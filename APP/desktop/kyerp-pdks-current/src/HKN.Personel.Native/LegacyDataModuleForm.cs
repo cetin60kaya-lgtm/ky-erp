@@ -38,11 +38,12 @@ public sealed class LegacyDataModuleForm : Form
     {
         this.view = view;
         Text = Title(view);
-        Font = new Font("Microsoft Sans Serif", 8.25f);
-        BackColor = SystemColors.Control;
+        Font = new Font("Segoe UI", 9f);
+        BackColor = Color.FromArgb(246,249,253);
         StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MinimizeBox = false; MaximizeBox = false; ShowInTaskbar = false;
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MinimizeBox = true; MaximizeBox = true; ShowInTaskbar = false;
+        MinimumSize = new Size(900,600);
         AutoScaleMode = AutoScaleMode.Dpi;
         ApplyLegacySize();
         var first = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
@@ -61,15 +62,7 @@ public sealed class LegacyDataModuleForm : Form
 
     void ApplyLegacySize()
     {
-        ClientSize = view switch
-        {
-            LegacyDataView.Puantaj => new Size(505, 365),
-            LegacyDataView.Bordro => new Size(350, 345),
-            LegacyDataView.GirisCikis => new Size(761,550),
-            LegacyDataView.PuantajSonuclari => new Size(760, 500),
-            LegacyDataView.Avanslar => new Size(760, 500),
-            _ => new Size(760,500)
-        };
+        ClientSize = new Size(1180, 720);
     }
 
     public void PrepareForEmbedding(){TopLevel=false;FormBorderStyle=FormBorderStyle.None;Dock=DockStyle.Fill;ShowInTaskbar=false;}
@@ -314,10 +307,20 @@ from GIRCIK G left join KIMLIK K on K.PKNO=G.PKNO where 1=1";
     {
         try
         {
-            var result=BuildPayrollPreview();using var preview=new Form{Text="Genel Maaş Bordrosu - Önizleme",StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.SizableToolWindow,Size=new Size(1050,620),ShowInTaskbar=false,Font=Font};
-            var resultGrid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,DataSource=result.DefaultView,BackgroundColor=Color.White};var menu=new ContextMenuStrip();menu.Items.Add("Excel/CSV Kaydet",null,(_,_)=>ExportGridCsv(resultGrid,"Genel_Maas_Bordrosu"));resultGrid.ContextMenuStrip=menu;preview.Controls.Add(resultGrid);preview.ShowDialog(this);
+            var result = BuildPayrollPreview();
+            var report = new KYERP.PDKS.Core.Reports.ReportTable(
+                $"{from.Value:dd.MM.yyyy} - {to.Value:dd.MM.yyyy} Genel Maaş Bordrosu",
+                result.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray(),
+                result.Rows.Cast<DataRow>()
+                    .Select(r => (IReadOnlyList<string>)result.Columns.Cast<DataColumn>()
+                        .Select(c => Convert.ToString(r[c]) ?? string.Empty).ToArray())
+                    .ToArray());
+            ReportPrintHelper.Preview(this, report, report.Columns.Count > 7);
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,"Genel Maaş Bordrosu",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex)
+        {
+            MessageBox.Show(ex.Message,"Genel Maaş Bordrosu",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        }
     }
 
     DataTable BuildPayrollPreview()

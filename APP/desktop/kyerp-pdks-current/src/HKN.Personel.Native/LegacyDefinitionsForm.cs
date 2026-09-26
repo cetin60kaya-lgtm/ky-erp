@@ -7,7 +7,7 @@ namespace HKN.Personel.Native;
 public sealed class LegacyDefinitionsForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
-    readonly TabControl tabs = new(){Location=new Point(0,0),Size=new Size(593,369)};
+    readonly TabControl tabs = new(){Dock=DockStyle.Fill};
     readonly Dictionary<string,SimpleDefinitionPage> simple = new(StringComparer.OrdinalIgnoreCase);
     readonly Dictionary<string,Control> firma = new(StringComparer.OrdinalIgnoreCase);
     readonly Dictionary<string,Control> bordro = new(StringComparer.OrdinalIgnoreCase);
@@ -16,9 +16,9 @@ public sealed class LegacyDefinitionsForm : Form
 
     public LegacyDefinitionsForm(string? initialTab=null)
     {
-        Text="Çalışma Sistemleri"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(609,450);
-        FormBorderStyle=FormBorderStyle.FixedDialog; MaximizeBox=false; MinimizeBox=false; ShowInTaskbar=false;
-        Font=new Font("Microsoft Sans Serif",8.25f); KeyPreview=true;
+        Text="Tanımlar"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(1120,700); MinimumSize=new Size(900,600);
+        FormBorderStyle=FormBorderStyle.Sizable; MaximizeBox=true; MinimizeBox=true; ShowInTaskbar=false;
+        Font=new Font("Segoe UI",9f); BackColor=Color.FromArgb(246,249,253); KeyPreview=true;
         Build();
         if(string.IsNullOrWhiteSpace(initialTab)) tabs.SelectedIndex=5; else SelectTab(initialTab);
         Shown+=(_,_)=>RefreshAll();
@@ -40,93 +40,59 @@ public sealed class LegacyDefinitionsForm : Form
 
     TabPage BuildSimple(string title,string table,string fieldLabel,string kimlikColumn)
     {
-        var page=new TabPage(title);
-        var label=new Label{Text=fieldLabel,Location=new Point(24,16),AutoSize=true};
-        var edit=new TextBox{Location=new Point(88,13),Size=new Size(241,21),MaxLength=50,ReadOnly=true};
-        var grid=new DataGridView
-        {
-            Location=new Point(24,40),Size=new Size(329,297),ReadOnly=true,AllowUserToAddRows=false,
-            AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,
-            BackgroundColor=Color.White,RowHeadersWidth=20,AutoGenerateColumns=false
-        };
-        grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText=fieldLabel,Width=285});
+        var page=new TabPage(title){Padding=new Padding(12),BackColor=Color.White};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
+        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Padding=new Padding(8,4,8,4)};
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,130));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        editor.Controls.Add(new Label{Text=fieldLabel,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)},0,0);
+        var edit=new TextBox{Dock=DockStyle.Fill,MaxLength=50,ReadOnly=true,Margin=new Padding(3,6,3,6)};editor.Controls.Add(edit,1,0);root.Controls.Add(editor,0,0);
+        var grid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=Color.White,RowHeadersVisible=false,AutoGenerateColumns=false};
+        grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText=fieldLabel,AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});root.Controls.Add(grid,0,1);
         var p=new SimpleDefinitionPage(db,table,kimlikColumn,edit,grid,Text); simple[title]=p;
-        page.Controls.AddRange([label,edit,grid,p.SaveButton(416,40),p.AddButton(416,80),p.EditButton(416,120),p.DeleteButton(416,160),p.DeleteAllButton(416,200)]);
-        return page;
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};
+        actions.Controls.Add(p.SaveButton(0,0));actions.Controls.Add(p.DeleteAllButton(0,0));actions.Controls.Add(p.DeleteButton(0,0));actions.Controls.Add(p.EditButton(0,0));actions.Controls.Add(p.AddButton(0,0));root.Controls.Add(actions,0,2);
+        page.Controls.Add(root);return page;
     }
-
     TabPage BuildFirma()
     {
-        var page=new TabPage("Firma");
-        var combo=new ComboBox{Location=new Point(120,14),Size=new Size(441,21),DropDownStyle=ComboBoxStyle.DropDownList}; firma["SELECT"]=combo;
-        page.Controls.Add(new Label{Text="Firma Adı",Location=new Point(48,16),AutoSize=true}); page.Controls.Add(combo);
-        AddFirmaField(page,"Adres",48,56,"ADRES",120,48,417);
-        AddFirmaField(page,"Telefon-1",48,88,"TEL1",120,80,105);
-        AddFirmaField(page,"Telefon-2",231,88,"TEL2",280,80,113);
-        AddFirmaField(page,"Fax",409,88,"FAX",432,80,105);
-        AddFirmaField(page,"Bulunduğu İl",48,120,"IL",120,112,145);
-        AddFirmaField(page,"İlçe",352,120,"ILCE",384,112,153);
-        AddFirmaField(page,"SSK Numarası",48,152,"SSK",120,144,217);
-        var def=new CheckBox{Text="İşlemlerde Bu Firmayı Varsayılan Olarak Göster",Location=new Point(48,176),Size=new Size(297,17)}; firma["AKTIF"]=def; page.Controls.Add(def);
-
-        var save=Command("K&aydet",16,264); var add=Command("&Yeni Ekle",128,264); var edit=Command("&Değiştir",240,264); var del=Command("&Sil",352,264); var all=Command("Tü&münü Sil",464,264);
-        page.Controls.AddRange([save,add,edit,del,all]); save.Enabled=false; SetFirmaEdit(false);
-        combo.SelectedIndexChanged+=(_,_)=>{if(!save.Enabled)LoadFirma();};
-        add.Click+=(_,_)=>BeginNewFirma(save);
-        edit.Click+=(_,_)=>{if(firmaCode is null)return;SetFirmaEdit(true);save.Enabled=true;combo.Focus();};
-        save.Click+=(_,_)=>SaveFirma(save);
-        del.Click+=(_,_)=>DeleteFirma();
-        all.Click+=(_,_)=>DeleteAllFirma();
-        return page;
-    }
-
-    void AddFirmaField(TabPage page,string caption,int lx,int ly,string key,int x,int y,int w)
-    {
-        page.Controls.Add(new Label{Text=caption,Location=new Point(lx,ly),AutoSize=true});
-        var box=new TextBox{Location=new Point(x,y),Size=new Size(w,21),ReadOnly=true}; firma[key]=box; page.Controls.Add(box);
+        var page=new TabPage("Firma"){Padding=new Padding(14),BackColor=Color.White};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1};
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+        var editor=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=4,RowCount=6,AutoSize=true,Padding=new Padding(12)};
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,130));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,110));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+        var combo=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList,Margin=new Padding(3,6,3,6)};firma["SELECT"]=combo;
+        editor.Controls.Add(new Label{Text="Firma Adı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,0);editor.Controls.Add(combo,1,0);editor.SetColumnSpan(combo,3);
+        string[] labels={"Adres","Telefon-1","Telefon-2","Fax","Bulunduğu İl","İlçe","SSK Numarası"};string[] keys={"ADRES","TEL1","TEL2","FAX","IL","ILCE","SSK"};
+        for(int i=0;i<keys.Length;i++){int row=1+i/2,col=(i%2)*2;var box=new TextBox{Dock=DockStyle.Fill,ReadOnly=true,Margin=new Padding(3,6,3,6)};firma[keys[i]]=box;editor.Controls.Add(new Label{Text=labels[i],Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},col,row);editor.Controls.Add(box,col+1,row);}
+        var def=new CheckBox{Text="İşlemlerde bu firmayı varsayılan olarak göster",Dock=DockStyle.Fill,AutoSize=true,Padding=new Padding(0,8,0,0)};firma["AKTIF"]=def;editor.Controls.Add(def,0,5);editor.SetColumnSpan(def,4);root.Controls.Add(editor,0,0);
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var save=Command("Kaydet",0,0,112);var add=Command("Yeni Ekle",0,0,112);var edit=Command("Değiştir",0,0,112);var del=Command("Sil",0,0,100);var all=Command("Tümünü Sil",0,0,120);actions.Controls.AddRange([save,all,del,edit,add]);root.Controls.Add(actions,0,1);page.Controls.Add(root);save.Enabled=false;SetFirmaEdit(false);
+        combo.SelectedIndexChanged+=(_,_)=>{if(!save.Enabled)LoadFirma();};add.Click+=(_,_)=>BeginNewFirma(save);edit.Click+=(_,_)=>{if(firmaCode is null)return;SetFirmaEdit(true);save.Enabled=true;combo.Focus();};save.Click+=(_,_)=>SaveFirma(save);del.Click+=(_,_)=>DeleteFirma();all.Click+=(_,_)=>DeleteAllFirma();return page;
     }
 
     TabPage BuildBordro()
     {
-        var page=new TabPage("Bordro");
-        var grid=new DataGridView
-        {
-            Location=new Point(8,8),Size=new Size(257,257),ReadOnly=true,AllowUserToAddRows=false,
-            AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,
-            BackgroundColor=Color.White,RowHeadersWidth=20,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells
-        }; bordro["GRID"]=grid; page.Controls.Add(grid);
-
-        page.Controls.Add(new Label{Text="Alan Kodu",Location=new Point(280,24),AutoSize=true});
-        var code=new Label{Location=new Point(336,24),AutoSize=true,BorderStyle=BorderStyle.Fixed3D}; bordro["KOD"]=code; page.Controls.Add(code);
-        AddBordroText(page,"Alan Adı",280,64,"AD",336,56,241);
-        AddBordroText(page,"Kısa Adı",280,96,"KAD",336,88,89);
-        page.Controls.Add(new Label{Text="Alan Türü",Location=new Point(280,128),AutoSize=true});
-        var type=new ComboBox{Location=new Point(336,120),Size=new Size(129,21),DropDownStyle=ComboBoxStyle.DropDownList};
-        type.Items.AddRange(["Normal Mesai","Fazla Mesai","Ücretsiz İzin","Ücretli İzin"]); bordro["TIP"]=type; page.Controls.Add(type);
-        page.Controls.Add(new Label{Text="Katsayı",Location=new Point(280,152),AutoSize=true});
-        var factor=new TextBox{Location=new Point(336,144),Size=new Size(25,21),ReadOnly=true,MaxLength=3}; bordro["CARPAN"]=factor; page.Controls.Add(factor);
-        page.Controls.Add(new Label{Text="Alan",Location=new Point(280,176),AutoSize=true});
-        var field=new ComboBox{Location=new Point(336,168),Size=new Size(137,21),DropDownStyle=ComboBoxStyle.DropDownList};
-        field.Items.AddRange(["Normal Çalışma","Fazla Mesai"]); bordro["CALAN"]=field; page.Controls.Add(field);
-        var bcode=new TextBox{Visible=false}; bordro["BKOD"]=bcode; page.Controls.Add(bcode);
-
-        var save=Command("K&aydet",32,280); var add=Command("&Yeni Ekle",176,280); var edit=Command("&Değiştir",312,280); var del=Command("&Sil",448,280);
-        page.Controls.AddRange([save,add,edit,del]); save.Enabled=false; SetBordroEdit(false);
-        grid.SelectionChanged+=(_,_)=>{if(!save.Enabled)LoadBordro();};
-        add.Click+=(_,_)=>{bordroCode=null;ClearBordro();SetBordroEdit(true);save.Enabled=true;((TextBox)bordro["AD"]).Focus();};
-        edit.Click+=(_,_)=>{if(bordroCode is null)return;SetBordroEdit(true);save.Enabled=true;((TextBox)bordro["AD"]).Focus();};
-        save.Click+=(_,_)=>SaveBordro(save); del.Click+=(_,_)=>DeleteBordro();
-        return page;
+        var page=new TabPage("Bordro"){Padding=new Padding(14),BackColor=Color.White};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1};root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+        var split=new SplitContainer{Dock=DockStyle.Fill,FixedPanel=FixedPanel.Panel1,SplitterDistance=470,SplitterWidth=8};
+        var grid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=Color.White,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};bordro["GRID"]=grid;split.Panel1.Controls.Add(grid);
+        var editor=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=2,RowCount=6,AutoSize=true,Padding=new Padding(18)};editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,135));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        var code=new Label{Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10f,FontStyle.Bold)};bordro["KOD"]=code;DefRow(editor,0,"Alan Kodu",code);
+        var ad=new TextBox{Dock=DockStyle.Fill,ReadOnly=true};bordro["AD"]=ad;DefRow(editor,1,"Alan Adı",ad);var kad=new TextBox{Dock=DockStyle.Fill,ReadOnly=true};bordro["KAD"]=kad;DefRow(editor,2,"Kısa Adı",kad);
+        var type=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};type.Items.AddRange(["Normal Mesai","Fazla Mesai","Ücretsiz İzin","Ücretli İzin"]);bordro["TIP"]=type;DefRow(editor,3,"Alan Türü",type);
+        var factor=new TextBox{Dock=DockStyle.Fill,ReadOnly=true,MaxLength=3};bordro["CARPAN"]=factor;DefRow(editor,4,"Katsayı",factor);var field=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};field.Items.AddRange(["Normal Çalışma","Fazla Mesai"]);bordro["CALAN"]=field;DefRow(editor,5,"Alan",field);var bcode=new TextBox{Visible=false};bordro["BKOD"]=bcode;editor.Controls.Add(bcode);split.Panel2.Controls.Add(editor);root.Controls.Add(split,0,0);
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var save=Command("Kaydet",0,0,112);var add=Command("Yeni Ekle",0,0,112);var edit=Command("Değiştir",0,0,112);var del=Command("Sil",0,0,100);actions.Controls.AddRange([save,del,edit,add]);root.Controls.Add(actions,0,1);page.Controls.Add(root);save.Enabled=false;SetBordroEdit(false);
+        grid.SelectionChanged+=(_,_)=>{if(!save.Enabled)LoadBordro();};add.Click+=(_,_)=>{bordroCode=null;ClearBordro();SetBordroEdit(true);save.Enabled=true;((TextBox)bordro["AD"]).Focus();};edit.Click+=(_,_)=>{if(bordroCode is null)return;SetBordroEdit(true);save.Enabled=true;((TextBox)bordro["AD"]).Focus();};save.Click+=(_,_)=>SaveBordro(save);del.Click+=(_,_)=>DeleteBordro();return page;
     }
 
-    void AddBordroText(TabPage page,string caption,int lx,int ly,string key,int x,int y,int w)
+    static void DefRow(TableLayoutPanel table,int row,string text,Control control)
     {
-        page.Controls.Add(new Label{Text=caption,Location=new Point(lx,ly),AutoSize=true});
-        var box=new TextBox{Location=new Point(x,y),Size=new Size(w,21),ReadOnly=true}; bordro[key]=box; page.Controls.Add(box);
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute,40));table.Controls.Add(new Label{Text=text,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)},0,row);control.Dock=DockStyle.Fill;control.Margin=new Padding(3,6,3,6);table.Controls.Add(control,1,row);
     }
 
-    static Button Command(string text,int x,int y,int width=105)=>new(){Text=text,Location=new Point(x,y),Size=new Size(width,33),ForeColor=Color.Navy,Font=new Font("Microsoft Sans Serif",8.25f,FontStyle.Bold),UseVisualStyleBackColor=true};
-
+    static Button Command(string text,int x,int y,int width=105)=>new(){Text=text,Width=Math.Max(width,100),Height=36,FlatStyle=FlatStyle.Flat,ForeColor=Color.FromArgb(27,44,68),BackColor=Color.White,Font=new Font("Segoe UI",9f,FontStyle.Bold),Cursor=Cursors.Hand};
     public void SelectTab(string name)
     {
         foreach(TabPage p in tabs.TabPages)
@@ -299,19 +265,18 @@ public sealed class LegacyDefinitionsForm : Form
     sealed class SimpleDefinitionPage
     {
         readonly FirebirdDatabase db; readonly string table; readonly string kimlikColumn; readonly TextBox edit; readonly DataGridView grid; readonly string owner;
-        int? code; bool editing;
+        int? code; bool editing; Button? saveButton;
         public SimpleDefinitionPage(FirebirdDatabase db,string table,string kimlikColumn,TextBox edit,DataGridView grid,string owner)
         {
             this.db=db;this.table=table;this.kimlikColumn=kimlikColumn;this.edit=edit;this.grid=grid;this.owner=owner;
             grid.SelectionChanged+=(_,_)=>{if(!editing)LoadSelection();};
         }
         Button B(string text,int x,int y)=>Command(text,x,y,121);
-        public Button SaveButton(int x,int y){var b=B("K&aydet",x,y);b.Enabled=false;b.Click+=(_,_)=>Save(b);return b;}
-        public Button AddButton(int x,int y){var b=B("&Yeni Ekle",x,y);b.Click+=(_,_)=>{code=null;edit.Clear();editing=true;edit.ReadOnly=false;FindSave()?.Let(s=>s.Enabled=true);edit.Focus();};return b;}
-        public Button EditButton(int x,int y){var b=B("&Değiştir",x,y);b.Click+=(_,_)=>{if(code is null)return;editing=true;edit.ReadOnly=false;FindSave()?.Let(s=>s.Enabled=true);edit.Focus();};return b;}
+        public Button SaveButton(int x,int y){var b=B("K&aydet",x,y);b.Enabled=false;b.Click+=(_,_)=>Save(b);saveButton=b;return b;}
+        public Button AddButton(int x,int y){var b=B("&Yeni Ekle",x,y);b.Click+=(_,_)=>{code=null;edit.Clear();editing=true;edit.ReadOnly=false;if(saveButton is not null)saveButton.Enabled=true;edit.Focus();};return b;}
+        public Button EditButton(int x,int y){var b=B("&Değiştir",x,y);b.Click+=(_,_)=>{if(code is null)return;editing=true;edit.ReadOnly=false;if(saveButton is not null)saveButton.Enabled=true;edit.Focus();};return b;}
         public Button DeleteButton(int x,int y){var b=B("&Sil",x,y);b.Click+=(_,_)=>Delete();return b;}
         public Button DeleteAllButton(int x,int y){var b=B("Tü&münü Sil",x,y);b.Click+=(_,_)=>DeleteAll();return b;}
-        Button? FindSave()=>edit.Parent?.Controls.OfType<Button>().FirstOrDefault(x=>x.Text.Replace("&","")=="Kaydet");
         public void Reload(){try{grid.DataSource=db.Query($"select KOD,AD from {table} order by KOD");if(grid.Rows.Count>0)grid.CurrentCell=grid.Rows[0].Cells[0];else{code=null;edit.Clear();}}catch(Exception ex){MessageBox.Show(ex.Message,owner);}}
         void LoadSelection(){if(grid.CurrentRow?.DataBoundItem is not DataRowView v)return;code=Convert.ToInt32(v.Row["KOD"]);edit.Text=Convert.ToString(v.Row["AD"])??"";}
         void Save(Button save)

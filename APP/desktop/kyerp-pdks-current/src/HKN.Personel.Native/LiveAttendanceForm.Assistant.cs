@@ -7,21 +7,31 @@ public sealed partial class LiveAttendanceForm
 {
     readonly TextBox assistantQuery = new()
     {
-        PlaceholderText = "PDKS Asistanına sor... Örn: Bu hafta kimler kart basmadı?",
+        PlaceholderText = "Denetim Asistanı sorgusu... Örn: Bu hafta kimler kart basmadı?",
         Dock = DockStyle.Fill,
         Font = new Font("Segoe UI", 10f)
     };
     readonly Button assistantAsk = new()
     {
-        Text = "Analiz Et",
+        Text = "Analizi Çalıştır",
         Width = 110,
-        Height = 34
+        Height = 34,
+        FlatStyle = FlatStyle.Flat,
+        BackColor = Color.FromArgb(36,107,230),
+        ForeColor = Color.White,
+        Font = new Font("Segoe UI",9f,FontStyle.Bold),
+        Cursor = Cursors.Hand
     };
     readonly Button assistantAction = new()
     {
-        Text = "İşlem Al",
+        Text = "İşlem Aç",
         Width = 105,
-        Height = 34
+        Height = 34,
+        FlatStyle = FlatStyle.Flat,
+        BackColor = Color.FromArgb(24,145,84),
+        ForeColor = Color.White,
+        Font = new Font("Segoe UI",9f,FontStyle.Bold),
+        Cursor = Cursors.Hand
     };
     readonly Label assistantSummary = new()
     {
@@ -77,7 +87,7 @@ public sealed partial class LiveAttendanceForm
         askRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 113));
         askRow.Controls.Add(new Label
         {
-            Text = "✦ PDKS Asistan",
+            Text = "✦ Denetim Asistanı",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Segoe UI", 10f, FontStyle.Bold),
@@ -94,7 +104,7 @@ public sealed partial class LiveAttendanceForm
         assistantChips.Controls.Add(Chip("Bu hafta geç gelenler"));
         layout.Controls.Add(assistantChips, 0, 1);
 
-        assistantSummary.Text = "Hazır • Canlı veriyi sorabilir veya hızlı sorgulardan birini seçebilirsin.";
+        assistantSummary.Text = "Analiz hazır • Canlı devam verisini sorgulayabilir veya hızlı analizlerden birini seçebilirsiniz.";
         layout.Controls.Add(assistantSummary, 0, 2);
         shell.Controls.Add(layout);
 
@@ -107,6 +117,7 @@ public sealed partial class LiveAttendanceForm
             RunAssistantQuery();
         };
         assistantGrid.CellDoubleClick += (_, _) => FocusSelectedResult();
+        assistantGrid.SelectionChanged += (_, _) => UpdatePersonPreview(assistantGrid);
         return shell;
     }
 
@@ -158,7 +169,7 @@ public sealed partial class LiveAttendanceForm
         }
         catch (Exception ex)
         {
-            assistantSummary.Text = "Asistan sorgusu çalıştırılamadı: " + ex.Message;
+            assistantSummary.Text = "Analiz çalıştırılamadı: " + ex.Message;
             assistantSummary.ForeColor = Color.FromArgb(185, 56, 48);
         }
     }
@@ -242,13 +253,13 @@ public sealed partial class LiveAttendanceForm
             table.Rows.Add(r.Day.ToString("dd.MM.yyyy"), r.Code, r.Name, r.Group, r.Entry, r.Exit, r.Status, r.Warning);
 
         assistantGrid.DataSource = table;
-        if (!tabs.TabPages.ContainsKey("PDKS Asistan"))
+        if (!tabs.TabPages.ContainsKey("Denetim Asistanı"))
         {
-            var page = new TabPage("PDKS Asistan") { Name = "PDKS Asistan" };
+            var page = new TabPage("Denetim Asistanı") { Name = "Denetim Asistanı" };
             page.Controls.Add(assistantGrid);
             tabs.TabPages.Insert(0, page);
         }
-        tabs.SelectedTab = tabs.TabPages["PDKS Asistan"];
+        tabs.SelectedTab = tabs.TabPages["Denetim Asistanı"];
 
         var period = start == end ? start.ToString("dd MMMM yyyy") : $"{start:dd.MM} - {end:dd.MM.yyyy}";
         assistantSummary.Text = rows.Count == 0
@@ -269,7 +280,7 @@ public sealed partial class LiveAttendanceForm
     {
         if (assistantGrid.CurrentRow is null)
         {
-            MessageBox.Show("Önce işlem yapılacak personeli seçin.", "PDKS Asistan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("Önce işlem yapılacak personeli seçin.", "Denetim Asistanı", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -277,9 +288,15 @@ public sealed partial class LiveAttendanceForm
         var name = Convert.ToString(assistantGrid.CurrentRow.Cells["Ad Soyad"].Value) ?? "";
         var status = Convert.ToString(assistantGrid.CurrentRow.Cells["Durum"].Value) ?? "";
         var when = Convert.ToString(assistantGrid.CurrentRow.Cells["Tarih"].Value) ?? "";
+        if (!DateTime.TryParse(when, out var targetDay)) targetDay = date.Value.Date;
+        if (openEntryExit is not null)
+        {
+            openEntryExit(code, targetDay);
+            return;
+        }
         Clipboard.SetText($"{code} - {name} - {when} - {status}");
-        MessageBox.Show($"{name}\nKart: {code}\nTarih: {when}\nDurum: {status}\n\nPersonel bilgisi panoya kopyalandı. Giriş/Çıkış ekranından düzeltme veya kontrol yapabilirsiniz.",
-            "PDKS Asistan • İşlem Önizleme", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        MessageBox.Show($"{name}\nKart: {code}\nTarih: {when}\nDurum: {status}",
+            "Denetim Asistanı • İşlem Önizleme", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     sealed record AssistantRow(DateTime Day, string Code, string Name, string Group, string Entry, string Exit, string Status, string Warning);

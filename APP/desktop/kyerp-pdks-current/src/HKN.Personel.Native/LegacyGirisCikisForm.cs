@@ -7,59 +7,48 @@ namespace HKN.Personel.Native;
 public sealed class LegacyGirisCikisForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
-    readonly DataGridView grid = new(){Location=new Point(0,128),Size=new Size(758,399),ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=Color.White,RowHeadersWidth=22,AutoGenerateColumns=false};
-    readonly TextBox cardStart = new(){Location=new Point(100,8),Size=new Size(40,21)};
-    readonly TextBox cardEnd = new(){Location=new Point(100,32),Size=new Size(40,21)};
-    readonly TextBox name = new(){Location=new Point(80,64),Size=new Size(175,21)};
-    readonly ComboBox punch = new(){Location=new Point(336,66),Size=new Size(207,21),DropDownStyle=ComboBoxStyle.DropDownList};
-    readonly DateTimePicker dateStart = D(272,8,176);
-    readonly DateTimePicker dateEnd = D(272,32,176);
-    readonly TextBox inFirst = T(480,8), inLast = T(600,8), outFirst = T(480,32), outLast = T(600,32);
-    readonly CheckBox manual = new(){Text="Elle Girlilen Kayıtlar",Location=new Point(552,72),AutoSize=true};
-    readonly ComboBox group = C(72,8,209), department=C(72,32,209), company=C(72,56,319), service=C(464,8,209), status=C(464,32,209), duty=C(464,56,209), sort=C(56,16,185);
-    readonly StatusStrip statusBar = new(){Location=new Point(0,527),Size=new Size(761,23),SizingGrip=false};
+    readonly DataGridView grid = new(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=Color.White,AutoGenerateColumns=false};
+    readonly TextBox cardStart = new(); readonly TextBox cardEnd = new(); readonly TextBox name = new();
+    readonly ComboBox punch = new(){DropDownStyle=ComboBoxStyle.DropDownList};
+    readonly DateTimePicker dateStart = D(); readonly DateTimePicker dateEnd = D();
+    readonly TextBox inFirst = new(){Text=":"}, inLast = new(){Text=":"}, outFirst = new(){Text=":"}, outLast = new(){Text=":"};
+    readonly CheckBox manual = new(){Text="Elle girilen kayıtlar"};
+    readonly ComboBox group=C(), department=C(), company=C(), service=C(), status=C(), duty=C(), sort=new(){DropDownStyle=ComboBoxStyle.DropDownList};
     readonly ToolStripStatusLabel statusText = new(){Spring=true,TextAlign=ContentAlignment.MiddleLeft};
-    readonly Button show = new(){Text="Göster",Location=new Point(693,19),Size=new Size(65,101),ForeColor=Color.Navy,Font=new Font("Microsoft Sans Serif",8.25f,FontStyle.Bold)};
     DataTable current = new();
+    readonly string? initialCard;
+    readonly DateTime? initialDate;
 
-    public LegacyGirisCikisForm()
-    {
-        Text="Giriş ve Çıkışlar";StartPosition=FormStartPosition.CenterScreen;Size=new Size(777,609);FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ShowInTaskbar=false;Font=new Font("Microsoft Sans Serif",8.25f);KeyPreview=true;
-        Build(); Shown+=(_,_)=>Init(); KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};
-    }
-
+    public LegacyGirisCikisForm(string? initialCard=null, DateTime? initialDate=null){this.initialCard=initialCard;this.initialDate=initialDate;Text="Giriş ve Çıkışlar";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1220,740);MinimumSize=new Size(980,620);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);KeyPreview=true;Build();Shown+=(_,_)=>Init();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
+    static DateTimePicker D()=>new(){Format=DateTimePickerFormat.Short};
     static DateTimePicker D(int x,int y,int w)=>new(){Location=new Point(x,y),Size=new Size(w,21),Format=DateTimePickerFormat.Custom,CustomFormat="dd MMM yyyy"};
-    static TextBox T(int x,int y)=>new(){Location=new Point(x,y),Size=new Size(40,21),Text=":"};
-    static ComboBox C(int x,int y,int w)=>new(){Location=new Point(x,y),Size=new Size(w,21),DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="TEXT",ValueMember="KOD"};
-    static Label L(string s,int x,int y)=>new(){Text=s,Location=new Point(x,y),AutoSize=true};
+    static Label L(string text,int x,int y)=>new(){Text=text,Location=new Point(x,y),AutoSize=true,ForeColor=Color.FromArgb(66,82,104)};
+    static ComboBox C()=>new(){DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="TEXT",ValueMember="KOD"};
+    static Label L(string text)=>new(){Text=text,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)};
+    static void Row(TableLayoutPanel t,int r,string label,Control c){t.RowStyles.Add(new RowStyle(SizeType.Absolute,36));t.Controls.Add(L(label),0,r);c.Dock=DockStyle.Fill;c.Margin=new Padding(3,5,3,5);t.Controls.Add(c,1,r);}
+    static Button Btn(string text,int width=110)=>new(){Text=text,Width=width,Height=36,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9f,FontStyle.Bold)};
 
     void Build()
     {
-        var tabs=new TabControl{Location=new Point(0,0),Size=new Size(689,121)};
-        var p=new TabPage("Giriş Çıkış Parametreleri");
-        p.Controls.AddRange([L("Kart No Başlangıç",8,16),L("Kart No Bitiş",8,40),L("Adı",8,72),L("Kart Basma",272,74),L("> Giriş Saati <",528,9),L("Tarih Bitiş",176,40),L("Tarih Başlangıç",176,16),L("> Çıkış Saati <",528,33),cardStart,cardEnd,name,punch,dateStart,dateEnd,inLast,outLast,inFirst,outFirst,manual]);
-        var f=new TabPage("Filtreleme");
-        f.Controls.AddRange([L("Firma",8,64),L("Grubu",8,16),L("Bölümü",8,40),L("Servis",408,16),L("Durum",408,40),L("Görev",408,64),company,group,department,service,status,duty]);
-        var s=new TabPage("Sıralama");s.Controls.AddRange([L("Sıralama",8,24),sort]); tabs.TabPages.AddRange([p,f,s]); Controls.Add(tabs);
-
-        AddCol("PKNO","Kart No",55);AddCol("AD","Adı",90);AddCol("SOYAD","Soyadı",95);AddCol("GTARIH","Giriş Tarihi",85);AddCol("GSAAT","Giriş Saati",70);AddCol("GTUR","Giriş",45);AddCol("CTARIH","Çıkış Tarihi",85);AddCol("CSAAT","Çıkış Saati",70);AddCol("CTUR","Çıkış",45);AddCol("GRUPAD","Grubu",95);AddCol("BOLUMAD","Bölümü",95);
-        grid.CellDoubleClick+=(_,_)=>EditSelected();Controls.Add(grid);Controls.Add(show);show.Click+=(_,_)=>Reload();
-        statusBar.Items.Add(statusText);Controls.Add(statusBar);
-        var menu=new MenuStrip{Dock=DockStyle.None,Location=new Point(690,0),Size=new Size(1,1),Visible=false};
-        var ops=new ToolStripMenuItem("İşlemler");
-        var del=MI("Sil",DeleteSelected);var delAll=MI("Tümünü Sil",()=>{});delAll.Enabled=false;var delList=MI("Listedeki Kayıtları Sil",DeleteListed);var add=MI("Yeni Ekle",()=>EditRecord(null));var edit=MI("Değiştir",EditSelected);var report=MI("Rapor",PrintList);
-        ops.DropDownItems.AddRange([del,delAll,delList,add,edit,report]);menu.Items.Add(ops);Controls.Add(menu);MainMenuStrip=menu;
-        var ctx=new ContextMenuStrip();ctx.Items.AddRange([MI("Sil",DeleteSelected),MI("Listedeki Kayıtları Sil",DeleteListed),MI("Yeni Ekle",()=>EditRecord(null)),MI("Değiştir",EditSelected),MI("Rapor",PrintList)]);grid.ContextMenuStrip=ctx;
-        name.KeyDown+=(_,e)=>{if(e.KeyCode==Keys.Enter)Reload();};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(14)};root.RowStyles.Add(new RowStyle(SizeType.Absolute,190));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
+        var filters=new TabControl{Dock=DockStyle.Fill};
+        var p=new TabPage("Giriş / Çıkış Parametreleri"){Padding=new Padding(12)};var pg=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=4};pg.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,130));pg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));pg.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,130));pg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));
+        Row(pg,0,"Kart No Başlangıç",cardStart); pg.Controls.Add(L("Tarih Başlangıç"),2,0);dateStart.Dock=DockStyle.Fill;pg.Controls.Add(dateStart,3,0);
+        Row(pg,1,"Kart No Bitiş",cardEnd); pg.Controls.Add(L("Tarih Bitiş"),2,1);dateEnd.Dock=DockStyle.Fill;pg.Controls.Add(dateEnd,3,1);
+        Row(pg,2,"Ad / Soyad",name); pg.Controls.Add(L("Kart Basma"),2,2);punch.Dock=DockStyle.Fill;pg.Controls.Add(punch,3,2);
+        var time=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};foreach(var c in new[]{inFirst,inLast,outFirst,outLast}){c.Width=55;time.Controls.Add(c);}time.Controls.Add(manual);pg.Controls.Add(L("Saat Aralığı"),0,3);pg.Controls.Add(time,1,3);pg.SetColumnSpan(time,3);p.Controls.Add(pg);
+        var f=new TabPage("Filtreleme"){Padding=new Padding(12)};var fg=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=3};fg.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,95));fg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));fg.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,95));fg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));Row(fg,0,"Grup",group);fg.Controls.Add(L("Servis"),2,0);service.Dock=DockStyle.Fill;fg.Controls.Add(service,3,0);Row(fg,1,"Bölüm",department);fg.Controls.Add(L("Durum"),2,1);status.Dock=DockStyle.Fill;fg.Controls.Add(status,3,1);Row(fg,2,"Firma",company);fg.Controls.Add(L("Görev"),2,2);duty.Dock=DockStyle.Fill;fg.Controls.Add(duty,3,2);f.Controls.Add(fg);
+        var sp=new TabPage("Sıralama"){Padding=new Padding(12)};var sg=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=2,RowCount=1,Height=42};sg.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,100));sg.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,260));sg.Controls.Add(L("Sıralama"),0,0);sort.Dock=DockStyle.Fill;sg.Controls.Add(sort,1,0);sp.Controls.Add(sg);filters.TabPages.AddRange([p,f,sp]);root.Controls.Add(filters,0,0);
+        AddCol("PKNO","Kart No",65);AddCol("AD","Adı",100);AddCol("SOYAD","Soyadı",100);AddCol("GTARIH","Giriş Tarihi",90);AddCol("GSAAT","Giriş Saati",80);AddCol("GTUR","Giriş",55);AddCol("CTARIH","Çıkış Tarihi",90);AddCol("CSAAT","Çıkış Saati",80);AddCol("CTUR","Çıkış",55);AddCol("GRUPAD","Grubu",110);AddCol("BOLUMAD","Bölümü",110);grid.Dock=DockStyle.Fill;grid.CellDoubleClick+=(_,_)=>EditSelected();root.Controls.Add(grid,0,1);
+        var bar=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,8,0,0)};var show=Btn("Göster",100);var add=Btn("Yeni Ekle",100);var edit=Btn("Değiştir",100);var del=Btn("Sil",90);var report=Btn("Rapor",90);show.Click+=(_,_)=>Reload();add.Click+=(_,_)=>EditRecord(null);edit.Click+=(_,_)=>EditSelected();del.Click+=(_,_)=>DeleteSelected();report.Click+=(_,_)=>PrintList();bar.Controls.AddRange([show,report,del,edit,add]);root.Controls.Add(bar,0,2);Controls.Add(root);var ctx=new ContextMenuStrip();ctx.Items.AddRange([MI("Sil",DeleteSelected),MI("Listedeki Kayıtları Sil",DeleteListed),MI("Yeni Ekle",()=>EditRecord(null)),MI("Değiştir",EditSelected),MI("Rapor",PrintList)]);grid.ContextMenuStrip=ctx;name.KeyDown+=(_,e)=>{if(e.KeyCode==Keys.Enter)Reload();};
     }
-
     static ToolStripMenuItem MI(string text,Action a){var m=new ToolStripMenuItem(text);m.Click+=(_,_)=>a();return m;}
     void AddCol(string n,string h,int w)=>grid.Columns.Add(new DataGridViewTextBoxColumn{Name=n,DataPropertyName=n,HeaderText=h,Width=w});
-
     void Init()
     {
         punch.Items.AddRange(["Tümü","Giriş","Çıkış"]);punch.SelectedIndex=0;sort.Items.AddRange(["Kart No","Ad Soyad","Giriş Tarihi","Çıkış Tarihi"]);sort.SelectedIndex=0;
-        dateStart.Value=DateTime.Today.AddDays(-30);dateEnd.Value=DateTime.Today;
+        dateStart.Value=initialDate?.Date ?? DateTime.Today.AddDays(-30);dateEnd.Value=initialDate?.Date ?? DateTime.Today;
+        if(!string.IsNullOrWhiteSpace(initialCard)){cardStart.Text=initialCard;cardEnd.Text=initialCard;}
         LoadLookup(group,"GRUP");LoadLookup(department,"BOLUM");LoadLookup(service,"SERVIS");LoadLookup(status,"DURUM");LoadLookup(duty,"GOREV");LoadLookup(company,"FIRMA");Reload();
     }
 
@@ -108,5 +97,16 @@ public sealed class LegacyGirisCikisForm : Form
 
     void DeleteSelected(){var r=Row();if(r is null)return;if(MessageBox.Show("Seçili giriş-çıkış kaydı silinsin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;db.Execute("delete from GIRCIK where SIRA=@Q",new FbParameter("@Q",Convert.ToInt32(r["SIRA"])));Reload();}
     void DeleteListed(){if(current.Rows.Count==0)return;if(MessageBox.Show($"Listede görünen {current.Rows.Count} kayıt silinsin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;var ids=current.AsEnumerable().Where(x=>x["SIRA"]!=DBNull.Value).Select(x=>Convert.ToInt32(x["SIRA"])).ToArray();db.InTransaction((c,t)=>{foreach(var id in ids){using var cmd=FirebirdDatabase.CreateCommand(c,t,"delete from GIRCIK where SIRA=@Q",new FbParameter("@Q",id));cmd.ExecuteNonQuery();}return 0;});Reload();}
-    void PrintList(){MessageBox.Show("Giriş-çıkış raporları: GirisCikisADSOYAD.fr3, GirisCikisTarih.fr3 ve GirisCikisBOLUM.fr3 eşleştirildi. Önizleme Raporlar menüsünden kullanılabilir.","Rapor",MessageBoxButtons.OK,MessageBoxIcon.Information);}
+    void PrintList()
+    {
+        try
+        {
+            var columns=grid.Columns.Cast<DataGridViewColumn>().Where(c=>c.Visible).OrderBy(c=>c.DisplayIndex).ToArray();
+            var rows=grid.Rows.Cast<DataGridViewRow>().Where(r=>!r.IsNewRow)
+                .Select(r=>(IReadOnlyList<string>)columns.Select(c=>Convert.ToString(r.Cells[c.Index].FormattedValue)??string.Empty).ToArray()).ToArray();
+            var report=new KYERP.PDKS.Core.Reports.ReportTable($"Giriş - Çıkış Raporu • {dateStart.Value:dd.MM.yyyy} - {dateEnd.Value:dd.MM.yyyy}",columns.Select(c=>c.HeaderText).ToArray(),rows);
+            ReportPrintHelper.Preview(this,report,true);
+        }
+        catch(Exception ex){MessageBox.Show(ex.Message,"Giriş - Çıkış Raporu",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+    }
 }

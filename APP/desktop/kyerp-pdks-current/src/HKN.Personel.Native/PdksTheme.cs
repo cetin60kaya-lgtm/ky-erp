@@ -10,17 +10,26 @@ public static class PdksTheme
     static readonly Color Muted = Color.FromArgb(88, 103, 124);
     static readonly Color Primary = Color.FromArgb(36, 107, 230);
 
+    static ThemeMessageFilter? filter;
+
     public static void Install()
     {
-        Application.Idle += (_, _) =>
+        if (filter is not null) return;
+        filter = new ThemeMessageFilter();
+        Application.AddMessageFilter(filter);
+    }
+
+    sealed class ThemeMessageFilter : IMessageFilter
+    {
+        const int WmShowWindow = 0x0018;
+        public bool PreFilterMessage(ref Message m)
         {
-            foreach (Form form in Application.OpenForms)
-            {
-                if (form.IsDisposed || ThemedForms.Contains(form)) continue;
-                Apply(form);
-                ThemedForms.Add(form);
-            }
-        };
+            if (m.Msg != WmShowWindow || m.WParam == IntPtr.Zero) return false;
+            if (Control.FromHandle(m.HWnd) is not Form form || form.IsDisposed || ThemedForms.Contains(form)) return false;
+            Apply(form);
+            ThemedForms.Add(form);
+            return false;
+        }
     }
 
     public static void Apply(Form form)
@@ -29,11 +38,44 @@ public static class PdksTheme
         form.Font = new Font("Segoe UI", 9f);
         form.BackColor = Canvas;
         form.ForeColor = Text;
+        form.AutoScaleMode = AutoScaleMode.Dpi;
         if (form.FormBorderStyle != FormBorderStyle.None)
-            form.FormBorderStyle = FormBorderStyle.FixedSingle;
+        {
+            form.FormBorderStyle = FormBorderStyle.Sizable;
+            form.MaximizeBox = true;
+            form.MinimizeBox = true;
+            form.MinimumSize = new Size(Math.Min(Math.Max(form.Width, 680), 980), Math.Min(Math.Max(form.Height, 480), 720));
+            if (form.Width < 760 && form.Height > 360) form.Width = 820;
+            if (form.Height < 560 && form.Width > 700) form.Height = 600;
+        }
+        MakeAdaptive(form);
         StyleControls(form.Controls);
     }
 
+    static void MakeAdaptive(Form form)
+    {
+        AdaptChildren(form);
+    }
+
+    static void AdaptChildren(Control parent)
+    {
+        var baseSize = parent.ClientSize;
+        foreach (Control c in parent.Controls)
+        {
+            if (c.Dock == DockStyle.None && baseSize.Width > 0 && baseSize.Height > 0)
+            {
+                var anchor = c.Anchor;
+                if (c.Right >= baseSize.Width - 70) anchor |= AnchorStyles.Right;
+                if (c.Bottom >= baseSize.Height - 70) anchor |= AnchorStyles.Bottom;
+                if (c.Width >= baseSize.Width * .50) anchor |= AnchorStyles.Left | AnchorStyles.Right;
+                if (c.Height >= baseSize.Height * .42) anchor |= AnchorStyles.Top | AnchorStyles.Bottom;
+                if (c is TabControl or DataGridView or ListBox or TreeView)
+                    anchor |= AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom;
+                c.Anchor = anchor;
+            }
+            if (c.HasChildren) AdaptChildren(c);
+        }
+    }
     static void StyleControls(Control.ControlCollection controls)
     {
         foreach (Control c in controls)
@@ -81,6 +123,15 @@ public static class PdksTheme
                 case TableLayoutPanel table when table.BackColor == SystemColors.Control:
                     table.BackColor = Surface;
                     break;
+                case FlowLayoutPanel flow when flow.BackColor == SystemColors.Control:
+                    flow.BackColor = Surface;
+                    break;
+                case SplitContainer split:
+                    split.BackColor = Border;
+                    split.Panel1.BackColor = Surface;
+                    split.Panel2.BackColor = Surface;
+                    split.SplitterWidth = Math.Max(split.SplitterWidth, 6);
+                    break;
             }
 
             if (c.HasChildren) StyleControls(c.Controls);
@@ -96,7 +147,7 @@ public static class PdksTheme
         b.ForeColor = Text;
         b.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
         b.Cursor = Cursors.Hand;
-        b.Padding = new Padding(4, 1, 4, 1);
+        b.Padding = new Padding(6, 1, 6, 1);
 
         var text = (b.Text ?? string.Empty).Trim();
         if (text.Contains("Kaydet", StringComparison.OrdinalIgnoreCase) ||
@@ -127,8 +178,10 @@ public static class PdksTheme
         tabs.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
         tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
         tabs.SizeMode = TabSizeMode.Normal;
-        tabs.Padding = new Point(16, 6);
-        tabs.ItemSize = new Size(120, 30);
+        tabs.Padding = new Point(16, 8);
+        tabs.Multiline = false;
+        tabs.HotTrack = true;
+        foreach (TabPage page in tabs.TabPages) page.BackColor = Surface;
         tabs.DrawItem += (_, e) =>
         {
             if (e.Index < 0 || e.Index >= tabs.TabPages.Count) return;
@@ -170,6 +223,11 @@ public static class PdksTheme
         grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(249, 251, 254);
         grid.RowHeadersVisible = false;
         grid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
-        grid.RowTemplate.Height = Math.Max(grid.RowTemplate.Height, 26);
+        grid.RowTemplate.Height = Math.Max(grid.RowTemplate.Height, 28);
+        grid.ColumnHeadersHeight = Math.Max(grid.ColumnHeadersHeight, 31);
+        grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        grid.MultiSelect = false;
+        if (grid.Columns.Count > 0 && grid.Columns.Count <= 8)
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
     }
 }

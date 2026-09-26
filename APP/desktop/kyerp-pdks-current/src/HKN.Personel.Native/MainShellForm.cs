@@ -5,12 +5,12 @@ namespace HKN.Personel.Native;
 public sealed class MainShellForm : Form
 {
     readonly LocalUser currentUser;
-    readonly Panel workspace = new() { Dock = DockStyle.Fill, BackColor = Color.White };
+    readonly WorkspaceDockHost workspace;
     readonly ToolStrip tool = new()
     {
         Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden, AutoSize = false,
         Height = 77, ImageScalingSize = new Size(36,36), BackColor = Color.White,
-        RenderMode = ToolStripRenderMode.ManagerRenderMode, Padding = Padding.Empty, CanOverflow = false
+        RenderMode = ToolStripRenderMode.ManagerRenderMode, Padding = Padding.Empty, CanOverflow = true, LayoutStyle = ToolStripLayoutStyle.HorizontalStackWithOverflow
     };
     readonly StatusStrip status = new() { SizingGrip = false, AutoSize = false, Height = 22, BackColor = SystemColors.Control };
     readonly ToolStripStatusLabel leadStatus = new() { AutoSize = false, Width = 170 };
@@ -20,13 +20,15 @@ public sealed class MainShellForm : Form
     readonly ToolStripStatusLabel brandStatus = new() { Spring = true, Text = "www.kyerp.net", TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.Blue };
     readonly ToolStripStatusLabel dbStatus = new() { AutoSize = false, Width = 420, TextAlign = ContentAlignment.MiddleLeft };
     PersonelForm? personel;
-    Form? activeChild;
+    CompanyBranding branding = CompanyBranding.Empty;
 
     public MainShellForm(LocalUser user)
     {
         currentUser = user;
+        workspace = new WorkspaceDockHost(user.UserName);
+        branding = CompanyBranding.Load();
         var v = typeof(MainShellForm).Assembly.GetName().Version;
-        Text = $"KYERP PDKS [Versiyon: {v?.Major ?? 2}.{v?.Minor ?? 2}.{v?.Build ?? 0}]";
+        Text = $"KYERP PDKS • {branding.ReportHeader} [Versiyon: {v?.Major ?? 2}.{v?.Minor ?? 2}.{v?.Build ?? 0}]";
         WindowState = FormWindowState.Maximized;
         MinimumSize = new Size(1100,700);
         StartPosition = FormStartPosition.CenterScreen;
@@ -39,103 +41,121 @@ public sealed class MainShellForm : Form
         ShowHome();
     }
 
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        switch (keyData)
+        {
+            case Keys.F2: OpenLiveAttendance(); return true;
+            case Keys.F3: OpenPersonel(); return true;
+            case Keys.F4: OpenLegacyGirisCikis(); return true;
+            case Keys.F5: OpenLegacyPuantaj(); return true;
+            case Keys.F6: OpenLegacyBordro(); return true;
+            case Keys.F7: OpenOperationalReport(LegacyOperationalReport.PersonnelList); return true;
+            case Keys.Control | Keys.T: OpenDialogModule(PdksModule.Terminal); return true;
+            case Keys.Control | Keys.H: ShowHome(); return true;
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
     void BuildMenu()
     {
         var menu = new MenuStrip
         {
             Dock = DockStyle.Top, Font = new Font("Segoe UI",10f,FontStyle.Bold),
             BackColor = Color.FromArgb(247,249,252), ForeColor = Color.FromArgb(28,46,72),
-            AutoSize = false, Height = 42,
-            Padding = new Padding(12,4,0,2), RenderMode = ToolStripRenderMode.ManagerRenderMode
+            AutoSize = false, Height = 44, Padding = new Padding(14,5,0,3),
+            RenderMode = ToolStripRenderMode.ManagerRenderMode, ImageScalingSize = new Size(20,20)
         };
 
-        var home = PlainItem("Ana Sayfa", ShowHome);
-        var ayarlar = new ToolStripMenuItem("Ayarlar");
-        ayarlar.DropDownItems.Add(MenuItem("Terminal Ayarları", PdksModule.Terminal, OpenLegacyTerminalSettings));
-        ayarlar.DropDownItems.Add(MenuItem("Yuvarlatmalar", PdksModule.Tanimlar, () => OpenLegacyTable("Yuvarlatmalar","YUVARLA",true,new Size(481,272))));
-        ayarlar.DropDownItems.Add(MenuItem("Çıkışta Yedek Al", PdksModule.Tanimlar, BackupDatabase));
-        ayarlar.DropDownItems.Add(new ToolStripSeparator());
-        ayarlar.DropDownItems.Add(PlainItem("Yazıcı Ayarları", OpenPrinterSettings));
-        ayarlar.DropDownItems.Add(PlainItem("Windows Tarih Ve Saat Ayarları", () => Launch("timedate.cpl")));
-        ayarlar.DropDownItems.Add(PlainItem("Windows Bölgesel Ayarlar", () => Launch("intl.cpl")));
-        ayarlar.DropDownItems.Add(PlainItem("Veri Tabanı Hizmet Sağlayıcısı (Interbase)", () => { StartupConfiguration.EnsureReady(); UpdateDbStatus(); }));
-        ayarlar.DropDownItems.Add(new ToolStripSeparator());
-        ayarlar.DropDownItems.Add(MenuItem("Çalışma Tarihi", PdksModule.Donemler, OpenWorkingDate));
+        var home = PlainItem("Genel Bakış", ShowHome);
 
-        var tanimlar = new ToolStripMenuItem("Tanımlar");
-        tanimlar.DropDownItems.Add(MenuItem("Çalışma Grupları", PdksModule.Tanimlar, OpenGroups));
-        tanimlar.DropDownItems.Add(new ToolStripSeparator());
-        tanimlar.DropDownItems.Add(MenuItem("Bölüm Tanımları", PdksModule.Tanimlar, () => OpenDefinitions("Bölümler")));
-        tanimlar.DropDownItems.Add(MenuItem("Servis Tanımları", PdksModule.Tanimlar, () => OpenDefinitions("Servisler")));
-        tanimlar.DropDownItems.Add(MenuItem("Görev Tanımları", PdksModule.Tanimlar, () => OpenDefinitions("Görevler")));
-        tanimlar.DropDownItems.Add(MenuItem("Durum Tanımları", PdksModule.Tanimlar, () => OpenDefinitions("Durum")));
-        tanimlar.DropDownItems.Add(new ToolStripSeparator());
-        tanimlar.DropDownItems.Add(MenuItem("Firma Bilgileri", PdksModule.Tanimlar, () => OpenDefinitions("Firma")));
-        tanimlar.DropDownItems.Add(MenuItem("Bordro Alanları", PdksModule.Tanimlar, () => OpenDefinitions("Bordro")));
-        tanimlar.DropDownItems.Add(new ToolStripSeparator());
-        tanimlar.DropDownItems.Add(MenuItem("Dönemler", PdksModule.Donemler, () => OpenDialogModule(PdksModule.Donemler)));
-        tanimlar.DropDownItems.Add(MenuItem("Kesinti ve Kazanç Türleri", PdksModule.Tanimlar, () => OpenLegacyTable("Kesinti ve Kazanç Türleri","AVTUR",true,new Size(520,410))));
-        tanimlar.DropDownItems.Add(MenuItem("Genel Tatiller", PdksModule.Tanimlar, () => OpenLegacyTable("Genel Tatiller","TATIL",true,new Size(570,430))));
-        tanimlar.DropDownItems.Add(MenuItem("Günlük Çalışma Saatleri", PdksModule.Tanimlar, () => OpenLegacyTable("Günlük Çalışma Saatleri","PUANBILGI",true,new Size(650,470))));
-        tanimlar.DropDownItems.Add(MenuItem("Yıllık Çalışma Planı", PdksModule.Tanimlar, () => OpenLegacyTable("Yıllık Çalışma Planı","PLANA",true,new Size(760,520))));
-        tanimlar.DropDownItems.Add(MenuItem("Ceza Kesintileri", PdksModule.Tanimlar, () => OpenLegacyTable("Ceza Kesintileri","GCEZA",true,new Size(620,450))));
-        tanimlar.DropDownItems.Add(new ToolStripSeparator());
-        tanimlar.DropDownItems.Add(MenuItem("Özel Geçiş Kartları", PdksModule.Tanimlar, () => OpenLegacyTable("Özel Geçiş Kartları","MKART",true,new Size(600,440))));
+        var daily = new ToolStripMenuItem("Operasyon");
+        daily.DropDownItems.Add(MenuItem("Canlı Devam Takibi", PdksModule.GunlukOperasyon, OpenLiveAttendance));
+        daily.DropDownItems.Add(MenuItem("Terminal Veri Aktarımı", PdksModule.Terminal, () => OpenDialogModule(PdksModule.Terminal)));
+        daily.DropDownItems.Add(MenuItem("Giriş-Çıkış Kayıtları", PdksModule.GirisCikis, OpenLegacyGirisCikis));
+        daily.DropDownItems.Add(new ToolStripSeparator());
+        daily.DropDownItems.Add(MenuItem("Çalışma Tarihi", PdksModule.Donemler, OpenWorkingDate));
 
-        var islemler = new ToolStripMenuItem("İşlemler");
-        islemler.DropDownItems.Add(MenuItem("Terminalden Gelen Bilgileri Aktar", PdksModule.Terminal, () => OpenDialogModule(PdksModule.Terminal)));
-        islemler.DropDownItems.Add(MenuItem("Canlı Personel Denetim", PdksModule.GunlukOperasyon, OpenLiveAttendance));
-        islemler.DropDownItems.Add(MenuItem("Giriş ve Çıkışlar", PdksModule.GirisCikis, OpenLegacyGirisCikis));
-        islemler.DropDownItems.Add(MenuItem("Personel Bilgileri", PdksModule.Personel, OpenPersonel));
-        islemler.DropDownItems.Add(new ToolStripSeparator());
-        islemler.DropDownItems.Add(MenuItem("Personel Süre Kaydırma", PdksModule.Personel, () => OpenLegacyTable("Personel Süre Kaydırma","PERTIMESHIFT",true,new Size(620,430))));
-        islemler.DropDownItems.Add(new ToolStripSeparator());
-        islemler.DropDownItems.Add(MenuItem("Ek Kazanç ve Kesinti Girişi", PdksModule.EkKazancKesinti, OpenLegacyKazancKesinti));
-        islemler.DropDownItems.Add(MenuItem("Sabit Ödemeler", PdksModule.Bordro, () => OpenPersonelTab(PdksModule.Bordro)));
-        islemler.DropDownItems.Add(MenuItem("İzin Girişi", PdksModule.Izinler, OpenLegacyIzin));
-        islemler.DropDownItems.Add(MenuItem("Personel Maaş Zammı", PdksModule.Personel, OpenPersonel));
-        islemler.DropDownItems.Add(MenuItem("Dönem Devir İşlemi", PdksModule.Donemler, () => OpenLegacyTable("Dönem Devir İşlemi","DONEM",false,new Size(620,430))));
-        islemler.DropDownItems.Add(new ToolStripSeparator());
-        islemler.DropDownItems.Add(MenuItem("Puantaj", PdksModule.Puantaj, OpenLegacyPuantaj));
-        islemler.DropDownItems.Add(new ToolStripSeparator());
-        var users = MenuItem("Kullanıcı Bilgileri", PdksModule.KullaniciYonetimi, OpenUserManagement);
-        users.Enabled = currentUser.IsAdmin; islemler.DropDownItems.Add(users);
+        var hr = new ToolStripMenuItem("İnsan Kaynakları");
+        hr.DropDownItems.Add(MenuItem("Personel Kartları", PdksModule.Personel, OpenPersonel));
+        hr.DropDownItems.Add(MenuItem("İzin Yönetimi", PdksModule.Izinler, OpenLegacyIzin));
+        hr.DropDownItems.Add(MenuItem("Ek Ödeme ve Kesinti İşlemleri", PdksModule.EkKazancKesinti, OpenLegacyKazancKesinti));
+        hr.DropDownItems.Add(MenuItem("Çalışma Süresi Düzeltmeleri", PdksModule.Personel, () => OpenLegacyTable("Çalışma Süresi Düzeltmeleri","PERTIMESHIFT",true,new Size(1080,680))));
 
-        var raporlar = new ToolStripMenuItem("Raporlar");
-        raporlar.DropDownItems.Add(MenuItem("Ayrıntılı Bordro", PdksModule.Bordro, OpenLegacyBordro));
-        raporlar.DropDownItems.Add(MenuItem("Genel Maaş Bordrosu", PdksModule.Bordro, OpenLegacyBordro));
-        var userBordro = MenuItem("Genel Maaş Bordrosu (Kullanıcı)", PdksModule.Bordro, OpenLegacyBordro); userBordro.Visible=false; raporlar.DropDownItems.Add(userBordro);
-        raporlar.DropDownItems.Add(new ToolStripSeparator());
-        raporlar.DropDownItems.Add(MenuItem("Puantaj Sonuçları", PdksModule.Puantaj, () => OpenData(LegacyDataView.PuantajSonuclari, PdksModule.Puantaj)));
-        raporlar.DropDownItems.Add(MenuItem("Detaylı Puantaj Sonuçları", PdksModule.Puantaj, () => OpenPersonelTab(PdksModule.Puantaj)));
-        raporlar.DropDownItems.Add(new ToolStripSeparator());
-        raporlar.DropDownItems.Add(MenuItem("Ek Kazanç ve Kesinti Raporu", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.EarningsDeductions)));
-        raporlar.DropDownItems.Add(MenuItem("İzinli Personel Raporu", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.LeavePersonnel)));
-        raporlar.DropDownItems.Add(new ToolStripSeparator());
-        raporlar.DropDownItems.Add(MenuItem("Personel Listesi", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.PersonnelList)));
-        raporlar.DropDownItems.Add(MenuItem("Çalışma Sistemine Göre Personel Sayısı", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.PersonnelCountByWorkSystem)));
-        raporlar.DropDownItems.Add(MenuItem("Personel Yıllık İzin Hakedişleri", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.AnnualLeaveEntitlements)));
+        var payroll = new ToolStripMenuItem("Puantaj ve Bordro");
+        payroll.DropDownItems.Add(MenuItem("Puantaj İşlemleri", PdksModule.Puantaj, OpenLegacyPuantaj));
+        payroll.DropDownItems.Add(MenuItem("Puantaj Sonuçları", PdksModule.Puantaj, () => OpenData(LegacyDataView.PuantajSonuclari, PdksModule.Puantaj)));
+        payroll.DropDownItems.Add(new ToolStripSeparator());
+        payroll.DropDownItems.Add(MenuItem("Personel Ödeme İşlemleri", PdksModule.Bordro, () => OpenPersonelTab(PdksModule.Bordro)));
+        payroll.DropDownItems.Add(MenuItem("Genel Maaş Bordrosu", PdksModule.Bordro, OpenLegacyBordro));
 
-        var araclar = new ToolStripMenuItem("Araçlar");
-        araclar.DropDownItems.Add(PlainItem("Hesap Makinası", () => Launch("calc.exe")));
-        araclar.DropDownItems.Add(PlainItem("Yazı Editörü (Wordpad)", LaunchEditor));
-        araclar.DropDownItems.Add(new ToolStripSeparator());
-        araclar.DropDownItems.Add(PlainItem("Yedekle", BackupDatabase));
+        var definitions = new ToolStripMenuItem("Yapılandırma");
+        definitions.DropDownItems.Add(MenuItem("Vardiya ve Çalışma Grupları", PdksModule.Tanimlar, OpenGroups));
+        definitions.DropDownItems.Add(MenuItem("Dönem Yönetimi", PdksModule.Donemler, () => OpenDialogModule(PdksModule.Donemler)));
+        var org = new ToolStripMenuItem("Organizasyon Yapısı");
+        org.DropDownItems.Add(MenuItem("Bölümler", PdksModule.Tanimlar, () => OpenDefinitions("Bölümler")));
+        org.DropDownItems.Add(MenuItem("Servisler", PdksModule.Tanimlar, () => OpenDefinitions("Servisler")));
+        org.DropDownItems.Add(MenuItem("Görevler", PdksModule.Tanimlar, () => OpenDefinitions("Görevler")));
+        org.DropDownItems.Add(MenuItem("Personel Durumları", PdksModule.Tanimlar, () => OpenDefinitions("Durum")));
+        org.DropDownItems.Add(MenuItem("Firma Bilgileri", PdksModule.Tanimlar, () => OpenDefinitions("Firma")));
+        definitions.DropDownItems.Add(org);
+        var calendar = new ToolStripMenuItem("Takvim ve Çalışma Planı");
+        calendar.DropDownItems.Add(MenuItem("Genel Tatiller", PdksModule.Tanimlar, () => OpenLegacyTable("Genel Tatiller","TATIL",true,new Size(1040,680))));
+        calendar.DropDownItems.Add(MenuItem("Günlük Çalışma Saatleri", PdksModule.Tanimlar, () => OpenLegacyTable("Günlük Çalışma Saatleri","PUANBILGI",true,new Size(1120,700))));
+        calendar.DropDownItems.Add(MenuItem("Yıllık Çalışma Planı", PdksModule.Tanimlar, () => OpenLegacyTable("Yıllık Çalışma Planı","PLANA",true,new Size(1180,720))));
+        definitions.DropDownItems.Add(calendar);
+        var money = new ToolStripMenuItem("Bordro ve Kesinti Tanımları");
+        money.DropDownItems.Add(MenuItem("Bordro Alanları", PdksModule.Tanimlar, () => OpenDefinitions("Bordro")));
+        money.DropDownItems.Add(MenuItem("Kesinti ve Kazanç Türleri", PdksModule.Tanimlar, () => OpenLegacyTable("Kesinti ve Kazanç Türleri","AVTUR",true,new Size(1040,680))));
+        money.DropDownItems.Add(MenuItem("Ceza Kesintileri", PdksModule.Tanimlar, () => OpenLegacyTable("Ceza Kesintileri","GCEZA",true,new Size(1040,680))));
+        definitions.DropDownItems.Add(money);
 
-        var transfer = new ToolStripMenuItem("Transfer");
-        transfer.DropDownItems.Add(MenuItem("Puantaj Transfer", PdksModule.Puantaj, () => OpenData(LegacyDataView.PuantajSonuclari, PdksModule.Puantaj)));
+        var reports = new ToolStripMenuItem("Raporlama ve Denetim");
+        reports.DropDownItems.Add(MenuItem("Personel Listesi", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.PersonnelList)));
+        reports.DropDownItems.Add(MenuItem("İzinli Personel", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.LeavePersonnel)));
+        reports.DropDownItems.Add(MenuItem("Ek Kazanç ve Kesintiler", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.EarningsDeductions)));
+        reports.DropDownItems.Add(MenuItem("Çalışma Sistemine Göre Personel", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.PersonnelCountByWorkSystem)));
+        reports.DropDownItems.Add(MenuItem("Yıllık İzin Hakedişleri", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.AnnualLeaveEntitlements)));
+        reports.DropDownItems.Add(new ToolStripSeparator());
+        reports.DropDownItems.Add(MenuItem("Genel Maaş Bordrosu", PdksModule.Bordro, OpenLegacyBordro));
 
-        var hakkinda = new ToolStripMenuItem("Hakkında");
-        hakkinda.DropDownItems.Add(new ToolStripMenuItem("Aktivasyon Kodu") { Enabled = false });
-        hakkinda.DropDownItems.Add(new ToolStripSeparator());
-        hakkinda.DropDownItems.Add(PlainItem("Hakkında", () => MessageBox.Show(Text + "\nwww.kyerp.net", "Hakkında", MessageBoxButtons.OK, MessageBoxIcon.Information)));
-        var help = PlainItem("Yardım", () => MessageBox.Show("KYERP PDKS yardım ve kullanım bilgileri.","Yardım")); help.ShortcutKeys=Keys.F1; hakkinda.DropDownItems.Add(help);
+        var system = new ToolStripMenuItem("Sistem Yönetimi");
+        system.DropDownItems.Add(MenuItem("Terminal ve Cihaz Ayarları", PdksModule.Terminal, OpenLegacyTerminalSettings));
+        system.DropDownItems.Add(PlainItem("Veritabanı Bağlantı Yönetimi", () => { StartupConfiguration.EnsureReady(); UpdateDbStatus(); }));
+        system.DropDownItems.Add(PlainItem("Hızlı Veri Kaynakları (GDB / TNF)", () => new QuickDataSourceForm().ShowDialog(this)));
+        system.DropDownItems.Add(PlainItem("Veritabanı Yedekleme", BackupDatabase));
+        system.DropDownItems.Add(PlainItem("Yazdırma Ayarları", OpenPrinterSettings));
+        system.DropDownItems.Add(new ToolStripSeparator());
+        var users = MenuItem("Kullanıcı Yönetimi", PdksModule.KullaniciYonetimi, OpenUserManagement);
+        users.Enabled = currentUser.IsAdmin;
+        system.DropDownItems.Add(users);
 
-        menu.Items.AddRange([home,tanimlar,islemler,raporlar,araclar,transfer,ayarlar,hakkinda]);
+        var layout = new ToolStripMenuItem("Çalışma Alanı");
+        layout.DropDownItems.Add(PlainItem("Tek Çalışma Alanı", () => workspace.ApplyLayout(WorkspaceLayoutMode.Single)));
+        layout.DropDownItems.Add(PlainItem("İki Sütunlu Görünüm", () => workspace.ApplyLayout(WorkspaceLayoutMode.TwoColumns)));
+        layout.DropDownItems.Add(PlainItem("İki Satırlı Görünüm", () => workspace.ApplyLayout(WorkspaceLayoutMode.TwoRows)));
+        layout.DropDownItems.Add(PlainItem("Operasyon Düzeni: Sol İki / Sağ Geniş", () => workspace.ApplyLayout(WorkspaceLayoutMode.ThreeFocusRight)));
+        layout.DropDownItems.Add(PlainItem("Dört Bölmeli Görünüm", () => workspace.ApplyLayout(WorkspaceLayoutMode.FourGrid)));
+        layout.DropDownItems.Add(new ToolStripSeparator());
+        layout.DropDownItems.Add(PlainItem("Aktif Modülü Kapat", workspace.CloseActive));
+        layout.DropDownItems.Add(PlainItem("Tüm Modülleri Kapat", () => workspace.CloseAll()));
+
+        var about = new ToolStripMenuItem("Destek ve Bilgi");
+        about.DropDownItems.Add(PlainItem("KY ERP Kurumsal Web Sitesi", OpenErpSite));
+        about.DropDownItems.Add(PlainItem("Hakkında", () => MessageBox.Show(Text + "\nKY ERP • PDKS\nhttps://kyerp.net", "Hakkında", MessageBoxButtons.OK, MessageBoxIcon.Information)));
+        var help = PlainItem("Kullanım Yardımı", () => MessageBox.Show("KYERP PDKS yardım ve kullanım bilgileri.","Kullanım Yardımı"));
+        help.ShortcutKeys = Keys.F1;
+        about.DropDownItems.Add(help);
+
+        menu.Items.AddRange([home,daily,hr,payroll,definitions,reports,system,layout,about]);
         ApplyMenuIcons(menu);
+        var companyBadge = new ToolStripMenuItem($"{branding.ReportHeader}  •  {currentUser.UserName}")
+        {
+            Alignment = ToolStripItemAlignment.Right, Enabled = false,
+            Font = new Font("Segoe UI",9.5f,FontStyle.Bold), ForeColor = Color.FromArgb(30,79,145)
+        };
+        menu.Items.Add(companyBadge);
         MainMenuStrip = menu;
     }
-
     static void ApplyMenuIcons(MenuStrip menu)
     {
         foreach (ToolStripMenuItem item in menu.Items) ApplyMenuIcon(item);
@@ -144,7 +164,7 @@ public sealed class MainShellForm : Form
     static void ApplyMenuIcon(ToolStripMenuItem item)
     {
         var text = (item.Text ?? string.Empty).ToLower(new System.Globalization.CultureInfo("tr-TR"));
-        var icon = text.Contains("ana sayfa") ? PdksToolbarIcon.Home
+        var icon = text.Contains("genel bakış") || text.Contains("ana sayfa") ? PdksToolbarIcon.Home
             : text.Contains("rapor") || text.Contains("sonuç") ? PdksToolbarIcon.Results
             : text.Contains("personel") || text.Contains("kullanıcı") ? PdksToolbarIcon.Personnel
             : text.Contains("terminal") || text.Contains("transfer") || text.Contains("aktar") ? PdksToolbarIcon.Transfer
@@ -177,21 +197,16 @@ public sealed class MainShellForm : Form
         tool.Height = 88;
         tool.BackColor = Color.White;
         tool.Padding = new Padding(10,4,0,4);
-        AddLegacyTool("Ana Sayfa", PdksModule.GunlukOperasyon, PdksToolbarIcons.Create(PdksToolbarIcon.Home), ShowHome, 88);
-        AddLegacyTool("Bilgi Aktar", PdksModule.Terminal, PdksToolbarIcons.Create(PdksToolbarIcon.Transfer), () => OpenDialogModule(PdksModule.Terminal), 88);
-        AddLegacyTool("Canlı Denetim", PdksModule.GunlukOperasyon, PdksToolbarIcons.Create(PdksToolbarIcon.Live), OpenLiveAttendance, 96);
-        AddLegacyTool("Gruplar", PdksModule.Tanimlar, PdksToolbarIcons.Create(PdksToolbarIcon.Groups), OpenGroups, 88);
-        AddLegacyTool("Dönemler", PdksModule.Donemler, PdksToolbarIcons.Create(PdksToolbarIcon.Periods), () => OpenDialogModule(PdksModule.Donemler), 88);
-        AddLegacyTool("Bölümler", PdksModule.Tanimlar, PdksToolbarIcons.Create(PdksToolbarIcon.Departments), () => OpenDefinitions("Bölümler"), 88);
-        AddLegacyTool("Giriş-Çıkışlar", PdksModule.GirisCikis, PdksToolbarIcons.Create(PdksToolbarIcon.EntryExit), OpenLegacyGirisCikis, 94);
-        AddLegacyTool("Per. Bilgileri", PdksModule.Personel, PdksToolbarIcons.Create(PdksToolbarIcon.Personnel), OpenPersonel, 94);
-        AddLegacyTool("Avanslar", PdksModule.EkKazancKesinti, PdksToolbarIcons.Create(PdksToolbarIcon.Advances), OpenLegacyKazancKesinti, 88);
+        AddLegacyTool("Genel Bakış", PdksModule.GunlukOperasyon, PdksToolbarIcons.Create(PdksToolbarIcon.Home), ShowHome, 88);
+        AddLegacyTool("Canlı İzleme", PdksModule.GunlukOperasyon, PdksToolbarIcons.Create(PdksToolbarIcon.Live), OpenLiveAttendance, 96);
+        AddLegacyTool("Terminal", PdksModule.Terminal, PdksToolbarIcons.Create(PdksToolbarIcon.Transfer), () => OpenDialogModule(PdksModule.Terminal), 92);
+        AddLegacyTool("Giriş-Çıkış", PdksModule.GirisCikis, PdksToolbarIcons.Create(PdksToolbarIcon.EntryExit), OpenLegacyGirisCikis, 96);
+        AddLegacyTool("Personel", PdksModule.Personel, PdksToolbarIcons.Create(PdksToolbarIcon.Personnel), OpenPersonel, 92);
         AddLegacyTool("Puantaj", PdksModule.Puantaj, PdksToolbarIcons.Create(PdksToolbarIcon.Timesheet), OpenLegacyPuantaj, 88);
-        AddLegacyTool("Puantaj Son.", PdksModule.Puantaj, PdksToolbarIcons.Create(PdksToolbarIcon.Results), () => OpenData(LegacyDataView.PuantajSonuclari, PdksModule.Puantaj), 92);
+        AddLegacyTool("Sonuçlar", PdksModule.Puantaj, PdksToolbarIcons.Create(PdksToolbarIcon.Results), () => OpenData(LegacyDataView.PuantajSonuclari, PdksModule.Puantaj), 88);
         AddLegacyTool("Bordro", PdksModule.Bordro, PdksToolbarIcons.Create(PdksToolbarIcon.Payroll), OpenLegacyBordro, 88);
-        AddLegacyTool("Çalışma Tarihi", PdksModule.Donemler, PdksToolbarIcons.Create(PdksToolbarIcon.WorkDate), OpenWorkingDate, 98);
+        AddLegacyTool("Çalışma Tarihi", PdksModule.Donemler, PdksToolbarIcons.Create(PdksToolbarIcon.WorkDate), OpenWorkingDate, 102);
     }
-
     void AddLegacyTool(string text, PdksModule module, Image image, Action action, int width, bool visible = true)
     {
         var b = new ToolStripButton(text,image)
@@ -199,9 +214,9 @@ public sealed class MainShellForm : Form
             AutoSize=false, Width=width, Height=80, TextImageRelation=TextImageRelation.ImageAboveText,
             DisplayStyle=ToolStripItemDisplayStyle.ImageAndText, Enabled=currentUser.Can(module),
             Font=new Font("Segoe UI",8.5f,FontStyle.Bold), ForeColor=Color.FromArgb(28,46,72),
-            Margin=new Padding(2,0,2,0), Padding=new Padding(2,7,2,4), AutoToolTip=false, Visible=visible
+            Margin=new Padding(2,0,2,0), Padding=new Padding(2,7,2,4), AutoToolTip=false, Visible=visible, CheckOnClick=false
         };
-        b.Click += (_,_) => action(); tool.Items.Add(b);
+        b.Click += (_,_) => { foreach(var x in tool.Items.OfType<ToolStripButton>()) x.Checked=false; b.Checked=true; action(); }; tool.Items.Add(b);
     }
 
     void BuildStatus()
@@ -210,8 +225,9 @@ public sealed class MainShellForm : Form
         status.Height = 28;
         status.BackColor = Color.FromArgb(247,249,252);
         todayStatus.Text = "Bugün: " + DateTime.Today.ToString("dd MMMM yyyy dddd", new System.Globalization.CultureInfo("tr-TR"));
+        firmStatus.Text = $"Firma: {branding.ReportHeader}";
         userStatus.Text = $"Kullanıcı: {currentUser.UserName}"; UpdateDbStatus();
-        brandStatus.Text = "KY ERP • Web PDKS";
+        brandStatus.Text = "KY ERP • PDKS";
         brandStatus.ForeColor = Color.FromArgb(25,92,180);
         brandStatus.IsLink = true;
         brandStatus.Click += (_,_) => OpenErpSite();
@@ -227,15 +243,16 @@ public sealed class MainShellForm : Form
 
     void ShowHome()
     {
-        DisposeActiveChild(); workspace.Controls.Clear();
-        workspace.Controls.Add(new PdksHomeDashboard(
+        foreach (var button in tool.Items.OfType<ToolStripButton>()) button.Checked = button.Text == "Genel Bakış";
+        personel = null;
+        workspace.ShowSingle(new PdksHomeDashboard(
             OpenLiveAttendance,
             () => OpenDialogModule(PdksModule.Terminal),
             OpenLegacyGirisCikis,
             OpenLegacyPuantaj,
             () => OpenData(LegacyDataView.PuantajSonuclari, PdksModule.Puantaj),
             OpenPersonel,
-            () => OpenOperationalReport(LegacyOperationalReport.PersonnelList)));
+            () => OpenOperationalReport(LegacyOperationalReport.PersonnelList)), "home", "Genel Bakış");
     }
 
     static void OpenErpSite()
@@ -246,9 +263,14 @@ public sealed class MainShellForm : Form
 
     bool Ready(PdksModule module)
     {
-        if (!currentUser.Can(module)) { MessageBox.Show("Bu işlem için yetkiniz yok.","KYERP PDKS",MessageBoxButtons.OK,MessageBoxIcon.Warning); return false; }
+        if (!currentUser.Can(module))
+        {
+            MessageBox.Show("Bu işlem için yetkiniz yok.", "KYERP PDKS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
         if (!StartupConfiguration.IsReady() && !StartupConfiguration.EnsureReady()) return false;
-        UpdateDbStatus(); return true;
+        UpdateDbStatus();
+        return true;
     }
 
     void EnsurePersonel()
@@ -261,123 +283,178 @@ public sealed class MainShellForm : Form
 
     void OpenPersonelTab(PdksModule module)
     {
-        if (!Ready(module)) return; EnsurePersonel(); if (personel is null) return;
+        if (!Ready(module)) return;
+        EnsurePersonel();
+        if (personel is null) return;
+        personel.PrepareForEmbedding();
+        PdksTheme.Apply(personel);
         personel.ActivateModule(module);
-        personel.ShowDialog(this);
-        personel.Dispose();
-        personel = null;
+        AccessGuard.Apply(personel, module, currentUser);
+        ShowEmbedded(personel, "personel", "İnsan Kaynakları");
     }
 
     void OpenGroups()
     {
         if (!Ready(PdksModule.Tanimlar)) return;
-        try { using var f = new LegacyGroupForm(); f.ShowDialog(this); }
-        catch (Exception ex) { MessageBox.Show(ex.Message,"Çalışma Grupları",MessageBoxButtons.OK,MessageBoxIcon.Warning); }
+        ShowModule(new LegacyGroupForm(), PdksModule.Tanimlar);
     }
 
     void OpenDefinitions(string initialTab)
     {
         if (!Ready(PdksModule.Tanimlar)) return;
-        try { using var f = new LegacyDefinitionsForm(initialTab); f.ShowDialog(this); }
-        catch (Exception ex) { MessageBox.Show(ex.Message,"Çalışma Sistemleri",MessageBoxButtons.OK,MessageBoxIcon.Warning); }
+        ShowModule(new LegacyDefinitionsForm(initialTab), PdksModule.Tanimlar);
     }
 
     void OpenLegacyTerminalSettings()
     {
         if (!Ready(PdksModule.Terminal)) return;
-        try { using var f = new LegacyTerminalSettingsForm(); f.ShowDialog(this); }
-        catch (Exception ex) { MessageBox.Show(ex.Message,"Terminal Aktarım Ayarları",MessageBoxButtons.OK,MessageBoxIcon.Warning); }
+        ShowModule(new LegacyTerminalSettingsForm(), PdksModule.Terminal);
     }
 
-    void OpenLegacyTable(string title,string table,bool edit,Size size,PdksModule module=PdksModule.Tanimlar)
+    void OpenLegacyTable(string title, string table, bool edit, Size size, PdksModule module = PdksModule.Tanimlar)
     {
         if (!Ready(module)) return;
-        try { using var f = new LegacyTableBrowserForm(title,table,edit,size); f.ShowDialog(this); }
-        catch (Exception ex) { MessageBox.Show(ex.Message,title,MessageBoxButtons.OK,MessageBoxIcon.Warning); }
+        ShowModule(new LegacyTableBrowserForm(title, table, edit, size), module);
     }
 
     void OpenDefinition(string table)
     {
-        if (!Ready(PdksModule.Tanimlar)) return; EnsurePersonel(); personel?.OpenOrganizationDefinition(table);
+        if (!Ready(PdksModule.Tanimlar)) return;
+        EnsurePersonel();
+        personel?.OpenOrganizationDefinition(table);
     }
 
     void OpenDialogModule(PdksModule module)
     {
-        if (!Ready(module)) return; EnsurePersonel(); personel?.OpenStandaloneDialog(module);
+        if (!Ready(module)) return;
+        switch (module)
+        {
+            case PdksModule.Terminal:
+                EnsurePersonel();
+                if (personel is not null) ShowModule(personel.CreateTerminalTransferDialog(), PdksModule.Terminal);
+                break;
+            case PdksModule.Donemler:
+                ShowModule(new LegacyPeriodForm(), PdksModule.Donemler);
+                break;
+            case PdksModule.GunlukOperasyon:
+                OpenLiveAttendance();
+                break;
+            case PdksModule.Tanimlar:
+                OpenDefinitions("Bölümler");
+                break;
+            default:
+                OpenPersonelTab(module);
+                break;
+        }
     }
 
     void OpenWorkingDate()
     {
-        if (!Ready(PdksModule.Donemler)) return; EnsurePersonel(); personel?.ShowWorkingDateDialog();
+        if (!Ready(PdksModule.Donemler)) return;
+        EnsurePersonel();
+        personel?.ShowWorkingDateDialog();
     }
 
     void OpenTerminalProfilesAdvanced()
     {
-        if (!Ready(PdksModule.Terminal)) return; EnsurePersonel(); personel?.ShowTerminalProfileManager();
+        if (!Ready(PdksModule.Terminal)) return;
+        EnsurePersonel();
+        personel?.ShowTerminalProfileManager();
     }
 
     void OpenLegacyKazancKesinti()
     {
-        if (!Ready(PdksModule.EkKazancKesinti)) return; EnsurePersonel(); personel?.ShowLegacyKazancKesintiEntry();
+        if (!Ready(PdksModule.EkKazancKesinti)) return;
+        ShowModule(new LegacyAvansEntryForm(), PdksModule.EkKazancKesinti);
     }
 
-    void OpenLegacyIzin()
-    {
-        if (!Ready(PdksModule.Izinler)) return; EnsurePersonel(); personel?.ShowLegacyIzinEntry();
-    }
+    void OpenLegacyIzin() => OpenPersonelTab(PdksModule.Izinler);
 
     void OpenLiveAttendance()
     {
         if (!Ready(PdksModule.GunlukOperasyon)) return;
-        using var form = new LiveAttendanceForm();
-        form.ShowDialog(this);
+        ShowModule(new LiveAttendanceForm(OpenGirisCikisFor, OpenPersonFor), PdksModule.GunlukOperasyon);
+    }
+
+    void OpenPersonFor(string cardNo)
+    {
+        if (!Ready(PdksModule.Personel)) return;
+        EnsurePersonel();
+        if (personel is null) return;
+        personel.PrepareForEmbedding();
+        PdksTheme.Apply(personel);
+        AccessGuard.Apply(personel, PdksModule.Personel, currentUser);
+        ShowEmbedded(personel, "personel", "İnsan Kaynakları");
+        personel.SelectPerson(cardNo);
+    }
+
+    void OpenGirisCikisFor(string cardNo, DateTime day)
+    {
+        if (!Ready(PdksModule.GirisCikis)) return;
+        ShowModule(new LegacyGirisCikisForm(cardNo, day), PdksModule.GirisCikis);
     }
 
     void OpenLegacyGirisCikis()
     {
         if (!Ready(PdksModule.GirisCikis)) return;
-        using var form = new LegacyGirisCikisForm();
-        form.ShowDialog(this);
+        ShowModule(new LegacyGirisCikisForm(), PdksModule.GirisCikis);
     }
 
     void OpenLegacyPuantaj()
     {
         if (!Ready(PdksModule.Puantaj)) return;
-        using var form = new LegacyPuantajForm();
-        form.ShowDialog(this);
+        ShowModule(new LegacyPuantajForm(), PdksModule.Puantaj);
     }
 
     void OpenLegacyBordro()
     {
         if (!Ready(PdksModule.Bordro)) return;
-        using var form = new LegacyBordroForm();
-        form.ShowDialog(this);
+        ShowModule(new LegacyBordroForm(), PdksModule.Bordro);
     }
+
     void OpenOperationalReport(LegacyOperationalReport report)
     {
         if (!Ready(PdksModule.Raporlar)) return;
-        using var form = new LegacyOperationalReportForm(report);
-        form.ShowDialog(this);
-    }
-    void OpenData(LegacyDataView view, PdksModule module)
-    {
-        if (!Ready(module)) return; using var form = new LegacyDataModuleForm(view); form.ShowDialog(this);
+        ShowModule(new LegacyOperationalReportForm(report), PdksModule.Raporlar);
     }
 
-    void ShowEmbedded(Form form)
+    void OpenData(LegacyDataView view, PdksModule module)
     {
-        if (!ReferenceEquals(activeChild, form)) DisposeActiveChild(); workspace.Controls.Clear(); activeChild=form;
-        if (form.Parent != workspace) workspace.Controls.Add(form); if (!form.Visible) form.Show(); form.BringToFront();
+        if (!Ready(module)) return;
+        switch (view)
+        {
+            case LegacyDataView.GirisCikis: ShowModule(new LegacyGirisCikisForm(), PdksModule.GirisCikis); break;
+            case LegacyDataView.Avanslar: ShowModule(new LegacyAvansEntryForm(), PdksModule.EkKazancKesinti); break;
+            case LegacyDataView.Puantaj: ShowModule(new LegacyPuantajForm(), PdksModule.Puantaj); break;
+            case LegacyDataView.Bordro: ShowModule(new LegacyBordroForm(), PdksModule.Bordro); break;
+            default: ShowModule(new LegacyDataModuleForm(view), module); break;
+        }
+    }
+
+    void ShowModule(Form form, PdksModule module)
+    {
+        AccessGuard.Apply(form, module, currentUser);
+        var host = new ModuleHostForm(form, ShowHome);
+        ShowEmbedded(host, "module:" + form.GetType().Name + ":" + form.Text, form.Text);
+    }
+
+    void ShowEmbedded(Form form, string key, string title)
+    {
+        workspace.Open(form, key, title);
+        if (!form.Visible) form.Show();
+        form.BringToFront();
     }
 
     void DisposeActiveChild()
     {
-        if (activeChild is null) return; if (!ReferenceEquals(activeChild, personel) && !activeChild.IsDisposed) activeChild.Dispose(); activeChild=null;
+        workspace.CloseAll();
+        personel = null;
     }
 
     void OpenUserManagement()
     {
-        if (!currentUser.IsAdmin) return; using var f = new UserManagementForm(); f.ShowDialog(this);
+        if (!currentUser.IsAdmin) return;
+        ShowModule(new UserManagementForm(), PdksModule.KullaniciYonetimi);
     }
 
     void OpenPrinterSettings()
@@ -421,11 +498,11 @@ public sealed class MainShellForm : Form
         {
             if (e.Item is not ToolStripButton b) { base.OnRenderButtonBackground(e); return; }
             var rect = new Rectangle(2,2,Math.Max(1,b.Width-5),Math.Max(1,b.Height-5));
-            var back = b.Pressed ? Color.FromArgb(224,236,255) : b.Selected ? Color.FromArgb(238,245,255) : Color.White;
+            var back = b.Pressed ? Color.FromArgb(224,236,255) : (b.Selected || b.Checked) ? Color.FromArgb(238,245,255) : Color.White;
             using var brush = new SolidBrush(back);
-            using var pen = new Pen(b.Selected || b.Pressed ? Color.FromArgb(165,198,242) : Color.FromArgb(226,231,239));
+            using var pen = new Pen(b.Selected || b.Pressed || b.Checked ? Color.FromArgb(165,198,242) : Color.FromArgb(226,231,239));
             e.Graphics.FillRectangle(brush,rect); e.Graphics.DrawRectangle(pen,rect);
-            if (b.Selected || b.Pressed)
+            if (b.Selected || b.Pressed || b.Checked)
             {
                 using var accent = new SolidBrush(Color.FromArgb(30,105,205));
                 e.Graphics.FillRectangle(accent,rect.Left,rect.Bottom-3,rect.Width,3);

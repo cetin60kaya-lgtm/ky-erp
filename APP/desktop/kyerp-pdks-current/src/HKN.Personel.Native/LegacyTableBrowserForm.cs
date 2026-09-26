@@ -27,22 +27,24 @@ public sealed class LegacyTableBrowserForm : Form
         this.table = table;
         this.allowEdit = allowEdit;
         Text = title;
-        Font = new Font("Microsoft Sans Serif", 8.25f);
+        Font = new Font("Segoe UI", 9f);
+        BackColor = Color.FromArgb(246, 249, 253);
         StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
-        MinimizeBox = false;
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MaximizeBox = true;
+        MinimizeBox = true;
         ShowInTaskbar = false;
-        ClientSize = legacySize ?? new Size(640, 430);
+        ClientSize = legacySize ?? new Size(980, 640);
+        MinimumSize = new Size(760, 520);
         BuildUi();
         Shown += (_, _) => Reload();
     }
 
     void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, Padding = new Padding(6) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, Padding = new Padding(14), BackColor = Color.FromArgb(246,249,253) };
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         root.Controls.Add(grid, 0, 0);
 
         var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(2, 6, 2, 0) };
@@ -63,8 +65,9 @@ public sealed class LegacyTableBrowserForm : Form
 
     static Button Button(string text, int width) => new()
     {
-        Text = text, Width = width, Height = 29, ForeColor = Color.Navy,
-        Font = new Font("Microsoft Sans Serif", 8.25f, FontStyle.Bold), UseVisualStyleBackColor = true
+        Text = text, Width = Math.Max(width, 96), Height = 36, FlatStyle = FlatStyle.Flat,
+        ForeColor = Color.FromArgb(27,44,68), BackColor = Color.White,
+        Font = new Font("Segoe UI", 9f, FontStyle.Bold), Cursor = Cursors.Hand
     };
 
     void Reload()
@@ -154,9 +157,10 @@ public sealed class LegacyTableBrowserForm : Form
         public GenericRowDialog(string title, DataTable schema, DataRow? source, string key, bool isNew)
         {
             this.schema = schema; this.key = key; this.isNew = isNew;
-            Text = title; StartPosition = FormStartPosition.CenterParent; FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false; Font = new Font("Microsoft Sans Serif", 8.25f);
-            ClientSize = new Size(470, Math.Min(650, Math.Max(180, schema.Columns.Count * 31 + 70)));
+            Text = title; StartPosition = FormStartPosition.CenterParent; FormBorderStyle = FormBorderStyle.Sizable;
+            MaximizeBox = true; MinimizeBox = true; ShowInTaskbar = false; Font = new Font("Segoe UI", 9f); BackColor = Color.FromArgb(246,249,253);
+            ClientSize = new Size(760, Math.Min(760, Math.Max(460, schema.Columns.Count * 38 + 110)));
+            MinimumSize = new Size(640, 420);
             Build(source);
         }
 

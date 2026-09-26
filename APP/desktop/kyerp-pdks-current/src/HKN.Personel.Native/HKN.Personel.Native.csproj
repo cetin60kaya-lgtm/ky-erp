@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <StartupObject>HKN.Personel.Native.Program</StartupObject>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
@@ -8,7 +9,7 @@
     <AssemblyName>KYERP.PDKS</AssemblyName>
     <Product>KYERP PDKS</Product>
     <Company>KY ERP</Company>
-    <Description>KYERP PDKS masaüstü personel devam kontrol sistemi</Description>
+    <Description>KYERP PDKS masaÃƒÆ’Ã‚Â¼stÃƒÆ’Ã‚Â¼ personel devam kontrol sistemi</Description>
     <Version>2.2.0</Version>
     <FileVersion>2.2.0.0</FileVersion>
   </PropertyGroup>

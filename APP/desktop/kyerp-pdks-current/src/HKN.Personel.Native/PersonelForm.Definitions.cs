@@ -272,16 +272,18 @@ public partial class PersonelForm
     {
         using var dialog=new Form
         {
-            Text="Çalışma Tarihi",StartPosition=FormStartPosition.CenterParent,ClientSize=new Size(205,83),
-            FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,ShowInTaskbar=false,Font=Font
+            Text="Çalışma Tarihi",StartPosition=FormStartPosition.CenterParent,ClientSize=new Size(430,185),
+            FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,ShowInTaskbar=false,
+            Font=new Font("Segoe UI",9f),BackColor=Color.FromArgb(246,249,253)
         };
-        var date=new DateTimePicker{Format=DateTimePickerFormat.Short,Value=SelectedWorkingDate,Width=105,Location=new Point(82,12)};
-        var label=new Label{Text="Çalışma Tarihi",AutoSize=true,Location=new Point(8,16)};
-        var select=new Button{Text="✓  Seç",Width=98,Height=29,Location=new Point(55,46),ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold),DialogResult=DialogResult.OK};
-        dialog.Controls.Add(label);dialog.Controls.Add(date);dialog.Controls.Add(select);dialog.AcceptButton=select;
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(24)};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,42));root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.Controls.Add(new Label{Text="İşlem yapılacak çalışma tarihini seçin",Dock=DockStyle.Fill,Font=new Font("Segoe UI",12f,FontStyle.Bold),ForeColor=Color.FromArgb(27,44,68)},0,0);
+        var date=new DateTimePicker{Format=DateTimePickerFormat.Long,Value=SelectedWorkingDate,Dock=DockStyle.Fill};root.Controls.Add(date,0,1);
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,8,0,0)};
+        var select=new Button{Text="Tarihi Kullan",Width=130,Height=36,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(36,107,230),ForeColor=Color.White,Font=new Font("Segoe UI",9f,FontStyle.Bold),DialogResult=DialogResult.OK};select.FlatAppearance.BorderSize=0;actions.Controls.Add(select);root.Controls.Add(actions,0,2);dialog.Controls.Add(root);dialog.AcceptButton=select;
         if(dialog.ShowDialog(DialogOwner())==DialogResult.OK) SelectedWorkingDate=date.Value.Date;
     }
-
     bool NameDialog(string title,string current,out string value)
     {
         using var dialog=Dialog(title,430,155);dialog.FormBorderStyle=FormBorderStyle.FixedDialog;

@@ -13,6 +13,8 @@ public partial class PersonelForm
     readonly Label payNormal=new(){AutoSize=true}, payEk=new(){AutoSize=true}, payKes=new(){AutoSize=true}, payNet=new(){AutoSize=true};
     readonly ComboBox bilgiType=new(){Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};
     readonly System.Windows.Forms.Timer slider=new(){Interval=3000};
+    bool refreshingFullTabs;
+    bool fullTabsReady;
 
     static DataGridView Grid(string name)=>new(){Name=name,Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
 
@@ -84,22 +86,33 @@ public partial class PersonelForm
             foreach(var c in new[]{periodG,periodI,periodE,periodB,periodO}){c.DisplayMember="AD";c.ValueMember="KOD";c.DataSource=dt.Copy();SelectPeriodForToday(c);}
             DateTime first=new(DateTime.Today.Year,DateTime.Today.Month,1), last=first.AddMonths(1).AddDays(-1);foreach(var d in new[]{gFrom,iFrom,eFrom})d.Value=first;foreach(var d in new[]{gTo,iTo,eTo})d.Value=last;
             WireAllButtons();
-            RefreshFullTabs();
         }
         catch{}
     }
 
     void RefreshFullTabs()
     {
-        if(string.IsNullOrEmpty(currentPk))return;
+        if (!fullTabsReady || refreshingFullTabs || IsDisposed || string.IsNullOrWhiteSpace(currentPk)) return;
+        refreshingFullTabs = true;
         try
         {
-            var p=new FbParameter("@PK",currentPk);DateTime a=gFrom.Value.Date,b=gTo.Value.Date.AddDays(1);
-            gGiris.DataSource=Q("select SIRA,GTARIH as GIRIS_TARIHI,GSAAT as GIRIS_SAATI,CTARIH as CIKIS_TARIHI,CSAAT as CIKIS_SAATI,GTUR,CTUR from GIRCIK where PKNO=@PK and ((GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B)) order by coalesce(GTARIH,CTARIH)",p,new FbParameter("@A",a),new FbParameter("@B",b));
-            a=iFrom.Value.Date;b=iTo.Value.Date.AddDays(1);gIzin.DataSource=Q("select SIRA,TARIH,BASSAAT,BITSAAT,SURESAAT,SUREDAKIKA,EBALAN,TIP,MAZERET from OZELIZIN where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",currentPk),new FbParameter("@A",a),new FbParameter("@B",b));
-            a=eFrom.Value.Date;b=eTo.Value.Date.AddDays(1);gEkk.DataSource=Q("select KOD,TARIH as ISLEM_TARIHI,VTARIH as VERILIS_TARIHI,TURKOD as TURU,MIKTAR,ACIKLAMA from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",currentPk),new FbParameter("@A",a),new FbParameter("@B",b));
+            var pk = currentPk;
+            var a = gFrom.Value.Date; var b = gTo.Value.Date.AddDays(1);
+            gGiris.DataSource = Q("select SIRA,GTARIH as GIRIS_TARIHI,GSAAT as GIRIS_SAATI,CTARIH as CIKIS_TARIHI,CSAAT as CIKIS_SAATI,GTUR,CTUR from GIRCIK where PKNO=@PK and ((GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B)) order by coalesce(GTARIH,CTARIH)", new FbParameter("@PK",pk), new FbParameter("@A",a), new FbParameter("@B",b));
+
+            a = iFrom.Value.Date; b = iTo.Value.Date.AddDays(1);
+            gIzin.DataSource = Q("select SIRA,TARIH,BASSAAT,BITSAAT,SURESAAT,SUREDAKIKA,EBALAN,TIP,MAZERET from OZELIZIN where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH", new FbParameter("@PK",pk), new FbParameter("@A",a), new FbParameter("@B",b));
+
+            a = eFrom.Value.Date; b = eTo.Value.Date.AddDays(1);
+            gEkk.DataSource = Q("select KOD,TARIH as ISLEM_TARIHI,VTARIH as VERILIS_TARIHI,TURKOD as TURU,MIKTAR,ACIKLAMA from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH", new FbParameter("@PK",pk), new FbParameter("@A",a), new FbParameter("@B",b));
+
             LoadBilgiOdemeClassic();
-        }catch(Exception ex){MessageBox.Show(ex.Message,"Personel Sekmeleri");}
+        }
+        catch(Exception ex)
+        {
+            try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "KYERP_PDKS_PersonelTabs.log"), DateTime.Now.ToString("O") + Environment.NewLine + ex + Environment.NewLine + Environment.NewLine); } catch { }
+        }
+        finally { refreshingFullTabs = false; }
     }
     (DateTime A,DateTime B) PeriodDates(ComboBox c)
     {
@@ -124,9 +137,26 @@ public partial class PersonelForm
     string Minutes(decimal m)=>$"{(int)(m/60):00}:{(int)(m%60):00}";
     void PrintReport(string title)
     {
-        if(currentPk=="")return;var doc=new PrintDocument{DocumentName=title};
-        doc.PrintPage+=(s,e)=>{var g=e.Graphics!;float y=45;using var h=new Font("Arial",14,FontStyle.Bold);using var n=new Font("Arial",9);g.DrawString(title,h,Brushes.Black,45,y);y+=35;g.DrawString($"Kart No: {currentPk}    Ad Soyad: {f.GetValueOrDefault("AD")?.Text} {f.GetValueOrDefault("SOYAD")?.Text}",n,Brushes.Black,45,y);y+=24;g.DrawString($"İşe Giriş: {f.GetValueOrDefault("IGTARIH")?.Text}    Maaş: {f.GetValueOrDefault("MAAS")?.Text}",n,Brushes.Black,45,y);y+=28;DataGridView? src=title.Contains("Giriş")?gGiris:title.Contains("İzin")?gIzin:title.Contains("Kazanç")?gEkk:gOdeme;foreach(DataGridViewRow r in src.Rows){if(r.IsNewRow)continue;string line=string.Join(" | ",r.Cells.Cast<DataGridViewCell>().Take(6).Select(c=>Convert.ToString(c.Value)));g.DrawString(line,n,Brushes.Black,45,y);y+=17;if(y>e.MarginBounds.Bottom-20){e.HasMorePages=true;return;}}};
-        using var pv=new PrintPreviewDialog{Document=doc,Width=1000,Height=750};pv.ShowDialog(this);
+        if (currentPk == "") return;
+        DataGridView src = title.Contains("Giriş") ? gGiris
+            : title.Contains("İzin") ? gIzin
+            : title.Contains("Kazanç") ? gEkk
+            : gOdeme;
+        var visible = src.Columns.Cast<DataGridViewColumn>()
+            .Where(c => c.Visible)
+            .Take(10)
+            .ToArray();
+        var columns = visible.Select(c => c.HeaderText).ToArray();
+        var rows = src.Rows.Cast<DataGridViewRow>()
+            .Where(r => !r.IsNewRow)
+            .Select(r => (IReadOnlyList<string>)visible
+                .Select(c => Convert.ToString(r.Cells[c.Index].Value) ?? string.Empty)
+                .ToArray())
+            .ToArray();
+        var person = $"{f.GetValueOrDefault("AD")?.Text} {f.GetValueOrDefault("SOYAD")?.Text}".Trim();
+        var report = new KYERP.PDKS.Core.Reports.ReportTable(
+            $"{title} • {currentPk} • {person}", columns, rows);
+        ReportPrintHelper.Preview(this, report, columns.Length > 7);
     }
 
     void FilterDialog()

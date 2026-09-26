@@ -11,8 +11,10 @@ public sealed class LocalUser
     public bool IsActive { get; set; } = true;
     public bool IsAdmin { get; set; }
     public List<string> Permissions { get; set; } = [];
+    public List<string> ReadOnlyPermissions { get; set; } = [];
 
     public bool Can(PdksModule module) => IsAdmin || Permissions.Contains(module.ToString(), StringComparer.OrdinalIgnoreCase);
+    public bool CanEdit(PdksModule module) => IsAdmin || (Can(module) && !ReadOnlyPermissions.Contains(module.ToString(), StringComparer.OrdinalIgnoreCase));
     public override string ToString() => UserName;
 }
 

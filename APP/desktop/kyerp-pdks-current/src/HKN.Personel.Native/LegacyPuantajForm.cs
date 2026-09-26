@@ -3,6 +3,7 @@ using System.Globalization;
 using FirebirdSql.Data.FirebirdClient;
 using KYERP.PDKS.Core;
 using KYERP.PDKS.Core.Payroll;
+using KYERP.PDKS.Core.Reports;
 
 namespace HKN.Personel.Native;
 
@@ -11,42 +12,22 @@ public sealed class LegacyPuantajForm : Form
     readonly FirebirdDatabase db=new(PdksOptions.FromEnvironment());
     readonly TabControl tabs=new(){Dock=DockStyle.Fill};
     readonly Dictionary<TabPage,FilterSet> filters=[];
-    readonly ListBox people=new(){Location=new Point(312,0),Size=new Size(297,321),IntegralHeight=false};
-    readonly ProgressBar progress1=new(){Location=new Point(16,328),Size=new Size(630,25)};
-    readonly ProgressBar progress2=new(){Location=new Point(16,356),Size=new Size(630,25)};
+    readonly ListBox people=new(){Dock=DockStyle.Fill,IntegralHeight=false};
+    readonly ProgressBar progress1=new(){Dock=DockStyle.Fill};
+    readonly ProgressBar progress2=new(){Dock=DockStyle.Fill};
 
-    public LegacyPuantajForm()
-    {
-        Text="Günlük ve Aylık Puantaj İşlemleri";StartPosition=FormStartPosition.CenterScreen;Size=new Size(689,504);FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ShowInTaskbar=false;Font=new Font("Microsoft Sans Serif",8.25f);KeyPreview=true;
-        Build();Shown+=(_,_)=>Init();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};
-    }
+    public LegacyPuantajForm(){Text="Günlük ve Aylık Puantaj İşlemleri";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);MinimumSize=new Size(960,620);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);KeyPreview=true;Build();Shown+=(_,_)=>Init();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
+    static TextBox E()=>new();
+    static DateTimePicker D()=>new(){Format=DateTimePickerFormat.Short};
+    static ComboBox C()=>new(){DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="TEXT",ValueMember="KOD"};
+    static Label L(string text)=>new(){Text=text,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)};
+    static void Row(TableLayoutPanel t,int r,string label,Control c){t.RowStyles.Add(new RowStyle(SizeType.Absolute,36));t.Controls.Add(L(label),0,r);c.Dock=DockStyle.Fill;c.Margin=new Padding(3,5,3,5);t.Controls.Add(c,1,r);}
+    static Button B(string text,int width=145)=>new(){Text=text,Width=width,Height=36,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9f,FontStyle.Bold)};
 
-    static Label L(string s,int x,int y)=>new(){Text=s,Location=new Point(x,y),AutoSize=true};
-    static TextBox E(int x,int y,int w=40)=>new(){Location=new Point(x,y),Size=new Size(w,21)};
-    static DateTimePicker D(int x,int y,int w)=>new(){Location=new Point(x,y),Size=new Size(w,21),Format=DateTimePickerFormat.Custom,CustomFormat="dd MMM yyyy"};
-    static ComboBox C(int x,int y,int w)=>new(){Location=new Point(x,y),Size=new Size(w,21),DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="TEXT",ValueMember="KOD"};
-    static Button B(string t,int x,int y,int w,int h=41)=>new(){Text=t,Location=new Point(x,y),Size=new Size(w,h),ForeColor=Color.Navy,Font=new Font("Microsoft Sans Serif",8.25f,FontStyle.Bold)};
-
-    void Build()
-    {
-        var daily=new TabPage("Günlük Puantaj");var monthly=new TabPage("Aylık Puantaj");tabs.TabPages.AddRange([daily,monthly]);Controls.Add(tabs);
-        filters[daily]=BuildDaily(daily);filters[monthly]=BuildMonthly(monthly);
-    }
-
-    FilterSet BuildDaily(TabPage p)
-    {
-        var f=new FilterSet(E(128,16),E(128,40),D(128,64,177),D(128,88,177),C(80,115,224),C(80,139,224),C(80,163,224),C(80,187,224),C(80,211,224),C(80,235,224));
-        p.Controls.AddRange([L("Kart No Başlangıç",40,24),L("Kart No Bitiş",40,48),L("Başlangıç Tarihi",40,72),L("Bitiş Tarihi",40,96),L("Grup",40,123),L("Bölüm",40,147),L("Servis",40,171),L("Durum",40,195),L("Görev",40,219),L("Firma",40,243),f.CardStart,f.CardEnd,f.Start,f.End,f.Group,f.Department,f.Service,f.Status,f.Duty,f.Company,people,progress1,progress2]);
-        var calc=B("&Hesapla",96,384,153);var result=B("&Puantaj Sonuçları",408,384,153);calc.Click+=(_,_)=>Calculate(f);result.Click+=(_,_)=>ShowResults(f);p.Controls.AddRange([calc,result]);Hook(f);return f;
-    }
-
-    FilterSet BuildMonthly(TabPage p)
-    {
-        var f=new FilterSet(E(320,32),E(320,56),D(320,80,175),D(320,104,175),C(320,131,200),C(320,155,200),C(320,179,200),C(320,203,200),C(320,227,200),C(320,251,200));
-        p.Controls.AddRange([L("Kart No Başlangıç",200,40),L("Kart No Bitiş",200,64),L("Başlangıç Tarihi",200,88),L("Bitiş Tarihi",200,112),L("Grup",200,139),L("Bölüm",200,163),L("Servis",200,187),L("Durum",200,211),L("Görev",200,235),L("Firma",200,259),f.CardStart,f.CardEnd,f.Start,f.End,f.Group,f.Department,f.Service,f.Status,f.Duty,f.Company]);
-        var bar=new ProgressBar{Location=new Point(16,324),Size=new Size(630,25)};var calc=B("&Hesapla",240,376,217);calc.Click+=(_,_)=>Calculate(f,bar);p.Controls.AddRange([bar,calc]);Hook(f);return f;
-    }
-
+    void Build(){var daily=new TabPage("Günlük Puantaj"){Padding=new Padding(12)};var monthly=new TabPage("Aylık Puantaj"){Padding=new Padding(12)};tabs.TabPages.AddRange([daily,monthly]);Controls.Add(tabs);filters[daily]=BuildDaily(daily);filters[monthly]=BuildMonthly(monthly);}
+    FilterSet BuildDaily(TabPage page){var f=new FilterSet(E(),E(),D(),D(),C(),C(),C(),C(),C(),C());var split=new SplitContainer{Dock=DockStyle.Fill,FixedPanel=FixedPanel.Panel1,SplitterDistance=360,SplitterWidth=8};var left=FilterPanel(f);split.Panel1.Controls.Add(left);var right=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,Padding=new Padding(10)};right.RowStyles.Add(new RowStyle(SizeType.Absolute,34));right.RowStyles.Add(new RowStyle(SizeType.Percent,100));right.RowStyles.Add(new RowStyle(SizeType.Absolute,56));right.RowStyles.Add(new RowStyle(SizeType.Absolute,56));right.Controls.Add(new Label{Text="İşlenecek Personel",Dock=DockStyle.Fill,Font=new Font("Segoe UI",10f,FontStyle.Bold),ForeColor=Color.FromArgb(27,44,68)},0,0);right.Controls.Add(people,0,1);right.Controls.Add(progress1,0,2);right.Controls.Add(progress2,0,3);split.Panel2.Controls.Add(right);var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1};root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));root.Controls.Add(split,0,0);var bar=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var calc=B("Hesapla");var result=B("Puantaj Sonuçları",170);calc.Click+=(_,_)=>Calculate(f);result.Click+=(_,_)=>ShowResults(f);bar.Controls.AddRange([calc,result]);root.Controls.Add(bar,0,1);page.Controls.Add(root);Hook(f);return f;}
+    FilterSet BuildMonthly(TabPage page){var f=new FilterSet(E(),E(),D(),D(),C(),C(),C(),C(),C(),C());var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(40,20,40,20)};root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));var panel=FilterPanel(f);root.Controls.Add(panel,0,0);var barProgress=new ProgressBar{Dock=DockStyle.Fill,Margin=new Padding(0,10,0,10)};root.Controls.Add(barProgress,0,1);var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var calc=B("Aylık Puantajı Hesapla",190);calc.Click+=(_,_)=>Calculate(f,barProgress);actions.Controls.Add(calc);root.Controls.Add(actions,0,2);page.Controls.Add(root);Hook(f);return f;}
+    Control FilterPanel(FilterSet f){var t=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=2,RowCount=10,Padding=new Padding(14),AutoSize=true};t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));Row(t,0,"Kart No Başlangıç",f.CardStart);Row(t,1,"Kart No Bitiş",f.CardEnd);Row(t,2,"Başlangıç Tarihi",f.Start);Row(t,3,"Bitiş Tarihi",f.End);Row(t,4,"Grup",f.Group);Row(t,5,"Bölüm",f.Department);Row(t,6,"Servis",f.Service);Row(t,7,"Durum",f.Status);Row(t,8,"Görev",f.Duty);Row(t,9,"Firma",f.Company);return t;}
     void Init()
     {
         foreach(var f in filters.Values)
@@ -145,9 +126,14 @@ public sealed class LegacyPuantajForm : Form
 
     void ShowResults(FilterSet f)
     {
-        try{var dt=db.Query("select p.PKNO,k.AD,k.SOYAD,p.TARIH,p.GIRIS,p.CIKIS,p.STATUS,p.DEVAMSIZLIKG,p.GECG,p.ERKENG,p.EKSIKG from PUANTAJ p left join KIMLIK k on k.PKNO=p.PKNO where p.TARIH>=@A and p.TARIH<@B order by p.TARIH,p.PKNO",new FbParameter("@A",f.Start.Value.Date),new FbParameter("@B",f.End.Value.Date.AddDays(1)));using var d=new Form{Text="Puantaj Sonuçları",StartPosition=FormStartPosition.CenterParent,ClientSize=new Size(900,520)};var g=new DataGridView{Dock=DockStyle.Fill,DataSource=dt,ReadOnly=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,AllowUserToAddRows=false};d.Controls.Add(g);d.ShowDialog(this);}catch(Exception ex){MessageBox.Show(ex.Message,"Puantaj Sonuçları",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        try
+        {
+            var dt=db.Query("select p.PKNO,k.AD,k.SOYAD,p.TARIH,p.GIRIS,p.CIKIS,p.STATUS,p.DEVAMSIZLIKG,p.GECG,p.ERKENG,p.EKSIKG from PUANTAJ p left join KIMLIK k on k.PKNO=p.PKNO where p.TARIH>=@A and p.TARIH<@B order by p.TARIH,p.PKNO",new FbParameter("@A",f.Start.Value.Date),new FbParameter("@B",f.End.Value.Date.AddDays(1)));
+            var report=new ReportTable($"Puantaj Sonuçları • {f.Start.Value:dd.MM.yyyy} - {f.End.Value:dd.MM.yyyy}",dt.Columns.Cast<DataColumn>().Select(c=>c.ColumnName).ToArray(),dt.Rows.Cast<DataRow>().Select(r=>(IReadOnlyList<string>)dt.Columns.Cast<DataColumn>().Select(c=>Convert.ToString(r[c])??string.Empty).ToArray()).ToArray());
+            ReportPrintHelper.Preview(this,report,true);
+        }
+        catch(Exception ex){MessageBox.Show(ex.Message,"Puantaj Sonuçları",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
     }
-
     sealed record FilterSet(TextBox CardStart,TextBox CardEnd,DateTimePicker Start,DateTimePicker End,ComboBox Group,ComboBox Department,ComboBox Service,ComboBox Status,ComboBox Duty,ComboBox Company)
     { public IEnumerable<ComboBox> Combos=>[Group,Department,Service,Status,Duty,Company]; }
     sealed record Employee(string Code,int? Department,int? Group);

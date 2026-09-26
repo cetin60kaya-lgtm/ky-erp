@@ -7,11 +7,11 @@ namespace HKN.Personel.Native;
 public sealed class LegacyGroupForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
-    readonly TextBox name = Box(64,0,281);
-    readonly TextBox periodHours = Box(116,32,46);
-    readonly TextBox dailyHours = Box(300,32,40);
-    readonly TextBox terminalCode = Box(228,61,113);
-    readonly DataGridView grid = new(){Location=new Point(0,88),Size=new Size(377,153),ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,BackgroundColor=Color.White,RowHeadersWidth=20,AutoGenerateColumns=false};
+    readonly TextBox name = new();
+    readonly TextBox periodHours = new();
+    readonly TextBox dailyHours = new();
+    readonly TextBox terminalCode = new();
+    readonly DataGridView grid = new(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,BackgroundColor=Color.White,AutoGenerateColumns=false};
     readonly TextBox[] dayShift = new TextBox[5];
     readonly TextBox[] starts = new TextBox[5];
     readonly TextBox[] ends = new TextBox[5];
@@ -22,41 +22,29 @@ public sealed class LegacyGroupForm : Form
 
     public LegacyGroupForm()
     {
-        Text="Çalışma Grupları"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(543,448);
-        FormBorderStyle=FormBorderStyle.FixedDialog; MaximizeBox=false; MinimizeBox=false; ShowInTaskbar=false;
-        Font=new Font("Microsoft Sans Serif",8.25f); KeyPreview=true;
+        Text="Çalışma Grupları"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(1100,680); MinimumSize=new Size(900,600);
+        Font=new Font("Segoe UI",9f); BackColor=Color.FromArgb(246,249,253); KeyPreview=true;
         Build(); Shown+=(_,_)=>Reload(); KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};
     }
 
-    static TextBox Box(int x,int y,int w)=>new(){Location=new Point(x,y),Size=new Size(w,21),BorderStyle=BorderStyle.FixedSingle};
-    static Label LabelAt(string text,int x,int y)=>new(){Text=text,AutoSize=true,Location=new Point(x,y)};
-    static Button Cmd(string text,int y)=>new(){Text=text,Location=new Point(392,y),Size=new Size(135,33),ForeColor=Color.Navy,Font=new Font("Microsoft Sans Serif",8.25f,FontStyle.Bold),UseVisualStyleBackColor=true};
+    static Label L(string text)=>new(){Text=text,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)};
+    static void Row(TableLayoutPanel t,int r,string text,Control c){t.RowStyles.Add(new RowStyle(SizeType.Absolute,38));t.Controls.Add(L(text),0,r);c.Dock=DockStyle.Fill;c.Margin=new Padding(3,6,3,6);t.Controls.Add(c,1,r);}
+    static Button Cmd(string text,int width=112)=>new(){Text=text,Width=width,Height=36,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9f,FontStyle.Bold)};
 
     void Build()
     {
-        Controls.Add(LabelAt("Grup Adı",0,8)); Controls.Add(LabelAt("Dönemlik Çalışma Saati",0,40)); Controls.Add(LabelAt("Günlük Çalışma Saati",192,40)); Controls.Add(LabelAt("Aktarma İşleminde Kullanılacak Terminal Kodu",0,69));
-        Controls.Add(name);Controls.Add(periodHours);Controls.Add(dailyHours);Controls.Add(terminalCode);
-        name.MaxLength=30;
-        grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText="Grup Adı",Width=340});
-        grid.SelectionChanged+=(_,_)=>{if(!editing)LoadSelection();}; Controls.Add(grid);
-
-        var group=new GroupBox{Text=" Grubun Çalışma Saat Aralıkları ",Location=new Point(0,248),Size=new Size(377,161)};
-        group.Controls.Add(LabelAt("Gün Dön.",8,16));group.Controls.Add(LabelAt("Giriş Saati",72,16));group.Controls.Add(LabelAt("Çıkış Saati",128,16));group.Controls.Add(LabelAt("Çalışma Grubunun Adı",184,16));
-        for(int i=0;i<5;i++)
-        {
-            int y=32+i*24;
-            dayShift[i]=Box(8,y,40); starts[i]=Box(72,y,40); ends[i]=Box(128,y,40); shiftNames[i]=Box(184,y,190);
-            dayShift[i].MaxLength=5;starts[i].MaxLength=5;ends[i].MaxLength=5;shiftNames[i].MaxLength=30;
-            group.Controls.Add(dayShift[i]);group.Controls.Add(starts[i]);group.Controls.Add(ends[i]);group.Controls.Add(shiftNames[i]);
-        }
-        Controls.Add(group);
-
-        var save=Cmd("K&aydet",56);var add=Cmd("&Yeni Ekle",104);var edit=Cmd("&Değiştir",152);var del=Cmd("&Sil",200);var delAll=Cmd("Tü&münü Sil",248);var close=Cmd("Kapa&t",328);
-        save.Enabled=false; save.Click+=(_,_)=>Save(); add.Click+=(_,_)=>BeginNew(save);edit.Click+=(_,_)=>BeginEdit(save);del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();close.Click+=(_,_)=>Close();
-        Controls.AddRange([save,add,edit,del,delAll,close]);
-        SetEditors(false);
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1,Padding=new Padding(14)};root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+        var split=new SplitContainer{Dock=DockStyle.Fill,FixedPanel=FixedPanel.Panel1,SplitterDistance=420,SplitterWidth=8};
+        var left=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1};left.RowStyles.Add(new RowStyle(SizeType.Absolute,180));left.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        var details=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=4,Padding=new Padding(10)};details.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,165));details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        Row(details,0,"Grup Adı",name);Row(details,1,"Dönemlik Çalışma Saati",periodHours);Row(details,2,"Günlük Çalışma Saati",dailyHours);Row(details,3,"Terminal Kodu",terminalCode);left.Controls.Add(details,0,0);
+        grid.Dock=DockStyle.Fill;grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText="Çalışma Grubu",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});grid.SelectionChanged+=(_,_)=>{if(!editing)LoadSelection();};left.Controls.Add(grid,0,1);split.Panel1.Controls.Add(left);
+        var shifts=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=6,Padding=new Padding(14)};shifts.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,90));shifts.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,110));shifts.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,110));shifts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        foreach(var x in new[]{("Gün Dön.",0),("Giriş Saati",1),("Çıkış Saati",2),("Çalışma Grubunun Adı",3)})shifts.Controls.Add(new Label{Text=x.Item1,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",9f,FontStyle.Bold)},x.Item2,0);
+        for(int r=0;r<5;r++){dayShift[r]=new TextBox();starts[r]=new TextBox();ends[r]=new TextBox();shiftNames[r]=new TextBox();var arr=new Control[]{dayShift[r],starts[r],ends[r],shiftNames[r]};for(int c=0;c<4;c++){arr[c].Dock=DockStyle.Fill;arr[c].Margin=new Padding(4,6,4,6);shifts.Controls.Add(arr[c],c,r+1);}}
+        split.Panel2.Controls.Add(shifts);root.Controls.Add(split,0,0);
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var save=Cmd("Kaydet");var add=Cmd("Yeni Ekle");var edit=Cmd("Değiştir");var del=Cmd("Sil");var delAll=Cmd("Tümünü Sil",120);save.Enabled=false;save.Click+=(_,_)=>Save();add.Click+=(_,_)=>BeginNew(save);edit.Click+=(_,_)=>BeginEdit(save);del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();actions.Controls.AddRange([save,delAll,del,edit,add]);root.Controls.Add(actions,0,1);Controls.Add(root);SetEditors(false);
     }
-
     void Reload()
     {
         try

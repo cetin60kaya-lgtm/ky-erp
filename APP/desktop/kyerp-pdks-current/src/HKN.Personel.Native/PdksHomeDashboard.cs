@@ -3,7 +3,7 @@ using System.Drawing.Drawing2D;
 
 namespace HKN.Personel.Native;
 
-internal sealed class PdksHomeDashboard : UserControl
+internal sealed partial class PdksHomeDashboard : UserControl
 {
     readonly Label liveStatus = new();
     readonly Label clock = new();
@@ -35,15 +35,22 @@ internal sealed class PdksHomeDashboard : UserControl
         layout.Controls.Add(new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent }, 0, 1);
         layout.Controls.Add(Brand(), 0, 2);
         layout.Controls.Add(Cards(liveAttendance, personnel, timesheet, reports), 0, 3);
+        layout.Controls.Add(BuildDailySummary(), 0, 4);
 
         stage.Controls.Add(layout);
         Controls.Add(stage);
 
         timer.Tick += (_, _) => clock.Text = DateTime.Now.ToString("HH:mm:ss");
-        deviceTimer.Tick += async (_, _) => await UpdateDeviceAsync();
-        timer.Start(); deviceTimer.Start();
+        deviceTimer.Tick += async (_, _) => { await UpdateDeviceAsync(); RefreshDailySummary(); };
         clock.Text = DateTime.Now.ToString("HH:mm:ss");
-        _ = UpdateDeviceAsync();
+        var auditMode = Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT") == "1";
+        if (!auditMode)
+        {
+            timer.Start(); deviceTimer.Start();
+            _ = UpdateDeviceAsync();
+            RefreshDailySummary();
+        }
+        else liveStatus.Text = "●  CANLI   •   Tasarım önizleme";
         Disposed += (_, _) => { timer.Stop(); deviceTimer.Stop(); };
     }
 
@@ -105,7 +112,7 @@ internal sealed class PdksHomeDashboard : UserControl
         box.Controls.Add(accent, 0, 2);
 
         var subtitle = new LinkLabel {
-            Text = "Personel Devam Kontrol Sistemi  ↗", Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter,
+            Text = $"{CompanyBranding.Current.Name}  •  Personel Devam Kontrol Sistemi  ↗", Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter,
             Font = new Font("Segoe UI", 10.5f), LinkBehavior = LinkBehavior.NeverUnderline,
             LinkColor = Color.FromArgb(42, 64, 91), ActiveLinkColor = Color.FromArgb(24, 111, 205), Cursor = Cursors.Hand
         };

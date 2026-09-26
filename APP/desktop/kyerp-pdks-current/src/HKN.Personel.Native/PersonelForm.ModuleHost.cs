@@ -94,4 +94,19 @@ public partial class PersonelForm
         xls.Click += (_, _) => ExportActiveGrid(true);
         body.Controls.Add(pdf); body.Controls.Add(xls); f.Controls.Add(body); f.ShowDialog(DialogOwner());
     }
-}
+
+    public void SelectPerson(string cardNo, PdksModule module = PdksModule.Personel)
+    {
+        ActivateModule(module);
+        var target = (cardNo ?? string.Empty).Trim().PadLeft(5, '0');
+        foreach (DataGridViewRow row in list.Rows)
+        {
+            var value = Convert.ToString(row.Cells["PKNO"].Value)?.Trim() ?? string.Empty;
+            if (!value.Equals(target, StringComparison.OrdinalIgnoreCase)) continue;
+            row.Selected = true;
+            list.CurrentCell = row.Cells["PKNO"];
+            LoadPerson(target);
+            list.FirstDisplayedScrollingRowIndex = Math.Max(0, row.Index);
+            break;
+        }
+    }}

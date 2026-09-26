@@ -21,10 +21,10 @@ public partial class PersonelForm : Form
     public PersonelForm()
     {
         db = new FirebirdDatabase(options);
-        Text="Personel Bilgileri"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(940,731); MinimumSize=new Size(940,731);
-        FormBorderStyle=FormBorderStyle.FixedDialog; MaximizeBox=false; MinimizeBox=false;
-        Font=new Font("Microsoft Sans Serif",8.25f); BackColor=SystemColors.Control;
-        BuildMenuFull(); BuildUiClassic(); list.SelectionChanged += (_,_) => { SyncPeriodsToPerson(); RefreshFullTabs(); }; Shown += (_,_) => { Reload(); LoadPeriods(); SyncPeriodsToPerson(); RefreshFullTabs(); ApplyClassicGridStyles(); };
+        Text="Personel Bilgileri"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(1220,760); MinimumSize=new Size(980,640);
+        FormBorderStyle=FormBorderStyle.Sizable; MaximizeBox=true; MinimizeBox=true;
+        Font=new Font("Segoe UI",9f); BackColor=Color.FromArgb(246,249,253);
+        BuildMenuFull(); BuildUiClassic(); Shown += (_,_) => { fullTabsReady=false; Reload(); LoadPeriods(); fullTabsReady=true; SyncPeriodsToPerson(); RefreshFullTabs(); ApplyClassicGridStyles(); };
     }
     void BuildMenu()
     {

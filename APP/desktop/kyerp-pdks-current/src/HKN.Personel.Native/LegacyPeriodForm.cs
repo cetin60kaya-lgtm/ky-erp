@@ -7,60 +7,37 @@ namespace HKN.Personel.Native;
 public sealed class LegacyPeriodForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
-    readonly DataGridView grid = new()
-    {
-        Location=new Point(0,0),Size=new Size(213,345),ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,
-        SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=Color.White,RowHeadersWidth=20,
-        AutoGenerateColumns=false
-    };
-    readonly TextBox name = new(){Location=new Point(334,16),Size=new Size(200,21)};
-    readonly ComboBox group = new(){Location=new Point(334,48),Size=new Size(200,21),DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="AD",ValueMember="KOD"};
-    readonly DateTimePicker start = new(){Location=new Point(334,81),Size=new Size(200,21),Format=DateTimePickerFormat.Custom,CustomFormat="dd MMMM yyyy dddd"};
-    readonly DateTimePicker end = new(){Location=new Point(334,121),Size=new Size(200,21),Format=DateTimePickerFormat.Custom,CustomFormat="dd MMMM yyyy dddd"};
-    readonly TextBox minusTime = TimeBox(382,144,40);
-    readonly TextBox minusDay = TimeBox(382,168,25);
-    readonly TextBox plusTime = TimeBox(382,192,40);
-    readonly TextBox plusDay = TimeBox(382,216,25);
-    readonly ComboBox plusArea = new(){Location=new Point(542,144),Size=new Size(180,21),DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="AD",ValueMember="KOD"};
-    readonly ComboBox minusArea = new(){Location=new Point(542,192),Size=new Size(180,21),DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="AD",ValueMember="KOD"};
-    readonly Label total = new(){Location=new Point(670,92),Size=new Size(25,20),BorderStyle=BorderStyle.Fixed3D,TextAlign=ContentAlignment.MiddleCenter};
-    readonly DateTimePicker filterStart = new(){Location=new Point(38,20),Size=new Size(171,21),Format=DateTimePickerFormat.Custom,CustomFormat="dd MMM yyyy"};
-    readonly DateTimePicker filterEnd = new(){Location=new Point(276,20),Size=new Size(171,21),Format=DateTimePickerFormat.Custom,CustomFormat="dd MMM yyyy"};
-    readonly Button save = Cmd("K&aydet",6,350,106);
-    int? code;
-    bool adding;
-    bool editing;
+    readonly DataGridView grid = new(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=Color.White,AutoGenerateColumns=false};
+    readonly TextBox name = new();
+    readonly ComboBox group = new(){DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="AD",ValueMember="KOD"};
+    readonly DateTimePicker start = new(){Format=DateTimePickerFormat.Custom,CustomFormat="dd MMMM yyyy dddd"};
+    readonly DateTimePicker end = new(){Format=DateTimePickerFormat.Custom,CustomFormat="dd MMMM yyyy dddd"};
+    readonly TextBox minusTime = new(), minusDay = new(), plusTime = new(), plusDay = new();
+    readonly ComboBox plusArea = new(){DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="AD",ValueMember="KOD"};
+    readonly ComboBox minusArea = new(){DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="AD",ValueMember="KOD"};
+    readonly Label total = new(){TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",11f,FontStyle.Bold)};
+    readonly DateTimePicker filterStart = new(){Format=DateTimePickerFormat.Short};
+    readonly DateTimePicker filterEnd = new(){Format=DateTimePickerFormat.Short};
+    readonly Button save = Cmd("Kaydet");
+    int? code; bool adding; bool editing;
 
-    public LegacyPeriodForm()
-    {
-        Text="Dönem Tanımlamaları";StartPosition=FormStartPosition.CenterScreen;Size=new Size(738,422);
-        FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ShowInTaskbar=false;
-        Font=new Font("Microsoft Sans Serif",8.25f);KeyPreview=true;
-        Build();Shown+=(_,_)=>ReloadAll();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};
-    }
-
-    static Label L(string t,int x,int y)=>new(){Text=t,Location=new Point(x,y),AutoSize=true};
-    static TextBox TimeBox(int x,int y,int w)=>new(){Location=new Point(x,y),Size=new Size(w,21),BorderStyle=BorderStyle.FixedSingle};
-    static Button Cmd(string text,int x,int y,int w)=>new(){Text=text,Location=new Point(x,y),Size=new Size(w,33),ForeColor=Color.Navy,Font=new Font("Microsoft Sans Serif",8.25f,FontStyle.Bold),UseVisualStyleBackColor=true};
+    public LegacyPeriodForm(){Text="Dönem Tanımlamaları";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);MinimumSize=new Size(920,620);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);KeyPreview=true;Build();Shown+=(_,_)=>ReloadAll();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
+    static Label L(string t)=>new(){Text=t,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)};
+    static Button Cmd(string text,int width=112)=>new(){Text=text,Width=width,Height=36,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9f,FontStyle.Bold)};
+    static void Row(TableLayoutPanel t,int r,string text,Control c){t.RowStyles.Add(new RowStyle(SizeType.Absolute,38));t.Controls.Add(L(text),0,r);c.Dock=DockStyle.Fill;c.Margin=new Padding(3,6,3,6);t.Controls.Add(c,1,r);}
 
     void Build()
     {
-        grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText="Dönem Adı",Width=175});
-        grid.SelectionChanged+=(_,_)=>{if(!editing)LoadSelected();};Controls.Add(grid);
-        Controls.AddRange([L("Dönem Adı",238,24),L("Grubu",238,56),L("Başlangıç",238,89),L("Bitiş Tarihi",238,123),L("Dönemlik Çalışma Eksiği",238,152),L("Dönemlik Çalışma Eksiği",238,176),L("Dönemlik Çalışma Fazlası",238,200),L("Dönemlik Çalışma Fazlası",238,224),L("Toplam Gün Sayısı",550,97),L("Ekleneceği Alan",438,152),L("Çıkarılacağı Alan",438,200),L("Gün",409,176),L("Gün",409,224)]);
-        Controls.AddRange([name,group,start,end,minusTime,minusDay,plusTime,plusDay,plusArea,minusArea,total]);
-
-        var filters=new GroupBox{Text="Filtreleme Bilgileri",Location=new Point(224,256),Size=new Size(489,89)};
-        filters.Controls.Add(filterStart);filters.Controls.Add(filterEnd);filters.Controls.Add(L("İle",234,25));
-        var between=Cmd("Arasındaki Dönemler",46,56,160);between.Height=30;var all=Cmd("Tüm Dönemleri Listele",284,56,160);all.Height=30;
-        between.Click+=(_,_)=>ReloadGrid(true);all.Click+=(_,_)=>ReloadGrid(false);filters.Controls.Add(between);filters.Controls.Add(all);Controls.Add(filters);
-
-        var add=Cmd("&Yeni Ekle",126,350,106);var edit=Cmd("&Değiştir",246,350,106);var del=Cmd("&Sil",366,350,106);var delAll=Cmd("Tü&münü Sil",486,350,106);var close=Cmd("Kapa&t",606,350,106);
-        Controls.AddRange([save,add,edit,del,delAll,close]);save.Enabled=false;
-        add.Click+=(_,_)=>BeginNew();edit.Click+=(_,_)=>BeginEdit();save.Click+=(_,_)=>SaveCurrent();del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();close.Click+=(_,_)=>Close();
-        start.ValueChanged+=(_,_)=>UpdateTotal();end.ValueChanged+=(_,_)=>UpdateTotal();SetEdit(false);
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1,Padding=new Padding(14)};root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+        var split=new SplitContainer{Dock=DockStyle.Fill,FixedPanel=FixedPanel.Panel1,SplitterDistance=390,SplitterWidth=8};
+        var left=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1};left.RowStyles.Add(new RowStyle(SizeType.Absolute,98));left.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        var filterBox=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=2,Padding=new Padding(10)};filterBox.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));filterBox.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        var range=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};filterStart.Width=112;filterEnd.Width=112;var between=Cmd("Aralığı Listele",120);var all=Cmd("Tümünü Listele",120);between.Click+=(_,_)=>ReloadGrid(true);all.Click+=(_,_)=>ReloadGrid(false);range.Controls.AddRange([filterStart,new Label{Text="—",AutoSize=true,Padding=new Padding(4,8,4,0)},filterEnd,between,all]);filterBox.Controls.Add(L("Filtre"),0,0);filterBox.Controls.Add(range,1,0);left.Controls.Add(filterBox,0,0);
+        grid.Dock=DockStyle.Fill;grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText="Dönem Adı",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});grid.SelectionChanged+=(_,_)=>{if(!editing)LoadSelected();};left.Controls.Add(grid,0,1);split.Panel1.Controls.Add(left);
+        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=11,Padding=new Padding(18)};editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,190));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        Row(editor,0,"Dönem Adı",name);Row(editor,1,"Çalışma Grubu",group);Row(editor,2,"Başlangıç",start);Row(editor,3,"Bitiş",end);Row(editor,4,"Toplam Gün",total);Row(editor,5,"Dönemlik Çalışma Eksiği",minusTime);Row(editor,6,"Eksik Gün",minusDay);Row(editor,7,"Ekleneceği Alan",plusArea);Row(editor,8,"Dönemlik Çalışma Fazlası",plusTime);Row(editor,9,"Fazla Gün",plusDay);Row(editor,10,"Çıkarılacağı Alan",minusArea);split.Panel2.Controls.Add(editor);root.Controls.Add(split,0,0);
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var add=Cmd("Yeni Ekle");var edit=Cmd("Değiştir");var del=Cmd("Sil");var delAll=Cmd("Tümünü Sil",120);save.Enabled=false;add.Click+=(_,_)=>BeginNew();edit.Click+=(_,_)=>BeginEdit();save.Click+=(_,_)=>SaveCurrent();del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();actions.Controls.AddRange([save,delAll,del,edit,add]);root.Controls.Add(actions,0,1);Controls.Add(root);start.ValueChanged+=(_,_)=>UpdateTotal();end.ValueChanged+=(_,_)=>UpdateTotal();SetEdit(false);
     }
-
     void ReloadAll()
     {
         try

@@ -1,5 +1,4 @@
 using System.Data;
-using System.Drawing.Printing;
 using FirebirdSql.Data.FirebirdClient;
 using KYERP.PDKS.Core;
 using KYERP.PDKS.Core.Reports;
@@ -19,21 +18,29 @@ public sealed class LegacyOperationalReportForm : Form
 {
     readonly FirebirdDatabase db=new(PdksOptions.FromEnvironment());
     readonly LegacyOperationalReport report;
-    readonly DateTimePicker from=new(){Location=new Point(88,10),Size=new Size(120,21),Format=DateTimePickerFormat.Short};
-    readonly DateTimePicker to=new(){Location=new Point(242,10),Size=new Size(120,21),Format=DateTimePickerFormat.Short};
-    readonly DataGridView grid=new(){Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,BackgroundColor=Color.White};
+    readonly DateTimePicker from=new(){Format=DateTimePickerFormat.Short};
+    readonly DateTimePicker to=new(){Format=DateTimePickerFormat.Short};
+    readonly DataGridView grid=new(){Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
+    readonly Label summary=new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleRight,Font=new Font("Segoe UI",9f,FontStyle.Bold),ForeColor=Color.FromArgb(36,107,230)};
     DataTable? data;
 
     public LegacyOperationalReportForm(LegacyOperationalReport report)
     {
-        this.report=report;Text=Title(report);StartPosition=FormStartPosition.CenterScreen;Size=new Size(900,600);MinimumSize=new Size(720,480);Font=new Font("Microsoft Sans Serif",8.25f);ShowInTaskbar=false;
-        var first=new DateTime(DateTime.Today.Year,DateTime.Today.Month,1);from.Value=first;to.Value=DateTime.Today;
-        var top=new Panel{Dock=DockStyle.Top,Height=43};var show=Button("&Göster",380);var preview=Button("Ö&nizleme",474);var pdf=Button("PDF",568);var excel=Button("Excel",662);var close=Button("Kapa&t",756);close.DialogResult=DialogResult.Cancel;
-        top.Controls.AddRange([new Label{Text="Tarih Aralığı",Location=new Point(12,14),AutoSize=true},from,new Label{Text="-",Location=new Point(224,14),AutoSize=true},to,show,preview,pdf,excel,close]);Controls.Add(grid);Controls.Add(top);CancelButton=close;
-        if(!UsesDateRange(report)){from.Visible=false;to.Visible=false;top.Controls.OfType<Label>().ToList().ForEach(x=>x.Visible=false);}
-        show.Click+=(_,_)=>LoadData();preview.Click+=(_,_)=>PrintPreview();pdf.Click+=(_,_)=>Export(false);excel.Click+=(_,_)=>Export(true);Shown+=(_,_)=>LoadData();
+        this.report=report;Text=Title(report);StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);MinimumSize=new Size(900,600);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);
+        var first=new DateTime(DateTime.Today.Year,DateTime.Today.Month,1);from.Value=first;to.Value=DateTime.Today;Build();Shown+=(_,_)=>LoadData();
     }
 
+    void Build()
+    {
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(14)};root.RowStyles.Add(new RowStyle(SizeType.Absolute,68));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+        var filter=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=6,Padding=new Padding(12),BackColor=Color.White};filter.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,90));filter.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));filter.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,24));filter.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));filter.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,110));filter.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        var label=new Label{Text="Tarih Aralığı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)};filter.Controls.Add(label,0,0);from.Dock=DockStyle.Fill;filter.Controls.Add(from,1,0);filter.Controls.Add(new Label{Text="—",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter},2,0);to.Dock=DockStyle.Fill;filter.Controls.Add(to,3,0);var show=Btn("Göster",100,true);show.Click+=(_,_)=>LoadData();filter.Controls.Add(show,4,0);filter.Controls.Add(summary,5,0);root.Controls.Add(filter,0,0);
+        if(!UsesDateRange(report)){label.Visible=false;from.Visible=false;to.Visible=false;}
+        root.Controls.Add(grid,0,1);
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var preview=Btn("Önizle",100);var pdf=Btn("PDF Aktar",110);var excel=Btn("Excel Aktar",110);preview.Click+=(_,_)=>PrintPreview();pdf.Click+=(_,_)=>Export(false);excel.Click+=(_,_)=>Export(true);actions.Controls.AddRange([excel,pdf,preview]);root.Controls.Add(actions,0,2);Controls.Add(root);
+    }
+
+    static Button Btn(string text,int width,bool primary=false){var b=new Button{Text=text,Width=width,Height=36,FlatStyle=FlatStyle.Flat,BackColor=primary?Color.FromArgb(36,107,230):Color.White,ForeColor=primary?Color.White:Color.FromArgb(27,44,68),Font=new Font("Segoe UI",9f,FontStyle.Bold)};b.FlatAppearance.BorderColor=primary?b.BackColor:Color.FromArgb(216,225,236);return b;}
     public LegacyOperationalReport Report=>report;
     public static string Title(LegacyOperationalReport value)=>value switch
     {
@@ -61,14 +68,14 @@ public sealed class LegacyOperationalReportForm : Form
                 LegacyOperationalReport.PersonnelCountByWorkSystem=>db.Query("select coalesce(g.AD,'Tanımsız') \"Çalışma Sistemi\",count(*) \"Personel Sayısı\" from KIMLIK k left join GRUP g on g.KOD=k.GRUP where k.ICTARIH is null group by g.AD order by g.AD"),
                 LegacyOperationalReport.AnnualLeaveEntitlements=>db.Query("select k.PKNO \"Kart No\",k.AD Ad,k.SOYAD Soyad,k.IGTARIH \"İşe Giriş\",coalesce(k.KULIZIN,0) \"İzin Hakedişi\" from KIMLIK k where k.ICTARIH is null order by k.PKNO"),
                 _=>throw new ArgumentOutOfRangeException()
-            };grid.DataSource=data;
+            };grid.DataSource=data;summary.Text=$"{data.Rows.Count} kayıt";
         }
         catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
     }
 
     ReportTable Table()
     {
-        data??=new DataTable();return new(Text,data.Columns.Cast<DataColumn>().Select(x=>x.ColumnName).ToArray(),data.Rows.Cast<DataRow>().Select(row=>(IReadOnlyList<string>)data.Columns.Cast<DataColumn>().Select(column=>Convert.ToString(row[column])??"").ToArray()).ToArray());
+        data??=new DataTable(); var reportTable = new ReportTable(Text,data.Columns.Cast<DataColumn>().Select(x=>x.ColumnName).ToArray(),data.Rows.Cast<DataRow>().Select(row=>(IReadOnlyList<string>)data.Columns.Cast<DataColumn>().Select(column=>Convert.ToString(row[column])??"").ToArray()).ToArray()); return CompanyBranding.Decorate(reportTable);
     }
 
     void Export(bool excel)
@@ -78,6 +85,14 @@ public sealed class LegacyOperationalReportForm : Form
 
     void PrintPreview()
     {
-        try{LoadData();var table=Table();var row=0;using var document=new PrintDocument{DocumentName=Text};document.PrintPage+=(_,args)=>{var graphics=args.Graphics;if(graphics is null)return;using var heading=new Font("Arial",14,FontStyle.Bold);using var body=new Font("Arial",8);var y=args.MarginBounds.Top;graphics.DrawString(Text,heading,Brushes.Black,args.MarginBounds.Left,y);y+=28;graphics.DrawString(string.Join(" | ",table.Columns),body,Brushes.Black,args.MarginBounds.Left,y);y+=17;while(row<table.Rows.Count&&y<args.MarginBounds.Bottom-17){graphics.DrawString(string.Join(" | ",table.Rows[row++]),body,Brushes.Black,args.MarginBounds.Left,y);y+=15;}args.HasMorePages=row<table.Rows.Count;};using var preview=new PrintPreviewDialog{Document=document,Width=1000,Height=750,Text=Text};preview.ShowDialog(this);}catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        try
+        {
+            LoadData();
+            ReportPrintHelper.Preview(this, Table(), grid.Columns.Count > 7);
+        }
+        catch(Exception ex)
+        {
+            MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        }
     }
 }

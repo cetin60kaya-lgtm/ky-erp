@@ -23,42 +23,89 @@ public sealed partial class LiveAttendanceForm : Form
     DateTime? recoveredLegacyDay;
     string legacyRecoveryText = "";
     readonly List<(string Code,DateTime At,string Source)> unmatched = new();
+    readonly Action<string,DateTime>? openEntryExit;
+    readonly Action<string>? openPerson;
 
-    public LiveAttendanceForm()
+    public LiveAttendanceForm(Action<string,DateTime>? openEntryExit=null, Action<string>? openPerson=null)
     {
-        Text="Canlı Personel Denetim";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);
-        MinimumSize=new Size(1000,620);Font=new Font("Microsoft Sans Serif",9f);Build();
+        this.openEntryExit=openEntryExit;this.openPerson=openPerson;Text="Canlı Personel Denetim";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);
+        MinimumSize=new Size(1000,620);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);Build();
         Shown+=async (_,_)=>await SyncAndLoadAsync();refresh.Click+=async (_,_)=>await SyncAndLoadAsync();
         date.ValueChanged+=async (_,_)=>await SyncAndLoadAsync(false);timer.Tick+=async (_,_)=>await SyncAndLoadAsync();
         FormClosed+=(_,_)=>{timer.Stop();closing.Cancel();};timer.Start();
     }
     void Build()
     {
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(8)};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,46));root.RowStyles.Add(new RowStyle(SizeType.Absolute,78));root.RowStyles.Add(new RowStyle(SizeType.Absolute,150));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        var top=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};
-        top.Controls.Add(new Label{Text="Denetim Tarihi",AutoSize=true,Padding=new Padding(0,8,5,0)});
-        top.Controls.Add(date);top.Controls.Add(live);top.Controls.Add(refresh);top.Controls.Add(device);root.Controls.Add(top,0,0);
-        root.Controls.Add(cards,0,1);root.Controls.Add(BuildAssistantPanel(),0,2);
-        AddTab("Genel");AddTab("Kart Basmayan");AddTab("İçeride / Çıkış Bekleyen");AddTab("İzinli");AddTab("Tamamlanan");AddTab("Eşleşmeyen Kart");
-        root.Controls.Add(tabs,0,3);Controls.Add(root);
-    }
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(14),BackColor=Color.FromArgb(246,249,253)};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,72));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,92));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,166));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
+        var header=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,Padding=new Padding(16,8,16,8),BackColor=Color.White};
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,38));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,27));
+        var titleBox=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2};
+        titleBox.RowStyles.Add(new RowStyle(SizeType.Percent,60));titleBox.RowStyles.Add(new RowStyle(SizeType.Percent,40));
+        titleBox.Controls.Add(new Label{Text="Canlı Personel Denetimi",Dock=DockStyle.Fill,TextAlign=ContentAlignment.BottomLeft,Font=new Font("Segoe UI",16f,FontStyle.Bold),ForeColor=Color.FromArgb(27,44,68)},0,0);
+        titleBox.Controls.Add(new Label{Text="Kart hareketleri • eksik basımlar • izin • içeride kalanlar",Dock=DockStyle.Fill,TextAlign=ContentAlignment.TopLeft,ForeColor=Color.FromArgb(88,103,124)},0,1);
+        header.Controls.Add(titleBox,0,0);
+        var controls=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(0,12,0,0)};
+        controls.Controls.Add(date);controls.Controls.Add(live);controls.Controls.Add(refresh);header.Controls.Add(controls,1,0);
+        device.Dock=DockStyle.Fill;device.TextAlign=ContentAlignment.MiddleRight;device.Font=new Font("Segoe UI",9f,FontStyle.Bold);device.ForeColor=Color.FromArgb(24,145,84);header.Controls.Add(device,2,0);
+        root.Controls.Add(header,0,0);
+
+        cards.BackColor=Color.Transparent;cards.Padding=new Padding(0,8,0,6);root.Controls.Add(cards,0,1);
+        root.Controls.Add(BuildAssistantPanel(),0,2);
+        AddTab("Genel");AddTab("Kart Basmayan");AddTab("İçeride / Çıkış Bekleyen");AddTab("İzinli");AddTab("Tamamlanan");AddTab("Eşleşmeyen Kart");
+        root.Controls.Add(BuildTrackingWorkspace(),0,3);Controls.Add(root);
+    }
     void AddTab(string title)
     {
         var grid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,
             AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect,
             MultiSelect=false,BackgroundColor=Color.White,RowHeadersVisible=false};
         grid.DataBindingComplete+=(_,_)=>PaintRows(grid);
+        grid.SelectionChanged+=(_,_)=>UpdatePersonPreview(grid);
+        grid.CellClick+=(_,_)=>UpdatePersonPreview(grid);
         var page=new TabPage(title);page.Controls.Add(grid);tabs.TabPages.Add(page);grids[title]=grid;
     }
 
     Label Card(string title,int value,Color back)
     {
-        var label=new Label{Width=132,Height=62,Margin=new Padding(4),BorderStyle=BorderStyle.FixedSingle,
-            TextAlign=ContentAlignment.MiddleCenter,Font=new Font(Font.FontFamily,10f,FontStyle.Bold),
-            BackColor=back,Text=$"{title}\n{value}"};
+        var cardWidth=Math.Clamp((Math.Max(880,cards.ClientSize.Width)-70)/8,105,165);
+        var label=new Label{Width=cardWidth,Height=70,Margin=new Padding(4),BorderStyle=BorderStyle.None,
+            Padding=new Padding(10,8,10,6),TextAlign=ContentAlignment.MiddleCenter,
+            Font=new Font("Segoe UI",10f,FontStyle.Bold),ForeColor=Color.FromArgb(27,44,68),
+            BackColor=back,Text=$"{title}\n{value:N0}",Cursor=Cursors.Hand};
+        label.Paint+=(_,e)=>{using var p=new Pen(Color.FromArgb(214,225,238));e.Graphics.DrawRectangle(p,0,0,label.Width-1,label.Height-1);};
+        label.Click+=(_,_)=>SelectStatusTab(title);
         cards.Controls.Add(label);return label;
+    }
+
+    void SelectStatusTab(string title)
+    {
+        var target = title switch
+        {
+            "Kart Basmayan" => "Kart Basmayan",
+            "İçeride" or "Çıkış Eksik" => "İçeride / Çıkış Bekleyen",
+            "İzinli" => "İzinli",
+            "Tamamlanan" => "Tamamlanan",
+            "Eşleşmeyen" => "Eşleşmeyen Kart",
+            _ => "Genel"
+        };
+        var page = tabs.TabPages.Cast<TabPage>().FirstOrDefault(x => x.Text == target);
+        if (page is not null) tabs.SelectedTab = page;
+    }
+
+    void OpenGridRow(DataGridView grid)
+    {
+        if (openEntryExit is null || grid.CurrentRow is null) return;
+        if (!grid.Columns.Contains("Kart No")) return;
+        var code = Convert.ToString(grid.CurrentRow.Cells["Kart No"].Value)?.Trim();
+        if (string.IsNullOrWhiteSpace(code)) return;
+        openEntryExit(code, date.Value.Date);
     }
     async Task SyncAndLoadAsync(bool syncDevice=true)
     {
