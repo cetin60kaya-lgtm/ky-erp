@@ -1,12 +1,8 @@
 name: KY Security PWA Frontend Hotfix
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - APP/app/ky-erp-frontend/public/guvenlik/**
-      - .github/workflows/security-frontend-hotfix-deploy.yml
+  # Cloudflare Git Integration is the only automatic Pages production path.
+  # Keep this workflow manual-only for emergency fallback.
   workflow_dispatch:
 
 permissions:

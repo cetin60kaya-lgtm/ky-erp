@@ -1,12 +1,8 @@
 name: KY ERP Frontend Hotfix Deploy
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - ".github/workflows/frontend-hotfix-deploy.yml"
-      - "APP/app/ky-erp-frontend/**"
+  # Cloudflare Git Integration is the only automatic Pages production path.
+  # Keep this workflow manual-only for emergency fallback.
   workflow_dispatch:
 
 permissions:
