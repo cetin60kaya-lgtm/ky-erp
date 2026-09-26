@@ -51,22 +51,19 @@ test("owner shell never renders a company as the application owner identity", as
   assert.doesNotMatch(shell, /İşlem Firması: \{activeCompanyName\}/);
 });
 
-test("notification center exposes direct scoped login and session approval actions", async () => {
+test("notification center keeps security approvals informational and phone-owned", async () => {
   const shell = await read("layouts/AppShellV3.jsx");
   const notifications = await read("../../../cloud/ky-erp-api/src/notifications-cloud.ts");
-  assert.match(shell, /decideSecurityCenterLoginApproval/);
-  assert.match(shell, /runPhoneApprovedSecurityAction/);
-  assert.match(shell, /SESSION_TRUST_APPROVE/);
-  assert.match(shell, /SESSION_TRUST_REJECT/);
-  assert.match(shell, /shell-v3-notification-inline-actions/);
-  assert.match(shell, /"APPROVE"/);
-  assert.match(shell, /"DENY"/);
-  assert.match(notifications, /AUTH_SECURITY_CAPABILITY_GRANT/);
+  assert.doesNotMatch(shell, /decideSecurityCenterLoginApproval/);
+  assert.doesNotMatch(shell, /SESSION_TRUST_APPROVE/);
+  assert.doesNotMatch(shell, /SESSION_TRUST_REJECT/);
+  assert.doesNotMatch(shell, /shell-v3-notification-inline-actions/);
+  assert.match(shell, /shell-v3-notification-readonly/);
+  assert.match(shell, /Onay ve ret işlemleri yalnız KY ERP Güvenlik uygulamasında tamamlanır/);
   assert.match(notifications, /LOGIN_APPROVE/);
   assert.match(notifications, /SESSION_APPROVE/);
   assert.match(notifications, /collectSessionTrustApprovals/);
   assert.match(notifications, /session-trust:/);
   assert.match(notifications, /actionable:\s*true/);
   assert.match(notifications, /securityCenter:\s*true/);
-  assert.match(notifications, /NOT IN \('SUPER_ADMIN','ADMIN','COMPANY_ADMIN'\)/);
 });

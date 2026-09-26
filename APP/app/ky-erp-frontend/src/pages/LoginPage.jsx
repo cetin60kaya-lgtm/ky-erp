@@ -128,7 +128,6 @@ export default function LoginPage() {
     verifyOwnerRecovery,
     checkApproval,
     checkPhoneApproval,
-    verifyPhoneApprovalCode,
     resendPhoneApproval,
     useAuthenticatorFallback: runAuthenticatorFallback,
   } = useAuth();
@@ -142,12 +141,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [phoneStatusMessage, setPhoneStatusMessage] = useState("");
-  const [phoneSecurityCode, setPhoneSecurityCode] = useState("");
   const [qrError, setQrError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
   const [recoveryOtp, setRecoveryOtp] = useState("");
   const [recoveryAnswers, setRecoveryAnswers] = useState(["", ""]);
+  const [securityMethod, setSecurityMethod] = useState("AUTHENTICATOR");
   const [turnstileConfig, setTurnstileConfig] = useState({ enabled: false, siteKey: "", loaded: false, failed: false });
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileError, setTurnstileError] = useState("");
@@ -256,6 +255,7 @@ export default function LoginPage() {
     setCode("");
     setRecoveryOtp("");
     setRecoveryAnswers(["", ""]);
+    setSecurityMethod("AUTHENTICATOR");
     setResetProvider("");
     setShowPassword(false);
     setCapsLock(false);
@@ -391,28 +391,6 @@ export default function LoginPage() {
     }
   }
 
-  async function submitPhoneSecurityCode(event) {
-    event?.preventDefault?.();
-    if (!/^\d{6}$/.test(phoneSecurityCode) || loading) return;
-    try {
-      setLoading(true);
-      setError("");
-      const response = await verifyPhoneApprovalCode({
-        phoneApprovalId: flow.phoneApprovalId,
-        phoneApprovalToken: flow.phoneApprovalToken,
-        code: phoneSecurityCode,
-      });
-      setPhoneStatusMessage(response?.message || "KY ERP Güvenlik kodu doğrulandı.");
-      setPhoneSecurityCode("");
-      phoneApprovalCheckRef.current.settled = false;
-      window.setTimeout(() => refreshPhoneApproval(), 250);
-    } catch (requestError) {
-      setError(requestError?.message || "KY ERP Güvenlik kodu doğrulanamadı.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function resendPhoneApprovalNotification() {
     if (!flow.phoneApprovalId || !flow.phoneApprovalToken || loading) return;
     try {
@@ -431,17 +409,24 @@ export default function LoginPage() {
     }
   }
 
-  async function switchToAuthenticator() {
+  async function switchToAuthenticator(method = "AUTHENTICATOR") {
     if (!flow.phoneApprovalId || !flow.phoneApprovalToken) return;
     try {
       setLoading(true);
       setError("");
-      applyResponse(await runAuthenticatorFallback({
+      const response = await runAuthenticatorFallback({
         phoneApprovalId: flow.phoneApprovalId,
         phoneApprovalToken: flow.phoneApprovalToken,
-      }));
+      });
+      applyResponse(response);
+      const recoveryRequested = method === "RECOVERY";
+      const recoveryAvailable = Boolean(response?.ownerRecoveryAvailable);
+      setSecurityMethod(recoveryRequested && recoveryAvailable ? "RECOVERY" : "AUTHENTICATOR");
+      if (recoveryRequested && !recoveryAvailable) {
+        setError("Bu hesapta Hesap Kurtarma henüz yapılandırılmamış. Authenticator ile devam edebilirsiniz.");
+      }
     } catch (requestError) {
-      setError(requestError?.message || "Authenticator yedek yöntemi açılamadı.");
+      setError(requestError?.message || "Alternatif kurumsal doğrulama açılamadı.");
     } finally {
       setLoading(false);
     }
@@ -564,6 +549,7 @@ export default function LoginPage() {
 
             <StepRail stage={stage} />
 
+            <div className="auth-stage-viewport">
             {stage === "CREDENTIALS" ? <div className="auth-login-intro"><span>KY</span><div><strong>Kurumsal hesabınızla devam edin</strong><small>Telefon onayı, güvenilir cihaz ve oturum kontrolleri hesabınıza göre otomatik uygulanır.</small></div></div> : null}
 
             {stage === "CREDENTIALS" ? (
@@ -666,97 +652,73 @@ export default function LoginPage() {
             ) : null}
 
             {stage === "PHONE_APPROVAL_PENDING" ? (
-              <div className="auth-flow-block auth-centered">
-                <div className="auth-phone-approval-icon" aria-hidden="true">✓</div>
-                <span className="auth-section-label">KY ERP TELEFON ONAYI</span>
-                <h3>{flow.pushDelivered === false ? "KY ERP Güvenlik uygulamasını açın" : "Telefonunuza bildirim gönderildi"}</h3>
-                <p>{flow.pushDelivered === false ? "Bildirim kanalı yenileniyor. KY ERP Güvenlik uygulamasını açın; bekleyen giriş Onaylar bölümünde görünür." : <>Tek KY ERP bildirimini açın ve telefonda bilgisayarda gördüğünüz <strong>2 haneli eşleştirme numarasını</strong> seçin. Doğru sayı seçimi giriş onayıdır. Cihaz kilidi kurulmuşsa Face ID / parmak izi / PIN doğrulaması da açılır.</>}</p>
-                {flow.matchNumber ? <div className="auth-match-number"><span>EŞLEŞTİRME NO</span><strong>{flow.matchNumber}</strong><small>Telefonda çıkan seçeneklerden bu numarayı seçin. Farklı numarayı seçerseniz giriş onaylanmaz.</small></div> : null}
-                <div className="auth-notice">
-                  <strong>Güvenli bekleme</strong>
-                  <span>Bu giriş yalnız kayıtlı güvenilir telefonunuzdan onaylanabilir. İstek kısa süre içinde otomatik olarak geçersiz olur.</span>
-                </div>
-                <form className="auth-security-code-box" onSubmit={submitPhoneSecurityCode}>
+              <div className="auth-flow-block auth-centered auth-phone-stage">
+                <div className="auth-phone-status-head">
+                  <div className="auth-phone-approval-icon" aria-hidden="true">✓</div>
                   <div>
-                    <strong>KY Güvenlik Giriş Kodu</strong>
-                    <span>Telefondaki KY ERP Güvenlik → Giriş Kodu bölümünden 6 haneli kısa süreli kod üretin.</span>
+                    <span className="auth-section-label">KY ERP TELEFON ONAYI</span>
+                    <h3>{flow.pushDelivered === false ? "KY Güvenlik uygulamasını açın" : "Telefonunuza bildirim gönderildi"}</h3>
+                    <p>Telefonda aşağıdaki eşleştirme numarasını seçin, ardından <strong>Onayla</strong> deyin. Cihaz güvenliği açıksa parmak izi / PIN doğrulaması istenir.</p>
                   </div>
-                  <input
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    value={phoneSecurityCode}
-                    onChange={(event) => setPhoneSecurityCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="000000"
-                    aria-label="KY Güvenlik giriş kodu"
-                  />
-                  <button type="submit" disabled={loading || phoneSecurityCode.length !== 6}>Kodu Kullan</button>
-                </form>
-                {phoneStatusMessage ? <div className="auth-notice"><strong>Telefon bağlantısı</strong><span>{phoneStatusMessage}</span></div> : null}
+                </div>
+                {flow.matchNumber ? <div className="auth-match-number auth-match-number-compact"><span>EŞLEŞTİRME NUMARASI</span><strong>{flow.matchNumber}</strong></div> : null}
+                <div className="auth-wait-status">
+                  <div className="auth-wait-ring"><span /></div>
+                  <div><strong>Telefon yanıtı bekleniyor</strong><small>Onaylandığında bu ekran otomatik olarak devam eder.</small></div>
+                </div>
+                {phoneStatusMessage ? <div className="auth-notice auth-notice-compact"><strong>Telefon bağlantısı</strong><span>{phoneStatusMessage}</span></div> : null}
                 <ErrorBox message={error} />
-                <button className="auth-primary" type="button" onClick={refreshPhoneApproval} disabled={loading}>Onayı Şimdi Kontrol Et</button>
                 <button className="auth-secondary" type="button" onClick={resendPhoneApprovalNotification} disabled={loading}>Bildirimi Yeniden Gönder</button>
-                <details className="auth-fallback-details auth-fallback-late">
-                  <summary>Telefonla onaylayamıyorum</summary>
-                  <div className="auth-fallback-late-copy">Telefon onayı birincil yöntemdir. Telefon kullanılamıyorsa beklemeden Google veya Microsoft Authenticator koduna geçebilirsiniz.</div>
-                  <button className="auth-secondary" type="button" onClick={switchToAuthenticator} disabled={loading}>Google / Microsoft Authenticator yedeğine geç</button>
-                </details>
-                <button type="button" className="auth-ghost" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
+                <div className="auth-method-section">
+                  <div className="auth-method-title"><strong>Kurumsal doğrulama seçenekleri</strong><small>Telefon kullanılamıyorsa güvenli yedek yönteme geçin.</small></div>
+                  <div className="auth-method-grid">
+                    <button type="button" onClick={() => switchToAuthenticator("AUTHENTICATOR")} disabled={loading}><span>A</span><b>Authenticator</b><small>Google / Microsoft</small></button>
+                    <button type="button" onClick={() => switchToAuthenticator("RECOVERY")} disabled={loading}><span>H</span><b>Hesap Kurtarma</b><small>Kod + güvenlik soruları</small></button>
+                  </div>
+                </div>
+                <button type="button" className="auth-ghost auth-ghost-compact" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
               </div>
             ) : null}
 
             {stage === "MFA_REQUIRED" ? (
-              <div className="auth-flow-block">
-                <div className="auth-policy-row">
-                  <div><span className="auth-section-label">GÜVENLİK POLİTİKASI</span><strong>{flow.policyLabel || (flow.requireBoth ? "Google + Microsoft" : "Authenticator doğrulaması")}</strong></div>
-                  {flow.requireBoth ? <span className="auth-policy-badge">2/2 MFA gerekli</span> : <span className="auth-policy-badge">1 MFA doğrulaması gerekli</span>}
+              <div className="auth-flow-block auth-mfa-stage">
+                <div className="auth-method-tabs" role="tablist" aria-label="Doğrulama yöntemi">
+                  <button type="button" className={securityMethod !== "RECOVERY" ? "active" : ""} onClick={() => setSecurityMethod("AUTHENTICATOR")}>Authenticator</button>
+                  {flow.ownerRecoveryAvailable ? <button type="button" className={securityMethod === "RECOVERY" ? "active" : ""} onClick={() => setSecurityMethod("RECOVERY")}>Hesap Kurtarma</button> : null}
                 </div>
-
-                <div className="provider-grid">
-                  {(availableProviders.length ? availableProviders : [currentProvider]).filter(Boolean).map((provider) => (
-                    <ProviderCard
-                      key={provider}
-                      provider={provider}
-                      selected={selectedProvider === provider && !verifiedProviders.includes(provider)}
-                      verified={verifiedProviders.includes(provider)}
-                      disabled={verifiedProviders.includes(provider) || loading}
-                      onClick={() => { setSelectedProvider(provider); setCode(""); setResetProvider(""); setError(""); }}
-                    />
-                  ))}
-                </div>
-
-                {flow.requireBoth ? (
-                  <div className="auth-progress-note">
-                    <strong>{verifiedProviders.length}/2 doğrulama tamamlandı</strong>
-                    <span>{verifiedProviders.length ? `${verifiedProviders.map((item) => PROVIDER_LABELS[item]).join(", ")} tamamlandı. Kalan doğrulamaya devam edin.` : "Önce Google veya Microsoft kodlarından biriyle başlayın."}</span>
-                  </div>
-                ) : null}
-
-                <form className="auth-form" onSubmit={handleMfa}>
-                  <label>{currentLabel} kodu
-                    <input className="auth-code-input" autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
-                  </label>
-                  {resetProvider ? <div className="auth-notice"><strong>{PROVIDER_LABELS[resetProvider]} yeniden kurulacak</strong><span>Kimliğinizi önce {currentLabel} koduyla doğrulayın.</span></div> : null}
-                  <ErrorBox message={error} />
-                  <button className="auth-primary" type="submit" disabled={loading || verifiedProviders.includes(currentProvider)}>{loading ? "Doğrulanıyor..." : resetProvider ? "Doğrula ve Yeniden Kur" : `${currentLabel} ile Doğrula`}</button>
-                  {!flow.requireBoth && alternativeAvailable ? <button type="button" className="auth-secondary" onClick={() => { setSelectedProvider(alternative); setCode(""); setError(""); }}>Diğer Authenticator'ı kullan</button> : null}
-                  {!flow.requireBoth && availableProviders.includes(alternative) ? <button type="button" className="auth-secondary" onClick={() => { setResetProvider(currentProvider); setSelectedProvider(alternative); setCode(""); setError(""); }}>{currentLabel} erişilemiyor · diğer yöntemle yeniden kur</button> : null}
-                  <button type="button" className="auth-ghost" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
-                </form>
-
-                {flow.ownerRecoveryAvailable ? (
-                  <div className="auth-recovery-panel auth-owner-recovery-panel">
-                    <div>
-                      <span className="auth-section-label">UYGULAMA SAHİBİ EK GÜVENLİK</span>
-                      <strong>Özel soru-cevap ile güvenli kurtarma</strong>
-                      <span>Yalnız uygulama sahibi için çalışır. Doğrulanmış iletişim kanalı ve kayıtlı özel güvenlik soruları birlikte doğrulanır; doğrudan oturum açılmaz, MFA güvenli şekilde yeniden kurulur.</span>
+                {securityMethod === "RECOVERY" && flow.ownerRecoveryAvailable ? (
+                  <div className="auth-recovery-compact">
+                    <span className="auth-section-label">KURUMSAL HESAP KURTARMA</span>
+                    <h3>Kimliğinizi güvenli şekilde kurtarın</h3>
+                    <p>Doğrulanmış iletişim kanalınıza 6 haneli kod gönderilir. Ardından kayıtlı üç güvenlik sorunuzdan rastgele iki tanesi sorulur.</p>
+                    <div className="auth-recovery-actions auth-recovery-actions-compact">
+                      {flow.recoveryChannels?.email ? <button type="button" className="auth-secondary" onClick={() => handleOwnerRecovery("EMAIL")} disabled={loading}>E-posta ile devam et</button> : null}
+                      {flow.recoveryChannels?.sms ? <button type="button" className="auth-secondary" onClick={() => handleOwnerRecovery("SMS")} disabled={loading}>SMS ile devam et</button> : null}
                     </div>
-                    <div className="auth-recovery-actions">
-                      {flow.recoveryChannels?.email ? <button type="button" className="auth-secondary" onClick={() => handleOwnerRecovery("EMAIL")} disabled={loading}>E-posta + özel sorular</button> : null}
-                      {flow.recoveryChannels?.sms ? <button type="button" className="auth-secondary" onClick={() => handleOwnerRecovery("SMS")} disabled={loading}>SMS + özel sorular</button> : null}
-                    </div>
+                    <div className="auth-notice auth-notice-compact"><strong>Güvenli kurtarma</strong><span>Bu işlem doğrudan oturum açmaz; doğrulama tamamlandıktan sonra MFA güvenliği yeniden kurulur.</span></div>
+                    <ErrorBox message={error} />
                   </div>
-                ) : null}
+                ) : (
+                  <>
+                    <div className="auth-policy-row auth-policy-row-compact">
+                      <div><span className="auth-section-label">AUTHENTICATOR</span><strong>{flow.policyLabel || (flow.requireBoth ? "Google + Microsoft" : "6 haneli doğrulama kodu")}</strong></div>
+                      {flow.requireBoth ? <span className="auth-policy-badge">2/2 MFA</span> : <span className="auth-policy-badge">Yedek doğrulama</span>}
+                    </div>
+                    <div className="provider-grid provider-grid-compact">
+                      {(availableProviders.length ? availableProviders : [currentProvider]).filter(Boolean).map((provider) => (
+                        <ProviderCard key={provider} provider={provider} selected={selectedProvider === provider && !verifiedProviders.includes(provider)} verified={verifiedProviders.includes(provider)} disabled={verifiedProviders.includes(provider) || loading} onClick={() => { setSelectedProvider(provider); setCode(""); setResetProvider(""); setError(""); }} />
+                      ))}
+                    </div>
+                    {flow.requireBoth ? <div className="auth-progress-note auth-notice-compact"><strong>{verifiedProviders.length}/2 doğrulama tamamlandı</strong><span>{verifiedProviders.length ? verifiedProviders.map((item) => PROVIDER_LABELS[item]).join(", ") + " tamamlandı. Kalan doğrulamaya devam edin." : "Google veya Microsoft Authenticator kodlarından biriyle başlayın."}</span></div> : null}
+                    <form className="auth-form auth-form-compact" onSubmit={handleMfa}>
+                      <label>{currentLabel} kodu<input className="auth-code-input" autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" /></label>
+                      {resetProvider ? <div className="auth-notice auth-notice-compact"><strong>{PROVIDER_LABELS[resetProvider]} yeniden kurulacak</strong><span>Kimliğinizi önce {currentLabel} koduyla doğrulayın.</span></div> : null}
+                      <ErrorBox message={error} />
+                      <button className="auth-primary" type="submit" disabled={loading || verifiedProviders.includes(currentProvider)}>{loading ? "Doğrulanıyor..." : resetProvider ? "Doğrula ve Yeniden Kur" : "Authenticator Kodunu Doğrula"}</button>
+                    </form>
+                  </>
+                )}
+                <button type="button" className="auth-ghost auth-ghost-compact" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
               </div>
             ) : null}
 
@@ -816,6 +778,8 @@ export default function LoginPage() {
                 <button className="auth-primary" type="button" onClick={() => resetToCredentials()}>Girişe Dön</button>
               </div>
             ) : null}
+
+            </div>
 
             <div className="auth-card-footer">
               <span className="auth-dot" />
