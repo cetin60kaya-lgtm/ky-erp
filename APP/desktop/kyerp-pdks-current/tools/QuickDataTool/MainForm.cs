@@ -271,11 +271,16 @@ public sealed class MainForm : Form
 
     Control BuildAudit()
     {
-        var p=new Panel{Dock=DockStyle.Fill}; var bar=new FlowLayoutPanel{Dock=DockStyle.Top,Height=46};
+        var p=new Panel{Dock=DockStyle.Fill};
+        var bar=new FlowLayoutPanel{Dock=DockStyle.Top,Height=82,WrapContents=true};
         bar.Controls.Add(new Label{Text="Yıl",AutoSize=true,Padding=new Padding(0,8,3,0)}); bar.Controls.Add(auditYear);
         bar.Controls.Add(new Label{Text="Ay",AutoSize=true,Padding=new Padding(7,8,3,0)}); bar.Controls.Add(auditMonthNo);
         bar.Controls.Add(new Label{Text="Aktif Personel",AutoSize=true,Padding=new Padding(7,8,3,0)}); bar.Controls.Add(auditPerson);
-        bar.Controls.Add(Btn("Senkron Kontrol",LoadAudit)); bar.Controls.Add(Btn("Senkron Uygula",ApplyAuditSync)); bar.Controls.Add(Btn("TNF Listele",LoadTnfAudit));
+        bar.Controls.Add(WideBtn("Kontrol Et",LoadAudit,100));
+        bar.Controls.Add(WideBtn("Seçili Eksikleri Ekle",()=>ApplyMissingTnf(true),155));
+        bar.Controls.Add(WideBtn("Tüm Eksikleri Ekle",()=>ApplyMissingTnf(false),145));
+        bar.Controls.Add(WideBtn("Fazla TNF Temizle",CleanExtraTnf,145));
+        bar.Controls.Add(WideBtn("TNF Listele",LoadTnfAudit,105));
         p.Controls.Add(auditGrid); p.Controls.Add(bar); return p;
     }
     void DetectSources()
@@ -725,10 +730,10 @@ public sealed class MainForm : Form
             var yf=Path.Combine(Path.GetDirectoryName(tnfPath.Text)??"",$"TR{y}.Tnf"); var src=File.Exists(yf)?yf:tnfPath.Text;
             var t=new DataTable(); foreach(var c in new[]{"Kart No","Ad Soyad","Tarih","Gün","Saat","Taraf","Ham TNF"}) t.Columns.Add(c);
             if(!File.Exists(src)){ t.Rows.Add("","","","","","","TNF dosyası yok: "+src); auditGrid.DataSource=t; return; }
-            var names=new Dictionary<string,string>(); if(db is not null){var pr=db.Query("select PKNO,AD,SOYAD from KIMLIK"); foreach(DataRow r in pr.Rows) names[Convert.ToString(r["PKNO"])??""]=$"{r["AD"]} {r["SOYAD"]}".Trim();}
+            var names=new Dictionary<string,string>(); if(db is not null){var pr=db.Query("select PKNO,AD,SOYAD from KIMLIK where ICTARIH is null or ICTARIH>=@TODAY",new FbParameter("@TODAY",DateTime.Today)); foreach(DataRow r in pr.Rows) names[Convert.ToString(r["PKNO"])??""]=$"{r["AD"]} {r["SOYAD"]}".Trim();}
             foreach(var line in File.ReadLines(src))
             {
-                if(string.IsNullOrWhiteSpace(line)) continue; var a=line.Split(','); if(a.Length<3) continue; var card=a[0].Trim(); if(filterCard is not null&&card!=filterCard) continue;
+                if(string.IsNullOrWhiteSpace(line)) continue; var a=line.Split(','); if(a.Length<3) continue; var card=a[0].Trim(); if(!names.ContainsKey(card)) continue; if(filterCard is not null&&card!=filterCard) continue;
                 if(!DateTime.TryParseExact(a[2].Trim(),"ddMMyy",System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out var d)) continue; if(d.Year!=y) continue; if(m!=0&&d.Month!=m) continue;
                 var tm=a[1].Trim(); var side=TimeOnly.TryParse(tm,out var ti)&&ti.Hour<12?"Giriş / Sabah":"Çıkış / Akşam";
                 t.Rows.Add(card,names.TryGetValue(card,out var n)?n:"",d.ToString("dd.MM.yyyy"),d.ToString("dddd",new System.Globalization.CultureInfo("tr-TR")),tm,side,line);
@@ -750,8 +755,9 @@ public sealed class MainForm : Form
             var yf = Path.Combine(Path.GetDirectoryName(tnfPath.Text) ?? "", $"TR{y}.Tnf");
             var src = File.Exists(yf) ? yf : tnfPath.Text;
             var lines = File.Exists(src) ? File.ReadAllLines(src).Where(x => !string.IsNullOrWhiteSpace(x)).ToList() : new List<string>();
-            var q = "select g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO where ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))" + (filterCard is null ? "" : " and g.PKNO=@P") + " order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
-            var rows = filterCard is null ? db.Query(q,new FbParameter("@A",start),new FbParameter("@B",end)) : db.Query(q,new FbParameter("@A",start),new FbParameter("@B",end),new FbParameter("@P",filterCard));
+            var activeCards = db.Query("select PKNO from KIMLIK where ICTARIH is null or ICTARIH>=@TODAY", new FbParameter("@TODAY",DateTime.Today)).AsEnumerable().Select(r=>Convert.ToString(r["PKNO"])??"").ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var q = "select g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g inner join KIMLIK k on k.PKNO=g.PKNO where (k.ICTARIH is null or k.ICTARIH>=@TODAY) and ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))" + (filterCard is null ? "" : " and g.PKNO=@P") + " order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
+            var rows = filterCard is null ? db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",start),new FbParameter("@B",end)) : db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",start),new FbParameter("@B",end),new FbParameter("@P",filterCard));
             var t = new DataTable();
             foreach (var c in new[]{"Kart No","Ad Soyad","Tarih","Gün","Taraf","Saat","Tür","TNF Karşılığı","Durum","İşlem"}) t.Columns.Add(c);
             var systemKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -765,7 +771,7 @@ public sealed class MainForm : Form
             foreach (var line in lines)
             {
                 var p = line.Split(','); if (p.Length < 3) continue;
-                var card = p[0].Trim(); if (filterCard is not null && card != filterCard) continue;
+                var card = p[0].Trim(); if (!activeCards.Contains(card)) continue; if (filterCard is not null && card != filterCard) continue;
                 if (!DateTime.TryParseExact(p[2].Trim(), "ddMMyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d) || d < start || d >= end) continue;
                 var entry = IsEntryTime(p[1].Trim());
                 var key = $"{card}|{d:yyyyMMdd}|{(entry ? "G" : "C")}"; if (systemKeys.Contains(key)) continue;
@@ -782,23 +788,14 @@ public sealed class MainForm : Form
 
     void AuditSystemSide(DataTable t, HashSet<string> systemKeys, List<string> lines, string card, string name, object dateObj, object timeObj, string tur, bool entry)
     {
-        if (dateObj is null || dateObj == DBNull.Value) return;
-        var time = Convert.ToString(timeObj)?.Trim() ?? ""; if (string.IsNullOrWhiteSpace(time)) return;
-        var d = Convert.ToDateTime(dateObj).Date;
-        var key = $"{card}|{d:yyyyMMdd}|{(entry ? "G" : "C")}"; systemKeys.Add(key);
-        var same = lines.Where(x => SameTnfSide(x, card, d, entry)).ToArray();
-        var exact = same.Where(x => x.Split(',').Length > 1 && x.Split(',')[1].Trim() == time).ToArray();
-        var isE = string.Equals(tur, "E", StringComparison.OrdinalIgnoreCase);
-        string durum, islem;
-        if (isE)
-        {
-            if (same.Length == 0) { durum = "UYUMLU - E / TNF YOK"; islem = "YOK"; }
-            else { durum = "UYUMSUZ - E AMA TNF VAR"; islem = "TNF SİL"; }
-        }
-        else if (exact.Length == 1 && same.Length == 1) { durum = "UYUMLU"; islem = "YOK"; }
-        else if (same.Length == 0) { durum = "UYUMSUZ - TNF EKSİK"; islem = "TNF EKLE"; }
-        else { durum = exact.Length > 0 ? "UYUMSUZ - FAZLA TNF" : "UYUMSUZ - SAAT FARKLI"; islem = "TNF DÜZELT"; }
-        t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),d.ToString("dddd",new System.Globalization.CultureInfo("tr-TR")),entry?"Giriş / Sabah":"Çıkış / Akşam",time,isE?"E":"Normal",string.Join(" | ",same),durum,islem);
+        if(dateObj is null||dateObj==DBNull.Value)return; var time=Convert.ToString(timeObj)?.Trim()??""; if(string.IsNullOrWhiteSpace(time))return;
+        var d=Convert.ToDateTime(dateObj).Date; var key=$"{card}|{d:yyyyMMdd}|{(entry?"G":"C")}"; systemKeys.Add(key);
+        var same=lines.Where(x=>SameTnfSide(x,card,d,entry)).ToList(); var exact=same.Where(x=>x.Split(',').Length>1&&x.Split(',')[1].Trim()==time).ToList();
+        var side=entry?"Giriş / Sabah":"Çıkış / Akşam"; var day=d.ToString("dddd",new System.Globalization.CultureInfo("tr-TR")); var isE=string.Equals(tur,"E",StringComparison.OrdinalIgnoreCase);
+        if(isE){ if(same.Count==0)t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,time,"E","","UYUMLU - E / TNF YOK","YOK"); else t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,time,"E",string.Join(" | ",same),"UYUMSUZ - E AMA TNF VAR","TNF SİL E"); return; }
+        if(exact.Count>0){ var keep=exact[0]; t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,time,"Normal",keep,"UYUMLU","YOK"); var extras=same.ToList(); extras.Remove(keep); foreach(var x in extras)t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,x.Split(',')[1].Trim(),"TNF",x,"UYUMSUZ - FAZLA TNF","TNF SİL FAZLA"); return; }
+        if(same.Count==0){t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,time,"Normal","","UYUMSUZ - TNF EKSİK","TNF EKLE");return;}
+        t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,time,"Normal",string.Join(" | ",same),"UYUMSUZ - SAAT FARKLI","İNCELE");
     }
 
     void ColorAuditRows()
@@ -810,6 +807,26 @@ public sealed class MainForm : Form
             r.DefaultCellStyle.BackColor = s.StartsWith("UYUMLU") ? Color.Honeydew : s.Contains("EKSİK") ? Color.LemonChiffon : Color.MistyRose;
             r.DefaultCellStyle.SelectionBackColor = s.StartsWith("UYUMLU") ? Color.PaleGreen : s.Contains("EKSİK") ? Color.Khaki : Color.LightSalmon;
         }
+    }
+
+    void ApplyMissingTnf(bool selectedOnly)
+    {
+        LoadAudit(); if(auditGrid.DataSource is not DataTable)return;
+        var rows=(selectedOnly?auditGrid.SelectedRows.Cast<DataGridViewRow>().Where(r=>!r.IsNewRow):auditGrid.Rows.Cast<DataGridViewRow>().Where(r=>!r.IsNewRow)).Where(r=>Convert.ToString(r.Cells["İşlem"].Value)=="TNF EKLE").ToList();
+        if(rows.Count==0){MessageBox.Show("Eklenecek eksik TNF kaydı yok.");return;} ApplyAuditRows(rows,$"{rows.Count} eksik TNF kaydı eklenecek.");
+    }
+    void CleanExtraTnf()
+    {
+        LoadAudit(); if(auditGrid.DataSource is not DataTable)return; var rows=auditGrid.Rows.Cast<DataGridViewRow>().Where(r=>!r.IsNewRow&&(Convert.ToString(r.Cells["İşlem"].Value)=="TNF SİL FAZLA"||Convert.ToString(r.Cells["İşlem"].Value)=="TNF SİL E")).ToList();
+        if(rows.Count==0){MessageBox.Show("Temizlenecek fazla TNF kaydı yok.");return;} ApplyAuditRows(rows,$"{rows.Count} fazla/E TNF kaydı temizlenecek.");
+    }
+    void ApplyAuditRows(List<DataGridViewRow> rows,string message)
+    {
+        var y=(int)auditYear.Value; var src=Path.Combine(Path.GetDirectoryName(tnfPath.Text)??"",$"TR{y}.Tnf"); if(!File.Exists(src))src=tnfPath.Text; if(!File.Exists(src)){MessageBox.Show("TNF dosyası bulunamadı.");return;}
+        if(MessageBox.Show(message+" Yedek alınacak. Devam?","Data Kontrol",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return; var backup=src+".bak_AUDIT_"+DateTime.Now.ToString("yyyyMMdd_HHmmss");File.Copy(src,backup,true);var lines=File.ReadAllLines(src).Where(x=>!string.IsNullOrWhiteSpace(x)).ToList();
+        foreach(var r in rows){var card=Convert.ToString(r.Cells["Kart No"].Value)??"";var d=DateTime.ParseExact(Convert.ToString(r.Cells["Tarih"].Value)??"","dd.MM.yyyy",System.Globalization.CultureInfo.InvariantCulture);var entry=(Convert.ToString(r.Cells["Taraf"].Value)??"").StartsWith("Giriş",StringComparison.OrdinalIgnoreCase);var time=Convert.ToString(r.Cells["Saat"].Value)??"";var op=Convert.ToString(r.Cells["İşlem"].Value)??"";
+            if(op=="TNF EKLE")lines.Add($"{card},{time},{d:ddMMyy},1,001"); else if(op=="TNF SİL E")lines=lines.Where(x=>!SameTnfSide(x,card,d,entry)).ToList(); else if(op=="TNF SİL FAZLA"){var raw=Convert.ToString(r.Cells["TNF Karşılığı"].Value)??"";var ix=lines.FindIndex(x=>string.Equals(x,raw,StringComparison.OrdinalIgnoreCase));if(ix>=0)lines.RemoveAt(ix);}}
+        File.WriteAllLines(src,SortTnf(lines));LoadAudit();MessageBox.Show("İşlem tamamlandı. Yedek: "+backup);
     }
 
     void ApplyAuditSync()
