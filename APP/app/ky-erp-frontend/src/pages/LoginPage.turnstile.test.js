@@ -21,16 +21,17 @@ test("auth context sends turnstileToken to the canonical login endpoint", () => 
   assert.match(authContext, /getTurnstileConfig/);
 });
 
-
 test("login page final corporate security UX is enforced", () => {
   assert.match(loginPage, /showPassword/);
   assert.match(loginPage, /Şifreyi göster/);
   assert.match(loginPage, /Caps Lock açık/);
   assert.match(loginPage, /turnstileConfig\.enabled && !turnstileToken/);
-  assert.match(loginPage, /turnstileConfig\.failed/);
   assert.match(loginPage, /Güvenlik doğrulaması kullanılamıyor/);
-  assert.match(loginPage, /1 MFA doğrulaması gerekli/);
-  assert.match(loginPage, /Özel soru-cevap ile güvenli kurtarma/);
+  assert.match(loginPage, /Kurumsal doğrulama seçenekleri/);
+  assert.match(loginPage, /Authenticator/);
+  assert.match(loginPage, /Hesap Kurtarma/);
+  assert.match(loginPage, /Kod \+ güvenlik soruları/);
+  assert.match(loginPage, /rastgele iki tanesi sorulur/);
   assert.doesNotMatch(loginPage, /Tek kullanımlık acil kurtarma kodu kullan/);
   assert.doesNotMatch(loginPage, /showRecoveryCode/);
 });

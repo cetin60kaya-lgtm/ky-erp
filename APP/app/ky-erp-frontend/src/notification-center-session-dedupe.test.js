@@ -7,12 +7,12 @@ import { fileURLToPath } from "node:url";
 const here=dirname(fileURLToPath(import.meta.url));
 const shell=readFileSync(resolve(here,"layouts/AppShellV3.jsx"),"utf8");
 
-test("notification center deduplicates session approvals and removes resolved duplicates immediately",()=>{
+test("notification center deduplicates security/session records while approvals remain phone-owned",()=>{
   assert.match(shell,/const seenNotificationKeys = new Set\(\)/);
+  assert.match(shell,/const key = notificationResolutionKey\(item\)/);
   assert.match(shell,/resolvedNotificationIdsRef\.current\.has\(key\) \|\| seenNotificationKeys\.has\(key\)/);
-  assert.match(shell,/const resolutionKey = notificationResolutionKey\(item\)/);
-  assert.match(shell,/const duplicateIds = \[\.\.\.new Set\(/);
-  assert.match(shell,/current\.items\.filter\(\(entry\) => notificationResolutionKey\(entry\) !== resolutionKey\)/);
-  assert.match(shell,/dismissNotifications\(duplicateIds\.length \? duplicateIds : \[item\.id\]\)/);
-  assert.doesNotMatch(shell,/setTimeout\(\(\) => \{[\s\S]{0,500}entry\.id !== item\.id[\s\S]{0,200}1600/);
+  assert.match(shell,/seenNotificationKeys\.add\(key\)/);
+  assert.doesNotMatch(shell,/decideNotificationApproval/);
+  assert.doesNotMatch(shell,/shell-v3-notification-inline-actions/);
+  assert.match(shell,/shell-v3-notification-readonly/);
 });
