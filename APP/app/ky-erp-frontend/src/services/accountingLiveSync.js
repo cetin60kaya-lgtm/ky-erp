@@ -10,6 +10,10 @@ function errorStatus(error) {
   return "api_error";
 }
 
+function hasTenantScope(activeMainCompany) {
+  return Boolean(activeMainCompany?.slug || activeMainCompany?.id);
+}
+
 export function useAccountingLiveSync(activeMainCompany, onRefresh) {
   const revisionRef = useRef(null);
   const busyRef = useRef(false);
@@ -29,6 +33,7 @@ export function useAccountingLiveSync(activeMainCompany, onRefresh) {
     revisionRef.current = null;
     setState({ status: "connecting", online: false, revision: 0, lastSyncAt: "", error: "" });
 
+    const scoped = hasTenantScope(activeMainCompany);
     const params = () => ({
       mainCompanySlug: activeMainCompany?.slug,
       mainCompanyId: activeMainCompany?.id,
@@ -39,10 +44,12 @@ export function useAccountingLiveSync(activeMainCompany, onRefresh) {
       if (stopped || busyRef.current || document.visibilityState === "hidden") return;
       busyRef.current = true;
       try {
-        const response = await apiGet("/muhasebe/workspace/live-state", params(), { timeoutMs: 6000 });
+        const response = scoped
+          ? await apiGet("/muhasebe/workspace/live-state", params(), { timeoutMs: 6000, forceFresh: true })
+          : await apiGet("/health", { _ts: Date.now() }, { timeoutMs: 6000, forceFresh: true });
         const data = response?.data || response || {};
-        const revision = Number(data.revision || 0);
-        const changed = revisionRef.current !== null && revision !== revisionRef.current;
+        const revision = scoped ? Number(data.revision || 0) : 0;
+        const changed = scoped && revisionRef.current !== null && revision !== revisionRef.current;
         revisionRef.current = revision;
         setState({
           status: "live",
