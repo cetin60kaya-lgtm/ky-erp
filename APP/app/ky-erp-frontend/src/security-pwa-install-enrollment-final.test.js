@@ -35,10 +35,10 @@ test("old PWA packages are physically removed",()=>{
 });
 
 test("fresh worker is push-only and leaves the app shell to the network",()=>{
-  assert.doesNotMatch(sw,/self\.addEventListener\(\"fetch\"/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
   assert.doesNotMatch(sw,/respondWith|cache\.put|cache\.add|cache\.addAll/);
-  assert.match(sw,/self\.addEventListener\(\"push\"/);
-  assert.match(sw,/self\.addEventListener\(\"notificationclick\"/);
+  assert.match(sw,/self\.addEventListener\("push"/);
+  assert.match(sw,/self\.addEventListener\("notificationclick"/);
 });
 
 test("security host serves one canonical PWA scope and retires old scopes",()=>{

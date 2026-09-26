@@ -23,7 +23,7 @@ function CompactList({ title, columns, rows, renderRow, emptyText }) {
   );
 }
 
-export default function ManagementOverviewWorkspace({ activeMainCompany, refreshKey, goTab, openModule }) {
+export default function ManagementOverviewWorkspace({ activeMainCompany, refreshKey, openModule }) {
   const [state, setState] = useState({ loading: true, error: "", data: {} });
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: "" }));

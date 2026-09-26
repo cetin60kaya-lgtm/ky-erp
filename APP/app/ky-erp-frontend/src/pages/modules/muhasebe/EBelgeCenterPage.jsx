@@ -383,7 +383,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
 export default function EBelgeCenterPage({ activeMainCompany, initialView = "overview", openModule }) {
   const allowedViews = ["overview", "incoming", "outgoing", "pool", "matching", "issues", "workflow", "archive", "integrations"];
   const view = allowedViews.includes(initialView) ? initialView : "overview";
-  const poolViews = ["incoming", "outgoing", "pool", "matching", "issues", "archive"];
+  const poolViews = useMemo(() => ["incoming", "outgoing", "pool", "matching", "issues", "archive"], []);
   const [pool, setPool] = useState({ items: [], stats: {}, total: 0 });
   const [dashboard, setDashboard] = useState({ summary: {}, recent: [] });
   const [integrations, setIntegrations] = useState({ providers: [], archive: [], fileHub: [] });
@@ -430,7 +430,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     } finally {
       setBusy(false);
     }
-  }, [loadDashboard, loadIntegrations, loadPool, view]);
+  }, [loadDashboard, loadIntegrations, loadPool, poolViews, view]);
 
   useEffect(() => { void refreshCurrent(); }, [refreshCurrent, activeMainCompany?.slug, activeMainCompany?.id]);
 
@@ -455,12 +455,12 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     try { await loadPool(); } catch { /* Yükleme başarılıysa liste yenileme ikincil kalır. */ }
   };
 
-  const allRows = pool.items || [];
   const rows = useMemo(() => {
+    const allRows = pool.items || [];
     if (view === "incoming") return allRows.filter((row) => String(row.direction || "INCOMING").toUpperCase() !== "OUTGOING");
     if (view === "outgoing") return allRows.filter((row) => String(row.direction || "").toUpperCase() === "OUTGOING");
     return allRows;
-  }, [allRows, view]);
+  }, [pool.items, view]);
   const companyName = activeMainCompany?.name || activeMainCompany?.title || activeMainCompany?.slug || "Hakan Emprime";
   const summary = dashboard.summary || {};
   const providers = [...(integrations.providers || [])].sort((a, b) => String(a.label || a.key || "").localeCompare(String(b.label || b.key || ""), "tr"));

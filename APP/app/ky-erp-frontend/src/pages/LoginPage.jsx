@@ -507,8 +507,6 @@ export default function LoginPage() {
     : [];
   const currentProvider = normalizeProvider(flow.provider) || selectedProvider;
   const currentLabel = PROVIDER_LABELS[currentProvider] || "Authenticator";
-  const alternative = currentProvider === "GOOGLE" ? "MICROSOFT" : "GOOGLE";
-  const alternativeAvailable = availableProviders.includes(alternative) && !verifiedProviders.includes(alternative);
   const stage = String(flow.stage || "CREDENTIALS").toUpperCase();
 
   return (

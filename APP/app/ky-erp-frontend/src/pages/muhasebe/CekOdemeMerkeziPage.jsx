@@ -261,7 +261,7 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
     if (quick === "cek") setModal({ type: "check", form: emptyCheckForm() });
     if (quick === "transaction") setModal({ type: "transaction", form: emptyTransactionForm(selectedCompanyId || selectedFirmId) });
     if (quick === "cari") setModal({ type: "firm", form: emptyFirmForm() });
-  }, []);
+  }, [selectedCompanyId, selectedFirmId]);
 
   const visibleRows = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("tr-TR");
