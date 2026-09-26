@@ -92,6 +92,7 @@ test("Depolama screen exposes provider-neutral connection, routing and index man
 
 test("Cloud storage registration includes management, preview, agent, scan and accounting archive routes", () => {
   const routes = read("APP/cloud/ky-erp-api/src/admin-storage-cloud.ts");
+  const main = read("APP/cloud/ky-erp-api/src/main.ts");
   const scan = read("APP/cloud/ky-erp-api/src/file-hub-agent-scan.ts");
   const archive = read("APP/cloud/ky-erp-api/src/accounting-document-archive.ts");
   const agentRoutes = read("APP/cloud/ky-erp-api/src/file-hub-agent-public.ts");
@@ -101,11 +102,11 @@ test("Cloud storage registration includes management, preview, agent, scan and a
     "registerFileHubPreviewRoutes",
     "registerPublicFileHubAgentRoutes",
     "registerPublicFileHubScanRoutes",
-    "registerAccountingDocumentArchiveRoutes",
   ]) {
     assert.match(routes, new RegExp(`${registration}\\(app\\)`));
   }
 
+  assert.match(main, /registerAccountingDocumentArchiveRoutes\(app\)/);
   assert.match(scan, /\/api\/auth\/file-hub-agent\/config/);
   assert.match(scan, /UPPER\(sync_mode\)='AGENT'/);
   assert.match(archive, /MUHASEBE/);

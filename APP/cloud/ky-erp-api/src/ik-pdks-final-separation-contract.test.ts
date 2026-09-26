@@ -22,8 +22,8 @@ test("IK visible navigation is personnel and finance only; PDKS attendance dupli
 
   assert.doesNotMatch(registry, /\["puantaj-izin",\s*"Yıllık İzin \/ Günlük Durum"/);
   assert.doesNotMatch(registry, /label:\s*"Günlük Personel"/);
-  assert.match(registry, /"puantaj-izin":\s*"personel-kartlari"/);
-  assert.match(registry, /"gunluk-giris":\s*"personel-kartlari"/);
+  assert.doesNotMatch(registry, /"puantaj-izin"/);
+  assert.doesNotMatch(registry, /"gunluk-giris"/);
 });
 
 test("IK rendering never mounts a second PDKS or puantaj workspace", () => {
@@ -37,7 +37,7 @@ test("IK rendering never mounts a second PDKS or puantaj workspace", () => {
 });
 
 test("monthly IK overview does not fetch or render live PDKS operations", () => {
-  const monthly = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
   assert.doesNotMatch(monthly, /getPdksLiveDashboard/);
   assert.doesNotMatch(monthly, /Bugünkü PDKS Hareketi/);
@@ -49,8 +49,8 @@ test("monthly IK overview does not fetch or render live PDKS operations", () => 
 });
 
 test("IK personnel card exposes authoritative annual leave entitlement, used and remaining balance", () => {
-  const page = frontend("pages/modules/ik/IkPersonnelFinancePage.jsx");
-  const service = frontend("services/ikPersonnelControlApi.js");
+  const page = frontend("pages/modules/ik/monthly/IkPersonnelFinancePage.jsx");
+  const service = frontend("services/ik/personnelApi.js");
 
   assert.match(page, /getIkControlLeaveEntitlement/);
   assert.match(service, /people\/\$\{encodeURIComponent\(employeeId\)\}\/leave-entitlement/);
@@ -95,7 +95,7 @@ test("PDKS remains the operational owner of leave movement and attendance", () =
 });
 
 test("IK payment outputs keep EK visible and A4 outputs readable", () => {
-  const monthly = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
   assert.match(monthly, /@page\{size:A4 landscape/);
   assert.match(monthly, /<h1>İK Ödeme Listesi<\/h1>/);

@@ -47,10 +47,11 @@ test("final round: owner oturum ve gercek mail akisi korunur", () => {
   assert.equal(wrangler?.vars?.RECOVERY_EMAIL_FROM, "KY ERP <admin@kyerp.net>");
 });
 
-test("final round: IsNet tenant, partial ve D1 guard sozlesmesi", () => {
+test("final round: İşNet tenant guard provider seviyesinde, UI e-Belge merkezindedir", () => {
   const tenant = read("APP/cloud/ky-erp-api/src/isnet-tenant-guard.ts");
   const outgoing = read("APP/cloud/ky-erp-api/src/isnet-outgoing-recovery.ts");
-  const frontend = read("APP/app/ky-erp-frontend/src/services/isnetApi.js");
+  const frontend = read("APP/app/ky-erp-frontend/src/pages/modules/muhasebe/EBelgeIntegrationsWorkspace.jsx");
+  const registry = read("APP/app/ky-erp-frontend/src/app/moduleRegistryBase.js");
   const backfill = read("APP/cloud/ky-erp-api/migrations/0027_isnet_tenant_scope_backfill.sql");
   const guard = read("APP/cloud/ky-erp-api/migrations/0028_isnet_tenant_scope_guard.sql");
 
@@ -59,10 +60,10 @@ test("final round: IsNet tenant, partial ve D1 guard sozlesmesi", () => {
   assert.match(outgoing, /PARTIAL_REVIEW_REQUIRED/);
   assert.match(outgoing, /transportComplete/);
   assert.match(outgoing, /persistenceErrors/);
-  assert.match(frontend, /resolveMainCompanySlug/);
-  assert.match(frontend, /PARTIAL_REVIEW_REQUIRED/);
-  assert.match(frontend, /outgoingInvoices/);
-  assert.match(frontend, /outgoingDispatches/);
+  assert.match(frontend, /activeMainCompany/);
+  assert.match(frontend, /İşNet Portal Bağlantısı/);
+  assert.match(registry, /key:\s*"e-belge"/);
+  assert.doesNotMatch(registry, /key:\s*"isnet"/);
   assert.match(backfill, /scope LIKE 'ISNET_%'/);
   assert.match(guard, /trg_isnet_json_store_tenant_insert/);
   assert.match(guard, /trg_isnet_json_store_tenant_update/);

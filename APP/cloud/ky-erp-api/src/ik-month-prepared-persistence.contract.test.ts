@@ -13,8 +13,8 @@ const localBackend = (name: string) =>
 
 test("IK monthly preparation is persisted server-side and survives reopen", () => {
   const relational = cloud("ik-relational-cloud.ts");
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
-  const api = frontend("services/ikApi.js");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const api = frontend("services/ik/monthlyApi.js");
 
   assert.match(relational, /IK_MONTH_PREPARED_ACTION = "MONTH_PREPARED"/);
   assert.match(relational, /\/api\/ik\/advanced\/period-state/);
@@ -31,7 +31,7 @@ test("IK monthly preparation is persisted server-side and survives reopen", () =
 });
 
 test("IK main data remains fail-soft while period-state is auxiliary", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   assert.match(page, /Promise\.allSettled/);
   assert.match(page, /if \(resultState\.status !== "fulfilled"\) throw resultState\.reason/);
   assert.match(page, /periodStateFailed/);

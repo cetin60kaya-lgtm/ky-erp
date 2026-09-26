@@ -9,10 +9,10 @@ test("e-Belge dashboard bugun sayacini sisteme alinma zamanindan uretir",()=>{
   assert.match(source,/date\(COALESCE\(issue_date,created_at\)\) BETWEEN \? AND \?/);
 });
 
-test("e-Belge Tam Sil soft delete degil bagli kayitlari fiziksel temizler",()=>{
-  assert.match(source,/app\.delete\("\/api\/e-belge\/documents\/:id"/);
-  assert.match(source,/DELETE FROM accounting_documents WHERE id=\? AND main_company_slug=\?/);
-  assert.match(source,/accounting_document_issues","accounting_document_taxes","accounting_document_lines/);
-  assert.match(source,/DELETE FROM file_hub_relations/);
-  assert.match(source,/POSTED_DELETE_BLOCKED/);
+test("e-Belge günlük akışta fiziksel hard-delete açmaz ve posted belgeyi canonical kayıtta korur",()=>{
+  assert.doesNotMatch(source,/app\.delete\("\/api\/e-belge\/documents\/:id"/);
+  assert.match(source,/d\.deleted_at IS NULL/);
+  assert.match(source,/status='POSTED'/);
+  assert.match(source,/posted_at/);
+  assert.match(source,/idempotent:true/);
 });

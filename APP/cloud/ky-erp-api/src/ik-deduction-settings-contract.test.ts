@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const worker = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
-const frontend = readFileSync(resolve(here, "../../../app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx"), "utf8");
+const frontend = readFileSync(resolve(here, "../../../app/ky-erp-frontend/src/pages/modules/ik/monthly/IkAdvancedMonthly.jsx"), "utf8");
 
 test("IK mesai ve kesinti saat bolenleri D1 migration gerektirmeden ayridir", () => {
   assert.match(worker, /IK_PERSON_CARD_CALC_SCOPE = "IK_PERSON_CARD_CALC"/);

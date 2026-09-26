@@ -9,7 +9,7 @@ const frontend = (name: string) => readFileSync(resolve(here, "../../../app/ky-e
 
 test("IK payroll report and payment slips use the canonical print service contract", () => {
   const service = frontend("services/printService.js");
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
   assert.match(service, /printHtmlDocument\(optionsOrHtml/);
   assert.match(service, /normalizePrintOptions/);
@@ -27,7 +27,7 @@ test("IK payroll report and payment slips use the canonical print service contra
 });
 
 test("IK bulk slip output keeps selected-person filtering and ten-up A4 pagination", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   assert.match(page, /selectedPayrollIds\.includes\(row\.employee\.id\)/);
   assert.match(page, /for \(let index = 0; index < rows\.length; index \+= 10\)/);
   assert.match(page, /@page\{size:A4 portrait/);
@@ -38,7 +38,7 @@ test("IK bulk slip output keeps selected-person filtering and ten-up A4 paginati
 
 
 test("IK finance movement keeps the selected employee and supports legal overtime multipliers", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.ok(page.includes("Hafta içi %50 (x1,5)"));
@@ -57,7 +57,7 @@ test("IK finance movement keeps the selected employee and supports legal overtim
 });
 
 test("IK bulk slips are compact ten-up A4 cards with strong cash and total fields", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   assert.ok(page.includes("AVANS/KESİNTİ"));
   assert.ok(page.includes("ELDEN"));
   assert.ok(page.includes("TOPLAM ÖDEME"));
@@ -71,7 +71,7 @@ test("IK bulk slips are compact ten-up A4 cards with strong cash and total field
 
 
 test("IK refresh uses canonical personnel and latest-wins request guard", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.match(page, /loadRequestRef = useRef/);
@@ -88,7 +88,7 @@ test("IK refresh uses canonical personnel and latest-wins request guard", () => 
 });
 
 test("IK base salary reference uses raw employees and overtime metadata is stripped on type change", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.match(page, /baseEmployeeId \? rawEmployees\.find/);
@@ -100,7 +100,7 @@ test("IK base salary reference uses raw employees and overtime metadata is strip
 
 
 test("payroll print HTML escapes employee-entered text and shows every payment component", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
   assert.match(page, /function escapeHtml\(value\)/);
   assert.match(page, /replaceAll\("&", "&amp;"\)/);
@@ -114,7 +114,7 @@ test("payroll print HTML escapes employee-entered text and shows every payment c
 });
 
 test("payroll payment balance is auto-reconciled in UI while backend keeps the hard invariant", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.match(page, /function reconcilePaymentSplit/);
@@ -126,7 +126,7 @@ test("payroll payment balance is auto-reconciled in UI while backend keeps the h
 });
 
 test("payment list PDF is a compact single-row list and prints one totals row only at the end", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const start = page.indexOf("const printPayrollReport = async");
   const end = page.indexOf("const legalLabel =", start);
   const block = page.slice(start, end);
@@ -152,7 +152,7 @@ test("payment list PDF is a compact single-row list and prints one totals row on
 
 
 test("single slip can select, edit and reprint only one person while bulk page eleven starts a new page", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
   assert.match(page, /const printSlip = async \(row = payrollRows\.find\(\(item\) => item\.employee\.id === selected\?\.id\)\)/);
   assert.match(page, /Fişi alınacak personel/);
@@ -165,7 +165,7 @@ test("single slip can select, edit and reprint only one person while bulk page e
 });
 
 test("bordro Excel exports the same core amounts shown on screen", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
   for (const field of [
     "maas: row.salary",
@@ -185,7 +185,7 @@ test("bordro Excel exports the same core amounts shown on screen", () => {
 
 
 test("forced refresh waits for an active read before starting the canonical reread", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
   assert.match(page, /const load = useCallback\(async \(\{ force = false, prepare = false \} = \{\}\) =>/);
   assert.match(page, /if \(!force && activeRequest\.key === requestKey\) return activeRequest\.promise/);
@@ -196,7 +196,7 @@ test("forced refresh waits for an active read before starting the canonical rere
 
 
 test("serialized refresh stays single-active across period changes", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   assert.match(page, /if \(activeRequest\.promise\) \{/);
   assert.match(page, /try \{ await activeRequest\.promise; \}/);
   assert.match(page, /loadRequestRef\.current\.seq !== requestId/);
@@ -204,7 +204,7 @@ test("serialized refresh stays single-active across period changes", () => {
 
 
 test("retired personnel and monthly SGK are independent and PDKS mismatch is internal", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.match(page, /Personel Statüsü/);
@@ -231,7 +231,7 @@ test("SGK status no longer forces bank payment or legacy fixed bank amount", () 
 
 
 test("IK payroll period persists and new periods require explicit preparation", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
   assert.match(page, /kyerp\.ik\.selected-period\.v2/);
   assert.match(page, /kyerp\.ik\.prepared-periods\.v2/);
@@ -248,7 +248,7 @@ test("IK payroll period persists and new periods require explicit preparation", 
 });
 
 test("IK overview is finance-focused and leaves live attendance operations to PDKS", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
   assert.doesNotMatch(page, /getPdksLiveDashboard/);
   assert.doesNotMatch(page, /Bugün kart basan/);
@@ -266,8 +266,8 @@ test("IK overview is finance-focused and leaves live attendance operations to PD
 });
 
 test("final payroll control edits every amount and writes movement deltas back to source", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
-  const api = frontend("services/ikApi.js");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const api = frontend("services/ik/monthlyApi.js");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.match(page, /Modal title="Son Bordro Kontrolü"/);
@@ -291,7 +291,7 @@ test("final payroll control edits every amount and writes movement deltas back t
 
 
 test("IK canonical month survives auxiliary read failures and uses Istanbul business dates", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   assert.match(page, /Promise\.allSettled/);
   assert.match(page, /resultState\.status !== "fulfilled"/);
   assert.match(page, /auxiliaryFailed/);
@@ -316,7 +316,7 @@ test("IK validates monthly SGK before card writes and final-control corrections 
 });
 
 test("kıdem preview keeps the complete payroll settlement breakdown", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const start = page.indexOf('modal === "fis" || modal === "kidemCikti"');
   const end = page.indexOf('if (modal === "topluOdeme")', start);
   const block = page.slice(start, end);
@@ -328,8 +328,8 @@ test("kıdem preview keeps the complete payroll settlement breakdown", () => {
 
 
 test("final payroll save auto-reconciles bank cash and supports serial personnel review", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
-  const css = frontend("pages/modules/ik.advanced.css");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const css = frontend("pages/modules/ik/monthly/ik.advanced.css");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.match(page, /function reconcilePaymentSplit/);
@@ -352,7 +352,7 @@ test("final payroll save auto-reconciles bank cash and supports serial personnel
 
 
 test("final payroll always reads live overtime advance deduction and garnishment movements", () => {
-  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
   assert.match(page, /const overtime = system\.overtime/);
   assert.match(page, /const advance = system\.advance/);

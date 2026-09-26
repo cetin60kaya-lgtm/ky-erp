@@ -11,6 +11,7 @@ import { DatabaseModule } from "./database/database.module";
 import { ModelTakipModule } from "./modules/model-takip/model-takip.module";
 import { ModelModule } from "./modules/models/model.module";
 import { IkModule } from "./ik/ik.module";
+import { GunlukOperasyonModule } from "./gunluk-operasyon/gunluk-operasyon.module";
 import { BackboneApiModule } from "./common/backbone-api.module";
 import { StorageModule } from "./storage/storage.module";
 import { AuthModule } from "./auth/auth.module";
@@ -34,6 +35,7 @@ import { AiModule } from "./ai/ai.module";
     DesenModule,
     ModelTakipModule,
     IkModule,
+    GunlukOperasyonModule,
     BackboneApiModule,
     MobileCompatModule,
     AiModule,

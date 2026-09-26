@@ -12,31 +12,28 @@ import { getSystemSentinelAccess } from "./services/systemSentinelApi";
 import AppShellV3 from "./layouts/AppShellV3";
 
 const AdminPage = lazyWithRetry(() => import("./pages/modules/AdminPage"), "admin-v3");
-const IkPersonnelFinancePage = lazyWithRetry(() => import("./pages/modules/ik/IkPersonnelFinancePage"), "ik-personnel-finance-v1");
-const IkAuditPersonnelPage = lazyWithRetry(() => import("./pages/modules/ik/IkAuditPersonnelPage"), "ik-audit-personnel-v1");
-const IkFinancePage = lazyWithRetry(() => import("./pages/modules/ik/IkFinancePage"), "ik-finance-v1");
-const GunlukOperasyonPage = lazyWithRetry(() => import("./pages/modules/GunlukOperasyonPage"), "gunluk-operasyon-v1");
+const IkPersonnelFinancePage = lazyWithRetry(() => import("./pages/modules/ik/monthly/IkPersonnelFinancePage"), "ik-personnel-finance-v1");
+const IkAuditPersonnelPage = lazyWithRetry(() => import("./pages/modules/ik/audit/IkAuditPersonnelPage"), "ik-audit-personnel-v1");
+const IkFinancePage = lazyWithRetry(() => import("./pages/modules/ik/monthly/IkFinancePage"), "ik-finance-v1");
 const PdksPage = lazyWithRetry(() => import("./pages/modules/PdksPage"), "pdks-v1");
 const UretimPage = lazyWithRetry(() => import("./pages/modules/UretimPage"), "uretim-v3");
 const BoyahanePage = lazyWithRetry(() => import("./pages/modules/BoyahanePage"), "boyahane-v3");
 const DesenPage = lazyWithRetry(() => import("./pages/modules/DesenPage"), "desen-v3");
 const EBelgeCenterPage = lazyWithRetry(() => import("./pages/modules/muhasebe/EBelgeCenterPage"), "e-belge-center-v1");
-const MuhasebeSmartMatchPage = lazyWithRetry(() => import("./pages/modules/muhasebe/MuhasebeSmartMatchPage"), "muhasebe-smart-match-v1");
 const AiAssistantPage = lazyWithRetry(() => import("./pages/modules/AiAssistantPage"), "asistan-v3");
 const CommunicationHubPage = lazyWithRetry(() => import("./pages/modules/CommunicationHubPage"), "communication-hub-v1");
 const ComplianceCenterPage = lazyWithRetry(() => import("./pages/modules/compliance/ComplianceCenterPage"), "compliance-center-v1");
 const SystemSentinelPage = lazyWithRetry(() => import("./pages/modules/SystemSentinelPage"), "system-sentinel-v1");
 
 const MODULE_LOADERS = {
-  muhasebe: () => Promise.all([import("./pages/modules/muhasebe/MuhasebeSmartMatchPage")]),
+  muhasebe: () => Promise.resolve({ default: MuhasebePage }),
   admin: () => import("./pages/modules/AdminPage"),
   depolama: () => import("./pages/modules/AdminPage"),
   ik: () => Promise.all([
-    import("./pages/modules/ik/IkPersonnelFinancePage"),
-    import("./pages/modules/ik/IkFinancePage"),
-    import("./pages/modules/ik/IkAuditPersonnelPage"),
+    import("./pages/modules/ik/monthly/IkPersonnelFinancePage"),
+    import("./pages/modules/ik/monthly/IkFinancePage"),
+    import("./pages/modules/ik/audit/IkAuditPersonnelPage"),
   ]),
-  "gunluk-operasyon": () => import("./pages/modules/GunlukOperasyonPage"),
   pdks: () => import("./pages/modules/PdksPage"),
   desen: () => import("./pages/modules/DesenPage"),
   uretim: () => import("./pages/modules/UretimPage"),
@@ -284,8 +281,6 @@ export default function AppV3() {
       moduleActionContext,
       openModule: (moduleKey, options = {}) => openTab(moduleKey, options.tabKey, options),
     };
-
-    if (activeModule?.key === "muhasebe" && activeTab === "envanter-urunleri") return <MuhasebeSmartMatchPage {...sharedProps} />;
     if (activeModule?.key === "muhasebe") return <MuhasebePage activeTab={activeTab} {...sharedProps} />;
 
     const eBelgeView = {
@@ -310,7 +305,6 @@ export default function AppV3() {
       }
       return <IkFinancePage activeTab={activeTab} {...sharedProps} />;
     }
-    if (activeModule?.key === "gunluk-operasyon") return <GunlukOperasyonPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "pdks") return <PdksPage activeTab={activeTab} isAuditAccount={isAuditAccount} {...sharedProps} />;
     if (activeModule?.key === "uretim") return <UretimPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "iletisim") return <CommunicationHubPage activeTab={activeTab} {...sharedProps} />;

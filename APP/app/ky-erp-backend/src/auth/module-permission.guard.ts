@@ -12,6 +12,7 @@ import { MODULE_KEY, ROLES_KEY } from "./roles.decorator";
 const MODULE_BY_PATH: Record<string, ModuleKey> = {
   muhasebe: ModuleKey.MUHASEBE,
   ik: ModuleKey.IK,
+  "gunluk-operasyon": ModuleKey.GUNLUK_OPERASYON,
   desen: ModuleKey.DESEN,
   imalat: ModuleKey.IMALAT,
   uretim: ModuleKey.IMALAT,

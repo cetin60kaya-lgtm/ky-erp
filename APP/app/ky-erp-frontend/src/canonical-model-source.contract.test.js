@@ -32,10 +32,13 @@ test("Cloud /api/models ürün tablosunu değil model_records kaynağını kulla
   assert.match(block, /app\.post\("\/api\/models"/);
 });
 
-test("Günlük Operasyon kodu korunurken ana modül kaydından geçici olarak çıkarılır", () => {
-  const registry = read("APP/app/ky-erp-frontend/src/app/moduleRegistry.js");
-  assert.match(registry, /TEMPORARILY_DISABLED_MODULE_KEYS = new Set\(\["gunluk-operasyon"\]\)/);
-  assert.match(registry, /\.filter\(\(module\) => !TEMPORARILY_DISABLED_MODULE_KEYS\.has\(module\.key\)\)/);
+test("Günlük Operasyon aktif ERP ağacından ayrıdır", () => {
+  const registry = read("APP/app/ky-erp-frontend/src/app/moduleRegistryBase.js");
+  const app = read("APP/app/ky-erp-frontend/src/AppV3.jsx");
+  const page = read("APP/app/ky-erp-frontend/src/pages/modules/gunluk-operasyon/GunlukOperasyonPage.jsx");
+  assert.doesNotMatch(registry, /key: "gunluk-operasyon"/);
+  assert.doesNotMatch(app, /GunlukOperasyonPage|activeModule\?\.key === "gunluk-operasyon"/);
+  assert.match(page, /GÜNLÜK OPERASYON \/ KONTROL MERKEZİ/);
 });
 test("Desen workflow aynı model kimliğini canonical model_records ile paylaşır", () => {
   const workflow = read("APP/cloud/ky-erp-api/src/desen-workflow.ts");

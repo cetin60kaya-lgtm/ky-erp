@@ -5,7 +5,6 @@ import {
   hrDateOnly,
   hrTodayIstanbul,
   hrListResponse,
-  mergeDailyRosterIds,
   calculateAnnualLeaveRange,
   advancedEmployeeVisible,
   calculateOvertimeAmount,
@@ -45,18 +44,6 @@ test("list responses expose both frontend-compatible list keys", () => {
   });
   assert.equal(response.data, response.items);
 });
-
-test("empty roster never falls back to every active daily employee", () => {
-  assert.deepEqual(mergeDailyRosterIds([], [], ["one", "two", "three"]), []);
-});
-
-test("daily roster keeps explicit and actually worked employees only", () => {
-  assert.deepEqual(
-    mergeDailyRosterIds(["selected", "missing"], ["worked", "selected"], ["selected", "worked", "pool-only"]),
-    ["selected", "worked"],
-  );
-});
-
 
 test("10 Aug 2026 leave start and 31 Aug return counts exactly 18 days", () => {
   const result = calculateAnnualLeaveRange(

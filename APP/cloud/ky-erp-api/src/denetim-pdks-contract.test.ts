@@ -44,7 +44,7 @@ test("DENETIM API is route-locked to strict SGK-card PDKS reads including person
 
 test("DENETIM IK stays finance-free while PDKS uses monthly SGK + card scope", () => {
   const readonlyApi = api("ik-audit-readonly.ts");
-  const ikScreen = frontend("pages/modules/ik/IkAuditPersonnelPage.jsx");
+  const ikScreen = frontend("pages/modules/ik/audit/IkAuditPersonnelPage.jsx");
   assert.match(readonlyApi, /const IK_PERSON_SQL/);
   assert.match(readonlyApi, /async function auditPdksPeople\(c: Context<AppEnv>, company: string, year: number, month: number\)/);
   assert.match(readonlyApi, /ik_person_monthly_compliance/);

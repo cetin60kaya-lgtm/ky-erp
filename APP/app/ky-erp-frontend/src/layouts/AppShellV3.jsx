@@ -49,7 +49,6 @@ const MODULE_VISUALS = {
   "e-belge": { icon: "e-belge", hint: "e-Belge ve entegrasyon" },
   desen: { icon: "desen", hint: "Desen, model ve yerleşim" },
   boyahane: { icon: "boyahane", hint: "Renk, reçete ve lot" },
-  "gunluk-operasyon": { icon: "operasyon", hint: "Günlük operasyon" },
   ik: { icon: "ik", hint: "Personel ve bordro" },
   pdks: { icon: "pdks", hint: "Kart ve devam kontrolü" },
   uretim: { icon: "imalat", hint: "İmalat ve üretim" },

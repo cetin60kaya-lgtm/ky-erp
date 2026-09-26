@@ -5,8 +5,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const page = readFileSync(resolve(here, "pages/modules/GunlukOperasyonPage.jsx"), "utf8");
-const css = readFileSync(resolve(here, "pages/modules/gunluk-operasyon.css"), "utf8");
+const page = readFileSync(resolve(here, "pages/modules/gunluk-operasyon/GunlukOperasyonPage.jsx"), "utf8");
+const css = readFileSync(resolve(here, "pages/modules/gunluk-operasyon/gunluk-operasyon.css"), "utf8");
 
 test("daily operations dashboard exposes fast operational actions", () => {
   assert.match(page, /GÜNLÜK OPERASYON \/ KONTROL MERKEZİ/);

@@ -52,12 +52,12 @@ test("async e-Belge file preview survives Android popup blocking", () => {
   assert.match(center, /openEBelgeBlob\(await getEBelgeFilePreview\(file\.id\), reservedWindow\)/);
 });
 
-test("desktop double-click shortcuts keep a single-tap path on touch screens", () => {
+test("desktop shortcuts keep an explicit single-tap path on touch screens", () => {
   const desen = read("./pages/desen/DesenModeller.jsx");
-  const reports = read("./pages/modules/muhasebe/MuhasebeReportsWorkspace.jsx");
+  const reports = read("./pages/modules/muhasebe/AccountingReportsListWorkspace.jsx");
 
   assert.match(desen, /runTouchRowAction/);
   assert.match(desen, /onClick=\{\(event\) => runTouchRowAction/);
-  assert.match(reports, /runTouchRowAction/);
-  assert.match(reports, /onClick=\{\(event\) =>/);
+  assert.match(reports, /<button type="button" onClick=\{\(\) => loadReport\(definition\)\}/);
+  assert.doesNotMatch(reports, /onDoubleClick=/);
 });

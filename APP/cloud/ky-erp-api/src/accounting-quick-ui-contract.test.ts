@@ -7,12 +7,13 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const frontend = (name: string) => readFileSync(resolve(here, "../../../app/ky-erp-frontend/src", name), "utf8");
 
-test("Hızlı Muhasebe exposes the already-implemented FIBE workspace", () => {
-  const quick = frontend("pages/modules/muhasebe/QuickAccountingBar.jsx");
-  assert.match(quick, /onClick=\{\(\) => openMode\("FIBE"\)\}/);
-  assert.match(quick, /<CircleDollarSign size=\{15\} \/> FİBE/);
-  assert.match(quick, /mode === "FIBE"/);
-  assert.match(quick, /FİBE ödemesi ayrı FİBE hesabına işlendi; normal cari değişmedi\./);
+test("Firma & Cari exposes FIBE only inside the canonical company workspace", () => {
+  const companies = frontend("pages/modules/muhasebe/CompaniesCurrentWorkspace.jsx");
+  const section = frontend("pages/modules/muhasebe/CompanyFibeSection.jsx");
+  assert.match(companies, /<CompanyFibeSection/);
+  assert.match(section, /Bu firma için FİBE takibini aç/);
+  assert.match(section, /Normal cariden tamamen ayrı firma bazlı ek ödeme hesabı/);
+  assert.doesNotMatch(companies, /QuickAccountingBar/);
 });
 
 test("Firma kartı keeps FIBE optional and separate from the normal current account", () => {

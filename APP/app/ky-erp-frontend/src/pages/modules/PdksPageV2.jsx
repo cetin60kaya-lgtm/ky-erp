@@ -17,7 +17,7 @@ import {
   savePdksService,
   savePdksWorkGroup,
 } from "../../services/pdksApi";
-import { confirmIkAdvancedCard, previewIkAdvancedCard } from "../../services/ikApi";
+import { confirmIkAdvancedCard, previewIkAdvancedCard } from "../../services/ik/monthlyApi";
 import "./pdks.css";
 
 const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];

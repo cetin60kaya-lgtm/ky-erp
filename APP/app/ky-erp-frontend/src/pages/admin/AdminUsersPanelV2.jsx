@@ -21,7 +21,7 @@ import {
   updateUserPermissions,
   verifyUserEmail,
 } from "../../services/adminApi";
-import { saveIkUserScope } from "../../services/ikPersonnelControlApi";
+import { saveIkUserScope } from "../../services/ik/personnelApi";
 import AdminApprovalCenter from "./AdminApprovalCenter";
 import AiPlatformAccessCard from "./AiPlatformAccessCard";
 import "./AdminUsersPanelV2.css";
