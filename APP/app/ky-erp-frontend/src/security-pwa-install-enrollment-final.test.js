@@ -34,32 +34,28 @@ test("old PWA packages are physically removed",()=>{
   assert.equal(existsSync(resolve(frontend,"public/ky-guvenlik-recover")),false);
 });
 
-test("fresh worker supports installability without shell caching",()=>{
-  assert.match(sw,/self\.addEventListener\("fetch"/);
-  assert.match(sw,/event\.respondWith\(fetch\(event\.request\)\)/);
-  assert.match(sw,/self\.addEventListener\("push"/);
-  assert.match(sw,/self\.addEventListener\("notificationclick"/);
-  assert.doesNotMatch(sw,/cache\.put|cache\.add|cache\.addAll/);
+test("fresh worker is push-only and leaves the app shell to the network",()=>{
+  assert.doesNotMatch(sw,/self\.addEventListener\(\"fetch\"/);
+  assert.doesNotMatch(sw,/respondWith|cache\.put|cache\.add|cache\.addAll/);
+  assert.match(sw,/self\.addEventListener\(\"push\"/);
+  assert.match(sw,/self\.addEventListener\(\"notificationclick\"/);
 });
 
-test("security host keeps both installed PWA launch scopes alive",()=>{
-  assert.match(host,/const SOURCE_PREFIX="\/guvenlik"/);
-  assert.match(host,/const PRIMARY_PREFIX="\/ky-guvenlik"/);
-  assert.match(host,/const COMPAT_PREFIXES=\[PRIMARY_PREFIX,SOURCE_PREFIX\]/);
-  assert.match(host,/const LEGACY_PREFIXES=\["\/security","\/ky-guvenlik-recover"\]/);
-  assert.match(host,/proxyScoped/);
+test("security host serves one canonical PWA scope and retires old scopes",()=>{
+  assert.match(host,/const APP_PREFIX="\/guvenlik"/);
+  assert.match(host,/const APP_URL="\/guvenlik\/"/);
+  assert.match(host,/const LEGACY_PREFIXES=\["\/security","\/ky-guvenlik","\/ky-guvenlik-recover"\]/);
   assert.match(host,/Service-Worker-Allowed/);
   assert.match(host,/env\.ASSETS/);
   assert.match(host,/return suffix&&suffix!=="\/"\?suffix:"\/"/);
   assert.match(host,/return new Response\("Gone",\{status:410/);
+  assert.doesNotMatch(host,/COMPAT_PREFIXES|PRIMARY_PREFIX/);
 });
 
-test("legacy redirects preserve only canonical enrollment and install handoff parameters",()=>{
-  assert.match(host,/const REDIRECT_QUERY_KEYS=\["enrollmentId","enrollmentToken","mode","install","platform","browser","chrome"\]/);
-  assert.match(host,/const preserved=new URLSearchParams\(\)/);
-  assert.match(host,/if\(value!==null\)preserved\.set\(key,value\)/);
-  assert.match(host,/target\.search=preserved\.toString\(\)/);
-  assert.doesNotMatch(host,/target\.search=""/);
+test("legacy security paths are retired instead of redirected into a compatibility PWA",()=>{
+  assert.match(host,/LEGACY_PREFIXES/);
+  assert.match(host,/return new Response\("Gone",\{status:410/);
+  assert.doesNotMatch(host,/REDIRECT_QUERY_KEYS|preserved=new URLSearchParams/);
 });
 
 test("enrollment no longer waits for platform biometric creation",()=>{
@@ -98,9 +94,10 @@ test("installer still clears every legacy worker before Android install",()=>{
   assert.match(installer,/candidate=registration\.installing\|\|registration\.waiting/);
 });
 
-test("live host contains install handoff override",()=>{
-  assert.match(host,/INSTALL_HELPER_HOTFIX/);
-  assert.match(host,/beforeinstallprompt/);
+test("live host serves the canonical installer asset without a duplicate hotfix",()=>{
+  assert.doesNotMatch(host,/INSTALL_HELPER_HOTFIX/);
+  assert.match(installer,/beforeinstallprompt/);
+  assert.match(installer,/Chrome'da Devam Et/);
 });
 
 test("security UI has one canonical refresh owner and no DOM rewrite observer",()=>{

@@ -6,10 +6,10 @@ import "./StorageCloudHub.css";
 
 const ROUTE_TO_TAB={"depolama-genel":"overview","depolama-kaynaklar":"connections","depolama-mail":"mail","depolama-atamalar":"bindings","depolama-dosyalar":"files","depolama-senkronizasyon":"sync","depolama-yedekleme":"logs"};
 const TABS=[["overview","Genel Bakış"],["connections","Dosya Servisleri"],["bindings","Bölüm / Dosya Atamaları"],["files","Dosya İndeksi"],["sync","Senkronizasyon & Agent"],["logs","Yedekleme & Loglar"]];
-const MODULES=["DESEN","IMALAT","BOYAHANE","MUHASEBE","EBELGE","ISNET","IK","DTF","STOK"];
+const MODULES=["DESEN","IMALAT","BOYAHANE","MUHASEBE","EBELGE","IK","DTF","STOK"];
 const PURPOSES=["MODEL_IMAGE","MODEL_SOURCE","PLACEMENT","OUTGOING_DESIGN","RIP_PDF","INVOICE","DELIVERY_NOTE","E_DOCUMENT","PAYMENT_DOCUMENT","PERSONNEL_DOCUMENT","CONTRACT","RECIPE","TECHNICAL_SHEET","QUALITY","PRODUCTION_PHOTO","QUALITY_PHOTO","CUSTOMER_REFERENCE","GENERIC"];
 const providerLabel=v=>({GOOGLE_DRIVE:"Google Drive",ONEDRIVE:"Microsoft OneDrive",SHAREPOINT:"Microsoft SharePoint",LOCAL_FOLDER:"Yerel Klasör",NAS:"NAS / Ağ Klasörü"})[v]||v||"-";
-const moduleLabel=v=>({DESEN:"Desen",IMALAT:"İmalat",BOYAHANE:"Boyahane",MUHASEBE:"Muhasebe",EBELGE:"e-Belge Merkezi",ISNET:"e-Belge Merkezi (Eski)",IK:"İK",DTF:"DTF",STOK:"Stok"})[v]||v||"-";
+const moduleLabel=v=>({DESEN:"Desen",IMALAT:"İmalat",BOYAHANE:"Boyahane",MUHASEBE:"Muhasebe",EBELGE:"e-Belge Merkezi",IK:"İK",DTF:"DTF",STOK:"Stok"})[v]||v||"-";
 const purposeLabel=v=>({MODEL_IMAGE:"Desen / Model Görseli",MODEL_SOURCE:"Kaynak Dosya (PSD / AI / TIFF)",PLACEMENT:"Yerleşim / Kalıp",OUTGOING_DESIGN:"Giden Desen / Takım",RIP_PDF:"DTF / RIP PDF",INVOICE:"Fatura",DELIVERY_NOTE:"İrsaliye",E_DOCUMENT:"e-Belge",PAYMENT_DOCUMENT:"Ödeme / Dekont / Çek",PERSONNEL_DOCUMENT:"Personel Evrakı",CONTRACT:"Sözleşme",RECIPE:"Reçete",TECHNICAL_SHEET:"Teknik Föy",QUALITY:"Kalite Belgesi",PRODUCTION_PHOTO:"Üretim Fotoğrafı",QUALITY_PHOTO:"Kalite Fotoğrafı",CUSTOMER_REFERENCE:"Müşteri Referansı",GENERIC:"Genel Ek / Diğer"})[v]||v||"-";
 const statusLabel=v=>({CONNECTED:"Bağlı",DISCONNECTED:"Bağlantı Kesildi",ERROR:"Hata",UNKNOWN:"Bekliyor",AVAILABLE:"Mevcut",MISSING:"Kaynakta Yok",ONLINE:"Çevrimiçi",OFFLINE:"Çevrimdışı"})[v]||v||"-";
 const formatDate=v=>v?new Date(v).toLocaleString("tr-TR"):"-";

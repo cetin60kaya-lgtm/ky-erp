@@ -16,7 +16,7 @@ import { Response } from "express";
 import { memoryStorage } from "multer";
 import { GunlukOperasyonService } from "./gunluk-operasyon.service";
 
-@Controller(["gunluk-operasyon", "api/gunluk-operasyon"])
+@Controller("gunluk-operasyon")
 export class GunlukOperasyonController {
   constructor(private readonly service: GunlukOperasyonService) {}
 

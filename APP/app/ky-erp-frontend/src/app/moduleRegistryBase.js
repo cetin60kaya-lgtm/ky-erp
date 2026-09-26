@@ -19,7 +19,7 @@ export const MODULES = [
   },
   {
     key: "e-belge",
-    permissionKey: "ISNET",
+    permissionKey: "MUHASEBE",
     label: "e-Belge Merkezi",
     icon: "e-belge",
     groups: [{

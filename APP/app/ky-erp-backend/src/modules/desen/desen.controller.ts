@@ -78,7 +78,7 @@ export class SharedModelsController {
   }
 }
 
-@Controller(["desen", "api/desen"])
+@Controller("desen")
 export class DesenController {
   private readonly legacySyncInFlight = new Map<string, Promise<any>>();
   private readonly legacySyncedAt = new Map<string, number>();

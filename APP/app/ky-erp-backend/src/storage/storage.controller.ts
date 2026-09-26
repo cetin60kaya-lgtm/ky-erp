@@ -12,7 +12,7 @@ import { StorageRulesService } from "./storage-rules.service";
 import { StorageService } from "./storage.service";
 import { getStorageRoot, readStorageSettings, writeStorageSettings } from "./storage-path.util";
 
-@Controller(["admin/file-storage", "api/admin/file-storage"])
+@Controller("admin/file-storage")
 export class StorageController {
   constructor(
     private readonly storageService: StorageService,

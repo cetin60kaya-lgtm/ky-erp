@@ -83,7 +83,7 @@ test("company owner and application owner are mandatory phone approvers", () => 
   assert.match(policy, /SESSION_TRUST_PENDING_WRITE/);
   assert.match(policy, /status: "PENDING"/);
 });
-test("dedicated Security worker owns phone approval while the legacy main worker retires itself", () => {
+test("dedicated Security app owns signed API calls while the service worker is push transport only", () => {
   assert.match(main, /X-KYERP-Push-Device/);
   assert.match(main, /X-KYERP-Push-Token/);
   assert.match(mailEntry, /X-KYERP-Push-Device/);
@@ -94,16 +94,12 @@ test("dedicated Security worker owns phone approval while the legacy main worker
   assert.doesNotMatch(frontendMain, /PhoneApprovalInboxBridge/);
   assert.match(serviceWorker, /registration\.unregister/);
   assert.doesNotMatch(serviceWorker, /auth\/push\/device\/decision/);
-  assert.match(securityWorker, /API_BASE/);
-  assert.match(securityWorker, /X-KYERP-Push-Device/);
-  assert.match(securityWorker, /X-KYERP-Push-Token/);
-  assert.match(securityWorker, /signDeviceAuth/);
-  assert.match(securityWorker, /deviceFetch\("\/auth\/push\/device\/pending"\)/);
+  assert.doesNotMatch(securityWorker, /API_BASE|deviceFetch|signDeviceAuth|X-KYERP-Push-Device|X-KYERP-Push-Token/);
   assert.match(securityApp, /X-KYERP-Push-Device/);
   assert.match(securityApp, /X-KYERP-Push-Token/);
   assert.match(securityWorker, /const TAG="kyerp-security-approval"/);
   assert.match(securityWorker, /tag:TAG/);
-  assert.match(securityWorker, /renotify:true/);
+  assert.match(securityWorker, /renotify:false/);
   assert.doesNotMatch(securityWorker, /action:"approve"/);
   assert.doesNotMatch(securityWorker, /action:"deny"/);
 });
@@ -170,7 +166,7 @@ test("phone approval keeps one latest self request, one visible notification and
   assert.match(serviceWorker, /registration\.unregister/);
   assert.match(securityWorker, /const TAG="kyerp-security-approval"/);
   assert.match(securityWorker, /tag:TAG/);
-  assert.match(securityWorker, /renotify:true/);
+  assert.match(securityWorker, /renotify:false/);
   assert.doesNotMatch(securityWorker, /kyerp-result-/);
   assert.match(securityApp, /createSigningKey/);
   assert.match(securityApp, /signDecision/);

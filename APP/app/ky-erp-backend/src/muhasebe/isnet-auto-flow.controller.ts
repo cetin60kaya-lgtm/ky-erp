@@ -6,7 +6,7 @@ import { IsnetAutoFlowService } from "./isnet-auto-flow.service";
 import { IsnetDispatchFlowCoordinatorService } from "./isnet-dispatch-flow-coordinator.service";
 
 @Controller("isnet/auto-flows")
-@RequireModule(ModuleKey.ISNET)
+@RequireModule(ModuleKey.MUHASEBE)
 export class IsnetAutoFlowController {
   constructor(
     private readonly service: IsnetAutoFlowService,

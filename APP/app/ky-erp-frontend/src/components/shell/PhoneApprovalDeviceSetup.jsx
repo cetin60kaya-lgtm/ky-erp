@@ -175,7 +175,7 @@ export default function PhoneApprovalSetup({ onClose }) {
             <div>
               <small>KY ERP GÜVENLİ GİRİŞ</small>
               <h2>KY ERP Güvenlik</h2>
-              <p>Telefon / tablet güvenilir cihaz bağlantısı: 8 karakter bağlantı kodu + ADMIN / KY ERP şifresi.</p>
+              <p>Microsoft Authenticator mantığında ayrı telefon/tablet onay uygulaması. Güvenilir cihaz bağlantısı 8 karakter kod + ADMIN / KY ERP şifresiyle kurulur.</p>
             </div>
           </div>
           <button type="button" className="phone-approval-close" onClick={onClose} aria-label="Kapat"><X size={18}/></button>
@@ -197,7 +197,7 @@ export default function PhoneApprovalSetup({ onClose }) {
               <div className="phone-approval-install-box compact"><strong>Telefonuna KY ERP Güvenlik uygulamasını kur</strong><small>Kurulum bağlantısı hazırlanırken 8 karakter güvenli bağlantı kodu da üretilir.</small><div className="phone-approval-install-actions"><button type="button" className="phone-approval-install-primary" onClick={() => openSecurityInstaller(clientPlatform === "ios" ? "ios" : "android")} disabled={busy}><Download size={18}/>{busy ? "Hazırlanıyor..." : clientPlatform === "ios" ? "iPhone / iPad’e Kur" : "Android’e Kur"}</button></div></div>
               <small className="phone-approval-help">Kurulum tamamlandıktan sonra uygulamada 8 karakter bağlantı kodu ve mevcut ADMIN / KY ERP şifresi birlikte girilir.</small>
             </>}
-            {enrollment ? <div className="phone-approval-enrollment compact-code"><span>8 KARAKTER BAĞLANTI KODU · ZORUNLU</span><strong>{enrollment.enrollmentCode}</strong><div className="phone-approval-app-actions"><button type="button" onClick={copyEnrollment}>{copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Kopyalandı" : "Kopyala"}</button></div></div> : <button type="button" className="phone-approval-link-button" onClick={createEnrollment} disabled={busy}>8 karakter bağlantı kodu üret</button>}
+            {enrollment ? <div className="phone-approval-enrollment compact-code"><span>8 KARAKTER BAĞLANTI KODU · ZORUNLU</span><strong>{enrollment.enrollmentCode}</strong><div className="phone-approval-app-actions"><button type="button" onClick={copyEnrollment}>{copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Kopyalandı" : "Kopyala"}</button></div></div> : <button type="button" className="phone-approval-link-button" onClick={createEnrollment} disabled={busy}>Sorun olursa yedek bağlantı kodu oluştur</button>}
           </section>
           <section className="phone-approval-card">
             <div className="phone-approval-card-head"><div><h3>Güvenilir cihazlar</h3><p>{securityDevices.length} KY Güvenlik cihazı aktif</p></div><ShieldCheck size={22}/></div>

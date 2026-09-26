@@ -5,7 +5,7 @@ import { RequireModule } from "../auth/roles.decorator";
 import { IsnetLocalFileService } from "./isnet-local-file.service";
 
 @Controller("isnet/local-files")
-@RequireModule(ModuleKey.ISNET)
+@RequireModule(ModuleKey.MUHASEBE)
 export class IsnetLocalFileController {
   constructor(private readonly service: IsnetLocalFileService) {}
 

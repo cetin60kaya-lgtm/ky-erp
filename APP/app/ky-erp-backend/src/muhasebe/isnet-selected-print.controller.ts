@@ -6,7 +6,7 @@ import { apiSuccess } from "../common/api-helpers";
 import { IsnetSelectedPrintService } from "./isnet-selected-print.service";
 
 @Controller("isnet/selected-print-queue")
-@RequireModule(ModuleKey.ISNET)
+@RequireModule(ModuleKey.MUHASEBE)
 export class IsnetSelectedPrintController {
   constructor(private readonly service: IsnetSelectedPrintService) {}
 

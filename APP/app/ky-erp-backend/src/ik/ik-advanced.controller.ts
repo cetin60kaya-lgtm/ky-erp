@@ -3,7 +3,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { IkAdvancedService } from "./ik-advanced.service";
 
-@Controller(["ik/advanced", "api/ik/advanced"])
+@Controller("ik/advanced")
 export class IkAdvancedController {
   constructor(private readonly service: IkAdvancedService) {}
   @Get("month") month(@Query() query: Record<string, any>) { return this.service.month(query); }

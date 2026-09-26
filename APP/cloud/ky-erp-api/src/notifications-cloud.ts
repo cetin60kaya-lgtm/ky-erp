@@ -362,7 +362,7 @@ async function collectEBelgeIssues(c: any, current: AnyRow, tenant: string) {
       title: `${text(row.document_no) || "Belge"} inceleme bekliyor`,
       detail: [issueCount ? `${issueCount} açık sorun` : "İnceleme gerekli", text(row.party_name)].filter(Boolean).join(" · "),
       createdAt: stamp,
-      route: { moduleKey: "isnet", tabKey: "e-belge-onay-sorunlar" },
+      route: { moduleKey: "e-belge", tabKey: "onay-sorunlar" },
       meta: { documentId: text(row.document_id), documentType: text(row.document_type), issueCount },
     };
   });

@@ -53,7 +53,7 @@ test("Depolama screen exposes provider-neutral connection, routing and index man
     "IMALAT",
     "BOYAHANE",
     "MUHASEBE",
-    "ISNET",
+    "EBELGE",
     "IK",
     "DTF",
     "STOK",

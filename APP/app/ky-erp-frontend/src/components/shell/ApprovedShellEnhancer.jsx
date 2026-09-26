@@ -2,61 +2,22 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { BellRing, PanelLeftClose, PanelLeftOpen, Search, X } from "lucide-react";
 import PhoneApprovalSetup from "./PhoneApprovalSetup";
+import { findModule, findTab } from "../../app/moduleRegistry";
 import "./approved-shell-menu.css";
 
 const STORAGE_KEY = "kyerp-approved-work-tabs-v1";
 const MENU_STORAGE_KEY = "kyerp-module-menu-open-v1";
 const HOME_PATH = "/muhasebe/yonetim-ozeti";
 
-const MODULE_LABELS = {
-  muhasebe: "Muhasebe",
-  "e-belge": "e-Belge Merkezi",
-  ik: "İK",
-  desen: "Desen",
-  uretim: "İmalat",
-  boyahane: "Boyahane",
-  admin: "Yönetim",
-};
-
-const SCREEN_LABELS = {
-  "yonetim-ozeti": "Yönetim Özeti",
-  "firma-kartlari": "Firmalar ve Cari",
-  "firma-yetkilileri": "Firma Yetkilileri",
-  "gider-kategorileri": "Gider Kategorileri",
-  "tedarikci-faturalar": "Tedarikçi Faturaları",
-  "kesilen-faturalar": "Kesilen Faturalar",
-  "musteri-irsaliyeleri": "İrsaliyeler",
-  "irsaliye-fatura-kontrol": "İrsaliye / Fatura",
-  "model-takip": "Model Üretim Takibi",
-  "cari-hareketler": "Cari Hareketler",
-  "kar-zarar": "Gelir / Gider / Kâr Zarar",
-  "envanter-urunleri": "Ürünler",
-  "kdv-kontrol": "KDV Kontrol",
-  "cek-odeme": "Çek, Kart ve Ödeme",
-  "mail-ekstre": "Ekstre ve Mail",
-  "mail-sablonlari": "Mail Şablonları",
-  "muhasebe-raporlari": "Muhasebe Raporları",
-  "yonetim-merkezi": "Analiz ve Eşleştirme",
-  "belge-akisi": "Gelen / Giden Belgeler",
-  "irsaliyeden-faturaya": "Fatura Kesme Yardımcısı",
-  "kesilen-belgeler": "Yerel Belge Arşivi",
-  "cikti-kuyrugu": "Çıktı ve Mail",
-  ayarlar: "Ayarlar",
-  ozet: "İK Özet",
-  "personel-kartlari": "Personel Kartları",
-  "uretim-girisi": "Üretim Girişi",
-  "imalat-kontrol-rapor": "Denetim ve Rapor",
-  "gelen-desenler": "Gelen Desenler",
-  "desen-modeller": "Desen Havuzu",
-  "is-akisi": "İş Akışı",
-};
 
 function routeInfo(pathname = window.location.pathname) {
   const parts = String(pathname || "").split("/").filter(Boolean);
   const moduleKey = parts[0] || "muhasebe";
   const screenKey = parts[1] || "yonetim-ozeti";
-  const moduleLabel = MODULE_LABELS[moduleKey] || "KY ERP";
-  const screenLabel = SCREEN_LABELS[screenKey] || screenKey.replaceAll("-", " ");
+  const module = findModule(moduleKey);
+  const tab = findTab(module, screenKey);
+  const moduleLabel = module?.label || "KY ERP";
+  const screenLabel = tab?.[1] || screenKey.replaceAll("-", " ");
   return {
     id: `${moduleKey}:${screenKey}`,
     path: `/${moduleKey}/${screenKey}`,

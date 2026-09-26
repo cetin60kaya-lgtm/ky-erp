@@ -60,7 +60,7 @@
 
   function showChromeHandoff(){
     clearPromptFallback();
-    setUi("Kuruluma devam etmek için aşağıdaki düğmeye dokun. KY Güvenlik tam Google Chrome'da açılacak.","Chrome'da Aç");
+    setUi("Kuruluma devam etmek için aşağıdaki düğmeye dokun. KY Güvenlik tam Google Chrome'da açılacak.","Chrome'da Devam Et");
   }
 
   function showReadyUi(){

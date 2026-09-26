@@ -17,7 +17,7 @@ const MODULE_BY_PATH: Record<string, ModuleKey> = {
   imalat: ModuleKey.IMALAT,
   uretim: ModuleKey.IMALAT,
   boyahane: ModuleKey.BOYAHANE,
-  isnet: ModuleKey.ISNET,
+  isnet: ModuleKey.MUHASEBE,
   ai: ModuleKey.ASISTAN,
   admin: ModuleKey.ADMIN,
   storage: ModuleKey.BELGE_ISLEM,

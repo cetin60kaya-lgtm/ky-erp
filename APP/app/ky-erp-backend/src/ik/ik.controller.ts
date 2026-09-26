@@ -16,7 +16,7 @@ import { Response } from "express";
 import { memoryStorage } from "multer";
 import { IkService } from "./ik.service";
 
-@Controller(["ik", "api/ik"])
+@Controller("ik")
 export class IkController {
   constructor(private readonly service: IkService) {}
 

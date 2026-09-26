@@ -30,7 +30,7 @@ function safeFilePart(value: string) {
     .trim();
 }
 
-@Controller(["muhasebe/odeme", "api/muhasebe/odeme"])
+@Controller("muhasebe/odeme")
 export class CheckCenterController {
   constructor(private readonly checks: CheckCenterService) {}
 

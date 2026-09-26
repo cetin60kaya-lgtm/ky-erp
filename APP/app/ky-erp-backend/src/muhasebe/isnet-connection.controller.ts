@@ -5,7 +5,7 @@ import { apiSuccess } from "../common/api-helpers";
 import { IsnetConnectionService } from "./isnet-connection.service";
 
 @Controller("isnet/connection")
-@RequireModule(ModuleKey.ISNET)
+@RequireModule(ModuleKey.MUHASEBE)
 export class IsnetConnectionController {
   constructor(private readonly service: IsnetConnectionService) {}
 

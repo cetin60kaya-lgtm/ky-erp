@@ -39,7 +39,7 @@ const belgeImportFilesInterceptor = FilesInterceptor("files", 200, {
   },
 });
 
-@Controller(["muhasebe/belge-import", "api/muhasebe/belge-import"])
+@Controller("muhasebe/belge-import")
 export class BelgeImportController {
   constructor(private readonly service: DocumentIntakeServiceV2) {}
 
