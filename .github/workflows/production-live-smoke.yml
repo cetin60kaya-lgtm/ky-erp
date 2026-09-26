@@ -1,0 +1,49 @@
+﻿name: KY ERP Production Live Smoke
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - "APP/app/ky-erp-frontend/**"
+      - ".github/workflows/production-live-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-production-live-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Read-only production health check
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Wait for Cloudflare Git deployment and verify live services
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 24); do
+            root="$(curl --location --silent --show-error --max-time 15 https://kyerp.net/ || true)"
+            login_code="$(curl --location --silent --show-error --output /tmp/login.html --write-out '%{http_code}' --max-time 15 https://kyerp.net/giris || true)"
+            api_code="$(curl --silent --show-error --output /tmp/api.json --write-out '%{http_code}' --max-time 15 https://api.kyerp.net/api/health || true)"
+            security_code="$(curl --location --silent --show-error --output /tmp/security.html --write-out '%{http_code}' --max-time 15 https://security.kyerp.net/ky-guvenlik/ || true)"
+            if [ "$login_code" = "200" ] \
+              && [ "$api_code" = "200" ] \
+              && [ "$security_code" = "200" ] \
+              && printf '%s' "$root" | grep -q '<title>KY ERP</title>' \
+              && ! printf '%s' "$root" | grep -q 'app\.kyerp\.net' \
+              && grep -q 'KY ERP' /tmp/login.html \
+              && grep -q 'KY ERP' /tmp/security.html; then
+              ok=1
+              echo "Production smoke PASS on attempt ${attempt}."
+              break
+            fi
+            echo "Waiting for healthy production (attempt ${attempt}/24)..."
+            sleep 10
+          done
+          test "$ok" -eq 1
