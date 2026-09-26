@@ -22,6 +22,17 @@ jobs:
       CANONICAL: kyerp.net
       LEGACY: app.kyerp.net
     steps:
+      - name: Enforce Pages test and build gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4"
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          payload='{"build_config":{"build_command":"npm run test && npm run build","destination_dir":"dist","root_dir":"APP/app/ky-erp-frontend"}}'
+          curl --fail --silent --show-error -X PATCH -H "$auth" -H "Content-Type: application/json" \
+            --data "$payload" "$api/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}" >/tmp/pages-project.json
+          jq -e '.success == true and .result.build_config.build_command == "npm run test && npm run build" and .result.build_config.destination_dir == "dist" and .result.build_config.root_dir == "APP/app/ky-erp-frontend"' /tmp/pages-project.json >/dev/null
+
       - name: Remove legacy Pages custom domain
         shell: bash
         run: |
