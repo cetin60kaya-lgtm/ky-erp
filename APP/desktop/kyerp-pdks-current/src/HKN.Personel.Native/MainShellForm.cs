@@ -136,10 +136,8 @@ public sealed class MainShellForm : Form
         layout.DropDownItems.Add(PlainItem("Operasyon Düzeni: Sol İki / Sağ Geniş", () => workspace.ApplyLayout(WorkspaceLayoutMode.ThreeFocusRight)));
         layout.DropDownItems.Add(PlainItem("Dört Bölmeli Görünüm", () => workspace.ApplyLayout(WorkspaceLayoutMode.FourGrid)));
         layout.DropDownItems.Add(new ToolStripSeparator());
-        layout.DropDownItems.Add(PlainItem("Pencereleri Yan Yana", () => ArrangeModuleWindows(false)));
-        layout.DropDownItems.Add(PlainItem("Pencereleri Basamakla", () => ArrangeModuleWindows(true)));
-        layout.DropDownItems.Add(new ToolStripSeparator());
-        layout.DropDownItems.Add(PlainItem("T\u00fcm Pencereleri Kapat", CloseModuleWindows));
+        layout.DropDownItems.Add(PlainItem("Aktif Modülü Kapat", workspace.CloseActive));
+        layout.DropDownItems.Add(PlainItem("Tüm Modülleri Kapat", () => workspace.CloseAll()));
 
         var about = new ToolStripMenuItem("Destek ve Bilgi");
         about.DropDownItems.Add(PlainItem("KY ERP Kurumsal Web Sitesi", OpenErpSite));
@@ -288,13 +286,11 @@ public sealed class MainShellForm : Form
         if (!Ready(module)) return;
         EnsurePersonel();
         if (personel is null) return;
+        personel.PrepareForEmbedding();
         PdksTheme.Apply(personel);
         personel.ActivateModule(module);
         AccessGuard.Apply(personel, module, currentUser);
-        personel.StartPosition = FormStartPosition.CenterParent;
-        personel.FormBorderStyle = FormBorderStyle.Sizable;
-        personel.Dock = DockStyle.None;
-        if (!personel.Visible) personel.Show(this); else personel.BringToFront();
+        ShowEmbedded(personel, "personel", "İnsan Kaynakları");
     }
 
     void OpenGroups()
@@ -385,12 +381,10 @@ public sealed class MainShellForm : Form
         if (!Ready(PdksModule.Personel)) return;
         EnsurePersonel();
         if (personel is null) return;
+        personel.PrepareForEmbedding();
         PdksTheme.Apply(personel);
         AccessGuard.Apply(personel, PdksModule.Personel, currentUser);
-        personel.StartPosition = FormStartPosition.CenterParent;
-        personel.FormBorderStyle = FormBorderStyle.Sizable;
-        personel.Dock = DockStyle.None;
-        if (!personel.Visible) personel.Show(this); else personel.BringToFront();
+        ShowEmbedded(personel, "personel", "İnsan Kaynakları");
         personel.SelectPerson(cardNo);
     }
 
@@ -440,12 +434,8 @@ public sealed class MainShellForm : Form
     void ShowModule(Form form, PdksModule module)
     {
         AccessGuard.Apply(form, module, currentUser);
-        PdksTheme.Apply(form);
-        form.StartPosition = FormStartPosition.CenterParent;
-        form.FormBorderStyle = FormBorderStyle.Sizable;
-        form.ShowInTaskbar = true;
-        form.Show(this);
-        form.BringToFront();
+        var host = new ModuleHostForm(form, ShowHome);
+        ShowEmbedded(host, "module:" + form.GetType().Name + ":" + form.Text, form.Text);
     }
 
     void ShowEmbedded(Form form, string key, string title)
@@ -459,33 +449,6 @@ public sealed class MainShellForm : Form
     {
         workspace.CloseAll();
         personel = null;
-    }
-
-    Form[] ModuleWindows() => Application.OpenForms.Cast<Form>().Where(f => !ReferenceEquals(f, this) && ReferenceEquals(f.Owner, this) && !f.IsDisposed && f.Visible).ToArray();
-
-    void ArrangeModuleWindows(bool cascade)
-    {
-        var windows = ModuleWindows();
-        if (windows.Length == 0) return;
-        var area = Screen.FromControl(this).WorkingArea;
-        if (cascade)
-        {
-            var w = Math.Min(1180, Math.Max(760, (int)(area.Width * .72)));
-            var h = Math.Min(780, Math.Max(560, (int)(area.Height * .72)));
-            for (var i = 0; i < windows.Length; i++) windows[i].SetBounds(area.Left + 24 + i * 34, area.Top + 24 + i * 34, w, h);
-            return;
-        }
-        var cols = (int)Math.Ceiling(Math.Sqrt(windows.Length));
-        var rows = (int)Math.Ceiling(windows.Length / (double)cols);
-        var cellW = Math.Max(640, area.Width / cols);
-        var cellH = Math.Max(480, area.Height / rows);
-        for (var i = 0; i < windows.Length; i++) windows[i].SetBounds(area.Left + (i % cols) * cellW, area.Top + (i / cols) * cellH, cellW, cellH);
-    }
-
-    void CloseModuleWindows()
-    {
-        foreach (var window in ModuleWindows()) window.Close();
-        if (personel is null || personel.IsDisposed) personel = null;
     }
 
     void OpenUserManagement()
