@@ -5,8 +5,11 @@ namespace HKN.Personel.Native;
 
 public partial class PersonelForm
 {
-    readonly ComboBox searchField = new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=74};
-    readonly TextBox searchText = new(){Width=164};
+    readonly ComboBox searchField = new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=65};
+    readonly RadioButton scopeActive = new(){Text="Aktif",AutoSize=true,Checked=true,Margin=new Padding(4,5,2,0)};
+    readonly RadioButton scopePassive = new(){Text="Pasif",AutoSize=true,Margin=new Padding(2,5,2,0)};
+    readonly RadioButton scopeAll = new(){Text="Tümü",AutoSize=true,Margin=new Padding(2,5,2,0)};
+    readonly TextBox searchText = new(){Width=95};
     readonly FlowLayoutPanel sortPanel = new(){Dock=DockStyle.Fill,FlowDirection=FlowDirection.LeftToRight,WrapContents=false};
     readonly Label stActive = new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};
     readonly Label stLeft = new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};
@@ -108,10 +111,10 @@ public partial class PersonelForm
     {
         var outer=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Padding=new Padding(0,4,0,0),Margin=Padding.Empty};outer.RowStyles.Add(new RowStyle(SizeType.Absolute,30));outer.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         var row=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Margin=Padding.Empty};var prev=NavButton("◀",-1);var next=NavButton("▶",1);searchField.Items.AddRange(new object[]{"Kart No","Ad","Soyad","İşe Giriş Tarihi","İşten Çıkış Tarihi"});searchField.SelectedIndex=0;
-        row.Controls.Add(prev);row.Controls.Add(new Label{Text="Arama Alanı",AutoSize=true,Padding=new Padding(5,7,3,0)});row.Controls.Add(searchField);row.Controls.Add(searchText);row.Controls.Add(next);outer.Controls.Add(row,0,0);
+        row.Controls.Add(prev);row.Controls.Add(new Label{Text="Ara",AutoSize=true,Padding=new Padding(3,7,2,0)});row.Controls.Add(searchField);row.Controls.Add(searchText);row.Controls.Add(scopeActive);row.Controls.Add(scopePassive);row.Controls.Add(scopeAll);row.Controls.Add(next);outer.Controls.Add(row,0,0);
         var g=new GroupBox{Text="Sıralama Şekli",Dock=DockStyle.Fill,Padding=new Padding(5,0,0,0)};string[] names={"Kart No","Ad","Soyad","İşe Giriş Tarihi","İşten Çıkış Tarihi"};string[] cols={"PKNO","AD","SOYAD","IGTARIH","ICTARIH"};
         for(int i=0;i<names.Length;i++){var r=new RadioButton{Text=names[i],AutoSize=true,Checked=i==0,Tag=cols[i],Margin=new Padding(2,3,4,0)};r.CheckedChanged+=SortChanged;sortPanel.Controls.Add(r);}g.Controls.Add(sortPanel);outer.Controls.Add(g,0,1);
-        searchText.TextChanged+=(_,_)=>ApplyClassicSearch();searchField.SelectedIndexChanged+=(_,_)=>ApplyClassicSearch();return outer;
+        searchText.TextChanged+=(_,_)=>ApplyClassicSearch();searchField.SelectedIndexChanged+=(_,_)=>ApplyClassicSearch();scopeActive.CheckedChanged+=(_,_)=>{if(scopeActive.Checked)Reload();};scopePassive.CheckedChanged+=(_,_)=>{if(scopePassive.Checked)Reload();};scopeAll.CheckedChanged+=(_,_)=>{if(scopeAll.Checked)Reload();};return outer;
     }
     Button NavButton(string text,int delta){var b=new Button{Text=text,Width=24,Height=23,Margin=new Padding(1,1,1,0),ForeColor=Color.RoyalBlue};b.Click+=(_,_)=>MoveRow(delta);return b;}
     void MoveRow(int d){if(list.Rows.Count==0)return;int i=list.CurrentRow?.Index??0;i=Math.Max(0,Math.Min(list.Rows.Count-1,i+d));list.CurrentCell=list.Rows[i].Cells[0];}

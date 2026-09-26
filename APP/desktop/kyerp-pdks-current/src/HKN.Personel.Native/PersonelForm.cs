@@ -113,7 +113,8 @@ public partial class PersonelForm : Form
     {
         try
         {
-            var dt=Q("select PKNO,AD,SOYAD,IGTARIH,ICTARIH from KIMLIK where ICTARIH is null order by PKNO"); list.DataSource=dt;
+            var where = scopePassive.Checked ? " where ICTARIH is not null" : scopeAll.Checked ? "" : " where ICTARIH is null";
+            var dt=Q("select PKNO,AD,SOYAD,IGTARIH,ICTARIH from KIMLIK"+where+" order by PKNO"); list.DataSource=dt;
             if(list.Columns.Contains("PKNO")) list.Columns["PKNO"].HeaderText="Kart No";
             if(list.Columns.Contains("AD")) list.Columns["AD"].HeaderText="Adı"; if(list.Columns.Contains("SOYAD")) list.Columns["SOYAD"].HeaderText="Soyadı";
             if(list.Columns.Contains("IGTARIH")) list.Columns["IGTARIH"].HeaderText="İş. Gir. Tar."; if(list.Columns.Contains("ICTARIH")) list.Columns["ICTARIH"].HeaderText="İş. Çıkış Tar.";
