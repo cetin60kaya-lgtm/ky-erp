@@ -22,11 +22,13 @@ test("login UI does not expose connection-state wording or admin-only copy", () 
   assert.doesNotMatch(source, /Admin hesaplarında MFA zorunludur/);
 });
 
-test("phone approval stays primary while authenticator fallback is immediately available", () => {
+test("phone approval stays primary in a fixed corporate verification card", () => {
   assert.doesNotMatch(source, /AUTHENTICATOR_FALLBACK_DELAY_MS/);
-  assert.doesNotMatch(source, /authenticatorFallbackReady/);
-  assert.doesNotMatch(source, /setAuthenticatorFallbackReady/);
-  assert.match(source, /Telefon onayı birincil yöntemdir/);
-  assert.match(source, /Telefonla onaylayamıyorum/);
-  assert.match(source, /Google \/ Microsoft Authenticator yedeğine geç/);
+  assert.doesNotMatch(source, /Onayı Şimdi Kontrol Et/);
+  assert.doesNotMatch(source, /Telefonla onaylayamıyorum/);
+  assert.match(source, /auth-stage-viewport/);
+  assert.match(source, /Kurumsal doğrulama seçenekleri/);
+  assert.match(source, /Authenticator/);
+  assert.match(source, /Hesap Kurtarma/);
+  assert.match(source, /Kod \+ güvenlik soruları/);
 });

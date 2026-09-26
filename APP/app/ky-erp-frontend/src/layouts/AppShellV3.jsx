@@ -6,7 +6,6 @@ import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
 
 import DisplaySettingsPanel from "./DisplaySettingsPanel";
 import { dismissNotifications, getNotifications, markNotificationsRead } from "../services/notificationApi";
-import { decideSecurityCenterLoginApproval, runPhoneApprovedSecurityAction } from "../services/securityCenterApi";
 import { apiGet } from "../utils/api";
 import "../styles/shell-v3.css";
 import "../styles/responsive-core.css";
@@ -197,7 +196,6 @@ export default function AppShellV3({
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notificationFilter, setNotificationFilter] = useState("all");
   const [notificationLoading, setNotificationLoading] = useState(false);
-  const [notificationActionBusy, setNotificationActionBusy] = useState("");
   const [notificationError, setNotificationError] = useState("");
   const [notificationData, setNotificationData] = useState({
     items: [],
@@ -227,10 +225,8 @@ export default function AppShellV3({
   const notificationView = useMemo(() => {
     const items = notificationData.items || [];
     if (notificationFilter === "unread") return items.filter((item) => item.unread);
-    if (notificationFilter === "action") return items.filter((item) => item?.meta?.actionable === true);
     return items;
   }, [notificationData.items, notificationFilter]);
-  const notificationActionCount = useMemo(() => (notificationData.items || []).filter((item) => item?.meta?.actionable === true).length, [notificationData.items]);
 
   useEffect(() => {
     if (!user?.id) { setSecurityAppEligible(false); return undefined; }
@@ -431,44 +427,13 @@ export default function AppShellV3({
     setNotificationOpen(false);
   }
 
-  async function decideNotificationApproval(event, item, decision) {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-    const approvalId = String(item?.meta?.approvalId || "").trim();
-    const sessionId = String(item?.meta?.sessionId || "").trim();
-    if ((!approvalId && !sessionId) || notificationActionBusy) return;
-    setNotificationActionBusy(item.id);
-    setNotificationError("");
-    try {
-      if (sessionId) {
-        const operation = decision === "DENY" ? "SESSION_TRUST_REJECT" : "SESSION_TRUST_APPROVE";
-        await runPhoneApprovedSecurityAction({ operation, sessionId });
-      } else {
-        await decideSecurityCenterLoginApproval(approvalId, decision);
-      }
-      const resolutionKey = notificationResolutionKey(item);
-      resolvedNotificationIdsRef.current.set(resolutionKey, Date.now() + 5 * 60_000);
-      const duplicateIds = [...new Set((notificationData.items || []).filter((entry) => notificationResolutionKey(entry) === resolutionKey).map((entry) => entry.id).filter(Boolean))];
-      setNotificationData((current) => {
-        const items = current.items.filter((entry) => notificationResolutionKey(entry) !== resolutionKey);
-        return { ...current, items, unreadCount: items.filter((entry) => entry.unread).length, totalCount: items.length };
-      });
-      try { await dismissNotifications(duplicateIds.length ? duplicateIds : [item.id]); } catch { /* Bildirim zaten kapandiysa akisi kesme. */ }
-      refreshNotifications(true);
-    } catch (error) {
-      setNotificationError(error?.message || "Güvenlik onayı tamamlanamadı.");
-    } finally {
-      setNotificationActionBusy("");
-    }
-  }
-
   function markAllNotificationsRead() {
     const unreadIds = notificationData.items.filter((item) => item.unread).map((item) => item.id);
     markNotificationIdsRead(unreadIds);
   }
 
-  function canDismissNotification(item) {
-    return !(item?.category === "SECURITY" && item?.meta?.actionable === true);
+  function canDismissNotification() {
+    return true;
   }
 
   async function dismissNotificationIds(ids) {
@@ -679,7 +644,6 @@ export default function AppShellV3({
                 <div className="shell-v3-notification-filters">
                   <button type="button" className={notificationFilter === "all" ? "active" : ""} onClick={() => setNotificationFilter("all")}>Tümü <b>{notificationData.totalCount}</b></button>
                   <button type="button" className={notificationFilter === "unread" ? "active" : ""} onClick={() => setNotificationFilter("unread")}>Okunmamış <b>{notificationData.unreadCount}</b></button>
-                  <button type="button" className={notificationFilter === "action" ? "active" : ""} onClick={() => setNotificationFilter("action")}>İşlem Bekleyen <b>{notificationActionCount}</b></button>
                 </div>
                 {notificationError ? <div className="shell-v3-notification-error">{notificationError}</div> : null}
                 {notificationData.partial ? <div className="shell-v3-notification-warning">Bazı bildirim kaynakları geçici olarak alınamadı. Görünen kayıtlar günceldir.</div> : null}
@@ -693,8 +657,6 @@ export default function AppShellV3({
                     </div>
                   ) : null}
                   {notificationView.map((item) => {
-                    const actionable = item?.category === "SECURITY" && item?.meta?.actionable === true && Boolean(item?.meta?.approvalId || item?.meta?.sessionId);
-                    const actionBusy = notificationActionBusy === item.id;
                     return <div className="shell-v3-notification-entry" key={item.id}>
                       <button
                         type="button"
@@ -709,10 +671,7 @@ export default function AppShellV3({
                         </span>
                         <time>{notificationTime(item.createdAt)}</time>
                       </button>
-                      {actionable ? <div className="shell-v3-notification-inline-actions">
-                        <button type="button" className="approve" disabled={Boolean(notificationActionBusy)} onClick={(event) => decideNotificationApproval(event, item, "APPROVE")}>{actionBusy ? "İşleniyor..." : "Onayla"}</button>
-                        <button type="button" className="deny" disabled={Boolean(notificationActionBusy)} onClick={(event) => decideNotificationApproval(event, item, "DENY")}>Reddet</button>
-                      </div> : null}
+                      {item?.category === "SECURITY" ? <div className="shell-v3-notification-readonly">Bilgi bildirimi · Onay ve ret işlemleri yalnız KY ERP Güvenlik uygulamasında tamamlanır.</div> : null}
                       {!item.unread && canDismissNotification(item) ? <button type="button" className="shell-v3-notification-dismiss" title="Bildirimi temizle" aria-label="Bildirimi temizle" onClick={() => dismissNotificationIds([item.id])}><X size={14} /></button> : null}
                     </div>;
                   })}
