@@ -23,8 +23,8 @@ public partial class PersonelForm : Form
         db = new FirebirdDatabase(options);
         Text="Personel Bilgileri"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(1220,760); MinimumSize=new Size(980,640);
         FormBorderStyle=FormBorderStyle.Sizable; MaximizeBox=true; MinimizeBox=true;
-        Font=new Font("Segoe UI",9f); BackColor=Color.FromArgb(246,249,253);
-        BuildMenuFull(); BuildUiClassic(); Shown += (_,_) => { fullTabsReady=false; Reload(); LoadPeriods(); fullTabsReady=true; SyncPeriodsToPerson(); RefreshFullTabs(); ApplyClassicGridStyles(); };
+        Font=new Font("Segoe UI",9f); BackColor=Color.FromArgb(246,249,253); DoubleBuffered=true; SetStyle(ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint,true);
+        BuildMenuFull(); BuildUiClassic(); Shown += (_,_) => { fullTabsReady=false; Reload(); LoadPeriods(); fullTabsReady=true; SyncPeriodsToPerson(); RefreshSelectedTab(); ApplyClassicGridStyles(); };
     }
     void BuildMenu()
     {
@@ -149,10 +149,7 @@ public partial class PersonelForm : Form
             var dt=Q(sql,new FbParameter("@PK",pk)); if(dt.Rows.Count==0) return; var r=dt.Rows[0];
             foreach(var kv in f) if(dt.Columns.Contains(kv.Key)) kv.Value.Text=Fmt(r[kv.Key]);
             if(dt.Columns.Contains("RESIM"))LoadPersonPhoto(r["RESIM"]);
-            LoadChild("GIRCIK", "select GTARIH,GSAAT,GDAKIKA,CTARIH,CSAAT,CDAKIKA from GIRCIK where PKNO=@PK order by coalesce(GTARIH,CTARIH) desc rows 100", pk);
-            LoadChild("IZIN", "select TARIH,TIP,MAZERET,BASSAAT,BITSAAT,SURESAAT from OZELIZIN where PKNO=@PK order by TARIH desc rows 100", pk);
-            LoadChild("AVANS", "select TARIH,MIKTAR,VTARIH,TURKOD,ACIKLAMA from AVANS where PKNO=@PK order by TARIH desc rows 100", pk);
-            RefreshFullTabs();
+            RefreshSelectedTab();
         }
         catch(Exception ex){ MessageBox.Show(ex.Message,"Personel",MessageBoxButtons.OK,MessageBoxIcon.Error); }
     }

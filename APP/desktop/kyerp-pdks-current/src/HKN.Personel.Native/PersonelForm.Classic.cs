@@ -16,6 +16,8 @@ public partial class PersonelForm
     readonly Label stTotal = new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};
     readonly Label stListed = new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};
     readonly PictureBox photo = new(){Dock=DockStyle.Fill,BorderStyle=BorderStyle.FixedSingle,SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.White};
+    readonly System.Windows.Forms.Timer personLoadTimer = new(){Interval=70};
+    string pendingPersonPk = "";
 
     void BuildUiClassic()
     {
@@ -27,7 +29,8 @@ public partial class PersonelForm
         BuildClassicList(); root.Controls.Add(list,0,0); BuildClassicRight(root); root.Controls.Add(BuildClassicSearch(),0,1); var st=BuildClassicStatus(); root.Controls.Add(st,0,2); root.SetColumnSpan(st,2);
         Controls.Add(root);
         list.DataBindingComplete += (_,_)=>{ConfigureListColumns();UpdateClassicStats();};
-        tabs.SelectedIndexChanged += (_,_)=>ApplyClassicGridStyles();
+        tabs.SelectedIndexChanged += (_,_)=>{ApplyClassicGridStyles();RefreshSelectedTab();};
+        personLoadTimer.Tick += (_,_)=>{personLoadTimer.Stop();var pk=pendingPersonPk;if(pk.Length>0&&pk!=currentPk)LoadPerson(pk);};
     }
 
     Control BuildClassicStatusPlaceholder()=>new Panel{Visible=false};
@@ -37,7 +40,9 @@ public partial class PersonelForm
         list.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None; list.RowHeadersWidth=18; list.RowHeadersVisible=true;
         list.ColumnHeadersHeight=20; list.RowTemplate.Height=20; list.AllowUserToResizeRows=false; list.MultiSelect=false;
         list.DefaultCellStyle.Font=Font; list.ColumnHeadersDefaultCellStyle.Font=Font; list.SelectionMode=DataGridViewSelectionMode.FullRowSelect;
-        list.SelectionChanged += (_,_)=>{if(list.CurrentRow?.Cells["PKNO"].Value is object v)LoadPerson(v.ToString()!);};
+        list.SelectionChanged += (_,_)=>QueuePersonLoad();
+        list.CellFormatting += PersonListFormat;
+        typeof(DataGridView).GetProperty("DoubleBuffered",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.SetValue(list,true);
     }
 
     void ConfigureListColumns()
@@ -55,7 +60,7 @@ public partial class PersonelForm
         right.Controls.Add(BuildClassicHeader(),0,0); BuildTabsClassic(); right.Controls.Add(tabs,0,1); root.Controls.Add(right,1,0);
         var buttons=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(6,12,52,0),WrapContents=false};
         buttons.Controls.Add(ClassicButton("Per. Bilgisi",100,()=>{if(currentPk!="")LoadPerson(currentPk);})); buttons.Controls.Add(ClassicButton("Sil",100,MarkExit));
-        buttons.Controls.Add(ClassicButton("Değiştir",100,()=>OpenPersonEditor(false))); buttons.Controls.Add(ClassicButton("Yeni Ekle",100,()=>OpenPersonEditor(true))); root.Controls.Add(buttons,1,1); Action syncTabLayout=()=>{bool info=tabs.SelectedIndex<=0||tabs.SelectedTab?.Text=="Personel Bilgileri";buttons.Visible=info;root.SetRowSpan(right,info?1:2);}; tabs.SelectedIndexChanged+=(_,_)=>syncTabLayout(); syncTabLayout();
+        buttons.Controls.Add(ClassicButton("Değiştir",100,()=>OpenPersonEditor(false))); buttons.Controls.Add(ClassicButton("Yeni Ekle",100,()=>OpenPersonEditor(true))); root.Controls.Add(buttons,1,1); Action syncTabLayout=()=>{bool info=tabs.SelectedIndex<=0||tabs.SelectedTab?.Text=="Personel Bilgileri";buttons.Visible=info;}; tabs.SelectedIndexChanged+=(_,_)=>syncTabLayout(); syncTabLayout();
     }
 
     Button ClassicButton(string text,int w,Action a){var b=new Button{Text=text,Width=w,Height=31,Font=new Font(Font,FontStyle.Bold),ForeColor=Color.Navy,Image=ClassicGlyph(text),ImageAlign=ContentAlignment.MiddleLeft,UseVisualStyleBackColor=true};b.Click+=(_,_)=>a();return b;}
@@ -116,6 +121,8 @@ public partial class PersonelForm
         for(int i=0;i<names.Length;i++){var r=new RadioButton{Text=names[i],AutoSize=true,Checked=i==0,Tag=cols[i],Margin=new Padding(2,3,4,0)};r.CheckedChanged+=SortChanged;sortPanel.Controls.Add(r);}g.Controls.Add(sortPanel);outer.Controls.Add(g,0,1);
         searchText.TextChanged+=(_,_)=>ApplyClassicSearch();searchField.SelectedIndexChanged+=(_,_)=>ApplyClassicSearch();scopeActive.CheckedChanged+=(_,_)=>{if(scopeActive.Checked)Reload();};scopePassive.CheckedChanged+=(_,_)=>{if(scopePassive.Checked)Reload();};scopeAll.CheckedChanged+=(_,_)=>{if(scopeAll.Checked)Reload();};return outer;
     }
+    void QueuePersonLoad(){if(list.CurrentRow?.Cells["PKNO"].Value is not object v)return;pendingPersonPk=v.ToString()??"";personLoadTimer.Stop();personLoadTimer.Start();}
+    void PersonListFormat(object? sender,DataGridViewCellFormattingEventArgs e){if(e.RowIndex<0||!list.Columns.Contains("ICTARIH"))return;var st=e.CellStyle;if(st is null)return;var exited=list.Rows[e.RowIndex].Cells["ICTARIH"].Value is not null and not DBNull;var back=exited?Color.FromArgb(255,238,238):Color.FromArgb(238,250,240);var sel=exited?Color.FromArgb(250,220,220):Color.FromArgb(216,240,222);st.BackColor=back;st.ForeColor=Color.FromArgb(35,55,65);st.SelectionBackColor=sel;st.SelectionForeColor=Color.FromArgb(25,45,55);}
     Button NavButton(string text,int delta){var b=new Button{Text=text,Width=24,Height=23,Margin=new Padding(1,1,1,0),ForeColor=Color.RoyalBlue};b.Click+=(_,_)=>MoveRow(delta);return b;}
     void MoveRow(int d){if(list.Rows.Count==0)return;int i=list.CurrentRow?.Index??0;i=Math.Max(0,Math.Min(list.Rows.Count-1,i+d));list.CurrentCell=list.Rows[i].Cells[0];}
     void ApplyClassicSearch(){if(list.DataSource is not DataTable dt)return;string s=searchText.Text.Replace("'","''").Trim();string c=searchField.SelectedIndex switch{1=>"AD",2=>"SOYAD",3=>"IGTARIH",4=>"ICTARIH",_=>"PKNO"};dt.DefaultView.RowFilter=s.Length==0?"":(c is "IGTARIH" or "ICTARIH"?$"CONVERT({c}, 'System.String') LIKE '%{s}%'":$"{c} LIKE '%{s}%'");UpdateClassicStats();}

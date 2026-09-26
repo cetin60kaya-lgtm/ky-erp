@@ -33,6 +33,8 @@ public sealed class MainShellForm : Form
         MinimumSize = new Size(1100,700);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI",9f);
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
         ToolStripManager.Renderer = new ModernShellRenderer();
         BuildMenu();
         BuildToolbar();

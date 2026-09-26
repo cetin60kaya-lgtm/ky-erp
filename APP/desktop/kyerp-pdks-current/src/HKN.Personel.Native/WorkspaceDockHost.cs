@@ -31,6 +31,8 @@ internal sealed class WorkspaceDockHost : UserControl
     {
         userKey = Sanitize(userName);
         Dock = DockStyle.Fill;
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
         Controls.Add(root);
         for (var i = 0; i < 4; i++) slots.Add(CreateSlot(i));
         ApplyLayout(LoadMode(), false);
