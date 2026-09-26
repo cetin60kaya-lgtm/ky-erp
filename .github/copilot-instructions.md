@@ -1,19 +1,31 @@
 # KY ERP Copilot Repository Instructions
 
-Always read the root `AGENTS.md` first. These instructions are Copilot-specific and apply in this repository.
+Always read the root `AGENTS.md` first. Also read `DOCS/KY_ERP_CHAT_GITHUB_CLOUDFLARE_ANA_KURAL_2026-09-27.md` before repo/code work. These instructions are Copilot-specific and apply in this repository.
 
 ## Repository identity
 
 - Production source branch: `codex/model-uretim-kontrol-merkezi-final`.
 - Do **not** assume a OneDrive, Google Drive or other cloud-synced repository path.
-- Resolve the real local repository with `git rev-parse --show-toplevel` before scripts, builds, deploys or destructive operations.
+- Resolve the real local repository with `git rev-parse --show-toplevel` only when local-machine work is actually required.
 - Expected remote: `https://github.com/cetin60kaya-lgtm/ky-erp.git`.
 - Frontend: `APP/app/ky-erp-frontend`.
 - Cloudflare Worker API: `APP/cloud/ky-erp-api`.
 - Local NestJS/SQLite backend is legacy/reference unless the user explicitly asks for local mode.
 - **Only user-facing live app URL: `https://kyerp.net/`.**
 - Live API origin: `https://api.kyerp.net`; backend-only.
-- `https://app.kyerp.net` is not canonical unless the user explicitly asks to reactivate it.
+- `https://app.kyerp.net` is not canonical and must not be reintroduced unless the user explicitly requests a new domain decision.
+
+## Chat → GitHub → Cloudflare default
+
+- Remote Desktop is not the default for repository/code work. Prefer direct GitHub file/branch/commit/PR operations from the connected AI/chat environment.
+- A normal `yap / düzelt / bitir / uygula / hallet / toparla` request is standing authorization to carry the repo task through implementation, tests, GitHub write/PR/merge when appropriate, Cloudflare canonical deployment and read-only live smoke. Do not repeatedly ask `commit edeyim mi`, `PR açayım mı`, `merge edeyim mi`, or `canlıya alayım mı`.
+- Stop before write/deploy when the user says `önce yorumla`, `önce bak`, `önizleme ver`, `onay vereyim`, `canlıya alma`, or equivalent.
+- Low-risk isolated/reversible changes may use the fast path after current production HEAD is verified.
+- Auth/security/shared API/Worker/large refactor/multi-file changes should use a fresh branch + PR; if diff/checks are clean, merge without another user prompt.
+- Production frontend automatic deployment has a single path: **Cloudflare Git Integration**. Do not add a second automatic GitHub Actions Pages deploy.
+- `production-live-smoke.yml` is read-only verification and must never deploy.
+- Manual deploy workflows are emergency fallback only.
+- Remote Desktop is reserved for local-only work such as Windows, Photoshop/Illustrator, PDKS desktop, local folders/devices/hardware, binary files not present in GitHub, or mandatory local integration tests.
 
 ## Canonical storage rule
 
@@ -41,9 +53,9 @@ KY ERP application modules are provider-neutral. No module may hardcode OneDrive
 5. Never reset/recreate production D1 or SQLite data.
 6. Never run production INSERT/UPDATE/DELETE merely to test UI behavior.
 7. Do not auto-retry mutation requests.
-8. Production migrations require explicit user approval plus backup/readiness checks.
-9. Do not deploy merely because source edits are complete. Live release requires explicit user request.
-10. Frontend changes: lint + tests + production build. Worker changes: typecheck + unit tests + local integration smoke + dry-run.
+8. Production migrations, destructive data writes, DNS/domain deletion, secret rotation, billing changes and real external/resmî sends remain explicit safety-gate operations with backup/readiness and user approval where required.
+9. For normal reversible repo/code work, do not request a second approval for commit/PR/merge/deploy unless the user explicitly requested a review-only or no-deploy stage.
+10. Frontend changes: lint + tests + production build where applicable. Worker changes: typecheck + unit tests + local integration smoke/dry-run where applicable.
 
 ## Auth and data invariants
 
@@ -58,4 +70,4 @@ KY ERP application modules are provider-neutral. No module may hardcode OneDrive
 
 ## Completion report
 
-State the root cause, files changed, tests run, deploy status, live verification status and final commit SHA.
+State the root cause, files changed, tests run, GitHub commit/PR/merge status, deploy status, live verification status and final commit SHA.
