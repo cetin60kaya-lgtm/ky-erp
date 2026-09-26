@@ -27,7 +27,9 @@ test("phone approval stays primary in a fixed corporate verification card", () =
   assert.doesNotMatch(source, /Onayı Şimdi Kontrol Et/);
   assert.doesNotMatch(source, /Telefonla onaylayamıyorum/);
   assert.match(source, /auth-stage-viewport/);
-  assert.match(source, /Kurumsal doğrulama seçenekleri/);
+  assert.match(source, /Kurumsal doğrulama yöntemleri/);
+  assert.match(source, /auth-method-tabs-triple/);
+  assert.match(source, /auth-site-backdrop/);
   assert.match(source, /Authenticator/);
   assert.match(source, /Hesap Kurtarma/);
   assert.match(source, /Kod \+ güvenlik soruları/);
