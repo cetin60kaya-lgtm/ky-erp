@@ -1,4 +1,4 @@
-name: KY ERP Canonical Domain Cleanup
+﻿name: KY ERP Canonical Domain Cleanup
 
 on:
   push:
@@ -60,3 +60,4 @@ jobs:
             exit 1
           fi
           curl --fail --silent --show-error https://kyerp.net/ | grep -q "KY ERP"
+
