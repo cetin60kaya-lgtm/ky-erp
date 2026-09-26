@@ -1,11 +1,8 @@
 name: KY ERP Canonical Domain Cleanup
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - ".github/workflows/canonical-domain-cleanup.yml"
+  # One-time maintenance / emergency repair only.
+  # Normal production deployment is Cloudflare Git Integration.
   workflow_dispatch:
 
 permissions:
