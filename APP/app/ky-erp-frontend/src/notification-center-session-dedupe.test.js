@@ -7,12 +7,13 @@ import { fileURLToPath } from "node:url";
 const here=dirname(fileURLToPath(import.meta.url));
 const shell=readFileSync(resolve(here,"layouts/AppShellV3.jsx"),"utf8");
 
-test("notification center deduplicates session approvals and removes resolved duplicates immediately",()=>{
+test("notification center deduplicates session approvals while security decisions stay phone-owned",()=>{
+  assert.match(shell,/function notificationResolutionKey\(item\)/);
   assert.match(shell,/const seenNotificationKeys = new Set\(\)/);
+  assert.match(shell,/const key = notificationResolutionKey\(item\)/);
   assert.match(shell,/resolvedNotificationIdsRef\.current\.has\(key\) \|\| seenNotificationKeys\.has\(key\)/);
-  assert.match(shell,/const resolutionKey = notificationResolutionKey\(item\)/);
-  assert.match(shell,/const duplicateIds = \[\.\.\.new Set\(/);
-  assert.match(shell,/current\.items\.filter\(\(entry\) => notificationResolutionKey\(entry\) !== resolutionKey\)/);
-  assert.match(shell,/dismissNotifications\(duplicateIds\.length \? duplicateIds : \[item\.id\]\)/);
-  assert.doesNotMatch(shell,/setTimeout\(\(\) => \{[\s\S]{0,500}entry\.id !== item\.id[\s\S]{0,200}1600/);
+  assert.match(shell,/seenNotificationKeys\.add\(key\)/);
+  assert.match(shell,/meta\?\.securityCenter === true/);
+  assert.match(shell,/setPhoneApprovalOpen\(true\)/);
+  assert.doesNotMatch(shell,/SESSION_TRUST_APPROVE|SESSION_TRUST_REJECT|runPhoneApprovedSecurityAction/);
 });

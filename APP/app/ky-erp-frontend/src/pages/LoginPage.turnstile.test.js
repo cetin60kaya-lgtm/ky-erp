@@ -29,8 +29,8 @@ test("login page final corporate security UX is enforced", () => {
   assert.match(loginPage, /turnstileConfig\.enabled && !turnstileToken/);
   assert.match(loginPage, /turnstileConfig\.failed/);
   assert.match(loginPage, /Güvenlik doğrulaması kullanılamıyor/);
-  assert.match(loginPage, /1 MFA doğrulaması gerekli/);
-  assert.match(loginPage, /Özel soru-cevap ile güvenli kurtarma/);
+  assert.match(loginPage, /Telefon onayı birincildir; Authenticator yalnız isteğe bağlı yedek yöntemdir/);
+  assert.match(loginPage, /Kod \+ güvenlik soruları/);
   assert.doesNotMatch(loginPage, /Tek kullanımlık acil kurtarma kodu kullan/);
   assert.doesNotMatch(loginPage, /showRecoveryCode/);
 });

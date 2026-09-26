@@ -68,7 +68,8 @@ test("phone approval is primary while Authenticator remains an explicit fallback
   assert.match(policy, /skipPhone: true/);
   assert.match(login, /Telefonunuza bildirim gönderildi/);
   assert.match(login, /Authenticator yalnız isteğe bağlı yedek yöntemdir/);
-  assert.match(login, /Google \/ Microsoft Authenticator yedeğine geç/);
+  assert.match(login, /switchToAuthenticator\("AUTHENTICATOR"\)/);
+  assert.match(login, /<small>Google \/ Microsoft<\/small>/);
   assert.match(authContext, /useAuthenticatorFallback/);
 });
 
@@ -186,7 +187,8 @@ test("KY Security short code stays tied to the same pending phone challenge", ()
   assert.match(policy, /phone-approval\/:id\/code/);
   assert.match(policy, /SECURITY_LOGIN_CODE_EXPIRED/);
   assert.match(authContext, /verifyPhoneApprovalCode/);
-  assert.match(login, /KY Güvenlik Giriş Kodu/);
+  assert.doesNotMatch(login, /KY Güvenlik Giriş Kodu/);
+  assert.match(securityApp, /generateLoginCode/);
 });
 
 test("trusted Security device keeps phone approval pending when push delivery is temporarily unavailable", () => {
