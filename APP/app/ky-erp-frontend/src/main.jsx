@@ -1,13 +1,13 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import PublicLandingPage from "./pages/PublicLandingPage.jsx";
+import LoginPage from "./pages/LoginPage.jsx";
 import { installAndroidRuntimeBridge } from "./utils/installAndroidRuntimeBridge";
 
 const PUBLIC_SITE_HOSTS = new Set(["kyerp.net", "www.kyerp.net"]);
-const APP_URL = "https://app.kyerp.net/";
 const hostname = String(window.location.hostname || "").toLowerCase();
 const isPublicSite = PUBLIC_SITE_HOSTS.has(hostname);
-const publicRedirectPaths = new Set(["/giris", "/login", "/app"]);
+const directLoginPaths = new Set(["/giris", "/login", "/app"]);
 const rootElement = document.getElementById("root");
 
 async function retireLegacyPhoneApprovalWorker() {
@@ -29,20 +29,18 @@ async function retireLegacyPhoneApprovalWorker() {
   }
 }
 
-async function renderErpApp() {
+async function loadErpRuntime() {
   installAndroidRuntimeBridge();
   void retireLegacyPhoneApprovalWorker();
 
   const { installPersistedAuthBootstrap } = await import("./context/authBootstrap");
   installPersistedAuthBootstrap();
-
-  // PDKS ayrı bir ana modüldür; İK yetkisini paylaşır fakat İK sekmesi değildir.
   await import("./app/pdksModuleRegistryPatch");
 
   const [
     { default: AppV3 },
     { ActiveCompanyProvider },
-    { AuthProvider },
+    { AuthProvider, useAuth },
     { installAuthenticatedAssetBridge },
     { installMuhasebeDocumentSanitizer },
     { installPersistentModalSizing },
@@ -59,39 +57,62 @@ async function renderErpApp() {
   installAuthenticatedAssetBridge();
   installMuhasebeDocumentSanitizer();
   installPersistentModalSizing();
+  return { AppV3, ActiveCompanyProvider, AuthProvider, useAuth };
+}
 
+async function renderCanonicalHost() {
+  const { AppV3, ActiveCompanyProvider, AuthProvider, useAuth } = await loadErpRuntime();
   const RootWrapper = import.meta.env.DEV ? React.Fragment : React.StrictMode;
 
-  function RootApp() {
+  function CanonicalHostApp() {
+    const { isAuthenticated } = useAuth();
+    const [loginOpen, setLoginOpen] = useState(() => {
+      const initialPath = String(window.location.pathname || "/").toLowerCase();
+      return directLoginPaths.has(initialPath) || initialPath !== "/";
+    });
+
+    useEffect(() => {
+      if (directLoginPaths.has(String(window.location.pathname || "").toLowerCase())) {
+        window.history.replaceState({}, "", "/" + window.location.search + window.location.hash);
+      }
+      const openLogin = () => setLoginOpen(true);
+      window.addEventListener("kyerp:open-login", openLogin);
+      return () => window.removeEventListener("kyerp:open-login", openLogin);
+    }, []);
+
+    if (isAuthenticated) return <ActiveCompanyProvider><AppV3 /></ActiveCompanyProvider>;
+
     return (
-      <AuthProvider>
-        <ActiveCompanyProvider>
-          <AppV3 />
-        </ActiveCompanyProvider>
-      </AuthProvider>
+      <>
+        <PublicLandingPage onOpenLogin={() => setLoginOpen(true)} />
+        {loginOpen ? <LoginPage onClose={() => setLoginOpen(false)} /> : null}
+      </>
     );
   }
 
   ReactDOM.createRoot(rootElement).render(
-    <RootWrapper>
-      <RootApp />
-    </RootWrapper>,
+    <RootWrapper><AuthProvider><CanonicalHostApp /></AuthProvider></RootWrapper>,
   );
 }
 
-if (isPublicSite && publicRedirectPaths.has(window.location.pathname.toLowerCase())) {
-  window.location.replace(APP_URL);
-} else if (isPublicSite) {
-  ReactDOM.createRoot(rootElement).render(<PublicLandingPage />);
-} else {
-  renderErpApp().catch((error) => {
-    console.error("KY ERP uygulama kabugu yuklenemedi", error);
-    ReactDOM.createRoot(rootElement).render(
-      <main style={{ maxWidth: 560, margin: "64px auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
-        <h1 style={{ fontSize: 24 }}>KY ERP açılamadı</h1>
-        <p>Uygulama dosyaları yüklenemedi. İnternet bağlantınızı kontrol edip sayfayı yeniden açın.</p>
-        <button type="button" onClick={() => window.location.reload()}>Yeniden Dene</button>
-      </main>,
-    );
-  });
+async function renderErpApp() {
+  const { AppV3, ActiveCompanyProvider, AuthProvider } = await loadErpRuntime();
+  const RootWrapper = import.meta.env.DEV ? React.Fragment : React.StrictMode;
+  ReactDOM.createRoot(rootElement).render(
+    <RootWrapper><AuthProvider><ActiveCompanyProvider><AppV3 /></ActiveCompanyProvider></AuthProvider></RootWrapper>,
+  );
 }
+
+const renderFailure = (error) => {
+  console.error("KY ERP uygulama kabugu yuklenemedi", error);
+  ReactDOM.createRoot(rootElement).render(
+    <main style={{ maxWidth: 560, margin: "64px auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
+      <h1 style={{ fontSize: 24 }}>KY ERP acilamadi</h1>
+      <p>Uygulama dosyalari yuklenemedi. Internet baglantinizi kontrol edip sayfayi yeniden acin.</p>
+      <button type="button" onClick={() => window.location.reload()}>Yeniden Dene</button>
+    </main>,
+  );
+};
+
+if (isPublicSite) renderCanonicalHost().catch(renderFailure);
+else renderErpApp().catch(renderFailure);

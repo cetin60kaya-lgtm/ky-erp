@@ -345,7 +345,7 @@ jobs:
           done
           test "$ready" -eq 1
           curl --fail --silent https://api.kyerp.net/api/system/status | jq -e '.ok == true' >/dev/null
-          auth="$(curl --fail --silent -H 'Origin: https://app.kyerp.net' https://api.kyerp.net/api/auth/status)"
+          auth="$(curl --fail --silent -H 'Origin: https://kyerp.net' https://api.kyerp.net/api/auth/status)"
           jq -e '.authVersion == "canonical-v3" and .sessionPolicy.passwordOnlyEnabled == false and .sessionPolicy.passwordOnlySeconds == 0 and .sessionPolicy.mfaSeconds == 36000' <<<"$auth" >/dev/null
 
       - name: Auth pre-cutover firma ve security satirlarini dogrula
@@ -386,7 +386,7 @@ jobs:
           jq -e --arg p "$PAGES_PROJECT" '.success == true and .result.name == $p' <<<"$project" >/dev/null
           production_branch="$(jq -r '.result.production_branch // empty' <<<"$project")"
           test "$production_branch" = "$PROD_BRANCH"
-          for domain in kyerp.net app.kyerp.net; do
+          for domain in kyerp.net; do
             domains="$(curl --fail --silent --show-error -H "$auth" "$base/domains")"
             if ! jq -e --arg d "$domain" 'any(.result[]?; .name == $d)' <<<"$domains" >/dev/null; then
               created="$(curl --fail --silent --show-error -X POST -H "$auth" -H 'Content-Type: application/json' --data "{\"name\":\"$domain\"}" "$base/domains")"
@@ -409,7 +409,7 @@ jobs:
           set -euo pipefail
           auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
           base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}"
-          for domain in kyerp.net app.kyerp.net; do
+          for domain in kyerp.net; do
             active=0
             for attempt in $(seq 1 60); do
               row="$(curl --fail --silent --show-error -H "$auth" "$base/domains/$domain")"
@@ -425,7 +425,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for url in https://kyerp.net/ https://app.kyerp.net/; do
+          for url in https://kyerp.net/; do
             ready=0
             for attempt in $(seq 1 30); do
               if curl --fail --silent --show-error "$url" >/tmp/kyerp-page.html && test -s /tmp/kyerp-page.html; then ready=1; break; fi
@@ -448,4 +448,4 @@ jobs:
           echo "RESEND_API_KEY: aktif Worker bindingi dogrulandi"
           echo "API: https://api.kyerp.net"
           echo "Site: https://kyerp.net"
-          echo "App: https://app.kyerp.net"
+          echo "App: https://kyerp.net"

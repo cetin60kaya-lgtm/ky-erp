@@ -108,7 +108,7 @@ jobs:
           set -euo pipefail
           ready=0
           for attempt in $(seq 1 30); do
-            if curl --location --fail --silent --show-error "https://app.kyerp.net/" > /tmp/kyerp-home.html && test -s /tmp/kyerp-home.html; then
+            if curl --location --fail --silent --show-error "https://kyerp.net/" > /tmp/kyerp-home.html && test -s /tmp/kyerp-home.html; then
               ready=1
               break
             fi
@@ -123,13 +123,13 @@ jobs:
           test -n "$local_responsive_asset"
           responsive_asset_name="$(basename "$local_responsive_asset")"
 
-          curl --location --fail --silent --show-error             "https://app.kyerp.net/assets/$responsive_asset_name" > /tmp/kyerp-responsive-live.js
+          curl --location --fail --silent --show-error             "https://kyerp.net/assets/$responsive_asset_name" > /tmp/kyerp-responsive-live.js
           grep -q "kyerp.display.preferences.v1" /tmp/kyerp-responsive-live.js
           grep -q "Telefon Modu" /tmp/kyerp-responsive-live.js
           grep -q "Tablet Modu" /tmp/kyerp-responsive-live.js
           grep -q "PC Modu" /tmp/kyerp-responsive-live.js
 
-          curl --location --fail --silent --show-error "https://app.kyerp.net/boyahane/is-akisi" >/tmp/kyerp-route.html
+          curl --location --fail --silent --show-error "https://kyerp.net/boyahane/is-akisi" >/tmp/kyerp-route.html
           test -s /tmp/kyerp-route.html
 
       - name: Yayin sonucu
@@ -138,7 +138,7 @@ jobs:
           echo "KY ERP responsive frontend production yayini tamamlandi."
           echo "D1: degismedi"
           echo "Worker API: degismedi"
-          echo "App: https://app.kyerp.net"
+          echo "App: https://kyerp.net"
 
       - name: Full release paketinde Pages-only yayini atla
         if: steps.scope.outputs.deploy != 'true'

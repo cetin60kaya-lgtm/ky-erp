@@ -32,7 +32,7 @@ const unb64url = (value: string) => {
   return Uint8Array.from(raw, (ch) => ch.charCodeAt(0));
 };
 const providerFamily = (provider: unknown) => upper(provider) === "GOOGLE_DRIVE" ? "GOOGLE" : ["ONEDRIVE", "SHAREPOINT"].includes(upper(provider)) ? "MICROSOFT" : "";
-const appBaseUrl = "https://app.kyerp.net";
+const appBaseUrl = "https://kyerp.net";
 const apiBaseUrl = "https://api.kyerp.net";
 const sanitizeReturnPath = (value: unknown) => {
   const path = text(value);

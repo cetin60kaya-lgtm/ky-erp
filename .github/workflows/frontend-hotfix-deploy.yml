@@ -65,12 +65,12 @@ jobs:
         run: |
           set -euo pipefail
           for i in {1..12}; do
-            code="$(curl -sS -o /tmp/kyerp.html -w '%{http_code}' https://app.kyerp.net/ || true)"
+            code="$(curl -sS -o /tmp/kyerp.html -w '%{http_code}' https://kyerp.net/ || true)"
             if [ "$code" = "200" ] && grep -q "KY ERP" /tmp/kyerp.html; then
-              echo "app.kyerp.net live: OK"
+              echo "kyerp.net live: OK"
               exit 0
             fi
             sleep 5
           done
-          echo "app.kyerp.net live verification failed" >&2
+          echo "kyerp.net live verification failed" >&2
           exit 1

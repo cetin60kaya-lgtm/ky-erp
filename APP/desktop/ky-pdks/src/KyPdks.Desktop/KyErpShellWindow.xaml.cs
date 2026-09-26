@@ -14,7 +14,7 @@ namespace KyPdks.Desktop;
 
 public partial class KyErpShellWindow : Window
 {
-    private static readonly Uri AppUri = new("https://app.kyerp.net/");
+    private static readonly Uri AppUri = new("https://kyerp.net/");
     private static readonly Uri HealthUri = new("https://api.kyerp.net/api/health");
 
     private readonly DesktopOfflineStore _offlineStore = new();
@@ -164,7 +164,7 @@ public partial class KyErpShellWindow : Window
             const string blocked = "{\"ok\":false,\"error\":{\"code\":\"KYERP_DESKTOP_PRELOAD_READ_ONLY\",\"message\":\"Tam Eşitle yalnız okuma isteği çalıştırır.\"}}";
             e.Response = ErpWebView.CoreWebView2.Environment.CreateWebResourceResponse(
                 new MemoryStream(Encoding.UTF8.GetBytes(blocked)), 409, "KY ERP PRELOAD READ ONLY",
-                "Content-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: https://app.kyerp.net\r\n");
+                "Content-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: https://kyerp.net\r\n");
             return;
         }
 
@@ -175,7 +175,7 @@ public partial class KyErpShellWindow : Window
             var cached = await _offlineStore.GetCacheAsync(CacheKey(e.Request.Uri), _lifetime.Token);
             if (cached is not null)
             {
-                var headers = $"Content-Type: {cached.ContentType}\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: https://app.kyerp.net\r\n";
+                var headers = $"Content-Type: {cached.ContentType}\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: https://kyerp.net\r\n";
                 e.Response = ErpWebView.CoreWebView2.Environment.CreateWebResourceResponse(
                     new MemoryStream(Encoding.UTF8.GetBytes(cached.PayloadJson)), cached.HttpStatus, "KY ERP OFFLINE CACHE", headers);
                 return;
@@ -183,7 +183,7 @@ public partial class KyErpShellWindow : Window
             const string unavailable = "{\"ok\":false,\"error\":{\"code\":\"KYERP_DESKTOP_OFFLINE_CACHE_MISS\",\"message\":\"Bu veri daha önce masaüstüne senkronlanmamış. İnternet geldiğinde Tam Eşitle çalıştırın.\"}}";
             e.Response = ErpWebView.CoreWebView2.Environment.CreateWebResourceResponse(
                 new MemoryStream(Encoding.UTF8.GetBytes(unavailable)), 503, "KY ERP OFFLINE",
-                "Content-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: https://app.kyerp.net\r\n");
+                "Content-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: https://kyerp.net\r\n");
         }
         catch { }
         finally { deferral.Complete(); }

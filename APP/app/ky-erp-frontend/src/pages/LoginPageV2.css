@@ -73,3 +73,11 @@
 .auth-method-tabs:not(.auth-method-tabs-triple){margin-bottom:10px}.auth-recovery-compact,.auth-mfa-stage{max-width:620px;margin:0 auto;width:100%}
 @media(max-width:820px){.auth-site-topbar nav{display:none}.auth-site-hero{width:calc(100% - 30px);grid-template-columns:1fr;padding:28px}.auth-site-preview{display:none}.auth-site-copy h1{font-size:38px}.auth-site-modules{display:none}.auth-shell{width:min(680px,calc(100vw - 20px))!important;height:min(700px,calc(100dvh - 20px))!important}}
 @media(max-width:560px){.auth-page{padding:6px!important}.auth-site-backdrop{display:none}.auth-site-dimmer{background:linear-gradient(180deg,#e9f2ff,#f8fbff);backdrop-filter:none}.auth-shell{width:100%!important;height:calc(100dvh - 12px)!important;border-radius:18px!important}.auth-card{padding:14px!important}.auth-method-tabs-triple{grid-template-columns:1fr!important}.auth-method-tabs-triple button{min-height:42px!important}.auth-method-tabs-triple button small{display:none}.auth-phone-status-head{grid-template-columns:48px 1fr!important}.auth-phone-status-head .auth-phone-approval-icon{width:46px!important;height:46px!important}.auth-match-number-compact{width:160px!important}.auth-match-number-compact strong{font-size:40px!important}}
+
+
+/* 2026-09-26 CANONICAL SINGLE-HOST MODAL */
+.auth-page{position:fixed!important;inset:0!important;z-index:9999!important;width:100vw!important;height:100dvh!important;min-height:100dvh!important;background:transparent!important}
+.auth-site-backdrop{display:none!important}
+.auth-site-dimmer{z-index:0!important;background:rgba(15,38,69,.34)!important;backdrop-filter:blur(3px)!important;-webkit-backdrop-filter:blur(3px)!important}
+.auth-shell{position:relative!important;z-index:1!important}
+.auth-modal-close{appearance:none;-webkit-appearance:none;font-family:inherit;cursor:pointer}

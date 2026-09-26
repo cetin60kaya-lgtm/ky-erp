@@ -24,8 +24,6 @@ import PublicDeviceExperience from "../components/public/PublicDeviceExperience"
 import "../styles/public-landing.css";
 import "../styles/public-landing-v2.css";
 
-const APP_URL = "https://app.kyerp.net/";
-
 const MODULES = [
   {
     icon: Gauge,
@@ -124,8 +122,9 @@ function AppPreview() {
   );
 }
 
-export default function PublicLandingPage() {
+export default function PublicLandingPage({ onOpenLogin }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const openLogin = (event) => { event?.preventDefault?.(); setMenuOpen(false); onOpenLogin?.(); };
 
   useEffect(() => {
     document.title = "KY ERP | Tekstil Üretim ve İşletme Yönetimi";
@@ -165,7 +164,7 @@ export default function PublicLandingPage() {
         </nav>
 
         <div className="ky-public-header__actions">
-          <a className="ky-public-login" href={APP_URL}>Sisteme Gir <ArrowRight size={17} /></a>
+          <a className="ky-public-login" href="#giris" onClick={openLogin}>Sisteme Gir <ArrowRight size={17} /></a>
           <button
             className="ky-public-menu"
             type="button"
@@ -188,7 +187,7 @@ export default function PublicLandingPage() {
               tekstil işletmesinin günlük operasyonlarını aynı sistemde birleştirir.
             </p>
             <div className="ky-public-hero__actions">
-              <a className="ky-public-primary" href={APP_URL}>Doğrudan Sisteme Gir <ArrowRight size={18} /></a>
+              <a className="ky-public-primary" href="#giris" onClick={openLogin}>Doğrudan Sisteme Gir <ArrowRight size={18} /></a>
               <a className="ky-public-secondary" href="#canli-demo">Sistemi İncele</a>
             </div>
             <div className="ky-public-trust">
@@ -209,7 +208,7 @@ export default function PublicLandingPage() {
 
         <PublicModuleShowcase />
         <PublicPresentationStories />
-        <PublicDeviceExperience />
+        <PublicDeviceExperience onOpenLogin={onOpenLogin} />
 
         <section className="ky-public-section ky-public-modules" id="moduller">
           <div className="ky-public-section__head">
@@ -241,7 +240,7 @@ export default function PublicLandingPage() {
             <p>
               Sipariş ve belgeden başlayan süreç; desen, renk hazırlığı, üretim ve mali takibe kadar ortak model ve firma ilişkileriyle devam eder.
             </p>
-            <a href={APP_URL}>Uygulamayı aç <ArrowRight size={17} /></a>
+            <a href="#giris" onClick={openLogin}>Uygulamayı aç <ArrowRight size={17} /></a>
           </div>
           <div className="ky-public-process__flow">
             {FLOW.map(([no, title, text], index) => (
@@ -262,11 +261,11 @@ export default function PublicLandingPage() {
             <h2>İşletmenizin çalışma merkezine geçin.</h2>
             <p>Hesabınızla giriş yapın, güvenliği doğrulayın ve yetkiniz olan çalışma alanına doğrudan devam edin.</p>
           </div>
-          <a href={APP_URL}>Sisteme Gir <ArrowRight size={19} /></a>
+          <a href="#giris" onClick={openLogin}>Sisteme Gir <ArrowRight size={19} /></a>
         </section>
       </main>
 
-      <PublicCorporateFooter />
+      <PublicCorporateFooter onOpenLogin={onOpenLogin} />
     </div>
   );
 }

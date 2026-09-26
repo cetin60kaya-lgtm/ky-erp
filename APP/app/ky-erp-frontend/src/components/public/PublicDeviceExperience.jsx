@@ -1,7 +1,6 @@
 import { ArrowRight, CheckCircle2, ShieldCheck, Smartphone, Workflow } from "lucide-react";
 import "../../styles/public-device-experience.css";
 
-const APP_URL = "https://app.kyerp.net/";
 
 const PLATFORMS = ["Windows PC", "Android", "iPhone", "iPad", "Tarayıcı", "PWA"];
 const FLOW = [
@@ -26,7 +25,8 @@ function MiniWorkspace({ compact = false }) {
   );
 }
 
-export default function PublicDeviceExperience() {
+export default function PublicDeviceExperience({ onOpenLogin }) {
+  const openLogin = (event) => { event?.preventDefault?.(); onOpenLogin?.(); };
   return (
     <section className="ky-device-experience" id="cihazlar">
       <div className="ky-device-experience__head">
@@ -53,7 +53,7 @@ export default function PublicDeviceExperience() {
         <div className="ky-device-entry-flow__steps">
           {FLOW.map(([no, title, text]) => <div key={no}><span>{no}</span><p><b>{title}</b><small>{text}</small></p><CheckCircle2 size={16} /></div>)}
         </div>
-        <a href={APP_URL}>Doğrudan Sisteme Gir <ArrowRight size={17} /></a>
+        <a href="#giris" onClick={openLogin}>Doğrudan Sisteme Gir <ArrowRight size={17} /></a>
       </div>
     </section>
   );

@@ -119,7 +119,7 @@ function loadTurnstileScript() {
   return turnstileScriptPromise;
 }
 
-export default function LoginPage() {
+export default function LoginPage({ onClose }) {
   const {
     getTurnstileConfig,
     login,
@@ -548,7 +548,7 @@ export default function LoginPage() {
             <div className="auth-mobile-brand">
               <span className="auth-mobile-logo" aria-hidden="true">KY</span>
               <div><strong>KY ERP</strong><small>Kurumsal Yönetim Sistemi</small></div>
-              <a className="auth-modal-close" href="https://kyerp.net/" aria-label="Giriş penceresini kapat">×</a>
+              <button type="button" className="auth-modal-close" onClick={() => onClose?.()} aria-label="Giris penceresini kapat">&times;</button>
             </div>
             <div className="auth-card-head">
               <div>

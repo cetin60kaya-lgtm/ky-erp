@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   audit:
-    name: kyerp.net, app.kyerp.net, Boyahane, Desen ve bundle son denetimi
+    name: kyerp.net canonical Boyahane, Desen ve bundle son denetimi
     runs-on: ubuntu-latest
     steps:
       - name: Production sonucunu doğrula
@@ -41,9 +41,9 @@ jobs:
         run: |
           set -euo pipefail
           for url in \
-            "https://app.kyerp.net/" \
-            "https://app.kyerp.net/desen/desen-modeller" \
-            "https://app.kyerp.net/boyahane/uretim-gecmisi"; do
+            "https://kyerp.net/" \
+            "https://kyerp.net/desen/desen-modeller" \
+            "https://kyerp.net/boyahane/uretim-gecmisi"; do
             ready=0
             for attempt in $(seq 1 30); do
               if curl --location --fail --silent --show-error "$url" > /tmp/kyerp-app.html; then
@@ -64,13 +64,13 @@ jobs:
         run: |
           set -euo pipefail
           curl --location --fail --silent --show-error \
-            "https://app.kyerp.net/" > /tmp/kyerp-home.html
+            "https://kyerp.net/" > /tmp/kyerp-home.html
           script="$(grep -oE '<script[^>]+src="[^"]+"' /tmp/kyerp-home.html | head -1 | sed -n 's/.*src="\([^"]*\)"/\1/p')"
           test -n "$script"
           case "$script" in
             http://*|https://*) script_url="$script" ;;
-            /*) script_url="https://app.kyerp.net${script}" ;;
-            *) script_url="https://app.kyerp.net/${script#./}" ;;
+            /*) script_url="https://kyerp.net${script}" ;;
+            *) script_url="https://kyerp.net/${script#./}" ;;
           esac
           curl --location --fail --silent --show-error "$script_url" > /tmp/kyerp-live.js
           grep -q "kyerp_auth_token" /tmp/kyerp-live.js
@@ -88,7 +88,7 @@ jobs:
         shell: bash
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" \
-            -f body="## KY ERP ana alan adı ve uygulama son denetim\n\n- Production run: ${{ github.event.workflow_run.id }}\n- Commit: ${{ github.event.workflow_run.head_sha }}\n- kyerp.net kök ve yönlendirmesiz: ✅\n- app.kyerp.net: ✅\n- Temiz kurumsal giriş bundle: ✅\n- Desen rotası: ✅\n- Boyahane İmalat Boyaları rotası: ✅\n- Authenticated asset bridge canlı bundle: ✅\n- Akıllı Renk & Pantone Merkezi canlı bundle: ✅\n- KY ERP AI renk entegrasyonu frontend: ✅\n- API health: ✅\n- Sonuç: **success**"
+            -f body="## KY ERP ana alan adı ve uygulama son denetim\n\n- Production run: ${{ github.event.workflow_run.id }}\n- Commit: ${{ github.event.workflow_run.head_sha }}\n- kyerp.net kök ve yönlendirmesiz: ✅\n- kyerp.net: ✅\n- Temiz kurumsal giriş bundle: ✅\n- Desen rotası: ✅\n- Boyahane İmalat Boyaları rotası: ✅\n- Authenticated asset bridge canlı bundle: ✅\n- Akıllı Renk & Pantone Merkezi canlı bundle: ✅\n- KY ERP AI renk entegrasyonu frontend: ✅\n- API health: ✅\n- Sonuç: **success**"
 
       - name: Başarısız sonucu PR kaydına yaz
         if: failure()
@@ -97,4 +97,4 @@ jobs:
         shell: bash
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" \
-            -f body="## KY ERP ana alan adı ve uygulama son denetim\n\n- Production run: ${{ github.event.workflow_run.id }}\n- Commit: ${{ github.event.workflow_run.head_sha }}\n- Production sonucu: ${{ github.event.workflow_run.conclusion }}\n- Sonuç: **failure**\n- Kontrol: kyerp.net kök yönlendirme / app.kyerp.net / giriş bundle / Desen / Boyahane / authenticated asset bridge / AI renk merkezi"
+            -f body="## KY ERP ana alan adı ve uygulama son denetim\n\n- Production run: ${{ github.event.workflow_run.id }}\n- Commit: ${{ github.event.workflow_run.head_sha }}\n- Production sonucu: ${{ github.event.workflow_run.conclusion }}\n- Sonuç: **failure**\n- Kontrol: kyerp.net kök yönlendirme / kyerp.net / giriş bundle / Desen / Boyahane / authenticated asset bridge / AI renk merkezi"

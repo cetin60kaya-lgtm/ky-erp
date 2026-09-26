@@ -1,12 +1,12 @@
 import { ArrowRight, Mail, Phone } from "lucide-react";
 import "../../styles/public-corporate-footer.css";
 
-const APP_URL = "https://app.kyerp.net/";
 const CONTACT_EMAIL = "iletisim@kyerp.net";
 const CONTACT_PHONE = "+90 542 394 06 54";
 const CONTACT_PHONE_HREF = "tel:+905423940654";
 
-export default function PublicCorporateFooter() {
+export default function PublicCorporateFooter({ onOpenLogin }) {
+  const openLogin = (event) => { event?.preventDefault?.(); onOpenLogin?.(); };
   return (
     <footer className="ky-corporate-footer" id="iletisim">
       <div className="ky-corporate-footer__main">
@@ -24,7 +24,7 @@ export default function PublicCorporateFooter() {
           <a href="#moduller">Modüller</a>
           <a href="#surec">İş Akışı</a>
           <a href="#guvenlik">Güvenlik</a>
-          <a href={APP_URL}>Uygulamaya Giriş <ArrowRight size={14} /></a>
+          <a href="#giris" onClick={openLogin}>Uygulamaya Giriş <ArrowRight size={14} /></a>
         </nav>
 
         <div className="ky-corporate-footer__contact">
