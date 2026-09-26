@@ -37,10 +37,10 @@ public sealed class LegacyOperationalReportForm : Form
         var label=new Label{Text="Tarih Aralığı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)};filter.Controls.Add(label,0,0);from.Dock=DockStyle.Fill;filter.Controls.Add(from,1,0);filter.Controls.Add(new Label{Text="—",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter},2,0);to.Dock=DockStyle.Fill;filter.Controls.Add(to,3,0);var show=Btn("Göster",100,true);show.Click+=(_,_)=>LoadData();filter.Controls.Add(show,4,0);filter.Controls.Add(summary,5,0);root.Controls.Add(filter,0,0);
         if(!UsesDateRange(report)){label.Visible=false;from.Visible=false;to.Visible=false;}
         root.Controls.Add(grid,0,1);
-        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var preview=Btn("Önizle",100);var pdf=Btn("PDF Aktar",110);var excel=Btn("Excel Aktar",110);preview.Click+=(_,_)=>PrintPreview();pdf.Click+=(_,_)=>Export(false);excel.Click+=(_,_)=>Export(true);actions.Controls.AddRange([excel,pdf,preview]);root.Controls.Add(actions,0,2);Controls.Add(root);
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var preview=Btn("Önizle",100);var print=Btn("Yazdır",100);var pdf=Btn("PDF Aktar",110);var excel=Btn("Excel Aktar",110);preview.Click+=(_,_)=>PrintPreview();print.Click+=(_,_)=>PrintDirect();pdf.Click+=(_,_)=>Export(false);excel.Click+=(_,_)=>Export(true);actions.Controls.AddRange([excel,pdf,print,preview]);root.Controls.Add(actions,0,2);Controls.Add(root);
     }
 
-    static Button Btn(string text,int width,bool primary=false){var b=new Button{Text=text,Width=width,Height=36,FlatStyle=FlatStyle.Flat,BackColor=primary?Color.FromArgb(36,107,230):Color.White,ForeColor=primary?Color.White:Color.FromArgb(27,44,68),Font=new Font("Segoe UI",9f,FontStyle.Bold)};b.FlatAppearance.BorderColor=primary?b.BackColor:Color.FromArgb(216,225,236);return b;}
+    static Button Btn(string text,int width,bool primary=false){var b=new Button{Text=text,Width=width,Height=36,MinimumSize=new Size(width,36),MaximumSize=new Size(width,36),FlatStyle=FlatStyle.Flat,BackColor=primary?Color.FromArgb(36,107,230):Color.White,ForeColor=primary?Color.White:Color.FromArgb(27,44,68),Font=new Font("Segoe UI",9f,FontStyle.Bold)};b.FlatAppearance.BorderColor=primary?b.BackColor:Color.FromArgb(216,225,236);return b;}
     public LegacyOperationalReport Report=>report;
     public static string Title(LegacyOperationalReport value)=>value switch
     {
@@ -81,6 +81,12 @@ public sealed class LegacyOperationalReportForm : Form
     void Export(bool excel)
     {
         try{LoadData();using var save=new SaveFileDialog{Filter=excel?"Excel (*.xlsx)|*.xlsx":"PDF (*.pdf)|*.pdf",DefaultExt=excel?"xlsx":"pdf",FileName=Text.Replace(' ','-')};if(save.ShowDialog(this)!=DialogResult.OK)return;if(excel)ReportExporter.ExportExcel(save.FileName,Table());else ReportExporter.ExportPdf(save.FileName,Table());MessageBox.Show("Rapor oluşturuldu:\n"+save.FileName,Text,MessageBoxButtons.OK,MessageBoxIcon.Information);}catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+    }
+
+    void PrintDirect()
+    {
+        try { LoadData(); ReportPrintHelper.Print(this, Table(), grid.Columns.Count > 7); }
+        catch(Exception ex) { MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning); }
     }
 
     void PrintPreview()

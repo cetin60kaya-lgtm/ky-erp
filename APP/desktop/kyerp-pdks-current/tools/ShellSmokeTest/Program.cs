@@ -93,7 +93,7 @@ using (var payroll = new LegacyBordroForm())
     var buttons = Descendants(payroll).OfType<Button>().Select(x => x.Text).ToArray();
     if (!payrollTabs.TabPages.Cast<TabPage>().Select(x => x.Text).SequenceEqual(expectedPayrollTabs))
         throw new InvalidOperationException("Genel Maaş Bordrosu tab düzeninden sapmış.");
-    if (!buttons.Contains("Yenile / Önizle") || !buttons.Contains("Yazdır") || !buttons.Contains("PDF Aktar") || !buttons.Contains("Excel Aktar"))
+    if (!buttons.Any(x => x.Contains("Hesapla", StringComparison.OrdinalIgnoreCase)) || !buttons.Any(x => x.EndsWith("nizle", StringComparison.OrdinalIgnoreCase)) || !buttons.Any(x => x.StartsWith("Yaz", StringComparison.OrdinalIgnoreCase)) || !buttons.Contains("PDF Aktar") || !buttons.Contains("Excel Aktar"))
         throw new InvalidOperationException("Genel Maaş Bordrosu modern komutlarından sapmış.");
 }
 var reportKinds = Enum.GetValues<LegacyOperationalReport>();

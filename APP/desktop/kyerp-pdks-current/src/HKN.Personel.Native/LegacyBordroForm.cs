@@ -48,8 +48,8 @@ public sealed class LegacyBordroForm : Form
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(14) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(18, 8, 18, 8) };
         header.Controls.Add(new Label
         {
@@ -117,14 +117,15 @@ public sealed class LegacyBordroForm : Form
         previewGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         split.Panel2.Padding = new Padding(8, 0, 0, 0);
         split.Panel2.Controls.Add(previewGrid);
-        root.Controls.Add(split, 0, 1);
+        root.Controls.Add(split, 0, 2);
 
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 10, 0, 0) };
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 8, 0, 0), WrapContents = false };
         actions.Controls.Add(ActionButton("Excel Aktar", () => Export(true), 118));
         actions.Controls.Add(ActionButton("PDF Aktar", () => Export(false), 118));
         actions.Controls.Add(ActionButton("Yazdır", Print, 104));
-        actions.Controls.Add(ActionButton("Yenile / Önizle", RefreshPreview, 138, true));
-        root.Controls.Add(actions, 0, 2);
+        actions.Controls.Add(ActionButton("Önizle", PreviewReport, 104));
+        actions.Controls.Add(ActionButton("Hesapla / Yenile", RefreshPreview, 138, true));
+        root.Controls.Add(actions, 0, 1);
         Controls.Add(root);
     }
     static void AddRow(TableLayoutPanel table, int row, string label, Control control)
@@ -149,6 +150,8 @@ public sealed class LegacyBordroForm : Form
             Text = text,
             Width = width,
             Height = 36,
+            MinimumSize = new Size(width, 36),
+            MaximumSize = new Size(width, 36),
             FlatStyle = FlatStyle.Flat,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             BackColor = primary ? Color.FromArgb(36, 107, 230) : Color.White,
@@ -161,7 +164,7 @@ public sealed class LegacyBordroForm : Form
     void Init()
     {
         start.Value = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-        end.Value = DateTime.Today;
+        end.Value = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1).AddDays(-1);
         LoadLookup(group, "GRUP");
         LoadLookup(department, "BOLUM");
         LoadLookup(service, "SERVIS");
@@ -318,6 +321,16 @@ public sealed class LegacyBordroForm : Form
         var reportTitle = string.IsNullOrWhiteSpace(title.Text) ? "Genel Maaş Bordrosu" : title.Text.Trim();
         var reportTable = new ReportTable($"{reportTitle} • {start.Value:dd.MM.yyyy} - {end.Value:dd.MM.yyyy}", columns, rows);
         return CompanyBranding.Decorate(reportTable);
+    }
+
+    void PreviewReport()
+    {
+        try
+        {
+            lastPreview = CalculatePreview();
+            ReportPrintHelper.Preview(this, ToReport(lastPreview), landscape.Checked);
+        }
+        catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
 
     void Print()
