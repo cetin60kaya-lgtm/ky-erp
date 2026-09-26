@@ -19,14 +19,14 @@ test("KY ERP Security is a separate installable phone tablet PWA",()=>{
   assert.match(manifest,/"id": "\/guvenlik\/"/);
   assert.match(manifest,/"scope": "\/guvenlik\/"/);
   assert.match(manifest,/"start_url": "\/guvenlik\/"/);
-  assert.match(setup,/Microsoft Authenticator mantığında ayrı telefon\/tablet onay uygulaması/);
-  assert.match(setup,/Sorun olursa yedek bağlantı kodu oluştur/);
+  assert.match(setup,/KY ERP ve KY Güvenlik telefonda iki ayrı uygulama olarak çalışır/);
+  assert.match(setup,/8 karakter bağlantı kodu üret/);
 });
 
 test("security app uses one consolidated notification and opens app for decision",()=>{
   assert.match(sw,/const TAG="kyerp-security-approval"/);
   assert.match(sw,/tag:TAG/);
-  assert.match(sw,/renotify:false/);
+  assert.match(sw,/renotify:true/);
   assert.match(sw,/notificationclick/);
   assert.doesNotMatch(sw,/action:"approve"/);
   assert.doesNotMatch(sw,/action:"deny"/);
@@ -41,19 +41,23 @@ test("approval is protected by device signature and optional local biometric scr
   assert.match(app,/userVerification:"required"/);
 });
 
-test("security app owns signed API calls while the service worker is notification transport only",()=>{
+test("security app and service worker use signed device identity for notification context",()=>{
   assert.match(app,/signDeviceAuth/);
   assert.match(app,/KYERP-DEVICE-AUTH-V1/);
   assert.match(app,/X-KYERP-Security-Timestamp/);
   assert.match(app,/X-KYERP-Security-Signature/);
-  assert.doesNotMatch(sw,/API_BASE|deviceFetch|signDeviceAuth|X-KYERP-Push-Device|X-KYERP-Push-Token/);
+  assert.match(sw,/API_BASE/);
+  assert.match(sw,/deviceFetch/);
+  assert.match(sw,/signDeviceAuth/);
+  assert.match(sw,/X-KYERP-Push-Device/);
+  assert.match(sw,/X-KYERP-Push-Token/);
   assert.match(sw,/showWakeNotification/);
   assert.match(sw,/clearLegacyCaches/);
-  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+  assert.match(sw,/self\.addEventListener\("fetch"/);
 });
 
 test("main ERP exposes connection diagnostics and a one-time access refresh path",()=>{
-  assert.match(setup,/yedek bağlantı kodu oluştur/);
+  assert.match(setup,/createEnrollment/);
   assert.match(setup,/Bağlantıyı Kontrol Et/);
   assert.match(setup,/refreshSecurityConnection/);
 });
@@ -67,12 +71,14 @@ test("security app verifies server health before ready and provides one-tap conn
   assert.match(app,/replaceDeviceId/);
 });
 
-test("push delivery always shows one wake notification without depending on an API fetch",()=>{
+test("push delivery resolves pending context and includes the matching number when available",()=>{
   assert.match(sw,/self\.addEventListener\("push"/);
   assert.match(sw,/showWakeNotification/);
   assert.match(sw,/tag:TAG/);
-  assert.match(sw,/renotify:false/);
-  assert.doesNotMatch(sw,/deviceFetch|fetchFailed|KY ERP · Bağlantı Kontrolü/);
+  assert.match(sw,/renotify:true/);
+  assert.match(sw,/deviceFetch/);
+  assert.match(sw,/auth\/push\/device\/pending/);
+  assert.match(sw,/Eşleştirme No/);
 });
 
 test("professional security app exposes approvals, short login code and trusted-device tabs",()=>{
@@ -82,7 +88,7 @@ test("professional security app exposes approvals, short login code and trusted-
   assert.match(app,/approval-match/);
   assert.match(app,/repairConnection/);
   assert.match(setup,/Bağlantıyı Kontrol Et/);
-  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+  assert.match(sw,/self\.addEventListener\("fetch"/);
 });
 
 test("phone approval has explicit Android and iPhone installation entry points and installer mode",()=>{
@@ -98,9 +104,9 @@ test("phone approval has explicit Android and iPhone installation entry points a
   assert.match(setup,/visibleDevices/);
   assert.match(setup,/intent:\/\//);
   assert.match(installer,/openFullChrome/);
-  assert.match(installer,/Chrome'da Devam Et/);
+  assert.match(installer,/Chrome'da Aç/);
   assert.match(html,/id="iosInstallNote"/);
-  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+  assert.match(sw,/self\.addEventListener\("fetch"/);
 });
 
 test("iPhone Safari permission is requested directly from a user gesture before async enrollment",()=>{
@@ -117,11 +123,12 @@ test("iPhone Safari permission is requested directly from a user gesture before 
   assert.match(manifest,/kyerp-security-512\.png/);
 });
 
-test("security service worker is push-only and never intercepts app shell requests",()=>{
+test("security service worker uses network-only fetch without stale shell caching",()=>{
   assert.match(sw,/self\.addEventListener\("push"/);
   assert.match(sw,/self\.addEventListener\("notificationclick"/);
-  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
-  assert.doesNotMatch(sw,/respondWith|cache\.match|cache\.put/);
+  assert.match(sw,/self\.addEventListener\("fetch"/);
+  assert.match(sw,/event\.respondWith\(fetch\(event\.request\)\)/);
+  assert.doesNotMatch(sw,/cache\.match|cache\.put/);
   assert.match(sw,/kyerp-security-icon\.svg/);
 });
 
@@ -139,7 +146,7 @@ test("main ERP and KY Security have separate install and service-worker ownershi
   assert.match(legacy,/registration\.unregister/);
   assert.doesNotMatch(legacy,/auth\/push\/device\/decision/);
   assert.match(manifest,/\/guvenlik\/kyerp-security-icon\.svg/);
-  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+  assert.match(sw,/self\.addEventListener\("fetch"/);
 });
 
 test("security app never renders a blank approvals screen on connection failure",()=>{
@@ -200,5 +207,5 @@ test("approved login clears every stale KY Security notification and duplicate d
   assert.match(app,/getRegistrations/);
   assert.match(app,/getNotifications\(\)/);
   assert.match(sw,/getNotifications\(\)/);
-  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+  assert.match(sw,/self\.addEventListener\("fetch"/);
 });

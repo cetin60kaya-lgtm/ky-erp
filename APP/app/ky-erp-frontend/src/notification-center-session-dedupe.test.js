@@ -7,13 +7,12 @@ import { fileURLToPath } from "node:url";
 const here=dirname(fileURLToPath(import.meta.url));
 const shell=readFileSync(resolve(here,"layouts/AppShellV3.jsx"),"utf8");
 
-test("notification center deduplicates session approvals while security decisions stay phone-owned",()=>{
-  assert.match(shell,/function notificationResolutionKey\(item\)/);
+test("notification center deduplicates security/session records while approvals remain phone-owned",()=>{
   assert.match(shell,/const seenNotificationKeys = new Set\(\)/);
   assert.match(shell,/const key = notificationResolutionKey\(item\)/);
   assert.match(shell,/resolvedNotificationIdsRef\.current\.has\(key\) \|\| seenNotificationKeys\.has\(key\)/);
   assert.match(shell,/seenNotificationKeys\.add\(key\)/);
-  assert.match(shell,/meta\?\.securityCenter === true/);
-  assert.match(shell,/setPhoneApprovalOpen\(true\)/);
-  assert.doesNotMatch(shell,/SESSION_TRUST_APPROVE|SESSION_TRUST_REJECT|runPhoneApprovedSecurityAction/);
+  assert.doesNotMatch(shell,/decideNotificationApproval/);
+  assert.doesNotMatch(shell,/shell-v3-notification-inline-actions/);
+  assert.match(shell,/shell-v3-notification-readonly/);
 });

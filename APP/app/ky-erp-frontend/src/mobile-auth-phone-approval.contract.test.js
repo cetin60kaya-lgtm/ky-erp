@@ -47,7 +47,7 @@ test("phone approval is handed off to the dedicated KY ERP Security PWA", () => 
   const securityManifest = read("../public/guvenlik/manifest.webmanifest");
 
   assert.match(setup, /security-enrollment\/start/);
-  assert.match(setup, /Sorun olursa yedek bağlantı kodu oluştur/);
+  assert.match(setup, /8 karakter bağlantı kodu üret/);
   assert.match(setup, /security\.kyerp\.net\/guvenlik/);
   assert.match(securityManifest, /"id": "\/guvenlik\/"/);
   assert.match(securityWorker, /const TAG="kyerp-security-approval"/);

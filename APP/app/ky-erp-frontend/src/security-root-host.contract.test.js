@@ -8,22 +8,24 @@ const here=dirname(fileURLToPath(import.meta.url));
 const root=resolve(here,"../../../..");
 const host=readFileSync(resolve(root,"APP/cloud/ky-erp-security-host/worker.js"),"utf8");
 
-test("security host serves only the fresh /guvenlik PWA",()=>{
-  assert.match(host,/const APP_PREFIX="\/guvenlik"/);
-  assert.match(host,/const APP_URL="\/guvenlik\/"/);
-  assert.match(host,/X-KYERP-Security-App","fresh-v3"/);
-  assert.match(host,/url\.pathname===APP_URL/);
+test("security host keeps /ky-guvenlik launch compatibility over /guvenlik source",()=>{
+  assert.match(host,/const SOURCE_PREFIX="\/guvenlik"/);
+  assert.match(host,/const PRIMARY_PREFIX="\/ky-guvenlik"/);
+  assert.match(host,/COMPAT_PREFIXES=\[PRIMARY_PREFIX,SOURCE_PREFIX\]/);
+  assert.match(host,/X-KYERP-Security-App","fresh-v3-compat"/);
+  assert.match(host,/return proxyScoped\(request,url,prefix,env\)/);
 });
 
-test("old security URLs are retired",()=>{
-  assert.match(host,/LEGACY_PREFIXES=\["\/security","\/ky-guvenlik","\/ky-guvenlik-recover"\]/);
+test("only obsolete security URLs are retired",()=>{
+  assert.match(host,/LEGACY_PREFIXES=\["\/security","\/ky-guvenlik-recover"\]/);
   assert.match(host,/RETIRE_SW/);
   assert.match(host,/self\.registration\.unregister/);
   assert.match(host,/return new Response\("Gone",\{status:410/);
 });
 
-test("legacy service workers never intercept navigation",()=>{
+test("retired root service workers redirect navigation to the compatibility launch",()=>{
   const retired=host.match(/const RETIRE_SW=`([\s\S]*?)`;/)?.[1]||"";
-  assert.doesNotMatch(retired,/addEventListener\("fetch"/);
-  assert.match(retired,/navigate\("\/guvenlik\/"\)/);
+  assert.match(retired,/addEventListener\("fetch"/);
+  assert.match(retired,/TARGET="\/ky-guvenlik\/"/);
+  assert.match(retired,/Response\.redirect\(new URL\(TARGET,self\.location\.origin\),308\)/);
 });
