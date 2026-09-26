@@ -35,8 +35,31 @@ public sealed class MainForm : Form
     readonly CheckedListBox peopleList = new() { Dock = DockStyle.Fill, CheckOnClick = true };
     readonly CheckedListBox dayList = new() { Dock = DockStyle.Fill, CheckOnClick = true };
     readonly DateTimePicker ioMonth = MonthPicker();
+    readonly NumericUpDown ioYear = new() { Minimum = 2010, Maximum = 2100, Width = 75 };
+    readonly ComboBox ioMonthNo = MonthCombo();
+    readonly ComboBox ioPerson = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+    readonly NumericUpDown auditYear = new() { Minimum = 2010, Maximum = 2100, Width = 75 };
+    readonly ComboBox auditMonthNo = MonthCombo();
+    readonly ComboBox auditPerson = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+    readonly NumericUpDown eYear = new() { Minimum = 2010, Maximum = 2100, Width = 75 };
+    readonly ComboBox eMonthNo = MonthCombo();
+    readonly ComboBox ePerson = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+    readonly DataGridView eHistoryGrid = Grid();
+    readonly NumericUpDown eHistoryYear = new() { Minimum = 2010, Maximum = 2100, Width = 75 };
+    readonly ComboBox eHistoryMonth = MonthCombo();
+    readonly ComboBox eHistoryPerson = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
     readonly DateTimePicker payrollMonth = MonthPicker();
+    readonly NumericUpDown payrollYear = new(){Minimum=2010,Maximum=2100,Width=75};
+    readonly ComboBox payrollMonthNo = MonthCombo();
+    readonly ComboBox payrollPerson = new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=220};
     readonly DateTimePicker paymentMonth = MonthPicker();
+    readonly NumericUpDown paymentYear = new(){Minimum=2010,Maximum=2100,Width=75};
+    readonly ComboBox paymentMonthNo = MonthCombo();
+    readonly ComboBox paymentPerson = new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=220};
+    readonly DateTimePicker advanceMonth = MonthPicker();
+    readonly NumericUpDown advanceYear = new(){Minimum=2010,Maximum=2100,Width=75};
+    readonly ComboBox advanceMonthNo = MonthCombo();
+    readonly ComboBox advancePerson = new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=220};
     readonly DateTimePicker rangeStart = new() { Format = DateTimePickerFormat.Short };
     readonly DateTimePicker rangeEnd = new() { Format = DateTimePickerFormat.Short };
     readonly MaskedTextBox inMin = TimeBox("08:20"), inMax = TimeBox("08:35");
@@ -54,7 +77,9 @@ public sealed class MainForm : Form
         Build();
         personFilter.SelectedIndexChanged += (_, _) => LoadPeople();
         eStart.ValueChanged += (_, _) => RebuildEDays(); eEnd.ValueChanged += (_, _) => RebuildEDays();
+        eYear.ValueChanged += (_, _) => ApplyEPeriodFilter(); eMonthNo.SelectedIndexChanged += (_, _) => ApplyEPeriodFilter(); ePerson.SelectedIndexChanged += (_, _) => ApplyEPeriodFilter();
         Shown += (_, _) => { DetectSources(); Connect(); };
+        ioYear.Value = auditYear.Value = eYear.Value = eHistoryYear.Value = payrollYear.Value = paymentYear.Value = advanceYear.Value = DateTime.Today.Year;
         rangeStart.ValueChanged += (_, _) => RebuildDays();
         rangeEnd.ValueChanged += (_, _) => RebuildDays();
     }
@@ -72,6 +97,7 @@ public sealed class MainForm : Form
     };
 
     static DateTimePicker MonthPicker() => new() { Format = DateTimePickerFormat.Custom, CustomFormat = "MMMM yyyy", ShowUpDown = true };
+    static ComboBox MonthCombo(){ var c=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=110}; c.Items.AddRange(new object[]{"Tümü","Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"}); c.SelectedIndex=DateTime.Today.Month; return c; }
     static MaskedTextBox TimeBox(string value) => new("00:00") { Text = value, Width = 60 };
     void Build()
     {
@@ -82,9 +108,10 @@ public sealed class MainForm : Form
         tabs.TabPages.Add(Page("Personel", BuildPeople()));
         tabs.TabPages.Add(Page("Giri\u015f-\u00c7\u0131k\u0131\u015f", BuildIo()));
         tabs.TabPages.Add(Page("Toplu \u0130\u015flem", BuildBulk()));
-        tabs.TabPages.Add(Page("E \u0130\u015flemleri", BuildE()));
+        tabs.TabPages.Add(Page("E İşlemleri", BuildE()));
+        tabs.TabPages.Add(Page("E İşlem Geçmişi", BuildEHistory()));
         tabs.TabPages.Add(Page("Bordro", BuildPayroll()));
-        tabs.TabPages.Add(Page("├ûdeme / Avans", BuildPayments()));
+        tabs.TabPages.Add(Page("Ödeme / Avans", BuildPayments()));
         tabs.TabPages.Add(Page("Data Kontrol", BuildAudit()));
         root.Controls.Add(tabs, 0, 1);
         Controls.Add(root);
@@ -137,11 +164,11 @@ public sealed class MainForm : Form
 
     Control BuildIo()
     {
-        var p = new Panel { Dock = DockStyle.Fill }; var bar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42 };
-        bar.Controls.Add(new Label { Text = "Ay", AutoSize = true, Padding = new Padding(0, 8, 4, 0) }); bar.Controls.Add(ioMonth);
-        bar.Controls.Add(Btn("Listele", LoadIo));
-        bar.Controls.Add(new Label { Text = "E i\u015flemleri ayr\u0131 E \u0130\u015flemleri sekmesinden toplu y\u00f6netilir.", AutoSize = true, Padding = new Padding(12,8,0,0) });
-        p.Controls.Add(ioGrid); p.Controls.Add(bar); return p;
+        var p=new Panel{Dock=DockStyle.Fill}; var bar=new FlowLayoutPanel{Dock=DockStyle.Top,Height=46};
+        bar.Controls.Add(new Label{Text="Yıl",AutoSize=true,Padding=new Padding(0,8,3,0)}); bar.Controls.Add(ioYear);
+        bar.Controls.Add(new Label{Text="Ay",AutoSize=true,Padding=new Padding(7,8,3,0)}); bar.Controls.Add(ioMonthNo);
+        bar.Controls.Add(new Label{Text="Personel",AutoSize=true,Padding=new Padding(7,8,3,0)}); bar.Controls.Add(ioPerson);
+        bar.Controls.Add(Btn("Listele",LoadIo)); p.Controls.Add(ioGrid); p.Controls.Add(bar); return p;
     }
     Control BuildBulk()
     {
@@ -160,7 +187,7 @@ public sealed class MainForm : Form
         root.Controls.Add(controls, 0, 0); root.SetColumnSpan(controls, 3);
         root.Controls.Add(peopleList, 0, 1); root.Controls.Add(dayList, 1, 1); root.Controls.Add(bulkGrid, 2, 1);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(4,6,4,2) };
-        actions.Controls.Add(WideBtn("T\u00fcm Personeli Se\u00e7", CheckAllPeople, 150)); actions.Controls.Add(WideBtn("T\u00fcm G\u00fcnleri Se\u00e7", CheckAllDays, 145));
+        actions.Controls.Add(WideBtn("Tüm Personeli Seç", CheckAllPeople, 145)); actions.Controls.Add(WideBtn("Tüm Günleri Seç", CheckAllDays, 135)); actions.Controls.Add(WideBtn("Hafta Sonu Hariç", CheckWeekdays, 145));
         actions.Controls.Add(WideBtn("\u00d6nizleme", PreviewBulk, 115)); actions.Controls.Add(WideBtn("Uygula", ApplyBulk, 100));
         root.Controls.Add(actions, 0, 2); root.SetColumnSpan(actions, 3);
         return root;
@@ -168,25 +195,29 @@ public sealed class MainForm : Form
 
     Control BuildE()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 3, Padding = new Padding(8) };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 300)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        var top = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true };
-        top.Controls.Add(new Label { Text = "Ba\u015flang\u0131\u00e7", AutoSize = true, Padding = new Padding(0,8,2,0) }); top.Controls.Add(eStart);
-        top.Controls.Add(new Label { Text = "Biti\u015f", AutoSize = true, Padding = new Padding(8,8,2,0) }); top.Controls.Add(eEnd);
-        top.Controls.Add(new Label { Text = "\u0130\u015flem", AutoSize = true, Padding = new Padding(8,8,2,0) }); top.Controls.Add(eSide);
-        top.Controls.Add(new Label { Text = "Yaln\u0131z mevcut normal giri\u015f/\u00e7\u0131k\u0131\u015f E'ye \u00e7evrilir; yeni saat \u00fcretilmez.", AutoSize = true, Padding = new Padding(12,8,0,0) });
-        root.Controls.Add(top,0,0); root.SetColumnSpan(top,3);
-        root.Controls.Add(ePeopleList,0,1); root.Controls.Add(eDayList,1,1); root.Controls.Add(eGrid,2,1);
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(4,6,4,2) };
-        actions.Controls.Add(WideBtn("T\u00fcm Aktifleri Se\u00e7", CheckAllEPeople, 145)); actions.Controls.Add(WideBtn("T\u00fcm G\u00fcnleri Se\u00e7", CheckAllEDays, 145)); actions.Controls.Add(WideBtn("E \u00d6nizleme", PreviewBulkE, 120)); actions.Controls.Add(WideBtn("E Uygula", ApplyBulkE, 120));
-        root.Controls.Add(actions,0,2); root.SetColumnSpan(actions,3); return root;
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=3,Padding=new Padding(8)};
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,300)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,250)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,78)); root.RowStyles.Add(new RowStyle(SizeType.Percent,100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
+        var top=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true}; top.Controls.Add(new Label{Text="Yıl",AutoSize=true,Padding=new Padding(0,8,2,0)}); top.Controls.Add(eYear); top.Controls.Add(new Label{Text="Ay",AutoSize=true,Padding=new Padding(8,8,2,0)}); top.Controls.Add(eMonthNo); top.Controls.Add(new Label{Text="Personel",AutoSize=true,Padding=new Padding(8,8,2,0)}); top.Controls.Add(ePerson); top.Controls.Add(new Label{Text="İşlem",AutoSize=true,Padding=new Padding(8,8,2,0)}); top.Controls.Add(eSide);
+        root.Controls.Add(top,0,0); root.SetColumnSpan(top,3); root.Controls.Add(ePeopleList,0,1); root.Controls.Add(eDayList,1,1); root.Controls.Add(eGrid,2,1);
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.LeftToRight,WrapContents=false,Padding=new Padding(4,6,4,2)}; actions.Controls.Add(WideBtn("Tüm Aktifleri Seç",CheckAllEPeople,135)); actions.Controls.Add(WideBtn("Tüm Günleri Seç",CheckAllEDays,130)); actions.Controls.Add(WideBtn("Hafta Sonu Hariç",CheckEWeekdays,145)); actions.Controls.Add(WideBtn("E Önizleme",PreviewBulkE,115)); actions.Controls.Add(WideBtn("E Uygula",ApplyBulkE,110)); root.Controls.Add(actions,0,2); root.SetColumnSpan(actions,3); return root;
+    }
+    Control BuildEHistory()
+    {
+        var p=new Panel{Dock=DockStyle.Fill}; var bar=new FlowLayoutPanel{Dock=DockStyle.Top,Height=46};
+        bar.Controls.Add(new Label{Text="Yıl",AutoSize=true,Padding=new Padding(0,8,3,0)}); bar.Controls.Add(eHistoryYear);
+        bar.Controls.Add(new Label{Text="Ay",AutoSize=true,Padding=new Padding(7,8,3,0)}); bar.Controls.Add(eHistoryMonth);
+        bar.Controls.Add(new Label{Text="Personel",AutoSize=true,Padding=new Padding(7,8,3,0)}); bar.Controls.Add(eHistoryPerson);
+        bar.Controls.Add(Btn("Listele",LoadEHistory)); bar.Controls.Add(Btn("İmza CSV",ExportEHistoryCsv));
+        p.Controls.Add(eHistoryGrid); p.Controls.Add(bar); return p;
     }
     Control BuildPayroll()
     {
-        var p = new Panel { Dock = DockStyle.Fill }; var bar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42 };
-        bar.Controls.Add(new Label { Text = "Ay", AutoSize = true, Padding = new Padding(0, 8, 4, 0) }); bar.Controls.Add(payrollMonth);
-        bar.Controls.Add(WideBtn("Bordroyu Listele", LoadPayroll, 135)); bar.Controls.Add(WideBtn("Se\u00e7ili Bordroyu D\u00fczenle", EditPayrollSelected, 190));
+        var p=new Panel{Dock=DockStyle.Fill}; var bar=new FlowLayoutPanel{Dock=DockStyle.Top,Height=46};
+        bar.Controls.Add(new Label{Text="Yıl",AutoSize=true,Padding=new Padding(0,8,3,0)}); bar.Controls.Add(payrollYear);
+        bar.Controls.Add(new Label{Text="Ay",AutoSize=true,Padding=new Padding(7,8,3,0)}); bar.Controls.Add(payrollMonthNo);
+        bar.Controls.Add(new Label{Text="Personel",AutoSize=true,Padding=new Padding(7,8,3,0)}); bar.Controls.Add(payrollPerson);
+        bar.Controls.Add(WideBtn("Bordroyu Listele",LoadPayroll,135)); bar.Controls.Add(WideBtn("Seçili Bordroyu Düzenle",EditPayrollSelected,190));
         p.Controls.Add(payrollGrid); p.Controls.Add(bar); return p;
     }
     Control BuildPayments()
@@ -194,11 +225,11 @@ public sealed class MainForm : Form
         var tabs2 = new TabControl { Dock = DockStyle.Fill };
         var pay = new Panel { Dock = DockStyle.Fill };
         var payBar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44 };
-        payBar.Controls.Add(new Label { Text = "Ay", AutoSize = true, Padding = new Padding(0,8,4,0) }); payBar.Controls.Add(paymentMonth);
+        payBar.Controls.Add(new Label{Text="Yıl",AutoSize=true,Padding=new Padding(0,8,3,0)}); payBar.Controls.Add(paymentYear); payBar.Controls.Add(new Label{Text="Ay",AutoSize=true,Padding=new Padding(7,8,3,0)}); payBar.Controls.Add(paymentMonthNo); payBar.Controls.Add(new Label{Text="Personel",AutoSize=true,Padding=new Padding(7,8,3,0)}); payBar.Controls.Add(paymentPerson);
         payBar.Controls.Add(WideBtn("\u00d6demeleri Listele", LoadPayments, 145)); payBar.Controls.Add(WideBtn("Se\u00e7ili \u00d6demeyi D\u00fczenle", EditSelectedPayment, 190));
         pay.Controls.Add(paymentGrid); pay.Controls.Add(payBar);
         var adv = new Panel { Dock = DockStyle.Fill };
-        var advBar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44 };
+        var advBar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 44 }; advBar.Controls.Add(new Label{Text="Yıl",AutoSize=true,Padding=new Padding(0,8,3,0)}); advBar.Controls.Add(advanceYear); advBar.Controls.Add(new Label{Text="Ay",AutoSize=true,Padding=new Padding(7,8,3,0)}); advBar.Controls.Add(advanceMonthNo); advBar.Controls.Add(new Label{Text="Personel",AutoSize=true,Padding=new Padding(7,8,3,0)}); advBar.Controls.Add(advancePerson);
         advBar.Controls.Add(WideBtn("Avanslar\u0131 Listele", LoadAdvances, 145)); advBar.Controls.Add(WideBtn("Se\u00e7ili Avans\u0131 D\u00fczenle", EditSelectedAdvance, 185));
         adv.Controls.Add(advanceGrid); adv.Controls.Add(advBar);
         tabs2.TabPages.Add(Page("\u00d6demeler", pay)); tabs2.TabPages.Add(Page("Avanslar", adv));
@@ -208,14 +239,14 @@ public sealed class MainForm : Form
     void LoadPayments()
     {
         if (db is null) return;
-        var a = new DateTime(paymentMonth.Value.Year, paymentMonth.Value.Month, 1); var b = a.AddMonths(1);
-        paymentGrid.DataSource = db.Query("select o.PKNO,k.AD,k.SOYAD,o.BASTAR,o.BITTAR,o.NODENEN,o.NOTARIH,o.FMODENEN,o.FMOTARIH from ODEME o left join KIMLIK k on k.PKNO=o.PKNO where o.BASTAR>=@A and o.BASTAR<@B order by o.PKNO", new FbParameter("@A",a), new FbParameter("@B",b));
+        var a = new DateTime((int)paymentYear.Value, paymentMonthNo.SelectedIndex==0?1:paymentMonthNo.SelectedIndex, 1); var b = paymentMonthNo.SelectedIndex==0?a.AddYears(1):a.AddMonths(1); var card=SelectedCard(paymentPerson);
+        var q="select o.PKNO,k.AD,k.SOYAD,o.BASTAR,o.BITTAR,o.NODENEN,o.NOTARIH,o.FMODENEN,o.FMOTARIH from ODEME o left join KIMLIK k on k.PKNO=o.PKNO where o.BASTAR>=@A and o.BASTAR<@B"+(card is null?"":" and o.PKNO=@P")+" order by o.PKNO";paymentGrid.DataSource=card is null?db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b)):db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card));
     }
 
     void LoadAdvances()
     {
         if (db is null) return;
-        advanceGrid.DataSource = db.Query("select a.KOD,a.PKNO,k.AD,k.SOYAD,a.TARIH,a.MIKTAR,a.VTARIH,a.TURKOD,a.TOPMIKTAR,a.TAKSITSAYISI,a.TAKSITNO,a.ACIKLAMA from AVANS a left join KIMLIK k on k.PKNO=a.PKNO order by a.TARIH desc,a.KOD desc");
+        var a=new DateTime((int)advanceYear.Value,advanceMonthNo.SelectedIndex==0?1:advanceMonthNo.SelectedIndex,1);var b=advanceMonthNo.SelectedIndex==0?a.AddYears(1):a.AddMonths(1);var card=SelectedCard(advancePerson);var q="select a.KOD,a.PKNO,k.AD,k.SOYAD,a.TARIH,a.MIKTAR,a.VTARIH,a.TURKOD,a.TOPMIKTAR,a.TAKSITSAYISI,a.TAKSITNO,a.ACIKLAMA from AVANS a left join KIMLIK k on k.PKNO=a.PKNO where a.TARIH>=@A and a.TARIH<@B"+(card is null?"":" and a.PKNO=@P")+" order by a.TARIH desc,a.KOD desc";advanceGrid.DataSource=card is null?db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b)):db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card));
     }
 
     void EditSelectedPayment()
@@ -231,7 +262,7 @@ public sealed class MainForm : Form
     void EditSelectedAdvance()
     {
         if (db is null || advanceGrid.SelectedRows.Count != 1) { MessageBox.Show("Tek avans sat\u0131r\u0131 se\u00e7in."); return; }
-        var r = advanceGrid.SelectedRows[0]; using var f = new RecordEditForm("Avans D├╝zenle", r, "TARIH","MIKTAR","VTARIH","TURKOD","TOPMIKTAR","TAKSITSAYISI","TAKSITNO","ACIKLAMA");
+        var r = advanceGrid.SelectedRows[0]; using var f = new RecordEditForm("Avans Düzenle", r, "TARIH","MIKTAR","VTARIH","TURKOD","TOPMIKTAR","TAKSITSAYISI","TAKSITNO","ACIKLAMA");
         if (f.ShowDialog(this) != DialogResult.OK) return;
         var kod = Convert.ToInt32(r.Cells["KOD"].Value);
         db.Execute("update AVANS set TARIH=@T,MIKTAR=@M,VTARIH=@V,TURKOD=@TK,TOPMIKTAR=@TM,TAKSITSAYISI=@TS,TAKSITNO=@TN,ACIKLAMA=@A where KOD=@K", new FbParameter("@T",DateOrDbNull(f.Get("TARIH"))), new FbParameter("@M",Num(f.Get("MIKTAR"))), new FbParameter("@V",DateOrDbNull(f.Get("VTARIH"))), new FbParameter("@TK",IntNum(f.Get("TURKOD"))), new FbParameter("@TM",Num(f.Get("TOPMIKTAR"))), new FbParameter("@TS",IntNum(f.Get("TAKSITSAYISI"))), new FbParameter("@TN",IntNum(f.Get("TAKSITNO"))), new FbParameter("@A",f.Get("ACIKLAMA")), new FbParameter("@K",kod));
@@ -240,15 +271,16 @@ public sealed class MainForm : Form
 
     Control BuildAudit()
     {
-        var p = new Panel { Dock = DockStyle.Fill }; var bar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42 };
-        bar.Controls.Add(Btn("E / TNF \u00c7ak\u0131\u015fmalar\u0131n\u0131 Tara", LoadAudit));
-        p.Controls.Add(auditGrid); p.Controls.Add(bar); return p;
+        var p=new Panel{Dock=DockStyle.Fill}; var bar=new FlowLayoutPanel{Dock=DockStyle.Top,Height=46};
+        bar.Controls.Add(new Label{Text="Yıl",AutoSize=true,Padding=new Padding(0,8,3,0)}); bar.Controls.Add(auditYear);
+        bar.Controls.Add(new Label{Text="Ay",AutoSize=true,Padding=new Padding(7,8,3,0)}); bar.Controls.Add(auditMonthNo);
+        bar.Controls.Add(new Label{Text="Personel",AutoSize=true,Padding=new Padding(7,8,3,0)}); bar.Controls.Add(auditPerson);
+        bar.Controls.Add(Btn("E / TNF Tara",LoadAudit)); bar.Controls.Add(Btn("TNF Kayıtlarını Listele",LoadTnfAudit)); p.Controls.Add(auditGrid); p.Controls.Add(bar); return p;
     }
-
     void DetectSources()
     {
         var configured = Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH", EnvironmentVariableTarget.User);
-        string[] dbCandidates = [configured ?? "", @"C:\Hedef500\Data\DATABASE.GDB", @"D:\Hedef500\Hedef500\Data\DATABASE.GDB"];
+        string[] dbCandidates = [@"D:\Hedef500\Hedef500\Data\DATABASE.GDB", @"C:\Hedef500\Data\DATABASE.GDB", configured ?? ""];
         dbPath.Text = dbCandidates.FirstOrDefault(File.Exists) ?? configured ?? "";
         var root = string.IsNullOrWhiteSpace(dbPath.Text) ? "" : Directory.GetParent(Path.GetDirectoryName(dbPath.Text) ?? "")?.FullName ?? "";
         var temp = Path.Combine(root, "Temp");
@@ -319,6 +351,8 @@ public sealed class MainForm : Form
             for (var i = 0; i < orderCols.Length; i++) if (peopleGrid.Columns.Contains(orderCols[i])) peopleGrid.Columns[orderCols[i]].DisplayIndex = i;
             var headers = new Dictionary<string,string> { ["PKNO"]="Kart No",["AD"]="Ad",["SOYAD"]="Soyad",["SICILNO"]="Sicil No",["BOLUM"]="Bölüm",["GOREV"]="Görev",["DURUM"]="Durum",["IGTARIH"]="İşe Giriş",["ICTARIH"]="İşten Çıkış",["MAAS"]="Maaş",["NSUCRET"]="Saat Ücreti",["MSUCRET"]="Fazla Mesai",["BHNO"]="Banka Hesap No",["GSM"]="Cep Telefonu" };
             foreach (var h in headers) if (peopleGrid.Columns.Contains(h.Key)) peopleGrid.Columns[h.Key].HeaderText = h.Value;
+            foreach(var cb in new[]{ioPerson,auditPerson,ePerson,eHistoryPerson,payrollPerson,paymentPerson,advancePerson}){var old=cb.SelectedItem?.ToString();cb.Items.Clear();cb.Items.Add("Tümü");foreach(DataRow pr in activeRows.Rows)cb.Items.Add($"{pr["PKNO"]}  {pr["AD"]} {pr["SOYAD"]}");cb.SelectedItem=old is not null&&cb.Items.Contains(old)?old:"Tümü";}
+            ApplyEPeriodFilter(); LoadEHistory();
             ColorPeopleRows();
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Personel"); }
@@ -368,14 +402,16 @@ public sealed class MainForm : Form
     static int IntNum(string s) => int.TryParse(s, out var v) ? v : 0;
     static object DateOrDbNull(string s) => DateTime.TryParse(s, out var d) ? d : DBNull.Value;
 
+    static string? SelectedCard(ComboBox cb){var s=cb.SelectedItem?.ToString();return string.IsNullOrWhiteSpace(s)||s=="Tümü"?null:s[..5];}
+    void ApplyEPeriodFilter(){var y=(int)eYear.Value;var m=eMonthNo.SelectedIndex;var a=m==0?new DateTime(y,1,1):new DateTime(y,m,1);var b=m==0?a.AddYears(1).AddDays(-1):a.AddMonths(1).AddDays(-1);eStart.Value=a;eEnd.Value=b;RebuildEDays();var card=SelectedCard(ePerson);if(card is not null)for(var i=0;i<ePeopleList.Items.Count;i++)ePeopleList.SetItemChecked(i,ePeopleList.Items[i]!.ToString()!.StartsWith(card));}
     void LoadIo()
     {
         if (db is null) return;
         try
         {
-            var a = new DateTime(ioMonth.Value.Year, ioMonth.Value.Month, 1); var b = a.AddMonths(1);
-            ioGrid.DataSource = db.Query("select g.SIRA,g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO where g.GTARIH>=@A and g.GTARIH<@B order by g.GTARIH,g.PKNO",
-                new FbParameter("@A", a), new FbParameter("@B", b));
+            var y=(int)ioYear.Value;var m=ioMonthNo.SelectedIndex;var a=m==0?new DateTime(y,1,1):new DateTime(y,m,1);var b=m==0?a.AddYears(1):a.AddMonths(1);var card=SelectedCard(ioPerson);
+            var q="select g.SIRA,g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO where ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))"+(card is null?"":" and g.PKNO=@P")+" order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
+            ioGrid.DataSource=card is null?db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b)):db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card));
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Giri\u015f-\u00c7\u0131k\u0131\u015f"); }
     }
@@ -385,7 +421,7 @@ public sealed class MainForm : Form
         if (db is null) return;
         try
         {
-            var a = new DateTime(payrollMonth.Value.Year, payrollMonth.Value.Month, 1); var b = a.AddMonths(1);
+            var a = new DateTime((int)payrollYear.Value, payrollMonthNo.SelectedIndex==0?1:payrollMonthNo.SelectedIndex, 1); var b = payrollMonthNo.SelectedIndex==0?a.AddYears(1):a.AddMonths(1); var card=SelectedCard(payrollPerson);
             payrollGrid.DataSource = db.Query("select u.*,k.AD,k.SOYAD from UCRETLER u left join KIMLIK k on k.PKNO=u.PKNO where u.BASTAR>=@A and u.BASTAR<@B order by u.PKNO",
                 new FbParameter("@A", a), new FbParameter("@B", b));
         }
@@ -399,7 +435,8 @@ public sealed class MainForm : Form
     }
 
     void CheckAllPeople() { for (var i = 0; i < peopleList.Items.Count; i++) peopleList.SetItemChecked(i, true); }
-    void CheckAllDays() { for (var i = 0; i < dayList.Items.Count; i++) dayList.SetItemChecked(i, true); }
+    void CheckAllDays() { for (var i=0;i<dayList.Items.Count;i++) dayList.SetItemChecked(i,true); }
+    void CheckWeekdays(){ for(var i=0;i<dayList.Items.Count;i++){var d=((DayChoice)dayList.Items[i]).Date.DayOfWeek; dayList.SetItemChecked(i,d!=DayOfWeek.Saturday&&d!=DayOfWeek.Sunday);} }
 
 
     void RebuildEDays()
@@ -409,7 +446,8 @@ public sealed class MainForm : Form
     }
 
     void CheckAllEPeople() { for (var i = 0; i < ePeopleList.Items.Count; i++) ePeopleList.SetItemChecked(i, true); }
-    void CheckAllEDays() { for (var i = 0; i < eDayList.Items.Count; i++) eDayList.SetItemChecked(i, true); }
+    void CheckAllEDays() { for(var i=0;i<eDayList.Items.Count;i++) eDayList.SetItemChecked(i,true); }
+    void CheckEWeekdays(){ for(var i=0;i<eDayList.Items.Count;i++){var d=((DayChoice)eDayList.Items[i]).Date.DayOfWeek; eDayList.SetItemChecked(i,d!=DayOfWeek.Saturday&&d!=DayOfWeek.Sunday);} }
 
     void PreviewBulkE()
     {
@@ -427,7 +465,7 @@ public sealed class MainForm : Form
         var src = db.Query("select g.SIRA,g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO where g.GTARIH>=@A and g.GTARIH<@B order by g.GTARIH,g.PKNO", new FbParameter("@A",a), new FbParameter("@B",b));
         var lines = File.Exists(tnfPath.Text) ? File.ReadAllLines(tnfPath.Text).Where(x => !string.IsNullOrWhiteSpace(x)).ToArray() : [];
         var t = new DataTable();
-        foreach (var c in new[]{"SIRA","Kart No","Ad Soyad","Tarih","Taraf","Saat","Mevcut T├╝r","TNF Aday","Durum"}) t.Columns.Add(c);
+        foreach (var c in new[]{"SIRA","Kart No","Ad Soyad","Tarih","Taraf","Saat","Mevcut Tür","TNF Aday","Durum"}) t.Columns.Add(c);
         var mode = eSide.SelectedIndex;
         foreach (DataRow r in src.Rows)
         {
@@ -669,14 +707,46 @@ public sealed class MainForm : Form
         }
     }
 
+    void LoadEHistory()
+    {
+        if(db is null)return; var y=(int)eHistoryYear.Value;var m=eHistoryMonth.SelectedIndex;var a=m==0?new DateTime(y,1,1):new DateTime(y,m,1);var b=m==0?a.AddYears(1):a.AddMonths(1);var card=SelectedCard(eHistoryPerson);
+        var q="select g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO where (g.GTUR='E' or g.CTUR='E') and ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))"+(card is null?"":" and g.PKNO=@P")+" order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
+        var rows=card is null?db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b)):db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card)); var t=new DataTable(); foreach(var c in new[]{"Kart No","Ad Soyad","Tarih","Gün","Taraf","Saat","Dönem","İmza"})t.Columns.Add(c);
+        foreach(DataRow r in rows.Rows){if(Convert.ToString(r["GTUR"])=="E"&&r["GTARIH"]!=DBNull.Value){var d=Convert.ToDateTime(r["GTARIH"]);t.Rows.Add(r["PKNO"],$"{r["AD"]} {r["SOYAD"]}",d.ToString("dd.MM.yyyy"),d.ToString("dddd",new System.Globalization.CultureInfo("tr-TR")),"Giriş",r["GSAAT"],"Sabah","");}if(Convert.ToString(r["CTUR"])=="E"&&r["CTARIH"]!=DBNull.Value){var d=Convert.ToDateTime(r["CTARIH"]);t.Rows.Add(r["PKNO"],$"{r["AD"]} {r["SOYAD"]}",d.ToString("dd.MM.yyyy"),d.ToString("dddd",new System.Globalization.CultureInfo("tr-TR")),"Çıkış",r["CSAAT"],"Akşam","");}} eHistoryGrid.DataSource=t;
+    }
+    void ExportEHistoryCsv(){if(eHistoryGrid.DataSource is not DataTable t||t.Rows.Count==0){MessageBox.Show("Çıktı için kayıt yok.");return;}var path=Path.Combine(AppContext.BaseDirectory,$"E_IMZA_{(int)eHistoryYear.Value}_{eHistoryMonth.SelectedIndex:00}.csv");var lines=new List<string>{string.Join(";",t.Columns.Cast<DataColumn>().Select(c=>c.ColumnName))};foreach(DataRow r in t.Rows)lines.Add(string.Join(";",r.ItemArray.Select(x=>Convert.ToString(x)?.Replace(";",",")??"")));File.WriteAllLines(path,lines,System.Text.Encoding.UTF8);MessageBox.Show("İmza çıktısı hazır:\n"+path);}
+
+    void LoadTnfAudit()
+    {
+        try
+        {
+            var y=(int)auditYear.Value; var m=auditMonthNo.SelectedIndex; var filterCard=SelectedCard(auditPerson);
+            var yf=Path.Combine(Path.GetDirectoryName(tnfPath.Text)??"",$"TR{y}.Tnf"); var src=File.Exists(yf)?yf:tnfPath.Text;
+            var t=new DataTable(); foreach(var c in new[]{"Kart No","Ad Soyad","Tarih","Gün","Saat","Taraf","Ham TNF"}) t.Columns.Add(c);
+            if(!File.Exists(src)){ t.Rows.Add("","","","","","","TNF dosyası yok: "+src); auditGrid.DataSource=t; return; }
+            var names=new Dictionary<string,string>(); if(db is not null){var pr=db.Query("select PKNO,AD,SOYAD from KIMLIK"); foreach(DataRow r in pr.Rows) names[Convert.ToString(r["PKNO"])??""]=$"{r["AD"]} {r["SOYAD"]}".Trim();}
+            foreach(var line in File.ReadLines(src))
+            {
+                if(string.IsNullOrWhiteSpace(line)) continue; var a=line.Split(','); if(a.Length<3) continue; var card=a[0].Trim(); if(filterCard is not null&&card!=filterCard) continue;
+                if(!DateTime.TryParseExact(a[2].Trim(),"ddMMyy",System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out var d)) continue; if(d.Year!=y) continue; if(m!=0&&d.Month!=m) continue;
+                var tm=a[1].Trim(); var side=TimeOnly.TryParse(tm,out var ti)&&ti.Hour<12?"Giriş / Sabah":"Çıkış / Akşam";
+                t.Rows.Add(card,names.TryGetValue(card,out var n)?n:"",d.ToString("dd.MM.yyyy"),d.ToString("dddd",new System.Globalization.CultureInfo("tr-TR")),tm,side,line);
+            }
+            auditGrid.DataSource=t;
+        }
+        catch(Exception ex){MessageBox.Show(ex.Message,"TNF Listeleme");}
+    }
+
     void LoadAudit()
     {
         if (db is null || !File.Exists(tnfPath.Text)) return;
         try
         {
             var t = new DataTable(); t.Columns.Add("Kart No"); t.Columns.Add("Tarih"); t.Columns.Add("Taraf"); t.Columns.Add("E Saati"); t.Columns.Add("TNF Aday"); t.Columns.Add("Durum");
-            var e = db.Query("select PKNO,GTARIH,GSAAT,GTUR,CTARIH,CSAAT,CTUR from GIRCIK where GTUR='E' or CTUR='E' order by GTARIH,PKNO");
-            var lines = File.ReadAllLines(tnfPath.Text).Where(x => !string.IsNullOrWhiteSpace(x)).ToArray();
+            var y=(int)auditYear.Value;var m=auditMonthNo.SelectedIndex;var a=m==0?new DateTime(y,1,1):new DateTime(y,m,1);var b=m==0?a.AddYears(1):a.AddMonths(1);var filterCard=SelectedCard(auditPerson);
+            var q="select PKNO,GTARIH,GSAAT,GTUR,CTARIH,CSAAT,CTUR from GIRCIK where (GTUR='E' or CTUR='E') and ((GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B))"+(filterCard is null?"":" and PKNO=@P")+" order by coalesce(GTARIH,CTARIH),PKNO";
+            var e=filterCard is null?db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b)):db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",filterCard));
+            var yf=Path.Combine(Path.GetDirectoryName(tnfPath.Text)??"",$"TR{y}.Tnf");var src=File.Exists(yf)?yf:tnfPath.Text;var lines=File.Exists(src)?File.ReadAllLines(src).Where(x=>!string.IsNullOrWhiteSpace(x)).ToArray():[];
             foreach (DataRow r in e.Rows)
             {
                 var card = Convert.ToString(r["PKNO"]) ?? "";
