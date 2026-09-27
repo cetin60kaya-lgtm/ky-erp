@@ -4,16 +4,10 @@ public partial class PersonelForm
 {
     bool monthlyPaymentLauncherInstalled;
 
-    protected override void OnShown(EventArgs e)
-    {
-        base.OnShown(e);
-        if (monthlyPaymentLauncherInstalled) return;
-        monthlyPaymentLauncherInstalled = true;
-        InstallMonthlyPaymentLauncher();
-    }
-
     void InstallMonthlyPaymentLauncher()
     {
+        if (monthlyPaymentLauncherInstalled) return;
+        monthlyPaymentLauncherInstalled = true;
         var page = tabs.TabPages.Cast<TabPage>().FirstOrDefault(x => x.Text == "Ödemeler");
         if (page is null || page.Controls.Find("MonthlyAdjustmentBar", true).Length > 0) return;
 
