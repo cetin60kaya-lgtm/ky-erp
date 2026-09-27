@@ -1,7 +1,6 @@
 using System.Data;
 using FirebirdSql.Data.FirebirdClient;
 using KYERP.PDKS.Core;
-using KYERP.PDKS.Core.Payroll;
 using KYERP.PDKS.Core.Reports;
 
 namespace HKN.Personel.Native;
@@ -9,51 +8,52 @@ namespace HKN.Personel.Native;
 public sealed class LegacyBordroForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
-    readonly TextBox title = new() { Text = "Genel Maaş Bordrosu" };
-    readonly TextBox cardStart = new() { Text = "00000" };
-    readonly TextBox cardEnd = new() { Text = "99999" };
-    readonly DateTimePicker start = new() { Format = DateTimePickerFormat.Short };
-    readonly DateTimePicker end = new() { Format = DateTimePickerFormat.Short };
-    readonly ComboBox group = Lookup(), department = Lookup(), service = Lookup(), duty = Lookup(), status = Lookup(), company = Lookup();
-    readonly CheckBox cost = new() { Text = "Bölümler arası maliyet görünümü" };
-    readonly RadioButton byCard = new() { Text = "Kart No", Checked = true };
-    readonly RadioButton byName = new() { Text = "Ad Soyad" };
-    readonly RadioButton bySurname = new() { Text = "Soyad Ad" };
-    readonly RadioButton byHire = new() { Text = "İşe Giriş" };
-    readonly CheckBox landscape = new() { Text = "Yatay sayfa", Checked = true };
-    readonly DataGridView previewGrid = new();
-    readonly Label summary = new();
-    DataTable? lastPreview;
+    readonly DateTimePicker period = new() { Format = DateTimePickerFormat.Custom, CustomFormat = "MMMM yyyy", ShowUpDown = true, Width = 145 };
+    readonly ComboBox reportType = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
+    readonly TextBox card = new() { Width = 90 };
+    readonly DataGridView grid = new()
+    {
+        Name = "BordroGrid",
+        Dock = DockStyle.Fill,
+        ReadOnly = true,
+        AllowUserToAddRows = false,
+        AllowUserToDeleteRows = false,
+        AllowUserToOrderColumns = true,
+        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
+        BackgroundColor = Color.White,
+        SelectionMode = DataGridViewSelectionMode.FullRowSelect
+    };
+    readonly Label summary = new() { AutoSize = true, Padding = new Padding(8, 9, 8, 0), Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+    DataTable data = new();
+    string LayoutKey => "bordro-" + (reportType.SelectedItem?.ToString() ?? "genel").Replace(' ', '-');
+
     public LegacyBordroForm()
     {
-        Text = "Genel Maaş Bordrosu";
-        StartPosition = FormStartPosition.CenterScreen;
-        Size = new Size(1180, 720);
-        MinimumSize = new Size(920, 620);
+        Text = "Bordro";
+        StartPosition = FormStartPosition.CenterParent;
+        Size = new Size(1360, 760);
+        MinimumSize = new Size(1050, 620);
         Font = new Font("Segoe UI", 9f);
         BackColor = Color.FromArgb(246, 249, 253);
+        reportType.Items.AddRange(["Genel Maaş Bordrosu", "Mesai Bordrosu", "Maaş Pusulası"]);
+        reportType.SelectedIndex = 0;
+        period.Value = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         Build();
-        Shown += (_, _) => { Init(); RefreshPreview(); };
+        Shown += (_, _) => { GridLayoutPersistence.Attach(grid, LayoutKey); LoadData(); };
     }
-
-    static ComboBox Lookup() => new()
-    {
-        DropDownStyle = ComboBoxStyle.DropDownList,
-        DisplayMember = "TEXT",
-        ValueMember = "KOD",
-        Dock = DockStyle.Fill
-    };
 
     void Build()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(14) };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, Padding = new Padding(12) };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(18, 8, 18, 8) };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+
+        var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
         header.Controls.Add(new Label
         {
-            Text = "GENEL MAAŞ BORDROSU",
+            Text = "BORDRO",
             AutoSize = true,
             Location = new Point(18, 10),
             Font = new Font("Segoe UI", 17f, FontStyle.Bold),
@@ -61,228 +61,107 @@ public sealed class LegacyBordroForm : Form
         });
         header.Controls.Add(new Label
         {
-            Text = "Filtrele • Önizle • Yazdır • PDF / Excel",
+            Text = "Ayı ve bordro türünü seç • alanları sırala • kolon genişliklerini bir kez ayarla ve kalıcı kullan",
             AutoSize = true,
             Location = new Point(20, 43),
             ForeColor = Color.FromArgb(88, 103, 124)
         });
-        summary.Dock = DockStyle.Right;
-        summary.Width = 300;
-        summary.TextAlign = ContentAlignment.MiddleRight;
-        summary.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
-        summary.ForeColor = Color.FromArgb(36, 107, 230);
-        header.Controls.Add(summary);
         root.Controls.Add(header, 0, 0);
 
-        var split = new SplitContainer { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1, SplitterDistance = 390, SplitterWidth = 8 };
-        var filters = new TabControl { Dock = DockStyle.Fill };
-        var filterPage = new TabPage("Filtreler") { Padding = new Padding(12), BackColor = Color.White };
-        var filterGrid = new TableLayoutPanel { Dock = DockStyle.Top, ColumnCount = 2, RowCount = 10, AutoSize = true };
-        filterGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
-        filterGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        AddRow(filterGrid, 0, "Rapor Başlığı", title);
-        AddRow(filterGrid, 1, "Kart No Başlangıç", cardStart);
-        AddRow(filterGrid, 2, "Kart No Bitiş", cardEnd);
-        AddRow(filterGrid, 3, "Başlangıç Tarihi", start);
-        AddRow(filterGrid, 4, "Bitiş Tarihi", end);
-        AddRow(filterGrid, 5, "Grup", group);
-        AddRow(filterGrid, 6, "Bölüm", department);
-        AddRow(filterGrid, 7, "Servis", service);
-        AddRow(filterGrid, 8, "Görev", duty);
-        AddRow(filterGrid, 9, "Durum", status);
-        filterPage.Controls.Add(filterGrid);
+        var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(14, 9, 0, 0), WrapContents = false };
+        filters.Controls.Add(Label("Dönem"));
+        filters.Controls.Add(period);
+        filters.Controls.Add(Label("Bordro Türü"));
+        filters.Controls.Add(reportType);
+        filters.Controls.Add(Label("Kart No"));
+        filters.Controls.Add(card);
+        filters.Controls.Add(Button("Göster", LoadData, 92, true));
+        filters.Controls.Add(Button("Alanlar / Sıralama", EditLayout, 145));
+        filters.Controls.Add(Button("Düzeni Kilitle", ToggleLock, 125));
+        filters.Controls.Add(summary);
+        root.Controls.Add(filters, 0, 1);
 
-        var advanced = new TabPage("Gelişmiş") { Padding = new Padding(12), BackColor = Color.White };
-        var advancedGrid = new TableLayoutPanel { Dock = DockStyle.Top, ColumnCount = 2, RowCount = 5, AutoSize = true };
-        advancedGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
-        advancedGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        AddRow(advancedGrid, 0, "Firma", company);
-        var sortPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
-        sortPanel.Controls.AddRange([byCard, byName, bySurname, byHire]);
-        AddRow(advancedGrid, 1, "Sıralama", sortPanel);
-        AddRow(advancedGrid, 2, "Sayfa", landscape);
-        AddRow(advancedGrid, 3, "Maliyet", cost);
-        advanced.Controls.Add(advancedGrid);
-        filters.TabPages.Add(filterPage);
-        filters.TabPages.Add(advanced);
-        split.Panel1.Padding = new Padding(0, 0, 8, 0);
-        split.Panel1.Controls.Add(filters);
+        grid.ColumnHeadersHeight = 34;
+        grid.RowTemplate.Height = 26;
+        grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(225, 238, 255);
+        grid.DefaultCellStyle.SelectionForeColor = Color.Black;
+        root.Controls.Add(grid, 0, 2);
 
-        previewGrid.Dock = DockStyle.Fill;
-        previewGrid.ReadOnly = true;
-        previewGrid.AllowUserToAddRows = false;
-        previewGrid.AllowUserToDeleteRows = false;
-        previewGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        previewGrid.BackgroundColor = Color.White;
-        previewGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        split.Panel2.Padding = new Padding(8, 0, 0, 0);
-        split.Panel2.Controls.Add(previewGrid);
-        root.Controls.Add(split, 0, 2);
-
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 8, 0, 0), WrapContents = false };
-        actions.Controls.Add(ActionButton("Excel Aktar", () => Export(true), 118));
-        actions.Controls.Add(ActionButton("PDF Aktar", () => Export(false), 118));
-        actions.Controls.Add(ActionButton("Yazdır", Print, 104));
-        actions.Controls.Add(ActionButton("Önizle", PreviewReport, 104));
-        actions.Controls.Add(ActionButton("Hesapla / Yenile", RefreshPreview, 138, true));
-        root.Controls.Add(actions, 0, 1);
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 10, 0, 0), WrapContents = false };
+        actions.Controls.Add(Button("Excel Aktar", () => Export(true), 118));
+        actions.Controls.Add(Button("PDF Aktar", () => Export(false), 118));
+        actions.Controls.Add(Button("Yazdır", Print, 104));
+        actions.Controls.Add(Button("Önizle", Preview, 104));
+        root.Controls.Add(actions, 0, 3);
         Controls.Add(root);
-    }
-    static void AddRow(TableLayoutPanel table, int row, string label, Control control)
-    {
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        table.Controls.Add(new Label
+
+        reportType.SelectedIndexChanged += (_, _) =>
         {
-            Text = label,
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.FromArgb(66, 82, 104)
-        }, 0, row);
-        control.Dock = DockStyle.Fill;
-        control.Margin = new Padding(3, 5, 3, 5);
-        table.Controls.Add(control, 1, row);
+            if (!IsHandleCreated) return;
+            GridLayoutPersistence.Apply(grid, LayoutKey);
+            LoadData();
+        };
+        period.ValueChanged += (_, _) => { if (IsHandleCreated) LoadData(); };
     }
 
-    static Button ActionButton(string text, Action action, int width, bool primary = false)
+    static Label Label(string text) => new() { Text = text, AutoSize = true, Padding = new Padding(8, 8, 3, 0), ForeColor = Color.FromArgb(66, 82, 104) };
+
+    static Button Button(string text, Action action, int width, bool primary = false)
     {
-        var button = new Button
+        var b = new Button
         {
             Text = text,
             Width = width,
-            Height = 36,
-            MinimumSize = new Size(width, 36),
-            MaximumSize = new Size(width, 36),
+            Height = 34,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             BackColor = primary ? Color.FromArgb(36, 107, 230) : Color.White,
-            ForeColor = primary ? Color.White : Color.FromArgb(27, 44, 68)
+            ForeColor = primary ? Color.White : Color.FromArgb(27, 44, 68),
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold)
         };
-        button.FlatAppearance.BorderColor = primary ? button.BackColor : Color.FromArgb(216, 225, 236);
-        button.Click += (_, _) => action();
-        return button;
-    }
-    void Init()
-    {
-        start.Value = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-        end.Value = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1).AddDays(-1);
-        LoadLookup(group, "GRUP");
-        LoadLookup(department, "BOLUM");
-        LoadLookup(service, "SERVIS");
-        LoadLookup(duty, "GOREV");
-        LoadLookup(status, "DURUM");
-        LoadLookup(company, "FIRMA");
+        b.FlatAppearance.BorderColor = primary ? b.BackColor : Color.FromArgb(216, 225, 236);
+        b.Click += (_, _) => action();
+        return b;
     }
 
-    void LoadLookup(ComboBox c, string table)
-    {
-        var dt = db.Query($"select KOD,AD from {table} order by KOD");
-        var r = dt.NewRow();
-        r["KOD"] = -1;
-        r["AD"] = "Tümü";
-        dt.Rows.InsertAt(r, 0);
-        dt.Columns.Add("TEXT", typeof(string), "AD");
-        c.DataSource = dt;
-        c.SelectedValue = -1;
-    }
-
-    static void AddFilter(List<string> where, List<FbParameter> parameters, string field, ComboBox combo, string key)
-    {
-        if (combo.SelectedValue is int value && value >= 0)
-        {
-            where.Add($"{field}=@{key}");
-            parameters.Add(new FbParameter("@" + key, value));
-        }
-    }
-    DataTable CalculatePreview()
-    {
-        if (end.Value.Date < start.Value.Date)
-            throw new InvalidOperationException("Bitiş tarihi başlangıç tarihinden önce olamaz.");
-
-        var where = new List<string> { "(k.ICTARIH is null or k.ICTARIH>=@A)", "(k.IGTARIH is null or k.IGTARIH<=@B)" };
-        var parameters = new List<FbParameter> { new("@A", start.Value.Date), new("@B", end.Value.Date) };
-        var startCard = cardStart.Text.Trim();
-        var endCard = cardEnd.Text.Trim();
-        if (startCard.Length > 0 && startCard != "00000") { where.Add("k.PKNO>=@KS"); parameters.Add(new("@KS", startCard.PadLeft(5, '0'))); }
-        if (endCard.Length > 0 && endCard != "99999") { where.Add("k.PKNO<=@KB"); parameters.Add(new("@KB", endCard.PadLeft(5, '0'))); }
-        AddFilter(where, parameters, "k.GRUP", group, "G");
-        AddFilter(where, parameters, "k.BOLUM", department, "D");
-        AddFilter(where, parameters, "k.SERVIS", service, "S");
-        AddFilter(where, parameters, "k.GOREV", duty, "R");
-        AddFilter(where, parameters, "k.DURUM", status, "U");
-        AddFilter(where, parameters, "k.SIRKET", company, "F");
-        var order = byHire.Checked ? "k.IGTARIH,k.PKNO" : byName.Checked ? "k.AD,k.SOYAD" : bySurname.Checked ? "k.SOYAD,k.AD" : "k.PKNO";
-        var employees = db.Query($"select k.PKNO,k.SICILNO,k.AD,k.SOYAD,k.IGTARIH,k.MAAS,k.BOLUM from KIMLIK k where {string.Join(" and ", where)} order by {order}", parameters.ToArray());
-
-        var result = new DataTable();
-        result.Columns.Add("Kart No", typeof(string));
-        result.Columns.Add("Sicil No", typeof(string));
-        result.Columns.Add("Ad Soyad", typeof(string));
-        result.Columns.Add("Gün", typeof(decimal));
-        result.Columns.Add("Normal Çalışma", typeof(string));
-        result.Columns.Add("%50 Mesai", typeof(string));
-        result.Columns.Add("%100 Mesai", typeof(string));
-        result.Columns.Add("Ücretsiz İzin", typeof(string));
-        result.Columns.Add("Maaş", typeof(decimal));
-        result.Columns.Add("Ek Kazanç", typeof(decimal));
-        result.Columns.Add("Kesinti", typeof(decimal));
-        result.Columns.Add("Avans", typeof(decimal));
-        result.Columns.Add("Brüt", typeof(decimal));
-        result.Columns.Add("Net Ödeme", typeof(decimal));
-        result.Columns.Add("İmza", typeof(string));
-
-        foreach (DataRow employee in employees.Rows)
-        {
-            var pk = Convert.ToString(employee["PKNO"]) ?? string.Empty;
-            var attendance = db.Query(
-                "select coalesce(sum(GUN1),0) GUN,coalesce(sum(DAKIKA1),0) NORMAL,coalesce(sum(DAKIKA2),0) M50,coalesce(sum(DAKIKA3),0) M100,coalesce(sum(DAKIKA4),0) UIZIN from PUANTAJ where PKNO=@P and TARIH>=@A and TARIH<@B",
-                new FbParameter("@P", pk), new FbParameter("@A", start.Value.Date), new FbParameter("@B", end.Value.Date.AddDays(1)));
-            var values = db.Query(
-                "select coalesce(sum(case when upper(coalesce(v.TUR,'')) like '%AVANS%' then a.MIKTAR else 0 end),0) AVANS," +
-                "coalesce(sum(case when v.ISARET='+' and upper(coalesce(v.TUR,'')) not like '%AVANS%' then a.MIKTAR else 0 end),0) KAZ," +
-                "coalesce(sum(case when (v.ISARET<>'+' or v.ISARET is null) and upper(coalesce(v.TUR,'')) not like '%AVANS%' then a.MIKTAR else 0 end),0) KES " +
-                "from AVANS a left join AVTUR v on v.KOD=a.TURKOD where a.PKNO=@P and a.TARIH>=@A and a.TARIH<@B",
-                new FbParameter("@P", pk), new FbParameter("@A", start.Value.Date), new FbParameter("@B", end.Value.Date.AddDays(1)));
-
-            var days = Convert.ToDecimal(attendance.Rows[0]["GUN"]);
-            var normalMinutes = Convert.ToInt32(attendance.Rows[0]["NORMAL"]);
-            var overtime50 = Convert.ToInt32(attendance.Rows[0]["M50"]);
-            var overtime100 = Convert.ToInt32(attendance.Rows[0]["M100"]);
-            var unpaid = Convert.ToInt32(attendance.Rows[0]["UIZIN"]);
-            var earn = values.Rows.Count == 0 ? 0m : Convert.ToDecimal(values.Rows[0]["KAZ"]);
-            var deduction = values.Rows.Count == 0 ? 0m : Convert.ToDecimal(values.Rows[0]["KES"]);
-            var advance = values.Rows.Count == 0 ? 0m : Convert.ToDecimal(values.Rows[0]["AVANS"]);
-            var salary = employee["MAAS"] == DBNull.Value ? 0m : Convert.ToDecimal(employee["MAAS"]);
-            var calc = PayrollCalculator.Calculate(new PayrollInput(salary, days, overtime50, overtime100, earn, deduction, advance, 0));
-
-            result.Rows.Add(
-                pk,
-                Convert.ToString(employee["SICILNO"]) ?? string.Empty,
-                $"{employee["AD"]} {employee["SOYAD"]}".Trim(),
-                days,
-                KYERP.PDKS.Core.Payroll.DailyAttendanceResult.AsTime(normalMinutes),
-                KYERP.PDKS.Core.Payroll.DailyAttendanceResult.AsTime(overtime50),
-                KYERP.PDKS.Core.Payroll.DailyAttendanceResult.AsTime(overtime100),
-                KYERP.PDKS.Core.Payroll.DailyAttendanceResult.AsTime(unpaid),
-                salary,
-                earn,
-                deduction,
-                advance,
-                calc.GrossPay,
-                calc.NetPay,
-                string.Empty);
-        }
-        return result;
-    }
-    void RefreshPreview()
+    void LoadData()
     {
         try
         {
-            lastPreview = CalculatePreview();
-            previewGrid.DataSource = lastPreview;
-            if (previewGrid.Columns.Contains("Kart No")) previewGrid.Columns["Kart No"].FillWeight = 70;
-            if (previewGrid.Columns.Contains("Ad Soyad")) previewGrid.Columns["Ad Soyad"].FillWeight = 180;
-            var netTotal = lastPreview.Columns.Contains("Net Ödeme") ? lastPreview.AsEnumerable().Sum(r => r.Field<decimal>("Net Ödeme")) : 0m;
-            summary.Text = $"{lastPreview.Rows.Count} personel  •  Net: {netTotal:N2} ₺  •  {start.Value:dd.MM.yyyy} - {end.Value:dd.MM.yyyy}";
+            var first = new DateTime(period.Value.Year, period.Value.Month, 1);
+            var next = first.AddMonths(1);
+            var whereCard = string.IsNullOrWhiteSpace(card.Text) ? "1=1" : "u.PKNO=@P";
+            var parameters = new List<FbParameter> { new("@A", first), new("@B", next) };
+            if (!string.IsNullOrWhiteSpace(card.Text)) parameters.Add(new FbParameter("@P", card.Text.Trim().PadLeft(5, '0')));
+
+            data = db.Query(
+                "select " +
+                "u.PKNO \"Kart No\",k.IGTARIH \"İ.G.T\",trim(coalesce(k.AD,'')||' '||coalesce(k.SOYAD,'')) \"Ad Soyad\"," +
+                "u.DMAAS Maaş,u.GUN1 \"Normal Gün\",u.SAAT1 \"Normal Saat\"," +
+                "u.SAAT2 \"%50 Mesai Saat\",u.SAAT3 \"%100 Mesai Saat\"," +
+                "u.GUN4 \"Ücretsiz İzin Gün\",u.GUN5 \"Ücretli İzin Gün\",u.GUN9 \"Yıllık İzin Gün\"," +
+                "u.DEVG \"Devamsız Gün\",u.DEVS \"Devamsız Saat\",u.GECS \"Geç Saat\",u.EKS \"Eksik Saat\"," +
+                "u.EX1 Avans,u.EX2 Banka,u.EX3 BES,u.EX4 İcra," +
+                "u.NCKALAN \"Maaş Ödeme\",u.FMKALAN \"Mesai Ödeme\"," +
+                "(coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0)) Toplam," +
+                "((coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0))-coalesce(u.EX2,0)) Elden," +
+                "cast('' as varchar(30)) İmza " +
+                "from UCRETLER u left join KIMLIK k on k.PKNO=u.PKNO " +
+                "where u.BASTAR<@B and coalesce(u.BITTAR,u.BASTAR)>=@A and " + whereCard + " order by u.PKNO",
+                parameters.ToArray());
+
+            if (!data.Columns.Contains("S.No"))
+            {
+                var serial = new DataColumn("S.No", typeof(int));
+                data.Columns.Add(serial);
+                serial.SetOrdinal(0);
+                for (var i = 0; i < data.Rows.Count; i++) data.Rows[i][serial] = i + 1;
+            }
+
+            grid.DataSource = data;
+            ApplyReasonableWidths();
+            GridLayoutPersistence.Apply(grid, LayoutKey);
+            var total = data.AsEnumerable().Sum(r => r["Toplam"] == DBNull.Value ? 0m : Convert.ToDecimal(r["Toplam"]));
+            summary.Text = $"{data.Rows.Count} personel • Toplam {total:N2} ₺";
         }
         catch (Exception ex)
         {
@@ -290,76 +169,72 @@ public sealed class LegacyBordroForm : Form
         }
     }
 
-    ReportTable ToReport(DataTable table)
+    void ApplyReasonableWidths()
     {
-        var columns = table.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
-        var money = new HashSet<string>(new[] { "Maaş", "Ek Kazanç", "Kesinti", "Avans", "Brüt", "Net Ödeme" }, StringComparer.OrdinalIgnoreCase);
-        string Format(DataRow row, DataColumn column)
+        foreach (DataGridViewColumn c in grid.Columns)
         {
-            if (row[column] == DBNull.Value) return string.Empty;
-            if (money.Contains(column.ColumnName)) return Convert.ToDecimal(row[column]).ToString("N2");
-            if (column.ColumnName == "Gün") return Convert.ToDecimal(row[column]).ToString("0.##");
-            return Convert.ToString(row[column]) ?? string.Empty;
-        }
-        var rows = table.Rows.Cast<DataRow>()
-            .Select(r => (IReadOnlyList<string>)table.Columns.Cast<DataColumn>().Select(c => Format(r, c)).ToArray())
-            .ToList();
-        if (table.Rows.Count > 0)
-        {
-            var total = new string[columns.Length];
-            var nameIndex = Array.IndexOf(columns, "Ad Soyad");
-            if (nameIndex >= 0) total[nameIndex] = "TOPLAM";
-            foreach (var columnName in money)
+            c.Width = c.HeaderText switch
             {
-                var index = Array.IndexOf(columns, columnName);
-                if (index >= 0) total[index] = table.AsEnumerable().Sum(r => r.Field<decimal>(columnName)).ToString("N2");
-            }
-            var dayIndex = Array.IndexOf(columns, "Gün");
-            if (dayIndex >= 0) total[dayIndex] = table.AsEnumerable().Sum(r => r.Field<decimal>("Gün")).ToString("0.##");
-            rows.Add(total);
+                "S.No" => 50,
+                "Kart No" => 70,
+                "İ.G.T" => 88,
+                "Ad Soyad" => 170,
+                "İmza" => 120,
+                _ when c.HeaderText.Contains("Saat", StringComparison.OrdinalIgnoreCase) => 80,
+                _ when c.HeaderText.Contains("Gün", StringComparison.OrdinalIgnoreCase) => 65,
+                _ => 90
+            };
         }
-        var reportTitle = string.IsNullOrWhiteSpace(title.Text) ? "Genel Maaş Bordrosu" : title.Text.Trim();
-        var reportTable = new ReportTable($"{reportTitle} • {start.Value:dd.MM.yyyy} - {end.Value:dd.MM.yyyy}", columns, rows);
-        return CompanyBranding.Decorate(reportTable);
     }
 
-    void PreviewReport()
+    void EditLayout()
     {
-        try
-        {
-            lastPreview = CalculatePreview();
-            ReportPrintHelper.Preview(this, ToReport(lastPreview), landscape.Checked);
-        }
+        GridLayoutPersistence.ShowEditor(this, grid, LayoutKey, "Bordro Alanları / Sıralama");
+        GridLayoutPersistence.Apply(grid, LayoutKey);
+    }
+
+    void ToggleLock()
+    {
+        var next = !GridLayoutPersistence.IsLocked(LayoutKey);
+        GridLayoutPersistence.SetLocked(grid, LayoutKey, next);
+        MessageBox.Show(next ? "Bordro düzeni kilitlendi." : "Bordro düzeni düzenlemeye açıldı.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    ReportTable CurrentReport()
+    {
+        var first = new DateTime(period.Value.Year, period.Value.Month, 1);
+        var last = first.AddMonths(1).AddDays(-1);
+        var name = reportType.SelectedItem?.ToString() ?? "Bordro";
+        return GridReportAdapter.ToReport(grid, data, $"{first:dd.MM.yyyy} - {last:dd.MM.yyyy} {name}");
+    }
+
+    void Preview()
+    {
+        try { LoadData(); ReportPrintHelper.Preview(this, CurrentReport(), true); }
         catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
 
     void Print()
     {
-        try
-        {
-            lastPreview = CalculatePreview();
-            ReportPrintHelper.Print(this, ToReport(lastPreview), landscape.Checked);
-        }
+        try { LoadData(); ReportPrintHelper.Print(this, CurrentReport(), true); }
         catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
+
     void Export(bool excel)
     {
         try
         {
-            lastPreview = CalculatePreview();
-            using var dialog = new SaveFileDialog
+            LoadData();
+            using var save = new SaveFileDialog
             {
-                Title = excel ? "Bordroyu Excel'e Aktar" : "Bordroyu PDF'e Aktar",
-                Filter = excel ? "Excel Çalışma Kitabı (*.xlsx)|*.xlsx" : "PDF Belgesi (*.pdf)|*.pdf",
-                FileName = $"Genel-Maas-Bordrosu-{start.Value:yyyyMM}." + (excel ? "xlsx" : "pdf"),
+                Filter = excel ? "Excel (*.xlsx)|*.xlsx" : "PDF (*.pdf)|*.pdf",
                 DefaultExt = excel ? "xlsx" : "pdf",
-                AddExtension = true
+                FileName = $"{reportType.SelectedItem}-{period.Value:yyyyMM}".Replace(' ', '-')
             };
-            if (dialog.ShowDialog(this) != DialogResult.OK) return;
-            var report = ToReport(lastPreview);
-            if (excel) ReportExporter.ExportExcel(dialog.FileName, report);
-            else ReportExporter.ExportPdf(dialog.FileName, report);
-            MessageBox.Show("Rapor oluşturuldu:\n" + dialog.FileName, Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (save.ShowDialog(this) != DialogResult.OK) return;
+            var report = CurrentReport();
+            if (excel) ReportExporter.ExportExcel(save.FileName, report); else ReportExporter.ExportPdf(save.FileName, report);
+            MessageBox.Show("Çıktı oluşturuldu:\n" + save.FileName, Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
