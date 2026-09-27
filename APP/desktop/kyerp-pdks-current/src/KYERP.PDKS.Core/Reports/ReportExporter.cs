@@ -9,7 +9,8 @@ namespace KYERP.PDKS.Core.Reports;
 public sealed record ReportTable(
     string Title,
     IReadOnlyList<string> Columns,
-    IReadOnlyList<IReadOnlyList<string>> Rows);
+    IReadOnlyList<IReadOnlyList<string>> Rows,
+    IReadOnlyList<int>? ColumnWidths = null);
 
 public static class ReportExporter
 {
@@ -56,6 +57,7 @@ public static class ReportExporter
             }) { WorkbookViewId = 0U }), 0);
         workbookPart.Workbook.Save();
     }
+
     public static void ExportPdf(string path, ReportTable report)
     {
         using var document = new PdfDocument();
@@ -78,14 +80,13 @@ public static class ReportExporter
             var page = document.AddPage();
             var wide = report.Columns.Count > 7;
             page.Size = wide ? PdfSharpCore.PageSize.A3 : PdfSharpCore.PageSize.A4;
-            page.Orientation = wide
-                ? PdfSharpCore.PageOrientation.Landscape
-                : PdfSharpCore.PageOrientation.Portrait;
+            page.Orientation = wide ? PdfSharpCore.PageOrientation.Landscape : PdfSharpCore.PageOrientation.Portrait;
             using var g = XGraphics.FromPdfPage(page);
             const double margin = 26;
             var width = page.Width - margin * 2;
             var weights = ColumnWeights(report);
-            var colWidths = weights.Select(x => x / weights.Sum() * width).ToArray();
+            var weightSum = Math.Max(1d, weights.Sum());
+            var colWidths = weights.Select(x => x / weightSum * width).ToArray();
             var y = margin;
             g.DrawString(report.Title, titleFont, new XSolidBrush(blue), new XRect(margin, y, width, 22), XStringFormats.TopLeft);
             y += 23;
@@ -117,6 +118,7 @@ public static class ReportExporter
 
         document.Save(path);
     }
+
     static void DrawPdfRow(
         XGraphics g, IReadOnlyList<string> values, XFont font,
         double left, ref double y, IReadOnlyList<double> widths, double height,
@@ -147,8 +149,12 @@ public static class ReportExporter
             length--;
         return value[..Math.Max(1, length)] + ellipsis;
     }
+
     static IReadOnlyList<double> ColumnWeights(ReportTable report)
     {
+        if (report.ColumnWidths is not null && report.ColumnWidths.Count == report.Columns.Count && report.ColumnWidths.Sum() > 0)
+            return report.ColumnWidths.Select(x => (double)Math.Max(1, x)).ToArray();
+
         var result = new double[report.Columns.Count];
         for (var i = 0; i < result.Length; i++)
         {
@@ -163,15 +169,26 @@ public static class ReportExporter
     static Columns BuildColumns(ReportTable report)
     {
         var columns = new Columns();
+        var sourceWidths = report.ColumnWidths;
+        var sourceAverage = sourceWidths is not null && sourceWidths.Count > 0 ? Math.Max(1d, sourceWidths.Average()) : 0d;
         for (var i = 0; i < report.Columns.Count; i++)
         {
-            var max = report.Columns[i].Length;
-            foreach (var row in report.Rows.Take(150))
-                if (i < row.Count) max = Math.Max(max, Clean(row[i]).Length);
+            double width;
+            if (sourceWidths is not null && sourceWidths.Count == report.Columns.Count && sourceAverage > 0)
+            {
+                width = Math.Clamp(14d * sourceWidths[i] / sourceAverage, 5d, 42d);
+            }
+            else
+            {
+                var max = report.Columns[i].Length;
+                foreach (var row in report.Rows.Take(150))
+                    if (i < row.Count) max = Math.Max(max, Clean(row[i]).Length);
+                width = Math.Clamp(max + 2.5, 10, 32);
+            }
             columns.Append(new Column
             {
                 Min = (uint)(i + 1), Max = (uint)(i + 1),
-                Width = Math.Clamp(max + 2.5, 10, 32), CustomWidth = true
+                Width = width, CustomWidth = true
             });
         }
         return columns;
@@ -184,6 +201,7 @@ public static class ReportExporter
             row.Append(Cell(Clean(value), style));
         return row;
     }
+
     static Cell Cell(string value, uint style) => new()
     {
         DataType = CellValues.InlineString,
