@@ -41,6 +41,7 @@ public sealed class MainForm : Form
     readonly NumericUpDown auditYear = new() { Minimum = 2010, Maximum = 2100, Width = 75 };
     readonly ComboBox auditMonthNo = MonthCombo();
     readonly ComboBox auditPerson = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+    readonly ComboBox auditView = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
     readonly NumericUpDown eYear = new() { Minimum = 2010, Maximum = 2100, Width = 75 };
     readonly ComboBox eMonthNo = MonthCombo();
     readonly ComboBox ePerson = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
@@ -74,6 +75,7 @@ public sealed class MainForm : Form
         Font = new Font("Segoe UI", 9f);
         personFilter.Items.AddRange(["Aktif","Pasif","T\u00fcm\u00fc"]); personFilter.SelectedIndex = 0;
         eSide.Items.AddRange(["Giri\u015f E","\u00c7\u0131k\u0131\u015f E","Giri\u015f + \u00c7\u0131k\u0131\u015f E"]); eSide.SelectedIndex = 0;
+        auditView.Items.AddRange(["Tümü","E Kayıtları","Sabah / Giriş","Akşam / Çıkış","Eksik TNF","Fazla TNF","Saat Farkı","Sistemde Yok / İncele","Uyumlu","Uyumsuz"]); auditView.SelectedIndex = 0;
         Build();
         personFilter.SelectedIndexChanged += (_, _) => LoadPeople();
         eStart.ValueChanged += (_, _) => RebuildEDays(); eEnd.ValueChanged += (_, _) => RebuildEDays();
@@ -82,6 +84,7 @@ public sealed class MainForm : Form
         ioYear.Value = auditYear.Value = eYear.Value = eHistoryYear.Value = payrollYear.Value = paymentYear.Value = advanceYear.Value = DateTime.Today.Year;
         rangeStart.ValueChanged += (_, _) => RebuildDays();
         rangeEnd.ValueChanged += (_, _) => RebuildDays();
+        auditView.SelectedIndexChanged += (_, _) => ApplyAuditViewFilter();
     }
 
     static DataGridView Grid() => new()
@@ -108,13 +111,35 @@ public sealed class MainForm : Form
         tabs.TabPages.Add(Page("Personel", BuildPeople()));
         tabs.TabPages.Add(Page("Giri\u015f-\u00c7\u0131k\u0131\u015f", BuildIo()));
         tabs.TabPages.Add(Page("Toplu \u0130\u015flem", BuildBulk()));
-        tabs.TabPages.Add(Page("E İşlemleri", BuildE()));
-        tabs.TabPages.Add(Page("E İşlem Geçmişi", BuildEHistory()));
-        tabs.TabPages.Add(Page("Bordro", BuildPayroll()));
-        tabs.TabPages.Add(Page("Ödeme / Avans", BuildPayments()));
-        tabs.TabPages.Add(Page("Data Kontrol", BuildAudit()));
+        tabs.TabPages.Add(Page("E / Kontrol", BuildEControlHub()));
+        tabs.TabPages.Add(Page("Bordro / Ödeme", BuildPayrollHub()));
         root.Controls.Add(tabs, 0, 1);
         Controls.Add(root);
+    }
+    Control BuildEControlHub()
+    {
+        var t = new TabControl { Dock = DockStyle.Fill };
+        t.TabPages.Add(Page("E İşlemleri", BuildE()));
+        t.TabPages.Add(Page("E Geçmişi / İmza", BuildEHistory()));
+        t.TabPages.Add(Page("Data Kontrol", BuildAudit()));
+        return t;
+    }
+
+    Control BuildPayrollHub()
+    {
+        var t = new TabControl { Dock = DockStyle.Fill };
+        t.TabPages.Add(Page("Bordro", BuildPayroll()));
+        t.TabPages.Add(Page("Ödeme / Avans", BuildPayments()));
+        return t;
+    }
+
+    string MakeBackup(string src, string tag)
+    {
+        var dir = Path.Combine(AppContext.BaseDirectory, "_YEDEK");
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, $"{Path.GetFileName(src)}.{tag}_{DateTime.Now:yyyyMMdd_HHmmss}.bak");
+        File.Copy(src, path, true);
+        return path;
     }
 
     static TabPage Page(string title, Control content)
@@ -276,6 +301,7 @@ public sealed class MainForm : Form
         bar.Controls.Add(new Label{Text="Yıl",AutoSize=true,Padding=new Padding(0,8,3,0)}); bar.Controls.Add(auditYear);
         bar.Controls.Add(new Label{Text="Ay",AutoSize=true,Padding=new Padding(7,8,3,0)}); bar.Controls.Add(auditMonthNo);
         bar.Controls.Add(new Label{Text="Aktif Personel",AutoSize=true,Padding=new Padding(7,8,3,0)}); bar.Controls.Add(auditPerson);
+        bar.Controls.Add(new Label{Text="Göster",AutoSize=true,Padding=new Padding(7,8,3,0)}); bar.Controls.Add(auditView);
         bar.Controls.Add(WideBtn("Kontrol Et",LoadAudit,100));
         bar.Controls.Add(WideBtn("Seçili Eksikleri Ekle",()=>ApplyMissingTnf(true),155));
         bar.Controls.Add(WideBtn("Tüm Eksikleri Ekle",()=>ApplyMissingTnf(false),145));
@@ -431,13 +457,25 @@ public sealed class MainForm : Form
             var a = new DateTime((int)payrollYear.Value, payrollMonthNo.SelectedIndex==0?1:payrollMonthNo.SelectedIndex, 1);
             var b = payrollMonthNo.SelectedIndex==0 ? a.AddYears(1) : a.AddMonths(1);
             var card = SelectedCard(payrollPerson);
-            var q = "select u.*,k.AD,k.SOYAD from UCRETLER u inner join KIMLIK k on k.PKNO=u.PKNO where (k.ICTARIH is null or k.ICTARIH>=@TODAY) and u.BASTAR>=@A and u.BASTAR<@B" + (card is null ? "" : " and u.PKNO=@P") + " order by u.PKNO";
+            var q = "select u.*,k.AD,k.SOYAD,k.BHNO,(trim(k.AD) || ' ' || trim(k.SOYAD)) as PERSONEL_ADI from UCRETLER u inner join KIMLIK k on k.PKNO=u.PKNO where (k.ICTARIH is null or k.ICTARIH>=@TODAY) and u.BASTAR>=@A and u.BASTAR<@B" + (card is null ? "" : " and u.PKNO=@P") + " order by u.PKNO";
             payrollGrid.DataSource = card is null
                 ? db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",a),new FbParameter("@B",b))
                 : db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card));
+            FormatPayrollGrid();
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Bordro"); }
     }
+    void FormatPayrollGrid()
+    {
+        if (payrollGrid.DataSource is null) return;
+        var show = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "PKNO","PERSONEL_ADI","BASTAR","BITTAR","DMAAS","GUN1","SAAT1","UCRET1","NCGUN","NCSAAT","NCUCRET","NCODENEN","FMSAAT","FMUCRET","FMODENEN","GUN4","SAAT4","DEVG","DEVU","EKKES","EKKAZ","YOLU","YEMEKU","BHNO" };
+        foreach (DataGridViewColumn c in payrollGrid.Columns) c.Visible = show.Contains(c.Name);
+        var order = new[]{"PKNO","PERSONEL_ADI","BASTAR","BITTAR","DMAAS","GUN1","SAAT1","UCRET1","NCGUN","NCSAAT","NCUCRET","NCODENEN","FMSAAT","FMUCRET","FMODENEN","GUN4","SAAT4","DEVG","DEVU","EKKES","EKKAZ","YOLU","YEMEKU","BHNO"};
+        for (var i=0;i<order.Length;i++) if (payrollGrid.Columns.Contains(order[i])) payrollGrid.Columns[order[i]].DisplayIndex=i;
+        var h = new Dictionary<string,string>{{"PKNO","Kart No"},{"BASTAR","Dönem Başlangıç"},{"BITTAR","Dönem Bitiş"},{"DMAAS","Maaş"},{"GUN1","Normal Gün"},{"SAAT1","Normal Saat"},{"UCRET1","Normal Tutar"},{"NCGUN","Toplam Gün"},{"NCSAAT","Toplam Saat"},{"NCUCRET","Ödenecek"},{"NCODENEN","Ödenen"},{"FMSAAT","Mesai Saat"},{"FMUCRET","Mesai Tutar"},{"FMODENEN","Mesai Ödenen"},{"GUN4","Ücretsiz İzin Gün"},{"SAAT4","Ücretsiz İzin Saat"},{"UCRET4","Ücretsiz İzin Tutar"},{"DEVG","Devamsızlık Gün"},{"DEVS","Devamsızlık Saat"},{"DEVU","Devamsızlık Tutar"},{"EKKES","Kesinti"},{"EKKAZ","Ek Kazanç"},{"YOLU","Yol"},{"YEMEKU","Yemek"},{"DEVIR","Devir"},{"BHNO","Banka Hesap No"}};
+        foreach(var x in h) if(payrollGrid.Columns.Contains(x.Key)) payrollGrid.Columns[x.Key].HeaderText=x.Value;
+    }
+
     void RebuildDays()
     {
         dayList.Items.Clear(); if (rangeEnd.Value.Date < rangeStart.Value.Date) return;
@@ -511,8 +549,7 @@ public sealed class MainForm : Form
         if (preview.AsEnumerable().Any(r => Convert.ToString(r["Durum"]) == "\u00c7AKI\u015eMA")) { MessageBox.Show("\u00c7ak\u0131\u015fmal\u0131 TNF sat\u0131r\u0131 var. Uygulama durduruldu.", "E \u0130\u015flemleri", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         if (!File.Exists(tnfPath.Text)) { MessageBox.Show("TNF dosyas\u0131n\u0131 se\u00e7in."); return; }
         if (MessageBox.Show($"{preview.Rows.Count} taraf E yap\u0131lacak ve TNF kar\u015f\u0131l\u0131klar\u0131 temizlenecek. Devam?", "Toplu E", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-        var backup = tnfPath.Text + ".bak_Ebulk_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        File.Copy(tnfPath.Text, backup, true);
+        var backup = MakeBackup(tnfPath.Text, "Ebulk");
         var lines = File.ReadAllLines(tnfPath.Text).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
         using var c = db.OpenConnection(); using var tx = c.BeginTransaction();
         try
@@ -598,9 +635,8 @@ public sealed class MainForm : Form
         if (!File.Exists(tnfPath.Text)) { MessageBox.Show("TNF dosyas\u0131n\u0131 se\u00e7in.", "Toplu \u0130\u015flem"); return; }
         if (MessageBox.Show($"{preview.Rows.Count} ki\u015fi/g\u00fcn kayd\u0131 uygulanacak. Mevcut dolu giri\u015f-\u00e7\u0131k\u0131\u015flar korunur. Devam?", "Toplu \u0130\u015flem", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
 
-        var backup = tnfPath.Text + ".bak_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        var backup = MakeBackup(tnfPath.Text, "Toplu");
         var temp = tnfPath.Text + ".tmp_quick";
-        File.Copy(tnfPath.Text, backup, true);
         var lines = File.ReadAllLines(tnfPath.Text).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
         var existing = new HashSet<string>(lines, StringComparer.OrdinalIgnoreCase);
         using var c = db.OpenConnection(); using var tx = c.BeginTransaction();
@@ -692,8 +728,7 @@ public sealed class MainForm : Form
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "E D\u00fczeltme", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         if (MessageBox.Show($"{selected.Count} kay\u0131t i\u00e7in {(entry ? "giri\u015f" : "\u00e7\u0131k\u0131\u015f")} taraf\u0131 E yap\u0131lacak. TNF'deki kar\u015f\u0131l\u0131k temizlenecek. Devam?", "E D\u00fczeltme", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-        var backup = tnfPath.Text + ".bak_E_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        File.Copy(tnfPath.Text, backup, true);
+        var backup = MakeBackup(tnfPath.Text, "E");
         using var c = db.OpenConnection(); using var tx = c.BeginTransaction();
         try
         {
@@ -786,6 +821,7 @@ public sealed class MainForm : Form
             }
             auditGrid.DataSource = t;
             ColorAuditRows();
+            ApplyAuditViewFilter();
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Data Kontrol"); }
     }
@@ -813,6 +849,32 @@ public sealed class MainForm : Form
             r.DefaultCellStyle.SelectionBackColor = s.StartsWith("UYUMLU") ? Color.PaleGreen : s.Contains("EKSİK") ? Color.Khaki : Color.LightSalmon;
         }
     }
+    void ApplyAuditViewFilter()
+    {
+        if (auditGrid.DataSource is null || !auditGrid.Columns.Contains("Durum")) return;
+        auditGrid.CurrentCell = null;
+        var mode = auditView.SelectedItem?.ToString() ?? "Tümü";
+        foreach (DataGridViewRow r in auditGrid.Rows)
+        {
+            if (r.IsNewRow) continue;
+            var tur = auditGrid.Columns.Contains("Tür") ? Convert.ToString(r.Cells["Tür"].Value) ?? "" : "";
+            var taraf = auditGrid.Columns.Contains("Taraf") ? Convert.ToString(r.Cells["Taraf"].Value) ?? "" : "";
+            var durum = Convert.ToString(r.Cells["Durum"].Value) ?? "";
+            r.Visible = mode switch
+            {
+                "E Kayıtları" => tur == "E",
+                "Sabah / Giriş" => taraf.StartsWith("Giriş", StringComparison.OrdinalIgnoreCase),
+                "Akşam / Çıkış" => taraf.StartsWith("Çıkış", StringComparison.OrdinalIgnoreCase),
+                "Eksik TNF" => durum.Contains("EKSİK", StringComparison.OrdinalIgnoreCase),
+                "Fazla TNF" => durum.Contains("FAZLA", StringComparison.OrdinalIgnoreCase) || durum.Contains("E AMA TNF VAR", StringComparison.OrdinalIgnoreCase),
+                "Saat Farkı" => durum.Contains("SAAT FARKLI", StringComparison.OrdinalIgnoreCase),
+                "Sistemde Yok / İncele" => durum.Contains("SİSTEMDE YOK", StringComparison.OrdinalIgnoreCase) || durum.Contains("İNCELE", StringComparison.OrdinalIgnoreCase),
+                "Uyumlu" => durum.StartsWith("UYUMLU", StringComparison.OrdinalIgnoreCase),
+                "Uyumsuz" => durum.StartsWith("UYUMSUZ", StringComparison.OrdinalIgnoreCase),
+                _ => true
+            };
+        }
+    }
 
     void ApplyMissingTnf(bool selectedOnly)
     {
@@ -836,7 +898,7 @@ public sealed class MainForm : Form
     void ApplyAuditRows(List<DataGridViewRow> rows,string message)
     {
         var y=(int)auditYear.Value; var src=Path.Combine(Path.GetDirectoryName(tnfPath.Text)??"",$"TR{y}.Tnf"); if(!File.Exists(src))src=tnfPath.Text; if(!File.Exists(src)){MessageBox.Show("TNF dosyası bulunamadı.");return;}
-        if(MessageBox.Show(message+" Yedek alınacak. Devam?","Data Kontrol",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return; var backup=src+".bak_AUDIT_"+DateTime.Now.ToString("yyyyMMdd_HHmmss");File.Copy(src,backup,true);var lines=File.ReadAllLines(src).Where(x=>!string.IsNullOrWhiteSpace(x)).ToList();
+        if(MessageBox.Show(message+" Devam?","Data Kontrol",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return; var backup=MakeBackup(src,"DataKontrol"); var lines=File.ReadAllLines(src).Where(x=>!string.IsNullOrWhiteSpace(x)).ToList();
         foreach(var r in rows){var card=Convert.ToString(r.Cells["Kart No"].Value)??"";var d=DateTime.ParseExact(Convert.ToString(r.Cells["Tarih"].Value)??"","dd.MM.yyyy",System.Globalization.CultureInfo.InvariantCulture);var entry=(Convert.ToString(r.Cells["Taraf"].Value)??"").StartsWith("Giriş",StringComparison.OrdinalIgnoreCase);var time=Convert.ToString(r.Cells["Saat"].Value)??"";var op=Convert.ToString(r.Cells["İşlem"].Value)??"";
             if(op=="TNF EKLE")lines.Add($"{card},{time},{d:ddMMyy},1,001"); else if(op=="TNF SİL E")lines=lines.Where(x=>!SameTnfSide(x,card,d,entry)).ToList(); else if(op=="TNF SİL FAZLA"){var raw=Convert.ToString(r.Cells["TNF Karşılığı"].Value)??"";var ix=lines.FindIndex(x=>string.Equals(x,raw,StringComparison.OrdinalIgnoreCase));if(ix>=0)lines.RemoveAt(ix);} else if(op=="TNF DÜZELT"){lines=lines.Where(x=>!SameTnfSide(x,card,d,entry)).ToList();lines.Add($"{card},{time},{d:ddMMyy},1,001");}}
         File.WriteAllLines(src,SortTnf(lines));LoadAudit();MessageBox.Show("İşlem tamamlandı. Yedek: "+backup);
