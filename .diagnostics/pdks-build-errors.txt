@@ -1,5 +1,7 @@
-HEAD: 204c755ffe67174095f81b51f7ef5f88b4942a96
-UTC: 2026-09-27T23:02:05
+HEAD: 81a910f7af77e1a97baac89fbdd9e685546fe520
+UTC: 2026-09-27T23:04:02
 
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\ToolStripLayoutPersistence.cs(23,87): error CS0019: Operator '??' cannot be applied to operands of type 'Form' and 'ToolStrip' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\ToolStripLayoutPersistence.cs(23,87): error CS0019: Operator '??' cannot be applied to operands of type 'Form' and 'ToolStrip' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\LegacyBordroForm.cs(1,12): error CS1001: Identifier expected [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\LegacyBordroForm.cs(1,12): error CS1002: ; expected [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\LegacyBordroForm.cs(1,12): error CS1001: Identifier expected [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\LegacyBordroForm.cs(1,12): error CS1002: ; expected [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
