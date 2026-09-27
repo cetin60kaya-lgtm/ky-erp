@@ -115,6 +115,55 @@ function geometryFromRect(rect) {
   return clampGeometry({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
 }
 
+function isFixedSecurityPanel(panel) {
+  if (!(panel instanceof HTMLElement)) return false;
+  if (panel.dataset.modalResize === "off" || panel.dataset.modalGeometry === "fixed") return true;
+  return panel.classList.contains("auth-shell") && Boolean(panel.closest(".auth-page"));
+}
+
+function applyFixedSecurityLayout(panel) {
+  if (!(panel instanceof HTMLElement)) return;
+
+  panel.__kyModalResizeCleanup?.();
+  delete panel.__kyModalResizeCleanup;
+  delete panel.dataset.kyModalResizable;
+  panel.classList.remove("ky-persistent-modal", "ky-modal-positioned", "ky-modal-dragging", "ky-modal-resizing");
+  panel.querySelectorAll(":scope > .ky-modal-resize-handle").forEach((handle) => handle.remove());
+  panel.querySelectorAll(".ky-modal-drag-handle").forEach((handle) => {
+    handle.classList.remove("ky-modal-drag-handle");
+    delete handle.dataset.kyModalDragHandle;
+  });
+
+  ["--ky-modal-left", "--ky-modal-top", "--ky-modal-width", "--ky-modal-height"].forEach((name) => {
+    panel.style.removeProperty(name);
+  });
+
+  const isPhone = window.innerWidth <= 560;
+  const isCompact = window.innerWidth <= 820;
+  const width = isPhone
+    ? "100%"
+    : isCompact
+      ? "min(680px, calc(100vw - 20px))"
+      : "min(900px, calc(100vw - 36px))";
+  const height = isPhone
+    ? "calc(100dvh - 12px)"
+    : isCompact
+      ? "min(700px, calc(100dvh - 20px))"
+      : "min(720px, calc(100dvh - 44px))";
+
+  panel.style.setProperty("width", width, "important");
+  panel.style.setProperty("height", height, "important");
+  panel.style.setProperty("max-width", "calc(100vw - 12px)", "important");
+  panel.style.setProperty("max-height", "calc(100dvh - 12px)", "important");
+  panel.style.setProperty("resize", "none", "important");
+
+  try {
+    window.localStorage.removeItem(`${GEOMETRY_STORAGE_PREFIX}auth-shell`);
+  } catch {
+    // Storage kapalıysa sabit güvenlik düzeni yine çalışır.
+  }
+}
+
 function findDragHandle(panel) {
   try {
     const explicit = panel.querySelector(DRAG_HANDLE_SELECTOR);
@@ -261,7 +310,12 @@ function attachResize(panel, key) {
   };
 }
 function makePersistent(panel) {
-  if (!(panel instanceof HTMLElement) || panel.dataset.kyModalResizable === "true") return;
+  if (!(panel instanceof HTMLElement)) return;
+  if (isFixedSecurityPanel(panel)) {
+    applyFixedSecurityLayout(panel);
+    return;
+  }
+  if (panel.dataset.kyModalResizable === "true") return;
 
   panel.dataset.kyModalResizable = "true";
   panel.classList.add("ky-persistent-modal");
@@ -333,7 +387,6 @@ export function installPersistentModalSizing() {
   if (window.__kyPersistentModalSizingInstalled) return;
   window.__kyPersistentModalSizingInstalled = true;
 
-
   const scan = (root) => collectPanels(root).forEach(makePersistent);
   scan(document);
 
@@ -352,6 +405,7 @@ export function installPersistentModalSizing() {
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
   window.addEventListener("resize", () => {
+    document.querySelectorAll(".auth-page .auth-shell").forEach(applyFixedSecurityLayout);
     document.querySelectorAll(".ky-persistent-modal").forEach((panel) => {
       const keys = storageKeys(panel);
       const saved = readGeometry(keys.geometry);
