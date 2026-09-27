@@ -9,8 +9,10 @@ internal static class GridLayoutExtensions
         var index = 0;
         foreach (var grid in Enumerate(root).OfType<DataGridView>())
         {
-            // Bordro kendi rapor türüne göre ayrı layout anahtarı kullanır; global anahtar onunla çakışmasın.
-            if (string.Equals(grid.Name, "BordroGrid", StringComparison.OrdinalIgnoreCase)) continue;
+            // Bu ekranlar rapor türüne göre kendi layout anahtarını yönetir; global anahtar çakışmasın.
+            if (string.Equals(grid.Name, "BordroGrid", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(grid.Name, "ReportCenterGrid", StringComparison.OrdinalIgnoreCase))
+                continue;
             var key = $"{formKey}-{grid.Name}-{index++}";
             if (string.IsNullOrWhiteSpace(grid.Name)) key = $"{formKey}-grid-{index}";
             GridLayoutPersistence.Attach(grid, key);
