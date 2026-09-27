@@ -10,9 +10,10 @@
     "security-auth-modal-fixed-responsive-layout",
     "security-auth-modal-no-persistent-user-geometry",
     "security-auth-modal-no-resize-handle",
+    "frontend-release-stale-targeted-test-guard",
     "frontend-lint-build",
     "cloudflare-pages-production",
     "live-bundle-verification"
   ],
-  "note": "Tüm Sistem görünümünde firma zorunlu muhasebe canlı servisleri çağrılmayarak Yönetim Özeti API hatası engellendi; muhasebe canlı senkron hook bağımlılıkları lint uyumlu hale getirildi. KY ERP Güvenlik giriş/doğrulama penceresi uygulama içi genel modal boyutlandırma sisteminden ayrıldı; masaüstünde tek geniş sabit düzen, tablet/telefonda responsive düzen kullanılır. Kullanıcıya özel modal geometri kaydı ve sürüklenebilir resize tutamacı güvenlik penceresinde kaldırıldı. Diğer uygulama modallarının mevcut davranışı değiştirilmedi."
+  "note": "Tüm Sistem görünümünde firma zorunlu muhasebe canlı servisleri çağrılmayarak Yönetim Özeti API hatası engellendi; muhasebe canlı senkron hook bağımlılıkları lint uyumlu hale getirildi. KY ERP Güvenlik giriş/doğrulama penceresi uygulama içi genel modal boyutlandırma sisteminden ayrıldı; masaüstünde tek geniş sabit düzen, tablet/telefonda responsive düzen kullanılır. Kullanıcıya özel modal geometri kaydı ve sürüklenebilir resize tutamacı güvenlik penceresinde kaldırıldı. Production yayın akışındaki artık mevcut olmayan hedefli test dosyası korumalı hale getirildi; audit, lint ve production build kapıları aktif kalır. Diğer uygulama modallarının mevcut davranışı değiştirilmedi."
 }
