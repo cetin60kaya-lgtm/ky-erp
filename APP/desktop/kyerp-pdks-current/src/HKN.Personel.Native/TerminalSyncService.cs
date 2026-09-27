@@ -52,14 +52,25 @@ internal static class TerminalSyncService
             AppendTnf(punches);
             var records=punches.Select(ToRecord).ToArray();
             var imported=new AttendanceImportService(new FirebirdDatabase(PdksOptions.FromEnvironment())).Import(records,5);
+            var accounted=imported.Inserted+imported.Updated+imported.Duplicates;
+            if(imported.Skipped!=0||accounted!=punches.Length)
+            {
+                var validation=$"{source}: doğrulama başarısız; okunan={punches.Length}, işlenen={accounted}, atlanan={imported.Skipped}. Terminal kayıtları SİLİNMEDİ.";
+                return Save(new(DateTime.Now,punches.Length,imported.Inserted,imported.Updated,imported.Duplicates,imported.Skipped,false,validation,scheduleKey));
+            }
 
             var clear=await TerminalDeviceClient.ExecuteAsync("clearlogs",ct);
+            if(clear.Success)
+            {
+                await PdksCloudAgent.EnqueueTerminalSyncAsync(punches,imported,ct);
+                _=PdksCloudAgent.RunOnceAsync(ct);
+            }
             var msg=clear.Success
-                ? $"{source}: {punches.Length} kayıt alındı ve cihaz temizlendi."
-                : $"{source}: veri kaydedildi; cihaz temizlenemedi: {clear.Message}";
+                ? $"{source}: {punches.Length} kayıt TNF + FDB doğrulandı, cihaz temizlendi ve bulut kuyruğuna alındı."
+                : $"{source}: TNF + FDB doğrulandı; cihaz temizlenemedi, terminal kayıtları korundu: {clear.Message}";
             return Save(new(DateTime.Now,punches.Length,imported.Inserted,imported.Updated,imported.Duplicates,imported.Skipped,clear.Success,msg,scheduleKey));
         }
-        catch(Exception ex){ return Save(new(DateTime.Now,0,0,0,0,0,false,"Eşitleme hatası: "+ex.Message,scheduleKey)); }
+        catch(Exception ex){ return Save(new(DateTime.Now,0,0,0,0,0,false,"Eşitleme hatası: "+ex.Message+" Terminal kayıtları silinmedi.",scheduleKey)); }
         finally { Gate.Release(); }
     }
     public static void ClearLive()
