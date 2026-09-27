@@ -6,6 +6,21 @@ const date = (value) => value ? new Date(value).toLocaleDateString("tr-TR") : "-
 const unwrap = (payload) => payload?.data?.data || payload?.data || payload || {};
 const rowsOf = (value) => Array.isArray(value) ? value : [];
 
+const statusText = (value) => {
+  const raw = String(value || "").trim();
+  const key = raw.toUpperCase();
+  return ({
+    CONTROL_WAITING: "Kontrol bekliyor",
+    WAITING: "Bekliyor",
+    PENDING: "Bekliyor",
+    MATCHING_WAIT: "Eşleşme bekliyor",
+    COMPANY_WAITING: "Cari eşleşmesi bekliyor",
+    MISSING_COMPANY: "Cari eşleşmesi eksik",
+    MISSING_DOCUMENT: "Belge bağlantısı eksik",
+    ERROR: "Kontrol gerekli",
+  })[key] || raw || "Kontrol";
+};
+
 function Metric({ label, value, emphasis = false }) {
   return <div className={`management-metric ${emphasis ? "emphasis" : ""}`}><span>{label}</span><strong>{value}</strong></div>;
 }
@@ -95,7 +110,7 @@ export default function ManagementOverviewWorkspace({ activeMainCompany, refresh
         <CompactList title="Bu ay en yüksek tedarikçiler" columns={["Firma", "Belge", "Toplam"]} rows={topSuppliers} emptyText="Bu ay tedarikçi faturası yok." renderRow={(row, index) => <tr key={row.id || row.firma || index}><td>{row.firma || row.companyName || "-"}</td><td>{row.belgeSayisi || row.count || 0}</td><td>{money(row.toplam || row.total)}</td></tr>} />
         <CompactList title="Bu ay en yüksek müşteriler" columns={["Firma", "Belge", "Toplam"]} rows={topCustomers} emptyText="Bu ay kesilen fatura yok." renderRow={(row, index) => <tr key={row.id || row.firma || index}><td>{row.firma || row.companyName || "-"}</td><td>{row.belgeSayisi || row.count || 0}</td><td>{money(row.toplam || row.total)}</td></tr>} />
         <CompactList title="Yaklaşan çekler" columns={["Vade", "Firma", "Çek no", "Tutar"]} rows={upcomingChecks} emptyText="Yaklaşan çek bulunmuyor." renderRow={(row, index) => <tr key={row.id || index}><td>{date(row.vadeTarihi || row.dueDate)}</td><td>{row.firma || row.companyName || "-"}</td><td>{row.cekNo || row.checkNo || "-"}</td><td>{money(row.tutar || row.amount)}</td></tr>} />
-        <CompactList title="Eksik / eşleşmeyen belgeler" columns={["Belge", "Firma", "Eksik", "İşlem"]} rows={missingDocuments} emptyText="Eksik veya eşleşmeyen belge yok." renderRow={(row, index) => <tr key={row.id || row.belge || index}><td>{row.belgeNo || row.belge || row.documentNo || "-"}</td><td>{row.firma || "-"}</td><td>{row.durum || row.eksik || "Kontrol"}</td><td><button type="button" onClick={() => openModule?.("e-belge", { tabKey: "onay-sorunlar" })}>İncele</button></td></tr>} />
+        <CompactList title="Eksik / eşleşmeyen belgeler" columns={["Belge", "Firma", "Eksik", "İşlem"]} rows={missingDocuments} emptyText="Eksik veya eşleşmeyen belge yok." renderRow={(row, index) => <tr key={row.id || row.belge || index}><td>{row.belgeNo || row.belge || row.documentNo || "-"}</td><td>{row.firma || "-"}</td><td>{statusText(row.durum || row.eksik)}</td><td><button type="button" onClick={() => openModule?.("e-belge", { tabKey: "onay-sorunlar" })}>İncele</button></td></tr>} />
       </div>
     </div>
   );

@@ -14,7 +14,12 @@
     "frontend-release-stale-targeted-test-guard",
     "frontend-lint-build",
     "cloudflare-pages-production",
-    "live-bundle-verification"
+    "live-bundle-verification",
+    "accounting-responsive-canonical-layout",
+    "accounting-management-overview-readable-density",
+    "accounting-quick-menu-outside-escape-close",
+    "accounting-status-human-labels",
+    "accounting-workspace-endpoint-audit"
   ],
-  "note": "Tüm Sistem görünümünde firma zorunlu muhasebe canlı servisleri çağrılmayarak Yönetim Özeti API hatası engellendi; muhasebe canlı senkron hook bağımlılıkları lint uyumlu hale getirildi. KY ERP Güvenlik giriş/doğrulama penceresi uygulama içi genel modal boyutlandırma sisteminden ayrıldı; masaüstünde tek geniş sabit düzen, tablet/telefonda responsive düzen kullanılır. Kullanıcıya özel modal geometri kaydı ve sürüklenebilir resize tutamacı güvenlik penceresinde kaldırıldı. Production yayın akışındaki artık mevcut olmayan hedefli test dosyası korumalı hale getirildi; audit, lint ve production build kapıları aktif kalır. Diğer uygulama modallarının mevcut davranışı değiştirilmedi. Muhasebe canlı revision servisi geçici hata verdiğinde genel API sağlık kontrolüyle bağlantı durumu korunur; güvenlik/yetki hataları maskelenmez."
+  "note": "Muhasebe API canlı durum düzeltmesinin ardından tüm muhasebe çalışma alanı için tek responsive düzen uygulandı: yönetim özeti okunabilir kart/tablo yoğunluğuna alındı, laptop/tablet/mobil kırılımları sabitlendi, firma/cari detayları merkez modal düzenine getirildi, teknik belge durum kodları kullanıcı diline çevrildi. Hızlı İşlem menüsü dışarı tıklama ve Escape ile kapanır. Muhasebe frontend API çağrılarının backend route karşılıkları denetlendi; e-Belge canonical kontrat testleri, lint ve production build başarılıdır."
 }

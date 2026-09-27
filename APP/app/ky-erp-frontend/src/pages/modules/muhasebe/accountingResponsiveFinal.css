@@ -1,0 +1,61 @@
+/* KY ERP Muhasebe canonical responsive shell - 2026-09-27 */
+.muhasebe-module-page,.muhasebe-workbench,.accounting-composite-workspace,
+.ccw-root,.idc-root,.sdw-root,.mtpl-root,.mtw-root,.plw-root,.vcw-root,.siw-root{box-sizing:border-box;min-width:0;width:100%}
+.muhasebe-module-page *{box-sizing:border-box}
+.accounting-page-header.compact{position:relative;z-index:20}
+.accounting-header-actions{min-width:max-content}
+.accounting-quick-menu{z-index:120;width:min(420px,calc(100vw - 32px));grid-template-columns:repeat(2,minmax(0,1fr))}
+.accounting-quick-menu button{min-width:0;min-height:44px}
+.management-table-wrap,.ccw-table-wrap,.idc-table-wrap,.sdw-table-wrap,
+.ledger-table-wrap,.payment-table-wrap,.reconciliation-table-wrap{max-width:100%;overflow:auto}
+.management-list-card,.ccw-table-card,.idc-table-card,.sdw-card,
+.financial-accounts-panel,.reconciliation-panel,.ledger-panel,.payment-planner-card{min-width:0}
+.ccw-toolbar,.idc-toolbar,.mtpl-toolbar{min-width:0}
+.ccw-search,.idc-search,.mtpl-search{min-width:180px}
+.ccw-summary,.idc-summary{min-width:0}
+.ccw-summary>div,.idc-summary>div{min-width:0}
+.ccw-summary strong,.idc-summary strong{overflow-wrap:anywhere}
+.accounting-table-shell,.reports-list{max-width:100%;overflow:auto}
+.accounting-table-shell table{min-width:920px}
+
+/* Firma/cari detayını da diğer muhasebe detayları gibi tek merkez modal yapısına al. */
+.ccw-root:has(.ccw-drawer-layer){grid-template-columns:1fr!important;grid-template-rows:auto!important}
+.ccw-root:has(.ccw-drawer-layer)>.ccw-toolbar,
+.ccw-root:has(.ccw-drawer-layer)>.ccw-summary,
+.ccw-root:has(.ccw-drawer-layer)>.ccw-error,
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card{grid-column:1!important;grid-row:auto!important}
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card{position:static!important;min-height:360px!important;max-height:none!important}
+.ccw-drawer-layer{align-items:center!important;justify-content:center!important;padding:24px!important;background:rgba(15,23,42,.46)!important;backdrop-filter:blur(2px)}
+.ccw-drawer{width:min(1240px,95vw)!important;height:auto!important;min-height:0!important;max-height:90vh!important;border:1px solid #dfe4ea;border-radius:16px!important;overflow:hidden;box-shadow:0 28px 80px rgba(15,23,42,.28)!important;animation:none!important}
+.ccw-drawer-body{max-height:calc(90vh - 74px)!important;overflow:auto!important}
+.ccw-detail-summary{grid-template-columns:repeat(4,minmax(0,1fr))}
+.ccw-profile-grid,.ccw-transaction>div{grid-template-columns:repeat(4,minmax(0,1fr))}
+.ccw-table-card>.ccw-table-wrap th,.ccw-table-card>.ccw-table-wrap td{font-size:12px}
+.ccw-table-card>.ccw-table-wrap th{font-size:10.5px}
+.idc-summary{grid-template-columns:repeat(5,minmax(0,1fr))}
+.financial-account-grid{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.reconciliation-table-wrap table{min-width:820px}
+
+@media(max-width:1180px){
+  .accounting-header-actions{min-width:0;flex-wrap:wrap}
+  .ccw-detail-summary,.ccw-profile-grid,.ccw-transaction>div{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .idc-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:820px){
+  .accounting-page-header.compact{grid-template-columns:1fr}
+  .accounting-header-actions{width:100%;justify-content:flex-start}
+  .accounting-quick-wrap{position:static}
+  .accounting-quick-menu{left:14px;right:14px;top:auto;width:auto;grid-template-columns:1fr}
+  .ccw-drawer-layer{padding:0!important}
+  .ccw-drawer{width:100vw!important;height:100vh!important;max-height:100vh!important;border-radius:0!important}
+  .ccw-drawer-body{max-height:calc(100vh - 74px)!important}
+  .ccw-summary,.idc-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:620px){
+  .accounting-header-actions{display:grid;grid-template-columns:1fr 1fr;align-items:center}
+  .accounting-live-state{grid-column:1/-1}
+  .accounting-primary,.accounting-refresh{width:100%}
+  .ccw-summary,.idc-summary,.ccw-detail-summary,.ccw-profile-grid,.ccw-transaction>div{grid-template-columns:1fr}
+  .ccw-toolbar,.idc-toolbar,.mtpl-toolbar{align-items:stretch!important;display:flex!important;flex-direction:column!important}
+  .ccw-search,.idc-search,.mtpl-search,.ccw-toolbar select,.idc-toolbar select,.ccw-toolbar button,.idc-toolbar button,.mtpl-toolbar button{width:100%;min-width:0}
+}

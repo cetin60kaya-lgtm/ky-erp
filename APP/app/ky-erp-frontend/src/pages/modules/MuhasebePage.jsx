@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import CompaniesCurrentWorkspace from "./muhasebe/CompaniesCurrentWorkspace";
 import CustomerDocumentsWorkspace from "./muhasebe/CustomerDocumentsWorkspace";
 import FinanceOperationsWorkspace from "./muhasebe/FinanceOperationsWorkspace";
@@ -12,6 +12,7 @@ import "./muhasebe/muhasebeModule.css";
 import "./muhasebe/supplierInventoryWorkspace.css";
 import "./muhasebe/accountingSafetyOverrides.css";
 import "./muhasebe/accountingWorkspaceCore.css";
+import "./muhasebe/accountingResponsiveFinal.css";
 
 export const MUHASEBE_TABS = [
   { key: "yonetim-ozeti", title: "Yönetim Özeti", description: "Nakit, cari, KDV, belge ve yaklaşan işlemleri tek ekranda izleyin." },
@@ -33,6 +34,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
   const [refreshKey, setRefreshKey] = useState(0);
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickCompanyOpen, setQuickCompanyOpen] = useState(false);
+  const quickWrapRef = useRef(null);
   const reloadAll = () => setRefreshKey((value) => value + 1);
   const live = useAccountingLiveSync(activeMainCompany);
   const liveLabel = { live: "Canl\u0131", connecting: "Ba\u011flan\u0131yor\u2026", offline: "\u00c7evrimd\u0131\u015f\u0131", auth_error: "Yetki hatas\u0131", api_error: "API hatas\u0131" }[live.status] || "Ba\u011flant\u0131 durumu";
@@ -46,6 +48,22 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
   useEffect(() => {
     setQuickOpen(false);
   }, [normalizedTab]);
+
+  useEffect(() => {
+    if (!quickOpen) return undefined;
+    const closeOutside = (event) => {
+      if (!quickWrapRef.current?.contains(event.target)) setQuickOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setQuickOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [quickOpen]);
 
   const goTab = (tabKey, query = "") => {
     const target = tabKey;
@@ -92,7 +110,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
           <div><span className="accounting-eyebrow">Muhasebe</span><h1>{current.title}</h1><p>{current.description}</p></div>
           <div className="accounting-header-actions">
             <span className={`accounting-live-state ${live.status || "connecting"}`} title={live.error || undefined}>{liveLabel}</span>
-            <div className="accounting-quick-wrap">
+            <div className="accounting-quick-wrap" ref={quickWrapRef}>
               <button type="button" className="accounting-primary" aria-expanded={quickOpen} onClick={() => setQuickOpen((value) => !value)}>+ Hızlı İşlem</button>
               {quickOpen ? (
                 <div className="accounting-quick-menu" role="menu">
