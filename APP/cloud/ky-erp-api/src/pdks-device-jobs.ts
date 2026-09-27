@@ -126,18 +126,76 @@ export function registerPdksDeviceJobRoutes(app: Hono<AppEnv>) {
     return ok(c, { id, status: success ? "SUCCESS" : "ERROR", finishedAt: stamp });
   });
 
+  app.post("/api/auth/pdks-device/bootstrap/personnel", async (c) => {
+    const device = await resolveDevice(c);
+    if (!device) return fail(c, 401, "PDKS_DEVICE_UNAUTHORIZED", "PDKS cihaz yetkisi geçersiz.");
+    const body = await bodyOf(c);
+    const records = Array.isArray(body.records) ? body.records as Row[] : [];
+    if (!records.length) return fail(c, 400, "PDKS_PERSONNEL_REQUIRED", "Personel snapshot boş olamaz.");
+    if (records.length > 500) return fail(c, 400, "PDKS_PERSONNEL_LIMIT", "Personel snapshot sınırı 500 kayıttır.");
+    const company = text(device.main_company_id);
+    const current = (await c.env.DB.prepare("SELECT id,code,full_name,status FROM hr_monthly_employees WHERE main_company_id=?").bind(company).all<Row>()).results || [];
+    const normalizeName = (value: unknown) => text(value).replace(/\s+/g, " ").toLocaleUpperCase("tr-TR");
+    const byCode = new Map(current.map((row) => [text(row.code), row]));
+    const byName = new Map<string, Row[]>();
+    for (const row of current) {
+      const key = normalizeName(row.full_name);
+      if (!byName.has(key)) byName.set(key, []);
+      byName.get(key)!.push(row);
+    }
+    const used = new Set<string>();
+    const stamp = nowIso();
+    let created = 0;
+    let updated = 0;
+    let reused = 0;
+    for (const source of records) {
+      const code = text(source.code || source.cardNo);
+      const fullName = text(source.fullName).replace(/\s+/g, " ").trim();
+      if (!/^\d{5}$/.test(code) || !fullName) continue;
+      let row = byCode.get(code);
+      if (!row && !text(source.exitDate)) {
+        const candidates = byName.get(normalizeName(fullName)) || [];
+        row = candidates.find((candidate) => !used.has(text(candidate.id)) && upper(candidate.status) !== "ARCHIVED");
+        if (row) reused++;
+      }
+      const id = text(row?.id) || crypto.randomUUID();
+      const exists = Boolean(row);
+      const status = text(source.exitDate) ? "Pasif" : "Aktif";
+      await c.env.DB.prepare(`INSERT INTO hr_monthly_employees
+        (id,main_company_id,code,full_name,department,title,work_type,sgk_status,status,hire_date,salary,road_allowance,bank_payment_type,bank_amount,cash_amount,overtime_hourly_base,annual_leave_entitlement,annual_leave_carryover,note,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET code=excluded.code,full_name=excluded.full_name,status=excluded.status,hire_date=excluded.hire_date,salary=excluded.salary,note=excluded.note,updated_at=excluded.updated_at`)
+        .bind(id, company, code, fullName, text(source.department) || null, text(source.title) || null, "Aylık", text(source.sgkStatus) || "VAR", status, text(source.startDate) || null, Number(source.salary || 0), 0, null, 0, 0, 225, 14, 0, "PDKS Desktop canonical", stamp, stamp).run();
+      await c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,card_no,exit_date,active_passive,personel_kodu,updated_at)
+        VALUES(?,?,?,?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET card_no=excluded.card_no,exit_date=excluded.exit_date,active_passive=excluded.active_passive,personel_kodu=excluded.personel_kodu,updated_at=excluded.updated_at`)
+        .bind(id, company, code, text(source.exitDate) || null, status, code, stamp).run();
+      used.add(id);
+      if (exists) updated++;
+      else created++;
+    }
+    let archived = 0;
+    for (const row of current) {
+      const id = text(row.id);
+      if (used.has(id) || !/^HKN-/i.test(text(row.code))) continue;
+      await c.env.DB.prepare("UPDATE hr_monthly_employees SET status='ARCHIVED',note='PDKS Desktop dışı eski web kaydı',updated_at=? WHERE id=? AND main_company_id=?").bind(stamp, id, company).run();
+      archived++;
+    }
+    return ok(c, { received: records.length, created, updated, reused, archived, updatedAt: stamp });
+  });
+
   app.get("/api/auth/pdks-device/sync-events/pull", async (c) => {
     const device = await resolveDevice(c);
     if (!device) return fail(c, 401, "PDKS_DEVICE_UNAUTHORIZED", "PDKS cihaz yetkisi geçersiz.");
     const cursor = text(c.req.query("cursor"));
     const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") || 100)));
     const result = cursor
-      ? await c.env.DB.prepare(`SELECT id,idempotency_key AS idempotencyKey,entity_type AS entityType,entity_id AS entityId,operation,source,payload_json AS payloadJson,occurred_at AS occurredAt,received_at AS receivedAt FROM ik_pdks_sync_events WHERE main_company_id=? AND source IN ('WEB','TABLET') AND (received_at>? OR (received_at=? AND id>?)) ORDER BY received_at,id LIMIT ?`).bind(text(device.main_company_id),cursor.split("|")[0]||cursor,cursor.split("|")[0]||cursor,cursor.split("|")[1]||"",limit).all<Row>()
-      : await c.env.DB.prepare(`SELECT id,idempotency_key AS idempotencyKey,entity_type AS entityType,entity_id AS entityId,operation,source,payload_json AS payloadJson,occurred_at AS occurredAt,received_at AS receivedAt FROM ik_pdks_sync_events WHERE main_company_id=? AND source IN ('WEB','TABLET') ORDER BY received_at,id LIMIT ?`).bind(text(device.main_company_id),limit).all<Row>();
+      ? await c.env.DB.prepare(`SELECT id,idempotency_key AS idempotencyKey,entity_type AS entityType,entity_id AS entityId,operation,source,payload_json AS payloadJson,occurred_at AS occurredAt,received_at AS receivedAt FROM ik_pdks_sync_events WHERE main_company_id=? AND source IN ('WEB','TABLET') AND (received_at>? OR (received_at=? AND id>?)) ORDER BY received_at,id LIMIT ?`).bind(text(device.main_company_id), cursor.split("|")[0] || cursor, cursor.split("|")[0] || cursor, cursor.split("|")[1] || "", limit).all<Row>()
+      : await c.env.DB.prepare(`SELECT id,idempotency_key AS idempotencyKey,entity_type AS entityType,entity_id AS entityId,operation,source,payload_json AS payloadJson,occurred_at AS occurredAt,received_at AS receivedAt FROM ik_pdks_sync_events WHERE main_company_id=? AND source IN ('WEB','TABLET') ORDER BY received_at,id LIMIT ?`).bind(text(device.main_company_id), limit).all<Row>();
     const rows = result.results || [];
-    const last = rows.length ? rows[rows.length-1] : null;
-    return ok(c,{changes:rows,cursor:last?`${text(last.receivedAt)}|${text(last.id)}`:cursor});
+    const last = rows.length ? rows[rows.length - 1] : null;
+    return ok(c, { changes: rows, cursor: last ? `${text(last.receivedAt)}|${text(last.id)}` : cursor });
   });
+
   app.post("/api/auth/pdks-device/sync-events/push", async (c) => {
     const device = await resolveDevice(c);
     if (!device) return fail(c, 401, "PDKS_DEVICE_UNAUTHORIZED", "PDKS cihaz yetkisi geçersiz.");
@@ -150,7 +208,7 @@ export function registerPdksDeviceJobRoutes(app: Hono<AppEnv>) {
     const receivedAt = nowIso();
     await c.env.DB.prepare(`INSERT OR IGNORE INTO ik_pdks_sync_events
       (id,idempotency_key,main_company_id,device_id,entity_type,entity_id,operation,source,payload_json,occurred_at,received_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?)`).bind(id,idempotencyKey,text(device.main_company_id),text(device.id),entityType,text(body.entityId),operation,"DESKTOP",typeof body.payloadJson === "string" ? body.payloadJson : JSON.stringify(body.payloadJson || {}),text(body.occurredAtUtc)||receivedAt,receivedAt).run();
+      VALUES(?,?,?,?,?,?,?,?,?,?,?)`).bind(id, idempotencyKey, text(device.main_company_id), text(device.id), entityType, text(body.entityId), operation, "DESKTOP", typeof body.payloadJson === "string" ? body.payloadJson : JSON.stringify(body.payloadJson || {}), text(body.occurredAtUtc) || receivedAt, receivedAt).run();
     return ok(c, { accepted: true, id, receivedAt }, 202);
   });
 }
