@@ -20,7 +20,11 @@ internal static class ToolStripLayoutPersistence
     {
         Apply(strip, key);
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Menü / Buton Düzenini Özelleştir", null, (_, _) => ShowEditor(strip.FindForm() ?? strip, strip, key));
+        menu.Items.Add("Menü / Buton Düzenini Özelleştir", null, (_, _) =>
+        {
+            IWin32Window owner = strip.FindForm() is Form form ? form : strip;
+            ShowEditor(owner, strip, key);
+        });
         menu.Items.Add("Mevcut Düzeni Kaydet", null, (_, _) => Save(strip, key));
         menu.Items.Add("Varsayılan Düzene Dön", null, (_, _) => Reset(strip, key));
         strip.ContextMenuStrip = menu;
