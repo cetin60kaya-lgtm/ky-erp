@@ -1,5 +1,9 @@
-HEAD: 050644bd41e1860ecb69b5dfd4dad9ad84fc2503
-UTC: 2026-09-27T23:11:00
+HEAD: b3c1e59262771c5a75d58597eb9af4a4e7cda15a
+UTC: 2026-09-27T23:13:24
 
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\ToolStripLayoutPersistence.cs(23,87): error CS0019: Operator '??' cannot be applied to operands of type 'Form' and 'ToolStrip' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\ToolStripLayoutPersistence.cs(23,87): error CS0019: Operator '??' cannot be applied to operands of type 'Form' and 'ToolStrip' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\tools\ShellSmokeTest\Program.cs(100,67): error CS0117: 'LegacyOperationalReportForm' does not contain a definition for 'Title' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\tools\ShellSmokeTest\ShellSmokeTest.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\tools\ShellSmokeTest\Program.cs(106,16): error CS1061: 'LegacyOperationalReportForm' does not contain a definition for 'Report' and no accessible extension method 'Report' accepting a first argument of type 'LegacyOperationalReportForm' could be found (are you missing a using directive or an assembly reference?) [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\tools\ShellSmokeTest\ShellSmokeTest.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\tools\ShellSmokeTest\Program.cs(106,83): error CS0117: 'LegacyOperationalReportForm' does not contain a definition for 'Title' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\tools\ShellSmokeTest\ShellSmokeTest.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\tools\ShellSmokeTest\Program.cs(100,67): error CS0117: 'LegacyOperationalReportForm' does not contain a definition for 'Title' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\tools\ShellSmokeTest\ShellSmokeTest.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\tools\ShellSmokeTest\Program.cs(106,16): error CS1061: 'LegacyOperationalReportForm' does not contain a definition for 'Report' and no accessible extension method 'Report' accepting a first argument of type 'LegacyOperationalReportForm' could be found (are you missing a using directive or an assembly reference?) [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\tools\ShellSmokeTest\ShellSmokeTest.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\tools\ShellSmokeTest\Program.cs(106,83): error CS0117: 'LegacyOperationalReportForm' does not contain a definition for 'Title' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\tools\ShellSmokeTest\ShellSmokeTest.csproj]
