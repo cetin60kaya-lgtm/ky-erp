@@ -12,6 +12,7 @@ internal static class GridReportAdapter
             .OrderBy(c => c.DisplayIndex)
             .ToList();
         var headers = columns.Select(c => c.HeaderText).ToArray();
+        var widths = columns.Select(c => c.Width).ToArray();
         var rows = new List<IReadOnlyList<string>>();
         foreach (DataRow row in data.Rows)
         {
@@ -22,7 +23,7 @@ internal static class GridReportAdapter
                 return data.Columns.Contains(name) ? Convert.ToString(row[name]) ?? string.Empty : string.Empty;
             }).ToArray());
         }
-        return CompanyBranding.Decorate(new ReportTable(title, headers, rows));
+        return CompanyBranding.Decorate(new ReportTable(title, headers, rows, widths));
     }
 
     public static int[] VisibleWidths(DataGridView grid) => grid.Columns.Cast<DataGridViewColumn>()
