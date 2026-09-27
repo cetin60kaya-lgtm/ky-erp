@@ -1,0 +1,5 @@
+HEAD: bae2804966cae4463bace7605cce55716e91989a
+UTC: 2026-09-27T16:48:00
+
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PersonelForm.PaymentEnhancements.cs(7,29): error CS0111: Type 'PersonelForm' already defines a member called 'OnShown' with the same parameter types [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PersonelForm.PaymentEnhancements.cs(7,29): error CS0111: Type 'PersonelForm' already defines a member called 'OnShown' with the same parameter types [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
