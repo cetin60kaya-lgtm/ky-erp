@@ -1,345 +1,193 @@
-export const MODULES = [
-  {
-    key: "muhasebe",
-    permissionKey: "MUHASEBE",
-    label: "Muhasebe",
-    icon: "cari-kasa",
-    groups: [
-      {
-        label: "Yönetim",
-        tabs: [
-          ["yonetim-ozeti", "Yönetim Özeti", "genel-bakis"],
-          ["firma-kartlari", "Firmalar ve Cari", "firma-kartlari"],
-        ],
-      },
-      {
-        label: "Fatura ve Belge",
-        tabs: [
-          ["tedarikci-faturalar", "Gelen Tedarikçi Faturaları", "tedarikci-fatura"],
-          ["kesilen-faturalar", "Kesilen Faturalar", "dosya"],
-          ["irsaliye-fatura-kontrol", "İrsaliye / Fatura Kontrolü", "file-check"],
-        ],
-      },
-      {
-        label: "Cari ve Ödeme",
-        tabs: [
-          ["cek-odeme", "Çek / Ödeme", "cekler"],
-          ["mail-ekstre", "Ekstre ve Mail Takibi", "eposta"],
-        ],
-      },
-      {
-        label: "Mali Kontrol",
-        tabs: [
-          ["kar-zarar", "Gelir / Gider ve Kâr / Zarar", "raporlar"],
-          ["kdv-kontrol", "Gelen / Giden KDV Kontrolü", "kdv"],
-        ],
-      },
-      {
-        label: "Rapor ve Şablon",
-        tabs: [
-          ["muhasebe-raporlari", "Muhasebe Raporları", "raporlar"],
-          ["mail-sablonlari", "Mail Şablonları", "eposta"],
-        ],
-      },
+import {
+  MODULES as BASE_MODULES,
+  MODULE_ROUTE_ALIASES as BASE_ROUTE_ALIASES,
+} from "./moduleRegistryBase";
+
+const DEPOLAMA_MODULE = {
+  key: "depolama",
+  permissionKey: "STORAGE_ADMIN",
+  label: "Bağlantılar & Depolama",
+  icon: "depolama",
+  groups: [
+    {
+      label: "Bağlantılar",
+      tabs: [
+        ["depolama-genel", "Genel Bakış", "dashboard"],
+        ["depolama-kaynaklar", "Dosya Servisleri", "dosya"],
+        ["depolama-mail", "E-posta Hesapları", "eposta"],
+        ["depolama-atamalar", "Bölüm / Dosya Atamaları", "file-check"],
+      ],
+    },
+    {
+      label: "Dosya Sistemi",
+      tabs: [
+        ["depolama-dosyalar", "Dosya İndeksi", "dosya"],
+        ["depolama-senkronizasyon", "Senkronizasyon & Agent", "ayarlar"],
+        ["depolama-yedekleme", "Yedekleme & Loglar", "raporlar"],
+      ],
+    },
+  ],
+};
+
+const ILETISIM_MODULE = {
+  key: "iletisim",
+  permissionKey: "MAIL",
+  label: "Mail & Dosyalar",
+  icon: "eposta",
+  groups: [
+    {
+      label: "Mail",
+      tabs: [
+        ["mail-gelen", "Gelen Kutusu", "eposta"],
+        ["mail-sabitlenen", "Sabitlenenler", "file-check"],
+        ["mail-gonderilen", "Gönderilmiş Postalar", "eposta"],
+        ["mail-taslaklar", "Taslaklar", "dosya"],
+        ["mail-yanit-bekleyen", "Yanıt Bekleyenler", "file-check"],
+        ["mail-sablonlar", "Şablonlar", "dosya"],
+      ],
+    },
+    {
+      label: "Dosyalar",
+      tabs: [
+        ["drive-dosyalar", "Dosyalar", "dosya"],
+        ["drive-son-kullanilanlar", "Son Kullanılanlar", "takvim"],
+        ["drive-firma-dosyalari", "Firma Dosyaları", "dosya"],
+      ],
+    },
+  ],
+};
+
+const COMPLIANCE_MODULE = {
+  key: "compliance",
+  permissionKey: "COMPLIANCE",
+  label: "Denetim & Uygunluk",
+  icon: "file-check",
+  groups: [{
+    label: "Kontrol Merkezi",
+    tabs: [
+      ["denetim-genel", "Genel Bakış", "dashboard"],
+      ["denetim-evraklar", "Evrak Takip", "dosya"],
+      ["denetim-takvim", "Süre & Takvim", "takvim"],
+      ["denetim-capa", "Düzeltici Faaliyet / CAPA", "uyari"],
     ],
-  },
-  {
-    key: "isnet",
-    permissionKey: "ISNET",
-    label: "İşNet",
-    icon: "eposta",
-    groups: [
-      {
-        label: "Yönetim",
-        tabs: [["yonetim-merkezi", "Yönetim Merkezi", "dashboard"]],
-      },
-      {
-        label: "Belge İşlemleri",
-        tabs: [
-          ["belge-akisi", "Gelen / Giden Belgeler", "dosya"],
-          ["irsaliyeden-faturaya", "İrsaliye ve Fatura İş Akışı", "file-check"],
-        ],
-      },
-      {
-        label: "Arşiv ve Gönderim",
-        tabs: [
-          ["kesilen-belgeler", "Belge Arşivi", "dosya"],
-          ["cikti-kuyrugu", "Çıktı ve Mail", "eposta"],
-        ],
-      },
-      {
-        label: "Sistem",
-        tabs: [["ayarlar", "Ayarlar ve Bağlantı", "ayarlar"]],
-      },
+  }, {
+    label: "Standartlar",
+    tabs: [
+      ["denetim-standartlar", "Denetim Standartları", "file-check"],
+      ["denetim-ayarlar", "Ayarlar & Özelleştirme", "ayarlar"],
     ],
-    hiddenTabs: [
-      ["gelen-irsaliyeler", "Gelen İrsaliyeler", "dosya"],
-      ["giden-irsaliyeler", "Giden İrsaliyeler", "dosya"],
-      ["gelen-faturalar", "Gelen Faturalar", "dosya"],
-      ["giden-faturalar", "Giden Faturalar", "dosya"],
-      ["yeni-irsaliye", "Yeni İrsaliye", "file-check"],
-      ["mail-merkezi", "Mail Merkezi", "eposta"],
-    ],
-  },
-  {
-    key: "desen",
-    permissionKey: "DESEN",
-    label: "Desen",
-    icon: "dosya",
-    groups: [
-      {
-        label: "Desen İşlemleri",
-        tabs: [
-          ["gelen-desenler", "Gelen Desenler", "dashboard"],
-          ["desen-modeller", "Desen Havuzu", "dosya"],
-          ["desen-yerlesim-is-akisi", "Yerleşim / Kalıp", "file-check"],
-        ],
-      },
-      {
-        label: "Rapor",
-        tabs: [["desen-raporlari", "Desen Raporları", "raporlar"]],
-      },
-    ],
-  },
-  {
-    key: "boyahane",
-    permissionKey: "BOYAHANE",
-    label: "Boyahane",
-    icon: "renk",
-    groups: [
-      {
-        label: "Hakan Emprime Boyahane",
-        tabs: [
-          ["is-akisi", "Ana Ekran", "dashboard"],
-          ["receteler", "Numune Çalışmaları", "file-check"],
-          ["uretim-gecmisi", "İmalat Boyaları", "dosya"],
-          ["kayitli-renkler", "Kayıtlı Renkler", "renk"],
-          ["urun-lotlar", "Stok, Lot ve Ürünler", "urunler"],
-          ["raporlar", "Raporlar ve İşlem Logları", "raporlar"],
-        ],
-      },
-    ],
-  },
-  {
-    key: "ik",
-    permissionKey: "IK",
-    label: "İK",
-    icon: "users",
-    groups: [
-      {
-        label: "İK Yönetimi",
-        tabs: [
-          ["ozet", "İK Özet", "dashboard"],
-          ["personel-kartlari", "Personel Kartı", "users"],
-          ["mesai-avans", "Mesai • Avans • Kesinti", "takvim"],
-          ["puantaj-izin", "Yıllık İzin / Günlük Durum", "takvim"],
-          ["bordro-odeme", "Bordro & Ödeme", "odemeler"],
-          ["sgk-evrak-kontrol", "SGK • Evrak • Ay Sonu", "file-check"],
-        ],
-      },
-      {
-        label: "Günlük Personel",
-        tabs: [
-          ["gunluk-personel", "Günlük Giriş", "users"],
-          ["gunluk-personel-kartlari", "Günlük Personel Kartları", "users"],
-          ["ik-raporlari", "Haftalık Özet", "takvim"],
-          ["gunluk-odeme-fisleri", "Günlük Ödeme Fişleri", "odemeler"],
-        ],
-      },
-    ],
-  },
-  {
-    key: "uretim",
-    permissionKey: "IMALAT",
-    label: "İmalat",
-    icon: "dashboard",
-    groups: [
-      {
-        label: "Tek Merkez Üretim",
-        tabs: [
-          ["uretim-merkezi", "Model ve Üretim Kontrol Merkezi", "dashboard"],
-          ["uretim-raporlari", "Üretim Raporları", "raporlar"],
-          ["uretim-ayarlari", "Makine ve Vardiya Ayarları", "ayarlar"],
-        ],
-      },
-    ],
-  },
-  {
-    key: "admin",
-    permissionKey: "ADMIN",
-    label: "Yönetim",
-    icon: "ayarlar",
-    groups: [
-      {
-        label: "Sistem Yönetimi",
-        tabs: [
-          ["admin-yonetim-ozeti", "Yönetim Özeti", "dashboard"],
-          ["kullanicilar", "Kullanıcılar", "users"],
-          ["ana-firma-ayarlar", "Ana Firma / Ayarlar", "ayarlar"],
-        ],
-      },
-      {
-        label: "Dosya ve Güvenlik",
-        tabs: [
-          ["dosya-klasor-yonetimi", "Dosya ve Klasör Yönetimi", "dosya"],
-          ["eslestirmeler", "Eşleştirmeler", "file-check"],
-          ["yedekleme-loglar", "Yedekleme / Loglar", "raporlar"],
-        ],
-      },
-    ],
-  },
-  {
-    key: "asistan",
-    permissionKey: "ASISTAN",
-    label: "KY ERP Asistan",
-    icon: "dashboard",
-    tabs: [["sohbet", "Asistan Sohbeti", "dashboard"]],
-  },
-];
+  }],
+};
+
+const SYSTEM_SENTINEL_MODULE = {
+  key: "sistem-merkezi",
+  permissionKey: "SYSTEM_SENTINEL",
+  label: "Sistem Merkezi",
+  icon: "guvenlik",
+  groups: [{ label: "Sistem Kontrol", tabs: [["sistem-nobetcisi", "Sistem Nöbetçisi", "terminal"]] }],
+};
+
+function withoutStorageDuplicates(module) {
+  if (module.key !== "admin") return module;
+  const storageKeys = new Set(["dosya-klasor-yonetimi", "yedekleme-loglar"]);
+  const hidden = [...(module.hiddenTabs || [])];
+  for (const group of module.groups || []) {
+    for (const tab of group.tabs || []) {
+      if (storageKeys.has(tab[0]) && !hidden.some((row) => row[0] === tab[0])) hidden.push(tab);
+    }
+  }
+  return {
+    ...module,
+    groups: (module.groups || [])
+      .map((group) => ({ ...group, tabs: (group.tabs || []).filter(([key]) => !storageKeys.has(key)) }))
+      .filter((group) => group.tabs.length),
+    hiddenTabs: hidden,
+  };
+}
+
+function withCompanyBilling(module) {
+  if (module.key !== "admin") return module;
+  const billingTab = ["firma-ucretlendirme", "Firma Paket / Kullanım", "odemeler"];
+  if ((module.groups || []).some((group) => (group.tabs || []).some(([key]) => key === billingTab[0]))) return module;
+  const groups = (module.groups || []).map((group, groupIndex) => {
+    if (groupIndex !== 0) return group;
+    const tabs = [...(group.tabs || [])];
+    const companyIndex = tabs.findIndex(([key]) => key === "ana-firma-ayarlar");
+    tabs.splice(companyIndex >= 0 ? companyIndex + 1 : tabs.length, 0, billingTab);
+    return { ...group, tabs };
+  });
+  return { ...module, groups };
+}
+
+
+const baseModules = BASE_MODULES
+  .map(withoutStorageDuplicates)
+  .map(withCompanyBilling);
+const eBelgeModule = baseModules.find((module) => module.key === "e-belge");
+const modulesWithoutEBelge = baseModules.filter((module) => module.key !== "e-belge");
+const adminIndex = modulesWithoutEBelge.findIndex((module) => module.key === "admin");
+export const MODULES = adminIndex >= 0
+  ? [
+      ...modulesWithoutEBelge.slice(0, adminIndex),
+      ...(eBelgeModule ? [eBelgeModule] : []),
+      ILETISIM_MODULE,
+      COMPLIANCE_MODULE,
+      DEPOLAMA_MODULE,
+      SYSTEM_SENTINEL_MODULE,
+      ...modulesWithoutEBelge.slice(adminIndex),
+    ]
+  : [...modulesWithoutEBelge, ...(eBelgeModule ? [eBelgeModule] : []), ILETISIM_MODULE, COMPLIANCE_MODULE, DEPOLAMA_MODULE, SYSTEM_SENTINEL_MODULE];
 
 export const MODULE_ROUTE_ALIASES = {
-  muhasebe: {
-    "genel-bakis": "yonetim-ozeti",
-    firmalar: "firma-kartlari",
-    cari: "firma-kartlari",
-    "cari-hareketler": "firma-kartlari",
-    "firma-yetkilileri": "firma-kartlari",
-    "eposta-kisileri": "firma-kartlari",
-    "gider-kategorileri": "kar-zarar",
-    "gelir-gider": "kar-zarar",
-    kar: "kar-zarar",
-    zarar: "kar-zarar",
-    kdv: "kdv-kontrol",
-    "cek-kart": "cek-odeme",
-    "odeme-tahsilat": "cek-odeme",
-    odemeler: "cek-odeme",
-    "odeme-nakit-akisi": "cek-odeme",
-    "eposta-ekstre": "mail-ekstre",
-    "belge-kontrol": "tedarikci-faturalar",
-    "belge-is-akisi": "tedarikci-faturalar",
-    "belge-yukle": "tedarikci-faturalar",
-    "belge-merkezi": "tedarikci-faturalar",
-    "tedarikci-fatura": "tedarikci-faturalar",
-    "tedarik-fatura": "tedarikci-faturalar",
-    "fatura-kesim": "kesilen-faturalar",
-    "fatura-kesim-yardimcisi": "kesilen-faturalar",
-    "fatura-yardimci": "kesilen-faturalar",
-    "musteri-belgeleri": "kesilen-faturalar",
-    "musteri-irsaliyeleri": "irsaliye-fatura-kontrol",
-    "musteri-irsaliye": "irsaliye-fatura-kontrol",
-    "irsaliye-fatura": "irsaliye-fatura-kontrol",
-    "model-muhasebe": "tedarikci-faturalar",
-    "model-takip": "irsaliye-fatura-kontrol",
-    "isveren-ozeti": "muhasebe-raporlari",
-    "kontrol-paneli": "yonetim-ozeti",
-    "hizli-giris": "firma-kartlari",
-    "gelen-irsaliye": "irsaliye-fatura-kontrol",
-    "giden-fatura": "kesilen-faturalar",
-    "bizim-fatura": "kesilen-faturalar",
-    "bizim-irsaliye": "irsaliye-fatura-kontrol",
-    raporlar: "muhasebe-raporlari",
-    ayarlar: "mail-sablonlari",
-  },
-  isnet: {
-    "belge-merkezi": "belge-akisi",
-    "is-akisi": "irsaliyeden-faturaya",
-    "arsiv-gonderim": "cikti-kuyrugu",
-  },
-  desen: {
-    desen: "gelen-desenler",
-    "desen-yonetim-ozeti": "gelen-desenler",
-    yerlesim: "desen-yerlesim-is-akisi",
-    "kalip-yerlesim": "desen-yerlesim-is-akisi",
-    "desen-klasor-ayarlari": "gelen-desenler",
-  },
-  boyahane: {
-    "boyahane-yonetim-ozeti": "is-akisi",
-    "renk-recete-is-akisi": "is-akisi",
-    "renk-gramaj": "uretim-gecmisi",
-    "hammadde-lot": "urun-lotlar",
-    "onayli-envanter": "urun-lotlar",
-    "boyahane-raporlari": "raporlar",
-    "evraklar-denetim": "raporlar",
-    "evrak-denetim": "raporlar",
-    evraklar: "raporlar",
-    "renk-havuzu": "kayitli-renkler",
-    "boya-giderleri": "raporlar",
-    "is-akisi-eski": "is-akisi",
-    "recete": "receteler",
-    "uretim-gecmis": "uretim-gecmisi",
-    "urun-ve-lotlar": "urun-lotlar",
-  },
-  ik: {
-    "ik-ozet": "ozet",
-    "ik-yonetim-ozeti": "ozet",
-    "ay-genel-kontrol": "ozet",
-    "genel-kontrol": "ozet",
-    "monthly-overview": "ozet",
-    "aylik-personel": "personel-kartlari",
-    "ay-personel-kartlari": "personel-kartlari",
-    "monthly-personnel": "personel-kartlari",
-    "ay-mesai-avans": "mesai-avans",
-    "mesai-kesinti": "mesai-avans",
-    "monthly-work-advance": "mesai-avans",
-    "izin-mesai-kesinti": "puantaj-izin",
-    "ay-maas-sozlesme": "puantaj-izin",
-    "maas-sozlesme": "puantaj-izin",
-    "yillik-izin": "puantaj-izin",
-    "ay-izin-evrak": "puantaj-izin",
-    "izin-evrak": "puantaj-izin",
-    "monthly-leave-management": "puantaj-izin",
-    "puantaj-kart-takibi": "puantaj-izin",
-    "ay-bordro": "bordro-odeme",
-    bordro: "bordro-odeme",
-    "monthly-payroll": "bordro-odeme",
-    "ay-odeme": "bordro-odeme",
-    "monthly-payment": "bordro-odeme",
-    "sgk-bordro-aktarim": "sgk-evrak-kontrol",
-    "sgk-bordro-aktirim": "sgk-evrak-kontrol",
-    "aylik-ik-kapanis": "sgk-evrak-kontrol",
-    "ay-evrak": "sgk-evrak-kontrol",
-    "evrak-belgeler": "sgk-evrak-kontrol",
-    "gun-personel-kartlari": "gunluk-personel-kartlari",
-    "daily-personnel": "gunluk-personel-kartlari",
-    "gun-giris": "gunluk-personel",
-    "gunluk-giris": "gunluk-personel",
-    "daily-entry": "gunluk-personel",
-    "gun-haftalik-ozet": "ik-raporlari",
-    "haftalik-ozet": "ik-raporlari",
-    "daily-weekly-summary": "ik-raporlari",
-    "gun-odemeler": "gunluk-odeme-fisleri",
-    odemeler: "gunluk-odeme-fisleri",
-    "daily-payments": "gunluk-odeme-fisleri",
-  },
-  uretim: {
-    "uretim-hizli-giris": "uretim-merkezi",
-    "uretim-is-havuzu": "uretim-merkezi",
-    "uretim-denge": "uretim-merkezi",
-    "uretim-girisi": "uretim-merkezi",
-    "imalat-denetim": "uretim-merkezi",
-    genel: "uretim-merkezi",
-    makinalar: "uretim-ayarlari",
-    "makine-tanimlari": "uretim-ayarlari",
-    "makine-vardiya-takibi": "uretim-ayarlari",
-    "uretim-kayit": "uretim-merkezi",
-    kalite: "uretim-merkezi",
-    "uretim-giris-is-akisi": "uretim-merkezi",
-    "uretim-seri-havuz": "uretim-merkezi",
-    "fis-aktarim-havuzu": "uretim-merkezi",
-    "imalat-yonetim-ozeti": "uretim-merkezi",
-    "manuel-is-ac": "uretim-merkezi",
-    "imalat-kontrol-rapor": "uretim-raporlari",
-    "uretim-raporu": "uretim-raporlari",
-    "imalat-raporlari": "uretim-raporlari",
-  },
+  ...BASE_ROUTE_ALIASES,
+  muhasebe: {},
+  "e-belge": {},
   admin: {
-    "ana-firma-yonetimi": "ana-firma-ayarlar",
-    "eposta-kayit": "ana-firma-ayarlar",
-    "firma-esleme": "eslestirmeler",
-    "urun-esleme": "eslestirmeler",
-    "kdv-baglantisi": "eslestirmeler",
-    yedekleme: "yedekleme-loglar",
-    loglar: "yedekleme-loglar",
+    ...(BASE_ROUTE_ALIASES.admin || {}),
+    "giris-onay": "admin-yonetim-ozeti",
+    onaylar: "admin-yonetim-ozeti",
+    "bekleyen-girisler": "admin-yonetim-ozeti",
+    "giris-onaylari": "admin-yonetim-ozeti",
+  },
+  iletisim: {
+    mail: "mail-gelen",
+    gelen: "mail-gelen",
+    sabitlenen: "mail-sabitlenen",
+    sabitler: "mail-sabitlenen",
+    gonderilen: "mail-gonderilen",
+    taslaklar: "mail-taslaklar",
+    "yanit-bekleyen": "mail-yanit-bekleyen",
+    sablonlar: "mail-sablonlar",
+    drive: "drive-dosyalar",
+    dosyalar: "drive-dosyalar",
+    "son-kullanilanlar": "drive-son-kullanilanlar",
+    "firma-dosyalari": "drive-firma-dosyalari",
+  },
+  compliance: {
+    genel: "denetim-genel",
+    evraklar: "denetim-evraklar",
+    evrak: "denetim-evraklar",
+    takvim: "denetim-takvim",
+    capa: "denetim-capa",
+    standartlar: "denetim-standartlar",
+    ayarlar: "denetim-ayarlar",
+  },
+  depolama: {
+    genel: "depolama-genel",
+    baglantilar: "depolama-kaynaklar",
+    servisler: "depolama-kaynaklar",
+    kaynaklar: "depolama-kaynaklar",
+    mail: "depolama-mail",
+    email: "depolama-mail",
+    eposta: "depolama-mail",
+    mailhesaplari: "depolama-mail",
+    atamalar: "depolama-atamalar",
+    yonlendirmeler: "depolama-atamalar",
+    dosyalar: "depolama-dosyalar",
+    senkronizasyon: "depolama-senkronizasyon",
+    agent: "depolama-senkronizasyon",
+    yedekleme: "depolama-yedekleme",
+    loglar: "depolama-yedekleme",
   },
 };
 
@@ -384,17 +232,10 @@ export function findTab(module, tabKey) {
 }
 
 export function getInitialRoute(pathname) {
-  const resolvedPathname =
-    pathname ??
-    (typeof window !== "undefined" ? window.location.pathname : "/");
-  const [requestedModuleKey, requestedTabKey] = resolvedPathname
-    .split("/")
-    .filter(Boolean);
+  const resolvedPathname = pathname ?? (typeof window !== "undefined" ? window.location.pathname : "/");
+  const [requestedModuleKey, requestedTabKey] = resolvedPathname.split("/").filter(Boolean);
   const module = findModule(requestedModuleKey) || MODULES[0];
   const normalizedTabKey = normalizeModuleTabKey(module, requestedTabKey);
   const tab = findTab(module, normalizedTabKey);
-  return {
-    moduleKey: module.key,
-    tabKey: tab?.[0] || getDefaultTabKey(module),
-  };
+  return { moduleKey: module.key, tabKey: tab?.[0] || getDefaultTabKey(module) };
 }

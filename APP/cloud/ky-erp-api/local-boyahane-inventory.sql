@@ -1,3 +1,35 @@
+-- KY ERP isolated local smoke fixture for Muhasebe -> Boyahane inventory flow.
+-- The Cloud runtime reads old relational products/lots only as compatibility data.
+-- Local smoke creates these optional legacy tables empty so compatibility reads do not fail,
+-- while all new test writes continue through canonical json_store flows.
+
+CREATE TABLE IF NOT EXISTS products (
+  id TEXT PRIMARY KEY,
+  main_company_slug TEXT NOT NULL,
+  legacy_id TEXT,
+  name TEXT NOT NULL,
+  unit TEXT,
+  is_active INTEGER DEFAULT 1,
+  raw TEXT,
+  created_at TEXT,
+  updated_at TEXT,
+  deleted_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS boyahane_lots (
+  id TEXT PRIMARY KEY,
+  main_company_slug TEXT NOT NULL,
+  product_id TEXT,
+  lot_no TEXT,
+  quantity REAL DEFAULT 0,
+  remaining_quantity REAL DEFAULT 0,
+  status TEXT,
+  raw TEXT,
+  created_at TEXT,
+  updated_at TEXT,
+  deleted_at TEXT
+);
+
 INSERT OR REPLACE INTO companies
   (id, main_company_slug, name, normalized_name, company_type, type, tax_no, is_active, created_at, updated_at)
 VALUES
@@ -17,33 +49,3 @@ INSERT OR REPLACE INTO json_store
   (id, scope, main_company_slug, file_name, data, created_at, updated_at)
 VALUES
   ('js-chemical-profile', 'MUHASEBE_CHEMICAL_SUPPLIER', 'mecit-hakan', 'company-chemical', '{"companyId":"company-chemical","companyName":"URAS KİMYA TEST","isChemicalSupplier":true,"defaultWarehouse":"BOYAHANE","defaultUnit":"KG","requireLot":true,"allowNegativeStock":false}', '2026-08-01T13:00:00.000Z', '2026-08-01T13:00:00.000Z');
-
--- Aşağıdaki kayıtlar canlı ve smoke şirketinden ayrılmış, yalnız yerel görsel kontrol içindir.
-INSERT OR REPLACE INTO json_store
-  (id, scope, main_company_slug, file_name, data, created_at, updated_at)
-VALUES
-  ('demo-product-clear', 'BOYAHANE_APPROVED_PRODUCT', 'boyahane-visual-demo', 'demo-product-clear', '{"id":"demo-product-clear","productName":"S 10 CLEAR","tradeName":"Clear Base 10","supplierName":"URAS","dyeType":"Su Bazlı","approvalStatus":"APPROVED","currentPrice":3.20,"currency":"USD","minimumStockKg":10,"documents":[{"name":"MSDS","status":"VALID"},{"name":"TDS","status":"VALID"},{"name":"ZDHC","status":"VALID"}]}', '2026-08-01T13:10:00.000Z', '2026-08-02T10:00:00.000Z'),
-  ('demo-product-white', 'BOYAHANE_APPROVED_PRODUCT', 'boyahane-visual-demo', 'demo-product-white', '{"id":"demo-product-white","productName":"S 20 WHITE","tradeName":"White Base 20","supplierName":"URAS","dyeType":"Su Bazlı","approvalStatus":"APPROVED","currentPrice":3.85,"currency":"USD","minimumStockKg":12,"documents":[{"name":"MSDS","status":"VALID"},{"name":"TDS","status":"VALID"},{"name":"LCW","status":"VALID"}]}', '2026-08-01T13:11:00.000Z', '2026-08-02T10:00:00.000Z'),
-  ('demo-product-red', 'BOYAHANE_APPROVED_PRODUCT', 'boyahane-visual-demo', 'demo-product-red', '{"id":"demo-product-red","productName":"KIRMIZI PİGMENT","tradeName":"Red KBT 1663","supplierName":"KBT","dyeType":"Pigment","approvalStatus":"APPROVED","currentPrice":12.40,"currency":"USD","minimumStockKg":3,"documents":[{"name":"MSDS","status":"VALID"},{"name":"SVL","status":"VALID"}]}', '2026-08-01T13:12:00.000Z', '2026-08-02T10:00:00.000Z'),
-  ('demo-product-blue', 'BOYAHANE_APPROVED_PRODUCT', 'boyahane-visual-demo', 'demo-product-blue', '{"id":"demo-product-blue","productName":"MAVİ PİGMENT","tradeName":"Blue KBT 4151","supplierName":"KBT","dyeType":"Pigment","approvalStatus":"REVIEW_REQUIRED","currentPrice":11.90,"currency":"USD","minimumStockKg":3,"documents":[{"name":"MSDS","status":"VALID"},{"name":"TDS","status":"WAITING"}]}', '2026-08-01T13:13:00.000Z', '2026-08-02T10:00:00.000Z'),
-  ('demo-product-fix', 'BOYAHANE_APPROVED_PRODUCT', 'boyahane-visual-demo', 'demo-product-fix', '{"id":"demo-product-fix","productName":"FİKSATÖR","tradeName":"Fix 90","supplierName":"URAS","dyeType":"Katkı","approvalStatus":"APPROVED","currentPrice":4.15,"currency":"EUR","minimumStockKg":5,"documents":[{"name":"MSDS","status":"VALID"},{"name":"TDS","status":"VALID"}]}', '2026-08-01T13:14:00.000Z', '2026-08-02T10:00:00.000Z'),
-
-  ('demo-lot-clear', 'BOYAHANE_LOT', 'boyahane-visual-demo', 'demo-lot-clear', '{"id":"demo-lot-clear","productId":"demo-product-clear","productName":"S 10 CLEAR","lotNo":"260105001","supplierName":"URAS","entryKg":25,"usedKg":18.5,"remainingKg":6.5,"status":"AVAILABLE","isDefault":true,"source":"MUHASEBE","usedModels":["SONIC 19","MESTUN"]}', '2026-07-20T09:00:00.000Z', '2026-08-02T10:00:00.000Z'),
-  ('demo-lot-white', 'BOYAHANE_LOT', 'boyahane-visual-demo', 'demo-lot-white', '{"id":"demo-lot-white","productId":"demo-product-white","productName":"S 20 WHITE","lotNo":"260105200","supplierName":"URAS","entryKg":25,"usedKg":8.2,"remainingKg":16.8,"status":"AVAILABLE","isDefault":true,"source":"MUHASEBE","usedModels":["X-OPENED"]}', '2026-07-22T09:00:00.000Z', '2026-08-02T10:00:00.000Z'),
-  ('demo-lot-red', 'BOYAHANE_LOT', 'boyahane-visual-demo', 'demo-lot-red', '{"id":"demo-lot-red","productId":"demo-product-red","productName":"KIRMIZI PİGMENT","lotNo":"260106093","supplierName":"KBT","entryKg":5,"usedKg":1.4,"remainingKg":3.6,"status":"AVAILABLE","isDefault":true,"source":"HIZLI_LOT","usedModels":["SONIC 19","SAFARİ"]}', '2026-07-24T09:00:00.000Z', '2026-08-02T10:00:00.000Z'),
-  ('demo-lot-waiting', 'BOYAHANE_LOT', 'boyahane-visual-demo', 'demo-lot-waiting', '{"id":"demo-lot-waiting","productId":"demo-product-blue","productName":"MAVİ PİGMENT","lotNo":"","supplierName":"KBT","entryKg":5,"remainingKg":5,"status":"LOT_WAITING","source":"MUHASEBE","invoiceNo":"KBT202600000144"}', '2026-08-02T08:00:00.000Z', '2026-08-02T08:00:00.000Z'),
-
-  ('demo-color-red', 'BOYAHANE_REGISTERED_COLOR', 'boyahane-visual-demo', 'demo-color-red', '{"id":"demo-color-red","pantone":"18-1663","colorName":"Kırmızı","colorHex":"#c62032","paintTypes":["SUBAZLI"],"activeVersion":"V2","status":"ACTIVE","lastModelName":"MESTUN","usageCount":14}', '2026-07-01T09:00:00.000Z', '2026-08-02T10:00:00.000Z'),
-  ('demo-color-blue', 'BOYAHANE_REGISTERED_COLOR', 'boyahane-visual-demo', 'demo-color-blue', '{"id":"demo-color-blue","pantone":"19-4151","colorName":"Saks","colorHex":"#173b77","paintTypes":["SUBAZLI"],"activeVersion":"V2","status":"ACTIVE","lastModelName":"MERVOD POLO","usageCount":11}', '2026-07-02T09:00:00.000Z', '2026-08-02T10:00:00.000Z'),
-  ('demo-color-ten', 'BOYAHANE_REGISTERED_COLOR', 'boyahane-visual-demo', 'demo-color-ten', '{"id":"demo-color-ten","pantone":"13-1030","colorName":"Ten","colorHex":"#f0c27b","paintTypes":["SUBAZLI"],"activeVersion":"V1","status":"ACTIVE","lastModelName":"SONIC 19","usageCount":6}', '2026-07-03T09:00:00.000Z', '2026-08-02T10:00:00.000Z'),
-  ('demo-color-white', 'BOYAHANE_REGISTERED_COLOR', 'boyahane-visual-demo', 'demo-color-white', '{"id":"demo-color-white","pantone":"BEYAZ","colorName":"Beyaz","colorHex":"#ffffff","paintTypes":["SUBAZLI"],"activeVersion":"V3","status":"ACTIVE","lastModelName":"X-OPENED","usageCount":22}', '2026-07-04T09:00:00.000Z', '2026-08-02T10:00:00.000Z'),
-
-  ('demo-job-sample-waiting', 'BOYAHANE_JOB', 'boyahane-visual-demo', 'sample-demo-sonic', '{"id":"sample-demo-sonic","designId":"demo-sonic","modelName":"SONIC 19","companyName":"TAHA GİYİM","orderNo":"SP-2608-014","imageUrl":"data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27900%27 height=%271100%27%3E%3Crect width=%27900%27 height=%271100%27 fill=%27%2307185f%27/%3E%3Ccircle cx=%27450%27 cy=%27420%27 r=%27230%27 fill=%27%231463e8%27/%3E%3Ctext x=%27450%27 y=%27950%27 text-anchor=%27middle%27 font-size=%2770%27 fill=%27white%27%3ESONIC 19%3C/text%3E%3C/svg%3E","channelCount":11,"uniqueColorCount":11,"jobType":"SAMPLE","status":"WAITING","priority":"HIGH","lastActor":"Ali"}', '2026-08-02T09:00:00.000Z', '2026-08-02T09:00:00.000Z'),
-  ('demo-job-sample-active', 'BOYAHANE_JOB', 'boyahane-visual-demo', 'sample-demo-safari', '{"id":"sample-demo-safari","designId":"demo-safari","modelName":"SAFARİ","companyName":"REN FASHION","orderNo":"SP-2608-009","imageUrl":"data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27900%27 height=%271100%27%3E%3Crect width=%27900%27 height=%271100%27 fill=%27%23481020%27/%3E%3Ccircle cx=%27450%27 cy=%27420%27 r=%27230%27 fill=%27%23d71d3f%27/%3E%3Ctext x=%27450%27 y=%27950%27 text-anchor=%27middle%27 font-size=%2770%27 fill=%27white%27%3ESAFARI%3C/text%3E%3C/svg%3E","channelCount":6,"uniqueColorCount":6,"jobType":"SAMPLE","status":"ACTIVE","priority":"NORMAL","lastActor":"Murat"}', '2026-08-01T10:00:00.000Z', '2026-08-02T10:00:00.000Z'),
-  ('demo-job-production-prepare', 'BOYAHANE_JOB', 'boyahane-visual-demo', 'dyehouse-demo-opened', '{"id":"dyehouse-demo-opened","designId":"demo-opened","modelName":"X-OPENED","companyName":"MİND TEKSTİL","orderNo":"SP-2608-021","channelCount":4,"uniqueColorCount":4,"jobType":"PRODUCTION","status":"WAITING","priority":"HIGH","lastActor":"Ali"}', '2026-08-02T08:00:00.000Z', '2026-08-02T08:00:00.000Z'),
-  ('demo-job-production-waiting', 'BOYAHANE_JOB', 'boyahane-visual-demo', 'dyehouse-demo-mestun', '{"id":"dyehouse-demo-mestun","designId":"demo-mestun","modelName":"MESTUN","companyName":"TAHA GİYİM","orderNo":"SP-2607-188","channelCount":3,"uniqueColorCount":3,"jobType":"PRODUCTION","status":"ACTIVE","priority":"NORMAL","lastActor":"Murat"}', '2026-07-02T10:00:00.000Z', '2026-08-02T09:00:00.000Z'),
-  ('demo-job-production-active', 'BOYAHANE_JOB', 'boyahane-visual-demo', 'dyehouse-demo-mervod', '{"id":"dyehouse-demo-mervod","designId":"demo-mervod","modelName":"MERVOD POLO","companyName":"REN FASHION","orderNo":"SP-2608-006","channelCount":2,"uniqueColorCount":2,"jobType":"PRODUCTION","status":"ACTIVE","enteredProductionAt":"2026-08-02T06:00:00.000Z","manufacturingStatus":"ACTIVE","lastActor":"Ali"}', '2026-07-31T10:00:00.000Z', '2026-08-02T09:00:00.000Z'),
-  ('demo-job-production-complete', 'BOYAHANE_JOB', 'boyahane-visual-demo', 'dyehouse-demo-complete', '{"id":"dyehouse-demo-complete","designId":"demo-complete","modelName":"SONIC 12","companyName":"TAHA GİYİM","orderNo":"SP-2606-101","channelCount":1,"uniqueColorCount":1,"jobType":"PRODUCTION","status":"COMPLETED","manufacturingStatus":"COMPLETED","lastActor":"Murat"}', '2026-06-10T10:00:00.000Z', '2026-07-01T09:00:00.000Z'),
-
-  ('demo-production-white', 'BOYAHANE_PRODUCTION', 'boyahane-visual-demo', 'demo-production-white', '{"id":"demo-production-white","requestId":"demo-request-white","jobId":"dyehouse-demo-opened","jobType":"PRODUCTION","modelSnapshot":"X-OPENED","companySnapshot":"MİND TEKSTİL","colorNameSnapshot":"Beyaz","pantoneSnapshot":"BEYAZ","paintTypeSnapshot":"SUBAZLI","versionSnapshot":"V1","productionTotalKg":12,"actor":"Ali","lines":[{"productId":"demo-product-white","productName":"S 20 WHITE","referenceGram":800,"lotId":"demo-lot-white"}]}', '2026-08-02T10:00:00.000Z', '2026-08-02T10:00:00.000Z'),
-  ('demo-log-rf', 'BOYAHANE_WORKFLOW_LOG', 'boyahane-visual-demo', 'demo-log-rf', '{"id":"demo-log-rf","actor":"Murat","actionType":"RF","description":"MERVOD POLO boyasından MESTUN modelinde 3,20 KG RF kullanıldı; değer 5.840 TL.","entityType":"BOYAHANE_RF"}', '2026-08-02T09:00:00.000Z', '2026-08-02T09:00:00.000Z');

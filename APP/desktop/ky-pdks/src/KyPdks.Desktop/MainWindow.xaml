@@ -1,0 +1,18 @@
+<Window x:Class="KyPdks.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="KY PDKS · Eski Yönetim Kaldırıldı" Height="300" Width="620"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#F3F6FA">
+    <Grid Margin="24">
+        <Border Background="White" BorderBrush="#D8E2EF" BorderThickness="1" CornerRadius="14" Padding="24">
+            <StackPanel>
+                <TextBlock Text="Eski Yerel Yönetim Devre Dışı" FontSize="23" FontWeight="Bold" Foreground="#172D49"/>
+                <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Foreground="#586C82"
+                           Text="Vardiya, servis, izin, avans, puantaj ve dönem işlemleri artık ikinci bir yerel veri tabanında tutulmaz. Yetkili kaynak KY ERP D1'dir."/>
+                <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#586C82"
+                           Text="Ana İşlem Merkezi üzerindeki Detay Yönetim düğmesi yeni D1 yönetim ekranını açar. Bu pencere yalnız eski çağrılar için güvenli uyumluluk kabuğudur."/>
+                <Button Content="Kapat" Width="110" HorizontalAlignment="Right" Margin="0,18,0,0" Click="CloseButton_Click"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -1,0 +1,35 @@
+{
+  "connections": [
+    {
+      "name": "Google Drive - DESINATOR",
+      "storageConnectionId": "GOOGLE_CONNECTION_ID_FROM_KYERP",
+      "providerType": "GOOGLE_DRIVE",
+      "rootPath": "G:\\Drive'ım\\DESINATOR",
+      "exclude": ["\\.tmp", "\\cache"]
+    },
+    {
+      "name": "Microsoft OneDrive - KY ERP",
+      "storageConnectionId": "ONEDRIVE_CONNECTION_ID_FROM_KYERP",
+      "providerType": "ONEDRIVE",
+      "rootPath": "D:\\OneDrive\\KYERP"
+    },
+    {
+      "name": "Microsoft SharePoint - Ortak Belgeler",
+      "storageConnectionId": "SHAREPOINT_CONNECTION_ID_FROM_KYERP",
+      "providerType": "SHAREPOINT",
+      "rootPath": "D:\\SharePoint\\KYERP"
+    },
+    {
+      "name": "Yerel Üretim Arşivi",
+      "storageConnectionId": "LOCAL_CONNECTION_ID_FROM_KYERP",
+      "providerType": "LOCAL_FOLDER",
+      "rootPath": "D:\\KYERP\\STORAGE"
+    },
+    {
+      "name": "NAS - KY ERP",
+      "storageConnectionId": "NAS_CONNECTION_ID_FROM_KYERP",
+      "providerType": "NAS",
+      "rootPath": "\\\\SUNUCU\\KYERP"
+    }
+  ]
+}

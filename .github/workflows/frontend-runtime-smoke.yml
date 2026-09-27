@@ -1,0 +1,86 @@
+name: KY ERP Frontend Gerçek Tarayıcı Testi
+
+on:
+  # Manual-only. Automatic frontend builds/deploys are handled by Cloudflare Git Integration.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-frontend
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Frontend paketlerini kur
+        run: npm ci
+
+      - name: Production build
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        run: npm run build
+
+      - name: Gerçek tarayıcı paketini kur
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Yerel production önizlemesini başlat
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4173 >/tmp/kyerp-vite-preview.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/kyerp-vite-preview.log
+          exit 1
+
+      - name: Boyahane ekranını gerçek Chrome ile doğrula
+        id: runtime
+        continue-on-error: true
+        run: node scripts/runtime-smoke.mjs
+
+      - name: Tarayıcı ekran görüntüsünü ve sonucu sakla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-runtime-smoke-${{ github.run_id }}
+          path: |
+            APP/app/ky-erp-frontend/runtime-smoke.png
+            APP/app/ky-erp-frontend/runtime-result.json
+            /tmp/kyerp-vite-preview.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Gerçek tarayıcı sonucunu çalışma özetine yaz
+        if: always()
+        env:
+          RUNTIME_OUTCOME: ${{ steps.runtime.outcome }}
+        run: |
+          result="$(cat runtime-result.json 2>/dev/null || printf '{"ok":false,"runtimeErrors":["runtime-result.json oluşmadı"]}')"
+          compact="$(jq -c '{ok, finalUrl, bodyPreview, runtimeErrors}' <<<"$result")"
+          {
+            printf '## KY ERP gerçek tarayıcı testi\n\n'
+            printf -- '- Commit: `%s`\n' "$GITHUB_SHA"
+            printf -- '- Run: `%s`\n' "$GITHUB_RUN_ID"
+            printf -- '- Sonuç: **%s**\n\n' "$RUNTIME_OUTCOME"
+            printf '```json\n%s\n```\n' "$compact"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tarayıcı hatası varsa başarısız say
+        if: steps.runtime.outcome != 'success'
+        run: exit 1

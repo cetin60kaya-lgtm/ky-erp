@@ -3,7 +3,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { IkAdvancedService } from "./ik-advanced.service";
 
-@Controller(["ik/advanced", "api/ik/advanced"])
+@Controller("ik/advanced")
 export class IkAdvancedController {
   constructor(private readonly service: IkAdvancedService) {}
   @Get("month") month(@Query() query: Record<string, any>) { return this.service.month(query); }
@@ -13,6 +13,8 @@ export class IkAdvancedController {
   @Get("control-matrix") controlMatrix(@Query() query: Record<string, any>) { return this.service.controlMatrix(query); }
   @Get("audit-logs") auditLogs(@Query() query: Record<string, any>) { return this.service.auditLogs(query); }
   @Get("payroll") payroll(@Query() query: Record<string, any>) { return this.service.payrollCalculation(query); }
+  @Get("period-state") periodState(@Query() query: Record<string, any>) { return this.service.periodState(query); }
+  @Post("period-prepare") periodPrepare(@Body() body: Record<string, any>) { return this.service.preparePeriod(body); }
   @Get("leave-center") leaveCenter(@Query() query: Record<string, any>) { return this.service.leaveCenter(query); }
   @Post("person-card/:employeeId") personCard(@Param("employeeId") employeeId: string, @Body() body: Record<string, any>) { return this.service.savePersonCard(employeeId, body); }
   @Post("attendance") attendance(@Body() body: Record<string, any>) { return this.service.saveAttendance(body); }

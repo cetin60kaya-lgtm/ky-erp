@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestj
 import { DispatchReconciliationService } from "./dispatch-reconciliation.service";
 import { CurrentUser } from "../auth/current-user.decorator";
 
-@Controller(["muhasebe", "api/muhasebe"])
+@Controller("muhasebe")
 export class DispatchReconciliationController {
   constructor(private readonly service: DispatchReconciliationService) {}
 

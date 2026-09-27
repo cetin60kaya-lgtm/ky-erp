@@ -1,8 +1,16 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "../utils/api";
 
 function companyParams(activeMainCompany) {
-  const mainCompanySlug = activeMainCompany?.slug || activeMainCompany?.id || "";
-  const mainCompanyId = activeMainCompany?.id || "";
+  const mainCompanySlug =
+    activeMainCompany?.slug ||
+    activeMainCompany?.mainCompanySlug ||
+    activeMainCompany?.id ||
+    activeMainCompany?.mainCompanyId ||
+    "";
+  const mainCompanyId =
+    activeMainCompany?.id ||
+    activeMainCompany?.mainCompanyId ||
+    mainCompanySlug;
   if (!mainCompanySlug) throw new Error("Ana firma zorunludur.");
   return { mainCompanySlug, mainCompanyId };
 }
@@ -58,8 +66,19 @@ export const deleteIsnetModelMapping = (activeMainCompany, id) =>
     companyParams(activeMainCompany),
   ).then(unwrap);
 
-export const resolveIsnetBusinessContext = (activeMainCompany, params = {}) =>
-  apiGet("/isnet/business-settings/resolve", {
+export const resolveIsnetBusinessContext = (activeMainCompany, params = {}) => {
+  const inlineParams = activeMainCompany?.mainCompanySlug && !activeMainCompany?.slug
+    ? {
+        companyId: activeMainCompany.companyId,
+        companyName: activeMainCompany.companyName,
+        modelId: activeMainCompany.modelId,
+        modelName: activeMainCompany.modelName,
+        departmentCode: activeMainCompany.departmentCode,
+      }
+    : {};
+  return apiGet("/isnet/business-settings/resolve", {
     ...companyParams(activeMainCompany),
+    ...inlineParams,
     ...params,
   }).then(unwrap);
+};

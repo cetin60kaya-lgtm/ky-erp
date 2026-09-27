@@ -11,7 +11,7 @@ import {
 import { AccountingApiService } from "../accounting-api.service";
 import { MailTemplateService } from "./mail-template.service";
 
-@Controller(["muhasebe/mail", "api/muhasebe/mail"])
+@Controller("muhasebe/mail")
 export class MailController {
   constructor(
     private readonly service: AccountingApiService,

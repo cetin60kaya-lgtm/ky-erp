@@ -1,0 +1,157 @@
+name: KY Security Canonical Final Deploy
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - APP/cloud/ky-erp-security-host/worker.js
+      - APP/cloud/ky-erp-security-host/wrangler.jsonc
+      - APP/app/ky-erp-frontend/src/security-pwa-install-enrollment-final.test.js
+      - APP/app/ky-erp-frontend/public/guvenlik/**
+      - APP/cloud/ky-erp-api/src/auth-security-mobile-control.ts
+      - APP/cloud/ky-erp-api/src/auth-push-cloud.ts
+      - .github/workflows/security-canonical-final-deploy.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-security-canonical-host
+  cancel-in-progress: false
+
+jobs:
+  deploy-security-host:
+    name: Deploy and verify KY Security launch compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+    steps:
+      - name: Checkout production source
+        uses: actions/checkout@v4
+
+      - name: Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install API dependencies
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci --ignore-scripts
+
+      - name: Validate security source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "CLOUDFLARE_API_TOKEN missing" >&2; exit 1; }
+          node --check APP/cloud/ky-erp-security-host/worker.js
+          node --check APP/app/ky-erp-frontend/public/guvenlik/app.js
+          node --check APP/app/ky-erp-frontend/public/guvenlik/security-actions.js
+          node --check APP/app/ky-erp-frontend/public/guvenlik/sw.js
+          node --check APP/app/ky-erp-frontend/public/guvenlik/security-control-center.js
+          node --test APP/app/ky-erp-frontend/src/security-pwa-install-enrollment-final.test.js
+          grep -q 'const SOURCE_PREFIX="/guvenlik"' APP/cloud/ky-erp-security-host/worker.js
+          grep -q 'const PRIMARY_PREFIX="/ky-guvenlik"' APP/cloud/ky-erp-security-host/worker.js
+          grep -q 'COMPAT_PREFIXES' APP/cloud/ky-erp-security-host/worker.js
+          ! grep -q 'security-foreground-sync.js' APP/app/ky-erp-frontend/public/guvenlik/index.html
+          ! grep -q 'MutationObserver' APP/app/ky-erp-frontend/public/guvenlik/security-control-center.js
+          grep -q 'id="bootPanel"' APP/app/ky-erp-frontend/public/guvenlik/index.html
+          grep -q 'Yedek Kod + Admin Şifresiyle Bağla' APP/app/ky-erp-frontend/public/guvenlik/app.js
+          grep -q 'Eşleştirme No:' APP/app/ky-erp-frontend/public/guvenlik/sw.js
+          grep -q 'env.ASSETS' APP/cloud/ky-erp-security-host/worker.js
+          grep -q '"binding": "ASSETS"' APP/cloud/ky-erp-security-host/wrangler.jsonc
+
+      - name: Dry-run API Worker bundle
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: npx wrangler@4.118.0 deploy --config wrangler.jsonc --dry-run --outdir /tmp/kyerp-api-dry
+
+      - name: Dry-run security host bundle with embedded assets
+        working-directory: APP/cloud/ky-erp-security-host
+        shell: bash
+        run: npx --yes wrangler@4.118.0 deploy --config wrangler.jsonc --dry-run --outdir /tmp/kyerp-security-dry
+
+      - name: Deploy KY ERP API security rules
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler@4.118.0 deploy --config wrangler.jsonc
+
+      - name: Deploy security.kyerp.net Worker with bundled security assets
+        working-directory: APP/cloud/ky-erp-security-host
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.118.0 deploy --config wrangler.jsonc
+
+      - name: Verify installed-PWA launch compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe="${GITHUB_SHA}-${GITHUB_RUN_ID}"
+          enrollment_id="TESTCANONICAL"
+          enrollment_token="TESTTOKEN"
+          legacy_url="https://security.kyerp.net/security/?enrollmentId=${enrollment_id}&enrollmentToken=${enrollment_token}&mode=link&probe=${probe}"
+
+          ok=0
+          for attempt in 1 2 3 4 5 6 7 8; do
+            curl -sS --max-time 20 -H 'Accept: text/html' -D /tmp/security.headers -o /dev/null "$legacy_url" || true
+            status="$(awk 'toupper($1) ~ /^HTTP\// {code=$2} END{print code}' /tmp/security.headers)"
+            location="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]+:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' /tmp/security.headers)"
+            release="$(awk 'BEGIN{IGNORECASE=1} /^x-kyerp-security-app:/{sub(/^[^:]+:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' /tmp/security.headers)"
+            echo "Attempt ${attempt}: status=${status:-none} release=${release:-none} location=${location:-none}"
+
+            if [ "$status" = "308" ] \
+              && [ "$release" = "fresh-v3-compat" ] \
+              && printf '%s' "$location" | grep -Fq 'https://security.kyerp.net/ky-guvenlik/' \
+              && printf '%s' "$location" | grep -Fq "enrollmentId=${enrollment_id}" \
+              && printf '%s' "$location" | grep -Fq "enrollmentToken=${enrollment_token}" \
+              && printf '%s' "$location" | grep -Fq 'mode=link' \
+              && ! printf '%s' "$location" | grep -Fq 'probe='; then
+              ok=1
+              break
+            fi
+            sleep 3
+          done
+          test "$ok" -eq 1
+
+          primary_status="$(curl --silent --show-error --max-time 20 -o /tmp/security-primary.html -w '%{http_code}' https://security.kyerp.net/ky-guvenlik/)"
+          test "$primary_status" = "200"
+          grep -q '<title>KY ERP Güvenlik</title>' /tmp/security-primary.html
+          grep -q '/ky-guvenlik/app.js' /tmp/security-primary.html
+          grep -q 'v3.0' /tmp/security-primary.html
+
+          compat_status="$(curl --silent --show-error --max-time 20 -o /tmp/security-compat.html -w '%{http_code}' https://security.kyerp.net/guvenlik/)"
+          test "$compat_status" = "200"
+          grep -q '<title>KY ERP Güvenlik</title>' /tmp/security-compat.html
+          grep -q '/guvenlik/app.js' /tmp/security-compat.html
+
+          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/ky-guvenlik/manifest.webmanifest -o /tmp/manifest-primary.json
+          jq -e '.id == "/ky-guvenlik/" and .start_url == "/ky-guvenlik/" and .scope == "/ky-guvenlik/"' /tmp/manifest-primary.json >/dev/null
+
+          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/manifest.webmanifest -o /tmp/manifest-compat.json
+          jq -e '.id == "/guvenlik/" and .start_url == "/guvenlik/" and .scope == "/guvenlik/"' /tmp/manifest-compat.json >/dev/null
+
+          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/ky-guvenlik/sw.js -o /tmp/sw-primary.js
+          grep -q 'const APP_URL="/ky-guvenlik/"' /tmp/sw-primary.js
+          grep -q 'Eşleştirme No:' /tmp/sw-primary.js
+
+          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/ky-guvenlik/app.js -o /tmp/security-app.js
+          grep -q 'Yedek Kod + Admin Şifresiyle Bağla' /tmp/security-app.js
+          grep -q 'approve.disabled=true' /tmp/security-app.js
+          grep -q 'createLocalUnlock' /tmp/security-app.js
+          grep -q 'id="bootPanel"' /tmp/security-primary.html
+
+          enrollment_guard="$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' --data '{}' https://api.kyerp.net/api/auth/push/security-enrollment/complete)"
+          printf '%s' "$enrollment_guard" | jq -e '.error.code == "SECURITY_ENROLLMENT_CODE_REQUIRED"' >/dev/null
+          relink_guard="$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' --data '{}' https://api.kyerp.net/api/auth/push/security-relink/by-subscription)"
+          printf '%s' "$relink_guard" | jq -e '.error.code == "SECURITY_ENROLLMENT_CODE_REQUIRED"' >/dev/null
+
+          legacy_asset_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -H 'Accept: application/javascript' https://security.kyerp.net/security/obsolete.js)"
+          test "$legacy_asset_status" = "410"
+
+          echo "KY Security installed-PWA launch compatibility verification passed."

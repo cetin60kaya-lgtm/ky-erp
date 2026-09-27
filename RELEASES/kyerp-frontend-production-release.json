@@ -1,0 +1,19 @@
+{
+  "approved": true,
+  "target": "production",
+  "component": "frontend",
+  "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
+  "releaseDate": "2026-09-25",
+  "scope": [
+    "gunluk-odeme-current-rate-print-parity",
+    "gunluk-odeme-persistent-paid-status",
+    "gunluk-operasyon-log-paid-green-state",
+    "gunluk-operasyon-log-person-control-tab",
+    "gunluk-operasyon-log-person-day-shift-paid-detail",
+    "gunluk-personel-pool-detail-removed",
+    "frontend-lint-build",
+    "cloudflare-pages-production",
+    "live-bundle-verification"
+  ],
+  "note": "Personel donem kontrolu Personel Havuzu icinden kaldirildi ve Gunluk Islem Gecmisi modalina ucuncu Personel Kontrol sekmesi olarak tasindi. Secili tarih araliginda HKN/ad ile personel aranir; gun gun tarih, Gunduz/Gece vardiyasi, guncel tutar ve Odendi/Hazir durumu gorulur. Kalici paymentStatus=PAID ve yesil ODENDI log vurgusu korunur. Hizli Giris ve Gunluk Giris kayit mantigina dokunulmaz."
+}

@@ -1,2 +1,5 @@
 Set shell = CreateObject("WScript.Shell")
-shell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""D:\Onedrive-Hkn\OneDrive\KY-ERP-MERKEZ\SCRIPTS\KYERP_GIZLI_BASLAT.ps1""", 0, False
+Set fso = CreateObject("Scripting.FileSystemObject")
+scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
+target = fso.BuildPath(scriptDir, "KYERP_GIZLI_BASLAT.ps1")
+shell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -File """ & target & """", 0, False

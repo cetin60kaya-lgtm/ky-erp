@@ -1,0 +1,202 @@
+<Window x:Class="KyPdks.Desktop.PdksUnifiedWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="KY PDKS Merkezi" Height="900" Width="1420" MinHeight="720" MinWidth="1120"
+        WindowStartupLocation="CenterOwner" Background="#F3F6FA" Loaded="Window_Loaded" Closing="Window_Closing">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="74"/>
+            <RowDefinition Height="86"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="32"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="White" BorderBrush="#DDE6EF" BorderThickness="0,0,0,1">
+            <Grid Margin="18,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="KY PDKS Merkezi" FontSize="24" FontWeight="Bold" Foreground="#102A43"/>
+                    <TextBlock Text="Web + Windows + Agent · tek KY ERP D1 · İK Aylık Personel ile ortak kayıt" Foreground="#64788F" FontSize="12"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Padding="10,6" CornerRadius="12" Background="#ECF8F1" BorderBrush="#B9DEC7" BorderThickness="1" Margin="0,0,8,0">
+                        <TextBlock x:Name="D1StateText" Text="D1 kontrol" Foreground="#246C43" FontWeight="SemiBold"/>
+                    </Border>
+                    <Button Content="Yenile" Click="RefreshButton_Click" Padding="14,7"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Background="#EAF0F7" BorderBrush="#D7E1EB" BorderThickness="0,0,0,1" Padding="16,10">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                    <TextBlock Text="PDKS HIZLI ASİSTAN" FontSize="11" FontWeight="Bold" Foreground="#5C7188"/>
+                    <TextBlock Text="Önizle → onayla → D1'e yaz" FontSize="10" Foreground="#7D8EA1"/>
+                </StackPanel>
+                <TextBox Grid.Column="1" x:Name="AssistantBox" Height="38" VerticalContentAlignment="Center" Padding="10,0"
+                         ToolTip="Ör: Çetin Kaya bugün 08:42 geldi | Çetin Kaya bugün gelmedi yok yaz | Çetin Kaya için 5000 TL avans gir | Çetin Kaya 10 saat hafta içi mesai ekle"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0">
+                    <Button x:Name="AssistantPreviewButton" Content="Önizle" Click="AssistantPreviewButton_Click" Padding="14,7" Margin="0,0,6,0"/>
+                    <Button x:Name="AssistantCommitButton" Content="Onayla ve Uygula" Click="AssistantCommitButton_Click" Padding="14,7" Background="#1769AA" Foreground="White" BorderBrush="#1769AA"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2" Margin="12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="230"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="10" Padding="10">
+                        <StackPanel>
+                            <TextBlock Text="PDKS İŞLEMLERİ" FontWeight="Bold" Foreground="#102A43" Margin="4,2,4,8"/>
+                            <Expander Header="Günlük İşlemler" IsExpanded="True" Margin="0,0,0,4">
+                                <StackPanel Margin="8,4,0,6">
+                                    <Button Content="Ana Ekran / Puantaj" Tag="DAILY" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
+                                    <Button Content="Giriş / Çıkış Kontrol" Tag="DAILY" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
+                                </StackPanel>
+                            </Expander>
+                            <Expander Header="Personel" Margin="0,0,0,4">
+                                <StackPanel Margin="8,4,0,6">
+                                    <Button Content="Fotoğraflı Personel Kartı" Tag="PERSON" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
+                                    <Button Content="İK / PDKS Ortak Bilgi" Tag="PERSON" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
+                                </StackPanel>
+                            </Expander>
+                            <Expander Header="Vardiya ve Tanımlar" Margin="0,0,0,4">
+                                <StackPanel Margin="8,4,0,6">
+                                    <Button Content="Vardiya / Servis" Tag="DEFINITIONS" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
+                                    <Button Content="Terminal Ayarları" Tag="DEFINITIONS" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
+                                </StackPanel>
+                            </Expander>
+                            <Expander Header="İK Bağlantısı" Margin="0,0,0,4">
+                                <StackPanel Margin="8,4,0,6">
+                                    <Button Content="Avans / Mesai / İzin" Tag="HR" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
+                                    <Button Content="Bordro Bağlantısı" Tag="HR" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
+                                </StackPanel>
+                            </Expander>
+                            <Expander Header="Sistem ve Denetim">
+                                <StackPanel Margin="8,4,0,6">
+                                    <Button Content="Agent / D1 Senkron" Tag="SYSTEM" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
+                                    <Button Content="Yıllık TEMP / Denetim" Tag="SYSTEM" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
+                                </StackPanel>
+                            </Expander>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+
+                <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="10" Padding="12">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="Personel" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,8,0"/>
+                        <ComboBox Grid.Column="1" x:Name="PersonCombo" DisplayMemberPath="FullName" SelectionChanged="PersonCombo_SelectionChanged" MinHeight="34"/>
+                        <TextBlock Grid.Column="2" x:Name="PeriodText" Text="-" VerticalAlignment="Center" Foreground="#64788F" Margin="12,0,0,0"/>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="2">
+                    <Grid x:Name="DailyPanel">
+                        <Grid.RowDefinitions><RowDefinition Height="90"/><RowDefinition Height="10"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <UniformGrid Columns="6">
+                            <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="ÇALIŞTI" Foreground="#708196"/><TextBlock x:Name="WorkedText" Text="0" FontSize="23" FontWeight="Bold"/></StackPanel></Border>
+                            <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="EKSİK" Foreground="#708196"/><TextBlock x:Name="MissingText" Text="0" FontSize="23" FontWeight="Bold" Foreground="#A53232"/></StackPanel></Border>
+                            <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="GEÇ DK" Foreground="#708196"/><TextBlock x:Name="LateText" Text="0" FontSize="23" FontWeight="Bold"/></StackPanel></Border>
+                            <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="ERKEN DK" Foreground="#708196"/><TextBlock x:Name="EarlyText" Text="0" FontSize="23" FontWeight="Bold"/></StackPanel></Border>
+                            <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="MESAİ DK" Foreground="#708196"/><TextBlock x:Name="OvertimeText" Text="0" FontSize="23" FontWeight="Bold" Foreground="#267048"/></StackPanel></Border>
+                            <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="9" Padding="10"><StackPanel><TextBlock Text="KART YOK" Foreground="#708196"/><TextBlock x:Name="NoPunchText" Text="0" FontSize="23" FontWeight="Bold"/></StackPanel></Border>
+                        </UniformGrid>
+                        <Border Grid.Row="2" Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="10" Padding="10">
+                            <DataGrid x:Name="AttendanceGrid" IsReadOnly="True" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Tarih" Binding="{Binding Date}" Width="110"/>
+                                    <DataGridTextColumn Header="Durum" Binding="{Binding Status}" Width="130"/>
+                                    <DataGridTextColumn Header="Giriş" Binding="{Binding Entry}" Width="80"/>
+                                    <DataGridTextColumn Header="Çıkış" Binding="{Binding Exit}" Width="80"/>
+                                    <DataGridTextColumn Header="Geç" Binding="{Binding LateMinutes}" Width="70"/>
+                                    <DataGridTextColumn Header="Erken" Binding="{Binding EarlyMinutes}" Width="70"/>
+                                    <DataGridTextColumn Header="Mesai" Binding="{Binding OvertimeMinutes}" Width="70"/>
+                                    <DataGridTextColumn Header="Basım" Binding="{Binding EventCount}" Width="70"/>
+                                    <DataGridTextColumn Header="Not" Binding="{Binding Note}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Border>
+                    </Grid>
+
+                    <Grid x:Name="PersonPanel" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="280"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="10" Padding="16">
+                            <StackPanel>
+                                <Border Width="180" Height="210" Background="#EEF3F8" CornerRadius="10" HorizontalAlignment="Center">
+                                    <Grid><Image x:Name="PersonPhoto" Stretch="UniformToFill"/><TextBlock x:Name="PhotoInitials" Text="?" FontSize="48" FontWeight="Bold" Foreground="#73879A" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid>
+                                </Border>
+                                <Button x:Name="PhotoButton" Content="Fotoğraf Seç / Güncelle" Click="PhotoButton_Click" Margin="0,10,0,0"/>
+                                <TextBlock x:Name="PersonNameText" Text="-" FontSize="20" FontWeight="Bold" TextAlignment="Center" Margin="0,12,0,0" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="PersonCodeText" Text="-" Foreground="#64788F" TextAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="10" Padding="18">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="160"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Kart No" FontWeight="SemiBold"/><TextBlock Grid.Column="1" x:Name="CardText"/>
+                                <TextBlock Grid.Row="1" Text="Bölüm" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="1" Grid.Column="1" x:Name="DepartmentText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="2" Text="Görev" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="2" Grid.Column="1" x:Name="TitleText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="3" Text="SGK / Durum" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="3" Grid.Column="1" x:Name="SgkText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="4" Text="İşe Giriş" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="4" Grid.Column="1" x:Name="StartText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="5" Text="İşten Çıkış" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="5" Grid.Column="1" x:Name="ExitText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="6" Text="Vardiya" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="6" Grid.Column="1" x:Name="GroupText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="7" Text="Servis" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="7" Grid.Column="1" x:Name="ServiceText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="8" Text="Veri Kaynağı" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="8" Grid.Column="1" Text="KY ERP D1 · İK Aylık Personel ile ortak" Foreground="#267048" Margin="0,10,0,0"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <Grid x:Name="DefinitionsPanel" Visibility="Collapsed">
+                        <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="10" Padding="20">
+                            <StackPanel>
+                                <TextBlock Text="Vardiya / Servis / Terminal" FontSize="21" FontWeight="Bold"/>
+                                <TextBlock Text="Tanımlar KY ERP D1'de ortaktır. Terminal bağlantı ayarı yalnız bu Windows Agent'a aittir." Foreground="#64788F" Margin="0,5,0,18"/>
+                                <TextBlock x:Name="DefinitionSummaryText" Text="D1 tanımları yükleniyor..." TextWrapping="Wrap" Margin="0,0,0,14"/>
+                                <Button Content="Vardiya · Servis · Terminal Yönetimini Aç" Click="OpenMasterButton_Click" Width="310" HorizontalAlignment="Left" Padding="14,9"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <Grid x:Name="HrPanel" Visibility="Collapsed">
+                        <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="10" Padding="20">
+                            <StackPanel>
+                                <TextBlock Text="İK Bağlantısı" FontSize="21" FontWeight="Bold"/>
+                                <TextBlock Text="Avans, mesai, izin ve bordro ikinci kez tutulmaz. Aynı D1 kayıtları İK ve PDKS'de görünür." Foreground="#64788F" Margin="0,5,0,14"/>
+                                <TextBlock Text="Hızlı işlem için yukarıdaki PDKS Asistanını kullanın:" FontWeight="SemiBold"/>
+                                <TextBlock Text="• Çetin Kaya bugün gelmedi yok yaz&#x0a;• Çetin Kaya için 5000 TL avans gir&#x0a;• Çetin Kaya 10 saat hafta içi mesai ekle&#x0a;• Çetin Kaya bugün 08:42 geldi" Margin="10,8,0,14"/>
+                                <TextBlock Text="Dönem kilitliyse sunucu işlemi reddeder; DENETİM hesabı yazamaz." Foreground="#A05A16"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <Grid x:Name="SystemPanel" Visibility="Collapsed">
+                        <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="10" Padding="20">
+                            <StackPanel>
+                                <TextBlock Text="Agent / D1 Senkron" FontSize="21" FontWeight="Bold"/>
+                                <TextBlock Text="Kart cihazı → işyeri LAN → KY PDKS Agent → HTTPS → KY ERP D1" Foreground="#64788F" Margin="0,5,0,14"/>
+                                <TextBlock x:Name="AgentDetailText" Text="Agent durumu yükleniyor..." TextWrapping="Wrap"/>
+                                <TextBlock x:Name="SyncDetailText" Text="D1 sync durumu yükleniyor..." TextWrapping="Wrap" Margin="0,8,0,0"/>
+                                <TextBlock Text="KY PDKS.exe kapalı olsa da Windows Agent kart toplamaya ve D1 kuyruğunu göndermeye devam eder." FontWeight="SemiBold" Foreground="#267048" Margin="0,14,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <Border Grid.Row="3" Background="#102A43" Padding="12,0">
+            <TextBlock x:Name="StatusText" Text="Hazır" Foreground="White" VerticalAlignment="Center"/>
+        </Border>
+    </Grid>
+</Window>

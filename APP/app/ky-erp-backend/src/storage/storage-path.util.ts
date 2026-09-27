@@ -33,7 +33,7 @@ export function getStorageRoot() {
   const configuredRoot = String(readStorageSettings()?.storageRoot || "").trim();
   if (configuredRoot) return path.resolve(configuredRoot);
   return process.platform === "win32"
-    ? "D:\\onedrive-Hkn\\OneDrive\\KY-ERP-MERKEZ\\STORAGE"
+    ? "D:\\KYERP\\STORAGE"
     : "/opt/ky-erp/storage";
 }
 

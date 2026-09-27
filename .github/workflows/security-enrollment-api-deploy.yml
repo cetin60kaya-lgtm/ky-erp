@@ -1,0 +1,79 @@
+name: KY Security Enrollment API Deploy
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - APP/cloud/ky-erp-api/src/auth-security-mobile-control.ts
+      - APP/cloud/ky-erp-api/src/auth-push-cloud.ts
+      - APP/cloud/ky-erp-api/src/auth-security-core.ts
+      - .github/workflows/security-enrollment-api-deploy.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-security-enrollment-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Validate and deploy security API only
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+    steps:
+      - name: Checkout production source
+        uses: actions/checkout@v4
+
+      - name: Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
+
+      - name: Validate enrollment guard source
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'SECURITY_ENROLLMENT_CODE_REQUIRED' APP/cloud/ky-erp-api/src/auth-security-mobile-control.ts
+          grep -q 'SECURITY_ENROLLMENT_CODE_INVALID' APP/cloud/ky-erp-api/src/auth-security-mobile-control.ts
+          grep -q 'security-relink/by-subscription' APP/cloud/ky-erp-api/src/auth-security-mobile-control.ts
+          grep -q 'compare(password' APP/cloud/ky-erp-api/src/auth-push-cloud.ts
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "CLOUDFLARE_API_TOKEN missing" >&2; exit 1; }
+
+      - name: Install API dependencies
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+
+      - name: Wrangler dry run
+        working-directory: APP/cloud/ky-erp-api
+        run: npx wrangler@4.118.0 deploy --dry-run --config wrangler.jsonc
+
+      - name: Deploy API Worker only
+        working-directory: APP/cloud/ky-erp-api
+        run: npx wrangler@4.118.0 deploy --config wrangler.jsonc
+
+      - name: Verify live fail-closed enrollment policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in 1 2 3 4 5 6 7 8; do
+            complete="$(curl -sS --max-time 20 -X POST 'https://api.kyerp.net/api/auth/push/security-enrollment/complete' -H 'content-type: application/json' --data '{}' || true)"
+            relink="$(curl -sS --max-time 20 -X POST 'https://api.kyerp.net/api/auth/push/security-relink/by-subscription' -H 'content-type: application/json' --data '{}' || true)"
+            if printf '%s' "$complete" | grep -q 'SECURITY_ENROLLMENT_CODE_REQUIRED' \
+              && printf '%s' "$relink" | grep -q 'SECURITY_ENROLLMENT_CODE_REQUIRED'; then
+              echo "Live enrollment guard verified on attempt ${attempt}."
+              ok=1
+              break
+            fi
+            echo "Waiting for API propagation (attempt ${attempt})"
+            sleep 4
+          done
+          test "$ok" -eq 1

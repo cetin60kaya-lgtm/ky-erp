@@ -9,6 +9,15 @@ type Row = Record<string, any>;
 const COLOR_SCOPE = "BOYAHANE_REGISTERED_COLOR";
 const RECIPE_SCOPE = "BOYAHANE_RECIPE";
 const PRODUCTION_SCOPE = "BOYAHANE_PRODUCTION";
+const MECIT_HAKAN_ALIASES = [
+  "mecit-hakan",
+  "main-mecit-hakan",
+  "mecit-hakan-gursu",
+  "hakan-baski",
+  "main-hakan",
+  "main-hakan-baski",
+  "hkn-baski",
+];
 
 const text = (value: unknown) => value === undefined || value === null ? "" : String(value).trim();
 const normalize = (value: unknown) => text(value)
@@ -40,15 +49,25 @@ async function bodyOf(c: Context<AppEnv>): Promise<Row> {
 }
 
 function slugOf(c: Context<AppEnv>, body: Row = {}) {
-  return text(body.mainCompanySlug || body.main_company_slug || c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "mecit-hakan");
+  const slug = text(body.mainCompanySlug || body.main_company_slug || c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "mecit-hakan")
+    .toLocaleLowerCase("tr-TR")
+    .replace(/_/g, "-");
+  return MECIT_HAKAN_ALIASES.includes(slug) ? "mecit-hakan" : slug;
+}
+
+function tenantSlugs(slug: string) {
+  const normalized = text(slug).toLocaleLowerCase("tr-TR").replace(/_/g, "-");
+  return MECIT_HAKAN_ALIASES.includes(normalized) ? MECIT_HAKAN_ALIASES : [normalized];
 }
 
 async function storeList(c: Context<AppEnv>, scope: string, slug: string): Promise<Row[]> {
+  const tenants = tenantSlugs(slug);
+  const placeholders = tenants.map(() => "?").join(",");
   const result = await c.env.DB.prepare(
     `SELECT id, file_name, data, created_at, updated_at FROM json_store
-      WHERE scope = ? AND (main_company_slug = ? OR main_company_slug IS NULL)
+      WHERE scope = ? AND (main_company_slug IN (${placeholders}) OR main_company_slug IS NULL)
       ORDER BY updated_at DESC, id DESC`,
-  ).bind(scope, slug).all<Row>();
+  ).bind(scope, ...tenants).all<Row>();
   return (result.results || []).map((row) => ({
     ...objectOf(row.data),
     id: text(objectOf(row.data).id || row.file_name),
@@ -60,12 +79,14 @@ async function storeList(c: Context<AppEnv>, scope: string, slug: string): Promi
 }
 
 async function storeGet(c: Context<AppEnv>, scope: string, fileName: string, slug: string): Promise<Row | null> {
+  const tenants = tenantSlugs(slug);
+  const placeholders = tenants.map(() => "?").join(",");
   const row = await c.env.DB.prepare(
     `SELECT id, file_name, data, created_at, updated_at FROM json_store
       WHERE scope = ? AND file_name = ?
-        AND (main_company_slug = ? OR main_company_slug IS NULL)
+        AND (main_company_slug IN (${placeholders}) OR main_company_slug IS NULL)
       ORDER BY updated_at DESC LIMIT 1`,
-  ).bind(scope, fileName, slug).first<Row>();
+  ).bind(scope, fileName, ...tenants).first<Row>();
   if (!row) return null;
   return {
     ...objectOf(row.data),

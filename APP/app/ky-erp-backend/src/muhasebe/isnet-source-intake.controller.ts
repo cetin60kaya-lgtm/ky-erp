@@ -15,7 +15,7 @@ import { RequireModule } from "../auth/roles.decorator";
 import { IsnetSourceIntakeService } from "./isnet-source-intake.service";
 
 @Controller("isnet/source-intakes")
-@RequireModule(ModuleKey.ISNET)
+@RequireModule(ModuleKey.MUHASEBE)
 export class IsnetSourceIntakeController {
   constructor(private readonly service: IsnetSourceIntakeService) {}
 

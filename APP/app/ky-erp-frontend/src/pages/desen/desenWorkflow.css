@@ -112,6 +112,9 @@
 .dsg-selection-count { margin-left: auto; padding: 7px 9px; border-radius: 8px; background: #ecfdf5; color: #15803d; font-size: 11px; white-space: nowrap; }
 .dsg-scan-tools select, .dsg-filter-grid select, .dsg-search input { min-height: 34px; border: 1px solid #c8d8e8; border-radius: 8px; background: #fff; color: var(--dsg-ink); font: inherit; font-size: 12px; }
 .dsg-scan-tools select, .dsg-filter-grid select { padding: 6px 9px; }
+.dsg-filter-grid .dsg-date-input { min-height: 34px; min-width: 132px; padding: 6px 8px; border: 1px solid #c8d8e8; border-radius: 8px; background: #fff; color: var(--dsg-ink); font: inherit; font-size: 12px; }
+.dsg-date-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--dsg-muted); }
+.dsg-date-meta small { white-space: nowrap; }
 .dsg-search { min-width: 190px; flex: 1; display: flex; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid #c8d8e8; border-radius: 8px; background: #fff; }
 .dsg-search input { min-width: 0; width: 100%; border: 0; outline: 0; }
 .dsg-scan-layout { height: calc(100% - 46px); min-height: 470px; display: grid; grid-template-columns: minmax(320px, 31%) minmax(380px, 1fr) minmax(260px, 24%); gap: 10px; }

@@ -6,7 +6,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { IsnetFullSyncService } from "./isnet-full-sync.service";
 
 @Controller("isnet")
-@RequireModule(ModuleKey.ISNET)
+@RequireModule(ModuleKey.MUHASEBE)
 export class IsnetFullSyncController {
   constructor(
     private readonly service: IsnetFullSyncService,

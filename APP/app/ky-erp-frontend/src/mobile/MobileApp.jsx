@@ -20,9 +20,7 @@ import MobileKdv from "./MobileKdv";
 import MobileFaturaIrsaliye from "./MobileFaturaIrsaliye";
 import MobileUrunler from "./MobileUrunler";
 import MobileIK from "./MobileIK";
-import MobileIKGunluk from "./MobileIKGunluk";
 import MobileIKAylik from "./MobileIKAylik";
-import MobileIKGunlukGiris from "./MobileIKGunlukGiris";
 import MobileImalat from "./MobileImalat";
 import MobileImalatGunluk from "./MobileImalatGunluk";
 import MobileImalatRapor from "./MobileImalatRapor";
@@ -43,8 +41,6 @@ function getMobilePage(pathname) {
   if (clean === "/mobile/muhasebe/fatura-irsaliye") return "muhasebe_fatura";
   if (clean === "/mobile/muhasebe/urunler") return "muhasebe_urunler";
   if (clean === "/mobile/muhasebe") return "muhasebe";
-  if (clean === "/mobile/ik/gunluk-giris") return "ik_gunluk_giris";
-  if (clean === "/mobile/ik/gunluk") return "ik_gunluk";
   if (clean === "/mobile/ik/aylik") return "ik_aylik";
   if (clean === "/mobile/ik") return "ik";
   if (clean === "/mobile/imalat/gunluk") return "imalat_gunluk";
@@ -103,8 +99,6 @@ export default function MobileApp() {
       case "muhasebe_fatura": return <MobileFaturaIrsaliye />;
       case "muhasebe_urunler": return <MobileUrunler />;
       case "muhasebe": return <MobileMuhasebe />;
-      case "ik_gunluk_giris": return <MobileIKGunlukGiris />;
-      case "ik_gunluk": return <MobileIKGunluk />;
       case "ik_aylik": return <MobileIKAylik />;
       case "ik": return <MobileIK />;
       case "imalat_gunluk": return <MobileImalatGunluk />;

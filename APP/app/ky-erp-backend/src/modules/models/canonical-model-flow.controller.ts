@@ -4,7 +4,7 @@ import { CanonicalDispatchSyncService } from "./canonical-dispatch-sync.service"
 import { CanonicalModelFlowService } from "./canonical-model-flow.service";
 import { CanonicalWorkflowOrchestratorService } from "./canonical-workflow-orchestrator.service";
 
-@Controller(["model-flow", "production/model-flow", "isnet/model-flow"])
+@Controller("model-flow")
 export class CanonicalModelFlowController {
   constructor(
     private readonly service: CanonicalModelFlowService,

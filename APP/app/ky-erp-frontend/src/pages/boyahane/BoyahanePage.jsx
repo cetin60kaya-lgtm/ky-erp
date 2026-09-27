@@ -11,6 +11,7 @@ import "./boyahaneFormulaV4.css";
 import "./boyahaneColorIdentity.css";
 import BoyahaneDashboardCompactPage from "./workflow/BoyahaneDashboardCompactPage";
 import BoyahaneWorkPageV5 from "./workflow/BoyahaneWorkPageV5";
+import BoyahaneProductionIntelligencePage from "./workflow/BoyahaneProductionIntelligencePage";
 import BoyahaneInventoryHubV3 from "./workflow/BoyahaneInventoryHubV3";
 import BoyahaneReportsAndLogsPage from "./workflow/BoyahaneReportsAndLogsPage";
 import KayitliRenklerWorkspace from "./workflow/KayitliRenklerWorkspace";
@@ -44,9 +45,9 @@ export default function BoyahanePage({
       moduleActionContext={moduleActionContext}
     />
   ) : tab === "uretim-gecmisi" ? (
-    <BoyahaneWorkPageV5
-      mode="production"
+    <BoyahaneProductionIntelligencePage
       activeMainCompany={activeMainCompany}
+      openModule={openModule}
       moduleActionContext={moduleActionContext}
     />
   ) : tab === "kayitli-renkler" ? (

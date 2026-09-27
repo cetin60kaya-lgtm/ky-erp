@@ -203,3 +203,52 @@
 @media (min-width: 761px) and (max-width: 1200px) {
   .management-secondary-metrics { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
 }
+
+.management-ebelge-strip{display:grid;gap:10px;padding:12px;border:1px solid #d7e3f8;border-radius:12px;background:linear-gradient(180deg,#f8fbff,#fff)}
+.management-ebelge-title{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.management-ebelge-title>div{display:grid;gap:3px;min-width:0}
+.management-ebelge-title span{color:#2563eb;font-size:.62rem;font-weight:900;letter-spacing:.08em}
+.management-ebelge-title strong{color:#172033;font-size:.9rem}
+.management-ebelge-title small{color:#667085;font-size:.69rem;line-height:1.45}
+.management-ebelge-title button{flex:0 0 auto;border:1px solid #b8cdf6;border-radius:8px;padding:7px 10px;color:#1d4ed8;background:#fff;font-weight:800;cursor:pointer}
+.management-ebelge-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.management-ebelge-metrics .management-metric{background:#fff}
+@media(max-width:900px){.management-ebelge-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.management-ebelge-title{align-items:flex-start}}
+@media(max-width:720px){.management-ebelge-title{flex-direction:column}.management-ebelge-title button{width:100%}.management-ebelge-metrics{grid-template-columns:1fr}}
+
+/* 2026-09-13 FINAL accounting UX: work first, details centered */
+.muhasebe-module-page{padding:10px 12px 14px}.accounting-page-header{margin-bottom:6px;gap:12px;min-height:34px}.accounting-page-header .accounting-eyebrow,.accounting-page-header p{display:none}.accounting-page-header h1{margin:0;font-size:1.08rem}.accounting-refresh{min-height:32px;height:32px;padding:0 10px;font-size:.72rem}.muhasebe-workbench{display:grid;gap:7px}
+.arl-drawer-layer,.siw-drawer-layer{align-items:center!important;justify-content:center!important;padding:24px!important;background:rgba(15,23,42,.46)!important;backdrop-filter:blur(2px)}
+.arl-drawer,.siw-drawer,.siw-drawer.wide,.siw-drawer.small{width:min(1180px,94vw)!important;height:auto!important;max-height:90vh!important;min-height:0!important;border:1px solid #dfe4ea;border-radius:16px;overflow:hidden;box-shadow:0 28px 80px rgba(15,23,42,.28)!important;animation:none!important}
+.arl-drawer-body,.siw-drawer-body{overflow:auto;max-height:calc(90vh - 130px)}
+.doc-review{position:fixed;z-index:2600;left:50%;top:50%;width:min(1180px,94vw);max-height:90vh;overflow:auto;transform:translate(-50%,-50%);box-shadow:0 0 0 100vmax rgba(15,23,42,.48),0 28px 80px rgba(15,23,42,.30);background:#fff!important;border-radius:16px!important}
+.doc-pool-card{display:grid;gap:8px}.doc-pool-head{padding:0 2px}.doc-pool-head small{display:none}.doc-pool-icon{width:30px;height:30px}.doc-pool-controls{grid-template-columns:170px 150px 1fr;gap:7px}.doc-pool-controls select{height:32px}.doc-pool-badges span{padding:4px 7px;font-size:10px}.doc-pool-drop{min-height:72px;padding:9px}.doc-pool-drop svg{width:20px;height:20px}.doc-pool-drop strong{font-size:12px}.doc-pool-drop span{display:none}.doc-pool-table th,.doc-pool-table td{padding:7px 9px}
+.sdw-secondary{border:1px solid #dce3ec;border-radius:10px;background:#fff;overflow:hidden}.sdw-secondary>summary{padding:9px 12px;color:#344054;font-size:12px;font-weight:800;cursor:pointer}.sdw-secondary[open]>summary{border-bottom:1px solid #e5e9ef}.sdw-secondary-body{display:grid;gap:10px;padding:10px}
+@media(max-width:760px){.arl-drawer-layer,.siw-drawer-layer{padding:0!important}.arl-drawer,.siw-drawer,.siw-drawer.wide,.siw-drawer.small{width:100vw!important;max-height:100vh!important;border-radius:0}.doc-review{width:100vw;max-height:100vh;border-radius:0!important}.doc-pool-controls{grid-template-columns:1fr 1fr}.doc-pool-badges{grid-column:1/-1}}
+
+/* all accounting edit/detail surfaces open centered, never as right side drawers */
+.idc-drawer-layer,.sif-drawer-layer,.mtpl-drawer-layer,.mtw-drawer-layer,.plw-drawer-layer,.vcw-drawer-layer{align-items:center!important;justify-content:center!important;padding:24px!important;background:rgba(15,23,42,.46)!important;backdrop-filter:blur(2px)}
+.idc-drawer,.sif-drawer,.mtpl-drawer,.mtw-drawer,.plw-drawer,.vcw-drawer{width:min(1180px,94vw)!important;height:auto!important;max-height:90vh!important;min-height:0!important;border:1px solid #dfe4ea;border-radius:16px!important;overflow:hidden;box-shadow:0 28px 80px rgba(15,23,42,.28)!important;animation:none!important}
+.idc-drawer-body,.sif-drawer-body,.mtpl-drawer-body,.mtw-drawer-body,.plw-drawer-body,.vcw-drawer-body{overflow:auto!important;max-height:calc(90vh - 130px)!important}
+@media(max-width:760px){.idc-drawer-layer,.sif-drawer-layer,.mtpl-drawer-layer,.mtw-drawer-layer,.plw-drawer-layer,.vcw-drawer-layer{padding:0!important}.idc-drawer,.sif-drawer,.mtpl-drawer,.mtw-drawer,.plw-drawer,.vcw-drawer{width:100vw!important;max-height:100vh!important;border-radius:0!important}}
+
+/* 2026-09-15 Muhasebe sade birleşik bilgi mimarisi */
+.accounting-page-header.compact{padding:8px 10px;min-height:0}
+.accounting-page-header.compact .accounting-eyebrow{display:none}
+.accounting-page-header.compact h1{font-size:17px;margin:0}
+.accounting-page-header.compact p{margin:2px 0 0;font-size:11px;color:#667085}
+.accounting-composite-workspace{display:grid;gap:8px;min-width:0}
+.accounting-subbar{display:flex;align-items:center;gap:6px;padding:6px;border:1px solid #dfe4ea;border-radius:10px;background:#f8f9fb}
+.accounting-subbar button,.accounting-inline-actions button{min-height:32px;padding:0 11px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;color:#344054;font-weight:750;cursor:pointer}
+.accounting-subbar button.active{background:#344054;color:#fff;border-color:#344054}
+.accounting-composite-body{min-width:0}
+.accounting-inline-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px;border:1px solid #dfe4ea;border-radius:10px;background:#f8f9fb;color:#667085;font-size:11px}
+.accounting-inline-actions button{display:inline-flex;align-items:center;gap:6px}
+.accounting-modal-backdrop{position:fixed;inset:0;z-index:2800;display:grid;place-items:center;padding:20px;background:rgba(15,23,42,.46);backdrop-filter:blur(2px)}
+.accounting-center-modal{width:min(980px,95vw);max-height:92vh;overflow:hidden;border:1px solid #d0d5dd;border-radius:16px;background:#f6f8fb;box-shadow:0 28px 80px rgba(15,23,42,.30)}
+.accounting-center-modal.large{width:min(1280px,96vw)}
+.accounting-center-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid #dfe4ea;background:#fff}
+.accounting-center-modal-head>div{display:grid;gap:3px}.accounting-center-modal-head small{color:#667085;font-size:11px}
+.accounting-center-modal-head button{display:grid;place-items:center;width:32px;height:32px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;cursor:pointer}
+.accounting-center-modal-body{max-height:calc(92vh - 58px);overflow:auto;padding:12px}
+@media(max-width:820px){.accounting-modal-backdrop{padding:0}.accounting-center-modal,.accounting-center-modal.large{width:100vw;height:100vh;max-height:100vh;border-radius:0}.accounting-center-modal-body{max-height:calc(100vh - 58px)}.accounting-subbar,.accounting-inline-actions{overflow-x:auto;white-space:nowrap}}

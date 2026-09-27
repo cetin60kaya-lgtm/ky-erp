@@ -1,0 +1,238 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const api = (name: string) => readFileSync(resolve(here, name), "utf8");
+const migration = (name: string) => readFileSync(resolve(here, "../migrations", name), "utf8");
+const frontend = (name: string) => readFileSync(resolve(here, "../../../app/ky-erp-frontend/src", name), "utf8");
+
+test("PDKS period/shift guard is registered before personnel-control routes", () => {
+  const main = api("main.ts");
+  assert.match(main, /import \{ registerIkPdksGuardRoutes \} from "\.\/ik-pdks-guard"/);
+  const guard = main.indexOf("registerIkPdksGuardRoutes(app)");
+  const personnel = main.indexOf("registerIkPersonnelControlRoutes(app)");
+  assert.ok(guard > 0 && personnel > guard, "PDKS guard must wrap personnel-control routes");
+});
+
+test("PDKS guard owns canonical operations, assistant, device, media and D1 shift normalization once", () => {
+  const source = api("ik-pdks-guard.ts");
+  const master = api("ik-pdks-master.ts");
+  assert.match(source, /SELECT is_locked FROM ik_monthly_close/);
+  assert.match(source, /PDKS_PERIOD_LOCKED/);
+  assert.match(source, /strictAuditEmployeeIds/);
+  assert.match(source, /ik_person_monthly_compliance/);
+  assert.match(source, /mc\.sgk_covered=1/);
+  assert.match(source, /ik_pdks_employee_groups/);
+  assert.match(source, /ik_pdks_work_groups/);
+  assert.match(source, /lateTolerance/);
+  assert.match(source, /earlyTolerance/);
+  assert.match(source, /overtimeMinutes/);
+  for (const registrar of ["registerIkPdksOperationRoutes", "registerIkPdksCardBridgeRoutes", "registerIkPdksAdjustmentRoutes", "registerIkPdksAssistantRoutes", "registerIkPdksDeviceRoutes", "registerIkPersonnelMediaRoutes"])
+    assert.match(source, new RegExp(`${registrar}\\(app\\)`));
+  assert.doesNotMatch(master, /registerIkPdksOperationRoutes/);
+  assert.doesNotMatch(master, /registerIkPdksAdjustmentRoutes/);
+});
+
+test("PDKS D1 master schema contains shift, service and employee assignments", () => {
+  const source = migration("0025_pdks_single_data_masters.sql");
+  for (const table of ["ik_pdks_work_groups", "ik_pdks_employee_groups", "ik_pdks_services", "ik_pdks_employee_services"])
+    assert.match(source, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));
+  assert.match(source, /UNIQUE\(main_company_id, code\)/);
+});
+
+test("PDKS D1 operation schema is migration-backed and idempotent", () => {
+  const source = migration("0026_pdks_operation_core.sql");
+  for (const table of ["hr_monthly_adjustments_v2", "hr_payrolls_v2", "ik_monthly_close", "ik_monthly_close_logs", "ik_audit_logs"])
+    assert.match(source, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));
+  assert.match(source, /UNIQUE\(main_company_id,year,month,employee_id\)/);
+  assert.match(source, /UNIQUE\(main_company_id,period_year,period_month\)/);
+});
+
+test("PDKS enrolled Windows device schema and headless HTTPS sync are explicit", () => {
+  const schema = migration("0037_pdks_device_sync.sql");
+  const device = api("ik-pdks-device.ts");
+  for (const table of ["ik_pdks_devices", "ik_pdks_device_sync_logs"])
+    assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));
+  assert.match(device, /\/api\/ik\/personnel-control\/device\/enroll/);
+  assert.match(device, /\/api\/auth\/pdks-device\/heartbeat/);
+  assert.match(device, /\/api\/auth\/pdks-device\/time-events\/import/);
+  assert.match(device, /X-KYERP-PDKS-Device/);
+  assert.match(device, /X-KYERP-PDKS-Secret/);
+  assert.match(device, /secret_hash/);
+  assert.match(device, /INSERT INTO ik_time_clock_events/);
+  assert.match(device, /PDKS_AGENT:/);
+  assert.match(device, /Dönem kilitli/);
+});
+
+test("PDKS quick assistant is preview-first, attendance-only and audit logged", () => {
+  const source = api("ik-pdks-assistant.ts");
+  const frontendAssistant = frontend("services/pdksAssistant.js");
+
+  assert.match(source, /\/api\/ik\/personnel-control\/assistant\/command/);
+  assert.match(source, /body\.commit === true/);
+  assert.match(source, /PDKS_ASSISTANT_COMMAND_UNCLEAR/);
+  assert.match(source, /PDKS_FINANCE_NOT_ALLOWED/);
+  assert.match(source, /KART_YOK/);
+  assert.match(source, /action = "ARRIVAL"/);
+  assert.match(source, /action = "DEPARTURE"/);
+  assert.match(source, /direction,source,note/);
+  assert.match(source, /"OUT", "KYERP_PDKS_ASSISTANT"/);
+  assert.match(source, /KYERP_PDKS_ASSISTANT/);
+  assert.match(source, /PDKS_ASSISTANT_/);
+  assert.match(source, /active_passive,e\.status,'AKTIF'/);
+  assert.doesNotMatch(source, /hr_monthly_adjustments_v2/);
+  assert.doesNotMatch(source, /SGK=VAR/);
+  assert.doesNotMatch(source, /parseAmount/);
+  assert.doesNotMatch(source, /parseHours/);
+
+  assert.match(frontendAssistant, /assertOperationalPdksCommand/);
+  assert.match(frontendAssistant, /Finans ve bordro işlemleri PDKS'den yapılamaz/);
+  assert.match(frontendAssistant, /18:55 çıkış yaptı/);
+  assert.doesNotMatch(frontendAssistant, /5000 TL avans/);
+  assert.doesNotMatch(frontendAssistant, /10 saat hafta içi mesai/);
+});
+
+test("Canonical personnel photo is shared by employee id and R2 instead of second PDKS person data", () => {
+  const source = api("ik-personnel-media.ts");
+  assert.match(source, /IK_PERSONNEL_PHOTO/);
+  assert.match(source, /ik\/personnel-photos/);
+  assert.match(source, /c\.env\.FILES\.put/);
+  assert.match(source, /people\/:employeeId\/photo/);
+  assert.match(source, /5 \* 1024 \* 1024/);
+  assert.match(source, /PDKS_AUDIT_READ_ONLY/);
+});
+
+test("PDKS canonical operations use tenant-first D1 paths and protect business rules", () => {
+  const source = api("ik-pdks-operations.ts");
+  assert.match(source, /X-KYERP-Tenant-Slug/);
+  assert.match(source, /requestedCompany\(c, body\) \|\|/);
+  assert.match(source, /PDKS_PERIOD_LOCKED/);
+  assert.match(source, /PDKS_PERIOD_NOT_FINISHED/);
+  assert.match(source, /LEAVE_BALANCE_INSUFFICIENT/);
+  assert.match(source, /LEAVE_DEPARTMENT_CONFLICT/);
+  assert.match(source, /if \(day === 0\) return false/);
+  assert.doesNotMatch(source, /payment_method/);
+});
+
+test("PDKS Hedef card bridge keeps real active-card events independent from SGK and writes only D1 clock events", () => {
+  const source = api("ik-pdks-card-bridge.ts");
+  assert.match(source, /\/api\/ik\/advanced\/card\/preview/);
+  assert.match(source, /\/api\/ik\/advanced\/card\/confirm/);
+  assert.match(source, /PDKS_TEXT_CARD_FILE_REQUIRED/);
+  assert.match(source, /active_passive,e\.status,'AKTIF'/);
+  assert.doesNotMatch(source, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\)='VAR'/);
+  assert.match(source, /SELECT is_locked FROM ik_monthly_close/);
+  assert.match(source, /INSERT OR IGNORE INTO ik_time_clock_events/);
+  assert.match(source, /KYERP_WEB_PDKS_FILE/);
+  assert.doesNotMatch(source, /json_store/);
+});
+
+test("Web PDKS uses personnel-control operations, not legacy advanced endpoints for business operations", () => {
+  const service = frontend("services/pdksApi.js");
+  assert.match(service, /const OPS = "\/ik\/personnel-control\/operations"/);
+  for (const tail of ["month", "payroll", "leaves", "audit-logs", "leave", "advance", "period-close", "holidays"])
+    assert.match(service, new RegExp(`\\$\\{OPS\\}/${tail}`));
+  assert.doesNotMatch(service, /\/ik\/advanced\//);
+});
+
+test("Web PDKS uses the left sidebar as primary navigation and only a compact group workbar inside", () => {
+  const registry = frontend("app/pdksModuleRegistryPatch.js");
+  const page = frontend("pages/modules/PdksPage.jsx");
+  const css = frontend("pages/modules/pdks-shell.css");
+
+  assert.match(registry, /key: "pdks"/);
+  assert.match(registry, /label: "PDKS"/);
+  for (const group of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"])
+    assert.match(page, new RegExp(group));
+
+  assert.match(page, /pdks-context-bar/);
+  assert.match(page, /pdks-context-tabs/);
+  assert.match(page, /Hızlı İşlem/);
+  assert.doesNotMatch(page, /pdks-command-nav/);
+  assert.doesNotMatch(page, /pdks-command-groups/);
+  assert.doesNotMatch(css, /body\.pdks-compact-active/);
+  assert.doesNotMatch(css, /shell-v3-submenu[^\n]*display:\s*none/);
+  assert.match(css, /\.pdks-context-bar/);
+  assert.match(css, /\.pdks-context-tabs/);
+});
+
+test("PDKS primary sidebar exposes exactly five operation groups without dumping every subtab", () => {
+  const registry = frontend("app/pdksModuleRegistryPatch.js");
+  const shell = frontend("layouts/AppShellV3.jsx");
+
+  for (const label of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"]) {
+    assert.ok(registry.includes(label), `Eksik PDKS ana grup: ${label}`);
+  }
+  assert.match(registry, /sidebarGroups:\s*\[/);
+  assert.match(registry, /\["ana-ekran", "Günlük"/);
+  assert.match(registry, /\["personel-bilgileri", "Personel & İK"/);
+  assert.match(registry, /\["gruplar-vardiyalar", "Tanımlar"/);
+  assert.match(registry, /\["saat-terminal", "Terminal & Sistem"/);
+  assert.match(registry, /\["raporlar", "Rapor & Denetim"/);
+
+  assert.match(shell, /hasPrimarySidebarGroups/);
+  assert.match(shell, /isActiveModule && \(hasPrimarySidebarGroups \|\| mobileMenuOpen\)/);
+  assert.match(shell, /module\.sidebarGroups\.map/);
+  assert.match(shell, /owningGroup\?\.tabs\?\.some/);
+  assert.match(shell, /shell-v3-submenu-primary/);
+});
+
+
+test("PDKS live dashboard counts all active workers for HR but keeps audit monthly-SGK scoped", () => {
+  const source = api("ik-pdks-modern.ts");
+
+  assert.match(source, /\/api\/ik\/personnel-control\/dashboard-live/);
+  assert.match(source, /const people=auth\.audit/);
+  assert.match(source, /ik_person_monthly_compliance mc/);
+  assert.match(source, /mc\.sgk_covered=1/);
+  assert.match(source, /UPPER\(COALESCE\(s\.active_passive,'AKTIF'\)\) NOT LIKE '%PAS%'/);
+  assert.match(source, /UPPER\(COALESCE\(e\.status,'AKTIF'\)\) NOT LIKE '%PAS%'/);
+  assert.doesNotMatch(source, /WHERE e\.main_company_id=\? AND UPPER\(COALESCE\(e\.status,'AKTIF'\)\) NOT LIKE '%PASIF%' AND UPPER\(COALESCE\(e\.sgk_status,'VAR'\)\)<>'YOK'/);
+});
+
+
+test("PDKS does not own payroll advance or user administration", () => {
+  const registry = frontend("app/pdksModuleRegistryPatch.js");
+  const shell = frontend("pages/modules/PdksPage.jsx");
+  const page = frontend("pages/modules/PdksPageV2.jsx");
+
+  assert.doesNotMatch(registry, /\["avanslar", "Avans"/);
+  assert.doesNotMatch(registry, /\["bordro", "Bordro"/);
+  assert.doesNotMatch(shell, /\["avanslar", "Avans"/);
+  assert.doesNotMatch(shell, /\["bordro", "Bordro"/);
+  assert.doesNotMatch(shell, /\["kullanicilar", "Kullanıcı"/);
+
+  assert.doesNotMatch(page, /savePdksFinanceMovement/);
+  assert.doesNotMatch(page, /getPdksPayroll/);
+  assert.doesNotMatch(page, /getPdksAdvancedMonth/);
+  assert.doesNotMatch(page, /const \[advance, setAdvance\]/);
+  assert.match(page, /Avans, kesinti, maaş, banka\/elden ve bordro işlemleri PDKS'de ikinci kez yönetilmez/);
+  assert.match(page, /Personel ana kartı yalnız İK'da yönetilir/);
+});
+
+
+test("PDKS person workspace is operational-only and never owns the IK person master or payroll", () => {
+  const desk = frontend("pages/pdks/PdksPersonnelDesk.jsx");
+
+  assert.doesNotMatch(desk, /getPdksPayroll/);
+  assert.doesNotMatch(desk, /createIkControlPerson/);
+  assert.doesNotMatch(desk, /saveIkControlChanges/);
+  assert.doesNotMatch(desk, /Kazanç \/ Kesinti/);
+  assert.doesNotMatch(desk, /payrollLine/);
+  assert.match(desk, /İK Kartını Aç/);
+  assert.match(desk, /PDKS ikinci personel kartı oluşturmaz/);
+  assert.match(desk, /Giriş \/ Çıkış/);
+  assert.match(desk, /Puantaj/);
+  assert.match(desk, /İzinler/);
+});
+
+test("PDKS Terminal & Sistem landing opens the actual device center", () => {
+  const page = frontend("pages/modules/PdksPage.jsx");
+  const device = frontend("pages/pdks/PdksDeviceCenter.jsx");
+
+  assert.match(page, /\["saat-terminal", "cihaz-baglantilari", "senkron"\]/);
+  assert.match(device, /activeTab==="saat-terminal"\?"Terminal & Sistem"/);
+});

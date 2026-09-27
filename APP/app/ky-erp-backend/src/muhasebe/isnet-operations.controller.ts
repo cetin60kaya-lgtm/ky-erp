@@ -18,7 +18,7 @@ import { IsnetOperationsService } from "./isnet-operations.service";
 import { IsnetMailDraftService } from "./isnet-mail-draft.service";
 
 @Controller("isnet")
-@RequireModule(ModuleKey.ISNET)
+@RequireModule(ModuleKey.MUHASEBE)
 export class IsnetOperationsController {
   constructor(
     private readonly service: IsnetOperationsService,

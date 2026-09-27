@@ -11,7 +11,7 @@ import {
 } from "@nestjs/common";
 import { IsnetBusinessSettingsService } from "./isnet-business-settings.service";
 
-@Controller(["isnet/business-settings", "api/isnet/business-settings"])
+@Controller("isnet/business-settings")
 export class IsnetBusinessSettingsController {
   constructor(private readonly service: IsnetBusinessSettingsService) {}
 

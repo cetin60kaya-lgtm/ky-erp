@@ -1,17 +1,4 @@
 {
-  "git.autoRepositoryDetection": "openEditors",
-  "git.repositoryScanMaxDepth": 1,
-  "terminal.integrated.cwd": "${workspaceFolder}",
-  "explorer.compactFolders": false,
-  "workbench.editor.enablePreview": false,
-  "files.autoSave": "afterDelay",
-  "files.autoSaveDelay": 1200,
-  "search.exclude": {
-    "**/node_modules": true,
-    "**/bin": true,
-    "**/obj": true,
-    "**/dist": true,
-    "**/.runtime": true,
-    "RELEASES/**": true
-  }
+  "git.autoRepositoryDetection": true,
+  "git.repositoryScanMaxDepth": 2
 }

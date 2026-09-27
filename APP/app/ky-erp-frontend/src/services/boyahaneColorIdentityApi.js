@@ -28,3 +28,13 @@ export async function updateRegisteredColorIdentity(company, id, body) {
     null,
   );
 }
+
+export async function updateRegisteredColorFormula(company, id, body) {
+  return unwrap(
+    await apiPatch(
+      `/boyahane/registered-colors/${encodeURIComponent(id)}`,
+      companyParams(company, body),
+    ),
+    null,
+  );
+}

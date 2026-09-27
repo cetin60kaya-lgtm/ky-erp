@@ -1,5 +1,10 @@
 import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
+import { registerAuthManagementRoutes } from "./auth-cloud";
+import { buildCanonicalAccountingReport, registerCanonicalAccountingReportRoutes } from "./accounting-report-canonical";
+import { canonicalAccountingDocumentDetail, listCanonicalAccountingDocuments, mergeCanonicalLegacyAccounting } from "./accounting-canonical-read";
+import { ensureAccountingCanonicalReportControls0046 } from "./runtime-migration-0046";
+import { ensureMailCommunicationCore0050 } from "./runtime-migration-0050";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -20,6 +25,7 @@ const ALLOWED_ORIGINS = new Set([
   "https://kyerp.net",
   "https://www.kyerp.net",
   "https://app.kyerp.net",
+  "https://security.kyerp.net",
 ]);
 
 const jsonError = (code: string, message: string, details?: unknown) => ({
@@ -28,7 +34,7 @@ const jsonError = (code: string, message: string, details?: unknown) => ({
 });
 
 app.use("/api/*", async (c, next) => {
-  c.set("requestId", crypto.randomUUID());
+  if (!c.get("requestId")) c.set("requestId", crypto.randomUUID());
   await next();
 });
 
@@ -54,7 +60,9 @@ app.onError((error, c) => {
     }),
   );
   return c.json(
-    jsonError("INTERNAL_ERROR", "Beklenmeyen bir sunucu hatası oluştu."),
+    jsonError("INTERNAL_ERROR", "Beklenmeyen bir sunucu hatası oluştu.", {
+      requestId: c.get("requestId"),
+    }),
     500,
   );
 });
@@ -596,6 +604,27 @@ async function accountingDocuments(
     });
 }
 
+
+async function accountingReadDocuments(
+  c: Context<AppEnv>,
+  options: { kind?: string; search?: string; status?: string } = {},
+): Promise<DatabaseRow[]> {
+  const slug = slugOf(c);
+  const [canonical, legacy] = await Promise.all([
+    listCanonicalAccountingDocuments(c, slug, options),
+    accountingDocuments(c, options),
+  ]);
+  return mergeCanonicalLegacyAccounting(canonical, legacy);
+}
+
+async function accountingReadDocumentDetail(
+  c: Context<AppEnv>,
+  id: string,
+): Promise<DatabaseRow | null> {
+  const canonical = await canonicalAccountingDocumentDetail(c, slugOf(c), id);
+  return canonical || accountingDocumentDetail(c, id);
+}
+
 async function accountingDocumentDetail(
   c: Context<AppEnv>,
   id: string,
@@ -665,7 +694,7 @@ async function accountingSummary(c: Context<AppEnv>) {
       orderBy: "name COLLATE NOCASE ASC",
       limit: 10000,
     }),
-    accountingDocuments(c),
+    accountingReadDocuments(c),
     scopedRows(c, "current_account_movements", {
       slug,
       orderBy: "movement_date DESC, id DESC",
@@ -717,6 +746,14 @@ async function accountingSummary(c: Context<AppEnv>) {
     .sort((a, b) => a.dueMs - b.dueMs)
     .slice(0, 10);
 
+  let eBelge = { total: 0, posted: 0, pending: 0, attention: 0, matchingWait: 0 };
+  try {
+    const statusRow = await c.env.DB.prepare(`SELECT COUNT(*) total,SUM(CASE WHEN status='POSTED' THEN 1 ELSE 0 END) posted,SUM(CASE WHEN status<>'POSTED' THEN 1 ELSE 0 END) pending FROM accounting_documents WHERE main_company_slug=? AND deleted_at IS NULL`).bind(slug).first<DatabaseRow>();
+    const attentionRow = await c.env.DB.prepare(`SELECT COUNT(DISTINCT i.document_id) n FROM accounting_document_issues i JOIN accounting_documents d ON d.id=i.document_id AND d.main_company_slug=i.main_company_slug WHERE i.main_company_slug=? AND d.deleted_at IS NULL AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR','CRITICAL')`).bind(slug).first<DatabaseRow>();
+    const matchingRow = await c.env.DB.prepare(`SELECT COUNT(DISTINCT i.document_id) n FROM accounting_document_issues i JOIN accounting_documents d ON d.id=i.document_id AND d.main_company_slug=i.main_company_slug WHERE i.main_company_slug=? AND d.deleted_at IS NULL AND i.is_resolved=0 AND i.issue_code LIKE 'DISPATCH_%'`).bind(slug).first<DatabaseRow>();
+    eBelge = { total: databaseNumber(statusRow?.total), posted: databaseNumber(statusRow?.posted), pending: databaseNumber(statusRow?.pending), attention: databaseNumber(attentionRow?.n), matchingWait: databaseNumber(matchingRow?.n) };
+  } catch { }
+
   const data = {
     generatedAt: new Date().toISOString(),
     companyCount: companies.length,
@@ -741,6 +778,7 @@ async function accountingSummary(c: Context<AppEnv>) {
     devredenKdv: vatSummary.carryForwardVat,
     kontrolBekleyenBelge: pendingDocuments.length,
     onayBekleyenBelge: pendingDocuments.length,
+    eBelge,
     isnetSonSenkronizasyon:
       documents
         .filter((item) => /ISNET/.test(normalizeText(item.sourceType)))
@@ -809,7 +847,7 @@ async function buildVatSummary(c: Context<AppEnv>, forcedFirmId = "") {
       limit: 10000,
     }),
     companyMap(c, slug),
-    accountingDocuments(c),
+    accountingReadDocuments(c),
   ]);
   const selected = records.filter((record) => {
     const recordYear = Number(
@@ -905,132 +943,7 @@ function documentDateInRange(row: DatabaseRow, startDate: string, endDate: strin
 }
 
 async function buildProfitLoss(c: Context<AppEnv>) {
-  const today = new Date();
-  const startDate =
-    c.req.query("startDate") ||
-    `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
-  const endDate = c.req.query("endDate") || today.toISOString().slice(0, 10);
-  const [documents, manualExpenses, fixedExpenses] = await Promise.all([
-    accountingDocuments(c),
-    jsonStoreList(c, "MUHASEBE_MANUAL_EXPENSE"),
-    jsonStoreList(c, "MUHASEBE_FIXED_EXPENSE"),
-  ]);
-  const documentRecords = documents
-    .filter((row) => documentDateInRange(row, startDate, endDate))
-    .filter((row) =>
-      ["SUPPLIER_INVOICE", "CUSTOMER_INVOICE"].includes(databaseText(row.documentKind)),
-    )
-    .map((row) => {
-      const income = row.documentKind === "CUSTOMER_INVOICE";
-      const raw = jsonObject(row.raw);
-      return {
-        id: row.id,
-        date: row.issueDate,
-        companyId: row.companyId,
-        companyName: row.companyName || row.supplierName,
-        documentNo: row.documentNo,
-        description: raw.description || raw.aciklama || "",
-        category:
-raw.reportCategory ||
-          raw.giderKategori ||
-          (income ? "Baskı Geliri" : "Mal ve Hizmet Alımı"),
-        type: income ? "INCOME" : "EXPENSE",
-        amount: databaseNumber(row.grandTotal),
-        vatAmount: databaseNumber(row.vatTotal),
-        recordType: raw.recordType || "RESMI",
-        source: "DOCUMENT",
-      };
-    });
-  const manualRecords = manualExpenses
-    .filter((row) => {
-      const date = databaseText(row.date || row.createdAt).slice(0, 10);
-      if (startDate && date < startDate) return false;
-      if (endDate && date > endDate) return false;
-      return true;
-    })
-    .map((row) => ({
-      id: row.id || row.fileName,
-      date: row.date || row.createdAt,
-      companyId: row.companyId || null,
-      companyName: row.companyName || row.description || "Genel gider",
-      documentNo: row.documentNo || "MANUEL",
-      description: row.description || "",
-      category: row.category || "Diğer",
-      type: "EXPENSE",
-      amount: databaseNumber(row.amount),
-      vatAmount: databaseNumber(row.vatAmount),
-      recordType: row.recordType || "RESMI",
-      source: "MANUAL",
-    }));
-  const records = [...documentRecords, ...manualRecords].sort((left, right) =>
-    databaseText(right.date).localeCompare(databaseText(left.date)),
-  );
-  const totalIncome = records
-    .filter((row) => row.type === "INCOME")
-    .reduce((sum, row) => sum + databaseNumber(row.amount), 0);
-  const totalExpense = records
-    .filter((row) => row.type === "EXPENSE")
-    .reduce((sum, row) => sum + databaseNumber(row.amount), 0);
-  const categoryMap = new Map<string, DatabaseRow>();
-  for (const row of records) {
-    const key = `${row.type}:${row.category}`;
-    const current = categoryMap.get(key) || {
-      type: row.type,
-      category: row.category,
-      count: 0,
-      total: 0,
-    };
-    current.count = databaseNumber(current.count) + 1;
-    current.total = databaseNumber(current.total) + databaseNumber(row.amount);
-    categoryMap.set(key, current);
-  }
-  const companyRows = new Map<string, DatabaseRow>();
-  for (const row of records) {
-    const key = databaseText(row.companyId || row.companyName || row.id);
-    const current = companyRows.get(key) || {
-      companyId: row.companyId,
-      companyName: row.companyName,
-      income: 0,
-      expense: 0,
-      net: 0,
-    };
-    if (row.type === "INCOME") {
-      current.income = databaseNumber(current.income) + databaseNumber(row.amount);
-    } else {
-      current.expense = databaseNumber(current.expense) + databaseNumber(row.amount);
-    }
-    current.net = databaseNumber(current.income) - databaseNumber(current.expense);
-    companyRows.set(key, current);
-  }
-  return {
-    period: { startDate, endDate },
-    summary: {
-      totalIncome,
-      totalExpense,
-      incomingVat: records
-        .filter((row) => row.type === "EXPENSE")
-        .reduce((sum, row) => sum + databaseNumber(row.vatAmount), 0),
-      outgoingVat: records
-        .filter((row) => row.type === "INCOME")
-        .reduce((sum, row) => sum + databaseNumber(row.vatAmount), 0),
-      grossProfit: totalIncome - totalExpense,
-      netProfit: totalIncome - totalExpense,
-      netResult: totalIncome - totalExpense,
-    },
-    records,
-    categories: [...categoryMap.values()].sort(
-      (a, b) => databaseNumber(b.total) - databaseNumber(a.total),
-    ),
-    companySummary: [...companyRows.values()].sort(
-      (a, b) =>
-        Math.abs(databaseNumber(b.net)) - Math.abs(databaseNumber(a.net)),
-    ),
-    generalExpenses: fixedExpenses,
-    emptyState:
-      records.length === 0
-        ? "Bu dönem için işlenmiş gelir veya gider kaydı bulunamadı."
-        : "",
-  };
+  return buildCanonicalAccountingReport(c);
 }
 
 async function buildChequeDashboard(c: Context<AppEnv>) {
@@ -1186,12 +1099,20 @@ async function buildDispatchControl(c: Context<AppEnv>) {
 }
 
 app.get("/api/health", (c) =>
-  c.json({ ok: true, service: "ky-erp-api", database: "d1" }),
+  c.json({ ok: true, service: "ky-erp-api", database: "d1", release: "accounting-write-hotfix-20260923" }),
 );
 
 app.get("/api/health/db", async (c) => {
+  const migration0046 = await ensureAccountingCanonicalReportControls0046(c.env.DB);
+  const migration0050 = await ensureMailCommunicationCore0050(c.env.DB);
   await c.env.DB.prepare("SELECT COUNT(*) AS count FROM main_companies").first();
-  return c.json({ ok: true, database: "ky-erp-db", connected: true });
+  return c.json({
+    ok: true,
+    database: "ky-erp-db",
+    connected: true,
+    canonicalAccountingControls: migration0046.state,
+    mailCommunicationCore: migration0050.state,
+  });
 });
 
 app.get("/api/system/status", async (c) => {
@@ -1359,14 +1280,30 @@ app.get("/api/muhasebe/reports/management-summary", accountingSummary);
 
 app.get("/api/muhasebe/firmalar", async (c) => {
   const search = c.req.query("search")?.trim() || "";
+  const slug = slugOf(c);
   const rows = await scopedRows(c, "companies", {
     search: { value: search, columns: ["name", "normalized_name", "tax_no"] },
     orderBy: "name COLLATE NOCASE ASC",
     limit: 10000,
   });
+  const movementResult = await c.env.DB.prepare(
+    `SELECT company_id,
+            MAX(COALESCE(movement_date, created_at)) AS last_movement_at,
+            COUNT(*) AS movement_count
+       FROM current_account_movements
+      WHERE main_company_slug = ?
+      GROUP BY company_id`,
+  )
+    .bind(slug)
+    .all<DatabaseRow>();
+  const movementByCompany = new Map(
+    (movementResult.results || []).map((row) => [databaseText(row.company_id), row]),
+  );
   const data = await Promise.all(
     rows.map(async (row) => {
-      const profile = await chemicalProfile(c, databaseText(row.id));
+      const companyId = databaseText(row.id);
+      const profile = await chemicalProfile(c, companyId);
+      const movement = movementByCompany.get(companyId);
       return {
         id: row.id,
         firmaAdi: row.name,
@@ -1383,6 +1320,8 @@ app.get("/api/muhasebe/firmalar", async (c) => {
         isActive: row.is_active !== 0 && row.is_active !== false,
         note: row.note,
         isChemicalSupplier: Boolean(profile.isChemicalSupplier),
+        lastMovementAt: movement ? databaseText(movement.last_movement_at) : "",
+        movementCount: movement ? databaseNumber(movement.movement_count) : 0,
         updatedAt: row.updated_at,
       };
     }),
@@ -1553,6 +1492,32 @@ app.post("/api/muhasebe/belge-import/upload", async (c) => {
   );
 });
 
+app.get("/api/muhasebe/accounting/documents-read", async (c) => {
+  const kind = databaseText(c.req.query("kind"));
+  const search = c.req.query("search") || "";
+  const status = c.req.query("status") || "";
+  const firmId = databaseText(c.req.query("firmId") || c.req.query("companyId"));
+  const startDate = databaseText(c.req.query("startDate") || c.req.query("dateFrom"));
+  const endDate = databaseText(c.req.query("endDate") || c.req.query("dateTo"));
+  const all = (await accountingReadDocuments(c, { kind: kind || undefined, search, status }))
+    .filter((row) => !firmId || databaseText(row.companyId || row.firmId) === firmId)
+    .filter((row) => {
+      const date = databaseText(row.issueDate || row.createdAt).slice(0, 10);
+      if (startDate && date < startDate) return false;
+      if (endDate && date > endDate) return false;
+      return true;
+    });
+  const limit = Math.min(500, positiveInt(c.req.query("limit"), 100) || 100);
+  const offset = nonNegativeInt(c.req.query("offset"), 0) || 0;
+  return c.json({
+    ok: true,
+    success: true,
+    data: all.slice(offset, offset + limit),
+    pagination: { limit, offset, total: all.length },
+    readModel: "CANONICAL_FIRST_LEGACY_DEDUPE",
+  });
+});
+
 app.get("/api/muhasebe/belge-import", async (c) => {
   const all = await accountingDocuments(c, {
     kind: "SUPPLIER_INVOICE",
@@ -1691,7 +1656,7 @@ app.post("/api/muhasebe/belge-import/:id/approve", async (c) => {
 });
 
 app.get("/api/muhasebe/kesilen-faturalar", async (c) => {
-  const all = await accountingDocuments(c, {
+  const all = await accountingReadDocuments(c, {
     kind: "CUSTOMER_INVOICE",
     search: c.req.query("search") || "",
     status: c.req.query("status") || "",
@@ -1718,7 +1683,7 @@ app.get("/api/muhasebe/kesilen-faturalar", async (c) => {
 });
 
 app.get("/api/muhasebe/kesilen-faturalar/:id", async (c) => {
-  const row = await accountingDocumentDetail(c, c.req.param("id"));
+  const row = await accountingReadDocumentDetail(c, c.req.param("id"));
   return row && row.documentKind === "CUSTOMER_INVOICE"
     ? c.json({ ok: true, success: true, data: row })
     : c.json(jsonError("NOT_FOUND", "Kesilen fatura bulunamadı."), 404);
@@ -1915,32 +1880,212 @@ app.get("/api/muhasebe/customer-dispatches", async (c) => {
   return c.json({ ok: true, success: true, data });
 });
 
+function canonicalModelView(row: DatabaseRow) {
+  const raw = jsonObject(row.raw);
+  const modelName = databaseText(
+    row.model_name || raw.modelName || raw.modelAdi || raw.name,
+  ).trim();
+  const modelCode = databaseText(
+    row.model_code || raw.modelCode || raw.code || modelName,
+  ).trim();
+  const companyId = databaseText(
+    row.company_id || row.customer_id || raw.companyId || raw.customerId,
+  ).trim();
+  const companyName = databaseText(
+    row.customer_name || raw.companyName || raw.musteri || raw.musteriFirma,
+  ).trim();
+  const orderNo = databaseText(
+    row.order_no || raw.orderNo || raw.siparisNo,
+  ).trim();
+  const groundColor = databaseText(
+    row.ground_color || raw.groundColor || raw.zeminRenk || raw.zemin,
+  ).trim();
+  const imageUrl = databaseText(
+    row.image_url || raw.imageUrl || raw.thumbnailUrl || raw.desenImageThumb,
+  ).trim();
+  const status = databaseText(row.status || raw.status || raw.durum || "ACTIVE").trim();
+  const createdAt = databaseText(row.created_at || raw.createdAt).trim();
+  const updatedAt = databaseText(row.updated_at || raw.updatedAt || createdAt).trim();
+
+  return {
+    ...raw,
+    id: row.id,
+    modelId: row.id,
+    name: modelName,
+    modelName,
+    modelAdi: modelName,
+    modelCode,
+    code: modelCode,
+    companyId,
+    companyName,
+    musteri: companyName,
+    musteriFirma: companyName,
+    orderNo,
+    siparisNo: orderNo,
+    groundColor,
+    zeminRenk: groundColor,
+    zemin: groundColor,
+    imageUrl,
+    status,
+    durum: status,
+    createdAt,
+    updatedAt,
+    sonIslemTarihi: updatedAt,
+    raw,
+  };
+}
+
 app.get("/api/models", async (c) => {
-  const products = await scopedRows(c, "products", {
-    orderBy: "name COLLATE NOCASE ASC",
+  const page = Math.max(1, Number(c.req.query("page") || 1));
+  const pageSize = Math.max(
+    1,
+    Math.min(10000, Number(c.req.query("pageSize") || c.req.query("limit") || 5000)),
+  );
+  const q = databaseText(c.req.query("q")).trim();
+  const rows = await scopedRows(c, "model_records", {
+    search: q
+      ? { value: q, columns: ["model_name", "model_code", "order_no", "customer_name"] }
+      : undefined,
+    orderBy: "updated_at DESC, created_at DESC",
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+  });
+  return c.json({
+    ok: true,
+    success: true,
+    data: rows.map(canonicalModelView),
+    meta: { page, pageSize, source: "model_records" },
+  });
+});
+
+app.get("/api/models/:id", async (c) => {
+  const id = databaseText(c.req.param("id")).trim();
+  const rows = await scopedRows(c, "model_records", {
+    filters: [{ column: "id", value: id }],
+    limit: 1,
+  });
+  const row = rows[0];
+  return row
+    ? c.json({ ok: true, success: true, data: canonicalModelView(row) })
+    : c.json(jsonError("NOT_FOUND", "Model bulunamadı."), 404);
+});
+
+app.post("/api/models", async (c) => {
+  const body = await requestBody(c);
+  const slug = slugOf(c, body);
+  const modelName = databaseText(
+    body.modelName || body.modelAdi || body.name || body.modelCode,
+  ).trim();
+  if (!modelName) {
+    return c.json(jsonError("MODEL_NAME_REQUIRED", "Model adı zorunludur."), 400);
+  }
+
+  const normalizedName = normalizeText(modelName);
+  const candidates = await scopedRows(c, "model_records", {
+    search: { value: modelName, columns: ["model_name", "model_code"] },
+    limit: 100,
+    slug,
+  });
+  const existing = candidates.find(
+    (row) => normalizeText(databaseText(row.model_name)) === normalizedName,
+  );
+  if (existing) {
+    return c.json({
+      ok: true,
+      success: true,
+      data: canonicalModelView(existing),
+      meta: { reused: true, source: "model_records" },
+    });
+  }
+
+  const id = databaseText(body.id || body.modelId || crypto.randomUUID()).trim();
+  const now = new Date().toISOString();
+  const modelCode = databaseText(body.modelCode || body.code || modelName).trim();
+  const companyId = databaseText(body.companyId || body.customerId).trim();
+  const companyName = databaseText(
+    body.companyName || body.musteri || body.musteriFirma,
+  ).trim();
+  const orderNo = databaseText(body.orderNo || body.siparisNo).trim();
+  const groundColor = databaseText(
+    body.groundColor || body.zeminRenk || body.zemin,
+  ).trim();
+  const imageUrl = databaseText(
+    body.imageUrl || body.thumbnailUrl || body.desenImageThumb,
+  ).trim();
+  const status = databaseText(body.status || body.durum || "ACTIVE").trim();
+
+  await insertDynamic(c, "model_records", {
+    id,
+    main_company_slug: slug,
+    model_name: modelName,
+    model_code: modelCode,
+    company_id: companyId || null,
+    customer_id: companyId || null,
+    customer_name: companyName || null,
+    order_no: orderNo || null,
+    ground_color: groundColor || null,
+    image_url: imageUrl || null,
+    status,
+    raw: JSON.stringify({
+      ...body,
+      id,
+      modelId: id,
+      modelName,
+      modelAdi: modelName,
+      modelCode,
+      companyId,
+      companyName,
+      orderNo,
+      groundColor,
+      imageUrl,
+      status,
+      createdAt: now,
+      updatedAt: now,
+    }),
+    created_at: now,
+    updated_at: now,
+  });
+
+  const rows = await scopedRows(c, "model_records", {
+    filters: [{ column: "id", value: id }],
+    limit: 1,
+    slug,
+  });
+  return c.json(
+    {
+      ok: true,
+      success: true,
+      data: canonicalModelView(rows[0] || {
+        id,
+        model_name: modelName,
+        model_code: modelCode,
+        customer_name: companyName,
+        order_no: orderNo,
+        ground_color: groundColor,
+        image_url: imageUrl,
+        status,
+        created_at: now,
+        updated_at: now,
+        raw: JSON.stringify(body),
+      }),
+      meta: { created: true, source: "model_records" },
+    },
+    201,
+  );
+});
+
+app.get("/api/desen/modeller", async (c) => {
+  const rows = await scopedRows(c, "model_records", {
+    orderBy: "updated_at DESC, created_at DESC",
     limit: 10000,
   });
   return c.json({
     ok: true,
     success: true,
-    data: products.map((row) => ({
-      id: row.id,
-      name: row.name,
-      modelName: row.name,
-      code: row.code || row.legacy_id || "",
-      unit: row.unit || "",
-      raw: jsonObject(row.raw),
-    })),
+    data: rows.map(canonicalModelView),
+    meta: { source: "model_records", compatibilityAlias: true },
   });
 });
-app.get("/api/desen/modeller", async (c) => {
-  const products = await scopedRows(c, "products", {
-    orderBy: "name COLLATE NOCASE ASC",
-    limit: 10000,
-  });
-  return c.json({ ok: true, success: true, data: products });
-});
-
 app.post("/api/muhasebe/odeme/firma", async (c) => {
   const body = await requestBody(c);
   const slug = slugOf(c, body);
@@ -2484,5 +2629,8 @@ app.get("/api/files/*", async (c) => {
   headers.set("etag", object.httpEtag);
   return new Response(object.body, { headers });
 });
+
+registerCanonicalAccountingReportRoutes(app);
+registerAuthManagementRoutes(app);
 
 export default app;

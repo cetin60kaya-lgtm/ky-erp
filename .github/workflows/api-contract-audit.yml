@@ -1,12 +1,8 @@
 name: KY ERP API Sözleşme Denetimi
 
 on:
-  pull_request:
-    paths:
-      - "APP/app/ky-erp-frontend/src/**"
-      - "APP/cloud/ky-erp-api/src/**"
-      - "SCRIPTS/audit-api-contracts.mjs"
-      - ".github/workflows/api-contract-audit.yml"
+  # GitHub Actions is disabled for automatic production/PR execution.
+  # Cloudflare Git Integration is the automatic deploy path; keep this workflow manual-only as fallback.
   workflow_dispatch:
 
 permissions:

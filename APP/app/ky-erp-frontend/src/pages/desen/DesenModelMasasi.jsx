@@ -25,6 +25,7 @@ import {
   scanDesignInbox,
 } from "../../services/desenWorkflowApi";
 import { openDesenImportFolder } from "../../services/desenApi";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import {
   assetUrl,
   EmptyState,
@@ -54,16 +55,24 @@ export default function DesenModelMasasi({ activeMainCompany }) {
   const [showErrors, setShowErrors] = useState(false);
 
   const load = useCallback(async () => {
-    if (!activeMainCompany?.slug) return;
+    if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
     setLoading(true);
     try {
-      const [inboxData, companyRows] = await Promise.all([
-        getDesignInbox(activeMainCompany),
-        getDesignCompanies(activeMainCompany),
-      ]);
-      setInbox(inboxData || EMPTY_INBOX);
-      setCompanies(companyRows || []);
-      setMessage("");
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id;
+      const result = await loadModuleData({
+        scope: `desen:${tenant}:model-masasi`,
+        sources: {
+          inbox: { critical: true, load: () => getDesignInbox(activeMainCompany) },
+          companies: { fallback: [], load: () => getDesignCompanies(activeMainCompany) },
+        },
+      });
+      if (result.states.inbox.status !== "error") setInbox(result.data.inbox || EMPTY_INBOX);
+      if (result.states.companies.status !== "error") setCompanies(result.data.companies || []);
+      setMessage(moduleLoadMessage(
+        result,
+        "Gelen Desenler ana listesi yüklenemedi; son başarılı içerik korunuyor.",
+        "Firma listesi geçici olarak yenilenemedi; Gelen Desenler görünmeye devam ediyor.",
+      ));
     } catch (error) { setMessage(error?.message || "Gelen Desenler yüklenemedi."); }
     finally { setLoading(false); }
   }, [activeMainCompany]);
@@ -110,7 +119,7 @@ export default function DesenModelMasasi({ activeMainCompany }) {
   return <>
     <section className="dsg-toolbar-card">
       <div className="dsg-toolbar-main">
-        <button className="dsg-btn primary" onClick={() => runScan(true)} disabled={scanning}>{scanning ? <LoaderCircle className="spin" size={16} /> : <ScanLine size={16} />} Gelen Klasörü Tara</button>
+        <button className="dsg-btn primary" onClick={() => runScan(true)} disabled={scanning}>{scanning ? <LoaderCircle className="spin" size={16} /> : <ScanLine size={16} />} Bulut Gelenleri Tara</button>
         <button className={`dsg-btn ${autoScan ? "active" : ""}`} onClick={() => setAutoScan((value) => !value)}><Play size={16} /> Otomatik Tarama {autoScan ? "Açık" : "Kapalı"}</button>
         <button className="dsg-btn" onClick={load}><RefreshCw size={16} /> Yenile</button>
         <button className="dsg-btn" onClick={openFolder}><FolderOpen size={16} /> Klasörü Aç</button>
@@ -148,6 +157,9 @@ function InboxScanModal({ activeMainCompany, companies, inbox, initialGroup, sca
   const group = groups.find((item) => item.id === selectedGroupId) || groups[0];
   const file = group?.files[fileIndex] || group?.files[0];
   useEffect(() => { setFileIndex(0); }, [group?.id]);
+  useEffect(() => {
+    if (!companyId && companies.length) setCompanyId(String(companies[0].id || ""));
+  }, [companies, companyId]);
 
   const selectableFiles = groups.flatMap((item) => item.files.filter((fileItem) => ["READY", "DUPLICATE"].includes(fileItem.status)));
   const selectedGroups = inbox.groups.filter((item) => item.files.some((fileItem) => selectedIds.includes(fileItem.id)));

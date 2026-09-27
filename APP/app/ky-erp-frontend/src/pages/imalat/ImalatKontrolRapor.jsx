@@ -10,6 +10,7 @@ import {
 import { getImalatDenetim, getImalatOperasyonRaporu } from "../../services/imalatApi";
 import { Field, Status } from "./ImalatShared";
 import { formatQty, toneForStatus } from "./imalatData";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import "../modules/cleanWorkflow.css";
 import "./imalatWorkflow.css";
 
@@ -51,22 +52,29 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
   const loadData = useCallback(async (nextFilters) => {
     setLoading(true);
     try {
-      const [auditResult, reportResult] = await Promise.all([
-        getImalatDenetim(activeMainCompany, nextFilters),
-        getImalatOperasyonRaporu(activeMainCompany, nextFilters),
-      ]);
-      setAudit({
-        summary: auditResult?.summary || {},
-        rows: Array.isArray(auditResult?.rows) ? auditResult.rows : [],
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id || "main";
+      const result = await loadModuleData({
+        scope: `imalat:${tenant}:rapor:${JSON.stringify(nextFilters)}`,
+        sources: {
+          audit: { critical: true, load: () => getImalatDenetim(activeMainCompany, nextFilters) },
+          report: { critical: true, load: () => getImalatOperasyonRaporu(activeMainCompany, nextFilters) },
+        },
       });
-      setReport({
-        summary: reportResult?.summary || {},
-        machineRows: Array.isArray(reportResult?.machineRows) ? reportResult.machineRows : [],
-        operatorRows: Array.isArray(reportResult?.operatorRows) ? reportResult.operatorRows : [],
-        modelRows: Array.isArray(reportResult?.modelRows) ? reportResult.modelRows : [],
-        rows: Array.isArray(reportResult?.rows) ? reportResult.rows : [],
-      });
-      setMessage("");
+      if (result.states.audit.status !== "error") {
+        const auditResult = result.data.audit;
+        setAudit({ summary: auditResult?.summary || {}, rows: Array.isArray(auditResult?.rows) ? auditResult.rows : [] });
+      }
+      if (result.states.report.status !== "error") {
+        const reportResult = result.data.report;
+        setReport({
+          summary: reportResult?.summary || {},
+          machineRows: Array.isArray(reportResult?.machineRows) ? reportResult.machineRows : [],
+          operatorRows: Array.isArray(reportResult?.operatorRows) ? reportResult.operatorRows : [],
+          modelRows: Array.isArray(reportResult?.modelRows) ? reportResult.modelRows : [],
+          rows: Array.isArray(reportResult?.rows) ? reportResult.rows : [],
+        });
+      }
+      setMessage(moduleLoadMessage(result, "İmalat denetim veya rapor ana kaynağı okunamadı; diğer başarılı sonuç korunuyor.", ""));
     } catch (error) {
       setMessage(error?.message || "İmalat denetim ve rapor verileri okunamadı.");
     } finally {

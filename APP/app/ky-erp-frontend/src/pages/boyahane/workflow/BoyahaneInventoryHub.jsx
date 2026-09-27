@@ -8,6 +8,7 @@ import {
   listBoyahaneLots,
   listBoyahaneProducts,
   runBoyahaneLotAction,
+  setBoyahaneProductLotPolicy,
   updateBoyahaneProduct,
 } from "../../../services/boyahaneWorkflowApi";
 import AddLotModal from "./AddLotModal";
@@ -27,6 +28,14 @@ function statusText(value) {
   }[key] || value || "-";
 }
 
+function lotPolicyText(value) {
+  return {
+    REQUIRED: "LOT Zorunlu",
+    OPTIONAL: "LOT Opsiyonel",
+    NONE: "LOT Kullanılmaz",
+  }[String(value || "REQUIRED").toUpperCase()] || "LOT Zorunlu";
+}
+
 function movementText(value) {
   return {
     IN: "Giriş",
@@ -38,6 +47,8 @@ function movementText(value) {
     FIRE: "Fire",
     ADJUSTMENT_IN: "Sayım fazlası",
     ADJUSTMENT_OUT: "Sayım eksiği",
+    CORRECTION_IN: "Düzeltme girişi",
+    CORRECTION_OUT: "Düzeltme çıkışı",
     RF: "RF",
   }[String(value || "").toUpperCase()] || value || "-";
 }
@@ -99,9 +110,9 @@ export default function BoyahaneInventoryHub({ activeMainCompany }) {
   }, [lots]);
 
   const q = search.trim().toLocaleLowerCase("tr-TR");
-  const filteredProducts = products.filter((row) => !q || [row.productName, row.tradeName, row.code, row.supplierName, row.dyeType].join(" ").toLocaleLowerCase("tr-TR").includes(q));
+  const filteredProducts = products.filter((row) => !q || [row.productName, row.tradeName, row.code, row.supplierName, row.dyeType, row.lotPolicy].join(" ").toLocaleLowerCase("tr-TR").includes(q));
   const filteredLots = lots.filter((row) => !q || [row.productName, row.lotNo, row.supplierName, row.invoiceNo, row.status].join(" ").toLocaleLowerCase("tr-TR").includes(q));
-  const filteredMovements = movements.filter((row) => !q || [row.productName, row.lotNo, row.modelName, row.source, row.actor, row.type].join(" ").toLocaleLowerCase("tr-TR").includes(q));
+  const filteredMovements = movements.filter((row) => !q || [row.productName, row.lotNo, row.modelName, row.source, row.actor, row.type, row.movementType, row.reason].join(" ").toLocaleLowerCase("tr-TR").includes(q));
   const activeLots = filteredLots.filter((row) => ["AVAILABLE", "ACTIVE", "QUARANTINE"].includes(String(row.status).toUpperCase()) && Number(row.remainingKg || 0) > 0);
   const historyLots = filteredLots.filter((row) => !activeLots.includes(row));
   const waitingRows = pendingLots.length ? pendingLots : lots.filter((row) => !String(row.lotNo || "").trim());
@@ -115,7 +126,7 @@ export default function BoyahaneInventoryHub({ activeMainCompany }) {
         isActive: true,
       });
       setProductModal(false);
-      setMessage("Ürün kartı oluşturuldu. Yetkili onayı verilmeden imalat reçetesinde kullanılamaz.");
+      setMessage("Ürün kartı ve LOT politikası oluşturuldu. Yetkili onayı verilmeden imalat reçetesinde kullanılamaz.");
       await load();
     } catch (requestError) { setError(requestError.message); }
     finally { setBusy(false); }
@@ -131,6 +142,16 @@ export default function BoyahaneInventoryHub({ activeMainCompany }) {
         isActive: true,
       });
       setMessage(`${row.productName} imalat kullanımına açıldı.`);
+      await load();
+    } catch (requestError) { setError(requestError.message); }
+    finally { setBusy(false); }
+  }
+
+  async function changeLotPolicy(row, lotPolicy) {
+    setBusy(true); setError(""); setMessage("");
+    try {
+      await setBoyahaneProductLotPolicy(activeMainCompany, row.id, lotPolicy);
+      setMessage(`${row.productName}: ${lotPolicyText(lotPolicy)} olarak kaydedildi.`);
       await load();
     } catch (requestError) { setError(requestError.message); }
     finally { setBusy(false); }
@@ -153,7 +174,7 @@ export default function BoyahaneInventoryHub({ activeMainCompany }) {
     try {
       await createBoyahaneLotMovement(activeMainCompany, movementLot.id, form);
       setMovementLot(null);
-      setMessage("Stok hareketi kaydedildi. Eski kayıt silinmedi.");
+      setMessage("Stok hareketi nedeni ve hareket anındaki maliyet ile kaydedildi. Eski kayıt silinmedi.");
       await load();
     } catch (requestError) { setError(requestError.message); }
     finally { setBusy(false); }
@@ -173,7 +194,7 @@ export default function BoyahaneInventoryHub({ activeMainCompany }) {
     <div className="bh-inventory-hub">
       <section className="bh-operation-intro"><div><small>STOK, LOT VE ÜRÜNLER</small><h2>Ürün Bazlı Stok Merkezi</h2><p>Karışım boyanın tek lotu yoktur. Her ürünün aktif ve geçmiş lotları ayrı izlenir; kullanılan lotlar modele otomatik bağlanır.</p></div><div className="bh-head-actions"><button type="button" className="bh-btn" onClick={() => setProductModal(true)}>+ Yeni Ürün</button><button type="button" className="bh-btn primary" onClick={() => setLotModal(true)}>+ Lot Ekle</button></div></section>
 
-      <div className="bh-command-kpis compact"><article><span>Ürün</span><strong>{products.length}</strong><small>{products.filter((row) => row.approvalStatus === "APPROVED").length} onaylı</small></article><article><span>Aktif lot</span><strong>{activeLots.length}</strong><small>Ürün bazlı</small></article><article><span>Lot bekleyen</span><strong>{waitingRows.length}</strong><small>Fatura / belge bağlantılı</small></article><article><span>Toplam giriş</span><strong>{formatKg(summary.totalEntryKg)}</strong><small>Muhasebe + elle giriş</small></article><article><span>Kalan stok</span><strong>{formatKg(summary.totalRemainingKg)}</strong><small>Eksi stok kapalı</small></article></div>
+      <div className="bh-command-kpis compact"><article><span>Ürün</span><strong>{products.length}</strong><small>{products.filter((row) => row.approvalStatus === "APPROVED").length} onaylı</small></article><article><span>Aktif lot</span><strong>{activeLots.length}</strong><small>Ürün bazlı</small></article><article><span>Lot bekleyen</span><strong>{waitingRows.length}</strong><small>Fatura / irsaliye bağlantılı</small></article><article><span>Toplam giriş</span><strong>{formatKg(summary.totalEntryKg)}</strong><small>Fiziksel stok hareketi</small></article><article><span>Kalan stok</span><strong>{formatKg(summary.totalRemainingKg)}</strong><small>Eksi stok kapalı</small></article></div>
 
       <nav className="bh-operation-tabs inventory"><button type="button" className={view === "products" ? "active" : ""} onClick={() => setView("products")}>Ürünler<b>{products.length}</b></button><button type="button" className={view === "lots" ? "active" : ""} onClick={() => setView("lots")}>Lotlar<b>{lots.length}</b></button><button type="button" className={view === "movements" ? "active" : ""} onClick={() => setView("movements")}>Stok Hareketleri<b>{movements.length}</b></button></nav>
       <div className="bh-inventory-search-row"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Ürün, lot, firma, model veya belge ara" /><button type="button" className="bh-btn" onClick={load}>Yenile</button></div>
@@ -183,14 +204,15 @@ export default function BoyahaneInventoryHub({ activeMainCompany }) {
       {view === "products" ? <section className="bh-product-card-grid">{filteredProducts.map((row) => {
         const stock = stockByProduct.get(String(row.id)) || {};
         const approved = row.approvalStatus === "APPROVED";
-        return <article className="bh-product-card" key={row.id}><div className="bh-product-visual">{String(row.productName || "Ü").slice(0, 2).toLocaleUpperCase("tr-TR")}</div><div className="bh-product-card-head"><div><h3>{row.productName}</h3><p>{row.tradeName || row.code || "Ticari ad belirtilmedi"}</p></div><span className={`bh-approval-mark ${approved ? "approved" : "waiting"}`}>{approved ? "✓" : "!"}</span></div><dl><div><dt>Firma</dt><dd>{row.supplierName || row.companyName || "-"}</dd></div><div><dt>Boya türü</dt><dd>{row.dyeType || "-"}</dd></div><div><dt>Son lot</dt><dd>{stock.lastLot || "-"}</dd></div><div><dt>Kalan</dt><dd>{formatKg(stock.remainingKg)}</dd></div><div><dt>Güncel fiyat</dt><dd>{Number(row.currentPrice || 0) ? `${Number(row.currentPrice).toLocaleString("tr-TR")} ${row.currency || "TL"}` : "-"}</dd></div><div><dt>Belgeler</dt><dd>{safeArray(row.documents || row.standards).length}</dd></div></dl><div className={`bh-product-approval ${approved ? "approved" : "waiting"}`}>{statusText(row.approvalStatus)}</div>{!approved ? <button type="button" className="bh-btn primary wide" disabled={busy} onClick={() => approveProduct(row)}>Evrakları Teyit Et ve Onayla</button> : <span className="bh-status green">İmalat kullanımına açık</span>}</article>;
+        const lotPolicy = String(row.lotPolicy || (row.lotRequired === false ? "OPTIONAL" : "REQUIRED")).toUpperCase();
+        return <article className="bh-product-card" key={row.id}><div className="bh-product-visual">{String(row.productName || "Ü").slice(0, 2).toLocaleUpperCase("tr-TR")}</div><div className="bh-product-card-head"><div><h3>{row.productName}</h3><p>{row.tradeName || row.code || "Ticari ad belirtilmedi"}</p></div><span className={`bh-approval-mark ${approved ? "approved" : "waiting"}`}>{approved ? "✓" : "!"}</span></div><dl><div><dt>Firma</dt><dd>{row.supplierName || row.companyName || "-"}</dd></div><div><dt>Boya türü</dt><dd>{row.dyeType || "-"}</dd></div><div><dt>LOT kuralı</dt><dd><select value={lotPolicy} disabled={busy} onChange={(event) => changeLotPolicy(row, event.target.value)}><option value="REQUIRED">LOT Zorunlu</option><option value="OPTIONAL">LOT Opsiyonel</option><option value="NONE">LOT Kullanılmaz</option></select></dd></div><div><dt>Son lot</dt><dd>{stock.lastLot || "-"}</dd></div><div><dt>Kalan</dt><dd>{formatKg(stock.remainingKg)}</dd></div><div><dt>Güncel fiyat</dt><dd>{Number(row.currentPrice || 0) ? `${Number(row.currentPrice).toLocaleString("tr-TR")} ${row.currency || "TL"}` : "-"}</dd></div><div><dt>Belgeler</dt><dd>{safeArray(row.documents || row.standards).length}</dd></div></dl><div className={`bh-product-approval ${approved ? "approved" : "waiting"}`}>{statusText(row.approvalStatus)}</div>{!approved ? <button type="button" className="bh-btn primary wide" disabled={busy} onClick={() => approveProduct(row)}>Evrakları Teyit Et ve Onayla</button> : <span className="bh-status green">İmalat kullanımına açık</span>}</article>;
       })}{!filteredProducts.length ? <div className="bh-empty large">Ürün kartı bulunamadı.</div> : null}</section> : null}
 
-      {view === "lots" ? <div className="bh-lot-layout"><section className="bh-card"><div className="bh-card-head"><div><h2>Lot Bekleyenler</h2><small>Lot numarası gelmemiş muhasebe veya imalat girişleri</small></div><button type="button" className="bh-btn primary" onClick={() => setLotModal(true)}>Toplu / Tekli Lot Gir</button></div><div className="bh-card-body"><div className="bh-table-wrap wide"><table><thead><tr><th>Ürün</th><th>Firma</th><th>Kaynak</th><th>Giriş tarihi</th><th>Miktar</th><th>Belge / Fatura</th><th>İşlem</th></tr></thead><tbody>{waitingRows.map((row, index) => <tr key={row.id || index}><td>{row.productName || "-"}</td><td>{row.supplierName || row.companyName || "-"}</td><td>{row.source || row.sourceType || "-"}</td><td>{formatDate(row.entryDate || row.createdAt)}</td><td>{formatKg(row.entryKg || row.quantity)}</td><td>{row.invoiceNo || row.documentNo || "-"}</td><td><button type="button" className="bh-btn mini primary" onClick={() => setLotModal(true)}>Lot Gir</button></td></tr>)}</tbody></table></div>{!waitingRows.length ? <div className="bh-empty">Lot bekleyen kayıt yok.</div> : null}</div></section>
+      {view === "lots" ? <div className="bh-lot-layout"><section className="bh-card"><div className="bh-card-head"><div><h2>Lot Bekleyenler</h2><small>LOT numarası fatura veya irsaliyeden henüz çözülememiş kayıtlar</small></div><button type="button" className="bh-btn primary" onClick={() => setLotModal(true)}>Toplu / Tekli Lot Gir</button></div><div className="bh-card-body"><div className="bh-table-wrap wide"><table><thead><tr><th>Ürün</th><th>Firma</th><th>Kaynak</th><th>Giriş tarihi</th><th>Miktar</th><th>Belge / Fatura</th><th>İşlem</th></tr></thead><tbody>{waitingRows.map((row, index) => <tr key={row.id || index}><td>{row.productName || "-"}</td><td>{row.supplierName || row.companyName || "-"}</td><td>{row.source || row.sourceType || "-"}</td><td>{formatDate(row.entryDate || row.createdAt)}</td><td>{formatKg(row.entryKg || row.quantity)}</td><td>{row.invoiceNo || row.documentNo || "-"}</td><td><button type="button" className="bh-btn mini primary" onClick={() => setLotModal(true)}>Lot Gir</button></td></tr>)}</tbody></table></div>{!waitingRows.length ? <div className="bh-empty">Lot bekleyen kayıt yok.</div> : null}</div></section>
         <section className="bh-card"><div className="bh-card-head"><div><h2>Aktif Lotlar</h2><small>Varsayılan lot ve kalan miktar</small></div></div><div className="bh-card-body"><div className="bh-table-wrap wide"><table><thead><tr><th>Ürün</th><th>Lot</th><th>Firma</th><th>Giriş</th><th>Kullanılan</th><th>Kalan</th><th>Varsayılan</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{activeLots.map((row) => <tr key={row.id}><td><strong>{row.productName}</strong></td><td>{row.lotNo}</td><td>{row.supplierName || "-"}</td><td>{formatKg(row.entryKg)}</td><td>{formatKg(row.usedKg)}</td><td><strong>{formatKg(row.remainingKg)}</strong></td><td>{row.isDefault ? "Evet" : "Hayır"}</td><td><span className={`bh-status ${row.status === "QUARANTINE" ? "orange" : "green"}`}>{statusText(row.status)}</span></td><td><div className="bh-row-actions"><button type="button" className="bh-btn mini primary" onClick={() => setMovementLot(row)}>Hareket</button><button type="button" className="bh-btn mini" onClick={() => lotAction(row.id, "SET_DEFAULT")}>Varsayılan</button><button type="button" className="bh-btn mini" onClick={() => lotAction(row.id, "QUARANTINE")}>Karantina</button><button type="button" className="bh-btn mini danger" onClick={() => lotAction(row.id, "FINISH")}>Lot Bitti</button></div></td></tr>)}</tbody></table></div></div></section>
         <section className="bh-card"><div className="bh-card-head"><div><h2>Geçmiş Lotlar</h2><small>Biten ve pasif lotlar silinmez</small></div></div><div className="bh-card-body"><div className="bh-table-wrap wide"><table><thead><tr><th>Ürün</th><th>Lot</th><th>Firma</th><th>Giriş tarihi</th><th>Kullanım başlangıcı</th><th>Bitiş</th><th>Giriş</th><th>Kalan</th><th>Kaynak</th><th>Durum</th></tr></thead><tbody>{historyLots.map((row) => <tr key={row.id}><td>{row.productName}</td><td>{row.lotNo}</td><td>{row.supplierName || "-"}</td><td>{formatDate(row.entryDate || row.createdAt)}</td><td>{formatDate(row.usageStartedAt)}</td><td>{formatDate(row.finishedAt || row.updatedAt)}</td><td>{formatKg(row.entryKg)}</td><td>{formatKg(row.remainingKg)}</td><td>{row.source || row.sourceType || "-"}</td><td>{statusText(row.status)}</td></tr>)}</tbody></table></div></div></section></div> : null}
 
-      {view === "movements" ? <section className="bh-card"><div className="bh-card-head"><div><h2>Stok Hareketleri</h2><small>Yanlış kayıt silinmez; iptal veya ters hareket oluşturulur.</small></div></div><div className="bh-card-body"><div className="bh-table-wrap wide"><table><thead><tr><th>Tarih-saat</th><th>Ürün</th><th>Lot</th><th>İşlem</th><th>Miktar</th><th>Model</th><th>Kaynak</th><th>Kullanıcı</th><th>Durum</th></tr></thead><tbody>{filteredMovements.map((row) => <tr key={row.id}><td>{formatDate(row.createdAt || row.movementAt)}</td><td>{row.productName || "-"}</td><td>{row.lotNo || "-"}</td><td>{movementText(row.type || row.movementType)}</td><td>{formatKg(row.quantityKg || row.quantity)}</td><td>{row.modelName || row.modelSnapshot || "-"}</td><td>{row.source || row.sourceType || "-"}</td><td>{row.actor || row.createdBy || "KY ERP"}</td><td>{row.status || "Kayıtlı"}</td></tr>)}</tbody></table></div>{!filteredMovements.length ? <div className="bh-empty">Stok hareketi bulunamadı.</div> : null}</div></section> : null}
+      {view === "movements" ? <section className="bh-card"><div className="bh-card-head"><div><h2>Stok Hareketleri</h2><small>Yanlış kayıt silinmez; iptal veya ters hareket oluşturulur.</small></div></div><div className="bh-card-body"><div className="bh-table-wrap wide"><table><thead><tr><th>Tarih-saat</th><th>Ürün</th><th>Lot</th><th>İşlem</th><th>Miktar</th><th>Model</th><th>Kaynak</th><th>Kullanıcı</th><th>Maliyet</th><th>Durum</th></tr></thead><tbody>{filteredMovements.map((row) => <tr key={row.id}><td>{formatDate(row.createdAt || row.movementAt)}</td><td>{row.productName || "-"}</td><td>{row.lotNo || "-"}</td><td>{movementText(row.movementType || row.reason || row.type)}</td><td>{formatKg(row.quantityKg || row.quantity)}</td><td>{row.modelName || row.modelSnapshot || "-"}</td><td>{row.source || row.sourceType || "-"}</td><td>{row.actor || row.createdBy || "KY ERP"}</td><td>{Number(row.costAmount || 0) ? Number(row.costAmount).toLocaleString("tr-TR", { style: "currency", currency: "TRY" }) : "-"}</td><td>{row.reversedByMovementId ? "Ters kayıt oluşturuldu" : row.status || "Kayıtlı"}</td></tr>)}</tbody></table></div>{!filteredMovements.length ? <div className="bh-empty">Stok hareketi bulunamadı.</div> : null}</div></section> : null}
 
       {productModal ? <ApprovedProductModal busy={busy} onCancel={() => setProductModal(false)} onSave={saveProduct} /> : null}
       {lotModal ? <AddLotModal products={products.filter((row) => row.approvalStatus === "APPROVED")} busy={busy} onCancel={() => setLotModal(false)} onSave={saveLot} /> : null}

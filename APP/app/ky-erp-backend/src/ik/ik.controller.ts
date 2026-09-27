@@ -16,7 +16,7 @@ import { Response } from "express";
 import { memoryStorage } from "multer";
 import { IkService } from "./ik.service";
 
-@Controller(["ik", "api/ik"])
+@Controller("ik")
 export class IkController {
   constructor(private readonly service: IkService) {}
 
@@ -36,26 +36,6 @@ export class IkController {
     return this.service.deleteMonthlyEmployee(id);
   }
 
-  @Get("gunluk/giris") legacyGunlukGiris(
-    @Query() query: Record<string, any>,
-  ) {
-    return this.service.dailyAttendance(query);
-  }
-  @Post("gunluk/giris") legacySaveGunlukGiris(
-    @Body() body: Record<string, any>,
-  ) {
-    return this.service.saveDailyRange(body);
-  }
-  @Get("gunluk/odeme") legacyGunlukOdeme(
-    @Query() query: Record<string, any>,
-  ) {
-    return this.service.weeklySummary(query);
-  }
-  @Post("gunluk/odeme-hesapla") legacyGunlukOdemeHesapla(
-    @Body() body: Record<string, any>,
-  ) {
-    return this.service.weeklySummary(body);
-  }
   @Post("bordro/hesapla") legacyBordroHesapla(
     @Body() body: Record<string, any>,
   ) {
@@ -234,148 +214,4 @@ export class IkController {
     return this.service.mergeSkills(body);
   }
 
-  @Get("daily-employees") dailyEmployees(@Query() query: Record<string, any>) {
-    return this.service.dailyEmployees(query);
-  }
-  @Get("daily-employees/excel")
-  async dailyEmployeesExcel(
-    @Query() query: Record<string, any>,
-    @Res() response: Response,
-  ) {
-    const buffer = await this.service.dailyEmployeesExcel(query);
-    response.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    );
-    response.setHeader(
-      "Content-Disposition",
-      `attachment; filename="KYERP_Gunluk_Personel_Kartlari.xlsx"`,
-    );
-    response.send(Buffer.from(buffer));
-  }
-  @Post("daily-employees/excel-upload")
-  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage() }))
-  importDailyEmployeesExcel(
-    @UploadedFile() file: any,
-    @Body() body: Record<string, any>,
-  ) {
-    return this.service.importDailyEmployeesExcel(file, body);
-  }
-  @Post("daily-employees") createDailyEmployee(
-    @Body() body: Record<string, any>,
-  ) {
-    return this.service.createDailyEmployee(body);
-  }
-  @Patch("daily-employees/:id") updateDailyEmployee(
-    @Param("id") id: string,
-    @Body() body: Record<string, any>,
-  ) {
-    return this.service.updateDailyEmployee(id, body);
-  }
-  @Delete("daily-employees/:id") deleteDailyEmployee(@Param("id") id: string) {
-    return this.service.deleteDailyEmployee(id);
-  }
-
-  @Get("daily-attendance") dailyAttendance(
-    @Query() query: Record<string, any>,
-  ) {
-    return this.service.dailyAttendance(query);
-  }
-  @Post("daily-attendance/save-range") saveDailyRange(
-    @Body() body: Record<string, any>,
-  ) {
-    return this.service.saveDailyRange(body);
-  }
-  @Get("daily-attendance/weekly-summary") weeklySummary(
-    @Query() query: Record<string, any>,
-  ) {
-    return this.service.weeklySummary(query);
-  }
-  @Get("daily-attendance/payment-slips") paymentSlips(
-    @Query() query: Record<string, any>,
-  ) {
-    return this.service.paymentSlips(query);
-  }
-  @Post("daily-attendance/mark-paid") markPaid(
-    @Body() body: Record<string, any>,
-  ) {
-    return this.service.markDailyPaid(body);
-  }
-
-  @Get("gunluk-personel/ozet")
-  focusedDailySummary(@Query() query: Record<string, any>) {
-    return this.service.focusedDailySummary(query);
-  }
-  @Get("gunluk-personel/personeller")
-  focusedDailyPeople(@Query() query: Record<string, any>) {
-    return this.service.focusedDailyPeople(query);
-  }
-  @Get("gunluk-personel/gun-kayitlari")
-  focusedDailyRecords(@Query() query: Record<string, any>) {
-    return this.service.focusedDailyRecords(query);
-  }
-  @Get("gunluk-personel/liste")
-  focusedDailyRoster(@Query() query: Record<string, any>) {
-    return this.service.focusedDailyRoster(query);
-  }
-  @Post("gunluk-personel/liste")
-  saveFocusedDailyRoster(@Body() body: Record<string, any>) {
-    return this.service.saveFocusedDailyRoster(body);
-  }
-  @Post("gunluk-personel/gun-kayitlari")
-  saveFocusedDailyRecords(@Body() body: Record<string, any>) {
-    return this.service.saveFocusedDailyRecords(body);
-  }
-  @Patch("gunluk-personel/gun-kayitlari/:id")
-  patchFocusedDailyRecord(
-    @Param("id") id: string,
-    @Body() body: Record<string, any>,
-  ) {
-    return this.service.patchFocusedDailyRecord(id, body);
-  }
-  @Delete("gunluk-personel/gun-kayitlari/:id")
-  deleteFocusedDailyRecord(
-    @Param("id") id: string,
-    @Body() body: Record<string, any>,
-  ) {
-    return this.service.deleteFocusedDailyRecord(id, body);
-  }
-  @Get("vasiflar")
-  focusedDailySkills(@Query() query: Record<string, any>) {
-    return this.service.skills(query);
-  }
-  @Get("gunluk-personel/haftalik-yazdir")
-  focusedDailyPrint(@Query() query: Record<string, any>) {
-    return this.service.focusedDailySummary(query);
-  }
-  @Get("gunluk-personel/excel")
-  async focusedDailyExcel(
-    @Query() query: Record<string, any>,
-    @Res() response: Response,
-  ) {
-    const start = String(query.startDate || query.start || "").replace(/-/g, "");
-    const end = String(query.endDate || query.end || start).replace(/-/g, "");
-    const buffer = await this.service.focusedDailyExcelTemplate(query);
-    response.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    );
-    response.setHeader(
-      "Content-Disposition",
-      `attachment; filename="KYERP_Gunluk_Personel_${start}_${end}.xlsx"`,
-    );
-    response.send(Buffer.from(buffer));
-  }
-  @Post("gunluk-personel/excel-upload")
-  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage() }))
-  importFocusedDailyExcel(
-    @UploadedFile() file: any,
-    @Body() body: Record<string, any>,
-  ) {
-    return this.service.previewFocusedDailyExcel(file, body);
-  }
-  @Post("gunluk-personel/excel-apply")
-  applyFocusedDailyExcel(@Body() body: Record<string, any>) {
-    return this.service.applyFocusedDailyExcel(body);
-  }
 }

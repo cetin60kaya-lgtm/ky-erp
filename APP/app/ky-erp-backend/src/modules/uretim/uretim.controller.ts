@@ -21,7 +21,7 @@ import { LiveDbService } from "../../database/live-db.service";
 import { UretimService } from "./uretim.service";
 import { Public } from "../../auth/public.decorator";
 
-@Controller(["uretim", "imalat", "production", "api/uretim", "api/imalat", "api/production"])
+@Controller(["uretim", "imalat", "production"])
 export class UretimController {
   constructor(
     private readonly service: UretimService,

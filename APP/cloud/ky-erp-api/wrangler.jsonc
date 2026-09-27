@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "ky-erp-api",
-  "main": "src/main.ts",
+  "main": "src/main-entry-security.ts",
   "workers_dev": false,
   "routes": [
     {
@@ -10,10 +10,17 @@
     }
   ],
   "compatibility_date": "2026-07-11",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
+  },
+  "vars": {
+    "RECOVERY_EMAIL_FROM": "KY ERP <admin@kyerp.net>",
+    "AI_GATEWAY_ID": "default",
+    "AI_GATEWAY_COLLECT_LOGS": "false"
   },
   "d1_databases": [
     {
@@ -31,5 +38,8 @@
       "bucket_name": "ky-erp-files",
       "remote": true
     }
-  ]
+  ],
+  "ai": {
+    "binding": "AI"
+  }
 }

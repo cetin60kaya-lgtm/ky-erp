@@ -61,14 +61,6 @@ export async function getDesenModelRenkleri(
   );
 }
 
-export async function getDesenSimpleModels(activeMainCompany, params = {}) {
-  return unwrap(
-    await apiGet(
-      "/desen/models-simple",
-      withCompany(activeMainCompany, params),
-    ),
-  );
-}
 
 export async function getDesenHavuz(activeMainCompany, params = {}) {
   return unwrap(

@@ -1,0 +1,205 @@
+.login-policy-card,
+.owner-recovery-panel,
+.login-policy-readonly {
+  border: 1px solid #d8e3f1;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f7faff 100%);
+}
+
+.login-policy-card {
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.security-v2-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.security-v2-title > div,
+.security-user-actions > div:first-child,
+.owner-recovery-stepup,
+.owner-contact-card,
+.owner-question-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.security-v2-title strong,
+.owner-recovery-panel h3 {
+  color: #10233f;
+}
+
+.security-v2-title span,
+.security-user-actions span,
+.security-user-actions small,
+.owner-recovery-panel p,
+.owner-recovery-status-grid small,
+.owner-contact-card small,
+.owner-question-card small,
+.login-policy-readonly span {
+  color: #64748b;
+}
+
+.security-owner-only {
+  flex: 0 0 auto;
+  border: 1px solid #bfd3fb;
+  border-radius: 999px;
+  background: #edf4ff;
+  color: #2458a6 !important;
+  padding: 5px 9px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+.login-policy-card select,
+.owner-recovery-panel select,
+.owner-recovery-panel input {
+  min-height: 36px;
+}
+
+.standalone-check {
+  margin-top: 10px;
+}
+
+.login-policy-readonly {
+  margin-top: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.owner-recovery-panel {
+  margin-top: 12px;
+  padding: 14px;
+}
+
+.owner-recovery-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.owner-recovery-status-grid > div {
+  min-width: 0;
+  border: 1px solid #e0e8f2;
+  border-radius: 10px;
+  background: #fff;
+  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.owner-recovery-status-grid span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.owner-recovery-status-grid strong {
+  color: #122a49;
+  overflow-wrap: anywhere;
+}
+
+.owner-recovery-note {
+  margin-top: 10px;
+  border-left: 3px solid #8fb6ef;
+  background: #f1f6fd;
+  color: #43566f;
+  padding: 9px 11px;
+  border-radius: 4px 8px 8px 4px;
+  font-size: 12px;
+}
+
+.owner-recovery-stepup {
+  margin-top: 14px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 13px;
+}
+
+.owner-contact-grid,
+.owner-questions-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.owner-contact-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.owner-questions-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.owner-contact-card,
+.owner-question-card {
+  border: 1px solid #dde6f1;
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px;
+}
+
+.owner-contact-card button {
+  align-self: flex-start;
+}
+
+.owner-contact-verify {
+  margin-top: 12px;
+  border: 1px solid #bad6c4;
+  border-radius: 10px;
+  background: #f3fbf6;
+  padding: 11px;
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) 150px auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.owner-contact-verify span {
+  color: #476257;
+}
+
+.owner-question-card input[type="password"] {
+  margin-top: 2px;
+}
+
+.security-user-actions {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e1e8f1;
+}
+
+@media (max-width: 1180px) {
+  .owner-recovery-status-grid,
+  .owner-questions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .owner-contact-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .owner-contact-verify {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 760px) {
+  .security-v2-title {
+    flex-direction: column;
+  }
+
+  .security-owner-only {
+    align-self: flex-start;
+  }
+}

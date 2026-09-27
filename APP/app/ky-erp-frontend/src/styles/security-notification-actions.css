@@ -1,0 +1,4 @@
+.shell-v3-notification-entry{display:grid;border-bottom:1px solid var(--border,#e5e7eb)}
+.shell-v3-notification-entry .shell-v3-notification-item{border-bottom:0;width:100%}
+.shell-v3-notification-readonly{margin:0 12px 9px 34px;padding:7px 9px;border:1px solid #dbe7f3;border-radius:8px;background:#f7faff;color:#60758b;font-size:10px;line-height:1.35}
+@media(max-width:620px){.shell-v3-notification-readonly{margin-left:28px}}

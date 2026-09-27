@@ -1,0 +1,204 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
+const here=dirname(fileURLToPath(import.meta.url));
+const root=resolve(here,"..");
+const app=readFileSync(resolve(root,"public/guvenlik/app.js"),"utf8");
+const ios=readFileSync(resolve(root,"public/guvenlik/ios-safari.js"),"utf8");
+const sw=readFileSync(resolve(root,"public/guvenlik/sw.js"),"utf8");
+const manifest=readFileSync(resolve(root,"public/guvenlik/manifest.webmanifest"),"utf8");
+const html=readFileSync(resolve(root,"public/guvenlik/index.html"),"utf8");
+const installer=readFileSync(resolve(root,"public/guvenlik/install-helper.js"),"utf8");
+const setup=readFileSync(resolve(here,"components/shell/PhoneApprovalDeviceSetup.jsx"),"utf8");
+
+test("KY ERP Security is a separate installable phone tablet PWA",()=>{
+  assert.match(manifest,/"name": "KY ERP Güvenlik"/);
+  assert.match(manifest,/"id": "\/guvenlik\/"/);
+  assert.match(manifest,/"scope": "\/guvenlik\/"/);
+  assert.match(manifest,/"start_url": "\/guvenlik\/"/);
+  assert.match(setup,/Microsoft Authenticator mantığında ayrı telefon\/tablet onay uygulaması/);
+  assert.match(setup,/Sorun olursa yedek bağlantı kodu oluştur/);
+});
+
+test("security app uses one consolidated notification and opens app for decision",()=>{
+  assert.match(sw,/const TAG="kyerp-security-approval"/);
+  assert.match(sw,/tag:TAG/);
+  assert.match(sw,/renotify:false/);
+  assert.match(sw,/notificationclick/);
+  assert.doesNotMatch(sw,/action:"approve"/);
+  assert.doesNotMatch(sw,/action:"deny"/);
+});
+
+test("approval is protected by device signature and optional local biometric screen lock",()=>{
+  assert.match(app,/createSigningKey/);
+  assert.match(app,/signingPrivateKey/);
+  assert.match(app,/KYERP-DECISION-V1/);
+  assert.match(app,/navigator\.credentials\.create/);
+  assert.match(app,/navigator\.credentials\.get/);
+  assert.match(app,/userVerification:"required"/);
+});
+
+test("security app owns signed API calls while the service worker is notification transport only",()=>{
+  assert.match(app,/signDeviceAuth/);
+  assert.match(app,/KYERP-DEVICE-AUTH-V1/);
+  assert.match(app,/X-KYERP-Security-Timestamp/);
+  assert.match(app,/X-KYERP-Security-Signature/);
+  assert.doesNotMatch(sw,/API_BASE|deviceFetch|signDeviceAuth|X-KYERP-Push-Device|X-KYERP-Push-Token/);
+  assert.match(sw,/showWakeNotification/);
+  assert.match(sw,/clearLegacyCaches/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+});
+
+test("main ERP exposes connection diagnostics and a one-time access refresh path",()=>{
+  assert.match(setup,/yedek bağlantı kodu oluştur/);
+  assert.match(setup,/Bağlantıyı Kontrol Et/);
+  assert.match(setup,/refreshSecurityConnection/);
+});
+
+test("security app verifies server health before ready and provides one-tap connection repair",()=>{
+  assert.match(app,/auth\/push\/device\/health/);
+  assert.match(app,/auth\/push\/device\/refresh/);
+  assert.match(app,/repairConnection/);
+  assert.match(app,/Bağlantı yenilendi/);
+  assert.match(app,/Erişim Yenileme Kodu/);
+  assert.match(app,/replaceDeviceId/);
+});
+
+test("push delivery always shows one wake notification without depending on an API fetch",()=>{
+  assert.match(sw,/self\.addEventListener\("push"/);
+  assert.match(sw,/showWakeNotification/);
+  assert.match(sw,/tag:TAG/);
+  assert.match(sw,/renotify:false/);
+  assert.doesNotMatch(sw,/deviceFetch|fetchFailed|KY ERP · Bağlantı Kontrolü/);
+});
+
+test("professional security app exposes approvals, short login code and trusted-device tabs",()=>{
+  assert.match(app,/showTab/);
+  assert.match(app,/generateLoginCode/);
+  assert.match(app,/auth\/push\/device\/login-code/);
+  assert.match(app,/approval-match/);
+  assert.match(app,/repairConnection/);
+  assert.match(setup,/Bağlantıyı Kontrol Et/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+});
+
+test("phone approval has explicit Android and iPhone installation entry points and installer mode",()=>{
+  assert.match(setup,/Android’e Kur/);
+  assert.match(setup,/iPhone \/ iPad’e Kur/);
+  assert.match(setup,/openSecurityInstaller/);
+  assert.match(app,/requestedInstall/);
+  assert.match(installer,/beforeinstallprompt/);
+  assert.match(installer,/appinstalled/);
+  assert.match(app,/Android'e KY Güvenlik'i Yükle/);
+  assert.match(app,/if\(standalone\)/);
+  assert.match(setup,/Pasifler \(/);
+  assert.match(setup,/visibleDevices/);
+  assert.match(setup,/intent:\/\//);
+  assert.match(installer,/openFullChrome/);
+  assert.match(installer,/Chrome'da Devam Et/);
+  assert.match(html,/id="iosInstallNote"/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+});
+
+test("iPhone Safari permission is requested directly from a user gesture before async enrollment",()=>{
+  assert.match(html,/apple-mobile-web-app-capable/);
+  assert.match(html,/apple-touch-icon/);
+  assert.match(html,/\/guvenlik\/ios-safari\.js/);
+  assert.match(html,/Safari ile açın → Paylaş → Ana Ekrana Ekle → Ekle/);
+  assert.match(app,/if\(isIos\(\)&&!isStandalone\(\)\)/);
+  assert.match(ios,/display-mode: standalone/);
+  assert.match(ios,/Notification\.requestPermission\(\)/);
+  assert.match(ios,/event\.stopImmediatePropagation\(\)/);
+  assert.match(ios,/button\.click\(\)/);
+  assert.match(manifest,/kyerp-security-192\.png/);
+  assert.match(manifest,/kyerp-security-512\.png/);
+});
+
+test("security service worker is push-only and never intercepts app shell requests",()=>{
+  assert.match(sw,/self\.addEventListener\("push"/);
+  assert.match(sw,/self\.addEventListener\("notificationclick"/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+  assert.doesNotMatch(sw,/respondWith|cache\.match|cache\.put/);
+  assert.match(sw,/kyerp-security-icon\.svg/);
+});
+
+test("appearance center centralizes KY ERP and KY Security install entry points",()=>{
+  assert.match(setup,/Android’e Kur/);
+  assert.match(setup,/iPhone \/ iPad’e Kur/);
+});
+
+test("main ERP and KY Security have separate install and service-worker ownership",()=>{
+  const main=readFileSync(resolve(here,"main.jsx"),"utf8");
+  const legacy=readFileSync(resolve(root,"public/kyerp-push-sw.js"),"utf8");
+  assert.match(main,/retireLegacyPhoneApprovalWorker/);
+  assert.doesNotMatch(main,/PhoneApprovalInboxBridge/);
+  assert.doesNotMatch(main,/serviceWorker\.register\("\/kyerp-push-sw\.js"/);
+  assert.match(legacy,/registration\.unregister/);
+  assert.doesNotMatch(legacy,/auth\/push\/device\/decision/);
+  assert.match(manifest,/\/guvenlik\/kyerp-security-icon\.svg/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+});
+
+test("security app never renders a blank approvals screen on connection failure",()=>{
+  assert.match(html,/id="emptyTitle"/);
+  assert.match(html,/id="emptyCopy"/);
+  assert.match(app,/setEmptyState/);
+  assert.match(app,/NETWORK_ERROR/);
+  assert.match(app,/repairConnection\(\{automatic:true\}\)/);
+  assert.match(app,/pushReachable===false/);
+});
+
+test("security app does not navigate into the main ERP application",()=>{
+  assert.doesNotMatch(html,/href="\/"[^>]*>Ana KY ERP/);
+  assert.match(html,/KY Güvenlik · Android · iPhone Safari/);
+});
+
+test("security app shows the verified bound ERP account identity and access scope",()=>{
+  assert.match(html,/BAĞLI HESAP/);
+  assert.match(html,/id="accountEmail"/);
+  assert.match(html,/id="accountUsername"/);
+  assert.match(html,/id="accountScope"/);
+  assert.match(html,/id="accountModules"/);
+  assert.match(html,/id="accountSecurityCaps"/);
+  assert.match(app,/renderAccount\(health\.account/);
+  assert.match(app,/Bu cihaz yalnız/);
+  assert.match(app,/Muhasebe/);
+});
+
+test("security app exposes one visible canonical version and persists it on the device record",()=>{
+  assert.match(html,/id="appVersionBadge">v3\.0/);
+  assert.match(html,/id="accountVersion">v3\.0/);
+  assert.match(app,/CLIENT_VERSION="security-v3\.0"/);
+  assert.match(app,/X-KYERP-Security-App-Version/);
+  assert.match(app,/lastKnownServerVersion/);
+  assert.match(app,/versionCheckedAt/);
+});
+
+test("number matching requires the computer number before phone approval",()=>{
+  assert.match(app,/approval-number-options/);
+  assert.match(app,/data-match/);
+  assert.match(app,/KYERP-DECISION-V2/);
+  assert.match(app,/matchNumber/);
+});
+
+test("security runtime files stay JavaScript-syntax valid",()=>{
+  assert.doesNotThrow(()=>new Function(app));
+  assert.doesNotThrow(()=>new Function(ios));
+  assert.doesNotThrow(()=>new Function(sw));
+});
+
+test("manager session approvals are visible and have dedicated result copy",()=>{
+  assert.match(app,/SESSION_APPROVAL/);
+  assert.match(app,/Oturum onaylandı/);
+  assert.match(app,/Oturum reddedildi ve kapatıldı/);
+});
+
+test("approved login clears every stale KY Security notification and duplicate decisions stay quiet",()=>{
+  assert.match(app,/getRegistrations/);
+  assert.match(app,/getNotifications\(\)/);
+  assert.match(sw,/getNotifications\(\)/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+});

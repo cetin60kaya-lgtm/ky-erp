@@ -5,7 +5,7 @@ import { apiSuccess } from "../common/api-helpers";
 import { IsnetSourceWorkflowService } from "./isnet-source-workflow.service";
 
 @Controller("isnet/source-workflow")
-@RequireModule(ModuleKey.ISNET)
+@RequireModule(ModuleKey.MUHASEBE)
 export class IsnetSourceWorkflowController {
   constructor(private readonly service: IsnetSourceWorkflowService) {}
 

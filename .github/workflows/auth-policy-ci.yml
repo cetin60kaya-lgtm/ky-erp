@@ -1,0 +1,94 @@
+name: KY ERP Production Source Validation
+
+on:
+  # Manual-only fallback. Automatic production validation/deployment is handled by Cloudflare Git Integration.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-production-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Node 22 / Worker / Frontend / Auth / PDKS
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            APP/cloud/ky-erp-api/package-lock.json
+            APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Worker paketleri
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+
+      - name: Worker typecheck
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run typecheck
+
+      - name: Worker unit + auth integration testleri
+        working-directory: APP/cloud/ky-erp-api
+        run: npm test
+
+      - name: Worker dry-run build
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run build
+
+      - name: Frontend paketleri
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+
+      - name: Frontend dependency security audit
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -o pipefail
+          npm audit --audit-level=high --json | tee npm-audit.json
+
+      - name: Frontend lint
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run lint
+
+      - name: Frontend testleri
+        working-directory: APP/app/ky-erp-frontend
+        run: npm test
+
+      - name: Frontend production build
+        working-directory: APP/app/ky-erp-frontend
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        run: npm run build
+
+      - name: Production güvenlik sözleşmesini doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'Node.js 22 LTS' DEPLOY/KYERP_DIRECT_PRODUCTION.ps1
+          grep -Fq 'Remote-Column-Exists' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
+          grep -Fq '0024_denetime_pdks_system_user.sql' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
+          grep -Fq 'OWNER_ROLLING_SESSION_SECONDS = 86_400' APP/cloud/ky-erp-api/src/main.ts
+          grep -Fq 'MFA_SESSION_SECONDS = 36_000' APP/cloud/ky-erp-api/src/main.ts
+          grep -Fq 'PASSWORD_SESSION_SECONDS = 0' APP/cloud/ky-erp-api/src/main.ts
+          grep -Fq 'UPPER(TRIM(COALESCE(e.sgk_status,' APP/cloud/ky-erp-api/src/ik-audit-readonly.ts
+          grep -Fq 'TRIM(COALESCE(s.card_no,' APP/cloud/ky-erp-api/src/ik-audit-readonly.ts
+          grep -Fq 'if(role==="DENETIM")view.add("IK")' APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanelV2.jsx
+          grep -Fq 'permissions:createPermissions' APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanelV2.jsx
+          grep -Fq 'loginPolicy:createForm.loginPolicy==="PASSWORD_ONLY"?"ANY_MFA":createForm.loginPolicy' APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanelV2.jsx
+          grep -Fq 'KY ERP <admin@kyerp.net>' APP/cloud/ky-erp-api/wrangler.jsonc
+          ! grep -Fq 'RECOVERY_EMAIL_WEBHOOK_URL' APP/cloud/ky-erp-api/src/admin-management-cloud.ts
+          ! grep -Fq 'wrangler d1 migrations apply' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
+
+      - name: Sonuç
+        run: echo "KY ERP production source validation PASSED"

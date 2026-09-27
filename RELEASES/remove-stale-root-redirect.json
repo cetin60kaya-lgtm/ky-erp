@@ -1,0 +1,8 @@
+{
+  "approved": true,
+  "requestedAt": "2026-08-25T09:40:00+03:00",
+  "routeId": "b8bb1befc83847b9bcd7df88d2193a9b",
+  "expectedPattern": "kyerp.net/*",
+  "expectedScript": "ky-erp-root-redirect",
+  "reason": "Remove obsolete 2026-08-03 root redirect so kyerp.net serves the current Pages login directly"
+}

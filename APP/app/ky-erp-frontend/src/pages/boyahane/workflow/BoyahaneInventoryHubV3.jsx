@@ -13,6 +13,7 @@ import {
 import AddLotModal from "./AddLotModal";
 import { ApprovedProductModal, StockMovementModal } from "./InventoryModals";
 import { formatDate, formatKg, safeArray } from "./boyahaneFormat";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 
 function normalized(value) {
   return String(value || "")
@@ -98,29 +99,32 @@ export default function BoyahaneInventoryHubV3({ activeMainCompany }) {
   const [message, setMessage] = useState("");
 
   async function load() {
-    if (!activeMainCompany?.slug) return;
+    if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
     setError("");
     try {
-      const [productRows, lotRows, stock] = await Promise.all([
-        listBoyahaneProducts(activeMainCompany),
-        listBoyahaneLots(activeMainCompany),
-        getBoyahaneStockSummary(activeMainCompany),
-      ]);
-      const safeProducts = safeArray(productRows);
-      const safeLots = safeArray(lotRows);
-      setProducts(safeProducts);
-      setLots(safeLots);
-      setMovements(safeArray(stock?.movements));
-      setPendingLots(
-        safeArray(stock?.pendingLots || stock?.lotWaiting || stock?.waitingLots),
-      );
-      setSummary(stock?.summary || {});
-      setDrafts(
-        Object.fromEntries(
-          safeProducts.map((row) => [row.id, productDraft(row)]),
-        ),
-      );
-      setDirtyIds([]);
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id;
+      const result = await loadModuleData({
+        scope: `boyahane:${tenant}:envanter`,
+        sources: {
+          products: { critical: true, load: () => listBoyahaneProducts(activeMainCompany) },
+          lots: { fallback: [], load: () => listBoyahaneLots(activeMainCompany) },
+          stock: { fallback: {}, load: () => getBoyahaneStockSummary(activeMainCompany) },
+        },
+      });
+      if (result.states.products.status !== "error") {
+        const safeProducts = safeArray(result.data.products);
+        setProducts(safeProducts);
+        setDrafts(Object.fromEntries(safeProducts.map((row) => [row.id, productDraft(row)])));
+        setDirtyIds([]);
+      }
+      if (result.states.lots.status !== "error") setLots(safeArray(result.data.lots));
+      if (result.states.stock.status !== "error") {
+        const stock = result.data.stock;
+        setMovements(safeArray(stock?.movements));
+        setPendingLots(safeArray(stock?.pendingLots || stock?.lotWaiting || stock?.waitingLots));
+        setSummary(stock?.summary || {});
+      }
+      setError(moduleLoadMessage(result, "Boyahane ürün ana listesi alınamadı; son başarılı ürünler korunuyor.", "Lot veya stok özeti yenilenemedi; ürün listesi kullanılabilir."));
     } catch (requestError) {
       setError(requestError?.message || "Stok, lot ve ürün verileri alınamadı.");
     }

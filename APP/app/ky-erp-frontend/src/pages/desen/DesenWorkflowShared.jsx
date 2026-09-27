@@ -20,7 +20,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { API_BASE } from "../../utils/api";
+import { apiUrl } from "../../utils/api";
 import {
   createDesignOperation,
   createDesignModel,
@@ -101,7 +101,7 @@ export function assetUrl(value) {
   const url = String(value || "").trim();
   if (!url) return "";
   if (/^(blob:|data:|https?:\/\/)/i.test(url)) return url;
-  return `${API_BASE}${url.startsWith("/") ? url : `/${url}`}`;
+  return apiUrl(url);
 }
 
 export function formatDate(value) {
@@ -202,6 +202,17 @@ export function ImagePreview({ src, alt = "Desen önizleme", className = "" }) {
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    if (!fullscreen) return undefined;
+    const handleFullscreenKey = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setFullscreen(false);
+    };
+    window.addEventListener("keydown", handleFullscreenKey, true);
+    return () => window.removeEventListener("keydown", handleFullscreenKey, true);
+  }, [fullscreen]);
   if (!src)
     return (
       <div className={`dsg-image-empty ${className}`}>
@@ -241,8 +252,13 @@ export function ImagePreview({ src, alt = "Desen önizleme", className = "" }) {
         >
           <Check size={16} />
         </button>
-        <button type="button" onClick={() => setFullscreen((value) => !value)}>
-          <Maximize2 size={16} />
+        <button
+          type="button"
+          onClick={() => setFullscreen((value) => !value)}
+          aria-label={fullscreen ? "Tam ekrandan çık" : "Tam ekran"}
+          title={fullscreen ? "Tam ekrandan çık (Esc)" : "Tam ekran"}
+        >
+          {fullscreen ? <X size={16} /> : <Maximize2 size={16} />}
         </button>
       </div>
       <div className="dsg-image-stage">
@@ -322,8 +338,8 @@ export function ModelEditorModal({
   const [quickEntry, setQuickEntry] = useState(false);
   const [colorPicker, setColorPicker] = useState(null);
   const [draft, setDraft] = useState(() => ({
-    companyId: model?.companyId || "",
-    companyName: model?.companyName || "",
+    companyId: model?.companyId || companies?.[0]?.id || "",
+    companyName: model?.companyName || companies?.[0]?.name || "",
     modelCode: model?.modelCode || inboxGroup?.modelName || "",
     modelName: model?.modelName || inboxGroup?.modelName || "",
     designName: model?.designName || "",
