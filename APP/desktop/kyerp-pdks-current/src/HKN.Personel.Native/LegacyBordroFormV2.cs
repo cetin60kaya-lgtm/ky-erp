@@ -63,25 +63,42 @@ public sealed class LegacyBordroForm : Form
         return b;
     }
 
+    string RoadExpression()
+    {
+        foreach (var field in new[] { "GUNYOLUCRET", "GUNYOLUCRETI", "YOLUCRET", "YOLUCRETI" })
+        {
+            var found = db.Query("select count(*) ADET from RDB$RELATION_FIELDS where trim(RDB$RELATION_NAME)=@T and trim(RDB$FIELD_NAME)=@F",
+                new FbParameter("@T", "KIMLIK"), new FbParameter("@F", field));
+            if (found.Rows.Count > 0 && Convert.ToInt32(found.Rows[0][0]) > 0) return $"coalesce(k.{field},0)";
+        }
+        return "cast(0 as numeric(15,2))";
+    }
+
     void LoadData()
     {
         try
         {
             var a = new DateTime(period.Value.Year, period.Value.Month, 1);
             var b = a.AddMonths(1);
+            var road = RoadExpression();
             data = db.Query(
                 "select u.PKNO \"Kart No\",k.IGTARIH \"İ.G.T\",trim(coalesce(k.AD,'')||' '||coalesce(k.SOYAD,'')) \"Ad Soyad\"," +
-                "u.DMAAS Maaş,u.GUN1 \"Normal Gün\",u.SAAT1 \"Normal Saat\",u.SAAT2 \"%50 Mesai Saat\",u.SAAT3 \"%100 Mesai Saat\"," +
-                "u.GUN4 \"Ücretsiz İzin Gün\",u.GUN5 \"Ücretli İzin Gün\",u.GUN9 \"Yıllık İzin Gün\",u.DEVG \"Devamsız Gün\",u.DEVS \"Devamsız Saat\",u.GECS \"Geç Saat\",u.EKS \"Eksik Saat\"," +
-                "u.EX1 Avans,u.EX2 Banka,u.EX3 BES,u.EX4 İcra,u.NCKALAN \"Maaş Ödeme\",u.FMKALAN \"Mesai Ödeme\"," +
-                "(coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0)) Toplam,((coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0))-coalesce(u.EX2,0)) Elden,cast('' as varchar(30)) İmza " +
+                "u.DMAAS \"Maaş\"," + road + " \"Yol\",u.GUN1 \"Normal Gün\",u.SAAT1 \"Normal Saat\"," +
+                "u.SAAT2 \"%50 Mesai Saat\",u.SAAT3 \"%100 Mesai Saat\",u.SAAT8 \"Mesai Saat\",u.UCRET8 \"Mesai\"," +
+                "u.GUN4 \"Ücretsiz İzin Gün\",u.GUN5 \"Ücretli İzin Gün\",u.GUN9 \"Yıllık İzin Gün\"," +
+                "u.DEVG \"Devamsız Gün\",u.DEVS \"Devamsız Saat\",u.GECS \"Geç Saat\",u.EKS \"Eksik Saat\"," +
+                "u.EKKAZ \"Ek Kazanç\",u.EKKES \"Kesinti\",u.EX1 \"Avans\",u.EX2 \"Banka\",u.EX3 \"BES\",u.EX4 \"İcra\"," +
+                "u.NCKALAN \"Maaş Ödeme\",u.FMKALAN \"Mesai Ödeme\"," +
+                "(coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0)) \"Toplam\"," +
+                "((coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0))-coalesce(u.EX2,0)) \"Elden\",cast('' as varchar(30)) \"İmza\" " +
                 "from UCRETLER u left join KIMLIK k on k.PKNO=u.PKNO where u.BASTAR<@B and coalesce(u.BITTAR,u.BASTAR)>=@A order by u.PKNO",
                 new FbParameter("@A", a), new FbParameter("@B", b));
             var serial = new DataColumn("S.No", typeof(int));
             data.Columns.Add(serial); serial.SetOrdinal(0);
             for (var i = 0; i < data.Rows.Count; i++) data.Rows[i][serial] = i + 1;
             grid.DataSource = data;
-            foreach (DataGridViewColumn c in grid.Columns) c.Width = c.HeaderText == "Ad Soyad" ? 170 : c.HeaderText == "İmza" ? 120 : c.HeaderText == "S.No" ? 50 : 85;
+            foreach (DataGridViewColumn c in grid.Columns)
+                c.Width = c.HeaderText == "Ad Soyad" ? 170 : c.HeaderText == "İmza" ? 120 : c.HeaderText == "S.No" ? 50 : c.HeaderText.Contains("Gün") ? 65 : 85;
             GridLayoutPersistence.Apply(grid, LayoutKey);
             var total = data.AsEnumerable().Sum(r => r["Toplam"] == DBNull.Value ? 0m : Convert.ToDecimal(r["Toplam"]));
             summary.Text = $"{data.Rows.Count} personel • {total:N2} ₺";
