@@ -28,6 +28,7 @@ internal sealed class ReportCenterForm : Form
         "Bordro • Genel Maaş", "Bordro • Mesai", "Bordro • Maaş Pusulası", "Bordro • Ücret Dönemleri", "Bordro • Ödemeler", "Bordro • Maaş Geçmişi",
         "Tanımlar • Bölümler", "Tanımlar • Servisler", "Tanımlar • Görevler", "Tanımlar • Gruplar", "Tanımlar • Durumlar", "Tanımlar • Firmalar"
     ];
+
     public ReportCenterForm()
     {
         Text = "KY PDKS 6.0 • Rapor ve Çıktı Merkezi";
@@ -83,6 +84,7 @@ internal sealed class ReportCenterForm : Form
     FbParameter[] Range() => [new("@A", from.Value.Date), new("@B", to.Value.Date.AddDays(1))];
     string CardWhere(string field = "k.PKNO") => string.IsNullOrWhiteSpace(card.Text) ? "1=1" : $"{field}=@P";
     FbParameter[] RangeCard() => string.IsNullOrWhiteSpace(card.Text) ? Range() : [..Range(), new FbParameter("@P", card.Text.Trim().PadLeft(5, '0'))];
+
     void LoadData()
     {
         try
@@ -135,6 +137,7 @@ internal sealed class ReportCenterForm : Form
         "Tanımlar • Firmalar" => db.Query("select KOD Kod,AD Açıklama from FIRMA order by KOD"),
         _ => new DataTable()
     };
+
     DataTable GirisCikis(string order) => db.Query(
         "select g.PKNO \"Kart No\",k.AD Ad,k.SOYAD Soyad,g.GTARIH \"Giriş Tarihi\",g.GSAAT \"Giriş Saati\",g.GTUR \"Giriş Türü\",g.CTARIH \"Çıkış Tarihi\",g.CSAAT \"Çıkış Saati\",g.CTUR \"Çıkış Türü\",b.AD Bölüm " +
         "from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO left join BOLUM b on b.KOD=k.BOLUM " +
@@ -147,23 +150,22 @@ internal sealed class ReportCenterForm : Form
         " and " + CardWhere("p.PKNO") + " order by " + order, RangeCard());
 
     DataTable GeneralSalaryReport() => db.Query(
-        "select u.PKNO \"Kart No\",k.AD Ad,k.SOYAD Soyad,k.MAAS Maaş,u.GUN1 \"Normal Gün\",u.SAAT1 \"Normal Saat\",u.GUN4 \"Ücretsiz İzin Gün\",u.SAAT4 \"Ücretsiz İzin Saat\",u.GUN5 \"Ücretli İzin Gün\",u.SAAT5 \"Ücretli İzin Saat\",u.GUN6 \"Hafta Tatili Gün\",u.SAAT6 \"Hafta Tatili Saat\",u.GUN7 \"Resmi Tatil Gün\",u.SAAT7 \"Resmi Tatil Saat\",u.GUN9 \"Yıllık İzin Gün\",u.SAAT9 \"Yıllık İzin Saat\",u.DEVG \"Devamsız Gün\",u.DEVS \"Devamsız Saat\",u.GECG \"Geç Gün\",u.GECS \"Geç Saat\",u.EKG \"Eksik Gün\",u.EKS \"Eksik Saat\",u.ERG \"Erken Gün\",u.ERS \"Erken Saat\",u.EKKAZ \"Ek Kazanç\",u.EKKES Kesinti,u.NCKALAN \"Net Maaş\" " +
+        "select u.PKNO \"Kart No\",k.AD Ad,k.SOYAD Soyad,u.DMAAS Maaş,u.GUN1 \"Normal Gün\",u.SAAT1 \"Normal Saat\",u.SAAT2 \"%50 Mesai\",u.SAAT3 \"%100 Mesai\",u.GUN4 \"Ücretsiz İzin Gün\",u.DEVG \"Devamsız Gün\",u.DEVS \"Devamsız Saat\",u.EKG \"Eksik Gün\",u.EKS \"Eksik Saat\",u.EKKAZ \"Ek Kazanç\",u.EKKES Kesinti,u.EX1 Avans,u.EX4 İcra,u.NCKALAN \"Maaş Kalan\",u.FMKALAN \"Mesai Kalan\",(coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0)) Net,u.EX2 Banka,((coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0))-coalesce(u.EX2,0)) Elden " +
         "from UCRETLER u left join KIMLIK k on k.PKNO=u.PKNO where u.BASTAR<@B and coalesce(u.BITTAR,u.BASTAR)>=@A and " + CardWhere("u.PKNO") + " order by u.PKNO", RangeCard());
 
     DataTable OvertimeReport() => db.Query(
-        "select u.PKNO \"Kart No\",k.AD Ad,k.SOYAD Soyad,k.MAAS Maaş,u.SAAT2 \"%50 Mesai Saat\",u.UCRET2 \"%50 Mesai Ücret\",u.SAAT3 \"%100 Mesai Saat\",u.UCRET3 \"%100 Mesai Ücret\",u.SAAT8 \"Toplam Mesai Saat\",u.UCRET8 \"Toplam Mesai Ücret\",u.FMKALAN \"Mesai Kalan\" " +
+        "select u.PKNO \"Kart No\",k.AD Ad,k.SOYAD Soyad,u.DMAAS Maaş,u.SAAT2 \"%50 Mesai Saat\",u.UCRET2 \"%50 Mesai Ücret\",u.SAAT3 \"%100 Mesai Saat\",u.UCRET3 \"%100 Mesai Ücret\",u.SAAT8 \"Toplam Mesai Saat\",u.UCRET8 \"Toplam Mesai Ücret\",u.FMKALAN \"Mesai Kalan\" " +
         "from UCRETLER u left join KIMLIK k on k.PKNO=u.PKNO where u.BASTAR<@B and coalesce(u.BITTAR,u.BASTAR)>=@A and " + CardWhere("u.PKNO") + " order by u.PKNO", RangeCard());
 
     DataTable SalarySlipReport() => db.Query(
-        "select u.PKNO \"Kart No\",k.AD Ad,k.SOYAD Soyad,b.AD Bölüm,k.IGTARIH \"İşe Giriş\",k.ICTARIH \"İşten Çıkış\",u.DMAAS Maaş,u.GUN1 \"Normal Gün\",u.SAAT1 \"Normal Saat\",u.UCRET1 \"Normal Ücret\",u.SAAT2 \"%50 Mesai\",u.UCRET2 \"%50 Ücret\",u.SAAT3 \"%100 Mesai\",u.UCRET3 \"%100 Ücret\",u.DEVG \"Devamsız Gün\",u.DEVS \"Devamsız Saat\",u.DEVU \"Devamsız Tutar\",u.GUN9 \"Yıllık İzin Gün\",u.GUN5 \"Ücretli İzin Gün\",u.GUN4 \"Ücretsiz İzin Gün\",u.EX1 Avans,u.EX2 Banka,u.EX3 BES,u.EX4 İcra,u.NCKALAN \"Maaş Kalan\",u.FMKALAN \"Mesai Kalan\",(coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0)) \"Net Kazanç\" " +
+        "select u.PKNO \"Kart No\",k.AD Ad,k.SOYAD Soyad,b.AD Bölüm,k.IGTARIH \"İşe Giriş\",k.ICTARIH \"İşten Çıkış\",u.DMAAS Maaş,u.GUN1 \"Normal Gün\",u.SAAT1 \"Normal Saat\",u.UCRET1 \"Normal Ücret\",u.SAAT2 \"%50 Mesai\",u.UCRET2 \"%50 Ücret\",u.SAAT3 \"%100 Mesai\",u.UCRET3 \"%100 Ücret\",u.DEVG \"Devamsız Gün\",u.DEVS \"Devamsız Saat\",u.DEVU \"Devamsız Tutar\",u.GUN9 \"Yıllık İzin Gün\",u.GUN5 \"Ücretli İzin Gün\",u.GUN4 \"Ücretsiz İzin Gün\",u.EX1 Avans,u.EX4 İcra,u.NCKALAN \"Maaş Kalan\",u.FMKALAN \"Mesai Kalan\",(coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0)) \"Net Kazanç\",u.EX2 Banka,((coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0))-coalesce(u.EX2,0)) Elden " +
         "from UCRETLER u left join KIMLIK k on k.PKNO=u.PKNO left join BOLUM b on b.KOD=k.BOLUM where u.BASTAR<@B and coalesce(u.BITTAR,u.BASTAR)>=@A and " + CardWhere("u.PKNO") + " order by u.PKNO", RangeCard());
 
     ReportTable Table()
     {
         var name = report.SelectedItem?.ToString() ?? "Rapor";
         var columns = data.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
-        var rows = data.Rows.Cast<DataRow>()
-            .Select(r => (IReadOnlyList<string>)data.Columns.Cast<DataColumn>().Select(c => Convert.ToString(r[c]) ?? string.Empty).ToArray()).ToArray();
+        var rows = data.Rows.Cast<DataRow>().Select(r => (IReadOnlyList<string>)data.Columns.Cast<DataColumn>().Select(c => Convert.ToString(r[c]) ?? string.Empty).ToArray()).ToArray();
         return CompanyBranding.Decorate(new ReportTable($"{name} • {from.Value:dd.MM.yyyy} - {to.Value:dd.MM.yyyy}", columns, rows));
     }
 
