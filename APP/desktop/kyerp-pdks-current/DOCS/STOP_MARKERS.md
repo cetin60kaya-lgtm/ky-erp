@@ -1,0 +1,1 @@
+Doğrulama işaret dosyaları gereksizdir; final doğrulama build ile yapılacaktır.
