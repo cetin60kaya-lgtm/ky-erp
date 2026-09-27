@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using FirebirdSql.Data.FirebirdClient;
 using KYERP.PDKS.Core;
 
@@ -240,13 +240,13 @@ public sealed class MainForm : Form
     {
         if (db is null) return;
         var a = new DateTime((int)paymentYear.Value, paymentMonthNo.SelectedIndex==0?1:paymentMonthNo.SelectedIndex, 1); var b = paymentMonthNo.SelectedIndex==0?a.AddYears(1):a.AddMonths(1); var card=SelectedCard(paymentPerson);
-        var q="select o.PKNO,k.AD,k.SOYAD,o.BASTAR,o.BITTAR,o.NODENEN,o.NOTARIH,o.FMODENEN,o.FMOTARIH from ODEME o left join KIMLIK k on k.PKNO=o.PKNO where o.BASTAR>=@A and o.BASTAR<@B"+(card is null?"":" and o.PKNO=@P")+" order by o.PKNO";paymentGrid.DataSource=card is null?db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b)):db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card));
+        var q="select o.PKNO,k.AD,k.SOYAD,o.BASTAR,o.BITTAR,o.NODENEN,o.NOTARIH,o.FMODENEN,o.FMOTARIH from ODEME o inner join KIMLIK k on k.PKNO=o.PKNO where (k.ICTARIH is null or k.ICTARIH>=@TODAY) and o.BASTAR>=@A and o.BASTAR<@B"+(card is null?"":" and o.PKNO=@P")+" order by o.PKNO";paymentGrid.DataSource=card is null?db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",a),new FbParameter("@B",b)):db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card));
     }
 
     void LoadAdvances()
     {
         if (db is null) return;
-        var a=new DateTime((int)advanceYear.Value,advanceMonthNo.SelectedIndex==0?1:advanceMonthNo.SelectedIndex,1);var b=advanceMonthNo.SelectedIndex==0?a.AddYears(1):a.AddMonths(1);var card=SelectedCard(advancePerson);var q="select a.KOD,a.PKNO,k.AD,k.SOYAD,a.TARIH,a.MIKTAR,a.VTARIH,a.TURKOD,a.TOPMIKTAR,a.TAKSITSAYISI,a.TAKSITNO,a.ACIKLAMA from AVANS a left join KIMLIK k on k.PKNO=a.PKNO where a.TARIH>=@A and a.TARIH<@B"+(card is null?"":" and a.PKNO=@P")+" order by a.TARIH desc,a.KOD desc";advanceGrid.DataSource=card is null?db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b)):db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card));
+        var a=new DateTime((int)advanceYear.Value,advanceMonthNo.SelectedIndex==0?1:advanceMonthNo.SelectedIndex,1);var b=advanceMonthNo.SelectedIndex==0?a.AddYears(1):a.AddMonths(1);var card=SelectedCard(advancePerson);var q="select a.KOD,a.PKNO,k.AD,k.SOYAD,a.TARIH,a.MIKTAR,a.VTARIH,a.TURKOD,a.TOPMIKTAR,a.TAKSITSAYISI,a.TAKSITNO,a.ACIKLAMA from AVANS a inner join KIMLIK k on k.PKNO=a.PKNO where (k.ICTARIH is null or k.ICTARIH>=@TODAY) and a.TARIH>=@A and a.TARIH<@B"+(card is null?"":" and a.PKNO=@P")+" order by a.TARIH desc,a.KOD desc";advanceGrid.DataSource=card is null?db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",a),new FbParameter("@B",b)):db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card));
     }
 
     void EditSelectedPayment()
@@ -280,6 +280,7 @@ public sealed class MainForm : Form
         bar.Controls.Add(WideBtn("Seçili Eksikleri Ekle",()=>ApplyMissingTnf(true),155));
         bar.Controls.Add(WideBtn("Tüm Eksikleri Ekle",()=>ApplyMissingTnf(false),145));
         bar.Controls.Add(WideBtn("Fazla TNF Temizle",CleanExtraTnf,145));
+        bar.Controls.Add(WideBtn("Saat Farkını Düzelt",FixTimeMismatchTnf,155));
         bar.Controls.Add(WideBtn("TNF Listele",LoadTnfAudit,105));
         p.Controls.Add(auditGrid); p.Controls.Add(bar); return p;
     }
@@ -416,8 +417,8 @@ public sealed class MainForm : Form
         try
         {
             var y=(int)ioYear.Value;var m=ioMonthNo.SelectedIndex;var a=m==0?new DateTime(y,1,1):new DateTime(y,m,1);var b=m==0?a.AddYears(1):a.AddMonths(1);var card=SelectedCard(ioPerson);
-            var q="select g.SIRA,g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO where ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))"+(card is null?"":" and g.PKNO=@P")+" order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
-            ioGrid.DataSource=card is null?db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b)):db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card));
+            var q="select g.SIRA,g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g inner join KIMLIK k on k.PKNO=g.PKNO where (k.ICTARIH is null or k.ICTARIH>=@TODAY) and ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))"+(card is null?"":" and g.PKNO=@P")+" order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
+            ioGrid.DataSource=card is null?db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",a),new FbParameter("@B",b)):db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card));
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Giri\u015f-\u00c7\u0131k\u0131\u015f"); }
     }
@@ -427,13 +428,16 @@ public sealed class MainForm : Form
         if (db is null) return;
         try
         {
-            var a = new DateTime((int)payrollYear.Value, payrollMonthNo.SelectedIndex==0?1:payrollMonthNo.SelectedIndex, 1); var b = payrollMonthNo.SelectedIndex==0?a.AddYears(1):a.AddMonths(1); var card=SelectedCard(payrollPerson);
-            payrollGrid.DataSource = db.Query("select u.*,k.AD,k.SOYAD from UCRETLER u left join KIMLIK k on k.PKNO=u.PKNO where u.BASTAR>=@A and u.BASTAR<@B order by u.PKNO",
-                new FbParameter("@A", a), new FbParameter("@B", b));
+            var a = new DateTime((int)payrollYear.Value, payrollMonthNo.SelectedIndex==0?1:payrollMonthNo.SelectedIndex, 1);
+            var b = payrollMonthNo.SelectedIndex==0 ? a.AddYears(1) : a.AddMonths(1);
+            var card = SelectedCard(payrollPerson);
+            var q = "select u.*,k.AD,k.SOYAD from UCRETLER u inner join KIMLIK k on k.PKNO=u.PKNO where (k.ICTARIH is null or k.ICTARIH>=@TODAY) and u.BASTAR>=@A and u.BASTAR<@B" + (card is null ? "" : " and u.PKNO=@P") + " order by u.PKNO";
+            payrollGrid.DataSource = card is null
+                ? db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",a),new FbParameter("@B",b))
+                : db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card));
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Bordro"); }
     }
-
     void RebuildDays()
     {
         dayList.Items.Clear(); if (rangeEnd.Value.Date < rangeStart.Value.Date) return;
@@ -716,8 +720,8 @@ public sealed class MainForm : Form
     void LoadEHistory()
     {
         if(db is null)return; var y=(int)eHistoryYear.Value;var m=eHistoryMonth.SelectedIndex;var a=m==0?new DateTime(y,1,1):new DateTime(y,m,1);var b=m==0?a.AddYears(1):a.AddMonths(1);var card=SelectedCard(eHistoryPerson);
-        var q="select g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO where (g.GTUR='E' or g.CTUR='E') and ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))"+(card is null?"":" and g.PKNO=@P")+" order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
-        var rows=card is null?db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b)):db.Query(q,new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card)); var t=new DataTable(); foreach(var c in new[]{"Kart No","Ad Soyad","Tarih","Gün","Taraf","Saat","Dönem","İmza"})t.Columns.Add(c);
+        var q="select g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g inner join KIMLIK k on k.PKNO=g.PKNO where (k.ICTARIH is null or k.ICTARIH>=@TODAY) and (g.GTUR='E' or g.CTUR='E') and ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))"+(card is null?"":" and g.PKNO=@P")+" order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
+        var rows=card is null?db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",a),new FbParameter("@B",b)):db.Query(q,new FbParameter("@TODAY",DateTime.Today),new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@P",card)); var t=new DataTable(); foreach(var c in new[]{"Kart No","Ad Soyad","Tarih","Gün","Taraf","Saat","Dönem","İmza"})t.Columns.Add(c);
         foreach(DataRow r in rows.Rows){if(Convert.ToString(r["GTUR"])=="E"&&r["GTARIH"]!=DBNull.Value){var d=Convert.ToDateTime(r["GTARIH"]);t.Rows.Add(r["PKNO"],$"{r["AD"]} {r["SOYAD"]}",d.ToString("dd.MM.yyyy"),d.ToString("dddd",new System.Globalization.CultureInfo("tr-TR")),"Giriş",r["GSAAT"],"Sabah","");}if(Convert.ToString(r["CTUR"])=="E"&&r["CTARIH"]!=DBNull.Value){var d=Convert.ToDateTime(r["CTARIH"]);t.Rows.Add(r["PKNO"],$"{r["AD"]} {r["SOYAD"]}",d.ToString("dd.MM.yyyy"),d.ToString("dddd",new System.Globalization.CultureInfo("tr-TR")),"Çıkış",r["CSAAT"],"Akşam","");}} eHistoryGrid.DataSource=t;
     }
     void ExportEHistoryCsv(){if(eHistoryGrid.DataSource is not DataTable t||t.Rows.Count==0){MessageBox.Show("Çıktı için kayıt yok.");return;}var path=Path.Combine(AppContext.BaseDirectory,$"E_IMZA_{(int)eHistoryYear.Value}_{eHistoryMonth.SelectedIndex:00}.csv");var lines=new List<string>{string.Join(";",t.Columns.Cast<DataColumn>().Select(c=>c.ColumnName))};foreach(DataRow r in t.Rows)lines.Add(string.Join(";",r.ItemArray.Select(x=>Convert.ToString(x)?.Replace(";",",")??"")));File.WriteAllLines(path,lines,System.Text.Encoding.UTF8);MessageBox.Show("İmza çıktısı hazır:\n"+path);}
@@ -795,7 +799,8 @@ public sealed class MainForm : Form
         if(isE){ if(same.Count==0)t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,time,"E","","UYUMLU - E / TNF YOK","YOK"); else t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,time,"E",string.Join(" | ",same),"UYUMSUZ - E AMA TNF VAR","TNF SİL E"); return; }
         if(exact.Count>0){ var keep=exact[0]; t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,time,"Normal",keep,"UYUMLU","YOK"); var extras=same.ToList(); extras.Remove(keep); foreach(var x in extras)t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,x.Split(',')[1].Trim(),"TNF",x,"UYUMSUZ - FAZLA TNF","TNF SİL FAZLA"); return; }
         if(same.Count==0){t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,time,"Normal","","UYUMSUZ - TNF EKSİK","TNF EKLE");return;}
-        t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,time,"Normal",string.Join(" | ",same),"UYUMSUZ - SAAT FARKLI","İNCELE");
+        if(same.Count==1){t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,time,"Normal",same[0],"UYUMSUZ - SAAT FARKLI","TNF DÜZELT");return;}
+        t.Rows.Add(card,name,d.ToString("dd.MM.yyyy"),day,side,time,"Normal",string.Join(" | ",same),"UYUMSUZ - ÇOKLU TNF / İNCELE","İNCELE");
     }
 
     void ColorAuditRows()
@@ -820,42 +825,21 @@ public sealed class MainForm : Form
         LoadAudit(); if(auditGrid.DataSource is not DataTable)return; var rows=auditGrid.Rows.Cast<DataGridViewRow>().Where(r=>!r.IsNewRow&&(Convert.ToString(r.Cells["İşlem"].Value)=="TNF SİL FAZLA"||Convert.ToString(r.Cells["İşlem"].Value)=="TNF SİL E")).ToList();
         if(rows.Count==0){MessageBox.Show("Temizlenecek fazla TNF kaydı yok.");return;} ApplyAuditRows(rows,$"{rows.Count} fazla/E TNF kaydı temizlenecek.");
     }
+    void FixTimeMismatchTnf()
+    {
+        LoadAudit(); if(auditGrid.DataSource is not DataTable)return;
+        var rows=auditGrid.Rows.Cast<DataGridViewRow>().Where(r=>!r.IsNewRow&&Convert.ToString(r.Cells["İşlem"].Value)=="TNF DÜZELT").ToList();
+        if(rows.Count==0){MessageBox.Show("Düzeltilecek tekil saat farkı yok.");return;}
+        ApplyAuditRows(rows,$"{rows.Count} saat farkı sistemdeki saate göre düzeltilecek.");
+    }
+
     void ApplyAuditRows(List<DataGridViewRow> rows,string message)
     {
         var y=(int)auditYear.Value; var src=Path.Combine(Path.GetDirectoryName(tnfPath.Text)??"",$"TR{y}.Tnf"); if(!File.Exists(src))src=tnfPath.Text; if(!File.Exists(src)){MessageBox.Show("TNF dosyası bulunamadı.");return;}
         if(MessageBox.Show(message+" Yedek alınacak. Devam?","Data Kontrol",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return; var backup=src+".bak_AUDIT_"+DateTime.Now.ToString("yyyyMMdd_HHmmss");File.Copy(src,backup,true);var lines=File.ReadAllLines(src).Where(x=>!string.IsNullOrWhiteSpace(x)).ToList();
         foreach(var r in rows){var card=Convert.ToString(r.Cells["Kart No"].Value)??"";var d=DateTime.ParseExact(Convert.ToString(r.Cells["Tarih"].Value)??"","dd.MM.yyyy",System.Globalization.CultureInfo.InvariantCulture);var entry=(Convert.ToString(r.Cells["Taraf"].Value)??"").StartsWith("Giriş",StringComparison.OrdinalIgnoreCase);var time=Convert.ToString(r.Cells["Saat"].Value)??"";var op=Convert.ToString(r.Cells["İşlem"].Value)??"";
-            if(op=="TNF EKLE")lines.Add($"{card},{time},{d:ddMMyy},1,001"); else if(op=="TNF SİL E")lines=lines.Where(x=>!SameTnfSide(x,card,d,entry)).ToList(); else if(op=="TNF SİL FAZLA"){var raw=Convert.ToString(r.Cells["TNF Karşılığı"].Value)??"";var ix=lines.FindIndex(x=>string.Equals(x,raw,StringComparison.OrdinalIgnoreCase));if(ix>=0)lines.RemoveAt(ix);}}
+            if(op=="TNF EKLE")lines.Add($"{card},{time},{d:ddMMyy},1,001"); else if(op=="TNF SİL E")lines=lines.Where(x=>!SameTnfSide(x,card,d,entry)).ToList(); else if(op=="TNF SİL FAZLA"){var raw=Convert.ToString(r.Cells["TNF Karşılığı"].Value)??"";var ix=lines.FindIndex(x=>string.Equals(x,raw,StringComparison.OrdinalIgnoreCase));if(ix>=0)lines.RemoveAt(ix);} else if(op=="TNF DÜZELT"){lines=lines.Where(x=>!SameTnfSide(x,card,d,entry)).ToList();lines.Add($"{card},{time},{d:ddMMyy},1,001");}}
         File.WriteAllLines(src,SortTnf(lines));LoadAudit();MessageBox.Show("İşlem tamamlandı. Yedek: "+backup);
-    }
-
-    void ApplyAuditSync()
-    {
-        if (db is null) { MessageBox.Show("Veritabanı bağlı değil."); return; }
-        LoadAudit(); if (auditGrid.DataSource is not DataTable t) return;
-        var y = (int)auditYear.Value;
-        var yf = Path.Combine(Path.GetDirectoryName(tnfPath.Text) ?? "", $"TR{y}.Tnf");
-        var src = File.Exists(yf) ? yf : tnfPath.Text;
-        if (!File.Exists(src)) { MessageBox.Show("TNF dosyası bulunamadı."); return; }
-        var changes = t.Rows.Cast<DataRow>().Where(r => Convert.ToString(r["İşlem"]) is string x && x != "YOK" && x != "İNCELE").ToList();
-        if (changes.Count == 0) { MessageBox.Show("Senkron farkı yok."); return; }
-        if (MessageBox.Show($"{changes.Count} senkron farkı uygulanacak. TNF yedeği alınacak. Devam?", "Senkron Uygula", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-        var backup = src + ".bak_SYNC_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        File.Copy(src, backup, true);
-        var lines = File.ReadAllLines(src).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
-        foreach (var r in changes)
-        {
-            var card = Convert.ToString(r["Kart No"]) ?? "";
-            var d = DateTime.ParseExact(Convert.ToString(r["Tarih"]) ?? "", "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture);
-            var entry = (Convert.ToString(r["Taraf"]) ?? "").StartsWith("Giriş", StringComparison.OrdinalIgnoreCase);
-            var time = Convert.ToString(r["Saat"]) ?? "";
-            var op = Convert.ToString(r["İşlem"]) ?? "";
-            if (op == "TNF SİL" || op == "TNF DÜZELT") lines = lines.Where(x => !SameTnfSide(x,card,d,entry)).ToList();
-            if (op == "TNF EKLE" || op == "TNF DÜZELT") lines.Add($"{card},{time},{d:ddMMyy},1,001");
-        }
-        File.WriteAllLines(src, SortTnf(lines));
-        LoadAudit();
-        MessageBox.Show($"Senkron tamamlandı. Yedek: {backup}", "HKN PDKS");
     }
 
     void EditPayrollSelected()
