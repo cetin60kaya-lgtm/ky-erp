@@ -27,6 +27,7 @@ internal sealed class WorkspaceDockHost : UserControl
     WorkspaceLayoutMode mode = WorkspaceLayoutMode.Single;
     int activeIndex;
     readonly Dictionary<string, int> splitDistances = new(StringComparer.OrdinalIgnoreCase);
+
     public WorkspaceDockHost(string userName)
     {
         userKey = Sanitize(userName);
@@ -61,6 +62,7 @@ internal sealed class WorkspaceDockHost : UserControl
         activeIndex = index;
         RefreshHeaders();
     }
+
     public void Open(Control control, string key, string title)
     {
         var existing = slots.FindIndex(s => s.Key == key && s.Content is not null);
@@ -101,27 +103,37 @@ internal sealed class WorkspaceDockHost : UserControl
         slot.Title.BringToFront();
         RefreshHeaders();
     }
+
     public void ApplyLayout(WorkspaceLayoutMode layout, bool save = true)
     {
         mode = layout;
         root.SuspendLayout();
-        var controls = slots.Select(s => s.Host).ToArray();
-        foreach (var host in controls) host.Parent = null;
-        root.Controls.Clear();
-
-        Control layoutControl = layout switch
+        try
         {
-            WorkspaceLayoutMode.TwoColumns => TwoColumns(),
-            WorkspaceLayoutMode.TwoRows => TwoRows(),
-            WorkspaceLayoutMode.ThreeFocusRight => ThreeFocusRight(),
-            WorkspaceLayoutMode.FourGrid => FourGrid(),
-            _ => Single()
-        };
-        root.Controls.Add(layoutControl);
-        layoutControl.Dock = DockStyle.Fill;
-        activeIndex = Math.Min(activeIndex, VisibleSlotCount() - 1);
-        RefreshHeaders();
-        root.ResumeLayout(true);
+            foreach (var host in slots.Select(s => s.Host).ToArray()) host.Parent = null;
+            root.Controls.Clear();
+
+            Control layoutControl = layout switch
+            {
+                WorkspaceLayoutMode.TwoColumns => TwoColumns(),
+                WorkspaceLayoutMode.TwoRows => TwoRows(),
+                WorkspaceLayoutMode.ThreeFocusRight => ThreeFocusRight(),
+                WorkspaceLayoutMode.FourGrid => FourGrid(),
+                _ => Single()
+            };
+            layoutControl.Dock = DockStyle.Fill;
+            root.Controls.Add(layoutControl);
+            layoutControl.BringToFront();
+            activeIndex = Math.Clamp(activeIndex, 0, Math.Max(0, VisibleSlotCount() - 1));
+            RefreshHeaders();
+        }
+        finally
+        {
+            root.ResumeLayout(true);
+            root.PerformLayout();
+        }
+
+        if (IsHandleCreated) BeginInvoke(new Action(NormalizeSplitters));
         if (save) SaveMode();
     }
 
@@ -147,6 +159,7 @@ internal sealed class WorkspaceDockHost : UserControl
         split.Panel2.Controls.Add(slots[1].Host);
         return split;
     }
+
     Control ThreeFocusRight()
     {
         var outer = Split("three-outer", Orientation.Vertical, .38);
@@ -180,36 +193,69 @@ internal sealed class WorkspaceDockHost : UserControl
             Orientation = orientation,
             SplitterWidth = 7,
             BackColor = Color.FromArgb(223, 231, 241),
-            Panel1MinSize = 220,
-            Panel2MinSize = 220
+            Panel1MinSize = 80,
+            Panel2MinSize = 80,
+            Tag = new SplitState(key, ratio)
         };
-        split.HandleCreated += (_, _) =>
-        {
-            if (splitDistances.TryGetValue(key, out var saved)) SetDistance(split, saved);
-            else SetRatio(split, ratio);
-        };
+        split.HandleCreated += (_, _) => QueueNormalize(split);
+        split.SizeChanged += (_, _) => QueueNormalize(split);
         split.SplitterMoved += (_, _) =>
         {
-            if (!split.IsHandleCreated) return;
-            splitDistances[key] = split.SplitterDistance;
+            if (!split.IsHandleCreated || split.Tag is not SplitState state) return;
+            splitDistances[state.Key] = split.SplitterDistance;
             SaveMode();
         };
         return split;
     }
 
+    void QueueNormalize(SplitContainer split)
+    {
+        if (!split.IsHandleCreated || split.IsDisposed) return;
+        BeginInvoke(new Action(() => NormalizeSplitter(split)));
+    }
+
+    void NormalizeSplitters()
+    {
+        foreach (var split in Descendants(root).OfType<SplitContainer>()) NormalizeSplitter(split);
+    }
+
+    void NormalizeSplitter(SplitContainer split)
+    {
+        if (split.IsDisposed || split.Tag is not SplitState state) return;
+        if (splitDistances.TryGetValue(state.Key, out var saved)) SetDistance(split, saved);
+        else SetRatio(split, state.Ratio);
+    }
+
+    static IEnumerable<Control> Descendants(Control rootControl)
+    {
+        foreach (Control child in rootControl.Controls)
+        {
+            yield return child;
+            foreach (var nested in Descendants(child)) yield return nested;
+        }
+    }
+
     static void SetDistance(SplitContainer split, int distance)
     {
         var span = split.Orientation == Orientation.Vertical ? split.ClientSize.Width : split.ClientSize.Height;
-        if (span > split.Panel1MinSize + split.Panel2MinSize)
-            split.SplitterDistance = Math.Max(split.Panel1MinSize, Math.Min(distance, span - split.Panel2MinSize));
+        var min = split.Panel1MinSize;
+        var max = span - split.SplitterWidth - split.Panel2MinSize;
+        if (max < min) return;
+        var safe = Math.Clamp(distance, min, max);
+        if (split.SplitterDistance != safe) split.SplitterDistance = safe;
     }
 
     static void SetRatio(SplitContainer split, double ratio)
     {
         var span = split.Orientation == Orientation.Vertical ? split.ClientSize.Width : split.ClientSize.Height;
-        if (span > split.Panel1MinSize + split.Panel2MinSize)
-            split.SplitterDistance = Math.Max(split.Panel1MinSize, Math.Min((int)(span * ratio), span - split.Panel2MinSize));
+        var min = split.Panel1MinSize;
+        var max = span - split.SplitterWidth - split.Panel2MinSize;
+        if (max < min) return;
+        SetDistance(split, (int)Math.Round(span * Math.Clamp(ratio, 0.1, 0.9)));
     }
+
+    sealed record SplitState(string Key, double Ratio);
+
     public void CloseActive()
     {
         if (activeIndex < 0 || activeIndex >= slots.Count) return;
@@ -258,6 +304,7 @@ internal sealed class WorkspaceDockHost : UserControl
         WorkspaceLayoutMode.ThreeFocusRight => 3,
         _ => 4
     };
+
     WorkspaceLayoutMode LoadMode()
     {
         try
@@ -270,8 +317,7 @@ internal sealed class WorkspaceDockHost : UserControl
             {
                 foreach (var pair in data.Where(x => x.Key.StartsWith("split:", StringComparison.OrdinalIgnoreCase)))
                     if (int.TryParse(pair.Value, out var distance)) splitDistances[pair.Key[6..]] = distance;
-                if (data.TryGetValue("mode", out var value) && Enum.TryParse<WorkspaceLayoutMode>(value, out var parsed))
-                    return parsed;
+                if (data.TryGetValue("mode", out var value) && Enum.TryParse<WorkspaceLayoutMode>(value, out var parsed)) return parsed;
             }
         }
         catch { }
