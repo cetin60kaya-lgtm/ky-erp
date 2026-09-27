@@ -3,17 +3,15 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-09-25",
+  "releaseDate": "2026-09-27",
   "scope": [
-    "gunluk-odeme-current-rate-print-parity",
-    "gunluk-odeme-persistent-paid-status",
-    "gunluk-operasyon-log-paid-green-state",
-    "gunluk-operasyon-log-person-control-tab",
-    "gunluk-operasyon-log-person-day-shift-paid-detail",
-    "gunluk-personel-pool-detail-removed",
+    "owner-all-system-accounting-api-guard",
+    "security-auth-modal-fixed-responsive-layout",
+    "security-auth-modal-no-persistent-user-geometry",
+    "security-auth-modal-no-resize-handle",
     "frontend-lint-build",
     "cloudflare-pages-production",
     "live-bundle-verification"
   ],
-  "note": "Personel donem kontrolu Personel Havuzu icinden kaldirildi ve Gunluk Islem Gecmisi modalina ucuncu Personel Kontrol sekmesi olarak tasindi. Secili tarih araliginda HKN/ad ile personel aranir; gun gun tarih, Gunduz/Gece vardiyasi, guncel tutar ve Odendi/Hazir durumu gorulur. Kalici paymentStatus=PAID ve yesil ODENDI log vurgusu korunur. Hizli Giris ve Gunluk Giris kayit mantigina dokunulmaz."
+  "note": "Tüm Sistem görünümünde firma zorunlu muhasebe canlı servisleri çağrılmayarak Yönetim Özeti API hatası engellendi. KY ERP Güvenlik giriş/doğrulama penceresi uygulama içi genel modal boyutlandırma sisteminden ayrıldı; masaüstünde tek geniş sabit düzen, tablet/telefonda responsive düzen kullanılır. Kullanıcıya özel modal geometri kaydı ve sürüklenebilir resize tutamacı güvenlik penceresinde kaldırıldı. Diğer uygulama modallarının mevcut davranışı değiştirilmedi."
 }
