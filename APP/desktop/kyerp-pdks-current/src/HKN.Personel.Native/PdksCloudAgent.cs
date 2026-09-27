@@ -16,7 +16,7 @@ internal static class PdksCloudAgent
     static readonly SemaphoreSlim Gate = new(1,1);
     static DateTime lastHeartbeat=DateTime.MinValue;
     static string? lastMessage;
-    static string OutboxRoot => Path.Combine(CompanyDataPaths.Config,"CloudOutbox");
+    internal static string OutboxRoot => Path.Combine(CompanyDataPaths.Config,"CloudOutbox");
     public static string Status => lastMessage ?? "Bulut bağlantısı bekleniyor";
 
     public static PdksCloudCredential? LoadCredential()
@@ -36,11 +36,20 @@ internal static class PdksCloudAgent
     {
         var options=PdksOptions.FromEnvironment();
         var tenant=options.TenantId??"kyerp";var company=options.CompanyId??LoadCredential()?.Company??"mecit-hakan";var workplace=options.WorkplaceId??"main";
+        var rows=punches.Select((p,index)=>new{
+            localId=$"{p.EmployeeCode}:{p.OccurredAt:yyyyMMddHHmmss}:{index}",
+            cardNo=p.EmployeeCode,
+            workDate=p.OccurredAt.ToString("yyyy-MM-dd"),
+            eventTime=p.OccurredAt.ToString("HH:mm:ss"),
+            direction="AUTO",
+            note=$"Terminal {p.TerminalNumber}; inout={p.InOut}; verify={p.VerifyMode}; event={p.EventCode}"
+        }).ToArray();
         var envelope=new SyncEnvelope(Guid.NewGuid(),tenant,company,workplace,"TERMINAL_BATCH","UPSERT",$"terminal:{DateTimeOffset.UtcNow:O}",DateTimeOffset.UtcNow,
             JsonSerializer.Serialize(new{
                 source="TERMINAL",deviceId=LoadCredential()?.DeviceId??Environment.MachineName,version=1,syncStatus="PENDING",
                 count=punches.Count,inserted=imported.Inserted,updated=imported.Updated,duplicates=imported.Duplicates,skipped=imported.Skipped,
-                firstAt=punches.Count>0?punches.Min(x=>x.OccurredAt):DateTime.MinValue,lastAt=punches.Count>0?punches.Max(x=>x.OccurredAt):DateTime.MinValue
+                firstAt=punches.Count>0?punches.Min(x=>x.OccurredAt):DateTime.MinValue,lastAt=punches.Count>0?punches.Max(x=>x.OccurredAt):DateTime.MinValue,
+                rows
             }));
         await new FileOutbox(OutboxRoot).EnqueueAsync(envelope,ct);
     }
@@ -52,6 +61,7 @@ internal static class PdksCloudAgent
         {
             var credential=LoadCredential();
             if(credential is null){lastMessage="Bulut cihaz anahtarı bekleniyor";return lastMessage;}
+            await PdksDesktopSnapshot.QueuePersonnelIfChangedAsync(OutboxRoot,ct);
             await FlushOutboxAsync(credential,ct);
             var inboxCount=await PdksCloudInbox.PullAndApplyAsync(credential,ct);
             if(DateTime.Now-lastHeartbeat>TimeSpan.FromMinutes(1)){await SendAsync(credential,HttpMethod.Post,"/api/auth/pdks-device/heartbeat",new{},ct);lastHeartbeat=DateTime.Now;}
@@ -67,13 +77,35 @@ internal static class PdksCloudAgent
     static async Task FlushOutboxAsync(PdksCloudCredential credential,CancellationToken ct)
     {
         var outbox=new FileOutbox(OutboxRoot);
-        foreach(var item in outbox.ReadPending(100))
+        var pending=outbox.ReadPending(100)
+            .OrderBy(item=>string.Equals(item.EntityType,"PERSONNEL_SNAPSHOT",StringComparison.OrdinalIgnoreCase)?0:1)
+            .ThenBy(item=>item.OccurredAtUtc)
+            .ToArray();
+        foreach(var item in pending)
         {
             try
             {
-                await SendAsync(credential,HttpMethod.Post,"/api/auth/pdks-device/sync-events/push",new{
-                    id=item.Id.ToString(),idempotencyKey=item.IdempotencyKey,item.EntityType,item.Operation,item.EntityId,item.OccurredAtUtc,item.PayloadJson
-                },ct,item.IdempotencyKey);
+                if(string.Equals(item.EntityType,"PERSONNEL_SNAPSHOT",StringComparison.OrdinalIgnoreCase))
+                {
+                    using var snapshot=JsonDocument.Parse(item.PayloadJson);
+                    var body=snapshot.RootElement.Clone();
+                    await SendAsync(credential,HttpMethod.Post,"/api/auth/pdks-device/bootstrap/personnel",body,ct,item.IdempotencyKey);
+                }
+                else if(string.Equals(item.EntityType,"TERMINAL_BATCH",StringComparison.OrdinalIgnoreCase))
+                {
+                    using var batch=JsonDocument.Parse(item.PayloadJson);
+                    var root=batch.RootElement;
+                    var rows=root.TryGetProperty("rows",out var rowsNode)?rowsNode.Clone():JsonDocument.Parse("[]").RootElement.Clone();
+                    var result=await SendAsync(credential,HttpMethod.Post,"/api/auth/pdks-device/time-events/import",new{source="KY PDKS 6.0 Desktop",rows},ct,item.IdempotencyKey);
+                    if(result.TryGetProperty("data",out var data)&&data.TryGetProperty("rejectedCount",out var rejected)&&rejected.GetInt32()>0)
+                        throw new InvalidOperationException($"Cloud terminal aktarımında {rejected.GetInt32()} kayıt reddedildi.");
+                }
+                else
+                {
+                    await SendAsync(credential,HttpMethod.Post,"/api/auth/pdks-device/sync-events/push",new{
+                        id=item.Id.ToString(),idempotencyKey=item.IdempotencyKey,item.EntityType,item.Operation,item.EntityId,item.OccurredAtUtc,item.PayloadJson
+                    },ct,item.IdempotencyKey);
+                }
                 outbox.MarkCompleted(item.Id);
             }
             catch(Exception ex){outbox.MarkFailed(item.Id,ex.Message);break;}
