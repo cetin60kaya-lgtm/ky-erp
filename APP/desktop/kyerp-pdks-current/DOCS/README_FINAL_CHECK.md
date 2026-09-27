@@ -1,0 +1,1 @@
+Final doğrulama GitHub Actions veya yerel Release build ile yapılacaktır.
