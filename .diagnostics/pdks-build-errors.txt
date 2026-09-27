@@ -1,5 +1,5 @@
-HEAD: 514c6000534a5ab9cd42346c3bcb03e731674b75
-UTC: 2026-09-27T16:50:20
+HEAD: 1604b8295bbc1edb802681e7275a7fa6705f6509
+UTC: 2026-09-27T22:59:19
 
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PersonelForm.PaymentEnhancements.cs(7,29): error CS0111: Type 'PersonelForm' already defines a member called 'OnLoad' with the same parameter types [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PersonelForm.PaymentEnhancements.cs(7,29): error CS0111: Type 'PersonelForm' already defines a member called 'OnLoad' with the same parameter types [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\ToolStripLayoutPersistence.cs(23,87): error CS0019: Operator '??' cannot be applied to operands of type 'Form' and 'ToolStrip' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\ToolStripLayoutPersistence.cs(23,87): error CS0019: Operator '??' cannot be applied to operands of type 'Form' and 'ToolStrip' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
