@@ -22,19 +22,32 @@ public sealed class LegacyOperationalReportForm : Form
     readonly DateTimePicker to = new() { Format = DateTimePickerFormat.Short, Width = 120 };
     readonly DataGridView grid = new()
     {
+        Name = "OperationalReportGrid",
         Dock = DockStyle.Fill,
         ReadOnly = true,
         AllowUserToAddRows = false,
         AllowUserToDeleteRows = false,
-        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+        AllowUserToOrderColumns = true,
+        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
         BackgroundColor = Color.White
     };
     DataTable data = new();
 
+    public LegacyOperationalReport Report => report;
+    public static string Title(LegacyOperationalReport r) => r switch
+    {
+        LegacyOperationalReport.PersonnelList => "Personel Listesi",
+        LegacyOperationalReport.LeavePersonnel => "İzinli Personel Raporu",
+        LegacyOperationalReport.EarningsDeductions => "Ek Kazanç ve Kesinti Raporu",
+        LegacyOperationalReport.PersonnelCountByWorkSystem => "Çalışma Sistemine Göre Personel",
+        LegacyOperationalReport.AnnualLeaveEntitlements => "Yıllık İzin Hakedişleri",
+        _ => "Rapor"
+    };
+
     public LegacyOperationalReportForm(LegacyOperationalReport report)
     {
         this.report = report;
-        Text = TitleFor(report);
+        Text = Title(report);
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(1180, 720);
         MinimumSize = new Size(900, 600);
@@ -44,16 +57,6 @@ public sealed class LegacyOperationalReportForm : Form
         Build();
         Shown += (_, _) => LoadData();
     }
-
-    static string TitleFor(LegacyOperationalReport r) => r switch
-    {
-        LegacyOperationalReport.PersonnelList => "Personel Listesi",
-        LegacyOperationalReport.LeavePersonnel => "İzinli Personel Raporu",
-        LegacyOperationalReport.EarningsDeductions => "Ek Kazanç ve Kesinti Raporu",
-        LegacyOperationalReport.PersonnelCountByWorkSystem => "Çalışma Sistemine Göre Personel",
-        LegacyOperationalReport.AnnualLeaveEntitlements => "Yıllık İzin Hakedişleri",
-        _ => "Rapor"
-    };
 
     void Build()
     {
@@ -95,6 +98,8 @@ public sealed class LegacyOperationalReportForm : Form
         {
             data = Query();
             grid.DataSource = data;
+            foreach (DataGridViewColumn c in grid.Columns)
+                if (c.Width < 70) c.Width = c.HeaderText.Contains("Ad", StringComparison.OrdinalIgnoreCase) ? 140 : 90;
         }
         catch (Exception ex)
         {
@@ -109,16 +114,16 @@ public sealed class LegacyOperationalReportForm : Form
         return report switch
         {
             LegacyOperationalReport.PersonnelList => db.Query(
-                "select k.PKNO \"Kart No\",k.AD Ad,k.SOYAD Soyad,k.IGTARIH \"İşe Giriş\",k.ICTARIH \"İşten Çıkış\",k.MAAS Maaş,b.AD Bölüm,s.AD Servis,g.AD Görev " +
+                "select k.PKNO \"Kart No\",k.AD \"Ad\",k.SOYAD \"Soyad\",k.IGTARIH \"İşe Giriş\",k.ICTARIH \"İşten Çıkış\",k.MAAS \"Maaş\",b.AD \"Bölüm\",s.AD \"Servis\",g.AD \"Görev\" " +
                 "from KIMLIK k left join BOLUM b on b.KOD=k.BOLUM left join SERVIS s on s.KOD=k.SERVIS left join GOREV g on g.KOD=k.GOREV order by k.PKNO"),
 
             LegacyOperationalReport.LeavePersonnel => db.Query(
-                "select o.TARIH Tarih,o.PKNO \"Kart No\",k.AD Ad,k.SOYAD Soyad,o.MAZERET Mazeret,o.TIP Tür,o.SURESAAT Süre,o.BASSAAT Başlangıç,o.BITSAAT Bitiş " +
+                "select o.TARIH \"Tarih\",o.PKNO \"Kart No\",k.AD \"Ad\",k.SOYAD \"Soyad\",o.MAZERET \"Mazeret\",o.TIP \"Tür\",o.SURESAAT \"Süre\",o.BASSAAT \"Başlangıç\",o.BITSAAT \"Bitiş\" " +
                 "from OZELIZIN o left join KIMLIK k on k.PKNO=o.PKNO where o.TARIH>=@A and o.TARIH<@B order by o.TARIH,o.PKNO",
                 new FbParameter("@A", a), new FbParameter("@B", b)),
 
             LegacyOperationalReport.EarningsDeductions => db.Query(
-                "select a.TARIH Tarih,a.PKNO \"Kart No\",k.AD Ad,k.SOYAD Soyad,v.TUR Tür,v.ISARET İşaret,a.MIKTAR Miktar,a.ACIKLAMA Açıklama " +
+                "select a.TARIH \"Tarih\",a.PKNO \"Kart No\",k.AD \"Ad\",k.SOYAD \"Soyad\",v.TUR \"Tür\",v.ISARET \"İşaret\",a.MIKTAR \"Miktar\",a.ACIKLAMA \"Açıklama\" " +
                 "from AVANS a left join KIMLIK k on k.PKNO=a.PKNO left join AVTUR v on v.KOD=a.TURKOD where a.TARIH>=@A and a.TARIH<@B order by a.TARIH,a.PKNO",
                 new FbParameter("@A", a), new FbParameter("@B", b)),
 
@@ -126,30 +131,24 @@ public sealed class LegacyOperationalReportForm : Form
                 "select coalesce(p.AD,'Tanımsız') \"Çalışma Sistemi\",count(*) \"Personel Sayısı\" from KIMLIK k left join PUANBILGI p on p.KOD=k.PUANTAJ group by p.AD order by p.AD"),
 
             LegacyOperationalReport.AnnualLeaveEntitlements => db.Query(
-                "select PKNO \"Kart No\",AD Ad,SOYAD Soyad,IGTARIH \"İşe Giriş\",coalesce(KULIZIN,0) \"İzin Hakedişi\" from KIMLIK order by PKNO"),
+                "select PKNO \"Kart No\",AD \"Ad\",SOYAD \"Soyad\",IGTARIH \"İşe Giriş\",coalesce(KULIZIN,0) \"İzin Hakedişi\" from KIMLIK order by PKNO"),
 
             _ => new DataTable()
         };
     }
 
-    ReportTable Table()
-    {
-        var columns = data.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
-        var rows = data.Rows.Cast<DataRow>()
-            .Select(r => (IReadOnlyList<string>)data.Columns.Cast<DataColumn>().Select(c => Convert.ToString(r[c]) ?? string.Empty).ToArray())
-            .ToArray();
-        return CompanyBranding.Decorate(new ReportTable($"{Text} • {from.Value:dd.MM.yyyy} - {to.Value:dd.MM.yyyy}", columns, rows));
-    }
+    ReportTable Table() => GridReportAdapter.ToReport(grid, data, $"{Text} • {from.Value:dd.MM.yyyy} - {to.Value:dd.MM.yyyy}");
+    IReadOnlyList<int> Widths() => GridReportAdapter.VisibleWidths(grid);
 
     void Preview()
     {
-        try { LoadData(); ReportPrintHelper.Preview(this, Table(), grid.Columns.Count > 7); }
+        try { LoadData(); ReportPrintHelper.Preview(this, Table(), grid.Columns.Count > 7, Widths()); }
         catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
 
     void Print()
     {
-        try { LoadData(); ReportPrintHelper.Print(this, Table(), grid.Columns.Count > 7); }
+        try { LoadData(); ReportPrintHelper.Print(this, Table(), grid.Columns.Count > 7, Widths()); }
         catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
 
