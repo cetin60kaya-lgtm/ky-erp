@@ -41,7 +41,6 @@ export default function PdksDeviceCenter({ activeTab="cihaz-baglantilari", activ
   const selectedJobs=useMemo(()=>selected?jobs.filter((row)=>row.deviceId===selected):jobs,[jobs,selected]);
   const latestJobByDevice=useMemo(()=>Object.fromEntries(devices.map((device)=>[device.id,jobs.find((job)=>job.deviceId===device.id)||null])),[devices,jobs]);
   const onlineCount=devices.filter((row)=>online(row.lastSeenAt)&&row.active!==0).length;
-  const failedCount=logs.filter((row)=>String(row.status||"").toUpperCase()!=="OK"||Number(row.rejectedCount||0)>0).length;
 
   async function enroll(event){
     event.preventDefault();if(isAuditAccount||!form.deviceLabel.trim())return;
