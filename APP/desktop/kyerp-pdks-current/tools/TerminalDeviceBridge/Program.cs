@@ -26,12 +26,12 @@ internal static class Program
             form.Show();
             Application.DoEvents();
             dynamic clock = host.Clock;
-            if (clock == null) return Fail("FP_CLOCK ActiveX başlatılamadı.");
+            if (clock == null) return Fail("FP_CLOCK ActiveX baÅŸlatÄ±lamadÄ±.");
             try
             {
                 string endpoint = ip;
-                if (!clock.SetIPAddress(ref endpoint, port, 0)) return Fail("Cihaz IP/port ayarı kabul edilmedi.");
-                if (!clock.OpenCommPort(machine)) return Fail("Kart cihazına bağlantı açılamadı.");
+                if (!clock.SetIPAddress(ref endpoint, port, 0)) return Fail("Cihaz IP/port ayarÄ± kabul edilmedi.");
+                if (!clock.OpenCommPort(machine)) return Fail("Kart cihazÄ±na baÄŸlantÄ± aÃ§Ä±lamadÄ±.");
                 try
                 {
                     clock.ReadMark = false;
@@ -45,6 +45,18 @@ internal static class Program
                         : "";
                     Console.WriteLine("STATUS|OK|" + deviceTime + "|" + newLogs + "|" + users + "|" + cards);
                     if (mode == "read") ReadNew(clock, machine, newLogs);
+                    else if (mode == "clearlogs")
+                    {
+                        bool ok = clock.EmptyGeneralLogData(machine);
+                        Console.WriteLine(ok ? "ACTION|OK|CLEARLOGS" : "ACTION|ERROR|CLEARLOGS");
+                        return ok ? 0 : 3;
+                    }
+                    else if (mode == "settime")
+                    {
+                        bool ok = clock.SetDeviceTime(machine);
+                        Console.WriteLine(ok ? "ACTION|OK|SETTIME" : "ACTION|ERROR|SETTIME");
+                        return ok ? 0 : 4;
+                    }
                     return 0;
                 }
                 finally { try { clock.CloseCommPort(); } catch { } }

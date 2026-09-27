@@ -172,6 +172,8 @@ internal static class StartupConfiguration
         if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured)) return configured;
         string[] candidates =
         [
+            CompanyDataPaths.Database,
+            Path.Combine(AppContext.BaseDirectory, "Data", "KY_PDKS_DATA.FDB"),
             @"D:\Hedef500\Hedef500\Data\DATABASE.GDB",
             @"C:\Hedef500\Hedef500\Data\DATABASE.GDB",
             Path.Combine(AppContext.BaseDirectory, "Data", "DATABASE.GDB")

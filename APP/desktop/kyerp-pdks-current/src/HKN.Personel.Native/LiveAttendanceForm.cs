@@ -11,9 +11,11 @@ public sealed partial class LiveAttendanceForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
     readonly DateTimePicker date = new(){Format=DateTimePickerFormat.Custom,CustomFormat="dd MMMM yyyy dddd",Width=225};
-    readonly CheckBox live = new(){Text="Canlı cihaz takibi",Checked=true,AutoSize=true,Padding=new Padding(8,6,0,0)};
+    readonly CheckBox live = new(){Text="Otomatik yenile",Checked=true,AutoSize=true,Padding=new Padding(8,6,0,0)};
     readonly Label device = new(){AutoSize=false,Width=430,Height=28,TextAlign=ContentAlignment.MiddleLeft};
-    readonly Button refresh = new(){Text="Şimdi Yenile",Width=105,Height=30};
+    readonly Button refresh = new(){Text="Yenile",Width=85,Height=30};
+    readonly Button syncNow = new(){Text="Eşitle",Width=85,Height=30};
+    readonly Button clearLive = new(){Text="Canlıyı Temizle",Width=125,Height=30};
     readonly FlowLayoutPanel cards = new(){Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(2)};
     readonly TabControl tabs = new(){Dock=DockStyle.Fill};
     readonly Dictionary<string,DataGridView> grids = new();
@@ -30,8 +32,9 @@ public sealed partial class LiveAttendanceForm : Form
     {
         this.openEntryExit=openEntryExit;this.openPerson=openPerson;Text="Canlı Personel Denetim";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);
         MinimumSize=new Size(1000,620);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);Build();
-        Shown+=async (_,_)=>await SyncAndLoadAsync();refresh.Click+=async (_,_)=>await SyncAndLoadAsync();
-        date.ValueChanged+=async (_,_)=>await SyncAndLoadAsync(false);timer.Tick+=async (_,_)=>await SyncAndLoadAsync();
+        Shown+=async (_,_)=>await SyncAndLoadAsync(false);refresh.Click+=async (_,_)=>await SyncAndLoadAsync(false);
+        syncNow.Click+=async (_,_)=>await SyncAndLoadAsync(true);clearLive.Click+=(_,_)=>{TerminalSyncService.ClearLive();ShowLastSync();};
+        date.ValueChanged+=async (_,_)=>await SyncAndLoadAsync(false);timer.Tick+=async (_,_)=>{if(live.Checked)await SyncAndLoadAsync(false);};
         FormClosed+=(_,_)=>{timer.Stop();closing.Cancel();};timer.Start();
     }
     void Build()
@@ -52,7 +55,7 @@ public sealed partial class LiveAttendanceForm : Form
         titleBox.Controls.Add(new Label{Text="Kart hareketleri • eksik basımlar • izin • içeride kalanlar",Dock=DockStyle.Fill,TextAlign=ContentAlignment.TopLeft,ForeColor=Color.FromArgb(88,103,124)},0,1);
         header.Controls.Add(titleBox,0,0);
         var controls=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(0,12,0,0)};
-        controls.Controls.Add(date);controls.Controls.Add(live);controls.Controls.Add(refresh);header.Controls.Add(controls,1,0);
+        controls.Controls.Add(date);controls.Controls.Add(live);controls.Controls.Add(refresh);controls.Controls.Add(syncNow);controls.Controls.Add(clearLive);header.Controls.Add(controls,1,0);
         device.Dock=DockStyle.Fill;device.TextAlign=ContentAlignment.MiddleRight;device.Font=new Font("Segoe UI",9f,FontStyle.Bold);device.ForeColor=Color.FromArgb(24,145,84);header.Controls.Add(device,2,0);
         root.Controls.Add(header,0,0);
 
@@ -107,29 +110,31 @@ public sealed partial class LiveAttendanceForm : Form
         if (string.IsNullOrWhiteSpace(code)) return;
         openEntryExit(code, date.Value.Date);
     }
-    async Task SyncAndLoadAsync(bool syncDevice=true)
+    async Task SyncAndLoadAsync(bool syncDevice=false)
     {
-        if(busy||IsDisposed)return;busy=true;refresh.Enabled=false;
+        if(busy||IsDisposed)return;busy=true;refresh.Enabled=false;syncNow.Enabled=false;
         try
         {
-            TerminalDeviceSnapshot? snapshot=null;
-            if(syncDevice&&live.Checked&&date.Value.Date==DateTime.Today)
+            if(syncDevice&&date.Value.Date==DateTime.Today)
             {
                 RecoverLegacyBackup(date.Value.Date);
-                snapshot=await TerminalDeviceClient.ReadAsync(true,closing.Token);
-                if(snapshot.Connected&&snapshot.Punches.Count>0)
-                {
-                    CaptureUnmatched(snapshot.Punches.Select(x=>(x.EmployeeCode,x.OccurredAt,"Canlı cihaz")),date.Value.Date);
-                    var records=snapshot.Punches.Select(ToRecord).ToArray();
-                    _=new AttendanceImportService(db).Import(records,5);
-                }
+                var state=await TerminalSyncService.SyncAsync("Canlı ekran",null,closing.Token);
+                if(state.ReadCount>0)device.ForeColor=state.DeviceCleared?Color.DarkGreen:Color.DarkOrange;
             }
-            if(snapshot is not null)ShowDevice(snapshot);
+            ShowLastSync();
             LoadDay(date.Value.Date);
         }
         catch(OperationCanceledException){ }
         catch(Exception ex){device.Text="Denetim hatası: "+ex.Message;device.ForeColor=Color.DarkRed;}
-        finally{busy=false;if(!IsDisposed)refresh.Enabled=true;}
+        finally{busy=false;if(!IsDisposed){refresh.Enabled=true;syncNow.Enabled=true;}}
+    }
+
+    void ShowLastSync()
+    {
+        var s=TerminalSyncService.ReadState();
+        if(s?.LastAt is null){device.Text="Son eşitleme: yok";device.ForeColor=Color.FromArgb(202,118,35);return;}
+        device.Text=$"Son eşitleme {s.LastAt:dd.MM HH:mm:ss}   Okunan {s.ReadCount}   Eklenen/Güncellenen {s.Inserted}/{s.Updated}";
+        device.ForeColor=s.DeviceCleared||s.ReadCount==0?Color.DarkGreen:Color.DarkOrange;
     }
 
     static ProfiledTerminalRecord ToRecord(TerminalDevicePunch punch)

@@ -25,7 +25,8 @@ internal static class CompanyDataPaths
     public static string Logs => Path.Combine(Root, "Logs");
     public static string Import => Path.Combine(Root, "Import");
     public static string Config => Path.Combine(Root, "Config");
-    public static string Database => Path.Combine(Data, "DATABASE.GDB");
+    public static string Database => Path.Combine(Data, "KY_PDKS_DATA.FDB");
+    public static string LiveFile => Path.Combine(Terminal, "live.dat");
     public static string PendingRestoreMarker => Path.Combine(Config, "pending-restore.txt");
     public static string CurrentTnf => Path.Combine(Tnf, $"TR{DateTime.Today.Year}.Tnf");
 
@@ -33,6 +34,9 @@ internal static class CompanyDataPaths
     {
         foreach (var path in new[] { Root, Data, Tnf, Backup, Reports, Terminal, Archive, Logs, Import, Config })
             Directory.CreateDirectory(path);
+
+        var legacyDatabase = Path.Combine(Data, "DATABASE.GDB");
+        if (!File.Exists(Database) && File.Exists(legacyDatabase)) File.Copy(legacyDatabase, Database, false);
 
         var profile = Path.Combine(Config, "company.txt");
         if (!File.Exists(profile))
@@ -62,7 +66,7 @@ internal static class CompanyDataPaths
 
         if (File.Exists(Database))
         {
-            var archived = Path.Combine(Archive, $"DATABASE_before_restore_{DateTime.Now:yyyyMMdd_HHmmss}.GDB");
+            var archived = Path.Combine(Archive, $"KY_PDKS_before_restore_{DateTime.Now:yyyyMMdd_HHmmss}.FDB");
             File.Move(Database, archived, true);
         }
         File.Move(staged, Database, true);

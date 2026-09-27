@@ -158,28 +158,26 @@ internal sealed partial class PdksHomeDashboard : UserControl
         return host;
     }
 
-    async Task UpdateDeviceAsync()
+    Task UpdateDeviceAsync()
     {
-        if (deviceBusy || IsDisposed) return;
+        if (deviceBusy || IsDisposed) return Task.CompletedTask;
         deviceBusy = true;
         try
         {
-            var s = await TerminalDeviceClient.ReadAsync(false);
-            if (IsDisposed) return;
-            liveStatus.Text = s.Connected
-                ? $"●  CANLI   •   Kart cihazı bağlı   •   Yeni kayıt {Math.Max(0, s.NewLogCount)}"
-                : "●  CANLI   •   Kart cihazı bekleniyor";
-            liveStatus.ForeColor = s.Connected ? Color.FromArgb(24, 145, 84) : Color.FromArgb(202, 118, 35);
-        }
-        catch
-        {
-            if (!IsDisposed)
+            var s = TerminalSyncService.ReadState();
+            if (s?.LastAt is null)
             {
-                liveStatus.Text = "●  CANLI   •   Kart cihazı bekleniyor";
+                liveStatus.Text = "●  CANLI   •   Henüz eşitleme yapılmadı";
                 liveStatus.ForeColor = Color.FromArgb(202, 118, 35);
+            }
+            else
+            {
+                liveStatus.Text = $"●  CANLI   •   Son eşitleme {s.LastAt:HH:mm:ss}   •   {s.ReadCount} kayıt";
+                liveStatus.ForeColor = s.DeviceCleared || s.ReadCount == 0 ? Color.FromArgb(24, 145, 84) : Color.FromArgb(202, 118, 35);
             }
         }
         finally { deviceBusy = false; }
+        return Task.CompletedTask;
     }
 
     static void OpenErp()

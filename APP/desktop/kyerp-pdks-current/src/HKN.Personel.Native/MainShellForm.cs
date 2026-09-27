@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace HKN.Personel.Native;
 
-public sealed class MainShellForm : Form
+public sealed partial class MainShellForm : Form
 {
     readonly LocalUser currentUser;
     readonly WorkspaceDockHost workspace;
@@ -41,6 +41,7 @@ public sealed class MainShellForm : Form
         BuildStatus();
         Controls.Add(workspace); Controls.Add(tool); Controls.Add(MainMenuStrip!); Controls.Add(status);
         ShowHome();
+        InitializeTerminalAutoSync();
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -123,9 +124,9 @@ public sealed class MainShellForm : Form
         reports.DropDownItems.Add(MenuItem("Genel Maaş Bordrosu", PdksModule.Bordro, OpenLegacyBordro));
 
         var system = new ToolStripMenuItem("Sistem Yönetimi");
-        system.DropDownItems.Add(MenuItem("Terminal ve Cihaz Ayarları", PdksModule.Terminal, OpenLegacyTerminalSettings));
+        system.DropDownItems.Add(MenuItem("Terminal & Cihaz Merkezi", PdksModule.Terminal, OpenTerminalCenter));
         system.DropDownItems.Add(PlainItem("Veritabanı Bağlantı Yönetimi", () => { StartupConfiguration.EnsureReady(); UpdateDbStatus(); }));
-        system.DropDownItems.Add(PlainItem("Hızlı Veri Kaynakları (GDB / TNF)", () => new QuickDataSourceForm().ShowDialog(this)));
+        system.DropDownItems.Add(PlainItem("Hızlı Veri Kaynakları (FDB / TNF)", () => new QuickDataSourceForm().ShowDialog(this)));
         system.DropDownItems.Add(PlainItem("Yedekleme / Geri Yükleme", () => new BackupRestoreForm().ShowDialog(this)));
         system.DropDownItems.Add(PlainItem("Hakan Emprime Veri Klasörü", CompanyDataPaths.OpenRoot));
         system.DropDownItems.Add(PlainItem("Yazdırma Ayarları", OpenPrinterSettings));
@@ -310,10 +311,14 @@ public sealed class MainShellForm : Form
         ShowModule(new LegacyDefinitionsForm(initialTab), PdksModule.Tanimlar);
     }
 
-    void OpenLegacyTerminalSettings()
+    void OpenLegacyTerminalSettings() => OpenTerminalCenter();
+
+    void OpenTerminalCenter()
     {
         if (!Ready(PdksModule.Terminal)) return;
-        ShowModule(new LegacyTerminalSettingsForm(), PdksModule.Terminal);
+        EnsurePersonel();
+        var transfer = personel?.CreateTerminalTransferDialog();
+        ShowModule(new TerminalCenterForm(transfer, new LegacyTerminalSettingsForm()), PdksModule.Terminal);
     }
 
     void OpenLegacyTable(string title, string table, bool edit, Size size, PdksModule module = PdksModule.Tanimlar)
@@ -335,8 +340,7 @@ public sealed class MainShellForm : Form
         switch (module)
         {
             case PdksModule.Terminal:
-                EnsurePersonel();
-                if (personel is not null) ShowModule(personel.CreateTerminalTransferDialog(), PdksModule.Terminal);
+                OpenTerminalCenter();
                 break;
             case PdksModule.Donemler:
                 ShowModule(new LegacyPeriodForm(), PdksModule.Donemler);

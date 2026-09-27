@@ -31,7 +31,7 @@ internal static class DatabaseMaintenance
         if (!File.Exists(backupFile)) throw new FileNotFoundException("Yedek dosyası bulunamadı.", backupFile);
         CompanyDataPaths.Ensure();
         var o = PdksOptions.FromEnvironment();
-        var staged = Path.Combine(CompanyDataPaths.Data, $"DATABASE_RESTORE_{DateTime.Now:yyyyMMdd_HHmmss}.GDB");
+        var staged = Path.Combine(CompanyDataPaths.Data, $"KY_PDKS_RESTORE_{DateTime.Now:yyyyMMdd_HHmmss}.FDB");
         Run(o, "-c", "-v", backupFile, $"{o.DatabaseHost}:{staged}");
 
         var testOptions = o with { DatabasePath = staged };
