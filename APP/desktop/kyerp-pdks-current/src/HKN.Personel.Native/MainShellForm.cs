@@ -42,6 +42,7 @@ public sealed partial class MainShellForm : Form
         Controls.Add(workspace); Controls.Add(tool); Controls.Add(MainMenuStrip!); Controls.Add(status);
         ShowHome();
         InitializeTerminalAutoSync();
+        InitializeCloudSync();
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
