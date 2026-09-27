@@ -69,18 +69,20 @@ public sealed class MainForm : Form
     PdksOptions? options;
     public MainForm()
     {
-        Text = "HKN PDKS H\u0131zl\u0131 Veri";
+        Text = "KY ERP • PDKS Hızlı İşlem";
         StartPosition = FormStartPosition.CenterScreen;
-        Width = 1380; Height = 820; MinimumSize = new Size(1100, 700);
-        Font = new Font("Segoe UI", 9f);
+        Width = 1480; Height = 880; MinimumSize = new Size(1180, 720);
+        Font = new Font("Segoe UI", 9.5f);
+        BackColor = Color.FromArgb(244,248,253);
         personFilter.Items.AddRange(["Aktif","Pasif","T\u00fcm\u00fc"]); personFilter.SelectedIndex = 0;
         eSide.Items.AddRange(["Giri\u015f E","\u00c7\u0131k\u0131\u015f E","Giri\u015f + \u00c7\u0131k\u0131\u015f E"]); eSide.SelectedIndex = 0;
         auditView.Items.AddRange(["Tümü","E Kayıtları","Sabah / Giriş","Akşam / Çıkış","Eksik TNF","Fazla TNF","Saat Farkı","Sistemde Yok / İncele","Uyumlu","Uyumsuz"]); auditView.SelectedIndex = 0;
         Build();
+        ApplyModernTheme();
         personFilter.SelectedIndexChanged += (_, _) => LoadPeople();
         eStart.ValueChanged += (_, _) => RebuildEDays(); eEnd.ValueChanged += (_, _) => RebuildEDays();
         eYear.ValueChanged += (_, _) => ApplyEPeriodFilter(); eMonthNo.SelectedIndexChanged += (_, _) => ApplyEPeriodFilter(); ePerson.SelectedIndexChanged += (_, _) => ApplyEPeriodFilter();
-        Shown += (_, _) => { DetectSources(); Connect(); };
+        Shown += (_, _) => { DetectSources(); Connect(); ApplyModernTheme(); };
         ioYear.Value = auditYear.Value = eYear.Value = eHistoryYear.Value = payrollYear.Value = paymentYear.Value = advanceYear.Value = DateTime.Today.Year;
         rangeStart.ValueChanged += (_, _) => RebuildDays();
         rangeEnd.ValueChanged += (_, _) => RebuildDays();
@@ -96,8 +98,85 @@ public sealed class MainForm : Form
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells,
         SelectionMode = DataGridViewSelectionMode.FullRowSelect,
         MultiSelect = true,
-        BackgroundColor = Color.White
+        BackgroundColor = Color.White,
+        BorderStyle = BorderStyle.None,
+        GridColor = Color.FromArgb(224,231,240),
+        RowHeadersVisible = false,
+        ColumnHeadersHeight = 34,
+        EnableHeadersVisualStyles = false,
+        RowTemplate = { Height = 28 }
     };
+
+    static readonly Color UiBg = Color.FromArgb(244,248,253);
+    static readonly Color UiBlue = Color.FromArgb(25,103,210);
+    static readonly Color UiNavy = Color.FromArgb(31,55,86);
+
+    void ApplyModernTheme()
+    {
+        BackColor = UiBg; tabs.Font = new Font("Segoe UI Semibold",9.5f); tabs.Padding = new Point(16,7);
+        StyleTree(this);
+        foreach(var g in new[]{peopleGrid,ioGrid,payrollGrid,bulkGrid,auditGrid,eGrid,paymentGrid,advanceGrid,eHistoryGrid}) StyleGrid(g);
+        HookOperationalColors();
+    }
+
+    static void StyleGrid(DataGridView g)
+    {
+        g.BackgroundColor=Color.White; g.BorderStyle=BorderStyle.None; g.GridColor=Color.FromArgb(225,232,241);
+        g.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(232,241,252); g.ColumnHeadersDefaultCellStyle.ForeColor=UiNavy;
+        g.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI Semibold",9f); g.ColumnHeadersDefaultCellStyle.SelectionBackColor=g.ColumnHeadersDefaultCellStyle.BackColor;
+        g.DefaultCellStyle.BackColor=Color.White; g.DefaultCellStyle.ForeColor=Color.FromArgb(38,50,68); g.DefaultCellStyle.SelectionBackColor=Color.FromArgb(207,226,250); g.DefaultCellStyle.SelectionForeColor=Color.FromArgb(20,43,75);
+        g.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(249,251,254);
+    }
+
+    static void StyleTree(Control root)
+    {
+        foreach(Control c in root.Controls)
+        {
+            if(c is TabPage) c.BackColor=Color.White; else if(c is Panel or TableLayoutPanel or FlowLayoutPanel) c.BackColor=Color.White;
+            if(c is Label l) l.ForeColor=UiNavy; if(c is Button b) StyleButton(b);
+            if(c is TextBoxBase or ComboBox or NumericUpDown or DateTimePicker) c.Font=new Font("Segoe UI",9.5f);
+            if(c.HasChildren) StyleTree(c);
+        }
+    }
+
+    static void StyleButton(Button b)
+    {
+        var t=b.Text.ToUpperInvariant(); b.FlatStyle=FlatStyle.Flat; b.FlatAppearance.BorderSize=0; b.Font=new Font("Segoe UI Semibold",9f); b.Cursor=Cursors.Hand;
+        if(t.Contains("SİL")||t.Contains("TEMİZ")){b.BackColor=Color.FromArgb(255,235,235);b.ForeColor=Color.FromArgb(184,39,45);}
+        else if(t.Contains("EKLE")||t.Contains("KAYDET")||t.Contains("UYGULA")){b.BackColor=Color.FromArgb(226,247,235);b.ForeColor=Color.FromArgb(18,122,72);}
+        else if(t.Contains("DÜZELT")||t.Contains("ÖNİZLE")){b.BackColor=Color.FromArgb(255,244,222);b.ForeColor=Color.FromArgb(176,96,9);}
+        else {b.BackColor=Color.FromArgb(231,241,253);b.ForeColor=Color.FromArgb(24,80,153);}
+        b.Padding=new Padding(8,0,8,0);
+    }
+
+    void HookOperationalColors()
+    {
+        foreach(var g in new[]{ioGrid,bulkGrid,eGrid,eHistoryGrid,auditGrid})
+        {
+            g.DataBindingComplete -= OperationalGridBindingComplete; g.DataBindingComplete += OperationalGridBindingComplete;
+        }
+        ApplyOperationalColors(ioGrid); ApplyOperationalColors(bulkGrid); ApplyOperationalColors(eGrid); ApplyOperationalColors(eHistoryGrid); ApplyOperationalColors(auditGrid);
+    }
+
+    void OperationalGridBindingComplete(object? sender, DataGridViewBindingCompleteEventArgs e)
+    { if(sender is DataGridView g) ApplyOperationalColors(g); }
+
+    static void ApplyOperationalColors(DataGridView g)
+    {
+        var hasStatus=g.Columns.Contains("Durum");
+        foreach(DataGridViewRow r in g.Rows)
+        {
+            if(r.IsNewRow) continue;
+            var taraf=g.Columns.Contains("Taraf")?Convert.ToString(r.Cells["Taraf"].Value)??"":"";
+            var sabah=taraf.StartsWith("Giriş",StringComparison.OrdinalIgnoreCase)||taraf.Contains("Sabah",StringComparison.OrdinalIgnoreCase);
+            var aksam=taraf.StartsWith("Çıkış",StringComparison.OrdinalIgnoreCase)||taraf.Contains("Akşam",StringComparison.OrdinalIgnoreCase);
+            if(!hasStatus){if(sabah)r.DefaultCellStyle.BackColor=Color.FromArgb(235,247,255); else if(aksam)r.DefaultCellStyle.BackColor=Color.FromArgb(255,245,231);}
+            if(g.Columns.Contains("GSAAT"))r.Cells["GSAAT"].Style.BackColor=Color.FromArgb(222,242,255); if(g.Columns.Contains("CSAAT"))r.Cells["CSAAT"].Style.BackColor=Color.FromArgb(255,235,210);
+            if(g.Columns.Contains("Giriş"))r.Cells["Giriş"].Style.BackColor=Color.FromArgb(222,242,255); if(g.Columns.Contains("Çıkış"))r.Cells["Çıkış"].Style.BackColor=Color.FromArgb(255,235,210);
+            if(g.Columns.Contains("Taraf")){if(sabah)r.Cells["Taraf"].Style.BackColor=Color.FromArgb(215,240,255);else if(aksam)r.Cells["Taraf"].Style.BackColor=Color.FromArgb(255,230,198);}
+            if(g.Columns.Contains("Saat")){if(sabah)r.Cells["Saat"].Style.BackColor=Color.FromArgb(222,242,255);else if(aksam)r.Cells["Saat"].Style.BackColor=Color.FromArgb(255,235,210);}
+        }
+    }
 
     static DateTimePicker MonthPicker() => new() { Format = DateTimePickerFormat.Custom, CustomFormat = "MMMM yyyy", ShowUpDown = true };
     static ComboBox MonthCombo(){ var c=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=110}; c.Items.AddRange(new object[]{"Tümü","Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"}); c.SelectedIndex=DateTime.Today.Month; return c; }
@@ -144,13 +223,13 @@ public sealed class MainForm : Form
 
     static TabPage Page(string title, Control content)
     {
-        var p = new TabPage(title) { Padding = new Padding(8), BackColor = Color.White };
+        var p = new TabPage(title) { Padding = new Padding(10), BackColor = Color.White };
         p.Controls.Add(content); return p;
     }
 
     Control BuildSources()
     {
-        var box = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 3, Padding = new Padding(10) };
+        var box = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 3, Padding = new Padding(14,10,14,8), BackColor = Color.FromArgb(236,244,253) };
         box.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 135)); box.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         box.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105)); box.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         box.Controls.Add(new Label { Text = "Hedef GDB", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
@@ -165,14 +244,14 @@ public sealed class MainForm : Form
 
     static Button Btn(string text, Action action)
     {
-        var b = new Button { Text = text, Dock = DockStyle.Fill, Height = 32, FlatStyle = FlatStyle.Flat };
-        b.Click += (_, _) => action(); return b;
+        var b = new Button { Text = text, Dock = DockStyle.Fill, Height = 34 };
+        StyleButton(b); b.Click += (_, _) => action(); return b;
     }
 
     static Button WideBtn(string text, Action action, int width)
     {
-        var b = new Button { Text = text, Width = width, Height = 32, FlatStyle = FlatStyle.Flat, Margin = new Padding(3,0,3,0) };
-        b.Click += (_, _) => action(); return b;
+        var b = new Button { Text = text, Width = width, Height = 34, Margin = new Padding(4,0,4,0) };
+        StyleButton(b); b.Click += (_, _) => action(); return b;
     }
 
     Control BuildPeople()
