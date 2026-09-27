@@ -101,6 +101,10 @@ ValidateQuery(c,"select o.TARIH,o.PKNO,k.AD,k.SOYAD,o.MAZERET,o.TIP,o.SURESAAT,o
 ValidateQuery(c,"select k.PKNO,k.SICILNO,k.AD,k.SOYAD,k.IGTARIH,g.AD,b.AD,s.AD,d.AD from KIMLIK k left join GRUP g on g.KOD=k.GRUP left join BOLUM b on b.KOD=k.BOLUM left join SERVIS s on s.KOD=k.SERVIS left join DURUM d on d.KOD=k.DURUM");
 ValidateQuery(c,"select coalesce(g.AD,'Tanımsız'),count(*) from KIMLIK k left join GRUP g on g.KOD=k.GRUP where k.ICTARIH is null group by g.AD");
 ValidateQuery(c,"select k.PKNO,k.AD,k.SOYAD,k.IGTARIH,coalesce(k.KULIZIN,0) from KIMLIK k where k.ICTARIH is null");
+ValidateQuery(c,"select first 1 u.PKNO,k.AD,k.SOYAD,k.MAAS,u.GUN1,u.SAAT1,u.GUN4,u.SAAT4,u.GUN5,u.SAAT5,u.GUN6,u.SAAT6,u.GUN7,u.SAAT7,u.GUN9,u.SAAT9,u.DEVG,u.DEVS,u.GECG,u.GECS,u.EKG,u.EKS,u.ERG,u.ERS,u.EKKAZ,u.EKKES,u.NCKALAN from UCRETLER u left join KIMLIK k on k.PKNO=u.PKNO");
+ValidateQuery(c,"select first 1 u.PKNO,k.AD,k.SOYAD,k.MAAS,u.SAAT2,u.UCRET2,u.SAAT3,u.UCRET3,u.SAAT8,u.UCRET8,u.FMKALAN from UCRETLER u left join KIMLIK k on k.PKNO=u.PKNO");
+ValidateQuery(c,"select first 1 u.PKNO,k.AD,k.SOYAD,b.AD,k.IGTARIH,k.ICTARIH,u.DMAAS,u.GUN1,u.SAAT1,u.UCRET1,u.EX1,u.EX2,u.EX3,u.EX4,u.NCKALAN,u.FMKALAN from UCRETLER u left join KIMLIK k on k.PKNO=u.PKNO left join BOLUM b on b.KOD=k.BOLUM");
+log.AppendLine("KY6 PAYROLL OUTPUT QUERIES OK");
 log.AppendLine("OPERATIONAL REPORT QUERIES OK");
 log.AppendLine("FINAL_RESULT=PASS");
 File.WriteAllText(logPath,log.ToString(),Encoding.UTF8);

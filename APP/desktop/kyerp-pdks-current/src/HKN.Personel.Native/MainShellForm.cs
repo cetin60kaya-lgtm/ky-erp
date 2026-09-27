@@ -112,6 +112,8 @@ public sealed class MainShellForm : Form
         definitions.DropDownItems.Add(money);
 
         var reports = new ToolStripMenuItem("Raporlama ve Denetim");
+        reports.DropDownItems.Add(MenuItem("Rapor ve Çıktı Merkezi", PdksModule.Raporlar, () => ShowModule(new ReportCenterForm(), PdksModule.Raporlar)));
+        reports.DropDownItems.Add(new ToolStripSeparator());
         reports.DropDownItems.Add(MenuItem("Personel Listesi", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.PersonnelList)));
         reports.DropDownItems.Add(MenuItem("İzinli Personel", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.LeavePersonnel)));
         reports.DropDownItems.Add(MenuItem("Ek Kazanç ve Kesintiler", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.EarningsDeductions)));
@@ -124,7 +126,8 @@ public sealed class MainShellForm : Form
         system.DropDownItems.Add(MenuItem("Terminal ve Cihaz Ayarları", PdksModule.Terminal, OpenLegacyTerminalSettings));
         system.DropDownItems.Add(PlainItem("Veritabanı Bağlantı Yönetimi", () => { StartupConfiguration.EnsureReady(); UpdateDbStatus(); }));
         system.DropDownItems.Add(PlainItem("Hızlı Veri Kaynakları (GDB / TNF)", () => new QuickDataSourceForm().ShowDialog(this)));
-        system.DropDownItems.Add(PlainItem("Veritabanı Yedekleme", BackupDatabase));
+        system.DropDownItems.Add(PlainItem("Yedekleme / Geri Yükleme", () => new BackupRestoreForm().ShowDialog(this)));
+        system.DropDownItems.Add(PlainItem("Hakan Emprime Veri Klasörü", CompanyDataPaths.OpenRoot));
         system.DropDownItems.Add(PlainItem("Yazdırma Ayarları", OpenPrinterSettings));
         system.DropDownItems.Add(new ToolStripSeparator());
         var users = MenuItem("Kullanıcı Yönetimi", PdksModule.KullaniciYonetimi, OpenUserManagement);
@@ -143,7 +146,7 @@ public sealed class MainShellForm : Form
 
         var about = new ToolStripMenuItem("Destek ve Bilgi");
         about.DropDownItems.Add(PlainItem("KY ERP Kurumsal Web Sitesi", OpenErpSite));
-        about.DropDownItems.Add(PlainItem("Hakkında", () => MessageBox.Show(Text + "\nKY ERP • PDKS\nhttps://kyerp.net", "Hakkında", MessageBoxButtons.OK, MessageBoxIcon.Information)));
+        about.DropDownItems.Add(PlainItem("KY PDKS 6.0 Hakkında", () => new AboutKy6Form().ShowDialog(this)));
         var help = PlainItem("Kullanım Yardımı", () => MessageBox.Show("KYERP PDKS yardım ve kullanım bilgileri.","Kullanım Yardımı"));
         help.ShortcutKeys = Keys.F1;
         about.DropDownItems.Add(help);

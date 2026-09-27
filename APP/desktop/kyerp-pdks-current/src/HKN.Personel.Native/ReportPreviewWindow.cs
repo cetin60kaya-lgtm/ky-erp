@@ -57,6 +57,7 @@ internal sealed class ReportPreviewWindow : Form
 
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 10, 0, 0) };
         actions.Controls.Add(Action("Kapat", Close, 100));
+        actions.Controls.Add(Action("CSV Aktar", ExportCsv, 110));
         actions.Controls.Add(Action("Excel Aktar", () => Export(true), 120));
         actions.Controls.Add(Action("PDF Aktar", () => Export(false), 120));
         actions.Controls.Add(Action("Yazdır", () => ReportPrintHelper.Print(this, report, landscape), 104, true));
@@ -87,6 +88,17 @@ internal sealed class ReportPreviewWindow : Form
         else ReportExporter.ExportPdf(save.FileName, report);
         MessageBox.Show("Rapor oluşturuldu:\n" + save.FileName, Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
+
+    void ExportCsv()
+    {
+        using var save = new SaveFileDialog { Filter = "CSV (*.csv)|*.csv", DefaultExt = "csv", FileName = SafeFileName(report.Title) + "-" + DateTime.Now.ToString("yyyyMMdd-HHmm") };
+        if (save.ShowDialog(this) != DialogResult.OK) return;
+        using var sw = new StreamWriter(save.FileName, false, new System.Text.UTF8Encoding(true));
+        sw.WriteLine(string.Join(";", report.Columns.Select(Csv)));
+        foreach (var row in report.Rows) sw.WriteLine(string.Join(";", row.Select(Csv)));
+        MessageBox.Show("CSV oluşturuldu:\n" + save.FileName, Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+    static string Csv(string value) => "\"" + (value ?? string.Empty).Replace("\"", "\"\"") + "\"";
 
     static DataTable ToTable(ReportTable report)
     {

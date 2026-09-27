@@ -7,11 +7,11 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>KYERP.PDKS</AssemblyName>
-    <Product>KYERP PDKS</Product>
+    <Product>KY PDKS 6.0</Product>
     <Company>KY ERP</Company>
-    <Description>KYERP PDKS masaÃƒÆ’Ã‚Â¼stÃƒÆ’Ã‚Â¼ personel devam kontrol sistemi</Description>
-    <Version>2.2.0</Version>
-    <FileVersion>2.2.0.0</FileVersion>
+    <Description>KY PDKS 6.0 yeni nesil personel devam, puantaj, bordro ve denetim sistemi</Description>
+    <Version>6.0.0</Version>
+    <FileVersion>6.0.0.0</FileVersion>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\KYERP.PDKS.Core\KYERP.PDKS.Core.csproj" />

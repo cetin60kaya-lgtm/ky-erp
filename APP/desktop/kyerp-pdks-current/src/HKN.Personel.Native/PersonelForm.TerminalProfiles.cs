@@ -7,9 +7,7 @@ namespace HKN.Personel.Native;
 
 public partial class PersonelForm
 {
-    string TerminalProfilePath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "KYERP", "PDKS", "terminal-transfer-profiles.json");
+    string TerminalProfilePath => Path.Combine(CompanyDataPaths.Config, "terminal-transfer-profiles.json");
 
     void ShowTerminalProfiles()
     {
@@ -103,8 +101,11 @@ public partial class PersonelForm
     {
         var env=Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_FILE");
         if(!string.IsNullOrWhiteSpace(env)) return env;
+        CompanyDataPaths.Ensure();
         var candidates=new[]
         {
+            CompanyDataPaths.CurrentTnf,
+            Path.Combine(CompanyDataPaths.Terminal,"timerecords.txt"),
             Path.Combine(options.RuntimeRoot,"Terminal Bilgi Aktar","timerecords.txt"),
             @"D:\Hedef500\Hedef500\Terminal Bilgi Aktar\timerecords.txt",
             @"D:\Terminal Bilgi Aktar\timerecords.txt"

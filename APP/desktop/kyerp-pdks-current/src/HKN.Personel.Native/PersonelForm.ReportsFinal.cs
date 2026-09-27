@@ -20,6 +20,20 @@ public partial class PersonelForm
         MessageBox.Show("Rapor oluşturuldu:\n"+save.FileName,"Raporlar",MessageBoxButtons.OK,MessageBoxIcon.Information);
     }
 
+    void ExportActiveGridCsv()
+    {
+        var page=tabs.SelectedTab??throw new InvalidOperationException("Aktarılacak sekme seçili değil.");
+        var grid=All(page).OfType<DataGridView>().FirstOrDefault()??throw new InvalidOperationException("Bu sekmede aktarılacak tablo yok.");
+        var columns=grid.Columns.Cast<DataGridViewColumn>().Where(c=>c.Visible).OrderBy(c=>c.DisplayIndex).ToArray();
+        using var save=new SaveFileDialog{Filter="CSV (*.csv)|*.csv",DefaultExt="csv",FileName=$"{SafeFileName(page.Text)}-{DateTime.Now:yyyyMMdd-HHmm}"};
+        if(save.ShowDialog(this)!=DialogResult.OK)return;
+        using var sw=new StreamWriter(save.FileName,false,new System.Text.UTF8Encoding(true));
+        string Csv(string v)=>"\""+(v??string.Empty).Replace("\"","\"\"")+"\"";
+        sw.WriteLine(string.Join(";",columns.Select(c=>Csv(c.HeaderText))));
+        foreach(DataGridViewRow row in grid.Rows)if(!row.IsNewRow)sw.WriteLine(string.Join(";",columns.Select(c=>Csv(Convert.ToString(row.Cells[c.Index].FormattedValue)??""))));
+        MessageBox.Show("CSV oluşturuldu:\n"+save.FileName,"Raporlar",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    }
+
     string ReportTemplate(string title)=>title switch
     {
         "Ayrıntılı Kişisel Bordro"=>options.ReportPath("Kisisel_Bordro.fr3"),

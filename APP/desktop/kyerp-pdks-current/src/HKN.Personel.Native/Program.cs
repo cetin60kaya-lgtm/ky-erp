@@ -18,6 +18,15 @@ static class Program
         };
         ApplicationConfiguration.Initialize();
         StartupConfiguration.LoadSavedSettingsIntoProcess();
+        CompanyDataPaths.Ensure();
+        CompanyDataPaths.ApplyPendingRestore();
+        CompanyDataPaths.PinEnvironment();
+        DatabaseMaintenance.EnsureDailyBackup();
+        try { CompanyDatabaseBootstrap.Ensure(); }
+        catch (Exception ex)
+        {
+            File.AppendAllText(Path.Combine(CompanyDataPaths.Logs, "startup.log"), $"{DateTime.Now:O} Firma hazırlığı: {ex.Message}{Environment.NewLine}");
+        }
         PdksTheme.Install();
 
         if (!LocalAuthStore.HasUsers)
