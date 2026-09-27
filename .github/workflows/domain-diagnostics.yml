@@ -21,7 +21,7 @@ jobs:
           set -u
           for url in \
             "https://kyerp.net/" \
-            "https://app.kyerp.net/" \
+            "https://kyerp.net/" \
             "https://api.kyerp.net/api/health"; do
             echo "===== $url ====="
             curl --connect-timeout 10 --max-time 20 --silent --show-error \

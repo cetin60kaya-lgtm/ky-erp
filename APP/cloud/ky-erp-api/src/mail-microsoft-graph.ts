@@ -10,7 +10,7 @@ const GRAPH = "https://graph.microsoft.com/v1.0";
 const AUTHORIZE = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 const TOKEN = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 const CALLBACK = "https://api.kyerp.net/api/auth/mail/oauth/microsoft/callback";
-const APP_RETURN = "https://app.kyerp.net/iletisim/mail-gelen";
+const APP_RETURN = "https://kyerp.net/iletisim/mail-gelen";
 const SCOPES = [
   "openid","profile","email","offline_access","User.Read",
   "Mail.ReadWrite","Mail.Send"

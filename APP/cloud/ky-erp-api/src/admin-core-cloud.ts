@@ -174,7 +174,7 @@ function companyView(row: Row) {
 }
 async function companyById(c: any, id: string) {
   return c.env.DB.prepare(
-    "SELECT id,slug,name,title,is_active,created_at,updated_at FROM main_companies WHERE id=? LIMIT 1",
+    "SELECT id,slug,name,is_active,created_at,updated_at FROM main_companies WHERE id=? LIMIT 1",
   ).bind(id).first<Row>();
 }
 async function readSetting(c: any, fileName: string) {
@@ -208,7 +208,7 @@ export function registerAdminCoreRoutes(app: any) {
     const current = await ownerCurrent(c);
     if (!current) return c.json(errorBody("OWNER_ONLY", "Ana firma yönetimi yalnız uygulama sahibine açıktır."), 403);
     const result = await c.env.DB.prepare(
-      "SELECT id,slug,name,title,is_active,created_at,updated_at FROM main_companies ORDER BY is_active DESC,name COLLATE NOCASE ASC",
+      "SELECT id,slug,name,is_active,created_at,updated_at FROM main_companies ORDER BY is_active DESC,name COLLATE NOCASE ASC",
     ).all<Row>();
     return c.json({ ok: true, data: (result.results || []).map(companyView) });
   });
@@ -225,9 +225,9 @@ export function registerAdminCoreRoutes(app: any) {
     const id = text(body.id) || crypto.randomUUID();
     const timestamp = nowIso();
     await c.env.DB.prepare(
-      `INSERT INTO main_companies(id,slug,name,title,is_active,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?)`,
-    ).bind(id, slug, name, text(body.note) || null, boolValue(body.isActive, true) ? 1 : 0, timestamp, timestamp).run();
+      `INSERT INTO main_companies(id,slug,name,is_active,created_at,updated_at)
+       VALUES (?,?,?,?,?,?)`,
+    ).bind(id, slug, name, boolValue(body.isActive, true) ? 1 : 0, timestamp, timestamp).run();
     await audit(c, "MAIN_COMPANY_CREATED", current.id, id, { mainCompanySlug: slug, name });
     return c.json({ ok: true, data: companyView(await companyById(c, id) || { id, slug, name, title: text(body.note), is_active: 1, created_at: timestamp, updated_at: timestamp }) }, 201);
   });
@@ -250,14 +250,14 @@ export function registerAdminCoreRoutes(app: any) {
         const plan = await tenantMovePlan(c, text(row.slug), nextSlug);
         plan.statements.push(
           c.env.DB.prepare(
-            `UPDATE main_companies SET slug=?,name=?,title=?,is_active=?,updated_at=? WHERE id=?`,
-          ).bind(nextSlug, name, text(body.note) || null, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id),
+            `UPDATE main_companies SET slug=?,name=?,is_active=?,updated_at=? WHERE id=?`,
+          ).bind(nextSlug, name, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id),
         );
         await atomicBatch(c, plan.statements);
       } else {
         await c.env.DB.prepare(
-          `UPDATE main_companies SET name=?,title=?,is_active=?,updated_at=? WHERE id=?`,
-        ).bind(name, text(body.note) || null, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id).run();
+          `UPDATE main_companies SET name=?,is_active=?,updated_at=? WHERE id=?`,
+        ).bind(name, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id).run();
       }
     } catch (error) {
       return c.json(errorBody("COMPANY_SLUG_MOVE_FAILED", "Firma değişikliği atomik olarak uygulanamadı; hiçbir tablo yarım taşınmadı.", { message: error instanceof Error ? error.message : String(error) }), 409);

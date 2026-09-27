@@ -1,0 +1,49 @@
+name: KY ERP D1 Admin Schema Diagnostic Temp
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/d1-admin-schema-diagnostic-temp.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read-only D1 admin schema inspection
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler whoami
+          echo '=== main_companies create SQL ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT sql FROM sqlite_master WHERE type='table' AND name='main_companies';" --json
+          echo '=== main_companies columns ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA table_info(main_companies);" --json
+          echo '=== main_companies foreign keys ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA foreign_key_list(main_companies);" --json
+          echo '=== main_companies indexes ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA index_list(main_companies);" --json
+          echo '=== main_companies existing rows ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT id,slug,name,title,is_active,created_at,updated_at FROM main_companies ORDER BY slug;" --json
+          echo '=== json_store schema ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA table_info(json_store);" --json
+          echo '=== PDKS policy tables ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT name,sql FROM sqlite_master WHERE type='table' AND name IN ('ik_pdks_company_policy','ik_pdks_personnel_groups','ik_pdks_employee_personnel_groups','ik_pdks_employee_policy_overrides','ik_pdks_rule_profiles') ORDER BY name;" --json
+          echo '=== PDKS company policy columns ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA table_info(ik_pdks_company_policy);" --json
+          echo '=== PDKS rule profile columns ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA table_info(ik_pdks_rule_profiles);" --json

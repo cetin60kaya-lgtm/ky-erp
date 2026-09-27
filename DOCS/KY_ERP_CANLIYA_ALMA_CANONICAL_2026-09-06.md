@@ -5,7 +5,7 @@
 **Production branch:** `codex/model-uretim-kontrol-merkezi-final`  
 **Frontend:** Cloudflare Pages `ky-erp-frontend`  
 **Worker/API:** Cloudflare Worker `ky-erp-api`  
-**ERP:** `https://app.kyerp.net`  
+**ERP:** `https://kyerp.net`
 **API:** `https://api.kyerp.net`
 
 Bu dosya KY ERP için **tek canonical production yayın prosedürüdür**. Yeni sohbet, ajan veya devam eden iş canlıya alma kararı verirken önce `AGENTS.md`, sonra `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md`, sonra bu dosyayı okumalıdır.

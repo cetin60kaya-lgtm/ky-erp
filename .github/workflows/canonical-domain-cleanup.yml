@@ -1,0 +1,71 @@
+name: KY ERP Canonical Domain Cleanup
+
+on:
+  # One-time maintenance / emergency repair only.
+  # Normal production deployment is Cloudflare Git Integration.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      PROJECT: ky-erp-frontend
+      CANONICAL: kyerp.net
+      LEGACY: app.kyerp.net
+    steps:
+      - name: Enforce Pages test and build gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4"
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          payload='{"build_config":{"build_command":"npm run test && npm run build","destination_dir":"dist","root_dir":"APP/app/ky-erp-frontend"}}'
+          curl --fail --silent --show-error -X PATCH -H "$auth" -H "Content-Type: application/json" \
+            --data "$payload" "$api/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}" >/tmp/pages-project.json
+          jq -e '.success == true and .result.build_config.build_command == "npm run test && npm run build" and .result.build_config.destination_dir == "dist" and .result.build_config.root_dir == "APP/app/ky-erp-frontend"' /tmp/pages-project.json >/dev/null
+
+      - name: Remove legacy Pages custom domain
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4"
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          domains="$(curl --fail --silent --show-error -H "$auth" "$api/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}/domains")"
+          if printf '%s' "$domains" | jq -e --arg d "$LEGACY" '.result[]? | select(.name==$d)' >/dev/null; then
+            curl --fail --silent --show-error -X DELETE -H "$auth" \
+              "$api/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}/domains/${LEGACY}" >/tmp/pages-delete.json
+            jq -e '.success == true' /tmp/pages-delete.json >/dev/null
+          fi
+
+      - name: Remove legacy DNS record
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4"
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          zone_id="$(curl --fail --silent --show-error -H "$auth" "$api/zones?name=${CANONICAL}" | jq -r '.result[0].id')"
+          test -n "$zone_id" && test "$zone_id" != "null"
+          records="$(curl --fail --silent --show-error -H "$auth" "$api/zones/${zone_id}/dns_records?name=${LEGACY}")"
+          for id in $(printf '%s' "$records" | jq -r '.result[]?.id'); do
+            curl --fail --silent --show-error -X DELETE -H "$auth" "$api/zones/${zone_id}/dns_records/${id}" | jq -e '.success == true' >/dev/null
+          done
+      - name: Verify canonical-only production
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4"
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          domains="$(curl --fail --silent --show-error -H "$auth" "$api/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}/domains")"
+          printf '%s' "$domains" | jq -e --arg d "$CANONICAL" '.result[]? | select(.name==$d and .status=="active")' >/dev/null
+          if printf '%s' "$domains" | jq -e --arg d "$LEGACY" '.result[]? | select(.name==$d)' >/dev/null; then
+            echo "legacy Pages domain still exists" >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error https://kyerp.net/ | grep -q "KY ERP"

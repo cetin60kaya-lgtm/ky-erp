@@ -155,4 +155,4 @@ jobs:
           set -euo pipefail
           curl --fail --silent --show-error https://api.kyerp.net/api/health | jq -e '.ok == true' >/dev/null
           curl --fail --silent --show-error https://kyerp.net/ >/dev/null
-          curl --fail --silent --show-error https://app.kyerp.net/boyahane/kayitli-renkler >/dev/null
+          curl --fail --silent --show-error https://kyerp.net/boyahane/kayitli-renkler >/dev/null

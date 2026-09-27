@@ -80,8 +80,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error https://app.kyerp.net/ >/tmp/app.html
+          curl --fail --silent --show-error https://kyerp.net/ >/tmp/app.html
           test -s /tmp/app.html
           curl --fail --silent --show-error https://api.kyerp.net/api/health \
             | jq -e '.ok == true' >/dev/null
-          echo "app.kyerp.net ve api.kyerp.net saglikli."
+          echo "kyerp.net ve api.kyerp.net saglikli."

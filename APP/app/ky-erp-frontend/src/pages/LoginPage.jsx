@@ -119,7 +119,7 @@ function loadTurnstileScript() {
   return turnstileScriptPromise;
 }
 
-export default function LoginPage() {
+export default function LoginPage({ onClose }) {
   const {
     getTurnstileConfig,
     login,
@@ -511,7 +511,20 @@ export default function LoginPage() {
 
   return (
     <main className="auth-page">
-      <section className="auth-shell">
+      <div className="auth-site-backdrop" aria-hidden="true">
+        <header className="auth-site-topbar">
+          <div className="auth-site-brand"><span>KY</span><div><strong>KY ERP</strong><small>Kurumsal Yönetim Sistemi</small></div></div>
+          <nav><b>Ana Sayfa</b><span>Muhasebe</span><span>Üretim</span><span>PDKS</span><span>İK</span><span>Stok</span><span>Raporlar</span><span>Ayarlar</span></nav>
+          <div className="auth-site-entry">Sisteme Giriş →</div>
+        </header>
+        <section className="auth-site-hero">
+          <div className="auth-site-copy"><small>TEKSTİL İŞLETMELERİ İÇİN BÜTÜNLEŞİK ERP</small><h1>Üretimi, insanı ve finansı <em>tek merkezden</em> yönetin.</h1><p>KY ERP ile üretimden muhasebeye, PDKS’den insan kaynaklarına kadar tüm süreçlerinizi tek merkezden yönetin.</p><div><button type="button">Sisteme Giriş Yap</button><button type="button">Sistemi İncele</button></div></div>
+          <div className="auth-site-preview"><div className="auth-site-preview-head"><span>KY</span><b>Üretim Kontrol Merkezi</b><i>Sistem aktif</i></div><div className="auth-site-preview-grid"><div><small>ÜRETİM</small><b>Model Takibi</b></div><div><small>BOYAHANE</small><b>Renk & Reçete</b></div><div><small>İK</small><b>PDKS & Puantaj</b></div></div><div className="auth-site-preview-flow"><b>Süreç Akışı</b><span>● Desen · Model hazır</span><span>● Boyahane · Renk hazırlanıyor</span><span>○ İmalat · Üretim sırası</span></div></div>
+        </section>
+        <div className="auth-site-modules"><div><b>Muhasebe</b><small>Cari, fatura, e-Belge</small></div><div><b>Üretim</b><small>Model, reçete, lot</small></div><div><b>PDKS</b><small>Giriş-çıkış, mesai, izin</small></div><div><b>İK</b><small>Personel, izin, bordro</small></div><div><b>Stok</b><small>Hammadde, yarı mamul</small></div><div><b>Raporlar</b><small>Detaylı analiz</small></div></div>
+      </div>
+      <div className="auth-site-dimmer" aria-hidden="true" />
+      <section className="auth-shell" role="dialog" aria-modal="true" aria-label="KY ERP güvenli giriş">
         <aside className="auth-brand-panel">
           <div className="auth-brand-lockup">
             <span className="auth-logo">KY</span>
@@ -532,9 +545,10 @@ export default function LoginPage() {
 
         <section className="auth-card-panel">
           <div className="auth-card">
-            <div className="auth-mobile-brand" aria-hidden="true">
-              <span className="auth-mobile-logo">KY</span>
-              <div><strong>KY ERP</strong><small>Güvenli Giriş</small></div>
+            <div className="auth-mobile-brand">
+              <span className="auth-mobile-logo" aria-hidden="true">KY</span>
+              <div><strong>KY ERP</strong><small>Kurumsal Yönetim Sistemi</small></div>
+              <button type="button" className="auth-modal-close" onClick={() => onClose?.()} aria-label="Giris penceresini kapat">&times;</button>
             </div>
             <div className="auth-card-head">
               <div>
@@ -651,6 +665,11 @@ export default function LoginPage() {
 
             {stage === "PHONE_APPROVAL_PENDING" ? (
               <div className="auth-flow-block auth-centered auth-phone-stage">
+                <div className="auth-method-tabs auth-method-tabs-triple" role="tablist" aria-label="Kurumsal doğrulama yöntemleri">
+                  <button type="button" className="active">Telefon Onayı<small>KY Güvenlik</small></button>
+                  <button type="button" onClick={() => switchToAuthenticator("AUTHENTICATOR")} disabled={loading}>Authenticator<small>Google / Microsoft</small></button>
+                  <button type="button" onClick={() => switchToAuthenticator("RECOVERY")} disabled={loading}>Hesap Kurtarma<small>Kod + güvenlik soruları</small></button>
+                </div>
                 <div className="auth-phone-status-head">
                   <div className="auth-phone-approval-icon" aria-hidden="true">✓</div>
                   <div>
@@ -667,13 +686,6 @@ export default function LoginPage() {
                 {phoneStatusMessage ? <div className="auth-notice auth-notice-compact"><strong>Telefon bağlantısı</strong><span>{phoneStatusMessage}</span></div> : null}
                 <ErrorBox message={error} />
                 <button className="auth-secondary" type="button" onClick={resendPhoneApprovalNotification} disabled={loading}>Bildirimi Yeniden Gönder</button>
-                <div className="auth-method-section">
-                  <div className="auth-method-title"><strong>Kurumsal doğrulama seçenekleri</strong><small>Telefon kullanılamıyorsa güvenli yedek yönteme geçin.</small></div>
-                  <div className="auth-method-grid">
-                    <button type="button" onClick={() => switchToAuthenticator("AUTHENTICATOR")} disabled={loading}><span>A</span><b>Authenticator</b><small>Google / Microsoft</small></button>
-                    <button type="button" onClick={() => switchToAuthenticator("RECOVERY")} disabled={loading}><span>H</span><b>Hesap Kurtarma</b><small>Kod + güvenlik soruları</small></button>
-                  </div>
-                </div>
                 <button type="button" className="auth-ghost auth-ghost-compact" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
               </div>
             ) : null}

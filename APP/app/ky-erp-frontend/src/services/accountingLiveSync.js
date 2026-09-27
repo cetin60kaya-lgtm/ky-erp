@@ -10,10 +10,16 @@ function errorStatus(error) {
   return "api_error";
 }
 
+function hasTenantScope(activeMainCompany) {
+  return Boolean(activeMainCompany?.slug || activeMainCompany?.id);
+}
+
 export function useAccountingLiveSync(activeMainCompany, onRefresh) {
   const revisionRef = useRef(null);
   const busyRef = useRef(false);
   const callbackRef = useRef(onRefresh);
+  const activeMainCompanyId = activeMainCompany?.id;
+  const activeMainCompanySlug = activeMainCompany?.slug;
   const [state, setState] = useState({
     status: "connecting",
     online: false,
@@ -29,9 +35,10 @@ export function useAccountingLiveSync(activeMainCompany, onRefresh) {
     revisionRef.current = null;
     setState({ status: "connecting", online: false, revision: 0, lastSyncAt: "", error: "" });
 
+    const scoped = hasTenantScope({ id: activeMainCompanyId, slug: activeMainCompanySlug });
     const params = () => ({
-      mainCompanySlug: activeMainCompany?.slug,
-      mainCompanyId: activeMainCompany?.id,
+      mainCompanySlug: activeMainCompanySlug,
+      mainCompanyId: activeMainCompanyId,
       _ts: Date.now(),
     });
 
@@ -39,11 +46,24 @@ export function useAccountingLiveSync(activeMainCompany, onRefresh) {
       if (stopped || busyRef.current || document.visibilityState === "hidden") return;
       busyRef.current = true;
       try {
-        const response = await apiGet("/muhasebe/workspace/live-state", params(), { timeoutMs: 6000 });
+        let response;
+        let liveStateAvailable = false;
+        if (scoped) {
+          try {
+            response = await apiGet("/muhasebe/workspace/live-state", params(), { timeoutMs: 6000, forceFresh: true });
+            liveStateAvailable = true;
+          } catch (liveError) {
+            const status = errorStatus(liveError);
+            if (status === "auth_error" || status === "offline") throw liveError;
+            response = await apiGet("/health", { _ts: Date.now() }, { timeoutMs: 6000, forceFresh: true });
+          }
+        } else {
+          response = await apiGet("/health", { _ts: Date.now() }, { timeoutMs: 6000, forceFresh: true });
+        }
         const data = response?.data || response || {};
-        const revision = Number(data.revision || 0);
-        const changed = revisionRef.current !== null && revision !== revisionRef.current;
-        revisionRef.current = revision;
+        const revision = liveStateAvailable ? Number(data.revision || 0) : Number(revisionRef.current || 0);
+        const changed = liveStateAvailable && revisionRef.current !== null && revision !== revisionRef.current;
+        if (liveStateAvailable) revisionRef.current = revision;
         setState({
           status: "live",
           online: true,
@@ -80,7 +100,7 @@ export function useAccountingLiveSync(activeMainCompany, onRefresh) {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
     };
-  }, [activeMainCompany?.id, activeMainCompany?.slug]);
+  }, [activeMainCompanyId, activeMainCompanySlug]);
 
   return state;
 }

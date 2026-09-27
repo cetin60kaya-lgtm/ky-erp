@@ -163,7 +163,7 @@ jobs:
           jq -e --arg p "$PAGES_PROJECT" '.success == true and .result.name == $p' <<<"$project" >/dev/null
           test "$(jq -r '.result.production_branch // empty' <<<"$project")" = "$PROD_BRANCH"
           domains="$(curl --fail --silent --show-error -H "$auth" "$base/domains")"
-          for domain in kyerp.net app.kyerp.net; do
+          for domain in kyerp.net; do
             jq -e --arg d "$domain" 'any(.result[]?; .name == $d)' <<<"$domains" >/dev/null
           done
 
@@ -182,7 +182,7 @@ jobs:
           set -euo pipefail
           auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
           base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}"
-          for domain in kyerp.net app.kyerp.net; do
+          for domain in kyerp.net; do
             active=0
             for attempt in $(seq 1 60); do
               row="$(curl --fail --silent --show-error -H "$auth" "$base/domains/$domain")"
@@ -191,7 +191,7 @@ jobs:
             done
             test "$active" -eq 1
           done
-          for url in https://kyerp.net/ https://app.kyerp.net/; do
+          for url in https://kyerp.net/; do
             curl --fail --silent --show-error "$url" >/tmp/kyerp-page.html
             test -s /tmp/kyerp-page.html
           done
@@ -201,4 +201,4 @@ jobs:
           echo "KY ERP production recovery completed"
           echo "https://api.kyerp.net"
           echo "https://kyerp.net"
-          echo "https://app.kyerp.net"
+          echo "https://kyerp.net"

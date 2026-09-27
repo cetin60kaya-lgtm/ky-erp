@@ -6,8 +6,9 @@ Bu dosya KY ERP için güncel ve üstün çalışma sözleşmesidir. Ayrıntıl�
 
 - Her yeni sohbet, yeni ajan, yeni feature branch veya kaldığı yerden devam eden KY ERP işinde **kod yazmadan önce** `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` okunmalıdır.
 - Ardından güncel yapılan işler + varsayılan iş sırası için **`DOCS/KY_ERP_GUNCEL_DEVAM_KAYNAGI_2026-09-06.md`** okunmalıdır.
-- Bu dosya (`AGENTS.md`) teknik/güvenlik kurallarında üstündür; `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` ana devam indeksidir; `DOCS/KY_ERP_GUNCEL_DEVAM_KAYNAGI_2026-09-06.md` ise son yapılan işler, tamamlanan Cloudflare/auth katmanı ve modül çalışma sırasının güncel özetidir.
-- Aktif feature branch üzerinde bu kontrol dosyasının production branch'ten daha yeni sürümü varsa aktif iş için o sürüm kullanılır; kullanıcı onayından sonra ilgili değişiklikler production kaynağına taşınır.
+- Repo/kod çalışma ve canlı yayın standardı için **`DOCS/KY_ERP_CHAT_GITHUB_CLOUDFLARE_ANA_KURAL_2026-09-27.md`** zorunlu canonical kaynaktır.
+- Bu dosya (`AGENTS.md`) teknik/güvenlik kurallarında üstündür; `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` ana devam indeksidir; `DOCS/KY_ERP_GUNCEL_DEVAM_KAYNAGI_2026-09-06.md` son yapılan işler özetidir; Chat/GitHub/Cloudflare ana kuralı ise repo işleri için varsayılan yürütme sözleşmesidir.
+- Aktif feature branch üzerinde bu kontrol dosyasının production branch'ten daha yeni sürümü varsa aktif iş için o sürüm kullanılır; güvenli ve doğrulanmış değişiklikler aşağıdaki ana çalışma kuralına göre production kaynağına taşınır.
 - Kullanıcının kalıcı çalışma kuralı, önemli mimari karar, kullanıcı tarafından doğrulanan Desktop sürümü, modül onayı, blocker veya production'a geçiş kararı oluştuğunda kontrol merkezi güncellenmelidir.
 - Şifre, MFA secret, API key, token veya kişisel gizli bilgiler kontrol merkezine yazılmaz.
 
@@ -16,17 +17,28 @@ Bu dosya KY ERP için güncel ve üstün çalışma sözleşmesidir. Ayrıntıl�
 - Repo: `cetin60kaya-lgtm/ky-erp`
 - Production kaynak branch: `codex/model-uretim-kontrol-merkezi-final`
 - `KYERP_PUBLIC_SITE=https://kyerp.net/`
-- `KYERP_PUBLIC_APP=https://app.kyerp.net/`
+- `KYERP_PUBLIC_APP=https://kyerp.net/`
 - `KYERP_API_ORIGIN=https://api.kyerp.net`
 - Kurumsal tanıtım sitesi: `https://kyerp.net/`
-- ERP uygulaması ve login: `https://app.kyerp.net/`
+- ERP uygulaması ve login: `https://kyerp.net/`
 - Canlı API: `https://api.kyerp.net`
 - Frontend: `APP/app/ky-erp-frontend`
 - Cloudflare Worker: `APP/cloud/ky-erp-api`
 - Repo için sabit OneDrive/Google Drive yolu **yoktur**.
-- Her işlemden önce gerçek repo kökünü `git rev-parse --show-toplevel`, remote'u `git remote get-url origin`, branch'i `git branch --show-current`, durumu `git status -sb` ile doğrula.
+- Yerel makine işi gerçekten gerekmedikçe repo/kod işlemlerinde ChatGPT/GitHub bağlantısı tercih edilir; Remote Desktop varsayılan değildir.
+- Yerel çalışma gerektiğinde gerçek repo kökünü `git rev-parse --show-toplevel`, remote'u `git remote get-url origin`, branch'i `git branch --show-current`, durumu `git status -sb` ile doğrula.
 - Beklenen remote `https://github.com/cetin60kaya-lgtm/ky-erp.git` olmalıdır.
 - Yerel çalışma ağacı kirliyse kullanıcı değişikliklerini silme; `reset --hard`, `clean -fd`, force checkout/pull yapma.
+
+## Ana çalışma kuralı — Chat → GitHub → Cloudflare
+
+- KY ERP repo/kod işlerinde varsayılan uçtan uca yol: **ChatGPT/AI ajanı → GitHub canonical kaynak → test/PR kapısı → Cloudflare Git Integration → canlı smoke**.
+- Kullanıcı `yap`, `düzelt`, `bitir`, `uygula`, `hallet`, `toparla` gibi uygulama isteyen bir komut verdiyse ve ayrıca durdurucu bir ifade kullanmadıysa bu komut normal repo/kod işi için **commit + gerekirse PR/merge + canonical deploy + canlı doğrulama için sürekli ön yetki** sayılır. Aynı işte tekrar `commit edeyim mi`, `PR açayım mı`, `merge edeyim mi`, `canlıya alayım mı` diye sorma.
+- Kullanıcı `önce yorumla`, `önce bak`, `görsel önizleme ver`, `onay vereyim`, `canlıya alma`, `sadece analiz et` veya eşdeğer bir ifade kullandıysa write/deploy o aşamada yapılmaz.
+- Düşük riskli, izole ve geri alınabilir UI/CSS/metin/test/dokümantasyon değişikliği güncel production HEAD doğrulandıktan sonra hızlı yoldan tamamlanabilir.
+- Auth, güvenlik, ortak API/Worker contractı, büyük refactor veya çok dosyalı orta/yüksek riskli değişiklikte varsayılan güvenli yol: güncel production HEAD'den feature branch → test → PR → diff/check temizse kullanıcıdan tekrar onay istemeden merge → Cloudflare → smoke.
+- Remote Desktop yalnız yerel makineye özgü Windows/Photoshop/Illustrator/PDKS Desktop, cihaz, klasör, donanım, GitHub'da olmayan binary dosya veya zorunlu yerel entegrasyon testi için kullanılır.
+- Ayrıntılı sözleşme: `DOCS/KY_ERP_CHAT_GITHUB_CLOUDFLARE_ANA_KURAL_2026-09-27.md`.
 
 ## Canlı sistem gerçeği
 
@@ -111,6 +123,7 @@ KY ERP mail sistemi tek bir sağlayıcıya sabit bağlı değildir; günlük kul
 - Production D1/SQLite verisini test için değiştirme.
 - Gerçek personel, muhasebe, fatura, irsaliye, desen, boyahane, stok, lot, reçete, imalat ve kullanıcı kayıtlarını silme/sıfırlama.
 - Production migration/write için açık kullanıcı onayı + yedek/readiness gerekir.
+- DNS/domain silme, secret/API token/MFA rotasyonu, billing değişikliği ve gerçek resmî/harici gönderim normal kod deploy ön yetkisinin dışındadır; güvenlik kapısı uygulanır.
 - Şifre, MFA secret, API token, `.env`, recovery code ve benzeri sırları repoya veya loga yazma.
 - POST/PATCH/PUT/DELETE isteklerini otomatik retry ederek mükerrer kayıt üretme.
 - Resmî İşNet belge/fatura gönderimi kullanıcı onayı olmadan yapılmaz.
@@ -170,24 +183,26 @@ KY ERP mail sistemi tek bir sağlayıcıya sabit bağlı değildir; günlük kul
 
 ## Deploy standardı
 
-- Kaynak hazır olmak, canlıya çıkmak değildir.
-- Kullanıcı açıkça canlıya al/deploy/release demeden production branch'e taşıma yapma.
-- **Tek canonical production yayın sözleşmesi:** `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md`.
+- Kaynak hazır olmak, canlıya çıkmak değildir; normal iş isteği aşağıdaki ön yetki kuralına göre release tamamlanana kadar sürer.
+- Kullanıcı normal bir repo/kod işini `yap/düzelt/bitir/uygula/hallet/toparla` şeklinde verdiyse ve `önce yorumla/önizleme/canlıya alma` demediyse ayrıca deploy onayı isteme; güvenli kod değişikliğini canonical GitHub/Cloudflare hattında tamamla.
+- **Tek canonical production yayın sözleşmesi:** `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md` ve onu tamamlayan `DOCS/KY_ERP_CHAT_GITHUB_CLOUDFLARE_ANA_KURAL_2026-09-27.md`.
 - **Canonical production yayın yolu Cloudflare Git Integration'dır.**
-- Normal release akışı: feature branch -> test/build -> kullanıcı onayı -> production branch merge -> Cloudflare Pages + Workers Builds -> canlı smoke.
+- Normal release akışı risk seviyesine göre doğrudan düşük-risk fast path veya feature branch -> test/build -> PR -> otomatik güvenli merge -> production branch -> Cloudflare -> canlı smoke şeklindedir.
 - Frontend: `codex/model-uretim-kontrol-merkezi-final` -> Cloudflare Pages `ky-erp-frontend`.
 - Worker: `codex/model-uretim-kontrol-merkezi-final` -> Cloudflare Workers Builds `ky-erp-api`.
+- Frontend Cloudflare build kapısı `npm run test && npm run build` olmalıdır; gate fail ise yeni frontend canlıya çıkmaz.
 - Worker build kapısı `npm run typecheck && npm test && npm run build`; deploy `npm run deploy`. Build kapısı fail ise Worker deploy edilmez ve release tamam sayılmaz.
 - **Normal canlıya almada kullanıcıdan PowerShell, Cloudflare tokenı, manuel Pages deployu veya manuel Worker build/deploy isteme.**
 - Manuel PowerShell/Cloudflare API müdahalesi yalnız Git Integration arızası, tetiklenmeme teşhisi veya kontrollü incident/recovery içindir.
 - Otomatik Worker build fail olursa manuel deploy ile bypass etme: Cloudflare build logunu oku, kök nedeni feature branch'te düzelt, regression testi ekle/güncelle, production'a normal merge et ve yeni otomatik buildi bekle.
-- Pages success + Worker fail = **kısmi/başarısız release**; ikisi ve canlı smoke tamamlanmadan "canlı tamam" denmez.
+- Pages success + Worker fail = **kısmi/başarısız release**; ikisi ve canlı smoke tamamlanmadan `canlı tamam` denmez.
 - Production branch paralel sohbet nedeniyle ilerlerse eski SHA körlemesine deploy edilmez; güncel HEAD doğrulanır ve ilgili değişikliğin yeni HEAD'de bulunduğu teyit edilir.
-- **Production deploy için GitHub Actions kullanılmaz.** Workflow'lar varsayılan olarak manual-only (`workflow_dispatch`) tutulur; otomatik push/PR/workflow_run/schedule tetikleri kullanıcı açık kararı olmadan eklenmez.
+- **Production deploy için GitHub Actions otomatik ikinci yayın hattı olarak kullanılmaz.** Deploy workflow'ları varsayılan olarak manual-only (`workflow_dispatch`) tutulur; tek istisna deploy yapmayan read-only smoke/audit kontrolüdür.
+- `production-live-smoke.yml` yalnız `kyerp.net`, login, API ve KY Güvenlik canlı sağlığını doğrular; deploy yapamaz.
 - Eski Windows BAT/direct deploy scriptleri canonical otomatik yayın yolu değildir; bakım/geri dönüş referansı olarak kalabilir.
 - Feature/preview branch otomatik Cloudflare production deploy etmez.
 - Production D1 reset yasaktır.
-- Migration gerekiyorsa normal Git auto-deploy'dan ayrı güvenlik kapısı uygulanır: remote D1 full backup -> readiness -> hedefli/additive migration -> schema doğrulaması -> deploy.
+- Migration gerekiyorsa normal Git auto-deploy'dan ayrı güvenlik kapısı uygulanır: remote D1 full backup -> readiness -> hedefli/additive migration -> schema doğrulaması -> deploy; bu güvenlik kapısı normal kod deploy ön yetkisinin dışındadır.
 - Secret/token değeri repoya, loga veya dokümana yazılmaz.
 - Deploy sonrası API health, auth contract, CORS ve frontend asset doğrulaması yapılmadan başarılı denmez.
 - Ayrıntılı Cloudflare/AI kaynağı: `DOCS/KY_ERP_CLOUDFLARE_PRO_AI_YAYIN_KAYNAGI_2026-09-04.md`.
@@ -200,6 +215,7 @@ Her değişiklik sonunda şunları raporla:
 - kök neden,
 - değişen dosyalar,
 - çalıştırılan testler,
+- GitHub commit/PR/merge durumu,
 - deploy durumu,
 - canlı doğrulama durumu,
 - son commit SHA.

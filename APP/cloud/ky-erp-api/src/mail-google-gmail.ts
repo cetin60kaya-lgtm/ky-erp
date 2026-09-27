@@ -11,7 +11,7 @@ const TOKEN = "https://oauth2.googleapis.com/token";
 const USERINFO = "https://www.googleapis.com/oauth2/v3/userinfo";
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const CALLBACK = "https://api.kyerp.net/api/auth/mail/oauth/google/callback";
-const APP_RETURN = "https://app.kyerp.net/iletisim/mail-gelen";
+const APP_RETURN = "https://kyerp.net/iletisim/mail-gelen";
 const SCOPES = [
   "openid",
   "email",

@@ -27,7 +27,9 @@ test("login page final corporate security UX is enforced", () => {
   assert.match(loginPage, /Caps Lock açık/);
   assert.match(loginPage, /turnstileConfig\.enabled && !turnstileToken/);
   assert.match(loginPage, /Güvenlik doğrulaması kullanılamıyor/);
-  assert.match(loginPage, /Kurumsal doğrulama seçenekleri/);
+  assert.match(loginPage, /Kurumsal doğrulama yöntemleri/);
+  assert.match(loginPage, /auth-site-backdrop/);
+  assert.match(loginPage, /auth-method-tabs-triple/);
   assert.match(loginPage, /Authenticator/);
   assert.match(loginPage, /Hesap Kurtarma/);
   assert.match(loginPage, /Kod \+ güvenlik soruları/);
@@ -35,3 +37,4 @@ test("login page final corporate security UX is enforced", () => {
   assert.doesNotMatch(loginPage, /Tek kullanımlık acil kurtarma kodu kullan/);
   assert.doesNotMatch(loginPage, /showRecoveryCode/);
 });
+

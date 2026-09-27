@@ -100,15 +100,12 @@ jobs:
             return 1
           }
           check_host kyerp.net
-          check_host app.kyerp.net
 
-      - name: Iki alan adinin ayni canonical frontend paketini verdigini dogrula
+      - name: Canonical frontend paketini dogrula
         shell: bash
         run: |
           set -euo pipefail
           root_a="$(cat /tmp/kyerp_net-root-js.txt)"
-          root_b="$(cat /tmp/app_kyerp_net-root-js.txt)"
           echo "kyerp.net: $root_a"
-          echo "app.kyerp.net: $root_b"
-          test "$root_a" = "$root_b"
-          echo "FINAL: D1 renk formulu + sade kart + ayri formül editoru iki canli alanda birebir dogrulandi."
+          test -n "$root_a"
+          echo "FINAL: canonical kyerp.net renk workspace bundle dogrulandi."

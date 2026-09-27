@@ -9,8 +9,8 @@ const PHONE_SCOPE = AUTH_SECURITY_SCOPES.PHONE_LOGIN;
 const STATE_SECONDS = 10 * 60;
 const MAX_STARTS_HOUR = 5;
 const ALLOWED_APP_ORIGINS = new Set([
-  "https://app.kyerp.net",
-  "https://security.kyerp.net", "https://kyerp.net", "https://www.kyerp.net",
+  "https://kyerp.net",
+  "https://security.kyerp.net", "https://www.kyerp.net",
   "http://localhost:5173", "http://127.0.0.1:5173",
 ]);
 
@@ -29,7 +29,7 @@ async function sha256(value: string) { return Array.from(await sha256Bytes(value
 function safeEqual(left: string, right: string) { if (left.length !== right.length) return false; let diff = 0; for (let index = 0; index < left.length; index += 1) diff |= left.charCodeAt(index) ^ right.charCodeAt(index); return diff === 0; }
 function validEmail(value: unknown) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text(value)); }
 function providerOf(value: unknown): Provider | "" { const normalized = text(value).toLowerCase(); return normalized === "google" || normalized === "microsoft" ? normalized : ""; }
-function allowedOrigin(value: unknown) { const origin = text(value); return ALLOWED_APP_ORIGINS.has(origin) ? origin : "https://app.kyerp.net"; }
+function allowedOrigin(value: unknown) { const origin = text(value); return ALLOWED_APP_ORIGINS.has(origin) ? origin : "https://kyerp.net"; }
 function callbackBase(c: any) { return text(c.env?.AUTH_EXTERNAL_CALLBACK_BASE || "https://api.kyerp.net").replace(/\/+$/, ""); }
 function callbackUrl(c: any, provider: Provider) { return `${callbackBase(c)}/api/auth/external/${provider}/callback`; }
 
@@ -169,7 +169,7 @@ export function registerAuthExternalRecoveryRoutes(app: any) {
 
   app.get("/api/auth/external/:provider/callback", async (c: any) => {
     const provider = providerOf(c.req.param("provider")), state = text(c.req.query("state")), code = text(c.req.query("code")), providerError = text(c.req.query("error"));
-    let origin = "https://app.kyerp.net"; let user: AnyRow = {};
+    let origin = "https://kyerp.net"; let user: AnyRow = {};
     try {
       if (!provider || !state) throw new Error("Kimlik doğrulama isteği geçersiz."); await ensureSchema(c);
       const row = await c.env.DB.prepare("SELECT * FROM auth_external_recovery_challenges WHERE provider=? AND state_hash=? AND used_at IS NULL LIMIT 1").bind(provider, await sha256(state)).first<AnyRow>();

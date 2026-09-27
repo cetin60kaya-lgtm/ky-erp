@@ -84,7 +84,6 @@ const OWNER_ROLLING_SESSION_SECONDS = 0;
 const LIVE_ORIGINS = new Set([
   "https://kyerp.net",
   "https://www.kyerp.net",
-  "https://app.kyerp.net",
   "https://security.kyerp.net",
 ]);
 
