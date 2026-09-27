@@ -1,0 +1,28 @@
+name: KYERP Final Fix Diagnostic TEMP
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/model-uretim-kontrol-merkezi-final
+      - name: Locate target routes and callers
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== TARGET MATCHES ==='
+          grep -R -n -E 'workspace/live-state|personnel-control|leave-entitlement|personnel-performance|desen-images|mail/sync|mail/download|mecit-hakan' APP --exclude-dir=node_modules --exclude-dir=dist --exclude='*.map' || true
+          echo '=== ROUTE FILES ==='
+          find APP/cloud/ky-erp-api/src -maxdepth 3 -type f | sort
+          echo '=== FRONTEND LIKELY FILES ==='
+          grep -R -l -E 'desen-images|leave-entitlement|personnel-performance|workspace/live-state|mail/sync|mail/download' APP/app/ky-erp-frontend/src --exclude-dir=node_modules 2>/dev/null | sort || true
