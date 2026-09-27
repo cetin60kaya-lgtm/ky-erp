@@ -1,0 +1,180 @@
+name: KY ERP Admin Core Schema Compat Hotfix Temp
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/admin-core-schema-compat-hotfix-temp.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/model-uretim-kontrol-merkezi-final
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Patch admin core for live D1 schema compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('APP/cloud/ky-erp-api/src/admin-core-cloud.ts')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = []
+
+          replacements.append((
+          '''async function companyById(c: any, id: string) {
+            return c.env.DB.prepare(
+              "SELECT id,slug,name,title,is_active,created_at,updated_at FROM main_companies WHERE id=? LIMIT 1",
+            ).bind(id).first<Row>();
+          }
+          ''',
+          '''async function mainCompanySelectColumns(c: any) {
+            const columns = await tableColumns(c, "main_companies");
+            return columns.has("title")
+              ? "id,slug,name,title,is_active,created_at,updated_at"
+              : "id,slug,name,is_active,created_at,updated_at";
+          }
+          async function companyById(c: any, id: string) {
+            const selectColumns = await mainCompanySelectColumns(c);
+            return c.env.DB.prepare(
+              `SELECT ${selectColumns} FROM main_companies WHERE id=? LIMIT 1`,
+            ).bind(id).first<Row>();
+          }
+          '''))
+
+          replacements.append((
+          '''    const result = await c.env.DB.prepare(
+                "SELECT id,slug,name,title,is_active,created_at,updated_at FROM main_companies ORDER BY is_active DESC,name COLLATE NOCASE ASC",
+              ).all<Row>();
+          ''',
+          '''    const selectColumns = await mainCompanySelectColumns(c);
+              const result = await c.env.DB.prepare(
+                `SELECT ${selectColumns} FROM main_companies ORDER BY is_active DESC,name COLLATE NOCASE ASC`,
+              ).all<Row>();
+          '''))
+
+          replacements.append((
+          '''    await c.env.DB.prepare(
+                `INSERT INTO main_companies(id,slug,name,title,is_active,created_at,updated_at)
+                 VALUES (?,?,?,?,?,?,?)`,
+              ).bind(id, slug, name, text(body.note) || null, boolValue(body.isActive, true) ? 1 : 0, timestamp, timestamp).run();
+          ''',
+          '''    const mainCompanyColumns = await tableColumns(c, "main_companies");
+              if (mainCompanyColumns.has("title")) {
+                await c.env.DB.prepare(
+                  `INSERT INTO main_companies(id,slug,name,title,is_active,created_at,updated_at)
+                   VALUES (?,?,?,?,?,?,?)`,
+                ).bind(id, slug, name, text(body.note) || null, boolValue(body.isActive, true) ? 1 : 0, timestamp, timestamp).run();
+              } else {
+                await c.env.DB.prepare(
+                  `INSERT INTO main_companies(id,slug,name,is_active,created_at,updated_at)
+                   VALUES (?,?,?,?,?,?)`,
+                ).bind(id, slug, name, boolValue(body.isActive, true) ? 1 : 0, timestamp, timestamp).run();
+              }
+          '''))
+
+          replacements.append((
+          '''    const timestamp = nowIso();
+              try {
+          ''',
+          '''    const timestamp = nowIso();
+              const mainCompanyColumns = await tableColumns(c, "main_companies");
+              const hasTitle = mainCompanyColumns.has("title");
+              try {
+          '''))
+
+          replacements.append((
+          '''        plan.statements.push(
+                  c.env.DB.prepare(
+                    `UPDATE main_companies SET slug=?,name=?,title=?,is_active=?,updated_at=? WHERE id=?`,
+                  ).bind(nextSlug, name, text(body.note) || null, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id),
+                );
+          ''',
+          '''        if (hasTitle) {
+                  plan.statements.push(
+                    c.env.DB.prepare(
+                      `UPDATE main_companies SET slug=?,name=?,title=?,is_active=?,updated_at=? WHERE id=?`,
+                    ).bind(nextSlug, name, text(body.note) || null, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id),
+                  );
+                } else {
+                  plan.statements.push(
+                    c.env.DB.prepare(
+                      `UPDATE main_companies SET slug=?,name=?,is_active=?,updated_at=? WHERE id=?`,
+                    ).bind(nextSlug, name, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id),
+                  );
+                }
+          '''))
+
+          replacements.append((
+          '''      } else {
+                await c.env.DB.prepare(
+                  `UPDATE main_companies SET name=?,title=?,is_active=?,updated_at=? WHERE id=?`,
+                ).bind(name, text(body.note) || null, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id).run();
+              }
+          ''',
+          '''      } else {
+                if (hasTitle) {
+                  await c.env.DB.prepare(
+                    `UPDATE main_companies SET name=?,title=?,is_active=?,updated_at=? WHERE id=?`,
+                  ).bind(name, text(body.note) || null, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id).run();
+                } else {
+                  await c.env.DB.prepare(
+                    `UPDATE main_companies SET name=?,is_active=?,updated_at=? WHERE id=?`,
+                  ).bind(name, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id).run();
+                }
+              }
+          '''))
+
+          for i, (old, new) in enumerate(replacements, 1):
+              if old not in text:
+                  raise SystemExit(f'PATCH_BLOCK_{i}_NOT_FOUND')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+          print('Admin core compatibility patch applied.')
+          PY
+
+          git diff --check
+          git diff -- APP/cloud/ky-erp-api/src/admin-core-cloud.ts
+
+      - name: Install worker dependencies
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run typecheck
+
+      - name: Tests
+        working-directory: APP/cloud/ky-erp-api
+        run: npm test
+
+      - name: Dry-run build
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run build
+
+      - name: Commit tested hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "kyerp-hotfix-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add APP/cloud/ky-erp-api/src/admin-core-cloud.ts
+          git commit -m "fix(admin): tolerate live main_companies schema without title"
+          git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
