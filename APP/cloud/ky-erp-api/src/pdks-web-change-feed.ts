@@ -5,12 +5,26 @@ type Env={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
 const text=(v:unknown)=>v==null?"":String(v).trim();
 const now=()=>new Date().toISOString();
+const upper=(v:unknown)=>text(v).toLocaleUpperCase("tr-TR");
 
 export function registerPdksWebChangeFeed(shell:Hono<Env>){
   shell.use("/api/ik/personnel-control/*",async(c,next)=>{
     const method=String(c.req.method||"GET").toUpperCase();
-    if(!["POST","PATCH","PUT","DELETE"].includes(method))return next();
     const path=new URL(c.req.url).pathname;
+
+    if(method==="GET"&&path==="/api/ik/personnel-control/people"){
+      await next();
+      if(c.res.status<200||c.res.status>=300)return;
+      try{
+        const responseJson=await c.res.clone().json() as Row;
+        const rows=Array.isArray(responseJson?.data)?responseJson.data:[];
+        const visible=rows.filter((row:Row)=>upper(row.status)!=="ARCHIVED"&&upper(row.activePassive)!=="ARŞIV"&&upper(row.activePassive)!=="ARSIV");
+        c.res=c.json({...responseJson,data:visible},c.res.status as any);
+      }catch{}
+      return;
+    }
+
+    if(!["POST","PATCH","PUT","DELETE"].includes(method))return next();
     if(path.includes("/device")||path.includes("/time-events/import"))return next();
     let body:Row={};
     try{body=await c.req.raw.clone().json() as Row;}catch{}
