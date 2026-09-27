@@ -18,6 +18,8 @@ export function useAccountingLiveSync(activeMainCompany, onRefresh) {
   const revisionRef = useRef(null);
   const busyRef = useRef(false);
   const callbackRef = useRef(onRefresh);
+  const activeMainCompanyId = activeMainCompany?.id;
+  const activeMainCompanySlug = activeMainCompany?.slug;
   const [state, setState] = useState({
     status: "connecting",
     online: false,
@@ -33,10 +35,10 @@ export function useAccountingLiveSync(activeMainCompany, onRefresh) {
     revisionRef.current = null;
     setState({ status: "connecting", online: false, revision: 0, lastSyncAt: "", error: "" });
 
-    const scoped = hasTenantScope(activeMainCompany);
+    const scoped = hasTenantScope({ id: activeMainCompanyId, slug: activeMainCompanySlug });
     const params = () => ({
-      mainCompanySlug: activeMainCompany?.slug,
-      mainCompanyId: activeMainCompany?.id,
+      mainCompanySlug: activeMainCompanySlug,
+      mainCompanyId: activeMainCompanyId,
       _ts: Date.now(),
     });
 
@@ -87,7 +89,7 @@ export function useAccountingLiveSync(activeMainCompany, onRefresh) {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
     };
-  }, [activeMainCompany?.id, activeMainCompany?.slug]);
+  }, [activeMainCompanyId, activeMainCompanySlug]);
 
   return state;
 }
