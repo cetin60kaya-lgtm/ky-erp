@@ -126,6 +126,18 @@ export function registerPdksDeviceJobRoutes(app: Hono<AppEnv>) {
     return ok(c, { id, status: success ? "SUCCESS" : "ERROR", finishedAt: stamp });
   });
 
+  app.get("/api/auth/pdks-device/sync-events/pull", async (c) => {
+    const device = await resolveDevice(c);
+    if (!device) return fail(c, 401, "PDKS_DEVICE_UNAUTHORIZED", "PDKS cihaz yetkisi geçersiz.");
+    const cursor = text(c.req.query("cursor"));
+    const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") || 100)));
+    const result = cursor
+      ? await c.env.DB.prepare(`SELECT id,idempotency_key AS idempotencyKey,entity_type AS entityType,entity_id AS entityId,operation,source,payload_json AS payloadJson,occurred_at AS occurredAt,received_at AS receivedAt FROM ik_pdks_sync_events WHERE main_company_id=? AND source IN ('WEB','TABLET') AND (received_at>? OR (received_at=? AND id>?)) ORDER BY received_at,id LIMIT ?`).bind(text(device.main_company_id),cursor.split("|")[0]||cursor,cursor.split("|")[0]||cursor,cursor.split("|")[1]||"",limit).all<Row>()
+      : await c.env.DB.prepare(`SELECT id,idempotency_key AS idempotencyKey,entity_type AS entityType,entity_id AS entityId,operation,source,payload_json AS payloadJson,occurred_at AS occurredAt,received_at AS receivedAt FROM ik_pdks_sync_events WHERE main_company_id=? AND source IN ('WEB','TABLET') ORDER BY received_at,id LIMIT ?`).bind(text(device.main_company_id),limit).all<Row>();
+    const rows = result.results || [];
+    const last = rows.length ? rows[rows.length-1] : null;
+    return ok(c,{changes:rows,cursor:last?`${text(last.receivedAt)}|${text(last.id)}`:cursor});
+  });
   app.post("/api/auth/pdks-device/sync-events/push", async (c) => {
     const device = await resolveDevice(c);
     if (!device) return fail(c, 401, "PDKS_DEVICE_UNAUTHORIZED", "PDKS cihaz yetkisi geçersiz.");

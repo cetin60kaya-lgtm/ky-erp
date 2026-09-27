@@ -50,6 +50,7 @@ import { registerIkPdksGuardRoutes } from "./ik-pdks-guard";
 import { registerIkPersonnelControlRoutes } from "./ik-personnel-control";
 import { registerIkPdksMasterRoutes } from "./ik-pdks-master";
 import { registerPdksDeviceJobRoutes } from "./pdks-device-jobs";
+import { registerPdksWebChangeFeed } from "./pdks-web-change-feed";
 import { registerGunlukOperasyonRoutes } from "./gunluk-operasyon-cloud";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
@@ -413,6 +414,7 @@ registerAuthSessionRefreshRoutes(shell);
 registerAuthPushRoutes(shell);
 registerAuthPolicyRoutes(shell);
 registerSecurityActionRoutes(shell);
+registerPdksWebChangeFeed(shell);
 shell.route("/", app);
 
 shell.onError((error, c) => {

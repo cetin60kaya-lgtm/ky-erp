@@ -53,10 +53,11 @@ internal static class PdksCloudAgent
             var credential=LoadCredential();
             if(credential is null){lastMessage="Bulut cihaz anahtarı bekleniyor";return lastMessage;}
             await FlushOutboxAsync(credential,ct);
+            var inboxCount=await PdksCloudInbox.PullAndApplyAsync(credential,ct);
             if(DateTime.Now-lastHeartbeat>TimeSpan.FromMinutes(1)){await SendAsync(credential,HttpMethod.Post,"/api/auth/pdks-device/heartbeat",new{},ct);lastHeartbeat=DateTime.Now;}
             var job=await NextJobAsync(credential,ct);
             if(job is not null)await ExecuteJobAsync(credential,job,ct);
-            lastMessage=$"Bulut bağlı • {DateTime.Now:HH:mm:ss}";
+            lastMessage=$"Bulut bağlı • Inbox {inboxCount} • {DateTime.Now:HH:mm:ss}";
             return lastMessage;
         }
         catch(Exception ex){lastMessage="Bulut bekliyor • "+ex.Message;return lastMessage;}
@@ -96,7 +97,7 @@ internal static class PdksCloudAgent
             await CompleteJobAsync(credential,job.Id,false,new{message="Desteklenmeyen komut"},ct);return;
         }
         var result=await TerminalSyncService.SyncAsync("Web/Tablet",null,ct);
-        var success=result.ReadCount==0 || (result.DeviceCleared && result.Skipped==0);
+        var success=string.Equals(result.Message,"Cihazda yeni kayıt yok.",StringComparison.OrdinalIgnoreCase) || (result.ReadCount>0 && result.DeviceCleared && result.Skipped==0);
         await CompleteJobAsync(credential,job.Id,success,new{
             ok=success,result.ReadCount,result.Inserted,result.Updated,result.Duplicates,result.Skipped,result.DeviceCleared,result.Message,lastAt=result.LastAt
         },ct);
@@ -106,6 +107,8 @@ internal static class PdksCloudAgent
     {
         await SendAsync(credential,HttpMethod.Post,$"/api/auth/pdks-device/jobs/{Uri.EscapeDataString(id)}/result",new{ok=success,status=success?"SUCCESS":"ERROR",detail},ct);
     }
+
+    public static Task<JsonElement> GetAsync(PdksCloudCredential credential,string path,CancellationToken ct=default) => SendAsync(credential,HttpMethod.Get,path,null,ct);
 
     static async Task<JsonElement> SendAsync(PdksCloudCredential credential,HttpMethod method,string path,object? body,CancellationToken ct,string? idempotencyKey=null)
     {
