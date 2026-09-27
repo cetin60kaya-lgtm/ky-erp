@@ -27,9 +27,7 @@ var actualTools = toolbar.Items.Cast<ToolStripItem>().Where(x => x is ToolStripB
 if (!actualTools.SequenceEqual(expectedTools))
     throw new InvalidOperationException("Araç çubuğu web PDKS düzeninden sapmış: " + string.Join(" | ", actualTools));
 
-using (var groups = new LegacyGroupForm())
-{
-}
+using (var groups = new LegacyGroupForm()) { }
 
 using (var definitions = new LegacyDefinitionsForm())
 {
@@ -40,22 +38,18 @@ using (var definitions = new LegacyDefinitionsForm())
         throw new InvalidOperationException("Çalışma Sistemleri tab düzeninden sapmış.");
 }
 
-    using (var periods = new LegacyPeriodForm())
-    {
-    }
+using (var periods = new LegacyPeriodForm()) { }
 
 using (var personnel = new PersonelForm())
 {
     var personnelTabs = Descendants(personnel).OfType<TabControl>().First(x => x.TabPages.Count == 6);
     string[] expectedPersonnelTabs = ["Personel Bilgileri", "Giriş ve Çıkışları", "İzinler", "Ek Kazanç Ve Kesintiler", "Bilgi", "Ödemeler"];
     var actualPersonnelTabs = personnelTabs.TabPages.Cast<TabPage>().Select(x => x.Text).ToArray();
-    var labels = Descendants(personnel).OfType<Label>().Select(x => x.Text).ToHashSet();
     if (!actualPersonnelTabs.SequenceEqual(expectedPersonnelTabs))
         throw new InvalidOperationException("Personel Bilgileri üst tab düzeninden sapmış.");
     using var terminalTransfer = personnel.CreateTerminalTransferDialog();
     var transferButtons = Descendants(terminalTransfer).OfType<Button>().Select(x => x.Text).ToArray();
     var transferTolerance = Descendants(terminalTransfer).OfType<TextBox>().Single(x => x.Name == "TransferTolerance");
-    var transferLog = Descendants(terminalTransfer).OfType<TextBox>().Single(x => x.Name == "TransferLog");
     if (transferTolerance.Text != "5" || !transferButtons.SequenceEqual(["Cihaz Okut", "&Aktar"]))
         throw new InvalidOperationException("Terminal Veri Transferi kontrol düzeninden sapmış.");
 }
@@ -88,14 +82,17 @@ using (var timesheet = new LegacyPuantajForm())
 
 using (var payroll = new LegacyBordroForm())
 {
-    var payrollTabs = Descendants(payroll).OfType<TabControl>().First(x => x.TabPages.Cast<TabPage>().Any(p => p.Text == "Filtreler"));
-    string[] expectedPayrollTabs = ["Filtreler", "Gelişmiş"];
     var buttons = Descendants(payroll).OfType<Button>().Select(x => x.Text).ToArray();
-    if (!payrollTabs.TabPages.Cast<TabPage>().Select(x => x.Text).SequenceEqual(expectedPayrollTabs))
-        throw new InvalidOperationException("Genel Maaş Bordrosu tab düzeninden sapmış.");
-    if (!buttons.Any(x => x.Contains("Hesapla", StringComparison.OrdinalIgnoreCase)) || !buttons.Any(x => x.EndsWith("nizle", StringComparison.OrdinalIgnoreCase)) || !buttons.Any(x => x.StartsWith("Yaz", StringComparison.OrdinalIgnoreCase)) || !buttons.Contains("PDF Aktar") || !buttons.Contains("Excel Aktar"))
-        throw new InvalidOperationException("Genel Maaş Bordrosu modern komutlarından sapmış.");
+    var periodPickers = Descendants(payroll).OfType<DateTimePicker>().ToArray();
+    var types = Descendants(payroll).OfType<ComboBox>().ToArray();
+    var payrollGrid = Descendants(payroll).OfType<DataGridView>().FirstOrDefault();
+    if (periodPickers.Length == 0 || types.Length == 0 || payrollGrid is null)
+        throw new InvalidOperationException("Bordro dönem/tür/tablo düzeni eksik.");
+    if (!buttons.Contains("Göster") || !buttons.Contains("Alanlar / Sıralama") || !buttons.Contains("Düzeni Kilitle") ||
+        !buttons.Contains("Önizle") || !buttons.Contains("Yazdır") || !buttons.Contains("PDF Aktar") || !buttons.Contains("Excel Aktar"))
+        throw new InvalidOperationException("Özelleştirilebilir bordro komutları eksik.");
 }
+
 var reportKinds = Enum.GetValues<LegacyOperationalReport>();
 var reportTitles = reportKinds.Select(LegacyOperationalReportForm.Title).ToArray();
 if (reportTitles.Distinct().Count() != 5)
