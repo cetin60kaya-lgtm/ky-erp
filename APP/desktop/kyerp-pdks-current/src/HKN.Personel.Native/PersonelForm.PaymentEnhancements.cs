@@ -4,6 +4,12 @@ public partial class PersonelForm
 {
     bool monthlyPaymentLauncherInstalled;
 
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        InstallMonthlyPaymentLauncher();
+    }
+
     void InstallMonthlyPaymentLauncher()
     {
         if (monthlyPaymentLauncherInstalled) return;
