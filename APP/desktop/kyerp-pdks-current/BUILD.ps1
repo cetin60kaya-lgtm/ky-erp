@@ -23,19 +23,27 @@ if ($LASTEXITCODE -ne 0) { throw "Native shell smoke testi basarisiz." }
 
 $personelOut = Join-Path $artifacts "Personel"
 if (Test-Path $personelOut) { Remove-Item $personelOut -Recurse -Force }
-& $dotnet publish $native -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o $personelOut
+& $dotnet publish $native -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o $personelOut
 if ($LASTEXITCODE -ne 0) { throw "Native publish basarisiz." }
 if (-not (Test-Path (Join-Path $personelOut "KYERP.PDKS.exe"))) { throw "KYERP.PDKS.exe publish edilmedi." }
 if (-not (Test-Path (Join-Path $personelOut "KYERP.TerminalBridge.exe"))) { throw "KYERP.TerminalBridge.exe publish edilmedi." }
 
-$terminalSdkSource = "D:\Hedef500\Hedef500\Terminal Bilgi Aktar\support"
-if (Test-Path (Join-Path $terminalSdkSource "FP_CLOCK.ocx")) {
+$terminalSdkCandidates = @(
+    "D:\Hedef500\Hedef500\Terminal Bilgi Aktar\support",
+    "C:\Hedef500\Terminal Bilgi Aktar\support",
+    "C:\Hedef500\Hedef500\Terminal Bilgi Aktar\support"
+)
+$terminalSdkSource = $terminalSdkCandidates | Where-Object { Test-Path (Join-Path $_ "FP_CLOCK.ocx") } | Select-Object -First 1
+if ($terminalSdkSource) {
     $terminalSdkOut = Join-Path $personelOut "TerminalSdk"
     New-Item -ItemType Directory -Force -Path $terminalSdkOut | Out-Null
     foreach ($name in @("FP_CLOCK.ocx","TMPCCOMM.dll","CH375DLL.DLL","MFC42.DLL")) {
         $source = Join-Path $terminalSdkSource $name
         if (Test-Path $source) { Copy-Item $source $terminalSdkOut -Force }
     }
+    $missing = @("FP_CLOCK.ocx","TMPCCOMM.dll","CH375DLL.DLL","MFC42.DLL") | Where-Object { -not (Test-Path (Join-Path $terminalSdkOut $_)) }
+    if ($missing.Count -gt 0) { throw "TerminalSdk eksik: $($missing -join ', ')" }
+    Write-Host "Terminal SDK eklendi: $terminalSdkSource" -ForegroundColor Green
 } else {
     Write-Warning "Fiziksel terminal SDK kaynagi bulunamadi; cihaz ActiveX dosyalari pakete eklenmedi."
 }
