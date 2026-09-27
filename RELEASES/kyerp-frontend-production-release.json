@@ -6,6 +6,7 @@
   "releaseDate": "2026-09-27",
   "scope": [
     "owner-all-system-accounting-api-guard",
+    "accounting-live-sync-hook-dependency-fix",
     "security-auth-modal-fixed-responsive-layout",
     "security-auth-modal-no-persistent-user-geometry",
     "security-auth-modal-no-resize-handle",
@@ -13,5 +14,5 @@
     "cloudflare-pages-production",
     "live-bundle-verification"
   ],
-  "note": "Tüm Sistem görünümünde firma zorunlu muhasebe canlı servisleri çağrılmayarak Yönetim Özeti API hatası engellendi. KY ERP Güvenlik giriş/doğrulama penceresi uygulama içi genel modal boyutlandırma sisteminden ayrıldı; masaüstünde tek geniş sabit düzen, tablet/telefonda responsive düzen kullanılır. Kullanıcıya özel modal geometri kaydı ve sürüklenebilir resize tutamacı güvenlik penceresinde kaldırıldı. Diğer uygulama modallarının mevcut davranışı değiştirilmedi."
+  "note": "Tüm Sistem görünümünde firma zorunlu muhasebe canlı servisleri çağrılmayarak Yönetim Özeti API hatası engellendi; muhasebe canlı senkron hook bağımlılıkları lint uyumlu hale getirildi. KY ERP Güvenlik giriş/doğrulama penceresi uygulama içi genel modal boyutlandırma sisteminden ayrıldı; masaüstünde tek geniş sabit düzen, tablet/telefonda responsive düzen kullanılır. Kullanıcıya özel modal geometri kaydı ve sürüklenebilir resize tutamacı güvenlik penceresinde kaldırıldı. Diğer uygulama modallarının mevcut davranışı değiştirilmedi."
 }
