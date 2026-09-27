@@ -3,6 +3,7 @@ using System.Text.Json;
 using KYERP.PDKS.Core;
 using KYERP.PDKS.Core.Attendance;
 using KYERP.PDKS.Core.Sync;
+using KYERP.PDKS.Core.Terminal;
 
 namespace HKN.Personel.Native;
 
@@ -101,8 +102,10 @@ internal static class PdksCloudAgent
         },ct);
     }
 
-    static Task CompleteJobAsync(PdksCloudCredential credential,string id,bool success,object detail,CancellationToken ct)
-        => SendAsync(credential,HttpMethod.Post,$"/api/auth/pdks-device/jobs/{Uri.EscapeDataString(id)}/result",new{ok=success,status=success?"SUCCESS":"ERROR",detail},ct);
+    static async Task CompleteJobAsync(PdksCloudCredential credential,string id,bool success,object detail,CancellationToken ct)
+    {
+        await SendAsync(credential,HttpMethod.Post,$"/api/auth/pdks-device/jobs/{Uri.EscapeDataString(id)}/result",new{ok=success,status=success?"SUCCESS":"ERROR",detail},ct);
+    }
 
     static async Task<JsonElement> SendAsync(PdksCloudCredential credential,HttpMethod method,string path,object? body,CancellationToken ct,string? idempotencyKey=null)
     {
