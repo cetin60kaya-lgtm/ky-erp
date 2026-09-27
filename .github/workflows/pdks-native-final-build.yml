@@ -1,0 +1,47 @@
+name: PDKS Native Final Build
+
+on:
+  push:
+    branches:
+      - codex/kyerp-pdks-full-app-prep
+    paths:
+      - 'APP/desktop/kyerp-pdks-current/**'
+      - '.github/workflows/pdks-native-final-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore APP/desktop/kyerp-pdks-current/KYERP.PDKS.sln
+      - name: Build solution
+        run: dotnet build APP/desktop/kyerp-pdks-current/KYERP.PDKS.sln -c Release --no-restore
+      - name: Publish native app
+        run: dotnet publish APP/desktop/kyerp-pdks-current/src/HKN.Personel.Native/HKN.Personel.Native.csproj -c Release -r win-x64 --self-contained false -o out/HKN-PDKS
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out/package | Out-Null
+          Copy-Item out/HKN-PDKS/* out/package -Recurse -Force
+          Set-Content -Path out/package/BUILD_INFO.txt -Encoding UTF8 -Value @(
+            'KY ERP PDKS 6.0 - FINAL TEST BUILD',
+            "Branch: $env:GITHUB_REF_NAME",
+            "Commit: $env:GITHUB_SHA",
+            "UTC: $([DateTime]::UtcNow.ToString('yyyy-MM-dd HH:mm:ss'))"
+          )
+          Compress-Archive -Path out/package/* -DestinationPath out/HKN-PDKS-6.0-FINAL.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HKN-PDKS-6.0-FINAL
+          path: out/HKN-PDKS-6.0-FINAL.zip
+          if-no-files-found: error
+          retention-days: 14
