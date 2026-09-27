@@ -7,6 +7,7 @@
   "scope": [
     "owner-all-system-accounting-api-guard",
     "accounting-live-sync-hook-dependency-fix",
+    "accounting-live-state-health-fallback",
     "security-auth-modal-fixed-responsive-layout",
     "security-auth-modal-no-persistent-user-geometry",
     "security-auth-modal-no-resize-handle",
@@ -15,5 +16,5 @@
     "cloudflare-pages-production",
     "live-bundle-verification"
   ],
-  "note": "Tüm Sistem görünümünde firma zorunlu muhasebe canlı servisleri çağrılmayarak Yönetim Özeti API hatası engellendi; muhasebe canlı senkron hook bağımlılıkları lint uyumlu hale getirildi. KY ERP Güvenlik giriş/doğrulama penceresi uygulama içi genel modal boyutlandırma sisteminden ayrıldı; masaüstünde tek geniş sabit düzen, tablet/telefonda responsive düzen kullanılır. Kullanıcıya özel modal geometri kaydı ve sürüklenebilir resize tutamacı güvenlik penceresinde kaldırıldı. Production yayın akışındaki artık mevcut olmayan hedefli test dosyası korumalı hale getirildi; audit, lint ve production build kapıları aktif kalır. Diğer uygulama modallarının mevcut davranışı değiştirilmedi."
+  "note": "Tüm Sistem görünümünde firma zorunlu muhasebe canlı servisleri çağrılmayarak Yönetim Özeti API hatası engellendi; muhasebe canlı senkron hook bağımlılıkları lint uyumlu hale getirildi. KY ERP Güvenlik giriş/doğrulama penceresi uygulama içi genel modal boyutlandırma sisteminden ayrıldı; masaüstünde tek geniş sabit düzen, tablet/telefonda responsive düzen kullanılır. Kullanıcıya özel modal geometri kaydı ve sürüklenebilir resize tutamacı güvenlik penceresinde kaldırıldı. Production yayın akışındaki artık mevcut olmayan hedefli test dosyası korumalı hale getirildi; audit, lint ve production build kapıları aktif kalır. Diğer uygulama modallarının mevcut davranışı değiştirilmedi. Muhasebe canlı revision servisi geçici hata verdiğinde genel API sağlık kontrolüyle bağlantı durumu korunur; güvenlik/yetki hataları maskelenmez."
 }
