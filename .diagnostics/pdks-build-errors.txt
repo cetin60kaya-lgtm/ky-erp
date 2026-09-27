@@ -1,5 +1,5 @@
-HEAD: 1604b8295bbc1edb802681e7275a7fa6705f6509
-UTC: 2026-09-27T22:59:19
+HEAD: 204c755ffe67174095f81b51f7ef5f88b4942a96
+UTC: 2026-09-27T23:02:05
 
 D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\ToolStripLayoutPersistence.cs(23,87): error CS0019: Operator '??' cannot be applied to operands of type 'Form' and 'ToolStrip' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
 D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\ToolStripLayoutPersistence.cs(23,87): error CS0019: Operator '??' cannot be applied to operands of type 'Form' and 'ToolStrip' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
