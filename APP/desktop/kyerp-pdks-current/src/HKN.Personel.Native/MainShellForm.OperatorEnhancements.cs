@@ -7,9 +7,12 @@ public sealed partial class MainShellForm
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        if (operatorEnhancementsApplied) return;
-        operatorEnhancementsApplied = true;
-        ApplyOperatorEnhancements();
+        if (!operatorEnhancementsApplied)
+        {
+            operatorEnhancementsApplied = true;
+            ApplyOperatorEnhancements();
+        }
+        InitializeShellLayoutCustomization();
     }
 
     void ApplyOperatorEnhancements()
