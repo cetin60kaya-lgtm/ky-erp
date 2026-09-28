@@ -18,8 +18,7 @@ public sealed partial class MainShellForm
     void ApplyOperatorEnhancements()
     {
         if (MainMenuStrip is null) return;
-
-        Text = $"KY PDKS 6.1 TEST • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
+        Text = $"KY PDKS 6.2 TEST • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
 
         var payroll = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
             .FirstOrDefault(x => string.Equals(x.Text ?? string.Empty, "Puantaj ve Bordro", StringComparison.OrdinalIgnoreCase));
@@ -36,38 +35,20 @@ public sealed partial class MainShellForm
         if (support is not null)
         {
             var oldAbout = support.DropDownItems.OfType<ToolStripMenuItem>()
-                .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("6.0 Hakkında", StringComparison.OrdinalIgnoreCase));
-            if (oldAbout is not null) oldAbout.Text = "KY PDKS 6.1 TEST Hakkında";
-
-            if (!support.DropDownItems.OfType<ToolStripMenuItem>()
-                    .Any(x => string.Equals(x.Text ?? string.Empty, "Hızlı Kullanım Rehberi", StringComparison.OrdinalIgnoreCase)))
+                .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Hakkında", StringComparison.OrdinalIgnoreCase));
+            if (oldAbout is not null) oldAbout.Text = "KY PDKS 6.2 TEST Hakkında";
+            if (!support.DropDownItems.OfType<ToolStripMenuItem>().Any(x => string.Equals(x.Text ?? string.Empty, "Hızlı Kullanım Rehberi", StringComparison.OrdinalIgnoreCase)))
             {
-                var guide = new ToolStripMenuItem("Hızlı Kullanım Rehberi")
-                {
-                    ToolTipText = "Canlı takipten bordroya kadar ekranların ne işe yaradığını ve önerilen işlem sırasını gösterir."
-                };
-                guide.Click += (_, _) =>
-                {
-                    using var form = new PdksQuickGuideForm();
-                    form.ShowDialog(this);
-                };
-                support.DropDownItems.Insert(0, guide);
-                if (support.DropDownItems.Count > 1 && support.DropDownItems[1] is not ToolStripSeparator)
-                    support.DropDownItems.Insert(1, new ToolStripSeparator());
+                var guide = new ToolStripMenuItem("Hızlı Kullanım Rehberi") { ToolTipText="Canlı takipten bordroya kadar ekranların ne işe yaradığını ve önerilen işlem sırasını gösterir." };
+                guide.Click += (_,_) => { using var form=new PdksQuickGuideForm(); form.ShowDialog(this); };
+                support.DropDownItems.Insert(0,guide); if(support.DropDownItems.Count>1&&support.DropDownItems[1] is not ToolStripSeparator)support.DropDownItems.Insert(1,new ToolStripSeparator());
             }
         }
 
-        if (!MainMenuStrip.Items.OfType<ToolStripMenuItem>()
-                .Any(x => string.Equals(x.Text ?? string.Empty, "REV 6.1 TEST", StringComparison.OrdinalIgnoreCase)))
-        {
-            MainMenuStrip.Items.Add(new ToolStripMenuItem("REV 6.1 TEST")
-            {
-                Alignment = ToolStripItemAlignment.Right,
-                Enabled = false,
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(190, 82, 54)
-            });
-        }
+        ConfigureRoleMenus();
+
+        if (!MainMenuStrip.Items.OfType<ToolStripMenuItem>().Any(x => string.Equals(x.Text ?? string.Empty,"REV 6.2 TEST",StringComparison.OrdinalIgnoreCase)))
+            MainMenuStrip.Items.Add(new ToolStripMenuItem("REV 6.2 TEST"){Alignment=ToolStripItemAlignment.Right,Enabled=false,Font=new Font("Segoe UI",9.5f,FontStyle.Bold),ForeColor=Color.FromArgb(190,82,54)});
 
         ApplyMenuIcons(MainMenuStrip);
     }
