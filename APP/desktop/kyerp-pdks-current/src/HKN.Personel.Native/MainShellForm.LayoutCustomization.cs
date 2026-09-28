@@ -21,12 +21,6 @@ public sealed partial class MainShellForm
     bool shellLayoutInitialized;
     static string ShellLayoutFile => Path.Combine(CompanyDataPaths.Config, "shell-layout.json");
 
-    protected override void OnShown(EventArgs e)
-    {
-        base.OnShown(e);
-        InitializeShellLayoutCustomization();
-    }
-
     void InitializeShellLayoutCustomization()
     {
         if (shellLayoutInitialized) return;
@@ -130,7 +124,7 @@ public sealed partial class MainShellForm
 
     void ReorderShellItems(bool toolbarMode, IReadOnlyList<ToolStripItem> ordered)
     {
-        var collection = toolbarMode ? tool.Items : MainMenuStrip?.Items;
+        ToolStripItemCollection? collection = toolbarMode ? tool.Items : MainMenuStrip?.Items;
         if (collection is null) return;
         for (var index = 0; index < ordered.Count; index++)
         {
