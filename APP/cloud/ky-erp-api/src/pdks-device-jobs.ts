@@ -13,8 +13,12 @@ const ok = (c: Context<AppEnv>, data: unknown, status = 200) => c.json({ ok: tru
 const fail = (c: Context<AppEnv>, status: number, code: string, message: string) => c.json({ ok: false, error: { code, message } }, status as any);
 
 async function bodyOf(c: Context<AppEnv>): Promise<Row> {
-  try { const body = await c.req.json(); return body && typeof body === "object" && !Array.isArray(body) ? body as Row : {}; }
-  catch { return {}; }
+  try {
+    const body = await c.req.json();
+    return body && typeof body === "object" && !Array.isArray(body) ? body as Row : {};
+  } catch {
+    return {};
+  }
 }
 
 async function sha256(value: string) {
@@ -130,9 +134,13 @@ export function registerPdksDeviceJobRoutes(app: Hono<AppEnv>) {
     const device = await resolveDevice(c);
     if (!device) return fail(c, 401, "PDKS_DEVICE_UNAUTHORIZED", "PDKS cihaz yetkisi geçersiz.");
     const body = await bodyOf(c);
-    const records = Array.isArray(body.records) ? body.records as Row[] : [];
-    if (!records.length) return fail(c, 400, "PDKS_PERSONNEL_REQUIRED", "Personel snapshot boş olamaz.");
-    if (records.length > 500) return fail(c, 400, "PDKS_PERSONNEL_LIMIT", "Personel snapshot sınırı 500 kayıttır.");
+    const allRecords = Array.isArray(body.records) ? body.records as Row[] : [];
+    if (!allRecords.length) return fail(c, 400, "PDKS_PERSONNEL_REQUIRED", "Personel snapshot boş olamaz.");
+    if (allRecords.length > 500) return fail(c, 400, "PDKS_PERSONNEL_LIMIT", "Personel snapshot sınırı 500 kayıttır.");
+
+    // PDKS yalnız SGK kapsamındaki personeli taşır. SGK'sız kayıt İK Aylık alanına aittir.
+    // Snapshot mevcut shared İK kayıtlarını asla silmez/arşivlemez; yalnız güvenli upsert yapar.
+    const records = allRecords.filter((row) => upper(row.sgkStatus || "VAR") !== "YOK");
     const company = text(device.main_company_id);
     const current = (await c.env.DB.prepare("SELECT id,code,full_name,status FROM hr_monthly_employees WHERE main_company_id=?").bind(company).all<Row>()).results || [];
     const normalizeName = (value: unknown) => text(value).replace(/\s+/g, " ").toLocaleUpperCase("tr-TR");
@@ -143,11 +151,14 @@ export function registerPdksDeviceJobRoutes(app: Hono<AppEnv>) {
       if (!byName.has(key)) byName.set(key, []);
       byName.get(key)!.push(row);
     }
+
     const used = new Set<string>();
     const stamp = nowIso();
     let created = 0;
     let updated = 0;
     let reused = 0;
+    let skippedNonSgk = allRecords.length - records.length;
+
     for (const source of records) {
       const code = text(source.code || source.cardNo);
       const fullName = text(source.fullName).replace(/\s+/g, " ").trim();
@@ -164,8 +175,8 @@ export function registerPdksDeviceJobRoutes(app: Hono<AppEnv>) {
       await c.env.DB.prepare(`INSERT INTO hr_monthly_employees
         (id,main_company_id,code,full_name,department,title,work_type,sgk_status,status,hire_date,salary,road_allowance,bank_payment_type,bank_amount,cash_amount,overtime_hourly_base,annual_leave_entitlement,annual_leave_carryover,note,created_at,updated_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        ON CONFLICT(id) DO UPDATE SET code=excluded.code,full_name=excluded.full_name,status=excluded.status,hire_date=excluded.hire_date,salary=excluded.salary,note=excluded.note,updated_at=excluded.updated_at`)
-        .bind(id, company, code, fullName, text(source.department) || null, text(source.title) || null, "Aylık", text(source.sgkStatus) || "VAR", status, text(source.startDate) || null, Number(source.salary || 0), 0, null, 0, 0, 225, 14, 0, "PDKS Desktop canonical", stamp, stamp).run();
+        ON CONFLICT(id) DO UPDATE SET code=excluded.code,full_name=excluded.full_name,status=excluded.status,hire_date=excluded.hire_date,sgk_status='VAR',note=excluded.note,updated_at=excluded.updated_at`)
+        .bind(id, company, code, fullName, text(source.department) || null, text(source.title) || null, "Aylık", "VAR", status, text(source.startDate) || null, Number(source.salary || 0), 0, null, 0, 0, 225, 14, 0, "PDKS Desktop canonical", stamp, stamp).run();
       await c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,card_no,exit_date,active_passive,personel_kodu,updated_at)
         VALUES(?,?,?,?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET card_no=excluded.card_no,exit_date=excluded.exit_date,active_passive=excluded.active_passive,personel_kodu=excluded.personel_kodu,updated_at=excluded.updated_at`)
         .bind(id, company, code, text(source.exitDate) || null, status, code, stamp).run();
@@ -173,14 +184,8 @@ export function registerPdksDeviceJobRoutes(app: Hono<AppEnv>) {
       if (exists) updated++;
       else created++;
     }
-    let archived = 0;
-    for (const row of current) {
-      const id = text(row.id);
-      if (used.has(id) || !/^HKN-/i.test(text(row.code))) continue;
-      await c.env.DB.prepare("UPDATE hr_monthly_employees SET status='ARCHIVED',note='PDKS Desktop dışı eski web kaydı',updated_at=? WHERE id=? AND main_company_id=?").bind(stamp, id, company).run();
-      archived++;
-    }
-    return ok(c, { received: records.length, created, updated, reused, archived, updatedAt: stamp });
+
+    return ok(c, { received: allRecords.length, acceptedSgk: records.length, skippedNonSgk, created, updated, reused, archived: 0, nonDestructive: true, updatedAt: stamp });
   });
 
   app.get("/api/auth/pdks-device/sync-events/pull", async (c) => {
