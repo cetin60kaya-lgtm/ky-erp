@@ -5,12 +5,14 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-09-28",
   "scope": [
-    "hr-invalid-employee-request-guard",
-    "design-storage-endpoint-alignment",
+    "accounting-production-navigation-groups",
+    "e-document-production-navigation-groups",
+    "accounting-direct-e-document-access",
+    "accounting-active-company-context",
+    "hr-monthly-active-company-guard",
     "frontend-lint-build",
     "cloudflare-pages-production",
-    "live-bundle-verification",
-    "accounting-workspace-contract-preservation"
+    "live-bundle-verification"
   ],
-  "note": "Final production frontend closure for the remaining authenticated audit errors. Canonical source commit 650835fffb2a4d3c6f013e1890a76d4973e80002 passed frontend lint and production build. Invalid IK employee selection no longer emits the leave-entitlement request, DESEN is aligned with the live compatibility endpoint, and existing accounting workspace contracts remain intact."
+  "note": "Final acceptance release for the three priority production workspaces: Muhasebe, e-Belge and IK Aylik. Accounting and e-document navigation are regrouped by real operational flow, accounting exposes the active company and direct e-document access, and IK monthly write/read flow is blocked when no active company is selected. Daily Operation behavior is intentionally unchanged."
 }
