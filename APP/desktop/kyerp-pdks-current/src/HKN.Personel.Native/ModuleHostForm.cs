@@ -2,17 +2,26 @@ namespace HKN.Personel.Native;
 
 internal sealed class ModuleHostForm : Form
 {
-    readonly Form child;
+    static readonly Dictionary<string, Form> moduleCache = new(StringComparer.OrdinalIgnoreCase);
+    static bool exitHooked;
 
-    public ModuleHostForm(Form child, Action showHome)
+    readonly Form child;
+    readonly string cacheKey;
+    readonly Panel content;
+
+    public ModuleHostForm(Form requestedChild, Action showHome)
     {
-        this.child = child;
+        cacheKey = CacheKey(requestedChild);
+        child = ResolveCachedChild(requestedChild, cacheKey);
+
         Text = child.Text;
         TopLevel = false;
         FormBorderStyle = FormBorderStyle.None;
         Dock = DockStyle.Fill;
         BackColor = Color.FromArgb(246, 249, 253);
         Font = new Font("Segoe UI", 9f);
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
 
         var header = new Panel
         {
@@ -62,15 +71,14 @@ internal sealed class ModuleHostForm : Form
         header.Controls.Add(icon);
         header.Controls.Add(accent);
 
-        var content = new Panel
+        content = new Panel
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(14, 12, 14, 14),
             BackColor = Color.FromArgb(246, 249, 253)
         };
 
-        // Tema ve anchor hesabını legacy form kendi tasarım boyutundayken uygula.
-        // Sonra formu çalışma alanına büyüt; böylece tablo/sekme/alt butonlar doğru esner.
+        // Tema yalnız ilk kullanımda pahalıdır. Aynı modüle geri dönüldüğünde yaşayan form yeniden kullanılır.
         PdksTheme.Apply(child);
         child.TopLevel = false;
         child.FormBorderStyle = FormBorderStyle.None;
@@ -81,13 +89,66 @@ internal sealed class ModuleHostForm : Form
         if (child.MainMenuStrip is not null) child.MainMenuStrip.Visible = false;
         foreach (var menu in child.Controls.OfType<MenuStrip>()) menu.Visible = false;
         HideEmbeddedCloseButtons(child.Controls);
+
+        if (child.Parent is not null) child.Parent.Controls.Remove(child);
         content.Controls.Add(child);
         Controls.Add(content);
         Controls.Add(header);
-        child.Show();
+        if (!child.Visible) child.Show();
+
+        // Host kapanınca ağır modül formunu öldürme. Sonraki menü tıklamasında aynı ekran anında geri gelir.
         Disposed += (_, _) =>
         {
-            if (!child.IsDisposed) child.Dispose();
+            try
+            {
+                if (!child.IsDisposed && IsDescendantOf(child, this)) content.Controls.Remove(child);
+            }
+            catch { }
+        };
+
+        HookApplicationExit();
+    }
+
+    static string CacheKey(Form form)
+        => $"{form.GetType().FullName}|{form.Text}";
+
+    static Form ResolveCachedChild(Form requested, string key)
+    {
+        if (moduleCache.TryGetValue(key, out var cached) && !cached.IsDisposed)
+        {
+            if (!ReferenceEquals(requested, cached))
+            {
+                try { requested.Dispose(); } catch { }
+            }
+            if (cached.Parent is not null)
+            {
+                try { cached.Parent.Controls.Remove(cached); } catch { }
+            }
+            return cached;
+        }
+
+        moduleCache[key] = requested;
+        return requested;
+    }
+
+    static bool IsDescendantOf(Control control, Control ancestor)
+    {
+        for (Control? p = control.Parent; p is not null; p = p.Parent)
+            if (ReferenceEquals(p, ancestor)) return true;
+        return false;
+    }
+
+    static void HookApplicationExit()
+    {
+        if (exitHooked) return;
+        exitHooked = true;
+        Application.ApplicationExit += (_, _) =>
+        {
+            foreach (var form in moduleCache.Values.Distinct().ToArray())
+            {
+                try { if (!form.IsDisposed) form.Dispose(); } catch { }
+            }
+            moduleCache.Clear();
         };
     }
 
@@ -105,6 +166,7 @@ internal sealed class ModuleHostForm : Form
             if (control.HasChildren) HideEmbeddedCloseButtons(control.Controls);
         }
     }
+
     static PdksToolbarIcon IconFor(string text)
     {
         var value = (text ?? string.Empty).ToLower(new System.Globalization.CultureInfo("tr-TR"));
