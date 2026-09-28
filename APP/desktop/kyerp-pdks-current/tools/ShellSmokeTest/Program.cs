@@ -83,11 +83,11 @@ using (var timesheet = new LegacyPuantajForm())
 using (var payroll = new LegacyBordroForm())
 {
     var buttons = Descendants(payroll).OfType<Button>().Select(x => x.Text).ToArray();
-    var periodPickers = Descendants(payroll).OfType<DateTimePicker>().ToArray();
-    var types = Descendants(payroll).OfType<ComboBox>().ToArray();
+    var selectors = Descendants(payroll).OfType<ComboBox>().ToArray();
     var payrollGrid = Descendants(payroll).OfType<DataGridView>().FirstOrDefault();
-    if (periodPickers.Length == 0 || types.Length == 0 || payrollGrid is null)
-        throw new InvalidOperationException("Bordro dönem/tür/tablo düzeni eksik.");
+    // Modern bordro dönem seçimi Yıl + Ay + Bordro Türü combolarından oluşur.
+    if (selectors.Length < 3 || payrollGrid is null)
+        throw new InvalidOperationException("Bordro yıl/ay/tür/tablo düzeni eksik.");
     if (!buttons.Contains("Göster") || !buttons.Contains("Alanlar / Sıralama") || !buttons.Contains("Düzeni Kilitle") ||
         !buttons.Contains("Önizle") || !buttons.Contains("Yazdır") || !buttons.Contains("PDF Aktar") || !buttons.Contains("Excel Aktar"))
         throw new InvalidOperationException("Özelleştirilebilir bordro komutları eksik.");
