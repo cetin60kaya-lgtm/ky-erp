@@ -1,6 +1,7 @@
+import { writeCurrentAccount } from "./accounting-current-write.ts";
 import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
-import { registerAuthManagementRoutes } from "./auth-cloud";
+import { getAuthenticatedUser, registerAuthManagementRoutes } from "./auth-cloud";
 import { buildCanonicalAccountingReport, registerCanonicalAccountingReportRoutes } from "./accounting-report-canonical";
 import { canonicalAccountingDocumentDetail, listCanonicalAccountingDocuments, mergeCanonicalLegacyAccounting } from "./accounting-canonical-read";
 import { ensureAccountingCanonicalReportControls0046 } from "./runtime-migration-0046";
@@ -154,7 +155,7 @@ function slugOf(c: Context<AppEnv>, body: DatabaseRow = {}): string {
       body.main_company_slug ||
       c.req.query("mainCompanySlug") ||
       c.req.query("mainCompanyId") ||
-      "mecit-hakan",
+      c.req.header("X-KYERP-Tenant-Slug"),
   ).trim();
 }
 
@@ -1369,7 +1370,7 @@ app.post("/api/muhasebe/belge-import/upload", async (c) => {
     form.get("mainCompanySlug") ||
       form.get("mainCompanyId") ||
       c.req.query("mainCompanySlug") ||
-      "mecit-hakan",
+      c.req.header("X-KYERP-Tenant-Slug"),
   ).trim();
   const files = form
     .getAll("files")
@@ -2192,67 +2193,24 @@ app.post("/api/muhasebe/odeme/kart", async (c) => {
   return c.json({ ok: true, success: true, data }, 201);
 });
 
-app.post("/api/muhasebe/odeme/islem", async (c) => {
+async function saveCurrentAccount(c: Context<AppEnv>) {
   const body = await requestBody(c);
-  const slug = slugOf(c, body);
-  const firmId = databaseText(body.firmId || body.companyId);
-  const amount = databaseNumber(body.amount);
-  if (!firmId || amount <= 0) {
-    return c.json(jsonError("INVALID_PAYMENT", "Firma ve sıfırdan büyük tutar zorunludur."), 400);
+  try {
+    const user = await getAuthenticatedUser(c);
+    if (!user) return c.json(jsonError("UNAUTHORIZED", "Geçerli oturum zorunludur."), 401);
+    const data = await writeCurrentAccount(c, slugOf(c, body), body, String(user.id));
+    return c.json({ ok: true, success: true, data }, data.idempotent ? 200 : 201);
+  } catch (cause: any) {
+    return c.json(jsonError(cause.code || "CURRENT_ACCOUNT_FAILED", cause.code ? cause.message : "Cari işlem tamamlanamadı. Tekrar kaydetmeden hareket listesini kontrol edin."), 409);
   }
-  const company = await rowByIdScoped(c, "companies", firmId, slug);
-  if (!company) {
-    return c.json(jsonError("COMPANY_NOT_FOUND", "Firma kaydı bulunamadı."), 404);
-  }
-  const direction = normalizeText(body.transactionDirection || "PAYMENT_OUT");
-  const isIncoming = /TAHSIL|RECEIPT|PAYMENT IN|INCOMING/.test(direction);
-  const effect = isIncoming ? amount : -amount;
-  const balanceAfter = databaseNumber(company.current_balance) + effect;
-  const id = databaseText(body.id || crypto.randomUUID());
-  const paymentDate = body.paymentDate || new Date().toISOString().slice(0, 10);
-  const data = await jsonStorePut(c, "MUHASEBE_PAYMENT", id, {
-    id,
-    firmId,
-    companyId: firmId,
-    companyName: company.name,
-    transactionDirection: body.transactionDirection || "PAYMENT_OUT",
-    paymentMethod: body.paymentMethod || "TRANSFER",
-    paymentDate,
-    amount,
-    description: body.description || "",
-    bankName: body.bankName || "",
-    createdAt: new Date().toISOString(),
-  }, slug);
-  await insertDynamic(c, "current_account_movements", {
-    id: crypto.randomUUID(),
-    main_company_slug: slug,
-    company_id: firmId,
-    movement_date: paymentDate,
-    movement_type: isIncoming ? "TAHSILAT" : "ODEME",
-    source_type: "PAYMENT",
-    document_no: id,
-    description: body.description || (isIncoming ? "Tahsilat" : "Ödeme"),
-    debit: isIncoming ? amount : 0,
-    credit: isIncoming ? 0 : amount,
-    amount,
-    effect,
-    balance_after: balanceAfter,
-    raw: data,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  });
-  await updateDynamic(c, "companies", firmId, {
-    current_balance: balanceAfter,
-    updated_at: new Date().toISOString(),
-  }, slug);
-  return c.json({ ok: true, success: true, data }, 201);
-});
-
+}
+app.post("/api/muhasebe/odeme/islem", saveCurrentAccount);
+app.post("/api/muhasebe/cari-hareketler", saveCurrentAccount);
 app.post("/api/muhasebe/odeme/cek/:id/dosyalar", async (c) => {
   const id = c.req.param("id");
   const form = await c.req.formData();
   const slug = databaseText(
-    form.get("mainCompanySlug") || form.get("mainCompanyId") || c.req.query("mainCompanySlug") || "mecit-hakan",
+    form.get("mainCompanySlug") || form.get("mainCompanyId") || c.req.query("mainCompanySlug") || c.req.header("X-KYERP-Tenant-Slug"),
   ).trim();
   const cheque = await jsonStoreGet(c, "MUHASEBE_CHEQUE", id, slug);
   if (!cheque) return c.json(jsonError("NOT_FOUND", "Çek kaydı bulunamadı."), 404);
@@ -2633,3 +2591,5 @@ registerCanonicalAccountingReportRoutes(app);
 registerAuthManagementRoutes(app);
 
 export default app;
+
+

@@ -32,8 +32,9 @@ export async function analyzeAccountingImageWithWorkersAi(c:Context<AppEnv>,file
   if(!c.env.AI)throw Object.assign(new Error("Cloudflare Workers AI belge OCR bağlantısı hazır değil."),{code:"WORKERS_AI_OCR_NOT_CONFIGURED"});
   if(!/^image\//i.test(file.type))throw Object.assign(new Error("Cloudflare belge OCR için görüntü önizlemesi gereklidir."),{code:"WORKERS_AI_IMAGE_REQUIRED"});
   if(file.size>10_000_000)throw Object.assign(new Error("OCR görüntüsü 10 MB sınırını aşıyor. PDF/görsel önizlemesini küçültün."),{code:"WORKERS_AI_IMAGE_TOO_LARGE"});
-  const bytes=new Uint8Array(await file.arrayBuffer()),image=`data:${file.type||"image/jpeg"};base64,${base64(bytes)}`,slug=text(c.req?.header?.("X-KYERP-Tenant-Slug"))||"mecit-hakan";
+  const bytes=new Uint8Array(await file.arrayBuffer()),image=`data:${file.type||"image/jpeg"};base64,${base64(bytes)}`,slug=text(c.req?.header?.("X-KYERP-Tenant-Slug"))||"";
   let result:any;try{result=await c.env.AI.run(MODEL,{task:"query",image,question:promptFor(documentKind),reasoning:false,temperature:0.05,top_p:.1,max_tokens:7000},{gateway:{id:text((c.env as any).AI_GATEWAY_ID)||"default",skipCache:true,collectLog:false,metadata:{app:"KY_ERP",tenant:slug,module:"MUHASEBE_EBELGE_OCR",requestId:text(c.get?.("requestId"))}}});}catch(error:any){throw Object.assign(new Error("Cloudflare belge OCR servisi yanıt veremedi."),{code:"WORKERS_AI_OCR_FAILED",detail:text(error?.message).slice(0,500)})}
   const answer=text(result?.answer||result?.response||result?.text);if(!answer)throw Object.assign(new Error("Cloudflare belge OCR boş sonuç döndürdü."),{code:"WORKERS_AI_OCR_EMPTY"});
   return canonical(extractJson(answer),documentKind,answer);
 }
+

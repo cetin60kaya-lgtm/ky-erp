@@ -14,7 +14,7 @@ const CLAIM_LEASE_MS=15*60_000;
 const text = (v: unknown) => v == null ? "" : String(v).trim();
 const upper = (v: unknown) => text(v).toLocaleUpperCase("tr-TR");
 const now = () => new Date().toISOString();
-const slugOf = (c: Context<AppEnv>, b: Row = {}) => text(b.mainCompanySlug || b.main_company_slug || c.req.header("X-KYERP-Tenant-Slug") || c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "mecit-hakan");
+const slugOf = (c: Context<AppEnv>, b: Row = {}) => text(b.mainCompanySlug || b.main_company_slug || c.req.header("X-KYERP-Tenant-Slug") || c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "");
 const err = (code: string, message: string, details?: unknown) => ({ ok:false, success:false, error:{ code, message, ...(details === undefined ? {} : { details }) } });
 async function bodyOf(c: Context<AppEnv>): Promise<Row> { try { const b=await c.req.json(); return b&&typeof b==="object"&&!Array.isArray(b)?b as Row:{}; } catch { return {}; } }
 function agentAllowed(c: Context<AppEnv>) { const expected=text(c.env.FILE_HUB_AGENT_KEY), actual=text(c.req.header("X-KYERP-Agent-Key")); return Boolean(expected && actual && expected===actual); }
@@ -198,3 +198,4 @@ export function registerAccountingDocumentArchiveRoutes(app: Hono<AppEnv>) {
     return c.json({ok:true,data:{jobId:id,status}});
   });
 }
+

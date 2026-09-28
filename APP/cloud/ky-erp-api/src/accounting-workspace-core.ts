@@ -17,81 +17,34 @@ const EXTRA_WATCH_TABLES = [
   "companies", "company_aliases", "current_account_movements",
   "vat_records", "sales_invoice_states", "checks", "payments",
 ];
-let schemaReady = false;
 async function ensureWorkspaceSchema(c: Context<AppEnv>) {
-  if (schemaReady) return;
-  await c.env.DB.exec(`
-    CREATE TABLE IF NOT EXISTS accounting_live_revision (
-      main_company_slug TEXT PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS accounting_financial_accounts (
-      id TEXT PRIMARY KEY, main_company_slug TEXT NOT NULL, account_type TEXT NOT NULL,
-      name TEXT NOT NULL, bank_name TEXT, iban TEXT, currency TEXT NOT NULL DEFAULT 'TRY',
-      opening_balance REAL NOT NULL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 1,
-      note TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS ux_accounting_financial_accounts_name
-      ON accounting_financial_accounts(main_company_slug, name);
-    CREATE TABLE IF NOT EXISTS accounting_reconciliations (
-      id TEXT PRIMARY KEY, main_company_slug TEXT NOT NULL, company_id TEXT NOT NULL,
-      period TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'WAITING', erp_balance REAL NOT NULL DEFAULT 0,
-      counterparty_balance REAL, difference REAL, note TEXT, confirmed_at TEXT,
-      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS ux_accounting_reconciliations_period
-      ON accounting_reconciliations(main_company_slug, company_id, period);
-  `);
-  const placeholders = EXTRA_WATCH_TABLES.map(() => "?").join(",");
-  const existing = await c.env.DB.prepare(
-    `SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE 'accounting_%' OR name IN (${placeholders}))`,
-  ).bind(...EXTRA_WATCH_TABLES).all<Row>();
-  for (const row of existing.results || []) {
-    const table = text(row.name);
-    if (!table || table === "accounting_live_revision") continue;
-    try {
-      const columns = await c.env.DB.prepare(`PRAGMA table_info("${table.replace(/"/g, '""')}")`).all<Row>();
-      if (!(columns.results || []).some((column) => text(column.name) === "main_company_slug")) continue;
-      const base = table.replace(/[^A-Za-z0-9_]/g, "_");
-      for (const [event, ref] of [["INSERT", "NEW"], ["UPDATE", "NEW"], ["DELETE", "OLD"]] as const) {
-        const trigger = `trg_${base}_accounting_live_${event.toLowerCase()}`;
-        try {
-          await c.env.DB.exec(`CREATE TRIGGER IF NOT EXISTS ${trigger} AFTER ${event} ON "${table}"
-            WHEN ${ref}.main_company_slug IS NOT NULL AND TRIM(${ref}.main_company_slug) <> ''
-            BEGIN
-              INSERT INTO accounting_live_revision(main_company_slug,revision,updated_at)
-              VALUES(${ref}.main_company_slug,1,CURRENT_TIMESTAMP)
-              ON CONFLICT(main_company_slug) DO UPDATE SET revision=revision+1,updated_at=CURRENT_TIMESTAMP;
-            END;`);
-        } catch (error) {
-          console.warn("KY ERP accounting live trigger skipped", { table, event, error: String(error) });
-        }
-      }
-    } catch (error) {
-      console.warn("KY ERP accounting live table inspection skipped", { table, error: String(error) });
-    }
-  }
-  schemaReady = true;
+  const rows = await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('accounting_financial_accounts','accounting_reconciliations')").all<Row>();
+  if ((rows.results || []).length !== 2) throw Object.assign(new Error("Muhasebe çalışma alanı şeması hazır değil; yedekli migration gerekir."), { code: "ACCOUNTING_SCHEMA_NOT_READY" });
 }
-
 async function readBody(c: Context<AppEnv>): Promise<Row> {
   try { const value = await c.req.json(); return value && typeof value === "object" && !Array.isArray(value) ? value as Row : {}; }
   catch { return {}; }
 }
 async function liveState(c: Context<AppEnv>) {
-  await ensureWorkspaceSchema(c);
   const slug = slugOf(c);
   if (!slug) return fail(c, 400, "MAIN_COMPANY_REQUIRED", "Muhasebe için ana firma seçimi zorunludur.");
-  let row = await c.env.DB.prepare(
-    `SELECT revision,updated_at FROM accounting_live_revision WHERE main_company_slug=? LIMIT 1`,
-  ).bind(slug).first<Row>();
-  if (!row) {
-    const ts = now();
-    await c.env.DB.prepare(`INSERT OR IGNORE INTO accounting_live_revision(main_company_slug,revision,updated_at) VALUES(?,0,?)`).bind(slug, ts).run();
-    row = { revision: 0, updated_at: ts };
+  // A read endpoint never creates schema, triggers or revision records.
+  const placeholders = EXTRA_WATCH_TABLES.map(() => "?").join(",");
+  const tables = await c.env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE 'accounting_%' OR name IN (${placeholders})) ORDER BY name`).bind(...EXTRA_WATCH_TABLES).all<Row>();
+  const revisions = [];
+  for (const { name: table } of tables.results || []) {
+    if (table === "accounting_live_revision" || !/^[a-z_]+$/.test(table)) continue;
+    const info = await c.env.DB.prepare(`PRAGMA table_info("${table}")`).all<Row>();
+    const columns = new Set((info.results || []).map(row => row.name));
+    if (!columns.has("main_company_slug")) continue;
+    const date = columns.has("updated_at") ? "updated_at" : columns.has("created_at") ? "created_at" : "NULL";
+    const row = await c.env.DB.prepare(`SELECT COUNT(*) n, MAX(${date}) stamp FROM "${table}" WHERE main_company_slug=?`).bind(slug).first<Row>();
+    revisions.push([table, row?.n || 0, row?.stamp || ""]);
   }
-  return ok(c, { revision: num(row.revision), updatedAt: row.updated_at, serverTime: now() });
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(revisions)));
+  const revision = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+  return ok(c, { revision, updatedAt: now(), serverTime: now() });
 }
-
 async function listFinancialAccounts(c: Context<AppEnv>) {
   await ensureWorkspaceSchema(c);
   const slug = slugOf(c);
@@ -206,3 +159,4 @@ export function registerAccountingWorkspaceCoreRoutes(app: Hono<AppEnv>) {
   app.post("/api/muhasebe/workspace/reconciliations", saveReconciliation);
   app.get("/api/muhasebe/workspace/company-widget", companyWidget);
 }
+
