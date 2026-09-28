@@ -20,8 +20,9 @@ public sealed partial class MainShellForm
         if (MainMenuStrip is null) return;
 
         var payroll = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
-            .FirstOrDefault(x => string.Equals(x.Text, "Puantaj ve Bordro", StringComparison.OrdinalIgnoreCase));
-        if (payroll is not null && !payroll.DropDownItems.OfType<ToolStripMenuItem>().Any(x => x.Text.Contains("Aylık Düzeltme", StringComparison.OrdinalIgnoreCase)))
+            .FirstOrDefault(x => string.Equals(x.Text ?? string.Empty, "Puantaj ve Bordro", StringComparison.OrdinalIgnoreCase));
+        if (payroll is not null && !payroll.DropDownItems.OfType<ToolStripMenuItem>()
+                .Any(x => (x.Text ?? string.Empty).Contains("Aylık Düzeltme", StringComparison.OrdinalIgnoreCase)))
         {
             var item = MenuItem("Aylık Düzeltme / Hızlı Ödeme", PdksModule.Bordro,
                 () => ShowModule(new MonthlyPayrollAdjustmentForm(), PdksModule.Bordro));
