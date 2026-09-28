@@ -85,13 +85,14 @@ export async function writeCurrentAccount(c: Context<AppEnv>, slug: string, inpu
     credit: entry.type === "COLLECTION" ? entry.amount : entry.type === "PAYMENT" ? 0 : entry.credit,
     currency: "TRY", payment_method: text(input.paymentMethod), created_by: actor, created_at: timestamp, updated_at: timestamp,
   }, ["id", "main_company_slug", "debit", "credit"]);
-  // D1 batch is transactional: movement, balance, ledger and payment history commit together.
+  // One transactional batch owns movement, balance, ledger, payment history and live revision.
   await db.batch([
     movement,
     db.prepare("UPDATE companies SET current_balance=(SELECT COALESCE(SUM(effect),0) FROM current_account_movements WHERE company_id=? AND main_company_slug=?), updated_at=? WHERE id=? AND main_company_slug=?").bind(companyId, slug, timestamp, companyId, slug),
     db.prepare("UPDATE current_account_movements SET balance_after=(SELECT current_balance FROM companies WHERE id=? AND main_company_slug=?) WHERE id=? AND main_company_slug=?").bind(companyId, slug, id, slug),
     ledger,
     db.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?)").bind(id, "MUHASEBE_PAYMENT", slug, requestId, JSON.stringify(payload), timestamp, timestamp),
+    db.prepare("INSERT INTO accounting_live_revision(main_company_slug,revision,updated_at) VALUES(?,1,?) ON CONFLICT(main_company_slug) DO UPDATE SET revision=accounting_live_revision.revision+1,updated_at=excluded.updated_at").bind(slug, timestamp),
   ]);
   const saved = await db.prepare("SELECT balance_after FROM current_account_movements WHERE id=? AND main_company_slug=?").bind(id, slug).first<Row>();
   return { ...payload, movementId: id, balanceAfter: Number(saved?.balance_after || 0), idempotent: false };
