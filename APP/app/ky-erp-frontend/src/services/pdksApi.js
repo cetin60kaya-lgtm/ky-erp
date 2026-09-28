@@ -26,7 +26,7 @@ export async function getPdksProfile() {
 }
 
 export async function getPdksPeople(params = {}) {
-  const payload = unwrap(await pdksCachedGet(cacheKey("people", params), "/ik/personnel-control/pdks-people", params));
+  const payload = unwrap(await pdksCachedGet(cacheKey("people", params), "/ik/personnel-control/people", params));
   return Array.isArray(payload) ? payload.filter(isSgkPdksPerson) : payload;
 }
 
