@@ -12,6 +12,7 @@ function fixture() {
     CREATE TABLE current_account_movements(id TEXT PRIMARY KEY,main_company_slug TEXT,company_id TEXT,movement_date TEXT,movement_type TEXT,source_type TEXT,document_no TEXT,description TEXT,debit REAL,credit REAL,amount REAL,effect REAL,balance_after REAL,record_type TEXT,raw TEXT,created_at TEXT,updated_at TEXT);
     CREATE TABLE accounting_ledger_entries(id TEXT PRIMARY KEY,main_company_slug TEXT,company_id TEXT,company_name TEXT,entry_date TEXT,entry_type TEXT,record_scope TEXT,description TEXT,debit REAL,credit REAL,currency TEXT,payment_method TEXT,created_by TEXT,created_at TEXT,updated_at TEXT);
     CREATE TABLE json_store(id TEXT PRIMARY KEY,scope TEXT,main_company_slug TEXT,file_name TEXT,data TEXT,created_at TEXT,updated_at TEXT);
+    CREATE TABLE accounting_live_revision(main_company_slug TEXT PRIMARY KEY,revision INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);
   `);
   const db = {
     prepare(query: string) {
@@ -42,6 +43,7 @@ test("supplier debt/payment and customer receivable/collection balance to zero",
     assert.equal(paid.balanceAfter, 0);
   }
   assert.equal(sql.prepare("SELECT COUNT(*) n FROM accounting_ledger_entries WHERE record_scope='INTERNAL'").get()!.n, 2);
+  assert.equal(sql.prepare("SELECT revision FROM accounting_live_revision WHERE main_company_slug='tenant-a'").get()!.revision, 4);
   sql.close();
 });
 
@@ -92,6 +94,7 @@ test("duplicate payment is returned once; changed payload and foreign tenant are
   const input = { companyId: "supplier", transactionType: "PAYMENT", amount: 250, requestId: "same-request" };
   await writeCurrentAccount(context, "tenant-a", input, "tester");
   assert.equal((await writeCurrentAccount(context, "tenant-a", input, "tester")).idempotent, true);
+  assert.equal(sql.prepare("SELECT revision FROM accounting_live_revision WHERE main_company_slug='tenant-a'").get()!.revision, 1);
   await assert.rejects(writeCurrentAccount(context, "tenant-a", { ...input, amount: 300 }, "tester"), { code: "REQUEST_ID_CONFLICT" });
   await assert.rejects(writeCurrentAccount(context, "tenant-a", { ...input, companyId: "foreign", requestId: "foreign" }, "tester"), { code: "COMPANY_NOT_FOUND" });
   await assert.rejects(writeCurrentAccount(context, "tenant-a", { ...input, companyId: "cash", requestId: "cash" }, "tester"), { code: "CURRENT_ACCOUNT_DISABLED" });
@@ -99,12 +102,13 @@ test("duplicate payment is returned once; changed payload and foreign tenant are
   sql.close();
 });
 
-test("ledger failure rolls back movement and balance without partial financial writes", async () => {
+test("ledger failure rolls back movement balance and live revision without partial financial writes", async () => {
   const { sql, context } = fixture();
   sql.exec("CREATE TRIGGER test_failure BEFORE INSERT ON accounting_ledger_entries BEGIN SELECT RAISE(ABORT,'ledger failed'); END;");
   await assert.rejects(writeCurrentAccount(context, "tenant-a", { companyId: "supplier", transactionType: "PAYMENT", amount: 250, requestId: "failure" }, "tester"));
   assert.equal(sql.prepare("SELECT COUNT(*) n FROM current_account_movements").get()!.n, 0);
   assert.equal(sql.prepare("SELECT current_balance FROM companies WHERE id='supplier'").get()!.current_balance, 0);
+  assert.equal(sql.prepare("SELECT COUNT(*) n FROM accounting_live_revision").get()!.n, 0);
   sql.close();
 });
 
