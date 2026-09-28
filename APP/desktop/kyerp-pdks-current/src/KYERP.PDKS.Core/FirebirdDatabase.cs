@@ -28,7 +28,10 @@ public sealed class FirebirdDatabase
             Password = options.RequireDatabasePassword(),
             DataSource = options.DatabaseHost,
             Port = options.DatabasePort,
-            Dialect = 3,
+            // Hakan Emprime / legacy PDKS database is Firebird SQL Dialect 1.
+            // Forcing Dialect 3 causes -817 "Metadata update statement is not allowed..."
+            // and other compatibility errors on the production database.
+            Dialect = 1,
             Charset = options.DatabaseCharset,
             Pooling = false
         }.ToString();
