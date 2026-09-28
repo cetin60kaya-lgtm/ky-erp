@@ -30,9 +30,9 @@ jobs:
       - name: Shell smoke
         run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/ShellSmokeTest/ShellSmokeTest.csproj -c Release --no-build
       - name: UI audit
-        run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/UiAudit/UiAudit.csproj -c Release --no-build
+        run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/UiAudit/UiAudit.csproj -c Release
       - name: V4 shell smoke
-        run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/V4ShellSmoke/V4ShellSmoke.csproj -c Release --no-build
+        run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/V4ShellSmoke/V4ShellSmoke.csproj -c Release
       - name: Publish native app self contained
         run: dotnet publish APP/desktop/kyerp-pdks-current/src/HKN.Personel.Native/HKN.Personel.Native.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o out/HKN-PDKS
       - name: Package
