@@ -14,7 +14,7 @@ internal static class ToolStripLayoutPersistence
         return Path.Combine(CompanyDataPaths.Config, $"toolbar-{safe}.json");
     }
 
-    static string ItemKey(ToolStripItem item) => !string.IsNullOrWhiteSpace(item.Name) ? item.Name : item.Text;
+    static string ItemKey(ToolStripItem item) => !string.IsNullOrWhiteSpace(item.Name) ? item.Name : item.Text ?? string.Empty;
 
     public static void Attach(ToolStrip strip, string key)
     {
@@ -76,7 +76,7 @@ internal static class ToolStripLayoutPersistence
         var grid = new DataGridView { Dock = DockStyle.Fill, AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false, AutoGenerateColumns = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect };
         grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Visible", HeaderText = "Göster", Width = 60 });
         grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Title", HeaderText = "Menü / Buton", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, ReadOnly = true });
-        foreach (ToolStripItem item in strip.Items) grid.Rows.Add(item.Visible, item.Text);
+        foreach (ToolStripItem item in strip.Items) grid.Rows.Add(item.Visible, item.Text ?? string.Empty);
 
         var bar = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 54, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(8) };
         var save = new Button { Text = "Kaydet", Width = 100, Height = 34 };
@@ -92,7 +92,7 @@ internal static class ToolStripLayoutPersistence
             foreach (DataGridViewRow row in grid.Rows)
             {
                 var text = Convert.ToString(row.Cells["Title"].Value) ?? string.Empty;
-                var item = items.FirstOrDefault(i => string.Equals(i.Text, text, StringComparison.Ordinal));
+                var item = items.FirstOrDefault(i => string.Equals(i.Text ?? string.Empty, text, StringComparison.Ordinal));
                 if (item is null) continue;
                 item.Visible = Convert.ToBoolean(row.Cells["Visible"].Value ?? true);
                 reordered.Add(item);
