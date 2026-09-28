@@ -3,19 +3,21 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "requestedAt": "2026-09-24T23:20:00+03:00",
-  "attempt": 2,
+  "requestedAt": "2026-09-28T07:54:00+03:00",
+  "attempt": 3,
   "scope": [
-    "daily-operation-canonical-read-write",
-    "daily-operation-d1-variable-limit-fix",
-    "daily-operation-bounded-revision-query",
-    "daily-operation-quick-entry-batch-save",
+    "accounting-tenant-fail-closed",
+    "accounting-live-state-stability",
+    "accounting-ledger-debit-credit-xor",
+    "accounting-payment-plan-idempotency",
+    "hr-invalid-employee-controlled-error",
+    "design-storage-compatibility-endpoint",
+    "gmail-route-registration",
     "worker-typecheck-test-build",
     "d1-full-predeploy-backup",
-    "d1-no-migration",
     "d1-no-reset",
     "cloudflare-worker-production",
     "live-api-health-check"
   ],
-  "note": "Gunluk Hızlı Giris toplu kayit hotfix. Canli Worker logunda dogrulanan D1 too many SQL variables hatasi icin revision sorgusu istek tarihleriyle sinirlandi ve unbounded attendance_id IN sorgusu kaldirildi. Worker-only production release; frontend/Pages degismez. D1 migration/reset yoktur; deploy oncesi tam D1 yedegi alinir."
+  "note": "Final production closure for Muhasebe, IK, DESEN and Gmail runtime errors. Canonical source commit 650835fffb2a4d3c6f013e1890a76d4973e80002 passed backend typecheck, full backend tests and build. Tenant fallbacks are removed from the touched accounting flows, payment posting is idempotent, invalid HR employee selection is controlled, DESEN compatibility endpoint is present and Gmail routes are registered. Deploy path keeps the existing full D1 predeploy backup and does not reset live data."
 }
