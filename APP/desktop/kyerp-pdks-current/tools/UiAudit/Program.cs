@@ -11,7 +11,9 @@ foreach (var key in new[] { "KY_PDKS_DB_PATH", "KY_PDKS_DB_HOST", "KY_PDKS_DB_PO
         Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.Process);
 }
 
-var root = Path.Combine(@"D:\KYERP\_UI_AUDIT", DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+var noLoad = string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_NOLOAD"), "1", StringComparison.Ordinal);
+var driveRoot = Directory.Exists(@"D:\") ? @"D:\KYERP\_UI_AUDIT" : Path.Combine(Path.GetTempPath(), "KYERP", "_UI_AUDIT");
+var root = Path.Combine(driveRoot, DateTime.Now.ToString("yyyyMMdd-HHmmss"));
 Directory.CreateDirectory(root);
 var log = new StringBuilder();
 var errors = new List<string>();
@@ -58,7 +60,7 @@ foreach (var job in jobs)
     {
         using var form = job.Factory();
         PdksTheme.Apply(form);
-        if (job.Name.StartsWith("30-Rapor-", StringComparison.Ordinal))
+        if (noLoad || job.Name.StartsWith("30-Rapor-", StringComparison.Ordinal))
             CaptureFormNoLoad(form, job.Name, root, log);
         else
             CaptureForm(form, job.Name, root, log);
@@ -75,7 +77,8 @@ try
 {
     using var personnel = new PersonelForm();
     using var transfer = personnel.CreateTerminalTransferDialog();
-    CaptureForm(transfer, "40-Terminal-Veri-Transferi", root, log);
+    if (noLoad) CaptureFormNoLoad(transfer, "40-Terminal-Veri-Transferi", root, log);
+    else CaptureForm(transfer, "40-Terminal-Veri-Transferi", root, log);
 }
 catch (Exception ex)
 {
@@ -86,8 +89,7 @@ catch (Exception ex)
 
 File.WriteAllText(Path.Combine(root, "audit.txt"), log.ToString(), Encoding.UTF8);
 File.WriteAllLines(Path.Combine(root, "errors.txt"), errors, Encoding.UTF8);
-File.WriteAllText(Path.Combine(root, "RESULT.txt"),
-    errors.Count == 0 ? "PASS" : $"PARTIAL - {errors.Count} error(s)");
+File.WriteAllText(Path.Combine(root, "RESULT.txt"), errors.Count == 0 ? "PASS" : $"PARTIAL - {errors.Count} error(s)");
 
 Console.WriteLine($"UI_AUDIT_ROOT={root}");
 Console.WriteLine($"UI_AUDIT_FORMS={jobs.Count + 1}");
@@ -162,8 +164,7 @@ static IEnumerable<Control> Descendants(Control root)
     foreach (Control child in root.Controls)
     {
         yield return child;
-        foreach (var descendant in Descendants(child))
-            yield return descendant;
+        foreach (var descendant in Descendants(child)) yield return descendant;
     }
 }
 
@@ -171,11 +172,7 @@ static string Safe(string value)
 {
     var invalid = Path.GetInvalidFileNameChars();
     var chars = value.Select(c => invalid.Contains(c) ? '-' : c).ToArray();
-    var text = new string(chars)
-        .Replace('&', '-')
-        .Replace(' ', '-')
-        .Replace('/', '-')
-        .Replace('\\', '-');
+    var text = new string(chars).Replace('&', '-').Replace(' ', '-').Replace('/', '-').Replace('\\', '-');
     while (text.Contains("--")) text = text.Replace("--", "-");
     return text.Trim('-');
 }
