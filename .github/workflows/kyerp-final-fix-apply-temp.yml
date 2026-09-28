@@ -21,7 +21,9 @@ jobs:
           persist-credentials: true
 
       - name: Apply final fixes
-        run: python3 .github/scripts/kyerp_final_fix.py
+        run: |
+          python3 .github/scripts/kyerp_final_fix.py
+          python3 .github/scripts/kyerp_final_fix_contract.py
 
       - name: Diff check
         run: git diff --check
