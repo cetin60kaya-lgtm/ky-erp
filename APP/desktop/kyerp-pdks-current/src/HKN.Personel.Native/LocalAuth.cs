@@ -10,12 +10,15 @@ public sealed class LocalUser
     public string Salt { get; set; } = "";
     public bool IsActive { get; set; } = true;
     public bool IsAdmin { get; set; }
+    public bool IsCompanyResponsible { get; set; }
     public List<string> Permissions { get; set; } = [];
     public List<string> ReadOnlyPermissions { get; set; } = [];
 
-    public bool Can(PdksModule module) => IsAdmin || Permissions.Contains(module.ToString(), StringComparer.OrdinalIgnoreCase);
-    public bool CanEdit(PdksModule module) => IsAdmin || (Can(module) && !ReadOnlyPermissions.Contains(module.ToString(), StringComparer.OrdinalIgnoreCase));
-    public override string ToString() => UserName;
+    public bool IsSuperAdmin => IsAdmin && UserName.Equals("ADMIN", StringComparison.OrdinalIgnoreCase);
+    public string RoleName => IsSuperAdmin ? "SUPER ADMIN" : IsCompanyResponsible ? "FİRMA SORUMLUSU" : "KULLANICI";
+    public bool Can(PdksModule module) => IsSuperAdmin || Permissions.Contains(module.ToString(), StringComparer.OrdinalIgnoreCase);
+    public bool CanEdit(PdksModule module) => IsSuperAdmin || (Can(module) && !ReadOnlyPermissions.Contains(module.ToString(), StringComparer.OrdinalIgnoreCase));
+    public override string ToString() => $"{UserName} • {RoleName}";
 }
 
 internal static class LocalAuthStore
@@ -30,24 +33,40 @@ internal static class LocalAuthStore
     {
         Directory.CreateDirectory(Dir);
         if (!File.Exists(FilePath)) return [];
-        try { return JsonSerializer.Deserialize<List<LocalUser>>(File.ReadAllText(FilePath), JsonOptions) ?? []; }
+        try
+        {
+            var users = JsonSerializer.Deserialize<List<LocalUser>>(File.ReadAllText(FilePath), JsonOptions) ?? [];
+            foreach (var u in users)
+            {
+                if (!u.UserName.Equals("ADMIN", StringComparison.OrdinalIgnoreCase) && u.IsAdmin)
+                    u.IsAdmin = false;
+            }
+            return users;
+        }
         catch { return []; }
     }
 
     public static void Save(List<LocalUser> users)
     {
         Directory.CreateDirectory(Dir);
+        foreach (var u in users)
+            if (!u.UserName.Equals("ADMIN", StringComparison.OrdinalIgnoreCase)) u.IsAdmin = false;
         File.WriteAllText(FilePath, JsonSerializer.Serialize(users, JsonOptions));
     }
 
-    public static LocalUser CreateUser(string userName, string password, bool active, bool admin, IEnumerable<string> permissions)
+    public static LocalUser CreateUser(string userName, string password, bool active, bool admin, IEnumerable<string> permissions, bool responsible = false)
     {
+        var normalized = userName.Trim().ToUpperInvariant();
         var salt = RandomNumberGenerator.GetBytes(16);
         var hash = Hash(password, salt);
         return new LocalUser
         {
-            UserName = userName.Trim().ToUpperInvariant(), Salt = Convert.ToBase64String(salt),
-            PasswordHash = Convert.ToBase64String(hash), IsActive = active, IsAdmin = admin,
+            UserName = normalized,
+            Salt = Convert.ToBase64String(salt),
+            PasswordHash = Convert.ToBase64String(hash),
+            IsActive = active,
+            IsAdmin = admin && normalized.Equals("ADMIN", StringComparison.OrdinalIgnoreCase),
+            IsCompanyResponsible = responsible,
             Permissions = permissions.Distinct(StringComparer.OrdinalIgnoreCase).ToList()
         };
     }
@@ -71,5 +90,5 @@ internal static class LocalAuthStore
         catch { return false; }
     }
 
-    static byte[] Hash(string password, byte[] salt) => Rfc2898DeriveBytes.Pbkdf2(password, salt, 120_000, HashAlgorithmName.SHA256, 32);
+    static byte[] Hash(string password, byte[] salt) => Rfc2898DeriveBytes.Pbkdf2(password, salt, 150_000, HashAlgorithmName.SHA256, 32);
 }
