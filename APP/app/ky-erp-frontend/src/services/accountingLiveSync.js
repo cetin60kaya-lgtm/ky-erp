@@ -46,24 +46,13 @@ export function useAccountingLiveSync(activeMainCompany, onRefresh) {
       if (stopped || busyRef.current || document.visibilityState === "hidden") return;
       busyRef.current = true;
       try {
-        let response;
-        let liveStateAvailable = false;
-        if (scoped) {
-          try {
-            response = await apiGet("/muhasebe/workspace/live-state", params(), { timeoutMs: 6000, forceFresh: true });
-            liveStateAvailable = true;
-          } catch (liveError) {
-            const status = errorStatus(liveError);
-            if (status === "auth_error" || status === "offline") throw liveError;
-            response = await apiGet("/health", { _ts: Date.now() }, { timeoutMs: 6000, forceFresh: true });
-          }
-        } else {
-          response = await apiGet("/health", { _ts: Date.now() }, { timeoutMs: 6000, forceFresh: true });
-        }
+        if (!scoped) throw new Error("Canlı muhasebe verisi için firma seçin.");
+        const response = await apiGet("/muhasebe/workspace/live-state", params(), { timeoutMs: 6000, forceFresh: true });
+        if (stopped) return;
         const data = response?.data || response || {};
-        const revision = liveStateAvailable ? Number(data.revision || 0) : Number(revisionRef.current || 0);
-        const changed = liveStateAvailable && revisionRef.current !== null && revision !== revisionRef.current;
-        if (liveStateAvailable) revisionRef.current = revision;
+        const revision = String(data.revision ?? "");
+        const changed = revisionRef.current !== null && revision !== revisionRef.current;
+        revisionRef.current = revision;
         setState({
           status: "live",
           online: true,
@@ -77,6 +66,7 @@ export function useAccountingLiveSync(activeMainCompany, onRefresh) {
           callbackRef.current?.();
         }
       } catch (error) {
+        if (stopped) return;
         setState((current) => ({
           ...current,
           status: errorStatus(error),
