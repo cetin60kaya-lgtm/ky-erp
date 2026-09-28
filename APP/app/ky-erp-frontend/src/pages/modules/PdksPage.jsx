@@ -10,27 +10,24 @@ import PdksPageV2 from "./PdksPageV2";
 import "./pdks-shell.css";
 
 const NAV_GROUPS = [
-  { key: "genel", label: "Genel Bakış", hint: "Canlı durum, hızlı işlem ve günlük özet", items: [
-    ["ana-ekran", "Genel Bakış"],
+  { key: "gunluk", label: "Günlük", hint: "Canlı durum, terminal aktarımı ve günlük giriş-çıkış işlemleri", items: [
+    ["ana-ekran", "Genel Bakış"], ["bilgi-aktar", "Terminal Aktar"], ["giris-cikislar", "Giriş-Çıkış"],
   ]},
-  { key: "operasyon", label: "Operasyon", hint: "Terminal aktarımı ve günlük giriş-çıkış işlemleri", items: [
-    ["bilgi-aktar", "Terminal"], ["giris-cikislar", "Giriş-Çıkış"],
-  ]},
-  { key: "personel", label: "İnsan Kaynakları", hint: "PDKS SGK personeli, aktif/pasif geçmiş ve izinler", items: [
+  { key: "personel", label: "Personel & İK", hint: "PDKS SGK personeli, aktif/pasif geçmiş, izin ve çalışma tarihi", items: [
     ["personel-bilgileri", "Personel"], ["izinler", "İzinler"], ["calisma-tarihi", "Çalışma Tarihi"],
   ]},
-  { key: "puantaj", label: "Puantaj ve Bordro", hint: "Puantaj, sonuç ve dönem işlemleri", items: [
-    ["puantaj", "Puantaj"], ["puantaj-sonuclari", "Sonuçlar"], ["donemler", "Dönem / Kapanış"],
-  ]},
-  { key: "rapor", label: "Raporlama ve Denetim", hint: "PDKS raporları ve yıllık denetim", items: [
-    ["raporlar", "Raporlar"], ["denetim-yillik-temp", "Yıllık TEMP"],
-  ]},
-  { key: "sistem", label: "Sistem Yönetimi", hint: "Cihaz, vardiya, servis, tatil ve çift yönlü senkron", items: [
-    ["saat-terminal", "Terminal"], ["cihaz-baglantilari", "Cihazlar"], ["senkron", "Senkron"],
+  { key: "tanimlar", label: "Tanımlar", hint: "Vardiya, puantaj kuralı, servis ve tatil tanımları", items: [
     ["gruplar-vardiyalar", "Vardiyalar"], ["puantaj-kurallari", "Puantaj Kuralları"], ["servisler", "Servisler"], ["tatiller", "Tatiller"],
+  ]},
+  { key: "terminal", label: "Terminal & Sistem", hint: "Cihaz sağlığı, Desktop Agent ve çift yönlü senkron", items: [
+    ["saat-terminal", "Terminal"], ["cihaz-baglantilari", "Cihazlar"], ["senkron", "Senkron"],
+  ]},
+  { key: "rapor", label: "Rapor & Denetim", hint: "Puantaj, bordro sonucu, dönem kapanışı, rapor ve yıllık denetim", items: [
+    ["puantaj", "Puantaj"], ["puantaj-sonuclari", "Sonuçlar"], ["donemler", "Dönem / Kapanış"], ["raporlar", "Raporlar"], ["denetim-yillik-temp", "Yıllık TEMP"],
   ]},
 ];
 
+const DEVICE_CENTER_TABS = ["saat-terminal", "cihaz-baglantilari", "senkron"];
 const AUDIT_ALLOWED_TABS = new Set(["ana-ekran","giris-cikislar","puantaj","puantaj-sonuclari","calisma-tarihi","raporlar","denetim-yillik-temp"]);
 const PERSONNEL_DESK_TABS = new Set(["personel-bilgileri","giris-cikislar","puantaj","izinler","calisma-tarihi"]);
 
@@ -90,7 +87,7 @@ export default function PdksPage(props) {
   const go = (tabKey) => openModule?.("pdks", { tabKey });
   const mainCompanyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
 
-  const deviceCenterTab = !isAuditAccount && ["saat-terminal", "cihaz-baglantilari", "senkron"].includes(activeTab);
+  const deviceCenterTab = !isAuditAccount && DEVICE_CENTER_TABS.includes(activeTab);
   const personnelDeskTab = PERSONNEL_DESK_TABS.has(activeTab);
   const rulesCenterTab = !isAuditAccount && activeTab === "puantaj-kurallari";
   const reportCenterTab = ["puantaj-sonuclari", "raporlar"].includes(activeTab);
@@ -99,7 +96,7 @@ export default function PdksPage(props) {
     <div className="pdks-module-shell">
       <header className="pdks-context-bar">
         <div className="pdks-context-title">
-          <small>KY ERP · PDKS 6.0 / {currentGroup?.label || "Genel Bakış"}</small>
+          <small>KY ERP · PDKS 6.0 / {currentGroup?.label || "Günlük"}</small>
           <strong>{currentItem[1]}</strong>
           <span>{currentGroup?.hint}</span>
         </div>
