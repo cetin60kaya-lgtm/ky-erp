@@ -14,6 +14,10 @@ function validEmployeeId(value) {
   return id && id !== "0" ? id : "";
 }
 
+function isSgkPdksPerson(person) {
+  return String(person?.sgkStatus ?? "VAR").trim().toLocaleUpperCase("tr-TR") !== "YOK";
+}
+
 const OPS = "/ik/personnel-control/operations";
 const cacheKey = (name, params = {}) => `${name}:${JSON.stringify(params, Object.keys(params).sort())}`;
 
@@ -22,7 +26,8 @@ export async function getPdksProfile() {
 }
 
 export async function getPdksPeople(params = {}) {
-  return unwrap(await pdksCachedGet(cacheKey("people", params), "/ik/personnel-control/people", params));
+  const payload = unwrap(await pdksCachedGet(cacheKey("people", params), "/ik/personnel-control/people", params));
+  return Array.isArray(payload) ? payload.filter(isSgkPdksPerson) : payload;
 }
 
 // Modern attendance motoru: vardiya, hafta sonu, yarım gün tatil, izin günü,
@@ -64,7 +69,7 @@ export async function savePdksLeaveV2(payload = {}) {
 export async function getPdksLeaveEntitlement(employeeId, params = {}) {
   const id = validEmployeeId(employeeId);
   if (!id) return null;
-  return unwrap(await pdksCachedGet(cacheKey(`leave-entitlement:${id}`, params), `/ik/personnel-control/people/${encodeURIComponent(id)}/leave-entitlement`, params));
+  return unwrap(await pdksCachedGet(cacheKey(`leave-entitlement:${employeeId}`, params), `/ik/personnel-control/people/${encodeURIComponent(employeeId)}/leave-entitlement`, params));
 }
 
 export async function savePdksCorrection(employeeId, payload = {}) {
