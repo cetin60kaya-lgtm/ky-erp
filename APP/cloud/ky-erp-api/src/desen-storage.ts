@@ -267,6 +267,29 @@ export function registerDesenStorageRoutes(app: Hono<AppEnv>) {
     });
   });
 
+  app.get("/api/storage/desen-images", async (c) => {
+    const slug = slugOf(c);
+    if (!slug) return c.json({ ok: false, success: false, error: { code: "MAIN_COMPANY_REQUIRED", message: "Desen havuzu için ana firma seçimi zorunludur." } }, 400);
+    const limit = Math.min(500, Math.max(1, Number(c.req.query("limit") || 300) || 300));
+    const prefixes = [`desen/inbox/${slug}/`, `desen/models/${slug}/`, `desen/processed/${slug}/`, `desen/archive/${slug}/`];
+    const files: Row[] = [];
+    try {
+      for (const prefix of prefixes) {
+        if (files.length >= limit) break;
+        const listed = await (c.env.FILES as any).list({ prefix, limit: Math.max(1, limit - files.length) });
+        for (const object of Array.isArray(listed?.objects) ? listed.objects : []) {
+          const key = text(object?.key);
+          if (!key || key.endsWith("/")) continue;
+          files.push({ id: key, key, storageKey: key, fileName: key.split("/").pop() || key, size: Number(object?.size || 0), uploadedAt: object?.uploaded || null });
+          if (files.length >= limit) break;
+        }
+      }
+      return c.json({ ok: true, success: true, data: files, items: files, files });
+    } catch (error) {
+      return c.json({ ok: false, success: false, error: { code: "DESEN_STORAGE_UNAVAILABLE", message: "Desen görselleri şu anda okunamadı." } }, 503);
+    }
+  });
+
   app.get("/api/desen/havuz/storage-durum", async (c) => {
     return c.json({ ok: true, success: true, data: await storageStatus(c, slugOf(c)) });
   });

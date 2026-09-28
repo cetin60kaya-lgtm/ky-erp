@@ -423,7 +423,7 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
     return ok(c,{id,status,...preview},201);
   });
 
-  app.get("/api/ik/personnel-control/people/:employeeId/leave-entitlement",async(c)=>{const auth=await authContext(c);if(!auth)return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı.");await seedCompany(c,auth.company);const data=await entitlementLedger(c,auth.company,text(c.req.param("employeeId")));return data?ok(c,data):fail(c,404,"NOT_FOUND","Personel bulunamadı.");});
+  app.get("/api/ik/personnel-control/people/:employeeId/leave-entitlement",async(c)=>{const auth=await authContext(c);if(!auth)return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı.");const employeeId=text(c.req.param("employeeId"));if(!employeeId||employeeId==="0")return fail(c,400,"EMPLOYEE_ID_INVALID","Geçerli bir personel seçilmelidir.");await seedCompany(c,auth.company);const data=await entitlementLedger(c,auth.company,employeeId);return data?ok(c,data):fail(c,404,"NOT_FOUND","Personel bulunamadı.");});
 
   app.post("/api/ik/personnel-control/people/:employeeId/correction", async (c) => {
     const body=await bodyOf(c),auth=await authContext(c,body); if(!auth)return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı."); if(auth.audit)return fail(c,403,"HR_AUDIT_READ_ONLY","Denetim kullanıcısı puantaj düzeltemez."); const employeeId=text(c.req.param("employeeId")),workDate=dateOnly(body.workDate||body.date),reason=text(body.reason||body.note); if(!workDate||!reason)return fail(c,400,"CORRECTION_REASON_REQUIRED","Tarih ve düzeltme nedeni zorunludur."); if(await isLocked(c,auth.company,workDate))return fail(c,423,"PDKS_PERIOD_LOCKED","Kilitli dönemde düzeltme yapılamaz.");

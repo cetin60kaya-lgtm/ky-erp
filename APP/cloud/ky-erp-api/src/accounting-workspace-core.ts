@@ -7,7 +7,7 @@ type Row = Record<string, any>;
 const text = (value: unknown) => value == null ? "" : String(value).trim();
 const num = (value: unknown) => { const n = Number(value ?? 0); return Number.isFinite(n) ? n : 0; };
 const now = () => new Date().toISOString();
-const slugOf = (c: Context<AppEnv>) => text(c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || c.req.header("X-KYERP-Tenant-Slug") || "mecit-hakan");
+const slugOf = (c: Context<AppEnv>) => text(c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || c.req.header("X-KYERP-Tenant-Slug"));
 const ok = (c: Context<AppEnv>, data: unknown, status = 200) => c.json({ ok: true, data }, status as any);
 const fail = (c: Context<AppEnv>, status: number, code: string, message: string) => c.json({ ok: false, error: { code, message } }, status as any);
 const periodNow = () => new Date().toISOString().slice(0, 7);
@@ -48,18 +48,26 @@ async function ensureWorkspaceSchema(c: Context<AppEnv>) {
   for (const row of existing.results || []) {
     const table = text(row.name);
     if (!table || table === "accounting_live_revision") continue;
-    const columns = await c.env.DB.prepare(`PRAGMA table_info("${table.replace(/"/g, '""')}")`).all<Row>();
-    if (!(columns.results || []).some((column) => text(column.name) === "main_company_slug")) continue;
-    const base = table.replace(/[^A-Za-z0-9_]/g, "_");
-    for (const [event, ref] of [["INSERT", "NEW"], ["UPDATE", "NEW"], ["DELETE", "OLD"]] as const) {
-      const trigger = `trg_${base}_accounting_live_${event.toLowerCase()}`;
-      await c.env.DB.exec(`CREATE TRIGGER IF NOT EXISTS ${trigger} AFTER ${event} ON "${table}"
-        WHEN ${ref}.main_company_slug IS NOT NULL AND TRIM(${ref}.main_company_slug) <> ''
-        BEGIN
-          INSERT INTO accounting_live_revision(main_company_slug,revision,updated_at)
-          VALUES(${ref}.main_company_slug,1,CURRENT_TIMESTAMP)
-          ON CONFLICT(main_company_slug) DO UPDATE SET revision=revision+1,updated_at=CURRENT_TIMESTAMP;
-        END;`);
+    try {
+      const columns = await c.env.DB.prepare(`PRAGMA table_info("${table.replace(/"/g, '""')}")`).all<Row>();
+      if (!(columns.results || []).some((column) => text(column.name) === "main_company_slug")) continue;
+      const base = table.replace(/[^A-Za-z0-9_]/g, "_");
+      for (const [event, ref] of [["INSERT", "NEW"], ["UPDATE", "NEW"], ["DELETE", "OLD"]] as const) {
+        const trigger = `trg_${base}_accounting_live_${event.toLowerCase()}`;
+        try {
+          await c.env.DB.exec(`CREATE TRIGGER IF NOT EXISTS ${trigger} AFTER ${event} ON "${table}"
+            WHEN ${ref}.main_company_slug IS NOT NULL AND TRIM(${ref}.main_company_slug) <> ''
+            BEGIN
+              INSERT INTO accounting_live_revision(main_company_slug,revision,updated_at)
+              VALUES(${ref}.main_company_slug,1,CURRENT_TIMESTAMP)
+              ON CONFLICT(main_company_slug) DO UPDATE SET revision=revision+1,updated_at=CURRENT_TIMESTAMP;
+            END;`);
+        } catch (error) {
+          console.warn("KY ERP accounting live trigger skipped", { table, event, error: String(error) });
+        }
+      }
+    } catch (error) {
+      console.warn("KY ERP accounting live table inspection skipped", { table, error: String(error) });
     }
   }
   schemaReady = true;
@@ -72,6 +80,7 @@ async function readBody(c: Context<AppEnv>): Promise<Row> {
 async function liveState(c: Context<AppEnv>) {
   await ensureWorkspaceSchema(c);
   const slug = slugOf(c);
+  if (!slug) return fail(c, 400, "MAIN_COMPANY_REQUIRED", "Muhasebe için ana firma seçimi zorunludur.");
   let row = await c.env.DB.prepare(
     `SELECT revision,updated_at FROM accounting_live_revision WHERE main_company_slug=? LIMIT 1`,
   ).bind(slug).first<Row>();

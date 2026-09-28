@@ -6,6 +6,11 @@ function unwrap(payload) {
     : payload;
 }
 
+function validEmployeeId(value) {
+  const id = String(value ?? "").trim();
+  return id && id !== "0" ? id : "";
+}
+
 export async function getIkControlProfile() {
   return unwrap(await apiGet("/ik/personnel-control/profile"));
 }
@@ -19,6 +24,8 @@ export async function getIkControlPerson(employeeId) {
 }
 
 export async function getIkControlLeaveEntitlement(employeeId, params = {}) {
+  const id = validEmployeeId(employeeId);
+  if (!id) return null;
   return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/leave-entitlement`, params));
 }
 

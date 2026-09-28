@@ -9,7 +9,7 @@ const now = () => new Date().toISOString();
 const slugOf = (c: Context<AppEnv>, body: Row = {}) => text(
   body.mainCompanySlug || body.main_company_slug || body.mainCompanyId ||
   c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") ||
-  c.req.header("X-KYERP-Tenant-Slug") || "mecit-hakan",
+  c.req.header("X-KYERP-Tenant-Slug"),
 );
 const error = (code: string, message: string) => ({ ok: false, success: false, error: { code, message } });
 async function bodyOf(c: Context<AppEnv>): Promise<Row> {
@@ -51,11 +51,15 @@ export function registerAccountingFinanceCoreRoutes(app: Hono<AppEnv>) {
   });
   app.post("/api/muhasebe/defter", async (c) => {
     const body = await bodyOf(c), slug = slugOf(c, body), id = crypto.randomUUID(), timestamp = now();
+    const debit = num(body.debit), credit = num(body.credit);
+    if ((debit > 0 && credit > 0) || (debit <= 0 && credit <= 0)) {
+      return c.json(error("LEDGER_SIDE_INVALID", "Defter kaydında yalnız borç veya yalnız alacak tutarı girilmelidir."), 400);
+    }
     await c.env.DB.prepare(`INSERT INTO accounting_ledger_entries(id,main_company_slug,entry_date,entry_type,record_scope,company_id,company_name,description,debit,credit,currency,payment_method,bank_account_id,source_document_id,source_payment_plan_id,file_asset_id,note,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
       id, slug, text(body.entryDate) || timestamp.slice(0, 10), text(body.entryType).toUpperCase() || "DIGER",
       text(body.recordScope).toUpperCase() === "INTERNAL" ? "INTERNAL" : "OFFICIAL",
       text(body.companyId) || null, text(body.companyName) || null, text(body.description) || null,
-      num(body.debit), num(body.credit), text(body.currency) || "TRY", text(body.paymentMethod) || null,
+      debit, credit, text(body.currency) || "TRY", text(body.paymentMethod) || null,
       text(body.bankAccountId) || null, text(body.sourceDocumentId) || null, text(body.sourcePaymentPlanId) || null,
       text(body.fileAssetId) || null, text(body.note) || null, text(body.createdBy) || null, timestamp, timestamp,
     ).run();

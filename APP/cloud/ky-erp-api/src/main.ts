@@ -64,6 +64,7 @@ import { registerProductionCenterRoutes } from "./production-center";
 import { registerProductionRuntimeV2Routes } from "./production-runtime-v2";
 import { registerNotificationRoutes } from "./notifications-cloud";
 import { registerMailCommunicationRoutes } from "./mail-communication-core";
+import { registerGoogleMailRoutes } from "./mail-google-gmail";
 import { registerMicrosoftMailRoutes } from "./mail-microsoft-graph";
 import { ensureMailCommunicationCore0050 } from "./runtime-migration-0050";
 
@@ -183,6 +184,7 @@ registerProductionRuntimeV2Routes(app);
 registerProductionCenterRoutes(app);
 registerNotificationRoutes(app);
 registerMailCommunicationRoutes(app);
+registerGoogleMailRoutes(app);
 registerMicrosoftMailRoutes(app);
 registerBoyahaneInventoryRoutes(app);
 registerBoyahaneExcelImportRoutes(app);
@@ -294,8 +296,8 @@ shell.use("/api/isnet/*", enforceIsnetTenant);
 // e-Belge Merkezi, Muhasebe yetkisi ve oturumun tenant bağlamı dışında erişilemez.
 shell.use("/api/e-belge/*", enforceAccountingTenant);
 
-// Müşteri irsaliye/fatura kontrolü canonical Muhasebe verisini kullanır ve aynı tenant/yetki kilidine tabidir.
-shell.use("/api/muhasebe/customer-dispatches*", enforceAccountingTenant);
+// Tüm Muhasebe endpointleri aynı tenant/yetki kilidine tabidir; tenant yoksa fail-closed çalışır.
+shell.use("/api/muhasebe/*", enforceAccountingTenant);
 registerCanonicalDispatchControlRoutes(shell);
 
 // Sistem Yönetimi yalnız uygulama sahibidir. Eski bir kullanıcı kaydında ADMIN

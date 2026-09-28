@@ -6,6 +6,11 @@ function unwrap(payload) {
     : payload;
 }
 
+function validEmployeeId(value) {
+  const id = String(value ?? "").trim();
+  return id && id !== "0" ? id : "";
+}
+
 const OPS = "/ik/personnel-control/operations";
 
 export async function getPdksProfile() {
@@ -51,6 +56,8 @@ export async function savePdksLeaveV2(payload = {}) {
 }
 
 export async function getPdksLeaveEntitlement(employeeId, params = {}) {
+  const id = validEmployeeId(employeeId);
+  if (!id) return null;
   return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/leave-entitlement`, params));
 }
 
