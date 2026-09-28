@@ -30,6 +30,8 @@ jobs:
       - name: Shell smoke
         run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/ShellSmokeTest/ShellSmokeTest.csproj -c Release --no-build
       - name: UI audit
+        env:
+          KY_PDKS_UI_AUDIT_NOLOAD: '1'
         run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/UiAudit/UiAudit.csproj -c Release
       - name: V4 shell smoke
         run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/V4ShellSmoke/V4ShellSmoke.csproj -c Release
