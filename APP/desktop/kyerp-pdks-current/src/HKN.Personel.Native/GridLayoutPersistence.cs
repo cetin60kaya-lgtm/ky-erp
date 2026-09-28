@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace HKN.Personel.Native;
@@ -18,7 +19,10 @@ internal static class GridLayoutPersistence
         public bool Visible { get; set; } = true;
     }
 
+    sealed class AttachmentMarker;
+
     static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    static readonly ConditionalWeakTable<DataGridView, AttachmentMarker> Attached = new();
 
     static string FileFor(string key)
     {
@@ -27,8 +31,22 @@ internal static class GridLayoutPersistence
         return Path.Combine(CompanyDataPaths.Config, $"grid-{safe}.json");
     }
 
+    public static string AutoKey(DataGridView grid)
+    {
+        var form = grid.FindForm();
+        var formName = form?.GetType().Name ?? "Form";
+        var gridName = string.IsNullOrWhiteSpace(grid.Name) ? "Grid" : grid.Name;
+        return $"auto-{formName}-{gridName}";
+    }
+
     public static void Attach(DataGridView grid, string key, bool allowUserCustomization = true)
     {
+        if (Attached.TryGetValue(grid, out _))
+        {
+            Apply(grid, key);
+            return;
+        }
+        Attached.Add(grid, new AttachmentMarker());
         grid.AllowUserToOrderColumns = allowUserCustomization;
         grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
         grid.ColumnAdded += (_, _) => BeginApply(grid, key);
@@ -38,6 +56,8 @@ internal static class GridLayoutPersistence
         grid.VisibleChanged += (_, _) => SaveIfReady(grid, key);
         BeginApply(grid, key);
     }
+
+    public static void AttachAuto(DataGridView grid) => Attach(grid, AutoKey(grid));
 
     static void BeginApply(DataGridView grid, string key)
     {
@@ -52,7 +72,8 @@ internal static class GridLayoutPersistence
         var state = Capture(grid, locked);
         Save(key, state);
         grid.AllowUserToOrderColumns = !locked;
-        foreach (DataGridViewColumn c in grid.Columns) c.Resizable = locked ? DataGridViewTriState.False : DataGridViewTriState.True;
+        foreach (DataGridViewColumn c in grid.Columns)
+            c.Resizable = locked ? DataGridViewTriState.False : DataGridViewTriState.True;
     }
 
     public static void Reset(DataGridView grid, string key)
@@ -94,7 +115,7 @@ internal static class GridLayoutPersistence
                                          string.Equals(c.HeaderText, saved.Name, StringComparison.OrdinalIgnoreCase));
                 if (column is null) continue;
                 column.Visible = saved.Visible;
-                column.Width = Math.Clamp(saved.Width, 35, 800);
+                column.Width = Math.Clamp(saved.Width, 35, 1200);
                 var maxIndex = Math.Max(0, grid.Columns.Count - 1);
                 column.DisplayIndex = Math.Clamp(saved.DisplayIndex, 0, maxIndex);
                 column.Resizable = state.Locked ? DataGridViewTriState.False : DataGridViewTriState.True;
@@ -110,8 +131,8 @@ internal static class GridLayoutPersistence
         {
             Text = title,
             StartPosition = FormStartPosition.CenterParent,
-            Size = new Size(640, 650),
-            MinimumSize = new Size(560, 480),
+            Size = new Size(680, 680),
+            MinimumSize = new Size(580, 500),
             Font = new Font("Segoe UI", 9f)
         };
         var list = new DataGridView
@@ -129,7 +150,7 @@ internal static class GridLayoutPersistence
         foreach (DataGridViewColumn c in grid.Columns.Cast<DataGridViewColumn>().OrderBy(c => c.DisplayIndex))
             list.Rows.Add(c.Visible, c.HeaderText, c.Width);
 
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 54, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(8) };
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(8) };
         var save = new Button { Text = "Kaydet", Width = 100, Height = 34 };
         var reset = new Button { Text = "Varsayılana Dön", Width = 130, Height = 34 };
         var up = new Button { Text = "Yukarı", Width = 90, Height = 34 };
@@ -144,13 +165,16 @@ internal static class GridLayoutPersistence
         reset.Click += (_, _) => { Reset(grid, key); form.DialogResult = DialogResult.OK; form.Close(); };
         save.Click += (_, _) =>
         {
-            var orderedColumns = grid.Columns.Cast<DataGridViewColumn>().OrderBy(c => c.DisplayIndex).ToList();
-            for (var i = 0; i < list.Rows.Count && i < orderedColumns.Count; i++)
+            var byHeader = grid.Columns.Cast<DataGridViewColumn>()
+                .ToDictionary(c => c.HeaderText, c => c, StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < list.Rows.Count; i++)
             {
-                var c = orderedColumns[i];
+                var header = Convert.ToString(list.Rows[i].Cells["Title"].Value) ?? string.Empty;
+                if (!byHeader.TryGetValue(header, out var c)) continue;
                 c.Visible = Convert.ToBoolean(list.Rows[i].Cells["Visible"].Value ?? true);
-                if (int.TryParse(Convert.ToString(list.Rows[i].Cells["Width"].Value), out var width)) c.Width = Math.Clamp(width, 35, 800);
-                c.DisplayIndex = i;
+                if (int.TryParse(Convert.ToString(list.Rows[i].Cells["Width"].Value), out var width))
+                    c.Width = Math.Clamp(width, 35, 1200);
+                c.DisplayIndex = Math.Min(i, grid.Columns.Count - 1);
             }
             SetLocked(grid, key, locked.Checked);
             form.DialogResult = DialogResult.OK;
