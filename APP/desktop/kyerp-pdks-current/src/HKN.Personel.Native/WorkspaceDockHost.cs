@@ -21,9 +21,12 @@ internal sealed class WorkspaceDockHost : UserControl
         public string Key { get; set; } = string.Empty;
     }
 
+    sealed record CachedScreen(Control Control, string Title);
+
     readonly string userKey;
     readonly List<Slot> slots = new();
     readonly Panel root = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(241,245,250) };
+    readonly Dictionary<string, CachedScreen> screenCache = new(StringComparer.OrdinalIgnoreCase);
     WorkspaceLayoutMode mode = WorkspaceLayoutMode.Single;
     int activeIndex;
     readonly Dictionary<string, int> splitDistances = new(StringComparer.OrdinalIgnoreCase);
@@ -63,37 +66,74 @@ internal sealed class WorkspaceDockHost : UserControl
         RefreshHeaders();
     }
 
-    public void Open(Control control, string key, string title)
+    public Control Open(Control control, string key, string title)
     {
-        var existing = slots.FindIndex(s => s.Key == key && s.Content is not null);
+        var existing = slots.FindIndex(s => s.Key.Equals(key, StringComparison.OrdinalIgnoreCase) && s.Content is not null && !s.Content.IsDisposed);
         if (existing >= 0)
         {
+            if (!ReferenceEquals(slots[existing].Content, control)) DisposeQuietly(control);
             SetActive(existing);
             BringContentFront(slots[existing]);
-            return;
+            return slots[existing].Content!;
         }
 
-        var index = activeIndex;
+        if (screenCache.TryGetValue(key, out var cached) && !cached.Control.IsDisposed)
+        {
+            screenCache.Remove(key);
+            if (!ReferenceEquals(cached.Control, control)) DisposeQuietly(control);
+            var cachedIndex = FindTargetSlot();
+            SetActive(cachedIndex);
+            Attach(slots[cachedIndex], cached.Control, key, cached.Title, preserveOutgoing: true);
+            return cached.Control;
+        }
+
+        screenCache.Remove(key);
+        var index = FindTargetSlot();
+        SetActive(index);
+        Attach(slots[index], control, key, title, preserveOutgoing: true);
+        return control;
+    }
+
+    public Control ShowSingle(Control control, string key, string title)
+    {
+        CacheVisibleScreens();
+        ApplyLayout(WorkspaceLayoutMode.Single, false);
+        SetActive(0);
+
+        if (screenCache.TryGetValue(key, out var cached) && !cached.Control.IsDisposed)
+        {
+            screenCache.Remove(key);
+            if (!ReferenceEquals(cached.Control, control)) DisposeQuietly(control);
+            Attach(slots[0], cached.Control, key, cached.Title, preserveOutgoing: true);
+            return cached.Control;
+        }
+
+        screenCache.Remove(key);
+        Attach(slots[0], control, key, title, preserveOutgoing: true);
+        return control;
+    }
+
+    int FindTargetSlot()
+    {
+        var index = Math.Clamp(activeIndex, 0, Math.Max(0, VisibleSlotCount() - 1));
         if (slots[index].Content is not null)
         {
             var empty = slots.FindIndex(0, VisibleSlotCount(), s => s.Content is null);
             if (empty >= 0) index = empty;
         }
-        SetActive(index);
-        Attach(slots[index], control, key, title);
+        return index;
     }
 
-    public void ShowSingle(Control control, string key, string title)
+    void CacheVisibleScreens()
     {
-        CloseAll(true);
-        ApplyLayout(WorkspaceLayoutMode.Single, false);
-        SetActive(0);
-        Attach(slots[0], control, key, title);
+        foreach (var slot in slots)
+            if (slot.Content is not null) DetachSlot(slot, false);
     }
 
-    void Attach(Slot slot, Control control, string key, string title)
+    void Attach(Slot slot, Control control, string key, string title, bool preserveOutgoing)
     {
-        DetachSlot(slot, true);
+        if (slot.Content is not null) DetachSlot(slot, !preserveOutgoing);
+        screenCache.Remove(key);
         slot.Key = key;
         slot.Content = control;
         slot.Title.Text = "  " + title;
@@ -266,6 +306,11 @@ internal sealed class WorkspaceDockHost : UserControl
     public void CloseAll(bool dispose = true)
     {
         foreach (var slot in slots) DetachSlot(slot, dispose);
+        if (dispose)
+        {
+            foreach (var cached in screenCache.Values.Select(x => x.Control).Distinct().ToArray()) DisposeQuietly(cached);
+            screenCache.Clear();
+        }
         RefreshHeaders();
     }
 
@@ -273,12 +318,29 @@ internal sealed class WorkspaceDockHost : UserControl
     {
         if (slot.Content is not null)
         {
-            slot.Host.Controls.Remove(slot.Content);
-            if (dispose && slot.Content is IDisposable d) d.Dispose();
+            var content = slot.Content;
+            var key = slot.Key;
+            var title = slot.Title.Text.Trim();
+            slot.Host.Controls.Remove(content);
+            if (dispose)
+            {
+                if (!string.IsNullOrWhiteSpace(key)) screenCache.Remove(key);
+                DisposeQuietly(content);
+            }
+            else if (!string.IsNullOrWhiteSpace(key) && !content.IsDisposed)
+            {
+                screenCache[key] = new CachedScreen(content, title);
+            }
         }
         slot.Content = null;
         slot.Key = string.Empty;
         slot.Title.Text = "  Boş çalışma alanı";
+    }
+
+    static void DisposeQuietly(Control control)
+    {
+        try { if (!control.IsDisposed) control.Dispose(); }
+        catch { }
     }
 
     void BringContentFront(Slot slot)
