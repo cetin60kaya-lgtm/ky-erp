@@ -43,7 +43,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path out/package | Out-Null
           Copy-Item out/HKN-PDKS/* out/package -Recurse -Force
           Set-Content -Path out/package/BUILD_INFO.txt -Encoding UTF8 -Value @(
-            'KY PDKS 6.0 - FINAL SELF-CONTAINED BUILD',
+            'KY PDKS 6.1 TEST - SELF-CONTAINED BUILD',
+            'Revision: 6.1 TEST',
             'Runtime: win-x64 self-contained',
             'Tests: Contract + Shell + UI Audit + V4 Shell',
             'Terminal: matched local TerminalSdk required for physical device operations',
@@ -51,13 +52,13 @@ jobs:
             "Commit: $env:GITHUB_SHA",
             "UTC: $([DateTime]::UtcNow.ToString('yyyy-MM-dd HH:mm:ss'))"
           )
-          Compress-Archive -Path out/package/* -DestinationPath out/KY-PDKS-6.0-FINAL-SELF-CONTAINED.zip -Force
-          (Get-FileHash out/KY-PDKS-6.0-FINAL-SELF-CONTAINED.zip -Algorithm SHA256).Hash | Set-Content out/KY-PDKS-6.0-FINAL-SELF-CONTAINED.zip.sha256.txt -Encoding ASCII
+          Compress-Archive -Path out/package/* -DestinationPath out/KY-PDKS-6.1-TEST-SELF-CONTAINED.zip -Force
+          (Get-FileHash out/KY-PDKS-6.1-TEST-SELF-CONTAINED.zip -Algorithm SHA256).Hash | Set-Content out/KY-PDKS-6.1-TEST-SELF-CONTAINED.zip.sha256.txt -Encoding ASCII
       - uses: actions/upload-artifact@v4
         with:
-          name: KY-PDKS-6.0-FINAL-SELF-CONTAINED
+          name: KY-PDKS-6.1-TEST-SELF-CONTAINED
           path: |
-            out/KY-PDKS-6.0-FINAL-SELF-CONTAINED.zip
-            out/KY-PDKS-6.0-FINAL-SELF-CONTAINED.zip.sha256.txt
+            out/KY-PDKS-6.1-TEST-SELF-CONTAINED.zip
+            out/KY-PDKS-6.1-TEST-SELF-CONTAINED.zip.sha256.txt
           if-no-files-found: error
           retention-days: 14
