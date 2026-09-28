@@ -52,10 +52,7 @@ public static class PdksTheme
         StyleControls(form.Controls);
     }
 
-    static void MakeAdaptive(Form form)
-    {
-        AdaptChildren(form);
-    }
+    static void MakeAdaptive(Form form) => AdaptChildren(form);
 
     static void AdaptChildren(Control parent)
     {
@@ -76,15 +73,14 @@ public static class PdksTheme
             if (c.HasChildren) AdaptChildren(c);
         }
     }
+
     static void StyleControls(Control.ControlCollection controls)
     {
         foreach (Control c in controls)
         {
             switch (c)
             {
-                case Button b:
-                    StyleButton(b);
-                    break;
+                case Button b: StyleButton(b); break;
                 case TextBox t:
                     t.BorderStyle = BorderStyle.FixedSingle;
                     t.BackColor = Color.White;
@@ -99,12 +95,8 @@ public static class PdksTheme
                     dt.CalendarForeColor = Text;
                     dt.CalendarMonthBackground = Color.White;
                     break;
-                case DataGridView grid:
-                    StyleGrid(grid);
-                    break;
-                case TabControl tabs:
-                    StyleTabs(tabs);
-                    break;
+                case DataGridView grid: StyleGrid(grid); break;
+                case TabControl tabs: StyleTabs(tabs); break;
                 case GroupBox group:
                     group.ForeColor = Color.FromArgb(34, 70, 120);
                     group.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
@@ -117,15 +109,9 @@ public static class PdksTheme
                     list.BackColor = Color.White;
                     list.ForeColor = Text;
                     break;
-                case Panel panel when panel.BackColor == SystemColors.Control:
-                    panel.BackColor = Surface;
-                    break;
-                case TableLayoutPanel table when table.BackColor == SystemColors.Control:
-                    table.BackColor = Surface;
-                    break;
-                case FlowLayoutPanel flow when flow.BackColor == SystemColors.Control:
-                    flow.BackColor = Surface;
-                    break;
+                case Panel panel when panel.BackColor == SystemColors.Control: panel.BackColor = Surface; break;
+                case TableLayoutPanel table when table.BackColor == SystemColors.Control: table.BackColor = Surface; break;
+                case FlowLayoutPanel flow when flow.BackColor == SystemColors.Control: flow.BackColor = Surface; break;
                 case SplitContainer split:
                     split.BackColor = Border;
                     split.Panel1.BackColor = Surface;
@@ -133,7 +119,6 @@ public static class PdksTheme
                     split.SplitterWidth = Math.Max(split.SplitterWidth, 6);
                     break;
             }
-
             if (c.HasChildren) StyleControls(c.Controls);
         }
     }
@@ -190,7 +175,6 @@ public static class PdksTheme
             var back = selected ? Color.FromArgb(232, 241, 255) : Color.FromArgb(248, 250, 253);
             var fore = selected ? Primary : Muted;
             using var brush = new SolidBrush(back);
-            using var textBrush = new SolidBrush(fore);
             using var pen = new Pen(selected ? Color.FromArgb(165, 198, 242) : Border);
             e.Graphics.FillRectangle(brush, rect);
             e.Graphics.DrawRectangle(pen, rect.X, rect.Y, rect.Width - 1, rect.Height - 1);
@@ -227,7 +211,14 @@ public static class PdksTheme
         grid.ColumnHeadersHeight = Math.Max(grid.ColumnHeadersHeight, 31);
         grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         grid.MultiSelect = false;
-        if (grid.Columns.Count > 0 && grid.Columns.Count <= 8)
-            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+
+        // Named grids remember the user's last column order and width automatically.
+        // Bordro and operational report grids use their own report-specific keys.
+        if (!string.IsNullOrWhiteSpace(grid.Name) &&
+            !string.Equals(grid.Name, "BordroGrid", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(grid.Name, "OperationalReportGrid", StringComparison.OrdinalIgnoreCase))
+        {
+            GridLayoutPersistence.AttachAuto(grid);
+        }
     }
 }
