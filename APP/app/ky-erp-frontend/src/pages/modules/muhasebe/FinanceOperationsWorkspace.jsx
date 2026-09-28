@@ -7,11 +7,15 @@ import PaymentPlannerPanel from "./PaymentPlannerPanel";
 const VIEWS = new Set(["daily", "planner", "ledger"]);
 
 export default function FinanceOperationsWorkspace({ activeMainCompany, refreshKey = 0, reloadAll }) {
-  const initialView = useMemo(() => {
-    const requested = new URLSearchParams(window.location.search).get("financeView") || "daily";
-    return VIEWS.has(requested) ? requested : "daily";
+  const initialState = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get("financeView") || "daily";
+    return {
+      view: VIEWS.has(requested) ? requested : "daily",
+      selectedCompanyId: params.get("companyId") || params.get("financeCompanyId") || "",
+    };
   }, []);
-  const [view, setView] = useState(initialView);
+  const [view, setView] = useState(initialState.view);
 
   return (
     <section className="accounting-composite-workspace">
@@ -33,6 +37,8 @@ export default function FinanceOperationsWorkspace({ activeMainCompany, refreshK
             refreshKey={refreshKey}
             reloadAll={reloadAll}
             embedded
+            hideFirmDirectory
+            selectedCompanyId={initialState.selectedCompanyId}
           />
         ) : null}
         {view === "planner" ? <PaymentPlannerPanel activeMainCompany={activeMainCompany} /> : null}
