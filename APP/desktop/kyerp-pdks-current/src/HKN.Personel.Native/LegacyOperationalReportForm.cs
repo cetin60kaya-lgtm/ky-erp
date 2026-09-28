@@ -32,6 +32,7 @@ public sealed class LegacyOperationalReportForm : Form
         BackgroundColor = Color.White
     };
     DataTable data = new();
+    string LayoutKey => "operational-report-" + report;
 
     public LegacyOperationalReport Report => report;
     public static string Title(LegacyOperationalReport r) => r switch
@@ -55,7 +56,11 @@ public sealed class LegacyOperationalReportForm : Form
         from.Value = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         to.Value = DateTime.Today;
         Build();
-        Shown += (_, _) => LoadData();
+        Shown += (_, _) =>
+        {
+            GridLayoutPersistence.Attach(grid, LayoutKey);
+            LoadData();
+        };
     }
 
     void Build()
@@ -65,7 +70,7 @@ public sealed class LegacyOperationalReportForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
 
-        var filter = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(6, 8, 0, 0) };
+        var filter = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(6, 8, 0, 0), WrapContents = false };
         filter.Controls.Add(new Label { Text = "Tarih Aralığı", AutoSize = true, Padding = new Padding(0, 7, 8, 0) });
         filter.Controls.Add(from);
         filter.Controls.Add(new Label { Text = "—", AutoSize = true, Padding = new Padding(6, 7, 6, 0) });
@@ -73,6 +78,9 @@ public sealed class LegacyOperationalReportForm : Form
         var show = new Button { Text = "Göster", Width = 90, Height = 32 };
         show.Click += (_, _) => LoadData();
         filter.Controls.Add(show);
+        var fields = new Button { Text = "Alanlar / Sıralama", Width = 145, Height = 32 };
+        fields.Click += (_, _) => GridLayoutPersistence.ShowEditor(this, grid, LayoutKey, Text + " • Alanlar / Sıralama");
+        filter.Controls.Add(fields);
         root.Controls.Add(filter, 0, 0);
         root.Controls.Add(grid, 0, 1);
 
@@ -97,9 +105,14 @@ public sealed class LegacyOperationalReportForm : Form
         try
         {
             data = Query();
+            LocalizeColumns(data);
             grid.DataSource = data;
             foreach (DataGridViewColumn c in grid.Columns)
-                if (c.Width < 70) c.Width = c.HeaderText.Contains("Ad", StringComparison.OrdinalIgnoreCase) ? 140 : 90;
+            {
+                if (c.Width < 70)
+                    c.Width = c.HeaderText.Contains("Ad", StringComparison.OrdinalIgnoreCase) ? 140 : 90;
+            }
+            GridLayoutPersistence.Apply(grid, LayoutKey);
         }
         catch (Exception ex)
         {
@@ -114,27 +127,58 @@ public sealed class LegacyOperationalReportForm : Form
         return report switch
         {
             LegacyOperationalReport.PersonnelList => db.Query(
-                "select k.PKNO \"Kart No\",k.AD \"Ad\",k.SOYAD \"Soyad\",k.IGTARIH \"İşe Giriş\",k.ICTARIH \"İşten Çıkış\",k.MAAS \"Maaş\",b.AD \"Bölüm\",s.AD \"Servis\",g.AD \"Görev\" " +
+                "select k.PKNO KARTNO,k.AD ADI,k.SOYAD SOYADI,k.IGTARIH ISEGIRIS,k.ICTARIH ISTENCIKIS,k.MAAS MAAS,b.AD BOLUM,s.AD SERVIS,g.AD GOREV " +
                 "from KIMLIK k left join BOLUM b on b.KOD=k.BOLUM left join SERVIS s on s.KOD=k.SERVIS left join GOREV g on g.KOD=k.GOREV order by k.PKNO"),
 
             LegacyOperationalReport.LeavePersonnel => db.Query(
-                "select o.TARIH \"Tarih\",o.PKNO \"Kart No\",k.AD \"Ad\",k.SOYAD \"Soyad\",o.MAZERET \"Mazeret\",o.TIP \"Tür\",o.SURESAAT \"Süre\",o.BASSAAT \"Başlangıç\",o.BITSAAT \"Bitiş\" " +
+                "select o.TARIH TARIH,o.PKNO KARTNO,k.AD ADI,k.SOYAD SOYADI,o.MAZERET MAZERET,o.TIP TIP,o.SURESAAT SURE,o.BASSAAT BASLANGIC,o.BITSAAT BITIS " +
                 "from OZELIZIN o left join KIMLIK k on k.PKNO=o.PKNO where o.TARIH>=@A and o.TARIH<@B order by o.TARIH,o.PKNO",
                 new FbParameter("@A", a), new FbParameter("@B", b)),
 
             LegacyOperationalReport.EarningsDeductions => db.Query(
-                "select a.TARIH \"Tarih\",a.PKNO \"Kart No\",k.AD \"Ad\",k.SOYAD \"Soyad\",v.TUR \"Tür\",v.ISARET \"İşaret\",a.MIKTAR \"Miktar\",a.ACIKLAMA \"Açıklama\" " +
+                "select a.TARIH TARIH,a.PKNO KARTNO,k.AD ADI,k.SOYAD SOYADI,v.TUR TUR,v.ISARET ISARET,a.MIKTAR MIKTAR,a.ACIKLAMA ACIKLAMA " +
                 "from AVANS a left join KIMLIK k on k.PKNO=a.PKNO left join AVTUR v on v.KOD=a.TURKOD where a.TARIH>=@A and a.TARIH<@B order by a.TARIH,a.PKNO",
                 new FbParameter("@A", a), new FbParameter("@B", b)),
 
             LegacyOperationalReport.PersonnelCountByWorkSystem => db.Query(
-                "select coalesce(p.AD,'Tanımsız') \"Çalışma Sistemi\",count(*) \"Personel Sayısı\" from KIMLIK k left join PUANBILGI p on p.KOD=k.PUANTAJ group by p.AD order by p.AD"),
+                "select coalesce(p.AD,'Tanimsiz') CALISMASISTEMI,count(*) PERSONELSAYISI from KIMLIK k left join PUANBILGI p on p.KOD=k.PUANTAJ group by p.AD order by p.AD"),
 
             LegacyOperationalReport.AnnualLeaveEntitlements => db.Query(
-                "select PKNO \"Kart No\",AD \"Ad\",SOYAD \"Soyad\",IGTARIH \"İşe Giriş\",coalesce(KULIZIN,0) \"İzin Hakedişi\" from KIMLIK order by PKNO"),
+                "select PKNO KARTNO,AD ADI,SOYAD SOYADI,IGTARIH ISEGIRIS,coalesce(KULIZIN,0) IZINHAKKI from KIMLIK order by PKNO"),
 
             _ => new DataTable()
         };
+    }
+
+    static void LocalizeColumns(DataTable table)
+    {
+        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["KARTNO"] = "Kart No",
+            ["ADI"] = "Ad",
+            ["SOYADI"] = "Soyad",
+            ["ISEGIRIS"] = "İşe Giriş",
+            ["ISTENCIKIS"] = "İşten Çıkış",
+            ["MAAS"] = "Maaş",
+            ["BOLUM"] = "Bölüm",
+            ["SERVIS"] = "Servis",
+            ["GOREV"] = "Görev",
+            ["TARIH"] = "Tarih",
+            ["MAZERET"] = "Mazeret",
+            ["TIP"] = "Tür",
+            ["SURE"] = "Süre",
+            ["BASLANGIC"] = "Başlangıç",
+            ["BITIS"] = "Bitiş",
+            ["TUR"] = "Tür",
+            ["ISARET"] = "İşaret",
+            ["MIKTAR"] = "Miktar",
+            ["ACIKLAMA"] = "Açıklama",
+            ["CALISMASISTEMI"] = "Çalışma Sistemi",
+            ["PERSONELSAYISI"] = "Personel Sayısı",
+            ["IZINHAKKI"] = "İzin Hakedişi"
+        };
+        foreach (DataColumn column in table.Columns)
+            if (names.TryGetValue(column.ColumnName.Trim(), out var localized)) column.ColumnName = localized;
     }
 
     ReportTable Table() => GridReportAdapter.ToReport(grid, data, $"{Text} • {from.Value:dd.MM.yyyy} - {to.Value:dd.MM.yyyy}");
@@ -142,13 +186,13 @@ public sealed class LegacyOperationalReportForm : Form
 
     void Preview()
     {
-        try { LoadData(); ReportPrintHelper.Preview(this, Table(), grid.Columns.Count > 7, Widths()); }
+        try { LoadData(); ReportPrintHelper.Preview(this, Table(), grid.Columns.Cast<DataGridViewColumn>().Count(c => c.Visible) > 7, Widths()); }
         catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
 
     void Print()
     {
-        try { LoadData(); ReportPrintHelper.Print(this, Table(), grid.Columns.Count > 7, Widths()); }
+        try { LoadData(); ReportPrintHelper.Print(this, Table(), grid.Columns.Cast<DataGridViewColumn>().Count(c => c.Visible) > 7, Widths()); }
         catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
 
