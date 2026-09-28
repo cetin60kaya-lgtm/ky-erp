@@ -6,9 +6,8 @@ public partial class PersonelForm
 {
     bool modernTabLayoutApplied;
 
-    protected override void OnShown(EventArgs e)
+    void ApplyModernTabLayoutAndPerformance()
     {
-        base.OnShown(e);
         if (modernTabLayoutApplied) return;
         modernTabLayoutApplied = true;
 
