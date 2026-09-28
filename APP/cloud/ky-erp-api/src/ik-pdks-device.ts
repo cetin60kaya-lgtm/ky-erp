@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerPdksDeviceJobRoutes } from "./pdks-device-jobs";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -312,4 +313,8 @@ export function registerIkPdksDeviceRoutes(app: Hono<AppEnv>) {
     await writeSyncLog(c, device, rows.length, accepted.length, rejected.length, "OK", "Agent D1 sync");
     return ok(c, { acceptedCount: accepted.length, rejectedCount: rejected.length, accepted, rejected });
   });
+
+  // Yeni PDKS 6.0 web/desktop senkron kontratı mevcut, production'da zaten kayıtlı
+  // cihaz modülünün altında çalışır. Böylece ana Worker route sırası değiştirilmez.
+  registerPdksDeviceJobRoutes(app);
 }
