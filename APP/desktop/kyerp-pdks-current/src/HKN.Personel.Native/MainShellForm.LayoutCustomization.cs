@@ -69,7 +69,7 @@ public sealed partial class MainShellForm
         grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Visible", HeaderText = "Göster", Width = 65 });
         grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Text", HeaderText = "Menü / Buton", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, ReadOnly = true });
         grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Width", HeaderText = "Genişlik", Width = 90 });
-        foreach (var item in source) grid.Rows.Add(item.Visible, item.Text, Math.Max(40, item.Width));
+        foreach (var item in source) grid.Rows.Add(item.Visible, item.Text ?? string.Empty, Math.Max(40, item.Width));
 
         var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(8) };
         var save = new Button { Text = "Kaydet", Width = 100, Height = 34 };
@@ -85,7 +85,7 @@ public sealed partial class MainShellForm
         reset.Click += (_, _) => { ResetShellLayout(toolbarMode); form.Close(); };
         save.Click += (_, _) =>
         {
-            var current = source.ToDictionary(i => i.Text, StringComparer.OrdinalIgnoreCase);
+            var current = source.ToDictionary(i => i.Text ?? string.Empty, StringComparer.OrdinalIgnoreCase);
             var ordered = new List<ToolStripItem>();
             foreach (DataGridViewRow row in grid.Rows)
             {
@@ -151,7 +151,7 @@ public sealed partial class MainShellForm
     static void ApplyShellItems(ToolStripItemCollection collection, IReadOnlyList<ShellItemState> states, bool preserveRightAligned)
     {
         if (states.Count == 0) return;
-        var map = collection.Cast<ToolStripItem>().ToDictionary(i => i.Text, StringComparer.OrdinalIgnoreCase);
+        var map = collection.Cast<ToolStripItem>().ToDictionary(i => i.Text ?? string.Empty, StringComparer.OrdinalIgnoreCase);
         var ordered = new List<ToolStripItem>();
         foreach (var state in states.OrderBy(s => s.Order))
         {
@@ -179,10 +179,10 @@ public sealed partial class MainShellForm
             {
                 Toolbar = tool.Items.Cast<ToolStripItem>()
                     .Where(i => i is ToolStripButton)
-                    .Select((i, n) => new ShellItemState { Text = i.Text, Order = n, Width = i.Width, Visible = i.Visible }).ToList(),
+                    .Select((i, n) => new ShellItemState { Text = i.Text ?? string.Empty, Order = n, Width = i.Width, Visible = i.Visible }).ToList(),
                 Menu = (MainMenuStrip?.Items.Cast<ToolStripItem>() ?? Enumerable.Empty<ToolStripItem>())
                     .Where(i => i.Alignment != ToolStripItemAlignment.Right)
-                    .Select((i, n) => new ShellItemState { Text = i.Text, Order = n, Width = i.Width, Visible = i.Visible }).ToList()
+                    .Select((i, n) => new ShellItemState { Text = i.Text ?? string.Empty, Order = n, Width = i.Width, Visible = i.Visible }).ToList()
             };
             File.WriteAllText(ShellLayoutFile, JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true }));
         }
