@@ -45,6 +45,48 @@ test("supplier debt/payment and customer receivable/collection balance to zero",
   sql.close();
 });
 
+test("legacy payment directions normalize to the canonical payment/collection contract", () => {
+  const payment = currentAccountEntry({ amount: 125, transactionDirection: "PAYMENT_OUT" });
+  const collection = currentAccountEntry({ amount: 125, transactionDirection: "COLLECTION_IN" });
+  const legacyCollection = currentAccountEntry({ amount: 125, transactionDirection: "PAYMENT_IN" });
+  assert.equal(payment.type, "PAYMENT");
+  assert.equal(payment.movementType, "ODEME");
+  assert.equal(payment.effect, 125);
+  assert.equal(collection.type, "COLLECTION");
+  assert.equal(collection.movementType, "TAHSILAT");
+  assert.equal(collection.effect, -125);
+  assert.equal(legacyCollection.type, "COLLECTION");
+});
+
+test("manual debt/credit and money transfers keep distinct movement source ownership", async () => {
+  const { sql, context } = fixture();
+  await writeCurrentAccount(context, "tenant-a", { companyId: "supplier", transactionType: "CREDIT", amount: 400, requestId: "manual-credit" }, "tester");
+  await writeCurrentAccount(context, "tenant-a", { companyId: "supplier", transactionType: "PAYMENT", amount: 100, requestId: "supplier-payment" }, "tester");
+  assert.deepEqual(
+    sql.prepare("SELECT movement_type,source_type FROM current_account_movements ORDER BY movement_date,id").all(),
+    [
+      { movement_type: "ALACAK", source_type: "MANUAL_CURRENT_ACCOUNT" },
+      { movement_type: "ODEME", source_type: "PAYMENT" },
+    ],
+  );
+  sql.close();
+});
+
+test("collection direction cannot silently become a supplier payment", async () => {
+  const { sql, context } = fixture();
+  const result = await writeCurrentAccount(context, "tenant-a", {
+    companyId: "customer",
+    transactionDirection: "COLLECTION_IN",
+    amount: 250,
+    requestId: "customer-collection-direction",
+  }, "tester");
+  assert.equal(result.type, "COLLECTION");
+  assert.equal(result.movementType, "TAHSILAT");
+  assert.equal(result.balanceAfter, -250);
+  assert.equal(sql.prepare("SELECT movement_type FROM current_account_movements WHERE id='cari:tenant-a:customer-collection-direction'").get()!.movement_type, "TAHSILAT");
+  sql.close();
+});
+
 test("duplicate payment is returned once; changed payload and foreign tenant are rejected", async () => {
   const { sql, context } = fixture();
   const input = { companyId: "supplier", transactionType: "PAYMENT", amount: 250, requestId: "same-request" };
@@ -66,10 +108,12 @@ test("ledger failure rolls back movement and balance without partial financial w
   sql.close();
 });
 
-test("invalid amounts, dates and types cannot silently become payments", () => {
-  for (const amount of [NaN, Infinity, -1, 0]) assert.throws(() => currentAccountEntry({ amount }));
-  assert.throws(() => currentAccountEntry({ amount: 1, date: "2026-02-31" }));
+test("invalid amounts, dates, missing directions and types cannot silently become payments", () => {
+  for (const amount of [NaN, Infinity, -1, 0]) assert.throws(() => currentAccountEntry({ amount, transactionType: "PAYMENT" }));
+  assert.throws(() => currentAccountEntry({ amount: 1, date: "2026-02-31", transactionType: "PAYMENT" }));
   assert.throws(() => currentAccountEntry({ amount: 1, transactionType: "OTHER" }));
+  assert.throws(() => currentAccountEntry({ amount: 1 }));
+  assert.throws(() => currentAccountEntry({ amount: 1, transactionDirection: "SIDEWAYS" }));
 });
 
 test("view permission does not grant writes, approval, deletion or cross-context access", () => {
