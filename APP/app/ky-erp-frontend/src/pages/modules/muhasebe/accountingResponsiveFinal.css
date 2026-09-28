@@ -1,4 +1,4 @@
-/* KY ERP Muhasebe canonical responsive shell - 2026-09-27 */
+/* KY ERP Muhasebe canonical responsive shell - final acceptance 2026-09-28 */
 .muhasebe-module-page,.muhasebe-workbench,.accounting-composite-workspace,
 .ccw-root,.idc-root,.sdw-root,.mtpl-root,.mtw-root,.plw-root,.vcw-root,.siw-root{box-sizing:border-box;min-width:0;width:100%}
 .muhasebe-module-page *{box-sizing:border-box}
@@ -10,35 +10,134 @@
 .ledger-table-wrap,.payment-table-wrap,.reconciliation-table-wrap{max-width:100%;overflow:auto}
 .management-list-card,.ccw-table-card,.idc-table-card,.sdw-card,
 .financial-accounts-panel,.reconciliation-panel,.ledger-panel,.payment-planner-card{min-width:0}
-.ccw-toolbar,.idc-toolbar,.mtpl-toolbar{min-width:0}
-.ccw-search,.idc-search,.mtpl-search{min-width:180px}
-.ccw-summary,.idc-summary{min-width:0}
-.ccw-summary>div,.idc-summary>div{min-width:0}
-.ccw-summary strong,.idc-summary strong{overflow-wrap:anywhere}
 .accounting-table-shell,.reports-list{max-width:100%;overflow:auto}
 .accounting-table-shell table{min-width:920px}
 
-/* Firma/cari detayını da diğer muhasebe detayları gibi tek merkez modal yapısına al. */
-.ccw-root:has(.ccw-drawer-layer){grid-template-columns:1fr!important;grid-template-rows:auto!important}
-.ccw-root:has(.ccw-drawer-layer)>.ccw-toolbar,
-.ccw-root:has(.ccw-drawer-layer)>.ccw-summary,
-.ccw-root:has(.ccw-drawer-layer)>.ccw-error,
-.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card{grid-column:1!important;grid-row:auto!important}
-.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card{position:static!important;min-height:360px!important;max-height:none!important}
-.ccw-drawer-layer{align-items:center!important;justify-content:center!important;padding:24px!important;background:rgba(15,23,42,.46)!important;backdrop-filter:blur(2px)}
-.ccw-drawer{width:min(1240px,95vw)!important;height:auto!important;min-height:0!important;max-height:90vh!important;border:1px solid #dfe4ea;border-radius:16px!important;overflow:hidden;box-shadow:0 28px 80px rgba(15,23,42,.28)!important;animation:none!important}
-.ccw-drawer-body{max-height:calc(90vh - 74px)!important;overflow:auto!important}
-.ccw-detail-summary{grid-template-columns:repeat(4,minmax(0,1fr))}
+/* Firmalar & Cari: masaüstünde liste + detay tek çalışma alanı. Modal/karartma yok. */
+.ccw-root:has(.ccw-drawer-layer){
+  display:grid!important;
+  grid-template-columns:minmax(310px,360px) minmax(0,1fr)!important;
+  grid-template-areas:
+    "toolbar toolbar"
+    "summary summary"
+    "error error"
+    "list detail"!important;
+  align-items:start;
+  gap:10px!important;
+}
+.ccw-root:has(.ccw-drawer-layer)>.ccw-toolbar{grid-area:toolbar!important}
+.ccw-root:has(.ccw-drawer-layer)>.ccw-summary{grid-area:summary!important}
+.ccw-root:has(.ccw-drawer-layer)>.ccw-error{grid-area:error!important}
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card{
+  grid-area:list!important;
+  position:sticky!important;
+  top:8px!important;
+  min-height:520px!important;
+  max-height:calc(100vh - 300px)!important;
+  overflow:auto!important;
+  border-radius:12px!important;
+}
+.ccw-root:has(.ccw-drawer-layer)>.ccw-drawer-layer{
+  grid-area:detail!important;
+  position:sticky!important;
+  top:8px!important;
+  inset:auto!important;
+  z-index:2!important;
+  display:block!important;
+  align-items:initial!important;
+  justify-content:initial!important;
+  padding:0!important;
+  min-width:0!important;
+  background:transparent!important;
+  backdrop-filter:none!important;
+}
+.ccw-root:has(.ccw-drawer-layer) .ccw-drawer{
+  width:100%!important;
+  height:auto!important;
+  min-height:520px!important;
+  max-height:calc(100vh - 300px)!important;
+  display:grid!important;
+  grid-template-rows:auto minmax(0,1fr)!important;
+  border:1px solid var(--border-color,#dfe4ea)!important;
+  border-radius:12px!important;
+  overflow:hidden!important;
+  background:var(--app-background,#f6f8fb)!important;
+  box-shadow:none!important;
+  animation:none!important;
+}
+.ccw-root:has(.ccw-drawer-layer) .ccw-drawer>header{
+  position:relative!important;
+  top:auto!important;
+  z-index:3!important;
+  padding:11px 12px!important;
+  align-items:center!important;
+  background:var(--surface-card,#fff)!important;
+}
+.ccw-root:has(.ccw-drawer-layer) .ccw-drawer h2{font-size:16px!important;line-height:1.2}
+.ccw-root:has(.ccw-drawer-layer) .ccw-drawer>header p{font-size:11px!important;line-height:1.3}
+.ccw-root:has(.ccw-drawer-layer) .ccw-drawer-actions{flex-wrap:wrap!important;justify-content:flex-end!important;gap:5px!important}
+.ccw-root:has(.ccw-drawer-layer) .ccw-drawer-actions button{min-height:32px!important;padding:0 9px!important;font-size:11px!important;border-radius:7px!important}
+.ccw-root:has(.ccw-drawer-layer) .ccw-drawer-actions .icon{width:32px!important;height:32px!important;padding:0!important}
+.ccw-root:has(.ccw-drawer-layer) .ccw-drawer-body{
+  max-height:none!important;
+  min-height:0!important;
+  overflow:auto!important;
+  padding:10px!important;
+  gap:9px!important;
+}
+.ccw-root:has(.ccw-drawer-layer) .ccw-detail-summary{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.ccw-root:has(.ccw-drawer-layer) .ccw-detail-summary>div{padding:9px!important}
+.ccw-root:has(.ccw-drawer-layer) .ccw-section,
+.ccw-root:has(.ccw-drawer-layer) .ccw-transaction{padding:11px!important;gap:9px!important;border-radius:10px!important}
+.ccw-root:has(.ccw-drawer-layer) .ccw-section h3,
+.ccw-root:has(.ccw-drawer-layer) .ccw-transaction h3{font-size:13px!important}
+.ccw-root:has(.ccw-drawer-layer) .ccw-table-wrap.compact{max-height:260px!important}
+.ccw-root:has(.ccw-drawer-layer) .ccw-table-wrap.compact table{min-width:760px!important}
+
+/* Sol firma listesi, detay açıkken yalnız gerekli üç kolonu taşır. */
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card .ccw-table-wrap table{min-width:0!important;table-layout:fixed!important}
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card .ccw-table-wrap th,
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card .ccw-table-wrap td{padding:9px 8px!important}
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card .ccw-table-wrap th:first-child,
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card .ccw-table-wrap td:first-child{width:52%!important}
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card .ccw-table-wrap th:nth-child(2),
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card .ccw-table-wrap td:nth-child(2){width:28%!important;text-align:right!important}
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card .ccw-table-wrap th:nth-child(3),
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card .ccw-table-wrap td:nth-child(3){width:20%!important;text-align:right!important}
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card .ccw-table-wrap td:first-child strong,
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card .ccw-table-wrap td:first-child small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ccw-table-wrap tbody tr.selected{background:#edf5ff!important;box-shadow:inset 3px 0 0 #1765d1!important}
+
+/* Filtreleri tek uzun satır yerine düzenli iki katman yap. */
+.ccw-toolbar{display:grid!important;grid-template-columns:minmax(260px,1.6fr) repeat(4,minmax(145px,.7fr)) auto auto auto;align-items:center;gap:7px!important;padding:8px 9px!important}
+.ccw-search{min-width:0!important;min-height:34px!important}
+.ccw-toolbar select,.ccw-toolbar button{min-width:0!important;min-height:34px!important;font-size:11px!important}
+.ccw-summary{min-width:0;grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.ccw-summary>div{min-width:0;padding:9px 11px!important}
+.ccw-summary strong{font-size:15px!important;overflow-wrap:anywhere}
+
+/* Firma düzenleme günlük çalışma alanını kaplamaz: sağ panel olarak açılır. */
+.ccw-settings-layer{align-items:stretch!important;justify-content:flex-end!important;padding:0!important;background:rgba(15,23,42,.28)!important;backdrop-filter:blur(1.5px)!important}
+.ccw-settings-panel{width:min(760px,92vw)!important;height:100%!important;border-radius:0!important;box-shadow:-18px 0 46px rgba(15,23,42,.22)!important}
 .ccw-profile-grid,.ccw-transaction>div{grid-template-columns:repeat(4,minmax(0,1fr))}
-.ccw-table-card>.ccw-table-wrap th,.ccw-table-card>.ccw-table-wrap td{font-size:12px}
-.ccw-table-card>.ccw-table-wrap th{font-size:10.5px}
 .idc-summary{grid-template-columns:repeat(5,minmax(0,1fr))}
 .financial-account-grid{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
 .reconciliation-table-wrap table{min-width:820px}
 
-@media(max-width:1180px){
+@media(max-width:1320px){
+  .ccw-toolbar{grid-template-columns:minmax(240px,1.5fr) repeat(2,minmax(145px,.75fr)) repeat(3,auto)!important}
+  .ccw-toolbar select:nth-of-type(3),.ccw-toolbar select:nth-of-type(4){grid-row:2}
+  .ccw-root:has(.ccw-drawer-layer){grid-template-columns:minmax(280px,320px) minmax(0,1fr)!important}
+  .ccw-root:has(.ccw-drawer-layer) .ccw-detail-summary{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .ccw-profile-grid,.ccw-transaction>div{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:1050px){
   .accounting-header-actions{min-width:0;flex-wrap:wrap}
-  .ccw-detail-summary,.ccw-profile-grid,.ccw-transaction>div{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ccw-root:has(.ccw-drawer-layer){grid-template-columns:1fr!important;grid-template-areas:"toolbar" "summary" "list" "detail"!important}
+  .ccw-root:has(.ccw-drawer-layer)>.ccw-table-card{position:static!important;min-height:240px!important;max-height:320px!important}
+  .ccw-root:has(.ccw-drawer-layer)>.ccw-drawer-layer{position:static!important}
+  .ccw-root:has(.ccw-drawer-layer) .ccw-drawer{min-height:0!important;max-height:none!important}
+  .ccw-root:has(.ccw-drawer-layer) .ccw-drawer-body{overflow:visible!important}
   .idc-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 @media(max-width:820px){
@@ -46,16 +145,17 @@
   .accounting-header-actions{width:100%;justify-content:flex-start}
   .accounting-quick-wrap{position:static}
   .accounting-quick-menu{left:14px;right:14px;top:auto;width:auto;grid-template-columns:1fr}
-  .ccw-drawer-layer{padding:0!important}
-  .ccw-drawer{width:100vw!important;height:100vh!important;max-height:100vh!important;border-radius:0!important}
-  .ccw-drawer-body{max-height:calc(100vh - 74px)!important}
-  .ccw-summary,.idc-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ccw-toolbar{display:flex!important;align-items:stretch!important;flex-direction:column!important}
+  .ccw-search,.ccw-toolbar select,.ccw-toolbar button{width:100%!important;min-width:0!important}
+  .ccw-summary,.idc-summary{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .ccw-root:has(.ccw-drawer-layer) .ccw-drawer>header{align-items:stretch!important;flex-direction:column!important}
+  .ccw-root:has(.ccw-drawer-layer) .ccw-drawer-actions{justify-content:flex-start!important}
 }
 @media(max-width:620px){
   .accounting-header-actions{display:grid;grid-template-columns:1fr 1fr;align-items:center}
   .accounting-live-state{grid-column:1/-1}
   .accounting-primary,.accounting-refresh{width:100%}
-  .ccw-summary,.idc-summary,.ccw-detail-summary,.ccw-profile-grid,.ccw-transaction>div{grid-template-columns:1fr}
-  .ccw-toolbar,.idc-toolbar,.mtpl-toolbar{align-items:stretch!important;display:flex!important;flex-direction:column!important}
-  .ccw-search,.idc-search,.mtpl-search,.ccw-toolbar select,.idc-toolbar select,.ccw-toolbar button,.idc-toolbar button,.mtpl-toolbar button{width:100%;min-width:0}
+  .ccw-summary,.idc-summary,.ccw-detail-summary,.ccw-profile-grid,.ccw-transaction>div{grid-template-columns:1fr!important}
+  .idc-toolbar,.mtpl-toolbar{align-items:stretch!important;display:flex!important;flex-direction:column!important}
+  .idc-search,.mtpl-search,.idc-toolbar select,.idc-toolbar button,.mtpl-toolbar button{width:100%;min-width:0}
 }
