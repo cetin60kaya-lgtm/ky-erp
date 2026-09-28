@@ -13,37 +13,24 @@ const fail = (c: Context<AppEnv>, status: number, code: string, message: string)
 const periodNow = () => new Date().toISOString().slice(0, 7);
 const safePeriod = (value: unknown) => /^\d{4}-\d{2}$/.test(text(value)) ? text(value) : periodNow();
 
-const EXTRA_WATCH_TABLES = [
-  "companies", "company_aliases", "current_account_movements",
-  "vat_records", "sales_invoice_states", "checks", "payments",
-];
 async function ensureWorkspaceSchema(c: Context<AppEnv>) {
-  const rows = await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('accounting_financial_accounts','accounting_reconciliations')").all<Row>();
-  if ((rows.results || []).length !== 2) throw Object.assign(new Error("Muhasebe çalışma alanı şeması hazır değil; yedekli migration gerekir."), { code: "ACCOUNTING_SCHEMA_NOT_READY" });
+  const rows = await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('accounting_live_revision','accounting_financial_accounts','accounting_reconciliations')").all<Row>();
+  if ((rows.results || []).length !== 3) throw Object.assign(new Error("Muhasebe çalışma alanı şeması hazır değil; yedekli migration gerekir."), { code: "ACCOUNTING_SCHEMA_NOT_READY" });
 }
 async function readBody(c: Context<AppEnv>): Promise<Row> {
   try { const value = await c.req.json(); return value && typeof value === "object" && !Array.isArray(value) ? value as Row : {}; }
   catch { return {}; }
 }
+function revisionWrite(c: Context<AppEnv>, slug: string, timestamp: string) {
+  return c.env.DB.prepare("INSERT INTO accounting_live_revision(main_company_slug,revision,updated_at) VALUES(?,1,?) ON CONFLICT(main_company_slug) DO UPDATE SET revision=accounting_live_revision.revision+1,updated_at=excluded.updated_at").bind(slug, timestamp);
+}
 async function liveState(c: Context<AppEnv>) {
   const slug = slugOf(c);
   if (!slug) return fail(c, 400, "MAIN_COMPANY_REQUIRED", "Muhasebe için ana firma seçimi zorunludur.");
-  // A read endpoint never creates schema, triggers or revision records.
-  const placeholders = EXTRA_WATCH_TABLES.map(() => "?").join(",");
-  const tables = await c.env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE 'accounting_%' OR name IN (${placeholders})) ORDER BY name`).bind(...EXTRA_WATCH_TABLES).all<Row>();
-  const revisions = [];
-  for (const { name: table } of tables.results || []) {
-    if (table === "accounting_live_revision" || !/^[a-z_]+$/.test(table)) continue;
-    const info = await c.env.DB.prepare(`PRAGMA table_info("${table}")`).all<Row>();
-    const columns = new Set((info.results || []).map(row => row.name));
-    if (!columns.has("main_company_slug")) continue;
-    const date = columns.has("updated_at") ? "updated_at" : columns.has("created_at") ? "created_at" : "NULL";
-    const row = await c.env.DB.prepare(`SELECT COUNT(*) n, MAX(${date}) stamp FROM "${table}" WHERE main_company_slug=?`).bind(slug).first<Row>();
-    revisions.push([table, row?.n || 0, row?.stamp || ""]);
-  }
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(revisions)));
-  const revision = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
-  return ok(c, { revision, updatedAt: now(), serverTime: now() });
+  await ensureWorkspaceSchema(c);
+  const row = await c.env.DB.prepare("SELECT revision,updated_at FROM accounting_live_revision WHERE main_company_slug=? LIMIT 1").bind(slug).first<Row>();
+  const serverTime = now();
+  return ok(c, { revision: num(row?.revision), updatedAt: text(row?.updated_at) || serverTime, serverTime });
 }
 async function listFinancialAccounts(c: Context<AppEnv>) {
   await ensureWorkspaceSchema(c);
@@ -64,12 +51,15 @@ async function createFinancialAccount(c: Context<AppEnv>) {
   if (!name) return fail(c, 400, "ACCOUNT_NAME_REQUIRED", "Hesap adı zorunludur.");
   const id = crypto.randomUUID(), ts = now();
   try {
-    await c.env.DB.prepare(`INSERT INTO accounting_financial_accounts
-      (id,main_company_slug,account_type,name,bank_name,iban,currency,opening_balance,is_active,note,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,1,?,?,?)`).bind(
-        id, slug, accountType, name, text(body.bankName) || null, text(body.iban).replace(/\s/g, "") || null,
-        text(body.currency) || "TRY", num(body.openingBalance), text(body.note) || null, ts, ts,
-      ).run();
+    await c.env.DB.batch([
+      c.env.DB.prepare(`INSERT INTO accounting_financial_accounts
+        (id,main_company_slug,account_type,name,bank_name,iban,currency,opening_balance,is_active,note,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,1,?,?,?)`).bind(
+          id, slug, accountType, name, text(body.bankName) || null, text(body.iban).replace(/\s/g, "") || null,
+          text(body.currency) || "TRY", num(body.openingBalance), text(body.note) || null, ts, ts,
+        ),
+      revisionWrite(c, slug, ts),
+    ]);
   } catch (error) {
     if (/UNIQUE/i.test(String(error))) return fail(c, 409, "ACCOUNT_NAME_EXISTS", "Bu isimde banka/kasa hesabı zaten var.");
     throw error;
@@ -85,12 +75,16 @@ async function updateFinancialAccount(c: Context<AppEnv>) {
   const type = String(body.accountType ?? current.account_type).toUpperCase() === "CASH" ? "CASH" : "BANK";
   const name = text(body.name ?? current.name);
   if (!name) return fail(c, 400, "ACCOUNT_NAME_REQUIRED", "Hesap adı zorunludur.");
-  await c.env.DB.prepare(`UPDATE accounting_financial_accounts SET account_type=?,name=?,bank_name=?,iban=?,currency=?,opening_balance=?,is_active=?,note=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(
-    type, name, text(body.bankName ?? current.bank_name) || null, text(body.iban ?? current.iban).replace(/\s/g, "") || null,
-    text(body.currency ?? current.currency) || "TRY", num(body.openingBalance ?? current.opening_balance),
-    body.isActive === undefined ? Number(current.is_active !== 0) : (body.isActive ? 1 : 0),
-    text(body.note ?? current.note) || null, now(), id, slug,
-  ).run();
+  const ts = now();
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE accounting_financial_accounts SET account_type=?,name=?,bank_name=?,iban=?,currency=?,opening_balance=?,is_active=?,note=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(
+      type, name, text(body.bankName ?? current.bank_name) || null, text(body.iban ?? current.iban).replace(/\s/g, "") || null,
+      text(body.currency ?? current.currency) || "TRY", num(body.openingBalance ?? current.opening_balance),
+      body.isActive === undefined ? Number(current.is_active !== 0) : (body.isActive ? 1 : 0),
+      text(body.note ?? current.note) || null, ts, id, slug,
+    ),
+    revisionWrite(c, slug, ts),
+  ]);
   return ok(c, { id });
 }
 async function listReconciliations(c: Context<AppEnv>) {
@@ -116,15 +110,18 @@ async function saveReconciliation(c: Context<AppEnv>) {
   const counterpartyBalance = hasCounterparty ? num(body.counterpartyBalance) : null;
   const difference = counterpartyBalance == null ? null : counterpartyBalance - erpBalance;
   const ts = now(), id = text(body.id) || crypto.randomUUID();
-  await c.env.DB.prepare(`INSERT INTO accounting_reconciliations
-    (id,main_company_slug,company_id,period,status,erp_balance,counterparty_balance,difference,note,confirmed_at,created_at,updated_at)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(main_company_slug,company_id,period) DO UPDATE SET status=excluded.status,erp_balance=excluded.erp_balance,
-      counterparty_balance=excluded.counterparty_balance,difference=excluded.difference,note=excluded.note,
-      confirmed_at=excluded.confirmed_at,updated_at=excluded.updated_at`).bind(
-    id, slug, companyId, period, status, erpBalance, counterpartyBalance, difference, text(body.note) || null,
-    status === "WAITING" ? null : ts, ts, ts,
-  ).run();
+  await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO accounting_reconciliations
+      (id,main_company_slug,company_id,period,status,erp_balance,counterparty_balance,difference,note,confirmed_at,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(main_company_slug,company_id,period) DO UPDATE SET status=excluded.status,erp_balance=excluded.erp_balance,
+        counterparty_balance=excluded.counterparty_balance,difference=excluded.difference,note=excluded.note,
+        confirmed_at=excluded.confirmed_at,updated_at=excluded.updated_at`).bind(
+      id, slug, companyId, period, status, erpBalance, counterpartyBalance, difference, text(body.note) || null,
+      status === "WAITING" ? null : ts, ts, ts,
+    ),
+    revisionWrite(c, slug, ts),
+  ]);
   return ok(c, { companyId, period, status, erpBalance, counterpartyBalance, difference });
 }
 async function companyWidget(c: Context<AppEnv>) {
@@ -159,4 +156,3 @@ export function registerAccountingWorkspaceCoreRoutes(app: Hono<AppEnv>) {
   app.post("/api/muhasebe/workspace/reconciliations", saveReconciliation);
   app.get("/api/muhasebe/workspace/company-widget", companyWidget);
 }
-
