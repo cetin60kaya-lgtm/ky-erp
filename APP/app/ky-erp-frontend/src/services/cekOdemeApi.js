@@ -1,4 +1,4 @@
-﻿import { apiGet, apiPost, apiUpload, buildApiUrl } from "../utils/api";
+import { apiGet, apiPost, apiUpload, buildApiUrl } from "../utils/api";
 
 function unwrap(payload) {
   if (
@@ -18,6 +18,80 @@ function unwrap(payload) {
     return payload?.data;
   }
   return payload;
+}
+
+const pendingTransactionIds = new Map();
+
+function transactionTypeOf(payload = {}) {
+  const explicit = String(payload.transactionType || "").trim().toUpperCase();
+  if (["DEBIT", "CREDIT", "PAYMENT", "COLLECTION"].includes(explicit)) return explicit;
+
+  const direction = String(payload.transactionDirection || "").trim().toUpperCase();
+  if (["PAYMENT", "PAYMENT_OUT", "OUT", "OUTGOING"].includes(direction)) return "PAYMENT";
+  if (["COLLECTION", "COLLECTION_IN", "PAYMENT_IN", "IN", "INCOMING"].includes(direction)) return "COLLECTION";
+  return explicit || direction;
+}
+
+function transactionFingerprint(payload = {}) {
+  const tenant = payload.mainCompanySlug || payload.mainCompanyId || "";
+  const company = payload.companyId || payload.firmId || "";
+  const type = transactionTypeOf(payload);
+  const raw = [
+    tenant,
+    company,
+    type,
+    payload.paymentDate || payload.date || "",
+    Number(payload.amount || 0).toFixed(2),
+    payload.paymentMethod || "",
+    payload.bankName || "",
+    payload.workType || payload.recordType || "",
+    payload.description || "",
+  ].join("|");
+  let hash = 2166136261;
+  for (let index = 0; index < raw.length; index += 1) {
+    hash ^= raw.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function pendingStorageKey(fingerprint) {
+  return `kyerp:muhasebe:pending:${fingerprint}`;
+}
+
+function getPendingRequestId(payload) {
+  const explicit = String(payload.requestId || payload.id || "").trim();
+  if (explicit) return explicit;
+  const fingerprint = transactionFingerprint(payload);
+  const memoryId = pendingTransactionIds.get(fingerprint);
+  if (memoryId) return memoryId;
+
+  let stored = "";
+  try {
+    stored = globalThis?.sessionStorage?.getItem(pendingStorageKey(fingerprint)) || "";
+  } catch {
+    // sessionStorage may be unavailable in tests/private contexts; in-memory id still protects retries.
+  }
+  const requestId = stored || crypto.randomUUID();
+  pendingTransactionIds.set(fingerprint, requestId);
+  try {
+    globalThis?.sessionStorage?.setItem(pendingStorageKey(fingerprint), requestId);
+  } catch {
+    // Best effort only; backend idempotency remains authoritative.
+  }
+  return requestId;
+}
+
+function clearPendingRequestId(payload, requestId) {
+  const fingerprint = transactionFingerprint(payload);
+  if (pendingTransactionIds.get(fingerprint) === requestId) pendingTransactionIds.delete(fingerprint);
+  try {
+    if (globalThis?.sessionStorage?.getItem(pendingStorageKey(fingerprint)) === requestId) {
+      globalThis.sessionStorage.removeItem(pendingStorageKey(fingerprint));
+    }
+  } catch {
+    // Best effort only.
+  }
 }
 
 export async function getOdemeFirmalar(params = {}) {
@@ -130,5 +204,19 @@ export async function createOdemeKart(payload = {}) {
 }
 
 export async function saveOdemeIslem(payload = {}) {
-  return unwrap(await apiPost("/api/muhasebe/odeme/islem", { ...payload, requestId: payload.requestId || payload.id || crypto.randomUUID() }));
+  const transactionType = transactionTypeOf(payload);
+  const canonicalPayload = {
+    ...payload,
+    transactionType,
+    transactionDirection: transactionType === "COLLECTION" ? "COLLECTION_IN" : "PAYMENT_OUT",
+  };
+  const requestId = getPendingRequestId(canonicalPayload);
+  const result = unwrap(
+    await apiPost("/api/muhasebe/odeme/islem", {
+      ...canonicalPayload,
+      requestId,
+    }),
+  );
+  clearPendingRequestId(canonicalPayload, requestId);
+  return result;
 }
