@@ -5,6 +5,9 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-09-28",
   "scope": [
+    "canonical-module-menu-order",
+    "canonical-pdks-module-registration",
+    "ik-hkn-personnel-code-flow",
     "accounting-production-navigation-groups",
     "e-document-production-navigation-groups",
     "accounting-direct-e-document-access",
@@ -14,5 +17,5 @@
     "cloudflare-pages-production",
     "live-bundle-verification"
   ],
-  "note": "Final acceptance release for the three priority production workspaces: Muhasebe, e-Belge and IK Aylik. Accounting and e-document navigation are regrouped by real operational flow, accounting exposes the active company and direct e-document access, and IK monthly write/read flow is blocked when no active company is selected. Daily Operation behavior is intentionally unchanged."
+  "note": "Final production release for the canonical KY ERP application menu and module routing. Menu order is Muhasebe, e-Belge, IK, PDKS, Desen, Boyahane, Imalat, Mail & Dosyalar, Denetim, Baglantilar, Sistem Merkezi, Platform Yonetimi and Asistan. PDKS is registered directly in the canonical module registry instead of runtime mutation. IK HKN personnel codes remain the IK identity flow and are not treated as PDKS card codes."
 }
