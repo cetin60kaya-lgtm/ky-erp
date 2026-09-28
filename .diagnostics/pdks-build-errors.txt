@@ -1,5 +1,5 @@
-HEAD: 275eb38513050e83d64a1d2bfa7ac20746d97fc5
-UTC: 2026-09-28T05:03:39
+HEAD: c4e6a933806adef53f174ca34b6a7bbc5cc7dd46
+UTC: 2026-09-28T05:06:37
 
 D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.OperatorEnhancements.cs(7,29): error CS0111: Type 'MainShellForm' already defines a member called 'OnShown' with the same parameter types [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
 D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.OperatorEnhancements.cs(7,29): error CS0111: Type 'MainShellForm' already defines a member called 'OnShown' with the same parameter types [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
