@@ -9,6 +9,11 @@ function unwrap(payload) {
     : payload;
 }
 
+function validEmployeeId(value) {
+  const id = String(value ?? "").trim();
+  return id && id !== "0" ? id : "";
+}
+
 const OPS = "/ik/personnel-control/operations";
 const cacheKey = (name, params = {}) => `${name}:${JSON.stringify(params, Object.keys(params).sort())}`;
 
@@ -57,7 +62,9 @@ export async function savePdksLeaveV2(payload = {}) {
 }
 
 export async function getPdksLeaveEntitlement(employeeId, params = {}) {
-  return unwrap(await pdksCachedGet(cacheKey(`leave-entitlement:${employeeId}`, params), `/ik/personnel-control/people/${encodeURIComponent(employeeId)}/leave-entitlement`, params));
+  const id = validEmployeeId(employeeId);
+  if (!id) return null;
+  return unwrap(await pdksCachedGet(cacheKey(`leave-entitlement:${id}`, params), `/ik/personnel-control/people/${encodeURIComponent(id)}/leave-entitlement`, params));
 }
 
 export async function savePdksCorrection(employeeId, payload = {}) {
