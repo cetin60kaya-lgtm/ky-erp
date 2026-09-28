@@ -119,10 +119,74 @@ function withCompanyBilling(module) {
   return { ...module, groups };
 }
 
+function withOperationalGroups(module) {
+  if (module.key === "muhasebe") {
+    return {
+      ...module,
+      groups: [
+        {
+          label: "Özet & Cari",
+          tabs: [
+            ["yonetim-ozeti", "Yönetim Özeti", "genel-bakis"],
+            ["firma-kartlari", "Firmalar & Cari", "firma-kartlari"],
+          ],
+        },
+        {
+          label: "Belge Akışı",
+          tabs: [
+            ["tedarikci-faturalar", "Alış & Tedarikçi", "tedarikci-fatura"],
+            ["musteri-belgeleri", "Satış & Müşteri", "file-check"],
+          ],
+        },
+        {
+          label: "Finans & Kontrol",
+          tabs: [
+            ["finans-islemleri", "Finans İşlemleri", "odemeler"],
+            ["mail-ekstre", "Ekstre & Mail", "eposta"],
+            ["mali-kontrol", "Mali Kontrol & Raporlar", "raporlar"],
+          ],
+        },
+      ],
+    };
+  }
+  if (module.key === "e-belge") {
+    return {
+      ...module,
+      groups: [
+        {
+          label: "Operasyon",
+          tabs: [
+            ["genel-bakis", "Genel Bakış", "dashboard"],
+            ["gelen-belgeler", "Gelen Belgeler", "dosya"],
+            ["giden-belgeler", "Giden Belgeler", "dosya"],
+            ["belge-havuzu", "Belge Havuzu", "upload"],
+          ],
+        },
+        {
+          label: "Kontrol & Eşleştirme",
+          tabs: [
+            ["eslestirmeler", "Eşleştirmeler", "file-check"],
+            ["onay-sorunlar", "Onay & Sorunlar", "uyari"],
+            ["is-akislari", "İş Akışları", "file-check"],
+          ],
+        },
+        {
+          label: "Arşiv & Sistem",
+          tabs: [
+            ["arsiv-cikti", "Arşiv & Çıktı", "dosya"],
+            ["entegrasyonlar", "Entegrasyonlar", "ayarlar"],
+          ],
+        },
+      ],
+    };
+  }
+  return module;
+}
 
 const baseModules = BASE_MODULES
   .map(withoutStorageDuplicates)
-  .map(withCompanyBilling);
+  .map(withCompanyBilling)
+  .map(withOperationalGroups);
 const eBelgeModule = baseModules.find((module) => module.key === "e-belge");
 const modulesWithoutEBelge = baseModules.filter((module) => module.key !== "e-belge");
 const adminIndex = modulesWithoutEBelge.findIndex((module) => module.key === "admin");
