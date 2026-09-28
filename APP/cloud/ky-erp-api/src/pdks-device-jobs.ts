@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerPdksWebChangeFeed } from "./pdks-web-change-feed";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -64,6 +65,10 @@ async function resolveDevice(c: Context<AppEnv>) {
 }
 
 export function registerPdksDeviceJobRoutes(app: Hono<AppEnv>) {
+  registerPdksWebChangeFeed(app);
+
+  // Ayrı endpoint geriye dönük/test amaçlı tutulur. Web ana listesi pdks-web-change-feed
+  // tarafından aynı güvenlik zincirindeki /people route'unda scoped edilir.
   app.get("/api/ik/personnel-control/pdks-people", async (c) => {
     await ensureSchema(c);
     const user = await getAuthenticatedUser(c) as Row | null;
