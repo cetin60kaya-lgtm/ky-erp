@@ -26,5 +26,7 @@ public partial class PersonelForm
             inner.TabPages[0].Text = "Kimlik Bilgileri";
             inner.TabPages[1].Text = "Kişisel Bilgileri";
         }
+
+        ApplyModernTabLayoutAndPerformance();
     }
 }
