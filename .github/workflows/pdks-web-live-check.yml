@@ -1,0 +1,45 @@
+name: PDKS Web Live Check
+
+on:
+  pull_request:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - 'APP/app/ky-erp-frontend/**'
+      - 'APP/cloud/ky-erp-api/**'
+      - '.github/workflows/pdks-web-live-check.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            APP/app/ky-erp-frontend/package-lock.json
+            APP/cloud/ky-erp-api/package-lock.json
+
+      - name: Frontend install
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+
+      - name: Frontend build
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run build
+
+      - name: Cloud install
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+
+      - name: Cloud typecheck
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run typecheck
+
+      - name: Cloud unit tests
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run test:unit
