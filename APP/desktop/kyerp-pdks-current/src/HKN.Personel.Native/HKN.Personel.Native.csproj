@@ -7,11 +7,11 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>KYERP.PDKS</AssemblyName>
-    <Product>KY PDKS 6.1 TEST</Product>
+    <Product>KY PDKS 6.2 TEST</Product>
     <Company>KY ERP</Company>
-    <Description>KY PDKS 6.1 TEST - operasyon komuta merkezi, personel devam, puantaj, bordro ve denetim sistemi</Description>
-    <Version>6.1.0</Version>
-    <FileVersion>6.1.0.0</FileVersion>
+    <Description>KY PDKS 6.2 TEST - rol bazlı yönetim, firma lisans erişim kilidi, hızlı işlemler, puantaj ve bordro</Description>
+    <Version>6.2.0</Version>
+    <FileVersion>6.2.0.0</FileVersion>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\KYERP.PDKS.Core\KYERP.PDKS.Core.csproj" />
