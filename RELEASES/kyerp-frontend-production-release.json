@@ -13,9 +13,13 @@
     "accounting-direct-e-document-access",
     "accounting-active-company-context",
     "hr-monthly-active-company-guard",
+    "accounting-firms-cari-master-detail-layout",
+    "accounting-firms-filter-layout",
+    "accounting-company-settings-side-panel",
+    "accounting-responsive-workspace",
     "frontend-lint-build",
     "cloudflare-pages-production",
     "live-bundle-verification"
   ],
-  "note": "Final production release for the canonical KY ERP application menu and module routing. Menu order is Muhasebe, e-Belge, IK, PDKS, Desen, Boyahane, Imalat, Mail & Dosyalar, Denetim, Baglantilar, Sistem Merkezi, Platform Yonetimi and Asistan. PDKS is registered directly in the canonical module registry instead of runtime mutation. IK HKN personnel codes remain the IK identity flow and are not treated as PDKS card codes."
+  "note": "Final acceptance UI release. Firmalar & Cari no longer opens the company detail as a large centered modal on desktop. The company directory and selected company detail now form one clean master-detail workspace; filters are compact, daily cari movement remains visible, company settings open separately as a right-side panel, and mobile/tablet layouts fall back to a single-column flow. Existing accounting behavior and Daily Operation are unchanged."
 }
