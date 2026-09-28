@@ -130,5 +130,5 @@ export async function createOdemeKart(payload = {}) {
 }
 
 export async function saveOdemeIslem(payload = {}) {
-  return unwrap(await apiPost("/api/muhasebe/odeme/islem", payload));
+  return unwrap(await apiPost("/api/muhasebe/odeme/islem", { ...payload, requestId: payload.requestId || payload.id || crypto.randomUUID() }));
 }

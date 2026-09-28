@@ -135,7 +135,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
           </div>
         </header>
       ) : null}
-      <div className="muhasebe-workbench">{content}</div>
+      <div className="muhasebe-workbench" key={activeMainCompany?.slug || activeMainCompany?.id || "no-company"}>{content}</div>
       <QuickCompanyCreateDialog
         open={quickCompanyOpen}
         onClose={() => setQuickCompanyOpen(false)}
