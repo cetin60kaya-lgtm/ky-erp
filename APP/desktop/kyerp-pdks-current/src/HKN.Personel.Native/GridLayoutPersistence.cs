@@ -19,7 +19,7 @@ internal static class GridLayoutPersistence
         public bool Visible { get; set; } = true;
     }
 
-    sealed class AttachmentMarker;
+    sealed class AttachmentMarker { }
 
     static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     static readonly ConditionalWeakTable<DataGridView, AttachmentMarker> Attached = new();
