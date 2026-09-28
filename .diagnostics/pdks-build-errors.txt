@@ -1,5 +1,5 @@
-HEAD: 443af7a5f663ef55703a0ac320847bd732447ed7
-UTC: 2026-09-27T23:23:58
+HEAD: 275eb38513050e83d64a1d2bfa7ac20746d97fc5
+UTC: 2026-09-28T05:03:39
 
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.cs(117,112): error CS0246: The type or namespace name 'ReportCenterForm' could not be found (are you missing a using directive or an assembly reference?) [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.cs(117,112): error CS0246: The type or namespace name 'ReportCenterForm' could not be found (are you missing a using directive or an assembly reference?) [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.OperatorEnhancements.cs(7,29): error CS0111: Type 'MainShellForm' already defines a member called 'OnShown' with the same parameter types [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.OperatorEnhancements.cs(7,29): error CS0111: Type 'MainShellForm' already defines a member called 'OnShown' with the same parameter types [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
