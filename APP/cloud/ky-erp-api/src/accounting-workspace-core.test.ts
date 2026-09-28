@@ -21,12 +21,18 @@ test("financial accounts reuse canonical ledger bank account id", () => {
   assert.match(core, /opening_balance/);
 });
 
-test("live sync watches accounting data without writing schema or revision rows on GET", () => {
-  assert.match(core, /name LIKE 'accounting_%'/);
-  assert.match(core, /table === "accounting_live_revision"/);
-  assert.doesNotMatch(core, /CREATE TRIGGER|CREATE TABLE|INSERT OR IGNORE INTO accounting_live_revision/);
-  assert.match(core, /crypto\.subtle\.digest/);
-  assert.match(core, /WHERE main_company_slug=\?/);
+test("live sync reads one tenant revision without schema introspection polling", () => {
+  assert.match(migration, /accounting_live_revision/);
+  assert.match(core, /SELECT revision,updated_at FROM accounting_live_revision WHERE main_company_slug=\?/);
+  assert.match(core, /revision=accounting_live_revision\.revision\+1/);
+  assert.doesNotMatch(core, /name LIKE 'accounting_%'/);
+  assert.doesNotMatch(core, /PRAGMA table_info/);
+  assert.doesNotMatch(core, /crypto\.subtle\.digest/);
+});
+
+test("financial account and reconciliation writes bump live revision in the same batch", () => {
+  assert.match(core, /DB\.batch\(\[/);
+  assert.match(core, /revisionWrite\(c, slug, ts\)/);
 });
 
 test("reconciliation stays period and company scoped", () => {
