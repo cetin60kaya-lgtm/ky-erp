@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 // Provider-neutral document intelligence for scanned/image/PDF accounting documents.
 // Azure Document Intelligence v4 is the first adapter; callers consume one canonical result.
 // structured fields + line items + confidence
@@ -16,7 +16,7 @@ const num = (v: unknown) => {
 };
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const slugOf = (c: Context<AppEnv>) => text(
-  c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || c.req.header("X-KYERP-Tenant-Slug") || "mecit-hakan",
+  c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || c.req.header("X-KYERP-Tenant-Slug") || "",
 );
 const normalize = (v: unknown) => upper(v).replace(/İ/g,"I").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z0-9ÇĞÖŞÜ]+/g," ").replace(/\s+/g," ").trim();
 
@@ -304,3 +304,4 @@ export async function analyzeAccountingDocument(c: Context<AppEnv>, file: File, 
   const finalScore=scoreAccountingExtraction(candidate);
   return{...candidate,extractionQualityScore:finalScore,lowConfidence:lowConfidence||finalScore<70,needsManualReview:Boolean(candidate.needsManualReview||missingCritical||finalScore<60),manualReviewReasons:[...(missingCritical?["CRITICAL_FIELDS_MISSING"]:[]),...(finalScore<60?["EXTRACTION_QUALITY_LOW"]:[]),...((candidate.extractionDiscrepancies||[]).filter((item:any)=>item.severity==="ERROR").map((item:any)=>item.code))]};
 }
+

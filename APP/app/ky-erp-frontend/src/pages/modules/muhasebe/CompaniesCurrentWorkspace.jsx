@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CircleAlert,
   CirclePlus,
@@ -71,6 +71,7 @@ function movementTypeLabel(value) {
 
 function emptyTransaction() {
   return {
+    requestId: crypto.randomUUID(),
     date: new Date().toISOString().slice(0, 10),
     transactionType: "DEBIT",
     amount: "",
@@ -147,6 +148,14 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [companySaving, setCompanySaving] = useState(false);
   const [financeOpen, setFinanceOpen] = useState(false);
   const [financeView, setFinanceView] = useState("checks");
+  const detailRequest = useRef(0);
+  const listRequest = useRef(0);
+  const transactionPending = useRef(false);
+
+  useEffect(() => () => {
+    detailRequest.current += 1;
+    listRequest.current += 1;
+  }, []);
 
   const params = useMemo(
     () => ({
@@ -157,6 +166,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   );
 
   const loadFirms = useCallback(async () => {
+    const request = ++listRequest.current;
     setLoading(true);
     setError("");
     try {
@@ -181,6 +191,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           },
         },
       });
+      if (request !== listRequest.current) return;
       const firmsPayload = result.data.firms;
       const profilesPayload = result.data.profiles;
       const profiles = new Map(listOf(profilesPayload).map((item) => [String(item.id), item]));
@@ -198,10 +209,11 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         "Firma profilleri geçici olarak yenilenemedi; firma ve cari listesi kullanılabilir.",
       ));
     } catch (requestError) {
+      if (request !== listRequest.current) return;
       setFirms([]);
       setError(requestError?.message || "Firma ve cari listesi alınamadı.");
     } finally {
-      setLoading(false);
+      if (request === listRequest.current) setLoading(false);
     }
   }, [params, query]);
 
@@ -252,6 +264,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
 
   const loadMovements = useCallback(
     async (firm) => {
+      const request = ++detailRequest.current;
       setSelected(firm);
       setSettingsOpen(false);
       setMovementFilter("ALL");
@@ -282,6 +295,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
             },
           },
         });
+        if (request !== detailRequest.current) return;
         const movementPayload = result.data.movements;
         const profilePayload = result.data.profile;
         const profile = objectOf(profilePayload);
@@ -296,10 +310,11 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           "Firma profilinin bazı yardımcı bilgileri yenilenemedi; cari hareketler kullanılabilir.",
         ));
       } catch (requestError) {
+        if (request !== detailRequest.current) return;
         setProfileDraft(profileDraftOf(firm));
         setNotice(requestError?.message || "Firma detayları alınamadı.");
       } finally {
-        setDetailLoading(false);
+        if (request === detailRequest.current) setDetailLoading(false);
       }
     },
     [params],
@@ -425,6 +440,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   };
 
   const saveTransaction = async () => {
+    if (transactionPending.current) return;
     if (!selected?.id || Number(transaction.amount || 0) <= 0) {
       setNotice("Sıfırdan büyük işlem tutarı zorunludur.");
       return;
@@ -433,12 +449,14 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       setNotice("Bu firma peşin/cari takipsiz tanımlı. Cari hareket oluşturulmaz.");
       return;
     }
+    transactionPending.current = true;
     setSaving(true);
     setNotice("");
     try {
       await apiPost("/muhasebe/cari-hareketler", {
         ...params,
         companyId: selected.id,
+        requestId: transaction.requestId,
         date: transaction.date,
         transactionType: transaction.transactionType,
         amount: Number(transaction.amount || 0),
@@ -452,6 +470,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     } catch (requestError) {
       setNotice(requestError?.message || "Cari işlem kaydedilemedi.");
     } finally {
+      transactionPending.current = false;
       setSaving(false);
     }
   };
@@ -547,7 +566,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
               </tr></thead>
               <tbody>
                 {visibleFirms.map((firm) => (
-                  <tr key={firm.id} className={String(selected?.id) === String(firm.id) ? "selected" : ""} onClick={() => loadMovements(firm)} tabIndex={0}>
+                  <tr key={firm.id} className={String(selected?.id) === String(firm.id) ? "selected" : ""} onClick={() => { if (!saving) loadMovements(firm); }} onKeyDown={(event) => { if (!saving && ["Enter", " "].includes(event.key)) { event.preventDefault(); loadMovements(firm); } }} tabIndex={0} aria-selected={String(selected?.id) === String(firm.id)}>
                     <td>
                       <div className="ccw-firm-row-main">
                         <div><strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong><small>{roleLabel(firm)} · {recordLabel(firm)}{firm.isChemicalSupplier ? " · Boya/kimyasal" : ""}</small></div>
@@ -569,8 +588,8 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       </section>
 
       {selected ? (
-        <div className="ccw-drawer-layer" role="presentation" onMouseDown={() => setSelected(null)}>
-          <aside className="ccw-drawer" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="ccw-detail-area">
+          <section className="ccw-detail-panel" aria-label="Seçili firma cari hesabı">
             <header>
               <div>
                 <h2>{selected.firmaAdi || selected.companyName || selected.name}</h2>
@@ -580,11 +599,15 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                 {canUseCari ? <button type="button" className="primary" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> Yeni Cari Hareket</button> : null}
                 <button type="button" onClick={() => { setFinanceView("checks"); setFinanceOpen(true); }}>Finans Merkezi</button>
                 <button type="button" onClick={() => setSettingsOpen(true)}>Firma Düzenle</button>
-                <button type="button" className="icon" onClick={() => setSelected(null)} aria-label="Kapat"><X size={20} /></button>
               </div>
             </header>
-            <div className="ccw-drawer-body">
+            <div className="ccw-detail-body">
               {notice ? <div className="ccw-notice" role="status">{notice}</div> : null}
+              <div className="ccw-detail-summary">
+                <div><span>Güncel bakiye</span><strong>{money(selected.currentBalance)}</strong><small>{Number(selected.currentBalance || 0) < 0 ? "Firmaya borcumuz" : Number(selected.currentBalance || 0) > 0 ? "Firmadan alacağımız" : "Hesap dengede"}</small></div>
+                <div><span>Takip düzeni</span><strong>{cariLabel(selected)}</strong><small>{recordLabel(selected)}</small></div>
+                <div><span>Son hareket</span><strong>{dateText(selected.lastMovementAt)}</strong><small>{movements.length} hareket yüklendi</small></div>
+              </div>
 
               {settingsOpen ? (
                 <div className="ccw-settings-layer" role="presentation" onMouseDown={() => setSettingsOpen(false)}>
@@ -711,7 +734,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                 ) : <div className="ccw-mini-empty">Bu firma için cari hareket bulunamadı.</div>}
               </section>
             </div>
-          </aside>
+          </section>
         </div>
       ) : null}
       {financeOpen ? (

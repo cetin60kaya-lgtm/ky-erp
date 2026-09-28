@@ -1,0 +1,72 @@
+name: KY ERP Final Acceptance CI
+
+on:
+  push:
+    branches:
+      - codex/final-acceptance-clean-20260928
+  pull_request:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+      - run: npm ci
+      - name: Frontend tests
+        run: npm test
+      - name: Frontend lint
+        run: npm run lint
+      - name: Frontend build
+        run: npm run build
+
+  worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/cloud/ky-erp-api
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
+      - run: npm ci
+      - name: Worker typecheck
+        run: npm run typecheck
+      - name: Worker unit tests
+        run: npm run test:unit
+      - name: Worker dry run build
+        run: npm run build
+
+  diff-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Diff safety
+        run: |
+          git fetch origin codex/model-uretim-kontrol-merkezi-final
+          git diff --check origin/codex/model-uretim-kontrol-merkezi-final...HEAD
+          if git diff --name-only origin/codex/model-uretim-kontrol-merkezi-final...HEAD | grep -E '(^|/)(DATA|STORAGE)(/|$)|(^|/)\.env($|\.)|\.(db|sqlite|sqlite3)$'; then
+            echo 'Forbidden data or secret-like file change detected.'
+            exit 1
+          fi

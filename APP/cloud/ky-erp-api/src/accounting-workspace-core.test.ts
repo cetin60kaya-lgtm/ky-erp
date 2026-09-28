@@ -21,11 +21,12 @@ test("financial accounts reuse canonical ledger bank account id", () => {
   assert.match(core, /opening_balance/);
 });
 
-test("live sync watches the whole accounting table family without self recursion", () => {
+test("live sync watches accounting data without writing schema or revision rows on GET", () => {
   assert.match(core, /name LIKE 'accounting_%'/);
   assert.match(core, /table === "accounting_live_revision"/);
-  assert.match(core, /CREATE TRIGGER IF NOT EXISTS/);
-  assert.match(core, /revision=revision\+1/);
+  assert.doesNotMatch(core, /CREATE TRIGGER|CREATE TABLE|INSERT OR IGNORE INTO accounting_live_revision/);
+  assert.match(core, /crypto\.subtle\.digest/);
+  assert.match(core, /WHERE main_company_slug=\?/);
 });
 
 test("reconciliation stays period and company scoped", () => {
