@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import "../../app/pdksModuleRegistryPatch";
 import { executePdksAssistantCommand, PDKS_ASSISTANT_EXAMPLES } from "../../services/pdksAssistant";
 import PdksDeviceCenter from "../pdks/PdksDeviceCenter";
 import PdksLiveHome from "../pdks/PdksLiveHome";
