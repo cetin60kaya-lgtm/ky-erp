@@ -10,6 +10,14 @@ export async function listPdksDeviceSyncLogs(params = {}) {
   return unwrap(await apiGet("/ik/personnel-control/device-sync-logs", { ...params, _ts: Date.now() }));
 }
 
+export async function listPdksDeviceJobs(params = {}) {
+  return unwrap(await apiGet("/ik/personnel-control/device-jobs", { ...params, _ts: Date.now() }));
+}
+
+export async function requestPdksTerminalSync(deviceId, payload = {}) {
+  return unwrap(await apiPost(`/ik/personnel-control/devices/${encodeURIComponent(deviceId)}/jobs`, { command: "SYNC_TERMINAL", payload }));
+}
+
 export async function enrollPdksDevice(payload = {}) {
   return unwrap(await apiPost("/ik/personnel-control/device/enroll", payload));
 }

@@ -10,23 +10,24 @@ import PdksPageV2 from "./PdksPageV2";
 import "./pdks-shell.css";
 
 const NAV_GROUPS = [
-  { key: "gunluk", label: "Günlük", hint: "Kart, giriş/çıkış ve puantaj", items: [
-    ["ana-ekran", "Canlı"], ["bilgi-aktar", "Kart Aktar"], ["giris-cikislar", "Giriş / Çıkış"], ["puantaj", "Puantaj"], ["puantaj-sonuclari", "Sonuçlar"],
+  { key: "gunluk", label: "Günlük", hint: "Canlı durum, terminal aktarımı ve günlük giriş-çıkış işlemleri", items: [
+    ["ana-ekran", "Genel Bakış"], ["bilgi-aktar", "Terminal Aktar"], ["giris-cikislar", "Giriş-Çıkış"],
   ]},
-  { key: "personel", label: "Personel & İK", hint: "İK ana kaynağı, izin ve çalışma bağlantısı", items: [
+  { key: "personel", label: "Personel & İK", hint: "PDKS SGK personeli, aktif/pasif geçmiş, izin ve çalışma tarihi", items: [
     ["personel-bilgileri", "Personel"], ["izinler", "İzinler"], ["calisma-tarihi", "Çalışma Tarihi"],
   ]},
-  { key: "tanimlar", label: "Tanımlar", hint: "Vardiya ve çalışma kuralları", items: [
-    ["gruplar-vardiyalar", "Vardiyalar"], ["puantaj-kurallari", "Puantaj Kuralları"], ["donemler", "Dönem / Kapanış"], ["servisler", "Servisler"], ["tatiller", "Tatiller"],
+  { key: "tanimlar", label: "Tanımlar", hint: "Vardiya, puantaj kuralı, servis ve tatil tanımları", items: [
+    ["gruplar-vardiyalar", "Vardiyalar"], ["puantaj-kurallari", "Puantaj Kuralları"], ["servisler", "Servisler"], ["tatiller", "Tatiller"],
   ]},
-  { key: "terminal", label: "Terminal & Sistem", hint: "Cihaz, agent ve senkron", items: [
+  { key: "terminal", label: "Terminal & Sistem", hint: "Cihaz sağlığı, Desktop Agent ve çift yönlü senkron", items: [
     ["saat-terminal", "Terminal"], ["cihaz-baglantilari", "Cihazlar"], ["senkron", "Senkron"],
   ]},
-  { key: "rapor", label: "Rapor & Denetim", hint: "Puantaj raporları ve yıllık denetim", items: [
-    ["raporlar", "Raporlar"], ["denetim-yillik-temp", "Yıllık TEMP"],
+  { key: "rapor", label: "Rapor & Denetim", hint: "Puantaj, bordro sonucu, dönem kapanışı, rapor ve yıllık denetim", items: [
+    ["puantaj", "Puantaj"], ["puantaj-sonuclari", "Sonuçlar"], ["donemler", "Dönem / Kapanış"], ["raporlar", "Raporlar"], ["denetim-yillik-temp", "Yıllık TEMP"],
   ]},
 ];
 
+const DEVICE_CENTER_TABS = ["saat-terminal", "cihaz-baglantilari", "senkron"];
 const AUDIT_ALLOWED_TABS = new Set(["ana-ekran","giris-cikislar","puantaj","puantaj-sonuclari","calisma-tarihi","raporlar","denetim-yillik-temp"]);
 const PERSONNEL_DESK_TABS = new Set(["personel-bilgileri","giris-cikislar","puantaj","izinler","calisma-tarihi"]);
 
@@ -57,7 +58,7 @@ function QuickAssistant({ disabled, mainCompanyId }) {
   return (
     <section className="pdks-quick-assistant compact">
       <div className="pdks-assistant-row">
-        <div className="pdks-assistant-label"><strong>Hızlı İşlem</strong><small>Personel + işlemi yaz</small></div>
+        <div className="pdks-assistant-label"><strong>Hızlı İşlem</strong><small>PDKS personeli + işlemi yaz</small></div>
         <input value={command} disabled={disabled || busy} onChange={(event) => setCommand(event.target.value)}
           onKeyDown={(event) => { if (event.key === "Enter") execute(); }}
           placeholder="Örn: Ali Akkaya bugün gelmedi, yok yaz" />
@@ -82,11 +83,11 @@ export default function PdksPage(props) {
     .filter((group) => group.items.length), [isAuditAccount]);
 
   const currentGroup = groupForTab(activeTab, groups);
-  const currentItem = currentGroup?.items.find(([key]) => key === activeTab) || currentGroup?.items[0] || ["ana-ekran", "Canlı"];
+  const currentItem = currentGroup?.items.find(([key]) => key === activeTab) || currentGroup?.items[0] || ["ana-ekran", "Genel Bakış"];
   const go = (tabKey) => openModule?.("pdks", { tabKey });
   const mainCompanyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
 
-  const deviceCenterTab = !isAuditAccount && ["saat-terminal", "cihaz-baglantilari", "senkron"].includes(activeTab);
+  const deviceCenterTab = !isAuditAccount && DEVICE_CENTER_TABS.includes(activeTab);
   const personnelDeskTab = PERSONNEL_DESK_TABS.has(activeTab);
   const rulesCenterTab = !isAuditAccount && activeTab === "puantaj-kurallari";
   const reportCenterTab = ["puantaj-sonuclari", "raporlar"].includes(activeTab);
@@ -95,16 +96,16 @@ export default function PdksPage(props) {
     <div className="pdks-module-shell">
       <header className="pdks-context-bar">
         <div className="pdks-context-title">
-          <small>PDKS / {currentGroup?.label || "Günlük"}</small>
+          <small>KY ERP · PDKS 6.0 / {currentGroup?.label || "Günlük"}</small>
           <strong>{currentItem[1]}</strong>
           <span>{currentGroup?.hint}</span>
         </div>
-        <nav className="pdks-context-tabs" aria-label={(currentGroup?.label || "PDKS") + " hızlı işlemleri"}>
+        <nav className="pdks-context-tabs" aria-label={(currentGroup?.label || "PDKS") + " işlemleri"}>
           {(currentGroup?.items || []).map(([key, label]) => (
             <button type="button" key={key} className={activeTab === key ? "active" : ""} onClick={() => go(key)}>{label}</button>
           ))}
         </nav>
-        <span className={"pdks-context-mode " + (isAuditAccount ? "audit" : "full")}>{isAuditAccount ? "DENETİM" : "CANLI"}</span>
+        <span className={"pdks-context-mode " + (isAuditAccount ? "audit" : "full")}>{isAuditAccount ? "DENETİM" : "PDKS 6.0"}</span>
       </header>
 
       <main className="pdks-module-content">
