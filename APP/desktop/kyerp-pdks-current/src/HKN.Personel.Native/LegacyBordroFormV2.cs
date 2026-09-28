@@ -67,35 +67,56 @@ public sealed class LegacyBordroForm : Form
     {
         foreach (var field in new[] { "GUNYOLUCRET", "GUNYOLUCRETI", "YOLUCRET", "YOLUCRETI" })
         {
-            var found = db.Query("select count(*) ADET from RDB$RELATION_FIELDS where trim(RDB$RELATION_NAME)=@T and trim(RDB$FIELD_NAME)=@F",
-                new FbParameter("@T", "KIMLIK"), new FbParameter("@F", field));
+            var found = db.Query("select count(*) ADET from RDB$RELATION_FIELDS where RDB$RELATION_NAME=@T and RDB$FIELD_NAME=@F",
+                new FbParameter("@T", "KIMLIK".PadRight(31)), new FbParameter("@F", field.PadRight(31)));
             if (found.Rows.Count > 0 && Convert.ToInt32(found.Rows[0][0]) > 0) return $"coalesce(k.{field},0)";
         }
         return "cast(0 as numeric(15,2))";
     }
 
+    static readonly (string Technical, string Caption)[] ColumnMap =
+    [
+        ("KART_NO", "Kart No"), ("IGT", "İ.G.T"), ("AD_SOYAD", "Ad Soyad"), ("MAAS", "Maaş"), ("YOL", "Yol"),
+        ("NORMAL_GUN", "Normal Gün"), ("NORMAL_SAAT", "Normal Saat"), ("MESAI50_SAAT", "%50 Mesai Saat"),
+        ("MESAI100_SAAT", "%100 Mesai Saat"), ("MESAI_SAAT", "Mesai Saat"), ("MESAI", "Mesai"),
+        ("UCRETSIZ_IZIN_GUN", "Ücretsiz İzin Gün"), ("UCRETLI_IZIN_GUN", "Ücretli İzin Gün"), ("YILLIK_IZIN_GUN", "Yıllık İzin Gün"),
+        ("DEVAMSIZ_GUN", "Devamsız Gün"), ("DEVAMSIZ_SAAT", "Devamsız Saat"), ("GEC_SAAT", "Geç Saat"), ("EKSIK_SAAT", "Eksik Saat"),
+        ("EK_KAZANC", "Ek Kazanç"), ("KESINTI", "Kesinti"), ("AVANS", "Avans"), ("BANKA", "Banka"), ("BES", "BES"), ("ICRA", "İcra"),
+        ("MAAS_ODEME", "Maaş Ödeme"), ("MESAI_ODEME", "Mesai Ödeme"), ("TOPLAM", "Toplam"), ("ELDEN", "Elden"), ("IMZA", "İmza")
+    ];
+
     void LoadData()
     {
         try
         {
+            UseWaitCursor = true;
+            summary.Text = "Yükleniyor...";
             var a = new DateTime(period.Value.Year, period.Value.Month, 1);
             var b = a.AddMonths(1);
             var road = RoadExpression();
+
+            // Firebird Dialect 1 uyumluluğu: SQL tarafında Türkçe/boşluklu quoted alias yok.
+            // Görsel başlıklar sorgudan sonra C# tarafında verilir; canlı DB şemasına metadata yazılmaz.
             data = db.Query(
-                "select u.PKNO \"Kart No\",k.IGTARIH \"İ.G.T\",trim(coalesce(k.AD,'')||' '||coalesce(k.SOYAD,'')) \"Ad Soyad\"," +
-                "u.DMAAS \"Maaş\"," + road + " \"Yol\",u.GUN1 \"Normal Gün\",u.SAAT1 \"Normal Saat\"," +
-                "u.SAAT2 \"%50 Mesai Saat\",u.SAAT3 \"%100 Mesai Saat\",u.SAAT8 \"Mesai Saat\",u.UCRET8 \"Mesai\"," +
-                "u.GUN4 \"Ücretsiz İzin Gün\",u.GUN5 \"Ücretli İzin Gün\",u.GUN9 \"Yıllık İzin Gün\"," +
-                "u.DEVG \"Devamsız Gün\",u.DEVS \"Devamsız Saat\",u.GECS \"Geç Saat\",u.EKS \"Eksik Saat\"," +
-                "u.EKKAZ \"Ek Kazanç\",u.EKKES \"Kesinti\",u.EX1 \"Avans\",u.EX2 \"Banka\",u.EX3 \"BES\",u.EX4 \"İcra\"," +
-                "u.NCKALAN \"Maaş Ödeme\",u.FMKALAN \"Mesai Ödeme\"," +
-                "(coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0)) \"Toplam\"," +
-                "((coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0))-coalesce(u.EX2,0)) \"Elden\",cast('' as varchar(30)) \"İmza\" " +
+                "select u.PKNO KART_NO,k.IGTARIH IGT,(trim(coalesce(k.AD,''))||' '||trim(coalesce(k.SOYAD,''))) AD_SOYAD," +
+                "u.DMAAS MAAS," + road + " YOL,u.GUN1 NORMAL_GUN,u.SAAT1 NORMAL_SAAT," +
+                "u.SAAT2 MESAI50_SAAT,u.SAAT3 MESAI100_SAAT,u.SAAT8 MESAI_SAAT,u.UCRET8 MESAI," +
+                "u.GUN4 UCRETSIZ_IZIN_GUN,u.GUN5 UCRETLI_IZIN_GUN,u.GUN9 YILLIK_IZIN_GUN," +
+                "u.DEVG DEVAMSIZ_GUN,u.DEVS DEVAMSIZ_SAAT,u.GECS GEC_SAAT,u.EKS EKSIK_SAAT," +
+                "u.EKKAZ EK_KAZANC,u.EKKES KESINTI,u.EX1 AVANS,u.EX2 BANKA,u.EX3 BES,u.EX4 ICRA," +
+                "u.NCKALAN MAAS_ODEME,u.FMKALAN MESAI_ODEME," +
+                "(coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0)) TOPLAM," +
+                "((coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0))-coalesce(u.EX2,0)) ELDEN,'' IMZA " +
                 "from UCRETLER u left join KIMLIK k on k.PKNO=u.PKNO where u.BASTAR<@B and coalesce(u.BITTAR,u.BASTAR)>=@A order by u.PKNO",
                 new FbParameter("@A", a), new FbParameter("@B", b));
+
+            foreach (var (technical, caption) in ColumnMap)
+                if (data.Columns.Contains(technical)) data.Columns[technical]!.ColumnName = caption;
+
             var serial = new DataColumn("S.No", typeof(int));
             data.Columns.Add(serial); serial.SetOrdinal(0);
             for (var i = 0; i < data.Rows.Count; i++) data.Rows[i][serial] = i + 1;
+
             grid.DataSource = data;
             foreach (DataGridViewColumn c in grid.Columns)
                 c.Width = c.HeaderText == "Ad Soyad" ? 170 : c.HeaderText == "İmza" ? 120 : c.HeaderText == "S.No" ? 50 : c.HeaderText.Contains("Gün") ? 65 : 85;
@@ -103,7 +124,17 @@ public sealed class LegacyBordroForm : Form
             var total = data.AsEnumerable().Sum(r => r["Toplam"] == DBNull.Value ? 0m : Convert.ToDecimal(r["Toplam"]));
             summary.Text = $"{data.Rows.Count} personel • {total:N2} ₺";
         }
-        catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (Exception ex)
+        {
+            data = new DataTable();
+            grid.DataSource = data;
+            summary.Text = "Bordro yüklenemedi";
+            MessageBox.Show("Bordro verisi okunamadı.\r\n\r\n" + ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            UseWaitCursor = false;
+        }
     }
 
     void ToggleLock()
