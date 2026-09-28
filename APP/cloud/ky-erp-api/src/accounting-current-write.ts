@@ -6,17 +6,39 @@ const text = (value: unknown) => String(value ?? "").trim();
 const upper = (value: unknown) => text(value).toUpperCase();
 const reject = (code: string, message: string) => { throw Object.assign(new Error(message), { code }); };
 
+function transactionTypeOf(input: Row) {
+  const explicit = upper(input.transactionType);
+  if (["DEBIT", "CREDIT", "PAYMENT", "COLLECTION"].includes(explicit)) return explicit;
+  if (explicit) reject("TRANSACTION_TYPE_INVALID", "Geçerli cari işlem türü seçin.");
+
+  const direction = upper(input.transactionDirection);
+  if (["PAYMENT", "PAYMENT_OUT", "OUT", "OUTGOING"].includes(direction)) return "PAYMENT";
+  if (["COLLECTION", "COLLECTION_IN", "PAYMENT_IN", "IN", "INCOMING"].includes(direction)) return "COLLECTION";
+  reject("TRANSACTION_TYPE_INVALID", "Geçerli cari işlem türü seçin.");
+}
+
 export function currentAccountEntry(input: Row) {
   const amount = Math.round(Number(input.amount) * 100) / 100;
   if (!Number.isFinite(amount) || amount <= 0) reject("AMOUNT_INVALID", "Sıfırdan büyük geçerli tutar girin.");
-  const type = upper(input.transactionType || (input.transactionDirection === "PAYMENT_IN" ? "COLLECTION" : "PAYMENT"));
+  const type = transactionTypeOf(input);
   const types: Record<string, string> = { DEBIT: "BORC", CREDIT: "ALACAK", PAYMENT: "ODEME", COLLECTION: "TAHSILAT" };
-  if (!types[type]) reject("TRANSACTION_TYPE_INVALID", "Geçerli cari işlem türü seçin.");
   const effect = ["DEBIT", "PAYMENT"].includes(type) ? amount : -amount;
   const date = text(input.date || input.paymentDate) || new Date().toISOString().slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) reject("DATE_INVALID", "Geçerli işlem tarihi girin.");
   const recordScope = /INTERNAL|GAYRI|UNOFFICIAL/.test(upper(input.recordScope || input.recordType || input.workType)) ? "INTERNAL" : "OFFICIAL";
-  return { amount, type, effect, date, movementType: types[type], debit: effect > 0 ? amount : 0, credit: effect < 0 ? amount : 0, recordScope, recordType: recordScope === "OFFICIAL" ? "RESMI" : "GAYRI_RESMI" };
+  const sourceType = ["PAYMENT", "COLLECTION"].includes(type) ? "PAYMENT" : "MANUAL_CURRENT_ACCOUNT";
+  return {
+    amount,
+    type,
+    effect,
+    date,
+    movementType: types[type],
+    sourceType,
+    debit: effect > 0 ? amount : 0,
+    credit: effect < 0 ? amount : 0,
+    recordScope,
+    recordType: recordScope === "OFFICIAL" ? "RESMI" : "GAYRI_RESMI",
+  };
 }
 
 export async function supportedInsert(db: D1Database, table: string, data: Row, required: string[] = []) {
@@ -52,7 +74,7 @@ export async function writeCurrentAccount(c: Context<AppEnv>, slug: string, inpu
   const payload = { ...input, id: requestId, firmId: companyId, companyId, companyName: company!.name, ...entry, paymentDate: entry.date, createdAt: timestamp, createdBy: actor };
   const movement = await supportedInsert(db, "current_account_movements", {
     id, main_company_slug: slug, company_id: companyId, movement_date: entry.date,
-    movement_type: entry.movementType, source_type: "PAYMENT", document_no: requestId,
+    movement_type: entry.movementType, source_type: entry.sourceType, document_no: requestId,
     description, debit: entry.debit, credit: entry.credit, amount: entry.amount, effect: entry.effect,
     balance_after: 0, record_type: entry.recordType, raw: payload, created_at: timestamp, updated_at: timestamp,
   }, ["id", "main_company_slug", "company_id", "effect", "amount", "balance_after"]);
