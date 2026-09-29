@@ -50,31 +50,8 @@ public sealed partial class MainShellForm
             .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Çalışma Tarihi", StringComparison.OrdinalIgnoreCase));
         if (workDate is not null) workDate.Visible = false;
 
-        WindowState = FormWindowState.Normal;
-        StartPosition = FormStartPosition.CenterScreen;
-        var area = Screen.FromControl(this).WorkingArea;
-        var targetWidth = Math.Clamp((int)Math.Round(area.Width * 0.86), 1180, 1480);
-        var targetHeight = Math.Clamp((int)Math.Round(area.Height * 0.84), 720, 880);
-        Size = new Size(Math.Min(targetWidth, area.Width - 40), Math.Min(targetHeight, area.Height - 40));
-        Location = new Point(
-            area.Left + Math.Max(0, (area.Width - Width) / 2),
-            area.Top + Math.Max(0, (area.Height - Height) / 2));
-
-        if (IsHandleCreated)
-        {
-            BeginInvoke(new Action(() =>
-            {
-                if (IsDisposed || MainMenuStrip is null) return;
-                Text = $"KY PDKS 6.3.2 TEST • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
-                var rev = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
-                    .FirstOrDefault(x => (x.Text ?? string.Empty).StartsWith("REV 6.", StringComparison.OrdinalIgnoreCase));
-                if (rev is not null) rev.Text = "REV 6.3.2 TEST";
-                var support = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
-                    .FirstOrDefault(x => (x.Text ?? string.Empty).StartsWith("Destek", StringComparison.OrdinalIgnoreCase));
-                var about = support?.DropDownItems.OfType<ToolStripMenuItem>()
-                    .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Hakkında", StringComparison.OrdinalIgnoreCase));
-                if (about is not null) about.Text = "KY PDKS 6.3.2 TEST Hakkında";
-            }));
-        }
+        // Window bounds are intentionally not changed here. Role/menu setup runs after the form
+        // exists and changing bounds here caused a visible second resize on startup.
+        Text = $"KY PDKS 6.3.3 TEST • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
     }
 }
