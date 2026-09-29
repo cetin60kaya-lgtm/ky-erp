@@ -12,7 +12,8 @@
     "frontend-full-test-suite",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
-    "live-daily-entry-bundle-verification"
+    "live-entry-verification",
+    "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "Fix the production Günlük Operasyon route at /gunluk-operasyon/daily-entry. AppV3 now lazy-loads and renders DailyHrWorkspace for the canonical gunluk-operasyon module instead of falling through to Ekran bulunamadı. Add a route contract test and require the full frontend test suite before production Pages deploy. Live bundle verification now checks the canonical daily-entry path."
+  "note": "Republish the canonical Günlük Operasyon route and require deep live verification. Production success now requires both the live entry bundle and the exact AppV3 chunk containing daily-hr-workspace-v1 to match the local production build by SHA256 on https://kyerp.net/gunluk-operasyon/daily-entry."
 }
