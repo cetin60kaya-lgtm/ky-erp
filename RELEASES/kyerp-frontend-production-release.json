@@ -16,11 +16,15 @@
     "daily-operations-canonical-sidebar-menu",
     "daily-operations-legacy-top-tabs-removed",
     "daily-operations-four-direct-pages",
+    "daily-operations-dedicated-api-and-backend-ownership",
+    "daily-operations-legacy-ik-page-removed",
+    "daily-operations-obsolete-patch-scripts-removed",
+    "muhasebe-mail-provider-accepted-send-tracking",
     "frontend-full-test-suite",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
     "live-entry-verification",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "Günlük Operasyon menüsünü KY ERP canonical sol alt menü yapısına geçir: Günlük Giriş, Personel Kartları, Haftalık Özet ve Ödeme Fişleri doğrudan sol menüden tek tıkla açılır. Sayfa içindeki eski yatay dört sekmeli menü ve ikinci merkezi İşlemler navigasyonu kaldırılır; mevcut günlük operasyon işleyişi ve veri akışı korunur."
+  "note": "Günlük Operasyon ve İK tek sahiplik düzenine geçirildi. Günlük Operasyon; Günlük Giriş, Personel Kartları, Haftalık Özet ve Ödeme Fişleri ile ayrı canonical modül olarak kendi API/backend akışında çalışır. Kullanılmayan eski karma IkPage/IkAdvancedMonthly ve patch_mesai yama dosyaları kaldırıldı. Günlük Operasyon dialogları viewport tabanlı deterministik ölçüde açılır. Muhasebe mail takibi yalnız gerçek Mail Center provider kabulünden sonra gönderildi durumuna geçer."
 }
