@@ -145,6 +145,53 @@
   pointer-events: none;
 }
 
+/* İK aylık/personel ekranında Yeni Personel ve Düzenle sayfayı uzatmaz; işlem merkez pencerede tamamlanır. */
+.shell-v3[data-active-module="ik"] .ikpf-page.ikpf-new-open::before,
+.shell-v3[data-active-module="ik"] .ikpf-page.ikpf-editing::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1180;
+  background: rgba(15, 23, 42, .34);
+}
+
+.shell-v3[data-active-module="ik"] .ikpf-new {
+  position: fixed !important;
+  z-index: 1200 !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: min(820px, calc(100vw - 44px)) !important;
+  max-height: calc(100dvh - 44px) !important;
+  overflow: auto !important;
+  margin: 0 !important;
+  background: #fff !important;
+  border-radius: 14px !important;
+  box-shadow: 0 22px 64px rgba(15, 23, 42, .24) !important;
+}
+
+.shell-v3[data-active-module="ik"] .ikpf-editing .ikpf-main {
+  position: fixed !important;
+  z-index: 1200 !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: min(980px, calc(100vw - 44px)) !important;
+  max-height: calc(100dvh - 44px) !important;
+  overflow: auto !important;
+  margin: 0 !important;
+  background: #fff !important;
+  border-radius: 14px !important;
+  box-shadow: 0 22px 64px rgba(15, 23, 42, .24) !important;
+}
+
+.shell-v3[data-active-module="ik"] .ikpf-editing .ikpf-person-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #fff;
+}
+
 /* Açılır pencerelerde sekmeli işlem yapısı için ortak görsel dil. */
 .shell-v3:not([data-active-module="gunluk-operasyon"]) .ky-action-tabs,
 .shell-v3:not([data-active-module="gunluk-operasyon"]) [class*="modal-tabs"],
@@ -222,7 +269,9 @@
     border-radius: 12px !important;
   }
 
-  .shell-v3:not([data-active-module="gunluk-operasyon"]) .ccw-transaction {
+  .shell-v3:not([data-active-module="gunluk-operasyon"]) .ccw-transaction,
+  .shell-v3[data-active-module="ik"] .ikpf-new,
+  .shell-v3[data-active-module="ik"] .ikpf-editing .ikpf-main {
     width: calc(100vw - 20px) !important;
     max-height: calc(100dvh - 20px) !important;
   }
