@@ -5,18 +5,18 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-09-29",
   "scope": [
-    "gunluk-operasyon-rich-workspace-restore",
-    "daily-entry-fast-entry",
-    "daily-personnel-cards",
-    "daily-weekly-summary",
-    "daily-payment-slips-current-rate",
-    "daily-log-person-control",
-    "daily-paid-persistent-status",
-    "daily-period-lock",
-    "daily-concurrency-guard",
+    "canonical-compact-workspace",
+    "module-only-sidebar",
+    "central-task-accordion",
+    "centered-dialogs",
+    "no-side-drawers",
+    "single-column-master-detail",
+    "sticky-dialog-actions",
+    "retired-draggable-modal-runtime",
+    "compact-management-overview",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
     "live-bundle-verification"
   ],
-  "note": "Restore the last verified rich Daily Operations workspace after the IK separation regression. The monthly IK module stays separate and unchanged. Daily Entry, Fast Entry, Personnel Cards, Weekly Summary, Payment Slips, Log + Person Control, persistent Paid state, period lock and daily safety helpers are restored from the last verified production implementation and bridged into the standalone gunluk-operasyon module."
+  "note": "Apply one canonical interaction model across KY ERP: left navigation contains main modules only; module tasks are selected from the compact central İşlemler accordion; workspaces are bounded and centered; legacy master-detail layouts collapse into a vertical work stream; new/edit/quick actions use centered dialogs instead of side drawers; dialog headers and save/cancel actions stay visible; draggable/resizable persisted window behavior is retired. Muhasebe Yönetim Özeti remains reduced to essential receivable, payable, monthly incoming/outgoing invoice and upcoming check metrics."
 }
