@@ -62,22 +62,33 @@ internal static class TerminalLiveArchiveService
     {
         Ensure();
         if (to.Date < from.Date) (from, to) = (to, from);
+        var knownByYear = new Dictionary<int, HashSet<string>>();
+        var pendingByYear = new Dictionary<int, List<string>>();
         var added = 0;
+
         foreach (var file in Directory.GetFiles(CompanyDataPaths.Tnf, "TR*.Tnf"))
         {
             foreach (var line in File.ReadLines(file))
             {
                 if (!TryParseTnfDate(line, out var day)) continue;
                 if (day < from.Date || day > to.Date) continue;
-                var yearPath = LiveTnfPath(day.Year);
-                var known = File.Exists(yearPath)
-                    ? new HashSet<string>(File.ReadLines(yearPath), StringComparer.Ordinal)
-                    : new HashSet<string>(StringComparer.Ordinal);
+                if (!knownByYear.TryGetValue(day.Year, out var known))
+                {
+                    var yearPath = LiveTnfPath(day.Year);
+                    known = File.Exists(yearPath)
+                        ? new HashSet<string>(File.ReadLines(yearPath), StringComparer.Ordinal)
+                        : new HashSet<string>(StringComparer.Ordinal);
+                    knownByYear[day.Year] = known;
+                    pendingByYear[day.Year] = [];
+                }
                 if (!known.Add(line)) continue;
-                File.AppendAllLines(yearPath, [line], Encoding.ASCII);
+                pendingByYear[day.Year].Add(line);
                 added++;
             }
         }
+
+        foreach (var pair in pendingByYear)
+            if (pair.Value.Count > 0) File.AppendAllLines(LiveTnfPath(pair.Key), pair.Value, Encoding.ASCII);
         return added;
     }
 
