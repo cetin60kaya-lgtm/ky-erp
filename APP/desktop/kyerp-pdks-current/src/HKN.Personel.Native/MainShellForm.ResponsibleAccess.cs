@@ -25,7 +25,7 @@ public sealed partial class MainShellForm
             {
                 ToolTipText = "Firma sorumlusuna özel personel, kart hareketi, E/hariç tutma, TNF, data kontrol ve bordro düzeltme merkezi"
             };
-            quick.Click += (_,_) => { using var f = new ResponsibleQuickOperationsForm(this); f.ShowDialog(this); };
+            quick.Click += (_, _) => { using var f = new ResponsibleQuickOperationsForm(this); f.ShowDialog(this); };
             management.DropDownItems.Add(quick);
 
             if (currentUser.IsSuperAdmin)
@@ -35,7 +35,7 @@ public sealed partial class MainShellForm
                 {
                     ToolTipText = "Firma lisansı, demo, süre, cihaz ve veri erişim durumunu yönetir. Yalnız Super Admin görür."
                 };
-                license.Click += (_,_) => { using var f = new CompanyLicenseCenterForm(); f.ShowDialog(this); };
+                license.Click += (_, _) => { using var f = new CompanyLicenseCenterForm(); f.ShowDialog(this); };
                 management.DropDownItems.Add(license);
             }
 
@@ -59,5 +59,22 @@ public sealed partial class MainShellForm
         Location = new Point(
             area.Left + Math.Max(0, (area.Width - Width) / 2),
             area.Top + Math.Max(0, (area.Height - Height) / 2));
+
+        if (IsHandleCreated)
+        {
+            BeginInvoke(new Action(() =>
+            {
+                if (IsDisposed || MainMenuStrip is null) return;
+                Text = $"KY PDKS 6.3.2 TEST • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
+                var rev = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
+                    .FirstOrDefault(x => (x.Text ?? string.Empty).StartsWith("REV 6.", StringComparison.OrdinalIgnoreCase));
+                if (rev is not null) rev.Text = "REV 6.3.2 TEST";
+                var support = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
+                    .FirstOrDefault(x => (x.Text ?? string.Empty).StartsWith("Destek", StringComparison.OrdinalIgnoreCase));
+                var about = support?.DropDownItems.OfType<ToolStripMenuItem>()
+                    .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Hakkında", StringComparison.OrdinalIgnoreCase));
+                if (about is not null) about.Text = "KY PDKS 6.3.2 TEST Hakkında";
+            }));
+        }
     }
 }
