@@ -16,7 +16,7 @@ internal sealed class WorkspaceDockHost : UserControl
     sealed class Slot
     {
         public Panel Host { get; } = new() { Dock = DockStyle.Fill, BackColor = Color.White };
-        public Label Title { get; } = new() { Dock = DockStyle.Top, Height = 28, TextAlign = ContentAlignment.MiddleLeft };
+        public Label Title { get; } = new() { Dock = DockStyle.Top, Height = 24, TextAlign = ContentAlignment.MiddleLeft };
         public Control? Content { get; set; }
         public string Key { get; set; } = string.Empty;
     }
@@ -70,6 +70,7 @@ internal sealed class WorkspaceDockHost : UserControl
         {
             SetActive(existing);
             BringContentFront(slots[existing]);
+            if (!slots[existing].Content!.Visible) slots[existing].Content!.Visible = true;
             return;
         }
 
@@ -85,7 +86,7 @@ internal sealed class WorkspaceDockHost : UserControl
 
     public void ShowSingle(Control control, string key, string title)
     {
-        CloseAll(true);
+        CloseAll(false);
         ApplyLayout(WorkspaceLayoutMode.Single, false);
         SetActive(0);
         Attach(slots[0], control, key, title);
@@ -93,11 +94,12 @@ internal sealed class WorkspaceDockHost : UserControl
 
     void Attach(Slot slot, Control control, string key, string title)
     {
-        DetachSlot(slot, true);
+        DetachSlot(slot, false);
         slot.Key = key;
         slot.Content = control;
         slot.Title.Text = "  " + title;
         control.Dock = DockStyle.Fill;
+        control.Visible = true;
         slot.Host.Controls.Add(control);
         control.BringToFront();
         slot.Title.BringToFront();
@@ -273,8 +275,10 @@ internal sealed class WorkspaceDockHost : UserControl
     {
         if (slot.Content is not null)
         {
-            slot.Host.Controls.Remove(slot.Content);
-            if (dispose && slot.Content is IDisposable d) d.Dispose();
+            var content = slot.Content;
+            slot.Host.Controls.Remove(content);
+            if (dispose && content is IDisposable d) d.Dispose();
+            else content.Visible = false;
         }
         slot.Content = null;
         slot.Key = string.Empty;
@@ -283,6 +287,7 @@ internal sealed class WorkspaceDockHost : UserControl
 
     void BringContentFront(Slot slot)
     {
+        if (slot.Content is not null) slot.Content.Visible = true;
         slot.Content?.BringToFront();
         slot.Title.BringToFront();
     }
