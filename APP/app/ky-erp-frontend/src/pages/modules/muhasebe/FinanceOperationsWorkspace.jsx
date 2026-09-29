@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import CekOdemeMerkeziPage from "../../muhasebe/CekOdemeMerkeziPage";
 import AccountingLedgerPanel from "./AccountingLedgerPanel";
 import FinancialAccountsPanel from "./FinancialAccountsPanel";
@@ -6,16 +6,18 @@ import PaymentPlannerPanel from "./PaymentPlannerPanel";
 
 const VIEWS = new Set(["daily", "planner", "ledger"]);
 
-export default function FinanceOperationsWorkspace({ activeMainCompany, refreshKey = 0, reloadAll }) {
-  const initialState = useMemo(() => {
-    const params = new URLSearchParams(window.location.search);
-    const requested = params.get("financeView") || "daily";
-    return {
-      view: VIEWS.has(requested) ? requested : "daily",
-      selectedCompanyId: params.get("companyId") || params.get("financeCompanyId") || "",
-    };
-  }, []);
-  const [view, setView] = useState(initialState.view);
+export default function FinanceOperationsWorkspace({ activeMainCompany, refreshKey = 0, reloadAll, moduleActionContext }) {
+  const action = useMemo(() => {
+    if (moduleActionContext?.targetModule !== "muhasebe" || moduleActionContext?.targetTab !== "finans-islemleri") return {};
+    return moduleActionContext;
+  }, [moduleActionContext]);
+  const requestedView = VIEWS.has(action.financeView) ? action.financeView : "daily";
+  const selectedCompanyId = action.companyId || action.financeCompanyId || "";
+  const [view, setView] = useState(requestedView);
+
+  useEffect(() => {
+    setView(requestedView);
+  }, [requestedView, action.nonce]);
 
   return (
     <section className="accounting-composite-workspace">
@@ -38,7 +40,7 @@ export default function FinanceOperationsWorkspace({ activeMainCompany, refreshK
             reloadAll={reloadAll}
             embedded
             hideFirmDirectory
-            selectedCompanyId={initialState.selectedCompanyId}
+            selectedCompanyId={selectedCompanyId}
           />
         ) : null}
         {view === "planner" ? <PaymentPlannerPanel activeMainCompany={activeMainCompany} /> : null}
