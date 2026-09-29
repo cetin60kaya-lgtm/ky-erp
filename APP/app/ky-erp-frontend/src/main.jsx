@@ -41,12 +41,16 @@ async function loadErpRuntime() {
     { default: AppV3 },
     { ActiveCompanyProvider },
     { AuthProvider, useAuth },
+    { default: GlobalLeftClickMenu },
+    { syncApplicationSettingsTabForUser },
     { installAuthenticatedAssetBridge },
     { installMuhasebeDocumentSanitizer },
   ] = await Promise.all([
     import("./AppV3.jsx"),
     import("./context/ActiveCompanyContext"),
     import("./context/AuthContext"),
+    import("./components/shell/GlobalLeftClickMenu"),
+    import("./app/applicationSettingsModulePatch"),
     import("./utils/installAuthenticatedAssetBridge"),
     import("./utils/installMuhasebeDocumentSanitizer"),
     import("./App.css"),
@@ -61,15 +65,30 @@ async function loadErpRuntime() {
   installAuthenticatedAssetBridge();
   installMuhasebeDocumentSanitizer();
   installCanonicalDialogSizing();
-  return { AppV3, ActiveCompanyProvider, AuthProvider, useAuth };
+  return {
+    AppV3,
+    ActiveCompanyProvider,
+    AuthProvider,
+    useAuth,
+    GlobalLeftClickMenu,
+    syncApplicationSettingsTabForUser,
+  };
 }
 
 async function renderCanonicalHost() {
-  const { AppV3, ActiveCompanyProvider, AuthProvider, useAuth } = await loadErpRuntime();
+  const {
+    AppV3,
+    ActiveCompanyProvider,
+    AuthProvider,
+    useAuth,
+    GlobalLeftClickMenu,
+    syncApplicationSettingsTabForUser,
+  } = await loadErpRuntime();
   const RootWrapper = import.meta.env.DEV ? React.Fragment : React.StrictMode;
 
   function CanonicalHostApp() {
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, user } = useAuth();
+    syncApplicationSettingsTabForUser(user);
     const [loginOpen, setLoginOpen] = useState(() => {
       const initialPath = String(window.location.pathname || "/").toLowerCase();
       return directLoginPaths.has(initialPath) || initialPath !== "/";
@@ -84,7 +103,14 @@ async function renderCanonicalHost() {
       return () => window.removeEventListener("kyerp:open-login", openLogin);
     }, []);
 
-    if (isAuthenticated) return <ActiveCompanyProvider><AppV3 /></ActiveCompanyProvider>;
+    if (isAuthenticated) {
+      return (
+        <ActiveCompanyProvider>
+          <AppV3 />
+          <GlobalLeftClickMenu />
+        </ActiveCompanyProvider>
+      );
+    }
 
     return (
       <>
@@ -100,10 +126,29 @@ async function renderCanonicalHost() {
 }
 
 async function renderErpApp() {
-  const { AppV3, ActiveCompanyProvider, AuthProvider } = await loadErpRuntime();
+  const {
+    AppV3,
+    ActiveCompanyProvider,
+    AuthProvider,
+    useAuth,
+    GlobalLeftClickMenu,
+    syncApplicationSettingsTabForUser,
+  } = await loadErpRuntime();
   const RootWrapper = import.meta.env.DEV ? React.Fragment : React.StrictMode;
+
+  function ErpRuntime() {
+    const { user } = useAuth();
+    syncApplicationSettingsTabForUser(user);
+    return (
+      <ActiveCompanyProvider>
+        <AppV3 />
+        <GlobalLeftClickMenu />
+      </ActiveCompanyProvider>
+    );
+  }
+
   ReactDOM.createRoot(rootElement).render(
-    <RootWrapper><AuthProvider><ActiveCompanyProvider><AppV3 /></ActiveCompanyProvider></AuthProvider></RootWrapper>,
+    <RootWrapper><AuthProvider><ErpRuntime /></AuthProvider></RootWrapper>,
   );
 }
 
