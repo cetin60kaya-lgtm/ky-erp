@@ -21,19 +21,30 @@ public sealed partial class MainShellForm
         if (management is null && (currentUser.IsCompanyResponsible || currentUser.IsSuperAdmin))
         {
             management = new ToolStripMenuItem("Yönetim");
-            var quick = new ToolStripMenuItem("Hızlı İşlemler") { ToolTipText = "Firma sorumlusuna özel veri düzeltme ve kontrol merkezi" };
+            var quick = new ToolStripMenuItem("Hızlı İşlemler")
+            {
+                ToolTipText = "Firma sorumlusuna özel personel, kart hareketi, E/hariç tutma, TNF, data kontrol ve bordro düzeltme merkezi"
+            };
             quick.Click += (_,_) => { using var f = new ResponsibleQuickOperationsForm(this); f.ShowDialog(this); };
             management.DropDownItems.Add(quick);
+
             if (currentUser.IsSuperAdmin)
             {
                 management.DropDownItems.Add(new ToolStripSeparator());
-                var license = new ToolStripMenuItem("Firma Lisans / Veri Erişim Kilidi");
+                var license = new ToolStripMenuItem("Lisans Yönetimi")
+                {
+                    ToolTipText = "Firma lisansı, demo, süre, cihaz ve veri erişim durumunu yönetir. Yalnız Super Admin görür."
+                };
                 license.Click += (_,_) => { using var f = new CompanyLicenseCenterForm(); f.ShowDialog(this); };
                 management.DropDownItems.Add(license);
             }
+
             var insert = Math.Max(0, MainMenuStrip.Items.Count - 2);
             MainMenuStrip.Items.Insert(insert, management);
         }
+
+        if (management is not null)
+            management.Visible = currentUser.IsCompanyResponsible || currentUser.IsSuperAdmin;
 
         var workDate = tool.Items.OfType<ToolStripItem>()
             .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Çalışma Tarihi", StringComparison.OrdinalIgnoreCase));
@@ -42,7 +53,11 @@ public sealed partial class MainShellForm
         WindowState = FormWindowState.Normal;
         StartPosition = FormStartPosition.CenterScreen;
         var area = Screen.FromControl(this).WorkingArea;
-        Size = new Size(Math.Min(1500, Math.Max(1180, area.Width - 120)), Math.Min(900, Math.Max(760, area.Height - 100)));
-        Location = new Point(area.Left + Math.Max(0, (area.Width - Width) / 2), area.Top + Math.Max(0, (area.Height - Height) / 2));
+        var targetWidth = Math.Clamp((int)Math.Round(area.Width * 0.86), 1180, 1480);
+        var targetHeight = Math.Clamp((int)Math.Round(area.Height * 0.84), 720, 880);
+        Size = new Size(Math.Min(targetWidth, area.Width - 40), Math.Min(targetHeight, area.Height - 40));
+        Location = new Point(
+            area.Left + Math.Max(0, (area.Width - Width) / 2),
+            area.Top + Math.Max(0, (area.Height - Height) / 2));
     }
 }
