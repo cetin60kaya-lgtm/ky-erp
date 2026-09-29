@@ -120,7 +120,7 @@ export default function GlobalLeftClickMenu() {
     });
 
     return rows.slice(0, settings.maxItems);
-  }, [catalog, settings, visibleModules, menu.open]);
+  }, [catalog, settings, visibleModules]);
 
   useEffect(() => {
     if (!isAuthenticated || !settings.enabled) {
