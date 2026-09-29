@@ -1,5 +1,6 @@
 using System.Data;
 using System.Globalization;
+using System.Reflection;
 using FirebirdSql.Data.FirebirdClient;
 using KYERP.PDKS.Core;
 using KYERP.PDKS.Core.Attendance;
@@ -19,11 +20,13 @@ public sealed partial class LiveAttendanceForm : Form
     readonly FlowLayoutPanel cards = new(){Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(2)};
     readonly TabControl tabs = new(){Dock=DockStyle.Fill};
     readonly Dictionary<string,DataGridView> grids = new();
-    readonly System.Windows.Forms.Timer timer = new(){Interval=5000};
+    readonly System.Windows.Forms.Timer timer = new(){Interval=20000};
     readonly CancellationTokenSource closing = new();
     bool busy;
     DateTime? recoveredLegacyDay;
     string legacyRecoveryText = "";
+    string lastUiFingerprint = "";
+    DateTime lastRenderedDay = DateTime.MinValue;
     readonly List<(string Code,DateTime At,string Source)> unmatched = new();
     readonly Action<string,DateTime>? openEntryExit;
     readonly Action<string>? openPerson;
@@ -31,12 +34,32 @@ public sealed partial class LiveAttendanceForm : Form
     public LiveAttendanceForm(Action<string,DateTime>? openEntryExit=null, Action<string>? openPerson=null)
     {
         this.openEntryExit=openEntryExit;this.openPerson=openPerson;Text="Canlı Personel Denetim";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);
-        MinimumSize=new Size(1000,620);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);Build();
-        Shown+=async (_,_)=>await SyncAndLoadAsync(false);refresh.Click+=async (_,_)=>await SyncAndLoadAsync(false);
-        syncNow.Click+=async (_,_)=>await SyncAndLoadAsync(true);clearLive.Click+=(_,_)=>{TerminalSyncService.ClearLive();ShowLastSync();};
-        date.ValueChanged+=async (_,_)=>await SyncAndLoadAsync(false);timer.Tick+=async (_,_)=>{if(live.Checked)await SyncAndLoadAsync(false);};
-        FormClosed+=(_,_)=>{timer.Stop();closing.Cancel();};timer.Start();
+        MinimumSize=new Size(1000,620);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);
+        DoubleBuffered=true;SetStyle(ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint|ControlStyles.UserPaint,true);
+        date.Value=DateTime.Today;
+        Build();
+        EnableDoubleBuffer(this);
+        Shown+=async (_,_)=>{timer.Start();await SyncAndLoadAsync(false,true);};
+        refresh.Click+=async (_,_)=>await SyncAndLoadAsync(false,true);
+        syncNow.Click+=async (_,_)=>await SyncAndLoadAsync(true,true);
+        clearLive.Click+=(_,_)=>{TerminalSyncService.ClearLive();ShowLastSync();};
+        date.ValueChanged+=async (_,_)=>{lastUiFingerprint="";await SyncAndLoadAsync(false,true);};
+        timer.Tick+=async (_,_)=>{if(live.Checked&&Visible&&date.Value.Date==DateTime.Today)await SyncAndLoadAsync(false,false);};
+        VisibleChanged+=(_,_)=>{if(IsDisposed)return;if(Visible)timer.Start();else timer.Stop();};
+        FormClosed+=(_,_)=>{timer.Stop();closing.Cancel();};
     }
+
+    static void EnableDoubleBuffer(Control root)
+    {
+        try
+        {
+            var property=typeof(Control).GetProperty("DoubleBuffered",BindingFlags.Instance|BindingFlags.NonPublic);
+            if(property is not null)property.SetValue(root,true);
+            foreach(Control child in root.Controls)EnableDoubleBuffer(child);
+        }
+        catch { }
+    }
+
     void Build()
     {
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(14),BackColor=Color.FromArgb(246,249,253)};
@@ -110,7 +133,8 @@ public sealed partial class LiveAttendanceForm : Form
         if (string.IsNullOrWhiteSpace(code)) return;
         openEntryExit(code, date.Value.Date);
     }
-    async Task SyncAndLoadAsync(bool syncDevice=false)
+
+    async Task SyncAndLoadAsync(bool syncDevice=false,bool forceUi=false)
     {
         if(busy||IsDisposed)return;busy=true;refresh.Enabled=false;syncNow.Enabled=false;
         try
@@ -122,7 +146,7 @@ public sealed partial class LiveAttendanceForm : Form
                 if(state.ReadCount>0)device.ForeColor=state.DeviceCleared?Color.DarkGreen:Color.DarkOrange;
             }
             ShowLastSync();
-            LoadDay(date.Value.Date);
+            LoadDay(date.Value.Date,forceUi);
         }
         catch(OperationCanceledException){ }
         catch(Exception ex){device.Text="Denetim hatası: "+ex.Message;device.ForeColor=Color.DarkRed;}
@@ -134,7 +158,7 @@ public sealed partial class LiveAttendanceForm : Form
         var s=TerminalSyncService.ReadState();
         if(s?.LastAt is null){device.Text="Son eşitleme: yok";device.ForeColor=Color.FromArgb(202,118,35);return;}
         device.Text=$"Son eşitleme {s.LastAt:dd.MM HH:mm:ss}   Okunan {s.ReadCount}   Eklenen/Güncellenen {s.Inserted}/{s.Updated}";
-        device.ForeColor=s.DeviceCleared||s.ReadCount==0?Color.DarkGreen:Color.DarkOrange;
+        device.ForeColor=s.ReadCount==0?Color.DarkGreen:Color.DarkOrange;
     }
 
     static ProfiledTerminalRecord ToRecord(TerminalDevicePunch punch)
@@ -170,7 +194,7 @@ public sealed partial class LiveAttendanceForm : Form
         catch(Exception ex){legacyRecoveryText="   Yedek kurtarma uyarısı: "+ex.Message;}
     }
 
-    void LoadDay(DateTime day)
+    void LoadDay(DateTime day,bool forceUi)
     {
         var next=day.AddDays(1);
         var employees=db.Query(@"select k.PKNO,k.AD,k.SOYAD,k.GRUP,coalesce(g.AD,'') GRUP_AD
@@ -203,23 +227,52 @@ public sealed partial class LiveAttendanceForm : Form
                 movement.Entry?.ToString("HH:mm")??"",movement.Exit?.ToString("HH:mm")??"",status,warning,
                 expected,fullLeave,movement.Entry.HasValue,movement.Exit.HasValue));
         }
-        Bind(rows);
+        Bind(rows,day,forceUi);
     }
 
-    void Bind(List<DailyRow> rows)
+    void Bind(List<DailyRow> rows,DateTime day,bool forceUi)
     {
-        grids["Genel"].DataSource=Table(rows);
-        grids["Kart Basmayan"].DataSource=Table(rows.Where(r=>r.Status=="Kart Basmadı"));
-        grids["İçeride / Çıkış Bekleyen"].DataSource=Table(rows.Where(r=>r.Status is "İçeride" or "Çıkış Kartı Yok"));
-        grids["İzinli"].DataSource=Table(rows.Where(r=>r.FullLeave));
-        grids["Tamamlanan"].DataSource=Table(rows.Where(r=>r.HasEntry&&r.HasExit));
-        grids["Eşleşmeyen Kart"].DataSource=UnmatchedTable();
-        cards.Controls.Clear();
-        Card("Beklenen",rows.Count(r=>r.Expected),Color.AliceBlue);Card("Gelen",rows.Count(r=>r.Expected&&r.HasEntry),Color.Honeydew);
-        Card("Kart Basmayan",rows.Count(r=>r.Status=="Kart Basmadı"),Color.MistyRose);Card("İzinli",rows.Count(r=>r.FullLeave),Color.LemonChiffon);
-        Card("İçeride",rows.Count(r=>r.Status=="İçeride"),Color.Honeydew);Card("Çıkış Eksik",rows.Count(r=>r.Status=="Çıkış Kartı Yok"),Color.MistyRose);
-        Card("Tamamlanan",rows.Count(r=>r.HasEntry&&r.HasExit),Color.WhiteSmoke);Card("Eşleşmeyen",unmatched.Count,Color.LavenderBlush);
+        var fingerprint=day.ToString("yyyyMMdd",CultureInfo.InvariantCulture)+"|"+
+            string.Join("|",rows.Select(r=>$"{r.Code}~{r.Entry}~{r.Exit}~{r.Status}~{r.Warning}"))+"|"+
+            string.Join("|",unmatched.Where(x=>x.At.Date==day.Date).OrderBy(x=>x.At).Select(x=>$"{x.Code}~{x.At:HHmmss}"));
+        if(!forceUi&&lastRenderedDay==day.Date&&string.Equals(lastUiFingerprint,fingerprint,StringComparison.Ordinal))return;
+
+        var selected=grids.ToDictionary(
+            x=>x.Key,
+            x=>x.Value.CurrentRow is not null&&x.Value.Columns.Contains("Kart No")?Convert.ToString(x.Value.CurrentRow.Cells["Kart No"].Value):null);
+
+        SuspendLayout();cards.SuspendLayout();tabs.SuspendLayout();foreach(var grid in grids.Values)grid.SuspendLayout();
+        try
+        {
+            grids["Genel"].DataSource=Table(rows);
+            grids["Kart Basmayan"].DataSource=Table(rows.Where(r=>r.Status=="Kart Basmadı"));
+            grids["İçeride / Çıkış Bekleyen"].DataSource=Table(rows.Where(r=>r.Status is "İçeride" or "Çıkış Kartı Yok"));
+            grids["İzinli"].DataSource=Table(rows.Where(r=>r.FullLeave));
+            grids["Tamamlanan"].DataSource=Table(rows.Where(r=>r.HasEntry&&r.HasExit));
+            grids["Eşleşmeyen Kart"].DataSource=UnmatchedTable();
+            cards.Controls.Clear();
+            Card("Beklenen",rows.Count(r=>r.Expected),Color.AliceBlue);Card("Gelen",rows.Count(r=>r.Expected&&r.HasEntry),Color.Honeydew);
+            Card("Kart Basmayan",rows.Count(r=>r.Status=="Kart Basmadı"),Color.MistyRose);Card("İzinli",rows.Count(r=>r.FullLeave),Color.LemonChiffon);
+            Card("İçeride",rows.Count(r=>r.Status=="İçeride"),Color.Honeydew);Card("Çıkış Eksik",rows.Count(r=>r.Status=="Çıkış Kartı Yok"),Color.MistyRose);
+            Card("Tamamlanan",rows.Count(r=>r.HasEntry&&r.HasExit),Color.WhiteSmoke);Card("Eşleşmeyen",unmatched.Count(x=>x.At.Date==day.Date),Color.LavenderBlush);
+
+            foreach(var pair in selected)
+            {
+                if(string.IsNullOrWhiteSpace(pair.Value)||!grids.TryGetValue(pair.Key,out var grid)||!grid.Columns.Contains("Kart No"))continue;
+                foreach(DataGridViewRow row in grid.Rows)
+                {
+                    if(!string.Equals(Convert.ToString(row.Cells["Kart No"].Value),pair.Value,StringComparison.OrdinalIgnoreCase))continue;
+                    row.Selected=true;grid.CurrentCell=row.Cells[0];break;
+                }
+            }
+            lastUiFingerprint=fingerprint;lastRenderedDay=day.Date;
+        }
+        finally
+        {
+            foreach(var grid in grids.Values)grid.ResumeLayout(false);tabs.ResumeLayout(false);cards.ResumeLayout(false);ResumeLayout(false);
+        }
     }
+
     void CaptureUnmatched(IEnumerable<(string Code,DateTime At,string Source)> punches,DateTime day)
     {
         var next=day.AddDays(1);
