@@ -11,6 +11,11 @@ internal enum WorkspaceLayoutMode
     FourGrid
 }
 
+/// <summary>
+/// Owns the lifetime of hosted module controls. There is intentionally no second-level
+/// module cache: each menu request is attached exactly once and the replaced control is disposed.
+/// This keeps navigation deterministic and prevents disposed ModuleHostForm references.
+/// </summary>
 internal sealed class WorkspaceDockHost : UserControl
 {
     sealed class Slot
@@ -22,12 +27,11 @@ internal sealed class WorkspaceDockHost : UserControl
     }
 
     readonly string userKey;
-    readonly List<Slot> slots = new();
-    readonly Dictionary<string, Control> cache = new(StringComparer.OrdinalIgnoreCase);
-    readonly Panel root = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(241,245,250) };
+    readonly List<Slot> slots = [];
+    readonly Panel root = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(241, 245, 250) };
+    readonly Dictionary<string, int> splitDistances = new(StringComparer.OrdinalIgnoreCase);
     WorkspaceLayoutMode mode = WorkspaceLayoutMode.Single;
     int activeIndex;
-    readonly Dictionary<string, int> splitDistances = new(StringComparer.OrdinalIgnoreCase);
 
     public WorkspaceDockHost(string userName)
     {
@@ -52,8 +56,8 @@ internal sealed class WorkspaceDockHost : UserControl
         slot.Title.BackColor = Color.FromArgb(246, 249, 253);
         slot.Title.Cursor = Cursors.Hand;
         slot.Title.Click += (_, _) => SetActive(index);
-        slot.Host.Controls.Add(slot.Title);
         slot.Host.Click += (_, _) => SetActive(index);
+        slot.Host.Controls.Add(slot.Title);
         return slot;
     }
 
@@ -66,42 +70,38 @@ internal sealed class WorkspaceDockHost : UserControl
 
     public void Open(Control control, string key, string title)
     {
-        var existing = slots.FindIndex(s => s.Key == key && s.Content is not null);
-        if (existing >= 0)
-        {
-            if (!ReferenceEquals(control, slots[existing].Content) && control is IDisposable disposable) disposable.Dispose();
-            SetActive(existing);
-            BringContentFront(slots[existing]);
-            return;
-        }
+        if (control is null || control.IsDisposed) return;
 
-        if (cache.Remove(key, out var cached) && !cached.IsDisposed)
-        {
-            if (!ReferenceEquals(control, cached) && control is IDisposable disposable) disposable.Dispose();
-            control = cached;
-        }
-
-        var index = activeIndex;
-        if (slots[index].Content is not null)
+        var existingIndex = slots.FindIndex(s => string.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase) && s.Content is not null);
+        var targetIndex = existingIndex >= 0 ? existingIndex : activeIndex;
+        if (existingIndex < 0 && slots[targetIndex].Content is not null)
         {
             var empty = slots.FindIndex(0, VisibleSlotCount(), s => s.Content is null);
-            if (empty >= 0) index = empty;
+            if (empty >= 0) targetIndex = empty;
         }
-        SetActive(index);
-        Attach(slots[index], control, key, title);
+
+        SetActive(targetIndex);
+        Replace(slots[targetIndex], control, key, title);
     }
 
     public void ShowSingle(Control control, string key, string title)
     {
-        ParkAll();
         ApplyLayout(WorkspaceLayoutMode.Single, false);
+        for (var i = 1; i < slots.Count; i++) DetachSlot(slots[i], true);
         SetActive(0);
-        Open(control, key, title);
+        Replace(slots[0], control, key, title);
     }
 
-    void Attach(Slot slot, Control control, string key, string title)
+    void Replace(Slot slot, Control control, string key, string title)
     {
-        DetachSlot(slot, false);
+        if (ReferenceEquals(slot.Content, control))
+        {
+            slot.Content.Visible = true;
+            slot.Content.BringToFront();
+            return;
+        }
+
+        DetachSlot(slot, true);
         slot.Key = key;
         slot.Content = control;
         slot.Title.Text = "  " + title;
@@ -113,12 +113,6 @@ internal sealed class WorkspaceDockHost : UserControl
         RefreshHeaders();
     }
 
-    void ParkAll()
-    {
-        foreach (var slot in slots) DetachSlot(slot, false);
-        RefreshHeaders();
-    }
-
     public void ApplyLayout(WorkspaceLayoutMode layout, bool save = true)
     {
         mode = layout;
@@ -127,7 +121,6 @@ internal sealed class WorkspaceDockHost : UserControl
         {
             foreach (var host in slots.Select(s => s.Host).ToArray()) host.Parent = null;
             root.Controls.Clear();
-
             Control layoutControl = layout switch
             {
                 WorkspaceLayoutMode.TwoColumns => TwoColumns(),
@@ -138,41 +131,38 @@ internal sealed class WorkspaceDockHost : UserControl
             };
             layoutControl.Dock = DockStyle.Fill;
             root.Controls.Add(layoutControl);
-            layoutControl.BringToFront();
             activeIndex = Math.Clamp(activeIndex, 0, Math.Max(0, VisibleSlotCount() - 1));
             RefreshHeaders();
         }
         finally
         {
             root.ResumeLayout(true);
-            root.PerformLayout();
         }
-
         if (IsHandleCreated) BeginInvoke(new Action(NormalizeSplitters));
         if (save) SaveMode();
     }
 
     Control Single()
     {
-        var panel = new Panel { Dock = DockStyle.Fill };
-        panel.Controls.Add(slots[0].Host);
-        return panel;
+        var p = new Panel { Dock = DockStyle.Fill };
+        p.Controls.Add(slots[0].Host);
+        return p;
     }
 
     Control TwoColumns()
     {
-        var split = Split("two-columns", Orientation.Vertical, .5);
-        split.Panel1.Controls.Add(slots[0].Host);
-        split.Panel2.Controls.Add(slots[1].Host);
-        return split;
+        var s = Split("two-columns", Orientation.Vertical, .5);
+        s.Panel1.Controls.Add(slots[0].Host);
+        s.Panel2.Controls.Add(slots[1].Host);
+        return s;
     }
 
     Control TwoRows()
     {
-        var split = Split("two-rows", Orientation.Horizontal, .5);
-        split.Panel1.Controls.Add(slots[0].Host);
-        split.Panel2.Controls.Add(slots[1].Host);
-        return split;
+        var s = Split("two-rows", Orientation.Horizontal, .5);
+        s.Panel1.Controls.Add(slots[0].Host);
+        s.Panel2.Controls.Add(slots[1].Host);
+        return s;
     }
 
     Control ThreeFocusRight()
@@ -207,16 +197,16 @@ internal sealed class WorkspaceDockHost : UserControl
             Dock = DockStyle.Fill,
             Orientation = orientation,
             SplitterWidth = 7,
-            BackColor = Color.FromArgb(223, 231, 241),
             Panel1MinSize = 80,
             Panel2MinSize = 80,
+            BackColor = Color.FromArgb(223, 231, 241),
             Tag = new SplitState(key, ratio)
         };
         split.HandleCreated += (_, _) => QueueNormalize(split);
         split.SizeChanged += (_, _) => QueueNormalize(split);
         split.SplitterMoved += (_, _) =>
         {
-            if (!split.IsHandleCreated || split.Tag is not SplitState state) return;
+            if (split.Tag is not SplitState state) return;
             splitDistances[state.Key] = split.SplitterDistance;
             SaveMode();
         };
@@ -237,56 +227,34 @@ internal sealed class WorkspaceDockHost : UserControl
     void NormalizeSplitter(SplitContainer split)
     {
         if (split.IsDisposed || split.Tag is not SplitState state) return;
-        if (splitDistances.TryGetValue(state.Key, out var saved)) SetDistance(split, saved);
-        else SetRatio(split, state.Ratio);
+        var span = split.Orientation == Orientation.Vertical ? split.ClientSize.Width : split.ClientSize.Height;
+        var min = split.Panel1MinSize;
+        var max = span - split.SplitterWidth - split.Panel2MinSize;
+        if (max < min) return;
+        var requested = splitDistances.TryGetValue(state.Key, out var saved) ? saved : (int)Math.Round(span * state.Ratio);
+        split.SplitterDistance = Math.Clamp(requested, min, max);
     }
 
-    static IEnumerable<Control> Descendants(Control rootControl)
+    static IEnumerable<Control> Descendants(Control control)
     {
-        foreach (Control child in rootControl.Controls)
+        foreach (Control child in control.Controls)
         {
             yield return child;
             foreach (var nested in Descendants(child)) yield return nested;
         }
     }
 
-    static void SetDistance(SplitContainer split, int distance)
-    {
-        var span = split.Orientation == Orientation.Vertical ? split.ClientSize.Width : split.ClientSize.Height;
-        var min = split.Panel1MinSize;
-        var max = span - split.SplitterWidth - split.Panel2MinSize;
-        if (max < min) return;
-        var safe = Math.Clamp(distance, min, max);
-        if (split.SplitterDistance != safe) split.SplitterDistance = safe;
-    }
-
-    static void SetRatio(SplitContainer split, double ratio)
-    {
-        var span = split.Orientation == Orientation.Vertical ? split.ClientSize.Width : split.ClientSize.Height;
-        var min = split.Panel1MinSize;
-        var max = span - split.SplitterWidth - split.Panel2MinSize;
-        if (max < min) return;
-        SetDistance(split, (int)Math.Round(span * Math.Clamp(ratio, 0.1, 0.9)));
-    }
-
     sealed record SplitState(string Key, double Ratio);
 
     public void CloseActive()
     {
-        if (activeIndex < 0 || activeIndex >= slots.Count) return;
-        DetachSlot(slots[activeIndex], true);
+        if (activeIndex >= 0 && activeIndex < slots.Count) DetachSlot(slots[activeIndex], true);
         RefreshHeaders();
     }
 
     public void CloseAll(bool dispose = true)
     {
         foreach (var slot in slots) DetachSlot(slot, dispose);
-        if (dispose)
-        {
-            foreach (var control in cache.Values.Distinct().ToArray())
-                if (control is IDisposable disposable) disposable.Dispose();
-            cache.Clear();
-        }
         RefreshHeaders();
     }
 
@@ -294,30 +262,17 @@ internal sealed class WorkspaceDockHost : UserControl
     {
         if (slot.Content is not null)
         {
-            var content = slot.Content;
-            var key = slot.Key;
-            slot.Host.Controls.Remove(content);
-            if (dispose)
+            var old = slot.Content;
+            slot.Host.Controls.Remove(old);
+            if (dispose && old is IDisposable d)
             {
-                cache.Remove(key);
-                if (content is IDisposable disposable) disposable.Dispose();
+                try { d.Dispose(); } catch { }
             }
-            else
-            {
-                content.Visible = false;
-                if (!string.IsNullOrWhiteSpace(key)) cache[key] = content;
-            }
+            else old.Visible = false;
         }
         slot.Content = null;
         slot.Key = string.Empty;
         slot.Title.Text = "  Boş çalışma alanı";
-    }
-
-    void BringContentFront(Slot slot)
-    {
-        if (slot.Content is not null) slot.Content.Visible = true;
-        slot.Content?.BringToFront();
-        slot.Title.BringToFront();
     }
 
     void RefreshHeaders()
@@ -344,14 +299,11 @@ internal sealed class WorkspaceDockHost : UserControl
         {
             var path = SettingsPath();
             if (!File.Exists(path)) return WorkspaceLayoutMode.Single;
-            var json = File.ReadAllText(path);
-            var data = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
-            if (data is not null)
-            {
-                foreach (var pair in data.Where(x => x.Key.StartsWith("split:", StringComparison.OrdinalIgnoreCase)))
-                    if (int.TryParse(pair.Value, out var distance)) splitDistances[pair.Key[6..]] = distance;
-                if (data.TryGetValue("mode", out var value) && Enum.TryParse<WorkspaceLayoutMode>(value, out var parsed)) return parsed;
-            }
+            var data = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path));
+            if (data is null) return WorkspaceLayoutMode.Single;
+            foreach (var pair in data.Where(x => x.Key.StartsWith("split:", StringComparison.OrdinalIgnoreCase)))
+                if (int.TryParse(pair.Value, out var distance)) splitDistances[pair.Key[6..]] = distance;
+            if (data.TryGetValue("mode", out var value) && Enum.TryParse<WorkspaceLayoutMode>(value, out var parsed)) return parsed;
         }
         catch { }
         return WorkspaceLayoutMode.Single;
@@ -369,9 +321,7 @@ internal sealed class WorkspaceDockHost : UserControl
         catch { }
     }
 
-    string SettingsPath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "KYERP", "PDKS", $"workspace-{userKey}.json");
+    string SettingsPath() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KYERP", "PDKS", $"workspace-{userKey}.json");
 
     static string Sanitize(string value)
     {
