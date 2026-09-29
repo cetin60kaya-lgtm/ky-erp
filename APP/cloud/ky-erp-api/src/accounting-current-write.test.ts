@@ -64,13 +64,12 @@ test("manual debt/credit and money transfers keep distinct movement source owner
   const { sql, context } = fixture();
   await writeCurrentAccount(context, "tenant-a", { companyId: "supplier", transactionType: "CREDIT", amount: 400, requestId: "manual-credit" }, "tester");
   await writeCurrentAccount(context, "tenant-a", { companyId: "supplier", transactionType: "PAYMENT", amount: 100, requestId: "supplier-payment" }, "tester");
-  assert.deepEqual(
-    sql.prepare("SELECT movement_type,source_type FROM current_account_movements ORDER BY movement_date,id").all(),
-    [
-      { movement_type: "ALACAK", source_type: "MANUAL_CURRENT_ACCOUNT" },
-      { movement_type: "ODEME", source_type: "PAYMENT" },
-    ],
-  );
+  const rows = sql.prepare("SELECT movement_type,source_type FROM current_account_movements ORDER BY movement_date,id").all()
+    .map((row) => ({ movement_type: row.movement_type, source_type: row.source_type }));
+  assert.deepEqual(rows, [
+    { movement_type: "ALACAK", source_type: "MANUAL_CURRENT_ACCOUNT" },
+    { movement_type: "ODEME", source_type: "PAYMENT" },
+  ]);
   sql.close();
 });
 
