@@ -1,5 +1,6 @@
 /* KY ERP canonical action UI
-   Mevcut modül/sayfa düzeni korunur. İşlem formları merkez açılır pencerede tamamlanır. */
+   Eski modül/sayfa düzeni korunur. İşlem formları merkez açılır pencerede tamamlanır.
+   Günlük Operasyon bu katmanın DIŞINDADIR; mevcut görünüm/davranışı aynen korunur. */
 
 :root {
   --ky-dialog-max: 900px;
@@ -7,22 +8,22 @@
   --ky-dialog-gap: 22px;
 }
 
-/* Sol modül ve alt menüler eski çalışma düzeninde görünür kalır. */
-.shell-v3-sidebar .shell-v3-submenu {
+/* Günlük Operasyon dışındaki modüllerde eski sol modül + alt menü yapısını koru. */
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .shell-v3-sidebar .shell-v3-submenu {
   display: block;
 }
 
 /* Sayfaların kendi yerleşimine müdahale edilmez; genişlik ve master/detail düzeni modüle aittir. */
-.shell-v3-workspace > * {
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .shell-v3-workspace > * {
   min-width: 0;
 }
 
-.shell-v3-workspace :where(.content-card, [class$="-workspace"], [class$="-page"]) {
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .shell-v3-workspace :where(.content-card, [class$="-workspace"], [class$="-page"]) {
   min-width: 0;
 }
 
 /* Drawer/side-panel isimleri eski kodda kalabilir; davranış artık merkez açılır penceredir. */
-:where(
+.shell-v3:not([data-active-module="gunluk-operasyon"]) :where(
   [class*="drawer-layer"],
   [class*="drawer-backdrop"],
   [class*="drawer-overlay"],
@@ -42,7 +43,7 @@
   padding: var(--ky-dialog-gap) !important;
 }
 
-:where(
+.shell-v3:not([data-active-module="gunluk-operasyon"]) :where(
   [class*="drawer-layer"],
   [class*="drawer-backdrop"],
   [class*="drawer-overlay"],
@@ -88,16 +89,16 @@
 }
 
 /* Uzun formlarda başlık ve Kaydet/Vazgeç görünür kalır. */
-[role="dialog"] > header,
-.ky-action-dialog > header {
+.shell-v3:not([data-active-module="gunluk-operasyon"]) [role="dialog"] > header,
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .ky-action-dialog > header {
   position: sticky;
   top: 0;
   z-index: 4;
   background: inherit;
 }
 
-[role="dialog"] > footer,
-.ky-action-dialog > footer {
+.shell-v3:not([data-active-module="gunluk-operasyon"]) [role="dialog"] > footer,
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .ky-action-dialog > footer {
   position: sticky;
   bottom: 0;
   z-index: 4;
@@ -105,7 +106,7 @@
 }
 
 /* Geniş belge/rapor açılırları yine merkezde kalır. */
-:where(
+.shell-v3:not([data-active-module="gunluk-operasyon"]) :where(
   [class*="drawer-layer"],
   [class*="drawer-backdrop"],
   [class*="side-layer"],
@@ -123,7 +124,7 @@
 }
 
 /* Firma/Cari'deki eski gömülü cari hareket formu da açılır pencere gibi davranır. */
-.ccw-transaction {
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .ccw-transaction {
   position: fixed !important;
   z-index: 1200 !important;
   top: 50% !important;
@@ -135,25 +136,19 @@
   background: #fff !important;
   border-radius: 14px !important;
   box-shadow: 0 0 0 100vmax rgba(15, 23, 42, .34), 0 22px 64px rgba(15, 23, 42, .24) !important;
-}
-
-.ccw-root:has(.ccw-transaction) > :not(.ccw-master-detail),
-.ccw-root:has(.ccw-transaction) .ccw-master-detail > :not(.ccw-detail-panel) {
-  pointer-events: none;
-}
-
-.ccw-root:has(.ccw-transaction) .ccw-detail-panel > :not(.ccw-transaction) {
-  pointer-events: none;
-}
-
-.ccw-transaction {
   pointer-events: auto;
 }
 
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .ccw-root:has(.ccw-transaction) > :not(.ccw-master-detail),
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .ccw-root:has(.ccw-transaction) .ccw-master-detail > :not(.ccw-detail-panel),
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .ccw-root:has(.ccw-transaction) .ccw-detail-panel > :not(.ccw-transaction) {
+  pointer-events: none;
+}
+
 /* Açılır pencerelerde sekmeli işlem yapısı için ortak görsel dil. */
-.ky-action-tabs,
-[class*="modal-tabs"],
-[class*="dialog-tabs"] {
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .ky-action-tabs,
+.shell-v3:not([data-active-module="gunluk-operasyon"]) [class*="modal-tabs"],
+.shell-v3:not([data-active-module="gunluk-operasyon"]) [class*="dialog-tabs"] {
   display: flex;
   gap: 6px;
   overflow-x: auto;
@@ -162,9 +157,9 @@
   background: #f8fafc;
 }
 
-.ky-action-tabs > button,
-[class*="modal-tabs"] > button,
-[class*="dialog-tabs"] > button {
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .ky-action-tabs > button,
+.shell-v3:not([data-active-module="gunluk-operasyon"]) [class*="modal-tabs"] > button,
+.shell-v3:not([data-active-module="gunluk-operasyon"]) [class*="dialog-tabs"] > button {
   border: 1px solid transparent;
   background: transparent;
   border-radius: 8px;
@@ -173,22 +168,22 @@
   cursor: pointer;
 }
 
-.ky-action-tabs > button.active,
-[class*="modal-tabs"] > button.active,
-[class*="dialog-tabs"] > button.active {
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .ky-action-tabs > button.active,
+.shell-v3:not([data-active-module="gunluk-operasyon"]) [class*="modal-tabs"] > button.active,
+.shell-v3:not([data-active-module="gunluk-operasyon"]) [class*="dialog-tabs"] > button.active {
   border-color: #cbdaf9;
   background: #eaf1ff;
   color: #234fa6;
   font-weight: 700;
 }
 
-/* Sürükle/boyutlandır pencere kullanılmaz. */
-.ky-modal-resize-handle {
+/* Sürükle/boyutlandır pencere yalnız diğer modüllerde kapalı; Günlük Operasyon etkilenmez. */
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .ky-modal-resize-handle {
   display: none !important;
 }
 
-.ky-persistent-modal,
-.ky-modal-positioned {
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .ky-persistent-modal,
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .ky-modal-positioned {
   position: relative !important;
   inset: auto !important;
   top: auto !important;
@@ -197,7 +192,7 @@
   resize: none !important;
 }
 
-.ky-modal-drag-handle {
+.shell-v3:not([data-active-module="gunluk-operasyon"]) .ky-modal-drag-handle {
   cursor: default !important;
   touch-action: auto !important;
 }
@@ -205,7 +200,7 @@
 @media (max-width: 900px) {
   :root { --ky-dialog-gap: 10px; }
 
-  :where(
+  .shell-v3:not([data-active-module="gunluk-operasyon"]) :where(
     [class*="drawer-layer"],
     [class*="drawer-backdrop"],
     [class*="drawer-overlay"],
@@ -227,7 +222,7 @@
     border-radius: 12px !important;
   }
 
-  .ccw-transaction {
+  .shell-v3:not([data-active-module="gunluk-operasyon"]) .ccw-transaction {
     width: calc(100vw - 20px) !important;
     max-height: calc(100dvh - 20px) !important;
   }
