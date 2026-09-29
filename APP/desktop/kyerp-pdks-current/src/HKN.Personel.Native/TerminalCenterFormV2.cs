@@ -21,6 +21,7 @@ public sealed class TerminalCenterForm : Form
         Size = new Size(1040, 680);
         MinimumSize = new Size(900, 560);
         Font = new Font("Segoe UI", 9f);
+        DoubleBuffered = true;
         Build();
         Shown += async (_, _) => await CheckDeviceAsync(false);
     }
@@ -28,7 +29,7 @@ public sealed class TerminalCenterForm : Form
     void Build()
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(16) };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
 
@@ -40,6 +41,15 @@ public sealed class TerminalCenterForm : Form
             Font = new Font("Segoe UI", 16f, FontStyle.Bold),
             Location = new Point(16, 10)
         });
+        var settings = TerminalDeviceSettingsStore.Load();
+        head.Controls.Add(new Label
+        {
+            Text = $"Cihaz: {settings.DeviceName}  •  Makine: {settings.MachineNo}  •  {settings.ConnectionType}  •  {settings.IpAddress}:{settings.IpPort}  •  {settings.BaudRate}  •  {settings.Direction}",
+            AutoSize = true,
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(42, 75, 118),
+            Location = new Point(18, 47)
+        });
         head.Controls.Add(sdkStatus);
         root.Controls.Add(head, 0, 0);
 
@@ -50,9 +60,9 @@ public sealed class TerminalCenterForm : Form
             WrapContents = true,
             AutoScroll = true
         };
-        cards.Controls.Add(Card("Cihaz Bağlantısı", "Gerçek kart cihazını doğrudan kontrol eder. Kayıt silmez veya değiştirmez.", () => CheckDeviceAsync(true), "Kontrol Et"));
-        cards.Controls.Add(Card("Kart Kayıtlarını Şimdi Al", "Cihazdaki yeni basımları okur. Veri yoksa bilgi verir; TNF + FDB doğrulanmadan cihazdan hiçbir kayıt silinmez.", SyncNowAsync, "Şimdi Al"));
-        cards.Controls.Add(Card("Cihaz Ayarları", "Hedef PDKS ile aynı cihaz/makine, Ethernet, COM, baudrate, IP, port, giriş/çıkış ve aktarım ayarlarını düzenler.", () => RunSync(OpenSettings), "Ayarlar"));
+        cards.Controls.Add(Card("1 • CİHAZ AYARLARI", "Hedef PDKS'deki cihaz/makine, Ethernet, COM, baudrate, IP, port ve giriş/çıkış ayarları. Menüde ayrıca Ayarlar > Terminal / Kart Cihazı Ayarları altında bulunur.", () => RunSync(OpenSettings), "AYARLARI AÇ"));
+        cards.Controls.Add(Card("2 • CİHAZ BAĞLANTISI", "Gerçek kart cihazını doğrudan kontrol eder. Kayıt silmez veya değiştirmez.", () => CheckDeviceAsync(true), "KONTROL ET"));
+        cards.Controls.Add(Card("3 • KART KAYITLARINI AL", "Cihazdaki basımları okur; TNF + FDB'ye işler. Cihaz kayıtlarını OTOMATİK SİLMEZ.", SyncNowAsync, "ŞİMDİ AL"));
         cards.Controls.Add(Card("Sürücüyü Onar", "Paket içindeki eşleşen 32-bit OCX/DLL setini Windows'a kaydeder. Yalnız sürücü nedeniyle bağlantı açılamıyorsa kullanılır.", RepairDriverAsync, "Onar"));
         cards.Controls.Add(Card("SDK / Sürücü Kontrolü", "FP_CLOCK.ocx, destek DLL'leri ve x86 TerminalBridge uyumluluğunu kontrol eder.", () => RunSync(ShowSdkDiagnostics), "Kontrol Et"));
         root.Controls.Add(cards, 0, 1);
@@ -61,6 +71,15 @@ public sealed class TerminalCenterForm : Form
         var close = new Button { Text = "Kapat", Width = 110, Height = 36 };
         close.Click += (_, _) => Close();
         bottom.Controls.Add(close);
+        var safety = new Label
+        {
+            Text = "GÜVENLİK: 6.3.3 TEST'te aktarım sonrası fiziksel cihaz kayıtlarını otomatik silme kapalıdır.",
+            AutoSize = true,
+            Padding = new Padding(8, 9, 16, 0),
+            ForeColor = Color.DarkGreen,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold)
+        };
+        bottom.Controls.Add(safety);
         root.Controls.Add(bottom, 0, 2);
         Controls.Add(root);
     }
@@ -73,10 +92,10 @@ public sealed class TerminalCenterForm : Form
 
     Control Card(string title, string text, Func<Task> action, string buttonText)
     {
-        var panel = new Panel { Width = 300, Height = 162, BackColor = Color.White, Margin = new Padding(10), Padding = new Padding(14) };
-        var t = new Label { Text = title, AutoSize = false, Width = 266, Height = 28, Font = new Font("Segoe UI", 11f, FontStyle.Bold), Location = new Point(14, 14) };
-        var d = new Label { Text = text, AutoSize = false, Width = 266, Height = 60, Location = new Point(14, 45) };
-        var b = new Button { Text = buttonText, Width = 112, Height = 34, Location = new Point(14, 112), Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+        var panel = new Panel { Width = 300, Height = 176, BackColor = Color.White, Margin = new Padding(10), Padding = new Padding(14) };
+        var t = new Label { Text = title, AutoSize = false, Width = 266, Height = 30, Font = new Font("Segoe UI", 11f, FontStyle.Bold), Location = new Point(14, 14) };
+        var d = new Label { Text = text, AutoSize = false, Width = 266, Height = 76, Location = new Point(14, 45) };
+        var b = new Button { Text = buttonText, Width = 126, Height = 34, Location = new Point(14, 128), Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
         b.Click += async (_, _) =>
         {
             if (busy) return;
@@ -175,8 +194,8 @@ public sealed class TerminalCenterForm : Form
             var result = await TerminalSyncService.SyncAsync("Manuel terminal aktarımı");
             if (result.ReadCount == 0 && result.Inserted == 0 && result.Updated == 0 && result.Duplicates == 0 && result.Skipped == 0)
             {
-                SetStatus("CİHAZ BAĞLI • Aktarılacak veri yok.", true);
-                MessageBox.Show("Aktarılacak veri yok.", "Terminal Aktarımı", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                SetStatus("CİHAZ BAĞLI • Aktarılacak veri yok. Cihaz kaydı silinmedi.", true);
+                MessageBox.Show("Aktarılacak veri yok.\n\nCihazdan hiçbir kayıt silinmedi.", "Terminal Aktarımı", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -189,7 +208,7 @@ public sealed class TerminalCenterForm : Form
                          $"\nGüncellenen: {result.Updated}" +
                          $"\nMükerrer: {result.Duplicates}" +
                          $"\nAtlanan: {result.Skipped}" +
-                         $"\nCihaz kayıtları temizlendi: {(result.DeviceCleared ? "Evet" : "Hayır")}";
+                         "\nCihaz kayıtları: KORUNDU";
             MessageBox.Show(detail, "Terminal Aktarımı", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         catch (Exception ex)
