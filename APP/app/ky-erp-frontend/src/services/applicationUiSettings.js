@@ -9,7 +9,7 @@ export const LEFT_CLICK_SETTINGS_EVENT = "kyerp:left-click-menu-settings";
 export const DEFAULT_LEFT_CLICK_MENU_SETTINGS = Object.freeze({
   version: 1,
   enabled: true,
-  blankAreaOnly: true,
+  blankAreaOnly: false,
   includeActiveModuleTabs: true,
   activeModuleTabLimit: 4,
   maxItems: 12,
@@ -47,7 +47,7 @@ export function normalizeLeftClickMenuSettings(value = {}) {
   return {
     version: 1,
     enabled: source.enabled !== false,
-    blankAreaOnly: source.blankAreaOnly !== false,
+    blankAreaOnly: source.blankAreaOnly === true,
     includeActiveModuleTabs: source.includeActiveModuleTabs !== false,
     activeModuleTabLimit: clamp(source.activeModuleTabLimit, 1, 8, DEFAULT_LEFT_CLICK_MENU_SETTINGS.activeModuleTabLimit),
     maxItems: clamp(source.maxItems, 5, 24, DEFAULT_LEFT_CLICK_MENU_SETTINGS.maxItems),
