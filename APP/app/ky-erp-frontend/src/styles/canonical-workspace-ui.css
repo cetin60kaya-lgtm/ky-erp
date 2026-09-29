@@ -9,6 +9,15 @@
   --ky-dialog-gap: 22px;
 }
 
+/* Sol alan sadece ana modül seçimidir. Alt iş adımları orta alandaki canonical görev açılırından yönetilir. */
+.shell-v3-sidebar .shell-v3-submenu {
+  display: none !important;
+}
+
+.shell-v3-module-button > svg:last-child {
+  display: none !important;
+}
+
 /* Bütün ana modüller aynı yatay ritmi kullanır; büyük monitörde ekran sağa sola yayılmaz. */
 .shell-v3-workspace > * {
   width: min(100%, var(--ky-workspace-max));
