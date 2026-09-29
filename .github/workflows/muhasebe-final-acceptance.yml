@@ -91,12 +91,13 @@ jobs:
           ! grep -R -n 'Gönderildi işaretle' "$root/muhasebe"
           grep -q 'PROVIDER_ACCEPTED' "$root/muhasebe/MailTrackingWorkspace.jsx"
           grep -q 'accounting_live_revision' APP/cloud/ky-erp-api/migrations/0055_accounting_workspace_core.sql
+          ! grep -n -E 'PopStateEvent|history\.replaceState|window\.location\.search' "$root/MuhasebePage.jsx" "$root/muhasebe/FinanceOperationsWorkspace.jsx"
       - name: Canonical yedi sekmeyi dogrula
         shell: bash
         run: |
           set -euo pipefail
           file="APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx"
-          for key in yonetim-ozeti firmalar-cari tedarikci-belgeleri musteri-belgeleri finans-islemleri ekstre-mail mali-kontrol-raporlar; do
+          for key in yonetim-ozeti firma-kartlari tedarikci-faturalar musteri-belgeleri finans-islemleri mail-ekstre mali-kontrol; do
             grep -q "key: \"$key\"" "$file" || { echo "Eksik sekme: $key" >&2; exit 1; }
           done
           count=$(grep -c 'key: "' "$file")
