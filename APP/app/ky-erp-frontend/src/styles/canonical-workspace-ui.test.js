@@ -3,11 +3,13 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const css = readFileSync(new URL("./canonical-workspace-ui.css", import.meta.url), "utf8");
+const popupCss = readFileSync(new URL("./module-action-popups.css", import.meta.url), "utf8");
 const main = readFileSync(new URL("../main.jsx", import.meta.url), "utf8");
 const navigator = readFileSync(new URL("../components/erp/CanonicalTaskNavigator.jsx", import.meta.url), "utf8");
 
-test("canonical UI is loaded globally after legacy module styles", () => {
+test("canonical action styles load after legacy module styles", () => {
   assert.match(main, /await import\("\.\/styles\/canonical-workspace-ui\.css"\)/);
+  assert.match(main, /await import\("\.\/styles\/module-action-popups\.css"\)/);
   assert.doesNotMatch(main, /installPersistentModalSizing/);
 });
 
@@ -24,6 +26,7 @@ test("daily operations is explicitly excluded from the global popup standard", (
   assert.match(css, /\.shell-v3:not\(\[data-active-module="gunluk-operasyon"\]\)/);
   assert.doesNotMatch(css, /\n:where\(\s*\[class\*="drawer-layer"\]/);
   assert.doesNotMatch(css, /\n\[role="dialog"\] > header/);
+  assert.doesNotMatch(popupCss, /data-active-module="gunluk-operasyon"\]\s+\.(?:compliance|pc2|eb)/);
 });
 
 test("other modules converge drawer side panel and modal layers to centered dialogs", () => {
@@ -35,8 +38,12 @@ test("other modules converge drawer side panel and modal layers to centered dial
   assert.match(css, /max-width:\s*var\(--ky-dialog-max\) !important/);
 });
 
-test("operations use popup behavior and reusable tabs", () => {
+test("page actions use popup behavior and reusable tabs", () => {
   assert.match(css, /\.ccw-transaction\s*\{[\s\S]*position:\s*fixed !important/);
+  assert.match(css, /data-active-module="ik"[\s\S]*\.ikpf-new/);
+  assert.match(css, /data-active-module="uretim"[\s\S]*\.pc2-layer/);
+  assert.match(popupCss, /data-active-module="compliance"[\s\S]*\.compliance-form-card/);
+  assert.match(popupCss, /\.capa-form/);
   assert.match(css, /\.ky-action-tabs/);
   assert.match(css, /modal-tabs/);
   assert.match(css, /dialog-tabs/);
@@ -45,4 +52,5 @@ test("operations use popup behavior and reusable tabs", () => {
 test("old draggable resizable modal behavior cannot return outside daily operations", () => {
   assert.match(css, /\.shell-v3:not\(\[data-active-module="gunluk-operasyon"\]\) \.ky-modal-resize-handle/);
   assert.match(css, /\.ky-modal-positioned[\s\S]*resize:\s*none !important/);
+  assert.match(css, /\.eb-document-modal[\s\S]*resize:\s*none !important/);
 });
