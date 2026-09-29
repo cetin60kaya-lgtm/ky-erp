@@ -21,19 +21,35 @@ internal static class TerminalSdkRepair
 
     public static bool TryRepair(IWin32Window owner)
     {
-        var sdk = Path.Combine(AppContext.BaseDirectory, "TerminalSdk");
+        var resolution = TerminalSdkLocator.Resolve();
+        var sdk = resolution.CompleteSdk && !string.IsNullOrWhiteSpace(resolution.SourceFolder)
+            ? resolution.SourceFolder!
+            : Path.Combine(AppContext.BaseDirectory, "TerminalSdk");
+
         var missing = CopyFiles.Where(x => !File.Exists(Path.Combine(sdk, x))).ToArray();
         if (missing.Length > 0)
         {
-            MessageBox.Show("Terminal sürücü paketi eksik: " + string.Join(", ", missing), "Terminal Sürücüsü", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(
+                "Çalışan Hedef terminal SDK seti otomatik bulunamadı.\r\n\r\nEksik: " + string.Join(", ", missing) +
+                "\r\n\r\nHedef PDKS açıkken tekrar deneyin veya TerminalSdk klasörünü tam paket olarak kullanın.",
+                "Terminal Sürücüsü", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
 
-        if (MessageBox.Show(
-                "Kart cihazı sürücüsünün Windows 32-bit bileşen kaydı eksik görünüyor.\r\n\r\nŞimdi otomatik onarılsın mı? Windows yalnız bir kez yönetici onayı isteyebilir.",
-                "Terminal Sürücüsünü Onar",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question) != DialogResult.Yes)
+        if (resolution.ActiveXRegistered)
+        {
+            if (MessageBox.Show(
+                    "FP_CLOCK 32-bit ActiveX zaten Windows'ta kayıtlı görünüyor. Yine de Hedef'te çalışan SDK setiyle kayıt yenilensin mi?\r\n\r\nHedef kurulum dosyaları değiştirilmez; yalnız Windows 32-bit bileşen kaydı yenilenir.",
+                    "Terminal Sürücüsünü Onar",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question) != DialogResult.Yes)
+                return false;
+        }
+        else if (MessageBox.Show(
+                     "Kart cihazı için Hedef PDKS'de kullanılan 32-bit terminal bileşenleri bulundu.\r\n\r\nWindows ActiveX kaydı şimdi otomatik yapılsın mı? Hedef klasöründeki dosyalar değiştirilmez.",
+                     "Terminal Sürücüsünü Onar",
+                     MessageBoxButtons.YesNo,
+                     MessageBoxIcon.Question) != DialogResult.Yes)
             return false;
 
         try
@@ -47,13 +63,17 @@ $S='{qSdk}'
 $W=Join-Path $env:WINDIR 'SysWOW64'
 $copy=@({copyArray})
 foreach($f in $copy){{
+  $src=Join-Path $S $f
+  if(-not (Test-Path -LiteralPath $src)){{ continue }}
   $dst=Join-Path $W $f
   if($f -ieq 'MFC42.DLL' -and (Test-Path -LiteralPath $dst)){{ continue }}
-  Copy-Item -LiteralPath (Join-Path $S $f) -Destination $dst -Force
+  Copy-Item -LiteralPath $src -Destination $dst -Force
 }}
 $reg=Join-Path $W 'regsvr32.exe'
 foreach($f in @({regArray})){{
-  & $reg /s (Join-Path $W $f)
+  $target=Join-Path $W $f
+  if(-not (Test-Path -LiteralPath $target)){{ continue }}
+  & $reg /s $target
   if($LASTEXITCODE -ne 0){{ exit $LASTEXITCODE }}
 }}
 exit 0
@@ -83,7 +103,7 @@ exit 0
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
-            return false; // UAC cancelled by user.
+            return false;
         }
         catch (Exception ex)
         {
