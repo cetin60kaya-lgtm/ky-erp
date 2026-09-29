@@ -63,6 +63,7 @@ public sealed class TerminalCenterForm : Form
         cards.Controls.Add(Card("1 • CİHAZ AYARLARI", "Hedef PDKS'deki cihaz/makine, Ethernet, COM, baudrate, IP, port ve giriş/çıkış ayarları. Menüde ayrıca Ayarlar > Terminal / Kart Cihazı Ayarları altında bulunur.", () => RunSync(OpenSettings), "AYARLARI AÇ"));
         cards.Controls.Add(Card("2 • CİHAZ BAĞLANTISI", "Gerçek kart cihazını doğrudan kontrol eder. Kayıt silmez veya değiştirmez.", () => CheckDeviceAsync(true), "KONTROL ET"));
         cards.Controls.Add(Card("3 • KART KAYITLARINI AL", "Cihazdaki basımları okur; TNF + FDB'ye işler. Cihaz kayıtlarını OTOMATİK SİLMEZ.", SyncNowAsync, "ŞİMDİ AL"));
+        cards.Controls.Add(Card("4 • HEDEF YEDEĞİNİ KURTAR", "Cihaz temizlendiyse Hedef Terminal Bilgi Aktar\\backup klasöründeki en son tarihli TXT kaydını güvenli biçimde TNF + FDB'ye geri işler. Fiziksel cihaza yazmaz.", () => RunSync(RecoverLatestBackup), "SON YEDEĞİ AL"));
         cards.Controls.Add(Card("Sürücüyü Onar", "Paket içindeki eşleşen 32-bit OCX/DLL setini Windows'a kaydeder. Yalnız sürücü nedeniyle bağlantı açılamıyorsa kullanılır.", RepairDriverAsync, "Onar"));
         cards.Controls.Add(Card("SDK / Sürücü Kontrolü", "FP_CLOCK.ocx, destek DLL'leri ve x86 TerminalBridge uyumluluğunu kontrol eder.", () => RunSync(ShowSdkDiagnostics), "Kontrol Et"));
         root.Controls.Add(cards, 0, 1);
@@ -217,6 +218,19 @@ public sealed class TerminalCenterForm : Form
             MessageBox.Show(ex.GetBaseException().Message, "Terminal Aktarımı", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { busy = false; }
+    }
+
+    void RecoverLatestBackup()
+    {
+        var answer = MessageBox.Show(
+            "Cihazdaki kayıtlar temizlendiyse Hedef'in Terminal Bilgi Aktar\\backup klasöründeki EN SON tarihli TXT yedeği TNF + FDB'ye geri işlensin mi?\n\nBu işlem fiziksel cihaza kayıt yazmaz ve cihazdan veri silmez.",
+            "Hedef Yedeğini Kurtar", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (answer != DialogResult.Yes) return;
+
+        SetStatus("Hedef terminal yedeği kontrol ediliyor…", null);
+        var result = LegacyTerminalBackupRecovery.RecoverLatest();
+        SetStatus(result.Message, result.Success);
+        MessageBox.Show(result.Message, "Hedef Yedek Kurtarma", MessageBoxButtons.OK, result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
 
     void SetStatus(string text, bool? ok)
