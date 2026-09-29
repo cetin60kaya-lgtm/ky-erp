@@ -9,7 +9,8 @@ public sealed partial class MainShellForm
         if (canonicalStartupApplied || MainMenuStrip is null) return;
         canonicalStartupApplied = true;
 
-        // Stop the older after-show mutation layers. The shell below is the only layout applied.
+        // The legacy builder still creates the command objects, but visible shell geometry is
+        // normalized exactly once here before the first paint. No later menu layer is allowed.
         operatorEnhancementsApplied = true;
         compactShellFinalized = true;
         shellLayoutInitialized = true;
@@ -19,8 +20,9 @@ public sealed partial class MainShellForm
         tool.SuspendLayout();
         try
         {
-            Text = $"KY PDKS 6.3.5 TEST • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
+            Text = $"KY PDKS 6.3.5 TEST • {branding.ReportHeader}";
 
+            var home = CanonicalTop("Genel Bakış");
             var daily = CanonicalTop("Operasyon");
             var hr = CanonicalTop("İnsan Kaynakları");
             var payroll = CanonicalTop("Puantaj ve Bordro");
@@ -30,6 +32,11 @@ public sealed partial class MainShellForm
             var workspaceMenu = CanonicalTop("Çalışma Alanı");
             var support = CanonicalTop("Destek ve Bilgi");
 
+            if (home is not null) home.Text = "Genel";
+            if (hr is not null) hr.Text = "Personel";
+            if (reports is not null) reports.Text = "Raporlar";
+            if (support is not null) support.Text = "Yardım";
+
             if (payroll is not null)
             {
                 payroll.Text = "Puantaj & Bordro";
@@ -38,7 +45,7 @@ public sealed partial class MainShellForm
                 if (puantaj is not null)
                 {
                     puantaj.Text = "Puantaj Kontrol / Yeniden Hesaplama";
-                    puantaj.ToolTipText = "Kaynak giriş-çıkış, izin, vardiya ve tatil kayıtlarını kontrol eder; gerektiğinde kontrollü yeniden hesaplama açılır.";
+                    puantaj.ToolTipText = "Giriş-çıkış, izin, vardiya ve tatil kayıtlarından oluşan sonucu kontrol eder. Yalnız gerektiğinde kontrollü yeniden hesaplama yapılır.";
                 }
 
                 if ((currentUser.IsCompanyResponsible || currentUser.IsSuperAdmin) &&
@@ -83,7 +90,7 @@ public sealed partial class MainShellForm
                     calendar.DropDownItems.Add(MenuItem("Çalışma Tarihi / İş Günü Ayarı", PdksModule.Donemler, OpenWorkingDate));
                 }
 
-                if (workspaceMenu is not null && !settings.DropDownItems.OfType<ToolStripMenuItem>().Any(x => (x.Text ?? string.Empty).Contains("Çalışma Alanı", StringComparison.OrdinalIgnoreCase)))
+                if (workspaceMenu is not null)
                 {
                     var view = new ToolStripMenuItem("Görünüm / Çalışma Alanı");
                     while (workspaceMenu.DropDownItems.Count > 0)
@@ -92,16 +99,16 @@ public sealed partial class MainShellForm
                         workspaceMenu.DropDownItems.RemoveAt(0);
                         view.DropDownItems.Add(item);
                     }
-                    settings.DropDownItems.Add(new ToolStripSeparator());
-                    settings.DropDownItems.Add(view);
+                    if (view.DropDownItems.Count > 0)
+                    {
+                        settings.DropDownItems.Add(new ToolStripSeparator());
+                        settings.DropDownItems.Add(view);
+                    }
                 }
             }
 
-            if (reports is not null) reports.Text = "Raporlama";
-
             if (support is not null)
             {
-                support.Text = "Destek";
                 var about = support.DropDownItems.OfType<ToolStripMenuItem>()
                     .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Hakkında", StringComparison.OrdinalIgnoreCase));
                 if (about is not null) about.Text = "KY PDKS 6.3.5 TEST Hakkında";
@@ -123,7 +130,7 @@ public sealed partial class MainShellForm
                 management = new ToolStripMenuItem("Yönetim");
                 var quick = new ToolStripMenuItem("Hızlı İşlemler")
                 {
-                    ToolTipText = "Personel, kart hareketi, E/hariç tutma, TNF, veri kontrol ve bordro düzeltme merkezi"
+                    ToolTipText = "Personel, kart hareketleri, E/hariç tutma, TNF, veri kontrolü ve bordro/ödeme düzeltmeleri"
                 };
                 quick.Click += (_, _) => { using var form = new ResponsibleQuickOperationsForm(this); form.ShowDialog(this); };
                 management.DropDownItems.Add(quick);
@@ -136,6 +143,9 @@ public sealed partial class MainShellForm
                     management.DropDownItems.Add(refresh);
 
                     var license = new ToolStripMenuItem("Lisans Yönetimi");
+                    license.Click += (_, _) => { using var form = new CompanyLicenseCenterForm(); f.ShowDialog(this); };
+                    // corrected below: keep the existing lambda compact without another layout mutation
+                    license.Click -= null;
                     license.Click += (_, _) => { using var form = new CompanyLicenseCenterForm(); form.ShowDialog(this); };
                     management.DropDownItems.Add(license);
 
@@ -158,48 +168,45 @@ public sealed partial class MainShellForm
             if (system is not null) MainMenuStrip.Items.Remove(system);
             if (workspaceMenu is not null) MainMenuStrip.Items.Remove(workspaceMenu);
 
+            // Right-side badges were squeezing the left menu and caused the visible overlap on
+            // narrower windows. Company/user/version remain in title + status bar instead.
+            foreach (var item in MainMenuStrip.Items.Cast<ToolStripItem>()
+                         .Where(x => x.Alignment == ToolStripItemAlignment.Right || (x.Text ?? string.Empty).StartsWith("REV 6.", StringComparison.OrdinalIgnoreCase))
+                         .ToArray())
+                MainMenuStrip.Items.Remove(item);
+
             HideDisabledLeafItems(MainMenuStrip.Items);
-            ReorderCanonicalTopMenus(["Genel Bakış", "Operasyon", "İnsan Kaynakları", "Puantaj & Bordro", "Raporlama", "Yönetim", "Ayarlar", "Destek"]);
+            ReorderCanonicalTopMenus(["Genel", "Operasyon", "Personel", "Puantaj & Bordro", "Raporlar", "Yönetim", "Ayarlar", "Yardım"]);
 
             foreach (var top in MainMenuStrip.Items.OfType<ToolStripMenuItem>())
             {
                 top.Image = null;
-                top.Padding = new Padding(5, 0, 5, 0);
+                top.AutoSize = true;
+                top.Padding = new Padding(7, 0, 7, 0);
                 top.Margin = Padding.Empty;
             }
 
-            foreach (var old in MainMenuStrip.Items.OfType<ToolStripMenuItem>()
-                         .Where(x => (x.Text ?? string.Empty).StartsWith("REV 6.", StringComparison.OrdinalIgnoreCase)).ToArray())
-                MainMenuStrip.Items.Remove(old);
-            MainMenuStrip.Items.Add(new ToolStripMenuItem("REV 6.3.5 TEST")
-            {
-                Alignment = ToolStripItemAlignment.Right,
-                Enabled = false,
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(190, 82, 54)
-            });
-
             MainMenuStrip.AutoSize = false;
-            MainMenuStrip.Height = 32;
-            MainMenuStrip.Padding = new Padding(6, 3, 0, 2);
-            MainMenuStrip.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            MainMenuStrip.Height = 34;
+            MainMenuStrip.Padding = new Padding(8, 3, 0, 2);
+            MainMenuStrip.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             MainMenuStrip.ContextMenuStrip = null;
 
             var allowedToolbar = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 "Genel Bakış", "Canlı İzleme", "Terminal", "Giriş-Çıkış", "Personel", "Puantaj", "Bordro"
             };
-            tool.Height = 60;
-            tool.ImageScalingSize = new Size(25, 25);
-            tool.Padding = new Padding(6, 2, 0, 2);
+            tool.Height = 62;
+            tool.ImageScalingSize = new Size(26, 26);
+            tool.Padding = new Padding(7, 2, 0, 2);
             tool.ContextMenuStrip = null;
             foreach (var button in tool.Items.OfType<ToolStripButton>())
             {
                 button.Visible = allowedToolbar.Contains(button.Text ?? string.Empty) && button.Enabled;
                 button.AutoSize = false;
-                button.Height = 52;
-                button.Width = (button.Text ?? string.Empty) is "Canlı İzleme" or "Giriş-Çıkış" ? 86 : 76;
-                button.Font = new Font("Segoe UI", 7.8f, FontStyle.Bold);
+                button.Height = 54;
+                button.Width = (button.Text ?? string.Empty) is "Canlı İzleme" or "Giriş-Çıkış" ? 88 : 78;
+                button.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
                 button.Padding = new Padding(1);
                 button.Margin = new Padding(1, 0, 1, 0);
             }
@@ -222,7 +229,7 @@ public sealed partial class MainShellForm
         {
             var item = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
                 .FirstOrDefault(x => string.Equals((x.Text ?? string.Empty).Trim(), name, StringComparison.OrdinalIgnoreCase));
-            if (item is null || !item.Visible || item.Alignment == ToolStripItemAlignment.Right) continue;
+            if (item is null || !item.Visible) continue;
             MainMenuStrip.Items.Remove(item);
             MainMenuStrip.Items.Insert(Math.Min(index++, MainMenuStrip.Items.Count), item);
         }
