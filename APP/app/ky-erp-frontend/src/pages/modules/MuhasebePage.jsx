@@ -26,7 +26,14 @@ function ControlledEmptyState({ requestedTab, goTab }) {
   return <section className="accounting-empty" role="status"><strong>Bu muhasebe görünümü bulunamadı.</strong><span>{requestedTab ? `“${requestedTab}” bağlantısı artık kullanılmıyor.` : "Geçerli bir ekran seçin."}</span><button type="button" className="accounting-primary" onClick={() => goTab("yonetim-ozeti")}>Yönetim özetine dön</button></section>;
 }
 
-export default function MuhasebePage({ activeTab, activeMainCompany, openModule }) {
+function normalizeActionContext(value) {
+  if (!value) return undefined;
+  if (typeof value === "object") return value;
+  const params = new URLSearchParams(String(value).replace(/^\?/, ""));
+  return Object.fromEntries(params.entries());
+}
+
+export default function MuhasebePage({ activeTab, activeMainCompany, openModule, moduleActionContext }) {
   const normalizedTab = activeTab || "yonetim-ozeti";
   const current = useMemo(() => MUHASEBE_TABS.find((tab) => tab.key === normalizedTab), [normalizedTab]);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -64,20 +71,13 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
     };
   }, [quickOpen]);
 
-  const goTab = (tabKey, query = "") => {
-    openModule?.("muhasebe", { tabKey });
-    if (query) {
-      const suffix = String(query).startsWith("?") ? query : `?${query}`;
-      window.setTimeout(() => {
-        window.history.replaceState({}, "", `/muhasebe/${tabKey}${suffix}`);
-        window.dispatchEvent(new PopStateEvent("popstate"));
-      }, 0);
-    }
+  const goTab = (tabKey, actionContext) => {
+    openModule?.("muhasebe", { tabKey, actionContext: normalizeActionContext(actionContext) });
   };
 
-  const goFinance = (query = "") => {
+  const goFinance = (actionContext) => {
     setQuickOpen(false);
-    goTab("finans-islemleri", query);
+    goTab("finans-islemleri", actionContext);
   };
 
   const openEBelgeUpload = () => {
@@ -95,7 +95,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
     setQuickCompanyOpen(true);
   };
 
-  const pageProps = { activeMainCompany, refreshKey, reloadAll, goTab, openModule };
+  const pageProps = { activeMainCompany, refreshKey, reloadAll, goTab, openModule, moduleActionContext };
   let content = null;
   if (!current) content = <ControlledEmptyState requestedTab={activeTab} goTab={goTab} />;
   else if (current.key === "yonetim-ozeti") content = <ManagementOverviewWorkspace {...pageProps} />;
@@ -121,10 +121,10 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
                   <button type="button" onClick={openQuickCompany}>Yeni Cari / Firma</button>
                   <button type="button" onClick={openEBelgeUpload}>Alış Belgesi</button>
                   <button type="button" onClick={() => { setQuickOpen(false); goTab("musteri-belgeleri"); }}>Satış Belgesi</button>
-                  <button type="button" onClick={() => goFinance("financeView=daily&quick=transaction")}>Ödeme / Tahsilat</button>
-                  <button type="button" onClick={() => goFinance("financeView=daily&quick=cek")}>Çek / Senet</button>
-                  <button type="button" onClick={() => goFinance("financeView=planner")}>Ödeme Planı</button>
-                  <button type="button" onClick={() => goFinance("financeView=ledger")}>Banka / Kasa / Defter</button>
+                  <button type="button" onClick={() => goFinance({ financeView: "daily", quick: "transaction" })}>Ödeme / Tahsilat</button>
+                  <button type="button" onClick={() => goFinance({ financeView: "daily", quick: "cek" })}>Çek / Senet</button>
+                  <button type="button" onClick={() => goFinance({ financeView: "planner" })}>Ödeme Planı</button>
+                  <button type="button" onClick={() => goFinance({ financeView: "ledger" })}>Banka / Kasa / Defter</button>
                 </div>
               ) : null}
             </div>
