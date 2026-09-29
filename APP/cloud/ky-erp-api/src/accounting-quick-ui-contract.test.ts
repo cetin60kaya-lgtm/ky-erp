@@ -41,7 +41,7 @@ test("weekly current-account control keeps official, internal, cash and FIBE tot
   assert.match(backend, /recordScope: "INTERNAL"/);
 });
 
-test("e-Belge final approval refreshes and exposes accounting integration status", () => {
+test("e-Belge final approval refreshes accounting while management overview stays compact", () => {
   const page = frontend("pages/modules/MuhasebePage.jsx");
   const ebelge = frontend("pages/modules/muhasebe/EBelgeCenterPage.jsx");
   const overview = frontend("pages/modules/muhasebe/ManagementOverviewWorkspace.jsx");
@@ -49,7 +49,13 @@ test("e-Belge final approval refreshes and exposes accounting integration status
   const posting = readFileSync(resolve(here, "accounting-document-posting.ts"), "utf8");
   assert.match(page, /kyerp:accounting-refresh/);
   assert.match(ebelge, /CustomEvent\("kyerp:accounting-refresh"/);
-  assert.match(overview, /e-Belge → Muhasebe Entegrasyonu/);
+  assert.match(overview, /Toplam alacak/);
+  assert.match(overview, /Toplam borç/);
+  assert.match(overview, /Bu ay gelen fatura/);
+  assert.match(overview, /Bu ay kesilen fatura/);
+  assert.match(overview, /Yaklaşan çek/);
+  assert.doesNotMatch(overview, /e-Belge → Muhasebe Entegrasyonu/);
+  assert.doesNotMatch(overview, /Bu ay en yüksek tedarikçiler|Bu ay en yüksek müşteriler|Son cari hareketler/);
   assert.match(center, /idempotent:true/);
   assert.match(posting, /current_account_movements/);
   assert.match(posting, /accounting_ledger_entries/);
