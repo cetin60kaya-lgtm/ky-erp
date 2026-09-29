@@ -54,6 +54,7 @@ async function loadErpRuntime() {
 
   // Canonical UI en son yüklenir; eski modül CSS'leri yan panel davranışını geri getiremez.
   await import("./styles/canonical-workspace-ui.css");
+  await import("./styles/module-action-popups.css");
 
   installAuthenticatedAssetBridge();
   installMuhasebeDocumentSanitizer();
