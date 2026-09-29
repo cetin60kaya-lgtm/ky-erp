@@ -44,24 +44,25 @@ jobs:
           Copy-Item out/HKN-PDKS/* out/package -Recurse -Force
           Get-ChildItem out/package -Filter '*.pdb' -Recurse | Remove-Item -Force
           Set-Content -Path out/package/BUILD_INFO.txt -Encoding UTF8 -Value @(
-            'KY PDKS 6.3.2 TEST - ISYERI TERMINAL STABLE',
-            'Revision: 6.3.2 TEST',
-            'Scope: Hedef-style physical terminal settings + direct device read + safe empty-data transfer + validated TNF/FDB import + stable shell/personnel fixes',
+            'KY PDKS 6.3.3 TEST - ISYERI STABLE SAFE',
+            'Revision: 6.3.3 TEST',
+            'Scope: stable first show + flicker-safe live attendance + visible Hedef-style terminal settings + non-destructive terminal sync',
             'Distribution: release symbols removed',
             'Runtime: win-x64 self-contained',
             'Tests: Contract + Shell + UI Audit + V4 Shell',
             'Terminal: x86 TerminalBridge included; matched TerminalSdk is added to workplace package after CI',
+            'Safety: physical terminal logs are never auto-cleared by sync',
             "Branch: $env:GITHUB_REF_NAME",
             "Commit: $env:GITHUB_SHA",
             "UTC: $([DateTime]::UtcNow.ToString('yyyy-MM-dd HH:mm:ss'))"
           )
-          Compress-Archive -Path out/package/* -DestinationPath out/KY-PDKS-6.3.2-ISYERI-TERMINAL-STABLE.zip -Force
-          (Get-FileHash out/KY-PDKS-6.3.2-ISYERI-TERMINAL-STABLE.zip -Algorithm SHA256).Hash | Set-Content out/KY-PDKS-6.3.2-ISYERI-TERMINAL-STABLE.zip.sha256.txt -Encoding ASCII
+          Compress-Archive -Path out/package/* -DestinationPath out/KY-PDKS-6.3.3-ISYERI-STABLE-SAFE.zip -Force
+          (Get-FileHash out/KY-PDKS-6.3.3-ISYERI-STABLE-SAFE.zip -Algorithm SHA256).Hash | Set-Content out/KY-PDKS-6.3.3-ISYERI-STABLE-SAFE.zip.sha256.txt -Encoding ASCII
       - uses: actions/upload-artifact@v4
         with:
-          name: KY-PDKS-6.3.2-ISYERI-TERMINAL-STABLE
+          name: KY-PDKS-6.3.3-ISYERI-STABLE-SAFE
           path: |
-            out/KY-PDKS-6.3.2-ISYERI-TERMINAL-STABLE.zip
-            out/KY-PDKS-6.3.2-ISYERI-TERMINAL-STABLE.zip.sha256.txt
+            out/KY-PDKS-6.3.3-ISYERI-STABLE-SAFE.zip
+            out/KY-PDKS-6.3.3-ISYERI-STABLE-SAFE.zip.sha256.txt
           if-no-files-found: error
           retention-days: 14
