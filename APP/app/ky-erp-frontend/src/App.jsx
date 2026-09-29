@@ -52,6 +52,7 @@ const MODULE_LOADERS = {
   muhasebe: () => {},
   admin: () => import("./pages/modules/AdminPage"),
   ik: () => import("./pages/modules/IkPage"),
+  "gunluk-operasyon": () => import("./pages/modules/IkPage"),
   desen: () => import("./pages/modules/DesenPage"),
   uretim: () => import("./pages/modules/UretimPage"),
   boyahane: () => import("./pages/modules/BoyahanePage"),
