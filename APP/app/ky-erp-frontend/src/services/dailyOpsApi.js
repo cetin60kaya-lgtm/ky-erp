@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from "../utils/api";
+import { apiDelete, apiGet, apiPatch, apiPost, apiUpload, downloadFile } from "../utils/api";
 
 function unwrap(payload) {
   return payload &&
@@ -77,4 +77,23 @@ export async function getDailyPeriodLock(params = {}, options = {}) {
 
 export async function setDailyPeriodLock(payload = {}) {
   return unwrap(await apiPost(`${ROOT}/period-lock`, payload));
+}
+
+export function downloadDailyExcel(params = {}) {
+  const start = String(params.startDate || params.start || "").replace(/-/g, "");
+  const end = String(params.endDate || params.end || start).replace(/-/g, "");
+  return downloadFile(`${ROOT}/excel`, params, `KYERP_Gunluk_Personel_${start}_${end}.xlsx`);
+}
+
+export async function previewDailyExcel(file, payload = {}) {
+  const form = new FormData();
+  form.append("file", file);
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") form.append(key, String(value));
+  });
+  return unwrap(await apiUpload(`${ROOT}/excel-upload`, form));
+}
+
+export async function applyDailyExcel(payload = {}) {
+  return unwrap(await apiPost(`${ROOT}/excel-apply`, payload));
 }
