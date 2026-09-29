@@ -2,13 +2,16 @@ namespace HKN.Personel.Native;
 
 internal static class AccessGuard
 {
-    static readonly string[] EditWords = ["yeni","ekle","değiştir","sil","kaydet","hesapla","aktar","oluştur","düzelt","temizle","tümünü sil"];
-    static readonly string[] SafeWords = ["göster","yenile","önizle","rapor","pdf","excel","kapat","ana sayfa","geri","ara","listele"];
+    static readonly string[] EditWords = ["yeni","ekle","değiştir","sil","kaydet","hesapla","aktar","oluştur","düzelt","temizle","tümünü sil","uygula","öde","işaretle","geri yükle"];
+    static readonly string[] SafeWords = ["göster","yenile","önizle","rapor","pdf","excel","kapat","ana sayfa","geri","ara","listele","kontrol"];
 
     public static void Apply(Control root, PdksModule module, LocalUser user)
     {
-        if (user.CanEdit(module)) return;
-        root.Tag = "READONLY";
+        var roleCanEdit = user.CanEdit(module);
+        var licenseCanWrite = user.IsSuperAdmin || CompanyLicenseGuard.CanWrite;
+        if (roleCanEdit && licenseCanWrite) return;
+
+        root.Tag = CompanyLicenseGuard.IsDemo && !user.IsSuperAdmin ? "DEMO_READONLY" : "READONLY";
         Walk(root);
     }
 
@@ -16,7 +19,11 @@ internal static class AccessGuard
     {
         foreach (Control c in root.Controls)
         {
-            if (c is Button b && IsEditAction(b.Text)) { b.Enabled = false; b.Tag = "READONLY"; }
+            if (c is Button b && IsEditAction(b.Text))
+            {
+                b.Enabled = false;
+                b.Tag = "READONLY";
+            }
             if (c is ToolStrip strip) DisableMenu(strip.Items);
             if (c.ContextMenuStrip is { } menu) DisableMenu(menu.Items);
             Walk(c);
