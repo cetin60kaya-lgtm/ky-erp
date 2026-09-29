@@ -76,6 +76,7 @@ const MODULE_LOADERS = {
     Promise.all([import("./pages/modules/muhasebe/MuhasebeSmartMatchPage")]),
   admin: () => import("./pages/modules/AdminPage"),
   ik: () => import("./pages/modules/IkPage"),
+  "gunluk-operasyon": () => import("./pages/modules/IkPage"),
   desen: () => import("./pages/modules/DesenPage"),
   uretim: () => import("./pages/modules/UretimPage"),
   boyahane: () => import("./pages/modules/BoyahanePage"),
@@ -453,7 +454,7 @@ export default function AppV3() {
     if (activeModule?.key === "boyahane") {
       return <BoyahanePage activeTab={activeTab} {...sharedProps} />;
     }
-    if (activeModule?.key === "ik") {
+    if (["ik", "gunluk-operasyon"].includes(activeModule?.key)) {
       return <IkPage activeTab={activeTab} {...sharedProps} />;
     }
     if (activeModule?.key === "uretim") {
