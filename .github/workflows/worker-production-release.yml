@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   release-worker:
-    name: Worker test, D1 yedek, deploy ve canli dogrulama
+    name: Worker test, D1 yedek, schema, deploy ve canli dogrulama
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -87,6 +87,27 @@ jobs:
           path: APP/cloud/ky-erp-api/database-backup/*.sql
           if-no-files-found: error
           retention-days: 30
+
+      - name: Mail ve muhasebe canonical schema migrationlarini uygula
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          for migration in \
+            migrations/0050_mail_communication_core.sql \
+            migrations/0051_mail_workspace_user_state.sql \
+            migrations/0055_accounting_workspace_core.sql; do
+            test -f "$migration"
+            echo "Uygulaniyor: $migration"
+            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file "$migration" --yes
+          done
+
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command \
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('mail_accounts','mail_send_jobs','mail_message_user_state','accounting_live_revision','accounting_financial_accounts','accounting_reconciliations') ORDER BY name;" --json > /tmp/kyerp-schema-proof.json
+          cat /tmp/kyerp-schema-proof.json
+          for required in mail_accounts mail_send_jobs mail_message_user_state accounting_live_revision accounting_financial_accounts accounting_reconciliations; do
+            grep -q "\"$required\"" /tmp/kyerp-schema-proof.json || { echo "Eksik production tablosu: $required" >&2; exit 1; }
+          done
 
       - name: Worker'i api.kyerp.net adresine dagit
         working-directory: APP/cloud/ky-erp-api
