@@ -2,13 +2,6 @@ namespace HKN.Personel.Native;
 
 public partial class PersonelForm
 {
-    protected override void OnShown(EventArgs e)
-    {
-        base.OnShown(e);
-        if (!IsHandleCreated) return;
-        BeginInvoke(new Action(RepairRecordActionBars));
-    }
-
     void RepairRecordActionBars()
     {
         RepairRecordActionBar("Giriş ve Çıkışları", gGiris, AddGiris, EditGiris, DeleteGiris, DeleteAllGiris);
