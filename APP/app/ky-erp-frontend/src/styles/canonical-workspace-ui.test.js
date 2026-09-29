@@ -12,18 +12,21 @@ test("canonical UI is loaded globally after legacy module styles", () => {
 });
 
 test("existing module and page layouts stay visible", () => {
-  assert.match(css, /\.shell-v3-sidebar \.shell-v3-submenu\s*\{\s*display:\s*block;/);
+  assert.match(css, /\.shell-v3:not\(\[data-active-module="gunluk-operasyon"\]\) \.shell-v3-sidebar \.shell-v3-submenu/);
   assert.doesNotMatch(css, /--ky-workspace-max/);
   assert.doesNotMatch(css, /\.ccw-master-detail\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\) !important/);
 });
 
-test("daily operations keeps its current navigator while other modules do not", () => {
+test("daily operations is explicitly excluded from the global popup standard", () => {
   assert.match(navigator, /module\?\.key !== "gunluk-operasyon"/);
   assert.match(navigator, /ky-task-nav__trigger/);
   assert.match(navigator, /onSelect\?\.\(key\)/);
+  assert.match(css, /\.shell-v3:not\(\[data-active-module="gunluk-operasyon"\]\)/);
+  assert.doesNotMatch(css, /\n:where\(\s*\[class\*="drawer-layer"\]/);
+  assert.doesNotMatch(css, /\n\[role="dialog"\] > header/);
 });
 
-test("drawer side panel and modal layers converge to centered dialogs", () => {
+test("other modules converge drawer side panel and modal layers to centered dialogs", () => {
   assert.match(css, /drawer-layer/);
   assert.match(css, /side-layer/);
   assert.match(css, /modal-backdrop/);
@@ -39,7 +42,7 @@ test("operations use popup behavior and reusable tabs", () => {
   assert.match(css, /dialog-tabs/);
 });
 
-test("old draggable resizable modal behavior cannot return", () => {
-  assert.match(css, /\.ky-modal-resize-handle[\s\S]*display:\s*none !important/);
+test("old draggable resizable modal behavior cannot return outside daily operations", () => {
+  assert.match(css, /\.shell-v3:not\(\[data-active-module="gunluk-operasyon"\]\) \.ky-modal-resize-handle/);
   assert.match(css, /\.ky-modal-positioned[\s\S]*resize:\s*none !important/);
 });
