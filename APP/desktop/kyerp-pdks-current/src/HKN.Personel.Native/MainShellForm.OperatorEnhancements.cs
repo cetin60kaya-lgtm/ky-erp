@@ -14,8 +14,8 @@ public sealed partial class MainShellForm
             ApplyOperatorEnhancements();
         }
 
-        // Saved layout is applied first; our product-level shell rules are applied last so an
-        // old user layout cannot re-maximize the app or resurrect obsolete top-level menus.
+        // Menu/toolbar customization is applied after the first stable window bounds were set in OnLoad.
+        // Do not resize/reposition the window here: doing that after first paint caused a visible SHOW/jump.
         InitializeShellLayoutCustomization();
         FinalizeCompactShell();
     }
@@ -23,7 +23,7 @@ public sealed partial class MainShellForm
     void ApplyOperatorEnhancements()
     {
         if (MainMenuStrip is null) return;
-        Text = $"KY PDKS 6.3.1 TEST • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
+        Text = $"KY PDKS 6.3.3 TEST • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
 
         MainMenuStrip.AutoSize = false;
         MainMenuStrip.Height = 31;
@@ -58,6 +58,15 @@ public sealed partial class MainShellForm
         if (definitions is not null)
         {
             definitions.Text = "Ayarlar";
+
+            if (!definitions.DropDownItems.OfType<ToolStripMenuItem>().Any(x => (x.Text ?? string.Empty).Contains("Kart Cihazı Ayarları", StringComparison.OrdinalIgnoreCase)))
+            {
+                var terminalSettings = MenuItem("Terminal / Kart Cihazı Ayarları", PdksModule.Terminal, OpenTerminalSettingsDirect);
+                terminalSettings.ToolTipText = "Cihaz1, Makine No, Ethernet/COM, IP, port, baudrate, giriş/çıkış ve güvenli aktarım ayarları.";
+                definitions.DropDownItems.Insert(0, terminalSettings);
+                definitions.DropDownItems.Insert(1, new ToolStripSeparator());
+            }
+
             var calendar = definitions.DropDownItems.OfType<ToolStripMenuItem>()
                 .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Takvim", StringComparison.OrdinalIgnoreCase));
             if (calendar is not null && !calendar.DropDownItems.OfType<ToolStripMenuItem>().Any(x => (x.Text ?? string.Empty).Contains("Çalışma Tarihi", StringComparison.OrdinalIgnoreCase)))
@@ -84,7 +93,7 @@ public sealed partial class MainShellForm
             support.Text = "Destek";
             var oldAbout = support.DropDownItems.OfType<ToolStripMenuItem>()
                 .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Hakkında", StringComparison.OrdinalIgnoreCase));
-            if (oldAbout is not null) oldAbout.Text = "KY PDKS 6.3.1 TEST Hakkında";
+            if (oldAbout is not null) oldAbout.Text = "KY PDKS 6.3.3 TEST Hakkında";
             if (!support.DropDownItems.OfType<ToolStripMenuItem>().Any(x => string.Equals(x.Text ?? string.Empty, "Hızlı Kullanım Rehberi", StringComparison.OrdinalIgnoreCase)))
             {
                 var guide = new ToolStripMenuItem("Hızlı Kullanım Rehberi")
@@ -130,7 +139,7 @@ public sealed partial class MainShellForm
                      .Where(x => (x.Text ?? string.Empty).StartsWith("REV 6.", StringComparison.OrdinalIgnoreCase)).ToArray())
             MainMenuStrip.Items.Remove(old);
 
-        MainMenuStrip.Items.Add(new ToolStripMenuItem("REV 6.3.1 TEST")
+        MainMenuStrip.Items.Add(new ToolStripMenuItem("REV 6.3.3 TEST")
         {
             Alignment = ToolStripItemAlignment.Right,
             Enabled = false,
@@ -183,15 +192,6 @@ public sealed partial class MainShellForm
 
             ReorderTopMenus(["Genel Bakış", "Operasyon", "İnsan Kaynakları", "Puantaj & Bordro", "Raporlama", "Yönetim", "Ayarlar", "Destek"]);
         }
-
-        // Force a predictable startup footprint regardless of what a previous layout file saved.
-        WindowState = FormWindowState.Normal;
-        StartPosition = FormStartPosition.Manual;
-        var area = Screen.FromControl(this).WorkingArea;
-        var targetWidth = Math.Clamp((int)Math.Round(area.Width * 0.88), 1180, 1500);
-        var targetHeight = Math.Clamp((int)Math.Round(area.Height * 0.86), 720, 900);
-        Size = new Size(Math.Min(targetWidth, area.Width - 50), Math.Min(targetHeight, area.Height - 50));
-        Location = new Point(area.Left + Math.Max(0, (area.Width - Width) / 2), area.Top + Math.Max(0, (area.Height - Height) / 2));
     }
 
     ToolStripMenuItem? FindTop(string text) => MainMenuStrip?.Items.OfType<ToolStripMenuItem>()
