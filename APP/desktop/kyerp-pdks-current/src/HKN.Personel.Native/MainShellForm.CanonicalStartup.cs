@@ -143,9 +143,6 @@ public sealed partial class MainShellForm
                     management.DropDownItems.Add(refresh);
 
                     var license = new ToolStripMenuItem("Lisans Yönetimi");
-                    license.Click += (_, _) => { using var form = new CompanyLicenseCenterForm(); f.ShowDialog(this); };
-                    // corrected below: keep the existing lambda compact without another layout mutation
-                    license.Click -= null;
                     license.Click += (_, _) => { using var form = new CompanyLicenseCenterForm(); form.ShowDialog(this); };
                     management.DropDownItems.Add(license);
 
