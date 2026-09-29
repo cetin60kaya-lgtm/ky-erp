@@ -13,12 +13,14 @@
     "production-centered-action-dialogs",
     "ebelge-mail-centered-dialogs",
     "compliance-action-popups",
-    "daily-operations-preserved-unchanged",
+    "daily-operations-canonical-sidebar-menu",
+    "daily-operations-legacy-top-tabs-removed",
+    "daily-operations-four-direct-pages",
     "frontend-full-test-suite",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
     "live-entry-verification",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "Restore the existing KY ERP page and submenu structure outside Günlük Operasyon. Keep general information, lists and summaries on each page; move operational forms behind page buttons into centered popup/dialog surfaces, with tab-ready popup styling for grouped actions. Günlük Operasyon is intentionally preserved unchanged. Production release still requires the existing live entry and Günlük Operasyon chunk verification gates."
+  "note": "Günlük Operasyon menüsünü KY ERP canonical sol alt menü yapısına geçir: Günlük Giriş, Personel Kartları, Haftalık Özet ve Ödeme Fişleri doğrudan sol menüden tek tıkla açılır. Sayfa içindeki eski yatay dört sekmeli menü ve ikinci merkezi İşlemler navigasyonu kaldırılır; mevcut günlük operasyon işleyişi ve veri akışı korunur."
 }
