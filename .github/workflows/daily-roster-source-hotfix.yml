@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
 
+# Final print-only deploy: screen UI is intentionally untouched.
 jobs:
   final:
     runs-on: ubuntu-latest
