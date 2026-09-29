@@ -12,8 +12,6 @@ internal sealed record TerminalCommandResult(bool Success, string Message);
 
 internal static class TerminalDeviceClient
 {
-    static readonly string[] RequiredSdkFiles = ["FP_CLOCK.ocx", "TMPCCOMM.dll", "CH375DLL.DLL", "MFC42.DLL"];
-
     public static TerminalDeviceSettings Settings => TerminalDeviceSettingsStore.Load();
     public static Task<TerminalDeviceSnapshot> ReadAsync(bool readPunches, CancellationToken cancellationToken = default) => RunReadAsync(readPunches ? "read" : "status", cancellationToken);
 
@@ -35,35 +33,19 @@ internal static class TerminalDeviceClient
         return Parse(run.Output, run.Error);
     }
 
-    static (bool Ready, string Folder, string Message) ResolveLocalSdk()
-    {
-        var configured = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_SDK");
-        var candidates = new List<string>();
-        if (!string.IsNullOrWhiteSpace(configured)) candidates.Add(configured.Trim());
-        candidates.Add(Path.Combine(AppContext.BaseDirectory, "TerminalSdk"));
-
-        foreach (var folder in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (!Directory.Exists(folder)) continue;
-            var missing = RequiredSdkFiles.Where(name => !File.Exists(Path.Combine(folder, name))).ToArray();
-            if (missing.Length == 0) return (true, folder, "Terminal SDK hazır.");
-            return (false, folder, "Terminal SDK eksik: " + string.Join(", ", missing));
-        }
-        return (false, string.Empty, "Terminal SDK bu kurulumda bulunamadı. Uygulamanın diğer bölümleri terminal olmadan kullanılabilir.");
-    }
-
     static async Task<(string Output, string Error)> RunBridgeAsync(string mode, CancellationToken ct)
     {
         var bridge = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_BRIDGE") ?? Path.Combine(AppContext.BaseDirectory, "KYERP.TerminalBridge.exe");
-        if (!File.Exists(bridge)) return ("STATUS|ERROR|Terminal köprüsü bulunamadı.", "");
+        if (!File.Exists(bridge)) return ("STATUS|ERROR|Terminal köprüsü bulunamadı. Tam kurulum paketini kullanın.", "");
 
-        var sdk = ResolveLocalSdk();
-        if (!sdk.Ready) return ("STATUS|ERROR|" + sdk.Message, "");
+        var sdk = TerminalSdkLocator.Resolve();
+        if (!sdk.CanAttemptConnection) return ("STATUS|ERROR|" + sdk.Message, "");
 
         var saved = TerminalDeviceSettingsStore.Load();
         var ip = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_IP") ?? saved.IpAddress;
         var port = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_PORT") ?? saved.IpPort.ToString(CultureInfo.InvariantCulture);
         var machine = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_MACHINE") ?? saved.MachineNo.ToString(CultureInfo.InvariantCulture);
+        var workingDirectory = Directory.Exists(sdk.WorkingDirectory) ? sdk.WorkingDirectory : AppContext.BaseDirectory;
 
         var psi = new ProcessStartInfo(bridge)
         {
@@ -71,11 +53,11 @@ internal static class TerminalDeviceClient
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            WorkingDirectory = sdk.Folder
+            WorkingDirectory = workingDirectory
         };
         var existingPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-        psi.Environment["PATH"] = sdk.Folder + Path.PathSeparator + existingPath;
-        psi.Environment["KY_PDKS_TERMINAL_SDK"] = sdk.Folder;
+        psi.Environment["PATH"] = workingDirectory + Path.PathSeparator + existingPath;
+        psi.Environment["KY_PDKS_TERMINAL_SDK"] = workingDirectory;
         psi.ArgumentList.Add(mode);
         psi.ArgumentList.Add(ip);
         psi.ArgumentList.Add(port);
@@ -94,7 +76,7 @@ internal static class TerminalDeviceClient
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return ("STATUS|ERROR|Kart cihazı zaman aşımına uğradı.", "");
+            return ("STATUS|ERROR|Kart cihazı zaman aşımına uğradı. IP/port ve ağ erişimini kontrol edin.", "");
         }
         catch (Exception ex)
         {
@@ -106,7 +88,9 @@ internal static class TerminalDeviceClient
     {
         if (string.IsNullOrWhiteSpace(message)) return "Terminal SDK hatası.";
         if (message.Contains("entry point", StringComparison.OrdinalIgnoreCase) || message.Contains("giriş noktası", StringComparison.OrdinalIgnoreCase) || message.Contains("FM_RecordRead", StringComparison.OrdinalIgnoreCase))
-            return "Terminal SDK sürümü uyumsuz. Paket içindeki eşleşen FP_CLOCK.ocx ve DLL seti kullanılmalı.";
+            return "Terminal SDK sürümü uyumsuz. Hedef PDKS'nin çalışan FP_CLOCK.ocx / DLL seti kullanılmalı.";
+        if (message.Contains("class not registered", StringComparison.OrdinalIgnoreCase) || message.Contains("80040154", StringComparison.OrdinalIgnoreCase))
+            return "FP_CLOCK 32-bit ActiveX Windows'ta kayıtlı değil. Terminal Merkezi > Sürücüyü Onar işlemini kullanın.";
         return message.Replace("|", "/").Replace("\r", " ").Replace("\n", " ");
     }
 
