@@ -1,0 +1,106 @@
+name: Daily Operations Final Restore TEMP
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/daily-operations-final-restore-temp.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-operations-final-restore
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      PAGES_PROJECT: ky-erp-frontend
+      PROD_BRANCH: codex/model-uretim-kontrol-merkezi-final
+    steps:
+      - name: Checkout production branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: codex/model-uretim-kontrol-merkezi-final
+
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Apply final daily operations restore
+        run: python .github/scripts/daily_operations_final_restore.py
+
+      - name: Source guardrails
+        shell: bash
+        run: |
+          set -euo pipefail
+          page='APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx'
+          grep -F 'Listeye eklenecek personeli ara...' "$page"
+          grep -F 'getDailyRevisions' "$page"
+          grep -F 'historicalIds' "$page"
+          grep -F 'log-date-toolbar' "$page"
+          if grep -F 'setRosterIds(new Set(employees.filter((row) => row.active !== false).map((row) => row.id)))' "$page"; then
+            echo '169-person auto-fill fallback still exists' >&2
+            exit 1
+          fi
+
+      - name: Frontend lint test build
+        working-directory: APP/app/ky-erp-frontend
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Commit final restore
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'KY ERP Automation'
+          git config user.email 'actions@kyerp.net'
+          git add APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx APP/app/ky-erp-frontend/src/pages/modules/ik/daily-hr-workspace-final.css
+          git diff --cached --check
+          git commit -m 'fix(daily): restore real roster quick entry and historical log'
+          new_sha="$(git rev-parse HEAD)"
+          echo "sha=$new_sha" >> "$GITHUB_OUTPUT"
+          git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+
+      - name: Verify Cloudflare access
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          npx --yes wrangler@4.118.0 whoami
+
+      - name: Deploy frontend production
+        working-directory: APP/app/ky-erp-frontend
+        run: >-
+          npx --yes wrangler@4.118.0 pages deploy dist
+          --project-name "$PAGES_PROJECT"
+          --branch "$PROD_BRANCH"
+          --commit-hash "${{ steps.commit.outputs.sha }}"
+          --commit-message "Daily Operations final restore ${{ steps.commit.outputs.sha }}"
+
+      - name: Live HTTP smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error https://kyerp.net/gunluk-operasyon/daily-entry >/tmp/daily.html && test -s /tmp/daily.html; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
