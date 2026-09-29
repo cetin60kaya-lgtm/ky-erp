@@ -8,10 +8,12 @@ internal static class AccessGuard
     public static void Apply(Control root, PdksModule module, LocalUser user)
     {
         var roleCanEdit = user.CanEdit(module);
-        var licenseCanWrite = user.IsSuperAdmin || CompanyLicenseGuard.CanWrite;
+        // Super Admin lisans/yönetim merkezine her zaman girebilir; ancak firma lisansı
+        // demo/süresi dolmuş durumdaysa canlı firma verisini hiçbir rol değiştiremez.
+        var licenseCanWrite = CompanyLicenseGuard.CanWrite;
         if (roleCanEdit && licenseCanWrite) return;
 
-        root.Tag = CompanyLicenseGuard.IsDemo && !user.IsSuperAdmin ? "DEMO_READONLY" : "READONLY";
+        root.Tag = CompanyLicenseGuard.IsDemo ? "DEMO_READONLY" : "READONLY";
         Walk(root);
     }
 
