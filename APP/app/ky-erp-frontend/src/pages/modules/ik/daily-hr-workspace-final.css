@@ -6,3 +6,27 @@
 
 /* final payment selection and weekly print controls */
 .gop-print-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}.gop-print-actions button{min-height:34px;border:1px solid #d5deeb;border-radius:8px;background:#fff;color:#17345e;padding:0 10px;display:inline-flex;align-items:center;gap:6px;font-weight:800;cursor:pointer}.gop-print-actions button.primary{background:#2563eb;border-color:#2563eb;color:#fff}.gop-print-actions button:disabled{opacity:.45;cursor:not-allowed}.gop-payment-card.selected{border-color:#60a5fa;background:#eff6ff;box-shadow:inset 4px 0 0 #2563eb}.gop-payment-pick{display:inline-flex!important;align-items:center!important;gap:4px!important;margin-right:2px;border:1px solid #bfdbfe;border-radius:999px;background:#fff;color:#1d4ed8;padding:3px 7px;font-size:10px;font-weight:900;white-space:nowrap;cursor:pointer}.gop-payment-pick input{margin:0;width:14px;height:14px}@media(max-width:900px){.gop-print-actions{justify-content:flex-start;width:100%}.gop-card-head{align-items:flex-start;flex-direction:column}}
+
+
+/* FINAL-UX-CONSOLIDATION-2026-09-29 */
+/* One strong shift identity: button + thin stripe + compact badge only. */
+.kyop-daily.day .kyop-titlebar,.kyop-daily.day .kyop-entry{border-left:6px solid #f97316}
+.kyop-daily.night .kyop-titlebar,.kyop-daily.night .kyop-entry{border-left:6px solid #3730a3}
+.gop-quick-dialog{position:relative}
+.gop-quick-dialog.shift-day{border-left:7px solid #f97316;box-shadow:0 24px 72px rgba(15,23,42,.28),inset 0 0 0 1px rgba(249,115,22,.12)}
+.gop-quick-dialog.shift-night{border-left:7px solid #3730a3;box-shadow:0 24px 72px rgba(15,23,42,.28),inset 0 0 0 1px rgba(55,48,163,.12)}
+.quick-title-line{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.quick-title-line h2{margin:2px 0 0}
+.quick-shift-badge{display:inline-flex!important;align-items:center;justify-content:center;min-width:64px;height:22px;border-radius:5px;color:#fff!important;font-size:8px!important;font-weight:950!important;letter-spacing:.05em!important}
+.quick-shift-badge.day{background:#f97316}.quick-shift-badge.night{background:#3730a3}
+.gop-shift-switch button.active.day{background:#f97316!important;border-color:#f97316!important;color:#fff!important}
+.gop-shift-switch button.active.night{background:#3730a3!important;border-color:#3730a3!important;color:#fff!important}
+.gop-quick-dialog.shift-day .quick-warning{border-left:5px solid #f97316}.gop-quick-dialog.shift-night .quick-warning{border-left:5px solid #3730a3}
+.gop-quick-dialog.shift-day .quick-avatar{background:#f97316!important}.gop-quick-dialog.shift-night .quick-avatar{background:#3730a3!important}
+.gop-quick-dialog.shift-day .quick-footer button.primary:not(.soft){background:#f97316!important;border-color:#f97316!important}.gop-quick-dialog.shift-night .quick-footer button.primary:not(.soft){background:#3730a3!important;border-color:#3730a3!important}
+
+/* New/Edit Person is intentionally compact; the user can keep a custom size. */
+.gop-person-dialog{min-width:420px;overflow:auto}.gop-person-dialog .gop-form-grid{gap:7px;padding:10px 12px}.gop-person-dialog .gop-form-grid input{height:31px}.gop-person-dialog .gop-form-grid textarea{min-height:54px;max-height:90px}.gop-person-dialog header{padding:9px 12px}.gop-person-dialog footer{padding:8px 10px}
+
+/* Persistent width / height controls at the lower left of Daily Operations dialogs. */
+.dialog-sizer{display:inline-flex;align-items:center;gap:4px;border:1px solid #d5deeb;border-radius:7px;background:#f8fafc;padding:3px 5px;color:#60748c;font-size:7px;font-weight:900;white-space:nowrap}.dialog-sizer input{width:52px!important;height:24px!important;border:1px solid #d5deeb!important;border-radius:5px!important;background:#fff!important;padding:0 4px!important;font-size:8px!important;color:#17324e!important}.gop-dialog>footer .dialog-sizer{margin-right:auto}.quick-footer>.dialog-sizer{margin-right:7px!important}.quick-footer>div:not(.dialog-sizer){margin-right:auto}.gop-log-dialog>.dialog-sizer{position:sticky;left:10px;bottom:8px;width:max-content;z-index:12;margin:8px 10px;background:#fff;box-shadow:0 2px 8px rgba(15,23,42,.08)}
+@media(max-width:650px){.dialog-sizer{display:none}.gop-person-dialog{min-width:0}.gop-quick-dialog{border-left-width:5px}}
