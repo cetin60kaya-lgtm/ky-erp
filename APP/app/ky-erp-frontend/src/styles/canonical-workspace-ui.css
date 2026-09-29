@@ -2,10 +2,10 @@
    Tek çalışma kanvası, merkez dialog, sakin ve kısa işlem akışı. */
 
 :root {
-  --ky-workspace-max: 1240px;
-  --ky-workspace-narrow: 980px;
-  --ky-dialog-max: 940px;
-  --ky-dialog-wide-max: 1060px;
+  --ky-workspace-max: 1180px;
+  --ky-workspace-narrow: 920px;
+  --ky-dialog-max: 900px;
+  --ky-dialog-wide-max: 1040px;
   --ky-dialog-gap: 22px;
 }
 
@@ -29,12 +29,35 @@
   max-width: var(--ky-workspace-narrow);
 }
 
-/* Eski drawer/backdrop isimleri korunabilir; davranış artık yan panel değil merkez dialogdur. */
+/* Eski iki-panelli ana iş ekranları artık yukarıdan aşağı tek akıştır. */
+.shell-v3-workspace :where(
+  [class*="master-detail"],
+  [class*="masterdetail"],
+  [class*="split-layout"],
+  [class*="two-pane"],
+  [class*="dual-pane"]
+) {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+/* Firma/Cari gibi seç-listeden-işle akışlarında liste kısa kalır, işlem alanı hemen altında açılır. */
+.shell-v3-workspace .ccw-master-detail {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.shell-v3-workspace .ccw-table-card > .ccw-table-wrap {
+  max-height: 320px !important;
+}
+
+/* Eski drawer/side-panel isimleri korunabilir; davranış artık yan panel değil merkez dialogdur. */
 :where(
   [class*="drawer-layer"],
   [class*="drawer-backdrop"],
   [class*="drawer-overlay"],
   [class*="drawer-scrim"],
+  [class*="side-layer"],
+  [class*="side-backdrop"],
+  [class*="side-overlay"],
   [class*="modal-backdrop"],
   [class*="modal-overlay"],
   [class*="modal-layer"],
@@ -52,6 +75,9 @@
   [class*="drawer-backdrop"],
   [class*="drawer-overlay"],
   [class*="drawer-scrim"],
+  [class*="side-layer"],
+  [class*="side-backdrop"],
+  [class*="side-overlay"],
   [class*="modal-backdrop"],
   [class*="modal-overlay"],
   [class*="modal-layer"],
@@ -62,9 +88,11 @@
   [role="dialog"],
   dialog,
   aside[class*="drawer"],
+  aside[class*="side-panel"],
   [class$="-drawer"],
   [class*="drawer-panel"],
   [class*="drawer-card"],
+  [class*="side-panel"],
   [class$="-modal"],
   [class*="modal-card"],
   [class*="modal-box"],
@@ -91,10 +119,12 @@
 :where(
   [class*="drawer-layer"],
   [class*="drawer-backdrop"],
+  [class*="side-layer"],
   [class*="modal-backdrop"],
   [class*="modal-overlay"]
 ) > :where(
   [class*="drawer-wide"],
+  [class*="side-panel-wide"],
   [class*="modal-wide"],
   [class*="document-modal"],
   [class*="preview-modal"]
@@ -159,6 +189,9 @@
     [class*="drawer-layer"],
     [class*="drawer-backdrop"],
     [class*="drawer-overlay"],
+    [class*="side-layer"],
+    [class*="side-backdrop"],
+    [class*="side-overlay"],
     [class*="modal-backdrop"],
     [class*="modal-overlay"],
     [class*="modal-layer"],
@@ -167,9 +200,11 @@
     [role="dialog"],
     dialog,
     aside[class*="drawer"],
+    aside[class*="side-panel"],
     [class$="-drawer"],
     [class*="drawer-panel"],
     [class*="drawer-card"],
+    [class*="side-panel"],
     [class$="-modal"],
     [class*="modal-card"],
     [class*="modal-box"],
