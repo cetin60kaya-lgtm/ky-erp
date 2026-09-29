@@ -19,6 +19,12 @@
     "daily-operations-dedicated-api-and-backend-ownership",
     "daily-operations-legacy-ik-page-removed",
     "daily-operations-obsolete-patch-scripts-removed",
+    "daily-operations-friday-rich-workspace-restored",
+    "daily-operations-quick-entry-restored",
+    "daily-operations-log-analysis-restored",
+    "daily-operations-person-control-restored",
+    "daily-operations-period-lock-restored",
+    "daily-operations-cards-weekly-payments-preserved",
     "muhasebe-mail-provider-accepted-send-tracking",
     "frontend-full-test-suite",
     "frontend-lint-test-build",
@@ -26,5 +32,5 @@
     "live-entry-verification",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "Günlük Operasyon ve İK tek sahiplik düzenine geçirildi. Günlük Operasyon; Günlük Giriş, Personel Kartları, Haftalık Özet ve Ödeme Fişleri ile ayrı canonical modül olarak kendi API/backend akışında çalışır. Kullanılmayan eski karma IkPage/IkAdvancedMonthly ve patch_mesai yama dosyaları kaldırıldı. Günlük Operasyon dialogları viewport tabanlı deterministik ölçüde açılır. Muhasebe mail takibi yalnız gerçek Mail Center provider kabulünden sonra gönderildi durumuna geçer."
+  "note": "25 Eylül Cuma temiz çalışan Günlük Operasyon düzeni, İK'ya geri bağlanmadan bağımsız Daily Operations API üzerinde native React olarak geri taşındı. Günlük Giriş, Hızlı Giriş, Log + Özet, Gelişmiş Arama, Personel Kontrol, dönem kilidi, Personel Kartları, Haftalık Özet ve Ödeme Fişleri tek canonical günlük yapı içinde korunur. Frontend lint, test ve build başarılıdır; production Pages deploy ve canlı bundle doğrulaması bu marker ile zorunludur."
 }
