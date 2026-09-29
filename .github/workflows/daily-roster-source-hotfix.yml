@@ -1,0 +1,94 @@
+name: Daily Roster Source Hotfix
+
+on:
+  push:
+    branches: [codex/model-uretim-kontrol-merkezi-final]
+    paths:
+      - '.github/workflows/daily-roster-source-hotfix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PAGES_PROJECT: ky-erp-frontend
+      PROD_BRANCH: codex/model-uretim-kontrol-merkezi-final
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: codex/model-uretim-kontrol-merkezi-final
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+      - name: Restore old personnel pool source behavior
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx')
+          s = p.read_text(encoding='utf-8')
+          anchor = '  const availableRosterPeople = useMemo(() => employees.filter((person) => person.active !== false && !rosterIds.has(person.id)), [employees, rosterIds]);\n'
+          if 'const poolPeople = useMemo' not in s:
+              insert = anchor + '''  const poolPeople = useMemo(() => {\n    const needle = poolAddQuery.trim().toLocaleLowerCase("tr-TR");\n    return employees.filter((person) => person.active !== false).filter((person) => !needle || `${person.name} ${person.personnelNo} ${person.role} ${person.broker}`.toLocaleLowerCase("tr-TR").includes(needle));\n  }, [employees, poolAddQuery]);\n'''
+              if anchor not in s:
+                  raise SystemExit('availableRosterPeople anchor not found')
+              s = s.replace(anchor, insert, 1)
+
+          replacement = '''          <aside className="kyop-panel kyop-pool"><div className="kyop-panel-head"><Users size={16}/> Personel Havuzu <b>{employees.filter((person) => person.active !== false).length}</b></div><div className="kyop-pool-top"><label className="kyop-search"><Search size={14}/><input value={poolAddQuery} onChange={(e) => setPoolAddQuery(e.target.value)} placeholder="Personel ara"/></label><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><Plus size={14}/> Personel</button></div><div className="kyop-pool-list">{poolPeople.length ? poolPeople.map((person) => { const inRoster = rosterIds.has(person.id); const hasWork = selectedIds.has(person.id); return <label key={person.id} className={inRoster ? "included" : ""}><input type="checkbox" checked={inRoster} onChange={() => inRoster ? removeRosterPerson(person.id) : addRosterPerson(person, "main")}/><span><strong>{person.personnelNo ? `${person.personnelNo} · ` : ""}{person.name}</strong><small>{person.role || "Vasıfsız"}</small><em>{hasWork ? "Bu gün kayıtlı" : inRoster ? "Aralık listesinde" : "Listeye ekle"}</em><em>G: {money(person.dayRate)} · N: {money(person.nightRate)}</em></span></label>; }) : <Empty>Personel bulunamadı.</Empty>}</div><button type="button" className="primary full" disabled={busy || rosterSaved} onClick={saveRoster}><Save size={15}/> {rosterSaved ? `Çalışma Listesi Kayıtlı (${rosterIds.size})` : `Personel Havuzunu Kaydet (${rosterIds.size})`}</button></aside>'''
+          pattern = r'          <aside className="kyop-panel kyop-pool">.*?</aside>'
+          s2, n = re.subn(pattern, replacement, s, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit(f'pool aside replace count={n}')
+          p.write_text(s2, encoding='utf-8')
+          print('restored source list; roster remains opt-in')
+          PY
+      - name: Verify pool contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          page='APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx'
+          grep -F 'Personel Havuzu <b>{employees.filter((person) => person.active !== false).length}</b>' "$page"
+          grep -F 'Listeye ekle' "$page"
+          grep -F 'Aralık listesinde' "$page"
+          grep -F 'Bu gün kayıtlı' "$page"
+          grep -F 'const poolPeople = useMemo' "$page"
+          if grep -F 'setRosterIds(new Set(employees.filter((row) => row.active !== false).map((row) => row.id)))' "$page"; then exit 1; fi
+      - name: Frontend checks
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+        env:
+          VITE_API_URL: https://api.kyerp.net
+      - name: Commit and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'KY ERP Automation'
+          git config user.email 'actions@kyerp.net'
+          git add APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
+          git diff --cached --check
+          git commit -m 'fix(daily): restore personnel pool source list'
+          git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+      - name: Deploy production
+        working-directory: APP/app/ky-erp-frontend
+        run: npx --yes wrangler@4.118.0 pages deploy dist --project-name "$PAGES_PROJECT" --branch "$PROD_BRANCH" --commit-hash "$(git rev-parse HEAD)" --commit-message "Daily personnel pool restore"
+      - name: Live smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error https://kyerp.net/gunluk-operasyon/daily-entry >/tmp/daily.html && test -s /tmp/daily.html; then exit 0; fi
+            sleep 2
+          done
+          exit 1
