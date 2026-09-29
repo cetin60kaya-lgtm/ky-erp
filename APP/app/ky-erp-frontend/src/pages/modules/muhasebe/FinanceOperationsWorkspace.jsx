@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import CekOdemeMerkeziPage from "../../muhasebe/CekOdemeMerkeziPage";
 import AccountingLedgerPanel from "./AccountingLedgerPanel";
 import FinancialAccountsPanel from "./FinancialAccountsPanel";
@@ -6,12 +6,18 @@ import PaymentPlannerPanel from "./PaymentPlannerPanel";
 
 const VIEWS = new Set(["daily", "planner", "ledger"]);
 
-export default function FinanceOperationsWorkspace({ activeMainCompany, refreshKey = 0, reloadAll }) {
-  const initialView = useMemo(() => {
-    const requested = new URLSearchParams(window.location.search).get("financeView") || "daily";
-    return VIEWS.has(requested) ? requested : "daily";
-  }, []);
-  const [view, setView] = useState(initialView);
+export default function FinanceOperationsWorkspace({ activeMainCompany, refreshKey = 0, reloadAll, moduleActionContext }) {
+  const action = useMemo(() => {
+    if (moduleActionContext?.targetModule !== "muhasebe" || moduleActionContext?.targetTab !== "finans-islemleri") return {};
+    return moduleActionContext;
+  }, [moduleActionContext]);
+  const requestedView = VIEWS.has(action.financeView) ? action.financeView : "daily";
+  const selectedCompanyId = action.companyId || action.financeCompanyId || "";
+  const [view, setView] = useState(requestedView);
+
+  useEffect(() => {
+    setView(requestedView);
+  }, [requestedView, action.nonce]);
 
   return (
     <section className="accounting-composite-workspace">
@@ -33,6 +39,8 @@ export default function FinanceOperationsWorkspace({ activeMainCompany, refreshK
             refreshKey={refreshKey}
             reloadAll={reloadAll}
             embedded
+            hideFirmDirectory
+            selectedCompanyId={selectedCompanyId}
           />
         ) : null}
         {view === "planner" ? <PaymentPlannerPanel activeMainCompany={activeMainCompany} /> : null}

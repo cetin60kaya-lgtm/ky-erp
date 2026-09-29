@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Clipboard, Mail, RefreshCcw, Search, X } from "lucide-react";
+import { Check, Clipboard, Mail, RefreshCcw, Search, Send, X } from "lucide-react";
 import { apiGet, apiPatch } from "../../../utils/api";
+import { createMailDraft, listMailAccounts, sendMailDraft } from "../../../services/mailApi";
 import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "./mailTrackingWorkspace.css";
 
@@ -47,6 +48,17 @@ function defaultDraft(row, template) {
     template?.govde ||
     `Merhaba,\n\nCari hesap mutabakatımız için güncel ekstrenizi paylaşmanızı rica ederiz.\n\nFirma: ${row.firma}\nSistemimizde görünen bakiye: ${money(row.bakiye)}\n\nTeşekkür ederiz.`;
   return { subject, body };
+}
+
+function defaultSendAccount(accounts) {
+  const active = (Array.isArray(accounts) ? accounts : []).filter(
+    (row) => String(row?.status || "").toUpperCase() === "ACTIVE",
+  );
+  return (
+    active.find((row) => Number(row?.is_default_send ?? row?.isDefaultSend ?? 0) === 1) ||
+    active[0] ||
+    null
+  );
 }
 
 export default function MailTrackingWorkspace({ activeMainCompany, refreshKey }) {
@@ -147,6 +159,54 @@ export default function MailTrackingWorkspace({ activeMainCompany, refreshKey })
       setNotice("Mail taslağı panoya kopyalandı. Gönderim yapılmadı.");
     } catch {
       setNotice("Taslak kopyalanamadı; metni elle seçebilirsiniz.");
+    }
+  };
+
+  const sendStatementRequest = async () => {
+    if (!selected?.email || saving) return;
+    setSaving(true);
+    setNotice("");
+    try {
+      const accounts = await listMailAccounts();
+      const account = defaultSendAccount(accounts);
+      if (!account?.id) {
+        throw new Error("Aktif gönderim hesabı yok. Mail Merkezi'nden bir Gmail veya Microsoft 365 hesabını bağlayıp varsayılan gönderim hesabı seçin.");
+      }
+      const created = await createMailDraft({
+        accountId: account.id,
+        subject: draft.subject,
+        bodyText: draft.body,
+        recipients: { to: [selected.email], cc: [], bcc: [] },
+      });
+      if (!created?.id) throw new Error("Mail taslağı oluşturulamadı.");
+
+      const logicalEventId = `MUHASEBE_EKSTRE_${selected.companyId}_${crypto.randomUUID()}`;
+      const result = await sendMailDraft(created.id, logicalEventId);
+      if (String(result?.status || "").toUpperCase() !== "PROVIDER_ACCEPTED") {
+        throw new Error("Mail sağlayıcısı gönderimi kabul etmedi; takip durumu değiştirilmedi.");
+      }
+
+      const sentAt = new Date().toISOString();
+      await apiPatch(`/muhasebe/mail-ekstre/${encodeURIComponent(selected.companyId)}`, {
+        ...params,
+        email: selected.email,
+        status: "GONDERILDI",
+        lastRequestAt: sentAt,
+        subject: draft.subject,
+        body: draft.body,
+        mailDraftId: created.id,
+        mailSendJobId: result?.id || result?.jobId || "",
+        providerMessageId: result?.providerMessageId || result?.provider_message_id || "",
+        providerAcceptanceId: result?.providerAcceptanceId || result?.provider_acceptance_id || "",
+        logicalEventId,
+      });
+      setNotice(`${selected.firma}: mail sağlayıcısı gönderim isteğini kabul etti. Teslim sonucu Mail Merkezi'nden izlenir.`);
+      setSelected(null);
+      await load();
+    } catch (error) {
+      setNotice(`Mail gönderilemedi: ${error?.message || "Bilinmeyen hata"}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -258,23 +318,13 @@ export default function MailTrackingWorkspace({ activeMainCompany, refreshKey })
                 <textarea rows="16" value={draft.body} onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))} />
               </label>
               <div className="mtw-warning">
-                Bu ekran maili otomatik göndermiyor. Taslak kopyalanır; gerçek gönderimden sonra “Gönderildi” kaydı verilir.
+                Gönderim, Mail Merkezi'ndeki aktif varsayılan Gmail / Microsoft 365 hesabı üzerinden yapılır. “Gönderildi” durumu yalnız sağlayıcı isteği kabul ettikten sonra kaydedilir.
               </div>
             </div>
             <footer>
               <button type="button" onClick={copyDraft}><Clipboard size={16} /> Taslağı kopyala</button>
-              <button
-                type="button"
-                className="primary"
-                disabled={saving}
-                onClick={() => patchStatus(selected, {
-                  status: "GONDERILDI",
-                  lastRequestAt: new Date().toISOString(),
-                  subject: draft.subject,
-                  body: draft.body,
-                })}
-              >
-                <Check size={16} /> Gönderildi işaretle
+              <button type="button" className="primary" disabled={saving || !draft.subject.trim() || !draft.body.trim()} onClick={sendStatementRequest}>
+                <Send size={16} /> {saving ? "Gönderiliyor…" : "Maili gönder"}
               </button>
             </footer>
           </aside>

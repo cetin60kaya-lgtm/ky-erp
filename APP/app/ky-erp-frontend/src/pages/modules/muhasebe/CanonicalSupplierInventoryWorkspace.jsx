@@ -129,10 +129,8 @@ function Drawer({ invoice, busy, onClose, children, footer }) {
   );
 }
 
-export default function CanonicalSupplierInventoryWorkspace({ activeMainCompany, refreshKey = 0 }) {
-  const [view, setView] = useState("invoices");
+export default function CanonicalSupplierInventoryWorkspace({ activeMainCompany, refreshKey = 0, openEBelge }) {
   const [invoices, setInvoices] = useState([]);
-  const [lots, setLots] = useState([]);
   const [products, setProducts] = useState([]);
   const [selected, setSelected] = useState(null);
   const [lines, setLines] = useState([]);
@@ -164,17 +162,15 @@ export default function CanonicalSupplierInventoryWorkspace({ activeMainCompany,
     setLoading(true);
     setError("");
     try {
-      const [invoicePayload, productPayload, lotPayload] = await Promise.all([
+      const [invoicePayload, productPayload] = await Promise.all([
         apiGet("/e-belge/pool", { ...companyParams, filter: "INCOMING_INVOICE", q: search, page: 1, pageSize: 100, _ts: Date.now() }),
         apiGet("/boyahane/products", { ...companyParams, _ts: Date.now() }),
-        apiGet("/boyahane/workflow/lots", { ...companyParams, search, status: "ALL", _ts: Date.now() }),
       ]);
       const invoiceData = unwrap(invoicePayload);
       setInvoices((Array.isArray(invoiceData?.items) ? invoiceData.items : []).map(canonicalInvoice));
       setProducts(listOf(productPayload));
-      setLots(listOf(lotPayload));
     } catch (requestError) {
-      setError(requestError?.message || "Tedarikçi belge/stok verileri alınamadı.");
+      setError(requestError?.message || "Tedarikçi fatura verileri alınamadı.");
     } finally {
       setLoading(false);
     }
@@ -275,10 +271,7 @@ export default function CanonicalSupplierInventoryWorkspace({ activeMainCompany,
     try {
       await saveLines();
       await apiPost(`/e-belge/documents/${encodeURIComponent(selected.id)}/reconcile`, companyParams);
-      const payload = await apiPost(
-        `/e-belge/documents/${encodeURIComponent(selected.id)}/finalize`,
-        { ...companyParams, confirm: true },
-      );
+      const payload = await apiPost(`/e-belge/documents/${encodeURIComponent(selected.id)}/finalize`, { ...companyParams, confirm: true });
       const data = unwrap(payload);
       setMessage("Fatura canonical olarak işlendi. Fiziksel stok tek kez, maliyet/KDV/cari ise finansal belge üzerinden kaydedildi.");
       setSelected((current) => ({ ...current, status: data?.status || "POSTED" }));
@@ -291,58 +284,40 @@ export default function CanonicalSupplierInventoryWorkspace({ activeMainCompany,
     }
   }
 
-  const filteredLots = lots.filter((row) => {
-    const q = upper(search);
-    return !q || upper(`${row.productName} ${row.lotNo} ${row.supplierName || row.companyName} ${row.documentNo || row.invoiceNo}`).includes(q);
-  });
-
   return (
     <section className="siw-root">
       <div className="siw-toolbar">
-        <div className="siw-view-switch">
-          <button type="button" className={view === "invoices" ? "active" : ""} onClick={() => setView("invoices")}><FileText size={16} /> Faturalar</button>
-          <button type="button" className={view === "lots" ? "active" : ""} onClick={() => setView("lots")}><Boxes size={16} /> Boyahane LOT</button>
-        </div>
-        <label className="siw-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Belge, firma, ürün veya LOT ara" /></label>
+        <label className="siw-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Fatura, firma veya belge no ara" /></label>
         <button type="button" className="siw-secondary-button" onClick={load} disabled={loading}><RefreshCcw size={16} /> Yenile</button>
+        <button type="button" className="siw-secondary-button" onClick={openEBelge}>e‑Belge’de Aç</button>
       </div>
 
       <div className="siw-callout">
         <ShieldCheck size={22} />
-        <div><strong>Tek canonical stok / LOT düzeni</strong><span>LOT kararı tedarikçiye değil ürün kartına aittir. İrsaliye fiziksel stok gerçeği, fatura maliyet/KDV/cari gerçeğidir; aynı mal ikinci kez stoğa girmez.</span></div>
+        <div><strong>Tek stok ve finans gerçeği</strong><span>İrsaliye fiziksel stok/LOT kaynağıdır. Fatura maliyet, KDV ve cari kaynağıdır; fatura aynı malı ikinci kez stoğa sokmaz.</span></div>
       </div>
 
       {error ? <div className="siw-message error">{error}</div> : null}
       {message && !selected ? <div className="siw-message">{message}</div> : null}
 
-      {view === "invoices" ? (
-        <div className="siw-table-wrap">
-          <table>
-            <thead><tr><th>Tarih</th><th>Firma</th><th>Fatura No</th><th>Kaynak</th><th>Tutar</th><th>Durum</th><th>Kontrol</th></tr></thead>
-            <tbody>{invoices.map((row) => (
-              <tr key={row.id} onClick={() => openInvoice(row)} style={{ cursor: "pointer" }}>
-                <td>{dateText(row.issueDate)}</td><td><strong>{row.companyName || "Firma bekliyor"}</strong></td><td>{row.documentNo || "-"}</td><td>{sourceLabel(row)}</td><td>{money(row.payableTotal)}</td><td>{statusLabel(row.status)}</td><td><button type="button" className="siw-secondary-button" onClick={(event) => { event.stopPropagation(); openInvoice(row); }}>Aç</button></td>
-              </tr>
-            ))}</tbody>
-          </table>
-          {!loading && !invoices.length ? <div className="siw-empty"><FileText size={25} /><strong>Tedarikçi faturası yok</strong><span>İşNet, XML/PDF ve tarama belgeleri aynı havuzda görünür.</span></div> : null}
-        </div>
-      ) : (
-        <div className="siw-table-wrap">
-          <table>
-            <thead><tr><th>Ürün</th><th>LOT</th><th>Tedarikçi</th><th>Belge</th><th>Giriş</th><th>Kalan</th><th>Durum</th></tr></thead>
-            <tbody>{filteredLots.map((row) => (
-              <tr key={row.id || row.fileName}><td><strong>{row.productName || "-"}</strong></td><td>{row.lotNo || "-"}</td><td>{row.supplierName || row.companyName || "-"}</td><td>{row.documentNo || row.invoiceNo || "-"}</td><td>{numberText(row.entryKg || row.quantity)} {row.unit || "KG"}</td><td>{numberText(row.remainingKg ?? row.remainingQuantity)} {row.unit || "KG"}</td><td>{row.status || "-"}</td></tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
+      <div className="siw-table-wrap">
+        <table>
+          <thead><tr><th>Tarih</th><th>Firma</th><th>Fatura No</th><th>Kaynak</th><th>Tutar</th><th>Durum</th><th>Kontrol</th></tr></thead>
+          <tbody>{invoices.map((row) => (
+            <tr key={row.id} onClick={() => openInvoice(row)} style={{ cursor: "pointer" }}>
+              <td>{dateText(row.issueDate)}</td><td><strong>{row.companyName || "Firma bekliyor"}</strong></td><td>{row.documentNo || "-"}</td><td>{sourceLabel(row)}</td><td>{money(row.payableTotal)}</td><td>{statusLabel(row.status)}</td><td><button type="button" className="siw-secondary-button" onClick={(event) => { event.stopPropagation(); openInvoice(row); }}>Aç</button></td>
+            </tr>
+          ))}</tbody>
+        </table>
+        {!loading && !invoices.length ? <div className="siw-empty"><FileText size={25} /><strong>Tedarikçi faturası yok</strong><span>İşNet, XML/PDF ve tarama belgeleri aynı canonical havuzdan gelir.</span></div> : null}
+      </div>
 
       <Drawer
         invoice={selected}
         busy={saving}
         onClose={() => { setSelected(null); setMessage(""); }}
         footer={<>
+          <button type="button" className="siw-secondary-button" onClick={openEBelge} disabled={saving}>e‑Belge’de Aç</button>
           <button type="button" className="siw-secondary-button" onClick={() => setSelected(null)} disabled={saving}>Kapat</button>
           <button type="button" className="siw-secondary-button" onClick={saveAndReconcile} disabled={saving || detailLoading}><Link2 size={17} /> Kaydet + Uzlaştır</button>
           <button type="button" className="siw-primary-button" onClick={finalizeInvoice} disabled={saving || detailLoading || upper(selected?.status) === "POSTED"}><CheckCircle2 size={17} /> Faturayı İşle</button>
@@ -356,7 +331,7 @@ export default function CanonicalSupplierInventoryWorkspace({ activeMainCompany,
         {requiredLotErrors.length ? <section className="siw-callout danger"><AlertTriangle size={22} /><div><strong>LOT tamamlanmadan işlenemez</strong><span>{requiredLotErrors.join(" ")}</span></div></section> : null}
 
         <section className="siw-card">
-          <header><div><Boxes size={18} /><span><strong>Belge Kalemleri · Ürün Bazlı LOT</strong><small>Firma kimyasal olsa da olmasa da kural seçilen ürün kartından gelir.</small></span></div></header>
+          <header><div><Boxes size={18} /><span><strong>Belge Kalemleri · Ürün Bazlı LOT</strong><small>LOT kuralı seçilen ürün kartından gelir; irsaliye kanıtı varsa fiziksel giriş tekrar edilmez.</small></span></div></header>
           <div className="siw-table-wrap wide">
             <table>
               <thead><tr><th>#</th><th>Kalem</th><th>Miktar</th><th>Ürün</th><th>Yönlendirme</th><th>LOT Kuralı</th><th>Fatura LOT</th><th>İrsaliye LOT / Dağılım</th><th>Fatura-önce Fiziksel Kabul</th></tr></thead>

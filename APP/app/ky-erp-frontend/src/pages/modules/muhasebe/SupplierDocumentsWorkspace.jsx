@@ -4,6 +4,8 @@ import { getEBelgePool } from "../../../services/eBelgeApi";
 import CanonicalSupplierInventoryWorkspace from "./CanonicalSupplierInventoryWorkspace";
 import "./supplierDocumentsWorkspace.css";
 
+const VIEWS = new Set(["dispatches", "invoices"]);
+
 const dateText = (value) => {
   if (!value) return "-";
   const parsed = new Date(value);
@@ -19,6 +21,10 @@ const sourceText = (row = {}) => {
 };
 
 export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshKey = 0, openModule }) {
+  const [view, setView] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("purchaseView") || "dispatches";
+    return VIEWS.has(requested) ? requested : "dispatches";
+  });
   const [dispatches, setDispatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -31,7 +37,7 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
     pageSize: 100,
   }), [activeMainCompany?.id, activeMainCompany?.slug]);
 
-  const load = useCallback(async () => {
+  const loadDispatches = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -45,38 +51,47 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
     }
   }, [params]);
 
-  useEffect(() => { void load(); }, [load, refreshKey]);
+  useEffect(() => {
+    if (view === "dispatches") void loadDispatches();
+  }, [loadDispatches, refreshKey, view]);
+
+  const openEBelge = () => openModule?.("e-belge", { tabKey: "belge-havuzu" });
 
   return (
     <section className="sdw-root">
-      <section className="sdw-flow">
-        <div><Truck size={20} /><strong>Tedarikçi Alış Zinciri</strong></div>
-        <p><b>Tedarikçiden Gelen İrsaliye</b><span>→</span><b>Tedarikçiden Gelen Fatura</b><span>→</span>Gider / KDV / Stok-Lot / Cari</p>
-        <small>Belge alma ve düzeltme yalnız e-Belge Merkezi'ndeki canonical havuzdan yapılır. Muhasebe burada belgenin mali, cari ve stok sonucunu gösterir.</small>
-        <div className="sdw-upload-actions">
-          <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "belge-havuzu" })}>e-Belge Havuzunu Aç</button>
-          <span>İşNet, XML/PDF ve görsel kaynakları aynı belge kimliğiyle burada sonuçlanır.</span>
-        </div>
-      </section>
+      <div className="accounting-subbar" role="tablist" aria-label="Tedarikçi alış belgeleri görünümü">
+        <button type="button" className={view === "dispatches" ? "active" : ""} onClick={() => setView("dispatches")}><Truck size={16} /> İrsaliyeler</button>
+        <button type="button" className={view === "invoices" ? "active" : ""} onClick={() => setView("invoices")}><FileText size={16} /> Faturalar</button>
+        <span className="sdw-rule-note">İrsaliye = fiziksel stok · Fatura = maliyet / KDV / cari</span>
+        <button type="button" className="sdw-ebutton" onClick={openEBelge}>e‑Belge’de Aç</button>
+      </div>
 
-      <section className="sdw-card">
-        <header>
-          <div><Truck size={18} /><span><strong>Tedarikçiden Gelen İrsaliyeler</strong><small>Canonical e-Belge havuzu · tüm sağlayıcılar</small></span></div>
-          <button type="button" onClick={load}><RefreshCcw size={15} /> Yenile</button>
-        </header>
-        {error ? <div className="sdw-message error">{error}</div> : null}
-        {loading ? <div className="sdw-empty">Tedarikçi irsaliyeleri yükleniyor…</div> : dispatches.length ? (
-          <div className="sdw-table-wrap"><table><thead><tr><th>Tarih</th><th>Tedarikçi</th><th>İrsaliye No</th><th>Kaynak</th><th>Kalem</th><th>Kontrol</th></tr></thead><tbody>
-            {dispatches.map((row) => <tr key={row.id}><td>{dateText(row.issue_date || row.created_at)}</td><td><strong>{row.party_name || "Firma eşleşmesi bekliyor"}</strong></td><td>{row.document_no || "-"}</td><td>{sourceText(row)}</td><td>{Number(row.line_count || 0)}</td><td>{Number(row.issue_count || 0) ? `${row.issue_count} sorun` : (row.status || "Kontrol bekliyor")}</td></tr>)}
-          </tbody></table></div>
-        ) : <div className="sdw-empty"><FileText size={24} /><strong>Tedarikçi irsaliyesi yok</strong><span>Gelen irsaliyeler e-Belge havuzuna ulaştığında burada otomatik görünür.</span></div>}
-      </section>
-
-      <section className="sdw-invoice-head">
-        <div><FileText size={18} /><strong>Tedarikçi Faturaları · Maliyet · KDV · LOT</strong></div>
-        <small>İrsaliye fiziksel stok gerçeğidir; fatura maliyet/KDV/cari gerçeğidir. Aynı mal ikinci kez stoğa girmez.</small>
-      </section>
-      <CanonicalSupplierInventoryWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />
+      {view === "dispatches" ? (
+        <section className="sdw-card">
+          <header>
+            <div><Truck size={18} /><span><strong>Tedarikçiden Gelen İrsaliyeler</strong><small>Canonical e‑Belge havuzu · fiziksel giriş gerçeği</small></span></div>
+            <button type="button" onClick={loadDispatches}><RefreshCcw size={15} /> Yenile</button>
+          </header>
+          <div className="sdw-inline-info">Belge içeriği, sağlayıcı/XML/PDF düzeltmeleri ve eşleştirme e‑Belge Merkezi’nde yapılır. Muhasebe burada irsaliyenin stok/LOT sonucunu izler.</div>
+          {error ? <div className="sdw-message error">{error}</div> : null}
+          {loading ? <div className="sdw-empty">Tedarikçi irsaliyeleri yükleniyor…</div> : dispatches.length ? (
+            <div className="sdw-table-wrap"><table><thead><tr><th>Tarih</th><th>Tedarikçi</th><th>İrsaliye No</th><th>Kaynak</th><th>Kalem</th><th>Kontrol</th></tr></thead><tbody>
+              {dispatches.map((row) => (
+                <tr key={row.id}>
+                  <td>{dateText(row.issue_date || row.created_at)}</td>
+                  <td><strong>{row.party_name || "Firma eşleşmesi bekliyor"}</strong></td>
+                  <td>{row.document_no || "-"}</td>
+                  <td>{sourceText(row)}</td>
+                  <td>{Number(row.line_count || 0)}</td>
+                  <td>{Number(row.issue_count || 0) ? `${row.issue_count} sorun` : (row.status || "Kontrol bekliyor")}</td>
+                </tr>
+              ))}
+            </tbody></table></div>
+          ) : <div className="sdw-empty"><FileText size={24} /><strong>Tedarikçi irsaliyesi yok</strong><span>Gelen irsaliyeler e‑Belge havuzuna ulaştığında burada otomatik görünür.</span></div>}
+        </section>
+      ) : (
+        <CanonicalSupplierInventoryWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} openEBelge={openEBelge} />
+      )}
     </section>
   );
 }

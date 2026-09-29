@@ -1,5 +1,6 @@
 import type { Context, Next } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { accountingAccess, accountingTenantCandidates } from "./accounting-access-policy.ts";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -8,30 +9,23 @@ const text = (value: unknown) => value == null ? "" : String(value).trim();
 const canonical = (value: unknown) => text(value).toLowerCase();
 const upper = (value: unknown) => text(value).toUpperCase().replace(/İ/g, "I");
 const owner = (role: unknown) => ["SUPER_ADMIN", "ADMIN"].includes(upper(role));
-const accountingRole = (role: unknown) => ["MUHASEBE", "ACCOUNTING"].includes(upper(role));
 const writeMethod = (method: unknown) => !["GET", "HEAD", "OPTIONS"].includes(upper(method));
-
-function accountingPermission(user: Row) {
-  if (owner(user?.role) || accountingRole(user?.role)) return true;
-  const rows = Array.isArray(user?.permissions) ? user.permissions : [];
-  const row = rows.find((item: Row) => upper(item?.moduleKey || item?.module_key) === "MUHASEBE");
-  return Boolean(row?.canView ?? row?.can_view);
-}
 
 async function requestedTenant(c: Context<AppEnv>) {
   const query = canonical(c.req.query("mainCompanySlug") || c.req.query("mainCompanyId"));
-  if (query) return query;
   const header = canonical(c.req.header("X-KYERP-Tenant-Slug"));
-  if (header) return header;
-  if (["GET", "HEAD", "OPTIONS"].includes(upper(c.req.method))) return "";
-  const contentType = text(c.req.header("Content-Type")).toLowerCase();
-  if (!contentType.includes("application/json")) return "";
-  try {
-    const body = await c.req.raw.clone().json() as Row;
-    return canonical(body?.mainCompanySlug || body?.main_company_slug || body?.mainCompanyId);
-  } catch {
-    return "";
+  let body: Row = {};
+  if (writeMethod(c.req.method)) {
+    const type = text(c.req.header("Content-Type")).toLowerCase();
+    if (type.includes("json") || type.includes("text/plain")) {
+      try { body = await c.req.raw.clone().json() as Row; } catch { /* Route validates malformed input. */ }
+    } else if (type.includes("multipart/form-data")) {
+      const form = await c.req.raw.clone().formData();
+      body = { mainCompanySlug: form.get("mainCompanySlug") || form.get("main_company_slug") };
+    }
   }
+  const candidates = accountingTenantCandidates(query, header, body);
+  return candidates.length === 1 ? candidates[0] : "";
 }
 
 async function writeAccountingAudit(c: Context<AppEnv>, user: Row, companySlug: string) {
@@ -72,8 +66,8 @@ export async function enforceAccountingTenant(c: Context<AppEnv>, next: Next) {
     return c.json({ ok: false, error: { code: "UNAUTHORIZED", message: "e-Belge Merkezi için geçerli oturum zorunludur." } }, 401);
   }
   const isWrite = writeMethod(c.req.method);
-  if (!isWrite && !accountingPermission(user)) {
-    return c.json({ ok: false, error: { code: "ACCOUNTING_FORBIDDEN", message: "Muhasebe / e-Belge Merkezi görüntüleme yetkiniz yok." } }, 403);
+  if (!accountingAccess(user, upper(c.req.method), c.req.path)) {
+    return c.json({ ok: false, error: { code: "ACCOUNTING_FORBIDDEN", message: "Bu Muhasebe / e-Belge işlemi için yetkiniz yok." } }, 403);
   }
   const requested = await requestedTenant(c);
   if (!requested) {

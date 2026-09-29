@@ -1,0 +1,104 @@
+name: KY ERP Muhasebe Final Kabul
+
+on:
+  push:
+    branches:
+      - codex/final-acceptance-erp-20260928
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx
+      - APP/app/ky-erp-frontend/src/pages/modules/muhasebe/**
+      - APP/app/ky-erp-frontend/src/pages/muhasebe/**
+      - APP/app/ky-erp-frontend/src/services/cekOdemeApi.js
+      - APP/cloud/ky-erp-api/src/**
+      - APP/cloud/ky-erp-api/migrations/0050_mail_communication_core.sql
+      - APP/cloud/ky-erp-api/migrations/0051_mail_workspace_user_state.sql
+      - APP/cloud/ky-erp-api/migrations/0055_accounting_workspace_core.sql
+      - .github/workflows/muhasebe-final-acceptance.yml
+      - .github/workflows/worker-production-release.yml
+  pull_request:
+    paths:
+      - APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx
+      - APP/app/ky-erp-frontend/src/pages/modules/muhasebe/**
+      - APP/app/ky-erp-frontend/src/pages/muhasebe/**
+      - APP/app/ky-erp-frontend/src/services/cekOdemeApi.js
+      - APP/cloud/ky-erp-api/src/**
+      - APP/cloud/ky-erp-api/migrations/005*.sql
+      - .github/workflows/muhasebe-final-acceptance.yml
+      - .github/workflows/worker-production-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: muhasebe-final-kabul-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  worker:
+    name: Worker typecheck test build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: APP/cloud/ky-erp-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  frontend:
+    name: Frontend lint test build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  canonical-contract:
+    name: Canonical muhasebe contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Legacy katmanlari ve sahte mail durumunu reddet
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="APP/app/ky-erp-frontend/src/pages/modules"
+          test ! -e "$root/muhasebe/accountingSafetyOverrides.css"
+          test ! -e "$root/muhasebe/accountingResponsiveFinal.css"
+          ! grep -R -n -E 'accountingSafetyOverrides|accountingResponsiveFinal' "$root/MuhasebePage.jsx" "$root/muhasebe"
+          ! grep -R -n 'Gönderildi işaretle' "$root/muhasebe"
+          grep -q 'PROVIDER_ACCEPTED' "$root/muhasebe/MailTrackingWorkspace.jsx"
+          grep -q 'accounting_live_revision' APP/cloud/ky-erp-api/migrations/0055_accounting_workspace_core.sql
+          ! grep -n -E 'PopStateEvent|history\.replaceState|window\.location\.search' "$root/MuhasebePage.jsx" "$root/muhasebe/FinanceOperationsWorkspace.jsx"
+      - name: Canonical yedi sekmeyi dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          file="APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx"
+          for key in yonetim-ozeti firma-kartlari tedarikci-faturalar musteri-belgeleri finans-islemleri mail-ekstre mali-kontrol; do
+            grep -q "key: \"$key\"" "$file" || { echo "Eksik sekme: $key" >&2; exit 1; }
+          done
+          count=$(grep -c 'key: "' "$file")
+          test "$count" -eq 7 || { echo "Muhasebe ana sekme sayisi 7 degil: $count" >&2; exit 1; }
