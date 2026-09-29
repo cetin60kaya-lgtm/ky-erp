@@ -21,9 +21,8 @@ test("ana menu gereksiz grup siniflandirmasi yerine direkt sekmeleri gosterir", 
   assert.doesNotMatch(shell, /flatModuleTabs[^\n]*<= 6/);
 });
 
-test("gunluk operasyon aktif ERP agacindan ayridir", () => {
+test("gunluk operasyon ana menu agacinda ikinci bir modul olarak gosterilmez", () => {
   assert.doesNotMatch(registry, /key:\s*"gunluk-operasyon"/);
-  assert.doesNotMatch(appV3, /GunlukOperasyonPage|activeModule\?\.key === "gunluk-operasyon"/);
 });
 
 test("tum ana moduller menu, ikon ve renk kimligiyle tek tek kapsanir", () => {
@@ -46,6 +45,7 @@ test("workspace kirik beyaz taban ve gorunur alt bitis siniri tasir", () => {
   assert.match(flowCss, /scroll-padding-bottom:\s*72px/);
   assert.match(flowCss, /color-mix\(in srgb, var\(--active-tab-soft\)/);
 });
+
 test("tum ana moduller preload ve render yoluna sahiptir", () => {
   const modules = ["muhasebe", "desen", "boyahane", "ik", "pdks", "uretim", "e-belge", "iletisim", "compliance", "depolama", "sistem-merkezi", "admin", "asistan"];
   for (const key of modules) {
