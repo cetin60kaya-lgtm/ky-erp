@@ -12,15 +12,25 @@ internal enum WorkspaceLayoutMode
 }
 
 /// <summary>
-/// Owns the lifetime of hosted module controls. There is intentionally no second-level
-/// module cache: each menu request is attached exactly once and the replaced control is disposed.
-/// This keeps navigation deterministic and prevents disposed ModuleHostForm references.
+/// Owns the lifetime of hosted module controls. Module changes are swapped atomically so
+/// the workspace never becomes visibly empty between two screens.
 /// </summary>
 internal sealed class WorkspaceDockHost : UserControl
 {
+    sealed class BufferedPanel : Panel
+    {
+        public BufferedPanel()
+        {
+            DoubleBuffered = true;
+            ResizeRedraw = false;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
+            UpdateStyles();
+        }
+    }
+
     sealed class Slot
     {
-        public Panel Host { get; } = new() { Dock = DockStyle.Fill, BackColor = Color.White };
+        public BufferedPanel Host { get; } = new() { Dock = DockStyle.Fill, BackColor = Color.White };
         public Label Title { get; } = new() { Dock = DockStyle.Top, Height = 24, TextAlign = ContentAlignment.MiddleLeft };
         public Control? Content { get; set; }
         public string Key { get; set; } = string.Empty;
@@ -28,17 +38,18 @@ internal sealed class WorkspaceDockHost : UserControl
 
     readonly string userKey;
     readonly List<Slot> slots = [];
-    readonly Panel root = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(241, 245, 250) };
+    readonly BufferedPanel root = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(241, 245, 250) };
     readonly Dictionary<string, int> splitDistances = new(StringComparer.OrdinalIgnoreCase);
     WorkspaceLayoutMode mode = WorkspaceLayoutMode.Single;
     int activeIndex;
+    bool layoutBuilt;
 
     public WorkspaceDockHost(string userName)
     {
         userKey = Sanitize(userName);
         Dock = DockStyle.Fill;
         DoubleBuffered = true;
-        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
         Controls.Add(root);
         for (var i = 0; i < 4; i++) slots.Add(CreateSlot(i));
         ApplyLayout(LoadMode(), false);
@@ -86,7 +97,9 @@ internal sealed class WorkspaceDockHost : UserControl
 
     public void ShowSingle(Control control, string key, string title)
     {
-        ApplyLayout(WorkspaceLayoutMode.Single, false);
+        if (mode != WorkspaceLayoutMode.Single || !layoutBuilt)
+            ApplyLayout(WorkspaceLayoutMode.Single, false);
+
         for (var i = 1; i < slots.Count; i++) DetachSlot(slots[i], true);
         SetActive(0);
         Replace(slots[0], control, key, title);
@@ -98,23 +111,45 @@ internal sealed class WorkspaceDockHost : UserControl
         {
             slot.Content.Visible = true;
             slot.Content.BringToFront();
+            slot.Title.BringToFront();
             return;
         }
 
-        DetachSlot(slot, true);
-        slot.Key = key;
-        slot.Content = control;
-        slot.Title.Text = "  " + title;
-        control.Dock = DockStyle.Fill;
-        control.Visible = true;
-        slot.Host.Controls.Add(control);
-        control.BringToFront();
-        slot.Title.BringToFront();
+        var old = slot.Content;
+        slot.Host.SuspendLayout();
+        try
+        {
+            slot.Key = key;
+            slot.Content = control;
+            slot.Title.Text = "  " + title;
+            control.Dock = DockStyle.Fill;
+            control.Visible = false;
+            slot.Host.Controls.Add(control);
+            control.BringToFront();
+            slot.Title.BringToFront();
+            control.Visible = true;
+
+            if (old is not null)
+            {
+                slot.Host.Controls.Remove(old);
+                try { old.Dispose(); } catch { }
+            }
+        }
+        finally
+        {
+            slot.Host.ResumeLayout(true);
+        }
         RefreshHeaders();
     }
 
     public void ApplyLayout(WorkspaceLayoutMode layout, bool save = true)
     {
+        if (layoutBuilt && mode == layout)
+        {
+            if (save) SaveMode();
+            return;
+        }
+
         mode = layout;
         root.SuspendLayout();
         try
@@ -132,6 +167,7 @@ internal sealed class WorkspaceDockHost : UserControl
             layoutControl.Dock = DockStyle.Fill;
             root.Controls.Add(layoutControl);
             activeIndex = Math.Clamp(activeIndex, 0, Math.Max(0, VisibleSlotCount() - 1));
+            layoutBuilt = true;
             RefreshHeaders();
         }
         finally
@@ -144,7 +180,7 @@ internal sealed class WorkspaceDockHost : UserControl
 
     Control Single()
     {
-        var p = new Panel { Dock = DockStyle.Fill };
+        var p = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.White };
         p.Controls.Add(slots[0].Host);
         return p;
     }
@@ -264,9 +300,9 @@ internal sealed class WorkspaceDockHost : UserControl
         {
             var old = slot.Content;
             slot.Host.Controls.Remove(old);
-            if (dispose && old is IDisposable d)
+            if (dispose)
             {
-                try { d.Dispose(); } catch { }
+                try { old.Dispose(); } catch { }
             }
             else old.Visible = false;
         }
