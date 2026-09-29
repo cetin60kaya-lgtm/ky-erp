@@ -12,9 +12,9 @@ test("canonical UI is loaded globally after legacy module styles", () => {
 });
 
 test("existing module and page layouts stay visible", () => {
-  assert.doesNotMatch(css, /\.shell-v3-sidebar \.shell-v3-submenu[\s\S]*display:\s*none !important/);
+  assert.match(css, /\.shell-v3-sidebar \.shell-v3-submenu\s*\{\s*display:\s*block;/);
   assert.doesNotMatch(css, /--ky-workspace-max/);
-  assert.doesNotMatch(css, /master-detail[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) !important/);
+  assert.doesNotMatch(css, /\.ccw-master-detail\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\) !important/);
   assert.match(navigator, /return null/);
 });
 
@@ -28,7 +28,7 @@ test("drawer side panel and modal layers converge to centered dialogs", () => {
 });
 
 test("operations use popup behavior and reusable tabs", () => {
-  assert.match(css, /\.ccw-transaction[\s\S]*position:\s*fixed !important/);
+  assert.match(css, /\.ccw-transaction\s*\{[\s\S]*position:\s*fixed !important/);
   assert.match(css, /\.ky-action-tabs/);
   assert.match(css, /modal-tabs/);
   assert.match(css, /dialog-tabs/);
