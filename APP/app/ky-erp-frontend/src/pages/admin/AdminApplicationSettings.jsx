@@ -87,7 +87,7 @@ export default function AdminApplicationSettings() {
     try {
       const saved = await saveLeftClickMenuSettings(settings);
       setSettings(saved);
-      setMessage("Sol tık menüsü tüm uygulama için kaydedildi ve bu oturumda hemen etkinleşti.");
+      setMessage("Sağ tık menüsü tüm uygulama için kaydedildi ve bu oturumda hemen etkinleşti.");
     } catch (error) {
       setMessage(`Kaydedilemedi: ${error?.message || "Sunucu hatası"}`);
     } finally {
@@ -107,7 +107,7 @@ export default function AdminApplicationSettings() {
         <div>
           <span className="admin-app-settings-kicker">PLATFORM YÖNETİMİ / SÜPER YÖNETİCİ</span>
           <h1>Uygulama Ayarları</h1>
-          <p>KY ERP genel arayüz davranışlarını tek yerden yönetin. İlk bölüm, uygulamanın her ekranında çalışan sol tık hızlı menüsüdür.</p>
+          <p>KY ERP genel arayüz davranışlarını tek yerden yönetin. İlk bölüm, uygulamanın her ekranında çalışan sağ tık hızlı menüsüdür.</p>
         </div>
         <div className="admin-app-settings-actions">
           <button type="button" className="secondary" onClick={restoreDefaults} disabled={saving}><RotateCcw size={15} /> Varsayılan</button>
@@ -122,8 +122,8 @@ export default function AdminApplicationSettings() {
       <section className="admin-app-settings-card">
         <div className="admin-app-settings-card-head">
           <div>
-            <h2>Sol Tık Hızlı Menüsü</h2>
-            <p>Normal buton, giriş alanı ve linkler kendi görevini yapmaya devam eder. Menü yalnız uygun çalışma alanı tıklamasında açılır.</p>
+            <h2>Sağ Tık Hızlı Menüsü</h2>
+            <p>Normal sol tık, buton, giriş alanı ve link davranışları değişmez. Hızlı menü uygun çalışma alanında sağ tıklayınca açılır.</p>
           </div>
           <label className="app-setting-switch">
             <input type="checkbox" checked={settings.enabled} onChange={(event) => patch({ enabled: event.target.checked })} />
@@ -185,7 +185,7 @@ export default function AdminApplicationSettings() {
       <section className="admin-app-settings-card preview-card">
         <div className="admin-app-settings-card-head slim"><div><h2>Canlı Önizleme</h2><p>Kaydettiğinizde tüm ekranlarda aynı düzen kullanılır.</p></div></div>
         <div className={`left-click-preview ${settings.compact ? "compact" : ""}`}>
-          <strong>Sol Tık Menüsü</strong>
+          <strong>Sağ Tık Menüsü</strong>
           {selectedActions.slice(0, Math.min(settings.maxItems, 8)).map((action) => (
             <div key={action.id}>{settings.showIcons ? <ErpIcon name={action.icon || "hizli"} size={15} /> : null}<span>{action.label}</span></div>
           ))}
