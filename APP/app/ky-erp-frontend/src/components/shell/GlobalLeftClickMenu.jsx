@@ -30,7 +30,9 @@ const INTERACTIVE_SELECTOR = [
   "[role='option']",
   "[contenteditable='true']",
   "[data-ky-no-left-menu]",
+  "[data-ky-no-right-menu]",
   "[data-ky-left-click-menu]",
+  "[data-ky-right-click-menu]",
 ].join(",");
 
 function canonicalRole(value) {
@@ -128,8 +130,7 @@ export default function GlobalLeftClickMenu() {
       return undefined;
     }
 
-    const onPointerUp = (event) => {
-      if (event.button !== 0 || event.pointerType === "touch") return;
+    const onContextMenu = (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target || target.closest(INTERACTIVE_SELECTOR)) return;
       const shell = target.closest(".shell-v3");
@@ -137,6 +138,7 @@ export default function GlobalLeftClickMenu() {
       if (settings.blankAreaOnly && !target.closest(".shell-v3-workspace")) return;
       const selectedText = String(window.getSelection?.()?.toString?.() || "").trim();
       if (selectedText) return;
+      event.preventDefault();
       const position = clampPosition(event.clientX, event.clientY, actions.length);
       setNotice("");
       setMenu({ open: true, ...position });
@@ -147,13 +149,13 @@ export default function GlobalLeftClickMenu() {
       setMenu((current) => current.open ? { ...current, open: false } : current);
     };
 
-    document.addEventListener("pointerup", onPointerUp, true);
+    document.addEventListener("contextmenu", onContextMenu, true);
     window.addEventListener("keydown", close);
     window.addEventListener("resize", close);
     window.addEventListener("scroll", close, true);
     window.addEventListener("popstate", close);
     return () => {
-      document.removeEventListener("pointerup", onPointerUp, true);
+      document.removeEventListener("contextmenu", onContextMenu, true);
       window.removeEventListener("keydown", close);
       window.removeEventListener("resize", close);
       window.removeEventListener("scroll", close, true);
@@ -214,15 +216,15 @@ export default function GlobalLeftClickMenu() {
   return (
     <section
       className={`ky-left-click-menu ${settings.compact ? "compact" : ""}`}
-      data-ky-left-click-menu="true"
+      data-ky-right-click-menu="true"
       role="menu"
-      aria-label="Sol tık hızlı menüsü"
+      aria-label="Sağ tık hızlı menüsü"
       style={{ left: menu.left, top: menu.top }}
       onPointerDown={(event) => event.stopPropagation()}
     >
       <header>
         <span><ErpIcon name={activeModule?.icon || "hizli"} size={16} /></span>
-        <div><strong>Sol Tık Menüsü</strong><small>{activeModule?.label || "KY ERP"}</small></div>
+        <div><strong>Sağ Tık Menüsü</strong><small>{activeModule?.label || "KY ERP"}</small></div>
       </header>
       <div className="ky-left-click-menu-list">
         {actions.map((action) => (
