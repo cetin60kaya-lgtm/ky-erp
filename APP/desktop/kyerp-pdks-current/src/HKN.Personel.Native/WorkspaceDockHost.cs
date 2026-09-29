@@ -23,6 +23,7 @@ internal sealed class WorkspaceDockHost : UserControl
 
     readonly string userKey;
     readonly List<Slot> slots = new();
+    readonly Dictionary<string, Control> cache = new(StringComparer.OrdinalIgnoreCase);
     readonly Panel root = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(241,245,250) };
     WorkspaceLayoutMode mode = WorkspaceLayoutMode.Single;
     int activeIndex;
@@ -68,10 +69,16 @@ internal sealed class WorkspaceDockHost : UserControl
         var existing = slots.FindIndex(s => s.Key == key && s.Content is not null);
         if (existing >= 0)
         {
+            if (!ReferenceEquals(control, slots[existing].Content) && control is IDisposable disposable) disposable.Dispose();
             SetActive(existing);
             BringContentFront(slots[existing]);
-            if (!slots[existing].Content!.Visible) slots[existing].Content!.Visible = true;
             return;
+        }
+
+        if (cache.Remove(key, out var cached) && !cached.IsDisposed)
+        {
+            if (!ReferenceEquals(control, cached) && control is IDisposable disposable) disposable.Dispose();
+            control = cached;
         }
 
         var index = activeIndex;
@@ -86,10 +93,10 @@ internal sealed class WorkspaceDockHost : UserControl
 
     public void ShowSingle(Control control, string key, string title)
     {
-        CloseAll(false);
+        ParkAll();
         ApplyLayout(WorkspaceLayoutMode.Single, false);
         SetActive(0);
-        Attach(slots[0], control, key, title);
+        Open(control, key, title);
     }
 
     void Attach(Slot slot, Control control, string key, string title)
@@ -103,6 +110,12 @@ internal sealed class WorkspaceDockHost : UserControl
         slot.Host.Controls.Add(control);
         control.BringToFront();
         slot.Title.BringToFront();
+        RefreshHeaders();
+    }
+
+    void ParkAll()
+    {
+        foreach (var slot in slots) DetachSlot(slot, false);
         RefreshHeaders();
     }
 
@@ -268,6 +281,12 @@ internal sealed class WorkspaceDockHost : UserControl
     public void CloseAll(bool dispose = true)
     {
         foreach (var slot in slots) DetachSlot(slot, dispose);
+        if (dispose)
+        {
+            foreach (var control in cache.Values.Distinct().ToArray())
+                if (control is IDisposable disposable) disposable.Dispose();
+            cache.Clear();
+        }
         RefreshHeaders();
     }
 
@@ -276,9 +295,18 @@ internal sealed class WorkspaceDockHost : UserControl
         if (slot.Content is not null)
         {
             var content = slot.Content;
+            var key = slot.Key;
             slot.Host.Controls.Remove(content);
-            if (dispose && content is IDisposable d) d.Dispose();
-            else content.Visible = false;
+            if (dispose)
+            {
+                cache.Remove(key);
+                if (content is IDisposable disposable) disposable.Dispose();
+            }
+            else
+            {
+                content.Visible = false;
+                if (!string.IsNullOrWhiteSpace(key)) cache[key] = content;
+            }
         }
         slot.Content = null;
         slot.Key = string.Empty;
