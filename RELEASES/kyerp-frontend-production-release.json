@@ -5,15 +5,20 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-09-29",
   "scope": [
-    "gunluk-operasyon-appv3-route",
-    "gunluk-operasyon-daily-entry",
-    "daily-hr-workspace-loader",
-    "daily-route-regression-contract",
+    "classic-page-layout-restored",
+    "button-driven-centered-action-dialogs",
+    "muhasebe-popup-actions",
+    "monthly-hr-popup-actions",
+    "pdks-quick-action-popup",
+    "production-centered-action-dialogs",
+    "ebelge-mail-centered-dialogs",
+    "compliance-action-popups",
+    "daily-operations-preserved-unchanged",
     "frontend-full-test-suite",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
     "live-entry-verification",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "Republish the canonical Günlük Operasyon route and require deep live verification. Production success now requires both the live entry bundle and the exact AppV3 chunk containing daily-hr-workspace-v1 to match the local production build by SHA256 on https://kyerp.net/gunluk-operasyon/daily-entry."
+  "note": "Restore the existing KY ERP page and submenu structure outside Günlük Operasyon. Keep general information, lists and summaries on each page; move operational forms behind page buttons into centered popup/dialog surfaces, with tab-ready popup styling for grouped actions. Günlük Operasyon is intentionally preserved unchanged. Production release still requires the existing live entry and Günlük Operasyon chunk verification gates."
 }
