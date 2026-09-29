@@ -44,9 +44,9 @@ jobs:
           Copy-Item out/HKN-PDKS/* out/package -Recurse -Force
           Get-ChildItem out/package -Filter '*.pdb' -Recurse | Remove-Item -Force
           Set-Content -Path out/package/BUILD_INFO.txt -Encoding UTF8 -Value @(
-            'KY PDKS 6.2 TEST - SELF-CONTAINED BUILD',
-            'Revision: 6.2 TEST',
-            'Scope: role separation + company responsible quick operations + per-company license access lock',
+            'KY PDKS 6.3 TEST - SELF-CONTAINED BUILD',
+            'Revision: 6.3 TEST',
+            'Scope: centered fast shell + restored personel CRUD tabs + synchronized periods + puantaj control + responsible quick operations + demo/license foundation',
             'Distribution: release symbols removed',
             'Runtime: win-x64 self-contained',
             'Tests: Contract + Shell + UI Audit + V4 Shell',
@@ -55,13 +55,13 @@ jobs:
             "Commit: $env:GITHUB_SHA",
             "UTC: $([DateTime]::UtcNow.ToString('yyyy-MM-dd HH:mm:ss'))"
           )
-          Compress-Archive -Path out/package/* -DestinationPath out/KY-PDKS-6.2-TEST-SELF-CONTAINED.zip -Force
-          (Get-FileHash out/KY-PDKS-6.2-TEST-SELF-CONTAINED.zip -Algorithm SHA256).Hash | Set-Content out/KY-PDKS-6.2-TEST-SELF-CONTAINED.zip.sha256.txt -Encoding ASCII
+          Compress-Archive -Path out/package/* -DestinationPath out/KY-PDKS-6.3-TEST-SELF-CONTAINED.zip -Force
+          (Get-FileHash out/KY-PDKS-6.3-TEST-SELF-CONTAINED.zip -Algorithm SHA256).Hash | Set-Content out/KY-PDKS-6.3-TEST-SELF-CONTAINED.zip.sha256.txt -Encoding ASCII
       - uses: actions/upload-artifact@v4
         with:
-          name: KY-PDKS-6.2-TEST-SELF-CONTAINED
+          name: KY-PDKS-6.3-TEST-SELF-CONTAINED
           path: |
-            out/KY-PDKS-6.2-TEST-SELF-CONTAINED.zip
-            out/KY-PDKS-6.2-TEST-SELF-CONTAINED.zip.sha256.txt
+            out/KY-PDKS-6.3-TEST-SELF-CONTAINED.zip
+            out/KY-PDKS-6.3-TEST-SELF-CONTAINED.zip.sha256.txt
           if-no-files-found: error
           retention-days: 14
