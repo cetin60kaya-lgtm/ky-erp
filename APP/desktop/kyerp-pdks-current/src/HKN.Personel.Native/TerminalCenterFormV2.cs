@@ -4,7 +4,14 @@ public sealed class TerminalCenterForm : Form
 {
     readonly Form? transferDialog;
     readonly Form settingsDialog;
-    readonly Label sdkStatus = new() { AutoSize = false, Height = 44, Dock = DockStyle.Bottom, Padding = new Padding(8, 4, 8, 4), Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+    readonly Label sdkStatus = new()
+    {
+        AutoSize = false,
+        Height = 44,
+        Dock = DockStyle.Bottom,
+        Padding = new Padding(8, 4, 8, 4),
+        Font = new Font("Segoe UI", 9f, FontStyle.Bold)
+    };
     bool busy;
 
     public TerminalCenterForm(Form? transferDialog, Form settingsDialog)
@@ -13,7 +20,7 @@ public sealed class TerminalCenterForm : Form
         this.settingsDialog = settingsDialog;
         Text = "Terminal & Cihaz Merkezi";
         StartPosition = FormStartPosition.CenterParent;
-        Size = new Size(1040, 650);
+        Size = new Size(1040, 680);
         MinimumSize = new Size(900, 560);
         Font = new Font("Segoe UI", 9f);
         Build();
@@ -28,13 +35,26 @@ public sealed class TerminalCenterForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
 
         var head = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(16) };
-        head.Controls.Add(new Label { Text = "TERMINAL & CİHAZ MERKEZİ", AutoSize = true, Font = new Font("Segoe UI", 16f, FontStyle.Bold), Location = new Point(16, 10) });
+        head.Controls.Add(new Label
+        {
+            Text = "TERMINAL & CİHAZ MERKEZİ",
+            AutoSize = true,
+            Font = new Font("Segoe UI", 16f, FontStyle.Bold),
+            Location = new Point(16, 10)
+        });
         head.Controls.Add(sdkStatus);
         root.Controls.Add(head, 0, 0);
 
-        var cards = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(8, 20, 8, 8), WrapContents = true, AutoScroll = true };
+        var cards = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(8, 20, 8, 8),
+            WrapContents = true,
+            AutoScroll = true
+        };
         cards.Controls.Add(Card("Cihaz Bağlantısı", "Gerçek kart cihazını doğrudan kontrol eder. Kayıt silmez veya değiştirmez.", () => CheckDeviceAsync(true), "Kontrol Et"));
         cards.Controls.Add(Card("Kart Kayıtlarını Şimdi Al", "Cihazdaki yeni basımları okur. TNF + FDB doğrulanmadan cihazdan hiçbir kayıt silinmez.", SyncNowAsync, "Şimdi Al"));
+        cards.Controls.Add(Card("Sürücüyü Onar", "Paket içindeki eski 32-bit OCX/DLL setini Windows'a kaydeder. Yalnız bağlantı sürücü nedeniyle açılmıyorsa kullanılır.", RepairDriverAsync, "Onar"));
         cards.Controls.Add(Card("Cihaz Ayarları", "IP, port, cihaz profili ve aktarım eşleşmelerini düzenler.", () => RunSync(OpenSettings), "Ayarlar"));
         cards.Controls.Add(Card("SDK / Sürücü Kontrolü", "FP_CLOCK.ocx, destek DLL'leri ve x86 TerminalBridge uyumluluğunu kontrol eder.", () => RunSync(ShowSdkDiagnostics), "Kontrol Et"));
         if (transferDialog is not null)
@@ -78,31 +98,70 @@ public sealed class TerminalCenterForm : Form
         busy = true;
         try
         {
-            var files = TerminalSdkDiagnostics.Check();
-            if (!files.Ok)
+            var snapshot = await ProbeDeviceAsync();
+            if (snapshot.Connected)
             {
-                SetStatus("SDK: " + files.Message, false);
-                if (showDialog) MessageBox.Show(files.Message, "Terminal Kontrolü", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ShowConnected(snapshot, showDialog);
                 return;
             }
 
-            SetStatus("Cihaz kontrol ediliyor…", null);
-            var snapshot = await TerminalDeviceClient.ReadAsync(false);
-            if (!snapshot.Connected)
+            SetStatus("Cihaz bağlantısı yok — " + snapshot.Message, false);
+            if (showDialog && TerminalSdkRepair.LooksLikeRegistrationProblem(snapshot.Message))
             {
-                SetStatus("Cihaz bağlantısı yok — " + snapshot.Message, false);
-                if (showDialog) MessageBox.Show(snapshot.Message, "Kart Cihazı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                if (TerminalSdkRepair.TryRepair(this))
+                {
+                    SetStatus("Sürücü onarıldı • cihaz yeniden kontrol ediliyor…", null);
+                    snapshot = await ProbeDeviceAsync();
+                    if (snapshot.Connected)
+                    {
+                        ShowConnected(snapshot, true);
+                        return;
+                    }
+                    SetStatus("Sürücü onarıldı ancak cihaz bağlantısı açılamadı — " + snapshot.Message, false);
+                }
             }
 
-            var message = $"CİHAZ BAĞLI • Saat {snapshot.DeviceTime:HH:mm:ss} • Yeni kayıt {snapshot.NewLogCount} • Kullanıcı {snapshot.UserCount} • Kart {snapshot.CardCount}";
-            SetStatus(message, true);
-            if (showDialog) MessageBox.Show(message, "Kart Cihazı", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (showDialog)
+                MessageBox.Show(snapshot.Message, "Kart Cihazı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         catch (Exception ex)
         {
             SetStatus("Cihaz kontrol hatası — " + ex.GetBaseException().Message, false);
             if (showDialog) MessageBox.Show(ex.GetBaseException().Message, "Kart Cihazı", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally { busy = false; }
+    }
+
+    async Task<TerminalDeviceSnapshot> ProbeDeviceAsync()
+    {
+        var files = TerminalSdkDiagnostics.Check();
+        if (!files.Ok) return TerminalDeviceSnapshot.Offline(files.Message);
+        SetStatus("Cihaz kontrol ediliyor…", null);
+        return await TerminalDeviceClient.ReadAsync(false);
+    }
+
+    void ShowConnected(TerminalDeviceSnapshot snapshot, bool showDialog)
+    {
+        var message = $"CİHAZ BAĞLI • Saat {snapshot.DeviceTime:HH:mm:ss} • Yeni kayıt {snapshot.NewLogCount} • Kullanıcı {snapshot.UserCount} • Kart {snapshot.CardCount}";
+        SetStatus(message, true);
+        if (showDialog) MessageBox.Show(message, "Kart Cihazı", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    async Task RepairDriverAsync()
+    {
+        if (busy) return;
+        busy = true;
+        try
+        {
+            if (!TerminalSdkRepair.TryRepair(this)) return;
+            SetStatus("Sürücü onarıldı • cihaz kontrol ediliyor…", null);
+            var snapshot = await ProbeDeviceAsync();
+            if (snapshot.Connected) ShowConnected(snapshot, true);
+            else
+            {
+                SetStatus("Sürücü hazır; cihaz bağlantısı yok — " + snapshot.Message, false);
+                MessageBox.Show(snapshot.Message, "Kart Cihazı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
         finally { busy = false; }
     }
