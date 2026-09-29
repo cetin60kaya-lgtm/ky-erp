@@ -2,20 +2,16 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-28T11:25:00+03:00",
-  "attempt": 103,
+  "requestedAt": "2026-09-29T05:05:00+03:00",
+  "attempt": 104,
   "scope": [
-    "pdks-6-web-shell",
-    "pdks-canonical-five-group-navigation",
-    "pdks-desktop-agent-sync-foundation",
-    "pdks-terminal-sync-job-queue",
-    "pdks-web-to-desktop-change-feed",
-    "pdks-desktop-to-web-personnel-bootstrap",
-    "pdks-offline-indexeddb-cache-queue",
-    "pdks-sgk-personnel-scope",
-    "pdks-active-passive-history",
-    "pdks-no-hr-monthly-destructive-archive",
-    "pdks-device-health-and-sync-center",
+    "muhasebe-final-canonical",
+    "muhasebe-seven-tab-shell",
+    "muhasebe-companies-current-master-detail",
+    "muhasebe-purchases-dispatch-invoice-separation",
+    "muhasebe-finance-native-navigation",
+    "mail-provider-accepted-send-contract",
+    "accounting-live-revision",
     "d1-full-predeploy-backup",
     "d1-no-reset",
     "worker-typecheck-test-build-before-live",
@@ -23,9 +19,10 @@
     "cloudflare-worker-production",
     "cloudflare-pages-production",
     "live-api-health-auth-contract",
-    "live-pages-domain-check"
+    "live-pages-domain-check",
+    "live-final-smoke"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "da7c00f6db9c83af858719916e92c1d4776a7fca",
-  "note": "28.09.2026 attempt 103. PDKS 6.0 web/tablet duzeni ve Desktop Agent cift yonlu senkron temeli. Desktop KIMLIK tarihsel PDKS havuzu korunur; aktif/pasif ICTARIH mantigi webde korunur. IK Aylik SGK'siz kayitlari PDKS'ye karistirilmaz; bootstrap mevcut IK kayitlarini silmez veya arsivlemez. Terminal Esitle komutu fiziksel terminale webden dogrudan baglanmaz, Desktop Agent is kuyrugundan calisir. PR #340 CI: frontend build, Worker typecheck ve Cloud unit testleri basarili. Resmi production release yolu ile D1 yedekli Worker+Pages yayinidir."
+  "sourceCommit": "a295bb471a97d01283bfead651e54a090a2c6a20",
+  "note": "29.09.2026 attempt 104. Muhasebe canonical final production release. Source includes merge 8a48d513f66385ada294d56ceccaa52b31f068f8 and successful Worker production release a295bb471a97d01283bfead651e54a090a2c6a20. Final acceptance passed on production branch; Worker production release completed D1 full backup, additive 0050/0051/0055 schema migration proof, deploy and API health. This release publishes the matching frontend to Cloudflare Pages through the existing guarded production path with no D1 reset."
 }
