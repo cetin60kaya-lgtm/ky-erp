@@ -11,26 +11,27 @@ public partial class PersonelForm
         if (modernTabLayoutApplied) return;
         modernTabLayoutApplied = true;
 
-        BeginInvoke(new Action(() =>
+        try
         {
-            try
-            {
-                ReplacePeriodHeader("Giriş ve Çıkışları", periodG, gFrom, gTo);
-                ReplacePeriodHeader("İzinler", periodI, iFrom, iTo);
-                ReplacePeriodHeader("Ek Kazanç Ve Kesintiler", periodE, eFrom, eTo);
-                ReplacePaymentHeader();
-                EnableSmoothGrid(list);
-                EnableSmoothGrid(gGiris);
-                EnableSmoothGrid(gIzin);
-                EnableSmoothGrid(gEkk);
-                EnableSmoothGrid(gBilgi);
-                EnableSmoothGrid(gOdeme);
-            }
-            catch
-            {
-                // Görsel iyileştirme ana işleyişi engellememeli.
-            }
-        }));
+            ReplacePeriodHeader("Giriş ve Çıkışları", periodG, gFrom, gTo);
+            ReplacePeriodHeader("İzinler", periodI, iFrom, iTo);
+            ReplacePeriodHeader("Ek Kazanç Ve Kesintiler", periodE, eFrom, eTo);
+            ReplaceRecordActionBar("Giriş ve Çıkışları", gGiris);
+            ReplaceRecordActionBar("İzinler", gIzin);
+            ReplaceRecordActionBar("Ek Kazanç Ve Kesintiler", gEkk);
+            ReplacePaymentHeader();
+            InstallRecordContextMenus();
+            EnableSmoothGrid(list);
+            EnableSmoothGrid(gGiris);
+            EnableSmoothGrid(gIzin);
+            EnableSmoothGrid(gEkk);
+            EnableSmoothGrid(gBilgi);
+            EnableSmoothGrid(gOdeme);
+        }
+        catch
+        {
+            // Görsel iyileştirme ana işleyişi engellememeli.
+        }
     }
 
     void ReplacePeriodHeader(string tabTitle, ComboBox periodBox, DateTimePicker from, DateTimePicker to)
@@ -43,7 +44,7 @@ public partial class PersonelForm
         var old = layout.GetControlFromPosition(0, 0);
         if (old is not null) layout.Controls.Remove(old);
         layout.RowStyles[0].SizeType = SizeType.Absolute;
-        layout.RowStyles[0].Height = 78;
+        layout.RowStyles[0].Height = 72;
 
         var header = new TableLayoutPanel
         {
@@ -51,15 +52,15 @@ public partial class PersonelForm
             ColumnCount = 7,
             RowCount = 2,
             BackColor = Color.White,
-            Padding = new Padding(12, 8, 12, 7),
+            Padding = new Padding(10, 6, 10, 5),
             Margin = Padding.Empty
         };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 86));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 82));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 230));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 108));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 108));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         header.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         header.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
@@ -72,7 +73,7 @@ public partial class PersonelForm
 
         var show = ModernHeaderButton("Seçili Dönemi Göster", 160);
         show.Dock = DockStyle.Right;
-        show.Click += (_, _) => RefreshFullTabs();
+        show.Click += (_, _) => RefreshSelectedTab();
         header.Controls.Add(show, 6, 0);
         header.SetRowSpan(show, 2);
 
@@ -90,6 +91,91 @@ public partial class PersonelForm
         old?.Dispose();
     }
 
+    void ReplaceRecordActionBar(string tabTitle, DataGridView grid)
+    {
+        var page = tabs.TabPages.Cast<TabPage>()
+            .FirstOrDefault(x => x.Text.Equals(tabTitle, StringComparison.OrdinalIgnoreCase));
+        if (page?.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is not TableLayoutPanel layout) return;
+        if (layout.RowStyles.Count < 3) return;
+
+        var old = layout.GetControlFromPosition(0, 2);
+        if (old is not null) layout.Controls.Remove(old);
+        layout.RowStyles[2].SizeType = SizeType.Absolute;
+        layout.RowStyles[2].Height = 54;
+
+        var bar = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            Padding = new Padding(8, 9, 12, 6),
+            BackColor = Color.FromArgb(248, 250, 253),
+            Margin = Padding.Empty
+        };
+
+        foreach (var text in new[] { "Tümünü Sil", "Sil", "Değiştir", "Yeni Ekle" })
+        {
+            var button = new Button
+            {
+                Text = text,
+                Name = $"crud_{grid.Name}_{text.Replace(" ", string.Empty)}",
+                Width = text == "Tümünü Sil" ? 116 : 104,
+                Height = 34,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.White,
+                ForeColor = text.Contains("Sil", StringComparison.OrdinalIgnoreCase) ? Color.FromArgb(173, 47, 47) : Color.FromArgb(31, 78, 139),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Image = ClassicGlyph(text),
+                ImageAlign = ContentAlignment.MiddleLeft,
+                TextImageRelation = TextImageRelation.ImageBeforeText,
+                Cursor = Cursors.Hand,
+                Margin = new Padding(5, 0, 0, 0)
+            };
+            button.FlatAppearance.BorderColor = Color.FromArgb(210, 219, 231);
+            bar.Controls.Add(button);
+        }
+
+        layout.Controls.Add(bar, 0, 2);
+        old?.Dispose();
+    }
+
+    void InstallRecordContextMenus()
+    {
+        InstallRecordContextMenu(gGiris, AddGiris, EditGiris, DeleteGiris, DeleteAllGiris);
+        InstallRecordContextMenu(gIzin, AddIzinFull, EditIzinFull, DeleteIzin, DeleteAllIzin);
+        InstallRecordContextMenu(gEkk, AddEkkFull, EditEkkFull, DeleteEkk, DeleteAllEkk);
+    }
+
+    void InstallRecordContextMenu(DataGridView grid, Action add, Action edit, Action delete, Action deleteAll)
+    {
+        var menu = new ContextMenuStrip { Font = new Font("Segoe UI", 9f) };
+        var miAdd = new ToolStripMenuItem("Yeni Ekle", ClassicGlyph("Yeni Ekle"), (_, _) => add());
+        var miEdit = new ToolStripMenuItem("Değiştir", ClassicGlyph("Değiştir"), (_, _) => edit());
+        var miDelete = new ToolStripMenuItem("Sil", ClassicGlyph("Sil"), (_, _) => delete());
+        var miDeleteAll = new ToolStripMenuItem("Tümünü Sil", ClassicGlyph("Tümünü Sil"), (_, _) => deleteAll());
+        menu.Items.AddRange([miAdd, miEdit, miDelete, new ToolStripSeparator(), miDeleteAll]);
+        menu.Opening += (_, _) =>
+        {
+            var hasRow = grid.CurrentRow is not null && !grid.CurrentRow.IsNewRow;
+            var hasRows = grid.Rows.Cast<DataGridViewRow>().Any(r => !r.IsNewRow);
+            miAdd.Enabled = !string.IsNullOrWhiteSpace(currentPk);
+            miEdit.Enabled = hasRow;
+            miDelete.Enabled = hasRow;
+            miDeleteAll.Enabled = hasRows;
+        };
+        grid.ContextMenuStrip = menu;
+        grid.CellMouseDown += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Right && e.RowIndex >= 0 && e.ColumnIndex >= 0)
+            {
+                grid.ClearSelection();
+                grid.Rows[e.RowIndex].Selected = true;
+                grid.CurrentCell = grid.Rows[e.RowIndex].Cells[e.ColumnIndex];
+            }
+        };
+        grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) edit(); };
+    }
+
     void ReplacePaymentHeader()
     {
         var page = tabs.TabPages.Cast<TabPage>()
@@ -100,7 +186,7 @@ public partial class PersonelForm
         var old = layout.GetControlFromPosition(0, 0);
         if (old is not null) layout.Controls.Remove(old);
         layout.RowStyles[0].SizeType = SizeType.Absolute;
-        layout.RowStyles[0].Height = 62;
+        layout.RowStyles[0].Height = 56;
 
         var header = new TableLayoutPanel
         {
@@ -108,12 +194,12 @@ public partial class PersonelForm
             ColumnCount = 4,
             RowCount = 1,
             BackColor = Color.White,
-            Padding = new Padding(14, 11, 14, 10),
+            Padding = new Padding(12, 9, 12, 8),
             Margin = Padding.Empty
         };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 108));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         header.Controls.Add(HeaderLabel("Dönem"), 0, 0);
@@ -125,7 +211,7 @@ public partial class PersonelForm
         var refresh = ModernHeaderButton("Yenile", 96);
         refresh.Dock = DockStyle.Fill;
         refresh.Margin = new Padding(0, 0, 8, 0);
-        refresh.Click += (_, _) => RefreshFullTabs();
+        refresh.Click += (_, _) => RefreshSelectedTab();
         header.Controls.Add(refresh, 2, 0);
 
         layout.Controls.Add(header, 0, 0);
@@ -148,7 +234,7 @@ public partial class PersonelForm
         {
             Text = text,
             Width = width,
-            Height = 34,
+            Height = 32,
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(31, 111, 235),
             ForeColor = Color.White,
