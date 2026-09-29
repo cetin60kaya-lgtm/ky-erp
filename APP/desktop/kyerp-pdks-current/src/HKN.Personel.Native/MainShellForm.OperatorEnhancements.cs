@@ -3,6 +3,7 @@ namespace HKN.Personel.Native;
 public sealed partial class MainShellForm
 {
     bool operatorEnhancementsApplied;
+    bool compactShellFinalized;
 
     protected override void OnShown(EventArgs e)
     {
@@ -12,21 +13,24 @@ public sealed partial class MainShellForm
             operatorEnhancementsApplied = true;
             ApplyOperatorEnhancements();
         }
+
+        // Saved layout is applied first; our product-level shell rules are applied last so an
+        // old user layout cannot re-maximize the app or resurrect obsolete top-level menus.
         InitializeShellLayoutCustomization();
+        FinalizeCompactShell();
     }
 
     void ApplyOperatorEnhancements()
     {
         if (MainMenuStrip is null) return;
-        Text = $"KY PDKS 6.3 TEST • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
+        Text = $"KY PDKS 6.3.1 TEST • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
 
         MainMenuStrip.AutoSize = false;
-        MainMenuStrip.Height = 32;
-        MainMenuStrip.Padding = new Padding(8, 3, 0, 2);
-        MainMenuStrip.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+        MainMenuStrip.Height = 31;
+        MainMenuStrip.Padding = new Padding(5, 3, 0, 2);
+        MainMenuStrip.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
 
-        var payroll = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
-            .FirstOrDefault(x => string.Equals(x.Text ?? string.Empty, "Puantaj ve Bordro", StringComparison.OrdinalIgnoreCase));
+        var payroll = FindTop("Puantaj ve Bordro");
         if (payroll is not null)
         {
             var puantaj = payroll.DropDownItems.OfType<ToolStripMenuItem>()
@@ -34,14 +38,14 @@ public sealed partial class MainShellForm
             if (puantaj is not null)
             {
                 puantaj.Text = "Puantaj Kontrol / Yeniden Hesaplama";
-                puantaj.ToolTipText = "Puantaj giriş-çıkış, izin, vardiya ve tatil bilgilerinden türetilir. Normal akışta kaynak kayıtları düzeltin; gerektiğinde burada kontrollü yeniden hesaplayın.";
+                puantaj.ToolTipText = "Puantaj giriş-çıkış, izin, vardiya ve tatil bilgilerinden türetilir. Kaynak kayıt değişince sonuç kontrol edilir; gerektiğinde kontrollü yeniden hesaplama kullanılır.";
             }
 
-            if (!payroll.DropDownItems.OfType<ToolStripMenuItem>()
-                .Any(x => (x.Text ?? string.Empty).Contains("Aylık Düzeltme", StringComparison.OrdinalIgnoreCase)))
+            if (!payroll.DropDownItems.OfType<ToolStripMenuItem>().Any(x => (x.Text ?? string.Empty).Contains("Aylık Düzeltme", StringComparison.OrdinalIgnoreCase)))
             {
                 var item = MenuItem("Aylık Düzeltme / Hızlı Ödeme", PdksModule.Bordro,
                     () => ShowModule(new MonthlyPayrollAdjustmentForm(), PdksModule.Bordro));
+                item.Visible = currentUser.IsCompanyResponsible || currentUser.IsSuperAdmin;
                 payroll.DropDownItems.Insert(Math.Min(2, payroll.DropDownItems.Count), item);
             }
         }
@@ -50,23 +54,20 @@ public sealed partial class MainShellForm
             .FirstOrDefault(x => (x.Text ?? string.Empty).StartsWith("Raporlama", StringComparison.OrdinalIgnoreCase));
         if (reports is not null) reports.Text = "Raporlama";
 
-        var definitions = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
-            .FirstOrDefault(x => string.Equals(x.Text ?? string.Empty, "Yapılandırma", StringComparison.OrdinalIgnoreCase));
+        var definitions = FindTop("Yapılandırma");
         if (definitions is not null)
         {
             definitions.Text = "Ayarlar";
             var calendar = definitions.DropDownItems.OfType<ToolStripMenuItem>()
                 .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Takvim", StringComparison.OrdinalIgnoreCase));
-            if (calendar is not null && !calendar.DropDownItems.OfType<ToolStripMenuItem>()
-                    .Any(x => (x.Text ?? string.Empty).Contains("Çalışma Tarihi", StringComparison.OrdinalIgnoreCase)))
+            if (calendar is not null && !calendar.DropDownItems.OfType<ToolStripMenuItem>().Any(x => (x.Text ?? string.Empty).Contains("Çalışma Tarihi", StringComparison.OrdinalIgnoreCase)))
             {
                 calendar.DropDownItems.Add(new ToolStripSeparator());
                 calendar.DropDownItems.Add(MenuItem("Çalışma Tarihi / İş Günü Ayarı", PdksModule.Donemler, OpenWorkingDate));
             }
         }
 
-        var daily = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
-            .FirstOrDefault(x => string.Equals(x.Text ?? string.Empty, "Operasyon", StringComparison.OrdinalIgnoreCase));
+        var daily = FindTop("Operasyon");
         if (daily is not null)
         {
             var oldWorkDate = daily.DropDownItems.OfType<ToolStripMenuItem>()
@@ -83,14 +84,14 @@ public sealed partial class MainShellForm
             support.Text = "Destek";
             var oldAbout = support.DropDownItems.OfType<ToolStripMenuItem>()
                 .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Hakkında", StringComparison.OrdinalIgnoreCase));
-            if (oldAbout is not null) oldAbout.Text = "KY PDKS 6.3 TEST Hakkında";
+            if (oldAbout is not null) oldAbout.Text = "KY PDKS 6.3.1 TEST Hakkında";
             if (!support.DropDownItems.OfType<ToolStripMenuItem>().Any(x => string.Equals(x.Text ?? string.Empty, "Hızlı Kullanım Rehberi", StringComparison.OrdinalIgnoreCase)))
             {
                 var guide = new ToolStripMenuItem("Hızlı Kullanım Rehberi")
                 {
-                    ToolTipText = "Canlı takipten bordroya kadar ekranların amacı, işlem sırası ve güvenli kullanım kurallarını gösterir."
+                    ToolTipText = "Canlı takipten bordroya kadar ekranların amacı ve güvenli işlem sırasını gösterir."
                 };
-                guide.Click += (_,_) => { using var form = new PdksQuickGuideForm(); form.ShowDialog(this); };
+                guide.Click += (_, _) => { using var form = new PdksQuickGuideForm(); form.ShowDialog(this); };
                 support.DropDownItems.Insert(0, guide);
                 if (support.DropDownItems.Count > 1 && support.DropDownItems[1] is not ToolStripSeparator)
                     support.DropDownItems.Insert(1, new ToolStripSeparator());
@@ -103,44 +104,110 @@ public sealed partial class MainShellForm
         foreach (var top in MainMenuStrip.Items.OfType<ToolStripMenuItem>())
         {
             top.Image = null;
-            top.Padding = new Padding(3, 0, 3, 0);
+            top.Padding = new Padding(4, 0, 4, 0);
+            top.Margin = new Padding(0);
         }
 
-        tool.Height = 66;
-        tool.ImageScalingSize = new Size(28, 28);
-        tool.Padding = new Padding(8, 3, 0, 3);
+        tool.Height = 62;
+        tool.ImageScalingSize = new Size(26, 26);
+        tool.Padding = new Padding(5, 2, 0, 2);
         foreach (var button in tool.Items.OfType<ToolStripButton>())
         {
-            button.Height = 58;
+            button.Height = 54;
             button.Width = button.Text switch
             {
-                "Canlı İzleme" => 86,
-                "Giriş-Çıkış" => 88,
-                _ => 78
+                "Canlı İzleme" => 82,
+                "Giriş-Çıkış" => 84,
+                _ => 74
             };
-            button.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
-            button.Padding = new Padding(1, 3, 1, 2);
+            button.Font = new Font("Segoe UI", 7.8f, FontStyle.Bold);
+            button.Padding = new Padding(1, 2, 1, 1);
             button.Margin = new Padding(1, 0, 1, 0);
             if (!button.Enabled) button.Visible = false;
         }
 
-        leadStatus.Text = CompanyLicenseGuard.ShortStatus();
-        leadStatus.ForeColor = CompanyLicenseGuard.CanWrite || currentUser.IsSuperAdmin
-            ? Color.FromArgb(42, 112, 70)
-            : Color.FromArgb(181, 91, 34);
-
         foreach (var old in MainMenuStrip.Items.OfType<ToolStripMenuItem>()
-                     .Where(x => string.Equals(x.Text ?? string.Empty, "REV 6.2 TEST", StringComparison.OrdinalIgnoreCase)).ToArray())
+                     .Where(x => (x.Text ?? string.Empty).StartsWith("REV 6.", StringComparison.OrdinalIgnoreCase)).ToArray())
             MainMenuStrip.Items.Remove(old);
 
-        if (!MainMenuStrip.Items.OfType<ToolStripMenuItem>().Any(x => string.Equals(x.Text ?? string.Empty, "REV 6.3 TEST", StringComparison.OrdinalIgnoreCase)))
-            MainMenuStrip.Items.Add(new ToolStripMenuItem("REV 6.3 TEST")
+        MainMenuStrip.Items.Add(new ToolStripMenuItem("REV 6.3.1 TEST")
+        {
+            Alignment = ToolStripItemAlignment.Right,
+            Enabled = false,
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(190, 82, 54)
+        });
+    }
+
+    void FinalizeCompactShell()
+    {
+        if (MainMenuStrip is null) return;
+
+        if (!compactShellFinalized)
+        {
+            compactShellFinalized = true;
+            var system = FindTop("Sistem Yönetimi");
+            var management = FindTop("Yönetim");
+            if (system is not null && management is not null && currentUser.IsSuperAdmin)
             {
-                Alignment = ToolStripItemAlignment.Right,
-                Enabled = false,
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(190,82,54)
-            });
+                var systemSub = new ToolStripMenuItem("Sistem") { ToolTipText = "Veritabanı, terminal, yedekleme ve kullanıcı yönetimi" };
+                while (system.DropDownItems.Count > 0)
+                {
+                    var item = system.DropDownItems[0];
+                    system.DropDownItems.RemoveAt(0);
+                    systemSub.DropDownItems.Add(item);
+                }
+                if (management.DropDownItems.Count > 0) management.DropDownItems.Add(new ToolStripSeparator());
+                management.DropDownItems.Add(systemSub);
+            }
+            if (system is not null) system.Visible = false;
+
+            var workspaceMenu = FindTop("Çalışma Alanı");
+            var settings = FindTop("Ayarlar");
+            if (workspaceMenu is not null && settings is not null)
+            {
+                var workspaceSub = new ToolStripMenuItem("Çalışma Alanı / Görünüm");
+                while (workspaceMenu.DropDownItems.Count > 0)
+                {
+                    var item = workspaceMenu.DropDownItems[0];
+                    workspaceMenu.DropDownItems.RemoveAt(0);
+                    workspaceSub.DropDownItems.Add(item);
+                }
+                settings.DropDownItems.Add(new ToolStripSeparator());
+                settings.DropDownItems.Add(workspaceSub);
+            }
+            if (workspaceMenu is not null) workspaceMenu.Visible = false;
+
+            var payroll = FindTop("Puantaj ve Bordro");
+            if (payroll is not null) payroll.Text = "Puantaj & Bordro";
+
+            ReorderTopMenus(["Genel Bakış", "Operasyon", "İnsan Kaynakları", "Puantaj & Bordro", "Raporlama", "Yönetim", "Ayarlar", "Destek"]);
+        }
+
+        // Force a predictable startup footprint regardless of what a previous layout file saved.
+        WindowState = FormWindowState.Normal;
+        StartPosition = FormStartPosition.Manual;
+        var area = Screen.FromControl(this).WorkingArea;
+        var targetWidth = Math.Clamp((int)Math.Round(area.Width * 0.88), 1180, 1500);
+        var targetHeight = Math.Clamp((int)Math.Round(area.Height * 0.86), 720, 900);
+        Size = new Size(Math.Min(targetWidth, area.Width - 50), Math.Min(targetHeight, area.Height - 50));
+        Location = new Point(area.Left + Math.Max(0, (area.Width - Width) / 2), area.Top + Math.Max(0, (area.Height - Height) / 2));
+    }
+
+    ToolStripMenuItem? FindTop(string text) => MainMenuStrip?.Items.OfType<ToolStripMenuItem>()
+        .FirstOrDefault(x => string.Equals((x.Text ?? string.Empty).Trim(), text, StringComparison.OrdinalIgnoreCase));
+
+    void ReorderTopMenus(string[] order)
+    {
+        if (MainMenuStrip is null) return;
+        var index = 0;
+        foreach (var name in order)
+        {
+            var item = FindTop(name);
+            if (item is null || !item.Visible) continue;
+            MainMenuStrip.Items.Remove(item);
+            MainMenuStrip.Items.Insert(Math.Min(index++, MainMenuStrip.Items.Count), item);
+        }
     }
 
     static void HideUnauthorizedChildren(ToolStripItemCollection items)
