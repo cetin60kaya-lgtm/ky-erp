@@ -55,9 +55,10 @@ internal static class TerminalSyncService
             if (punches.Length == 0)
                 return Save(new(DateTime.Now, 0, 0, 0, 0, 0, false, "Aktarılacak veri yok. Cihazda kayıt bulunamadı; cihazdan hiçbir şey silinmedi.", scheduleKey));
 
-            // Physical terminal data is treated as source evidence. Always back it up before any import.
+            // Physical terminal data is source evidence. Keep both a short live cache and a durable live TNF/raw archive.
             BackupPunches(punches);
             AppendLive(punches);
+            TerminalLiveArchiveService.Append(punches);
             AppendTnf(punches);
 
             var records = punches.Select(ToRecord).ToArray();
@@ -72,9 +73,9 @@ internal static class TerminalSyncService
             await PdksCloudAgent.EnqueueTerminalSyncAsync(punches, imported, ct);
             _ = PdksCloudAgent.RunOnceAsync(ct);
 
-            // 6.3.3 safety rule: Sync never calls EmptyGeneralLogData/clearlogs.
+            // Safety rule: Sync never calls EmptyGeneralLogData/clearlogs.
             // Device cleanup, if ever needed later, must be a separate explicit administrator operation.
-            var keepMessage = $"{source}: {punches.Length} kayıt TNF + FDB doğrulandı. Cihaz kayıtları KORUNDU; otomatik silme kapalı.";
+            var keepMessage = $"{source}: {punches.Length} kayıt CANLI TNF + TNF + FDB doğrulandı. Cihaz kayıtları KORUNDU; otomatik silme kapalı.";
             return Save(new(DateTime.Now, punches.Length, imported.Inserted, imported.Updated, imported.Duplicates, imported.Skipped, false, keepMessage, scheduleKey));
         }
         catch (Exception ex)
