@@ -32,6 +32,7 @@ public partial class PersonelForm : Form
             ApplyModernTabLayoutAndPerformance();
             Reload();
             LoadPeriods();
+            RepairRecordActionBars();
             fullTabsReady=true;
             SyncPeriodsToPerson();
             RefreshSelectedTab();
