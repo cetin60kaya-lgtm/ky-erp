@@ -23,7 +23,7 @@ public sealed partial class MainShellForm
     void ApplyOperatorEnhancements()
     {
         if (MainMenuStrip is null) return;
-        Text = $"KY PDKS 6.3.3 TEST • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
+        Text = $"KY PDKS 6.3.4 TEST • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
 
         MainMenuStrip.AutoSize = false;
         MainMenuStrip.Height = 31;
@@ -84,6 +84,14 @@ public sealed partial class MainShellForm
             if (oldWorkDate is not null) daily.DropDownItems.Remove(oldWorkDate);
             while (daily.DropDownItems.Count > 0 && daily.DropDownItems[^1] is ToolStripSeparator)
                 daily.DropDownItems.RemoveAt(daily.DropDownItems.Count - 1);
+
+            if (!daily.DropDownItems.OfType<ToolStripMenuItem>().Any(x => (x.Text ?? string.Empty).Contains("Kart Basma Kontrolü", StringComparison.OrdinalIgnoreCase)))
+            {
+                daily.DropDownItems.Insert(Math.Min(1, daily.DropDownItems.Count), MenuItem(
+                    "Kart Basma Kontrolü • 7 Gün / Aylık",
+                    PdksModule.GunlukOperasyon,
+                    () => ShowModule(new AttendanceHistoryForm(), PdksModule.GunlukOperasyon)));
+            }
         }
 
         var support = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
@@ -93,7 +101,7 @@ public sealed partial class MainShellForm
             support.Text = "Destek";
             var oldAbout = support.DropDownItems.OfType<ToolStripMenuItem>()
                 .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Hakkında", StringComparison.OrdinalIgnoreCase));
-            if (oldAbout is not null) oldAbout.Text = "KY PDKS 6.3.3 TEST Hakkında";
+            if (oldAbout is not null) oldAbout.Text = "KY PDKS 6.3.4 TEST Hakkında";
             if (!support.DropDownItems.OfType<ToolStripMenuItem>().Any(x => string.Equals(x.Text ?? string.Empty, "Hızlı Kullanım Rehberi", StringComparison.OrdinalIgnoreCase)))
             {
                 var guide = new ToolStripMenuItem("Hızlı Kullanım Rehberi")
@@ -139,7 +147,7 @@ public sealed partial class MainShellForm
                      .Where(x => (x.Text ?? string.Empty).StartsWith("REV 6.", StringComparison.OrdinalIgnoreCase)).ToArray())
             MainMenuStrip.Items.Remove(old);
 
-        MainMenuStrip.Items.Add(new ToolStripMenuItem("REV 6.3.3 TEST")
+        MainMenuStrip.Items.Add(new ToolStripMenuItem("REV 6.3.4 TEST")
         {
             Alignment = ToolStripItemAlignment.Right,
             Enabled = false,
