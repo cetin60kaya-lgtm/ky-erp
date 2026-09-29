@@ -115,6 +115,21 @@
   box-shadow: 0 20px 54px rgba(15, 23, 42, 0.24) !important;
 }
 
+/* Uzun formlarda başlık ve ana aksiyonlar görünür kalır. */
+[role="dialog"] > header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: inherit;
+}
+
+[role="dialog"] > footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  background: inherit;
+}
+
 /* Geniş belge/rapor dialogları yine merkezde kalır; sadece gerektiği kadar büyür. */
 :where(
   [class*="drawer-layer"],
