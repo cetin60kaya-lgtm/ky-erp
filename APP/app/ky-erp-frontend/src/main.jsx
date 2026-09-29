@@ -52,12 +52,15 @@ async function loadErpRuntime() {
     import("./App.css"),
   ]);
 
-  // Canonical UI en son yüklenir; eski modül CSS'leri yan panel davranışını geri getiremez.
+  // Canonical UI en son yüklenir; eski modül CSS'leri ortak pencere davranışını geri getiremez.
   await import("./styles/canonical-workspace-ui.css");
   await import("./styles/module-action-popups.css");
+  await import("./styles/canonical-dialog-resize.css");
+  const { installCanonicalDialogSizing } = await import("./utils/installCanonicalDialogSizing");
 
   installAuthenticatedAssetBridge();
   installMuhasebeDocumentSanitizer();
+  installCanonicalDialogSizing();
   return { AppV3, ActiveCompanyProvider, AuthProvider, useAuth };
 }
 
