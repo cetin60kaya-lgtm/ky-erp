@@ -1,0 +1,93 @@
+name: QuickDataTool REV5 Crash Safe Build
+
+on:
+  push:
+    branches:
+      - codex/quickdata-tnf-tab-rev4
+    paths:
+      - '.github/workflows/quickdata-rev5-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Patch TNF tab startup crash and add crash guard
+        shell: pwsh
+        run: |
+          $tnf = 'APP/desktop/kyerp-pdks-current/tools/QuickDataTool/TnfPrepareInjector.cs'
+          $s = Get-Content $tnf -Raw
+          $old = '        BeginInvoke(new Action(RefreshPeople));'
+          $new = '        Load += (_, _) => RefreshPeople();'
+          if (-not $s.Contains($old)) { throw 'Expected BeginInvoke line not found.' }
+          $s = $s.Replace($old, $new)
+          Set-Content $tnf $s -Encoding UTF8 -NoNewline
+
+          $guard = @'
+          using System.Text;
+          namespace QuickDataTool;
+          internal static class CrashGuard
+          {
+              internal static void Install()
+              {
+                  Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+                  Application.ThreadException += (_, e) => Log(e.Exception);
+                  AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+                  {
+                      if (e.ExceptionObject is Exception ex) Log(ex);
+                  };
+              }
+              static void Log(Exception ex)
+              {
+                  try
+                  {
+                      var path = Path.Combine(AppContext.BaseDirectory, "QUICKDATA_HATA.log");
+                      File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}\r\n\r\n", Encoding.UTF8);
+                      MessageBox.Show("Bir işlem hatası yakalandı; uygulama kapatılmadı.\n\n" + ex.Message + "\n\nKayıt: " + path,
+                          "HKN PDKS", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                  }
+                  catch { }
+              }
+          }
+          '@
+          $guard | Set-Content 'APP/desktop/kyerp-pdks-current/tools/QuickDataTool/CrashGuard.cs' -Encoding UTF8
+
+          $program = 'APP/desktop/kyerp-pdks-current/tools/QuickDataTool/Program.cs'
+          $p = Get-Content $program -Raw
+          $needle = '        ApplicationConfiguration.Initialize();'
+          if (-not $p.Contains($needle)) { throw 'Program startup marker not found.' }
+          $p = $p.Replace($needle, $needle + "`r`n        CrashGuard.Install();")
+          Set-Content $program $p -Encoding UTF8 -NoNewline
+
+      - name: Publish QuickDataTool
+        shell: pwsh
+        run: |
+          $proj = 'APP/desktop/kyerp-pdks-current/tools/QuickDataTool/QuickDataTool.csproj'
+          dotnet restore $proj
+          dotnet publish $proj -c Release -r win-x64 --self-contained false -o "$env:RUNNER_TEMP\QuickDataTool"
+          @'
+          HKN PDKS HIZLI VERI - REV5
+
+          Tek giris: QuickDataTool.exe
+          TNF Hazirla ana uygulamanin icindedir.
+          REV5 duzeltmesi:
+          - Acildiktan 2-3 saniye sonra kapanmaya neden olan TNF sekmesi BeginInvoke hatasi giderildi.
+          - TNF sekmesi artik kontrol yuklendikten sonra personel listesini yeniler.
+          - Beklenmeyen arayuz hatalari uygulamayi kapatmaz; QUICKDATA_HATA.log dosyasina yazilir.
+          - TXT uretimi DATABASE.GDB'ye yazmaz.
+          - Dosya adi tarih.txt mantigindadir: 29&9&2026.txt
+          - Varsayilan format: 00003,08:28,290926,1,001
+          '@ | Set-Content "$env:RUNNER_TEMP\QuickDataTool\README_REV5.txt" -Encoding UTF8
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HKN-PDKS-Hizli-Veri-REV5
+          path: ${{ runner.temp }}\QuickDataTool\**
+          if-no-files-found: error
+          retention-days: 7
