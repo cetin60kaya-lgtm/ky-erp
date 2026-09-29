@@ -8,6 +8,7 @@ import { registerSecurityCenterLoginRoutes } from "./security-center-login-cloud
 import { requireOwnerSecurityApp } from "./owner-security-device-guard";
 import { registerErpCommandGatewayRoutes } from "./erp-command-gateway";
 import { registerAiPlatformAccessRoutes } from "./ai-platform-access";
+import { registerUiDialogLayoutRoutes } from "./ui-dialog-layout-cloud";
 
 type Env = { Bindings: Cloudflare.Env };
 
@@ -16,26 +17,29 @@ const LOCAL = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
 const PREVIEW = /^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i;
 const allowedOrigin = (origin: string) => LIVE_ORIGINS.has(origin) || LOCAL.test(origin) || PREVIEW.test(origin) ? origin : undefined;
 const roleCode = (value: unknown) => String(value || "").trim().toUpperCase().replace(/İ/g, "I");
+const commonCors = cors({
+  origin: allowedOrigin,
+  allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+  allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device", "X-KYERP-AI-Platform"],
+  exposeHeaders: ["Content-Length", "Content-Type", "ETag", "X-Request-Id"],
+  maxAge: 86400,
+  credentials: true,
+});
 
 const command = new Hono<Env>();
-command.use("/api/ai/*", cors({
-  origin: allowedOrigin,
-  allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-  allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-AI-Platform"],
-  exposeHeaders: ["Content-Length", "Content-Type", "ETag", "X-Request-Id"],
-  maxAge: 86400,
-  credentials: true,
-}));
-command.use("/api/admin/users/*", cors({
-  origin: allowedOrigin,
-  allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-  allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-AI-Platform"],
-  exposeHeaders: ["Content-Length", "Content-Type", "ETag", "X-Request-Id"],
-  maxAge: 86400,
-  credentials: true,
-}));
+command.use("/api/ai/*", commonCors);
+command.use("/api/admin/users/*", commonCors);
 registerErpCommandGatewayRoutes(command);
 registerAiPlatformAccessRoutes(command);
+
+const ui = new Hono<Env>();
+ui.use("/api/ui/dialog-layouts/*", commonCors);
+registerUiDialogLayoutRoutes(ui);
+ui.onError((error, c) => {
+  const requestId = crypto.randomUUID();
+  console.error(JSON.stringify({ code: "UI_DIALOG_LAYOUT_FAILED", requestId, message: error instanceof Error ? error.message : String(error) }));
+  return c.json({ ok: false, error: { code: "UI_DIALOG_LAYOUT_FAILED", message: "Pencere ölçüsü işlemi tamamlanamadı.", requestId } }, 500);
+});
 
 const security = new Hono<Env>();
 security.use("/api/security-center/*", cors({
@@ -84,6 +88,7 @@ export default {
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext) {
     const path = new URL(request.url).pathname;
     if (path === "/api/ai/command" || path.startsWith("/api/ai/command/") || path === "/api/ai/platform-access" || path.startsWith("/api/ai/platform-access/") || /^\/api\/admin\/users\/[^/]+\/ai-platform-access$/.test(path)) return command.fetch(request, env, ctx);
+    if (path.startsWith("/api/ui/dialog-layouts/")) return ui.fetch(request, env, ctx);
     if (path === "/api/security-center" || path.startsWith("/api/security-center/")) {
       return security.fetch(request, env, ctx);
     }
