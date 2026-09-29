@@ -17,21 +17,7 @@ import {
 import "../../styles/global-left-click-menu.css";
 
 const INTERACTIVE_SELECTOR = [
-  "button",
-  "a",
-  "input",
-  "textarea",
-  "select",
-  "option",
-  "label",
-  "summary",
-  "[role='button']",
-  "[role='menuitem']",
-  "[role='option']",
-  "[contenteditable='true']",
-  "[data-ky-no-left-menu]",
   "[data-ky-no-right-menu]",
-  "[data-ky-left-click-menu]",
   "[data-ky-right-click-menu]",
 ].join(",");
 
@@ -131,6 +117,7 @@ export default function GlobalLeftClickMenu() {
     }
 
     const onContextMenu = (event) => {
+      if (event.shiftKey) return;
       const target = event.target instanceof Element ? event.target : null;
       if (!target || target.closest(INTERACTIVE_SELECTOR)) return;
       const shell = target.closest(".shell-v3");
