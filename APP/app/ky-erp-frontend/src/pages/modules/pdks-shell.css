@@ -8,7 +8,7 @@
   top: 0;
   z-index: 28;
   display: grid;
-  grid-template-columns: minmax(210px, auto) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(210px, auto) minmax(0, 1fr) auto auto;
   align-items: stretch;
   gap: 10px;
   margin-bottom: 9px;
@@ -107,6 +107,25 @@
   background: #5aa5d4;
 }
 
+.pdks-context-action {
+  align-self: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid #b8d0e3;
+  border-radius: 7px;
+  background: #fff;
+  color: #075f9b;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.pdks-context-action:hover {
+  border-color: #7fb1d2;
+  background: #edf6fc;
+}
+
 .pdks-context-mode {
   align-self: center;
   flex: 0 0 auto;
@@ -132,6 +151,68 @@
 
 .pdks-module-content {
   min-width: 0;
+}
+
+.pdks-action-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1250;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(15, 23, 42, .34);
+}
+
+.pdks-action-modal-layer .pdks-quick-assistant {
+  width: min(760px, calc(100vw - 44px));
+  max-height: calc(100dvh - 44px);
+  margin: 0;
+  overflow: auto;
+  background: #fff;
+  box-shadow: 0 22px 64px rgba(15, 23, 42, .24);
+}
+
+.pdks-action-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -1px -1px 10px;
+  padding: 9px 10px;
+  border-bottom: 1px solid #dbe5ed;
+}
+
+.pdks-action-modal-head div {
+  min-width: 0;
+}
+
+.pdks-action-modal-head strong,
+.pdks-action-modal-head small {
+  display: block;
+}
+
+.pdks-action-modal-head strong {
+  color: #153c5b;
+  font-size: 13px;
+}
+
+.pdks-action-modal-head small {
+  margin-top: 2px;
+  color: #7c8c9b;
+  font-size: 9px;
+}
+
+.pdks-action-modal-head > button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #d8e2eb;
+  border-radius: 7px;
+  background: #fff;
+  color: #52687a;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .pdks-quick-assistant {
@@ -244,7 +325,7 @@
 @media (max-width: 1100px) {
   .pdks-context-bar {
     position: static;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
   }
   .pdks-context-tabs {
     grid-column: 1 / -1;
@@ -265,6 +346,16 @@
     min-height: 38px;
     padding: 5px 8px;
     font-size: 9px;
+  }
+  .pdks-context-action {
+    padding-inline: 8px;
+  }
+  .pdks-action-modal-layer {
+    padding: 10px;
+  }
+  .pdks-action-modal-layer .pdks-quick-assistant {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
   }
   .pdks-assistant-row {
     grid-template-columns: 1fr auto;
