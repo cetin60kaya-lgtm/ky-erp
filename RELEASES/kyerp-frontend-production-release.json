@@ -26,11 +26,15 @@
     "daily-operations-period-lock-restored",
     "daily-operations-cards-weekly-payments-preserved",
     "muhasebe-mail-provider-accepted-send-tracking",
+    "super-admin-application-settings-tab",
+    "global-left-click-quick-menu",
+    "left-click-menu-order-add-remove-controls",
+    "left-click-native-control-safety",
     "frontend-full-test-suite",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
     "live-entry-verification",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "25 Eylül Cuma temiz çalışan Günlük Operasyon düzeni, İK'ya geri bağlanmadan bağımsız Daily Operations API üzerinde native React olarak geri taşındı. Günlük Giriş, Hızlı Giriş, Log + Özet, Gelişmiş Arama, Personel Kontrol, dönem kilidi, Personel Kartları, Haftalık Özet ve Ödeme Fişleri tek canonical günlük yapı içinde korunur. Frontend lint, test ve build başarılıdır; production Pages deploy ve canlı bundle doğrulaması bu marker ile zorunludur."
+  "note": "Platform Yönetimi altına yalnız Süper Yönetici için Uygulama Ayarları ekranı eklendi. Sol Tık Hızlı Menüsü buradan açılıp kapatılır; işlem ve ekranlar eklenip çıkarılabilir, sıralanabilir, aktif modül kısayolları ve görünüm seçenekleri yönetilebilir. Normal buton, link ve form alanlarının sol tık davranışı korunur; menü çalışma alanındaki uygun boş tıklamada açılır. Ayarlar mevcut admin settings API üzerinden kalıcılaştırılır. Frontend lint, test ve build ile production Pages deploy ve canlı bundle doğrulaması bu marker ile zorunludur."
 }
