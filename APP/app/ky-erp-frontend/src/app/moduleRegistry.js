@@ -153,7 +153,17 @@ const DAILY_OPERATIONS_MODULE = {
   permissionKey: "IK",
   label: "Günlük Operasyon",
   icon: "takvim",
-  groups: [{ label: "Günlük Takip", tabs: [["daily-entry", "Günlük Operasyon", "takvim"]] }],
+  groups: [
+    {
+      label: "Günlük Operasyon",
+      tabs: [
+        ["daily-entry", "Günlük Giriş", "takvim"],
+        ["daily-cards", "Personel Kartları", "users"],
+        ["daily-weekly", "Haftalık Özet", "raporlar"],
+        ["daily-payments", "Ödeme Fişleri", "odemeler"],
+      ],
+    },
+  ],
 };
 
 const SYSTEM_SENTINEL_MODULE = {
@@ -260,6 +270,14 @@ export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,
   muhasebe: {},
   "e-belge": {},
+  "gunluk-operasyon": {
+    "gunluk-giris": "daily-entry",
+    "gunluk-personel-kartlari": "daily-cards",
+    "personel-kartlari": "daily-cards",
+    "haftalik-ozet": "daily-weekly",
+    "gunluk-odeme-fisleri": "daily-payments",
+    "odeme-fisleri": "daily-payments",
+  },
   pdks: {
     "genel-bakis": "ana-ekran",
     "canli-gecisler": "ana-ekran",
