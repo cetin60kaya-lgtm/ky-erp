@@ -211,14 +211,69 @@ public static class PdksTheme
         grid.ColumnHeadersHeight = Math.Max(grid.ColumnHeadersHeight, 31);
         grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         grid.MultiSelect = false;
+        grid.AllowUserToOrderColumns = true;
+        grid.AllowUserToResizeColumns = true;
 
-        // Named grids remember the user's last column order and width automatically.
-        // Bordro and operational report grids use their own report-specific keys.
         if (!string.IsNullOrWhiteSpace(grid.Name) &&
             !string.Equals(grid.Name, "BordroGrid", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(grid.Name, "OperationalReportGrid", StringComparison.OrdinalIgnoreCase))
         {
             GridLayoutPersistence.AttachAuto(grid);
         }
+
+        EnsureGridContextMenu(grid);
+    }
+
+    static void EnsureGridContextMenu(DataGridView grid)
+    {
+        var menu = grid.ContextMenuStrip ?? new ContextMenuStrip { Font = new Font("Segoe UI", 9f) };
+        if (menu.Items.OfType<ToolStripItem>().Any(x => string.Equals(x.Name, "KY_GRID_COPY_CELL", StringComparison.Ordinal)))
+        {
+            grid.ContextMenuStrip = menu;
+            return;
+        }
+
+        if (menu.Items.Count > 0 && menu.Items[^1] is not ToolStripSeparator) menu.Items.Add(new ToolStripSeparator());
+        var copyCell = new ToolStripMenuItem("Hücreyi Kopyala") { Name = "KY_GRID_COPY_CELL" };
+        copyCell.Click += (_, _) =>
+        {
+            if (grid.CurrentCell?.Value is object value)
+                try { Clipboard.SetText(Convert.ToString(value) ?? string.Empty); } catch { }
+        };
+        var copyRow = new ToolStripMenuItem("Satırı Kopyala") { Name = "KY_GRID_COPY_ROW" };
+        copyRow.Click += (_, _) =>
+        {
+            if (grid.CurrentRow is null) return;
+            var values = grid.Columns.Cast<DataGridViewColumn>()
+                .Where(c => c.Visible)
+                .OrderBy(c => c.DisplayIndex)
+                .Select(c => Convert.ToString(grid.CurrentRow.Cells[c.Index].Value) ?? string.Empty);
+            try { Clipboard.SetText(string.Join("\t", values)); } catch { }
+        };
+        var selectAll = new ToolStripMenuItem("Tümünü Seç") { Name = "KY_GRID_SELECT_ALL" };
+        selectAll.Click += (_, _) => grid.SelectAll();
+        var lockColumn = new ToolStripMenuItem("Sütunu Kilitle / Kilidi Aç") { Name = "KY_GRID_LOCK_COLUMN" };
+        lockColumn.Click += (_, _) =>
+        {
+            var column = grid.CurrentCell?.OwningColumn;
+            if (column is null) return;
+            column.Frozen = !column.Frozen;
+            column.HeaderCell.Style.BackColor = column.Frozen ? Color.FromArgb(255, 244, 203) : Color.FromArgb(236, 243, 252);
+            column.HeaderCell.Style.ForeColor = Color.FromArgb(31, 67, 116);
+        };
+        menu.Items.Add(copyCell);
+        menu.Items.Add(copyRow);
+        menu.Items.Add(selectAll);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(lockColumn);
+        grid.ContextMenuStrip = menu;
+
+        grid.CellMouseDown += (_, e) =>
+        {
+            if (e.Button != MouseButtons.Right || e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            grid.ClearSelection();
+            grid.Rows[e.RowIndex].Selected = true;
+            grid.CurrentCell = grid.Rows[e.RowIndex].Cells[e.ColumnIndex];
+        };
     }
 }
