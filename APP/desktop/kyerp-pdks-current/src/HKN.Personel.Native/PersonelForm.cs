@@ -26,13 +26,18 @@ public partial class PersonelForm : Form
         Font=new Font("Segoe UI",9f); BackColor=Color.FromArgb(246,249,253); DoubleBuffered=true; SetStyle(ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint,true);
         BuildMenuFull();
         BuildUiClassic();
-        Shown += (_,_) =>
+
+        // Geometry and CRUD bars are built before the form becomes visible. Doing this from
+        // Shown caused the Personel page to jump/repaint after every navigation.
+        ApplyModernTabLayoutAndPerformance();
+        RepairRecordActionBars();
+        WireLegacyPeriodSelectors();
+
+        Load += (_,_) =>
         {
             fullTabsReady=false;
-            ApplyModernTabLayoutAndPerformance();
             Reload();
             LoadPeriods();
-            RepairRecordActionBars();
             fullTabsReady=true;
             SyncPeriodsToPerson();
             RefreshSelectedTab();
