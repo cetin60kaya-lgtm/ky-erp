@@ -1,0 +1,75 @@
+/* KY ERP sabit açılır pencere kuralı:
+   - pencere merkezde kalır
+   - en/boy yalnız sağ-alt tutamaçtan ayarlanır
+   - son canonical ölçü sunucudan gelir
+   - minimum ölçünün altında çubuk haline gelemez */
+
+[data-ky-resizable-dialog="true"] {
+  min-width: min(420px, calc(100vw - 40px)) !important;
+  min-height: min(280px, calc(100dvh - 40px)) !important;
+  box-sizing: border-box !important;
+}
+
+.ky-modal-resize-handle {
+  position: absolute !important;
+  right: 4px !important;
+  bottom: 4px !important;
+  left: auto !important;
+  top: auto !important;
+  display: block !important;
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  min-height: 24px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 5px !important;
+  background:
+    linear-gradient(135deg, transparent 0 42%, rgba(71, 85, 105, .35) 43% 49%, transparent 50% 60%, rgba(71, 85, 105, .55) 61% 67%, transparent 68% 78%, rgba(71, 85, 105, .75) 79% 85%, transparent 86%) !important;
+  box-shadow: none !important;
+  cursor: nwse-resize !important;
+  touch-action: none !important;
+  z-index: 1000 !important;
+  opacity: .8 !important;
+}
+
+.ky-modal-resize-handle:hover,
+.ky-modal-resize-handle:focus-visible {
+  opacity: 1 !important;
+  background-color: rgba(226, 232, 240, .75) !important;
+  outline: 1px solid rgba(37, 99, 235, .35) !important;
+}
+
+/* Eski CSS resize handle'ı gizlese bile canonical kural her modülde son sözü söyler. */
+.shell-v3 .ky-modal-resize-handle,
+.shell-v3[data-active-module="gunluk-operasyon"] .ky-modal-resize-handle {
+  display: block !important;
+}
+
+/* Başlık ve alt işlem satırı uzun pencerelerde görünür kalır. */
+[data-ky-resizable-dialog="true"] > header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: inherit;
+}
+
+[data-ky-resizable-dialog="true"] > footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  background: inherit;
+}
+
+@media (max-width: 520px) {
+  [data-ky-resizable-dialog="true"] {
+    min-width: calc(100vw - 20px) !important;
+    min-height: min(260px, calc(100dvh - 20px)) !important;
+  }
+
+  .ky-modal-resize-handle {
+    width: 28px !important;
+    height: 28px !important;
+  }
+}
