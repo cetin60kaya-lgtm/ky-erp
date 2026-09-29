@@ -27,21 +27,21 @@ static class Program
         if (login.ShowDialog() != DialogResult.OK || login.AuthenticatedUser is null) return;
         var user = login.AuthenticatedUser;
 
-        if (!CompanyLicenseGuard.EnsureAccess(out _, out var licenseMessage))
+        var licenseActive = CompanyLicenseGuard.EnsureAccess(out _, out var licenseMessage);
+        if (!licenseActive)
         {
-            if (!user.IsSuperAdmin)
+            if (user.IsSuperAdmin)
             {
-                MessageBox.Show(licenseMessage,"Firma Veri Erişimi Kilitli",MessageBoxButtons.OK,MessageBoxIcon.Stop);
-                return;
+                MessageBox.Show(
+                    licenseMessage + "\r\n\r\nSuper Admin erişimi açık kalır. Yönetim > Lisans Yönetimi üzerinden firma lisansını düzenleyebilirsiniz.",
+                    "KY PDKS • Lisans",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
             }
-
-            MessageBox.Show(licenseMessage + "\r\n\r\nSuper Admin olarak lisansı yenileyebilirsiniz.","Firma Veri Erişimi Kilitli",MessageBoxButtons.OK,MessageBoxIcon.Warning);
-            using var licenseCenter = new CompanyLicenseCenterForm();
-            licenseCenter.ShowDialog();
-            if (!CompanyLicenseGuard.EnsureAccess(out _, out licenseMessage))
+            else
             {
-                MessageBox.Show("Lisans yenilenmedi. Firma verisine erişim açılmadı.","KYERP PDKS",MessageBoxButtons.OK,MessageBoxIcon.Stop);
-                return;
+                using var activation = new LicenseActivationForm(licenseMessage);
+                activation.ShowDialog();
             }
         }
 
