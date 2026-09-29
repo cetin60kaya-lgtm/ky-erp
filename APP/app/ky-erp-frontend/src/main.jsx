@@ -43,20 +43,17 @@ async function loadErpRuntime() {
     { AuthProvider, useAuth },
     { installAuthenticatedAssetBridge },
     { installMuhasebeDocumentSanitizer },
-    { installPersistentModalSizing },
   ] = await Promise.all([
     import("./AppV3.jsx"),
     import("./context/ActiveCompanyContext"),
     import("./context/AuthContext"),
     import("./utils/installAuthenticatedAssetBridge"),
     import("./utils/installMuhasebeDocumentSanitizer"),
-    import("./utils/installPersistentModalSizing"),
     import("./App.css"),
   ]);
 
   installAuthenticatedAssetBridge();
   installMuhasebeDocumentSanitizer();
-  installPersistentModalSizing();
   return { AppV3, ActiveCompanyProvider, AuthProvider, useAuth };
 }
 
