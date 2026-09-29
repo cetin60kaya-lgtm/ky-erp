@@ -8,6 +8,7 @@ import AdminCompanyUsersPanel from "../admin/AdminCompanyUsersPanel";
 import AdminCompanySettings from "../admin/AdminCompanySettings";
 import AdminCompanyAuthority from "../admin/AdminCompanyAuthority";
 import AdminCompanyBilling from "../admin/AdminCompanyBilling";
+import AdminApplicationSettings from "../admin/AdminApplicationSettings";
 import AdminStorageCenter from "../admin/AdminStorageCenter";
 import AdminMappings from "../admin/AdminMappings";
 import AdminBackupLogs from "../admin/AdminBackupLogs";
@@ -62,6 +63,9 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
     }
     if (companyAdmin) return <AdminCompanyAuthority activeMainCompany={activeMainCompany} />;
     return <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
+  }
+  if (activeTab === "uygulama-ayarlari") {
+    return owner ? <AdminApplicationSettings /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "firma-ucretlendirme") {
     return owner ? <AdminCompanyBilling activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
