@@ -50,6 +50,7 @@ public static class PdksTheme
         }
         MakeAdaptive(form);
         StyleControls(form.Controls);
+        if (form.GetType().Name.Equals("LegacyPuantajForm", StringComparison.Ordinal)) PolishPuantaj(form);
     }
 
     static void MakeAdaptive(Form form) => AdaptChildren(form);
@@ -71,6 +72,62 @@ public static class PdksTheme
                 c.Anchor = anchor;
             }
             if (c.HasChildren) AdaptChildren(c);
+        }
+    }
+
+    static IEnumerable<Control> Descendants(Control parent)
+    {
+        foreach (Control child in parent.Controls)
+        {
+            yield return child;
+            foreach (var nested in Descendants(child)) yield return nested;
+        }
+    }
+
+    static void PolishPuantaj(Form form)
+    {
+        form.Text = "Puantaj Kontrol ve Yeniden Hesaplama";
+        foreach (var button in Descendants(form).OfType<Button>())
+        {
+            if (string.Equals(button.Text, "Hesapla", StringComparison.OrdinalIgnoreCase))
+                button.Text = "Seçimi Yeniden Hesapla";
+            else if (button.Text.Contains("Aylık Puantajı Hesapla", StringComparison.OrdinalIgnoreCase))
+                button.Text = "Ayı Yeniden Hesapla";
+        }
+
+        foreach (var progress in Descendants(form).OfType<ProgressBar>())
+        {
+            progress.Dock = DockStyle.Top;
+            progress.Height = 20;
+            progress.Margin = new Padding(0, 8, 0, 4);
+            if (progress.Parent is TableLayoutPanel table)
+            {
+                var row = table.GetRow(progress);
+                if (row >= 0 && row < table.RowStyles.Count)
+                {
+                    table.RowStyles[row].SizeType = SizeType.Absolute;
+                    table.RowStyles[row].Height = 32;
+                }
+            }
+        }
+
+        var tabs = Descendants(form).OfType<TabControl>().FirstOrDefault();
+        if (tabs is null) return;
+        foreach (TabPage page in tabs.TabPages)
+        {
+            var banner = new Label
+            {
+                Text = "Puantaj; giriş-çıkış, izin, vardiya ve tatil kayıtlarından oluşur. Normal kullanımda kaynak kaydı düzeltin; bu ekran seçili aralık için kontrol ve gerektiğinde yeniden hesaplama içindir.",
+                Dock = DockStyle.Top,
+                Height = 42,
+                Padding = new Padding(12, 8, 12, 6),
+                BackColor = Color.FromArgb(232, 241, 252),
+                ForeColor = Color.FromArgb(44, 75, 112),
+                Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            page.Controls.Add(banner);
+            banner.BringToFront();
         }
     }
 
