@@ -44,25 +44,25 @@ jobs:
           Copy-Item out/HKN-PDKS/* out/package -Recurse -Force
           Get-ChildItem out/package -Filter '*.pdb' -Recurse | Remove-Item -Force
           Set-Content -Path out/package/BUILD_INFO.txt -Encoding UTF8 -Value @(
-            'KY PDKS 6.3.3 TEST - ISYERI STABLE SAFE',
-            'Revision: 6.3.3 TEST',
-            'Scope: stable first show + flicker-safe live attendance + visible Hedef-style terminal settings + non-destructive terminal sync',
+            'KY PDKS 6.3.4 TEST - CANLI KART KONTROL',
+            'Revision: 6.3.4 TEST',
+            'Scope: durable CANLI TNF/raw archive + 5-minute safe terminal sync + 7-day/monthly card punch control + explicit live archive cleanup',
             'Distribution: release symbols removed',
             'Runtime: win-x64 self-contained',
             'Tests: Contract + Shell + UI Audit + V4 Shell',
             'Terminal: x86 TerminalBridge included; matched TerminalSdk is added to workplace package after CI',
-            'Safety: physical terminal logs are never auto-cleared by sync',
+            'Safety: physical terminal logs are never auto-cleared by sync; live archive cleanup never deletes main TNF/FDB',
             "Branch: $env:GITHUB_REF_NAME",
             "Commit: $env:GITHUB_SHA",
             "UTC: $([DateTime]::UtcNow.ToString('yyyy-MM-dd HH:mm:ss'))"
           )
-          Compress-Archive -Path out/package/* -DestinationPath out/KY-PDKS-6.3.3-ISYERI-STABLE-SAFE.zip -Force
-          (Get-FileHash out/KY-PDKS-6.3.3-ISYERI-STABLE-SAFE.zip -Algorithm SHA256).Hash | Set-Content out/KY-PDKS-6.3.3-ISYERI-STABLE-SAFE.zip.sha256.txt -Encoding ASCII
+          Compress-Archive -Path out/package/* -DestinationPath out/KY-PDKS-6.3.4-CANLI-KART-KONTROL.zip -Force
+          (Get-FileHash out/KY-PDKS-6.3.4-CANLI-KART-KONTROL.zip -Algorithm SHA256).Hash | Set-Content out/KY-PDKS-6.3.4-CANLI-KART-KONTROL.zip.sha256.txt -Encoding ASCII
       - uses: actions/upload-artifact@v4
         with:
-          name: KY-PDKS-6.3.3-ISYERI-STABLE-SAFE
+          name: KY-PDKS-6.3.4-CANLI-KART-KONTROL
           path: |
-            out/KY-PDKS-6.3.3-ISYERI-STABLE-SAFE.zip
-            out/KY-PDKS-6.3.3-ISYERI-STABLE-SAFE.zip.sha256.txt
+            out/KY-PDKS-6.3.4-CANLI-KART-KONTROL.zip
+            out/KY-PDKS-6.3.4-CANLI-KART-KONTROL.zip.sha256.txt
           if-no-files-found: error
           retention-days: 14
