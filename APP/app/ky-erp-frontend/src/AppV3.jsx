@@ -308,7 +308,7 @@ export default function AppV3() {
       }
       return <IkFinancePage activeTab={activeTab} {...sharedProps} />;
     }
-    if (activeModule?.key === "gunluk-operasyon") return <DailyHrWorkspace {...sharedProps} />;
+    if (activeModule?.key === "gunluk-operasyon") return <DailyHrWorkspace activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "pdks") return <PdksPage activeTab={activeTab} isAuditAccount={isAuditAccount} {...sharedProps} />;
     if (activeModule?.key === "uretim") return <UretimPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "iletisim") return <CommunicationHubPage activeTab={activeTab} {...sharedProps} />;
