@@ -2,26 +2,27 @@ import type { Context } from "hono";
 
 type Row = Record<string, any>;
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
+type TransactionType = "DEBIT" | "CREDIT" | "PAYMENT" | "COLLECTION";
 const text = (value: unknown) => String(value ?? "").trim();
 const upper = (value: unknown) => text(value).toUpperCase();
-const reject = (code: string, message: string) => { throw Object.assign(new Error(message), { code }); };
+const reject = (code: string, message: string): never => { throw Object.assign(new Error(message), { code }); };
 
-function transactionTypeOf(input: Row) {
+function transactionTypeOf(input: Row): TransactionType {
   const explicit = upper(input.transactionType);
-  if (["DEBIT", "CREDIT", "PAYMENT", "COLLECTION"].includes(explicit)) return explicit;
+  if (["DEBIT", "CREDIT", "PAYMENT", "COLLECTION"].includes(explicit)) return explicit as TransactionType;
   if (explicit) reject("TRANSACTION_TYPE_INVALID", "Geçerli cari işlem türü seçin.");
 
   const direction = upper(input.transactionDirection);
   if (["PAYMENT", "PAYMENT_OUT", "OUT", "OUTGOING"].includes(direction)) return "PAYMENT";
   if (["COLLECTION", "COLLECTION_IN", "PAYMENT_IN", "IN", "INCOMING"].includes(direction)) return "COLLECTION";
-  reject("TRANSACTION_TYPE_INVALID", "Geçerli cari işlem türü seçin.");
+  return reject("TRANSACTION_TYPE_INVALID", "Geçerli cari işlem türü seçin.");
 }
 
 export function currentAccountEntry(input: Row) {
   const amount = Math.round(Number(input.amount) * 100) / 100;
   if (!Number.isFinite(amount) || amount <= 0) reject("AMOUNT_INVALID", "Sıfırdan büyük geçerli tutar girin.");
   const type = transactionTypeOf(input);
-  const types: Record<string, string> = { DEBIT: "BORC", CREDIT: "ALACAK", PAYMENT: "ODEME", COLLECTION: "TAHSILAT" };
+  const types: Record<TransactionType, string> = { DEBIT: "BORC", CREDIT: "ALACAK", PAYMENT: "ODEME", COLLECTION: "TAHSILAT" };
   const effect = ["DEBIT", "PAYMENT"].includes(type) ? amount : -amount;
   const date = text(input.date || input.paymentDate) || new Date().toISOString().slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) reject("DATE_INVALID", "Geçerli işlem tarihi girin.");
@@ -66,12 +67,12 @@ export async function writeCurrentAccount(c: Context<AppEnv>, slug: string, inpu
   }
   const company = await db.prepare("SELECT * FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL").bind(companyId, slug).first<Row>();
   if (!company) reject("COMPANY_NOT_FOUND", "Cari firma bulunamadı.");
-  const supplier = upper(company!.payment_mode) === "CREDIT" && Number(company!.supplier_debt_tracking) === 1;
-  const customer = Number(company!.customer_receivable_tracking) === 1;
+  const supplier = upper(company.payment_mode) === "CREDIT" && Number(company.supplier_debt_tracking) === 1;
+  const customer = Number(company.customer_receivable_tracking) === 1;
   if ((!supplier && !customer) || (entry.type === "PAYMENT" && !supplier) || (entry.type === "COLLECTION" && !customer)) reject("CURRENT_ACCOUNT_DISABLED", "Firma için bu cari işlem türü açık değil. Peşin tedarikçiye cari borç yazılamaz.");
   const timestamp = new Date().toISOString();
   const description = text(input.description) || entry.movementType;
-  const payload = { ...input, id: requestId, firmId: companyId, companyId, companyName: company!.name, ...entry, paymentDate: entry.date, createdAt: timestamp, createdBy: actor };
+  const payload = { ...input, id: requestId, firmId: companyId, companyId, companyName: company.name, ...entry, paymentDate: entry.date, createdAt: timestamp, createdBy: actor };
   const movement = await supportedInsert(db, "current_account_movements", {
     id, main_company_slug: slug, company_id: companyId, movement_date: entry.date,
     movement_type: entry.movementType, source_type: entry.sourceType, document_no: requestId,
@@ -79,13 +80,12 @@ export async function writeCurrentAccount(c: Context<AppEnv>, slug: string, inpu
     balance_after: 0, record_type: entry.recordType, raw: payload, created_at: timestamp, updated_at: timestamp,
   }, ["id", "main_company_slug", "company_id", "effect", "amount", "balance_after"]);
   const ledger = await supportedInsert(db, "accounting_ledger_entries", {
-    id, main_company_slug: slug, company_id: companyId, company_name: company!.name, entry_date: entry.date,
+    id, main_company_slug: slug, company_id: companyId, company_name: company.name, entry_date: entry.date,
     entry_type: entry.movementType, record_scope: entry.recordScope, description,
     debit: entry.type === "PAYMENT" ? entry.amount : entry.type === "COLLECTION" ? 0 : entry.debit,
     credit: entry.type === "COLLECTION" ? entry.amount : entry.type === "PAYMENT" ? 0 : entry.credit,
     currency: "TRY", payment_method: text(input.paymentMethod), created_by: actor, created_at: timestamp, updated_at: timestamp,
   }, ["id", "main_company_slug", "debit", "credit"]);
-  // One transactional batch owns movement, balance, ledger, payment history and live revision.
   await db.batch([
     movement,
     db.prepare("UPDATE companies SET current_balance=(SELECT COALESCE(SUM(effect),0) FROM current_account_movements WHERE company_id=? AND main_company_slug=?), updated_at=? WHERE id=? AND main_company_slug=?").bind(companyId, slug, timestamp, companyId, slug),
