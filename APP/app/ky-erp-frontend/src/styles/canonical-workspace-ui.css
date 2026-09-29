@@ -192,6 +192,43 @@
   background: #fff;
 }
 
+/* İmalatın eski sağ drawer sınıfı da artık merkez pencere. */
+.shell-v3[data-active-module="uretim"] .pc2-layer {
+  align-items: center !important;
+  justify-content: center !important;
+  padding: var(--ky-dialog-gap) !important;
+}
+
+.shell-v3[data-active-module="uretim"] .pc2-layer > .pc2-drawer {
+  position: relative !important;
+  inset: auto !important;
+  width: min(760px, calc(100vw - (var(--ky-dialog-gap) * 2))) !important;
+  max-width: 760px !important;
+  height: auto !important;
+  max-height: calc(100dvh - (var(--ky-dialog-gap) * 2)) !important;
+  margin: auto !important;
+  overflow: hidden !important;
+  border-radius: 14px !important;
+  box-shadow: 0 22px 64px rgba(15, 23, 42, .24) !important;
+}
+
+.shell-v3[data-active-module="uretim"] .pc2-layer > .pc2-drawer.wide {
+  width: min(var(--ky-dialog-wide-max), calc(100vw - (var(--ky-dialog-gap) * 2))) !important;
+  max-width: var(--ky-dialog-wide-max) !important;
+}
+
+/* e-Belge detay penceresi merkezde sabittir; eski geometri/sürükleme görsel davranışı uygulanmaz. */
+.shell-v3[data-active-module="e-belge"] .eb-document-modal,
+.shell-v3[data-active-module="muhasebe"] .eb-document-modal {
+  resize: none !important;
+}
+
+.shell-v3[data-active-module="e-belge"] .eb-document-modal-head,
+.shell-v3[data-active-module="muhasebe"] .eb-document-modal-head {
+  cursor: default !important;
+  touch-action: auto !important;
+}
+
 /* Açılır pencerelerde sekmeli işlem yapısı için ortak görsel dil. */
 .shell-v3:not([data-active-module="gunluk-operasyon"]) .ky-action-tabs,
 .shell-v3:not([data-active-module="gunluk-operasyon"]) [class*="modal-tabs"],
@@ -271,8 +308,11 @@
 
   .shell-v3:not([data-active-module="gunluk-operasyon"]) .ccw-transaction,
   .shell-v3[data-active-module="ik"] .ikpf-new,
-  .shell-v3[data-active-module="ik"] .ikpf-editing .ikpf-main {
+  .shell-v3[data-active-module="ik"] .ikpf-editing .ikpf-main,
+  .shell-v3[data-active-module="uretim"] .pc2-layer > .pc2-drawer,
+  .shell-v3[data-active-module="uretim"] .pc2-layer > .pc2-drawer.wide {
     width: calc(100vw - 20px) !important;
+    max-width: calc(100vw - 20px) !important;
     max-height: calc(100dvh - 20px) !important;
   }
 }
