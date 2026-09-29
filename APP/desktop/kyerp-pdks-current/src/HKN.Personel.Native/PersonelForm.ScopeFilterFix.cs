@@ -6,24 +6,29 @@ public partial class PersonelForm
 {
     bool employmentScopeFixWired;
 
-    protected override void OnActivated(EventArgs e)
+    protected override void OnVisibleChanged(EventArgs e)
     {
-        base.OnActivated(e);
+        base.OnVisibleChanged(e);
+        if (!Visible || IsDisposed) return;
+
         if (!employmentScopeFixWired)
         {
             employmentScopeFixWired = true;
+            // Existing classic handlers reload the table. These handlers are deliberately wired
+            // afterwards and apply the visible scope to the freshly loaded DataTable.
             scopeActive.CheckedChanged += EmploymentScopeChanged;
             scopePassive.CheckedChanged += EmploymentScopeChanged;
             scopeAll.CheckedChanged += EmploymentScopeChanged;
             searchText.TextChanged += (_, _) => ApplyEmploymentScopeAndSearch();
             searchField.SelectedIndexChanged += (_, _) => ApplyEmploymentScopeAndSearch();
         }
-        ApplyEmploymentScopeAndSearch();
+
+        BeginInvoke(new Action(ApplyEmploymentScopeAndSearch));
     }
 
     void EmploymentScopeChanged(object? sender, EventArgs e)
     {
-        if (sender is RadioButton radio && radio.Checked)
+        if (sender is RadioButton radio && radio.Checked && IsHandleCreated && !IsDisposed)
             BeginInvoke(new Action(ApplyEmploymentScopeAndSearch));
     }
 
@@ -46,12 +51,19 @@ public partial class PersonelForm
                 4 => "ICTARIH",
                 _ => "PKNO"
             };
-            filters.Add(column is "IGTARIH" or "ICTARIH"
-                ? $"CONVERT({column}, 'System.String') LIKE '%{term}%'"
-                : $"{column} LIKE '%{term}%'");
+            filters.Add($"CONVERT({column}, 'System.String') LIKE '%{term}%'");
         }
 
-        dt.DefaultView.RowFilter = string.Join(" AND ", filters);
+        try
+        {
+            dt.DefaultView.RowFilter = string.Join(" AND ", filters);
+        }
+        catch
+        {
+            // Never leave a stale filter if a legacy database exposes a different column type.
+            dt.DefaultView.RowFilter = scopeActive.Checked ? "ICTARIH IS NULL" : scopePassive.Checked ? "ICTARIH IS NOT NULL" : string.Empty;
+        }
+
         UpdateClassicStats();
         if (list.Rows.Count > 0 && list.CurrentRow is null)
             list.CurrentCell = list.Rows[0].Cells[0];
