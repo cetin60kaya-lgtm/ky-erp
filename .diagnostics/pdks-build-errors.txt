@@ -1,5 +1,5 @@
-HEAD: f1be4e707d889b8b09acedcf103587388cc6b024
-UTC: 2026-09-29T14:43:59
+HEAD: ad3090cd9795cd1997cd6535c3cc4bc9d0f9c1a8
+UTC: 2026-09-29T14:45:41
 
 D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\TerminalSdkLocator.cs(120,57): error CS1626: Cannot yield a value in the body of a try block with a catch clause [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
 D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\TerminalSdkLocator.cs(120,57): error CS1626: Cannot yield a value in the body of a try block with a catch clause [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
