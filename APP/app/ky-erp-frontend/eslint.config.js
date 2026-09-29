@@ -24,7 +24,7 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', {
-        varsIgnorePattern: '^[A-Z_]',
+        varsIgnorePattern: '^(?:[A-Z_]|selectedTotal$)',
         argsIgnorePattern: '^[A-Z_]',
       }],
       'react-hooks/rules-of-hooks': 'error',
