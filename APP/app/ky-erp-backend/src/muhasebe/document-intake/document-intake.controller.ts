@@ -22,12 +22,7 @@ import type {
   DocumentIntakeQueryDto,
 } from "./dto/document-intake.dto";
 
-@Controller([
-  "muhasebe/document-intake",
-  "api/muhasebe/document-intake",
-  "muhasebe/tedarikci-belgeler",
-  "api/muhasebe/tedarikci-belgeler",
-])
+@Controller("muhasebe/document-intake")
 export class DocumentIntakeController {
   constructor(private readonly service: DocumentIntakeServiceV2) {}
 

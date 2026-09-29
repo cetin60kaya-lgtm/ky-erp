@@ -1,0 +1,121 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
+const here=dirname(fileURLToPath(import.meta.url));
+const push=readFileSync(resolve(here,"auth-push-cloud.ts"),"utf8");
+const core=readFileSync(resolve(here,"auth-security-core.ts"),"utf8");
+const runtime=`${push}\n${core}`;
+
+test("security app enrollment is one-time, password stepped-up and migration retires legacy devices",()=>{
+  assert.match(runtime,/AUTH_PUSH_SECURITY_ENROLLMENT/);
+  assert.match(push,/security-enrollment\/start/);
+  assert.match(push,/security-enrollment\/complete/);
+  assert.match(push,/compare\(password, text\(user\.password_hash\)\)/);
+  assert.match(push,/legacyDevicesRetired: true/);
+  assert.match(push,/row\.securityApp !== true/);
+  assert.match(push,/retiredReason: "KY ERP Güvenlik uygulamasına taşındı"/);
+});
+
+test("security app devices are preferred and every decision is signed with device key",()=>{
+  assert.match(push,/row\.securityApp !== true/);
+  assert.match(core,/trustedDeviceIsRetired/);
+  assert.match(core,/purpose === "SELF"/);
+  assert.match(push,/LEGACY_PHONE_APPROVAL_RETIRED/);
+  assert.match(push,/verifySecurityAppDecision/);
+  assert.match(push,/SECURITY_DEVICE_SIGNATURE_INVALID/);
+  assert.match(push,/KYERP-DECISION-V1/);
+  assert.match(push,/decisionPublicKeyJwk/);
+  assert.match(push,/requiresLoginNumberMatch/);
+  assert.match(push,/KYERP-DECISION-V2/);
+  assert.match(push,/PHONE_MATCH_NUMBER_INVALID/);
+});
+
+test("security device token drift self-heals only with a fresh signed device-auth proof",()=>{
+  assert.match(push,/verifySecurityDeviceAuth/);
+  assert.match(push,/KYERP-DEVICE-AUTH-V1/);
+  assert.match(push,/X-KYERP-Security-Timestamp/);
+  assert.match(push,/X-KYERP-Security-Signature/);
+  assert.match(push,/120_000/);
+  assert.match(push,/SECURITY_DEVICE_TOKEN_REPAIRED/);
+  assert.match(push,/deviceTokenHash: suppliedHash/);
+});
+
+
+test("security app health and signed connection refresh can recover an inactive push channel",()=>{
+  assert.match(push,/auth\/push\/device\/health/);
+  assert.match(push,/auth\/push\/device\/refresh/);
+  assert.match(push,/signedSecurityActorForRecovery/);
+  assert.match(push,/SECURITY_APP_CONNECTION_REFRESHED/);
+  assert.match(push,/PUSH_DEVICE_RECOVERY_UNAUTHORIZED/);
+  assert.match(push,/lastRefreshAt/);
+  assert.match(push,/pushReachable: actor\.device\.pushReachable !== false/);
+});
+
+
+test("access refresh reuses the same security device id instead of creating duplicate push devices",()=>{
+  assert.match(push,/targetDeviceId/);
+  assert.match(push,/reservedDeviceId/);
+  assert.match(push,/const existing = serverBoundCandidate \|\| legacyReplaceCandidate/);
+  assert.match(push,/SECURITY_DEVICE_RELINK_INVALID/);
+  assert.match(push,/relinkedDevice: Boolean\(serverBoundCandidate \|\| legacyReplaceCandidate\)/);
+  assert.match(push,/SECURITY_APP_VERSION = "security-v3\.0"/);
+});
+
+
+
+test("trusted phone card keeps one server identity while push transport refreshes silently",()=>{
+  assert.match(push,/identityVersion: "TRUSTED_DEVICE_V1"/);
+  assert.match(push,/trustedAt: existing\?\.trustedAt \|\| existing\?\.createdAt \|\| nowIso\(\)/);
+  assert.match(push,/deviceId: saved\.id/);
+  assert.match(push,/deviceTokenHash: await sha256\(deviceToken\)/);
+  assert.match(push,/SECURITY_APP_CONNECTION_REFRESHED/);
+  assert.match(push,/pushEndpointChanged/);
+});
+test("security app creates a one-minute challenge-bound login code with attempt limiting",()=>{
+  assert.match(push,/SECURITY_LOGIN_CODE_SECONDS = 60/);
+  assert.match(push,/SECURITY_LOGIN_CODE_MAX_ATTEMPTS = 5/);
+  assert.match(push,/\/api\/auth\/push\/device\/login-code/);
+  assert.match(push,/SECURITY_APP_LOGIN_CODE_CREATED/);
+  assert.match(push,/verifySecurityLoginCode/);
+  assert.match(push,/SECURITY_APP_LOGIN_CODE_VERIFIED/);
+});
+
+test("push transport expiry never revokes the trusted security device and phone approval stays primary",()=>{
+  assert.match(core,/device\.securityApp === true \? true/);
+  assert.match(core,/pushReachable: false/);
+  assert.match(push,/SECURITY_DEVICE_REACTIVATED_AFTER_PUSH_EXPIRY/);
+  assert.match(push,/PHONE_LOGIN_APPROVAL_PUSH_DEFERRED/);
+  assert.match(push,/pushDelivered: sent > 0/);
+});
+
+
+test("reactivated Security device clears stale retirement markers so phone login stays primary",()=>{
+  assert.match(core,/trustedDeviceIsRetired/);
+  assert.match(push,/retiredAt: ""/);
+  assert.match(push,/retiredReason: ""/);
+  assert.match(core,/row\.securityApp !== true \|\| trustedDeviceIsRetired\(row\)/);
+});
+
+test("security device health returns the verified bound account identity and permission scope",()=>{
+  assert.match(push,/securityAccountProfile/);
+  assert.match(push,/s\.email,s\.role_override,s\.main_company_slug/);
+  assert.match(push,/scopeType: isSuper\(role\) \? "SYSTEM"/);
+  assert.match(push,/moduleKeys/);
+  assert.match(push,/securityCapabilities/);
+  assert.match(push,/const account = await safeSecurityAccountProfile\(c, actor\)/);
+  assert.match(push,/SELECT name FROM main_companies/);
+  assert.doesNotMatch(push,/SELECT name,title FROM main_companies/);
+  assert.match(push,/companyName = companySlug/);
+});
+
+
+test("security app install and runtime are limited to owners or delegated security users",()=>{
+  assert.match(push,/securityAppAccess/);
+  assert.match(push,/SECURITY_APP_NOT_ALLOWED/);
+  assert.match(push,/securityAppEligible: appAccess.eligible/);
+  assert.match(push,/capabilities.length > 0/);
+  assert.match(push,/if \(!appAccess\.eligible\) return null/);
+});

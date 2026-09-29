@@ -1,0 +1,163 @@
+/* KY ERP final workspace flow
+   Ana shell tek dikey scroll sahibidir. Moduller viewport yuksekligini yeniden hesaplamaz. */
+
+.shell-v3-workspace {
+  scroll-padding-bottom: 40px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+}
+
+.shell-v3-workspace > * {
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+}
+
+.shell-v3-workspace .clean-workflow-page,
+.shell-v3-workspace .clean-workflow-page .cw-screen,
+.shell-v3-workspace .clean-workflow-page .cw-work-grid {
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+.shell-v3-workspace .clean-workflow-page {
+  padding-bottom: 30px;
+}
+
+.shell-v3-workspace .ik-page,
+.shell-v3-workspace .ik-html.app {
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+.shell-v3-workspace .ik-page {
+  padding-bottom: 34px;
+}
+
+.shell-v3-workspace .bh-grid-3,
+.shell-v3-workspace .bh-grid-2 {
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+.shell-v3-workspace .bh-grid-3 > .bh-card {
+  max-height: none !important;
+}
+
+.shell-v3-workspace .bh-scroll {
+  max-height: min(62vh, 680px);
+}
+
+.shell-v3-workspace .bh-list,
+.shell-v3-workspace .bh-work-color-list {
+  max-height: min(58vh, 620px);
+}
+
+.shell-v3-workspace .iw-grid-3 > .iw-card:first-child {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+.shell-v3-workspace .iw-grid-3 > .iw-card:first-child .iw-list {
+  max-height: min(64vh, 720px);
+  overflow: auto;
+}
+@media (max-height: 760px) and (min-width: 1025px) {
+  .shell-v3-workspace {
+    padding-bottom: 36px;
+  }
+
+  .shell-v3-workspace .bh-scroll,
+  .shell-v3-workspace .bh-list,
+  .shell-v3-workspace .bh-work-color-list,
+  .shell-v3-workspace .iw-grid-3 > .iw-card:first-child .iw-list {
+    max-height: 56vh;
+  }
+}
+
+@media (max-width: 760px) {
+  .shell-v3-workspace {
+    padding-bottom: max(18px, env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+/* 2026-09-13 final canvas: kirik beyaz zemin, modül tonu ve güvenli alt sınır */
+.shell-v3 {
+  --ky-app-canvas: #f5f7fa;
+}
+
+.shell-v3-main {
+  background: var(--ky-app-canvas) !important;
+}
+
+.shell-v3-workspace {
+  position: relative;
+  scrollbar-gutter: stable;
+  scroll-padding-bottom: 72px;
+  padding-bottom: max(42px, env(safe-area-inset-bottom, 0px)) !important;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--active-tab-soft) 88%, var(--ky-app-canvas)) 0,
+    color-mix(in srgb, var(--active-tab-soft) 58%, var(--ky-app-canvas)) 190px,
+    color-mix(in srgb, var(--active-tab-soft) 24%, var(--ky-app-canvas)) 430px,
+    var(--ky-app-canvas) 760px,
+    var(--ky-app-canvas) 100%
+  ) !important;
+}
+
+.shell-v3-workspace::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: max(26px, env(safe-area-inset-bottom, 0px));
+  border-bottom: 1px solid color-mix(in srgb, var(--active-tab-line) 62%, #dfe5eb);
+  pointer-events: none;
+}
+
+/* Sistem Merkezi de diğer ana modüller gibi bağımsız renk kimliği taşır. */
+.shell-v3[data-active-module="sistem-merkezi"] {
+  --module-accent: #3f7280;
+  --module-soft: #edf7f8;
+  --module-line: #cde4e8;
+}
+.shell-v3-module[data-module="sistem-merkezi"] {
+  --mod: #3f7280;
+  --mod-soft: #edf7f8;
+  --mod-line: #cde4e8;
+}
+.shell-v3-tabs > button[data-module="sistem-merkezi"] {
+  --tab-accent: #3f7280;
+  --tab-soft: #edf7f8;
+  --tab-line: #cde4e8;
+}
+
+@media (max-width: 760px) {
+  .shell-v3-workspace {
+    scroll-padding-bottom: 56px;
+    padding-bottom: max(30px, env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* 2026-09-13 visual-only final polish: tint depth, softer borders, breathing room */
+.shell-v3-workspace {
+  padding-top: 18px !important;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--active-tab-soft) 92%, var(--ky-app-canvas)) 0,
+    color-mix(in srgb, var(--active-tab-soft) 70%, var(--ky-app-canvas)) 220px,
+    color-mix(in srgb, var(--active-tab-soft) 44%, var(--ky-app-canvas)) 520px,
+    color-mix(in srgb, var(--active-tab-soft) 26%, var(--ky-app-canvas)) 900px,
+    color-mix(in srgb, var(--active-tab-soft) 16%, var(--ky-app-canvas)) 100%
+  ) !important;
+}
+.shell-v3-workspace .content-card,
+.shell-v3-workspace [class*="card"] {
+  border-color: color-mix(in srgb, var(--active-tab-line) 38%, #e2e8f0) !important;
+}
+.shell-v3-workspace::after {
+  border-bottom-color: color-mix(in srgb, var(--active-tab-line) 72%, #d9e1e8);
+}
+@media (max-width: 760px) {
+  .shell-v3-workspace { padding-top: 12px !important; }
+}

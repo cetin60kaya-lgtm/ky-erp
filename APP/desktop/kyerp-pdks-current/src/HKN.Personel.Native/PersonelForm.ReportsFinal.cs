@@ -1,17 +1,47 @@
 using System.Drawing.Printing;
+using KYERP.PDKS.Core.Reports;
 
 namespace HKN.Personel.Native;
 
 public partial class PersonelForm
 {
+    static string SafeFileName(string value)=>string.Concat(value.Select(c=>Path.GetInvalidFileNameChars().Contains(c)?'_':c));
+
+    void ExportActiveGrid(bool excel)
+    {
+        var page=tabs.SelectedTab??throw new InvalidOperationException("Aktarılacak sekme seçili değil.");
+        var grid=All(page).OfType<DataGridView>().FirstOrDefault()??throw new InvalidOperationException("Bu sekmede aktarılacak tablo yok.");
+        var columns=grid.Columns.Cast<DataGridViewColumn>().Where(column=>column.Visible).OrderBy(column=>column.DisplayIndex).ToArray();
+        var rows=grid.Rows.Cast<DataGridViewRow>().Where(row=>!row.IsNewRow).Select(row=>(IReadOnlyList<string>)columns.Select(column=>Convert.ToString(row.Cells[column.Index].FormattedValue)??"").ToArray()).ToArray();
+        var report=CompanyBranding.Decorate(new ReportTable(page.Text,columns.Select(column=>column.HeaderText).ToArray(),rows));
+        using var save=new SaveFileDialog{Filter=excel?"Excel (*.xlsx)|*.xlsx":"PDF (*.pdf)|*.pdf",DefaultExt=excel?"xlsx":"pdf",FileName=$"{SafeFileName(page.Text)}-{DateTime.Now:yyyyMMdd-HHmm}"};
+        if(save.ShowDialog(this)!=DialogResult.OK)return;
+        if(excel)ReportExporter.ExportExcel(save.FileName,report);else ReportExporter.ExportPdf(save.FileName,report);
+        MessageBox.Show("Rapor oluşturuldu:\n"+save.FileName,"Raporlar",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    }
+
+    void ExportActiveGridCsv()
+    {
+        var page=tabs.SelectedTab??throw new InvalidOperationException("Aktarılacak sekme seçili değil.");
+        var grid=All(page).OfType<DataGridView>().FirstOrDefault()??throw new InvalidOperationException("Bu sekmede aktarılacak tablo yok.");
+        var columns=grid.Columns.Cast<DataGridViewColumn>().Where(c=>c.Visible).OrderBy(c=>c.DisplayIndex).ToArray();
+        using var save=new SaveFileDialog{Filter="CSV (*.csv)|*.csv",DefaultExt="csv",FileName=$"{SafeFileName(page.Text)}-{DateTime.Now:yyyyMMdd-HHmm}"};
+        if(save.ShowDialog(this)!=DialogResult.OK)return;
+        using var sw=new StreamWriter(save.FileName,false,new System.Text.UTF8Encoding(true));
+        string Csv(string v)=>"\""+(v??string.Empty).Replace("\"","\"\"")+"\"";
+        sw.WriteLine(string.Join(";",columns.Select(c=>Csv(c.HeaderText))));
+        foreach(DataGridViewRow row in grid.Rows)if(!row.IsNewRow)sw.WriteLine(string.Join(";",columns.Select(c=>Csv(Convert.ToString(row.Cells[c.Index].FormattedValue)??""))));
+        MessageBox.Show("CSV oluşturuldu:\n"+save.FileName,"Raporlar",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    }
+
     string ReportTemplate(string title)=>title switch
     {
-        "Ayrıntılı Kişisel Bordro"=>@"D:\Hedef500\Hedef500\Report\Kisisel_Bordro.fr3",
-        "Personel Bilgi Formu"=>@"D:\Hedef500\Hedef500\Report\PerBilgi.fr3",
-        "Personel Bilgi Formu (Boş)"=>@"D:\Hedef500\Hedef500\Report\PerBilgiBos.fr3",
-        "Kişisel Giriş Çıkış Raporu"=>@"D:\Hedef500\Hedef500\Report\KisiselGirisCikis.fr3",
-        "Kişisel İzin Kartı"=>@"D:\Hedef500\Hedef500\Report\KisiselIzinKarti.fr3",
-        "Kişisel Ek Kazanç ve Kesinti Kartı"=>@"D:\Hedef500\Hedef500\Report\KisiselEKKKarti.fr3",
+        "Ayrıntılı Kişisel Bordro"=>options.ReportPath("Kisisel_Bordro.fr3"),
+        "Personel Bilgi Formu"=>options.ReportPath("PerBilgi.fr3"),
+        "Personel Bilgi Formu (Boş)"=>options.ReportPath("PerBilgiBos.fr3"),
+        "Kişisel Giriş Çıkış Raporu"=>options.ReportPath("KisiselGirisCikis.fr3"),
+        "Kişisel İzin Kartı"=>options.ReportPath("KisiselIzinKarti.fr3"),
+        "Kişisel Ek Kazanç ve Kesinti Kartı"=>options.ReportPath("KisiselEKKKarti.fr3"),
         _=>""
     };
 
@@ -19,23 +49,46 @@ public partial class PersonelForm
 
     void PrintReportFinal(string title)
     {
-        if(currentPk==""&&title!="Personel Bilgi Formu (Boş)")return;
-        string template=ReportTemplate(title);if(template.Length>0&&!File.Exists(template)){MessageBox.Show("Rapor şablonu bulunamadı:\n"+template,"Rapor",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
-        var grid=ReportGrid(title);int rowIndex=0;var doc=new PrintDocument{DocumentName=title};
-        doc.BeginPrint+=(_,_)=>rowIndex=0;
-        doc.PrintPage+=(s,e)=>
+        if (currentPk == "" && title != "Personel Bilgi Formu (Boş)") return;
+        var blank = title == "Personel Bilgi Formu (Boş)";
+        var grid = ReportGrid(title);
+        ReportTable report;
+
+        if (title.StartsWith("Personel Bilgi Formu", StringComparison.Ordinal))
         {
-            var g=e.Graphics!;float y=45;using var h=new Font("Arial",14,FontStyle.Bold);using var n=new Font("Arial",9);using var b=new Font("Arial",9,FontStyle.Bold);
-            g.DrawString(title,h,Brushes.Black,45,y);y+=30;
-            bool blank=title=="Personel Bilgi Formu (Boş)";string pk=blank?"":currentPk,ad=blank?"":$"{f.GetValueOrDefault("AD")?.Text} {f.GetValueOrDefault("SOYAD")?.Text}";
-            g.DrawString($"Kart No: {pk}    Ad Soyad: {ad}",n,Brushes.Black,45,y);y+=21;
-            g.DrawString($"İşe Giriş: {(blank?"":f.GetValueOrDefault("IGTARIH")?.Text)}    Maaş: {(blank?"":f.GetValueOrDefault("MAAS")?.Text)}",n,Brushes.Black,45,y);y+=26;
-            if(title.StartsWith("Personel Bilgi Formu")){string[] keys={"UKNO","CINSIYET","DTARIH","DYER","BABAAD","ANAAD","MEDHAL","UYRUK","SSKNO","GSM","ADRES"};foreach(var k in keys){g.DrawString($"{k}: {(blank?"":f.GetValueOrDefault(k)?.Text)}",n,Brushes.Black,45,y);y+=19;}e.HasMorePages=false;return;}
-            if(grid==null){e.HasMorePages=false;return;}
-            string head=string.Join(" | ",grid.Columns.Cast<DataGridViewColumn>().Where(c=>c.Visible).Take(6).Select(c=>c.HeaderText));g.DrawString(head,b,Brushes.Black,45,y);y+=20;
-            while(rowIndex<grid.Rows.Count){var r=grid.Rows[rowIndex];rowIndex++;if(r.IsNewRow)continue;string line=string.Join(" | ",r.Cells.Cast<DataGridViewCell>().Where(c=>c.OwningColumn.Visible).Take(6).Select(c=>Convert.ToString(c.FormattedValue)));g.DrawString(line,n,Brushes.Black,45,y);y+=17;if(y>e.MarginBounds.Bottom-25){e.HasMorePages=rowIndex<grid.Rows.Count;return;}}
-            e.HasMorePages=false;
-        };
-        using var pv=new PrintPreviewDialog{Document=doc,Width=1000,Height=750,Text=title};pv.ShowDialog(this);
+            string V(string key) => blank ? string.Empty : f.GetValueOrDefault(key)?.Text ?? string.Empty;
+            var rows = new List<IReadOnlyList<string>>
+            {
+                new[] { "Kart No", blank ? string.Empty : currentPk },
+                new[] { "Ad Soyad", blank ? string.Empty : $"{V("AD")} {V("SOYAD")}".Trim() },
+                new[] { "İşe Giriş", V("IGTARIH") },
+                new[] { "Maaş", V("MAAS") },
+                new[] { "Ulusal Kimlik No", V("UKNO") },
+                new[] { "Cinsiyeti", V("CINSIYET") },
+                new[] { "Doğum Tarihi", V("DTARIH") },
+                new[] { "Doğum Yeri", V("DYER") },
+                new[] { "Baba Adı", V("BABAAD") },
+                new[] { "Ana Adı", V("ANAAD") },
+                new[] { "Medeni Hali", V("MEDHAL") },
+                new[] { "Uyruğu", V("UYRUK") },
+                new[] { "SSK No", V("SSKNO") },
+                new[] { "GSM", V("GSM") },
+                new[] { "Adres", V("ADRES") }
+            };
+            report = new ReportTable(title, new[] { "Alan", "Bilgi" }, rows);
+        }
+        else
+        {
+            if (grid is null) return;
+            var columns = grid.Columns.Cast<DataGridViewColumn>()
+                .Where(c => c.Visible).OrderBy(c => c.DisplayIndex).Take(10).ToArray();
+            var rows = grid.Rows.Cast<DataGridViewRow>().Where(r => !r.IsNewRow)
+                .Select(r => (IReadOnlyList<string>)columns.Select(c => Convert.ToString(r.Cells[c.Index].FormattedValue) ?? string.Empty).ToArray())
+                .ToArray();
+            var person = $"{f.GetValueOrDefault("AD")?.Text} {f.GetValueOrDefault("SOYAD")?.Text}".Trim();
+            report = new ReportTable($"{title} • {currentPk} • {person}", columns.Select(c => c.HeaderText).ToArray(), rows);
+        }
+
+        ReportPrintHelper.Preview(this, report, report.Columns.Count > 7);
     }
 }

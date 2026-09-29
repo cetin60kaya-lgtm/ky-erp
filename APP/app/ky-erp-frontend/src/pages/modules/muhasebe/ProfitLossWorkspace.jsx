@@ -107,6 +107,7 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
     const source = Array.isArray(state.data?.records) ? state.data.records : [];
     const term = query.trim().toLocaleLowerCase("tr-TR");
     return source.filter((row) => {
+      if (row.reportIncluded === false || row.reportStatus === "HARIC" || row.sourceType === "CURRENT_ACCOUNT") return false;
       if (type !== "ALL" && row.type !== type) return false;
       if (recordType !== "ALL" && String(row.recordType || "RESMI").toUpperCase() !== recordType) return false;
       if (!term) return true;
@@ -129,7 +130,7 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
   }, [records]);
 
   const summary = state.data?.summary || {};
-  const templates = Array.isArray(state.data?.generalExpenses) ? state.data.generalExpenses : [];
+  const templates = Array.isArray(state.data?.fixedExpenseTemplates) ? state.data.fixedExpenseTemplates : [];
 
   const saveExpense = async () => {
     if (!form.date || !form.category || Number(form.amount || 0) <= 0) {

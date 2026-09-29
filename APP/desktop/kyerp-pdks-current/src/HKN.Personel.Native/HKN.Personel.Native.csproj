@@ -1,15 +1,27 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <StartupObject>HKN.Personel.Native.Program</StartupObject>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>KYERP.PDKS</AssemblyName>
+    <Product>KY PDKS 6.3 TEST</Product>
+    <Company>KY ERP</Company>
+    <Description>KY PDKS 6.3 TEST - seri çalışma alanı, görünür kayıt işlemleri, otomatik puantaj kontrolü, bordro çıktıları ve profesyonel lisans temeli</Description>
+    <Version>6.3.0</Version>
+    <FileVersion>6.3.0.0</FileVersion>
+    <DebugType Condition="'$(Configuration)'=='Release'">none</DebugType>
+    <DebugSymbols Condition="'$(Configuration)'=='Release'">false</DebugSymbols>
   </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="FirebirdSql.Data.FirebirdClient" Version="10.3.4" />
+    <ProjectReference Include="..\KYERP.PDKS.Core\KYERP.PDKS.Core.csproj" />
   </ItemGroup>
-
+  <Target Name="BuildTerminalDeviceBridge" AfterTargets="Build" Condition="Exists('$(WINDIR)\Microsoft.NET\Framework\v4.0.30319\csc.exe')">
+    <Exec Command="&quot;$(WINDIR)\Microsoft.NET\Framework\v4.0.30319\csc.exe&quot; /nologo /platform:x86 /target:exe /out:&quot;$(TargetDir)KYERP.TerminalBridge.exe&quot; /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:Microsoft.CSharp.dll &quot;$(MSBuildProjectDirectory)\..\..\tools\TerminalDeviceBridge\Program.cs&quot;" />
+  </Target>
+  <Target Name="PublishTerminalDeviceBridge" AfterTargets="Publish" Condition="Exists('$(WINDIR)\Microsoft.NET\Framework\v4.0.30319\csc.exe')">
+    <Exec Command="&quot;$(WINDIR)\Microsoft.NET\Framework\v4.0.30319\csc.exe&quot; /nologo /platform:x86 /target:exe /out:&quot;$(PublishDir)KYERP.TerminalBridge.exe&quot; /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:Microsoft.CSharp.dll &quot;$(MSBuildProjectDirectory)\..\..\tools\TerminalDeviceBridge\Program.cs&quot;" />
+  </Target>
 </Project>

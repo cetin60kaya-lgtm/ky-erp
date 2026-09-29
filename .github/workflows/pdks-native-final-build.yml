@@ -1,0 +1,67 @@
+name: PDKS Native Final Build
+
+on:
+  push:
+    branches:
+      - codex/kyerp-pdks-full-app-prep
+    paths:
+      - 'APP/desktop/kyerp-pdks-current/**'
+      - '.github/workflows/pdks-native-final-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore APP/desktop/kyerp-pdks-current/KYERP.PDKS.sln
+      - name: Build solution
+        run: dotnet build APP/desktop/kyerp-pdks-current/KYERP.PDKS.sln -c Release --no-restore
+      - name: Contract tests
+        run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/ContractTests/ContractTests.csproj -c Release --no-build
+      - name: Shell smoke
+        run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/ShellSmokeTest/ShellSmokeTest.csproj -c Release --no-build
+      - name: UI audit
+        env:
+          KY_PDKS_UI_AUDIT_NOLOAD: '1'
+        run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/UiAudit/UiAudit.csproj -c Release
+      - name: V4 shell smoke
+        run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/V4ShellSmoke/V4ShellSmoke.csproj -c Release
+      - name: Publish native app self contained
+        run: dotnet publish APP/desktop/kyerp-pdks-current/src/HKN.Personel.Native/HKN.Personel.Native.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o out/HKN-PDKS
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out/package | Out-Null
+          Copy-Item out/HKN-PDKS/* out/package -Recurse -Force
+          Get-ChildItem out/package -Filter '*.pdb' -Recurse | Remove-Item -Force
+          Set-Content -Path out/package/BUILD_INFO.txt -Encoding UTF8 -Value @(
+            'KY PDKS 6.2 TEST - SELF-CONTAINED BUILD',
+            'Revision: 6.2 TEST',
+            'Scope: role separation + company responsible quick operations + per-company license access lock',
+            'Distribution: release symbols removed',
+            'Runtime: win-x64 self-contained',
+            'Tests: Contract + Shell + UI Audit + V4 Shell',
+            'Terminal: matched local TerminalSdk required for physical device operations',
+            "Branch: $env:GITHUB_REF_NAME",
+            "Commit: $env:GITHUB_SHA",
+            "UTC: $([DateTime]::UtcNow.ToString('yyyy-MM-dd HH:mm:ss'))"
+          )
+          Compress-Archive -Path out/package/* -DestinationPath out/KY-PDKS-6.2-TEST-SELF-CONTAINED.zip -Force
+          (Get-FileHash out/KY-PDKS-6.2-TEST-SELF-CONTAINED.zip -Algorithm SHA256).Hash | Set-Content out/KY-PDKS-6.2-TEST-SELF-CONTAINED.zip.sha256.txt -Encoding ASCII
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KY-PDKS-6.2-TEST-SELF-CONTAINED
+          path: |
+            out/KY-PDKS-6.2-TEST-SELF-CONTAINED.zip
+            out/KY-PDKS-6.2-TEST-SELF-CONTAINED.zip.sha256.txt
+          if-no-files-found: error
+          retention-days: 14

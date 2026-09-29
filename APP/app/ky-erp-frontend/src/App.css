@@ -14244,7 +14244,7 @@ body.ik-personel-clean-header .topbar>.primary-btn {
   min-height: min(240px, calc(100vh - 20px)) !important;
   max-width: calc(100vw - 20px) !important;
   max-height: calc(100vh - 20px) !important;
-  resize: both !important;
+  resize: none !important;
   overflow: auto !important;
   box-sizing: border-box !important;
   scrollbar-gutter: stable;
@@ -14286,4 +14286,87 @@ body.ik-personel-clean-header .topbar>.primary-btn {
   .kyerp-ai-fab span {
     display: none;
   }
+}
+
+
+/* Evrensel açılır pencere çalışma düzeni: taşı + boyutlandır + son konumu hatırla */
+@media (min-width: 701px) and (pointer: fine) {
+.ky-persistent-modal.ky-modal-positioned {
+    position: fixed !important;
+    inset: auto !important;
+    left: var(--ky-modal-left) !important;
+    top: var(--ky-modal-top) !important;
+    margin: 0 !important;
+    transform: none !important;
+  }
+  .ky-modal-drag-handle {
+    cursor: move !important;
+    user-select: none;
+    touch-action: none;
+  }
+  .ky-modal-dragging {
+    transition: none !important;
+  }
+}
+
+/* Evrensel modal v3: tüm açılırlar 8 yönden taşınabilir/boyutlanabilir */
+.ky-persistent-modal {
+  resize: none !important;
+  box-sizing: border-box !important;
+  overflow: auto !important;
+  scrollbar-gutter: stable;
+}
+.ky-persistent-modal.ky-modal-resizing,
+.ky-persistent-modal.ky-modal-dragging {
+  transition: none !important;
+  user-select: none !important;
+}
+@media (min-width: 701px) {
+.ky-persistent-modal.ky-modal-positioned {
+    position: fixed !important;
+    inset: auto !important;
+    left: var(--ky-modal-left) !important;
+    top: var(--ky-modal-top) !important;
+    margin: 0 !important;
+    transform: none !important;
+  }
+}
+
+/* Tüm cihazlarda aynı modal geometrisi; hiçbir açılır hariç değil */
+.ky-persistent-modal.ky-modal-positioned {
+  position: fixed !important;
+  inset: auto !important;
+  left: var(--ky-modal-left) !important;
+  top: var(--ky-modal-top) !important;
+  margin: 0 !important;
+  transform: none !important;
+}
+
+/* Evrensel modal v4: doğal açılış, başlıktan taşıma, yalnız sol alttan boyutlandırma */
+.ky-persistent-modal.ky-modal-positioned {
+  width: var(--ky-modal-width) !important;
+  height: var(--ky-modal-height) !important;
+}
+.ky-persistent-modal {
+  resize: none !important;
+}
+
+/* Modal v4.2: görünür ve gerçek sağ-alt boyutlandırma tutamacı */
+.ky-modal-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  height: 20px;
+  z-index: 2147483000;
+  cursor: nwse-resize !important;
+  touch-action: none;
+  user-select: none;
+  pointer-events: auto;
+  border-bottom-right-radius: 8px;
+  background:
+    linear-gradient(135deg, transparent 0 48%, rgba(71,84,103,.82) 49% 54%, transparent 55% 65%, rgba(71,84,103,.60) 66% 71%, transparent 72%);
+}
+.ky-modal-resize-handle:hover {
+  background-color: rgba(37,99,235,.07);
 }

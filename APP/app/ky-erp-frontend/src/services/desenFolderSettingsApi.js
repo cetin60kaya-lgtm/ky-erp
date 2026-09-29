@@ -50,3 +50,13 @@ export async function openDesenIncomingFolder(activeMainCompany) {
     ),
   );
 }
+
+
+export async function getDesenBridgeStatus(activeMainCompany) {
+  return unwrap(
+    await apiGet(
+      "/desen/bridge/status",
+      companyPayload(activeMainCompany),
+    ),
+  );
+}

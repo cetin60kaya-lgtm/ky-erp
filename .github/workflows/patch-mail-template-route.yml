@@ -1,12 +1,8 @@
 name: Muhasebe Mail Şablonu Bağlantısı
 
 on:
-  pull_request:
-    paths:
-      - "docs/trigger-mail-workspace.txt"
-      - ".github/workflows/patch-mail-template-route.yml"
+  # Automatic GitHub Actions disabled. Manual diagnostic/fallback only.
   workflow_dispatch:
-
 permissions:
   contents: write
   pull-requests: read

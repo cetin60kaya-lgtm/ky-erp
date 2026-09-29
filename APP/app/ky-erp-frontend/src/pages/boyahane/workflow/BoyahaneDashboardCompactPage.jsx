@@ -8,6 +8,7 @@ import {
   listRegisteredColors,
 } from "../../../services/boyahaneWorkflowApi";
 import { formatDate, formatKg, safeArray, statusTone } from "./boyahaneFormat";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import ModelThumbnail from "./ModelThumbnail";
 
 function todayKey(value = new Date()) {
@@ -78,18 +79,27 @@ export default function BoyahaneDashboardCompactPage({ activeMainCompany, openMo
     setLoading(true);
     setError("");
     try {
-      const [jobRows, productionRows, colorRows, logRows, report] = await Promise.all([
-        listBoyahaneJobs(activeMainCompany),
-        listBoyahaneProductions(activeMainCompany),
-        listRegisteredColors(activeMainCompany),
-        listBoyahaneLogs(activeMainCompany),
-        getBoyahaneReports(activeMainCompany),
-      ]);
-      setJobs(safeArray(jobRows));
-      setProductions(safeArray(productionRows));
-      setColors(safeArray(colorRows));
-      setLogs(safeArray(logRows));
-      setSummary(report?.summary || {});
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id;
+      const result = await loadModuleData({
+        scope: `boyahane:${tenant}:dashboard`,
+        sources: {
+          jobs: { critical: true, load: () => listBoyahaneJobs(activeMainCompany) },
+          productions: { fallback: [], load: () => listBoyahaneProductions(activeMainCompany) },
+          colors: { fallback: [], load: () => listRegisteredColors(activeMainCompany) },
+          logs: { fallback: [], load: () => listBoyahaneLogs(activeMainCompany) },
+          report: { fallback: {}, load: () => getBoyahaneReports(activeMainCompany) },
+        },
+      });
+      if (result.states.jobs.status !== "error") setJobs(safeArray(result.data.jobs));
+      if (result.states.productions.status !== "error") setProductions(safeArray(result.data.productions));
+      if (result.states.colors.status !== "error") setColors(safeArray(result.data.colors));
+      if (result.states.logs.status !== "error") setLogs(safeArray(result.data.logs));
+      if (result.states.report.status !== "error") setSummary(result.data.report?.summary || {});
+      setError(moduleLoadMessage(
+        result,
+        "Boyahane iş ana listesi alınamadı; son başarılı işler korunuyor.",
+        "Bazı Boyahane yardımcı özetleri yenilenemedi; iş listesi kullanılabilir.",
+      ));
     } catch (requestError) {
       setError(requestError?.message || "Boyahane verileri alınamadı.");
     } finally {

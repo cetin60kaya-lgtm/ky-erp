@@ -1166,7 +1166,7 @@ async function createModel(c: Context<AppEnv>, body: Row) {
       (!orderNo || normalized(card.orderNo) === normalized(orderNo)),
   );
   if (duplicate) return { ...duplicate, duplicate: true };
-  const id = crypto.randomUUID();
+  const id = text(first(body.designModelId, body.modelId, body.id)) || crypto.randomUUID();
   const now = new Date().toISOString();
   const company: Row = center.companies.find((row: Row) => row.id === companyId) || {};
   const regions = String(first(body.printRegions, body.printArea, body.baskiBolgesi, "Ön"))
@@ -1181,6 +1181,7 @@ async function createModel(c: Context<AppEnv>, body: Row) {
     dispatchNo: text(first(body.dispatchNo, body.irsaliyeNo)),
     expectedQty: numberValue(first(body.expectedQty, body.gelenAdet)),
     printRegions: regions.map((regionName, index) => ({ regionName, sortOrder: index + 1 })),
+    designModelId: text(body.designModelId || id),
     source: text(body.sourceModule) || "PRODUCTION_CENTER",
     createdAt: now,
   };

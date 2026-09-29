@@ -30,7 +30,6 @@ async function bootstrap() {
       if ([
         "https://kyerp.net",
         "https://www.kyerp.net",
-        "https://app.kyerp.net",
       ].includes(origin)) return callback(null, true);
       // Allow the live server itself
       if (origin === "http://178.157.14.87" || origin.startsWith("http://178.157.14.87")) return callback(null, true);

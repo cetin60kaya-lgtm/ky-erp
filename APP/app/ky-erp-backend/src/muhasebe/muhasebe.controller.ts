@@ -59,7 +59,7 @@ function sanitizeFilePart(value: string) {
     .trim();
 }
 
-@Controller(["muhasebe", "api/muhasebe"])
+@Controller("muhasebe")
 export class MuhasebeController {
   constructor(
     private readonly belgService: MuhasebeBelgeService,
@@ -762,86 +762,6 @@ export class MuhasebeController {
       this.resolveDbSlug(mainCompanySlug, mainCompanyId),
     );
     return apiSuccess(await this.muhasebeDb.getUploadSummary(slug));
-  }
-
-  @Get("belge-havuzu")
-  getBelgeHavuzu(
-    @Query("mainCompanySlug") mainCompanySlug?: string,
-    @Query("mainCompanyId") mainCompanyId?: string,
-    @Query("durum") durum?: string,
-    @Query("belgeTipi") belgeTipi?: string,
-    @Query("page") page?: string,
-    @Query("limit") limit?: string,
-    @Query("q") q?: string,
-    @Query("type") type?: string,
-    @Query("status") status?: string,
-  ) {
-    const slug = this.requireMainCompanySlug(
-      this.resolveDbSlug(mainCompanySlug, mainCompanyId),
-    );
-    return this.muhasebeFinal.belgeHavuzu({
-      mainCompanySlug: slug,
-      durum: status || durum,
-      type: type || belgeTipi,
-      page,
-      limit,
-      q,
-    });
-  }
-
-  @Get("belge-havuzu/:id")
-  getBelgeHavuzuById(
-    @Param("id") id: string,
-    @Query("mainCompanySlug") mainCompanySlug?: string,
-    @Query("mainCompanyId") mainCompanyId?: string,
-  ) {
-    const slug = this.requireMainCompanySlug(
-      this.resolveDbSlug(mainCompanySlug, mainCompanyId),
-    );
-    return this.muhasebeFinal.belgeDetay(slug, id);
-  }
-
-  @Patch("belge-havuzu/:id")
-  updateBelgeHavuzu(@Param("id") id: string, @Body() body: any) {
-    const slug = this.requireMainCompanySlug(
-      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
-    );
-    return this.muhasebeDb.updateDocument(slug, id, body);
-  }
-
-  @Post("belge-havuzu/:id/reject")
-  rejectBelgeHavuzu(@Param("id") id: string, @Body() body: any) {
-    const slug = this.requireMainCompanySlug(
-      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
-    );
-    return this.muhasebeDb.rejectDocument(slug, id, body);
-  }
-
-  @Post("belge-havuzu/:id/reddet")
-  reddetBelgeHavuzu(@Param("id") id: string, @Body() body: any) {
-    return this.rejectBelgeHavuzu(id, body);
-  }
-
-  @Post("belge-havuzu/onay-kuyrugu")
-  enqueueBelgeHavuzuApprovals() {
-    throw new GoneException(
-      "Belge onay kuyrugu devre disi. Toplu onay icin her belgeyi /muhasebe/belge-havuzu/:id/onayla endpointine sirali gonderin.",
-    );
-  }
-
-  @Get("belge-havuzu/onay-kuyrugu/:jobId")
-  getBelgeHavuzuApprovalQueue() {
-    throw new GoneException(
-      "Belge onay kuyrugu devre disi.",
-    );
-  }
-
-  @Post("belge-havuzu/:id/onayla")
-  approveBelgeHavuzu(@Param("id") id: string, @Body() body: any) {
-    const slug = this.requireMainCompanySlug(
-      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
-    );
-    return this.muhasebeFinal.approveDocument(slug, id, body);
   }
 
   @Post("fatura-kesim/pdf-oku")
@@ -2178,53 +2098,6 @@ export class MuhasebeController {
     return this.folderWatcher.deleteTemplate(slug, id);
   }
 
-  @Post("belge-havuzu/:id/tekrar-tasnif-et")
-  reprocessBelgeHavuzu(@Param("id") id: string, @Body() body: any) {
-    const slug = this.requireMainCompanySlug(
-      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
-    );
-    return this.muhasebeDb.reprocessDocument(slug, id);
-  }
-
-  @Post("belge-havuzu/yeniden-isle")
-  reprocessPendingBelgeHavuzu(@Body() body: any) {
-    const slug = this.requireMainCompanySlug(
-      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
-    );
-    return this.muhasebeDb.reprocessPendingDocuments(slug);
-  }
-
-  @Post("belge-yukleme/tasnif-bekleyenleri-yeniden-isle")
-  reprocessPendingUploads(@Body() body: any) {
-    return this.reprocessPendingBelgeHavuzu(body);
-  }
-
-  @Post("belge-yukleme/:id/tekrar-tasnif")
-  reprocessUpload(@Param("id") id: string, @Body() body: any) {
-    return this.reprocessBelgeHavuzu(id, body);
-  }
-
-  @Patch("belge-yukleme/:id/sil")
-  softDeleteUpload(@Param("id") id: string, @Body() body: any) {
-    const slug = this.requireMainCompanySlug(
-      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
-    );
-    return this.muhasebeDb.softDeleteDocument(slug, id, body);
-  }
-
-  @Post("belge-yukleme/eski-kayitlari-temizle")
-  cleanupOldDocumentUploads(@Body() body: any) {
-    const slug = this.requireMainCompanySlug(
-      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
-    );
-    return this.muhasebeDb.cleanupOldDocumentRecords(slug, body);
-  }
-
-  @Patch("belge-havuzu/:id/sil")
-  softDeleteBelgeHavuzu(@Param("id") id: string, @Body() body: any) {
-    return this.softDeleteUpload(id, body);
-  }
-
   @Get("models")
   listAvailableModels(
     @Query("mainCompanySlug") mainCompanySlug?: string,
@@ -3178,11 +3051,6 @@ export class MuhasebeController {
     );
   }
 
-  @Patch("musteri-irsaliye/:id/sil")
-  softDeleteMusteriIrsaliye(@Param("id") id: string, @Body() body: any) {
-    return this.softDeleteUpload(id, body);
-  }
-
   @Patch("incoming-deliveries/:id")
   patchIncomingDelivery(@Param("id") id: string, @Body() body: any) {
     return this.patchMusteriIrsaliye(id, body);
@@ -3291,11 +3159,6 @@ export class MuhasebeController {
     );
   }
 
-  @Patch("bizim-belgeler/:id/sil")
-  softDeleteBizimBelge(@Param("id") id: string, @Body() body: any) {
-    return this.softDeleteUpload(id, body);
-  }
-
   @Patch("outgoing-documents/:id")
   patchOutgoingDocument(@Param("id") id: string, @Body() body: any) {
     return this.patchBizimBelgeler(id, body);
@@ -3390,11 +3253,6 @@ export class MuhasebeController {
     return this.getSupplierInvoicesPool(mainCompanySlug, mainCompanyId);
   }
 
-  @Patch("tedarikci-fatura/:id/sil")
-  softDeleteTedarikciFatura(@Param("id") id: string, @Body() body: any) {
-    return this.softDeleteUpload(id, body);
-  }
-
   @Post("tedarikci-fatura/:id/firma-eslestir")
   matchTedarikciFaturaFirma(@Param("id") id: string, @Body() body: any) {
     return this.muhasebeDb.updateDocument(
@@ -3404,16 +3262,6 @@ export class MuhasebeController {
       id,
       body,
     );
-  }
-
-  @Post("belge-yukleme/:id/firma-eslestir")
-  matchUploadFirma(@Param("id") id: string, @Body() body: any) {
-    return this.matchTedarikciFaturaFirma(id, body);
-  }
-
-  @Post("belge-yukleme/:id/yeni-firma-ac")
-  createFirmForUpload(@Param("id") id: string, @Body() body: any) {
-    return this.matchTedarikciFaturaFirma(id, body);
   }
 
   @Get("firma-eslestirme-onerileri")
@@ -3920,50 +3768,6 @@ export class MuhasebeController {
       this.resolveSlug(body.mainCompanySlug, body.mainCompanyId),
     );
     return this.muhasebeDb.saveProduct(slug, body, id);
-  }
-
-  @Get("envanter-urunleri")
-  getEnvanterUrunleri(
-    @Query("mainCompanySlug") mainCompanySlug?: string,
-    @Query("mainCompanyId") mainCompanyId?: string,
-    @Query() query?: any,
-  ) {
-    const slug = this.requireMainCompanySlug(
-      this.resolveDbSlug(mainCompanySlug, mainCompanyId),
-    );
-    return this.muhasebeDb.listInventoryProducts({
-      ...query,
-      mainCompanySlug: slug,
-    });
-  }
-
-  @Post("envanter-urunleri")
-  saveEnvanterUrunu(@Body() body: any) {
-    const slug = this.requireMainCompanySlug(
-      this.resolveSlug(body.mainCompanySlug, body.mainCompanyId),
-    );
-    return this.muhasebeDb.saveProduct(slug, body);
-  }
-
-  @Patch("envanter-urunleri/:id")
-  patchEnvanterUrunu(@Param("id") id: string, @Body() body: any) {
-    const slug = this.requireMainCompanySlug(
-      this.resolveSlug(body.mainCompanySlug, body.mainCompanyId),
-    );
-    return this.muhasebeDb.saveProduct(slug, body, id);
-  }
-
-  @Put("envanter-urunleri/:id")
-  putEnvanterUrunu(@Param("id") id: string, @Body() body: any) {
-    return this.patchEnvanterUrunu(id, body);
-  }
-
-  @Post("envanter-urunleri/:id/pasife-al")
-  passiveEnvanterUrunu(@Param("id") id: string, @Body() body: any) {
-    const slug = this.requireMainCompanySlug(
-      this.resolveSlug(body.mainCompanySlug, body.mainCompanyId),
-    );
-    return this.muhasebeDb.passiveProduct(slug, id);
   }
 
   @Post("urunler/:id/aliases")

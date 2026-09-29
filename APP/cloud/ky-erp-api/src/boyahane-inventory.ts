@@ -11,6 +11,15 @@ const LOT_SCOPE = "BOYAHANE_LOT";
 const MOVEMENT_SCOPE = "BOYAHANE_STOCK_MOVEMENT";
 const ALIAS_SCOPE = "MUHASEBE_PRODUCT_ALIAS";
 const SUPPLIER_SCOPE = "MUHASEBE_CHEMICAL_SUPPLIER";
+const MECIT_HAKAN_ALIASES = [
+  "mecit-hakan",
+  "main-mecit-hakan",
+  "mecit-hakan-gursu",
+  "hakan-baski",
+  "main-hakan",
+  "main-hakan-baski",
+  "hkn-baski",
+];
 
 const text = (value: unknown) =>
   value === undefined || value === null ? "" : String(value).trim();
@@ -61,24 +70,32 @@ async function bodyOf(c: Context<AppEnv>): Promise<Row> {
 }
 
 function slugOf(c: Context<AppEnv>, body: Row = {}) {
-  return text(
+  const slug = text(
     body.mainCompanySlug ||
       body.main_company_slug ||
       c.req.query("mainCompanySlug") ||
       c.req.query("mainCompanyId") ||
       "mecit-hakan",
-  );
+  ).toLocaleLowerCase("tr-TR").replace(/_/g, "-");
+  return MECIT_HAKAN_ALIASES.includes(slug) ? "mecit-hakan" : slug;
+}
+
+function tenantSlugs(slug: string) {
+  const normalized = text(slug).toLocaleLowerCase("tr-TR").replace(/_/g, "-");
+  return MECIT_HAKAN_ALIASES.includes(normalized) ? MECIT_HAKAN_ALIASES : [normalized];
 }
 
 async function storeRows(c: Context<AppEnv>, scope: string, slug: string) {
+  const tenants = tenantSlugs(slug);
+  const placeholders = tenants.map(() => "?").join(",");
   const result = await c.env.DB.prepare(
     `SELECT id, file_name, data, created_at, updated_at
        FROM json_store
       WHERE scope = ?
-        AND (main_company_slug = ? OR main_company_slug IS NULL)
+        AND (main_company_slug IN (${placeholders}) OR main_company_slug IS NULL)
       ORDER BY updated_at DESC, id DESC`,
   )
-    .bind(scope, slug)
+    .bind(scope, ...tenants)
     .all<Row>();
 
   return (result.results || []).map((row) => ({
@@ -96,16 +113,18 @@ async function storeGet(
   fileName: string,
   slug: string,
 ) {
+  const tenants = tenantSlugs(slug);
+  const placeholders = tenants.map(() => "?").join(",");
   const row = await c.env.DB.prepare(
     `SELECT id, file_name, data, created_at, updated_at
        FROM json_store
       WHERE scope = ?
         AND file_name = ?
-        AND (main_company_slug = ? OR main_company_slug IS NULL)
+        AND (main_company_slug IN (${placeholders}) OR main_company_slug IS NULL)
       ORDER BY updated_at DESC
       LIMIT 1`,
   )
-    .bind(scope, fileName, slug)
+    .bind(scope, fileName, ...tenants)
     .first<Row>();
 
   if (!row) return null;
@@ -215,38 +234,91 @@ async function approvedProducts(c: Context<AppEnv>, slug: string) {
     if (product.id) map.set(product.id, product);
   });
 
-  // Eski lotlar kaybolmasın; ürün kartı olmayan kayıtlar kontrollü geçiş kartı alır.
+  // İlişkisel eski lotların bağlı ürünleri salt-okunur uyumluluk kartı olarak gösterilir.
+  // GET akışı production verisine yazmaz; yeni kartlar yalnız açık kullanıcı işlemiyle oluşur.
+  const tenants = tenantSlugs(slug);
+  const placeholders = tenants.map(() => "?").join(",");
+  const legacyProducts = await c.env.DB.prepare(
+    `SELECT DISTINCT p.id,p.legacy_id,p.name,p.unit,p.is_active,p.raw
+       FROM products p
+       JOIN boyahane_lots l ON l.product_id = p.id
+      WHERE l.deleted_at IS NULL
+        AND l.main_company_slug IN (${placeholders})
+        AND p.main_company_slug IN (${placeholders})
+      ORDER BY p.name COLLATE NOCASE ASC`,
+  ).bind(...tenants, ...tenants).all<Row>();
+  for (const row of legacyProducts.results || []) {
+    const raw = jsonObject(row.raw);
+    const product = productView({
+      ...raw,
+      id: text(row.id),
+      productName: text(row.name),
+      name: text(row.name),
+      code: text(raw.shortCode || row.legacy_id),
+      dyeType: text(raw.paintType || raw.groupType || "GENEL"),
+      unit: text(row.unit || raw.unit || "KG"),
+      approvalStatus: "APPROVED",
+      isActive: row.is_active !== false && Number(row.is_active ?? 1) !== 0,
+      source: "RELATIONAL_LOT",
+    });
+    if (product.id && !map.has(product.id)) map.set(product.id, product);
+  }
+
+  // Eski JSON lotlar kaybolmasın; ürün kartı olmayan kayıtlar bellekte geçiş kartı alır.
   const lots = await storeRows(c, LOT_SCOPE, slug);
   for (const lot of lots) {
     const id = text(lot.productId || lot.inventoryId);
     const name = text(lot.productName);
     if (!id || !name || map.has(id)) continue;
-    const migrated = productView(
-      await storePut(
-        c,
-        PRODUCT_SCOPE,
-        id,
-        {
-          id,
-          productName: name,
-          name,
-          dyeType: text(lot.dyeType || "GENEL"),
-          unit: text(lot.unit || "KG"),
-          minStockKg: 0,
-          approvalStatus: "REVIEW_REQUIRED",
-          isActive: true,
-          source: "LEGACY_LOT",
-          createdAt: text(lot.createdAt || new Date().toISOString()),
-        },
-        slug,
-      ),
-    );
+    const migrated = productView({
+      id,
+      productName: name,
+      name,
+      dyeType: text(lot.dyeType || "GENEL"),
+      unit: text(lot.unit || "KG"),
+      minStockKg: 0,
+      approvalStatus: "REVIEW_REQUIRED",
+      isActive: true,
+      source: "LEGACY_LOT",
+      createdAt: text(lot.createdAt),
+    });
     map.set(id, migrated);
   }
 
   return [...map.values()].sort((a, b) =>
     text(a.productName).localeCompare(text(b.productName), "tr"),
   );
+}
+
+async function relationalLots(c: Context<AppEnv>, slug: string) {
+  const tenants = tenantSlugs(slug);
+  const placeholders = tenants.map(() => "?").join(",");
+  const result = await c.env.DB.prepare(
+    `SELECT l.*,p.name AS product_name,p.unit AS product_unit
+       FROM boyahane_lots l
+       LEFT JOIN products p ON p.id = l.product_id
+      WHERE l.deleted_at IS NULL
+        AND l.main_company_slug IN (${placeholders})
+      ORDER BY l.updated_at DESC,l.created_at DESC,l.id DESC`,
+  ).bind(...tenants).all<Row>();
+  return (result.results || []).map((row) => ({
+    ...jsonObject(row.raw),
+    id: text(row.id),
+    productId: text(row.product_id),
+    inventoryId: text(row.product_id),
+    productName: text(row.product_name || jsonObject(row.raw)?.line?.rawName),
+    lotNo: text(row.lot_no),
+    entryKg: numberValue(row.quantity),
+    quantity: numberValue(row.quantity),
+    usedKg: Math.max(0, numberValue(row.quantity) - numberValue(row.remaining_quantity)),
+    remainingKg: numberValue(row.remaining_quantity),
+    remainingQuantity: numberValue(row.remaining_quantity),
+    unit: text(row.product_unit || jsonObject(row.raw)?.line?.unit || "KG"),
+    status: text(row.status || "ACTIVE"),
+    createdAt: text(row.created_at),
+    updatedAt: text(row.updated_at),
+    source: "RELATIONAL_LOT",
+  }));
 }
 
 async function updateDocumentTransfer(
@@ -388,7 +460,14 @@ export function registerBoyahaneInventoryRoutes(app: Hono<AppEnv>) {
     const productMap = new Map(products.map((row) => [text(row.id), row]));
     const search = normalize(c.req.query("search"));
     const status = normalize(c.req.query("status"));
-    const rows = (await storeRows(c, LOT_SCOPE, slug))
+    const storedLots = await storeRows(c, LOT_SCOPE, slug);
+    const legacyLots = await relationalLots(c, slug);
+    const lotMap = new Map<string, Row>();
+    [...legacyLots, ...storedLots].forEach((row) => {
+      const id = text(row.id || row.fileName);
+      if (id) lotMap.set(id, row);
+    });
+    const rows = [...lotMap.values()]
       .map((row) => lotView(row, productMap))
       .filter(
         (row) =>
@@ -407,7 +486,9 @@ export function registerBoyahaneInventoryRoutes(app: Hono<AppEnv>) {
     const slug = slugOf(c);
     const products = await approvedProducts(c, slug);
     const productMap = new Map(products.map((row) => [text(row.id), row]));
-    const lot = await storeGet(c, LOT_SCOPE, c.req.param("id"), slug);
+    const lot = await storeGet(c, LOT_SCOPE, c.req.param("id"), slug)
+      || (await relationalLots(c, slug)).find((row) => text(row.id) === c.req.param("id"))
+      || null;
     if (!lot) return c.json(jsonError("NOT_FOUND", "Lot bulunamadı."), 404);
     const movements = (await storeRows(c, MOVEMENT_SCOPE, slug)).filter(
       (row) => text(row.lotId) === text(lot.id || lot.fileName),

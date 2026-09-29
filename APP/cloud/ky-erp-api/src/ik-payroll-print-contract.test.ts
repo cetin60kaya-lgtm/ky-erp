@@ -1,0 +1,369 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const frontend = (name: string) => readFileSync(resolve(here, "../../../app/ky-erp-frontend/src", name), "utf8");
+
+test("IK payroll report and payment slips use the canonical print service contract", () => {
+  const service = frontend("services/printService.js");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+
+  assert.match(service, /printHtmlDocument\(optionsOrHtml/);
+  assert.match(service, /normalizePrintOptions/);
+  assert.match(service, /buildPrintableDocument/);
+  assert.match(service, /fullDocument/);
+  assert.match(service, /win\.print\(\)/);
+
+  assert.ok(page.includes("Ödeme Listesi / PDF"));
+  assert.ok(page.includes("10’lu Toplu Fiş / PDF"));
+  assert.ok(page.includes("Tek Kişi Fişi"));
+  assert.ok(page.includes("printHtmlDocument({ title: `İK Ödeme Listesi"));
+  assert.ok(page.includes("printHtmlDocument({ title: `Toplu Personel Ödeme Fişleri"));
+  assert.ok(page.includes("printHtmlDocument({ title: `Ödeme Fişi"));
+  assert.doesNotMatch(page, /printHtmlDocument\(html,/);
+});
+
+test("IK bulk slip output keeps selected-person filtering and ten-up A4 pagination", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(page, /selectedPayrollIds\.includes\(row\.employee\.id\)/);
+  assert.match(page, /for \(let index = 0; index < rows\.length; index \+= 10\)/);
+  assert.match(page, /@page\{size:A4 portrait/);
+  assert.match(page, /grid-template-columns:1fr 1fr/);
+  assert.match(page, /grid-template-rows:repeat\(5,1fr\)/);
+  assert.match(page, /class="cut-slot"/);
+});
+
+
+test("IK finance movement keeps the selected employee and supports legal overtime multipliers", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.ok(page.includes("Hafta içi %50 (x1,5)"));
+  assert.ok(page.includes("Hafta sonu %100 (x2)"));
+  assert.ok(page.includes("overtimeMultiplier"));
+  assert.match(page, /draft\.adjustmentType === "Toplu avans"\) payload\.employeeIds/);
+  assert.match(page, /else payload\.employeeId = draft\.employeeId/);
+
+  assert.match(cloud, /const isBulkAdvance =/);
+  assert.match(cloud, /const singleEmployeeId = text\(body\.employeeId\)/);
+  assert.match(cloud, /SINGLE_EMPLOYEE_ONLY/);
+  assert.match(cloud, /overtimeAmountForEmployee/);
+  assert.match(cloud, /calculateOvertimeAmount/);
+  assert.match(cloud, /employee_id=\?,date=\?,adjustment_type=/);
+  assert.match(cloud, /advancedEmployeeVisible/);
+});
+
+test("IK bulk slips are compact ten-up A4 cards with strong cash and total fields", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.ok(page.includes("AVANS/KESİNTİ"));
+  assert.ok(page.includes("ELDEN"));
+  assert.ok(page.includes("TOPLAM ÖDEME"));
+  assert.ok(page.includes("Personel İmza"));
+  assert.ok(page.includes("Ödeme Yapan"));
+  assert.match(page, /index \+= 10/);
+  assert.match(page, /grid-template-rows:repeat\(5,1fr\)/);
+  assert.match(page, /\.compact-grid \.cash/);
+  assert.match(page, /\.compact-grid \.total/);
+});
+
+
+test("IK refresh uses canonical personnel and latest-wins request guard", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.match(page, /loadRequestRef = useRef/);
+  assert.match(page, /if \(activeRequest\.promise\) \{/);
+  assert.match(page, /if \(!force && activeRequest\.key === requestKey\) return activeRequest\.promise/);
+  assert.match(page, /loadRequestRef\.current\.seq !== requestId/);
+  assert.match(page, /canonicalEmployeeIds/);
+  assert.match(page, /currentIds\.has\(item\.employeeId\)/);
+
+  assert.match(cloud, /rawEmployees: rawEmployeesWithCalc/);
+  assert.match(cloud, /IK_PERSON_CARD_CALC_SCOPE/);
+  assert.match(cloud, /visibleEmployeeIds/);
+  assert.match(cloud, /payroll: payroll\.filter/);
+});
+
+test("IK base salary reference uses raw employees and overtime metadata is stripped on type change", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.match(page, /baseEmployeeId \? rawEmployees\.find/);
+  assert.match(page, /const employee = rawEmployees\.find/);
+  assert.match(cloud, /new Map\(rawEmployees\.map/);
+  assert.match(cloud, /text\(body\.note \?\? overtimeMetaFromNote\(current\.note\)\.note\)/);
+  assert.match(cloud, /exit_date=excluded\.exit_date/);
+});
+
+
+test("payroll print HTML escapes employee-entered text and shows every payment component", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+
+  assert.match(page, /function escapeHtml\(value\)/);
+  assert.match(page, /replaceAll\("&", "&amp;"\)/);
+  assert.match(page, /escapeHtml\(row\.employee\.fullName\)/);
+  assert.match(page, /escapeHtml\(row\.employee\.code \|\| "-"\)/);
+  assert.match(page, /escapeHtml\(row\.employee\.department \|\| "Bölüm yok"\)/);
+
+  for (const label of ["Maaş", "Yol", "EK", "Mesai", "Avans", "Kesinti", "İcra/Haciz", "BANKA", "ELDEN", "TOPLAM ÖDEME"]) {
+    assert.ok(page.includes(label), `Eksik fiş/rapor alanı: ${label}`);
+  }
+});
+
+test("payroll payment balance is auto-reconciled in UI while backend keeps the hard invariant", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.match(page, /function reconcilePaymentSplit/);
+  assert.match(page, /const balancedSplit = reconcilePaymentSplit\(rowTotals\.net/);
+  assert.match(page, /const payment = reconcilePaymentSplit\(enteredTotals\.net/);
+  assert.doesNotMatch(page, /Banka \+ elden net odeme ile eslesmiyor\. Devam edilsin mi/);
+  assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
+  assert.match(cloud, /calculatePayrollAmounts/);
+});
+
+test("payment list PDF is a compact single-row list and prints one totals row only at the end", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const start = page.indexOf("const printPayrollReport = async");
+  const end = page.indexOf("const legalLabel =", start);
+  const block = page.slice(start, end);
+
+  assert.match(page, /const exportPayroll = \(\) =>/);
+  assert.match(page, /excelRows\.push\(\{/);
+  assert.match(page, /personel: "TOPLAM"/);
+  assert.match(block, /const rows = payrollRows\.filter/);
+  assert.match(block, /<h1>İK Ödeme Listesi<\/h1>/);
+  assert.match(block, /Personel \/ HKN/);
+  for (const label of ["Maaş","Yol","EK","Mesai","Avans","Kesinti","İcra/Haciz","Banka","Elden","Net"]) {
+    assert.ok(block.includes(`>${label}<`), `Eksik ödeme listesi kolonu: ${label}`);
+  }
+  assert.match(block, /<tr class="total-row">/);
+  assert.match(block, /TOPLAM · \$\{rows\.length\} personel/);
+  assert.doesNotMatch(block, /<tfoot>/);
+  assert.doesNotMatch(block, /Hak Ediş<\/th>/);
+  assert.doesNotMatch(block, /Durum<\/th>/);
+  assert.match(block, /toplam yalnız listenin en sonunda bir kez gösterilir/);
+  assert.ok(page.includes("Ödeme Listesi / PDF"));
+  assert.ok(page.includes("Ödeme Listesi / Excel"));
+});
+
+
+test("single slip can select, edit and reprint only one person while bulk page eleven starts a new page", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+
+  assert.match(page, /const printSlip = async \(row = payrollRows\.find\(\(item\) => item\.employee\.id === selected\?\.id\)\)/);
+  assert.match(page, /Fişi alınacak personel/);
+  assert.match(page, /Yanlışsa Düzenle/);
+  assert.match(page, /Sadece Bu Fişi Yazdır \/ PDF/);
+  assert.match(page, /onClick=\{\(\) => printSlip\(row\)\}/);
+  assert.match(page, /for \(let index = 0; index < rows\.length; index \+= 10\) pages\.push\(rows\.slice\(index, index \+ 10\)\)/);
+  assert.match(page, /page-break-after:always/);
+  assert.match(page, /\.page:last-child\{page-break-after:auto\}/);
+});
+
+test("bordro Excel exports the same core amounts shown on screen", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+
+  for (const field of [
+    "maas: row.salary",
+    "yol: row.road",
+    "ek: row.extra",
+    "mesai: row.overtime",
+    "avans: row.advance",
+    "kesinti: row.deduction",
+    "icraHaciz: row.garnishment",
+    "toplamOdeme: row.net",
+    "banka: row.bank",
+    "elden: row.cash",
+  ]) {
+    assert.ok(page.includes(field), `Eksik Excel bordro alanı: ${field}`);
+  }
+});
+
+
+test("forced refresh waits for an active read before starting the canonical reread", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+
+  assert.match(page, /const load = useCallback\(async \(\{ force = false, prepare = false \} = \{\}\) =>/);
+  assert.match(page, /if \(!force && activeRequest\.key === requestKey\) return activeRequest\.promise/);
+  assert.match(page, /await activeRequest\.promise/);
+  assert.match(page, /await load\(\{ force: true \}\)/);
+  assert.match(page, /const go = \(target\) => \{[\s\S]*load\(\{ force: true \}\)/);
+});
+
+
+test("serialized refresh stays single-active across period changes", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(page, /if \(activeRequest\.promise\) \{/);
+  assert.match(page, /try \{ await activeRequest\.promise; \}/);
+  assert.match(page, /loadRequestRef\.current\.seq !== requestId/);
+});
+
+
+test("retired personnel and monthly SGK are independent and PDKS mismatch is internal", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.match(page, /Personel Statüsü/);
+  assert.match(page, /value="RETIRED">Emekli/);
+  assert.match(page, /Bu Ay SGK Gün/);
+  assert.match(page, /Gerçek PDKS Kart Günü/);
+  assert.match(page, /Denetim görünümünde bu iç uyarı gösterilmez/);
+  assert.match(page, /personnelStatus: modalDraft\.personnelStatus/);
+  assert.match(page, /sgkDays: modalDraft\.sgkFollow === "SGKLI"/);
+
+  assert.match(cloud, /ik_person_hr_profiles/);
+  assert.match(cloud, /ik_person_monthly_compliance/);
+  assert.match(cloud, /COUNT\(DISTINCT work_date\) AS card_days/);
+  assert.match(cloud, /sgkPdksMatch/);
+});
+
+test("SGK status no longer forces bank payment or legacy fixed bank amount", () => {
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.doesNotMatch(cloud, /enteredBank \|\| 28075\.5/);
+  assert.doesNotMatch(cloud, /sgk === "YOK" \|\| cashOnly/);
+  assert.match(cloud, /const bank = cashOnly \? 0 : bankOnly \? total : Math\.min\(total, enteredBank\)/);
+});
+
+
+test("IK payroll period persists and new periods require explicit preparation", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+
+  assert.match(page, /kyerp\.ik\.selected-period\.v2/);
+  assert.match(page, /kyerp\.ik\.prepared-periods\.v2/);
+  assert.match(page, /function previousPeriod\(\)/);
+  assert.match(page, /const initial = readStoredIkPeriod\(companyId\)/);
+  assert.match(page, /const periodPrepared = preparedPeriods\.includes\(period\)/);
+  assert.match(page, /Bilgileri Hazırla/);
+  assert.match(page, /preparePeriod/);
+  assert.match(page, /getIkAdvancedPeriodState/);
+  assert.match(page, /prepareIkAdvancedPeriod/);
+  assert.match(page, /const preparedForView =/);
+  assert.match(page, /const includePayroll = prepare \|\| preparedForView/);
+  assert.match(page, /periodPrepared \? employees\.map/);
+});
+
+test("IK overview is finance-focused and leaves live attendance operations to PDKS", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+
+  assert.doesNotMatch(page, /getPdksLiveDashboard/);
+  assert.doesNotMatch(page, /Bugün kart basan/);
+  assert.doesNotMatch(page, /Bugün gelmeyen/);
+  assert.doesNotMatch(page, /Eksik basım/);
+  assert.doesNotMatch(page, /Bugün yıllık izinde/);
+  assert.match(page, /Akıllı İK Kontrol Merkezi/);
+  assert.match(page, /Hızlı Finans İşlemleri/);
+  assert.match(page, /Giriş\/çıkış, puantaj, vardiya, terminal ve izin hareketleri PDKS bölümündedir/);
+  assert.match(page, /Mesai Ekle/);
+  assert.match(page, /Avans Ekle/);
+  assert.match(page, /Kesinti Ekle/);
+  assert.match(page, /Son Bordro Kontrolü/);
+  assert.match(page, /Tek Kişi Fişi/);
+});
+
+test("final payroll control edits every amount and writes movement deltas back to source", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const api = frontend("services/ik/monthlyApi.js");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.match(page, /Modal title="Son Bordro Kontrolü"/);
+  for (const label of ["Maaş", "Yol", "EK / İlave Ödeme", "Mesai Toplamı", "Avans", "Özel Kesinti", "İcra / Haciz", "Bankadan Ödenecek", "Elden Ödenecek"]) {
+    assert.ok(page.includes(label), `Eksik son bordro alanı: ${label}`);
+  }
+  assert.match(page, /saveIkAdvancedFinalPayrollControl/);
+  assert.match(page, /Kaydet \+ Fişi Aç/);
+  assert.match(api, /\/ik\/advanced\/payroll\/final-control/);
+
+  assert.match(cloud, /async function saveAdvancedPayrollFinalControl/);
+  assert.match(cloud, /Mesai - Son Bordro Düzeltme/);
+  assert.match(cloud, /Avans - Son Bordro Düzeltme/);
+  assert.match(cloud, /Ozel kesinti - Son Bordro Düzeltme/);
+  assert.match(cloud, /Son bordro kontrolü düzeltmesi/);
+  assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
+  assert.match(cloud, /action: "FINAL_CONTROL"/);
+  assert.match(cloud, /status=excluded\.status/);
+  assert.match(cloud, /app\.post\("\/api\/ik\/advanced\/payroll\/final-control"/);
+});
+
+
+test("IK canonical month survives auxiliary read failures and uses Istanbul business dates", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(page, /Promise\.allSettled/);
+  assert.match(page, /resultState\.status !== "fulfilled"/);
+  assert.match(page, /auxiliaryFailed/);
+  assert.match(page, /timeZone: "Europe\/Istanbul"/);
+  assert.match(page, /istanbulDateKey\(\)/);
+});
+
+test("PDKS report people query follows the selected historical year and month", () => {
+  const report = frontend("pages/pdks/PdksReportCenter.jsx");
+  assert.match(report, /getPdksPeople\(\{year,month\}\)/);
+});
+
+test("IK validates monthly SGK before card writes and final-control corrections are immutable", () => {
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+  const cardSaveStart = cloud.indexOf("async function savePersonCard");
+  const cardSaveEnd = cloud.indexOf("async function updateMonthlyEmployeeFromCard", cardSaveStart);
+  const cardSave = cloud.slice(cardSaveStart, cardSaveEnd);
+  assert.ok(cardSave.indexOf("SGK_DAYS_INVALID") < cardSave.indexOf("INSERT INTO ik_person_card_settings"));
+  assert.match(cloud, /FINAL_CONTROL_CORRECTION_IMMUTABLE/);
+  assert.match(cloud, /wasPassive/);
+  assert.match(cloud, /hrTodayIstanbul\(\)/);
+});
+
+test("kıdem preview keeps the complete payroll settlement breakdown", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const start = page.indexOf('modal === "fis" || modal === "kidemCikti"');
+  const end = page.indexOf('if (modal === "topluOdeme")', start);
+  const block = page.slice(start, end);
+  for (const label of ["Maaş","Yol","EK","Mesai","Avans","Özel Kesinti","İcra / Haciz","Banka","Elden","Toplam"]) {
+    assert.ok(block.includes(label), `Eksik kıdem alanı: ${label}`);
+  }
+  assert.match(block, /Bordro düzeltmesi · kilitli|KIDEM ÇIKTISI/);
+});
+
+
+test("final payroll save auto-reconciles bank cash and supports serial personnel review", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const css = frontend("pages/modules/ik/monthly/ik.advanced.css");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.match(page, /function reconcilePaymentSplit/);
+  assert.match(page, /const payment = reconcilePaymentSplit\(enteredTotals\.net/);
+  assert.match(page, /payment\.bank/);
+  assert.match(page, /payment\.cash/);
+  assert.match(page, /Kaydet \+ Sonraki/);
+  assert.match(page, /Personeller/);
+  assert.match(page, /payroll-person-rail-list/);
+  assert.match(page, /openPayroll\(nextRow\)/);
+  assert.doesNotMatch(page, /disabled=\{busy\|\|Math\.abs\(totals\.diff\)>0\.01\}/);
+
+  assert.match(css, /payroll-final-layout/);
+  assert.match(css, /payroll-person-rail/);
+  assert.match(css, /payroll-control-grid/);
+
+  // Backend still keeps the hard invariant; only the UI reconciles before posting.
+  assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
+});
+
+
+test("final payroll always reads live overtime advance deduction and garnishment movements", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+
+  assert.match(page, /const overtime = system\.overtime/);
+  assert.match(page, /const advance = system\.advance/);
+  assert.match(page, /const deduction = system\.deduction/);
+  assert.match(page, /const garnishment = system\.garnishment/);
+  assert.match(page, /sourceChangedSinceSave/);
+  assert.match(page, /savedPaymentMatchesLiveNet/);
+  assert.match(page, /const liveBank = Math\.min\(liveTotals\.net, liveBankPlan\)/);
+  assert.match(page, /const useSavedPaymentSplit = !sourceChangedSinceSave && savedPaymentMatchesLiveNet/);
+
+  // planFor must be a pure live-source calculation; stale payroll snapshots cannot hide new movements.
+  assert.doesNotMatch(page, /const bank = saved\?\.final \? num\(saved\.final\.bank\)/);
+  assert.doesNotMatch(page, /const overtime = num\(saved\.final\.overtimeAmount\)/);
+});

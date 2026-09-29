@@ -25,6 +25,7 @@ import {
   saveOdemeIslem,
   uploadOdemeCekDosyalari,
 } from "../../services/cekOdemeApi";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import "./CekOdemeMerkeziPage.css";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -117,9 +118,9 @@ function emptyFirmForm() {
   };
 }
 
-function emptyTransactionForm() {
+function emptyTransactionForm(firmId = "") {
   return {
-    firmId: "",
+    firmId,
     transactionDirection: "PAYMENT_OUT",
     paymentMethod: "TRANSFER",
     paymentDate: today,
@@ -165,39 +166,48 @@ function Modal({ title, size = "", children, onClose, actions }) {
   );
 }
 
-export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, reloadAll }) {
+export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, reloadAll, embedded = false, selectedCompanyId = "", hideFirmDirectory = false }) {
   const baseParams = useMemo(() => companyParams(activeMainCompany), [activeMainCompany]);
   const [firms, setFirms] = useState([]);
   const [overview, setOverview] = useState({ summary: {}, months: [], rows: [] });
-  const [selectedFirmId, setSelectedFirmId] = useState("");
+  const [selectedFirmId, setSelectedFirmId] = useState(selectedCompanyId || "");
   const [firmSummary, setFirmSummary] = useState(null);
   const [detailRows, setDetailRows] = useState({ debts: [], cards: [], cash: [], movements: [] });
   const [detailTab, setDetailTab] = useState("debts");
   const [search, setSearch] = useState("");
   const [firmSearch, setFirmSearch] = useState("");
+  const [firmBalanceFilter, setFirmBalanceFilter] = useState("ALL");
+  const [firmSort, setFirmSort] = useState("NAME");
   const [statusFilter, setStatusFilter] = useState("OPEN");
+  const [periodFilter, setPeriodFilter] = useState("MONTH");
+  const [directionFilter, setDirectionFilter] = useState("ALL");
+  const [ownershipFilter, setOwnershipFilter] = useState("ALL");
+  const [workFilter, setWorkFilter] = useState("ALL");
   const [monthFilter, setMonthFilter] = useState("");
   const [modal, setModal] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
 
   const loadBase = useCallback(async () => {
-    const [firmResult, overviewResult] = await Promise.all([
-      getOdemeFirmalar({ ...baseParams, active: "all", limit: 500, _ts: Date.now() }),
-      getOdemeCekOzeti({ ...baseParams, _ts: Date.now() }),
-    ]);
-    const firmRows = asArray(firmResult);
-    setFirms(firmRows);
-    setOverview({
-      summary: overviewResult?.summary || {},
-      months: asArray(overviewResult?.months),
-      rows: asArray(overviewResult?.rows),
+    const tenant = baseParams.mainCompanySlug || baseParams.mainCompanyId || "main";
+    const result = await loadModuleData({
+      scope: `muhasebe:${tenant}:cek-odeme`,
+      sources: {
+        overview: { critical: true, load: () => getOdemeCekOzeti({ ...baseParams, _ts: Date.now() }) },
+        firms: { fallback: [], load: () => getOdemeFirmalar({ ...baseParams, active: "all", limit: 500, _ts: Date.now() }) },
+      },
     });
-    setSelectedFirmId((current) =>
-      current && firmRows.some((row) => String(row.id || row.firmaId) === String(current))
-        ? current
-        : "",
-    );
+    if (result.states.firms.status !== "error") {
+      const firmRows = asArray(result.data.firms);
+      setFirms(firmRows);
+      setSelectedFirmId((current) => current && firmRows.some((row) => String(row.id || row.firmaId) === String(current)) ? current : "");
+    }
+    if (result.states.overview.status !== "error") {
+      const overviewResult = result.data.overview;
+      setOverview({ summary: overviewResult?.summary || {}, months: asArray(overviewResult?.months), rows: asArray(overviewResult?.rows) });
+    }
+    const warning = moduleLoadMessage(result, "Çek ve ödeme ana özeti alınamadı; son başarılı özet korunuyor.", "Firma yardımcı listesi yenilenemedi; çek özeti kullanılabilir.");
+    if (warning) setNotice({ tone: result.hasCriticalError ? "error" : "warning", text: warning });
   }, [baseParams]);
 
   const loadFirm = useCallback(
@@ -207,20 +217,26 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
         setDetailRows({ debts: [], cards: [], cash: [], movements: [] });
         return;
       }
-      const [summary, debts, cards, cash, movements] = await Promise.all([
-        getOdemeFirmaOzet(firmId, baseParams),
-        getOdemeFirmaAcikBorclar(firmId, baseParams),
-        getOdemeFirmaKartlar(firmId, baseParams),
-        getOdemeFirmaNakitHavale(firmId, baseParams),
-        getOdemeFirmaHareketler(firmId, baseParams),
-      ]);
-      setFirmSummary(summary || null);
-      setDetailRows({
-        debts: asArray(debts),
-        cards: asArray(cards),
-        cash: asArray(cash),
-        movements: asArray(movements),
+      const tenant = baseParams.mainCompanySlug || baseParams.mainCompanyId || "main";
+      const result = await loadModuleData({
+        scope: `muhasebe:${tenant}:cek-odeme:firma:${firmId}`,
+        sources: {
+          summary: { critical: true, load: () => getOdemeFirmaOzet(firmId, baseParams) },
+          debts: { fallback: [], load: () => getOdemeFirmaAcikBorclar(firmId, baseParams) },
+          cards: { fallback: [], load: () => getOdemeFirmaKartlar(firmId, baseParams) },
+          cash: { fallback: [], load: () => getOdemeFirmaNakitHavale(firmId, baseParams) },
+          movements: { fallback: [], load: () => getOdemeFirmaHareketler(firmId, baseParams) },
+        },
       });
+      if (result.states.summary.status !== "error") setFirmSummary(result.data.summary || null);
+      setDetailRows((current) => ({
+        debts: result.states.debts.status === "error" ? current.debts : asArray(result.data.debts),
+        cards: result.states.cards.status === "error" ? current.cards : asArray(result.data.cards),
+        cash: result.states.cash.status === "error" ? current.cash : asArray(result.data.cash),
+        movements: result.states.movements.status === "error" ? current.movements : asArray(result.data.movements),
+      }));
+      const warning = moduleLoadMessage(result, "Firma ödeme özeti alınamadı; son başarılı detay korunuyor.", "Bazı ödeme detayları yenilenemedi; diğer firma bilgileri kullanılabilir.");
+      if (warning) setNotice({ tone: result.hasCriticalError ? "error" : "warning", text: warning });
     },
     [baseParams],
   );
@@ -230,6 +246,9 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
       setNotice({ tone: "error", text: error?.message || "Çek merkezi yüklenemedi." }),
     );
   }, [loadBase, refreshKey]);
+  useEffect(() => {
+    if (selectedCompanyId) setSelectedFirmId(selectedCompanyId);
+  }, [selectedCompanyId]);
 
   useEffect(() => {
     loadFirm(selectedFirmId).catch((error) =>
@@ -240,11 +259,20 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
   useEffect(() => {
     const quick = new URLSearchParams(window.location.search).get("quick");
     if (quick === "cek") setModal({ type: "check", form: emptyCheckForm() });
+    if (quick === "transaction") setModal({ type: "transaction", form: emptyTransactionForm(selectedCompanyId || selectedFirmId) });
     if (quick === "cari") setModal({ type: "firm", form: emptyFirmForm() });
-  }, []);
+  }, [selectedCompanyId, selectedFirmId]);
 
   const visibleRows = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("tr-TR");
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const mondayOffset = (todayStart.getDay() + 6) % 7;
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(todayStart.getDate() - mondayOffset);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
     return overview.rows.filter((row) => {
       const haystack = [row.firmaAdi, row.checkNo, row.bankName, row.accountNo, row.note]
         .filter(Boolean)
@@ -252,24 +280,54 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
         .toLocaleLowerCase("tr-TR");
       const open = row.open !== false && !["PAID", "CANCELLED"].includes(String(row.status || "").toUpperCase());
       if (term && !haystack.includes(term)) return false;
+      if (selectedCompanyId) {
+        const rowFirmId = row.firmId || row.firmaId || row.companyId || row.company_id || "";
+        if (String(rowFirmId) !== String(selectedCompanyId)) return false;
+      }
       if (statusFilter === "OPEN" && !open) return false;
       if (statusFilter === "OVERDUE" && Number(row.daysRemaining) >= 0) return false;
       if (statusFilter === "PAID" && open) return false;
+      const dueRaw = row.dueDate || row.vade || row.issueDate || row.createdAt;
+      const due = dueRaw ? new Date(String(dueRaw).slice(0, 10) + "T12:00:00") : null;
+      if (!monthFilter && periodFilter === "WEEK" && (!due || due < weekStart || due > weekEnd)) return false;
+      if (!monthFilter && periodFilter === "MONTH" && (!due || due.getFullYear() !== now.getFullYear() || due.getMonth() !== now.getMonth())) return false;
       if (monthFilter && String(row.monthKey || "") !== monthFilter) return false;
+      if (directionFilter !== "ALL" && String(row.checkDirection || "").toUpperCase() !== directionFilter) return false;
+      if (ownershipFilter !== "ALL" && String(row.checkOwnership || "").toUpperCase() !== ownershipFilter) return false;
+      if (workFilter !== "ALL" && String(row.workType || "OFFICIAL").toUpperCase() !== workFilter) return false;
       return true;
     });
-  }, [overview.rows, search, statusFilter, monthFilter]);
+  }, [directionFilter, monthFilter, overview.rows, ownershipFilter, periodFilter, search, selectedCompanyId, statusFilter, workFilter]);
+
+  const visibleCheckSummary = useMemo(() => ({
+    count: visibleRows.length,
+    total: visibleRows.reduce((sum, row) => sum + numberValue(row.amount || row.tutar), 0),
+  }), [visibleRows]);
 
   const visibleFirms = useMemo(() => {
     const term = firmSearch.trim().toLocaleLowerCase("tr-TR");
-    return firms.filter((row) =>
-      [firmName(row), row.taxNo, row.vergiNo, row.shortName]
+    const rows = firms.filter((row) => {
+      const matches = [firmName(row), row.taxNo, row.vergiNo, row.shortName]
         .filter(Boolean)
         .join(" ")
         .toLocaleLowerCase("tr-TR")
-        .includes(term),
-    );
-  }, [firms, firmSearch]);
+        .includes(term);
+      const balance = numberValue(row.bakiye ?? row.currentBalance);
+      if (!matches) return false;
+      if (firmBalanceFilter === "RECEIVABLE" && balance <= 0) return false;
+      if (firmBalanceFilter === "PAYABLE" && balance >= 0) return false;
+      if (firmBalanceFilter === "NONZERO" && balance === 0) return false;
+      if (firmBalanceFilter === "ZERO" && balance !== 0) return false;
+      return true;
+    });
+    return [...rows].sort((a, b) => {
+      const av = numberValue(a.bakiye ?? a.currentBalance);
+      const bv = numberValue(b.bakiye ?? b.currentBalance);
+      if (firmSort === "BALANCE_DESC") return bv - av;
+      if (firmSort === "BALANCE_ASC") return av - bv;
+      return firmName(a).localeCompare(firmName(b), "tr");
+    });
+  }, [firmBalanceFilter, firmSearch, firmSort, firms]);
 
   const refreshAll = async () => {
     await loadBase();
@@ -389,7 +447,7 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
   const activeDetailRows = detailRows[detailTab] || [];
 
   return (
-    <div className="check-hub">
+    <div className={`check-hub ${embedded ? "embedded" : ""} ${hideFirmDirectory ? "hide-firm-directory" : ""}`}>
       <section className="check-hero">
         <div>
           <span className="check-kicker">ÇEK • ÖDEME • TAHSİLAT DENETİMİ</span>
@@ -402,10 +460,10 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
           <button className="check-btn ghost" type="button" onClick={refreshAll}>
             <RefreshCw size={16} /> Yenile
           </button>
-          <button className="check-btn ghost" type="button" onClick={() => setModal({ type: "firm", form: emptyFirmForm() })}>
+          <button className="check-btn ghost quick-firm" type="button" onClick={() => setModal({ type: "firm", form: emptyFirmForm() })}>
             <Building2 size={16} /> Hızlı Cari Aç
           </button>
-          <button className="check-btn orange" type="button" onClick={() => setModal({ type: "transaction", form: emptyTransactionForm() })}>
+          <button className="check-btn orange" type="button" onClick={() => setModal({ type: "transaction", form: emptyTransactionForm(selectedCompanyId || selectedFirmId) })}>
             <WalletCards size={16} /> Ödeme / Tahsilat
           </button>
           <button className="check-btn primary" type="button" onClick={() => setModal({ type: "check", form: emptyCheckForm(selectedFirmId) })}>
@@ -425,11 +483,11 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
       </section>
 
       <section className="check-month-strip" aria-label="Aylık çek toplamları">
-        <button className={`check-month-card ${!monthFilter ? "active" : ""}`} type="button" onClick={() => setMonthFilter("")}>
+        <button className={`check-month-card ${!monthFilter && periodFilter === "ALL" ? "active" : ""}`} type="button" onClick={() => { setMonthFilter(""); setPeriodFilter("ALL"); }}>
           <span>TÜM AYLAR</span><b>{money(summary.openTotal)}</b><small>{summary.openCount || 0} açık çek</small>
         </button>
         {overview.months.map((month) => (
-          <button key={month.monthKey} className={`check-month-card ${monthFilter === month.monthKey ? "active" : ""}`} type="button" onClick={() => setMonthFilter(month.monthKey)}>
+          <button key={month.monthKey} className={`check-month-card ${monthFilter === month.monthKey ? "active" : ""}`} type="button" onClick={() => { setMonthFilter(month.monthKey); setPeriodFilter("ALL"); }}>
             <span>{month.label}</span><b>{money(month.total)}</b><small>{month.count} çek</small>
           </button>
         ))}
@@ -437,15 +495,14 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
 
       <section className="check-panel">
         <header className="check-panel-head">
-          <div><h2>Çek Vade Takvimi</h2><p>Varsayılan görünüm yalnız açık çekleri gösterir.</p></div>
+          <div><h2>Çekleri Görüntüle</h2><p>{visibleCheckSummary.count} çek · {money(visibleCheckSummary.total)}</p></div>
           <div className="check-toolbar">
             <div style={{ position: "relative" }}><Search size={15} style={{ position: "absolute", left: 10, top: 11, color: "#8190a3" }} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Firma, çek no, banka veya hesap ara" style={{ paddingLeft: 32 }} /></div>
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-              <option value="OPEN">Açık Çekler</option>
-              <option value="OVERDUE">Vadesi Geçenler</option>
-              <option value="PAID">Kapananlar</option>
-              <option value="ALL">Tümü</option>
-            </select>
+            <select value={periodFilter} onChange={(event) => { setPeriodFilter(event.target.value); setMonthFilter(""); }}><option value="WEEK">Bu Hafta</option><option value="MONTH">Bu Ay</option><option value="ALL">Tüm Dönem</option></select>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="OPEN">Açık Çekler</option><option value="OVERDUE">Vadesi Geçenler</option><option value="PAID">Kapananlar</option><option value="ALL">Tümü</option></select>
+            <select value={directionFilter} onChange={(event) => setDirectionFilter(event.target.value)}><option value="ALL">Alınan + Verilen</option><option value="RECEIVED">Alınan</option><option value="GIVEN">Verilen</option></select>
+            <select value={ownershipFilter} onChange={(event) => setOwnershipFilter(event.target.value)}><option value="ALL">Tüm Çek Türleri</option><option value="CUSTOMER_CHECK">Müşteri Çeki</option><option value="OWN_CHECK">Kendi Çekimiz</option></select>
+            <select value={workFilter} onChange={(event) => setWorkFilter(event.target.value)}><option value="ALL">Resmî + Gayri</option><option value="OFFICIAL">Resmî</option><option value="UNOFFICIAL">Gayri resmî</option></select>
           </div>
         </header>
         <div className="check-table-wrap">
@@ -481,14 +538,28 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
         </div>
       </section>
 
-      <section className="check-panel">
+      <section className="check-panel check-firm-directory-panel">
         <header className="check-panel-head">
           <div><h2>Firma / Cari ve Diğer Ödemeler</h2><p>Firma yoksa hızlı cari aç; açık borç, kart ve hareketleri aynı yerden izle.</p></div>
           <button className="check-btn" type="button" onClick={() => setModal({ type: "card", form: emptyCardForm() })}><CreditCard size={16} /> Kart Kaydı</button>
         </header>
         <div className="check-detail-grid">
           <aside className="check-firm-list">
-            <div className="check-firm-search"><input value={firmSearch} onChange={(event) => setFirmSearch(event.target.value)} placeholder="Firma / vergi no ara" /></div>
+            <div className="check-firm-search">
+              <input value={firmSearch} onChange={(event) => setFirmSearch(event.target.value)} placeholder="Firma / vergi no ara" />
+              <select value={firmBalanceFilter} onChange={(event) => setFirmBalanceFilter(event.target.value)}>
+                <option value="ALL">Tüm bakiyeler</option>
+                <option value="RECEIVABLE">Alacak bakiyesi</option>
+                <option value="PAYABLE">Borç bakiyesi</option>
+                <option value="NONZERO">Bakiyesi olanlar</option>
+                <option value="ZERO">Sıfır bakiye</option>
+              </select>
+              <select value={firmSort} onChange={(event) => setFirmSort(event.target.value)}>
+                <option value="NAME">Ada göre</option>
+                <option value="BALANCE_DESC">Bakiye azalan</option>
+                <option value="BALANCE_ASC">Bakiye artan</option>
+              </select>
+            </div>
             {visibleFirms.slice(0, 250).map((firm) => {
               const id = firm.id || firm.firmaId;
               return <button className={`check-firm-row ${String(id) === String(selectedFirmId) ? "active" : ""}`} type="button" key={id} onClick={() => setSelectedFirmId(id)}><strong>{firmName(firm)}</strong><span>{money(firm.bakiye || firm.currentBalance)} • {firm.openCheckCount || 0} açık çek</span></button>;

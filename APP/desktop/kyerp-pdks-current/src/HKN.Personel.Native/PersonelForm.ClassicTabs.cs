@@ -36,22 +36,47 @@ public partial class PersonelForm
     {
         var page=new TabPage("Bilgi");var lay=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2};lay.RowStyles.Add(new RowStyle(SizeType.Absolute,66));lay.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         var top=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=2,Padding=new Padding(6,5,6,2)};top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,70));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,205));top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));
-        top.Controls.Add(new Label{Text="Dönem Adı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,0);periodB.Dock=DockStyle.Fill;top.Controls.Add(periodB,1,0);var type=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};type.Items.AddRange(new object[]{"Tümü","Normal Çalışma","Mesai","Devamsızlık","Geç Kalma","Eksik Süre"});type.SelectedIndex=0;top.Controls.Add(type,3,0);
+        top.Controls.Add(new Label{Text="Dönem Adı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,0);periodB.Dock=DockStyle.Fill;top.Controls.Add(periodB,1,0);bilgiType.Items.AddRange(new object[]{"Tümü","Normal Çalışma","Mesai","Devamsızlık","Geç Kalma","Eksik Süre"});bilgiType.SelectedIndex=0;bilgiType.SelectedIndexChanged+=(_,_)=>ApplyTimesheetFilter();top.Controls.Add(bilgiType,3,0);
         top.Controls.Add(new Label{Text="Tarih Aralığı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,1);var dates=new Label{Text="",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};top.Controls.Add(dates,1,1);top.SetColumnSpan(dates,2);void upd(){var d=PeriodDates(periodB);dates.Text=$"{d.A:dd.MM.yyyy}     ile     {d.B:dd.MM.yyyy}";}periodB.SelectedIndexChanged+=(_,_)=>upd();var show=new Button{Text="Seçili Tarihi Göster",Dock=DockStyle.Fill,ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold),Image=ClassicGlyph("Göster"),ImageAlign=ContentAlignment.MiddleLeft};show.Click+=(_,_)=>RefreshFullTabs();top.Controls.Add(show,3,1);
         lay.Controls.Add(top,0,0);lay.Controls.Add(gBilgi,0,1);page.Controls.Add(lay);return page;
     }
 
     TabPage BuildOdemeClassic()
     {
-        var page=new TabPage("Ödemeler");var lay=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3};lay.RowStyles.Add(new RowStyle(SizeType.Absolute,42));lay.RowStyles.Add(new RowStyle(SizeType.Percent,100));lay.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
-        var top=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(7,5,0,0),WrapContents=false};top.Controls.Add(new Label{Text="Dönem Adı",AutoSize=true,Padding=new Padding(0,6,5,0)});periodO.Width=205;top.Controls.Add(periodO);lay.Controls.Add(top,0,0);
-        var body=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Padding=new Padding(2)};body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,56));body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,44));body.Controls.Add(gOdeme,0,0);
-        var totals=new GroupBox{Text="Toplamlar",Dock=DockStyle.Fill,Padding=new Padding(3)};var t=new TableLayoutPanel{Dock=DockStyle.Top,AutoSize=true,ColumnCount=4,RowCount=15};t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,34));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));
-        t.Controls.Add(new Label{Text="Normal Çalışma Toplamı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,0);t.SetColumnSpan(t.GetControlFromPosition(0,0)!,4);odHours.BackColor=Color.Black;odHours.ForeColor=Color.Lime;odHours.Font=new Font(Font,FontStyle.Bold);t.Controls.Add(odHours,0,1);t.Controls.Add(odDays,1,1);t.Controls.Add(odNormal,2,1);t.SetColumnSpan(odNormal,2);
-        AddPairLabels(t,2,"Ek Kesinti","Ek Kazanç");t.Controls.Add(odEkKes,0,3);t.SetColumnSpan(odEkKes,2);t.Controls.Add(odEkKaz,2,3);t.SetColumnSpan(odEkKaz,2);AddPairLabels(t,4,"Yol Parası","Yemek Parası");t.Controls.Add(odYol,0,5);t.SetColumnSpan(odYol,2);t.Controls.Add(odYemek,2,5);t.SetColumnSpan(odYemek,2);
-        AddTotalSingle(t,6,"Devir",odDevir);AddTotalSingle(t,7,"Ödenecek",odOdenecek);AddTotalSingle(t,8,"Ödenen Maaş",odOdenen);AddTotalSingle(t,9,"Kalan Ödeme",odKalan);AddTotalSingle(t,10,"Mesai",odMesai);AddTotalSingle(t,11,"Ödenen Mesai",odOdenenMesai);AddTotalSingle(t,12,"Kalan Mesai",odKalanMesai);var net=new Label{Text="Ödenecek Net Tutar",ForeColor=Color.Blue,Font=new Font(Font,FontStyle.Bold),Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter};t.Controls.Add(net,0,13);t.SetColumnSpan(net,4);t.Controls.Add(odOdenecek,2,14);t.SetColumnSpan(odOdenecek,2);
-        totals.Controls.Add(t);body.Controls.Add(totals,1,0);lay.Controls.Add(body,0,1);
-        var bar=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Padding=new Padding(30,6,30,4)};bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));var pay=new Button{Text="Maaş ve Mesai Ödemesi",Dock=DockStyle.Fill,Margin=new Padding(20,0,20,0),ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold),Image=ClassicGlyph("Yeni"),ImageAlign=ContentAlignment.MiddleLeft};var calc=new Button{Text="Hesapla",Dock=DockStyle.Fill,Margin=new Padding(20,0,20,0),ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold),Image=ClassicGlyph("Göster"),ImageAlign=ContentAlignment.MiddleLeft};pay.Click+=(_,_)=>ShowPaymentClassic();calc.Click+=(_,_)=>RefreshFullTabs();bar.Controls.Add(pay,0,0);bar.Controls.Add(calc,1,0);lay.Controls.Add(bar,0,2);page.Controls.Add(lay);return page;
+        var page=new TabPage("Ödemeler"){BackColor=Color.FromArgb(247,249,252)};
+        var lay=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(12)};
+        lay.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
+        lay.RowStyles.Add(new RowStyle(SizeType.Absolute,84));
+        lay.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        lay.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+
+        var top=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(7,7,0,0),WrapContents=false};
+        top.Controls.Add(new Label{Text="Dönem",AutoSize=true,Padding=new Padding(0,6,5,0),Font=new Font(Font,FontStyle.Bold)});
+        periodO.Width=230;top.Controls.Add(periodO);
+        var refresh=new Button{Text="Yenile",Width=92,Height=30,Margin=new Padding(12,0,0,0),FlatStyle=FlatStyle.Flat,BackColor=Color.White};
+        refresh.Click+=(_,_)=>RefreshFullTabs();top.Controls.Add(refresh);lay.Controls.Add(top,0,0);
+
+        var info=new Panel{Dock=DockStyle.Fill,BackColor=Color.FromArgb(235,244,255),Padding=new Padding(18,12,18,10)};
+        var title=new Label{Text="Aylık Bordro ve Ödeme Merkezi",Dock=DockStyle.Top,Height=30,Font=new Font("Segoe UI",12f,FontStyle.Bold),ForeColor=Color.FromArgb(25,73,130)};
+        var note=new Label{Text="Maaş, gün/saat, mesai, izin/devamsızlık, ek kazanç, kesinti, avans, icra ve Banka/Elden dağılımını tek yerden düzenler. Ayı Kaydet işlemi gerçek UCRETLER kaynağına yazar.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f),ForeColor=Color.FromArgb(55,75,98)};
+        info.Controls.Add(note);info.Controls.Add(title);lay.Controls.Add(info,0,1);
+
+        var body=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Padding=new Padding(0,8,0,0)};
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,55));body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,45));
+        body.Controls.Add(gOdeme,0,0);
+        var totals=new GroupBox{Text="Seçili Personel • Kontrol Özeti",Dock=DockStyle.Fill,Padding=new Padding(10)};
+        var t=new TableLayoutPanel{Dock=DockStyle.Top,AutoSize=true,ColumnCount=4,RowCount=15};t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,34));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));
+        t.Controls.Add(new Label{Text="Normal Çalışma",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font(Font,FontStyle.Bold)},0,0);t.SetColumnSpan(t.GetControlFromPosition(0,0)!,4);odHours.BackColor=Color.FromArgb(25,42,64);odHours.ForeColor=Color.White;odHours.Font=new Font(Font,FontStyle.Bold);t.Controls.Add(odHours,0,1);t.Controls.Add(odDays,1,1);t.Controls.Add(odNormal,2,1);t.SetColumnSpan(odNormal,2);
+        AddPairLabels(t,2,"Kesinti","Ek Kazanç");t.Controls.Add(odEkKes,0,3);t.SetColumnSpan(odEkKes,2);t.Controls.Add(odEkKaz,2,3);t.SetColumnSpan(odEkKaz,2);AddPairLabels(t,4,"Yol","Yemek");t.Controls.Add(odYol,0,5);t.SetColumnSpan(odYol,2);t.Controls.Add(odYemek,2,5);t.SetColumnSpan(odYemek,2);
+        AddTotalSingle(t,6,"Ödenecek",odOdenecek);AddTotalSingle(t,7,"Ödenen Maaş",odOdenen);AddTotalSingle(t,8,"Kalan Maaş",odKalan);AddTotalSingle(t,9,"Mesai",odMesai);AddTotalSingle(t,10,"Ödenen Mesai",odOdenenMesai);AddTotalSingle(t,11,"Kalan Mesai",odKalanMesai);
+        var net=new Label{Text="Net Ödenecek",ForeColor=Color.FromArgb(0,91,187),Font=new Font("Segoe UI",10f,FontStyle.Bold),Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter};t.Controls.Add(net,0,12);t.SetColumnSpan(net,4);t.Controls.Add(odOdenecek,2,13);t.SetColumnSpan(odOdenecek,2);
+        totals.Controls.Add(t);body.Controls.Add(totals,1,0);lay.Controls.Add(body,0,2);
+
+        var bar=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Padding=new Padding(20,7,20,4)};bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,70));bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));
+        var edit=new Button{Text="Aylık Düzeltme / Hızlı Ödeme",Dock=DockStyle.Fill,Margin=new Padding(0,0,16,0),FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(31,111,235),ForeColor=Color.White,Font=new Font("Segoe UI",10f,FontStyle.Bold)};edit.FlatAppearance.BorderSize=0;
+        edit.Click+=(_,_)=>{using var f=new MonthlyPayrollAdjustmentForm();f.ShowDialog(this);RefreshFullTabs();};
+        var calc=new Button{Text="Hesapları Yenile",Dock=DockStyle.Fill,FlatStyle=FlatStyle.Flat,BackColor=Color.White,Font=new Font(Font,FontStyle.Bold)};calc.Click+=(_,_)=>RefreshFullTabs();
+        bar.Controls.Add(edit,0,0);bar.Controls.Add(calc,1,0);lay.Controls.Add(bar,0,3);page.Controls.Add(lay);return page;
     }
     void AddPairLabels(TableLayoutPanel t,int row,string a,string b){var la=new Label{Text=a,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};var lb=new Label{Text=b,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};t.Controls.Add(la,0,row);t.SetColumnSpan(la,2);t.Controls.Add(lb,2,row);t.SetColumnSpan(lb,2);}
     void AddTotalSingle(TableLayoutPanel t,int row,string name,Control val){var l=new Label{Text=name,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};t.Controls.Add(l,0,row);t.SetColumnSpan(l,3);t.Controls.Add(val,3,row);}
@@ -67,6 +92,7 @@ public partial class PersonelForm
     {
         var d=PeriodDates(periodB);var end=d.B.AddDays(1);
         gBilgi.DataSource=Q("select TARIH,SAAT1 as NC,SAAT2 as M50,SAAT3 as M100,SAAT4 as UIZIN,SAAT5,SAAT6,SAAT7,SAAT8,SAAT9,DEVAMSIZLIKS as DEVAMSIZLIK,GECS as GEC_KALMA,EKSIKS as EKSIK_SURE from PUANTAJ where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",currentPk),new FbParameter("@A",d.A),new FbParameter("@B",end));
+        ApplyTimesheetFilter();
         d=PeriodDates(periodO);end=d.B.AddDays(1);
         var pu=Q("select coalesce(sum(GUN1),0) NG,coalesce(sum(DAKIKA1),0) ND,coalesce(sum(GUN2),0) G2,coalesce(sum(DAKIKA2),0) D2,coalesce(sum(GUN3),0) G3,coalesce(sum(DAKIKA3),0) D3,coalesce(sum(GUN4),0) G4,coalesce(sum(DAKIKA4),0) D4,coalesce(sum(DEVAMSIZLIKG),0) DG,coalesce(sum(GECG),0) GG,coalesce(sum(ERKENG),0) EG,coalesce(sum(EKSIKG),0) XG from PUANTAJ where PKNO=@PK and TARIH>=@A and TARIH<@B",new FbParameter("@PK",currentPk),new FbParameter("@A",d.A),new FbParameter("@B",end));
         var kr=Q("select MAAS,GYUCRET,GYEMUCRET from KIMLIK where PKNO=@PK",new FbParameter("@PK",currentPk));
@@ -86,4 +112,5 @@ public partial class PersonelForm
     }
     decimal Num(DataRow r,string c)=>r[c]==DBNull.Value?0:Convert.ToDecimal(r[c]);
     decimal Val(DataTable t,int row,string c)=>t.Rows.Count<=row||!t.Columns.Contains(c)||t.Rows[row][c]==DBNull.Value?0:Convert.ToDecimal(t.Rows[row][c]);
+    void ApplyTimesheetFilter(){if(gBilgi.DataSource is DataTable table)table.DefaultView.RowFilter=KYERP.PDKS.Core.Payroll.TimesheetViewFilter.Build(bilgiType.SelectedIndex);}
 }

@@ -1,0 +1,111 @@
+name: KY ERP Worker Canli Yayin
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - RELEASES/kyerp-worker-production-release.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-worker-production-release
+  cancel-in-progress: false
+
+jobs:
+  release-worker:
+    name: Worker test, D1 yedek, deploy ve canli dogrulama
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      DB_NAME: ky-erp-db
+      WORKER_DIR: APP/cloud/ky-erp-api
+      PROD_BRANCH: codex/model-uretim-kontrol-merkezi-final
+
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
+
+      - name: Worker release kaydini dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "$PROD_BRANCH"
+          test -f RELEASES/kyerp-worker-production-release.json
+          jq -e '.approved == true and .target == "production" and .component == "worker" and .sourceBranch == "codex/model-uretim-kontrol-merkezi-final"' RELEASES/kyerp-worker-production-release.json >/dev/null
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "CLOUDFLARE_API_TOKEN eksik" >&2; exit 1; }
+          echo "RELEASE_SHA=$GITHUB_SHA"
+
+      - name: Worker paketleri, typecheck, test ve build
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm audit --omit=dev --audit-level=high
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Cloudflare production erisimini dogrula
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler whoami
+
+      - name: Canli D1 tam yedegini al
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p database-backup
+          stamp="$(date -u +%Y%m%d-%H%M%S)"
+          output="database-backup/ky-erp-db-before-worker-${stamp}.sql"
+          npx wrangler d1 export "$DB_NAME" --remote --config wrangler.jsonc --skip-confirmation --output "$output"
+          test -s "$output"
+          echo "D1_BACKUP=$output" >> "$GITHUB_ENV"
+
+      - name: D1 yedegini artifact olarak sakla
+        uses: actions/upload-artifact@v4
+        with:
+          name: ky-erp-worker-production-backup-${{ github.run_id }}
+          path: APP/cloud/ky-erp-api/database-backup/*.sql
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Worker'i api.kyerp.net adresine dagit
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config wrangler.jsonc
+
+      - name: Canli API saglik kontrolu
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail --silent --show-error --max-time 20 https://api.kyerp.net/api/health > /tmp/kyerp-health.json; then
+              cat /tmp/kyerp-health.json
+              exit 0
+            fi
+            echo "Canli API henuz hazir degil; deneme $attempt/6"
+            sleep 5
+          done
+          echo "Canli API saglik kontrolu basarisiz." >&2
+          exit 1

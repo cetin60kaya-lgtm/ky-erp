@@ -1,0 +1,1 @@
+Build kontrolü bu commit zincirinden sonra GitHub Actions/yerel build ile doğrulanacak. Kabul: Release 0 error, smoke/contract pass, terminal SDK guard çalışır, bordro özelleştirme açılır.

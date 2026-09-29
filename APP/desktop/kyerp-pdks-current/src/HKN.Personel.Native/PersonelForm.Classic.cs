@@ -5,19 +5,23 @@ namespace HKN.Personel.Native;
 
 public partial class PersonelForm
 {
-    readonly ComboBox searchField = new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=74};
-    readonly TextBox searchText = new(){Width=164};
+    readonly ComboBox searchField = new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=65};
+    readonly RadioButton scopeActive = new(){Text="Aktif",AutoSize=true,Checked=true,Margin=new Padding(4,5,2,0)};
+    readonly RadioButton scopePassive = new(){Text="Pasif",AutoSize=true,Margin=new Padding(2,5,2,0)};
+    readonly RadioButton scopeAll = new(){Text="Tümü",AutoSize=true,Margin=new Padding(2,5,2,0)};
+    readonly TextBox searchText = new(){Width=95};
     readonly FlowLayoutPanel sortPanel = new(){Dock=DockStyle.Fill,FlowDirection=FlowDirection.LeftToRight,WrapContents=false};
     readonly Label stActive = new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};
     readonly Label stLeft = new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};
     readonly Label stTotal = new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};
     readonly Label stListed = new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};
     readonly PictureBox photo = new(){Dock=DockStyle.Fill,BorderStyle=BorderStyle.FixedSingle,SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.White};
+    readonly System.Windows.Forms.Timer personLoadTimer = new(){Interval=70};
+    string pendingPersonPk = "";
 
     void BuildUiClassic()
     {
         AutoScaleMode=AutoScaleMode.None;
-        MinimumSize=new Size(961,572); Size=new Size(961,572);
         Font=new Font("Microsoft Sans Serif",8.25f,FontStyle.Regular,GraphicsUnit.Point);
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=3,Padding=new Padding(6,25,6,0),Margin=Padding.Empty};
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,390)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
@@ -25,7 +29,8 @@ public partial class PersonelForm
         BuildClassicList(); root.Controls.Add(list,0,0); BuildClassicRight(root); root.Controls.Add(BuildClassicSearch(),0,1); var st=BuildClassicStatus(); root.Controls.Add(st,0,2); root.SetColumnSpan(st,2);
         Controls.Add(root);
         list.DataBindingComplete += (_,_)=>{ConfigureListColumns();UpdateClassicStats();};
-        tabs.SelectedIndexChanged += (_,_)=>ApplyClassicGridStyles();
+        tabs.SelectedIndexChanged += (_,_)=>{ApplyClassicGridStyles();RefreshSelectedTab();};
+        personLoadTimer.Tick += (_,_)=>{personLoadTimer.Stop();var pk=pendingPersonPk;if(pk.Length>0&&pk!=currentPk)LoadPerson(pk);};
     }
 
     Control BuildClassicStatusPlaceholder()=>new Panel{Visible=false};
@@ -35,7 +40,9 @@ public partial class PersonelForm
         list.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None; list.RowHeadersWidth=18; list.RowHeadersVisible=true;
         list.ColumnHeadersHeight=20; list.RowTemplate.Height=20; list.AllowUserToResizeRows=false; list.MultiSelect=false;
         list.DefaultCellStyle.Font=Font; list.ColumnHeadersDefaultCellStyle.Font=Font; list.SelectionMode=DataGridViewSelectionMode.FullRowSelect;
-        list.SelectionChanged += (_,_)=>{if(list.CurrentRow?.Cells["PKNO"].Value is object v)LoadPerson(v.ToString()!);};
+        list.SelectionChanged += (_,_)=>QueuePersonLoad();
+        list.CellFormatting += PersonListFormat;
+        typeof(DataGridView).GetProperty("DoubleBuffered",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.SetValue(list,true);
     }
 
     void ConfigureListColumns()
@@ -53,7 +60,7 @@ public partial class PersonelForm
         right.Controls.Add(BuildClassicHeader(),0,0); BuildTabsClassic(); right.Controls.Add(tabs,0,1); root.Controls.Add(right,1,0);
         var buttons=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(6,12,52,0),WrapContents=false};
         buttons.Controls.Add(ClassicButton("Per. Bilgisi",100,()=>{if(currentPk!="")LoadPerson(currentPk);})); buttons.Controls.Add(ClassicButton("Sil",100,MarkExit));
-        buttons.Controls.Add(ClassicButton("Değiştir",100,()=>OpenPersonEditor(false))); buttons.Controls.Add(ClassicButton("Yeni Ekle",100,()=>OpenPersonEditor(true))); root.Controls.Add(buttons,1,1); Action syncTabLayout=()=>{bool info=tabs.SelectedIndex<=0||tabs.SelectedTab?.Text=="Personel Bilgileri";buttons.Visible=info;root.SetRowSpan(right,info?1:2);}; tabs.SelectedIndexChanged+=(_,_)=>syncTabLayout(); syncTabLayout();
+        buttons.Controls.Add(ClassicButton("Değiştir",100,()=>OpenPersonEditor(false))); buttons.Controls.Add(ClassicButton("Yeni Ekle",100,()=>OpenPersonEditor(true))); root.Controls.Add(buttons,1,1); Action syncTabLayout=()=>{bool info=tabs.SelectedIndex<=0||tabs.SelectedTab?.Text=="Personel Bilgileri";buttons.Visible=info;}; tabs.SelectedIndexChanged+=(_,_)=>syncTabLayout(); syncTabLayout();
     }
 
     Button ClassicButton(string text,int w,Action a){var b=new Button{Text=text,Width=w,Height=31,Font=new Font(Font,FontStyle.Bold),ForeColor=Color.Navy,Image=ClassicGlyph(text),ImageAlign=ContentAlignment.MiddleLeft,UseVisualStyleBackColor=true};b.Click+=(_,_)=>a();return b;}
@@ -92,9 +99,9 @@ public partial class PersonelForm
     }
     TabPage BuildKisiselClassic()
     {
-        var page=new TabPage("Kişisel Bilgiler");var t=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=12,Padding=new Padding(4)};
+        var page=new TabPage("Kişisel Bilgileri");var t=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=14,Padding=new Padding(4)};
         t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,42));t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,58));
-        string[] z={"Vergi Kimlik No","VKNO","SSK No","SSKNO","Askerlik Durumu","ASDURUM","Elbise Beden No","ELBNO","Eğitim Durumu","EGTDURUM","Ayakkabı No","AYNO","Yabancı Dil","YDIL","Kullandığı İzin","KULIZIN","Uzmanlık Alanı","UALAN","Çocuk Sayısı","CCKSAY","Ehliyetin Sınıfı","ESINIF","Ev Telefonu","EVTEL","Ehliyetin Verildiği İl/İlçe","EVILILCE","Cep Telefonu","GSM","Ehliyet Belge Numarası","EBELGENO","Fazla Mesai Ücreti","MSUCRET","Ehliyetin Verildiği Tarih","EVTAR","Günlük Yemek Ücreti","GYEMUCRET","Kullandığı Cihaz","EKC","Günlük Yol Ücreti","GYUCRET","Eski Maaşı","EMAAS","İşten Çıkış Sebebi","ICIKSEBEB","","","Adres","ADRES"};
+        string[] z={"Vergi Kimlik No","VKNO","SSK No","SSKNO","Askerlik Durumu","ASDURUM","Elbise Beden No","ELBNO","Eğitim Durumu","EGTDURUM","Ayakkabı No","AYNO","Yabancı Dil","YDIL","Kullandığı İzin","KULIZIN","Uzmanlık Alanı","UALAN","Çocuk Sayısı","CCKSAY","Ehliyetin Sınıfı","ESINIF","Ev Telefonu","EVTEL","Ehliyetin Verildiği İl/İlçe","EVILILCE","Cep Telefonu","GSM","Ehliyet Belge Numarası","EBELGENO","Fazla Mesai Ücreti","MSUCRET","Ehliyetin Verildiği Tarih","EVTAR","Günlük Yemek Ücreti","GYEMUCRET","Kullandığı Cihaz","EKC","Günlük Yol Ücreti","GYUCRET","Eski Maaşı","EMAAS","İşten Çıkış Sebebi","ICIKSEBEB","Saat Ücreti","NSUCRET","Adres","ADRES","Banka Hesap No","BHNO","SGK İşe Giriş Tarihi","SGKGIRTAR"};
         FillPairs(t,z);page.Controls.Add(t);return page;
     }
 
@@ -109,11 +116,13 @@ public partial class PersonelForm
     {
         var outer=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Padding=new Padding(0,4,0,0),Margin=Padding.Empty};outer.RowStyles.Add(new RowStyle(SizeType.Absolute,30));outer.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         var row=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Margin=Padding.Empty};var prev=NavButton("◀",-1);var next=NavButton("▶",1);searchField.Items.AddRange(new object[]{"Kart No","Ad","Soyad","İşe Giriş Tarihi","İşten Çıkış Tarihi"});searchField.SelectedIndex=0;
-        row.Controls.Add(prev);row.Controls.Add(new Label{Text="Arama Alanı",AutoSize=true,Padding=new Padding(5,7,3,0)});row.Controls.Add(searchField);row.Controls.Add(searchText);row.Controls.Add(next);outer.Controls.Add(row,0,0);
+        row.Controls.Add(prev);row.Controls.Add(new Label{Text="Ara",AutoSize=true,Padding=new Padding(3,7,2,0)});row.Controls.Add(searchField);row.Controls.Add(searchText);row.Controls.Add(scopeActive);row.Controls.Add(scopePassive);row.Controls.Add(scopeAll);row.Controls.Add(next);outer.Controls.Add(row,0,0);
         var g=new GroupBox{Text="Sıralama Şekli",Dock=DockStyle.Fill,Padding=new Padding(5,0,0,0)};string[] names={"Kart No","Ad","Soyad","İşe Giriş Tarihi","İşten Çıkış Tarihi"};string[] cols={"PKNO","AD","SOYAD","IGTARIH","ICTARIH"};
         for(int i=0;i<names.Length;i++){var r=new RadioButton{Text=names[i],AutoSize=true,Checked=i==0,Tag=cols[i],Margin=new Padding(2,3,4,0)};r.CheckedChanged+=SortChanged;sortPanel.Controls.Add(r);}g.Controls.Add(sortPanel);outer.Controls.Add(g,0,1);
-        searchText.TextChanged+=(_,_)=>ApplyClassicSearch();searchField.SelectedIndexChanged+=(_,_)=>ApplyClassicSearch();return outer;
+        searchText.TextChanged+=(_,_)=>ApplyClassicSearch();searchField.SelectedIndexChanged+=(_,_)=>ApplyClassicSearch();scopeActive.CheckedChanged+=(_,_)=>{if(scopeActive.Checked)Reload();};scopePassive.CheckedChanged+=(_,_)=>{if(scopePassive.Checked)Reload();};scopeAll.CheckedChanged+=(_,_)=>{if(scopeAll.Checked)Reload();};return outer;
     }
+    void QueuePersonLoad(){if(list.CurrentRow?.Cells["PKNO"].Value is not object v)return;pendingPersonPk=v.ToString()??"";personLoadTimer.Stop();personLoadTimer.Start();}
+    void PersonListFormat(object? sender,DataGridViewCellFormattingEventArgs e){if(e.RowIndex<0||!list.Columns.Contains("ICTARIH"))return;var st=e.CellStyle;if(st is null)return;var exited=list.Rows[e.RowIndex].Cells["ICTARIH"].Value is not null and not DBNull;var back=exited?Color.FromArgb(255,238,238):Color.FromArgb(238,250,240);var sel=exited?Color.FromArgb(250,220,220):Color.FromArgb(216,240,222);st.BackColor=back;st.ForeColor=Color.FromArgb(35,55,65);st.SelectionBackColor=sel;st.SelectionForeColor=Color.FromArgb(25,45,55);}
     Button NavButton(string text,int delta){var b=new Button{Text=text,Width=24,Height=23,Margin=new Padding(1,1,1,0),ForeColor=Color.RoyalBlue};b.Click+=(_,_)=>MoveRow(delta);return b;}
     void MoveRow(int d){if(list.Rows.Count==0)return;int i=list.CurrentRow?.Index??0;i=Math.Max(0,Math.Min(list.Rows.Count-1,i+d));list.CurrentCell=list.Rows[i].Cells[0];}
     void ApplyClassicSearch(){if(list.DataSource is not DataTable dt)return;string s=searchText.Text.Replace("'","''").Trim();string c=searchField.SelectedIndex switch{1=>"AD",2=>"SOYAD",3=>"IGTARIH",4=>"ICTARIH",_=>"PKNO"};dt.DefaultView.RowFilter=s.Length==0?"":(c is "IGTARIH" or "ICTARIH"?$"CONVERT({c}, 'System.String') LIKE '%{s}%'":$"{c} LIKE '%{s}%'");UpdateClassicStats();}
@@ -139,7 +148,7 @@ public partial class PersonelForm
     void StyleGrid(DataGridView g){g.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;g.RowHeadersWidth=18;g.RowTemplate.Height=20;g.ColumnHeadersHeight=20;g.BackgroundColor=SystemColors.Control;g.BorderStyle=BorderStyle.FixedSingle;g.GridColor=SystemColors.ControlDark;g.DefaultCellStyle.Font=Font;g.ColumnHeadersDefaultCellStyle.Font=Font;g.EnableHeadersVisualStyles=true;}
 
     void GirisBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gGiris,"SIRA",0,false);SetCol(gGiris,"GIRIS_TARIHI",104,true,"Giriş Tarihi");SetCol(gGiris,"GIRIS_SAATI",72,true,"Giriş Saati");SetCol(gGiris,"GTUR",34,true,"Tür");SetCol(gGiris,"CIKIS_TARIHI",104,true,"Çıkış Tarihi");SetCol(gGiris,"CIKIS_SAATI",72,true,"Çıkış Saati");SetCol(gGiris,"CTUR",34,true,"Tür");OrderGirisColumns();}
-    void IzinBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gIzin,"SIRA",0,false);SetCol(gIzin,"TARIH",120,true,"Tarih");SetCol(gIzin,"BASSAAT",62,true,"Baş. Saat");SetCol(gIzin,"BITSAAT",62,true,"Bit. Saat");SetCol(gIzin,"SURESAAT",62,true,"Süre");SetCol(gIzin,"TIP",90,true,"Tip");SetCol(gIzin,"MAZERET",210,true,"Mazeret");}
+    void IzinBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gIzin,"SIRA",0,false);SetCol(gIzin,"SUREDAKIKA",0,false);SetCol(gIzin,"EBALAN",0,false);SetCol(gIzin,"TARIH",120,true,"Tarih");SetCol(gIzin,"BASSAAT",62,true,"Baş. Saat");SetCol(gIzin,"BITSAAT",62,true,"Bit. Saat");SetCol(gIzin,"SURESAAT",62,true,"Süre");SetCol(gIzin,"TIP",90,true,"Tip");SetCol(gIzin,"MAZERET",210,true,"Mazeret");}
     void EkkBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gEkk,"KOD",0,false);SetCol(gEkk,"ISLEM_TARIHI",108,true,"İşlem Tar.");SetCol(gEkk,"VERILIS_TARIHI",108,true,"Ver. Tar.");SetCol(gEkk,"TURU",85,true,"Türü");SetCol(gEkk,"MIKTAR",85,true,"Miktar");SetCol(gEkk,"ACIKLAMA",175,true,"Açıklama");}
     void BilgiBound(object? s,DataGridViewBindingCompleteEventArgs e){string[] n={"TARIH","NC","M50","M100","UIZIN","SAAT5","SAAT6","SAAT7","SAAT8","SAAT9","DEVAMSIZLIK","GEC_KALMA","EKSIK_SURE"};string[] h={"TARİH","N.Ç.","% 50","%100","Üsz.İ","5","6","7","8","9","Dvms.","Geç K.","Eks."};int[] w={105,48,48,48,42,36,36,36,36,36,50,50,50};for(int i=0;i<n.Length;i++)SetCol(gBilgi,n[i],w[i],true,h[i]);}
     void SetCol(DataGridView g,string n,int w,bool vis,string? h=null){if(!g.Columns.Contains(n))return;var c=g.Columns[n];c.Visible=vis;if(vis)c.Width=w;if(h!=null)c.HeaderText=h;}

@@ -1,0 +1,49 @@
+name: PDKS Build Diagnostic
+
+on:
+  push:
+    branches:
+      - codex/kyerp-pdks-full-app-prep
+    paths:
+      - 'APP/desktop/kyerp-pdks-current/**'
+      - '.github/workflows/pdks-build-diagnostic.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/kyerp-pdks-full-app-prep
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore APP/desktop/kyerp-pdks-current/KYERP.PDKS.sln
+      - name: Build and capture
+        id: build
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          dotnet build APP/desktop/kyerp-pdks-current/KYERP.PDKS.sln -c Release --no-restore 2>&1 | Tee-Object -FilePath pdks-build.log
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Commit diagnostic on failure
+        if: steps.build.outcome == 'failure'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .diagnostics | Out-Null
+          $lines = Get-Content pdks-build.log | Where-Object { $_ -match ': error |error CS|error MSB' }
+          if (-not $lines) { $lines = Get-Content pdks-build.log | Select-Object -Last 120 }
+          @("HEAD: $env:GITHUB_SHA", "UTC: $([DateTime]::UtcNow.ToString('s'))", '') + $lines | Set-Content .diagnostics/pdks-build-errors.txt -Encoding UTF8
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .diagnostics/pdks-build-errors.txt
+          git commit -m 'chore(pdks): capture build diagnostic' || exit 0
+          git push origin HEAD:codex/kyerp-pdks-full-app-prep
+      - name: Fail if build failed
+        if: steps.build.outcome == 'failure'
+        run: exit 1

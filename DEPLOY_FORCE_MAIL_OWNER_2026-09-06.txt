@@ -1,0 +1,8 @@
+KY ERP Cloudflare redeploy trigger
+Purpose: force Pages/Worker Git Integration after mail owner approval bypass fixes.
+Production base: codex/model-uretim-kontrol-merkezi-final
+Expected production behavior:
+- SUPER_ADMIN/ADMIN and COMPANY_ADMIN own mail requests do not remain pending.
+- Existing privileged requester pending mail request is auto-approved when mail overview/accounts/approvals loads.
+- Normal user requests remain in approval queue.
+Generated: 2026-09-06

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { AccountingApiService } from "../accounting-api.service";
 
-@Controller(["muhasebe/cari", "api/muhasebe/cari"])
+@Controller("muhasebe/cari")
 export class CariController {
   constructor(private readonly service: AccountingApiService) {}
 

@@ -51,7 +51,6 @@ import { IsnetDocumentCenterController } from "./isnet-document-center.controlle
 import { IsnetDocumentCenterService } from "./isnet-document-center.service";
 import { IsnetSelectedPrintController } from "./isnet-selected-print.controller";
 import { IsnetSelectedPrintService } from "./isnet-selected-print.service";
-import { MuhasebeSmartMatchController } from "./muhasebe-smart-match.controller";
 import { MuhasebeSmartMatchService } from "./muhasebe-smart-match.service";
 import { IsnetBusinessSettingsController } from "./isnet-business-settings.controller";
 import { IsnetBusinessSettingsService } from "./isnet-business-settings.service";
@@ -69,7 +68,6 @@ import { CheckCenterService } from "./check-center/check-center.service";
     DocumentIntakeController,
     BelgeImportController,
     MuhasebeAliasController,
-    MuhasebeSmartMatchController,
     FirmsController,
     CariController,
     KdvController,

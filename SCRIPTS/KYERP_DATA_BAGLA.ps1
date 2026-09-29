@@ -1,25 +1,31 @@
 param(
-  [string]$LiveDataRoot = "D:\Onedrive-Hkn\OneDrive\KY-ERP-MERKEZ\DATA"
+  [string]$LiveDataRoot = $env:KYERP_LEGACY_DATA_ROOT
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $LinkPath = Join-Path $Root "DATA"
+
+if ([string]::IsNullOrWhiteSpace($LiveDataRoot)) {
+  $LiveDataRoot = "D:\KYERP\DATA"
+}
+
+$LiveDataRoot = [System.IO.Path]::GetFullPath($LiveDataRoot)
 $SourceDatabase = Join-Path $LiveDataRoot "KYERP.db"
 $LinkedDatabase = Join-Path $LinkPath "KYERP.db"
 
 if (-not (Test-Path -LiteralPath $LiveDataRoot)) {
-  throw "Canli DATA klasoru bulunamadi: $LiveDataRoot"
+  throw "Legacy DATA klasoru bulunamadi: $LiveDataRoot. Gerekirse KYERP_LEGACY_DATA_ROOT ortam degiskenini tanimlayin."
 }
 
 if (-not (Test-Path -LiteralPath $SourceDatabase)) {
-  throw "Canli veritabani bulunamadi: $SourceDatabase"
+  throw "Legacy veritabani bulunamadi: $SourceDatabase"
 }
 
 $sqlite = (Get-Command sqlite3 -ErrorAction Stop).Source
 $quickCheck = (& $sqlite $SourceDatabase ".timeout 30000" "PRAGMA quick_check;" 2>&1) -join "`n"
 if ($LASTEXITCODE -ne 0 -or $quickCheck.Trim() -ne "ok") {
-  throw "Canli veritabani quick_check basarisiz: $quickCheck"
+  throw "Legacy veritabani quick_check basarisiz: $quickCheck"
 }
 
 if (Test-Path -LiteralPath $LinkPath) {

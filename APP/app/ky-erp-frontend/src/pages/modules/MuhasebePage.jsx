@@ -1,114 +1,72 @@
-import { useMemo, useState } from "react";
-import CekOdemeMerkeziPage from "../muhasebe/CekOdemeMerkeziPage";
-import MailTemplatesWorkspace from "./muhasebe/MailTemplatesWorkspace";
-import IrsaliyeFaturaKontrolTab from "./muhasebe/IrsaliyeFaturaKontrolTab";
-import KesilenFaturalarTab from "./muhasebe/KesilenFaturalarTab";
-import AccountingReportsListWorkspace from "./muhasebe/AccountingReportsListWorkspace";
+import { useEffect, useMemo, useRef, useState } from "react";
 import CompaniesCurrentWorkspace from "./muhasebe/CompaniesCurrentWorkspace";
-import MailTrackingWorkspace from "./muhasebe/MailTrackingWorkspace";
+import CustomerDocumentsWorkspace from "./muhasebe/CustomerDocumentsWorkspace";
+import FinanceOperationsWorkspace from "./muhasebe/FinanceOperationsWorkspace";
+import FinancialControlWorkspace from "./muhasebe/FinancialControlWorkspace";
+import MailAccountingWorkspace from "./muhasebe/MailAccountingWorkspace";
 import ManagementOverviewWorkspace from "./muhasebe/ManagementOverviewWorkspace";
-import ProfitLossWorkspace from "./muhasebe/ProfitLossWorkspace";
-import SupplierInventoryWorkspace from "./muhasebe/SupplierInventoryWorkspace";
-import VatComparisonWorkspace from "./muhasebe/VatComparisonWorkspace";
-import { MUHASEBE_ROUTE_ALIASES } from "../../app/moduleRegistry";
+import QuickCompanyCreateDialog from "./muhasebe/QuickCompanyCreateDialog";
+import SupplierDocumentsWorkspace from "./muhasebe/SupplierDocumentsWorkspace";
+import { useAccountingLiveSync } from "../../services/accountingLiveSync";
 import "./muhasebe/muhasebeModule.css";
 import "./muhasebe/supplierInventoryWorkspace.css";
+import "./muhasebe/accountingSafetyOverrides.css";
+import "./muhasebe/accountingWorkspaceCore.css";
+import "./muhasebe/accountingResponsiveFinal.css";
 
 export const MUHASEBE_TABS = [
-  {
-    key: "yonetim-ozeti",
-    title: "Yönetim Özeti",
-    description: "Nakit, cari, KDV, belge ve çek görünümünü tek ekranda izleyin.",
-  },
-  {
-    key: "firma-kartlari",
-    title: "Firmalar ve Cari",
-    description: "Firma bakiyeleri, cari hareketler ve hızlı işlemler için tek liste.",
-  },
-  {
-    key: "tedarikci-faturalar",
-    title: "Gelen Tedarikçi Faturaları",
-    description:
-      "İşNet faturalarını kontrol edin; boya ve kimyasal alımlarını onaylı ürün, firma aliası, lot ve stok hareketiyle Boyahaneye aktarın.",
-  },
-  {
-    key: "kesilen-faturalar",
-    title: "Kesilen Faturalar",
-    description: "Kesilen faturaların İşNet, model, adet ve belge durumlarını izleyin.",
-  },
-  {
-    key: "irsaliye-fatura-kontrol",
-    title: "İrsaliye / Fatura Kontrolü",
-    description: "Model, sipariş ve adet farklarını tek listede karşılaştırın.",
-  },
-  {
-    key: "cek-odeme",
-    title: "Çek / Ödeme",
-    description: "Vadeleri, banka ve firma riskini yakından takip edin.",
-  },
-  {
-    key: "mail-ekstre",
-    title: "Ekstre ve Mail Takibi",
-    description: "Ekstre, alıcı, hatırlatma ve gönderim işlerini satırdan yönetin.",
-  },
-  {
-    key: "kar-zarar",
-    title: "Gelir / Gider ve Kâr Zarar",
-    description: "Resmî ve gayri resmî hareketleri aynı dönem görünümünde analiz edin.",
-  },
-  {
-    key: "kdv-kontrol",
-    title: "Gelen / Giden KDV Kontrolü",
-    description: "Firma bazlı KDV hareketlerini ve dönem farkını karşılaştırın.",
-  },
-  {
-    key: "muhasebe-raporlari",
-    title: "Muhasebe Raporları",
-    description: "Operasyonel ve yönetim raporlarını filtreleyip dışa aktarın.",
-  },
-  {
-    key: "mail-sablonlari",
-    title: "Mail Şablonları",
-    description: "Muhasebe yazışmalarında kullanılan şablonları yönetin.",
-  },
+  { key: "yonetim-ozeti", title: "Yönetim Özeti", description: "Nakit, cari, KDV, belge ve yaklaşan işlemleri tek ekranda izleyin." },
+  { key: "firma-kartlari", title: "Firmalar & Cari", description: "Müşteri ve tedarikçi kartlarını, cari bakiyeyi ve firma muhasebe tanımlarını yönetin." },
+  { key: "tedarikci-faturalar", title: "Tedarikçi / Alış Belgeleri", description: "Gelen irsaliye ve faturaları gider, KDV, stok, LOT ve cari akışıyla birlikte yönetin." },
+  { key: "musteri-belgeleri", title: "Müşteri / Satış Belgeleri", description: "Müşteri irsaliyesinden bizim irsaliye ve kesilen faturaya kadar belge zincirini izleyin." },
+  { key: "finans-islemleri", title: "Finans İşlemleri", description: "Ödeme, tahsilat, çek, ödeme planı, banka, kasa ve defter hareketlerini günlük akışta yönetin." },
+  { key: "mail-ekstre", title: "Ekstre ve Mail", description: "Ekstre, mutabakat, alıcı, hatırlatma ve gönderim işlemlerini tek alanda yönetin." },
+  { key: "mali-kontrol", title: "Mali Kontrol & Raporlar", description: "Gelir-gider, kâr-zarar, KDV ve muhasebe raporlarını tek alanda inceleyin." },
 ];
 
 function ControlledEmptyState({ requestedTab, goTab }) {
-  return (
-    <section className="accounting-empty" role="status">
-      <strong>Bu muhasebe görünümü bulunamadı.</strong>
-      <span>
-        {requestedTab
-          ? `“${requestedTab}” bağlantısı artık kullanılmıyor.`
-          : "Geçerli bir ekran seçin."}
-      </span>
-      <button
-        type="button"
-        className="accounting-primary"
-        onClick={() => goTab("yonetim-ozeti")}
-      >
-        Yönetim özetine dön
-      </button>
-    </section>
-  );
+  return <section className="accounting-empty" role="status"><strong>Bu muhasebe görünümü bulunamadı.</strong><span>{requestedTab ? `“${requestedTab}” bağlantısı artık kullanılmıyor.` : "Geçerli bir ekran seçin."}</span><button type="button" className="accounting-primary" onClick={() => goTab("yonetim-ozeti")}>Yönetim özetine dön</button></section>;
 }
 
-export default function MuhasebePage({
-  activeTab,
-  activeMainCompany,
-  openModule,
-}) {
-  const normalizedTab =
-    MUHASEBE_ROUTE_ALIASES[activeTab] || activeTab || "yonetim-ozeti";
-  const current = useMemo(
-    () => MUHASEBE_TABS.find((tab) => tab.key === normalizedTab),
-    [normalizedTab],
-  );
+export default function MuhasebePage({ activeTab, activeMainCompany, openModule }) {
+  const normalizedTab = activeTab || "yonetim-ozeti";
+  const current = useMemo(() => MUHASEBE_TABS.find((tab) => tab.key === normalizedTab), [normalizedTab]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickCompanyOpen, setQuickCompanyOpen] = useState(false);
+  const quickWrapRef = useRef(null);
   const reloadAll = () => setRefreshKey((value) => value + 1);
+  const live = useAccountingLiveSync(activeMainCompany);
+  const liveLabel = { live: "Canl\u0131", connecting: "Ba\u011flan\u0131yor\u2026", offline: "\u00c7evrimd\u0131\u015f\u0131", auth_error: "Yetki hatas\u0131", api_error: "API hatas\u0131" }[live.status] || "Ba\u011flant\u0131 durumu";
+
+  useEffect(() => {
+    const refreshFromCanonicalDocument = () => setRefreshKey((value) => value + 1);
+    window.addEventListener("kyerp:accounting-refresh", refreshFromCanonicalDocument);
+    return () => window.removeEventListener("kyerp:accounting-refresh", refreshFromCanonicalDocument);
+  }, []);
+
+  useEffect(() => {
+    setQuickOpen(false);
+  }, [normalizedTab]);
+
+  useEffect(() => {
+    if (!quickOpen) return undefined;
+    const closeOutside = (event) => {
+      if (!quickWrapRef.current?.contains(event.target)) setQuickOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setQuickOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [quickOpen]);
 
   const goTab = (tabKey, query = "") => {
-    const target = MUHASEBE_ROUTE_ALIASES[tabKey] || tabKey;
+    const target = tabKey;
     openModule?.("muhasebe", { tabKey: target });
     if (query) {
       const suffix = String(query).startsWith("?") ? query : `?${query}`;
@@ -119,79 +77,64 @@ export default function MuhasebePage({
     }
   };
 
-  const pageProps = { activeMainCompany, refreshKey, reloadAll, goTab };
+  const goFinance = (query = "") => {
+    setQuickOpen(false);
+    goTab("finans-islemleri", query);
+  };
+
+  const openEBelgeUpload = () => {
+    setQuickOpen(false);
+    openModule?.("e-belge", { tabKey: "belge-havuzu" });
+  };
+
+  const openQuickCompany = () => {
+    setQuickOpen(false);
+    setQuickCompanyOpen(true);
+  };
+
+  const pageProps = { activeMainCompany, refreshKey, reloadAll, goTab, openModule };
   let content = null;
-  if (!current) {
-    content = <ControlledEmptyState requestedTab={activeTab} goTab={goTab} />;
-  } else if (current.key === "yonetim-ozeti") {
-    content = <ManagementOverviewWorkspace {...pageProps} />;
-  } else if (current.key === "firma-kartlari") {
-    content = (
-      <CompaniesCurrentWorkspace
-        activeMainCompany={activeMainCompany}
-        refreshKey={refreshKey}
-      />
-    );
-  } else if (current.key === "tedarikci-faturalar") {
-    content = (
-      <SupplierInventoryWorkspace
-        activeMainCompany={activeMainCompany}
-        refreshKey={refreshKey}
-      />
-    );
-  } else if (current.key === "kesilen-faturalar") {
-    content = <KesilenFaturalarTab activeMainCompany={activeMainCompany} />;
-  } else if (current.key === "irsaliye-fatura-kontrol") {
-    content = <IrsaliyeFaturaKontrolTab activeMainCompany={activeMainCompany} />;
-  } else if (current.key === "cek-odeme") {
-    content = (
-      <CekOdemeMerkeziPage
-        activeMainCompany={activeMainCompany}
-        refreshKey={refreshKey}
-        reloadAll={reloadAll}
-      />
-    );
-  } else if (current.key === "mail-ekstre") {
-    content = <MailTrackingWorkspace {...pageProps} />;
-  } else if (current.key === "kar-zarar") {
-    content = (
-      <ProfitLossWorkspace
-        activeMainCompany={activeMainCompany}
-        refreshKey={refreshKey}
-      />
-    );
-  } else if (current.key === "kdv-kontrol") {
-    content = <VatComparisonWorkspace {...pageProps} />;
-  } else if (current.key === "muhasebe-raporlari") {
-    content = <AccountingReportsListWorkspace {...pageProps} />;
-  } else if (current.key === "mail-sablonlari") {
-    content = (
-      <MailTemplatesWorkspace
-        activeMainCompany={activeMainCompany}
-        refreshKey={refreshKey}
-      />
-    );
-  }
+  if (!current) content = <ControlledEmptyState requestedTab={activeTab} goTab={goTab} />;
+  else if (current.key === "yonetim-ozeti") content = <ManagementOverviewWorkspace {...pageProps} />;
+  else if (current.key === "firma-kartlari") content = <CompaniesCurrentWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} reloadAll={reloadAll} />;
+  else if (current.key === "tedarikci-faturalar") content = <SupplierDocumentsWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} openModule={openModule} />;
+  else if (current.key === "musteri-belgeleri") content = <CustomerDocumentsWorkspace activeMainCompany={activeMainCompany} openModule={openModule} />;
+  else if (current.key === "finans-islemleri") content = <FinanceOperationsWorkspace {...pageProps} />;
+  else if (current.key === "mail-ekstre") content = <MailAccountingWorkspace {...pageProps} />;
+  else if (current.key === "mali-kontrol") content = <FinancialControlWorkspace {...pageProps} />;
 
   return (
     <main className="muhasebe-module-page">
       {current ? (
-        <header className="accounting-page-header">
-          <div>
-            <span className="accounting-eyebrow">Muhasebe</span>
-            <h1>{current.title}</h1>
-            <p>{current.description}</p>
+        <header className="accounting-page-header compact">
+          <div><span className="accounting-eyebrow">Muhasebe</span><h1>{current.title}</h1><p>{current.description}</p></div>
+          <div className="accounting-header-actions">
+            <span className={`accounting-live-state ${live.status || "connecting"}`} title={live.error || undefined}>{liveLabel}</span>
+            <div className="accounting-quick-wrap" ref={quickWrapRef}>
+              <button type="button" className="accounting-primary" aria-expanded={quickOpen} onClick={() => setQuickOpen((value) => !value)}>+ Hızlı İşlem</button>
+              {quickOpen ? (
+                <div className="accounting-quick-menu" role="menu">
+                  <button type="button" onClick={openQuickCompany}>Yeni Cari / Firma</button>
+                  <button type="button" onClick={openEBelgeUpload}>Alış Belgesi</button>
+                  <button type="button" onClick={() => { setQuickOpen(false); goTab("musteri-belgeleri"); }}>Satış Belgesi</button>
+                  <button type="button" onClick={() => goFinance("financeView=daily&quick=transaction")}>Ödeme / Tahsilat</button>
+                  <button type="button" onClick={() => goFinance("financeView=daily&quick=cek")}>Çek / Senet</button>
+                  <button type="button" onClick={() => goFinance("financeView=planner")}>Ödeme Planı</button>
+                  <button type="button" onClick={() => goFinance("financeView=ledger")}>Banka / Kasa / Defter</button>
+                </div>
+              ) : null}
+            </div>
+            <button type="button" className="accounting-refresh" onClick={reloadAll}>Güncelle</button>
           </div>
-          <button
-            type="button"
-            className="accounting-refresh"
-            onClick={reloadAll}
-          >
-            Güncelle
-          </button>
         </header>
       ) : null}
       <div className="muhasebe-workbench">{content}</div>
+      <QuickCompanyCreateDialog
+        open={quickCompanyOpen}
+        onClose={() => setQuickCompanyOpen(false)}
+        onCreated={reloadAll}
+        activeMainCompany={activeMainCompany}
+      />
     </main>
   );
 }

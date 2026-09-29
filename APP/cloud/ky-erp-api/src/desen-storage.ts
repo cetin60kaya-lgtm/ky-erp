@@ -214,8 +214,9 @@ export function registerDesenStorageRoutes(app: Hono<AppEnv>) {
         httpMetadata: { contentType: file.type || "application/octet-stream" },
         customMetadata: {
           originalName: file.name,
+          relativePath: text(form.relativePath),
           uploadedAt: nowIso(),
-          source: "KY_ERP_UPLOAD",
+          source: text(form.source || "KY_ERP_UPLOAD"),
         },
       });
       created.push({

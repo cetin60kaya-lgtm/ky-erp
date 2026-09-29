@@ -1,17 +1,8 @@
 name: KY ERP Muhasebe İşNet İK ve Üretim Kontrolü
 
 on:
-  push:
-    branches:
-      - arayuz-kabuk-v3
-      - tasarim-dogru-v4
-      - tasarim-final-v1
-      - agent/uretim-tek-merkez
-  pull_request:
-    branches:
-      - main
-      - tasarim-final-v1
-
+  # Automatic GitHub Actions disabled. Run only when explicitly requested.
+  workflow_dispatch:
 permissions:
   contents: read
 

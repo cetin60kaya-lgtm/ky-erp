@@ -1,0 +1,113 @@
+.phone-approval-backdrop{position:fixed;inset:0;z-index:5000;display:grid;place-items:center;padding:20px;background:rgba(8,22,40,.48);backdrop-filter:blur(3px)}
+.phone-approval-modal{width:min(920px,96vw);max-height:min(820px,92vh);overflow:auto;border:1px solid #d9e4ef;border-radius:18px;background:#f8fbff;box-shadow:0 28px 80px rgba(15,35,58,.28);color:#15293d}
+.phone-approval-modal>header,.phone-approval-modal>footer{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;background:#fff}
+.phone-approval-modal>header{border-bottom:1px solid #e1e9f2}.phone-approval-modal>footer{border-top:1px solid #e1e9f2;font-size:12px;color:#60758a}
+.phone-approval-title{display:flex;align-items:center;gap:12px}.phone-approval-title>span{display:grid;place-items:center;width:44px;height:44px;border-radius:13px;background:#e7f0ff;color:#1f64d7}.phone-approval-title small{display:block;font-size:10px;font-weight:800;letter-spacing:.08em;color:#5180b5}.phone-approval-title h2{margin:2px 0 1px;font-size:22px}.phone-approval-title p{margin:0;color:#668097;font-size:13px}
+.phone-approval-close{display:grid!important;place-items:center;width:36px;height:36px;padding:0!important;border-radius:10px!important}
+.phone-approval-notice{margin:14px 18px 0;padding:11px 13px;border:1px solid #cbe3d3;border-radius:10px;background:#eefaf2;color:#26603a;font-size:13px}.phone-approval-notice.bad{border-color:#f0c8c8;background:#fff1f1;color:#9b2e2e}
+.phone-approval-warning{margin:12px 18px 0;padding:12px 14px;border:1px solid #f2d59c;border-radius:10px;background:#fff9eb;display:grid;gap:3px}.phone-approval-warning span{font-size:12px;color:#775b28}
+.phone-approval-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px}.phone-approval-card{padding:16px;border:1px solid #dce7f2;border-radius:14px;background:#fff;display:grid;align-content:start;gap:11px}.phone-approval-card-head{display:flex;justify-content:space-between;gap:12px;color:#346391}.phone-approval-card-head h3{margin:0;color:#183552;font-size:16px}.phone-approval-card-head p{margin:2px 0 0;color:#71879a;font-size:12px}
+.phone-approval-card label{display:grid;gap:5px;font-size:12px;font-weight:700;color:#47637c}.phone-approval-card input{height:38px;border:1px solid #cfdce8;border-radius:9px;padding:0 11px;background:#fbfdff;color:#17334e}.phone-approval-card input:focus{outline:2px solid rgba(37,99,235,.16);border-color:#6b9be4}
+.phone-approval-card button,.phone-approval-modal>footer button{min-height:36px;border:1px solid #cbd8e5;border-radius:9px;background:#fff;color:#294964;font-weight:700;cursor:pointer}.phone-approval-card button:disabled{opacity:.55;cursor:not-allowed}.phone-approval-card .phone-approval-primary{display:flex;align-items:center;justify-content:center;gap:7px;border-color:#2463da;background:#2463da;color:#fff}.phone-approval-card .danger{display:grid;place-items:center;min-width:34px;width:34px;padding:0;border-color:#eccaca;color:#a63b3b;background:#fff7f7}
+.phone-approval-help{line-height:1.45;color:#70869a}.phone-approval-device-list{display:grid;gap:8px}.phone-approval-device{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:11px;border:1px solid #e0e8f0;border-radius:10px;background:#fbfdff}.phone-approval-device.disabled{opacity:.58}.phone-approval-device>div{display:grid;gap:2px}.phone-approval-device strong{font-size:12px}.phone-approval-device span,.phone-approval-device small{font-size:11px;color:#71869a}.phone-approval-device-error{color:#a54444!important}.phone-approval-empty{padding:18px;border:1px dashed #cedae6;border-radius:10px;text-align:center;color:#70869a;font-size:12px}
+@media(max-width:760px){.phone-approval-backdrop{padding:0;align-items:end}.phone-approval-modal{width:100vw;max-height:94vh;border-radius:18px 18px 0 0}.phone-approval-grid{grid-template-columns:1fr;padding:12px}.phone-approval-modal>header,.phone-approval-modal>footer{padding:14px}.phone-approval-title p{display:none}.phone-approval-modal>footer{align-items:flex-start;flex-direction:column}}
+
+
+/* Telefon kurulumu mobilde tam ekran ve büyük dokunma alanları. */
+@media(max-width:760px){
+  .phone-approval-backdrop{padding:0;align-items:stretch}
+  .phone-approval-modal{
+    width:100vw;
+    height:100dvh;
+    max-height:100dvh;
+    border:0;
+    border-radius:0;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .phone-approval-modal>header{
+    position:sticky;
+    top:0;
+    z-index:3;
+    padding:max(12px,env(safe-area-inset-top)) 14px 12px;
+  }
+  .phone-approval-modal>footer{
+    position:sticky;
+    bottom:0;
+    z-index:2;
+    padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+  }
+  .phone-approval-notice,.phone-approval-warning{margin-left:12px;margin-right:12px}
+  .phone-approval-grid{padding:12px;gap:10px}
+  .phone-approval-card{padding:14px}
+  .phone-approval-card input{
+    min-height:48px;
+    height:48px;
+    font-size:16px;
+  }
+  .phone-approval-card button,.phone-approval-modal>footer button{
+    min-height:46px;
+    font-size:13px;
+  }
+  .phone-approval-title h2{font-size:20px}
+}
+
+
+/* KY ERP Güvenlik uygulaması kurulum yüzeyi */
+.phone-approval-app-hero{background:linear-gradient(180deg,#ffffff 0%,#f7fbff 100%)}
+.phone-approval-flow{display:grid;gap:9px;padding:12px;border:1px solid #dce8f5;border-radius:12px;background:#f8fbff}
+.phone-approval-flow>div{display:grid;grid-template-columns:28px 1fr;align-items:start;gap:9px}
+.phone-approval-flow b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#e4efff;color:#1f5fb7;font-size:11px}
+.phone-approval-flow span{padding-top:3px;color:#4b657d;font-size:12px;line-height:1.45}
+.phone-approval-enrollment{display:grid;gap:8px;padding:16px;border:1px solid #bcd4f2;border-radius:14px;background:#eef6ff;text-align:center}
+.phone-approval-enrollment>span{font-size:9px;font-weight:900;letter-spacing:.12em;color:#54779c}
+.phone-approval-enrollment>strong{font-size:30px;letter-spacing:.16em;color:#153f74}
+.phone-approval-enrollment>small{font-size:11px;color:#607b96}
+.phone-approval-app-actions{display:grid;grid-template-columns:1.6fr 1fr .7fr;gap:8px;margin-top:4px}
+.phone-approval-app-actions>button{display:flex;align-items:center;justify-content:center;gap:7px}
+@media(max-width:760px){
+  .phone-approval-flow span{font-size:13px}
+  .phone-approval-enrollment>strong{font-size:28px}
+  .phone-approval-app-actions{grid-template-columns:1fr}
+}
+
+
+/* KY ERP Güvenlik bağlantı sağlığı ve erişim yenileme */
+.phone-approval-healthbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid #dce7f2;border-radius:11px;background:#f8fbff}
+.phone-approval-healthbar>span{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800}
+.phone-approval-healthbar>span.ok{color:#247447}.phone-approval-healthbar>span.warn{color:#96681d}.phone-approval-healthbar>span.off{color:#7a8794}
+.phone-approval-healthbar>div{display:flex;gap:7px}
+.phone-approval-healthbar button{display:flex;align-items:center;justify-content:center;gap:6px;min-height:34px!important;padding:0 10px}
+@media(max-width:760px){.phone-approval-healthbar{align-items:stretch;flex-direction:column}.phone-approval-healthbar>div{display:grid;grid-template-columns:1fr 1fr}.phone-approval-healthbar button{min-height:46px!important}}
+
+.phone-approval-connection-actions{display:grid;grid-template-columns:1.35fr 1fr;gap:8px}.phone-approval-connection-actions>button{display:flex;align-items:center;justify-content:center;gap:7px}
+@media(max-width:760px){.phone-approval-connection-actions{grid-template-columns:1fr}}
+
+
+/* Telefon Onayı içinden doğrudan KY Güvenlik kurulum yönlendirmesi */
+.phone-approval-install-box{display:grid;gap:10px;padding:14px;border:1px solid #bcd5f3;border-radius:14px;background:linear-gradient(145deg,#edf6ff,#f8fbff)}
+.phone-approval-install-box>div:first-child{display:grid;gap:3px}
+.phone-approval-install-kicker{font-size:9px;font-weight:900;letter-spacing:.12em;color:#4b78a8}
+.phone-approval-install-box strong{font-size:14px;color:#173a61}
+.phone-approval-install-box small{font-size:10px;line-height:1.45;color:#6a8096}
+.phone-approval-install-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.phone-approval-install-actions button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:8px 11px}
+.phone-approval-install-primary{border-color:#2563da!important;background:#2563da!important;color:#fff!important}
+.phone-approval-install-secondary{border-color:#23364a!important;background:#23364a!important;color:#fff!important}
+.phone-approval-install-actions .is-device{box-shadow:0 0 0 3px rgba(37,99,218,.12),0 8px 18px rgba(28,74,130,.12)}
+.phone-approval-install-note{padding-top:1px}
+@media(max-width:760px){
+  .phone-approval-install-actions{grid-template-columns:1fr}
+  .phone-approval-install-actions button{min-height:52px;font-size:13px}
+}
+
+/* KY Güvenlik final sade bağlantı yüzeyi */
+.phone-approval-grid-clean{align-items:start}
+.phone-approval-status-card{display:grid;gap:4px;padding:14px;border:1px solid #cfe7d8;border-radius:12px;background:#f2fbf5}
+.phone-approval-status-card>div{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.phone-approval-status-card b{color:#20623b;font-size:13px}.phone-approval-status-card span,.phone-approval-status-card small{color:#668174;font-size:11px}
+.phone-approval-main-actions{display:grid;grid-template-columns:1.4fr 1fr;gap:8px}
+.phone-approval-main-actions>button{display:flex;align-items:center;justify-content:center;gap:7px}
+.phone-approval-install-box.compact{padding:16px}.phone-approval-enrollment.compact-code{padding:12px}
+.phone-approval-enrollment.compact-code>strong{font-size:24px}.phone-approval-enrollment.compact-code .phone-approval-app-actions{grid-template-columns:1fr}
+.phone-approval-link-button{min-height:34px!important;border-style:dashed!important;background:#f9fbfd!important;color:#607a92!important;font-size:11px!important}
+@media(max-width:760px){.phone-approval-main-actions{grid-template-columns:1fr}.phone-approval-status-card{padding:13px}.phone-approval-link-button{min-height:42px!important}}

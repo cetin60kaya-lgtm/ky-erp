@@ -35,23 +35,6 @@ export class SharedModelsController {
     return apiSuccess(Array.isArray(result) ? result : result.rows || []);
   }
 
-  /** Geriye dönük uyumluluk – eski shared-list endpoint'i artık aynı Prisma kaynağını kullanıyor */
-  @Get("shared-list")
-  async sharedList(@Query() query: Record<string, any>) {
-    const result = await this.modelService.list(query);
-    return apiSuccess(Array.isArray(result) ? result : result.rows || []);
-  }
-
-  @Get("shared-list/:id")
-  async sharedGet(
-    @Param("id") id: string,
-    @Query() query: Record<string, any>,
-  ) {
-    return apiSuccess(
-      await this.modelService.getById(id, query.mainCompanySlug),
-    );
-  }
-
   @Get(":id/logs")
   async getLogs(@Param("id") id: string, @Query() query: Record<string, any>) {
     return apiSuccess(
@@ -95,7 +78,7 @@ export class SharedModelsController {
   }
 }
 
-@Controller(["desen", "api/desen"])
+@Controller("desen")
 export class DesenController {
   private readonly legacySyncInFlight = new Map<string, Promise<any>>();
   private readonly legacySyncedAt = new Map<string, number>();
@@ -343,10 +326,6 @@ export class DesenController {
     return apiSuccess(this.service.listRecords(query));
   }
 
-  @Get("models-simple")
-  async simpleModels(@Query() query: Record<string, any>) {
-    return apiSuccess(await this.service.listSimpleModels(query));
-  }
 
   @Get("modeller")
   async ortakModeller(@Query() query: Record<string, any>) {

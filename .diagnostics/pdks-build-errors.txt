@@ -1,0 +1,5 @@
+HEAD: 51dd0fb824b30d033777ceab56bd72a5faf71065
+UTC: 2026-09-28T15:32:49
+
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PersonelForm.UiPerformanceFixes.cs(9,29): error CS0111: Type 'PersonelForm' already defines a member called 'OnShown' with the same parameter types [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PersonelForm.UiPerformanceFixes.cs(9,29): error CS0111: Type 'PersonelForm' already defines a member called 'OnShown' with the same parameter types [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]

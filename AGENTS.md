@@ -1,41 +1,221 @@
-# KY ERP — ANA YÖNLENDİRME
+# KY ERP — AI Agent Ana Kuralları
 
-> **Önemli:** GitHub default branch'i `main` tarihsel/yardımcı branch'tir. Güncel KY ERP production kaynak kodu ve çalışma kuralları için `main` canonical kabul edilmez.
+Bu dosya KY ERP için güncel ve üstün çalışma sözleşmesidir. Ayrıntılı eski iş kuralları referans için `DOCS/AGENTS_RULES_BASE_PRE_STORAGE_20260902.md` dosyasında korunur. Çelişki halinde **bu dosya** geçerlidir; özellikle eski OneDrive/SQLite/path notları canonical değildir.
 
-## Yeni sohbet / yeni ajan zorunlu başlangıç
+## Zorunlu proje devam kaydı
 
-1. Önce `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` dosyasını oku.
-2. Gerçek production kaynak branch'e geç veya onu GitHub'dan oku: `codex/model-uretim-kontrol-merkezi-final`.
-3. O branch'teki `AGENTS.md` dosyasını teknik ve güvenlik açısından üstün çalışma sözleşmesi kabul et.
-4. Aktif feature branch varsa (ör. Desktop çalışması) aynı `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` dosyasının o branch'teki daha yeni kopyasını kontrol et.
-5. Kullanıcı açıkça `onay / canlıya al / deploy / merge` demeden production deploy veya merge yapma.
+- Her yeni sohbet, yeni ajan, yeni feature branch veya kaldığı yerden devam eden KY ERP işinde **kod yazmadan önce** `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` okunmalıdır.
+- Ardından güncel yapılan işler + varsayılan iş sırası için **`DOCS/KY_ERP_GUNCEL_DEVAM_KAYNAGI_2026-09-06.md`** okunmalıdır.
+- Repo/kod çalışma ve canlı yayın standardı için **`DOCS/KY_ERP_CHAT_GITHUB_CLOUDFLARE_ANA_KURAL_2026-09-27.md`** zorunlu canonical kaynaktır.
+- Bu dosya (`AGENTS.md`) teknik/güvenlik kurallarında üstündür; `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` ana devam indeksidir; `DOCS/KY_ERP_GUNCEL_DEVAM_KAYNAGI_2026-09-06.md` son yapılan işler özetidir; Chat/GitHub/Cloudflare ana kuralı ise repo işleri için varsayılan yürütme sözleşmesidir.
+- Aktif feature branch üzerinde bu kontrol dosyasının production branch'ten daha yeni sürümü varsa aktif iş için o sürüm kullanılır; güvenli ve doğrulanmış değişiklikler aşağıdaki ana çalışma kuralına göre production kaynağına taşınır.
+- Kullanıcının kalıcı çalışma kuralı, önemli mimari karar, kullanıcı tarafından doğrulanan Desktop sürümü, modül onayı, blocker veya production'a geçiş kararı oluştuğunda kontrol merkezi güncellenmelidir.
+- Şifre, MFA secret, API key, token veya kişisel gizli bilgiler kontrol merkezine yazılmaz.
 
-## Güncel proje kimliği
+## Canonical kaynak
 
 - Repo: `cetin60kaya-lgtm/ky-erp`
 - Production kaynak branch: `codex/model-uretim-kontrol-merkezi-final`
-- Public site: `https://kyerp.net`
-- ERP uygulaması: `https://app.kyerp.net`
-- API: `https://api.kyerp.net`
+- `KYERP_PUBLIC_SITE=https://kyerp.net/`
+- `KYERP_PUBLIC_APP=https://kyerp.net/`
+- `KYERP_API_ORIGIN=https://api.kyerp.net`
+- Kurumsal tanıtım sitesi: `https://kyerp.net/`
+- ERP uygulaması ve login: `https://kyerp.net/`
+- Canlı API: `https://api.kyerp.net`
+- Frontend: `APP/app/ky-erp-frontend`
+- Cloudflare Worker: `APP/cloud/ky-erp-api`
+- Repo için sabit OneDrive/Google Drive yolu **yoktur**.
+- Yerel makine işi gerçekten gerekmedikçe repo/kod işlemlerinde ChatGPT/GitHub bağlantısı tercih edilir; Remote Desktop varsayılan değildir.
+- Yerel çalışma gerektiğinde gerçek repo kökünü `git rev-parse --show-toplevel`, remote'u `git remote get-url origin`, branch'i `git branch --show-current`, durumu `git status -sb` ile doğrula.
+- Beklenen remote `https://github.com/cetin60kaya-lgtm/ky-erp.git` olmalıdır.
+- Yerel çalışma ağacı kirliyse kullanıcı değişikliklerini silme; `reset --hard`, `clean -fd`, force checkout/pull yapma.
 
-## Güncel çalışma yönü — 03.09.2026
+## Ana çalışma kuralı — Chat → GitHub → Cloudflare
 
-- KY ERP Desktop geliştirme sonrası ilk gerçek kontrol ortamıdır.
-- GitHub ana kaynak kodu ve geçmiş/yedek merkezidir.
-- kyerp.net yalnız Desktop üzerinde kullanıcı kontrolünden geçen ve açıkça onaylanan değişiklikleri alır.
-- Kullanıcı GitHub/VS Code ile manuel uğraştırılmaz; mümkün olduğunca otomatik build/güncelleme akışı kullanılır.
-- Aktif Desktop branch'i: `codex/ky-erp-desktop-final-20260903`.
-- Draft PR: `#56 — KY ERP Desktop 1.7.2 — tam Windows ERP uygulaması`.
-- Kullanıcı Desktop 1.7.2'nin açıldığını ve oturumun çalıştığını gerçek Windows cihazda doğrulamıştır.
-- İlk ayrıntılı modül kontrolü: `İK > Günlük Giriş`.
+- KY ERP repo/kod işlerinde varsayılan uçtan uca yol: **ChatGPT/AI ajanı → GitHub canonical kaynak → test/PR kapısı → Cloudflare Git Integration → canlı smoke**.
+- Kullanıcı `yap`, `düzelt`, `bitir`, `uygula`, `hallet`, `toparla` gibi uygulama isteyen bir komut verdiyse ve ayrıca durdurucu bir ifade kullanmadıysa bu komut normal repo/kod işi için **commit + gerekirse PR/merge + canonical deploy + canlı doğrulama için sürekli ön yetki** sayılır. Aynı işte tekrar `commit edeyim mi`, `PR açayım mı`, `merge edeyim mi`, `canlıya alayım mı` diye sorma.
+- Kullanıcı `önce yorumla`, `önce bak`, `görsel önizleme ver`, `onay vereyim`, `canlıya alma`, `sadece analiz et` veya eşdeğer bir ifade kullandıysa write/deploy o aşamada yapılmaz.
+- Düşük riskli, izole ve geri alınabilir UI/CSS/metin/test/dokümantasyon değişikliği güncel production HEAD doğrulandıktan sonra hızlı yoldan tamamlanabilir.
+- Auth, güvenlik, ortak API/Worker contractı, büyük refactor veya çok dosyalı orta/yüksek riskli değişiklikte varsayılan güvenli yol: güncel production HEAD'den feature branch → test → PR → diff/check temizse kullanıcıdan tekrar onay istemeden merge → Cloudflare → smoke.
+- Remote Desktop yalnız yerel makineye özgü Windows/Photoshop/Illustrator/PDKS Desktop, cihaz, klasör, donanım, GitHub'da olmayan binary dosya veya zorunlu yerel entegrasyon testi için kullanılır.
+- Ayrıntılı sözleşme: `DOCS/KY_ERP_CHAT_GITHUB_CLOUDFLARE_ANA_KURAL_2026-09-27.md`.
 
-## Eski main kuralları
+## Canlı sistem gerçeği
 
-Bu dosyada daha önce bulunan OneDrive/SQLite/yerel DATA ve `tasarim-final-v1` merkezli kurallar güncel canonical mimari değildir. Gerekirse Git geçmişinden tarihsel referans olarak incelenebilir; yeni geliştirme kararlarında kullanılmamalıdır.
+- Canlı uygulama Cloudflare Worker/Pages düzenindedir.
+- Canlı veri D1 üzerindedir; eski local NestJS + Prisma + SQLite düzeni legacy/reference kabul edilir.
+- Gerçek business dosyalarının fiziksel evi firma tarafından seçilen File Hub provider'ıdır.
+- R2; preview, cache, staging ve açıkça tanımlı geçici/türetilmiş dosya rolleri içindir. Büyük/orijinal PSD, AI, PDF, XML ve iş dosyalarının zorunlu ana arşivi değildir.
 
-## Güvenlik
+## Depolama / File Hub — canonical kural
 
-- Production verisini test için silme/sıfırlama.
-- Şifre, MFA secret, API key veya tokenı GitHub'a yazma.
-- Kullanıcı onayı olmadan resmî İşNet belge gönderimi, production migration veya deploy yapma.
-- Değişiklikten önce ilgili feature branch ve güncel Proje Kontrol Merkezi okunmalıdır.
+KY ERP hiçbir depolama sağlayıcısına sabit bağlı değildir.
+
+Desteklenen V1 provider tipleri:
+
+- `GOOGLE_DRIVE`
+- `ONEDRIVE`
+- `SHAREPOINT`
+- `LOCAL_FOLDER`
+- `NAS`
+
+Kurallar:
+
+1. Dosya provider bağlantısı bir kez **Bağlantılar & Depolama > Dosya Servisleri** ekranında tanımlanır.
+2. Bölüm + dosya amacı hedefi **Bağlantılar & Depolama > Bölüm / Dosya Atamaları** ekranında seçilir.
+3. Modüller doğrudan Google/OneDrive/NAS path kodu çağırmaz; ortak File Hub resolver kullanır.
+4. Çözüm sırası: exact `module + purpose` binding -> firma primary storage -> hedef yoksa kontrollü hata.
+5. OneDrive desteklenen opsiyonel provider'dır; varsayılan, repo kökü veya runtime zorunluluğu değildir.
+6. Google Drive Desktop, OneDrive/SharePoint senkron klasörü, yerel klasör ve NAS V1'de KY File Agent ile izlenir.
+7. Gelecekte Google Drive API veya Microsoft Graph adapteri eklenirse aynı `file_hub_connections`, `file_hub_bindings`, `FileAsset` ve relation modeli korunur.
+8. Fiziksel dosya silme ile ERP ilişkisinden kaldırma ayrı işlemlerdir. Varsayılan davranış fiziksel dosyayı silmemektir.
+9. Dosya kaybolursa ERP kaydı silinmez; `MISSING` olarak işaretlenir.
+10. Aynı dosya Desen, İmalat, Boyahane vb. birden fazla entity ile ilişkilendirilebilir; gereksiz kopya üretme.
+
+### Bölüm standardı
+
+- **Desen:** `MODEL_IMAGE`, `MODEL_SOURCE`, `PLACEMENT`, `OUTGOING_DESIGN` File Hub üzerinden çözülür. Ayrı Desen-only Google/OneDrive path sistemi geri getirilmez.
+- **DTF:** `RIP_PDF` File Hub üzerinden çözülür.
+- **Muhasebe:** `INVOICE`, `DELIVERY_NOTE`, `PAYMENT_DOCUMENT`, genel ekler File Hub üzerinden çözülür.
+- **İşNet:** `E_DOCUMENT` ve belge arşivi File Hub üzerinden çözülür.
+- **İK:** `PERSONNEL_DOCUMENT`, `CONTRACT` gibi personel evrakı File Hub üzerinden çözülür; erişim yetkisi sıkıdır.
+- **Boyahane:** `RECIPE`, `QUALITY`, kalite/numune fotoğrafları File Hub üzerinden çözülür.
+- **İmalat:** teknik dosya, model dosyası, üretim fotoğrafı ve müşteri referansı File Hub üzerinden çözülür.
+- **Stok:** kalite/teknik/genel ekler File Hub üzerinden çözülür.
+
+## Mail & Dosyalar — canonical kural
+
+KY ERP mail sistemi tek bir sağlayıcıya sabit bağlı değildir; günlük kullanıcı deneyimi ile bağlantı yönetimi ayrıdır.
+
+- Günlük kullanıcı alanı: **Mail & Dosyalar**.
+- Yönetim alanı: **Bağlantılar & Depolama**.
+- Dosya provider yönetimi: **Bağlantılar & Depolama > Dosya Servisleri**.
+- Mail provider / posta kutusu yönetimi: **Bağlantılar & Depolama > E-posta Hesapları**.
+- Mail & Dosyalar içinde Gelen Kutusu, Gönderilenler, Taslaklar, Yanıt Bekleyenler, Şablonlar ve File Hub dosya görünümleri bulunur.
+- Microsoft 365/Outlook ilk aktif mail adapterıdır. Gmail/JMAP/IMAP-SMTP yalnız adapter gerçekten hazır ve production config mevcut olduğunda aktif gösterilir; hazır olmayan provider sahte şekilde “bağlı” görünmez.
+- Mail hesapları tenant + mail_account_members ile izole edilir. Modül yetkisi tek başına başka kullanıcının posta kutusunu açmaz.
+- Tüm mail hesabı bağlantı talepleri ilgili Firma Sahibi / İşveren onayını kullanır (`COMPANY_OWNER`). Eski `APP_OWNER` ikinci adımı uygulanmaz; Süper Yönetici gözetim görünürlüğü firma sahibi kararını devralmaz.
+- OAuth token/credential plaintext saklanmaz; AES-GCM kasası kullanılır ve mevcut File Hub OAuth secret katmanı yeniden kullanılabilir.
+- Mail gönderimi yalnız açık kullanıcı işlemiyle yapılır. AI otomatik gönderemez.
+- Provider 202 Accepted veya benzeri kabul cevabı “teslim edildi” anlamına gelmez.
+- Belirsiz timeout/transport sonucunda otomatik retry yapma; UNKNOWN_REVIEW_REQUIRED ile çift mail riski engellenir.
+- Mail ekleri File Hub ile ilişkilendirilir; aynı dosyanın gereksiz ikinci kopyası üretilmez.
+- Normal operasyon rolleri Mail & Dosyalar alanını görüntüleyebilir; mail oluşturma/gönderme/onay yetkisi ayrıca verilir.
+- Canonical additive Mail Core D1 şeması 0050_mail_communication_core.sql dosyasıdır. Production D1'e uygulanmadan önce full backup + readiness + hedefli migration + schema doğrulaması zorunludur.
+
+## Desen özel kuralı
+
+- Model ana kaydının tek merkezi Desen'dir.
+- İşNet, Desen, Boyahane, İmalat ve Muhasebe aynı `canonicalModelId` ilişkisini kullanır.
+- File Hub Agent DESEN binding altında bulduğu model görseli/kaynak/yerleşim/giden desen dosyalarını model ilişkisine bağlar.
+- R2 canlı yükleme ekranı doğrudan yüklenen dosya için staging/preview akışıdır; Google Drive veya başka provider'ın yerine geçen kalıcı Desen ana arşivi olarak gösterilmez.
+
+## Çoklu firma ve yetki
+
+- KY ERP çoklu ana firma/tenant destekler.
+- Storage connection, binding, FileAsset, location, relation, event ve agent status kayıtları tenant bağlamından çıkamaz.
+- Yönetimsel **Bağlantılar & Depolama** ekranı owner/admin yetkisindedir.
+- Normal modül kullanıcısı yalnız yetkili olduğu entity dosyalarını ve kendi modülü için çözümlenen storage hedefini görebilir.
+
+## Veri ve güvenlik
+
+- Birinci öncelik veri kaybını önlemektir.
+- Production D1/SQLite verisini test için değiştirme.
+- Gerçek personel, muhasebe, fatura, irsaliye, desen, boyahane, stok, lot, reçete, imalat ve kullanıcı kayıtlarını silme/sıfırlama.
+- Production migration/write için açık kullanıcı onayı + yedek/readiness gerekir.
+- DNS/domain silme, secret/API token/MFA rotasyonu, billing değişikliği ve gerçek resmî/harici gönderim normal kod deploy ön yetkisinin dışındadır; güvenlik kapısı uygulanır.
+- Şifre, MFA secret, API token, `.env`, recovery code ve benzeri sırları repoya veya loga yazma.
+- POST/PATCH/PUT/DELETE isteklerini otomatik retry ederek mükerrer kayıt üretme.
+- Resmî İşNet belge/fatura gönderimi kullanıcı onayı olmadan yapılmaz.
+
+## Cloudflare AI standardı
+
+- Workers AI binding adı `AI` ve canonical model çağrısı Worker içinden yapılır.
+- Workers AI çağrıları AI Gateway üzerinden yürütülür; varsayılan gateway kimliği `default`.
+- ERP/tenant cevabı cache edilmez; AI Gateway request bazında `skipCache: true`.
+- Hassas ERP prompt/response payload'larının kalıcı AI Gateway loguna düşmesi varsayılan olarak kapalıdır (`AI_GATEWAY_COLLECT_LOGS=false`).
+- Tenant/permission guard AI çağrısından önce uygulanır.
+- AI kullanım/maliyet kaydı KY ERP'nin tenant bazlı billing ledger'ında tutulur.
+- AI write executor serbest SQL değildir; typed/allowlisted ve kullanıcı onaylı iş akışı dışında write yapılmaz.
+- Queues/Workflows/Vectorize/AI Search çekirdek production zorunluluğu değildir; somut iş akışı ve tenant/permission contractı olmadan sırf servis açık görünsün diye eklenmez.
+
+## Auth standardı
+
+- Auth contract: `canonical-v3`.
+- Birincil ikinci faktör, kullanıcı güvenilir telefon kaydettiyse **KY ERP Telefonla Onay** push akışıdır: parola -> telefondan Onayla/Reddet -> gerekirse firma giriş onayı -> session.
+- Google/Microsoft Authenticator kaldırılmaz; kullanıcı `6 haneli kod ile devam et` diyerek güvenli fallback kullanabilir.
+- Güvenilir telefon kaydı yalnız açık session ile yapılamaz; mevcut parola step-up zorunludur. Cihaz capability tokenı D1'de plaintext tutulmaz.
+- iPhone/iPad Web Push için KY ERP Ana Ekrana eklenmiş web app olarak açılmalıdır. iOS bildirim action butonlarını göstermese veya `notificationclick` olayı güvenilmez olsa bile uygulama foreground olduğunda pending onay güvenli KY ERP ekranında açılır.
+- Firma kullanıcısının `approvalRequired` kararı varsa onay varsayılan olarak kendi `COMPANY_ADMIN` / Firma Sahibi telefonuna gider. Süper Yöneticiye aynalama firma bazında ayrıca açılabilir.
+- Owner/admin MFA zorunluluğunu kaldırma. `BOTH_MFA` politikası telefon onayı ile sessizce tek faktöre düşürülmez.
+- PASSWORD_ONLY session: 28800 saniye.
+- MFA/owner/admin session: 36000 saniye.
+- Geçici network/5xx hatası geçerli sessionı silmemelidir.
+- Logout, gerçek expiry, revoke, password/MFA reset veya yeni tarayıcı tekrar doğrulama gerektirir.
+
+## Temel modül iş kuralları
+
+- **İK:** günlük giriş/çıkış ve ana listeler yardımcı endpoint hatası yüzünden kaybolmaz; demo fallback kullanma.
+- **Boyahane:** ürün, lot, reçete, renk, imalat boyası ve stok geçmişi gerçek veriden gelir; veri uydurma.
+- **İmalat:** net sağlam = brüt üretim - baskı sakatı - kumaş sakatı; çok operasyonlu modelde tamamlanan model adedi zorunlu operasyonların minimum ortak adedidir.
+- **Muhasebe/İşNet:** İşNet belge operasyon merkezidir; Muhasebe aynı resmî belge operasyonunu ikinci kez yaptırmaz. Firma iletişim bilgisinin tek kaynağı `companies` kaydıdır.
+
+## Android / tablet / dokunmatik parite standardı
+
+- Canonical web uygulaması **tek AppV3 kaynağıdır**. Android telefon/tablet için ikinci business ekranı veya ayrı iş mantığı oluşturma; responsive görünüm aynı işlem sözleşmesini kullanır.
+- PC'de görünen ve çalışan bir buton, menü, onay, dosya açma, kayıt, düzenleme, silme, filtre, çıktı veya modal işlemi telefon/tablette kaybolamaz. Görsel olarak gizlenmesi gerekiyorsa aynı yetkiye ve aynı API davranışına sahip dokunmatik karşılığı zorunludur.
+- Kritik işlem yalnız `hover`, `doubleClick`, sağ tık, mouse drag veya masaüstü popup davranışına bağlı olamaz. Dokunmatik için tek dokunma/normal buton alternatifi bulunmalıdır.
+- Dokunmatik ana hedefler en az 44 px olmalıdır. Form alanları telefonda 16 px yazı ile açılmalı; Android sanal klavyesi aktif inputu ve alt işlem düğmelerini kapatmamalıdır.
+- Geniş tablolar mobilde sütun/işlem kaybederek kırpılmaz; güvenli yatay kaydırma kullanır. İşlem sütunu erişilebilir kalır.
+- Modal/drawer/sheet telefon ve tablette viewport içine sığmalı; kapat/kaydet/onay/ret footer'ı klavye veya yüzen buton altında kalmamalıdır.
+- Async PDF/XML/önizleme/yazdırma akışında Android popup engelleyicisi dikkate alınır: yeni sekme gerekiyorsa kullanıcı tıklamasında senkron olarak ayrılır; bu mümkün değilse mevcut sekmede güvenli fallback sağlanır.
+- `phone`, `tablet`, `pc` görünüm seçimi yalnız layout farkıdır; tenant, auth, permission, API, hesaplama ve kayıt kuralları değişmez.
+- Yeni veya revize edilen frontend özelliği için test/build kontrolüne ek olarak Android parite kontratı korunur. Masaüstünde çalışan bir işlem mobilde kayboluyorsa release blocker kabul edilir.
+
+## Kod ve test standardı
+
+- Önce kök nedeni bul, sonra ortak hata sınıfını düzelt.
+- Demo veri ile production sorununu gizleme.
+- API route/contract değişikliğinde frontend/backend eşleşmesini kontrol et.
+- Frontend değişikliğinde lint + test + production build.
+- Worker değişikliğinde typecheck + unit test + local integration smoke + dry-run.
+- Production D1 write smoke testi yapma.
+
+## Deploy standardı
+
+- Kaynak hazır olmak, canlıya çıkmak değildir; normal iş isteği aşağıdaki ön yetki kuralına göre release tamamlanana kadar sürer.
+- Kullanıcı normal bir repo/kod işini `yap/düzelt/bitir/uygula/hallet/toparla` şeklinde verdiyse ve `önce yorumla/önizleme/canlıya alma` demediyse ayrıca deploy onayı isteme; güvenli kod değişikliğini canonical GitHub/Cloudflare hattında tamamla.
+- **Tek canonical production yayın sözleşmesi:** `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md` ve onu tamamlayan `DOCS/KY_ERP_CHAT_GITHUB_CLOUDFLARE_ANA_KURAL_2026-09-27.md`.
+- **Canonical production yayın yolu Cloudflare Git Integration'dır.**
+- Normal release akışı risk seviyesine göre doğrudan düşük-risk fast path veya feature branch -> test/build -> PR -> otomatik güvenli merge -> production branch -> Cloudflare -> canlı smoke şeklindedir.
+- Frontend: `codex/model-uretim-kontrol-merkezi-final` -> Cloudflare Pages `ky-erp-frontend`.
+- Worker: `codex/model-uretim-kontrol-merkezi-final` -> Cloudflare Workers Builds `ky-erp-api`.
+- Frontend Cloudflare build kapısı `npm run test && npm run build` olmalıdır; gate fail ise yeni frontend canlıya çıkmaz.
+- Worker build kapısı `npm run typecheck && npm test && npm run build`; deploy `npm run deploy`. Build kapısı fail ise Worker deploy edilmez ve release tamam sayılmaz.
+- **Normal canlıya almada kullanıcıdan PowerShell, Cloudflare tokenı, manuel Pages deployu veya manuel Worker build/deploy isteme.**
+- Manuel PowerShell/Cloudflare API müdahalesi yalnız Git Integration arızası, tetiklenmeme teşhisi veya kontrollü incident/recovery içindir.
+- Otomatik Worker build fail olursa manuel deploy ile bypass etme: Cloudflare build logunu oku, kök nedeni feature branch'te düzelt, regression testi ekle/güncelle, production'a normal merge et ve yeni otomatik buildi bekle.
+- Pages success + Worker fail = **kısmi/başarısız release**; ikisi ve canlı smoke tamamlanmadan `canlı tamam` denmez.
+- Production branch paralel sohbet nedeniyle ilerlerse eski SHA körlemesine deploy edilmez; güncel HEAD doğrulanır ve ilgili değişikliğin yeni HEAD'de bulunduğu teyit edilir.
+- **Production deploy için GitHub Actions otomatik ikinci yayın hattı olarak kullanılmaz.** Deploy workflow'ları varsayılan olarak manual-only (`workflow_dispatch`) tutulur; tek istisna deploy yapmayan read-only smoke/audit kontrolüdür.
+- `production-live-smoke.yml` yalnız `kyerp.net`, login, API ve KY Güvenlik canlı sağlığını doğrular; deploy yapamaz.
+- Eski Windows BAT/direct deploy scriptleri canonical otomatik yayın yolu değildir; bakım/geri dönüş referansı olarak kalabilir.
+- Feature/preview branch otomatik Cloudflare production deploy etmez.
+- Production D1 reset yasaktır.
+- Migration gerekiyorsa normal Git auto-deploy'dan ayrı güvenlik kapısı uygulanır: remote D1 full backup -> readiness -> hedefli/additive migration -> schema doğrulaması -> deploy; bu güvenlik kapısı normal kod deploy ön yetkisinin dışındadır.
+- Secret/token değeri repoya, loga veya dokümana yazılmaz.
+- Deploy sonrası API health, auth contract, CORS ve frontend asset doğrulaması yapılmadan başarılı denmez.
+- Ayrıntılı Cloudflare/AI kaynağı: `DOCS/KY_ERP_CLOUDFLARE_PRO_AI_YAYIN_KAYNAGI_2026-09-04.md`.
+- Bildirim Merkezi kaynağı: `DOCS/KY_ERP_CANLI_YAYIN_BILDIRIM_KAYNAGI_2026-09-06.md`.
+
+## İş bitiş raporu
+
+Her değişiklik sonunda şunları raporla:
+
+- kök neden,
+- değişen dosyalar,
+- çalıştırılan testler,
+- GitHub commit/PR/merge durumu,
+- deploy durumu,
+- canlı doğrulama durumu,
+- son commit SHA.

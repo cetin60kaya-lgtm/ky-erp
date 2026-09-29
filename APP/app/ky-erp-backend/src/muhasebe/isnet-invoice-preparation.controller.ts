@@ -5,7 +5,7 @@ import { apiSuccess } from "../common/api-helpers";
 import { IsnetInvoicePreparationService } from "./isnet-invoice-preparation.service";
 
 @Controller("isnet/invoice-preparation")
-@RequireModule(ModuleKey.ISNET)
+@RequireModule(ModuleKey.MUHASEBE)
 export class IsnetInvoicePreparationController {
   constructor(private readonly service: IsnetInvoicePreparationService) {}
 

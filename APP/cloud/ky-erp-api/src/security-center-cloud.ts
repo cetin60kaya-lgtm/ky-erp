@@ -1,0 +1,400 @@
+// @ts-nocheck
+import { getAuthenticatedUser } from "./auth-cloud";
+import {
+  AUTH_SECURITY_SCOPES, securityStoreGet as storeGet, securityStoreList as storeList, securityStorePut as storePut,
+  securityDevicesForUser, sendSecurityWakeMany as sendWakeMany, tableExists, randomToken,
+} from "./auth-security-core";
+
+type AnyRow = Record<string, any>;
+
+const GRANT_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_GRANT;
+const PREF_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_NOTIFICATION_PREF;
+const TRUST_SCOPE = AUTH_SECURITY_SCOPES.SESSION_TRUST;
+const TRUSTED_DEVICE_SCOPE = AUTH_SECURITY_SCOPES.TRUSTED_LOGIN_DEVICE;
+const ACTION_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ACTION;
+const ACTION_SECONDS = 10 * 60;
+const CAPABILITIES = new Set(["LOGIN_APPROVE", "SESSION_VIEW", "SESSION_APPROVE", "SESSION_CLOSE", "AUDIT_VIEW"]);
+const CRITICAL_OPERATIONS = new Set([
+  "SESSION_TRUST_APPROVE", "SESSION_TRUST_REJECT", "SESSION_CLOSE", "SESSION_SUSPICIOUS", "TRUSTED_DEVICE_REVOKE",
+  "SECURITY_CAPABILITY_SET", "SUPER_ADMIN_GRANT", "SUPER_ADMIN_REVOKE", "ONLY_ME",
+]);
+
+function text(value: unknown) { return value === undefined || value === null ? "" : String(value).trim(); }
+function upper(value: unknown) { return text(value).toUpperCase().replace(/İ/g, "I"); }
+function nowIso() { return new Date().toISOString(); }
+function addSeconds(seconds: number) { return new Date(Date.now() + seconds * 1000).toISOString(); }
+function clientIp(c: any) { return text(c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For")?.split(",")[0]); }
+function userAgent(c: any) { return text(c.req.header("User-Agent")).slice(0, 300); }
+function jsonError(code: string, message: string, details?: unknown) { return { ok: false, error: { code, message, ...(details === undefined ? {} : { details }) } }; }
+function isSuper(role: unknown) { return ["SUPER_ADMIN", "ADMIN"].includes(upper(role)); }
+function isCompanyAdmin(role: unknown) { return upper(role) === "COMPANY_ADMIN"; }
+function objectOf(value: unknown): AnyRow {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as AnyRow;
+  if (typeof value !== "string" || !value.trim()) return {};
+  try { const parsed = JSON.parse(value); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
+}
+async function bodyOf(c: any) { try { const body = await c.req.json(); return body && typeof body === "object" && !Array.isArray(body) ? body as AnyRow : {}; } catch { return {}; } }
+async function sha256(value: string) { const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)); return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join(""); }
+function safeEqual(left: string, right: string) { if (left.length !== right.length) return false; let diff = 0; for (let index = 0; index < left.length; index += 1) diff |= left.charCodeAt(index) ^ right.charCodeAt(index); return diff === 0; }
+
+async function requireStorage(c: any) {
+  for (const tableName of ["json_store", "auth_users", "auth_user_security", "auth_sessions", "auth_security_audit", "auth_system_secrets"]) {
+    if (!(await tableExists(c, tableName))) return false;
+  }
+  return true;
+}
+async function audit(c: any, action: string, current: AnyRow, targetUserId = "", companySlug = "", sessionId = "", detail: AnyRow = {}) {
+  try {
+    await c.env.DB.prepare(`INSERT INTO auth_security_audit(id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at) VALUES (?,?,?,?,?,?,?,?,?)`).bind(
+      crypto.randomUUID(), text(current?.id) || null, targetUserId || null, companySlug || (isSuper(current?.role) ? null : text(current?.mainCompanySlug) || null), action, sessionId || null, clientIp(c) || null, JSON.stringify(detail || {}), nowIso(),
+    ).run();
+  } catch {}
+}
+async function currentAuth(c: any) {
+  const current = await getAuthenticatedUser(c);
+  if (!current) return { error: c.json(jsonError("UNAUTHORIZED", "Oturum gerekli."), 401) };
+  return { current };
+}
+async function userById(c: any, id: string) {
+  return c.env.DB.prepare(`SELECT u.id,u.username,u.full_name,u.role,u.platform_role,u.is_active,u.created_at,s.role_override,s.main_company_slug FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.id=? LIMIT 1`).bind(id).first<AnyRow>();
+}
+function effectiveRole(row: AnyRow) { const role = upper(row?.role_override || row?.platform_role || row?.role || "VIEWER"); return role === "ADMIN" ? "SUPER_ADMIN" : role; }
+async function canonicalOwner(c: any) {
+  return c.env.DB.prepare(`SELECT u.id,u.username,u.full_name,u.role,u.platform_role,u.created_at,s.role_override,s.main_company_slug FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.is_active=1 AND (UPPER(COALESCE(u.platform_role,''))='SUPER_ADMIN' OR UPPER(COALESCE(u.role,'')) IN ('SUPER_ADMIN','ADMIN')) ORDER BY u.created_at ASC,u.id ASC LIMIT 1`).first<AnyRow>();
+}
+function sanitizeCapabilities(value: unknown) { return [...new Set((Array.isArray(value) ? value : []).map(upper).filter((item) => CAPABILITIES.has(item)))]; }
+async function grantFor(c: any, userId: string, companySlug: string) { const row = await storeGet(c, GRANT_SCOPE, `${companySlug}:${userId}`); if (!row || row.isActive === false) return null; return row; }
+async function scopeFor(c: any, current: AnyRow) {
+  const companySlug = text(current.mainCompanySlug || current.main_company_slug);
+  if (isSuper(current.role)) return { type: "SYSTEM", companySlug: "", capabilities: [...CAPABILITIES], delegated: false, canDelegateSecurity: true };
+  if (isCompanyAdmin(current.role)) return { type: "COMPANY", companySlug, capabilities: [...CAPABILITIES], delegated: false, canDelegateSecurity: true };
+  const grant = companySlug ? await grantFor(c, text(current.id), companySlug) : null;
+  const capabilities = sanitizeCapabilities(grant?.capabilities);
+  return { type: capabilities.length ? "COMPANY" : "SELF", companySlug, capabilities, delegated: capabilities.length > 0, canDelegateSecurity: false };
+}
+function hasCap(scope: AnyRow, capability: string) { return scope.type === "SYSTEM" || scope.capabilities?.includes(capability); }
+function browserDeviceId(label: unknown) { const value = text(label); return value.startsWith("BROWSER:") ? value.slice(8) : ""; }
+function trustedDeviceKey(userId: unknown, deviceId: unknown) { return `${text(userId)}:${text(deviceId)}`; }
+function activeTrustedDevice(row: AnyRow | null | undefined) { return Boolean(row && row.isTrusted !== false && !text(row.revokedAt)); }
+async function scopedSession(c: any, current: AnyRow, scope: AnyRow, sessionId: string) {
+  const row = await c.env.DB.prepare(`SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override,us.main_company_slug AS user_company_slug FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.id=? LIMIT 1`).bind(sessionId).first<AnyRow>();
+  if (!row) return null;
+  if (scope.type === "SYSTEM") return row;
+  if (scope.type === "COMPANY" && text(row.main_company_slug) === text(scope.companySlug)) {
+    const targetRole = effectiveRole(row);
+    if (isSuper(targetRole)) return null;
+    if (isCompanyAdmin(targetRole) && text(row.user_id) !== text(current.id)) return null;
+    if (isCompanyAdmin(targetRole) && !isCompanyAdmin(current.role)) return null;
+    return row;
+  }
+  if (scope.type === "SELF" && text(row.user_id) === text(current.id)) return row;
+  return null;
+}
+
+async function notifyDevices(c: any, userId: string) {
+  return sendWakeMany(c, await securityDevicesForUser(c, userId, "CRITICAL"));
+}
+
+async function expireAction(c: any, action: AnyRow) {
+  if (!action?.storeId) return action;
+  const timestamp = nowIso();
+  const next = { ...action, status: "EXPIRED", claimedAt: "", consumedAt: timestamp, updatedAt: timestamp };
+  delete next.storeId;
+  delete next.fileName;
+  const result = await c.env.DB.prepare(`UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=? AND COALESCE(json_extract(data,'$.consumedAt'),'')='' AND UPPER(COALESCE(json_extract(data,'$.status'),'')) IN ('PENDING','APPROVED')`).bind(JSON.stringify(next), timestamp, action.storeId, ACTION_SCOPE).run();
+  if (Number(result?.meta?.changes || 0) > 0) return { ...next, storeId: action.storeId, fileName: action.fileName };
+  return (await storeGet(c, ACTION_SCOPE, text(action.id))) || action;
+}
+async function actionFromToken(c: any, id: string, token: string) {
+  let row = await storeGet(c, ACTION_SCOPE, id);
+  if (!row || !token || !safeEqual(text(row.actionTokenHash), await sha256(token))) return null;
+  if (!text(row.consumedAt) && ["PENDING", "APPROVED"].includes(upper(row.status)) && Date.parse(text(row.expiresAt)) <= Date.now()) {
+    row = await expireAction(c, row);
+  }
+  return row;
+}
+async function claimAction(c: any, action: AnyRow) {
+  if (!action?.storeId) return false;
+  const timestamp = nowIso();
+  const next = { ...action, status: "PROCESSING", claimedAt: timestamp, updatedAt: timestamp }; delete next.storeId; delete next.fileName;
+  const result = await c.env.DB.prepare(`UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=? AND UPPER(COALESCE(json_extract(data,'$.status'),''))='APPROVED' AND COALESCE(json_extract(data,'$.consumedAt'),'')='' AND COALESCE(json_extract(data,'$.expiresAt'),'')>?`).bind(JSON.stringify(next), timestamp, action.storeId, ACTION_SCOPE, timestamp).run();
+  return Number(result?.meta?.changes || 0) > 0;
+}
+async function finishAction(c: any, action: AnyRow, status = "APPROVED") {
+  const current = await storeGet(c, ACTION_SCOPE, text(action.id)); if (!current?.storeId) return;
+  const timestamp = nowIso(); const next = { ...current, status, claimedAt: "", consumedAt: timestamp, updatedAt: timestamp }; delete next.storeId; delete next.fileName;
+  await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=?").bind(JSON.stringify(next), timestamp, current.storeId, ACTION_SCOPE).run();
+}
+async function restoreAction(c: any, action: AnyRow) {
+  const current = await storeGet(c, ACTION_SCOPE, text(action.id)); if (!current?.storeId) return;
+  const timestamp = nowIso(); const next = { ...current, status: "APPROVED", claimedAt: "", updatedAt: timestamp }; delete next.storeId; delete next.fileName;
+  await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=?").bind(JSON.stringify(next), timestamp, current.storeId, ACTION_SCOPE).run();
+}
+function actionTitle(operation: string) {
+  return ({ SESSION_TRUST_APPROVE: "Cihazı güvenilir yap", SESSION_TRUST_REJECT: "Yeni oturumu reddet", SESSION_CLOSE: "Oturumu kapat", SESSION_SUSPICIOUS: "Şüpheli oturumu kapat", TRUSTED_DEVICE_REVOKE: "Onaylı cihaz güvenini kaldır", SECURITY_CAPABILITY_SET: "Güvenlik yetkilerini değiştir", SUPER_ADMIN_GRANT: "Süper Yönetici ekle", SUPER_ADMIN_REVOKE: "Süper Yönetici yetkisini kaldır", ONLY_ME: "Sadece Ben Kalayım" } as AnyRow)[operation] || "Kritik güvenlik işlemi";
+}
+
+async function authorizeOperation(c: any, current: AnyRow, scope: AnyRow, operation: string, payload: AnyRow) {
+  if (!CRITICAL_OPERATIONS.has(operation)) return { error: jsonError("SECURITY_OPERATION_UNSUPPORTED", "Bu güvenlik işlemi desteklenmiyor."), status: 400 };
+  const owner = await canonicalOwner(c);
+  if (["SUPER_ADMIN_GRANT", "SUPER_ADMIN_REVOKE", "ONLY_ME"].includes(operation)) {
+    if (!owner || text(owner.id) !== text(current.id) || !isSuper(current.role)) return { error: jsonError("OWNER_ONLY", "Bu işlem yalnız asıl Süper Yönetici tarafından başlatılabilir."), status: 403 };
+  }
+  if (operation === "SECURITY_CAPABILITY_SET") {
+    const companySlug = text(payload.companySlug || scope.companySlug); const target = await userById(c, text(payload.targetUserId));
+    if (!target || !target.is_active) return { error: jsonError("TARGET_USER_NOT_FOUND", "Yetki verilecek aktif kullanıcı bulunamadı."), status: 404 };
+    if (!scope.canDelegateSecurity) return { error: jsonError("FORBIDDEN", "Güvenlik yetkisi devretme yetkiniz yok."), status: 403 };
+    if (scope.type !== "SYSTEM" && companySlug !== text(scope.companySlug)) return { error: jsonError("CROSS_TENANT_FORBIDDEN", "Başka firmanın güvenlik yetkilerini değiştiremezsiniz."), status: 403 };
+    if (scope.type !== "SYSTEM" && text(target.main_company_slug) !== companySlug) return { error: jsonError("CROSS_TENANT_FORBIDDEN", "Başka firmadaki kullanıcıya güvenlik yetkisi verilemez."), status: 403 };
+    if (isSuper(effectiveRole(target))) return { error: jsonError("OWNER_GRANT_NOT_ALLOWED", "Süper Yönetici hesabına delege güvenlik yetkisi yazılmaz."), status: 409 };
+    return { payload: { companySlug, targetUserId: text(target.id), capabilities: sanitizeCapabilities(payload.capabilities) } };
+  }
+  if (["SUPER_ADMIN_GRANT", "SUPER_ADMIN_REVOKE"].includes(operation)) {
+    const target = await userById(c, text(payload.targetUserId)); if (!target || !target.is_active) return { error: jsonError("TARGET_USER_NOT_FOUND", "Hedef kullanıcı bulunamadı."), status: 404 };
+    if (operation === "SUPER_ADMIN_GRANT" && isSuper(effectiveRole(target))) return { error: jsonError("ALREADY_SUPER_ADMIN", "Kullanıcı zaten Süper Yönetici."), status: 409 };
+    if (operation === "SUPER_ADMIN_REVOKE" && text(target.id) === text(owner?.id)) return { error: jsonError("OWNER_LOCKED", "Asıl Süper Yönetici yetkisi kaldırılamaz."), status: 409 };
+    if (operation === "SUPER_ADMIN_REVOKE" && !isSuper(effectiveRole(target))) return { error: jsonError("NOT_SUPER_ADMIN", "Hedef kullanıcı Süper Yönetici değil."), status: 409 };
+    return { payload: { targetUserId: text(target.id), companySlug: text(target.main_company_slug) } };
+  }
+  if (operation === "TRUSTED_DEVICE_REVOKE") {
+    const targetUserId = text(payload.targetUserId); const deviceId = text(payload.deviceId);
+    const trusted = await storeGet(c, TRUSTED_DEVICE_SCOPE, trustedDeviceKey(targetUserId, deviceId));
+    if (!activeTrustedDevice(trusted)) return { error: jsonError("TRUSTED_DEVICE_NOT_FOUND", "Onaylı cihaz bulunamadı."), status: 404 };
+    const target = await userById(c, targetUserId); if (!target) return { error: jsonError("TARGET_USER_NOT_FOUND", "Kullanıcı bulunamadı."), status: 404 };
+    if (scope.type === "SELF" && targetUserId !== text(current.id)) return { error: jsonError("FORBIDDEN", "Yalnız kendi onaylı cihazınızı yönetebilirsiniz."), status: 403 };
+    if (scope.type === "COMPANY") {
+      if (text(trusted.mainCompanySlug) !== text(scope.companySlug)) return { error: jsonError("CROSS_TENANT_FORBIDDEN", "Başka firmanın cihazı yönetilemez."), status: 403 };
+      const targetRole = effectiveRole(target);
+      if (isSuper(targetRole) || (isCompanyAdmin(targetRole) && targetUserId !== text(current.id))) return { error: jsonError("FORBIDDEN", "Bu kullanıcı cihazı firma kapsamından yönetilemez."), status: 403 };
+      if (targetUserId !== text(current.id) && !hasCap(scope, "SESSION_APPROVE")) return { error: jsonError("FORBIDDEN", "Onaylı cihaz yönetimi için Oturum Onayı yetkisi gerekir."), status: 403 };
+    }
+    return { payload: { targetUserId, deviceId, companySlug: text(trusted.mainCompanySlug), trustedDeviceKey: trustedDeviceKey(targetUserId, deviceId), deviceLabel: text(trusted.deviceLabel) } };
+  }
+  if (operation === "ONLY_ME") {
+    if (!text(current.session?.id)) return { error: jsonError("CURRENT_SESSION_REQUIRED", "Mevcut güvenli oturum bulunamadı."), status: 409 };
+    return { payload: { keepSessionId: text(current.session.id) } };
+  }
+  const session = await scopedSession(c, current, scope, text(payload.sessionId));
+  if (!session) return { error: jsonError("SESSION_NOT_FOUND", "Oturum bulunamadı veya kapsam dışı."), status: 404 };
+  const sessionActive = !text(session.revoked_at) && Date.parse(text(session.expires_at)) > Date.now();
+  if (operation !== "SESSION_CLOSE" && !sessionActive) return { error: jsonError("SESSION_NOT_ACTIVE", "Bu oturum artık aktif değil; güven kararı uygulanamaz."), status: 409 };
+  if (operation === "SESSION_CLOSE") {
+    const own = text(session.user_id) === text(current.id);
+    if (!own && !hasCap(scope, "SESSION_CLOSE")) return { error: jsonError("FORBIDDEN", "Bu oturumu kapatma yetkiniz yok."), status: 403 };
+  } else if (!hasCap(scope, "SESSION_APPROVE")) return { error: jsonError("FORBIDDEN", "Oturum güven kararı yetkiniz yok."), status: 403 };
+  return { payload: { sessionId: text(session.id), targetUserId: text(session.user_id), companySlug: text(session.main_company_slug), deviceLabel: text(session.device_label), userAgent: text(session.user_agent), ipAddress: text(session.ip_address) } };
+}
+
+async function executeOperation(c: any, current: AnyRow, operation: string, payload: AnyRow) {
+  const timestamp = nowIso();
+  if (operation === "SECURITY_CAPABILITY_SET") {
+    const capabilities = sanitizeCapabilities(payload.capabilities);
+    await storePut(c, GRANT_SCOPE, `${payload.companySlug}:${payload.targetUserId}`, payload.companySlug, { userId: payload.targetUserId, capabilities, isActive: capabilities.length > 0, grantedByUserId: current.id, grantedAt: timestamp });
+    await audit(c, capabilities.length ? "SECURITY_CAPABILITY_GRANTED" : "SECURITY_CAPABILITY_REVOKED", current, payload.targetUserId, payload.companySlug, "", { capabilities });
+    return { capabilities };
+  }
+  if (operation === "SUPER_ADMIN_GRANT") {
+    const target = await userById(c, payload.targetUserId); const oldRole = effectiveRole(target || {});
+    const write = await c.env.DB.prepare("UPDATE auth_user_security SET role_override='SUPER_ADMIN',approval_required=0,updated_at=? WHERE user_id=?").bind(timestamp, payload.targetUserId).run();
+    if (Number(write?.meta?.changes || 0) !== 1) throw new Error("SECURITY_PROFILE_NOT_FOUND");
+    await audit(c, "SUPER_ADMIN_GRANTED", current, payload.targetUserId, payload.companySlug, "", { oldRole, newRole: "SUPER_ADMIN" });
+    return { targetUserId: payload.targetUserId, role: "SUPER_ADMIN" };
+  }
+  if (operation === "SUPER_ADMIN_REVOKE") {
+    const target = await userById(c, payload.targetUserId); const oldRole = effectiveRole(target || {});
+    if (["SUPER_ADMIN", "ADMIN"].includes(upper(target?.platform_role)) || ["SUPER_ADMIN", "ADMIN"].includes(upper(target?.role))) throw new Error("OWNER_LOCKED");
+    const write = await c.env.DB.prepare("UPDATE auth_user_security SET role_override=NULL,updated_at=? WHERE user_id=?").bind(timestamp, payload.targetUserId).run();
+    if (Number(write?.meta?.changes || 0) !== 1) throw new Error("SECURITY_PROFILE_NOT_FOUND");
+    const updated = await userById(c, payload.targetUserId);
+    await audit(c, "SUPER_ADMIN_REVOKED", current, payload.targetUserId, payload.companySlug, "", { oldRole, newRole: effectiveRole(updated || {}) });
+    return { targetUserId: payload.targetUserId, role: effectiveRole(updated || {}) };
+  }
+  if (operation === "TRUSTED_DEVICE_REVOKE") {
+    const existing = await storeGet(c, TRUSTED_DEVICE_SCOPE, payload.trustedDeviceKey);
+    await storePut(c, TRUSTED_DEVICE_SCOPE, payload.trustedDeviceKey, payload.companySlug, { ...existing, userId: payload.targetUserId, deviceId: payload.deviceId, deviceLabel: payload.deviceLabel, isTrusted: false, revokedAt: timestamp, revokedByUserId: current.id, revokeReason: "MANUAL" });
+    await audit(c, "TRUSTED_LOGIN_DEVICE_REVOKED", current, payload.targetUserId, payload.companySlug, "", { deviceId: payload.deviceId, deviceLabel: payload.deviceLabel });
+    return { targetUserId: payload.targetUserId, deviceId: payload.deviceId, trusted: false };
+  }
+  if (operation === "ONLY_ME") {
+    const result = await c.env.DB.prepare(`UPDATE auth_sessions
+      SET revoked_at=?,revoked_by=?
+      WHERE revoked_at IS NULL AND expires_at>? AND id<>?
+        AND user_id IN (
+          SELECT u.id FROM auth_users u
+          LEFT JOIN auth_user_security us ON us.user_id=u.id
+          WHERE UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN')
+        )`).bind(timestamp, current.id, timestamp, payload.keepSessionId).run();
+    const count = Number(result?.meta?.changes || 0);
+    await audit(c, "SUPER_ADMIN_ONLY_ME_EXECUTED", current, current.id, "", payload.keepSessionId, { revokedSessions: count, preservedRole: "SUPER_ADMIN" });
+    return { revokedSessions: count, keptSessionId: payload.keepSessionId };
+  }
+  const session = await c.env.DB.prepare("SELECT * FROM auth_sessions WHERE id=? LIMIT 1").bind(payload.sessionId).first<AnyRow>();
+  if (!session) throw new Error("SESSION_NOT_FOUND");
+  if (operation === "SESSION_TRUST_APPROVE") {
+    await storePut(c, TRUST_SCOPE, payload.sessionId, payload.companySlug, { sessionId: payload.sessionId, userId: payload.targetUserId, status: "TRUSTED", decidedByUserId: current.id, decidedAt: timestamp });
+    const deviceId = browserDeviceId(payload.deviceLabel);
+    if (deviceId) {
+      const key = trustedDeviceKey(payload.targetUserId, deviceId); const existing = await storeGet(c, TRUSTED_DEVICE_SCOPE, key);
+      await storePut(c, TRUSTED_DEVICE_SCOPE, key, payload.companySlug, { userId: payload.targetUserId, deviceId, deviceLabel: payload.deviceLabel, userAgent: payload.userAgent, ipAddress: payload.ipAddress, isTrusted: true, trustedByUserId: current.id, firstTrustedAt: text(existing?.firstTrustedAt || timestamp), lastTrustedAt: timestamp, revokedAt: "", revokedByUserId: "", revokeReason: "" });
+    }
+    await audit(c, "SESSION_TRUSTED", current, payload.targetUserId, payload.companySlug, payload.sessionId, { deviceId, deviceLabel: payload.deviceLabel });
+    return { sessionId: payload.sessionId, trustStatus: "TRUSTED", deviceId, deviceTrusted: Boolean(deviceId) };
+  }
+  if (operation === "SESSION_TRUST_REJECT" || operation === "SESSION_SUSPICIOUS") {
+    const status = operation === "SESSION_SUSPICIOUS" ? "SUSPICIOUS" : "REJECTED";
+    if (operation === "SESSION_SUSPICIOUS") { const deviceId = browserDeviceId(payload.deviceLabel); if (deviceId) { const key = trustedDeviceKey(payload.targetUserId, deviceId); const existing = await storeGet(c, TRUSTED_DEVICE_SCOPE, key); if (activeTrustedDevice(existing)) await storePut(c, TRUSTED_DEVICE_SCOPE, key, payload.companySlug, { ...existing, isTrusted: false, revokedAt: timestamp, revokedByUserId: current.id, revokeReason: "SUSPICIOUS" }); } }
+    await storePut(c, TRUST_SCOPE, payload.sessionId, payload.companySlug, { sessionId: payload.sessionId, userId: payload.targetUserId, status, decidedByUserId: current.id, decidedAt: timestamp });
+    await c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=COALESCE(revoked_at,?),revoked_by=COALESCE(revoked_by,?) WHERE id=?").bind(timestamp, current.id, payload.sessionId).run();
+    await audit(c, operation === "SESSION_SUSPICIOUS" ? "SESSION_MARKED_SUSPICIOUS" : "SESSION_TRUST_REJECTED", current, payload.targetUserId, payload.companySlug, payload.sessionId, { deviceLabel: payload.deviceLabel });
+    return { sessionId: payload.sessionId, trustStatus: status, revoked: true };
+  }
+  if (operation === "SESSION_CLOSE") {
+    await c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=COALESCE(revoked_at,?),revoked_by=COALESCE(revoked_by,?) WHERE id=?").bind(timestamp, current.id, payload.sessionId).run();
+    await audit(c, "SESSION_REVOKED_SECURITY_CENTER", current, payload.targetUserId, payload.companySlug, payload.sessionId, { deviceLabel: payload.deviceLabel });
+    return { sessionId: payload.sessionId, revoked: true };
+  }
+  throw new Error("UNSUPPORTED_OPERATION");
+}
+
+function friendlyEvent(action: string) {
+  const map: AnyRow = {
+    LOGIN_SUCCESS: ["🟢", "Giriş yapıldı"], PHONE_APPROVAL_APPROVED: ["📲", "Telefon onayladı"], SESSION_CREATED_POLICY: ["💻", "Oturum açıldı"], SESSION_VERIFIED_BY_PHONE_LOGIN: ["📲", "Oturum telefonla doğrulandı"],
+    SESSION_TRUSTED: ["🔐", "Güvenilir oturum onaylandı"], SESSION_TRUST_REJECTED: ["🚫", "Oturum reddedildi"], SESSION_MARKED_SUSPICIOUS: ["🚫", "Şüpheli oturum kapatıldı"],
+    SESSION_REVOKED_SECURITY_CENTER: ["🔴", "Oturum kapatıldı"], SECURITY_CAPABILITY_GRANTED: ["🛡️", "Güvenlik yetkisi verildi"], SECURITY_CAPABILITY_REVOKED: ["🛡️", "Güvenlik yetkisi kaldırıldı"],
+    SUPER_ADMIN_GRANTED: ["⚠️", "Süper Yönetici eklendi"], SUPER_ADMIN_REVOKED: ["⚠️", "Süper Yönetici yetkisi kaldırıldı"], SUPER_ADMIN_ONLY_ME_EXECUTED: ["⚠️", "Sadece Ben Kalayım çalıştırıldı"],
+    SECURITY_ACTION_APPROVED: ["📲", "Kritik işlem telefondan onaylandı"], SECURITY_ACTION_DENIED: ["🚫", "Kritik işlem telefondan reddedildi"], OWNER_RECOVERY_QUESTIONS_UPDATED: ["🛡️", "Güvenlik soruları güncellendi"],
+    LOGIN_APPROVAL_APPROVED_SECURITY_CENTER: ["👤", "Giriş yetkili tarafından onaylandı"], LOGIN_APPROVAL_DENIED_SECURITY_CENTER: ["🚫", "Giriş yetkili tarafından reddedildi"],
+  };
+  const value = map[upper(action)] || ["•", text(action) || "Güvenlik olayı"];
+  return { icon: value[0], label: value[1] };
+}
+
+export function registerSecurityCenterRoutes(app: any) {
+  app.get("/api/security-center/overview", async (c: any) => {
+    if (!(await requireStorage(c))) return c.json(jsonError("SECURITY_SCHEMA_UNAVAILABLE", "Güvenlik veri katmanı hazır değil."), 503);
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const scope = await scopeFor(c, current);
+    const ownDevices = (await securityDevicesForUser(c, text(current.id), "CONTROL")).map((row: AnyRow) => ({ id: row.id, label: row.deviceLabel || row.label || "KY Güvenlik", platform: row.platform || "", lastSeenAt: row.lastSeenAt || row.updatedAt, pushReady: Boolean(row.pushEndpoint), securityApp: true }));
+    let sessionCountRow: AnyRow | null = null;
+    if (scope.type === "SYSTEM") sessionCountRow = await c.env.DB.prepare("SELECT COUNT(*) AS total FROM auth_sessions WHERE revoked_at IS NULL AND expires_at>?").bind(nowIso()).first<AnyRow>();
+    else if (scope.type === "COMPANY" && hasCap(scope, "SESSION_VIEW")) {
+      const companyOwner = isCompanyAdmin(current.role);
+      sessionCountRow = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.main_company_slug=? AND s.revoked_at IS NULL AND s.expires_at>? AND (UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN') OR (?=1 AND s.user_id=?))`).bind(scope.companySlug, nowIso(), companyOwner ? 1 : 0, current.id).first<AnyRow>();
+    }
+    else if (scope.type === "SELF") sessionCountRow = await c.env.DB.prepare("SELECT COUNT(*) AS total FROM auth_sessions WHERE user_id=? AND revoked_at IS NULL AND expires_at>?").bind(current.id, nowIso()).first<AnyRow>();
+    return c.json({ ok: true, data: { scopeType: scope.type, companySlug: scope.companySlug, delegated: scope.delegated, canDelegateSecurity: scope.canDelegateSecurity, capabilities: scope.capabilities, role: current.role, ownDevices, activeSessionCount: Number(sessionCountRow?.total || 0), trustEnforcement: false, trustMode: "REVIEW_ONLY" } });
+  });
+
+  app.get("/api/security-center/sessions", async (c: any) => {
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const scope = await scopeFor(c, current);
+    if (scope.type === "COMPANY" && !hasCap(scope, "SESSION_VIEW")) return c.json(jsonError("FORBIDDEN", "Oturum görüntüleme yetkiniz yok."), 403);
+    let result;
+    if (scope.type === "SYSTEM") result = await c.env.DB.prepare(`SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id ORDER BY s.created_at DESC LIMIT 500`).all<AnyRow>();
+    else if (scope.type === "COMPANY") {
+      const companyOwner = isCompanyAdmin(current.role);
+      result = await c.env.DB.prepare(`SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.main_company_slug=? AND (UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN') OR (?=1 AND s.user_id=?)) ORDER BY s.created_at DESC LIMIT 300`).bind(scope.companySlug, companyOwner ? 1 : 0, current.id).all<AnyRow>();
+    }
+    else result = await c.env.DB.prepare(`SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.user_id=? ORDER BY s.created_at DESC LIMIT 100`).bind(current.id).all<AnyRow>();
+    const trusts = new Map((await storeList(c, TRUST_SCOPE)).map((row: AnyRow) => [text(row.sessionId || row.fileName), row]));
+    const trustedDevices = new Map((await storeList(c, TRUSTED_DEVICE_SCOPE)).map((row: AnyRow) => [trustedDeviceKey(row.userId, row.deviceId), row]));
+    const data = (result.results || []).map((row: AnyRow) => { const trust = trusts.get(text(row.id)); const deviceId = browserDeviceId(row.device_label); const persistent = deviceId ? trustedDevices.get(trustedDeviceKey(row.user_id, deviceId)) : null; const explicit = upper(trust?.status || ""); const persistentTrusted = activeTrustedDevice(persistent) && !["REJECTED","SUSPICIOUS"].includes(explicit); const trustStatus = persistentTrusted ? "TRUSTED" : (explicit || "PENDING"); const role = effectiveRole(row); return { id: row.id, userId: row.user_id, username: row.username, fullName: row.full_name, role, mainCompanySlug: isSuper(role) ? "" : row.main_company_slug, deviceId, deviceLabel: row.device_label, userAgent: row.user_agent, ipAddress: row.ip_address, createdAt: row.created_at, approvedAt: row.approved_at, lastSeenAt: row.last_seen_at, expiresAt: row.expires_at, revokedAt: row.revoked_at, revokedBy: row.revoked_by, active: !row.revoked_at && Date.parse(text(row.expires_at)) > Date.now(), trustStatus, trustSource: persistentTrusted ? "DEVICE" : (explicit ? "SESSION" : "PENDING"), trustDecidedAt: persistentTrusted ? persistent?.lastTrustedAt || persistent?.firstTrustedAt : trust?.decidedAt || null, trustDecidedByUserId: persistentTrusted ? persistent?.trustedByUserId || null : trust?.decidedByUserId || null, own: text(row.user_id) === text(current.id) }; });
+    return c.json({ ok: true, data });
+  });
+
+  app.get("/api/security-center/trusted-devices", async (c: any) => {
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const scope = await scopeFor(c, current);
+    const trusted = (await storeList(c, TRUSTED_DEVICE_SCOPE)).filter(activeTrustedDevice); const data: AnyRow[] = [];
+    for (const row of trusted) {
+      const user = await userById(c, text(row.userId)); if (!user || !user.is_active) continue; const role = effectiveRole(user);
+      if (scope.type === "SELF" && text(row.userId) !== text(current.id)) continue;
+      if (scope.type === "COMPANY") { if (text(row.mainCompanySlug) !== text(scope.companySlug)) continue; if (isSuper(role)) continue; if (isCompanyAdmin(role) && text(row.userId) !== text(current.id)) continue; if (isCompanyAdmin(role) && !isCompanyAdmin(current.role)) continue; }
+      data.push({ id: text(row.id || row.fileName), deviceId: text(row.deviceId), userId: text(row.userId), username: text(user.username), fullName: text(user.full_name || user.username), role, mainCompanySlug: isSuper(role) ? "" : text(row.mainCompanySlug), deviceLabel: text(row.deviceLabel), userAgent: text(row.userAgent), ipAddress: text(row.ipAddress), firstTrustedAt: row.firstTrustedAt || row.createdAt || null, lastTrustedAt: row.lastTrustedAt || row.updatedAt || null, trustedByUserId: row.trustedByUserId || null, own: text(row.userId) === text(current.id) });
+    }
+    data.sort((a,b)=>String(b.lastTrustedAt||"").localeCompare(String(a.lastTrustedAt||""))); return c.json({ ok: true, data });
+  });
+
+  app.delete("/api/security-center/trusted-devices/:deviceId", async (c: any) => {
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const deviceId = text(c.req.param("deviceId")); const key = trustedDeviceKey(current.id, deviceId); const row = await storeGet(c, TRUSTED_DEVICE_SCOPE, key);
+    if (!activeTrustedDevice(row)) return c.json(jsonError("TRUSTED_DEVICE_NOT_FOUND", "Onaylı cihaz bulunamadı."), 404); const timestamp = nowIso();
+    await storePut(c, TRUSTED_DEVICE_SCOPE, key, text(row.mainCompanySlug), { ...row, isTrusted: false, revokedAt: timestamp, revokedByUserId: current.id, revokeReason: "SELF" }); await audit(c, "TRUSTED_LOGIN_DEVICE_REVOKED_SELF", current, current.id, text(row.mainCompanySlug), "", { deviceId, deviceLabel: row.deviceLabel }); return c.json({ ok: true, data: { deviceId, trusted: false } });
+  });
+
+  app.get("/api/security-center/audit", async (c: any) => {
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const scope = await scopeFor(c, current); const limit = Math.max(25, Math.min(500, Number(c.req.query("limit") || 250)));
+    if (scope.type === "COMPANY" && !hasCap(scope, "AUDIT_VIEW")) return c.json(jsonError("FORBIDDEN", "Güvenlik akışını görüntüleme yetkiniz yok."), 403);
+    let result;
+    if (scope.type === "SYSTEM") result = await c.env.DB.prepare(`SELECT a.*,au.full_name AS actor_name,tu.full_name AS target_name FROM auth_security_audit a LEFT JOIN auth_users au ON au.id=a.actor_user_id LEFT JOIN auth_users tu ON tu.id=a.target_user_id ORDER BY a.created_at DESC LIMIT ?`).bind(limit).all<AnyRow>();
+    else if (scope.type === "COMPANY") result = await c.env.DB.prepare(`SELECT a.*,au.full_name AS actor_name,tu.full_name AS target_name FROM auth_security_audit a LEFT JOIN auth_users au ON au.id=a.actor_user_id LEFT JOIN auth_users tu ON tu.id=a.target_user_id WHERE a.main_company_slug=? ORDER BY a.created_at DESC LIMIT ?`).bind(scope.companySlug, limit).all<AnyRow>();
+    else result = await c.env.DB.prepare(`SELECT a.*,au.full_name AS actor_name,tu.full_name AS target_name FROM auth_security_audit a LEFT JOIN auth_users au ON au.id=a.actor_user_id LEFT JOIN auth_users tu ON tu.id=a.target_user_id WHERE a.actor_user_id=? OR a.target_user_id=? ORDER BY a.created_at DESC LIMIT ?`).bind(current.id, current.id, limit).all<AnyRow>();
+    const data = (result.results || []).map((row: AnyRow) => { const detail = objectOf(row.detail); const friendly = friendlyEvent(row.action); return { id: row.id, createdAt: row.created_at, action: row.action, icon: friendly.icon, label: friendly.label, actorUserId: row.actor_user_id, actorName: row.actor_name || "", targetUserId: row.target_user_id, targetName: row.target_name || "", mainCompanySlug: row.main_company_slug, sessionId: row.session_id, ipAddress: row.ip_address, deviceId: detail.deviceId || "", deviceLabel: detail.deviceLabel || "", decision: detail.decision || "", oldValue: detail.oldValue, newValue: detail.newValue, result: detail.result || "", detail }; });
+    return c.json({ ok: true, data });
+  });
+
+  app.get("/api/security-center/notifications", async (c: any) => {
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const scope = await scopeFor(c, current); const row = await storeGet(c, PREF_SCOPE, text(current.id));
+    const defaults = { ownLogins: true, companyLoginRequests: hasCap(scope, "LOGIN_APPROVE"), newSession: true, suspiciousLogin: true, newDevice: true, sessionClosed: true, permissionChange: scope.type !== "SELF", securityProblem: true };
+    return c.json({ ok: true, data: { ...defaults, ...objectOf(row?.preferences) } });
+  });
+  app.put("/api/security-center/notifications", async (c: any) => {
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const body = await bodyOf(c); const scope = await scopeFor(c, current);
+    const keys = ["ownLogins", "companyLoginRequests", "newSession", "suspiciousLogin", "newDevice", "sessionClosed", "permissionChange", "securityProblem"]; const preferences: AnyRow = {};
+    for (const key of keys) if (body[key] !== undefined) preferences[key] = Boolean(body[key]);
+    await storePut(c, PREF_SCOPE, text(current.id), text(scope.companySlug), { userId: current.id, preferences });
+    await audit(c, "SECURITY_NOTIFICATION_PREFERENCES_UPDATED", current, current.id, scope.companySlug, "", { preferences });
+    return c.json({ ok: true, data: preferences });
+  });
+
+  app.get("/api/security-center/users", async (c: any) => {
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const scope = await scopeFor(c, current);
+    if (!scope.canDelegateSecurity) return c.json(jsonError("FORBIDDEN", "Kullanıcı listesi yalnız güvenlik yetkisi devredebilen yöneticilere açıktır."), 403);
+    const result = scope.type === "SYSTEM"
+      ? await c.env.DB.prepare(`SELECT u.id,u.username,u.full_name,u.is_active,u.role,u.platform_role,s.role_override,s.main_company_slug FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.is_active=1 ORDER BY u.full_name,u.username LIMIT 500`).all<AnyRow>()
+      : await c.env.DB.prepare(`SELECT u.id,u.username,u.full_name,u.is_active,u.role,u.platform_role,s.role_override,s.main_company_slug FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.is_active=1 AND s.main_company_slug=? AND UPPER(COALESCE(NULLIF(TRIM(s.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN') ORDER BY u.full_name,u.username LIMIT 300`).bind(scope.companySlug).all<AnyRow>();
+    return c.json({ ok: true, data: (result.results || []).map((row: AnyRow) => ({ id: row.id, username: row.username, fullName: row.full_name, role: effectiveRole(row), mainCompanySlug: row.main_company_slug })) });
+  });
+
+  app.get("/api/security-center/grants", async (c: any) => {
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const scope = await scopeFor(c, current);
+    if (!scope.canDelegateSecurity) return c.json(jsonError("FORBIDDEN", "Yetki listesi yalnız güvenlik yetkisi devredebilen yöneticilere açıktır."), 403);
+    const rows = await storeList(c, GRANT_SCOPE, scope.type === "SYSTEM" ? "" : scope.companySlug);
+    const data = [];
+    for (const row of rows) { if (row.isActive === false) continue; const user = await userById(c, text(row.userId)); if (!user || isSuper(effectiveRole(user))) continue; data.push({ id: row.id, userId: row.userId, fullName: user.full_name, username: user.username, role: effectiveRole(user), mainCompanySlug: row.mainCompanySlug, capabilities: sanitizeCapabilities(row.capabilities), grantedByUserId: row.grantedByUserId, grantedAt: row.grantedAt, updatedAt: row.updatedAt }); }
+    return c.json({ ok: true, data });
+  });
+
+  app.post("/api/security-center/actions/start", async (c: any) => {
+    if (!(await requireStorage(c))) return c.json(jsonError("SECURITY_SCHEMA_UNAVAILABLE", "Güvenlik veri katmanı hazır değil."), 503);
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const scope = await scopeFor(c, current); const body = await bodyOf(c); const operation = upper(body.operation);
+    const authorization = await authorizeOperation(c, current, scope, operation, body);
+    if (authorization.error) return c.json(authorization.error, authorization.status);
+    const devices = await securityDevicesForUser(c, text(current.id), "CRITICAL"); if (!devices.length) return c.json(jsonError("SECURITY_DEVICE_REQUIRED", "Bu kritik işlem için aktif KY Güvenlik telefonu gereklidir."), 409);
+    const id = crypto.randomUUID(); const token = randomToken(); const requestedAt = nowIso(); const expiresAt = addSeconds(ACTION_SECONDS); const payload = authorization.payload || {};
+    await storePut(c, ACTION_SCOPE, id, text(payload.companySlug || scope.companySlug), { id, userId: current.id, mainCompanySlug: text(payload.companySlug || scope.companySlug), actionType: operation, actionTokenHash: await sha256(token), status: "PENDING", requestedAt, expiresAt, decidedAt: "", decidedByDeviceId: "", claimedAt: "", consumedAt: "", sourceIp: clientIp(c), sourceUserAgent: userAgent(c), operationPayload: payload, title: actionTitle(operation) });
+    const notifiedDevices = await notifyDevices(c, text(current.id));
+    await audit(c, "SECURITY_CENTER_ACTION_REQUESTED", current, text(payload.targetUserId || current.id), text(payload.companySlug || scope.companySlug), text(payload.sessionId), { actionId: id, operation, notifiedDevices });
+    return c.json({ ok: true, data: { actionId: id, actionToken: token, operation, title: actionTitle(operation), status: "PENDING", expiresAt, notifiedDevices, pushDelivered: notifiedDevices > 0 } });
+  });
+
+  app.post("/api/security-center/actions/:id/status", async (c: any) => {
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const body = await bodyOf(c); const action = await actionFromToken(c, text(c.req.param("id")), text(body.actionToken));
+    if (!action || text(action.userId) !== text(auth.current.id)) return c.json(jsonError("SECURITY_ACTION_INVALID", "Güvenlik onayı bulunamadı."), 401);
+    return c.json({ ok: true, data: { actionId: action.id, operation: action.actionType, status: upper(action.status), expiresAt: action.expiresAt, decidedAt: action.decidedAt || null, consumedAt: action.consumedAt || null } });
+  });
+
+  app.post("/api/security-center/actions/:id/execute", async (c: any) => {
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const body = await bodyOf(c); const action = await actionFromToken(c, text(c.req.param("id")), text(body.actionToken));
+    if (!action || text(action.userId) !== text(current.id)) return c.json(jsonError("SECURITY_ACTION_INVALID", "Güvenlik onayı bu hesaba ait değil."), 401);
+    if (upper(action.status) === "EXPIRED") return c.json(jsonError("SECURITY_ACTION_EXPIRED", "Güvenlik onayının süresi doldu."), 409);
+    if (upper(action.status) !== "APPROVED" || text(action.consumedAt)) return c.json(jsonError("SECURITY_ACTION_NOT_APPROVED", "KY Güvenlik telefon onayı tamamlanmadı veya kullanıldı."), 409);
+    const scope = await scopeFor(c, current); const authorization = await authorizeOperation(c, current, scope, upper(action.actionType), objectOf(action.operationPayload));
+    if (authorization.error) return c.json(authorization.error, authorization.status);
+    if (!(await claimAction(c, action))) return c.json(jsonError("SECURITY_ACTION_CONSUMED", "Bu güvenlik onayı başka bir işlem tarafından kullanılıyor veya süresi doldu."), 409);
+    try {
+      const result = await executeOperation(c, current, upper(action.actionType), authorization.payload || objectOf(action.operationPayload));
+      await finishAction(c, action, "APPROVED");
+      return c.json({ ok: true, data: { executed: true, operation: action.actionType, result } });
+    } catch (error) {
+      await restoreAction(c, action);
+      return c.json(jsonError("SECURITY_OPERATION_FAILED", "Kritik güvenlik işlemi uygulanamadı; telefon onayı tüketilmedi.", error instanceof Error ? error.message : String(error)), 500);
+    }
+  });
+}

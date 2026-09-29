@@ -5,7 +5,7 @@ import { apiSuccess } from "../common/api-helpers";
 import { IsnetDocumentCenterService } from "./isnet-document-center.service";
 
 @Controller("isnet/document-center")
-@RequireModule(ModuleKey.ISNET)
+@RequireModule(ModuleKey.MUHASEBE)
 export class IsnetDocumentCenterController {
   constructor(private readonly service: IsnetDocumentCenterService) {}
 

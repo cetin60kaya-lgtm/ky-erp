@@ -1,8 +1,8 @@
--- KY ERP Cloudflare D1 çalışma şeması.
--- Bu migration veri silmez ve örnek/test kaydı eklemez.
--- Var olan tabloları korur; yalnız eksik çekirdek tabloları ve güvenli indeksleri oluşturur.
--- machine_shift_defaults tablosu canlıdaki eski şemayla uyumlu tutulur;
--- yeni alanlar 0002 migrationında güvenli biçimde eklenir.
+-- KY ERP Cloudflare D1 ilk çalışma şeması.
+-- Bu dosya migration zincirinin tarihsel başlangıç halini temsil eder.
+-- Sonraki üretim alanları 0011_production_schema_compat.sql tarafından eklenir;
+-- böylece temiz D1 kurulumu ile daha önce migration uygulanmış canlı D1 aynı sırayı izler.
+-- Mevcut canlı veride 0001 zaten uygulanmış olduğundan bu düzeltme veri değiştirmez.
 
 PRAGMA defer_foreign_keys = true;
 
@@ -44,21 +44,10 @@ CREATE TABLE IF NOT EXISTS model_records (
   model_name TEXT NOT NULL,
   model_code TEXT,
   order_no TEXT,
-  company_id TEXT,
-  customer_id TEXT,
-  customer_name TEXT,
-  source_dispatch_no TEXT,
-  customer_dispatch_no TEXT,
-  incoming_qty REAL DEFAULT 0,
-  incoming_quantity REAL DEFAULT 0,
-  remaining_quantity REAL DEFAULT 0,
-  ground_color TEXT,
-  image_url TEXT,
   status TEXT,
   raw TEXT,
   created_at TEXT,
-  updated_at TEXT,
-  deleted_at TEXT
+  updated_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS model_print_regions (
@@ -101,23 +90,16 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   id TEXT PRIMARY KEY,
   main_company_slug TEXT NOT NULL,
   document_id TEXT NOT NULL,
-  model_id TEXT,
-  model_name TEXT,
   product_name TEXT,
   description TEXT,
-  order_no TEXT,
-  dispatch_no TEXT,
   quantity REAL DEFAULT 0,
   unit TEXT,
   unit_price REAL DEFAULT 0,
   line_total REAL DEFAULT 0,
-  subtotal REAL DEFAULT 0,
   vat_amount REAL DEFAULT 0,
-  print_area TEXT,
   raw TEXT,
   created_at TEXT,
-  updated_at TEXT,
-  deleted_at TEXT
+  updated_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS production_records (
@@ -142,8 +124,7 @@ CREATE TABLE IF NOT EXISTS production_records (
   note TEXT,
   raw TEXT,
   created_at TEXT,
-  updated_at TEXT,
-  deleted_at TEXT
+  updated_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS model_document_links (
@@ -152,9 +133,7 @@ CREATE TABLE IF NOT EXISTS model_document_links (
   model_id TEXT NOT NULL,
   document_id TEXT NOT NULL,
   raw TEXT,
-  created_at TEXT,
-  updated_at TEXT,
-  deleted_at TEXT
+  created_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS model_production_links (
@@ -163,9 +142,7 @@ CREATE TABLE IF NOT EXISTS model_production_links (
   model_id TEXT NOT NULL,
   production_record_id TEXT NOT NULL,
   raw TEXT,
-  created_at TEXT,
-  updated_at TEXT,
-  deleted_at TEXT
+  created_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS machine_shift_defaults (

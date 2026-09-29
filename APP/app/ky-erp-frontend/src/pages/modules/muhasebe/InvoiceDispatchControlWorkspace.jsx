@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { apiGet } from "../../../utils/api";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "./invoiceDispatchControlWorkspace.css";
 
 const unwrap = (payload) => payload?.data?.data ?? payload?.data ?? payload ?? {};
@@ -90,25 +91,31 @@ export default function InvoiceDispatchControlWorkspace({ activeMainCompany }) {
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: "" }));
     try {
-      const [rowsPayload, summaryPayload] = await Promise.all([
-        apiGet("/muhasebe/customer-dispatches", { ...params, _ts: Date.now() }),
-        apiGet("/muhasebe/customer-dispatches/summary", { ...params, _ts: Date.now() }),
-      ]);
-      const rows = listOf(rowsPayload);
-      const value = unwrap(rowsPayload);
-      setState({
-        loading: false,
-        error: "",
-        rows,
-        summary: value?.summary || unwrap(summaryPayload) || {},
+      const tenant = params.mainCompanySlug || params.mainCompanyId || "main";
+      const result = await loadModuleData({
+        scope: `muhasebe:${tenant}:irsaliye-fatura-kontrol`,
+        sources: {
+          rows: { critical: true, load: () => apiGet("/muhasebe/customer-dispatches", { ...params, _ts: Date.now() }) },
+          summary: { fallback: {}, load: () => apiGet("/muhasebe/customer-dispatches/summary", { ...params, _ts: Date.now() }) },
+        },
+      });
+      setState((current) => {
+        const rowsPayload = result.data.rows;
+        const value = unwrap(rowsPayload);
+        return {
+          loading: false,
+          error: moduleLoadMessage(result, "İrsaliye ve fatura ana listesi alınamadı; son başarılı liste korunuyor.", "Kontrol özeti yenilenemedi; belge satırları kullanılabilir."),
+          rows: result.states.rows.status === "error" ? current.rows : listOf(rowsPayload),
+          summary: result.states.summary.status === "error" ? current.summary : value?.summary || unwrap(result.data.summary) || {},
+        };
       });
     } catch (error) {
-      setState({
+      setState((current) => ({
         loading: false,
         error: error?.message || "İrsaliye ve fatura kontrolü alınamadı.",
-        rows: [],
-        summary: {},
-      });
+        rows: current.rows,
+        summary: current.summary,
+      }));
     }
   }, [params]);
 
