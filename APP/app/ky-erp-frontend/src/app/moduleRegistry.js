@@ -148,6 +148,14 @@ const COMPLIANCE_MODULE = {
   ],
 };
 
+const DAILY_OPERATIONS_MODULE = {
+  key: "gunluk-operasyon",
+  permissionKey: "IK",
+  label: "Günlük Operasyon",
+  icon: "takvim",
+  groups: [{ label: "Günlük Takip", tabs: [["daily-entry", "Günlük Operasyon", "takvim"]] }],
+};
+
 const SYSTEM_SENTINEL_MODULE = {
   key: "sistem-merkezi",
   permissionKey: "SYSTEM_SENTINEL",
@@ -221,6 +229,7 @@ const preparedBaseModules = BASE_MODULES
 
 const modulesByKey = new Map(preparedBaseModules.map((module) => [module.key, module]));
 modulesByKey.set(PDKS_MODULE.key, PDKS_MODULE);
+modulesByKey.set(DAILY_OPERATIONS_MODULE.key, DAILY_OPERATIONS_MODULE);
 modulesByKey.set(ILETISIM_MODULE.key, ILETISIM_MODULE);
 modulesByKey.set(COMPLIANCE_MODULE.key, COMPLIANCE_MODULE);
 modulesByKey.set(DEPOLAMA_MODULE.key, DEPOLAMA_MODULE);
@@ -230,6 +239,7 @@ const CANONICAL_MODULE_ORDER = [
   "muhasebe",
   "e-belge",
   "ik",
+  "gunluk-operasyon",
   "pdks",
   "desen",
   "boyahane",
