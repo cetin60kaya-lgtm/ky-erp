@@ -5,18 +5,14 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-09-29",
   "scope": [
-    "canonical-compact-workspace",
-    "module-only-sidebar",
-    "central-task-accordion",
-    "centered-dialogs",
-    "no-side-drawers",
-    "single-column-master-detail",
-    "sticky-dialog-actions",
-    "retired-draggable-modal-runtime",
-    "compact-management-overview",
+    "gunluk-operasyon-appv3-route",
+    "gunluk-operasyon-daily-entry",
+    "daily-hr-workspace-loader",
+    "daily-route-regression-contract",
+    "frontend-full-test-suite",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
-    "live-bundle-verification"
+    "live-daily-entry-bundle-verification"
   ],
-  "note": "Apply one canonical interaction model across KY ERP: left navigation contains main modules only; module tasks are selected from the compact central İşlemler accordion; workspaces are bounded and centered; legacy master-detail layouts collapse into a vertical work stream; new/edit/quick actions use centered dialogs instead of side drawers; dialog headers and save/cancel actions stay visible; draggable/resizable persisted window behavior is retired. Muhasebe Yönetim Özeti remains reduced to essential receivable, payable, monthly incoming/outgoing invoice and upcoming check metrics."
+  "note": "Fix the production Günlük Operasyon route at /gunluk-operasyon/daily-entry. AppV3 now lazy-loads and renders DailyHrWorkspace for the canonical gunluk-operasyon module instead of falling through to Ekran bulunamadı. Add a route contract test and require the full frontend test suite before production Pages deploy. Live bundle verification now checks the canonical daily-entry path."
 }
