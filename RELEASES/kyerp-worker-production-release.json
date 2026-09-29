@@ -3,21 +3,23 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "requestedAt": "2026-09-28T07:54:00+03:00",
-  "attempt": 3,
+  "sourceCommit": "8a48d513f66385ada294d56ceccaa52b31f068f8",
+  "requestedAt": "2026-09-29T05:00:00+03:00",
+  "attempt": 4,
   "scope": [
-    "accounting-tenant-fail-closed",
-    "accounting-live-state-stability",
-    "accounting-ledger-debit-credit-xor",
-    "accounting-payment-plan-idempotency",
-    "hr-invalid-employee-controlled-error",
-    "design-storage-compatibility-endpoint",
-    "gmail-route-registration",
+    "muhasebe-final-canonical",
+    "accounting-payment-idempotency",
+    "accounting-transaction-direction-normalization",
+    "accounting-live-revision",
+    "mail-provider-accepted-send-contract",
+    "migration-0050-mail-core",
+    "migration-0051-mail-user-state",
+    "migration-0055-accounting-workspace-core",
     "worker-typecheck-test-build",
     "d1-full-predeploy-backup",
     "d1-no-reset",
     "cloudflare-worker-production",
     "live-api-health-check"
   ],
-  "note": "Final production closure for Muhasebe, IK, DESEN and Gmail runtime errors. Canonical source commit 650835fffb2a4d3c6f013e1890a76d4973e80002 passed backend typecheck, full backend tests and build. Tenant fallbacks are removed from the touched accounting flows, payment posting is idempotent, invalid HR employee selection is controlled, DESEN compatibility endpoint is present and Gmail routes are registered. Deploy path keeps the existing full D1 predeploy backup and does not reset live data."
+  "note": "Muhasebe final kabul production Worker release. Canonical source merge 8a48d513f66385ada294d56ceccaa52b31f068f8 passed final acceptance on the production branch. Release order is full D1 backup, additive 0050/0051/0055 migrations with schema proof, Worker deploy and live API health. No D1 reset."
 }
