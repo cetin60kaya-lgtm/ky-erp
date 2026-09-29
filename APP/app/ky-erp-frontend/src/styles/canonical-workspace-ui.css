@@ -1,0 +1,183 @@
+/* KY ERP canonical UI standard
+   Tek çalışma kanvası, merkez dialog, sakin ve kısa işlem akışı. */
+
+:root {
+  --ky-workspace-max: 1240px;
+  --ky-workspace-narrow: 980px;
+  --ky-dialog-max: 940px;
+  --ky-dialog-wide-max: 1060px;
+  --ky-dialog-gap: 22px;
+}
+
+/* Bütün ana modüller aynı yatay ritmi kullanır; büyük monitörde ekran sağa sola yayılmaz. */
+.shell-v3-workspace > * {
+  width: min(100%, var(--ky-workspace-max));
+  margin-inline: auto;
+}
+
+.shell-v3-workspace :where(.content-card, [class$="-workspace"], [class$="-page"]) {
+  min-width: 0;
+}
+
+/* Kısa form ve ayar yüzeyleri mümkün olduğunca okunabilir merkez genişlikte kalır. */
+.shell-v3-workspace :where(
+  [class*="settings"],
+  [class*="form-shell"],
+  [class*="form-card"],
+  [class*="detail-form"]
+) {
+  max-width: var(--ky-workspace-narrow);
+}
+
+/* Eski drawer/backdrop isimleri korunabilir; davranış artık yan panel değil merkez dialogdur. */
+:where(
+  [class*="drawer-layer"],
+  [class*="drawer-backdrop"],
+  [class*="drawer-overlay"],
+  [class*="drawer-scrim"],
+  [class*="modal-backdrop"],
+  [class*="modal-overlay"],
+  [class*="modal-layer"],
+  [class*="modal-bg"],
+  [class*="dialog-backdrop"],
+  [class*="dialog-overlay"]
+) {
+  align-items: center !important;
+  justify-content: center !important;
+  padding: var(--ky-dialog-gap) !important;
+}
+
+:where(
+  [class*="drawer-layer"],
+  [class*="drawer-backdrop"],
+  [class*="drawer-overlay"],
+  [class*="drawer-scrim"],
+  [class*="modal-backdrop"],
+  [class*="modal-overlay"],
+  [class*="modal-layer"],
+  [class*="modal-bg"],
+  [class*="dialog-backdrop"],
+  [class*="dialog-overlay"]
+) > :where(
+  [role="dialog"],
+  dialog,
+  aside[class*="drawer"],
+  [class$="-drawer"],
+  [class*="drawer-panel"],
+  [class*="drawer-card"],
+  [class$="-modal"],
+  [class*="modal-card"],
+  [class*="modal-box"],
+  [class*="modal-panel"]
+) {
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+  width: min(var(--ky-dialog-max), calc(100vw - (var(--ky-dialog-gap) * 2))) !important;
+  max-width: var(--ky-dialog-max) !important;
+  height: auto !important;
+  max-height: calc(100dvh - (var(--ky-dialog-gap) * 2)) !important;
+  margin: auto !important;
+  border-radius: 14px !important;
+  overflow: auto !important;
+  box-shadow: 0 20px 54px rgba(15, 23, 42, 0.24) !important;
+}
+
+/* Geniş belge/rapor dialogları yine merkezde kalır; sadece gerektiği kadar büyür. */
+:where(
+  [class*="drawer-layer"],
+  [class*="drawer-backdrop"],
+  [class*="modal-backdrop"],
+  [class*="modal-overlay"]
+) > :where(
+  [class*="drawer-wide"],
+  [class*="modal-wide"],
+  [class*="document-modal"],
+  [class*="preview-modal"]
+) {
+  width: min(var(--ky-dialog-wide-max), calc(100vw - (var(--ky-dialog-gap) * 2))) !important;
+  max-width: var(--ky-dialog-wide-max) !important;
+}
+
+/* Eski sürüklenebilir / yeniden boyutlandırılabilir pencere davranışı canonical düzende kullanılmaz. */
+.ky-modal-resize-handle {
+  display: none !important;
+}
+
+.ky-persistent-modal,
+.ky-modal-positioned {
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important;
+  left: auto !important;
+  width: auto;
+  height: auto;
+  transform: none !important;
+  resize: none !important;
+}
+
+.ky-modal-drag-handle {
+  cursor: default !important;
+  touch-action: auto !important;
+}
+
+/* Açılır detaylar aynı görsel dilde: başlık sakin, içerik ihtiyaç halinde görünür. */
+.shell-v3-workspace details {
+  border-radius: 10px;
+}
+
+.shell-v3-workspace details > summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Aksiyon satırları ekran kenarlarına dağılmaz. */
+.shell-v3-workspace :where(
+  [class*="toolbar"],
+  [class*="action-row"],
+  [class*="actions-row"],
+  [class*="button-row"]
+) {
+  min-width: 0;
+}
+
+/* Telefon/tablet: tek kolon ve ekrana oturan merkez dialog. */
+@media (max-width: 900px) {
+  :root {
+    --ky-dialog-gap: 10px;
+  }
+
+  .shell-v3-workspace > * {
+    width: 100%;
+  }
+
+  :where(
+    [class*="drawer-layer"],
+    [class*="drawer-backdrop"],
+    [class*="drawer-overlay"],
+    [class*="modal-backdrop"],
+    [class*="modal-overlay"],
+    [class*="modal-layer"],
+    [class*="modal-bg"]
+  ) > :where(
+    [role="dialog"],
+    dialog,
+    aside[class*="drawer"],
+    [class$="-drawer"],
+    [class*="drawer-panel"],
+    [class*="drawer-card"],
+    [class$="-modal"],
+    [class*="modal-card"],
+    [class*="modal-box"],
+    [class*="modal-panel"]
+  ) {
+    width: calc(100vw - 20px) !important;
+    max-width: calc(100vw - 20px) !important;
+    max-height: calc(100dvh - 20px) !important;
+    border-radius: 12px !important;
+  }
+}
