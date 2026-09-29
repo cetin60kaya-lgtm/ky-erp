@@ -20,7 +20,8 @@ test("worker exposes admin aliases without removing external AI routes", () => {
   assert.match(worker, /app\.get\("\/api\/ai\/platform-access\/me"/);
 });
 
-test("security entry dispatches and CORS-protects the admin AI route", () => {
+test("security entry dispatches the admin AI route and keeps CORS protection", () => {
   assert.match(entry, /command\.use\("\/api\/admin\/users\/\*", cors/);
+  assert.match(entry, /app\.use\("\/api\/admin\/users\/\*", cors/);
   assert.match(entry, /ai-platform-access\$\/\.test\(path\)/);
 });
