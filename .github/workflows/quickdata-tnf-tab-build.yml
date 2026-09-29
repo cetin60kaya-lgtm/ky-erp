@@ -1,0 +1,47 @@
+name: QuickDataTool TNF Tab Build
+
+on:
+  push:
+    branches:
+      - codex/quickdata-tnf-tab-rev4
+    paths:
+      - 'APP/desktop/kyerp-pdks-current/tools/QuickDataTool/**'
+      - 'APP/desktop/kyerp-pdks-current/src/KYERP.PDKS.Core/**'
+      - '.github/workflows/quickdata-tnf-tab-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish QuickDataTool
+        shell: pwsh
+        run: |
+          $proj = 'APP/desktop/kyerp-pdks-current/tools/QuickDataTool/QuickDataTool.csproj'
+          dotnet restore $proj
+          dotnet publish $proj -c Release -r win-x64 --self-contained false -o "$env:RUNNER_TEMP\QuickDataTool"
+          @'
+          HKN PDKS HIZLI VERI - TNF HAZIRLA ENTEGRE REV4
+
+          Tek giris: QuickDataTool.exe
+          Yeni sekme: TNF Hazirla
+          - DATABASE.GDB'ye yazmaz.
+          - Aktif personeli ana uygulamadaki listeden alir.
+          - Her gun once tum girisleri, sonra tum cikislari saat sirasiyla yazar.
+          - Dosya Masaustune islem tarihiyle kaydedilir: 29&9&2026.txt
+          - Ayni ad varsa (1), (2) diye devam eder.
+          - Varsayilan satir: 00003,08:28,290926,1,001
+          - Terminal Format Ayari uygulama icindedir.
+          - Eski Toplu Islem butonu DB + TNF UYGULA diye belirginlestirildi.
+          '@ | Set-Content "$env:RUNNER_TEMP\QuickDataTool\README_REV4.txt" -Encoding UTF8
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HKN-PDKS-Hizli-Veri-REV4
+          path: ${{ runner.temp }}\QuickDataTool\**
+          if-no-files-found: error
+          retention-days: 7
