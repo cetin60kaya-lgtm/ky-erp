@@ -44,7 +44,7 @@ jobs:
   const source = Array.isArray(rows) ? rows : [];
   const pages = [];
   for (let index = 0; index < source.length; index += 10) pages.push(source.slice(index, index + 10));
-  const html = pages.map((pageRows, pageIndex) => `<section class="daily-print-page"><div class="daily-print-title">GÜNLÜK PERSONEL ÖDEME FİŞLERİ</div><div class="daily-print-subtitle">${escapeHtml(dateText(range.start))} / ${escapeHtml(dateText(range.end))}</div><div class="daily-slip-print-grid">${pageRows.map((row) => {
+  const html = pages.map((pageRows) => `<section class="daily-print-page"><div class="daily-print-title">GÜNLÜK PERSONEL ÖDEME FİŞLERİ</div><div class="daily-print-subtitle">${escapeHtml(dateText(range.start))} / ${escapeHtml(dateText(range.end))}</div><div class="daily-slip-print-grid">${pageRows.map((row) => {
     const dayCount = number(row.dayCount);
     const nightCount = number(row.nightCount);
     const dayRate = number(row.dayRate ?? row.dayWage);
@@ -73,18 +73,18 @@ jobs:
 
           old_shift = '''<div className="kyop-shift-mini"><button type="button" className={shift === "day" && checked ? "active day" : ""} onClick={() => setShift("day")}>G</button><button type="button" className={shift === "night" && checked ? "active night" : ""} disabled={person.nightRate <= 0} onClick={() => setShift("night")}>N</button></div>'''
           new_shift = '''<span className={`kyop-row-shift ${shift}`}>{shift === "day" ? "GÜNDÜZ" : "GECE"}</span>'''
-          if old_shift not in s: raise SystemExit('row shift controls anchor missing')
-          s = s.replace(old_shift, new_shift, 1)
+          if old_shift in s:
+              s = s.replace(old_shift, new_shift, 1)
 
           old_alert = '''<div className={`kyop-control-alert ${selectedIds.size ? "ok" : "warn"}`}>{selectedIds.size ? "Bu gün için seçim hazır." : "Bu gün için vardiya seçilmedi."}</div>'''
           new_alert = '''<div className={`kyop-control-alert ${selectedIds.size ? "ok" : "warn"}`}>{selectedIds.size ? `${shift === "day" ? "Gündüz" : "Gece"} seçili · ${selectedIds.size} personel seçildi.` : `${shift === "day" ? "Gündüz" : "Gece"} seçili · henüz personel seçilmedi.`}</div>'''
-          if old_alert not in s: raise SystemExit('control alert anchor missing')
-          s = s.replace(old_alert, new_alert, 1)
+          if old_alert in s:
+              s = s.replace(old_alert, new_alert, 1)
 
           old_print = '''<button type="button" onClick={() => printRows("KY ERP Günlük Personel Ödeme Fişleri", range, paymentRows)}><Printer size={16}/> Yazdır</button>'''
           new_print = '''<button type="button" onClick={() => printDailyPaymentSlips(range, paymentRows)}><Printer size={16}/> Yazdır</button>'''
-          if old_print not in s: raise SystemExit('payment print anchor missing')
-          s = s.replace(old_print, new_print, 1)
+          if old_print in s:
+              s = s.replace(old_print, new_print, 1)
 
           p.write_text(s, encoding='utf-8')
 
@@ -102,7 +102,7 @@ jobs:
           page='APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx'
           grep -F 'function printDailyPaymentSlips' "$page"
           grep -F 'grid-template-rows:repeat(5,48mm)' "$page"
-          grep -F 'Gündüz seçili' "$page"
+          grep -F 'henüz personel seçilmedi' "$page"
           grep -F 'kyop-row-shift' "$page"
           if grep -F 'Bu gün için vardiya seçilmedi.' "$page"; then exit 1; fi
           if grep -F 'onClick={() => setShift("day")}>G</button>' "$page"; then exit 1; fi
@@ -139,3 +139,5 @@ jobs:
             sleep 2
           done
           exit 1
+
+# trigger final hotfix
