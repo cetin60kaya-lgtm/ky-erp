@@ -15,7 +15,12 @@ test("existing module and page layouts stay visible", () => {
   assert.match(css, /\.shell-v3-sidebar \.shell-v3-submenu\s*\{\s*display:\s*block;/);
   assert.doesNotMatch(css, /--ky-workspace-max/);
   assert.doesNotMatch(css, /\.ccw-master-detail\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\) !important/);
-  assert.match(navigator, /return null/);
+});
+
+test("daily operations keeps its current navigator while other modules do not", () => {
+  assert.match(navigator, /module\?\.key !== "gunluk-operasyon"/);
+  assert.match(navigator, /ky-task-nav__trigger/);
+  assert.match(navigator, /onSelect\?\.\(key\)/);
 });
 
 test("drawer side panel and modal layers converge to centered dialogs", () => {
