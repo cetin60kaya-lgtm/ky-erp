@@ -4,6 +4,8 @@ import test from "node:test";
 
 const css = readFileSync(new URL("./canonical-workspace-ui.css", import.meta.url), "utf8");
 const main = readFileSync(new URL("../main.jsx", import.meta.url), "utf8");
+const app = readFileSync(new URL("../AppV3.jsx", import.meta.url), "utf8");
+const navigator = readFileSync(new URL("../components/erp/CanonicalTaskNavigator.jsx", import.meta.url), "utf8");
 
 test("canonical UI is loaded globally after legacy module styles", () => {
   assert.match(main, /await import\("\.\/styles\/canonical-workspace-ui\.css"\)/);
@@ -13,6 +15,14 @@ test("canonical UI is loaded globally after legacy module styles", () => {
 test("all module workspaces share one compact centered canvas", () => {
   assert.match(css, /--ky-workspace-max:\s*1180px/);
   assert.match(css, /\.shell-v3-workspace > \*[\s\S]*margin-inline:\s*auto/);
+});
+
+test("sidebar owns modules only while task navigation lives in the center", () => {
+  assert.match(css, /\.shell-v3-sidebar \.shell-v3-submenu[\s\S]*display:\s*none !important/);
+  assert.match(app, /<CanonicalTaskNavigator/);
+  assert.match(navigator, /ky-task-nav__trigger/);
+  assert.match(navigator, /<details/);
+  assert.match(navigator, /onSelect\?\.\(key\)/);
 });
 
 test("drawer side panel and modal layers converge to centered dialogs", () => {
