@@ -33,6 +33,7 @@ import {
   getDailyPaymentSlips,
   getDailyPeriodLock,
   getDailyRoster,
+  getDailyRevisions,
   getDailyWeeklySummary,
   markDailyPaid,
   previewDailyExcel,
@@ -43,6 +44,7 @@ import {
 } from "../../../services/dailyOpsApi";
 import { printHtmlDocument } from "../../../services/printService";
 import "./daily-hr-workspace.css";
+import "./daily-hr-workspace-final.css";
 
 const VALID_VIEWS = new Set(["daily-entry", "daily-cards", "daily-weekly", "daily-payments"]);
 const RANGE_KEY = "kyerp.dailyOperations.range.v5";
@@ -122,7 +124,7 @@ function printRows(title, range, rows) {
   return printHtmlDocument({ title, html: `<main><h1>${escapeHtml(title)}</h1><p>${escapeHtml(dateText(range.start))} — ${escapeHtml(dateText(range.end))}</p><table><thead><tr><th>Personel</th><th>Vasıf</th><th>Gündüz</th><th>Gece</th><th>Toplam</th></tr></thead><tbody>${body}</tbody></table></main>`, css: "@page{size:A4;margin:12mm}body{font:12px Arial,sans-serif;color:#111}h1{font-size:18px;margin:0 0 4px}p{margin:0 0 14px;color:#555}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:7px;text-align:left}th{background:#f1f5f9}" });
 }
 function actionLabel(row = {}) {
-  const key = normalizeText(row.action || row.operation || row.eventType || row.type);
+  const key = normalizeText(row.action || row.operation || row.eventType || row.type || row.changeType);
   if (key.includes("PAID") || key.includes("ODE") || key.includes("ÖDE")) return "ÖDENDİ";
   if (key.includes("REMOVE") || key.includes("DELETE") || key.includes("SIL")) return "KAYIT KALDIRILDI";
   if (key.includes("CREATE") || key.includes("ADD")) return "KAYIT EKLENDİ";
@@ -148,11 +150,17 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [summaryRows, setSummaryRows] = useState([]);
   const [paymentRows, setPaymentRows] = useState([]);
   const [query, setQuery] = useState("");
+  const [poolAddQuery, setPoolAddQuery] = useState("");
+  const [quickAddQuery, setQuickAddQuery] = useState("");
+  const [cardAddToRoster, setCardAddToRoster] = useState(false);
   const [cardDialog, setCardDialog] = useState(null);
   const [quick, setQuick] = useState(null);
   const [logOpen, setLogOpen] = useState(false);
   const [logTab, setLogTab] = useState("summary");
   const [logRows, setLogRows] = useState([]);
+  const [logRevisions, setLogRevisions] = useState([]);
+  const [logAttendance, setLogAttendance] = useState([]);
+  const [logRange, setLogRange] = useState(readRange);
   const [logQuery, setLogQuery] = useState("");
   const [logAction, setLogAction] = useState("");
   const [logShift, setLogShift] = useState("all");
@@ -190,13 +198,16 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         getDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }),
         getDailyPeriodLock({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }).catch(() => null),
       ]);
-      setAttendance(Array.isArray(rows) ? rows : []);
+      const attendanceRows = Array.isArray(rows) ? rows : [];
+      setAttendance(attendanceRows);
       const savedIds = Array.isArray(roster?.employeeIds) ? roster.employeeIds.map(String) : Array.isArray(roster) ? roster.map(String) : [];
-      if (savedIds.length) { setRosterIds(new Set(savedIds)); setRosterSaved(true); }
-      else { setRosterIds(new Set(employees.filter((row) => row.active !== false).map((row) => row.id))); setRosterSaved(false); }
+      const historicalIds = [...new Set(attendanceRows.map(rowEmployeeId).filter(Boolean))];
+      const resolvedIds = savedIds.length ? savedIds : historicalIds;
+      setRosterIds(new Set(resolvedIds));
+      setRosterSaved(savedIds.length > 0);
       if (lock !== null) { setPeriodLocked(Boolean(lock?.locked ?? lock?.isLocked ?? lock?.active)); setPeriodLockKnown(true); }
     } catch (loadError) { setError(loadError?.message || "Dönem kayıtları alınamadı."); }
-  }, [companyId, employees, range.end, range.start]);
+  }, [companyId, range.end, range.start]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -240,12 +251,19 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     return employees.filter((person) => !needle || `${person.name} ${person.personnelNo} ${person.role} ${person.broker}`.toLocaleLowerCase("tr-TR").includes(needle));
   }, [employees, query]);
   const activeRosterPeople = useMemo(() => employees.filter((person) => person.active !== false && rosterIds.has(person.id)), [employees, rosterIds]);
+  const availableRosterPeople = useMemo(() => employees.filter((person) => person.active !== false && !rosterIds.has(person.id)), [employees, rosterIds]);
+  const resolveRosterChoice = useCallback((raw, candidates = availableRosterPeople) => {
+    const needle = normalizeText(raw);
+    if (!needle) return null;
+    return candidates.find((person) => normalizeText(person.personnelNo) === needle || normalizeText(person.name) === needle)
+      || candidates.find((person) => `${normalizeText(person.personnelNo)} ${normalizeText(person.name)}`.includes(needle))
+      || null;
+  }, [availableRosterPeople]);
   const visibleEntryPeople = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("tr-TR");
     return activeRosterPeople.filter((person) => !needle || `${person.name} ${person.personnelNo} ${person.role}`.toLocaleLowerCase("tr-TR").includes(needle));
   }, [activeRosterPeople, query]);
   const recordByEmployee = useMemo(() => new Map(records.map((row) => [rowEmployeeId(row), row])), [records]);
-  const selectedTotal = useMemo(() => activeRosterPeople.reduce((sum, person) => sum + (selectedIds.has(person.id) ? (shift === "night" ? person.nightRate : person.dayRate) : 0), 0), [activeRosterPeople, selectedIds, shift]);
   const daySummaries = useMemo(() => days.map((date) => {
     const rows = attendance.filter((row) => rowDate(row) === date);
     let dayCount = 0; let nightCount = 0; let total = 0; const people = new Set();
@@ -268,6 +286,21 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     try { const saved = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...rosterIds] }); setRosterIds(new Set(Array.isArray(saved?.employeeIds) ? saved.employeeIds.map(String) : [...rosterIds])); setRosterSaved(true); setNotice("Tarih aralığı personel listesi kaydedildi."); }
     catch (e) { setError(e?.message || "Personel listesi kaydedilemedi."); } finally { setBusy(false); }
   };
+  const addRosterPerson = (person, target = "main") => {
+    if (!person?.id) { setError("Listeden eklenecek personeli seçin."); return; }
+    setRosterIds((current) => { const next = new Set(current); next.add(person.id); return next; });
+    setRosterSaved(false);
+    if (target === "quick") setQuickAddQuery(""); else setPoolAddQuery("");
+    setNotice(`${person.name} tarih aralığı listesine eklendi. Kaydettiğinizde sunucuya yazılacak.`);
+  };
+  const removeRosterPerson = (personId) => {
+    setRosterIds((current) => { const next = new Set(current); next.delete(personId); return next; });
+    setSelectedIds((current) => { const next = new Set(current); next.delete(personId); return next; });
+    setRosterSaved(false);
+  };
+  const addFromPool = () => addRosterPerson(resolveRosterChoice(poolAddQuery), "main");
+  const addFromQuickPool = () => addRosterPerson(resolveRosterChoice(quickAddQuery), "quick");
+
   const saveFocused = async () => {
     if (busy || periodLocked) return; setBusy(true); setError(""); setNotice("");
     try {
@@ -302,6 +335,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (!quick || busy || periodLocked) return;
     const snapshot = quick; setBusy(true); setError("");
     try {
+      if (!rosterSaved) { await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...rosterIds] }); setRosterSaved(true); }
       const rows = await getDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift });
       const currentMap = new Map((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), row]));
       await saveDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift, personnelEntries: activeRosterPeople.map((person) => ({ personelId: person.id, status: snapshot.ids.has(person.id) ? "ACTIVE" : "REMOVE", expectedUpdatedAt: currentMap.get(person.id)?.updatedAt || currentMap.get(person.id)?.attendanceUpdatedAt || "", note: currentMap.get(person.id)?.note || "" })) });
@@ -314,15 +348,35 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     finally { setBusy(false); }
   };
 
-  const loadLog = async () => {
+  const loadLog = async (targetRange = logRange, shouldOpen = true) => {
+    if (busy) return;
+    const safe = targetRange?.start && targetRange?.end && targetRange.end >= targetRange.start ? targetRange : range;
     setBusy(true); setError("");
     try {
-      let audits = [];
-      try { const result = await getDailyAudit({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, limit: 800 }); audits = Array.isArray(result) ? result : Array.isArray(result?.rows) ? result.rows : []; }
-      catch { const batches = await Promise.all(days.map((date) => getDailyAudit({ mainCompanyId: companyId, date, limit: 250 }).catch(() => []))); audits = batches.flatMap((r) => Array.isArray(r) ? r : Array.isArray(r?.rows) ? r.rows : []); }
-      setLogRows(audits.sort((a, b) => String(b.createdAt || b.timestamp || "").localeCompare(String(a.createdAt || a.timestamp || "")))); setLogOpen(true);
+      const auditPromise = getDailyAudit({ mainCompanyId: companyId, startDate: safe.start, endDate: safe.end, limit: 1200 }).catch(async () => {
+        const batches = await Promise.all(rangeDays(safe.start, safe.end).map((date) => getDailyAudit({ mainCompanyId: companyId, date, limit: 300 }).catch(() => [])));
+        return batches.flatMap((row) => Array.isArray(row) ? row : Array.isArray(row?.rows) ? row.rows : []);
+      });
+      const [auditResult, revisionResult, attendanceResult] = await Promise.all([
+        auditPromise,
+        getDailyRevisions({ mainCompanyId: companyId, startDate: safe.start, endDate: safe.end, limit: 1200 }).catch(() => []),
+        getDailyAttendance({ mainCompanyId: companyId, startDate: safe.start, endDate: safe.end }).catch(() => []),
+      ]);
+      const audits = Array.isArray(auditResult) ? auditResult : Array.isArray(auditResult?.rows) ? auditResult.rows : [];
+      const revisions = Array.isArray(revisionResult) ? revisionResult : Array.isArray(revisionResult?.rows) ? revisionResult.rows : [];
+      setLogRows(audits.sort((a, b) => String(b.createdAt || b.timestamp || "").localeCompare(String(a.createdAt || a.timestamp || ""))));
+      setLogRevisions(revisions);
+      setLogAttendance(Array.isArray(attendanceResult) ? attendanceResult : []);
+      setLogRange(safe);
+      if (shouldOpen) setLogOpen(true);
     } catch (e) { setError(e?.message || "Log kayıtları alınamadı."); }
     finally { setBusy(false); }
+  };
+  const searchLogRange = () => loadLog(logRange, true);
+  const moveLogWeek = (offset) => {
+    const next = { start: addDays(logRange.start, offset * 7), end: addDays(logRange.end, offset * 7) };
+    setLogRange(next);
+    void loadLog(next, true);
   };
   const togglePeriodLock = async () => {
     if (busy) return; setBusy(true); setError("");
@@ -335,8 +389,25 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (busy || !cardDialog) return;
     if (!String(cardDialog.name || "").trim()) { setError("Ad soyad zorunludur."); return; }
     setBusy(true); setError("");
-    try { const payload = employeePayload(cardDialog, companyId); if (cardDialog.id) await updateDailyEmployee(cardDialog.id, payload); else await createDailyEmployee(payload); await loadEmployees(); setCardDialog(null); setNotice(cardDialog.id ? "Personel kartı güncellendi." : "Yeni günlük personel oluşturuldu."); }
-    catch (e) { setError(e?.message || "Personel kartı kaydedilemedi."); }
+    try {
+      const payload = employeePayload(cardDialog, companyId);
+      let saved = null;
+      if (cardDialog.id) saved = await updateDailyEmployee(cardDialog.id, payload);
+      else saved = await createDailyEmployee(payload);
+      const refreshed = await loadEmployees();
+      if (cardAddToRoster && !cardDialog.id) {
+        const savedId = String(saved?.id || saved?.employeeId || "");
+        const created = refreshed.find((person) => person.id === savedId)
+          || refreshed.find((person) => normalizeText(person.personnelNo) === normalizeText(payload.personnelNo) && payload.personnelNo)
+          || refreshed.find((person) => normalizeText(person.name) === normalizeText(payload.fullName));
+        if (created?.id) {
+          setRosterIds((current) => { const next = new Set(current); next.add(created.id); return next; });
+          setRosterSaved(false);
+        }
+      }
+      setCardDialog(null); setCardAddToRoster(false);
+      setNotice(cardDialog.id ? "Personel kartı güncellendi." : "Yeni günlük personel oluşturuldu.");
+    } catch (e) { setError(e?.message || "Personel kartı kaydedilemedi."); }
     finally { setBusy(false); }
   };
   const deactivateCard = async (person) => { if (busy || !person?.id) return; setBusy(true); try { await deleteDailyEmployee(person.id, { mainCompanyId: companyId }); await loadEmployees(); setNotice(`${person.name} pasife alındı.`); } catch (e) { setError(e?.message || "Personel pasife alınamadı."); } finally { setBusy(false); } };
@@ -356,14 +427,24 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const rangeControls = <div className="gop-range-controls"><button type="button" onClick={() => shiftRange(-1)}>‹ Önceki hafta</button><label>Başlangıç<input type="date" value={range.start} onChange={(e) => setSafeRange({ ...range, start: e.target.value })} /></label><label>Bitiş<input type="date" value={range.end} onChange={(e) => setSafeRange({ ...range, end: e.target.value })} /></label><button type="button" onClick={() => shiftRange(1)}>Sonraki hafta ›</button></div>;
   const controlNeedle = normalizeText(controlQuery);
   const controlPerson = controlNeedle ? employees.find((person) => normalizeText(person.personnelNo) === controlNeedle || normalizeText(person.name) === controlNeedle) || employees.find((person) => `${normalizeText(person.personnelNo)} ${normalizeText(person.name)}`.includes(controlNeedle)) : null;
-  const personControlRows = controlPerson ? attendance.filter((row) => rowEmployeeId(row) === controlPerson.id && rowDate(row) >= range.start && rowDate(row) <= range.end).sort((a, b) => rowDate(a).localeCompare(rowDate(b))) : [];
+  const personControlRows = controlPerson ? logAttendance.filter((row) => rowEmployeeId(row) === controlPerson.id && rowDate(row) >= logRange.start && rowDate(row) <= logRange.end).sort((a, b) => rowDate(a).localeCompare(rowDate(b))) : [];
   const controlTotals = personControlRows.reduce((sum, row) => ({ day: sum.day + (rowDay(row) ? 1 : 0), night: sum.night + (rowNight(row) ? 1 : 0), paid: sum.paid + (rowPaid(row) ? (rowDay(row) ? 1 : 0) + (rowNight(row) ? 1 : 0) : 0), total: sum.total + (rowDay(row) ? number(row.dayWage ?? controlPerson?.dayRate) : 0) + (rowNight(row) ? number(row.nightWage ?? controlPerson?.nightRate) : 0) }), { day: 0, night: 0, paid: 0, total: 0 });
-  const visibleLogRows = logRows.filter((row) => {
-    const personText = `${row.personName || row.employeeName || row.name || ""} ${row.personnelNo || row.code || ""}`.toLocaleLowerCase("tr-TR");
+  const revisionEvents = logRevisions.map((row) => ({ ...row, action: row.action || row.changeType || "REVISION", createdAt: row.createdAt || row.timestamp }));
+  const rawLogRows = logRows.length || revisionEvents.length ? [...logRows, ...revisionEvents] : logAttendance.flatMap((row) => {
+    const events = [];
+    if (rowDay(row)) events.push({ ...row, action: "KAYIT", shift: "day", createdAt: row.updatedAt || row.createdAt });
+    if (rowNight(row)) events.push({ ...row, action: "KAYIT", shift: "night", createdAt: row.updatedAt || row.createdAt });
+    return events;
+  });
+  const visibleLogRows = rawLogRows.filter((row) => {
+    const person = employeeMap.get(rowEmployeeId(row));
+    const personText = `${row.personName || row.employeeName || row.name || person?.name || ""} ${row.personnelNo || row.code || person?.personnelNo || ""}`.toLocaleLowerCase("tr-TR");
     const actionText = actionLabel(row).toLocaleLowerCase("tr-TR");
     const shiftName = String(row.shift || row.vardiya || "").toLowerCase();
     return (!logQuery || personText.includes(logQuery.toLocaleLowerCase("tr-TR"))) && (!logAction || actionText.includes(logAction.toLocaleLowerCase("tr-TR"))) && (logShift === "all" || shiftName.includes(logShift));
-  });
+  }).sort((a, b) => String(b.createdAt || b.timestamp || rowDate(b)).localeCompare(String(a.createdAt || a.timestamp || rowDate(a))));
+  const logPeople = new Set(logAttendance.map(rowEmployeeId).filter(Boolean)).size;
+  const logTotals = logAttendance.reduce((sum, row) => ({ day: sum.day + (rowDay(row) ? 1 : 0), night: sum.night + (rowNight(row) ? 1 : 0), total: sum.total + (rowDay(row) ? number(row.dayWage ?? employeeMap.get(rowEmployeeId(row))?.dayRate) : 0) + (rowNight(row) ? number(row.nightWage ?? employeeMap.get(rowEmployeeId(row))?.nightRate) : 0) }), { day: 0, night: 0, total: 0 });
   const quickDirty = quick ? !sameSet(quick.ids, quick.baseline) : false;
   const quickPeople = quick ? activeRosterPeople.filter((person) => !quick.query || `${person.name} ${person.personnelNo} ${person.role}`.toLocaleLowerCase("tr-TR").includes(quick.query.toLocaleLowerCase("tr-TR"))) : [];
   const quickGroups = quick ? (() => { const groups = new Map(); quickPeople.forEach((person) => { const key = person.role || "Vasıfsız"; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(person); }); return [...groups.entries()].sort(roleSort); })() : [];
@@ -380,12 +461,12 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         <div className="kyop-titlebar"><div><span>KY ERP / GÜNLÜK OPERASYON / GÜVENLİ GİRİŞ</span><h1>Günlük Personel Girişi</h1><p>Detaylı kontrolde tek gün aktiftir; hızlı giriş de tek gün ve tek vardiya üzerinden çalışır.</p></div><div className="kyop-mode"><button className={shift === "day" ? "active day" : ""} type="button" onClick={() => setShift("day")}><Sun size={17}/> GÜNDÜZ GİRİŞİ</button><button className={shift === "night" ? "active night" : ""} type="button" onClick={() => setShift("night")}><Moon size={17}/> GECE GİRİŞİ</button></div></div>
         <div className="kyop-actions">
           <label>Başlangıç<input type="date" value={range.start} onChange={(e) => setSafeRange({ ...range, start: e.target.value })}/></label><label>Bitiş<input type="date" value={range.end} onChange={(e) => setSafeRange({ ...range, end: e.target.value })}/></label>
-          <button type="button" onClick={thisWeek}><CalendarDays size={15}/> Bu Hafta</button><button type="button" className="primary" onClick={openQuick}><Zap size={15}/> Hızlı Giriş</button><button type="button" onClick={() => setCardDialog({ ...EMPTY_PERSON })}><UserPlus size={15}/> Yeni Personel Ekle</button><button type="button" onClick={selectAll}><CheckCircle2 size={15}/> Tümünü Seç</button><button type="button" onClick={clearAll}>Seçimi Kaldır</button><button type="button" onClick={loadFocused}><RefreshCw size={15}/> Kayıtlı Seçimi Yükle</button><button type="button" className="primary" disabled={busy || periodLocked} onClick={saveFocused}><Save size={15}/> Günlük Kaydet</button><button type="button" onClick={() => printRows("KY ERP Günlük Personel Haftalık Liste", range, daySummaries.map((d) => ({ name: dateText(d.date), role: `${d.people} personel`, dayCount: d.dayCount, nightCount: d.nightCount, totalAmount: d.total })))}><Printer size={15}/> Haftalık Liste Yazdır</button><button type="button" onClick={exportExcel}><FileSpreadsheet size={15}/> Excel Aktar</button><button type="button" onClick={importExcel}><FileSpreadsheet size={15}/> Excel Yükle</button>
+          <button type="button" onClick={thisWeek}><CalendarDays size={15}/> Bu Hafta</button><button type="button" className="primary" onClick={openQuick}><Zap size={15}/> Hızlı Giriş</button><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><UserPlus size={15}/> Yeni Personel Ekle</button><button type="button" onClick={selectAll}><CheckCircle2 size={15}/> Tümünü Seç</button><button type="button" onClick={clearAll}>Seçimi Kaldır</button><button type="button" onClick={loadFocused}><RefreshCw size={15}/> Kayıtlı Seçimi Yükle</button><button type="button" className="primary" disabled={busy || periodLocked} onClick={saveFocused}><Save size={15}/> Günlük Kaydet</button><button type="button" onClick={() => printRows("KY ERP Günlük Personel Haftalık Liste", range, daySummaries.map((d) => ({ name: dateText(d.date), role: `${d.people} personel`, dayCount: d.dayCount, nightCount: d.nightCount, totalAmount: d.total })))}><Printer size={15}/> Haftalık Liste Yazdır</button><button type="button" onClick={exportExcel}><FileSpreadsheet size={15}/> Excel Aktar</button><button type="button" onClick={importExcel}><FileSpreadsheet size={15}/> Excel Yükle</button>
         </div>
         <div className={`kyop-banner ${shift === "night" ? "night" : ""}`}><strong>Güvenli giriş modu:</strong><span>Yalnız {longDateText(selectedDate)} — {shift === "day" ? "Gündüz" : "Gece"} aktif. Hızlı girişte de aynı anda yalnız bir gün düzenlenir.</span>{periodLocked ? <b><LockKeyhole size={14}/> DÖNEM KAPALI</b> : null}</div>
         <div className="kyop-days">{daySummaries.map((item) => <button type="button" key={item.date} className={item.date === selectedDate ? "active" : ""} onClick={() => setSelectedDate(item.date)}><small>{new Intl.DateTimeFormat("tr-TR", { weekday: "long" }).format(new Date(`${item.date}T12:00:00`))}</small><strong>{dateText(item.date, true)}</strong><span>G: {item.dayCount} · N: {item.nightCount}</span><b>{money(item.total)}</b><em>{item.people ? `${item.people} personel` : "Kayıt yok"}</em>{item.date === selectedDate ? <i>AKTİF GÜN</i> : null}</button>)}</div>
         <div className="kyop-grid">
-          <aside className="kyop-panel kyop-pool"><div className="kyop-panel-head"><Users size={16}/> Personel Havuzu <b>{rosterIds.size}</b></div><div className="kyop-pool-top"><label className="kyop-search"><Search size={14}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Personel ara"/></label><button type="button" onClick={() => setCardDialog({ ...EMPTY_PERSON })}><Plus size={14}/> Personel</button></div><div className="kyop-pool-list">{filteredEmployees.filter((p) => p.active).map((person) => <label key={person.id} className={rosterIds.has(person.id) ? "included" : ""}><input type="checkbox" checked={rosterIds.has(person.id)} onChange={() => { setRosterSaved(false); setRosterIds((current) => { const next = new Set(current); if (next.has(person.id)) next.delete(person.id); else next.add(person.id); return next; }); }}/><span><strong>{person.personnelNo ? `${person.personnelNo} · ` : ""}{person.name}</strong><small>{person.role || "Vasıfsız"}</small><em>G: {money(person.dayRate)} · N: {money(person.nightRate)}</em></span></label>)}</div><button type="button" className="primary full" disabled={busy} onClick={saveRoster}><Save size={15}/> Personel Havuzunu Kaydet</button></aside>
+          <aside className="kyop-panel kyop-pool"><div className="kyop-panel-head"><Users size={16}/> Personel Havuzu <b>{rosterIds.size}</b></div><div className="kyop-pool-add"><label className="kyop-search"><Search size={14}/><input list="kyop-roster-candidates" value={poolAddQuery} onChange={(e) => setPoolAddQuery(e.target.value)} placeholder="Listeye eklenecek personeli ara..."/></label><datalist id="kyop-roster-candidates">{availableRosterPeople.map((person) => <option key={person.id} value={person.personnelNo || person.name}>{person.name} · {person.role || "Vasıfsız"}</option>)}</datalist><button type="button" disabled={!poolAddQuery.trim()} onClick={addFromPool}><Plus size={14}/> Listeye Ekle</button><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><UserPlus size={14}/> Yeni</button></div><div className="kyop-pool-list kyop-selected-roster">{activeRosterPeople.length ? activeRosterPeople.map((person) => <div key={person.id} className="kyop-roster-card"><span><strong>{person.personnelNo ? `${person.personnelNo} · ` : ""}{person.name}</strong><small>{person.role || "Vasıfsız"}</small><em>G: {money(person.dayRate)} · N: {money(person.nightRate)}</em></span><button type="button" title="Listeden çıkar" onClick={() => removeRosterPerson(person.id)}><X size={13}/></button></div>) : <Empty>Bu tarih aralığının havuzu boş. Personel arayıp “Listeye Ekle” ile doldurun.</Empty>}</div><button type="button" className="primary full" disabled={busy || rosterSaved} onClick={saveRoster}><Save size={15}/> {rosterSaved ? "Havuz Kayıtlı" : "Personel Havuzunu Kaydet"}</button></aside>
 
           <main className="kyop-panel kyop-entry"><div className="kyop-entry-head"><div><span>SEÇİLİ GÜNÜN PERSONEL GİRİŞİ</span><h2>{dateText(selectedDate)} · {shift === "day" ? "Gündüz" : "Gece"}</h2><p>Bu tablo yalnız {currentWeekday} günü için gösterilir. Üstte gün seçince liste ve toplamlar aynı güne yenilenir.</p></div><div className="kyop-head-actions"><button type="button" onClick={loadLog}>Log</button><button type="button" className={periodLocked ? "locked" : ""} onClick={togglePeriodLock}>{periodLocked ? "Dönemi Aç" : "Dönemi Kapat"}</button><b>{dateText(selectedDate, true)} · {shift === "day" ? "G" : "N"}</b></div></div>
             <div className="kyop-table-wrap"><table><thead><tr><th>Personel / Giriş / Durum</th><th>Vasıf</th><th>Aktif Gün</th><th>Gündüz Ücret</th><th>Gece Ücret</th><th>Not</th><th>İşlem</th></tr></thead><tbody>{groupedEntryPeople.length ? groupedEntryPeople.flatMap(([role, people]) => [<tr className="group" key={`g-${role}`}><td colSpan="7">{role} <b>{people.length} personel</b></td></tr>, ...people.map((person) => { const checked = selectedIds.has(person.id); const blocked = shift === "night" && person.nightRate <= 0; return <tr key={person.id} className={checked ? "selected" : ""}><td><div className="kyop-person-cell"><div><strong>{person.name}</strong><small>{person.personnelNo || "Kod yok"}</small><em>{checked ? "Bu Gün Seçildi" : "Bu Gün Yok"}</em></div><div className="kyop-shift-mini"><button type="button" className={shift === "day" && checked ? "active day" : ""} onClick={() => setShift("day")}>G</button><button type="button" className={shift === "night" && checked ? "active night" : ""} disabled={person.nightRate <= 0} onClick={() => setShift("night")}>N</button></div></div></td><td>{person.role || "-"}</td><td>{dateText(selectedDate, true)}</td><td>{money(person.dayRate)}</td><td>{person.nightRate > 0 ? money(person.nightRate) : "-"}</td><td><input value={notes[person.id] || ""} onChange={(e) => setNotes((current) => ({ ...current, [person.id]: e.target.value }))} placeholder="Not"/></td><td><div className="kyop-row-actions"><button type="button" title={checked ? "Seçimi kaldır" : "Seç"} disabled={blocked || periodLocked} className={checked ? "selected" : ""} onClick={() => setSelectedIds((current) => { const next = new Set(current); if (next.has(person.id)) next.delete(person.id); else next.add(person.id); return next; })}><CheckCircle2 size={14}/></button><button type="button" title="Personel kartını düzenle" onClick={() => setCardDialog({ ...person })}><Pencil size={14}/></button><button type="button" title="Bu vardiyadan kaldır" disabled={!checked || periodLocked} onClick={() => setSelectedIds((current) => { const next = new Set(current); next.delete(person.id); return next; })}><Trash2 size={14}/></button></div></td></tr>; })]) : <tr><td colSpan="7"><Empty>Dönem havuzunda personel yok.</Empty></td></tr>}</tbody></table></div>
@@ -403,14 +484,14 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         <div className="quick-day-nav"><button type="button" disabled={quickDirty || quick.date <= range.start || busy} onClick={() => changeQuickFocus(addDays(quick.date, -1), quick.shift)}>‹ Önceki Gün</button><label><span>İşlem yapılacak gün</span><input type="date" min={range.start} max={range.end} value={quick.date} disabled={quickDirty || busy} onChange={(e) => changeQuickFocus(e.target.value, quick.shift)}/></label><button type="button" disabled={quickDirty || quick.date >= range.end || busy} onClick={() => changeQuickFocus(addDays(quick.date, 1), quick.shift)}>Sonraki Gün ›</button><div className="gop-shift-switch"><button type="button" className={quick.shift === "day" ? "active day" : ""} disabled={quickDirty || busy} onClick={() => changeQuickFocus(quick.date, "day")}><Sun size={15}/> Gündüz</button><button type="button" className={quick.shift === "night" ? "active night" : ""} disabled={quickDirty || busy} onClick={() => changeQuickFocus(quick.date, "night")}><Moon size={15}/> Gece</button></div></div>
         <div className="quick-warning"><strong>Yalnız {longDateText(quick.date)} — {quick.shift === "day" ? "Gündüz" : "Gece"}</strong><span>Başka bir gün veya vardiya bu kayıt sırasında değiştirilemez.</span></div>
         <div className="quick-kpis"><Stat label="Seçilen" value={quick.ids.size} hint="Bu gün çalışacak"/><Stat label="Kontrol Edildi" value={quickChecked} hint="Yeşil işaretli"/><Stat label="Kontrol Bekleyen" value={quickPending} hint="Gözden geçirilecek"/><Stat label="Toplam Personel" value={activeRosterPeople.length} hint="Tarih aralığı listesi"/></div>
-        <div className="quick-controls"><label className="gop-search"><Search size={14}/><input value={quick.query} onChange={(e) => setQuick({ ...quick, query: e.target.value })} placeholder="Personel, kod veya vasıf ara"/></label><div className="quick-legend"><span className="sel-dot"/> Seçildi <span className="ok-dot"/> Kontrol edildi <span className="save-dot"/> Kayıtlı</div></div>
+        <div className="quick-controls"><label className="gop-search"><Search size={14}/><input value={quick.query} onChange={(e) => setQuick({ ...quick, query: e.target.value })} placeholder="Personel, kod veya vasıf ara"/></label><div className="quick-add-bar"><label className="gop-search"><Search size={14}/><input list="quick-roster-candidates" value={quickAddQuery} onChange={(e) => setQuickAddQuery(e.target.value)} placeholder="Listeye eklenecek personeli ara..."/></label><datalist id="quick-roster-candidates">{availableRosterPeople.map((person) => <option key={person.id} value={person.personnelNo || person.name}>{person.name} · {person.role || "Vasıfsız"}</option>)}</datalist><button type="button" disabled={!quickAddQuery.trim()} onClick={addFromQuickPool}><Plus size={13}/> Listeye Ekle</button><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><UserPlus size={13}/> Yeni Personel</button></div><div className="quick-legend"><span className="sel-dot"/> Seçildi <span className="ok-dot"/> Kontrol edildi <span className="save-dot"/> Kayıtlı</div></div>
         <div className="quick-groups">{quickGroups.length ? quickGroups.map(([role, people]) => { const selectable = people.filter((person) => quick.shift === "day" || person.nightRate > 0); const selectedCount = selectable.filter((person) => quick.ids.has(person.id)).length; const allSelected = selectable.length > 0 && selectedCount === selectable.length; return <section className="quick-group" key={role}><div className="quick-group-head"><strong>{role}</strong><span>{selectedCount} / {selectable.length} seçildi</span><button type="button" onClick={() => setQuick((current) => { const ids = new Set(current.ids); const checked = new Set(current.checked); selectable.forEach((person) => { if (allSelected) { ids.delete(person.id); checked.delete(person.id); } else ids.add(person.id); }); return { ...current, ids, checked }; })}>{allSelected ? "Vasıf Seçimini Kaldır" : "Vasıfın Tümünü Seç"}</button></div><div className="quick-person-grid">{people.map((person) => { const selected = quick.ids.has(person.id); const checked = quick.checked.has(person.id); const blocked = quick.shift === "night" && person.nightRate <= 0; return <article key={person.id} className={`quick-person ${selected ? "selected" : ""} ${checked ? "checked" : ""} ${blocked ? "blocked" : ""}`}><button type="button" className="quick-main-toggle" disabled={blocked} onClick={() => setQuick((current) => { const ids = new Set(current.ids); const checkedSet = new Set(current.checked); if (ids.has(person.id)) { ids.delete(person.id); checkedSet.delete(person.id); } else ids.add(person.id); return { ...current, ids, checked: checkedSet }; })}><span className="quick-avatar">G</span><span className="quick-person-text"><strong>{person.name}</strong><small>{person.personnelNo || "Kod yok"} · {person.role || "Vasıfsız"}</small></span><b>{money(quick.shift === "night" ? person.nightRate : person.dayRate)}</b><em>{selected ? "Seçildi" : "Seç"}</em></button><button type="button" className="quick-check-button" disabled={!selected || blocked} onClick={() => setQuick((current) => { const next = new Set(current.checked); if (next.has(person.id)) next.delete(person.id); else next.add(person.id); return { ...current, checked: next }; })}>{checked ? "✓ Kontrol Edildi" : "○ Kontrol Et"}</button></article>; })}</div></section>; }) : <Empty>Bu filtrede personel bulunamadı.</Empty>}</div>
         <footer className="quick-footer"><div><strong>{quickDirty ? "Kaydedilmemiş seçimler var." : "Kayıtlı seçimler yüklendi."}</strong><small>Gün veya vardiya değiştirmek için önce kaydedin.</small></div><button type="button" onClick={() => setQuick(null)}><X size={14}/> Kapat</button><button type="button" className="primary" disabled={busy || periodLocked || !quickDirty} onClick={() => saveQuick(false)}><Save size={15}/> {quick.shift === "day" ? "Gündüz" : "Gece"} Kaydet</button><button type="button" className="primary soft" disabled={busy || periodLocked || !quickDirty || quick.date >= range.end} onClick={() => saveQuick(true)}><Save size={15}/> Kaydet ve Sonraki Gün</button></footer>
       </section></div> : null}
 
-      {logOpen ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section className="gop-dialog gop-log-dialog"><header><div><span>GÜNLÜK GİRİŞ / LOG + ANALİZ</span><h2>Log</h2><p>{dateText(range.start)} — {dateText(range.end)}</p></div><button type="button" onClick={() => setLogOpen(false)}><X size={19}/></button></header><div className="log-tabs"><button className={logTab === "summary" ? "active" : ""} onClick={() => setLogTab("summary")}>Log + Özet</button><button className={logTab === "search" ? "active" : ""} onClick={() => setLogTab("search")}>Gelişmiş Arama</button><button className={logTab === "control" ? "active" : ""} onClick={() => setLogTab("control")}>Personel Kontrol</button></div>{logTab !== "control" ? <div className="log-toolbar"><label>Personel / HKN<input value={logQuery} onChange={(e) => setLogQuery(e.target.value)} placeholder="Personel veya HKN ara"/></label><label>İşlem<input value={logAction} onChange={(e) => setLogAction(e.target.value)} placeholder="İşlem ara"/></label><label>Vardiya<select value={logShift} onChange={(e) => setLogShift(e.target.value)}><option value="all">Tümü</option><option value="day">Gündüz</option><option value="night">Gece</option></select></label></div> : null}{logTab === "summary" ? <><div className="log-kpis"><Stat label="Dönem" value={`${days.length} gün`}/><Stat label="Aktif personel" value={rosterIds.size}/><Stat label="Toplam vardiya" value={rangeTotals.day + rangeTotals.night}/><Stat label="Toplam" value={money(rangeTotals.total)}/></div><div className="log-list">{visibleLogRows.length ? visibleLogRows.map((row, index) => { const paid = actionLabel(row) === "ÖDENDİ"; return <article className={paid ? "paid" : ""} key={row.id || `${row.createdAt}-${index}`}><div><strong>{paid ? "✓ ÖDENDİ · Bu kayıt ödenmiştir" : actionLabel(row)}</strong><small>İşlem zamanı: {dateTimeText(row.createdAt || row.timestamp)}</small></div><div><b>{row.personName || row.employeeName || row.name || "Personel"}</b><span>Kayıt tarihi: {dateText(row.workDate || row.date)}</span></div><div><span>{String(row.shift || "").toLowerCase().includes("night") ? "Gece" : "Gündüz"}</span><small>{row.actorName || row.actor || row.source || "Sistem"}</small></div></article>; }) : <Empty>Bu dönemde log kaydı yok.</Empty>}</div></> : null}{logTab === "search" ? <div className="log-list search-mode">{visibleLogRows.length ? visibleLogRows.map((row, index) => <article key={row.id || index}><div><strong>{actionLabel(row)}</strong><small>{dateTimeText(row.createdAt || row.timestamp)}</small></div><div><b>{row.personName || row.employeeName || row.name || "-"}</b><span>{dateText(row.workDate || row.date)}</span></div><div><span>{row.shift || "-"}</span><small>{row.qualification || ""}</small></div></article>) : <Empty>Filtreye uygun kayıt yok.</Empty>}</div> : null}{logTab === "control" ? <div className="person-control"><label>HKN veya isim ara<input list="gop-person-control-list" value={controlQuery} onChange={(e) => setControlQuery(e.target.value)} placeholder="HKN111 veya RESUL"/><datalist id="gop-person-control-list">{employees.filter((p) => p.active).map((p) => <option key={p.id} value={p.personnelNo || p.name}>{p.name}</option>)}</datalist></label>{controlPerson ? <><div className="log-kpis"><Stat label="Personel" value={controlPerson.name} hint={controlPerson.role}/><Stat label="Gündüz" value={controlTotals.day}/><Stat label="Gece" value={controlTotals.night}/><Stat label="Toplam" value={money(controlTotals.total)} hint={`${controlTotals.paid} ödendi vardiya`}/></div><div className="person-control-days">{personControlRows.length ? personControlRows.map((row, index) => <div key={`${rowDate(row)}-${index}`}><strong>{dateText(rowDate(row))}</strong><span>{rowDay(row) ? "Gündüz" : ""}{rowDay(row) && rowNight(row) ? " + " : ""}{rowNight(row) ? "Gece" : ""}</span><b>{money((rowDay(row) ? number(row.dayWage ?? controlPerson.dayRate) : 0) + (rowNight(row) ? number(row.nightWage ?? controlPerson.nightRate) : 0))}</b><em className={rowPaid(row) ? "paid" : "waiting"}>{rowPaid(row) ? "Ödendi" : "Hazır"}</em></div>) : <Empty>Seçili dönemde çalışma kaydı yok.</Empty>}</div></> : <Empty>Personel seçin veya HKN / isim yazarak arayın.</Empty>}</div> : null}</section></div> : null}
+      {logOpen ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section className="gop-dialog gop-log-dialog"><header><div><span>GÜNLÜK GİRİŞ / LOG + ANALİZ</span><h2>Log</h2><p>{dateText(logRange.start)} — {dateText(logRange.end)}</p></div><button type="button" onClick={() => setLogOpen(false)}><X size={19}/></button></header><div className="log-tabs"><button className={logTab === "summary" ? "active" : ""} onClick={() => setLogTab("summary")}>Log + Özet</button><button className={logTab === "search" ? "active" : ""} onClick={() => setLogTab("search")}>Gelişmiş Arama</button><button className={logTab === "control" ? "active" : ""} onClick={() => setLogTab("control")}>Personel Kontrol</button></div>{logTab !== "control" ? <><div className="log-date-toolbar"><button type="button" onClick={() => moveLogWeek(-1)}>‹ Önceki Hafta</button><label>Başlangıç<input type="date" value={logRange.start} onChange={(e) => setLogRange({ ...logRange, start: e.target.value })}/></label><label>Bitiş<input type="date" value={logRange.end} onChange={(e) => setLogRange({ ...logRange, end: e.target.value })}/></label><button type="button" className="primary" onClick={searchLogRange}><Search size={14}/> Kayıt Ara</button><button type="button" onClick={() => moveLogWeek(1)}>Sonraki Hafta ›</button></div><div className="log-toolbar"><label>Personel / HKN<input value={logQuery} onChange={(e) => setLogQuery(e.target.value)} placeholder="Personel veya HKN ara"/></label><label>İşlem<input value={logAction} onChange={(e) => setLogAction(e.target.value)} placeholder="İşlem ara"/></label><label>Vardiya<select value={logShift} onChange={(e) => setLogShift(e.target.value)}><option value="all">Tümü</option><option value="day">Gündüz</option><option value="night">Gece</option></select></label></div></> : null}{logTab === "summary" ? <><div className="log-kpis"><Stat label="Dönem" value={`${rangeDays(logRange.start, logRange.end).length} gün`}/><Stat label="Kayıtlı personel" value={logPeople}/><Stat label="Toplam vardiya" value={logTotals.day + logTotals.night}/><Stat label="Toplam" value={money(logTotals.total)}/></div><div className="log-list">{visibleLogRows.length ? visibleLogRows.map((row, index) => { const paid = actionLabel(row) === "ÖDENDİ"; return <article className={paid ? "paid" : ""} key={row.id || `${row.createdAt}-${index}`}><div><strong>{paid ? "✓ ÖDENDİ · Bu kayıt ödenmiştir" : actionLabel(row)}</strong><small>İşlem zamanı: {dateTimeText(row.createdAt || row.timestamp)}</small></div><div><b>{row.personName || row.employeeName || row.name || employeeMap.get(rowEmployeeId(row))?.name || "Personel"}</b><span>Kayıt tarihi: {dateText(row.workDate || row.date)}</span></div><div><span>{String(row.shift || "").toLowerCase().includes("night") ? "Gece" : "Gündüz"}</span><small>{row.actorName || row.actor || row.source || "Sistem"}</small></div></article>; }) : <Empty>Bu dönemde log kaydı yok.</Empty>}</div></> : null}{logTab === "search" ? <div className="log-list search-mode">{visibleLogRows.length ? visibleLogRows.map((row, index) => <article key={row.id || index}><div><strong>{actionLabel(row)}</strong><small>{dateTimeText(row.createdAt || row.timestamp)}</small></div><div><b>{row.personName || row.employeeName || row.name || employeeMap.get(rowEmployeeId(row))?.name || "-"}</b><span>{dateText(row.workDate || row.date)}</span></div><div><span>{row.shift || "-"}</span><small>{row.qualification || ""}</small></div></article>) : <Empty>Filtreye uygun kayıt yok.</Empty>}</div> : null}{logTab === "control" ? <div className="person-control"><label>HKN veya isim ara<input list="gop-person-control-list" value={controlQuery} onChange={(e) => setControlQuery(e.target.value)} placeholder="HKN111 veya RESUL"/><datalist id="gop-person-control-list">{employees.filter((p) => p.active).map((p) => <option key={p.id} value={p.personnelNo || p.name}>{p.name}</option>)}</datalist></label>{controlPerson ? <><div className="log-kpis"><Stat label="Personel" value={controlPerson.name} hint={controlPerson.role}/><Stat label="Gündüz" value={controlTotals.day}/><Stat label="Gece" value={controlTotals.night}/><Stat label="Toplam" value={money(controlTotals.total)} hint={`${controlTotals.paid} ödendi vardiya`}/></div><div className="person-control-days">{personControlRows.length ? personControlRows.map((row, index) => <div key={`${rowDate(row)}-${index}`}><strong>{dateText(rowDate(row))}</strong><span>{rowDay(row) ? "Gündüz" : ""}{rowDay(row) && rowNight(row) ? " + " : ""}{rowNight(row) ? "Gece" : ""}</span><b>{money((rowDay(row) ? number(row.dayWage ?? controlPerson.dayRate) : 0) + (rowNight(row) ? number(row.nightWage ?? controlPerson.nightRate) : 0))}</b><em className={rowPaid(row) ? "paid" : "waiting"}>{rowPaid(row) ? "Ödendi" : "Hazır"}</em></div>) : <Empty>Seçili dönemde çalışma kaydı yok.</Empty>}</div></> : <Empty>Personel seçin veya HKN / isim yazarak arayın.</Empty>}</div> : null}</section></div> : null}
 
-      {cardDialog ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section className="gop-dialog"><header><div><span>GÜNLÜK OPERASYON</span><h2>{cardDialog.id ? "Personel Kartını Düzenle" : "Yeni Personel"}</h2></div><button type="button" onClick={() => setCardDialog(null)}><X size={19}/></button></header><div className="gop-form-grid"><label>Ad soyad<input value={cardDialog.name} onChange={(e) => setCardDialog({ ...cardDialog, name: e.target.value })}/></label><label>Personel no<input value={cardDialog.personnelNo} onChange={(e) => setCardDialog({ ...cardDialog, personnelNo: e.target.value })}/></label><label>Vasıf<input value={cardDialog.role} onChange={(e) => setCardDialog({ ...cardDialog, role: e.target.value })}/></label><label>Aracı<input value={cardDialog.broker} onChange={(e) => setCardDialog({ ...cardDialog, broker: e.target.value })}/></label><label>Gündüz ücret<input type="number" value={cardDialog.dayRate} onChange={(e) => setCardDialog({ ...cardDialog, dayRate: number(e.target.value) })}/></label><label>Gece ücret<input type="number" value={cardDialog.nightRate} onChange={(e) => setCardDialog({ ...cardDialog, nightRate: number(e.target.value) })}/></label><label className="wide">Not<textarea rows="3" value={cardDialog.note} onChange={(e) => setCardDialog({ ...cardDialog, note: e.target.value })}/></label><label className="check"><input type="checkbox" checked={cardDialog.active !== false} onChange={(e) => setCardDialog({ ...cardDialog, active: e.target.checked })}/> Aktif personel</label></div><footer><button type="button" onClick={() => setCardDialog(null)}>Vazgeç</button><button type="button" className="primary" disabled={busy} onClick={saveCard}><Save size={16}/> Kaydet</button></footer></section></div> : null}
+      {cardDialog ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section className="gop-dialog"><header><div><span>GÜNLÜK OPERASYON</span><h2>{cardDialog.id ? "Personel Kartını Düzenle" : "Yeni Personel"}</h2></div><button type="button" onClick={() => { setCardDialog(null); setCardAddToRoster(false); }}><X size={19}/></button></header><div className="gop-form-grid"><label>Ad soyad<input value={cardDialog.name} onChange={(e) => setCardDialog({ ...cardDialog, name: e.target.value })}/></label><label>Personel no<input value={cardDialog.personnelNo} onChange={(e) => setCardDialog({ ...cardDialog, personnelNo: e.target.value })}/></label><label>Vasıf<input value={cardDialog.role} onChange={(e) => setCardDialog({ ...cardDialog, role: e.target.value })}/></label><label>Aracı<input value={cardDialog.broker} onChange={(e) => setCardDialog({ ...cardDialog, broker: e.target.value })}/></label><label>Gündüz ücret<input type="number" value={cardDialog.dayRate} onChange={(e) => setCardDialog({ ...cardDialog, dayRate: number(e.target.value) })}/></label><label>Gece ücret<input type="number" value={cardDialog.nightRate} onChange={(e) => setCardDialog({ ...cardDialog, nightRate: number(e.target.value) })}/></label><label className="wide">Not<textarea rows="3" value={cardDialog.note} onChange={(e) => setCardDialog({ ...cardDialog, note: e.target.value })}/></label><label className="check"><input type="checkbox" checked={cardDialog.active !== false} onChange={(e) => setCardDialog({ ...cardDialog, active: e.target.checked })}/> Aktif personel</label></div><footer><button type="button" onClick={() => { setCardDialog(null); setCardAddToRoster(false); }}>Vazgeç</button><button type="button" className="primary" disabled={busy} onClick={saveCard}><Save size={16}/> Kaydet</button></footer></section></div> : null}
 
       {excelPreview ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section className="gop-dialog gop-dialog-wide"><header><div><span>EXCEL KONTROL</span><h2>İçe Aktarım Önizleme</h2></div><button type="button" onClick={() => setExcelPreview(null)}><X size={19}/></button></header><div className="excel-preview"><p>{Array.isArray(excelPreview.rows) ? excelPreview.rows.length : 0} satır bulundu. Uygulamadan önce tarih ve personel eşleşmelerini kontrol edin.</p><div className="gop-table-wrap"><table><thead><tr><th>Personel</th><th>Tarih</th><th>Gündüz</th><th>Gece</th><th>Uyarı</th></tr></thead><tbody>{(excelPreview.rows || []).slice(0, 250).map((row, index) => <tr key={row.key || index}><td>{row.personName || row.excelName || row.personnelNo || "-"}</td><td>{dateText(row.workDate)}</td><td>{row.dayShift ? "✓" : ""}</td><td>{row.nightShift ? "✓" : ""}</td><td>{Array.isArray(row.warnings) ? row.warnings.join(", ") : row.warning || ""}</td></tr>)}</tbody></table></div></div><footer><button type="button" onClick={() => setExcelPreview(null)}>Vazgeç</button><button type="button" className="primary" disabled={busy} onClick={applyExcel}><Save size={15}/> Excel'i Uygula</button></footer></section></div> : null}
     </section>
