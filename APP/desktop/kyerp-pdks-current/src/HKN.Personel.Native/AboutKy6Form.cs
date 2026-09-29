@@ -4,7 +4,7 @@ internal sealed class AboutKy6Form : Form
 {
     public AboutKy6Form()
     {
-        Text="KY PDKS 6.3.1 TEST Hakkında";
+        Text="KY PDKS 6.3.2 TEST Hakkında";
         StartPosition=FormStartPosition.CenterParent;
         ClientSize=new Size(760,560);
         FormBorderStyle=FormBorderStyle.FixedDialog;
@@ -22,7 +22,7 @@ internal sealed class AboutKy6Form : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
-        root.Controls.Add(new Label{Text="KY PDKS 6.3.1 TEST",Dock=DockStyle.Fill,Font=new Font("Segoe UI",24f,FontStyle.Bold),ForeColor=Color.FromArgb(30,75,145)},0,0);
+        root.Controls.Add(new Label{Text="KY PDKS 6.3.2 TEST",Dock=DockStyle.Fill,Font=new Font("Segoe UI",24f,FontStyle.Bold),ForeColor=Color.FromArgb(30,75,145)},0,0);
         root.Controls.Add(new Label{Text="Seri Operasyon • Terminal • Puantaj • Bordro • Rol ve Lisans Yönetimi",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold)},0,1);
         root.Controls.Add(new Label{Text="TEST SÜRÜMÜ • gerçek firma verisi ve terminal ile saha kabulü tamamlanmadan final değildir",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f,FontStyle.Bold),ForeColor=Color.FromArgb(190,82,54)},0,2);
         root.Controls.Add(new Label
@@ -30,7 +30,7 @@ internal sealed class AboutKy6Form : Form
             Dock=DockStyle.Fill,
             AutoSize=false,
             TextAlign=ContentAlignment.TopLeft,
-            Text="REV 6.3.1 işyeri testinde görülen kritik sorunlara odaklanan düzeltme paketidir.\n\n• Canlı İzleme / Terminal / diğer modüllerdeki disposed ModuleHost yaşam döngüsü hatası giderildi.\n• Personel Aktif / Pasif / Tüm filtresi, arama ile birlikte gerçek liste görünümüne uygulanır.\n• Ana pencere eski kayıtlı düzen tam ekran istese bile geniş ve ortalı açılır.\n• Sistem Yönetimi ve Çalışma Alanı üst menü kalabalığı kaldırıldı; ilgili işlemler Yönetim ve Ayarlar altına toplandı.\n• Kart cihazı bulut anahtarından bağımsız, doğrudan yerel terminal bağlantısıyla kontrol edilir.\n• Terminal merkezinde Cihaz Bağlantısı, Şimdi Al ve Sürücüyü Onar akışı bulunur.\n• Paket, Hedef 5.0.29 ile eşleşen 32-bit FP_CLOCK / destek DLL setiyle dağıtılır; kayıt eksikse uygulama yönetici onayıyla onarabilir.\n• Terminal kayıtları TNF + FDB doğrulanmadan cihazdan silinmez.\n• Firma Sorumlusu ve Super Admin ayrımı korunur; yetkisiz yönetim alanları görünmez.\n• Lisans süresi veri silmez; erişimi yönetir.\n\nCanlı Firebird FDB/GDB dosyasının fiziksel disk şifrelemesi lisans kilidinden ayrı bir güvenlik katmanıdır; uygulama veri dosyasını sessizce yeniden şifrelemez veya silmez."
+            Text="REV 6.3.2 işyeri terminal kabulüne odaklanan kararlı test paketidir.\n\n• Kart cihazı ayarları Hedef PDKS'deki gerçek cihaz mantığına göre düzenlendi: cihaz/makine, Ethernet, COM, baudrate, IP, port ve giriş/çıkış.\n• Cihaz bağlantı testi, cihaz tarih/saat okuma, PC saatine ayarlama, cihazdan kart kayıtlarını önizleme ve doğrulanmış aktarım aynı merkezde toplandı.\n• Cihaz kayıt sayacı 0/-1 dönse bile cihaz günlükleri okunmayı denenir; boş cihaz artık hata yerine açık bilgi verir.\n• Aktarılacak veri yoksa işlem hata üretmez ve 'Aktarılacak veri yok.' mesajı gösterilir.\n• Terminal kayıtları TNF + FDB doğrulanmadan cihazdan silinmez; yedek seçeneği açıksa ham cihaz kaydı ayrıca yedeklenir.\n• Terminal IP/port/makine ayarı uygulamanın gerçek bağlantı motoruyla aynı kayıt dosyasından okunur.\n• Disposed ModuleHost yaşam döngüsü, personel Aktif/Pasif/Tüm filtresi, kompakt menüler ve ortalı pencere düzeltmeleri korunur.\n• Firma Sorumlusu ve Super Admin ayrımı korunur; yetkisiz yönetim alanları görünmez.\n• Lisans süresi veri silmez; erişimi yönetir.\n\nCanlı Firebird FDB/GDB dosyasının fiziksel disk şifrelemesi lisans kilidinden ayrı bir güvenlik katmanıdır; uygulama veri dosyasını sessizce yeniden şifrelemez veya silmez."
         },0,3);
         var close=new Button{Text="Kapat",Width=110,Height=32,Anchor=AnchorStyles.Right};
         close.Click+=(_,_)=>Close();
