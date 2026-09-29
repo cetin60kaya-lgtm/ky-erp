@@ -34,7 +34,7 @@ public sealed partial class MainShellForm
             if (puantaj is not null)
             {
                 puantaj.Text = "Puantaj Kontrol / Yeniden Hesaplama";
-                puantaj.ToolTipText = "Puantaj normalde giriş-çıkış, izin, vardiya ve tatil değişiklikleriyle güncel tutulur. Gerekirse bu ekrandan kontrollü yeniden hesaplanır.";
+                puantaj.ToolTipText = "Puantaj giriş-çıkış, izin, vardiya ve tatil bilgilerinden türetilir. Normal akışta kaynak kayıtları düzeltin; gerektiğinde burada kontrollü yeniden hesaplayın.";
             }
 
             if (!payroll.DropDownItems.OfType<ToolStripMenuItem>()
@@ -52,7 +52,29 @@ public sealed partial class MainShellForm
 
         var definitions = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
             .FirstOrDefault(x => string.Equals(x.Text ?? string.Empty, "Yapılandırma", StringComparison.OrdinalIgnoreCase));
-        if (definitions is not null) definitions.Text = "Ayarlar";
+        if (definitions is not null)
+        {
+            definitions.Text = "Ayarlar";
+            var calendar = definitions.DropDownItems.OfType<ToolStripMenuItem>()
+                .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Takvim", StringComparison.OrdinalIgnoreCase));
+            if (calendar is not null && !calendar.DropDownItems.OfType<ToolStripMenuItem>()
+                    .Any(x => (x.Text ?? string.Empty).Contains("Çalışma Tarihi", StringComparison.OrdinalIgnoreCase)))
+            {
+                calendar.DropDownItems.Add(new ToolStripSeparator());
+                calendar.DropDownItems.Add(MenuItem("Çalışma Tarihi / İş Günü Ayarı", PdksModule.Donemler, OpenWorkingDate));
+            }
+        }
+
+        var daily = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
+            .FirstOrDefault(x => string.Equals(x.Text ?? string.Empty, "Operasyon", StringComparison.OrdinalIgnoreCase));
+        if (daily is not null)
+        {
+            var oldWorkDate = daily.DropDownItems.OfType<ToolStripMenuItem>()
+                .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Çalışma Tarihi", StringComparison.OrdinalIgnoreCase));
+            if (oldWorkDate is not null) daily.DropDownItems.Remove(oldWorkDate);
+            while (daily.DropDownItems.Count > 0 && daily.DropDownItems[^1] is ToolStripSeparator)
+                daily.DropDownItems.RemoveAt(daily.DropDownItems.Count - 1);
+        }
 
         var support = MainMenuStrip.Items.OfType<ToolStripMenuItem>()
             .FirstOrDefault(x => (x.Text ?? string.Empty).StartsWith("Destek", StringComparison.OrdinalIgnoreCase));
@@ -76,6 +98,7 @@ public sealed partial class MainShellForm
         }
 
         ConfigureRoleMenus();
+        HideUnauthorizedChildren(MainMenuStrip.Items);
 
         foreach (var top in MainMenuStrip.Items.OfType<ToolStripMenuItem>())
         {
@@ -98,7 +121,13 @@ public sealed partial class MainShellForm
             button.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
             button.Padding = new Padding(1, 3, 1, 2);
             button.Margin = new Padding(1, 0, 1, 0);
+            if (!button.Enabled) button.Visible = false;
         }
+
+        leadStatus.Text = CompanyLicenseGuard.ShortStatus();
+        leadStatus.ForeColor = CompanyLicenseGuard.CanWrite || currentUser.IsSuperAdmin
+            ? Color.FromArgb(42, 112, 70)
+            : Color.FromArgb(181, 91, 34);
 
         foreach (var old in MainMenuStrip.Items.OfType<ToolStripMenuItem>()
                      .Where(x => string.Equals(x.Text ?? string.Empty, "REV 6.2 TEST", StringComparison.OrdinalIgnoreCase)).ToArray())
@@ -112,5 +141,15 @@ public sealed partial class MainShellForm
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(190,82,54)
             });
+    }
+
+    static void HideUnauthorizedChildren(ToolStripItemCollection items)
+    {
+        foreach (ToolStripItem item in items)
+        {
+            if (item is not ToolStripMenuItem menu) continue;
+            if (menu.DropDownItems.Count > 0) HideUnauthorizedChildren(menu.DropDownItems);
+            if (!menu.Enabled && menu.DropDownItems.Count == 0) menu.Visible = false;
+        }
     }
 }
