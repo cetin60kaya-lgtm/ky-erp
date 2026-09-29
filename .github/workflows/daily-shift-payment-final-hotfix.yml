@@ -1,0 +1,141 @@
+name: Daily Shift Payment Final Hotfix
+
+on:
+  push:
+    branches: [codex/model-uretim-kontrol-merkezi-final]
+    paths:
+      - '.github/workflows/daily-shift-payment-final-hotfix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  final-hotfix:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PAGES_PROJECT: ky-erp-frontend
+      PROD_BRANCH: codex/model-uretim-kontrol-merkezi-final
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: codex/model-uretim-kontrol-merkezi-final
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+      - name: Fix selected shift semantics and restore 10-up daily payment print
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx')
+          s = p.read_text(encoding='utf-8')
+
+          old = '''function printRows(title, range, rows) {
+  const body = rows.map((row) => `<tr><td>${escapeHtml(row.name || row.fullName)}</td><td>${escapeHtml(row.qualification || row.role || "-")}</td><td>${number(row.dayCount)}</td><td>${number(row.nightCount)}</td><td>${escapeHtml(money(row.totalAmount ?? row.total))}</td></tr>`).join("");
+  return printHtmlDocument({ title, html: `<main><h1>${escapeHtml(title)}</h1><p>${escapeHtml(dateText(range.start))} — ${escapeHtml(dateText(range.end))}</p><table><thead><tr><th>Personel</th><th>Vasıf</th><th>Gündüz</th><th>Gece</th><th>Toplam</th></tr></thead><tbody>${body}</tbody></table></main>`, css: "@page{size:A4;margin:12mm}body{font:12px Arial,sans-serif;color:#111}h1{font-size:18px;margin:0 0 4px}p{margin:0 0 14px;color:#555}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:7px;text-align:left}th{background:#f1f5f9}" });
+}
+'''
+          new = old + '''function printDailyPaymentSlips(range, rows = []) {
+  const source = Array.isArray(rows) ? rows : [];
+  const pages = [];
+  for (let index = 0; index < source.length; index += 10) pages.push(source.slice(index, index + 10));
+  const html = pages.map((pageRows, pageIndex) => `<section class="daily-print-page"><div class="daily-print-title">GÜNLÜK PERSONEL ÖDEME FİŞLERİ</div><div class="daily-print-subtitle">${escapeHtml(dateText(range.start))} / ${escapeHtml(dateText(range.end))}</div><div class="daily-slip-print-grid">${pageRows.map((row) => {
+    const dayCount = number(row.dayCount);
+    const nightCount = number(row.nightCount);
+    const dayRate = number(row.dayRate ?? row.dayWage);
+    const nightRate = number(row.nightRate ?? row.nightWage);
+    const dayTotal = number(row.dayTotal) || dayCount * dayRate;
+    const nightTotal = number(row.nightTotal) || nightCount * nightRate;
+    const total = number(row.totalAmount ?? row.total) || dayTotal + nightTotal;
+    return `<article class="daily-slip-card"><h4>PERSONEL ÖDEME FİŞİ</h4><strong>${escapeHtml(row.name || row.fullName || "-")}</strong><span>${escapeHtml(row.qualification || row.role || "-")}</span><b>${escapeHtml(row.personnelNo || row.code || "")}</b><table><thead><tr><th>Vardiya</th><th>Ücret</th><th>Gün</th><th>Toplam</th></tr></thead><tbody><tr><td>GÜNDÜZ</td><td>${escapeHtml(money(dayRate))}</td><td>${dayCount}</td><td>${escapeHtml(money(dayTotal))}</td></tr><tr><td>GECE</td><td>${escapeHtml(money(nightRate))}</td><td>${nightCount}</td><td>${escapeHtml(money(nightTotal))}</td></tr></tbody></table><div class="daily-slip-total"><span>TOPLAM ÖDEME</span><strong>${escapeHtml(money(total))}</strong></div></article>`;
+  }).join("")}</div></section>`).join("");
+  return printHtmlDocument({
+    title: "KY ERP Günlük Personel Ödeme Fişleri",
+    html: `<main class="daily-print">${html || '<p>Kayıt yok.</p>'}</main>`,
+    css: `@page{size:A4 portrait;margin:6mm}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#111}.daily-print{width:198mm}.daily-print-page{width:198mm;max-height:277mm;overflow:hidden;page-break-after:always;break-after:page}.daily-print-page:last-child{page-break-after:auto;break-after:auto}.daily-print-title{text-align:center;font-size:14px;font-weight:900;margin-bottom:.6mm;letter-spacing:.03em}.daily-print-subtitle{text-align:center;font-size:8px;font-weight:700;margin-bottom:1.5mm;color:#444}.daily-slip-print-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(5,48mm);gap:3.5mm 7mm}.daily-slip-card{height:48mm;padding:1.7mm 3mm 4mm;border:1.2px dashed #111;box-sizing:border-box;font-size:8.6px;display:flex;flex-direction:column;overflow:hidden;break-inside:avoid;page-break-inside:avoid}.daily-slip-card h4{font-size:8px;font-weight:800;margin:0 0 .8mm;text-align:center}.daily-slip-card>strong{font-size:14px;line-height:1.1;text-align:center;margin-bottom:.8mm;text-transform:uppercase}.daily-slip-card>span,.daily-slip-card>b{font-size:8px;margin:.4mm 0;display:block}.daily-slip-card table{width:100%;border-collapse:collapse;font-size:8.2px}.daily-slip-card th,.daily-slip-card td{border:1px solid #111;padding:1.4px 2.5px;text-align:left}.daily-slip-total{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;margin-bottom:1.8mm;padding-top:1mm;border-top:1.4px solid #111}.daily-slip-total span{font-size:9px;font-weight:800}.daily-slip-total strong{font-size:23px;line-height:1;color:#111}`,
+  });
+}
+'''
+          if 'function printDailyPaymentSlips' not in s:
+              if old not in s: raise SystemExit('printRows anchor missing')
+              s = s.replace(old, new, 1)
+
+          old_pool = '<div className="kyop-panel-head"><Users size={16}/> Personel Havuzu <b>{employees.filter((person) => person.active !== false).length}</b></div>'
+          new_pool = '<div className="kyop-panel-head"><Users size={16}/> Personel Havuzu <b>{rosterIds.size} / {employees.filter((person) => person.active !== false).length}</b></div>'
+          if old_pool in s: s = s.replace(old_pool, new_pool, 1)
+          s = s.replace('{hasWork ? "Bu gün kayıtlı" : inRoster ? "Aralık listesinde" : "Listeye ekle"}', '{hasWork ? `${shift === "day" ? "Gündüz" : "Gece"} seçili` : inRoster ? "Havuzda" : "Havuza ekle"}')
+          s = s.replace('{rosterSaved ? `Çalışma Listesi Kayıtlı (${rosterIds.size})` : `Personel Havuzunu Kaydet (${rosterIds.size})`}', '{rosterSaved ? `Personel Havuzu Kayıtlı (${rosterIds.size})` : `Personel Havuzunu Kaydet (${rosterIds.size})`}')
+
+          old_shift = '''<div className="kyop-shift-mini"><button type="button" className={shift === "day" && checked ? "active day" : ""} onClick={() => setShift("day")}>G</button><button type="button" className={shift === "night" && checked ? "active night" : ""} disabled={person.nightRate <= 0} onClick={() => setShift("night")}>N</button></div>'''
+          new_shift = '''<span className={`kyop-row-shift ${shift}`}>{shift === "day" ? "GÜNDÜZ" : "GECE"}</span>'''
+          if old_shift not in s: raise SystemExit('row shift controls anchor missing')
+          s = s.replace(old_shift, new_shift, 1)
+
+          old_alert = '''<div className={`kyop-control-alert ${selectedIds.size ? "ok" : "warn"}`}>{selectedIds.size ? "Bu gün için seçim hazır." : "Bu gün için vardiya seçilmedi."}</div>'''
+          new_alert = '''<div className={`kyop-control-alert ${selectedIds.size ? "ok" : "warn"}`}>{selectedIds.size ? `${shift === "day" ? "Gündüz" : "Gece"} seçili · ${selectedIds.size} personel seçildi.` : `${shift === "day" ? "Gündüz" : "Gece"} seçili · henüz personel seçilmedi.`}</div>'''
+          if old_alert not in s: raise SystemExit('control alert anchor missing')
+          s = s.replace(old_alert, new_alert, 1)
+
+          old_print = '''<button type="button" onClick={() => printRows("KY ERP Günlük Personel Ödeme Fişleri", range, paymentRows)}><Printer size={16}/> Yazdır</button>'''
+          new_print = '''<button type="button" onClick={() => printDailyPaymentSlips(range, paymentRows)}><Printer size={16}/> Yazdır</button>'''
+          if old_print not in s: raise SystemExit('payment print anchor missing')
+          s = s.replace(old_print, new_print, 1)
+
+          p.write_text(s, encoding='utf-8')
+
+          css = Path('APP/app/ky-erp-frontend/src/pages/modules/ik/daily-hr-workspace-final.css')
+          c = css.read_text(encoding='utf-8')
+          marker = '/* selected shift is global; rows only show the active shift */'
+          if marker not in c:
+              c += '''\n/* selected shift is global; rows only show the active shift */\n.kyop-row-shift{display:inline-flex;align-items:center;justify-content:center;min-width:48px;height:22px;border-radius:999px;font-size:7px;font-weight:900;letter-spacing:.03em}.kyop-row-shift.day{background:#fff1e6;color:#b45309;border:1px solid #fdba74}.kyop-row-shift.night{background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe}\n'''
+          css.write_text(c, encoding='utf-8')
+          PY
+      - name: Verify semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          page='APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx'
+          grep -F 'function printDailyPaymentSlips' "$page"
+          grep -F 'grid-template-rows:repeat(5,48mm)' "$page"
+          grep -F 'Gündüz seçili' "$page"
+          grep -F 'kyop-row-shift' "$page"
+          if grep -F 'Bu gün için vardiya seçilmedi.' "$page"; then exit 1; fi
+          if grep -F 'onClick={() => setShift("day")}>G</button>' "$page"; then exit 1; fi
+      - name: Frontend checks
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+        env:
+          VITE_API_URL: https://api.kyerp.net
+      - name: Commit final daily logic
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'KY ERP Automation'
+          git config user.email 'actions@kyerp.net'
+          git add APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx APP/app/ky-erp-frontend/src/pages/modules/ik/daily-hr-workspace-final.css
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(daily): align global shift logic and restore 10-up payment slips'
+            git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+          fi
+      - name: Deploy production
+        working-directory: APP/app/ky-erp-frontend
+        run: npx --yes wrangler@4.118.0 pages deploy dist --project-name "$PAGES_PROJECT" --branch "$PROD_BRANCH" --commit-hash "$(git rev-parse HEAD)" --commit-message "Daily shift logic and 10-up payment slips"
+      - name: Live smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error https://kyerp.net/gunluk-operasyon/daily-entry >/tmp/daily.html && test -s /tmp/daily.html; then exit 0; fi
+            sleep 2
+          done
+          exit 1
