@@ -1,0 +1,9 @@
+/* Added checked row styling for daily entry safe screen */
+.kyik-safe-name-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}
+.kyik-safe-name-shift-badge{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 7px;border-radius:999px;font-size:12px;font-weight:900;color:#fff}
+.kyik-safe-name-shift-badge.day{background:#f97316}
+.kyik-safe-name-shift-badge.night{background:#312e81}
+.kyik-safe-table-wrap tr.checked{background:#ecfdf5}
+.kyik-safe-table-wrap tr.checked td{background:#ecfdf5}
+.kyik-safe-table-wrap tr.checked strong{color:#166534}
+.kyik-safe-table-wrap tr.checked .kyik-safe-row-actions button{color:#0f766e}
