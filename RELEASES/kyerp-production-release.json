@@ -3,7 +3,7 @@
   "target": "production",
   "mode": "production",
   "requestedAt": "2026-09-29T05:05:00+03:00",
-  "attempt": 104,
+  "attempt": 105,
   "scope": [
     "muhasebe-final-canonical",
     "muhasebe-seven-tab-shell",
@@ -24,5 +24,5 @@
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "sourceCommit": "a295bb471a97d01283bfead651e54a090a2c6a20",
-  "note": "29.09.2026 attempt 104. Muhasebe canonical final production release. Source includes merge 8a48d513f66385ada294d56ceccaa52b31f068f8 and successful Worker production release a295bb471a97d01283bfead651e54a090a2c6a20. Final acceptance passed on production branch; Worker production release completed D1 full backup, additive 0050/0051/0055 schema migration proof, deploy and API health. This release publishes the matching frontend to Cloudflare Pages through the existing guarded production path with no D1 reset."
+  "note": "Günlük Operasyon modülünü aylık İK'dan ayrı olarak canlıya alma; mevcut İK düzeni korunur"
 }
