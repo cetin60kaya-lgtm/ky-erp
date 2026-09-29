@@ -1,114 +1,365 @@
-using System.Data;
-using FirebirdSql.Data.FirebirdClient;
-using KYERP.PDKS.Core;
-
 namespace HKN.Personel.Native;
 
 public sealed class LegacyTerminalSettingsForm : Form
 {
-    readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
-    readonly ComboBox terminal = new(){DropDownStyle=ComboBoxStyle.DropDownList};
-    readonly CheckBox active = new(){Text="Varsayılan terminal"};
-    readonly Dictionary<string,TextBox> fields = new(StringComparer.OrdinalIgnoreCase);
-    readonly TextBox programPath = new();
+    readonly DataGridView grid = new();
+    readonly NumericUpDown deviceNo = Number(1, 9999);
+    readonly TextBox deviceName = new();
+    readonly NumericUpDown machineNo = Number(1, 9999);
+    readonly ComboBox connectionType = Combo("Ethernet", "Seri");
+    readonly ComboBox comPort = Combo("COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8");
+    readonly ComboBox baudRate = Combo("9600", "19200", "38400", "57600", "115200");
+    readonly TextBox ipAddress = new();
+    readonly NumericUpDown ipPort = Number(1, 65535);
+    readonly ComboBox direction = Combo("GİRİŞ", "ÇIKIŞ");
     readonly TextBox transferFile = new();
-    readonly Button save = Cmd("Kaydet");
-    int? editingTip; bool isNew;
+    readonly NumericUpDown tolerance = Number(0, 60);
+    readonly CheckBox deleteAfter = new() { Text = "Veri doğrulandıktan sonra cihaz kayıtları silinsin" };
+    readonly CheckBox backup = new() { Text = "Veriler yedek alınsın" };
+    readonly Label status = new() { AutoSize = false, Height = 30, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+    readonly Button save = Cmd("KAYDET", 110);
+    bool editing;
 
-    public LegacyTerminalSettingsForm(){Text="Terminal & Aktarım Ayarları";StartPosition=FormStartPosition.CenterParent;Size=new Size(1120,700);MinimumSize=new Size(900,600);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);KeyPreview=true;Build();Shown+=(_,_)=>Reload();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
-    static Label L(string text)=>new(){Text=text,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)};
-    static Button Cmd(string text,int width=112)=>new(){Text=text,Width=width,Height=36,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9f,FontStyle.Bold)};
-    static void Row(TableLayoutPanel t,int r,string label,Control c){t.RowStyles.Add(new RowStyle(SizeType.Absolute,38));t.Controls.Add(L(label),0,r);c.Dock=DockStyle.Fill;c.Margin=new Padding(3,6,3,6);t.Controls.Add(c,1,r);}
+    public LegacyTerminalSettingsForm()
+    {
+        Text = "Terminal / Kart Cihazı Ayarları";
+        StartPosition = FormStartPosition.CenterParent;
+        Size = new Size(1040, 690);
+        MinimumSize = new Size(960, 640);
+        Font = new Font("Segoe UI", 9f);
+        BackColor = Color.FromArgb(246, 249, 253);
+        Build();
+        Shown += async (_, _) =>
+        {
+            LoadSettings();
+            SetEditing(false);
+            await TestConnectionAsync(false);
+        };
+    }
+
+    static NumericUpDown Number(int min, int max) => new() { Minimum = min, Maximum = max, ThousandsSeparator = false };
+    static ComboBox Combo(params string[] items)
+    {
+        var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown };
+        box.Items.AddRange(items.Cast<object>().ToArray());
+        return box;
+    }
+    static Button Cmd(string text, int width = 122) => new() { Text = text, Width = width, Height = 36, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+    static Label L(string text) => new() { Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.FromArgb(55, 70, 92) };
 
     void Build()
     {
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(14)};root.RowStyles.Add(new RowStyle(SizeType.Absolute,74));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
-        var header=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,Padding=new Padding(14,10,14,8),BackColor=Color.White};header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,240));header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,180));header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));header.Controls.Add(L("Terminal Profili"),0,0);terminal.Dock=DockStyle.Fill;header.Controls.Add(terminal,1,0);active.Dock=DockStyle.Fill;header.Controls.Add(active,2,0);header.Controls.Add(new Label{Text="Kart cihazı ve dosya aktarım eşleşmeleri",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleRight,ForeColor=Color.FromArgb(36,107,230),Font=new Font("Segoe UI",9f,FontStyle.Bold)},3,0);root.Controls.Add(header,0,0);
-        var tabs=new TabControl{Dock=DockStyle.Fill};var map=new TabPage("Kayıt Alanları"){Padding=new Padding(16)};var keys=new TabPage("Giriş / Çıkış Kodları"){Padding=new Padding(16)};var files=new TabPage("Program & Dosya"){Padding=new Padding(16)};
-        var mapGrid=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=3,RowCount=9,AutoSize=true};mapGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,45));mapGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,27.5f));mapGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,27.5f));mapGrid.Controls.Add(new Label{Text="Alan",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f,FontStyle.Bold)},0,0);mapGrid.Controls.Add(new Label{Text="Başlangıç",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f,FontStyle.Bold)},1,0);mapGrid.Controls.Add(new Label{Text="Uzunluk / Bitiş",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f,FontStyle.Bold)},2,0);
-        var defs=new[]{("Personel Kart Numarası","PKNO"),("Yıl","YIL"),("Ay","AY"),("Gün","GUN"),("Basılan Tuş","TUS"),("Saat","SAAT"),("Dakika","DAKIKA"),("Saat Kodu","MK")};for(int i=0;i<defs.Length;i++){var a=new TextBox();var b=new TextBox();fields[defs[i].Item2+"BAS"]=a;fields[defs[i].Item2+"BIT"]=b;mapGrid.RowStyles.Add(new RowStyle(SizeType.Absolute,38));mapGrid.Controls.Add(L(defs[i].Item1),0,i+1);a.Dock=DockStyle.Fill;b.Dock=DockStyle.Fill;a.Margin=b.Margin=new Padding(5,6,5,6);mapGrid.Controls.Add(a,1,i+1);mapGrid.Controls.Add(b,2,i+1);}map.Controls.Add(mapGrid);
-        var keyGrid=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=3,RowCount=4,AutoSize=true};keyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));keyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));keyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));keyGrid.Controls.Add(new Label{Text="Alternatif",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f,FontStyle.Bold)},0,0);keyGrid.Controls.Add(new Label{Text="Giriş",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f,FontStyle.Bold)},1,0);keyGrid.Controls.Add(new Label{Text="Çıkış",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f,FontStyle.Bold)},2,0);for(int i=1;i<=3;i++){var gi=new TextBox();var ci=new TextBox();gi.MaxLength=1;ci.MaxLength=1;fields[$"GIRIS{i}"]=gi;fields[$"CIKIS{i}"]=ci;keyGrid.RowStyles.Add(new RowStyle(SizeType.Absolute,42));keyGrid.Controls.Add(L($"Kod {i}"),0,i);gi.Dock=DockStyle.Fill;ci.Dock=DockStyle.Fill;gi.Margin=ci.Margin=new Padding(5,7,5,7);keyGrid.Controls.Add(gi,1,i);keyGrid.Controls.Add(ci,2,i);}keys.Controls.Add(keyGrid);
-        var fileGrid=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=3,RowCount=2,AutoSize=true};fileGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));fileGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));fileGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,50));Row(fileGrid,0,"Programın Yolu",programPath);Row(fileGrid,1,"Aktarım Dosyası",transferFile);var bp=Cmd("…",40);var bf=Cmd("…",40);bp.Click+=(_,_)=>BrowseFile(programPath,true);bf.Click+=(_,_)=>BrowseFile(transferFile,false);fileGrid.Controls.Add(bp,2,0);fileGrid.Controls.Add(bf,2,1);files.Controls.Add(fileGrid);tabs.TabPages.AddRange([map,keys,files]);root.Controls.Add(tabs,0,1);
-        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var add=Cmd("Yeni Ekle");var edit=Cmd("Değiştir");var del=Cmd("Sil");var delAll=Cmd("Tümünü Sil",120);save.Enabled=false;save.Click+=(_,_)=>SaveCurrent();add.Click+=(_,_)=>BeginNew();edit.Click+=(_,_)=>BeginEdit();del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();actions.Controls.AddRange([save,delAll,del,edit,add]);root.Controls.Add(actions,0,2);Controls.Add(root);SetEdit(false);terminal.SelectedIndexChanged+=(_,_)=>{if(!save.Enabled)LoadSelected();};
-    }
-    void Reload()
-    {
-        try
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, Padding = new Padding(14), BackColor = BackColor };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 115));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+
+        BuildGrid();
+        root.Controls.Add(grid, 0, 0);
+
+        var devicePanel = new GroupBox { Text = "Cihaz Bağlantı Ayarları", Dock = DockStyle.Fill, Padding = new Padding(12) };
+        var deviceFields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 10, RowCount = 2 };
+        for (var i = 0; i < 10; i++) deviceFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10));
+        deviceFields.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        deviceFields.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        AddField(deviceFields, 0, "Cihaz No", deviceNo);
+        AddField(deviceFields, 1, "Cihaz Adı", deviceName);
+        AddField(deviceFields, 2, "Makine No", machineNo);
+        AddField(deviceFields, 3, "Bağlantı Tipi", connectionType);
+        AddField(deviceFields, 4, "Com No", comPort);
+        AddField(deviceFields, 5, "Baudrate", baudRate);
+        AddField(deviceFields, 6, "IP Adres", ipAddress);
+        AddField(deviceFields, 7, "IP Port", ipPort);
+        AddField(deviceFields, 8, "Giriş / Çıkış", direction);
+        var statusBox = new Panel { Dock = DockStyle.Fill, Padding = new Padding(4, 2, 4, 2) };
+        status.Dock = DockStyle.Fill;
+        statusBox.Controls.Add(status);
+        deviceFields.Controls.Add(L("İşlem Durumu"), 9, 0);
+        deviceFields.Controls.Add(statusBox, 9, 1);
+        devicePanel.Controls.Add(deviceFields);
+        root.Controls.Add(devicePanel, 0, 1);
+
+        var rowActions = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(8, 12, 8, 0), WrapContents = false };
+        var add = Cmd("EKLE", 105);
+        var remove = Cmd("ÇIKART", 105);
+        var edit = Cmd("DÜZENLE", 105);
+        add.Click += (_, _) => { ApplyToFields(TerminalDeviceSettings.Default); SetEditing(true); };
+        remove.Click += (_, _) =>
         {
-            var dt=db.Query("select TIP,AKTIF from SAAT order by TIP");terminal.DataSource=dt;terminal.DisplayMember="TIP";terminal.ValueMember="TIP";
-            if(dt.Rows.Count>0)terminal.SelectedIndex=0;else ClearFields();
-        }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Error);}
-    }
+            if (MessageBox.Show("Ana cihaz ayarları varsayılana döndürülsün mü?", Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            TerminalDeviceSettingsStore.Save(TerminalDeviceSettings.Default);
+            LoadSettings();
+            SetEditing(false);
+        };
+        edit.Click += (_, _) => SetEditing(true);
+        save.Click += (_, _) => SaveSettings();
+        rowActions.Controls.AddRange([add, remove, edit, save]);
+        root.Controls.Add(rowActions, 0, 2);
 
-    void LoadSelected()
-    {
-        try
+        var operations = new GroupBox { Text = "Cihaz İşlemleri", Dock = DockStyle.Fill, Padding = new Padding(12) };
+        var opRoot = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
+        opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
+        opRoot.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var opButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true };
+        Button Action(string text, Func<Task> action, int width = 135)
         {
-            if(terminal.SelectedValue is null||terminal.SelectedValue is DataRowView)return;var tip=Convert.ToString(terminal.SelectedValue)??"";if(tip.Length==0)return;
-            var dt=db.Query("select * from SAAT where TIP=@T",new FbParameter("@T",tip));if(dt.Rows.Count==0)return;var r=dt.Rows[0];
-            editingTip=terminal.SelectedIndex;isNew=false;active.Checked=string.Equals(Convert.ToString(r["AKTIF"]),"E",StringComparison.OrdinalIgnoreCase)||string.Equals(Convert.ToString(r["AKTIF"]),"1",StringComparison.OrdinalIgnoreCase);
-            foreach(var key in fields.Keys)fields[key].Text=r.Table.Columns.Contains(key)&&r[key]!=DBNull.Value?Convert.ToString(r[key])??"":"";
-            programPath.Text=r["EXEPATH"]==DBNull.Value?"":Convert.ToString(r["EXEPATH"])??"";transferFile.Text=r["TRANSFILE"]==DBNull.Value?"":Convert.ToString(r["TRANSFILE"])??"";
-        }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
-    }
-
-    void BeginNew()
-    {
-        isNew=true;editingTip=null;terminal.DataSource=null;terminal.Items.Clear();terminal.DropDownStyle=ComboBoxStyle.DropDown;terminal.Text="";ClearFields();SetEdit(true);save.Enabled=true;terminal.Focus();
-    }
-
-    void BeginEdit()
-    {
-        if(terminal.SelectedValue is null){MessageBox.Show("Bir terminal seçin.",Text);return;}isNew=false;editingTip=terminal.SelectedIndex;terminal.DropDownStyle=ComboBoxStyle.DropDown;SetEdit(true);save.Enabled=true;
-    }
-
-    void ClearFields(){active.Checked=false;foreach(var b in fields.Values)b.Clear();programPath.Clear();transferFile.Clear();}
-    void SetEdit(bool enabled){active.Enabled=enabled;foreach(var b in fields.Values)b.ReadOnly=!enabled;programPath.ReadOnly=!enabled;transferFile.ReadOnly=!enabled;terminal.Enabled=true;}
-    static object DbNumber(string value)=>int.TryParse(value.Trim(),out var n)?n:DBNull.Value;
-    static object DbText(string value)=>string.IsNullOrWhiteSpace(value)?DBNull.Value:value.Trim();
-
-    void SaveCurrent()
-    {
-        try
-        {
-            var tip=terminal.Text.Trim();if(tip.Length==0)throw new InvalidOperationException("Terminal adı boş bırakılamaz.");if(tip.Length>10)throw new InvalidOperationException("Terminal adı en fazla 10 karakter olabilir.");
-            var parameters=new List<FbParameter>{new("@TIP",tip),new("@AKTIF",active.Checked?"E":"H"),new("@EXEPATH",DbText(programPath.Text)),new("@TRANSFILE",DbText(transferFile.Text))};
-            foreach(var key in new[]{"YILBAS","YILBIT","AYBAS","AYBIT","GUNBAS","GUNBIT","PKNOBAS","PKNOBIT","TUSBAS","TUSBIT","SAATBAS","SAATBIT","MKBAS","MKBIT","DAKIKABAS","DAKIKABIT"})parameters.Add(new FbParameter("@"+key,DbNumber(fields[key].Text)));
-            foreach(var key in new[]{"GIRIS1","GIRIS2","GIRIS3","CIKIS1","CIKIS2","CIKIS3"})parameters.Add(new FbParameter("@"+key,DbText(fields[key].Text)));
-            const string cols="TIP,YILBAS,YILBIT,AYBAS,AYBIT,GUNBAS,GUNBIT,PKNOBAS,PKNOBIT,TUSBAS,TUSBIT,SAATBAS,SAATBIT,MKBAS,MKBIT,GIRIS1,GIRIS2,GIRIS3,CIKIS1,CIKIS2,CIKIS3,EXEPATH,DAKIKABAS,DAKIKABIT,TRANSFILE,AKTIF";
-            if(isNew)
+            var b = Cmd(text, width);
+            b.Click += async (_, _) =>
             {
-                if(Convert.ToInt32(db.Scalar("select count(*) from SAAT where TIP=@T",new FbParameter("@T",tip))??0)>0)throw new InvalidOperationException("Bu terminal adı zaten kayıtlı.");
-                db.Execute($"insert into SAAT ({cols}) values (@TIP,@YILBAS,@YILBIT,@AYBAS,@AYBIT,@GUNBAS,@GUNBIT,@PKNOBAS,@PKNOBIT,@TUSBAS,@TUSBIT,@SAATBAS,@SAATBIT,@MKBAS,@MKBIT,@GIRIS1,@GIRIS2,@GIRIS3,@CIKIS1,@CIKIS2,@CIKIS3,@EXEPATH,@DAKIKABAS,@DAKIKABIT,@TRANSFILE,@AKTIF)",parameters.ToArray());
+                b.Enabled = false;
+                try { await action(); }
+                finally { if (!IsDisposed) b.Enabled = true; }
+            };
+            opButtons.Controls.Add(b);
+            return b;
+        }
+        Action("BAĞLAN TEST", () => TestConnectionAsync(true));
+        Action("CİHAZ TARİH/SAAT OKU", ReadDeviceTimeAsync, 178);
+        Action("PC SAATİNE AYARLA", SetDeviceTimeAsync, 165);
+        Action("CİHAZDAN OKU", PreviewPunchesAsync, 135);
+        Action("KAYITLARI AKTAR", TransferNowAsync, 145);
+        Action("SÜRÜCÜYÜ ONAR", RepairAsync, 145);
+        opRoot.Controls.Add(opButtons, 0, 0);
+
+        var transfer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2 };
+        transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
+        transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48));
+        transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
+        transfer.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        transfer.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        transfer.Controls.Add(L("Veri Aktarım Yolu"), 0, 0);
+        transferFile.Dock = DockStyle.Fill;
+        transferFile.Margin = new Padding(4, 7, 4, 7);
+        transfer.Controls.Add(transferFile, 1, 0);
+        var browse = Cmd("…", 40);
+        browse.Height = 29;
+        browse.Click += (_, _) => BrowseTransferFile();
+        transfer.Controls.Add(browse, 2, 0);
+        transfer.Controls.Add(L("Tolerans (dk)"), 3, 0);
+        tolerance.Dock = DockStyle.Fill;
+        tolerance.Margin = new Padding(4, 7, 4, 7);
+        transfer.Controls.Add(tolerance, 3, 1);
+        backup.Dock = DockStyle.Fill;
+        deleteAfter.Dock = DockStyle.Fill;
+        transfer.Controls.Add(backup, 0, 1);
+        transfer.SetColumnSpan(backup, 2);
+        transfer.Controls.Add(deleteAfter, 2, 1);
+        transfer.SetColumnSpan(deleteAfter, 1);
+        opRoot.Controls.Add(transfer, 0, 1);
+
+        var note = new Label
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            Text = "Güvenlik: cihaz kayıtları yalnız TNF + FDB aktarımı doğrulandıktan sonra silinir. Veri yoksa işlem hata üretmez; ‘Aktarılacak veri yok.’ bilgisi gösterilir.",
+            ForeColor = Color.FromArgb(70, 84, 103),
+            Padding = new Padding(4, 6, 4, 0)
+        };
+        opRoot.Controls.Add(note, 0, 2);
+        operations.Controls.Add(opRoot);
+        root.Controls.Add(operations, 0, 3);
+
+        var bottom = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 8, 0, 0) };
+        var close = Cmd("ÇIKIŞ", 110);
+        close.Click += (_, _) => Close();
+        bottom.Controls.Add(close);
+        root.Controls.Add(bottom, 0, 4);
+
+        Controls.Add(root);
+    }
+
+    void BuildGrid()
+    {
+        grid.Dock = DockStyle.Fill;
+        grid.ReadOnly = true;
+        grid.AllowUserToAddRows = false;
+        grid.AllowUserToDeleteRows = false;
+        grid.MultiSelect = false;
+        grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        grid.BackgroundColor = Color.White;
+        foreach (var name in new[] { "CihazNo", "CihazAdı", "MakineNo", "BağlantıTipi", "ComPort", "Baudrate", "IP Adres", "IP Port", "Giriş/Çıkış", "İşlem Durumu" })
+            grid.Columns.Add(name.Replace(" ", ""), name);
+        grid.CellDoubleClick += (_, _) => SetEditing(true);
+    }
+
+    static void AddField(TableLayoutPanel table, int column, string label, Control control)
+    {
+        table.Controls.Add(L(label), column, 0);
+        control.Dock = DockStyle.Fill;
+        control.Margin = new Padding(3, 7, 3, 7);
+        table.Controls.Add(control, column, 1);
+    }
+
+    void LoadSettings()
+    {
+        var value = TerminalDeviceSettingsStore.Load();
+        ApplyToFields(value);
+        RefreshGrid(value, "Kontrol bekliyor");
+    }
+
+    void ApplyToFields(TerminalDeviceSettings value)
+    {
+        deviceNo.Value = Math.Clamp(value.DeviceNo, (int)deviceNo.Minimum, (int)deviceNo.Maximum);
+        deviceName.Text = value.DeviceName;
+        machineNo.Value = Math.Clamp(value.MachineNo, (int)machineNo.Minimum, (int)machineNo.Maximum);
+        connectionType.Text = value.ConnectionType;
+        comPort.Text = value.ComPort;
+        baudRate.Text = value.BaudRate.ToString();
+        ipAddress.Text = value.IpAddress;
+        ipPort.Value = Math.Clamp(value.IpPort, (int)ipPort.Minimum, (int)ipPort.Maximum);
+        direction.Text = value.Direction;
+        transferFile.Text = value.TransferFile;
+        deleteAfter.Checked = value.DeleteAfterValidatedTransfer;
+        backup.Checked = value.BackupBeforeTransfer;
+        tolerance.Value = Math.Clamp(value.ToleranceMinutes, (int)tolerance.Minimum, (int)tolerance.Maximum);
+    }
+
+    TerminalDeviceSettings ReadFields()
+    {
+        if (string.IsNullOrWhiteSpace(ipAddress.Text)) throw new InvalidOperationException("IP adresi boş bırakılamaz.");
+        if (!int.TryParse(baudRate.Text.Trim(), out var baud) || baud <= 0) throw new InvalidOperationException("Baudrate geçersiz.");
+        return new TerminalDeviceSettings(
+            (int)deviceNo.Value,
+            string.IsNullOrWhiteSpace(deviceName.Text) ? "Cihaz1" : deviceName.Text.Trim(),
+            (int)machineNo.Value,
+            string.IsNullOrWhiteSpace(connectionType.Text) ? "Ethernet" : connectionType.Text.Trim(),
+            string.IsNullOrWhiteSpace(comPort.Text) ? "COM1" : comPort.Text.Trim(),
+            baud,
+            ipAddress.Text.Trim(),
+            (int)ipPort.Value,
+            string.IsNullOrWhiteSpace(direction.Text) ? "GİRİŞ" : direction.Text.Trim(),
+            string.IsNullOrWhiteSpace(transferFile.Text) ? TerminalDeviceSettings.Default.TransferFile : transferFile.Text.Trim(),
+            deleteAfter.Checked,
+            backup.Checked,
+            (int)tolerance.Value);
+    }
+
+    void SaveSettings()
+    {
+        try
+        {
+            var value = ReadFields();
+            TerminalDeviceSettingsStore.Save(value);
+            RefreshGrid(value, "Kaydedildi");
+            SetEditing(false);
+            MessageBox.Show("Kart cihazı ayarları kaydedildi.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    void SetEditing(bool value)
+    {
+        editing = value;
+        foreach (var c in new Control[] { deviceNo, deviceName, machineNo, connectionType, comPort, baudRate, ipAddress, ipPort, direction, transferFile, tolerance, deleteAfter, backup }) c.Enabled = value;
+        save.Enabled = value;
+    }
+
+    void RefreshGrid(TerminalDeviceSettings value, string state)
+    {
+        grid.Rows.Clear();
+        grid.Rows.Add(value.DeviceNo, value.DeviceName, value.MachineNo, value.ConnectionType, value.ComPort, value.BaudRate, value.IpAddress, value.IpPort, value.Direction, state);
+        if (grid.Rows.Count > 0) grid.Rows[0].Selected = true;
+    }
+
+    async Task TestConnectionAsync(bool showMessage)
+    {
+        try
+        {
+            var saved = TerminalDeviceSettingsStore.Load();
+            SetStatus("Bağlantı test ediliyor…", null);
+            var snap = await TerminalDeviceClient.ReadAsync(false);
+            if (snap.Connected)
+            {
+                SetStatus($"Bağlantı var • {snap.DeviceTime:dd.MM.yyyy HH:mm:ss}", true);
+                RefreshGrid(saved, "Bağlantı var");
+                if (showMessage) MessageBox.Show($"Cihaz bağlantısı başarılı.\nIP: {saved.IpAddress}:{saved.IpPort}\nMakine: {saved.MachineNo}\nCihaz saati: {snap.DeviceTime:dd.MM.yyyy HH:mm:ss}", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else
             {
-                var old=terminal.SelectedValue is DataRowView?tip:Convert.ToString(terminal.SelectedValue)??tip;
-                parameters.Add(new FbParameter("@OLD",old));
-                db.Execute("update SAAT set TIP=@TIP,YILBAS=@YILBAS,YILBIT=@YILBIT,AYBAS=@AYBAS,AYBIT=@AYBIT,GUNBAS=@GUNBAS,GUNBIT=@GUNBIT,PKNOBAS=@PKNOBAS,PKNOBIT=@PKNOBIT,TUSBAS=@TUSBAS,TUSBIT=@TUSBIT,SAATBAS=@SAATBAS,SAATBIT=@SAATBIT,MKBAS=@MKBAS,MKBIT=@MKBIT,GIRIS1=@GIRIS1,GIRIS2=@GIRIS2,GIRIS3=@GIRIS3,CIKIS1=@CIKIS1,CIKIS2=@CIKIS2,CIKIS3=@CIKIS3,EXEPATH=@EXEPATH,DAKIKABAS=@DAKIKABAS,DAKIKABIT=@DAKIKABIT,TRANSFILE=@TRANSFILE,AKTIF=@AKTIF where TIP=@OLD",parameters.ToArray());
+                SetStatus("Bağlantı yok • " + snap.Message, false);
+                RefreshGrid(saved, "Bağlantı yok");
+                if (showMessage) MessageBox.Show(snap.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
-            terminal.DropDownStyle=ComboBoxStyle.DropDownList;save.Enabled=false;SetEdit(false);Reload();
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch (Exception ex)
+        {
+            SetStatus("Bağlantı hatası • " + ex.GetBaseException().Message, false);
+            if (showMessage) MessageBox.Show(ex.GetBaseException().Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
-    void DeleteOne()
+    async Task ReadDeviceTimeAsync()
     {
-        var tip=Convert.ToString(terminal.SelectedValue);if(string.IsNullOrWhiteSpace(tip))return;
-        if(MessageBox.Show("Seçili terminal ayarı silinsin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
-        try{db.Execute("delete from SAAT where TIP=@T",new FbParameter("@T",tip));Reload();}catch(Exception ex){MessageBox.Show(ex.Message,Text);}
+        var snap = await TerminalDeviceClient.ReadAsync(false);
+        if (!snap.Connected) { MessageBox.Show(snap.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        MessageBox.Show($"Cihaz tarih / saat: {snap.DeviceTime:dd.MM.yyyy HH:mm:ss}", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
-    void DeleteAll()
+    async Task SetDeviceTimeAsync()
     {
-        if(MessageBox.Show("Tüm terminal ayarları silinsin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
-        try{db.Execute("delete from SAAT");Reload();}catch(Exception ex){MessageBox.Show(ex.Message,Text);}
+        if (MessageBox.Show("Cihaz tarihi ve saati bu bilgisayarın saatine ayarlansın mı?", Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        var result = await TerminalDeviceClient.ExecuteAsync("settime");
+        MessageBox.Show(result.Success ? "Cihaz tarihi / saati PC saatine ayarlandı." : result.Message, Text, MessageBoxButtons.OK, result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        await TestConnectionAsync(false);
     }
 
-    void BrowseFile(TextBox target,bool executable)
+    async Task PreviewPunchesAsync()
     {
-        using var dlg=new OpenFileDialog{CheckFileExists=true,Filter=executable?"Program (*.exe)|*.exe|Tüm dosyalar (*.*)|*.*":"Aktarım dosyası (*.*)|*.*"};if(dlg.ShowDialog(this)==DialogResult.OK)target.Text=dlg.FileName;
+        var snap = await TerminalDeviceClient.ReadAsync(true);
+        if (!snap.Connected) { MessageBox.Show(snap.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        if (snap.Punches.Count == 0)
+        {
+            MessageBox.Show("Cihaz bağlı. Yeni kart kaydı yok.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        using var preview = new Form { Text = $"Cihaz Kayıtları • {snap.Punches.Count}", StartPosition = FormStartPosition.CenterParent, Size = new Size(680, 520), Font = Font };
+        var list = new DataGridView { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AutoGenerateColumns = false, BackgroundColor = Color.White };
+        list.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Kart No", DataPropertyName = nameof(TerminalDevicePunch.EmployeeCode), Width = 100 });
+        list.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tarih / Saat", DataPropertyName = nameof(TerminalDevicePunch.OccurredAt), Width = 180 });
+        list.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Giriş/Çıkış", DataPropertyName = nameof(TerminalDevicePunch.InOut), Width = 100 });
+        list.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Terminal", DataPropertyName = nameof(TerminalDevicePunch.TerminalNumber), Width = 90 });
+        list.DataSource = snap.Punches.ToList();
+        preview.Controls.Add(list);
+        preview.ShowDialog(this);
+    }
+
+    async Task TransferNowAsync()
+    {
+        var result = await TerminalSyncService.SyncAsync("Manuel terminal aktarımı");
+        if (result.ReadCount == 0 && result.Inserted == 0 && result.Updated == 0 && result.Duplicates == 0)
+        {
+            MessageBox.Show("Aktarılacak veri yok.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        var detail = result.Message + $"\n\nOkunan: {result.ReadCount}\nYeni: {result.Inserted}\nGüncellenen: {result.Updated}\nMükerrer: {result.Duplicates}\nAtlanan: {result.Skipped}\nCihaz temizlendi: {(result.DeviceCleared ? "Evet" : "Hayır")}";
+        MessageBox.Show(detail, Text, MessageBoxButtons.OK, result.Skipped == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+    }
+
+    async Task RepairAsync()
+    {
+        if (!TerminalSdkRepair.TryRepair(this)) return;
+        await TestConnectionAsync(true);
+    }
+
+    void BrowseTransferFile()
+    {
+        using var dlg = new OpenFileDialog { CheckFileExists = false, FileName = Path.GetFileName(transferFile.Text), InitialDirectory = Directory.Exists(Path.GetDirectoryName(transferFile.Text)) ? Path.GetDirectoryName(transferFile.Text) : null, Filter = "Terminal kayıt dosyası (*.txt;*.tnf)|*.txt;*.tnf|Tüm dosyalar (*.*)|*.*" };
+        if (dlg.ShowDialog(this) == DialogResult.OK) transferFile.Text = dlg.FileName;
+    }
+
+    void SetStatus(string text, bool? ok)
+    {
+        status.Text = text;
+        status.ForeColor = ok switch { true => Color.DarkGreen, false => Color.Firebrick, _ => Color.FromArgb(31, 92, 180) };
     }
 }
