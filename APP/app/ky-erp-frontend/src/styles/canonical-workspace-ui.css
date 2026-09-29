@@ -1,64 +1,27 @@
-/* KY ERP canonical UI standard
-   Tek çalışma kanvası, merkez dialog, sakin ve kısa işlem akışı. */
+/* KY ERP canonical action UI
+   Mevcut modül/sayfa düzeni korunur. İşlem formları merkez açılır pencerede tamamlanır. */
 
 :root {
-  --ky-workspace-max: 1180px;
-  --ky-workspace-narrow: 920px;
   --ky-dialog-max: 900px;
-  --ky-dialog-wide-max: 1040px;
+  --ky-dialog-wide-max: 1080px;
   --ky-dialog-gap: 22px;
 }
 
-/* Sol alan sadece ana modül seçimidir. Alt iş adımları orta alandaki canonical görev açılırından yönetilir. */
+/* Sol modül ve alt menüler eski çalışma düzeninde görünür kalır. */
 .shell-v3-sidebar .shell-v3-submenu {
-  display: none !important;
+  display: block;
 }
 
-.shell-v3-module-button > svg:last-child {
-  display: none !important;
-}
-
-/* Bütün ana modüller aynı yatay ritmi kullanır; büyük monitörde ekran sağa sola yayılmaz. */
+/* Sayfaların kendi yerleşimine müdahale edilmez; genişlik ve master/detail düzeni modüle aittir. */
 .shell-v3-workspace > * {
-  width: min(100%, var(--ky-workspace-max));
-  margin-inline: auto;
+  min-width: 0;
 }
 
 .shell-v3-workspace :where(.content-card, [class$="-workspace"], [class$="-page"]) {
   min-width: 0;
 }
 
-/* Kısa form ve ayar yüzeyleri mümkün olduğunca okunabilir merkez genişlikte kalır. */
-.shell-v3-workspace :where(
-  [class*="settings"],
-  [class*="form-shell"],
-  [class*="form-card"],
-  [class*="detail-form"]
-) {
-  max-width: var(--ky-workspace-narrow);
-}
-
-/* Eski iki-panelli ana iş ekranları artık yukarıdan aşağı tek akıştır. */
-.shell-v3-workspace :where(
-  [class*="master-detail"],
-  [class*="masterdetail"],
-  [class*="split-layout"],
-  [class*="two-pane"],
-  [class*="dual-pane"]
-) {
-  grid-template-columns: minmax(0, 1fr) !important;
-}
-
-/* Firma/Cari gibi seç-listeden-işle akışlarında liste kısa kalır, işlem alanı hemen altında açılır. */
-.shell-v3-workspace .ccw-master-detail {
-  grid-template-columns: minmax(0, 1fr) !important;
-}
-
-.shell-v3-workspace .ccw-table-card > .ccw-table-wrap {
-  max-height: 320px !important;
-}
-
-/* Eski drawer/side-panel isimleri korunabilir; davranış artık yan panel değil merkez dialogdur. */
+/* Drawer/side-panel isimleri eski kodda kalabilir; davranış artık merkez açılır penceredir. */
 :where(
   [class*="drawer-layer"],
   [class*="drawer-backdrop"],
@@ -124,22 +87,24 @@
   box-shadow: 0 20px 54px rgba(15, 23, 42, 0.24) !important;
 }
 
-/* Uzun formlarda başlık ve ana aksiyonlar görünür kalır. */
-[role="dialog"] > header {
+/* Uzun formlarda başlık ve Kaydet/Vazgeç görünür kalır. */
+[role="dialog"] > header,
+.ky-action-dialog > header {
   position: sticky;
   top: 0;
   z-index: 4;
   background: inherit;
 }
 
-[role="dialog"] > footer {
+[role="dialog"] > footer,
+.ky-action-dialog > footer {
   position: sticky;
   bottom: 0;
   z-index: 4;
   background: inherit;
 }
 
-/* Geniş belge/rapor dialogları yine merkezde kalır; sadece gerektiği kadar büyür. */
+/* Geniş belge/rapor açılırları yine merkezde kalır. */
 :where(
   [class*="drawer-layer"],
   [class*="drawer-backdrop"],
@@ -157,7 +122,67 @@
   max-width: var(--ky-dialog-wide-max) !important;
 }
 
-/* Eski sürüklenebilir / yeniden boyutlandırılabilir pencere davranışı canonical düzende kullanılmaz. */
+/* Firma/Cari'deki eski gömülü cari hareket formu da açılır pencere gibi davranır. */
+.ccw-transaction {
+  position: fixed !important;
+  z-index: 1200 !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: min(760px, calc(100vw - 44px)) !important;
+  max-height: calc(100dvh - 44px) !important;
+  overflow: auto !important;
+  background: #fff !important;
+  border-radius: 14px !important;
+  box-shadow: 0 0 0 100vmax rgba(15, 23, 42, .34), 0 22px 64px rgba(15, 23, 42, .24) !important;
+}
+
+.ccw-root:has(.ccw-transaction) > :not(.ccw-master-detail),
+.ccw-root:has(.ccw-transaction) .ccw-master-detail > :not(.ccw-detail-panel) {
+  pointer-events: none;
+}
+
+.ccw-root:has(.ccw-transaction) .ccw-detail-panel > :not(.ccw-transaction) {
+  pointer-events: none;
+}
+
+.ccw-transaction {
+  pointer-events: auto;
+}
+
+/* Açılır pencerelerde sekmeli işlem yapısı için ortak görsel dil. */
+.ky-action-tabs,
+[class*="modal-tabs"],
+[class*="dialog-tabs"] {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.ky-action-tabs > button,
+[class*="modal-tabs"] > button,
+[class*="dialog-tabs"] > button {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 8px;
+  padding: 8px 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ky-action-tabs > button.active,
+[class*="modal-tabs"] > button.active,
+[class*="dialog-tabs"] > button.active {
+  border-color: #cbdaf9;
+  background: #eaf1ff;
+  color: #234fa6;
+  font-weight: 700;
+}
+
+/* Sürükle/boyutlandır pencere kullanılmaz. */
 .ky-modal-resize-handle {
   display: none !important;
 }
@@ -168,8 +193,6 @@
   inset: auto !important;
   top: auto !important;
   left: auto !important;
-  width: auto;
-  height: auto;
   transform: none !important;
   resize: none !important;
 }
@@ -179,35 +202,8 @@
   touch-action: auto !important;
 }
 
-/* Açılır detaylar aynı görsel dilde: başlık sakin, içerik ihtiyaç halinde görünür. */
-.shell-v3-workspace details {
-  border-radius: 10px;
-}
-
-.shell-v3-workspace details > summary {
-  cursor: pointer;
-  user-select: none;
-}
-
-/* Aksiyon satırları ekran kenarlarına dağılmaz. */
-.shell-v3-workspace :where(
-  [class*="toolbar"],
-  [class*="action-row"],
-  [class*="actions-row"],
-  [class*="button-row"]
-) {
-  min-width: 0;
-}
-
-/* Telefon/tablet: tek kolon ve ekrana oturan merkez dialog. */
 @media (max-width: 900px) {
-  :root {
-    --ky-dialog-gap: 10px;
-  }
-
-  .shell-v3-workspace > * {
-    width: 100%;
-  }
+  :root { --ky-dialog-gap: 10px; }
 
   :where(
     [class*="drawer-layer"],
@@ -221,22 +217,18 @@
     [class*="modal-layer"],
     [class*="modal-bg"]
   ) > :where(
-    [role="dialog"],
-    dialog,
-    aside[class*="drawer"],
-    aside[class*="side-panel"],
-    [class$="-drawer"],
-    [class*="drawer-panel"],
-    [class*="drawer-card"],
-    [class*="side-panel"],
-    [class$="-modal"],
-    [class*="modal-card"],
-    [class*="modal-box"],
-    [class*="modal-panel"]
+    [role="dialog"], dialog, aside[class*="drawer"], aside[class*="side-panel"],
+    [class$="-drawer"], [class*="drawer-panel"], [class*="drawer-card"], [class*="side-panel"],
+    [class$="-modal"], [class*="modal-card"], [class*="modal-box"], [class*="modal-panel"]
   ) {
     width: calc(100vw - 20px) !important;
     max-width: calc(100vw - 20px) !important;
     max-height: calc(100dvh - 20px) !important;
     border-radius: 12px !important;
+  }
+
+  .ccw-transaction {
+    width: calc(100vw - 20px) !important;
+    max-height: calc(100dvh - 20px) !important;
   }
 }
