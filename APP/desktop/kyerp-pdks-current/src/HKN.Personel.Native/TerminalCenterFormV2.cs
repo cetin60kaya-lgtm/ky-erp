@@ -2,7 +2,6 @@ namespace HKN.Personel.Native;
 
 public sealed class TerminalCenterForm : Form
 {
-    readonly Form? transferDialog;
     readonly Form settingsDialog;
     readonly Label sdkStatus = new()
     {
@@ -16,7 +15,6 @@ public sealed class TerminalCenterForm : Form
 
     public TerminalCenterForm(Form? transferDialog, Form settingsDialog)
     {
-        this.transferDialog = transferDialog;
         this.settingsDialog = settingsDialog;
         Text = "Terminal & Cihaz Merkezi";
         StartPosition = FormStartPosition.CenterParent;
@@ -53,12 +51,10 @@ public sealed class TerminalCenterForm : Form
             AutoScroll = true
         };
         cards.Controls.Add(Card("Cihaz Bağlantısı", "Gerçek kart cihazını doğrudan kontrol eder. Kayıt silmez veya değiştirmez.", () => CheckDeviceAsync(true), "Kontrol Et"));
-        cards.Controls.Add(Card("Kart Kayıtlarını Şimdi Al", "Cihazdaki yeni basımları okur. TNF + FDB doğrulanmadan cihazdan hiçbir kayıt silinmez.", SyncNowAsync, "Şimdi Al"));
-        cards.Controls.Add(Card("Sürücüyü Onar", "Paket içindeki eski 32-bit OCX/DLL setini Windows'a kaydeder. Yalnız bağlantı sürücü nedeniyle açılmıyorsa kullanılır.", RepairDriverAsync, "Onar"));
-        cards.Controls.Add(Card("Cihaz Ayarları", "IP, port, cihaz profili ve aktarım eşleşmelerini düzenler.", () => RunSync(OpenSettings), "Ayarlar"));
+        cards.Controls.Add(Card("Kart Kayıtlarını Şimdi Al", "Cihazdaki yeni basımları okur. Veri yoksa bilgi verir; TNF + FDB doğrulanmadan cihazdan hiçbir kayıt silinmez.", SyncNowAsync, "Şimdi Al"));
+        cards.Controls.Add(Card("Cihaz Ayarları", "Hedef PDKS ile aynı cihaz/makine, Ethernet, COM, baudrate, IP, port, giriş/çıkış ve aktarım ayarlarını düzenler.", () => RunSync(OpenSettings), "Ayarlar"));
+        cards.Controls.Add(Card("Sürücüyü Onar", "Paket içindeki eşleşen 32-bit OCX/DLL setini Windows'a kaydeder. Yalnız sürücü nedeniyle bağlantı açılamıyorsa kullanılır.", RepairDriverAsync, "Onar"));
         cards.Controls.Add(Card("SDK / Sürücü Kontrolü", "FP_CLOCK.ocx, destek DLL'leri ve x86 TerminalBridge uyumluluğunu kontrol eder.", () => RunSync(ShowSdkDiagnostics), "Kontrol Et"));
-        if (transferDialog is not null)
-            cards.Controls.Add(Card("Dosyadan / Eski Aktarım", "Eski Hedef dosya aktarım ekranını yalnız gerektiğinde açar.", () => RunSync(OpenTransfer), "Aç"));
         root.Controls.Add(cards, 0, 1);
 
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(8, 10, 8, 0) };
@@ -142,7 +138,10 @@ public sealed class TerminalCenterForm : Form
 
     void ShowConnected(TerminalDeviceSnapshot snapshot, bool showDialog)
     {
-        var message = $"CİHAZ BAĞLI • Saat {snapshot.DeviceTime:HH:mm:ss} • Yeni kayıt {snapshot.NewLogCount} • Kullanıcı {snapshot.UserCount} • Kart {snapshot.CardCount}";
+        var newText = snapshot.NewLogCount >= 0 ? snapshot.NewLogCount.ToString() : "?";
+        var userText = snapshot.UserCount >= 0 ? snapshot.UserCount.ToString() : "?";
+        var cardText = snapshot.CardCount >= 0 ? snapshot.CardCount.ToString() : "?";
+        var message = $"CİHAZ BAĞLI • Saat {snapshot.DeviceTime:HH:mm:ss} • Yeni kayıt {newText} • Kullanıcı {userText} • Kart {cardText}";
         SetStatus(message, true);
         if (showDialog) MessageBox.Show(message, "Kart Cihazı", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
@@ -173,7 +172,14 @@ public sealed class TerminalCenterForm : Form
         try
         {
             SetStatus("Kart kayıtları cihazdan okunuyor…", null);
-            var result = await TerminalSyncService.SyncAsync("Manuel");
+            var result = await TerminalSyncService.SyncAsync("Manuel terminal aktarımı");
+            if (result.ReadCount == 0 && result.Inserted == 0 && result.Updated == 0 && result.Duplicates == 0 && result.Skipped == 0)
+            {
+                SetStatus("CİHAZ BAĞLI • Aktarılacak veri yok.", true);
+                MessageBox.Show("Aktarılacak veri yok.", "Terminal Aktarımı", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
             var ok = !result.Message.Contains("hata", StringComparison.OrdinalIgnoreCase) &&
                      !result.Message.Contains("başarısız", StringComparison.OrdinalIgnoreCase);
             SetStatus(result.Message, ok);
@@ -218,17 +224,6 @@ public sealed class TerminalCenterForm : Form
         var detail = result.Message + (string.IsNullOrWhiteSpace(result.OcxPath) ? string.Empty : "\n\nDosya: " + result.OcxPath);
         MessageBox.Show(detail, "Terminal SDK Kontrolü", MessageBoxButtons.OK, result.Ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         RefreshSdkStatus();
-    }
-
-    void OpenTransfer()
-    {
-        if (!TerminalSdkGuard.EnsureCompatible(this)) return;
-        if (transferDialog is null || transferDialog.IsDisposed)
-        {
-            MessageBox.Show("Eski aktarım ekranı kullanılamıyor. 'Kart Kayıtlarını Şimdi Al' işlemini kullanın.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-        transferDialog.ShowDialog(this);
     }
 
     void OpenSettings()
