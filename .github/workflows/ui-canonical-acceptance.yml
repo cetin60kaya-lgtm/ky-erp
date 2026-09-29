@@ -1,0 +1,57 @@
+name: KY ERP Canonical UI Acceptance
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+      - codex/pdks-desktop-1.8.1-device-final-20260907
+      - main
+    paths:
+      - 'APP/app/ky-erp-frontend/**'
+      - 'APP/cloud/ky-erp-api/**'
+      - '.github/workflows/ui-canonical-acceptance.yml'
+  pull_request:
+    paths:
+      - 'APP/app/ky-erp-frontend/**'
+      - 'APP/cloud/ky-erp-api/**'
+      - '.github/workflows/ui-canonical-acceptance.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend lint test build
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  worker:
+    name: Worker typecheck test build
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: APP/cloud/ky-erp-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
