@@ -27,14 +27,14 @@
     "daily-operations-cards-weekly-payments-preserved",
     "muhasebe-mail-provider-accepted-send-tracking",
     "super-admin-application-settings-tab",
-    "global-left-click-quick-menu",
-    "left-click-menu-order-add-remove-controls",
-    "left-click-native-control-safety",
+    "global-right-click-quick-menu",
+    "right-click-menu-order-add-remove-controls",
+    "right-click-global-shell-behavior",
     "frontend-full-test-suite",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
     "live-entry-verification",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "Platform Yönetimi altına yalnız Süper Yönetici için Uygulama Ayarları ekranı eklendi. Sol Tık Hızlı Menüsü buradan açılıp kapatılır; işlem ve ekranlar eklenip çıkarılabilir, sıralanabilir, aktif modül kısayolları ve görünüm seçenekleri yönetilebilir. Normal buton, link ve form alanlarının sol tık davranışı korunur; menü çalışma alanındaki uygun boş tıklamada açılır. Ayarlar mevcut admin settings API üzerinden kalıcılaştırılır. İlk yayın denemesindeki React hook lint uyarısı düzeltildi; bu marker production lint, test, build, Pages deploy ve canlı bundle doğrulamasını yeniden çalıştırır."
+  "note": "Platform Yönetimi > Uygulama Ayarları içindeki hızlı menü sol tıktan sağ tıka çevrildi. Normal sol tık davranışı tamamen serbest bırakıldı. Sağ tık hızlı menüsü varsayılan olarak uygulama kabuğunda genel çalışır; istenirse yalnız çalışma alanıyla sınırlandırılabilir. Shift + sağ tık tarayıcının yerel sağ tık menüsünü açar. Menü sırası, ekle/çıkar ve görünüm ayarları korunur. Bu marker production lint, test, build, Pages deploy ve canlı bundle doğrulamasını çalıştırır."
 }
