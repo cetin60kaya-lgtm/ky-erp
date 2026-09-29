@@ -36,5 +36,5 @@
     "live-entry-verification",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "Platform Yönetimi altına yalnız Süper Yönetici için Uygulama Ayarları ekranı eklendi. Sol Tık Hızlı Menüsü buradan açılıp kapatılır; işlem ve ekranlar eklenip çıkarılabilir, sıralanabilir, aktif modül kısayolları ve görünüm seçenekleri yönetilebilir. Normal buton, link ve form alanlarının sol tık davranışı korunur; menü çalışma alanındaki uygun boş tıklamada açılır. Ayarlar mevcut admin settings API üzerinden kalıcılaştırılır. Frontend lint, test ve build ile production Pages deploy ve canlı bundle doğrulaması bu marker ile zorunludur."
+  "note": "Platform Yönetimi altına yalnız Süper Yönetici için Uygulama Ayarları ekranı eklendi. Sol Tık Hızlı Menüsü buradan açılıp kapatılır; işlem ve ekranlar eklenip çıkarılabilir, sıralanabilir, aktif modül kısayolları ve görünüm seçenekleri yönetilebilir. Normal buton, link ve form alanlarının sol tık davranışı korunur; menü çalışma alanındaki uygun boş tıklamada açılır. Ayarlar mevcut admin settings API üzerinden kalıcılaştırılır. İlk yayın denemesindeki React hook lint uyarısı düzeltildi; bu marker production lint, test, build, Pages deploy ve canlı bundle doğrulamasını yeniden çalıştırır."
 }
