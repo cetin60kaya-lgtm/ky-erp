@@ -1,12 +1,11 @@
-using System.Globalization;
-
 namespace HKN.Personel.Native;
 
 public sealed partial class MainShellForm
 {
-    readonly System.Windows.Forms.Timer terminalAutoTimer = new() { Interval = 30000 };
+    readonly System.Windows.Forms.Timer terminalAutoTimer = new() { Interval = 60000 };
     bool terminalAutoBusy;
     DateTime terminalLastProbeUtc = DateTime.MinValue;
+    DateTime terminalLastLiveSyncUtc = DateTime.MinValue;
 
     void InitializeTerminalAutoSync()
     {
@@ -43,17 +42,19 @@ public sealed partial class MainShellForm
 
             var settings = TerminalSyncService.LoadSettings();
             if (!settings.Enabled) return;
+            if (!forceProbe && DateTime.UtcNow - terminalLastLiveSyncUtc < TimeSpan.FromMinutes(5)) return;
+
+            terminalLastLiveSyncUtc = DateTime.UtcNow;
             var now = DateTime.Now;
-            var hm = now.ToString("HH:mm", CultureInfo.InvariantCulture);
-            if (!settings.Times.Contains(hm, StringComparer.Ordinal)) return;
-            var key = $"{now:yyyyMMdd}|{hm}";
+            var bucketMinute = (now.Minute / 5) * 5;
+            var key = $"LIVE|{now:yyyyMMddHH}|{bucketMinute:00}";
             var state = TerminalSyncService.ReadState();
             if (string.Equals(state?.ScheduleKey, key, StringComparison.Ordinal)) return;
 
-            var result = await TerminalSyncService.SyncAsync("Otomatik", key);
+            var result = await TerminalSyncService.SyncAsync("Otomatik canlı", key);
             if (!IsDisposed)
             {
-                leadStatus.Text = result.Message;
+                leadStatus.Text = result.ReadCount == 0 ? "Canlı kart kontrolü • " + result.Message : $"Canlı kart • okunan {result.ReadCount} • +{result.Inserted}/{result.Updated}";
                 leadStatus.ForeColor = result.Skipped == 0 ? Color.FromArgb(42, 112, 70) : Color.FromArgb(181, 91, 34);
             }
         }
