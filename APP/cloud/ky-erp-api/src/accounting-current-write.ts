@@ -65,8 +65,9 @@ export async function writeCurrentAccount(c: Context<AppEnv>, slug: string, inpu
     if (text(existing.company_id) !== companyId || Number(existing.amount) !== entry.amount || text(existing.movement_type) !== entry.movementType) reject("REQUEST_ID_CONFLICT", "Bu işlem kimliği farklı bir kayıt için kullanılmış.");
     return { id: requestId, movementId: id, balanceAfter: Number(existing.balance_after), idempotent: true };
   }
-  const company = await db.prepare("SELECT * FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL").bind(companyId, slug).first<Row>();
-  if (!company) reject("COMPANY_NOT_FOUND", "Cari firma bulunamadı.");
+  const companyRow = await db.prepare("SELECT * FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL").bind(companyId, slug).first<Row>();
+  if (!companyRow) reject("COMPANY_NOT_FOUND", "Cari firma bulunamadı.");
+  const company = companyRow as Row;
   const supplier = upper(company.payment_mode) === "CREDIT" && Number(company.supplier_debt_tracking) === 1;
   const customer = Number(company.customer_receivable_tracking) === 1;
   if ((!supplier && !customer) || (entry.type === "PAYMENT" && !supplier) || (entry.type === "COLLECTION" && !customer)) reject("CURRENT_ACCOUNT_DISABLED", "Firma için bu cari işlem türü açık değil. Peşin tedarikçiye cari borç yazılamaz.");
