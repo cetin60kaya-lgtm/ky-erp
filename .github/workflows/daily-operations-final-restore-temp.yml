@@ -37,7 +37,9 @@ jobs:
           cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
 
       - name: Apply final daily operations restore
-        run: python .github/scripts/daily_operations_final_restore.py
+        run: |
+          python .github/scripts/daily_operations_final_restore.py
+          python .github/scripts/daily_operations_final_restore_fix.py
 
       - name: Source guardrails
         shell: bash
@@ -48,6 +50,7 @@ jobs:
           grep -F 'getDailyRevisions' "$page"
           grep -F 'historicalIds' "$page"
           grep -F 'log-date-toolbar' "$page"
+          grep -F '{logTab !== "control" ? <><div className="log-date-toolbar">' "$page"
           if grep -F 'setRosterIds(new Set(employees.filter((row) => row.active !== false).map((row) => row.id)))' "$page"; then
             echo '169-person auto-fill fallback still exists' >&2
             exit 1
