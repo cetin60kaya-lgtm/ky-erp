@@ -104,11 +104,12 @@ internal static class TerminalSdkLocator
         yield return @"D:\Hedef500\Terminal Bilgi Aktar";
     }
 
-    static IEnumerable<string> RunningHedefFolders()
+    static IReadOnlyList<string> RunningHedefFolders()
     {
+        var result = new List<string>();
         Process[] processes;
         try { processes = Process.GetProcesses(); }
-        catch { yield break; }
+        catch { return result; }
 
         foreach (var process in processes)
         {
@@ -117,11 +118,12 @@ internal static class TerminalSdkLocator
                 if (!process.ProcessName.Contains("Hedef", StringComparison.OrdinalIgnoreCase)) continue;
                 var file = process.MainModule?.FileName;
                 var folder = string.IsNullOrWhiteSpace(file) ? null : Path.GetDirectoryName(file);
-                if (!string.IsNullOrWhiteSpace(folder)) yield return folder;
+                if (!string.IsNullOrWhiteSpace(folder)) result.Add(folder);
             }
             catch { }
             finally { process.Dispose(); }
         }
+        return result;
     }
 
     static string? FindCompleteSdkUnder(string root)
