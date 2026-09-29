@@ -21,7 +21,7 @@ test("worker exposes admin aliases without removing external AI routes", () => {
 });
 
 test("security entry dispatches the admin AI route and keeps CORS protection", () => {
-  assert.match(entry, /command\.use\("\/api\/admin\/users\/\*", cors/);
-  assert.match(entry, /app\.use\("\/api\/admin\/users\/\*", cors/);
+  assert.match(entry, /command\.use\("\/api\/admin\/users\/\*", commonCors\)/);
+  assert.match(entry, /const commonCors = cors\(/);
   assert.match(entry, /ai-platform-access\$\/\.test\(path\)/);
 });
