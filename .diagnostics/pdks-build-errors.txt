@@ -1,5 +1,5 @@
-HEAD: 796597462076f59405a9920dd7d8544056444278
-UTC: 2026-09-29T02:36:11
+HEAD: f1be4e707d889b8b09acedcf103587388cc6b024
+UTC: 2026-09-29T14:43:59
 
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PersonelForm.RecordActionBars.cs(5,29): error CS0111: Type 'PersonelForm' already defines a member called 'OnShown' with the same parameter types [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PersonelForm.RecordActionBars.cs(5,29): error CS0111: Type 'PersonelForm' already defines a member called 'OnShown' with the same parameter types [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\TerminalSdkLocator.cs(120,57): error CS1626: Cannot yield a value in the body of a try block with a catch clause [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\TerminalSdkLocator.cs(120,57): error CS1626: Cannot yield a value in the body of a try block with a catch clause [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
