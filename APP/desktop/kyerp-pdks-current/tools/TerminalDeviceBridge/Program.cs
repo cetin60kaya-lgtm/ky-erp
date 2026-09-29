@@ -26,12 +26,12 @@ internal static class Program
             form.Show();
             Application.DoEvents();
             dynamic clock = host.Clock;
-            if (clock == null) return Fail("FP_CLOCK ActiveX baÅŸlatÄ±lamadÄ±.");
+            if (clock == null) return Fail("FP_CLOCK ActiveX başlatılamadı.");
             try
             {
                 string endpoint = ip;
-                if (!clock.SetIPAddress(ref endpoint, port, 0)) return Fail("Cihaz IP/port ayarÄ± kabul edilmedi.");
-                if (!clock.OpenCommPort(machine)) return Fail("Kart cihazÄ±na baÄŸlantÄ± aÃ§Ä±lamadÄ±.");
+                if (!clock.SetIPAddress(ref endpoint, port, 0)) return Fail("Cihaz IP/port ayarı kabul edilmedi.");
+                if (!clock.OpenCommPort(machine)) return Fail("Kart cihazına bağlantı açılamadı.");
                 try
                 {
                     clock.ReadMark = false;
@@ -44,7 +44,7 @@ internal static class Program
                         ? new DateTime(year, month, day, hour, minute, second).ToString("s", CultureInfo.InvariantCulture)
                         : "";
                     Console.WriteLine("STATUS|OK|" + deviceTime + "|" + newLogs + "|" + users + "|" + cards);
-                    if (mode == "read") ReadNew(clock, machine, newLogs);
+                    if (mode == "read") ReadNew(clock, machine);
                     else if (mode == "clearlogs")
                     {
                         bool ok = clock.EmptyGeneralLogData(machine);
@@ -64,10 +64,15 @@ internal static class Program
             catch (Exception ex) { return Fail(ex.GetBaseException().Message); }
         }
     }
-    private static void ReadNew(dynamic clock, int machine, int announced)
+
+    private static void ReadNew(dynamic clock, int machine)
     {
         var count = 0;
-        if (announced > 0 && clock.ReadGeneralLogData(machine))
+        bool prepared = false;
+        try { prepared = clock.ReadGeneralLogData(machine); }
+        catch { prepared = false; }
+
+        if (prepared)
         {
             while (true)
             {
@@ -94,6 +99,7 @@ internal static class Program
         try { return clock.GetDeviceStatus(machine, code, ref value) ? value : -1; }
         catch { return -1; }
     }
+
     private static Form HiddenForm()
     {
         return new Form
