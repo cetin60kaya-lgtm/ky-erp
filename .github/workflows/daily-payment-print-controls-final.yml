@@ -1,4 +1,4 @@
-name: Daily Payment Print Controls Final
+name: Daily Operations Final UX Consolidation
 
 on:
   push:
@@ -28,23 +28,33 @@ jobs:
           cache: npm
           cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
 
-      - name: Apply final print-only layouts
+      - name: Apply consolidated final UX patch
         run: python .github/scripts/daily_print_layout_final_patch.py
 
-      - name: Verify print contract
+      - name: Verify final UX contract
         shell: bash
         run: |
           set -euo pipefail
           page='APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx'
+          css='APP/app/ky-erp-frontend/src/pages/modules/ik/daily-hr-workspace-final.css'
           grep -F 'index += 10' "$page"
-          grep -F 'grid-template-rows:repeat(5,50mm)' "$page"
+          grep -F 'grid-template-rows:repeat(5,51mm)' "$page"
           grep -F 'TOPLAM ÖDEME' "$page"
           grep -F 'index += 35' "$page"
-          grep -F 'work-cell' "$page"
-          grep -F 'GÜNLÜK PERSONEL HAFTALIK KONTROL LİSTESİ' "$page"
-          grep -F 'Seçili Kişileri Yazdır' "$page"
-          grep -F 'Tümünü Yazdır' "$page"
-          grep -F 'Haftalık Özet' "$page"
+          grep -F 'week-totals' "$page"
+          grep -F 'GENEL TOPLAM' "$page"
+          grep -F 'weekday: "short"' "$page"
+          grep -F 'else await loadQuickFocus(snapshot.date, snapshot.shift, snapshot.query);' "$page"
+          grep -F 'gop-person-dialog' "$page"
+          grep -F 'DialogSizer kind="quick"' "$page"
+          grep -F 'DialogSizer kind="person"' "$page"
+          grep -F 'DialogSizer kind="log"' "$page"
+          grep -F 'DialogSizer kind="excel"' "$page"
+          grep -F 'quick-shift-badge' "$page"
+          grep -F 'quick.shift === "day" ? "G" : "N"' "$page"
+          grep -F 'FINAL-UX-CONSOLIDATION-2026-09-29' "$css"
+          grep -F '.gop-quick-dialog.shift-night' "$css"
+          grep -F '.dialog-sizer' "$css"
 
       - name: Frontend checks
         working-directory: APP/app/ky-erp-frontend
@@ -56,29 +66,34 @@ jobs:
         env:
           VITE_API_URL: https://api.kyerp.net
 
-      - name: Commit if changed
+      - name: Commit final Daily Operations update
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'KY ERP Automation'
           git config user.email 'actions@kyerp.net'
-          git add APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
+          git add \
+            APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx \
+            APP/app/ky-erp-frontend/src/pages/modules/ik/daily-hr-workspace-final.css
           git diff --cached --check
           if ! git diff --cached --quiet; then
-            git commit -m 'fix(daily): finalize weekly and payment print layouts'
+            git commit -m 'fix(daily): consolidate final entry print and dialog UX'
             git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
           fi
 
       - name: Deploy production
         working-directory: APP/app/ky-erp-frontend
-        run: npx --yes wrangler@4.118.0 pages deploy dist --project-name "$PAGES_PROJECT" --branch "$PROD_BRANCH" --commit-hash "$(git rev-parse HEAD)" --commit-message "Daily print layouts final"
+        run: npx --yes wrangler@4.118.0 pages deploy dist --project-name "$PAGES_PROJECT" --branch "$PROD_BRANCH" --commit-hash "$(git rev-parse HEAD)" --commit-message "Daily Operations final UX consolidation"
 
       - name: Live smoke
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error https://kyerp.net/gunluk-operasyon/daily-payments >/tmp/daily.html && test -s /tmp/daily.html; then exit 0; fi
-            sleep 2
+          for path in gunluk-operasyon/daily-entry gunluk-operasyon/daily-payments gunluk-operasyon/daily-weekly; do
+            ok=0
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent --show-error "https://kyerp.net/$path" > /tmp/daily.html && test -s /tmp/daily.html; then ok=1; break; fi
+              sleep 2
+            done
+            test "$ok" = 1
           done
-          exit 1
