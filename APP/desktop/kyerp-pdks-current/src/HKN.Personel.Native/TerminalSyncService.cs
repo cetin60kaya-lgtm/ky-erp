@@ -53,9 +53,10 @@ internal static class TerminalSyncService
 
             var punches = snapshot.Punches.OrderBy(x => x.OccurredAt).ToArray();
             if (punches.Length == 0)
-                return Save(new(DateTime.Now, 0, 0, 0, 0, 0, false, "Aktarılacak veri yok.", scheduleKey));
+                return Save(new(DateTime.Now, 0, 0, 0, 0, 0, false, "Aktarılacak veri yok. Cihazda kayıt bulunamadı; cihazdan hiçbir şey silinmedi.", scheduleKey));
 
-            if (deviceSettings.BackupBeforeTransfer) BackupPunches(punches);
+            // Physical terminal data is treated as source evidence. Always back it up before any import.
+            BackupPunches(punches);
             AppendLive(punches);
             AppendTnf(punches);
 
@@ -64,32 +65,21 @@ internal static class TerminalSyncService
             var accounted = imported.Inserted + imported.Updated + imported.Duplicates;
             if (imported.Skipped != 0 || accounted != punches.Length)
             {
-                var validation = $"{source}: doğrulama başarısız; okunan={punches.Length}, işlenen={accounted}, atlanan={imported.Skipped}. Terminal kayıtları SİLİNMEDİ.";
+                var validation = $"{source}: doğrulama başarısız; okunan={punches.Length}, işlenen={accounted}, atlanan={imported.Skipped}. Cihaz kayıtları KORUNDU.";
                 return Save(new(DateTime.Now, punches.Length, imported.Inserted, imported.Updated, imported.Duplicates, imported.Skipped, false, validation, scheduleKey));
             }
 
-            if (!deviceSettings.DeleteAfterValidatedTransfer)
-            {
-                await PdksCloudAgent.EnqueueTerminalSyncAsync(punches, imported, ct);
-                _ = PdksCloudAgent.RunOnceAsync(ct);
-                var keepMessage = $"{source}: {punches.Length} kayıt TNF + FDB doğrulandı. Ayar gereği cihaz kayıtları silinmedi.";
-                return Save(new(DateTime.Now, punches.Length, imported.Inserted, imported.Updated, imported.Duplicates, imported.Skipped, false, keepMessage, scheduleKey));
-            }
+            await PdksCloudAgent.EnqueueTerminalSyncAsync(punches, imported, ct);
+            _ = PdksCloudAgent.RunOnceAsync(ct);
 
-            var clear = await TerminalDeviceClient.ExecuteAsync("clearlogs", ct);
-            if (clear.Success)
-            {
-                await PdksCloudAgent.EnqueueTerminalSyncAsync(punches, imported, ct);
-                _ = PdksCloudAgent.RunOnceAsync(ct);
-            }
-            var msg = clear.Success
-                ? $"{source}: {punches.Length} kayıt TNF + FDB doğrulandı, cihaz temizlendi ve bulut kuyruğuna alındı."
-                : $"{source}: TNF + FDB doğrulandı; cihaz temizlenemedi, terminal kayıtları korundu: {clear.Message}";
-            return Save(new(DateTime.Now, punches.Length, imported.Inserted, imported.Updated, imported.Duplicates, imported.Skipped, clear.Success, msg, scheduleKey));
+            // 6.3.3 safety rule: Sync never calls EmptyGeneralLogData/clearlogs.
+            // Device cleanup, if ever needed later, must be a separate explicit administrator operation.
+            var keepMessage = $"{source}: {punches.Length} kayıt TNF + FDB doğrulandı. Cihaz kayıtları KORUNDU; otomatik silme kapalı.";
+            return Save(new(DateTime.Now, punches.Length, imported.Inserted, imported.Updated, imported.Duplicates, imported.Skipped, false, keepMessage, scheduleKey));
         }
         catch (Exception ex)
         {
-            return Save(new(DateTime.Now, 0, 0, 0, 0, 0, false, "Eşitleme hatası: " + ex.Message + " Terminal kayıtları silinmedi.", scheduleKey));
+            return Save(new(DateTime.Now, 0, 0, 0, 0, 0, false, "Eşitleme hatası: " + ex.Message + " Cihaz kayıtları silinmedi.", scheduleKey));
         }
         finally { Gate.Release(); }
     }
