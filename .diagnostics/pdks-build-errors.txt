@@ -1,5 +1,5 @@
-HEAD: ad3090cd9795cd1997cd6535c3cc4bc9d0f9c1a8
-UTC: 2026-09-29T14:45:41
+HEAD: 225ae8a3dc5f6bee942821cbf0d9439a9d280794
+UTC: 2026-09-29T15:20:15
 
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\TerminalSdkLocator.cs(120,57): error CS1626: Cannot yield a value in the body of a try block with a catch clause [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\TerminalSdkLocator.cs(120,57): error CS1626: Cannot yield a value in the body of a try block with a catch clause [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.CanonicalStartup.cs(146,99): error CS0103: The name 'f' does not exist in the current context [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.CanonicalStartup.cs(146,99): error CS0103: The name 'f' does not exist in the current context [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
