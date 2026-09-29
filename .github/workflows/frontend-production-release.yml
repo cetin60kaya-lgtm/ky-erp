@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   release-frontend:
-    name: Frontend lint, hedefli test, build, Pages deploy ve canli dogrulama
+    name: Frontend lint, test, build, Pages deploy ve derin canli dogrulama
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -61,6 +61,9 @@ jobs:
           npm run lint
           npm test
           npm run build
+          marker_file="$(grep -R -l --include='*.js' 'daily-hr-workspace-v1' dist/assets | head -n1)"
+          test -n "$marker_file" || { echo "Gunluk Operasyon AppV3 marker chunk bulunamadi" >&2; exit 1; }
+          echo "Gunluk Operasyon build chunk: $marker_file"
 
       - name: Cloudflare Pages production hedefini dogrula
         id: pages
@@ -86,22 +89,35 @@ jobs:
             --branch "$PROD_BRANCH" \
             --commit-hash "$GITHUB_SHA"
 
-      - name: Canli uygulama bundle dogrulamasi
+      - name: Canli uygulama bundle ve Gunluk Operasyon chunk dogrulamasi
         working-directory: APP/app/ky-erp-frontend
         shell: bash
         run: |
           set -euo pipefail
-          local_asset="$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' dist/index.html | head -n1)"
-          test -n "$local_asset"
-          for attempt in 1 2 3 4 5 6; do
-            live_html="$(curl --fail --silent --show-error --max-time 20 https://kyerp.net/gunluk-operasyon/daily-entry || true)"
-            live_asset="$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' <<<"$live_html" | head -n1 || true)"
-            if [ "$live_asset" = "$local_asset" ]; then
-              echo "Canli bundle dogrulandi: $live_asset"
+          local_entry="$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' dist/index.html | head -n1)"
+          marker_file="$(grep -R -l --include='*.js' 'daily-hr-workspace-v1' dist/assets | head -n1)"
+          marker_asset="/assets/$(basename "$marker_file")"
+          local_marker_sha="$(sha256sum "$marker_file" | awk '{print $1}')"
+          test -n "$local_entry"
+          test -n "$marker_asset"
+          for attempt in $(seq 1 18); do
+            live_html="$(curl --fail --silent --show-error --max-time 20 -H 'Cache-Control: no-cache' "https://kyerp.net/gunluk-operasyon/daily-entry?release=${GITHUB_SHA}-${attempt}" || true)"
+            live_entry="$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' <<<"$live_html" | head -n1 || true)"
+            marker_code="$(curl -sS -o /tmp/kyerp-live-daily.js -w '%{http_code}' --max-time 20 -H 'Cache-Control: no-cache' "https://kyerp.net${marker_asset}?release=${GITHUB_SHA}-${attempt}" || true)"
+            live_marker_sha=""
+            live_marker_ok="no"
+            if [ "$marker_code" = "200" ]; then
+              live_marker_sha="$(sha256sum /tmp/kyerp-live-daily.js | awk '{print $1}')"
+              if grep -q 'daily-hr-workspace-v1' /tmp/kyerp-live-daily.js && [ "$live_marker_sha" = "$local_marker_sha" ]; then
+                live_marker_ok="yes"
+              fi
+            fi
+            if [ "$live_entry" = "$local_entry" ] && [ "$live_marker_ok" = "yes" ]; then
+              echo "Canli entry + Gunluk Operasyon chunk dogrulandi: entry=$live_entry marker=$marker_asset sha=$live_marker_sha"
               exit 0
             fi
-            echo "Canli bundle henuz yeni surum degil; deneme $attempt/6 (local=$local_asset live=$live_asset)"
+            echo "Canli derin dogrulama bekliyor $attempt/18 (entry local=$local_entry live=$live_entry, marker=$marker_code/$live_marker_ok)"
             sleep 5
           done
-          echo "Canli frontend bundle dogrulamasi basarisiz." >&2
+          echo "Canli frontend derin dogrulamasi basarisiz." >&2
           exit 1
