@@ -7,11 +7,11 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>KYERP.PDKS</AssemblyName>
-    <Product>KY PDKS 6.2 TEST</Product>
+    <Product>KY PDKS 6.3 TEST</Product>
     <Company>KY ERP</Company>
-    <Description>KY PDKS 6.2 TEST - rol bazlı yönetim, firma lisans erişim kilidi, hızlı işlemler, puantaj ve bordro</Description>
-    <Version>6.2.0</Version>
-    <FileVersion>6.2.0.0</FileVersion>
+    <Description>KY PDKS 6.3 TEST - seri çalışma alanı, görünür kayıt işlemleri, otomatik puantaj kontrolü, bordro çıktıları ve profesyonel lisans temeli</Description>
+    <Version>6.3.0</Version>
+    <FileVersion>6.3.0.0</FileVersion>
     <DebugType Condition="'$(Configuration)'=='Release'">none</DebugType>
     <DebugSymbols Condition="'$(Configuration)'=='Release'">false</DebugSymbols>
   </PropertyGroup>
