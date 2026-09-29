@@ -5,11 +5,16 @@ namespace HKN.Personel.Native;
 
 public partial class PersonelForm
 {
+    bool periodSynchronizationWired;
+    bool syncingPeriodSelection;
+
     void SyncPeriodsToPerson()
     {
-        if (string.IsNullOrWhiteSpace(currentPk)) return;
+        WirePeriodSynchronization();
+        if (string.IsNullOrWhiteSpace(currentPk) || syncingPeriodSelection) return;
         try
         {
+            syncingPeriodSelection = true;
             var q = Q("select GRUP from KIMLIK where PKNO=@PK", new FbParameter("@PK", currentPk));
             if (q.Rows.Count == 0 || q.Rows[0][0] == DBNull.Value) return;
             int group = Convert.ToInt32(q.Rows[0][0]);
@@ -25,6 +30,46 @@ public partial class PersonelForm
             SetDateRange(e, eFrom, eTo);
         }
         catch { }
+        finally { syncingPeriodSelection = false; }
+    }
+
+    void WirePeriodSynchronization()
+    {
+        if (periodSynchronizationWired) return;
+        periodSynchronizationWired = true;
+
+        list.SelectionChanged += (_, _) =>
+        {
+            if (!fullTabsReady || IsDisposed || syncingPeriodSelection) return;
+            BeginInvoke(new Action(() =>
+            {
+                if (IsDisposed) return;
+                SyncPeriodsToPerson();
+                RefreshSelectedTab();
+            }));
+        };
+
+        HookPeriod(periodG, gFrom, gTo);
+        HookPeriod(periodI, iFrom, iTo);
+        HookPeriod(periodE, eFrom, eTo);
+        periodB.SelectedIndexChanged += (_, _) => { if (fullTabsReady && !syncingPeriodSelection) RefreshSelectedTab(); };
+        periodO.SelectedIndexChanged += (_, _) => { if (fullTabsReady && !syncingPeriodSelection) RefreshSelectedTab(); };
+    }
+
+    void HookPeriod(ComboBox period, DateTimePicker from, DateTimePicker to)
+    {
+        period.SelectedIndexChanged += (_, _) =>
+        {
+            if (syncingPeriodSelection) return;
+            var row = SelectedPeriodRow(period);
+            SetDateRange(row, from, to);
+            if (fullTabsReady) RefreshSelectedTab();
+        };
+    }
+
+    static DataRow? SelectedPeriodRow(ComboBox period)
+    {
+        return period.SelectedItem is DataRowView view ? view.Row : null;
     }
 
     DataRow? SelectPeriodForGroup(ComboBox c, int group)
