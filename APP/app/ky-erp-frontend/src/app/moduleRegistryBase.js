@@ -78,6 +78,15 @@ export const MODULES = [
       { label: "Personel", tabs: [["ozet", "İK Özet", "dashboard"], ["personel-kartlari", "Personel Kartları", "users"]] },
       { label: "Ücret & İzin", tabs: [["ucret-odeme-plani", "Maaş / Yol / Banka / Elden", "odemeler"], ["mesai-avans", "Mesai / Avans / Kesinti", "takvim"], ["yillik-izin", "Yıllık İzin / İzin Sicili", "takvim"], ["bordro-odeme", "Bordro & Ödeme", "odemeler"]] },
       { label: "Evrak & Kapanış", tabs: [["sgk-evrak-kontrol", "SGK / Evrak / Ay Sonu", "file-check"]] },
+      {
+        label: "Günlük Personel / Yevmiyeci",
+        tabs: [
+          ["gunluk-personel", "Günlük Giriş", "users"],
+          ["ik-raporlari", "Haftalık Yevmiyeci", "takvim"],
+          ["gunluk-personel-kartlari", "Günlük Personel Kartları", "users"],
+          ["gunluk-odeme-fisleri", "Günlük Ödeme Fişleri", "odemeler"],
+        ],
+      },
     ],
     hiddenTabs: [
       ["denetim-raporu", "Denetim Raporları", "raporlar"],
@@ -183,11 +192,21 @@ export const MODULE_ROUTE_ALIASES = {
     "aylik-ik-kapanis": "sgk-evrak-kontrol",
     "ay-evrak": "sgk-evrak-kontrol",
     "evrak-belgeler": "sgk-evrak-kontrol",
-
     "yillik-izin": "yillik-izin",
     "ay-izin-evrak": "yillik-izin",
     "izin-evrak": "yillik-izin",
     "monthly-leave-management": "yillik-izin",
+    "gun-giris": "gunluk-personel",
+    "gunluk-giris": "gunluk-personel",
+    "daily-entry": "gunluk-personel",
+    "gun-haftalik-ozet": "ik-raporlari",
+    "haftalik-ozet": "ik-raporlari",
+    "daily-weekly-summary": "ik-raporlari",
+    "gun-personel-kartlari": "gunluk-personel-kartlari",
+    "daily-personnel": "gunluk-personel-kartlari",
+    "gun-odemeler": "gunluk-odeme-fisleri",
+    odemeler: "gunluk-odeme-fisleri",
+    "daily-payments": "gunluk-odeme-fisleri",
   },
   uretim: {
     "uretim-hizli-giris": "uretim-merkezi",
