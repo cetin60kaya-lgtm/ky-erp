@@ -52,6 +52,22 @@ export async function markDailyPaid(payload = {}) {
   return unwrap(await apiPost(`${ROOT}/attendance/mark-paid`, payload));
 }
 
+export async function getDailyPaymentPool(params = {}, options = {}) {
+  return unwrap(await apiGet(`${ROOT}/payments/pool`, params, freshOptions(options)));
+}
+
+export async function getDailyPaymentHistory(params = {}, options = {}) {
+  return unwrap(await apiGet(`${ROOT}/payments/history`, params, freshOptions(options)));
+}
+
+export async function createDailyPayment(payload = {}) {
+  return unwrap(await apiPost(`${ROOT}/payments`, payload));
+}
+
+export async function cancelDailyPayment(paymentId, payload = {}) {
+  return unwrap(await apiPost(`${ROOT}/payments/${encodeURIComponent(paymentId)}/cancel`, payload));
+}
+
 export async function getDailyFocusedRecords(params = {}, options = {}) {
   return unwrap(await apiGet(`${ROOT}/records`, params, freshOptions(options)));
 }

@@ -175,6 +175,44 @@ function ensureSchema(c: Context<AppEnv>) {
         version TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`),
+      c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS hr_daily_payments (
+        id TEXT PRIMARY KEY,
+        payment_no TEXT NOT NULL UNIQUE,
+        main_company_id TEXT NOT NULL,
+        employee_id TEXT NOT NULL,
+        personnel_no TEXT,
+        full_name TEXT NOT NULL,
+        qualification TEXT,
+        period_start TEXT NOT NULL,
+        period_end TEXT NOT NULL,
+        day_count INTEGER NOT NULL DEFAULT 0,
+        night_count INTEGER NOT NULL DEFAULT 0,
+        total_days INTEGER NOT NULL DEFAULT 0,
+        total_amount_cents INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'PAID',
+        paid_date TEXT NOT NULL,
+        paid_at TEXT NOT NULL,
+        paid_by_user_id TEXT,
+        paid_by_label TEXT,
+        cancelled_at TEXT,
+        cancelled_by_user_id TEXT,
+        cancelled_by_label TEXT,
+        cancel_reason TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`),
+      c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS hr_daily_payment_items (
+        id TEXT PRIMARY KEY,
+        payment_id TEXT NOT NULL,
+        main_company_id TEXT NOT NULL,
+        attendance_id TEXT NOT NULL,
+        employee_id TEXT NOT NULL,
+        work_date TEXT NOT NULL,
+        shift TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL DEFAULT 0,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      )`),
       c.env.DB.prepare(
         "CREATE INDEX IF NOT EXISTS idx_daily_revision_attendance ON hr_daily_attendance_revision(main_company_id, attendance_id, revision DESC)",
       ),
@@ -186,6 +224,15 @@ function ensureSchema(c: Context<AppEnv>) {
       ),
       c.env.DB.prepare(
         "CREATE INDEX IF NOT EXISTS idx_daily_check_lookup ON hr_daily_attendance_check(main_company_id, work_date, shift, employee_id)",
+      ),
+      c.env.DB.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_daily_payment_history ON hr_daily_payments(main_company_id, paid_date DESC, paid_at DESC)",
+      ),
+      c.env.DB.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_daily_payment_employee ON hr_daily_payments(main_company_id, employee_id, status, paid_date DESC)",
+      ),
+      c.env.DB.prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_payment_item_active ON hr_daily_payment_items(main_company_id, attendance_id, shift) WHERE active=1",
       ),
       c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_attendance_insert
         AFTER INSERT ON hr_daily_attendance
@@ -250,6 +297,26 @@ function ensureSchema(c: Context<AppEnv>) {
           UPDATE hr_daily_attendance_check
           SET checked=0,updated_at=CURRENT_TIMESTAMP
           WHERE employee_id=NEW.employee_id AND work_date=NEW.work_date AND shift='night' AND checked<>0;
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_payment_insert
+        AFTER INSERT ON hr_daily_payments
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_payment_update
+        AFTER UPDATE ON hr_daily_payments
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_payment_item_insert
+        AFTER INSERT ON hr_daily_payment_items
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_payment_item_update
+        AFTER UPDATE ON hr_daily_payment_items
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
         END`),
       c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_roster_insert
         AFTER INSERT ON hr_daily_range_roster
@@ -1439,6 +1506,143 @@ async function weeklySummary(c: Context<AppEnv>) {
   return okItems(c,rows,rows);
 }
 
+function paymentDateKey(value: unknown) {
+  const direct = dateOnly(value);
+  return validDate(direct) ? direct : dateOnly(nowIso());
+}
+
+async function paymentSourceRows(c: Context<AppEnv>, companyId: string, start: string, end: string, employeeId = "") {
+  const result = await c.env.DB.prepare(`SELECT
+      a.id AS attendance_id,a.employee_id,a.work_date,a.day_shift,a.night_shift,a.day_wage,a.night_wage,a.payment_status,
+      e.personnel_no,e.full_name,e.qualification,
+      COALESCE(cd.checked,0) AS day_checked,COALESCE(cn.checked,0) AS night_checked,
+      EXISTS(SELECT 1 FROM hr_daily_payment_items p WHERE p.main_company_id=? AND p.attendance_id=a.id AND p.shift='day' AND p.active=1) AS day_paid_item,
+      EXISTS(SELECT 1 FROM hr_daily_payment_items p WHERE p.main_company_id=? AND p.attendance_id=a.id AND p.shift='night' AND p.active=1) AS night_paid_item,
+      (SELECT COUNT(*) FROM hr_daily_payment_items p WHERE p.main_company_id=? AND p.attendance_id=a.id) AS ledger_item_count
+    FROM hr_daily_attendance a
+    JOIN hr_daily_employees e ON e.id=a.employee_id
+    LEFT JOIN hr_daily_attendance_check cd ON cd.main_company_id=e.main_company_id AND cd.employee_id=a.employee_id AND cd.work_date=a.work_date AND cd.shift='day'
+    LEFT JOIN hr_daily_attendance_check cn ON cn.main_company_id=e.main_company_id AND cn.employee_id=a.employee_id AND cn.work_date=a.work_date AND cn.shift='night'
+    WHERE e.main_company_id=? AND a.work_date>=? AND a.work_date<=?
+      AND (?='' OR a.employee_id=?)
+      AND (a.day_shift=1 OR a.night_shift=1)
+    ORDER BY e.full_name COLLATE NOCASE,a.work_date,a.id`)
+    .bind(companyId,companyId,companyId,companyId,start,end,employeeId,employeeId).all<Row>();
+  return result.results || [];
+}
+
+function payableShifts(row: Row) {
+  const legacyPaid = text(row.payment_status).toUpperCase() === 'PAID' && num(row.ledger_item_count) === 0;
+  const items: Row[] = [];
+  if (flag(row.day_shift) && !legacyPaid && !flag(row.day_paid_item)) items.push({ shift:'day', checked:flag(row.day_checked), amount:money(row.day_wage) });
+  if (flag(row.night_shift) && !legacyPaid && !flag(row.night_paid_item)) items.push({ shift:'night', checked:flag(row.night_checked), amount:money(row.night_wage) });
+  return items;
+}
+
+async function paymentPool(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const companyId=companyIdOf(c);
+  const start=dateOnly(c.req.query('startDate') || c.req.query('start'));
+  const end=dateOnly(c.req.query('endDate') || c.req.query('end') || start);
+  if(!validDate(start) || !validDate(end) || end<start) return fail(c,400,'DATE_RANGE_REQUIRED','Geçerli hakediş tarih aralığı zorunludur.');
+  const rows=await paymentSourceRows(c,companyId,start,end);
+  const map=new Map<string,Row>();
+  for(const row of rows){
+    const shifts=payableShifts(row);
+    if(!shifts.length) continue;
+    const employeeId=text(row.employee_id);
+    const current=map.get(employeeId) || { id:`pool-${employeeId}-${start}-${end}`,employeeId,personnelNo:text(row.personnel_no),name:text(row.full_name),fullName:text(row.full_name),qualification:text(row.qualification),periodStart:start,periodEnd:end,dayCount:0,nightCount:0,totalDays:0,totalAmount:0,pendingCheckCount:0,items:[] };
+    for(const item of shifts){
+      if(item.shift==='day') current.dayCount+=1; else current.nightCount+=1;
+      current.totalDays+=1; current.totalAmount=money(num(current.totalAmount)+num(item.amount));
+      if(!item.checked) current.pendingCheckCount+=1;
+      current.items.push({attendanceId:text(row.attendance_id),workDate:dateOnly(row.work_date),shift:item.shift,amount:num(item.amount),checked:Boolean(item.checked)});
+    }
+    current.ready=current.pendingCheckCount===0;
+    map.set(employeeId,current);
+  }
+  return okItems(c,[...map.values()],[...map.values()]);
+}
+
+async function paymentHistory(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const companyId=companyIdOf(c);
+  const start=dateOnly(c.req.query('startDate') || c.req.query('start'));
+  const end=dateOnly(c.req.query('endDate') || c.req.query('end') || start);
+  const status=text(c.req.query('status')).toUpperCase();
+  if(!validDate(start) || !validDate(end) || end<start) return fail(c,400,'DATE_RANGE_REQUIRED','Geçerli ödeme tarih aralığı zorunludur.');
+  const result=await c.env.DB.prepare(`SELECT * FROM hr_daily_payments WHERE main_company_id=? AND paid_date>=? AND paid_date<=? AND (?='' OR status=?) ORDER BY paid_date DESC,paid_at DESC,payment_no DESC`)
+    .bind(companyId,start,end,status,status).all<Row>();
+  const payments=result.results || [];
+  if(!payments.length) return okItems(c,[],[]);
+  const ids=payments.map((row)=>text(row.id));
+  const itemsResult=await c.env.DB.prepare(`SELECT * FROM hr_daily_payment_items WHERE main_company_id=? AND payment_id IN (${ids.map(()=>'?').join(',')}) ORDER BY work_date,shift`).bind(companyId,...ids).all<Row>();
+  const byPayment=new Map<string,Row[]>();
+  for(const item of itemsResult.results || []){ const key=text(item.payment_id); const list=byPayment.get(key)||[]; list.push({id:text(item.id),attendanceId:text(item.attendance_id),workDate:dateOnly(item.work_date),shift:text(item.shift),amount:Number(item.amount_cents||0)/100,active:flag(item.active)}); byPayment.set(key,list); }
+  const rows=payments.map((row)=>({id:text(row.id),paymentId:text(row.id),paymentNo:text(row.payment_no),employeeId:text(row.employee_id),personnelNo:text(row.personnel_no),name:text(row.full_name),fullName:text(row.full_name),qualification:text(row.qualification),periodStart:dateOnly(row.period_start),periodEnd:dateOnly(row.period_end),dayCount:num(row.day_count),nightCount:num(row.night_count),totalDays:num(row.total_days),totalAmount:Number(row.total_amount_cents||0)/100,status:text(row.status),paidDate:dateOnly(row.paid_date),paidAt:text(row.paid_at),paidByUserId:text(row.paid_by_user_id),paidByLabel:text(row.paid_by_label)||'KY ERP Kullanıcısı',cancelledAt:text(row.cancelled_at),cancelledByLabel:text(row.cancelled_by_label),cancelReason:text(row.cancel_reason),items:byPayment.get(text(row.id))||[]}));
+  return okItems(c,rows,rows);
+}
+
+async function createPayment(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const body=await bodyOf(c);
+  const companyId=companyIdOf(c,body);
+  const employeeId=text(body.employeeId || body.personId);
+  const start=dateOnly(body.startDate || body.start);
+  const end=dateOnly(body.endDate || body.end || start);
+  if(!employeeId) return fail(c,400,'EMPLOYEE_REQUIRED','Personel zorunludur.');
+  if(!validDate(start)||!validDate(end)||end<start) return fail(c,400,'DATE_RANGE_REQUIRED','Geçerli hakediş tarih aralığı zorunludur.');
+  const sourceRows=await paymentSourceRows(c,companyId,start,end,employeeId);
+  const items:Row[]=[];
+  let person:Row|null=null;
+  for(const row of sourceRows){
+    person=person||row;
+    for(const item of payableShifts(row)) items.push({attendanceId:text(row.attendance_id),workDate:dateOnly(row.work_date),shift:item.shift,amount:num(item.amount),checked:Boolean(item.checked)});
+  }
+  if(!items.length) return fail(c,409,'PAYMENT_NOTHING_DUE','Bu personel için ödenecek açık vardiya bulunmuyor.');
+  const pending=items.filter((item)=>!item.checked);
+  if(pending.length) return fail(c,409,'PAYMENT_CHECK_REQUIRED',`Ödeme öncesi ${pending.length} vardiyanın Kontrol Edildi onayı tamamlanmalıdır.`,{pending});
+  const actor=await actorOf(c);
+  const paidDate=paymentDateKey(body.paymentDate);
+  const paidAt=nowIso();
+  const countRow=await c.env.DB.prepare('SELECT COUNT(*) AS count FROM hr_daily_payments WHERE main_company_id=? AND paid_date=?').bind(companyId,paidDate).first<Row>();
+  const seq=Math.max(1,num(countRow?.count)+1);
+  const paymentNo=`OP-${paidDate.slice(2).replace(/-/g,'')}-${String(seq).padStart(3,'0')}`;
+  const paymentId=crypto.randomUUID();
+  const dayCount=items.filter((item)=>item.shift==='day').length;
+  const nightCount=items.filter((item)=>item.shift==='night').length;
+  const totalCents=items.reduce((sum,item)=>sum+dailyMoneyCents(item.amount),0);
+  const statements:D1PreparedStatement[]=[c.env.DB.prepare(`INSERT INTO hr_daily_payments (id,payment_no,main_company_id,employee_id,personnel_no,full_name,qualification,period_start,period_end,day_count,night_count,total_days,total_amount_cents,status,paid_date,paid_at,paid_by_user_id,paid_by_label,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'PAID',?,?,?,?,?,?)`).bind(paymentId,paymentNo,companyId,employeeId,text(person?.personnel_no)||null,text(person?.full_name)||'Personel',text(person?.qualification)||null,start,end,dayCount,nightCount,items.length,totalCents,paidDate,paidAt,actor.id||null,actor.label,paidAt,paidAt)];
+  for(const item of items){ statements.push(c.env.DB.prepare(`INSERT INTO hr_daily_payment_items (id,payment_id,main_company_id,attendance_id,employee_id,work_date,shift,amount_cents,active,created_at) VALUES (?,?,?,?,?,?,?,?,1,?)`).bind(crypto.randomUUID(),paymentId,companyId,item.attendanceId,employeeId,item.workDate,item.shift,dailyMoneyCents(item.amount),paidAt)); }
+  const attendanceIds=[...new Set(items.map((item)=>item.attendanceId))];
+  for(const attendanceId of attendanceIds) statements.push(c.env.DB.prepare("UPDATE hr_daily_attendance SET payment_status='PAID',updated_at=? WHERE id=?").bind(paidAt,attendanceId));
+  statements.push(auditStmt(c,{companyId,employeeId,workDate:start,action:'PAYMENT_CREATE',before:null,after:{paymentId,paymentNo,startDate:start,endDate:end,dayCount,nightCount,totalAmount:totalCents/100},actor,source:'KYERP_DAILY_PAYMENT_V1'}));
+  try { await c.env.DB.batch(statements); } catch(error){ const msg=error instanceof Error?error.message:String(error); if(msg.includes('UNIQUE')||msg.includes('constraint')) return fail(c,409,'PAYMENT_CONFLICT','Bu vardiyalardan biri başka bir işlemde ödendi. Ödeme havuzunu yenileyin.'); throw error; }
+  return ok(c,{id:paymentId,paymentId,paymentNo,employeeId,name:text(person?.full_name),periodStart:start,periodEnd:end,dayCount,nightCount,totalDays:items.length,totalAmount:totalCents/100,status:'PAID',paidDate,paidAt,paidByLabel:actor.label,items});
+}
+
+async function cancelPayment(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const body=await bodyOf(c);
+  const companyId=companyIdOf(c,body);
+  const paymentId=text(c.req.param('id') || body.paymentId);
+  const reason=text(body.reason || body.note);
+  if(!paymentId) return fail(c,400,'PAYMENT_REQUIRED','Ödeme kaydı zorunludur.');
+  if(!reason) return fail(c,400,'CANCEL_REASON_REQUIRED','Ödeme iptal açıklaması zorunludur.');
+  const payment=await c.env.DB.prepare("SELECT * FROM hr_daily_payments WHERE id=? AND main_company_id=? LIMIT 1").bind(paymentId,companyId).first<Row>();
+  if(!payment) return fail(c,404,'PAYMENT_NOT_FOUND','Ödeme kaydı bulunamadı.');
+  if(text(payment.status).toUpperCase()!=='PAID') return fail(c,409,'PAYMENT_ALREADY_CANCELLED','Bu ödeme zaten aktif değil.');
+  const itemsResult=await c.env.DB.prepare("SELECT * FROM hr_daily_payment_items WHERE payment_id=? AND main_company_id=? AND active=1").bind(paymentId,companyId).all<Row>();
+  const items=itemsResult.results||[];
+  const actor=await actorOf(c); const timestamp=nowIso(); const statements:D1PreparedStatement[]=[];
+  statements.push(c.env.DB.prepare(`UPDATE hr_daily_payments SET status='CANCELLED',cancelled_at=?,cancelled_by_user_id=?,cancelled_by_label=?,cancel_reason=?,updated_at=? WHERE id=? AND main_company_id=?`).bind(timestamp,actor.id||null,actor.label,reason,timestamp,paymentId,companyId));
+  statements.push(c.env.DB.prepare("UPDATE hr_daily_payment_items SET active=0 WHERE payment_id=? AND main_company_id=?").bind(paymentId,companyId));
+  for(const attendanceId of [...new Set(items.map((item)=>text(item.attendance_id)).filter(Boolean))]) statements.push(c.env.DB.prepare("UPDATE hr_daily_attendance SET payment_status='WAITING',updated_at=? WHERE id=?").bind(timestamp,attendanceId));
+  statements.push(auditStmt(c,{companyId,employeeId:text(payment.employee_id),workDate:dateOnly(payment.period_start),action:'PAYMENT_CANCEL',before:{paymentId,paymentNo:text(payment.payment_no),status:'PAID'},after:{status:'CANCELLED',reason},actor,note:reason,source:'KYERP_DAILY_PAYMENT_V1'}));
+  await c.env.DB.batch(statements);
+  return ok(c,{paymentId,paymentNo:text(payment.payment_no),status:'CANCELLED',cancelReason:reason,cancelledAt:timestamp,cancelledByLabel:actor.label});
+}
+
 async function markPaid(c: Context<AppEnv>) {
   const body=await bodyOf(c);
   const companyId=companyIdOf(c,body);
@@ -1511,6 +1715,11 @@ export function registerGunlukOperasyonRoutes(app: Hono<AppEnv>) {
   app.get("/api/gunluk-operasyon/attendance/weekly-summary", protect(weeklySummary));
   app.get("/api/gunluk-operasyon/attendance/payment-slips", protect(weeklySummary));
   app.post("/api/gunluk-operasyon/attendance/mark-paid", protect(markPaid));
+
+  app.get("/api/gunluk-operasyon/payments/pool", protect(paymentPool));
+  app.get("/api/gunluk-operasyon/payments/history", protect(paymentHistory));
+  app.post("/api/gunluk-operasyon/payments", protect(createPayment));
+  app.post("/api/gunluk-operasyon/payments/:id/cancel", protect(cancelPayment));
 
   app.get("/api/gunluk-operasyon/records", protect(listFocused));
   app.post("/api/gunluk-operasyon/records", protect(saveFocused));
