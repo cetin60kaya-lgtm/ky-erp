@@ -91,6 +91,8 @@ function shiftOf(value: unknown): "day" | "night" {
 
 let schemaReady: Promise<void> | null = null;
 
+// Core Günlük Operasyon bootstrap must stay payment-ledger independent.
+// Payment ledger schema is migration-owned and must not be recreated on every request.
 function ensureSchema(c: Context<AppEnv>) {
   if (!schemaReady) {
     schemaReady = c.env.DB.batch([
@@ -175,44 +177,6 @@ function ensureSchema(c: Context<AppEnv>) {
         version TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`),
-      c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS hr_daily_payments (
-        id TEXT PRIMARY KEY,
-        payment_no TEXT NOT NULL UNIQUE,
-        main_company_id TEXT NOT NULL,
-        employee_id TEXT NOT NULL,
-        personnel_no TEXT,
-        full_name TEXT NOT NULL,
-        qualification TEXT,
-        period_start TEXT NOT NULL,
-        period_end TEXT NOT NULL,
-        day_count INTEGER NOT NULL DEFAULT 0,
-        night_count INTEGER NOT NULL DEFAULT 0,
-        total_days INTEGER NOT NULL DEFAULT 0,
-        total_amount_cents INTEGER NOT NULL DEFAULT 0,
-        status TEXT NOT NULL DEFAULT 'PAID',
-        paid_date TEXT NOT NULL,
-        paid_at TEXT NOT NULL,
-        paid_by_user_id TEXT,
-        paid_by_label TEXT,
-        cancelled_at TEXT,
-        cancelled_by_user_id TEXT,
-        cancelled_by_label TEXT,
-        cancel_reason TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )`),
-      c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS hr_daily_payment_items (
-        id TEXT PRIMARY KEY,
-        payment_id TEXT NOT NULL,
-        main_company_id TEXT NOT NULL,
-        attendance_id TEXT NOT NULL,
-        employee_id TEXT NOT NULL,
-        work_date TEXT NOT NULL,
-        shift TEXT NOT NULL,
-        amount_cents INTEGER NOT NULL DEFAULT 0,
-        active INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL
-      )`),
       c.env.DB.prepare(
         "CREATE INDEX IF NOT EXISTS idx_daily_revision_attendance ON hr_daily_attendance_revision(main_company_id, attendance_id, revision DESC)",
       ),
@@ -224,15 +188,6 @@ function ensureSchema(c: Context<AppEnv>) {
       ),
       c.env.DB.prepare(
         "CREATE INDEX IF NOT EXISTS idx_daily_check_lookup ON hr_daily_attendance_check(main_company_id, work_date, shift, employee_id)",
-      ),
-      c.env.DB.prepare(
-        "CREATE INDEX IF NOT EXISTS idx_daily_payment_history ON hr_daily_payments(main_company_id, paid_date DESC, paid_at DESC)",
-      ),
-      c.env.DB.prepare(
-        "CREATE INDEX IF NOT EXISTS idx_daily_payment_employee ON hr_daily_payments(main_company_id, employee_id, status, paid_date DESC)",
-      ),
-      c.env.DB.prepare(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_payment_item_active ON hr_daily_payment_items(main_company_id, attendance_id, shift) WHERE active=1",
       ),
       c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_attendance_insert
         AFTER INSERT ON hr_daily_attendance
@@ -297,26 +252,6 @@ function ensureSchema(c: Context<AppEnv>) {
           UPDATE hr_daily_attendance_check
           SET checked=0,updated_at=CURRENT_TIMESTAMP
           WHERE employee_id=NEW.employee_id AND work_date=NEW.work_date AND shift='night' AND checked<>0;
-        END`),
-      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_payment_insert
-        AFTER INSERT ON hr_daily_payments
-        BEGIN
-          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
-        END`),
-      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_payment_update
-        AFTER UPDATE ON hr_daily_payments
-        BEGIN
-          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
-        END`),
-      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_payment_item_insert
-        AFTER INSERT ON hr_daily_payment_items
-        BEGIN
-          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
-        END`),
-      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_payment_item_update
-        AFTER UPDATE ON hr_daily_payment_items
-        BEGIN
-          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
         END`),
       c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_roster_insert
         AFTER INSERT ON hr_daily_range_roster
