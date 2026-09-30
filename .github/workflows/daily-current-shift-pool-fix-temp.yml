@@ -1,0 +1,106 @@
+name: KYERP Current Shift Pool Fix TEMP
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/daily-current-shift-pool-fix-temp.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kyerp-current-shift-pool-fix
+  cancel-in-progress: false
+
+jobs:
+  patch-test-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      VITE_API_URL: https://api.kyerp.net
+    steps:
+      - name: Checkout production branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/model-uretim-kontrol-merkezi-final
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply safe current-shift pool patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/daily_roster_instant_save.py
+          git diff --check
+          grep -q 'activatePersonForSelectedShift' APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
+          grep -q 'Seçili vardiya otomatik kaydedilir' APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
+          if grep -q 'inRoster ? "Havuzda" : "Havuza ekle"' APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx; then
+            echo 'Stale Havuzda logic still exists' >&2
+            exit 1
+          fi
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Frontend lint test build
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Commit application fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "kyerp-production-bot"
+          git config user.email "kyerp-production-bot@users.noreply.github.com"
+          git add APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
+          if ! git diff --cached --quiet; then
+            git commit -m "fix(daily): make pool reflect current shift and save instantly"
+            git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+          fi
+
+      - name: Verify Cloudflare
+        working-directory: APP/app/ky-erp-frontend
+        run: npx --yes wrangler@4.118.0 whoami
+
+      - name: Deploy production Pages
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.118.0 pages deploy dist \
+            --project-name ky-erp-frontend \
+            --branch codex/model-uretim-kontrol-merkezi-final \
+            --commit-hash "$(git rev-parse HEAD)"
+
+      - name: Production smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in /gunluk-operasyon/daily-entry /gunluk-operasyon/daily-weekly /gunluk-operasyon/daily-payments; do
+            ok=0
+            for i in {1..12}; do
+              code="$(curl -sS -L -o /tmp/page.html -w '%{http_code}' "https://kyerp.net${path}" || true)"
+              if [ "$code" = "200" ] && grep -q 'KY ERP' /tmp/page.html; then
+                ok=1
+                break
+              fi
+              sleep 5
+            done
+            test "$ok" = 1
+            echo "$path live: OK"
+          done
