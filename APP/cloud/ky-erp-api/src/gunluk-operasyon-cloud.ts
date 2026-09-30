@@ -158,6 +158,18 @@ function ensureSchema(c: Context<AppEnv>) {
         updated_at TEXT NOT NULL,
         UNIQUE(main_company_id, employee_id, work_date, shift)
       )`),
+      c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS hr_daily_attendance_check (
+        id TEXT PRIMARY KEY,
+        main_company_id TEXT NOT NULL,
+        employee_id TEXT NOT NULL,
+        work_date TEXT NOT NULL,
+        shift TEXT NOT NULL,
+        checked INTEGER NOT NULL DEFAULT 0,
+        checked_by_user_id TEXT,
+        checked_by_label TEXT,
+        updated_at TEXT NOT NULL,
+        UNIQUE(main_company_id, employee_id, work_date, shift)
+      )`),
       c.env.DB.prepare(
         "CREATE INDEX IF NOT EXISTS idx_daily_revision_attendance ON hr_daily_attendance_revision(main_company_id, attendance_id, revision DESC)",
       ),
@@ -166,6 +178,9 @@ function ensureSchema(c: Context<AppEnv>) {
       ),
       c.env.DB.prepare(
         "CREATE INDEX IF NOT EXISTS idx_daily_period_lock_range ON hr_daily_period_lock(main_company_id, status, start_date, end_date)",
+      ),
+      c.env.DB.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_daily_check_lookup ON hr_daily_attendance_check(main_company_id, work_date, shift, employee_id)",
       ),
       c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_revision_no_update
         BEFORE UPDATE ON hr_daily_attendance_revision
@@ -336,7 +351,9 @@ async function listFocused(c: Context<AppEnv>) {
         a.night_shift,
         a.updated_at AS attendance_updated_at,
         COALESCE(n.note,'') AS note,
-        n.updated_at AS note_updated_at
+        n.updated_at AS note_updated_at,
+        COALESCE(ch.checked,0) AS checked,
+        ch.updated_at AS checked_updated_at
       FROM hr_daily_employees e
       LEFT JOIN hr_daily_attendance a
         ON a.employee_id=e.id AND a.work_date=?
@@ -345,9 +362,14 @@ async function listFocused(c: Context<AppEnv>) {
        AND n.employee_id=e.id
        AND n.work_date=?
        AND n.shift=?
+      LEFT JOIN hr_daily_attendance_check ch
+        ON ch.main_company_id=e.main_company_id
+       AND ch.employee_id=e.id
+       AND ch.work_date=?
+       AND ch.shift=?
       WHERE e.main_company_id=?
       ORDER BY e.qualification ASC,e.full_name ASC,e.id ASC`)
-    .bind(date, date, shift, companyId)
+    .bind(date, date, shift, date, shift, companyId)
     .all<Row>();
 
   const rows = (result.results || []).map((row) => ({
@@ -363,8 +385,10 @@ async function listFocused(c: Context<AppEnv>) {
     dayShift: flag(row.day_shift),
     nightShift: flag(row.night_shift),
     note: text(row.note),
+    checked: flag(row.checked),
     updatedAt: text(row.attendance_updated_at),
     noteUpdatedAt: text(row.note_updated_at),
+    checkedUpdatedAt: text(row.checked_updated_at),
   }));
 
   return okItems(c, rows, rows);
@@ -726,45 +750,94 @@ async function saveFocused(c: Context<AppEnv>) {
         .bind(companyId, date, shift, ...employeeIds)
         .all<Row>()
     : { results: [] as Row[] };
+  const checksResult = employeeIds.length
+    ? await c.env.DB.prepare(`SELECT employee_id,checked
+        FROM hr_daily_attendance_check
+        WHERE main_company_id=? AND work_date=? AND shift=?
+          AND employee_id IN (${employeeIds.map(() => "?").join(",")})`)
+        .bind(companyId, date, shift, ...employeeIds)
+        .all<Row>()
+    : { results: [] as Row[] };
   const noteByEmployee = new Map(
     (notesResult.results || []).map((row) => [text(row.employee_id), text(row.note)]),
+  );
+  const checkedByEmployee = new Map(
+    (checksResult.results || []).map((row) => [text(row.employee_id), flag(row.checked)]),
   );
 
   for (const entry of entries) {
     const employeeId = text(entry.personelId || entry.employeeId);
-    const before = noteByEmployee.get(employeeId) || "";
-    const after = text(entry.note);
-    if (before === after) continue;
+    const noteBefore = noteByEmployee.get(employeeId) || "";
+    const noteAfter = text(entry.note);
+    if (noteBefore !== noteAfter) {
+      statements.push(
+        c.env.DB.prepare(`INSERT INTO hr_daily_attendance_notes
+          (id,main_company_id,employee_id,work_date,shift,note,updated_at)
+          VALUES (?,?,?,?,?,?,?)
+          ON CONFLICT(main_company_id,employee_id,work_date,shift)
+          DO UPDATE SET note=excluded.note,updated_at=excluded.updated_at`).bind(
+          crypto.randomUUID(),
+          companyId,
+          employeeId,
+          date,
+          shift,
+          noteAfter,
+          nowIso(),
+        ),
+      );
+      statements.push(
+        auditStmt(c, {
+          companyId,
+          employeeId,
+          workDate: date,
+          shift,
+          action: "NOTE_UPDATE",
+          before: { note: noteBefore },
+          after: { note: noteAfter },
+          actor,
+          note: noteAfter,
+          source: "KYERP_DAILY_ENTRY_V3",
+        }),
+      );
+    }
 
-    statements.push(
-      c.env.DB.prepare(`INSERT INTO hr_daily_attendance_notes
-        (id,main_company_id,employee_id,work_date,shift,note,updated_at)
-        VALUES (?,?,?,?,?,?,?)
-        ON CONFLICT(main_company_id,employee_id,work_date,shift)
-        DO UPDATE SET note=excluded.note,updated_at=excluded.updated_at`).bind(
-        crypto.randomUUID(),
-        companyId,
-        employeeId,
-        date,
-        shift,
-        after,
-        nowIso(),
-      ),
-    );
-    statements.push(
-      auditStmt(c, {
-        companyId,
-        employeeId,
-        workDate: date,
-        shift,
-        action: "NOTE_UPDATE",
-        before: { note: before },
-        after: { note: after },
-        actor,
-        note: after,
-        source: "KYERP_DAILY_ENTRY_V3",
-      }),
-    );
+    const status = text(entry.status).toUpperCase().replace(/İ/g, "I");
+    const selected = !["REMOVE", "PASSIVE", "INACTIVE", "DELETE"].includes(status);
+    const checkBefore = checkedByEmployee.get(employeeId) === true;
+    const checkAfter = selected && (entry.checked === undefined ? checkBefore : flag(entry.checked));
+    if (checkBefore !== checkAfter) {
+      const timestamp = nowIso();
+      statements.push(
+        c.env.DB.prepare(`INSERT INTO hr_daily_attendance_check
+          (id,main_company_id,employee_id,work_date,shift,checked,checked_by_user_id,checked_by_label,updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?)
+          ON CONFLICT(main_company_id,employee_id,work_date,shift)
+          DO UPDATE SET checked=excluded.checked,checked_by_user_id=excluded.checked_by_user_id,checked_by_label=excluded.checked_by_label,updated_at=excluded.updated_at`).bind(
+          crypto.randomUUID(),
+          companyId,
+          employeeId,
+          date,
+          shift,
+          checkAfter ? 1 : 0,
+          actor.id || null,
+          actor.label,
+          timestamp,
+        ),
+      );
+      statements.push(
+        auditStmt(c, {
+          companyId,
+          employeeId,
+          workDate: date,
+          shift,
+          action: "ATTENDANCE_CHECK_UPDATE",
+          before: { checked: checkBefore },
+          after: { checked: checkAfter },
+          actor,
+          source: "KYERP_DAILY_CHECK_V1",
+        }),
+      );
+    }
   }
 
   if (statements.length) await c.env.DB.batch(statements);
@@ -1316,6 +1389,30 @@ async function markPaid(c: Context<AppEnv>) {
   return ok(c,{employeeId,startDate:start,endDate:end,updated:Number(result.meta?.changes || 0)});
 }
 
+async function syncState(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const companyId = companyIdOf(c);
+  const [attendanceVersion, employeeVersion, auditVersion, checkVersion] = await Promise.all([
+    c.env.DB.prepare(`SELECT COALESCE(MAX(a.updated_at),'') AS version
+        FROM hr_daily_attendance a
+        JOIN hr_daily_employees e ON e.id=a.employee_id
+        WHERE e.main_company_id=?`).bind(companyId).first<Row>(),
+    c.env.DB.prepare("SELECT COALESCE(MAX(updated_at),'') AS version FROM hr_daily_employees WHERE main_company_id=?")
+      .bind(companyId).first<Row>(),
+    c.env.DB.prepare("SELECT COALESCE(MAX(created_at),'') AS version FROM hr_daily_operation_audit WHERE main_company_id=?")
+      .bind(companyId).first<Row>(),
+    c.env.DB.prepare("SELECT COALESCE(MAX(updated_at),'') AS version FROM hr_daily_attendance_check WHERE main_company_id=?")
+      .bind(companyId).first<Row>(),
+  ]);
+  const version = [
+    text(attendanceVersion?.version),
+    text(employeeVersion?.version),
+    text(auditVersion?.version),
+    text(checkVersion?.version),
+  ].join("|");
+  return ok(c, { mainCompanyId: companyId, version, serverTime: nowIso() });
+}
+
 function protect(fn: (c: Context<AppEnv>) => Promise<Response>) {
   return async (c: Context<AppEnv>) => {
     try {
@@ -1339,6 +1436,7 @@ function protect(fn: (c: Context<AppEnv>) => Promise<Response>) {
 }
 
 export function registerGunlukOperasyonRoutes(app: Hono<AppEnv>) {
+  app.get("/api/gunluk-operasyon/sync-state", protect(syncState));
   app.get("/api/gunluk-operasyon/employees", protect(listEmployees));
   app.post("/api/gunluk-operasyon/employees", protect(createEmployee));
   app.patch("/api/gunluk-operasyon/employees/:id", protect(updateEmployee));

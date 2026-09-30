@@ -10,9 +10,14 @@ function unwrap(payload) {
 }
 
 const ROOT = "/gunluk-operasyon";
+const freshOptions = (options = {}) => ({ ...options, forceFresh: options.forceFresh !== false });
+
+export async function getDailySyncState(params = {}, options = {}) {
+  return unwrap(await apiGet(`${ROOT}/sync-state`, params, freshOptions(options)));
+}
 
 export async function getDailyEmployees(params = {}, options = {}) {
-  return unwrap(await apiGet(`${ROOT}/employees`, params, options));
+  return unwrap(await apiGet(`${ROOT}/employees`, params, freshOptions(options)));
 }
 
 export async function createDailyEmployee(payload = {}) {
@@ -28,7 +33,7 @@ export async function deleteDailyEmployee(id, payload = {}) {
 }
 
 export async function getDailyAttendance(params = {}, options = {}) {
-  return unwrap(await apiGet(`${ROOT}/attendance`, params, options));
+  return unwrap(await apiGet(`${ROOT}/attendance`, params, freshOptions(options)));
 }
 
 export async function saveDailyAttendanceRange(payload = {}) {
@@ -36,11 +41,11 @@ export async function saveDailyAttendanceRange(payload = {}) {
 }
 
 export async function getDailyWeeklySummary(params = {}, options = {}) {
-  return unwrap(await apiGet(`${ROOT}/attendance/weekly-summary`, params, options));
+  return unwrap(await apiGet(`${ROOT}/attendance/weekly-summary`, params, freshOptions(options)));
 }
 
 export async function getDailyPaymentSlips(params = {}, options = {}) {
-  return unwrap(await apiGet(`${ROOT}/attendance/payment-slips`, params, options));
+  return unwrap(await apiGet(`${ROOT}/attendance/payment-slips`, params, freshOptions(options)));
 }
 
 export async function markDailyPaid(payload = {}) {
@@ -48,7 +53,7 @@ export async function markDailyPaid(payload = {}) {
 }
 
 export async function getDailyFocusedRecords(params = {}, options = {}) {
-  return unwrap(await apiGet(`${ROOT}/records`, params, options));
+  return unwrap(await apiGet(`${ROOT}/records`, params, freshOptions(options)));
 }
 
 export async function saveDailyFocusedRecords(payload = {}) {
@@ -56,7 +61,7 @@ export async function saveDailyFocusedRecords(payload = {}) {
 }
 
 export async function getDailyRoster(params = {}, options = {}) {
-  return unwrap(await apiGet(`${ROOT}/roster`, params, options));
+  return unwrap(await apiGet(`${ROOT}/roster`, params, freshOptions(options)));
 }
 
 export async function saveDailyRoster(payload = {}) {
@@ -64,15 +69,15 @@ export async function saveDailyRoster(payload = {}) {
 }
 
 export async function getDailyAudit(params = {}, options = {}) {
-  return unwrap(await apiGet(`${ROOT}/audit`, params, options));
+  return unwrap(await apiGet(`${ROOT}/audit`, params, freshOptions(options)));
 }
 
 export async function getDailyRevisions(params = {}, options = {}) {
-  return unwrap(await apiGet(`${ROOT}/revisions`, params, options));
+  return unwrap(await apiGet(`${ROOT}/revisions`, params, freshOptions(options)));
 }
 
 export async function getDailyPeriodLock(params = {}, options = {}) {
-  return unwrap(await apiGet(`${ROOT}/period-lock`, params, options));
+  return unwrap(await apiGet(`${ROOT}/period-lock`, params, freshOptions(options)));
 }
 
 export async function setDailyPeriodLock(payload = {}) {
