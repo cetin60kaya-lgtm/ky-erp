@@ -7,11 +7,11 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>KYERP.PDKS</AssemblyName>
-    <Product>KY PDKS 6.3.4 TEST</Product>
+    <Product>KY PDKS 6.3.6 TEST</Product>
     <Company>KY ERP</Company>
-    <Description>KY PDKS 6.3.4 TEST - durable live TNF archive, 5-minute safe terminal sync, weekly/monthly card punch control and explicit live archive cleanup</Description>
-    <Version>6.3.4</Version>
-    <FileVersion>6.3.4.0</FileVersion>
+    <Description>KY PDKS 6.3.6 TEST - single simple shell, one-minute safe live terminal sync, durable live TNF/raw archive, weekly/monthly card control and device records preserved</Description>
+    <Version>6.3.6</Version>
+    <FileVersion>6.3.6.0</FileVersion>
     <DebugType Condition="'$(Configuration)'=='Release'">none</DebugType>
     <DebugSymbols Condition="'$(Configuration)'=='Release'">false</DebugSymbols>
   </PropertyGroup>
