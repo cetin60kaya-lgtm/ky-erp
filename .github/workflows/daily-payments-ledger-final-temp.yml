@@ -34,8 +34,16 @@ jobs:
       - name: Apply payment ledger final
         shell: bash
         run: |
-          set -euo pipefail
-          python3 .github/scripts/daily_payments_ledger_final_v2.py
+          set -uo pipefail
+          if ! python3 .github/scripts/daily_payments_ledger_diag.py; then
+            git config user.name "kyerp-production-bot"
+            git config user.email "kyerp-production-bot@users.noreply.github.com"
+            git add .github/payment_patch_error.txt
+            git commit -m "chore: capture payments patch diagnostic"
+            git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+            exit 1
+          fi
+          set -e
           git diff --check
           grep -q 'CREATE TABLE IF NOT EXISTS hr_daily_payments' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
           grep -q 'idx_daily_payment_item_active' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
