@@ -1,100 +1,29 @@
-name: KYERP Daily Delete Production Hotfix TEMP
+name: KYERP Final Fix Diagnostic TEMP
 
 on:
   push:
     branches:
       - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - .github/workflows/kyerp-final-fix-diagnostic-temp.yml
+  workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: kyerp-daily-delete-production-hotfix
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  patch-test-deploy:
+  diagnose:
     runs-on: ubuntu-latest
-    environment: production
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
-      VITE_API_URL: https://api.kyerp.net
     steps:
-      - name: Checkout production branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: codex/model-uretim-kontrol-merkezi-final
-          fetch-depth: 0
-          persist-credentials: true
-
-      - name: Apply daily delete hotfix
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 .github/scripts/daily_entry_delete_fix.py
-          git diff --check
-          git diff -- APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
-
-      - name: Setup Node 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
-
-      - name: Frontend gates
+      - name: Inspect daily view mappings
         working-directory: APP/app/ky-erp-frontend
         shell: bash
         run: |
           set -euo pipefail
-          npm ci
-          npm run lint
-          npm test
-          npm run build
-
-      - name: Commit app hotfix
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "kyerp-production-bot"
-          git config user.email "kyerp-production-bot@users.noreply.github.com"
-          git add APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
-          if ! git diff --cached --quiet; then
-            git commit -m "fix(daily): delete saved shift immediately"
-            git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
-          fi
-
-      - name: Verify Cloudflare
-        working-directory: APP/app/ky-erp-frontend
-        run: npx --yes wrangler@4.118.0 whoami
-
-      - name: Deploy production Pages
-        working-directory: APP/app/ky-erp-frontend
-        shell: bash
-        run: |
-          set -euo pipefail
-          npx --yes wrangler@4.118.0 pages deploy dist \
-            --project-name ky-erp-frontend \
-            --branch codex/model-uretim-kontrol-merkezi-final \
-            --commit-hash "$(git rev-parse HEAD)"
-
-      - name: Live smoke
-        shell: bash
-        run: |
-          set -euo pipefail
-          for path in /gunluk-operasyon/daily-entry /gunluk-operasyon/daily-payments; do
-            ok=0
-            for i in {1..12}; do
-              code="$(curl -sS -L -o /tmp/kyerp.html -w '%{http_code}' "https://kyerp.net${path}" || true)"
-              if [ "$code" = "200" ] && grep -q "KY ERP" /tmp/kyerp.html; then
-                ok=1
-                break
-              fi
-              sleep 5
-            done
-            test "$ok" = 1
-            echo "$path live: OK"
-          done
+          echo '=== DailyHrWorkspace ==='
+          grep -n -E 'VIEWS|IkPage activeTab|daily-entry|daily-cards|daily-weekly|daily-payments' src/pages/modules/ik/DailyHrWorkspace.jsx || true
+          echo '=== IkPage mappings ==='
+          grep -n -E 'daily-entry|daily-cards|daily-weekly|daily-payments|gunluk-personel|gunluk-personel-kartlari|gunluk-odeme-fisleri|ik-raporlari' src/pages/modules/IkPage.jsx | head -n 120 || true
+          echo '=== IkPage fallback/render tail ==='
+          grep -n -E 'Ekran bulunamadı|activeTab ===|normalizedTab|viewKey|tabKey' src/pages/modules/IkPage.jsx | tail -n 120 || true
