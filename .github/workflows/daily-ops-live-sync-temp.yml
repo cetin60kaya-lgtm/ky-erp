@@ -40,12 +40,15 @@ jobs:
         run: |
           set -euo pipefail
           python .github/scripts/daily_ops_live_sync_final.py
+          python .github/scripts/daily_ops_live_sync_cost_guard.py
           git diff --check
 
       - name: Source guardrails
         run: |
           set -euo pipefail
           grep -q 'hr_daily_attendance_check' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
+          grep -q 'hr_daily_sync_state' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
+          grep -q 'trg_daily_sync_attendance_update' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
           grep -q '/api/gunluk-operasyon/sync-state' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
           grep -q 'ATTENDANCE_CHECK_UPDATE' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
           grep -q 'getDailySyncState' APP/app/ky-erp-frontend/src/services/dailyOpsApi.js
