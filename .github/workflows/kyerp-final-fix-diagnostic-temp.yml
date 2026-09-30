@@ -1,29 +1,177 @@
-name: KYERP Final Fix Diagnostic TEMP
+name: KYERP Daily Delete Production Hotfix TEMP
 
 on:
   push:
     branches:
       - codex/model-uretim-kontrol-merkezi-final
-  workflow_dispatch:
+    paths:
+      - .github/workflows/kyerp-final-fix-diagnostic-temp.yml
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: kyerp-daily-delete-production-hotfix
+  cancel-in-progress: false
 
 jobs:
-  diagnose:
+  patch-test-deploy:
     runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      VITE_API_URL: https://api.kyerp.net
     steps:
       - uses: actions/checkout@v4
         with:
           ref: codex/model-uretim-kontrol-merkezi-final
-      - name: Inspect daily view mappings
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Patch immediate delete
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx')
+          s = p.read_text(encoding='utf-8')
+
+          if 'const deleteShiftAndCleanupRoster = async (person)' not in s:
+              marker = '  const removeRosterPerson = (personId) => {'
+              start = s.find(marker)
+              if start < 0:
+                  raise SystemExit('removeRosterPerson start not found')
+              end = s.find('\n  };', start)
+              if end < 0:
+                  raise SystemExit('removeRosterPerson end not found')
+              end += len('\n  };')
+              handler = r'''
+
+  const deleteShiftAndCleanupRoster = async (person) => {
+    if (!person?.id || busy || periodLocked) return;
+    const currentRecord = recordByEmployee.get(person.id) || {};
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await saveDailyFocusedRecords({
+        mainCompanyId: companyId,
+        date: selectedDate,
+        shift,
+        personnelEntries: [{
+          personelId: person.id,
+          status: "REMOVE",
+          checked: false,
+          expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
+          note: "",
+        }],
+      });
+
+      const requestedRosterIds = [...rosterIds].filter((id) => id !== person.id);
+      const savedRoster = await saveDailyRoster({
+        mainCompanyId: companyId,
+        startDate: range.start,
+        endDate: range.end,
+        employeeIds: requestedRosterIds,
+      });
+      const finalRosterIds = new Set(
+        Array.isArray(savedRoster?.employeeIds)
+          ? savedRoster.employeeIds.map(String)
+          : requestedRosterIds,
+      );
+      const keptForOtherWork = finalRosterIds.has(person.id);
+
+      setRosterIds(finalRosterIds);
+      setRosterSaved(true);
+      setSelectedIds((current) => { const next = new Set(current); next.delete(person.id); return next; });
+      setCheckedIds((current) => { const next = new Set(current); next.delete(person.id); return next; });
+      setNotes((current) => { const next = { ...current }; delete next[person.id]; return next; });
+
+      await Promise.all([loadFocused(), loadRangeData()]);
+      setNotice(
+        keptForOtherWork
+          ? `${person.name} ${shift === "day" ? "gündüz" : "gece"} kaydı silindi. Tarih aralığında başka kaydı olduğu için havuzda kaldı.`
+          : `${person.name} ${shift === "day" ? "gündüz" : "gece"} kaydı silindi; tarih aralığında başka kaydı olmadığı için havuzdan da çıkarıldı.`,
+      );
+    } catch (e) {
+      setError(e?.message || "Vardiya kaydı silinemedi. Ekranı yenileyip tekrar deneyin.");
+    } finally {
+      setBusy(false);
+    }
+  };'''
+              s = s[:end] + handler + s[end:]
+
+          old = '<button type="button" title="Bu vardiyadan kaldır" disabled={!selected || periodLocked} onClick={() => { setSelectedIds((current) => { const next = new Set(current); next.delete(person.id); return next; }); setCheckedIds((current) => { const next = new Set(current); next.delete(person.id); return next; }); }}><Trash2 size={14}/></button>'
+          new = '<button type="button" title="Bu vardiya kaydını sil" disabled={!selected || periodLocked || busy} onClick={() => deleteShiftAndCleanupRoster(person)}><Trash2 size={14}/></button>'
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif new not in s:
+              raise SystemExit('trash action not found')
+
+          assert s.count('const deleteShiftAndCleanupRoster = async (person)') == 1
+          assert s.count('onClick={() => deleteShiftAndCleanupRoster(person)}') == 1
+          assert 'title="Bu vardiyadan kaldır"' not in s
+          p.write_text(s, encoding='utf-8')
+          PY
+          git diff --check
+          git diff -- APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Frontend gates
         working-directory: APP/app/ky-erp-frontend
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== DailyHrWorkspace ==='
-          grep -n -E 'VIEWS|IkPage activeTab|daily-entry|daily-cards|daily-weekly|daily-payments' src/pages/modules/ik/DailyHrWorkspace.jsx || true
-          echo '=== IkPage mappings ==='
-          grep -n -E 'daily-entry|daily-cards|daily-weekly|daily-payments|gunluk-personel|gunluk-personel-kartlari|gunluk-odeme-fisleri|ik-raporlari' src/pages/modules/IkPage.jsx | head -n 120 || true
-          echo '=== IkPage fallback/render tail ==='
-          grep -n -E 'Ekran bulunamadı|activeTab ===|normalizedTab|viewKey|tabKey' src/pages/modules/IkPage.jsx | tail -n 120 || true
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Commit app hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "kyerp-production-bot"
+          git config user.email "kyerp-production-bot@users.noreply.github.com"
+          git add APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
+          if ! git diff --cached --quiet; then
+            git commit -m "fix(daily): delete saved shift immediately"
+            git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+          fi
+
+      - name: Verify Cloudflare
+        working-directory: APP/app/ky-erp-frontend
+        run: npx --yes wrangler@4.118.0 whoami
+
+      - name: Deploy production Pages
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.118.0 pages deploy dist \
+            --project-name ky-erp-frontend \
+            --branch codex/model-uretim-kontrol-merkezi-final \
+            --commit-hash "$(git rev-parse HEAD)"
+
+      - name: Live smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in /gunluk-operasyon/daily-entry /gunluk-operasyon/daily-payments; do
+            for i in {1..12}; do
+              code="$(curl -sS -L -o /tmp/kyerp.html -w '%{http_code}' "https://kyerp.net${path}" || true)"
+              if [ "$code" = "200" ] && grep -q "KY ERP" /tmp/kyerp.html; then
+                echo "$path live: OK"
+                break
+              fi
+              test "$i" != "12"
+              sleep 5
+            done
+          done
