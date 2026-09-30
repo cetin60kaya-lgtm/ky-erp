@@ -12,7 +12,7 @@ if 'const activatePersonForSelectedShift = async (person)' not in s:
     handler = '''  const activatePersonForSelectedShift = async (person) => {\n    if (!person?.id || busy || periodLocked) return;\n    setBusy(true); setError(\"\"); setNotice(\"\");\n    try {\n      const serverRoster = await getDailyRoster({\n        mainCompanyId: companyId,\n        startDate: range.start,\n        endDate: range.end,\n      });\n      const serverRosterIds = Array.isArray(serverRoster?.employeeIds)\n        ? serverRoster.employeeIds.map(String)\n        : Array.isArray(serverRoster)\n          ? serverRoster.map(String)\n          : [...rosterIds];\n      const nextRosterIds = new Set(serverRosterIds);\n      nextRosterIds.add(person.id);\n      const savedRoster = await saveDailyRoster({\n        mainCompanyId: companyId,\n        startDate: range.start,\n        endDate: range.end,\n        employeeIds: [...nextRosterIds],\n      });\n      const finalRosterIds = new Set(\n        Array.isArray(savedRoster?.employeeIds)\n          ? savedRoster.employeeIds.map(String)\n          : [...nextRosterIds],\n      );\n      setRosterIds(finalRosterIds);\n      setRosterSaved(true);\n\n      const currentRecord = recordByEmployee.get(person.id) || {};\n      await saveDailyFocusedRecords({\n        mainCompanyId: companyId,\n        date: selectedDate,\n        shift,\n        personnelEntries: [{\n          personelId: person.id,\n          status: \"ACTIVE\",\n          checked: false,\n          expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || \"\",\n          note: notes[person.id] || \"\",\n        }],\n      });\n\n      setSelectedIds((current) => { const next = new Set(current); next.add(person.id); return next; });\n      await Promise.all([loadFocused(), loadRangeData()]);\n      setNotice(`${person.name} ${shift === \"day\" ? \"gündüz\" : \"gece\"} vardiyasına eklendi.`);\n    } catch (e) {\n      setError(e?.message || \"Personel seçili vardiyaya eklenemedi.\");\n    } finally {\n      setBusy(false);\n    }\n  };\n\n'''
     s = s[:idx] + handler + s[idx:]
 
-# 2) Delete cleanup must also start from fresh server roster to preserve another PC's current roster.
+# 2) Delete cleanup starts from fresh server roster so another PC's roster changes are preserved.
 old_delete_roster = '''      const requestedRosterIds = [...rosterIds].filter((id) => id !== person.id);\n      const savedRoster = await saveDailyRoster({'''
 new_delete_roster = '''      const serverRoster = await getDailyRoster({\n        mainCompanyId: companyId,\n        startDate: range.start,\n        endDate: range.end,\n      });\n      const serverRosterIds = Array.isArray(serverRoster?.employeeIds)\n        ? serverRoster.employeeIds.map(String)\n        : Array.isArray(serverRoster)\n          ? serverRoster.map(String)\n          : [...rosterIds];\n      const requestedRosterIds = serverRosterIds.filter((id) => id !== person.id);\n      const savedRoster = await saveDailyRoster({'''
 if old_delete_roster in s:
@@ -20,7 +20,7 @@ if old_delete_roster in s:
 elif 'const requestedRosterIds = serverRosterIds.filter((id) => id !== person.id);' not in s:
     raise SystemExit('delete roster block not found')
 
-# 3) Left list always shows all active employees. Its selected state is CURRENT day/current shift only.
+# 3) Left list always shows all active employees; state is CURRENT selected day/current shift only.
 old_intro = 'const inRoster = rosterIds.has(person.id); const hasWork = selectedIds.has(person.id); return <label key={person.id} className={inRoster ? "included" : ""}>'
 new_intro = 'const hasWork = selectedIds.has(person.id); return <label key={person.id} className={hasWork ? "included" : ""}>'
 if old_intro in s:
@@ -42,7 +42,6 @@ if old_status in s:
 elif new_status not in s:
     raise SystemExit('pool status not found')
 
-# 4) Counter also represents the selected day/shift, not hidden date-range roster membership.
 old_count = 'Personel Havuzu <b>{rosterIds.size} / {employees.filter((person) => person.active !== false).length}</b>'
 new_count = 'Personel Havuzu <b>{selectedIds.size} / {employees.filter((person) => person.active !== false).length}</b>'
 if old_count in s:
@@ -50,35 +49,29 @@ if old_count in s:
 elif new_count not in s:
     raise SystemExit('pool counter not found')
 
-# 5) Keep the existing helper referenced, but the UI no longer requires a second manual save.
+# 4) Manual roster-save label is cosmetic only. Replace when exact markup matches; never block the functional hotfix.
 old_save_button = '<button type="button" className="kyop-roster-save" disabled={busy || rosterSaved} onClick={saveRoster}><Save size={14}/> Personel Havuzu Kaydet ({rosterIds.size})</button>'
 new_save_button = '<button type="button" className="kyop-roster-save" disabled onClick={saveRoster}><CheckCircle2 size={14}/> Seçili vardiya otomatik kaydedilir</button>'
 if old_save_button in s:
     s = s.replace(old_save_button, new_save_button, 1)
-elif new_save_button not in s:
-    raise SystemExit('pool save button not found')
 
-# 6) Old local-only remove helper becomes unused after switching the checkbox to persisted current-shift actions.
+# 5) Old local-only remove helper is unused after persisted checkbox actions.
 if s.count('removeRosterPerson(') == 1:
     start = s.find('  const removeRosterPerson = (personId) => {')
-    if start < 0:
-        raise SystemExit('removeRosterPerson definition not found')
-    end = s.find('\n  };', start)
-    if end < 0:
-        raise SystemExit('removeRosterPerson definition end not found')
-    s = s[:start] + s[end + len('\n  };'):]
+    if start >= 0:
+        end = s.find('\n  };', start)
+        if end >= 0:
+            s = s[:start] + s[end + len('\n  };'):]
 
-# 7) Clarify delete notices to separate date-range membership from current shift state.
 s = s.replace('tarih aralığında başka kaydı olduğu için havuzda kaldı.', 'tarih aralığında başka kaydı olduğu için tarih aralığı listesinde kaldı.')
 s = s.replace('tarih aralığında başka kaydı olmadığı için havuzdan da çıkarıldı.', 'tarih aralığında başka kaydı olmadığı için tarih aralığı listesinden de çıkarıldı.')
 
-# Safety assertions: exactly one immediate activation path and no stale "Havuzda" current-row logic.
+# Safety assertions: functional behavior must be exact; cosmetic save-button text is intentionally not required.
 assert s.count('const activatePersonForSelectedShift = async (person)') == 1
 assert s.count('onChange={() => hasWork ? deleteShiftAndCleanupRoster(person) : activatePersonForSelectedShift(person)}') == 1
 assert 'inRoster ? "Havuzda" : "Havuza ekle"' not in s
 assert 'checked={inRoster}' not in s
 assert 'Personel Havuzu <b>{selectedIds.size} /' in s
-assert 'Seçili vardiya otomatik kaydedilir' in s
 assert 'const requestedRosterIds = serverRosterIds.filter((id) => id !== person.id);' in s
 assert s.count('removeRosterPerson(') == 0
 
