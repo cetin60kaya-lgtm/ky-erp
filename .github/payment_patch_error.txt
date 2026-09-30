@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/home/runner/work/ky-erp/ky-erp/.github/scripts/daily_payments_ledger_diag.py", line 5, in <module>
+    exec(compile(code,'daily_payments_ledger_final_v2.py','exec'))
+  File "daily_payments_ledger_final_v2.py", line 33, in <module>
+  File "daily_payments_ledger_final_v2_exec.py", line 227, in <module>
+SystemExit: pay handler pattern missing
