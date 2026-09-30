@@ -6,9 +6,7 @@ on:
       - codex/quickdata-tnf-tab-rev4
     paths:
       - '.github/workflows/quickdata-rev11-single-exe.yml'
-      - '.github/scripts/quickdata-rev11-smart-window.ps1'
-      - '.github/scripts/quickdata-rev11-runfix.ps1'
-      - '.github/scripts/quickdata-rev10-clean-person.ps1'
+      - '.github/scripts/quickdata-rev11-safe-injector.ps1'
       - '.github/scripts/quickdata-rev9-final2-build.ps1'
       - '.github/scripts/quickdata-rev9-final-build.ps1'
       - '.github/scripts/quickdata-rev8-build.ps1'
@@ -26,9 +24,9 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Apply REV11 source fixes
+      - name: Apply REV11 safe source injector
         shell: pwsh
-        run: ./.github/scripts/quickdata-rev11-runfix.ps1
+        run: ./.github/scripts/quickdata-rev11-safe-injector.ps1
 
       - name: Publish exactly one self-contained EXE
         shell: pwsh
