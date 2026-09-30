@@ -1,0 +1,163 @@
+name: QuickDataTool REV7 Audited
+
+on:
+  push:
+    branches:
+      - codex/quickdata-tnf-tab-rev4
+    paths:
+      - '.github/workflows/quickdata-rev7-audited.yml'
+      - 'APP/desktop/kyerp-pdks-current/tools/QuickDataTool/DbTnfSyncInjector.cs'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore verified full tool and apply REV7 safety fixes
+        shell: pwsh
+        run: |
+          $tool = 'APP/desktop/kyerp-pdks-current/tools/QuickDataTool'
+          $main = Join-Path $tool 'MainForm.cs'
+          $tnf = Join-Path $tool 'TnfPrepareInjector.cs'
+
+          # Restore the last verified feature-complete QuickDataTool source.
+          git show a2a57332597e3fa5a6284f4c5209c33bf2368688:APP/desktop/kyerp-pdks-current/tools/QuickDataTool/MainForm.cs | Set-Content $main -Encoding UTF8
+
+          # TNF Hazirla startup safety and historical personnel support.
+          $s = Get-Content $tnf -Raw
+          $s = $s.Replace('        BeginInvoke(new Action(RefreshPeople));','        Load += (_, _) => RefreshPeople();')
+          $s = $s.Replace('        start.ValueChanged += (_, _) => RebuildDays();','        start.ValueChanged += (_, _) => { RebuildDays(); RefreshPeople(); };')
+          $s = $s.Replace('        end.ValueChanged += (_, _) => RebuildDays();','        end.ValueChanged += (_, _) => { RebuildDays(); RefreshPeople(); };')
+
+          $old = @'
+              var load = main.GetType().GetMethod("LoadPeople", BindingFlags.Instance | BindingFlags.NonPublic);
+              load?.Invoke(main, null);
+              var field = main.GetType().GetField("peopleList", BindingFlags.Instance | BindingFlags.NonPublic);
+              if (field?.GetValue(main) is not CheckedListBox source) return;
+              var existing = people.CheckedItems.Cast<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+              people.Items.Clear();
+              foreach (var item in source.Items.Cast<object>().Select(x => Convert.ToString(x) ?? "").Where(x => x.Length >= 5))
+                  people.Items.Add(item, existing.Count == 0 || existing.Contains(item));
+              status.Text = $"{people.Items.Count} aktif personel";
+          '@
+          $new = @'
+              var field = main.GetType().GetField("db", BindingFlags.Instance | BindingFlags.NonPublic);
+              if (field?.GetValue(main) is not KYERP.PDKS.Core.FirebirdDatabase database) return;
+              var a = start.Value.Date;
+              var b = end.Value.Date.AddDays(1);
+              var table = database.Query("select PKNO,AD,SOYAD from KIMLIK where (IGTARIH is null or IGTARIH<@B) and (ICTARIH is null or ICTARIH>=@A) order by PKNO",
+                  new FirebirdSql.Data.FirebirdClient.FbParameter("@A", a), new FirebirdSql.Data.FirebirdClient.FbParameter("@B", b));
+              var existing = people.CheckedItems.Cast<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+              people.Items.Clear();
+              foreach (DataRow r in table.Rows)
+              {
+                  var card = Convert.ToString(r["PKNO"])?.Trim() ?? "";
+                  if (card.Length == 0 || card == "00001") continue;
+                  var item = $"{card}  {r["AD"]} {r["SOYAD"]}";
+                  people.Items.Add(item, existing.Count == 0 || existing.Contains(item));
+              }
+              status.Text = $"{people.Items.Count} seçili dönemde personel";
+          '@
+          if (-not $s.Contains($old)) { throw 'TNF RefreshPeople block not found.' }
+          $s = $s.Replace($old, $new)
+          Set-Content $tnf $s -Encoding UTF8 -NoNewline
+
+          # Crash guard: no silent close.
+          $guard = @'
+          using System.Text;
+          namespace QuickDataTool;
+          internal static class CrashGuard
+          {
+              internal static void Install()
+              {
+                  Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+                  Application.ThreadException += (_, e) => Log(e.Exception);
+                  AppDomain.CurrentDomain.UnhandledException += (_, e) => { if (e.ExceptionObject is Exception ex) Log(ex); };
+              }
+              static void Log(Exception ex)
+              {
+                  try
+                  {
+                      var path = Path.Combine(AppContext.BaseDirectory, "QUICKDATA_HATA.log");
+                      File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}\r\n\r\n", Encoding.UTF8);
+                      MessageBox.Show("Bir işlem hatası yakalandı.\n\n" + ex.Message + "\n\nKayıt: " + path,
+                          "HKN PDKS", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                  }
+                  catch { }
+              }
+          }
+          '@
+          $guard | Set-Content (Join-Path $tool 'CrashGuard.cs') -Encoding UTF8
+
+          $program = Join-Path $tool 'Program.cs'
+          $p = Get-Content $program -Raw
+          if (-not $p.Contains('CrashGuard.Install();')) {
+            $needle = '        ApplicationConfiguration.Initialize();'
+            if (-not $p.Contains($needle)) { throw 'Program startup marker not found.' }
+            $p = $p.Replace($needle, $needle + "`r`n        CrashGuard.Install();")
+            Set-Content $program $p -Encoding UTF8 -NoNewline
+          }
+
+          # Source-level audit gates.
+          $audit = Get-Content (Join-Path $tool 'DbTnfSyncInjector.cs') -Raw
+          foreach($token in @('TNF SİL FAZLA','TNF SİL E','TNF DÜZELT','TNF EKLE','_YEDEK','ÇOKLU / İNCELE','LoadSettings')) {
+            if(-not $audit.Contains($token)) { throw "REV7 sync audit missing: $token" }
+          }
+          $full = Get-Content $main -Raw
+          foreach($token in @('BuildEHistory','EditPayrollSelected','EditSelectedPayment','EditSelectedAdvance','ApplyBulkE','ApplyBulk')) {
+            if(-not $full.Contains($token)) { throw "Full tool feature missing: $token" }
+          }
+
+      - name: Build and publish
+        shell: pwsh
+        run: |
+          $proj = 'APP/desktop/kyerp-pdks-current/tools/QuickDataTool/QuickDataTool.csproj'
+          dotnet restore $proj
+          dotnet build $proj -c Release --no-restore
+          dotnet publish $proj -c Release -r win-x64 --self-contained false -o "$env:RUNNER_TEMP\QuickDataTool"
+          if(-not (Test-Path "$env:RUNNER_TEMP\QuickDataTool\QuickDataTool.exe")) { throw 'QuickDataTool.exe missing after publish.' }
+
+          @'
+          HKN PDKS HIZLI VERI - REV7 AUDITED
+
+          Tek giris: QuickDataTool.exe
+
+          KONTROL EDILEN / DUZELTILENLER
+          - Tam Personel / Giris-Cikis / Toplu Islem / E / E Gecmisi / Bordro / Odeme-Avans kaynaklari geri yuklendi.
+          - DB - TNF Esitle yeni guvenli karsilastirma motoruna gecirildi.
+          - DB - TNF Esitle DB'ye YAZMAZ; DB kaynak, secili TNF hedefidir.
+          - Eksik TNF ekler.
+          - DB'de karsiligi olmayan TNF fazlalarini temizler.
+          - E kaydinin TNF karsiligini temizler.
+          - Tekil ve guvenli saat farkini DB saatine gore duzeltir.
+          - Coklu/belirsiz eslesmede otomatik islem yapmaz, INCELE birakir.
+          - Eski/pasif personelin gecmis donem kayitlari kontrolden dislanmaz.
+          - Bilinmeyen kartli TNF satirlari da karsilastirmada gorulur.
+          - Secili Eksikleri Ekle secimi artik yenileme nedeniyle kaybolmaz.
+          - Silme/duzeltme yalniz ilgili ham TNF satirina uygulanir; ayni gunun diger vardiyasini silmez.
+          - TNF degisikliginden once _YEDEK klasorune otomatik yedek alinir.
+          - Yazma temp dosya + atomik degistirme ile yapilir; hata olursa yedekten geri doner.
+          - DB-TNF parser ve writer Terminal Format Ayari (TNF_FORMAT_AYAR.json) ile ayni formati kullanir.
+          - TNF Hazirla secili tarih araliginda ise giris/cikis tarihine gore donemde calisan personeli listeler.
+          - TNF Hazirla acilis kapanma hatasi giderildi.
+          - Hedef GDB otomatik tani D:\Hedef500\Hedef500\Data\DATABASE.GDB yolunu once tercih eder.
+          - Beklenmeyen hata QUICKDATA_HATA.log dosyasina yazilir.
+
+          NOT: Toplu Islem sekmesindeki DB + TNF UYGULA canli yazma islemidir.
+          Temiz yeni dosya uretmek icin TNF Hazirla kullanilir.
+          '@ | Set-Content "$env:RUNNER_TEMP\QuickDataTool\README_REV7.txt" -Encoding UTF8
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HKN-PDKS-Hizli-Veri-REV7-AUDITED
+          path: ${{ runner.temp }}\QuickDataTool\**
+          if-no-files-found: error
+          retention-days: 14
