@@ -1,3 +1,4 @@
+# retry after assertion hardening
 name: KYERP Daily Entry Consistency Fix TEMP
 
 on:
