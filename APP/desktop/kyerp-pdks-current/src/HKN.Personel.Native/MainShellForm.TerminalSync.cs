@@ -5,59 +5,82 @@ public sealed partial class MainShellForm
     readonly System.Windows.Forms.Timer terminalAutoTimer = new() { Interval = 60000 };
     bool terminalAutoBusy;
     DateTime terminalLastProbeUtc = DateTime.MinValue;
-    DateTime terminalLastLiveSyncUtc = DateTime.MinValue;
 
     void InitializeTerminalAutoSync()
     {
         terminalAutoTimer.Tick += async (_, _) => await CheckTerminalAutoSyncAsync();
-        terminalAutoTimer.Start();
+        Shown += async (_, _) =>
+        {
+            if (IsDisposed) return;
+            terminalAutoTimer.Start();
+            await CheckTerminalAutoSyncAsync(true);
+        };
         FormClosed += (_, _) => terminalAutoTimer.Stop();
-        _ = CheckTerminalAutoSyncAsync(true);
     }
 
-    async Task CheckTerminalAutoSyncAsync(bool forceProbe = false)
+    async Task CheckTerminalAutoSyncAsync(bool force = false)
     {
-        if (terminalAutoBusy || IsDisposed) return;
+        if (terminalAutoBusy || IsDisposed || !Visible) return;
         terminalAutoBusy = true;
         try
         {
-            if (forceProbe || DateTime.UtcNow - terminalLastProbeUtc >= TimeSpan.FromMinutes(2))
+            var settings = TerminalSyncService.LoadSettings();
+            if (settings.Enabled)
             {
-                terminalLastProbeUtc = DateTime.UtcNow;
-                var device = await TerminalDeviceClient.ReadAsync(false);
-                if (!IsDisposed)
+                var now = DateTime.Now;
+                var key = $"LIVE|{now:yyyyMMddHHmm}";
+                var previous = TerminalSyncService.ReadState();
+                if (!force && string.Equals(previous?.ScheduleKey, key, StringComparison.Ordinal)) return;
+
+                var result = await TerminalSyncService.SyncAsync("Otomatik canlı", key);
+                if (IsDisposed) return;
+
+                if (result.ReadCount == 0)
                 {
-                    if (device.Connected)
-                    {
-                        leadStatus.Text = $"Kart cihazı bağlı • {device.DeviceTime:HH:mm:ss} • yeni {device.NewLogCount}";
-                        leadStatus.ForeColor = Color.FromArgb(42, 112, 70);
-                    }
-                    else
-                    {
-                        leadStatus.Text = "Kart cihazı: " + device.Message;
-                        leadStatus.ForeColor = Color.FromArgb(181, 91, 34);
-                    }
+                    leadStatus.Text = result.Message.Contains("Aktarılacak veri yok", StringComparison.OrdinalIgnoreCase)
+                        ? "Kart cihazı bağlı • yeni kayıt yok"
+                        : ShortTerminalMessage(result.Message);
+                    leadStatus.ForeColor = result.Message.Contains("başarısız", StringComparison.OrdinalIgnoreCase) ||
+                                           result.Message.Contains("hata", StringComparison.OrdinalIgnoreCase)
+                        ? Color.FromArgb(181, 91, 34)
+                        : Color.FromArgb(42, 112, 70);
                 }
+                else
+                {
+                    leadStatus.Text = $"Kart cihazı • {result.ReadCount} okundu • +{result.Inserted}/{result.Updated}";
+                    leadStatus.ForeColor = result.Skipped == 0 ? Color.FromArgb(42, 112, 70) : Color.FromArgb(181, 91, 34);
+                }
+                return;
             }
 
-            var settings = TerminalSyncService.LoadSettings();
-            if (!settings.Enabled) return;
-            if (!forceProbe && DateTime.UtcNow - terminalLastLiveSyncUtc < TimeSpan.FromMinutes(5)) return;
-
-            terminalLastLiveSyncUtc = DateTime.UtcNow;
-            var now = DateTime.Now;
-            var bucketMinute = (now.Minute / 5) * 5;
-            var key = $"LIVE|{now:yyyyMMddHH}|{bucketMinute:00}";
-            var state = TerminalSyncService.ReadState();
-            if (string.Equals(state?.ScheduleKey, key, StringComparison.Ordinal)) return;
-
-            var result = await TerminalSyncService.SyncAsync("Otomatik canlı", key);
+            // Sync disabled: do a lightweight connection probe only every two minutes.
+            if (!force && DateTime.UtcNow - terminalLastProbeUtc < TimeSpan.FromMinutes(2)) return;
+            terminalLastProbeUtc = DateTime.UtcNow;
+            var device = await TerminalDeviceClient.ReadAsync(false);
+            if (IsDisposed) return;
+            leadStatus.Text = device.Connected
+                ? $"Kart cihazı bağlı • {device.DeviceTime:HH:mm:ss} • yeni {Math.Max(0, device.NewLogCount)}"
+                : "Kart cihazı: " + ShortTerminalMessage(device.Message);
+            leadStatus.ForeColor = device.Connected ? Color.FromArgb(42, 112, 70) : Color.FromArgb(181, 91, 34);
+        }
+        catch (Exception ex)
+        {
             if (!IsDisposed)
             {
-                leadStatus.Text = result.ReadCount == 0 ? "Canlı kart kontrolü • " + result.Message : $"Canlı kart • okunan {result.ReadCount} • +{result.Inserted}/{result.Updated}";
-                leadStatus.ForeColor = result.Skipped == 0 ? Color.FromArgb(42, 112, 70) : Color.FromArgb(181, 91, 34);
+                leadStatus.Text = "Kart cihazı: " + ShortTerminalMessage(ex.Message);
+                leadStatus.ForeColor = Color.FromArgb(181, 91, 34);
             }
         }
-        finally { terminalAutoBusy = false; }
+        finally
+        {
+            terminalAutoBusy = false;
+        }
+    }
+
+    static string ShortTerminalMessage(string? text)
+    {
+        var value = (text ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+        if (value.Length <= 72) return value;
+        return value[..69] + "...";
     }
 }
