@@ -1,4 +1,4 @@
-# transformer v4 normalized-jsx
+# transformer v4 exact-source-diagnostic
 name: KYERP Daily Payments Ledger Final TEMP
 
 on:
@@ -65,10 +65,18 @@ jobs:
           if ! npm run lint >/tmp/payment-frontend.log 2>&1; then
             cd ../../..
             tail -n 220 /tmp/payment-frontend.log > .github/payment_frontend_error.txt
+            python3 - <<'PY'
+          from pathlib import Path
+          p=Path('APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx')
+          lines=p.read_text(encoding='utf-8').splitlines()
+          start=max(0,810); end=min(len(lines),850)
+          out='\n'.join(f'{i+1}: {lines[i]}' for i in range(start,end))+'\n'
+          Path('.github/payment_transformed_snippet.txt').write_text(out,encoding='utf-8')
+          PY
             git config user.name "kyerp-production-bot"
             git config user.email "kyerp-production-bot@users.noreply.github.com"
-            git add .github/payment_frontend_error.txt
-            git commit -m "chore: capture payments frontend diagnostic" || true
+            git add .github/payment_frontend_error.txt .github/payment_transformed_snippet.txt
+            git commit -m "chore: capture payments transformed source diagnostic" || true
             git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
             exit 1
           fi
