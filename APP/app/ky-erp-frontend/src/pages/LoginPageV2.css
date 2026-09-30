@@ -81,3 +81,38 @@
 .auth-site-dimmer{z-index:0!important;background:rgba(15,38,69,.34)!important;backdrop-filter:blur(3px)!important;-webkit-backdrop-filter:blur(3px)!important}
 .auth-shell{position:relative!important;z-index:1!important}
 .auth-modal-close{appearance:none;-webkit-appearance:none;font-family:inherit;cursor:pointer}
+
+/* 2026-09-30 KY ERP COMPACT AUTH MODAL */
+@media (min-width:561px){
+.auth-page .auth-shell{width:min(610px,calc(100vw - 32px))!important;height:auto!important;max-height:calc(100dvh - 28px)!important;min-height:0!important;overflow:hidden!important;border-radius:22px!important}
+.auth-page .auth-card-panel{height:auto!important;min-height:0!important}
+.auth-page .auth-card{height:auto!important;min-height:0!important;padding:16px 22px 13px!important;display:block!important;overflow:visible!important;border-radius:22px!important}
+.auth-page .auth-mobile-brand{margin-bottom:8px!important;padding-bottom:8px!important}
+.auth-page .auth-mobile-logo{width:38px!important;height:38px!important;flex-basis:38px!important}
+.auth-page .auth-card-head h2{font-size:23px!important}
+.auth-page .auth-card-head p{font-size:10px!important}
+.auth-page .auth-secure-badge{padding:5px 8px!important;font-size:9px!important}
+.auth-page .auth-steps{margin:10px 0 12px!important}
+.auth-page .auth-stage-viewport{overflow:visible!important;max-height:none!important;padding:0!important}
+.auth-page .auth-login-intro{margin:0 0 8px!important;padding:9px 11px!important}
+.auth-page .auth-form{gap:9px!important}
+.auth-page .auth-form input,.auth-page .auth-password-field input{min-height:41px!important}
+.auth-page .auth-primary,.auth-page .auth-secondary{min-height:39px!important;padding:8px 11px!important}
+.auth-page .auth-inline-note{font-size:8px!important}
+.auth-page .auth-card-footer{margin-top:7px!important;padding-top:8px!important;font-size:8px!important}
+.auth-page .auth-method-tabs-triple button{min-height:44px!important;padding:5px 6px!important}
+.auth-page .auth-phone-status-head{grid-template-columns:48px minmax(0,1fr)!important;gap:10px!important;padding:5px 2px 0!important}
+.auth-page .auth-phone-status-head .auth-phone-approval-icon{width:46px!important;height:46px!important;border-radius:13px!important}
+.auth-page .auth-phone-status-head h3{font-size:17px!important}
+.auth-page .auth-phone-status-head p{font-size:9px!important;line-height:1.35!important}
+.auth-page .auth-match-number-compact{width:154px!important;padding:7px 10px!important}
+.auth-page .auth-match-number-compact strong{font-size:38px!important}
+.auth-page .auth-wait-status{padding:7px 9px!important}
+.auth-page .auth-method-tabs:not(.auth-method-tabs-triple){margin-bottom:7px!important}
+.auth-page .provider-grid-compact{gap:6px!important}
+.auth-page .provider-grid-compact .provider-card{padding:7px!important}
+.auth-page .auth-form-compact .auth-code-input{min-height:42px!important}
+.auth-page .auth-owner-notice{padding:8px 10px!important}
+}
+@media (min-width:561px) and (max-height:650px){.auth-page .auth-shell{overflow-y:auto!important}}
+@media (max-width:560px){.auth-page .auth-card{height:100%!important;overflow:hidden!important}.auth-page .auth-stage-viewport{overflow-y:auto!important;min-height:0!important}}
