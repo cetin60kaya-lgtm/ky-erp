@@ -1,4 +1,4 @@
-# retry 2026-09-30 current-shift pool
+# retry 2 2026-09-30 current-shift pool
 name: KYERP Current Shift Pool Fix TEMP
 
 on:
