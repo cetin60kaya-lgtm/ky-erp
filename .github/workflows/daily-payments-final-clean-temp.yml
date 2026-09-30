@@ -38,7 +38,7 @@ jobs:
           grep -q 'm.personnel_no,e.full_name,e.qualification' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
           grep -q 'LEFT JOIN hr_daily_employee_meta m ON m.employee_id=e.id' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
           ! grep -q 'e.personnel_no,e.full_name,e.qualification' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
-          grep -q '0056_hr_daily_payment_ledger' <(printf '%s\n' APP/cloud/ky-erp-api/migrations/0056_hr_daily_payment_ledger.sql)
+          test -f APP/cloud/ky-erp-api/migrations/0056_hr_daily_payment_ledger.sql
           grep -q '\["daily-payments", "Ödemeler", "odemeler"\]' APP/app/ky-erp-frontend/src/app/moduleRegistry.js
 
       - uses: actions/setup-node@v4
@@ -57,11 +57,36 @@ jobs:
       - name: Validate frontend
         working-directory: APP/app/ky-erp-frontend
         run: |
-          set -euo pipefail
-          npm ci
-          npm run lint
-          npm test
-          npm run build
+          set +e
+          ci_rc=0; lint_rc=99; test_rc=99; build_rc=99
+          npm ci > /tmp/daily-payments-frontend-final.log 2>&1
+          ci_rc=$?
+          if [ "$ci_rc" -eq 0 ]; then
+            npm run lint >> /tmp/daily-payments-frontend-final.log 2>&1
+            lint_rc=$?
+          fi
+          if [ "$ci_rc" -eq 0 ] && [ "$lint_rc" -eq 0 ]; then
+            npm test >> /tmp/daily-payments-frontend-final.log 2>&1
+            test_rc=$?
+          fi
+          if [ "$ci_rc" -eq 0 ] && [ "$lint_rc" -eq 0 ] && [ "$test_rc" -eq 0 ]; then
+            npm run build >> /tmp/daily-payments-frontend-final.log 2>&1
+            build_rc=$?
+          fi
+          if [ "$ci_rc" -ne 0 ] || [ "$lint_rc" -ne 0 ] || [ "$test_rc" -ne 0 ] || [ "$build_rc" -ne 0 ]; then
+            cd ../../..
+            {
+              echo "ci_rc=$ci_rc lint_rc=$lint_rc test_rc=$test_rc build_rc=$build_rc"
+              tail -n 350 /tmp/daily-payments-frontend-final.log
+            } > .github/daily_payments_final_frontend_error.txt
+            git config user.name "kyerp-production-bot"
+            git config user.email "kyerp-production-bot@users.noreply.github.com"
+            git add .github/daily_payments_final_frontend_error.txt
+            git commit -m "chore: capture daily payment final frontend diagnostic" || true
+            git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+            exit 1
+          fi
+          exit 0
 
       - name: Ensure canonical payment schema in production D1
         working-directory: APP/cloud/ky-erp-api
@@ -76,6 +101,7 @@ jobs:
           set -euo pipefail
           git config user.name "kyerp-production-bot"
           git config user.email "kyerp-production-bot@users.noreply.github.com"
+          git rm -f --ignore-unmatch .github/daily_payments_final_frontend_error.txt || true
           git add \
             APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts \
             APP/cloud/ky-erp-api/migrations/0056_hr_daily_payment_ledger.sql \
@@ -95,11 +121,12 @@ jobs:
       - name: Production smoke
         run: |
           set -euo pipefail
+          api_ok=0
           for url in https://api.kyerp.net/health https://api.kyerp.net/api/health; do
             code="$(curl -sS -L -o /tmp/api.html -w '%{http_code}' "$url" || true)"
             if [ "$code" = "200" ]; then api_ok=1; break; fi
           done
-          test "${api_ok:-0}" = 1
+          test "$api_ok" = 1
           for path in /gunluk-operasyon/daily-dashboard /gunluk-operasyon/daily-payments /gunluk-operasyon/daily-entry /gunluk-operasyon/daily-weekly; do
             ok=0
             for i in {1..12}; do
@@ -124,6 +151,7 @@ jobs:
             .github/payment_polish_error.txt \
             .github/payment_polish_source.txt \
             .github/daily-payments-schema-diagnostic.txt \
+            .github/daily_payments_final_frontend_error.txt \
             .github/workflows/daily-payments-schema-diagnostic-temp.yml \
             .github/workflows/daily-payments-runtime-schema-fix-temp.yml \
             .github/scripts/daily_payments_runtime_schema_fix_temp.py || true
