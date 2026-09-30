@@ -6,6 +6,12 @@ API = Path('APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts')
 fe = FE.read_text(encoding='utf-8')
 api = API.read_text(encoding='utf-8')
 
+old_historical = '''      const historicalIds = [...new Set(attendanceRows.map(rowEmployeeId).filter(Boolean))];'''
+new_historical = '''      const historicalIds = [...new Set(attendanceRows.filter((row) => rowDay(row) || rowNight(row)).map(rowEmployeeId).filter(Boolean))];'''
+if old_historical not in fe:
+    raise SystemExit('historical roster anchor not found')
+fe = fe.replace(old_historical, new_historical, 1)
+
 old_visible = '''  const visibleEntryPeople = useMemo(() => {\n    const needle = query.trim().toLocaleLowerCase("tr-TR");\n    return activeRosterPeople.filter((person) => !needle || `${person.name} ${person.personnelNo} ${person.role}`.toLocaleLowerCase("tr-TR").includes(needle));\n  }, [activeRosterPeople, query]);'''
 new_visible = '''  const visibleEntryPeople = useMemo(() => {\n    const needle = query.trim().toLocaleLowerCase("tr-TR");\n    return employees\n      .filter((person) => person.active !== false && selectedIds.has(person.id))\n      .filter((person) => !needle || `${person.name} ${person.personnelNo} ${person.role}`.toLocaleLowerCase("tr-TR").includes(needle));\n  }, [employees, query, selectedIds]);'''
 if old_visible not in fe:
@@ -54,6 +60,12 @@ if old_checked not in api:
     raise SystemExit('focused checked anchor not found')
 api = api.replace(old_checked, new_checked, 1)
 
+old_attendance_where = '''      WHERE e.main_company_id=?\n        AND (?='' OR a.work_date>=?)\n        AND (?='' OR a.work_date<=?)\n      ORDER BY a.work_date ASC,e.full_name ASC,a.id ASC`)'''
+new_attendance_where = '''      WHERE e.main_company_id=?\n        AND (?='' OR a.work_date>=?)\n        AND (?='' OR a.work_date<=?)\n        AND (a.day_shift=1 OR a.night_shift=1)\n      ORDER BY a.work_date ASC,e.full_name ASC,a.id ASC`)'''
+if old_attendance_where not in api:
+    raise SystemExit('attendance active-only anchor not found')
+api = api.replace(old_attendance_where, new_attendance_where, 1)
+
 trigger_anchor = '''      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_roster_insert\n        AFTER INSERT ON hr_daily_range_roster\n'''
 trigger_insert = '''      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_check_clear_day\n        AFTER UPDATE OF day_shift ON hr_daily_attendance\n        WHEN OLD.day_shift=1 AND NEW.day_shift=0\n        BEGIN\n          UPDATE hr_daily_attendance_check\n          SET checked=0,updated_at=CURRENT_TIMESTAMP\n          WHERE employee_id=NEW.employee_id AND work_date=NEW.work_date AND shift='day' AND checked<>0;\n        END`),\n      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_check_clear_night\n        AFTER UPDATE OF night_shift ON hr_daily_attendance\n        WHEN OLD.night_shift=1 AND NEW.night_shift=0\n        BEGIN\n          UPDATE hr_daily_attendance_check\n          SET checked=0,updated_at=CURRENT_TIMESTAMP\n          WHERE employee_id=NEW.employee_id AND work_date=NEW.work_date AND shift='night' AND checked<>0;\n        END`),\n      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_roster_insert\n        AFTER INSERT ON hr_daily_range_roster\n'''
 if trigger_anchor not in api:
@@ -62,10 +74,12 @@ api = api.replace(trigger_anchor, trigger_insert, 1)
 
 # Safety assertions
 assert 'checked: (shift === "day" ? flag(row.day_shift) : flag(row.night_shift)) && flag(row.checked)' in api
+assert 'AND (a.day_shift=1 OR a.night_shift=1)' in api
 assert 'trg_daily_check_clear_day' in api and 'trg_daily_check_clear_night' in api
 assert 'setPersonReviewed(person, !reviewed)' in fe
 assert 'onClick={() => deleteShiftAndCleanupRoster(person)}><CheckCircle2' in fe
-assert 'employees.filter((person) => person.active !== false && selectedIds.has(person.id))' in fe
+assert '.filter((person) => person.active !== false && selectedIds.has(person.id))' in fe
+assert 'attendanceRows.filter((row) => rowDay(row) || rowNight(row))' in fe
 
 FE.write_text(fe, encoding='utf-8')
 API.write_text(api, encoding='utf-8')
