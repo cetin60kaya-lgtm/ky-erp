@@ -1,0 +1,133 @@
+name: KYERP Daily Payments Final Clean TEMP
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/daily-payments-final-clean-temp.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kyerp-daily-payments-final-clean
+  cancel-in-progress: false
+
+jobs:
+  validate-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      VITE_API_URL: https://api.kyerp.net
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/model-uretim-kontrol-merkezi-final
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply canonical payment source
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/daily_payments_final_clean_temp.py
+          git diff --check
+          grep -q 'm.personnel_no,e.full_name,e.qualification' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
+          grep -q 'LEFT JOIN hr_daily_employee_meta m ON m.employee_id=e.id' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
+          ! grep -q 'e.personnel_no,e.full_name,e.qualification' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
+          grep -q '0056_hr_daily_payment_ledger' <(printf '%s\n' APP/cloud/ky-erp-api/migrations/0056_hr_daily_payment_ledger.sql)
+          grep -q '\["daily-payments", "Ödemeler", "odemeler"\]' APP/app/ky-erp-frontend/src/app/moduleRegistry.js
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate API
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Validate frontend
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Ensure canonical payment schema in production D1
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.119.0 d1 execute ky-erp-db --remote --file migrations/0056_hr_daily_payment_ledger.sql
+          npx --yes wrangler@4.119.0 d1 execute ky-erp-db --remote --command "SELECT a.id AS attendance_id, m.personnel_no, e.full_name FROM hr_daily_attendance a JOIN hr_daily_employees e ON e.id=a.employee_id LEFT JOIN hr_daily_employee_meta m ON m.employee_id=e.id LEFT JOIN hr_daily_attendance_check cd ON cd.main_company_id=e.main_company_id AND cd.employee_id=a.employee_id AND cd.work_date=a.work_date AND cd.shift='day' LEFT JOIN hr_daily_attendance_check cn ON cn.main_company_id=e.main_company_id AND cn.employee_id=a.employee_id AND cn.work_date=a.work_date AND cn.shift='night' WHERE (a.day_shift=1 OR a.night_shift=1) LIMIT 1;"
+          npx --yes wrangler@4.119.0 d1 execute ky-erp-db --remote --command "SELECT COUNT(*) AS payment_table_ok FROM hr_daily_payments; SELECT COUNT(*) AS payment_item_table_ok FROM hr_daily_payment_items;"
+
+      - name: Commit canonical source
+        run: |
+          set -euo pipefail
+          git config user.name "kyerp-production-bot"
+          git config user.email "kyerp-production-bot@users.noreply.github.com"
+          git add \
+            APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts \
+            APP/cloud/ky-erp-api/migrations/0056_hr_daily_payment_ledger.sql \
+            APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx \
+            APP/app/ky-erp-frontend/src/app/moduleRegistry.js
+          git commit -m "fix(daily): finalize canonical payment ledger"
+          git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+
+      - name: Deploy API Worker
+        working-directory: APP/cloud/ky-erp-api
+        run: npx --yes wrangler@4.119.0 deploy
+
+      - name: Deploy frontend
+        working-directory: APP/app/ky-erp-frontend
+        run: npx --yes wrangler@4.119.0 pages deploy dist --project-name ky-erp-frontend --branch codex/model-uretim-kontrol-merkezi-final --commit-hash "$(git rev-parse HEAD)"
+
+      - name: Production smoke
+        run: |
+          set -euo pipefail
+          for url in https://api.kyerp.net/health https://api.kyerp.net/api/health; do
+            code="$(curl -sS -L -o /tmp/api.html -w '%{http_code}' "$url" || true)"
+            if [ "$code" = "200" ]; then api_ok=1; break; fi
+          done
+          test "${api_ok:-0}" = 1
+          for path in /gunluk-operasyon/daily-dashboard /gunluk-operasyon/daily-payments /gunluk-operasyon/daily-entry /gunluk-operasyon/daily-weekly; do
+            ok=0
+            for i in {1..12}; do
+              code="$(curl -sS -L -o /tmp/page.html -w '%{http_code}' "https://kyerp.net${path}" || true)"
+              if [ "$code" = "200" ] && grep -q 'KY ERP' /tmp/page.html; then ok=1; break; fi
+              sleep 4
+            done
+            test "$ok" = 1
+          done
+
+      - name: Remove temporary deployment helpers
+        if: success()
+        run: |
+          set -euo pipefail
+          git config user.name "kyerp-production-bot"
+          git config user.email "kyerp-production-bot@users.noreply.github.com"
+          git rm -f --ignore-unmatch \
+            .github/workflows/daily-payments-final-clean-temp.yml \
+            .github/scripts/daily_payments_final_clean_temp.py \
+            .github/workflows/daily-payments-polish-temp.yml \
+            .github/scripts/daily_payments_polish_temp.py \
+            .github/payment_polish_error.txt \
+            .github/payment_polish_source.txt \
+            .github/daily-payments-schema-diagnostic.txt \
+            .github/workflows/daily-payments-schema-diagnostic-temp.yml \
+            .github/workflows/daily-payments-runtime-schema-fix-temp.yml \
+            .github/scripts/daily_payments_runtime_schema_fix_temp.py || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: remove daily payment deployment helpers"
+            git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+          fi
