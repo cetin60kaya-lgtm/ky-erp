@@ -1,4 +1,4 @@
-# transformer v3
+# transformer v3 frontend-diagnostic
 name: KYERP Daily Payments Ledger Final TEMP
 
 on:
@@ -62,7 +62,16 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
-          npm run lint
+          if ! npm run lint >/tmp/payment-frontend.log 2>&1; then
+            cd ../../..
+            tail -n 220 /tmp/payment-frontend.log > .github/payment_frontend_error.txt
+            git config user.name "kyerp-production-bot"
+            git config user.email "kyerp-production-bot@users.noreply.github.com"
+            git add .github/payment_frontend_error.txt
+            git commit -m "chore: capture payments frontend diagnostic" || true
+            git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+            exit 1
+          fi
           npm test
           npm run build
 
