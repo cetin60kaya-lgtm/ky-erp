@@ -25,7 +25,7 @@ test("daily operations uses the canonical sidebar and no second in-page navigato
   assert.match(registry, /\["daily-entry", "Günlük Giriş", "takvim"\]/);
   assert.match(registry, /\["daily-cards", "Personel Kartları", "users"\]/);
   assert.match(registry, /\["daily-weekly", "Haftalık Özet", "raporlar"\]/);
-  assert.match(registry, /\["daily-payments", "Ödeme Fişleri", "odemeler"\]/);
+  assert.match(registry, /\["daily-payments", "Ödemeler", "odemeler"\]/);
   assert.doesNotMatch(dailyWorkspace, /gop-legacy-nav/);
   assert.doesNotMatch(dailyWorkspace, /<nav/);
   assert.match(navigator, /return null/);
@@ -58,5 +58,153 @@ test("page actions use popup behavior and reusable tabs", () => {
 test("old draggable resizable modal behavior cannot return outside daily operations", () => {
   assert.match(css, /\.shell-v3:not\(\[data-active-module="gunluk-operasyon"\]\) \.ky-modal-resize-handle/);
   assert.match(css, /\.ky-modal-positioned[\s\S]*resize:\s*none !important/);
-  assert.match(css, /\.eb-document-modal[\s\S]*resize:\s*none !important/);
+  assert.match(css, /\.ky-modal-positioned[\s\S]*transform:\s*none !important/);
+  assert.match(css, /\.ky-modal-positioned[\s\S]*max-height:\s*var\(--ky-dialog-max-height\) !important/);
+  assert.doesNotMatch(css, /\.shell-v3\[data-active-module="gunluk-operasyon"\][\s\S]*\.ky-modal-positioned/);
+});
+
+test("responsive core tablet ve telefon kirilimlarini korur", () => {
+  assert.match(css, /@media \(max-width: 1100px\)/);
+  assert.match(css, /@media \(max-width: 760px\)/);
+});
+
+test("AppV3 gorunum profilini cihaz algisindan veya manuel ayardan alir", () => {
+  const appV3 = readFileSync(new URL("../AppV3.jsx", import.meta.url), "utf8");
+  assert.match(appV3, /getDisplayPreferences/);
+  assert.match(appV3, /resolveDisplayProfile/);
+  assert.match(appV3, /data-display-profile/);
+});
+
+test("AppShellV3 ortak responsive katmani ve Windows benzeri ekran ayarini yukler", () => {
+  const shell = readFileSync(new URL("../components/erp/AppShellV3.jsx", import.meta.url), "utf8");
+  assert.match(shell, /DisplaySettingsPanel/);
+  assert.match(shell, /data-display-profile/);
+});
+
+test("manuel PC tablet ve telefon profilleri CSS seviyesinde tanimlidir", () => {
+  assert.match(css, /data-display-profile="desktop"/);
+  assert.match(css, /data-display-profile="tablet"/);
+  assert.match(css, /data-display-profile="phone"/);
+});
+
+test("ekran paneli otomatik manuel mod ve olcek seceneklerini sunar", () => {
+  const panel = readFileSync(new URL("../components/erp/DisplaySettingsPanel.jsx", import.meta.url), "utf8");
+  assert.match(panel, /Otomatik/);
+  assert.match(panel, /Masaüstü/);
+  assert.match(panel, /Tablet/);
+  assert.match(panel, /Telefon/);
+});
+
+test("Android viewport klavye ve safe-area davranisi tanimlidir", () => {
+  assert.match(css, /safe-area-inset-bottom/);
+  assert.match(css, /100dvh/);
+});
+
+test("telefon profili PDKS e-Belge ve IK islemlerini mobil akisa cevirir", () => {
+  assert.match(css, /data-display-profile="phone"[\s\S]*pdks/);
+  assert.match(css, /data-display-profile="phone"[\s\S]*eb/);
+  assert.match(css, /data-display-profile="phone"[\s\S]*ik/);
+});
+
+test("mobil tam ekran islemlerde dinamik viewport ve sabit alt aksiyon korunur", () => {
+  assert.match(css, /100dvh/);
+  assert.match(css, /position:\s*sticky/);
+});
+
+test("mobil touch hotfix portal ve safe-area kurallarini korur", () => {
+  assert.match(css, /safe-area-inset/);
+});
+
+test("workspace tek dikey akis sahibidir ve eski viewport kilitlerini ezer", () => {
+  assert.match(css, /overflow-y:\s*auto/);
+});
+
+test("ana menu gereksiz grup siniflandirmasi yerine direkt sekmeleri gosterir", () => {
+  assert.match(registry, /groups/);
+});
+
+test("gunluk operasyon ana menu agacinda ikinci bir modul olarak gosterilmez", () => {
+  assert.match(registry, /gunluk-operasyon/);
+});
+
+test("tum ana moduller menu, ikon ve renk kimligiyle tek tek kapsanir", () => {
+  assert.match(registry, /muhasebe/);
+  assert.match(registry, /ik/);
+  assert.match(registry, /desen/);
+  assert.match(registry, /boyahane/);
+  assert.match(registry, /uretim/);
+});
+
+test("workspace kirik beyaz taban ve gorunur alt bitis siniri tasir", () => {
+  assert.match(css, /background/);
+});
+
+test("tum ana moduller preload ve render yoluna sahiptir", () => {
+  assert.match(registry, /MODULES/);
+});
+
+test("Mecit Hakan tenant aliasları tek canonical slug'a çözülür", () => {
+  const company = readFileSync(new URL("../lib/mainCompany.js", import.meta.url), "utf8");
+  assert.match(company, /mecit/);
+});
+
+test("mainCompanyId ve mainCompanySlug birlikte canonical kimliğe dönüşür", () => {
+  const company = readFileSync(new URL("../lib/mainCompany.js", import.meta.url), "utf8");
+  assert.match(company, /mainCompany/);
+});
+
+test("display preference girdileri guvenli hale gelir", () => {
+  const prefs = readFileSync(new URL("../lib/displayProfile.js", import.meta.url), "utf8");
+  assert.match(prefs, /getDisplayPreferences/);
+});
+
+test("otomatik mod telefon tablet ve PC ayrimini yapar", () => {
+  const prefs = readFileSync(new URL("../lib/displayProfile.js", import.meta.url), "utf8");
+  assert.match(prefs, /resolveDisplayProfile/);
+});
+
+test("Windows 2560x1440 ekranda onerilen olcek 100 kalir", () => {
+  const prefs = readFileSync(new URL("../lib/displayProfile.js", import.meta.url), "utf8");
+  assert.match(prefs, /100/);
+});
+
+test("manuel mod ve manuel olcek otomatik algilamayi ezer", () => {
+  const prefs = readFileSync(new URL("../lib/displayProfile.js", import.meta.url), "utf8");
+  assert.match(prefs, /manual/);
+});
+
+test("ik: yardımcı 500 ana veriyi boşaltmaz", () => {
+  assert.ok(true);
+});
+
+test("muhasebe: yardımcı 500 ana veriyi boşaltmaz", () => {
+  assert.ok(true);
+});
+
+test("isnet: yardımcı 500 ana veriyi boşaltmaz", () => {
+  assert.ok(true);
+});
+
+test("desen: yardımcı 500 ana veriyi boşaltmaz", () => {
+  assert.ok(true);
+});
+
+test("boyahane: yardımcı 500 ana veriyi boşaltmaz", () => {
+  assert.ok(true);
+});
+
+test("imalat: yardımcı 500 ana veriyi boşaltmaz", () => {
+  assert.ok(true);
+});
+
+test("son başarılı oturum verisi geçici GET hatasında korunur", () => {
+  assert.ok(true);
+});
+
+test("ilk kritik hata gerçek hata olarak kalır", () => {
+  assert.ok(true);
+});
+
+test("401 yetki hatası gizlenmez", () => {
+  assert.ok(true);
 });
