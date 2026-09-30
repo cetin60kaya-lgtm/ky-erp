@@ -7,7 +7,7 @@ text = jsx.read_text(encoding='utf-8')
 
 def replace_once(old, new):
     global text
-    assert old in text, f'missing source block: {old[:100]}'
+    assert old in text, f'missing source block: {old[:120]}'
     text = text.replace(old, new, 1)
 
 replace_once(
@@ -17,12 +17,12 @@ replace_once(
 
 replace_once(
     'function writeQuickRowHeight(value) { try { window.localStorage.setItem(QUICK_ROW_HEIGHT_KEY, String(value)); } catch { /* optional storage */ } }\n',
-    'function writeQuickRowHeight(value) { try { window.localStorage.setItem(QUICK_ROW_HEIGHT_KEY, String(value)); } catch { /* optional storage */ } }\nfunction readQuickCardWidth() { try { const value = Number(window.localStorage.getItem(QUICK_CARD_WIDTH_KEY)); return Number.isFinite(value) && value >= 210 && value <= 380 ? value : 300; } catch { return 300; } }\nfunction writeQuickCardWidth(value) { try { window.localStorage.setItem(QUICK_CARD_WIDTH_KEY, String(value)); } catch { /* optional storage */ } }\n',
+    'function writeQuickRowHeight(value) { try { window.localStorage.setItem(QUICK_ROW_HEIGHT_KEY, String(value)); } catch { /* optional storage */ } }\nfunction readQuickCardWidth() { try { const value = Number(window.localStorage.getItem(QUICK_CARD_WIDTH_KEY)); return Number.isFinite(value) && value >= 180 && value <= 320 ? value : 230; } catch { return 230; } }\nfunction writeQuickCardWidth(value) { try { window.localStorage.setItem(QUICK_CARD_WIDTH_KEY, String(value)); } catch { /* optional storage */ } }\n',
 )
 
 replace_once(
     'function normalizeText(value) { return String(value || "").trim().toLocaleUpperCase("tr-TR").replace(/\\s+/g, " "); }\n',
-    'function normalizeText(value) { return String(value || "").trim().toLocaleUpperCase("tr-TR").replace(/\\s+/g, " "); }\nfunction roleLabel(value) {\n  const raw = String(value || "").trim().replace(/\\s+/g, " ");\n  const key = normalizeText(raw);\n  if (["MAKİNACI", "MAKINACI"].includes(key)) return "Makinacı";\n  if (["SERİMCİ", "SERIMCI"].includes(key)) return "Serimci";\n  if (["BOYACI"].includes(key)) return "Boyacı";\n  if (["VASIFSIZ", "VASIFSİZ"].includes(key)) return "Vasıfsız";\n  return raw;\n}\n',
+    'function normalizeText(value) { return String(value || "").trim().toLocaleUpperCase("tr-TR").replace(/\\s+/g, " "); }\nfunction roleLabel(value) {\n  const raw = String(value || "").trim().replace(/\\s+/g, " ");\n  const key = normalizeText(raw);\n  if (["MAKİNACI", "MAKINACI", "MAKİNECİ", "MAKINECI"].includes(key)) return "Makinacı";\n  if (["SERİMCİ", "SERIMCI", "SERİM", "SERIM"].includes(key)) return "Serimci";\n  if (key === "USTA") return "Usta";\n  if (key === "BOYACI") return "Boyacı";\n  if (["VASIFSIZ", "VASIFSİZ"].includes(key)) return "Vasıfsız";\n  return raw;\n}\n',
 )
 
 replace_once(
@@ -39,7 +39,7 @@ replace_once(
     '  const days = useMemo(() => rangeDays(range.start, range.end), [range.end, range.start]);\n',
     '''  const days = useMemo(() => rangeDays(range.start, range.end), [range.end, range.start]);
   const roleOptions = useMemo(() => {
-    const values = ["Makinacı", "Serimci", "Boyacı", "Vasıfsız", ...employees.map((person) => person.role)];
+    const values = ["Makinacı", "Serimci", "Usta", "Boyacı", "Vasıfsız", ...employees.map((person) => person.role)];
     const unique = new Map();
     values.forEach((value) => { const label = roleLabel(value); const key = normalizeText(label); if (label && key && !unique.has(key)) unique.set(key, label); });
     return [...unique.values()];
@@ -69,8 +69,13 @@ replace_once(
 )
 
 replace_once(
+    '<button type="button" className="quick-check-button" disabled={!selected || blocked} onClick={() => setQuick((current) => { const next = new Set(current.checked); if (next.has(person.id)) next.delete(person.id); else next.add(person.id); return { ...current, checked: next }; })}>{checked ? "✓ Kontrol Edildi" : "○ Kontrol Et"}</button>',
+    '<button type="button" className={`quick-check-button ${checked ? "is-checked" : ""}`} aria-label={checked ? "Kontrol edildi" : "Kontrol et"} aria-pressed={checked} title={checked ? "Kontrol edildi" : "Kontrol et"} disabled={!selected || blocked} onClick={() => setQuick((current) => { const next = new Set(current.checked); if (next.has(person.id)) next.delete(person.id); else next.add(person.id); return { ...current, checked: next }; })}><span className="quick-check-mark">{checked ? "✓" : ""}</span></button>',
+)
+
+replace_once(
     '<label className="quick-row-height" title="Excel satır yüksekliği gibi hızlı giriş personel satırlarını sıkıştırır veya açar"><span>Satır</span><input type="range" min="30" max="48" step="1" value={quickRowHeight} onChange={(e) => { const value = Number(e.target.value); setQuickRowHeight(value); writeQuickRowHeight(value); }}/><b>{quickRowHeight}px</b></label><div>',
-    '<label className="quick-row-height" title="Excel satır yüksekliği gibi hızlı giriş personel satırlarını sıkıştırır veya açar"><span>Satır</span><input type="range" min="30" max="48" step="1" value={quickRowHeight} onChange={(e) => { const value = Number(e.target.value); setQuickRowHeight(value); writeQuickRowHeight(value); }}/><b>{quickRowHeight}px</b></label><label className="quick-card-width" title="Kişi kartı genişliği. Daralttıkça kartlar otomatik daha fazla sütuna yerleşir"><span>Kart En</span><input type="range" min="210" max="380" step="10" value={quickCardWidth} onChange={(e) => { const value = Number(e.target.value); setQuickCardWidth(value); writeQuickCardWidth(value); }}/><b>{quickCardWidth}px</b></label><div>',
+    '<label className="quick-row-height" title="Excel satır yüksekliği gibi hızlı giriş personel satırlarını sıkıştırır veya açar"><span>Satır</span><input type="range" min="30" max="48" step="1" value={quickRowHeight} onChange={(e) => { const value = Number(e.target.value); setQuickRowHeight(value); writeQuickRowHeight(value); }}/><b>{quickRowHeight}px</b></label><label className="quick-card-width" title="Kişi kartı genişliği. Daralttıkça kişiler otomatik daha fazla sütuna yerleşir"><span>En</span><input type="range" min="180" max="320" step="10" value={quickCardWidth} onChange={(e) => { const value = Number(e.target.value); setQuickCardWidth(value); writeQuickCardWidth(value); }}/><b>{quickCardWidth}px</b></label><div>',
 )
 
 modal_old = '<label>Vasıf<input value={cardDialog.role} onChange={(e) => setCardDialog({ ...cardDialog, role: e.target.value })}/></label>'
@@ -93,10 +98,17 @@ assert marker not in style
 style += '''
 
 /* QUICK-ENTRY-WIDTH-AND-ROLE-CONTROL-2026-09-30 */
-.gop-quick-dialog{--quick-card-w:300px}
-.gop-quick-dialog .quick-person-grid{grid-template-columns:repeat(auto-fit,minmax(var(--quick-card-w),1fr))!important}
+.gop-quick-dialog{--quick-card-w:230px}
+.gop-quick-dialog .quick-person-grid{grid-template-columns:repeat(auto-fit,minmax(var(--quick-card-w),1fr))!important;gap:2px!important}
+.gop-quick-dialog .quick-person{grid-template-columns:minmax(0,1fr) 30px!important;min-width:0!important}
+.gop-quick-dialog .quick-main-toggle{grid-template-columns:20px minmax(0,1fr) auto auto!important;padding-left:4px!important;padding-right:3px!important}
+.gop-quick-dialog .quick-check-button{width:30px!important;min-width:30px!important;padding:0!important;display:grid!important;place-items:center!important;background:#fff!important;border-left:1px solid #e2e8f0!important;color:#94a3b8!important}
+.gop-quick-dialog .quick-check-button:not(:disabled):hover{background:#f0fdf4!important}
+.gop-quick-dialog .quick-check-button.is-checked{background:#16a34a!important;color:#fff!important;border-color:#16a34a!important}
+.gop-quick-dialog .quick-check-button:disabled{opacity:.38!important}
+.quick-check-mark{display:grid;place-items:center;width:18px;height:18px;border:1.5px solid currentColor;border-radius:5px;font-size:12px;font-weight:1000;line-height:1}
 .quick-card-width{display:inline-flex;align-items:center;gap:5px;border:1px solid #d5deeb;border-radius:7px;background:#f8fafc;padding:3px 6px;color:#60748c;font-size:7px;font-weight:900;white-space:nowrap}
-.quick-card-width input{width:92px;accent-color:#2563eb}
+.quick-card-width input{width:88px;accent-color:#2563eb}
 .quick-card-width b{min-width:34px;color:#17385f;font-size:8px}
 .gop-role-field{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px;align-items:end;min-width:0}
 .gop-role-field label{display:grid;gap:4px;font-size:8px;font-weight:900;color:#52677f;min-width:0}
@@ -106,4 +118,4 @@ style += '''
 @media(max-width:650px){.quick-card-width{display:none}.gop-role-field{grid-template-columns:1fr}.gop-role-field button{width:100%}}
 '''
 css.write_text(style, encoding='utf-8')
-print('quick card width + controlled role selectors applied')
+print('compact quick cards + icon control + role selectors applied')
