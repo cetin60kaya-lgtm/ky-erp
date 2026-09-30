@@ -239,6 +239,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [rosterSaved, setRosterSaved] = useState(false);
   const [summaryRows, setSummaryRows] = useState([]);
   const [paymentRows, setPaymentRows] = useState([]);
+  const [paymentLoadError, setPaymentLoadError] = useState("");
   const [paymentHistoryRows, setPaymentHistoryRows] = useState([]);
   const [paymentSelectedIds, setPaymentSelectedIds] = useState(() => new Set());
   const [paymentTab, setPaymentTab] = useState("pool");
@@ -355,9 +356,17 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
   const loadPayments = useCallback(async () => {
     if (!companyId || !["daily-payments", "daily-dashboard"].includes(view)) return;
-    setLoading(true); setError("");
-    try { const rows = await getDailyPaymentPool({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }); setPaymentRows(Array.isArray(rows) ? rows : []); }
-    catch (e) { setError(e?.message || "Ödeme havuzu alınamadı."); } finally { setLoading(false); }
+    setLoading(true); setPaymentLoadError("");
+    if (view === "daily-payments") setError("");
+    try {
+      const rows = await getDailyPaymentPool({ mainCompanyId: companyId, startDate: range.start, endDate: range.end });
+      setPaymentRows(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      const message = e?.message || "Ödeme havuzu alınamadı.";
+      setPaymentRows([]);
+      setPaymentLoadError(message);
+      if (view === "daily-payments") setError(message);
+    } finally { setLoading(false); }
   }, [companyId, range.end, range.start, view]);
   useEffect(() => { void loadPayments(); }, [loadPayments]);
 
@@ -497,11 +506,12 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     const rows = [];
     if (weeklyPending) rows.push(`${weeklyPending} vardiya kontrol bekliyor.`);
     if (paymentMetrics.waitingCount) rows.push(`${paymentMetrics.waitingCount} personelin ödemesi bekliyor.`);
+    if (paymentLoadError) rows.push("Ödeme verisi şu anda alınamadı; diğer günlük operasyon verileri etkilenmedi.");
     if (dashboardZeroWage) rows.push(`${dashboardZeroWage} aktif personelin gündüz ücreti 0.`);
     if (periodLocked) rows.push("Seçili dönem kapalı; günlük kayıt değişikliği kilitli.");
     if (!attendance.length) rows.push("Seçili tarih aralığında çalışma kaydı yok.");
     return rows;
-  }, [attendance.length, dashboardZeroWage, paymentMetrics.waitingCount, periodLocked, weeklyPending]);
+  }, [attendance.length, dashboardZeroWage, paymentLoadError, paymentMetrics.waitingCount, periodLocked, weeklyPending]);
   const recentOperations = useMemo(() => [...attendance].sort((a, b) => String(b.updatedAt || b.createdAt || rowDate(b)).localeCompare(String(a.updatedAt || a.createdAt || rowDate(a)))).slice(0, 8), [attendance]);
   useEffect(() => {
     const valid = new Set(paymentRows.map((row) => String(row.employeeId || row.id || row.personnelNo || row.name || row.fullName || "")));

@@ -1449,13 +1449,14 @@ function paymentDateKey(value: unknown) {
 async function paymentSourceRows(c: Context<AppEnv>, companyId: string, start: string, end: string, employeeId = "") {
   const result = await c.env.DB.prepare(`SELECT
       a.id AS attendance_id,a.employee_id,a.work_date,a.day_shift,a.night_shift,a.day_wage,a.night_wage,a.payment_status,
-      e.personnel_no,e.full_name,e.qualification,
+      m.personnel_no,e.full_name,e.qualification,
       COALESCE(cd.checked,0) AS day_checked,COALESCE(cn.checked,0) AS night_checked,
       EXISTS(SELECT 1 FROM hr_daily_payment_items p WHERE p.main_company_id=? AND p.attendance_id=a.id AND p.shift='day' AND p.active=1) AS day_paid_item,
       EXISTS(SELECT 1 FROM hr_daily_payment_items p WHERE p.main_company_id=? AND p.attendance_id=a.id AND p.shift='night' AND p.active=1) AS night_paid_item,
       (SELECT COUNT(*) FROM hr_daily_payment_items p WHERE p.main_company_id=? AND p.attendance_id=a.id) AS ledger_item_count
     FROM hr_daily_attendance a
     JOIN hr_daily_employees e ON e.id=a.employee_id
+    LEFT JOIN hr_daily_employee_meta m ON m.employee_id=e.id
     LEFT JOIN hr_daily_attendance_check cd ON cd.main_company_id=e.main_company_id AND cd.employee_id=a.employee_id AND cd.work_date=a.work_date AND cd.shift='day'
     LEFT JOIN hr_daily_attendance_check cn ON cn.main_company_id=e.main_company_id AND cn.employee_id=a.employee_id AND cn.work_date=a.work_date AND cn.shift='night'
     WHERE e.main_company_id=? AND a.work_date>=? AND a.work_date<=?
@@ -1579,17 +1580,8 @@ async function cancelPayment(c: Context<AppEnv>) {
 }
 
 async function markPaid(c: Context<AppEnv>) {
-  const body=await bodyOf(c);
-  const companyId=companyIdOf(c,body);
-  const employeeId=text(body.employeeId || body.personId);
-  const start=dateOnly(body.startDate || body.start);
-  const end=dateOnly(body.endDate || body.end || start);
-  if(!employeeId) return fail(c,400,"EMPLOYEE_REQUIRED","Personel zorunludur.");
-  const timestamp=nowIso();
-  const result=await c.env.DB.prepare(`UPDATE hr_daily_attendance SET payment_status='PAID',updated_at=?
-    WHERE employee_id=? AND work_date>=? AND work_date<=? AND employee_id IN (SELECT id FROM hr_daily_employees WHERE main_company_id=?)`)
-    .bind(timestamp,employeeId,start,end,companyId).run();
-  return ok(c,{employeeId,startDate:start,endDate:end,updated:Number(result.meta?.changes || 0)});
+  // Backward-compatible endpoint: all payments must be recorded in the canonical ledger.
+  return createPayment(c);
 }
 
 async function syncState(c: Context<AppEnv>) {

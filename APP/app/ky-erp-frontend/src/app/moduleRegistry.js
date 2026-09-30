@@ -161,7 +161,7 @@ const DAILY_OPERATIONS_MODULE = {
         ["daily-entry", "Günlük Giriş", "takvim"],
         ["daily-cards", "Personel Kartları", "users"],
         ["daily-weekly", "Haftalık Özet", "raporlar"],
-        ["daily-payments", "Ödeme Fişleri", "odemeler"],
+        ["daily-payments", "Ödemeler", "odemeler"],
       ],
     },
   ],
