@@ -157,6 +157,7 @@ const DAILY_OPERATIONS_MODULE = {
     {
       label: "Günlük Operasyon",
       tabs: [
+        ["daily-dashboard", "Ana Sayfa", "dashboard"],
         ["daily-entry", "Günlük Giriş", "takvim"],
         ["daily-cards", "Personel Kartları", "users"],
         ["daily-weekly", "Haftalık Özet", "raporlar"],
@@ -271,6 +272,9 @@ export const MODULE_ROUTE_ALIASES = {
   muhasebe: {},
   "e-belge": {},
   "gunluk-operasyon": {
+    "ana-sayfa": "daily-dashboard",
+    "genel-bakis": "daily-dashboard",
+    "dashboard": "daily-dashboard",
     "gunluk-giris": "daily-entry",
     "gunluk-personel-kartlari": "daily-cards",
     "personel-kartlari": "daily-cards",

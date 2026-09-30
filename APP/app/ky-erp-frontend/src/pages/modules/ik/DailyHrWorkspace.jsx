@@ -47,7 +47,7 @@ import { printHtmlDocument } from "../../../services/printService";
 import "./daily-hr-workspace.css";
 import "./daily-hr-workspace-final.css";
 
-const VALID_VIEWS = new Set(["daily-entry", "daily-cards", "daily-weekly", "daily-payments"]);
+const VALID_VIEWS = new Set(["daily-dashboard", "daily-entry", "daily-cards", "daily-weekly", "daily-payments"]);
 const RANGE_KEY = "kyerp.dailyOperations.range.v5";
 const LIVE_SYNC_INTERVAL_MS = 1500;
 const DIALOG_SIZE_KEY = "kyerp.dailyOperations.dialogSizes.v1";
@@ -232,7 +232,17 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [summaryRows, setSummaryRows] = useState([]);
   const [paymentRows, setPaymentRows] = useState([]);
   const [paymentSelectedIds, setPaymentSelectedIds] = useState(() => new Set());
-  const [query, setQuery] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [cardQuery, setCardQuery] = useState("");
+  const [cardStatusFilter, setCardStatusFilter] = useState("active");
+  const [cardRoleFilter, setCardRoleFilter] = useState("all");
+  const [cardBrokerFilter, setCardBrokerFilter] = useState("all");
+  const [cardSelectedIds, setCardSelectedIds] = useState(() => new Set());
+  const [cardEditor, setCardEditor] = useState(null);
+  const [bulkMode, setBulkMode] = useState("day-set");
+  const [bulkValue, setBulkValue] = useState("");
+  const [dashboardOpen, setDashboardOpen] = useState("");
+  const [query] = useState("");
   const [poolAddQuery, setPoolAddQuery] = useState("");
   const [quickAddQuery, setQuickAddQuery] = useState("");
   const [cardAddToRoster, setCardAddToRoster] = useState(false);
@@ -327,7 +337,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   useEffect(() => { void loadFocused(); }, [loadFocused]);
 
   const loadWeekly = useCallback(async () => {
-    if (!companyId || view !== "daily-weekly") return;
+    if (!companyId || !["daily-weekly", "daily-dashboard"].includes(view)) return;
     setLoading(true); setError("");
     try { const rows = await getDailyWeeklySummary({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }); setSummaryRows(Array.isArray(rows) ? rows : []); }
     catch (e) { setError(e?.message || "Haftalık özet alınamadı."); } finally { setLoading(false); }
@@ -335,7 +345,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   useEffect(() => { void loadWeekly(); }, [loadWeekly]);
 
   const loadPayments = useCallback(async () => {
-    if (!companyId || view !== "daily-payments") return;
+    if (!companyId || !["daily-payments", "daily-dashboard"].includes(view)) return;
     setLoading(true); setError("");
     try { const rows = await getDailyPaymentSlips({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }); setPaymentRows(Array.isArray(rows) ? rows : []); }
     catch (e) { setError(e?.message || "Ödeme fişleri alınamadı."); } finally { setLoading(false); }
@@ -343,10 +353,6 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   useEffect(() => { void loadPayments(); }, [loadPayments]);
 
   const employeeMap = useMemo(() => new Map(employees.map((person) => [person.id, person])), [employees]);
-  const filteredEmployees = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase("tr-TR");
-    return employees.filter((person) => !needle || `${person.name} ${person.personnelNo} ${person.role} ${person.broker}`.toLocaleLowerCase("tr-TR").includes(needle));
-  }, [employees, query]);
   const activeRosterPeople = useMemo(() => employees.filter((person) => person.active !== false && rosterIds.has(person.id)), [employees, rosterIds]);
   const availableRosterPeople = useMemo(() => employees.filter((person) => person.active !== false && !rosterIds.has(person.id)), [employees, rosterIds]);
   const poolPeople = useMemo(() => {
@@ -400,6 +406,70 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     return [...map.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), "tr"));
   }, [attendance, employeeMap, range.end, range.start]);
   const selectedPaymentRows = useMemo(() => paymentRows.filter((row) => paymentSelectedIds.has(String(row.employeeId || row.id || row.personnelNo || row.name || row.fullName || ""))), [paymentRows, paymentSelectedIds]);
+  const cardRoles = useMemo(() => [...new Set(employees.map((person) => person.role || "Vasıfsız").filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr")), [employees]);
+  const cardBrokers = useMemo(() => [...new Set(employees.map((person) => person.broker || "Direkt").filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr")), [employees]);
+  const managedEmployees = useMemo(() => {
+    const needle = cardQuery.trim().toLocaleLowerCase("tr-TR");
+    return employees.filter((person) => {
+      const matchesText = !needle || `${person.name} ${person.personnelNo} ${person.role} ${person.broker}`.toLocaleLowerCase("tr-TR").includes(needle);
+      const matchesStatus = cardStatusFilter === "all" || (cardStatusFilter === "active" ? person.active !== false : person.active === false);
+      const matchesRole = cardRoleFilter === "all" || (person.role || "Vasıfsız") === cardRoleFilter;
+      const matchesBroker = cardBrokerFilter === "all" || (person.broker || "Direkt") === cardBrokerFilter;
+      return matchesText && matchesStatus && matchesRole && matchesBroker;
+    });
+  }, [cardBrokerFilter, cardQuery, cardRoleFilter, cardStatusFilter, employees]);
+  const selectedCardPeople = useMemo(() => employees.filter((person) => cardSelectedIds.has(person.id)), [cardSelectedIds, employees]);
+  useEffect(() => {
+    const valid = new Set(employees.map((person) => person.id));
+    setCardSelectedIds((current) => {
+      const next = new Set([...current].filter((id) => valid.has(id)));
+      return sameSet(current, next) ? current : next;
+    });
+  }, [employees]);
+
+  const paymentSettled = useCallback((row) => {
+    const total = number(row.totalAmount ?? row.total);
+    return rowPaid(row) || (total > 0 && number(row.paidAmount) >= total);
+  }, []);
+  const visiblePaymentRows = useMemo(() => paymentRows.filter((row) => paymentFilter === "all" || (paymentFilter === "paid" ? paymentSettled(row) : !paymentSettled(row))), [paymentFilter, paymentRows, paymentSettled]);
+  const paymentMetrics = useMemo(() => paymentRows.reduce((sum, row) => {
+    const total = number(row.totalAmount ?? row.total);
+    const paid = paymentSettled(row);
+    sum.total += total;
+    if (paid) { sum.paidCount += 1; sum.paidAmount += total; }
+    else { sum.waitingCount += 1; sum.waitingAmount += total; }
+    return sum;
+  }, { total: 0, paidCount: 0, waitingCount: 0, paidAmount: 0, waitingAmount: 0 }), [paymentRows, paymentSettled]);
+
+  const weeklyTotals = useMemo(() => weeklyControlRows.reduce((sum, row) => ({
+    people: sum.people + 1,
+    day: sum.day + number(row.dayCount),
+    night: sum.night + number(row.nightCount),
+    total: sum.total + number(row.totalAmount ?? row.total),
+  }), { people: 0, day: 0, night: 0, total: 0 }), [weeklyControlRows]);
+  const weeklyPending = useMemo(() => attendance.filter((row) => (rowDay(row) || rowNight(row)) && !(row.checked === true || row.checked === 1 || row.checked === "1")).length, [attendance]);
+  const roleOverview = useMemo(() => {
+    const ids = new Set(attendance.filter((row) => rowDay(row) || rowNight(row)).map(rowEmployeeId).filter(Boolean));
+    const counts = new Map();
+    employees.filter((person) => ids.has(person.id)).forEach((person) => {
+      const key = person.role || "Vasıfsız";
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [attendance, employees]);
+  const dashboardDays = daySummaries.length > 7 ? daySummaries.slice(-7) : daySummaries;
+  const dashboardPeople = useMemo(() => new Set(attendance.filter((row) => rowDay(row) || rowNight(row)).map(rowEmployeeId).filter(Boolean)).size, [attendance]);
+  const dashboardZeroWage = useMemo(() => employees.filter((person) => person.active !== false && person.dayRate <= 0).length, [employees]);
+  const dashboardWarnings = useMemo(() => {
+    const rows = [];
+    if (weeklyPending) rows.push(`${weeklyPending} vardiya kontrol bekliyor.`);
+    if (paymentMetrics.waitingCount) rows.push(`${paymentMetrics.waitingCount} personelin ödemesi bekliyor.`);
+    if (dashboardZeroWage) rows.push(`${dashboardZeroWage} aktif personelin gündüz ücreti 0.`);
+    if (periodLocked) rows.push("Seçili dönem kapalı; günlük kayıt değişikliği kilitli.");
+    if (!attendance.length) rows.push("Seçili tarih aralığında çalışma kaydı yok.");
+    return rows;
+  }, [attendance.length, dashboardZeroWage, paymentMetrics.waitingCount, periodLocked, weeklyPending]);
+  const recentOperations = useMemo(() => [...attendance].sort((a, b) => String(b.updatedAt || b.createdAt || rowDate(b)).localeCompare(String(a.updatedAt || a.createdAt || rowDate(a)))).slice(0, 8), [attendance]);
   useEffect(() => {
     const valid = new Set(paymentRows.map((row) => String(row.employeeId || row.id || row.personnelNo || row.name || row.fullName || "")));
     setPaymentSelectedIds((current) => {
@@ -538,8 +608,61 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     } catch (e) { setError(e?.message || "Personel kartı kaydedilemedi."); }
     finally { setBusy(false); }
   };
-  const deactivateCard = async (person) => { if (busy || !person?.id) return; setBusy(true); try { await deleteDailyEmployee(person.id, { mainCompanyId: companyId }); await loadEmployees(); setNotice(`${person.name} pasife alındı.`); } catch (e) { setError(e?.message || "Personel pasife alınamadı."); } finally { setBusy(false); } };
+  const deactivateCard = async (person) => { if (busy || !person?.id) return; setBusy(true); try { await deleteDailyEmployee(person.id, { mainCompanyId: companyId }); await loadEmployees(); if (cardEditor?.id === person.id) setCardEditor(null); setNotice(`${person.name} pasife alındı.`); } catch (e) { setError(e?.message || "Personel pasife alınamadı."); } finally { setBusy(false); } };
+  const saveCardEditor = async () => {
+    if (busy || !cardEditor?.id) return;
+    if (!String(cardEditor.name || "").trim()) { setError("Ad soyad zorunludur."); return; }
+    setBusy(true); setError("");
+    try {
+      await updateDailyEmployee(cardEditor.id, employeePayload(cardEditor, companyId));
+      const refreshed = await loadEmployees();
+      const fresh = refreshed.find((person) => person.id === cardEditor.id);
+      if (fresh) setCardEditor({ ...fresh });
+      setNotice(`${cardEditor.name} güncellendi.`);
+    } catch (e) { setError(e?.message || "Personel güncellenemedi."); }
+    finally { setBusy(false); }
+  };
+  const applyBulkCards = async () => {
+    if (busy || !selectedCardPeople.length || !String(bulkValue).trim()) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const percent = bulkMode === "percent" ? number(bulkValue) : 0;
+      const updatedPeople = selectedCardPeople.map((person) => {
+        const next = { ...person };
+        if (bulkMode === "day-set") next.dayRate = number(bulkValue);
+        if (bulkMode === "night-set") next.nightRate = number(bulkValue);
+        if (bulkMode === "both-set") { next.dayRate = number(bulkValue); next.nightRate = number(bulkValue); }
+        if (bulkMode === "role-set") next.role = String(bulkValue).trim();
+        if (bulkMode === "percent") {
+          next.dayRate = Math.max(0, Math.round(person.dayRate * (1 + percent / 100) * 100) / 100);
+          next.nightRate = Math.max(0, Math.round(person.nightRate * (1 + percent / 100) * 100) / 100);
+        }
+        return next;
+      });
+      for (let index = 0; index < updatedPeople.length; index += 8) {
+        const chunk = updatedPeople.slice(index, index + 8);
+        await Promise.all(chunk.map((person) => updateDailyEmployee(person.id, employeePayload(person, companyId))));
+      }
+      await loadEmployees();
+      setNotice(`${updatedPeople.length} personel toplu güncellendi.`);
+    } catch (e) { setError(e?.message || "Toplu personel güncellemesi tamamlanamadı."); }
+    finally { setBusy(false); }
+  };
   const payRow = async (row) => { if (busy) return; setBusy(true); try { await markDailyPaid({ mainCompanyId: companyId, employeeId: row.employeeId || row.id, startDate: range.start, endDate: range.end }); setNotice(`${row.name || row.fullName} için dönem ödemesi işlendi.`); await Promise.all([loadPayments(), loadRangeData()]); } catch (e) { setError(e?.message || "Ödeme durumu güncellenemedi."); } finally { setBusy(false); } };
+  const paySelectedRows = async () => {
+    const rows = selectedPaymentRows.filter((row) => !paymentSettled(row));
+    if (busy || !rows.length) return;
+    setBusy(true); setError("");
+    try {
+      for (let index = 0; index < rows.length; index += 8) {
+        await Promise.all(rows.slice(index, index + 8).map((row) => markDailyPaid({ mainCompanyId: companyId, employeeId: row.employeeId || row.id, startDate: range.start, endDate: range.end })));
+      }
+      setPaymentSelectedIds(new Set());
+      setNotice(`${rows.length} personelin ödemesi işlendi.`);
+      await Promise.all([loadPayments(), loadRangeData()]);
+    } catch (e) { setError(e?.message || "Seçili ödemeler güncellenemedi."); }
+    finally { setBusy(false); }
+  };
 
   const exportExcel = async () => { setBusy(true); try { await downloadDailyExcel({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }); } catch (e) { setError(e?.message || "Excel indirilemedi."); } finally { setBusy(false); } };
   const importExcel = () => {
@@ -582,6 +705,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         await loadWeekly();
       } else if (view === "daily-payments") {
         await loadPayments();
+      } else if (view === "daily-dashboard") {
+        await Promise.all([loadEmployees(), loadRangeData(), loadWeekly(), loadPayments()]);
       }
     };
 
@@ -637,6 +762,16 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
   const shiftRange = (weeks) => setSafeRange({ start: addDays(range.start, weeks * 7), end: addDays(range.end, weeks * 7) });
   const rangeControls = <div className="gop-range-controls"><button type="button" onClick={() => shiftRange(-1)}>‹ Önceki hafta</button><label>Başlangıç<input type="date" value={range.start} onChange={(e) => setSafeRange({ ...range, start: e.target.value })} /></label><label>Bitiş<input type="date" value={range.end} onChange={(e) => setSafeRange({ ...range, end: e.target.value })} /></label><button type="button" onClick={() => shiftRange(1)}>Sonraki hafta ›</button></div>;
+  const dashboardPreset = (mode) => {
+    const today = localDateKey();
+    const [year, month] = today.split("-").map(Number);
+    const monthStart = `${year}-${pad(month)}-01`;
+    const monthEnd = localDateKey(new Date(year, month, 0, 12));
+    if (mode === "today" || mode === "live") return setSafeRange({ start: today, end: today });
+    if (mode === "week") { const start = startOfWeek(today); return setSafeRange({ start, end: addDays(start, 6) }); }
+    if (mode === "last") { const start = addDays(startOfWeek(today), -7); return setSafeRange({ start, end: addDays(start, 6) }); }
+    if (mode === "month") return setSafeRange({ start: monthStart, end: monthEnd });
+  };
   const controlNeedle = normalizeText(controlQuery);
   const controlPerson = controlNeedle ? employees.find((person) => normalizeText(person.personnelNo) === controlNeedle || normalizeText(person.name) === controlNeedle) || employees.find((person) => `${normalizeText(person.personnelNo)} ${normalizeText(person.name)}`.includes(controlNeedle)) : null;
   const personControlRows = controlPerson ? logAttendance.filter((row) => rowEmployeeId(row) === controlPerson.id && rowDate(row) >= logRange.start && rowDate(row) <= logRange.end).sort((a, b) => rowDate(a).localeCompare(rowDate(b))) : [];
@@ -667,7 +802,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
   return (
     <section className="gop-workspace notranslate" translate="no">
-      {view !== "daily-entry" ? <header className="gop-header"><div><span>GÜNLÜK OPERASYON</span><h1>{view === "daily-cards" ? "Personel Kartları" : view === "daily-weekly" ? "Haftalık Özet" : "Ödeme Fişleri"}</h1><p>İK aylık işlemlerinden bağımsız günlük personel, vardiya ve ödeme çalışma alanı.</p></div><button className="gop-refresh" type="button" disabled={loading || busy} onClick={() => view === "daily-weekly" ? loadWeekly() : view === "daily-payments" ? loadPayments() : loadEmployees()}><RefreshCw size={16}/> Yenile</button></header> : null}
+      {view !== "daily-entry" ? <header className="gop-header"><div><span>GÜNLÜK OPERASYON</span><h1>{view === "daily-dashboard" ? "Ana Sayfa" : view === "daily-cards" ? "Personel Kartları" : view === "daily-weekly" ? "Haftalık Özet" : "Ödeme Fişleri"}</h1><p>{view === "daily-dashboard" ? "Çalışma, kontrol ve ödeme durumunu tek ekranda izleyin." : view === "daily-cards" ? "Personel kartlarını, vasıfları ve günlük ücretleri yönetin." : view === "daily-weekly" ? "Seçili dönemi gün gün kontrol edin ve çıktısını alın." : "Bekleyen ve tamamlanan dönem ödemelerini yönetin."}</p></div><button className="gop-refresh" type="button" disabled={loading || busy} onClick={() => view === "daily-dashboard" ? Promise.all([loadEmployees(), loadRangeData(), loadWeekly(), loadPayments()]) : view === "daily-weekly" ? loadWeekly() : view === "daily-payments" ? loadPayments() : loadEmployees()}><RefreshCw size={16}/> Yenile</button></header> : null}
       {notice ? <div className="gop-notice">{notice}</div> : null}{error ? <div className="gop-error">{error}</div> : null}
 
       {view === "daily-entry" ? <div className={`kyop-daily ${shift}`}>
@@ -689,9 +824,31 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         </div>
       </div> : null}
 
-      {view === "daily-cards" ? <div className="gop-card"><div className="gop-card-head"><div><h2>Günlük Personel Kartları</h2><span>Günlük operasyon ücretleri ve personel kimlikleri.</span></div><button type="button" className="primary" onClick={() => setCardDialog({ ...EMPTY_PERSON })}><Plus size={16}/> Yeni Personel</button></div><label className="gop-search standalone"><Search size={15}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ad, kod, vasıf veya aracı ara"/></label><div className="gop-table-wrap"><table><thead><tr><th>Kod</th><th>Personel</th><th>Vasıf</th><th>Gündüz</th><th>Gece</th><th>Aracı</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{filteredEmployees.length ? filteredEmployees.map((person) => <tr key={person.id}><td>{person.personnelNo || "-"}</td><td><strong>{person.name}</strong></td><td>{person.role || "-"}</td><td>{money(person.dayRate)}</td><td>{money(person.nightRate)}</td><td>{person.broker || "-"}</td><td><span className={`gop-badge ${person.active ? "ok" : "passive"}`}>{person.active ? "Aktif" : "Pasif"}</span></td><td><div className="gop-row-actions"><button type="button" onClick={() => setCardDialog({ ...person })}><Pencil size={15}/> Düzenle</button>{person.active ? <button type="button" onClick={() => deactivateCard(person)}><Trash2 size={15}/> Pasif</button> : null}</div></td></tr>) : <tr><td colSpan="8"><Empty>Günlük personel kartı bulunamadı.</Empty></td></tr>}</tbody></table></div></div> : null}
-      {view === "daily-weekly" ? <><div className="gop-toolbar-card">{rangeControls}</div><div className="gop-stat-grid three"><Stat label="Çalışan" value={summaryRows.length}/><Stat label="Vardiya toplamı" value={summaryRows.reduce((s, r) => s + number(r.dayCount) + number(r.nightCount), 0)}/><Stat label="Dönem toplamı" value={money(summaryRows.reduce((s, r) => s + number(r.totalAmount ?? r.total), 0))}/></div><div className="gop-card"><div className="gop-card-head"><div><h2>Haftalık Özet</h2><span>Sunucu kayıtlarından hesaplanan dönem özeti ve eski haftalık kontrol listesi.</span></div><div className="gop-print-actions"><button type="button" onClick={() => printWeeklyControlList(range, days, weeklyControlRows)}><Printer size={16}/> Haftalık Kontrol Listesi</button><button type="button" onClick={() => printRows("KY ERP Günlük Personel Haftalık Özeti", range, summaryRows)}><Printer size={16}/> Özet Yazdır</button></div></div><div className="gop-table-wrap"><table><thead><tr><th>Personel</th><th>Vasıf</th><th>Gündüz</th><th>Gece</th><th>Toplam</th></tr></thead><tbody>{summaryRows.length ? summaryRows.map((row) => <tr key={row.employeeId || row.id}><td><strong>{row.name || row.fullName}</strong></td><td>{row.qualification || row.role || "-"}</td><td>{number(row.dayCount)}</td><td>{number(row.nightCount)}</td><td><strong>{money(row.totalAmount ?? row.total)}</strong></td></tr>) : <tr><td colSpan="5"><Empty>Seçili dönemde çalışma kaydı yok.</Empty></td></tr>}</tbody></table></div></div></> : null}
-      {view === "daily-payments" ? <><div className="gop-toolbar-card">{rangeControls}</div><div className="gop-stat-grid three"><Stat label="Ödeme fişi" value={paymentRows.length}/><Stat label="Ödendi" value={paymentRows.filter((r) => rowPaid(r) || (number(r.totalAmount ?? r.total) > 0 && number(r.paidAmount) >= number(r.totalAmount ?? r.total))).length}/><Stat label="Dönem toplamı" value={money(paymentRows.reduce((s, r) => s + number(r.totalAmount ?? r.total), 0))}/></div><div className="gop-card"><div className="gop-card-head"><div><h2>Ödeme Fişleri</h2><span>{paymentSelectedIds.size ? `${paymentSelectedIds.size} kişi seçili.` : "Yazdırılacak kişileri kartlardan seçebilirsiniz."}</span></div><div className="gop-print-actions"><button type="button" className="primary" disabled={!selectedPaymentRows.length} onClick={() => printDailyPaymentSlips(range, selectedPaymentRows)}><Printer size={16}/> Seçili Kişileri Yazdır{paymentSelectedIds.size ? ` (${paymentSelectedIds.size})` : ""}</button><button type="button" disabled={!paymentRows.length} onClick={() => printDailyPaymentSlips(range, paymentRows)}><Printer size={16}/> Tümünü Yazdır</button><button type="button" disabled={!weeklyControlRows.length} onClick={() => printWeeklyControlList(range, days, weeklyControlRows)}><ClipboardList size={16}/> Haftalık Özet</button></div></div><div className="gop-payment-grid">{paymentRows.length ? paymentRows.map((row) => { const total = number(row.totalAmount ?? row.total); const paid = rowPaid(row) || (total > 0 && number(row.paidAmount) >= total); const paymentKey = String(row.employeeId || row.id || row.personnelNo || row.name || row.fullName || ""); const picked = paymentSelectedIds.has(paymentKey); return <article key={paymentKey} className={`gop-payment-card ${paid ? "paid" : ""} ${picked ? "selected" : ""}`}><div><label className="gop-payment-pick"><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next = new Set(current); if (next.has(paymentKey)) next.delete(paymentKey); else next.add(paymentKey); return next; })}/><span>Seç</span></label><UserRound size={18}/><span><strong>{row.name || row.fullName}</strong><small>{row.qualification || row.role || "-"}</small></span></div><dl><div><dt>Gündüz</dt><dd>{number(row.dayCount)}</dd></div><div><dt>Gece</dt><dd>{number(row.nightCount)}</dd></div><div><dt>Ödenecek</dt><dd>{money(total)}</dd></div></dl><footer><span className={`gop-badge ${paid ? "ok" : "waiting"}`}>{paid ? "Ödendi" : "Ödeme Bekliyor"}</span>{!paid ? <button type="button" className="primary" disabled={busy} onClick={() => payRow(row)}><WalletCards size={15}/> Ödendi İşaretle</button> : null}</footer></article>; }) : <Empty>Seçili dönemde ödeme fişi oluşacak kayıt yok.</Empty>}</div></div></> : null}
+      {view === "daily-dashboard" ? <div className="gop-dashboard">
+        <div className="gop-dashboard-filter"><div className="gop-preset-buttons"><button type="button" onClick={() => dashboardPreset("live")}>● Canlı</button><button type="button" onClick={() => dashboardPreset("today")}>Bugün</button><button type="button" onClick={() => dashboardPreset("week")}>Bu Hafta</button><button type="button" onClick={() => dashboardPreset("last")}>Geçen Hafta</button><button type="button" onClick={() => dashboardPreset("month")}>Bu Ay</button></div>{rangeControls}</div>
+        <div className="gop-dashboard-stats"><Stat label="Çalışan Personel" value={dashboardPeople} hint={`${dateText(range.start)} — ${dateText(range.end)}`}/><Stat label="Toplam Vardiya" value={rangeTotals.day + rangeTotals.night} hint={`G ${rangeTotals.day} · N ${rangeTotals.night}`}/><Stat label="Kontrol Bekleyen" value={weeklyPending} hint={weeklyPending ? "İnceleme gerekli" : "Kontroller tamam"}/><Stat label="Ödeme Bekleyen" value={paymentMetrics.waitingCount} hint={money(paymentMetrics.waitingAmount)}/><Stat label="Dönem Toplamı" value={money(rangeTotals.total)} hint={`Ödenen ${money(paymentMetrics.paidAmount)}`}/></div>
+        <div className="gop-dashboard-grid">
+          <section className="gop-dashboard-main"><div className="gop-section-title"><div><strong>Günlük Durum</strong><span>Seçili aralıktaki son 7 gün</span></div><span className="gop-live-chip">● Canlı senkron</span></div><div className="gop-dashboard-days">{dashboardDays.length ? dashboardDays.map((item) => <article key={item.date}><div><small>{new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${item.date}T12:00:00`))}</small><strong>{dateText(item.date, true)}</strong></div><dl><div className="day"><dt>Gündüz</dt><dd>{item.dayCount}</dd></div><div className="night"><dt>Gece</dt><dd>{item.nightCount}</dd></div><div><dt>Personel</dt><dd>{item.people}</dd></div></dl><b>{money(item.total)}</b></article>) : <Empty>Bu aralıkta günlük kayıt yok.</Empty>}</div></section>
+          <aside className="gop-dashboard-side"><div className="gop-section-title"><div><strong>Yönetici Bilgilendirme</strong><span>Öncelikli kontrol noktaları</span></div></div><div className="gop-alert-list">{dashboardWarnings.length ? dashboardWarnings.map((warning, index) => <div key={index} className="warn">{warning}</div>) : <div className="ok">Bu dönem için kritik uyarı yok.</div>}</div><div className="gop-dashboard-mini"><div><span>Aktif personel</span><b>{employees.filter((person) => person.active !== false).length}</b></div><div><span>Ödenen</span><b>{paymentMetrics.paidCount}</b></div><div><span>Bekleyen tutar</span><b>{money(paymentMetrics.waitingAmount)}</b></div></div></aside>
+        </div>
+        <div className="gop-dashboard-details">
+          <details open={dashboardOpen === "roles"} onToggle={(e) => setDashboardOpen(e.currentTarget.open ? "roles" : "")}><summary>Vasıf Dağılımı <span>{roleOverview.length} grup</span></summary><div className="gop-role-overview">{roleOverview.length ? roleOverview.map(([role, count]) => <div key={role}><span>{role}</span><b>{count}</b></div>) : <Empty>Kayıt yok.</Empty>}</div></details>
+          <details open={dashboardOpen === "payments"} onToggle={(e) => setDashboardOpen(e.currentTarget.open ? "payments" : "")}><summary>Maliyet & Ödeme <span>{money(rangeTotals.total)}</span></summary><div className="gop-cost-overview"><div><span>Gündüz vardiya</span><b>{rangeTotals.day}</b></div><div><span>Gece vardiya</span><b>{rangeTotals.night}</b></div><div><span>Dönem toplamı</span><b>{money(rangeTotals.total)}</b></div><div><span>Ödeme bekleyen</span><b>{money(paymentMetrics.waitingAmount)}</b></div></div></details>
+          <details open={dashboardOpen === "recent"} onToggle={(e) => setDashboardOpen(e.currentTarget.open ? "recent" : "")}><summary>Son Kayıtlar <span>{recentOperations.length}</span></summary><div className="gop-recent-list">{recentOperations.length ? recentOperations.map((row, index) => { const person = employeeMap.get(rowEmployeeId(row)); return <div key={`${rowEmployeeId(row)}-${rowDate(row)}-${index}`}><span><strong>{person?.name || row.name || row.fullName || "Personel"}</strong><small>{dateText(rowDate(row))}</small></span><b>{rowDay(row) ? "G" : ""}{rowDay(row) && rowNight(row) ? " + " : ""}{rowNight(row) ? "N" : ""}</b><em>{dateTimeText(row.updatedAt || row.createdAt)}</em></div>; }) : <Empty>Kayıt yok.</Empty>}</div></details>
+        </div>
+      </div> : null}
+
+      {view === "daily-cards" ? <div className="gop-card-manager">
+        <section className="gop-card-pool"><div className="gop-card-manager-head"><div><strong>Personel Havuzu</strong><span>{managedEmployees.length} / {employees.length} kayıt</span></div><button type="button" className="primary" onClick={() => setCardDialog({ ...EMPTY_PERSON })}><Plus size={15}/> Yeni Personel</button></div><label className="gop-search standalone"><Search size={15}/><input value={cardQuery} onChange={(e) => setCardQuery(e.target.value)} placeholder="Ad, kod, vasıf veya aracı ara"/></label><div className="gop-card-filters"><select value={cardStatusFilter} onChange={(e) => setCardStatusFilter(e.target.value)}><option value="active">Aktif</option><option value="passive">Pasif</option><option value="all">Tümü</option></select><select value={cardRoleFilter} onChange={(e) => setCardRoleFilter(e.target.value)}><option value="all">Tüm vasıflar</option>{cardRoles.map((role) => <option key={role} value={role}>{role}</option>)}</select><select value={cardBrokerFilter} onChange={(e) => setCardBrokerFilter(e.target.value)}><option value="all">Tüm aracılar</option>{cardBrokers.map((broker) => <option key={broker} value={broker}>{broker}</option>)}</select></div><div className="gop-card-selectbar"><button type="button" onClick={() => setCardSelectedIds(new Set(managedEmployees.map((person) => person.id)))}>Görünenleri Seç</button><button type="button" onClick={() => setCardSelectedIds(new Set())}>Seçimi Kaldır</button><b>{cardSelectedIds.size} seçili</b></div><div className="gop-card-person-list">{managedEmployees.length ? managedEmployees.map((person) => { const picked = cardSelectedIds.has(person.id); const active = cardEditor?.id === person.id; return <div key={person.id} className={`${active ? "active" : ""} ${person.active === false ? "passive" : ""}`}><label><input type="checkbox" checked={picked} onChange={() => setCardSelectedIds((current) => { const next = new Set(current); if (next.has(person.id)) next.delete(person.id); else next.add(person.id); return next; })}/></label><button type="button" onClick={() => setCardEditor({ ...person })}><span><strong>{person.name}</strong><small>{person.personnelNo || "Kod yok"} · {person.role || "Vasıfsız"}</small></span><span><b>G {money(person.dayRate)}</b><b>N {money(person.nightRate)}</b></span></button></div>; }) : <Empty>Filtreye uygun personel yok.</Empty>}</div></section>
+        <section className="gop-card-detail"><div className="gop-card-manager-head"><div><strong>{cardEditor ? "Personel Bilgileri" : "Personel Yönetimi"}</strong><span>{cardEditor ? `${cardEditor.personnelNo || "Kod yok"} · ${cardEditor.role || "Vasıfsız"}` : "Düzenlemek için soldan personel seçin"}</span></div></div>{cardEditor ? <div className="gop-inline-person-form"><label>Ad Soyad<input value={cardEditor.name} onChange={(e) => setCardEditor({ ...cardEditor, name: e.target.value })}/></label><label>Personel No<input value={cardEditor.personnelNo} onChange={(e) => setCardEditor({ ...cardEditor, personnelNo: e.target.value })}/></label><label>Vasıf<input value={cardEditor.role} onChange={(e) => setCardEditor({ ...cardEditor, role: e.target.value })}/></label><label>Aracı<input value={cardEditor.broker} onChange={(e) => setCardEditor({ ...cardEditor, broker: e.target.value })}/></label><label>Gündüz Ücret<input type="number" value={cardEditor.dayRate} onChange={(e) => setCardEditor({ ...cardEditor, dayRate: number(e.target.value) })}/></label><label>Gece Ücret<input type="number" value={cardEditor.nightRate} onChange={(e) => setCardEditor({ ...cardEditor, nightRate: number(e.target.value) })}/></label><label className="wide">Not<textarea rows="3" value={cardEditor.note || ""} onChange={(e) => setCardEditor({ ...cardEditor, note: e.target.value })}/></label><label className="check"><input type="checkbox" checked={cardEditor.active !== false} onChange={(e) => setCardEditor({ ...cardEditor, active: e.target.checked })}/> Aktif personel</label><div className="gop-inline-person-actions"><button type="button" onClick={() => setCardEditor(null)}>Kapat</button>{cardEditor.active !== false ? <button type="button" onClick={() => deactivateCard(cardEditor)}><Trash2 size={14}/> Pasife Al</button> : null}<button type="button" className="primary" disabled={busy} onClick={saveCardEditor}><Save size={15}/> Kaydet</button></div></div> : <div className="gop-card-empty-detail"><Users size={30}/><strong>Personel seçin</strong><span>Kart bilgileri sağ tarafta açılır; modal açmadan düzenleyebilirsiniz.</span></div>}
+          <div className="gop-bulk-editor"><div><strong>Toplu Düzenleme</strong><span>Seçili {selectedCardPeople.length} personel</span></div><select value={bulkMode} onChange={(e) => setBulkMode(e.target.value)}><option value="day-set">Gündüz ücret ata</option><option value="night-set">Gece ücret ata</option><option value="both-set">Gündüz + Gece aynı tutar</option><option value="percent">Ücretlere % uygula</option><option value="role-set">Vasıf değiştir</option></select><input value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} placeholder={bulkMode === "role-set" ? "Yeni vasıf" : bulkMode === "percent" ? "+10 veya -5" : "Tutar"}/><button type="button" className="primary" disabled={busy || !selectedCardPeople.length || !String(bulkValue).trim()} onClick={applyBulkCards}>Seçililere Uygula</button></div>
+        </section>
+      </div> : null}
+
+      {view === "daily-weekly" ? <><div className="gop-toolbar-card">{rangeControls}<div className="gop-print-actions"><button type="button" disabled={!weeklyControlRows.length} onClick={() => printWeeklyControlList(range, days, weeklyControlRows)}><Printer size={16}/> Kontrol Listesi</button><button type="button" disabled={!summaryRows.length} onClick={() => printRows("KY ERP Günlük Personel Haftalık Özeti", range, summaryRows)}><Printer size={16}/> Özet Yazdır</button><button type="button" onClick={exportExcel}><FileSpreadsheet size={16}/> Excel</button></div></div><div className="gop-week-stats"><Stat label="Çalışan" value={weeklyTotals.people}/><Stat label="Toplam Gün" value={weeklyTotals.day + weeklyTotals.night}/><Stat label="Gündüz" value={weeklyTotals.day}/><Stat label="Gece" value={weeklyTotals.night}/><Stat label="Kontrol Bekleyen" value={weeklyPending}/><Stat label="Toplam Tutar" value={money(weeklyTotals.total)}/></div><div className="gop-card gop-week-card"><div className="gop-card-head"><div><h2>Haftalık Kontrol Matrisi</h2><span>{dateText(range.start)} — {dateText(range.end)} · Gün gün çalışma ve hakediş kontrolü.</span></div></div><div className="gop-week-matrix"><table><thead><tr><th className="person">Personel</th><th className="role">Vasıf</th>{days.slice(0, 7).map((date) => <th key={date}><span>{new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`))}</span><b>{dateText(date, true)}</b></th>)}<th>Toplam Gün</th><th>Toplam</th></tr></thead><tbody>{weeklyControlRows.length ? weeklyControlRows.map((row) => <tr key={row.employeeId}><td className="person"><strong>{row.name}</strong><small>{row.personnelNo || ""}</small></td><td className="role">{row.role || "-"}</td>{days.slice(0, 7).map((date) => { const cell = row.days?.[date] || {}; return <td key={date} className="shift-cell"><span className={cell.day ? "on day" : ""}>G{cell.day ? "✓" : "–"}</span><span className={cell.night ? "on night" : ""}>N{cell.night ? "✓" : "–"}</span></td>; })}<td className="total-day"><strong>{number(row.dayCount) + number(row.nightCount)}</strong></td><td className="money"><strong>{money(row.totalAmount)}</strong></td></tr>) : <tr><td colSpan={days.slice(0, 7).length + 4}><Empty>Seçili dönemde çalışma kaydı yok.</Empty></td></tr>}</tbody></table></div><details className="gop-week-detail"><summary>Vasıf Dağılımı <span>{roleOverview.length} grup</span></summary><div className="gop-role-overview">{roleOverview.map(([role, count]) => <div key={role}><span>{role}</span><b>{count}</b></div>)}</div></details></div></> : null}
+
+      {view === "daily-payments" ? <><div className="gop-toolbar-card">{rangeControls}<div className="gop-payment-filter"><button type="button" className={paymentFilter === "all" ? "active" : ""} onClick={() => setPaymentFilter("all")}>Tümü</button><button type="button" className={paymentFilter === "waiting" ? "active" : ""} onClick={() => setPaymentFilter("waiting")}>Bekleyen</button><button type="button" className={paymentFilter === "paid" ? "active" : ""} onClick={() => setPaymentFilter("paid")}>Ödenen</button></div></div><div className="gop-payment-stats"><Stat label="Personel" value={paymentRows.length}/><Stat label="Ödeme Bekleyen" value={paymentMetrics.waitingCount} hint={money(paymentMetrics.waitingAmount)}/><Stat label="Ödenen" value={paymentMetrics.paidCount} hint={money(paymentMetrics.paidAmount)}/><Stat label="Bekleyen Tutar" value={money(paymentMetrics.waitingAmount)}/><Stat label="Dönem Toplamı" value={money(paymentMetrics.total)}/></div><div className="gop-card"><div className="gop-card-head payment-head"><div><h2>Ödeme Yönetimi</h2><span>{paymentSelectedIds.size ? `${paymentSelectedIds.size} kişi seçili.` : `${visiblePaymentRows.length} kayıt gösteriliyor.`}</span></div><div className="gop-print-actions"><button type="button" onClick={() => setPaymentSelectedIds(new Set(visiblePaymentRows.map((row) => String(row.employeeId || row.id || row.personnelNo || row.name || row.fullName || ""))))}>Tümünü Seç</button><button type="button" disabled={!paymentSelectedIds.size} onClick={() => setPaymentSelectedIds(new Set())}>Seçimi Kaldır</button><button type="button" className="primary" disabled={busy || !selectedPaymentRows.some((row) => !paymentSettled(row))} onClick={paySelectedRows}><WalletCards size={15}/> Seçili Ödendi</button><button type="button" disabled={!selectedPaymentRows.length} onClick={() => printDailyPaymentSlips(range, selectedPaymentRows)}><Printer size={15}/> Seçili Yazdır</button><button type="button" disabled={!paymentRows.length} onClick={() => printDailyPaymentSlips(range, paymentRows)}><Printer size={15}/> Tümünü Yazdır</button><button type="button" disabled={!weeklyControlRows.length} onClick={() => printWeeklyControlList(range, days, weeklyControlRows)}><ClipboardList size={15}/> Haftalık Kontrol</button></div></div><div className="gop-payment-grid compact">{visiblePaymentRows.length ? visiblePaymentRows.map((row) => { const total = number(row.totalAmount ?? row.total); const paid = paymentSettled(row); const paymentKey = String(row.employeeId || row.id || row.personnelNo || row.name || row.fullName || ""); const picked = paymentSelectedIds.has(paymentKey); return <article key={paymentKey} className={`gop-payment-card ${paid ? "paid" : ""} ${picked ? "selected" : ""}`}><div className="payment-person"><label className="gop-payment-pick"><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next = new Set(current); if (next.has(paymentKey)) next.delete(paymentKey); else next.add(paymentKey); return next; })}/><span>Seç</span></label><UserRound size={18}/><span><strong>{row.name || row.fullName}</strong><small>{row.qualification || row.role || "-"}</small></span></div><dl><div><dt>Gündüz</dt><dd>{number(row.dayCount)}</dd></div><div><dt>Gece</dt><dd>{number(row.nightCount)}</dd></div><div className="payment-total"><dt>Ödenecek</dt><dd>{money(total)}</dd></div></dl><footer><span className={`gop-badge ${paid ? "ok" : "waiting"}`}>{paid ? "Ödendi" : "Ödeme Bekliyor"}</span>{!paid ? <button type="button" className="primary" disabled={busy} onClick={() => payRow(row)}><WalletCards size={15}/> Ödendi İşaretle</button> : <span className="paid-note">Tamamlandı</span>}</footer></article>; }) : <Empty>Filtreye uygun ödeme kaydı yok.</Empty>}</div></div></> : null}
+
 
       {quick ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section className={`gop-dialog gop-quick-dialog shift-${quick.shift}`} style={dialogBoxStyle(dialogSizes.quick)}><header><div><span>TEK GÜN GÜVENLİ HIZLI GİRİŞ</span><div className="quick-title-line"><h2>{longDateText(quick.date)} · {quick.shift === "day" ? "Gündüz" : "Gece"}</h2><span className={`quick-shift-badge ${quick.shift}`}>{quick.shift === "day" ? "GÜNDÜZ" : "GECE"}</span></div><p>Bu pencerede yalnız seçili gün ve seçili vardiya değişir.</p></div><button type="button" onClick={() => setQuick(null)}><X size={19}/></button></header>
         <div className="quick-day-nav"><button type="button" disabled={quickDirty || quick.date <= range.start || busy} onClick={() => changeQuickFocus(addDays(quick.date, -1), quick.shift)}>‹ Önceki Gün</button><label><span>İşlem yapılacak gün</span><input type="date" min={range.start} max={range.end} value={quick.date} disabled={quickDirty || busy} onChange={(e) => changeQuickFocus(e.target.value, quick.shift)}/></label><button type="button" disabled={quickDirty || quick.date >= range.end || busy} onClick={() => changeQuickFocus(addDays(quick.date, 1), quick.shift)}>Sonraki Gün ›</button><div className="gop-shift-switch"><button type="button" className={quick.shift === "day" ? "active day" : ""} disabled={quickDirty || busy} onClick={() => changeQuickFocus(quick.date, "day")}><Sun size={15}/> Gündüz</button><button type="button" className={quick.shift === "night" ? "active night" : ""} disabled={quickDirty || busy} onClick={() => changeQuickFocus(quick.date, "night")}><Moon size={15}/> Gece</button></div></div>
