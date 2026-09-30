@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/quickdata-rev11-single-exe.yml'
       - '.github/scripts/quickdata-rev11-smart-window.ps1'
+      - '.github/scripts/quickdata-rev11-runfix.ps1'
       - '.github/scripts/quickdata-rev10-clean-person.ps1'
       - '.github/scripts/quickdata-rev9-final2-build.ps1'
       - '.github/scripts/quickdata-rev9-final-build.ps1'
@@ -27,7 +28,7 @@ jobs:
 
       - name: Apply REV11 source fixes
         shell: pwsh
-        run: ./.github/scripts/quickdata-rev11-smart-window.ps1
+        run: ./.github/scripts/quickdata-rev11-runfix.ps1
 
       - name: Publish exactly one self-contained EXE
         shell: pwsh
