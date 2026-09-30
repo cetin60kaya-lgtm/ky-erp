@@ -43,6 +43,7 @@ jobs:
           if old not in t:
               raise SystemExit('filteredEmployees cleanup marker missing')
           t = t.replace(old, '', 1)
+          t = t.replace('const [query, setQuery] = useState("");', 'const [query] = useState("");', 1)
           t = t.replace('''  const paymentSettled = (row) => {\n    const total = number(row.totalAmount ?? row.total);\n    return rowPaid(row) || (total > 0 && number(row.paidAmount) >= total);\n  };\n  const visiblePaymentRows = useMemo(() => paymentRows.filter((row) => paymentFilter === "all" || (paymentFilter === "paid" ? paymentSettled(row) : !paymentSettled(row))), [paymentFilter, paymentRows]);\n''', '''  const paymentSettled = useCallback((row) => {\n    const total = number(row.totalAmount ?? row.total);\n    return rowPaid(row) || (total > 0 && number(row.paidAmount) >= total);\n  }, []);\n  const visiblePaymentRows = useMemo(() => paymentRows.filter((row) => paymentFilter === "all" || (paymentFilter === "paid" ? paymentSettled(row) : !paymentSettled(row))), [paymentFilter, paymentRows, paymentSettled]);\n''', 1)
           t = t.replace('''  }, { total: 0, paidCount: 0, waitingCount: 0, paidAmount: 0, waitingAmount: 0 }), [paymentRows]);\n''', '''  }, { total: 0, paidCount: 0, waitingCount: 0, paidAmount: 0, waitingAmount: 0 }), [paymentRows, paymentSettled]);\n''', 1)
           p.write_text(t, encoding='utf-8')
