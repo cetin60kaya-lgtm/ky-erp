@@ -1,0 +1,10 @@
+
+> ky-erp-frontend@0.0.0 lint
+> eslint "src/**/*.{js,jsx,ts,tsx}" --max-warnings=0
+
+
+/home/runner/work/ky-erp/ky-erp/APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
+  830:55  error  Parsing error: Expecting Unicode escape sequence \uXXXX
+
+✖ 1 problem (1 error, 0 warnings)
+
