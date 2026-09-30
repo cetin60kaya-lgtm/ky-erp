@@ -6,7 +6,8 @@ on:
       - codex/quickdata-tnf-tab-rev4
     paths:
       - '.github/workflows/quickdata-rev9-single-exe.yml'
-      - '.github/scripts/quickdata-rev9-build.ps1'
+      - '.github/scripts/quickdata-rev9-final-build.ps1'
+      - '.github/scripts/quickdata-rev8-build.ps1'
   workflow_dispatch:
 
 jobs:
@@ -21,9 +22,9 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Apply REV9 source fixes
+      - name: Apply REV9 final source fixes
         shell: pwsh
-        run: ./.github/scripts/quickdata-rev9-build.ps1
+        run: ./.github/scripts/quickdata-rev9-final-build.ps1
 
       - name: Publish exactly one self-contained EXE
         shell: pwsh
