@@ -1,0 +1,51 @@
+name: QuickDataTool REV11 FINAL3 Single EXE
+
+on:
+  push:
+    branches:
+      - codex/quickdata-tnf-tab-rev4
+    paths:
+      - '.github/workflows/quickdata-rev11-final3-single-exe.yml'
+      - '.github/scripts/quickdata-rev11-final3.ps1'
+      - '.github/scripts/quickdata-rev11-final.ps1'
+      - '.github/scripts/quickdata-rev10-clean-person.ps1'
+      - '.github/scripts/quickdata-rev9-final2-build.ps1'
+      - '.github/scripts/quickdata-rev9-final-build.ps1'
+      - '.github/scripts/quickdata-rev8-build.ps1'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Apply REV11 FINAL3 source fixes
+        shell: pwsh
+        run: ./.github/scripts/quickdata-rev11-final3.ps1
+      - name: Publish one self-contained EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $proj = 'APP/desktop/kyerp-pdks-current/tools/QuickDataTool/QuickDataTool.csproj'
+          $out = Join-Path $env:RUNNER_TEMP 'single'
+          dotnet restore $proj -r win-x64
+          dotnet publish $proj -c Release -r win-x64 --self-contained true -o $out -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false
+          $exe = Join-Path $out 'QuickDataTool.exe'
+          if (-not (Test-Path $exe)) { throw 'Single EXE not produced.' }
+          $final = Join-Path $env:RUNNER_TEMP 'final'
+          New-Item -ItemType Directory -Force -Path $final | Out-Null
+          Copy-Item $exe (Join-Path $final 'HKN-PDKS-REV11-FINAL.exe')
+          $files = Get-ChildItem $final -File
+          if ($files.Count -ne 1) { throw 'Final package must contain exactly one EXE.' }
+      - name: Upload REV11 FINAL
+        uses: actions/upload-artifact@v4
+        with:
+          name: HKN-PDKS-REV11-FINAL-SINGLE-EXE
+          path: ${{ runner.temp }}\final\HKN-PDKS-REV11-FINAL.exe
+          if-no-files-found: error
+          retention-days: 14
