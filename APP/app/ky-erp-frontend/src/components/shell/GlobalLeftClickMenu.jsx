@@ -131,18 +131,27 @@ export default function GlobalLeftClickMenu() {
       setMenu({ open: true, ...position });
     };
 
+    const onPrimaryPointerDown = (event) => {
+      if (event.button !== 0) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("[data-ky-right-click-menu]")) return;
+      setMenu((current) => current.open ? { ...current, open: false } : current);
+    };
+
     const close = (event) => {
       if (event?.type === "keydown" && event.key !== "Escape") return;
       setMenu((current) => current.open ? { ...current, open: false } : current);
     };
 
     document.addEventListener("contextmenu", onContextMenu, true);
+    document.addEventListener("pointerdown", onPrimaryPointerDown, true);
     window.addEventListener("keydown", close);
     window.addEventListener("resize", close);
     window.addEventListener("scroll", close, true);
     window.addEventListener("popstate", close);
     return () => {
       document.removeEventListener("contextmenu", onContextMenu, true);
+      document.removeEventListener("pointerdown", onPrimaryPointerDown, true);
       window.removeEventListener("keydown", close);
       window.removeEventListener("resize", close);
       window.removeEventListener("scroll", close, true);
