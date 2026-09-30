@@ -55,13 +55,13 @@ new_save_button = '<button type="button" className="kyop-roster-save" disabled o
 if old_save_button in s:
     s = s.replace(old_save_button, new_save_button, 1)
 
-# 5) Old local-only remove helper is unused after persisted checkbox actions.
-if s.count('removeRosterPerson(') == 1:
-    start = s.find('  const removeRosterPerson = (personId) => {')
-    if start >= 0:
-        end = s.find('\n  };', start)
-        if end >= 0:
-            s = s[:start] + s[end + len('\n  };'):]
+# 5) Remove obsolete local-only roster removal helper. Current checkbox removal is persisted through deleteShiftAndCleanupRoster.
+remove_start = s.find('  const removeRosterPerson = (personId) => {')
+if remove_start >= 0:
+    remove_end = s.find('\n  };', remove_start)
+    if remove_end < 0:
+        raise SystemExit('removeRosterPerson definition end not found')
+    s = s[:remove_start] + s[remove_end + len('\n  };'):]
 
 s = s.replace('tarih aralığında başka kaydı olduğu için havuzda kaldı.', 'tarih aralığında başka kaydı olduğu için tarih aralığı listesinde kaldı.')
 s = s.replace('tarih aralığında başka kaydı olmadığı için havuzdan da çıkarıldı.', 'tarih aralığında başka kaydı olmadığı için tarih aralığı listesinden de çıkarıldı.')
@@ -73,7 +73,7 @@ assert 'inRoster ? "Havuzda" : "Havuza ekle"' not in s
 assert 'checked={inRoster}' not in s
 assert 'Personel Havuzu <b>{selectedIds.size} /' in s
 assert 'const requestedRosterIds = serverRosterIds.filter((id) => id !== person.id);' in s
-assert s.count('removeRosterPerson(') == 0
+assert 'const removeRosterPerson = ' not in s
 
 p.write_text(s, encoding='utf-8')
 print('daily current-shift pool patch applied safely')
