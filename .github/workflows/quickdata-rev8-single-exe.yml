@@ -6,6 +6,7 @@ on:
       - codex/quickdata-tnf-tab-rev4
     paths:
       - '.github/workflows/quickdata-rev8-single-exe.yml'
+      - '.github/scripts/quickdata-rev8-build.ps1'
   workflow_dispatch:
 
 jobs:
@@ -15,273 +16,33 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore full source and apply REV8 fixes
+      - name: Apply REV8 source fixes
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $tool = 'APP/desktop/kyerp-pdks-current/tools/QuickDataTool'
-          $main = Join-Path $tool 'MainForm.cs'
-          $tnf = Join-Path $tool 'TnfPrepareInjector.cs'
-          $sync = Join-Path $tool 'DbTnfSyncInjector.cs'
-          $program = Join-Path $tool 'Program.cs'
+        run: ./.github/scripts/quickdata-rev8-build.ps1
 
-          # Restore the verified feature-complete base.
-          git show a2a57332597e3fa5a6284f4c5209c33bf2368688:APP/desktop/kyerp-pdks-current/tools/QuickDataTool/MainForm.cs | Set-Content $main -Encoding UTF8
-
-          # 1) TOPLU ISLEM: no more 'minute slot too narrow'. Keep user-entered interval,
-          # distribute evenly and allow the same minute for more than one employee when needed.
-          $m = Get-Content $main -Raw
-          $m = [regex]::Replace($m, '\s*if \(inB - inA \+ 1 < cards\.Count \|\| outB - outA \+ 1 < cards\.Count\)\s*throw new InvalidOperationException\(\$"Saat aral\\u0131\\u011f\\u0131 dar\.[^;]+;\s*', "`r`n")
-          $m = $m.Replace('var ins = ShuffledMinutes(inA, inB, day, 17); var outs = ShuffledMinutes(outA, outB, day, 71);', 'var ins = DistributedMinutes(inA, inB, cards.Count, day, 17); var outs = DistributedMinutes(outA, outB, cards.Count, day, 71);')
-          $oldShuffle = @'
-    static List<int> ShuffledMinutes(int min, int max, DateTime day, int salt)
-    {
-        var list = Enumerable.Range(min, max - min + 1).ToList();
-        var rng = new Random(HashCode.Combine(day.Year, day.DayOfYear, salt));
-        for (var i = list.Count - 1; i > 0; i--)
-        {
-            var j = rng.Next(i + 1); (list[i], list[j]) = (list[j], list[i]);
-        }
-        return list;
-    }
-'@
-          $newShuffle = @'
-    static List<int> DistributedMinutes(int min, int max, int count, DateTime day, int salt)
-    {
-        if (max < min) throw new InvalidOperationException("Saat aralığı hatalı.");
-        var span = max - min + 1;
-        var list = Enumerable.Range(0, count).Select(i => min + (i % span)).ToList();
-        var rng = new Random(HashCode.Combine(day.Year, day.DayOfYear, salt, count));
-        for (var i = list.Count - 1; i > 0; i--)
-        {
-            var j = rng.Next(i + 1); (list[i], list[j]) = (list[j], list[i]);
-        }
-        return list;
-    }
-'@
-          if (-not $m.Contains($oldShuffle)) { throw 'MainForm ShuffledMinutes block not found.' }
-          $m = $m.Replace($oldShuffle, $newShuffle)
-          Set-Content $main $m -Encoding UTF8 -NoNewline
-
-          # 2) TNF HAZIRLA: same flexible minute distribution + startup safety.
-          $t = Get-Content $tnf -Raw
-          $t = $t.Replace('        BeginInvoke(new Action(RefreshPeople));','        Load += (_, _) => RefreshPeople();')
-          $t = [regex]::Replace($t, '\s*if \(ib - ia \+ 1 < cards\.Count \|\| ob - oa \+ 1 < cards\.Count\)\s*throw new InvalidOperationException\(\$"Saat aralığı dar\.[^;]+;\s*', "`r`n")
-          $t = $t.Replace('var ins = ShuffledMinutes(ia, ib, day, 17); var outs = ShuffledMinutes(oa, ob, day, 71);', 'var ins = DistributedMinutes(ia, ib, cards.Count, day, 17); var outs = DistributedMinutes(oa, ob, cards.Count, day, 71);')
-          $oldTnfShuffle = @'
-    static List<int> ShuffledMinutes(int min, int max, DateTime day, int salt)
-    {
-        var list = Enumerable.Range(min, max - min + 1).ToList();
-        var rng = new Random(HashCode.Combine(day.Year, day.DayOfYear, salt));
-        for (var i = list.Count - 1; i > 0; i--) { var j = rng.Next(i + 1); (list[i], list[j]) = (list[j], list[i]); }
-        return list;
-    }
-'@
-          $newTnfShuffle = @'
-    static List<int> DistributedMinutes(int min, int max, int count, DateTime day, int salt)
-    {
-        if (max < min) throw new InvalidOperationException("Saat aralığı hatalı.");
-        var span = max - min + 1;
-        var list = Enumerable.Range(0, count).Select(i => min + (i % span)).ToList();
-        var rng = new Random(HashCode.Combine(day.Year, day.DayOfYear, salt, count));
-        for (var i = list.Count - 1; i > 0; i--) { var j = rng.Next(i + 1); (list[i], list[j]) = (list[j], list[i]); }
-        return list;
-    }
-'@
-          if (-not $t.Contains($oldTnfShuffle)) { throw 'TNF ShuffledMinutes block not found.' }
-          $t = $t.Replace($oldTnfShuffle, $newTnfShuffle)
-
-          # Store format settings under LocalAppData so the package remains one EXE.
-          $t = $t.Replace('readonly string settingsPath = Path.Combine(AppContext.BaseDirectory, "TNF_FORMAT_AYAR.json");', 'readonly string settingsPath = SettingsFile();')
-          $marker = '    FormatSettings settings = new();'
-          $helper = @'
-    FormatSettings settings = new();
-
-    static string SettingsFile()
-    {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HKN-PDKS");
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "TNF_FORMAT_AYAR.json");
-    }
-'@
-          if ($t.Contains($marker)) { $t = $t.Replace($marker, $helper) } else { throw 'TNF settings marker missing.' }
-          Set-Content $tnf $t -Encoding UTF8 -NoNewline
-
-          # DB-TNF sync reads the very same LocalAppData format settings.
-          $s = Get-Content $sync -Raw
-          $s = $s.Replace('readonly string settingsPath = Path.Combine(AppContext.BaseDirectory, "TNF_FORMAT_AYAR.json");', 'readonly string settingsPath = SettingsFile();')
-          $syncMarker = '    public DbTnfSyncControl(Form mainForm)'
-          $syncHelper = @'
-    static string SettingsFile()
-    {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HKN-PDKS");
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "TNF_FORMAT_AYAR.json");
-    }
-
-    public DbTnfSyncControl(Form mainForm)
-'@
-          if ($s.Contains($syncMarker)) { $s = $s.Replace($syncMarker, $syncHelper) } else { throw 'Sync constructor marker missing.' }
-          Set-Content $sync $s -Encoding UTF8 -NoNewline
-
-          # 3) PASSWORD GATE. Plain password is NOT stored in source.
-          # PBKDF2-SHA256, 210000 iterations, fixed salt + derived hash.
-          $gate = @'
-using System.Security.Cryptography;
-using System.Text;
-
-namespace QuickDataTool;
-
-internal sealed class PasswordGateForm : Form
-{
-    readonly TextBox password = new() { UseSystemPasswordChar = true, Width = 250 };
-    readonly Label info = new() { AutoSize = true, ForeColor = Color.DimGray };
-    int attempts;
-
-    static readonly byte[] Salt = Convert.FromBase64String("a06dmpu1kojiATXZLw2rpA==");
-    static readonly byte[] Expected = Convert.FromBase64String("aKQ32UI5MPJb/q5Bym5r9vLORk1AIV35UeEl1/A/9II=");
-
-    internal PasswordGateForm()
-    {
-        Text = "HKN PDKS - Giriş";
-        Width = 390; Height = 205;
-        StartPosition = FormStartPosition.CenterScreen;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false; MinimizeBox = false;
-        Font = new Font("Segoe UI", 10f);
-
-        var title = new Label { Text = "HKN PDKS", AutoSize = true, Font = new Font("Segoe UI", 15f, FontStyle.Bold) };
-        var label = new Label { Text = "Şifre", AutoSize = true, Padding = new Padding(0,7,6,0) };
-        var ok = new Button { Text = "GİRİŞ", Width = 110, Height = 34 };
-        var cancel = new Button { Text = "KAPAT", Width = 90, Height = 34, DialogResult = DialogResult.Cancel };
-        ok.Click += (_, _) => CheckPassword();
-
-        var root = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(28,20,20,15) };
-        root.Controls.Add(title);
-        var row = new FlowLayoutPanel { Width = 325, Height = 38, WrapContents = false };
-        row.Controls.Add(label); row.Controls.Add(password); root.Controls.Add(row);
-        info.Text = "Yetkili kullanıcı girişi"; root.Controls.Add(info);
-        var buttons = new FlowLayoutPanel { Width = 325, Height = 42, FlowDirection = FlowDirection.RightToLeft };
-        buttons.Controls.Add(cancel); buttons.Controls.Add(ok); root.Controls.Add(buttons);
-        Controls.Add(root);
-        AcceptButton = ok; CancelButton = cancel;
-        Shown += (_, _) => password.Focus();
-    }
-
-    void CheckPassword()
-    {
-        var actual = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(password.Text), Salt, 210000, HashAlgorithmName.SHA256, 32);
-        if (CryptographicOperations.FixedTimeEquals(actual, Expected))
-        {
-            DialogResult = DialogResult.OK;
-            Close();
-            return;
-        }
-        attempts++;
-        password.Clear();
-        if (attempts >= 5)
-        {
-            MessageBox.Show("Çok fazla hatalı deneme. Uygulama kapatılacak.", "HKN PDKS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            DialogResult = DialogResult.Cancel;
-            Close();
-            return;
-        }
-        info.Text = $"Şifre hatalı. Kalan deneme: {5 - attempts}";
-        info.ForeColor = Color.DarkRed;
-        password.Focus();
-    }
-}
-'@
-          $gate | Set-Content (Join-Path $tool 'PasswordGateForm.cs') -Encoding UTF8
-
-          $p = Get-Content $program -Raw
-          $oldRun = '        ApplicationConfiguration.Initialize();' + "`r`n" + '        Application.Run(new MainForm());'
-          $newRun = @'
-        ApplicationConfiguration.Initialize();
-        using (var gate = new PasswordGateForm())
-        {
-            if (gate.ShowDialog() != DialogResult.OK) return;
-        }
-        Application.Run(new MainForm());
-'@
-          if (-not $p.Contains($oldRun)) {
-            # handle LF checkout
-            $p = $p.Replace('        ApplicationConfiguration.Initialize();' + "`n" + '        Application.Run(new MainForm());', $newRun.TrimEnd())
-          } else {
-            $p = $p.Replace($oldRun, $newRun.TrimEnd())
-          }
-          if (-not $p.Contains('PasswordGateForm')) { throw 'Password gate injection failed.' }
-          Set-Content $program $p -Encoding UTF8 -NoNewline
-
-          # Crash guard - no silent close.
-          $guard = @'
-using System.Text;
-namespace QuickDataTool;
-internal static class CrashGuard
-{
-    internal static void Install()
-    {
-        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-        Application.ThreadException += (_, e) => Log(e.Exception);
-        AppDomain.CurrentDomain.UnhandledException += (_, e) => { if (e.ExceptionObject is Exception ex) Log(ex); };
-    }
-    static void Log(Exception ex)
-    {
-        try
-        {
-            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HKN-PDKS");
-            Directory.CreateDirectory(dir);
-            var path = Path.Combine(dir, "QUICKDATA_HATA.log");
-            File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}\r\n\r\n", Encoding.UTF8);
-            MessageBox.Show("Bir işlem hatası yakalandı.\n\n" + ex.Message + "\n\nKayıt: " + path, "HKN PDKS", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-        catch { }
-    }
-}
-'@
-          $guard | Set-Content (Join-Path $tool 'CrashGuard.cs') -Encoding UTF8
-          $p = Get-Content $program -Raw
-          if (-not $p.Contains('CrashGuard.Install();')) {
-            $p = $p.Replace('        ApplicationConfiguration.Initialize();', '        ApplicationConfiguration.Initialize();' + "`r`n" + '        CrashGuard.Install();')
-            Set-Content $program $p -Encoding UTF8 -NoNewline
-          }
-
-          # Hard source audit before building.
-          $allMain = Get-Content $main -Raw
-          $allTnf = Get-Content $tnf -Raw
-          $allSync = Get-Content $sync -Raw
-          foreach($tok in @('DistributedMinutes','ApplyBulk','ApplyBulkE','BuildEHistory','EditPayrollSelected','EditSelectedPayment','EditSelectedAdvance')) { if(-not $allMain.Contains($tok)){ throw "Main feature missing: $tok" } }
-          foreach($tok in @('DistributedMinutes','YENİ TXT OLUŞTUR','Terminal Format Ayarı')) { if(-not $allTnf.Contains($tok)){ throw "TNF feature missing: $tok" } }
-          foreach($tok in @('TNF SİL FAZLA','TNF SİL E','TNF DÜZELT','TNF EKLE','_YEDEK','ÇOKLU / İNCELE')) { if(-not $allSync.Contains($tok)){ throw "Sync feature missing: $tok" } }
-
-      - name: Build one self-contained EXE
+      - name: Publish exactly one self-contained EXE
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $proj = 'APP/desktop/kyerp-pdks-current/tools/QuickDataTool/QuickDataTool.csproj'
-          $out = "$env:RUNNER_TEMP\single"
+          $out = Join-Path $env:RUNNER_TEMP 'single'
           dotnet restore $proj -r win-x64
-          dotnet publish $proj -c Release -r win-x64 --self-contained true -o $out `
-            -p:PublishSingleFile=true `
-            -p:IncludeNativeLibrariesForSelfExtract=true `
-            -p:EnableCompressionInSingleFile=true `
-            -p:DebugType=None `
-            -p:DebugSymbols=false
-
+          dotnet publish $proj -c Release -r win-x64 --self-contained true -o $out -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false
           $exe = Join-Path $out 'QuickDataTool.exe'
-          if(-not (Test-Path $exe)){ throw 'Single EXE not produced.' }
-          $final = "$env:RUNNER_TEMP\final"
+          if (-not (Test-Path $exe)) { throw 'Single EXE not produced.' }
+          $final = Join-Path $env:RUNNER_TEMP 'final'
           New-Item -ItemType Directory -Force -Path $final | Out-Null
           Copy-Item $exe (Join-Path $final 'HKN-PDKS.exe')
           $files = Get-ChildItem $final -File
-          if($files.Count -ne 1 -or $files[0].Name -ne 'HKN-PDKS.exe'){ throw 'Final package is not exactly one EXE.' }
-          Write-Host "FINAL EXE: $($files[0].FullName) / $([math]::Round($files[0].Length/1MB,2)) MB"
+          if ($files.Count -ne 1 -or $files[0].Name -ne 'HKN-PDKS.exe') { throw 'Final package is not exactly one EXE.' }
+          Write-Host "Single EXE OK: $($files[0].Length) bytes"
 
-      - name: Upload single EXE artifact
+      - name: Upload HKN-PDKS.exe
         uses: actions/upload-artifact@v4
         with:
           name: HKN-PDKS-REV8-SINGLE-EXE
