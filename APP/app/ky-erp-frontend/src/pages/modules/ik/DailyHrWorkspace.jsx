@@ -167,12 +167,12 @@ function printDailyPaymentSlips(range, rows = []) {
 }
 function printWeeklyControlList(range, days, rows = []) {
   const source = Array.isArray(rows) ? rows : [];
-  const fallbackDays = Array.isArray(days) ? days.slice(0, 7) : [];
-  const safeDays = range?.start
-    ? Array.from({ length: 7 }, (_, index) => addDays(range.start, index))
-    : fallbackDays;
-  const printStart = safeDays[0] || range.start;
-  const printEnd = safeDays[safeDays.length - 1] || range.end;
+  const rangeBoundDays = Array.isArray(days)
+    ? days.filter((date) => (!range?.start || date >= range.start) && (!range?.end || date <= range.end)).slice(0, 7)
+    : [];
+  const safeDays = rangeBoundDays.length ? rangeBoundDays : rangeDays(range?.start, range?.end).slice(0, 7);
+  const printStart = range?.start || safeDays[0] || "";
+  const printEnd = range?.end || safeDays[safeDays.length - 1] || printStart;
   const totals = source.reduce((sum, row) => ({
     people: sum.people + 1,
     days: sum.days + number(row.dayCount) + number(row.nightCount),
