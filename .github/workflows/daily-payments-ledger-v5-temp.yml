@@ -1,0 +1,77 @@
+name: KYERP Payments Ledger V5 TEMP
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/daily-payments-ledger-v5-temp.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kyerp-payments-ledger-v5
+  cancel-in-progress: false
+
+jobs:
+  validate-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      VITE_API_URL: https://api.kyerp.net
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/model-uretim-kontrol-merkezi-final
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Apply final source
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/daily_payments_ledger_diag.py
+          git diff --check
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate frontend
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+      - name: Validate API
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run typecheck
+          npm run test:unit
+          npm run build
+      - name: Commit final application source
+        run: |
+          set -euo pipefail
+          git config user.name "kyerp-production-bot"
+          git config user.email "kyerp-production-bot@users.noreply.github.com"
+          git add APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts APP/app/ky-erp-frontend/src/services/dailyOpsApi.js APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx APP/app/ky-erp-frontend/src/pages/modules/ik/daily-hr-workspace-final.css
+          git commit -m "feat(daily): add auditable payment ledger and history"
+          git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+      - name: Deploy API
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run deploy
+      - name: Deploy frontend
+        working-directory: APP/app/ky-erp-frontend
+        run: npx --yes wrangler@4.119.0 pages deploy dist --project-name ky-erp-frontend --branch codex/model-uretim-kontrol-merkezi-final --commit-hash "$(git rev-parse HEAD)"
+      - name: Production smoke
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/api.out -w '%{http_code}' https://api.kyerp.net/api/gunluk-operasyon/payments/pool || true)"
+          test "$code" = "401" -o "$code" = "403" -o "$code" = "400" -o "$code" = "200"
+          for path in /gunluk-operasyon/daily-payments /gunluk-operasyon/daily-entry /gunluk-operasyon/daily-weekly; do
+            curl -fsSL "https://kyerp.net${path}" | grep -q 'KY ERP'
+          done
