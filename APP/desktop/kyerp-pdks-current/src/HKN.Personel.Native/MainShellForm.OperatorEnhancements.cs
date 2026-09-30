@@ -23,7 +23,7 @@ public sealed partial class MainShellForm
     void ApplyOperatorEnhancements()
     {
         if (MainMenuStrip is null) return;
-        Text = $"KY PDKS 6.3.4 TEST • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
+        Text = $"KY PDKS 6.3.7 CANLI • {branding.ReportHeader} • Operasyon / Puantaj / Bordro";
 
         MainMenuStrip.AutoSize = false;
         MainMenuStrip.Height = 31;
@@ -101,7 +101,7 @@ public sealed partial class MainShellForm
             support.Text = "Destek";
             var oldAbout = support.DropDownItems.OfType<ToolStripMenuItem>()
                 .FirstOrDefault(x => (x.Text ?? string.Empty).Contains("Hakkında", StringComparison.OrdinalIgnoreCase));
-            if (oldAbout is not null) oldAbout.Text = "KY PDKS 6.3.4 TEST Hakkında";
+            if (oldAbout is not null) oldAbout.Text = "KY PDKS 6.3.7 CANLI Hakkında";
             if (!support.DropDownItems.OfType<ToolStripMenuItem>().Any(x => string.Equals(x.Text ?? string.Empty, "Hızlı Kullanım Rehberi", StringComparison.OrdinalIgnoreCase)))
             {
                 var guide = new ToolStripMenuItem("Hızlı Kullanım Rehberi")
@@ -147,12 +147,12 @@ public sealed partial class MainShellForm
                      .Where(x => (x.Text ?? string.Empty).StartsWith("REV 6.", StringComparison.OrdinalIgnoreCase)).ToArray())
             MainMenuStrip.Items.Remove(old);
 
-        MainMenuStrip.Items.Add(new ToolStripMenuItem("REV 6.3.4 TEST")
+        MainMenuStrip.Items.Add(new ToolStripMenuItem("REV 6.3.7 CANLI")
         {
             Alignment = ToolStripItemAlignment.Right,
             Enabled = false,
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(190, 82, 54)
+            ForeColor = Color.FromArgb(32, 122, 78)
         });
     }
 
