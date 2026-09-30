@@ -34,6 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/scripts/daily_payment_filter_isolation_temp.py
+          python3 .github/scripts/daily_payment_filter_dependency_fix_temp.py
           git diff --check
           grep -q 'paymentPoolRange' APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
           grep -q 'paymentHistoryRange' APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
@@ -89,6 +90,7 @@ jobs:
           git config user.email "kyerp-production-bot@users.noreply.github.com"
           git rm -f --ignore-unmatch \
             .github/workflows/daily-payment-filter-isolation-temp.yml \
-            .github/scripts/daily_payment_filter_isolation_temp.py
+            .github/scripts/daily_payment_filter_isolation_temp.py \
+            .github/scripts/daily_payment_filter_dependency_fix_temp.py
           git commit -m "chore: remove daily payment filter deployment helpers"
           git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
