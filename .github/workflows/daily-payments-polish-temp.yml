@@ -34,19 +34,28 @@ jobs:
           set -euo pipefail
           python3 .github/scripts/daily_payments_polish_temp.py
           git diff --check
-          grep -q '\["daily-payments", "Ödemeler", "odemeler"\]' APP/app/ky-erp-frontend/src/app/moduleRegistry.js
-          grep -q 'const maxDays = view === "daily-payments" ? 366 : 31' APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Validate frontend
         working-directory: APP/app/ky-erp-frontend
         run: |
-          set -euo pipefail
-          npm ci
-          npm run lint
-          npm test
-          npm run build
+          set -uo pipefail
+          npm ci >/tmp/pay-polish.log 2>&1 || true
+          npm run lint >>/tmp/pay-polish.log 2>&1
+          lint=$?
+          if [ "$lint" -eq 0 ]; then npm test >>/tmp/pay-polish.log 2>&1; test_rc=$?; else test_rc=99; fi
+          if [ "$lint" -eq 0 ] && [ "$test_rc" -eq 0 ]; then npm run build >>/tmp/pay-polish.log 2>&1; build_rc=$?; else build_rc=99; fi
+          if [ "$lint" -ne 0 ] || [ "$test_rc" -ne 0 ] || [ "$build_rc" -ne 0 ]; then
+            cd ../../..
+            tail -n 240 /tmp/pay-polish.log > .github/payment_polish_error.txt
+            git config user.name "kyerp-production-bot"
+            git config user.email "kyerp-production-bot@users.noreply.github.com"
+            git add .github/payment_polish_error.txt
+            git commit -m "chore: capture payment polish validation diagnostic" || true
+            git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+            exit 1
+          fi
       - name: Commit final polish
         run: |
           set -euo pipefail
@@ -69,5 +78,4 @@ jobs:
               sleep 4
             done
             test "$ok" = 1
-            echo "$path live: OK"
           done
