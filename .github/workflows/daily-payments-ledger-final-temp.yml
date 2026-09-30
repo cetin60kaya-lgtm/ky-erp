@@ -35,7 +35,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 .github/scripts/daily_payments_ledger_final.py
+          python3 .github/scripts/daily_payments_ledger_final_v2.py
           git diff --check
           grep -q 'CREATE TABLE IF NOT EXISTS hr_daily_payments' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
           grep -q 'idx_daily_payment_item_active' APP/cloud/ky-erp-api/src/gunluk-operasyon-cloud.ts
