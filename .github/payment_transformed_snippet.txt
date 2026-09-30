@@ -1,0 +1,40 @@
+811:         if (bulkMode === "day-set") next.dayRate = number(bulkValue);
+812:         if (bulkMode === "night-set") next.nightRate = number(bulkValue);
+813:         if (bulkMode === "both-set") { next.dayRate = number(bulkValue); next.nightRate = number(bulkValue); }
+814:         if (bulkMode === "role-set") next.role = String(bulkValue).trim();
+815:         if (bulkMode === "percent") {
+816:           next.dayRate = Math.max(0, Math.round(person.dayRate * (1 + percent / 100) * 100) / 100);
+817:           next.nightRate = Math.max(0, Math.round(person.nightRate * (1 + percent / 100) * 100) / 100);
+818:         }
+819:         return next;
+820:       });
+821:       for (let index = 0; index < updatedPeople.length; index += 8) {
+822:         const chunk = updatedPeople.slice(index, index + 8);
+823:         await Promise.all(chunk.map((person) => updateDailyEmployee(person.id, employeePayload(person, companyId))));
+824:       }
+825:       await loadEmployees();
+826:       setNotice(`${updatedPeople.length} personel toplu güncellendi.`);
+827:     } catch (e) { setError(e?.message || "Toplu personel güncellemesi tamamlanamadı."); }
+828:     finally { setBusy(false); }
+829:   };
+830:   const payRow = async (row, printAfter = false) => {\n    if (busy || number(row.pendingCheckCount) > 0) return;\n    setBusy(true); setError("");\n    try {\n      const payment = await createDailyPayment({ mainCompanyId: companyId, employeeId: row.employeeId, startDate: range.start, endDate: range.end, paymentDate: localDateKey() });\n      setNotice(`${payment?.paymentNo || "Ödeme"} · ${row.name || row.fullName} ödendi.`);\n      await Promise.all([loadPayments(), loadPaymentHistory(), loadRangeData()]);\n      if (printAfter) printPaidPaymentReceipt(payment || { ...row, periodStart: range.start, periodEnd: range.end, paidDate: localDateKey(), status: "PAID" });\n    } catch (e) { setError(e?.message || "Ödeme tamamlanamadı."); } finally { setBusy(false); }\n  };\n  const paySelectedRows = async () => {\n    const rows = selectedPaymentRows.filter((row) => number(row.pendingCheckCount) === 0);\n    if (busy || !rows.length) return;\n    setBusy(true); setError("");\n    try {\n      let completed = 0;\n      for (const row of rows) { await createDailyPayment({ mainCompanyId: companyId, employeeId: row.employeeId, startDate: range.start, endDate: range.end, paymentDate: localDateKey() }); completed += 1; }\n      setPaymentSelectedIds(new Set()); setNotice(`${completed} personelin ödemesi kaydedildi.`);\n      await Promise.all([loadPayments(), loadPaymentHistory(), loadRangeData()]);\n    } catch (e) { setError(e?.message || "Seçili ödemeler tamamlanamadı."); } finally { setBusy(false); }\n  };\n  const cancelPaymentRow = async (row) => {\n    if (busy || String(row.status).toUpperCase() !== "PAID") return;\n    const reason = window.prompt(`${row.paymentNo || "Ödeme"} iptal nedeni:`);\n    if (!reason?.trim()) return;\n    if (!window.confirm(`${row.paymentNo || "Ödeme"} iptal edilsin mi? Ödeme geçmişi silinmeyecek; hakediş tekrar ödeme havuzuna açılacak.`)) return;\n    setBusy(true); setError("");\n    try { await cancelDailyPayment(row.id || row.paymentId, { mainCompanyId: companyId, reason: reason.trim() }); setNotice(`${row.paymentNo} iptal edildi; hakediş yeniden havuza açıldı.`); await Promise.all([loadPaymentHistory(), loadPayments(), loadRangeData()]); }\n    catch (e) { setError(e?.message || "Ödeme iptal edilemedi."); } finally { setBusy(false); }\n  };\n  const paymentPreset = (mode) => {\n    const today = localDateKey(); const start = startOfWeek(today); const [year, month] = today.split("-").map(Number);\n    if (mode === "today") return setSafeRange({ start: today, end: today });\n    if (mode === "week") return setSafeRange({ start, end: addDays(start, 6) });\n    if (mode === "lastWeek") { const previous = addDays(start, -7); return setSafeRange({ start: previous, end: addDays(previous, 6) }); }\n    if (mode === "month") return setSafeRange({ start: `${year}-${pad(month)}-01`, end: localDateKey(new Date(year, month, 0, 12)) });\n    if (mode === "lastMonth") { const d = new Date(year, month - 2, 1, 12); return setSafeRange({ start: localDateKey(d), end: localDateKey(new Date(d.getFullYear(), d.getMonth() + 1, 0, 12)) }); }\n    if (mode === "year") return setSafeRange({ start: `${year}-01-01`, end: `${year}-12-31` });\n  };
+831: 
+832:   const exportExcel = async () => { setBusy(true); try { await downloadDailyExcel({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }); } catch (e) { setError(e?.message || "Excel indirilemedi."); } finally { setBusy(false); } };
+833:   const importExcel = () => {
+834:     const input = document.createElement("input"); input.type = "file"; input.accept = ".xlsx";
+835:     input.onchange = async (event) => { const file = event.target.files?.[0]; if (!file) return; setBusy(true); try { const preview = await previewDailyExcel(file, { mainCompanyId: companyId, startDate: range.start, endDate: range.end }); setExcelPreview(preview); setNotice("Excel okundu. Kontrol edip uygula."); } catch (e) { setError(e?.message || "Excel okunamadı."); } finally { setBusy(false); } };
+836:     input.click();
+837:   };
+838:   const applyExcel = async () => { if (!excelPreview || busy) return; setBusy(true); try { const result = await applyDailyExcel({ mainCompanyId: companyId, startDate: excelPreview.startDate || range.start, endDate: excelPreview.endDate || range.end, rows: excelPreview.rows || [] }); setExcelPreview(null); setNotice(`${result?.count || 0} Excel satırı uygulandı.`); await Promise.all([loadEmployees(), loadRangeData(), loadFocused()]); } catch (e) { setError(e?.message || "Excel uygulanamadı."); } finally { setBusy(false); } };
+839: 
+840:   useEffect(() => {
+841:     liveVersionRef.current = "";
+842:   }, [companyId]);
+843: 
+844:   useEffect(() => {
+845:     if (!companyId) return undefined;
+846:     let cancelled = false;
+847: 
+848:     const refreshQuick = async () => {
+849:       if (!quick) return;
+850:       const snapshot = quick;
