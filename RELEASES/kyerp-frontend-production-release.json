@@ -3,7 +3,7 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-09-29",
+  "releaseDate": "2026-09-30",
   "scope": [
     "classic-page-layout-restored",
     "button-driven-centered-action-dialogs",
@@ -30,11 +30,12 @@
     "global-right-click-quick-menu",
     "right-click-menu-order-add-remove-controls",
     "right-click-global-shell-behavior",
+    "right-click-close-on-primary-click",
     "frontend-full-test-suite",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
     "live-entry-verification",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "Platform Yönetimi > Uygulama Ayarları içindeki hızlı menü sol tıktan sağ tıka çevrildi. Normal sol tık davranışı tamamen serbest bırakıldı. Sağ tık hızlı menüsü varsayılan olarak uygulama kabuğunda genel çalışır; istenirse yalnız çalışma alanıyla sınırlandırılabilir. Shift + sağ tık tarayıcının yerel sağ tık menüsünü açar. Menü sırası, ekle/çıkar ve görünüm ayarları korunur. Bu marker production lint, test, build, Pages deploy ve canlı bundle doğrulamasını çalıştırır."
+  "note": "Sağ tık hızlı menüsü açıkken menü dışındaki herhangi bir yere tek sol tık yapıldığında menü anında kapanır. Menü içindeki işlem tıklamaları kendi aksiyonlarını çalıştırmaya devam eder. Normal sol tık davranışı engellenmez. Production lint, test, build, Pages deploy ve canlı bundle doğrulaması bu marker ile çalıştırılır."
 }
