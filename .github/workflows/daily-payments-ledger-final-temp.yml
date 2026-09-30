@@ -1,3 +1,4 @@
+# transformer v3
 name: KYERP Daily Payments Ledger Final TEMP
 
 on:
@@ -39,7 +40,7 @@ jobs:
             git config user.name "kyerp-production-bot"
             git config user.email "kyerp-production-bot@users.noreply.github.com"
             git add .github/payment_patch_error.txt
-            git commit -m "chore: capture payments patch diagnostic"
+            git commit -m "chore: capture payments patch diagnostic" || true
             git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
             exit 1
           fi
