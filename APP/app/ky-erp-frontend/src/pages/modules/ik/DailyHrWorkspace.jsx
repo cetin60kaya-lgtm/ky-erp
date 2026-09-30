@@ -490,11 +490,60 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (target === "quick") setQuickAddQuery(""); else setPoolAddQuery("");
     setNotice(`${person.name} tarih aralığı listesine eklendi. Kaydettiğinizde sunucuya yazılacak.`);
   };
-  const removeRosterPerson = (personId) => {
-    setRosterIds((current) => { const next = new Set(current); next.delete(personId); return next; });
-    setSelectedIds((current) => { const next = new Set(current); next.delete(personId); return next; });
-    setCheckedIds((current) => { const next = new Set(current); next.delete(personId); return next; });
-    setRosterSaved(false);
+
+
+  const activatePersonForSelectedShift = async (person) => {
+    if (!person?.id || busy || periodLocked) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const serverRoster = await getDailyRoster({
+        mainCompanyId: companyId,
+        startDate: range.start,
+        endDate: range.end,
+      });
+      const serverRosterIds = Array.isArray(serverRoster?.employeeIds)
+        ? serverRoster.employeeIds.map(String)
+        : Array.isArray(serverRoster)
+          ? serverRoster.map(String)
+          : [...rosterIds];
+      const nextRosterIds = new Set(serverRosterIds);
+      nextRosterIds.add(person.id);
+      const savedRoster = await saveDailyRoster({
+        mainCompanyId: companyId,
+        startDate: range.start,
+        endDate: range.end,
+        employeeIds: [...nextRosterIds],
+      });
+      const finalRosterIds = new Set(
+        Array.isArray(savedRoster?.employeeIds)
+          ? savedRoster.employeeIds.map(String)
+          : [...nextRosterIds],
+      );
+      setRosterIds(finalRosterIds);
+      setRosterSaved(true);
+
+      const currentRecord = recordByEmployee.get(person.id) || {};
+      await saveDailyFocusedRecords({
+        mainCompanyId: companyId,
+        date: selectedDate,
+        shift,
+        personnelEntries: [{
+          personelId: person.id,
+          status: "ACTIVE",
+          checked: false,
+          expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
+          note: notes[person.id] || "",
+        }],
+      });
+
+      setSelectedIds((current) => { const next = new Set(current); next.add(person.id); return next; });
+      await Promise.all([loadFocused(), loadRangeData()]);
+      setNotice(`${person.name} ${shift === "day" ? "gündüz" : "gece"} vardiyasına eklendi.`);
+    } catch (e) {
+      setError(e?.message || "Personel seçili vardiyaya eklenemedi.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const deleteShiftAndCleanupRoster = async (person) => {
@@ -515,7 +564,17 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         }],
       });
 
-      const requestedRosterIds = [...rosterIds].filter((id) => id !== person.id);
+      const serverRoster = await getDailyRoster({
+        mainCompanyId: companyId,
+        startDate: range.start,
+        endDate: range.end,
+      });
+      const serverRosterIds = Array.isArray(serverRoster?.employeeIds)
+        ? serverRoster.employeeIds.map(String)
+        : Array.isArray(serverRoster)
+          ? serverRoster.map(String)
+          : [...rosterIds];
+      const requestedRosterIds = serverRosterIds.filter((id) => id !== person.id);
       const savedRoster = await saveDailyRoster({
         mainCompanyId: companyId,
         startDate: range.start,
@@ -539,7 +598,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       setNotice(
         keptForOtherWork
           ? `${person.name} ${shift === "day" ? "gündüz" : "gece"} kaydı silindi. Tarih aralığında başka kaydı olduğu için havuzda kaldı.`
-          : `${person.name} ${shift === "day" ? "gündüz" : "gece"} kaydı silindi; tarih aralığında başka kaydı olmadığı için havuzdan da çıkarıldı.`,
+          : `${person.name} ${shift === "day" ? "gündüz" : "gece"} kaydı silindi; tarih aralığında başka kaydı olmadığı için tarih aralığı listesinden de çıkarıldı.`,
       );
     } catch (e) {
       setError(e?.message || "Vardiya kaydı silinemedi. Ekranı yenileyip tekrar deneyin.");
@@ -865,7 +924,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         <div className={`kyop-banner ${shift === "night" ? "night" : ""}`}><strong>Güvenli giriş modu:</strong><span>Yalnız {longDateText(selectedDate)} — {shift === "day" ? "Gündüz" : "Gece"} aktif. Hızlı girişte de aynı anda yalnız bir gün düzenlenir.</span>{periodLocked ? <b><LockKeyhole size={14}/> DÖNEM KAPALI</b> : null}</div>
         <div className="kyop-days">{daySummaries.map((item) => <button type="button" key={item.date} className={item.date === selectedDate ? "active" : ""} onClick={() => setSelectedDate(item.date)}><small>{new Intl.DateTimeFormat("tr-TR", { weekday: "long" }).format(new Date(`${item.date}T12:00:00`))}</small><strong>{dateText(item.date, true)}</strong><span>G: {item.dayCount} · N: {item.nightCount}</span><b>{money(item.total)}</b><em>{item.people ? `${item.people} personel` : "Kayıt yok"}</em>{item.date === selectedDate ? <i>AKTİF GÜN</i> : null}</button>)}</div>
         <div className="kyop-grid">
-          <aside className="kyop-panel kyop-pool"><div className="kyop-panel-head"><Users size={16}/> Personel Havuzu <b>{rosterIds.size} / {employees.filter((person) => person.active !== false).length}</b></div><div className="kyop-pool-top"><label className="kyop-search"><Search size={14}/><input value={poolAddQuery} onChange={(e) => setPoolAddQuery(e.target.value)} placeholder="Personel ara"/></label><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><Plus size={14}/> Personel</button></div><div className="kyop-pool-list">{poolPeople.length ? poolPeople.map((person) => { const inRoster = rosterIds.has(person.id); const hasWork = selectedIds.has(person.id); return <label key={person.id} className={inRoster ? "included" : ""}><input type="checkbox" checked={inRoster} onChange={() => inRoster ? removeRosterPerson(person.id) : addRosterPerson(person, "main")}/><span><strong>{person.personnelNo ? `${person.personnelNo} · ` : ""}{person.name}</strong><small>{person.role || "Vasıfsız"}</small><em>{hasWork ? `${shift === "day" ? "Gündüz" : "Gece"} seçili` : inRoster ? "Havuzda" : "Havuza ekle"}</em><em>G: {money(person.dayRate)} · N: {money(person.nightRate)}</em></span></label>; }) : <Empty>Personel bulunamadı.</Empty>}</div><button type="button" className="primary full" disabled={busy || rosterSaved} onClick={saveRoster}><Save size={15}/> {rosterSaved ? `Personel Havuzu Kayıtlı (${rosterIds.size})` : `Personel Havuzunu Kaydet (${rosterIds.size})`}</button></aside>
+          <aside className="kyop-panel kyop-pool"><div className="kyop-panel-head"><Users size={16}/> Personel Havuzu <b>{selectedIds.size} / {employees.filter((person) => person.active !== false).length}</b></div><div className="kyop-pool-top"><label className="kyop-search"><Search size={14}/><input value={poolAddQuery} onChange={(e) => setPoolAddQuery(e.target.value)} placeholder="Personel ara"/></label><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><Plus size={14}/> Personel</button></div><div className="kyop-pool-list">{poolPeople.length ? poolPeople.map((person) => { const hasWork = selectedIds.has(person.id); return <label key={person.id} className={hasWork ? "included" : ""}><input type="checkbox" checked={hasWork} disabled={busy || periodLocked} onChange={() => hasWork ? deleteShiftAndCleanupRoster(person) : activatePersonForSelectedShift(person)}/><span><strong>{person.personnelNo ? `${person.personnelNo} · ` : ""}{person.name}</strong><small>{person.role || "Vasıfsız"}</small><em>{hasWork ? `${shift === "day" ? "Gündüz" : "Gece"} seçili` : "Havuza ekle"}</em><em>G: {money(person.dayRate)} · N: {money(person.nightRate)}</em></span></label>; }) : <Empty>Personel bulunamadı.</Empty>}</div><button type="button" className="primary full" disabled={busy || rosterSaved} onClick={saveRoster}><Save size={15}/> {rosterSaved ? `Personel Havuzu Kayıtlı (${rosterIds.size})` : `Personel Havuzunu Kaydet (${rosterIds.size})`}</button></aside>
 
           <main className="kyop-panel kyop-entry"><div className="kyop-entry-head"><div><span>SEÇİLİ GÜNÜN PERSONEL GİRİŞİ</span><h2>{dateText(selectedDate)} · {shift === "day" ? "Gündüz" : "Gece"}</h2><p>Bu tablo yalnız {currentWeekday} günü için gösterilir. Üstte gün seçince liste ve toplamlar aynı güne yenilenir.</p></div><div className="kyop-head-actions"><button type="button" onClick={loadLog}>Log</button><button type="button" className={periodLocked ? "locked" : ""} onClick={togglePeriodLock}>{periodLocked ? "Dönemi Aç" : "Dönemi Kapat"}</button><b>{dateText(selectedDate, true)} · {shift === "day" ? "G" : "N"}</b></div></div>
             <div className="kyop-table-wrap"><table><thead><tr><th>Personel / Giriş / Durum</th><th>Vasıf</th><th>Aktif Gün</th><th>Gündüz Ücret</th><th>Gece Ücret</th><th>Not</th><th>İşlem</th></tr></thead><tbody>{groupedEntryPeople.length ? groupedEntryPeople.flatMap(([role, people]) => [<tr className="group" key={`g-${role}`}><td colSpan="7">{role} <b>{people.length} personel</b></td></tr>, ...people.map((person) => { const selected = selectedIds.has(person.id); const reviewed = checkedIds.has(person.id); const blocked = shift === "night" && person.nightRate <= 0; return <tr key={person.id} className={`${selected ? "selected" : ""} ${reviewed ? "checked" : ""}`}><td><div className="kyop-person-cell"><div><strong>{person.name}</strong><small>{person.personnelNo || "Kod yok"}</small><em>{reviewed ? "✓ Kontrol Edildi" : selected ? "Bu Gün Seçildi" : "Bu Gün Yok"}</em></div><span className={`kyop-row-shift ${shift}`}>{shift === "day" ? "GÜNDÜZ" : "GECE"}</span></div></td><td>{person.role || "-"}</td><td>{dateText(selectedDate, true)}</td><td>{money(person.dayRate)}</td><td>{person.nightRate > 0 ? money(person.nightRate) : "-"}</td><td><input value={notes[person.id] || ""} onChange={(e) => setNotes((current) => ({ ...current, [person.id]: e.target.value }))} placeholder="Not"/></td><td><div className="kyop-row-actions"><button type="button" title={selected ? "Seçimi kaldır" : "Seç"} disabled={blocked || periodLocked} className={selected ? "selected" : ""} onClick={() => { setSelectedIds((current) => { const next = new Set(current); if (next.has(person.id)) next.delete(person.id); else next.add(person.id); return next; }); if (selected) setCheckedIds((current) => { const next = new Set(current); next.delete(person.id); return next; }); }}><CheckCircle2 size={14}/></button><button type="button" title={reviewed ? "Kontrol işaretini kaldır" : "Kontrol edildi"} disabled={!selected || blocked || periodLocked} className={reviewed ? "selected" : ""} onClick={() => setCheckedIds((current) => { const next = new Set(current); if (next.has(person.id)) next.delete(person.id); else next.add(person.id); return next; })}>✓</button><button type="button" title="Personel kartını düzenle" onClick={() => setCardDialog({ ...person })}><Pencil size={14}/></button><button type="button" title="Bu vardiya kaydını sil" disabled={!selected || periodLocked || busy} onClick={() => deleteShiftAndCleanupRoster(person)}><Trash2 size={14}/></button></div></td></tr>; })]) : <tr><td colSpan="7"><Empty>Dönem havuzunda personel yok.</Empty></td></tr>}</tbody></table></div>
