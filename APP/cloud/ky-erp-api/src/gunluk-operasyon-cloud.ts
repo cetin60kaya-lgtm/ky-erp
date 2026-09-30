@@ -493,18 +493,10 @@ async function listRoster(c: Context<AppEnv>) {
     return fail(c, 400, "DATE_RANGE_REQUIRED", "Geçerli tarih aralığı seçilmedi.");
   }
 
-  const [savedResult, workedResult, knownResult] = await Promise.all([
+  const [savedResult, knownResult] = await Promise.all([
     c.env.DB.prepare(`SELECT employee_id
         FROM hr_daily_range_roster
         WHERE main_company_id=? AND start_date=? AND end_date=?`)
-      .bind(companyId, start, end)
-      .all<Row>(),
-    c.env.DB.prepare(`SELECT DISTINCT a.employee_id
-        FROM hr_daily_attendance a
-        JOIN hr_daily_employees e ON e.id=a.employee_id
-        WHERE e.main_company_id=?
-          AND a.work_date>=? AND a.work_date<=?
-          AND (a.day_shift=1 OR a.night_shift=1)`)
       .bind(companyId, start, end)
       .all<Row>(),
     c.env.DB.prepare("SELECT id FROM hr_daily_employees WHERE main_company_id=?")
@@ -513,12 +505,9 @@ async function listRoster(c: Context<AppEnv>) {
   ]);
 
   const knownIds = new Set((knownResult.results || []).map((row) => text(row.id)));
-  const employeeIds = [
-    ...new Set([
-      ...(savedResult.results || []).map((row) => text(row.employee_id)),
-      ...(workedResult.results || []).map((row) => text(row.employee_id)),
-    ]),
-  ].filter((id) => id && knownIds.has(id));
+  const employeeIds = (savedResult.results || [])
+    .map((row) => text(row.employee_id))
+    .filter((id) => id && knownIds.has(id));
 
   const data = { startDate: start, endDate: end, employeeIds };
   return okItems(c, data, employeeIds);
@@ -1030,30 +1019,15 @@ async function saveRoster(c: Context<AppEnv>) {
     }
   }
 
-  const [existingResult, workedResult] = await Promise.all([
-    c.env.DB.prepare(`SELECT id,employee_id
-        FROM hr_daily_range_roster
-        WHERE main_company_id=? AND start_date=? AND end_date=?`)
-      .bind(companyId, start, end)
-      .all<Row>(),
-    c.env.DB.prepare(`SELECT DISTINCT a.employee_id
-        FROM hr_daily_attendance a
-        JOIN hr_daily_employees e ON e.id=a.employee_id
-        WHERE e.main_company_id=?
-          AND a.work_date>=? AND a.work_date<=?
-          AND (a.day_shift=1 OR a.night_shift=1)`)
-      .bind(companyId, start, end)
-      .all<Row>(),
-  ]);
+  const existingResult = await c.env.DB.prepare(`SELECT id,employee_id
+      FROM hr_daily_range_roster
+      WHERE main_company_id=? AND start_date=? AND end_date=?`)
+    .bind(companyId, start, end)
+    .all<Row>();
 
   const existing = existingResult.results || [];
   const existingIds = new Set(existing.map((row) => text(row.employee_id)));
-  const finalIds = [
-    ...new Set([
-      ...requested,
-      ...(workedResult.results || []).map((row) => text(row.employee_id)),
-    ]),
-  ];
+  const finalIds = [...new Set(requested)];
   const finalSet = new Set(finalIds);
   const actor = await actorOf(c);
   const statements: D1PreparedStatement[] = [];
