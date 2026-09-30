@@ -235,6 +235,22 @@ function ensureSchema(c: Context<AppEnv>) {
         BEGIN
           INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
         END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_check_clear_day
+        AFTER UPDATE OF day_shift ON hr_daily_attendance
+        WHEN OLD.day_shift=1 AND NEW.day_shift=0
+        BEGIN
+          UPDATE hr_daily_attendance_check
+          SET checked=0,updated_at=CURRENT_TIMESTAMP
+          WHERE employee_id=NEW.employee_id AND work_date=NEW.work_date AND shift='day' AND checked<>0;
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_check_clear_night
+        AFTER UPDATE OF night_shift ON hr_daily_attendance
+        WHEN OLD.night_shift=1 AND NEW.night_shift=0
+        BEGIN
+          UPDATE hr_daily_attendance_check
+          SET checked=0,updated_at=CURRENT_TIMESTAMP
+          WHERE employee_id=NEW.employee_id AND work_date=NEW.work_date AND shift='night' AND checked<>0;
+        END`),
       c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_roster_insert
         AFTER INSERT ON hr_daily_range_roster
         BEGIN
@@ -398,6 +414,7 @@ async function listAttendance(c: Context<AppEnv>) {
       WHERE e.main_company_id=?
         AND (?='' OR a.work_date>=?)
         AND (?='' OR a.work_date<=?)
+        AND (a.day_shift=1 OR a.night_shift=1)
       ORDER BY a.work_date ASC,e.full_name ASC,a.id ASC`)
     .bind(companyId, start, start, end, end)
     .all<Row>();
@@ -458,7 +475,7 @@ async function listFocused(c: Context<AppEnv>) {
     dayShift: flag(row.day_shift),
     nightShift: flag(row.night_shift),
     note: text(row.note),
-    checked: flag(row.checked),
+    checked: (shift === "day" ? flag(row.day_shift) : flag(row.night_shift)) && flag(row.checked),
     updatedAt: text(row.attendance_updated_at),
     noteUpdatedAt: text(row.note_updated_at),
     checkedUpdatedAt: text(row.checked_updated_at),
