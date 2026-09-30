@@ -1,3 +1,4 @@
+# retry 2026-09-30 current-shift pool
 name: KYERP Current Shift Pool Fix TEMP
 
 on:
@@ -38,7 +39,8 @@ jobs:
           python3 .github/scripts/daily_roster_instant_save.py
           git diff --check
           grep -q 'activatePersonForSelectedShift' APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
-          grep -q 'Seçili vardiya otomatik kaydedilir' APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
+          grep -q 'checked={hasWork}' APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
+          grep -q 'Personel Havuzu <b>{selectedIds.size}' APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx
           if grep -q 'inRoster ? "Havuzda" : "Havuza ekle"' APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx; then
             echo 'Stale Havuzda logic still exists' >&2
             exit 1
