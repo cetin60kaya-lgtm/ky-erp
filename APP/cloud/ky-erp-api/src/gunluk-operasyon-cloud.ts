@@ -170,6 +170,11 @@ function ensureSchema(c: Context<AppEnv>) {
         updated_at TEXT NOT NULL,
         UNIQUE(main_company_id, employee_id, work_date, shift)
       )`),
+      c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS hr_daily_sync_state (
+        main_company_id TEXT PRIMARY KEY,
+        version TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`),
       c.env.DB.prepare(
         "CREATE INDEX IF NOT EXISTS idx_daily_revision_attendance ON hr_daily_attendance_revision(main_company_id, attendance_id, revision DESC)",
       ),
@@ -182,6 +187,74 @@ function ensureSchema(c: Context<AppEnv>) {
       c.env.DB.prepare(
         "CREATE INDEX IF NOT EXISTS idx_daily_check_lookup ON hr_daily_attendance_check(main_company_id, work_date, shift, employee_id)",
       ),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_attendance_insert
+        AFTER INSERT ON hr_daily_attendance
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at)
+          SELECT e.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP FROM hr_daily_employees e WHERE e.id=NEW.employee_id;
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_attendance_update
+        AFTER UPDATE ON hr_daily_attendance
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at)
+          SELECT e.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP FROM hr_daily_employees e WHERE e.id=NEW.employee_id;
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_attendance_delete
+        AFTER DELETE ON hr_daily_attendance
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at)
+          SELECT e.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP FROM hr_daily_employees e WHERE e.id=OLD.employee_id;
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_employee_insert
+        AFTER INSERT ON hr_daily_employees
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_employee_update
+        AFTER UPDATE ON hr_daily_employees
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_notes_insert
+        AFTER INSERT ON hr_daily_attendance_notes
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_notes_update
+        AFTER UPDATE ON hr_daily_attendance_notes
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_check_insert
+        AFTER INSERT ON hr_daily_attendance_check
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_check_update
+        AFTER UPDATE ON hr_daily_attendance_check
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_roster_insert
+        AFTER INSERT ON hr_daily_range_roster
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_roster_delete
+        AFTER DELETE ON hr_daily_range_roster
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (OLD.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_lock_insert
+        AFTER INSERT ON hr_daily_period_lock
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
+        END`),
+      c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_sync_lock_update
+        AFTER UPDATE ON hr_daily_period_lock
+        BEGIN
+          INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP);
+        END`),
       c.env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_daily_revision_no_update
         BEFORE UPDATE ON hr_daily_attendance_revision
         BEGIN SELECT RAISE(ABORT,'daily attendance revision is append-only'); END`),
@@ -1392,25 +1465,25 @@ async function markPaid(c: Context<AppEnv>) {
 async function syncState(c: Context<AppEnv>) {
   await ensureSchema(c);
   const companyId = companyIdOf(c);
-  const [attendanceVersion, employeeVersion, auditVersion, checkVersion] = await Promise.all([
-    c.env.DB.prepare(`SELECT COALESCE(MAX(a.updated_at),'') AS version
-        FROM hr_daily_attendance a
-        JOIN hr_daily_employees e ON e.id=a.employee_id
-        WHERE e.main_company_id=?`).bind(companyId).first<Row>(),
-    c.env.DB.prepare("SELECT COALESCE(MAX(updated_at),'') AS version FROM hr_daily_employees WHERE main_company_id=?")
-      .bind(companyId).first<Row>(),
-    c.env.DB.prepare("SELECT COALESCE(MAX(created_at),'') AS version FROM hr_daily_operation_audit WHERE main_company_id=?")
-      .bind(companyId).first<Row>(),
-    c.env.DB.prepare("SELECT COALESCE(MAX(updated_at),'') AS version FROM hr_daily_attendance_check WHERE main_company_id=?")
-      .bind(companyId).first<Row>(),
-  ]);
-  const version = [
-    text(attendanceVersion?.version),
-    text(employeeVersion?.version),
-    text(auditVersion?.version),
-    text(checkVersion?.version),
-  ].join("|");
-  return ok(c, { mainCompanyId: companyId, version, serverTime: nowIso() });
+  let row = await c.env.DB.prepare(
+    "SELECT version,updated_at FROM hr_daily_sync_state WHERE main_company_id=? LIMIT 1",
+  ).bind(companyId).first<Row>();
+  if (!row) {
+    const version = crypto.randomUUID();
+    const updatedAt = nowIso();
+    await c.env.DB.prepare(
+      "INSERT OR IGNORE INTO hr_daily_sync_state(main_company_id,version,updated_at) VALUES (?,?,?)",
+    ).bind(companyId, version, updatedAt).run();
+    row = await c.env.DB.prepare(
+      "SELECT version,updated_at FROM hr_daily_sync_state WHERE main_company_id=? LIMIT 1",
+    ).bind(companyId).first<Row>();
+  }
+  return ok(c, {
+    mainCompanyId: companyId,
+    version: text(row?.version),
+    updatedAt: text(row?.updated_at),
+    serverTime: nowIso(),
+  });
 }
 
 function protect(fn: (c: Context<AppEnv>) => Promise<Response>) {
