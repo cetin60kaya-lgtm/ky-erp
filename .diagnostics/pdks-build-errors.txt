@@ -1,5 +1,5 @@
-HEAD: 225ae8a3dc5f6bee942821cbf0d9439a9d280794
-UTC: 2026-09-29T15:20:15
+HEAD: 75594547056d43629201defb4f6203c97abc9520
+UTC: 2026-10-01T07:33:37
 
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.CanonicalStartup.cs(146,99): error CS0103: The name 'f' does not exist in the current context [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.CanonicalStartup.cs(146,99): error CS0103: The name 'f' does not exist in the current context [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\TerminalDeviceClient.cs(64,33): error CS0103: The name 'TerminalNetworkDiagnostics' does not exist in the current context [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\TerminalDeviceClient.cs(64,33): error CS0103: The name 'TerminalNetworkDiagnostics' does not exist in the current context [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
