@@ -14,7 +14,7 @@ Always read `AGENTS.md` and `.github/copilot-instructions.md` first.
 Never deploy merely because source edits are complete. Run only when the user explicitly asks to deploy/live-release/production-release.
 
 Canonical repo root on the authorized Windows machine:
-`D:\onedrive-Hkn\OneDrive\KY-ERP-MERKEZ`
+`D:\Googledrive\KYERP\00_CANONICAL\GITHUB\ky-erp`
 
 Canonical branch:
 `codex/model-uretim-kontrol-merkezi-final`

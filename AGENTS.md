@@ -1,5 +1,21 @@
 # KY ERP — AI Agent Ana Kuralları
 
+## KY ERP tek yerel kök — 01.10.2026
+
+- DESEN PC ve Google Drive üzerindeki **tek aktif yerel KY ERP kökü**: `D:\Googledrive\KYERP`.
+- **Tek aktif Git working copy**: `D:\Googledrive\KYERP\00_CANONICAL\GITHUB\ky-erp`.
+- Repo remote: `https://github.com/cetin60kaya-lgtm/ky-erp.git`.
+- Production kaynak branch: `codex/model-uretim-kontrol-merkezi-final`.
+- Canlı işletme verisinin otoritesi `Cloudflare D1 / ky-erp-db`; Drive içindeki D1/SQL dosyaları yalnız yedek/export/migration kaynağıdır.
+- D1 yedekleri: `D:\Googledrive\KYERP\01_DATA_BACKUP\D1`.
+- Firebird/PDKS yedekleri: `D:\Googledrive\KYERP\01_DATA_BACKUP\FIREBIRD_PDKS`.
+- Config/env değeri içermeyen servis envanterleri: `D:\Googledrive\KYERP\01_DATA_BACKUP\CONFIG_EXPORTS`.
+- `D:\Googledrive\KYERP-MERKEZ`, `D:\Googledrive\KYERP-GELISTIRME-MERKEZI`, `D:\onedrive-Hkn\OneDrive\KY-ERP-MERKEZ` ve ayrı PDKS clone'ları **yeni iş kaynağı değildir**.
+- Eski kökler yalnız `99_ARCHIVE`, tarihsel referans veya kontrollü veri aktarımı için okunabilir; buradan yeni kod, migration, deploy veya agent başlatılmaz.
+- Yeni sohbet/ajan yerel dosya erişimi gerektiğinde önce bu canonical kökü kullanır; yeni paralel `KYERP-*MERKEZ`, ayrı repo clone'u veya alternatif ana kök oluşturmaz.
+- Uygulama kodunda makineye özel absolute path hard-code etme; bu sabit yol yalnız yerel geliştirme/operasyon çalışma alanıdır.
+- Ayrıntı: `DOCS/KY_ERP_TEK_YEREL_KOK_2026-10-01.md`.
+
 Bu dosya KY ERP için güncel ve üstün çalışma sözleşmesidir. Ayrıntılı eski iş kuralları referans için `DOCS/AGENTS_RULES_BASE_PRE_STORAGE_20260902.md` dosyasında korunur. Çelişki halinde **bu dosya** geçerlidir; özellikle eski OneDrive/SQLite/path notları canonical değildir.
 
 ## Zorunlu proje devam kaydı
