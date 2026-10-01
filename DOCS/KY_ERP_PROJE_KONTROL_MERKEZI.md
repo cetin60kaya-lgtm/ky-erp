@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.10.2026 — HKN PDKS REV21 son aylık kontrol / aynı DB ve TNF üretimi
+
+- Yeni revizyon açılmadı. Eksik tamamlama doğal dağılım varsayılanı ve dört sınır alanı ortak Hedef kaynağını kullanır; gerçek saatler korunur, hiç basılmamış gün açık onay ister. Yeni DB hareketleri aynı kart/tarih/saatle aynı işlemde DUZELTILMIS TNF'ye aktarılır; eski eksikler ayrı EKSIK çıktısında kalır.
+- E tarafı eksik sayılmaz. Tamamlanmış normal çift sonrası tekil geç-bandı fazla giriş güvenli temizlik adayı; açık vardiya/mesai ve gerçek belirsizlik korunur. Global TNF işlemi bütün ay snapshot'ını kapsar; personel işlemi ayrıdır.
+- DB öncesi TNF yedeği/pending çıktı, gbak/satır dump/fingerprint/transaction; hata öncesi rollback ve pending temizliği. COMMIT sonrası dosya yayın hatasında kurtarma dosyaları korunur ve DB'nin değiştiği açıkça belirtilir; dağıtık atomic transaction iddiası yoktur. Normal TNF eşitleme DB'ye yazmaz.
+- 204 assertion + PDKS_DENETIM_PASS (39 fonksiyon/24 ekran/0 hata). Canlı DB/TNF yalnız okuma ve değişmezlik kontrolü; yazma testleri sentetik fixture. Mayıs DB41/TNF4/compare3/ek51/toplam102 ms; UI bind4/toplam141/heartbeat111 ms. Tam yıl UI toplam191/heartbeat243 ms. Parola kapısı Responding=True.
+- Gerçek canlı DB erken giriş sınırı 08:30 olduğundan DB kaynaklı band 08:30–08:45; fallback 08:15–08:45. Kaynak dürüstçe gösterilir; canlı ayar değiştirilmez. Bellekte düzeltme sonrası Fazla/Saat/E=0, Eksik=71, İncele=3; canlı TNF düzeltilmiş gibi raporlanmaz.
+- Aynı REV21 final self-contained single EXE yeniden üretildi ve eski paket arşivlendi. SHA256: 3E41B86DE699A7A16B8F76C78A3766B75C50BC35ACF86C57D3A0C16D5EAE38D7. Görev dışı beş kirli dosya korunur, commit dışında kalır. Ayrıntı: [REV21 notları](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV21.md).
+
 ## 01.10.2026 — HKN PDKS REV21 ortak Hedef çalışma saatleri (yeni revizyon açılmadı)
 
 - WorkTimePolicy tek kaynaktır: HAFTA İÇİ DB ayarı read-only/background okunur; eksik/bozuk/belirsiz ayarda tam sabit fallback. Aylık/DB/son kontrol, eksik tamamlama ve TNF Hazırla aynı kaynak kullanır; gerçek kart saatleri değişmez.

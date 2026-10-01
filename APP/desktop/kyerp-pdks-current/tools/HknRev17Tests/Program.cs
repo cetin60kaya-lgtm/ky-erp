@@ -310,6 +310,10 @@ internal static class Program
             Check(control.PlanVisibleCorrections(true).Length==0, "checkbox plan still requires explicit selection");
             Check(unselectedPlan.Length==departedPairs.Count(pair=>pair.Safe), "bulk person plan includes every safe visible operation");
             Check(DbTnfSyncControl.CorrectionSummary(unselectedPlan).Contains("Fazla TNF:"), "confirmation gives operation count summary");
+            var globalPlan = control.PlanAllCorrections();
+            Check(globalPlan.Length == control.LastSnapshot!.Table.AsEnumerable().Count(SyncEngine.SafeOperation) && globalPlan.Select(row => row.Field<string>("Kart No")).Distinct().Count() > 1,
+                "REV21 global TNF plan includes all snapshot people despite visible person filter");
+            Check(DbTnfSyncControl.CorrectionSummary(globalPlan, 0, true, 12).Contains("İşlenecek Personel: Tüm ay / 12 kişi"), "REV21 global confirmation displays whole-month scope rather than selected person");
             var personLabel = (Label)typeof(DbTnfSyncControl).GetField("personnelSummary", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
             Check(personLabel.Text.Contains("DB Durumu (DURUM.AD)") && personLabel.Text.Contains("Efektif Durum: PASİF") && personLabel.Text.Contains("ÇELİŞKİSİ"), "summary separates raw status effective status and date contradiction");
             searchBox.Text = "00003";
@@ -337,7 +341,7 @@ internal static class Program
             Check(Count(planCheck,"TNF SİL FAZLA")==0 && Count(planCheck,"TNF DÜZELT")==0 && Count(planCheck,"TNF SİL E")==0, "live memory-only output plan reaches zero safe surplus time and E errors");
             Check(dbGrid.Columns.Cast<DataGridViewColumn>().All(column=>column is not DataGridViewCheckBoxColumn), "simplified grids contain no selection checkbox");
             var buttons=Descendants(control).OfType<Button>().Where(button=>button.Text!="İptal").Select(button=>button.Text).ToArray();
-            Check(buttons.Length==6 && buttons.Contains("BU AYI KONTROL ET") && buttons.Contains("DB GÜVENLİLERİ DÜZELT") && buttons.Contains("DB EKSİKLERİ TAMAMLA") && buttons.Contains("TNF'Yİ DB'YE GÖRE DÜZELT") && buttons.Contains("SON TAM KONTROL") && buttons.Contains("ÇIKTI DOSYALARINI AÇ"), "REV21 only six monthly buttons; DB and TNF stages clearly separated");
+            Check(buttons.Length==7 && buttons.Contains("BU AYI KONTROL ET") && buttons.Contains("DB GÜVENLİLERİ DÜZELT") && buttons.Contains("DB EKSİKLERİ TAMAMLA") && buttons.Contains("TNF'Yİ DB'YE GÖRE DÜZELT") && buttons.Contains("SON TAM KONTROL") && buttons.Contains("ÇIKTI DOSYALARINI AÇ") && buttons.Contains("BU PERSONELİ DB'YE GÖRE DÜZELT"), "REV21 six monthly actions and separate person TNF action; DB and TNF stages clearly separated");
             Console.WriteLine($"REV20_READONLY_PLAN safe={safeRows.Length} missing={livePlan.Missing.Length} corrected_lines={livePlan.Corrected.Length} plan_ms={planClock.ElapsedMilliseconds}");
             await control.RunAuditAsync(true, true);
             var grid = (DataGridView)typeof(DbTnfSyncControl).GetField("dbGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;

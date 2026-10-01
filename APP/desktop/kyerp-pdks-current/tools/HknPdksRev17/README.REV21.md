@@ -1,5 +1,22 @@
 # HKN PDKS REV21 — Aylık kontrol
 
+## 01.10.2026 — Son aylık düzeltme ve yeni DB kayıtlarının aynı TNF çıktısı
+
+- Aynı REV21 korunur. Eksik tamamlama penceresinde ortak Hedef ayarından dört aralık sınırı gösterilir; doğal dağılım varsayılan açıktır, sabit mod aynı kaynağın 08:30/19:00 referanslarını kullanır. Gerçek kart saatleri değişmez; hiç basılmamış gün için açık kullanıcı onayı gerekir.
+- Yeni DB hareketinin onaylanan kart/tarih/saati ikinci kez üretilmez: aynı tamamlamada bire bir DUZELTILMIS TNF'ye aktarılır. Bu yeni hareketler ayrıca EKSIK dosyasına yazılmaz; önceki gerçek DB eksikleri EKSIK dosyasında kalır. Orijinal TNF korunur.
+- TNF yedeği ve iki dayanıklı pending çıktı DB transaction'ından önce hazırlanır; mevcut gbak/satır dump/fingerprint/rollback kapıları korunur. Başarılı DB COMMIT ardından çıktılar dosya başına atomic yayımlanır. DB ve dosyalar dağıtık atomic transaction değildir: COMMIT sonrası yayın hatasında pending dosyalar kurtarma için korunur ve kullanıcıya DB'nin tamamlandığı açıkça bildirilir; tekrar DB eklemesi yapılmamalıdır.
+- E tarafı artık eksik giriş/çıkış sayılmaz ve tamamlamaya girmez. Normal tamamlanmış çiftin ardından tekil geç-bandı fazla giriş güvenli temizlik adayıdır; açık kişisel vardiya/mesai planı ve gerçek çoklu belirsizlik otomatik silinmez. Canlı kayıt üzerinde silme uygulanmadı.
+- Global TNF düğmesi görünür kişi filtresinden bağımsız bütün aylık snapshot'ı işler; onayda Tüm ay / kişi sayısı gösterilir. Ayrı personel düğmesi yalnız seçili kişiyi işler. Hizalı iki grid, async/iptal ve diğer modüller korunur.
+- DB önceliği değişmedi: canlı HAFTA İÇİ EGTOL=510, yani 08:30 bulundu. Canlı giriş aralığı 08:30–08:45; DB okunamazsa istenen fallback 08:15–08:45. Çıkış 18:30–19:30. Uygulama kaynak etiketini gerçek ayarla gösterir; canlı DB ayarı sessizce değiştirilmez.
+- **204 assertion geçti**: sınır sınıflandırmaları, E/missing ayrımı, eksik tek taraf/tam gün onayı, doğal dağılım, DB/TNF aynı yeni saatler, çıktı tekrarsızlığı, gerçek rollback/pending temizliği, vardiya koruması ve global/personel kapsamı. Canlı DB/TNF yalnız okundu, fingerprint ve TNF SHA değişmedi. Tüm yazma testleri yeni sentetik fixture üzerinde yapıldı.
+- Mayıs okuma: DB 41 ms, TNF 4 ms, compare 3 ms, ek aylık denetim 51 ms, toplam 102 ms. UI bind 4 ms, toplam 141 ms, heartbeat 111 ms. Tam 2026 okuma: DB 57/TNF 5/compare 32/toplam 96 ms; UI bind 20/toplam 191/heartbeat 243 ms. Ölçümler ayrı çalıştırmalardır.
+- Bellekte canlı TNF düzeltme planı: Eksik 71, Fazla 0, Saat Farkı 0, E Hatası 0, İncele 3; canlı dosyada bu değişiklikler uygulanmadı. Eksiklerin ayrı çıktıya taşınması gerçek TNF içe aktarımının tamamlandığı anlamına gelmez.
+- Standart **PDKS_DENETIM_PASS**: 39 fonksiyon/24 ekran, sıfır hata; restore/build/contract/kopya DB CRUD/shell/UI/V4 geçti. Final parola kapısı HKN PDKS - Giriş, Responding=True; parola bypass edilmedi.
+- .NET 8 win-x64 self-contained single-file publish başarılı; final 172680514 byte. Önceki REV21 EXE 99_ARSIV altında korunur. Görev başındaki beş görev dışı değişiklik çalışma ağacında bırakıldı, bu commit'e eklenmedi.
+- Final: `D:/Googledrive/KYERP-PDKS-HIZLI-VERİ/_PAKETLER/GUNCEL/HKN-PDKS-REV21-FINAL.exe`.
+- SHA256: `3E41B86DE699A7A16B8F76C78A3766B75C50BC35ACF86C57D3A0C16D5EAE38D7`.
+- Yerel kanıtlar: 08_TEST/REV21_MONTHLY_FINAL_TEST.log, REV21_MONTHLY_FINAL_DENETIM.log, REV21_MONTHLY_FINAL_PUBLISH.log, REV21_MONTHLY_FINAL_STARTUP.log. EXE/DB/TNF/verifier/şirket logları Git'e alınmaz. Aşağıdaki bölümler önceki REV21 teslimlerinin tarihçesidir.
+
 ## 01.10.2026 — Aynı REV21 içinde ortak Hedef saat kaynağı
 
 - `WorkTimePolicy` tek ortak ve değişmez değerlendirme kaynağıdır. HAFTA İÇİ satırı Türkçe karakter/case normalize edilerek seçilir; HAFTA İÇİ YENİ/RAMAZAN ile karıştırılmaz. Belirsiz, eksik, bozuk veya okunamayan ayarda bütünüyle sabit fallback kullanılır.

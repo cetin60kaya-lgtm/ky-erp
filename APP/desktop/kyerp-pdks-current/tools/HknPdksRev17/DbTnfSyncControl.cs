@@ -122,6 +122,10 @@ internal sealed partial class DbTnfSyncControl : UserControl
         bar.Controls.Add(paths);
         bar.SetFlowBreak(paths, true);
         bar.Controls.Add(workTimeInformation);
+        bar.SetFlowBreak(workTimeInformation, true);
+        var selectedPersonBar = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        bar.Controls.Add(selectedPersonBar);
+        Button("BU PERSONELİ DB'YE GÖRE DÜZELT", ApplyPersonAsync, 265, Color.LightGreen, selectedPersonBar);
         cancel.Click += (_, _) => cancellation?.Cancel();
         checkBar.Controls.AddRange([progressBar, cancel]);
         operationControls.AddRange([year, month, statusFilter, errorsOnly, hasMovement, search]);
@@ -429,10 +433,14 @@ internal sealed partial class DbTnfSyncControl : UserControl
     internal DataRow[] PlanVisibleCorrections(bool selectedOnly)
         => visiblePairs.Where(pair => pair.Safe && (!selectedOnly || pair.Selected) && pair.Row.Field<string>("Kart No") == selectedCard).Select(pair => pair.Row).ToArray();
 
-    internal static string CorrectionSummary(DataRow[] rows, int review = 0)
+    internal DataRow[] PlanAllCorrections()
+        => snapshot?.Table.AsEnumerable().Where(SyncEngine.SafeOperation).ToArray() ?? [];
+
+    internal static string CorrectionSummary(DataRow[] rows, int review = 0, bool entireMonth = false, int personCount = 0)
     {
         var counts = rows.GroupBy(row => row.Field<string>("İşlem")!).ToDictionary(group => group.Key, group => group.Count());
-        return $"Seçili Personel Sayısı: {rows.Select(row => row.Field<string>("Kart No")).Distinct().Count()}\nFazla TNF: {counts.GetValueOrDefault("TNF SİL FAZLA")}\nEksik TNF: {counts.GetValueOrDefault("TNF EKLE")}\nSaat Farkı: {counts.GetValueOrDefault("TNF DÜZELT")}\nE Kaydı: {counts.GetValueOrDefault("TNF SİL E")}\nToplam: {rows.Length}\nİncele: {review} (işlem yapılmayacak)";
+        var scope = entireMonth ? $"İşlenecek Personel: Tüm ay / {personCount} kişi" : $"İşlenecek Personel: {rows.Select(row => row.Field<string>("Kart No")).Distinct().Count()} kişi";
+        return $"{scope}\nFazla TNF: {counts.GetValueOrDefault("TNF SİL FAZLA")}\nEksik TNF: {counts.GetValueOrDefault("TNF EKLE")}\nSaat Farkı: {counts.GetValueOrDefault("TNF DÜZELT")}\nE Kaydı: {counts.GetValueOrDefault("TNF SİL E")}\nToplam: {rows.Length}\nİncele: {review} (işlem yapılmayacak)";
     }
 
     async Task ApplyPersonAsync()
@@ -464,16 +472,17 @@ internal sealed partial class DbTnfSyncControl : UserControl
         if (snapshot is null || IsDisposed) return;
         if (monthlySnapshot is null || monthlySnapshot.Issues.Any(issue => issue.Safe))
         { MessageBox.Show(main, "Önce DB güvenli hatalarını düzeltin. Gerçek belirsizlikler otomatik değiştirilmez."); return; }
-        var rows = snapshot.Table.AsEnumerable().Where(SyncEngine.SafeOperation).ToArray();
+        var rows = PlanAllCorrections();
         if (rows.Length == 0) { MessageBox.Show(main, "Güvenli TNF işlemi yok; İNCELE kayıtları değişmez."); return; }
-        await ApplyAsync(rows);
+        await ApplyAsync(rows, true);
     }
 
-    async Task ApplyAsync(DataRow[] rows)
+    async Task ApplyAsync(DataRow[] rows, bool entireMonth = false)
     {
         if (snapshot is null || !ReferenceEquals(snapshotDatabase, Database)) return;
         var review = snapshot.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") == "İNCELE");
-        if (MessageBox.Show(main, $"{CorrectionSummary(rows, review)}\n\nOrijinal TNF ve DB DEĞİŞMEZ. _YEDEK alınır. Fazla/E silme ve saat düzeltmeleri DUZELTILMIS dosyasına; eksik normal DB kayıtları EKSIK dosyasına yazılır. Devam?",
+        var personCount = snapshot.Table.AsEnumerable().Select(row => row.Field<string>("Kart No")).Distinct().Count();
+        if (MessageBox.Show(main, $"{CorrectionSummary(rows, review, entireMonth, personCount)}\n\nOrijinal TNF ve DB DEĞİŞMEZ. _YEDEK alınır. Fazla/E silme ve saat düzeltmeleri DUZELTILMIS dosyasına; eksik normal DB kayıtları EKSIK dosyasına yazılır. Devam?",
             "TNF çıktılarını hazırla", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
         var previous = snapshot;
         var sourcePath = RequireTnfPath();

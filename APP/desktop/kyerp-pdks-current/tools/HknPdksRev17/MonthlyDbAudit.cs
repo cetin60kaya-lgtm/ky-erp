@@ -110,19 +110,26 @@ internal static class MonthlyDbAudit
                 if (scheduleMap.TryGetValue((person.Value, day), out var plan))
                     schedules.Add(new(person.Key, day, ScheduleTime(plan, "IGIRISS"), ScheduleTime(plan, "DCIKISS")));
         var excluded = new HashSet<(string Card, DateTime Day)>();
+        var shiftDays = new HashSet<(string Card, DateTime Day)>();
         var exclusions = new[] {
             Query("select PKNO,TARIH from OZELIZIN where TARIH>=@A and TARIH<@B"),
             Query("select PKNO,TARIH from PERPLANTAT where TARIH>=@A and TARIH<@B"),
             Query("select PKNO,TARIH from PERPLANMES where TARIH>=@A and TARIH<@B") };
         foreach (var table in exclusions)
             foreach (DataRow row in table.Rows) excluded.Add((Text(row, "PKNO"), Date(row, "TARIH")!.Value));
+        foreach (var table in exclusions.Skip(1))
+            foreach (DataRow row in table.Rows) shiftDays.Add((Text(row, "PKNO"), Date(row, "TARIH")!.Value));
         var holidays = Query("select TARIH,GKOD from PLANG where TARIH>=@A and TARIH<@B and TTKOD is not null");
         foreach (DataRow row in holidays.Rows)
             foreach (var person in groups.Where(person => person.Value == Text(row, "GKOD"))) excluded.Add((person.Key, Date(row, "TARIH")!.Value));
         var overrides = Query("select PKNO,STARTDATE,ENDDATE from PERTIMESHIFT where STARTDATE<@B and (ENDDATE is null or ENDDATE>=@A)");
         foreach (DataRow row in overrides.Rows)
             for (var day = request.Start; day < request.End; day = day.AddDays(1))
-                if (day >= Date(row, "STARTDATE") && (Date(row, "ENDDATE") is null || day <= Date(row, "ENDDATE"))) excluded.Add((Text(row, "PKNO"), day));
+                if (day >= Date(row, "STARTDATE") && (Date(row, "ENDDATE") is null || day <= Date(row, "ENDDATE")))
+                {
+                    excluded.Add((Text(row, "PKNO"), day));
+                    shiftDays.Add((Text(row, "PKNO"), day));
+                }
         var triggers = Query("select RDB$TRIGGER_NAME,RDB$RELATION_NAME,RDB$TRIGGER_INACTIVE,RDB$TRIGGER_SOURCE from RDB$TRIGGERS where coalesce(RDB$SYSTEM_FLAG,0)=0 order by RDB$TRIGGER_NAME", false);
         var locked = new HashSet<string>();
         foreach (DataRow row in triggers.Rows)
@@ -139,7 +146,7 @@ internal static class MonthlyDbAudit
         var moves = Movements(records, request);
         if (SyncEngine.DbFingerprint(moves, sync.People) != sync.DbHash) throw new InvalidOperationException("DB kontrol sırasında değişti; kontrolü yenileyin.");
         var workHours = WorkTimePolicy.Read(connection, transaction, token);
-        var issues = Analyze(request, moves, people, schedules, excluded, locked, token, workHours);
+        var issues = Analyze(request, moves, people, schedules, excluded, locked, token, workHours, shiftDays);
         var fingerprint = Fingerprint(new[] { records, peopleTable, plans, holidays, overrides, triggers }.Concat(exclusions).ToArray()) + ":" + JsonSerializer.Serialize(workHours);
         if (ownedTransaction is not null) transaction.Rollback();
         return new(request, records, people, schedules, excluded, locked, Hash(triggers), blocked, issues, fingerprint, timer.ElapsedMilliseconds) { WorkHours = workHours };
@@ -149,7 +156,8 @@ internal static class MonthlyDbAudit
     static string Fingerprint(params DataTable[] tables) => string.Join(":", tables.Select(Hash));
 
     internal static List<MonthlyIssue> Analyze(AuditRequest request, List<DbMovement> moves, Dictionary<string, EmploymentRule> people,
-        List<DailySchedule> schedules, HashSet<(string Card, DateTime Day)> excluded, HashSet<string> locked, CancellationToken token, WorkTimePolicy? workHours = null)
+        List<DailySchedule> schedules, HashSet<(string Card, DateTime Day)> excluded, HashSet<string> locked, CancellationToken token, WorkTimePolicy? workHours = null,
+        HashSet<(string Card, DateTime Day)>? shiftDays = null)
     {
         var policy = workHours ?? WorkTimePolicy.Default;
         var issues = new List<MonthlyIssue>();
@@ -183,21 +191,20 @@ internal static class MonthlyDbAudit
             var ordinary = scheduleMap.TryGetValue(group.Key, out var schedule) && Clock(schedule.Entry, out plannedEntry) && Clock(schedule.Exit, out plannedExit) && plannedEntry < plannedExit;
             var pair = entries.Length == 2 && exits.Length == 1 ? entries.SingleOrDefault(entry => entry.Id == exits[0].Id) : null;
             var extra = pair is null ? null : entries.Single(entry => entry != pair);
-            var extraSafe = ordinary && pair is not null && extra is not null && Clock(pair.Time, out var entryMinutes) && Clock(exits[0].Time, out var exitMinutes) && Clock(extra.Time, out var extraMinutes) &&
+            var extraSafe = ordinary && shiftDays?.Contains(group.Key) != true && pair is not null && extra is not null && Clock(pair.Time, out var entryMinutes) && Clock(exits[0].Time, out var exitMinutes) && Clock(extra.Time, out var extraMinutes) &&
                 entryMinutes >= policy.DayRollover && entryMinutes <= policy.EntryLate && exitMinutes >= policy.ExitEarly && exitMinutes <= policy.ExitLate && extraMinutes >= policy.ExitEarly && extraMinutes <= policy.ExitLate && extraMinutes > exitMinutes && plannedEntry == policy.Entry && plannedExit == policy.Exit;
             if (extraSafe)
             {
-                var calendarConflict = excluded.Contains(group.Key);
-                issues.Add(new(extra!.Card, extra.Date, "FAZLA TARAF", calendarConflict
-                    ? "Fazla giriş adayı; DB izin/tatil/vardiya istisnası ile hareketler çelişiyor. Otomatik silinmez."
-                    : $"{WorkTimePolicy.Format(policy.Entry)}–{WorkTimePolicy.Format(policy.Exit)} tek günlük DB planı; tamamlanmış satırdan sonra çıkış aralığında tek fazla giriş.", !isLocked && !calendarConflict, extra.Id, extra.Side, extra.Time));
-                if (calendarConflict) issues.Add(new(extra.Card, extra.Date, "İNCELE", "İzin/tatil/vardiya istisnası bulunan günde hareket var; fazla taraf adayını kullanıcı doğrulamalı."));
+                issues.Add(new(extra!.Card, extra.Date, "FAZLA TARAF",
+                    $"{WorkTimePolicy.Format(policy.Entry)}–{WorkTimePolicy.Format(policy.Exit)} tek günlük DB planı; tamamlanmış satırdan sonra çıkış aralığında tek fazla giriş. İkinci çıkış/çift yok.", !isLocked, extra.Id, extra.Side, extra.Time));
                 entries = [pair!];
             }
             else if (entries.Length > 1 || exits.Length > 1)
                 issues.Add(new(group.Key.Card, group.Key.Date, "İNCELE", "Çoklu taraf / olası iki vardiya. Gerçek çiftler otomatik silinmez."));
-            if (normal.Length > 0 && entries.Length == 0) issues.Add(new(group.Key.Card, group.Key.Date, "EKSİK GİRİŞ", "Yeni saat yalnız ayrı tamamlama onayıyla eklenebilir."));
-            if (normal.Length > 0 && exits.Length == 0) issues.Add(new(group.Key.Card, group.Key.Date, "EKSİK ÇIKIŞ", "Yeni saat yalnız ayrı tamamlama onayıyla eklenebilir."));
+            if (normal.Length > 0 && entries.Length == 0 && !group.Value.Any(move => move.Side == "Giriş" && move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)))
+                issues.Add(new(group.Key.Card, group.Key.Date, "EKSİK GİRİŞ", "Yeni saat yalnız ayrı tamamlama onayıyla eklenebilir."));
+            if (normal.Length > 0 && exits.Length == 0 && !group.Value.Any(move => move.Side == "Çıkış" && move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)))
+                issues.Add(new(group.Key.Card, group.Key.Date, "EKSİK ÇIKIŞ", "Yeni saat yalnız ayrı tamamlama onayıyla eklenebilir."));
             if (ordinary && plannedEntry == policy.Entry && plannedExit == policy.Exit && !excluded.Contains(group.Key) && entries.Length <= 1 && exits.Length <= 1)
             {
                 foreach (var entry in entries)

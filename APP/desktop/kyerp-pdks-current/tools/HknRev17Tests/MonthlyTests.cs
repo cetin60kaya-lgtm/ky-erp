@@ -61,6 +61,7 @@ internal static class MonthlyTests
         check(all.Length > single.Length, "REV21 whole day generation only after explicit setting");
         check(all.All(issue => issue.Day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday && !MonthlyDbAudit.Holiday(issue.Day)), "REV21 weekends official holidays and eve excluded");
         check(all.All(issue => MonthlyDbAudit.Clock(issue.Time, out var minute) && (issue.Side == "Giriş" ? minute >= snapshot.WorkHours.EntryEarly && minute <= snapshot.WorkHours.EntryLate : minute >= snapshot.WorkHours.ExitEarly && minute <= snapshot.WorkHours.ExitLate)), "REV21 explicitly authorized missing generation uses shared policy bands");
+        check(all.Select(issue => issue.Time).Distinct().Count() > 2, "REV21 natural distribution varies generated minutes across days");
         check(!all.Any(issue => issue.Day.Day is 5 or 6 or 8), "REV21 shifts E leave never generate");
         check(!MonthlyDbAudit.Complete(snapshot, new(true, true, true, false), "00999", CancellationToken.None).Any(), "REV21 selected personnel scope enforced");
         var safe = snapshot.Issues.Where(issue => issue.Safe).ToArray();
@@ -74,7 +75,24 @@ internal static class MonthlyTests
         sync = Read();
         snapshot = MonthlyDbAudit.Read(database, sync, CancellationToken.None);
         single = MonthlyDbAudit.Complete(snapshot, new(false, true, false, false), "", CancellationToken.None);
-        MonthlyDbWriter.ApplyAsync(database, sync, snapshot, single, CancellationToken.None).GetAwaiter().GetResult();
+        var originalTnf = File.ReadAllBytes(tnf);
+        var staleRejected = false;
+        try { SyncEngine.CompleteDbAndTnfAsync(database, sync, snapshot with { Fingerprint = "stale" }, single, CancellationToken.None).GetAwaiter().GetResult(); }
+        catch (InvalidOperationException) { staleRejected = true; }
+        check(staleRejected && !Directory.GetFiles(directory, "*.pending", SearchOption.AllDirectories).Any() &&
+            Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where SIRA=3 and CSAAT is not null")) == 0,
+            "REV21 staged TNF discarded and DB unchanged when transaction revalidation fails");
+        var completion = SyncEngine.CompleteDbAndTnfAsync(database, sync, snapshot, single, CancellationToken.None).GetAwaiter().GetResult();
+        check(single.All(issue => File.ReadAllLines(completion.Outputs.CorrectedPath).Contains($"{issue.Card},{issue.Time},{issue.Day:ddMMyy},1,001")),
+            "REV21 missing entry and exit use exactly the same DB card date time in corrected TNF");
+        check(single.All(issue => !File.ReadAllLines(completion.Outputs.MissingPath).Contains($"{issue.Card},{issue.Time},{issue.Day:ddMMyy},1,001")),
+            "REV21 generated DB rows are not duplicated across corrected and missing outputs");
+        check(originalTnf.SequenceEqual(File.ReadAllBytes(tnf)), "REV21 coordinated completion preserves original TNF bytes");
+        var correctedRequest = request with { Path = completion.Outputs.CorrectedPath };
+        var verified = SyncEngine.ReadAsync(database, correctedRequest, CancellationToken.None).GetAwaiter().GetResult();
+        check(single.All(issue => verified.Table.AsEnumerable().Any(row => row.Field<string>("Kart No") == issue.Card && row.Field<string>("Tarih") == issue.Day.ToString("dd.MM.yyyy") &&
+            row.Field<string>("Taraf") == issue.Side && row.Field<string>("DB Saat") == issue.Time && row.Field<string>("TNF Saat") == issue.Time && row.Field<string>("İşlem") == "YOK")),
+            "REV21 post-commit readonly recheck confirms generated DB and TNF sides match");
         check(Convert.ToString(database.Scalar("select GSAAT from GIRCIK where SIRA=3"))!.Trim() == "08:50", "REV21 real late entry stays 08:50 after completion");
         check(Convert.ToString(database.Scalar("select CSAAT from GIRCIK where SIRA=3"))!.Trim() == "19:00", "REV21 only missing exit filled");
         check(Convert.ToString(database.Scalar("select CSAAT from GIRCIK where SIRA=11"))!.Trim()=="18:20" &&
@@ -82,7 +100,9 @@ internal static class MonthlyTests
         sync = Read();
         snapshot = MonthlyDbAudit.Read(database, sync, CancellationToken.None);
         all = MonthlyDbAudit.Complete(snapshot, new(false, false, true, false), "", CancellationToken.None);
-        MonthlyDbWriter.ApplyAsync(database, sync, snapshot, all, CancellationToken.None).GetAwaiter().GetResult();
+        var wholeCompletion = SyncEngine.CompleteDbAndTnfAsync(database, sync, snapshot, all, CancellationToken.None).GetAwaiter().GetResult();
+        check(all.All(issue => File.ReadAllLines(wholeCompletion.Outputs.CorrectedPath).Contains($"{issue.Card},{issue.Time},{issue.Day:ddMMyy},1,001")),
+            "REV21 explicitly approved whole days produce paired DB rows and identical TNF rows in one workflow");
         check(Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where GTARIH='2026-05-11' and GSAAT='08:30' and CSAAT='19:00'")) == 1, "REV21 whole-day completion inserts one paired row");
         sync = Read();
         snapshot = MonthlyDbAudit.Read(database, sync, CancellationToken.None);
@@ -115,10 +135,11 @@ internal static class MonthlyTests
             .Where(issue => issue.Day.Day is 12 or 13).OrderByDescending(issue => issue.Day).ToArray();
         check(rollbackPlan.Any(issue=>issue.Day.Day==13) && rollbackPlan.Any(issue=>issue.Day.Day==12), "REV21 rollback fixture has earlier successful side then failing insertion");
         rejected = false;
-        try { MonthlyDbWriter.ApplyAsync(database, sync, snapshot, rollbackPlan, CancellationToken.None).GetAwaiter().GetResult(); } catch (FbException) { rejected = true; }
+        try { SyncEngine.CompleteDbAndTnfAsync(database, sync, snapshot, rollbackPlan, CancellationToken.None).GetAwaiter().GetResult(); } catch (FbException) { rejected = true; }
         check(rejected && Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where GTARIH='2026-05-13' and CSAAT is not null"))==0 &&
             Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where GTARIH='2026-05-12'"))==0, "REV21 actual mid-batch failure rolls back both successful side and partial insertion");
         database.Execute("alter table GIRCIK drop constraint FIXTURE_FAIL");
+        check(!Directory.GetFiles(directory, "*.pending", SearchOption.AllDirectories).Any(), "REV21 real mid-batch DB rollback also discards staged TNF files");
         sync = Read();
         snapshot = MonthlyDbAudit.Read(database, sync, CancellationToken.None);
         var backupDirectory = Path.Combine(directory, "_YEDEK");
@@ -157,7 +178,7 @@ internal static class MonthlyTests
         foreach(var plan in snapshot.Schedules.Where(plan=>plan.Card=="00056" && plan.Day.Day==25)) Console.WriteLine($"REV21_PLAN_00056 entry={plan.Entry} exit={plan.Exit} excluded={snapshot.Excluded.Contains((plan.Card,plan.Day))}");
         foreach (var issue in snapshot.Issues.Where(issue=>issue.Card=="00056" && issue.Day.Day==25)) Console.WriteLine($"REV21_00056_25MAY kind={issue.Kind} safe={issue.Safe} id={issue.Id} side={issue.Side} time={issue.Time}");
         check(snapshot.Issues.Any(issue=>issue.Card=="00056"&&issue.Day.Day==25&&issue.Kind=="FAZLA TARAF"), "REV21 live 00056 25May extra entry found without writing");
-        check(snapshot.Issues.Any(issue=>issue.Card=="00056"&&issue.Day.Day==25&&issue.Kind=="FAZLA TARAF"&&!issue.Safe) && snapshot.Issues.Any(issue=>issue.Card=="00056"&&issue.Day.Day==25&&issue.Kind=="İNCELE"), "REV21 live leave conflict shown; candidate never deleted automatically");
+        check(snapshot.Issues.Any(issue=>issue.Card=="00056"&&issue.Day.Day==25&&issue.Kind=="FAZLA TARAF"&&issue.Safe), "REV21 live completed normal pair plus isolated 19:00 entry is safe cleanup; read only test");
         var generated = MonthlyDbAudit.Complete(snapshot,CompletionSettings.For(snapshot.WorkHours,false,true,true,false),"",CancellationToken.None);
         check(generated.All(issue=>!snapshot.LockedCards.Contains(issue.Card) && !snapshot.Excluded.Contains((issue.Card,issue.Day))), "REV21 live completion plan only; no DB writes");
         Console.WriteLine($"REV21_LIVE_READONLY completion_plan_sides={generated.Length} safe_cleanup_sides={snapshot.Issues.Count(issue=>issue.Safe)}");

@@ -6,6 +6,37 @@ namespace QuickDataTool;
 
 internal sealed record TnfOutputs(string CorrectedPath, string MissingPath, string BackupPath, int MissingCount);
 
+internal sealed class StagedTnfOutputs(TnfOutputs outputs, string correctedTemporary, string missingTemporary) : IDisposable
+{
+    bool retain;
+    internal TnfOutputs Publish()
+    {
+        try
+        {
+            File.Move(correctedTemporary, outputs.CorrectedPath, false);
+            File.Move(missingTemporary, outputs.MissingPath, false);
+            return outputs;
+        }
+        catch
+        {
+            if (File.Exists(outputs.CorrectedPath) && !File.Exists(correctedTemporary))
+                File.Move(outputs.CorrectedPath, correctedTemporary, false);
+            throw;
+        }
+    }
+    internal string RetainForRecovery()
+    {
+        retain = true;
+        return $"{correctedTemporary}\n{missingTemporary}";
+    }
+    public void Dispose()
+    {
+        if (retain) return;
+        if (File.Exists(correctedTemporary)) File.Delete(correctedTemporary);
+        if (File.Exists(missingTemporary)) File.Delete(missingTemporary);
+    }
+}
+
 internal static partial class SyncEngine
 {
     internal static bool SafeOperation(DataRow row) => row.Field<string>("İşlem") is
@@ -66,6 +97,13 @@ internal static partial class SyncEngine
 
     internal static async Task<TnfOutputs> WriteOutputsAsync(AuditSnapshot snapshot, string[] corrected, string[] missing, CancellationToken cancellation)
     {
+        using var staged = await StageOutputsAsync(snapshot, corrected, missing, cancellation).ConfigureAwait(false);
+        cancellation.ThrowIfCancellationRequested();
+        return staged.Publish();
+    }
+
+    internal static async Task<StagedTnfOutputs> StageOutputsAsync(AuditSnapshot snapshot, string[] corrected, string[] missing, CancellationToken cancellation)
+    {
         var directory = Path.GetDirectoryName(snapshot.Request.Path)!;
         if (Path.GetFileName(directory).Equals("_TNF_CIKTILARI", StringComparison.OrdinalIgnoreCase))
             directory = Directory.GetParent(directory)!.FullName;
@@ -78,6 +116,8 @@ internal static partial class SyncEngine
         var correctedPath = Path.Combine(outputDirectory, stem + "_DUZELTILMIS.Tnf");
         var missingPath = Path.Combine(outputDirectory, stem + "_EKSIK.Tnf");
         var backupPath = Path.Combine(backupDirectory, stem + ".Tnf");
+        var correctedTemporary = correctedPath + ".pending";
+        var missingTemporary = missingPath + ".pending";
         using var source = new FileStream(snapshot.Request.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
         var bytes = new byte[source.Length];
         await source.ReadExactlyAsync(bytes, cancellation).ConfigureAwait(false);
@@ -89,17 +129,16 @@ internal static partial class SyncEngine
         await AtomicWriteAsync(backupPath, bytes, cancellation).ConfigureAwait(false);
         try
         {
-            await AtomicWriteAsync(correctedPath, EncodeLines(corrected, snapshot.Encoding), cancellation).ConfigureAwait(false);
-            await AtomicWriteAsync(missingPath, EncodeLines(missing, snapshot.Encoding), cancellation).ConfigureAwait(false);
+            await AtomicWriteAsync(correctedTemporary, EncodeLines(corrected, snapshot.Encoding), cancellation).ConfigureAwait(false);
+            await AtomicWriteAsync(missingTemporary, EncodeLines(missing, snapshot.Encoding), cancellation).ConfigureAwait(false);
         }
         catch
         {
-            if (File.Exists(correctedPath)) File.Delete(correctedPath);
-            if (File.Exists(missingPath)) File.Delete(missingPath);
+            if (File.Exists(correctedTemporary)) File.Delete(correctedTemporary);
+            if (File.Exists(missingTemporary)) File.Delete(missingTemporary);
             throw;
         }
-        Log($"outputs_completed corrections={corrected.Length} missing={missing.Length} source_preserved=true db_read_only=true backup_created=true");
-        return new(correctedPath, missingPath, backupPath, missing.Length);
+        return new(new(correctedPath, missingPath, backupPath, missing.Length), correctedTemporary, missingTemporary);
     }
 
     static byte[] EncodeLines(string[] lines, System.Text.Encoding encoding) =>

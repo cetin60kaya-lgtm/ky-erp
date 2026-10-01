@@ -90,19 +90,26 @@ internal sealed partial class DbTnfSyncControl
         scope.SelectedIndex = 0;
         var single = new CheckBox { Left = 20, Top = 65, Width = 550, Text = "Sadece eksik tek tarafı tamamla", Checked = true };
         var whole = new CheckBox { Left = 20, Top = 95, Width = 550, Text = "Hiç basmamış uygun iş gününe giriş + çıkış ÜRET (açık onay)" };
-        var natural = new CheckBox { Left = 20, Top = 130, Width = 550, Text = "Doğal dağılım (kapalıysa sabit referans)" };
+        var natural = new RadioButton { Left = 20, Top = 130, Width = 270, Text = "Doğal dağılım", Checked = true };
+        var fixedTime = new RadioButton { Left = 300, Top = 130, Width = 280, Text = "Sabit referans: 08:30 / 19:00" };
         var policy = monthlySnapshot!.WorkHours;
-        var entry = new DateTimePicker { Left = 145, Top = 170, Width = 100, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddMinutes(policy.Entry) };
-        var exit = new DateTimePicker { Left = 430, Top = 170, Width = 100, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddMinutes(policy.Exit) };
-        var calendar = new CheckBox { Left = 20, Top = 215, Width = 555, Height = 40, Text = "DB tatil / yıllık izin / çalışma planlarının bu ay için güncel olduğunu doğruladım" };
-        var explanation = new Label { Left = 20, Top = 265, Width = 555, Height = 80, Text = policy.Information + ". Gerçek kart saatleri ASLA değişmez. Yeni eksik saat yalnız açık onayla; hafta sonu, tatil, izin, E, kilit, belirsiz plan ve gelecek gün dışlanır. Tatil koruması 2026 ile sınırlıdır." };
+        fixedTime.Text = $"Sabit referans: {WorkTimePolicy.Format(policy.Entry)} / {WorkTimePolicy.Format(policy.Exit)}";
+        var entryMin = new DateTimePicker { Left = 210, Top = 170, Width = 95, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddMinutes(policy.EntryEarly) };
+        var entryMax = new DateTimePicker { Left = 340, Top = 170, Width = 95, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddMinutes(policy.EntryLate) };
+        var exitMin = new DateTimePicker { Left = 210, Top = 205, Width = 95, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddMinutes(policy.ExitEarly) };
+        var exitMax = new DateTimePicker { Left = 340, Top = 205, Width = 95, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddMinutes(policy.ExitLate) };
+        var calendar = new CheckBox { Left = 20, Top = 245, Width = 555, Height = 40, Text = "DB tatil / yıllık izin / çalışma planlarının bu ay için güncel olduğunu doğruladım" };
+        var explanation = new Label { Left = 20, Top = 290, Width = 555, Height = 60, Text = $"Kaynak: {policy.Source}. Mevcut gerçek kart saatleri değiştirilmez. Yalnız eksik kayıt üretilir ve AYNI saatle düzeltilmiş TNF'ye aktarılır. Orijinal TNF korunur. Tatil koruması: 2026." };
         var preview = new Button { Left = 20, Top = 355, Width = 230, Text = "ÜRETİLECEK SAATLERİ ONAYLA" };
         preview.Click += (_, _) => { if (!calendar.Checked) { MessageBox.Show(dialog, "Tatil/izin planlarını doğrulamadan saat üretilemez."); return; } dialog.DialogResult = DialogResult.OK; };
-        dialog.Controls.AddRange([scope, single, whole, natural, new Label { Left = 20, Top = 175, Text = "Giriş referansı", Width = 120 }, entry,
-            new Label { Left = 300, Top = 175, Text = "Çıkış referansı", Width = 120 }, exit, calendar, explanation, preview]);
+        dialog.Controls.AddRange([scope, single, whole, natural, fixedTime,
+            new Label { Left = 20, Top = 175, Text = "Giriş üretim aralığı", Width = 180 }, entryMin, entryMax,
+            new Label { Left = 20, Top = 210, Text = "Çıkış üretim aralığı", Width = 180 }, exitMin, exitMax,
+            new Label { Left = 315, Top = 175, Text = "–", Width = 20 }, new Label { Left = 315, Top = 210, Text = "–", Width = 20 }, calendar, explanation, preview]);
         if (dialog.ShowDialog(main) != DialogResult.OK) return;
         var settings = CompletionSettings.For(policy, scope.SelectedIndex == 1, single.Checked, whole.Checked, natural.Checked) with {
-            Entry = entry.Value.Hour * 60 + entry.Value.Minute, Exit = exit.Value.Hour * 60 + exit.Value.Minute };
+            EntryMin = entryMin.Value.Hour * 60 + entryMin.Value.Minute, EntryMax = entryMax.Value.Hour * 60 + entryMax.Value.Minute,
+            ExitMin = exitMin.Value.Hour * 60 + exitMin.Value.Minute, ExitMax = exitMax.Value.Hour * 60 + exitMax.Value.Minute };
         var current = monthlySnapshot!;
         var card = selectedCard;
         MonthlyIssue[] operations;
@@ -122,10 +129,13 @@ internal sealed partial class DbTnfSyncControl
         if (!RequireMonthlyResult()) return;
         if (operations.Length == 0) { MessageBox.Show(main, "Bu kapsamda uygun güvenli DB işlemi yok. Eksik plan/tatil/izin/kilit veya belirsizlikler korunur."); return; }
         var overview = string.Join("\n", operations.GroupBy(issue => issue.Kind).Select(group => $"{group.Key}: {group.Count()}"));
-        if (MessageBox.Show(main, $"Dönem: {monthlySnapshot!.Request.Start:MM.yyyy}\nPersonel: {operations.Select(issue => issue.Card).Distinct().Count()}\n{overview}\nToplam taraf: {operations.Length}\n\nDATABASE.GDB değişecek. Önce gbak ve satır dump yedeği. Transaction / rollback uygulanır. Mevcut gerçek saatler değiştirilmez. Devam?",
+        var completion = operations.All(issue => issue.Kind == "EKLE");
+        var tnfNote = completion ? "\nYeni DB kart/tarih/saatleri AYNI değerlerle DUZELTILMIS TNF'ye aktarılır. TNF yedeği alınır; orijinal korunur. Eski eksikler ayrı EKSIK çıktısında kalır." : "";
+        if (MessageBox.Show(main, $"Dönem: {monthlySnapshot!.Request.Start:MM.yyyy}\nPersonel: {operations.Select(issue => issue.Card).Distinct().Count()}\n{overview}\nToplam taraf: {operations.Length}\n\nDATABASE.GDB değişecek. Önce gbak ve satır dump yedeği. Transaction / rollback uygulanır. Mevcut gerçek saatler değiştirilmez.{tnfNote} Devam?",
             title, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         var previous = snapshot!;
         var plan = monthlySnapshot;
+        var sourcePath = RequireTnfPath();
         cancellation = new CancellationTokenSource();
         var token = cancellation.Token;
         SetBusy(true);
@@ -134,11 +144,29 @@ internal sealed partial class DbTnfSyncControl
         try
         {
             summary.Text = "gbak yedeği alınıyor; sonra DB transaction uygulanacak...";
-            var backup = await Task.Run(() => MonthlyDbWriter.ApplyAsync(snapshotDatabase!, previous, plan, operations, token), token);
+            string backup;
+            if (completion)
+            {
+                var result = await Task.Run(() => SyncEngine.CompleteDbAndTnfAsync(snapshotDatabase!, previous, plan, operations, token), token);
+                backup = result.Backup;
+                lastOutputs = result.Outputs;
+                outputSourcePath = sourcePath;
+            }
+            else
+            {
+                backup = await Task.Run(() => MonthlyDbWriter.ApplyAsync(snapshotDatabase!, previous, plan, operations, token), token);
+                lastOutputs = null;
+            }
             success = true;
             SyncEngine.Log($"REV21 monthly_db_action={title} completed backup={Path.GetFileName(backup)}");
         }
         catch (OperationCanceledException) { summary.Text = "İşlem iptal edildi; commit öncesindeki değişiklikler geri alındı."; }
+        catch (CompletionPublicationException exception)
+        {
+            success = true;
+            lastOutputs = null;
+            MessageBox.Show(main, exception.Message, "DB tamamlandı / TNF çıktı kurtarma gerekli", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
         catch (Exception exception) { MessageBox.Show(main, exception.Message, "DB işlemi durdu / rollback", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally
         {
@@ -150,8 +178,9 @@ internal sealed partial class DbTnfSyncControl
         }
         if (success && !IsDisposed)
         {
-            lastOutputs = null;
             await RunAuditAsync(false);
+            if (completion && lastOutputs is not null)
+                details.Text = "Yeni DB kayıtları AYNI kart/tarih/saat ile düzeltilmiş TNF'de hazır. Orijinal TNF korunur. ÇIKTI DOSYALARINI AÇ ile kullanın.";
             if (monthlySnapshot is not null)
                 summary.Text += monthlySnapshot.Issues.Any(issue => issue.Safe || issue.Kind == "İNCELE") ? " | KALAN DB HATA / İNCELE VAR" : " | DB GÜVENLİ HATA = 0";
         }

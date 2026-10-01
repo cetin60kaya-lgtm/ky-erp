@@ -12,11 +12,23 @@ internal static class WorkTimeTests
         foreach (var minute in new[] { 1110, 1140, 1170 }) check(policy.ClassifyExit(minute) == "NORMAL", $"REV21 inclusive exit boundary {minute}");
         check(policy.ClassifyEntry(494) == "ERKEN GELİŞ" && !WorkTimePolicy.IsError(policy.ClassifyEntry(494)), "REV21 early arrival never error or penalty");
         check(policy.ClassifyEntry(526) == "GEÇ GİRİŞ", "REV21 late starts after upper boundary");
+        check(policy.ClassifyEntry(513) == "NORMAL" && policy.ClassifyEntry(520) == "NORMAL" && policy.ClassifyEntry(530) == "GEÇ GİRİŞ", "REV21 requested 08:33 08:40 and 08:50 classification");
+        check(policy.ClassifyExit(1136) == "NORMAL" && policy.ClassifyExit(1145) == "NORMAL", "REV21 requested 18:56 and 19:05 classification");
         check(policy.ClassifyExit(1109) == "ERKEN ÇIKIŞ" && policy.ClassifyExit(1171) == "GEÇ ÇIKIŞ / mesai adayı", "REV21 departure boundaries and overtime candidate");
         var day = new DateTime(2026, 5, 4);
         var request = new AuditRequest("SYNTHETIC.Tnf", day, day.AddDays(1), "", new());
         var personnel = new Dictionary<string, EmploymentRule> { ["00001"] = new("00001", "Fixture", day.AddYears(-1), null, true) };
         var schedules = new List<DailySchedule> { new("00001", day, "08:30", "19:00") };
+        foreach (var eSide in new[] { "Giriş", "Çıkış" })
+        {
+            var eMoves = new List<DbMovement> { new(1, "00001", day, eSide, eSide == "Giriş" ? "08:30" : "19:00", "E"),
+                new(1, "00001", day, eSide == "Giriş" ? "Çıkış" : "Giriş", eSide == "Giriş" ? "19:00" : "08:30", "") };
+            var eIssues = MonthlyDbAudit.Analyze(request, eMoves, personnel, schedules, [], [], CancellationToken.None, policy);
+            check(eIssues.Count(issue => issue.Kind == "E KAYIT") == 1 && !eIssues.Any(issue => issue.Kind.StartsWith("EKSİK")), "REV21 E side never counted as missing " + eSide);
+        }
+        var extraMoves = new List<DbMovement> { new(1,"00001",day,"Giriş","08:23",""), new(1,"00001",day,"Çıkış","18:51",""), new(2,"00001",day,"Giriş","19:00","") };
+        var shiftIssues = MonthlyDbAudit.Analyze(request, extraMoves, personnel, schedules, [], [], CancellationToken.None, policy, [("00001",day)]);
+        check(!shiftIssues.Any(issue => issue.Safe) && shiftIssues.Any(issue => issue.Kind == "İNCELE"), "REV21 explicit second shift override never safe-delete isolated entry");
         foreach (var entry in new[] { "08:14", "08:15", "08:30", "08:45", "08:46" })
         {
             var movements = new List<DbMovement> { new(1, "00001", day, "Giriş", entry, ""), new(1, "00001", day, "Çıkış", "18:30", "") };
