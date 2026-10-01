@@ -6,6 +6,7 @@ import "./desenFullscreenFix.css";
 import DesenFolderSettingsBar from "./DesenFolderSettingsBar";
 import DesenInboxUploadButton from "./DesenInboxUploadButton";
 import DesenModelMasasi from "./DesenModelMasasi";
+import DesenGidenDesenler from "./DesenGidenDesenler";
 import DesenModeller from "./DesenModeller";
 import YerlesimKalipPage from "./YerlesimKalipPage";
 import DesenRaporlari from "./DesenRaporlari";
@@ -36,6 +37,11 @@ const SCREEN_COPY = {
     description:
       "File Hub'a bağlı Google Drive, Microsoft, yerel klasör veya NAS kaynağından gelen desenleri tek model kartına bağlayın. Uygulama içi yüklemelerde R2 yalnız geçici/önizleme alanı olarak kullanılır.",
   },
+  "giden-desenler": {
+    title: "Giden Desenler",
+    description:
+      "Google Drive giden desenler klasörünü ve otomatik bildirim akışını tek ekrandan izleyin.",
+  },
 };
 
 function resolveScreenKey(activeTab) {
@@ -44,6 +50,7 @@ function resolveScreenKey(activeTab) {
 
 function renderScreen(screenKey, activeMainCompany, inboxRevision) {
   if (screenKey === "desen-klasor-ayarlari") return null;
+  if (screenKey === "giden-desenler") return <DesenGidenDesenler />;
   if (screenKey === "desen-modeller") {
     return <DesenModeller activeMainCompany={activeMainCompany} />;
   }
