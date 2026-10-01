@@ -1,22 +1,29 @@
-name: KY ERP Masaüstü Windows Setup
+name: KY ERP + PDKS Desktop Windows Setup
 
 on:
-  # Automatic GitHub Actions disabled. Run only when explicitly requested.
-  workflow_dispatch:
+  # Automatic GitHub Actions disabled. Run only when explicitly requested.\n  workflow_dispatch:
+
 permissions:
   contents: read
 
 concurrency:
-  group: ky-erp-desktop-windows-${{ github.ref }}
+  group: ky-desktop-dual-windows-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Test, publish ve Setup.exe
+    name: Test, dual publish ve iki Setup.exe
     runs-on: windows-latest
     steps:
       - name: Kaynak kodu al
         uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
 
       - name: .NET 8 SDK
         uses: actions/setup-dotnet@v4
@@ -27,25 +34,48 @@ jobs:
         shell: pwsh
         run: choco install innosetup -y --no-progress
 
-      - name: KY ERP Masaüstü test ve paket
+      - name: KY ERP + KY PDKS test ve paket
         shell: pwsh
         run: ./APP/desktop/ky-pdks/BUILD_SETUP.ps1
 
-      - name: Setup çıktısını doğrula
+      - name: İki Setup çıktısını doğrula
         shell: pwsh
         run: |
-          $setup = Get-ChildItem ./APP/desktop/ky-pdks/dist/setup -Filter 'KY-ERP-Masaustu-Setup-*.exe' | Select-Object -First 1
-          if (-not $setup) { throw 'KY ERP Masaüstü Setup.exe bulunamadı.' }
-          Get-FileHash $setup.FullName -Algorithm SHA256
-          Get-Content "$($setup.FullName).sha256.txt"
+          $dir = './APP/desktop/ky-pdks/dist/setup'
+          $erp = Get-ChildItem $dir -Filter 'KY-ERP-Desktop-Setup-*.exe' | Select-Object -First 1
+          $pdks = Get-ChildItem $dir -Filter 'KY-PDKS-Desktop-Setup-*.exe' | Select-Object -First 1
+          if (-not $erp) { throw 'KY ERP Desktop Setup.exe bulunamadı.' }
+          if (-not $pdks) { throw 'KY PDKS Desktop Setup.exe bulunamadı.' }
+          if (-not (Test-Path "$($erp.FullName).sha256.txt")) { throw 'KY ERP SHA256 dosyası yok.' }
+          if (-not (Test-Path "$($pdks.FullName).sha256.txt")) { throw 'KY PDKS SHA256 dosyası yok.' }
+          $info = Get-Content "$dir/build-info.json" -Raw | ConvertFrom-Json
+          if ($info.version -ne '1.8.0') { throw "build-info sürümü yanlış: $($info.version)" }
+          if ($info.products.Count -ne 2) { throw 'build-info iki ürün içermiyor.' }
+          if ($info.products[0].scope -ne 'FULL_ERP_DESKTOP') { throw 'Tam ERP scope yanlış.' }
+          if ($info.products[1].scope -ne 'PDKS_ONLY_DESKTOP') { throw 'PDKS-only scope yanlış.' }
+          if ($info.products[1].includesWebView -ne $false) { throw 'PDKS-only build WebView içeriyor görünüyor.' }
+          if ($info.products[1].denetimWriteControls -ne 'HIDDEN') { throw 'DENETİM write-controls politikası yanlış.' }
+          Get-FileHash $erp.FullName -Algorithm SHA256
+          Get-FileHash $pdks.FullName -Algorithm SHA256
 
-      - name: Windows kurulum paketini sakla
+      - name: KY ERP Desktop paketini sakla
         uses: actions/upload-artifact@v4
         with:
-          name: KY-ERP-Masaustu-Windows-Setup-${{ github.run_number }}
+          name: KY-ERP-Desktop-Windows-Setup-${{ github.run_number }}
           path: |
-            APP/desktop/ky-pdks/dist/setup/KY-ERP-Masaustu-Setup-*.exe
-            APP/desktop/ky-pdks/dist/setup/*.sha256.txt
+            APP/desktop/ky-pdks/dist/setup/KY-ERP-Desktop-Setup-*.exe
+            APP/desktop/ky-pdks/dist/setup/KY-ERP-Desktop-Setup-*.sha256.txt
+            APP/desktop/ky-pdks/dist/setup/build-info.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: KY PDKS Desktop paketini sakla
+        uses: actions/upload-artifact@v4
+        with:
+          name: KY-PDKS-Desktop-Windows-Setup-${{ github.run_number }}
+          path: |
+            APP/desktop/ky-pdks/dist/setup/KY-PDKS-Desktop-Setup-*.exe
+            APP/desktop/ky-pdks/dist/setup/KY-PDKS-Desktop-Setup-*.sha256.txt
             APP/desktop/ky-pdks/dist/setup/build-info.json
           if-no-files-found: error
           retention-days: 30

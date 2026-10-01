@@ -5,7 +5,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
 using KyPdks.Shared;
-using Microsoft.Win32;
 
 namespace KyPdks.Desktop;
 
@@ -39,7 +38,6 @@ public partial class PdksUnifiedWindow : Window
     {
         PersonCombo.ItemsSource = _people;
         PersonCombo.SelectedIndex = _people.Count > 0 ? 0 : -1;
-        PhotoButton.IsEnabled = _canWrite;
         AssistantCommitButton.IsEnabled = _canWrite;
         PeriodText.Text = DateTime.Today.ToString("MMMM yyyy", CultureInfo.GetCultureInfo("tr-TR"));
         await RefreshAsync();
@@ -65,7 +63,7 @@ public partial class PdksUnifiedWindow : Window
             D1StateText.Text = "D1: Yükleniyor";
             _masters = await _mastersApi.GetAsync(_token, _lifetime.Token);
             D1StateText.Text = _masters.Audit ? "D1: DENETİM / Salt okunur" : "D1: Bağlı";
-            DefinitionSummaryText.Text = $"{_masters.Groups.Count} vardiya · {_masters.Services.Count} servis · {_people.Count} SGK=VAR + kartlı personel. Vardiya ve servis atamaları Web ile aynıdır.";
+            DefinitionSummaryText.Text = $"{_masters.Groups.Count} vardiya · {_masters.Services.Count} servis · {_people.Count} aktif kartlı personel. Vardiya ve servis atamaları Web ile aynıdır.";
             await RefreshAgentStateAsync();
             await LoadSelectedAsync();
             StatusText.Text = "Web ve Windows PDKS aynı KY ERP D1 verisinden yenilendi.";
@@ -103,7 +101,6 @@ public partial class PdksUnifiedWindow : Window
         CardText.Text = person.CardNo;
         DepartmentText.Text = string.IsNullOrWhiteSpace(person.Department) ? "-" : person.Department;
         TitleText.Text = string.IsNullOrWhiteSpace(person.Title) ? "-" : person.Title;
-        SgkText.Text = $"{person.SgkStatus} · {person.Status}";
         StartText.Text = string.IsNullOrWhiteSpace(person.StartDate) ? "-" : person.StartDate;
         ExitText.Text = string.IsNullOrWhiteSpace(person.ExitDate) ? "-" : person.ExitDate;
         PhotoInitials.Text = Initials(person.FullName);
@@ -152,28 +149,11 @@ public partial class PdksUnifiedWindow : Window
         }
     }
 
-    private async void PhotoButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (!_canWrite || _selected is null) return;
-        var dialog = new OpenFileDialog
-        {
-            Title = "Personel fotoğrafını seçin",
-            Filter = "Fotoğraf|*.jpg;*.jpeg;*.png;*.webp",
-            Multiselect = false,
-        };
-        if (dialog.ShowDialog(this) != true) return;
-        await RunAsync("Personel fotoğrafı KY ERP ortak kaydına yükleniyor...", async () =>
-        {
-            await _mediaApi.UploadPhotoAsync(_token, _selected.Id, dialog.FileName, _lifetime.Token);
-            await LoadPhotoAsync(_selected);
-            StatusText.Text = $"{_selected.FullName} fotoğrafı İK + PDKS ortak kaydında güncellendi.";
-        });
-    }
-
     private async void AssistantPreviewButton_Click(object sender, RoutedEventArgs e)
     {
         var command = AssistantBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(command)) { StatusText.Text = "Asistan komutunu yazın."; return; }
+        if (IsFinanceAssistantCommand(command)) { StatusText.Text = "Finans ve bordro işlemleri yalnız İK üzerinden yapılır."; return; }
         await RunAsync("Komut D1 üzerinde önizleniyor...", async () =>
         {
             var result = await _machineApi.AssistantAsync(_token, command, false, _lifetime.Token);
@@ -186,6 +166,7 @@ public partial class PdksUnifiedWindow : Window
         if (!_canWrite) return;
         var command = AssistantBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(command)) { StatusText.Text = "Asistan komutunu yazın."; return; }
+        if (IsFinanceAssistantCommand(command)) { StatusText.Text = "Finans ve bordro işlemleri yalnız İK üzerinden yapılır."; return; }
         await RunAsync("Komut kontrol ediliyor...", async () =>
         {
             var preview = await _machineApi.AssistantAsync(_token, command, false, _lifetime.Token);
@@ -201,6 +182,13 @@ public partial class PdksUnifiedWindow : Window
             StatusText.Text = $"UYGULANDI · {result.Summary}";
             await LoadSelectedAsync();
         });
+    }
+
+    private static bool IsFinanceAssistantCommand(string command)
+    {
+        var value = (command ?? "").ToUpper(CultureInfo.GetCultureInfo("tr-TR"));
+        var blocked = new[] { "AVANS", "BORDRO", "MAAŞ", "MAAS", "BANKA", "ELDEN", "KESİNTİ", "KESINTI", "İCRA", "ICRA", "HACİZ", "HACIZ", "FİBE", "FIBE" };
+        return blocked.Any(value.Contains);
     }
 
     private async Task RefreshAgentStateAsync()
@@ -220,7 +208,6 @@ public partial class PdksUnifiedWindow : Window
         DailyPanel.Visibility = key == "DAILY" ? Visibility.Visible : Visibility.Collapsed;
         PersonPanel.Visibility = key == "PERSON" ? Visibility.Visible : Visibility.Collapsed;
         DefinitionsPanel.Visibility = key == "DEFINITIONS" ? Visibility.Visible : Visibility.Collapsed;
-        HrPanel.Visibility = key == "HR" ? Visibility.Visible : Visibility.Collapsed;
         SystemPanel.Visibility = key == "SYSTEM" ? Visibility.Visible : Visibility.Collapsed;
     }
 

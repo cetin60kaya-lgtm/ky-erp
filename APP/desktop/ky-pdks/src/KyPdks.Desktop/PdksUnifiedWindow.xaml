@@ -59,20 +59,13 @@
                             </Expander>
                             <Expander Header="Personel" Margin="0,0,0,4">
                                 <StackPanel Margin="8,4,0,6">
-                                    <Button Content="Fotoğraflı Personel Kartı" Tag="PERSON" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
-                                    <Button Content="İK / PDKS Ortak Bilgi" Tag="PERSON" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
+                                    <Button Content="Personel / Kart Referansı" Tag="PERSON" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
                                 </StackPanel>
                             </Expander>
                             <Expander Header="Vardiya ve Tanımlar" Margin="0,0,0,4">
                                 <StackPanel Margin="8,4,0,6">
                                     <Button Content="Vardiya / Servis" Tag="DEFINITIONS" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
                                     <Button Content="Terminal Ayarları" Tag="DEFINITIONS" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
-                                </StackPanel>
-                            </Expander>
-                            <Expander Header="İK Bağlantısı" Margin="0,0,0,4">
-                                <StackPanel Margin="8,4,0,6">
-                                    <Button Content="Avans / Mesai / İzin" Tag="HR" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
-                                    <Button Content="Bordro Bağlantısı" Tag="HR" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
                                 </StackPanel>
                             </Expander>
                             <Expander Header="Sistem ve Denetim">
@@ -133,7 +126,7 @@
                                 <Border Width="180" Height="210" Background="#EEF3F8" CornerRadius="10" HorizontalAlignment="Center">
                                     <Grid><Image x:Name="PersonPhoto" Stretch="UniformToFill"/><TextBlock x:Name="PhotoInitials" Text="?" FontSize="48" FontWeight="Bold" Foreground="#73879A" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid>
                                 </Border>
-                                <Button x:Name="PhotoButton" Content="Fotoğraf Seç / Güncelle" Click="PhotoButton_Click" Margin="0,10,0,0"/>
+                                <TextBlock Text="Fotoğraf · İK ana kaynağı" Foreground="#64788F" TextAlignment="Center" Margin="0,8,0,0"/>
                                 <TextBlock x:Name="PersonNameText" Text="-" FontSize="20" FontWeight="Bold" TextAlignment="Center" Margin="0,12,0,0" TextWrapping="Wrap"/>
                                 <TextBlock x:Name="PersonCodeText" Text="-" Foreground="#64788F" TextAlignment="Center"/>
                             </StackPanel>
@@ -142,17 +135,16 @@
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="160"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
                                 <TextBlock Text="Kart No" FontWeight="SemiBold"/><TextBlock Grid.Column="1" x:Name="CardText"/>
                                 <TextBlock Grid.Row="1" Text="Bölüm" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="1" Grid.Column="1" x:Name="DepartmentText" Margin="0,10,0,0"/>
                                 <TextBlock Grid.Row="2" Text="Görev" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="2" Grid.Column="1" x:Name="TitleText" Margin="0,10,0,0"/>
-                                <TextBlock Grid.Row="3" Text="SGK / Durum" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="3" Grid.Column="1" x:Name="SgkText" Margin="0,10,0,0"/>
-                                <TextBlock Grid.Row="4" Text="İşe Giriş" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="4" Grid.Column="1" x:Name="StartText" Margin="0,10,0,0"/>
-                                <TextBlock Grid.Row="5" Text="İşten Çıkış" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="5" Grid.Column="1" x:Name="ExitText" Margin="0,10,0,0"/>
-                                <TextBlock Grid.Row="6" Text="Vardiya" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="6" Grid.Column="1" x:Name="GroupText" Margin="0,10,0,0"/>
-                                <TextBlock Grid.Row="7" Text="Servis" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="7" Grid.Column="1" x:Name="ServiceText" Margin="0,10,0,0"/>
-                                <TextBlock Grid.Row="8" Text="Veri Kaynağı" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="8" Grid.Column="1" Text="KY ERP D1 · İK Aylık Personel ile ortak" Foreground="#267048" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="3" Text="İşe Giriş" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="3" Grid.Column="1" x:Name="StartText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="4" Text="İşten Çıkış" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="4" Grid.Column="1" x:Name="ExitText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="5" Text="Vardiya" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="5" Grid.Column="1" x:Name="GroupText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="6" Text="Servis" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="6" Grid.Column="1" x:Name="ServiceText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="7" Text="Veri Kaynağı" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="7" Grid.Column="1" Text="KY ERP D1 · Personel ana kaynağı İK" Foreground="#267048" Margin="0,10,0,0"/>
                             </Grid>
                         </Border>
                     </Grid>
@@ -164,18 +156,6 @@
                                 <TextBlock Text="Tanımlar KY ERP D1'de ortaktır. Terminal bağlantı ayarı yalnız bu Windows Agent'a aittir." Foreground="#64788F" Margin="0,5,0,18"/>
                                 <TextBlock x:Name="DefinitionSummaryText" Text="D1 tanımları yükleniyor..." TextWrapping="Wrap" Margin="0,0,0,14"/>
                                 <Button Content="Vardiya · Servis · Terminal Yönetimini Aç" Click="OpenMasterButton_Click" Width="310" HorizontalAlignment="Left" Padding="14,9"/>
-                            </StackPanel>
-                        </Border>
-                    </Grid>
-
-                    <Grid x:Name="HrPanel" Visibility="Collapsed">
-                        <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="10" Padding="20">
-                            <StackPanel>
-                                <TextBlock Text="İK Bağlantısı" FontSize="21" FontWeight="Bold"/>
-                                <TextBlock Text="Avans, mesai, izin ve bordro ikinci kez tutulmaz. Aynı D1 kayıtları İK ve PDKS'de görünür." Foreground="#64788F" Margin="0,5,0,14"/>
-                                <TextBlock Text="Hızlı işlem için yukarıdaki PDKS Asistanını kullanın:" FontWeight="SemiBold"/>
-                                <TextBlock Text="• Çetin Kaya bugün gelmedi yok yaz&#x0a;• Çetin Kaya için 5000 TL avans gir&#x0a;• Çetin Kaya 10 saat hafta içi mesai ekle&#x0a;• Çetin Kaya bugün 08:42 geldi" Margin="10,8,0,14"/>
-                                <TextBlock Text="Dönem kilitliyse sunucu işlemi reddeder; DENETİM hesabı yazamaz." Foreground="#A05A16"/>
                             </StackPanel>
                         </Border>
                     </Grid>
