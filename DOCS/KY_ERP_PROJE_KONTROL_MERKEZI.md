@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.10.2026 — HKN PDKS REV19 personel ve snapshot genelinde kalıcı seçim
+
+- REV18 hızlı veri aracı mevcut kaynak projesinde 19.0.0 olarak güncellendi. Native kabuk, DB/TNF karşılaştırma ve yan yana grid düzeni değiştirilmedi. Ayrıntı: [REV19 seçim ve test notları](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV19.md).
+- PERSONEL seçimi yalnız visiblePairs güvenli satırlarını, TOPLU seçim/kategori düğmeleri filtrelerden bağımsız snapshot.Table güvenli satırlarını kullanır. SEÇİLENLERİ UYGULA bütün snapshot'taki seçili güvenlileri toplar. İNCELE/uyumlu/ayrı DB temizliği otomatik seçilmez; global temizleme bütün Seç alanlarını sıfırlar.
+- DataRow üzerinde kalıcı seçim, iki grid arasında checkbox bildirimi, Fazla/Eksik/Saat/E/Toplam sayacı ve personel adedi içeren özet onay eklendi. Checkbox'sız personel düzeltme korunur. Toplu uygulama mevcut tek yedek/bellek batch/atomik TNF yazmasını kullanır; normal DB yazması yoktur. Başarılı toplu işlem sonrası otomatik SON TAM KONTROL çalışır.
+- 127 assertion geçti; gerçek Mayıs 2026 Fazla=75 için seçim planı ve sayaç 75 doğrulandı. Tüm güvenlileri seçme 25 ms; tam UI kontrolü DB 102 ms / TNF 8 ms / compare 41 ms / bind 23 ms / toplam 233 ms; en büyük heartbeat 257 ms. Canlı şirket dosyaları yalnız okundu; canlı yazma testi yoktur.
+- Standart PDKS_DENETIM_PASS: 39 fonksiyon ve 24 form, 0 audit hatası; contract/shell/V4 smoke başarılı. Sentetik fixture regresyonları canlı dosyalardan ayrıdır. .NET 8 win-x64 self-contained single-file final `_PAKETLER/GUNCEL/HKN-PDKS-REV19-FINAL.exe` üretildi; gerçek parola penceresi Responding=True. Özel verifier, şirket dosyaları, ekran görüntüleri ve EXE Git'e eklenmez; kanıtlar yerel 08_TEST/REV19_* altında kalır.
+
 ## 01.10.2026 — HKN PDKS REV18 personel bazlı güvenli TNF düzeltme
 
 - REV17 hızlı veri aracının REV18 devamı tamamlandı; native KYERP 6.4 kaynakları bu iş kapsamında değiştirilmedi. Kaynak/test dizinleri korundu. Ayrıntı: [REV18 işlem ve doğrulama notları](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV18.md).

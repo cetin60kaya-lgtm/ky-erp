@@ -285,7 +285,7 @@ internal static class Program
             Check(unselectedPlan.Length > 0 && unselectedPlan.All(row=>row.Field<string>("Kart No")=="00053"), "bulk person plan needs no checkbox and cannot include other card");
             Check(control.PlanVisibleCorrections(true).Length==0, "checkbox plan still requires explicit selection");
             Check(unselectedPlan.Length==departedPairs.Count(pair=>pair.Safe), "bulk person plan includes every safe visible operation");
-            Check(DbTnfSyncControl.CorrectionSummary(unselectedPlan).Contains("Fazla:"), "confirmation gives operation count summary");
+            Check(DbTnfSyncControl.CorrectionSummary(unselectedPlan).Contains("Fazla TNF:"), "confirmation gives operation count summary");
             var personLabel = (Label)typeof(DbTnfSyncControl).GetField("personnelSummary", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
             Check(personLabel.Text.Contains("DB Durumu (DURUM.AD)") && personLabel.Text.Contains("Efektif Durum: PASİF") && personLabel.Text.Contains("ÇELİŞKİSİ"), "summary separates raw status effective status and date contradiction");
             searchBox.Text = "00003";
@@ -297,14 +297,105 @@ internal static class Program
             var juneRow = Array.FindIndex(targetRows, pair => pair.Date.EndsWith(".06.2026"));
             if (juneRow >= 0) dbGrid.FirstDisplayedScrollingRowIndex = juneRow;
             Check(dbGrid.FirstDisplayedScrollingRowIndex == tnfGrid.FirstDisplayedScrollingRowIndex, "scroll positions synchronized");
-            var safeSelection = (Task)typeof(DbTnfSyncControl).GetMethod("SelectVisibleAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(control, [true])!;
-            await safeSelection;
+            control.SelectCurrentPersonSafe();
             Check(targetRows.All(pair => pair.Selected == pair.Safe), "bulk selection excludes review and compatible rows");
-            await (Task)typeof(DbTnfSyncControl).GetMethod("SelectVisibleAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(control, [false])!;
+            control.ClearSelection();
             Check(targetRows.All(pair => !pair.Selected), "clear checkboxes leaves no hidden selection");
             var uiSummary = (Label)typeof(DbTnfSyncControl).GetField("summary", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
             Check(uiSummary.Visible && uiSummary.Text.Contains("Eksik="), "global counts remain visible");
-            using (var image = new System.Drawing.Bitmap(owner.Width,owner.Height)) { owner.DrawToBitmap(image, new System.Drawing.Rectangle(0,0,owner.Width,owner.Height)); image.Save("D:/Googledrive/KYERP-PDKS-MASAUSTU/08_TEST/REV18_UI_READONLY.png"); }
+            using (var image = new System.Drawing.Bitmap(owner.Width,owner.Height)) { owner.DrawToBitmap(image, new System.Drawing.Rectangle(0,0,owner.Width,owner.Height)); image.Save("D:/Googledrive/KYERP-PDKS-MASAUSTU/08_TEST/REV19_UI_READONLY.png"); }
+            var selectionLabel = (Label)typeof(DbTnfSyncControl).GetField("selectionSummary", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
+            var fullSnapshot = control.LastSnapshot!;
+            var safeRows = fullSnapshot.Table.AsEnumerable().Where(DbTnfSyncControl.IsSafeOperation).ToArray();
+            control.SelectCurrentPersonSafe();
+            var currentSelected = control.PlanAllSelected();
+            Check(currentSelected.Length == targetRows.Count(pair => pair.Safe) && currentSelected.All(row => row.Field<string>("Kart No") == "00056"), "current person selection only selects safe visible rows");
+            searchBox.Text = "00003";
+            Check(control.PlanAllSelected().Length == currentSelected.Length, "changing person preserves hidden selections in snapshot");
+            searchBox.Text = "00056";
+            Check(((BindingSource)dbGrid.DataSource!).List.Cast<DbTnfSyncControl.PairView>().Where(pair => pair.Safe).All(pair => pair.Selected), "returning person restores checkbox state on original DataRows");
+            control.ClearSelection();
+            var safeIndex = Array.FindIndex(targetRows, pair => pair.Safe);
+            Check(safeIndex >= 0, "checkbox synchronization test has a safe row");
+            dbGrid.CurrentCell = dbGrid.Rows[safeIndex].Cells[0];
+            dbGrid.BeginEdit(false);
+            dbGrid.Rows[safeIndex].Cells[0].Value = true;
+            dbGrid.NotifyCurrentCellDirty(true);
+            dbGrid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            dbGrid.EndEdit();
+            Check(targetRows[safeIndex].Selected && Equals(tnfGrid.Rows[safeIndex].Cells[0].Value, true), "DB checkbox immediately mirrors TNF checkbox and DataRow");
+            Check(selectionLabel.Text.Contains("Toplam: 1"), "manual checkbox updates live selection counter");
+            tnfGrid.CurrentCell = tnfGrid.Rows[safeIndex].Cells[0];
+            tnfGrid.BeginEdit(false);
+            tnfGrid.Rows[safeIndex].Cells[0].Value = false;
+            tnfGrid.NotifyCurrentCellDirty(true);
+            tnfGrid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            tnfGrid.EndEdit();
+            Check(!targetRows[safeIndex].Selected && Equals(dbGrid.Rows[safeIndex].Cells[0].Value, false), "TNF checkbox immediately mirrors DB checkbox");
+            var selectionClock = Stopwatch.StartNew();
+            searchBox.Text = "NO VISIBLE PERSON";
+            control.SelectAllSafe();
+            selectionClock.Stop();
+            Check(control.PlanAllSelected().Length == safeRows.Length && safeRows.All(row => row.Field<bool>("Seç")), "global safe selection ignores personnel and movement filters");
+            Check(fullSnapshot.Table.AsEnumerable().Where(row => !DbTnfSyncControl.IsSafeOperation(row)).All(row => !row.Field<bool>("Seç")), "global selection excludes review compatible and invalid DB rows");
+            Check(selectionClock.ElapsedMilliseconds < 2000, "global selection remains responsive");
+            var reviewRows = fullSnapshot.Table.AsEnumerable().Where(row => row.Field<string>("İşlem") == "İNCELE").ToArray();
+            if (reviewRows.Length > 0) reviewRows[0]["Seç"] = true;
+            Check(control.PlanAllSelected().Length == safeRows.Length, "manually selected review cannot enter global apply plan");
+            var confirmation = DbTnfSyncControl.CorrectionSummary(control.PlanAllSelected(), reviewRows.Length);
+            Check(confirmation.Contains($"Seçili Personel Sayısı: {safeRows.Select(row => row.Field<string>("Kart No")).Distinct().Count()}") && confirmation.Contains($"Toplam: {safeRows.Length}") && confirmation.Contains("işlem yapılmayacak"), "batch confirmation counts personnel all operations and excluded review");
+            control.ClearSelection();
+            Check(fullSnapshot.Table.AsEnumerable().All(row => !row.Field<bool>("Seç")) && selectionLabel.Text.Contains("Toplam: 0"), "clear selection clears all hidden rows including manually selected review");
+            foreach (var operation in new[] { "FAZLA", "TNF EKLE", "TNF DÜZELT" })
+            {
+                control.SelectAllSafe(operation);
+                var expectedRows = safeRows.Where(row => operation == "FAZLA" ? row.Field<string>("İşlem") is "TNF SİL FAZLA" or "TNF SİL E" : row.Field<string>("İşlem") == operation).ToArray();
+                Check(control.PlanAllSelected().Length == expectedRows.Length && expectedRows.All(row => row.Field<bool>("Seç")), "global operation selection " + operation);
+                control.ClearSelection();
+            }
+            searchBox.Text = "00053";
+            control.SelectAllSafe("FAZLA");
+            Check(control.PlanAllSelected().Select(row => row.Field<string>("Kart No")).Distinct().Count() > 1 && control.PlanVisibleCorrections(false).All(row => row.Field<string>("Kart No") == "00053"), "global selected apply plan and checkbox-free person plan remain separate");
+            control.ClearSelection();
+            using (var fixtureControl = new DbTnfSyncControl(owner))
+            {
+                var selectionTable = SyncEngine.EmptyTable();
+                var operations = new[] { "TNF EKLE", "TNF SİL FAZLA", "TNF SİL E", "TNF DÜZELT", "İNCELE", "YOK", "GEÇERSİZ DB" };
+                for (var index = 0; index < operations.Length; index++)
+                {
+                    var row = selectionTable.NewRow();
+                    row["Kart No"] = index % 2 == 0 ? "10001" : "10002";
+                    row["İşlem"] = operations[index];
+                    row["Seç"] = false;
+                    selectionTable.Rows.Add(row);
+                }
+                typeof(DbTnfSyncControl).GetMethod("SetSnapshot", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(fixtureControl, [fullSnapshot with { Table = selectionTable }]);
+                fixtureControl.SelectAllSafe("FAZLA");
+                var fixtureRows = fixtureControl.PlanAllSelected();
+                Check(fixtureRows.Length == 2 && fixtureRows.Any(row => row.Field<string>("İşlem") == "TNF SİL E"), "surplus selector includes E deletions in memory-only fixture");
+                var fixtureLabel = (Label)typeof(DbTnfSyncControl).GetField("selectionSummary", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(fixtureControl)!;
+                Check(fixtureLabel.Text.Contains("Fazla: 1") && fixtureLabel.Text.Contains("E Kaydı: 1") && fixtureLabel.Text.Contains("Toplam: 2"), "counter separates surplus and E categories");
+                fixtureControl.SelectAllSafe();
+                Check(fixtureControl.PlanAllSelected().Length == 4 && selectionTable.AsEnumerable().Where(row => !DbTnfSyncControl.IsSafeOperation(row)).All(row => !row.Field<bool>("Seç")), "all four safe operations selected and unsafe operations excluded in fixture");
+                Check(fixtureLabel.Text.Contains("Eksik: 1") && fixtureLabel.Text.Contains("Saat Farkı: 1") && fixtureLabel.Text.Contains("Toplam: 4"), "counter totals mixed operations across cards");
+                fixtureControl.ClearSelection();
+                Check(selectionTable.AsEnumerable().All(row => !row.Field<bool>("Seç")), "memory-only fixture clear selection includes every row");
+            }
+            var monthPicker = (ComboBox)typeof(DbTnfSyncControl).GetField("month", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
+            var yearPicker = (NumericUpDown)typeof(DbTnfSyncControl).GetField("year", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
+            yearPicker.Value = 2026;
+            monthPicker.SelectedIndex = 5;
+            searchBox.Text = "00056";
+            await control.RunAuditAsync(false);
+            var maySnapshot = control.LastSnapshot!;
+            var mayExpected = maySnapshot.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") is "TNF SİL FAZLA" or "TNF SİL E");
+            control.SelectAllSafe("FAZLA");
+            Check(maySnapshot.Request.Start == new DateTime(2026, 5, 1) && maySnapshot.Request.End == new DateTime(2026, 6, 1), "May 2026 selection test uses exact month boundaries");
+            Check(control.PlanAllSelected().Length == mayExpected && selectionLabel.Text.Contains($"Toplam: {mayExpected}"), "May surplus selector matches snapshot surplus count regardless of selected person");
+            Console.WriteLine($"REV19_SELECTION full_safe={safeRows.Length} full_people={safeRows.Select(row => row.Field<string>("Kart No")).Distinct().Count()} full_select_ms={selectionClock.ElapsedMilliseconds} may_surplus={mayExpected} may_selected={control.PlanAllSelected().Length}");
+            searchBox.Text = "";
+            using (var image = new System.Drawing.Bitmap(owner.Width,owner.Height)) { owner.DrawToBitmap(image, new System.Drawing.Rectangle(0,0,owner.Width,owner.Height)); image.Save("D:/Googledrive/KYERP-PDKS-MASAUSTU/08_TEST/REV19_MAY_SELECTION.png"); }
+            control.ClearSelection();
             await control.RunAuditAsync(true, true);
             var grid = (DataGridView)typeof(DbTnfSyncControl).GetField("dbGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
             var other = (DataGridView)typeof(DbTnfSyncControl).GetField("tnfGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
