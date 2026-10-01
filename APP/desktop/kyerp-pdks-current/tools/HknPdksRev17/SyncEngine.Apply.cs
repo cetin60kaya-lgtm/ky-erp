@@ -58,7 +58,7 @@ internal static partial class SyncEngine
         using var lease = new FileStream(snapshot.Request.Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
         if (Convert.ToHexString(await SHA256.HashDataAsync(lease, cancellation).ConfigureAwait(false)) != snapshot.FileHash)
             throw new InvalidOperationException("TNF kontrol sonrasında değişmiş.");
-        
+
         FbConnection? connection = null;
         FbTransaction? transaction = null;
         var replaced = false;
