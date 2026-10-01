@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\KYERP.PDKS.Core\KYERP.PDKS.Core.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Product>HKN PDKS REV17</Product>
+    <Version>17.0.0</Version>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <HknPasswordGateFile Condition="'$(HknPasswordGateFile)' == ''">$(LocalAppData)\HKN-PDKS\REV15_PASSWORD_GATE.json</HknPasswordGateFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="$(HknPasswordGateFile)" LogicalName="QuickDataTool.PasswordGate.json" />
+  </ItemGroup>
+
+  <Target Name="ValidatePasswordGate" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(HknPasswordGateFile)')" Text="Private password verifier is required. Set HknPasswordGateFile to the locally retained REV15 verifier; never commit it." />
+  </Target>
+
+</Project>

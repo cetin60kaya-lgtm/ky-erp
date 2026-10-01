@@ -1,5 +1,15 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.10.2026 — HKN PDKS REV17 hızlı veri eşitleme
+
+- Kullanıcının istediği REV17 ayrı hızlı veri EXE olarak tamamlandı; native KYERP 6.4 kaynakları bu revizyon kapsamında değiştirilmedi. Kaynak: `APP/desktop/kyerp-pdks-current/tools/HknPdksRev17`, test: `tools/HknRev17Tests`. Ayrıntı: [REV17 kaynak ve doğrulama notları](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV17.md).
+- Personel/hata listesi + gerçek DB personel özeti + eşzamanlı kaydırılan, kart/tarih/taraf anahtarında hizalanmış ayrı DB/TNF tabloları, güvenli checkbox seçimi ve kullanıcı onaylı TNF düzeltme eklendi. Çoklu/mükerrer/belirsiz eşleşme İNCELE; otomatik değişiklik yok.
+- Normal eşitleme DB'ye yazmaz. Ayrı geçersiz DB temizliği yalnız seçilen kesin kayıt için transaction, tam satır dump, yedek ve yeniden doğrulama kullanır. Canlı şirket dosyalarında otomatik yazma testi yapılmadı; yazma senaryoları sentetik fixture ile doğrulandı.
+- Ağır iş UI dışına taşındı; tek DB sorgusu, tek TNF okuması, lookup, iptal ve tek işlem kilidi korundu. Tam kontrol yıl sonuna kadar kapsamı korur. Boş DB personel durumundan AKTİF üretilmez; çelişkisiz işe giriş/çıkış sınırları içindeki hareketler belirsiz diye etiketlenmez.
+- 73 assertion geçti. Tam UI kontrolünde DB 132 ms / TNF 6 ms / karşılaştırma 36 ms / bind 20 ms / toplam 252 ms; en büyük UI heartbeat aralığı 251 ms. Standart PDKS_DENETIM_PASS; 39 fonksiyon ve 24 form audit, 0 hata; shell/V4 smoke geçti.
+- .NET 8 win-x64 self-contained single-file final üretildi: `_PAKETLER/GUNCEL/HKN-PDKS-REV17-FINAL.exe`. Gerçek final EXE parola penceresi Responding=True; eski parola korundu, bypass edilmedi. Nullable uyarıları mevcut, build hatası yok. Kanıtlar yalnız yerel 08_TEST altında; şirket kayıtları/verifier/binary Git'e eklenmez. Kullanıcı kabulü ayrıca beklenir; canlı hata adetleri sıfırlandı iddiası yok.
+
+
 ## 21.09.2026 — KY ERP Güvenlik Android PWA akışı tek canonical yapıya alındı
 
 - Feature branch: `codex/security-pwa-enrollment-final-20260921`.
