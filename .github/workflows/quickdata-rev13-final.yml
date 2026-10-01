@@ -1,0 +1,53 @@
+name: QuickDataTool REV13 Final
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/quickdata-tnf-tab-rev4
+    paths:
+      - '.github/workflows/quickdata-rev13-final.yml'
+      - '.github/scripts/quickdata-rev12-runfix.ps1'
+      - '.github/scripts/quickdata-rev12-dbfirst.ps1'
+      - '.github/scripts/quickdata-rev9-final2-build.ps1'
+      - '.github/scripts/quickdata-rev9-final-build.ps1'
+      - '.github/scripts/quickdata-rev8-build.ps1'
+
+jobs:
+  build-test-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Apply final DB-first source
+        shell: pwsh
+        run: ./.github/scripts/quickdata-rev12-runfix.ps1
+      - name: Build QuickDataTool
+        shell: pwsh
+        run: dotnet build APP/desktop/kyerp-pdks-current/tools/QuickDataTool/QuickDataTool.csproj -c Release
+      - name: Contract tests
+        shell: pwsh
+        run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/ContractTests/ContractTests.csproj -c Release
+      - name: Publish one EXE
+        shell: pwsh
+        run: |
+          $proj='APP/desktop/kyerp-pdks-current/tools/QuickDataTool/QuickDataTool.csproj'
+          $out=Join-Path $env:RUNNER_TEMP 'rev13'
+          dotnet publish $proj -c Release -r win-x64 --self-contained true -o $out -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false
+          $src=Join-Path $out 'QuickDataTool.exe'
+          $dst=Join-Path $out 'HKN-PDKS-REV13-FINAL.exe'
+          Move-Item $src $dst -Force
+          Get-ChildItem $out -File | Where-Object Name -ne 'HKN-PDKS-REV13-FINAL.exe' | Remove-Item -Force
+          if((Get-ChildItem $out -File).Count -ne 1){ throw 'Final package must contain exactly one EXE.' }
+          Get-FileHash $dst -Algorithm SHA256
+      - name: Upload REV13
+        uses: actions/upload-artifact@v4
+        with:
+          name: HKN-PDKS-REV13-FINAL
+          path: ${{ runner.temp }}\rev13\HKN-PDKS-REV13-FINAL.exe
+          if-no-files-found: error
+          retention-days: 14
