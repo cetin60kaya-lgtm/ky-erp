@@ -386,7 +386,7 @@ public sealed partial class MainShellForm : Form
     void OpenLiveAttendance()
     {
         if (!Ready(PdksModule.GunlukOperasyon)) return;
-        ShowModule(new LiveAttendanceHubForm(OpenGirisCikisFor, OpenPersonFor), PdksModule.GunlukOperasyon);
+        ShowModule(new LiveAttendanceHubForm(OpenGirisCikisFor, OpenPersonFor, currentUser.IsSuperAdmin), PdksModule.GunlukOperasyon);
     }
 
     void OpenPersonFor(string cardNo)

@@ -11,12 +11,12 @@ namespace HKN.Personel.Native;
 public sealed partial class LiveAttendanceForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
-    readonly DateTimePicker date = new(){Format=DateTimePickerFormat.Custom,CustomFormat="dd MMMM yyyy dddd",Width=225};
+    readonly DateTimePicker date = new(){Format=DateTimePickerFormat.Custom,CustomFormat="dd MMMM yyyy dddd",Width=190};
     readonly CheckBox live = new(){Text="Otomatik yenile",Checked=true,AutoSize=true,Padding=new Padding(8,6,0,0)};
     readonly Label device = new(){AutoSize=false,Width=430,Height=28,TextAlign=ContentAlignment.MiddleLeft};
-    readonly Button refresh = new(){Text="Yenile",Width=85,Height=30};
-    readonly Button syncNow = new(){Text="Eşitle",Width=85,Height=30};
-    readonly Button clearLive = new(){Text="Canlıyı Temizle",Width=125,Height=30};
+    readonly Button refresh = new(){Text="Yenile",Width=76,Height=30};
+    readonly Button syncNow = new(){Text="Eşitle",Width=76,Height=30};
+    readonly Button clearLive = new(){Text="Önbellek Temizle",Width=115,Height=30};
     readonly FlowLayoutPanel cards = new(){Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(2)};
     readonly TabControl tabs = new(){Dock=DockStyle.Fill};
     readonly Dictionary<string,DataGridView> grids = new();
@@ -43,7 +43,7 @@ public sealed partial class LiveAttendanceForm : Form
         Shown+=async (_,_)=>{timer.Start();await SyncAndLoadAsync(false,true);};
         refresh.Click+=async (_,_)=>await SyncAndLoadAsync(false,true);
         syncNow.Click+=async (_,_)=>await SyncAndLoadAsync(true,true);
-        clearLive.Click+=(_,_)=>{TerminalSyncService.ClearLive();ShowLastSync();};
+        clearLive.Click+=(_,_)=>{if(MessageBox.Show("Kısa canlı önbellek temizlensin mi?\n\nAna TNF, FDB ve 365 günlük canlı arşiv korunur.","Canlı Önbellek",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;TerminalSyncService.ClearLive();ShowLastSync();};
         date.ValueChanged+=async (_,_)=>{lastUiFingerprint="";await SyncAndLoadAsync(false,true);};
         timer.Tick+=async (_,_)=>{if(live.Checked&&Visible&&date.Value.Date==DateTime.Today)await SyncAndLoadAsync(false,false);};
         VisibleChanged+=(_,_)=>{if(IsDisposed)return;if(Visible)timer.Start();else timer.Stop();};
@@ -70,9 +70,9 @@ public sealed partial class LiveAttendanceForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
         var header=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,Padding=new Padding(16,8,16,8),BackColor=Color.White};
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,22));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,62));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,65));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,15));
         var titleBox=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2};
         titleBox.RowStyles.Add(new RowStyle(SizeType.Percent,60));titleBox.RowStyles.Add(new RowStyle(SizeType.Percent,40));
         titleBox.Controls.Add(new Label{Text="Canlı Personel Denetimi",Dock=DockStyle.Fill,TextAlign=ContentAlignment.BottomLeft,Font=new Font("Segoe UI",16f,FontStyle.Bold),ForeColor=Color.FromArgb(27,44,68)},0,0);
@@ -85,7 +85,7 @@ public sealed partial class LiveAttendanceForm : Form
 
         cards.BackColor=Color.Transparent;cards.Padding=new Padding(0,8,0,6);root.Controls.Add(cards,0,1);
         root.Controls.Add(BuildAssistantPanel(),0,2);
-        AddTab("Genel");AddTab("Kart Basmayan");AddTab("İçeride / Çıkış Bekleyen");AddTab("İzinli");AddTab("Tamamlanan");AddTab("Eşleşmeyen Kart");
+        AddTab("Genel");AddTab("Kart Basmayan");AddTab("Giriş Eksik");AddTab("İçeride / Çıkış Bekleyen");AddTab("İzinli");AddTab("Geç Giriş");AddTab("Erken Çıkış");AddTab("Tamamlanan");AddTab("Eşleşmeyen Kart");
         root.Controls.Add(BuildTrackingWorkspace(),0,3);Controls.Add(root);
     }
     void AddTab(string title)
@@ -125,6 +125,7 @@ public sealed partial class LiveAttendanceForm : Form
         var target = title switch
         {
             "Kart Basmayan" => "Kart Basmayan",
+            "Giriş Eksik" => "Giriş Eksik",
             "İçeride" or "Çıkış Eksik" => "İçeride / Çıkış Bekleyen",
             "İzinli" => "İzinli",
             "Tamamlanan" => "Tamamlanan",
@@ -212,7 +213,7 @@ public sealed partial class LiveAttendanceForm : Form
             where (k.IGTARIH is null or k.IGTARIH<@B) and (k.ICTARIH is null or k.ICTARIH>=@A)
             order by k.PKNO",new FbParameter("@A",day),new FbParameter("@B",next));
         var moves=db.Query(@"select PKNO,GTARIH,GSAAT,GDAKIKA,CTARIH,CSAAT,CDAKIKA from GIRCIK
-            where GTARIH>=@A and GTARIH<@B order by PKNO,GTARIH,GDAKIKA",new FbParameter("@A",day),new FbParameter("@B",next));
+            where (GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B) order by PKNO,coalesce(GTARIH,CTARIH),GDAKIKA,CDAKIKA",new FbParameter("@A",day),new FbParameter("@B",next));
         var leaves=db.Query(@"select PKNO,TIP,MAZERET,SUREDAKIKA,BASSAAT,BITSAAT from OZELIZIN
             where TARIH>=@A and TARIH<@B order by PKNO",new FbParameter("@A",day),new FbParameter("@B",next));
         var plans=db.Query(@"select p.GKOD,p.MTKOD,b.AD PLAN_AD,b.IGIRISS,b.GGTOL,b.DCIKISS,b.ECTOL,b.DEVAMSIZLIK
@@ -256,8 +257,11 @@ public sealed partial class LiveAttendanceForm : Form
         {
             grids["Genel"].DataSource=Table(rows);
             grids["Kart Basmayan"].DataSource=Table(rows.Where(r=>r.Status=="Kart Basmadı"));
+            grids["Giriş Eksik"].DataSource=Table(rows.Where(r=>r.Status=="Giriş Kartı Yok"));
             grids["İçeride / Çıkış Bekleyen"].DataSource=Table(rows.Where(r=>r.Status is "İçeride" or "Çıkış Kartı Yok"));
             grids["İzinli"].DataSource=Table(rows.Where(r=>r.FullLeave));
+            grids["Geç Giriş"].DataSource=Table(rows.Where(r=>r.Warning.Contains("Geç giriş",StringComparison.OrdinalIgnoreCase)));
+            grids["Erken Çıkış"].DataSource=Table(rows.Where(r=>r.Warning.Contains("Erken çıkış",StringComparison.OrdinalIgnoreCase)));
             grids["Tamamlanan"].DataSource=Table(rows.Where(r=>r.HasEntry&&r.HasExit));
             grids["Eşleşmeyen Kart"].DataSource=UnmatchedTable();
             Card("Beklenen",rows.Count(r=>r.Expected),Color.AliceBlue);Card("Gelen",rows.Count(r=>r.Expected&&r.HasEntry),Color.Honeydew);
@@ -341,14 +345,14 @@ public sealed partial class LiveAttendanceForm : Form
     {
         if(fullLeave)return "İzinli";if(!expected)return entry.HasValue?"Plansız Kart":"Çalışma Yok";
         var now=DateTime.Now;var historical=day.Date<now.Date;var today=day.Date==now.Date;var minute=now.Hour*60+now.Minute;
-        if(!entry.HasValue)return historical||(today&&minute>s.EntryTolerance)?"Kart Basmadı":"Bekleniyor";
+        if(!entry.HasValue){if(exit.HasValue)return "Giriş Kartı Yok";return historical||(today&&minute>s.EntryTolerance)?"Kart Basmadı":"Bekleniyor";}
         if(!exit.HasValue)return historical||(today&&minute>s.ExpectedExit+15)?"Çıkış Kartı Yok":"İçeride";
         return "Tamamlandı";
     }
 
     static string Warning(Schedule s,DateTime? entry,DateTime? exit,string status)
     {
-        if(status is "İzinli" or "Çalışma Yok" or "Kart Basmadı" or "Çıkış Kartı Yok")return status;
+        if(status is "İzinli" or "Çalışma Yok" or "Kart Basmadı" or "Giriş Kartı Yok" or "Çıkış Kartı Yok")return status;
         var list=new List<string>();
         if(entry.HasValue&&Minute(entry.Value)>s.EntryTolerance)list.Add($"Geç giriş +{Minute(entry.Value)-s.ExpectedEntry} dk");
         if(exit.HasValue&&Minute(exit.Value)<s.ExitTolerance)list.Add($"Erken çıkış {s.ExpectedExit-Minute(exit.Value)} dk");
@@ -361,11 +365,11 @@ public sealed partial class LiveAttendanceForm : Form
             var status=Convert.ToString(row.Cells["Durum"].Value)??"";
             row.DefaultCellStyle.BackColor=status switch
             {
-                "Kart Basmadı" or "Çıkış Kartı Yok"=>Color.MistyRose,
+                "Kart Basmadı" or "Giriş Kartı Yok" or "Çıkış Kartı Yok"=>Color.MistyRose,
                 "İzinli"=>Color.LemonChiffon,
                 "İçeride"=>Color.Honeydew,
                 "Tamamlandı"=>Color.White,
-                _=>Color.WhiteSmoke
+                _=>grid.Columns.Contains("Uyarı") && !string.IsNullOrWhiteSpace(Convert.ToString(row.Cells["Uyarı"].Value)) ? Color.LemonChiffon : Color.WhiteSmoke
             };
         }
     }

@@ -14,13 +14,15 @@ public sealed class AttendanceHistoryForm : Form
     readonly Label archiveInfo = new() { AutoSize = false, Height = 38, TextAlign = ContentAlignment.MiddleLeft };
     readonly Label status = new() { AutoSize = false, Height = 32, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.FromArgb(55, 70, 92) };
     bool loading;
+    readonly bool allowArchiveCleanup;
 
     sealed record EmployeeRow(string Code, string Name, DateTime Hire, DateTime? Exit);
     sealed record MovementRow(string Code, DateTime Day, TimeSpan? Entry, TimeSpan? Exit);
     sealed record DayState(DateTime Day, string Code, string Name, string Entry, string Exit, string State);
 
-    public AttendanceHistoryForm()
+    public AttendanceHistoryForm(bool allowArchiveCleanup = false)
     {
+        this.allowArchiveCleanup = allowArchiveCleanup;
         Text = "Kart Basma Kontrolü • 7 Gün / Aylık / Tarih Aralığı";
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(1280, 780);
@@ -107,8 +109,11 @@ public sealed class AttendanceHistoryForm : Form
         status.Dock = DockStyle.Fill;
         actions.Controls.Add(status, 0, 0);
         var clean = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
-        clean.Controls.Add(B("CANLI ARŞİVİ KOMPLE TEMİZLE", 210, (_, _) => ClearAllArchive()));
-        clean.Controls.Add(B("TARİH ARALIĞINI TEMİZLE", 190, (_, _) => ClearRange()));
+        if (allowArchiveCleanup)
+        {
+            clean.Controls.Add(B("CANLI ARŞİVİ KOMPLE TEMİZLE", 210, (_, _) => ClearAllArchive()));
+            clean.Controls.Add(B("TARİH ARALIĞINI TEMİZLE", 190, (_, _) => ClearRange()));
+        }
         actions.Controls.Add(clean, 1, 0);
         root.Controls.Add(actions, 0, 4);
 

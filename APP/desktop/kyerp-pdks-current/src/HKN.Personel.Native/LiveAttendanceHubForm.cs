@@ -5,7 +5,7 @@ public sealed class LiveAttendanceHubForm : Form
     readonly LiveAttendanceForm live;
     readonly AttendanceHistoryForm history;
 
-    public LiveAttendanceHubForm(Action<string, DateTime>? openEntryExit = null, Action<string>? openPerson = null)
+    public LiveAttendanceHubForm(Action<string, DateTime>? openEntryExit = null, Action<string>? openPerson = null, bool allowArchiveCleanup = false)
     {
         Text = "Canlı Personel & Kart Kontrol Merkezi";
         StartPosition = FormStartPosition.CenterParent;
@@ -15,7 +15,7 @@ public sealed class LiveAttendanceHubForm : Form
         BackColor = Color.FromArgb(246, 249, 253);
 
         live = new LiveAttendanceForm(openEntryExit, openPerson);
-        history = new AttendanceHistoryForm();
+        history = new AttendanceHistoryForm(allowArchiveCleanup);
 
         var tabs = new TabControl
         {

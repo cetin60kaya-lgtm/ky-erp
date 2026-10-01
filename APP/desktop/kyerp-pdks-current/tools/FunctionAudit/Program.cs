@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Reflection;
 using System.Text;
 using HKN.Personel.Native;
 
@@ -7,6 +8,7 @@ Environment.SetEnvironmentVariable("KY_PDKS_UI_AUDIT", "1", EnvironmentVariableT
 
 var errors = new List<string>();
 var results = new List<string>();
+RunLiveAttendanceChecks(errors, results);
 Application.ThreadException += (_, e) => errors.Add("UI: " + e.Exception.GetBaseException().Message);
 
 var user = new LocalUser
@@ -111,6 +113,40 @@ Console.WriteLine(errors.Count == 0 ? "FUNCTION_AUDIT_PASS" : "FUNCTION_AUDIT_FA
 shell.Close();
 Environment.Exit(errors.Count == 0 ? 0 : 1);
 
+static void RunLiveAttendanceChecks(List<string> errors, List<string> results)
+{
+    try
+    {
+        using var form = new LiveAttendanceForm();
+        var tabs = FindControls<TabControl>(form).FirstOrDefault();
+        var names = tabs?.TabPages.Cast<TabPage>().Select(x => x.Text).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+        foreach (var required in new[] { "Giriş Eksik", "Geç Giriş", "Erken Çıkış" })
+            if (!names.Contains(required)) errors.Add("Canlı denetim sekmesi eksik: " + required);
+        var scheduleType = typeof(LiveAttendanceForm).GetNestedType("Schedule", BindingFlags.NonPublic);
+        var status = typeof(LiveAttendanceForm).GetMethod("Status", BindingFlags.NonPublic | BindingFlags.Static);
+        if (scheduleType is null || status is null) errors.Add("Canlı denetim durum sınıflandırıcısı bulunamadı.");
+        else
+        {
+            var schedule = Activator.CreateInstance(scheduleType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null,
+                new object[] { "Test", 510, 525, 1140, 1110, 450 }, null);
+            var day = DateTime.Today.AddDays(-1);
+            var exitOnly = status.Invoke(null, new object?[] { day, schedule, true, false, null, day.AddHours(19) }) as string;
+            if (!string.Equals(exitOnly, "Giriş Kartı Yok", StringComparison.Ordinal)) errors.Add("Exit-only canlı hareket yanlış sınıflandı: " + exitOnly);
+        }
+        var failed = errors.Any(x => x.Contains("Canlı denetim", StringComparison.OrdinalIgnoreCase) || x.Contains("Exit-only", StringComparison.OrdinalIgnoreCase));
+        results.Add(failed ? "FAIL|Canlı denetim durum/sekme regresyonu" : "PASS|Canlı denetim giriş-çıkış ve geç/erken filtreleri");
+    }
+    catch (Exception ex) { errors.Add("Canlı denetim regresyon testi: " + ex.GetBaseException().Message); }
+}
+
+static IEnumerable<T> FindControls<T>(Control root) where T : Control
+{
+    foreach (Control child in root.Controls)
+    {
+        if (child is T match) yield return match;
+        foreach (var nested in FindControls<T>(child)) yield return nested;
+    }
+}
 static void Collect(ToolStripMenuItem parent, string path, List<(string Path, ToolStripMenuItem Item)> leaves)
 {
     var children = parent.DropDownItems.OfType<ToolStripMenuItem>().ToArray();
