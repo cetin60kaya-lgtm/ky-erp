@@ -42,11 +42,9 @@ public sealed partial class MainShellForm
         var general = PlainItem("Genel", ShowHome);
 
         var operation = TopMenu("Operasyon");
-        operation.DropDownItems.Add(MenuItem("Canlı Personel Denetimi", PdksModule.GunlukOperasyon, OpenLiveAttendance));
-        operation.DropDownItems.Add(MenuItem("Kart Basma Kontrolü • Gün / 7 Gün / Ay", PdksModule.GunlukOperasyon,
-            () => ShowModule(new AttendanceHistoryForm(), PdksModule.GunlukOperasyon)));
+        operation.DropDownItems.Add(MenuItem("Canlı / Kart Kontrol Merkezi", PdksModule.GunlukOperasyon, OpenLiveAttendance));
         operation.DropDownItems.Add(new ToolStripSeparator());
-        operation.DropDownItems.Add(MenuItem("Terminal / Kart Cihazı", PdksModule.Terminal, OpenTerminalCenter));
+        operation.DropDownItems.Add(MenuItem("Terminalden Veri Al / Eşitle", PdksModule.Terminal, OpenTerminalCenter));
         operation.DropDownItems.Add(MenuItem("Giriş / Çıkış Kayıtları", PdksModule.GirisCikis, OpenLegacyGirisCikis));
 
         var personnel = TopMenu("Personel");
@@ -56,7 +54,7 @@ public sealed partial class MainShellForm
         personnel.DropDownItems.Add(MenuItem("Çalışma Süresi Düzeltmeleri", PdksModule.Personel,
             () => OpenLegacyTable("Çalışma Süresi Düzeltmeleri", "PERTIMESHIFT", true, new Size(1080, 680))));
 
-        var payroll = TopMenu("Puantaj & Bordro");
+        var payroll = TopMenu("Puantaj / Bordro");
         var timesheet = MenuItem("Puantaj Kontrol / Yeniden Hesaplama", PdksModule.Puantaj, OpenLegacyPuantaj);
         timesheet.ToolTipText = "Giriş-çıkış, izin, vardiya ve tatil kayıtlarından oluşan puantajı kontrol eder. Kaynak değişmediyse yeniden hesaplama gerekmez.";
         payroll.DropDownItems.Add(timesheet);
@@ -105,7 +103,7 @@ public sealed partial class MainShellForm
         }
 
         var settings = TopMenu("Ayarlar");
-        settings.DropDownItems.Add(MenuItem("Terminal / Kart Cihazı Ayarları", PdksModule.Terminal, OpenTerminalSettingsDirect));
+        settings.DropDownItems.Add(MenuItem("Kart Cihazı Ayarları", PdksModule.Terminal, OpenTerminalSettingsDirect));
         settings.DropDownItems.Add(MenuItem("Çalışma Tarihi / İş Günü", PdksModule.Donemler, OpenWorkingDate));
         settings.DropDownItems.Add(new ToolStripSeparator());
         settings.DropDownItems.Add(MenuItem("Vardiya / Çalışma Grupları", PdksModule.Tanimlar, OpenGroups));
@@ -143,9 +141,9 @@ public sealed partial class MainShellForm
         RemoveEmptyTopMenus();
 
         MainMenuStrip.AutoSize = false;
-        MainMenuStrip.Height = 30;
-        MainMenuStrip.Padding = new Padding(6, 2, 0, 1);
-        MainMenuStrip.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+        MainMenuStrip.Height = 34;
+        MainMenuStrip.Padding = new Padding(10, 3, 0, 2);
+        MainMenuStrip.Font = new Font("Segoe UI", 9.2f, FontStyle.Bold);
         MainMenuStrip.BackColor = Color.FromArgb(248, 249, 251);
         MainMenuStrip.ContextMenuStrip = null;
         MainMenuStrip.ShowItemToolTips = true;
@@ -153,8 +151,9 @@ public sealed partial class MainShellForm
         {
             item.Image = null;
             item.AutoSize = true;
-            item.Padding = new Padding(5, 0, 5, 0);
-            item.Margin = Padding.Empty;
+            item.Padding = new Padding(10, 0, 10, 0);
+            item.Margin = new Padding(1, 0, 1, 0);
+            item.DropDown.MinimumSize = new Size(250, 0);
         }
     }
 
@@ -166,7 +165,7 @@ public sealed partial class MainShellForm
         };
         tool.Height = 58;
         tool.ImageScalingSize = new Size(24, 24);
-        tool.Padding = new Padding(5, 1, 0, 1);
+        tool.Padding = new Padding(10, 2, 0, 2);
         tool.ContextMenuStrip = null;
         tool.RenderMode = ToolStripRenderMode.System;
         foreach (var button in tool.Items.OfType<ToolStripButton>())
@@ -177,7 +176,7 @@ public sealed partial class MainShellForm
             button.Width = (button.Text ?? string.Empty) is "Canlı İzleme" or "Giriş-Çıkış" ? 82 : 72;
             button.Font = new Font("Segoe UI", 7.6f, FontStyle.Regular);
             button.Padding = Padding.Empty;
-            button.Margin = new Padding(1, 0, 1, 0);
+            button.Margin = new Padding(3, 0, 3, 0);
         }
     }
 

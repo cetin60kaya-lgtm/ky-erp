@@ -189,6 +189,19 @@ public sealed class AttendanceHistoryForm : Form
         }
         catch { }
 
+        var holidayDays = new HashSet<(string Code, DateTime Day)>();
+        try
+        {
+            var holidayTable = db.Query(@"select PKNO,TARIH from PERPLANTAT where TARIH>=@A and TARIH<@B",
+                new FbParameter("@A", a), new FbParameter("@B", b.AddDays(1)));
+            foreach (DataRow r in holidayTable.Rows)
+            {
+                var day = D(r, "TARIH");
+                var code = S(r, "PKNO");
+                if (day.HasValue && code.Length > 0) holidayDays.Add((code, day.Value.Date));
+            }
+        }
+        catch { }
         var result = new List<DayState>();
         foreach (var employee in employees)
         {
@@ -199,7 +212,9 @@ public sealed class AttendanceHistoryForm : Form
                 movements.TryGetValue((employee.Code, day), out var move);
                 var leave = leaveDays.Contains((employee.Code, day));
                 var weekend = day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+                var holiday = holidayDays.Contains((employee.Code, day));
                 var state = weekend ? "Hafta Sonu"
+                    : holiday ? "Tatil"
                     : leave ? "İzinli"
                     : move is null ? "Kart Basmadı"
                     : move.Entry.HasValue && move.Exit.HasValue ? "Tamam"
@@ -219,7 +234,7 @@ public sealed class AttendanceHistoryForm : Form
         foreach (var c in new[] { "Kart No", "Ad Soyad", "Çalışma Günü", "Kart Basılan", "Kart Basmayan", "Eksik Çıkış", "Giriş Eksik", "İzinli", "Son Giriş", "Son Çıkış" }) table.Columns.Add(c);
         foreach (var g in rows.GroupBy(x => new { x.Code, x.Name }).OrderBy(x => x.Key.Code))
         {
-            var work = g.Count(x => x.State != "Hafta Sonu" && x.State != "İzinli");
+            var work = g.Count(x => x.State != "Hafta Sonu" && x.State != "Tatil" && x.State != "İzinli");
             var punched = g.Count(x => x.State is "Tamam" or "Çıkış Eksik" or "Giriş Eksik");
             var missing = g.Count(x => x.State == "Kart Basmadı");
             var exitMissing = g.Count(x => x.State == "Çıkış Eksik");
@@ -249,7 +264,7 @@ public sealed class AttendanceHistoryForm : Form
         {
             var state = Convert.ToString(r.Cells["Durum"].Value);
             if (state == "Kart Basmadı" || state == "Çıkış Eksik" || state == "Giriş Eksik") r.DefaultCellStyle.BackColor = Color.FromArgb(255, 232, 229);
-            else if (state == "İzinli") r.DefaultCellStyle.BackColor = Color.FromArgb(255, 248, 204);
+            else if (state is "İzinli" or "Tatil") r.DefaultCellStyle.BackColor = Color.FromArgb(255, 248, 204);
         }
     }
 
@@ -287,11 +302,8 @@ public sealed class AttendanceHistoryForm : Form
         var cday = D(r, "CTARIH");
         var day = gday ?? cday;
         if (day is null || code.Length == 0) return null;
-        TimeSpan? entry = null, exit = null;
-        if (r.Table.Columns.Contains("GSAAT") && r["GSAAT"] != DBNull.Value)
-            entry = new TimeSpan(I(r, "GSAAT"), I(r, "GDAKIKA"), 0);
-        if (r.Table.Columns.Contains("CSAAT") && r["CSAAT"] != DBNull.Value)
-            exit = new TimeSpan(I(r, "CSAAT"), I(r, "CDAKIKA"), 0);
+        var entry = ReadClock(r, "GSAAT", "GDAKIKA");
+        var exit = ReadClock(r, "CSAAT", "CDAKIKA");
         return new(code, day.Value.Date, entry, exit);
     }
 
@@ -303,6 +315,17 @@ public sealed class AttendanceHistoryForm : Form
         return new(first.Code, first.Day, entries.Length == 0 ? null : entries[0], exits.Length == 0 ? null : exits[^1]);
     }
 
+    static TimeSpan? ReadClock(DataRow r, string hourColumn, string minuteColumn)
+    {
+        if (!r.Table.Columns.Contains(hourColumn) || r[hourColumn] == DBNull.Value) return null;
+        var raw = Convert.ToString(r[hourColumn])?.Trim() ?? string.Empty;
+        if (TimeSpan.TryParse(raw, out var parsed)) return new TimeSpan(parsed.Hours, parsed.Minutes, 0);
+        if (DateTime.TryParse(raw, out var dateParsed)) return new TimeSpan(dateParsed.Hour, dateParsed.Minute, 0);
+        if (!int.TryParse(raw, out var hour)) return null;
+        var minute = I(r, minuteColumn);
+        if (hour is < 0 or > 23 || minute is < 0 or > 59) return null;
+        return new TimeSpan(hour, minute, 0);
+    }
     static string S(DataRow r, string c) => r.Table.Columns.Contains(c) && r[c] != DBNull.Value ? Convert.ToString(r[c])?.Trim() ?? "" : "";
     static int I(DataRow r, string c) => r.Table.Columns.Contains(c) && r[c] != DBNull.Value ? Convert.ToInt32(r[c]) : 0;
     static DateTime? D(DataRow r, string c) => r.Table.Columns.Contains(c) && r[c] != DBNull.Value ? Convert.ToDateTime(r[c]) : null;

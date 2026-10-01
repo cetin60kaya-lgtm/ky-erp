@@ -15,17 +15,30 @@ var user = new LocalUser
     Permissions = Enum.GetNames<PdksModule>().ToList()
 };
 
-using var form = new MainShellForm(user);
+using var form = new MainShellForm(user)
+{
+    StartPosition = FormStartPosition.Manual,
+    Location = new Point(20, 20),
+    Size = new Size(1500, 900)
+};
+form.Show();
+Application.DoEvents();
+Thread.Sleep(250);
+Application.DoEvents();
+
 var menus = form.MainMenuStrip!.Items.Cast<ToolStripItem>()
     .Where(x => x.Alignment != ToolStripItemAlignment.Right)
     .Select(x => x.Text ?? string.Empty)
     .ToArray();
-foreach (var required in new[] { "Genel Bakış", "Operasyon", "İnsan Kaynakları", "Puantaj ve Bordro" })
+foreach (var required in new[] { "Genel", "Operasyon", "Personel", "Puantaj / Bordro", "Raporlar", "Yönetim", "Ayarlar", "Yardım" })
     if (!menus.Contains(required)) throw new InvalidOperationException("Ana menü eksik: " + required);
+
+if (menus.Distinct(StringComparer.OrdinalIgnoreCase).Count() != menus.Length)
+    throw new InvalidOperationException("Ana menüde mükerrer üst başlık var.");
 
 var toolbar = form.Controls.OfType<ToolStrip>().First(x => x is not MenuStrip && x is not StatusStrip);
 var toolNames = toolbar.Items.OfType<ToolStripButton>().Select(x => x.Text ?? string.Empty).ToArray();
-foreach (var required in new[] { "Genel Bakış", "Canlı İzleme", "Terminal", "Giriş-Çıkış", "Personel", "Puantaj", "Sonuçlar", "Bordro" })
+foreach (var required in new[] { "Genel Bakış", "Canlı İzleme", "Terminal", "Giriş-Çıkış", "Personel", "Puantaj", "Bordro" })
     if (!toolNames.Contains(required)) throw new InvalidOperationException("Araç çubuğu eksik: " + required);
 
 using (var settings = new LegacyTerminalSettingsForm())
@@ -68,11 +81,9 @@ using (var payroll = new LegacyBordroForm())
         if (!buttons.Contains(required)) throw new InvalidOperationException("Bordro komutu eksik: " + required);
 }
 
-var timer = new System.Windows.Forms.Timer { Interval = 250 };
-timer.Tick += (_, _) => { timer.Stop(); form.Close(); };
-form.Shown += (_, _) => timer.Start();
-Application.Run(form);
-Console.WriteLine("KYERP PDKS 6.3.2 SHELL SMOKE OK");
+form.Close();
+Application.DoEvents();
+Console.WriteLine("KYERP PDKS 6.4.0 SHELL SMOKE OK");
 
 static IEnumerable<Control> Descendants(Control root)
 {

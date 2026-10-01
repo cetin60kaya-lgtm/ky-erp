@@ -25,9 +25,10 @@ var errors = new List<string>();
 
 var user = new LocalUser
 {
-    UserName = "UI-AUDIT",
+    UserName = "ADMIN",
     IsActive = true,
     IsAdmin = true,
+    IsCompanyResponsible = true,
     Permissions = Enum.GetNames<PdksModule>().ToList()
 };
 
@@ -44,7 +45,8 @@ var jobs = new List<(string Name, Func<Form> Factory)>
     ("08-Bordro", () => new LegacyBordroForm()),
     ("09-TerminalAyarlari", () => new LegacyTerminalSettingsForm()),
     ("10-Kullanicilar", () => new UserManagementForm()),
-    ("11-CanliDenetim", () => new LiveAttendanceForm())
+    ("11-CanliDenetim", () => new LiveAttendanceForm()),
+    ("12-KartGecmisi", () => new AttendanceHistoryForm())
 };
 
 foreach (var view in Enum.GetValues<LegacyDataView>())
@@ -66,9 +68,9 @@ foreach (var job in jobs)
         using var form = job.Factory();
         PdksTheme.Apply(form);
         if (noLoad || job.Name.StartsWith("30-Rapor-", StringComparison.Ordinal))
-            CaptureFormNoLoad(form, job.Name, root, log);
+            CaptureFormNoLoad(form, job.Name, root, log, errors);
         else
-            CaptureForm(form, job.Name, root, log);
+            CaptureForm(form, job.Name, root, log, errors);
     }
     catch (Exception ex)
     {
@@ -82,8 +84,8 @@ try
 {
     using var personnel = new PersonelForm();
     using var transfer = personnel.CreateTerminalTransferDialog();
-    if (noLoad) CaptureFormNoLoad(transfer, "40-Terminal-Veri-Transferi", root, log);
-    else CaptureForm(transfer, "40-Terminal-Veri-Transferi", root, log);
+    if (noLoad) CaptureFormNoLoad(transfer, "40-Terminal-Veri-Transferi", root, log, errors);
+    else CaptureForm(transfer, "40-Terminal-Veri-Transferi", root, log, errors);
 }
 catch (Exception ex)
 {
@@ -101,16 +103,17 @@ Console.WriteLine($"UI_AUDIT_FORMS={jobs.Count + 1}");
 Console.WriteLine($"UI_AUDIT_ERRORS={errors.Count}");
 foreach (var error in errors) Console.WriteLine("ERROR=" + error);
 
-static void CaptureFormNoLoad(Form form, string name, string root, StringBuilder log)
+static void CaptureFormNoLoad(Form form, string name, string root, StringBuilder log, List<string> errors)
 {
     form.CreateControl();
     form.PerformLayout();
     log.AppendLine($"FORM-NOLOAD|{name}|{form.Text}|{form.Width}x{form.Height}");
     WriteControlTree(form, log, 0);
+    ValidateLayout(form, name, errors, log);
     Capture(form, Path.Combine(root, Safe(name) + ".png"));
 }
 
-static void CaptureForm(Form form, string name, string root, StringBuilder log)
+static void CaptureForm(Form form, string name, string root, StringBuilder log, List<string> errors)
 {
     form.StartPosition = FormStartPosition.Manual;
     form.Location = new Point(40, 40);
@@ -138,6 +141,7 @@ static void CaptureForm(Form form, string name, string root, StringBuilder log)
     else
     {
         var settle = form is LiveAttendanceForm ? 2600
+            : form is AttendanceHistoryForm ? 1800
             : form is PersonelForm ? 1200
             : form.GetType().Name.Contains("Terminal", StringComparison.OrdinalIgnoreCase) ? 1800
             : 650;
@@ -147,6 +151,7 @@ static void CaptureForm(Form form, string name, string root, StringBuilder log)
 
     log.AppendLine($"FORM|{name}|{form.Text}|{form.Width}x{form.Height}");
     WriteControlTree(form, log, 0);
+    ValidateLayout(form, name, errors, log);
     Capture(form, Path.Combine(root, Safe(name) + ".png"));
 
     if (form is MainShellForm && form.MainMenuStrip is MenuStrip menu)
@@ -211,6 +216,40 @@ static void WriteControlTree(Control root, StringBuilder log, int depth)
     }
 }
 
+static void ValidateLayout(Form form, string name, List<string> errors, StringBuilder log)
+{
+    foreach (var control in Descendants(form).Where(x => x.Visible))
+    {
+        if (control is Button button)
+        {
+            if (button.Width < 28 || button.Height < 22)
+            {
+                var msg = $"{name}: sıkışmış buton '{button.Text}' {button.Width}x{button.Height}";
+                errors.Add(msg); log.AppendLine("LAYOUT_ERROR|" + msg);
+            }
+            if (button.Parent is Control parent && !parent.ClientRectangle.Contains(button.Bounds))
+            {
+                var msg = $"{name}: taşan buton '{button.Text}' Bounds={button.Bounds} Parent={parent.ClientRectangle}";
+                errors.Add(msg); log.AppendLine("LAYOUT_ERROR|" + msg);
+            }
+        }
+        if (control is TabControl tabs && tabs.Width < 300)
+        {
+            var msg = $"{name}: dar sekme alanı {tabs.Width}x{tabs.Height}";
+            errors.Add(msg); log.AppendLine("LAYOUT_ERROR|" + msg);
+        }
+    }
+    if (form.MainMenuStrip is MenuStrip menu)
+    {
+        var visible = menu.Items.OfType<ToolStripMenuItem>().Where(x => x.Visible).ToArray();
+        var total = visible.Sum(x => x.Width + x.Margin.Horizontal);
+        if (total > menu.DisplayRectangle.Width)
+        {
+            var msg = $"{name}: üst menü sıkışıyor toplam={total} alan={menu.DisplayRectangle.Width}";
+            errors.Add(msg); log.AppendLine("LAYOUT_ERROR|" + msg);
+        }
+    }
+}
 static IEnumerable<Control> Descendants(Control root)
 {
     foreach (Control child in root.Controls)

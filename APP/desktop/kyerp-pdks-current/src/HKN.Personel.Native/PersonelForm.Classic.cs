@@ -24,7 +24,7 @@ public partial class PersonelForm
         AutoScaleMode=AutoScaleMode.None;
         Font=new Font("Microsoft Sans Serif",8.25f,FontStyle.Regular,GraphicsUnit.Point);
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=3,Padding=new Padding(6,25,6,0),Margin=Padding.Empty};
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,390)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,450)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute,77)); root.RowStyles.Add(new RowStyle(SizeType.Absolute,22));
         BuildClassicList(); root.Controls.Add(list,0,0); BuildClassicRight(root); root.Controls.Add(BuildClassicSearch(),0,1); var st=BuildClassicStatus(); root.Controls.Add(st,0,2); root.SetColumnSpan(st,2);
         Controls.Add(root);
@@ -114,7 +114,7 @@ public partial class PersonelForm
 
     Control BuildClassicSearch()
     {
-        var outer=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Padding=new Padding(0,4,0,0),Margin=Padding.Empty};outer.RowStyles.Add(new RowStyle(SizeType.Absolute,30));outer.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        var outer=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Padding=new Padding(0,4,0,0),Margin=Padding.Empty};outer.RowStyles.Add(new RowStyle(SizeType.Absolute,34));outer.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         var row=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Margin=Padding.Empty};var prev=NavButton("◀",-1);var next=NavButton("▶",1);searchField.Items.AddRange(new object[]{"Kart No","Ad","Soyad","İşe Giriş Tarihi","İşten Çıkış Tarihi"});searchField.SelectedIndex=0;
         row.Controls.Add(prev);row.Controls.Add(new Label{Text="Ara",AutoSize=true,Padding=new Padding(3,7,2,0)});row.Controls.Add(searchField);row.Controls.Add(searchText);row.Controls.Add(scopeActive);row.Controls.Add(scopePassive);row.Controls.Add(scopeAll);row.Controls.Add(next);outer.Controls.Add(row,0,0);
         var g=new GroupBox{Text="Sıralama Şekli",Dock=DockStyle.Fill,Padding=new Padding(5,0,0,0)};string[] names={"Kart No","Ad","Soyad","İşe Giriş Tarihi","İşten Çıkış Tarihi"};string[] cols={"PKNO","AD","SOYAD","IGTARIH","ICTARIH"};
@@ -123,7 +123,7 @@ public partial class PersonelForm
     }
     void QueuePersonLoad(){if(list.CurrentRow?.Cells["PKNO"].Value is not object v)return;pendingPersonPk=v.ToString()??"";personLoadTimer.Stop();personLoadTimer.Start();}
     void PersonListFormat(object? sender,DataGridViewCellFormattingEventArgs e){if(e.RowIndex<0||!list.Columns.Contains("ICTARIH"))return;var st=e.CellStyle;if(st is null)return;var exited=list.Rows[e.RowIndex].Cells["ICTARIH"].Value is not null and not DBNull;var back=exited?Color.FromArgb(255,238,238):Color.FromArgb(238,250,240);var sel=exited?Color.FromArgb(250,220,220):Color.FromArgb(216,240,222);st.BackColor=back;st.ForeColor=Color.FromArgb(35,55,65);st.SelectionBackColor=sel;st.SelectionForeColor=Color.FromArgb(25,45,55);}
-    Button NavButton(string text,int delta){var b=new Button{Text=text,Width=24,Height=23,Margin=new Padding(1,1,1,0),ForeColor=Color.RoyalBlue};b.Click+=(_,_)=>MoveRow(delta);return b;}
+    Button NavButton(string text,int delta){var b=new Button{Text=text,Width=28,Height=27,Margin=new Padding(1,1,1,0),ForeColor=Color.RoyalBlue};b.Click+=(_,_)=>MoveRow(delta);return b;}
     void MoveRow(int d){if(list.Rows.Count==0)return;int i=list.CurrentRow?.Index??0;i=Math.Max(0,Math.Min(list.Rows.Count-1,i+d));list.CurrentCell=list.Rows[i].Cells[0];}
     void ApplyClassicSearch(){if(list.DataSource is not DataTable dt)return;string s=searchText.Text.Replace("'","''").Trim();string c=searchField.SelectedIndex switch{1=>"AD",2=>"SOYAD",3=>"IGTARIH",4=>"ICTARIH",_=>"PKNO"};dt.DefaultView.RowFilter=s.Length==0?"":(c is "IGTARIH" or "ICTARIH"?$"CONVERT({c}, 'System.String') LIKE '%{s}%'":$"{c} LIKE '%{s}%'");UpdateClassicStats();}
     void SortChanged(object? sender,EventArgs e){if(sender is RadioButton r&&r.Checked&&list.DataSource is DataTable dt)dt.DefaultView.Sort=$"{r.Tag} ASC";}

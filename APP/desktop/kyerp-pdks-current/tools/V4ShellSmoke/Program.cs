@@ -6,14 +6,16 @@ foreach (var key in new[] { "KY_PDKS_DB_PATH", "KY_PDKS_DB_HOST", "KY_PDKS_DB_PO
     var value = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User);
     if (!string.IsNullOrWhiteSpace(value)) Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.Process);
 }
-var admin = new LocalUser { UserName="SMOKE", IsActive=true, IsAdmin=true, Permissions=Enum.GetNames<PdksModule>().ToList() };
+var admin = new LocalUser { UserName="ADMIN", IsActive=true, IsAdmin=true, IsCompanyResponsible=true, Permissions=Enum.GetNames<PdksModule>().ToList() };
 using var form = new MainShellForm(admin);
+form.Show();
+Application.DoEvents();
 var menu = form.MainMenuStrip!.Items.Cast<ToolStripItem>().Where(x=>x.Alignment!=ToolStripItemAlignment.Right).Select(x=>x.Text).ToArray();
-var expected = new[]{"Genel Bakış","Operasyon","İnsan Kaynakları","Puantaj ve Bordro","Yapılandırma","Raporlama ve Denetim","Sistem Yönetimi","Çalışma Alanı","Destek ve Bilgi"};
+var expected = new[]{"Genel","Operasyon","Personel","Puantaj / Bordro","Raporlar","Yönetim","Ayarlar","Yardım"};
 if(!menu.SequenceEqual(expected)) throw new Exception("Menu mismatch: "+string.Join(" | ",menu));
 var toolbar=form.Controls.OfType<ToolStrip>().First(x=>x is not MenuStrip && x is not StatusStrip);
 var tools=toolbar.Items.OfType<ToolStripButton>().Select(x=>x.Text).ToArray();
-var expectedTools=new[]{"Genel Bakış","Canlı İzleme","Terminal","Giriş-Çıkış","Personel","Puantaj","Sonuçlar","Bordro","Çalışma Tarihi"};
+var expectedTools=new[]{"Genel Bakış","Canlı İzleme","Terminal","Giriş-Çıkış","Personel","Puantaj","Bordro"};
 if(!tools.SequenceEqual(expectedTools)) throw new Exception("Toolbar mismatch: "+string.Join(" | ",tools));
 var viewer=new LocalUser{UserName="VIEW",IsActive=true,Permissions=[PdksModule.Personel.ToString()],ReadOnlyPermissions=[PdksModule.Personel.ToString()]};
 if(!viewer.Can(PdksModule.Personel)||viewer.CanEdit(PdksModule.Personel)) throw new Exception("Read-only access failed");

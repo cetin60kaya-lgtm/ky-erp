@@ -60,7 +60,7 @@ public static class PdksTheme
         var baseSize = parent.ClientSize;
         foreach (Control c in parent.Controls)
         {
-            if (c.Dock == DockStyle.None && baseSize.Width > 0 && baseSize.Height > 0)
+            if (c.Dock == DockStyle.None && c is not Button && baseSize.Width > 0 && baseSize.Height > 0)
             {
                 var anchor = c.Anchor;
                 if (c.Right >= baseSize.Width - 70) anchor |= AnchorStyles.Right;

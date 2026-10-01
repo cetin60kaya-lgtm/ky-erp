@@ -32,12 +32,15 @@ public sealed partial class MainShellForm : Form
         WindowState = FormWindowState.Normal;
         MinimumSize = new Size(1100,700);
         StartPosition = FormStartPosition.Manual;
+        var working = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1440, 900);
+        Size = new Size(Math.Min(1680, Math.Max(MinimumSize.Width, working.Width - 80)), Math.Min(960, Math.Max(MinimumSize.Height, working.Height - 70)));
+        Location = new Point(working.Left + Math.Max(0, (working.Width - Width) / 2), working.Top + Math.Max(0, (working.Height - Height) / 2));
         Font = new Font("Segoe UI",9f);
         DoubleBuffered = true;
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
         ToolStripManager.Renderer = new ModernShellRenderer();
-        BuildMenu();
-        BuildToolbar();
+        BuildCanonicalMenuHost();
+        BuildCanonicalToolbarSeed();
         BuildStatus();
         Controls.Add(workspace); Controls.Add(tool); Controls.Add(MainMenuStrip!); Controls.Add(status);
         ShowHome();
@@ -383,7 +386,7 @@ public sealed partial class MainShellForm : Form
     void OpenLiveAttendance()
     {
         if (!Ready(PdksModule.GunlukOperasyon)) return;
-        ShowModule(new LiveAttendanceForm(OpenGirisCikisFor, OpenPersonFor), PdksModule.GunlukOperasyon);
+        ShowModule(new LiveAttendanceHubForm(OpenGirisCikisFor, OpenPersonFor), PdksModule.GunlukOperasyon);
     }
 
     void OpenPersonFor(string cardNo)

@@ -78,7 +78,7 @@ public sealed class LegacyDataModuleForm : Form
     void BuildGridUi()
     {
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(5)};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,42));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,24));root.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,24));root.RowStyles.Add(new RowStyle(SizeType.Absolute,44));
         var top=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(2,4,0,0)};
         top.Controls.Add(new Label{Text="Tarih Aralığı",AutoSize=true,Padding=new Padding(0,7,4,0)});top.Controls.Add(from);top.Controls.Add(new Label{Text="ile",AutoSize=true,Padding=new Padding(4,7,4,0)});top.Controls.Add(to);
         var show=LegacyButton("Göster",82,25);show.Click+=(_,_)=>ReloadData();top.Controls.Add(show);top.Controls.Add(new Label{Text="Ara",AutoSize=true,Padding=new Padding(12,7,4,0)});search.TextChanged+=(_,_)=>ApplySearch();top.Controls.Add(search);

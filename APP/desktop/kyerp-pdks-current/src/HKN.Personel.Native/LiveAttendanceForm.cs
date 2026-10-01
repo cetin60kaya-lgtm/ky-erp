@@ -70,9 +70,9 @@ public sealed partial class LiveAttendanceForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
         var header=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,Padding=new Padding(16,8,16,8),BackColor=Color.White};
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,38));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,27));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,22));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,62));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16));
         var titleBox=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2};
         titleBox.RowStyles.Add(new RowStyle(SizeType.Percent,60));titleBox.RowStyles.Add(new RowStyle(SizeType.Percent,40));
         titleBox.Controls.Add(new Label{Text="Canlı Personel Denetimi",Dock=DockStyle.Fill,TextAlign=ContentAlignment.BottomLeft,Font=new Font("Segoe UI",16f,FontStyle.Bold),ForeColor=Color.FromArgb(27,44,68)},0,0);

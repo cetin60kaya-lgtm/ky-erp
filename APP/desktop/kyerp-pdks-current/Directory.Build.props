@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup Condition="'$(KYERP_PDKS_BUILD_ROOT)' != ''">
+    <BaseOutputPath>$(KYERP_PDKS_BUILD_ROOT)\bin\$(MSBuildProjectName)\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(KYERP_PDKS_BUILD_ROOT)\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\obj\**;$(MSBuildProjectDirectory)\bin\**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

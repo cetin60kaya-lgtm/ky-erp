@@ -14,7 +14,7 @@ public sealed class LegacyTerminalSettingsForm : Form
     readonly ComboBox direction = Combo("GİRİŞ", "ÇIKIŞ");
     readonly TextBox transferFile = new();
     readonly NumericUpDown tolerance = Number(0, 60);
-    readonly CheckBox deleteAfter = new() { Text = "Veri doğrulandıktan sonra cihaz kayıtları silinsin" };
+    readonly CheckBox deleteAfter = new() { Text = "Cihaz kayıtlarını otomatik silme (güvenlik gereği kapalı)", Enabled = false, Checked = false };
     readonly CheckBox backup = new() { Text = "Veriler yedek alınsın" };
     readonly Label status = new() { AutoSize = false, Height = 30, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
     readonly Button save = Cmd("KAYDET", 110);
@@ -156,7 +156,7 @@ public sealed class LegacyTerminalSettingsForm : Form
         {
             Dock = DockStyle.Fill,
             AutoSize = false,
-            Text = "Güvenlik: cihaz kayıtları yalnız TNF + FDB aktarımı doğrulandıktan sonra silinir. Veri yoksa işlem hata üretmez; ‘Aktarılacak veri yok.’ bilgisi gösterilir.",
+            Text = "Güvenlik: cihaz kayıtları otomatik silinmez. Kayıtlar önce TNF + FDB + canlı arşive doğrulanarak alınır; yedekleme açık tutulur. Veri yoksa işlem hata üretmez.",
             ForeColor = Color.FromArgb(70, 84, 103),
             Padding = new Padding(4, 6, 4, 0)
         };
@@ -259,7 +259,9 @@ public sealed class LegacyTerminalSettingsForm : Form
     void SetEditing(bool value)
     {
         editing = value;
-        foreach (var c in new Control[] { deviceNo, deviceName, machineNo, connectionType, comPort, baudRate, ipAddress, ipPort, direction, transferFile, tolerance, deleteAfter, backup }) c.Enabled = value;
+        foreach (var c in new Control[] { deviceNo, deviceName, machineNo, connectionType, comPort, baudRate, ipAddress, ipPort, direction, transferFile, tolerance, backup }) c.Enabled = value;
+        deleteAfter.Enabled = false;
+        deleteAfter.Checked = false;
         save.Enabled = value;
     }
 

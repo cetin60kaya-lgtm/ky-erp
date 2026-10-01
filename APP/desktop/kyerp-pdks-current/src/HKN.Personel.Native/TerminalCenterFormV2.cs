@@ -61,9 +61,9 @@ public sealed class TerminalCenterForm : Form
             AutoScroll = true
         };
         cards.Controls.Add(Card("1 • CİHAZ AYARLARI", "Hedef PDKS'deki cihaz/makine, Ethernet, COM, baudrate, IP, port ve giriş/çıkış ayarları. Menüde ayrıca Ayarlar > Terminal / Kart Cihazı Ayarları altında bulunur.", () => RunSync(OpenSettings), "AYARLARI AÇ"));
-        cards.Controls.Add(Card("2 • CİHAZ BA�?LANTISI", "Gerçek kart cihazını doğrudan kontrol eder. Kayıt silmez veya değiştirmez.", () => CheckDeviceAsync(true), "KONTROL ET"));
-        cards.Controls.Add(Card("3 • KART KAYITLARINI AL", "Cihazdaki basımları okur; TNF + FDB'ye işler. Cihaz kayıtlarını OTOMATİK SİLMEZ.", SyncNowAsync, "�?İMDİ AL"));
-        cards.Controls.Add(Card("4 • HEDEF YEDE�?İNİ KURTAR", "Cihaz temizlendiyse Hedef Terminal Bilgi Aktar\\backup klasöründeki en son tarihli TXT kaydını güvenli biçimde TNF + FDB'ye geri işler. Fiziksel cihaza yazmaz.", () => RunSync(RecoverLatestBackup), "SON YEDE�?İ AL"));
+        cards.Controls.Add(Card("2 • CİHAZ BAĞLANTISI", "Gerçek kart cihazını doğrudan kontrol eder. Kayıt silmez veya değiştirmez.", () => CheckDeviceAsync(true), "KONTROL ET"));
+        cards.Controls.Add(Card("3 • KART KAYITLARINI AL", "Cihazdaki basımları okur; TNF + FDB'ye işler. Cihaz kayıtlarını OTOMATİK SİLMEZ.", SyncNowAsync, "ŞİMDİ AL"));
+        cards.Controls.Add(Card("4 • HEDEF YEDEĞİNİ KURTAR", "Cihaz temizlendiyse Hedef Terminal Bilgi Aktar\\backup klasöründeki en son tarihli TXT kaydını güvenli biçimde TNF + FDB'ye geri işler. Fiziksel cihaza yazmaz.", () => RunSync(RecoverLatestBackup), "SON YEDEĞİ AL"));
         cards.Controls.Add(Card("Sürücüyü Onar", "Paket içindeki eşleşen 32-bit OCX/DLL setini Windows'a kaydeder. Yalnız sürücü nedeniyle bağlantı açılamıyorsa kullanılır.", RepairDriverAsync, "Onar"));
         cards.Controls.Add(Card("SDK / Sürücü Kontrolü", "FP_CLOCK.ocx, destek DLL'leri ve x86 TerminalBridge uyumluluğunu kontrol eder.", () => RunSync(ShowSdkDiagnostics), "Kontrol Et"));
         root.Controls.Add(cards, 0, 1);
@@ -161,7 +161,7 @@ public sealed class TerminalCenterForm : Form
         var newText = snapshot.NewLogCount >= 0 ? snapshot.NewLogCount.ToString() : "?";
         var userText = snapshot.UserCount >= 0 ? snapshot.UserCount.ToString() : "?";
         var cardText = snapshot.CardCount >= 0 ? snapshot.CardCount.ToString() : "?";
-        var message = $"CİHAZ BA�?LI • Saat {snapshot.DeviceTime:HH:mm:ss} • Yeni kayıt {newText} • Kullanıcı {userText} • Kart {cardText}";
+        var message = $"CİHAZ BAĞLI • Saat {snapshot.DeviceTime:HH:mm:ss} • Yeni kayıt {newText} • Kullanıcı {userText} • Kart {cardText}";
         SetStatus(message, true);
         if (showDialog) MessageBox.Show(message, "Kart Cihazı", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
@@ -195,7 +195,7 @@ public sealed class TerminalCenterForm : Form
             var result = await TerminalSyncService.SyncAsync("Manuel terminal aktarımı");
             if (result.ReadCount == 0 && result.Inserted == 0 && result.Updated == 0 && result.Duplicates == 0 && result.Skipped == 0)
             {
-                SetStatus("CİHAZ BA�?LI • Aktarılacak veri yok. Cihaz kaydı silinmedi.", true);
+                SetStatus("CİHAZ BAĞLI • Aktarılacak veri yok. Cihaz kaydı silinmedi.", true);
                 MessageBox.Show("Aktarılacak veri yok.\n\nCihazdan hiçbir kayıt silinmedi.", "Terminal Aktarımı", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }

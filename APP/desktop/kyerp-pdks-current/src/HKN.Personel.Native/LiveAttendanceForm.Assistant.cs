@@ -15,7 +15,7 @@ public sealed partial class LiveAttendanceForm
     {
         Text = "Analizi Çalıştır",
         Width = 110,
-        Height = 34,
+        Height = 30,
         FlatStyle = FlatStyle.Flat,
         BackColor = Color.FromArgb(36,107,230),
         ForeColor = Color.White,
@@ -26,7 +26,7 @@ public sealed partial class LiveAttendanceForm
     {
         Text = "İşlem Aç",
         Width = 105,
-        Height = 34,
+        Height = 30,
         FlatStyle = FlatStyle.Flat,
         BackColor = Color.FromArgb(24,145,84),
         ForeColor = Color.White,
@@ -76,7 +76,7 @@ public sealed partial class LiveAttendanceForm
             RowCount = 3,
             BackColor = Color.Transparent
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 

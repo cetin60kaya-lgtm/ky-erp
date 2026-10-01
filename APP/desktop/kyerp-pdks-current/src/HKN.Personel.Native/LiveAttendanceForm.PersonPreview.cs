@@ -72,9 +72,9 @@ public sealed partial class LiveAttendanceForm
         var actions = new FlowLayoutPanel
         {
             Dock = DockStyle.Bottom,
-            Height = 48,
+            Height = 92,
             FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
+            WrapContents = true,
             Padding = new Padding(0, 6, 0, 0),
             BackColor = Color.Transparent
         };
