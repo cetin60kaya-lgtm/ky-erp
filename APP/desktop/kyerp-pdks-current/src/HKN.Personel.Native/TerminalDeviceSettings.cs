@@ -19,15 +19,15 @@ internal sealed record TerminalDeviceSettings(
 {
     public static TerminalDeviceSettings Default => new(
         1,
-        "Cihaz1",
+        "cihaz1",
         1,
         "Ethernet",
         "COM1",
         38400,
-        "192.168.127.10",
+        "192.168.1.224",
         5005,
-        "GİRİ�?",
-        @"C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt",
+        "GİRİŞ",
+        File.Exists(@"D:\Hedef500\Hedef500\Terminal Bilgi Aktar\timerecords.txt") ? @"D:\Hedef500\Hedef500\Terminal Bilgi Aktar\timerecords.txt" : @"C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt",
         false,
         true,
         5);

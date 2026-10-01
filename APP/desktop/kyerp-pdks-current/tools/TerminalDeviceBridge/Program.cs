@@ -14,9 +14,10 @@ internal static class Program
     private static int Main(string[] args)
     {
         var mode = args.Length > 0 ? args[0].ToLowerInvariant() : "status";
-        var ip = args.Length > 1 ? args[1] : "192.168.127.10";
+        var ip = args.Length > 1 ? args[1] : "192.168.1.224";
         var port = args.Length > 2 ? int.Parse(args[2], CultureInfo.InvariantCulture) : 5005;
         var machine = args.Length > 3 ? int.Parse(args[3], CultureInfo.InvariantCulture) : 1;
+        var password = args.Length > 4 ? int.Parse(args[4], CultureInfo.InvariantCulture) : 0;
         Application.EnableVisualStyles();
         using (var form = HiddenForm())
         using (var host = new ClockHost())
@@ -30,18 +31,18 @@ internal static class Program
             try
             {
                 string endpoint = ip;
-                if (!clock.SetIPAddress(ref endpoint, port, 0)) return Fail("Cihaz IP/port ayarı kabul edilmedi.");
+                if (!clock.SetIPAddress(ref endpoint, port, password)) return Fail("Cihaz IP/port ayarı kabul edilmedi.");
                 if (!clock.OpenCommPort(machine)) { int err = 0; try { clock.GetLastError(ref err); } catch { } return Fail("Kart cihazına bağlantı açılamadı. SDK hata kodu: " + err); }
                 try
                 {
                     clock.ReadMark = false;
-                    int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
-                    bool timeOk = clock.GetDeviceTime(machine, ref year, ref month, ref day, ref hour, ref minute, ref second);
+                    int year = 0, month = 0, day = 0, hour = 0, minute = 0, dayOfWeek = 0;
+                    bool timeOk = clock.GetDeviceTime(machine, ref year, ref month, ref day, ref hour, ref minute, ref dayOfWeek);
                     int users = Status(clock, machine, 2);
                     int newLogs = Status(clock, machine, 6);
                     int cards = Status(clock, machine, 7);
                     var deviceTime = timeOk
-                        ? new DateTime(year, month, day, hour, minute, second).ToString("s", CultureInfo.InvariantCulture)
+                        ? new DateTime(year, month, day, hour, minute, 0).ToString("s", CultureInfo.InvariantCulture)
                         : "";
                     Console.WriteLine("STATUS|OK|" + deviceTime + "|" + newLogs + "|" + users + "|" + cards);
                     if (mode == "read") ReadNew(clock, machine);

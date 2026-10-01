@@ -30,7 +30,20 @@ internal static class TerminalDeviceClient
     static async Task<TerminalDeviceSnapshot> RunReadAsync(string mode, CancellationToken ct)
     {
         var run = await RunBridgeAsync(mode, ct);
-        return Parse(run.Output, run.Error);
+        var bridgeSnapshot = Parse(run.Output, run.Error);
+        if (bridgeSnapshot.Connected) return bridgeSnapshot;
+
+        var saved = TerminalDeviceSettingsStore.Load();
+        if (!saved.ConnectionType.Equals("Ethernet", StringComparison.OrdinalIgnoreCase))
+            return bridgeSnapshot;
+
+        var native = await TerminalNative5001Client.ProbeAsync(saved.IpAddress, mode != "status", ct);
+        if (!native.Connected) return bridgeSnapshot;
+
+        if (mode == "status")
+            return new(true, native.Message, native.DeviceTime, -1, -1, -1, Array.Empty<TerminalDevicePunch>());
+
+        return TerminalDeviceSnapshot.Offline(native.Message + " • kart kayıt protokolü henüz doğrulanmadı; aktarım yapılmadı.");
     }
 
     static async Task<(string Output, string Error)> RunBridgeAsync(string mode, CancellationToken ct)
@@ -45,6 +58,12 @@ internal static class TerminalDeviceClient
         var ip = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_IP") ?? saved.IpAddress;
         var port = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_PORT") ?? saved.IpPort.ToString(CultureInfo.InvariantCulture);
         var machine = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_MACHINE") ?? saved.MachineNo.ToString(CultureInfo.InvariantCulture);
+        var password = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_PASSWORD") ?? "0";
+        if (saved.ConnectionType.Equals("Ethernet", StringComparison.OrdinalIgnoreCase) && int.TryParse(port, out var ethernetPort))
+        {
+            var network = await TerminalNetworkDiagnostics.CheckAsync(ip, ethernetPort, ct);
+            if (!network.AddressValid) return ("STATUS|ERROR|" + network.Message, "");
+        }
         var workingDirectory = Directory.Exists(sdk.WorkingDirectory) ? sdk.WorkingDirectory : AppContext.BaseDirectory;
 
         var psi = new ProcessStartInfo(bridge)
@@ -62,6 +81,7 @@ internal static class TerminalDeviceClient
         psi.ArgumentList.Add(ip);
         psi.ArgumentList.Add(port);
         psi.ArgumentList.Add(machine);
+        psi.ArgumentList.Add(password);
 
         Process? process = null;
         try
