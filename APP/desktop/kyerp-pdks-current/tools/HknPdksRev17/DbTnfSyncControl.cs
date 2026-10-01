@@ -18,10 +18,10 @@ internal sealed class DbTnfSyncControl : UserControl
     readonly CheckBox errorsOnly = new() { Text = "Sadece Hatalı", AutoSize = true, Checked = true };
     readonly CheckBox hasMovement = new() { Text = "Dönemde hareketi olan", AutoSize = true, Checked = true };
     readonly Label summary = new() { Dock = DockStyle.Bottom, Height = 42, Padding = new Padding(8), Text = "Önce DB'ye bağlanın; Kontrol Et veya SON TAM KONTROL çalıştırın." };
-    readonly Label selectionSummary = new() { AutoSize = true, Padding = new Padding(8, 5, 8, 5), Text = "Seçili: Fazla: 0 | Eksik: 0 | Saat Farkı: 0 | E Kaydı: 0 | Toplam: 0", BackColor = Color.FromArgb(234, 242, 250) };
-    bool selectingBatch;
+    TnfOutputs? lastOutputs;
+    string outputSourcePath = "";
     readonly Label personnelSummary = new() { Dock = DockStyle.Fill, Padding = new Padding(12), Font = new Font("Segoe UI", 11), Text = "Karşılaştırmak için soldan personel seçin." };
-    readonly Label details = new() { Dock = DockStyle.Bottom, Height = 45, Padding = new Padding(8), Text = "Soldan personel seçin, BU PERSONELİ DB'YE GÖRE DÜZELT ile güvenli hataları topluca uygulayın. Checkbox isteğe bağlıdır. İNCELE değişmez." };
+    readonly Label details = new() { Dock = DockStyle.Bottom, Height = 45, Padding = new Padding(8), Text = "Soldan personel seçin, BU PERSONELİ DB'YE GÖRE DÜZELT ile güvenli hataları topluca uygulayın. Orijinal TNF korunur; düzeltilmiş ve eksik dosyaları ayrı hazırlanır. İNCELE değişmez." };
     readonly ProgressBar progressBar = new() { Width = 105, Height = 26, Style = ProgressBarStyle.Marquee, Visible = false };
     readonly Button cancel = new() { Text = "İptal", Width = 65, Height = 32, Enabled = false };
     readonly DataGridView peopleGrid = Grid();
@@ -70,7 +70,7 @@ internal sealed class DbTnfSyncControl : UserControl
     }
 
     internal sealed record PersonView(string Card, string Name, string DbStatus, string Status, string Hire, string Exit,
-        string ErrorType, int ErrorCount, int DbCount, int TnfCount, int Missing, int Extra, int TimeDifference, int Review, string Note, string Result);
+        string ErrorType, int ErrorCount, int DbCount, int TnfCount, int Missing, int Extra, int TimeDifference, int EErrors, int Review, string Note, string Result);
 
     public DbTnfSyncControl(Form mainForm)
     {
@@ -85,10 +85,7 @@ internal sealed class DbTnfSyncControl : UserControl
         var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(5), WrapContents = false, FlowDirection = FlowDirection.TopDown };
         var checkBar = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
         var personBar = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        var batchBar = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        personBar.Controls.Add(new Label { Text = "PERSONEL", AutoSize = true, Padding = new Padding(0, 10, 5, 0) });
-        batchBar.Controls.Add(new Label { Text = "TOPLU", AutoSize = true, Padding = new Padding(0, 10, 5, 0) });
-        bar.Controls.AddRange([checkBar, personBar, batchBar, selectionSummary]);
+        bar.Controls.AddRange([checkBar, personBar]);
         checkBar.Controls.AddRange([new Label { Text = "Yıl", AutoSize = true, Padding = new Padding(0,8,0,0) }, year,
             new Label { Text = "Ay", AutoSize = true, Padding = new Padding(0,8,0,0) }, month]);
         void Button(string text, Func<Task> action, int width, Color? color = null, FlowLayoutPanel? group = null)
@@ -104,15 +101,9 @@ internal sealed class DbTnfSyncControl : UserControl
         }
         Button("KONTROL ET", () => RunAuditAsync(false), 105);
         Button("SON TAM KONTROL", () => RunAuditAsync(true), 145, Color.LightBlue);
-        Button("BU PERSONELİN TÜMÜNÜ SEÇ", () => { SelectCurrentPersonSafe(); return Task.CompletedTask; }, 230, group: personBar);
         Button("BU PERSONELİ DB'YE GÖRE DÜZELT", ApplyPersonAsync, 255, Color.LightGreen, personBar);
-        Button("TÜM GÜVENLİLERİ SEÇ", () => { SelectAllSafe(); return Task.CompletedTask; }, 180, group: batchBar);
-        Button("TÜM FAZLALARI SEÇ", () => { SelectAllSafe("FAZLA"); return Task.CompletedTask; }, 150, group: batchBar);
-        Button("TÜM EKSİKLERİ SEÇ", () => { SelectAllSafe("TNF EKLE"); return Task.CompletedTask; }, 150, group: batchBar);
-        Button("TÜM SAAT FARKLARINI SEÇ", () => { SelectAllSafe("TNF DÜZELT"); return Task.CompletedTask; }, 195, group: batchBar);
-        Button("SEÇİLENLERİ UYGULA", ApplySelectedAsync, 165, Color.LightGreen, batchBar);
-        Button("SEÇİMİ KALDIR", () => { ClearSelection(); return Task.CompletedTask; }, 120, group: batchBar);
-        Button("GEÇERSİZ DB KAYDINI TEMİZLE", CleanSelectedAsync, 235, Color.MistyRose);
+        Button("TÜM GÜVENLİLERİ UYGULA", ApplyAllSafeAsync, 215, Color.LightGreen, personBar);
+        Button("ÇIKTI DOSYALARINI AÇ", OpenOutputsAsync, 185, group: personBar);
         cancel.Click += (_, _) => cancellation?.Cancel();
         checkBar.Controls.AddRange([progressBar, cancel]);
         operationControls.AddRange([year, month, statusFilter, errorsOnly, hasMovement, search]);
@@ -151,13 +142,12 @@ internal sealed class DbTnfSyncControl : UserControl
         AddColumn(peopleGrid, "Name", "Ad Soyad", 120);
         AddColumn(peopleGrid, "DbStatus", "DB Durumu", 100);
         AddColumn(peopleGrid, "Status", "Efektif Durum", 145);
-        AddColumn(peopleGrid, "Hire", "İşe Giriş", 80);
-        AddColumn(peopleGrid, "Exit", "Çıkış", 80);
         AddColumn(peopleGrid, "DbCount", "DB Hareket", 80);
         AddColumn(peopleGrid, "TnfCount", "TNF Hareket", 80);
         AddColumn(peopleGrid, "Missing", "Eksik", 55);
         AddColumn(peopleGrid, "Extra", "Fazla", 55);
         AddColumn(peopleGrid, "TimeDifference", "Saat Farkı", 80);
+        AddColumn(peopleGrid, "EErrors", "E Hatası", 65);
         AddColumn(peopleGrid, "Review", "İncele", 55);
         peopleGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         peopleGrid.Font = new Font("Segoe UI", 8);
@@ -204,25 +194,23 @@ internal sealed class DbTnfSyncControl : UserControl
     void ConfigureComparison(DataGridView grid, bool dbSide)
     {
         grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        grid.Columns.Add(new DataGridViewCheckBoxColumn { DataPropertyName = "Selected", HeaderText = "Seç", Width = 35, FillWeight = 35, MinimumWidth = 28, SortMode = DataGridViewColumnSortMode.NotSortable });
         AddColumn(grid, "Date", "Tarih", 80);
         AddColumn(grid, "Side", "Taraf", 60);
         AddColumn(grid, dbSide ? "DbTime" : "TnfTime", "Saat", 50);
         if (dbSide) AddColumn(grid, "Type", "Tür", 50);
         AddColumn(grid, "Status", "Durum", 125);
-        grid.CurrentCellDirtyStateChanged += (_, _) => { if (grid.IsCurrentCellDirty) grid.CommitEdit(DataGridViewDataErrorContexts.Commit); };
-        grid.CellValueChanged += (_, args) =>
-        {
-            if (args.RowIndex < 0 || grid.Rows[args.RowIndex].DataBoundItem is not PairView pair) return;
-            if (pair.Selected && pair.Operation == "YOK") pair.Selected = false;
-            if (args.RowIndex < dbGrid.RowCount) dbGrid.InvalidateRow(args.RowIndex);
-            if (args.RowIndex < tnfGrid.RowCount) tnfGrid.InvalidateRow(args.RowIndex);
-            if (!selectingBatch) UpdateSelectionSummary();
-        };
         grid.CellFormatting += (_, args) =>
         {
             if (args.RowIndex < 0 || grid.Rows[args.RowIndex].DataBoundItem is not PairView pair || args.CellStyle is null) return;
-            args.CellStyle.BackColor = pair.Operation == "YOK" ? Color.White : pair.Operation == "İNCELE" && !pair.Row.Field<bool>("CertainInvalid") ? Color.Gainsboro : pair.Status == "TNF EKSİK" ? Color.LemonChiffon : Color.MistyRose;
+            args.CellStyle.BackColor = pair.Operation switch
+            {
+                "TNF EKLE" => Color.LemonChiffon,
+                "TNF SİL FAZLA" => Color.MistyRose,
+                "TNF SİL E" => Color.Thistle,
+                "TNF DÜZELT" => Color.PeachPuff,
+                "İNCELE" => Color.Gainsboro,
+                _ => pair.Status == "E KAYDI" ? Color.Thistle : Color.Honeydew
+            };
         };
         grid.SelectionChanged += (_, _) => { if (grid.CurrentRow?.DataBoundItem is PairView pair) details.Text = pair.Detail; };
         grid.Scroll += (_, args) =>
@@ -255,7 +243,7 @@ internal sealed class DbTnfSyncControl : UserControl
 
     AuditRequest Request(bool full)
     {
-        var path = RequireTnfPath();
+        var path = lastOutputs is not null && RequireTnfPath() == outputSourcePath ? lastOutputs.CorrectedPath : RequireTnfPath();
         var selectedYear = (int)year.Value;
         if (full)
         {
@@ -306,8 +294,8 @@ internal sealed class DbTnfSyncControl : UserControl
                 rule?.EffectiveStatus(result.Request.End.AddDays(-1)) ?? "KIMLIK YOK",
                 rule?.Hire?.ToString("dd.MM.yyyy") ?? "-", rule?.Exit?.ToString("dd.MM.yyyy") ?? "-",
                 errors.Length == 0 ? "UYUMLU" : string.Join(", ", errors.Select(pair => pair.Status).Distinct()), errors.Length,
-                dbCount, tnfCount, operations.GetValueOrDefault("TNF EKLE"), operations.GetValueOrDefault("TNF SİL FAZLA") + operations.GetValueOrDefault("TNF SİL E"),
-                operations.GetValueOrDefault("TNF DÜZELT"), operations.GetValueOrDefault("İNCELE"),
+                dbCount, tnfCount, operations.GetValueOrDefault("TNF EKLE"), operations.GetValueOrDefault("TNF SİL FAZLA"),
+                operations.GetValueOrDefault("TNF DÜZELT"), operations.GetValueOrDefault("TNF SİL E"), operations.GetValueOrDefault("İNCELE"),
                 rule?.StatusNote(result.Request.End.AddDays(-1)) ?? "",
                 dbCount == 0 && tnfCount > 0 ? "TNF ONLY / FAZLA TNF | " + detail : errors.Length == 0 ? "✓ UYUMLU" : detail));
         }
@@ -370,7 +358,7 @@ internal sealed class DbTnfSyncControl : UserControl
             }, token);
             token.ThrowIfCancellationRequested();
             if (IsDisposed || main.IsDisposed) return;
-            if (!ReferenceEquals(database, Database) || RequireTnfPath() != request.Path) throw new InvalidOperationException("Kaynak değişti; kontrolü yenileyin.");
+            if (!ReferenceEquals(database, Database) || !MatchesSource(request.Path)) throw new InvalidOperationException("Kaynak değişti; kontrolü yenileyin.");
             var bind = Stopwatch.StartNew();
             byCard = prepared.View.Groups;
             people = prepared.View.People;
@@ -381,7 +369,9 @@ internal sealed class DbTnfSyncControl : UserControl
             LastGridMilliseconds = bind.ElapsedMilliseconds;
             LastTotalMilliseconds = total.ElapsedMilliseconds;
             summary.Text = $"{(full ? "SON TAM KONTROL" : listOnly ? "TNF Listele" : "Kontrol")} {request.Start:dd.MM.yyyy}–{request.End:dd.MM.yyyy} | {prepared.Summary}";
-            SyncEngine.Log($"REV19 db_query_ms={prepared.Result.DbMilliseconds} tnf_read_parse_ms={prepared.Result.TnfMilliseconds} compare_ms={prepared.Result.CompareMilliseconds} grid_bind_ms={LastGridMilliseconds} total_ms={LastTotalMilliseconds} db_events={prepared.Result.Db.Count} rows={prepared.Result.Table.Rows.Count}");
+            if (lastOutputs is not null && request.Path == lastOutputs.CorrectedPath && lastOutputs.MissingCount > 0)
+                summary.Text += $" | EKSİK TNF HAZIR: {lastOutputs.MissingCount}";
+            SyncEngine.Log($"REV20 db_query_ms={prepared.Result.DbMilliseconds} tnf_read_parse_ms={prepared.Result.TnfMilliseconds} compare_ms={prepared.Result.CompareMilliseconds} grid_bind_ms={LastGridMilliseconds} total_ms={LastTotalMilliseconds} db_events={prepared.Result.Db.Count} rows={prepared.Result.Table.Rows.Count}");
         }
         catch (OperationCanceledException) { if (!IsDisposed) summary.Text = "Kontrol iptal edildi; sonuç uygulanamaz."; }
         catch (Exception exception) { if (!IsDisposed) { summary.Text = "Kontrol başarısız; eski sonuç uygulanamaz."; MessageBox.Show(main, exception.Message, "DB - TNF Eşitle", MessageBoxButtons.OK, MessageBoxIcon.Error); } }
@@ -392,71 +382,13 @@ internal sealed class DbTnfSyncControl : UserControl
     {
         var counts = table.AsEnumerable().GroupBy(row => row.Field<string>("İşlem")!).ToDictionary(group => group.Key, group => group.Count());
         int Count(string operation) => counts.GetValueOrDefault(operation);
-        return $"Uyumlu={Count("YOK")}  Eksik={Count("TNF EKLE")}  Fazla={Count("TNF SİL FAZLA") + Count("TNF SİL E")}  Saat Farkı={Count("TNF DÜZELT")}  İncele={Count("İNCELE")}  Geçersiz DB={Count("GEÇERSİZ DB")}";
+        return $"Uyumlu={Count("YOK")}  Eksik={Count("TNF EKLE")}  Fazla={Count("TNF SİL FAZLA")}  Saat Farkı={Count("TNF DÜZELT")}  E Kayıt Hatası={Count("TNF SİL E")}  İncele={Count("İNCELE")}";
     }
 
     internal static bool IsSafeOperation(DataRow row)
         => row.Field<string>("İşlem") is "TNF EKLE" or "TNF SİL FAZLA" or "TNF SİL E" or "TNF DÜZELT";
 
-    void SetSnapshot(AuditSnapshot? value)
-    {
-        if (snapshot is not null) snapshot.Table.ColumnChanged -= SelectionChanged;
-        snapshot = value;
-        if (snapshot is not null) snapshot.Table.ColumnChanged += SelectionChanged;
-        if (!IsDisposed) UpdateSelectionSummary();
-    }
-
-    void SelectionChanged(object? sender, DataColumnChangeEventArgs args)
-    {
-        if (args.Column?.ColumnName == "Seç" && !selectingBatch && !IsDisposed) UpdateSelectionSummary();
-    }
-
-    internal DataRow[] PlanAllSelected()
-        => snapshot?.Table.AsEnumerable().Where(row => row.Field<bool>("Seç") && IsSafeOperation(row)).ToArray() ?? [];
-
-    void UpdateSelectionSummary()
-    {
-        var rows = PlanAllSelected();
-        var counts = rows.GroupBy(row => row.Field<string>("İşlem")!).ToDictionary(group => group.Key, group => group.Count());
-        selectionSummary.Text = $"Seçili: Fazla: {counts.GetValueOrDefault("TNF SİL FAZLA")} | Eksik: {counts.GetValueOrDefault("TNF EKLE")} | Saat Farkı: {counts.GetValueOrDefault("TNF DÜZELT")} | E Kaydı: {counts.GetValueOrDefault("TNF SİL E")} | Toplam: {rows.Length}";
-    }
-
-    void SelectRows(IEnumerable<DataRow> rows, bool select)
-    {
-        if (IsBusy || snapshot is null) return;
-        dbGrid.EndEdit();
-        tnfGrid.EndEdit();
-        selectingBatch = true;
-        try
-        {
-            foreach (var row in rows) row["Seç"] = select;
-        }
-        finally { selectingBatch = false; }
-        dbGrid.Refresh();
-        tnfGrid.Refresh();
-        UpdateSelectionSummary();
-    }
-
-    internal void SelectCurrentPersonSafe()
-        => SelectRows(visiblePairs.Where(pair => pair.Safe).Select(pair => pair.Row), true);
-
-    internal void SelectAllSafe(string? operation = null)
-    {
-        if (snapshot is null) return;
-        SelectRows(snapshot.Table.AsEnumerable().Where(row => IsSafeOperation(row) &&
-            (operation is null || (operation == "FAZLA" ? row.Field<string>("İşlem") is "TNF SİL FAZLA" or "TNF SİL E" : row.Field<string>("İşlem") == operation))), true);
-    }
-
-    internal void ClearSelection()
-    {
-        if (snapshot is not null) SelectRows(snapshot.Table.AsEnumerable(), false);
-    }
-
-    async Task RecheckPersonAsync()
-    {
-        if (selectedCard.Length == 0) { MessageBox.Show(main, "Soldan personel seçin."); return; }
-        await RunAuditAsync(false, scope: snapshot?.Request with { Card = selectedCard });
-    }
+    void SetSnapshot(AuditSnapshot? value) => snapshot = value;
 
     internal DataRow[] PlanVisibleCorrections(bool selectedOnly)
         => visiblePairs.Where(pair => pair.Safe && (!selectedOnly || pair.Selected) && pair.Row.Field<string>("Kart No") == selectedCard).Select(pair => pair.Row).ToArray();
@@ -469,77 +401,64 @@ internal sealed class DbTnfSyncControl : UserControl
 
     async Task ApplyPersonAsync()
     {
-        if (IsBusy || snapshot is null || selectedCard.Length == 0 || !ReferenceEquals(snapshotDatabase, Database) || RequireTnfPath() != snapshot.Request.Path)
+        if (IsBusy || snapshot is null || selectedCard.Length == 0 || !ReferenceEquals(snapshotDatabase, Database) || !MatchesSource(snapshot.Request.Path))
         { MessageBox.Show(main, "Önce kontrol yapın ve soldan personel seçin."); return; }
         dbGrid.EndEdit();
         tnfGrid.EndEdit();
         var rows = PlanVisibleCorrections(false);
-        if (rows.Length == 0) { MessageBox.Show(main, "Bu personelin güvenli TNF hatası yok. İNCELE ve geçersiz DB kayıtları otomatik değiştirilmez."); return; }
-        await ApplyAsync(rows, false);
+        if (rows.Length == 0) { MessageBox.Show(main, "Bu personelin güvenli TNF hatası yok. İNCELE kayıtları otomatik değiştirilmez."); return; }
+        await ApplyAsync(rows);
     }
 
-    async Task ApplySelectedAsync()
+    bool MatchesSource(string path) => RequireTnfPath() == path ||
+        lastOutputs is not null && RequireTnfPath() == outputSourcePath && path == lastOutputs.CorrectedPath;
+
+    Task OpenOutputsAsync()
     {
-        if (IsBusy || snapshot is null || !ReferenceEquals(snapshotDatabase, Database) || RequireTnfPath() != snapshot.Request.Path) { MessageBox.Show(main, "Önce Kontrol Et çalıştırın."); return; }
-        dbGrid.EndEdit();
-        tnfGrid.EndEdit();
-        var rows = PlanAllSelected();
-        if (rows.Length == 0) { MessageBox.Show(main, "Önce güvenli hata checkbox'larını işaretleyin. İNCELE değiştirilemez."); return; }
-        await ApplyAsync(rows, false, fullCheck: true);
+        if (lastOutputs is null) { MessageBox.Show(main, "Henüz çıktı hazırlanmadı."); return Task.CompletedTask; }
+        Process.Start(new ProcessStartInfo("explorer.exe", Path.GetDirectoryName(lastOutputs.CorrectedPath)!) { UseShellExecute = true });
+        return Task.CompletedTask;
     }
 
-    async Task CleanSelectedAsync()
+    async Task ApplyAllSafeAsync()
     {
-        if (IsBusy || snapshot is null || selectedCard.Length == 0) { MessageBox.Show(main, "Soldan tek kişi seçin ve kesin geçersiz satırları işaretleyin."); return; }
-        dbGrid.EndEdit();
-        tnfGrid.EndEdit();
-        var rows = visiblePairs.Where(pair => pair.Selected && pair.Row.Field<bool>("CertainInvalid") && pair.Row.Field<int>("DbId") >= 0).Select(pair => pair.Row).ToArray();
-        if (rows.Length == 0) { MessageBox.Show(main, "Kesin geçersiz seçili DB kaydı yok; şüpheli kayıt silinmez."); return; }
-        await ApplyAsync(rows, true);
+        if (IsBusy || snapshot is null || !ReferenceEquals(snapshotDatabase, Database) || !MatchesSource(snapshot.Request.Path))
+        { MessageBox.Show(main, "Önce KONTROL ET çalıştırın."); return; }
+        await RunAuditAsync(true);
+        if (snapshot is null || IsDisposed) return;
+        var rows = snapshot.Table.AsEnumerable().Where(SyncEngine.SafeOperation).ToArray();
+        if (rows.Length == 0) { MessageBox.Show(main, "Güvenli TNF işlemi yok; İNCELE kayıtları değişmez."); return; }
+        await ApplyAsync(rows);
     }
 
-    async Task ApplyAsync(DataRow[] rows, bool clean, bool fullCheck = false)
+    async Task ApplyAsync(DataRow[] rows)
     {
         if (snapshot is null || !ReferenceEquals(snapshotDatabase, Database)) return;
-        var review = fullCheck ? snapshot.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") == "İNCELE") : visiblePairs.Count(pair => pair.Operation == "İNCELE");
-        if (MessageBox.Show(main, $"{CorrectionSummary(rows, review)}\n\nSeçili {rows.Length} kayıt {(clean ? "DB transaction ile temizlenecek; tam DB satır yedeği alınacak" : "yalnız TNF üzerinde düzeltilecek; DB ASLA değişmeyecek")}. TNF _YEDEK alınır. Devam?",
-            "Seçilenleri Uygula", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-        var cardToRecheck = selectedCard;
-        var previous = clean ? snapshot with { Request = snapshot.Request with { Card = selectedCard } } : snapshot;
+        var review = snapshot.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") == "İNCELE");
+        if (MessageBox.Show(main, $"{CorrectionSummary(rows, review)}\n\nOrijinal TNF ve DB DEĞİŞMEZ. _YEDEK alınır. Fazla/E silme ve saat düzeltmeleri DUZELTILMIS dosyasına; eksik normal DB kayıtları EKSIK dosyasına yazılır. Devam?",
+            "TNF çıktılarını hazırla", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        var previous = snapshot;
+        var sourcePath = RequireTnfPath();
         SetSnapshot(null);
         cancellation = new CancellationTokenSource();
         SetBusy(true);
         var succeeded = false;
         try
         {
-            if (clean)
-            {
-                var cardSnapshot = await Task.Run(() => SyncEngine.ReadAsync(snapshotDatabase!, previous.Request, cancellation.Token));
-                var selectedIds = rows.Select(row => (row.Field<int>("DbId"), row.Field<string>("Taraf"))).ToHashSet();
-                var selectedRows = cardSnapshot.Table.AsEnumerable().Where(row => selectedIds.Contains((row.Field<int>("DbId"), row.Field<string>("Taraf")))).ToArray();
-                if (previous.FileHash != cardSnapshot.FileHash || SyncEngine.DbFingerprint(previous.Db.Where(movement => movement.Card == selectedCard), previous.People.Where(person => person.Key == selectedCard).ToDictionary()) != cardSnapshot.DbHash)
-                    throw new InvalidOperationException("DB/personel/TNF değişmiş; önce yeniden kontrol edin.");
-                await Task.Run(() => SyncEngine.ApplyAsync(snapshotDatabase!, cardSnapshot, selectedRows, true, cancellation.Token));
-            }
-            else await Task.Run(() => SyncEngine.ApplyAsync(snapshotDatabase!, previous, rows, false, cancellation.Token));
+            var outputs = await Task.Run(() => SyncEngine.ApplyAsync(snapshotDatabase!, previous, rows, cancellation.Token));
+            lastOutputs = outputs;
+            outputSourcePath = sourcePath;
             succeeded = true;
         }
-        catch (OperationCanceledException) { summary.Text = "Düzeltme iptal edildi."; }
-        catch (Exception exception) { MessageBox.Show(main, exception.Message, "Düzeltme başarısız", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (OperationCanceledException) { summary.Text = "Çıktı hazırlama iptal edildi."; }
+        catch (Exception exception) { MessageBox.Show(main, exception.Message, "Çıktı hazırlanamadı", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally { cancellation.Dispose(); cancellation = null; if (!IsDisposed) SetBusy(false); }
         if (succeeded && !IsDisposed)
         {
-            if (fullCheck)
+            await RunAuditAsync(true);
+            if (snapshot is not null)
             {
-                await RunAuditAsync(true);
-                details.Text = "Toplu TNF düzeltmesi tamamlandı; SON TAM KONTROL çalıştırıldı. DB değiştirilmedi.";
-            }
-            else
-            {
-                errorsOnly.Checked = false;
-                hasMovement.Checked = false;
-                await RunAuditAsync(false, scope: previous.Request with { Card = cardToRecheck });
-                details.Text = "Yalnız seçilen personel tekrar kontrol edildi. Tüm dosya için SON TAM KONTROL düğmesini kullanın. DB normal düzeltmede değiştirilmez.";
+                details.Text = $"Orijinal TNF korundu. SON TAM KONTROL düzeltilmiş dosyada yapıldı. Eksik dosyasını Hedef'e ayrıca okutun. Çıktı: {lastOutputs.CorrectedPath}";
             }
         }
     }

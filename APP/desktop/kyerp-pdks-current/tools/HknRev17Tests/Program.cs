@@ -36,6 +36,11 @@ internal static class Program
             Check(Count(Compare([Db()], [Tnf(time: "08:24")]), "TNF DÜZELT") == 1, "unique time mismatch");
             Check(Count(Compare([Db(tur: "E")], [Tnf()]), "TNF SİL E") == 1, "E excluded");
             Check(Count(Compare([Db(tur: "E")], []), "YOK") == 1, "E absence compatible");
+            Check(Count(Compare([Db(tur:"E")], [Tnf(),Tnf(1)]),"TNF SİL E")==2, "unambiguous E side removes duplicate TNF counterparts");
+            Check(Count(Compare([Db(time:"",tur:"E")], []),"YOK")==1, "E absence does not require a fabricated DB clock");
+            Check(Count(Compare([], [Tnf(),Tnf(1,"19:00")]),"TNF SİL FAZLA")==2, "DB empty multiple TNF never becomes review");
+            Check(Count(Compare([Db(),Db(2,tur:"E",side:"Çıkış")], []),"TNF EKLE")==0, "identical normal and E clock collision never exports an E-identical missing line");
+            Check(Count(Compare([Db(time:"08:23:30")], []),"İNCELE")==1, "seconds cannot silently round into canonical DB minutes");
             Check(Count(Compare([Db()], [Tnf(), Tnf(1)]), "İNCELE") == 2, "duplicate TNF requires review");
             Check(Count(Compare([Db(), Db(2)], [Tnf()]), "İNCELE") == 2, "duplicate DB is never auto corrected");
             Check(Count(Compare([Db()], [Tnf(time: "08:24"), Tnf(1, "08:25")]), "İNCELE") == 2, "ambiguous time correspondence");
@@ -43,10 +48,10 @@ internal static class Program
             Check(Count(Compare([Db(), Db(2, "19:00", "E", "Çıkış")], [Tnf(time: "08:24"), Tnf(1, "19:01")]), "TNF SİL E") == 1, "unique mismatching E safe while separate normal side preserved");
             Check(Count(Compare([Db(time: "")], []), "İNCELE") == 1, "blank DB time needs review");
             Check(Count(Compare([Db()], [Tnf() with { Standard = false }]), "İNCELE") == 1, "unexpected TNF type needs review");
-            Check(Count(Compare([Db()], [], new()), "İNCELE") == 1, "missing personnel needs review");
+            Check(Count(Compare([Db()], [], new()), "TNF EKLE") == 1, "DB source needs no personnel status to export missing");
             var alignment = Compare([Db(), Db(2, "18:56", side: "Çıkış")], [Tnf(time: "08:38"), Tnf(1, "18:56")]);
             Check(alignment.Rows.Count == 2 && alignment.Rows[0].Field<string>("Taraf") == "Giriş" && alignment.Rows[0].Field<string>("TNF Saat") == "08:38", "mismatch aligns to missing side");
-            Check(Count(Compare([Db()], [Tnf(time: "18:00")]), "İNCELE") == 2, "opposite time band never guessed");
+            Check(Count(Compare([Db()], [Tnf(time: "18:00")]), "TNF DÜZELT") == 1, "single DB and TNF match without fabricating a clock");
             Check(Count(alignment, "TNF DÜZELT") == 1 && Count(alignment, "YOK") == 1, "opposite side stays compatible");
             Check(Count(Compare([Db(), Db(2,"18:00",side:"Çıkış")], [Tnf(time:"08:38"), Tnf(1,"18:38")]), "TNF DÜZELT") == 2, "two unique time differences align by side");
             var surplus = Compare([Db(),Db(2,"18:00",side:"Çıkış")], [Tnf(),Tnf(1,"18:00"),Tnf(2,"18:10")]);
@@ -82,10 +87,10 @@ internal static class Program
             Check((departedActive with { Exit = null, Active = false }).EffectiveStatus(Day) == "AKTİF", "hire without exit determines effective active regardless DB label");
             var departedPeople = new Dictionary<string, EmploymentRule> { ["00053"] = departedActive };
             var departedRows = Compare([], [Tnf(card:"00053")], departedPeople);
-            Check(Count(departedRows,"TNF SİL FAZLA") == 1 && departedRows.Rows[0].Field<string>("Durum")!.Contains("GEÇERSİZ"), "TNF only after exit safely deletes without DB write");
+            Check(Count(departedRows,"TNF SİL FAZLA") == 1, "TNF only after exit safely deletes without DB write");
             Check(Count(Compare([], [Tnf() with { Date = new(2019,1,1) }]), "TNF SİL FAZLA") == 1, "TNF only before hire safely deletes");
-            Check(Count(Compare([Db()], [Tnf()], new() { ["00039"] = departedActive with { Card="00039" } }),"TNF SİL FAZLA") == 1, "certain invalid TNF can be removed while invalid DB is retained");
-            Check(Count(Compare([], [Tnf(card:"00053"), Tnf(1,card:"00053")], departedPeople),"İNCELE") == 2, "duplicate departed TNF remains review");
+            Check(Count(Compare([Db()], [Tnf()], new() { ["00039"] = departedActive with { Card="00039" } }),"YOK") == 1, "personnel dates cannot override normal DB source movement");
+            Check(Count(Compare([], [Tnf(card:"00053"), Tnf(1,card:"00053")], departedPeople),"TNF SİL FAZLA") == 2, "DB empty duplicate TNF are all safe surplus");
             var anchoredEarly = Compare([Db()], [Tnf(time:"08:22"),Tnf(1)]);
             Check(Count(anchoredEarly,"YOK")==1 && Count(anchoredEarly,"TNF SİL FAZLA")==1 && anchoredEarly.Rows[0].Field<string>("TNF Saat")=="08:23", "exact anchor is paired first even when surplus time precedes it");
             Check(Count(Compare([Db(tur:"E")], [Tnf(time:"08:24")]),"TNF SİL E") == 1, "unique E counterpart excluded even with different time");
@@ -93,7 +98,7 @@ internal static class Program
             Check((departedActive with { Ambiguous=true }).Evaluate(Day).Certain == false, "multiple personnel definitions do not infer new hire");
             Check(Format.TryParse("00039,08:23,010126,1,001", 0, out var parsed) && parsed.Date == Day && parsed.Time == "08:23", "TNF canonical parser");
             Check(!Format.TryParse("00039;08:23,010126,1,001", 0, out _), "broken TNF separator rejected");
-            Check(Count(Compare([Db()], [], new() { ["00039"] = departedActive with { Card="00039" } }),"GEÇERSİZ DB") == 1, "certain invalid DB is not labelled review and requires explicit cleanup");
+            Check(Count(Compare([Db()], [], new() { ["00039"] = departedActive with { Card="00039" } }),"TNF EKLE") == 1, "normal DB source preserved even beyond personnel exit");
             Check(!Format.TryParse("00039,28:23,010126,1,001", 0, out _), "invalid clock rejected");
             var overflow = false;
             try { Format.Build("123456", Day, "08:23"); } catch (FormatException) { overflow = true; }
@@ -129,7 +134,7 @@ internal static class Program
     static void FixtureCorrections()
     {
         System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
-        var directory = Path.Combine(@"D:\Googledrive\KYERP-PDKS-MASAUSTU\08_TEST", "REV18_FIXTURE_" + Guid.NewGuid().ToString("N"));
+        var directory = Path.Combine(@"D:\Googledrive\KYERP-PDKS-MASAUSTU\08_TEST", "REV20_FIXTURE_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var dbPath = Path.Combine(directory, "SYNTHETIC.GDB");
         var path = Path.Combine(directory, "TR2026.Tnf");
@@ -166,47 +171,58 @@ internal static class Program
         var snapshot = Read(request);
         var original = File.ReadAllBytes(path);
         var safe = snapshot.Table.AsEnumerable().Where(row => row.Field<string>("İşlem") is "TNF EKLE" or "TNF SİL E" or "TNF SİL FAZLA" or "TNF DÜZELT").ToArray();
-        var backup = SyncEngine.ApplyAsync(database,snapshot,safe,false,CancellationToken.None).GetAwaiter().GetResult();
-        Check(original.SequenceEqual(File.ReadAllBytes(backup)), "fixture backup preserves original bytes");
-        var corrected = Read(request);
-        Check(corrected.Table.AsEnumerable().All(row => row.Field<string>("İşlem") is "YOK" or "İNCELE" or "GEÇERSİZ DB"), "selected safe fixture errors corrected");
-        Check(Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where GTARIH is not null")) == 9, "standard corrections leave fixture DB untouched");
-        var beforeReview = File.ReadAllBytes(path);
+        var outputs = SyncEngine.ApplyAsync(database,snapshot,safe,CancellationToken.None).GetAwaiter().GetResult();
+        Check(original.SequenceEqual(File.ReadAllBytes(outputs.BackupPath)), "fixture backup preserves exact original bytes");
+        Check(original.SequenceEqual(File.ReadAllBytes(path)), "original TNF never modified");
+        var corrected = Read(request with { Path=outputs.CorrectedPath });
+        Check(Count(corrected.Table,"TNF SİL FAZLA")==0 && Count(corrected.Table,"TNF SİL E")==0 && Count(corrected.Table,"TNF DÜZELT")==0, "all safe excess E and time errors resolved in corrected output");
+        Check(Count(corrected.Table,"TNF EKLE")==2, "missing records remain separate from corrected original");
+        var missingLines = File.ReadAllLines(outputs.MissingPath);
+        Check(missingLines.Length==2 && missingLines.Contains("00039,08:23,020126,1,001") && missingLines.Contains("00039,08:23,301226,1,001"), "missing file uses exact DB card date clock and canonical columns");
+        Check(missingLines.Distinct().Count()==missingLines.Length && !missingLines.Contains(Format.Build("00039",Day.AddDays(2),"08:23")), "missing output has no duplicates and never emits E");
+        Check(File.ReadAllLines(outputs.CorrectedPath).Contains("00039,08:23,010126,1,001"), "time corrected to exact DB clock");
+        Check(Count(corrected.Table,"İNCELE")==Count(snapshot.Table,"İNCELE"), "ambiguous records untouched");
+        Check(snapshot.Db.SequenceEqual(corrected.Db), "all fixture DB movement fields stay unchanged after output generation");
+        Check(Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where GTARIH is not null"))==9, "output workflow leaves fixture DB untouched including invalid employment dates");
+        Check(Directory.GetFiles(Path.Combine(directory,"_YEDEK")).Length==1, "one backup for whole batch");
+        Check(!Directory.GetFiles(directory,"*.tmp",SearchOption.AllDirectories).Any(), "no temporary files survive atomic publication");
+        var originalLines=File.ReadAllLines(path);
+        File.AppendAllLines(path,["00039,23:59,311226,1,001"]);
+        var staleFileRejected=false;
+        try { SyncEngine.WriteOutputsAsync(snapshot,[],[],CancellationToken.None).GetAwaiter().GetResult(); }
+        catch(InvalidOperationException) { staleFileRejected=true; }
+        Check(staleFileRejected && Directory.GetFiles(Path.Combine(directory,"_YEDEK")).Length==1, "changed TNF is rejected before any backup or publication");
+        File.WriteAllBytes(path,original);
         var rejected = false;
-        try { SyncEngine.ApplyAsync(database,corrected,[corrected.Table.AsEnumerable().First(row => row.Field<string>("İşlem") == "İNCELE")],false,CancellationToken.None).GetAwaiter().GetResult(); }
-        catch (InvalidOperationException) { rejected = true; }
-        Check(rejected && beforeReview.SequenceEqual(File.ReadAllBytes(path)), "review selection never auto changed");
-        File.AppendAllLines(path, [Format.Build("00040",new(2026,2,2),"08:23"), Format.Build("00040",new(2026,2,3),"08:23")]);
-        var personRequest = request with { Card = "00040" };
-        var personSnapshot = Read(personRequest);
-        var selected = personSnapshot.Table.AsEnumerable().Where(row => row.Field<string>("Tarih") == "02.02.2026").ToArray();
-        SyncEngine.ApplyAsync(database,personSnapshot,selected,true,CancellationToken.None).GetAwaiter().GetResult();
-        Check(Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where SIRA=8 and GTARIH is null")) == 1, "selected invalid fixture DB side cleared");
-        Check(Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where SIRA=9 and GTARIH is not null")) == 1, "unselected invalid fixture DB side preserved");
-        var dumps = Directory.GetFiles(Path.Combine(directory, "_YEDEK"), "*.GIRCIK.json");
-        Check(dumps.Length == 1 && File.ReadAllText(dumps[0]).Contains("GSAAT") && File.ReadAllText(dumps[0]).Contains("SIRA"), "DB row dump created");
-        Check(!File.ReadAllLines(path).Contains(Format.Build("00040",new(2026,2,2),"08:23")) && File.ReadAllLines(path).Contains(Format.Build("00040",new(2026,2,3),"08:23")), "only selected invalid fixture TNF removed");
-        var stale = Read(personRequest);
-        database.Execute("update KIMLIK set DURUM='A' where PKNO='00040'");
-        var beforeStale = File.ReadAllBytes(path);
-        rejected = false;
-        try { SyncEngine.ApplyAsync(database,stale,stale.Table.AsEnumerable().ToArray(),true,CancellationToken.None).GetAwaiter().GetResult(); }
-        catch (InvalidOperationException) { rejected = true; }
-        Check(rejected && beforeStale.SequenceEqual(File.ReadAllBytes(path)), "changed personnel status rejects stale cleanup");
-        var departedLine = Format.Build("00053", Day, "08:23");
-        File.AppendAllLines(path, [departedLine]);
-        var departedSnapshot = Read(request);
-        Check(departedSnapshot.People.TryGetValue("00053",out var departed) && departed.RawStatus == "Aktif" && departed.EffectiveStatus(Day).StartsWith("PASİF"), "single query loads metadata for TNF only card");
-        var departedSelection = departedSnapshot.Table.AsEnumerable().Where(row => row.Field<string>("Kart No") == "00053").ToArray();
-        Check(departedSelection.Length == 1 && departedSelection[0].Field<string>("İşlem") == "TNF SİL FAZLA", "TNF only stale active fixture is safely actionable");
-        var beforeOthers = File.ReadAllLines(path).Where(line => !line.StartsWith("00053")).ToArray();
-        var dbBeforePerson = Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where GTARIH is not null"));
-        SyncEngine.ApplyAsync(database,departedSnapshot,departedSelection,false,CancellationToken.None).GetAwaiter().GetResult();
-        Check(!File.ReadAllLines(path).Contains(departedLine) && beforeOthers.SequenceEqual(File.ReadAllLines(path)), "person correction removes only selected TNF card");
-        Check(Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where GTARIH is not null")) == dbBeforePerson, "person bulk correction leaves DB untouched");
-        var personOnly = Read(request with { Card="00053" });
-        Check(personOnly.People.ContainsKey("00053") && personOnly.Table.Rows.Count == 0 && personOnly.Db.Count == 0, "person refresh retains metadata after last surplus removed");
-        Console.WriteLine("FIXTURE_ONLY_WRITE_TESTS_PASSED");
+        try { SyncEngine.ApplyAsync(database,snapshot,[snapshot.Table.AsEnumerable().First(row=>row.Field<string>("İşlem")=="İNCELE")],CancellationToken.None).GetAwaiter().GetResult(); }
+        catch(InvalidOperationException) { rejected=true; }
+        Check(rejected && original.SequenceEqual(File.ReadAllBytes(path)), "review cannot enter output plan");
+        var repeated = SyncEngine.PrepareOutputs(snapshot,safe.Concat(safe).ToArray(),CancellationToken.None);
+        Check(repeated.Missing.SequenceEqual(missingLines), "same selected row never produces duplicate missing line");
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        var cancelRejected = false;
+        try { SyncEngine.WriteOutputsAsync(snapshot,repeated.Corrected,repeated.Missing,cancelled.Token).GetAwaiter().GetResult(); }
+        catch(OperationCanceledException) { cancelRejected=true; }
+        Check(cancelRejected && Directory.GetFiles(Path.Combine(directory,"_YEDEK")).Length==1, "cancellation publishes nothing and preserves source");
+        database.Execute("update GIRCIK set GSAAT='08:25' where SIRA=1");
+        rejected=false;
+        try { SyncEngine.ApplyAsync(database,snapshot,safe,CancellationToken.None).GetAwaiter().GetResult(); }
+        catch(InvalidOperationException) { rejected=true; }
+        Check(rejected && original.SequenceEqual(File.ReadAllBytes(path)), "stale DB snapshot cannot generate incorrect outputs");
+        File.AppendAllLines(path,[Format.Build("00053",Day,"08:23")]);
+        var personSnapshot=Read(request);
+        var personRows=personSnapshot.Table.AsEnumerable().Where(row=>row.Field<string>("Kart No")=="00053").ToArray();
+        var personOutput=SyncEngine.ApplyAsync(database,personSnapshot,personRows,CancellationToken.None).GetAwaiter().GetResult();
+        Check(!File.ReadAllLines(personOutput.CorrectedPath).Any(line=>line.StartsWith("00053")) && File.ReadAllLines(path).Any(line=>line.StartsWith("00053")), "person output removes surplus but original still retains person");
+        Check(Read(request with { Path=personOutput.CorrectedPath,Card="00053" }).Db.Count==0, "TNF only person read remains read only");
+        var firstCorrectedBytes=File.ReadAllBytes(outputs.CorrectedPath);
+        var correctedFresh=Read(request with { Path=outputs.CorrectedPath });
+        var nextRows=correctedFresh.Table.AsEnumerable().Where(SyncEngine.SafeOperation).ToArray();
+        var nextOutput=SyncEngine.ApplyAsync(database,correctedFresh,nextRows,CancellationToken.None).GetAwaiter().GetResult();
+        Check(Path.GetDirectoryName(nextOutput.CorrectedPath)==Path.GetDirectoryName(outputs.CorrectedPath), "repeated person/output processing never nests output directories");
+        Check(Path.GetFileName(nextOutput.CorrectedPath).Length==Path.GetFileName(outputs.CorrectedPath).Length && firstCorrectedBytes.SequenceEqual(File.ReadAllBytes(outputs.CorrectedPath)), "repeated output names remain short and previous corrected file is immutable");
+        Console.WriteLine("REV20_FIXTURE_OUTPUT_TESTS_PASSED");
     }
 
     static void LiveReadOnly(string dbPath, string tnfPath)
@@ -244,7 +260,7 @@ internal static class Program
             if (card == "00053")
             {
                 Check(rule!.Exit is not null && rule.EffectiveStatus(request.End.AddDays(-1)).StartsWith("PASİF"), "live 00053 is effectively departed");
-                Check(cardRows.Any(row => row.Field<string>("İşlem")=="TNF SİL FAZLA"), "live 00053 exposes safe surplus TNF");
+                Check(cardRows.Length>0, "live 00053 movements remain visible with DB as source");
             }
         }
         ApplicationConfiguration.Initialize();
@@ -297,105 +313,24 @@ internal static class Program
             var juneRow = Array.FindIndex(targetRows, pair => pair.Date.EndsWith(".06.2026"));
             if (juneRow >= 0) dbGrid.FirstDisplayedScrollingRowIndex = juneRow;
             Check(dbGrid.FirstDisplayedScrollingRowIndex == tnfGrid.FirstDisplayedScrollingRowIndex, "scroll positions synchronized");
-            control.SelectCurrentPersonSafe();
-            Check(targetRows.All(pair => pair.Selected == pair.Safe), "bulk selection excludes review and compatible rows");
-            control.ClearSelection();
-            Check(targetRows.All(pair => !pair.Selected), "clear checkboxes leaves no hidden selection");
             var uiSummary = (Label)typeof(DbTnfSyncControl).GetField("summary", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
             Check(uiSummary.Visible && uiSummary.Text.Contains("Eksik="), "global counts remain visible");
-            using (var image = new System.Drawing.Bitmap(owner.Width,owner.Height)) { owner.DrawToBitmap(image, new System.Drawing.Rectangle(0,0,owner.Width,owner.Height)); image.Save("D:/Googledrive/KYERP-PDKS-MASAUSTU/08_TEST/REV19_UI_READONLY.png"); }
-            var selectionLabel = (Label)typeof(DbTnfSyncControl).GetField("selectionSummary", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
+            using (var image = new System.Drawing.Bitmap(owner.Width,owner.Height)) { owner.DrawToBitmap(image, new System.Drawing.Rectangle(0,0,owner.Width,owner.Height)); image.Save("D:/Googledrive/KYERP-PDKS-MASAUSTU/08_TEST/REV20_UI_READONLY.png"); }
             var fullSnapshot = control.LastSnapshot!;
-            var safeRows = fullSnapshot.Table.AsEnumerable().Where(DbTnfSyncControl.IsSafeOperation).ToArray();
-            control.SelectCurrentPersonSafe();
-            var currentSelected = control.PlanAllSelected();
-            Check(currentSelected.Length == targetRows.Count(pair => pair.Safe) && currentSelected.All(row => row.Field<string>("Kart No") == "00056"), "current person selection only selects safe visible rows");
-            searchBox.Text = "00003";
-            Check(control.PlanAllSelected().Length == currentSelected.Length, "changing person preserves hidden selections in snapshot");
-            searchBox.Text = "00056";
-            Check(((BindingSource)dbGrid.DataSource!).List.Cast<DbTnfSyncControl.PairView>().Where(pair => pair.Safe).All(pair => pair.Selected), "returning person restores checkbox state on original DataRows");
-            control.ClearSelection();
-            var safeIndex = Array.FindIndex(targetRows, pair => pair.Safe);
-            Check(safeIndex >= 0, "checkbox synchronization test has a safe row");
-            dbGrid.CurrentCell = dbGrid.Rows[safeIndex].Cells[0];
-            dbGrid.BeginEdit(false);
-            dbGrid.Rows[safeIndex].Cells[0].Value = true;
-            dbGrid.NotifyCurrentCellDirty(true);
-            dbGrid.CommitEdit(DataGridViewDataErrorContexts.Commit);
-            dbGrid.EndEdit();
-            Check(targetRows[safeIndex].Selected && Equals(tnfGrid.Rows[safeIndex].Cells[0].Value, true), "DB checkbox immediately mirrors TNF checkbox and DataRow");
-            Check(selectionLabel.Text.Contains("Toplam: 1"), "manual checkbox updates live selection counter");
-            tnfGrid.CurrentCell = tnfGrid.Rows[safeIndex].Cells[0];
-            tnfGrid.BeginEdit(false);
-            tnfGrid.Rows[safeIndex].Cells[0].Value = false;
-            tnfGrid.NotifyCurrentCellDirty(true);
-            tnfGrid.CommitEdit(DataGridViewDataErrorContexts.Commit);
-            tnfGrid.EndEdit();
-            Check(!targetRows[safeIndex].Selected && Equals(dbGrid.Rows[safeIndex].Cells[0].Value, false), "TNF checkbox immediately mirrors DB checkbox");
-            var selectionClock = Stopwatch.StartNew();
-            searchBox.Text = "NO VISIBLE PERSON";
-            control.SelectAllSafe();
-            selectionClock.Stop();
-            Check(control.PlanAllSelected().Length == safeRows.Length && safeRows.All(row => row.Field<bool>("Seç")), "global safe selection ignores personnel and movement filters");
-            Check(fullSnapshot.Table.AsEnumerable().Where(row => !DbTnfSyncControl.IsSafeOperation(row)).All(row => !row.Field<bool>("Seç")), "global selection excludes review compatible and invalid DB rows");
-            Check(selectionClock.ElapsedMilliseconds < 2000, "global selection remains responsive");
-            var reviewRows = fullSnapshot.Table.AsEnumerable().Where(row => row.Field<string>("İşlem") == "İNCELE").ToArray();
-            if (reviewRows.Length > 0) reviewRows[0]["Seç"] = true;
-            Check(control.PlanAllSelected().Length == safeRows.Length, "manually selected review cannot enter global apply plan");
-            var confirmation = DbTnfSyncControl.CorrectionSummary(control.PlanAllSelected(), reviewRows.Length);
-            Check(confirmation.Contains($"Seçili Personel Sayısı: {safeRows.Select(row => row.Field<string>("Kart No")).Distinct().Count()}") && confirmation.Contains($"Toplam: {safeRows.Length}") && confirmation.Contains("işlem yapılmayacak"), "batch confirmation counts personnel all operations and excluded review");
-            control.ClearSelection();
-            Check(fullSnapshot.Table.AsEnumerable().All(row => !row.Field<bool>("Seç")) && selectionLabel.Text.Contains("Toplam: 0"), "clear selection clears all hidden rows including manually selected review");
-            foreach (var operation in new[] { "FAZLA", "TNF EKLE", "TNF DÜZELT" })
-            {
-                control.SelectAllSafe(operation);
-                var expectedRows = safeRows.Where(row => operation == "FAZLA" ? row.Field<string>("İşlem") is "TNF SİL FAZLA" or "TNF SİL E" : row.Field<string>("İşlem") == operation).ToArray();
-                Check(control.PlanAllSelected().Length == expectedRows.Length && expectedRows.All(row => row.Field<bool>("Seç")), "global operation selection " + operation);
-                control.ClearSelection();
-            }
-            searchBox.Text = "00053";
-            control.SelectAllSafe("FAZLA");
-            Check(control.PlanAllSelected().Select(row => row.Field<string>("Kart No")).Distinct().Count() > 1 && control.PlanVisibleCorrections(false).All(row => row.Field<string>("Kart No") == "00053"), "global selected apply plan and checkbox-free person plan remain separate");
-            control.ClearSelection();
-            using (var fixtureControl = new DbTnfSyncControl(owner))
-            {
-                var selectionTable = SyncEngine.EmptyTable();
-                var operations = new[] { "TNF EKLE", "TNF SİL FAZLA", "TNF SİL E", "TNF DÜZELT", "İNCELE", "YOK", "GEÇERSİZ DB" };
-                for (var index = 0; index < operations.Length; index++)
-                {
-                    var row = selectionTable.NewRow();
-                    row["Kart No"] = index % 2 == 0 ? "10001" : "10002";
-                    row["İşlem"] = operations[index];
-                    row["Seç"] = false;
-                    selectionTable.Rows.Add(row);
-                }
-                typeof(DbTnfSyncControl).GetMethod("SetSnapshot", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(fixtureControl, [fullSnapshot with { Table = selectionTable }]);
-                fixtureControl.SelectAllSafe("FAZLA");
-                var fixtureRows = fixtureControl.PlanAllSelected();
-                Check(fixtureRows.Length == 2 && fixtureRows.Any(row => row.Field<string>("İşlem") == "TNF SİL E"), "surplus selector includes E deletions in memory-only fixture");
-                var fixtureLabel = (Label)typeof(DbTnfSyncControl).GetField("selectionSummary", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(fixtureControl)!;
-                Check(fixtureLabel.Text.Contains("Fazla: 1") && fixtureLabel.Text.Contains("E Kaydı: 1") && fixtureLabel.Text.Contains("Toplam: 2"), "counter separates surplus and E categories");
-                fixtureControl.SelectAllSafe();
-                Check(fixtureControl.PlanAllSelected().Length == 4 && selectionTable.AsEnumerable().Where(row => !DbTnfSyncControl.IsSafeOperation(row)).All(row => !row.Field<bool>("Seç")), "all four safe operations selected and unsafe operations excluded in fixture");
-                Check(fixtureLabel.Text.Contains("Eksik: 1") && fixtureLabel.Text.Contains("Saat Farkı: 1") && fixtureLabel.Text.Contains("Toplam: 4"), "counter totals mixed operations across cards");
-                fixtureControl.ClearSelection();
-                Check(selectionTable.AsEnumerable().All(row => !row.Field<bool>("Seç")), "memory-only fixture clear selection includes every row");
-            }
-            var monthPicker = (ComboBox)typeof(DbTnfSyncControl).GetField("month", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
-            var yearPicker = (NumericUpDown)typeof(DbTnfSyncControl).GetField("year", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
-            yearPicker.Value = 2026;
-            monthPicker.SelectedIndex = 5;
-            searchBox.Text = "00056";
-            await control.RunAuditAsync(false);
-            var maySnapshot = control.LastSnapshot!;
-            var mayExpected = maySnapshot.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") is "TNF SİL FAZLA" or "TNF SİL E");
-            control.SelectAllSafe("FAZLA");
-            Check(maySnapshot.Request.Start == new DateTime(2026, 5, 1) && maySnapshot.Request.End == new DateTime(2026, 6, 1), "May 2026 selection test uses exact month boundaries");
-            Check(control.PlanAllSelected().Length == mayExpected && selectionLabel.Text.Contains($"Toplam: {mayExpected}"), "May surplus selector matches snapshot surplus count regardless of selected person");
-            Console.WriteLine($"REV19_SELECTION full_safe={safeRows.Length} full_people={safeRows.Select(row => row.Field<string>("Kart No")).Distinct().Count()} full_select_ms={selectionClock.ElapsedMilliseconds} may_surplus={mayExpected} may_selected={control.PlanAllSelected().Length}");
-            searchBox.Text = "";
-            using (var image = new System.Drawing.Bitmap(owner.Width,owner.Height)) { owner.DrawToBitmap(image, new System.Drawing.Rectangle(0,0,owner.Width,owner.Height)); image.Save("D:/Googledrive/KYERP-PDKS-MASAUSTU/08_TEST/REV19_MAY_SELECTION.png"); }
-            control.ClearSelection();
+            var safeRows=fullSnapshot.Table.AsEnumerable().Where(SyncEngine.SafeOperation).ToArray();
+            var planClock=Stopwatch.StartNew();
+            var livePlan=SyncEngine.PrepareOutputs(fullSnapshot,safeRows,CancellationToken.None);
+            planClock.Stop();
+            Check(livePlan.Missing.All(line=>Format.TryParse(line,0,out _)), "live missing plan has only canonical TNF lines; no write performed");
+            Check(safeRows.All(row=>row.Field<string>("Tür")!="E" || row.Field<string>("İşlem")=="TNF SİL E"), "live E never produces a missing line");
+            var parsedPlan=livePlan.Corrected.Select((line,index)=>Format.TryParse(line,index,out var movement)?movement:null).Where(movement=>movement is not null).Cast<TnfMovement>().Where(movement=>movement.Date>=fullSnapshot.Request.Start && movement.Date<fullSnapshot.Request.End).ToList();
+            var planCheck=Compare(fullSnapshot.Db,parsedPlan,fullSnapshot.People);
+            Console.WriteLine($"REV20_POST_PLAN missing={Count(planCheck,"TNF EKLE")} surplus={Count(planCheck,"TNF SİL FAZLA")} time={Count(planCheck,"TNF DÜZELT")} e={Count(planCheck,"TNF SİL E")} review={Count(planCheck,"İNCELE")}");
+            Check(Count(planCheck,"TNF SİL FAZLA")==0 && Count(planCheck,"TNF DÜZELT")==0 && Count(planCheck,"TNF SİL E")==0, "live memory-only output plan reaches zero safe surplus time and E errors");
+            Check(dbGrid.Columns.Cast<DataGridViewColumn>().All(column=>column is not DataGridViewCheckBoxColumn), "simplified grids contain no selection checkbox");
+            var buttons=Descendants(control).OfType<Button>().Where(button=>button.Text!="İptal").Select(button=>button.Text).ToArray();
+            Check(buttons.Length==5 && buttons.Contains("TÜM GÜVENLİLERİ UYGULA") && buttons.Contains("ÇIKTI DOSYALARINI AÇ") && !buttons.Any(button=>button.Contains("DB KAYDINI")), "only five final buttons and no DB cleanup action");
+            Console.WriteLine($"REV20_READONLY_PLAN safe={safeRows.Length} missing={livePlan.Missing.Length} corrected_lines={livePlan.Corrected.Length} plan_ms={planClock.ElapsedMilliseconds}");
             await control.RunAuditAsync(true, true);
             var grid = (DataGridView)typeof(DbTnfSyncControl).GetField("dbGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
             var other = (DataGridView)typeof(DbTnfSyncControl).GetField("tnfGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
@@ -417,6 +352,15 @@ internal static class Program
         var tabs = (TabControl)typeof(MainForm).GetField("tabs", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(main)!;
         Check(tabs.TabPages.Count >= 7, "REV15 main modules construct");
         Check(typeof(PasswordGateForm).GetField("Expected", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null) is byte[] { Length: 32 }, "original password gate retained with embedded private verifier");
+    }
+
+    static IEnumerable<Control> Descendants(Control parent)
+    {
+        foreach (Control child in parent.Controls)
+        {
+            yield return child;
+            foreach (var descendant in Descendants(child)) yield return descendant;
+        }
     }
 
     sealed class ProbeForm : Form

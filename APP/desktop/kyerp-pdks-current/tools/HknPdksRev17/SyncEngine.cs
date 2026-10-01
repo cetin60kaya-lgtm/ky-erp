@@ -228,8 +228,6 @@ internal static partial class SyncEngine
                 var date = Date(prefix + "TARIH");
                 if (date is null || date < request.Start || date >= request.End) return;
                 var time = Convert.ToString(reader[prefix + "SAAT"])?.Trim() ?? "";
-                if (TimeSpan.TryParse(time, out var clock) && clock >= TimeSpan.Zero && clock < TimeSpan.FromDays(1))
-                    time = $"{clock.Hours:00}:{clock.Minutes:00}";
                 movements.Add(new(Convert.ToInt32(reader["SIRA"]), card, date.Value, side, time, Convert.ToString(reader[prefix + "TUR"])?.Trim() ?? ""));
             }
             Add("G", "Giriş");

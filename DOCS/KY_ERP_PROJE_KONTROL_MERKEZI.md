@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.10.2026 — HKN PDKS REV20 salt okunur DB ve ayrı TNF çıktıları
+
+- REV19 hızlı veri projesi 20.0.0 olarak sadeleştirildi. DB–TNF motorunda yalnız SELECT; eski DB temizliği ve seçim düğmeleri kaldırıldı. Diğer modüller/açılış şifresi korunur. Ayrıntı: [REV20 kaynak ve test notları](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV20.md).
+- Kullanıcı onayıyla orijinal TNF korunarak tek yedek, `*_DUZELTILMIS.Tnf` ve `*_EKSIK.Tnf` üretilir. E'den eksik üretilmez; normal DB kart/tarih/saat bire bir korunur. Gerçek belirsiz eşleşmeler otomatik değiştirilmez. Tam yıl son kontrolü corrected dosyada çalışır.
+- 118 assertion geçti. Canlı dosyalar yalnız okundu; bellek planı Fazla/Saat/E=0, Eksik=118 ayrı çıktı planında, İncele=5. UI: DB 88 / TNF 6 / compare 37 / bind 18 / toplam 213 ms; heartbeat en fazla 282 ms. Canlı kayıtların temizlendiği iddiası yoktur.
+- Standart PDKS_DENETIM_PASS; 39 fonksiyon ve 24 form, 0 hata. .NET 8 win-x64 self-contained single-file final `_PAKETLER/GUNCEL/HKN-PDKS-REV20-FINAL.exe`; giriş ekranı Responding=True. Nullable uyarılar devam eder, build hatası yok.
+- Görev dışı mevcut MainForm değişiklikleri çalışma ağacında korunup bu release/commit dışında tutuldu. Şirket dosyaları, özel parola verifier, binary ve yerel test kanıtları Git'e eklenmez. Eski paketler korunur.
+
 ## 01.10.2026 — HKN PDKS REV19 personel ve snapshot genelinde kalıcı seçim
 
 - REV18 hızlı veri aracı mevcut kaynak projesinde 19.0.0 olarak güncellendi. Native kabuk, DB/TNF karşılaştırma ve yan yana grid düzeni değiştirilmedi. Ayrıntı: [REV19 seçim ve test notları](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV19.md).

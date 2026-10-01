@@ -64,7 +64,7 @@ internal static partial class SyncEngine
             {
                 var band = ClockSide(line.Time);
                 var candidates = bandSides.GetValueOrDefault(band) ?? [];
-                var side = candidates.Length == 1 ? candidates[0] : movements.Length == 0 || unfilled.Length == 0 ? band : "Belirsiz";
+                var side = movements.Length == 1 ? movements[0].Side : candidates.Length == 1 ? candidates[0] : movements.Length == 0 || unfilled.Length == 0 ? band : "Belirsiz";
                 if (candidates.Length > 1) side = "Belirsiz";
                 assigned[side].Add(line);
             }
@@ -77,7 +77,9 @@ internal static partial class SyncEngine
                 var anchoredSurplus = dbLines.Length == 1 && tnfLines.Count > 1 && !uncertainDate &&
                     tnfLines.Count(line => line.Time == dbLines[0].Time) == 1 && !tnfLines.Any(line => duplicateTimes.Contains(line.Time));
                 if (anchoredSurplus) tnfLines = tnfLines.OrderBy(line => line.Time == dbLines[0].Time ? 0 : 1).ThenBy(line => line.Time).ThenBy(line => line.Index).ToList();
-                var multiple = dbLines.Length > 1 || tnfLines.Count > 1 && !anchoredSurplus || tnfLines.Any(line => duplicateTimes.Contains(line.Time));
+                var eOnly = dbLines.Length > 0 && dbLines.All(movement => movement.Tur.Equals("E", StringComparison.OrdinalIgnoreCase));
+                var eClockConflict = dbLines.Any(movement => !movement.Tur.Equals("E", StringComparison.OrdinalIgnoreCase) && movements.Any(other => other.Time == movement.Time && other.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)));
+                var multiple = eClockConflict || !eOnly && movements.Length > 0 && (dbLines.Length > 1 || tnfLines.Count > 1 && !anchoredSurplus || tnfLines.Any(line => duplicateTimes.Contains(line.Time)));
                 for (var index = 0; index < Math.Max(dbLines.Length, tnfLines.Count); index++)
                 {
                     var db = index < dbLines.Length ? dbLines[index] : null;
@@ -86,41 +88,23 @@ internal static partial class SyncEngine
                     var operation = "YOK";
                     var detail = "TNF tarafı tekil DB saat eşleşmesiyle hizalandı.";
                     var certain = false;
-                    if (evaluation.Item1 is not null)
-                    {
-                        status = evaluation.Item2 ? "GEÇERSİZ TARİH" : "İNCELE";
-                        operation = "İNCELE";
-                        certain = evaluation.Item2 && !multiple && !uncertainDate;
-                        detail = evaluation.Item1;
-                        if (certain && db is not null) operation = "GEÇERSİZ DB";
-                        if (multiple || uncertainDate)
-                        {
-                            status = "İNCELE";
-                            detail += "; çoklu kayıt veya taraf belirsiz; otomatik karar verilmez.";
-                        }
-                        if (evaluation.Item2 && tnf is { Standard: true } && !multiple && !uncertainDate)
-                        {
-                            status = "GEÇERSİZ TARİH / FAZLA TNF";
-                            operation = "TNF SİL FAZLA";
-                        }
-                    }
-                    else if (multiple || uncertainDate && (side == "Belirsiz" || unfilled.Contains(side)))
+                    if (multiple || uncertainDate && (side == "Belirsiz" || unfilled.Contains(side)))
                     {
                         status = tnf is not null && duplicateTimes.Contains(tnf.Time) ? "MÜKERRER / İNCELE" : "İNCELE";
                         operation = "İNCELE";
                         detail = multiple ? "Aynı kart+tarih+taraf için çoklu kayıt; otomatik karar verilmez." : "TNF tarafı tekil olarak belirlenemedi; otomatik karar verilmez.";
+                    }
+                    else if (eOnly)
+                    {
+                        status = "E KAYDI";
+                        operation = tnf is null ? "YOK" : "TNF SİL E";
+                        detail = tnf is null ? "E kaydı TNF'de yok; doğru." : "DB tarafı yalnız E içeriyor; TNF karşılıkları çıktıda kaldırılır.";
                     }
                     else if (db is not null && !CanBuild(db, format) || tnf is { Standard: false })
                     {
                         status = "İNCELE";
                         operation = "İNCELE";
                         detail = "Saat / TNF türü / kodu / formatı geçersiz.";
-                    }
-                    else if (db is not null && db.Tur.Equals("E", StringComparison.OrdinalIgnoreCase))
-                    {
-                        status = "E KAYDI";
-                        operation = tnf is null ? "YOK" : "TNF SİL E";
-                        detail = tnf is null ? "E kaydı TNF'de yok; doğru." : "E kaydı TNF'de bulunmamalı.";
                     }
                     else if (db is null)
                     {
@@ -138,8 +122,9 @@ internal static partial class SyncEngine
                     {
                         status = "SAAT FARKI";
                         operation = "TNF DÜZELT";
-                        detail = "TNF taraf alanı içermez; tekil saat grubuyla DB tarafına hizalandı. DB ana kaynaktır.";
+                        detail = "TNF tekil olarak DB tarafına hizalandı. DB kart/tarih/saat bire bir korunur.";
                     }
+                    if (evaluation.Item1 is not null) detail += " Personel tarih notu (DB hareketi değiştirilmez): " + evaluation.Item1;
                     table.Rows.Add(key.Card, rule?.Name ?? "KIMLIK YOK", key.Date.ToString("dd.MM.yyyy"), side, db?.Time ?? "",
                         db?.Tur.Equals("E", StringComparison.OrdinalIgnoreCase) == true ? "E" : db is null ? "TNF" : "Normal",
                         tnf?.Time ?? "", tnf?.Raw ?? "", status, operation, db?.Id ?? -1, tnf?.Index ?? -1, certain, detail, false);
@@ -154,7 +139,7 @@ internal static partial class SyncEngine
 
     static bool CanBuild(DbMovement movement, TnfFormat format)
     {
-        if (!TimeSpan.TryParseExact(movement.Time, @"hh\:mm", CultureInfo.InvariantCulture, out var clock) || clock.TotalHours >= 24) return false;
+        if (movement.Card.Length != 5 || !movement.Card.All(char.IsAsciiDigit) || !TimeSpan.TryParseExact(movement.Time, @"hh\:mm", CultureInfo.InvariantCulture, out var clock) || clock.TotalHours >= 24) return false;
         try
         {
             return format.TryParse(format.Build(movement.Card, movement.Date, movement.Time), -1, out var generated) &&

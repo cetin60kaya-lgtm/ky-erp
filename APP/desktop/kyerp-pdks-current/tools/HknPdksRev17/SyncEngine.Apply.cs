@@ -1,147 +1,123 @@
 using System.Data;
 using System.Globalization;
 using System.Security.Cryptography;
-using FirebirdSql.Data.FirebirdClient;
-using KYERP.PDKS.Core;
 
 namespace QuickDataTool;
 
+internal sealed record TnfOutputs(string CorrectedPath, string MissingPath, string BackupPath, int MissingCount);
+
 internal static partial class SyncEngine
 {
-    public static async Task<string> ApplyAsync(FirebirdDatabase database, AuditSnapshot snapshot,
-        DataRow[] selected, bool clean, CancellationToken cancellation)
+    internal static bool SafeOperation(DataRow row) => row.Field<string>("İşlem") is
+        "TNF EKLE" or "TNF SİL FAZLA" or "TNF SİL E" or "TNF DÜZELT";
+
+    internal static string CanonicalLine(DataRow row)
     {
-        if (selected.Length == 0 || selected.Any(row => !ReferenceEquals(row.Table, snapshot.Table)))
-            throw new InvalidOperationException("Seçim kontrol sonucuna ait değil.");
-        if (clean && (snapshot.Request.Card.Length == 0 || selected.Any(row =>
-            !row.Field<bool>("CertainInvalid") || row.Field<string>("Kart No") != snapshot.Request.Card)))
-            throw new InvalidOperationException("Temizleme yalnız tek kartın kesin geçersiz seçili kayıtları için yapılır.");
-        var fresh = await ReadAsync(database, snapshot.Request, cancellation).ConfigureAwait(false);
-        if (fresh.FileHash != snapshot.FileHash || fresh.DbHash != snapshot.DbHash)
-            throw new InvalidOperationException("DB/personel/TNF değişmiş. Önce yeniden Kontrol Et.");
+        var card = row.Field<string>("Kart No") ?? "";
+        var time = row.Field<string>("DB Saat") ?? "";
+        var date = DateTime.ParseExact(row.Field<string>("Tarih")!, "dd.MM.yyyy", CultureInfo.InvariantCulture);
+        if (card.Length != 5 || !card.All(char.IsAsciiDigit) ||
+            !TimeSpan.TryParseExact(time, @"hh\:mm", CultureInfo.InvariantCulture, out var clock) || clock.TotalHours >= 24 ||
+            row.Field<string>("Tür") == "E")
+            throw new InvalidOperationException("DB kart/saat/normal tür bilgisi bire bir TNF formatına aktarılamıyor.");
+        return $"{card},{time},{date.ToString("ddMMyy", CultureInfo.InvariantCulture)},1,001";
+    }
+
+    internal static (string[] Corrected, string[] Missing) PrepareOutputs(AuditSnapshot snapshot, DataRow[] selected, CancellationToken cancellation)
+    {
+        if (selected.Length == 0 || selected.Any(row => !ReferenceEquals(row.Table, snapshot.Table) || !SafeOperation(row)))
+            throw new InvalidOperationException("Yalnız bu kontrol sonucunun güvenli TNF işlemleri uygulanabilir.");
         var deletions = new HashSet<int>();
         var replacements = new Dictionary<int, string>();
-        var additions = new HashSet<string>(StringComparer.Ordinal);
-        var dbSelections = new HashSet<(int Id, string Side)>();
-        foreach (var row in selected)
+        var missing = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var row in selected.Distinct())
         {
             cancellation.ThrowIfCancellationRequested();
-            var operation = row.Field<string>("İşlem")!;
+            var operation = row.Field<string>("İşlem");
             var index = row.Field<int>("TnfIndex");
-            if (clean)
-            {
-                if (index >= 0) deletions.Add(index);
-                if (row.Field<int>("DbId") >= 0) dbSelections.Add((row.Field<int>("DbId"), row.Field<string>("Taraf")!));
-                continue;
-            }
-            if (operation is not ("TNF EKLE" or "TNF SİL E" or "TNF SİL FAZLA" or "TNF DÜZELT"))
-                throw new InvalidOperationException("İNCELE veya uyumlu satır otomatik değiştirilemez.");
-            if (operation is "TNF SİL E" or "TNF SİL FAZLA") deletions.Add(index);
+            if (operation == "TNF EKLE") missing.Add(CanonicalLine(row));
             else
             {
-                var line = snapshot.Request.Format.Build(row.Field<string>("Kart No")!,
-                    DateTime.ParseExact(row.Field<string>("Tarih")!, "dd.MM.yyyy", CultureInfo.InvariantCulture), row.Field<string>("DB Saat")!);
-                if (operation == "TNF EKLE") additions.Add(line); else replacements[index] = line;
+                if (index < 0 || index >= snapshot.Lines.Length) throw new InvalidOperationException("TNF satır adresi geçersiz.");
+                if (operation is "TNF SİL FAZLA" or "TNF SİL E") deletions.Add(index);
+                else if (!replacements.TryAdd(index, CanonicalLine(row)))
+                    throw new InvalidOperationException("Aynı TNF satırı birden fazla işlemle eşleşiyor; kontrolü yenileyin.");
             }
         }
-        foreach (var index in deletions.Concat(replacements.Keys))
-            if (index < 0 || index >= snapshot.Lines.Length) throw new InvalidOperationException("TNF satır kimliği geçersiz.");
-        var output = new List<string>();
+        if (deletions.Overlaps(replacements.Keys)) throw new InvalidOperationException("TNF işlem planı çelişkili.");
+        var corrected = new List<string>(snapshot.Lines.Length);
         for (var index = 0; index < snapshot.Lines.Length; index++)
-            if (!deletions.Contains(index)) output.Add(replacements.GetValueOrDefault(index, snapshot.Lines[index]));
-        var existing = output.ToHashSet(StringComparer.Ordinal);
-        output.AddRange(additions.Where(line => existing.Add(line)));
-        var directory = Path.Combine(Path.GetDirectoryName(snapshot.Request.Path)!, "_YEDEK");
-        Directory.CreateDirectory(directory);
-        var backup = Path.Combine(directory, Path.GetFileName(snapshot.Request.Path) + $".bak_{DateTime.Now:yyyyMMdd_HHmmss_fff}_{Guid.NewGuid():N}");
-        var temporary = snapshot.Request.Path + $".tmp_REV19_{Guid.NewGuid():N}";
-        using var lease = new FileStream(snapshot.Request.Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
-        if (Convert.ToHexString(await SHA256.HashDataAsync(lease, cancellation).ConfigureAwait(false)) != snapshot.FileHash)
-            throw new InvalidOperationException("TNF kontrol sonrasında değişmiş.");
+        {
+            cancellation.ThrowIfCancellationRequested();
+            if (!deletions.Contains(index)) corrected.Add(replacements.GetValueOrDefault(index) ?? snapshot.Lines[index]);
+        }
+        return (corrected.ToArray(), missing.Order(StringComparer.Ordinal).ToArray());
+    }
 
-        FbConnection? connection = null;
-        FbTransaction? transaction = null;
-        var replaced = false;
-        var commitAttempted = false;
+    public static async Task<TnfOutputs> ApplyAsync(KYERP.PDKS.Core.FirebirdDatabase database, AuditSnapshot snapshot,
+        DataRow[] selected, CancellationToken cancellation)
+    {
+        var fresh = await ReadAsync(database, snapshot.Request, cancellation).ConfigureAwait(false);
+        if (fresh.FileHash != snapshot.FileHash || fresh.DbHash != snapshot.DbHash)
+            throw new InvalidOperationException("DB/personel/TNF değişmiş. Önce yeniden KONTROL ET.");
+        var plan = PrepareOutputs(snapshot, selected, cancellation);
+        return await WriteOutputsAsync(snapshot, plan.Corrected, plan.Missing, cancellation).ConfigureAwait(false);
+    }
+
+    internal static async Task<TnfOutputs> WriteOutputsAsync(AuditSnapshot snapshot, string[] corrected, string[] missing, CancellationToken cancellation)
+    {
+        var directory = Path.GetDirectoryName(snapshot.Request.Path)!;
+        if (Path.GetFileName(directory).Equals("_TNF_CIKTILARI", StringComparison.OrdinalIgnoreCase))
+            directory = Directory.GetParent(directory)!.FullName;
+        var backupDirectory = Path.Combine(directory, "_YEDEK");
+        var outputDirectory = Path.Combine(directory, "_TNF_CIKTILARI");
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture) + "_" + Guid.NewGuid().ToString("N")[..8];
+        var sourceStem = System.Text.RegularExpressions.Regex.Replace(Path.GetFileNameWithoutExtension(snapshot.Request.Path),
+            @"_\d{8}_\d{6}_\d{3}_[0-9a-f]{8}_DUZELTILMIS$", "");
+        var stem = sourceStem + "_" + stamp;
+        var correctedPath = Path.Combine(outputDirectory, stem + "_DUZELTILMIS.Tnf");
+        var missingPath = Path.Combine(outputDirectory, stem + "_EKSIK.Tnf");
+        var backupPath = Path.Combine(backupDirectory, stem + ".Tnf");
+        using var source = new FileStream(snapshot.Request.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var bytes = new byte[source.Length];
+        await source.ReadExactlyAsync(bytes, cancellation).ConfigureAwait(false);
+        if (Convert.ToHexString(SHA256.HashData(bytes)) != snapshot.FileHash)
+            throw new InvalidOperationException("Orijinal TNF değişmiş; çıktı hazırlanmadı.");
+        cancellation.ThrowIfCancellationRequested();
+        Directory.CreateDirectory(backupDirectory);
+        Directory.CreateDirectory(outputDirectory);
+        await AtomicWriteAsync(backupPath, bytes, cancellation).ConfigureAwait(false);
         try
         {
-            await File.WriteAllLinesAsync(temporary, output, snapshot.Encoding, cancellation).ConfigureAwait(false);
-            cancellation.ThrowIfCancellationRequested();
-            if (dbSelections.Count > 0)
-            {
-                connection = database.OpenConnection();
-                transaction = connection.BeginTransaction();
-                var byId = snapshot.Db.ToDictionary(movement => (movement.Id, movement.Side));
-                var dump = new List<Dictionary<string, object?>>();
-                foreach (var id in dbSelections.Select(selection => selection.Id).Distinct())
-                {
-                    cancellation.ThrowIfCancellationRequested();
-                    using var dumpCommand = new FbCommand("select * from GIRCIK where SIRA=@Id", connection, transaction) { CommandTimeout = 60 };
-                    dumpCommand.Parameters.Add(new FbParameter("@Id", id));
-                    using var reader = await dumpCommand.ExecuteReaderAsync(cancellation).ConfigureAwait(false);
-                    if (!await reader.ReadAsync(cancellation).ConfigureAwait(false)) throw new InvalidOperationException("DB yedeği için satır bulunamadı.");
-                    var record = new Dictionary<string, object?>();
-                    for (var column = 0; column < reader.FieldCount; column++)
-                        record[reader.GetName(column)] = reader.IsDBNull(column) ? null : reader.GetValue(column);
-                    dump.Add(record);
-                }
-                var dumpPath = backup + ".GIRCIK.json";
-                var dumpBytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { Version = 19, CapturedAt = DateTime.Now, Rows = dump }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-                using (var dumpStream = new FileStream(dumpPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                {
-                    await dumpStream.WriteAsync(dumpBytes, cancellation).ConfigureAwait(false);
-                    dumpStream.Flush(true);
-                }
-                foreach (var selection in dbSelections)
-                {
-                    var movement = byId[selection];
-                    if (!snapshot.People.TryGetValue(movement.Card, out var rule) || !rule.Evaluate(movement.Date).Certain)
-                        throw new InvalidOperationException("Personel dönemi kesin geçersiz değil.");
-                    var prefix = movement.Side == "Giriş" ? "G" : "C";
-                    using var command = FirebirdDatabase.CreateCommand(connection, transaction,
-                        $"update GIRCIK set {prefix}TARIH=null,{prefix}SAAT=null,{prefix}DAKIKA=null,{prefix}TUR=null " +
-                        $"where SIRA=@Id and PKNO=@Card and {prefix}TARIH>=@Date and {prefix}TARIH<@End " +
-                        $"and trim({prefix}SAAT)=@Time and coalesce(trim({prefix}TUR),'')=@Tur " +
-                        "and exists(select 1 from KIMLIK k where k.PKNO=@Card and k.IGTARIH is not distinct from @Hire " +
-                        "and k.ICTARIH is not distinct from @Exit and k.DURUM is not distinct from @Status)",
-                        new FbParameter("@Id", movement.Id), new FbParameter("@Card", movement.Card),
-                        new FbParameter("@Date", movement.Date), new FbParameter("@End", movement.Date.AddDays(1)),
-                        new FbParameter("@Time", movement.Time), new FbParameter("@Tur", movement.Tur),
-                        new FbParameter("@Hire", (object?)rule.Hire ?? DBNull.Value), new FbParameter("@Exit", (object?)rule.Exit ?? DBNull.Value),
-                        new FbParameter("@Status", (object?)rule.StatusCode ?? DBNull.Value));
-                    command.CommandTimeout = 60;
-                    if (command.ExecuteNonQuery() != 1) throw new InvalidOperationException("Seçili DB kaydı değişmiş; temizlik geri alındı.");
-                }
-            }
-            cancellation.ThrowIfCancellationRequested();
-            File.Replace(temporary, snapshot.Request.Path, backup);
-            replaced = true;
-            if (transaction is not null)
-            {
-                commitAttempted = true;
-                transaction.Commit();
-            }
-            Log($"correction_completed selected={selected.Length} db_sides={dbSelections.Count} backup_created=true");
-            return backup;
+            await AtomicWriteAsync(correctedPath, EncodeLines(corrected, snapshot.Encoding), cancellation).ConfigureAwait(false);
+            await AtomicWriteAsync(missingPath, EncodeLines(missing, snapshot.Encoding), cancellation).ConfigureAwait(false);
         }
-        catch (Exception exception)
+        catch
         {
-            if (commitAttempted)
-                throw new InvalidOperationException("DB commit sonucu belirsiz. TNF yedeği korundu; tekrar düzeltmeden önce SON TAM KONTROL yapın.", exception);
-            transaction?.Rollback();
-            if (replaced)
-            {
-                lease.Dispose();
-                File.Copy(backup, temporary, false);
-                File.Replace(temporary, snapshot.Request.Path, null);
-            }
+            if (File.Exists(correctedPath)) File.Delete(correctedPath);
+            if (File.Exists(missingPath)) File.Delete(missingPath);
             throw;
         }
-        finally
+        Log($"outputs_completed corrections={corrected.Length} missing={missing.Length} source_preserved=true db_read_only=true backup_created=true");
+        return new(correctedPath, missingPath, backupPath, missing.Length);
+    }
+
+    static byte[] EncodeLines(string[] lines, System.Text.Encoding encoding) =>
+        encoding.GetPreamble().Concat(encoding.GetBytes(lines.Length == 0 ? "" : string.Join("\r\n", lines) + "\r\n")).ToArray();
+
+    static async Task AtomicWriteAsync(string destination, byte[] bytes, CancellationToken cancellation)
+    {
+        var temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
         {
-            transaction?.Dispose();
-            connection?.Dispose();
-            if (File.Exists(temporary)) File.Delete(temporary);
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                await stream.WriteAsync(bytes, cancellation).ConfigureAwait(false);
+                stream.Flush(true);
+            }
+            cancellation.ThrowIfCancellationRequested();
+            File.Move(temporary, destination, false);
         }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 }
