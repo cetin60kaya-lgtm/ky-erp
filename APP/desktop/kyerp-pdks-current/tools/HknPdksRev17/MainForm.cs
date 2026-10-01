@@ -846,8 +846,8 @@ public sealed class MainForm : Form
 			DateTime dateTime = new DateTime((int)paymentYear.Value, (paymentMonthNo.SelectedIndex == 0) ? 1 : paymentMonthNo.SelectedIndex, 1);
 			DateTime dateTime2 = ((paymentMonthNo.SelectedIndex == 0) ? dateTime.AddYears(1) : dateTime.AddMonths(1));
 			string text = SelectedCard(paymentPerson);
-			string sql = "select o.PKNO,k.AD,k.SOYAD,o.BASTAR,o.BITTAR,o.NODENEN,o.NOTARIH,o.FMODENEN,o.FMOTARIH from ODEME o inner join KIMLIK k on k.PKNO=o.PKNO where (k.ICTARIH is null or k.ICTARIH>=@TODAY) and o.BASTAR>=@A and o.BASTAR<@B" + ((text == null) ? "" : " and o.PKNO=@P") + " order by o.PKNO";
-			paymentGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@TODAY", DateTime.Today), new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@TODAY", DateTime.Today), new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
+			string sql = "select o.PKNO,k.AD,k.SOYAD,k.MAAS as KART_MAAS,o.BASTAR,o.BITTAR,o.NODENEN,o.NOTARIH,o.FMODENEN,o.FMOTARIH from ODEME o inner join KIMLIK k on k.PKNO=o.PKNO where k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and o.BASTAR>=@A and o.BASTAR<@B" + ((text == null) ? "" : " and o.PKNO=@P") + " order by o.PKNO";
+			paymentGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
 		}
 	}
 
@@ -858,8 +858,8 @@ public sealed class MainForm : Form
 			DateTime dateTime = new DateTime((int)advanceYear.Value, (advanceMonthNo.SelectedIndex == 0) ? 1 : advanceMonthNo.SelectedIndex, 1);
 			DateTime dateTime2 = ((advanceMonthNo.SelectedIndex == 0) ? dateTime.AddYears(1) : dateTime.AddMonths(1));
 			string text = SelectedCard(advancePerson);
-			string sql = "select a.KOD,a.PKNO,k.AD,k.SOYAD,a.TARIH,a.MIKTAR,a.VTARIH,a.TURKOD,a.TOPMIKTAR,a.TAKSITSAYISI,a.TAKSITNO,a.ACIKLAMA from AVANS a inner join KIMLIK k on k.PKNO=a.PKNO where (k.ICTARIH is null or k.ICTARIH>=@TODAY) and a.TARIH>=@A and a.TARIH<@B" + ((text == null) ? "" : " and a.PKNO=@P") + " order by a.TARIH desc,a.KOD desc";
-			advanceGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@TODAY", DateTime.Today), new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@TODAY", DateTime.Today), new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
+			string sql = "select a.KOD,a.PKNO,k.AD,k.SOYAD,a.TARIH,a.MIKTAR,a.VTARIH,a.TURKOD,a.TOPMIKTAR,a.TAKSITSAYISI,a.TAKSITNO,a.ACIKLAMA from AVANS a inner join KIMLIK k on k.PKNO=a.PKNO where k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and a.TARIH>=@A and a.TARIH<@B" + ((text == null) ? "" : " and a.PKNO=@P") + " order by a.TARIH desc,a.KOD desc";
+			advanceGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
 		}
 	}
 
@@ -1058,7 +1058,7 @@ public sealed class MainForm : Form
 			sourceStatus.ForeColor = Color.DarkGreen;
 			try
 			{
-				var policy = await Task.Run(() => WorkTimePolicy.Read(database, CancellationToken.None));
+				var policy = await Task.Run(() => WorkTimePolicy.Read(database!, CancellationToken.None));
 				if (!IsDisposed && ReferenceEquals(db, database))
 				{
 					SetWorkHours(policy);
@@ -1318,8 +1318,8 @@ public sealed class MainForm : Form
 			DateTime dateTime = ((selectedIndex == 0) ? new DateTime(year, 1, 1) : new DateTime(year, selectedIndex, 1));
 			DateTime dateTime2 = ((selectedIndex == 0) ? dateTime.AddYears(1) : dateTime.AddMonths(1));
 			string text = SelectedCard(ioPerson);
-			string sql = "select g.SIRA,g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g inner join KIMLIK k on k.PKNO=g.PKNO where (k.ICTARIH is null or k.ICTARIH>=@TODAY) and ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))" + ((text == null) ? "" : " and g.PKNO=@P") + " order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
-			ioGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@TODAY", DateTime.Today), new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@TODAY", DateTime.Today), new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
+			string sql = "select g.SIRA,g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g inner join KIMLIK k on k.PKNO=g.PKNO where k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))" + ((text == null) ? "" : " and g.PKNO=@P") + " order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
+			ioGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
 		}
 		catch (Exception ex)
 		{
@@ -1338,8 +1338,8 @@ public sealed class MainForm : Form
 			DateTime dateTime = new DateTime((int)payrollYear.Value, (payrollMonthNo.SelectedIndex == 0) ? 1 : payrollMonthNo.SelectedIndex, 1);
 			DateTime dateTime2 = ((payrollMonthNo.SelectedIndex == 0) ? dateTime.AddYears(1) : dateTime.AddMonths(1));
 			string text = SelectedCard(payrollPerson);
-			string sql = "select u.*,k.AD,k.SOYAD from UCRETLER u inner join KIMLIK k on k.PKNO=u.PKNO where (k.ICTARIH is null or k.ICTARIH>=@TODAY) and u.BASTAR>=@A and u.BASTAR<@B" + ((text == null) ? "" : " and u.PKNO=@P") + " order by u.PKNO";
-			payrollGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@TODAY", DateTime.Today), new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@TODAY", DateTime.Today), new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
+			string sql = "select u.*,k.AD,k.SOYAD,k.MAAS as KART_MAAS from UCRETLER u inner join KIMLIK k on k.PKNO=u.PKNO where k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and u.BASTAR>=@A and u.BASTAR<@B" + ((text == null) ? "" : " and u.PKNO=@P") + " order by u.PKNO";
+			payrollGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
 		}
 		catch (Exception ex)
 		{
@@ -1958,8 +1958,8 @@ public sealed class MainForm : Form
 		DateTime dateTime = ((selectedIndex == 0) ? new DateTime(year, 1, 1) : new DateTime(year, selectedIndex, 1));
 		DateTime dateTime2 = ((selectedIndex == 0) ? dateTime.AddYears(1) : dateTime.AddMonths(1));
 		string text = SelectedCard(eHistoryPerson);
-		string sql = "select g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g inner join KIMLIK k on k.PKNO=g.PKNO where (k.ICTARIH is null or k.ICTARIH>=@TODAY) and (g.GTUR='E' or g.CTUR='E') and ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))" + ((text == null) ? "" : " and g.PKNO=@P") + " order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
-		DataTable dataTable = ((text == null) ? db.Query(sql, new FbParameter("@TODAY", DateTime.Today), new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@TODAY", DateTime.Today), new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
+		string sql = "select g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g inner join KIMLIK k on k.PKNO=g.PKNO where k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and (g.GTUR='E' or g.CTUR='E') and ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))" + ((text == null) ? "" : " and g.PKNO=@P") + " order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
+		DataTable dataTable = ((text == null) ? db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
 		DataTable dataTable2 = new DataTable();
 		string[] array = new string[8] { "Kart No", "Ad Soyad", "Tarih", "Gün", "Taraf", "Saat", "Dönem", "İmza" };
 		foreach (string columnName in array)

@@ -264,6 +264,12 @@ internal static class Program
             {
                 Check(rule!.Exit is not null && rule.EffectiveStatus(request.End.AddDays(-1)).StartsWith("PASİF"), "live 00053 is effectively departed");
                 Check(cardRows.Length>0, "live 00053 movements remain visible with DB as source");
+                var historicalStart = new DateTime(2025, 6, 1);
+                var historicalEnd = new DateTime(2025, 8, 1);
+                var currentOnly = Convert.ToInt64(database.Scalar("select count(*) from GIRCIK g inner join KIMLIK k on k.PKNO=g.PKNO where g.PKNO='00053' and (k.ICTARIH is null or k.ICTARIH>=@TODAY) and ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))", new FirebirdSql.Data.FirebirdClient.FbParameter("@TODAY", DateTime.Today), new FirebirdSql.Data.FirebirdClient.FbParameter("@A", historicalStart), new FirebirdSql.Data.FirebirdClient.FbParameter("@B", historicalEnd)) ?? 0);
+                var periodAware = Convert.ToInt64(database.Scalar("select count(*) from GIRCIK g inner join KIMLIK k on k.PKNO=g.PKNO where g.PKNO='00053' and k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))", new FirebirdSql.Data.FirebirdClient.FbParameter("@A", historicalStart), new FirebirdSql.Data.FirebirdClient.FbParameter("@B", historicalEnd)) ?? 0);
+                Console.WriteLine($"HISTORICAL_00053 current_filter={currentOnly} period_filter={periodAware}");
+                Check(periodAware > currentOnly && periodAware > 0, "departed personnel historical movements remain visible in selected period");
             }
         }
         using var owner = new ProbeForm(database, tnfPath);
