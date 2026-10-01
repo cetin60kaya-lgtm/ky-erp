@@ -122,6 +122,7 @@ internal static class Program
             var listing = SyncEngine.ListTerminal([Tnf(), Tnf(1)], People, CancellationToken.None);
             Check(listing.Rows.Count == 2 && listing.Rows[0].Field<string>("Durum") == "TNF LİSTE", "terminal listing preserves physical duplicate rows");
             WorkTimeTests.Run(Check);
+            SeparatedWorkflowTests.Run(Check, args.Length == 2 ? args[0] : null, args.Length == 2 ? args[1] : null);
             MonthlyTests.Run(Check, args.Length == 2 ? args[0] : null, args.Length == 2 ? args[1] : null);
             if (args.Length == 2)
             {

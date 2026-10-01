@@ -37,24 +37,28 @@ internal static class DbTnfSyncInjector
 		injected = true;
 		Application.Idle -= InjectOnce;
 		foreach (TabPage item in (from TabPage p in tabControl.TabPages
-			where p.Text.Equals("Data Kontrol", StringComparison.OrdinalIgnoreCase) || p.Text.Equals("DB - TNF Eşitle", StringComparison.OrdinalIgnoreCase)
+			where p.Text.Equals("Data Kontrol", StringComparison.OrdinalIgnoreCase) || p.Text.Equals("DB - TNF Eşitle", StringComparison.OrdinalIgnoreCase) || p.Text == "AYLIK KONTROL"
 			select p).ToList())
 		{
 			tabControl.TabPages.Remove(item);
 		}
-        TabPage tabPage = new TabPage("AYLIK KONTROL")
+        var dbPage = new TabPage("DB KAYIT") { Padding = new Padding(8), BackColor = Color.White };
+        dbPage.Controls.Add(new DbRecordControl(form));
+        TabPage tabPage = new TabPage("TNF DÜZENLE")
 		{
 			Padding = new Padding(8),
 			BackColor = Color.White
 		};
-		tabPage.Controls.Add(new DbTnfSyncControl(form));
+		tabPage.Controls.Add(new DbTnfSyncControl(form, true));
 		int num = tabControl.TabPages.Cast<TabPage>().ToList().FindIndex((TabPage p) => p.Text.Equals("TNF Hazırla", StringComparison.OrdinalIgnoreCase));
 		if (num >= 0)
 		{
-			tabControl.TabPages.Insert(num, tabPage);
+			tabControl.TabPages.Insert(num, dbPage);
+			tabControl.TabPages.Insert(num + 1, tabPage);
 		}
 		else
 		{
+			tabControl.TabPages.Add(dbPage);
 			tabControl.TabPages.Add(tabPage);
 		}
 	}

@@ -13,7 +13,7 @@ using KYERP.PDKS.Core;
 
 namespace QuickDataTool;
 
-public sealed class MainForm : Form
+public sealed partial class MainForm : Form
 {
 	private sealed class DayChoice
 	{
@@ -300,7 +300,7 @@ public sealed class MainForm : Form
 		};
 		ePerson.SelectedIndexChanged += delegate
 		{
-			ApplyEPeriodFilter();
+			if (!loadingEPeople) ApplyEPeriodFilter();
 		};
 		base.Shown += delegate
 		{
@@ -672,7 +672,7 @@ public sealed class MainForm : Form
 			WrapContents = false,
 			Padding = new Padding(4, 6, 4, 2)
 		};
-		flowLayoutPanel2.Controls.Add(WideBtn("Tüm Aktifleri Seç", CheckAllEPeople, 135));
+		flowLayoutPanel2.Controls.Add(WideBtn("Tüm Personeli Seç", CheckAllEPeople, 135));
 		flowLayoutPanel2.Controls.Add(WideBtn("Tüm Günleri Seç", CheckAllEDays, 130));
 		flowLayoutPanel2.Controls.Add(WideBtn("Hafta Sonu Hariç", CheckEWeekdays, 145));
 		flowLayoutPanel2.Controls.Add(WideBtn("E Önizleme", PreviewBulkE, 115));
@@ -1089,7 +1089,6 @@ public sealed class MainForm : Form
 			personSummary.Text = $"Aktif: {num}   Pasif: {num2}   Toplam: {num + num2}";
 			DataTable dataTable = db.Query("select PKNO,AD,SOYAD from KIMLIK where (ICTARIH is null or ICTARIH>=@TODAY) order by PKNO", new FbParameter("@TODAY", DateTime.Today));
 			peopleList.Items.Clear();
-			ePeopleList.Items.Clear();
 			foreach (DataRow row in dataTable.Rows)
 			{
 				string text4 = Convert.ToString(row["PKNO"]) ?? "";
@@ -1097,7 +1096,6 @@ public sealed class MainForm : Form
 				if (!(text4 == "00001"))
 				{
 					peopleList.Items.Add(item, isChecked: false);
-					ePeopleList.Items.Add(item, isChecked: false);
 				}
 			}
 			if (peopleGrid.Columns.Contains("ICTARIH"))
@@ -1148,7 +1146,7 @@ public sealed class MainForm : Form
 					peopleGrid.Columns[item2.Key].HeaderText = item2.Value;
 				}
 			}
-			ComboBox[] array2 = new ComboBox[7] { ioPerson, auditPerson, ePerson, eHistoryPerson, payrollPerson, paymentPerson, advancePerson };
+			ComboBox[] array2 = new ComboBox[6] { ioPerson, auditPerson, eHistoryPerson, payrollPerson, paymentPerson, advancePerson };
 			foreach (ComboBox comboBox in array2)
 			{
 				string text5 = comboBox.SelectedItem?.ToString();
@@ -1295,6 +1293,7 @@ public sealed class MainForm : Form
 		eStart.Value = value;
 		eEnd.Value = value2;
 		RebuildEDays();
+		if (!loadingEPeople) _ = LoadEPeopleAsync();
 		string text = SelectedCard(ePerson);
 		if (text != null)
 		{
@@ -1444,7 +1443,7 @@ public sealed class MainForm : Form
 			throw new InvalidOperationException("Veritabanı bağlı değil.");
 		}
 		HashSet<string> hashSet = (from string x in ePeopleList.CheckedItems
-			select x.Substring(0, 5)).ToHashSet();
+			select x.Split(' ')[0]).ToHashSet();
 		HashSet<DateTime> hashSet2 = (from DayChoice x in eDayList.CheckedItems
 			select x.Date).ToHashSet();
 		if (hashSet.Count == 0 || hashSet2.Count == 0)
@@ -1453,7 +1452,7 @@ public sealed class MainForm : Form
 		}
 		DateTime dateTime = hashSet2.Min();
 		DateTime dateTime2 = hashSet2.Max().AddDays(1.0);
-		DataTable dataTable = db.Query("select g.SIRA,g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO where g.GTARIH>=@A and g.GTARIH<@B order by g.GTARIH,g.PKNO", new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2));
+		DataTable dataTable = db.Query("select g.SIRA,g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO where (g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B) order by g.SIRA,g.PKNO", new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2));
 		string[] lines = (File.Exists(tnfPath.Text) ? (from x in File.ReadAllLines(tnfPath.Text)
 			where !string.IsNullOrWhiteSpace(x)
 			select x).ToArray() : Array.Empty<string>());
@@ -1471,17 +1470,16 @@ public sealed class MainForm : Form
 			{
 				continue;
 			}
-			DateTime date = Convert.ToDateTime(row["GTARIH"]).Date;
-			if (hashSet2.Contains(date))
+			foreach (bool entry in new[] { true, false })
 			{
+				string prefix = entry ? "G" : "C";
+				if (row[prefix + "TARIH"] == DBNull.Value) continue;
+				DateTime date = Convert.ToDateTime(row[prefix + "TARIH"]).Date;
+				if (!hashSet2.Contains(date)) continue;
 				string name = $"{row["AD"]} {row["SOYAD"]}".Trim();
-				if ((selectedIndex == 0 || selectedIndex == 2) && row["GSAAT"] != DBNull.Value && !string.IsNullOrWhiteSpace(Convert.ToString(row["GSAAT"])) && Convert.ToString(row["GTUR"]) != "E")
+				if ((selectedIndex == (entry ? 0 : 1) || selectedIndex == 2) && row[prefix + "SAAT"] != DBNull.Value && !string.IsNullOrWhiteSpace(Convert.ToString(row[prefix + "SAAT"])) && Convert.ToString(row[prefix + "TUR"]) != "E")
 				{
-					AddEPreviewRow(dataTable2, lines, row, text, name, date, entry: true);
-				}
-				if ((selectedIndex == 1 || selectedIndex == 2) && row["CSAAT"] != DBNull.Value && !string.IsNullOrWhiteSpace(Convert.ToString(row["CSAAT"])) && Convert.ToString(row["CTUR"]) != "E")
-				{
-					AddEPreviewRow(dataTable2, lines, row, text, name, date, entry: false);
+					AddEPreviewRow(dataTable2, lines, row, text, name, date, entry);
 				}
 			}
 		}

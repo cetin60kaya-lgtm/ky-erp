@@ -14,7 +14,7 @@ internal sealed class StagedTnfOutputs(TnfOutputs outputs, string correctedTempo
         try
         {
             File.Move(correctedTemporary, outputs.CorrectedPath, false);
-            File.Move(missingTemporary, outputs.MissingPath, false);
+            if (missingTemporary.Length > 0) File.Move(missingTemporary, outputs.MissingPath, false);
             return outputs;
         }
         catch
@@ -56,7 +56,7 @@ internal static partial class SyncEngine
 
     internal static (string[] Corrected, string[] Missing) PrepareOutputs(AuditSnapshot snapshot, DataRow[] selected, CancellationToken cancellation)
     {
-        if (selected.Length == 0 || selected.Any(row => !ReferenceEquals(row.Table, snapshot.Table) || !SafeOperation(row)))
+        if (selected.Length == 0 && !snapshot.Request.Exact || selected.Any(row => !ReferenceEquals(row.Table, snapshot.Table) || !SafeOperation(row)))
             throw new InvalidOperationException("Yalnız bu kontrol sonucunun güvenli TNF işlemleri uygulanabilir.");
         var deletions = new HashSet<int>();
         var replacements = new Dictionary<int, string>();
@@ -82,7 +82,7 @@ internal static partial class SyncEngine
             cancellation.ThrowIfCancellationRequested();
             if (!deletions.Contains(index)) corrected.Add(replacements.GetValueOrDefault(index) ?? snapshot.Lines[index]);
         }
-        return (corrected.ToArray(), missing.Order(StringComparer.Ordinal).ToArray());
+        return snapshot.Request.Exact ? (corrected.Concat(missing.Order(StringComparer.Ordinal)).ToArray(), []) : (corrected.ToArray(), missing.Order(StringComparer.Ordinal).ToArray());
     }
 
     public static async Task<TnfOutputs> ApplyAsync(KYERP.PDKS.Core.FirebirdDatabase database, AuditSnapshot snapshot,
@@ -92,6 +92,7 @@ internal static partial class SyncEngine
         if (fresh.FileHash != snapshot.FileHash || fresh.DbHash != snapshot.DbHash)
             throw new InvalidOperationException("DB/personel/TNF değişmiş. Önce yeniden KONTROL ET.");
         var plan = PrepareOutputs(snapshot, selected, cancellation);
+        if (snapshot.Request.Exact) VerifyExactOutput(snapshot, plan.Corrected, cancellation);
         return await WriteOutputsAsync(snapshot, plan.Corrected, plan.Missing, cancellation).ConfigureAwait(false);
     }
 
@@ -114,10 +115,10 @@ internal static partial class SyncEngine
             @"_\d{8}_\d{6}_\d{3}_[0-9a-f]{8}_DUZELTILMIS$", "");
         var stem = sourceStem + "_" + stamp;
         var correctedPath = Path.Combine(outputDirectory, stem + "_DUZELTILMIS.Tnf");
-        var missingPath = Path.Combine(outputDirectory, stem + "_EKSIK.Tnf");
+        var missingPath = snapshot.Request.Exact ? "" : Path.Combine(outputDirectory, stem + "_EKSIK.Tnf");
         var backupPath = Path.Combine(backupDirectory, stem + ".Tnf");
         var correctedTemporary = correctedPath + ".pending";
-        var missingTemporary = missingPath + ".pending";
+        var missingTemporary = missingPath.Length == 0 ? "" : missingPath + ".pending";
         using var source = new FileStream(snapshot.Request.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
         var bytes = new byte[source.Length];
         await source.ReadExactlyAsync(bytes, cancellation).ConfigureAwait(false);
@@ -130,7 +131,7 @@ internal static partial class SyncEngine
         try
         {
             await AtomicWriteAsync(correctedTemporary, EncodeLines(corrected, snapshot.Encoding), cancellation).ConfigureAwait(false);
-            await AtomicWriteAsync(missingTemporary, EncodeLines(missing, snapshot.Encoding), cancellation).ConfigureAwait(false);
+            if (missingTemporary.Length > 0) await AtomicWriteAsync(missingTemporary, EncodeLines(missing, snapshot.Encoding), cancellation).ConfigureAwait(false);
         }
         catch
         {

@@ -120,7 +120,7 @@ internal sealed record EmploymentRule(string Card, string Name, DateTime? Hire, 
     }
 }
 
-internal sealed record AuditRequest(string Path, DateTime Start, DateTime End, string Card, TnfFormat Format);
+internal sealed record AuditRequest(string Path, DateTime Start, DateTime End, string Card, TnfFormat Format, bool Exact = false);
 internal sealed record AuditSnapshot(AuditRequest Request, DataTable Table, List<DbMovement> Db,
     Dictionary<string, EmploymentRule> People, string[] Lines, Encoding Encoding, string FileHash,
     string DbHash, long DbMilliseconds, long TnfMilliseconds, long CompareMilliseconds);
@@ -177,7 +177,7 @@ internal static partial class SyncEngine
         var dbMilliseconds = timer.ElapsedMilliseconds;
         timer.Restart();
         progress?.Report("Kart + tarih karşılaştırılıyor...");
-        var table = listOnly ? ListTerminal(tnf, people, cancellation) : Compare(movements, tnf, people, request.Format, cancellation);
+        var table = listOnly ? ListTerminal(tnf, people, cancellation) : request.Exact ? CompareExact(movements, tnf, people, cancellation) : Compare(movements, tnf, people, request.Format, cancellation);
         foreach (var raw in invalid) table.Rows.Add("", "", "", "", "", "", "", raw, "BOZUK TNF / İNCELE", "İNCELE", -1, -1, false);
         return new(request, table, movements, people, lines.ToArray(), encoding, Convert.ToHexString(SHA256.HashData(bytes)),
             DbFingerprint(movements, people), dbMilliseconds, tnfMilliseconds, timer.ElapsedMilliseconds);

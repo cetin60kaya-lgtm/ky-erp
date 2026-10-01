@@ -1,5 +1,17 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.10.2026 — HKN PDKS REV21 FINAL: DB KAYIT ve TNF DÜZENLE ayrı akış
+
+- Son kullanıcı talebi aynı REV21'e uygulanır: DB KAYIT açık personel/gün seçimi, TNF DÜZENLE ayrı SELECT-only karşılaştırma/çıktı akışıdır. Önceki aylık normal-gün engelleri bu yeni açık seçim ekranına uygulanmaz; aşağıdaki eski teslimler tarihçedir.
+- DB KAYIT aktif/pasif bütün KIMLIK kartlarını yükler; hafta sonu başlangıçta kapalı, manuel seçilebilir. Seçili günlerde izin/tatil/istihdam/puantaj engeli yoktur. Seçili E taraflarının normal kayda dönüşmesi bilgi ve onayda açıkça belirtilir. Sonuç her kart/gün için 08:15–08:45 tek giriş ve 18:30–19:30 tek çıkıştır; doğal dağılım, en uygun keeper, mükerrer/fazla silme ve yanlış taraf düzeltme vardır.
+- DB uygulaması gbak + satır dump + fingerprint doğrulamasıyla tek transaction yürütür; hata/iptal rollback. COMMIT öncesi tek çift doğrulanır; seçim dışı kayıtlar ve farklı tarihli karşı taraf korunur. Bu ekran TNF okumaz/yazmaz.
+- E İşlemleri personel yüklemesi ana ekrandaki aktif-only listeden ayrıldı; tüm KIMLIK personelleri asenkron gelir. Çıkış önizlemesi kendi CTARIH'i ile çalışır. Normal çift üretmez.
+- TNF DÜZENLE bütün seçili ayı işler, eksikleri aynı DUZELTILMIS dosyasına ekler; fazla/E/mükerrer siler, saatleri DB'den bire bir alır. Orijinal ve _YEDEK korunur; tek atomic çıktı önce/sonra doğrulanır. Bu sekmede DB write yoktur. Teknik bozuk/çoklu DB kaynağı düzeltilmeden çıktı yayınlanmaz; TNF mükerreri tek başına İNCELE değildir.
+- 265 assertion geçti: sentetik Firebird insert/update/delete, gbak, gerçek rollback, dış kapsam korunması, E önizleme, ayrı ekranlar, TNF eşitlik ve mevcut ekran/parola regresyonları. Canlı DB/TNF yalnız okundu, değişmezlik testleri geçti. Eylül canlı DB50/TNF8/compare6 ms; UI bind8/toplam100/heartbeat96 ms. Tam yıl DB58/TNF4/compare52/toplam115 ms (grid hariç).
+- Standart PDKS_DENETIM_PASS: 39 fonksiyon/24 ekran/0 hata. .NET8 win-x64 self-contained single-file publish başarılı. Final 172758338 byte; önceki EXE 99_ARSIV altında korunur.
+- Final: `D:/Googledrive/KYERP-PDKS-HIZLI-VERİ/_PAKETLER/GUNCEL/HKN-PDKS-REV21-FINAL.exe`; SHA256 `3BB3F76649D0A2179F41759B427C46DAF6260DF5517636BD0CBB4660604BC600`.
+- Kanıtlar yerel 08_TEST/REV21_SEPARATED_TEST.log, REV21_SEPARATED_GATE.log, REV21_SEPARATED_PUBLISH.log, REV21_SEPARATED_STARTUP.log. Şirket verisi/DB/TNF/EXE/gbak/dump/parola verifier'ı ve görev dışı beş değişiklik commit'e alınmaz. Kullanıcının canlı DB'sinde temizlik uygulandığı iddia edilmez; yazma yalnız uygulamadaki açık onayla yapılır.
+
 ## 01.10.2026 — HKN PDKS REV21 normal gün tek çift son kuralı
 
 - Aynı REV21; ayrı DB cleanup onayı artık kesin mükerrer/fazla tarafları siler, yanlış tarafı düzeltir, aralık dışı gerçek saatleri 08:15–08:45 / 18:30–19:30 içinde doğal dağılımla değiştirir, uygun eksik/boş normal günleri tamamlar. Normal günde sonuç 1 giriş + 1 çıkış transaction içinde doğrulanır. Bu düğme için önceki gerçek saat koruma kuralı kullanıcı tarafından değiştirildi; normal TNF eşitleme DB'ye yazmaz.

@@ -1,5 +1,20 @@
 # HKN PDKS REV21 — Aylık kontrol
 
+## 01.10.2026 — Final: DB KAYIT / TNF DÜZENLE ayrımı
+
+- Aynı REV21 sürümü korunur. Yeni **DB KAYIT** açık kullanıcı seçimiyle çalışır; **TNF DÜZENLE** yalnız SELECT kullanır. Diğer mevcut sekmeler korunur. Aşağıdaki eski aylık akış açıklamaları teslim tarihçesidir; bu bölüm son kullanıcı akışının güncel sözleşmesidir.
+- DB KAYIT: DB'deki aktif/pasif bütün kartlar yüklenir, çoklu personel ve tarih/gün seçilir. Hafta sonu varsayılan kapalıdır, manuel seçilebilir. İzin, tatil, işe giriş/çıkış veya puantaj otomatik engeli uygulanmaz. Kullanıcının seçtiği E taraflarının NORMAL kayda dönüşeceği hem bilgi satırında hem onayda açıkça belirtilir; E İşlemleri ayrı kalır.
+- ÖNİZLE; mevcut/yeni giriş, mevcut/yeni çıkış ve işlem özetini gösterir. Her seçili kart/gün sonunda bir giriş 08:15–08:45 ve bir çıkış 18:30–19:30 kalır. En uygun kayıt tutulur, kesin mükerrerde ilk SIRA korunur, fazlalar silinir, yanlış taraf/aralık dışı saat düzeltilir. Eksikler doğal dağılımla üretilir; onaylanan önizleme saatleri aynen uygulanır.
+- DB'YE UYGULA öncesi gbak ve satır dump alınır. Personel/kayıt fingerprint'i transaction içinde yeniden okunur. DELETE/UPDATE/INSERT ve sonuç doğrulaması tek transaction içindedir; hata/iptal/tetikleyici engeli rollback yapar. Seçilmeyen gün ve satırın diğer tarihli tarafı korunur. DB işlemi TNF okumaz/yazmaz.
+- E personel listesinin aktif filtreye bağımlılığı kaldırıldı; kart ve ad soyad doğrudan KIMLIK'ten asenkron yüklenir. Çıkış tarafı kendi CTARIH'i üzerinden önizlenir; çıkış-only kayıtlar atlanmaz. E uygulaması normal çift üretmez.
+- TNF DÜZENLE: seçili ayın bütün personelleri karşılaştırılır. Eksikler aynı DUZELTILMIS dosyasına DB kart/tarih/saatiyle eklenir; fazla, mükerrer ve E karşılıkları silinir; saat farkları DB dakikasına çekilir. Tek DB tarafına uyan ilk TNF tutulur. TNF mükerrerleri İNCELE değildir. Teknik olarak bozuk veya henüz tekilleştirilmemiş DB kaynağı, format bozukluğu ve aynı saatte iki farklı DB tarafı varsa dosya yayınlanmaz; kaynak önce düzeltilir.
+- Orijinal TNF korunur, _YEDEK alınır, *_DUZELTILMIS.Tnf tek pending/atomic yayınla oluşturulur. Ayrı EKSIK dosyası yoktur. Format KartNo,Saat,GGAAYY,1,001; DB saati yuvarlanmaz/yeniden üretilmez. Yayın öncesi ve sonrası düzeltilmiş dosyanın seçili kapsamı DB ile bire bir doğrulanır.
+- Ağır sorgu/önizleme/karşılaştırma/transaction işleri arka plandadır; iptal ve eşzamanlı işlem koruması vardır. Grid tek DataSource ile bağlanır. Canlı DB/TNF testleri yalnız okuma; yazma testleri ayrı sentetik Firebird veritabanındadır.
+- Kanıt: 08_TEST/REV21_SEPARATED_TEST.log, REV21_SEPARATED_GATE.log; şirket kayıtları, gbak/dump, ekran görüntüleri, EXE ve parola verifier'ı Git'e eklenmez.
+- Final doğrulama: 265 assertion geçti; standart PDKS_DENETIM_PASS, 39 fonksiyon/24 ekran/0 hata. Sentetik DB'de gerçek gbak/transaction/rollback, tek çift, seçim dışı karşı taraf, E çıkış önizlemesi, TNF mükerrer temizliği ve bire bir çıktı doğrulandı. Canlı DB/TNF yalnız okundu ve değişmedi.
+- Eylül canlı süreleri: DB query 50 ms, TNF parse 8 ms, compare 6 ms; ayrı TNF ekranında grid bind 8 ms, toplam 100 ms, en büyük UI heartbeat 96 ms. Tam yıl: DB58/TNF4/compare52/toplam115 ms (grid hariç).
+- Aynı REV21 .NET 8 / win-x64 / self-contained / single-file olarak derlendi; final 172758338 byte. Paket: `D:/Googledrive/KYERP-PDKS-HIZLI-VERİ/_PAKETLER/GUNCEL/HKN-PDKS-REV21-FINAL.exe`. SHA256: `3BB3F76649D0A2179F41759B427C46DAF6260DF5517636BD0CBB4660604BC600`. Önceki EXE 99_ARSIV altında korunur. Publish/startup kanıtları 08_TEST/REV21_SEPARATED_PUBLISH.log ve REV21_SEPARATED_STARTUP.log dosyalarındadır.
+
 ## 01.10.2026 — Son kural: normal iş gününde tek giriş / tek çıkış
 
 - Aynı REV21 korunur. **DB GÜVENLİLERİ DÜZELT** artık kullanıcıya kapsam ve değişiklik özeti göstererek seçili ayın normal günlerini tek giriş/tek çıkışa getirir. Bu onaylı akış aralık dışındaki GERÇEK saatleri değiştirir; önceki teslimlerin gerçek saat koruma kuralını bu düğme için geçersiz kılar. Normal DB–TNF eşitleme ise hâlâ yalnız SELECT yapar ve gerçek DB saatine bire bir bağlıdır.
