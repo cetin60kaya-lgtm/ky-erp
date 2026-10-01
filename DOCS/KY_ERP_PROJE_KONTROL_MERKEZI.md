@@ -1,5 +1,11 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.10.2026 — REV21 DB KAYIT son ekran düzeni
+
+- AYLIK KONTROL'ün önceki personel özetleri ve DB/TNF yan yana detayı geri yüklendi; ayrı TNF DÜZENLE korunur. DB KAYIT artık yalnız seçili kişi/gün için altı açık işlemden birinin EKLE/DÜZELT/SİL önizleme ve onaylı gbak/transaction uygulama ekranıdır. Hafta sonu başlangıçta kapalı, elle seçilebilir; E tarafları korunur. Önceki genel normalleştirme tasarımı aşağıda tarihçedir.
+- Sentetik fixture'da altı işlem, E ve karşı tarih korunması ile stale önizleme testleri eklenir. Canlı DATABASE.GDB / TR2026.Tnf yalnız okuma ile doğrulanır; testler canlı dosyalarda yazmaz. Ayrıntı: [REV21 notları](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV21.md).
+- Son kanıt 283 assertion, PDKS_DENETIM_PASS, 39 fonksiyon / 24 ekran / 0 UI hatası ve parola kapılı EXE Responding=True. REV21 final SHA256: `4BD83668DA847A8939180FD22C0DB1EFF74AC67626E042047D68FD32C89B566C`.
+
 ## 01.10.2026 — HKN PDKS REV21 FINAL: DB KAYIT ve TNF DÜZENLE ayrı akış
 
 - Son kullanıcı talebi aynı REV21'e uygulanır: DB KAYIT açık personel/gün seçimi, TNF DÜZENLE ayrı SELECT-only karşılaştırma/çıktı akışıdır. Önceki aylık normal-gün engelleri bu yeni açık seçim ekranına uygulanmaz; aşağıdaki eski teslimler tarihçedir.

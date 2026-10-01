@@ -14,10 +14,16 @@ internal sealed record DbRecordPerson(string Card, string Name)
 }
 internal sealed record DbRecordDay(string Card, string Name, DateTime Day, string ExistingEntry, string Entry,
     string ExistingExit, string Exit, string Operation, int EntryId, int ExitId);
+internal enum DbRecordMode { Normalize, AddEntry, AddExit, AddBoth, CorrectTime, RemoveDuplicates, RemoveExtra }
+internal sealed record DbRecordChange(string Card, string Name, DateTime Day, string Side, string ExistingTime,
+    string NewTime, string Operation, int Id, string ExistingSide);
 internal sealed record DbRecordSnapshot(DateTime Start, DateTime End, string[] Cards, DateTime[] Days,
-    DataTable Records, DbRecordPerson[] People, DbRecordDay[] Plan, string Fingerprint);
+    DataTable Records, DbRecordPerson[] People, DbRecordDay[] Plan, string Fingerprint, DbRecordMode Mode = DbRecordMode.Normalize)
+{
+    internal DbRecordChange[] Changes { get; init; } = [];
+}
 
-internal static class DbRecordService
+internal static partial class DbRecordService
 {
     internal static DbRecordPerson[] ReadPeople(FirebirdDatabase database, CancellationToken token,
         FbConnection? existingConnection = null, FbTransaction? transaction = null)
@@ -34,7 +40,8 @@ internal static class DbRecordService
     }
 
     internal static DbRecordSnapshot Read(FirebirdDatabase database, IEnumerable<string> selectedCards,
-        IEnumerable<DateTime> selectedDays, CancellationToken token, FbConnection? existingConnection = null, FbTransaction? existingTransaction = null)
+        IEnumerable<DateTime> selectedDays, CancellationToken token, FbConnection? existingConnection = null, FbTransaction? existingTransaction = null,
+        DbRecordMode mode = DbRecordMode.Normalize)
     {
         var cards = selectedCards.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
         var days = selectedDays.Select(day => day.Date).Distinct().Order().ToArray();
@@ -63,8 +70,9 @@ internal static class DbRecordService
         adapter.Fill(records);
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new {
             People = people, Rows = records.AsEnumerable().Select(row => row.ItemArray.Select(value => value == DBNull.Value ? null : value)).ToArray() }))));
-        var snapshot = new DbRecordSnapshot(start, end, cards, days, records, people, [], fingerprint);
-        snapshot = snapshot with { Plan = Plan(snapshot, token) };
+        var snapshot = new DbRecordSnapshot(start, end, cards, days, records, people, [], fingerprint, mode);
+        snapshot = mode == DbRecordMode.Normalize ? snapshot with { Plan = Plan(snapshot, token) }
+            : snapshot with { Changes = PlanChanges(snapshot, token) };
         ownedTransaction?.Rollback();
         return snapshot;
     }
@@ -120,11 +128,13 @@ internal static class DbRecordService
         var maximum = side == "Giriş" ? 525 : 1170;
         var minute = RandomNumberGenerator.GetInt32(minimum, maximum + 1);
         if (previous.TryGetValue((card, side), out var last) && last == minute) minute = minimum + (minute - minimum + 1) % (maximum - minimum + 1);
+        previous[(card, side)] = minute;
         return minute;
     }
 
     internal static async Task<string> ApplyAsync(FirebirdDatabase database, DbRecordSnapshot snapshot, CancellationToken token)
     {
+        if (snapshot.Mode != DbRecordMode.Normalize) return await ApplyChangesAsync(database, snapshot, token).ConfigureAwait(false);
         var cards = snapshot.Cards.ToHashSet(StringComparer.Ordinal);
         var days = snapshot.Days.ToHashSet();
         var structural = Plan(snapshot, token).ToDictionary(plan => (plan.Card, plan.Day));

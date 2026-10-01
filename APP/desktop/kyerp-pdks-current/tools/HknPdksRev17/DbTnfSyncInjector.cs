@@ -44,6 +44,8 @@ internal static class DbTnfSyncInjector
 		}
         var dbPage = new TabPage("DB KAYIT") { Padding = new Padding(8), BackColor = Color.White };
         dbPage.Controls.Add(new DbRecordControl(form));
+        var monthlyPage = new TabPage("AYLIK KONTROL") { Padding = new Padding(8), BackColor = Color.White };
+        monthlyPage.Controls.Add(new DbTnfSyncControl(form));
         TabPage tabPage = new TabPage("TNF DÜZENLE")
 		{
 			Padding = new Padding(8),
@@ -54,11 +56,13 @@ internal static class DbTnfSyncInjector
 		if (num >= 0)
 		{
 			tabControl.TabPages.Insert(num, dbPage);
-			tabControl.TabPages.Insert(num + 1, tabPage);
+			tabControl.TabPages.Insert(num + 1, monthlyPage);
+			tabControl.TabPages.Insert(num + 2, tabPage);
 		}
 		else
 		{
 			tabControl.TabPages.Add(dbPage);
+			tabControl.TabPages.Add(monthlyPage);
 			tabControl.TabPages.Add(tabPage);
 		}
 	}

@@ -1,5 +1,14 @@
 # HKN PDKS REV21 — Aylık kontrol
 
+## 01.10.2026 — DB KAYIT işlem ekranı; aylık kontrol geri yüklendi
+
+- AYLIK KONTROL önceki personel özetli ve DB/TNF yan yana karşılaştırmalı ekranıdır. DB KAYIT bu ekranın yerine geçmez; TNF DÜZENLE ayrıca bulunur.
+- DB KAYIT personel ve gün seçiminden sonra yalnız seçilen altı işlemden birinin değişikliklerini yedi kolonlu önizlemede gösterir: giriş ekle, çıkış ekle, iki eksik tarafı ekle, saat/yanlış taraf düzelt, mükerrer temizle veya fazla kayıt temizle. Hafta sonu başlangıçta seçilmez; kullanıcı elle seçebilir. E türü taraflara normal hareket eklenmez veya E tarafı silinmez.
+- DB'YE UYGULA yalnız önizlenen değişiklikleri, gbak ve satır yedeği ile fingerprint denetiminden sonra tek transaction içinde uygular; sonra yeniden önizleme yapar. TNF dosyasına bu ekrandan dokunulmaz. İşlem seçimine göre ayrıca adım gerekebilir; bütün modlar otomatik toplu normalleştirme yapmaz.
+- Sentetik Firebird'de ekleme, düzeltme, iki temizleme modu, E koruması, hafta sonu manuel seçimi, tarih dışı karşı tarafı koruma ve eski önizleme reddi sınanır. Canlı DB/TNF yalnız okunur; test amaçlı veri yazılmaz.
+- Doğal dağılım ardışık günlerde aynı kişiye aynı dakikayı tekrar atamaz. Son doğrulama: 283 assertion, PDKS_DENETIM_PASS (39 fonksiyon, 24 ekran, 0 UI hatası); canlı ay UI grid bind 4 ms, toplam 139 ms, en büyük heartbeat 137 ms. Parola kapısı dahil paket açılışı Responding=True.
+- .NET 8 win-x64 self-contained single-file çıktı: `D:/Googledrive/KYERP-PDKS-HIZLI-VERİ/_PAKETLER/GUNCEL/HKN-PDKS-REV21-FINAL.exe`; SHA256 `4BD83668DA847A8939180FD22C0DB1EFF74AC67626E042047D68FD32C89B566C`. Eski EXE 99_ARSIV altında saklandı. Kanıt: `08_TEST/REV21_OPERATION_TEST.log`, `08_TEST/REV21_OPERATION_GATE.log`, `08_TEST/REV21_OPERATION_PUBLISH.log`.
+
 ## 01.10.2026 — Final: DB KAYIT / TNF DÜZENLE ayrımı
 
 - Aynı REV21 sürümü korunur. Yeni **DB KAYIT** açık kullanıcı seçimiyle çalışır; **TNF DÜZENLE** yalnız SELECT kullanır. Diğer mevcut sekmeler korunur. Aşağıdaki eski aylık akış açıklamaları teslim tarihçesidir; bu bölüm son kullanıcı akışının güncel sözleşmesidir.

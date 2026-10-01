@@ -100,6 +100,7 @@ internal static class SeparatedWorkflowTests
         var clockMismatch = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
         check(clockMismatch.Table.AsEnumerable().Any(row => row.Field<string>("İşlem") == "TNF DÜZELT"), "TNF DÜZENLE unique clock mismatch directly corrected to exact DB minute");
         RunUi(database, check);
+        RunOperationTests(database, check);
         RunComparisonUi(database, tnfPath, directory, check);
         if (liveDb is not null && liveTnf is not null)
         {
@@ -176,11 +177,66 @@ internal static class SeparatedWorkflowTests
         using var control = new DbRecordControl(main);
         Wait(control.LoadPeopleAsync());
         check(control.PersonCount == 2, "DB KAYIT UI personnel list populated");
+        var operation = (ComboBox)Field(control, "operation");
+        check(operation.Items.Cast<string>().SequenceEqual(new[] { "Giriş Ekle", "Çıkış Ekle", "Giriş + Çıkış Ekle", "Saat Düzelt", "Mükerrer Temizle", "Fazla Kayıt Temizle" }) &&
+            ((DataGridView)Field(control, "preview")).Columns.Count == 7, "DB KAYIT only six operations and seven preview columns");
         var days = (CheckedListBox)Field(control, "days");
         check(days.CheckedItems.Count < days.Items.Count && days.CheckedItems.Count > 0, "DB KAYIT UI weekends initially unchecked; weekdays checked");
         using var tnf = new DbTnfSyncControl(main, true);
         IEnumerable<Control> Descendants(Control root) => root.Controls.Cast<Control>().SelectMany(child => Descendants(child).Prepend(child));
         var buttons = Descendants(tnf).OfType<Button>().Select(button => button.Text).ToArray();
         check(buttons.Contains("TNF'Yİ DB'YE GÖRE DÜZELT") && !buttons.Any(text => text.Contains("DB GÜVENLİ") || text.Contains("DB EKSİK")), "TNF UI separated; no DB write buttons reachable");
+    }
+
+    static void RunOperationTests(FirebirdDatabase database, Action<bool, string> check)
+    {
+        foreach (var sql in new[] {
+            "insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,CTARIH,CSAAT,MKOD) values (11001,'00056','2026-11-02','08:25','2026-11-02','18:55','000')",
+            "insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,MKOD) values (11002,'00056','2026-11-02','08:30','000')",
+            "insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,MKOD) values (11003,'00056','2026-11-03','07:20','000')",
+            "insert into GIRCIK (SIRA,PKNO,CTARIH,CSAAT,MKOD) values (11004,'00056','2026-11-04','20:10','000')",
+            "insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,CTARIH,CSAAT,MKOD) values (11005,'00056','2026-11-05','18:55','2026-11-05','08:33','000')",
+            "insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,GTUR,MKOD) values (11006,'00056','2026-11-06','08:30','E','000')",
+            "insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,CTARIH,CSAAT,MKOD) values (11007,'00056','2026-11-09','08:22','2026-12-01','18:54','000')" }) database.Execute(sql);
+        var entryDay = new DateTime(2026, 11, 4);
+        var exitDay = new DateTime(2026, 11, 3);
+        DbRecordSnapshot Read(DbRecordMode mode, params DateTime[] days) => DbRecordService.Read(database, ["00056"], days, CancellationToken.None, mode: mode);
+        void Apply(DbRecordSnapshot snapshot)
+        {
+            DbRecordService.ApplyAsync(database, snapshot, CancellationToken.None).GetAwaiter().GetResult();
+            check(Read(snapshot.Mode, snapshot.Days).Changes.Length == 0, $"DB KAYIT {snapshot.Mode} recheck has no further changes");
+        }
+        var addEntry = Read(DbRecordMode.AddEntry, entryDay);
+        check(addEntry.Changes.Length == 1 && addEntry.Changes[0].Side == "Giriş" && addEntry.Changes[0].Operation == "EKLE", "entry-only preview changes missing side");
+        Apply(addEntry);
+        check(database.Query("select CSAAT from GIRCIK where SIRA=11004").Rows[0].Field<string>("CSAAT") == "20:10", "entry-only retains real exit clock");
+        var addExit = Read(DbRecordMode.AddExit, exitDay);
+        check(addExit.Changes.Length == 1 && addExit.Changes[0].Side == "Çıkış", "exit-only preview changes missing side");
+        Apply(addExit);
+        check(database.Query("select GSAAT from GIRCIK where SIRA=11003").Rows[0].Field<string>("GSAAT") == "07:20", "exit-only retains real entry clock");
+        var emptyDay = new DateTime(2026, 11, 7);
+        var addBoth = Read(DbRecordMode.AddBoth, emptyDay);
+        check(addBoth.Changes.Length == 2 && addBoth.Changes.All(change => change.Operation == "EKLE"), "manually selected weekend can preview both missing sides");
+        Apply(addBoth);
+        check(Read(DbRecordMode.AddBoth, new DateTime(2026, 11, 6)).Changes.Length == 1 &&
+            Read(DbRecordMode.AddEntry, new DateTime(2026, 11, 6)).Changes.Length == 0, "E entry remains protected from normal entry creation");
+        var fix = Read(DbRecordMode.CorrectTime, exitDay, entryDay, new DateTime(2026, 11, 5));
+        check(fix.Changes.Any(change => change.ExistingTime == "07:20" && change.Side == "Giriş") &&
+            fix.Changes.Any(change => change.ExistingTime == "20:10" && change.Side == "Çıkış") &&
+            fix.Changes.Count(change => change.Day.Day == 5) == 2, "clock correction previews out-of-range clocks and reversed sides");
+        Apply(fix);
+        var duplicateDay = new DateTime(2026, 11, 2);
+        var duplicates = Read(DbRecordMode.RemoveDuplicates, duplicateDay);
+        check(duplicates.Changes.Length == 1 && duplicates.Changes[0].Operation == "SİL", "duplicate cleanup previews only surplus entry");
+        Apply(duplicates);
+        database.Execute("insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,MKOD) values (12000,'00056','2026-11-02','19:00','000')");
+        var extra = Read(DbRecordMode.RemoveExtra, duplicateDay);
+        check(extra.Changes.Length == 1 && extra.Changes[0].ExistingTime == "19:00", "surplus cleanup preserves best entry");
+        Apply(extra);
+        check(database.Query("select CSAAT from GIRCIK where SIRA=11007").Rows[0].Field<string>("CSAAT") == "18:54", "out-of-range opposite date side remains unchanged");
+        var stale = Read(DbRecordMode.AddBoth, new DateTime(2026, 11, 10));
+        database.Execute("insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,MKOD) values (13000,'00056','2026-11-10','08:31','000')");
+        try { DbRecordService.ApplyAsync(database, stale, CancellationToken.None).GetAwaiter().GetResult(); check(false, "operation stale preview must fail"); }
+        catch (InvalidOperationException) { check(Read(DbRecordMode.AddBoth, new DateTime(2026, 11, 10)).Changes.Length == 1, "operation stale preview rejected without writes"); }
     }
 }

@@ -11,6 +11,7 @@ internal sealed class DbRecordControl : UserControl
     readonly ComboBox month = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
     readonly DateTimePicker start = new() { Format = DateTimePickerFormat.Short, Width = 110 };
     readonly DateTimePicker end = new() { Format = DateTimePickerFormat.Short, Width = 110 };
+    readonly ComboBox operation = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 185 };
     readonly CheckedListBox people = new() { Dock = DockStyle.Fill, CheckOnClick = true };
     readonly CheckedListBox days = new() { Dock = DockStyle.Fill, CheckOnClick = true };
     readonly DataGridView preview = new() { Dock = DockStyle.Fill, ReadOnly = true, AutoGenerateColumns = false, AllowUserToAddRows = false,
@@ -36,10 +37,12 @@ internal sealed class DbRecordControl : UserControl
         Font = new Font("Segoe UI", 9);
         month.Items.AddRange(["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]);
         month.SelectedIndex = DateTime.Today.Month - 1;
+        operation.Items.AddRange(["Giriş Ekle", "Çıkış Ekle", "Giriş + Çıkış Ekle", "Saat Düzelt", "Mükerrer Temizle", "Fazla Kayıt Temizle"]);
+        operation.SelectedIndex = 2;
         var top = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(5), WrapContents = true };
         void Field(string title, Control control) { top.Controls.Add(new Label { Text = title, AutoSize = true, Padding = new Padding(4, 7, 0, 0) }); top.Controls.Add(control); controls.Add(control); }
         Field("Yıl", year); Field("Ay", month); Field("Başlangıç", start); Field("Bitiş", end);
-        Field("İşlem", new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 170, Items = { "NORMAL: 1 Giriş + 1 Çıkış" }, SelectedIndex = 0 });
+        Field("İşlem", operation);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(5), WrapContents = true };
         void Button(string text, Action action, int width)
         {
@@ -47,8 +50,9 @@ internal sealed class DbRecordControl : UserControl
             button.Click += (_, _) => action(); buttons.Controls.Add(button); controls.Add(button);
         }
         Button("TÜM PERSONELİ SEÇ", () => Check(people, true), 165);
-        Button("TÜM GÜNLERİ SEÇ", () => Check(days, true), 150);
+        Button("TÜM HAFTA İÇİNİ SEÇ", SelectWeekdays, 185);
         Button("HAFTA SONUNU KALDIR", RemoveWeekends, 190);
+        Button("SEÇİMİ TEMİZLE", () => { Check(people, false); Check(days, false); }, 155);
         Button("ÖNİZLE", async () => await PreviewAsync(), 105);
         Button("DB'YE UYGULA", async () => await ApplyAsync(), 140);
         cancel.Click += (_, _) => cancellation?.Cancel();
@@ -56,22 +60,22 @@ internal sealed class DbRecordControl : UserControl
         var content = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2 };
         content.ColumnStyles.Add(new(SizeType.Absolute, 250)); content.ColumnStyles.Add(new(SizeType.Absolute, 200)); content.ColumnStyles.Add(new(SizeType.Percent, 100));
         content.RowStyles.Add(new(SizeType.Absolute, 28)); content.RowStyles.Add(new(SizeType.Percent, 100));
-        foreach (var title in new[] { "PERSONEL — çoklu seçim", "GÜNLER — hafta sonu varsayılan kapalı", "DB ÖNİZLEME — onaylanan saatler" }) content.Controls.Add(new Label { Text = title, Dock = DockStyle.Fill });
+        foreach (var title in new[] { "PERSONEL — çoklu seçim", "GÜNLER — hafta sonu varsayılan kapalı", "YAPILACAK İŞLEMLER — sadece değişiklikler" }) content.Controls.Add(new Label { Text = title, Dock = DockStyle.Fill });
         content.Controls.Add(people, 0, 1); content.Controls.Add(days, 1, 1); content.Controls.Add(preview, 2, 1);
-        foreach (var column in new[] { ("Card", "Kart"), ("Name", "Ad Soyad"), ("Day", "Tarih"), ("ExistingEntry", "Mevcut Giriş"), ("Entry", "Yeni Giriş"),
-            ("ExistingExit", "Mevcut Çıkış"), ("Exit", "Yeni Çıkış"), ("Operation", "İşlem") }) preview.Columns.Add(new DataGridViewTextBoxColumn {
+        foreach (var column in new[] { ("Card", "Kart"), ("Name", "Ad Soyad"), ("Day", "Tarih"), ("Side", "Taraf"),
+            ("ExistingTime", "Eski Saat"), ("NewTime", "Yeni Saat"), ("Operation", "İşlem") }) preview.Columns.Add(new DataGridViewTextBoxColumn {
                 DataPropertyName = column.Item1, HeaderText = column.Item2, SortMode = DataGridViewColumnSortMode.NotSortable });
         preview.Columns[2].DefaultCellStyle.Format = "dd.MM.yyyy";
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(5) };
         layout.RowStyles.Add(new(SizeType.AutoSize)); layout.RowStyles.Add(new(SizeType.AutoSize)); layout.RowStyles.Add(new(SizeType.Percent, 100));
         layout.RowStyles.Add(new(SizeType.Absolute, 60)); layout.RowStyles.Add(new(SizeType.Absolute, 42));
         layout.Controls.Add(top, 0, 0); layout.Controls.Add(buttons, 0, 1); layout.Controls.Add(content, 0, 2);
-        layout.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(8), Text = "Giriş: 08:15–08:45 | Çıkış: 18:30–19:30 | Doğal dağılım\nSeçtiğiniz günler izin/tatil/işe giriş-çıkış/puantaj filtresi olmadan işlenir. Seçilen E türleri NORMAL kayda çevrilir. TNF bu sekmede değişmez." }, 0, 3);
+        layout.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(8), Text = "Giriş: 08:15–08:45 | Çıkış: 18:30–19:30 | Yeni saatler doğal dağılır.\nYalnız seçilen işlem, personel ve günler değiştirilir. E türleri korunur; TNF bu sekmede değişmez." }, 0, 3);
         layout.Controls.Add(status, 0, 4); Controls.Add(layout);
         controls.AddRange([people, days]);
         year.ValueChanged += (_, _) => SetMonth(); month.SelectedIndexChanged += (_, _) => SetMonth();
         start.ValueChanged += (_, _) => { if (!updating) RebuildDays(); }; end.ValueChanged += (_, _) => { if (!updating) RebuildDays(); };
-        people.ItemCheck += (_, _) => InvalidatePreview(); days.ItemCheck += (_, _) => InvalidatePreview();
+        people.ItemCheck += (_, _) => InvalidatePreview(); days.ItemCheck += (_, _) => InvalidatePreview(); operation.SelectedIndexChanged += (_, _) => InvalidatePreview();
         VisibleChanged += async (_, _) => { if (Visible && !ReferenceEquals(peopleDatabase, Database)) await LoadPeopleAsync(); };
         if (main.GetType().GetField("dbPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) is TextBox path)
             path.TextChanged += (_, _) => { cancellation?.Cancel(); peopleDatabase = null; people.Items.Clear(); InvalidatePreview(); };
@@ -96,6 +100,7 @@ internal sealed class DbRecordControl : UserControl
     }
     void InvalidatePreview() { if (updating) return; snapshot = null; preview.DataSource = null; status.Text = "Seçim değişti; ÖNİZLE çalıştırın."; }
     static void Check(CheckedListBox list, bool value) { list.BeginUpdate(); for (var index = 0; index < list.Items.Count; index++) list.SetItemChecked(index, value); list.EndUpdate(); }
+    void SelectWeekdays() { for (var index = 0; index < days.Items.Count; index++) if (((DayItem)days.Items[index]).Day.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)) days.SetItemChecked(index, true); }
     void RemoveWeekends() { for (var index = 0; index < days.Items.Count; index++) if (((DayItem)days.Items[index]).Day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) days.SetItemChecked(index, false); }
     void Busy(bool value) { foreach (var control in controls) control.Enabled = !value; progress.Visible = value; cancel.Enabled = value; }
 
@@ -127,10 +132,11 @@ internal sealed class DbRecordControl : UserControl
         try
         {
             var database = Database ?? throw new InvalidOperationException("Önce DB'ye bağlanın.");
-            var result = await Task.Run(() => DbRecordService.Read(database, cards, dates, cancellation.Token), cancellation.Token);
+            var mode = (DbRecordMode)(operation.SelectedIndex + 1);
+            var result = await Task.Run(() => DbRecordService.Read(database, cards, dates, cancellation.Token, mode: mode), cancellation.Token);
             if (IsDisposed || !ReferenceEquals(database, Database)) return;
-            snapshot = result; previewDatabase = database; preview.DataSource = result.Plan;
-            status.Text = $"Personel: {cards.Length} | Gün: {dates.Length} | Personel-gün: {result.Plan.Length} | Değişecek: {result.Plan.Count(plan => plan.Operation != "UYUMLU")} | {timer.ElapsedMilliseconds} ms";
+            snapshot = result; previewDatabase = database; preview.DataSource = result.Changes;
+            status.Text = $"{operation.Text} | Personel: {cards.Length} | Gün: {dates.Length} | Yapılacak işlem: {result.Changes.Length} | {timer.ElapsedMilliseconds} ms";
         }
         catch (OperationCanceledException) { if (!IsDisposed) status.Text = "İptal edildi."; }
         catch (Exception exception) { if (!IsDisposed) { status.Text = exception.Message; MessageBox.Show(main, exception.Message, "DB KAYIT", MessageBoxButtons.OK, MessageBoxIcon.Warning); } }
@@ -142,13 +148,13 @@ internal sealed class DbRecordControl : UserControl
         if (cancellation is not null) return;
         if (snapshot is null || !ReferenceEquals(previewDatabase, Database)) { MessageBox.Show(main, "Önce ÖNİZLE çalıştırın."); return; }
         var current = snapshot;
-        if (current.Plan.All(plan => plan.Operation == "UYUMLU")) { status.Text = "Her seçili gün zaten 1 giriş + 1 çıkış; mükerrer=0."; return; }
-        if (MessageBox.Show(main, $"{current.Cards.Length} personel / {current.Days.Length} seçili gün.\nHer personel-gün 1 giriş + 1 çıkış olacak.\nFazla/mükerrer silinir; aralık dışı gerçek saatler ve yanlış taraflar değiştirilir; eksikler üretilir.\nSeçilen E kayıtları NORMAL yapılır. İzin/tatil/personel tarih filtresi UYGULANMAZ.\nÖnce gbak yedeği alınır; tek transaction uygulanır. TNF değişmez. Devam?", "DB KAYIT — açık kullanıcı seçimi", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        if (current.Changes.Length == 0) { status.Text = "Seçilen işlem için yapılacak değişiklik yok."; return; }
+        if (MessageBox.Show(main, $"{current.Cards.Length} personel / {current.Days.Length} seçili gün.\nİşlem: {operation.Text}\nÖnizlemedeki {current.Changes.Length} değişiklik uygulanacak; diğer kayıtlar ve E türleri korunacak.\nİşlemden önce gbak ve satır yedeği alınır. TNF değişmez. Devam?", "DB KAYIT — işlem onayı", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         cancellation = new(); Busy(true); var succeeded = false; string backup = "";
         try { backup = await Task.Run(() => DbRecordService.ApplyAsync(previewDatabase!, current, cancellation.Token), cancellation.Token); succeeded = true; }
         catch (OperationCanceledException) { if (!IsDisposed) status.Text = "İptal edildi; DB transaction geri alındı."; }
         catch (Exception exception) { if (!IsDisposed) MessageBox.Show(main, exception.Message, "DB uygulanamadı", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally { snapshot = null; cancellation?.Dispose(); cancellation = null; if (!IsDisposed) Busy(false); }
-        if (succeeded && !IsDisposed) { await PreviewAsync(); status.Text += " | DB COMMIT: Mükerrer=0. TNF DÜZENLE sekmesine geçin. Yedek: " + backup; }
+        if (succeeded && !IsDisposed) { await PreviewAsync(); status.Text += " | DB işlemi tamamlandı. TNF gerekiyorsa TNF DÜZENLE sekmesine geçin. Yedek: " + backup; }
     }
 }
