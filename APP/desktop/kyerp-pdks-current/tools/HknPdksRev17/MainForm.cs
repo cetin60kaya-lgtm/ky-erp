@@ -243,15 +243,25 @@ public sealed class MainForm : Form
 		Format = DateTimePickerFormat.Short
 	};
 
-	private readonly MaskedTextBox inMin = TimeBox("08:20");
+	private readonly MaskedTextBox inMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Entry));
 
-	private readonly MaskedTextBox inMax = TimeBox("08:35");
+	private readonly MaskedTextBox inMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Entry));
 
-	private readonly MaskedTextBox outMin = TimeBox("18:55");
+	private readonly MaskedTextBox outMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Exit));
 
-	private readonly MaskedTextBox outMax = TimeBox("19:05");
+	private readonly MaskedTextBox outMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Exit));
 
 	private FirebirdDatabase? db;
+	internal WorkTimePolicy WorkHours { get; private set; } = WorkTimePolicy.Default;
+	internal event EventHandler? WorkHoursChanged;
+	internal void SetWorkHours(WorkTimePolicy policy)
+	{
+		if (WorkHours == policy) return;
+		WorkHours = policy;
+		inMin.Text = inMax.Text = WorkTimePolicy.Format(policy.Entry);
+		outMin.Text = outMax.Text = WorkTimePolicy.Format(policy.Exit);
+		WorkHoursChanged?.Invoke(this, EventArgs.Empty);
+	}
 
 	private PdksOptions? options;
 
@@ -1021,8 +1031,9 @@ public sealed class MainForm : Form
 		sourceStatus.ForeColor = (flag ? Color.DarkGreen : Color.DarkRed);
 	}
 
-	private void Connect()
+	private async void Connect()
 	{
+		SetWorkHours(WorkTimePolicy.Default);
 		FirebirdDatabase database;
 		PdksOptions pdksOptions;
 		string user;
@@ -1045,6 +1056,19 @@ public sealed class MainForm : Form
 			options = pdksOptions;
 			sourceStatus.Text = "Bağlandı: " + dbPath.Text + "   |   Kullanıcı: " + user;
 			sourceStatus.ForeColor = Color.DarkGreen;
+			try
+			{
+				var policy = await Task.Run(() => WorkTimePolicy.Read(database, CancellationToken.None));
+				if (!IsDisposed && ReferenceEquals(db, database))
+				{
+					SetWorkHours(policy);
+					sourceStatus.Text += "   |   " + policy.Information;
+				}
+			}
+			catch (Exception)
+			{
+				if (!IsDisposed && ReferenceEquals(db, database)) sourceStatus.Text += "   |   " + WorkTimePolicy.Default.Information;
+			}
 		}
 	}
 
@@ -1588,9 +1612,9 @@ public sealed class MainForm : Form
 		int num2 = ToMinute(inMax.Text);
 		int num3 = ToMinute(outMin.Text);
 		int num4 = ToMinute(outMax.Text);
-		if (num2 < num || num4 < num3)
+		if (num2 < num || num4 < num3 || num < WorkHours.EntryEarly || num2 > WorkHours.EntryLate || num3 < WorkHours.ExitEarly || num4 > WorkHours.ExitLate)
 		{
-			throw new InvalidOperationException("Saat aralığı hatalı.");
+			throw new InvalidOperationException("Saat aralığı ortak Hedef çalışma ayarı dışında. " + WorkHours.Information);
 		}
 		DataTable dataTable = new DataTable();
 		dataTable.Columns.Add("Kart No");

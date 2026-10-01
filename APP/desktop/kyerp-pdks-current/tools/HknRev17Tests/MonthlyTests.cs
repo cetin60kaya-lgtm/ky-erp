@@ -60,7 +60,7 @@ internal static class MonthlyTests
         var all = MonthlyDbAudit.Complete(snapshot, new(false, true, true, true), "", CancellationToken.None);
         check(all.Length > single.Length, "REV21 whole day generation only after explicit setting");
         check(all.All(issue => issue.Day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday && !MonthlyDbAudit.Holiday(issue.Day)), "REV21 weekends official holidays and eve excluded");
-        check(all.All(issue => MonthlyDbAudit.Clock(issue.Time, out var minute) && (issue.Side == "Giriş" ? minute >= 500 && minute <= 515 : minute >= 1135 && minute <= 1145)), "REV21 generated minutes stay within authorized bands");
+        check(all.All(issue => MonthlyDbAudit.Clock(issue.Time, out var minute) && (issue.Side == "Giriş" ? minute >= snapshot.WorkHours.EntryEarly && minute <= snapshot.WorkHours.EntryLate : minute >= snapshot.WorkHours.ExitEarly && minute <= snapshot.WorkHours.ExitLate)), "REV21 explicitly authorized missing generation uses shared policy bands");
         check(!all.Any(issue => issue.Day.Day is 5 or 6 or 8), "REV21 shifts E leave never generate");
         check(!MonthlyDbAudit.Complete(snapshot, new(true, true, true, false), "00999", CancellationToken.None).Any(), "REV21 selected personnel scope enforced");
         var safe = snapshot.Issues.Where(issue => issue.Safe).ToArray();
@@ -151,12 +151,14 @@ internal static class MonthlyTests
         snapshot = MonthlyDbAudit.Read(database,sync,CancellationToken.None);
         Console.WriteLine($"REV21_LIVE_MAY db_query_ms={sync.DbMilliseconds} tnf_parse_ms={sync.TnfMilliseconds} compare_ms={sync.CompareMilliseconds} monthly_db_ms={snapshot.Milliseconds} total_ms={timer.ElapsedMilliseconds}");
         Console.WriteLine(MonthlyDbAudit.Summary(snapshot));
+        Console.WriteLine(snapshot.WorkHours.Information);
+        check(snapshot.WorkHours.FromDatabase && snapshot.WorkHours.Entry == 510 && snapshot.WorkHours.EntryEarly == 510 && snapshot.WorkHours.EntryLate == 525 && snapshot.WorkHours.ExitEarly == 1110 && snapshot.WorkHours.ExitLate == 1170 && snapshot.WorkHours.DayEnd == 420 && snapshot.WorkHours.DailyWork == 450, "REV21 live exact HAFTA ICI policy read without database writes");
         Console.WriteLine($"REV21_PLANS schedules={snapshot.Schedules.Count} people={snapshot.People.Count} excluded={snapshot.Excluded.Count}");
         foreach(var plan in snapshot.Schedules.Where(plan=>plan.Card=="00056" && plan.Day.Day==25)) Console.WriteLine($"REV21_PLAN_00056 entry={plan.Entry} exit={plan.Exit} excluded={snapshot.Excluded.Contains((plan.Card,plan.Day))}");
         foreach (var issue in snapshot.Issues.Where(issue=>issue.Card=="00056" && issue.Day.Day==25)) Console.WriteLine($"REV21_00056_25MAY kind={issue.Kind} safe={issue.Safe} id={issue.Id} side={issue.Side} time={issue.Time}");
         check(snapshot.Issues.Any(issue=>issue.Card=="00056"&&issue.Day.Day==25&&issue.Kind=="FAZLA TARAF"), "REV21 live 00056 25May extra entry found without writing");
         check(snapshot.Issues.Any(issue=>issue.Card=="00056"&&issue.Day.Day==25&&issue.Kind=="FAZLA TARAF"&&!issue.Safe) && snapshot.Issues.Any(issue=>issue.Card=="00056"&&issue.Day.Day==25&&issue.Kind=="İNCELE"), "REV21 live leave conflict shown; candidate never deleted automatically");
-        var generated = MonthlyDbAudit.Complete(snapshot,new(false,true,true,false),"",CancellationToken.None);
+        var generated = MonthlyDbAudit.Complete(snapshot,CompletionSettings.For(snapshot.WorkHours,false,true,true,false),"",CancellationToken.None);
         check(generated.All(issue=>!snapshot.LockedCards.Contains(issue.Card) && !snapshot.Excluded.Contains((issue.Card,issue.Day))), "REV21 live completion plan only; no DB writes");
         Console.WriteLine($"REV21_LIVE_READONLY completion_plan_sides={generated.Length} safe_cleanup_sides={snapshot.Issues.Count(issue=>issue.Safe)}");
         var mayFingerprint = snapshot.Fingerprint;

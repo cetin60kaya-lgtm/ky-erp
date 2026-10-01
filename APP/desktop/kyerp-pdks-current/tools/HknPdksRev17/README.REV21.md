@@ -1,5 +1,20 @@
 # HKN PDKS REV21 — Aylık kontrol
 
+## 01.10.2026 — Aynı REV21 içinde ortak Hedef saat kaynağı
+
+- `WorkTimePolicy` tek ortak ve değişmez değerlendirme kaynağıdır. HAFTA İÇİ satırı Türkçe karakter/case normalize edilerek seçilir; HAFTA İÇİ YENİ/RAMAZAN ile karıştırılmaz. Belirsiz, eksik, bozuk veya okunamayan ayarda bütünüyle sabit fallback kullanılır.
+- Gerçek DB eşlemesi: IGIRISS / EGTOL / GGTOL, DCIKISS / ECTOL / GCTOL, GDSAAT, GUNBIT, BASLAMAS1 / BITISS1, MAKSURE1. Sayısal dakika ve HH:mm desteklenir; GUNBIT=1860 ertesi gün 07:00 olarak normalize edilir. DB ayarı değiştirilmez.
+- Fallback: giriş 08:30, normal 08:15–08:45; çıkış 19:00, normal 18:30–19:30; gün dönümü/bitişi 07:00; normal çalışma 08:30–19:00; günlük çalışma 07:30. Sınırlar dahildir. Erken geliş bilgi olup hata/ceza sayılmaz; geç çıkış mesai adayı olarak gösterilir.
+- Canlı HAFTA İÇİ satırında EGTOL=510 (08:30) bulunmuştur. Kullanıcının DB önceliği gereği gerçek normal giriş bandı 08:30–08:45 gösterilir; fallback 08:15 ile sessizce değiştirilmez. Diğer okunan değerler verilen fallback ile aynıdır.
+- Aylık/DB kontrol ve son kontrol aynı policy ile sınıflandırır. DB eksik tamamlama, toplu işlem ve TNF Hazırla referans/izinli aralıkları aynı nesneden alır; varsayılan üretim aralıkları tek sabit referanstır. Önceden mevcut kullanıcı-onaylı yeni eksik saat özelliği ayrıdır; çalışma referansının okunması/sınıflandırılması hiçbir gerçek kart saatini değiştirmez.
+- DB–TNF eşitleme toleranslı hale getirilmemiştir: gerçek kart/tarih/saat bire bir kalır. 08:23 ile 08:38 ikisi bir çalışma bandında olsa bile TNF saat farkı olarak tespit edilir. E/yan yana grid/atomic ayrı çıktılar/parola korunur.
+- Küçük bilgi satırı gerçek ayarları ve `Kaynak: Hedef DB` / `Kaynak: Sabit Varsayılan` bilgisini gösterir. Ayar okuması background/read-only transaction; başlangıçta ağır otomatik tarama yoktur. DB yazma öncesi policy de fingerprint ile yeniden doğrulanır.
+- **188 assertion geçti**: 32 yeni ortak kaynak/sınır/normalizasyon/fallback/consumer testi ve önceki regresyonlar. Canlı Mayıs okuma: DB 47 ms, TNF 5 ms, compare 2 ms, aylık ek denetim 57 ms, toplam 115 ms. Ayrı UI: bind 3 ms, toplam 152 ms, en büyük heartbeat 116 ms.
+- Canlı DB/TNF yalnız okundu; hareket/metadata fingerprint ve TNF SHA değişmedi. DB yazma/gbak/rollback testleri yalnız yeni sentetik fixture üzerinde çalışır.
+- Aynı REV21 yeniden derlendi: .NET 8 win-x64 self-contained single-file, 172672322 byte. Parola kapısı `HKN PDKS - Giriş`, Responding=True. Önceki REV21 EXE 99_ARSIV altında korunmuştur.
+- Final aynı dosyadır: `D:/Googledrive/KYERP-PDKS-HIZLI-VERİ/_PAKETLER/GUNCEL/HKN-PDKS-REV21-FINAL.exe`. SHA256: `D02D3AD7171F1006B6B312B2870105D7ABDF52AB9FF5F0492B11EB4906144765`.
+- Kanıtlar: yerel 08_TEST/REV21_TIME_TEST.log, REV21_TIME_PUBLISH.log, REV21_TIME_FINAL_STARTUP.log. Görev dışı MainForm SQL değişiklikleri ve csproj BOM farkı çalışma ağacında korunup commit/release dışında bırakılır.
+
 ## Akış
 
 - Yıl/ay seç → **BU AYI KONTROL ET**. DB bulguları ve hizalı DB/TNF karşılaştırması ayrı detay sekmelerindedir.
@@ -17,13 +32,13 @@
 - Temizlik yalnız hedef tarafı temizler; aynı satırın diğer tarafı ve ay dışındaki hareketi korunur. Boş satır ancak iki taraf da boşsa silinir.
 - Gerçek 08:50 giriş / 18:20 çıkış değişmez. Geç/erken süreler DB çalışma planına göre bilgi olarak gösterilir; bordro hesaplarına müdahale edilmez.
 - İki gerçek vardiya silinmez. E normal TNF kaynağı değildir. İşe giriş/çıkış ve yeniden işe giriş boşluğu dikkate alınır; eski geçmişe yeni saat üretilmez.
-- Saat üretimi: giriş 08:20–08:35, çıkış 18:55–19:05. Cumartesi/pazar, resmî tatil/arife, izin, özel vardiya, E, gelecek gün ve belirsiz tarih/plan dışlanır.
+- Ayrı kullanıcı onaylı eksik saat üretiminin referans/izinli bandı ortak WorkTimePolicy kaynağındandır. Cumartesi/pazar, resmî tatil/arife, izin, özel vardiya, E, gelecek gün ve belirsiz tarih/plan dışlanır.
 - Dini tatil güvenlik takvimi 2026 ile sınırlıdır; diğer yıllarda saat üretimi kapalıdır. Arife/yarım günler güvenlik için tamamen dışlanır. DB tatil/izin/kişisel plan istisnaları ayrıca değerlendirilir.
 - Tanınmayan aktif GIRCIK/DB trigger'ı DB yazmasını engeller; mevcut trigger'lar değiştirilmez. Ağustos beş-personel kilidi korunur.
 - TNF aşamasında yalnız DB SELECT: gerçek kart/tarih/saat kullanılır, E'den eksik üretilmez, canonical `KartNo,Saat,GGAAYY,1,001` korunur. Önceki REV20 temp/atomic çıktı ve tek yedek mantığı değiştirilmedi.
 - Ağır işler Task.Run + CancellationToken üzerinde; aynı anda ikinci işlem engellenir. Grid toplu bağlanır. Açılışta otomatik aylık tarama yoktur.
 
-## 01.10.2026 doğrulaması
+## 01.10.2026 ilk REV21 doğrulaması (ortak saat düzeltmesi öncesi)
 
 - **156 assertion geçti**: önceki karşılaştırma/çıktı/parola/UI regresyonları, gerçek gbak, yedek hatası, başarılı işlem sonrası hata ile gerçek rollback, tek/tam gün üretimi, gerçek saat korunması, ay dışı karşı taraf korunması, E/tatil/izin/vardiya/rehire/kilit/iptal.
 - Canlı `DATABASE.GDB` ve `TR2026.Tnf` yalnız okundu. DB metadata/hareket fingerprint ve TNF SHA değişmedi. Yazma testleri yalnız yeni sentetik Firebird fixture üzerinde çalıştı.

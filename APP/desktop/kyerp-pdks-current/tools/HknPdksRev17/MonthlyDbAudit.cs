@@ -14,9 +14,21 @@ internal sealed record MonthlyIssue(string Card, DateTime Day, string Kind, stri
 internal sealed record DailySchedule(string Card, DateTime Day, string Entry, string Exit);
 internal sealed record MonthlyDbSnapshot(AuditRequest Request, DataTable Records, Dictionary<string, EmploymentRule> People,
     List<DailySchedule> Schedules, HashSet<(string Card, DateTime Day)> Excluded, HashSet<string> LockedCards,
-    string TriggerHash, bool WritesBlocked, List<MonthlyIssue> Issues, string Fingerprint, long Milliseconds);
-internal sealed record CompletionSettings(bool SelectedPerson, bool SingleSide, bool WholeDay, bool Natural,
-    int Entry = 510, int Exit = 1140, int EntryMin = 500, int EntryMax = 515, int ExitMin = 1135, int ExitMax = 1145);
+    string TriggerHash, bool WritesBlocked, List<MonthlyIssue> Issues, string Fingerprint, long Milliseconds)
+{
+    internal WorkTimePolicy WorkHours { get; init; } = WorkTimePolicy.Default;
+}
+internal sealed record CompletionSettings(bool SelectedPerson, bool SingleSide, bool WholeDay, bool Natural)
+{
+    internal int Entry { get; init; } = WorkTimePolicy.Default.Entry;
+    internal int Exit { get; init; } = WorkTimePolicy.Default.Exit;
+    internal int EntryMin { get; init; } = WorkTimePolicy.Default.EntryEarly;
+    internal int EntryMax { get; init; } = WorkTimePolicy.Default.EntryLate;
+    internal int ExitMin { get; init; } = WorkTimePolicy.Default.ExitEarly;
+    internal int ExitMax { get; init; } = WorkTimePolicy.Default.ExitLate;
+    internal static CompletionSettings For(WorkTimePolicy policy, bool selectedPerson, bool singleSide, bool wholeDay, bool natural)
+        => new(selectedPerson, singleSide, wholeDay, natural) { Entry = policy.Entry, Exit = policy.Exit, EntryMin = policy.EntryEarly, EntryMax = policy.EntryLate, ExitMin = policy.ExitEarly, ExitMax = policy.ExitLate };
+}
 
 internal static class MonthlyDbAudit
 {
@@ -31,7 +43,6 @@ internal static class MonthlyDbAudit
         return true;
     }
     static string Time(int minutes) => $"{minutes / 60:00}:{minutes % 60:00}";
-    static int MinuteDifference(string time, int reference) => Clock(time, out var minute) ? minute - reference : 0;
     static string ScheduleTime(DataRow row, string field)
     {
         var value = Text(row, field);
@@ -127,18 +138,20 @@ internal static class MonthlyDbAudit
             (Text(row, "RDB$RELATION_NAME") == "GIRCIK" || Text(row, "RDB$RELATION_NAME").Length == 0));
         var moves = Movements(records, request);
         if (SyncEngine.DbFingerprint(moves, sync.People) != sync.DbHash) throw new InvalidOperationException("DB kontrol sırasında değişti; kontrolü yenileyin.");
-        var issues = Analyze(request, moves, people, schedules, excluded, locked, token);
-        var fingerprint = Fingerprint(new[] { records, peopleTable, plans, holidays, overrides, triggers }.Concat(exclusions).ToArray());
+        var workHours = WorkTimePolicy.Read(connection, transaction, token);
+        var issues = Analyze(request, moves, people, schedules, excluded, locked, token, workHours);
+        var fingerprint = Fingerprint(new[] { records, peopleTable, plans, holidays, overrides, triggers }.Concat(exclusions).ToArray()) + ":" + JsonSerializer.Serialize(workHours);
         if (ownedTransaction is not null) transaction.Rollback();
-        return new(request, records, people, schedules, excluded, locked, Hash(triggers), blocked, issues, fingerprint, timer.ElapsedMilliseconds);
+        return new(request, records, people, schedules, excluded, locked, Hash(triggers), blocked, issues, fingerprint, timer.ElapsedMilliseconds) { WorkHours = workHours };
     }
 
     static string Hash(DataTable table) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(table.AsEnumerable().Select(row => row.ItemArray.Select(value => value == DBNull.Value ? null : value is DateTime date ? date.ToString("O", CultureInfo.InvariantCulture) : Convert.ToString(value, CultureInfo.InvariantCulture)).ToArray()).ToArray()))));
     static string Fingerprint(params DataTable[] tables) => string.Join(":", tables.Select(Hash));
 
     internal static List<MonthlyIssue> Analyze(AuditRequest request, List<DbMovement> moves, Dictionary<string, EmploymentRule> people,
-        List<DailySchedule> schedules, HashSet<(string Card, DateTime Day)> excluded, HashSet<string> locked, CancellationToken token)
+        List<DailySchedule> schedules, HashSet<(string Card, DateTime Day)> excluded, HashSet<string> locked, CancellationToken token, WorkTimePolicy? workHours = null)
     {
+        var policy = workHours ?? WorkTimePolicy.Default;
         var issues = new List<MonthlyIssue>();
         var days = moves.GroupBy(move => (move.Card, move.Date)).ToDictionary(group => group.Key, group => group.ToArray());
         var scheduleMap = schedules.ToDictionary(schedule => (schedule.Card, schedule.Day));
@@ -171,13 +184,13 @@ internal static class MonthlyDbAudit
             var pair = entries.Length == 2 && exits.Length == 1 ? entries.SingleOrDefault(entry => entry.Id == exits[0].Id) : null;
             var extra = pair is null ? null : entries.Single(entry => entry != pair);
             var extraSafe = ordinary && pair is not null && extra is not null && Clock(pair.Time, out var entryMinutes) && Clock(exits[0].Time, out var exitMinutes) && Clock(extra.Time, out var extraMinutes) &&
-                entryMinutes is >= 500 and <= 515 && exitMinutes is >= 1125 and <= 1145 && extraMinutes is >= 1135 and <= 1145 && extraMinutes > exitMinutes && plannedEntry == 510 && plannedExit == 1140;
+                entryMinutes >= policy.DayRollover && entryMinutes <= policy.EntryLate && exitMinutes >= policy.ExitEarly && exitMinutes <= policy.ExitLate && extraMinutes >= policy.ExitEarly && extraMinutes <= policy.ExitLate && extraMinutes > exitMinutes && plannedEntry == policy.Entry && plannedExit == policy.Exit;
             if (extraSafe)
             {
                 var calendarConflict = excluded.Contains(group.Key);
                 issues.Add(new(extra!.Card, extra.Date, "FAZLA TARAF", calendarConflict
                     ? "Fazla giriş adayı; DB izin/tatil/vardiya istisnası ile hareketler çelişiyor. Otomatik silinmez."
-                    : "08:30–19:00 tek günlük DB planı; tamamlanmış satırdan sonra çıkış aralığında tek fazla giriş.", !isLocked && !calendarConflict, extra.Id, extra.Side, extra.Time));
+                    : $"{WorkTimePolicy.Format(policy.Entry)}–{WorkTimePolicy.Format(policy.Exit)} tek günlük DB planı; tamamlanmış satırdan sonra çıkış aralığında tek fazla giriş.", !isLocked && !calendarConflict, extra.Id, extra.Side, extra.Time));
                 if (calendarConflict) issues.Add(new(extra.Card, extra.Date, "İNCELE", "İzin/tatil/vardiya istisnası bulunan günde hareket var; fazla taraf adayını kullanıcı doğrulamalı."));
                 entries = [pair!];
             }
@@ -185,12 +198,14 @@ internal static class MonthlyDbAudit
                 issues.Add(new(group.Key.Card, group.Key.Date, "İNCELE", "Çoklu taraf / olası iki vardiya. Gerçek çiftler otomatik silinmez."));
             if (normal.Length > 0 && entries.Length == 0) issues.Add(new(group.Key.Card, group.Key.Date, "EKSİK GİRİŞ", "Yeni saat yalnız ayrı tamamlama onayıyla eklenebilir."));
             if (normal.Length > 0 && exits.Length == 0) issues.Add(new(group.Key.Card, group.Key.Date, "EKSİK ÇIKIŞ", "Yeni saat yalnız ayrı tamamlama onayıyla eklenebilir."));
-            if (ordinary && !excluded.Contains(group.Key) && entries.Length <= 1 && exits.Length <= 1)
+            if (ordinary && plannedEntry == policy.Entry && plannedExit == policy.Exit && !excluded.Contains(group.Key) && entries.Length <= 1 && exits.Length <= 1)
             {
-                foreach (var entry in entries.Where(entry => Clock(entry.Time, out var minute) && minute > plannedEntry))
-                    issues.Add(new(entry.Card, entry.Date, "GEÇ GİRİŞ", $"Gerçek saat korunur; DB planına göre {MinuteDifference(entry.Time, plannedEntry)} dakika geç. Referans {schedule!.Entry}.", Id: entry.Id, Time: entry.Time));
-                foreach (var exit in exits.Where(exit => Clock(exit.Time, out var minute) && minute < plannedExit))
-                    issues.Add(new(exit.Card, exit.Date, "ERKEN ÇIKIŞ", $"Gerçek saat korunur; DB planına göre {-MinuteDifference(exit.Time, plannedExit)} dakika eksik. Referans {schedule!.Exit}.", Id: exit.Id, Time: exit.Time));
+                foreach (var entry in entries)
+                    if (Clock(entry.Time, out var minute) && policy.ClassifyEntry(minute) is var kind && kind != "NORMAL")
+                        issues.Add(new(entry.Card, entry.Date, kind, $"Gerçek saat korunur. Giriş aralığı {WorkTimePolicy.Format(policy.EntryEarly)}–{WorkTimePolicy.Format(policy.EntryLate)}. Kaynak: {policy.Source}." + (kind == "ERKEN GELİŞ" ? " Bilgi; hata/ceza değildir." : ""), Id: entry.Id, Side: entry.Side, Time: entry.Time));
+                foreach (var exit in exits)
+                    if (Clock(exit.Time, out var minute) && policy.ClassifyExit(minute) is var kind && kind != "NORMAL")
+                        issues.Add(new(exit.Card, exit.Date, kind, $"Gerçek saat korunur. Çıkış aralığı {WorkTimePolicy.Format(policy.ExitEarly)}–{WorkTimePolicy.Format(policy.ExitLate)}. Kaynak: {policy.Source}.", Id: exit.Id, Side: exit.Side, Time: exit.Time));
             }
         }
         foreach (var person in people.Values)
@@ -208,7 +223,8 @@ internal static class MonthlyDbAudit
     internal static MonthlyIssue[] Complete(MonthlyDbSnapshot snapshot, CompletionSettings settings, string card, CancellationToken token)
     {
         if (!settings.SingleSide && !settings.WholeDay) return [];
-        if (settings.EntryMin < 500 || settings.EntryMax > 515 || settings.EntryMin > settings.EntryMax || settings.ExitMin < 1135 || settings.ExitMax > 1145 || settings.ExitMin > settings.ExitMax ||
+        var policy = snapshot.WorkHours;
+        if (settings.EntryMin < policy.EntryEarly || settings.EntryMax > policy.EntryLate || settings.EntryMin > settings.EntryMax || settings.ExitMin < policy.ExitEarly || settings.ExitMax > policy.ExitLate || settings.ExitMin > settings.ExitMax ||
             settings.Entry < settings.EntryMin || settings.Entry > settings.EntryMax || settings.Exit < settings.ExitMin || settings.Exit > settings.ExitMax)
             throw new InvalidOperationException("Saatler izinli giriş/çıkış aralıklarında olmalıdır.");
         var moves = Movements(snapshot.Records, snapshot.Request).GroupBy(move => (move.Card, move.Date)).ToDictionary(group => group.Key, group => group.ToArray());
@@ -222,7 +238,7 @@ internal static class MonthlyDbAudit
             var person = snapshot.People.GetValueOrDefault(issue.Card);
             if (snapshot.LockedCards.Contains(issue.Card) || person is null || person.Hire is null || issue.Day < person.Hire || person.Ambiguous || person.Evaluate(issue.Day).Reason is not null || issue.Day > DateTime.Today ||
                 issue.Day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || Holiday(issue.Day) || snapshot.Excluded.Contains(key) || !plans.TryGetValue(key, out var schedule) ||
-                !Clock(schedule.Entry, out var plannedEntry) || !Clock(schedule.Exit, out var plannedExit) || plannedEntry != 510 || plannedExit != 1140) continue;
+                !Clock(schedule.Entry, out var plannedEntry) || !Clock(schedule.Exit, out var plannedExit) || plannedEntry != policy.Entry || plannedExit != policy.Exit) continue;
             var existing = moves.GetValueOrDefault(key) ?? [];
             if (existing.Length > 1 || existing.Any(move => move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase) || !Clock(move.Time, out _))) continue;
             var entry = settings.Natural ? RandomNumberGenerator.GetInt32(settings.EntryMin, settings.EntryMax + 1) : settings.Entry;
@@ -237,7 +253,7 @@ internal static class MonthlyDbAudit
     internal static string Summary(MonthlyDbSnapshot snapshot)
     {
         var counts = snapshot.Issues.GroupBy(issue => issue.Kind).ToDictionary(group => group.Key, group => group.Count());
-        return "DB | " + string.Join(" | ", new[] { "MÜKERRER", "FAZLA TARAF", "EKSİK GİRİŞ", "EKSİK ÇIKIŞ", "HİÇ BASMAMIŞ", "TARİH DIŞI", "E KAYIT", "GEÇ GİRİŞ", "ERKEN ÇIKIŞ", "İNCELE" }.Select(kind => $"{kind}: {counts.GetValueOrDefault(kind)}")) +
+        return "DB | " + string.Join(" | ", new[] { "MÜKERRER", "FAZLA TARAF", "EKSİK GİRİŞ", "EKSİK ÇIKIŞ", "HİÇ BASMAMIŞ", "TARİH DIŞI", "E KAYIT", "GEÇ GİRİŞ", "ERKEN ÇIKIŞ", "ERKEN GELİŞ", "GEÇ ÇIKIŞ / mesai adayı", "İNCELE" }.Select(kind => $"{kind}: {counts.GetValueOrDefault(kind)}")) +
             $" | Güvenli: {snapshot.Issues.Count(issue => issue.Safe)}" + (snapshot.WritesBlocked ? " | DB YAZMA KİLİTLİ: GIRCIK/DB trigger" : "");
     }
 }

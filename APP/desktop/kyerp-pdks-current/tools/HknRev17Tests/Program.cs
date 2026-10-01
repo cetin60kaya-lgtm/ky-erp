@@ -26,6 +26,7 @@ internal static class Program
     [STAThread]
     static int Main(string[] args)
     {
+        ApplicationConfiguration.Initialize();
         try
         {
             Check(Count(Compare([Db()], [Tnf()]), "YOK") == 1, "exact match");
@@ -120,6 +121,7 @@ internal static class Program
             Check(Count(Compare([Db(), late], []), "TNF EKLE") == 2, "empty TNF still detects full-year DB");
             var listing = SyncEngine.ListTerminal([Tnf(), Tnf(1)], People, CancellationToken.None);
             Check(listing.Rows.Count == 2 && listing.Rows[0].Field<string>("Durum") == "TNF LİSTE", "terminal listing preserves physical duplicate rows");
+            WorkTimeTests.Run(Check);
             MonthlyTests.Run(Check, args.Length == 2 ? args[0] : null, args.Length == 2 ? args[1] : null);
             if (args.Length == 2)
             {
@@ -264,7 +266,6 @@ internal static class Program
                 Check(cardRows.Length>0, "live 00053 movements remain visible with DB as source");
             }
         }
-        ApplicationConfiguration.Initialize();
         using var owner = new ProbeForm(database, tnfPath);
         using var control = new DbTnfSyncControl(owner);
         owner.Controls.Add(control);

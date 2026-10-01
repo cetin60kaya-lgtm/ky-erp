@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.10.2026 — HKN PDKS REV21 ortak Hedef çalışma saatleri (yeni revizyon açılmadı)
+
+- WorkTimePolicy tek kaynaktır: HAFTA İÇİ DB ayarı read-only/background okunur; eksik/bozuk/belirsiz ayarda tam sabit fallback. Aylık/DB/son kontrol, eksik tamamlama ve TNF Hazırla aynı kaynak kullanır; gerçek kart saatleri değişmez.
+- Canlı DB EGTOL=08:30 bulundu; DB önceliği nedeniyle bilgi satırında 08:30–08:45 gösterilir. Fallback giriş bandı 08:15–08:45, çıkış bandı 18:30–19:30. Erken geliş hata/ceza değildir, geç çıkış mesai adayıdır. Eşitleme gerçek DB saatini bire bir korur.
+- 188 assertion geçti; canlı DB/TNF yalnız okuma, yazma testleri sentetik fixture. Mayıs DB 47/TNF 5/compare 2/ek denetim 57/toplam 115 ms; UI bind 3/toplam 152/heartbeat 116 ms. Parola kapısı Responding=True.
+- Aynı REV21 self-contained single EXE yeniden üretildi; eski paket 99_ARSIV altında. SHA256 D02D3AD7171F1006B6B312B2870105D7ABDF52AB9FF5F0492B11EB4906144765. Görev dışı kirli MainForm SQL ve csproj BOM farkı korunur; private dosyalar Git'e alınmaz.
+- Ayrıntı ve güncel test/release bilgisi: [REV21 notları](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV21.md).
+
 ## 01.10.2026 — HKN PDKS REV21 aylık DB kontrol ve ayrı TNF hazırlama
 
 - Son ek gereksinime göre AYLIK KONTROL: altı düğme, DB bulguları / hizalı DB–TNF detayları; diğer modüller ve parola korunur. [REV21 güvenlik/test/release notları](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV21.md).

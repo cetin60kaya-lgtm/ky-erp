@@ -107,13 +107,15 @@ internal sealed class TnfPrepareControl : UserControl
 		Width = 115
 	};
 
-	private readonly MaskedTextBox inMin = TimeBox("08:20");
+	private readonly MaskedTextBox inMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Entry));
 
-	private readonly MaskedTextBox inMax = TimeBox("08:35");
+	private readonly MaskedTextBox inMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Entry));
 
-	private readonly MaskedTextBox outMin = TimeBox("18:55");
+	private readonly MaskedTextBox outMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Exit));
 
-	private readonly MaskedTextBox outMax = TimeBox("19:05");
+	private readonly MaskedTextBox outMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Exit));
+	private readonly Label workTimeInformation = new() { AutoSize = true, ForeColor = Color.DarkSlateBlue, Padding = new Padding(4), Text = WorkTimePolicy.Default.Information };
+	private WorkTimePolicy WorkHours => main is MainForm application ? application.WorkHours : WorkTimePolicy.Default;
 
 	private readonly CheckBox weekends = new CheckBox
 	{
@@ -175,6 +177,19 @@ internal sealed class TnfPrepareControl : UserControl
 		Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 		settings = LoadSettings();
 		Build();
+		void RefreshWorkHours()
+		{
+			inMin.Text = inMax.Text = WorkTimePolicy.Format(WorkHours.Entry);
+			outMin.Text = outMax.Text = WorkTimePolicy.Format(WorkHours.Exit);
+			workTimeInformation.Text = WorkHours.Information;
+		}
+		RefreshWorkHours();
+		if (main is MainForm application)
+		{
+			EventHandler update = (_, _) => RefreshWorkHours();
+			application.WorkHoursChanged += update;
+			Disposed += (_, _) => application.WorkHoursChanged -= update;
+		}
 		start.ValueChanged += delegate
 		{
 			RebuildDays();
@@ -258,6 +273,8 @@ internal sealed class TnfPrepareControl : UserControl
 		flowLayoutPanel.Controls.Add(outMin);
 		flowLayoutPanel.Controls.Add(outMax);
 		flowLayoutPanel.Controls.Add(weekends);
+		flowLayoutPanel.SetFlowBreak(weekends, true);
+		flowLayoutPanel.Controls.Add(workTimeInformation);
 		tableLayoutPanel.Controls.Add(flowLayoutPanel, 0, 0);
 		tableLayoutPanel.SetColumnSpan(flowLayoutPanel, 3);
 		tableLayoutPanel.Controls.Add(people, 0, 1);
@@ -577,9 +594,9 @@ internal sealed class TnfPrepareControl : UserControl
 		int num2 = ToMinute(inMax.Text);
 		int num3 = ToMinute(outMin.Text);
 		int num4 = ToMinute(outMax.Text);
-		if (num2 < num || num4 < num3)
+		if (num2 < num || num4 < num3 || num < WorkHours.EntryEarly || num2 > WorkHours.EntryLate || num3 < WorkHours.ExitEarly || num4 > WorkHours.ExitLate)
 		{
-			throw new InvalidOperationException("Saat aralığı hatalı.");
+			throw new InvalidOperationException("Saat aralığı ortak Hedef çalışma ayarı dışında. " + WorkHours.Information);
 		}
 		DataTable dataTable = new DataTable();
 		dataTable.Columns.Add("Kart No");

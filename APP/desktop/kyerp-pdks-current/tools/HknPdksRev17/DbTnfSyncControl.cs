@@ -11,6 +11,7 @@ namespace QuickDataTool;
 internal sealed partial class DbTnfSyncControl : UserControl
 {
     readonly Form main;
+    readonly Label workTimeInformation = new() { AutoSize = true, Padding = new Padding(4), ForeColor = Color.DarkSlateBlue, Text = WorkTimePolicy.Default.Information };
     readonly NumericUpDown year = new() { Minimum = 2010, Maximum = 2100, Width = 75, Value = DateTime.Today.Year };
     readonly ComboBox month = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
     readonly TextBox search = new() { Width = 180, PlaceholderText = "Kart / ad soyad ara" };
@@ -75,6 +76,13 @@ internal sealed partial class DbTnfSyncControl : UserControl
     public DbTnfSyncControl(Form mainForm)
     {
         main = mainForm;
+        if (main is MainForm application)
+        {
+            workTimeInformation.Text = application.WorkHours.Information;
+            EventHandler update = (_, _) => workTimeInformation.Text = application.WorkHours.Information;
+            application.WorkHoursChanged += update;
+            Disposed += (_, _) => application.WorkHoursChanged -= update;
+        }
         Dock = DockStyle.Fill;
         Font = new Font("Segoe UI", 9);
         BackColor = Color.White;
@@ -112,6 +120,8 @@ internal sealed partial class DbTnfSyncControl : UserControl
         if (main.GetType().GetField("dbPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) is TextBox databaseBox)
             databaseBox.TextChanged += (_, _) => { UpdatePaths(); InvalidateResult(); monthlySnapshot = null; };
         bar.Controls.Add(paths);
+        bar.SetFlowBreak(paths, true);
+        bar.Controls.Add(workTimeInformation);
         cancel.Click += (_, _) => cancellation?.Cancel();
         checkBar.Controls.AddRange([progressBar, cancel]);
         operationControls.AddRange([year, month, statusFilter, errorsOnly, hasMovement, search]);
@@ -375,7 +385,8 @@ internal sealed partial class DbTnfSyncControl : UserControl
             {
                 var result = await SyncEngine.ReadAsync(database, request, token, progress, listOnly);
                 var monthly = !listOnly && request.End == request.Start.AddMonths(1) ? MonthlyDbAudit.Read(database, result, token) : null;
-                return (Result: result, Monthly: monthly, View: PrepareMonthlyView(result, monthly, token), Summary: Summary(result.Table));
+                var workHours = monthly?.WorkHours ?? WorkTimePolicy.Read(database, token);
+                return (Result: result, Monthly: monthly, WorkHours: workHours, View: PrepareMonthlyView(result, monthly, token), Summary: Summary(result.Table));
             }, token);
             token.ThrowIfCancellationRequested();
             if (IsDisposed || main.IsDisposed) return;
@@ -384,6 +395,8 @@ internal sealed partial class DbTnfSyncControl : UserControl
             byCard = prepared.View.Groups;
             people = prepared.View.People;
             monthlySnapshot = prepared.Monthly;
+            workTimeInformation.Text = prepared.WorkHours.Information;
+            if (main is MainForm application) application.SetWorkHours(prepared.WorkHours);
             SetSnapshot(listOnly ? null : prepared.Result);
             snapshotDatabase = database;
             if (listOnly) errorsOnly.Checked = false;

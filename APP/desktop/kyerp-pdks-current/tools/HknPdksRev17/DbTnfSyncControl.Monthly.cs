@@ -29,6 +29,7 @@ internal sealed partial class DbTnfSyncControl
                 "EKSİK GİRİŞ" or "EKSİK ÇIKIŞ" or "HİÇ BASMAMIŞ" => Color.LemonChiffon,
                 "E KAYIT" => Color.Thistle,
                 "GEÇ GİRİŞ" or "ERKEN ÇIKIŞ" => Color.PeachPuff,
+                "ERKEN GELİŞ" or "GEÇ ÇIKIŞ / mesai adayı" => Color.Honeydew,
                 _ => Color.MistyRose
             };
         };
@@ -43,7 +44,7 @@ internal sealed partial class DbTnfSyncControl
         {
             var person = view.People[index];
             var errors = issues.GetValueOrDefault(person.Card) ?? [];
-            var count = errors.Count(issue => issue.Kind != "E KAYIT");
+            var count = errors.Count(issue => WorkTimePolicy.IsError(issue.Kind));
             view.People[index] = person with { ErrorCount = person.ErrorCount + count,
                 Result = person.Result + (errors.Length == 0 ? " | DB TEMİZ" : " | DB: " + string.Join(", ", errors.GroupBy(issue => issue.Kind).Select(group => $"{group.Key}={group.Count()}"))) };
         }
@@ -90,17 +91,18 @@ internal sealed partial class DbTnfSyncControl
         var single = new CheckBox { Left = 20, Top = 65, Width = 550, Text = "Sadece eksik tek tarafı tamamla", Checked = true };
         var whole = new CheckBox { Left = 20, Top = 95, Width = 550, Text = "Hiç basmamış uygun iş gününe giriş + çıkış ÜRET (açık onay)" };
         var natural = new CheckBox { Left = 20, Top = 130, Width = 550, Text = "Doğal dağılım (kapalıysa sabit referans)" };
-        var entry = new DateTimePicker { Left = 145, Top = 170, Width = 100, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddHours(8.5) };
-        var exit = new DateTimePicker { Left = 430, Top = 170, Width = 100, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddHours(19) };
+        var policy = monthlySnapshot!.WorkHours;
+        var entry = new DateTimePicker { Left = 145, Top = 170, Width = 100, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddMinutes(policy.Entry) };
+        var exit = new DateTimePicker { Left = 430, Top = 170, Width = 100, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddMinutes(policy.Exit) };
         var calendar = new CheckBox { Left = 20, Top = 215, Width = 555, Height = 40, Text = "DB tatil / yıllık izin / çalışma planlarının bu ay için güncel olduğunu doğruladım" };
-        var explanation = new Label { Left = 20, Top = 265, Width = 555, Height = 80, Text = "Giriş: 08:20–08:35; çıkış: 18:55–19:05. Gerçek 08:50 / 18:20 ASLA değişmez. Hafta sonu, tatil, izin, E, kilit, belirsiz dönem/plan ve gelecekteki günlerde saat üretilmez. Resmî dini tatil koruması şu anda 2026 için doğrulanmıştır; diğer yıllarda üretim kapalıdır." };
+        var explanation = new Label { Left = 20, Top = 265, Width = 555, Height = 80, Text = policy.Information + ". Gerçek kart saatleri ASLA değişmez. Yeni eksik saat yalnız açık onayla; hafta sonu, tatil, izin, E, kilit, belirsiz plan ve gelecek gün dışlanır. Tatil koruması 2026 ile sınırlıdır." };
         var preview = new Button { Left = 20, Top = 355, Width = 230, Text = "ÜRETİLECEK SAATLERİ ONAYLA" };
         preview.Click += (_, _) => { if (!calendar.Checked) { MessageBox.Show(dialog, "Tatil/izin planlarını doğrulamadan saat üretilemez."); return; } dialog.DialogResult = DialogResult.OK; };
         dialog.Controls.AddRange([scope, single, whole, natural, new Label { Left = 20, Top = 175, Text = "Giriş referansı", Width = 120 }, entry,
             new Label { Left = 300, Top = 175, Text = "Çıkış referansı", Width = 120 }, exit, calendar, explanation, preview]);
         if (dialog.ShowDialog(main) != DialogResult.OK) return;
-        var settings = new CompletionSettings(scope.SelectedIndex == 1, single.Checked, whole.Checked, natural.Checked,
-            entry.Value.Hour * 60 + entry.Value.Minute, exit.Value.Hour * 60 + exit.Value.Minute);
+        var settings = CompletionSettings.For(policy, scope.SelectedIndex == 1, single.Checked, whole.Checked, natural.Checked) with {
+            Entry = entry.Value.Hour * 60 + entry.Value.Minute, Exit = exit.Value.Hour * 60 + exit.Value.Minute };
         var current = monthlySnapshot!;
         var card = selectedCard;
         MonthlyIssue[] operations;

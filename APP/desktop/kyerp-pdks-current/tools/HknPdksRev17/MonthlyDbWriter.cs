@@ -61,14 +61,14 @@ internal static class MonthlyDbWriter
         if (operations.Length == 0 || operations.Any(operation => !operation.Safe || operation.Day < snapshot.Request.Start || operation.Day >= snapshot.Request.End || snapshot.LockedCards.Contains(operation.Card) ||
             operation.Kind != "EKLE" && !MonthlyDbAudit.SafeKinds.Contains(operation.Kind))) throw new InvalidOperationException("DB işlem planı güvenli değil veya dönem/kilit dışı.");
         if (operations.GroupBy(operation => (operation.Card, operation.Day, operation.Id, operation.Side)).Any(group => group.Count() > 1)) throw new InvalidOperationException("DB planında tekrarlı taraf var.");
-        var eligible = MonthlyDbAudit.Complete(snapshot, new(false, true, true, false), "", CancellationToken.None)
+        var eligible = MonthlyDbAudit.Complete(snapshot, CompletionSettings.For(snapshot.WorkHours, false, true, true, false), "", CancellationToken.None)
             .Select(operation => (operation.Card, operation.Day, operation.Id, operation.Side)).ToHashSet();
         foreach (var operation in operations)
         {
             if (operation.Kind == "EKLE")
             {
                 if (!eligible.Contains((operation.Card, operation.Day, operation.Id, operation.Side)) || !MonthlyDbAudit.Clock(operation.Time, out var minute) ||
-                    (operation.Side == "Giriş" ? minute is < 500 or > 515 : minute is < 1135 or > 1145)) throw new InvalidOperationException("Eksik taraf üretimi takvim/tarih/saat koşullarını sağlamıyor.");
+                    (operation.Side == "Giriş" ? minute < snapshot.WorkHours.EntryEarly || minute > snapshot.WorkHours.EntryLate : minute < snapshot.WorkHours.ExitEarly || minute > snapshot.WorkHours.ExitLate)) throw new InvalidOperationException("Eksik taraf üretimi takvim/tarih/saat koşullarını sağlamıyor.");
             }
             else if (!snapshot.Issues.Any(issue => issue.Safe && issue.Card == operation.Card && issue.Day == operation.Day && issue.Id == operation.Id && issue.Side == operation.Side && issue.Kind == operation.Kind && issue.Time == operation.Time))
                 throw new InvalidOperationException("Silme planı DB kontrol sonucuyla eşleşmiyor.");
