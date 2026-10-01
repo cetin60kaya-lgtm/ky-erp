@@ -8,14 +8,12 @@ public sealed partial class MainShellForm
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        if (canonicalStartupApplied) return;
         if (!operatorEnhancementsApplied)
         {
             operatorEnhancementsApplied = true;
             ApplyOperatorEnhancements();
         }
-
-        // Menu/toolbar customization is applied after the first stable window bounds were set in OnLoad.
-        // Do not resize/reposition the window here: doing that after first paint caused a visible SHOW/jump.
         InitializeShellLayoutCustomization();
         FinalizeCompactShell();
     }

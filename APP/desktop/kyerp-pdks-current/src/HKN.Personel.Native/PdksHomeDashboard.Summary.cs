@@ -54,7 +54,7 @@ internal sealed partial class PdksHomeDashboard
 
         var title = new Label
         {
-            Text = "REV 6.1 TEST  •  Günlük Operasyon Komuta Merkezi",
+            Text = "REV 6.4.0 CANLI  •  Günlük Operasyon Komuta Merkezi",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Segoe UI", 11.5f, FontStyle.Bold),

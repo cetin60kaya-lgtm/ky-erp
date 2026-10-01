@@ -20,7 +20,7 @@ public sealed partial class MainShellForm
         tool.SuspendLayout();
         try
         {
-            Text = $"KY PDKS 6.3.6 TEST • {branding.ReportHeader}";
+            Text = $"KY PDKS 6.4.0 CANLI • {branding.ReportHeader}";
             workspace.ApplyLayout(WorkspaceLayoutMode.Single);
             BuildSimpleCanonicalMenu();
             BuildSimpleCanonicalToolbar();
@@ -41,7 +41,7 @@ public sealed partial class MainShellForm
 
         var general = PlainItem("Genel", ShowHome);
 
-        var operation = Top("Operasyon");
+        var operation = TopMenu("Operasyon");
         operation.DropDownItems.Add(MenuItem("Canlı Personel Denetimi", PdksModule.GunlukOperasyon, OpenLiveAttendance));
         operation.DropDownItems.Add(MenuItem("Kart Basma Kontrolü • Gün / 7 Gün / Ay", PdksModule.GunlukOperasyon,
             () => ShowModule(new AttendanceHistoryForm(), PdksModule.GunlukOperasyon)));
@@ -49,14 +49,14 @@ public sealed partial class MainShellForm
         operation.DropDownItems.Add(MenuItem("Terminal / Kart Cihazı", PdksModule.Terminal, OpenTerminalCenter));
         operation.DropDownItems.Add(MenuItem("Giriş / Çıkış Kayıtları", PdksModule.GirisCikis, OpenLegacyGirisCikis));
 
-        var personnel = Top("Personel");
+        var personnel = TopMenu("Personel");
         personnel.DropDownItems.Add(MenuItem("Personel Kartları", PdksModule.Personel, OpenPersonel));
         personnel.DropDownItems.Add(MenuItem("İzin Yönetimi", PdksModule.Izinler, OpenLegacyIzin));
         personnel.DropDownItems.Add(MenuItem("Ek Kazanç / Kesinti", PdksModule.EkKazancKesinti, OpenLegacyKazancKesinti));
         personnel.DropDownItems.Add(MenuItem("Çalışma Süresi Düzeltmeleri", PdksModule.Personel,
             () => OpenLegacyTable("Çalışma Süresi Düzeltmeleri", "PERTIMESHIFT", true, new Size(1080, 680))));
 
-        var payroll = Top("Puantaj & Bordro");
+        var payroll = TopMenu("Puantaj & Bordro");
         var timesheet = MenuItem("Puantaj Kontrol / Yeniden Hesaplama", PdksModule.Puantaj, OpenLegacyPuantaj);
         timesheet.ToolTipText = "Giriş-çıkış, izin, vardiya ve tatil kayıtlarından oluşan puantajı kontrol eder. Kaynak değişmediyse yeniden hesaplama gerekmez.";
         payroll.DropDownItems.Add(timesheet);
@@ -70,7 +70,7 @@ public sealed partial class MainShellForm
             payroll.DropDownItems.Add(MenuItem("Aylık Düzeltme / Hızlı Ödeme", PdksModule.Bordro,
                 () => ShowModule(new MonthlyPayrollAdjustmentForm(), PdksModule.Bordro)));
 
-        var reports = Top("Raporlar");
+        var reports = TopMenu("Raporlar");
         reports.DropDownItems.Add(MenuItem("Rapor ve Çıktı Merkezi", PdksModule.Raporlar,
             () => ShowModule(new ReportCenterForm(), PdksModule.Raporlar)));
         reports.DropDownItems.Add(new ToolStripSeparator());
@@ -86,7 +86,7 @@ public sealed partial class MainShellForm
         ToolStripMenuItem? management = null;
         if (currentUser.IsCompanyResponsible || currentUser.IsSuperAdmin)
         {
-            management = Top("Yönetim");
+            management = TopMenu("Yönetim");
             var quick = new ToolStripMenuItem("Hızlı İşlemler");
             quick.Click += (_, _) => { using var form = new ResponsibleQuickOperationsForm(this); form.ShowDialog(this); };
             management.DropDownItems.Add(quick);
@@ -104,14 +104,14 @@ public sealed partial class MainShellForm
             }
         }
 
-        var settings = Top("Ayarlar");
+        var settings = TopMenu("Ayarlar");
         settings.DropDownItems.Add(MenuItem("Terminal / Kart Cihazı Ayarları", PdksModule.Terminal, OpenTerminalSettingsDirect));
         settings.DropDownItems.Add(MenuItem("Çalışma Tarihi / İş Günü", PdksModule.Donemler, OpenWorkingDate));
         settings.DropDownItems.Add(new ToolStripSeparator());
         settings.DropDownItems.Add(MenuItem("Vardiya / Çalışma Grupları", PdksModule.Tanimlar, OpenGroups));
         settings.DropDownItems.Add(MenuItem("Dönem Yönetimi", PdksModule.Donemler, () => OpenDialogModule(PdksModule.Donemler)));
 
-        var org = Top("Organizasyon");
+        var org = TopMenu("Organizasyon");
         org.DropDownItems.Add(MenuItem("Bölümler", PdksModule.Tanimlar, () => OpenDefinitions("Bölümler")));
         org.DropDownItems.Add(MenuItem("Servisler", PdksModule.Tanimlar, () => OpenDefinitions("Servisler")));
         org.DropDownItems.Add(MenuItem("Görevler", PdksModule.Tanimlar, () => OpenDefinitions("Görevler")));
@@ -119,7 +119,7 @@ public sealed partial class MainShellForm
         org.DropDownItems.Add(MenuItem("Firma Bilgileri", PdksModule.Tanimlar, () => OpenDefinitions("Firma")));
         settings.DropDownItems.Add(org);
 
-        var calendar = Top("Takvim / Çalışma Planı");
+        var calendar = TopMenu("Takvim / Çalışma Planı");
         calendar.DropDownItems.Add(MenuItem("Genel Tatiller", PdksModule.Tanimlar,
             () => OpenLegacyTable("Genel Tatiller", "TATIL", true, new Size(1040, 680))));
         calendar.DropDownItems.Add(MenuItem("Günlük Çalışma Saatleri", PdksModule.Tanimlar,
@@ -128,7 +128,7 @@ public sealed partial class MainShellForm
             () => OpenLegacyTable("Yıllık Çalışma Planı", "PLANA", true, new Size(1180, 720))));
         settings.DropDownItems.Add(calendar);
 
-        var help = Top("Yardım");
+        var help = TopMenu("Yardım");
         help.DropDownItems.Add(PlainItem("Hızlı Kullanım Rehberi", () => { using var form = new PdksQuickGuideForm(); form.ShowDialog(this); }));
         help.DropDownItems.Add(PlainItem("KY PDKS Hakkında", () => new AboutKy6Form().ShowDialog(this)));
         help.DropDownItems.Add(PlainItem("KY ERP Web Sitesi", OpenErpSite));
@@ -181,7 +181,7 @@ public sealed partial class MainShellForm
         }
     }
 
-    static ToolStripMenuItem Top(string text) => new(text) { Image = null };
+    static ToolStripMenuItem TopMenu(string text) => new(text) { Image = null };
 
     void RemoveEmptyTopMenus()
     {

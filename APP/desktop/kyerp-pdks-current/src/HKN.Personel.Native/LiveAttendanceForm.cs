@@ -20,6 +20,7 @@ public sealed partial class LiveAttendanceForm : Form
     readonly FlowLayoutPanel cards = new(){Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(2)};
     readonly TabControl tabs = new(){Dock=DockStyle.Fill};
     readonly Dictionary<string,DataGridView> grids = new();
+    readonly Dictionary<string,Label> summaryCards = new(StringComparer.OrdinalIgnoreCase);
     readonly System.Windows.Forms.Timer timer = new(){Interval=20000};
     readonly CancellationTokenSource closing = new();
     bool busy;
@@ -101,13 +102,22 @@ public sealed partial class LiveAttendanceForm : Form
     Label Card(string title,int value,Color back)
     {
         var cardWidth=Math.Clamp((Math.Max(880,cards.ClientSize.Width)-70)/8,105,165);
+        if(summaryCards.TryGetValue(title,out var existing))
+        {
+            existing.Width=cardWidth;
+            existing.BackColor=back;
+            existing.Text=$"{title}\n{value:N0}";
+            return existing;
+        }
         var label=new Label{Width=cardWidth,Height=70,Margin=new Padding(4),BorderStyle=BorderStyle.None,
             Padding=new Padding(10,8,10,6),TextAlign=ContentAlignment.MiddleCenter,
             Font=new Font("Segoe UI",10f,FontStyle.Bold),ForeColor=Color.FromArgb(27,44,68),
             BackColor=back,Text=$"{title}\n{value:N0}",Cursor=Cursors.Hand};
         label.Paint+=(_,e)=>{using var p=new Pen(Color.FromArgb(214,225,238));e.Graphics.DrawRectangle(p,0,0,label.Width-1,label.Height-1);};
         label.Click+=(_,_)=>SelectStatusTab(title);
-        cards.Controls.Add(label);return label;
+        summaryCards[title]=label;
+        cards.Controls.Add(label);
+        return label;
     }
 
     void SelectStatusTab(string title)
@@ -250,7 +260,6 @@ public sealed partial class LiveAttendanceForm : Form
             grids["İzinli"].DataSource=Table(rows.Where(r=>r.FullLeave));
             grids["Tamamlanan"].DataSource=Table(rows.Where(r=>r.HasEntry&&r.HasExit));
             grids["Eşleşmeyen Kart"].DataSource=UnmatchedTable();
-            cards.Controls.Clear();
             Card("Beklenen",rows.Count(r=>r.Expected),Color.AliceBlue);Card("Gelen",rows.Count(r=>r.Expected&&r.HasEntry),Color.Honeydew);
             Card("Kart Basmayan",rows.Count(r=>r.Status=="Kart Basmadı"),Color.MistyRose);Card("İzinli",rows.Count(r=>r.FullLeave),Color.LemonChiffon);
             Card("İçeride",rows.Count(r=>r.Status=="İçeride"),Color.Honeydew);Card("Çıkış Eksik",rows.Count(r=>r.Status=="Çıkış Kartı Yok"),Color.MistyRose);

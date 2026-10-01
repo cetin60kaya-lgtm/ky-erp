@@ -29,9 +29,9 @@ public sealed partial class MainShellForm : Form
         branding = CompanyBranding.Load();
         var v = typeof(MainShellForm).Assembly.GetName().Version;
         Text = $"KYERP PDKS • {branding.ReportHeader} [Versiyon: {v?.Major ?? 2}.{v?.Minor ?? 2}.{v?.Build ?? 0}]";
-        WindowState = FormWindowState.Maximized;
+        WindowState = FormWindowState.Normal;
         MinimumSize = new Size(1100,700);
-        StartPosition = FormStartPosition.CenterScreen;
+        StartPosition = FormStartPosition.Manual;
         Font = new Font("Segoe UI",9f);
         DoubleBuffered = true;
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);

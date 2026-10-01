@@ -19,7 +19,7 @@ public sealed partial class MainShellForm
         cloudSyncBusy = true;
         try
         {
-            var result = await PdksCloudAgent.RunOnceAsync();
+            var result = await PdksCloudAgent.RunOnceAsync() ?? string.Empty;
             if (IsDisposed || terminalAutoBusy || string.IsNullOrWhiteSpace(result)) return;
 
             // Cloud is optional for local work. Missing cloud credentials must never replace
@@ -29,7 +29,7 @@ public sealed partial class MainShellForm
                 result.Contains("yapilandir", StringComparison.OrdinalIgnoreCase))
                 return;
 
-            if (!leadStatus.Text.StartsWith("Kart cihazı", StringComparison.OrdinalIgnoreCase))
+            if (!(leadStatus.Text ?? string.Empty).StartsWith("Kart cihazı", StringComparison.OrdinalIgnoreCase))
                 leadStatus.Text = result;
         }
         finally { cloudSyncBusy = false; }

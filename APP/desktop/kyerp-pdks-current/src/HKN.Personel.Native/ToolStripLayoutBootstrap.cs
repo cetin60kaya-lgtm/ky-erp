@@ -24,6 +24,7 @@ internal static class ToolStripLayoutBootstrap
 
     static void Attach(Form form)
     {
+        if (form is MainShellForm) return;
         var strips = Enumerate(form).OfType<ToolStrip>().ToList();
         for (var i = 0; i < strips.Count; i++)
         {

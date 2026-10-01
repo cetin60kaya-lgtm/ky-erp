@@ -190,6 +190,7 @@ public static class PdksTheme
         b.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
         b.Cursor = Cursors.Hand;
         b.Padding = new Padding(6, 1, 6, 1);
+        if (b.Parent is FlowLayoutPanel) b.MinimumSize = new Size(b.MinimumSize.Width, 30);
 
         var text = (b.Text ?? string.Empty).Trim();
         if (text.Contains("Kaydet", StringComparison.OrdinalIgnoreCase) ||

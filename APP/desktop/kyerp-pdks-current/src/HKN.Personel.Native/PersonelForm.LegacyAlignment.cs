@@ -7,8 +7,8 @@ public partial class PersonelForm
         base.OnLoad(e);
         if (TopLevel)
         {
-            Size = new Size(940, 731);
-            MinimumSize = new Size(940, 731);
+            Size = new Size(1220, 760);
+            MinimumSize = new Size(1220, 760);
         }
         Text = "Personel Bilgileri";
 

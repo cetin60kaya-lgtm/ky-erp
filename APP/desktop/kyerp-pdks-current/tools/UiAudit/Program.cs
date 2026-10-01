@@ -118,12 +118,54 @@ static void CaptureForm(Form form, string name, string root, StringBuilder log)
         grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
     form.Show();
     Application.DoEvents();
-    Thread.Sleep(form is LiveAttendanceForm ? 1800 : 120);
+    if (form is MainShellForm)
+    {
+        Capture(form, Path.Combine(root, $"{Safe(name)}__START-000ms.png"));
+        log.AppendLine($"STARTUP|{name}|000ms|{form.Bounds}|State={form.WindowState}");
+        Thread.Sleep(900);
+        Application.DoEvents();
+        Capture(form, Path.Combine(root, $"{Safe(name)}__START-900ms.png"));
+        log.AppendLine($"STARTUP|{name}|900ms|{form.Bounds}|State={form.WindowState}");
+        Thread.Sleep(1600);
+        Application.DoEvents();
+        Capture(form, Path.Combine(root, $"{Safe(name)}__START-2500ms.png"));
+        log.AppendLine($"STARTUP|{name}|2500ms|{form.Bounds}|State={form.WindowState}");
+        Thread.Sleep(2500);
+        Application.DoEvents();
+        Capture(form, Path.Combine(root, $"{Safe(name)}__START-5000ms.png"));
+        log.AppendLine($"STARTUP|{name}|5000ms|{form.Bounds}|State={form.WindowState}");
+    }
+    else
+    {
+        var settle = form is LiveAttendanceForm ? 2600
+            : form is PersonelForm ? 1200
+            : form.GetType().Name.Contains("Terminal", StringComparison.OrdinalIgnoreCase) ? 1800
+            : 650;
+        Thread.Sleep(settle);
+    }
     Application.DoEvents();
 
     log.AppendLine($"FORM|{name}|{form.Text}|{form.Width}x{form.Height}");
     WriteControlTree(form, log, 0);
     Capture(form, Path.Combine(root, Safe(name) + ".png"));
+
+    if (form is MainShellForm && form.MainMenuStrip is MenuStrip menu)
+    {
+        foreach (var item in menu.Items.OfType<ToolStripMenuItem>().Where(x => x.Visible && x.Enabled && x.DropDownItems.Count > 0))
+        {
+            item.ShowDropDown();
+            Application.DoEvents();
+            var menuWait = item.Text is "Yönetim" or "Ayarlar" ? 1100 : 700;
+            Thread.Sleep(menuWait);
+            Capture(form, Path.Combine(root, $"{Safe(name)}__MENU-{Safe(item.Text ?? "Menu")}.png"));
+            log.AppendLine($"MENU|{name}|{item.Text}|Wait={menuWait}ms");
+            Thread.Sleep(item.Text is "Yönetim" or "Ayarlar" ? 700 : 300);
+            Application.DoEvents();
+            item.HideDropDown();
+            Application.DoEvents();
+            Thread.Sleep(250);
+        }
+    }
 
     var tabs = Descendants(form).OfType<TabControl>().ToList();
     for (var t = 0; t < tabs.Count; t++)
@@ -133,8 +175,13 @@ static void CaptureForm(Form form, string name, string root, StringBuilder log)
         {
             tab.SelectedIndex = i;
             Application.DoEvents();
-            Thread.Sleep(60);
             var page = tab.TabPages[i];
+            var tabWait = name.Contains("Personel", StringComparison.OrdinalIgnoreCase) ? 850
+                : page.Text.Contains("Terminal", StringComparison.OrdinalIgnoreCase) ? 1200
+                : page.Text.Contains("Canlı", StringComparison.OrdinalIgnoreCase) ? 1200
+                : 450;
+            Thread.Sleep(tabWait);
+            Application.DoEvents();
             var file = $"{Safe(name)}__TAB{t + 1}-{i + 1}-{Safe(page.Text)}.png";
             Capture(form, Path.Combine(root, file));
             log.AppendLine($"TAB|{name}|{t + 1}|{i + 1}|{page.Text}");

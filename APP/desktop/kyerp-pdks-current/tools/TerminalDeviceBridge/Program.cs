@@ -14,7 +14,7 @@ internal static class Program
     private static int Main(string[] args)
     {
         var mode = args.Length > 0 ? args[0].ToLowerInvariant() : "status";
-        var ip = args.Length > 1 ? args[1] : "192.168.1.224";
+        var ip = args.Length > 1 ? args[1] : "192.168.127.10";
         var port = args.Length > 2 ? int.Parse(args[2], CultureInfo.InvariantCulture) : 5005;
         var machine = args.Length > 3 ? int.Parse(args[3], CultureInfo.InvariantCulture) : 1;
         Application.EnableVisualStyles();
@@ -31,7 +31,7 @@ internal static class Program
             {
                 string endpoint = ip;
                 if (!clock.SetIPAddress(ref endpoint, port, 0)) return Fail("Cihaz IP/port ayarı kabul edilmedi.");
-                if (!clock.OpenCommPort(machine)) return Fail("Kart cihazına bağlantı açılamadı.");
+                if (!clock.OpenCommPort(machine)) { int err = 0; try { clock.GetLastError(ref err); } catch { } return Fail("Kart cihazına bağlantı açılamadı. SDK hata kodu: " + err); }
                 try
                 {
                     clock.ReadMark = false;

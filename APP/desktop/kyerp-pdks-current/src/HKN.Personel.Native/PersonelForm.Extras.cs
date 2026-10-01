@@ -85,7 +85,9 @@ public partial class PersonelForm
         {
             var dt=Q("select KOD,AD,BASTAR,BITTAR,GRUP from DONEM order by BASTAR desc,GRUP");
             foreach(var c in new[]{periodG,periodI,periodE,periodB,periodO}){c.DisplayMember="AD";c.ValueMember="KOD";c.DataSource=dt.Copy();SelectPeriodForToday(c);}
-            DateTime first=new(DateTime.Today.Year,DateTime.Today.Month,1), last=first.AddMonths(1).AddDays(-1);foreach(var d in new[]{gFrom,iFrom,eFrom})d.Value=first;foreach(var d in new[]{gTo,iTo,eTo})d.Value=last;
+            SetDateRange(SelectedPeriodRow(periodG),gFrom,gTo);
+            SetDateRange(SelectedPeriodRow(periodI),iFrom,iTo);
+            SetDateRange(SelectedPeriodRow(periodE),eFrom,eTo);
             WireAllButtons();
         }
         catch{}

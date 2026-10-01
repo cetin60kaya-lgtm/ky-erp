@@ -63,9 +63,10 @@ internal static class TerminalDeviceClient
         psi.ArgumentList.Add(port);
         psi.ArgumentList.Add(machine);
 
+        Process? process = null;
         try
         {
-            using var process = Process.Start(psi);
+            process = Process.Start(psi);
             if (process is null) return ("STATUS|ERROR|Terminal köprüsü başlatılamadı.", "");
             var outputTask = process.StandardOutput.ReadToEndAsync(ct);
             var errorTask = process.StandardError.ReadToEndAsync(ct);
@@ -76,11 +77,16 @@ internal static class TerminalDeviceClient
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
+            try { if (process is { HasExited: false }) process.Kill(true); } catch { }
             return ("STATUS|ERROR|Kart cihazı zaman aşımına uğradı. IP/port ve ağ erişimini kontrol edin.", "");
         }
         catch (Exception ex)
         {
             return ("STATUS|ERROR|" + FriendlyTerminalError(ex.GetBaseException().Message), "");
+        }
+        finally
+        {
+            process?.Dispose();
         }
     }
 
