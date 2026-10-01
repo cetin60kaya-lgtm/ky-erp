@@ -7,23 +7,14 @@ $tool = 'APP/desktop/kyerp-pdks-current/tools/QuickDataTool'
 $mainPath = Join-Path $tool 'MainForm.cs'
 $syncPath = Join-Path $tool 'DbTnfSyncInjector.cs'
 
-# -----------------------------------------------------------------------------
 # 1) CONNECTION MUST BE LIGHTWEIGHT.
-# REV9 connected and immediately loaded every legacy tab + audit on the UI thread.
-# With a real Hedef DB this can make WinForms look hung. Connect only establishes DB.
-# Every screen already has explicit Listele/Yenile buttons; DB-TNF refreshes when opened.
-# -----------------------------------------------------------------------------
 $m = Get-Content $mainPath -Raw
 $heavy = '        LoadPeople(); LoadIo(); LoadPayroll(); LoadPayments(); LoadAdvances(); RebuildDays(); RebuildEDays(); LoadAudit();'
 if (-not $m.Contains($heavy)) { throw 'REV14 heavy Connect marker not found.' }
 $m = $m.Replace($heavy, '        // REV14: connection only. Heavy screens load on demand; DB-TNF is DB-first/lazy.')
 Set-Content $mainPath $m -Encoding UTF8 -NoNewline
 
-# -----------------------------------------------------------------------------
 # 2) FINAL AUDIT = WHOLE TNF YEAR WHEN POSSIBLE.
-# TR2026 must be compared against the DB for the full 2026 year, so a missing tail
-# record cannot be hidden just because TNF max date stops early.
-# -----------------------------------------------------------------------------
 $s = Get-Content $syncPath -Raw
 $oldRange = @'
             auditStartOverride = dates.Min();
@@ -63,15 +54,11 @@ $newRange = @'
 if (-not $s.Contains($oldRange)) { throw 'REV14 FinalFullAudit range marker not found.' }
 $s = $s.Replace($oldRange, $newRange)
 
-# -----------------------------------------------------------------------------
 # 3) ONE USER-DRIVEN FIX BUTTON.
-# User selects exactly the rows they want; only safe, deterministic TNF operations
-# are applied. INCELE is never auto-modified. After every change, whole-file audit runs.
-# -----------------------------------------------------------------------------
 $buttonMarker = '        bar.Controls.Add(B("SON TAM KONTROL", FinalFullAudit, 145));'
-$buttonReplace = $buttonMarker + "`r`n        bar.Controls.Add(B(\"SEÇİLİ HATALARI DÜZELT\", ApplySelectedIssues, 190));"
+$buttonAdd = '        bar.Controls.Add(B("SEÇİLİ HATALARI DÜZELT", ApplySelectedIssues, 190));'
 if (-not $s.Contains($buttonMarker)) { throw 'REV14 SON TAM KONTROL button marker not found.' }
-$s = $s.Replace($buttonMarker, $buttonReplace)
+$s = $s.Replace($buttonMarker, $buttonMarker + "`r`n" + $buttonAdd)
 
 $applyMarker = '    void ApplyMissing(bool selectedOnly)'
 $selectedMethod = @'
@@ -111,16 +98,13 @@ $newAfterApply = @'
 if (-not $s.Contains($oldAfterApply)) { throw 'REV14 ApplyRows completion marker not found.' }
 $s = $s.Replace($oldAfterApply, $newAfterApply)
 
-# Clarify source-of-truth note.
 $s = $s.Replace(
     'DB sadece kaynak olarak okunur. Düzeltmeler seçili TNF/TXT dosyasına uygulanır; işlem öncesi _YEDEK alınır. Çoklu/belirsiz eşleşmeler otomatik değiştirilmez.',
     'DB ANA KAYNAKTIR. Önce DB hareketleri taranır; TNF DB ile birebir karşılaştırılır. Seçilen güvenli hatalar TNF üzerinde düzeltilir, İNCELE satırlarına dokunulmaz. Son işlem daima TAM KONTROLdür.')
 
 Set-Content $syncPath $s -Encoding UTF8 -NoNewline
 
-# -----------------------------------------------------------------------------
 # 4) HARD AUDIT
-# -----------------------------------------------------------------------------
 $mc = Get-Content $mainPath -Raw
 $sc = Get-Content $syncPath -Raw
 if ($mc.Contains($heavy)) { throw 'REV14 heavy Connect chain still exists.' }
