@@ -42,7 +42,7 @@ internal static class DbTnfSyncInjector
 		{
 			tabControl.TabPages.Remove(item);
 		}
-		TabPage tabPage = new TabPage("DB - TNF Eşitle")
+        TabPage tabPage = new TabPage("AYLIK KONTROL")
 		{
 			Padding = new Padding(8),
 			BackColor = Color.White

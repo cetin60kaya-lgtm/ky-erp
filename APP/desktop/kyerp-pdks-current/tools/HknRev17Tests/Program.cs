@@ -120,6 +120,7 @@ internal static class Program
             Check(Count(Compare([Db(), late], []), "TNF EKLE") == 2, "empty TNF still detects full-year DB");
             var listing = SyncEngine.ListTerminal([Tnf(), Tnf(1)], People, CancellationToken.None);
             Check(listing.Rows.Count == 2 && listing.Rows[0].Field<string>("Durum") == "TNF LİSTE", "terminal listing preserves physical duplicate rows");
+            MonthlyTests.Run(Check, args.Length == 2 ? args[0] : null, args.Length == 2 ? args[1] : null);
             if (args.Length == 2)
             {
                 FixtureCorrections();
@@ -329,7 +330,7 @@ internal static class Program
             Check(Count(planCheck,"TNF SİL FAZLA")==0 && Count(planCheck,"TNF DÜZELT")==0 && Count(planCheck,"TNF SİL E")==0, "live memory-only output plan reaches zero safe surplus time and E errors");
             Check(dbGrid.Columns.Cast<DataGridViewColumn>().All(column=>column is not DataGridViewCheckBoxColumn), "simplified grids contain no selection checkbox");
             var buttons=Descendants(control).OfType<Button>().Where(button=>button.Text!="İptal").Select(button=>button.Text).ToArray();
-            Check(buttons.Length==5 && buttons.Contains("TÜM GÜVENLİLERİ UYGULA") && buttons.Contains("ÇIKTI DOSYALARINI AÇ") && !buttons.Any(button=>button.Contains("DB KAYDINI")), "only five final buttons and no DB cleanup action");
+            Check(buttons.Length==6 && buttons.Contains("BU AYI KONTROL ET") && buttons.Contains("DB GÜVENLİLERİ DÜZELT") && buttons.Contains("DB EKSİKLERİ TAMAMLA") && buttons.Contains("TNF'Yİ DB'YE GÖRE DÜZELT") && buttons.Contains("SON TAM KONTROL") && buttons.Contains("ÇIKTI DOSYALARINI AÇ"), "REV21 only six monthly buttons; DB and TNF stages clearly separated");
             Console.WriteLine($"REV20_READONLY_PLAN safe={safeRows.Length} missing={livePlan.Missing.Length} corrected_lines={livePlan.Corrected.Length} plan_ms={planClock.ElapsedMilliseconds}");
             await control.RunAuditAsync(true, true);
             var grid = (DataGridView)typeof(DbTnfSyncControl).GetField("dbGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
@@ -341,6 +342,17 @@ internal static class Program
             ((CancellationTokenSource)typeof(DbTnfSyncControl).GetField("cancellation", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!).Cancel();
             await cancelledAudit;
             Check(!control.IsBusy && control.LastSnapshot is null, "actual control cancellation clears unsafe snapshot");
+            var monthPicker = (ComboBox)typeof(DbTnfSyncControl).GetField("month", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
+            monthPicker.SelectedIndex = 5;
+            searchBox.Text = "";
+            maximum = 0;
+            last = clock.ElapsedMilliseconds;
+            await control.RunAuditAsync(false);
+            await Task.Delay(100);
+            Check(control.LastMonthlySnapshot is not null && control.LastSnapshot!.Request.Start==new DateTime(2026,5,1) && control.LastSnapshot.Request.End==new DateTime(2026,6,1), "REV21 monthly UI audits full selected month with DB findings");
+            Check(maximum < 2000, "REV21 monthly DB/TNF UI heartbeat stays below two seconds");
+            Console.WriteLine($"REV21_MONTHLY_UI grid_bind_ms={control.LastGridMilliseconds} total_ms={control.LastTotalMilliseconds} max_heartbeat_gap_ms={maximum}");
+            using (var image = new System.Drawing.Bitmap(owner.Width,owner.Height)) { owner.DrawToBitmap(image, new System.Drawing.Rectangle(0,0,owner.Width,owner.Height)); image.Save("D:/Googledrive/KYERP-PDKS-MASAUSTU/08_TEST/REV21_UI_READONLY.png"); }
             }
             catch (Exception exception) { uiFailure = exception; }
             finally { owner.Close(); }

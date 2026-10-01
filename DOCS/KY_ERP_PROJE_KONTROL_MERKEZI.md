@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.10.2026 — HKN PDKS REV21 aylık DB kontrol ve ayrı TNF hazırlama
+
+- Son ek gereksinime göre AYLIK KONTROL: altı düğme, DB bulguları / hizalı DB–TNF detayları; diğer modüller ve parola korunur. [REV21 güvenlik/test/release notları](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV21.md).
+- DB temizliği ile eksik saat üretimi ayrı onaylı işlemlerdir. Başarılı gbak + satır dump + consistency transaction + metadata yeniden doğrulama; hata/iptalde rollback. Gerçek saatler, ay dışı karşı taraf, gerçek çift vardiya ve Ağustos kilidi korunur.
+- TNF aşaması DB readonly; orijinal TNF korunarak DUZELTILMIS/EKSIK çıktı. E'den eksik üretilmez, gerçek DB kart/tarih/saat bire bir korunur. Son kontrol tüm seçili ayı kapsar.
+- 156 assertion ve standart PDKS_DENETIM_PASS (39 fonksiyon/24 form/0 hata). Canlı dosyalar yalnız okundu; yazma/rollback/gbak testleri yalnız sentetik DB'dedir. Aylık UI toplam 305 ms, bind 17 ms, heartbeat 129 ms.
+- İstenen canlı fazla-giriş örneği görülür; aynı gün DB izin/tatil istisnası olduğundan İNCELE ve otomatik silmeme koruması uygulanır. Kişisel kayıt ayrıntıları yalnız yerel kanıttadır. 2026 dışı takvimde otomatik saat üretimi kapalıdır; bilinmeyen GIRCIK/DB trigger'ında DB yazması engellenir.
+- .NET 8 win-x64 self-contained single-file REV21 final üretildi; parola ekranı Responding=True. Eski paketler ve görev dışı kirli MainForm değişiklikleri korunur. Şirket dosyaları, loglar, verifier ve binary Git'e eklenmez; kullanıcı saha kabulü ayrıca beklenir.
+
 ## 01.10.2026 — HKN PDKS REV20 salt okunur DB ve ayrı TNF çıktıları
 
 - REV19 hızlı veri projesi 20.0.0 olarak sadeleştirildi. DB–TNF motorunda yalnız SELECT; eski DB temizliği ve seçim düğmeleri kaldırıldı. Diğer modüller/açılış şifresi korunur. Ayrıntı: [REV20 kaynak ve test notları](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV20.md).

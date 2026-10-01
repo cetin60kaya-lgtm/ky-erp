@@ -8,7 +8,7 @@ using KYERP.PDKS.Core;
 
 namespace QuickDataTool;
 
-internal sealed class DbTnfSyncControl : UserControl
+internal sealed partial class DbTnfSyncControl : UserControl
 {
     readonly Form main;
     readonly NumericUpDown year = new() { Minimum = 2010, Maximum = 2100, Width = 75, Value = DateTime.Today.Year };
@@ -16,12 +16,12 @@ internal sealed class DbTnfSyncControl : UserControl
     readonly TextBox search = new() { Width = 180, PlaceholderText = "Kart / ad soyad ara" };
     readonly ComboBox statusFilter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 90 };
     readonly CheckBox errorsOnly = new() { Text = "Sadece Hatalı", AutoSize = true, Checked = true };
-    readonly CheckBox hasMovement = new() { Text = "Dönemde hareketi olan", AutoSize = true, Checked = true };
+    readonly CheckBox hasMovement = new() { Text = "Dönemde hareketi olan", AutoSize = true, Checked = false };
     readonly Label summary = new() { Dock = DockStyle.Bottom, Height = 42, Padding = new Padding(8), Text = "Önce DB'ye bağlanın; Kontrol Et veya SON TAM KONTROL çalıştırın." };
     TnfOutputs? lastOutputs;
     string outputSourcePath = "";
     readonly Label personnelSummary = new() { Dock = DockStyle.Fill, Padding = new Padding(12), Font = new Font("Segoe UI", 11), Text = "Karşılaştırmak için soldan personel seçin." };
-    readonly Label details = new() { Dock = DockStyle.Bottom, Height = 45, Padding = new Padding(8), Text = "Soldan personel seçin, BU PERSONELİ DB'YE GÖRE DÜZELT ile güvenli hataları topluca uygulayın. Orijinal TNF korunur; düzeltilmiş ve eksik dosyaları ayrı hazırlanır. İNCELE değişmez." };
+    readonly Label details = new() { Dock = DockStyle.Bottom, Height = 64, Padding = new Padding(8), Text = "Ayı kontrol edin → DB güvenlileri düzeltin / eksikleri ayrı onayla tamamlayın → TNF'yi DB'ye göre hazırlayın. Gerçek saatler, orijinal TNF ve belirsiz vardiyalar korunur." };
     readonly ProgressBar progressBar = new() { Width = 105, Height = 26, Style = ProgressBarStyle.Marquee, Visible = false };
     readonly Button cancel = new() { Text = "İptal", Width = 65, Height = 32, Enabled = false };
     readonly DataGridView peopleGrid = Grid();
@@ -99,11 +99,19 @@ internal sealed class DbTnfSyncControl : UserControl
             operationControls.Add(button);
             (group ?? checkBar).Controls.Add(button);
         }
-        Button("KONTROL ET", () => RunAuditAsync(false), 105);
-        Button("SON TAM KONTROL", () => RunAuditAsync(true), 145, Color.LightBlue);
-        Button("BU PERSONELİ DB'YE GÖRE DÜZELT", ApplyPersonAsync, 255, Color.LightGreen, personBar);
-        Button("TÜM GÜVENLİLERİ UYGULA", ApplyAllSafeAsync, 215, Color.LightGreen, personBar);
+        Button("BU AYI KONTROL ET", () => RunAuditAsync(false), 155);
+        Button("SON TAM KONTROL", () => RunAuditAsync(false), 145, Color.LightBlue);
+        Button("DB GÜVENLİLERİ DÜZELT", RepairDbAsync, 190, Color.MistyRose, personBar);
+        Button("DB EKSİKLERİ TAMAMLA", CompleteDbAsync, 190, Color.LemonChiffon, personBar);
+        Button("TNF'Yİ DB'YE GÖRE DÜZELT", ApplyAllSafeAsync, 215, Color.LightGreen, personBar);
         Button("ÇIKTI DOSYALARINI AÇ", OpenOutputsAsync, 185, group: personBar);
+        var paths = new Label { AutoSize = true, MaximumSize = new Size(1450, 65), Padding = new Padding(4) };
+        void UpdatePaths() => paths.Text = "DB: " + (main.GetType().GetField("dbPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) as TextBox)?.Text + "\nTNF: " + TnfPathBox?.Text;
+        UpdatePaths();
+        if (TnfPathBox is { } sourceBox) sourceBox.TextChanged += (_, _) => UpdatePaths();
+        if (main.GetType().GetField("dbPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) is TextBox databaseBox)
+            databaseBox.TextChanged += (_, _) => { UpdatePaths(); InvalidateResult(); monthlySnapshot = null; };
+        bar.Controls.Add(paths);
         cancel.Click += (_, _) => cancellation?.Cancel();
         checkBar.Controls.AddRange([progressBar, cancel]);
         operationControls.AddRange([year, month, statusFilter, errorsOnly, hasMovement, search]);
@@ -123,14 +131,21 @@ internal sealed class DbTnfSyncControl : UserControl
         comparison.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         comparison.Controls.Add(GridPanel("DB — ANA KAYNAK", dbGrid), 0, 0);
         comparison.Controls.Add(GridPanel("TNF — DÜZELTİLECEK DOSYA", tnfGrid), 1, 0);
-        right.Controls.Add(comparison, 0, 1);
+        var tabs = new TabControl { Dock = DockStyle.Fill };
+        var tnfPage = new TabPage("DB / TNF — AYNI HİZADA");
+        tnfPage.Controls.Add(comparison);
+        var dbPage = new TabPage("DB KONTROL / ONAY BEKLEYEN EKSİKLER");
+        ConfigureMonthlyGrid();
+        dbPage.Controls.Add(monthlyGrid);
+        tabs.TabPages.AddRange([dbPage, tnfPage]);
+        right.Controls.Add(tabs, 0, 1);
         split.Panel2.Controls.Add(right);
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
         bar.Dock = details.Dock = summary.Dock = DockStyle.Fill;
         summary.BackColor = Color.FromArgb(234,242,250);
         layout.Controls.Add(bar, 0, 0);
@@ -250,6 +265,7 @@ internal sealed class DbTnfSyncControl : UserControl
             var match = Regex.Match(Path.GetFileNameWithoutExtension(path), @"(?<!\d)(20\d{2})(?!\d)");
             if (match.Success) selectedYear = int.Parse(match.Value);
         }
+        if (!full && month.SelectedIndex == 0) throw new InvalidOperationException("Aylık kontrol için tek bir ay seçin.");
         var start = new DateTime(selectedYear, full || month.SelectedIndex == 0 ? 1 : month.SelectedIndex, 1);
         var end = full || month.SelectedIndex == 0 ? start.AddYears(1) : start.AddMonths(1);
         var settings = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HKN-PDKS", "TNF_FORMAT_AYAR.json");
@@ -261,6 +277,7 @@ internal sealed class DbTnfSyncControl : UserControl
     {
         foreach (var control in operationControls) control.Enabled = !busy;
         peopleGrid.Enabled = dbGrid.Enabled = tnfGrid.Enabled = !busy;
+        monthlyGrid.Enabled = !busy;
         progressBar.Visible = busy;
         cancel.Enabled = busy;
         if (busy) summary.Text = "Kontrol ediliyor...";
@@ -333,6 +350,7 @@ internal sealed class DbTnfSyncControl : UserControl
         }
         selectedCard = person.Card == "FORMAT" ? "" : person.Card;
         visiblePairs = byCard.GetValueOrDefault(selectedCard) ?? [];
+        ShowMonthlyPerson();
         Bind(dbGrid, visiblePairs);
         Bind(tnfGrid, visiblePairs);
         personnelSummary.Text = $"{person.Card}  {person.Name}\nDB Durumu (DURUM.AD): {person.DbStatus}\nİşe Giriş Tarihi: {person.Hire}     İşten Çıkış Tarihi: {person.Exit}\nEfektif Durum: {person.Status} (dönem sonu)     {person.Note}\nDB Hareket: {person.DbCount}     TNF Hareket: {person.TnfCount}\nSonuç: {person.Result}";
@@ -346,6 +364,8 @@ internal sealed class DbTnfSyncControl : UserControl
         var total = Stopwatch.StartNew();
         SetBusy(true);
         SetSnapshot(null);
+        monthlySnapshot = null;
+        monthlyGrid.DataSource = null;
         try
         {
             var database = Database ?? throw new InvalidOperationException("Önce DB'ye bağlanın.");
@@ -354,7 +374,8 @@ internal sealed class DbTnfSyncControl : UserControl
             var prepared = await Task.Run(async () =>
             {
                 var result = await SyncEngine.ReadAsync(database, request, token, progress, listOnly);
-                return (Result: result, View: PrepareView(result, token), Summary: Summary(result.Table));
+                var monthly = !listOnly && request.End == request.Start.AddMonths(1) ? MonthlyDbAudit.Read(database, result, token) : null;
+                return (Result: result, Monthly: monthly, View: PrepareMonthlyView(result, monthly, token), Summary: Summary(result.Table));
             }, token);
             token.ThrowIfCancellationRequested();
             if (IsDisposed || main.IsDisposed) return;
@@ -362,6 +383,7 @@ internal sealed class DbTnfSyncControl : UserControl
             var bind = Stopwatch.StartNew();
             byCard = prepared.View.Groups;
             people = prepared.View.People;
+            monthlySnapshot = prepared.Monthly;
             SetSnapshot(listOnly ? null : prepared.Result);
             snapshotDatabase = database;
             if (listOnly) errorsOnly.Checked = false;
@@ -369,9 +391,10 @@ internal sealed class DbTnfSyncControl : UserControl
             LastGridMilliseconds = bind.ElapsedMilliseconds;
             LastTotalMilliseconds = total.ElapsedMilliseconds;
             summary.Text = $"{(full ? "SON TAM KONTROL" : listOnly ? "TNF Listele" : "Kontrol")} {request.Start:dd.MM.yyyy}–{request.End:dd.MM.yyyy} | {prepared.Summary}";
+            if (monthlySnapshot is not null) details.Text = MonthlyDbAudit.Summary(monthlySnapshot);
             if (lastOutputs is not null && request.Path == lastOutputs.CorrectedPath && lastOutputs.MissingCount > 0)
                 summary.Text += $" | EKSİK TNF HAZIR: {lastOutputs.MissingCount}";
-            SyncEngine.Log($"REV20 db_query_ms={prepared.Result.DbMilliseconds} tnf_read_parse_ms={prepared.Result.TnfMilliseconds} compare_ms={prepared.Result.CompareMilliseconds} grid_bind_ms={LastGridMilliseconds} total_ms={LastTotalMilliseconds} db_events={prepared.Result.Db.Count} rows={prepared.Result.Table.Rows.Count}");
+            SyncEngine.Log($"REV21 db_query_ms={prepared.Result.DbMilliseconds} monthly_db_audit_ms={prepared.Monthly?.Milliseconds ?? 0} tnf_read_parse_ms={prepared.Result.TnfMilliseconds} compare_ms={prepared.Result.CompareMilliseconds} grid_bind_ms={LastGridMilliseconds} total_ms={LastTotalMilliseconds} db_events={prepared.Result.Db.Count} rows={prepared.Result.Table.Rows.Count}");
         }
         catch (OperationCanceledException) { if (!IsDisposed) summary.Text = "Kontrol iptal edildi; sonuç uygulanamaz."; }
         catch (Exception exception) { if (!IsDisposed) { summary.Text = "Kontrol başarısız; eski sonuç uygulanamaz."; MessageBox.Show(main, exception.Message, "DB - TNF Eşitle", MessageBoxButtons.OK, MessageBoxIcon.Error); } }
@@ -424,8 +447,10 @@ internal sealed class DbTnfSyncControl : UserControl
     {
         if (IsBusy || snapshot is null || !ReferenceEquals(snapshotDatabase, Database) || !MatchesSource(snapshot.Request.Path))
         { MessageBox.Show(main, "Önce KONTROL ET çalıştırın."); return; }
-        await RunAuditAsync(true);
+        await RunAuditAsync(false);
         if (snapshot is null || IsDisposed) return;
+        if (monthlySnapshot is null || monthlySnapshot.Issues.Any(issue => issue.Safe))
+        { MessageBox.Show(main, "Önce DB güvenli hatalarını düzeltin. Gerçek belirsizlikler otomatik değiştirilmez."); return; }
         var rows = snapshot.Table.AsEnumerable().Where(SyncEngine.SafeOperation).ToArray();
         if (rows.Length == 0) { MessageBox.Show(main, "Güvenli TNF işlemi yok; İNCELE kayıtları değişmez."); return; }
         await ApplyAsync(rows);
@@ -455,7 +480,7 @@ internal sealed class DbTnfSyncControl : UserControl
         finally { cancellation.Dispose(); cancellation = null; if (!IsDisposed) SetBusy(false); }
         if (succeeded && !IsDisposed)
         {
-            await RunAuditAsync(true);
+            await RunAuditAsync(false);
             if (snapshot is not null)
             {
                 details.Text = $"Orijinal TNF korundu. SON TAM KONTROL düzeltilmiş dosyada yapıldı. Eksik dosyasını Hedef'e ayrıca okutun. Çıktı: {lastOutputs.CorrectedPath}";
