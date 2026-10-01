@@ -1,0 +1,51 @@
+name: QuickDataTool REV15 Fast Audit
+
+on:
+  push:
+    branches:
+      - codex/quickdata-tnf-tab-rev4
+    paths:
+      - '.github/workflows/quickdata-rev15-fast-audit.yml'
+      - '.github/scripts/quickdata-rev15-fast-audit.ps1'
+      - '.github/scripts/quickdata-rev14-final.ps1'
+      - '.github/scripts/quickdata-rev12-runfix.ps1'
+      - '.github/scripts/quickdata-rev12-dbfirst.ps1'
+      - '.github/scripts/quickdata-rev9-final2-build.ps1'
+      - '.github/scripts/quickdata-rev9-final-build.ps1'
+      - '.github/scripts/quickdata-rev8-build.ps1'
+  workflow_dispatch:
+
+jobs:
+  build-test-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Apply REV15 source
+        shell: pwsh
+        run: ./.github/scripts/quickdata-rev15-fast-audit.ps1
+      - name: Build
+        shell: pwsh
+        run: dotnet build APP/desktop/kyerp-pdks-current/tools/QuickDataTool/QuickDataTool.csproj -c Release
+      - name: Contract tests
+        shell: pwsh
+        run: dotnet run --project APP/desktop/kyerp-pdks-current/tools/ContractTests/ContractTests.csproj -c Release
+      - name: Publish
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'rev15'
+          dotnet publish APP/desktop/kyerp-pdks-current/tools/QuickDataTool/QuickDataTool.csproj -c Release -r win-x64 --self-contained true -o $out -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false
+          $final = Join-Path $env:RUNNER_TEMP 'final15'
+          New-Item -ItemType Directory -Force -Path $final | Out-Null
+          Copy-Item (Join-Path $out 'QuickDataTool.exe') (Join-Path $final 'HKN-PDKS-REV15-FINAL.exe')
+          Get-FileHash (Join-Path $final 'HKN-PDKS-REV15-FINAL.exe') -Algorithm SHA256 | ForEach-Object { $_.Hash } | Set-Content (Join-Path $final 'HKN-PDKS-REV15-FINAL.sha256.txt')
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: HKN-PDKS-REV15-FINAL
+          path: ${{ runner.temp }}\final15\*
+          retention-days: 14
