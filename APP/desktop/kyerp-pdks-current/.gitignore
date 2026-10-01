@@ -10,6 +10,9 @@ artifacts/
 **/.runtime/
 private-runtime/
 **/private-runtime/
+legacy/
+legacy-analysis/
+legacy-runtime/
 *.gdb
 *.GDB
 *.gbk

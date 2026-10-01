@@ -35,14 +35,14 @@ Korunacaklar:
 2. `docs/UI_PARITY_LOCK.md`
 3. `docs/ARCHITECTURE_TARGET.md`
 4. `docs/CODEX_HANDOFF.md`
-5. `legacy-runtime/MANIFEST.md`
+5. `AGENTS.md` ve `00_PROJE/PDKS_PROJE_KURALLARI_CANONICAL.md` (workspace canonical kuralları)
 
 Kurallar:
 - Mevcut çalışan KYERP işlevlerini değiştirme veya silme.
 - Hedef'teki bütün menü/işlev/raporları envanterle; eksik olanları KYERP düzenine göre eşle.
 - Firebird DB şemasına destructive değişiklik yapma.
 - `Hedef.exe` üzerinde patch/reverse engineering yapma.
-- Aktif kaynak ile `legacy/` kaynaklarını net ayır.
+- Aktif kaynak yalnız `src/` + `tools/` altında tutulur; tarihsel legacy kaynaklar repo dışında workspace `02_REFERANS` arşivindedir.
 - Önce çözüm/proje klasörlerini, configuration ve data-access katmanını düzenle.
 - KYERP UI alan isimlerini, yerleşimini ve kullanıcı akışını koru.
 - Her önemli adımda build al; build kırık bırakma.

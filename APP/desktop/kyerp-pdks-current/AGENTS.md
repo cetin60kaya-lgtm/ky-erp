@@ -22,3 +22,13 @@ Rules:
 10. Preserve old releases; archive superseded accepted revisions under `99_ARSIV`.
 11. Use Remote Desktop only for necessary local checks/actions; prefer the shared Drive workspace for files.
 12. One computer at a time may make source/data changes in this shared workspace.
+13. GitHub remote is mandatory as the shared code mirror: `https://github.com/cetin60kaya-lgtm/ky-erp.git`.
+14. Active PDKS branch is `codex/kyerp-pdks-full-app-prep`; do not work on a different branch unless explicitly requested.
+15. After each logical, tested revision run `git diff --check`, then commit with a meaningful message and push the active branch.
+16. Do not depend on Remote Desktop for source availability; the Drive clone and GitHub branch must both stay usable.
+17. Never commit company DATA/TNF/live records, credentials, licenses, private runtime files, or proprietary third-party binaries to GitHub.
+18. Before pushing, verify `git status`, current branch, and that no private/runtime data is staged.
+19. Use `PDKS_DENETIM.ps1` as the standard local verification gate; it runs restore/build/contract/shell/UI audit/V4 smoke and writes evidence under `08_TEST`.
+20. `tools/UiAudit` is the canonical GUI/UI audit utility; its screenshots and logs must stay under the shared workspace `08_TEST` tree.
+21. For difficult multi-file analysis/refactors, VS Code/Codex may be used against this canonical source tree, but it must not create another working copy.
+22. Historical legacy source is archived outside the active source tree under workspace `02_REFERANS`; do not restore it into active build paths without an explicit need.

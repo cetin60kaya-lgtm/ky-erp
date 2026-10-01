@@ -17,7 +17,7 @@ Bu dosya, `codex/kyerp-pdks-full-app-prep` dalındaki PDKS revizyonunu plan yazm
 3. `docs/CODEX_HANDOFF.md`
 4. `docs/ARCHITECTURE_TARGET.md`
 5. `README.md`
-6. `legacy-runtime/MANIFEST.md`
+6. `AGENTS.md` ve workspace `00_PROJE/PDKS_PROJE_KURALLARI_CANONICAL.md`
 
 ## Görev paylaşımı
 
@@ -53,7 +53,7 @@ Bu repo büyüktür. Gereksiz context tüketme.
 ## Faz 0 — Baseline doğrulama
 
 - Repo/branch durumunu doğrula.
-- `APP/desktop/kyerp-pdks-current` altındaki aktif ve legacy kaynakları envanterle.
+- `APP/desktop/kyerp-pdks-current` altındaki aktif `src/`, `tools/`, `docs/` ve build kaynaklarını envanterle; tarihsel legacy kaynaklar workspace `02_REFERANS` arşivindedir.
 - .NET solution/projeleri, Node katmanlarını ve PDKS ile ilgili web/API yollarını belirle.
 - Mevcut build komutlarını çalıştır; baseline hataları ayrı kaydet.
 - Build kırığını yeni değişikliklerle karıştırma; önce mevcut durumu belgele.
@@ -110,7 +110,7 @@ Her Hedef işlevi için:
 ## Faz 3 — Kaynak/mimari temizlik
 
 - Tek `KYERP.PDKS.sln` veya `.slnx` kullan.
-- Aktif `src/` ile `legacy/` ayrımını netleştir.
+- Aktif kodu `src/` + `tools/` altında tut; tarihsel legacy kaynaklar aktif repoya geri eklenmez, workspace `02_REFERANS` arşivinde kalır.
 - Büyük form/partial dosyalarını UI, domain, service, data, reports, dialogs sorumluluklarına ayır.
 - Hard-coded DB yolu/parola/ortam bağımlılıklarını merkezi configuration'a taşı.
 - Firebird erişimini repository/service katmanına al.

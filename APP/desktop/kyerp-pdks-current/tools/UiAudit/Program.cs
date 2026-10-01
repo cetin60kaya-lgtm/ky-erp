@@ -12,7 +12,12 @@ foreach (var key in new[] { "KY_PDKS_DB_PATH", "KY_PDKS_DB_HOST", "KY_PDKS_DB_PO
 }
 
 var noLoad = string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_NOLOAD"), "1", StringComparison.Ordinal);
-var driveRoot = Directory.Exists(@"D:\") ? @"D:\KYERP\_UI_AUDIT" : Path.Combine(Path.GetTempPath(), "KYERP", "_UI_AUDIT");
+var workspaceRoot = Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT", EnvironmentVariableTarget.User);
+var driveRoot = !string.IsNullOrWhiteSpace(workspaceRoot)
+    ? Path.Combine(workspaceRoot, "08_TEST", "UI_AUDIT")
+    : (Directory.Exists(@"D:\Googledrive\KYERP-PDKS-MASAUSTU")
+        ? @"D:\Googledrive\KYERP-PDKS-MASAUSTU\08_TEST\UI_AUDIT"
+        : Path.Combine(Path.GetTempPath(), "KYERP", "_UI_AUDIT"));
 var root = Path.Combine(driveRoot, DateTime.Now.ToString("yyyyMMdd-HHmmss"));
 Directory.CreateDirectory(root);
 var log = new StringBuilder();
