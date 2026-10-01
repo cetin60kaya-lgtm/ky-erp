@@ -54,7 +54,7 @@ internal static partial class SyncEngine
         var directory = Path.Combine(Path.GetDirectoryName(snapshot.Request.Path)!, "_YEDEK");
         Directory.CreateDirectory(directory);
         var backup = Path.Combine(directory, Path.GetFileName(snapshot.Request.Path) + $".bak_{DateTime.Now:yyyyMMdd_HHmmss_fff}_{Guid.NewGuid():N}");
-        var temporary = snapshot.Request.Path + $".tmp_REV17_{Guid.NewGuid():N}";
+        var temporary = snapshot.Request.Path + $".tmp_REV18_{Guid.NewGuid():N}";
         using var lease = new FileStream(snapshot.Request.Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
         if (Convert.ToHexString(await SHA256.HashDataAsync(lease, cancellation).ConfigureAwait(false)) != snapshot.FileHash)
             throw new InvalidOperationException("TNF kontrol sonrasında değişmiş.");
@@ -86,7 +86,7 @@ internal static partial class SyncEngine
                     dump.Add(record);
                 }
                 var dumpPath = backup + ".GIRCIK.json";
-                var dumpBytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { Version = 17, CapturedAt = DateTime.Now, Rows = dump }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                var dumpBytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { Version = 18, CapturedAt = DateTime.Now, Rows = dump }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
                 using (var dumpStream = new FileStream(dumpPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 {
                     await dumpStream.WriteAsync(dumpBytes, cancellation).ConfigureAwait(false);

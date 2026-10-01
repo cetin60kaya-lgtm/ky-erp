@@ -60,6 +60,12 @@ internal sealed class TnfFormat
         try
         {
             raw = raw.TrimStart('\uFEFF');
+            foreach (var separator in Separators.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = separator.Split('=');
+                var position = int.Parse(parts[0]) - 1;
+                if (position < 0 || position >= raw.Length || parts[1].Length != 1 || raw[position] != parts[1][0]) return false;
+            }
             string Slice(int start, int length) => raw.Substring(start - 1, length).Trim();
             var card = Slice(CardStart, CardLen);
             var date = DateTime.ParseExact(Slice(DayStart, DayLen) + Slice(MonthStart, MonthLen) + Slice(YearStart, YearLen),
@@ -80,29 +86,36 @@ internal sealed class TnfFormat
 
 internal sealed record DbMovement(int Id, string Card, DateTime Date, string Side, string Time, string Tur);
 internal sealed record TnfMovement(int Index, string Raw, string Card, DateTime Date, string Time, bool Standard = true);
-internal sealed record EmploymentRule(string Card, string Name, DateTime? Hire, DateTime? Exit, bool? Active, bool Ambiguous = false, string? StatusCode = null)
+internal sealed record EmploymentRule(string Card, string Name, DateTime? Hire, DateTime? Exit, bool? Active, bool Ambiguous = false, string? StatusCode = null, string RawStatus = "")
 {
+    public string EffectiveStatus(DateTime reference)
+    {
+        if (Ambiguous || Hire is null || Exit < Hire && Active == false) return "İNCELE";
+        if (reference < Hire && (Exit is null || Exit >= Hire)) return "HENÜZ İŞE BAŞLAMAMIŞ";
+        if (Exit >= Hire && reference > Exit) return "PASİF / ÇIKIŞ YAPMIŞ";
+        if (Exit < Hire && reference > Exit && reference < Hire) return "İŞE GİRİŞLER ARASI";
+        return "AKTİF";
+    }
+
+    public string StatusNote(DateTime reference)
+    {
+        var effective = EffectiveStatus(reference);
+        return Active == true && effective.StartsWith("PASİF") || Active == false && effective == "AKTİF"
+            ? "DURUM/TARİH ÇELİŞKİSİ: DB durum alanı tarih ile çelişkili" : "";
+    }
+
     public (string? Reason, bool Certain) Evaluate(DateTime day)
     {
-        if (Ambiguous) return ("PERSONEL DURUMU ÇELİŞKİLİ", false);
-        if (Active is null)
-        {
-            if (Hire is not null && Exit is not null && Exit >= Hire && day >= Hire && day <= Exit) return (null, false);
-            return ("DB DURUM ALANI BOŞ / TANIMSIZ; DÖNEM İNCELE", false);
-        }
+        if (Ambiguous) return ("AYNI KARTTA ÇOKLU PERSONEL / DÖNEM BELİRSİZ", false);
         if (Hire is null) return ("İŞE GİRİŞ TARİHİ EKSİK", false);
-        if (Active == false)
+        if (Exit < Hire)
         {
-            if (Exit is null || Exit < Hire) return ("PASİF TARİHLERİ EKSİK / ÇELİŞKİLİ", false);
-            if (day < Hire) return ("İŞE GİRİŞ ÖNCESİ", true);
-            if (day > Exit) return ("PASİF ÇIKIŞ SONRASI", true);
-        }
-        else if (Exit is not null)
-        {
-            if (Exit >= Hire) return ("AKTİF AMA ÇIKIŞ TARİHİ ÇELİŞKİLİ", false);
+            if (Active == false) return ("PERSONEL TARİHLERİ ÇELİŞKİLİ", false);
             if (day > Exit && day < Hire) return ("ESKİ ÇIKIŞ / SON GİRİŞ ARASI", true);
+            return (null, false);
         }
-        else if (day < Hire) return ("İŞE GİRİŞ ÖNCESİ", true);
+        if (day < Hire) return ("İŞE GİRİŞ ÖNCESİ", true);
+        if (Exit is not null && day > Exit) return ("ÇIKIŞ SONRASI; DAHA YENİ İŞE GİRİŞ YOK", true);
         return (null, false);
     }
 }
@@ -140,10 +153,6 @@ internal static partial class SyncEngine
         CancellationToken cancellation, IProgress<string>? progress = null, bool listOnly = false)
     {
         var timer = Stopwatch.StartNew();
-        progress?.Report("DB hareketleri okunuyor...");
-        var (movements, people) = await ReadDbAsync(database, request, cancellation).ConfigureAwait(false);
-        var dbMilliseconds = timer.ElapsedMilliseconds;
-        timer.Restart();
         progress?.Report("TNF bir kez okunuyor...");
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         var bytes = await File.ReadAllBytesAsync(request.Path, cancellation).ConfigureAwait(false);
@@ -163,6 +172,10 @@ internal static partial class SyncEngine
         }
         var tnfMilliseconds = timer.ElapsedMilliseconds;
         timer.Restart();
+        progress?.Report("DB hareketleri ve ilgili kartların personel bilgileri okunuyor...");
+        var (movements, people) = await ReadDbAsync(database, request, tnf.Select(movement => movement.Card).Distinct().ToArray(), cancellation).ConfigureAwait(false);
+        var dbMilliseconds = timer.ElapsedMilliseconds;
+        timer.Restart();
         progress?.Report("Kart + tarih karşılaştırılıyor...");
         var table = listOnly ? ListTerminal(tnf, people, cancellation) : Compare(movements, tnf, people, request.Format, cancellation);
         foreach (var raw in invalid) table.Rows.Add("", "", "", "", "", "", "", raw, "BOZUK TNF / İNCELE", "İNCELE", -1, -1, false);
@@ -171,7 +184,7 @@ internal static partial class SyncEngine
     }
 
     static async Task<(List<DbMovement>, Dictionary<string, EmploymentRule>)> ReadDbAsync(
-        FirebirdDatabase database, AuditRequest request, CancellationToken cancellation)
+        FirebirdDatabase database, AuditRequest request, string[] terminalCards, CancellationToken cancellation)
     {
         cancellation.ThrowIfCancellationRequested();
         using var connection = database.OpenConnection();
@@ -182,8 +195,10 @@ internal static partial class SyncEngine
         var movements = new List<DbMovement>();
         var people = new Dictionary<string, EmploymentRule>(StringComparer.Ordinal);
         var range = "((GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B))" + (request.Card.Length == 0 ? "" : " and PKNO=@P");
+        var relevantCards = terminalCards.Concat(request.Card.Length == 0 ? [] : new[] { request.Card }).Distinct().ToArray();
+        var terminalUnion = string.Concat(relevantCards.Select((card, index) => $" union select cast(@T{index} as varchar(20)) from rdb$database"));
         var sql = "with selected_moves as (select SIRA,PKNO,GTARIH,GSAAT,GTUR,CTARIH,CSAAT,CTUR from GIRCIK where " + range + "), " +
-            "cards as (select distinct PKNO from selected_moves) " +
+            "cards as (select distinct PKNO from selected_moves" + terminalUnion + ") " +
             "select 'M' RECORDTYPE,g.*,cast(null as varchar(100)) AD,cast(null as varchar(100)) SOYAD," +
             "cast(null as date) IGTARIH,cast(null as date) ICTARIH,cast(null as varchar(20)) DURUM,cast(null as varchar(100)) DURUMAD " +
             "from selected_moves g union all " +
@@ -193,6 +208,7 @@ internal static partial class SyncEngine
         command.Parameters.Add(new FbParameter("@A", request.Start));
         command.Parameters.Add(new FbParameter("@B", request.End));
         if (request.Card.Length > 0) command.Parameters.Add(new FbParameter("@P", request.Card));
+        for (var index = 0; index < relevantCards.Length; index++) command.Parameters.Add(new FbParameter($"@T{index}", relevantCards[index]));
         using var reader = await command.ExecuteReaderAsync(cancellation).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellation).ConfigureAwait(false))
         {
@@ -203,7 +219,7 @@ internal static partial class SyncEngine
             {
                 var status = Convert.ToString(reader["DURUMAD"]) ?? "";
                 var rule = new EmploymentRule(card, $"{reader["AD"]} {reader["SOYAD"]}".Trim(), Date("IGTARIH"), Date("ICTARIH"),
-                    ActiveStatus(status), StatusCode: reader["DURUM"] == DBNull.Value ? null : Convert.ToString(reader["DURUM"]));
+                    ActiveStatus(status), StatusCode: reader["DURUM"] == DBNull.Value ? null : Convert.ToString(reader["DURUM"]), RawStatus: status);
                 people[card] = people.TryGetValue(card, out var previous) ? previous with { Ambiguous = true } : rule;
                 continue;
             }

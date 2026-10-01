@@ -74,7 +74,10 @@ internal static partial class SyncEngine
             {
                 var dbLines = movements.Where(movement => movement.Side == side).ToArray();
                 var tnfLines = assigned[side];
-                var multiple = dbLines.Length > 1 || tnfLines.Count > 1 || tnfLines.Any(line => duplicateTimes.Contains(line.Time));
+                var anchoredSurplus = dbLines.Length == 1 && tnfLines.Count > 1 && !uncertainDate &&
+                    tnfLines.Count(line => line.Time == dbLines[0].Time) == 1 && !tnfLines.Any(line => duplicateTimes.Contains(line.Time));
+                if (anchoredSurplus) tnfLines = tnfLines.OrderBy(line => line.Time == dbLines[0].Time ? 0 : 1).ThenBy(line => line.Time).ThenBy(line => line.Index).ToList();
+                var multiple = dbLines.Length > 1 || tnfLines.Count > 1 && !anchoredSurplus || tnfLines.Any(line => duplicateTimes.Contains(line.Time));
                 for (var index = 0; index < Math.Max(dbLines.Length, tnfLines.Count); index++)
                 {
                     var db = index < dbLines.Length ? dbLines[index] : null;
@@ -89,6 +92,17 @@ internal static partial class SyncEngine
                         operation = "İNCELE";
                         certain = evaluation.Item2 && !multiple && !uncertainDate;
                         detail = evaluation.Item1;
+                        if (certain && db is not null) operation = "GEÇERSİZ DB";
+                        if (multiple || uncertainDate)
+                        {
+                            status = "İNCELE";
+                            detail += "; çoklu kayıt veya taraf belirsiz; otomatik karar verilmez.";
+                        }
+                        if (evaluation.Item2 && tnf is { Standard: true } && !multiple && !uncertainDate)
+                        {
+                            status = "GEÇERSİZ TARİH / FAZLA TNF";
+                            operation = "TNF SİL FAZLA";
+                        }
                     }
                     else if (multiple || uncertainDate && (side == "Belirsiz" || unfilled.Contains(side)))
                     {
@@ -105,7 +119,7 @@ internal static partial class SyncEngine
                     else if (db is not null && db.Tur.Equals("E", StringComparison.OrdinalIgnoreCase))
                     {
                         status = "E KAYDI";
-                        operation = tnf is null ? "YOK" : db.Time == tnf.Time ? "TNF SİL E" : "İNCELE";
+                        operation = tnf is null ? "YOK" : "TNF SİL E";
                         detail = tnf is null ? "E kaydı TNF'de yok; doğru." : "E kaydı TNF'de bulunmamalı.";
                     }
                     else if (db is null)

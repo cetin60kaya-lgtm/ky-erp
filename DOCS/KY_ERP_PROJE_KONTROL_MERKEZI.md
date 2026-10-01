@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.10.2026 — HKN PDKS REV18 personel bazlı güvenli TNF düzeltme
+
+- REV17 hızlı veri aracının REV18 devamı tamamlandı; native KYERP 6.4 kaynakları bu iş kapsamında değiştirilmedi. Kaynak/test dizinleri korundu. Ayrıntı: [REV18 işlem ve doğrulama notları](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV18.md).
+- Ham DURUM.AD, işe giriş, çıkış ve dönem sonundaki efektif durum ayrı gösterilir. Aktif DB etiketi geçmiş çıkışı geçersiz kılmaz; durum/tarih çelişkisi ayrıca not edilir. Kesin tarih dışı TNF fazlası güvenli silme planına girer; gerçek belirsizlik ve mükerrer kayıtlar İNCELE kalır.
+- BU PERSONELİ DB'YE GÖRE DÜZELT checkbox istemeden yalnız seçili kartın güvenli TNF işlemlerini özet onayla uygular. Checkbox ile SEÇİLENLERİ UYGULA korunur. Yedek, kaynak/snapshot yeniden doğrulama ve atomik TNF yazma korunur; sonrasında yalnız ilgili personel yeniden kontrol edilir. SON TAM KONTROL isteğe bağlıdır.
+- DB hareketi olmayan TNF kartları da aynı tek DB sorgusunda ilgili personel bilgileriyle yüklenir ve listeden düşmez. Normal düzeltme DB'ye yazmaz; ayrı geçersiz DB temizliği kullanıcı onayı, transaction ve tam satır dump/yedek ister.
+- 103 assertion geçti; canlı dosyalarda yalnız okuma/karşılaştırma, yazma senaryolarında sentetik fixture kullanıldı. Tam UI kontrolü DB 68 ms / TNF 8 ms / karşılaştırma 40 ms / bind 20 ms / toplam 196 ms; en büyük UI heartbeat aralığı 259 ms. PDKS_DENETIM_PASS: 39 fonksiyon, 24 form, 0 audit hatası ve shell/V4 smoke başarılı.
+- .NET 8 win-x64 self-contained single-file final üretildi: `_PAKETLER/GUNCEL/HKN-PDKS-REV18-FINAL.exe`. Gerçek final EXE parola penceresi Responding=True; mevcut parola korundu. Build 0 hata; mevcut nullable uyarıları devam eder. Canlı hata kayıtları değiştirilmedi veya sıfırlandı iddiası yok; şirket verileri, özel verifier ve EXE Git'e eklenmez.
+
 ## 01.10.2026 — HKN PDKS REV17 hızlı veri eşitleme
 
 - Kullanıcının istediği REV17 ayrı hızlı veri EXE olarak tamamlandı; native KYERP 6.4 kaynakları bu revizyon kapsamında değiştirilmedi. Kaynak: `APP/desktop/kyerp-pdks-current/tools/HknPdksRev17`, test: `tools/HknRev17Tests`. Ayrıntı: [REV17 kaynak ve doğrulama notları](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV17.md).
