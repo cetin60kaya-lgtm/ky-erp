@@ -31,25 +31,37 @@ internal static partial class SyncEngine
         return (corrected.ToArray(), plan.Missing.Where(line => !generated.Contains(line)).ToArray());
     }
 
-    internal static async Task<(string Backup, TnfOutputs Outputs)> CompleteDbAndTnfAsync(FirebirdDatabase database, AuditSnapshot sync,
-        MonthlyDbSnapshot monthly, MonthlyIssue[] additions, CancellationToken token)
+    internal static (string[] Corrected, string[] Missing) PrepareNormalizationOutputs(AuditSnapshot projected, MonthlyIssue[] operations, CancellationToken token)
     {
-        MonthlyDbWriter.ValidatePlan(monthly, additions);
-        if (additions.Any(addition => addition.Kind != "EKLE")) throw new InvalidOperationException("Bu akış yalnız yeni DB kayıtları içindir.");
+        var days = operations.Select(operation => (operation.Card, operation.Day)).ToHashSet();
+        var safe = projected.Table.AsEnumerable().Where(SafeOperation).ToArray();
+        var plan = safe.Length == 0 ? (Corrected: projected.Lines, Missing: Array.Empty<string>()) : PrepareOutputs(projected, safe, token);
+        bool Unchanged(string line)
+        {
+            token.ThrowIfCancellationRequested();
+            return !projected.Request.Format.TryParse(line, 0, out var movement) || !movement.Standard || !days.Contains((movement.Card, movement.Date));
+        }
+        var corrected = plan.Corrected.Where(Unchanged).ToList();
+        var written = corrected.ToHashSet(StringComparer.Ordinal);
+        foreach (var movement in projected.Db.Where(move => days.Contains((move.Card, move.Date)) && !move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)).OrderBy(move => move.Card, StringComparer.Ordinal).ThenBy(move => move.Date).ThenBy(move => move.Time, StringComparer.Ordinal))
+        {
+            token.ThrowIfCancellationRequested();
+            var line = projected.Request.Format.Build(movement.Card, movement.Date, movement.Time);
+            if (written.Add(line)) corrected.Add(line);
+        }
+        return (corrected.ToArray(), plan.Missing.Where(Unchanged).ToArray());
+    }
+
+    internal static async Task<(string Backup, TnfOutputs Outputs)> CompleteDbAndTnfAsync(FirebirdDatabase database, AuditSnapshot sync,
+        MonthlyDbSnapshot monthly, MonthlyIssue[] additions, CancellationToken token, bool normalize = false)
+    {
+        MonthlyDbWriter.ValidatePlan(monthly, additions, normalize);
+        if (!normalize && additions.Any(addition => addition.Kind != "EKLE")) throw new InvalidOperationException("Bu akış yalnız yeni DB kayıtları içindir.");
         using var sourceLock = new FileStream(sync.Request.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
         var fresh = await ReadAsync(database, sync.Request, token).ConfigureAwait(false);
         if (fresh.FileHash != sync.FileHash || fresh.DbHash != sync.DbHash)
             throw new InvalidOperationException("DB/TNF kontrol sonrası değişti. Yeniden kontrol edin; DB değişmedi.");
-        var moves = MonthlyDbAudit.Movements(monthly.Records, monthly.Request);
-        var nextId = moves.Select(move => move.Id).DefaultIfEmpty(0).Max() + 1;
-        var newIds = new Dictionary<(string Card, DateTime Day), int>();
-        foreach (var addition in additions)
-        {
-            var id = addition.Id;
-            if (id < 0 && !newIds.TryGetValue((addition.Card, addition.Day), out id))
-                newIds.Add((addition.Card, addition.Day), id = nextId++);
-            moves.Add(new(id, addition.Card, addition.Day, addition.Side, addition.Time, ""));
-        }
+        var moves = MonthlyDbNormalization.Project(MonthlyDbAudit.Movements(monthly.Records, monthly.Request), additions);
         var terminal = new List<TnfMovement>();
         for (var index = 0; index < sync.Lines.Length; index++)
         {
@@ -59,9 +71,11 @@ internal static partial class SyncEngine
         }
         var projected = sync with { Db = moves, People = monthly.People,
             Table = Compare(moves, terminal, monthly.People, sync.Request.Format, token) };
-        var plan = PrepareCompletedOutputs(projected, additions, token);
+        var generated = additions.Where(operation => operation.Kind == "EKLE" || MonthlyDbNormalization.IsReplacement(operation)).Select(operation =>
+            MonthlyDbNormalization.IsReplacement(operation) ? operation with { Kind = "EKLE", Side = operation.NewSide, Time = operation.NewTime } : operation).ToArray();
+        var plan = normalize ? PrepareNormalizationOutputs(projected, additions, token) : PrepareCompletedOutputs(projected, generated, token);
         using var staged = await StageOutputsAsync(sync, plan.Corrected, plan.Missing, token).ConfigureAwait(false);
-        var backup = await MonthlyDbWriter.ApplyAsync(database, sync, monthly, additions, token).ConfigureAwait(false);
+        var backup = await MonthlyDbWriter.ApplyAsync(database, sync, monthly, additions, token, normalize).ConfigureAwait(false);
         try
         {
             var outputs = staged.Publish();

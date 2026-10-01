@@ -43,7 +43,8 @@ internal static class MonthlyTests
             "insert into GIRCIK values (9,'00056','2026-05-08','08:25',505,'',null,null,null,null,'000')",
             "insert into GIRCIK values (10,'00056','2026-04-30','08:50',530,'','2026-05-07','18:20',1100,'','000')",
             "insert into GIRCIK values (11,'00056',null,null,null,null,'2026-05-14','18:20',1100,'','000')",
-            "insert into OZELIZIN values ('00056','2026-05-08')" }) database.Execute(sql);
+            "insert into OZELIZIN values ('00056','2026-05-08')",
+            "insert into PERTIMESHIFT values ('00056','2026-05-05','2026-05-05')" }) database.Execute(sql);
         for (var day = new DateTime(2026, 5, 1); day < new DateTime(2026, 6, 1); day = day.AddDays(1))
             database.Execute("insert into PLANA values (@D,'1','1')", new FbParameter("@D", day));
         var request = new AuditRequest(tnf, new(2026, 5, 1), new(2026, 6, 1), "", new());
@@ -64,7 +65,7 @@ internal static class MonthlyTests
         check(all.Select(issue => issue.Time).Distinct().Count() > 2, "REV21 natural distribution varies generated minutes across days");
         check(!all.Any(issue => issue.Day.Day is 5 or 6 or 8), "REV21 shifts E leave never generate");
         check(!MonthlyDbAudit.Complete(snapshot, new(true, true, true, false), "00999", CancellationToken.None).Any(), "REV21 selected personnel scope enforced");
-        var safe = snapshot.Issues.Where(issue => issue.Safe).ToArray();
+        var safe = snapshot.Issues.Where(issue => issue.Safe && MonthlyDbAudit.SafeKinds.Contains(issue.Kind)).ToArray();
         var backup = MonthlyDbWriter.ApplyAsync(database, sync, snapshot, safe, CancellationToken.None).GetAwaiter().GetResult();
         check(File.Exists(backup) && new FileInfo(backup).Length > 0 && File.Exists(backup + ".rows.json"), "REV21 fixture actual gbak and row dump before transaction");
         check(Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where SIRA in (2,8)")) == 0, "REV21 fixture safe surplus removed");
@@ -163,6 +164,7 @@ internal static class MonthlyTests
         try { MonthlyDbAudit.Analyze(request,MonthlyDbAudit.Movements(snapshot.Records,request),originalPeople,snapshot.Schedules,snapshot.Excluded,[],cancellation); } catch(OperationCanceledException) { rejected=true; }
         check(rejected, "REV21 monthly analysis cancellation works");
         Console.WriteLine("REV21_SYNTHETIC_WRITES_PASSED");
+        NormalizationTests.Run(check);
         if (liveDb is null || liveTnf is null) return;
         options = options with { DatabasePath = liveDb, DatabaseCharset = "WIN1254" };
         database = new(options);
@@ -177,8 +179,15 @@ internal static class MonthlyTests
         Console.WriteLine($"REV21_PLANS schedules={snapshot.Schedules.Count} people={snapshot.People.Count} excluded={snapshot.Excluded.Count}");
         foreach(var plan in snapshot.Schedules.Where(plan=>plan.Card=="00056" && plan.Day.Day==25)) Console.WriteLine($"REV21_PLAN_00056 entry={plan.Entry} exit={plan.Exit} excluded={snapshot.Excluded.Contains((plan.Card,plan.Day))}");
         foreach (var issue in snapshot.Issues.Where(issue=>issue.Card=="00056" && issue.Day.Day==25)) Console.WriteLine($"REV21_00056_25MAY kind={issue.Kind} safe={issue.Safe} id={issue.Id} side={issue.Side} time={issue.Time}");
-        check(snapshot.Issues.Any(issue=>issue.Card=="00056"&&issue.Day.Day==25&&issue.Kind=="FAZLA TARAF"), "REV21 live 00056 25May extra entry found without writing");
-        check(snapshot.Issues.Any(issue=>issue.Card=="00056"&&issue.Day.Day==25&&issue.Kind=="FAZLA TARAF"&&issue.Safe), "REV21 live completed normal pair plus isolated 19:00 entry is safe cleanup; read only test");
+        var liveIrfan = MonthlyDbAudit.Movements(snapshot.Records, request).Where(move => move.Card == "00056" && move.Date.Day == 25).ToArray();
+        Console.WriteLine($"REV21_LIVE_00056_25MAY movements={string.Join(";", liveIrfan.Select(move => move.Side + " " + move.Time))}");
+        var hasExtra = liveIrfan.Any(move => move.Side == "Giriş" && move.Time == "19:00");
+        check(!hasExtra || snapshot.Issues.Any(issue=>issue.Card=="00056"&&issue.Day.Day==25&&issue.Kind=="FAZLA TARAF"&&issue.Safe), "REV21 live remaining 19:00 extra safely detected if present; SELECT only");
+        var normalization = MonthlyDbNormalization.Plan(snapshot, true, "", CancellationToken.None);
+        var irfanPlan = normalization.Operations.Where(issue => issue.Card == "00056" && issue.Day.Day == 25).ToArray();
+        check((!hasExtra || irfanPlan.Any(issue => issue.Kind == "FAZLA TARAF" && issue.Time == "19:00")) && !irfanPlan.Any(issue => issue.Time is "08:23" or "18:51"), "REV21 live normalization preserves correct pair; synthetic test verifies extra deletion");
+        if (normalization.Operations.Length > 0) MonthlyDbNormalization.Validate(snapshot, normalization.Operations);
+        Console.WriteLine($"REV21_LIVE_NORMALIZATION_READONLY planned_operations={normalization.Operations.Length} normal_days={normalization.NormalDays.Count}");
         var generated = MonthlyDbAudit.Complete(snapshot,CompletionSettings.For(snapshot.WorkHours,false,true,true,false),"",CancellationToken.None);
         check(generated.All(issue=>!snapshot.LockedCards.Contains(issue.Card) && !snapshot.Excluded.Contains((issue.Card,issue.Day))), "REV21 live completion plan only; no DB writes");
         Console.WriteLine($"REV21_LIVE_READONLY completion_plan_sides={generated.Length} safe_cleanup_sides={snapshot.Issues.Count(issue=>issue.Safe)}");

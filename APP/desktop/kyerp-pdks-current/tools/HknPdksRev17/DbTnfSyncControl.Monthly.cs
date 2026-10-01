@@ -18,6 +18,8 @@ internal sealed partial class DbTnfSyncControl
         AddColumn(monthlyGrid, "Kind", "DB Sonucu", 130);
         AddColumn(monthlyGrid, "Side", "Taraf", 65);
         AddColumn(monthlyGrid, "Time", "Gerçek Saat", 75);
+        AddColumn(monthlyGrid, "NewSide", "Yeni Taraf", 75);
+        AddColumn(monthlyGrid, "NewTime", "Yeni Saat", 75);
         AddColumn(monthlyGrid, "Safe", "Güvenli", 60);
         AddColumn(monthlyGrid, "Detail", "İşlem / Açıklama", 390);
         monthlyGrid.CellFormatting += (_, args) =>
@@ -68,17 +70,27 @@ internal sealed partial class DbTnfSyncControl
     async Task RepairDbAsync()
     {
         if (!RequireMonthlyResult()) return;
-        using var dialog = new Form { Text = "DB Güvenli Düzeltme — kapsam", Width = 490, Height = 245, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
+        using var dialog = new Form { Text = "DB Normal Gün — tek giriş / tek çıkış", Width = 620, Height = 300, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
         var scope = new ComboBox { Left = 20, Top = 50, Width = 440, DropDownStyle = ComboBoxStyle.DropDownList };
         scope.Items.AddRange(["Seçili ay / tüm personeller", $"Seçili ay / yalnız {selectedCard}"]);
         scope.SelectedIndex = 0;
-        var apply = new Button { Left = 20, Top = 145, Width = 210, Text = "PLAN ÖZETİNİ GÖSTER", DialogResult = DialogResult.OK };
-        dialog.Controls.AddRange([new Label { Left = 20, Top = 20, Width = 440, Text = "Gerçek saatler değişmez. Yalnız güvenli fazla taraf temizlenir." }, scope,
-            new Label { Left = 20, Top = 90, Width = 440, Height = 45, Text = "Yazmadan önce gbak + satır dump alınır. Kilitli kartlar ve belirsiz vardiyalar değiştirilmez." }, apply]);
+        var apply = new Button { Left = 20, Top = 210, Width = 230, Text = "PLAN ÖZETİNİ GÖSTER", DialogResult = DialogResult.OK };
+        dialog.Controls.AddRange([new Label { Left = 20, Top = 15, Width = 555, Height = 35, Text = MonthlyDbNormalization.Information }, scope,
+            new Label { Left = 20, Top = 90, Width = 555, Height = 105, Text = "Mükerrer/fazla taraf silinir; sabah/akşam tarafı düzeltilir. Aralık dışındaki GERÇEK saatler bu onaylı işlemde DEĞİŞTİRİLİR. Eksik taraf ve uygun hiç basılmamış normal gün üretilir. Doğal dağılım kullanılır. E/izin/tatil/hafta sonu/vardiya/kilit korunur. Önce gbak + satır dump; aynı DB saatleri TNF çıktısına aktarılır." }, apply]);
         dialog.AcceptButton = apply;
         if (dialog.ShowDialog(main) != DialogResult.OK) return;
-        var operations = monthlySnapshot!.Issues.Where(issue => issue.Safe && (scope.SelectedIndex == 0 || issue.Card == selectedCard)).DistinctBy(issue => (issue.Card, issue.Day, issue.Id, issue.Side)).ToArray();
-        await ApplyDbBatchAsync(operations, "DB GÜVENLİLERİ DÜZELT");
+        var current = monthlySnapshot!;
+        var card = scope.SelectedIndex == 0 ? "" : selectedCard;
+        if (scope.SelectedIndex == 1 && card.Length == 0) { MessageBox.Show(main, "Önce bir personel seçin."); return; }
+        MonthlyIssue[] operations;
+        cancellation = new CancellationTokenSource();
+        var token = cancellation.Token;
+        SetBusy(true);
+        try { operations = await Task.Run(() => MonthlyDbNormalization.Plan(current, true, card, token).Operations, token); }
+        catch (OperationCanceledException) { summary.Text = "Normalleştirme planı iptal edildi; DB değişmedi."; return; }
+        catch (Exception exception) { MessageBox.Show(main, exception.Message, "Normalleştirme planı hazırlanamadı"); return; }
+        finally { cancellation.Dispose(); cancellation = null; if (!IsDisposed) SetBusy(false); }
+        if (!IsDisposed) await ApplyDbBatchAsync(operations, "DB GÜVENLİLERİ DÜZELT — TEK ÇİFT", true);
     }
 
     async Task CompleteDbAsync()
@@ -124,14 +136,15 @@ internal sealed partial class DbTnfSyncControl
         await ApplyDbBatchAsync(operations, "DB EKSİKLERİ TAMAMLA — YENİ SAAT");
     }
 
-    async Task ApplyDbBatchAsync(MonthlyIssue[] operations, string title)
+    async Task ApplyDbBatchAsync(MonthlyIssue[] operations, string title, bool normalize = false)
     {
         if (!RequireMonthlyResult()) return;
         if (operations.Length == 0) { MessageBox.Show(main, "Bu kapsamda uygun güvenli DB işlemi yok. Eksik plan/tatil/izin/kilit veya belirsizlikler korunur."); return; }
         var overview = string.Join("\n", operations.GroupBy(issue => issue.Kind).Select(group => $"{group.Key}: {group.Count()}"));
-        var completion = operations.All(issue => issue.Kind == "EKLE");
+        var completion = normalize || operations.All(issue => issue.Kind == "EKLE");
         var tnfNote = completion ? "\nYeni DB kart/tarih/saatleri AYNI değerlerle DUZELTILMIS TNF'ye aktarılır. TNF yedeği alınır; orijinal korunur. Eski eksikler ayrı EKSIK çıktısında kalır." : "";
-        if (MessageBox.Show(main, $"Dönem: {monthlySnapshot!.Request.Start:MM.yyyy}\nPersonel: {operations.Select(issue => issue.Card).Distinct().Count()}\n{overview}\nToplam taraf: {operations.Length}\n\nDATABASE.GDB değişecek. Önce gbak ve satır dump yedeği. Transaction / rollback uygulanır. Mevcut gerçek saatler değiştirilmez.{tnfNote} Devam?",
+        var clockNote = normalize ? "Aralık dışındaki gerçek saatler ve yanlış taraf DEĞİŞİR. Uygun hiç basılmamış normal günler de ÜRETİLİR. Normal gün sonunda 1 giriş + 1 çıkış doğrulanır.\n" + MonthlyDbNormalization.Information : "Mevcut gerçek saatler değiştirilmez.";
+        if (MessageBox.Show(main, $"Dönem: {monthlySnapshot!.Request.Start:MM.yyyy}\nPersonel: {operations.Select(issue => issue.Card).Distinct().Count()}\n{overview}\nToplam taraf: {operations.Length}\n\nDATABASE.GDB değişecek. Önce gbak ve satır dump yedeği. Transaction / rollback uygulanır. {clockNote}{tnfNote} Devam?",
             title, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         var previous = snapshot!;
         var plan = monthlySnapshot;
@@ -147,7 +160,7 @@ internal sealed partial class DbTnfSyncControl
             string backup;
             if (completion)
             {
-                var result = await Task.Run(() => SyncEngine.CompleteDbAndTnfAsync(snapshotDatabase!, previous, plan, operations, token), token);
+                var result = await Task.Run(() => SyncEngine.CompleteDbAndTnfAsync(snapshotDatabase!, previous, plan, operations, token, normalize), token);
                 backup = result.Backup;
                 lastOutputs = result.Outputs;
                 outputSourcePath = sourcePath;

@@ -54,10 +54,15 @@ internal static class MonthlyDbWriter
         return candidates.FirstOrDefault(File.Exists) ?? throw new FileNotFoundException("Firebird gbak.exe yok. Yedeksiz DB işlemi yapılamaz; DB değişmedi.");
     }
 
-    internal static void ValidatePlan(MonthlyDbSnapshot snapshot, MonthlyIssue[] operations)
+    internal static void ValidatePlan(MonthlyDbSnapshot snapshot, MonthlyIssue[] operations, bool normalize = false)
     {
         if (snapshot.WritesBlocked) throw new InvalidOperationException("GIRCIK veya DB trigger'ı mevcut. Trigger ezilmez; DB yazması engellendi.");
         if (snapshot.Request.End != snapshot.Request.Start.AddMonths(1)) throw new InvalidOperationException("DB işlemi yalnız seçili ayda yapılabilir.");
+        if (normalize)
+        {
+            MonthlyDbNormalization.Validate(snapshot, operations);
+            return;
+        }
         if (operations.Length == 0 || operations.Any(operation => !operation.Safe || operation.Day < snapshot.Request.Start || operation.Day >= snapshot.Request.End || snapshot.LockedCards.Contains(operation.Card) ||
             operation.Kind != "EKLE" && !MonthlyDbAudit.SafeKinds.Contains(operation.Kind))) throw new InvalidOperationException("DB işlem planı güvenli değil veya dönem/kilit dışı.");
         if (operations.GroupBy(operation => (operation.Card, operation.Day, operation.Id, operation.Side)).Any(group => group.Count() > 1)) throw new InvalidOperationException("DB planında tekrarlı taraf var.");
@@ -75,9 +80,9 @@ internal static class MonthlyDbWriter
         }
     }
 
-    internal static async Task<string> ApplyAsync(FirebirdDatabase database, AuditSnapshot sync, MonthlyDbSnapshot snapshot, MonthlyIssue[] operations, CancellationToken token)
+    internal static async Task<string> ApplyAsync(FirebirdDatabase database, AuditSnapshot sync, MonthlyDbSnapshot snapshot, MonthlyIssue[] operations, CancellationToken token, bool normalize = false)
     {
-        ValidatePlan(snapshot, operations);
+        ValidatePlan(snapshot, operations, normalize);
         var backup = await BackupAsync(database, token).ConfigureAwait(false);
         token.ThrowIfCancellationRequested();
         using var connection = database.OpenConnection();
@@ -86,7 +91,7 @@ internal static class MonthlyDbWriter
         {
             var fresh = MonthlyDbAudit.Read(database, sync, token, connection, transaction);
             if (fresh.Fingerprint != snapshot.Fingerprint) throw new InvalidOperationException("DB/personel/izin/plan/trigger değişti; yeniden kontrol edin. İşlem geri alındı.");
-            ValidatePlan(fresh, operations);
+            ValidatePlan(fresh, operations, normalize);
             var dump = snapshot.Records.AsEnumerable().Select(row => snapshot.Records.Columns.Cast<DataColumn>().ToDictionary(column => column.ColumnName, column => row[column] == DBNull.Value ? null : row[column])).ToArray();
             var dumpPath = backup + ".rows.json";
             await File.WriteAllTextAsync(dumpPath, JsonSerializer.Serialize(new { Period = snapshot.Request.Start, Before = dump, Operations = operations }, new JsonSerializerOptions { WriteIndented = true }), token).ConfigureAwait(false);
@@ -104,11 +109,16 @@ internal static class MonthlyDbWriter
                 var affected = Execute($"update GIRCIK set {prefix}TARIH=null,{prefix}SAAT=null,{prefix}DAKIKA=null,{prefix}TUR=null where SIRA=@I and PKNO=@P and {prefix}TARIH=@D and {prefix}SAAT=@T",
                     new("@I", operation.Id), new("@P", operation.Card), new("@D", operation.Day), new("@T", operation.Time));
                 if (affected != 1) throw new InvalidOperationException("DB satırı değişti/tekil değil; tüm işlem geri alındı.");
-                Execute("delete from GIRCIK where SIRA=@I and PKNO=@P and GTARIH is null and CTARIH is null and (GSAAT is null or trim(GSAAT)='') and (CSAAT is null or trim(CSAAT)='')", new("@I", operation.Id), new("@P", operation.Card));
             }
             using var maxCommand = new FbCommand("select coalesce(max(SIRA),0) from GIRCIK", connection, transaction);
             var nextId = Convert.ToInt32(maxCommand.ExecuteScalar()) + 1;
-            foreach (var group in operations.Where(operation => operation.Kind == "EKLE").GroupBy(operation => (operation.Card, operation.Day, operation.Id)))
+            var additions = operations.Where(operation => operation.Kind == "EKLE" || MonthlyDbNormalization.IsReplacement(operation)).Select(operation =>
+                MonthlyDbNormalization.IsReplacement(operation) ? operation with {
+                    Id = operation.NewSide == operation.Side ? operation.Id : -1,
+                    Side = operation.NewSide, Time = operation.NewTime } : operation).ToArray();
+            var originalTypes = MonthlyDbAudit.Movements(snapshot.Records, snapshot.Request).ToDictionary(move => (move.Id, move.Card, move.Date, move.Side), move => move.Tur);
+            var replacementTypes = operations.Where(MonthlyDbNormalization.IsReplacement).ToDictionary(operation => (operation.Card, operation.Day, operation.NewSide), operation => originalTypes[(operation.Id, operation.Card, operation.Day, operation.Side)]);
+            foreach (var group in additions.GroupBy(operation => (operation.Card, operation.Day, operation.Id)))
             {
                 var id = group.Key.Id;
                 if (id < 0)
@@ -120,10 +130,24 @@ internal static class MonthlyDbWriter
                 {
                     if (!MonthlyDbAudit.Clock(operation.Time, out var minute)) throw new InvalidOperationException("Üretilen saat geçersiz.");
                     var prefix = operation.Side == "Giriş" ? "G" : "C";
-                    var affected = Execute($"update GIRCIK set {prefix}TARIH=@D,{prefix}SAAT=@T,{prefix}DAKIKA=@M,{prefix}TUR='' where SIRA=@I and PKNO=@P and {prefix}TARIH is null and ({prefix}SAAT is null or trim({prefix}SAAT)='')",
-                        new("@D", operation.Day), new("@T", operation.Time), new("@M", minute), new("@I", id), new("@P", operation.Card));
+                    var type = replacementTypes.GetValueOrDefault((operation.Card, operation.Day, operation.Side)) ?? "";
+                    var affected = Execute($"update GIRCIK set {prefix}TARIH=@D,{prefix}SAAT=@T,{prefix}DAKIKA=@M,{prefix}TUR=@TYPE where SIRA=@I and PKNO=@P and {prefix}TARIH is null and ({prefix}SAAT is null or trim({prefix}SAAT)='')",
+                        new("@D", operation.Day), new("@T", operation.Time), new("@M", minute), new("@TYPE", type), new("@I", id), new("@P", operation.Card));
                     if (affected != 1) throw new InvalidOperationException("Eksik taraf artık boş değil; gerçek saat korunarak işlem geri alındı.");
                 }
+            }
+            foreach (var group in operations.Where(operation => operation.Kind != "EKLE").GroupBy(operation => (operation.Card, operation.Id)))
+                Execute("delete from GIRCIK where SIRA=@I and PKNO=@P and GTARIH is null and CTARIH is null and (GSAAT is null or trim(GSAAT)='') and (CSAAT is null or trim(CSAAT)='')", new("@I", group.Key.Id), new("@P", group.Key.Card));
+            if (normalize)
+            {
+                using var resultCommand = FirebirdDatabase.CreateCommand(connection, transaction,
+                    "select * from GIRCIK where (GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B)", new("@A", snapshot.Request.Start), new("@B", snapshot.Request.End));
+                resultCommand.CommandTimeout = 30;
+                using var registration = token.Register(resultCommand.Cancel);
+                using var adapter = new FbDataAdapter(resultCommand);
+                var resultTable = new System.Data.DataTable();
+                adapter.Fill(resultTable);
+                MonthlyDbNormalization.VerifyResult(snapshot, operations, MonthlyDbAudit.Movements(resultTable, snapshot.Request));
             }
             token.ThrowIfCancellationRequested();
             transaction.Commit();

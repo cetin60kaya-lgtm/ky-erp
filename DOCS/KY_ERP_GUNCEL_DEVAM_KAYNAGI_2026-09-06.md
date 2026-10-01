@@ -1,5 +1,11 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 01.10.2026 — PDKS aynı REV21 normal gün tek giriş / tek çıkış
+
+- Kullanıcının son açık kuralı DB cleanup düğmesine uygulandı: onay sonrası normal gün mükerrer/fazla taraf temizliği, yanlış taraf ve aralık dışı gerçek saat düzeltmesi, uygun eksik/tam boş gün üretimi. Giriş 08:15–08:45, çıkış 18:30–19:30, doğal dağılım; E/tatil/izin/vardiya/personel tarih/kilit korumaları devam eder. Diğer ekranların Hedef DB ortak ayarı sessizce değiştirilmez.
+- gbak/satır dump/fingerprint/transaction/result doğrulaması ve rollback; değişen DB hareketleri bire bir düzeltilmiş TNF'de aynı işlemle hazırdır. Normal DB–TNF karşılaştırma/düzeltme DB'ye yazmaz. Canlı yazma testi yok; sentetik fixture üzerinde 232 assertion + PDKS_DENETIM_PASS.
+- Final aynı REV21 paket yoluna yerleştirildi; SHA256 `7725E7E016540E472966E05E20B59321437C801F4B42BB6626317519FDFE74FE`. Eski açık kullanıcı uygulaması kapatılmadan executable arşivlendi; yeni sürüm yeniden açılışta kullanılmalıdır. Ayrıntılar [kontrol merkezi](./KY_ERP_PROJE_KONTROL_MERKEZI.md) ve [REV21 README](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV21.md).
+
 ## 21.09.2026 — Android KY ERP Güvenlik PWA final feature paketi
 
 - Branch: `codex/security-pwa-enrollment-final-20260921`.

@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.10.2026 — HKN PDKS REV21 normal gün tek çift son kuralı
+
+- Aynı REV21; ayrı DB cleanup onayı artık kesin mükerrer/fazla tarafları siler, yanlış tarafı düzeltir, aralık dışı gerçek saatleri 08:15–08:45 / 18:30–19:30 içinde doğal dağılımla değiştirir, uygun eksik/boş normal günleri tamamlar. Normal günde sonuç 1 giriş + 1 çıkış transaction içinde doğrulanır. Bu düğme için önceki gerçek saat koruma kuralı kullanıcı tarafından değiştirildi; normal TNF eşitleme DB'ye yazmaz.
+- E/izin/tatil/hafta sonu/vardiya/kilit/future/rehire ve teknik belirsizlikler üretimden hariçtir. gbak + satır dump + fingerprint + tam gün plan doğrulaması + rollback korunur. Değişen DB saatleri aynı işlemde aynı kart/tarih/saat ile düzeltilmiş TNF'ye aktarılır; orijinal TNF korunur. COMMIT sonrası yayın hatasında pending kurtarma dosyaları korunur.
+- 232 assertion, gerçek sentetik transaction/rollback ve bire bir DB–TNF doğrulaması; canlı DB/TNF yalnız SELECT/değişmezlik testi. Mayıs DB40/TNF4/compare2/ek53/toplam102 ms; UI bind3/toplam142/heartbeat105 ms. PDKS_DENETIM_PASS: 39 fonksiyon/24 ekran/0 hata. Yeni final parola kapısı gizli smoke ile Responding=True; bypass yok.
+- Final aynı paket yolunda: `D:/Googledrive/KYERP-PDKS-HIZLI-VERİ/_PAKETLER/GUNCEL/HKN-PDKS-REV21-FINAL.exe`; SHA256 `7725E7E016540E472966E05E20B59321437C801F4B42BB6626317519FDFE74FE`. Açık eski kullanıcı oturumu kapatılmadı; eski executable arşivde, yeni davranış yeniden açılışta etkin olur. Görev dışı beş değişiklik commit dışında korunur.
+- Ayrıntı: [REV21 README](../APP/desktop/kyerp-pdks-current/tools/HknPdksRev17/README.REV21.md). Kanıtlar yerel 08_TEST/REV21_SINGLE_PAIR_*; şirket verileri ve binary Git'e alınmaz.
+
 ## 01.10.2026 — HKN PDKS REV21 son aylık kontrol / aynı DB ve TNF üretimi
 
 - Yeni revizyon açılmadı. Eksik tamamlama doğal dağılım varsayılanı ve dört sınır alanı ortak Hedef kaynağını kullanır; gerçek saatler korunur, hiç basılmamış gün açık onay ister. Yeni DB hareketleri aynı kart/tarih/saatle aynı işlemde DUZELTILMIS TNF'ye aktarılır; eski eksikler ayrı EKSIK çıktısında kalır.

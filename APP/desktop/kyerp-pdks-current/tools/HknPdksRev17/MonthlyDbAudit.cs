@@ -10,13 +10,14 @@ using KYERP.PDKS.Core;
 
 namespace QuickDataTool;
 
-internal sealed record MonthlyIssue(string Card, DateTime Day, string Kind, string Detail, bool Safe = false, int Id = -1, string Side = "", string Time = "");
+internal sealed record MonthlyIssue(string Card, DateTime Day, string Kind, string Detail, bool Safe = false, int Id = -1, string Side = "", string Time = "", string NewSide = "", string NewTime = "");
 internal sealed record DailySchedule(string Card, DateTime Day, string Entry, string Exit);
 internal sealed record MonthlyDbSnapshot(AuditRequest Request, DataTable Records, Dictionary<string, EmploymentRule> People,
     List<DailySchedule> Schedules, HashSet<(string Card, DateTime Day)> Excluded, HashSet<string> LockedCards,
     string TriggerHash, bool WritesBlocked, List<MonthlyIssue> Issues, string Fingerprint, long Milliseconds)
 {
     internal WorkTimePolicy WorkHours { get; init; } = WorkTimePolicy.Default;
+    internal HashSet<(string Card, DateTime Day)> ShiftDays { get; init; } = [];
 }
 internal sealed record CompletionSettings(bool SelectedPerson, bool SingleSide, bool WholeDay, bool Natural)
 {
@@ -149,7 +150,7 @@ internal static class MonthlyDbAudit
         var issues = Analyze(request, moves, people, schedules, excluded, locked, token, workHours, shiftDays);
         var fingerprint = Fingerprint(new[] { records, peopleTable, plans, holidays, overrides, triggers }.Concat(exclusions).ToArray()) + ":" + JsonSerializer.Serialize(workHours);
         if (ownedTransaction is not null) transaction.Rollback();
-        return new(request, records, people, schedules, excluded, locked, Hash(triggers), blocked, issues, fingerprint, timer.ElapsedMilliseconds) { WorkHours = workHours };
+        return new(request, records, people, schedules, excluded, locked, Hash(triggers), blocked, issues, fingerprint, timer.ElapsedMilliseconds) { WorkHours = workHours, ShiftDays = shiftDays };
     }
 
     static string Hash(DataTable table) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(table.AsEnumerable().Select(row => row.ItemArray.Select(value => value == DBNull.Value ? null : value is DateTime date ? date.ToString("O", CultureInfo.InvariantCulture) : Convert.ToString(value, CultureInfo.InvariantCulture)).ToArray()).ToArray()))));
@@ -173,7 +174,7 @@ internal static class MonthlyDbAudit
             foreach (var move in group.Value)
             {
                 if (move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)) issues.Add(new(move.Card, move.Date, "E KAYIT", "TNF kaynağı değildir; DB kaydı korunur.", Id: move.Id, Side: move.Side, Time: move.Time));
-                if (validity.Item1 is not null) issues.Add(new(move.Card, move.Date, validity.Item2 ? "TARİH DIŞI" : "İNCELE", validity.Item1, validity.Item2 && !isLocked, move.Id, move.Side, move.Time));
+                if (validity.Item1 is not null) issues.Add(new(move.Card, move.Date, validity.Item2 ? "TARİH DIŞI" : "İNCELE", validity.Item1, validity.Item2 && !isLocked && !move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase), move.Id, move.Side, move.Time));
                 else if (!move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase) && !Clock(move.Time, out _)) issues.Add(new(move.Card, move.Date, "İNCELE", "Teknik bozuk saat; gerçek değer üretilmez.", Id: move.Id, Side: move.Side, Time: move.Time));
             }
             if (validity.Item1 is not null) continue;
@@ -201,9 +202,9 @@ internal static class MonthlyDbAudit
             }
             else if (entries.Length > 1 || exits.Length > 1)
                 issues.Add(new(group.Key.Card, group.Key.Date, "İNCELE", "Çoklu taraf / olası iki vardiya. Gerçek çiftler otomatik silinmez."));
-            if (normal.Length > 0 && entries.Length == 0 && !group.Value.Any(move => move.Side == "Giriş" && move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)))
+            if (normal.Length > 0 && entries.Length == 0 && !group.Value.Any(move => move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)))
                 issues.Add(new(group.Key.Card, group.Key.Date, "EKSİK GİRİŞ", "Yeni saat yalnız ayrı tamamlama onayıyla eklenebilir."));
-            if (normal.Length > 0 && exits.Length == 0 && !group.Value.Any(move => move.Side == "Çıkış" && move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)))
+            if (normal.Length > 0 && exits.Length == 0 && !group.Value.Any(move => move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)))
                 issues.Add(new(group.Key.Card, group.Key.Date, "EKSİK ÇIKIŞ", "Yeni saat yalnız ayrı tamamlama onayıyla eklenebilir."));
             if (ordinary && plannedEntry == policy.Entry && plannedExit == policy.Exit && !excluded.Contains(group.Key) && entries.Length <= 1 && exits.Length <= 1)
             {
@@ -223,6 +224,23 @@ internal static class MonthlyDbAudit
                 if (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || Holiday(day) || excluded.Contains((person.Card, day))) continue;
                 issues.Add(new(person.Card, day, "HİÇ BASMAMIŞ", "Tam gün üretimi için açık kullanıcı onayı gerekir."));
             }
+        var normalization = MonthlyDbNormalization.Plan(request, moves, people, schedules, excluded, locked, shiftDays ?? [], false, "", token);
+        issues.RemoveAll(issue => normalization.NormalDays.Contains((issue.Card, issue.Day)) &&
+            (issue.Kind is "MÜKERRER" or "FAZLA TARAF" or "EKSİK GİRİŞ" or "EKSİK ÇIKIŞ" or "HİÇ BASMAMIŞ" ||
+             issue.Kind == "İNCELE" && issue.Detail == "Çoklu taraf / olası iki vardiya. Gerçek çiftler otomatik silinmez."));
+        var presentKinds = issues.Select(issue => (issue.Card, issue.Day, issue.Kind)).ToHashSet();
+        var presentOperations = issues.Select(issue => (issue.Card, issue.Day, issue.Id, issue.Side, issue.Kind)).ToHashSet();
+        foreach (var operation in normalization.Operations)
+        {
+            if (operation.Kind == "EKLE")
+            {
+                var kind = !days.ContainsKey((operation.Card, operation.Day)) ? "HİÇ BASMAMIŞ" : operation.Side == "Giriş" ? "EKSİK GİRİŞ" : "EKSİK ÇIKIŞ";
+                if (presentKinds.Add((operation.Card, operation.Day, kind)))
+                    issues.Add(operation with { Kind = kind, Safe = false });
+            }
+            else if (presentOperations.Add((operation.Card, operation.Day, operation.Id, operation.Side, operation.Kind)))
+                issues.Add(operation);
+        }
         foreach (var card in locked) issues.Add(new(card, request.Start, "İNCELE", "Geçmiş dönem kilidi; bu kart için DB yazması engellendi."));
         return issues;
     }
@@ -260,7 +278,7 @@ internal static class MonthlyDbAudit
     internal static string Summary(MonthlyDbSnapshot snapshot)
     {
         var counts = snapshot.Issues.GroupBy(issue => issue.Kind).ToDictionary(group => group.Key, group => group.Count());
-        return "DB | " + string.Join(" | ", new[] { "MÜKERRER", "FAZLA TARAF", "EKSİK GİRİŞ", "EKSİK ÇIKIŞ", "HİÇ BASMAMIŞ", "TARİH DIŞI", "E KAYIT", "GEÇ GİRİŞ", "ERKEN ÇIKIŞ", "ERKEN GELİŞ", "GEÇ ÇIKIŞ / mesai adayı", "İNCELE" }.Select(kind => $"{kind}: {counts.GetValueOrDefault(kind)}")) +
+        return "DB | " + string.Join(" | ", new[] { "MÜKERRER", "FAZLA TARAF", "TARAF DÜZELT", "SAAT DÜZELT", "EKSİK GİRİŞ", "EKSİK ÇIKIŞ", "HİÇ BASMAMIŞ", "TARİH DIŞI", "E KAYIT", "GEÇ GİRİŞ", "ERKEN ÇIKIŞ", "ERKEN GELİŞ", "GEÇ ÇIKIŞ / mesai adayı", "İNCELE" }.Select(kind => $"{kind}: {counts.GetValueOrDefault(kind)}")) +
             $" | Güvenli: {snapshot.Issues.Count(issue => issue.Safe)}" + (snapshot.WritesBlocked ? " | DB YAZMA KİLİTLİ: GIRCIK/DB trigger" : "");
     }
 }
