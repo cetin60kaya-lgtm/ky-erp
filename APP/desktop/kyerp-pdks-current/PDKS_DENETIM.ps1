@@ -66,24 +66,43 @@ if ([string]::IsNullOrWhiteSpace($canonicalDb) -or -not (Test-Path -LiteralPath 
 }
 $testDb = Join-Path $testRoot 'KY_PDKS_TEST.FDB'
 Copy-Item -LiteralPath $canonicalDb -Destination $testDb -Force
+$testWorkspace = Join-Path $testRoot 'WORKSPACE'
+$testCompany = Join-Path $testWorkspace '03_DATA\Hakan Emprime'
+$testConfig = Join-Path $testCompany '.system\Config'
+$testTnf = Join-Path $testWorkspace '04_TNF\Hakan Emprime'
+New-Item -ItemType Directory -Force -Path $testConfig,$testTnf | Out-Null
+$canonicalTnf = Join-Path $workspaceRoot '04_TNF\Hakan Emprime'
+if (Test-Path -LiteralPath $canonicalTnf) {
+    Get-ChildItem -LiteralPath $canonicalTnf -Filter '*.Tnf' -File | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $testTnf $_.Name) -Force
+    }
+}
+$canonicalConfig = Join-Path $workspaceRoot '03_DATA\Hakan Emprime\.system\Config'
+foreach ($name in @('terminal-device.json','terminal-sync.json')) {
+    $source = Join-Path $canonicalConfig $name
+    if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $testConfig $name) -Force }
+}
 $oldDbPath = [Environment]::GetEnvironmentVariable('KY_PDKS_DB_PATH','Process')
+$oldWorkspaceProcess = [Environment]::GetEnvironmentVariable('KYERP_PDKS_ROOT','Process')
 try {
     [Environment]::SetEnvironmentVariable('KY_PDKS_DB_PATH',$testDb,'Process')
+    [Environment]::SetEnvironmentVariable('KYERP_PDKS_ROOT',$testWorkspace,'Process')
     [Environment]::SetEnvironmentVariable('KY_PDKS_SMOKE_LOG',(Join-Path $testRoot '04_CRUD_SMOKE_DETAIL.log'),'Process')
     Run-Step '04_CRUD_SMOKE' { dotnet run --project .\tools\SmokeTest\SmokeTest.csproj -c Release --no-build }
     Run-Step '05_FUNCTION_AUDIT' { dotnet run --project .\tools\FunctionAudit\FunctionAudit.csproj -c Release --no-build }
+    Run-Step '06_SHELL_SMOKE' { dotnet run --project .\tools\ShellSmokeTest\ShellSmokeTest.csproj -c Release --no-build }
+    Run-Step '07_UI_AUDIT' { dotnet run --project .\tools\UiAudit\UiAudit.csproj -c Release }
+    Run-Step '08_V4_SHELL' { dotnet run --project .\tools\V4ShellSmoke\V4ShellSmoke.csproj -c Release }
 }
 finally {
     [Environment]::SetEnvironmentVariable('KY_PDKS_DB_PATH',$oldDbPath,'Process')
+    [Environment]::SetEnvironmentVariable('KYERP_PDKS_ROOT',$oldWorkspaceProcess,'Process')
 }
-
-Run-Step '06_SHELL_SMOKE' { dotnet run --project .\tools\ShellSmokeTest\ShellSmokeTest.csproj -c Release --no-build }
-Run-Step '07_UI_AUDIT' { dotnet run --project .\tools\UiAudit\UiAudit.csproj -c Release }
-Run-Step '08_V4_SHELL' { dotnet run --project .\tools\V4ShellSmoke\V4ShellSmoke.csproj -c Release }
 
 $summary.Add("INFO|Workspace=$workspaceRoot")
 $summary.Add("INFO|Project=$projectRoot")
 $summary.Add("INFO|FunctionalTestDb=$testDb")
+$summary.Add("INFO|IsolatedWorkspace=$testWorkspace")
 $summary.Add("INFO|Completed=" + (Get-Date).ToString('s'))
 $summary | Set-Content -LiteralPath (Join-Path $testRoot 'RESULT.txt') -Encoding UTF8
 Write-Host "PDKS_DENETIM_PASS" -ForegroundColor Green

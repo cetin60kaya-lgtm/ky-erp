@@ -3,6 +3,7 @@ using HKN.Personel.Native;
 ApplicationConfiguration.Initialize();
 foreach (var key in new[] { "KY_PDKS_DB_PATH", "KY_PDKS_DB_HOST", "KY_PDKS_DB_PORT", "KY_PDKS_DB_USER", "KY_PDKS_DB_PASSWORD", "KY_PDKS_RUNTIME_ROOT", "KY_PDKS_REPORT_ROOT", "KY_PDKS_PERSONEL_EXE" })
 {
+    if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key))) continue;
     var value = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User);
     if (!string.IsNullOrWhiteSpace(value)) Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.Process);
 }

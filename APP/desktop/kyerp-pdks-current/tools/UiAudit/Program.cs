@@ -6,13 +6,13 @@ ApplicationConfiguration.Initialize();
 Environment.SetEnvironmentVariable("KY_PDKS_UI_AUDIT", "1", EnvironmentVariableTarget.Process);
 foreach (var key in new[] { "KY_PDKS_DB_PATH", "KY_PDKS_DB_HOST", "KY_PDKS_DB_PORT", "KY_PDKS_DB_USER", "KY_PDKS_DB_PASSWORD", "KY_PDKS_RUNTIME_ROOT", "KY_PDKS_REPORT_ROOT", "KY_PDKS_PERSONEL_EXE" })
 {
+    if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key))) continue;
     var value = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User);
-    if (!string.IsNullOrWhiteSpace(value))
-        Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.Process);
+    if (!string.IsNullOrWhiteSpace(value)) Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.Process);
 }
 
 var noLoad = string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_NOLOAD"), "1", StringComparison.Ordinal);
-var workspaceRoot = Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT", EnvironmentVariableTarget.User);
+var workspaceRoot = Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT") ?? Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT", EnvironmentVariableTarget.User);
 var driveRoot = !string.IsNullOrWhiteSpace(workspaceRoot)
     ? Path.Combine(workspaceRoot, "08_TEST", "UI_AUDIT")
     : (Directory.Exists(@"D:\Googledrive\KYERP-PDKS-MASAUSTU")

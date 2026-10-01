@@ -8,8 +8,8 @@ internal static class CompanyDataPaths
     {
         get
         {
-            var configured = Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT", EnvironmentVariableTarget.User)
-                ?? Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT");
+            var configured = Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT")
+                ?? Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT", EnvironmentVariableTarget.User);
             if (!string.IsNullOrWhiteSpace(configured)) return configured.Trim();
             if (Directory.Exists(@"D:\Googledrive")) return @"D:\Googledrive\KYERP-PDKS-MASAUSTU";
             return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KYERP-PDKS-MASAUSTU");
