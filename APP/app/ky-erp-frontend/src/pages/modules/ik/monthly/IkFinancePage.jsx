@@ -9,7 +9,7 @@ const MODE_BY_TAB = {
   "sgk-evrak-kontrol": "kapanis",
 };
 
-export default function IkFinancePage({ activeTab = "ozet", activeMainCompany }) {
+export default function IkFinancePage({ activeTab = "ozet", activeMainCompany, openModule }) {
   const companyReady = Boolean(activeMainCompany?.slug || activeMainCompany?.id);
   if (!companyReady) {
     return (
@@ -24,8 +24,8 @@ export default function IkFinancePage({ activeTab = "ozet", activeMainCompany })
   return (
     <IkAdvancedMonthly
       mode={mode}
-      initialControlTab={activeTab === "sgk-evrak-kontrol" ? "kontrol" : undefined}
       activeMainCompany={activeMainCompany}
+      openModule={openModule}
     />
   );
 }
