@@ -29,8 +29,8 @@ public sealed partial class MainShellForm
                 result.Contains("yapilandir", StringComparison.OrdinalIgnoreCase))
                 return;
 
-            if (!(leadStatus.Text ?? string.Empty).StartsWith("Kart cihazı", StringComparison.OrdinalIgnoreCase))
-                leadStatus.Text = result;
+            if (!shellActivityText.StartsWith("Kart cihazı", StringComparison.OrdinalIgnoreCase))
+                SetShellActivity(result, null);
         }
         finally { cloudSyncBusy = false; }
     }
