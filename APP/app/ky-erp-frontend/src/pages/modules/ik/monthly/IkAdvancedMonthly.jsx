@@ -27,7 +27,9 @@ import {
 } from "../../../../services/ik/monthlyApi";
 import { printHtmlDocument } from "../../../../services/printService";
 import { exportRowsToExcelFile } from "../../../../utils/excelExport";
-import IkMonthlyProShell from "./IkMonthlyProShell";\nimport "./ik.advanced.css";\nimport "./ik.monthly.pro.css";
+import IkMonthlyProShell from "./IkMonthlyProShell";
+import "./ik.advanced.css";
+import "./ik.monthly.pro.css";
 
 const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 const FINANCE_TYPES = ["Mesai", "Avans", "Toplu avans", "Ozel kesinti", "Icra", "Haciz", "Eksik gün", "Eksik saat"];
