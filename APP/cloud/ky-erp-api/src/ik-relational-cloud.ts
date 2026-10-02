@@ -648,7 +648,11 @@ async function saveAdvancedFinance(c: Context<AppEnv>) {
   const valid = await all(c, `SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND id IN (${employeeIds.map(() => "?").join(",")})`, [companyId, ...employeeIds]);
   if (valid.length !== employeeIds.length) return error(c, 400, "INVALID_EMPLOYEE", "Başka firmaya ait veya geçersiz personel var.");
 
-  const date = hrDateOnly(body.date) || hrDateOnly(nowIso());
+  const date = hrDateOnly(body.date) || hrTodayIstanbul();
+  const dateYear = number(date.slice(0, 4));
+  const dateMonth = number(date.slice(5, 7));
+  const financeLock = await rejectAdvancedPeriodLocked(c, companyId, dateYear, dateMonth);
+  if (financeLock) return financeLock;
   const hourOrDay = number(body.hourOrDay || body.hours);
   const typeUpper = upper(adjustmentType);
   const isOvertime = typeUpper.includes("MESAI");
@@ -708,6 +712,10 @@ async function updateAdvancedFinance(c: Context<AppEnv>) {
   const valid = await first(c, "SELECT id FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
   if (!valid) return error(c, 400, "INVALID_EMPLOYEE", "Başka firmaya ait veya geçersiz personel var.");
 
+  const targetDate = hrDateOnly(body.date || current.date);
+  const updateLock = await rejectAdvancedPeriodLocked(c, companyId, number(targetDate.slice(0, 4)), number(targetDate.slice(5, 7)));
+  if (updateLock) return updateLock;
+
   const adjustmentType = text(body.adjustmentType || body.type || current.adjustment_type);
   const typeUpper = upper(adjustmentType);
   const isOvertime = typeUpper.includes("MESAI");
@@ -736,7 +744,7 @@ async function updateAdvancedFinance(c: Context<AppEnv>) {
         text(body.note ?? overtimeMetaFromNote(current.note).note)].filter(Boolean).join(" · ")
       : (text(body.note ?? overtimeMetaFromNote(current.note).note) || null);
   await c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET employee_id=?,date=?,adjustment_type=?,hour_or_day=?,amount=?,payment_method=?,payroll_effect=?,note=?,status=? WHERE id=?")
-    .bind(employeeId, hrDateOnly(body.date || current.date), adjustmentType, isAbsence && absenceMode === "DAY" ? 1 : hourOrDay, amount,
+    .bind(employeeId, targetDate, adjustmentType, isAbsence && absenceMode === "DAY" ? 1 : hourOrDay, amount,
       isOvertime ? "Bordro" : (text(body.paymentMethod || current.payment_method) || "Elden"),
       isOvertime || isAbsence ? "Bordroya yansir" : text(body.payrollEffect || current.payroll_effect),
       note, text(body.status || current.status), id).run();
@@ -748,11 +756,14 @@ async function deleteAdvancedFinance(c: Context<AppEnv>) {
   const body = await bodyOf(c);
   const id = text(body.id);
   const companyId = companyIdOf(c, body);
-  const current = await first(c, "SELECT a.id,a.note FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
+  const current = await first(c, "SELECT a.id,a.note,a.date FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
   if (!current) return error(c, 404, "NOT_FOUND", "Mesai/avans/kesinti kaydı bulunamadı.");
   if (upper(current.note).includes("SON BORDRO KONTROL")) {
     return error(c, 409, "FINAL_CONTROL_CORRECTION_IMMUTABLE", "Son bordro kontrolü düzeltmesi hareket ekranından silinemez.");
   }
+  const deleteDate = hrDateOnly(current.date);
+  const deleteLock = await rejectAdvancedPeriodLocked(c, companyId, number(deleteDate.slice(0, 4)), number(deleteDate.slice(5, 7)));
+  if (deleteLock) return deleteLock;
   await c.env.DB.prepare("DELETE FROM hr_monthly_adjustments_v2 WHERE id=?").bind(id).run();
   return okData(c, { id, deleted: true });
 }
@@ -907,6 +918,17 @@ async function advancedSyncState(c: Context<AppEnv>) {
 const IK_MONTH_PREPARED_ENTITY = "IK_DONEM";
 const IK_MONTH_PREPARED_ACTION = "MONTH_PREPARED";
 
+async function advancedPeriodLockRow(c: Context<AppEnv>, companyId: string, year: number, month: number) {
+  return first(c, "SELECT is_locked,locked_at,updated_at FROM ik_monthly_close WHERE main_company_id=? AND period_year=? AND period_month=? LIMIT 1", [companyId, year, month]);
+}
+
+async function rejectAdvancedPeriodLocked(c: Context<AppEnv>, companyId: string, year: number, month: number) {
+  const row = await advancedPeriodLockRow(c, companyId, year, month);
+  return flag(row?.is_locked)
+    ? error(c, 409, "IK_PERIOD_LOCKED", `${year}-${String(month).padStart(2, "0")} dönemi kapalıdır. Dönem yeniden açılmadan bordro/hareket/izin değiştirilemez.`)
+    : null;
+}
+
 async function advancedPeriodState(c: Context<AppEnv>) {
   const companyId = companyIdOf(c);
   const year = number(c.req.query("year")) || new Date().getFullYear();
@@ -922,6 +944,7 @@ async function advancedPeriodState(c: Context<AppEnv>) {
       LIMIT 1`,
     [companyId, period, IK_MONTH_PREPARED_ENTITY, IK_MONTH_PREPARED_ACTION],
   );
+  const lock = await advancedPeriodLockRow(c, companyId, year, month);
   return okData(c, {
     mainCompanyId: companyId,
     year,
@@ -929,6 +952,8 @@ async function advancedPeriodState(c: Context<AppEnv>) {
     period,
     prepared: Boolean(row),
     preparedAt: row?.created_at || null,
+    isLocked: flag(lock?.is_locked),
+    lockedAt: lock?.locked_at || null,
   });
 }
 
@@ -1354,6 +1379,8 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   const year = number(body.year) || new Date().getFullYear();
   const month = number(body.month) || new Date().getMonth() + 1;
   const period = `${year}-${String(month).padStart(2, "0")}`;
+  const payrollLock = await rejectAdvancedPeriodLocked(c, companyId, year, month);
+  if (payrollLock) return payrollLock;
   const employee = await first(c, "SELECT id,full_name FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
   if (!employee) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
 
@@ -1467,6 +1494,8 @@ async function saveAdvancedPayrollLines(c: Context<AppEnv>) {
   const year = number(body.year) || new Date().getFullYear();
   const month = number(body.month) || new Date().getMonth() + 1;
   const period = `${year}-${String(month).padStart(2, "0")}`;
+  const payrollLock = await rejectAdvancedPeriodLocked(c, companyId, year, month);
+  if (payrollLock) return payrollLock;
   const employeeIds = Array.isArray(body.employeeIds) ? [...new Set(body.employeeIds.map(text).filter(Boolean))] : [];
   if (!employeeIds.length) return error(c, 400, "EMPLOYEE_REQUIRED", "Bordro kaydı için en az bir personel seçilmelidir.");
   const requested = upper(body.status || "CALCULATED");
@@ -1618,7 +1647,28 @@ async function runAdvancedCloseCheck(c: Context<AppEnv>) {
     { type: "ODEME_DURUM", title: "Ödeme durumu", ok: unpaid.length === 0, detail: unpaid.length ? `${unpaid.length} bordro satırı henüz PAID durumunda değil.` : "Tüm bordrolar ödendi." },
   ];
   await audit(c, { mainCompanyId: companyId, period, entityType: "AY_SONU", action: "CHECK", summary: "Ay sonu kontrolü çalıştırıldı.", details: { checks, periodEnd } });
-  return okData(c, { year, month, period, periodEnd, checks, isLocked: false });
+  let lockRow = await advancedPeriodLockRow(c, companyId, year, month);
+  if (body.lock === true) {
+    const blocking = checks.filter((item) => !item.ok);
+    if (blocking.length) return error(c, 409, "IK_CLOSE_BLOCKED", `${blocking.length} açık kontrol maddesi varken dönem kapatılamaz.`, { checks });
+    const timestamp = nowIso();
+    const id = crypto.randomUUID();
+    await c.env.DB.batch([
+      c.env.DB.prepare(`INSERT INTO ik_monthly_close
+        (id,main_company_id,period_year,period_month,is_locked,locked_at,created_at,updated_at)
+        VALUES (?,?,?,?,1,?,?,?)
+        ON CONFLICT(main_company_id,period_year,period_month) DO UPDATE SET
+          is_locked=1,locked_at=excluded.locked_at,updated_at=excluded.updated_at`)
+        .bind(id, companyId, year, month, timestamp, timestamp, timestamp),
+      c.env.DB.prepare(`INSERT INTO ik_monthly_close_logs
+        (id,main_company_id,period_year,period_month,action,reason,old_json,new_json,user_name,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`)
+        .bind(crypto.randomUUID(), companyId, year, month, "LOCK", text(body.reason || "Ay sonu kontrolleri tamamlandı."), JSON.stringify({ isLocked: flag(lockRow?.is_locked) }), JSON.stringify({ isLocked: true }), text(body.userName || "Sistem"), timestamp),
+    ]);
+    await audit(c, { mainCompanyId: companyId, period, entityType: "AY_SONU", action: "LOCK", summary: "İK aylık dönem kapatıldı.", details: { checks } });
+    lockRow = await advancedPeriodLockRow(c, companyId, year, month);
+  }
+  return okData(c, { year, month, period, periodEnd, checks, isLocked: flag(lockRow?.is_locked), lockedAt: lockRow?.locked_at || null });
 }
 
 async function auditLogs(c: Context<AppEnv>) {
