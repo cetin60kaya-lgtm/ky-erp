@@ -171,3 +171,20 @@
   .gop-quick-dialog .quick-person{grid-template-columns:minmax(0,1fr) 22px!important}.gop-quick-dialog .quick-check-button{width:22px!important;min-width:22px!important;max-width:22px!important}.gop-quick-dialog .quick-check-mark{width:15px!important;height:15px!important;font-size:9px!important}
 }
 @media (max-width:760px){.quick-safety-chip{display:none}.gop-quick-dialog .quick-main-toggle{grid-template-columns:18px minmax(0,1fr) 54px 28px!important}.gop-quick-dialog .quick-main-toggle>b{width:54px!important}.gop-quick-dialog .quick-main-toggle>em{width:28px!important}}
+
+
+/* PAYMENT-TAB-REDESIGN-2026-10-02 */
+.gop-payment-tabs.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.gop-payment-tabs.three button{justify-content:center;min-height:38px}
+.gop-payment-stats.period-stats{grid-template-columns:repeat(5,minmax(0,1fr))}
+.gop-payment-stats.period-stats .gop-stat:last-child{border:1px solid #9fc4ff;background:#f1f6ff}
+.gop-payment-stats.period-stats .gop-stat:last-child strong{font-size:18px;color:#0f4c81}
+.period-ledger table{min-width:1280px}
+.period-ledger td.money,.period-ledger th:nth-child(5),.period-ledger th:nth-child(7),.period-ledger th:nth-child(8){text-align:right}
+.period-ledger td.grand strong{font-size:14px;color:#0f4c81}
+.period-ledger tfoot td{background:#eef4fa;border-top:2px solid #173d68;padding:10px 8px;font-weight:900}
+.period-ledger tfoot .grand strong{font-size:17px}
+.period-ledger tbody tr:hover{background:#f8fbff}
+.period-ledger td>button{border:1px solid #d6dfeb;background:#fff;border-radius:7px;padding:6px 9px;font-weight:800;display:inline-flex;gap:5px;align-items:center}
+.pool-stats{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+@media(max-width:900px){.gop-payment-tabs.three{grid-template-columns:1fr}.gop-payment-stats.period-stats,.pool-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}}

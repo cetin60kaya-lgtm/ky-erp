@@ -289,12 +289,13 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [rosterSaved, setRosterSaved] = useState(false);
   const [summaryRows, setSummaryRows] = useState([]);
   const [paymentRows, setPaymentRows] = useState([]);
+  const [paymentPeriodRows, setPaymentPeriodRows] = useState([]);
   const [paymentLoadError, setPaymentLoadError] = useState("");
   const [paymentHistoryRows, setPaymentHistoryRows] = useState([]);
   const [paymentPoolRange, setPaymentPoolRange] = useState(() => readNamedRange(PAYMENT_POOL_RANGE_KEY));
   const [paymentHistoryRange, setPaymentHistoryRange] = useState(() => readNamedRange(PAYMENT_HISTORY_RANGE_KEY));
   const [paymentSelectedIds, setPaymentSelectedIds] = useState(() => new Set());
-  const [paymentTab, setPaymentTab] = useState("pool");
+  const [paymentTab, setPaymentTab] = useState("period");
   const [paymentHistoryStatus, setPaymentHistoryStatus] = useState("all");
   const [paymentHistoryGroup, setPaymentHistoryGroup] = useState("day");
   const [cardQuery, setCardQuery] = useState("");
@@ -434,15 +435,65 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (view === "daily-payments") setError("");
     try {
       const sourceRange = view === "daily-dashboard" ? range : paymentPoolRange;
-      const rows = await getDailyPaymentPool({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end });
-      setPaymentRows(Array.isArray(rows) ? rows : []);
+      const [poolResult, attendanceResult] = await Promise.all([
+        getDailyPaymentPool({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }),
+        getDailyAttendance({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }, { forceFresh: true }),
+      ]);
+      const poolRows = Array.isArray(poolResult) ? poolResult : [];
+      const attendanceRows = Array.isArray(attendanceResult) ? attendanceResult : [];
+      setPaymentRows(poolRows);
+
+      const employeeLookup = new Map(employees.map((person) => [String(person.id), person]));
+      const map = new Map();
+      attendanceRows.forEach((row) => {
+        const date = rowDate(row);
+        if (!date || date < sourceRange.start || date > sourceRange.end) return;
+        const employeeId = rowEmployeeId(row);
+        if (!employeeId) return;
+        const person = employeeLookup.get(String(employeeId)) || {};
+        const current = map.get(employeeId) || {
+          employeeId,
+          name: person.name || row.name || row.fullName || "Personel",
+          fullName: person.name || row.name || row.fullName || "Personel",
+          personnelNo: person.personnelNo || row.personnelNo || "",
+          qualification: person.role || row.qualification || row.role || "-",
+          periodStart: sourceRange.start,
+          periodEnd: sourceRange.end,
+          dayCount: 0,
+          dayTotal: 0,
+          nightCount: 0,
+          nightTotal: 0,
+          totalDays: 0,
+          totalAmount: 0,
+          items: [],
+        };
+        if (rowDay(row)) {
+          const amount = number(row.dayWage ?? row.dayRate ?? person.dayRate);
+          current.dayCount += 1;
+          current.dayTotal += amount;
+          current.totalDays += 1;
+          current.totalAmount += amount;
+          current.items.push({ workDate: date, shift: "day", amount, active: true });
+        }
+        if (rowNight(row)) {
+          const amount = number(row.nightWage ?? row.nightRate ?? person.nightRate);
+          current.nightCount += 1;
+          current.nightTotal += amount;
+          current.totalDays += 1;
+          current.totalAmount += amount;
+          current.items.push({ workDate: date, shift: "night", amount, active: true });
+        }
+        map.set(employeeId, current);
+      });
+      setPaymentPeriodRows([...map.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), "tr")));
     } catch (e) {
-      const message = e?.message || "Ödeme havuzu alınamadı.";
+      const message = e?.message || "Dönem ödeme verileri alınamadı.";
       setPaymentRows([]);
+      setPaymentPeriodRows([]);
       setPaymentLoadError(message);
       if (view === "daily-payments") setError(message);
     } finally { setLoading(false); }
-  }, [companyId, paymentPoolRange, range, view]);
+  }, [companyId, employees, paymentPoolRange, range, view]);
   useEffect(() => { void loadPayments(); }, [loadPayments]);
 
   const loadPaymentHistory = useCallback(async () => {
@@ -516,6 +567,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     return [...map.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), "tr"));
   }, [attendance, employeeMap, range.end, range.start]);
   const selectedPaymentRows = useMemo(() => paymentRows.filter((row) => paymentSelectedIds.has(String(row.employeeId))), [paymentRows, paymentSelectedIds]);
+  const selectedPaymentPeriodRows = useMemo(() => paymentPeriodRows.filter((row) => paymentSelectedIds.has(String(row.employeeId))), [paymentPeriodRows, paymentSelectedIds]);
   const cardRoles = useMemo(() => [...new Set(employees.map((person) => person.role || "Vasıfsız").filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr")), [employees]);
   const cardBrokers = useMemo(() => [...new Set(employees.map((person) => person.broker || "Direkt").filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr")), [employees]);
   const managedEmployees = useMemo(() => {
@@ -537,13 +589,23 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     });
   }, [employees]);
 
-  const paymentMetrics = useMemo(() => paymentRows.reduce((sum, row) => {
-    sum.waitingCount += 1;
-    sum.waitingAmount += number(row.totalAmount);
-    sum.totalDays += number(row.totalDays ?? (number(row.dayCount) + number(row.nightCount)));
-    if (number(row.pendingCheckCount) > 0) sum.controlPending += 1;
+  const paymentMetrics = useMemo(() => paymentPeriodRows.reduce((sum, row) => {
+    sum.people += 1;
+    sum.dayCount += number(row.dayCount);
+    sum.dayTotal += number(row.dayTotal);
+    sum.nightCount += number(row.nightCount);
+    sum.nightTotal += number(row.nightTotal);
+    sum.totalDays += number(row.totalDays);
+    sum.totalAmount += number(row.totalAmount);
     return sum;
-  }, { waitingCount: 0, waitingAmount: 0, totalDays: 0, controlPending: 0 }), [paymentRows]);
+  }, { people: 0, dayCount: 0, dayTotal: 0, nightCount: 0, nightTotal: 0, totalDays: 0, totalAmount: 0 }), [paymentPeriodRows]);
+  const openPaymentMetrics = useMemo(() => paymentRows.reduce((sum, row) => {
+    sum.people += 1;
+    sum.days += number(row.totalDays ?? (number(row.dayCount) + number(row.nightCount)));
+    sum.amount += number(row.totalAmount);
+    sum.controlPending += number(row.pendingCheckCount) > 0 ? 1 : 0;
+    return sum;
+  }, { people: 0, days: 0, amount: 0, controlPending: 0 }), [paymentRows]);
   const paymentHistoryMetrics = useMemo(() => paymentHistoryRows.reduce((sum, row) => {
     if (String(row.status).toUpperCase() !== "PAID") return sum;
     sum.amount += number(row.totalAmount); sum.count += 1; sum.days += number(row.totalDays); sum.people.add(String(row.employeeId)); return sum;
@@ -580,21 +642,21 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const dashboardWarnings = useMemo(() => {
     const rows = [];
     if (weeklyPending) rows.push(`${weeklyPending} vardiya kontrol bekliyor.`);
-    if (paymentMetrics.waitingCount) rows.push(`${paymentMetrics.waitingCount} personelin ödemesi bekliyor.`);
+    if (openPaymentMetrics.people) rows.push(`${openPaymentMetrics.people} personelin ödemesi bekliyor.`);
     if (paymentLoadError) rows.push("Ödeme verisi şu anda alınamadı; diğer günlük operasyon verileri etkilenmedi.");
     if (dashboardZeroWage) rows.push(`${dashboardZeroWage} aktif personelin gündüz ücreti 0.`);
     if (periodLocked) rows.push("Seçili dönem kapalı; günlük kayıt değişikliği kilitli.");
     if (!attendance.length) rows.push("Seçili tarih aralığında çalışma kaydı yok.");
     return rows;
-  }, [attendance.length, dashboardZeroWage, paymentLoadError, paymentMetrics.waitingCount, periodLocked, weeklyPending]);
+  }, [attendance.length, dashboardZeroWage, paymentLoadError, openPaymentMetrics.people, periodLocked, weeklyPending]);
   const recentOperations = useMemo(() => [...attendance].sort((a, b) => String(b.updatedAt || b.createdAt || rowDate(b)).localeCompare(String(a.updatedAt || a.createdAt || rowDate(a)))).slice(0, 8), [attendance]);
   useEffect(() => {
-    const valid = new Set(paymentRows.map((row) => String(row.employeeId || row.id || row.personnelNo || row.name || row.fullName || "")));
+    const valid = new Set(paymentPeriodRows.map((row) => String(row.employeeId || row.id || row.personnelNo || row.name || row.fullName || "")));
     setPaymentSelectedIds((current) => {
       const next = new Set([...current].filter((id) => valid.has(id)));
       return sameSet(current, next) ? current : next;
     });
-  }, [paymentRows]);
+  }, [paymentPeriodRows]);
 
   const saveRoster = async () => {
     if (busy) return; setBusy(true); setError(""); setNotice("");
@@ -944,59 +1006,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     try { await cancelDailyPayment(row.id || row.paymentId, { mainCompanyId: companyId, reason: reason.trim() }); setNotice(`${row.paymentNo} iptal edildi; hakediş yeniden havuza açıldı.`); await Promise.all([loadPaymentHistory(), loadPayments(), loadRangeData()]); }
     catch (e) { setError(e?.message || "Ödeme iptal edilemedi."); } finally { setBusy(false); }
   };
-  const printPaymentPeriodSlips = useCallback(async ({ selectedOnly = false } = {}) => {
-    if (!companyId) return;
-    setBusy(true); setError("");
-    try {
-      const source = await getDailyAttendance({ mainCompanyId: companyId, startDate: paymentPoolRange.start, endDate: paymentPoolRange.end }, { forceFresh: true });
-      const rows = Array.isArray(source) ? source : [];
-      const byEmployee = new Map();
-      rows.forEach((row) => {
-        const date = rowDate(row);
-        if (!date || date < paymentPoolRange.start || date > paymentPoolRange.end) return;
-        const employeeId = rowEmployeeId(row);
-        if (!employeeId) return;
-        const person = employeeMap.get(employeeId) || {};
-        const current = byEmployee.get(employeeId) || {
-          employeeId,
-          name: person.name || row.name || row.fullName || "Personel",
-          fullName: person.name || row.name || row.fullName || "Personel",
-          personnelNo: person.personnelNo || row.personnelNo || "",
-          qualification: person.role || row.qualification || row.role || "-",
-          periodStart: paymentPoolRange.start,
-          periodEnd: paymentPoolRange.end,
-          dayCount: 0,
-          nightCount: 0,
-          dayTotal: 0,
-          nightTotal: 0,
-          totalAmount: 0,
-          items: [],
-        };
-        if (rowDay(row)) {
-          const amount = number(row.dayWage ?? row.dayRate ?? person.dayRate);
-          current.dayCount += 1;
-          current.dayTotal += amount;
-          current.totalAmount += amount;
-          current.items.push({ workDate: date, shift: "day", amount, active: true });
-        }
-        if (rowNight(row)) {
-          const amount = number(row.nightWage ?? row.nightRate ?? person.nightRate);
-          current.nightCount += 1;
-          current.nightTotal += amount;
-          current.totalAmount += amount;
-          current.items.push({ workDate: date, shift: "night", amount, active: true });
-        }
-        byEmployee.set(employeeId, current);
-      });
-      let slips = [...byEmployee.values()].filter((row) => number(row.totalAmount) > 0).sort((a, b) => String(a.name).localeCompare(String(b.name), "tr"));
-      if (selectedOnly) slips = slips.filter((row) => paymentSelectedIds.has(String(row.employeeId)));
-      printDailyPaymentSlips(paymentPoolRange, slips);
-    } catch (e) {
-      setError(e?.message || "Seçili tarih aralığı fişleri hazırlanamadı.");
-    } finally {
-      setBusy(false);
-    }
-  }, [companyId, employeeMap, paymentPoolRange, paymentSelectedIds]);
+  const printPaymentPeriodSlips = useCallback(({ selectedOnly = false } = {}) => {
+    let slips = paymentPeriodRows;
+    if (selectedOnly) slips = slips.filter((row) => paymentSelectedIds.has(String(row.employeeId)));
+    printDailyPaymentSlips(paymentPoolRange, slips);
+  }, [paymentPeriodRows, paymentPoolRange, paymentSelectedIds]);
 
   const activePaymentRange = paymentTab === "history" ? paymentHistoryRange : paymentPoolRange;
   const paymentPreset = (mode) => setSafePaymentRange(paymentTab === "history" ? "history" : "pool", paymentPresetRange(mode));
@@ -1188,16 +1202,26 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       {view === "daily-weekly" ? <><div className="gop-toolbar-card">{rangeControls}<div className="gop-print-actions"><button type="button" disabled={!weeklyControlRows.length} onClick={() => printWeeklyControlList(range, days, weeklyControlRows)}><Printer size={16}/> Kontrol Listesi</button><button type="button" disabled={!summaryRows.length} onClick={() => printRows("KY ERP Günlük Personel Haftalık Özeti", range, summaryRows)}><Printer size={16}/> Özet Yazdır</button><button type="button" onClick={exportExcel}><FileSpreadsheet size={16}/> Excel</button></div></div><div className="gop-week-stats"><Stat label="Çalışan" value={weeklyTotals.people}/><Stat label="Toplam Gün" value={weeklyTotals.day + weeklyTotals.night}/><Stat label="Gündüz" value={weeklyTotals.day}/><Stat label="Gece" value={weeklyTotals.night}/><Stat label="Kontrol Bekleyen" value={weeklyPending}/><Stat label="Toplam Tutar" value={money(weeklyTotals.total)}/></div><div className="gop-card gop-week-card"><div className="gop-card-head"><div><h2>Haftalık Kontrol Matrisi</h2><span>{dateText(range.start)} — {dateText(range.end)} · Gün gün çalışma ve hakediş kontrolü.</span></div></div><div className="gop-week-matrix"><table><thead><tr><th className="person">Personel</th><th className="role">Vasıf</th>{days.slice(0, 7).map((date) => <th key={date}><span>{new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`))}</span><b>{dateText(date, true)}</b></th>)}<th>Toplam Gün</th><th>Toplam</th></tr></thead><tbody>{weeklyControlRows.length ? weeklyControlRows.map((row) => <tr key={row.employeeId}><td className="person"><strong>{row.name}</strong><small>{row.personnelNo || ""}</small></td><td className="role">{row.role || "-"}</td>{days.slice(0, 7).map((date) => { const cell = row.days?.[date] || {}; return <td key={date} className="shift-cell"><span className={cell.day ? "on day" : ""}>G{cell.day ? "✓" : "–"}</span><span className={cell.night ? "on night" : ""}>N{cell.night ? "✓" : "–"}</span></td>; })}<td className="total-day"><strong>{number(row.dayCount) + number(row.nightCount)}</strong></td><td className="money"><strong>{money(row.totalAmount)}</strong></td></tr>) : <tr><td colSpan={days.slice(0, 7).length + 4}><Empty>Seçili dönemde çalışma kaydı yok.</Empty></td></tr>}</tbody></table></div><details className="gop-week-detail"><summary>Vasıf Dağılımı <span>{roleOverview.length} grup</span></summary><div className="gop-role-overview">{roleOverview.map(([role, count]) => <div key={role}><span>{role}</span><b>{count}</b></div>)}</div></details></div></> : null}
 
       {view === "daily-payments" ? <div className="gop-payments-v2">
-        <div className="gop-payment-tabs"><button type="button" className={paymentTab === "pool" ? "active" : ""} onClick={() => setPaymentTab("pool")}><WalletCards size={16}/> Ödeme Havuzu <b>{paymentRows.length}</b></button><button type="button" className={paymentTab === "history" ? "active" : ""} onClick={() => setPaymentTab("history")}><ClipboardList size={16}/> Yapılan Ödemeler <b>{paymentHistoryRows.filter((row) => String(row.status).toUpperCase() === "PAID").length}</b></button></div>
-        <div className="gop-toolbar-card payment-toolbar"><div className="gop-payment-filter-context"><strong>{paymentTab === "pool" ? "Hakediş Filtresi" : "Ödeme Tarihi Filtresi"}</strong><span>{dateText(activePaymentRange.start)} — {dateText(activePaymentRange.end)}</span></div><div className="gop-preset-buttons"><button type="button" className={paymentPresetActive("today") ? "active" : ""} onClick={() => paymentPreset("today")}>Bugün</button><button type="button" className={paymentPresetActive("week") ? "active" : ""} onClick={() => paymentPreset("week")}>Bu Hafta</button><button type="button" className={paymentPresetActive("lastWeek") ? "active" : ""} onClick={() => paymentPreset("lastWeek")}>Geçen Hafta</button><button type="button" className={paymentPresetActive("month") ? "active" : ""} onClick={() => paymentPreset("month")}>Bu Ay</button><button type="button" className={paymentPresetActive("lastMonth") ? "active" : ""} onClick={() => paymentPreset("lastMonth")}>Geçen Ay</button><button type="button" className={paymentPresetActive("year") ? "active" : ""} onClick={() => paymentPreset("year")}>Bu Yıl</button></div>{paymentRangeControls}</div>
-        {paymentTab === "pool" ? <>
-          <div className="gop-payment-stats"><Stat label="Ödeme Bekleyen" value={paymentRows.length} hint={`${paymentMetrics.totalDays} vardiya`}/><Stat label="Bekleyen Tutar" value={money(paymentMetrics.waitingAmount)}/><Stat label="Kontrol Bekleyen" value={paymentMetrics.controlPending} hint="Ödeme öncesi tamamlanmalı"/><Stat label="Hakediş Dönemi" value={`${dateText(paymentPoolRange.start)} — ${dateText(paymentPoolRange.end)}`}/></div>
-          <div className="gop-card"><div className="gop-card-head payment-head"><div><h2>Ödeme Havuzu</h2><span>Kontrolü tamamlanan hakedişleri ödeyin. Fiş yazdırmak ödeme durumunu değiştirmez.</span></div><div className="gop-print-actions"><button type="button" disabled={!selectedPaymentRows.length} onClick={() => printPaymentPeriodSlips({ selectedOnly: true })}><Printer size={15}/> Seçili Fişleri Yazdır</button><button type="button" disabled={!paymentRows.length} onClick={() => printPaymentPeriodSlips()}><Printer size={15}/> Tüm Fişleri Yazdır</button><button type="button" onClick={() => setPaymentSelectedIds(new Set(paymentRows.map((row) => String(row.employeeId))))}>Tümünü Seç</button><button type="button" disabled={!paymentSelectedIds.size} onClick={() => setPaymentSelectedIds(new Set())}>Seçimi Kaldır</button><button type="button" className="primary" disabled={busy || !selectedPaymentRows.length || selectedPaymentRows.some((row) => number(row.pendingCheckCount) > 0)} onClick={paySelectedRows}><WalletCards size={15}/> Seçili Ödendi</button></div></div>
-            <div className="gop-payment-ledger-table"><table><thead><tr><th>Seç</th><th>Personel</th><th>Hakediş Dönemi</th><th>Gündüz</th><th>Gece</th><th>Toplam</th><th>Ödenecek</th><th>Kontrol</th><th>İşlem</th></tr></thead><tbody>{paymentRows.length ? paymentRows.map((row) => { const key=String(row.employeeId); const picked=paymentSelectedIds.has(key); const ready=number(row.pendingCheckCount)===0; return <tr key={key} className={!ready ? "needs-control" : ""}><td><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next=new Set(current); if(next.has(key)) next.delete(key); else next.add(key); return next; })}/></td><td><strong>{row.name || row.fullName}</strong><small>{row.personnelNo || ""} · {row.qualification || "-"}</small></td><td>{dateText(row.periodStart)} — {dateText(row.periodEnd)}</td><td>{number(row.dayCount)}</td><td>{number(row.nightCount)}</td><td><b>{number(row.totalDays)}</b></td><td className="money"><strong>{money(row.totalAmount)}</strong></td><td><span className={`gop-badge ${ready ? "ok" : "waiting"}`}>{ready ? "✓ Tam" : `${number(row.pendingCheckCount)} eksik`}</span></td><td><div className="ledger-actions"><button type="button" onClick={() => printDailyPaymentSlips(paymentPoolRange,[row])}><Printer size={14}/> Fiş Önizle</button><button type="button" className="primary" disabled={busy || !ready} onClick={() => payRow(row,false)}><WalletCards size={14}/> Ödendi Yap</button><button type="button" className="primary soft" disabled={busy || !ready} onClick={() => payRow(row,true)}><Printer size={14}/> Ödendi + Fiş</button></div></td></tr>; }) : <tr><td colSpan="9"><Empty>Bu hakediş döneminde açık ödeme yok.</Empty></td></tr>}</tbody></table></div>
+        <div className="gop-payment-tabs three">
+          <button type="button" className={paymentTab === "period" ? "active" : ""} onClick={() => setPaymentTab("period")}><Printer size={16}/> Dönem / Çıktı <b>{paymentPeriodRows.length}</b></button>
+          <button type="button" className={paymentTab === "pool" ? "active" : ""} onClick={() => setPaymentTab("pool")}><WalletCards size={16}/> Ödeme Bekleyen <b>{paymentRows.length}</b></button>
+          <button type="button" className={paymentTab === "history" ? "active" : ""} onClick={() => setPaymentTab("history")}><ClipboardList size={16}/> Yapılan Ödemeler <b>{paymentHistoryRows.filter((row) => String(row.status).toUpperCase() === "PAID").length}</b></button>
+        </div>
+        <div className="gop-toolbar-card payment-toolbar"><div className="gop-payment-filter-context"><strong>{paymentTab === "history" ? "Ödeme Tarihi Filtresi" : "Hakediş Filtresi"}</strong><span>{dateText(activePaymentRange.start)} — {dateText(activePaymentRange.end)}</span></div><div className="gop-preset-buttons"><button type="button" className={paymentPresetActive("today") ? "active" : ""} onClick={() => paymentPreset("today")}>Bugün</button><button type="button" className={paymentPresetActive("week") ? "active" : ""} onClick={() => paymentPreset("week")}>Bu Hafta</button><button type="button" className={paymentPresetActive("lastWeek") ? "active" : ""} onClick={() => paymentPreset("lastWeek")}>Geçen Hafta</button><button type="button" className={paymentPresetActive("month") ? "active" : ""} onClick={() => paymentPreset("month")}>Bu Ay</button><button type="button" className={paymentPresetActive("lastMonth") ? "active" : ""} onClick={() => paymentPreset("lastMonth")}>Geçen Ay</button><button type="button" className={paymentPresetActive("year") ? "active" : ""} onClick={() => paymentPreset("year")}>Bu Yıl</button></div>{paymentRangeControls}</div>
+
+        {paymentTab === "period" ? <>
+          <div className="gop-payment-stats period-stats"><Stat label="Personel" value={paymentMetrics.people}/><Stat label="Gündüz" value={paymentMetrics.dayCount} hint={money(paymentMetrics.dayTotal)}/><Stat label="Gece" value={paymentMetrics.nightCount} hint={money(paymentMetrics.nightTotal)}/><Stat label="Toplam Vardiya" value={paymentMetrics.totalDays}/><Stat label="GENEL TOPLAM" value={money(paymentMetrics.totalAmount)}/></div>
+          <div className="gop-card"><div className="gop-card-head payment-head"><div><h2>Dönem Hakedişleri ve Çıktı</h2><span>Ödeme yapılsa bile bu liste kaybolmaz. Çıktı her zaman seçili tarih aralığından alınır.</span></div><div className="gop-print-actions"><button type="button" disabled={!selectedPaymentPeriodRows.length} onClick={() => printPaymentPeriodSlips({ selectedOnly: true })}><Printer size={15}/> Seçili Fişleri Yazdır</button><button type="button" disabled={!paymentPeriodRows.length} onClick={() => printPaymentPeriodSlips()}><Printer size={15}/> Tüm Fişleri Yazdır</button><button type="button" onClick={() => setPaymentSelectedIds(new Set(paymentPeriodRows.map((row) => String(row.employeeId))))}>Tümünü Seç</button><button type="button" disabled={!paymentSelectedIds.size} onClick={() => setPaymentSelectedIds(new Set())}>Seçimi Kaldır</button></div></div>
+            <div className="gop-payment-ledger-table period-ledger"><table><thead><tr><th>Seç</th><th>Personel</th><th>Hakediş Dönemi</th><th>Gündüz Adet</th><th>Gündüz Toplam</th><th>Gece Adet</th><th>Gece Toplam</th><th>Ücret Toplamı</th><th>Fiş</th></tr></thead><tbody>{paymentPeriodRows.length ? paymentPeriodRows.map((row) => { const key=String(row.employeeId); const picked=paymentSelectedIds.has(key); return <tr key={key}><td><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next=new Set(current); if(next.has(key)) next.delete(key); else next.add(key); return next; })}/></td><td><strong>{row.name || row.fullName}</strong><small>{row.personnelNo || ""} · {row.qualification || "-"}</small></td><td>{dateText(paymentPoolRange.start)} — {dateText(paymentPoolRange.end)}</td><td><b>{number(row.dayCount)}</b></td><td className="money">{money(row.dayTotal)}</td><td><b>{number(row.nightCount)}</b></td><td className="money">{money(row.nightTotal)}</td><td className="money grand"><strong>{money(row.totalAmount)}</strong></td><td><button type="button" onClick={() => printDailyPaymentSlips(paymentPoolRange,[row])}><Printer size={14}/> Fiş</button></td></tr>; }) : <tr><td colSpan="9"><Empty>Seçili tarih aralığında çalışma kaydı yok.</Empty></td></tr>}</tbody><tfoot><tr><td colSpan="3"><strong>GENEL TOPLAM</strong></td><td><strong>{paymentMetrics.dayCount}</strong></td><td className="money"><strong>{money(paymentMetrics.dayTotal)}</strong></td><td><strong>{paymentMetrics.nightCount}</strong></td><td className="money"><strong>{money(paymentMetrics.nightTotal)}</strong></td><td className="money grand"><strong>{money(paymentMetrics.totalAmount)}</strong></td><td></td></tr></tfoot></table></div>
+          </div>
+        </> : paymentTab === "pool" ? <>
+          <div className="gop-payment-stats pool-stats"><Stat label="Ödeme Bekleyen" value={openPaymentMetrics.people} hint={`${openPaymentMetrics.days} vardiya`}/><Stat label="Bekleyen Tutar" value={money(openPaymentMetrics.amount)}/><Stat label="Kontrol Bekleyen" value={openPaymentMetrics.controlPending}/><Stat label="Hakediş Dönemi" value={`${dateText(paymentPoolRange.start)} — ${dateText(paymentPoolRange.end)}`}/></div>
+          <div className="gop-card"><div className="gop-card-head payment-head"><div><h2>Ödeme Bekleyenler</h2><span>Bu alan yalnız ödenmemiş hakedişleri gösterir. Ödeme sonrası kayıt Dönem / Çıktı ve Yapılan Ödemeler tarafında kalır.</span></div><div className="gop-print-actions"><button type="button" onClick={() => setPaymentTab("period")}><Printer size={15}/> Dönem Çıktısına Git</button><button type="button" onClick={() => setPaymentSelectedIds(new Set(paymentRows.map((row) => String(row.employeeId))))}>Tümünü Seç</button><button type="button" className="primary" disabled={busy || !selectedPaymentRows.length || selectedPaymentRows.some((row) => number(row.pendingCheckCount) > 0)} onClick={paySelectedRows}><WalletCards size={15}/> Seçili Ödendi</button></div></div>
+            <div className="gop-payment-ledger-table"><table><thead><tr><th>Seç</th><th>Personel</th><th>Dönem</th><th>Gündüz</th><th>Gece</th><th>Vardiya</th><th>Ödenecek</th><th>Kontrol</th><th>İşlem</th></tr></thead><tbody>{paymentRows.length ? paymentRows.map((row) => { const key=String(row.employeeId); const picked=paymentSelectedIds.has(key); const ready=number(row.pendingCheckCount)===0; return <tr key={key} className={!ready ? "needs-control" : ""}><td><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next=new Set(current); if(next.has(key)) next.delete(key); else next.add(key); return next; })}/></td><td><strong>{row.name || row.fullName}</strong><small>{row.personnelNo || ""} · {row.qualification || "-"}</small></td><td>{dateText(row.periodStart)} — {dateText(row.periodEnd)}</td><td>{number(row.dayCount)}</td><td>{number(row.nightCount)}</td><td><b>{number(row.totalDays)}</b></td><td className="money"><strong>{money(row.totalAmount)}</strong></td><td><span className={`gop-badge ${ready ? "ok" : "waiting"}`}>{ready ? "✓ Tam" : `${number(row.pendingCheckCount)} eksik`}</span></td><td><div className="ledger-actions"><button type="button" className="primary" disabled={busy || !ready} onClick={() => payRow(row,false)}><WalletCards size={14}/> Ödendi Yap</button><button type="button" className="primary soft" disabled={busy || !ready} onClick={() => payRow(row,true)}><Printer size={14}/> Ödendi + Fiş</button></div></td></tr>; }) : <tr><td colSpan="9"><Empty>Bu dönemde bekleyen ödeme yok. Çıktılar Dönem / Çıktı sekmesinden alınabilir.</Empty></td></tr>}</tbody></table></div>
           </div>
         </> : <>
           <div className="gop-payment-stats"><Stat label="Yapılan Ödeme" value={money(paymentHistoryMetrics.amount)}/><Stat label="Ödeme Adedi" value={paymentHistoryMetrics.count}/><Stat label="Personel" value={paymentHistoryMetrics.people.size}/><Stat label="Toplam Gün/Vardiya" value={paymentHistoryMetrics.days}/></div>
-          <div className="gop-card"><div className="gop-card-head payment-head"><div><h2>Yapılan Ödemeler</h2><span>Ödeme tarihine göre kalıcı ödeme defteri. Hakediş dönemi ayrıca korunur.</span></div><div className="gop-payment-filter"><button type="button" className={paymentHistoryStatus === "all" ? "active" : ""} onClick={() => setPaymentHistoryStatus("all")}>Tümü</button><button type="button" className={paymentHistoryStatus === "paid" ? "active" : ""} onClick={() => setPaymentHistoryStatus("paid")}>Ödenen</button><button type="button" className={paymentHistoryStatus === "cancelled" ? "active" : ""} onClick={() => setPaymentHistoryStatus("cancelled")}>İptal</button><select value={paymentHistoryGroup} onChange={(e) => setPaymentHistoryGroup(e.target.value)}><option value="day">Günlük</option><option value="week">Haftalık</option><option value="month">Aylık</option></select></div></div>
+          <div className="gop-card"><div className="gop-card-head payment-head"><div><h2>Yapılan Ödemeler</h2><span>Kalıcı ödeme geçmişi. Ödeme yapılsa da dönem çıktısı ayrıca korunur.</span></div><div className="gop-print-actions"><button type="button" onClick={() => setPaymentTab("period")}><Printer size={14}/> Dönem / Çıktı</button></div><div className="gop-payment-filter"><button type="button" className={paymentHistoryStatus === "all" ? "active" : ""} onClick={() => setPaymentHistoryStatus("all")}>Tümü</button><button type="button" className={paymentHistoryStatus === "paid" ? "active" : ""} onClick={() => setPaymentHistoryStatus("paid")}>Ödenen</button><button type="button" className={paymentHistoryStatus === "cancelled" ? "active" : ""} onClick={() => setPaymentHistoryStatus("cancelled")}>İptal</button><select value={paymentHistoryGroup} onChange={(e) => setPaymentHistoryGroup(e.target.value)}><option value="day">Günlük</option><option value="week">Haftalık</option><option value="month">Aylık</option></select></div></div>
             <div className="gop-payment-history-records">{paymentHistoryGroups.length ? paymentHistoryGroups.map(([group, rows]) => {
               const paidRows = rows.filter((row) => String(row.status).toUpperCase() === "PAID");
               const groupAmount = paidRows.reduce((sum, row) => sum + number(row.totalAmount), 0);
