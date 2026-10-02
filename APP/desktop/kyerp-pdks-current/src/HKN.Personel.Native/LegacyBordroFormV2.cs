@@ -24,7 +24,7 @@ public sealed class LegacyBordroForm : Form
         "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
     ];
 
-    public LegacyBordroForm()
+    public LegacyBordroForm(int initialType = 0)
     {
         Text = "Bordro";
         Size = new Size(1360, 760);
@@ -35,7 +35,7 @@ public sealed class LegacyBordroForm : Form
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
 
         type.Items.AddRange(["Genel Maaş Bordrosu", "Mesai Bordrosu", "Maaş Pusulası"]);
-        type.SelectedIndex = 0;
+        type.SelectedIndex = Math.Clamp(initialType, 0, type.Items.Count - 1);
 
         var currentYear = DateTime.Today.Year;
         for (var y = currentYear + 1; y >= 2015; y--) year.Items.Add(y);
