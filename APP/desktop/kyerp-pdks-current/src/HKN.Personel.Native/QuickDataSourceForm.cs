@@ -25,7 +25,7 @@ public sealed class QuickDataSourceForm : Form
         BackColor=p.Canvas;
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(14), RowCount = 4, ColumnCount = 1, BackColor=p.Canvas };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 90)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.Controls.Add(SourceRow("Canlı şirket veritabanı (.FDB)", gdb, PickGdb), 0, 0);
         root.Controls.Add(SourceRow("Terminal / denetim datası (.Tnf / .txt)", terminal, PickTerminal), 0, 1);
         var bar = PdksUiKit.ActionBar(false,p.Canvas);
