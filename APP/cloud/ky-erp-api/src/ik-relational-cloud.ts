@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
+import * as XLSX from "xlsx";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -1543,6 +1544,304 @@ async function saveAdvancedSettlementDraft(c: Context<AppEnv>) {
   return okData(c, { id, employeeId, period, status: "DRAFT" }, 201);
 }
 
+function sgkHeaderKey(value: unknown) {
+  return upper(value)
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/İ/g, "I").replace(/Ş/g, "S").replace(/Ğ/g, "G").replace(/Ü/g, "U").replace(/Ö/g, "O").replace(/Ç/g, "C")
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim().replace(/\s+/g, " ");
+}
+
+function sgkNameKey(value: unknown) {
+  return sgkHeaderKey(value).replace(/\s+/g, " ");
+}
+
+function sgkNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.round(value * 100) / 100;
+  const raw = text(value).replace(/₺|TL/gi, "").replace(/\s+/g, "");
+  if (!raw) return 0;
+  let normalized = raw;
+  if (raw.includes(",")) normalized = raw.replace(/\./g, "").replace(",", ".");
+  else if (/^-?\d{1,3}(,\d{3})+$/.test(raw)) normalized = raw.replace(/,/g, "");
+  const parsed = Number(normalized.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : 0;
+}
+
+function sgkDate(value: unknown) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  if (typeof value === "number" && value > 1000 && value < 100000) {
+    const decoded = XLSX.SSF.parse_date_code(value);
+    if (decoded?.y && decoded?.m && decoded?.d) return `${String(decoded.y).padStart(4, "0")}-${String(decoded.m).padStart(2, "0")}-${String(decoded.d).padStart(2, "0")}`;
+  }
+  const raw = text(value);
+  if (!raw) return "";
+  const iso = raw.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
+  const tr = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (tr) return `${tr[3]}-${tr[2].padStart(2, "0")}-${tr[1].padStart(2, "0")}`;
+  return "";
+}
+
+function sgkPeriodFromText(value: unknown) {
+  const raw = sgkHeaderKey(value);
+  const numeric = raw.match(/(?:^|\s)(0?[1-9]|1[0-2])\s*[./-]?\s*(20\d{2})(?:\s|$)/);
+  if (numeric) return { month: Number(numeric[1]), year: Number(numeric[2]) };
+  const months: Record<string, number> = { OCAK:1, SUBAT:2, MART:3, NISAN:4, MAYIS:5, HAZIRAN:6, TEMMUZ:7, AGUSTOS:8, EYLUL:9, EKIM:10, KASIM:11, ARALIK:12 };
+  for (const [name, month] of Object.entries(months)) {
+    const m = raw.match(new RegExp(`(?:^|\\s)${name}(?:\\s+AYI)?(?:\\s+|.*?)(20\\d{2})`));
+    if (m) return { month, year: Number(m[1]) };
+  }
+  return null;
+}
+
+function sgkColumn(headers: unknown[], aliases: string[]) {
+  const normalized = headers.map(sgkHeaderKey);
+  for (const alias of aliases.map(sgkHeaderKey)) {
+    const exact = normalized.findIndex((value) => value === alias);
+    if (exact >= 0) return exact;
+    const contains = normalized.findIndex((value) => value.includes(alias));
+    if (contains >= 0) return contains;
+  }
+  return -1;
+}
+
+async function previewAdvancedSgk(c: Context<AppEnv>) {
+  const form = await c.req.formData();
+  const file = form.get("file");
+  if (!(file instanceof File)) return error(c, 400, "FILE_REQUIRED", "Resmi bordro XLS/XLSX dosyası seçilmelidir.");
+  if (file.size <= 0) return error(c, 400, "FILE_EMPTY", "Bordro dosyası boş.");
+  if (file.size > 15 * 1024 * 1024) return error(c, 413, "FILE_TOO_LARGE", "Bordro dosyası en fazla 15 MB olabilir.");
+  const fileName = text(file.name);
+  if (!/\.(xls|xlsx)$/i.test(fileName)) return error(c, 400, "SGK_FILE_TYPE", "Yalnız .xls veya .xlsx bordro dosyası kabul edilir.");
+
+  const body: Row = {};
+  for (const [key, value] of form.entries()) if (!(value instanceof File)) body[key] = value;
+  const companyId = companyIdOf(c, body);
+  const selectedYear = number(body.year);
+  const selectedMonth = number(body.month);
+
+  let workbook: XLSX.WorkBook;
+  try {
+    const buffer = await file.arrayBuffer();
+    workbook = XLSX.read(buffer, { type: "array", cellDates: true, dense: false });
+  } catch {
+    return error(c, 400, "SGK_EXCEL_PARSE", "Bordro Excel dosyası okunamadı.");
+  }
+  const sheetName = workbook.SheetNames[0];
+  const sheet = sheetName ? workbook.Sheets[sheetName] : null;
+  if (!sheet) return error(c, 400, "SGK_EXCEL_EMPTY", "Bordro dosyasında okunabilir sayfa bulunamadı.");
+  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" }) as unknown[][];
+  if (!matrix.length) return error(c, 400, "SGK_EXCEL_EMPTY", "Bordro dosyasında satır bulunamadı.");
+
+  let headerIndex = -1;
+  for (let i = 0; i < Math.min(matrix.length, 80); i += 1) {
+    const keys = (matrix[i] || []).map(sgkHeaderKey);
+    const hasName = keys.some((value) => value.includes("ADI SOYADI") || value === "AD SOYAD" || value === "PERSONEL");
+    const hasDay = keys.some((value) => value === "GUN" || value.includes("SGK GUN"));
+    const hasNet = keys.some((value) => value.includes("NET ISTIHKAK") || value === "NET");
+    if (hasName && (hasDay || hasNet)) { headerIndex = i; break; }
+  }
+  if (headerIndex < 0) return error(c, 400, "SGK_HEADER_NOT_FOUND", "Bordro başlık satırı bulunamadı. ADI SOYADI ve GÜN/NET sütunları kontrol edilmelidir.");
+
+  const headers = matrix[headerIndex] || [];
+  const col = {
+    name: sgkColumn(headers, ["ADI SOYADI","AD SOYAD","PERSONEL"]),
+    identity: sgkColumn(headers, ["T.C. KIMLIK NO","TC KIMLIK NO","T.C. KIMLIK","TC KIMLIK"]),
+    code: sgkColumn(headers, ["PERSONEL KODU","PERSONEL KOD","SICIL NO","SSK SICIL"]),
+    hire: sgkColumn(headers, ["GIRIS TARIHI","ISE GIRIS"]),
+    exit: sgkColumn(headers, ["CIKIS TARIHI","ISTEN CIKIS"]),
+    days: sgkColumn(headers, ["SGK GUN","GUN"]),
+    normal: sgkColumn(headers, ["NORMAL KAZANC"]),
+    other: sgkColumn(headers, ["DIGER KAZANC"]),
+    gross: sgkColumn(headers, ["TOPLAM KAZANC","BRUT KAZANC","BRUT"]),
+    base: sgkColumn(headers, ["SGK MATRAH","SSK MATRAH"]),
+    sgkPremium: sgkColumn(headers, ["SGK PRIMI","SSK PRIMI"]),
+    unemployment: sgkColumn(headers, ["ISSIZLIK PRIMI"]),
+    incomeTax: sgkColumn(headers, ["GELIR VERGISI"]),
+    stampTax: sgkColumn(headers, ["DAMGA VERGISI"]),
+    specialDeduction: sgkColumn(headers, ["OZEL KESINTI"]),
+    employerSgk: sgkColumn(headers, ["ISVEREN SGK","ISVEREN SSK"]),
+    employerUnemployment: sgkColumn(headers, ["ISVEREN ISSIZLIK"]),
+    incentive: sgkColumn(headers, ["SGK TESVIK","TESVIK"]),
+    employerCost: sgkColumn(headers, ["ISVEREN NET MALIYET","NET MALIYET"]),
+    net: sgkColumn(headers, ["NET ISTIHKAK","NET UCRET","NET"]),
+  };
+  if (col.name < 0) return error(c, 400, "SGK_NAME_COLUMN_MISSING", "Bordroda personel adı sütunu bulunamadı.");
+
+  const people = await all(c, `SELECT e.id,e.code,e.full_name,s.identity_no,s.payroll_included
+      FROM hr_monthly_employees e
+      LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
+      WHERE e.main_company_id=?`, [companyId]);
+  const byIdentity = new Map<string, Row>();
+  const byCode = new Map<string, Row>();
+  const byName = new Map<string, Row[]>();
+  for (const person of people) {
+    const identity = text(person.identity_no).replace(/\D/g, "");
+    if (identity) byIdentity.set(identity, person);
+    const code = sgkHeaderKey(person.code).replace(/\s+/g, "");
+    if (code) byCode.set(code, person);
+    const name = sgkNameKey(person.full_name);
+    const list = byName.get(name) || [];
+    list.push(person);
+    byName.set(name, list);
+  }
+
+  const topText = matrix.slice(0, Math.min(headerIndex + 1, 30)).flat().map(text).filter(Boolean);
+  let detected = sgkPeriodFromText(topText.join(" "));
+  if (!detected) detected = sgkPeriodFromText(fileName);
+  const detectedYear = detected?.year || 0;
+  const detectedMonth = detected?.month || 0;
+  const periodDetected = Boolean(detectedYear && detectedMonth);
+  const periodMatches = periodDetected
+    ? (!selectedYear || !selectedMonth || (selectedYear === detectedYear && selectedMonth === detectedMonth))
+    : false;
+
+  const workplaceText = topText.find((value) => /ISYERI|İŞYERİ|SICIL|SİCİL/i.test(value)) || "";
+  const rows: Row[] = [];
+  const maxRows = Math.min(matrix.length, headerIndex + 1 + 5000);
+  for (let i = headerIndex + 1; i < maxRows; i += 1) {
+    const source = matrix[i] || [];
+    const fullName = text(source[col.name]).replace(/\s+/g, " ");
+    if (!fullName) continue;
+    const identityNo = col.identity >= 0 ? text(source[col.identity]).replace(/\D/g, "") : "";
+    const personCode = col.code >= 0 ? text(source[col.code]) : "";
+    const identityMatch = identityNo ? byIdentity.get(identityNo) : null;
+    const codeMatch = personCode ? byCode.get(sgkHeaderKey(personCode).replace(/\s+/g, "")) : null;
+    const nameMatches = byName.get(sgkNameKey(fullName)) || [];
+    const nameMatch = nameMatches.length === 1 ? nameMatches[0] : null;
+    const matched = identityMatch || codeMatch || nameMatch || null;
+    const employeeId = matched && flag(matched.payroll_included) !== false ? text(matched.id) : "";
+    rows.push({
+      sourceFile: fileName,
+      workplace: workplaceText,
+      workplaceNo: "",
+      rowNumber: i + 1,
+      selected: Boolean(employeeId),
+      employeeId: employeeId || null,
+      fullName,
+      identityNo,
+      personCode,
+      hireDate: col.hire >= 0 ? sgkDate(source[col.hire]) : "",
+      exitDate: col.exit >= 0 ? sgkDate(source[col.exit]) : "",
+      sgkDays: col.days >= 0 ? sgkNumber(source[col.days]) : 0,
+      normalEarning: col.normal >= 0 ? sgkNumber(source[col.normal]) : 0,
+      otherEarning: col.other >= 0 ? sgkNumber(source[col.other]) : 0,
+      gross: col.gross >= 0 ? sgkNumber(source[col.gross]) : 0,
+      sgkBase: col.base >= 0 ? sgkNumber(source[col.base]) : 0,
+      sgkPremium: col.sgkPremium >= 0 ? sgkNumber(source[col.sgkPremium]) : 0,
+      unemploymentPremium: col.unemployment >= 0 ? sgkNumber(source[col.unemployment]) : 0,
+      incomeTax: col.incomeTax >= 0 ? sgkNumber(source[col.incomeTax]) : 0,
+      stampTax: col.stampTax >= 0 ? sgkNumber(source[col.stampTax]) : 0,
+      specialDeduction: col.specialDeduction >= 0 ? sgkNumber(source[col.specialDeduction]) : 0,
+      employerSgk: col.employerSgk >= 0 ? sgkNumber(source[col.employerSgk]) : 0,
+      employerUnemployment: col.employerUnemployment >= 0 ? sgkNumber(source[col.employerUnemployment]) : 0,
+      sgkIncentive: col.incentive >= 0 ? sgkNumber(source[col.incentive]) : 0,
+      employerNetCost: col.employerCost >= 0 ? sgkNumber(source[col.employerCost]) : 0,
+      net: col.net >= 0 ? sgkNumber(source[col.net]) : 0,
+      status: employeeId ? (identityMatch ? "TC_ESLESTI" : codeMatch ? "KOD_ESLESTI" : "AD_ESLESTI") : (nameMatches.length > 1 ? "AYNI_AD_COKLU" : "ESLESMEDI"),
+    });
+  }
+  if (!rows.length) return error(c, 400, "SGK_ROWS_EMPTY", "Bordro dosyasında personel satırı bulunamadı.");
+  return okData(c, {
+    fileName,
+    workplace: workplaceText,
+    year: detectedYear,
+    month: detectedMonth,
+    periodDetected,
+    periodMatches,
+    selectedYear,
+    selectedMonth,
+    rows,
+    matched: rows.filter((row) => row.employeeId).length,
+    unmatched: rows.filter((row) => !row.employeeId).length,
+  });
+}
+
+async function confirmAdvancedSgk(c: Context<AppEnv>) {
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c, body);
+  const year = number(body.year);
+  const month = number(body.month);
+  if (!year || month < 1 || month > 12) return error(c, 400, "INVALID_PERIOD", "SGK bordrosu için geçerli yıl ve ay zorunludur.");
+  const locked = await rejectAdvancedPeriodLocked(c, companyId, year, month);
+  if (locked) return locked;
+  const rows = Array.isArray(body.rows) ? body.rows.filter((row: Row) => text(row.employeeId)) as Row[] : [];
+  if (!rows.length) return error(c, 400, "SGK_ROWS_REQUIRED", "Aktarılacak eşleşmiş bordro satırı bulunamadı.");
+
+  const employeeIds = [...new Set(rows.map((row) => text(row.employeeId)).filter(Boolean))];
+  const validRows = await all(c, `SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND id IN (${employeeIds.map(() => "?").join(",")})`, [companyId, ...employeeIds]);
+  if (validRows.length !== employeeIds.length) return error(c, 400, "INVALID_EMPLOYEE", "SGK bordrosunda başka firmaya ait veya geçersiz personel var.");
+
+  const versionRow = await first(c, "SELECT MAX(version_no) AS version_no FROM ik_sgk_imports WHERE main_company_id=? AND period_year=? AND period_month=?", [companyId, year, month]);
+  const versionNo = number(versionRow?.version_no) + 1;
+  const importId = crypto.randomUUID();
+  const timestamp = nowIso();
+  const fileName = text(body.fileName) || "SGK Bordro";
+
+  const grouped = new Map<string, Row>();
+  const sums = ["sgkDays","normalEarning","otherEarning","gross","sgkBase","sgkPremium","unemploymentPremium","incomeTax","stampTax","specialDeduction","employerSgk","employerUnemployment","sgkIncentive","net","employerNetCost"];
+  for (const row of rows) {
+    const employeeId = text(row.employeeId);
+    const current = grouped.get(employeeId) || {
+      employeeId,
+      fullName: text(row.fullName),
+      identityNo: text(row.identityNo),
+      personCode: text(row.personCode),
+      hireDate: hrDateOnly(row.hireDate),
+      exitDate: hrDateOnly(row.exitDate),
+      sources: [],
+    };
+    for (const key of sums) current[key] = number(current[key]) + number(row[key]);
+    (current.sources as unknown[]).push({ sourceFile: text(row.sourceFile), workplace: text(row.workplace), rowNumber: number(row.rowNumber) });
+    grouped.set(employeeId, current);
+  }
+
+  const statements: D1PreparedStatement[] = [
+    c.env.DB.prepare(`INSERT INTO ik_sgk_imports
+      (id,main_company_id,period_year,period_month,file_name,version_no,status,created_at)
+      VALUES (?,?,?,?,?,?,?,?)`)
+      .bind(importId, companyId, year, month, fileName, versionNo, "CONFIRMED", timestamp),
+  ];
+  for (const row of grouped.values()) {
+    statements.push(
+      c.env.DB.prepare(`INSERT INTO ik_sgk_rows
+        (id,import_id,employee_id,full_name,identity_no,sgk_days,gross,net,raw_json,created_at,
+         person_code,hire_date,exit_date,normal_earning,other_earning,total_earning,sgk_base,sgk_premium,
+         unemployment_premium,income_tax,stamp_tax,special_deduction,employer_sgk,employer_unemployment,
+         sgk_incentive,employer_net_cost,difference_reason)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .bind(
+          crypto.randomUUID(), importId, text(row.employeeId), text(row.fullName), text(row.identityNo),
+          number(row.sgkDays), number(row.gross), number(row.net), JSON.stringify({ sources: row.sources || [] }), timestamp,
+          text(row.personCode), hrDateOnly(row.hireDate), hrDateOnly(row.exitDate), number(row.normalEarning),
+          number(row.otherEarning), number(row.gross), number(row.sgkBase), number(row.sgkPremium),
+          number(row.unemploymentPremium), number(row.incomeTax), number(row.stampTax), number(row.specialDeduction),
+          number(row.employerSgk), number(row.employerUnemployment), number(row.sgkIncentive),
+          number(row.employerNetCost), text(row.differenceReason),
+        ),
+    );
+    statements.push(
+      c.env.DB.prepare(`INSERT INTO ik_person_monthly_compliance
+        (main_company_id,employee_id,period,sgk_covered,sgk_days,note,updated_by,updated_at)
+        VALUES (?,?,?,?,?,?,?,?)
+        ON CONFLICT(main_company_id,employee_id,period) DO UPDATE SET
+          sgk_covered=excluded.sgk_covered,sgk_days=excluded.sgk_days,note=excluded.note,
+          updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+        .bind(companyId, text(row.employeeId), `${year}-${String(month).padStart(2, "0")}`, 1, number(row.sgkDays), `Resmi bordro v${versionNo}`, "IK_SGK_IMPORT", timestamp),
+    );
+  }
+  await c.env.DB.batch(statements);
+  await audit(c, {
+    mainCompanyId: companyId,
+    period: `${year}-${String(month).padStart(2, "0")}`,
+    entityType: "SGK_BORDRO",
+    action: "CONFIRM",
+    summary: `Resmi bordro v${versionNo} onaylandı.`,
+    details: { importId, fileName, versionNo, matched: grouped.size, inputRows: rows.length },
+  });
+  return okData(c, { id: importId, importId, year, month, versionNo, fileName, matched: grouped.size, inputRows: rows.length, status: "CONFIRMED" }, 201);
+}
+
 function safeIkDocumentName(value: unknown) {
   return text(value).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "evrak.bin";
 }
@@ -2023,6 +2322,8 @@ export function registerIkRelationalCloudRoutes(app: Hono<AppEnv>) {
   app.post("/api/ik/advanced/payroll/final-control", protect(saveAdvancedPayrollFinalControl));
   app.post("/api/ik/advanced/payroll/save", protect(saveAdvancedPayrollLines));
   app.post("/api/ik/advanced/settlement-draft", protect(saveAdvancedSettlementDraft));
+  app.post("/api/ik/advanced/sgk/preview", protect(previewAdvancedSgk));
+  app.post("/api/ik/advanced/sgk/confirm", protect(confirmAdvancedSgk));
   app.post("/api/ik/advanced/documents/upload", protect(uploadAdvancedDocument));
   app.get("/api/ik/advanced/documents/:documentId/content", protect(downloadAdvancedDocument));
   app.post("/api/ik/advanced/close-check", protect(runAdvancedCloseCheck));
