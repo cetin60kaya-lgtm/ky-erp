@@ -131,4 +131,6 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add APP/cloud/ky-erp-api/package.json APP/cloud/ky-erp-api/package-lock.json
           git commit -m "build(ik): pin SGK Excel parser"
+          git fetch origin codex/model-uretim-kontrol-merkezi-final
+          git rebase origin/codex/model-uretim-kontrol-merkezi-final
           git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
