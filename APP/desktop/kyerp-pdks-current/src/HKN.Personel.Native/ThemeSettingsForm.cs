@@ -3,7 +3,7 @@ namespace HKN.Personel.Native;
 public sealed class ThemeSettingsForm : Form
 {
     readonly ComboBox mode = new(){DropDownStyle=ComboBoxStyle.DropDownList};
-    readonly FlowLayoutPanel accents = new(){Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,5,0,0)};
+    readonly FlowLayoutPanel accents = new(){Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,1,0,0)};
     readonly Panel preview = new(){Dock=DockStyle.Fill};
     PdksAccent selectedAccent = PdksAppearance.Accent;
 
