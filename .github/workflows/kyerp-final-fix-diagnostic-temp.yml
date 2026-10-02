@@ -43,6 +43,41 @@ jobs:
         working-directory: APP/cloud/ky-erp-api
         run: npm run typecheck
 
+      - name: Worker production dependency audit
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm audit --omit=dev --json > /tmp/worker-audit.json || true
+          jq -c '{vulnerabilities:.metadata.vulnerabilities,dependencies:.metadata.dependencies}' /tmp/worker-audit.json
+
+      - name: IK live D1 integrity audit
+        working-directory: APP/cloud/ky-erp-api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+        shell: bash
+        run: |
+          set -euo pipefail
+          q() {
+            npx --yes wrangler@4.118.0 d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$1" --json | jq -c '.[0].results'
+          }
+          echo "EMPLOYEES=$(q "SELECT COUNT(*) n FROM hr_monthly_employees WHERE main_company_id='mecit-hakan';")"
+          echo "DUP_NAMES=$(q "SELECT COUNT(*) n FROM (SELECT LOWER(TRIM(full_name)) k,COUNT(*) c FROM hr_monthly_employees WHERE main_company_id='mecit-hakan' GROUP BY k HAVING c>1);")"
+          echo "DUP_CODES=$(q "SELECT COUNT(*) n FROM (SELECT LOWER(TRIM(code)) k,COUNT(*) c FROM hr_monthly_employees WHERE main_company_id='mecit-hakan' AND TRIM(COALESCE(code,''))<>'' GROUP BY k HAVING c>1);")"
+          echo "ACTIVE_NO_HIRE=$(q "SELECT COUNT(*) n FROM hr_monthly_employees WHERE main_company_id='mecit-hakan' AND UPPER(COALESCE(status,''))='AKTIF' AND TRIM(COALESCE(hire_date,''))='';")"
+          echo "PASSIVE_NO_EXIT=$(q "SELECT COUNT(*) n FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.main_company_id='mecit-hakan' AND UPPER(COALESCE(e.status,'')) LIKE 'PAS%' AND TRIM(COALESCE(s.exit_date,''))='';")"
+          echo "BAD_EMPLOYMENT_DATES=$(q "SELECT COUNT(*) n FROM hr_monthly_employees e JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.main_company_id='mecit-hakan' AND TRIM(COALESCE(s.exit_date,''))<>'' AND TRIM(COALESCE(e.hire_date,''))<>'' AND date(s.exit_date)<date(e.hire_date);")"
+          echo "ORPHAN_CARDS=$(q "SELECT COUNT(*) n FROM ik_person_card_settings s LEFT JOIN hr_monthly_employees e ON e.id=s.employee_id AND e.main_company_id=s.main_company_id WHERE s.main_company_id='mecit-hakan' AND e.id IS NULL;")"
+          echo "ORPHAN_ADJUSTMENTS=$(q "SELECT COUNT(*) n FROM hr_monthly_adjustments_v2 a LEFT JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE e.id IS NULL;")"
+          echo "ORPHAN_LEAVES=$(q "SELECT COUNT(*) n FROM hr_leave_records_v2 l LEFT JOIN hr_monthly_employees e ON e.id=l.employee_id WHERE e.id IS NULL;")"
+          echo "ORPHAN_PAYROLL=$(q "SELECT COUNT(*) n FROM hr_payrolls_v2 p LEFT JOIN hr_monthly_employees e ON e.id=p.employee_id AND e.main_company_id=p.main_company_id WHERE p.main_company_id='mecit-hakan' AND e.id IS NULL;")"
+          echo "PAYROLL_UNBALANCED=$(q "SELECT COUNT(*) n FROM hr_payrolls_v2 WHERE main_company_id='mecit-hakan' AND ABS(COALESCE(bank_amount,0)+COALESCE(cash_amount,0)-COALESCE(total_amount,0))>0.011;")"
+          echo "PAYROLL_DUP=$(q "SELECT COUNT(*) n FROM (SELECT year,month,employee_id,COUNT(*) c FROM hr_payrolls_v2 WHERE main_company_id='mecit-hakan' GROUP BY year,month,employee_id HAVING c>1);")"
+          echo "NEGATIVE_PAYROLL=$(q "SELECT COUNT(*) n FROM hr_payrolls_v2 WHERE main_company_id='mecit-hakan' AND (COALESCE(salary,0)<0 OR COALESCE(road_allowance,0)<0 OR COALESCE(overtime_amount,0)<0 OR COALESCE(premium_amount,0)<0 OR COALESCE(deduction_amount,0)<0 OR COALESCE(advance_amount,0)<0 OR COALESCE(bank_amount,0)<0 OR COALESCE(cash_amount,0)<0 OR COALESCE(total_amount,0)<0);")"
+          echo "SGK_IMPORTS=$(q "SELECT COUNT(*) n FROM ik_sgk_imports WHERE main_company_id='mecit-hakan';")"
+          echo "DOCUMENTS=$(q "SELECT COUNT(*) n FROM hr_employee_documents d JOIN hr_monthly_employees e ON e.id=d.employee_id WHERE e.main_company_id='mecit-hakan';")"
+
       - name: Frontend install
         working-directory: APP/app/ky-erp-frontend
         run: npm ci
@@ -54,6 +89,14 @@ jobs:
       - name: Frontend lint
         working-directory: APP/app/ky-erp-frontend
         run: npm run lint
+
+      - name: Frontend production dependency audit
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm audit --omit=dev --json > /tmp/frontend-audit.json || true
+          jq -c '{vulnerabilities:.metadata.vulnerabilities,dependencies:.metadata.dependencies}' /tmp/frontend-audit.json
 
       - name: Frontend build
         working-directory: APP/app/ky-erp-frontend
