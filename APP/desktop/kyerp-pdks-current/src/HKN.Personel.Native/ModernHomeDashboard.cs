@@ -6,40 +6,44 @@ namespace HKN.Personel.Native;
 internal sealed class ModernHomeDashboard : UserControl
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
-    readonly Label activeValue = MetricValue();
-    readonly Label arrivedValue = MetricValue();
-    readonly Label leaveValue = MetricValue();
-    readonly Label pendingValue = MetricValue();
-    readonly Label terminalState = new() { AutoSize=false, Height=24, Dock=DockStyle.Top, TextAlign=ContentAlignment.MiddleLeft };
-    readonly Label dbState = new() { AutoSize=false, Height=24, Dock=DockStyle.Top, TextAlign=ContentAlignment.MiddleLeft };
-    readonly Label syncState = new() { AutoSize=false, Height=24, Dock=DockStyle.Top, TextAlign=ContentAlignment.MiddleLeft };
+    readonly IReadOnlyDictionary<PdksCommandId,PdksCommandDescriptor> commands;
+    readonly Action<PdksCommandId> execute;
+    Label activeValue = MetricValue();
+    Label arrivedValue = MetricValue();
+    Label leaveValue = MetricValue();
+    Label pendingValue = MetricValue();
+    Label terminalState = StatusLabel();
+    Label dbState = StatusLabel();
+    Label syncState = StatusLabel();
     readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
 
-    static readonly Color Canvas = Color.FromArgb(245,247,250);
-    static readonly Color Surface = Color.White;
-    static readonly Color Border = Color.FromArgb(226,232,240);
-    static readonly Color TextColor = Color.FromArgb(26,38,58);
-    static readonly Color Muted = Color.FromArgb(100,116,139);
-    static readonly Color Blue = Color.FromArgb(37,99,235);
+    static readonly PdksCommandId[] QuickOrder =
+    [
+        PdksCommandId.LiveAttendance,
+        PdksCommandId.EntryExit,
+        PdksCommandId.Personnel,
+        PdksCommandId.TimesheetMonthly,
+        PdksCommandId.PayrollGeneral,
+        PdksCommandId.Reports
+    ];
 
-    public ModernHomeDashboard(
-        Action liveAttendance,
-        Action entryExit,
-        Action personnel,
-        Action timesheet,
-        Action payroll,
-        Action reports,
-        Action terminal)
+    public ModernHomeDashboard(IEnumerable<PdksCommandDescriptor> commandSet, Action<PdksCommandId> commandExecutor)
     {
+        commands = commandSet.ToDictionary(x=>x.Id);
+        execute = commandExecutor;
         Dock = DockStyle.Fill;
-        BackColor = Canvas;
         Font = new Font("Segoe UI",9f);
         DoubleBuffered = true;
-        Build(liveAttendance,entryExit,personnel,timesheet,payroll,reports,terminal);
+        Build();
         Shown += (_,_) => RefreshDashboard();
         timer.Tick += (_,_) => RefreshDashboard();
+        PdksAppearance.Changed += AppearanceChanged;
         if (Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT") != "1") timer.Start();
-        Disposed += (_,_) => timer.Stop();
+        Disposed += (_,_) =>
+        {
+            timer.Stop();
+            PdksAppearance.Changed -= AppearanceChanged;
+        };
         RefreshDashboard();
     }
 
@@ -49,9 +53,26 @@ internal sealed class ModernHomeDashboard : UserControl
         remove { HandleCreated -= value; }
     }
 
-    void Build(Action liveAttendance, Action entryExit, Action personnel, Action timesheet, Action payroll, Action reports, Action terminal)
+    void AppearanceChanged(object? sender, EventArgs e)
     {
-        var scroll = new Panel { Dock=DockStyle.Fill, AutoScroll=true, BackColor=Canvas };
+        if (IsDisposed) return;
+        void rebuild()
+        {
+            Controls.Clear();
+            activeValue=MetricValue();arrivedValue=MetricValue();leaveValue=MetricValue();pendingValue=MetricValue();
+            terminalState=StatusLabel();dbState=StatusLabel();syncState=StatusLabel();
+            Build();
+            RefreshDashboard();
+        }
+        if (InvokeRequired) BeginInvoke((Action)rebuild); else rebuild();
+    }
+
+    void Build()
+    {
+        var p=PdksAppearance.Current;
+        BackColor=p.Canvas;
+
+        var scroll = new Panel { Dock=DockStyle.Fill, AutoScroll=true, BackColor=p.Canvas };
         var root = new TableLayoutPanel
         {
             Dock=DockStyle.Top,
@@ -59,7 +80,7 @@ internal sealed class ModernHomeDashboard : UserControl
             ColumnCount=1,
             RowCount=5,
             Padding=new Padding(6,4,6,24),
-            BackColor=Canvas
+            BackColor=p.Canvas
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,82));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,132));
@@ -67,14 +88,14 @@ internal sealed class ModernHomeDashboard : UserControl
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,258));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,220));
 
-        var hero = new Panel { Dock=DockStyle.Fill, BackColor=Canvas };
+        var hero = new Panel { Dock=DockStyle.Fill, BackColor=p.Canvas };
         hero.Controls.Add(new Label
         {
             Text=$"İyi çalışmalar, {Environment.UserName}",
             Location=new Point(2,8),
             AutoSize=true,
             Font=new Font("Segoe UI",18f,FontStyle.Bold),
-            ForeColor=TextColor
+            ForeColor=p.Text
         });
         hero.Controls.Add(new Label
         {
@@ -82,11 +103,11 @@ internal sealed class ModernHomeDashboard : UserControl
             Location=new Point(4,46),
             AutoSize=true,
             Font=new Font("Segoe UI",9.5f),
-            ForeColor=Muted
+            ForeColor=p.Muted
         });
         root.Controls.Add(hero,0,0);
 
-        var metrics = new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=4, Padding=new Padding(0,0,0,10), BackColor=Canvas };
+        var metrics = new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=4, Padding=new Padding(0,0,0,10), BackColor=p.Canvas };
         for(var i=0;i<4;i++) metrics.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
         metrics.Controls.Add(MetricCard("Aktif Personel","Toplam aktif çalışan",activeValue,PdksToolbarIcon.Personnel),0,0);
         metrics.Controls.Add(MetricCard("Bugün Gelen","Kart basan personel",arrivedValue,PdksToolbarIcon.Live),1,0);
@@ -100,26 +121,23 @@ internal sealed class ModernHomeDashboard : UserControl
             Dock=DockStyle.Fill,
             TextAlign=ContentAlignment.BottomLeft,
             Font=new Font("Segoe UI",11f,FontStyle.Bold),
-            ForeColor=TextColor
+            ForeColor=p.Text
         },0,2);
 
-        var actionGrid = new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=3, RowCount=2, Padding=new Padding(0,8,0,6), BackColor=Canvas };
+        var actionGrid = new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=3, RowCount=2, Padding=new Padding(0,8,0,6), BackColor=p.Canvas };
         for(var i=0;i<3;i++) actionGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,33.333f));
         actionGrid.RowStyles.Add(new RowStyle(SizeType.Percent,50));
         actionGrid.RowStyles.Add(new RowStyle(SizeType.Percent,50));
-        actionGrid.Controls.Add(ActionCard("Canlı Denetim","Anlık giriş, çıkış ve eksik kayıtlar",PdksToolbarIcon.Live,liveAttendance),0,0);
-        actionGrid.Controls.Add(ActionCard("Giriş / Çıkış","Kart hareketlerini görüntüle ve düzenle",PdksToolbarIcon.EntryExit,entryExit),1,0);
-        actionGrid.Controls.Add(ActionCard("Personel","Personel kartı ve özlük bilgileri",PdksToolbarIcon.Personnel,personnel),2,0);
-        actionGrid.Controls.Add(ActionCard("Puantaj","Günlük ve aylık çalışma sonuçları",PdksToolbarIcon.Timesheet,timesheet),0,1);
-        actionGrid.Controls.Add(ActionCard("Bordro","Hakediş, resmî bordro ve ödeme",PdksToolbarIcon.Payroll,payroll),1,1);
-        actionGrid.Controls.Add(ActionCard("Raporlar","Operasyon ve bordro raporları",PdksToolbarIcon.Results,reports),2,1);
+        var visible=QuickOrder.Where(commands.ContainsKey).Select(id=>commands[id]).ToArray();
+        for(var i=0;i<visible.Length;i++)
+            actionGrid.Controls.Add(ActionCard(visible[i]),i%3,i/3);
         root.Controls.Add(actionGrid,0,3);
 
-        var lower = new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=2, Padding=new Padding(0,6,0,0), BackColor=Canvas };
+        var lower = new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=2, Padding=new Padding(0,6,0,0), BackColor=p.Canvas };
         lower.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,65));
         lower.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));
         lower.Controls.Add(InfoCard("Günün Akışı",BuildFlowText()),0,0);
-        lower.Controls.Add(SystemCard(terminal),1,0);
+        lower.Controls.Add(SystemCard(),1,0);
         root.Controls.Add(lower,0,4);
 
         scroll.Controls.Add(root);
@@ -128,56 +146,74 @@ internal sealed class ModernHomeDashboard : UserControl
 
     Control MetricCard(string title,string subtitle,Label value,PdksToolbarIcon icon)
     {
+        var p=PdksAppearance.Current;
         var card=CardPanel();
         card.Margin=new Padding(0,0,12,0);
-        var iconBox=new PictureBox{Image=PdksToolbarIcons.Create(icon),SizeMode=PictureBoxSizeMode.CenterImage,Location=new Point(18,18),Size=new Size(38,38),BackColor=Color.FromArgb(239,246,255)};
+        var iconBox=new PictureBox{Image=PdksToolbarIcons.Create(icon),SizeMode=PictureBoxSizeMode.CenterImage,Location=new Point(18,18),Size=new Size(38,38),BackColor=p.PrimarySoft};
         value.Location=new Point(72,15); value.Size=new Size(150,36);
-        var titleLabel=new Label{Text=title,Location=new Point(72,51),AutoSize=true,Font=new Font("Segoe UI",9.5f,FontStyle.Bold),ForeColor=TextColor};
-        var sub=new Label{Text=subtitle,Location=new Point(18,82),AutoSize=true,Font=new Font("Segoe UI",8.5f),ForeColor=Muted};
+        var titleLabel=new Label{Text=title,Location=new Point(72,51),AutoSize=true,Font=new Font("Segoe UI",9.5f,FontStyle.Bold),ForeColor=p.Text};
+        var sub=new Label{Text=subtitle,Location=new Point(18,82),AutoSize=true,Font=new Font("Segoe UI",8.5f),ForeColor=p.Muted};
         card.Controls.Add(iconBox);card.Controls.Add(value);card.Controls.Add(titleLabel);card.Controls.Add(sub);
         return card;
     }
 
-    static Label MetricValue()=>new(){Text="—",AutoSize=false,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",20f,FontStyle.Bold),ForeColor=TextColor};
-
-    Control ActionCard(string title,string subtitle,PdksToolbarIcon icon,Action action)
+    static Label MetricValue()
     {
+        var p=PdksAppearance.Current;
+        return new Label{Text="—",AutoSize=false,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",20f,FontStyle.Bold),ForeColor=p.Text};
+    }
+
+    static Label StatusLabel()
+    {
+        var p=PdksAppearance.Current;
+        return new Label{AutoSize=false,Height=24,Dock=DockStyle.Top,TextAlign=ContentAlignment.MiddleLeft,ForeColor=p.Muted};
+    }
+
+    Control ActionCard(PdksCommandDescriptor command)
+    {
+        var p=PdksAppearance.Current;
         var card=CardPanel();
         card.Margin=new Padding(0,0,12,12);
         card.Cursor=Cursors.Hand;
-        var pic=new PictureBox{Image=PdksToolbarIcons.Create(icon),Location=new Point(18,19),Size=new Size(38,38),SizeMode=PictureBoxSizeMode.CenterImage,BackColor=Color.Transparent};
-        var t=new Label{Text=title,Location=new Point(70,18),AutoSize=true,Font=new Font("Segoe UI",10.5f,FontStyle.Bold),ForeColor=TextColor,BackColor=Color.Transparent};
-        var s=new Label{Text=subtitle,Location=new Point(70,45),AutoSize=true,Font=new Font("Segoe UI",8.6f),ForeColor=Muted,BackColor=Color.Transparent};
-        var arrow=new Label{Text="›",Dock=DockStyle.Right,Width=36,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",19f),ForeColor=Color.FromArgb(148,163,184),BackColor=Color.Transparent};
+        var pic=new PictureBox{Image=PdksToolbarIcons.Create(command.Icon),Location=new Point(18,19),Size=new Size(38,38),SizeMode=PictureBoxSizeMode.CenterImage,BackColor=Color.Transparent};
+        var t=new Label{Text=command.Title,Location=new Point(70,18),AutoSize=true,Font=new Font("Segoe UI",10.5f,FontStyle.Bold),ForeColor=p.Text,BackColor=Color.Transparent};
+        var s=new Label{Text=command.Hint,Location=new Point(70,45),AutoSize=true,Font=new Font("Segoe UI",8.6f),ForeColor=p.Muted,BackColor=Color.Transparent};
+        var arrow=new Label{Text="›",Dock=DockStyle.Right,Width=36,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",19f),ForeColor=p.Muted,BackColor=Color.Transparent};
         card.Controls.Add(arrow);card.Controls.Add(pic);card.Controls.Add(t);card.Controls.Add(s);
-        void invoke(object? _,EventArgs __)=>action();
+        void invoke(object? _,EventArgs __)=>execute(command.Id);
         foreach(Control c in new Control[]{card,pic,t,s,arrow}){c.Click+=invoke;c.Cursor=Cursors.Hand;}
-        card.MouseEnter+=(_,_)=>card.BackColor=Color.FromArgb(248,250,252);
-        card.MouseLeave+=(_,_)=>card.BackColor=Surface;
+        card.MouseEnter+=(_,_)=>card.BackColor=p.SurfaceAlt;
+        card.MouseLeave+=(_,_)=>card.BackColor=p.Surface;
         return card;
     }
 
     Control InfoCard(string title,string body)
     {
+        var p=PdksAppearance.Current;
         var card=CardPanel();card.Margin=new Padding(0,0,12,0);card.Padding=new Padding(20);
-        card.Controls.Add(new Label{Text=body,Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f),ForeColor=Muted,TextAlign=ContentAlignment.TopLeft,Padding=new Padding(0,44,0,0)});
-        card.Controls.Add(new Label{Text=title,Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=TextColor});
+        card.Controls.Add(new Label{Text=body,Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f),ForeColor=p.Muted,TextAlign=ContentAlignment.TopLeft,Padding=new Padding(0,44,0,0)});
+        card.Controls.Add(new Label{Text=title,Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text});
         return card;
     }
 
-    Control SystemCard(Action terminal)
+    Control SystemCard()
     {
+        var p=PdksAppearance.Current;
         var card=CardPanel();card.Padding=new Padding(20);card.Margin=Padding.Empty;
-        var open=new Button{Text="Terminal Merkezini Aç",Dock=DockStyle.Bottom,Height=36,FlatStyle=FlatStyle.Flat,BackColor=Color.White,ForeColor=Blue,Font=new Font("Segoe UI",9f,FontStyle.Bold),Cursor=Cursors.Hand};
-        open.FlatAppearance.BorderColor=Color.FromArgb(191,219,254);open.Click+=(_,_)=>terminal();
-        terminalState.ForeColor=Muted;dbState.ForeColor=Muted;syncState.ForeColor=Muted;
-        var body=new Panel{Dock=DockStyle.Fill,Padding=new Padding(0,44,0,0),BackColor=Surface};
+        var open=new Button{Text="Terminal Merkezini Aç",Dock=DockStyle.Bottom,Height=36,FlatStyle=FlatStyle.Flat,BackColor=p.Surface,ForeColor=p.Primary,Font=new Font("Segoe UI",9f,FontStyle.Bold),Cursor=Cursors.Hand};
+        open.FlatAppearance.BorderColor=p.Border;open.Click+=(_,_)=>execute(PdksCommandId.TerminalCenter);
+        terminalState.ForeColor=p.Muted;dbState.ForeColor=p.Muted;syncState.ForeColor=p.Muted;
+        var body=new Panel{Dock=DockStyle.Fill,Padding=new Padding(0,44,0,0),BackColor=p.Surface};
         body.Controls.Add(syncState);body.Controls.Add(dbState);body.Controls.Add(terminalState);
-        card.Controls.Add(open);card.Controls.Add(body);card.Controls.Add(new Label{Text="Sistem Durumu",Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=TextColor});
+        card.Controls.Add(open);card.Controls.Add(body);card.Controls.Add(new Label{Text="Sistem Durumu",Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text});
         return card;
     }
 
-    static Panel CardPanel()=>new ModernCardPanel{Dock=DockStyle.Fill,BackColor=Surface,Padding=new Padding(0),BorderColor=Border,Radius=12};
+    static Panel CardPanel()
+    {
+        var p=PdksAppearance.Current;
+        return new ModernCardPanel{Dock=DockStyle.Fill,BackColor=p.Surface,Padding=new Padding(0),BorderColor=p.Border,Radius=12};
+    }
 
     static string BuildFlowText() =>
         "1. Terminal hareketleri alınır ve doğrulanır\r\n\r\n" +
@@ -200,27 +236,27 @@ internal sealed class ModernHomeDashboard : UserControl
             activeValue.Text=arrivedValue.Text=leaveValue.Text=pendingValue.Text="—";
         }
 
-        var path=Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH",EnvironmentVariableTarget.User)??Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH");
+        var p=PdksAppearance.Current;
         dbState.Text=StartupConfiguration.IsReady()?"●  Veritabanı: bağlı":"●  Veritabanı: bağlantı bekliyor";
-        dbState.ForeColor=StartupConfiguration.IsReady()?Color.FromArgb(22,163,74):Color.FromArgb(202,118,35);
+        dbState.ForeColor=StartupConfiguration.IsReady()?p.Success:p.Warning;
         var state=TerminalSyncService.ReadState();
         if(state?.LastAt is null)
         {
             terminalState.Text="●  Terminal: son eşitleme yok";
-            terminalState.ForeColor=Color.FromArgb(202,118,35);
+            terminalState.ForeColor=p.Warning;
             syncState.Text="Son veri alımı: —";
         }
         else
         {
             terminalState.Text="●  Terminal: bağlantı profili hazır";
-            terminalState.ForeColor=Color.FromArgb(22,163,74);
+            terminalState.ForeColor=p.Success;
             syncState.Text=$"Son veri alımı: {state.LastAt:dd.MM.yyyy HH:mm} • {state.ReadCount:N0} kayıt";
         }
     }
 
     sealed class ModernCardPanel:Panel
     {
-        public Color BorderColor{get;set;}=Border;
+        public Color BorderColor{get;set;}=Color.LightGray;
         public int Radius{get;set;}=12;
         public ModernCardPanel(){DoubleBuffered=true;ResizeRedraw=true;}
         protected override void OnPaint(PaintEventArgs e)
