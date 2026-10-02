@@ -1,5 +1,5 @@
-HEAD: 0dcd848efff500eae2259cf8e4e93acfe7593e89
-UTC: 2026-10-02T13:22:25
+HEAD: f20b6ac25146f15c25d662923006820a139a3a8e
+UTC: 2026-10-02T13:23:53
 
 D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.ModernShell.cs(154,74): error CS0117: 'PdksToolbarIcon' does not contain a definition for 'Terminal' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
 D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.ModernShell.cs(155,73): error CS0117: 'PdksToolbarIcon' does not contain a definition for 'Settings' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
