@@ -58,6 +58,7 @@ public sealed class ReportCenterForm : Form
             if (found >= 0) initialIndex = found;
         }
         report.SelectedIndex = initialIndex;
+        report.SelectedIndexChanged += (_, _) => LoadData();
         Shown += (_, _) => LoadData();
     }
 
@@ -172,7 +173,6 @@ public sealed class ReportCenterForm : Form
         root.Controls.Add(actions,0,3);
 
         Controls.Add(root);
-        report.SelectedIndexChanged += (_, _) => LoadData();
         card.KeyDown += (_,e)=>{if(e.KeyCode==Keys.Enter)LoadData();};
     }
 
