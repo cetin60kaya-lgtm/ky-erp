@@ -2,6 +2,7 @@ using System.Data;
 using FirebirdSql.Data.FirebirdClient;
 using KYERP.PDKS.Core;
 using KYERP.PDKS.Core.Reports;
+using KYERP.PDKS.Core.Payroll;
 
 namespace HKN.Personel.Native;
 
@@ -146,8 +147,9 @@ public sealed class LegacyBordroForm : Form
         ("MESAI100_SAAT", "%100 Mesai Saat"), ("MESAI_SAAT", "Mesai Saat"), ("MESAI", "Mesai"),
         ("UCRETSIZ_IZIN_GUN", "Ücretsiz İzin Gün"), ("UCRETLI_IZIN_GUN", "Ücretli İzin Gün"), ("YILLIK_IZIN_GUN", "Yıllık İzin Gün"),
         ("DEVAMSIZ_GUN", "Devamsız Gün"), ("DEVAMSIZ_SAAT", "Devamsız Saat"), ("GEC_SAAT", "Geç Saat"), ("EKSIK_SAAT", "Eksik Saat"),
-        ("EK_KAZANC", "Ek Kazanç"), ("KESINTI", "Kesinti"), ("AVANS", "Avans"), ("BANKA", "Banka"), ("BES", "BES"), ("ICRA", "İcra"),
-        ("MAAS_ODEME", "Maaş Ödeme"), ("MESAI_ODEME", "Mesai Ödeme"), ("TOPLAM", "Toplam"), ("ELDEN", "Elden"), ("IMZA", "İmza")
+        ("EK_KAZANC", "Ek Kazanç"), ("KESINTI", "Kesinti"), ("AVANS", "Avans"), ("BANKA", "Banka Kayıtlı"), ("BES", "BES"), ("ICRA", "İcra"),
+        ("MAAS_ODEME", "Maaş Ödeme"), ("MESAI_ODEME", "Mesai Ödeme"), ("TOPLAM", "Hak Edilen Net"), ("ELDEN", "Kayıtlı Fark"),
+        ("PEK_BRUT", "Hesaplanan PEK"), ("RESMI_NET", "Resmî Bordro Neti"), ("FARK", "Aradaki Fark"), ("BANKA_OTOMATIK", "Bankaya Ödenecek"), ("IMZA", "İmza")
     ];
 
     void LoadData()
@@ -187,6 +189,7 @@ public sealed class LegacyBordroForm : Form
                 data.ImportRow(row);
             }
             if (data.Columns.Contains("DONEM_BASLANGIC")) data.Columns.Remove("DONEM_BASLANGIC");
+            ApplyOfficialPayrollColumns(data, a.Year);
 
             foreach (var (technical, caption) in ColumnMap)
                 if (data.Columns.Contains(technical)) data.Columns[technical]!.ColumnName = caption;
@@ -221,6 +224,51 @@ public sealed class LegacyBordroForm : Form
             UseWaitCursor = false;
             loading = false;
         }
+    }
+
+    static void ApplyOfficialPayrollColumns(DataTable table, int payrollYear)
+    {
+        foreach (var name in new[] { "PEK_BRUT", "RESMI_NET", "FARK", "BANKA_OTOMATIK" })
+            if (!table.Columns.Contains(name)) table.Columns.Add(name, typeof(decimal));
+
+        foreach (DataRow row in table.Rows)
+        {
+            try
+            {
+                var card=Convert.ToString(row["KART_NO"])?.Trim()??string.Empty;
+                var entitlement=Money(row,"TOPLAM");
+                var fallback=Money(row,"MAAS");
+                var profile=PayrollProfileStore.Load(card,fallback);
+                var unpaid=Money(row,"UCRETSIZ_IZIN_GUN");
+                var absent=Money(row,"DEVAMSIZ_GUN");
+                var payableDays=Math.Clamp((int)Math.Round(30m-unpaid-absent,MidpointRounding.AwayFromZero),0,30);
+                if(entitlement<=0m||payableDays==0)
+                {
+                    row["PEK_BRUT"]=0m;row["RESMI_NET"]=0m;row["FARK"]=entitlement;row["BANKA_OTOMATIK"]=0m;continue;
+                }
+
+                var rules=TurkishPayrollRules.ForYear(payrollYear);
+                var requiredGross=TurkishPayrollCalculator.GrossForTargetNet(entitlement,payrollYear,0m,payableDays);
+                var gross=profile.PekMode==PekMode.Manual
+                    ? Math.Round(profile.ManualPekGross*payableDays/30m,2,MidpointRounding.AwayFromZero)
+                    : requiredGross;
+                var official=TurkishPayrollCalculator.Calculate(new OfficialPayrollInput(gross,0m,payableDays),rules);
+                row["PEK_BRUT"]=official.PrimeEarnings;
+                row["RESMI_NET"]=official.NetWage;
+                row["FARK"]=Math.Round(entitlement-official.NetWage,2,MidpointRounding.AwayFromZero);
+                row["BANKA_OTOMATIK"]=official.NetWage;
+            }
+            catch(NotSupportedException)
+            {
+                row["PEK_BRUT"]=0m;row["RESMI_NET"]=0m;row["FARK"]=Money(row,"TOPLAM");row["BANKA_OTOMATIK"]=0m;
+            }
+        }
+    }
+
+    static decimal Money(DataRow row, string column)
+    {
+        if(!row.Table.Columns.Contains(column)||row[column]==DBNull.Value)return 0m;
+        try{return Convert.ToDecimal(row[column]);}catch{return 0m;}
     }
 
     void ToggleLock()
