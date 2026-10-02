@@ -8,7 +8,10 @@ public sealed partial class MainShellForm
     Label? modernPageTitle;
     Label? modernPageHint;
     Label? modernDbState;
+    Label? modernActivityState;
     Label? modernClock;
+    string shellActivityText="Hazır";
+    bool? shellActivityOk=true;
     System.Windows.Forms.Timer? modernClockTimer;
     Button? activeNavButton;
     Button? modernBackButton;
@@ -99,7 +102,7 @@ public sealed partial class MainShellForm
                 Controls.Remove(modernShell);
                 modernShell.Dispose();
             }
-            modernShell=null;modernPageTitle=null;modernPageHint=null;modernDbState=null;modernClock=null;activeNavButton=null;modernBackButton=null;
+            modernShell=null;modernPageTitle=null;modernPageHint=null;modernDbState=null;modernActivityState=null;modernClock=null;activeNavButton=null;modernBackButton=null;
             modernClockTimer?.Stop();modernClockTimer?.Dispose();modernClockTimer=null;
             BuildModernShell();
             SetModernPage(title,hint);
@@ -430,27 +433,43 @@ public sealed partial class MainShellForm
     Control BuildModernFooter()
     {
         var p=PdksAppearance.Current;
-        var bar = new Panel { Dock = DockStyle.Fill, BackColor = p.Surface, Padding = new Padding(18, 0, 18, 0) };
+        var bar = new Panel { Dock = DockStyle.Fill, BackColor = p.Surface, Padding = new Padding(14, 0, 14, 0) };
+        var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,BackColor=p.Surface,Margin=Padding.Empty};
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,390));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,230));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+
         modernDbState = new Label
         {
-            Dock = DockStyle.Left,
-            Width = 650,
+            Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = p.Muted,
             Font = new Font("Segoe UI", 7.8f)
         };
+        modernActivityState = new Label
+        {
+            Dock=DockStyle.Fill,
+            TextAlign=ContentAlignment.MiddleCenter,
+            ForeColor=shellActivityOk==true?p.Success:shellActivityOk==false?p.Warning:p.Muted,
+            Font=new Font("Segoe UI",7.8f,FontStyle.Bold),
+            AutoEllipsis=true,
+            Text=shellActivityText
+        };
         var version = new Label
         {
-            Dock = DockStyle.Right,
-            Width = 210,
+            Dock = DockStyle.Fill,
             Text = $"KY PDKS 6.4  •  {PdksAppearance.ModeLabel} / {PdksAppearance.AccentLabel}",
             TextAlign = ContentAlignment.MiddleRight,
             ForeColor = p.Muted,
             Font = new Font("Segoe UI", 7.8f)
         };
-        bar.Controls.Add(version);
-        bar.Controls.Add(modernDbState);
+        layout.Controls.Add(modernDbState,0,0);
+        layout.Controls.Add(modernActivityState,1,0);
+        layout.Controls.Add(version,2,0);
+        bar.Controls.Add(layout);
         RefreshModernDbState();
+        RefreshShellActivity();
         return bar;
     }
 
@@ -466,6 +485,21 @@ public sealed partial class MainShellForm
         if(modernBackButton is null || modernBackButton.IsDisposed)return;
         modernBackButton.Enabled=navigationHistory.Count>0;
         modernBackButton.Text=navigationHistory.Count>0?"‹":"·";
+    }
+
+    void SetShellActivity(string text,bool? ok=null)
+    {
+        shellActivityText=string.IsNullOrWhiteSpace(text)?"Hazır":text.Trim();
+        shellActivityOk=ok;
+        RefreshShellActivity();
+    }
+
+    void RefreshShellActivity()
+    {
+        if(modernActivityState is null || modernActivityState.IsDisposed)return;
+        var p=PdksAppearance.Current;
+        modernActivityState.Text=shellActivityText;
+        modernActivityState.ForeColor=shellActivityOk==true?p.Success:shellActivityOk==false?p.Warning:p.Muted;
     }
 
     void RefreshModernDbState()
