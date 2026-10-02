@@ -23,27 +23,29 @@ public sealed class LegacyGroupForm : Form
     public LegacyGroupForm()
     {
         Text="Çalışma Grupları"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(1100,680); MinimumSize=new Size(900,600);
-        Font=new Font("Segoe UI",9f); BackColor=Color.FromArgb(246,249,253); KeyPreview=true;
+        Font=new Font("Segoe UI",9f); BackColor=PdksAppearance.Current.Canvas; KeyPreview=true;
         Build(); Shown+=(_,_)=>Reload(); KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};
     }
 
-    static Label L(string text)=>new(){Text=text,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)};
-    static void Row(TableLayoutPanel t,int r,string text,Control c){t.RowStyles.Add(new RowStyle(SizeType.Absolute,38));t.Controls.Add(L(text),0,r);c.Dock=DockStyle.Fill;c.Margin=new Padding(3,6,3,6);t.Controls.Add(c,1,r);}
-    static Button Cmd(string text,int width=112)=>new(){Text=text,Width=width,Height=36,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9f,FontStyle.Bold)};
+    static Label L(string text)=>PdksUiKit.FieldLabel(text);
+    static void Row(TableLayoutPanel t,int r,string text,Control c){t.RowStyles.Add(new RowStyle(SizeType.Absolute,42));t.Controls.Add(L(text),0,r);c.Dock=DockStyle.Fill;c.Margin=new Padding(0,6,0,6);t.Controls.Add(c,1,r);}
+    static Button Cmd(string text,int width=112)=>PdksUiKit.Button(text,width,
+        text.Contains("Kaydet",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Primary:
+        text.Contains("Sil",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Danger:PdksActionRole.Secondary);
 
     void Build()
     {
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1,Padding=new Padding(14)};root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
-        var split=new SplitContainer{Dock=DockStyle.Fill,FixedPanel=FixedPanel.Panel1,SplitterDistance=420,SplitterWidth=8};
-        var left=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1};left.RowStyles.Add(new RowStyle(SizeType.Absolute,180));left.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        var p=PdksAppearance.Current;var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1,Padding=new Padding(16),BackColor=p.Canvas};root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+        var split=new SplitContainer{Dock=DockStyle.Fill,FixedPanel=FixedPanel.Panel1,SplitterDistance=420,SplitterWidth=10,BackColor=p.Border};split.Panel1.BackColor=p.Surface;split.Panel2.BackColor=p.Surface;
+        var left=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(14),BackColor=p.Surface};left.RowStyles.Add(new RowStyle(SizeType.Absolute,34));left.RowStyles.Add(new RowStyle(SizeType.Absolute,180));left.RowStyles.Add(new RowStyle(SizeType.Percent,100));left.Controls.Add(PdksUiKit.SectionTitle("Çalışma Grubu"),0,0);
         var details=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=4,Padding=new Padding(10)};details.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,165));details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        Row(details,0,"Grup Adı",name);Row(details,1,"Dönemlik Çalışma Saati",periodHours);Row(details,2,"Günlük Çalışma Saati",dailyHours);Row(details,3,"Terminal Kodu",terminalCode);left.Controls.Add(details,0,0);
-        grid.Dock=DockStyle.Fill;grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText="Çalışma Grubu",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});grid.SelectionChanged+=(_,_)=>{if(!editing)LoadSelection();};left.Controls.Add(grid,0,1);split.Panel1.Controls.Add(left);
-        var shifts=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=6,Padding=new Padding(14)};shifts.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,90));shifts.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,110));shifts.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,110));shifts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        foreach(var x in new[]{("Gün Dön.",0),("Giriş Saati",1),("Çıkış Saati",2),("Çalışma Grubunun Adı",3)})shifts.Controls.Add(new Label{Text=x.Item1,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",9f,FontStyle.Bold)},x.Item2,0);
-        for(int r=0;r<5;r++){dayShift[r]=new TextBox();starts[r]=new TextBox();ends[r]=new TextBox();shiftNames[r]=new TextBox();var arr=new Control[]{dayShift[r],starts[r],ends[r],shiftNames[r]};for(int c=0;c<4;c++){arr[c].Dock=DockStyle.Fill;arr[c].Margin=new Padding(4,6,4,6);shifts.Controls.Add(arr[c],c,r+1);}}
+        Row(details,0,"Grup Adı",name);Row(details,1,"Dönemlik Çalışma Saati",periodHours);Row(details,2,"Günlük Çalışma Saati",dailyHours);Row(details,3,"Terminal Kodu",terminalCode);left.Controls.Add(details,0,1);
+        grid.Dock=DockStyle.Fill;grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText="Çalışma Grubu",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});grid.SelectionChanged+=(_,_)=>{if(!editing)LoadSelection();};grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.RowTemplate.Height=31;grid.ColumnHeadersHeight=35;left.Controls.Add(grid,0,2);split.Panel1.Controls.Add(left);
+        var shifts=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=7,Padding=new Padding(16),BackColor=p.Surface};shifts.RowStyles.Add(new RowStyle(SizeType.Absolute,34));shifts.Controls.Add(PdksUiKit.SectionTitle("Vardiya Saatleri"),0,0);shifts.SetColumnSpan(shifts.GetControlFromPosition(0,0)!,4);shifts.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,90));shifts.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,110));shifts.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,110));shifts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        foreach(var x in new[]{("Gün Dön.",0),("Giriş Saati",1),("Çıkış Saati",2),("Çalışma Grubunun Adı",3)})shifts.Controls.Add(new Label{Text=x.Item1,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",8.6f,FontStyle.Bold),ForeColor=p.Muted},x.Item2,1);
+        for(int r=0;r<5;r++){dayShift[r]=new TextBox();starts[r]=new TextBox();ends[r]=new TextBox();shiftNames[r]=new TextBox();var arr=new Control[]{dayShift[r],starts[r],ends[r],shiftNames[r]};for(int c=0;c<4;c++){arr[c].Dock=DockStyle.Fill;arr[c].Margin=new Padding(4,6,4,6);shifts.Controls.Add(arr[c],c,r+2);}}
         split.Panel2.Controls.Add(shifts);root.Controls.Add(split,0,0);
-        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var save=Cmd("Kaydet");var add=Cmd("Yeni Ekle");var edit=Cmd("Değiştir");var del=Cmd("Sil");var delAll=Cmd("Tümünü Sil",120);save.Enabled=false;save.Click+=(_,_)=>Save();add.Click+=(_,_)=>BeginNew(save);edit.Click+=(_,_)=>BeginEdit(save);del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();actions.Controls.AddRange([save,delAll,del,edit,add]);root.Controls.Add(actions,0,1);Controls.Add(root);SetEditors(false);
+        var actions=PdksUiKit.ActionBar(true,p.Canvas);var save=Cmd("Kaydet");var add=Cmd("Yeni Ekle");var edit=Cmd("Değiştir");var del=Cmd("Sil");var delAll=Cmd("Tümünü Sil",120);save.Enabled=false;save.Click+=(_,_)=>Save();add.Click+=(_,_)=>BeginNew(save);edit.Click+=(_,_)=>BeginEdit(save);del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();actions.Controls.AddRange([save,delAll,del,edit,add]);root.Controls.Add(actions,0,1);Controls.Add(root);SetEditors(false);
     }
     void Reload()
     {
@@ -52,7 +54,7 @@ public sealed class LegacyGroupForm : Form
             grid.DataSource=db.Query("select KOD,AD,VAD1,VAD2,VAD3,VAD4,VAD5,BASSAAT1,BASSAAT2,BASSAAT3,BASSAAT4,BASSAAT5,BITSAAT1,BITSAAT2,BITSAAT3,BITSAAT4,BITSAAT5,TSAAT,GSAAT,GDSAAT1,GDSAAT2,GDSAAT3,GDSAAT4,GDSAAT5,MKOD from GRUP order by KOD");
             if(grid.Rows.Count>0){grid.CurrentCell=grid.Rows[0].Cells[0];LoadSelection();}
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Error);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Error,"Definitions.Groups");}
     }
 
     DataRow? CurrentData()
@@ -115,7 +117,7 @@ public sealed class LegacyGroupForm : Form
             }
             SetEditors(false);adding=false;Reload();
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions.Groups");}
     }
 
     void DeleteOne()
@@ -128,7 +130,7 @@ public sealed class LegacyGroupForm : Form
             if(MessageBox.Show("Seçili çalışma grubu silinsin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
             db.Execute("delete from GRUP where KOD=@K",new FbParameter("@K",selectedCode.Value));selectedCode=null;Reload();
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions.Groups");}
     }
 
     void DeleteAll()
@@ -140,6 +142,6 @@ public sealed class LegacyGroupForm : Form
             if(MessageBox.Show("Tüm çalışma grupları silinsin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
             db.Execute("delete from GRUP");selectedCode=null;Reload();
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions.Groups");}
     }
 }
