@@ -594,39 +594,36 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const saved = payrollLines.find((line) => line.employeeId === employee.id);
   if (!saved?.final) return system;
 
-  // Mesai, avans, kesinti ve icra/haciz her zaman kaynak hareket ekranindan okunur.
-  // Son bordroda yapilan manuel farklar da kaynak hareketine duzeltme kaydi olarak yazildigi icin
-  // kayitli bordro snapshot'i bu canli hareketlerin ustunu ortemez.
+  // Bir bordro satırı Son Kontrol/Kaydet ile sunucuya yazıldıktan sonra o dönemin
+  // ödeme rakamları snapshot olarak okunur. Özellikle PAID satırlarında sonraki
+  // personel kartı veya hareket değişiklikleri eski fiş/ödeme tutarını oynatamaz.
   const salary = saved.final.salaryPay !== undefined ? num(saved.final.salaryPay) : system.salary;
   const road = saved.final.roadPay !== undefined ? num(saved.final.roadPay) : system.road;
   const extraLabel = "EK";
   const extra = saved.final.premiumAmount !== undefined ? num(saved.final.premiumAmount) : system.extra;
-  const overtime = system.overtime;
-  const advance = system.advance;
-  const deduction = system.deduction;
-  const garnishment = system.garnishment;
+  const overtime = saved.final.overtimeAmount !== undefined ? num(saved.final.overtimeAmount) : system.overtime;
+  const advance = saved.final.advanceAmount !== undefined ? num(saved.final.advanceAmount) : system.advance;
+  const deduction = saved.final.deductionAmount !== undefined ? num(saved.final.deductionAmount) : system.deduction;
+  const garnishment = saved.final.garnishmentAmount !== undefined ? num(saved.final.garnishmentAmount) : system.garnishment;
+  const savedTotals = calcRow({ salary, road, extra, overtime, advance, deduction, garnishment });
+  const savedBank = saved.final.bank !== undefined ? num(saved.final.bank) : system.bank;
+  const savedCash = saved.final.cash !== undefined ? num(saved.final.cash) : system.cash;
+  const payment = reconcilePaymentSplit(savedTotals.net, savedBank, savedCash, "cash");
 
-  const savedOvertime = saved.final.overtimeAmount !== undefined ? num(saved.final.overtimeAmount) : overtime;
-  const savedAdvance = saved.final.advanceAmount !== undefined ? num(saved.final.advanceAmount) : advance;
-  const savedDeduction = saved.final.deductionAmount !== undefined ? num(saved.final.deductionAmount) : deduction;
-  const savedGarnishment = saved.final.garnishmentAmount !== undefined ? num(saved.final.garnishmentAmount) : garnishment;
-  const sourceChangedSinceSave = [savedOvertime - overtime, savedAdvance - advance, savedDeduction - deduction, savedGarnishment - garnishment]
-    .some((value) => Math.abs(round(value)) > 0.01);
-
-  const liveTotals = calcRow({ salary, road, extra, overtime, advance, deduction, garnishment });
-  const liveBankPlan = Math.max(num(employee.bankAmount) - system.bankDeductions, 0);
-  const liveBank = Math.min(liveTotals.net, liveBankPlan);
-  const liveCash = Math.max(liveTotals.net - liveBank, 0);
-  const savedPaymentMatchesLiveNet = Math.abs(round(num(saved.final.bank) + num(saved.final.cash) - liveTotals.net)) <= 0.01;
-  const useSavedPaymentSplit = !sourceChangedSinceSave && savedPaymentMatchesLiveNet;
-  const bank = useSavedPaymentSplit ? num(saved.final.bank) : liveBank;
-  const cash = useSavedPaymentSplit ? num(saved.final.cash) : liveCash;
+  const sourceChangedSinceSave = [
+    system.overtime - overtime,
+    system.advance - advance,
+    system.deduction - deduction,
+    system.garnishment - garnishment,
+  ].some((value) => Math.abs(round(value)) > 0.01);
 
   return {
     ...system,
-    salary, road, extraLabel, extra, overtime, advance, deduction, garnishment, bank, cash, saved,
+    salary, road, extraLabel, extra, overtime, advance, deduction, garnishment,
+    bank: payment.bank, cash: payment.cash, saved,
     sourceChangedSinceSave,
-    ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank, cash }),
+    paidLocked: upper(saved.status) === "PAID",
+    ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank: payment.bank, cash: payment.cash }),
   };
 }): [], [employees, payrollLines, planFor, periodPrepared]);
 
