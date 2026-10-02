@@ -50,6 +50,12 @@ public sealed partial class MainShellForm : Form
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
+        if (keyData == (Keys.Alt | Keys.Left))
+        {
+            NavigateBack();
+            return true;
+        }
+
         if (keyData == (Keys.Control | Keys.K))
         {
             OpenCommandPalette();
