@@ -14,7 +14,7 @@ internal sealed class ModuleHostForm : Form
         TopLevel = false;
         FormBorderStyle = FormBorderStyle.None;
         Dock = DockStyle.Fill;
-        BackColor = Color.FromArgb(245, 247, 250);
+        BackColor = PdksAppearance.Current.Canvas;
         Font = new Font("Segoe UI", 9f);
         DoubleBuffered = true;
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
@@ -23,7 +23,7 @@ internal sealed class ModuleHostForm : Form
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(0),
-            BackColor = Color.FromArgb(245, 247, 250)
+            BackColor = PdksAppearance.Current.Canvas
         };
 
         PdksTheme.Apply(child);
@@ -41,13 +41,33 @@ internal sealed class ModuleHostForm : Form
         content.Controls.Add(child);
         Controls.Add(content);
         child.Show();
+
+        PdksAppearance.Changed += AppearanceChanged;
+    }
+
+    void AppearanceChanged(object? sender,EventArgs e)
+    {
+        if(IsDisposed)return;
+        void apply()
+        {
+            var p=PdksAppearance.Current;
+            BackColor=p.Canvas;
+            content.BackColor=p.Canvas;
+            PdksTheme.Apply(child);
+            child.Invalidate(true);
+        }
+        if(InvokeRequired)BeginInvoke((Action)apply);else apply();
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing && !child.IsDisposed)
+        if (disposing)
         {
-            try { child.Dispose(); } catch { }
+            PdksAppearance.Changed -= AppearanceChanged;
+            if (!child.IsDisposed)
+            {
+                try { child.Dispose(); } catch { }
+            }
         }
         base.Dispose(disposing);
     }
