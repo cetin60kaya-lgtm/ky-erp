@@ -6,6 +6,7 @@ public sealed class ThemeSettingsForm : Form
     readonly FlowLayoutPanel accents = new(){Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,1,0,0)};
     readonly Panel preview = new(){Dock=DockStyle.Fill};
     PdksAccent selectedAccent = PdksAppearance.Accent;
+    Color selectedCustomAccent = PdksAppearance.CustomAccentColor;
 
     public ThemeSettingsForm()
     {
@@ -45,13 +46,28 @@ public sealed class ThemeSettingsForm : Form
         settings.Controls.Add(Label("Vurgu Rengi"),0,1);
         foreach(var a in Enum.GetValues<PdksAccent>())
         {
+            var sample=a==PdksAccent.Custom?selectedCustomAccent:PdksAppearance.AccentColor(a);
             var b=new Button{
-                Text=PdksAppearance.AccentName(a),Tag=a,Width=70,Height=28,FlatStyle=FlatStyle.Flat,
-                BackColor=PdksAppearance.AccentColor(a),ForeColor=BestText(PdksAppearance.AccentColor(a)),
-                Font=new Font("Segoe UI",8.3f,FontStyle.Bold),Cursor=Cursors.Hand,Margin=new Padding(0,0,6,0)
+                Text=a==PdksAccent.Custom?"Özel…":PdksAppearance.AccentName(a),Tag=a,Width=66,Height=28,FlatStyle=FlatStyle.Flat,
+                BackColor=sample,ForeColor=BestText(sample),
+                Font=new Font("Segoe UI",8.1f,FontStyle.Bold),Cursor=Cursors.Hand,Margin=new Padding(0,0,5,0)
             };
             b.FlatAppearance.BorderSize=selectedAccent==a?3:1;
-            b.Click+=(_,_)=>{selectedAccent=(PdksAccent)b.Tag!;UpdateAccentSelection();UpdatePreview();};
+            b.Click+=(_,_)=>
+            {
+                var picked=(PdksAccent)b.Tag!;
+                if(picked==PdksAccent.Custom)
+                {
+                    using var dialog=new ColorDialog{Color=selectedCustomAccent,FullOpen=true};
+                    if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+                    selectedCustomAccent=dialog.Color;
+                    b.BackColor=selectedCustomAccent;
+                    b.ForeColor=BestText(selectedCustomAccent);
+                }
+                selectedAccent=picked;
+                UpdateAccentSelection();
+                UpdatePreview();
+            };
             accents.Controls.Add(b);
         }
         settings.Controls.Add(accents,1,1);
@@ -73,6 +89,7 @@ public sealed class ThemeSettingsForm : Form
     {
         mode.SelectedIndex=PdksAppearance.Mode==PdksThemeMode.Dark?1:0;
         selectedAccent=PdksAppearance.Accent;
+        selectedCustomAccent=PdksAppearance.CustomAccentColor;
         UpdateAccentSelection();
         UpdatePreview();
     }
@@ -87,9 +104,7 @@ public sealed class ThemeSettingsForm : Form
     {
         if(mode.SelectedIndex<0)return;
         var previewMode=mode.SelectedIndex==1?PdksThemeMode.Dark:PdksThemeMode.Light;
-        var oldMode=PdksAppearance.Mode;
-        var oldAccent=PdksAppearance.Accent;
-        var palette=BuildPreviewPalette(previewMode,selectedAccent);
+        var palette=BuildPreviewPalette(previewMode,selectedAccent,selectedCustomAccent);
 
         preview.Controls.Clear();
         preview.BackColor=palette.Canvas;
@@ -108,13 +123,9 @@ public sealed class ThemeSettingsForm : Form
         preview.Controls.Add(shell);
     }
 
-    static PdksPalette BuildPreviewPalette(PdksThemeMode themeMode,PdksAccent accent)
+    static PdksPalette BuildPreviewPalette(PdksThemeMode themeMode,PdksAccent accent,Color customAccent)
     {
-        var currentMode=PdksAppearance.Mode;
-        var currentAccent=PdksAppearance.Accent;
-        if(currentMode==themeMode && currentAccent==accent)return PdksAppearance.Current;
-
-        var primary=PdksAppearance.AccentColor(accent);
+        var primary=accent==PdksAccent.Custom?customAccent:PdksAppearance.AccentColor(accent);
         if(themeMode==PdksThemeMode.Dark)
             return new PdksPalette("Koyu",true,Color.FromArgb(11,18,32),Color.FromArgb(17,24,39),Color.FromArgb(24,33,49),Color.FromArgb(8,15,28),Color.FromArgb(30,41,59),Color.FromArgb(241,245,249),Color.FromArgb(148,163,184),Color.FromArgb(51,65,85),primary,Color.FromArgb(30,41,59),Color.FromArgb(241,245,249),Color.FromArgb(148,163,184),Color.FromArgb(34,197,94),Color.FromArgb(245,158,11),Color.FromArgb(248,113,113),Color.FromArgb(69,27,31),Color.FromArgb(30,41,59),Color.FromArgb(30,41,59),Color.FromArgb(15,23,42));
         return new PdksPalette("Açık",false,Color.FromArgb(244,247,251),Color.White,Color.FromArgb(248,250,252),Color.FromArgb(15,23,42),Color.FromArgb(30,41,59),Color.FromArgb(15,23,42),Color.FromArgb(100,116,139),Color.FromArgb(226,232,240),primary,Color.FromArgb(239,246,255),Color.White,Color.FromArgb(203,213,225),Color.FromArgb(22,163,74),Color.FromArgb(202,118,35),Color.FromArgb(185,28,28),Color.FromArgb(255,241,240),Color.FromArgb(219,234,254),Color.FromArgb(241,245,249),Color.White);
@@ -123,7 +134,10 @@ public sealed class ThemeSettingsForm : Form
     void ApplySelection()
     {
         var selectedMode=mode.SelectedIndex==1?PdksThemeMode.Dark:PdksThemeMode.Light;
-        PdksAppearance.Set(selectedMode,selectedAccent);
+        if(selectedAccent==PdksAccent.Custom)
+            PdksAppearance.SetCustomAccent(selectedMode,selectedCustomAccent);
+        else
+            PdksAppearance.Set(selectedMode,selectedAccent);
         PdksTheme.ReapplyOpenForms();
         DialogResult=DialogResult.OK;
         Close();
