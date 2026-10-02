@@ -59,7 +59,7 @@ public sealed class BackupRestoreForm : Form
             RefreshList();
             MessageBox.Show("Yedek alındı:\n" + path, Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
-        catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (Exception ex) { PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"BackupRestore"); }
     }
 
     void Restore()
@@ -81,6 +81,6 @@ public sealed class BackupRestoreForm : Form
             Application.Restart();
             Environment.Exit(0);
         }
-        catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (Exception ex) { PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"BackupRestore"); }
     }
 }
