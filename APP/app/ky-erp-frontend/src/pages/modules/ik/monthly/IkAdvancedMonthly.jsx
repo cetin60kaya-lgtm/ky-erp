@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  createIkAdvancedPerson,
   deleteIkAdvancedFinanceMovement,
   getIkAdvancedAuditLogs,
   getIkAdvancedMonth,
@@ -27,7 +28,9 @@ import {
 } from "../../../../services/ik/monthlyApi";
 import { printHtmlDocument } from "../../../../services/printService";
 import { exportRowsToExcelFile } from "../../../../utils/excelExport";
+import IkMonthlyProShell from "./IkMonthlyProShell";
 import "./ik.advanced.css";
+import "./ik.monthly.pro.css";
 
 const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 const FINANCE_TYPES = ["Mesai", "Avans", "Toplu avans", "Ozel kesinti", "Icra", "Haciz", "Eksik gün", "Eksik saat"];
@@ -284,6 +287,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const [sgkFilter, setSgkFilter] = useState("ALL");
   const [movementTypeFilter, setMovementTypeFilter] = useState("ALL");
   const [movementEffectFilter, setMovementEffectFilter] = useState("ALL");
+  const [payrollPaymentFilter, setPayrollPaymentFilter] = useState("ALL");
+  const [payrollStatusFilter, setPayrollStatusFilter] = useState("ALL");
+  const [documentFilter, setDocumentFilter] = useState("ALL");
   const [selectedId, setSelectedId] = useState("");
   const [modal, setModal] = useState(null);
   const [modalDraft, setModalDraft] = useState({});
@@ -528,6 +534,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setSgkFilter("ALL");
     setMovementTypeFilter("ALL");
     setMovementEffectFilter("ALL");
+    setPayrollPaymentFilter("ALL");
+    setPayrollStatusFilter("ALL");
+    setDocumentFilter("ALL");
     setNotice("");
   };
 
@@ -668,6 +677,40 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     manual: acc.manual + (row.saved?.override ? 1 : 0),
   }), { count: 0, bank: 0, cash: 0, net: 0, advance: 0, deduction: 0, extra: 0, garnishment: 0, overtime: 0, annual: 0, docsMissing: 0, manual: 0 }), [payrollRows, employeeLeave, docsFor]);
 
+  const filteredPayrollRows = useMemo(() => {
+    const needle = upper(search).trim();
+    return payrollRows.filter((row) => {
+      const employee = row.employee || {};
+      if (needle && !upper(`${employee.fullName || ""} ${employee.code || ""} ${employee.department || ""}`).includes(needle)) return false;
+      if (payrollPaymentFilter === "BANK" && num(row.bank) <= 0) return false;
+      if (payrollPaymentFilter === "CASH" && num(row.cash) <= 0) return false;
+      if (payrollPaymentFilter === "MIXED" && !(num(row.bank) > 0 && num(row.cash) > 0)) return false;
+      const paid = upper(row.saved?.status) === "PAID";
+      if (payrollStatusFilter === "PAID" && !paid) return false;
+      if (payrollStatusFilter === "READY" && (paid || Math.abs(num(row.diff)) > 0.01)) return false;
+      if (payrollStatusFilter === "CONTROL" && (paid || Math.abs(num(row.diff)) <= 0.01)) return false;
+      return true;
+    });
+  }, [payrollRows, payrollPaymentFilter, payrollStatusFilter, search]);
+
+  const visibleDocumentEmployeeIds = useMemo(() => {
+    const needle = upper(search).trim();
+    return new Set(employees.filter((employee) => {
+      if (needle && !upper(`${employee.fullName || ""} ${employee.code || ""} ${employee.department || ""}`).includes(needle)) return false;
+      if (sgkFilter === "SGK" && !isSgk(employee)) return false;
+      if (sgkFilter === "NO_SGK" && isSgk(employee)) return false;
+      const hasDocs = docsFor(employee).length > 0;
+      if (documentFilter === "HAS" && !hasDocs) return false;
+      if (documentFilter === "MISSING" && hasDocs) return false;
+      return true;
+    }).map((employee) => employee.id));
+  }, [documentFilter, employees, search, sgkFilter, docsFor]);
+
+  const filteredDocuments = useMemo(
+    () => documents.filter((doc) => visibleDocumentEmployeeIds.has(doc.employeeId)),
+    [documents, visibleDocumentEmployeeIds],
+  );
+
   const unbalancedPayrollRows = useMemo(() => payrollRows.filter((row) => Math.abs(num(row.diff)) > 0.01), [payrollRows]);
   const grandPaymentDiff = round(summary.bank + summary.cash - summary.net);
   const balanced = Math.abs(grandPaymentDiff) <= 0.01 && unbalancedPayrollRows.length === 0;
@@ -723,6 +766,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setPage(target);
     setNotice("");
     load({ force: true });
+  };
+
+  const openNewPerson = () => {
+    if (data.close?.isLocked) return setNotice("Kapalı dönemde yeni personel kartı açılamaz.");
+    setSelectedId("");
+    setModalDraft(draftPerson({ startDate: istanbulDateKey(), status: "AKTIF" }));
+    setModal("personel");
   };
 
   const openPerson = (employee = selected) => {
@@ -904,61 +954,102 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   };
 
   const savePerson = async () => {
-    if (!modalDraft.fullName?.trim()) return setNotice("Personel adi bos olamaz.");
+    if (!modalDraft.fullName?.trim()) return setNotice("Personel adı boş olamaz.");
     if (!["SGKLI", "SGKSIZ"].includes(modalDraft.sgkFollow)) return setNotice("Bu ay için SGK durumu seçilmelidir.");
     if (modalDraft.sgkFollow === "SGKLI" && (num(modalDraft.sgkDays) < 1 || num(modalDraft.sgkDays) > totalDays)) return setNotice(`SGK gün sayısı 1-${totalDays} arasında olmalıdır.`);
     if (modalDraft.startDate && modalDraft.exitDate && modalDraft.exitDate < modalDraft.startDate) return setNotice("İşten çıkış tarihi işe giriş tarihinden önce olamaz.");
     if (upper(modalDraft.status).includes("PAS") && !modalDraft.exitDate) return setNotice("Pasif personel için işten çıkış tarihi zorunludur.");
-    if (!modalDraft.paymentType) return setNotice("Odeme tipi bos olamaz.");
-    if (num(modalDraft.salary) < 0) return setNotice("Maas negatif olamaz.");
-    if (num(modalDraft.overtimeHourlyBase) <= 0) return setNotice("Mesai saat boleni 0 dan buyuk olmalidir.");
-    if (num(modalDraft.deductionHourlyBase) <= 0) return setNotice("Kesinti saat boleni 0 dan buyuk olmalidir.");
+    if (!modalDraft.paymentType) return setNotice("Ödeme tipi boş olamaz.");
+    if (num(modalDraft.salary) < 0) return setNotice("Maaş negatif olamaz.");
+    if (num(modalDraft.overtimeHourlyBase) <= 0) return setNotice("Mesai saat böleni 0'dan büyük olmalıdır.");
+    if (num(modalDraft.deductionHourlyBase) <= 0) return setNotice("Kesinti saat böleni 0'dan büyük olmalıdır.");
+    if (!modalDraft.id && data.close?.isLocked) return setNotice("Kapalı dönemde yeni personel kartı açılamaz.");
+
+    const normalizedCardNo = String(modalDraft.cardNo || "").trim();
+    const duplicateCard = normalizedCardNo && rawEmployees.some((item) => item.id !== modalDraft.id && String(item.cardNo || "").trim() === normalizedCardNo);
+    if (duplicateCard) return setNotice("Bu kart numarası başka bir personele bağlı.");
+
     const baseEmployee = modalDraft.baseEmployeeId ? rawEmployees.find((item) => item.id === modalDraft.baseEmployeeId) : null;
-    if (modalDraft.baseEmployeeId === modalDraft.id) return setNotice("Personel kendisini baz personel olarak secemez.");
-    if (modalDraft.baseEmployeeId && !baseEmployee) return setNotice("Baz personel bulunamadi.");
-    if (baseEmployee && num(baseEmployee.salary) > num(modalDraft.salary)) return setNotice("Baz personel maasi gercek maastan yuksek olamaz.");
+    if (modalDraft.baseEmployeeId === modalDraft.id) return setNotice("Personel kendisini baz personel olarak seçemez.");
+    if (modalDraft.baseEmployeeId && !baseEmployee) return setNotice("Baz personel bulunamadı.");
+    if (baseEmployee && num(baseEmployee.salary) > num(modalDraft.salary)) return setNotice("Baz personel maaşı gerçek maaştan yüksek olamaz.");
+
     const autoExtra = baseEmployee ? Math.max(round(num(modalDraft.salary) - num(baseEmployee.salary)), 0) : 0;
     const planTotal = num(modalDraft.bankAmount) + num(modalDraft.cashAmount);
-    if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) && !window.confirm("Banka plan + elden plan gercek maas ve yol toplamindan yüksek. Devam edilsin mi?")) return;
+    if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) && !window.confirm("Banka plan + elden plan gerçek maaş ve yol toplamından yüksek. Devam edilsin mi?")) return;
+
+    const cardPayload = {
+      mainCompanyId: companyId,
+      fullName: modalDraft.fullName,
+      personelKodu: modalDraft.code,
+      cardNo: modalDraft.cardNo,
+      identityNo: modalDraft.identityNo,
+      personnelStatus: modalDraft.personnelStatus || "NORMAL",
+      period,
+      year,
+      month,
+      sgkFollow: modalDraft.sgkFollow === "SGKLI",
+      sgkDays: modalDraft.sgkFollow === "SGKLI" ? num(modalDraft.sgkDays) : 0,
+      paymentType: modalDraft.paymentType,
+      salary: num(modalDraft.salary),
+      roadAllowance: num(modalDraft.roadAllowance),
+      bankAmount: num(modalDraft.bankAmount),
+      cashAmount: num(modalDraft.cashAmount),
+      baseEmployeeId: modalDraft.baseEmployeeId || "",
+      extraPaymentLabel: "EK",
+      extraPaymentAmount: autoExtra,
+      overtimeHourlyBase: num(modalDraft.overtimeHourlyBase) || 225,
+      deductionHourlyBase: num(modalDraft.deductionHourlyBase) || 300,
+      payrollIncluded: modalDraft.payrollIncluded !== false,
+      hireDate: modalDraft.startDate,
+      exitDate: modalDraft.exitDate,
+      title: modalDraft.title,
+      department: modalDraft.department,
+      annualLeaveEntitlement: num(modalDraft.annualLeaveEntitlement),
+      annualLeaveCarryover: num(modalDraft.annualLeaveCarryover),
+      activePassive: modalDraft.status,
+      note: modalDraft.note,
+      phone: modalDraft.phone,
+    };
+
     setBusy(true);
+    let createdEmployeeId = "";
     try {
-      await saveIkAdvancedPersonCard(modalDraft.id, {
-        mainCompanyId: companyId,
-        fullName: modalDraft.fullName,
-        personelKodu: modalDraft.code,
-        cardNo: modalDraft.cardNo,
-        identityNo: modalDraft.identityNo,
-        personnelStatus: modalDraft.personnelStatus || "NORMAL",
-        period,
-        year,
-        month,
-        sgkFollow: modalDraft.sgkFollow === "SGKLI",
-        sgkDays: modalDraft.sgkFollow === "SGKLI" ? num(modalDraft.sgkDays) : 0,
-        paymentType: modalDraft.paymentType,
-        salary: num(modalDraft.salary),
-        roadAllowance: num(modalDraft.roadAllowance),
-        bankAmount: num(modalDraft.bankAmount),
-        cashAmount: num(modalDraft.cashAmount),
-        baseEmployeeId: modalDraft.baseEmployeeId || "",
-        extraPaymentLabel: "EK",
-        extraPaymentAmount: autoExtra,
-        overtimeHourlyBase: num(modalDraft.overtimeHourlyBase) || 225,
-        deductionHourlyBase: num(modalDraft.deductionHourlyBase) || 300,
-        payrollIncluded: modalDraft.payrollIncluded !== false,
-        hireDate: modalDraft.startDate,
-        exitDate: modalDraft.exitDate,
-        title: modalDraft.title,
-        department: modalDraft.department,
-        annualLeaveEntitlement: num(modalDraft.annualLeaveEntitlement),
-        annualLeaveCarryover: num(modalDraft.annualLeaveCarryover),
-        activePassive: modalDraft.status,
-        note: modalDraft.note,
-      });
+      let employeeId = modalDraft.id;
+      if (!employeeId) {
+        const created = await createIkAdvancedPerson({
+          mainCompanyId: companyId,
+          fullName: modalDraft.fullName,
+          code: modalDraft.code,
+          department: modalDraft.department,
+          title: modalDraft.title,
+          workType: "AYLIK",
+          sgkStatus: modalDraft.sgkFollow === "SGKLI" ? "VAR" : "YOK",
+          status: modalDraft.status || "AKTIF",
+          hireDate: modalDraft.startDate,
+          salary: num(modalDraft.salary),
+          roadAllowance: num(modalDraft.roadAllowance),
+          bankPaymentType: modalDraft.paymentType,
+          bankAmount: num(modalDraft.bankAmount),
+          cashAmount: num(modalDraft.cashAmount),
+          overtimeHourlyBase: num(modalDraft.overtimeHourlyBase) || 225,
+          annualLeaveEntitlement: num(modalDraft.annualLeaveEntitlement),
+          annualLeaveCarryover: num(modalDraft.annualLeaveCarryover),
+          note: modalDraft.note,
+        });
+        employeeId = created?.id || created?.employeeId || "";
+        createdEmployeeId = employeeId;
+        if (!employeeId) throw new Error("Yeni personel kimliği alınamadı.");
+      }
+
+      await saveIkAdvancedPersonCard(employeeId, cardPayload);
+      setSelectedId(employeeId);
       setModal(null);
-      setNotice("Personel karti kaydedildi.");
+      setNotice(modalDraft.id ? "Personel kartı güncellendi." : "Yeni personel kartı oluşturuldu.");
       await load({ force: true });
     } catch (error) {
-      setNotice(error?.message || "Personel karti kaydedilemedi.");
+      const detail = error?.message || "Personel kartı kaydedilemedi.";
+      setNotice(createdEmployeeId ? `Personel ana kaydı oluştu ancak kart ayrıntıları tamamlanamadı: ${detail}` : detail);
     } finally {
       setBusy(false);
     }
@@ -1703,15 +1794,33 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   };
 
   return (
-    <div className="ik-html">
-      {notice && <div className="note">{notice}<button className="btn" onClick={() => setNotice("")}>Kapat</button></div>}
-      {page === "ozet" && renderOzet()}
-      {page === "personel" && renderPersonel()}
-      {page === "ucret" && renderUcret()}
-      {page === "hareket" && renderHareket()}
-      {page === "izin" && renderIzin()}
-      {page === "bordro" && renderBordro()}
-      {page === "evrak" && renderEvrak()}
+    <div className="ik-html ik-monthly-pro">
+      <IkMonthlyProShell
+        page={page}
+        onNavigate={go}
+        year={year}
+        month={month}
+        months={MONTHS}
+        onPeriodChange={changePeriod}
+        periodPrepared={periodPrepared}
+        isLocked={Boolean(data.close?.isLocked)}
+        balanced={periodPrepared && balanced}
+        issueCount={smartIssues.length}
+        employeeCount={employees.length}
+        sgkCount={employees.filter(isSgk).length}
+        paidCount={payrollRows.filter((row) => upper(row.saved?.status) === "PAID").length}
+        payrollCount={payrollRows.length}
+        companyName={activeMainCompany?.name || activeMainCompany?.title || "KY ERP"}
+      >
+        {notice && <div className="note">{notice}<button className="btn" onClick={() => setNotice("")}>Kapat</button></div>}
+        {page === "ozet" && renderOzet()}
+        {page === "personel" && renderPersonel()}
+        {page === "ucret" && renderUcret()}
+        {page === "hareket" && renderHareket()}
+        {page === "izin" && renderIzin()}
+        {page === "bordro" && renderBordro()}
+        {page === "evrak" && renderEvrak()}
+      </IkMonthlyProShell>
       {renderModal()}
     </div>
   );
@@ -1721,16 +1830,20 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       ? <div><label>Durum</label><select value={employeeStatusFilter} onChange={(event) => setEmployeeStatusFilter(event.target.value)}><option value="ALL">Tümü</option><option value="ACTIVE">Aktif</option><option value="PASSIVE">Pasif</option></select></div>
       : fourth === "Tip"
         ? <div><label>Hareket Tipi</label><select value={movementTypeFilter} onChange={(event) => setMovementTypeFilter(event.target.value)}><option value="ALL">Tümü</option>{FINANCE_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
-        : null;
+        : ["Ödeme", "Odeme"].includes(fourth)
+          ? <div><label>Ödeme Kanalı</label><select value={payrollPaymentFilter} onChange={(event) => setPayrollPaymentFilter(event.target.value)}><option value="ALL">Tümü</option><option value="BANK">Banka içeren</option><option value="CASH">Elden içeren</option><option value="MIXED">Banka + Elden</option></select></div>
+          : fourth === "Evrak"
+            ? <div><label>Evrak</label><select value={documentFilter} onChange={(event) => setDocumentFilter(event.target.value)}><option value="ALL">Tümü</option><option value="HAS">Evrakı olan</option><option value="MISSING">Eksik evrak</option></select></div>
+            : null;
     const fifthControl = fifth === "SGK"
       ? <div><label>SGK</label><select value={sgkFilter} onChange={(event) => setSgkFilter(event.target.value)}><option value="ALL">Tümü</option><option value="SGK">SGK'lı</option><option value="NO_SGK">SGK'sız</option></select></div>
       : fifth === "Bordro etkisi"
         ? <div><label>Bordro Etkisi</label><select value={movementEffectFilter} onChange={(event) => setMovementEffectFilter(event.target.value)}><option value="ALL">Tümü</option><option value="PAYROLL">Bordroya Yansır</option><option value="INFO">Sadece Kayıt</option></select></div>
-        : null;
+        : fifth === "Durum"
+          ? <div><label>Bordro Durumu</label><select value={payrollStatusFilter} onChange={(event) => setPayrollStatusFilter(event.target.value)}><option value="ALL">Tümü</option><option value="READY">Hazır</option><option value="CONTROL">Kontrol gerekli</option><option value="PAID">Ödendi</option></select></div>
+          : null;
     return (
       <div className="filters ik-essential-filters">
-        <div><label>Yıl</label><select value={year} onChange={(event) => changePeriod(Number(event.target.value), month)}>{[2025, 2026, 2027, 2028].map((item) => <option key={item}>{item}</option>)}</select></div>
-        <div><label>Ay</label><select value={month} onChange={(event) => changePeriod(year, Number(event.target.value))}>{MONTHS.map((item, index) => <option key={item} value={index + 1}>{item}</option>)}</select></div>
         <div className="ik-search-filter"><label>{third}</label><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Ad, kod, kart no" /></div>
         {fourthControl}
         {fifthControl}
@@ -1799,16 +1912,95 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   }
 
   function renderPersonel() {
+    const profile = filteredEmployees.find((item) => item.id === selected?.id) || filteredEmployees[0] || null;
+    const profileLeave = profile ? employeeLeave(profile) : { annual: 0, balance: 0 };
+    const profileDocs = profile ? docsFor(profile) : [];
+    const initials = (employee) => String(employee?.fullName || "?").trim().split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toLocaleUpperCase("tr-TR");
     return (
       <section>
-        <div className="page-head"><div><h1>Personel Karti</h1><p>Sabit bilgi. Avans, mesai, kesinti ve bordro girisi burada yok.</p></div><button className="btn primary" onClick={() => openPerson()}>Yeni / Detay</button></div>
-        {filters({ third: "Personel ara", fourth: "SGK", fifth: "Odeme" })}
-        <div className="card"><div className="ch"><div><b>Personel Kartlari</b><span>Satirdan Detay / Duzenle / Evrak acilir.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>Kod / Kart No</th><th>İşe Giriş</th><th>İşten Çıkış</th><th>SGK</th><th>Odeme</th><th>Maas</th><th>Yol</th><th>EK</th><th>Banka Plan</th><th>Elden Plan</th><th>Kalan Izin</th><th>Evrak</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{filteredEmployees.map((employee) => {
-          const leave = employeeLeave(employee);
-          const docCount = docsFor(employee).length;
-          return <tr key={employee.id} onClick={() => setSelectedId(employee.id)}><td><span className="person">{employee.fullName}</span><span className="code">{employee.department || "-"}</span></td><td>{employee.code || "-"} / {employee.cardNo || "-"}</td><td><b>{employeeHireDate(employee) || "-"}</b></td><td><b>{employeeExitDate(employee) || "-"}</b></td><td>{sgkLabel(employee)}</td><td>{paymentLabel(employee)}</td><td className="money">{money(employee.salary)}</td><td className="money">{money(employee.roadAllowance)}</td><td className="money">{money(employee.extraPaymentAmount)}</td><td className="money">{money(employee.bankAmount)}</td><td className="money">{money(employee.cashAmount)}</td><td><span className={`badge ${leave.balance < 0 ? "red" : "green"}`}>{leave.balance}</span></td><td><span className={`badge ${docCount ? "green" : "orange"}`}>{docCount ? "Var" : "Eksik"}</span></td><td><span className={`badge ${upper(employee.status || employee.activePassive).includes("PAS") ? "red" : employeeExitDate(employee) ? "orange" : "green"}`}>{employmentPeriodLabel(employee, period)}</span></td><td><button className="btn" onClick={(event) => { event.stopPropagation(); openPerson(employee); }}>Detay</button> <button className="btn" onClick={(event) => { event.stopPropagation(); openPerson(employee); }}>Duzenle</button> <button className="btn" onClick={(event) => { event.stopPropagation(); openDocument(employee); }}>Evrak</button></td></tr>;
-        })}<EmptyRow show={!filteredEmployees.length} colSpan={15} text="Personel bulunamadi." /></tbody></table></div></div>
-        <LogTable title="Personel Islem Loglari" rows={scopedLogs} onEdit={editFromLog} />
+        <div className="page-head">
+          <div><h1>Personel Kartları</h1><p>Özlük, SGK, ücret planı, izin ve evrak durumunu tek personel profili üzerinden yönetin.</p></div>
+          <div className="group"><button className="btn primary" disabled={data.close?.isLocked} onClick={openNewPerson}>Yeni Personel</button></div>
+        </div>
+        {filters({ third: "Personel ara", fourth: "Durum", fifth: "SGK" })}
+
+        <div className="ik-pro-personnel-layout">
+          <aside className="ik-pro-roster card">
+            <div className="ch"><div><b>Personel Listesi</b><span>{filteredEmployees.length} kayıt · seçim yaparak kartı açın</span></div></div>
+            <div className="ik-pro-roster-scroll">
+              {filteredEmployees.map((employee) => {
+                const leave = employeeLeave(employee);
+                const isActive = employee.id === profile?.id;
+                const passive = upper(employee.status || employee.activePassive).includes("PAS");
+                return (
+                  <button type="button" key={employee.id} className={`ik-pro-roster-item ${isActive ? "active" : ""}`} onClick={() => setSelectedId(employee.id)}>
+                    <span className="ik-pro-avatar">{initials(employee)}</span>
+                    <span className="ik-pro-roster-copy">
+                      <b>{employee.fullName}</b>
+                      <small>{employee.department || employee.title || "Bölüm belirtilmemiş"} · {employee.code || "Kod yok"}</small>
+                    </span>
+                    <span className="ik-pro-roster-meta">
+                      <i className={passive ? "danger" : employee.sgkFollow === true ? "success" : "neutral"}>{passive ? "Pasif" : employee.sgkFollow === true ? "SGK" : "SGK dışı"}</i>
+                      <small>{leave.balance} gün izin</small>
+                    </span>
+                  </button>
+                );
+              })}
+              {!filteredEmployees.length && <div className="ik-pro-empty">Filtreye uygun personel bulunamadı.</div>}
+            </div>
+          </aside>
+
+          <div className="ik-pro-profile card">
+            {profile ? <>
+              <div className="ik-pro-profile-head">
+                <span className="ik-pro-avatar large">{initials(profile)}</span>
+                <div>
+                  <div className="ik-pro-profile-name"><h2>{profile.fullName}</h2><span className={`badge ${upper(profile.status || profile.activePassive).includes("PAS") ? "red" : "green"}`}>{employmentPeriodLabel(profile, period)}</span></div>
+                  <p>{profile.title || "Unvan belirtilmemiş"} · {profile.department || "Bölüm belirtilmemiş"} · {profile.code || "Personel kodu yok"}</p>
+                </div>
+                <div className="ik-pro-profile-actions">
+                  <button className="btn primary" onClick={() => openPerson(profile)}>Kartı Düzenle</button>
+                  <button className="btn" onClick={() => openDocument(profile)}>Evrak</button>
+                </div>
+              </div>
+
+              <div className="ik-pro-profile-grid">
+                <div><span>SGK</span><b>{sgkLabel(profile)}</b><small>{profile.sgkFollow === false ? "PDKS dışı" : `${num(profile.sgkDays)} gün`}</small></div>
+                <div><span>İşe Giriş</span><b>{employeeHireDate(profile) || "Eksik"}</b><small>{employeeExitDate(profile) ? `Çıkış: ${employeeExitDate(profile)}` : "Aktif çalışma"}</small></div>
+                <div><span>Ödeme Tipi</span><b>{paymentLabel(profile)}</b><small>Banka + elden planı</small></div>
+                <div><span>Yıllık İzin</span><b>{profileLeave.balance} gün</b><small>{profileLeave.annual} gün kullanılmış</small></div>
+                <div><span>Evrak</span><b>{profileDocs.length} belge</b><small>{profileDocs.length ? "Bağlı evrak var" : "Evrak kontrolü gerekli"}</small></div>
+                <div><span>Kart No</span><b>{profile.cardNo || "—"}</b><small>{profile.phone || "Telefon yok"}</small></div>
+              </div>
+
+              <div className="ik-pro-finance-snapshot">
+                <div><span>Maaş</span><b>{money(profile.salary)}</b></div>
+                <div><span>Yol</span><b>{money(profile.roadAllowance)}</b></div>
+                <div><span>EK</span><b>{money(profile.extraPaymentAmount)}</b></div>
+                <div><span>Banka</span><b>{money(profile.bankAmount)}</b></div>
+                <div><span>Elden</span><b>{money(profile.cashAmount)}</b></div>
+              </div>
+
+              <div className="ik-pro-profile-toolbar">
+                <button className="btn" onClick={() => openPayPlan(profile)}>Ücret Planı</button>
+                <button className="btn" onClick={() => openLeave("yillik", "", profile)}>İzin Gir</button>
+                <button className="btn" onClick={() => { setSelectedId(profile.id); go("hareket"); }}>Mesai / Avans</button>
+                <button className="btn green" onClick={() => { setSelectedId(profile.id); go("bordro"); }}>Bordroya Git</button>
+              </div>
+            </> : <div className="ik-pro-empty profile">Görüntülenecek personel seçin.</div>}
+          </div>
+        </div>
+
+        <details className="ik-pro-detail-table card">
+          <summary>Detay Personel Tablosunu Aç <span>Tüm kolonlar ve teknik kontrol görünümü</span></summary>
+          <div className="tw"><table><thead><tr><th>Personel</th><th>Kod / Kart No</th><th>İşe Giriş</th><th>İşten Çıkış</th><th>SGK</th><th>Ödeme</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Banka Plan</th><th>Elden Plan</th><th>Kalan İzin</th><th>Evrak</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{filteredEmployees.map((employee) => {
+            const leave = employeeLeave(employee);
+            const docCount = docsFor(employee).length;
+            return <tr key={employee.id} onClick={() => setSelectedId(employee.id)}><td><span className="person">{employee.fullName}</span><span className="code">{employee.department || "-"}</span></td><td>{employee.code || "-"} / {employee.cardNo || "-"}</td><td><b>{employeeHireDate(employee) || "-"}</b></td><td><b>{employeeExitDate(employee) || "-"}</b></td><td>{sgkLabel(employee)}</td><td>{paymentLabel(employee)}</td><td className="money">{money(employee.salary)}</td><td className="money">{money(employee.roadAllowance)}</td><td className="money">{money(employee.extraPaymentAmount)}</td><td className="money">{money(employee.bankAmount)}</td><td className="money">{money(employee.cashAmount)}</td><td><span className={`badge ${leave.balance < 0 ? "red" : "green"}`}>{leave.balance}</span></td><td><span className={`badge ${docCount ? "green" : "orange"}`}>{docCount ? "Var" : "Eksik"}</span></td><td><span className={`badge ${upper(employee.status || employee.activePassive).includes("PAS") ? "red" : employeeExitDate(employee) ? "orange" : "green"}`}>{employmentPeriodLabel(employee, period)}</span></td><td><button className="btn" onClick={(event) => { event.stopPropagation(); openPerson(employee); }}>Düzenle</button> <button className="btn" onClick={(event) => { event.stopPropagation(); openDocument(employee); }}>Evrak</button></td></tr>;
+          })}<EmptyRow show={!filteredEmployees.length} colSpan={15} text="Personel bulunamadı." /></tbody></table></div>
+        </details>
+
+        <LogTable title="Personel İşlem Logları" rows={scopedLogs} onEdit={editFromLog} />
       </section>
     );
   }
@@ -1897,13 +2089,13 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       <section>
         <div className="page-head"><div><h1>Son Bordro ve Ödeme Merkezi</h1><p>Resmi bordro, puantaj, avans/kesinti ve banka ödemesi çıktı öncesi burada son kez kontrol edilir.</p></div><div className="group"><span className={`badge ${data.close?.isLocked ? "red" : "blue"}`}>{data.close?.isLocked ? "Dönem Kapalı" : "Dönem Açık"}</span><span className={`badge ${balanced ? "green" : "red"}`}>{balanced ? "Ödeme dengeli" : "Ödeme kontrol gerekli"}</span></div></div>
         {filters({ third: "Personel ara", fourth: "Odeme", fifth: "Durum" })}
-        <div className="sumgrid short">{summaryBox("Odeme listesi", payrollRows.length, "", `${selectedPayrollIds.length || payrollRows.length} secili`)}{summaryBox("Resmi bordro neti", money(employees.reduce((sum,item)=>sum+num(item.sgkNet),0)))}{summaryBox("Banka", money(summary.bank))}{summaryBox("Elden", money(summary.cash))}{summaryBox("Avans / Kesinti", `${money(summary.advance)} / ${money(summary.deduction)}`, "orange")}{summaryBox("EK / İcra-Haciz", `${money(summary.extra)} / ${money(summary.garnishment)}`, summary.garnishment ? "orange" : "")}{summaryBox("Net Toplam", money(summary.net), balanced ? "green" : "red")}</div>
+        <div className="sumgrid short">{summaryBox("Ödeme listesi", filteredPayrollRows.length, "", `${payrollRows.length} toplam · ${selectedPayrollIds.length || payrollRows.length} seçili`)}{summaryBox("Resmi bordro neti", money(employees.reduce((sum,item)=>sum+num(item.sgkNet),0)))}{summaryBox("Banka", money(summary.bank))}{summaryBox("Elden", money(summary.cash))}{summaryBox("Avans / Kesinti", `${money(summary.advance)} / ${money(summary.deduction)}`, "orange")}{summaryBox("EK / İcra-Haciz", `${money(summary.extra)} / ${money(summary.garnishment)}`, summary.garnishment ? "orange" : "")}{summaryBox("Net Toplam", money(summary.net), balanced ? "green" : "red")}</div>
         <div className="workbar"><div className="group"><button className="btn primary" disabled={data.close?.isLocked} onClick={refreshPayroll}>Yeniden Hesapla</button><button className="btn" disabled={data.close?.isLocked} onClick={savePayroll}>Seçilileri Kaydet</button><button className="btn green" disabled={data.close?.isLocked || !balanced} onClick={openBulkPayment}>Ödeme Merkezi</button><button className="btn" disabled={data.close?.isLocked} onClick={() => openPayroll()}>Seçiliyi Düzenle</button><button className="btn" onClick={printPayrollReport}>Ödeme Listesi / PDF</button><button className="btn" onClick={printPaymentSlips}>10’lu Toplu Fiş / PDF</button><button className="btn" onClick={() => setModal("fis")}>Tek Kişi Fişi</button></div><button className="btn green" onClick={exportPayroll}>Ödeme Listesi / Excel</button></div>
         {data.close?.isLocked ? <div className="warnline warn">Bu dönem kapalıdır. Kayıtlar değiştirilemez; çıktı ve geçmiş görüntüleme devam eder.</div> : <div className={`warnline ${balanced ? "ok" : "warn"}`}>{balanced ? "Toplam ödeme dengeli: Banka + Elden = Net Toplam." : "Toplam ödeme banka + elden ile eşleşmiyor. Ödeme işlemi kapalıdır."}</div>}
         <div className="card">
           <div className="ch"><div><b>Çıktı Öncesi Son Bordro</b><span>Resmi Net SGK bordrosundan kontrol amaçlı gelir; şirket ödemesinde Banka + Elden = Net Ödenecek zorunludur.</span></div></div>
           <div className="tw payroll-screen-table-wrap"><table className="payroll-screen-table"><thead><tr>
-            <th className="check-col"><input type="checkbox" checked={payrollRows.length>0&&selectedPayrollIds.length===payrollRows.length} onChange={(event)=>setSelectedPayrollIds(event.target.checked?payrollRows.map((row)=>row.employee.id):[])} /></th>
+            <th className="check-col"><input type="checkbox" checked={filteredPayrollRows.length>0&&filteredPayrollRows.every((row)=>selectedPayrollIds.includes(row.employee.id))} onChange={(event)=>setSelectedPayrollIds(event.target.checked?[...new Set([...selectedPayrollIds,...filteredPayrollRows.map((row)=>row.employee.id)])]:selectedPayrollIds.filter((id)=>!filteredPayrollRows.some((row)=>row.employee.id===id)))} /></th>
             <th className="person-col">Personel</th>
             <th className="official-col">Resmi Bordro</th>
             <th className="summary-col">Hak Ediş</th>
@@ -1912,7 +2104,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
             <th className="status-col">Durum</th>
             <th className="action-col">İşlem</th>
           </tr></thead><tbody>
-            {payrollRows.map((row) => <tr key={row.employee.id}>
+            {filteredPayrollRows.map((row) => <tr key={row.employee.id}>
               <td className="check-col"><input type="checkbox" checked={selectedPayrollIds.includes(row.employee.id)} onChange={(event)=>setSelectedPayrollIds((old)=>event.target.checked?[...new Set([...old,row.employee.id])]:old.filter((id)=>id!==row.employee.id))} /></td>
               <td className="person-col"><span className="person">{row.employee.fullName}</span><span className="code">{row.employee.code || "-"} · {row.employee.department || "Bölüm yok"}</span><span className="employment-dates">Giriş: {employeeHireDate(row.employee) || "-"} · Çıkış: {employeeExitDate(row.employee) || "-"}</span></td>
               <td className="official-col"><div className="payroll-cell-stack"><span><em>SGK Gün</em><b>{num(row.employee.sgkDays)||"-"}</b></span><span><em>Resmi Net</em><b>{num(row.employee.sgkNet)>0?money(row.employee.sgkNet):"-"}</b></span></div></td>
@@ -1922,7 +2114,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               <td className="status-col"><span className={`badge ${num(row.employee.sgkNet)>0?"blue":"orange"}`}>{num(row.employee.sgkNet)>0?"Bordro":"Plan"}</span><span className={`badge ${upper(row.saved?.status)==="PAID"?"green":row.diff===0?"green":"red"}`}>{upper(row.saved?.status)==="PAID"?"Ödendi":row.diff===0?"Hazır":"Kontrol"}</span></td>
               <td className="action-col"><button className="btn" disabled={data.close?.isLocked || upper(row.saved?.status)==="PAID"} onClick={()=>openPayroll(row)}>{upper(row.saved?.status)==="PAID"?"Kilitli":"Son Kontrol"}</button><button className="btn" onClick={()=>{setSelectedId(row.employee.id);setModal("fis");}}>Fiş</button></td>
             </tr>)}
-            <EmptyRow show={!payrollRows.length} colSpan={8} text="Bordro için personel bulunamadı." />
+            <EmptyRow show={!filteredPayrollRows.length} colSpan={8} text="Filtreye uygun bordro personeli bulunamadı." />
           </tbody></table></div>
         </div>
         <LogTable title="Bordro Islem Loglari" rows={scopedLogs} onEdit={editFromLog} />
@@ -1938,7 +2130,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         <div className="workbar"><div className="group"><input ref={payrollInput} type="file" accept=".xls,.xlsx" multiple hidden onChange={(event)=>previewPayrollFiles(event.target.files)} /><button className="btn primary" disabled={data.close?.isLocked} onClick={() => payrollInput.current?.click()}>Resmi Bordro XLS/XLSX</button><button className="btn" onClick={() => openDocument()}>Evrak Yükle</button><button className="btn" onClick={() => setModal("izinFis")}>İzin Formu</button><button className="btn" onClick={() => setModal("kidemCikti")}>Ayrılış Ödeme Özeti</button><button className="btn orange" disabled={busy} onClick={() => runClose(false)}>Ay Sonu Kontrol</button><button className="btn red" disabled={busy || data.close?.isLocked || !checks.length || checks.some((item)=>!item.ok)} onClick={() => runClose(true)}>{data.close?.isLocked ? "Dönem Kapalı" : "Dönemi Kapat"}</button></div></div>
         <div className="sumgrid short">{summaryBox("Bordro satiri", safeList(data.sgkRows).length)}{summaryBox("Eslesen personel", safeList(data.sgkRows).filter((row)=>row.employeeId).length,"green")}{summaryBox("SGK gun",safeList(data.sgkRows).reduce((sum,row)=>sum+num(row.sgkDays),0))}{summaryBox("Resmi net",money(safeList(data.sgkRows).reduce((sum,row)=>sum+num(row.net),0)))}{summaryBox("Yeni giris",safeList(data.sgkRows).filter((row)=>row.hireDate?.startsWith(period)).length,"orange")}{summaryBox("Cikis",safeList(data.sgkRows).filter((row)=>row.exitDate?.startsWith(period)).length,"red")}</div>
         <div className="card sgk-payroll-card"><div className="ch"><div><b>Onayli Resmi Bordro Verisi</b><span>Net Istihkak banka listesine, SGK gun puantaj kontrolune aktarilir.</span></div><button className="btn" onClick={()=>go("bordro")}>Son Bordroya Git</button></div><div className="tw"><table><thead><tr><th>Personel</th><th>TC</th><th>Giris</th><th>Cikis</th><th>SGK Gun</th><th>Normal Kazanc</th><th>Toplam Kazanc</th><th>SGK Matrah</th><th>SGK Primi</th><th>Vergi</th><th>Net Istihkak</th><th>Kaynak</th></tr></thead><tbody>{safeList(data.sgkRows).map((row)=><tr key={row.id}><td>{row.fullName}</td><td>{row.identityNo||"-"}</td><td>{row.hireDate||"-"}</td><td>{row.exitDate||"-"}</td><td>{row.sgkDays}</td><td className="money">{money(row.normalEarning)}</td><td className="money">{money(row.gross)}</td><td className="money">{money(row.sgkBase)}</td><td className="money">{money(row.sgkPremium)}</td><td className="money">{money(num(row.incomeTax)+num(row.stampTax))}</td><td className="money">{money(row.net)}</td><td>{row.source?.sourceFile||data.sgkImport?.fileName||"-"}</td></tr>)}<EmptyRow show={!safeList(data.sgkRows).length} colSpan={12} text="Bu donem icin onayli bordro yok. Bir veya birden cok XLS dosyasi yukleyin." /></tbody></table></div></div>
-        <div className="layout2"><div className="card"><div className="ch"><div><b>Evrak / Belge Baglantilari</b><span>Yuklenen belgeler burada listelenir.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>Belge Turu</th><th>Dosya</th><th>Tarih</th><th>Not</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{documents.map((doc) => <tr key={doc.id}><td>{employees.find((item) => item.id === doc.employeeId)?.fullName || "-"}</td><td>{doc.documentType || "-"}</td><td>{doc.fileName || "-"}</td><td>{doc.date || doc.createdAt || "-"}</td><td>{doc.note || doc.storagePath || "-"}</td><td><span className="badge green">{doc.status || "Kayitli"}</span></td><td><button className="btn" onClick={async () => { try { await downloadIkAdvancedDocument(doc.id, doc.fileName || "ik-evrak"); setNotice("Evrak indirildi."); } catch (error) { setNotice(error?.message || "Evrak indirilemedi."); } }}>İndir</button></td></tr>)}<EmptyRow show={!documents.length} colSpan={7} text="Kayitli evrak yok." /></tbody></table></div></div><div className="card"><div className="ch"><div><b>Eksik Evrak Kontrolu</b><span>Bordro loglari burada gorunmez.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>Eksik Belge</th><th>Tarih</th><th>Not</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{employees.filter((employee) => !docsFor(employee).length).map((employee) => <tr key={employee.id}><td>{employee.fullName}</td><td>Personel evragi</td><td>{period}</td><td>Evrak baglantisi yok</td><td><span className="badge orange">Eksik</span></td><td><button className="btn" onClick={() => openDocument(employee)}>Yukle</button></td></tr>)}<EmptyRow show={employees.every((employee) => docsFor(employee).length)} colSpan={6} text="Eksik evrak gorunmuyor." /></tbody></table></div></div></div>
+        <div className="layout2"><div className="card"><div className="ch"><div><b>Evrak / Belge Baglantilari</b><span>Yuklenen belgeler burada listelenir.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>Belge Turu</th><th>Dosya</th><th>Tarih</th><th>Not</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{filteredDocuments.map((doc) => <tr key={doc.id}><td>{employees.find((item) => item.id === doc.employeeId)?.fullName || "-"}</td><td>{doc.documentType || "-"}</td><td>{doc.fileName || "-"}</td><td>{doc.date || doc.createdAt || "-"}</td><td>{doc.note || doc.storagePath || "-"}</td><td><span className="badge green">{doc.status || "Kayitli"}</span></td><td><button className="btn" onClick={async () => { try { await downloadIkAdvancedDocument(doc.id, doc.fileName || "ik-evrak"); setNotice("Evrak indirildi."); } catch (error) { setNotice(error?.message || "Evrak indirilemedi."); } }}>İndir</button></td></tr>)}<EmptyRow show={!filteredDocuments.length} colSpan={7} text="Filtreye uygun kayıtlı evrak yok." /></tbody></table></div></div><div className="card"><div className="ch"><div><b>Eksik Evrak Kontrolu</b><span>Bordro loglari burada gorunmez.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>Eksik Belge</th><th>Tarih</th><th>Not</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{employees.filter((employee) => visibleDocumentEmployeeIds.has(employee.id) && !docsFor(employee).length).map((employee) => <tr key={employee.id}><td>{employee.fullName}</td><td>Personel evragi</td><td>{period}</td><td>Evrak baglantisi yok</td><td><span className="badge orange">Eksik</span></td><td><button className="btn" onClick={() => openDocument(employee)}>Yukle</button></td></tr>)}<EmptyRow show={!employees.some((employee) => visibleDocumentEmployeeIds.has(employee.id) && !docsFor(employee).length)} colSpan={6} text="Filtreye uygun eksik evrak görünmüyor." /></tbody></table></div></div></div>
         {!!checks.length && <div className="card"><div className="ch"><div><b>Ay Sonu Kontrol Maddeleri</b><span>Kontrol sonucu.</span></div></div><div className="tw"><table><thead><tr><th>Kontrol maddesi</th><th>Durum</th><th>Aciklama</th><th>Islem</th></tr></thead><tbody>{checks.map((item, index) => <tr key={index}><td>{item.title || item.type}</td><td><span className={`badge ${item.ok ? "green" : "orange"}`}>{item.ok ? "Tamam" : "Duzelt"}</span></td><td>{item.detail || "-"}</td><td>{item.ok ? "-" : <button className="btn" onClick={() => go("personel")}>Ac</button>}</td></tr>)}</tbody></table></div></div>}
         <LogTable title="SGK / Evrak Islem Loglari" rows={scopedLogs} onEdit={editFromLog} />
       </section>
