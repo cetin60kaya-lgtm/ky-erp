@@ -14,9 +14,9 @@ public sealed partial class LiveAttendanceForm : Form
     readonly DateTimePicker date = new(){Format=DateTimePickerFormat.Custom,CustomFormat="dd MMMM yyyy dddd",Width=190};
     readonly CheckBox live = new(){Text="Otomatik yenile",Checked=true,AutoSize=true,Padding=new Padding(8,6,0,0)};
     readonly Label device = new(){AutoSize=false,Width=430,Height=28,TextAlign=ContentAlignment.MiddleLeft};
-    readonly Button refresh = new(){Text="Yenile",Width=76,Height=30};
-    readonly Button syncNow = new(){Text="Eşitle",Width=76,Height=30};
-    readonly Button clearLive = new(){Text="Önbellek Temizle",Width=115,Height=30};
+    readonly Button refresh = PdksUiKit.Button("Yenile",76,PdksActionRole.Secondary);
+    readonly Button syncNow = PdksUiKit.Button("Eşitle",76,PdksActionRole.Primary);
+    readonly Button clearLive = PdksUiKit.Button("Önbellek Temizle",115,PdksActionRole.Quiet);
     readonly FlowLayoutPanel cards = new(){Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(2)};
     readonly TabControl tabs = new(){Dock=DockStyle.Fill,Multiline=true,SizeMode=TabSizeMode.Normal};
     readonly Dictionary<string,DataGridView> grids = new();
@@ -35,7 +35,7 @@ public sealed partial class LiveAttendanceForm : Form
     public LiveAttendanceForm(Action<string,DateTime>? openEntryExit=null, Action<string>? openPerson=null)
     {
         this.openEntryExit=openEntryExit;this.openPerson=openPerson;Text="Canlı Personel Denetim";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);
-        MinimumSize=new Size(1000,620);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);
+        MinimumSize=new Size(1000,620);Font=new Font("Segoe UI",9f);BackColor=PdksAppearance.Current.Canvas;
         DoubleBuffered=true;SetStyle(ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint|ControlStyles.UserPaint,true);
         date.Value=DateTime.Today;
         Build();
@@ -63,24 +63,25 @@ public sealed partial class LiveAttendanceForm : Form
 
     void Build()
     {
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(14),BackColor=Color.FromArgb(246,249,253)};
+        var p=PdksAppearance.Current;
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(14),BackColor=p.Canvas};
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,72));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,92));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,166));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
-        var header=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,Padding=new Padding(16,8,16,8),BackColor=Color.White};
+        var header=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,Padding=new Padding(16,8,16,8),BackColor=p.Surface};
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,65));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,15));
         var titleBox=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2};
         titleBox.RowStyles.Add(new RowStyle(SizeType.Percent,60));titleBox.RowStyles.Add(new RowStyle(SizeType.Percent,40));
-        titleBox.Controls.Add(new Label{Text="Canlı Personel Denetimi",Dock=DockStyle.Fill,TextAlign=ContentAlignment.BottomLeft,Font=new Font("Segoe UI",16f,FontStyle.Bold),ForeColor=Color.FromArgb(27,44,68)},0,0);
-        titleBox.Controls.Add(new Label{Text="Kart hareketleri • eksik basımlar • izin • içeride kalanlar",Dock=DockStyle.Fill,TextAlign=ContentAlignment.TopLeft,ForeColor=Color.FromArgb(88,103,124)},0,1);
+        titleBox.Controls.Add(new Label{Text="Canlı Personel Denetimi",Dock=DockStyle.Fill,TextAlign=ContentAlignment.BottomLeft,Font=new Font("Segoe UI",16f,FontStyle.Bold),ForeColor=p.Text},0,0);
+        titleBox.Controls.Add(new Label{Text="Kart hareketleri • eksik basımlar • izin • içeride kalanlar",Dock=DockStyle.Fill,TextAlign=ContentAlignment.TopLeft,ForeColor=p.Muted},0,1);
         header.Controls.Add(titleBox,0,0);
         var controls=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(0,12,0,0)};
         controls.Controls.Add(date);controls.Controls.Add(live);controls.Controls.Add(refresh);controls.Controls.Add(syncNow);controls.Controls.Add(clearLive);header.Controls.Add(controls,1,0);
-        device.Dock=DockStyle.Fill;device.TextAlign=ContentAlignment.MiddleRight;device.Font=new Font("Segoe UI",9f,FontStyle.Bold);device.ForeColor=Color.FromArgb(24,145,84);header.Controls.Add(device,2,0);
+        device.Dock=DockStyle.Fill;device.TextAlign=ContentAlignment.MiddleRight;device.Font=new Font("Segoe UI",9f,FontStyle.Bold);device.ForeColor=p.Success;header.Controls.Add(device,2,0);
         root.Controls.Add(header,0,0);
 
         cards.BackColor=Color.Transparent;cards.Padding=new Padding(0,8,0,6);root.Controls.Add(cards,0,1);
@@ -92,7 +93,7 @@ public sealed partial class LiveAttendanceForm : Form
     {
         var grid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,
             AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,SelectionMode=DataGridViewSelectionMode.FullRowSelect,
-            MultiSelect=false,BackgroundColor=Color.White,RowHeadersVisible=false};
+            MultiSelect=false,BackgroundColor=PdksAppearance.Current.Surface,RowHeadersVisible=false,BorderStyle=BorderStyle.None};
         grid.DataBindingComplete+=(_,_)=>PaintRows(grid);
         grid.SelectionChanged+=(_,_)=>UpdatePersonPreview(grid);
         grid.CellClick+=(_,_)=>UpdatePersonPreview(grid);
@@ -109,11 +110,12 @@ public sealed partial class LiveAttendanceForm : Form
             existing.Text=$"{title}\n{value:N0}";
             return existing;
         }
+        var p=PdksAppearance.Current;
         var label=new Label{Width=cardWidth,Height=70,Margin=new Padding(4),BorderStyle=BorderStyle.None,
             Padding=new Padding(10,8,10,6),TextAlign=ContentAlignment.MiddleCenter,
-            Font=new Font("Segoe UI",10f,FontStyle.Bold),ForeColor=Color.FromArgb(27,44,68),
+            Font=new Font("Segoe UI",10f,FontStyle.Bold),ForeColor=p.Text,
             BackColor=back,Text=$"{title}\n{value:N0}",Cursor=Cursors.Hand};
-        label.Paint+=(_,e)=>{using var p=new Pen(Color.FromArgb(214,225,238));e.Graphics.DrawRectangle(p,0,0,label.Width-1,label.Height-1);};
+        label.Paint+=(_,e)=>{using var pen=new Pen(PdksAppearance.Current.Border);e.Graphics.DrawRectangle(pen,0,0,label.Width-1,label.Height-1);};
         label.Click+=(_,_)=>SelectStatusTab(title);
         summaryCards[title]=label;
         cards.Controls.Add(label);
@@ -263,10 +265,11 @@ public sealed partial class LiveAttendanceForm : Form
             grids["Erken Çıkış"].DataSource=Table(rows.Where(r=>r.Warning.Contains("Erken çıkış",StringComparison.OrdinalIgnoreCase)));
             grids["Tamamlanan"].DataSource=Table(rows.Where(r=>r.HasEntry&&r.HasExit));
             grids["Eşleşmeyen Kart"].DataSource=UnmatchedTable();
-            Card("Beklenen",rows.Count(r=>r.Expected),Color.AliceBlue);Card("Gelen",rows.Count(r=>r.Expected&&r.HasEntry),Color.Honeydew);
-            Card("Kart Basmayan",rows.Count(r=>r.Status=="Kart Basmadı"),Color.MistyRose);Card("İzinli",rows.Count(r=>r.FullLeave),Color.LemonChiffon);
-            Card("İçeride",rows.Count(r=>r.Status=="İçeride"),Color.Honeydew);Card("Çıkış Eksik",rows.Count(r=>r.Status=="Çıkış Kartı Yok"),Color.MistyRose);
-            Card("Tamamlanan",rows.Count(r=>r.HasEntry&&r.HasExit),Color.WhiteSmoke);Card("Eşleşmeyen",unmatched.Count(x=>x.At.Date==day.Date),Color.LavenderBlush);
+            var p=PdksAppearance.Current;
+            Card("Beklenen",rows.Count(r=>r.Expected),p.PrimarySoft);Card("Gelen",rows.Count(r=>r.Expected&&r.HasEntry),p.SurfaceAlt);
+            Card("Kart Basmayan",rows.Count(r=>r.Status=="Kart Basmadı"),p.DangerSoft);Card("İzinli",rows.Count(r=>r.FullLeave),p.PrimarySoft);
+            Card("İçeride",rows.Count(r=>r.Status=="İçeride"),p.SurfaceAlt);Card("Çıkış Eksik",rows.Count(r=>r.Status=="Çıkış Kartı Yok"),p.DangerSoft);
+            Card("Tamamlanan",rows.Count(r=>r.HasEntry&&r.HasExit),p.SurfaceAlt);Card("Eşleşmeyen",unmatched.Count(x=>x.At.Date==day.Date),p.DangerSoft);
 
             foreach(var pair in selected)
             {
@@ -367,17 +370,19 @@ public sealed partial class LiveAttendanceForm : Form
     }
     static void PaintRows(DataGridView grid)
     {
+        var p=PdksAppearance.Current;
         foreach(DataGridViewRow row in grid.Rows)
         {
             var status=Convert.ToString(row.Cells["Durum"].Value)??"";
             row.DefaultCellStyle.BackColor=status switch
             {
-                "Kart Basmadı" or "Giriş Kartı Yok" or "Çıkış Kartı Yok"=>Color.MistyRose,
-                "İzinli"=>Color.LemonChiffon,
-                "İçeride"=>Color.Honeydew,
-                "Tamamlandı"=>Color.White,
-                _=>grid.Columns.Contains("Uyarı") && !string.IsNullOrWhiteSpace(Convert.ToString(row.Cells["Uyarı"].Value)) ? Color.LemonChiffon : Color.WhiteSmoke
+                "Kart Basmadı" or "Giriş Kartı Yok" or "Çıkış Kartı Yok"=>p.DangerSoft,
+                "İzinli"=>p.PrimarySoft,
+                "İçeride"=>p.SurfaceAlt,
+                "Tamamlandı"=>p.Surface,
+                _=>grid.Columns.Contains("Uyarı") && !string.IsNullOrWhiteSpace(Convert.ToString(row.Cells["Uyarı"].Value)) ? p.PrimarySoft : p.SurfaceAlt
             };
+            row.DefaultCellStyle.ForeColor=p.Text;
         }
     }
 
