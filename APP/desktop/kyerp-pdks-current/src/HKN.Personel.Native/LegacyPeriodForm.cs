@@ -45,8 +45,8 @@ public sealed class LegacyPeriodForm : Form
         left.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         left.Controls.Add(new Label{Text="Dönemler",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42)},0,0);
         var range=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,8,0,0)};
-        filterStart.Width=105;filterEnd.Width=105;
-        var between=PeriodButton("Aralığı Listele",112,false);var all=PeriodButton("Tümü",82,false);
+        filterStart.Width=92;filterEnd.Width=92;
+        var between=PeriodButton("Aralığı Listele",100,false);var all=PeriodButton("Tümü",68,false);
         between.Click+=(_,_)=>ReloadGrid(true);all.Click+=(_,_)=>ReloadGrid(false);
         range.Controls.Add(filterStart);range.Controls.Add(new Label{Text="—",AutoSize=true,Padding=new Padding(4,7,4,0),ForeColor=Color.FromArgb(100,116,139)});range.Controls.Add(filterEnd);range.Controls.Add(between);range.Controls.Add(all);
         left.Controls.Add(range,0,1);
