@@ -18,37 +18,15 @@ public partial class PersonelForm
 
     static DataGridView Grid(string name)=>new(){Name=name,Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
 
-    void BuildMenuFull()
+    void InitializePersonelBehavior()
     {
-        var m=new MenuStrip();
-        var rap=new ToolStripMenuItem("Raporlar");
-        rap.DropDownItems.Add(Item("Ayrıntılı Kişisel Bordro",Keys.F2,()=>PrintReportFinal("Ayrıntılı Kişisel Bordro")));
-        rap.DropDownItems.Add(Item("Personel Bilgi Formu",Keys.None,()=>PrintReportFinal("Personel Bilgi Formu")));
-        rap.DropDownItems.Add(Item("Personel Bilgi Formu (Boş)",Keys.None,()=>PrintReportFinal("Personel Bilgi Formu (Boş)")));
-        rap.DropDownItems.Add(Item("Kişisel Giriş Çıkış Raporu",Keys.None,()=>PrintReportFinal("Kişisel Giriş Çıkış Raporu")));
-        rap.DropDownItems.Add(Item("Kişisel İzin Kartı",Keys.None,()=>PrintReportFinal("Kişisel İzin Kartı")));
-        rap.DropDownItems.Add(Item("Kişisel Ek Kazanç ve Kesinti Kartı",Keys.None,()=>PrintReportFinal("Kişisel Ek Kazanç ve Kesinti Kartı")));
-        rap.DropDownItems.Add(new ToolStripSeparator());
-        rap.DropDownItems.Add(Item("Aktif Tabloyu PDF Aktar",Keys.None,()=>ExportActiveGrid(false)));
-        rap.DropDownItems.Add(Item("Aktif Tabloyu Excel Aktar",Keys.None,()=>ExportActiveGrid(true)));
-        rap.DropDownItems.Add(Item("Aktif Tabloyu CSV Aktar",Keys.None,ExportActiveGridCsv));
-        var isl=new ToolStripMenuItem("İşlemler");
-        isl.DropDownItems.Add(Item("Personel Listesi Filtreleme",Keys.F3,FilterDialog));
-        isl.DropDownItems.Add(Item("Süreli Personel Kaydırma",Keys.F4,ToggleSlider));
-        isl.DropDownItems.Add(Item("Hesapla",Keys.F5,RefreshFullTabs));
-        isl.DropDownItems.Add(Item("Maaş Geçmişi",Keys.None,SalaryHistory));
-        isl.DropDownItems.Add(Item("Günlük Operasyon",Keys.None,ShowDailyOperations));
-        isl.DropDownItems.Add(new ToolStripSeparator());
-        isl.DropDownItems.Add(Item("Organizasyon Tanımları",Keys.None,ShowOrganizationDefinitions));
-        isl.DropDownItems.Add(Item("Dönem Tanımları",Keys.None,ShowPeriodDefinitions));
-        isl.DropDownItems.Add(Item("Terminal Aktarım Profilleri",Keys.None,ShowTerminalProfiles));
-        m.Items.Add(rap); m.Items.Add(isl); MainMenuStrip=m; Controls.Add(m);
-        slider.Tick += (_,_)=>{ if(list.Rows.Count==0)return; int i=list.CurrentRow?.Index??-1; i=(i+1)%list.Rows.Count; list.CurrentCell=list.Rows[i].Cells[0]; };
-    }
-
-    ToolStripMenuItem Item(string text,Keys key,Action a)
-    {
-        var x=new ToolStripMenuItem(text); if(key!=Keys.None)x.ShortcutKeys=key; x.Click+=(_,_)=>a(); return x;
+        slider.Tick += (_,_) =>
+        {
+            if (list.Rows.Count == 0) return;
+            var i = list.CurrentRow?.Index ?? -1;
+            i = (i + 1) % list.Rows.Count;
+            list.CurrentCell = list.Rows[i].Cells[0];
+        };
     }
 
     TabPage BuildKisiselTab()
@@ -59,9 +37,9 @@ public partial class PersonelForm
         for(int i=0;i<z.Length;i+=2){int n=i/2,row=n/2,col=(n%2)*2;if(string.IsNullOrEmpty(z[i]))continue; t.Controls.Add(new Label{Text=z[i],Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},col,row);var b=new TextBox{Dock=DockStyle.Fill};if(!string.IsNullOrEmpty(z[i+1]))f[z[i+1]]=b;t.Controls.Add(b,col+1,row);}
         p.Controls.Add(t); return p;
     }
-    TabPage BuildGirisTab()=>PeriodGridTab("Giriş ve Çıkışları",periodG,gFrom,gTo,gGiris,true);
+    TabPage BuildGirisTab()=>PeriodGridTab("Giriş / Çıkış",periodG,gFrom,gTo,gGiris,true);
     TabPage BuildIzinTab()=>PeriodGridTab("İzinler",periodI,iFrom,iTo,gIzin,false);
-    TabPage BuildEkkTab()=>PeriodGridTab("Ek Kazanç Ve Kesintiler",periodE,eFrom,eTo,gEkk,false);
+    TabPage BuildEkkTab()=>PeriodGridTab("Kazanç / Kesinti",periodE,eFrom,eTo,gEkk,false);
 
     TabPage PeriodGridTab(string title,ComboBox per,DateTimePicker a,DateTimePicker b,DataGridView grid,bool giris)
     {
@@ -100,10 +78,10 @@ public partial class PersonelForm
         try
         {
             var pk=currentPk; var name=tabs.SelectedTab.Text;
-            if(name=="Giriş ve Çıkışları"){var a=gFrom.Value.Date;var b=gTo.Value.Date.AddDays(1);gGiris.DataSource=Q("select SIRA,GTARIH as GIRIS_TARIHI,GSAAT as GIRIS_SAATI,CTARIH as CIKIS_TARIHI,CSAAT as CIKIS_SAATI,GTUR,CTUR from GIRCIK where PKNO=@PK and ((GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B)) order by coalesce(GTARIH,CTARIH)",new FbParameter("@PK",pk),new FbParameter("@A",a),new FbParameter("@B",b));}
+            if(name=="Giriş / Çıkış"){var a=gFrom.Value.Date;var b=gTo.Value.Date.AddDays(1);gGiris.DataSource=Q("select SIRA,GTARIH as GIRIS_TARIHI,GSAAT as GIRIS_SAATI,CTARIH as CIKIS_TARIHI,CSAAT as CIKIS_SAATI,GTUR,CTUR from GIRCIK where PKNO=@PK and ((GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B)) order by coalesce(GTARIH,CTARIH)",new FbParameter("@PK",pk),new FbParameter("@A",a),new FbParameter("@B",b));}
             else if(name=="İzinler"){var a=iFrom.Value.Date;var b=iTo.Value.Date.AddDays(1);gIzin.DataSource=Q("select SIRA,TARIH,BASSAAT,BITSAAT,SURESAAT,SUREDAKIKA,EBALAN,TIP,MAZERET from OZELIZIN where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",pk),new FbParameter("@A",a),new FbParameter("@B",b));}
-            else if(name=="Ek Kazanç Ve Kesintiler"){var a=eFrom.Value.Date;var b=eTo.Value.Date.AddDays(1);gEkk.DataSource=Q("select KOD,TARIH as ISLEM_TARIHI,VTARIH as VERILIS_TARIHI,TURKOD as TURU,MIKTAR,ACIKLAMA from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",pk),new FbParameter("@A",a),new FbParameter("@B",b));}
-            else if(name is "Bilgi" or "Ödemeler") LoadBilgiOdemeClassic();
+            else if(name=="Kazanç / Kesinti"){var a=eFrom.Value.Date;var b=eTo.Value.Date.AddDays(1);gEkk.DataSource=Q("select KOD,TARIH as ISLEM_TARIHI,VTARIH as VERILIS_TARIHI,TURKOD as TURU,MIKTAR,ACIKLAMA from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",pk),new FbParameter("@A",a),new FbParameter("@B",b));}
+            else if(name is "Puantaj Bilgisi" or "Ödemeler") LoadBilgiOdemeClassic();
         }
         finally { refreshingFullTabs=false; }
     }
@@ -192,9 +170,9 @@ public partial class PersonelForm
         foreach(TabPage p in tabs.TabPages)
         {
             var bs=All(p).OfType<Button>().ToList();
-            if(p.Text=="Giriş ve Çıkışları")Wire(bs,AddGiris,EditGiris,DeleteGiris,DeleteAllGiris);
+            if(p.Text=="Giriş / Çıkış")Wire(bs,AddGiris,EditGiris,DeleteGiris,DeleteAllGiris);
             if(p.Text=="İzinler")Wire(bs,AddIzinFull,EditIzinFull,DeleteIzin,DeleteAllIzin);
-            if(p.Text=="Ek Kazanç Ve Kesintiler")Wire(bs,AddEkkFull,EditEkkFull,DeleteEkk,DeleteAllEkk);
+            if(p.Text=="Kazanç / Kesinti")Wire(bs,AddEkkFull,EditEkkFull,DeleteEkk,DeleteAllEkk);
         }
     }
     void Wire(List<Button> bs,Action add,Action edit,Action del,Action all)
