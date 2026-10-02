@@ -107,8 +107,13 @@ test("payroll outputs and SGK close controls remain present", () => {
   assert.match(page, /runIkAdvancedCloseCheck/);
 });
 
-test("monthly API surface has no obsolete card-import endpoints", () => {
+test("PDKS card-import compatibility stays outside the monthly HR screens", () => {
   const api = frontend("services/ik/monthlyApi.js");
-  assert.doesNotMatch(api, /\/ik\/advanced\/card\/preview/);
-  assert.doesNotMatch(api, /\/ik\/advanced\/card\/confirm/);
+  const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const pdks = frontend("pages/modules/PdksPageV2.jsx");
+  assert.match(api, /\/ik\/advanced\/card\/preview/);
+  assert.match(api, /\/ik\/advanced\/card\/confirm/);
+  assert.doesNotMatch(monthly, /previewIkAdvancedCard|confirmIkAdvancedCard/);
+  assert.match(pdks, /previewIkAdvancedCard/);
+  assert.match(pdks, /confirmIkAdvancedCard/);
 });
