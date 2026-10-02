@@ -1204,7 +1204,7 @@ async function advancedPayroll(c: Context<AppEnv>) {
     const systemCash = Math.max(baseNet - systemBank, 0);
     const systemFinal = { salaryPay: baseSalary, roadPay: number(employee.roadAllowance), overtimeAmount: overtime, premiumAmount: extra, garnishmentAmount: garnishment, deductionAmount: deduction, advanceAmount: advance, bank: systemBank, cash: systemCash, total: baseNet };
     const savedStatus = upper(row?.status);
-    const hasSavedFinal = Boolean(row && ["OVERRIDE", "CALCULATED", "PAID"].includes(savedStatus));
+    const hasSavedFinal = Boolean(row && ["OVERRIDE", "CALCULATED", "PAID", "MANUAL_APPROVED"].includes(savedStatus));
     const final = hasSavedFinal ? { salaryPay: row.salary, roadPay: row.roadAllowance, overtimeAmount: row.overtimeAmount, premiumAmount: row.premiumAmount, garnishmentAmount: row.garnishmentAmount, deductionAmount: row.deductionAmount, advanceAmount: row.advanceAmount, bank: row.bankAmount, cash: row.cashAmount, total: row.totalAmount } : systemFinal;
     return { employeeId: employee.id, code: employee.code, fullName: employee.fullName, department: employee.department, system: systemFinal, final, status: hasSavedFinal ? savedStatus : "SYSTEM" };
   });
@@ -1724,7 +1724,8 @@ async function previewAdvancedSgk(c: Context<AppEnv>) {
     const nameMatches = byName.get(sgkNameKey(fullName)) || [];
     const nameMatch = nameMatches.length === 1 ? nameMatches[0] : null;
     const matched = identityMatch || codeMatch || nameMatch || null;
-    const employeeId = matched && flag(matched.payroll_included) !== false ? text(matched.id) : "";
+    const payrollIncluded = matched?.payroll_included;
+    const employeeId = matched && (payrollIncluded === null || payrollIncluded === undefined || flag(payrollIncluded)) ? text(matched.id) : "";
     rows.push({
       sourceFile: fileName,
       workplace: workplaceText,
