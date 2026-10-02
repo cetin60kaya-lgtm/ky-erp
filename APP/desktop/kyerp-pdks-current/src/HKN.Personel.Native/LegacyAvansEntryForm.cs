@@ -176,7 +176,7 @@ public sealed class LegacyAvansEntryForm : Form
         {
             LoadTypes(bulkType);LoadTypes(singleType);foreach(var pair in bulkFilters)LoadLookup(pair.Value,Convert.ToString(pair.Value.Tag)??pair.Key);LoadBulkPeople();LoadSinglePeople();
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Error);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Error,"EarningsDeductions");}
     }
 
     void LoadTypes(ComboBox box)
@@ -194,7 +194,7 @@ public sealed class LegacyAvansEntryForm : Form
         {
             bulkSource=db.Query("select PKNO,AD,SOYAD,IGTARIH,GRUP,BOLUM,SERVIS,DURUM,GOREV,SIRKET,MAAS from KIMLIK where ICTARIH is null and IGTARIH>=@D order by PKNO",new FbParameter("@D",hiredAfter.Value.Date));bulkPeople.DataSource=bulkSource.DefaultView;ConfigurePeople(bulkPeople);ApplyBulkFilter();
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"EarningsDeductions");}
     }
     void ApplyBulkFilter()
     {
@@ -206,7 +206,7 @@ public sealed class LegacyAvansEntryForm : Form
         {
             var where=activePeople.Checked?"where ICTARIH is null":leftPeople.Checked?"where ICTARIH is not null":"";var order=sortName.Checked?"AD,SOYAD,PKNO":sortSurname.Checked?"SOYAD,AD,PKNO":"PKNO";singlePeople.DataSource=db.Query($"select PKNO,AD,SOYAD,IGTARIH,ICTARIH,MAAS from KIMLIK {where} order by {order}");ConfigurePeople(singlePeople);
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"EarningsDeductions");}
     }
     static void ConfigurePeople(DataGridView g)
     {
@@ -228,7 +228,7 @@ public sealed class LegacyAvansEntryForm : Form
             foreach(string pk in selectedCodes.Items){decimal value;if(ratioCheck.Checked){var salary=Convert.ToDecimal(db.Scalar("select coalesce(MAAS,0) from KIMLIK where PKNO=@P",new FbParameter("@P",pk))??0);value=decimal.Round(salary*ratio.Value/100m,2,MidpointRounding.AwayFromZero);}else value=amount.Value;if(value<0)throw new InvalidOperationException("Miktar negatif olamaz.");rows.Add((pk,value));}
             db.InTransaction((c,t)=>{foreach(var row in rows)InsertAvans(c,t,row.Pk,bulkDate.Value.Date,bulkIssueDate.Value.Date,type.Code,row.Value,desc);return rows.Count;});MessageBox.Show($"{rows.Count} personel için kayıt eklendi.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"EarningsDeductions");}
     }
     void InsertSingle()
     {
@@ -236,7 +236,7 @@ public sealed class LegacyAvansEntryForm : Form
         {
             if(singlePeople.CurrentRow is null)throw new InvalidOperationException("Personel seçin.");var pk=Convert.ToString(singlePeople.CurrentRow.Cells["PKNO"].Value)??"";if(pk.Length==0)throw new InvalidOperationException("Personel seçin.");var type=SelectedType(singleType);InsertAvans(null,null,pk,singleDate.Value.Date,singleIssueDate.Value.Date,type.Code,singleAmount.Value,singleDescription.Text.Trim());MessageBox.Show("Kayıt eklendi.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"EarningsDeductions");}
     }
     static TypeItem SelectedType(ComboBox box)=>box.SelectedItem as TypeItem??throw new InvalidOperationException("Kazanç/kesinti türünü seçin.");
 
