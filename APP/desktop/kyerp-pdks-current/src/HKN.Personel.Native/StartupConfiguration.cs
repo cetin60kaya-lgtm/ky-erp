@@ -101,70 +101,91 @@ internal static class StartupConfiguration
 
     private static Form BuildDialog(PdksOptions current, out TextBox dbPath, out TextBox host, out TextBox port, out TextBox user, out TextBox password)
     {
-        var form = new Form
+        var p=PdksAppearance.Current;
+        var form=new Form
         {
-            Text = "KYERP PDKS İlk Kurulum",
-            StartPosition = FormStartPosition.CenterScreen,
-            Width = 660,
-            Height = 360,
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false,
-            MinimizeBox = false
+            Text="KY PDKS • Veritabanı Bağlantısı",
+            StartPosition=FormStartPosition.CenterScreen,
+            Size=new Size(760,520),
+            MinimumSize=new Size(700,480),
+            FormBorderStyle=FormBorderStyle.FixedDialog,
+            MaximizeBox=false,
+            MinimizeBox=false,
+            Font=new Font("Segoe UI",9f),
+            BackColor=p.Canvas
         };
 
-        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 7, Padding = new Padding(14) };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,145));
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=new Padding(18),BackColor=p.Canvas};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,94));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+
+        var hero=PdksUiKit.Card(16);
+        var heroLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Surface,Margin=Padding.Empty};
+        heroLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
+        heroLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        heroLayout.Controls.Add(new Label{Text="Veritabanı Bağlantısı",Dock=DockStyle.Fill,Font=new Font("Segoe UI",13f,FontStyle.Bold),ForeColor=p.Text,TextAlign=ContentAlignment.MiddleLeft},0,0);
+        heroLayout.Controls.Add(new Label{Text="Canlı Firebird veri kaynağını doğrulayın. Bağlantı bilgileri yalnız bu Windows kullanıcısının ayarlarında saklanır.",Dock=DockStyle.Fill,ForeColor=p.Muted,TextAlign=ContentAlignment.MiddleLeft},0,1);
+        hero.Controls.Add(heroLayout);
+        root.Controls.Add(hero,0,0);
+
+        var card=PdksUiKit.Card(18);
+        var grid=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=6,BackColor=p.Surface,Margin=Padding.Empty};
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,130));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,90));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,105));
+        for(var i=0;i<5;i++)grid.RowStyles.Add(new RowStyle(SizeType.Absolute,46));
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
-        var dbPathControl = new TextBox { Dock = DockStyle.Fill, Text = GuessDatabasePath(current.DatabasePath) };
-        dbPath = dbPathControl;
-        host = new TextBox { Dock = DockStyle.Fill, Text = current.DatabaseHost };
-        port = new TextBox { Dock = DockStyle.Fill, Text = current.DatabasePort.ToString() };
-        user = new TextBox { Dock = DockStyle.Fill, Text = current.DatabaseUser };
-        password = new TextBox { Dock = DockStyle.Fill, UseSystemPasswordChar = true };
+        var dbPathControl=new TextBox{Dock=DockStyle.Fill,Text=GuessDatabasePath(current.DatabasePath),Margin=new Padding(0,7,10,7)};
+        dbPath=dbPathControl;
+        host=new TextBox{Dock=DockStyle.Fill,Text=current.DatabaseHost,Margin=new Padding(0,7,10,7)};
+        port=new TextBox{Dock=DockStyle.Fill,Text=current.DatabasePort.ToString(),Margin=new Padding(0,7,10,7)};
+        user=new TextBox{Dock=DockStyle.Fill,Text=current.DatabaseUser,Margin=new Padding(0,7,10,7)};
+        password=new TextBox{Dock=DockStyle.Fill,UseSystemPasswordChar=true,Margin=new Padding(0,7,10,7)};
 
-        AddRow(grid, 0, "Veritabanı", dbPathControl);
-        var browse = new Button { Text = "Gözat...", Dock = DockStyle.Fill };
-        browse.Click += (_, _) =>
-        {
-            using var picker = new OpenFileDialog { Filter = "Firebird veritabanı (*.gdb;*.fdb)|*.gdb;*.fdb|Tüm dosyalar (*.*)|*.*", FileName = dbPathControl.Text };
-            if (picker.ShowDialog(form) == DialogResult.OK) dbPathControl.Text = picker.FileName;
+        AddRow(grid,0,"Veritabanı",dbPathControl);
+        var browse=PdksUiKit.Button("Gözat",90,PdksActionRole.Secondary);
+        browse.MinimumSize=Size.Empty;browse.MaximumSize=Size.Empty;browse.Dock=DockStyle.Fill;browse.Margin=new Padding(0,7,0,7);
+        browse.Click+=(_,_)=>{
+            using var picker=new OpenFileDialog{Filter="Firebird veritabanı (*.gdb;*.fdb)|*.gdb;*.fdb|Tüm dosyalar (*.*)|*.*",FileName=dbPathControl.Text};
+            if(picker.ShowDialog(form)==DialogResult.OK)dbPathControl.Text=picker.FileName;
         };
-        grid.Controls.Add(browse, 2, 0);
-        AddRow(grid, 1, "Sunucu", host);
-        AddRow(grid, 2, "Port", port);
-        AddRow(grid, 3, "Kullanıcı", user);
-        AddRow(grid, 4, "Parola", password);
+        grid.Controls.Add(browse,2,0);
 
-        var note = new Label
+        AddRow(grid,1,"Sunucu",host);
+        AddRow(grid,2,"Port",port);
+        AddRow(grid,3,"Kullanıcı",user);
+        AddRow(grid,4,"Parola",password);
+
+        var note=new Label
         {
-            Text = "Parola GitHub'a veya uygulama dosyalarına yazılmaz. Bağlantı test edildikten sonra yalnız bu Windows kullanıcısının ortam ayarına kaydedilir.",
-            Dock = DockStyle.Fill,
-            AutoSize = false
+            Text="Güvenlik: parola GitHub'a veya uygulama dosyalarına yazılmaz. Bağlantı başarılı olmadan ayarlar kalıcılaştırılmaz.",
+            Dock=DockStyle.Fill,
+            ForeColor=p.Muted,
+            TextAlign=ContentAlignment.MiddleLeft,
+            Padding=new Padding(0,10,0,0)
         };
-        grid.Controls.Add(note, 0, 5);
-        grid.SetColumnSpan(note, 3);
+        grid.Controls.Add(note,0,5);grid.SetColumnSpan(note,3);
+        card.Controls.Add(grid);
+        root.Controls.Add(card,0,1);
 
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
-        var cancel = new Button { Text = "Kapat", DialogResult = DialogResult.Cancel, Width = 100 };
-        var save = new Button { Text = "Bağlan ve Aç", DialogResult = DialogResult.OK, Width = 120 };
-        buttons.Controls.Add(cancel);
-        buttons.Controls.Add(save);
-        grid.Controls.Add(buttons, 0, 6);
-        grid.SetColumnSpan(buttons, 3);
+        var buttons=PdksUiKit.ActionBar(true,p.Canvas);
+        var cancel=PdksUiKit.Button("Kapat",100,PdksActionRole.Quiet);cancel.DialogResult=DialogResult.Cancel;
+        var save=PdksUiKit.Button("Bağlan ve Aç",125,PdksActionRole.Primary);save.DialogResult=DialogResult.OK;
+        buttons.Controls.Add(cancel);buttons.Controls.Add(save);
+        root.Controls.Add(buttons,0,2);
 
-        form.Controls.Add(grid);
-        form.AcceptButton = save;
-        form.CancelButton = cancel;
+        form.Controls.Add(root);
+        form.AcceptButton=save;
+        form.CancelButton=cancel;
         return form;
     }
 
-    private static void AddRow(TableLayoutPanel grid, int row, string label, Control control)
+    private static void AddRow(TableLayoutPanel grid,int row,string label,Control control)
     {
-        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        grid.Controls.Add(new Label { Text = label, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, row);
-        grid.Controls.Add(control, 1, row);
+        grid.Controls.Add(PdksUiKit.FieldLabel(label),0,row);
+        grid.Controls.Add(control,1,row);
     }
 
     private static string GuessDatabasePath(string configured)
