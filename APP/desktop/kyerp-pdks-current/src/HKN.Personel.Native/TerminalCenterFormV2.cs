@@ -28,12 +28,14 @@ public sealed class TerminalCenterForm : Form
 
     void Build()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(16) };
+        var p=PdksAppearance.Current;
+        BackColor=p.Canvas;
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(16), BackColor=p.Canvas };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
 
-        var head = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(16) };
+        var head = PdksUiKit.Card(16);
         head.Controls.Add(new Label
         {
             Text = "TERMINAL & CİHAZ MERKEZİ",
@@ -47,7 +49,7 @@ public sealed class TerminalCenterForm : Form
             Text = $"Cihaz: {settings.DeviceName}  •  Makine: {settings.MachineNo}  •  {settings.ConnectionType}  •  {settings.IpAddress}:{settings.IpPort}  •  {settings.BaudRate}  •  {settings.Direction}",
             AutoSize = true,
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(42, 75, 118),
+            ForeColor = p.Muted,
             Location = new Point(18, 47)
         });
         head.Controls.Add(sdkStatus);
@@ -58,7 +60,8 @@ public sealed class TerminalCenterForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(8, 20, 8, 8),
             WrapContents = true,
-            AutoScroll = true
+            AutoScroll = true,
+            BackColor = p.Canvas
         };
         cards.Controls.Add(Card("1 • CİHAZ AYARLARI", "Hedef PDKS'deki cihaz/makine, Ethernet, COM, baudrate, IP, port ve giriş/çıkış ayarları. Menüde ayrıca Ayarlar > Terminal / Kart Cihazı Ayarları altında bulunur.", () => RunSync(OpenSettings), "AYARLARI AÇ"));
         cards.Controls.Add(Card("2 • CİHAZ BAĞLANTISI", "Gerçek kart cihazını doğrudan kontrol eder. Kayıt silmez veya değiştirmez.", () => CheckDeviceAsync(true), "KONTROL ET"));
@@ -68,16 +71,15 @@ public sealed class TerminalCenterForm : Form
         cards.Controls.Add(Card("SDK / Sürücü Kontrolü", "FP_CLOCK.ocx, destek DLL'leri ve x86 TerminalBridge uyumluluğunu kontrol eder.", () => RunSync(ShowSdkDiagnostics), "Kontrol Et"));
         root.Controls.Add(cards, 0, 1);
 
-        var bottom = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(8, 10, 8, 0) };
-        var close = new Button { Text = "Kapat", Width = 110, Height = 36 };
-        close.Click += (_, _) => Close();
+        var bottom = PdksUiKit.ActionBar(true,p.Canvas);
+        var close = PdksUiKit.Button("Kapat",110,PdksActionRole.Quiet,Close);
         bottom.Controls.Add(close);
         var safety = new Label
         {
             Text = "GÜVENLİK: 6.4.0 CANLI'te aktarım sonrası fiziksel cihaz kayıtlarını otomatik silme kapalıdır.",
             AutoSize = true,
             Padding = new Padding(8, 9, 16, 0),
-            ForeColor = Color.DarkGreen,
+            ForeColor = p.Success,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold)
         };
         bottom.Controls.Add(safety);
@@ -93,10 +95,13 @@ public sealed class TerminalCenterForm : Form
 
     Control Card(string title, string text, Func<Task> action, string buttonText)
     {
-        var panel = new Panel { Width = 300, Height = 176, BackColor = Color.White, Margin = new Padding(10), Padding = new Padding(14) };
-        var t = new Label { Text = title, AutoSize = false, Width = 266, Height = 30, Font = new Font("Segoe UI", 11f, FontStyle.Bold), Location = new Point(14, 14) };
-        var d = new Label { Text = text, AutoSize = false, Width = 266, Height = 76, Location = new Point(14, 45) };
-        var b = new Button { Text = buttonText, Width = 126, Height = 34, Location = new Point(14, 128), Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+        var p=PdksAppearance.Current;
+        var panel = PdksUiKit.Card(14);
+        panel.Width=300;panel.Height=176;panel.Margin=new Padding(10);panel.Dock=DockStyle.None;
+        var t = new Label { Text = title, AutoSize = false, Width = 266, Height = 30, Font = new Font("Segoe UI", 11f, FontStyle.Bold), ForeColor=p.Text, Location = new Point(14, 14) };
+        var d = new Label { Text = text, AutoSize = false, Width = 266, Height = 76, ForeColor=p.Muted, Location = new Point(14, 45) };
+        var b = PdksUiKit.Button(buttonText,126,PdksActionRole.Primary);
+        b.Location=new Point(14,128);
         b.Click += async (_, _) =>
         {
             if (busy) return;
@@ -239,9 +244,9 @@ public sealed class TerminalCenterForm : Form
         sdkStatus.Text = text;
         sdkStatus.ForeColor = ok switch
         {
-            true => Color.DarkGreen,
-            false => Color.Firebrick,
-            _ => Color.FromArgb(31, 92, 180)
+            true => PdksAppearance.Current.Success,
+            false => PdksAppearance.Current.Danger,
+            _ => PdksAppearance.Current.Primary
         };
     }
 
