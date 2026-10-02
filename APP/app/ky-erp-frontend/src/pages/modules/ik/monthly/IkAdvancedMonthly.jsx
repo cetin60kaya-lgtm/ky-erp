@@ -751,6 +751,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
 
   const openPayroll = (row = payrollRows.find((item) => item.employee.id === selected?.id)) => {
     if (!row) return setNotice("Personel secilmeden kayit yapilamaz.");
+    if (upper(row.saved?.status) === "PAID") return setNotice("Bu bordronun ödemesi tamamlandı. Fiş ve rapor alınabilir; tutar değişikliği kilitlidir.");
     const rowTotals = calcRow(row);
     const balancedSplit = reconcilePaymentSplit(rowTotals.net, row.bank, row.cash, "cash");
     setSelectedId(row.employee.id);
@@ -797,6 +798,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       : modalDraft.group === "BANK" ? payrollRows.filter((row) => row.bank > 0)
         : modalDraft.group === "CASH" ? payrollRows.filter((row) => row.cash > 0) : payrollRows;
     if (!groupRows.length) return setNotice("Secilen grupta odeme satiri yok.");
+    const payableRows = groupRows.filter((row) => upper(row.saved?.status) !== "PAID");
+    if (modalDraft.action === "COMPLETE" && !payableRows.length) return setNotice("Seçilen gruptaki bordroların tamamı daha önce ödendi.");
     if (modalDraft.action === "BANK_LIST") {
       exportRowsToExcelFile(`ik-banka-odeme-${period}.xlsx`, groupRows.map((row) => ({ personel: row.employee.fullName, tcKimlikNo: row.employee.identityNo || "", donem: period, resmiBordroNeti: num(row.employee.sgkNet), bankaOdemesi: row.bank, aciklama: modalDraft.note || `${MONTHS[month - 1]} ${year} ucret odemesi` })));
       setModal(null); return;
@@ -804,7 +807,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (modalDraft.action === "REPORT") { setSelectedPayrollIds(groupRows.map((row) => row.employee.id)); setModal(null); setTimeout(printPayrollReport, 0); return; }
     setBusy(true);
     try {
-      for (const row of groupRows) {
+      for (const row of payableRows) {
         await saveIkAdvancedFinalPayrollControl({
           mainCompanyId: companyId, year, month, employeeId: row.employee.id,
           salary: row.salary, road: row.road, extra: row.extra, overtime: row.overtime,
@@ -817,8 +820,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
           reason: modalDraft.note || `Odeme oncesi bordro sabitleme: ${modalDraft.paymentDate}`,
         });
       }
-      await saveIkAdvancedPayrollLines({ mainCompanyId: companyId, year, month, employeeIds: groupRows.map((row) => row.employee.id), status: "PAID", reason: modalDraft.note || `Odeme tamamlandi: ${modalDraft.paymentDate}` });
-      setModal(null); setNotice(`${groupRows.length} personelin bordrosu sabitlendi ve odeme durumu tamamlandi olarak kaydedildi.`); await load({ force: true, prepare: true });
+      await saveIkAdvancedPayrollLines({ mainCompanyId: companyId, year, month, employeeIds: payableRows.map((row) => row.employee.id), status: "PAID", reason: modalDraft.note || `Odeme tamamlandi: ${modalDraft.paymentDate}` });
+      setModal(null); setNotice(`${payableRows.length} personelin bordrosu sabitlendi ve ödeme durumu tamamlandı olarak kaydedildi.`); await load({ force: true, prepare: true });
     } catch (error) { setNotice(error?.message || "Toplu odeme islemi kaydedilemedi."); } finally { setBusy(false); }
   };
 
@@ -1803,8 +1806,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               <td className="summary-col"><div className="payroll-cell-stack"><span><em>Maaş</em><b>{money(row.salary)}</b></span><span><em>Yol / EK</em><b>{money(row.road)} / {money(row.extra)}</b></span><span><em>Mesai</em><b>{money(row.overtime)}</b></span><span className="cell-total"><em>Hak Ediş</em><b>{money(row.hakedis)}</b></span></div></td>
               <td className="summary-col"><div className="payroll-cell-stack"><span><em>Avans</em><b>{money(row.advance)}</b></span><span><em>Kesinti</em><b>{money(row.deduction)}</b></span><span><em>İcra/Haciz</em><b>{money(row.garnishment)}</b></span></div></td>
               <td className="payment-col"><div className="payroll-cell-stack"><span><em>Banka</em><b>{money(row.bank)}</b></span><span><em>Elden</em><b>{money(row.cash)}</b></span><span className="cell-total net"><em>Net Ödenecek</em><b>{money(row.net)}</b></span></div></td>
-              <td className="status-col"><span className={`badge ${num(row.employee.sgkNet)>0?"blue":"orange"}`}>{num(row.employee.sgkNet)>0?"Bordro":"Plan"}</span><span className={`badge ${row.diff===0?"green":"red"}`}>{row.diff===0?"Hazır":"Kontrol"}</span></td>
-              <td className="action-col"><button className="btn" onClick={()=>openPayroll(row)}>Son Kontrol</button><button className="btn" onClick={()=>{setSelectedId(row.employee.id);setModal("fis");}}>Fiş</button></td>
+              <td className="status-col"><span className={`badge ${num(row.employee.sgkNet)>0?"blue":"orange"}`}>{num(row.employee.sgkNet)>0?"Bordro":"Plan"}</span><span className={`badge ${upper(row.saved?.status)==="PAID"?"green":row.diff===0?"green":"red"}`}>{upper(row.saved?.status)==="PAID"?"Ödendi":row.diff===0?"Hazır":"Kontrol"}</span></td>
+              <td className="action-col"><button className="btn" disabled={upper(row.saved?.status)==="PAID"} onClick={()=>openPayroll(row)}>{upper(row.saved?.status)==="PAID"?"Kilitli":"Son Kontrol"}</button><button className="btn" onClick={()=>{setSelectedId(row.employee.id);setModal("fis");}}>Fiş</button></td>
             </tr>)}
             <EmptyRow show={!payrollRows.length} colSpan={8} text="Bordro için personel bulunamadı." />
           </tbody></table></div>
@@ -1943,10 +1946,11 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               <div className="payroll-person-rail-list">
                 {payrollRows.map((row, index) => {
                   const active = row.employee.id === modalDraft.employeeId;
-                  const checked = row.saved?.status === "OVERRIDE";
+                  const savedStatus = upper(row.saved?.status);
+                  const checked = ["OVERRIDE", "CALCULATED", "PAID"].includes(savedStatus);
                   return <button type="button" key={row.employee.id} className={active ? "active" : ""} onClick={() => openPayroll(row)}>
                     <span><b>{index + 1}. {row.employee.fullName}</b><small>{row.employee.code || "HKN yok"}</small></span>
-                    <em className={checked ? "done" : row.diff === 0 ? "ready" : "warn"}>{checked ? "Kontrol edildi" : row.diff === 0 ? "Hazır" : "Dengele"}</em>
+                    <em className={checked ? "done" : row.diff === 0 ? "ready" : "warn"}>{savedStatus === "PAID" ? "Ödendi" : checked ? "Kontrol edildi" : row.diff === 0 ? "Hazır" : "Dengele"}</em>
                   </button>;
                 })}
               </div>
