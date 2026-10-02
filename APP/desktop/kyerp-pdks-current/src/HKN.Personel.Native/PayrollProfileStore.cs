@@ -97,7 +97,7 @@ internal static class PayrollProfileStore
         return text.All(char.IsDigit) && text.Length > 0 ? text.PadLeft(5, '0') : text;
     }
 
-    static string Csv(string value) => """ + value.Replace(""", """") + """;
+    static string Csv(string value) => "\"" + value.Replace("\"", "\"\"") + "\"";
 
     static readonly JsonSerializerOptions JsonOptions = new()
     {
