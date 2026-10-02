@@ -1,6 +1,6 @@
 namespace HKN.Personel.Native;
 
-internal sealed class AuditHistoryForm : Form
+public sealed class AuditHistoryForm : Form
 {
     readonly ListBox files = new() { Dock = DockStyle.Fill, IntegralHeight = false };
     readonly TextBox content = new()
