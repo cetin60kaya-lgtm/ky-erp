@@ -226,7 +226,7 @@ public sealed class LegacyTerminalSettingsForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Terminal.Settings");
         }
     }
 
