@@ -93,11 +93,11 @@ public sealed class UserManagementForm : Form
 
     static Button Btn(string text, int width, bool primary = false)
     {
-        var b = new Button { Text = text, Width = width, Height = 34, FlatStyle = FlatStyle.Flat,
-            BackColor = primary ? Color.FromArgb(36, 107, 230) : Color.White,
-            ForeColor = primary ? Color.White : Color.FromArgb(27, 44, 68), Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
-        b.FlatAppearance.BorderColor = primary ? b.BackColor : Color.FromArgb(210, 220, 234);
-        return b;
+        var role = primary ? PdksActionRole.Primary :
+            text.Contains("Sil", StringComparison.OrdinalIgnoreCase) ? PdksActionRole.Danger :
+            text.Contains("Kapat", StringComparison.OrdinalIgnoreCase) ? PdksActionRole.Quiet :
+            PdksActionRole.Secondary;
+        return PdksUiKit.Button(text, width, role);
     }
     void ReloadUsers()
     {
