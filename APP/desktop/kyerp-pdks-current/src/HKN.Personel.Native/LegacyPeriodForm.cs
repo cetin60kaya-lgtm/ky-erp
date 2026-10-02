@@ -28,16 +28,72 @@ public sealed class LegacyPeriodForm : Form
 
     void Build()
     {
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1,Padding=new Padding(14)};root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
-        var split=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=Padding.Empty};split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,46));split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,54));
-        var left=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1};left.RowStyles.Add(new RowStyle(SizeType.Absolute,98));left.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        var filterBox=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=2,Padding=new Padding(10)};filterBox.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,90));filterBox.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        var range=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,FlowDirection=FlowDirection.LeftToRight};filterStart.Width=112;filterEnd.Width=112;var between=Cmd("Aralığı Listele",120);var all=Cmd("Tümünü Listele",120);between.Click+=(_,_)=>ReloadGrid(true);all.Click+=(_,_)=>ReloadGrid(false);range.Controls.AddRange([filterStart,new Label{Text="—",AutoSize=true,Padding=new Padding(4,8,4,0)},filterEnd,between,all]);filterBox.Controls.Add(L("Filtre"),0,0);filterBox.Controls.Add(range,1,0);left.Controls.Add(filterBox,0,0);
-        grid.Dock=DockStyle.Fill;grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText="Dönem Adı",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});grid.SelectionChanged+=(_,_)=>{if(!editing)LoadSelected();};left.Controls.Add(grid,0,1);split.Controls.Add(left,0,0);
-        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=11,Padding=new Padding(18)};editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,190));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        Row(editor,0,"Dönem Adı",name);Row(editor,1,"Çalışma Grubu",group);Row(editor,2,"Başlangıç",start);Row(editor,3,"Bitiş",end);Row(editor,4,"Toplam Gün",total);Row(editor,5,"Dönemlik Çalışma Eksiği",minusTime);Row(editor,6,"Eksik Gün",minusDay);Row(editor,7,"Ekleneceği Alan",plusArea);Row(editor,8,"Dönemlik Çalışma Fazlası",plusTime);Row(editor,9,"Fazla Gün",plusDay);Row(editor,10,"Çıkarılacağı Alan",minusArea);split.Controls.Add(editor,1,0);root.Controls.Add(split,0,0);
-        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var add=Cmd("Yeni Ekle");var edit=Cmd("Değiştir");var del=Cmd("Sil");var delAll=Cmd("Tümünü Sil",120);save.Enabled=false;add.Click+=(_,_)=>BeginNew();edit.Click+=(_,_)=>BeginEdit();save.Click+=(_,_)=>SaveCurrent();del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();actions.Controls.AddRange([save,delAll,del,edit,add]);root.Controls.Add(actions,0,1);Controls.Add(root);start.ValueChanged+=(_,_)=>UpdateTotal();end.ValueChanged+=(_,_)=>UpdateTotal();SetEdit(false);
+        BackColor=Color.FromArgb(244,247,251);
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1,Padding=new Padding(16),BackColor=BackColor};
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
+
+        var body=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,BackColor=BackColor,Margin=Padding.Empty};
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,42));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,12));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,58));
+
+        var leftCard=PeriodCard();
+        var left=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=new Padding(16),BackColor=Color.White};
+        left.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
+        left.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+        left.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        left.Controls.Add(new Label{Text="Dönemler",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42)},0,0);
+        var range=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,8,0,0)};
+        filterStart.Width=105;filterEnd.Width=105;
+        var between=PeriodButton("Aralığı Listele",112,false);var all=PeriodButton("Tümü",82,false);
+        between.Click+=(_,_)=>ReloadGrid(true);all.Click+=(_,_)=>ReloadGrid(false);
+        range.Controls.Add(filterStart);range.Controls.Add(new Label{Text="—",AutoSize=true,Padding=new Padding(4,7,4,0),ForeColor=Color.FromArgb(100,116,139)});range.Controls.Add(filterEnd);range.Controls.Add(between);range.Controls.Add(all);
+        left.Controls.Add(range,0,1);
+        grid.Dock=DockStyle.Fill;grid.Margin=new Padding(0,8,0,0);grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.RowTemplate.Height=31;grid.ColumnHeadersHeight=34;
+        grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText="Dönem Adı",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});
+        grid.SelectionChanged+=(_,_)=>{if(!editing)LoadSelected();};
+        left.Controls.Add(grid,0,2);leftCard.Controls.Add(left);body.Controls.Add(leftCard,0,0);
+        body.Controls.Add(new Panel{Dock=DockStyle.Fill,BackColor=BackColor},1,0);
+
+        var rightCard=PeriodCard();
+        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(20),BackColor=Color.White};
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        editor.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
+        editor.Controls.Add(new Label{Text="Dönem Bilgileri",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42)},0,0);editor.SetColumnSpan(editor.GetControlFromPosition(0,0)!,2);
+        PeriodRow(editor,1,"Dönem Adı",name);PeriodRow(editor,2,"Çalışma Grubu",group);PeriodRow(editor,3,"Başlangıç",start);PeriodRow(editor,4,"Bitiş",end);PeriodRow(editor,5,"Toplam Gün",total);
+        PeriodRow(editor,6,"Dönemlik Çalışma Eksiği",minusTime);PeriodRow(editor,7,"Eksik Gün",minusDay);PeriodRow(editor,8,"Ekleneceği Alan",plusArea);
+        PeriodRow(editor,9,"Dönemlik Çalışma Fazlası",plusTime);PeriodRow(editor,10,"Fazla Gün",plusDay);PeriodRow(editor,11,"Çıkarılacağı Alan",minusArea);
+        rightCard.Controls.Add(editor);body.Controls.Add(rightCard,2,0);
+        root.Controls.Add(body,0,0);
+
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0),WrapContents=false,BackColor=BackColor};
+        var add=PeriodButton("Yeni Dönem",110,true);var edit=PeriodButton("Düzenle",90,false);var del=PeriodButton("Sil",72,false,true);var delAll=PeriodButton("Tümünü Sil",100,false,true);
+        save.Width=100;save.Height=34;save.FlatStyle=FlatStyle.Flat;save.BackColor=Color.FromArgb(37,99,235);save.ForeColor=Color.White;save.FlatAppearance.BorderColor=save.BackColor;save.Enabled=false;
+        add.Click+=(_,_)=>BeginNew();edit.Click+=(_,_)=>BeginEdit();save.Click+=(_,_)=>SaveCurrent();del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();
+        actions.Controls.AddRange([save,delAll,del,edit,add]);root.Controls.Add(actions,0,1);Controls.Add(root);
+        start.ValueChanged+=(_,_)=>UpdateTotal();end.ValueChanged+=(_,_)=>UpdateTotal();SetEdit(false);
     }
+
+    static Panel PeriodCard()
+    {
+        var p=new Panel{Dock=DockStyle.Fill,BackColor=Color.White,Margin=Padding.Empty};
+        p.Paint+=(_,e)=>{using var pen=new Pen(Color.FromArgb(226,232,240));e.Graphics.DrawRectangle(pen,0,0,Math.Max(0,p.Width-1),Math.Max(0,p.Height-1));};return p;
+    }
+
+    static void PeriodRow(TableLayoutPanel table,int row,string caption,Control control)
+    {
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+        table.Controls.Add(new Label{Text=caption,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(100,116,139),Font=new Font("Segoe UI",8.5f,FontStyle.Bold)},0,row);
+        control.Dock=DockStyle.Fill;control.Margin=new Padding(0,6,0,6);table.Controls.Add(control,1,row);
+    }
+
+    static Button PeriodButton(string text,int width,bool primary,bool danger=false)
+    {
+        var b=new Button{Text=text,Width=width,Height=34,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",8.8f,FontStyle.Bold),BackColor=primary?Color.FromArgb(37,99,235):Color.White,ForeColor=primary?Color.White:danger?Color.FromArgb(185,28,28):Color.FromArgb(15,23,42),Margin=new Padding(8,0,0,0),Cursor=Cursors.Hand};
+        b.FlatAppearance.BorderColor=primary?Color.FromArgb(37,99,235):danger?Color.FromArgb(254,202,202):Color.FromArgb(226,232,240);return b;
+    }
+
     void ReloadAll()
     {
         try
