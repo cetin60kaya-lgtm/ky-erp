@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   ik-monthly-full-check:
@@ -115,3 +115,20 @@ jobs:
       - name: Frontend build
         working-directory: APP/app/ky-erp-frontend
         run: npm run build
+
+      - name: Pin SGK Excel parser dependency
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --save-exact xlsx@0.18.5
+          cd ../../..
+          if git diff --quiet -- APP/cloud/ky-erp-api/package.json APP/cloud/ky-erp-api/package-lock.json; then
+            echo "xlsx dependency already pinned."
+            exit 0
+          fi
+          git config user.name "KY ERP Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add APP/cloud/ky-erp-api/package.json APP/cloud/ky-erp-api/package-lock.json
+          git commit -m "build(ik): pin SGK Excel parser"
+          git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
