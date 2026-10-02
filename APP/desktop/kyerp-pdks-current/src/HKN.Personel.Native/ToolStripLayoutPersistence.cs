@@ -67,7 +67,7 @@ internal static class ToolStripLayoutPersistence
         var file = FileFor(key);
         if (File.Exists(file)) File.Delete(file);
         foreach (ToolStripItem item in strip.Items) item.Visible = true;
-        MessageBox.Show("Düzen sıfırlandı. Varsayılan sıranın tamamen geri gelmesi için uygulamayı yeniden açın.", "KY PDKS 6.0", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        MessageBox.Show("Düzen sıfırlandı. Varsayılan sıranın tamamen geri gelmesi için uygulamayı yeniden açın.", "KY PDKS 6.4", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     static void ShowEditor(IWin32Window owner, ToolStrip strip, string key)
