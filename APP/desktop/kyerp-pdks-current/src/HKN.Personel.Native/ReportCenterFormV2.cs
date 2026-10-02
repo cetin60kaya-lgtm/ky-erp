@@ -42,7 +42,7 @@ public sealed class ReportCenterForm : Form
 
     public ReportCenterForm(string? initialCategory = null)
     {
-        Text = "KY PDKS 6.0 • Rapor ve Çıktı Merkezi";
+        Text = "KY PDKS 6.4 • Rapor ve Çıktı Merkezi";
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(1240, 760);
         MinimumSize = new Size(980, 620);
