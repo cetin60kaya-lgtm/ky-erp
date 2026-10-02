@@ -28,8 +28,8 @@ jobs:
           cache: npm
           cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
 
-      - name: Apply payment page redesign
-        run: python .github/scripts/payment_page_redesign_20261002.py
+      - name: Apply professional payment flow
+        run: python .github/scripts/payment_pro_flow_20261002.py
 
       - name: Commit payment page redesign
         shell: bash
@@ -40,7 +40,7 @@ jobs:
           git add APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx APP/app/ky-erp-frontend/src/pages/modules/ik/daily-hr-workspace-final.css
           git diff --cached --check
           if ! git diff --cached --quiet; then
-            git commit -m 'fix(daily): redesign payment period print pool and history'
+            git commit -m 'fix(daily): professional payment print history flow'
             git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
           fi
 
@@ -75,3 +75,5 @@ jobs:
           done
 
 # payment-tab-redesign-trigger-20261002-v1
+
+# payment-pro-flow-trigger-20261002-v1
