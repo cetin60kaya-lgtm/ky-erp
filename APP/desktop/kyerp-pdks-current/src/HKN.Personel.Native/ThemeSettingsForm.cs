@@ -26,16 +26,20 @@ public sealed class ThemeSettingsForm : Form
         ForeColor=p.Text;
 
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(18),BackColor=p.Canvas};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,68));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,126));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,86));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,132));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
 
-        var hero=new Panel{Dock=DockStyle.Fill,BackColor=p.Surface,Padding=new Padding(18)};
-        hero.Controls.Add(new Label{
-            Text="Tema ve Görünüm",Dock=DockStyle.Top,Height=28,Font=new Font("Segoe UI",13f,FontStyle.Bold),ForeColor=p.Text});
-        hero.Controls.Add(new Label{
-            Text="Tema (açık/koyu) ile vurgu rengini birbirinden bağımsız seçin.",Dock=DockStyle.Bottom,Height=22,Font=new Font("Segoe UI",8.8f),ForeColor=p.Muted});
+        var hero=PdksUiKit.Card(14);
+        var heroLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Surface,Margin=Padding.Empty};
+        heroLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,32));
+        heroLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        heroLayout.Controls.Add(new Label{
+            Text="Tema ve Görünüm",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",13f,FontStyle.Bold),ForeColor=p.Text},0,0);
+        heroLayout.Controls.Add(new Label{
+            Text="Tema modu ve vurgu rengi birbirinden bağımsızdır. Seçim tüm uygulamaya uygulanır ve kaydedilir.",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",8.8f),ForeColor=p.Muted},0,1);
+        hero.Controls.Add(heroLayout);
         root.Controls.Add(hero,0,0);
 
         var settings=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=2,Padding=new Padding(18,14,18,10),BackColor=p.Surface,Margin=new Padding(0,10,0,10)};
@@ -48,7 +52,7 @@ public sealed class ThemeSettingsForm : Form
         {
             var sample=a==PdksAccent.Custom?selectedCustomAccent:PdksAppearance.AccentColor(a);
             var b=new Button{
-                Text=a==PdksAccent.Custom?"Özel…":PdksAppearance.AccentName(a),Tag=a,Width=66,Height=28,FlatStyle=FlatStyle.Flat,
+                Text=a==PdksAccent.Custom?"Özel":PdksAppearance.AccentName(a),Tag=a,Width=68,Height=30,FlatStyle=FlatStyle.Flat,
                 BackColor=sample,ForeColor=BestText(sample),
                 Font=new Font("Segoe UI",8.1f,FontStyle.Bold),Cursor=Cursors.Hand,Margin=new Padding(0,0,5,0)
             };
@@ -76,8 +80,8 @@ public sealed class ThemeSettingsForm : Form
         preview.Margin=new Padding(0,0,0,10);
         root.Controls.Add(preview,0,2);
 
-        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,WrapContents=false,Padding=new Padding(0,9,0,0),BackColor=p.Canvas};
-        var apply=Button("Uygula",110,true);var close=Button("Kapat",96,false);
+        var actions=PdksUiKit.ActionBar(true,p.Canvas);
+        var apply=PdksUiKit.Button("Uygula",110,PdksActionRole.Primary);var close=PdksUiKit.Button("Kapat",96,PdksActionRole.Quiet);
         apply.Click+=(_,_)=>ApplySelection();close.Click+=(_,_)=>Close();
         actions.Controls.Add(close);actions.Controls.Add(apply);root.Controls.Add(actions,0,3);
 
