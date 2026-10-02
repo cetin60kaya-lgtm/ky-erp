@@ -1,7 +1,7 @@
-HEAD: 061af94bff5aa6411e352746f3f38e954248598b
-UTC: 2026-10-02T12:56:10
+HEAD: 0dcd848efff500eae2259cf8e4e93acfe7593e89
+UTC: 2026-10-02T13:22:25
 
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PayrollProfileStore.cs(100,63): error CS1002: ; expected [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PayrollProfileStore.cs(100,63): error CS1519: Invalid token ',' in a member declaration [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PayrollProfileStore.cs(100,63): error CS1002: ; expected [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PayrollProfileStore.cs(100,63): error CS1519: Invalid token ',' in a member declaration [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.ModernShell.cs(154,74): error CS0117: 'PdksToolbarIcon' does not contain a definition for 'Terminal' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.ModernShell.cs(155,73): error CS0117: 'PdksToolbarIcon' does not contain a definition for 'Settings' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.ModernShell.cs(154,74): error CS0117: 'PdksToolbarIcon' does not contain a definition for 'Terminal' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.ModernShell.cs(155,73): error CS0117: 'PdksToolbarIcon' does not contain a definition for 'Settings' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
