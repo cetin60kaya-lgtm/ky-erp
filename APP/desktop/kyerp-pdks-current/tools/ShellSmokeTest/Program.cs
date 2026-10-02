@@ -31,7 +31,7 @@ var menus = form.MainMenuStrip!.Items.Cast<ToolStripItem>()
     .Where(x => x.Alignment != ToolStripItemAlignment.Right)
     .Select(x => x.Text ?? string.Empty)
     .ToArray();
-foreach (var required in new[] { "Genel", "Operasyon", "Personel", "Puantaj / Bordro", "Raporlar", "Yönetim", "Ayarlar", "Yardım" })
+foreach (var required in new[] { "ANA SAYFA", "İŞLEMLER", "PERSONEL", "PUANTAJ", "BORDRO", "RAPORLAR", "TANIMLAR", "SİSTEM", "YARDIM" })
     if (!menus.Contains(required)) throw new InvalidOperationException("Ana menü eksik: " + required);
 
 if (menus.Distinct(StringComparer.OrdinalIgnoreCase).Count() != menus.Length)
@@ -39,7 +39,7 @@ if (menus.Distinct(StringComparer.OrdinalIgnoreCase).Count() != menus.Length)
 
 var toolbar = form.Controls.OfType<ToolStrip>().First(x => x is not MenuStrip && x is not StatusStrip);
 var toolNames = toolbar.Items.OfType<ToolStripButton>().Select(x => x.Text ?? string.Empty).ToArray();
-foreach (var required in new[] { "Genel Bakış", "Canlı İzleme", "Terminal", "Giriş-Çıkış", "Personel", "Puantaj", "Bordro" })
+foreach (var required in new[] { "Ana Sayfa", "Canlı", "Giriş / Çıkış", "Personel", "Puantaj", "Bordro" })
     if (!toolNames.Contains(required)) throw new InvalidOperationException("Araç çubuğu eksik: " + required);
 
 using (var settings = new LegacyTerminalSettingsForm())
@@ -56,9 +56,13 @@ using (var settings = new LegacyTerminalSettingsForm())
 using (var personnel = new PersonelForm())
 {
     var tabs = Descendants(personnel).OfType<TabControl>().First(x => x.TabPages.Count == 6);
-    string[] expected = ["Personel Bilgileri", "Giriş ve Çıkışları", "İzinler", "Ek Kazanç Ve Kesintiler", "Bilgi", "Ödemeler"];
+    string[] expected = ["Personel Bilgileri", "Giriş / Çıkış", "İzinler", "Kazanç / Kesinti", "Puantaj Bilgisi", "Ödemeler"];
     if (!tabs.TabPages.Cast<TabPage>().Select(x => x.Text).SequenceEqual(expected))
         throw new InvalidOperationException("Personel sekmeleri bozulmuş.");
+    var inner = Descendants(tabs.TabPages[0]).OfType<TabControl>().First();
+    string[] innerExpected = ["Temel Bilgiler", "Kimlik", "İletişim / Kişisel", "Ehliyet / Belgeler", "İş / SGK", "Ek Ödemeler"];
+    if (!inner.TabPages.Cast<TabPage>().Select(x => x.Text).SequenceEqual(innerExpected))
+        throw new InvalidOperationException("Personel bilgi iç sekmeleri bozulmuş.");
 }
 
 using (var attendance = new LegacyGirisCikisForm())
