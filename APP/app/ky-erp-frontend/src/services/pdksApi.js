@@ -15,7 +15,7 @@ function validEmployeeId(value) {
 }
 
 function isSgkPdksPerson(person) {
-  return String(person?.sgkStatus ?? "VAR").trim().toLocaleUpperCase("tr-TR") !== "YOK";
+  return String(person?.sgkStatus ?? "").trim().toLocaleUpperCase("tr-TR") === "VAR";
 }
 
 const OPS = "/ik/personnel-control/operations";
