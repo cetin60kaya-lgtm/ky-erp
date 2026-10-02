@@ -82,25 +82,25 @@ internal sealed class ModernHomeDashboard : UserControl
             Padding=new Padding(6,4,6,24),
             BackColor=p.Canvas
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,82));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,132));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,32));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,258));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,260));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,64));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,114));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,28));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,220));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,228));
 
         var hero = new Panel { Dock=DockStyle.Fill, BackColor=p.Canvas };
         hero.Controls.Add(new Label
         {
             Text=$"İyi çalışmalar, {Environment.UserName}",
-            Location=new Point(2,8),
+            Location=new Point(2,2),
             AutoSize=true,
-            Font=new Font("Segoe UI",18f,FontStyle.Bold),
+            Font=new Font("Segoe UI",17f,FontStyle.Bold),
             ForeColor=p.Text
         });
         hero.Controls.Add(new Label
         {
             Text=$"{DateTime.Today:dd MMMM yyyy} • Günlük personel operasyon özeti",
-            Location=new Point(4,46),
+            Location=new Point(4,37),
             AutoSize=true,
             Font=new Font("Segoe UI",9.5f),
             ForeColor=p.Muted
@@ -149,10 +149,10 @@ internal sealed class ModernHomeDashboard : UserControl
         var p=PdksAppearance.Current;
         var card=CardPanel();
         card.Margin=new Padding(0,0,12,0);
-        var iconBox=new PictureBox{Image=PdksToolbarIcons.Create(icon),SizeMode=PictureBoxSizeMode.CenterImage,Location=new Point(18,18),Size=new Size(38,38),BackColor=p.PrimarySoft};
-        value.Location=new Point(72,15); value.Size=new Size(150,36);
-        var titleLabel=new Label{Text=title,Location=new Point(72,51),AutoSize=true,Font=new Font("Segoe UI",9.5f,FontStyle.Bold),ForeColor=p.Text};
-        var sub=new Label{Text=subtitle,Location=new Point(18,82),AutoSize=true,Font=new Font("Segoe UI",8.5f),ForeColor=p.Muted};
+        var iconBox=new PictureBox{Image=PdksToolbarIcons.Create(icon),SizeMode=PictureBoxSizeMode.CenterImage,Location=new Point(18,14),Size=new Size(36,36),BackColor=p.PrimarySoft};
+        value.Location=new Point(68,11); value.Size=new Size(150,34);
+        var titleLabel=new Label{Text=title,Location=new Point(68,45),AutoSize=true,Font=new Font("Segoe UI",9.3f,FontStyle.Bold),ForeColor=p.Text};
+        var sub=new Label{Text=subtitle,Location=new Point(18,72),AutoSize=true,Font=new Font("Segoe UI",8.3f),ForeColor=p.Muted};
         card.Controls.Add(iconBox);card.Controls.Add(value);card.Controls.Add(titleLabel);card.Controls.Add(sub);
         return card;
     }
