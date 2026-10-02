@@ -1861,6 +1861,8 @@ async function saveAdvancedLeaveRecordV2(c: Context<AppEnv>) {
     const startDate = hrDateOnly(body.startDate || body.start);
     const endDate = hrDateOnly(body.endDate || body.end || startDate);
     if (!startDate || !endDate || endDate < startDate) return error(c, 400, "DATE_REQUIRED", "Geçerli izin başlangıç ve bitiş tarihi zorunludur.");
+    const leaveLock = await rejectAdvancedPeriodLocked(c, companyId, number(startDate.slice(0, 4)), number(startDate.slice(5, 7)));
+    if (leaveLock) return leaveLock;
     const dates = Array.isArray(body.dates) ? body.dates.map(hrDateOnly).filter(Boolean) : [];
     const diffDays = Math.max(1, Math.floor((new Date(`${endDate}T00:00:00Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime()) / 86400000) + 1);
     const dayCount = number(body.dayCount || body.days) || dates.length || diffDays;
@@ -1872,6 +1874,9 @@ async function saveAdvancedLeaveRecordV2(c: Context<AppEnv>) {
 
   const preview = await previewAdvancedLeaveV2(c, body) as Row | null;
   if (!preview) return error(c, 400, "LEAVE_PREVIEW_FAILED", "Yıllık izin günleri hesaplanamadı.");
+  const annualStart = text(preview.startDate);
+  const annualLock = await rejectAdvancedPeriodLocked(c, companyId, number(annualStart.slice(0, 4)), number(annualStart.slice(5, 7)));
+  if (annualLock) return annualLock;
   if (preview.hasCriticalConflict) return error(c, 409, "LEAVE_CONFLICT", "Personelin seçilen tarihlerde başka yıllık izin kaydı var.");
   if (preview.hasDepartmentWarning && body.allowDepartmentConflict !== true) return error(c, 409, "DEPARTMENT_LEAVE_CONFLICT", "Aynı bölümde izin çakışması var. Yetkili onayı gerekir.");
 
@@ -1906,6 +1911,9 @@ async function cancelAdvancedLeaveV2(c: Context<AppEnv>) {
   if (!id) return error(c, 400, "ID_REQUIRED", "İzin kaydı seçilmelidir.");
   const plan = await first(c, "SELECT * FROM ik_leave_plans WHERE id=? AND main_company_id=? LIMIT 1", [id, companyId]);
   if (!plan) return error(c, 404, "NOT_FOUND", "İzin planı bulunamadı.");
+  const planStart = hrDateOnly(plan.start_date);
+  const cancelLock = await rejectAdvancedPeriodLocked(c, companyId, number(planStart.slice(0, 4)), number(planStart.slice(5, 7)));
+  if (cancelLock) return cancelLock;
   await c.env.DB.prepare("UPDATE ik_leave_plans SET status='CANCELLED',note=?,updated_at=? WHERE id=?").bind(text(body.reason || plan.note || "İptal edildi"), nowIso(), id).run();
   await c.env.DB.prepare("DELETE FROM hr_leave_records_v2 WHERE document_path=?").bind(`ik-leave-plan:${id}`).run();
   await audit(c, { mainCompanyId: companyId, period: hrDateOnly(plan.start_date).slice(0, 7), employeeId: text(plan.employee_id), entityType: "IZIN", action: "CANCEL", summary: "Yıllık izin kaydı iptal edildi.", details: { id, reason: text(body.reason) } });
