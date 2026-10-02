@@ -219,7 +219,8 @@ internal sealed class ModernHomeDashboard : UserControl
                 TextAlign=ContentAlignment.MiddleLeft,
                 Cursor=Cursors.Hand,
                 Padding=new Padding(4,0,0,0),
-                Margin=new Padding(0,1,0,1)
+                Margin=new Padding(0,1,0,1),
+                MinimumSize=new Size(0,28)
             };
             b.FlatAppearance.BorderSize=0;
             b.FlatAppearance.MouseOverBackColor=p.SurfaceAlt;
