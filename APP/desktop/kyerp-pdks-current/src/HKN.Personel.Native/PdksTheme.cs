@@ -3,13 +3,7 @@ namespace HKN.Personel.Native;
 public static class PdksTheme
 {
     static readonly HashSet<Form> ThemedForms = [];
-    static readonly Color Surface = Color.White;
-    static readonly Color Canvas = Color.FromArgb(244, 247, 251);
-    static readonly Color Border = Color.FromArgb(226, 232, 240);
-    static readonly Color Text = Color.FromArgb(15, 23, 42);
-    static readonly Color Muted = Color.FromArgb(100, 116, 139);
-    static readonly Color Primary = Color.FromArgb(37, 99, 235);
-
+    static readonly HashSet<TabControl> StyledTabs = [];
     static ThemeMessageFilter? filter;
 
     public static void Install()
@@ -17,6 +11,18 @@ public static class PdksTheme
         if (filter is not null) return;
         filter = new ThemeMessageFilter();
         Application.AddMessageFilter(filter);
+        PdksAppearance.Changed += (_,_) => ReapplyOpenForms();
+    }
+
+    public static void ReapplyOpenForms()
+    {
+        ThemedForms.Clear();
+        foreach (Form form in Application.OpenForms.Cast<Form>().ToArray())
+        {
+            if (form.IsDisposed || form is MainShellForm or LoginForm or ThemeSettingsForm) continue;
+            Apply(form);
+            form.Invalidate(true);
+        }
     }
 
     sealed class ThemeMessageFilter : IMessageFilter
@@ -34,10 +40,12 @@ public static class PdksTheme
 
     public static void Apply(Form form)
     {
-        if (form is MainShellForm or LoginForm) return;
+        if (form is MainShellForm or LoginForm or ThemeSettingsForm) return;
+        var p = PdksAppearance.Current;
+
         form.Font = new Font("Segoe UI", 9.2f);
-        form.BackColor = Canvas;
-        form.ForeColor = Text;
+        form.BackColor = p.Canvas;
+        form.ForeColor = p.Text;
         form.AutoScaleMode = AutoScaleMode.Dpi;
         if (form.FormBorderStyle != FormBorderStyle.None)
         {
@@ -48,9 +56,10 @@ public static class PdksTheme
             if (form.Width < 760 && form.Height > 360) form.Width = 820;
             if (form.Height < 560 && form.Width > 700) form.Height = 600;
         }
+
         MakeAdaptive(form);
-        StyleControls(form.Controls);
-        if (form.GetType().Name.Equals("LegacyPuantajForm", StringComparison.Ordinal)) PolishPuantaj(form);
+        StyleControls(form.Controls, p);
+        if (form.GetType().Name.Equals("LegacyPuantajForm", StringComparison.Ordinal)) PolishPuantaj(form, p);
     }
 
     static void MakeAdaptive(Form form) => AdaptChildren(form);
@@ -84,7 +93,7 @@ public static class PdksTheme
         }
     }
 
-    static void PolishPuantaj(Form form)
+    static void PolishPuantaj(Form form, PdksPalette p)
     {
         form.Text = "Puantaj Kontrol ve Yeniden Hesaplama";
         foreach (var button in Descendants(form).OfType<Button>())
@@ -115,14 +124,16 @@ public static class PdksTheme
         if (tabs is null) return;
         foreach (TabPage page in tabs.TabPages)
         {
+            if (page.Controls.OfType<Label>().Any(x => string.Equals(x.Name, "KY_PUANTAJ_INFO", StringComparison.Ordinal))) continue;
             var banner = new Label
             {
-                Text = "Puantaj; giriş-çıkış, izin, vardiya ve tatil kayıtlarından oluşur. Normal kullanımda kaynak kaydı düzeltin; bu ekran seçili aralık için kontrol ve gerektiğinde yeniden hesaplama içindir.",
+                Name = "KY_PUANTAJ_INFO",
+                Text = "Puantaj; giriş-çıkış, izin, vardiya ve tatil kayıtlarından oluşur. Kaynak kaydı düzeltin; bu ekran seçili aralık için kontrol ve gerektiğinde yeniden hesaplama içindir.",
                 Dock = DockStyle.Top,
                 Height = 42,
                 Padding = new Padding(12, 8, 12, 6),
-                BackColor = Color.FromArgb(232, 241, 252),
-                ForeColor = Color.FromArgb(44, 75, 112),
+                BackColor = p.PrimarySoft,
+                ForeColor = p.Primary,
                 Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleLeft
             };
@@ -131,138 +142,213 @@ public static class PdksTheme
         }
     }
 
-    static void StyleControls(Control.ControlCollection controls)
+    static void StyleControls(Control.ControlCollection controls, PdksPalette p)
     {
         foreach (Control c in controls)
         {
             switch (c)
             {
-                case Button b: StyleButton(b); break;
+                case Button b:
+                    StyleButton(b, p);
+                    break;
                 case TextBox t:
                     t.BorderStyle = BorderStyle.FixedSingle;
-                    t.BackColor = Color.White;
-                    t.ForeColor = Text;
+                    t.BackColor = t.ReadOnly ? p.SurfaceAlt : p.Input;
+                    t.ForeColor = p.Text;
+                    break;
+                case MaskedTextBox mt:
+                    mt.BorderStyle = BorderStyle.FixedSingle;
+                    mt.BackColor = mt.ReadOnly ? p.SurfaceAlt : p.Input;
+                    mt.ForeColor = p.Text;
+                    break;
+                case RichTextBox rt:
+                    rt.BorderStyle = BorderStyle.FixedSingle;
+                    rt.BackColor = rt.ReadOnly ? p.SurfaceAlt : p.Input;
+                    rt.ForeColor = p.Text;
                     break;
                 case ComboBox cb:
                     cb.FlatStyle = FlatStyle.Flat;
-                    cb.BackColor = Color.White;
-                    cb.ForeColor = Text;
+                    cb.BackColor = p.Input;
+                    cb.ForeColor = p.Text;
+                    break;
+                case NumericUpDown num:
+                    num.BackColor = p.Input;
+                    num.ForeColor = p.Text;
                     break;
                 case DateTimePicker dt:
-                    dt.CalendarForeColor = Text;
-                    dt.CalendarMonthBackground = Color.White;
+                    dt.CalendarForeColor = p.Text;
+                    dt.CalendarMonthBackground = p.Surface;
+                    dt.BackColor = p.Input;
+                    dt.ForeColor = p.Text;
                     break;
-                case DataGridView grid: StyleGrid(grid); break;
-                case TabControl tabs: StyleTabs(tabs); break;
+                case DataGridView grid:
+                    StyleGrid(grid, p);
+                    break;
+                case TabControl tabs:
+                    StyleTabs(tabs);
+                    break;
                 case GroupBox group:
-                    group.ForeColor = Color.FromArgb(34, 70, 120);
+                    group.ForeColor = p.Primary;
                     group.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+                    group.BackColor = p.Surface;
                     break;
                 case Label label:
-                    if (label.ForeColor == SystemColors.ControlText) label.ForeColor = Text;
+                    StyleLabel(label, p);
+                    break;
+                case CheckBox check:
+                    check.ForeColor = p.Text;
+                    if (NeutralBack(check.BackColor)) check.BackColor = p.Surface;
+                    break;
+                case RadioButton radio:
+                    radio.ForeColor = p.Text;
+                    if (NeutralBack(radio.BackColor)) radio.BackColor = p.Surface;
                     break;
                 case ListBox list:
                     list.BorderStyle = BorderStyle.FixedSingle;
-                    list.BackColor = Color.White;
-                    list.ForeColor = Text;
+                    list.BackColor = p.Surface;
+                    list.ForeColor = p.Text;
                     break;
-                case Panel panel when panel.BackColor == SystemColors.Control: panel.BackColor = Surface; break;
-                case TableLayoutPanel table when table.BackColor == SystemColors.Control: table.BackColor = Surface; break;
-                case FlowLayoutPanel flow when flow.BackColor == SystemColors.Control: flow.BackColor = Surface; break;
+                case TreeView tree:
+                    tree.BackColor = p.Surface;
+                    tree.ForeColor = p.Text;
+                    break;
+                case Panel panel:
+                    panel.BackColor = MapBack(panel.BackColor, p);
+                    break;
+                case TableLayoutPanel table:
+                    table.BackColor = MapBack(table.BackColor, p);
+                    break;
+                case FlowLayoutPanel flow:
+                    flow.BackColor = MapBack(flow.BackColor, p);
+                    break;
                 case SplitContainer split:
-                    split.BackColor = Border;
-                    split.Panel1.BackColor = Surface;
-                    split.Panel2.BackColor = Surface;
+                    split.BackColor = p.Border;
+                    split.Panel1.BackColor = p.Surface;
+                    split.Panel2.BackColor = p.Surface;
                     split.SplitterWidth = Math.Max(split.SplitterWidth, 6);
                     break;
             }
-            if (c.HasChildren) StyleControls(c.Controls);
+            if (c.HasChildren) StyleControls(c.Controls, p);
         }
     }
 
-    static void StyleButton(Button b)
+    static void StyleLabel(Label label, PdksPalette p)
+    {
+        if (IsStatusColor(label.ForeColor)) return;
+        var current = label.ForeColor;
+        if (current == Color.FromArgb(100,116,139) || current == Color.FromArgb(88,103,124) || current == Color.Gray || current == Color.DimGray)
+            label.ForeColor = p.Muted;
+        else if (current == Color.Blue || current == Color.Navy || current.B > current.R * 1.4)
+            label.ForeColor = p.Primary;
+        else
+            label.ForeColor = p.Text;
+
+        if (NeutralBack(label.BackColor)) label.BackColor = Color.Transparent;
+    }
+
+    static void StyleButton(Button b, PdksPalette p)
     {
         b.FlatStyle = FlatStyle.Flat;
-        b.FlatAppearance.BorderColor = Border;
+        b.FlatAppearance.BorderColor = p.Border;
         b.FlatAppearance.BorderSize = 1;
-        b.BackColor = Color.White;
-        b.ForeColor = Text;
+        b.BackColor = p.Surface;
+        b.ForeColor = p.Text;
         b.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
         b.Cursor = Cursors.Hand;
         b.Padding = new Padding(6, 1, 6, 1);
         if (b.Parent is FlowLayoutPanel) b.MinimumSize = new Size(b.MinimumSize.Width, 30);
 
         var text = (b.Text ?? string.Empty).Trim();
-        if (text.Contains("Kaydet", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Ekle", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Hesapla", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Aktar", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Giriş", StringComparison.OrdinalIgnoreCase))
+        if (IsPrimaryAction(text))
         {
-            b.BackColor = Primary;
+            b.BackColor = p.Primary;
             b.ForeColor = Color.White;
-            b.FlatAppearance.BorderColor = Primary;
+            b.FlatAppearance.BorderColor = p.Primary;
         }
-        else if (text.Contains("Sil", StringComparison.OrdinalIgnoreCase))
+        else if (text.Contains("Sil", StringComparison.OrdinalIgnoreCase) || text.Contains("Çıkart", StringComparison.OrdinalIgnoreCase))
         {
-            b.BackColor = Color.FromArgb(255, 241, 240);
-            b.ForeColor = Color.FromArgb(185, 56, 48);
-            b.FlatAppearance.BorderColor = Color.FromArgb(244, 195, 190);
+            b.BackColor = p.DangerSoft;
+            b.ForeColor = p.Danger;
+            b.FlatAppearance.BorderColor = p.Danger;
         }
-        else if (text.Contains("Kapat", StringComparison.OrdinalIgnoreCase))
+        else if (text.Contains("Kapat", StringComparison.OrdinalIgnoreCase) || text.Contains("Çıkış", StringComparison.OrdinalIgnoreCase))
         {
-            b.BackColor = Color.FromArgb(241, 244, 248);
-            b.ForeColor = Muted;
+            b.BackColor = p.SurfaceAlt;
+            b.ForeColor = p.Muted;
         }
     }
 
+    static bool IsPrimaryAction(string text) =>
+        text.Contains("Kaydet", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("Ekle", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("Oluştur", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("Hesapla", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("Aktar", StringComparison.OrdinalIgnoreCase) ||
+        text.Equals("Göster", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("Giriş", StringComparison.OrdinalIgnoreCase) && !text.Contains("Çıkış", StringComparison.OrdinalIgnoreCase);
+
     static void StyleTabs(TabControl tabs)
     {
+        var p = PdksAppearance.Current;
         tabs.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
         tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
         tabs.SizeMode = TabSizeMode.Normal;
         tabs.Padding = new Point(18, 9);
         tabs.Multiline = true;
         tabs.HotTrack = true;
-        foreach (TabPage page in tabs.TabPages) page.BackColor = Surface;
-        tabs.DrawItem += (_, e) =>
+        tabs.BackColor = p.Canvas;
+        foreach (TabPage page in tabs.TabPages)
         {
-            if (e.Index < 0 || e.Index >= tabs.TabPages.Count) return;
-            var selected = e.Index == tabs.SelectedIndex;
-            var rect = e.Bounds;
-            var back = selected ? Color.FromArgb(232, 241, 255) : Color.FromArgb(248, 250, 253);
-            var fore = selected ? Primary : Muted;
-            using var brush = new SolidBrush(back);
-            using var pen = new Pen(selected ? Color.FromArgb(165, 198, 242) : Border);
-            e.Graphics.FillRectangle(brush, rect);
-            e.Graphics.DrawRectangle(pen, rect.X, rect.Y, rect.Width - 1, rect.Height - 1);
-            TextRenderer.DrawText(e.Graphics, tabs.TabPages[e.Index].Text, tabs.Font, rect, fore,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-            if (selected)
+            page.BackColor = p.Surface;
+            page.ForeColor = p.Text;
+        }
+
+        if (StyledTabs.Add(tabs))
+        {
+            tabs.DrawItem += (_, e) =>
             {
-                using var accent = new SolidBrush(Primary);
-                e.Graphics.FillRectangle(accent, rect.Left + 6, rect.Bottom - 3, Math.Max(4, rect.Width - 12), 3);
-            }
-        };
+                if (e.Index < 0 || e.Index >= tabs.TabPages.Count) return;
+                var palette = PdksAppearance.Current;
+                var selected = e.Index == tabs.SelectedIndex;
+                var rect = e.Bounds;
+                var back = selected ? palette.PrimarySoft : palette.SurfaceAlt;
+                var fore = selected ? palette.Primary : palette.Muted;
+                using var brush = new SolidBrush(back);
+                using var pen = new Pen(selected ? palette.Primary : palette.Border);
+                e.Graphics.FillRectangle(brush, rect);
+                e.Graphics.DrawRectangle(pen, rect.X, rect.Y, rect.Width - 1, rect.Height - 1);
+                TextRenderer.DrawText(e.Graphics, tabs.TabPages[e.Index].Text, tabs.Font, rect, fore,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                if (selected)
+                {
+                    using var accent = new SolidBrush(palette.Primary);
+                    e.Graphics.FillRectangle(accent, rect.Left + 6, rect.Bottom - 3, Math.Max(4, rect.Width - 12), 3);
+                }
+            };
+        }
+        tabs.Invalidate();
     }
 
-    static void StyleGrid(DataGridView grid)
+    static void StyleGrid(DataGridView grid, PdksPalette p)
     {
-        grid.BackgroundColor = Color.White;
+        grid.BackgroundColor = p.Surface;
         grid.BorderStyle = BorderStyle.None;
-        grid.GridColor = Color.FromArgb(228, 234, 242);
+        grid.GridColor = p.Border;
         grid.EnableHeadersVisualStyles = false;
         grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
-        grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(236, 243, 252);
-        grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(31, 67, 116);
+        grid.ColumnHeadersDefaultCellStyle.BackColor = p.GridHeader;
+        grid.ColumnHeadersDefaultCellStyle.ForeColor = p.Text;
         grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
-        grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(236, 243, 252);
-        grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.FromArgb(31, 67, 116);
-        grid.DefaultCellStyle.BackColor = Color.White;
-        grid.DefaultCellStyle.ForeColor = Text;
-        grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(221, 236, 255);
-        grid.DefaultCellStyle.SelectionForeColor = Text;
-        grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(249, 251, 254);
+        grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = p.GridHeader;
+        grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = p.Text;
+        grid.DefaultCellStyle.BackColor = p.Surface;
+        grid.DefaultCellStyle.ForeColor = p.Text;
+        grid.DefaultCellStyle.SelectionBackColor = p.Selection;
+        grid.DefaultCellStyle.SelectionForeColor = p.Text;
+        grid.AlternatingRowsDefaultCellStyle.BackColor = p.SurfaceAlt;
+        grid.AlternatingRowsDefaultCellStyle.ForeColor = p.Text;
+        grid.RowHeadersDefaultCellStyle.BackColor = p.SurfaceAlt;
+        grid.RowHeadersDefaultCellStyle.ForeColor = p.Text;
         grid.RowHeadersVisible = false;
         grid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
         grid.RowTemplate.Height = Math.Max(grid.RowTemplate.Height, 31);
@@ -279,12 +365,14 @@ public static class PdksTheme
             GridLayoutPersistence.AttachAuto(grid);
         }
 
-        EnsureGridContextMenu(grid);
+        EnsureGridContextMenu(grid, p);
     }
 
-    static void EnsureGridContextMenu(DataGridView grid)
+    static void EnsureGridContextMenu(DataGridView grid, PdksPalette p)
     {
         var menu = grid.ContextMenuStrip ?? new ContextMenuStrip { Font = new Font("Segoe UI", 9f) };
+        menu.BackColor = p.Surface;
+        menu.ForeColor = p.Text;
         if (menu.Items.OfType<ToolStripItem>().Any(x => string.Equals(x.Name, "KY_GRID_COPY_CELL", StringComparison.Ordinal)))
         {
             grid.ContextMenuStrip = menu;
@@ -316,8 +404,8 @@ public static class PdksTheme
             var column = grid.CurrentCell?.OwningColumn;
             if (column is null) return;
             column.Frozen = !column.Frozen;
-            column.HeaderCell.Style.BackColor = column.Frozen ? Color.FromArgb(255, 244, 203) : Color.FromArgb(236, 243, 252);
-            column.HeaderCell.Style.ForeColor = Color.FromArgb(31, 67, 116);
+            column.HeaderCell.Style.BackColor = column.Frozen ? PdksAppearance.Current.PrimarySoft : PdksAppearance.Current.GridHeader;
+            column.HeaderCell.Style.ForeColor = PdksAppearance.Current.Text;
         };
         menu.Items.Add(copyCell);
         menu.Items.Add(copyRow);
@@ -334,4 +422,27 @@ public static class PdksTheme
             grid.CurrentCell = grid.Rows[e.RowIndex].Cells[e.ColumnIndex];
         };
     }
+
+    static Color MapBack(Color color, PdksPalette p)
+    {
+        if (!NeutralBack(color)) return color;
+        if (color == Color.White || color == SystemColors.Window) return p.Surface;
+        return p.Canvas;
+    }
+
+    static bool NeutralBack(Color color) =>
+        color == Color.Transparent ||
+        color == SystemColors.Control ||
+        color == SystemColors.Window ||
+        color == Color.White ||
+        color == Color.FromArgb(244,247,251) ||
+        color == Color.FromArgb(245,247,250) ||
+        color == Color.FromArgb(246,249,253) ||
+        color == Color.FromArgb(248,250,252) ||
+        color == Color.FromArgb(247,249,252);
+
+    static bool IsStatusColor(Color color) =>
+        color == Color.Green || color == Color.DarkGreen || color == Color.Firebrick ||
+        color == Color.Red || color == Color.Orange || color == Color.DarkOrange ||
+        (color.G > color.R * 1.35 && color.G > color.B * 1.2);
 }
