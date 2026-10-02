@@ -168,10 +168,7 @@ public sealed class LegacyAvansEntryForm : Form
     }
 
     static Button ModernAvansButton(string text,int width,bool primary)
-    {
-        var b=new Button{Text=text,Width=width,Height=34,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",8.8f,FontStyle.Bold),BackColor=primary?Color.FromArgb(37,99,235):Color.White,ForeColor=primary?Color.White:Color.FromArgb(15,23,42),Cursor=Cursors.Hand,Margin=new Padding(8,0,0,0)};
-        b.FlatAppearance.BorderColor=primary?Color.FromArgb(37,99,235):Color.FromArgb(226,232,240);return b;
-    }
+        => PdksUiKit.Button(text,width,primary?PdksActionRole.Primary:PdksActionRole.Secondary);
 
     void LoadAll()
     {
