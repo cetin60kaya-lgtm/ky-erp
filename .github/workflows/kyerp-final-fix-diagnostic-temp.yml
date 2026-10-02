@@ -77,6 +77,10 @@ jobs:
           echo "NEGATIVE_PAYROLL=$(q "SELECT COUNT(*) n FROM hr_payrolls_v2 WHERE main_company_id='mecit-hakan' AND (COALESCE(salary,0)<0 OR COALESCE(road_allowance,0)<0 OR COALESCE(overtime_amount,0)<0 OR COALESCE(premium_amount,0)<0 OR COALESCE(deduction_amount,0)<0 OR COALESCE(advance_amount,0)<0 OR COALESCE(bank_amount,0)<0 OR COALESCE(cash_amount,0)<0 OR COALESCE(total_amount,0)<0);")"
           echo "SGK_IMPORTS=$(q "SELECT COUNT(*) n FROM ik_sgk_imports WHERE main_company_id='mecit-hakan';")"
           echo "DOCUMENTS=$(q "SELECT COUNT(*) n FROM hr_employee_documents d JOIN hr_monthly_employees e ON e.id=d.employee_id WHERE e.main_company_id='mecit-hakan';")"
+          echo "DUP_NAME_DETAIL=$(q "SELECT LOWER(TRIM(full_name)) name_key,COUNT(*) n,GROUP_CONCAT(id) ids FROM hr_monthly_employees WHERE main_company_id='mecit-hakan' GROUP BY name_key HAVING n>1;")"
+          echo "MISSING_HIRE_STATUS=$(q "SELECT UPPER(COALESCE(status,'')) status,COUNT(*) n FROM hr_monthly_employees WHERE main_company_id='mecit-hakan' AND TRIM(COALESCE(hire_date,''))='' GROUP BY 1;")"
+          echo "PAYROLL_BY_PERIOD=$(q "SELECT year,month,status,COUNT(*) n,ROUND(SUM(COALESCE(total_amount,0)),2) total,ROUND(SUM(COALESCE(bank_amount,0)+COALESCE(cash_amount,0)),2) split_total,ROUND(SUM(COALESCE(bank_amount,0)+COALESCE(cash_amount,0)-COALESCE(total_amount,0)),2) diff FROM hr_payrolls_v2 WHERE main_company_id='mecit-hakan' GROUP BY year,month,status ORDER BY year DESC,month DESC,status;")"
+          echo "UNBALANCED_BY_PERIOD=$(q "SELECT year,month,COUNT(*) n,ROUND(SUM(ABS(COALESCE(bank_amount,0)+COALESCE(cash_amount,0)-COALESCE(total_amount,0))),2) abs_diff FROM hr_payrolls_v2 WHERE main_company_id='mecit-hakan' AND ABS(COALESCE(bank_amount,0)+COALESCE(cash_amount,0)-COALESCE(total_amount,0))>0.011 GROUP BY year,month ORDER BY year DESC,month DESC;")"
 
       - name: Frontend install
         working-directory: APP/app/ky-erp-frontend
