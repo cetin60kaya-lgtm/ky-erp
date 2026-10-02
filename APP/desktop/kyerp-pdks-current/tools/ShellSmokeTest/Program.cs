@@ -53,15 +53,14 @@ if (workflow.Select(x=>x.Order).Distinct().Count() != workflow.Length)
 var shellButtons = Descendants(form).OfType<Button>().Select(x => x.Text ?? string.Empty).ToArray();
 foreach (var required in expectedPrimary)
     if (!shellButtons.Contains(required)) throw new InvalidOperationException("Modern navigasyon eksik: " + required);
-foreach (var required in new[] { "Yönetim", $"Tema • {PdksAppearance.ModeLabel}" })
+foreach (var required in new[] { "Yönetim", $"Tema • {PdksAppearance.ModeLabel}", "İşlem Ara  Ctrl+K" })
     if (!shellButtons.Contains(required)) throw new InvalidOperationException("Kabuk komutu eksik: " + required);
 
 if (form.MainMenuStrip is null || form.MainMenuStrip.Visible)
     throw new InvalidOperationException("Eski menü görünür olmamalı.");
 
-var legacyToolbar = form.Controls.OfType<ToolStrip>().First(x => x is not MenuStrip && x is not StatusStrip);
-if (legacyToolbar.Visible || legacyToolbar.Items.Count != 0)
-    throw new InvalidOperationException("Eski araç çubuğu aktif olmamalı.");
+if (form.Controls.OfType<ToolStrip>().Any(x => x is not MenuStrip && x.Visible))
+    throw new InvalidOperationException("Eski araç çubuğu artık kabukta bulunmamalı.");
 
 var palette = PdksAppearance.Current;
 if (palette.Primary == palette.Canvas)
