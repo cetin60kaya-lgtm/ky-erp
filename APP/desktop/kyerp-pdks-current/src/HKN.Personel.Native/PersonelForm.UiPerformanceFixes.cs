@@ -13,12 +13,12 @@ public partial class PersonelForm
 
         try
         {
-            ReplacePeriodHeader("Giriş ve Çıkışları", periodG, gFrom, gTo);
+            ReplacePeriodHeader("Giriş / Çıkış", periodG, gFrom, gTo);
             ReplacePeriodHeader("İzinler", periodI, iFrom, iTo);
-            ReplacePeriodHeader("Ek Kazanç Ve Kesintiler", periodE, eFrom, eTo);
-            ReplaceRecordActionBar("Giriş ve Çıkışları", gGiris);
+            ReplacePeriodHeader("Kazanç / Kesinti", periodE, eFrom, eTo);
+            ReplaceRecordActionBar("Giriş / Çıkış", gGiris);
             ReplaceRecordActionBar("İzinler", gIzin);
-            ReplaceRecordActionBar("Ek Kazanç Ve Kesintiler", gEkk);
+            ReplaceRecordActionBar("Kazanç / Kesinti", gEkk);
             ReplacePaymentHeader();
             InstallRecordContextMenus();
             EnableSmoothGrid(list);
