@@ -64,6 +64,9 @@ public sealed class QuickDataSourceForm : Form
         bar.Controls.Add(PdksUiKit.Button("FDB'yi Aktif Et",125,PdksActionRole.Secondary,ActivateDatabase));
         status.ForeColor=p.Muted;
         status.Padding=new Padding(14,8,0,0);
+        status.Width=310;
+        status.Height=34;
+        status.AutoEllipsis=true;
         bar.Controls.Add(status);
         root.Controls.Add(bar,0,3);
 
