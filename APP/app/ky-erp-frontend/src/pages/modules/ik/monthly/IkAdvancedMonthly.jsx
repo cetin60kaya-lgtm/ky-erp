@@ -27,7 +27,7 @@ import {
 } from "../../../../services/ik/monthlyApi";
 import { printHtmlDocument } from "../../../../services/printService";
 import { exportRowsToExcelFile } from "../../../../utils/excelExport";
-import "./ik.advanced.css";
+import IkMonthlyProShell from "./IkMonthlyProShell";\nimport "./ik.advanced.css";\nimport "./ik.monthly.pro.css";
 
 const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 const FINANCE_TYPES = ["Mesai", "Avans", "Toplu avans", "Ozel kesinti", "Icra", "Haciz", "Eksik gün", "Eksik saat"];
@@ -1703,15 +1703,33 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   };
 
   return (
-    <div className="ik-html">
-      {notice && <div className="note">{notice}<button className="btn" onClick={() => setNotice("")}>Kapat</button></div>}
-      {page === "ozet" && renderOzet()}
-      {page === "personel" && renderPersonel()}
-      {page === "ucret" && renderUcret()}
-      {page === "hareket" && renderHareket()}
-      {page === "izin" && renderIzin()}
-      {page === "bordro" && renderBordro()}
-      {page === "evrak" && renderEvrak()}
+    <div className="ik-html ik-monthly-pro">
+      <IkMonthlyProShell
+        page={page}
+        onNavigate={go}
+        year={year}
+        month={month}
+        months={MONTHS}
+        onPeriodChange={changePeriod}
+        periodPrepared={periodPrepared}
+        isLocked={Boolean(data.close?.isLocked)}
+        balanced={periodPrepared && balanced}
+        issueCount={smartIssues.length}
+        employeeCount={employees.length}
+        sgkCount={employees.filter(isSgk).length}
+        paidCount={payrollRows.filter((row) => upper(row.saved?.status) === "PAID").length}
+        payrollCount={payrollRows.length}
+        companyName={activeMainCompany?.name || activeMainCompany?.title || "KY ERP"}
+      >
+        {notice && <div className="note">{notice}<button className="btn" onClick={() => setNotice("")}>Kapat</button></div>}
+        {page === "ozet" && renderOzet()}
+        {page === "personel" && renderPersonel()}
+        {page === "ucret" && renderUcret()}
+        {page === "hareket" && renderHareket()}
+        {page === "izin" && renderIzin()}
+        {page === "bordro" && renderBordro()}
+        {page === "evrak" && renderEvrak()}
+      </IkMonthlyProShell>
       {renderModal()}
     </div>
   );
@@ -1729,8 +1747,6 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         : null;
     return (
       <div className="filters ik-essential-filters">
-        <div><label>Yıl</label><select value={year} onChange={(event) => changePeriod(Number(event.target.value), month)}>{[2025, 2026, 2027, 2028].map((item) => <option key={item}>{item}</option>)}</select></div>
-        <div><label>Ay</label><select value={month} onChange={(event) => changePeriod(year, Number(event.target.value))}>{MONTHS.map((item, index) => <option key={item} value={index + 1}>{item}</option>)}</select></div>
         <div className="ik-search-filter"><label>{third}</label><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Ad, kod, kart no" /></div>
         {fourthControl}
         {fifthControl}
