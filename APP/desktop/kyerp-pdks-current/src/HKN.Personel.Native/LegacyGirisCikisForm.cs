@@ -101,10 +101,7 @@ public sealed class LegacyGirisCikisForm : Form
     }
 
     static Button ModernGcButton(string text,int width,bool primary,bool danger=false)
-    {
-        var b=new Button{Text=text,Width=width,Height=36,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",8.8f,FontStyle.Bold),BackColor=primary?Color.FromArgb(37,99,235):Color.White,ForeColor=primary?Color.White:danger?Color.FromArgb(185,28,28):Color.FromArgb(15,23,42),Cursor=Cursors.Hand,Margin=new Padding(8,0,0,0)};
-        b.FlatAppearance.BorderColor=primary?Color.FromArgb(37,99,235):danger?Color.FromArgb(254,202,202):Color.FromArgb(226,232,240);return b;
-    }
+        => PdksUiKit.Button(text,width,primary?PdksActionRole.Primary:danger?PdksActionRole.Danger:PdksActionRole.Secondary);
 
     static ToolStripMenuItem MI(string text,Action a){var m=new ToolStripMenuItem(text);m.Click+=(_,_)=>a();return m;}
     void AddCol(string n,string h,int w)=>grid.Columns.Add(new DataGridViewTextBoxColumn{Name=n,DataPropertyName=n,HeaderText=h,Width=w});
