@@ -60,3 +60,14 @@ test("new personnel is blocked in a closed period and duplicate card is checked 
   assert.match(monthly, /duplicateCard/);
   assert.match(monthly, /Bu kart numarası başka bir personele bağlı/);
 });
+
+
+test("payroll and document controls filter the rows they display", () => {
+  assert.match(monthly, /payrollPaymentFilter/);
+  assert.match(monthly, /payrollStatusFilter/);
+  assert.match(monthly, /const filteredPayrollRows = useMemo/);
+  assert.match(monthly, /filteredPayrollRows\.map/);
+  assert.match(monthly, /documentFilter/);
+  assert.match(monthly, /visibleDocumentEmployeeIds/);
+  assert.match(monthly, /filteredDocuments\.map/);
+});
