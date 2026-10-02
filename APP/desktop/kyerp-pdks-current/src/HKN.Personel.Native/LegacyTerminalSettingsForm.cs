@@ -89,9 +89,9 @@ public sealed class LegacyTerminalSettingsForm : Form
         var net=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,Margin=Padding.Empty};net.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,52));net.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,24));net.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,24));ipAddress.Dock=DockStyle.Fill;ipPort.Dock=DockStyle.Fill;connectionType.Dock=DockStyle.Fill;net.Controls.Add(ipAddress,0,0);net.Controls.Add(ipPort,1,0);net.Controls.Add(connectionType,2,0);TerminalRow(connection,3,"Ağ",net);
         var serial=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Margin=Padding.Empty};serial.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));serial.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));comPort.Dock=DockStyle.Fill;baudRate.Dock=DockStyle.Fill;serial.Controls.Add(comPort,0,0);serial.Controls.Add(baudRate,1,0);TerminalRow(connection,4,"Seri",serial);
         TerminalRow(connection,5,"Yön",direction);
-        var editBar=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,WrapContents=false,Padding=new Padding(0,5,0,0)};
-        var add=TerminalButton("EKLE",82,true);var remove=TerminalButton("ÇIKART",82,false);var edit=TerminalButton("DÜZENLE",90,false);
-        save.Width=90;save.Height=32;save.FlatStyle=FlatStyle.Flat;save.BackColor=Color.FromArgb(37,99,235);save.ForeColor=Color.White;save.FlatAppearance.BorderColor=save.BackColor;
+        var editBar=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.LeftToRight,WrapContents=true,Padding=new Padding(0,5,0,0)};
+        var add=TerminalButton("EKLE",62,true);var remove=TerminalButton("ÇIKART",68,false);var edit=TerminalButton("DÜZENLE",76,false);
+        save.Width=72;save.Height=32;save.FlatStyle=FlatStyle.Flat;save.BackColor=Color.FromArgb(37,99,235);save.ForeColor=Color.White;save.FlatAppearance.BorderColor=save.BackColor;
         add.Click += (_, _) => { ApplyToFields(TerminalDeviceSettings.Default); SetEditing(true); };
         remove.Click += (_, _) => { if(MessageBox.Show("Ana cihaz ayarları varsayılana döndürülsün mü?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;TerminalDeviceSettingsStore.Save(TerminalDeviceSettings.Default);LoadSettings();SetEditing(false); };
         edit.Click += (_,_)=>SetEditing(true);save.Click += (_,_)=>SaveSettings();
@@ -333,6 +333,10 @@ public sealed class LegacyTerminalSettingsForm : Form
 
     void SetStatus(string text, bool? ok)
     {
+        if (text.Contains('Ã') || text.Contains('Ä') || text.Contains('Å'))
+        {
+            try { text = System.Text.Encoding.UTF8.GetString(System.Text.Encoding.Latin1.GetBytes(text)); } catch { }
+        }
         status.Text = text;
         status.ForeColor = ok switch { true => Color.DarkGreen, false => Color.Firebrick, _ => Color.FromArgb(31, 92, 180) };
     }
