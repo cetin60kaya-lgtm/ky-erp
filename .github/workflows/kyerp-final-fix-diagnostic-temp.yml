@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - '.github/workflows/kyerp-final-fix-diagnostic-temp.yml'
   workflow_dispatch:
 
 permissions:
@@ -12,18 +14,29 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      DB_NAME: ky-erp-db
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          ref: codex/model-uretim-kontrol-merkezi-final
-      - name: Inspect daily view mappings
-        working-directory: APP/app/ky-erp-frontend
+          node-version: 22
+      - name: IK master / daily / PDKS counts
+        working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== DailyHrWorkspace ==='
-          grep -n -E 'VIEWS|IkPage activeTab|daily-entry|daily-cards|daily-weekly|daily-payments' src/pages/modules/ik/DailyHrWorkspace.jsx || true
-          echo '=== IkPage mappings ==='
-          grep -n -E 'daily-entry|daily-cards|daily-weekly|daily-payments|gunluk-personel|gunluk-personel-kartlari|gunluk-odeme-fisleri|ik-raporlari' src/pages/modules/IkPage.jsx | head -n 120 || true
-          echo '=== IkPage fallback/render tail ==='
-          grep -n -E 'Ekran bulunamadı|activeTab ===|normalizedTab|viewKey|tabKey' src/pages/modules/IkPage.jsx | tail -n 120 || true
+          query() {
+            npx --yes wrangler@4.118.0 d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "$1" --json | jq -c '.[0].results'
+          }
+          echo "MONTHLY_TOTAL=$(query "SELECT COUNT(*) n FROM hr_monthly_employees WHERE main_company_id='mecit-hakan';")"
+          echo "MONTHLY_STATUS=$(query "SELECT UPPER(COALESCE(status,'')) status,COUNT(*) n FROM hr_monthly_employees WHERE main_company_id='mecit-hakan' GROUP BY 1 ORDER BY 1;")"
+          echo "MONTHLY_SGK=$(query "SELECT UPPER(COALESCE(sgk_status,'')) sgk,COUNT(*) n FROM hr_monthly_employees WHERE main_company_id='mecit-hakan' GROUP BY 1 ORDER BY 1;")"
+          echo "DAILY_TOTAL=$(query "SELECT COUNT(*) n FROM hr_daily_employees WHERE main_company_id='mecit-hakan';")"
+          echo "DAILY_STATUS=$(query "SELECT UPPER(COALESCE(status,'')) status,COUNT(*) n FROM hr_daily_employees WHERE main_company_id='mecit-hakan' GROUP BY 1 ORDER BY 1;")"
+          echo "PDKS_DISTINCT=$(query "SELECT COUNT(DISTINCT employee_id) n FROM ik_time_clock_events WHERE main_company_id='mecit-hakan';")"
+          echo "OVERLAP_BY_NAME=$(query "SELECT COUNT(*) n FROM hr_daily_employees d WHERE d.main_company_id='mecit-hakan' AND EXISTS (SELECT 1 FROM hr_monthly_employees m WHERE m.main_company_id=d.main_company_id AND LOWER(TRIM(m.full_name))=LOWER(TRIM(d.full_name)));")"
+          echo "DAILY_NOT_MONTHLY=$(query "SELECT COUNT(*) n FROM hr_daily_employees d WHERE d.main_company_id='mecit-hakan' AND NOT EXISTS (SELECT 1 FROM hr_monthly_employees m WHERE m.main_company_id=d.main_company_id AND LOWER(TRIM(m.full_name))=LOWER(TRIM(d.full_name)));")"
+          echo "MONTHLY_NOT_DAILY=$(query "SELECT COUNT(*) n FROM hr_monthly_employees m WHERE m.main_company_id='mecit-hakan' AND NOT EXISTS (SELECT 1 FROM hr_daily_employees d WHERE d.main_company_id=m.main_company_id AND LOWER(TRIM(d.full_name))=LOWER(TRIM(m.full_name)));")"
