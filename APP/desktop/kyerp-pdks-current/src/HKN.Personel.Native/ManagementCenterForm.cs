@@ -55,7 +55,7 @@ internal sealed class ManagementCenterForm : Form
             Padding = Padding.Empty,
             BackColor = p.Canvas
         };
-        shell.RowStyles.Add(new RowStyle(SizeType.Absolute,88));
+        shell.RowStyles.Add(new RowStyle(SizeType.Absolute,62));
         shell.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
         shell.Controls.Add(BuildHeader(),0,0);
@@ -68,49 +68,50 @@ internal sealed class ManagementCenterForm : Form
     {
         var p=PdksAppearance.Current;
         var card=PdksUiKit.Card(0);
-        card.Margin=new Padding(8,6,8,10);
+        card.Margin=new Padding(8,4,8,8);
 
         var layout=new TableLayoutPanel
         {
             Dock=DockStyle.Fill,
             ColumnCount=3,
             RowCount=1,
-            Padding=new Padding(16,10,16,10),
+            Padding=new Padding(14,7,14,7),
             BackColor=p.Surface,
             Margin=Padding.Empty
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,310));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,330));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,190));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
-        var titleArea=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Surface,Margin=Padding.Empty};
-        titleArea.RowStyles.Add(new RowStyle(SizeType.Percent,58));
-        titleArea.RowStyles.Add(new RowStyle(SizeType.Percent,42));
-        titleArea.Controls.Add(new Label
+        var context=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Surface,Margin=Padding.Empty};
+        context.RowStyles.Add(new RowStyle(SizeType.Percent,55));
+        context.RowStyles.Add(new RowStyle(SizeType.Percent,45));
+        context.Controls.Add(new Label
         {
-            Text="Yönetim Merkezi",
+            Text="İşlem Kataloğu",
             Dock=DockStyle.Fill,
             TextAlign=ContentAlignment.BottomLeft,
-            Font=new Font("Segoe UI",16f,FontStyle.Bold),
+            Font=new Font("Segoe UI",9.8f,FontStyle.Bold),
             ForeColor=p.Text
         },0,0);
-        titleArea.Controls.Add(new Label
+        context.Controls.Add(new Label
         {
-            Text="Tüm alt işlemler tek merkezde • menü sırası ve yetkiler tek katalogdan yönetilir",
+            Text=$"{commands.Count} işlem • yetkiye göre filtrelenmiş",
             Dock=DockStyle.Fill,
             TextAlign=ContentAlignment.TopLeft,
-            Font=new Font("Segoe UI",8.8f),
+            Font=new Font("Segoe UI",7.9f),
             ForeColor=p.Muted
         },0,1);
-        layout.Controls.Add(titleArea,0,0);
+        layout.Controls.Add(context,0,0);
 
+        search.PlaceholderText="İşlem ara (bordro, izin, terminal...)";
         search.BackColor=p.Input;search.ForeColor=p.Text;search.BorderStyle=BorderStyle.FixedSingle;
-        search.Dock=DockStyle.Fill;search.Margin=new Padding(8,11,8,11);search.Font=new Font("Segoe UI",9.2f);
+        search.Dock=DockStyle.Fill;search.Margin=new Padding(8,6,8,6);search.Font=new Font("Segoe UI",9.2f);
         layout.Controls.Add(search,1,0);
 
         groupFilter.BackColor=p.Input;groupFilter.ForeColor=p.Text;
-        groupFilter.Dock=DockStyle.Fill;groupFilter.Margin=new Padding(0,11,0,11);
+        groupFilter.Dock=DockStyle.Fill;groupFilter.Margin=new Padding(0,6,0,6);
         layout.Controls.Add(groupFilter,2,0);
 
         card.Controls.Add(layout);
