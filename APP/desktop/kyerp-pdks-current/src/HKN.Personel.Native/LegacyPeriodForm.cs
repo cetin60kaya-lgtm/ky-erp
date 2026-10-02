@@ -89,10 +89,7 @@ public sealed class LegacyPeriodForm : Form
     }
 
     static Button PeriodButton(string text,int width,bool primary,bool danger=false)
-    {
-        var b=new Button{Text=text,Width=width,Height=34,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",8.8f,FontStyle.Bold),BackColor=primary?Color.FromArgb(37,99,235):Color.White,ForeColor=primary?Color.White:danger?Color.FromArgb(185,28,28):Color.FromArgb(15,23,42),Margin=new Padding(8,0,0,0),Cursor=Cursors.Hand};
-        b.FlatAppearance.BorderColor=primary?Color.FromArgb(37,99,235):danger?Color.FromArgb(254,202,202):Color.FromArgb(226,232,240);return b;
-    }
+        => PdksUiKit.Button(text,width,primary?PdksActionRole.Primary:danger?PdksActionRole.Danger:PdksActionRole.Secondary);
 
     void ReloadAll()
     {
