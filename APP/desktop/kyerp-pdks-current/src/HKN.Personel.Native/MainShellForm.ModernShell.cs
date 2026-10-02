@@ -320,7 +320,11 @@ public sealed partial class MainShellForm
             e.Graphics.DrawLine(pen, 0, bar.Height - 1, bar.Width, bar.Height - 1);
         };
 
-        var left = new TableLayoutPanel { Dock = DockStyle.Left, Width = 700, ColumnCount=2, RowCount = 1, BackColor = p.Surface };
+        var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,BackColor=p.Surface,Margin=Padding.Empty};
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,500));
+
+        var left = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount=2, RowCount = 1, BackColor = p.Surface };
         left.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,48));
         left.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
 
@@ -355,21 +359,20 @@ public sealed partial class MainShellForm
 
         var right = new FlowLayoutPanel
         {
-            Dock = DockStyle.Right,
-            Width = 560,
+            Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
             BackColor = p.Surface,
             Padding = new Padding(0, 10, 0, 0)
         };
-        var quickSearch = PdksUiKit.Button("İşlem Ara   Ctrl+K",132,PdksActionRole.Secondary,OpenCommandPalette);
-        quickSearch.Height=34;quickSearch.MinimumSize=new Size(132,34);quickSearch.MaximumSize=new Size(132,34);
+        var quickSearch = PdksUiKit.Button("İşlem Ara  Ctrl+K",120,PdksActionRole.Secondary,OpenCommandPalette);
+        quickSearch.Height=34;quickSearch.MinimumSize=new Size(120,34);quickSearch.MaximumSize=new Size(120,34);
         quickSearch.Margin=new Padding(10,0,0,0);
 
         var user = new RoundedLabel
         {
             AutoSize = false,
-            Width = 150,
+            Width = 128,
             Height = 34,
             Text = currentUser.UserName,
             TextAlign = ContentAlignment.MiddleCenter,
@@ -382,7 +385,7 @@ public sealed partial class MainShellForm
         modernClock = new Label
         {
             AutoSize = false,
-            Width = 80,
+            Width = 62,
             Height = 34,
             Text = DateTime.Now.ToString("HH:mm"),
             TextAlign = ContentAlignment.MiddleCenter,
@@ -392,7 +395,7 @@ public sealed partial class MainShellForm
         var live = new Label
         {
             AutoSize = false,
-            Width = 125,
+            Width = 108,
             Height = 34,
             Text = "● SİSTEM AKTİF",
             TextAlign = ContentAlignment.MiddleCenter,
@@ -404,8 +407,9 @@ public sealed partial class MainShellForm
         right.Controls.Add(live);
         right.Controls.Add(quickSearch);
 
-        bar.Controls.Add(right);
-        bar.Controls.Add(left);
+        layout.Controls.Add(left,0,0);
+        layout.Controls.Add(right,1,0);
+        bar.Controls.Add(layout);
 
         modernClockTimer = new System.Windows.Forms.Timer { Interval = 15000 };
         modernClockTimer.Tick += (_, _) => { if (modernClock is not null) modernClock.Text = DateTime.Now.ToString("HH:mm"); };
