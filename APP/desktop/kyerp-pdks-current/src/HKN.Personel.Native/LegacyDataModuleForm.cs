@@ -156,7 +156,7 @@ from GIRCIK G left join KIMLIK K on K.PKNO=G.PKNO where 1=1";
             sql+=" order by "+(sortBox.SelectedIndex switch{1=>"K.AD,K.SOYAD,G.GTARIH",2=>"K.SOYAD,K.AD,G.GTARIH",3=>"G.GTARIH,G.PKNO",4=>"G.CTARIH,G.PKNO",_=>"G.PKNO,G.GTARIH,G.SIRA"});
             data=db.Query(sql,ps.ToArray());grid.DataSource=data;ConfigureGirisColumns();UpdateGirisStatus();
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"LegacyDataModule");}
     }
 
     void ConfigureGirisColumns()
@@ -185,17 +185,17 @@ from GIRCIK G left join KIMLIK K on K.PKNO=G.PKNO where 1=1";
         if(src is not null){person.SelectedValue=Convert.ToString(src["PKNO"]);hasIn.Checked=src["GTARIH"]!=DBNull.Value;hasOut.Checked=src["CTARIH"]!=DBNull.Value;if(hasIn.Checked){inDate.Value=Convert.ToDateTime(src["GTARIH"]);inTime.Text=Convert.ToString(src["GSAAT"])??"";}if(hasOut.Checked){outDate.Value=Convert.ToDateTime(src["CTARIH"]);outTime.Text=Convert.ToString(src["CSAAT"])??"";}}
         void Sync(){inDate.Enabled=hasIn.Checked;inTime.Enabled=hasIn.Checked;outDate.Enabled=hasOut.Checked;outTime.Enabled=hasOut.Checked;}hasIn.CheckedChanged+=(_,_)=>Sync();hasOut.CheckedChanged+=(_,_)=>Sync();Sync();
         var save=LegacyButton(editMode?"Kaydet":"Ekle",100,31);save.Location=new Point(205,190);var cancel=LegacyButton("Kapat",90,31);cancel.Location=new Point(310,190);cancel.DialogResult=DialogResult.Cancel;d.Controls.Add(save);d.Controls.Add(cancel);d.CancelButton=cancel;
-        save.Click+=(_,_)=>{try{if(!hasIn.Checked&&!hasOut.Checked)throw new InvalidOperationException("Lütfen giriş veya çıkış saati alanlarından birisini giriniz..!");var pk=Convert.ToString(person.SelectedValue)??throw new InvalidOperationException("Personel seçin.");object gd=DBNull.Value,gs=DBNull.Value,gm=DBNull.Value,cd=DBNull.Value,cs=DBNull.Value,cm=DBNull.Value;if(hasIn.Checked){if(!TryMinute(inTime.Text,out var m))throw new InvalidOperationException("Giriş saatini SS:dd biçiminde girin.");gd=inDate.Value.Date;gs=inTime.Text.Trim();gm=m;}if(hasOut.Checked){if(!TryMinute(outTime.Text,out var m))throw new InvalidOperationException("Çıkış saatini SS:dd biçiminde girin.");cd=outDate.Value.Date;cs=outTime.Text.Trim();cm=m;}var bol=db.Scalar("select BOLUM from KIMLIK where PKNO=@P",new FbParameter("@P",pk))??DBNull.Value;if(src is null){var seq=Convert.ToInt32(db.Scalar("select coalesce(max(SIRA),0)+1 from GIRCIK")??1);db.Execute("insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,CTARIH,CSAAT,CDAKIKA,CTUR,MKOD,BOLUM) values (@S,@P,@GD,@GS,@GM,'M',@CD,@CS,@CM,'M','000',@B)",new FbParameter("@S",seq),new FbParameter("@P",pk),new FbParameter("@GD",gd),new FbParameter("@GS",gs),new FbParameter("@GM",gm),new FbParameter("@CD",cd),new FbParameter("@CS",cs),new FbParameter("@CM",cm),new FbParameter("@B",bol));}else{var seq=Convert.ToInt32(src["SIRA"]);db.Execute("update GIRCIK set PKNO=@P,GTARIH=@GD,GSAAT=@GS,GDAKIKA=@GM,GTUR='M',CTARIH=@CD,CSAAT=@CS,CDAKIKA=@CM,CTUR='M',BOLUM=@B where SIRA=@S",new FbParameter("@P",pk),new FbParameter("@GD",gd),new FbParameter("@GS",gs),new FbParameter("@GM",gm),new FbParameter("@CD",cd),new FbParameter("@CS",cs),new FbParameter("@CM",cm),new FbParameter("@B",bol),new FbParameter("@S",seq));}d.DialogResult=DialogResult.OK;d.Close();ReloadGirisFromState();}catch(Exception ex){MessageBox.Show(ex.Message,d.Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}};
+        save.Click+=(_,_)=>{try{if(!hasIn.Checked&&!hasOut.Checked)throw new InvalidOperationException("Lütfen giriş veya çıkış saati alanlarından birisini giriniz..!");var pk=Convert.ToString(person.SelectedValue)??throw new InvalidOperationException("Personel seçin.");object gd=DBNull.Value,gs=DBNull.Value,gm=DBNull.Value,cd=DBNull.Value,cs=DBNull.Value,cm=DBNull.Value;if(hasIn.Checked){if(!TryMinute(inTime.Text,out var m))throw new InvalidOperationException("Giriş saatini SS:dd biçiminde girin.");gd=inDate.Value.Date;gs=inTime.Text.Trim();gm=m;}if(hasOut.Checked){if(!TryMinute(outTime.Text,out var m))throw new InvalidOperationException("Çıkış saatini SS:dd biçiminde girin.");cd=outDate.Value.Date;cs=outTime.Text.Trim();cm=m;}var bol=db.Scalar("select BOLUM from KIMLIK where PKNO=@P",new FbParameter("@P",pk))??DBNull.Value;if(src is null){var seq=Convert.ToInt32(db.Scalar("select coalesce(max(SIRA),0)+1 from GIRCIK")??1);db.Execute("insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,CTARIH,CSAAT,CDAKIKA,CTUR,MKOD,BOLUM) values (@S,@P,@GD,@GS,@GM,'M',@CD,@CS,@CM,'M','000',@B)",new FbParameter("@S",seq),new FbParameter("@P",pk),new FbParameter("@GD",gd),new FbParameter("@GS",gs),new FbParameter("@GM",gm),new FbParameter("@CD",cd),new FbParameter("@CS",cs),new FbParameter("@CM",cm),new FbParameter("@B",bol));}else{var seq=Convert.ToInt32(src["SIRA"]);db.Execute("update GIRCIK set PKNO=@P,GTARIH=@GD,GSAAT=@GS,GDAKIKA=@GM,GTUR='M',CTARIH=@CD,CSAAT=@CS,CDAKIKA=@CM,CTUR='M',BOLUM=@B where SIRA=@S",new FbParameter("@P",pk),new FbParameter("@GD",gd),new FbParameter("@GS",gs),new FbParameter("@GM",gm),new FbParameter("@CD",cd),new FbParameter("@CS",cs),new FbParameter("@CM",cm),new FbParameter("@B",bol),new FbParameter("@S",seq));}d.DialogResult=DialogResult.OK;d.Close();ReloadGirisFromState();}catch(Exception ex){PdksErrorPresenter.Show(d,ex,d.Text,MessageBoxIcon.Warning,"LegacyDataModule.Editor");}};
         d.ShowDialog(this);
     }
 
     void DeleteGirisCurrent()
     {
-        if(grid.CurrentRow?.DataBoundItem is not DataRowView v)return;var seq=Convert.ToInt32(v.Row["SIRA"]);if(MessageBox.Show("Seçili giriş-çıkış kaydı silinsin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;try{db.Execute("delete from GIRCIK where SIRA=@S",new FbParameter("@S",seq));ReloadGirisFromState();}catch(Exception ex){MessageBox.Show(ex.Message,Text);}
+        if(grid.CurrentRow?.DataBoundItem is not DataRowView v)return;var seq=Convert.ToInt32(v.Row["SIRA"]);if(MessageBox.Show("Seçili giriş-çıkış kaydı silinsin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;try{db.Execute("delete from GIRCIK where SIRA=@S",new FbParameter("@S",seq));ReloadGirisFromState();}catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"LegacyDataModule");}
     }
     void DeleteGirisListed()
     {
-        if(data is null||data.Rows.Count==0)return;if(MessageBox.Show("Listedeki giriş-çıkış kayıtlarını silmek istediğinizden emin misiniz ?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;try{var ids=data.AsEnumerable().Where(r=>r["SIRA"]!=DBNull.Value).Select(r=>Convert.ToInt32(r["SIRA"])).ToArray();db.InTransaction((c,t)=>{foreach(var id in ids){using var cmd=FirebirdDatabase.CreateCommand(c,t,"delete from GIRCIK where SIRA=@S",new FbParameter("@S",id));cmd.ExecuteNonQuery();}return ids.Length;});ReloadGirisFromState();}catch(Exception ex){MessageBox.Show(ex.Message,Text);}
+        if(data is null||data.Rows.Count==0)return;if(MessageBox.Show("Listedeki giriş-çıkış kayıtlarını silmek istediğinizden emin misiniz ?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;try{var ids=data.AsEnumerable().Where(r=>r["SIRA"]!=DBNull.Value).Select(r=>Convert.ToInt32(r["SIRA"])).ToArray();db.InTransaction((c,t)=>{foreach(var id in ids){using var cmd=FirebirdDatabase.CreateCommand(c,t,"delete from GIRCIK where SIRA=@S",new FbParameter("@S",id));cmd.ExecuteNonQuery();}return ids.Length;});ReloadGirisFromState();}catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"LegacyDataModule");}
     }
     void ReloadGirisFromState(){if(Tag is GirisFilterState s)LoadGirisCikis(s.KartBas,s.KartBit,s.Name,s.KartBasma,s.Start,s.End,s.InFirst,s.InLast,s.OutFirst,s.OutLast,s.Manual,s.Sort);}
     static bool TryMinute(string value,out int minute){minute=0;if(!TimeSpan.TryParse(value.Trim(),out var t))return false;minute=(int)t.TotalMinutes;return minute>=0&&minute<1440;}
@@ -277,7 +277,7 @@ from GIRCIK G left join KIMLIK K on K.PKNO=G.PKNO where 1=1";
             from.Value=a;to.Value=b;if(monthly){if(monthlyProgress is not null)monthlyProgress.Value=100;}else{if(dailyProgress1 is not null)dailyProgress1.Value=100;if(dailyProgress2 is not null)dailyProgress2.Value=100;}
             MessageBox.Show($"{a:dd.MM.yyyy} - {b:dd.MM.yyyy} tarihleri arası puantaj işlemi tamamlandı.\nİşlenen personel/gün: {processed}","Puantaj",MessageBoxButtons.OK,MessageBoxIcon.Information);
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,"Puantaj",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,"Puantaj",MessageBoxIcon.Warning,"LegacyDataModule.Timesheet");}
     }
 
     DataTable LoadSelectedEmployees(DateTime a,DateTime b,TextBox? kb,TextBox? ke,Dictionary<string,ComboBox> lookups)
@@ -319,7 +319,7 @@ from GIRCIK G left join KIMLIK K on K.PKNO=G.PKNO where 1=1";
         }
         catch(Exception ex)
         {
-            MessageBox.Show(ex.Message,"Genel Maaş Bordrosu",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            PdksErrorPresenter.Show(this,ex,"Genel Maaş Bordrosu",MessageBoxIcon.Warning,"LegacyDataModule.Payroll");
         }
     }
 
