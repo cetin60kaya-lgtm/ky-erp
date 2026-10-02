@@ -41,3 +41,22 @@ test("monthly HR professional UI stays responsive and keeps dense tables usable"
   assert.match(css, /@media \(max-width: 820px\)/);
   assert.match(css, /@media \(max-width: 560px\)/);
 });
+
+
+test("personnel cards use master detail UX and a real canonical create route", () => {
+  assert.match(monthly, /openNewPerson/);
+  assert.match(monthly, /createIkAdvancedPerson/);
+  assert.match(monthly, /ik-pro-personnel-layout/);
+  assert.match(monthly, /ik-pro-roster-item/);
+  assert.match(monthly, /Detay Personel Tablosunu Aç/);
+  assert.match(monthly, /fourth: "Durum", fifth: "SGK"/);
+  assert.match(css, /ik-pro-personnel-layout/);
+  assert.match(css, /ik-pro-profile-grid/);
+  assert.match(css, /ik-pro-finance-snapshot/);
+});
+
+test("new personnel is blocked in a closed period and duplicate card is checked before save", () => {
+  assert.match(monthly, /Kapalı dönemde yeni personel kartı açılamaz/);
+  assert.match(monthly, /duplicateCard/);
+  assert.match(monthly, /Bu kart numarası başka bir personele bağlı/);
+});
