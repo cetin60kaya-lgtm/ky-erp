@@ -41,7 +41,7 @@ if (shell.MainMenuStrip is null)
 }
 
 var topNames = shell.MainMenuStrip.Items.OfType<ToolStripMenuItem>().Where(x => x.Visible).Select(x => Clean(x.Text)).ToArray();
-var expected = new[] { "Genel", "Operasyon", "Personel", "Puantaj / Bordro", "Raporlar", "Yönetim", "Ayarlar", "Yardım" };
+var expected = new[] { "ANA SAYFA", "İŞLEMLER", "PERSONEL", "PUANTAJ", "BORDRO", "RAPORLAR", "TANIMLAR", "SİSTEM", "YARDIM" };
 foreach (var duplicate in topNames.GroupBy(x => x, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
     errors.Add("Mükerrer üst menu: " + duplicate.Key);
 foreach (var name in expected.Where(x => !topNames.Contains(x, StringComparer.OrdinalIgnoreCase)))
