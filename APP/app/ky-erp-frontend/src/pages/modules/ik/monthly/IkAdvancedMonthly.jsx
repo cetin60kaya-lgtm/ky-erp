@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  createIkAdvancedPerson,
   deleteIkAdvancedFinanceMovement,
   getIkAdvancedAuditLogs,
   getIkAdvancedMonth,
@@ -727,6 +728,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     load({ force: true });
   };
 
+  const openNewPerson = () => {
+    if (data.close?.isLocked) return setNotice("Kapalı dönemde yeni personel kartı açılamaz.");
+    setSelectedId("");
+    setModalDraft(draftPerson({ startDate: istanbulDateKey(), status: "AKTIF" }));
+    setModal("personel");
+  };
+
   const openPerson = (employee = selected) => {
     if (!employee) return setNotice("Personel secilmeden kayit yapilamaz.");
     setSelectedId(employee.id);
@@ -906,61 +914,102 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   };
 
   const savePerson = async () => {
-    if (!modalDraft.fullName?.trim()) return setNotice("Personel adi bos olamaz.");
+    if (!modalDraft.fullName?.trim()) return setNotice("Personel adı boş olamaz.");
     if (!["SGKLI", "SGKSIZ"].includes(modalDraft.sgkFollow)) return setNotice("Bu ay için SGK durumu seçilmelidir.");
     if (modalDraft.sgkFollow === "SGKLI" && (num(modalDraft.sgkDays) < 1 || num(modalDraft.sgkDays) > totalDays)) return setNotice(`SGK gün sayısı 1-${totalDays} arasında olmalıdır.`);
     if (modalDraft.startDate && modalDraft.exitDate && modalDraft.exitDate < modalDraft.startDate) return setNotice("İşten çıkış tarihi işe giriş tarihinden önce olamaz.");
     if (upper(modalDraft.status).includes("PAS") && !modalDraft.exitDate) return setNotice("Pasif personel için işten çıkış tarihi zorunludur.");
-    if (!modalDraft.paymentType) return setNotice("Odeme tipi bos olamaz.");
-    if (num(modalDraft.salary) < 0) return setNotice("Maas negatif olamaz.");
-    if (num(modalDraft.overtimeHourlyBase) <= 0) return setNotice("Mesai saat boleni 0 dan buyuk olmalidir.");
-    if (num(modalDraft.deductionHourlyBase) <= 0) return setNotice("Kesinti saat boleni 0 dan buyuk olmalidir.");
+    if (!modalDraft.paymentType) return setNotice("Ödeme tipi boş olamaz.");
+    if (num(modalDraft.salary) < 0) return setNotice("Maaş negatif olamaz.");
+    if (num(modalDraft.overtimeHourlyBase) <= 0) return setNotice("Mesai saat böleni 0'dan büyük olmalıdır.");
+    if (num(modalDraft.deductionHourlyBase) <= 0) return setNotice("Kesinti saat böleni 0'dan büyük olmalıdır.");
+    if (!modalDraft.id && data.close?.isLocked) return setNotice("Kapalı dönemde yeni personel kartı açılamaz.");
+
+    const normalizedCardNo = String(modalDraft.cardNo || "").trim();
+    const duplicateCard = normalizedCardNo && rawEmployees.some((item) => item.id !== modalDraft.id && String(item.cardNo || "").trim() === normalizedCardNo);
+    if (duplicateCard) return setNotice("Bu kart numarası başka bir personele bağlı.");
+
     const baseEmployee = modalDraft.baseEmployeeId ? rawEmployees.find((item) => item.id === modalDraft.baseEmployeeId) : null;
-    if (modalDraft.baseEmployeeId === modalDraft.id) return setNotice("Personel kendisini baz personel olarak secemez.");
-    if (modalDraft.baseEmployeeId && !baseEmployee) return setNotice("Baz personel bulunamadi.");
-    if (baseEmployee && num(baseEmployee.salary) > num(modalDraft.salary)) return setNotice("Baz personel maasi gercek maastan yuksek olamaz.");
+    if (modalDraft.baseEmployeeId === modalDraft.id) return setNotice("Personel kendisini baz personel olarak seçemez.");
+    if (modalDraft.baseEmployeeId && !baseEmployee) return setNotice("Baz personel bulunamadı.");
+    if (baseEmployee && num(baseEmployee.salary) > num(modalDraft.salary)) return setNotice("Baz personel maaşı gerçek maaştan yüksek olamaz.");
+
     const autoExtra = baseEmployee ? Math.max(round(num(modalDraft.salary) - num(baseEmployee.salary)), 0) : 0;
     const planTotal = num(modalDraft.bankAmount) + num(modalDraft.cashAmount);
-    if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) && !window.confirm("Banka plan + elden plan gercek maas ve yol toplamindan yüksek. Devam edilsin mi?")) return;
+    if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) && !window.confirm("Banka plan + elden plan gerçek maaş ve yol toplamından yüksek. Devam edilsin mi?")) return;
+
+    const cardPayload = {
+      mainCompanyId: companyId,
+      fullName: modalDraft.fullName,
+      personelKodu: modalDraft.code,
+      cardNo: modalDraft.cardNo,
+      identityNo: modalDraft.identityNo,
+      personnelStatus: modalDraft.personnelStatus || "NORMAL",
+      period,
+      year,
+      month,
+      sgkFollow: modalDraft.sgkFollow === "SGKLI",
+      sgkDays: modalDraft.sgkFollow === "SGKLI" ? num(modalDraft.sgkDays) : 0,
+      paymentType: modalDraft.paymentType,
+      salary: num(modalDraft.salary),
+      roadAllowance: num(modalDraft.roadAllowance),
+      bankAmount: num(modalDraft.bankAmount),
+      cashAmount: num(modalDraft.cashAmount),
+      baseEmployeeId: modalDraft.baseEmployeeId || "",
+      extraPaymentLabel: "EK",
+      extraPaymentAmount: autoExtra,
+      overtimeHourlyBase: num(modalDraft.overtimeHourlyBase) || 225,
+      deductionHourlyBase: num(modalDraft.deductionHourlyBase) || 300,
+      payrollIncluded: modalDraft.payrollIncluded !== false,
+      hireDate: modalDraft.startDate,
+      exitDate: modalDraft.exitDate,
+      title: modalDraft.title,
+      department: modalDraft.department,
+      annualLeaveEntitlement: num(modalDraft.annualLeaveEntitlement),
+      annualLeaveCarryover: num(modalDraft.annualLeaveCarryover),
+      activePassive: modalDraft.status,
+      note: modalDraft.note,
+      phone: modalDraft.phone,
+    };
+
     setBusy(true);
+    let createdEmployeeId = "";
     try {
-      await saveIkAdvancedPersonCard(modalDraft.id, {
-        mainCompanyId: companyId,
-        fullName: modalDraft.fullName,
-        personelKodu: modalDraft.code,
-        cardNo: modalDraft.cardNo,
-        identityNo: modalDraft.identityNo,
-        personnelStatus: modalDraft.personnelStatus || "NORMAL",
-        period,
-        year,
-        month,
-        sgkFollow: modalDraft.sgkFollow === "SGKLI",
-        sgkDays: modalDraft.sgkFollow === "SGKLI" ? num(modalDraft.sgkDays) : 0,
-        paymentType: modalDraft.paymentType,
-        salary: num(modalDraft.salary),
-        roadAllowance: num(modalDraft.roadAllowance),
-        bankAmount: num(modalDraft.bankAmount),
-        cashAmount: num(modalDraft.cashAmount),
-        baseEmployeeId: modalDraft.baseEmployeeId || "",
-        extraPaymentLabel: "EK",
-        extraPaymentAmount: autoExtra,
-        overtimeHourlyBase: num(modalDraft.overtimeHourlyBase) || 225,
-        deductionHourlyBase: num(modalDraft.deductionHourlyBase) || 300,
-        payrollIncluded: modalDraft.payrollIncluded !== false,
-        hireDate: modalDraft.startDate,
-        exitDate: modalDraft.exitDate,
-        title: modalDraft.title,
-        department: modalDraft.department,
-        annualLeaveEntitlement: num(modalDraft.annualLeaveEntitlement),
-        annualLeaveCarryover: num(modalDraft.annualLeaveCarryover),
-        activePassive: modalDraft.status,
-        note: modalDraft.note,
-      });
+      let employeeId = modalDraft.id;
+      if (!employeeId) {
+        const created = await createIkAdvancedPerson({
+          mainCompanyId: companyId,
+          fullName: modalDraft.fullName,
+          code: modalDraft.code,
+          department: modalDraft.department,
+          title: modalDraft.title,
+          workType: "AYLIK",
+          sgkStatus: modalDraft.sgkFollow === "SGKLI" ? "VAR" : "YOK",
+          status: modalDraft.status || "AKTIF",
+          hireDate: modalDraft.startDate,
+          salary: num(modalDraft.salary),
+          roadAllowance: num(modalDraft.roadAllowance),
+          bankPaymentType: modalDraft.paymentType,
+          bankAmount: num(modalDraft.bankAmount),
+          cashAmount: num(modalDraft.cashAmount),
+          overtimeHourlyBase: num(modalDraft.overtimeHourlyBase) || 225,
+          annualLeaveEntitlement: num(modalDraft.annualLeaveEntitlement),
+          annualLeaveCarryover: num(modalDraft.annualLeaveCarryover),
+          note: modalDraft.note,
+        });
+        employeeId = created?.id || created?.employeeId || "";
+        createdEmployeeId = employeeId;
+        if (!employeeId) throw new Error("Yeni personel kimliği alınamadı.");
+      }
+
+      await saveIkAdvancedPersonCard(employeeId, cardPayload);
+      setSelectedId(employeeId);
       setModal(null);
-      setNotice("Personel karti kaydedildi.");
+      setNotice(modalDraft.id ? "Personel kartı güncellendi." : "Yeni personel kartı oluşturuldu.");
       await load({ force: true });
     } catch (error) {
-      setNotice(error?.message || "Personel karti kaydedilemedi.");
+      const detail = error?.message || "Personel kartı kaydedilemedi.";
+      setNotice(createdEmployeeId ? `Personel ana kaydı oluştu ancak kart ayrıntıları tamamlanamadı: ${detail}` : detail);
     } finally {
       setBusy(false);
     }
@@ -1817,16 +1866,95 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   }
 
   function renderPersonel() {
+    const profile = filteredEmployees.find((item) => item.id === selected?.id) || filteredEmployees[0] || null;
+    const profileLeave = profile ? employeeLeave(profile) : { annual: 0, balance: 0 };
+    const profileDocs = profile ? docsFor(profile) : [];
+    const initials = (employee) => String(employee?.fullName || "?").trim().split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toLocaleUpperCase("tr-TR");
     return (
       <section>
-        <div className="page-head"><div><h1>Personel Karti</h1><p>Sabit bilgi. Avans, mesai, kesinti ve bordro girisi burada yok.</p></div><button className="btn primary" onClick={() => openPerson()}>Yeni / Detay</button></div>
-        {filters({ third: "Personel ara", fourth: "SGK", fifth: "Odeme" })}
-        <div className="card"><div className="ch"><div><b>Personel Kartlari</b><span>Satirdan Detay / Duzenle / Evrak acilir.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>Kod / Kart No</th><th>İşe Giriş</th><th>İşten Çıkış</th><th>SGK</th><th>Odeme</th><th>Maas</th><th>Yol</th><th>EK</th><th>Banka Plan</th><th>Elden Plan</th><th>Kalan Izin</th><th>Evrak</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{filteredEmployees.map((employee) => {
-          const leave = employeeLeave(employee);
-          const docCount = docsFor(employee).length;
-          return <tr key={employee.id} onClick={() => setSelectedId(employee.id)}><td><span className="person">{employee.fullName}</span><span className="code">{employee.department || "-"}</span></td><td>{employee.code || "-"} / {employee.cardNo || "-"}</td><td><b>{employeeHireDate(employee) || "-"}</b></td><td><b>{employeeExitDate(employee) || "-"}</b></td><td>{sgkLabel(employee)}</td><td>{paymentLabel(employee)}</td><td className="money">{money(employee.salary)}</td><td className="money">{money(employee.roadAllowance)}</td><td className="money">{money(employee.extraPaymentAmount)}</td><td className="money">{money(employee.bankAmount)}</td><td className="money">{money(employee.cashAmount)}</td><td><span className={`badge ${leave.balance < 0 ? "red" : "green"}`}>{leave.balance}</span></td><td><span className={`badge ${docCount ? "green" : "orange"}`}>{docCount ? "Var" : "Eksik"}</span></td><td><span className={`badge ${upper(employee.status || employee.activePassive).includes("PAS") ? "red" : employeeExitDate(employee) ? "orange" : "green"}`}>{employmentPeriodLabel(employee, period)}</span></td><td><button className="btn" onClick={(event) => { event.stopPropagation(); openPerson(employee); }}>Detay</button> <button className="btn" onClick={(event) => { event.stopPropagation(); openPerson(employee); }}>Duzenle</button> <button className="btn" onClick={(event) => { event.stopPropagation(); openDocument(employee); }}>Evrak</button></td></tr>;
-        })}<EmptyRow show={!filteredEmployees.length} colSpan={15} text="Personel bulunamadi." /></tbody></table></div></div>
-        <LogTable title="Personel Islem Loglari" rows={scopedLogs} onEdit={editFromLog} />
+        <div className="page-head">
+          <div><h1>Personel Kartları</h1><p>Özlük, SGK, ücret planı, izin ve evrak durumunu tek personel profili üzerinden yönetin.</p></div>
+          <div className="group"><button className="btn primary" disabled={data.close?.isLocked} onClick={openNewPerson}>Yeni Personel</button></div>
+        </div>
+        {filters({ third: "Personel ara", fourth: "Durum", fifth: "SGK" })}
+
+        <div className="ik-pro-personnel-layout">
+          <aside className="ik-pro-roster card">
+            <div className="ch"><div><b>Personel Listesi</b><span>{filteredEmployees.length} kayıt · seçim yaparak kartı açın</span></div></div>
+            <div className="ik-pro-roster-scroll">
+              {filteredEmployees.map((employee) => {
+                const leave = employeeLeave(employee);
+                const isActive = employee.id === profile?.id;
+                const passive = upper(employee.status || employee.activePassive).includes("PAS");
+                return (
+                  <button type="button" key={employee.id} className={`ik-pro-roster-item ${isActive ? "active" : ""}`} onClick={() => setSelectedId(employee.id)}>
+                    <span className="ik-pro-avatar">{initials(employee)}</span>
+                    <span className="ik-pro-roster-copy">
+                      <b>{employee.fullName}</b>
+                      <small>{employee.department || employee.title || "Bölüm belirtilmemiş"} · {employee.code || "Kod yok"}</small>
+                    </span>
+                    <span className="ik-pro-roster-meta">
+                      <i className={passive ? "danger" : employee.sgkFollow === true ? "success" : "neutral"}>{passive ? "Pasif" : employee.sgkFollow === true ? "SGK" : "SGK dışı"}</i>
+                      <small>{leave.balance} gün izin</small>
+                    </span>
+                  </button>
+                );
+              })}
+              {!filteredEmployees.length && <div className="ik-pro-empty">Filtreye uygun personel bulunamadı.</div>}
+            </div>
+          </aside>
+
+          <div className="ik-pro-profile card">
+            {profile ? <>
+              <div className="ik-pro-profile-head">
+                <span className="ik-pro-avatar large">{initials(profile)}</span>
+                <div>
+                  <div className="ik-pro-profile-name"><h2>{profile.fullName}</h2><span className={`badge ${upper(profile.status || profile.activePassive).includes("PAS") ? "red" : "green"}`}>{employmentPeriodLabel(profile, period)}</span></div>
+                  <p>{profile.title || "Unvan belirtilmemiş"} · {profile.department || "Bölüm belirtilmemiş"} · {profile.code || "Personel kodu yok"}</p>
+                </div>
+                <div className="ik-pro-profile-actions">
+                  <button className="btn primary" onClick={() => openPerson(profile)}>Kartı Düzenle</button>
+                  <button className="btn" onClick={() => openDocument(profile)}>Evrak</button>
+                </div>
+              </div>
+
+              <div className="ik-pro-profile-grid">
+                <div><span>SGK</span><b>{sgkLabel(profile)}</b><small>{profile.sgkFollow === false ? "PDKS dışı" : `${num(profile.sgkDays)} gün`}</small></div>
+                <div><span>İşe Giriş</span><b>{employeeHireDate(profile) || "Eksik"}</b><small>{employeeExitDate(profile) ? `Çıkış: ${employeeExitDate(profile)}` : "Aktif çalışma"}</small></div>
+                <div><span>Ödeme Tipi</span><b>{paymentLabel(profile)}</b><small>Banka + elden planı</small></div>
+                <div><span>Yıllık İzin</span><b>{profileLeave.balance} gün</b><small>{profileLeave.annual} gün kullanılmış</small></div>
+                <div><span>Evrak</span><b>{profileDocs.length} belge</b><small>{profileDocs.length ? "Bağlı evrak var" : "Evrak kontrolü gerekli"}</small></div>
+                <div><span>Kart No</span><b>{profile.cardNo || "—"}</b><small>{profile.phone || "Telefon yok"}</small></div>
+              </div>
+
+              <div className="ik-pro-finance-snapshot">
+                <div><span>Maaş</span><b>{money(profile.salary)}</b></div>
+                <div><span>Yol</span><b>{money(profile.roadAllowance)}</b></div>
+                <div><span>EK</span><b>{money(profile.extraPaymentAmount)}</b></div>
+                <div><span>Banka</span><b>{money(profile.bankAmount)}</b></div>
+                <div><span>Elden</span><b>{money(profile.cashAmount)}</b></div>
+              </div>
+
+              <div className="ik-pro-profile-toolbar">
+                <button className="btn" onClick={() => openPayPlan(profile)}>Ücret Planı</button>
+                <button className="btn" onClick={() => openLeave("yillik", "", profile)}>İzin Gir</button>
+                <button className="btn" onClick={() => { setSelectedId(profile.id); go("hareket"); }}>Mesai / Avans</button>
+                <button className="btn green" onClick={() => { setSelectedId(profile.id); go("bordro"); }}>Bordroya Git</button>
+              </div>
+            </> : <div className="ik-pro-empty profile">Görüntülenecek personel seçin.</div>}
+          </div>
+        </div>
+
+        <details className="ik-pro-detail-table card">
+          <summary>Detay Personel Tablosunu Aç <span>Tüm kolonlar ve teknik kontrol görünümü</span></summary>
+          <div className="tw"><table><thead><tr><th>Personel</th><th>Kod / Kart No</th><th>İşe Giriş</th><th>İşten Çıkış</th><th>SGK</th><th>Ödeme</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Banka Plan</th><th>Elden Plan</th><th>Kalan İzin</th><th>Evrak</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{filteredEmployees.map((employee) => {
+            const leave = employeeLeave(employee);
+            const docCount = docsFor(employee).length;
+            return <tr key={employee.id} onClick={() => setSelectedId(employee.id)}><td><span className="person">{employee.fullName}</span><span className="code">{employee.department || "-"}</span></td><td>{employee.code || "-"} / {employee.cardNo || "-"}</td><td><b>{employeeHireDate(employee) || "-"}</b></td><td><b>{employeeExitDate(employee) || "-"}</b></td><td>{sgkLabel(employee)}</td><td>{paymentLabel(employee)}</td><td className="money">{money(employee.salary)}</td><td className="money">{money(employee.roadAllowance)}</td><td className="money">{money(employee.extraPaymentAmount)}</td><td className="money">{money(employee.bankAmount)}</td><td className="money">{money(employee.cashAmount)}</td><td><span className={`badge ${leave.balance < 0 ? "red" : "green"}`}>{leave.balance}</span></td><td><span className={`badge ${docCount ? "green" : "orange"}`}>{docCount ? "Var" : "Eksik"}</span></td><td><span className={`badge ${upper(employee.status || employee.activePassive).includes("PAS") ? "red" : employeeExitDate(employee) ? "orange" : "green"}`}>{employmentPeriodLabel(employee, period)}</span></td><td><button className="btn" onClick={(event) => { event.stopPropagation(); openPerson(employee); }}>Düzenle</button> <button className="btn" onClick={(event) => { event.stopPropagation(); openDocument(employee); }}>Evrak</button></td></tr>;
+          })}<EmptyRow show={!filteredEmployees.length} colSpan={15} text="Personel bulunamadı." /></tbody></table></div>
+        </details>
+
+        <LogTable title="Personel İşlem Logları" rows={scopedLogs} onEdit={editFromLog} />
       </section>
     );
   }
