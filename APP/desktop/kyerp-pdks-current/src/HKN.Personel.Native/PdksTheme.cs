@@ -251,33 +251,11 @@ public static class PdksTheme
     static void StyleButton(Button b, PdksPalette p)
     {
         b.FlatStyle = FlatStyle.Flat;
-        b.FlatAppearance.BorderColor = p.Border;
-        b.FlatAppearance.BorderSize = 1;
-        b.BackColor = p.Surface;
-        b.ForeColor = p.Text;
         b.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
         b.Cursor = Cursors.Hand;
         b.Padding = new Padding(6, 1, 6, 1);
         if (b.Parent is FlowLayoutPanel) b.MinimumSize = new Size(b.MinimumSize.Width, 30);
-
-        var text = (b.Text ?? string.Empty).Trim();
-        if (IsPrimaryAction(text))
-        {
-            b.BackColor = p.Primary;
-            b.ForeColor = Color.White;
-            b.FlatAppearance.BorderColor = p.Primary;
-        }
-        else if (text.Contains("Sil", StringComparison.OrdinalIgnoreCase) || text.Contains("Çıkart", StringComparison.OrdinalIgnoreCase))
-        {
-            b.BackColor = p.DangerSoft;
-            b.ForeColor = p.Danger;
-            b.FlatAppearance.BorderColor = p.Danger;
-        }
-        else if (text.Contains("Kapat", StringComparison.OrdinalIgnoreCase) || text.Contains("Çıkış", StringComparison.OrdinalIgnoreCase))
-        {
-            b.BackColor = p.SurfaceAlt;
-            b.ForeColor = p.Muted;
-        }
+        PdksUiKit.ApplyButtonPalette(b,p,PdksUiKit.InferRole(b));
     }
 
     static bool IsPrimaryAction(string text) =>
