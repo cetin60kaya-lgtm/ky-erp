@@ -499,3 +499,346 @@
     flex-direction: column;
   }
 }
+
+
+.ik-monthly-pro .ik-pro-personnel-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, .78fr) minmax(0, 1.72fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ik-monthly-pro .ik-pro-roster {
+  min-width: 0;
+}
+
+.ik-monthly-pro .ik-pro-roster-scroll {
+  max-height: 570px;
+  overflow: auto;
+  padding: 5px;
+}
+
+.ik-monthly-pro .ik-pro-roster-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  min-height: 62px;
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--pro-ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ik-monthly-pro .ik-pro-roster-item + .ik-pro-roster-item {
+  margin-top: 3px;
+}
+
+.ik-monthly-pro .ik-pro-roster-item:hover {
+  background: #f5f8fb;
+}
+
+.ik-monthly-pro .ik-pro-roster-item.active {
+  border-color: #b8cef4;
+  background: #eef4ff;
+}
+
+.ik-monthly-pro .ik-pro-avatar {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: #e8eef4;
+  color: #405a73;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.ik-monthly-pro .ik-pro-avatar.large {
+  width: 54px;
+  height: 54px;
+  border-radius: 15px;
+  background: #e8f0ff;
+  color: #245cbd;
+  font-size: 15px;
+}
+
+.ik-monthly-pro .ik-pro-roster-copy,
+.ik-monthly-pro .ik-pro-roster-meta {
+  min-width: 0;
+}
+
+.ik-monthly-pro .ik-pro-roster-copy b,
+.ik-monthly-pro .ik-pro-roster-copy small {
+  display: block;
+}
+
+.ik-monthly-pro .ik-pro-roster-copy b {
+  overflow: hidden;
+  color: #17304a;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ik-monthly-pro .ik-pro-roster-copy small {
+  margin-top: 3px;
+  overflow: hidden;
+  color: #748598;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ik-monthly-pro .ik-pro-roster-meta {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.ik-monthly-pro .ik-pro-roster-meta i {
+  min-width: 47px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #edf1f5;
+  color: #6d7d8d;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 900;
+  text-align: center;
+}
+
+.ik-monthly-pro .ik-pro-roster-meta i.success { background: #e8f7ef; color: #237852; }
+.ik-monthly-pro .ik-pro-roster-meta i.danger { background: #fff0f0; color: #b43d3d; }
+
+.ik-monthly-pro .ik-pro-roster-meta small {
+  color: #8291a1;
+  font-size: 8px;
+}
+
+.ik-monthly-pro .ik-pro-profile {
+  min-width: 0;
+  padding: 16px;
+}
+
+.ik-monthly-pro .ik-pro-profile-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e8eef4;
+}
+
+.ik-monthly-pro .ik-pro-profile-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.ik-monthly-pro .ik-pro-profile-name h2 {
+  margin: 0;
+  color: #142c46;
+  font-size: 19px;
+  letter-spacing: -.015em;
+}
+
+.ik-monthly-pro .ik-pro-profile-head p {
+  margin: 4px 0 0;
+  color: #728398;
+  font-size: 10px;
+}
+
+.ik-monthly-pro .ik-pro-profile-actions,
+.ik-monthly-pro .ik-pro-profile-toolbar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ik-monthly-pro .ik-pro-profile-actions {
+  justify-content: flex-end;
+}
+
+.ik-monthly-pro .ik-pro-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 14px 0;
+}
+
+.ik-monthly-pro .ik-pro-profile-grid > div {
+  min-width: 0;
+  min-height: 72px;
+  padding: 10px 11px;
+  border: 1px solid #e1e9f1;
+  border-radius: 11px;
+  background: #fafcfd;
+}
+
+.ik-monthly-pro .ik-pro-profile-grid span,
+.ik-monthly-pro .ik-pro-profile-grid b,
+.ik-monthly-pro .ik-pro-profile-grid small {
+  display: block;
+}
+
+.ik-monthly-pro .ik-pro-profile-grid span {
+  color: #75869a;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ik-monthly-pro .ik-pro-profile-grid b {
+  margin-top: 5px;
+  overflow: hidden;
+  color: #20384f;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ik-monthly-pro .ik-pro-profile-grid small {
+  margin-top: 3px;
+  overflow: hidden;
+  color: #8795a5;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ik-monthly-pro .ik-pro-finance-snapshot {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0,1fr));
+  overflow: hidden;
+  margin-bottom: 12px;
+  border: 1px solid #dfe7ef;
+  border-radius: 12px;
+}
+
+.ik-monthly-pro .ik-pro-finance-snapshot > div {
+  padding: 11px;
+  border-right: 1px solid #e8eef4;
+  background: #fff;
+}
+
+.ik-monthly-pro .ik-pro-finance-snapshot > div:last-child {
+  border-right: 0;
+}
+
+.ik-monthly-pro .ik-pro-finance-snapshot span,
+.ik-monthly-pro .ik-pro-finance-snapshot b {
+  display: block;
+}
+
+.ik-monthly-pro .ik-pro-finance-snapshot span {
+  color: #7b8b9d;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.ik-monthly-pro .ik-pro-finance-snapshot b {
+  margin-top: 5px;
+  color: #18324b;
+  font-size: 14px;
+}
+
+.ik-monthly-pro .ik-pro-profile-toolbar {
+  padding-top: 2px;
+}
+
+.ik-monthly-pro .ik-pro-empty {
+  padding: 28px 14px;
+  color: #7b8b9b;
+  text-align: center;
+  font-size: 11px;
+}
+
+.ik-monthly-pro .ik-pro-empty.profile {
+  display: grid;
+  min-height: 320px;
+  place-items: center;
+}
+
+.ik-monthly-pro .ik-pro-detail-table {
+  margin-bottom: 10px;
+}
+
+.ik-monthly-pro .ik-pro-detail-table summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  color: #344e66;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ik-monthly-pro .ik-pro-detail-table summary::-webkit-details-marker {
+  display: none;
+}
+
+.ik-monthly-pro .ik-pro-detail-table summary::after {
+  content: "＋";
+  color: #687b8e;
+  font-size: 15px;
+}
+
+.ik-monthly-pro .ik-pro-detail-table[open] summary::after {
+  content: "−";
+}
+
+.ik-monthly-pro .ik-pro-detail-table summary span {
+  margin-left: auto;
+  color: #8795a4;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+@media (max-width: 1050px) {
+  .ik-monthly-pro .ik-pro-personnel-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ik-monthly-pro .ik-pro-roster-scroll {
+    max-height: 310px;
+  }
+}
+
+@media (max-width: 680px) {
+  .ik-monthly-pro .ik-pro-profile-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .ik-monthly-pro .ik-pro-profile-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .ik-monthly-pro .ik-pro-profile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ik-monthly-pro .ik-pro-finance-snapshot {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ik-monthly-pro .ik-pro-finance-snapshot > div {
+    border-bottom: 1px solid #e8eef4;
+  }
+
+  .ik-monthly-pro .ik-pro-detail-table summary span {
+    display: none;
+  }
+}
