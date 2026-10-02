@@ -17,7 +17,7 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
         AutoGenerateColumns=false, SelectionMode=DataGridViewSelectionMode.FullRowSelect,
         MultiSelect=true, BackgroundColor=Color.White, BorderStyle=BorderStyle.FixedSingle
     };
-    readonly Label summary = new() { AutoSize=true, Font=new Font("Segoe UI",9.5f,FontStyle.Bold), ForeColor=Color.FromArgb(31,78,121), Padding=new Padding(8,8,0,0) };
+    readonly Label summary = new() { AutoSize=true, Font=new Font("Segoe UI",9.5f,FontStyle.Bold), ForeColor=PdksAppearance.Current.Primary, Padding=new Padding(8,8,0,0) };
     DataTable data = new();
     bool loading;
 
@@ -26,7 +26,7 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
         Text="Aylık Düzeltme ve Hızlı Ödeme";
         StartPosition=FormStartPosition.CenterParent;
         Width=1500; Height=780; MinimumSize=new Size(1180,650);
-        Font=new Font("Segoe UI",9f); BackColor=Color.FromArgb(244,247,251);
+        Font=new Font("Segoe UI",9f); BackColor=PdksAppearance.Current.Canvas;
         year.Value=DateTime.Today.Year;
         month.Items.AddRange(System.Globalization.CultureInfo.GetCultureInfo("tr-TR").DateTimeFormat.MonthNames.Take(12).Cast<object>().ToArray());
         month.SelectedIndex=DateTime.Today.Month-1;
@@ -54,16 +54,16 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
         AddMoney("EX4","İcra",72,false);
         AddMoney("NCKALAN","Maaş Kalan",94,false);
         AddMoney("FMKALAN","Mesai Kalan",94,false);
-        AddMoney("HAKEDIS_NET","Hak Edilen Net",105,true,Color.FromArgb(240,248,255));
-        AddMoney("PEK_BRUT","Hesaplanan PEK",108,true,Color.FromArgb(243,250,243));
-        AddMoney("RESMI_NET","Resmî Bordro Neti",112,true,Color.FromArgb(243,250,243));
-        AddMoney("FARK","Aradaki Fark",100,true,Color.FromArgb(255,249,229));
-        AddMoney("EX2","Bankaya Ödenecek",112,true,Color.FromArgb(235,246,255));
+        AddMoney("HAKEDIS_NET","Hak Edilen Net",105,true,PdksAppearance.Current.PrimarySoft);
+        AddMoney("PEK_BRUT","Hesaplanan PEK",108,true,PdksAppearance.Current.SurfaceAlt);
+        AddMoney("RESMI_NET","Resmî Bordro Neti",112,true,PdksAppearance.Current.SurfaceAlt);
+        AddMoney("FARK","Aradaki Fark",100,true,PdksAppearance.Current.PrimarySoft);
+        AddMoney("EX2","Bankaya Ödenecek",112,true,PdksAppearance.Current.PrimarySoft);
         AddText("DURUM","Durum",135,true,true);
 
         grid.EnableHeadersVisualStyles=false;
-        grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(225,237,252);
-        grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.FromArgb(20,55,95);
+        grid.ColumnHeadersDefaultCellStyle.BackColor=PdksAppearance.Current.GridHeader;
+        grid.ColumnHeadersDefaultCellStyle.ForeColor=PdksAppearance.Current.Text;
         grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",9f,FontStyle.Bold);
         grid.RowTemplate.Height=28;
         grid.CellBeginEdit+=(_,e)=>{ if(grid.Columns[e.ColumnIndex].ReadOnly) e.Cancel=true; };
@@ -75,22 +75,23 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
 
     void BuildUi()
     {
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,Padding=new Padding(12)};
+        var p=PdksAppearance.Current;
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,Padding=new Padding(14),BackColor=p.Canvas};
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,54)); root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
 
-        var filters=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(4,7,0,0)};
+        var filters=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(12,7,8,0),BackColor=p.Surface};
         filters.Controls.Add(L("Yıl")); filters.Controls.Add(year); filters.Controls.Add(L("Ay")); filters.Controls.Add(month);
         filters.Controls.Add(L("Personel")); filters.Controls.Add(person); filters.Controls.Add(B("Yenile",82,Reload)); filters.Controls.Add(summary);
         root.Controls.Add(filters,0,0);
 
-        var fast=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(4,5,0,0)};
+        var fast=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(12,5,8,0),BackColor=p.Surface};
         fast.Controls.Add(B("Tümünü Seç",92,()=>SetAll(true))); fast.Controls.Add(B("Seçimi Kaldır",104,()=>SetAll(false)));
         fast.Controls.Add(B("Resmî Bordroyu Yenile",160,RecalculateAll));
-        fast.Controls.Add(new Label{Text="Banka tutarı resmî bordro netinden otomatik hesaplanır.",AutoSize=true,Padding=new Padding(12,7,0,0),ForeColor=Color.FromArgb(65,82,103)});
+        fast.Controls.Add(new Label{Text="Banka tutarı resmî bordro netinden otomatik hesaplanır.",AutoSize=true,Padding=new Padding(12,7,0,0),ForeColor=p.Muted});
         root.Controls.Add(fast,0,1); root.Controls.Add(grid,0,2);
 
-        var bottom=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,WrapContents=false,Padding=new Padding(0,8,0,0)};
+        var bottom=PdksUiKit.ActionBar(true,p.Canvas);
         var save=B("Ayı Kaydet",130,SaveMonth); Primary(save); bottom.Controls.Add(save);
         var pay=B("Seçili Ödemeleri İşle",165,PostSelectedPayments); Primary(pay); bottom.Controls.Add(pay);
         bottom.Controls.Add(B("Kapat",90,Close));
@@ -100,9 +101,22 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
     void AddCheck(string name,string header,int width)=>grid.Columns.Add(new DataGridViewCheckBoxColumn{Name=name,HeaderText=header,DataPropertyName=name,Width=width});
     void AddText(string name,string header,int width,bool readOnly,bool fill=false)=>grid.Columns.Add(new DataGridViewTextBoxColumn{Name=name,HeaderText=header,DataPropertyName=name,Width=width,ReadOnly=readOnly,AutoSizeMode=fill?DataGridViewAutoSizeColumnMode.Fill:DataGridViewAutoSizeColumnMode.None});
     void AddMoney(string name,string header,int width,bool readOnly,Color? back=null)=>grid.Columns.Add(new DataGridViewTextBoxColumn{Name=name,HeaderText=header,DataPropertyName=name,Width=width,ReadOnly=readOnly,DefaultCellStyle=new DataGridViewCellStyle{Format="N2",Alignment=DataGridViewContentAlignment.MiddleRight,BackColor=back??Color.White}});
-    static Label L(string text)=>new(){Text=text,AutoSize=true,Padding=new Padding(4,7,3,0)};
-    Button B(string text,int width,Action action){var b=new Button{Text=text,Width=width,Height=32,Margin=new Padding(4,0,4,0),Font=new Font("Segoe UI",9f,FontStyle.Bold),FlatStyle=FlatStyle.Flat,BackColor=Color.White};b.FlatAppearance.BorderColor=Color.FromArgb(190,205,224);b.Click+=(_,_)=>action();return b;}
-    static void Primary(Button b){b.BackColor=Color.FromArgb(31,111,235);b.ForeColor=Color.White;b.FlatAppearance.BorderSize=0;}
+    static Label L(string text)=>new(){Text=text,AutoSize=true,Padding=new Padding(4,7,3,0),ForeColor=PdksAppearance.Current.Muted};
+    Button B(string text,int width,Action action)
+    {
+        var role=text.Contains("Kaydet",StringComparison.OrdinalIgnoreCase) ||
+                 text.Contains("Ödemeleri İşle",StringComparison.OrdinalIgnoreCase) ||
+                 text.Contains("Yenile",StringComparison.OrdinalIgnoreCase)
+            ? PdksActionRole.Primary
+            : text.Contains("Kapat",StringComparison.OrdinalIgnoreCase)
+                ? PdksActionRole.Quiet
+                : PdksActionRole.Secondary;
+        var b=PdksUiKit.Button(text,width,role,action);
+        b.Height=32;b.MinimumSize=new Size(width,32);b.MaximumSize=new Size(width,32);
+        b.Margin=new Padding(4,0,4,0);
+        return b;
+    }
+    static void Primary(Button b)=>PdksUiKit.ApplyButtonPalette(b,PdksAppearance.Current,PdksActionRole.Primary);
 
     (DateTime A,DateTime B) Period(){var a=new DateTime((int)year.Value,month.SelectedIndex+1,1);return(a,a.AddMonths(1).AddDays(-1));}
 
@@ -192,8 +206,12 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
 
     void GridCellFormatting(object? s,DataGridViewCellFormattingEventArgs e)
     {
-        if(e.RowIndex<0)return;var row=grid.Rows[e.RowIndex];var durum=Convert.ToString(row.Cells["DURUM"].Value)??"";
-        row.DefaultCellStyle.BackColor=durum=="Hata"?Color.FromArgb(255,232,232):durum=="Değişti"?Color.FromArgb(255,248,220):Color.White;
+        if(e.RowIndex<0)return;
+        var p=PdksAppearance.Current;
+        var row=grid.Rows[e.RowIndex];
+        var durum=Convert.ToString(row.Cells["DURUM"].Value)??"";
+        row.DefaultCellStyle.BackColor=durum=="Hata"?p.DangerSoft:durum=="Değişti"?p.PrimarySoft:p.Surface;
+        row.DefaultCellStyle.ForeColor=p.Text;
     }
 
     static decimal Dec(DataRow r,string c){if(!r.Table.Columns.Contains(c)||r[c]==DBNull.Value)return 0;try{return Convert.ToDecimal(r[c]);}catch{return decimal.TryParse(Convert.ToString(r[c]),out var x)?x:0;}}
