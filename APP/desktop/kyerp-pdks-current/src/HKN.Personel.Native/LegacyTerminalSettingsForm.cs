@@ -269,7 +269,7 @@ public sealed class LegacyTerminalSettingsForm : Form
         catch (Exception ex)
         {
             SetStatus("Bağlantı hatası • " + ex.GetBaseException().Message, false);
-            if (showMessage) MessageBox.Show(ex.GetBaseException().Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (showMessage) PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Terminal.Connection");
         }
     }
 
