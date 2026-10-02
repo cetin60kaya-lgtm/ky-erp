@@ -27,20 +27,30 @@ Application.DoEvents();
 Thread.Sleep(250);
 Application.DoEvents();
 
-var menus = form.MainMenuStrip!.Items.Cast<ToolStripItem>()
-    .Where(x => x.Alignment != ToolStripItemAlignment.Right)
-    .Select(x => x.Text ?? string.Empty)
-    .ToArray();
-foreach (var required in new[] { "ANA SAYFA", "İŞLEMLER", "PERSONEL", "PUANTAJ", "BORDRO", "RAPORLAR", "TANIMLAR", "SİSTEM", "YARDIM" })
-    if (!menus.Contains(required)) throw new InvalidOperationException("Ana menü eksik: " + required);
+var primary = PdksCommandCatalog.Primary.ToArray();
+var expectedPrimary = new[] { "Genel Bakış", "Canlı Denetim", "Giriş / Çıkış", "Personel", "Puantaj", "Bordro", "Raporlar", "Tanımlar", "Terminal" };
+if (!primary.Select(x=>x.Title).SequenceEqual(expectedPrimary))
+    throw new InvalidOperationException("Modern ana navigasyon sırası bozulmuş.");
 
-if (menus.Distinct(StringComparer.OrdinalIgnoreCase).Count() != menus.Length)
-    throw new InvalidOperationException("Ana menüde mükerrer üst başlık var.");
+if (PdksCommandCatalog.All.Select(x=>x.Id).Distinct().Count() != PdksCommandCatalog.All.Count)
+    throw new InvalidOperationException("Komut kataloğunda mükerrer komut var.");
 
-var toolbar = form.Controls.OfType<ToolStrip>().First(x => x is not MenuStrip && x is not StatusStrip);
-var toolNames = toolbar.Items.OfType<ToolStripButton>().Select(x => x.Text ?? string.Empty).ToArray();
-foreach (var required in new[] { "Ana Sayfa", "Canlı", "Giriş / Çıkış", "Personel", "Puantaj", "Bordro" })
-    if (!toolNames.Contains(required)) throw new InvalidOperationException("Araç çubuğu eksik: " + required);
+var shellButtons = Descendants(form).OfType<Button>().Select(x => x.Text ?? string.Empty).ToArray();
+foreach (var required in expectedPrimary)
+    if (!shellButtons.Contains(required)) throw new InvalidOperationException("Modern navigasyon eksik: " + required);
+foreach (var required in new[] { "Yönetim", $"Tema • {PdksAppearance.ModeLabel}" })
+    if (!shellButtons.Contains(required)) throw new InvalidOperationException("Kabuk komutu eksik: " + required);
+
+if (form.MainMenuStrip is null || form.MainMenuStrip.Visible)
+    throw new InvalidOperationException("Eski menü görünür olmamalı.");
+
+var legacyToolbar = form.Controls.OfType<ToolStrip>().First(x => x is not MenuStrip && x is not StatusStrip);
+if (legacyToolbar.Visible || legacyToolbar.Items.Count != 0)
+    throw new InvalidOperationException("Eski araç çubuğu aktif olmamalı.");
+
+var palette = PdksAppearance.Current;
+if (palette.Primary == palette.Canvas)
+    throw new InvalidOperationException("Tema vurgu rengi tuval renginden ayrı olmalı.");
 
 using (var settings = new LegacyTerminalSettingsForm())
 {
