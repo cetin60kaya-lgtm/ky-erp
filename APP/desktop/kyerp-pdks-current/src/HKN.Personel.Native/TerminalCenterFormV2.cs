@@ -151,7 +151,7 @@ public sealed class TerminalCenterForm : Form
         catch (Exception ex)
         {
             SetStatus("Cihaz kontrol hatası — " + ex.GetBaseException().Message, false);
-            if (showDialog) MessageBox.Show(ex.GetBaseException().Message, "Kart Cihazı", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            if (showDialog) PdksErrorPresenter.Show(this,ex,"Kart Cihazı",MessageBoxIcon.Error,"TerminalCenter.Test");
         }
         finally { busy = false; }
     }
@@ -223,7 +223,7 @@ public sealed class TerminalCenterForm : Form
         catch (Exception ex)
         {
             SetStatus("Aktarım hatası — " + ex.GetBaseException().Message, false);
-            MessageBox.Show(ex.GetBaseException().Message, "Terminal Aktarımı", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            PdksErrorPresenter.Show(this,ex,"Terminal Aktarımı",MessageBoxIcon.Error,"TerminalCenter.Transfer");
         }
         finally { busy = false; }
     }
