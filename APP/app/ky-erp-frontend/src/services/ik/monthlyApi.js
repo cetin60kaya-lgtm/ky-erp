@@ -132,18 +132,6 @@ export async function confirmIkAdvancedSgk(payload = {}) {
   return unwrap(await apiPost("/ik/advanced/sgk/confirm", payload));
 }
 
-export async function previewIkAdvancedCard(file, params = {}) {
-  const form = new FormData();
-  form.append("file", file);
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") form.append(key, value);
-  });
-  return unwrap(await apiUpload("/ik/advanced/card/preview", form));
-}
-
-export async function confirmIkAdvancedCard(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/card/confirm", payload));
-}
 
 export async function runIkAdvancedCloseCheck(payload = {}) {
   return postAndPublish("/ik/advanced/close-check", payload, "close-check");
