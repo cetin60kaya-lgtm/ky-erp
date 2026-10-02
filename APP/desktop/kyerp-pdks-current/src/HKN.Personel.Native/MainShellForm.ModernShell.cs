@@ -45,7 +45,7 @@ public sealed partial class MainShellForm
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 2,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
             BackColor = p.Canvas
@@ -131,7 +131,7 @@ public sealed partial class MainShellForm
         };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute,72));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute,102));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute,84));
 
         var brand = new Panel { Dock = DockStyle.Fill, BackColor = p.Sidebar };
         var badge = new RoundedLabel
@@ -195,7 +195,6 @@ public sealed partial class MainShellForm
         };
         bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        bottom.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var manage=CompactButton("Yönetim",PdksToolbarIcon.Groups);
         manage.Click+=(_,_)=>ShowManagementCenter();
@@ -203,15 +202,6 @@ public sealed partial class MainShellForm
         theme.Click+=(_,_)=>OpenThemeSettings();
         bottom.Controls.Add(manage,0,0);
         bottom.Controls.Add(theme,0,1);
-        bottom.Controls.Add(new Label
-        {
-            Text = $"v6.4  •  {PdksAppearance.AccentLabel}",
-            Dock = DockStyle.Fill,
-            ForeColor = p.SidebarMuted,
-            Font = new Font("Segoe UI", 7.8f),
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(10, 2, 0, 0)
-        }, 0, 2);
         layout.Controls.Add(bottom,0,2);
 
         sidebar.Controls.Add(layout);
