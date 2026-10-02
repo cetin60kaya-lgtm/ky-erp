@@ -125,6 +125,8 @@ public sealed class ThemeSettingsForm : Form
         var selectedMode=mode.SelectedIndex==1?PdksThemeMode.Dark:PdksThemeMode.Light;
         PdksAppearance.Set(selectedMode,selectedAccent);
         PdksTheme.ReapplyOpenForms();
+        DialogResult=DialogResult.OK;
+        Close();
     }
 
     static Label Label(string text)=>new(){Text=text,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",8.7f,FontStyle.Bold),ForeColor=PdksAppearance.Current.Muted};
