@@ -128,19 +128,9 @@ public sealed class LegacyBordroForm : Form
 
     static Button Btn(string text, Action action, int width, bool primary = false)
     {
-        var b = new Button
-        {
-            Text = text,
-            Width = width,
-            Height = 34,
-            Margin = new Padding(10, 0, 0, 0),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = primary ? Color.FromArgb(31, 111, 235) : Color.White,
-            ForeColor = primary ? Color.White : Color.FromArgb(35, 61, 90),
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold)
-        };
-        b.FlatAppearance.BorderColor = primary ? Color.FromArgb(31, 111, 235) : Color.FromArgb(211, 220, 233);
-        b.Click += (_, _) => action();
+        var role=primary?PdksActionRole.Primary:(text.Contains("Kapat",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Quiet:PdksActionRole.Secondary);
+        var b=PdksUiKit.Button(text,width,role,action);
+        b.Margin=new Padding(10,0,0,0);
         return b;
     }
 
