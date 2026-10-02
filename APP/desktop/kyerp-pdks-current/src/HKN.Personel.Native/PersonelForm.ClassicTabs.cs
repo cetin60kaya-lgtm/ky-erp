@@ -8,9 +8,9 @@ public partial class PersonelForm
     readonly TextBox odHours=Box(),odDays=Box(),odNormal=Box(),odEkKes=Box(),odEkKaz=Box(),odYol=Box(),odYemek=Box(),odDevir=Box(),odOdenecek=Box(),odOdenen=Box(),odKalan=Box(),odMesai=Box(),odOdenenMesai=Box(),odKalanMesai=Box();
     static TextBox Box()=>new(){ReadOnly=true,BorderStyle=BorderStyle.FixedSingle,TextAlign=HorizontalAlignment.Right,Dock=DockStyle.Fill,Margin=Padding.Empty};
 
-    TabPage BuildGirisClassic()=>BuildPeriodGridClassic("Giriş ve Çıkışları",periodG,gFrom,gTo,gGiris);
+    TabPage BuildGirisClassic()=>BuildPeriodGridClassic("Giriş / Çıkış",periodG,gFrom,gTo,gGiris);
     TabPage BuildIzinClassic()=>BuildPeriodGridClassic("İzinler",periodI,iFrom,iTo,gIzin);
-    TabPage BuildEkkClassic()=>BuildPeriodGridClassic("Ek Kazanç Ve Kesintiler",periodE,eFrom,eTo,gEkk);
+    TabPage BuildEkkClassic()=>BuildPeriodGridClassic("Kazanç / Kesinti",periodE,eFrom,eTo,gEkk);
 
     TabPage BuildPeriodGridClassic(string title,ComboBox per,DateTimePicker from,DateTimePicker to,DataGridView grid)
     {
@@ -34,7 +34,7 @@ public partial class PersonelForm
 
     TabPage BuildBilgiClassic()
     {
-        var page=new TabPage("Bilgi");var lay=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2};lay.RowStyles.Add(new RowStyle(SizeType.Absolute,66));lay.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        var page=new TabPage("Puantaj Bilgisi");var lay=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2};lay.RowStyles.Add(new RowStyle(SizeType.Absolute,66));lay.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         var top=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=2,Padding=new Padding(6,5,6,2)};top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,70));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,205));top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));
         top.Controls.Add(new Label{Text="Dönem Adı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,0);periodB.Dock=DockStyle.Fill;top.Controls.Add(periodB,1,0);bilgiType.Items.AddRange(new object[]{"Tümü","Normal Çalışma","Mesai","Devamsızlık","Geç Kalma","Eksik Süre"});bilgiType.SelectedIndex=0;bilgiType.SelectedIndexChanged+=(_,_)=>ApplyTimesheetFilter();top.Controls.Add(bilgiType,3,0);
         top.Controls.Add(new Label{Text="Tarih Aralığı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,1);var dates=new Label{Text="",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};top.Controls.Add(dates,1,1);top.SetColumnSpan(dates,2);void upd(){var d=PeriodDates(periodB);dates.Text=$"{d.A:dd.MM.yyyy}     ile     {d.B:dd.MM.yyyy}";}periodB.SelectedIndexChanged+=(_,_)=>upd();var show=new Button{Text="Seçili Tarihi Göster",Dock=DockStyle.Fill,ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold),Image=ClassicGlyph("Göster"),ImageAlign=ContentAlignment.MiddleLeft};show.Click+=(_,_)=>RefreshFullTabs();top.Controls.Add(show,3,1);
