@@ -804,8 +804,21 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (modalDraft.action === "REPORT") { setSelectedPayrollIds(groupRows.map((row) => row.employee.id)); setModal(null); setTimeout(printPayrollReport, 0); return; }
     setBusy(true);
     try {
+      for (const row of groupRows) {
+        await saveIkAdvancedFinalPayrollControl({
+          mainCompanyId: companyId, year, month, employeeId: row.employee.id,
+          salary: row.salary, road: row.road, extra: row.extra, overtime: row.overtime,
+          advance: row.advance, deduction: row.deduction, garnishment: row.garnishment,
+          bank: row.bank, cash: row.cash,
+          advanceSource: row.advanceSource || "Elden",
+          deductionSource: row.deductionSource || "Elden",
+          garnishmentSource: row.garnishmentSource === "ELDEN" ? "Elden" : "Banka",
+          legalType: row.legalType === "HACIZ" ? "HACIZ" : "ICRA",
+          reason: modalDraft.note || `Odeme oncesi bordro sabitleme: ${modalDraft.paymentDate}`,
+        });
+      }
       await saveIkAdvancedPayrollLines({ mainCompanyId: companyId, year, month, employeeIds: groupRows.map((row) => row.employee.id), status: "PAID", reason: modalDraft.note || `Odeme tamamlandi: ${modalDraft.paymentDate}` });
-      setModal(null); setNotice(`${groupRows.length} personelin odeme durumu tamamlandi olarak kaydedildi.`); await load({ force: true });
+      setModal(null); setNotice(`${groupRows.length} personelin bordrosu sabitlendi ve odeme durumu tamamlandi olarak kaydedildi.`); await load({ force: true, prepare: true });
     } catch (error) { setNotice(error?.message || "Toplu odeme islemi kaydedilemedi."); } finally { setBusy(false); }
   };
 
@@ -1196,11 +1209,26 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   };
 
   const savePayroll = async () => {
+    const rows = payrollRows.filter((row) => !selectedPayrollIds.length || selectedPayrollIds.includes(row.employee.id));
+    if (!rows.length) return setNotice("Kaydedilecek bordro satırı bulunamadı.");
     setBusy(true);
     try {
-      await saveIkAdvancedPayrollLines({ mainCompanyId: companyId, year, month, employeeIds: selectedPayrollIds.length ? selectedPayrollIds : undefined, status: "CALCULATED", reason: "Bordro kaydi" });
-      setNotice("Bordro satirlari kaydedildi.");
-      await load({ force: true });
+      for (const row of rows) {
+        await saveIkAdvancedFinalPayrollControl({
+          mainCompanyId: companyId, year, month, employeeId: row.employee.id,
+          salary: row.salary, road: row.road, extra: row.extra, overtime: row.overtime,
+          advance: row.advance, deduction: row.deduction, garnishment: row.garnishment,
+          bank: row.bank, cash: row.cash,
+          advanceSource: row.advanceSource || "Elden",
+          deductionSource: row.deductionSource || "Elden",
+          garnishmentSource: row.garnishmentSource === "ELDEN" ? "Elden" : "Banka",
+          legalType: row.legalType === "HACIZ" ? "HACIZ" : "ICRA",
+          reason: "Aylık bordro sabitleme",
+        });
+      }
+      await saveIkAdvancedPayrollLines({ mainCompanyId: companyId, year, month, employeeIds: rows.map((row) => row.employee.id), status: "CALCULATED", reason: "Bordro kaydı" });
+      setNotice(`${rows.length} personelin bordrosu seçili dönem değerleriyle sabitlendi.`);
+      await load({ force: true, prepare: true });
     } catch (error) {
       setNotice(error?.message || "Bordro kaydedilemedi.");
     } finally {
