@@ -83,7 +83,9 @@ foreach (var job in jobs)
     {
         using var form = job.Factory();
         PdksTheme.Apply(form);
-        if (noLoad || job.Name.StartsWith("30-Rapor-", StringComparison.Ordinal))
+        if (noLoad ||
+            job.Name.StartsWith("30-Rapor-", StringComparison.Ordinal) ||
+            job.Name.Equals("14-RaporMerkezi", StringComparison.Ordinal))
             CaptureFormNoLoad(form, job.Name, root, log, errors);
         else
             CaptureForm(form, job.Name, root, log, errors, visibleAudit);
