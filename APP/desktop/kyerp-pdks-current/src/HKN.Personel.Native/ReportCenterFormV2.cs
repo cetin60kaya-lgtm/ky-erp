@@ -201,9 +201,22 @@ public sealed class ReportCenterForm : Form
                 else if (c.Width < 70) c.Width = 90;
             }
             GridLayoutPersistence.Apply(grid, "report-center");
+            summary.ForeColor = PdksAppearance.Current.Muted;
             summary.Text = $"{data.Rows.Count} kayıt";
         }
-        catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (Exception ex)
+        {
+            data = new DataTable();
+            grid.DataSource = data;
+            summary.Text = "Rapor alınamadı • " + FriendlyError(ex);
+            summary.ForeColor = PdksAppearance.Current.Danger;
+        }
+    }
+
+    static string FriendlyError(Exception ex)
+    {
+        var text = ex.Message.Replace("\r"," ").Replace("\n"," ").Trim();
+        return text.Length <= 140 ? text : text[..137] + "...";
     }
 
     DataTable ReportQuery(string sql, params FbParameter[] parameters)
