@@ -816,10 +816,18 @@ async function createSalaryContract(c: Context<AppEnv>) {
 
 export function advancedEmployeeVisible(employee: Row, card: Row, period: string) {
   if (card.payroll_included !== undefined && card.payroll_included !== null && !flag(card.payroll_included)) return false;
+  const year = number(period.slice(0, 4));
+  const month = number(period.slice(5, 7));
+  if (!year || month < 1 || month > 12) return false;
+  const periodStart = `${period}-01`;
+  const periodEnd = `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
+  const hireDate = hrDateOnly(employee.hireDate || employee.startDate || employee.hire_date);
+  const exitDate = hrDateOnly(card.exit_date || employee.exitDate || employee.exit_date);
+  if (hireDate && hireDate > periodEnd) return false;
+  if (exitDate && exitDate < periodStart) return false;
   const status = upper(`${text(card.active_passive)} ${text(employee.status)}`);
-  if (!status.includes("PAS")) return true;
-  const exitPeriod = hrDateOnly(card.exit_date).slice(0, 7);
-  return Boolean(exitPeriod && exitPeriod === period);
+  if (status.includes("PAS") && !exitDate) return false;
+  return true;
 }
 
 const IK_MONTH_PREPARED_ENTITY = "IK_DONEM";
