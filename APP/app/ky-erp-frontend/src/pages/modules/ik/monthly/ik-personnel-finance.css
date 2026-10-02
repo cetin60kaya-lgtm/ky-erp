@@ -108,3 +108,24 @@
 .ikpf-focus-ucret .ikpf-stat strong{color:#0f6659}
 .ikpf-focus-personel .ikpf-person-head{background:#f8fbff;border:1px solid #e1e9f2;border-radius:10px;padding:10px}
 @media(max-width:900px){.ikpf-focus-personel.ikpf-editing .ikpf-person-card,.ikpf-focus-ucret.ikpf-editing .ikpf-finance-card,.ikpf-new-open .ikpf-new{left:3vw;right:3vw;top:5vh;max-height:90vh}.ikpf-editing .ikpf-actions{right:6vw;top:7vh}.ikpf-focus-ucret .ikpf-stats{grid-template-columns:repeat(2,1fr)}}
+
+
+/* IK PERSONEL MASTER - SGK/PDKS AYRIMI 2026-10-02 */
+.ikpf-roster-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 11px;border-bottom:1px solid #e6edf5;background:#f8fbff}
+.ikpf-roster-head>div{display:flex;flex-direction:column;gap:2px}
+.ikpf-roster-head strong{font-size:11px;color:#173b70}
+.ikpf-roster-head span{font-size:8.5px;color:#718198}
+.ikpf-roster-head>b{min-width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:#173b70;color:#fff;font-size:12px}
+.ikpf-sgk-filter{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:5px;padding:0 8px 8px;border-bottom:1px solid #e6edf5}
+.ikpf-sgk-filter button{border:1px solid #d6dfeb;background:#fff;border-radius:6px;padding:6px 5px;font-size:9px;font-weight:800;cursor:pointer;color:#43546a}
+.ikpf-sgk-filter button.active{background:#eaf2ff;border-color:#8fb4eb;color:#173b70}
+.ikpf-list-count{padding:5px 9px;background:#fbfcfe;border-bottom:1px solid #edf1f6;color:#718198;font-size:8.5px;font-weight:800}
+.ikpf-list{max-height:calc(100vh - 355px);min-height:420px;overflow-y:auto;scrollbar-gutter:stable}
+.ikpf-list>button{padding:6px 8px;min-height:42px}
+.ikpf-list>button>b{width:28px;height:28px}
+.ikpf-list em.no-sgk{color:#986000}
+.ikpf-people{border:1px solid #dfe7f1;border-radius:9px;background:#fff}
+@media(max-width:900px){
+  .ikpf-list{max-height:420px;min-height:280px}
+  .ikpf-sgk-filter{grid-template-columns:1fr 1fr 1fr}
+}
