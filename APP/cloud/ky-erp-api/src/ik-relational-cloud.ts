@@ -1111,8 +1111,10 @@ async function advancedPayroll(c: Context<AppEnv>) {
     const systemBank = Math.min(baseNet, Math.max(number(employee.bankAmount) - bankDeductions, 0));
     const systemCash = Math.max(baseNet - systemBank, 0);
     const systemFinal = { salaryPay: baseSalary, roadPay: number(employee.roadAllowance), overtimeAmount: overtime, premiumAmount: extra, garnishmentAmount: garnishment, deductionAmount: deduction, advanceAmount: advance, bank: systemBank, cash: systemCash, total: baseNet };
-    const final = row && upper(row.status) === "OVERRIDE" ? { salaryPay: row.salary, roadPay: row.roadAllowance, overtimeAmount: row.overtimeAmount, premiumAmount: row.premiumAmount, garnishmentAmount: row.garnishmentAmount, deductionAmount: row.deductionAmount, advanceAmount: row.advanceAmount, bank: row.bankAmount, cash: row.cashAmount, total: row.totalAmount } : systemFinal;
-    return { employeeId: employee.id, code: employee.code, fullName: employee.fullName, department: employee.department, system: systemFinal, final, status: row && upper(row.status) === "OVERRIDE" ? "OVERRIDE" : "SYSTEM" };
+    const savedStatus = upper(row?.status);
+    const hasSavedFinal = Boolean(row && ["OVERRIDE", "CALCULATED", "PAID"].includes(savedStatus));
+    const final = hasSavedFinal ? { salaryPay: row.salary, roadPay: row.roadAllowance, overtimeAmount: row.overtimeAmount, premiumAmount: row.premiumAmount, garnishmentAmount: row.garnishmentAmount, deductionAmount: row.deductionAmount, advanceAmount: row.advanceAmount, bank: row.bankAmount, cash: row.cashAmount, total: row.totalAmount } : systemFinal;
+    return { employeeId: employee.id, code: employee.code, fullName: employee.fullName, department: employee.department, system: systemFinal, final, status: hasSavedFinal ? savedStatus : "SYSTEM" };
   });
   const totals = lines.reduce((sum, row) => ({ bank: sum.bank + number(row.final.bank), cash: sum.cash + number(row.final.cash), total: sum.total + number(row.final.total) }), { bank: 0, cash: 0, total: 0 });
   return okData(c, { year, month, policy: { roadByActualPresence: true, defaultOvertimeBase: 225, advanceFirstFromCash: false, deductionRespectsSource: true, legalDeductionsAreMovements: true }, lines, totals });
@@ -1370,7 +1372,10 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   const legalType = upper(body.legalType) === "HACIZ" ? "Haciz" : "Icra";
   pushCorrection("garnishment", `${legalType} - Son Bordro Düzeltme`, text(body.garnishmentSource) || "Banka");
 
-  const existing = await first(c, "SELECT id,created_at FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND employee_id=? LIMIT 1", [companyId, year, month, employeeId]);
+  const existing = await first(c, "SELECT id,status,created_at FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND employee_id=? LIMIT 1", [companyId, year, month, employeeId]);
+  if (upper(existing?.status) === "PAID") {
+    return error(c, 409, "PAYROLL_PAID_LOCKED", "Ödemesi tamamlanmış bordro doğrudan değiştirilemez. Önce ödeme kaydını yetkili işlemle geri açın.");
+  }
   const payrollId = text(existing?.id) || crypto.randomUUID();
   statements.push(
     c.env.DB.prepare(`INSERT INTO hr_payrolls_v2
@@ -1401,6 +1406,91 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     details: { reason, current, desired, net, correctionIds },
   });
   return okData(c, { employeeId, period, current, final: { ...desired, total: net }, correctionIds });
+}
+
+
+async function saveAdvancedPayrollLines(c: Context<AppEnv>) {
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c, body);
+  const year = number(body.year) || new Date().getFullYear();
+  const month = number(body.month) || new Date().getMonth() + 1;
+  const period = `${year}-${String(month).padStart(2, "0")}`;
+  const employeeIds = Array.isArray(body.employeeIds) ? [...new Set(body.employeeIds.map(text).filter(Boolean))] : [];
+  if (!employeeIds.length) return error(c, 400, "EMPLOYEE_REQUIRED", "Bordro kaydı için en az bir personel seçilmelidir.");
+  const requested = upper(body.status || "CALCULATED");
+  const status = requested === "PAID" ? "PAID" : "CALCULATED";
+  const placeholders = employeeIds.map(() => "?").join(",");
+  const rows = await all(c, `SELECT id,employee_id,status FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND employee_id IN (${placeholders})`, [companyId, year, month, ...employeeIds]);
+  const existingIds = new Set(rows.map((row) => text(row.employee_id)));
+  const missing = employeeIds.filter((id) => !existingIds.has(id));
+  if (missing.length) {
+    return error(c, 409, "PAYROLL_NOT_FROZEN", `${missing.length} personelin bordrosu henüz sabitlenmemiş. Önce Son Kontrol/Kaydet işlemi yapılmalıdır.`);
+  }
+  const timestamp = nowIso();
+  await c.env.DB.batch(rows.map((row) => c.env.DB.prepare("UPDATE hr_payrolls_v2 SET status=?,updated_at=? WHERE id=?").bind(status, timestamp, text(row.id))));
+  await audit(c, {
+    mainCompanyId: companyId,
+    period,
+    entityType: "BORDRO",
+    action: status === "PAID" ? "PAYMENT_COMPLETE" : "PAYROLL_SAVE",
+    summary: status === "PAID" ? `${rows.length} personelin ödemesi tamamlandı.` : `${rows.length} personelin bordrosu sabitlendi.`,
+    details: { employeeIds, status, reason: text(body.reason) },
+  });
+  return okData(c, { year, month, period, employeeIds, status, count: rows.length });
+}
+
+async function saveAdvancedSettlementDraft(c: Context<AppEnv>) {
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c, body);
+  const employeeId = text(body.employeeId);
+  const year = number(body.year) || new Date().getFullYear();
+  const month = number(body.month) || new Date().getMonth() + 1;
+  if (!(await employeeBelongsToCompany(c, employeeId, companyId))) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
+  const period = `${year}-${String(month).padStart(2, "0")}`;
+  const id = crypto.randomUUID();
+  await audit(c, {
+    mainCompanyId: companyId,
+    period,
+    employeeId,
+    entityType: "KIDEM_AYRILIS",
+    action: "DRAFT",
+    summary: "Kıdem / ayrılış taslağı oluşturuldu.",
+    details: { id, reason: text(body.reason) || "Kıdem / ayrılış taslağı" },
+  });
+  return okData(c, { id, employeeId, period, status: "DRAFT" }, 201);
+}
+
+async function runAdvancedCloseCheck(c: Context<AppEnv>) {
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c, body);
+  const year = number(body.year) || new Date().getFullYear();
+  const month = number(body.month) || new Date().getMonth() + 1;
+  const period = `${year}-${String(month).padStart(2, "0")}`;
+  const periodEnd = `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
+  const [employees, cards, payroll] = await Promise.all([
+    monthlyRows(c, companyId),
+    all(c, "SELECT employee_id,payroll_included,active_passive,exit_date FROM ik_person_card_settings WHERE main_company_id=?", [companyId]),
+    all(c, "SELECT * FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=?", [companyId, year, month]),
+  ]);
+  const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
+  const visible = employees.filter((employee) => advancedEmployeeVisible(employee, cardsByEmployee.get(text(employee.id)) || {}, period));
+  const payrollByEmployee = new Map(payroll.map((row) => [text(row.employee_id), row]));
+  const missingPayroll = visible.filter((employee) => !payrollByEmployee.has(text(employee.id)));
+  const unbalanced = payroll.filter((row) => Math.abs(number(row.bank_amount) + number(row.cash_amount) - number(row.total_amount)) > 0.01);
+  const unpaid = payroll.filter((row) => upper(row.status) !== "PAID");
+  const badDates = visible.filter((employee) => {
+    const card = cardsByEmployee.get(text(employee.id)) || {};
+    const exitDate = hrDateOnly(card.exit_date);
+    return Boolean(exitDate && employee.hireDate && exitDate < employee.hireDate);
+  });
+  const checks = [
+    { type: "PERSONEL_TARIH", title: "İşe giriş / çıkış tarihleri", ok: badDates.length === 0, detail: badDates.length ? `${badDates.length} personelde tarih sırası hatalı.` : "İşe giriş / çıkış tarihleri tutarlı." },
+    { type: "BORDRO_KAPSAM", title: "Bordro kapsamı", ok: missingPayroll.length === 0, detail: missingPayroll.length ? `${missingPayroll.length} dönem personelinin bordrosu henüz sabitlenmedi.` : `${visible.length} dönem personelinin bordrosu kayıtlı.` },
+    { type: "ODEME_DENGE", title: "Banka + elden dengesi", ok: unbalanced.length === 0, detail: unbalanced.length ? `${unbalanced.length} bordro satırında ödeme dengesi bozuk.` : "Tüm bordro satırlarında banka + elden = net." },
+    { type: "ODEME_DURUM", title: "Ödeme durumu", ok: unpaid.length === 0, detail: unpaid.length ? `${unpaid.length} bordro satırı henüz PAID durumunda değil.` : "Tüm bordrolar ödendi." },
+  ];
+  await audit(c, { mainCompanyId: companyId, period, entityType: "AY_SONU", action: "CHECK", summary: "Ay sonu kontrolü çalıştırıldı.", details: { checks, periodEnd } });
+  return okData(c, { year, month, period, periodEnd, checks, isLocked: false });
 }
 
 async function auditLogs(c: Context<AppEnv>) {
@@ -1735,6 +1825,9 @@ export function registerIkRelationalCloudRoutes(app: Hono<AppEnv>) {
   app.get("/api/ik/advanced/payroll", protect(advancedPayroll));
   app.post("/api/ik/advanced/payroll/override", protect(saveAdvancedPayrollOverride));
   app.post("/api/ik/advanced/payroll/final-control", protect(saveAdvancedPayrollFinalControl));
+  app.post("/api/ik/advanced/payroll/save", protect(saveAdvancedPayrollLines));
+  app.post("/api/ik/advanced/settlement-draft", protect(saveAdvancedSettlementDraft));
+  app.post("/api/ik/advanced/close-check", protect(runAdvancedCloseCheck));
   app.get("/api/ik/advanced/audit-logs", protect(auditLogs));
   app.get("/api/ik/advanced/leave-center", protect(leaveCenterV2));
   app.post("/api/ik/advanced/leave/preview", protect(async (c) => (await previewAdvancedLeaveV2(c)) as Response));
