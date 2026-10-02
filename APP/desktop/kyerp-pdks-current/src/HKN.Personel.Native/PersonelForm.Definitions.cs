@@ -59,7 +59,7 @@ public partial class PersonelForm
         void Run(Action action)
         {
             try { action(); RefreshGrid(); Reload(); }
-            catch(Exception ex) { MessageBox.Show(ex.Message,dialog.Text,MessageBoxButtons.OK,MessageBoxIcon.Warning); }
+            catch(Exception ex) { PdksErrorPresenter.Show(dialog,ex,dialog.Text,MessageBoxIcon.Warning,"Definitions.Organization"); }
         }
 
         add.Click += (_,_) => Run(() =>
