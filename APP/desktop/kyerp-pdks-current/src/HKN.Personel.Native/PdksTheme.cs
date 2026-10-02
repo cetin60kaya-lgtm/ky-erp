@@ -4,11 +4,11 @@ public static class PdksTheme
 {
     static readonly HashSet<Form> ThemedForms = [];
     static readonly Color Surface = Color.White;
-    static readonly Color Canvas = Color.FromArgb(246, 249, 253);
-    static readonly Color Border = Color.FromArgb(216, 225, 236);
-    static readonly Color Text = Color.FromArgb(27, 44, 68);
-    static readonly Color Muted = Color.FromArgb(88, 103, 124);
-    static readonly Color Primary = Color.FromArgb(36, 107, 230);
+    static readonly Color Canvas = Color.FromArgb(244, 247, 251);
+    static readonly Color Border = Color.FromArgb(226, 232, 240);
+    static readonly Color Text = Color.FromArgb(15, 23, 42);
+    static readonly Color Muted = Color.FromArgb(100, 116, 139);
+    static readonly Color Primary = Color.FromArgb(37, 99, 235);
 
     static ThemeMessageFilter? filter;
 
@@ -35,7 +35,7 @@ public static class PdksTheme
     public static void Apply(Form form)
     {
         if (form is MainShellForm or LoginForm) return;
-        form.Font = new Font("Segoe UI", 9f);
+        form.Font = new Font("Segoe UI", 9.2f);
         form.BackColor = Canvas;
         form.ForeColor = Text;
         form.AutoScaleMode = AutoScaleMode.Dpi;
@@ -221,8 +221,8 @@ public static class PdksTheme
         tabs.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
         tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
         tabs.SizeMode = TabSizeMode.Normal;
-        tabs.Padding = new Point(16, 8);
-        tabs.Multiline = false;
+        tabs.Padding = new Point(18, 9);
+        tabs.Multiline = true;
         tabs.HotTrack = true;
         foreach (TabPage page in tabs.TabPages) page.BackColor = Surface;
         tabs.DrawItem += (_, e) =>
@@ -265,8 +265,8 @@ public static class PdksTheme
         grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(249, 251, 254);
         grid.RowHeadersVisible = false;
         grid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
-        grid.RowTemplate.Height = Math.Max(grid.RowTemplate.Height, 28);
-        grid.ColumnHeadersHeight = Math.Max(grid.ColumnHeadersHeight, 31);
+        grid.RowTemplate.Height = Math.Max(grid.RowTemplate.Height, 31);
+        grid.ColumnHeadersHeight = Math.Max(grid.ColumnHeadersHeight, 36);
         grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         grid.MultiSelect = false;
         grid.AllowUserToOrderColumns = true;
