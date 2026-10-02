@@ -23,73 +23,110 @@ public sealed class UserManagementForm : Form
         MinimumSize = new Size(820, 560);
         StartPosition = FormStartPosition.CenterParent;
         Font = new Font("Segoe UI", 9f);
-        BackColor = Color.FromArgb(246, 249, 253);
+        BackColor = PdksAppearance.Current.Canvas;
         Build();
         ReloadUsers();
     }
     void Build()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(14) };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
+        var p=PdksAppearance.Current;
+        BackColor=p.Canvas;
+
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 1,
+            Padding = new Padding(16),
+            BackColor=p.Canvas
+        };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 12));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        var left = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, BackColor = Color.White };
+        var leftCard=PdksUiKit.Card();
+        var left = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding=new Padding(14), BackColor = p.Surface };
+        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-        left.Controls.Add(usersList, 0, 0);
-        var leftButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(8), WrapContents = false };
-        var add = Btn("Kullanıcı Ekle", 112, true); add.Click += (_, _) => NewUser();
+        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        left.Controls.Add(PdksUiKit.SectionTitle("Kullanıcılar"),0,0);
+        usersList.BorderStyle=BorderStyle.None;usersList.BackColor=p.Surface;usersList.ForeColor=p.Text;
+        left.Controls.Add(usersList, 0, 1);
+        var leftButtons = PdksUiKit.ActionBar(false,p.Surface);
+        var add = Btn("Yeni Kullanıcı", 112, true); add.Click += (_, _) => NewUser();
         var remove = Btn("Sil", 70); remove.Click += (_, _) => DeleteUser();
         leftButtons.Controls.Add(add); leftButtons.Controls.Add(remove);
-        left.Controls.Add(leftButtons, 0, 1);
-        root.Controls.Add(left, 0, 0);
+        left.Controls.Add(leftButtons, 0, 2);
+        leftCard.Controls.Add(left);
+        root.Controls.Add(leftCard, 0, 0);
+        root.Controls.Add(new Panel{Dock=DockStyle.Fill,BackColor=p.Canvas},1,0);
 
-        var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 6, Padding = new Padding(16, 4, 0, 0) };
-        right.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-        right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        var rightCard=PdksUiKit.Card();
+        var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(18), BackColor=p.Surface };
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-        right.Controls.Add(Label("Kullanıcı Adı"), 0, 0); right.Controls.Add(userName, 1, 0);
-        right.Controls.Add(Label("Yeni Şifre"), 0, 1); right.Controls.Add(password, 1, 1);
-        var flags = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
-        flags.Controls.Add(active); flags.Controls.Add(admin);
-        right.Controls.Add(Label("Durum"), 0, 2); right.Controls.Add(flags, 1, 2);
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+
+        right.Controls.Add(PdksUiKit.SectionTitle("Kullanıcı ve Yetki Bilgileri"),0,0);
+
+        var fields=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=2,BackColor=p.Surface};
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,110));
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,95));
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+        fields.RowStyles.Add(new RowStyle(SizeType.Absolute,44));
+        fields.RowStyles.Add(new RowStyle(SizeType.Absolute,44));
+        fields.Controls.Add(Label("Kullanıcı Adı"),0,0);fields.Controls.Add(userName,1,0);
+        fields.Controls.Add(Label("Yeni Şifre"),2,0);fields.Controls.Add(password,3,0);
+        var flags=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,BackColor=p.Surface,Padding=new Padding(0,7,0,0)};
+        flags.Controls.Add(active);flags.Controls.Add(admin);
+        fields.Controls.Add(Label("Durum"),0,1);fields.Controls.Add(flags,1,1);fields.SetColumnSpan(flags,3);
+        right.Controls.Add(fields,0,1);
+
+        right.Controls.Add(new Label
+        {
+            Text="Modül Yetkileri",
+            Dock=DockStyle.Fill,
+            TextAlign=ContentAlignment.MiddleLeft,
+            Font=new Font("Segoe UI",9f,FontStyle.Bold),
+            ForeColor=p.Text
+        },0,2);
 
         rights.Columns.Add(new DataGridViewTextBoxColumn { Name = "Module", HeaderText = "Modül", ReadOnly = true, AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         rights.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Access", HeaderText = "Erişim", Width = 80 });
-        rights.Columns.Add(new DataGridViewCheckBoxColumn { Name = "ReadOnly", HeaderText = "Sadece Görüntüleme", Width = 130 });
+        rights.Columns.Add(new DataGridViewCheckBoxColumn { Name = "ReadOnly", HeaderText = "Sadece Görüntüleme", Width = 145 });
         foreach (var module in Enum.GetValues<PdksModule>().Where(x => x is not PdksModule.Home and not PdksModule.KullaniciYonetimi))
             rights.Rows.Add(Friendly(module), false, false);
+        rights.BorderStyle=BorderStyle.None;rights.BackgroundColor=p.Surface;rights.RowTemplate.Height=31;rights.ColumnHeadersHeight=35;
         rights.CurrentCellDirtyStateChanged += (_, _) => { if (rights.IsCurrentCellDirty) rights.CommitEdit(DataGridViewDataErrorContexts.Commit); };
         rights.CellValueChanged += (_, e) => SyncRightRow(e.RowIndex, e.ColumnIndex);
-        right.Controls.Add(Label("Erişim Yetkileri"), 0, 3); right.Controls.Add(rights, 1, 3);
+        right.Controls.Add(rights,0,3);
 
         var hint = new Label
         {
-            Text = "Erişim: modülü kullanabilir.  •  Sadece Görüntüleme: kayıtları ve raporları görüntüler; ekleme, güncelleme ve silme işlemleri devre dışıdır.",
-            Dock = DockStyle.Fill, ForeColor = Color.FromArgb(85, 99, 118), TextAlign = ContentAlignment.MiddleLeft
+            Text = "Erişim: modülü kullanabilir.  •  Sadece Görüntüleme: kayıtları ve raporları görüntüler; ekleme, güncelleme ve silme işlemleri kapalıdır.",
+            Dock = DockStyle.Fill, ForeColor = p.Muted, TextAlign = ContentAlignment.MiddleLeft
         };
-        right.Controls.Add(hint, 1, 4);
-        var bottom = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 9, 0, 0) };
+        right.Controls.Add(hint,0,4);
+
+        var bottom = PdksUiKit.ActionBar(true,p.Surface);
         var save = Btn("Kaydet", 110, true); save.Click += (_, _) => SaveUser();
         var close = Btn("Kapat", 96); close.Click += (_, _) => Close();
         bottom.Controls.Add(close); bottom.Controls.Add(save);
-        right.Controls.Add(bottom, 1, 5);
-        root.Controls.Add(right, 1, 0);
+        right.Controls.Add(bottom,0,5);
+
+        rightCard.Controls.Add(right);
+        root.Controls.Add(rightCard,2,0);
         Controls.Add(root);
+
         usersList.SelectedIndexChanged += (_, _) => LoadSelected();
         admin.CheckedChanged += (_, _) => rights.Enabled = !admin.Checked;
     }
 
-    static Label Label(string text) => new()
-    {
-        Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
-        ForeColor = Color.FromArgb(54, 72, 96), Font = new Font("Segoe UI", 9f, FontStyle.Bold)
-    };
+    static Label Label(string text) => PdksUiKit.FieldLabel(text);
 
     static Button Btn(string text, int width, bool primary = false)
     {
