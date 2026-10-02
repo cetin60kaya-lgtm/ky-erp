@@ -37,18 +37,16 @@ public sealed partial class MainShellForm
 
                 if (result.ReadCount == 0)
                 {
-                    leadStatus.Text = result.Message.Contains("Aktarılacak veri yok", StringComparison.OrdinalIgnoreCase)
+                    var message = result.Message.Contains("Aktarılacak veri yok", StringComparison.OrdinalIgnoreCase)
                         ? "Kart cihazı bağlı • yeni kayıt yok"
                         : ShortTerminalMessage(result.Message);
-                    leadStatus.ForeColor = result.Message.Contains("başarısız", StringComparison.OrdinalIgnoreCase) ||
-                                           result.Message.Contains("hata", StringComparison.OrdinalIgnoreCase)
-                        ? Color.FromArgb(181, 91, 34)
-                        : Color.FromArgb(42, 112, 70);
+                    var ok = !(result.Message.Contains("başarısız", StringComparison.OrdinalIgnoreCase) ||
+                               result.Message.Contains("hata", StringComparison.OrdinalIgnoreCase));
+                    SetShellActivity(message, ok);
                 }
                 else
                 {
-                    leadStatus.Text = $"Kart cihazı • {result.ReadCount} okundu • +{result.Inserted}/{result.Updated}";
-                    leadStatus.ForeColor = result.Skipped == 0 ? Color.FromArgb(42, 112, 70) : Color.FromArgb(181, 91, 34);
+                    SetShellActivity($"Kart cihazı • {result.ReadCount} okundu • +{result.Inserted}/{result.Updated}", result.Skipped == 0);
                 }
                 return;
             }
@@ -58,17 +56,17 @@ public sealed partial class MainShellForm
             terminalLastProbeUtc = DateTime.UtcNow;
             var device = await TerminalDeviceClient.ReadAsync(false);
             if (IsDisposed) return;
-            leadStatus.Text = device.Connected
-                ? $"Kart cihazı bağlı • {device.DeviceTime:HH:mm:ss} • yeni {Math.Max(0, device.NewLogCount)}"
-                : "Kart cihazı: " + ShortTerminalMessage(device.Message);
-            leadStatus.ForeColor = device.Connected ? Color.FromArgb(42, 112, 70) : Color.FromArgb(181, 91, 34);
+            SetShellActivity(
+                device.Connected
+                    ? $"Kart cihazı bağlı • {device.DeviceTime:HH:mm:ss} • yeni {Math.Max(0, device.NewLogCount)}"
+                    : "Kart cihazı: " + ShortTerminalMessage(device.Message),
+                device.Connected);
         }
         catch (Exception ex)
         {
             if (!IsDisposed)
             {
-                leadStatus.Text = "Kart cihazı: " + ShortTerminalMessage(ex.Message);
-                leadStatus.ForeColor = Color.FromArgb(181, 91, 34);
+                SetShellActivity("Kart cihazı: " + ShortTerminalMessage(ex.Message), false);
             }
         }
         finally
