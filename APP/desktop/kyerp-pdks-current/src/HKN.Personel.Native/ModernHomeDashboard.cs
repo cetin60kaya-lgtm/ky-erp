@@ -86,7 +86,7 @@ internal sealed class ModernHomeDashboard : UserControl
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,132));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,32));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,258));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,242));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,260));
 
         var hero = new Panel { Dock=DockStyle.Fill, BackColor=p.Canvas };
         hero.Controls.Add(new Label
