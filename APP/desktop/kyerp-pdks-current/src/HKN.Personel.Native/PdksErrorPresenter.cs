@@ -39,6 +39,8 @@ public static class PdksErrorPresenter
     public static void Show(IWin32Window? owner,Exception ex,string title="KY PDKS",MessageBoxIcon icon=MessageBoxIcon.Warning,string context="UI")
     {
         Log(ex,context);
+        if (string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT"), "1", StringComparison.Ordinal))
+            return;
         MessageBox.Show(owner,Friendly(ex),title,MessageBoxButtons.OK,icon);
     }
 
