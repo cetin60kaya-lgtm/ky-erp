@@ -2,7 +2,7 @@ using System.Drawing.Drawing2D;
 
 namespace HKN.Personel.Native;
 
-internal enum PdksToolbarIcon
+public enum PdksToolbarIcon
 {
     Home, Transfer, Live, Groups, Periods, Departments, EntryExit,
     Personnel, Advances, Timesheet, Results, Payroll, WorkDate
