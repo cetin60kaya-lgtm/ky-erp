@@ -67,33 +67,53 @@ internal sealed class ManagementCenterForm : Form
     Control BuildHeader()
     {
         var p=PdksAppearance.Current;
-        var header=PdksUiKit.Card(0);
-        header.Margin=new Padding(8,6,8,10);
+        var card=PdksUiKit.Card(0);
+        card.Margin=new Padding(8,6,8,10);
 
-        var title=new Label
+        var layout=new TableLayoutPanel
+        {
+            Dock=DockStyle.Fill,
+            ColumnCount=3,
+            RowCount=1,
+            Padding=new Padding(16,10,16,10),
+            BackColor=p.Surface,
+            Margin=Padding.Empty
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,310));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,190));
+
+        var titleArea=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Surface,Margin=Padding.Empty};
+        titleArea.RowStyles.Add(new RowStyle(SizeType.Percent,58));
+        titleArea.RowStyles.Add(new RowStyle(SizeType.Percent,42));
+        titleArea.Controls.Add(new Label
         {
             Text="Yönetim Merkezi",
-            Location=new Point(18,13),
-            AutoSize=true,
+            Dock=DockStyle.Fill,
+            TextAlign=ContentAlignment.BottomLeft,
             Font=new Font("Segoe UI",16f,FontStyle.Bold),
             ForeColor=p.Text
-        };
-        var hint=new Label
+        },0,0);
+        titleArea.Controls.Add(new Label
         {
             Text="Tüm alt işlemler tek merkezde • menü sırası ve yetkiler tek katalogdan yönetilir",
-            Location=new Point(20,47),
-            AutoSize=true,
+            Dock=DockStyle.Fill,
+            TextAlign=ContentAlignment.TopLeft,
             Font=new Font("Segoe UI",8.8f),
             ForeColor=p.Muted
-        };
+        },0,1);
+        layout.Controls.Add(titleArea,0,0);
 
         search.BackColor=p.Input;search.ForeColor=p.Text;search.BorderStyle=BorderStyle.FixedSingle;
-        search.Location=new Point(Math.Max(520,ClientSize.Width-560),20);search.Height=32;search.Anchor=AnchorStyles.Top|AnchorStyles.Right;
-        groupFilter.BackColor=p.Input;groupFilter.ForeColor=p.Text;
-        groupFilter.Location=new Point(Math.Max(830,ClientSize.Width-250),20);groupFilter.Height=32;groupFilter.Anchor=AnchorStyles.Top|AnchorStyles.Right;
+        search.Dock=DockStyle.Fill;search.Margin=new Padding(8,11,8,11);search.Font=new Font("Segoe UI",9.2f);
+        layout.Controls.Add(search,1,0);
 
-        header.Controls.Add(title);header.Controls.Add(hint);header.Controls.Add(search);header.Controls.Add(groupFilter);
-        return header;
+        groupFilter.BackColor=p.Input;groupFilter.ForeColor=p.Text;
+        groupFilter.Dock=DockStyle.Fill;groupFilter.Margin=new Padding(0,11,0,11);
+        layout.Controls.Add(groupFilter,2,0);
+
+        card.Controls.Add(layout);
+        return card;
     }
 
     void RebuildContent()
