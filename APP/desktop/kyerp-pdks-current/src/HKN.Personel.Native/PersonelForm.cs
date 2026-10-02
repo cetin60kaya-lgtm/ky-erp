@@ -25,7 +25,7 @@ public partial class PersonelForm : Form
         FormBorderStyle=FormBorderStyle.Sizable; MaximizeBox=true; MinimizeBox=true;
         Font=new Font("Segoe UI",9f); BackColor=Color.FromArgb(246,249,253); DoubleBuffered=true; SetStyle(ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint,true);
         InitializePersonelBehavior();
-        BuildUiClassic();
+        BuildUiModernV2();
 
         // Geometry and CRUD bars are built before the form becomes visible. Doing this from
         // Shown caused the Personel page to jump/repaint after every navigation.
