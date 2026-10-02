@@ -830,6 +830,78 @@ export function advancedEmployeeVisible(employee: Row, card: Row, period: string
   return true;
 }
 
+const HISTORICAL_PAYROLL_FIELDS = new Set([
+  "salary",
+  "roadAllowance",
+  "paymentChannel",
+  "bankPaymentType",
+  "bankAmount",
+  "cashAmount",
+  "overtimeBaseHours",
+  "overtimeHourlyBase",
+]);
+
+export function applyHistoricalEmployeeValues(employee: Row, changeRows: Row[] = [], periodEnd = "") {
+  if (!periodEnd) return { ...employee };
+  const result: Row = { ...employee };
+  const own = changeRows
+    .filter((row) => text(row.employee_id || row.employeeId) === text(employee.id))
+    .filter((row) => hrDateOnly(row.effective_date || row.effectiveDate) > periodEnd)
+    .sort((a, b) => {
+      const byDate = hrDateOnly(b.effective_date || b.effectiveDate).localeCompare(hrDateOnly(a.effective_date || a.effectiveDate));
+      if (byDate) return byDate;
+      return text(b.created_at || b.createdAt).localeCompare(text(a.created_at || a.createdAt));
+    });
+  for (const row of own) {
+    const field = text(row.field_name || row.fieldName);
+    if (!HISTORICAL_PAYROLL_FIELDS.has(field)) continue;
+    const oldValue = row.old_value ?? row.oldValue;
+    if (["salary", "roadAllowance", "bankAmount", "cashAmount", "overtimeBaseHours", "overtimeHourlyBase"].includes(field)) {
+      result[field] = number(oldValue);
+      if (field === "overtimeBaseHours") result.overtimeHourlyBase = number(oldValue) || 225;
+      if (field === "overtimeHourlyBase") result.overtimeBaseHours = number(oldValue) || 225;
+      continue;
+    }
+    if (field === "paymentChannel" || field === "bankPaymentType") {
+      const paymentType = text(oldValue) || "Banka + Elden";
+      result.paymentChannel = paymentType;
+      result.bankPaymentType = paymentType;
+    }
+  }
+  return result;
+}
+
+async function advancedSyncState(c: Context<AppEnv>) {
+  const companyId = companyIdOf(c);
+  const probes: Array<{ key: string; sql: string; values: unknown[] }> = [
+    { key: "employee", sql: "SELECT MAX(COALESCE(updated_at,created_at,'')) AS stamp,COUNT(*) AS count FROM hr_monthly_employees WHERE main_company_id=?", values: [companyId] },
+    { key: "card", sql: "SELECT MAX(COALESCE(updated_at,'')) AS stamp,COUNT(*) AS count FROM ik_person_card_settings WHERE main_company_id=?", values: [companyId] },
+    { key: "history", sql: "SELECT MAX(COALESCE(created_at,'')) AS stamp,COUNT(*) AS count FROM ik_employee_change_history WHERE main_company_id=?", values: [companyId] },
+    { key: "salary", sql: "SELECT MAX(COALESCE(s.created_at,s.effective_date,'')) AS stamp,COUNT(*) AS count FROM hr_salary_contracts s JOIN hr_monthly_employees e ON e.id=s.employee_id WHERE e.main_company_id=?", values: [companyId] },
+    { key: "adjustment", sql: "SELECT MAX(COALESCE(a.created_at,a.date,'')) AS stamp,COUNT(*) AS count FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE e.main_company_id=?", values: [companyId] },
+    { key: "leave", sql: "SELECT MAX(COALESCE(l.created_at,l.start_date,'')) AS stamp,COUNT(*) AS count FROM hr_leave_records_v2 l JOIN hr_monthly_employees e ON e.id=l.employee_id WHERE e.main_company_id=?", values: [companyId] },
+    { key: "leavePlan", sql: "SELECT MAX(COALESCE(updated_at,created_at,'')) AS stamp,COUNT(*) AS count FROM ik_leave_plans WHERE main_company_id=?", values: [companyId] },
+    { key: "payroll", sql: "SELECT MAX(COALESCE(updated_at,created_at,'')) AS stamp,COUNT(*) AS count FROM hr_payrolls_v2 WHERE main_company_id=?", values: [companyId] },
+    { key: "sgk", sql: "SELECT MAX(COALESCE(updated_at,'')) AS stamp,COUNT(*) AS count FROM ik_person_monthly_compliance WHERE main_company_id=?", values: [companyId] },
+    { key: "audit", sql: "SELECT MAX(COALESCE(created_at,'')) AS stamp,COUNT(*) AS count FROM hr_monthly_audit_logs WHERE main_company_id=?", values: [companyId] },
+    { key: "document", sql: "SELECT MAX(COALESCE(d.created_at,d.date,'')) AS stamp,COUNT(*) AS count FROM hr_employee_documents d JOIN hr_monthly_employees e ON e.id=d.employee_id WHERE e.main_company_id=?", values: [companyId] },
+  ];
+  const parts: string[] = [];
+  let updatedAt = "";
+  for (const probe of probes) {
+    try {
+      const row = await first(c, probe.sql, probe.values);
+      const stamp = text(row?.stamp);
+      const count = number(row?.count);
+      parts.push(`${probe.key}:${stamp}:${count}`);
+      if (stamp > updatedAt) updatedAt = stamp;
+    } catch {
+      parts.push(`${probe.key}::0`);
+    }
+  }
+  return okData(c, { mainCompanyId: companyId, version: parts.join("|"), updatedAt });
+}
+
 const IK_MONTH_PREPARED_ENTITY = "IK_DONEM";
 const IK_MONTH_PREPARED_ACTION = "MONTH_PREPARED";
 
@@ -913,7 +985,7 @@ async function advancedMonth(c: Context<AppEnv>) {
   const period = `${year}-${String(month).padStart(2, "0")}`;
   const periodStart = `${period}-01`;
   const periodEnd = `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
-  const [employees, cards, adjustments, leaves, payroll, documents, contracts, profiles, compliance, cardDayRows, calcRows] = await Promise.all([
+  const [employees, cards, adjustments, leaves, payroll, documents, contracts, profiles, compliance, cardDayRows, calcRows, historyRows] = await Promise.all([
     monthlyRows(c, companyId),
     all(c, "SELECT * FROM ik_person_card_settings WHERE main_company_id=?", [companyId]),
     adjustmentRows(c, companyId),
@@ -925,6 +997,7 @@ async function advancedMonth(c: Context<AppEnv>) {
     all(c, "SELECT employee_id,sgk_covered,sgk_days,note FROM ik_person_monthly_compliance WHERE main_company_id=? AND period=?", [companyId, period]).catch(() => []),
     all(c, "SELECT employee_id,COUNT(DISTINCT work_date) AS card_days FROM ik_time_clock_events WHERE main_company_id=? AND work_date BETWEEN ? AND ? GROUP BY employee_id", [companyId, periodStart, periodEnd]).catch(() => []),
     all(c, "SELECT file_name,data FROM json_store WHERE scope=? AND file_name LIKE ?", [IK_PERSON_CARD_CALC_SCOPE, `${companyId}:%`]).catch(() => []),
+    all(c, "SELECT employee_id,field_name,old_value,new_value,effective_date,created_at FROM ik_employee_change_history WHERE main_company_id=? AND effective_date>? ORDER BY effective_date DESC,created_at DESC", [companyId, periodEnd]).catch(() => []),
   ]);
   const calcPrefix = `${companyId}:`;
   const calcByEmployee = new Map<string, PersonCardCalc>();
@@ -933,7 +1006,10 @@ async function advancedMonth(c: Context<AppEnv>) {
     if (!fileName.startsWith(calcPrefix)) continue;
     calcByEmployee.set(fileName.slice(calcPrefix.length), parsePersonCardCalc(row));
   }
-  const rawEmployeesWithCalc = employees.map((employee) => ({ ...employee, deductionHourlyBase: number(calcByEmployee.get(text(employee.id))?.deductionHourlyBase) || 300 }));
+  const rawEmployeesWithCalc = employees.map((employee) => applyHistoricalEmployeeValues({
+    ...employee,
+    deductionHourlyBase: number(calcByEmployee.get(text(employee.id))?.deductionHourlyBase) || 300,
+  }, historyRows, periodEnd));
   const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
   const profileByEmployee = new Map(profiles.map((row) => [text(row.employee_id), row]));
   const complianceByEmployee = new Map(compliance.map((row) => [text(row.employee_id), row]));
@@ -995,12 +1071,15 @@ async function advancedPayroll(c: Context<AppEnv>) {
   const year = number(c.req.query("year")) || new Date().getFullYear();
   const month = number(c.req.query("month")) || new Date().getMonth() + 1;
   const period = `${year}-${String(month).padStart(2, "0")}`;
-  const [rawEmployees, saved, adjustments, cards] = await Promise.all([
+  const periodEnd = `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
+  const [currentEmployees, saved, adjustments, cards, historyRows] = await Promise.all([
     monthlyRows(c, companyId),
     payrollRows(c, companyId),
     adjustmentRows(c, companyId),
     all(c, "SELECT employee_id,payroll_included,active_passive,exit_date FROM ik_person_card_settings WHERE main_company_id=?", [companyId]),
+    all(c, "SELECT employee_id,field_name,old_value,new_value,effective_date,created_at FROM ik_employee_change_history WHERE main_company_id=? AND effective_date>? ORDER BY effective_date DESC,created_at DESC", [companyId, periodEnd]).catch(() => []),
   ]);
+  const rawEmployees = currentEmployees.map((employee) => applyHistoricalEmployeeValues(employee, historyRows, periodEnd));
   const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
   const employees = rawEmployees.filter((employee) => advancedEmployeeVisible(employee, cardsByEmployee.get(text(employee.id)) || {}, period));
   const employeesById = new Map(rawEmployees.map((employee) => [text(employee.id), employee]));
@@ -1649,6 +1728,7 @@ export function registerIkRelationalCloudRoutes(app: Hono<AppEnv>) {
   app.delete("/api/ik/leaves/:id", protect(deleteLeave));
   app.get("/api/ik/payroll", protect(listPayrolls));
 
+  app.get("/api/ik/advanced/sync-state", protect(advancedSyncState));
   app.get("/api/ik/advanced/period-state", protect(advancedPeriodState));
   app.post("/api/ik/advanced/period-prepare", protect(prepareAdvancedPeriod));
   app.get("/api/ik/advanced/month", protect(advancedMonth));
