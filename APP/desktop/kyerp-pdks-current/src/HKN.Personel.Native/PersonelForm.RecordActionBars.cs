@@ -4,9 +4,9 @@ public partial class PersonelForm
 {
     void RepairRecordActionBars()
     {
-        RepairRecordActionBar("Giriş ve Çıkışları", gGiris, AddGiris, EditGiris, DeleteGiris, DeleteAllGiris);
+        RepairRecordActionBar("Giriş / Çıkış", gGiris, AddGiris, EditGiris, DeleteGiris, DeleteAllGiris);
         RepairRecordActionBar("İzinler", gIzin, AddIzinFull, EditIzinFull, DeleteIzin, DeleteAllIzin);
-        RepairRecordActionBar("Ek Kazanç Ve Kesintiler", gEkk, AddEkkFull, EditEkkFull, DeleteEkk, DeleteAllEkk);
+        RepairRecordActionBar("Kazanç / Kesinti", gEkk, AddEkkFull, EditEkkFull, DeleteEkk, DeleteAllEkk);
     }
 
     void RepairRecordActionBar(string tabTitle, DataGridView grid, Action add, Action edit, Action delete, Action deleteAll)
