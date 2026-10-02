@@ -11,6 +11,7 @@ public sealed partial class MainShellForm
     Label? modernClock;
     System.Windows.Forms.Timer? modernClockTimer;
     Button? activeNavButton;
+    Button? modernBackButton;
     readonly Dictionary<PdksCommandId,Button> modernNavButtons = [];
     bool appearanceHooked;
 
@@ -98,7 +99,7 @@ public sealed partial class MainShellForm
                 Controls.Remove(modernShell);
                 modernShell.Dispose();
             }
-            modernShell=null;modernPageTitle=null;modernPageHint=null;modernDbState=null;modernClock=null;activeNavButton=null;
+            modernShell=null;modernPageTitle=null;modernPageHint=null;modernDbState=null;modernClock=null;activeNavButton=null;modernBackButton=null;
             modernClockTimer?.Stop();modernClockTimer?.Dispose();modernClockTimer=null;
             BuildModernShell();
             SetModernPage(title,hint);
@@ -319,9 +320,19 @@ public sealed partial class MainShellForm
             e.Graphics.DrawLine(pen, 0, bar.Height - 1, bar.Width, bar.Height - 1);
         };
 
-        var left = new TableLayoutPanel { Dock = DockStyle.Left, Width = 700, RowCount = 2, BackColor = p.Surface };
-        left.RowStyles.Add(new RowStyle(SizeType.Percent, 60));
-        left.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
+        var left = new TableLayoutPanel { Dock = DockStyle.Left, Width = 700, ColumnCount=2, RowCount = 1, BackColor = p.Surface };
+        left.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,48));
+        left.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+
+        modernBackButton=PdksUiKit.Button("‹",34,PdksActionRole.Quiet,NavigateBack);
+        modernBackButton.Font=new Font("Segoe UI",16f,FontStyle.Bold);
+        modernBackButton.Margin=new Padding(0,12,10,0);
+        modernBackButton.Enabled=navigationHistory.Count>0;
+        left.Controls.Add(modernBackButton,0,0);
+
+        var titleArea=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Surface};
+        titleArea.RowStyles.Add(new RowStyle(SizeType.Percent,60));
+        titleArea.RowStyles.Add(new RowStyle(SizeType.Percent,40));
         modernPageTitle = new Label
         {
             Dock = DockStyle.Fill,
@@ -338,8 +349,9 @@ public sealed partial class MainShellForm
             Font = new Font("Segoe UI", 8.7f),
             ForeColor = p.Muted
         };
-        left.Controls.Add(modernPageTitle, 0, 0);
-        left.Controls.Add(modernPageHint, 0, 1);
+        titleArea.Controls.Add(modernPageTitle,0,0);
+        titleArea.Controls.Add(modernPageHint,0,1);
+        left.Controls.Add(titleArea,1,0);
 
         var right = new FlowLayoutPanel
         {
@@ -433,6 +445,13 @@ public sealed partial class MainShellForm
         if (modernPageTitle is not null) modernPageTitle.Text = title;
         if (modernPageHint is not null) modernPageHint.Text = hint;
         RefreshModernDbState();
+    }
+
+    void RefreshBackButton()
+    {
+        if(modernBackButton is null || modernBackButton.IsDisposed)return;
+        modernBackButton.Enabled=navigationHistory.Count>0;
+        modernBackButton.Text=navigationHistory.Count>0?"‹":"·";
     }
 
     void RefreshModernDbState()
