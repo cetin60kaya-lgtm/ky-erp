@@ -2,12 +2,13 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-10-02T15:05:00+03:00",
-  "attempt": 107,
+  "requestedAt": "2026-10-02T15:20:00+03:00",
+  "attempt": 108,
   "scope": [
     "ik-monthly-live-sync-1500ms",
     "ik-multi-pc-broadcast-sync",
     "ik-historical-salary-period-isolation",
+    "ik-payroll-snapshot-immutability",
     "ik-payroll-freeze-before-payment",
     "ik-paid-payroll-lock",
     "ik-hire-exit-authoritative",
@@ -22,6 +23,6 @@
     "live-pages-domain-check"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "3f1115fbffb38b463c753ead61c580c111be4968",
-  "note": "İK Aylık maaş dağıtımı güvenlik finali: geçmiş dönem ücret izolasyonu, ödeme öncesi bordro sabitleme, PAID kilidi, net işe giriş/çıkış ve Günlük Operasyon benzeri 1.5 sn canlı çoklu-PC senkron."
+  "sourceCommit": "3e0a14f984f2a27a843c5b1a73f04e496c4e34d9",
+  "note": "İK Aylık maaş dağıtımı finali: kaydedilmiş/ödenmiş bordro snapshot değişmez; geçmiş dönem ücret izolasyonu, PAID kilidi, işe giriş/çıkış tutarlılığı ve Günlük Operasyon benzeri 1.5 sn çoklu-PC canlı senkron."
 }
