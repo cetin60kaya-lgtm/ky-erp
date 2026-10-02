@@ -15,18 +15,12 @@ public partial class PersonelForm
         if (tabs.TabPages.Count >= 6)
         {
             tabs.TabPages[0].Text = "Personel Bilgileri";
-            tabs.TabPages[1].Text = "Giriş ve Çıkışları";
+            tabs.TabPages[1].Text = "Giriş / Çıkış";
             tabs.TabPages[2].Text = "İzinler";
-            tabs.TabPages[3].Text = "Ek Kazanç Ve Kesintiler";
-            tabs.TabPages[4].Text = "Bilgi";
+            tabs.TabPages[3].Text = "Kazanç / Kesinti";
+            tabs.TabPages[4].Text = "Puantaj Bilgisi";
             tabs.TabPages[5].Text = "Ödemeler";
         }
-        if (tabs.TabPages.Count > 0 && tabs.TabPages[0].Controls.OfType<TabControl>().FirstOrDefault() is { } inner && inner.TabPages.Count >= 2)
-        {
-            inner.TabPages[0].Text = "Kimlik Bilgileri";
-            inner.TabPages[1].Text = "Kişisel Bilgileri";
-        }
-
         ApplyModernTabLayoutAndPerformance();
     }
 }
