@@ -196,6 +196,9 @@ public sealed partial class MainShellForm
             Padding = new Padding(10, 2, 0, 0)
         }, 0, 2);
         sidebar.Controls.Add(bottom);
+        nav.SendToBack();
+        brand.BringToFront();
+        bottom.BringToFront();
         return sidebar;
     }
 
