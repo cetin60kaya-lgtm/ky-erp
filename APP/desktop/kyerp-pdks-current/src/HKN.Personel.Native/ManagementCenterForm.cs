@@ -112,8 +112,8 @@ internal sealed class ManagementCenterForm : Form
                     x.Hint.Contains(q,StringComparison.CurrentCultureIgnoreCase) ||
                     x.Group.Contains(q,StringComparison.CurrentCultureIgnoreCase));
 
-            if(groupFilter.SelectedIndex>0 && groupFilter.SelectedItem is string group)
-                filtered=filtered.Where(x=>x.Group==group);
+            if(groupFilter.SelectedIndex>0 && groupFilter.SelectedItem is string selectedGroup)
+                filtered=filtered.Where(x=>x.Group==selectedGroup);
 
             var groups=filtered.GroupBy(x=>x.Group).OrderBy(x=>x.Min(c=>c.Order)).ToArray();
             var root=new TableLayoutPanel
