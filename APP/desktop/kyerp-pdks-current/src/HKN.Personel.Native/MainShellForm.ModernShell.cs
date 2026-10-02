@@ -288,11 +288,12 @@ public sealed partial class MainShellForm
 
     static PdksCommandId PrimaryParent(PdksCommandId id) => id switch
     {
-        PdksCommandId.Leave or PdksCommandId.EarningsDeductions or PdksCommandId.PayrollPayments => PdksCommandId.Personnel,
+        PdksCommandId.Leave or PdksCommandId.EarningsDeductions or PdksCommandId.QuickOperations or PdksCommandId.PayrollPayments => PdksCommandId.Personnel,
         PdksCommandId.TimesheetDaily or PdksCommandId.TimesheetResults => PdksCommandId.TimesheetMonthly,
         PdksCommandId.PayrollAdjustment or PdksCommandId.PayrollPayslip or PdksCommandId.PayrollOvertime => PdksCommandId.PayrollGeneral,
-        PdksCommandId.Groups or PdksCommandId.Periods => PdksCommandId.Definitions,
-        PdksCommandId.TerminalSettings or PdksCommandId.DataSources => PdksCommandId.TerminalCenter,
+        PdksCommandId.Groups or PdksCommandId.Periods or PdksCommandId.WorkingDate or PdksCommandId.Holidays or
+        PdksCommandId.DailyWorkHours or PdksCommandId.AnnualWorkPlan or PdksCommandId.PayrollFields or PdksCommandId.EarningsTypes => PdksCommandId.Definitions,
+        PdksCommandId.TerminalSettings or PdksCommandId.TerminalProfiles or PdksCommandId.DataSources => PdksCommandId.TerminalCenter,
         _ => id
     };
 
