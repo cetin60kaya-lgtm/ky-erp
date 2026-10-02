@@ -1,16 +1,27 @@
-name: Daily Operations Final UX Consolidation
+name: Günlük Operasyon Canlı Yayın
 
 on:
   push:
     branches: [codex/model-uretim-kontrol-merkezi-final]
     paths:
+      - 'APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx'
+      - 'APP/app/ky-erp-frontend/src/pages/modules/ik/daily-hr-workspace.css'
+      - 'APP/app/ky-erp-frontend/src/pages/modules/ik/daily-hr-workspace-final.css'
+      - 'APP/app/ky-erp-frontend/src/services/dailyOpsApi.js'
+      - 'APP/app/ky-erp-frontend/src/app/moduleRegistry.js'
+      - 'APP/app/ky-erp-frontend/public/manifest.webmanifest'
       - '.github/workflows/daily-payment-print-controls-final.yml'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: daily-operations-production
+  cancel-in-progress: false
 
 jobs:
-  final:
+  validate-and-deploy:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -18,62 +29,62 @@ jobs:
       PAGES_PROJECT: ky-erp-frontend
       PROD_BRANCH: codex/model-uretim-kontrol-merkezi-final
     steps:
-      - uses: actions/checkout@v4
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: codex/model-uretim-kontrol-merkezi-final
-      - uses: actions/setup-node@v4
+
+      - name: Node.js 22
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
 
-      - name: Apply professional payment flow
-        run: python .github/scripts/payment_pro_flow_20261002.py
+      - name: Frontend kalite kapısı
+        working-directory: APP/app/ky-erp-frontend
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run lint
+          npm test
+          npm run build
 
-      - name: Commit payment page redesign
+      - name: Günlük Operasyon build doğrulaması
+        working-directory: APP/app/ky-erp-frontend
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'KY ERP Automation'
-          git config user.email 'actions@kyerp.net'
-          git add APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx APP/app/ky-erp-frontend/src/pages/modules/ik/daily-hr-workspace-final.css
-          git diff --cached --check
-          if ! git diff --cached --quiet; then
-            git commit -m 'fix(daily): professional payment print history flow'
-            git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
-          fi
+          test -f dist/index.html
+          grep -R -q "Yönetim Özeti" dist/assets
+          grep -R -q "Hızlı Personel Girişi" dist/assets
+          grep -R -q "Hakediş & Ödeme" dist/assets
 
-      - name: Frontend build
-        working-directory: APP/app/ky-erp-frontend
-        run: |
-          npm ci
-          npm run build
-        env:
-          VITE_API_URL: https://api.kyerp.net
-
-      - name: Deploy production directly to Cloudflare Pages
+      - name: Cloudflare Pages production deploy
         working-directory: APP/app/ky-erp-frontend
         run: >-
           npx --yes wrangler@4.118.0 pages deploy dist
           --project-name "$PAGES_PROJECT"
           --branch "$PROD_BRANCH"
           --commit-hash "$(git rev-parse HEAD)"
-          --commit-message "Urgent Daily Operations payment slips"
+          --commit-message "Günlük Operasyon kurumsal final düzen"
 
-      - name: Live smoke
+      - name: Canlı route smoke
         shell: bash
         run: |
           set -euo pipefail
-          for path in gunluk-operasyon/daily-payments gunluk-operasyon/daily-weekly; do
+          for path in             gunluk-operasyon/daily-dashboard             gunluk-operasyon/daily-entry             gunluk-operasyon/daily-cards             gunluk-operasyon/daily-weekly             gunluk-operasyon/daily-payments             manifest.webmanifest
+          do
             ok=0
             for attempt in $(seq 1 30); do
-              if curl --fail --silent --show-error "https://kyerp.net/$path" > /tmp/daily.html && test -s /tmp/daily.html; then ok=1; break; fi
+              if curl --fail --silent --show-error "https://kyerp.net/$path" > /tmp/live.out && test -s /tmp/live.out; then
+                ok=1
+                break
+              fi
               sleep 2
             done
             test "$ok" = 1
           done
-
-# payment-tab-redesign-trigger-20261002-v1
-
-# payment-pro-flow-trigger-20261002-v1
