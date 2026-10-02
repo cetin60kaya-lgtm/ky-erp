@@ -121,7 +121,8 @@ export default function IkPersonnelFinancePage({ activeMainCompany, focus = "per
   const [editing, setEditing] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [statusView, setStatusView] = useState("ACTIVE");
+  const [statusView, setStatusView] = useState("ALL");
+  const [sgkView, setSgkView] = useState("ALL");
   const [effectiveDate, setEffectiveDate] = useState(TODAY);
   const [changeNote, setChangeNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -225,15 +226,24 @@ export default function IkPersonnelFinancePage({ activeMainCompany, focus = "per
 
   const selected = detail?.person || people.find((row) => row.id === selectedId) || null;
 
+  const peopleCounts = useMemo(() => people.reduce((acc, person) => {
+    acc.total += 1;
+    if (isPassive(person)) acc.passive += 1; else acc.active += 1;
+    if (upper(person?.sgkStatus) === "VAR") acc.sgk += 1; else if (upper(person?.sgkStatus) === "YOK") acc.noSgk += 1;
+    return acc;
+  }, { total: 0, active: 0, passive: 0, sgk: 0, noSgk: 0 }), [people]);
+
   const visible = useMemo(() => {
     const needle = query.trim().toLocaleUpperCase("tr-TR");
     return people.filter((person) => {
       if (statusView === "ACTIVE" && isPassive(person)) return false;
       if (statusView === "PASSIVE" && !isPassive(person)) return false;
+      if (sgkView === "SGK" && upper(person?.sgkStatus) !== "VAR") return false;
+      if (sgkView === "NO_SGK" && upper(person?.sgkStatus) !== "YOK") return false;
       if (!needle) return true;
       return upper(`${person.personnelCode || person.code || ""} ${person.fullName || ""} ${person.department || ""} ${person.title || ""}`).includes(needle);
     });
-  }, [people, query, statusView]);
+  }, [people, query, sgkView, statusView]);
 
   useEffect(() => {
     if (!visible.length) return;
@@ -345,7 +355,7 @@ export default function IkPersonnelFinancePage({ activeMainCompany, focus = "per
       <div>
         <small>İK / PERSONEL & ÜCRET YÖNETİMİ</small>
         <h1>{focus === "ucret" ? "Maaş ve Ödeme Planı" : "Personel Kartları"}</h1>
-        <p>{focus === "ucret" ? "Aylık sabit ücret ve ödeme planını yönetin. Personel özlük bilgileri bu ekranda gösterilmez." : "Özlük, iletişim, SGK ve çalışma bilgilerini yönetin. Maaş planı ayrı ücret ekranındadır; PDKS işlemleri PDKS bölümündedir."}</p>
+        <p>{focus === "ucret" ? "Aylık sabit ücret ve ödeme planını yönetin. Personel özlük bilgileri bu ekranda gösterilmez." : "İK ana personel kadrosu SGK'lı ve SGK'sız herkesi içerir. PDKS ayrı modüldür ve yalnız SGK'lı + kartlı personeli kullanır."}</p>
       </div>
       {!audit && focus === "personel" ? <button type="button" className="ikpf-primary" onClick={() => setNewOpen((value) => !value)}><Plus size={16}/>{newOpen ? "Yeni Kartı Kapat" : "Yeni Personel"}</button> : null}
     </header>
@@ -376,13 +386,16 @@ export default function IkPersonnelFinancePage({ activeMainCompany, focus = "per
 
     <div className="ikpf-layout">
       <aside className="ikpf-people">
+        <div className="ikpf-roster-head"><div><strong>İK Ana Personel Kadrosu</strong><span>SGK'lı + SGK'sız tüm personel</span></div><b>{peopleCounts.total}</b></div>
         <div className="ikpf-search"><Search size={16}/><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="HKN, ad, bölüm, görev ara"/></div>
-        <div className="ikpf-filter"><button className={statusView==="ACTIVE"?"active":""} onClick={()=>setStatusView("ACTIVE")}>Aktif</button><button className={statusView==="ALL"?"active":""} onClick={()=>setStatusView("ALL")}>Tümü</button><button className={statusView==="PASSIVE"?"active":""} onClick={()=>setStatusView("PASSIVE")}>Pasif</button></div>
+        <div className="ikpf-filter"><button className={statusView==="ALL"?"active":""} onClick={()=>setStatusView("ALL")}>Tümü {peopleCounts.total}</button><button className={statusView==="ACTIVE"?"active":""} onClick={()=>setStatusView("ACTIVE")}>Aktif {peopleCounts.active}</button><button className={statusView==="PASSIVE"?"active":""} onClick={()=>setStatusView("PASSIVE")}>Pasif {peopleCounts.passive}</button></div>
+        <div className="ikpf-sgk-filter"><button className={sgkView==="ALL"?"active":""} onClick={()=>setSgkView("ALL")}>SGK Durumu: Tümü</button><button className={sgkView==="SGK"?"active":""} onClick={()=>setSgkView("SGK")}>SGK'lı {peopleCounts.sgk}</button><button className={sgkView==="NO_SGK"?"active":""} onClick={()=>setSgkView("NO_SGK")}>SGK'sız {peopleCounts.noSgk}</button></div>
+        <div className="ikpf-list-count">{visible.length} personel gösteriliyor</div>
         <div className="ikpf-list">
           {visible.map((row)=><button type="button" key={row.id} className={selectedId===row.id?"active":""} onClick={()=>setSelectedId(row.id)}>
             <b>{String(row.fullName||"?").split(/\s+/).slice(0,2).map((v)=>v[0]).join("")}</b>
             <span><strong>{row.fullName}</strong><small>{row.personnelCode||row.code||"HKN bekliyor"} · {row.department||"Departman yok"}</small></span>
-            <em>{row.sgkStatus||"VAR"}</em>
+            <em className={upper(row.sgkStatus)==="YOK"?"no-sgk":""}>{upper(row.sgkStatus)==="YOK"?"SGK YOK":"SGK VAR"}</em>
           </button>)}
           {!visible.length ? <div className="ikpf-empty"><Users size={28}/>Personel bulunamadı.</div> : null}
         </div>
@@ -423,7 +436,7 @@ export default function IkPersonnelFinancePage({ activeMainCompany, focus = "per
               <Field label="İşe Giriş"><input disabled={!editing} type="date" value={dateOnly(person?.startDate)} onChange={(e)=>setDraft({...draft,startDate:e.target.value})}/></Field>
               <Field label="İşten Çıkış"><input disabled={!editing} type="date" value={dateOnly(person?.exitDate)} onChange={(e)=>setDraft({...draft,exitDate:e.target.value})}/></Field>
               <Field label="Durum"><select disabled={!editing} value={person?.status||"Aktif"} onChange={(e)=>setDraft({...draft,status:e.target.value})}><option>Aktif</option><option>Pasif</option><option>İzinli</option></select></Field>
-              <Field label="PDKS Kart No"><input disabled value={selected.cardNo||"Atanmadı"}/></Field>
+              <Field label="PDKS Bağlantısı"><input disabled value={upper(person?.sgkStatus)==="YOK" ? "PDKS dışı · SGK'sız" : (selected.cardNo ? `Kart: ${selected.cardNo}` : "SGK'lı · kart atanmadı")}/></Field>
             </div>
           </section>
 
