@@ -17,7 +17,9 @@ internal sealed class BackupRestoreForm : Form
     }
     void Build()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(12) };
+        var p=PdksAppearance.Current;
+        BackColor=p.Canvas;
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(14), BackColor=p.Canvas };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
@@ -25,7 +27,7 @@ internal sealed class BackupRestoreForm : Form
         root.Controls.Add(info, 0, 0);
         root.Controls.Add(list, 0, 1);
 
-        var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 8, 0, 0) };
+        var bar = PdksUiKit.ActionBar(true,p.Canvas);
         bar.Controls.Add(Button("Kapat", Close));
         bar.Controls.Add(Button("Klasörü Aç", CompanyDataPaths.OpenRoot));
         bar.Controls.Add(Button("Yedekten Geri Yükle", Restore));
@@ -36,10 +38,11 @@ internal sealed class BackupRestoreForm : Form
 
     static Button Button(string text, Action action, bool primary = false)
     {
-        var b = new Button { Text = text, Width = 145, Height = 34, FlatStyle = FlatStyle.Flat };
-        if (primary) { b.BackColor = Color.FromArgb(36,107,230); b.ForeColor = Color.White; }
-        b.Click += (_, _) => action();
-        return b;
+        var role=primary?PdksActionRole.Primary:
+            text.Contains("Kapat",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Quiet:
+            text.Contains("Geri Yükle",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Danger:
+            PdksActionRole.Secondary;
+        return PdksUiKit.Button(text,145,role,action);
     }
     void RefreshList()
     {
