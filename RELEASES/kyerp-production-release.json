@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-10-02T15:38:00+03:00",
-  "attempt": 109,
+  "requestedAt": "2026-10-02T15:41:00+03:00",
+  "attempt": 110,
   "scope": [
     "ik-monthly-live-sync-1500ms",
     "ik-multi-pc-broadcast-sync",
@@ -24,9 +24,11 @@
     "ik-personnel-master-all-sgk-and-nonsgk",
     "ik-pdks-strict-sgk-card-separation",
     "ik-personnel-master-ui-counts",
-    "live-final-smoke"
+    "live-final-smoke",
+    "pdks-explicit-sgk-only",
+    "ik-master-all-personnel"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "bd42a8429e8438ed754ad0e48a035310cf6687f2",
-  "note": "İK personel ana kadrosu: SGK'lı ve SGK'sız tüm personeli göster; PDKS yalnız SGK'lı + kartlı ayrımı korunur"
+  "sourceCommit": "9b19a83ec61227f2da1850803c5da0a767dc9b72",
+  "note": "İK personel ana kadrosu tüm SGK'lı/SGK'sız personel; PDKS sadece açıkça SGK VAR personel"
 }
