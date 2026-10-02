@@ -21,8 +21,6 @@ public sealed partial class MainShellForm
         var p=PdksAppearance.Current;
 
         MainMenuStrip!.Visible = false;
-        tool.Visible = false;
-        status.Visible = false;
 
         modernNavButtons.Clear();
         modernShell = new Panel { Dock = DockStyle.Fill, BackColor = p.Canvas };
