@@ -1318,6 +1318,8 @@ async function saveAdvancedPayrollOverride(c: Context<AppEnv>) {
   const year = number(body.year) || new Date().getFullYear();
   const month = number(body.month) || new Date().getMonth() + 1;
   const period = `${year}-${String(month).padStart(2, "0")}`;
+  const payrollLock = await rejectAdvancedPeriodLocked(c, companyId, year, month);
+  if (payrollLock) return payrollLock;
   const override = body.override && typeof body.override === "object" && !Array.isArray(body.override) ? body.override as Row : {};
   const employee = await first(c, `SELECT e.*, s.extra_payment_amount, s.base_employee_id FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.id=? AND e.main_company_id=?`, [employeeId, companyId]);
   if (!employee) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
