@@ -123,9 +123,9 @@ public partial class PersonelForm : Form
         return db.Query(sql, pars);
     }
 
-    object? S(string sql)
+    object? S(string sql, params FbParameter[] pars)
     {
-        return db.Scalar(sql);
+        return db.Scalar(sql, pars);
     }
 
     int Exec(string sql, params FbParameter[] pars)
