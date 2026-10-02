@@ -181,4 +181,11 @@ public sealed partial class MainShellForm
             .OrderBy(x=>x.Min(c=>c.Order));
 
     void OpenThemeSettings() => ExecuteCommand(PdksCommandId.Theme);
+
+    void OpenCommandPalette()
+    {
+        using var palette = new CommandPaletteForm(PdksCommandCatalog.All.Where(CanExecute));
+        if (palette.ShowDialog(this) == DialogResult.OK && palette.SelectedCommand is PdksCommandId id)
+            ExecuteCommand(id);
+    }
 }
