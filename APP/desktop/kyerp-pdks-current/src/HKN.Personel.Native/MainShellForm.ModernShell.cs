@@ -181,7 +181,7 @@ public sealed partial class MainShellForm
         bottom.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var manage=CompactButton("Yönetim",PdksToolbarIcon.Groups);
-        manage.Click+=(_,_)=>ShowManagementMenu(manage);
+        manage.Click+=(_,_)=>ShowManagementCenter();
         var theme=CompactButton($"Tema • {PdksAppearance.ModeLabel}",PdksToolbarIcon.Home);
         theme.Click+=(_,_)=>OpenThemeSettings();
         bottom.Controls.Add(manage,0,0);
@@ -300,41 +300,13 @@ public sealed partial class MainShellForm
         _ => id
     };
 
-    void ShowManagementMenu(Control anchor)
+    void ShowManagementCenter()
     {
-        var p=PdksAppearance.Current;
-        var menu = new ContextMenuStrip
-        {
-            Font = new Font("Segoe UI", 9f),
-            BackColor = p.Surface,
-            ForeColor = p.Text,
-            ShowImageMargin = false,
-            Padding = new Padding(6)
-        };
-
-        foreach(var group in VisibleManagementGroups())
-        {
-            if(group.Key=="GÖRÜNÜM")continue;
-            var groupItem=new ToolStripMenuItem(group.Key)
-            {
-                Font=new Font("Segoe UI",8.8f,FontStyle.Bold),
-                ForeColor=p.Text,
-                Padding=new Padding(8,5,8,5)
-            };
-            foreach(var command in group.OrderBy(x=>x.Order))
-            {
-                var item=new ToolStripMenuItem(command.Title)
-                {
-                    ToolTipText=command.Hint,
-                    ForeColor=p.Text,
-                    Padding=new Padding(8,5,8,5)
-                };
-                item.Click+=(_,_)=>ExecuteCommand(command.Id);
-                groupItem.DropDownItems.Add(item);
-            }
-            menu.Items.Add(groupItem);
-        }
-        menu.Show(anchor,new Point(anchor.Width,0));
+        var view = new ManagementCenterForm(
+            PdksCommandCatalog.Management.Where(CanExecute),
+            ExecuteCommand);
+        ShowEmbedded(view, "management-center", "Yönetim Merkezi");
+        SetModernPage("Yönetim Merkezi", "Personel, puantaj, bordro, tanımlar ve sistem işlemleri");
     }
 
     Control BuildModernTopbar()
