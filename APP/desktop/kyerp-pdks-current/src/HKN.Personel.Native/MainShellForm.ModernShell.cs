@@ -81,7 +81,9 @@ public sealed partial class MainShellForm
         }
 
         SetModernPage("Genel Bakış", "Günün personel hareketleri ve hızlı işlemler");
+        currentWorkspaceCommand ??= PdksCommandId.Home;
         SelectNavForCommand(PdksCommandId.Home);
+        RefreshBackButton();
     }
 
     void AppearanceChanged(object? sender,EventArgs e)
@@ -316,6 +318,11 @@ public sealed partial class MainShellForm
 
     void ShowManagementCenter()
     {
+        if(currentWorkspaceCommand is PdksCommandId previous)
+            navigationHistory.Push(previous);
+        currentWorkspaceCommand=null;
+        RefreshBackButton();
+
         var view = new ManagementCenterForm(
             PdksCommandCatalog.Management.Where(CanExecute),
             ExecuteCommand);
@@ -380,8 +387,8 @@ public sealed partial class MainShellForm
             BackColor = p.Surface,
             Padding = new Padding(0, 10, 0, 0)
         };
-        var quickSearch = PdksUiKit.Button("İşlem Ara  Ctrl+K",120,PdksActionRole.Secondary,OpenCommandPalette);
-        quickSearch.Height=34;quickSearch.MinimumSize=new Size(120,34);quickSearch.MaximumSize=new Size(120,34);
+        var quickSearch = PdksUiKit.Button("İşlem Ara  Ctrl+K",135,PdksActionRole.Secondary,OpenCommandPalette);
+        quickSearch.Height=34;quickSearch.MinimumSize=new Size(135,34);quickSearch.MaximumSize=new Size(135,34);
         quickSearch.Margin=new Padding(10,0,0,0);
 
         var user = new RoundedLabel
