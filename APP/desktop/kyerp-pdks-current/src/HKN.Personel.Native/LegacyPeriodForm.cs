@@ -100,7 +100,7 @@ public sealed class LegacyPeriodForm : Form
             filterStart.Value=new DateTime(DateTime.Today.Year,1,1);filterEnd.Value=DateTime.Today.AddYears(1).Date;
             ReloadGrid(false);
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Error);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Error,"Periods");}
     }
 
     void ReloadGrid(bool filtered)
@@ -113,7 +113,7 @@ public sealed class LegacyPeriodForm : Form
             else dt=db.Query(sql+" order by BASTAR,GRUP");
             grid.DataSource=dt;if(grid.Rows.Count>0){grid.CurrentCell=grid.Rows[0].Cells[0];LoadSelected();}else{code=null;ClearFields();}
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Periods");}
     }
 
     DataRow? CurrentRow()=>grid.CurrentRow?.DataBoundItem is DataRowView v?v.Row:null;
@@ -160,7 +160,7 @@ public sealed class LegacyPeriodForm : Form
             }
             adding=false;SetEdit(false);save.Enabled=false;ReloadGrid(false);
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Periods");}
     }
 
     int PeriodUsage(int selected)=>Convert.ToInt32(db.Scalar("select count(*) from UCRETLER where DONEM=@K",new FbParameter("@K",selected))??0);
@@ -173,7 +173,7 @@ public sealed class LegacyPeriodForm : Form
             if(MessageBox.Show("Seçili dönemi silmek istediğinizden emin misiniz ?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
             db.Execute("delete from DONEM where KOD=@K",new FbParameter("@K",code.Value));code=null;ReloadGrid(false);
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Periods");}
     }
     void DeleteAll()
     {
@@ -183,6 +183,6 @@ public sealed class LegacyPeriodForm : Form
             if(MessageBox.Show("Tüm dönem kayıtları silinsin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
             db.Execute("delete from DONEM");code=null;ReloadGrid(false);
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Periods");}
     }
 }
