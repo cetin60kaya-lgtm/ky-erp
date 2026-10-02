@@ -19,7 +19,7 @@ public sealed class PdksQuickGuideForm : Form
         Dock = DockStyle.Top,
         Height = 42,
         Font = new Font("Segoe UI", 16f, FontStyle.Bold),
-        ForeColor = Color.FromArgb(27, 44, 68),
+        ForeColor = PdksAppearance.Current.Text,
         TextAlign = ContentAlignment.MiddleLeft
     };
 
@@ -27,7 +27,7 @@ public sealed class PdksQuickGuideForm : Form
     {
         Dock = DockStyle.Fill,
         Font = new Font("Segoe UI", 10f),
-        ForeColor = Color.FromArgb(62, 78, 101),
+        ForeColor = PdksAppearance.Current.Muted,
         AutoSize = false,
         Padding = new Padding(0, 10, 0, 0)
     };
@@ -119,7 +119,7 @@ public sealed class PdksQuickGuideForm : Form
         Size = new Size(900, 620);
         MinimumSize = new Size(760, 520);
         Font = new Font("Segoe UI", 9f);
-        BackColor = Color.FromArgb(246, 249, 253);
+        BackColor = PdksAppearance.Current.Canvas;
 
         Build();
         topics.Items.AddRange(guide.Keys.Cast<object>().ToArray());
@@ -129,50 +129,48 @@ public sealed class PdksQuickGuideForm : Form
 
     void Build()
     {
+        var p=PdksAppearance.Current;
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
+            ColumnCount = 3,
             RowCount = 2,
             Padding = new Padding(16),
-            BackColor = BackColor
+            BackColor = p.Canvas
         };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 245));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 12));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
 
-        var left = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(8) };
+        var left = PdksUiKit.Card(12);
+        topics.BackColor=p.Surface;topics.ForeColor=p.Text;
         left.Controls.Add(topics);
         root.Controls.Add(left, 0, 0);
+        root.Controls.Add(new Panel{Dock=DockStyle.Fill,BackColor=p.Canvas},1,0);
 
-        var body = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(22, 16, 22, 16), Margin = new Padding(12, 0, 0, 0) };
+        var body = PdksUiKit.Card(20);
+        description.ForeColor=p.Muted;title.ForeColor=p.Text;
         body.Controls.Add(description);
         body.Controls.Add(title);
-        root.Controls.Add(body, 1, 0);
+        root.Controls.Add(body, 2, 0);
 
         var hint = new Label
         {
             Text = "Günlük kullanım için soldan konuyu seçin. Bu rehber veri değiştirmez.",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.FromArgb(88, 103, 124)
+            ForeColor = p.Muted
         };
-        var close = new Button
-        {
-            Text = "Kapat",
-            Dock = DockStyle.Right,
-            Width = 110,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.White
-        };
-        close.Click += (_, _) => Close();
+        var close = PdksUiKit.Button("Kapat",110,PdksActionRole.Quiet,Close);
+        close.Dock=DockStyle.Right;
 
-        var bottom = new Panel { Dock = DockStyle.Fill, BackColor = BackColor, Padding = new Padding(0, 8, 0, 0) };
+        var bottom = new Panel { Dock = DockStyle.Fill, BackColor = p.Canvas, Padding = new Padding(0, 8, 0, 0) };
         bottom.Controls.Add(hint);
         bottom.Controls.Add(close);
         root.Controls.Add(bottom, 0, 1);
-        root.SetColumnSpan(bottom, 2);
+        root.SetColumnSpan(bottom, 3);
 
         Controls.Add(root);
     }
