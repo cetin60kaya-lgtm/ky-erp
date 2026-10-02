@@ -179,6 +179,7 @@ static void CaptureForm(Form form, string name, string root, StringBuilder log, 
         var tab = tabs[t];
         for (var i = 0; i < tab.TabPages.Count; i++)
         {
+            EnsureTabVisible(tab);
             tab.SelectedIndex = i;
             Application.DoEvents();
             var page = tab.TabPages[i];
@@ -251,6 +252,18 @@ static void ValidateLayout(Form form, string name, List<string> errors, StringBu
         }
     }
 }
+static void EnsureTabVisible(TabControl tab)
+{
+    Control? current = tab;
+    while (current is not null)
+    {
+        if (current.Parent is TabPage page && page.Parent is TabControl parentTabs)
+            parentTabs.SelectedTab = page;
+        current = current.Parent;
+    }
+    Application.DoEvents();
+}
+
 static IEnumerable<Control> Descendants(Control root)
 {
     foreach (Control child in root.Controls)
