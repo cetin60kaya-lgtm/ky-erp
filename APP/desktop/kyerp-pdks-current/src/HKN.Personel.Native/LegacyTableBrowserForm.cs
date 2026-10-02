@@ -28,7 +28,7 @@ public sealed class LegacyTableBrowserForm : Form
         this.allowEdit = allowEdit;
         Text = title;
         Font = new Font("Segoe UI", 9f);
-        BackColor = Color.FromArgb(246, 249, 253);
+        BackColor = PdksAppearance.Current.Canvas;
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = true;
@@ -42,12 +42,16 @@ public sealed class LegacyTableBrowserForm : Form
 
     void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, Padding = new Padding(14), BackColor = Color.FromArgb(246,249,253) };
+        var p=PdksAppearance.Current;
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(16), BackColor = p.Canvas };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        root.Controls.Add(grid, 0, 0);
+        root.Controls.Add(PdksUiKit.SectionTitle(Text),0,0);
+        grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.RowTemplate.Height=31;grid.ColumnHeadersHeight=35;
+        root.Controls.Add(grid, 0, 1);
 
-        var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(2, 6, 2, 0) };
+        var bar = PdksUiKit.ActionBar(true,p.Canvas);
         var close = Button("Kapat", 82); close.DialogResult = DialogResult.Cancel;
         var refresh = Button("Yenile", 82); refresh.Click += (_, _) => Reload();
         bar.Controls.Add(close); bar.Controls.Add(refresh);
@@ -58,17 +62,19 @@ public sealed class LegacyTableBrowserForm : Form
             var add = Button("Yeni Ekle", 94); add.Click += (_, _) => EditRow(true);
             bar.Controls.Add(del); bar.Controls.Add(edit); bar.Controls.Add(add);
         }
-        root.Controls.Add(bar, 0, 1);
+        root.Controls.Add(bar, 0, 2);
         Controls.Add(root);
         CancelButton = close;
     }
 
-    static Button Button(string text, int width) => new()
+    static Button Button(string text, int width)
     {
-        Text = text, Width = Math.Max(width, 96), Height = 36, FlatStyle = FlatStyle.Flat,
-        ForeColor = Color.FromArgb(27,44,68), BackColor = Color.White,
-        Font = new Font("Segoe UI", 9f, FontStyle.Bold), Cursor = Cursors.Hand
-    };
+        var role=text.Contains("Sil",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Danger:
+            text.Contains("Yeni",StringComparison.OrdinalIgnoreCase) || text.Contains("Yenile",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Primary:
+            text.Contains("Kapat",StringComparison.OrdinalIgnoreCase) || text.Contains("Vazgeç",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Quiet:
+            PdksActionRole.Secondary;
+        return PdksUiKit.Button(text,Math.Max(width,96),role);
+    }
 
     void Reload()
     {
@@ -82,7 +88,7 @@ public sealed class LegacyTableBrowserForm : Form
         catch (Exception ex)
         {
             grid.DataSource = null;
-            MessageBox.Show($"{table} okunamadı: {ex.Message}", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions.TableBrowser.Reload");
         }
     }
 
@@ -127,7 +133,7 @@ public sealed class LegacyTableBrowserForm : Form
             }
             Reload();
         }
-        catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (Exception ex) { PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions.TableBrowser"); }
     }
 
     void DeleteRow()
@@ -141,7 +147,7 @@ public sealed class LegacyTableBrowserForm : Form
             db.Execute($"delete from {table} where {key}=@K", new FbParameter("@K", row[key]));
             Reload();
         }
-        catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (Exception ex) { PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions.TableBrowser"); }
     }
 
     static bool IsNumber(Type t) => t == typeof(short) || t == typeof(int) || t == typeof(long) || t == typeof(decimal) || t == typeof(double) || t == typeof(float);
@@ -158,7 +164,7 @@ public sealed class LegacyTableBrowserForm : Form
         {
             this.schema = schema; this.key = key; this.isNew = isNew;
             Text = title; StartPosition = FormStartPosition.CenterParent; FormBorderStyle = FormBorderStyle.Sizable;
-            MaximizeBox = true; MinimizeBox = true; ShowInTaskbar = false; Font = new Font("Segoe UI", 9f); BackColor = Color.FromArgb(246,249,253);
+            MaximizeBox = true; MinimizeBox = true; ShowInTaskbar = false; Font = new Font("Segoe UI", 9f); BackColor = PdksAppearance.Current.Canvas;
             ClientSize = new Size(760, Math.Min(760, Math.Max(460, schema.Columns.Count * 38 + 110)));
             MinimumSize = new Size(640, 420);
             Build(source);
@@ -166,14 +172,14 @@ public sealed class LegacyTableBrowserForm : Form
 
         void Build(DataRow? source)
         {
-            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoScroll = true, Padding = new Padding(8) };
+            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoScroll = true, Padding = new Padding(16), BackColor=PdksAppearance.Current.Surface };
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
             int row = 0;
             foreach (DataColumn col in schema.Columns)
             {
                 if (col.DataType == typeof(byte[])) continue;
                 root.RowStyles.Add(new RowStyle(SizeType.Absolute,29));
-                root.Controls.Add(new Label { Text = col.ColumnName, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, row);
+                root.Controls.Add(PdksUiKit.FieldLabel(col.ColumnName), 0, row);
                 Control editor;
                 if (col.DataType == typeof(DateTime))
                     editor = new DateTimePicker { Dock = DockStyle.Fill, Format = DateTimePickerFormat.Custom, CustomFormat = "dd.MM.yyyy HH:mm", ShowCheckBox = col.AllowDBNull };
@@ -223,7 +229,7 @@ public sealed class LegacyTableBrowserForm : Form
                 }
                 DialogResult = DialogResult.OK; Close();
             }
-            catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+            catch (Exception ex) { PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions.TableBrowser"); }
         }
     }
 }
