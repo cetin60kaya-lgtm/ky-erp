@@ -238,7 +238,9 @@ public static class PdksTheme
         var current = label.ForeColor;
         if (current == Color.FromArgb(100,116,139) || current == Color.FromArgb(88,103,124) || current == Color.Gray || current == Color.DimGray)
             label.ForeColor = p.Muted;
-        else if (current == Color.Blue || current == Color.Navy || current.B > current.R * 1.4)
+        else if (current == Color.Blue || current == Color.Navy ||
+                 current == Color.FromArgb(31,92,180) ||
+                 (current.B > 110 && current.B > current.R * 1.35 && current.B > current.G * 1.08))
             label.ForeColor = p.Primary;
         else
             label.ForeColor = p.Text;
