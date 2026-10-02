@@ -12,6 +12,7 @@ foreach (var key in new[] { "KY_PDKS_DB_PATH", "KY_PDKS_DB_HOST", "KY_PDKS_DB_PO
 }
 
 var noLoad = string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_NOLOAD"), "1", StringComparison.Ordinal);
+var visibleAudit = string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_VISIBLE"), "1", StringComparison.Ordinal);
 var workspaceRoot = Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT") ?? Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT", EnvironmentVariableTarget.User);
 var driveRoot = !string.IsNullOrWhiteSpace(workspaceRoot)
     ? Path.Combine(workspaceRoot, "08_TEST", "UI_AUDIT")
@@ -85,7 +86,7 @@ foreach (var job in jobs)
         if (noLoad || job.Name.StartsWith("30-Rapor-", StringComparison.Ordinal))
             CaptureFormNoLoad(form, job.Name, root, log, errors);
         else
-            CaptureForm(form, job.Name, root, log, errors);
+            CaptureForm(form, job.Name, root, log, errors, visibleAudit);
         Console.WriteLine("UI_AUDIT_DONE=" + job.Name);
     }
     catch (Exception ex)
@@ -96,18 +97,24 @@ foreach (var job in jobs)
     }
 }
 
-try
+var includeTransfer = string.IsNullOrWhiteSpace(only) ||
+    only.Split(';',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries)
+        .Any(f=>"40-Terminal-Veri-Transferi".Contains(f,StringComparison.OrdinalIgnoreCase));
+if (includeTransfer)
 {
-    using var personnel = new PersonelForm();
-    using var transfer = personnel.CreateTerminalTransferDialog();
-    if (noLoad) CaptureFormNoLoad(transfer, "40-Terminal-Veri-Transferi", root, log, errors);
-    else CaptureForm(transfer, "40-Terminal-Veri-Transferi", root, log, errors);
-}
-catch (Exception ex)
-{
-    var msg = $"40-Terminal-Veri-Transferi: {ex.GetType().Name}: {ex.Message}";
-    errors.Add(msg);
-    log.AppendLine("ERROR " + msg);
+    try
+    {
+        using var personnel = new PersonelForm();
+        using var transfer = personnel.CreateTerminalTransferDialog();
+        if (noLoad) CaptureFormNoLoad(transfer, "40-Terminal-Veri-Transferi", root, log, errors);
+        else CaptureForm(transfer, "40-Terminal-Veri-Transferi", root, log, errors, visibleAudit);
+    }
+    catch (Exception ex)
+    {
+        var msg = $"40-Terminal-Veri-Transferi: {ex.GetType().Name}: {ex.Message}";
+        errors.Add(msg);
+        log.AppendLine("ERROR " + msg);
+    }
 }
 
 File.WriteAllText(Path.Combine(root, "audit.txt"), log.ToString(), Encoding.UTF8);
@@ -115,7 +122,7 @@ File.WriteAllLines(Path.Combine(root, "errors.txt"), errors, Encoding.UTF8);
 File.WriteAllText(Path.Combine(root, "RESULT.txt"), errors.Count == 0 ? "PASS" : $"PARTIAL - {errors.Count} error(s)");
 
 Console.WriteLine($"UI_AUDIT_ROOT={root}");
-Console.WriteLine($"UI_AUDIT_FORMS={jobs.Count + 1}");
+Console.WriteLine($"UI_AUDIT_FORMS={jobs.Count + (includeTransfer ? 1 : 0)}");
 Console.WriteLine($"UI_AUDIT_ERRORS={errors.Count}");
 foreach (var error in errors) Console.WriteLine("ERROR=" + error);
 Environment.ExitCode = errors.Count == 0 ? 0 : 1;
@@ -130,10 +137,11 @@ static void CaptureFormNoLoad(Form form, string name, string root, StringBuilder
     Capture(form, Path.Combine(root, Safe(name) + ".png"));
 }
 
-static void CaptureForm(Form form, string name, string root, StringBuilder log, List<string> errors)
+static void CaptureForm(Form form, string name, string root, StringBuilder log, List<string> errors, bool visibleAudit)
 {
     form.StartPosition = FormStartPosition.Manual;
-    form.Location = new Point(40, 40);
+    form.ShowInTaskbar = false;
+    form.Location = visibleAudit ? new Point(40, 40) : new Point(-32000, -32000);
     foreach (var grid in Descendants(form).OfType<DataGridView>())
         grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
     form.Show();
