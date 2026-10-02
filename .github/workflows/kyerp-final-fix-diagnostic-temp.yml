@@ -51,6 +51,16 @@ jobs:
           npm audit --omit=dev --json > /tmp/worker-audit.json || true
           jq -c '{vulnerabilities:.metadata.vulnerabilities,dependencies:.metadata.dependencies}' /tmp/worker-audit.json
 
+      - name: SGK Excel parser dependency probe
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false xlsx@0.18.5 >/tmp/xlsx-install.log 2>&1
+          node -e "const x=require('xlsx'); console.log('XLSX_VERSION='+x.version)"
+          npm audit --omit=dev --json > /tmp/xlsx-audit.json || true
+          jq -c '{vulnerabilities:.metadata.vulnerabilities}' /tmp/xlsx-audit.json
+
       - name: IK live D1 integrity audit
         working-directory: APP/cloud/ky-erp-api
         env:
