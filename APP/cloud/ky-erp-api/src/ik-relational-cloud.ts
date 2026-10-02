@@ -1115,6 +1115,20 @@ async function advancedMonth(c: Context<AppEnv>) {
       source,
     };
   });
+  const sgkByEmployee = new Map<string, Row>();
+  for (const row of sgkRows) {
+    const employeeId = text(row.employeeId);
+    if (!employeeId) continue;
+    const current = sgkByEmployee.get(employeeId) || { sgkDays: 0, sgkNet: 0, sgkGross: 0 };
+    current.sgkDays = number(current.sgkDays) + number(row.sgkDays);
+    current.sgkNet = number(current.sgkNet) + number(row.net);
+    current.sgkGross = number(current.sgkGross) + number(row.gross);
+    sgkByEmployee.set(employeeId, current);
+  }
+  const employeesWithSgk = mergedEmployees.map((employee) => {
+    const official = sgkByEmployee.get(text(employee.id));
+    return official ? { ...employee, sgkDays: number(official.sgkDays), sgkNet: number(official.sgkNet), sgkGross: number(official.sgkGross), sgkImportVersion: number(sgkImport?.version_no) || 1 } : employee;
+  });
   const closeRow = closeRows[0] || {};
   let checks: Row[] = [];
   try {
@@ -1124,7 +1138,7 @@ async function advancedMonth(c: Context<AppEnv>) {
   return okData(c, {
     year,
     month,
-    employees: mergedEmployees,
+    employees: employeesWithSgk,
     rawEmployees: rawEmployeesWithCalc,
     adjustments: adjustments.filter((row) => visibleEmployeeIds.has(text(row.employeeId))),
     leaves: leaves.filter((row) => visibleEmployeeIds.has(text(row.employeeId))),
