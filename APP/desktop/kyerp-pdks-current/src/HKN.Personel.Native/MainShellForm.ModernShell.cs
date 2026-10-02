@@ -151,8 +151,8 @@ public sealed partial class MainShellForm
         bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         bottom.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        bottom.Controls.Add(CompactNavButton("Terminal", PdksToolbarIcon.Terminal, OpenTerminalCenter), 0, 0);
-        bottom.Controls.Add(CompactNavButton("Yönetim", PdksToolbarIcon.Settings, ShowManagementMenu), 0, 1);
+        bottom.Controls.Add(CompactNavButton("Terminal", PdksToolbarIcon.Transfer, OpenTerminalCenter), 0, 0);
+        bottom.Controls.Add(CompactNavButton("Yönetim", PdksToolbarIcon.Groups, ShowManagementMenu), 0, 1);
         bottom.Controls.Add(new Label
         {
             Text = "v6.4",
