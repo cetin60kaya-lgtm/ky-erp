@@ -203,3 +203,31 @@
 .gop-payment-record-actions button{font-weight:900}
 @media(max-width:1300px){.gop-payment-stats.period-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:800px){.gop-payment-stats.period-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+/* DAILY-OPERATIONS-CORPORATE-FINAL-2026-10-02 */
+.gop-owner-strip{display:grid;grid-template-columns:1.35fr repeat(3,minmax(0,1fr));gap:10px;margin:0 0 12px}
+.gop-owner-strip>div{min-height:92px;border:1px solid #dbe4ef;border-radius:12px;background:#fff;padding:13px 15px;display:flex;flex-direction:column;justify-content:center}
+.gop-owner-strip .owner-total{background:linear-gradient(135deg,#10284d,#173d68);border-color:#173d68;color:#fff}
+.gop-owner-strip span{font-size:10px;font-weight:900;letter-spacing:.06em;color:#64748b}
+.gop-owner-strip .owner-total span,.gop-owner-strip .owner-total small,.gop-owner-strip .owner-total em{color:#dbeafe}
+.gop-owner-strip strong{font-size:22px;line-height:1.1;margin:5px 0;color:#0f172a}
+.gop-owner-strip .owner-total strong{font-size:28px;color:#fff}
+.gop-owner-strip small,.gop-owner-strip em{font-size:10px;color:#64748b;font-style:normal}
+.gop-preset-buttons button{min-height:31px;font-weight:800}
+.gop-preset-buttons button:focus-visible,.kyop-actions button:focus-visible,.quick-footer button:focus-visible{outline:3px solid rgba(37,99,235,.25);outline-offset:2px}
+@media (min-width:700px) and (max-width:1400px){
+  .gop-owner-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .gop-owner-strip .owner-total{grid-row:span 2}
+}
+@media (pointer:coarse) and (min-width:700px){
+  .gop-preset-buttons button,.gop-range-controls button,.kyop-actions button,.quick-day-nav button,.quick-footer button{min-height:42px;padding-left:13px;padding-right:13px}
+  .gop-owner-strip>div{min-height:108px}
+  .gop-owner-strip strong{font-size:25px}
+  .gop-owner-strip .owner-total strong{font-size:32px}
+  .quick-person button{min-height:44px}
+}
+@media (max-width:760px){
+  .gop-owner-strip{grid-template-columns:1fr 1fr}
+  .gop-owner-strip .owner-total{grid-column:1/-1;grid-row:auto}
+}
