@@ -67,7 +67,7 @@ public sealed partial class MainShellForm : Form
     static void OpenErpSite()
     {
         try { Process.Start(new ProcessStartInfo("https://kyerp.net") { UseShellExecute = true }); }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "KY ERP", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (Exception ex) { PdksErrorPresenter.Show(this,ex,"KY ERP",MessageBoxIcon.Warning,"Shell"); }
     }
 
     bool Ready(PdksModule module)
@@ -278,7 +278,7 @@ public sealed partial class MainShellForm : Form
     static void Launch(string file)
     {
         try { Process.Start(new ProcessStartInfo(file){UseShellExecute=true}); }
-        catch (Exception ex) { MessageBox.Show(ex.Message,"KYERP PDKS",MessageBoxButtons.OK,MessageBoxIcon.Warning); }
+        catch (Exception ex) { PdksErrorPresenter.Show(null,ex,"KYERP PDKS",MessageBoxIcon.Warning,"Shell.Launch"); }
     }
 
     static void LaunchEditor()
@@ -297,7 +297,7 @@ public sealed partial class MainShellForm : Form
             var dest = Path.Combine(dir,$"DATABASE_{DateTime.Now:yyyyMMdd_HHmmss}.GDB"); File.Copy(path,dest,false);
             MessageBox.Show("Yedek alındı:\n"+dest,"Yedekle",MessageBoxButtons.OK,MessageBoxIcon.Information);
         }
-        catch (Exception ex) { MessageBox.Show(ex.Message,"Yedekle",MessageBoxButtons.OK,MessageBoxIcon.Warning); }
+        catch (Exception ex) { PdksErrorPresenter.Show(this,ex,"Yedekle",MessageBoxIcon.Warning,"Shell.Backup"); }
     }
 
 }
