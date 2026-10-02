@@ -100,7 +100,7 @@ public sealed class TerminalCenterForm : Form
     {
         var p=PdksAppearance.Current;
         var panel = PdksUiKit.Card(14);
-        panel.Width=300;panel.Height=176;panel.Margin=new Padding(10);panel.Dock=DockStyle.None;
+        panel.Dock=DockStyle.None;panel.Size=new Size(300,176);panel.MinimumSize=new Size(300,176);panel.MaximumSize=new Size(300,176);panel.Margin=new Padding(10);
         var t = new Label { Text = title, AutoSize = false, Width = 266, Height = 30, Font = new Font("Segoe UI", 11f, FontStyle.Bold), ForeColor=p.Text, Location = new Point(14, 14) };
         var d = new Label { Text = text, AutoSize = false, Width = 266, Height = 76, ForeColor=p.Muted, Location = new Point(14, 45) };
         var b = PdksUiKit.Button(buttonText,126,PdksActionRole.Primary);
