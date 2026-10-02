@@ -52,7 +52,7 @@ public sealed class ThemeSettingsForm : Form
         {
             var sample=a==PdksAccent.Custom?selectedCustomAccent:PdksAppearance.AccentColor(a);
             var b=new Button{
-                Text=a==PdksAccent.Custom?"Özel":PdksAppearance.AccentName(a),Tag=a,Width=68,Height=30,FlatStyle=FlatStyle.Flat,
+                Text=a==PdksAccent.Custom?"Özel":PdksAppearance.AccentName(a),Tag=a,Width=60,Height=30,FlatStyle=FlatStyle.Flat,
                 BackColor=sample,ForeColor=BestText(sample),
                 Font=new Font("Segoe UI",8.1f,FontStyle.Bold),Cursor=Cursors.Hand,Margin=new Padding(0,0,5,0)
             };
