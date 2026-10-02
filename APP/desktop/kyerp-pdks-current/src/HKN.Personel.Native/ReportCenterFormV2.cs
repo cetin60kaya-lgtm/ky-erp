@@ -6,7 +6,7 @@ using KYERP.PDKS.Core.Reports;
 
 namespace HKN.Personel.Native;
 
-internal sealed class ReportCenterForm : Form
+public sealed class ReportCenterForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
     readonly ComboBox report = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 330 };
