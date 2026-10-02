@@ -1,6 +1,7 @@
 using System.Data;
 using FirebirdSql.Data.FirebirdClient;
 using KYERP.PDKS.Core;
+using KYERP.PDKS.Core.Payroll;
 
 namespace HKN.Personel.Native;
 
@@ -53,10 +54,12 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
         AddMoney("EX4","İcra",72,false);
         AddMoney("NCKALAN","Maaş Kalan",94,false);
         AddMoney("FMKALAN","Mesai Kalan",94,false);
-        AddMoney("NET","Net",94,true);
-        AddMoney("EX2","Banka",94,false,Color.FromArgb(235,246,255));
-        AddMoney("ELDEN","Elden",94,false,Color.FromArgb(255,246,229));
-        AddText("DURUM","Durum",105,true,true);
+        AddMoney("HAKEDIS_NET","Hak Edilen Net",105,true,Color.FromArgb(240,248,255));
+        AddMoney("PEK_BRUT","Hesaplanan PEK",108,true,Color.FromArgb(243,250,243));
+        AddMoney("RESMI_NET","Resmî Bordro Neti",112,true,Color.FromArgb(243,250,243));
+        AddMoney("FARK","Aradaki Fark",100,true,Color.FromArgb(255,249,229));
+        AddMoney("EX2","Bankaya Ödenecek",112,true,Color.FromArgb(235,246,255));
+        AddText("DURUM","Durum",135,true,true);
 
         grid.EnableHeadersVisualStyles=false;
         grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(225,237,252);
@@ -83,8 +86,8 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
 
         var fast=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(4,5,0,0)};
         fast.Controls.Add(B("Tümünü Seç",92,()=>SetAll(true))); fast.Controls.Add(B("Seçimi Kaldır",104,()=>SetAll(false)));
-        fast.Controls.Add(B("Seçili → Banka",112,()=>AllocateSelected(true))); fast.Controls.Add(B("Seçili → Elden",112,()=>AllocateSelected(false)));
-        fast.Controls.Add(B("Geçen Ay Banka/Elden",158,CopyPreviousDistribution));
+        fast.Controls.Add(B("Resmî Bordroyu Yenile",160,RecalculateAll));
+        fast.Controls.Add(new Label{Text="Banka tutarı resmî bordro netinden otomatik hesaplanır.",AutoSize=true,Padding=new Padding(12,7,0,0),ForeColor=Color.FromArgb(65,82,103)});
         root.Controls.Add(fast,0,1); root.Controls.Add(grid,0,2);
 
         var bottom=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,WrapContents=false,Padding=new Padding(0,8,0,0)};
@@ -112,7 +115,12 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
             data=db.Query("select u.PKNO,(k.AD||' '||k.SOYAD) PERSONEL,u.BASTAR,u.BITTAR,u.DMAAS,u.GUN1,u.SAAT1,u.SAAT2,u.SAAT3,u.GUN4,u.DEVG,u.EKS,u.EKKAZ,u.EKKES,u.EX1,u.EX2,u.EX4,u.NCKALAN,u.FMKALAN " +
                 "from UCRETLER u left join KIMLIK k on k.PKNO=u.PKNO where u.BASTAR<=@B and coalesce(u.BITTAR,u.BASTAR)>=@A and (k.ICTARIH is null or k.ICTARIH>=@A) order by u.PKNO",
                 new FbParameter("@A",p.A),new FbParameter("@B",p.B));
-            data.Columns.Add("SEC",typeof(bool)); data.Columns.Add("NET",typeof(decimal)); data.Columns.Add("ELDEN",typeof(decimal)); data.Columns.Add("DURUM",typeof(string));
+            data.Columns.Add("SEC",typeof(bool));
+            data.Columns.Add("HAKEDIS_NET",typeof(decimal));
+            data.Columns.Add("PEK_BRUT",typeof(decimal));
+            data.Columns.Add("RESMI_NET",typeof(decimal));
+            data.Columns.Add("FARK",typeof(decimal));
+            data.Columns.Add("DURUM",typeof(string));
             foreach(DataRow r in data.Rows){r["SEC"]=false;RecalcRow(r,"Temiz");}
             grid.DataSource=data;
             LoadPeopleFilter(); ApplyPersonFilter(); RefreshSummary();
@@ -135,17 +143,51 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
     void GridCellEndEdit(object? s,DataGridViewCellEventArgs e)
     {
         if(e.RowIndex<0)return;
-        var view=grid.Rows[e.RowIndex].DataBoundItem as DataRowView;if(view is null)return;var r=view.Row;
-        var name=grid.Columns[e.ColumnIndex].Name;
-        if(name=="ELDEN"){var net=Dec(r,"NET");var elden=Math.Max(0,Dec(r,"ELDEN"));r["EX2"]=Math.Max(0,net-elden);}
-        RecalcRow(r,"Değişti"); RefreshSummary();
+        var view=grid.Rows[e.RowIndex].DataBoundItem as DataRowView;
+        if(view is null)return;
+        RecalcRow(view.Row,"Değişti");
+        RefreshSummary();
     }
 
     void RecalcRow(DataRow r,string state)
     {
-        var net=Math.Max(0,Dec(r,"NCKALAN")+Dec(r,"FMKALAN")); var banka=Math.Max(0,Dec(r,"EX2")); var elden=net-banka;
-        r["NET"]=net; r["ELDEN"]=elden;
-        r["DURUM"] = banka>net+0.01m || elden<-.01m ? "Hata" : state;
+        var card=Convert.ToString(r["PKNO"])?.Trim()??string.Empty;
+        var entitlement=Math.Max(0,Dec(r,"NCKALAN")+Dec(r,"FMKALAN"));
+        r["HAKEDIS_NET"]=entitlement;
+        try
+        {
+            var selectedYear=(int)year.Value;
+            var rules=TurkishPayrollRules.ForYear(selectedYear);
+            var profile=PayrollProfileStore.Load(card,Math.Max(0,Dec(r,"DMAAS")));
+            var unpaid=Math.Max(0,Dec(r,"GUN4"));
+            var absent=Math.Max(0,Dec(r,"DEVG"));
+            var payableDays=Math.Clamp((int)Math.Round(30m-unpaid-absent,MidpointRounding.AwayFromZero),0,30);
+            if(entitlement<=0||payableDays==0)
+            {
+                r["PEK_BRUT"]=0m;r["RESMI_NET"]=0m;r["FARK"]=entitlement;r["EX2"]=0m;r["DURUM"]=state;return;
+            }
+
+            var requiredGross=TurkishPayrollCalculator.GrossForTargetNet(entitlement,selectedYear,0m,payableDays);
+            decimal gross;
+            var mismatch=false;
+            if(profile.PekMode==PekMode.Manual)
+            {
+                gross=Math.Round(profile.ManualPekGross*payableDays/30m,2,MidpointRounding.AwayFromZero);
+                mismatch=gross+0.01m<requiredGross;
+            }
+            else gross=requiredGross;
+
+            var official=TurkishPayrollCalculator.Calculate(new OfficialPayrollInput(gross,0m,payableDays),rules);
+            r["PEK_BRUT"]=official.PrimeEarnings;
+            r["RESMI_NET"]=official.NetWage;
+            r["FARK"]=Math.Round(entitlement-official.NetWage,2,MidpointRounding.AwayFromZero);
+            r["EX2"]=official.NetWage;
+            r["DURUM"]=mismatch?"PEK UYUMSUZ":state;
+        }
+        catch(NotSupportedException)
+        {
+            r["PEK_BRUT"]=0m;r["RESMI_NET"]=0m;r["FARK"]=entitlement;r["EX2"]=0m;r["DURUM"]="YIL PARAMETRESİ YOK";
+        }
     }
 
     void GridCellFormatting(object? s,DataGridViewCellFormattingEventArgs e)
@@ -157,23 +199,11 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
     static decimal Dec(DataRow r,string c){if(!r.Table.Columns.Contains(c)||r[c]==DBNull.Value)return 0;try{return Convert.ToDecimal(r[c]);}catch{return decimal.TryParse(Convert.ToString(r[c]),out var x)?x:0;}}
     IEnumerable<DataRow> Selected()=>data.AsEnumerable().Where(r=>r.Field<bool>("SEC"));
     void SetAll(bool value){foreach(DataRow r in data.Rows)r["SEC"]=value;RefreshSummary();}
-    void AllocateSelected(bool bank){foreach(var r in Selected()){var net=Dec(r,"NET");r["EX2"]=bank?net:0m;RecalcRow(r,"Değişti");}RefreshSummary();grid.Refresh();}
-
-    void CopyPreviousDistribution()
+    void RecalculateAll()
     {
-        try
-        {
-            var p=Period();var prevA=p.A.AddMonths(-1);var prevB=p.A.AddDays(-1);
-            foreach(var r in Selected())
-            {
-                var q=db.Query("select first 1 coalesce(EX2,0) BANKA,(coalesce(NCKALAN,0)+coalesce(FMKALAN,0)) NET from UCRETLER where PKNO=@P and BASTAR<=@B and coalesce(BITTAR,BASTAR)>=@A order by BASTAR desc",
-                    new FbParameter("@P",Convert.ToString(r["PKNO"])??""),new FbParameter("@A",prevA),new FbParameter("@B",prevB));
-                if(q.Rows.Count==0)continue;var oldNet=Convert.ToDecimal(q.Rows[0]["NET"]);var oldBank=Convert.ToDecimal(q.Rows[0]["BANKA"]);var net=Dec(r,"NET");
-                var ratio=oldNet<=0?0m:Math.Clamp(oldBank/oldNet,0m,1m);r["EX2"]=Math.Round(net*ratio,2);RecalcRow(r,"Değişti");
-            }
-            RefreshSummary();grid.Refresh();
-        }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text);}
+        foreach(DataRow row in data.Rows) RecalcRow(row,"Temiz");
+        grid.Refresh();
+        RefreshSummary();
     }
 
     void SaveMonth()
@@ -199,6 +229,11 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
     void PostSelectedPayments()
     {
         var rows=Selected().ToList();if(rows.Count==0){MessageBox.Show("Ödeme için personel seçin.",Text);return;}
+        if(rows.Any(r=>string.Equals(Convert.ToString(r["DURUM"]),"PEK UYUMSUZ",StringComparison.OrdinalIgnoreCase)))
+        {
+            MessageBox.Show("Seçimde PEK uyumsuzluğu bulunan personel var. Resmî bordro/PEK düzeltilmeden banka ödeme kaydı oluşturulmaz.",Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            return;
+        }
         try
         {
             ValidateRows(rows);
@@ -208,7 +243,7 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
                 {
                     var pk=Convert.ToString(r["PKNO"])??"";var a=Convert.ToDateTime(r["BASTAR"]);var b=Convert.ToDateTime(r["BITTAR"]);
                     using(var del=FirebirdDatabase.CreateCommand(c,t,"delete from ODEME where PKNO=@P and BASTAR=@A and BITTAR=@B",new FbParameter("@P",pk),new FbParameter("@A",a),new FbParameter("@B",b)))del.ExecuteNonQuery();
-                    using var ins=FirebirdDatabase.CreateCommand(c,t,"insert into ODEME(PKNO,BASTAR,BITTAR,NODENEN,NOTARIH,FMODENEN,FMOTARIH) values(@P,@A,@B,@N,@D,@F,@D)",new FbParameter("@P",pk),new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@N",Dec(r,"NCKALAN")),new FbParameter("@D",DateTime.Today),new FbParameter("@F",Dec(r,"FMKALAN")));ins.ExecuteNonQuery();
+                    using var ins=FirebirdDatabase.CreateCommand(c,t,"insert into ODEME(PKNO,BASTAR,BITTAR,NODENEN,NOTARIH,FMODENEN,FMOTARIH) values(@P,@A,@B,@N,@D,0,@D)",new FbParameter("@P",pk),new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@N",Dec(r,"EX2")),new FbParameter("@D",DateTime.Today));ins.ExecuteNonQuery();
                 }
                 return 0;
             });
@@ -223,15 +258,16 @@ internal sealed class MonthlyPayrollAdjustmentForm : Form
     {
         foreach(var r in rows)
         {
-            var card=Convert.ToString(r["PKNO"])??"";var net=Dec(r,"NCKALAN")+Dec(r,"FMKALAN");var bank=Dec(r,"EX2");var elden=net-bank;
+            var card=Convert.ToString(r["PKNO"])??"";
             if(Dec(r,"DMAAS")<0)throw new InvalidOperationException($"{card}: maaş negatif olamaz.");
             if(Dec(r,"GUN1")<0||Dec(r,"GUN1")>31)throw new InvalidOperationException($"{card}: normal gün 0-31 arasında olmalı.");
-            if(net<0||bank<0||elden<-.01m)throw new InvalidOperationException($"{card}: Banka/Elden dağılımı Net tutarla uyumlu değil.");
+            if(Dec(r,"HAKEDIS_NET")<0||Dec(r,"RESMI_NET")<0||Dec(r,"EX2")<0)throw new InvalidOperationException($"{card}: bordro tutarları negatif olamaz.");
+            if(Math.Abs(Dec(r,"EX2")-Dec(r,"RESMI_NET"))>0.01m)throw new InvalidOperationException($"{card}: bankaya ödenecek tutar resmî bordro netiyle uyumlu değil.");
         }
     }
 
     void RefreshSummary()
     {
-        var rows=Selected().ToList();summary.Text=$"Seçili: {rows.Count}   Net: {rows.Sum(r=>Dec(r,"NET")):N2} ₺   Banka: {rows.Sum(r=>Dec(r,"EX2")):N2} ₺   Elden: {rows.Sum(r=>Dec(r,"ELDEN")):N2} ₺";
+        var rows=Selected().ToList();summary.Text=$"Seçili: {rows.Count}   Hakediş: {rows.Sum(r=>Dec(r,"HAKEDIS_NET")):N2} ₺   Resmî Net/Banka: {rows.Sum(r=>Dec(r,"RESMI_NET")):N2} ₺   Fark: {rows.Sum(r=>Dec(r,"FARK")):N2} ₺";
     }
 }
