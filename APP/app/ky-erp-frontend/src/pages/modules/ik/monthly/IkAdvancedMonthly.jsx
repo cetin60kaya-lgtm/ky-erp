@@ -29,7 +29,7 @@ import { printHtmlDocument } from "../../../../services/printService";
 import { exportRowsToExcelFile } from "../../../../utils/excelExport";
 import "./ik.advanced.css";
 
-const MONTHS = ["Ocak", "Subat", "Mart", "Nisan", "Mayis", "Haziran", "Temmuz", "Agustos", "Eylul", "Ekim", "Kasim", "Aralik"];
+const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 const FINANCE_TYPES = ["Mesai", "Avans", "Toplu avans", "Ozel kesinti", "Icra", "Haciz", "Eksik gün", "Eksik saat"];
 const LEAVE_TYPES = ["Yillik izin", "Normal izin", "Ucretsiz izin", "Mazeret izni", "Dogum izni", "Olum izni"];
 const DAILY_TYPES = ["Isi vardi - sadece not", "Rapor", "Normal izin", "Ucretsiz izin", "Dogum izni", "Olum izni"];
@@ -261,7 +261,7 @@ function draftPerson(employee = {}) {
   };
 }
 
-export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) {
+export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, openModule }) {
   const companyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
   const initial = readStoredIkPeriod(companyId);
   const initialPage = mode === "personel" ? "personel"
@@ -280,6 +280,10 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
+  const [employeeStatusFilter, setEmployeeStatusFilter] = useState("ALL");
+  const [sgkFilter, setSgkFilter] = useState("ALL");
+  const [movementTypeFilter, setMovementTypeFilter] = useState("ALL");
+  const [movementEffectFilter, setMovementEffectFilter] = useState("ALL");
   const [selectedId, setSelectedId] = useState("");
   const [modal, setModal] = useState(null);
   const [modalDraft, setModalDraft] = useState({});
@@ -520,20 +524,42 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     setMonth(Number(nextMonth));
     setPayrollData(null);
     setSelectedPayrollIds([]);
+    setEmployeeStatusFilter("ALL");
+    setSgkFilter("ALL");
+    setMovementTypeFilter("ALL");
+    setMovementEffectFilter("ALL");
     setNotice("");
   };
 
-    const filteredEmployees = useMemo(() => {
+  const filteredEmployees = useMemo(() => {
     const needle = upper(search).trim();
     return employees.filter((employee) => {
+      const status = upper(`${employee.status || ""} ${employee.activePassive || ""}`);
+      if (employeeStatusFilter === "ACTIVE" && status.includes("PAS")) return false;
+      if (employeeStatusFilter === "PASSIVE" && !status.includes("PAS")) return false;
+      if (sgkFilter === "SGK" && !isSgk(employee)) return false;
+      if (sgkFilter === "NO_SGK" && isSgk(employee)) return false;
       const haystack = upper(`${employee.fullName || ""} ${employee.code || ""} ${employee.cardNo || ""} ${employee.identityNo || ""}`);
       return !needle || haystack.includes(needle);
     });
-  }, [employees, search]);
+  }, [employeeStatusFilter, employees, search, sgkFilter]);
 
   const movements = useMemo(() => rawAdjustments
     .map((item) => ({ ...item, type: normalizeFinanceType(item.adjustmentType || item.type) }))
     .filter((item) => item.type), [rawAdjustments]);
+
+  const filteredMovements = useMemo(() => {
+    const needle = upper(search).trim();
+    return movements.filter((item) => {
+      if (movementTypeFilter !== "ALL" && item.type !== movementTypeFilter) return false;
+      const effect = upper(item.payrollEffect || "Bordroya yansir");
+      if (movementEffectFilter === "PAYROLL" && effect.includes("SADECE")) return false;
+      if (movementEffectFilter === "INFO" && !effect.includes("SADECE")) return false;
+      if (!needle) return true;
+      const employee = employees.find((row) => row.id === item.employeeId);
+      return upper(`${employee?.fullName || item.fullName || ""} ${employee?.code || ""} ${item.note || item.description || ""}`).includes(needle);
+    });
+  }, [employees, movementEffectFilter, movementTypeFilter, movements, search]);
 
   const employeeLeave = useCallback((employee) => {
     const own = leaves.filter((item) => item.employeeId === employee.id);
@@ -680,6 +706,19 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   }, [logs, employees, page]);
 
   const go = (target) => {
+    const tabByTarget = {
+      ozet: "ozet",
+      personel: "personel-kartlari",
+      ucret: "ucret-odeme-plani",
+      hareket: "mesai-avans",
+      izin: "yillik-izin",
+      bordro: "bordro-odeme",
+      evrak: "sgk-evrak-kontrol",
+    };
+    if (typeof openModule === "function" && tabByTarget[target]) {
+      openModule("ik", { tabKey: tabByTarget[target] });
+      return;
+    }
     setPage(target);
     setNotice("");
     load({ force: true });
@@ -1673,13 +1712,25 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     </div>
   );
 
-  function filters({ third = "Personel ara" } = {}) {
+  function filters({ third = "Personel ara", fourth = "", fifth = "" } = {}) {
+    const fourthControl = fourth === "Durum"
+      ? <div><label>Durum</label><select value={employeeStatusFilter} onChange={(event) => setEmployeeStatusFilter(event.target.value)}><option value="ALL">Tümü</option><option value="ACTIVE">Aktif</option><option value="PASSIVE">Pasif</option></select></div>
+      : fourth === "Tip"
+        ? <div><label>Hareket Tipi</label><select value={movementTypeFilter} onChange={(event) => setMovementTypeFilter(event.target.value)}><option value="ALL">Tümü</option>{FINANCE_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
+        : null;
+    const fifthControl = fifth === "SGK"
+      ? <div><label>SGK</label><select value={sgkFilter} onChange={(event) => setSgkFilter(event.target.value)}><option value="ALL">Tümü</option><option value="SGK">SGK'lı</option><option value="NO_SGK">SGK'sız</option></select></div>
+      : fifth === "Bordro etkisi"
+        ? <div><label>Bordro Etkisi</label><select value={movementEffectFilter} onChange={(event) => setMovementEffectFilter(event.target.value)}><option value="ALL">Tümü</option><option value="PAYROLL">Bordroya Yansır</option><option value="INFO">Sadece Kayıt</option></select></div>
+        : null;
     return (
       <div className="filters ik-essential-filters">
         <div><label>Yıl</label><select value={year} onChange={(event) => changePeriod(Number(event.target.value), month)}>{[2025, 2026, 2027, 2028].map((item) => <option key={item}>{item}</option>)}</select></div>
         <div><label>Ay</label><select value={month} onChange={(event) => changePeriod(year, Number(event.target.value))}>{MONTHS.map((item, index) => <option key={item} value={index + 1}>{item}</option>)}</select></div>
         <div className="ik-search-filter"><label>{third}</label><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Ad, kod, kart no" /></div>
-        <button className="btn" onClick={load}>{busy ? "Yükleniyor" : "Yenile"}</button>
+        {fourthControl}
+        {fifthControl}
+        <button className="btn" onClick={() => load({ force: true })}>{busy ? "Yükleniyor" : "Yenile"}</button>
       </div>
     );
   }
@@ -1776,15 +1827,18 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   function renderHareket() {
     return (
       <section>
-        <div className="page-head"><div><h1>Mesai - Avans - Kesinti</h1><p>Tek hareket giris ekrani. Toplu avans sadece burada ve sihirbaz pencerede yapilir.</p></div></div>
+        <div className="page-head"><div><h1>Mesai / Avans / Kesinti</h1><p>Seçili aya ait tüm bordro hareketlerini tek ekrandan yönetin. Toplu avans yalnız bu ekrandan kaydedilir.</p></div></div>
         {filters({ third: "Personel ara", fourth: "Tip", fifth: "Bordro etkisi" })}
-        <div className="workbar"><div className="group"><button className="btn primary" onClick={() => openFinance("Mesai")}>Mesai Ekle</button><button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button><button className="btn green" onClick={() => openFinance("Toplu avans")}>Toplu Avans</button><button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button></div><button className="btn" onClick={() => exportRowsToExcelFile(`ik-hareket-${period}.xlsx`, movements)}>Excel Indir</button></div>
+        <div className="workbar"><div className="group"><button className="btn primary" onClick={() => openFinance("Mesai")}>Mesai Ekle</button><button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button><button className="btn green" onClick={() => openFinance("Toplu avans")}>Toplu Avans</button><button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button></div><button className="btn" onClick={() => exportRowsToExcelFile(`ik-hareket-${period}.xlsx`, filteredMovements.map((item) => {
+          const employee = employees.find((row) => row.id === item.employeeId);
+          return { tarih: item.date || item.adjustmentDate || "", personelKodu: employee?.code || "", personel: employee?.fullName || item.fullName || "", tip: item.type, saatGun: item.hourOrDay || item.quantity || "", tutar: num(item.amount), odemeSekli: item.paymentMethod || "", bordroEtkisi: item.payrollEffect || "Bordroya yansir", aciklama: item.note || item.description || "" };
+        }))}>Excel İndir</button></div>
         <div className="sumgrid short">{summaryBox("Personel", employees.length)}{summaryBox("Mesai toplamı", money(summary.overtime))}{summaryBox("Avans toplamı", money(summary.advance), "orange")}{summaryBox("Özel kesinti", money(summary.deduction), "red")}{summaryBox("İcra / Haciz", money(summary.garnishment), summary.garnishment ? "orange" : "")}</div>
-        <div className="card"><div className="ch"><div><b>Hareketler</b><span>Bordro sonucu gosterilmez; sadece hareket kaydi.</span></div></div><div className="tw"><table><thead><tr><th>Tarih</th><th>Personel</th><th>Tip</th><th>Saat/Gun</th><th>Tutar</th><th>Odeme Sekli</th><th>Bordro Etkisi</th><th>Aciklama</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{movements.map((item) => {
+        <div className="card"><div className="ch"><div><b>Hareketler</b><span>Bu liste hareket kaynağıdır; bordro sonucu Bordro & Ödeme ekranında kesinleşir.</span></div></div><div className="tw"><table><thead><tr><th>Tarih</th><th>Personel</th><th>Tip</th><th>Saat/Gun</th><th>Tutar</th><th>Odeme Sekli</th><th>Bordro Etkisi</th><th>Aciklama</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{filteredMovements.map((item) => {
           const employee = employees.find((row) => row.id === item.employeeId);
           const finalCorrection = upper(item.note).includes("SON BORDRO KONTROL");
           return <tr key={item.id || `${item.employeeId}-${item.date}-${item.type}`}><td>{item.date || item.adjustmentDate || "-"}</td><td><span className="person">{employee?.fullName || item.fullName || "-"}</span><span className="code">{employee?.code || "-"}</span></td><td>{item.type}{item.type === "Mesai" ? <span className="code">{upper(item.note).includes("SON BORDRO KONTROL") ? "Son bordro düzeltmesi" : overtimeTypeLabel(item.overtimeMultiplier || (upper(item.note).includes("X2") ? 2 : 1.5))}</span> : null}</td><td>{item.hourOrDay || item.quantity || "-"}</td><td className="money">{money(item.amount)}</td><td>{item.paymentMethod || "-"}</td><td>{item.payrollEffect || "Bordroya yansir"}</td><td>{item.note || item.description || "-"}</td><td><span className="badge green">Kayitli</span></td><td><button className="btn" onClick={() => setNotice(item.note || "Hareket detayi acildi.")}>Detay</button> {finalCorrection ? <span className="badge blue">Bordro düzeltmesi · kilitli</span> : <><button className="btn" onClick={() => openFinance(item.type, item)}>Duzenle</button> <button className="btn red" onClick={() => deleteFinance(item)}>Sil</button></>}</td></tr>;
-        })}<EmptyRow show={!movements.length} colSpan={10} text="Bu ay hareket kaydi yok." /></tbody></table></div></div>
+        })}<EmptyRow show={!filteredMovements.length} colSpan={10} text="Seçili filtrelerde hareket kaydı yok." /></tbody></table></div></div>
         <LogTable title="Hareket Loglari" rows={scopedLogs} onEdit={editFromLog} />
       </section>
     );
