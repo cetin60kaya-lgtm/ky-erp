@@ -86,7 +86,7 @@ public partial class PersonelForm
         });
 
         try { RefreshGrid(); }
-        catch(Exception ex) { MessageBox.Show("Tanımlar okunamadı: "+ex.Message,dialog.Text,MessageBoxButtons.OK,MessageBoxIcon.Error); return; }
+        catch(Exception ex) { PdksErrorPresenter.Show(dialog,ex,dialog.Text,MessageBoxIcon.Error,"Definitions.Load"); return; }
         dialog.ShowDialog(DialogOwner());
     }
 
