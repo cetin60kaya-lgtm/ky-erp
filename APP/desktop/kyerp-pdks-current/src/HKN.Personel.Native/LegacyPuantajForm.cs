@@ -24,10 +24,143 @@ public sealed class LegacyPuantajForm : Form
     static void Row(TableLayoutPanel t,int r,string label,Control c){t.RowStyles.Add(new RowStyle(SizeType.Absolute,36));t.Controls.Add(L(label),0,r);c.Dock=DockStyle.Fill;c.Margin=new Padding(3,5,3,5);t.Controls.Add(c,1,r);}
     static Button B(string text,int width=145)=>new(){Text=text,Width=width,Height=36,MinimumSize=new Size(width,36),MaximumSize=new Size(width,36),FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9f,FontStyle.Bold)};
 
-    void Build(){var daily=new TabPage("Günlük Puantaj"){Padding=new Padding(12)};var monthly=new TabPage("Aylık Puantaj"){Padding=new Padding(12)};tabs.TabPages.AddRange([daily,monthly]);Controls.Add(tabs);filters[daily]=BuildDaily(daily);filters[monthly]=BuildMonthly(monthly);}
-    FilterSet BuildDaily(TabPage page){var f=new FilterSet(E(),E(),D(),D(),C(),C(),C(),C(),C(),C());var split=new SplitContainer{Dock=DockStyle.Fill,FixedPanel=FixedPanel.Panel1,SplitterDistance=360,SplitterWidth=8};var left=FilterPanel(f);split.Panel1.Controls.Add(left);var right=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,Padding=new Padding(10)};right.RowStyles.Add(new RowStyle(SizeType.Absolute,34));right.RowStyles.Add(new RowStyle(SizeType.Percent,100));right.RowStyles.Add(new RowStyle(SizeType.Absolute,56));right.RowStyles.Add(new RowStyle(SizeType.Absolute,56));right.Controls.Add(new Label{Text="İşlenecek Personel",Dock=DockStyle.Fill,Font=new Font("Segoe UI",10f,FontStyle.Bold),ForeColor=Color.FromArgb(27,44,68)},0,0);right.Controls.Add(people,0,1);right.Controls.Add(progress1,0,2);right.Controls.Add(progress2,0,3);split.Panel2.Controls.Add(right);var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1};root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));root.Controls.Add(split,0,0);var bar=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var calc=B("Hesapla");var result=B("Puantaj Sonuçları",170);calc.Click+=(_,_)=>Calculate(f);result.Click+=(_,_)=>ShowResults(f);bar.Controls.AddRange([calc,result]);root.Controls.Add(bar,0,1);page.Controls.Add(root);Hook(f);return f;}
-    FilterSet BuildMonthly(TabPage page){var f=new FilterSet(E(),E(),D(),D(),C(),C(),C(),C(),C(),C());var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(40,20,40,20)};root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));var panel=FilterPanel(f);root.Controls.Add(panel,0,0);var barProgress=new ProgressBar{Dock=DockStyle.Fill,Margin=new Padding(0,10,0,10)};root.Controls.Add(barProgress,0,1);var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var calc=B("Aylık Puantajı Hesapla",190);var result=B("Puantaj Sonuçları",170);calc.Click+=(_,_)=>Calculate(f,barProgress);result.Click+=(_,_)=>ShowResults(f);actions.Controls.AddRange([calc,result]);root.Controls.Add(actions,0,2);page.Controls.Add(root);Hook(f);return f;}
-    Control FilterPanel(FilterSet f){var t=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=2,RowCount=10,Padding=new Padding(14),AutoSize=true};t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));Row(t,0,"Kart No Başlangıç",f.CardStart);Row(t,1,"Kart No Bitiş",f.CardEnd);Row(t,2,"Başlangıç Tarihi",f.Start);Row(t,3,"Bitiş Tarihi",f.End);Row(t,4,"Grup",f.Group);Row(t,5,"Bölüm",f.Department);Row(t,6,"Servis",f.Service);Row(t,7,"Durum",f.Status);Row(t,8,"Görev",f.Duty);Row(t,9,"Firma",f.Company);return t;}
+    void Build()
+    {
+        BackColor=Color.FromArgb(244,247,251);
+        tabs.Padding=new Point(18,8);
+        var daily=new TabPage("Günlük Puantaj"){Padding=new Padding(16),BackColor=Color.FromArgb(244,247,251)};
+        var monthly=new TabPage("Aylık Puantaj"){Padding=new Padding(16),BackColor=Color.FromArgb(244,247,251)};
+        tabs.TabPages.AddRange([daily,monthly]);
+        Controls.Add(tabs);
+        filters[daily]=BuildDaily(daily);
+        filters[monthly]=BuildMonthly(monthly);
+    }
+
+    FilterSet BuildDaily(TabPage page)
+    {
+        var f=new FilterSet(E(),E(),D(),D(),C(),C(),C(),C(),C(),C());
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,BackColor=page.BackColor};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,178));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
+
+        root.Controls.Add(FilterPanel(f,"Günlük puantaj filtresi","Kart hareketi, izin, tatil ve vardiya planlarından günlük puantaj oluşturur."),0,0);
+
+        var listCard=Card();
+        var listLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Padding=new Padding(16),BackColor=Color.White};
+        listLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
+        listLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        listLayout.Controls.Add(new Label{Text="İşlenecek Personel",Dock=DockStyle.Fill,Font=new Font("Segoe UI",10.5f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42),TextAlign=ContentAlignment.MiddleLeft},0,0);
+        people.BorderStyle=BorderStyle.None;
+        people.BackColor=Color.White;
+        people.ForeColor=Color.FromArgb(15,23,42);
+        people.Font=new Font("Segoe UI",9f);
+        listLayout.Controls.Add(people,0,1);
+        listCard.Controls.Add(listLayout);
+        root.Controls.Add(listCard,0,1);
+
+        var progressCard=new Panel{Dock=DockStyle.Fill,BackColor=page.BackColor,Padding=new Padding(0,12,0,4)};
+        var progressTable=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,BackColor=page.BackColor};
+        progressTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+        progressTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+        progress1.Height=14;progress2.Height=14;
+        progressTable.Controls.Add(progress1,0,0);progressTable.Controls.Add(progress2,1,0);
+        progressCard.Controls.Add(progressTable);
+        root.Controls.Add(progressCard,0,2);
+
+        var bar=ActionBar();
+        var calc=ModernButton("Puantajı Hesapla",155,true);
+        var result=ModernButton("Puantaj Sonuçları",155,false);
+        calc.Click+=(_,_)=>Calculate(f);
+        result.Click+=(_,_)=>ShowResults(f);
+        bar.Controls.Add(calc);bar.Controls.Add(result);
+        root.Controls.Add(bar,0,3);
+        page.Controls.Add(root);
+        Hook(f);
+        return f;
+    }
+
+    FilterSet BuildMonthly(TabPage page)
+    {
+        var f=new FilterSet(E(),E(),D(),D(),C(),C(),C(),C(),C(),C());
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,BackColor=page.BackColor};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,178));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
+
+        root.Controls.Add(FilterPanel(f,"Aylık puantaj filtresi","Seçilen dönem için personel bazında aylık puantajı toplu olarak hesaplar."),0,0);
+
+        var info=Card();
+        info.Padding=new Padding(22);
+        info.Controls.Add(new Label{
+            Text="Aylık puantaj hesaplaması; giriş / çıkış, izin, resmi tatil ve çalışma grubunu birlikte değerlendirir.\r\nKaynak kayıtları düzeltildikten sonra ayı yeniden hesaplamak güvenlidir.",
+            Dock=DockStyle.Fill,Font=new Font("Segoe UI",10f),ForeColor=Color.FromArgb(71,85,105),TextAlign=ContentAlignment.MiddleLeft});
+        root.Controls.Add(info,0,1);
+
+        var barProgress=new ProgressBar{Dock=DockStyle.Fill,Margin=new Padding(0,14,0,8),Height=14};
+        root.Controls.Add(barProgress,0,2);
+
+        var actions=ActionBar();
+        var calc=ModernButton("Ayı Hesapla",145,true);
+        var result=ModernButton("Puantaj Sonuçları",155,false);
+        calc.Click+=(_,_)=>Calculate(f,barProgress);
+        result.Click+=(_,_)=>ShowResults(f);
+        actions.Controls.Add(calc);actions.Controls.Add(result);
+        root.Controls.Add(actions,0,3);
+        page.Controls.Add(root);
+        Hook(f);
+        return f;
+    }
+
+    Control FilterPanel(FilterSet f,string title,string subtitle)
+    {
+        var card=Card();
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=new Padding(16),BackColor=Color.White};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,28));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,26));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.Controls.Add(new Label{Text=title,Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42)},0,0);
+        root.Controls.Add(new Label{Text=subtitle,Dock=DockStyle.Fill,Font=new Font("Segoe UI",8.5f),ForeColor=Color.FromArgb(100,116,139)},0,1);
+
+        var fields=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,RowCount=2,Margin=new Padding(0,8,0,0)};
+        for(var i=0;i<5;i++)fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));
+        var items=new (string Text,Control Control)[]
+        {
+            ("Kart Başlangıç",f.CardStart),("Kart Bitiş",f.CardEnd),("Başlangıç",f.Start),("Bitiş",f.End),("Grup",f.Group),
+            ("Bölüm",f.Department),("Servis",f.Service),("Durum",f.Status),("Görev",f.Duty),("Firma",f.Company)
+        };
+        for(var i=0;i<items.Length;i++)
+        {
+            var holder=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Margin=new Padding(0,0,12,0),BackColor=Color.White};
+            holder.RowStyles.Add(new RowStyle(SizeType.Absolute,20));holder.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+            holder.Controls.Add(new Label{Text=items[i].Text,Dock=DockStyle.Fill,ForeColor=Color.FromArgb(100,116,139),Font=new Font("Segoe UI",8f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft},0,0);
+            items[i].Control.Dock=DockStyle.Fill;items[i].Control.Margin=new Padding(0,2,0,0);
+            holder.Controls.Add(items[i].Control,0,1);
+            fields.Controls.Add(holder,i%5,i/5);
+        }
+        root.Controls.Add(fields,0,2);
+        card.Controls.Add(root);
+        return card;
+    }
+
+    static Panel Card()
+    {
+        var p=new Panel{Dock=DockStyle.Fill,BackColor=Color.White,Padding=Padding.Empty,Margin=new Padding(0,0,0,10)};
+        p.Paint+=(_,e)=>{using var pen=new Pen(Color.FromArgb(226,232,240));e.Graphics.DrawRectangle(pen,0,0,Math.Max(0,p.Width-1),Math.Max(0,p.Height-1));};
+        return p;
+    }
+
+    static FlowLayoutPanel ActionBar()=>new(){Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,WrapContents=false,Padding=new Padding(0,10,0,0),BackColor=Color.FromArgb(244,247,251)};
+
+    static Button ModernButton(string text,int width,bool primary)
+    {
+        var b=new Button{Text=text,Width=width,Height=36,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9f,FontStyle.Bold),BackColor=primary?Color.FromArgb(37,99,235):Color.White,ForeColor=primary?Color.White:Color.FromArgb(15,23,42),Cursor=Cursors.Hand,Margin=new Padding(8,0,0,0)};
+        b.FlatAppearance.BorderColor=primary?Color.FromArgb(37,99,235):Color.FromArgb(226,232,240);
+        return b;
+    }
+
     void Init()
     {
         foreach(var f in filters.Values)
