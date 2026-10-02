@@ -84,7 +84,7 @@ public sealed class LegacyDataModuleForm : Form
     {
         var p=PdksAppearance.Current;
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(16),BackColor=p.Canvas};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,104));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,118));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
