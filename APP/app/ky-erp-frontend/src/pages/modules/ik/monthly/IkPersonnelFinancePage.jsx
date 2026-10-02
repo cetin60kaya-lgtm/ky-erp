@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Banknote,
   BadgeCheck,
@@ -22,9 +22,22 @@ import {
   removeIkControlPerson,
   saveIkControlChanges,
 } from "../../../../services/ik/personnelApi";
+import { getIkAdvancedSyncState } from "../../../../services/ik/monthlyApi";
 import "./ik-personnel-finance.css";
 
-const TODAY = new Date().toISOString().slice(0, 10);
+function istanbulDateKey(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+const TODAY = istanbulDateKey();
+const IK_LIVE_SYNC_INTERVAL_MS = 1500;
+const IK_LIVE_SYNC_CHANNEL = "kyerp.ik.monthly.live.v1";
 const num = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const upper = (value) => String(value || "").trim().toLocaleUpperCase("tr-TR");
 const money = (value) => num(value).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -114,6 +127,8 @@ export default function IkPersonnelFinancePage({ activeMainCompany, focus = "per
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const liveVersionRef = useRef("");
+  const livePollBusyRef = useRef(false);
 
   const audit = Boolean(profile?.audit);
   const role = upper(profile?.role).replace(/İ/g, "I");
@@ -158,6 +173,56 @@ export default function IkPersonnelFinancePage({ activeMainCompany, focus = "per
     return () => { cancelled = true; };
   }, [loadDetail, selectedId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      await loadPeople();
+      if (selectedId) await loadDetail(selectedId);
+    };
+    const poll = async () => {
+      if (cancelled || livePollBusyRef.current) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      livePollBusyRef.current = true;
+      try {
+        const state = await getIkAdvancedSyncState({ mainCompanyId: company }, { forceFresh: true, timeoutMs: 5000 });
+        const version = String(state?.version || "");
+        if (!version) return;
+        if (!liveVersionRef.current) { liveVersionRef.current = version; return; }
+        if (version === liveVersionRef.current) return;
+        if (busy || editing || newOpen) {
+          if (!cancelled) setNotice((current) => current || "Canlı senkron: başka bilgisayarda değişiklik var. Açık düzenleme kaydedilince ekran yenilenecek.");
+          return;
+        }
+        await refresh();
+        if (!cancelled) {
+          liveVersionRef.current = version;
+          setNotice("Canlı senkron: diğer bilgisayardaki İK değişiklikleri alındı.");
+        }
+      } catch {
+        // Canlı senkron yardımcı katmandır; geçici bağlantı hatası personel işlemini durdurmaz.
+      } finally {
+        livePollBusyRef.current = false;
+      }
+    };
+    const timer = window.setInterval(() => { void poll(); }, IK_LIVE_SYNC_INTERVAL_MS);
+    const onFocus = () => { void poll(); };
+    const onVisibility = () => { if (document.visibilityState === "visible") void poll(); };
+    const channel = typeof window.BroadcastChannel === "function" ? new window.BroadcastChannel(IK_LIVE_SYNC_CHANNEL) : null;
+    const onMutation = () => { void poll(); };
+    channel?.addEventListener?.("message", onMutation);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    void poll();
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      channel?.removeEventListener?.("message", onMutation);
+      channel?.close?.();
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [busy, company, editing, loadDetail, loadPeople, newOpen, selectedId]);
+
   const selected = detail?.person || people.find((row) => row.id === selectedId) || null;
 
   const visible = useMemo(() => {
@@ -187,9 +252,18 @@ export default function IkPersonnelFinancePage({ activeMainCompany, focus = "per
 
   const saveEdit = async () => {
     if (!selected || !draft || audit) return;
+    const normalizedDraft = { ...draft };
+    const startDate = dateOnly(normalizedDraft.startDate);
+    const exitDate = dateOnly(normalizedDraft.exitDate);
+    if (exitDate && startDate && exitDate < startDate) {
+      setError("İşten çıkış tarihi işe giriş tarihinden önce olamaz.");
+      return;
+    }
+    if (exitDate) normalizedDraft.status = "Pasif";
+    if (isPassive(normalizedDraft) && !exitDate) normalizedDraft.exitDate = effectiveDate || istanbulDateKey();
     const changes = {};
     for (const key of EDIT_KEYS) {
-      const nextValue = key === "startDate" || key === "exitDate" ? dateOnly(draft[key]) : draft[key];
+      const nextValue = key === "startDate" || key === "exitDate" ? dateOnly(normalizedDraft[key]) : normalizedDraft[key];
       const oldValue = key === "startDate" || key === "exitDate" ? dateOnly(selected[key]) : selected[key];
       if (String(nextValue ?? "") !== String(oldValue ?? "")) changes[key] = nextValue;
     }
@@ -238,6 +312,7 @@ export default function IkPersonnelFinancePage({ activeMainCompany, focus = "per
       await removeIkControlPerson(selected.id, {
         mode,
         confirmName: selected.fullName,
+        exitDate: hard ? undefined : istanbulDateKey(),
         reason: hard ? "Yanlış veya mükerrer İK personel kaydı" : "İK üzerinden pasife alındı",
         mainCompanyId: company,
       });
