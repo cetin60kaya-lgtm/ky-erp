@@ -7,8 +7,9 @@ internal static class TerminalProfileEditor
     public static bool Edit(IWin32Window owner, Font font, TerminalTransferProfile profile, out TerminalTransferProfile edited)
     {
         if (profile.IsCanonical) throw new InvalidOperationException("Canonical preset doğrudan değiştirilemez; önce kopyalayın.");
-        using var dialog = new Form { Text = "Terminal Profili Düzenle", StartPosition = FormStartPosition.CenterParent, Size = new Size(840, 720), MinimumSize = new Size(720, 620), Font = font };
-        var tabs = new TabControl { Dock = DockStyle.Fill };
+        var p=PdksAppearance.Current;
+        using var dialog = new Form { Text = "Terminal Profili Düzenle", StartPosition = FormStartPosition.CenterParent, Size = new Size(840, 720), MinimumSize = new Size(720, 620), Font = font, BackColor=p.Canvas };
+        var tabs = new TabControl { Dock = DockStyle.Fill, Padding=new Point(18,9) };
         var general = FormTable(165, 90);
         var positions = FormTable(210, 150);
         var mappings = FormTable(180, 0);
@@ -53,9 +54,9 @@ internal static class TerminalProfileEditor
         }
         format.SelectedValueChanged += (_, _) => RefreshFormat(); RefreshFormat();
 
-        var bar = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 50, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(6) };
-        var cancel = new Button { Text = "İptal", Width = 90, DialogResult = DialogResult.Cancel };
-        var save = new Button { Text = "Doğrula ve Kaydet", Width = 145 };
+        var bar = PdksUiKit.ActionBar(true,p.Canvas);bar.Dock=DockStyle.Bottom;bar.Height=50;bar.Padding=new Padding(6);
+        var cancel = PdksUiKit.Button("İptal",90,PdksActionRole.Quiet);cancel.DialogResult=DialogResult.Cancel;
+        var save = PdksUiKit.Button("Doğrula ve Kaydet",145,PdksActionRole.Primary);
         bar.Controls.Add(cancel); bar.Controls.Add(save); dialog.Controls.Add(tabs); dialog.Controls.Add(bar); dialog.CancelButton = cancel;
         TerminalTransferProfile? result = null;
         save.Click += (_, _) =>
@@ -84,18 +85,18 @@ internal static class TerminalProfileEditor
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, firstWidth)); panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         if (lastWidth > 0) panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, lastWidth)); return panel;
     }
-    static void AddPage(TabControl tabs, string title, Control content) { var page = new TabPage(title) { Padding = new Padding(4) }; page.Controls.Add(content); tabs.TabPages.Add(page); }
+    static void AddPage(TabControl tabs, string title, Control content) { var page = new TabPage(title) { Padding = new Padding(6), BackColor=PdksAppearance.Current.Surface }; page.Controls.Add(content); tabs.TabPages.Add(page); }
     static int AddRow(TableLayoutPanel panel, int height = 38) { var row = panel.RowCount++; panel.RowStyles.Add(new RowStyle(SizeType.Absolute, height)); return row; }
     static TextBox TextField(TableLayoutPanel panel, string label, string? value) { var row = AddRow(panel); AddLabel(panel, label, row); var box = new TextBox { Text = value ?? "", Dock = DockStyle.Fill, Margin = new Padding(3, 7, 3, 4) }; panel.Controls.Add(box, 1, row); return box; }
-    static TextBox PathField(TableLayoutPanel panel, string label, string? value, Form owner) { var box = TextField(panel, label, value); var row = panel.GetRow(box); var button = new Button { Text = "Gözat...", Dock = DockStyle.Fill, Margin = new Padding(4) }; button.Click += (_, _) => { using var picker = new OpenFileDialog { FileName = box.Text, CheckFileExists = false }; if (picker.ShowDialog(owner) == DialogResult.OK) box.Text = picker.FileName; }; panel.Controls.Add(button, 2, row); return box; }
+    static TextBox PathField(TableLayoutPanel panel, string label, string? value, Form owner) { var box = TextField(panel, label, value); var row = panel.GetRow(box); var button = PdksUiKit.Button("Gözat...",92,PdksActionRole.Secondary); button.Dock=DockStyle.Fill;button.Margin=new Padding(4);button.MinimumSize=Size.Empty;button.MaximumSize=Size.Empty; button.Click += (_, _) => { using var picker = new OpenFileDialog { FileName = box.Text, CheckFileExists = false }; if (picker.ShowDialog(owner) == DialogResult.OK) box.Text = picker.FileName; }; panel.Controls.Add(button, 2, row); return box; }
     static ComboBox ComboField<T>(TableLayoutPanel panel, string label, T[] values, T selected) { var row = AddRow(panel); AddLabel(panel, label, row); var box = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList, DataSource = values, Margin = new Padding(3, 6, 3, 4) }; box.SelectedItem = selected; panel.Controls.Add(box, 1, row); return box; }
     static CheckBox CheckField(TableLayoutPanel panel, string label, string text, bool value) { var row = AddRow(panel); AddLabel(panel, label, row); var box = new CheckBox { Text = text, Checked = value, Dock = DockStyle.Fill }; panel.Controls.Add(box, 1, row); return box; }
     static void AddPositionHeader(TableLayoutPanel panel) { var row = AddRow(panel); panel.Controls.Add(new Label { Text = "Alan", Font = new Font(panel.Font, FontStyle.Bold), Dock = DockStyle.Fill }, 0, row); panel.Controls.Add(new Label { Text = "Başlangıç / Kolon", Font = new Font(panel.Font, FontStyle.Bold), Dock = DockStyle.Fill }, 1, row); panel.Controls.Add(new Label { Text = "Uzunluk", Font = new Font(panel.Font, FontStyle.Bold), Dock = DockStyle.Fill }, 2, row); }
     static (NumericUpDown Start, NumericUpDown Length) SliceField(TableLayoutPanel panel, string label, FieldSlice? slice) { var row = AddRow(panel); AddLabel(panel, label, row); var start = Number(slice?.Start ?? 0, 0); var length = Number(Math.Max(1, slice?.Length ?? 1), 1); panel.Controls.Add(start, 1, row); panel.Controls.Add(length, 2, row); return (start, length); }
     static NumericUpDown Number(int value, int minimum) => new() { Minimum = minimum, Maximum = 9999, Value = value, Dock = DockStyle.Fill, Margin = new Padding(3, 6, 3, 4) };
     static TextBox MappingField(TableLayoutPanel panel, string label, Dictionary<string, string> value) { var row = AddRow(panel, 78); AddLabel(panel, label + "\n(kod=değer)", row); var box = new TextBox { Text = TerminalCodeMappingText.Format(value), Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical }; panel.Controls.Add(box, 1, row); return box; }
-    static void AddNote(TableLayoutPanel panel, string text, int span) { var row = AddRow(panel, 50); var label = new Label { Text = text, AutoSize = true, Dock = DockStyle.Fill, ForeColor = Color.DimGray, Padding = new Padding(2, 8, 2, 2) }; panel.Controls.Add(label, 0, row); panel.SetColumnSpan(label, span); }
-    static void AddLabel(TableLayoutPanel panel, string text, int row) => panel.Controls.Add(new Label { Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, row);
+    static void AddNote(TableLayoutPanel panel, string text, int span) { var row = AddRow(panel, 50); var label = new Label { Text = text, AutoSize = true, Dock = DockStyle.Fill, ForeColor = PdksAppearance.Current.Muted, Padding = new Padding(2, 8, 2, 2) }; panel.Controls.Add(label, 0, row); panel.SetColumnSpan(label, span); }
+    static void AddLabel(TableLayoutPanel panel, string text, int row) => panel.Controls.Add(PdksUiKit.FieldLabel(text), 0, row);
     static FieldSlice ReadSlice((NumericUpDown Start, NumericUpDown Length) value) => new((int)value.Start.Value, (int)value.Length.Value);
     static string? Optional(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
