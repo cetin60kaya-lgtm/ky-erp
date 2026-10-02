@@ -18,6 +18,7 @@ public sealed partial class MainShellForm
             workspace.ApplyLayout(WorkspaceLayoutMode.Single);
             BuildCanonicalMenu();
             BuildCanonicalToolbar();
+            BuildModernShell();
         }
         finally
         {
