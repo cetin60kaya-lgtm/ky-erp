@@ -189,13 +189,17 @@ function printDailyPaymentSlips(range, rows = []) {
   const source = Array.isArray(rows) ? rows : [];
   const pages = [];
   for (let index = 0; index < source.length; index += 10) pages.push(source.slice(index, index + 10));
-  const html = pages.map((pageRows, pageIndex) => `<section class="pay-page"><header><strong>GÜNLÜK PERSONEL ÖDEME FİŞLERİ</strong><span>${escapeHtml(dateText(range.start))} — ${escapeHtml(dateText(range.end))}</span><em>Sayfa ${pageIndex + 1} / ${pages.length}</em></header><div class="pay-grid">${pageRows.map((row, index) => {
+  const grandTotal = source.reduce((sum, row) => sum + number(row.totalAmount ?? row.total ?? row.dayTotal ?? 0) + (number(row.totalAmount ?? row.total) ? 0 : number(row.nightTotal)), 0);
+  const html = pages.map((pageRows, pageIndex) => `<section class="pay-page"><header><strong>GÜNLÜK PERSONEL ÖDEME FİŞLERİ</strong><span>${escapeHtml(dateText(range.start))} — ${escapeHtml(dateText(range.end))}</span><span>GENEL TOPLAM: ${escapeHtml(money(grandTotal))}</span><em>Sayfa ${pageIndex + 1} / ${pages.length}</em></header><div class="pay-grid">${pageRows.map((row, index) => {
     const dayCount = number(row.dayCount);
     const nightCount = number(row.nightCount);
+    const items = Array.isArray(row.items) ? row.items : [];
     const dayRate = number(row.dayRate ?? row.dayWage);
     const nightRate = number(row.nightRate ?? row.nightWage);
-    const dayTotal = number(row.dayTotal) || dayCount * dayRate;
-    const nightTotal = number(row.nightTotal) || nightCount * nightRate;
+    const dayItemTotal = items.filter((item) => String(item.shift || "").toLowerCase() === "day" && item.active !== false).reduce((sum, item) => sum + number(item.amount), 0);
+    const nightItemTotal = items.filter((item) => String(item.shift || "").toLowerCase() === "night" && item.active !== false).reduce((sum, item) => sum + number(item.amount), 0);
+    const dayTotal = number(row.dayTotal) || dayItemTotal || dayCount * dayRate;
+    const nightTotal = number(row.nightTotal) || nightItemTotal || nightCount * nightRate;
     const total = number(row.totalAmount ?? row.total) || dayTotal + nightTotal;
     const no = pageIndex * 10 + index + 1;
     return `<article class="pay-card"><div class="pay-name"><b>${no}. ${escapeHtml(row.name || row.fullName || "-")}</b><span>${escapeHtml(row.qualification || row.role || "-")}</span></div><div class="pay-shifts"><div><strong>GÜNDÜZ</strong><span>${dayCount} GÜN</span><b>${escapeHtml(money(dayTotal))}</b></div><div><strong>GECE</strong><span>${nightCount} GÜN</span><b>${escapeHtml(money(nightTotal))}</b></div></div><div class="pay-total"><span>TOPLAM ÖDEME</span><strong>${escapeHtml(money(total))}</strong></div></article>`;
@@ -203,7 +207,7 @@ function printDailyPaymentSlips(range, rows = []) {
   return printHtmlDocument({
     title: "KY ERP Günlük Personel Ödeme Fişleri",
     html: `<main class="pay-print">${html || '<p>Kayıt yok.</p>'}</main>`,
-    css: `@page{size:A4 portrait;margin:5mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#000;background:#fff}.pay-print{width:200mm}.pay-page{width:200mm;height:287mm;page-break-after:always;break-after:page;overflow:hidden}.pay-page:last-child{page-break-after:auto;break-after:auto}.pay-page>header{height:11mm;border:1px solid #000;display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:5mm;padding:1.5mm 3mm;margin-bottom:2.5mm}.pay-page>header strong{font-size:11.5pt}.pay-page>header span,.pay-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.pay-grid{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(5,51mm);gap:2.5mm 4mm}.pay-card{height:51mm;border:1px solid #000;padding:2.2mm 2.6mm;display:grid;grid-template-rows:auto 1fr auto;gap:1.2mm;break-inside:avoid;page-break-inside:avoid}.pay-name{display:flex;align-items:baseline;justify-content:space-between;gap:3mm;border-bottom:1px solid #000;padding-bottom:1mm}.pay-name b{font-size:10.5pt;text-transform:uppercase;line-height:1}.pay-name span{font-size:7.5pt;white-space:nowrap}.pay-shifts{border:1px solid #000}.pay-shifts>div{display:grid;grid-template-columns:1fr 18mm 34mm;align-items:center;min-height:8.5mm;padding:1mm 2mm}.pay-shifts>div+div{border-top:1px solid #000}.pay-shifts strong{font-size:8.5pt}.pay-shifts span{font-size:8pt;text-align:center;font-weight:700}.pay-shifts b{font-size:11.5pt;text-align:right;line-height:1}.pay-total{display:flex;align-items:flex-end;justify-content:space-between;border-top:1.5px solid #000;padding-top:1.3mm}.pay-total span{font-size:9pt;font-weight:900}.pay-total strong{font-size:18pt;line-height:1;font-weight:900}@media print{body{-webkit-print-color-adjust:economy;print-color-adjust:economy}}`
+    css: `@page{size:A4 portrait;margin:5mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#000;background:#fff}.pay-print{width:200mm}.pay-page{width:200mm;height:287mm;page-break-after:always;break-after:page;overflow:hidden}.pay-page:last-child{page-break-after:auto;break-after:auto}.pay-page>header{height:11mm;border:1px solid #000;display:grid;grid-template-columns:1fr auto auto auto;align-items:center;gap:5mm;padding:1.5mm 3mm;margin-bottom:2.5mm}.pay-page>header strong{font-size:11.5pt}.pay-page>header span,.pay-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.pay-grid{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(5,51mm);gap:2.5mm 4mm}.pay-card{height:51mm;border:1px solid #000;padding:2.2mm 2.6mm;display:grid;grid-template-rows:auto 1fr auto;gap:1.2mm;break-inside:avoid;page-break-inside:avoid}.pay-name{display:flex;align-items:baseline;justify-content:space-between;gap:3mm;border-bottom:1px solid #000;padding-bottom:1mm}.pay-name b{font-size:10.5pt;text-transform:uppercase;line-height:1}.pay-name span{font-size:7.5pt;white-space:nowrap}.pay-shifts{border:1px solid #000}.pay-shifts>div{display:grid;grid-template-columns:1fr 18mm 34mm;align-items:center;min-height:8.5mm;padding:1mm 2mm}.pay-shifts>div+div{border-top:1px solid #000}.pay-shifts strong{font-size:8.5pt}.pay-shifts span{font-size:8pt;text-align:center;font-weight:700}.pay-shifts b{font-size:11.5pt;text-align:right;line-height:1}.pay-total{display:flex;align-items:flex-end;justify-content:space-between;border-top:1.5px solid #000;padding-top:1.3mm}.pay-total span{font-size:9pt;font-weight:900}.pay-total strong{font-size:18pt;line-height:1;font-weight:900}@media print{body{-webkit-print-color-adjust:economy;print-color-adjust:economy}}`
   });
 }
 function printWeeklyControlList(range, days, rows = []) {
@@ -933,6 +937,60 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     try { await cancelDailyPayment(row.id || row.paymentId, { mainCompanyId: companyId, reason: reason.trim() }); setNotice(`${row.paymentNo} iptal edildi; hakediş yeniden havuza açıldı.`); await Promise.all([loadPaymentHistory(), loadPayments(), loadRangeData()]); }
     catch (e) { setError(e?.message || "Ödeme iptal edilemedi."); } finally { setBusy(false); }
   };
+  const printPaymentPeriodSlips = useCallback(async ({ selectedOnly = false } = {}) => {
+    if (!companyId) return;
+    setBusy(true); setError("");
+    try {
+      const source = await getDailyAttendance({ mainCompanyId: companyId, startDate: paymentPoolRange.start, endDate: paymentPoolRange.end }, { forceFresh: true });
+      const rows = Array.isArray(source) ? source : [];
+      const byEmployee = new Map();
+      rows.forEach((row) => {
+        const date = rowDate(row);
+        if (!date || date < paymentPoolRange.start || date > paymentPoolRange.end) return;
+        const employeeId = rowEmployeeId(row);
+        if (!employeeId) return;
+        const person = employeeMap.get(employeeId) || {};
+        const current = byEmployee.get(employeeId) || {
+          employeeId,
+          name: person.name || row.name || row.fullName || "Personel",
+          fullName: person.name || row.name || row.fullName || "Personel",
+          personnelNo: person.personnelNo || row.personnelNo || "",
+          qualification: person.role || row.qualification || row.role || "-",
+          periodStart: paymentPoolRange.start,
+          periodEnd: paymentPoolRange.end,
+          dayCount: 0,
+          nightCount: 0,
+          dayTotal: 0,
+          nightTotal: 0,
+          totalAmount: 0,
+          items: [],
+        };
+        if (rowDay(row)) {
+          const amount = number(row.dayWage ?? row.dayRate ?? person.dayRate);
+          current.dayCount += 1;
+          current.dayTotal += amount;
+          current.totalAmount += amount;
+          current.items.push({ workDate: date, shift: "day", amount, active: true });
+        }
+        if (rowNight(row)) {
+          const amount = number(row.nightWage ?? row.nightRate ?? person.nightRate);
+          current.nightCount += 1;
+          current.nightTotal += amount;
+          current.totalAmount += amount;
+          current.items.push({ workDate: date, shift: "night", amount, active: true });
+        }
+        byEmployee.set(employeeId, current);
+      });
+      let slips = [...byEmployee.values()].filter((row) => number(row.totalAmount) > 0).sort((a, b) => String(a.name).localeCompare(String(b.name), "tr"));
+      if (selectedOnly) slips = slips.filter((row) => paymentSelectedIds.has(String(row.employeeId)));
+      printDailyPaymentSlips(paymentPoolRange, slips);
+    } catch (e) {
+      setError(e?.message || "Seçili tarih aralığı fişleri hazırlanamadı.");
+    } finally {
+      setBusy(false);
+    }
+  }, [companyId, employeeMap, paymentPoolRange, paymentSelectedIds]);
+
   const activePaymentRange = paymentTab === "history" ? paymentHistoryRange : paymentPoolRange;
   const paymentPreset = (mode) => setSafePaymentRange(paymentTab === "history" ? "history" : "pool", paymentPresetRange(mode));
   const paymentPresetActive = (mode) => sameRange(activePaymentRange, paymentPresetRange(mode));
@@ -1127,7 +1185,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         <div className="gop-toolbar-card payment-toolbar"><div className="gop-payment-filter-context"><strong>{paymentTab === "pool" ? "Hakediş Filtresi" : "Ödeme Tarihi Filtresi"}</strong><span>{dateText(activePaymentRange.start)} — {dateText(activePaymentRange.end)}</span></div><div className="gop-preset-buttons"><button type="button" className={paymentPresetActive("today") ? "active" : ""} onClick={() => paymentPreset("today")}>Bugün</button><button type="button" className={paymentPresetActive("week") ? "active" : ""} onClick={() => paymentPreset("week")}>Bu Hafta</button><button type="button" className={paymentPresetActive("lastWeek") ? "active" : ""} onClick={() => paymentPreset("lastWeek")}>Geçen Hafta</button><button type="button" className={paymentPresetActive("month") ? "active" : ""} onClick={() => paymentPreset("month")}>Bu Ay</button><button type="button" className={paymentPresetActive("lastMonth") ? "active" : ""} onClick={() => paymentPreset("lastMonth")}>Geçen Ay</button><button type="button" className={paymentPresetActive("year") ? "active" : ""} onClick={() => paymentPreset("year")}>Bu Yıl</button></div>{paymentRangeControls}</div>
         {paymentTab === "pool" ? <>
           <div className="gop-payment-stats"><Stat label="Ödeme Bekleyen" value={paymentRows.length} hint={`${paymentMetrics.totalDays} vardiya`}/><Stat label="Bekleyen Tutar" value={money(paymentMetrics.waitingAmount)}/><Stat label="Kontrol Bekleyen" value={paymentMetrics.controlPending} hint="Ödeme öncesi tamamlanmalı"/><Stat label="Hakediş Dönemi" value={`${dateText(paymentPoolRange.start)} — ${dateText(paymentPoolRange.end)}`}/></div>
-          <div className="gop-card"><div className="gop-card-head payment-head"><div><h2>Ödeme Havuzu</h2><span>Kontrolü tamamlanan hakedişleri ödeyin. Fiş yazdırmak ödeme durumunu değiştirmez.</span></div><div className="gop-print-actions"><button type="button" disabled={!selectedPaymentRows.length} onClick={() => printDailyPaymentSlips(paymentPoolRange, selectedPaymentRows)}><Printer size={15}/> Seçili Fişleri Yazdır</button><button type="button" disabled={!paymentRows.length} onClick={() => printDailyPaymentSlips(paymentPoolRange, paymentRows)}><Printer size={15}/> Tüm Fişleri Yazdır</button><button type="button" onClick={() => setPaymentSelectedIds(new Set(paymentRows.map((row) => String(row.employeeId))))}>Tümünü Seç</button><button type="button" disabled={!paymentSelectedIds.size} onClick={() => setPaymentSelectedIds(new Set())}>Seçimi Kaldır</button><button type="button" className="primary" disabled={busy || !selectedPaymentRows.length || selectedPaymentRows.some((row) => number(row.pendingCheckCount) > 0)} onClick={paySelectedRows}><WalletCards size={15}/> Seçili Ödendi</button></div></div>
+          <div className="gop-card"><div className="gop-card-head payment-head"><div><h2>Ödeme Havuzu</h2><span>Kontrolü tamamlanan hakedişleri ödeyin. Fiş yazdırmak ödeme durumunu değiştirmez.</span></div><div className="gop-print-actions"><button type="button" disabled={!selectedPaymentRows.length} onClick={() => printPaymentPeriodSlips({ selectedOnly: true })}><Printer size={15}/> Seçili Fişleri Yazdır</button><button type="button" disabled={!paymentRows.length} onClick={() => printPaymentPeriodSlips()}><Printer size={15}/> Tüm Fişleri Yazdır</button><button type="button" onClick={() => setPaymentSelectedIds(new Set(paymentRows.map((row) => String(row.employeeId))))}>Tümünü Seç</button><button type="button" disabled={!paymentSelectedIds.size} onClick={() => setPaymentSelectedIds(new Set())}>Seçimi Kaldır</button><button type="button" className="primary" disabled={busy || !selectedPaymentRows.length || selectedPaymentRows.some((row) => number(row.pendingCheckCount) > 0)} onClick={paySelectedRows}><WalletCards size={15}/> Seçili Ödendi</button></div></div>
             <div className="gop-payment-ledger-table"><table><thead><tr><th>Seç</th><th>Personel</th><th>Hakediş Dönemi</th><th>Gündüz</th><th>Gece</th><th>Toplam</th><th>Ödenecek</th><th>Kontrol</th><th>İşlem</th></tr></thead><tbody>{paymentRows.length ? paymentRows.map((row) => { const key=String(row.employeeId); const picked=paymentSelectedIds.has(key); const ready=number(row.pendingCheckCount)===0; return <tr key={key} className={!ready ? "needs-control" : ""}><td><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next=new Set(current); if(next.has(key)) next.delete(key); else next.add(key); return next; })}/></td><td><strong>{row.name || row.fullName}</strong><small>{row.personnelNo || ""} · {row.qualification || "-"}</small></td><td>{dateText(row.periodStart)} — {dateText(row.periodEnd)}</td><td>{number(row.dayCount)}</td><td>{number(row.nightCount)}</td><td><b>{number(row.totalDays)}</b></td><td className="money"><strong>{money(row.totalAmount)}</strong></td><td><span className={`gop-badge ${ready ? "ok" : "waiting"}`}>{ready ? "✓ Tam" : `${number(row.pendingCheckCount)} eksik`}</span></td><td><div className="ledger-actions"><button type="button" onClick={() => printDailyPaymentSlips(paymentPoolRange,[row])}><Printer size={14}/> Fiş Önizle</button><button type="button" className="primary" disabled={busy || !ready} onClick={() => payRow(row,false)}><WalletCards size={14}/> Ödendi Yap</button><button type="button" className="primary soft" disabled={busy || !ready} onClick={() => payRow(row,true)}><Printer size={14}/> Ödendi + Fiş</button></div></td></tr>; }) : <tr><td colSpan="9"><Empty>Bu hakediş döneminde açık ödeme yok.</Empty></td></tr>}</tbody></table></div>
           </div>
         </> : <>
