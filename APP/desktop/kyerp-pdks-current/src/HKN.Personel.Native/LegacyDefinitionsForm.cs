@@ -80,6 +80,7 @@ public sealed class LegacyDefinitionsForm : Form
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,120));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,110));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
         editor.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
+        for(var row=1;row<8;row++)editor.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
         editor.Controls.Add(PdksUiKit.SectionTitle("Firma Bilgileri"),0,0);editor.SetColumnSpan(editor.GetControlFromPosition(0,0)!,4);
 
         var combo=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList,Margin=new Padding(0,6,0,6)};firma["SELECT"]=combo;
