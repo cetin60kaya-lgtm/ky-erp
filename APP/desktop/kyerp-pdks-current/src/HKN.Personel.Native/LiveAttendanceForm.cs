@@ -152,8 +152,7 @@ public sealed partial class LiveAttendanceForm : Form
         {
             if(syncDevice&&date.Value.Date==DateTime.Today)
             {
-                RecoverLegacyBackup(date.Value.Date);
-                var state=await TerminalSyncService.SyncAsync("Canlı ekran",null,closing.Token);
+                var state=await TerminalSyncService.CaptureLiveAsync("Canlı ekran",closing.Token);
                 if(state.ReadCount>0)device.ForeColor=state.DeviceCleared?Color.DarkGreen:Color.DarkOrange;
             }
             ShowLastSync();
@@ -166,7 +165,7 @@ public sealed partial class LiveAttendanceForm : Form
 
     void ShowLastSync()
     {
-        var s=TerminalSyncService.ReadState();
+        var s=TerminalSyncService.ReadLiveState();
         if(s?.LastAt is null){device.Text="Son eşitleme: yok";device.ForeColor=Color.FromArgb(202,118,35);return;}
         device.Text=$"Son eşitleme {s.LastAt:dd.MM HH:mm:ss}   Okunan {s.ReadCount}   Eklenen/Güncellenen {s.Inserted}/{s.Updated}";
         device.ForeColor=s.ReadCount==0?Color.DarkGreen:Color.DarkOrange;
@@ -212,15 +211,15 @@ public sealed partial class LiveAttendanceForm : Form
             from KIMLIK k left join GRUP g on g.KOD=k.GRUP
             where (k.IGTARIH is null or k.IGTARIH<@B) and (k.ICTARIH is null or k.ICTARIH>=@A)
             order by k.PKNO",new FbParameter("@A",day),new FbParameter("@B",next));
-        var moves=db.Query(@"select PKNO,GTARIH,GSAAT,GDAKIKA,CTARIH,CSAAT,CDAKIKA from GIRCIK
-            where (GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B) order by PKNO,coalesce(GTARIH,CTARIH),GDAKIKA,CDAKIKA",new FbParameter("@A",day),new FbParameter("@B",next));
+        var physicalPunches=TerminalLiveArchiveService.ReadPhysicalPunches(day,day);
         var leaves=db.Query(@"select PKNO,TIP,MAZERET,SUREDAKIKA,BASSAAT,BITSAAT from OZELIZIN
             where TARIH>=@A and TARIH<@B order by PKNO",new FbParameter("@A",day),new FbParameter("@B",next));
         var plans=db.Query(@"select p.GKOD,p.MTKOD,b.AD PLAN_AD,b.IGIRISS,b.GGTOL,b.DCIKISS,b.ECTOL,b.DEVAMSIZLIK
             from PLANA p left join PUANBILGI b on b.KOD=p.MTKOD where p.TARIH>=@A and p.TARIH<@B",
             new FbParameter("@A",day),new FbParameter("@B",next));
         var fallback=db.Query("select KOD,AD,IGIRISS,GGTOL,DCIKISS,ECTOL,DEVAMSIZLIK from PUANBILGI");
-        var moveMap=moves.AsEnumerable().GroupBy(r=>S(r,"PKNO")).ToDictionary(g=>g.Key,g=>Movement(g));
+        var punchMap=physicalPunches.GroupBy(x=>x.EmployeeCode).ToDictionary(g=>g.Key,g=>g.OrderBy(x=>x.OccurredAt).ToArray(),StringComparer.OrdinalIgnoreCase);
+        CaptureUnmatched(physicalPunches.Select(x=>(x.EmployeeCode,x.OccurredAt,"Fiziksel cihaz")),day);
         var leaveMap=leaves.AsEnumerable().GroupBy(r=>S(r,"PKNO")).ToDictionary(g=>g.Key,g=>LeaveInfo(g));
         var planMap=plans.AsEnumerable().GroupBy(r=>I(r,"GKOD")).ToDictionary(g=>g.Key,g=>ReadSchedule(g.First()));
         var fallbackMap=fallback.AsEnumerable().ToDictionary(r=>I(r,"KOD"),ReadSchedule);
@@ -229,7 +228,7 @@ public sealed partial class LiveAttendanceForm : Form
         {
             var code=S(employee,"PKNO");var group=employee["GRUP"]==DBNull.Value?-1:I(employee,"GRUP");
             var groupName=S(employee,"GRUP_AD");var schedule=planMap.GetValueOrDefault(group)??FallbackSchedule(groupName,day,fallbackMap);
-            moveMap.TryGetValue(code,out var movement);leaveMap.TryGetValue(code,out var leaveInfo);
+            punchMap.TryGetValue(code,out var personPunches);var movement=PhysicalMovement(personPunches??Array.Empty<TerminalDevicePunch>());leaveMap.TryGetValue(code,out var leaveInfo);
             var fullLeave=leaveInfo.Minutes>0&&leaveInfo.Minutes>=Math.Max(420,schedule.WorkMinutes);
             var expected=schedule.WorkMinutes>0&&!fullLeave;
             var status=Status(day,schedule,expected,fullLeave,movement.Entry,movement.Exit);
@@ -307,6 +306,14 @@ public sealed partial class LiveAttendanceForm : Form
         var table=new DataTable();foreach(var name in new[]{"Kart No","Ad Soyad","Grup","Gün Planı","Giriş","Çıkış","Durum","Uyarı"})table.Columns.Add(name);
         foreach(var r in source)table.Rows.Add(r.Code,r.Name,r.Group,r.Plan,r.Entry,r.Exit,r.Status,r.Warning);
         return table;
+    }
+
+    static (DateTime? Entry,DateTime? Exit) PhysicalMovement(IEnumerable<TerminalDevicePunch> rows)
+    {
+        var ordered=rows.OrderBy(x=>x.OccurredAt).ToArray();
+        var entries=ordered.Where(x=>x.OccurredAt.TimeOfDay<TimeSpan.FromHours(12)).Select(x=>x.OccurredAt).ToArray();
+        var exits=ordered.Where(x=>x.OccurredAt.TimeOfDay>=TimeSpan.FromHours(12)).Select(x=>x.OccurredAt).ToArray();
+        return(entries.Length==0?null:entries.Min(),exits.Length==0?null:exits.Max());
     }
 
     static (DateTime? Entry,DateTime? Exit) Movement(IEnumerable<DataRow> rows)

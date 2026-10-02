@@ -28,13 +28,7 @@ public sealed class LiveArchiveControlForm : Form
         from.Value = DateTime.Today.AddDays(-6);
         to.Value = DateTime.Today;
         Build();
-        Shown += (_, _) =>
-        {
-            // İlk açılışta son 1 yıllık kanonik TNF kayıtlarını canlı arşive tamamla.
-            // İşlem tekrar çalıştırılsa da mükerrer satır eklemez.
-            TerminalLiveArchiveService.SeedFromCanonicalTnf(DateTime.Today.AddDays(-364), DateTime.Today);
-            RefreshView();
-        };
+        Shown += (_, _) => RefreshView();
     }
 
     void Build()
@@ -56,7 +50,7 @@ public sealed class LiveArchiveControlForm : Form
         });
         head.Controls.Add(new Label
         {
-            Text = "Cihazdan gelen ham kart basımları + ayrı CANLI TNF. Varsayılan saklama hedefi en az 365 gündür; otomatik silme yoktur.",
+            Text = "Yalnız fiziksel cihazdan okunan kart basımları. Uygulama düzeltmeleri ve ana TNF/FDB bu arşivi değiştirmez.",
             AutoSize = true,
             ForeColor = Color.FromArgb(75, 88, 105),
             Location = new Point(14, 38)
@@ -75,7 +69,6 @@ public sealed class LiveArchiveControlForm : Form
         root.Controls.Add(filter, 0, 1);
 
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(6, 8, 6, 0), WrapContents = false };
-        actions.Controls.Add(B("Güncel Veriyi Tamamla", SeedCurrent, 165));
         actions.Controls.Add(B("Tarih Aralığını Temizle", DeleteRange, 170));
         actions.Controls.Add(B("Canlı Veriyi Komple Temizle", ClearAll, 190));
         summary.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
@@ -109,13 +102,6 @@ public sealed class LiveArchiveControlForm : Form
         return b;
     }
 
-    void SeedCurrent()
-    {
-        var added = TerminalLiveArchiveService.SeedFromCanonicalTnf(DateTime.Today.AddDays(-364), DateTime.Today);
-        RefreshView();
-        MessageBox.Show($"Son 365 günlük mevcut TNF kayıtları canlı arşive kontrol edilerek tamamlandı.\nYeni eklenen kayıt: {added}", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
-    }
-
     void RefreshView()
     {
         var a = from.Value.Date;
@@ -130,6 +116,7 @@ public sealed class LiveArchiveControlForm : Form
         grid.Rows.Add("Son kayıt", s.LastAt?.ToString("dd.MM.yyyy HH:mm") ?? "Yok");
         grid.Rows.Add("Canlı TNF", s.TnfPath);
         grid.Rows.Add("Ham arşiv", s.RawFolder);
+        grid.Rows.Add("Kaynak", "Yalnız fiziksel kart cihazı");
         grid.Rows.Add("Saklama standardı", "En az 365 gün / otomatik silme kapalı");
     }
 

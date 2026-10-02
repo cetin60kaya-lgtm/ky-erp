@@ -71,7 +71,7 @@ public sealed class AttendanceHistoryForm : Form
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
         header.Controls.Add(new Label
         {
-            Text = "Kart Basma Kontrol Merkezi\nCihaz + CANLI TNF + FDB üzerinden kim kart basmış / basmamış kontrolü",
+            Text = "Kart Basma Kontrol Merkezi\nYalnız fiziksel cihaz CANLI arşivi üzerinden kart basım kontrolü",
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI", 12f, FontStyle.Bold),
             ForeColor = Color.FromArgb(27, 44, 68)
@@ -127,7 +127,7 @@ public sealed class AttendanceHistoryForm : Form
         try
         {
             status.Text = "Kart cihazı okunuyor…";
-            var result = await TerminalSyncService.SyncAsync("Kart Basma Kontrolü");
+            var result = await TerminalSyncService.CaptureLiveAsync("Kart Basma Kontrolü");
             status.Text = result.Message;
             await RefreshAllAsync(seedArchive: true, keepLoading: true);
         }
@@ -150,7 +150,6 @@ public sealed class AttendanceHistoryForm : Form
             }
 
             status.Text = "Veriler hazırlanıyor…";
-            if (seedArchive) TerminalLiveArchiveService.SeedFromCanonicalTnf(a, b);
             var rows = LoadPeriod(a, b);
             BindSummary(rows, a, b);
             UpdateArchiveInfo(a, b);
@@ -174,11 +173,9 @@ public sealed class AttendanceHistoryForm : Form
             S(r, "PKNO"), $"{S(r, "AD")} {S(r, "SOYAD")}".Trim(),
             D(r, "IGTARIH") ?? a, D(r, "ICTARIH"))).Where(x => !string.IsNullOrWhiteSpace(x.Code)).ToArray();
 
-        var movesTable = db.Query(@"select PKNO,GTARIH,GSAAT,GDAKIKA,CTARIH,CSAAT,CDAKIKA from GIRCIK
-            where (GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B)",
-            new FbParameter("@A", a), new FbParameter("@B", b.AddDays(1)));
-        var movements = movesTable.AsEnumerable().Select(ToMovement).Where(x => x is not null).Cast<MovementRow>()
-            .GroupBy(x => (x.Code, x.Day.Date)).ToDictionary(g => g.Key, g => MergeMovement(g));
+        var movements = TerminalLiveArchiveService.ReadPhysicalPunches(a, b)
+            .GroupBy(x => (x.EmployeeCode, x.OccurredAt.Date))
+            .ToDictionary(g => g.Key, g => MergePhysicalMovement(g));
 
         var leaveDays = new HashSet<(string Code, DateTime Day)>();
         try
@@ -298,6 +295,15 @@ public sealed class AttendanceHistoryForm : Form
         var removed = TerminalLiveArchiveService.ClearAll();
         UpdateArchiveInfo(from.Value.Date, to.Value.Date);
         status.Text = $"Canlı arşiv temizlendi: {removed:N0} kayıt. Ana TNF/FDB korunuyor.";
+    }
+
+    static MovementRow MergePhysicalMovement(IEnumerable<TerminalDevicePunch> rows)
+    {
+        var ordered = rows.OrderBy(x => x.OccurredAt).ToArray();
+        var first = ordered[0];
+        var morning = ordered.Where(x => x.OccurredAt.TimeOfDay < TimeSpan.FromHours(12)).Select(x => x.OccurredAt.TimeOfDay).ToArray();
+        var later = ordered.Where(x => x.OccurredAt.TimeOfDay >= TimeSpan.FromHours(12)).Select(x => x.OccurredAt.TimeOfDay).ToArray();
+        return new(first.EmployeeCode, first.OccurredAt.Date, morning.Length == 0 ? null : morning.Min(), later.Length == 0 ? null : later.Max());
     }
 
     static MovementRow? ToMovement(DataRow r)

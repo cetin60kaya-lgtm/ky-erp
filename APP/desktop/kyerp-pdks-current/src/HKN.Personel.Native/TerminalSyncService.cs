@@ -19,6 +19,7 @@ internal static class TerminalSyncService
     static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     static string SettingsFile => Path.Combine(CompanyDataPaths.Config, "terminal-sync.json");
     static string StateFile => Path.Combine(CompanyDataPaths.Config, "terminal-sync-state.json");
+    static string LiveStateFile => Path.Combine(CompanyDataPaths.Config, "terminal-live-state.json");
 
     public static TerminalSyncSettings LoadSettings()
     {
@@ -38,6 +39,36 @@ internal static class TerminalSyncService
     {
         try { return File.Exists(StateFile) ? JsonSerializer.Deserialize<TerminalSyncState>(File.ReadAllText(StateFile)) : null; }
         catch { return null; }
+    }
+
+    public static TerminalSyncState? ReadLiveState()
+    {
+        try { return File.Exists(LiveStateFile) ? JsonSerializer.Deserialize<TerminalSyncState>(File.ReadAllText(LiveStateFile)) : null; }
+        catch { return null; }
+    }
+
+    public static async Task<TerminalSyncState> CaptureLiveAsync(string source, CancellationToken ct = default)
+    {
+        await Gate.WaitAsync(ct);
+        try
+        {
+            CompanyDataPaths.Ensure();
+            var snapshot = await TerminalDeviceClient.ReadAsync(true, ct);
+            if (!snapshot.Connected)
+                return SaveLive(new(DateTime.Now, 0, 0, 0, 0, 0, false, "Canlı kontrol cihaz bağlantısı başarısız: " + snapshot.Message, null));
+            var punches = snapshot.Punches.OrderBy(x => x.OccurredAt).ToArray();
+            if (punches.Length == 0)
+                return SaveLive(new(DateTime.Now, 0, 0, 0, 0, 0, false, "Canlı kontrol: cihaz bağlı, yeni fiziksel kart kaydı yok. Ana FDB/TNF değiştirilmedi.", null));
+            BackupPunches(punches);
+            AppendLive(punches);
+            var added = TerminalLiveArchiveService.Append(punches);
+            return SaveLive(new(DateTime.Now, punches.Length, added, 0, punches.Length - added, 0, false, $"{source}: {punches.Length} fiziksel kayıt okundu; canlı arşive {added} yeni kayıt eklendi. Ana FDB/TNF değiştirilmedi.", null));
+        }
+        catch (Exception ex)
+        {
+            return SaveLive(new(DateTime.Now, 0, 0, 0, 0, 0, false, "Canlı kontrol hatası: " + ex.Message + " Ana FDB/TNF değiştirilmedi.", null));
+        }
+        finally { Gate.Release(); }
     }
 
     public static async Task<TerminalSyncState> SyncAsync(string source, string? scheduleKey = null, CancellationToken ct = default)
@@ -139,6 +170,13 @@ internal static class TerminalSyncService
     {
         CompanyDataPaths.Ensure();
         File.WriteAllText(StateFile, JsonSerializer.Serialize(state, Json));
+        return state;
+    }
+
+    static TerminalSyncState SaveLive(TerminalSyncState state)
+    {
+        CompanyDataPaths.Ensure();
+        File.WriteAllText(LiveStateFile, JsonSerializer.Serialize(state, Json));
         return state;
     }
 

@@ -28,6 +28,7 @@ internal sealed class DbRecordControl : UserControl
     internal DbRecordSnapshot? LastSnapshot => snapshot;
     internal int PersonCount => people.Items.Count;
     FirebirdDatabase? Database => main.GetType().GetField("db", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) as FirebirdDatabase;
+    TextBox? TnfBox => main.GetType().GetField("tnfPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) as TextBox;
     sealed record DayItem(DateTime Day) { public override string ToString() => $"{Day:dd.MM.yyyy dddd}"; }
 
     internal DbRecordControl(Form owner)
@@ -70,7 +71,7 @@ internal sealed class DbRecordControl : UserControl
         layout.RowStyles.Add(new(SizeType.AutoSize)); layout.RowStyles.Add(new(SizeType.AutoSize)); layout.RowStyles.Add(new(SizeType.Percent, 100));
         layout.RowStyles.Add(new(SizeType.Absolute, 60)); layout.RowStyles.Add(new(SizeType.Absolute, 42));
         layout.Controls.Add(top, 0, 0); layout.Controls.Add(buttons, 0, 1); layout.Controls.Add(content, 0, 2);
-        layout.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(8), Text = "Giriş: 08:15–08:45 | Çıkış: 18:30–19:30 | Yeni saatler doğal dağılır.\nYalnız seçilen işlem, personel ve günler değiştirilir. E türleri korunur; TNF bu sekmede değişmez." }, 0, 3);
+        layout.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(8), Text = "Giriş: 08:15–08:45 | Çıkış: 18:30–19:30 | Yeni saatler doğal dağılır.\nYalnız seçilen işlem, personel ve günler değiştirilir. E türleri korunur; ana TNF aynı işlemde otomatik hizalanır." }, 0, 3);
         layout.Controls.Add(status, 0, 4); Controls.Add(layout);
         controls.AddRange([people, days]);
         year.ValueChanged += (_, _) => SetMonth(); month.SelectedIndexChanged += (_, _) => SetMonth();
@@ -149,12 +150,14 @@ internal sealed class DbRecordControl : UserControl
         if (snapshot is null || !ReferenceEquals(previewDatabase, Database)) { MessageBox.Show(main, "Önce ÖNİZLE çalıştırın."); return; }
         var current = snapshot;
         if (current.Changes.Length == 0) { status.Text = "Seçilen işlem için yapılacak değişiklik yok."; return; }
-        if (MessageBox.Show(main, $"{current.Cards.Length} personel / {current.Days.Length} seçili gün.\nİşlem: {operation.Text}\nÖnizlemedeki {current.Changes.Length} değişiklik uygulanacak; diğer kayıtlar ve E türleri korunacak.\nİşlemden önce gbak ve satır yedeği alınır. TNF değişmez. Devam?", "DB KAYIT — işlem onayı", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        if (MessageBox.Show(main, $"{current.Cards.Length} personel / {current.Days.Length} seçili gün.\nİşlem: {operation.Text}\nÖnizlemedeki {current.Changes.Length} değişiklik uygulanacak; diğer kayıtlar ve E türleri korunacak.\nİşlemden önce DB ve TNF yedeği alınır. DB + ana TNF tek işlemde birlikte hizalanır. Devam?", "DB KAYIT — işlem onayı", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        var tnf = TnfBox?.Text?.Trim() ?? "";
+        if (!File.Exists(tnf)) { MessageBox.Show(main, "Ana TNF dosyasını seçin. DB KAYIT artık DB + TNF birlikte çalışır.", "DB KAYIT", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         cancellation = new(); Busy(true); var succeeded = false; string backup = "";
-        try { backup = await Task.Run(() => DbRecordService.ApplyAsync(previewDatabase!, current, cancellation.Token), cancellation.Token); succeeded = true; }
+        try { backup = await Task.Run(() => DbRecordService.ApplyAsync(previewDatabase!, current, tnf, cancellation.Token), cancellation.Token); succeeded = true; }
         catch (OperationCanceledException) { if (!IsDisposed) status.Text = "İptal edildi; DB transaction geri alındı."; }
         catch (Exception exception) { if (!IsDisposed) MessageBox.Show(main, exception.Message, "DB uygulanamadı", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally { snapshot = null; cancellation?.Dispose(); cancellation = null; if (!IsDisposed) Busy(false); }
-        if (succeeded && !IsDisposed) { await PreviewAsync(); status.Text += " | DB işlemi tamamlandı. TNF gerekiyorsa TNF DÜZENLE sekmesine geçin. Yedek: " + backup; }
+        if (succeeded && !IsDisposed) { await PreviewAsync(); status.Text += " | DB + ana TNF birlikte tamamlandı. Ayrı TNF işlemi gerekmez. DB yedeği: " + backup; }
     }
 }

@@ -1,7 +1,10 @@
 using System.Runtime.InteropServices;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using HKN.Personel.Native;
+using KYERP.PDKS.Core;
+using FirebirdSql.Data.FirebirdClient;
 
 ApplicationConfiguration.Initialize();
 Environment.SetEnvironmentVariable("KY_PDKS_UI_AUDIT", "1", EnvironmentVariableTarget.Process);
@@ -9,6 +12,8 @@ Environment.SetEnvironmentVariable("KY_PDKS_UI_AUDIT", "1", EnvironmentVariableT
 var errors = new List<string>();
 var results = new List<string>();
 RunLiveAttendanceChecks(errors, results);
+RunLiveIsolationChecks(errors, results);
+RunOperationalTnfChecks(errors, results);
 Application.ThreadException += (_, e) => errors.Add("UI: " + e.Exception.GetBaseException().Message);
 
 var user = new LocalUser
@@ -112,6 +117,84 @@ Console.WriteLine($"FUNCTION_AUDIT_ERRORS={errors.Distinct().Count()}");
 Console.WriteLine(errors.Count == 0 ? "FUNCTION_AUDIT_PASS" : "FUNCTION_AUDIT_FAIL");
 shell.Close();
 Environment.Exit(errors.Count == 0 ? 0 : 1);
+
+static void RunOperationalTnfChecks(List<string> errors, List<string> results)
+{
+    var database = new FirebirdDatabase(PdksOptions.FromEnvironment());
+    var day = new DateTime(2098, 12, 15);
+    var workspace = Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT") ?? string.Empty;
+    var tnfPath = Path.Combine(workspace, "04_TNF", "Hakan Emprime", "TR2098.Tnf");
+    var card = ""; var id = 0;
+    try
+    {
+        var people = database.Query("select first 1 PKNO from KIMLIK order by PKNO");
+        card = Convert.ToString(people.Rows[0][0])?.Trim() ?? throw new InvalidOperationException("Test personeli yok.");
+        var max = database.Query("select coalesce(max(SIRA),0)+1 N from GIRCIK"); id = Convert.ToInt32(max.Rows[0][0]);
+        database.Execute("insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,CTARIH,CSAAT,CDAKIKA,CTUR,MKOD) values (@I,@P,@D,'08:30',510,'E',@D,'19:00',1140,'','000')",
+            new FbParameter("@I", id), new FbParameter("@P", card), new FbParameter("@D", day));
+        var service = typeof(LiveAttendanceForm).Assembly.GetType("HKN.Personel.Native.OperationalTnfSyncService") ?? throw new InvalidOperationException("Operasyon TNF servisi bulunamadı.");
+        var align = service.GetMethod("AlignPersonDay", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new InvalidOperationException("TNF hizalama metodu bulunamadı.");
+        align.Invoke(null, new object[] { database, card, day });
+        var lines = File.Exists(tnfPath) ? File.ReadAllLines(tnfPath) : [];
+        if (lines.Any(x => x.StartsWith(card + ",08:30,151298,")) || !lines.Any(x => x.StartsWith(card + ",19:00,151298,")))
+            errors.Add("E tarafı TNF kuralı bozuk: sabah E dışlanmadı veya normal akşam kayboldu.");
+        database.Execute("update GIRCIK set GTUR='' where SIRA=@I", new FbParameter("@I", id));
+        align.Invoke(null, new object[] { database, card, day });
+        lines = File.ReadAllLines(tnfPath);
+        if (!lines.Any(x => x.StartsWith(card + ",08:30,151298,")) || !lines.Any(x => x.StartsWith(card + ",19:00,151298,")))
+            errors.Add("E normale çevrildiğinde DB-TNF tek işlem hizalaması başarısız.");
+        database.Execute("delete from GIRCIK where SIRA=@I", new FbParameter("@I", id)); id = 0;
+        align.Invoke(null, new object[] { database, card, day });
+        lines = File.ReadAllLines(tnfPath);
+        if (lines.Any(x => x.StartsWith(card + ",", StringComparison.Ordinal) && x.Contains(",151298,1,001", StringComparison.Ordinal))) errors.Add("DB kaydı silindikten sonra TNF karşılığı kaldı.");
+        var failed = errors.Any(x => x.Contains("TNF kuralı", StringComparison.OrdinalIgnoreCase) || x.Contains("DB-TNF", StringComparison.OrdinalIgnoreCase) || x.Contains("TNF karşılığı", StringComparison.OrdinalIgnoreCase));
+        results.Add(failed ? "FAIL|E ve manuel DB-TNF tek işlem regresyonu" : "PASS|E ve manuel değişiklikler ana TNF ile tek işlem hizalanıyor");
+    }
+    catch (Exception ex) { errors.Add("Operasyon TNF regresyon testi: " + ex.GetBaseException().Message); }
+    finally { if (id != 0) try { database.Execute("delete from GIRCIK where SIRA=@I", new FbParameter("@I", id)); } catch { } }
+}
+
+static void RunLiveIsolationChecks(List<string> errors, List<string> results)
+{
+    try
+    {
+        var workspace = Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT") ?? string.Empty;
+        var dbPath = Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH") ?? string.Empty;
+        var tnfPath = Path.Combine(workspace, "04_TNF", "Hakan Emprime", $"TR{DateTime.Today.Year}.Tnf");
+        string Hash(string path) => File.Exists(path) ? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))) : "MISSING";
+        string DbFingerprint()
+        {
+            var database = new FirebirdDatabase(PdksOptions.FromEnvironment());
+            var builder = new StringBuilder();
+            foreach (var sql in new[] {
+                "select SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,CTARIH,CSAAT,CDAKIKA,CTUR from GIRCIK order by SIRA",
+                "select PKNO,IGTARIH,ICTARIH from KIMLIK order by PKNO" })
+            {
+                var table = database.Query(sql);
+                foreach (System.Data.DataRow row in table.Rows)
+                    builder.AppendLine(string.Join("|", row.ItemArray.Select(value => value == DBNull.Value ? "<NULL>" : Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture))));
+            }
+            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
+        }
+        var dbBefore = DbFingerprint(); var tnfBefore = Hash(tnfPath);
+        var assembly = typeof(LiveAttendanceForm).Assembly;
+        var archive = assembly.GetType("HKN.Personel.Native.TerminalLiveArchiveService") ?? throw new InvalidOperationException("Canlı arşiv servisi bulunamadı.");
+        archive.GetMethod("ClearAll", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!.Invoke(null, null);
+        using (var history = new AttendanceHistoryForm()) { history.Show(); Pump(900); history.Close(); }
+        var stats = archive.GetMethod("GetStats", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!.Invoke(null, new object[] { DateTime.Today.AddDays(-6), DateTime.Today });
+        var count = Convert.ToInt32(stats!.GetType().GetProperty("RecordCount")!.GetValue(stats));
+        if (count != 0) errors.Add("Canlı kontrol ana TNF'den kendiliğinden doldu; fiziksel arşiv bağımsız değil.");
+        var sync = assembly.GetType("HKN.Personel.Native.TerminalSyncService") ?? throw new InvalidOperationException("Canlı terminal servisi bulunamadı.");
+        var capture = sync.GetMethod("CaptureLiveAsync", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!;
+        var task = (Task)capture.Invoke(null, new object[] { "FunctionAudit canlı izolasyon", CancellationToken.None })!;
+        task.GetAwaiter().GetResult();
+        if (DbFingerprint() != dbBefore) errors.Add("Canlı cihaz okuması ana FDB verisini değiştirdi.");
+        if (Hash(tnfPath) != tnfBefore) errors.Add("Canlı cihaz okuması ana TNF'yi değiştirdi.");
+        var failed = errors.Any(x => x.Contains("Canlı kontrol", StringComparison.OrdinalIgnoreCase) || x.Contains("Canlı cihaz", StringComparison.OrdinalIgnoreCase));
+        results.Add(failed ? "FAIL|Canlı kontrol fiziksel arşiv izolasyonu" : "PASS|Canlı kontrol fiziksel arşivi FDB/TNF'den bağımsız");
+    }
+    catch (Exception ex) { errors.Add("Canlı kontrol izolasyon testi: " + ex.GetBaseException().Message); }
+}
 
 static void RunLiveAttendanceChecks(List<string> errors, List<string> results)
 {

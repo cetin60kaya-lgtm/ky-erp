@@ -28,8 +28,9 @@ internal static class TerminalLiveArchiveService
         Directory.CreateDirectory(TnfRoot);
     }
 
-    public static void Append(IEnumerable<TerminalDevicePunch> punches)
+    public static int Append(IEnumerable<TerminalDevicePunch> punches)
     {
+        var physicalAdded = 0;
         Ensure();
         foreach (var yearGroup in punches.GroupBy(x => x.OccurredAt.Year))
         {
@@ -54,8 +55,13 @@ internal static class TerminalLiveArchiveService
                 : new HashSet<string>(StringComparer.Ordinal);
             var lines = dayGroup.Select(x => $"{x.EmployeeCode}|{x.OccurredAt:O}|{x.InOut}|{x.VerifyMode}|{x.EventCode}|{x.TerminalNumber}")
                 .Where(known.Add).ToArray();
-            if (lines.Length > 0) File.AppendAllLines(path, lines, Encoding.UTF8);
+            if (lines.Length > 0)
+            {
+                File.AppendAllLines(path, lines, Encoding.UTF8);
+                physicalAdded += lines.Length;
+            }
         }
+        return physicalAdded;
     }
 
     public static int SeedFromCanonicalTnf(DateTime from, DateTime to)
@@ -92,24 +98,38 @@ internal static class TerminalLiveArchiveService
         return added;
     }
 
-    public static LiveArchiveStats GetStats(DateTime from, DateTime to)
+    internal static IReadOnlyList<TerminalDevicePunch> ReadPhysicalPunches(DateTime from, DateTime to)
     {
         Ensure();
         if (to.Date < from.Date) (from, to) = (to, from);
-        var records = new List<(string Code, DateTime At)>();
-        for (var y = from.Year; y <= to.Year; y++)
+        var result = new List<TerminalDevicePunch>();
+        foreach (var file in Directory.GetFiles(RawRoot, "*.raw", SearchOption.AllDirectories))
         {
-            var path = LiveTnfPath(y);
-            if (!File.Exists(path)) continue;
-            foreach (var line in File.ReadLines(path))
+            if (!DateTime.TryParseExact(Path.GetFileNameWithoutExtension(file), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fileDay)) continue;
+            if (fileDay.Date < from.Date || fileDay.Date > to.Date) continue;
+            foreach (var line in File.ReadLines(file))
             {
-                if (!TryParseTnf(line, out var code, out var at)) continue;
+                var p = line.Split('|');
+                if (p.Length < 6 || string.IsNullOrWhiteSpace(p[0])) continue;
+                if (!DateTime.TryParse(p[1], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var at)) continue;
                 if (at.Date < from.Date || at.Date > to.Date) continue;
-                records.Add((code, at));
+                _ = int.TryParse(p[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var inOut);
+                _ = int.TryParse(p[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var verify);
+                _ = int.TryParse(p[4], NumberStyles.Integer, CultureInfo.InvariantCulture, out var evt);
+                _ = int.TryParse(p[5], NumberStyles.Integer, CultureInfo.InvariantCulture, out var terminal);
+                result.Add(new TerminalDevicePunch(p[0].Trim(), at, inOut, verify, evt, terminal));
             }
         }
-        return new(records.Count, records.Select(x => x.Code).Distinct(StringComparer.Ordinal).Count(),
-            records.Count == 0 ? null : records.Min(x => x.At), records.Count == 0 ? null : records.Max(x => x.At),
+        return result
+            .GroupBy(x => $"{x.EmployeeCode}|{x.OccurredAt:O}|{x.InOut}|{x.VerifyMode}|{x.EventCode}|{x.TerminalNumber}", StringComparer.Ordinal)
+            .Select(x => x.First()).OrderBy(x => x.OccurredAt).ToArray();
+    }
+
+    public static LiveArchiveStats GetStats(DateTime from, DateTime to)
+    {
+        var records = ReadPhysicalPunches(from, to);
+        return new(records.Count, records.Select(x => x.EmployeeCode).Distinct(StringComparer.Ordinal).Count(),
+            records.Count == 0 ? null : records.Min(x => x.OccurredAt), records.Count == 0 ? null : records.Max(x => x.OccurredAt),
             LiveTnfPath(to.Year), RawRoot);
     }
 

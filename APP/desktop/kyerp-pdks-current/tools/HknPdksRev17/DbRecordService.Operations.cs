@@ -66,7 +66,7 @@ internal static partial class DbRecordService
 
     static string FormatMinute(int minute) => TimeSpan.FromMinutes(minute).ToString(@"hh\:mm", System.Globalization.CultureInfo.InvariantCulture);
 
-    internal static async Task<string> ApplyChangesAsync(FirebirdDatabase database, DbRecordSnapshot snapshot, CancellationToken token)
+    internal static async Task<string> ApplyChangesAsync(FirebirdDatabase database, DbRecordSnapshot snapshot, string? tnfPath, CancellationToken token)
     {
         if (!Enum.IsDefined(snapshot.Mode) || snapshot.Mode == DbRecordMode.Normalize || snapshot.Changes.Length == 0)
             throw new InvalidOperationException("Önizlenecek DB işlemi bulunamadı.");
@@ -134,8 +134,12 @@ internal static partial class DbRecordService
                 Execute("delete from GIRCIK where SIRA=@I and GTARIH is null and CTARIH is null and (GSAAT is null or trim(GSAAT)='') and (CSAAT is null or trim(CSAAT)='')", new FbParameter("@I", id));
             VerifyChanges(snapshot, Read(database, snapshot.Cards, snapshot.Days, token, connection, transaction, snapshot.Mode));
             token.ThrowIfCancellationRequested();
-            transaction.Commit();
-            SyncEngine.Log($"REV21 db_record_operation={snapshot.Mode} changed={snapshot.Changes.Length}");
+            var tnfScope = snapshot.Changes.Select(change => (change.Card, change.Day)).Distinct().ToArray();
+            using var stagedTnf = string.IsNullOrWhiteSpace(tnfPath) ? null : DbRecordTnfCoordinator.Stage(connection, transaction, tnfPath, tnfScope, token);
+            stagedTnf?.Publish();
+            try { transaction.Commit(); }
+            catch { stagedTnf?.Restore(); throw; }
+            SyncEngine.Log($"REV21 db_record_operation={snapshot.Mode} changed={snapshot.Changes.Length} tnf={(stagedTnf is null ? "off" : "aligned")}");
             return backup;
         }
         catch { try { transaction.Rollback(); } catch { } throw; }

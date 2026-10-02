@@ -102,6 +102,7 @@ Console.WriteLine($"UI_AUDIT_ROOT={root}");
 Console.WriteLine($"UI_AUDIT_FORMS={jobs.Count + 1}");
 Console.WriteLine($"UI_AUDIT_ERRORS={errors.Count}");
 foreach (var error in errors) Console.WriteLine("ERROR=" + error);
+Environment.ExitCode = errors.Count == 0 ? 0 : 1;
 
 static void CaptureFormNoLoad(Form form, string name, string root, StringBuilder log, List<string> errors)
 {

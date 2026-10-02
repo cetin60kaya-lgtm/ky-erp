@@ -132,9 +132,12 @@ internal static partial class DbRecordService
         return minute;
     }
 
-    internal static async Task<string> ApplyAsync(FirebirdDatabase database, DbRecordSnapshot snapshot, CancellationToken token)
+    internal static Task<string> ApplyAsync(FirebirdDatabase database, DbRecordSnapshot snapshot, CancellationToken token) =>
+        ApplyAsync(database, snapshot, null, token);
+
+    internal static async Task<string> ApplyAsync(FirebirdDatabase database, DbRecordSnapshot snapshot, string? tnfPath, CancellationToken token)
     {
-        if (snapshot.Mode != DbRecordMode.Normalize) return await ApplyChangesAsync(database, snapshot, token).ConfigureAwait(false);
+        if (snapshot.Mode != DbRecordMode.Normalize) return await ApplyChangesAsync(database, snapshot, tnfPath, token).ConfigureAwait(false);
         var cards = snapshot.Cards.ToHashSet(StringComparer.Ordinal);
         var days = snapshot.Days.ToHashSet();
         var structural = Plan(snapshot, token).ToDictionary(plan => (plan.Card, plan.Day));
@@ -212,8 +215,12 @@ internal static partial class DbRecordService
             var after = Read(database, snapshot.Cards, snapshot.Days, token, connection, transaction);
             Verify(snapshot, after);
             token.ThrowIfCancellationRequested();
-            transaction.Commit();
-            SyncEngine.Log($"REV21 db_record_committed people={snapshot.Cards.Length} days={snapshot.Days.Length} changed={changed.Length}");
+            using var stagedTnf = string.IsNullOrWhiteSpace(tnfPath) ? null :
+                DbRecordTnfCoordinator.Stage(connection, transaction, tnfPath, snapshot.Cards.SelectMany(card => snapshot.Days.Select(day => (card, day))), token);
+            stagedTnf?.Publish();
+            try { transaction.Commit(); }
+            catch { stagedTnf?.Restore(); throw; }
+            SyncEngine.Log($"REV21 db_record_committed people={snapshot.Cards.Length} days={snapshot.Days.Length} changed={changed.Length} tnf={(stagedTnf is null ? "off" : "aligned")}");
             return backup;
         }
         catch { try { transaction.Rollback(); } catch { } throw; }

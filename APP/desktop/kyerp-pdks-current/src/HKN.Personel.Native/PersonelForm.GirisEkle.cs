@@ -94,6 +94,7 @@ public partial class PersonelForm
     int InsertGirisCikis(DataTable chosen,DateTime gir,DateTime cik,int inTolerance,int outTolerance)
     {
         int added=0;
+        var touched=new List<(string Card,DateTime Day)>();
         foreach(DataRow r in chosen.Rows)
         {
             string pk=Convert.ToString(r["PKNO"])??"";if(pk.Length==0)continue;
@@ -105,8 +106,11 @@ public partial class PersonelForm
             string gs=adjustedIn.ToString("HH:mm"),cs=adjustedOut.ToString("HH:mm");
             Exec("insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,CTARIH,CSAAT,CDAKIKA,MKOD) values (@S,@PK,@GD,@GS,@GM,@CD,@CS,@CM,'000')",
                 new FbParameter("@S",Next("GIRCIK","SIRA")),new FbParameter("@PK",pk),new FbParameter("@GD",adjustedIn.Date),new FbParameter("@GS",gs),new FbParameter("@GM",adjustedIn.Hour*60+adjustedIn.Minute),new FbParameter("@CD",adjustedOut.Date),new FbParameter("@CS",cs),new FbParameter("@CM",adjustedOut.Hour*60+adjustedOut.Minute));
+            touched.Add((pk,adjustedIn.Date));
+            if(adjustedOut.Date!=adjustedIn.Date)touched.Add((pk,adjustedOut.Date));
             added++;
         }
+        if(touched.Count>0)OperationalTnfSyncService.AlignPersonDays(db,touched);
         return added;
     }
 }

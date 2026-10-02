@@ -65,6 +65,13 @@ internal static class SeparatedWorkflowTests
         database.Execute("drop trigger TEST_ROLLBACK");
         var tnfPath = Path.Combine(directory, "TR2026.Tnf");
         File.WriteAllText(tnfPath, "00056,08:20,010926,1,001\n00056,08:30,010926,1,001\n00056,08:30,010926,1,001\n00056,18:55,010926,1,001\n00999,09:00,010926,1,001\n");
+        var coordinatedDay = new DateTime(2026, 10, 12);
+        var coordinated = DbRecordService.Read(database, ["00053"], [coordinatedDay], CancellationToken.None);
+        DbRecordService.ApplyAsync(database, coordinated, tnfPath, CancellationToken.None).GetAwaiter().GetResult();
+        var coordinatedAfter = DbRecordService.Read(database, ["00053"], [coordinatedDay], CancellationToken.None);
+        var coordinatedLines = File.ReadAllLines(tnfPath);
+        check(coordinatedAfter.Plan.Single().Operation == "UYUMLU" && coordinatedLines.Count(line => line.StartsWith("00053,") && line.Contains(",121026,1,001")) == 2, "DB KAYIT one apply updates DB and main TNF together");
+        check(coordinatedLines.Contains("00999,09:00,010926,1,001"), "DB KAYIT coordinated TNF preserves unrelated lines");
         var bytes = File.ReadAllBytes(tnfPath);
         var request = new AuditRequest(tnfPath, new(2026, 9, 1), new(2026, 10, 1), "", new(), true);
         var sync = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
