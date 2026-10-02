@@ -52,6 +52,10 @@ export async function prepareIkAdvancedPeriod(payload = {}) {
   return postAndPublish("/ik/advanced/period-prepare", payload, "period-prepare");
 }
 
+export async function createIkAdvancedPerson(payload = {}) {
+  return postAndPublish("/ik/monthly-employees", payload, "person-create");
+}
+
 export async function saveIkAdvancedPersonCard(employeeId, payload = {}) {
   return postAndPublish(`/ik/advanced/person-card/${encodeURIComponent(employeeId)}`, payload, "person-card");
 }
