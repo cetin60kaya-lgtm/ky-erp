@@ -67,7 +67,7 @@ public sealed partial class MainShellForm : Form
     static void OpenErpSite()
     {
         try { Process.Start(new ProcessStartInfo("https://kyerp.net") { UseShellExecute = true }); }
-        catch (Exception ex) { PdksErrorPresenter.Show(this,ex,"KY ERP",MessageBoxIcon.Warning,"Shell"); }
+        catch (Exception ex) { PdksErrorPresenter.Show(null,ex,"KY ERP",MessageBoxIcon.Warning,"Shell.OpenSite"); }
     }
 
     bool Ready(PdksModule module)
