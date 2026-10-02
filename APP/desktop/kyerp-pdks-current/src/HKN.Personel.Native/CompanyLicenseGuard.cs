@@ -209,7 +209,7 @@ internal static class CompanyLicenseGuard
     public static void OpenPortal()
     {
         try { Process.Start(new ProcessStartInfo(PortalUri.ToString()) { UseShellExecute = true }); }
-        catch (Exception ex) { PdksErrorPresenter.Show(this,ex,"KY ERP Lisans",MessageBoxIcon.Warning,"License"); }
+        catch (Exception ex) { PdksErrorPresenter.Show(null,ex,"KY ERP Lisans",MessageBoxIcon.Warning,"License.Portal"); }
     }
 
     static void Save(CompanyLicenseState state)
