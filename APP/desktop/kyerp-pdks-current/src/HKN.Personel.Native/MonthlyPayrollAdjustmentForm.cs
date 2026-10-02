@@ -17,7 +17,11 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
         AutoGenerateColumns=false, SelectionMode=DataGridViewSelectionMode.FullRowSelect,
         MultiSelect=true, BackgroundColor=Color.White, BorderStyle=BorderStyle.FixedSingle
     };
-    readonly Label summary = new() { AutoSize=true, Font=new Font("Segoe UI",9.5f,FontStyle.Bold), ForeColor=PdksAppearance.Current.Primary, Padding=new Padding(8,8,0,0) };
+    readonly Label summary = new() { AutoSize=true, Font=new Font("Segoe UI",8.5f,FontStyle.Bold), ForeColor=PdksAppearance.Current.Muted };
+    readonly Label selectedValue = KpiValue();
+    readonly Label entitlementValue = KpiValue();
+    readonly Label officialValue = KpiValue();
+    readonly Label differenceValue = KpiValue();
     DataTable data = new();
     bool loading;
 
@@ -76,26 +80,91 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
     void BuildUi()
     {
         var p=PdksAppearance.Current;
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,Padding=new Padding(14),BackColor=p.Canvas};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,54)); root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent,100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=5,ColumnCount=1,Padding=new Padding(16),BackColor=p.Canvas};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,102));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,102));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
 
-        var filters=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(12,7,8,0),BackColor=p.Surface};
-        filters.Controls.Add(L("Yıl")); filters.Controls.Add(year); filters.Controls.Add(L("Ay")); filters.Controls.Add(month);
-        filters.Controls.Add(L("Personel")); filters.Controls.Add(person); filters.Controls.Add(B("Yenile",82,Reload)); filters.Controls.Add(summary);
-        root.Controls.Add(filters,0,0);
+        var header=PdksUiKit.Card(16);
+        var headerGrid=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Surface,Margin=Padding.Empty};
+        headerGrid.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
+        headerGrid.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        headerGrid.Controls.Add(new Label
+        {
+            Text="Aylık Bordro Düzeltme ve Hızlı Ödeme",
+            Dock=DockStyle.Fill,
+            Font=new Font("Segoe UI",12f,FontStyle.Bold),
+            ForeColor=p.Text,
+            TextAlign=ContentAlignment.MiddleLeft
+        },0,0);
 
-        var fast=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(12,5,8,0),BackColor=p.Surface};
-        fast.Controls.Add(B("Tümünü Seç",92,()=>SetAll(true))); fast.Controls.Add(B("Seçimi Kaldır",104,()=>SetAll(false)));
-        fast.Controls.Add(B("Resmî Bordroyu Yenile",160,RecalculateAll));
-        fast.Controls.Add(new Label{Text="Banka tutarı resmî bordro netinden otomatik hesaplanır.",AutoSize=true,Padding=new Padding(12,7,0,0),ForeColor=p.Muted});
-        root.Controls.Add(fast,0,1); root.Controls.Add(grid,0,2);
+        var filters=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,7,0,0),BackColor=p.Surface};
+        filters.Controls.Add(L("Yıl"));filters.Controls.Add(year);
+        filters.Controls.Add(L("Ay"));filters.Controls.Add(month);
+        filters.Controls.Add(L("Personel"));filters.Controls.Add(person);
+        filters.Controls.Add(B("Yenile",86,Reload));
+        summary.Text="Kaynak: UCRETLER • Resmî net / banka otomatik";
+        summary.Padding=new Padding(12,8,0,0);
+        filters.Controls.Add(summary);
+        headerGrid.Controls.Add(filters,0,1);
+        header.Controls.Add(headerGrid);
+        root.Controls.Add(header,0,0);
+
+        var kpis=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,BackColor=p.Canvas,Padding=new Padding(0,10,0,4),Margin=Padding.Empty};
+        for(var i=0;i<4;i++)kpis.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
+        kpis.Controls.Add(KpiCard("Seçili Personel",selectedValue,"Ödeme / işlem seçimi"),0,0);
+        kpis.Controls.Add(KpiCard("Hak Edilen Net",entitlementValue,"İç hakediş toplamı"),1,0);
+        kpis.Controls.Add(KpiCard("Resmî Net / Banka",officialValue,"Banka ödeme toplamı"),2,0);
+        kpis.Controls.Add(KpiCard("Aradaki Fark",differenceValue,"Hakediş - resmî net"),3,0);
+        root.Controls.Add(kpis,0,1);
+
+        var fast=PdksUiKit.ActionBar(false,p.Canvas);
+        fast.Controls.Add(B("Tümünü Seç",96,()=>SetAll(true)));
+        fast.Controls.Add(B("Seçimi Kaldır",112,()=>SetAll(false)));
+        fast.Controls.Add(B("Resmî Bordroyu Yenile",166,RecalculateAll));
+        fast.Controls.Add(new Label{Text="Banka tutarı resmî bordro netinden otomatik hesaplanır; PEK uyumsuzluğu varsa ödeme engellenir.",AutoSize=true,Padding=new Padding(14,8,0,0),ForeColor=p.Muted});
+        root.Controls.Add(fast,0,2);
+
+        grid.Margin=Padding.Empty;
+        grid.BorderStyle=BorderStyle.None;
+        grid.RowHeadersVisible=false;
+        grid.RowTemplate.Height=31;
+        grid.ColumnHeadersHeight=36;
+        root.Controls.Add(grid,0,3);
 
         var bottom=PdksUiKit.ActionBar(true,p.Canvas);
-        var save=B("Ayı Kaydet",130,SaveMonth); Primary(save); bottom.Controls.Add(save);
-        var pay=B("Seçili Ödemeleri İşle",165,PostSelectedPayments); Primary(pay); bottom.Controls.Add(pay);
+        bottom.Controls.Add(B("Ayı Kaydet",130,SaveMonth));
+        bottom.Controls.Add(B("Seçili Ödemeleri İşle",170,PostSelectedPayments));
         bottom.Controls.Add(B("Kapat",90,Close));
-        root.Controls.Add(bottom,0,3); Controls.Add(root);
+        root.Controls.Add(bottom,0,4);
+        Controls.Add(root);
+    }
+
+    static Label KpiValue()=>new()
+    {
+        Text="0",
+        Dock=DockStyle.Fill,
+        TextAlign=ContentAlignment.MiddleLeft,
+        Font=new Font("Segoe UI",15f,FontStyle.Bold),
+        ForeColor=PdksAppearance.Current.Text
+    };
+
+    static Control KpiCard(string title,Label value,string hint)
+    {
+        var p=PdksAppearance.Current;
+        var card=PdksUiKit.Card(12);
+        card.Margin=new Padding(0,0,10,0);
+        var grid=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,BackColor=p.Surface,Margin=Padding.Empty};
+        grid.RowStyles.Add(new RowStyle(SizeType.Absolute,20));
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        grid.RowStyles.Add(new RowStyle(SizeType.Absolute,18));
+        grid.Controls.Add(new Label{Text=title,Dock=DockStyle.Fill,Font=new Font("Segoe UI",8.3f,FontStyle.Bold),ForeColor=p.Muted},0,0);
+        grid.Controls.Add(value,0,1);
+        grid.Controls.Add(new Label{Text=hint,Dock=DockStyle.Fill,Font=new Font("Segoe UI",7.8f),ForeColor=p.Muted},0,2);
+        card.Controls.Add(grid);
+        return card;
     }
 
     void AddCheck(string name,string header,int width)=>grid.Columns.Add(new DataGridViewCheckBoxColumn{Name=name,HeaderText=header,DataPropertyName=name,Width=width});
@@ -286,6 +355,11 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
 
     void RefreshSummary()
     {
-        var rows=Selected().ToList();summary.Text=$"Seçili: {rows.Count}   Hakediş: {rows.Sum(r=>Dec(r,"HAKEDIS_NET")):N2} ₺   Resmî Net/Banka: {rows.Sum(r=>Dec(r,"RESMI_NET")):N2} ₺   Fark: {rows.Sum(r=>Dec(r,"FARK")):N2} ₺";
+        var rows=Selected().ToList();
+        selectedValue.Text=rows.Count.ToString("N0");
+        entitlementValue.Text=$"{rows.Sum(r=>Dec(r,"HAKEDIS_NET")):N2} ₺";
+        officialValue.Text=$"{rows.Sum(r=>Dec(r,"RESMI_NET")):N2} ₺";
+        differenceValue.Text=$"{rows.Sum(r=>Dec(r,"FARK")):N2} ₺";
+        differenceValue.ForeColor=Math.Abs(rows.Sum(r=>Dec(r,"FARK")))>0.01m?PdksAppearance.Current.Warning:PdksAppearance.Current.Text;
     }
 }
