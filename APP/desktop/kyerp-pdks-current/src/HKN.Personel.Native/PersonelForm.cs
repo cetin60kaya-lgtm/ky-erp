@@ -24,7 +24,7 @@ public partial class PersonelForm : Form
         Text="Personel Bilgileri"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(1220,760); MinimumSize=new Size(980,640);
         FormBorderStyle=FormBorderStyle.Sizable; MaximizeBox=true; MinimizeBox=true;
         Font=new Font("Segoe UI",9f); BackColor=Color.FromArgb(246,249,253); DoubleBuffered=true; SetStyle(ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint,true);
-        BuildMenuFull();
+        InitializePersonelBehavior();
         BuildUiClassic();
 
         // Geometry and CRUD bars are built before the form becomes visible. Doing this from
@@ -149,7 +149,15 @@ public partial class PersonelForm : Form
     void LoadPerson(string pk)
     {
         currentPk=pk; var dt=Q("select first 1 k.*,g.AD as GRUPAD,b.AD as BOLUMAD,s.AD as SERVISAD,d.AD as DURUMAD,go.AD as GOREVAD,fi.AD as FIRMAAD from KIMLIK k left join GRUP g on g.KOD=k.GRUP left join BOLUM b on b.KOD=k.BOLUM left join SERVIS s on s.KOD=k.SERVIS left join DURUM d on d.KOD=k.DURUM left join GOREV go on go.KOD=k.GOREV left join FIRMA fi on fi.KOD=k.SIRKET where k.PKNO=@PK",new FbParameter("@PK",pk));
-        if(dt.Rows.Count==0)return; var r=dt.Rows[0]; foreach(var kv in f) if(dt.Columns.Contains(kv.Key)) kv.Value.Text=Convert.ToString(r[kv.Key])??""; else if(dt.Columns.Contains(kv.Key.Replace("AD",""))) kv.Value.Text=Convert.ToString(r[kv.Key.Replace("AD","")])??"";
+        if(dt.Rows.Count==0)return;
+        var r=dt.Rows[0];
+        foreach(var kv in f)
+        {
+            if(dt.Columns.Contains(kv.Key)) kv.Value.Text = r[kv.Key] is DateTime d ? d.ToString("dd.MM.yyyy") : Convert.ToString(r[kv.Key]) ?? "";
+            else if(dt.Columns.Contains(kv.Key.Replace("AD",""))) kv.Value.Text = Convert.ToString(r[kv.Key.Replace("AD","")]) ?? "";
+        }
+        UpdateCanonicalProfileSummary(r);
+        LoadPayrollProfilePanel(pk, ReadDecimal(r, "MAAS"));
     }
 
     void SaveCurrent()
