@@ -50,6 +50,12 @@ public sealed partial class MainShellForm : Form
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
+        if (keyData == (Keys.Control | Keys.K))
+        {
+            OpenCommandPalette();
+            return true;
+        }
+
         var command = PdksCommandCatalog.ForShortcut(keyData);
         if (command is not null && CanExecute(command))
         {
