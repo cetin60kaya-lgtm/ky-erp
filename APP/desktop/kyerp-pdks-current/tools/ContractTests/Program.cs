@@ -237,6 +237,25 @@ Run("payroll calculation", () =>
     Throws(()=>PayrollCalculator.Calculate(new PayrollInput(-1,0,0,0,0,0,0)));
 });
 
+Run("2026 official payroll calculation", () =>
+{
+    var rules=TurkishPayrollRules.ForYear(2026);
+    Equal(33030m,rules.MinimumGrossMonthly);
+    Equal(297270m,rules.SgkCeilingMonthly);
+    var minimum=TurkishPayrollCalculator.Calculate(new OfficialPayrollInput(33030m),rules);
+    Equal(33030m,minimum.PrimeEarnings);
+    Equal(4624.20m,minimum.EmployeeSgk);
+    Equal(330.30m,minimum.EmployeeUnemployment);
+    Equal(0m,minimum.IncomeTaxPayable);
+    Equal(0m,minimum.StampTaxPayable);
+    Equal(28075.50m,minimum.NetWage);
+
+    var gross=TurkishPayrollCalculator.GrossForTargetNet(30000m,2026);
+    var target=TurkishPayrollCalculator.Calculate(new OfficialPayrollInput(gross),rules);
+    Equal(true,gross>=33030m);
+    Equal(true,Math.Abs(target.NetWage-30000m)<=0.01m);
+});
+
 Run("daily attendance calculation", () =>
 {
     var day=new DateTime(2026,9,21);
