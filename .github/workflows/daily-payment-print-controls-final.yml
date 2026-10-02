@@ -10,6 +10,7 @@ on:
       - 'APP/app/ky-erp-frontend/src/services/dailyOpsApi.js'
       - 'APP/app/ky-erp-frontend/src/app/moduleRegistry.js'
       - 'APP/app/ky-erp-frontend/public/manifest.webmanifest'
+      - 'APP/app/ky-erp-frontend/src/styles/canonical-workspace-ui.test.js'
       - '.github/workflows/daily-payment-print-controls-final.yml'
   workflow_dispatch:
 
@@ -88,3 +89,5 @@ jobs:
             done
             test "$ok" = 1
           done
+
+# corporate-final-rerun-20261002-v2
