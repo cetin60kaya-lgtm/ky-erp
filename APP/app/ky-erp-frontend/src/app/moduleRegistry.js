@@ -157,11 +157,11 @@ const DAILY_OPERATIONS_MODULE = {
     {
       label: "Günlük Operasyon",
       tabs: [
-        ["daily-dashboard", "Ana Sayfa", "dashboard"],
-        ["daily-entry", "Günlük Giriş", "takvim"],
-        ["daily-cards", "Personel Kartları", "users"],
-        ["daily-weekly", "Haftalık Özet", "raporlar"],
-        ["daily-payments", "Ödemeler", "odemeler"],
+        ["daily-dashboard", "Yönetim Özeti", "dashboard"],
+        ["daily-entry", "Günlük Personel Girişi", "takvim"],
+        ["daily-cards", "Personel & Ücret Kartları", "users"],
+        ["daily-weekly", "Dönem Kontrolü", "raporlar"],
+        ["daily-payments", "Hakediş & Ödeme", "odemeler"],
       ],
     },
   ],
