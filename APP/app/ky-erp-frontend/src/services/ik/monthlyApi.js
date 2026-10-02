@@ -57,7 +57,7 @@ export async function saveIkAdvancedPersonCard(employeeId, payload = {}) {
 }
 
 export async function saveIkAdvancedException(payload = {}) {
-  return postAndPublish("/ik/advanced/exception", payload, "exception");
+  return postAndPublish("/ik/advanced/leave", payload, "exception");
 }
 
 export async function saveIkAdvancedLeave(payload = {}) {
