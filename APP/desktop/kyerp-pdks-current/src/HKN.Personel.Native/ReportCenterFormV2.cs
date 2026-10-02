@@ -208,15 +208,9 @@ public sealed class ReportCenterForm : Form
         {
             data = new DataTable();
             grid.DataSource = data;
-            summary.Text = "Rapor alınamadı • " + FriendlyError(ex);
+            summary.Text = "Rapor alınamadı • " + PdksErrorPresenter.Report(ex,"ReportCenter.LoadData");
             summary.ForeColor = PdksAppearance.Current.Danger;
         }
-    }
-
-    static string FriendlyError(Exception ex)
-    {
-        var text = ex.Message.Replace("\r"," ").Replace("\n"," ").Trim();
-        return text.Length <= 140 ? text : text[..137] + "...";
     }
 
     DataTable ReportQuery(string sql, params FbParameter[] parameters)
@@ -343,5 +337,5 @@ public sealed class ReportCenterForm : Form
         foreach (var ch in Path.GetInvalidFileNameChars()) value = value.Replace(ch, '-');
         return value.Replace(' ', '-');
     }
-    void Error(Exception ex) => MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    void Error(Exception ex) => PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"ReportCenter.Output");
 }
