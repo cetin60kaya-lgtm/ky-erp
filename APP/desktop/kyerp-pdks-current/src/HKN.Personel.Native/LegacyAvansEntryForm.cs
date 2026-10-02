@@ -37,9 +37,9 @@ public sealed class LegacyAvansEntryForm : Form
 
     public LegacyAvansEntryForm()
     {
-        Text="Ek Kesinti  ve Kazanç Girişleri";StartPosition=FormStartPosition.CenterScreen;Size=new Size(764,508);
-        FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ShowInTaskbar=false;
-        Font=new Font("Microsoft Sans Serif",8.25f);Build();tabs.SelectedIndex=1;Shown+=(_,_)=>LoadAll();
+        Text="Kazanç / Kesinti / Avans";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1120,700);
+        MinimumSize=new Size(980,620);FormBorderStyle=FormBorderStyle.Sizable;MaximizeBox=true;MinimizeBox=true;ShowInTaskbar=false;
+        Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(244,247,251);Build();tabs.SelectedIndex=1;Shown+=(_,_)=>LoadAll();
     }
 
     static DateTimePicker Picker(int x,int y)=>new(){Location=new Point(x,y),Size=new Size(169,21),Format=DateTimePickerFormat.Short,Value=DateTime.Today};
@@ -55,32 +55,122 @@ public sealed class LegacyAvansEntryForm : Form
 
     TabPage BuildBulkTab()
     {
-        var page=new TabPage("Toplu Giriş");
-        page.Controls.Add(L("Tarihinden Sonra İşe Girenleri Gösterme",97,10));page.Controls.Add(hiredAfter);
-        page.Controls.Add(L("Seçenekler",348,11));
+        var page=new TabPage("Toplu Giriş"){Padding=new Padding(16),BackColor=Color.FromArgb(244,247,251)};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,BackColor=page.BackColor};
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,58));root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,42));
+
+        var leftCard=ModernCard();
+        var leftLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(16),BackColor=Color.White};
+        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,92));
+        leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
+        leftLayout.Controls.Add(new Label{Text="Personel Seçimi",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42)},0,0);
+
+        var filters=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=2,BackColor=Color.White};
+        for(int i=0;i<4;i++)filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
         string[] names={"Grup","Bölüm","Servis","Durum","Görev","Firma"};string[] keys={"GRUP","BOLUM","SERVIS","DURUM","GOREV","SIRKET"};string[] tables={"GRUP","BOLUM","SERVIS","DURUM","GOREV","FIRMA"};
         for(int i=0;i<names.Length;i++)
         {
-            var y=35+i*24;page.Controls.Add(L(names[i],260,y+8));var box=new ComboBox{Location=new Point(308,y),Size=new Size(200,21),DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember=nameof(TypeItem.Name),ValueMember=nameof(TypeItem.Code),Tag=tables[i]};bulkFilters[keys[i]]=box;page.Controls.Add(box);box.SelectedIndexChanged+=(_,_)=>ApplyBulkFilter();
+            var holder=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Margin=new Padding(0,0,8,4)};
+            holder.RowStyles.Add(new RowStyle(SizeType.Absolute,18));holder.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+            holder.Controls.Add(new Label{Text=names[i],Dock=DockStyle.Fill,Font=new Font("Segoe UI",8f,FontStyle.Bold),ForeColor=Color.FromArgb(100,116,139)},0,0);
+            var box=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember=nameof(TypeItem.Name),ValueMember=nameof(TypeItem.Code),Tag=tables[i]};
+            bulkFilters[keys[i]]=box;holder.Controls.Add(box,0,1);box.SelectedIndexChanged+=(_,_)=>ApplyBulkFilter();
+            filters.Controls.Add(holder,i%4,i/4);
         }
-        bulkPeople.Location=new Point(4,24);bulkPeople.Size=new Size(247,372);page.Controls.Add(bulkPeople);
-        page.Controls.AddRange(new Control[]{L("İşlem Tarihi",260,216),bulkDate,L("Veriliş Tarihi",264,240),bulkIssueDate,L("Türü",260,264),bulkType,L("Verilecek Oran",260,288),ratio,ratioCheck,L("Verilecek Miktar",260,312),amount,L("Açıklama",260,336),bulkDescription});
+        leftLayout.Controls.Add(filters,0,1);
+
+        bulkPeople.Dock=DockStyle.Fill;bulkPeople.Margin=new Padding(0,8,0,8);leftLayout.Controls.Add(bulkPeople,0,2);
+        var selectBar=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.LeftToRight,WrapContents=false,Padding=new Padding(0,5,0,0)};
+        var addOne=ModernAvansButton("Seçiliyi Ekle",110,false);var addAll=ModernAvansButton("Tümünü Ekle",110,false);var clear=ModernAvansButton("Seçimi Temizle",115,false);
+        addOne.Click+=(_,_)=>MoveSelected();addAll.Click+=(_,_)=>MoveAll();clear.Click+=(_,_)=>ClearSelected();selectBar.Controls.AddRange([addOne,addAll,clear]);
+        leftLayout.Controls.Add(selectBar,0,3);leftCard.Controls.Add(leftLayout);root.Controls.Add(leftCard,0,0);
+
+        var rightCard=ModernCard();
+        var form=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=11,Padding=new Padding(20),BackColor=Color.White};
+        form.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        form.Controls.Add(new Label{Text="Toplu İşlem",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42)},0,0);form.SetColumnSpan(form.GetControlFromPosition(0,0)!,2);
+        hiredAfter.Dock=DockStyle.Fill;bulkDate.Dock=DockStyle.Fill;bulkIssueDate.Dock=DockStyle.Fill;bulkType.Dock=DockStyle.Fill;ratio.Dock=DockStyle.Fill;amount.Dock=DockStyle.Fill;bulkDescription.Dock=DockStyle.Fill;
+        AddModernAvansRow(form,1,"İşe Giriş Alt Sınırı",hiredAfter);
+        AddModernAvansRow(form,2,"İşlem Tarihi",bulkDate);
+        AddModernAvansRow(form,3,"Veriliş Tarihi",bulkIssueDate);
+        AddModernAvansRow(form,4,"Tür",bulkType);
+        AddModernAvansRow(form,5,"Oran (%)",ratio);
+        form.Controls.Add(ratioCheck,1,6);
+        AddModernAvansRow(form,7,"Miktar",amount);
+        AddModernAvansRow(form,8,"Açıklama",bulkDescription);
+        var chosen=new Label{Text="Seçilen personel: 0",Dock=DockStyle.Fill,ForeColor=Color.FromArgb(100,116,139),Font=new Font("Segoe UI",8.5f,FontStyle.Bold)};form.Controls.Add(chosen,1,9);
+        selectedCodes.Visible=false;selectedNames.Visible=false;
+        void updateChosen(){chosen.Text=$"Seçilen personel: {selectedCodes.Items.Count}";}
+        var add=ModernAvansButton("Kayıtları Oluştur",145,true);add.Dock=DockStyle.Right;add.Click+=(_,_)=>{InsertBulk();updateChosen();};
+        form.Controls.Add(add,1,10);
         ratioCheck.CheckedChanged+=(_,_)=>{ratio.Enabled=ratioCheck.Checked;amount.Enabled=!ratioCheck.Checked;};
-        var add=B("&Ekle",260,371);var close=B("Kapa&t",404,371);close.Click+=(_,_)=>Close();add.Click+=(_,_)=>InsertBulk();page.Controls.Add(add);page.Controls.Add(close);
-        page.Controls.Add(selectedCodes);page.Controls.Add(selectedNames);
-        var one=B(">",76,403,33);var all=B(">>",124,403,33);var backAll=B("<<",620,403,33);var back=B("<",668,403,33);
-        one.Click+=(_,_)=>MoveSelected();all.Click+=(_,_)=>MoveAll();back.Click+=(_,_)=>RemoveSelected();backAll.Click+=(_,_)=>ClearSelected();page.Controls.AddRange([one,all,backAll,back]);
-        hiredAfter.ValueChanged+=(_,_)=>LoadBulkPeople();return page;
+        hiredAfter.ValueChanged+=(_,_)=>LoadBulkPeople();
+        selectedCodes.SelectedIndexChanged+=(_,_)=>updateChosen();
+        rightCard.Controls.Add(form);root.Controls.Add(rightCard,1,0);
+
+        page.Controls.Add(root);
+        return page;
     }
 
     TabPage BuildSingleTab()
     {
-        var page=new TabPage("Seçili Kişi Girişi");singlePeople.Location=new Point(8,8);singlePeople.Size=new Size(489,377);singlePeople.MultiSelect=false;page.Controls.Add(singlePeople);
-        page.Controls.AddRange(new Control[]{L("İşlem Tarihi",504,32),singleDate,L("Veriliş Tarihi",504,64),singleIssueDate,L("Türü",504,96),singleType,L("Açıklama",508,128),singleDescription,L("Miktar",508,155),singleAmount});
-        var add=B("&Ekle",564,190,141);var clear=B("Temi&zle",564,235,141);var close=B("Kapa&t",556,363,141);add.Click+=(_,_)=>InsertSingle();clear.Click+=(_,_)=>{singleDescription.Clear();singleAmount.Value=0;};close.Click+=(_,_)=>Close();page.Controls.AddRange([add,clear,close]);
-        var work=new GroupBox{Text="Çalışma Durumu",Location=new Point(8,392),Size=new Size(257,49)};work.Controls.AddRange([allPeople,activePeople,leftPeople]);page.Controls.Add(work);
-        var sort=new GroupBox{Text="Sıralama Şekli",Location=new Point(272,392),Size=new Size(225,49)};sort.Controls.AddRange([sortCard,sortName,sortSurname]);page.Controls.Add(sort);
-        allPeople.CheckedChanged+=(_,_)=>LoadSinglePeople();activePeople.CheckedChanged+=(_,_)=>LoadSinglePeople();leftPeople.CheckedChanged+=(_,_)=>LoadSinglePeople();sortCard.CheckedChanged+=(_,_)=>LoadSinglePeople();sortName.CheckedChanged+=(_,_)=>LoadSinglePeople();sortSurname.CheckedChanged+=(_,_)=>LoadSinglePeople();return page;
+        var page=new TabPage("Seçili Kişi Girişi"){Padding=new Padding(16),BackColor=Color.FromArgb(244,247,251)};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,BackColor=page.BackColor};
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,60));root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));
+
+        var left=ModernCard();
+        var leftLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=new Padding(16),BackColor=Color.White};
+        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,42));leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
+        leftLayout.Controls.Add(new Label{Text="Personel Seç",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42)},0,0);
+        singlePeople.Dock=DockStyle.Fill;singlePeople.Margin=new Padding(0,6,0,8);singlePeople.MultiSelect=false;leftLayout.Controls.Add(singlePeople,0,1);
+        var filterBar=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,8,0,0)};
+        filterBar.Controls.Add(new Label{Text="Durum",AutoSize=true,Padding=new Padding(0,6,6,0),ForeColor=Color.FromArgb(100,116,139)});
+        allPeople.AutoSize=true;activePeople.AutoSize=true;leftPeople.AutoSize=true;sortCard.Visible=false;sortName.Visible=false;sortSurname.Visible=false;
+        filterBar.Controls.Add(allPeople);filterBar.Controls.Add(activePeople);filterBar.Controls.Add(leftPeople);leftLayout.Controls.Add(filterBar,0,2);
+        left.Controls.Add(leftLayout);root.Controls.Add(left,0,0);
+
+        var right=ModernCard();
+        var form=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=8,Padding=new Padding(22),BackColor=Color.White};
+        form.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,115));form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        form.Controls.Add(new Label{Text="İşlem Bilgileri",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42)},0,0);form.SetColumnSpan(form.GetControlFromPosition(0,0)!,2);
+        singleDate.Dock=DockStyle.Fill;singleIssueDate.Dock=DockStyle.Fill;singleType.Dock=DockStyle.Fill;singleDescription.Dock=DockStyle.Fill;singleAmount.Dock=DockStyle.Fill;
+        AddModernAvansRow(form,1,"İşlem Tarihi",singleDate);
+        AddModernAvansRow(form,2,"Veriliş Tarihi",singleIssueDate);
+        AddModernAvansRow(form,3,"Tür",singleType);
+        AddModernAvansRow(form,4,"Açıklama",singleDescription);
+        AddModernAvansRow(form,5,"Miktar",singleAmount);
+        var add=ModernAvansButton("Kaydı Ekle",120,true);var clear=ModernAvansButton("Temizle",95,false);
+        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,WrapContents=false,Padding=new Padding(0,10,0,0)};
+        add.Click+=(_,_)=>InsertSingle();clear.Click+=(_,_)=>{singleDescription.Clear();singleAmount.Value=0;};actions.Controls.Add(add);actions.Controls.Add(clear);form.Controls.Add(actions,1,7);
+        right.Controls.Add(form);root.Controls.Add(right,1,0);
+
+        allPeople.CheckedChanged+=(_,_)=>LoadSinglePeople();activePeople.CheckedChanged+=(_,_)=>LoadSinglePeople();leftPeople.CheckedChanged+=(_,_)=>LoadSinglePeople();
+        sortCard.CheckedChanged+=(_,_)=>LoadSinglePeople();sortName.CheckedChanged+=(_,_)=>LoadSinglePeople();sortSurname.CheckedChanged+=(_,_)=>LoadSinglePeople();
+        page.Controls.Add(root);
+        return page;
+    }
+
+    static Panel ModernCard()
+    {
+        var p=new Panel{Dock=DockStyle.Fill,BackColor=Color.White,Margin=new Padding(0,0,12,0)};
+        p.Paint+=(_,e)=>{using var pen=new Pen(Color.FromArgb(226,232,240));e.Graphics.DrawRectangle(pen,0,0,Math.Max(0,p.Width-1),Math.Max(0,p.Height-1));};
+        return p;
+    }
+
+    static void AddModernAvansRow(TableLayoutPanel table,int row,string label,Control control)
+    {
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+        table.Controls.Add(new Label{Text=label,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(100,116,139),Font=new Font("Segoe UI",8.5f,FontStyle.Bold)},0,row);
+        control.Margin=new Padding(0,6,0,6);
+        table.Controls.Add(control,1,row);
+    }
+
+    static Button ModernAvansButton(string text,int width,bool primary)
+    {
+        var b=new Button{Text=text,Width=width,Height=34,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",8.8f,FontStyle.Bold),BackColor=primary?Color.FromArgb(37,99,235):Color.White,ForeColor=primary?Color.White:Color.FromArgb(15,23,42),Cursor=Cursors.Hand,Margin=new Padding(8,0,0,0)};
+        b.FlatAppearance.BorderColor=primary?Color.FromArgb(37,99,235):Color.FromArgb(226,232,240);return b;
     }
 
     void LoadAll()
