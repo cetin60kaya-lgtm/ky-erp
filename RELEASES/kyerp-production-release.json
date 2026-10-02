@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-10-02T15:41:00+03:00",
-  "attempt": 110,
+  "requestedAt": "2026-10-02T17:22:00+03:00",
+  "attempt": 111,
   "scope": [
     "ik-monthly-live-sync-1500ms",
     "ik-multi-pc-broadcast-sync",
@@ -26,9 +26,18 @@
     "ik-personnel-master-ui-counts",
     "live-final-smoke",
     "pdks-explicit-sgk-only",
-    "ik-master-all-personnel"
+    "ik-master-all-personnel",
+    "ik-monthly-seven-tab-final",
+    "ik-monthly-canonical-navigation",
+    "ik-monthly-real-filters",
+    "ik-payroll-payment-balance",
+    "ik-payroll-snapshot-output-safety",
+    "ik-personnel-pdks-separation",
+    "ik-live-sync",
+    "frontend-lint-test-build",
+    "worker-typecheck-test-build"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "9b19a83ec61227f2da1850803c5da0a767dc9b72",
-  "note": "İK personel ana kadrosu tüm SGK'lı/SGK'sız personel; PDKS sadece açıkça SGK VAR personel"
+  "sourceCommit": "894556ce4f3e6b1792ef79a72a96bd7178f1bf9e",
+  "note": "İK Aylık final sağlık turu: 7 canonical sekme, gerçek filtreler, tek navigasyon, bordro banka/elden dengeleme, snapshot/çıktı güvenliği, PDKS ayrımı ve tam test/build"
 }
