@@ -8,40 +8,64 @@ function unwrap(payload) {
     ? payload.data
     : payload;
 }
+
+const IK_MUTATION_CHANNEL = "kyerp.ik.monthly.live.v1";
+const freshOptions = (options = {}) => ({ ...options, forceFresh: options.forceFresh !== false });
+
+function publishIkMutation(type = "mutation") {
+  if (typeof window === "undefined" || typeof window.BroadcastChannel !== "function") return;
+  try {
+    const channel = new window.BroadcastChannel(IK_MUTATION_CHANNEL);
+    channel.postMessage({ type, at: Date.now() });
+    channel.close();
+  } catch {
+    // D1 sync-state is authoritative; BroadcastChannel only accelerates same-browser refresh.
+  }
+}
+
+async function postAndPublish(path, payload, type) {
+  const result = unwrap(await apiPost(path, payload));
+  publishIkMutation(type);
+  return result;
+}
+
+export async function getIkAdvancedSyncState(params = {}, options = {}) {
+  return unwrap(await apiGet("/ik/advanced/sync-state", params, freshOptions(options)));
+}
 export async function getIkAdvancedMonth(params = {}) {
-  return unwrap(await apiGet("/ik/advanced/month", params));
+  return unwrap(await apiGet("/ik/advanced/month", params, freshOptions()));
 }
 
 export async function getIkAdvancedAuditLogs(params = {}) {
-  return unwrap(await apiGet("/ik/advanced/audit-logs", params));
+  return unwrap(await apiGet("/ik/advanced/audit-logs", params, freshOptions()));
 }
 
 export async function getIkAdvancedPayroll(params = {}) {
-  return unwrap(await apiGet("/ik/advanced/payroll", params));
+  return unwrap(await apiGet("/ik/advanced/payroll", params, freshOptions()));
 }
 
 export async function getIkAdvancedPeriodState(params = {}) {
-  return unwrap(await apiGet("/ik/advanced/period-state", params));
+  return unwrap(await apiGet("/ik/advanced/period-state", params, freshOptions()));
 }
 
 export async function prepareIkAdvancedPeriod(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/period-prepare", payload));
+  return postAndPublish("/ik/advanced/period-prepare", payload, "period-prepare");
 }
 
 export async function saveIkAdvancedPersonCard(employeeId, payload = {}) {
-  return unwrap(await apiPost(`/ik/advanced/person-card/${encodeURIComponent(employeeId)}`, payload));
+  return postAndPublish(`/ik/advanced/person-card/${encodeURIComponent(employeeId)}`, payload, "person-card");
 }
 
 export async function saveIkAdvancedException(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/exception", payload));
+  return postAndPublish("/ik/advanced/exception", payload, "exception");
 }
 
 export async function saveIkAdvancedLeave(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/leave", payload));
+  return postAndPublish("/ik/advanced/leave", payload, "leave");
 }
 
 export async function getIkAdvancedLeaveCenter(params = {}) {
-  return unwrap(await apiGet("/ik/advanced/leave-center", params));
+  return unwrap(await apiGet("/ik/advanced/leave-center", params, freshOptions()));
 }
 
 export async function previewIkAdvancedLeave(payload = {}) {
@@ -49,35 +73,35 @@ export async function previewIkAdvancedLeave(payload = {}) {
 }
 
 export async function saveIkAdvancedLeavePolicy(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/leave/policy", payload));
+  return postAndPublish("/ik/advanced/leave/policy", payload, "leave-policy");
 }
 
 export async function cancelIkAdvancedLeave(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/leave/cancel", payload));
+  return postAndPublish("/ik/advanced/leave/cancel", payload, "leave-cancel");
 }
 
 export async function saveIkAdvancedFinanceMovement(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/finance-movement", payload));
+  return postAndPublish("/ik/advanced/finance-movement", payload, "finance-create");
 }
 
 export async function updateIkAdvancedFinanceMovement(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/finance-movement/update", payload));
+  return postAndPublish("/ik/advanced/finance-movement/update", payload, "finance-update");
 }
 
 export async function deleteIkAdvancedFinanceMovement(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/finance-movement/delete", payload));
+  return postAndPublish("/ik/advanced/finance-movement/delete", payload, "finance-delete");
 }
 
 export async function saveIkAdvancedFinalPayrollControl(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/payroll/final-control", payload));
+  return postAndPublish("/ik/advanced/payroll/final-control", payload, "payroll-final");
 }
 
 export async function saveIkAdvancedPayrollLines(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/payroll/save", payload));
+  return postAndPublish("/ik/advanced/payroll/save", payload, "payroll-save");
 }
 
 export async function saveIkAdvancedSettlementDraft(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/settlement-draft", payload));
+  return postAndPublish("/ik/advanced/settlement-draft", payload, "settlement-draft");
 }
 
 export async function uploadIkAdvancedDocument(file, params = {}) {
@@ -116,5 +140,5 @@ export async function confirmIkAdvancedCard(payload = {}) {
 }
 
 export async function runIkAdvancedCloseCheck(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/close-check", payload));
+  return postAndPublish("/ik/advanced/close-check", payload, "close-check");
 }
