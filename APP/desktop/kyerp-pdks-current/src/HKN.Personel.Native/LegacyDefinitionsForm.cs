@@ -201,7 +201,7 @@ public sealed class LegacyDefinitionsForm : Form
             c.DropDownStyle=ComboBoxStyle.DropDownList; c.DataSource=dt; c.DisplayMember="AD"; c.ValueMember="KOD";
             if(dt.Rows.Count>0)c.SelectedIndex=0; else {firmaCode=null;ClearFirmaFields();}
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions");}
     }
 
     void LoadFirma()
@@ -214,7 +214,7 @@ public sealed class LegacyDefinitionsForm : Form
             var r=dt.Rows[0]; foreach(var k in new[]{"ADRES","TEL1","TEL2","FAX","IL","ILCE","SSK"})((TextBox)firma[k]).Text=r[k]==DBNull.Value?"":Convert.ToString(r[k])??"";
             ((CheckBox)firma["AKTIF"]).Checked=string.Equals(Convert.ToString(r["AKTIF"]),"E",StringComparison.OrdinalIgnoreCase)||Convert.ToString(r["AKTIF"])=="1";
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions");}
     }
 
     void BeginNewFirma(Button save)
@@ -256,7 +256,7 @@ public sealed class LegacyDefinitionsForm : Form
             }
             save.Enabled=false; SetFirmaEdit(false); c.DropDownStyle=ComboBoxStyle.DropDownList; LoadFirmaList();
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions");}
     }
 
     void DeleteFirma()
@@ -268,7 +268,7 @@ public sealed class LegacyDefinitionsForm : Form
             if(MessageBox.Show("Seçili firma silinsin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
             db.Execute("delete from FIRMA where KOD=@K",new FbParameter("@K",firmaCode)); firmaCode=null; LoadFirmaList();
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions");}
     }
 
     void DeleteAllFirma()
@@ -279,7 +279,7 @@ public sealed class LegacyDefinitionsForm : Form
             if(MessageBox.Show("Tüm firmalar silinsin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
             db.Execute("delete from FIRMA"); firmaCode=null; LoadFirmaList();
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions");}
     }
 
     void LoadBordroList()
@@ -289,7 +289,7 @@ public sealed class LegacyDefinitionsForm : Form
             var g=(DataGridView)bordro["GRID"]; g.DataSource=db.Query("select KOD,AD,KAD,BKOD,CARPAN,CALAN,TIP from BORDRO order by KOD");
             if(g.Rows.Count>0)g.CurrentCell=g.Rows[0].Cells[0]; else {bordroCode=null;ClearBordro();}
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions");}
     }
 
     void LoadBordro()
@@ -337,7 +337,7 @@ public sealed class LegacyDefinitionsForm : Form
                 db.Execute("update BORDRO set AD=@AD,KAD=@KA,BKOD=@BK,CARPAN=@C,CALAN=@CA,TIP=@T where KOD=@K",new FbParameter("@AD",ad),new FbParameter("@KA",DbOrNull(kad)),new FbParameter("@BK",DbOrNull(bkod)),new FbParameter("@C",carpan),new FbParameter("@CA",calan),new FbParameter("@T",tip),new FbParameter("@K",bordroCode));
             bordroCode=code; SetBordroEdit(false); save.Enabled=false; LoadBordroList();
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions");}
     }
 
     static object DbOrNull(string s)=>string.IsNullOrWhiteSpace(s)?DBNull.Value:s;
@@ -347,7 +347,7 @@ public sealed class LegacyDefinitionsForm : Form
         if(bordroCode is null)return;
         if(MessageBox.Show("Seçili bordro alanı silinsin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
         try{db.Execute("delete from BORDRO where KOD=@K",new FbParameter("@K",bordroCode));bordroCode=null;LoadBordroList();}
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions");}
     }
 
     sealed class SimpleDefinitionPage
@@ -365,7 +365,7 @@ public sealed class LegacyDefinitionsForm : Form
         public Button EditButton(int x,int y){var b=B("&Değiştir",x,y);b.Click+=(_,_)=>{if(code is null)return;editing=true;edit.ReadOnly=false;if(saveButton is not null)saveButton.Enabled=true;edit.Focus();};return b;}
         public Button DeleteButton(int x,int y){var b=B("&Sil",x,y);b.Click+=(_,_)=>Delete();return b;}
         public Button DeleteAllButton(int x,int y){var b=B("Tü&münü Sil",x,y);b.Click+=(_,_)=>DeleteAll();return b;}
-        public void Reload(){try{grid.DataSource=db.Query($"select KOD,AD from {table} order by KOD");if(grid.Rows.Count>0)grid.CurrentCell=grid.Rows[0].Cells[0];else{code=null;edit.Clear();}}catch(Exception ex){MessageBox.Show(ex.Message,owner);}}
+        public void Reload(){try{grid.DataSource=db.Query($"select KOD,AD from {table} order by KOD");if(grid.Rows.Count>0)grid.CurrentCell=grid.Rows[0].Cells[0];else{code=null;edit.Clear();}}catch(Exception ex){PdksErrorPresenter.Show(null,ex,owner,MessageBoxIcon.Warning,"Definitions.Simple");}}
         void LoadSelection(){if(grid.CurrentRow?.DataBoundItem is not DataRowView v)return;code=Convert.ToInt32(v.Row["KOD"]);edit.Text=Convert.ToString(v.Row["AD"])??"";}
         void Save(Button save)
         {
@@ -376,7 +376,7 @@ public sealed class LegacyDefinitionsForm : Form
                 else db.Execute($"update {table} set AD=@A where KOD=@K",new FbParameter("@A",ad),new FbParameter("@K",code));
                 editing=false;edit.ReadOnly=true;save.Enabled=false;Reload();
             }
-            catch(Exception ex){MessageBox.Show(ex.Message,owner,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+            catch(Exception ex){PdksErrorPresenter.Show(null,ex,owner,MessageBoxIcon.Warning,"Definitions.Simple");}
         }
         int Usage(int? selected=null)=>Convert.ToInt32(db.Scalar($"select count(*) from KIMLIK where {kimlikColumn}"+(selected is null?" is not null":"=@K"),selected is null?[]:[new FbParameter("@K",selected.Value)])??0);
         void Delete()
@@ -388,7 +388,7 @@ public sealed class LegacyDefinitionsForm : Form
                 if(MessageBox.Show("Seçili kayıt silinsin mi?",owner,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
                 db.Execute($"delete from {table} where KOD=@K",new FbParameter("@K",code));code=null;Reload();
             }
-            catch(Exception ex){MessageBox.Show(ex.Message,owner,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+            catch(Exception ex){PdksErrorPresenter.Show(null,ex,owner,MessageBoxIcon.Warning,"Definitions.Simple");}
         }
         void DeleteAll()
         {
@@ -398,7 +398,7 @@ public sealed class LegacyDefinitionsForm : Form
                 if(MessageBox.Show("Tüm kayıtlar silinsin mi?",owner,MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
                 db.Execute($"delete from {table}");code=null;Reload();
             }
-            catch(Exception ex){MessageBox.Show(ex.Message,owner,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+            catch(Exception ex){PdksErrorPresenter.Show(null,ex,owner,MessageBoxIcon.Warning,"Definitions.Simple");}
         }
     }
 }
