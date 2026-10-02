@@ -188,3 +188,18 @@
 .period-ledger td>button{border:1px solid #d6dfeb;background:#fff;border-radius:7px;padding:6px 9px;font-weight:800;display:inline-flex;gap:5px;align-items:center}
 .pool-stats{grid-template-columns:repeat(4,minmax(0,1fr))!important}
 @media(max-width:900px){.gop-payment-tabs.three{grid-template-columns:1fr}.gop-payment-stats.period-stats,.pool-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+
+
+/* PAYMENT-PRO-FLOW-2026-10-02 */
+.gop-payment-stats.period-stats{grid-template-columns:repeat(6,minmax(0,1fr))}
+.payment-state{display:inline-flex;align-items:center;justify-content:center;min-width:92px;min-height:25px;padding:0 8px;border-radius:999px;font-size:8px;font-weight:950;white-space:nowrap}
+.payment-state.paid{background:#dcfce7;color:#15803d;border:1px solid #86efac}
+.payment-state.waiting{background:#fff7ed;color:#c2410c;border:1px solid #fdba74}
+.payment-state.control{background:#fff1f2;color:#be123c;border:1px solid #fda4af}
+.print-payment-note{display:inline-flex;align-items:center;min-height:30px;padding:0 9px;border-radius:7px;background:#ecfdf5;border:1px solid #86efac;color:#15803d;font-size:8px;font-weight:950}
+.period-ledger td:last-child button:disabled{opacity:.45;cursor:not-allowed}
+.gop-payment-history-group-head{background:linear-gradient(180deg,#f8fbff,#eef4fa)}
+.gop-payment-record.paid{box-shadow:0 2px 8px rgba(15,23,42,.06)}
+.gop-payment-record-actions button{font-weight:900}
+@media(max-width:1300px){.gop-payment-stats.period-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:800px){.gop-payment-stats.period-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
