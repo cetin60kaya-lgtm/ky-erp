@@ -12,7 +12,7 @@ public sealed class LegacyGirisCikisForm : Form
     readonly ComboBox punch = new(){DropDownStyle=ComboBoxStyle.DropDownList};
     readonly DateTimePicker dateStart = D(); readonly DateTimePicker dateEnd = D();
     readonly TextBox inFirst = new(){Text=":"}, inLast = new(){Text=":"}, outFirst = new(){Text=":"}, outLast = new(){Text=":"};
-    readonly CheckBox manual = new(){Text="Elle girilen kayıtlar"};
+    readonly CheckBox manual = new(){Text="Sadece manuel",AutoSize=true};
     readonly ComboBox group=C(), department=C(), company=C(), service=C(), status=C(), duty=C(), sort=new(){DropDownStyle=ComboBoxStyle.DropDownList};
     readonly ToolStripStatusLabel statusText = new(){Spring=true,TextAlign=ContentAlignment.MiddleLeft};
     DataTable current = new();
