@@ -634,6 +634,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const savedTotals = calcRow({ salary, road, extra, overtime, advance, deduction, garnishment });
   const savedBank = saved.final.bank !== undefined ? num(saved.final.bank) : system.bank;
   const savedCash = saved.final.cash !== undefined ? num(saved.final.cash) : system.cash;
+  const savedPayment = reconcilePaymentSplit(savedTotals.net, savedBank, savedCash);
 
   const sourceChangedSinceSave = [
     system.overtime - overtime,
@@ -645,10 +646,10 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   return {
     ...system,
     salary, road, extraLabel, extra, overtime, advance, deduction, garnishment,
-    bank: savedBank, cash: savedCash, saved,
+    bank: savedPayment.bank, cash: savedPayment.cash, saved,
     sourceChangedSinceSave,
     paidLocked: upper(saved.status) === "PAID",
-    ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank: savedBank, cash: savedCash }),
+    ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank: savedPayment.bank, cash: savedPayment.cash }),
   };
 }): [], [employees, payrollLines, planFor, periodPrepared]);
 
@@ -1198,11 +1199,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       return setNotice("Son bordro kalemleri negatif olamaz.");
     }
 
-    const payment = { bank: Math.max(round(modalDraft.bank), 0), cash: Math.max(round(modalDraft.cash), 0), adjusted: false };
-    const paymentDiff = round(payment.bank + payment.cash - enteredTotals.net);
-    if (Math.abs(paymentDiff) > 0.01) {
-      return setNotice(`Banka + Elden, Net Ödenecek ile eşleşmiyor. Fark: ${money(paymentDiff)}. Kaydetmeden önce düzeltin.`);
-    }
+    const payment = reconcilePaymentSplit(
+      enteredTotals.net,
+      modalDraft.bank,
+      modalDraft.cash,
+      modalDraft.paymentEdit === "bank" ? "bank" : "cash",
+    );
     const nextRow = nextAfter
       ? payrollRows[(payrollRows.findIndex((row) => row.employee.id === modalDraft.employeeId) + 1)]
       : null;
@@ -1524,6 +1526,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const legalSourceLabel = (row) => row.garnishmentSource === "KARMA" ? "Banka + Elden" : row.garnishmentSource === "ELDEN" ? "Elden" : "Bankadan";
 
   const slipCardHtml = (row) => {
+    const rowTotals = calcRow({ salary: row.salary, road: row.road, extra: row.extra, overtime: row.overtime, advance: row.advance, deduction: row.deduction, garnishment: row.garnishment });
+    const balancedSplit = reconcilePaymentSplit(rowTotals.net, row.bank, row.cash);
     const legalTitle = row.garnishment
       ? `${legalLabel(row) || "İcra/Haciz"} (${legalSourceLabel(row)})`
       : "İcra/Haciz";
@@ -1540,8 +1544,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       <header><div class="brand">KY ERP</div><div class="period">${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)}<br><b>PERSONEL ÖDEME FİŞİ</b></div></header>
       <div class="person-block"><strong>${escapeHtml(row.employee.fullName)}</strong><span>${escapeHtml(row.employee.code || "-")} · ${escapeHtml(row.employee.department || "Bölüm yok")}</span></div>
       <div class="slip-lines">${lines.map(([label,value])=>`<div><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`).join("")}</div>
-      <div class="pay-channels"><div><span>BANKA</span><b>${money(row.bank)}</b></div><div class="cash-pay"><span>ELDEN</span><b>${money(row.cash)}</b></div></div>
-      <div class="net"><span>TOPLAM ÖDEME</span><b>${money(row.net)}</b></div>
+      <div class="pay-channels"><div><span>BANKA</span><b>${money(balancedSplit.bank)}</b></div><div class="cash-pay"><span>ELDEN</span><b>${money(balancedSplit.cash)}</b></div></div>
+      <div class="net"><span>TOPLAM ÖDEME</span><b>${money(rowTotals.net)}</b></div>
       <footer><div><span>Personel İmza</span><i></i></div><div><span>Ödeme Yapan</span><i></i></div></footer>
       ${row.extra > 0 ? `<div class="extra-coupon"><span>✂ EK ÖDEME</span><b>${money(row.extra)}</b><small>Personel: ${escapeHtml(row.employee.fullName)} · İmza: __________________</small></div>` : ""}
     </article>`;
