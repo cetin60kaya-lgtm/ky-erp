@@ -82,6 +82,7 @@ internal sealed class ManagementCenterForm : Form
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,310));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,190));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
         var titleArea=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Surface,Margin=Padding.Empty};
         titleArea.RowStyles.Add(new RowStyle(SizeType.Percent,58));
