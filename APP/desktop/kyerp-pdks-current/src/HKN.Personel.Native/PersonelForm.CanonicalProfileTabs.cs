@@ -9,11 +9,12 @@ public partial class PersonelForm
     TabPage BuildCanonicalBasicTab()
     {
         var page = new TabPage("Temel Bilgiler");
-        var host = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 6, Padding = new Padding(14) };
+        var host = new TableLayoutPanel { Dock = DockStyle.Top, Height = 250, ColumnCount = 4, RowCount = 6, Padding = new Padding(14) };
         host.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));
         host.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
         host.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));
         host.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+        for (var row = 0; row < 6; row++) host.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         var fields = new[]
         {
             ("Kart No","PKNO"),("Ad Soyad","ADSOYAD"),("İşe Giriş","IGTARIH"),("İşten Çıkış","ICTARIH"),
