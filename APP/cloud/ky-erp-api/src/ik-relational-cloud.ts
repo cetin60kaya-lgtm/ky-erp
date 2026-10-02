@@ -791,6 +791,8 @@ async function saveLeave(c: Context<AppEnv>) {
   const startDate = hrDateOnly(body.startDate ?? body.start ?? current?.start_date);
   const endDate = hrDateOnly(body.endDate ?? body.end ?? current?.end_date);
   if (!startDate || !endDate) return error(c, 400, "DATE_REQUIRED", "İzin başlangıç ve bitiş tarihi zorunludur.");
+  const leaveLock = await rejectAdvancedPeriodLocked(c, companyId, number(startDate.slice(0, 4)), number(startDate.slice(5, 7)));
+  if (leaveLock) return leaveLock;
   const dayCount = number(body.dayCount ?? body.days ?? current?.day_count) || 1;
   const documentPath = text(body.documentPath ?? body.document ?? current?.document_path) || null;
   const note = text(body.note ?? body.description ?? current?.note) || null;
@@ -805,6 +807,9 @@ async function deleteLeave(c: Context<AppEnv>) {
   const companyId = companyIdOf(c);
   const row = await first(c, "SELECT l.* FROM hr_leave_records_v2 l JOIN hr_monthly_employees e ON e.id=l.employee_id WHERE l.id=? AND e.main_company_id=?", [id, companyId]);
   if (!row) return error(c, 404, "NOT_FOUND", "İzin kaydı bulunamadı.");
+  const leaveDate = hrDateOnly(row.start_date);
+  const leaveLock = await rejectAdvancedPeriodLocked(c, companyId, number(leaveDate.slice(0, 4)), number(leaveDate.slice(5, 7)));
+  if (leaveLock) return leaveLock;
   await c.env.DB.prepare("DELETE FROM hr_leave_records_v2 WHERE id=?").bind(id).run();
   return okData(c, { id, deleted: true });
 }
@@ -1244,6 +1249,8 @@ async function savePersonCard(c: Context<AppEnv>) {
   const period = /^\d{4}-\d{2}$/.test(text(body.period))
     ? text(body.period)
     : `${number(body.year) || new Date().getFullYear()}-${String(number(body.month) || new Date().getMonth() + 1).padStart(2, "0")}`;
+  const cardLock = await rejectAdvancedPeriodLocked(c, companyId, number(period.slice(0, 4)), number(period.slice(5, 7)));
+  if (cardLock) return cardLock;
   const sgkCovered = body.sgkFollow === true || upper(body.sgkStatus) === "VAR";
   const maxSgkDays = new Date(Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0).getDate() || 31;
   const rawSgkDays = body.sgkDays === null || body.sgkDays === undefined || body.sgkDays === "" ? null : Math.round(number(body.sgkDays));
