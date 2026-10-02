@@ -235,7 +235,7 @@ public sealed class LegacyBordroForm : Form
             data = new DataTable();
             grid.DataSource = data;
             summary.Text = "Bordro yüklenemedi";
-            MessageBox.Show("Bordro verisi okunamadı.\r\n\r\n" + ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Payroll.Load");
         }
         finally
         {
