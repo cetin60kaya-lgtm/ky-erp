@@ -116,7 +116,7 @@ public sealed class LegacyOperationalReportForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"OperationalReport");
         }
     }
 
@@ -187,13 +187,13 @@ public sealed class LegacyOperationalReportForm : Form
     void Preview()
     {
         try { LoadData(); ReportPrintHelper.Preview(this, Table(), grid.Columns.Cast<DataGridViewColumn>().Count(c => c.Visible) > 7, Widths()); }
-        catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (Exception ex) { PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"OperationalReport"); }
     }
 
     void Print()
     {
         try { LoadData(); ReportPrintHelper.Print(this, Table(), grid.Columns.Cast<DataGridViewColumn>().Count(c => c.Visible) > 7, Widths()); }
-        catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (Exception ex) { PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"OperationalReport"); }
     }
 
     void Export(bool excel)
@@ -210,6 +210,6 @@ public sealed class LegacyOperationalReportForm : Form
             if (save.ShowDialog(this) != DialogResult.OK) return;
             if (excel) ReportExporter.ExportExcel(save.FileName, Table()); else ReportExporter.ExportPdf(save.FileName, Table());
         }
-        catch (Exception ex) { MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (Exception ex) { PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"OperationalReport"); }
     }
 }
