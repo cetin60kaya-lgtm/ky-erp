@@ -6,19 +6,6 @@ public sealed partial class MainShellForm : Form
 {
     readonly LocalUser currentUser;
     readonly WorkspaceDockHost workspace;
-    readonly ToolStrip tool = new()
-    {
-        Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden, AutoSize = false,
-        Height = 77, ImageScalingSize = new Size(36,36), BackColor = Color.White,
-        RenderMode = ToolStripRenderMode.ManagerRenderMode, Padding = Padding.Empty, CanOverflow = true, LayoutStyle = ToolStripLayoutStyle.HorizontalStackWithOverflow
-    };
-    readonly StatusStrip status = new() { SizingGrip = false, AutoSize = false, Height = 22, BackColor = SystemColors.Control };
-    readonly ToolStripStatusLabel leadStatus = new() { AutoSize = false, Width = 170 };
-    readonly ToolStripStatusLabel todayStatus = new() { AutoSize = false, Width = 190, TextAlign = ContentAlignment.MiddleCenter };
-    readonly ToolStripStatusLabel firmStatus = new() { AutoSize = false, Width = 195, Text = "Firma :", TextAlign = ContentAlignment.MiddleLeft };
-    readonly ToolStripStatusLabel userStatus = new() { AutoSize = false, Width = 155, TextAlign = ContentAlignment.MiddleLeft };
-    readonly ToolStripStatusLabel brandStatus = new() { Spring = true, Text = "www.kyerp.net", TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.Blue };
-    readonly ToolStripStatusLabel dbStatus = new() { AutoSize = false, Width = 420, TextAlign = ContentAlignment.MiddleLeft };
     PersonelForm? personel;
     CompanyBranding branding = CompanyBranding.Empty;
 
@@ -38,10 +25,8 @@ public sealed partial class MainShellForm : Form
         Font = new Font("Segoe UI",9f);
         DoubleBuffered = true;
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
-        ToolStripManager.Renderer = new ModernShellRenderer();
         BuildCanonicalMenuHost();
-        BuildStatus();
-        Controls.Add(workspace); Controls.Add(tool); Controls.Add(MainMenuStrip!); Controls.Add(status);
+        Controls.Add(workspace); Controls.Add(MainMenuStrip!);
         ApplyCanonicalStartup();
         ShowHome();
         InitializeTerminalAutoSync();
@@ -70,54 +55,8 @@ public sealed partial class MainShellForm : Form
         }
         return base.ProcessCmdKey(ref msg, keyData);
     }
-    ToolStripMenuItem MenuItem(string text, PdksModule module, Action action)
-    {
-        var item = new ToolStripMenuItem(text) { Enabled = currentUser.Can(module) };
-        item.Click += (_,_) => action(); return item;
-    }
-
-    static ToolStripMenuItem PlainItem(string text, Action action)
-    {
-        var item = new ToolStripMenuItem(text); item.Click += (_,_) => action(); return item;
-    }
-
-    void AddLegacyTool(string text, PdksModule module, Image image, Action action, int width, bool visible = true)
-    {
-        var b = new ToolStripButton(text,image)
-        {
-            AutoSize=false, Width=width, Height=80, TextImageRelation=TextImageRelation.ImageAboveText,
-            DisplayStyle=ToolStripItemDisplayStyle.ImageAndText, Enabled=currentUser.Can(module),
-            Font=new Font("Segoe UI",8.5f,FontStyle.Bold), ForeColor=Color.FromArgb(28,46,72),
-            Margin=new Padding(2,0,2,0), Padding=new Padding(2,7,2,4), AutoToolTip=false, Visible=visible, CheckOnClick=false
-        };
-        b.Click += (_,_) => { foreach(var x in tool.Items.OfType<ToolStripButton>()) x.Checked=false; b.Checked=true; action(); }; tool.Items.Add(b);
-    }
-
-    void BuildStatus()
-    {
-        status.Font = new Font("Segoe UI",8f);
-        status.Height = 28;
-        status.BackColor = Color.FromArgb(247,249,252);
-        todayStatus.Text = "Bugün: " + DateTime.Today.ToString("dd MMMM yyyy dddd", new System.Globalization.CultureInfo("tr-TR"));
-        firmStatus.Text = $"Firma: {branding.ReportHeader}";
-        userStatus.Text = $"Kullanıcı: {currentUser.UserName}"; UpdateDbStatus();
-        brandStatus.Text = "KY ERP • PDKS";
-        brandStatus.ForeColor = Color.FromArgb(25,92,180);
-        brandStatus.IsLink = true;
-        brandStatus.Click += (_,_) => OpenErpSite();
-        status.Items.Add(leadStatus); status.Items.Add(todayStatus); status.Items.Add(firmStatus); status.Items.Add(userStatus); status.Items.Add(brandStatus); status.Items.Add(dbStatus);
-        status.Dock = DockStyle.Bottom;
-    }
-
-    void UpdateDbStatus()
-    {
-        var path = Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH", EnvironmentVariableTarget.User) ?? Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH");
-        dbStatus.Text = StartupConfiguration.IsReady() ? path ?? "Veritabanı bağlı" : "Veritabanı: bağlantı bekliyor";
-    }
-
     void ShowHome()
     {
-        foreach (var button in tool.Items.OfType<ToolStripButton>()) button.Checked = button.Text == "Genel Bakış";
         personel = null;
         workspace.ShowSingle(new ModernHomeDashboard(
             VisiblePrimaryCommands(),
@@ -139,7 +78,7 @@ public sealed partial class MainShellForm : Form
             return false;
         }
         if (!StartupConfiguration.IsReady() && !StartupConfiguration.EnsureReady()) return false;
-        UpdateDbStatus();
+        RefreshModernDbState();
         return true;
     }
 
@@ -361,48 +300,4 @@ public sealed partial class MainShellForm : Form
         catch (Exception ex) { MessageBox.Show(ex.Message,"Yedekle",MessageBoxButtons.OK,MessageBoxIcon.Warning); }
     }
 
-    sealed class ModernShellRenderer : ToolStripProfessionalRenderer
-    {
-        public ModernShellRenderer() : base(new ModernColors()) { RoundedEdges = false; }
-
-        protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
-            => e.Graphics.Clear(e.ToolStrip is MenuStrip ? Color.FromArgb(247,249,252) : Color.White);
-
-        protected override void OnRenderButtonBackground(ToolStripItemRenderEventArgs e)
-        {
-            if (e.Item is not ToolStripButton b) { base.OnRenderButtonBackground(e); return; }
-            var rect = new Rectangle(2,2,Math.Max(1,b.Width-5),Math.Max(1,b.Height-5));
-            var back = b.Pressed ? Color.FromArgb(224,236,255) : (b.Selected || b.Checked) ? Color.FromArgb(238,245,255) : Color.White;
-            using var brush = new SolidBrush(back);
-            using var pen = new Pen(b.Selected || b.Pressed || b.Checked ? Color.FromArgb(165,198,242) : Color.FromArgb(226,231,239));
-            e.Graphics.FillRectangle(brush,rect); e.Graphics.DrawRectangle(pen,rect);
-            if (b.Selected || b.Pressed || b.Checked)
-            {
-                using var accent = new SolidBrush(Color.FromArgb(30,105,205));
-                e.Graphics.FillRectangle(accent,rect.Left,rect.Bottom-3,rect.Width,3);
-            }
-        }
-
-        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
-        {
-            using var pen = new Pen(Color.FromArgb(220,227,237));
-            e.Graphics.DrawLine(pen,0,e.ToolStrip.Height-1,e.ToolStrip.Width,e.ToolStrip.Height-1);
-        }
-
-        sealed class ModernColors : ProfessionalColorTable
-        {
-            public override Color MenuItemSelected => Color.FromArgb(232,241,255);
-            public override Color MenuItemBorder => Color.FromArgb(180,205,240);
-            public override Color MenuItemSelectedGradientBegin => MenuItemSelected;
-            public override Color MenuItemSelectedGradientEnd => MenuItemSelected;
-            public override Color MenuItemPressedGradientBegin => Color.FromArgb(222,236,255);
-            public override Color MenuItemPressedGradientEnd => Color.FromArgb(222,236,255);
-            public override Color ToolStripDropDownBackground => Color.White;
-            public override Color ImageMarginGradientBegin => Color.White;
-            public override Color ImageMarginGradientMiddle => Color.White;
-            public override Color ImageMarginGradientEnd => Color.White;
-            public override Color SeparatorDark => Color.FromArgb(225,230,238);
-            public override Color SeparatorLight => Color.White;
-        }
-    }
 }
