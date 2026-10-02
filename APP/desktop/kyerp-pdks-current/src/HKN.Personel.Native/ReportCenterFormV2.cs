@@ -65,29 +65,115 @@ public sealed class ReportCenterForm : Form
     {
         var p = PdksAppearance.Current;
         BackColor = p.Canvas;
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(14), BackColor=p.Canvas };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            RowCount = 4,
+            ColumnCount = 1,
+            Padding = new Padding(16),
+            BackColor = p.Canvas
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        var filter = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(12, 8, 8, 0), BackColor=p.Surface };
-        filter.Controls.Add(Label("Rapor")); filter.Controls.Add(report);
-        filter.Controls.Add(Label("Başlangıç")); filter.Controls.Add(from);
-        filter.Controls.Add(Label("Bitiş")); filter.Controls.Add(to);
-        filter.Controls.Add(Label("Kart")); filter.Controls.Add(card);
-        filter.Controls.Add(Button("Göster", LoadData, true));
-        filter.Controls.Add(Button("Alanlar / Sıralama", () => GridLayoutPersistence.ShowEditor(this, grid, "report-center", "Rapor Alanları / Sıralama")));
-        filter.Controls.Add(summary);
-        root.Controls.Add(filter, 0, 0);
-        root.Controls.Add(grid, 0, 1);
+
+        var filterCard = PdksUiKit.Card(16);
+        var filterRoot = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            RowCount = 3,
+            ColumnCount = 1,
+            BackColor = p.Surface,
+            Margin = Padding.Empty
+        };
+        filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        filterRoot.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        filterRoot.Controls.Add(new Label
+        {
+            Text = "Rapor ve Çıktı Merkezi",
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 11.5f, FontStyle.Bold),
+            ForeColor = p.Text,
+            TextAlign = ContentAlignment.MiddleLeft
+        },0,0);
+
+        var filters = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 9,
+            RowCount = 1,
+            BackColor = p.Surface
+        };
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 52));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 76));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 52));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 104));
+
+        report.Dock=DockStyle.Fill;report.Margin=new Padding(0,5,12,5);
+        from.Dock=DockStyle.Fill;from.Margin=new Padding(0,5,12,5);
+        to.Dock=DockStyle.Fill;to.Margin=new Padding(0,5,12,5);
+        card.Dock=DockStyle.Fill;card.Margin=new Padding(0,5,12,5);
+        var show = Button("Göster",LoadData,true);show.Dock=DockStyle.Fill;show.Margin=new Padding(0,5,0,5);
+
+        filters.Controls.Add(PdksUiKit.FieldLabel("Rapor"),0,0);
+        filters.Controls.Add(report,1,0);
+        filters.Controls.Add(PdksUiKit.FieldLabel("Başlangıç"),2,0);
+        filters.Controls.Add(from,3,0);
+        filters.Controls.Add(PdksUiKit.FieldLabel("Bitiş"),4,0);
+        filters.Controls.Add(to,5,0);
+        filters.Controls.Add(PdksUiKit.FieldLabel("Kart"),6,0);
+        filters.Controls.Add(card,7,0);
+        filters.Controls.Add(show,8,0);
+        filterRoot.Controls.Add(filters,0,1);
+
+        var infoBar = new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,BackColor=p.Surface};
+        infoBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        infoBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,155));
+        summary.Dock=DockStyle.Fill;summary.TextAlign=ContentAlignment.MiddleLeft;summary.ForeColor=p.Muted;summary.Padding=new Padding(2,5,0,0);
+        var fields = Button("Alanlar / Sıralama",()=>GridLayoutPersistence.ShowEditor(this,grid,"report-center","Rapor Alanları / Sıralama"));
+        fields.Dock=DockStyle.Fill;fields.Margin=new Padding(0,2,0,2);
+        infoBar.Controls.Add(summary,0,0);infoBar.Controls.Add(fields,1,0);
+        filterRoot.Controls.Add(infoBar,0,2);
+
+        filterCard.Controls.Add(filterRoot);
+        root.Controls.Add(filterCard,0,0);
+
+        root.Controls.Add(new Label
+        {
+            Text="Rapor Sonuçları",
+            Dock=DockStyle.Fill,
+            Font=new Font("Segoe UI",10.2f,FontStyle.Bold),
+            ForeColor=p.Text,
+            TextAlign=ContentAlignment.BottomLeft,
+            Padding=new Padding(2,0,0,6)
+        },0,1);
+
+        grid.Margin=Padding.Empty;
+        grid.BorderStyle=BorderStyle.None;
+        grid.RowHeadersVisible=false;
+        grid.RowTemplate.Height=31;
+        grid.ColumnHeadersHeight=36;
+        root.Controls.Add(grid,0,2);
+
         var actions = PdksUiKit.ActionBar(true,p.Canvas);
         actions.Controls.Add(Button("CSV Aktar", ExportCsv));
         actions.Controls.Add(Button("Excel Aktar", () => Export(true)));
         actions.Controls.Add(Button("PDF Aktar", () => Export(false)));
         actions.Controls.Add(Button("Yazdır", Print));
         actions.Controls.Add(Button("Önizle", Preview));
-        root.Controls.Add(actions, 0, 2);
+        root.Controls.Add(actions,0,3);
+
         Controls.Add(root);
         report.SelectedIndexChanged += (_, _) => LoadData();
+        card.KeyDown += (_,e)=>{if(e.KeyCode==Keys.Enter)LoadData();};
     }
 
     static Label Label(string text) => new() { Text = text, AutoSize = true, Padding = new Padding(10, 7, 4, 0), ForeColor=PdksAppearance.Current.Muted };
