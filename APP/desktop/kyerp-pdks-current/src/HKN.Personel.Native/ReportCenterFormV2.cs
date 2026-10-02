@@ -62,11 +62,13 @@ internal sealed class ReportCenterForm : Form
 
     void Build()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(12) };
+        var p = PdksAppearance.Current;
+        BackColor = p.Canvas;
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(14), BackColor=p.Canvas };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        var filter = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(4, 8, 4, 0) };
+        var filter = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(12, 8, 8, 0), BackColor=p.Surface };
         filter.Controls.Add(Label("Rapor")); filter.Controls.Add(report);
         filter.Controls.Add(Label("Başlangıç")); filter.Controls.Add(from);
         filter.Controls.Add(Label("Bitiş")); filter.Controls.Add(to);
@@ -76,7 +78,7 @@ internal sealed class ReportCenterForm : Form
         filter.Controls.Add(summary);
         root.Controls.Add(filter, 0, 0);
         root.Controls.Add(grid, 0, 1);
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 8, 0, 0) };
+        var actions = PdksUiKit.ActionBar(true,p.Canvas);
         actions.Controls.Add(Button("CSV Aktar", ExportCsv));
         actions.Controls.Add(Button("Excel Aktar", () => Export(true)));
         actions.Controls.Add(Button("PDF Aktar", () => Export(false)));
@@ -87,13 +89,11 @@ internal sealed class ReportCenterForm : Form
         report.SelectedIndexChanged += (_, _) => LoadData();
     }
 
-    static Label Label(string text) => new() { Text = text, AutoSize = true, Padding = new Padding(10, 7, 4, 0) };
+    static Label Label(string text) => new() { Text = text, AutoSize = true, Padding = new Padding(10, 7, 4, 0), ForeColor=PdksAppearance.Current.Muted };
     static Button Button(string text, Action action, bool primary = false)
     {
-        var b = new Button { Text = text, Width = text.Contains("Alanlar") ? 140 : 112, Height = 34, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
-        if (primary) { b.BackColor = Color.FromArgb(36, 107, 230); b.ForeColor = Color.White; }
-        b.Click += (_, _) => action();
-        return b;
+        var role=primary?PdksActionRole.Primary:text.Contains("Kapat",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Quiet:PdksActionRole.Secondary;
+        return PdksUiKit.Button(text,text.Contains("Alanlar")?140:112,role,action);
     }
 
     FbParameter[] Range() => [new("@A", from.Value.Date), new("@B", to.Value.Date.AddDays(1))];
