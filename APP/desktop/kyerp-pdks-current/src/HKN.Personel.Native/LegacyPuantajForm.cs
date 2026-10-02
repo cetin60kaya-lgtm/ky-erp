@@ -212,7 +212,7 @@ public sealed class LegacyPuantajForm : Form
             var changed=db.InTransaction((con,tr)=>{var n=0;foreach(var employee in employees)for(var day=a;day<b;day=day.AddDays(1)){movements.TryGetValue((employee.Code,day),out var movement);leaves.TryGetValue((employee.Code,day),out var leaveTime);var shift=ChooseShift(schedules.GetValueOrDefault(employee.Group??-1),movement.Entry);var result=DailyAttendanceCalculator.Calculate(new(day,shift.Start,shift.End,shift.Work,movement.Entry,movement.Exit,leaveTime.Paid,leaveTime.Unpaid,holidays.Contains((employee.Code,day))));Upsert(con,tr,employee,day,result);n++;if(pb.Value<pb.Maximum)pb.Value++;}return n;});
             pb.Value=pb.Maximum;if(bar is null){progress2.Minimum=0;progress2.Maximum=1;progress2.Value=1;}MessageBox.Show($"Puantaj işlemi tamamlandı. {changed} personel-gün kaydı işlendi.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Timesheet");}
     }
 
     static (DateTime? Entry,DateTime? Exit) Movement(IEnumerable<DataRow> rows)
@@ -261,7 +261,7 @@ public sealed class LegacyPuantajForm : Form
             var report=new ReportTable($"Puantaj Sonuçları • {f.Start.Value:dd.MM.yyyy} - {f.End.Value:dd.MM.yyyy}",dt.Columns.Cast<DataColumn>().Select(c=>c.ColumnName).ToArray(),dt.Rows.Cast<DataRow>().Select(r=>(IReadOnlyList<string>)dt.Columns.Cast<DataColumn>().Select(c=>Convert.ToString(r[c])??string.Empty).ToArray()).ToArray());
             ReportPrintHelper.Preview(this,report,true);
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,"Puantaj Sonuçları",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,"Puantaj Sonuçları",MessageBoxIcon.Warning,"Timesheet.Results");}
     }
     sealed record FilterSet(TextBox CardStart,TextBox CardEnd,DateTimePicker Start,DateTimePicker End,ComboBox Group,ComboBox Department,ComboBox Service,ComboBox Status,ComboBox Duty,ComboBox Company)
     { public IEnumerable<ComboBox> Combos=>[Group,Department,Service,Status,Duty,Company]; }
