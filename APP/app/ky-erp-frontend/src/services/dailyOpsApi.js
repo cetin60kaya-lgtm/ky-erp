@@ -32,15 +32,21 @@ export async function getDailyEmployees(params = {}, options = {}) {
 }
 
 export async function createDailyEmployee(payload = {}) {
-  return unwrap(await apiPost(`${ROOT}/employees`, payload));
+  const result = unwrap(await apiPost(`${ROOT}/employees`, payload));
+  publishDailyMutation("createDailyEmployee");
+  return result;
 }
 
 export async function updateDailyEmployee(id, payload = {}) {
-  return unwrap(await apiPatch(`${ROOT}/employees/${encodeURIComponent(id)}`, payload));
+  const result = unwrap(await apiPatch(`${ROOT}/employees/${encodeURIComponent(id)}`, payload));
+  publishDailyMutation("updateDailyEmployee");
+  return result;
 }
 
 export async function deleteDailyEmployee(id, payload = {}) {
-  return unwrap(await apiDelete(`${ROOT}/employees/${encodeURIComponent(id)}`, payload));
+  const result = unwrap(await apiDelete(`${ROOT}/employees/${encodeURIComponent(id)}`, payload));
+  publishDailyMutation("deleteDailyEmployee");
+  return result;
 }
 
 export async function getDailyAttendance(params = {}, options = {}) {
@@ -48,7 +54,9 @@ export async function getDailyAttendance(params = {}, options = {}) {
 }
 
 export async function saveDailyAttendanceRange(payload = {}) {
-  return unwrap(await apiPost(`${ROOT}/attendance/save-range`, payload));
+  const result = unwrap(await apiPost(`${ROOT}/attendance/save-range`, payload));
+  publishDailyMutation("saveDailyAttendanceRange");
+  return result;
 }
 
 export async function getDailyWeeklySummary(params = {}, options = {}) {
@@ -60,7 +68,9 @@ export async function getDailyPaymentSlips(params = {}, options = {}) {
 }
 
 export async function markDailyPaid(payload = {}) {
-  return unwrap(await apiPost(`${ROOT}/attendance/mark-paid`, payload));
+  const result = unwrap(await apiPost(`${ROOT}/attendance/mark-paid`, payload));
+  publishDailyMutation("markDailyPaid");
+  return result;
 }
 
 export async function getDailyPaymentPool(params = {}, options = {}) {
@@ -72,11 +82,15 @@ export async function getDailyPaymentHistory(params = {}, options = {}) {
 }
 
 export async function createDailyPayment(payload = {}) {
-  return unwrap(await apiPost(`${ROOT}/payments`, payload));
+  const result = unwrap(await apiPost(`${ROOT}/payments`, payload));
+  publishDailyMutation("createDailyPayment");
+  return result;
 }
 
 export async function cancelDailyPayment(paymentId, payload = {}) {
-  return unwrap(await apiPost(`${ROOT}/payments/${encodeURIComponent(paymentId)}/cancel`, payload));
+  const result = unwrap(await apiPost(`${ROOT}/payments/${encodeURIComponent(paymentId)}/cancel`, payload));
+  publishDailyMutation("cancelDailyPayment");
+  return result;
 }
 
 export async function getDailyFocusedRecords(params = {}, options = {}) {
@@ -84,7 +98,9 @@ export async function getDailyFocusedRecords(params = {}, options = {}) {
 }
 
 export async function saveDailyFocusedRecords(payload = {}) {
-  return unwrap(await apiPost(`${ROOT}/records`, payload));
+  const result = unwrap(await apiPost(`${ROOT}/records`, payload));
+  publishDailyMutation("saveDailyFocusedRecords");
+  return result;
 }
 
 export async function getDailyRoster(params = {}, options = {}) {
@@ -92,7 +108,9 @@ export async function getDailyRoster(params = {}, options = {}) {
 }
 
 export async function saveDailyRoster(payload = {}) {
-  return unwrap(await apiPost(`${ROOT}/roster`, payload));
+  const result = unwrap(await apiPost(`${ROOT}/roster`, payload));
+  publishDailyMutation("saveDailyRoster");
+  return result;
 }
 
 export async function getDailyAudit(params = {}, options = {}) {
@@ -108,7 +126,9 @@ export async function getDailyPeriodLock(params = {}, options = {}) {
 }
 
 export async function setDailyPeriodLock(payload = {}) {
-  return unwrap(await apiPost(`${ROOT}/period-lock`, payload));
+  const result = unwrap(await apiPost(`${ROOT}/period-lock`, payload));
+  publishDailyMutation("setDailyPeriodLock");
+  return result;
 }
 
 export function downloadDailyExcel(params = {}) {
@@ -127,5 +147,7 @@ export async function previewDailyExcel(file, payload = {}) {
 }
 
 export async function applyDailyExcel(payload = {}) {
-  return unwrap(await apiPost(`${ROOT}/excel-apply`, payload));
+  const result = unwrap(await apiPost(`${ROOT}/excel-apply`, payload));
+  publishDailyMutation("applyDailyExcel");
+  return result;
 }
