@@ -1,5 +1,5 @@
-HEAD: 72caa13b3f01562a95be03b8fb9a7e8830e77d8c
-UTC: 2026-10-02T15:51:53
+HEAD: 31b8aabab53c2814fdc05adc840ccc40826780ec
+UTC: 2026-10-02T15:54:45
 
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.cs(70,56): error CS0026: Keyword 'this' is not valid in a static property, static method, or static field initializer [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.cs(70,56): error CS0026: Keyword 'this' is not valid in a static property, static method, or static field initializer [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\CompanyLicenseGuard.cs(212,56): error CS0026: Keyword 'this' is not valid in a static property, static method, or static field initializer [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\CompanyLicenseGuard.cs(212,56): error CS0026: Keyword 'this' is not valid in a static property, static method, or static field initializer [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
