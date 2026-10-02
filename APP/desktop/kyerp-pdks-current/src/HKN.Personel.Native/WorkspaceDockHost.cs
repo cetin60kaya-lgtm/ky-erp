@@ -30,7 +30,7 @@ internal sealed class WorkspaceDockHost : UserControl
 
     sealed class Slot
     {
-        public BufferedPanel Host { get; } = new() { Dock = DockStyle.Fill, BackColor = Color.White };
+        public BufferedPanel Host { get; } = new() { Dock = DockStyle.Fill };
         public Label Title { get; } = new() { Dock = DockStyle.Top, Height = 34, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(10,0,0,0) };
         public Control? Content { get; set; }
         public string Key { get; set; } = string.Empty;
@@ -38,7 +38,7 @@ internal sealed class WorkspaceDockHost : UserControl
 
     readonly string userKey;
     readonly List<Slot> slots = [];
-    readonly BufferedPanel root = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(241, 245, 250) };
+    readonly BufferedPanel root = new() { Dock = DockStyle.Fill };
     readonly Dictionary<string, int> splitDistances = new(StringComparer.OrdinalIgnoreCase);
     WorkspaceLayoutMode mode = WorkspaceLayoutMode.Single;
     int activeIndex;
@@ -50,9 +50,12 @@ internal sealed class WorkspaceDockHost : UserControl
         Dock = DockStyle.Fill;
         DoubleBuffered = true;
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
+        ApplyAppearance();
         Controls.Add(root);
         for (var i = 0; i < 4; i++) slots.Add(CreateSlot(i));
         ApplyLayout(LoadMode(), false);
+        PdksAppearance.Changed += AppearanceChanged;
+        Disposed += (_,_) => PdksAppearance.Changed -= AppearanceChanged;
     }
 
     public WorkspaceLayoutMode Mode => mode;
@@ -63,8 +66,9 @@ internal sealed class WorkspaceDockHost : UserControl
         var slot = new Slot();
         slot.Title.Text = $"  Çalışma Alanı {index + 1}";
         slot.Title.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
-        slot.Title.ForeColor = Color.FromArgb(51, 65, 85);
-        slot.Title.BackColor = Color.White;
+        slot.Title.ForeColor = PdksAppearance.Current.Muted;
+        slot.Title.BackColor = PdksAppearance.Current.Surface;
+        slot.Host.BackColor = PdksAppearance.Current.Surface;
         slot.Title.Cursor = Cursors.Hand;
         slot.Title.Click += (_, _) => SetActive(index);
         slot.Host.Click += (_, _) => SetActive(index);
@@ -180,7 +184,7 @@ internal sealed class WorkspaceDockHost : UserControl
 
     Control Single()
     {
-        var p = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.White };
+        var p = new BufferedPanel { Dock = DockStyle.Fill, BackColor = PdksAppearance.Current.Surface };
         p.Controls.Add(slots[0].Host);
         return p;
     }
@@ -235,7 +239,7 @@ internal sealed class WorkspaceDockHost : UserControl
             SplitterWidth = 7,
             Panel1MinSize = 80,
             Panel2MinSize = 80,
-            BackColor = Color.FromArgb(223, 231, 241),
+            BackColor = PdksAppearance.Current.Border,
             Tag = new SplitState(key, ratio)
         };
         split.HandleCreated += (_, _) => QueueNormalize(split);
@@ -313,13 +317,36 @@ internal sealed class WorkspaceDockHost : UserControl
 
     void RefreshHeaders()
     {
+        var p=PdksAppearance.Current;
         for (var i = 0; i < slots.Count; i++)
         {
             var active = i == activeIndex && i < VisibleSlotCount();
             slots[i].Title.Visible = mode != WorkspaceLayoutMode.Single;
-            slots[i].Title.BackColor = active ? Color.FromArgb(239, 246, 255) : Color.White;
-            slots[i].Title.ForeColor = active ? Color.FromArgb(37, 99, 235) : Color.FromArgb(71, 85, 105);
+            slots[i].Title.BackColor = active ? p.PrimarySoft : p.Surface;
+            slots[i].Title.ForeColor = active ? p.Primary : p.Muted;
+            slots[i].Host.BackColor = p.Surface;
         }
+    }
+
+    void AppearanceChanged(object? sender,EventArgs e)
+    {
+        if(IsDisposed)return;
+        void apply()
+        {
+            ApplyAppearance();
+            foreach(var split in Descendants(root).OfType<SplitContainer>())
+                split.BackColor=PdksAppearance.Current.Border;
+            RefreshHeaders();
+            Invalidate(true);
+        }
+        if(InvokeRequired)BeginInvoke((Action)apply);else apply();
+    }
+
+    void ApplyAppearance()
+    {
+        var p=PdksAppearance.Current;
+        BackColor=p.Canvas;
+        root.BackColor=p.Canvas;
     }
 
     int VisibleSlotCount() => mode switch
