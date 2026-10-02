@@ -112,14 +112,15 @@ public sealed partial class MainShellForm : Form
     {
         foreach (var button in tool.Items.OfType<ToolStripButton>()) button.Checked = button.Text == "Genel Bakış";
         personel = null;
-        workspace.ShowSingle(new PdksHomeDashboard(
+        workspace.ShowSingle(new ModernHomeDashboard(
             OpenLiveAttendance,
-            () => OpenDialogModule(PdksModule.Terminal),
             OpenLegacyGirisCikis,
-            OpenLegacyPuantaj,
-            () => OpenData(LegacyDataView.PuantajSonuclari, PdksModule.Puantaj),
             OpenPersonel,
-            () => OpenOperationalReport(LegacyOperationalReport.PersonnelList)), "home", "Genel Bakış");
+            OpenLegacyPuantaj,
+            OpenLegacyBordro,
+            () => OpenReportCenter(null),
+            OpenTerminalCenter), "home", "Genel Bakış");
+        SetModernPage("Genel Bakış", "Günün personel hareketleri ve hızlı işlemler");
     }
 
     static void OpenErpSite()
@@ -313,6 +314,7 @@ public sealed partial class MainShellForm : Form
         workspace.Open(form, key, title);
         if (!form.Visible) form.Show();
         form.BringToFront();
+        SetModernPage(title, "KY PDKS çalışma alanı");
     }
 
     void DisposeActiveChild()
