@@ -85,8 +85,19 @@ public partial class PersonelForm
     {
         tabs.TabPages.Clear(); tabs.Margin=Padding.Empty; tabs.Padding=new Point(7,3); tabs.Font=Font;
         var info=new TabPage("Personel Bilgileri");var inner=new TabControl{Dock=DockStyle.Fill,Font=Font,Padding=new Point(7,3)};
-        inner.TabPages.Add(BuildKimlikClassic()); inner.TabPages.Add(BuildKisiselClassic()); info.Controls.Add(inner);
-        tabs.TabPages.Add(info); tabs.TabPages.Add(BuildGirisClassic()); tabs.TabPages.Add(BuildIzinClassic()); tabs.TabPages.Add(BuildEkkClassic()); tabs.TabPages.Add(BuildBilgiClassic()); tabs.TabPages.Add(BuildOdemeClassic());
+        inner.TabPages.Add(BuildCanonicalBasicTab());
+        inner.TabPages.Add(BuildCanonicalIdentityTab());
+        inner.TabPages.Add(BuildCanonicalContactTab());
+        inner.TabPages.Add(BuildCanonicalDocumentsTab());
+        inner.TabPages.Add(BuildCanonicalWorkSgkTab());
+        inner.TabPages.Add(BuildCanonicalExtraPaymentsTab());
+        info.Controls.Add(inner);
+        tabs.TabPages.Add(info);
+        tabs.TabPages.Add(BuildGirisClassic());
+        tabs.TabPages.Add(BuildIzinClassic());
+        tabs.TabPages.Add(BuildEkkClassic());
+        tabs.TabPages.Add(BuildBilgiClassic());
+        tabs.TabPages.Add(BuildOdemeClassic());
         ApplyClassicGridStyles();
     }
 
