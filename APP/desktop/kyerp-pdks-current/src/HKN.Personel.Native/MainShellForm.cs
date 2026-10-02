@@ -43,6 +43,7 @@ public sealed partial class MainShellForm : Form
         BuildCanonicalToolbarSeed();
         BuildStatus();
         Controls.Add(workspace); Controls.Add(tool); Controls.Add(MainMenuStrip!); Controls.Add(status);
+        ApplyCanonicalStartup();
         ShowHome();
         InitializeTerminalAutoSync();
         InitializeCloudSync();
