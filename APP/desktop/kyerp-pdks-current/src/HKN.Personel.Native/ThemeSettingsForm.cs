@@ -46,9 +46,9 @@ public sealed class ThemeSettingsForm : Form
         foreach(var a in Enum.GetValues<PdksAccent>())
         {
             var b=new Button{
-                Text=PdksAppearance.AccentName(a),Tag=a,Width=86,Height=32,FlatStyle=FlatStyle.Flat,
+                Text=PdksAppearance.AccentName(a),Tag=a,Width=70,Height=28,FlatStyle=FlatStyle.Flat,
                 BackColor=PdksAppearance.AccentColor(a),ForeColor=BestText(PdksAppearance.AccentColor(a)),
-                Font=new Font("Segoe UI",8.3f,FontStyle.Bold),Cursor=Cursors.Hand,Margin=new Padding(0,0,8,0)
+                Font=new Font("Segoe UI",8.3f,FontStyle.Bold),Cursor=Cursors.Hand,Margin=new Padding(0,0,6,0)
             };
             b.FlatAppearance.BorderSize=selectedAccent==a?3:1;
             b.Click+=(_,_)=>{selectedAccent=(PdksAccent)b.Tag!;UpdateAccentSelection();UpdatePreview();};
