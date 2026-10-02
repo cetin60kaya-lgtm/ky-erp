@@ -161,11 +161,11 @@ static void CaptureForm(Form form, string name, string root, StringBuilder log, 
         {
             item.ShowDropDown();
             Application.DoEvents();
-            var menuWait = item.Text is "Yönetim" or "Ayarlar" ? 1100 : 700;
+            var menuWait = item.Text is "SİSTEM" or "TANIMLAR" ? 1100 : 700;
             Thread.Sleep(menuWait);
             Capture(form, Path.Combine(root, $"{Safe(name)}__MENU-{Safe(item.Text ?? "Menu")}.png"));
             log.AppendLine($"MENU|{name}|{item.Text}|Wait={menuWait}ms");
-            Thread.Sleep(item.Text is "Yönetim" or "Ayarlar" ? 700 : 300);
+            Thread.Sleep(item.Text is "SİSTEM" or "TANIMLAR" ? 700 : 300);
             Application.DoEvents();
             item.HideDropDown();
             Application.DoEvents();
