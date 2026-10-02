@@ -156,12 +156,33 @@ function stripOvertimeMeta(value) {
     .trim();
 }
 
+function employeeHireDate(employee = {}) {
+  return String(employee.startDate || employee.hireDate || employee.hire_date || "").slice(0, 10);
+}
+function employeeExitDate(employee = {}) {
+  return String(employee.exitDate || employee.exit_date || "").slice(0, 10);
+}
 function payrollVisibleEmployee(employee = {}, period = "") {
   if (employee.payrollIncluded === false) return false;
+  const [year, month] = String(period || "").split("-").map(Number);
+  if (!year || month < 1 || month > 12) return false;
+  const periodStart = `${period}-01`;
+  const periodEnd = `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
+  const hireDate = employeeHireDate(employee);
+  const exitDate = employeeExitDate(employee);
+  if (hireDate && hireDate > periodEnd) return false;
+  if (exitDate && exitDate < periodStart) return false;
   const status = upper(`${employee.status || ""} ${employee.activePassive || ""}`);
-  if (!status.includes("PAS")) return true;
-  const exitPeriod = String(employee.exitDate || employee.exit_date || "").slice(0, 7);
-  return Boolean(exitPeriod && exitPeriod === period);
+  if (status.includes("PAS") && !exitDate) return false;
+  return true;
+}
+function employmentPeriodLabel(employee = {}, period = "") {
+  const hireDate = employeeHireDate(employee);
+  const exitDate = employeeExitDate(employee);
+  if (hireDate && hireDate.startsWith(period) && exitDate && exitDate.startsWith(period)) return "Giriş / Çıkış";
+  if (hireDate && hireDate.startsWith(period)) return "Yeni Giriş";
+  if (exitDate && exitDate.startsWith(period)) return "Çıkış";
+  return exitDate ? "Dönem Çalışanı" : "Aktif";
 }
 
 function isSgk(employee = {}) {
@@ -223,7 +244,8 @@ function draftPerson(employee = {}) {
     extraPaymentAmount: employee.extraPaymentAmount ?? "",
     overtimeHourlyBase: employee.overtimeHourlyBase ?? employee.overtimeBaseHours ?? 225,
     deductionHourlyBase: employee.deductionHourlyBase ?? 300,
-    startDate: employee.startDate || employee.hireDate || "",
+    startDate: employeeHireDate(employee),
+    exitDate: employeeExitDate(employee),
     title: employee.title || "",
     department: employee.department || "",
     phone: employee.phone || "",
@@ -775,6 +797,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (!modalDraft.fullName?.trim()) return setNotice("Personel adi bos olamaz.");
     if (!["SGKLI", "SGKSIZ"].includes(modalDraft.sgkFollow)) return setNotice("Bu ay için SGK durumu seçilmelidir.");
     if (modalDraft.sgkFollow === "SGKLI" && (num(modalDraft.sgkDays) < 1 || num(modalDraft.sgkDays) > totalDays)) return setNotice(`SGK gün sayısı 1-${totalDays} arasında olmalıdır.`);
+    if (modalDraft.startDate && modalDraft.exitDate && modalDraft.exitDate < modalDraft.startDate) return setNotice("İşten çıkış tarihi işe giriş tarihinden önce olamaz.");
+    if (upper(modalDraft.status).includes("PAS") && !modalDraft.exitDate) return setNotice("Pasif personel için işten çıkış tarihi zorunludur.");
     if (!modalDraft.paymentType) return setNotice("Odeme tipi bos olamaz.");
     if (num(modalDraft.salary) < 0) return setNotice("Maas negatif olamaz.");
     if (num(modalDraft.overtimeHourlyBase) <= 0) return setNotice("Mesai saat boleni 0 dan buyuk olmalidir.");
@@ -812,6 +836,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
         deductionHourlyBase: num(modalDraft.deductionHourlyBase) || 300,
         payrollIncluded: modalDraft.payrollIncluded !== false,
         hireDate: modalDraft.startDate,
+        exitDate: modalDraft.exitDate,
         title: modalDraft.title,
         department: modalDraft.department,
         annualLeaveEntitlement: num(modalDraft.annualLeaveEntitlement),
@@ -1746,7 +1771,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     if (modal === "personel") return (
       <Modal title="Personel Kartı ve Ödeme Ayarları" sub="Kimlik, çalışma, SGK, ücret, banka ve izin bilgilerini tek ekrandan yönetin" size="medium" onClose={() => setModal(null)}>
         <div className="modal-section-grid">
-          <div className="modal-section"><h3>Kimlik ve Çalışma Bilgileri</h3><div className="form"><Field label="Ad Soyad" half><input value={modalDraft.fullName||""} onChange={(event)=>setModalDraft((old)=>({...old,fullName:event.target.value}))}/></Field><Field label="TC Kimlik No"><input value={modalDraft.identityNo||""} maxLength={11} onChange={(event)=>setModalDraft((old)=>({...old,identityNo:event.target.value.replace(/\D/g,"")}))}/></Field><Field label="Personel Kodu"><input value={modalDraft.code||""} onChange={(event)=>setModalDraft((old)=>({...old,code:event.target.value}))}/></Field><Field label="Kart No"><input value={modalDraft.cardNo||""} onChange={(event)=>setModalDraft((old)=>({...old,cardNo:event.target.value}))}/></Field><Field label="İşe Giriş"><input type="date" value={modalDraft.startDate||""} onChange={(event)=>setModalDraft((old)=>({...old,startDate:event.target.value}))}/></Field><Field label="Görev"><input value={modalDraft.title||""} onChange={(event)=>setModalDraft((old)=>({...old,title:event.target.value}))}/></Field><Field label="Bölüm"><input value={modalDraft.department||""} onChange={(event)=>setModalDraft((old)=>({...old,department:event.target.value}))}/></Field><Field label="Durum"><select value={modalDraft.status||"AKTIF"} onChange={(event)=>setModalDraft((old)=>({...old,status:event.target.value}))}><option value="AKTIF">Aktif</option><option value="PASIF">Pasif</option></select></Field></div></div>
+          <div className="modal-section"><h3>Kimlik ve Çalışma Bilgileri</h3><div className="form"><Field label="Ad Soyad" half><input value={modalDraft.fullName||""} onChange={(event)=>setModalDraft((old)=>({...old,fullName:event.target.value}))}/></Field><Field label="TC Kimlik No"><input value={modalDraft.identityNo||""} maxLength={11} onChange={(event)=>setModalDraft((old)=>({...old,identityNo:event.target.value.replace(/\D/g,"")}))}/></Field><Field label="Personel Kodu"><input value={modalDraft.code||""} onChange={(event)=>setModalDraft((old)=>({...old,code:event.target.value}))}/></Field><Field label="Kart No"><input value={modalDraft.cardNo||""} onChange={(event)=>setModalDraft((old)=>({...old,cardNo:event.target.value}))}/></Field><Field label="İşe Giriş"><input type="date" value={modalDraft.startDate||""} onChange={(event)=>setModalDraft((old)=>({...old,startDate:event.target.value}))}/></Field><Field label="İşten Çıkış"><input type="date" value={modalDraft.exitDate||""} onChange={(event)=>setModalDraft((old)=>({...old,exitDate:event.target.value,status:event.target.value?"PASIF":old.status}))}/></Field><Field label="Görev"><input value={modalDraft.title||""} onChange={(event)=>setModalDraft((old)=>({...old,title:event.target.value}))}/></Field><Field label="Bölüm"><input value={modalDraft.department||""} onChange={(event)=>setModalDraft((old)=>({...old,department:event.target.value}))}/></Field><Field label="Durum"><select value={modalDraft.status||"AKTIF"} onChange={(event)=>setModalDraft((old)=>({...old,status:event.target.value}))}><option value="AKTIF">Aktif</option><option value="PASIF">Pasif</option></select></Field></div></div>
           <div className="modal-section"><h3>SGK ve Bordro Kapsamı · {MONTHS[month-1]} {year}</h3><div className="form">
             <Field label="Personel Statüsü" half><select value={modalDraft.personnelStatus||"NORMAL"} onChange={(event)=>setModalDraft((old)=>({...old,personnelStatus:event.target.value}))}><option value="NORMAL">Normal</option><option value="RETIRED">Emekli</option></select></Field>
             <Field label="SGK Durumu" half><select value={modalDraft.sgkFollow||"BELIRTILMEMIS"} onChange={(event)=>setModalDraft((old)=>({...old,sgkFollow:event.target.value,sgkDays:event.target.value==="SGKSIZ"?0:old.sgkDays}))}><option value="SGKLI">SGK'lı</option><option value="SGKSIZ">SGK'sız</option><option value="BELIRTILMEMIS">Seçiniz</option></select></Field>
