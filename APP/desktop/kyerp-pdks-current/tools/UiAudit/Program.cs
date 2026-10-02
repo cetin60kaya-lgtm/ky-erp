@@ -47,7 +47,13 @@ var jobs = new List<(string Name, Func<Form> Factory)>
     ("10-Kullanicilar", () => new UserManagementForm()),
     ("11-CanliDenetim", () => new LiveAttendanceForm()),
     ("12-KartGecmisi", () => new AttendanceHistoryForm()),
-    ("13-Tema", () => new ThemeSettingsForm())
+    ("13-Tema", () => new ThemeSettingsForm()),
+    ("14-RaporMerkezi", () => new ReportCenterForm()),
+    ("15-AylikBordroDuzeltme", () => new MonthlyPayrollAdjustmentForm()),
+    ("16-YedekYonetimi", () => new BackupRestoreForm()),
+    ("17-VeriKaynaklari", () => new QuickDataSourceForm()),
+    ("18-IslemGecmisi", () => new AuditHistoryForm()),
+    ("19-TerminalMerkezi", () => new TerminalCenterForm(null, new LegacyTerminalSettingsForm()))
 };
 
 foreach (var view in Enum.GetValues<LegacyDataView>())
@@ -139,6 +145,17 @@ static void CaptureForm(Form form, string name, string root, StringBuilder log, 
         Application.DoEvents();
         Capture(form, Path.Combine(root, $"{Safe(name)}__START-5000ms.png"));
         log.AppendLine($"STARTUP|{name}|5000ms|{form.Bounds}|State={form.WindowState}");
+
+        var management = Descendants(form).OfType<Button>().FirstOrDefault(x => string.Equals(x.Text, "Yönetim", StringComparison.Ordinal));
+        if (management is not null)
+        {
+            management.PerformClick();
+            Application.DoEvents();
+            Thread.Sleep(500);
+            Application.DoEvents();
+            Capture(form, Path.Combine(root, $"{Safe(name)}__MANAGEMENT.png"));
+            log.AppendLine($"MANAGEMENT|{name}|Opened");
+        }
     }
     else
     {
