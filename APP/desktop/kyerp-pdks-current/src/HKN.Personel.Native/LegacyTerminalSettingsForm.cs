@@ -142,7 +142,9 @@ public sealed class LegacyTerminalSettingsForm : Form
 
     static Button TerminalButton(string text,int width,bool primary)
     {
-        var b=new Button{Text=text,Width=width,Height=32,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",8.5f,FontStyle.Bold),BackColor=primary?Color.FromArgb(37,99,235):Color.White,ForeColor=primary?Color.White:Color.FromArgb(15,23,42),Margin=new Padding(0,0,8,0),Cursor=Cursors.Hand};b.FlatAppearance.BorderColor=primary?Color.FromArgb(37,99,235):Color.FromArgb(226,232,240);return b;
+        var b=PdksUiKit.Button(text,width,primary?PdksActionRole.Primary:PdksActionRole.Secondary);
+        b.Height=32;b.MinimumSize=new Size(width,32);b.MaximumSize=new Size(width,32);b.Margin=new Padding(0,0,8,0);
+        return b;
     }
 
     void BuildGrid()
