@@ -139,7 +139,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
             grid.DataSource=data;
             LoadPeopleFilter(); ApplyPersonFilter(); RefreshSummary();
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Payroll.Adjustment");}
         finally{loading=false;}
     }
 
@@ -241,7 +241,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
             });
             MessageBox.Show($"{data.Rows.Count} personelin aylık bordro kaynağı güncellendi.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);Reload();
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Error);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Error,"Payroll.Adjustment");}
     }
 
     void PostSelectedPayments()
@@ -267,7 +267,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
             });
             MessageBox.Show($"{rows.Count} personelin ödemesi işlendi.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);
         }
-        catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Error);}
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Error,"Payroll.Adjustment");}
     }
 
     static object Obj(DataRow r,string c)=>r[c]==DBNull.Value?0:r[c];
