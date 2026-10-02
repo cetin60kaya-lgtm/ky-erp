@@ -1,5 +1,5 @@
-HEAD: f1f09b832daa1c3789e3de82f71214013fcd34cd
-UTC: 2026-10-02T12:53:37
+HEAD: 061af94bff5aa6411e352746f3f38e954248598b
+UTC: 2026-10-02T12:56:10
 
 D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PayrollProfileStore.cs(100,63): error CS1002: ; expected [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
 D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\PayrollProfileStore.cs(100,63): error CS1519: Invalid token ',' in a member declaration [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
