@@ -28,6 +28,22 @@ jobs:
           cache: npm
           cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
 
+      - name: Apply payment page redesign
+        run: python .github/scripts/payment_page_redesign_20261002.py
+
+      - name: Commit payment page redesign
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'KY ERP Automation'
+          git config user.email 'actions@kyerp.net'
+          git add APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx APP/app/ky-erp-frontend/src/pages/modules/ik/daily-hr-workspace-final.css
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(daily): redesign payment period print pool and history'
+            git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+          fi
+
       - name: Frontend build
         working-directory: APP/app/ky-erp-frontend
         run: |
@@ -57,3 +73,5 @@ jobs:
             done
             test "$ok" = 1
           done
+
+# payment-tab-redesign-trigger-20261002-v1
