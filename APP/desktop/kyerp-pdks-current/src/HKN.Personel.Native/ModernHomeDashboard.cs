@@ -196,21 +196,13 @@ internal sealed class ModernHomeDashboard : UserControl
         for(var i=1;i<7;i++)layout.RowStyles.Add(new RowStyle(SizeType.Percent,16.666f));
         layout.Controls.Add(new Label{Text="Standart İş Akışı",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text},0,0);
 
-        var steps=new (PdksCommandId Id,string Text)[]
-        {
-            (PdksCommandId.TerminalCenter,"1  Terminal verisini al ve doğrula"),
-            (PdksCommandId.EntryExit,"2  Giriş / çıkış eksiklerini düzelt"),
-            (PdksCommandId.Personnel,"3  Personel, izin ve ek ödemeleri kontrol et"),
-            (PdksCommandId.TimesheetMonthly,"4  Puantajı hesapla ve sonucu kontrol et"),
-            (PdksCommandId.PayrollGeneral,"5  Hakediş ve resmî bordroyu hazırla"),
-            (PdksCommandId.Reports,"6  Raporla, çıktı al ve dönemi kapat")
-        };
+        var steps=PdksWorkflowCatalog.All.OrderBy(x=>x.Order).ToArray();
         for(var i=0;i<steps.Length;i++)
         {
             var step=steps[i];
             var b=new Button
             {
-                Text=step.Text,
+                Text=$"{i+1}  {step.Title}",
                 Dock=DockStyle.Fill,
                 FlatStyle=FlatStyle.Flat,
                 BackColor=p.Surface,
@@ -224,7 +216,7 @@ internal sealed class ModernHomeDashboard : UserControl
             };
             b.FlatAppearance.BorderSize=0;
             b.FlatAppearance.MouseOverBackColor=p.SurfaceAlt;
-            b.Click+=(_,_)=>execute(step.Id);
+            b.Click+=(_,_)=>execute(step.Command);
             layout.Controls.Add(b,0,i+1);
         }
         card.Controls.Add(layout);
