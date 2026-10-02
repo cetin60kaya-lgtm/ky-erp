@@ -12,7 +12,7 @@ public sealed class LiveAttendanceHubForm : Form
         Size = new Size(1320, 790);
         MinimumSize = new Size(1120, 690);
         Font = new Font("Segoe UI", 9f);
-        BackColor = Color.FromArgb(246, 249, 253);
+        BackColor = PdksAppearance.Current.Canvas;
 
         live = new LiveAttendanceForm(openEntryExit, openPerson);
         history = new AttendanceHistoryForm(allowArchiveCleanup);
@@ -30,7 +30,7 @@ public sealed class LiveAttendanceHubForm : Form
 
     static TabPage Host(string title, Form child)
     {
-        var page = new TabPage(title) { Padding = Padding.Empty, BackColor = Color.White };
+        var page = new TabPage(title) { Padding = Padding.Empty, BackColor = PdksAppearance.Current.Surface };
         child.TopLevel = false;
         child.FormBorderStyle = FormBorderStyle.None;
         child.Dock = DockStyle.Fill;
