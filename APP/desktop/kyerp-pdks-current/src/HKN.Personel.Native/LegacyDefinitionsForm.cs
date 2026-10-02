@@ -70,33 +70,105 @@ public sealed class LegacyDefinitionsForm : Form
     }
     TabPage BuildFirma()
     {
-        var page=new TabPage("Firma"){Padding=new Padding(14),BackColor=Color.White};
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1};
+        var p=PdksAppearance.Current;
+        var page=new TabPage("Firma"){Padding=new Padding(16),BackColor=p.Canvas};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1,BackColor=p.Canvas};
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
-        var editor=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=4,RowCount=6,AutoSize=true,Padding=new Padding(12)};
-        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,130));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,110));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
-        var combo=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList,Margin=new Padding(3,6,3,6)};firma["SELECT"]=combo;
-        editor.Controls.Add(new Label{Text="Firma Adı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,0);editor.Controls.Add(combo,1,0);editor.SetColumnSpan(combo,3);
-        string[] labels={"Adres","Telefon-1","Telefon-2","Fax","Bulunduğu İl","İlçe","SSK Numarası"};string[] keys={"ADRES","TEL1","TEL2","FAX","IL","ILCE","SSK"};
-        for(int i=0;i<keys.Length;i++){int row=1+i/2,col=(i%2)*2;var box=new TextBox{Dock=DockStyle.Fill,ReadOnly=true,Margin=new Padding(3,6,3,6)};firma[keys[i]]=box;editor.Controls.Add(new Label{Text=labels[i],Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},col,row);editor.Controls.Add(box,col+1,row);}
-        var def=new CheckBox{Text="İşlemlerde bu firmayı varsayılan olarak göster",Dock=DockStyle.Fill,AutoSize=true,Padding=new Padding(0,8,0,0)};firma["AKTIF"]=def;editor.Controls.Add(def,0,5);editor.SetColumnSpan(def,4);root.Controls.Add(editor,0,0);
-        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var save=Command("Kaydet",0,0,112);var add=Command("Yeni Ekle",0,0,112);var edit=Command("Değiştir",0,0,112);var del=Command("Sil",0,0,100);var all=Command("Tümünü Sil",0,0,120);actions.Controls.AddRange([save,all,del,edit,add]);root.Controls.Add(actions,0,1);page.Controls.Add(root);save.Enabled=false;SetFirmaEdit(false);
-        combo.SelectedIndexChanged+=(_,_)=>{if(!save.Enabled)LoadFirma();};add.Click+=(_,_)=>BeginNewFirma(save);edit.Click+=(_,_)=>{if(firmaCode is null)return;SetFirmaEdit(true);save.Enabled=true;combo.Focus();};save.Click+=(_,_)=>SaveFirma(save);del.Click+=(_,_)=>DeleteFirma();all.Click+=(_,_)=>DeleteAllFirma();return page;
+
+        var card=PdksUiKit.Card();
+        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=8,Padding=new Padding(20),BackColor=p.Surface};
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,120));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,110));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+        editor.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
+        editor.Controls.Add(PdksUiKit.SectionTitle("Firma Bilgileri"),0,0);editor.SetColumnSpan(editor.GetControlFromPosition(0,0)!,4);
+
+        var combo=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList,Margin=new Padding(0,6,0,6)};firma["SELECT"]=combo;
+        editor.Controls.Add(PdksUiKit.FieldLabel("Firma Adı"),0,1);editor.Controls.Add(combo,1,1);editor.SetColumnSpan(combo,3);
+
+        var address=new TextBox{Dock=DockStyle.Fill,ReadOnly=true,Margin=new Padding(0,6,0,6)};firma["ADRES"]=address;
+        editor.Controls.Add(PdksUiKit.FieldLabel("Adres"),0,2);editor.Controls.Add(address,1,2);editor.SetColumnSpan(address,3);
+
+        string[] labels={"Telefon-1","Telefon-2","Fax","Bulunduğu İl","İlçe","SSK Numarası"};
+        string[] keys={"TEL1","TEL2","FAX","IL","ILCE","SSK"};
+        for(int i=0;i<keys.Length;i++)
+        {
+            int row=3+i/2,col=(i%2)*2;
+            var box=new TextBox{Dock=DockStyle.Fill,ReadOnly=true,Margin=new Padding(0,6,12,6)};
+            firma[keys[i]]=box;
+            editor.Controls.Add(PdksUiKit.FieldLabel(labels[i]),col,row);
+            editor.Controls.Add(box,col+1,row);
+        }
+
+        var def=new CheckBox{Text="İşlemlerde bu firmayı varsayılan olarak göster",Dock=DockStyle.Fill,AutoSize=true,Padding=new Padding(0,8,0,0)};
+        firma["AKTIF"]=def;editor.Controls.Add(def,1,6);editor.SetColumnSpan(def,3);
+        card.Controls.Add(editor);root.Controls.Add(card,0,0);
+
+        var actions=PdksUiKit.ActionBar();
+        var save=PdksUiKit.Button("Kaydet",108,PdksActionRole.Primary);
+        var add=PdksUiKit.Button("Yeni Firma",108,PdksActionRole.Secondary);
+        var edit=PdksUiKit.Button("Düzenle",96,PdksActionRole.Secondary);
+        var del=PdksUiKit.Button("Sil",82,PdksActionRole.Danger);
+        var all=PdksUiKit.Button("Tümünü Sil",108,PdksActionRole.Danger);
+        actions.Controls.AddRange([save,all,del,edit,add]);root.Controls.Add(actions,0,1);page.Controls.Add(root);
+        save.Enabled=false;SetFirmaEdit(false);
+
+        combo.SelectedIndexChanged+=(_,_)=>{if(!save.Enabled)LoadFirma();};
+        add.Click+=(_,_)=>BeginNewFirma(save);
+        edit.Click+=(_,_)=>{if(firmaCode is null)return;SetFirmaEdit(true);save.Enabled=true;combo.Focus();};
+        save.Click+=(_,_)=>SaveFirma(save);
+        del.Click+=(_,_)=>DeleteFirma();
+        all.Click+=(_,_)=>DeleteAllFirma();
+        return page;
     }
 
     TabPage BuildBordro()
     {
-        var page=new TabPage("Bordro"){Padding=new Padding(14),BackColor=Color.White};
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1};root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
-        var split=new SplitContainer{Dock=DockStyle.Fill,FixedPanel=FixedPanel.Panel1,SplitterDistance=470,SplitterWidth=8};
-        var grid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=Color.White,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill};bordro["GRID"]=grid;split.Panel1.Controls.Add(grid);
-        var editor=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=2,RowCount=6,AutoSize=true,Padding=new Padding(18)};editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,135));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        var code=new Label{Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10f,FontStyle.Bold)};bordro["KOD"]=code;DefRow(editor,0,"Alan Kodu",code);
-        var ad=new TextBox{Dock=DockStyle.Fill,ReadOnly=true};bordro["AD"]=ad;DefRow(editor,1,"Alan Adı",ad);var kad=new TextBox{Dock=DockStyle.Fill,ReadOnly=true};bordro["KAD"]=kad;DefRow(editor,2,"Kısa Adı",kad);
-        var type=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};type.Items.AddRange(["Normal Mesai","Fazla Mesai","Ücretsiz İzin","Ücretli İzin"]);bordro["TIP"]=type;DefRow(editor,3,"Alan Türü",type);
-        var factor=new TextBox{Dock=DockStyle.Fill,ReadOnly=true,MaxLength=3};bordro["CARPAN"]=factor;DefRow(editor,4,"Katsayı",factor);var field=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};field.Items.AddRange(["Normal Çalışma","Fazla Mesai"]);bordro["CALAN"]=field;DefRow(editor,5,"Alan",field);var bcode=new TextBox{Visible=false};bordro["BKOD"]=bcode;editor.Controls.Add(bcode);split.Panel2.Controls.Add(editor);root.Controls.Add(split,0,0);
-        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0)};var save=Command("Kaydet",0,0,112);var add=Command("Yeni Ekle",0,0,112);var edit=Command("Değiştir",0,0,112);var del=Command("Sil",0,0,100);actions.Controls.AddRange([save,del,edit,add]);root.Controls.Add(actions,0,1);page.Controls.Add(root);save.Enabled=false;SetBordroEdit(false);
-        grid.SelectionChanged+=(_,_)=>{if(!save.Enabled)LoadBordro();};add.Click+=(_,_)=>{bordroCode=null;ClearBordro();SetBordroEdit(true);save.Enabled=true;((TextBox)bordro["AD"]).Focus();};edit.Click+=(_,_)=>{if(bordroCode is null)return;SetBordroEdit(true);save.Enabled=true;((TextBox)bordro["AD"]).Focus();};save.Click+=(_,_)=>SaveBordro(save);del.Click+=(_,_)=>DeleteBordro();return page;
+        var p=PdksAppearance.Current;
+        var page=new TabPage("Bordro"){Padding=new Padding(16),BackColor=p.Canvas};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1,BackColor=p.Canvas};
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+
+        var body=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,BackColor=p.Canvas};
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,12));body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,60));
+
+        var listCard=PdksUiKit.Card();
+        var listLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Padding=new Padding(16),BackColor=p.Surface};
+        listLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,38));listLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        listLayout.Controls.Add(PdksUiKit.SectionTitle("Bordro Alanları"),0,0);
+        var grid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=p.Surface,RowHeadersVisible=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BorderStyle=BorderStyle.None};
+        grid.RowTemplate.Height=31;grid.ColumnHeadersHeight=35;
+        bordro["GRID"]=grid;listLayout.Controls.Add(grid,0,1);listCard.Controls.Add(listLayout);body.Controls.Add(listCard,0,0);
+        body.Controls.Add(new Panel{Dock=DockStyle.Fill,BackColor=p.Canvas},1,0);
+
+        var editCard=PdksUiKit.Card();
+        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=7,Padding=new Padding(20),BackColor=p.Surface};
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,135));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        editor.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
+        editor.Controls.Add(PdksUiKit.SectionTitle("Alan Bilgileri"),0,0);editor.SetColumnSpan(editor.GetControlFromPosition(0,0)!,2);
+
+        var code=new Label{Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10f,FontStyle.Bold),ForeColor=p.Text};bordro["KOD"]=code;DefRow(editor,1,"Alan Kodu",code);
+        var ad=new TextBox{Dock=DockStyle.Fill,ReadOnly=true};bordro["AD"]=ad;DefRow(editor,2,"Alan Adı",ad);
+        var kad=new TextBox{Dock=DockStyle.Fill,ReadOnly=true};bordro["KAD"]=kad;DefRow(editor,3,"Kısa Adı",kad);
+        var type=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};type.Items.AddRange(["Normal Mesai","Fazla Mesai","Ücretsiz İzin","Ücretli İzin"]);bordro["TIP"]=type;DefRow(editor,4,"Alan Türü",type);
+        var factor=new TextBox{Dock=DockStyle.Fill,ReadOnly=true,MaxLength=3};bordro["CARPAN"]=factor;DefRow(editor,5,"Katsayı",factor);
+        var field=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};field.Items.AddRange(["Normal Çalışma","Fazla Mesai"]);bordro["CALAN"]=field;DefRow(editor,6,"Alan",field);
+        var bcode=new TextBox{Visible=false};bordro["BKOD"]=bcode;editor.Controls.Add(bcode);
+        editCard.Controls.Add(editor);body.Controls.Add(editCard,2,0);root.Controls.Add(body,0,0);
+
+        var actions=PdksUiKit.ActionBar();
+        var save=PdksUiKit.Button("Kaydet",108,PdksActionRole.Primary);
+        var add=PdksUiKit.Button("Yeni Alan",108,PdksActionRole.Secondary);
+        var edit=PdksUiKit.Button("Düzenle",96,PdksActionRole.Secondary);
+        var del=PdksUiKit.Button("Sil",82,PdksActionRole.Danger);
+        actions.Controls.AddRange([save,del,edit,add]);root.Controls.Add(actions,0,1);page.Controls.Add(root);
+        save.Enabled=false;SetBordroEdit(false);
+
+        grid.SelectionChanged+=(_,_)=>{if(!save.Enabled)LoadBordro();};
+        add.Click+=(_,_)=>{bordroCode=null;ClearBordro();SetBordroEdit(true);save.Enabled=true;((TextBox)bordro["AD"]).Focus();};
+        edit.Click+=(_,_)=>{if(bordroCode is null)return;SetBordroEdit(true);save.Enabled=true;((TextBox)bordro["AD"]).Focus();};
+        save.Click+=(_,_)=>SaveBordro(save);
+        del.Click+=(_,_)=>DeleteBordro();
+        return page;
     }
 
     static void DefRow(TableLayoutPanel table,int row,string text,Control control)
