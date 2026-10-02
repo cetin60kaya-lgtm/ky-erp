@@ -28,7 +28,7 @@ public sealed class AttendanceHistoryForm : Form
         Size = new Size(1280, 780);
         MinimumSize = new Size(1080, 680);
         Font = new Font("Segoe UI", 9f);
-        BackColor = Color.FromArgb(246, 249, 253);
+        BackColor = PdksAppearance.Current.Canvas;
         from.Value = DateTime.Today.AddDays(-6);
         to.Value = DateTime.Today;
         Build();
@@ -36,79 +36,110 @@ public sealed class AttendanceHistoryForm : Form
         summary.SelectionChanged += (_, _) => LoadSelectedDetail();
     }
 
-    static DataGridView Grid() => new()
+    static DataGridView Grid()
     {
-        Dock = DockStyle.Fill,
-        ReadOnly = true,
-        AllowUserToAddRows = false,
-        AllowUserToDeleteRows = false,
-        MultiSelect = false,
-        RowHeadersVisible = false,
-        SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-        BackgroundColor = Color.White,
-        BorderStyle = BorderStyle.FixedSingle
-    };
+        var p=PdksAppearance.Current;
+        return new DataGridView
+        {
+            Dock = DockStyle.Fill,
+            ReadOnly = true,
+            AllowUserToAddRows = false,
+            AllowUserToDeleteRows = false,
+            MultiSelect = false,
+            RowHeadersVisible = false,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            BackgroundColor = p.Surface,
+            BorderStyle = BorderStyle.None,
+            RowTemplate = { Height = 31 },
+            ColumnHeadersHeight = 36
+        };
+    }
 
     static Button B(string text, int width, EventHandler click)
     {
-        var b = new Button { Text = text, Width = width, Height = 32, FlatStyle = FlatStyle.Flat };
+        var role = text.Contains("TEMİZLE",StringComparison.OrdinalIgnoreCase) ? PdksActionRole.Danger :
+                   text.Contains("Cihazdan Al",StringComparison.OrdinalIgnoreCase) || text.Equals("Yenile",StringComparison.OrdinalIgnoreCase) ? PdksActionRole.Primary :
+                   PdksActionRole.Secondary;
+        var b = PdksUiKit.Button(text,width,role);
+        b.Height=32;b.MinimumSize=new Size(width,32);b.MaximumSize=new Size(width,32);
         b.Click += click;
         return b;
     }
 
     void Build()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, Padding = new Padding(12), BackColor = BackColor };
+        var p=PdksAppearance.Current;
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, Padding = new Padding(16), BackColor = p.Canvas };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 62));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 38));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
 
-        var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, BackColor = Color.White, Padding = new Padding(12, 6, 12, 6) };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
-        header.Controls.Add(new Label
+        var header = PdksUiKit.Card(16);
+        var headerLayout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,BackColor=p.Surface};
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,58));
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,42));
+        headerLayout.Controls.Add(new Label
         {
-            Text = "Kart Basma Kontrol Merkezi\nYalnız fiziksel cihaz CANLI arşivi üzerinden kart basım kontrolü",
-            Dock = DockStyle.Fill,
+            Text = "Kart Basma Kontrol Merkezi",
+            Dock = DockStyle.Top,
+            Height=28,
             Font = new Font("Segoe UI", 12f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(27, 44, 68)
+            ForeColor = p.Text,
+            TextAlign=ContentAlignment.MiddleLeft
+        }, 0, 0);
+        headerLayout.Controls.Add(new Label
+        {
+            Text = "Fiziksel cihaz CANLI arşivi üzerinden kişi ve gün bazlı kontrol",
+            Dock = DockStyle.Bottom,
+            Height=24,
+            Font = new Font("Segoe UI", 8.7f),
+            ForeColor = p.Muted,
+            TextAlign=ContentAlignment.MiddleLeft
         }, 0, 0);
         archiveInfo.Dock = DockStyle.Fill;
         archiveInfo.TextAlign = ContentAlignment.MiddleRight;
-        archiveInfo.ForeColor = Color.FromArgb(31, 103, 72);
-        header.Controls.Add(archiveInfo, 1, 0);
+        archiveInfo.ForeColor = p.Success;
+        headerLayout.Controls.Add(archiveInfo, 1, 0);
+        header.Controls.Add(headerLayout);
         root.Controls.Add(header, 0, 0);
 
-        var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(4, 7, 4, 4) };
-        filters.Controls.Add(new Label { Text = "Başlangıç", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
+        var filterCard=PdksUiKit.Card(10);
+        var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(6, 4, 6, 0), BackColor=p.Surface };
+        filters.Controls.Add(new Label { Text = "Başlangıç", AutoSize = true, Padding = new Padding(0, 8, 0, 0), ForeColor=p.Muted });
         filters.Controls.Add(from);
-        filters.Controls.Add(new Label { Text = "Bitiş", AutoSize = true, Padding = new Padding(8, 8, 0, 0) });
+        filters.Controls.Add(new Label { Text = "Bitiş", AutoSize = true, Padding = new Padding(8, 8, 0, 0), ForeColor=p.Muted });
         filters.Controls.Add(to);
         filters.Controls.Add(B("Bugün", 70, async (_, _) => { from.Value = to.Value = DateTime.Today; await RefreshAllAsync(true); }));
         filters.Controls.Add(B("Son 7 Gün", 88, async (_, _) => { from.Value = DateTime.Today.AddDays(-6); to.Value = DateTime.Today; await RefreshAllAsync(true); }));
         filters.Controls.Add(B("Bu Ay", 72, async (_, _) => { from.Value = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1); to.Value = DateTime.Today; await RefreshAllAsync(true); }));
         filters.Controls.Add(B("Son 30 Gün", 92, async (_, _) => { from.Value = DateTime.Today.AddDays(-29); to.Value = DateTime.Today; await RefreshAllAsync(true); }));
-        filters.Controls.Add(B("Yenile", 72, async (_, _) => await RefreshAllAsync(true)));
-        filters.Controls.Add(B("Şimdi Cihazdan Al", 130, async (_, _) => await SyncNowAsync()));
-        root.Controls.Add(filters, 0, 1);
+        filters.Controls.Add(B("Yenile", 78, async (_, _) => await RefreshAllAsync(true)));
+        filters.Controls.Add(B("Şimdi Cihazdan Al", 138, async (_, _) => await SyncNowAsync()));
+        filterCard.Controls.Add(filters);
+        root.Controls.Add(filterCard, 0, 1);
 
-        var top = new GroupBox { Text = "Personel Özeti", Dock = DockStyle.Fill, Padding = new Padding(8) };
-        top.Controls.Add(summary);
-        root.Controls.Add(top, 0, 2);
+        var topCard=PdksUiKit.Card();
+        var topLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Padding=new Padding(14),BackColor=p.Surface};
+        topLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,34));topLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        topLayout.Controls.Add(PdksUiKit.SectionTitle("Personel Özeti"),0,0);
+        topLayout.Controls.Add(summary,0,1);topCard.Controls.Add(topLayout);root.Controls.Add(topCard,0,2);
 
-        var bottom = new GroupBox { Text = "Seçili Personel • Gün Gün Kart Hareketi", Dock = DockStyle.Fill, Padding = new Padding(8) };
-        bottom.Controls.Add(detail);
-        root.Controls.Add(bottom, 0, 3);
+        var detailCard=PdksUiKit.Card();
+        detailCard.Margin=new Padding(0,10,0,0);
+        var detailLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Padding=new Padding(14),BackColor=p.Surface};
+        detailLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,34));detailLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        detailLayout.Controls.Add(PdksUiKit.SectionTitle("Seçili Personel • Gün Gün Kart Hareketi"),0,0);
+        detailLayout.Controls.Add(detail,0,1);detailCard.Controls.Add(detailLayout);root.Controls.Add(detailCard,0,3);
 
-        var actions = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
+        var actions = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, BackColor=p.Canvas };
         actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
         actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
-        status.Dock = DockStyle.Fill;
+        status.Dock = DockStyle.Fill;status.ForeColor=p.Muted;
         actions.Controls.Add(status, 0, 0);
-        var clean = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
+        var clean = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, BackColor=p.Canvas, Padding=new Padding(0,8,0,0) };
         if (allowArchiveCleanup)
         {
             clean.Controls.Add(B("CANLI ARŞİVİ KOMPLE TEMİZLE", 210, (_, _) => ClearAllArchive()));
@@ -153,13 +184,14 @@ public sealed class AttendanceHistoryForm : Form
             var rows = LoadPeriod(a, b);
             BindSummary(rows, a, b);
             UpdateArchiveInfo(a, b);
+            status.ForeColor = PdksAppearance.Current.Muted;
             status.Text = $"{a:dd.MM.yyyy} - {b:dd.MM.yyyy} kontrol edildi. {rows.Count:N0} kişi-gün satırı.";
             await Task.CompletedTask;
         }
         catch (Exception ex)
         {
-            status.Text = "Kontrol hatası: " + ex.GetBaseException().Message;
-            MessageBox.Show(ex.GetBaseException().Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            status.Text = "Kontrol hatası • " + PdksErrorPresenter.Report(ex,"AttendanceHistory.Refresh");
+            status.ForeColor = PdksAppearance.Current.Danger;
         }
         finally { if (!keepLoading) loading = false; }
     }
@@ -248,7 +280,7 @@ public sealed class AttendanceHistoryForm : Form
         }
         summary.Tag = rows;
         summary.DataSource = table;
-        if (summary.Columns.Contains("Kart Basmayan")) summary.Columns["Kart Basmayan"].DefaultCellStyle.BackColor = Color.FromArgb(255, 232, 229);
+        if (summary.Columns.Contains("Kart Basmayan")) summary.Columns["Kart Basmayan"].DefaultCellStyle.BackColor = PdksAppearance.Current.DangerSoft;
         if (summary.Rows.Count > 0) summary.Rows[0].Selected = true;
         LoadSelectedDetail();
     }
@@ -265,8 +297,8 @@ public sealed class AttendanceHistoryForm : Form
         foreach (DataGridViewRow r in detail.Rows)
         {
             var state = Convert.ToString(r.Cells["Durum"].Value);
-            if (state == "Kart Basmadı" || state == "Çıkış Eksik" || state == "Giriş Eksik") r.DefaultCellStyle.BackColor = Color.FromArgb(255, 232, 229);
-            else if (state is "İzinli" or "Tatil") r.DefaultCellStyle.BackColor = Color.FromArgb(255, 248, 204);
+            if (state == "Kart Basmadı" || state == "Çıkış Eksik" || state == "Giriş Eksik") r.DefaultCellStyle.BackColor = PdksAppearance.Current.DangerSoft;
+            else if (state is "İzinli" or "Tatil") r.DefaultCellStyle.BackColor = PdksAppearance.Current.IsDark ? Color.FromArgb(69,52,21) : Color.FromArgb(255,248,204);
         }
     }
 
