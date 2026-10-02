@@ -19,6 +19,16 @@ const number = (value: unknown) => {
 };
 const nowIso = () => new Date().toISOString();
 const dateOnly = (value: unknown) => text(value).slice(0, 10);
+function todayIstanbul(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
 
 function companyOf(c: Context<AppEnv>, body: Row = {}) {
   return text(
@@ -573,16 +583,26 @@ async function removePerson(c: Context<AppEnv>) {
 
   if (mode !== "PASSIVE") return error(c, 400, "REMOVE_MODE_INVALID", "Silme modu PASSIVE veya HARD olmalıdır.");
   const timestamp = nowIso();
+  const effectiveExitDate = dateOnly(body.exitDate) || todayIstanbul();
+  if (person.startDate && effectiveExitDate < person.startDate) {
+    return error(c, 400, "EXIT_BEFORE_HIRE", "İşten çıkış tarihi işe giriş tarihinden önce olamaz.");
+  }
   await c.env.DB.batch([
     c.env.DB.prepare("UPDATE hr_monthly_employees SET status='Pasif',updated_at=? WHERE id=? AND main_company_id=?").bind(timestamp, employeeId, auth.company),
-    c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,active_passive,updated_at)
-      VALUES (?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET active_passive=excluded.active_passive,updated_at=excluded.updated_at`)
-      .bind(employeeId, auth.company, "Pasif", timestamp),
+    c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,active_passive,exit_date,updated_at)
+      VALUES (?,?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET active_passive=excluded.active_passive,exit_date=excluded.exit_date,updated_at=excluded.updated_at`)
+      .bind(employeeId, auth.company, "Pasif", effectiveExitDate, timestamp),
     c.env.DB.prepare(`INSERT INTO ik_employee_change_history
       (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(
         crypto.randomUUID(), auth.company, employeeId, "PERSONNEL_STATUS", "status", text(person.status), "Pasif",
-        dateOnly(timestamp), reason, text(auth.user?.id), timestamp,
+        effectiveExitDate, reason, text(auth.user?.id), timestamp,
+      ),
+    c.env.DB.prepare(`INSERT INTO ik_employee_change_history
+      (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(
+        crypto.randomUUID(), auth.company, employeeId, "PERSONNEL_EXIT", "exitDate", text(person.exitDate), effectiveExitDate,
+        effectiveExitDate, reason, text(auth.user?.id), timestamp,
       ),
   ]);
   await writePersonRemovalAudit(c, auth, { ...person, status: "Pasif" }, "PASSIVE", reason);
@@ -599,7 +619,7 @@ async function saveChanges(c: Context<AppEnv>) {
   if (!currentRaw) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
   const body = await bodyOf(c);
   const changes = body.changes && typeof body.changes === "object" ? body.changes : {};
-  const effectiveDate = dateOnly(body.effectiveDate) || dateOnly(nowIso());
+  const effectiveDate = dateOnly(body.effectiveDate) || todayIstanbul();
   const note = text(body.note);
   const employeeFields: Record<string, string> = {
     fullName: "full_name", department: "department", title: "title", workType: "work_type",
@@ -614,6 +634,18 @@ async function saveChanges(c: Context<AppEnv>) {
   const period = /^\d{4}-\d{2}$/.test(text(body.period)) ? text(body.period) : requestedPeriod(c);
   const profile = await first(c, "SELECT personnel_status FROM ik_person_hr_profiles WHERE employee_id=? AND main_company_id=? LIMIT 1", [employeeId, auth.company]).catch(() => null);
   const monthCompliance = await complianceRow(c, auth.company, employeeId, period);
+  const requestedStatus = Object.prototype.hasOwnProperty.call(changes, "status") ? text(changes.status) : text(currentRaw.status);
+  const requestedExitDate = Object.prototype.hasOwnProperty.call(changes, "exitDate") ? dateOnly(changes.exitDate) : dateOnly(currentRaw.exit_date);
+  const requestedStartDate = Object.prototype.hasOwnProperty.call(changes, "startDate") ? dateOnly(changes.startDate) : dateOnly(currentRaw.hire_date);
+  if (requestedExitDate && requestedStartDate && requestedExitDate < requestedStartDate) {
+    return error(c, 400, "EXIT_BEFORE_HIRE", "İşten çıkış tarihi işe giriş tarihinden önce olamaz.");
+  }
+  if (upper(requestedStatus).includes("PAS") && !requestedExitDate) {
+    changes.exitDate = effectiveDate;
+  }
+  if (!upper(requestedStatus).includes("PAS") && Object.prototype.hasOwnProperty.call(changes, "status") && !Object.prototype.hasOwnProperty.call(changes, "exitDate")) {
+    changes.exitDate = "";
+  }
   const statements: any[] = [];
   let salaryTouched = false;
 
@@ -656,6 +688,12 @@ async function saveChanges(c: Context<AppEnv>) {
     if (String(oldValue ?? "") === String(normalized ?? "")) continue;
     if (employeeColumn) {
       statements.push(c.env.DB.prepare(`UPDATE hr_monthly_employees SET ${employeeColumn}=?,updated_at=? WHERE id=? AND main_company_id=?`).bind(normalized, nowIso(), employeeId, auth.company));
+      if (key === "status") {
+        const nextActivePassive = upper(normalized).includes("PAS") ? "Pasif" : "Aktif";
+        statements.push(c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,active_passive,updated_at)
+          VALUES (?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET active_passive=excluded.active_passive,updated_at=excluded.updated_at`)
+          .bind(employeeId, auth.company, nextActivePassive, nowIso()));
+      }
     } else {
       statements.push(c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,${cardColumn},updated_at) VALUES (?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET ${cardColumn}=excluded.${cardColumn},updated_at=excluded.updated_at`).bind(employeeId, auth.company, normalized, nowIso()));
     }
