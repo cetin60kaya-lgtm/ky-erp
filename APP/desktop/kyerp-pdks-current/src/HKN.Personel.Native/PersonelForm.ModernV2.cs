@@ -274,21 +274,8 @@ public partial class PersonelForm
 
     Button ModernActionButton(string text, bool primary, Action action, int width, bool danger = false)
     {
-        var button = new Button
-        {
-            Text = text,
-            Width = width,
-            Height = 30,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = primary ? UiPrimary : UiSurface,
-            ForeColor = primary ? Color.White : danger ? Color.FromArgb(185,28,28) : UiText,
-            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
-            Cursor = Cursors.Hand,
-            Margin = new Padding(8, 0, 0, 0)
-        };
-        button.FlatAppearance.BorderColor = primary ? UiPrimary : danger ? Color.FromArgb(254,202,202) : UiBorder;
-        button.FlatAppearance.BorderSize = 1;
-        button.Click += (_,_) => action();
+        var button=PdksUiKit.Button(text,width,primary?PdksActionRole.Primary:danger?PdksActionRole.Danger:PdksActionRole.Secondary,action);
+        button.Height=30;button.MinimumSize=new Size(width,30);button.MaximumSize=new Size(width,30);
         return button;
     }
 
