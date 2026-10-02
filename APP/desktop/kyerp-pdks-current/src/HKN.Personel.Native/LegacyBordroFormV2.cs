@@ -60,28 +60,42 @@ public sealed class LegacyBordroForm : Form
     void Build()
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(16), BackColor = Color.FromArgb(244,247,251) };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
 
         var periodCard = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(18, 12, 18, 10), Margin = new Padding(0, 0, 0, 10) };
         periodCard.Paint += (_,e) => { using var pen = new Pen(Color.FromArgb(226,232,240)); e.Graphics.DrawRectangle(pen,0,0,Math.Max(0,periodCard.Width-1),Math.Max(0,periodCard.Height-1)); };
-        var periodLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, BackColor = Color.White };
-        periodLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        var periodLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, BackColor = Color.White };
+        periodLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        periodLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         periodLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         periodLayout.Controls.Add(new Label { Text = "Bordro Merkezi", Dock = DockStyle.Fill, Font = new Font("Segoe UI",11f,FontStyle.Bold), ForeColor = Color.FromArgb(15,23,42), TextAlign = ContentAlignment.MiddleLeft },0,0);
-        var top = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true, BackColor = Color.White, Padding = new Padding(0,4,0,0) };
-        top.Controls.Add(Caption("Yıl"));
-        top.Controls.Add(year);
-        top.Controls.Add(Caption("Ay", 16));
-        top.Controls.Add(month);
-        top.Controls.Add(Caption("Bordro Türü", 20));
-        top.Controls.Add(type);
-        top.Controls.Add(Btn("Göster", LoadData, 92, true));
-        top.Controls.Add(Btn("Alanlar / Sıralama", () => GridLayoutPersistence.ShowEditor(this, grid, LayoutKey, "Bordro Alanları / Sıralama"), 145));
-        top.Controls.Add(Btn("Düzeni Kilitle", ToggleLock, 125));
-        top.Controls.Add(summary);
-        periodLayout.Controls.Add(top,0,1);
+
+        var filters = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 9, RowCount = 1, BackColor = Color.White };
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 38));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 86));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        filters.Controls.Add(Caption("Yıl"),0,0); year.Dock=DockStyle.Fill; year.Margin=new Padding(0,4,10,6); filters.Controls.Add(year,1,0);
+        filters.Controls.Add(Caption("Ay"),2,0); month.Dock=DockStyle.Fill; month.Margin=new Padding(0,4,10,6); filters.Controls.Add(month,3,0);
+        filters.Controls.Add(Caption("Tür"),4,0); type.Dock=DockStyle.Fill; type.Margin=new Padding(0,4,10,6); filters.Controls.Add(type,5,0);
+
+        var show = Btn("Göster", LoadData, 88, true); show.Dock=DockStyle.Fill; show.Margin=new Padding(0,4,8,6); filters.Controls.Add(show,6,0);
+        var layout = Btn("Alanlar / Sıralama", () => GridLayoutPersistence.ShowEditor(this, grid, LayoutKey, "Bordro Alanları / Sıralama"), 140); layout.Dock=DockStyle.Fill; layout.Margin=new Padding(0,4,8,6); filters.Controls.Add(layout,7,0);
+        var lockButton = Btn("Düzeni Kilitle", ToggleLock, 118); lockButton.Dock=DockStyle.Left; lockButton.Margin=new Padding(0,4,8,6); filters.Controls.Add(lockButton,8,0);
+        periodLayout.Controls.Add(filters,0,1);
+
+        summary.Dock = DockStyle.Fill;
+        summary.Padding = new Padding(2,4,0,0);
+        summary.ForeColor = Color.FromArgb(100,116,139);
+        periodLayout.Controls.Add(summary,0,2);
         periodCard.Controls.Add(periodLayout);
         root.Controls.Add(periodCard, 0, 0);
 
