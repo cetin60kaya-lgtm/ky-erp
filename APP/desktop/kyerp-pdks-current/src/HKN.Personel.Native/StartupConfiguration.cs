@@ -72,7 +72,7 @@ internal static class StartupConfiguration
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Bağlantı kurulamadı. Ayarları kontrol edin.\n\n" + ex.Message, "KYERP PDKS", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                PdksErrorPresenter.Show(null,ex,"KYERP PDKS",MessageBoxIcon.Error,"Startup.DatabaseConnection");
                 current = PdksOptions.FromEnvironment();
                 continue;
             }
