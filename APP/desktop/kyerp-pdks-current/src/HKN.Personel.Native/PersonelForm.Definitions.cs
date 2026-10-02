@@ -238,7 +238,7 @@ public partial class PersonelForm
         void Safe(Action action)
         {
             try{action();}
-            catch(Exception ex){MessageBox.Show(ex.Message,"Dönem Tanımlamaları",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+            catch(Exception ex){PdksErrorPresenter.Show(DialogOwner(),ex,"Dönem Tanımlamaları",MessageBoxIcon.Warning,"Definitions.Periods");}
         }
 
         list.SelectionChanged+=(_,_)=>{if(!save.Enabled)LoadSelected();};
@@ -251,53 +251,80 @@ public partial class PersonelForm
         deleteAll.Click+=(_,_)=>Safe(()=>{if(MessageBox.Show("Bütün dönem kayıtları silinecek. Devam edilsin mi?","Dönem Tanımlamaları",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;Exec("delete from DONEM");LoadPeriods();RefreshGrid();});
 
         try{BindGroups();SetEditMode(false);RefreshGrid();}
-        catch(Exception ex){MessageBox.Show("Dönemler okunamadı: "+ex.Message,"Dönem Tanımlamaları",MessageBoxButtons.OK,MessageBoxIcon.Error);return;}
+        catch(Exception ex){PdksErrorPresenter.Show(DialogOwner(),ex,"Dönem Tanımlamaları",MessageBoxIcon.Error,"Definitions.Periods.Load");return;}
         dialog.ShowDialog(DialogOwner()); LoadPeriods();
     }
 
     static Control WrapValue(Control value,string suffix)
     {
         var flow=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Margin=Padding.Empty};
-        flow.Controls.Add(value); if(!string.IsNullOrWhiteSpace(suffix)) flow.Controls.Add(new Label{Text=suffix,AutoSize=true,Padding=new Padding(3,4,0,0)});
+        flow.Controls.Add(value); if(!string.IsNullOrWhiteSpace(suffix)) flow.Controls.Add(new Label{Text=suffix,AutoSize=true,Padding=new Padding(3,4,0,0),ForeColor=PdksAppearance.Current.Muted});
         return flow;
     }
 
     static void AddPeriodRow(TableLayoutPanel table,int row,string label,Control control)
     {
-        table.Controls.Add(new Label{Text=label,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,row);
+        table.Controls.Add(PdksUiKit.FieldLabel(label),0,row);
         table.Controls.Add(control,1,row); table.SetColumnSpan(control,3);
     }
 
     public void ShowWorkingDateDialog()
     {
+        var p=PdksAppearance.Current;
         using var dialog=new Form
         {
-            Text="Çalışma Tarihi",StartPosition=FormStartPosition.CenterParent,ClientSize=new Size(430,185),
+            Text="Çalışma Tarihi",StartPosition=FormStartPosition.CenterParent,ClientSize=new Size(520,235),
             FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,ShowInTaskbar=false,
-            Font=new Font("Segoe UI",9f),BackColor=Color.FromArgb(246,249,253)
+            Font=new Font("Segoe UI",9f),BackColor=p.Canvas
         };
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(24)};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,42));root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        root.Controls.Add(new Label{Text="İşlem yapılacak çalışma tarihini seçin",Dock=DockStyle.Fill,Font=new Font("Segoe UI",12f,FontStyle.Bold),ForeColor=Color.FromArgb(27,44,68)},0,0);
-        var date=new DateTimePicker{Format=DateTimePickerFormat.Long,Value=SelectedWorkingDate,Dock=DockStyle.Fill};root.Controls.Add(date,0,1);
-        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,8,0,0)};
-        var select=new Button{Text="Tarihi Kullan",Width=130,Height=36,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(36,107,230),ForeColor=Color.White,Font=new Font("Segoe UI",9f,FontStyle.Bold),DialogResult=DialogResult.OK};select.FlatAppearance.BorderSize=0;actions.Controls.Add(select);root.Controls.Add(actions,0,2);dialog.Controls.Add(root);dialog.AcceptButton=select;
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(18),BackColor=p.Canvas};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,76));root.RowStyles.Add(new RowStyle(SizeType.Absolute,62));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+
+        var header=PdksUiKit.Card(16);
+        var headerLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Surface};
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,30));headerLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        headerLayout.Controls.Add(new Label{Text="Çalışma Tarihi",Dock=DockStyle.Fill,Font=new Font("Segoe UI",12f,FontStyle.Bold),ForeColor=p.Text,TextAlign=ContentAlignment.MiddleLeft},0,0);
+        headerLayout.Controls.Add(new Label{Text="Rapor, puantaj ve dönem işlemlerinde kullanılacak tarihi seçin.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",8.6f),ForeColor=p.Muted,TextAlign=ContentAlignment.MiddleLeft},0,1);
+        header.Controls.Add(headerLayout);root.Controls.Add(header,0,0);
+
+        var dateCard=PdksUiKit.Card(12);
+        var dateLayout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,BackColor=p.Surface};
+        dateLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,120));dateLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        dateLayout.Controls.Add(PdksUiKit.FieldLabel("Çalışma Tarihi"),0,0);
+        var date=new DateTimePicker{Format=DateTimePickerFormat.Long,Value=SelectedWorkingDate,Dock=DockStyle.Fill,Margin=new Padding(0,6,0,6)};dateLayout.Controls.Add(date,1,0);
+        dateCard.Controls.Add(dateLayout);root.Controls.Add(dateCard,0,1);
+
+        var actions=PdksUiKit.ActionBar(true,p.Canvas);
+        var cancel=PdksUiKit.Button("Vazgeç",96,PdksActionRole.Quiet);cancel.DialogResult=DialogResult.Cancel;
+        var select=PdksUiKit.Button("Tarihi Kullan",130,PdksActionRole.Primary);select.DialogResult=DialogResult.OK;
+        actions.Controls.Add(cancel);actions.Controls.Add(select);root.Controls.Add(actions,0,2);
+        dialog.Controls.Add(root);dialog.AcceptButton=select;dialog.CancelButton=cancel;
         if(dialog.ShowDialog(DialogOwner())==DialogResult.OK) SelectedWorkingDate=date.Value.Date;
     }
     bool NameDialog(string title,string current,out string value)
     {
         using var dialog=Dialog(title,430,155);dialog.FormBorderStyle=FormBorderStyle.FixedDialog;
         var panel=Root(2);panel.ColumnCount=2;panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,90));panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        panel.Controls.Add(new Label{Text="Tanım adı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,0);
+        panel.Controls.Add(PdksUiKit.FieldLabel("Tanım adı"),0,0);
         var input=new TextBox{Text=current,Dock=DockStyle.Fill};panel.Controls.Add(input,1,0);
         var ok=ClassicDialogButton("Kaydet",90);ok.DialogResult=DialogResult.OK;panel.Controls.Add(ok,1,1);
         dialog.Controls.Add(panel);dialog.AcceptButton=ok;var accepted=dialog.ShowDialog(DialogOwner())==DialogResult.OK;value=input.Text;return accepted;
     }
 
-    Button ClassicDialogButton(string text,int width)=>new(){Text=text,Width=width,Height=30,ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold),UseVisualStyleBackColor=true};
-    Form Dialog(string title,int width,int height)=>new(){Text=title,StartPosition=FormStartPosition.CenterParent,Size=new Size(width,height),MinimumSize=new Size(Math.Max(220,width-100),Math.Max(150,height-100)),Font=Font,ShowInTaskbar=false};
-    static TableLayoutPanel Root(int rows)=>new(){Dock=DockStyle.Fill,RowCount=rows,Padding=new Padding(8)};
-    static DataGridView Grid()=>new(){Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
+    Button ClassicDialogButton(string text,int width)
+    {
+        var role=text.Contains("Kaydet",StringComparison.OrdinalIgnoreCase) || text.Contains("Ekle",StringComparison.OrdinalIgnoreCase)
+            ? PdksActionRole.Primary
+            : text.Contains("Sil",StringComparison.OrdinalIgnoreCase)
+                ? PdksActionRole.Danger
+                : text.Contains("Kapat",StringComparison.OrdinalIgnoreCase) || text.Contains("Vazgeç",StringComparison.OrdinalIgnoreCase)
+                    ? PdksActionRole.Quiet
+                    : PdksActionRole.Secondary;
+        var b=PdksUiKit.Button(text,width,role);b.Height=30;b.MinimumSize=new Size(width,30);b.MaximumSize=new Size(width,30);return b;
+    }
+    Form Dialog(string title,int width,int height)=>new(){Text=title,StartPosition=FormStartPosition.CenterParent,Size=new Size(width,height),MinimumSize=new Size(Math.Max(220,width-100),Math.Max(150,height-100)),Font=Font,ShowInTaskbar=false,BackColor=PdksAppearance.Current.Canvas};
+    static TableLayoutPanel Root(int rows)=>new(){Dock=DockStyle.Fill,RowCount=rows,Padding=new Padding(14),BackColor=PdksAppearance.Current.Surface};
+    static DataGridView Grid()=>new(){Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=PdksAppearance.Current.Surface,BorderStyle=BorderStyle.None,RowHeadersVisible=false,ColumnHeadersHeight=35};
     static DataGridViewRow SelectedRow(DataGridView grid)=>grid.CurrentRow??throw new InvalidOperationException("Bir satır seçin.");
     static string RequiredName(string value)=>string.IsNullOrWhiteSpace(value)?throw new ArgumentException("Ad alanı zorunludur."):value.Trim();
     sealed record DefinitionType(string Label,string Table,OrganizationDefinitionKind Kind);
