@@ -175,7 +175,7 @@ public sealed partial class MainShellForm
             ImageAlign = ContentAlignment.MiddleLeft,
             TextImageRelation = TextImageRelation.ImageBeforeText,
             Height = 44,
-            Width = 186,
+            Width = 176,
             FlatStyle = FlatStyle.Flat,
             BackColor = selected ? ShellNavyHover : ShellNavy,
             ForeColor = selected ? Color.White : Color.FromArgb(203, 213, 225),
@@ -207,7 +207,7 @@ public sealed partial class MainShellForm
     Button CompactNavButton(string text, PdksToolbarIcon icon, Action action)
     {
         var button = NavButton(text, icon, action);
-        button.Width = 186;
+        button.Width = 176;
         button.Height = 38;
         button.Font = new Font("Segoe UI", 8.8f, FontStyle.Bold);
         return button;
