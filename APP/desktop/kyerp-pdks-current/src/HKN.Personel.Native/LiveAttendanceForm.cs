@@ -122,6 +122,30 @@ public sealed partial class LiveAttendanceForm : Form
         return label;
     }
 
+    static Color StatusCardBack(string kind)
+    {
+        var p=PdksAppearance.Current;
+        if(p.IsDark)
+        {
+            return kind switch
+            {
+                "success" => Color.FromArgb(18,55,42),
+                "warning" => Color.FromArgb(69,52,21),
+                "danger" => Color.FromArgb(69,27,31),
+                "info" => p.PrimarySoft,
+                _ => p.SurfaceAlt
+            };
+        }
+        return kind switch
+        {
+            "success" => Color.FromArgb(236,253,245),
+            "warning" => Color.FromArgb(255,251,235),
+            "danger" => Color.FromArgb(254,242,242),
+            "info" => p.PrimarySoft,
+            _ => p.SurfaceAlt
+        };
+    }
+
     void SelectStatusTab(string title)
     {
         var target = title switch
@@ -155,22 +179,22 @@ public sealed partial class LiveAttendanceForm : Form
             if(syncDevice&&date.Value.Date==DateTime.Today)
             {
                 var state=await TerminalSyncService.CaptureLiveAsync("Canlı ekran",closing.Token);
-                if(state.ReadCount>0)device.ForeColor=state.DeviceCleared?Color.DarkGreen:Color.DarkOrange;
+                if(state.ReadCount>0)device.ForeColor=state.DeviceCleared?PdksAppearance.Current.Success:PdksAppearance.Current.Warning;
             }
             ShowLastSync();
             LoadDay(date.Value.Date,forceUi);
         }
         catch(OperationCanceledException){ }
-        catch(Exception ex){device.Text="Denetim hatası: "+ex.Message;device.ForeColor=Color.DarkRed;}
+        catch(Exception ex){device.Text="Denetim hatası: "+ex.Message;device.ForeColor=PdksAppearance.Current.Danger;}
         finally{busy=false;if(!IsDisposed){refresh.Enabled=true;syncNow.Enabled=true;}}
     }
 
     void ShowLastSync()
     {
         var s=TerminalSyncService.ReadLiveState();
-        if(s?.LastAt is null){device.Text="Son eşitleme: yok";device.ForeColor=Color.FromArgb(202,118,35);return;}
+        if(s?.LastAt is null){device.Text="Son eşitleme: yok";device.ForeColor=PdksAppearance.Current.Warning;return;}
         device.Text=$"Son eşitleme {s.LastAt:dd.MM HH:mm:ss}   Okunan {s.ReadCount}   Eklenen/Güncellenen {s.Inserted}/{s.Updated}";
-        device.ForeColor=s.ReadCount==0?Color.DarkGreen:Color.DarkOrange;
+        device.ForeColor=s.ReadCount==0?PdksAppearance.Current.Success:PdksAppearance.Current.Warning;
     }
 
     static ProfiledTerminalRecord ToRecord(TerminalDevicePunch punch)
