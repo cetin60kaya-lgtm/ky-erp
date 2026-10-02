@@ -11,25 +11,20 @@ public sealed partial class MainShellForm
     Label? modernClock;
     System.Windows.Forms.Timer? modernClockTimer;
     Button? activeNavButton;
-
-    static readonly Color ShellNavy = Color.FromArgb(15, 23, 42);
-    static readonly Color ShellNavyHover = Color.FromArgb(30, 41, 59);
-    static readonly Color ShellCanvas = Color.FromArgb(244, 247, 251);
-    static readonly Color ShellSurface = Color.White;
-    static readonly Color ShellText = Color.FromArgb(15, 23, 42);
-    static readonly Color ShellMuted = Color.FromArgb(100, 116, 139);
-    static readonly Color ShellPrimary = Color.FromArgb(37, 99, 235);
-    static readonly Color ShellBorder = Color.FromArgb(226, 232, 240);
+    readonly Dictionary<PdksCommandId,Button> modernNavButtons = [];
+    bool appearanceHooked;
 
     void BuildModernShell()
     {
         if (modernShell is not null) return;
+        var p=PdksAppearance.Current;
 
         MainMenuStrip!.Visible = false;
         tool.Visible = false;
         status.Visible = false;
 
-        modernShell = new Panel { Dock = DockStyle.Fill, BackColor = ShellCanvas };
+        modernNavButtons.Clear();
+        modernShell = new Panel { Dock = DockStyle.Fill, BackColor = p.Canvas };
 
         var frame = new TableLayoutPanel
         {
@@ -38,9 +33,9 @@ public sealed partial class MainShellForm
             RowCount = 1,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
-            BackColor = ShellCanvas
+            BackColor = p.Canvas
         };
-        frame.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 214));
+        frame.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 224));
         frame.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         frame.Controls.Add(BuildModernSidebar(), 0, 0);
@@ -52,17 +47,17 @@ public sealed partial class MainShellForm
             RowCount = 3,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
-            BackColor = ShellCanvas
+            BackColor = p.Canvas
         };
-        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
         main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         main.Controls.Add(BuildModernTopbar(), 0, 0);
 
         var content = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = ShellCanvas,
+            BackColor = p.Canvas,
             Padding = new Padding(18, 14, 18, 16),
             Margin = Padding.Empty
         };
@@ -76,25 +71,59 @@ public sealed partial class MainShellForm
         modernShell.Controls.Add(frame);
         Controls.Add(modernShell);
         modernShell.BringToFront();
-        SetModernPage("Genel Bakış", "Günlük personel, puantaj ve bordro işlemleri");
+
+        if (!appearanceHooked)
+        {
+            appearanceHooked=true;
+            PdksAppearance.Changed += AppearanceChanged;
+            Disposed += (_,_) => PdksAppearance.Changed -= AppearanceChanged;
+        }
+
+        SetModernPage("Genel Bakış", "Günün personel hareketleri ve hızlı işlemler");
+        SelectNavForCommand(PdksCommandId.Home);
+    }
+
+    void AppearanceChanged(object? sender,EventArgs e)
+    {
+        if(IsDisposed)return;
+        void rebuild()
+        {
+            var title=modernPageTitle?.Text ?? "Genel Bakış";
+            var hint=modernPageHint?.Text ?? "KY PDKS çalışma alanı";
+            var selected=modernNavButtons.FirstOrDefault(x=>x.Value==activeNavButton).Key;
+
+            if(workspace.Parent is not null)workspace.Parent.Controls.Remove(workspace);
+            if(modernShell is not null)
+            {
+                Controls.Remove(modernShell);
+                modernShell.Dispose();
+            }
+            modernShell=null;modernPageTitle=null;modernPageHint=null;modernDbState=null;modernClock=null;activeNavButton=null;
+            modernClockTimer?.Stop();modernClockTimer?.Dispose();modernClockTimer=null;
+            BuildModernShell();
+            SetModernPage(title,hint);
+            if(Enum.IsDefined(selected))SelectNavForCommand(selected);
+        }
+        if(InvokeRequired)BeginInvoke((Action)rebuild);else rebuild();
     }
 
     Control BuildModernSidebar()
     {
+        var p=PdksAppearance.Current;
         var sidebar = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = ShellNavy,
-            Padding = new Padding(12, 14, 12, 12)
+            BackColor = p.Sidebar,
+            Padding = new Padding(14, 14, 14, 12)
         };
 
-        var brand = new Panel { Dock = DockStyle.Top, Height = 76, BackColor = ShellNavy };
+        var brand = new Panel { Dock = DockStyle.Top, Height = 72, BackColor = p.Sidebar };
         var badge = new RoundedLabel
         {
             Text = "KY",
-            Location = new Point(8, 10),
+            Location = new Point(6, 8),
             Size = new Size(42, 42),
-            BackColor = ShellPrimary,
+            BackColor = p.Primary,
             ForeColor = Color.White,
             Font = new Font("Segoe UI", 12.5f, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleCenter,
@@ -104,18 +133,18 @@ public sealed partial class MainShellForm
         brand.Controls.Add(new Label
         {
             Text = "KY PDKS",
-            Location = new Point(62, 8),
-            Size = new Size(122, 25),
-            ForeColor = Color.White,
+            Location = new Point(60, 7),
+            Size = new Size(132, 24),
+            ForeColor = p.SidebarText,
             Font = new Font("Segoe UI", 12f, FontStyle.Bold),
             TextAlign = ContentAlignment.BottomLeft
         });
         brand.Controls.Add(new Label
         {
             Text = branding.ReportHeader,
-            Location = new Point(62, 34),
-            Size = new Size(128, 22),
-            ForeColor = Color.FromArgb(148, 163, 184),
+            Location = new Point(60, 33),
+            Size = new Size(136, 22),
+            ForeColor = p.SidebarMuted,
             Font = new Font("Segoe UI", 8.2f),
             AutoEllipsis = true
         });
@@ -127,38 +156,42 @@ public sealed partial class MainShellForm
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
             AutoScroll = true,
-            BackColor = ShellNavy,
-            Padding = new Padding(0, 8, 0, 0)
+            BackColor = p.Sidebar,
+            Padding = new Padding(0, 6, 0, 0)
         };
-        nav.Controls.Add(NavButton("Genel Bakış", PdksToolbarIcon.Home, ShowHome, true));
-        nav.Controls.Add(NavButton("Canlı Denetim", PdksToolbarIcon.Live, OpenLiveAttendance));
-        nav.Controls.Add(NavButton("Giriş / Çıkış", PdksToolbarIcon.EntryExit, OpenLegacyGirisCikis));
-        nav.Controls.Add(NavButton("Personel", PdksToolbarIcon.Personnel, OpenPersonel));
-        nav.Controls.Add(NavButton("Puantaj", PdksToolbarIcon.Timesheet, () => OpenPuantaj(1)));
-        nav.Controls.Add(NavButton("Bordro", PdksToolbarIcon.Payroll, () => OpenBordro(0)));
-        nav.Controls.Add(NavButton("Raporlar", PdksToolbarIcon.Results, () => OpenReportCenter(null)));
-        nav.Controls.Add(NavButton("Tanımlar", PdksToolbarIcon.Departments, () => OpenDefinitions("Bölümler")));
+
+        foreach(var group in VisiblePrimaryCommands().GroupBy(x=>x.Group))
+        {
+            nav.Controls.Add(SectionLabel(group.Key));
+            foreach(var command in group.OrderBy(x=>x.Order))
+                nav.Controls.Add(NavButton(command));
+        }
         sidebar.Controls.Add(nav);
 
         var bottom = new TableLayoutPanel
         {
             Dock = DockStyle.Bottom,
-            Height = 112,
+            Height = 102,
             RowCount = 3,
-            BackColor = ShellNavy,
+            BackColor = p.Sidebar,
             Padding = new Padding(0, 6, 0, 0)
         };
-        bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         bottom.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        bottom.Controls.Add(CompactNavButton("Terminal", PdksToolbarIcon.Transfer, OpenTerminalCenter), 0, 0);
-        bottom.Controls.Add(CompactNavButton("Yönetim", PdksToolbarIcon.Groups, ShowManagementMenu), 0, 1);
+
+        var manage=CompactButton("Yönetim",PdksToolbarIcon.Groups);
+        manage.Click+=(_,_)=>ShowManagementMenu(manage);
+        var theme=CompactButton($"Tema • {PdksAppearance.ModeLabel}",PdksToolbarIcon.Home);
+        theme.Click+=(_,_)=>OpenThemeSettings();
+        bottom.Controls.Add(manage,0,0);
+        bottom.Controls.Add(theme,0,1);
         bottom.Controls.Add(new Label
         {
-            Text = "v6.4",
+            Text = $"v6.4  •  {PdksAppearance.AccentLabel}",
             Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(100, 116, 139),
-            Font = new Font("Segoe UI", 8f),
+            ForeColor = p.SidebarMuted,
+            Font = new Font("Segoe UI", 7.8f),
             TextAlign = ContentAlignment.MiddleLeft,
             Padding = new Padding(10, 2, 0, 0)
         }, 0, 2);
@@ -166,90 +199,151 @@ public sealed partial class MainShellForm
         return sidebar;
     }
 
-    Button NavButton(string text, PdksToolbarIcon icon, Action action, bool selected = false)
+    Control SectionLabel(string text)
     {
+        var p=PdksAppearance.Current;
+        return new Label
+        {
+            Text=text,
+            Width=182,
+            Height=25,
+            Margin=new Padding(0,7,0,2),
+            Padding=new Padding(10,5,0,0),
+            ForeColor=p.SidebarMuted,
+            BackColor=p.Sidebar,
+            Font=new Font("Segoe UI",7.4f,FontStyle.Bold),
+            TextAlign=ContentAlignment.MiddleLeft
+        };
+    }
+
+    Button NavButton(PdksCommandDescriptor command)
+    {
+        var p=PdksAppearance.Current;
         var button = new Button
         {
-            Text = text,
-            Image = PdksToolbarIcons.Create(icon),
+            Text = command.Title,
+            Image = PdksToolbarIcons.Create(command.Icon),
             ImageAlign = ContentAlignment.MiddleLeft,
             TextImageRelation = TextImageRelation.ImageBeforeText,
-            Height = 44,
-            Width = 176,
+            Height = 42,
+            Width = 182,
             FlatStyle = FlatStyle.Flat,
-            BackColor = selected ? ShellNavyHover : ShellNavy,
-            ForeColor = selected ? Color.White : Color.FromArgb(203, 213, 225),
-            Font = new Font("Segoe UI", 9.2f, FontStyle.Bold),
+            BackColor = p.Sidebar,
+            ForeColor = p.SidebarMuted,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft,
             Cursor = Cursors.Hand,
-            Margin = new Padding(0, 0, 0, 3),
-            Padding = new Padding(12, 0, 6, 0)
+            Margin = new Padding(0, 0, 0, 2),
+            Padding = new Padding(10, 0, 5, 0),
+            Tag = command.Id
         };
         button.FlatAppearance.BorderSize = 0;
-        button.FlatAppearance.MouseOverBackColor = ShellNavyHover;
-        button.FlatAppearance.MouseDownBackColor = Color.FromArgb(51, 65, 85);
-        button.Click += (_, _) =>
+        button.FlatAppearance.MouseOverBackColor = p.SidebarHover;
+        button.FlatAppearance.MouseDownBackColor = p.SidebarHover;
+        button.Click += (_, _) => ExecuteCommand(command.Id);
+        modernNavButtons[command.Id]=button;
+        return button;
+    }
+
+    Button CompactButton(string text,PdksToolbarIcon icon)
+    {
+        var p=PdksAppearance.Current;
+        var button=new Button
         {
-            if (activeNavButton is not null && !activeNavButton.IsDisposed)
-            {
-                activeNavButton.BackColor = ShellNavy;
-                activeNavButton.ForeColor = Color.FromArgb(203, 213, 225);
-            }
-            activeNavButton = button;
-            button.BackColor = ShellNavyHover;
-            button.ForeColor = Color.White;
-            action();
+            Text=text,
+            Image=PdksToolbarIcons.Create(icon),
+            ImageAlign=ContentAlignment.MiddleLeft,
+            TextImageRelation=TextImageRelation.ImageBeforeText,
+            Width=182,
+            Height=34,
+            FlatStyle=FlatStyle.Flat,
+            BackColor=p.Sidebar,
+            ForeColor=p.SidebarMuted,
+            Font=new Font("Segoe UI",8.6f,FontStyle.Bold),
+            TextAlign=ContentAlignment.MiddleLeft,
+            Padding=new Padding(10,0,5,0),
+            Cursor=Cursors.Hand,
+            Margin=Padding.Empty
         };
-        if (selected) activeNavButton = button;
+        button.FlatAppearance.BorderSize=0;
+        button.FlatAppearance.MouseOverBackColor=p.SidebarHover;
         return button;
     }
 
-    Button CompactNavButton(string text, PdksToolbarIcon icon, Action action)
+    void SelectNavForCommand(PdksCommandId id)
     {
-        var button = NavButton(text, icon, action);
-        button.Width = 176;
-        button.Height = 38;
-        button.Font = new Font("Segoe UI", 8.8f, FontStyle.Bold);
-        return button;
+        var p=PdksAppearance.Current;
+        var primary=PrimaryParent(id);
+        if(!modernNavButtons.TryGetValue(primary,out var button))return;
+
+        if(activeNavButton is not null && !activeNavButton.IsDisposed)
+        {
+            activeNavButton.BackColor=p.Sidebar;
+            activeNavButton.ForeColor=p.SidebarMuted;
+        }
+        activeNavButton=button;
+        button.BackColor=p.SidebarHover;
+        button.ForeColor=p.SidebarText;
     }
 
-    void ShowManagementMenu()
+    static PdksCommandId PrimaryParent(PdksCommandId id) => id switch
     {
+        PdksCommandId.Leave or PdksCommandId.EarningsDeductions or PdksCommandId.PayrollPayments => PdksCommandId.Personnel,
+        PdksCommandId.TimesheetDaily or PdksCommandId.TimesheetResults => PdksCommandId.TimesheetMonthly,
+        PdksCommandId.PayrollAdjustment or PdksCommandId.PayrollPayslip or PdksCommandId.PayrollOvertime => PdksCommandId.PayrollGeneral,
+        PdksCommandId.Groups or PdksCommandId.Periods => PdksCommandId.Definitions,
+        PdksCommandId.TerminalSettings or PdksCommandId.DataSources => PdksCommandId.TerminalCenter,
+        _ => id
+    };
+
+    void ShowManagementMenu(Control anchor)
+    {
+        var p=PdksAppearance.Current;
         var menu = new ContextMenuStrip
         {
             Font = new Font("Segoe UI", 9f),
-            BackColor = Color.White,
+            BackColor = p.Surface,
+            ForeColor = p.Text,
             ShowImageMargin = false,
             Padding = new Padding(6)
         };
-        void Add(string text, Action action, bool enabled = true)
-        {
-            var item = new ToolStripMenuItem(text) { Enabled = enabled, Padding = new Padding(8, 5, 8, 5) };
-            item.Click += (_, _) => action();
-            menu.Items.Add(item);
-        }
 
-        Add("Dönemler", () => OpenDialogModule(PdksModule.Donemler));
-        Add("Kazanç / Kesinti / Avans", OpenLegacyKazancKesinti);
-        Add("Aylık Düzeltme / Hızlı Ödeme", () => ShowModule(new MonthlyPayrollAdjustmentForm(), PdksModule.Bordro),
-            currentUser.IsCompanyResponsible || currentUser.IsSuperAdmin);
-        menu.Items.Add(new ToolStripSeparator());
-        Add("Entegrasyonlar", () => new IntegrationCenterForm(this, currentUser).ShowDialog(this));
-        Add("İşlem Geçmişi", () => new AuditHistoryForm().ShowDialog(this));
-        Add("Kullanıcı / Yetki", OpenUserManagement, currentUser.IsAdmin);
-        menu.Show(Cursor.Position);
+        foreach(var group in VisibleManagementGroups())
+        {
+            if(group.Key=="GÖRÜNÜM")continue;
+            var groupItem=new ToolStripMenuItem(group.Key)
+            {
+                Font=new Font("Segoe UI",8.8f,FontStyle.Bold),
+                ForeColor=p.Text,
+                Padding=new Padding(8,5,8,5)
+            };
+            foreach(var command in group.OrderBy(x=>x.Order))
+            {
+                var item=new ToolStripMenuItem(command.Title)
+                {
+                    ToolTipText=command.Hint,
+                    ForeColor=p.Text,
+                    Padding=new Padding(8,5,8,5)
+                };
+                item.Click+=(_,_)=>ExecuteCommand(command.Id);
+                groupItem.DropDownItems.Add(item);
+            }
+            menu.Items.Add(groupItem);
+        }
+        menu.Show(anchor,new Point(anchor.Width,0));
     }
 
     Control BuildModernTopbar()
     {
-        var bar = new Panel { Dock = DockStyle.Fill, BackColor = ShellSurface, Padding = new Padding(22, 8, 22, 8) };
+        var p=PdksAppearance.Current;
+        var bar = new Panel { Dock = DockStyle.Fill, BackColor = p.Surface, Padding = new Padding(22, 8, 22, 8) };
         bar.Paint += (_, e) =>
         {
-            using var pen = new Pen(ShellBorder);
+            using var pen = new Pen(PdksAppearance.Current.Border);
             e.Graphics.DrawLine(pen, 0, bar.Height - 1, bar.Width, bar.Height - 1);
         };
 
-        var left = new TableLayoutPanel { Dock = DockStyle.Left, Width = 720, RowCount = 2, BackColor = ShellSurface };
+        var left = new TableLayoutPanel { Dock = DockStyle.Left, Width = 700, RowCount = 2, BackColor = p.Surface };
         left.RowStyles.Add(new RowStyle(SizeType.Percent, 60));
         left.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
         modernPageTitle = new Label
@@ -258,15 +352,15 @@ public sealed partial class MainShellForm
             Text = "Genel Bakış",
             TextAlign = ContentAlignment.BottomLeft,
             Font = new Font("Segoe UI", 15f, FontStyle.Bold),
-            ForeColor = ShellText
+            ForeColor = p.Text
         };
         modernPageHint = new Label
         {
             Dock = DockStyle.Fill,
-            Text = "Günlük personel, puantaj ve bordro işlemleri",
+            Text = "Günün personel hareketleri ve hızlı işlemler",
             TextAlign = ContentAlignment.TopLeft,
             Font = new Font("Segoe UI", 8.7f),
-            ForeColor = ShellMuted
+            ForeColor = p.Muted
         };
         left.Controls.Add(modernPageTitle, 0, 0);
         left.Controls.Add(modernPageHint, 0, 1);
@@ -277,18 +371,18 @@ public sealed partial class MainShellForm
             Width = 430,
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
-            BackColor = ShellSurface,
+            BackColor = p.Surface,
             Padding = new Padding(0, 10, 0, 0)
         };
         var user = new RoundedLabel
         {
             AutoSize = false,
-            Width = 155,
+            Width = 150,
             Height = 34,
             Text = currentUser.UserName,
             TextAlign = ContentAlignment.MiddleCenter,
-            BackColor = Color.FromArgb(241, 245, 249),
-            ForeColor = ShellText,
+            BackColor = p.SurfaceAlt,
+            ForeColor = p.Text,
             Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
             Radius = 8,
             Margin = new Padding(10, 0, 0, 0)
@@ -296,21 +390,21 @@ public sealed partial class MainShellForm
         modernClock = new Label
         {
             AutoSize = false,
-            Width = 90,
+            Width = 80,
             Height = 34,
             Text = DateTime.Now.ToString("HH:mm"),
             TextAlign = ContentAlignment.MiddleCenter,
-            ForeColor = ShellMuted,
+            ForeColor = p.Muted,
             Font = new Font("Segoe UI", 8.8f, FontStyle.Bold)
         };
         var live = new Label
         {
             AutoSize = false,
-            Width = 120,
+            Width = 125,
             Height = 34,
             Text = "● SİSTEM AKTİF",
             TextAlign = ContentAlignment.MiddleCenter,
-            ForeColor = Color.FromArgb(22, 163, 74),
+            ForeColor = p.Success,
             Font = new Font("Segoe UI", 8.2f, FontStyle.Bold)
         };
         right.Controls.Add(user);
@@ -323,28 +417,28 @@ public sealed partial class MainShellForm
         modernClockTimer = new System.Windows.Forms.Timer { Interval = 15000 };
         modernClockTimer.Tick += (_, _) => { if (modernClock is not null) modernClock.Text = DateTime.Now.ToString("HH:mm"); };
         modernClockTimer.Start();
-        Disposed += (_, _) => modernClockTimer?.Stop();
         return bar;
     }
 
     Control BuildModernFooter()
     {
-        var bar = new Panel { Dock = DockStyle.Fill, BackColor = ShellSurface, Padding = new Padding(18, 0, 18, 0) };
+        var p=PdksAppearance.Current;
+        var bar = new Panel { Dock = DockStyle.Fill, BackColor = p.Surface, Padding = new Padding(18, 0, 18, 0) };
         modernDbState = new Label
         {
             Dock = DockStyle.Left,
-            Width = 620,
+            Width = 650,
             TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = ShellMuted,
+            ForeColor = p.Muted,
             Font = new Font("Segoe UI", 7.8f)
         };
         var version = new Label
         {
             Dock = DockStyle.Right,
-            Width = 150,
-            Text = "KY PDKS 6.4",
+            Width = 210,
+            Text = $"KY PDKS 6.4  •  {PdksAppearance.ModeLabel} / {PdksAppearance.AccentLabel}",
             TextAlign = ContentAlignment.MiddleRight,
-            ForeColor = ShellMuted,
+            ForeColor = p.Muted,
             Font = new Font("Segoe UI", 7.8f)
         };
         bar.Controls.Add(version);
@@ -363,14 +457,13 @@ public sealed partial class MainShellForm
     void RefreshModernDbState()
     {
         if (modernDbState is null) return;
+        var p=PdksAppearance.Current;
         var path = Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH", EnvironmentVariableTarget.User)
             ?? Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH");
         modernDbState.Text = StartupConfiguration.IsReady()
             ? "● Veritabanı bağlı  •  " + (Path.GetFileName(path) ?? "KY_PDKS_DATA.FDB")
             : "● Veritabanı bağlantısı bekleniyor";
-        modernDbState.ForeColor = StartupConfiguration.IsReady()
-            ? Color.FromArgb(22, 163, 74)
-            : Color.FromArgb(202, 118, 35);
+        modernDbState.ForeColor = StartupConfiguration.IsReady() ? p.Success : p.Warning;
     }
 
     sealed class RoundedLabel : Label
