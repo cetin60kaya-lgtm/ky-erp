@@ -39,7 +39,7 @@ public sealed class LegacyDataModuleForm : Form
         this.view = view;
         Text = Title(view);
         Font = new Font("Segoe UI", 9f);
-        BackColor = Color.FromArgb(246,249,253);
+        BackColor = PdksAppearance.Current.Canvas;
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
         MinimizeBox = true; MaximizeBox = true; ShowInTaskbar = false;
@@ -52,13 +52,18 @@ public sealed class LegacyDataModuleForm : Form
         Shown += (_,_) => ReloadData();
     }
 
-    static DataGridView NewGrid()=>new()
+    static DataGridView NewGrid()
     {
-        Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows=false,
-        MultiSelect = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells,
-        BackgroundColor = Color.White, RowHeadersWidth = 18, RowTemplate = { Height = 20 }, ColumnHeadersHeight = 20
-    };
+        var p=PdksAppearance.Current;
+        return new DataGridView
+        {
+            Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,
+            MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,
+            AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,
+            BackgroundColor=p.Surface,BorderStyle=BorderStyle.None,RowHeadersVisible=false,
+            RowTemplate={Height=31},ColumnHeadersHeight=36
+        };
+    }
 
     void ApplyLegacySize()
     {
@@ -77,13 +82,48 @@ public sealed class LegacyDataModuleForm : Form
 
     void BuildGridUi()
     {
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(5)};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,24));root.RowStyles.Add(new RowStyle(SizeType.Absolute,44));
-        var top=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(2,4,0,0)};
-        top.Controls.Add(new Label{Text="Tarih Aralığı",AutoSize=true,Padding=new Padding(0,7,4,0)});top.Controls.Add(from);top.Controls.Add(new Label{Text="ile",AutoSize=true,Padding=new Padding(4,7,4,0)});top.Controls.Add(to);
-        var show=LegacyButton("Göster",82,25);show.Click+=(_,_)=>ReloadData();top.Controls.Add(show);top.Controls.Add(new Label{Text="Ara",AutoSize=true,Padding=new Padding(12,7,4,0)});search.TextChanged+=(_,_)=>ApplySearch();top.Controls.Add(search);
-        var closeBar=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(4,4,4,0)};var close=LegacyButton("Kapat",88,28);close.DialogResult=DialogResult.Cancel;closeBar.Controls.Add(close);
-        root.Controls.Add(top,0,0);root.Controls.Add(grid,0,1);root.Controls.Add(status,0,2);root.Controls.Add(closeBar,0,3);Controls.Add(root);CancelButton=close;
+        var p=PdksAppearance.Current;
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(16),BackColor=p.Canvas};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,104));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
+
+        var filterCard=PdksUiKit.Card(16);
+        var filterRoot=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Surface,Margin=Padding.Empty};
+        filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,32));
+        filterRoot.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        filterRoot.Controls.Add(new Label{Text=Text,Dock=DockStyle.Fill,Font=new Font("Segoe UI",11.5f,FontStyle.Bold),ForeColor=p.Text,TextAlign=ContentAlignment.MiddleLeft},0,0);
+
+        var top=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,7,0,0),BackColor=p.Surface};
+        top.Controls.Add(new Label{Text="Tarih Aralığı",AutoSize=true,Padding=new Padding(0,8,4,0),ForeColor=p.Muted,Font=new Font("Segoe UI",8.4f,FontStyle.Bold)});
+        top.Controls.Add(from);
+        top.Controls.Add(new Label{Text="—",AutoSize=true,Padding=new Padding(4,8,4,0),ForeColor=p.Muted});
+        top.Controls.Add(to);
+        var show=PdksUiKit.Button("Göster",88,PdksActionRole.Primary,ReloadData);
+        top.Controls.Add(show);
+        top.Controls.Add(new Label{Text="Ara",AutoSize=true,Padding=new Padding(14,8,4,0),ForeColor=p.Muted,Font=new Font("Segoe UI",8.4f,FontStyle.Bold)});
+        search.Width=220;search.PlaceholderText="Kart, personel veya içerik ara...";
+        search.TextChanged+=(_,_)=>ApplySearch();
+        top.Controls.Add(search);
+        filterRoot.Controls.Add(top,0,1);
+        filterCard.Controls.Add(filterRoot);
+        root.Controls.Add(filterCard,0,0);
+
+        root.Controls.Add(new Label{Text="Kayıtlar",Dock=DockStyle.Fill,Font=new Font("Segoe UI",10.2f,FontStyle.Bold),ForeColor=p.Text,TextAlign=ContentAlignment.BottomLeft,Padding=new Padding(2,0,0,7)},0,1);
+        root.Controls.Add(grid,0,2);
+
+        var footer=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,BackColor=p.Canvas};
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,110));
+        status.ForeColor=p.Muted;status.Padding=new Padding(2,8,0,0);
+        footer.Controls.Add(status,0,0);
+        var close=PdksUiKit.Button("Kapat",92,PdksActionRole.Quiet,Close);close.Dock=DockStyle.Right;
+        footer.Controls.Add(close,1,0);
+        root.Controls.Add(footer,0,3);
+
+        Controls.Add(root);
+        CancelButton=close;
     }
 
     // ---------------- GİRİŞ / ÇIKIŞ ----------------
@@ -235,7 +275,7 @@ from GIRCIK G left join KIMLIK K on K.PKNO=G.PKNO where 1=1";
     }
     void LoadPuantajPeople()
     {
-        try{LoadLookups(dailyLookups);LoadLookups(monthlyLookups);people=db.Query("select PKNO,AD,SOYAD,IGTARIH,GRUP,BOLUM,SERVIS,DURUM,GOREV,SIRKET from KIMLIK where ICTARIH is null order by PKNO");grid.DataSource=people.DefaultView;foreach(var col in new[]{"GRUP","BOLUM","SERVIS","DURUM","GOREV","SIRKET"})if(grid.Columns.Contains(col))grid.Columns[col].Visible=false;Rename("PKNO","Kart No");Rename("AD","Adı");Rename("SOYAD","Soyadı");Rename("IGTARIH","Tarih");ApplyPeopleFilter();}catch(Exception ex){grid.DataSource=null;status.Text="Personel listesi okunamadı: "+ex.Message;}
+        try{LoadLookups(dailyLookups);LoadLookups(monthlyLookups);people=db.Query("select PKNO,AD,SOYAD,IGTARIH,GRUP,BOLUM,SERVIS,DURUM,GOREV,SIRKET from KIMLIK where ICTARIH is null order by PKNO");grid.DataSource=people.DefaultView;foreach(var col in new[]{"GRUP","BOLUM","SERVIS","DURUM","GOREV","SIRKET"})if(grid.Columns.Contains(col))grid.Columns[col].Visible=false;Rename("PKNO","Kart No");Rename("AD","Adı");Rename("SOYAD","Soyadı");Rename("IGTARIH","Tarih");ApplyPeopleFilter();}catch(Exception ex){grid.DataSource=null;status.Text="Personel listesi okunamadı • "+PdksErrorPresenter.Report(ex,"LegacyDataModule.People");status.ForeColor=PdksAppearance.Current.Danger;}
     }
     void ApplyPeopleFilter()
     {
