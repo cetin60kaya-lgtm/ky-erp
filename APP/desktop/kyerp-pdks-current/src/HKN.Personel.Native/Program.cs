@@ -9,8 +9,12 @@ static class Program
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-        Application.ThreadException += (_,e) => MessageBox.Show(e.Exception.Message,"KYERP PDKS",MessageBoxButtons.OK,MessageBoxIcon.Warning);
-        AppDomain.CurrentDomain.UnhandledException += (_,e) => { if(e.ExceptionObject is Exception ex) MessageBox.Show(ex.Message,"KYERP PDKS",MessageBoxButtons.OK,MessageBoxIcon.Error); };
+        Application.ThreadException += (_,e) => PdksErrorPresenter.Show(null,e.Exception,"KYERP PDKS",MessageBoxIcon.Warning,"Application.ThreadException");
+        AppDomain.CurrentDomain.UnhandledException += (_,e) =>
+        {
+            if(e.ExceptionObject is Exception ex)
+                PdksErrorPresenter.Show(null,ex,"KYERP PDKS",MessageBoxIcon.Error,"AppDomain.UnhandledException");
+        };
         ApplicationConfiguration.Initialize();
         StartupConfiguration.LoadSavedSettingsIntoProcess();
         CompanyDataPaths.Ensure();
