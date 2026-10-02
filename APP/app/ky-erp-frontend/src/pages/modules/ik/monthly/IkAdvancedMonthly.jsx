@@ -1547,6 +1547,54 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     }
   };
 
+  const printSettlement = async (row = payrollRows.find((item) => item.employee.id === selected?.id)) => {
+    if (!row) return setNotice("Kıdem / ayrılış çıktısı için personel seçilmelidir.");
+    const totalDeductions = round(num(row.advance) + num(row.deduction) + num(row.garnishment));
+    const html = `<html><head><meta charset="utf-8"><style>
+      @page{size:A4 portrait;margin:14mm}
+      *{box-sizing:border-box}
+      body{font-family:Arial,Helvetica,sans-serif;color:#14263a;margin:0;font-size:11px}
+      h1{font-size:20px;margin:0 0 4px}
+      .sub{color:#60758a;margin-bottom:18px}
+      .person{border:1px solid #9fb0c3;padding:12px;margin-bottom:14px}
+      .person b{font-size:16px}.person span{display:block;margin-top:4px;color:#60758a}
+      table{width:100%;border-collapse:collapse}
+      td{border:1px solid #b8c5d1;padding:8px}
+      td:last-child{text-align:right;font-weight:800;font-variant-numeric:tabular-nums}
+      .ded td:last-child{color:#7a1f1f}
+      .total td{border-top:2px solid #111;font-size:15px;font-weight:900}
+      .channels{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+      .channels div{border:1.5px solid #64788d;padding:12px;text-align:center}
+      .channels span{display:block;font-size:9px;font-weight:800}.channels b{display:block;font-size:18px;margin-top:4px}
+      .sign{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:48px}
+      .sign div{border-top:1px solid #52657b;padding-top:5px;text-align:center;color:#52657b}
+    </style></head><body>
+      <h1>Kıdem / Ayrılış Ödeme Özeti</h1>
+      <div class="sub">${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)} · Kontrol çıktısı</div>
+      <div class="person"><b>${escapeHtml(row.employee.fullName)}</b><span>${escapeHtml(row.employee.code || "-")} · ${escapeHtml(row.employee.department || "Bölüm yok")}</span></div>
+      <table><tbody>
+        <tr><td>Maaş</td><td>${money(row.salary)}</td></tr>
+        <tr><td>Yol</td><td>${money(row.road)}</td></tr>
+        <tr><td>EK / İlave Ödeme</td><td>${money(row.extra)}</td></tr>
+        <tr><td>Mesai</td><td>${money(row.overtime)}</td></tr>
+        <tr class="ded"><td>Avans</td><td>-${money(row.advance)}</td></tr>
+        <tr class="ded"><td>Özel Kesinti</td><td>-${money(row.deduction)}</td></tr>
+        <tr class="ded"><td>İcra / Haciz</td><td>-${money(row.garnishment)}</td></tr>
+        <tr><td>Toplam Kesinti</td><td>${money(totalDeductions)}</td></tr>
+        <tr class="total"><td>Net Ödeme</td><td>${money(row.net)}</td></tr>
+      </tbody></table>
+      <div class="channels"><div><span>BANKA</span><b>${money(row.bank)}</b></div><div><span>ELDEN</span><b>${money(row.cash)}</b></div></div>
+      <div class="sign"><div>Personel İmza</div><div>İK / Ödeme Onayı</div></div>
+    </body></html>`;
+    try {
+      await printHtmlDocument({ title: `Kıdem Ayrılış Özeti - ${row.employee.fullName}`, html });
+      setNotice(`${row.employee.fullName} için kıdem / ayrılış ödeme özeti yazdırma / PDF ekranına gönderildi.`);
+    } catch (error) {
+      setNotice(error?.message || "Kıdem / ayrılış çıktısı açılamadı.");
+    }
+  };
+
+
 const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     const leave = employee ? employeeLeave(employee) : { annual: 0, balance: 0 };
     const countedDays = selectedPlan.countedDays ?? "";
@@ -2048,7 +2096,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         <Modal title={modal === "fis" ? "Tek Kişi Ödeme Fişi" : "Kıdem Çıktısı"} sub={modal === "fis" ? "Personeli seçin; yanlış tutar varsa son bordrodan düzeltip yalnız bu fişi tekrar alın." : "Yazdırmadan önce önizleme"} size="small" onClose={() => setModal(null)}>
           {modal === "fis" && <div className="form"><Field label="Fişi alınacak personel" wide><select value={row?.employee?.id || ""} onChange={(event)=>setSelectedId(event.target.value)}>{payrollRows.map((item)=><option key={item.employee.id} value={item.employee.id}>{item.employee.fullName} · {item.employee.code || "HKN yok"}</option>)}</select></Field></div>}
           <div className="print-sheet"><h2>{modal === "fis" ? "ÖDEME FİŞİ" : "KIDEM ÇIKTISI"}</h2><div className="print-row"><span>Personel</span><b>{row?.employee?.fullName || "-"}</b></div><div className="print-row"><span>Dönem</span><b>{MONTHS[month - 1]} {year}</b></div>{modal === "fis" ? <><div className="print-row"><span>Mesai</span><b>{money(row?.overtime)}</b></div><div className="print-row"><span>Avans / Kesinti / İcra-Haciz</span><b>{money(num(row?.advance)+num(row?.deduction)+num(row?.garnishment))}</b></div><div className="print-row"><span>Banka</span><b>{money(row?.bank)}</b></div><div className="print-row" style={{fontSize:18,fontWeight:900,border:"2px solid #111",padding:8}}><span>ELDEN</span><b>{money(row?.cash)}</b></div><div className="print-row" style={{fontSize:20,fontWeight:900,border:"2px solid #111",padding:8,marginTop:6}}><span>TOPLAM ÖDEME</span><b>{money(row?.net)}</b></div></> : <><div className="print-row"><span>Maaş</span><b>{money(row?.salary)}</b></div><div className="print-row"><span>Yol</span><b>{money(row?.road)}</b></div><div className="print-row"><span>EK</span><b>{money(row?.extra)}</b></div><div className="print-row"><span>Mesai</span><b>{money(row?.overtime)}</b></div><div className="print-row"><span>Avans</span><b>{money(row?.advance)}</b></div><div className="print-row"><span>Özel Kesinti</span><b>{money(row?.deduction)}</b></div><div className="print-row"><span>İcra / Haciz</span><b>{money(row?.garnishment)}</b></div><div className="print-row"><span>Banka</span><b>{money(row?.bank)}</b></div><div className="print-row"><span>Elden</span><b>{money(row?.cash)}</b></div><div className="print-row"><span>Toplam</span><b>{money(row?.net)}</b></div></>}</div>
-          <ModalFooter onClose={() => setModal(null)} actions={modal === "fis" ? <><button className="btn" disabled={!row} onClick={()=>openPayroll(row)}>Yanlışsa Düzenle</button><button className="btn primary" disabled={!row} onClick={() => printSlip(row)}>Sadece Bu Fişi Yazdır / PDF</button></> : <button className="btn primary" onClick={() => printSlip(row)}>Yazdır / PDF</button>} />
+          <ModalFooter onClose={() => setModal(null)} actions={modal === "fis" ? <><button className="btn" disabled={!row || upper(row?.saved?.status)==="PAID"} onClick={()=>openPayroll(row)}>Yanlışsa Düzenle</button><button className="btn primary" disabled={!row} onClick={() => printSlip(row)}>Sadece Bu Fişi Yazdır / PDF</button></> : <button className="btn primary" disabled={!row} onClick={() => printSettlement(row)}>Yazdır / PDF</button>} />
         </Modal>
       );
     }
