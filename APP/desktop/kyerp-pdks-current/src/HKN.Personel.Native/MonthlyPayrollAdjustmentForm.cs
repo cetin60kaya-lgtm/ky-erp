@@ -81,7 +81,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
     {
         var p=PdksAppearance.Current;
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=5,ColumnCount=1,Padding=new Padding(16),BackColor=p.Canvas};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,102));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,116));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,102));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
