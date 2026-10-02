@@ -31,7 +31,7 @@ internal sealed class WorkspaceDockHost : UserControl
     sealed class Slot
     {
         public BufferedPanel Host { get; } = new() { Dock = DockStyle.Fill, BackColor = Color.White };
-        public Label Title { get; } = new() { Dock = DockStyle.Top, Height = 24, TextAlign = ContentAlignment.MiddleLeft };
+        public Label Title { get; } = new() { Dock = DockStyle.Top, Height = 34, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(10,0,0,0) };
         public Control? Content { get; set; }
         public string Key { get; set; } = string.Empty;
     }
@@ -62,9 +62,9 @@ internal sealed class WorkspaceDockHost : UserControl
     {
         var slot = new Slot();
         slot.Title.Text = $"  Çalışma Alanı {index + 1}";
-        slot.Title.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-        slot.Title.ForeColor = Color.FromArgb(45, 68, 96);
-        slot.Title.BackColor = Color.FromArgb(246, 249, 253);
+        slot.Title.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+        slot.Title.ForeColor = Color.FromArgb(51, 65, 85);
+        slot.Title.BackColor = Color.White;
         slot.Title.Cursor = Cursors.Hand;
         slot.Title.Click += (_, _) => SetActive(index);
         slot.Host.Click += (_, _) => SetActive(index);
@@ -316,8 +316,9 @@ internal sealed class WorkspaceDockHost : UserControl
         for (var i = 0; i < slots.Count; i++)
         {
             var active = i == activeIndex && i < VisibleSlotCount();
-            slots[i].Title.BackColor = active ? Color.FromArgb(226, 238, 255) : Color.FromArgb(246, 249, 253);
-            slots[i].Title.ForeColor = active ? Color.FromArgb(26, 91, 184) : Color.FromArgb(72, 88, 110);
+            slots[i].Title.Visible = mode != WorkspaceLayoutMode.Single;
+            slots[i].Title.BackColor = active ? Color.FromArgb(239, 246, 255) : Color.White;
+            slots[i].Title.ForeColor = active ? Color.FromArgb(37, 99, 235) : Color.FromArgb(71, 85, 105);
         }
     }
 
