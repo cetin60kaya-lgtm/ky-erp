@@ -34,6 +34,14 @@ public sealed class LegacyBordroForm : Form
         BackColor = Color.FromArgb(246, 249, 253);
         DoubleBuffered = true;
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+        grid.RowTemplate.Height = 31;
+        grid.ColumnHeadersHeight = 36;
+        grid.EnableHeadersVisualStyles = false;
+        grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(248,250,252);
+        grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(71,85,105);
+        grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI",8.5f,FontStyle.Bold);
+        grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219,234,254);
+        grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(15,23,42);
 
         type.Items.AddRange(["Genel Maaş Bordrosu", "Mesai Bordrosu", "Maaş Pusulası"]);
         type.SelectedIndex = Math.Clamp(initialType, 0, type.Items.Count - 1);
@@ -51,13 +59,18 @@ public sealed class LegacyBordroForm : Form
 
     void Build()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(14, 10, 14, 10), BackColor = BackColor };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(16), BackColor = Color.FromArgb(244,247,251) };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
 
-        var periodCard = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(16, 12, 16, 10), Margin = new Padding(0, 0, 0, 8) };
-        var top = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true, BackColor = Color.White, Padding = Padding.Empty };
+        var periodCard = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(18, 12, 18, 10), Margin = new Padding(0, 0, 0, 10) };
+        periodCard.Paint += (_,e) => { using var pen = new Pen(Color.FromArgb(226,232,240)); e.Graphics.DrawRectangle(pen,0,0,Math.Max(0,periodCard.Width-1),Math.Max(0,periodCard.Height-1)); };
+        var periodLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, BackColor = Color.White };
+        periodLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        periodLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        periodLayout.Controls.Add(new Label { Text = "Bordro Merkezi", Dock = DockStyle.Fill, Font = new Font("Segoe UI",11f,FontStyle.Bold), ForeColor = Color.FromArgb(15,23,42), TextAlign = ContentAlignment.MiddleLeft },0,0);
+        var top = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true, BackColor = Color.White, Padding = new Padding(0,4,0,0) };
         top.Controls.Add(Caption("Yıl"));
         top.Controls.Add(year);
         top.Controls.Add(Caption("Ay", 16));
@@ -68,7 +81,8 @@ public sealed class LegacyBordroForm : Form
         top.Controls.Add(Btn("Alanlar / Sıralama", () => GridLayoutPersistence.ShowEditor(this, grid, LayoutKey, "Bordro Alanları / Sıralama"), 145));
         top.Controls.Add(Btn("Düzeni Kilitle", ToggleLock, 125));
         top.Controls.Add(summary);
-        periodCard.Controls.Add(top);
+        periodLayout.Controls.Add(top,0,1);
+        periodCard.Controls.Add(periodLayout);
         root.Controls.Add(periodCard, 0, 0);
 
         var gridCard = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(1) };
