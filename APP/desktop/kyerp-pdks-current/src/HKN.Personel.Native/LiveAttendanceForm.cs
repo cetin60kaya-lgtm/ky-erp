@@ -185,7 +185,11 @@ public sealed partial class LiveAttendanceForm : Form
             LoadDay(date.Value.Date,forceUi);
         }
         catch(OperationCanceledException){ }
-        catch(Exception ex){device.Text="Denetim hatası: "+ex.Message;device.ForeColor=PdksAppearance.Current.Danger;}
+        catch(Exception ex)
+        {
+            device.Text="Denetim hatası • "+PdksErrorPresenter.Report(ex,"LiveAttendance.Sync");
+            device.ForeColor=PdksAppearance.Current.Danger;
+        }
         finally{busy=false;if(!IsDisposed){refresh.Enabled=true;syncNow.Enabled=true;}}
     }
 
