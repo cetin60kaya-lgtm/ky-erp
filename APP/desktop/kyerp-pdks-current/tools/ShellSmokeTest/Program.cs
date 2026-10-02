@@ -67,9 +67,11 @@ using (var personnel = new PersonelForm())
 
 using (var attendance = new LegacyGirisCikisForm())
 {
-    var tabs = Descendants(attendance).OfType<TabControl>().First(x => x.TabPages.Cast<TabPage>().Any(p => p.Text == "Giriş / Çıkış Parametreleri"));
-    if (!tabs.TabPages.Cast<TabPage>().Select(x => x.Text).SequenceEqual(["Giriş / Çıkış Parametreleri", "Filtreleme", "Sıralama"]))
-        throw new InvalidOperationException("Giriş/Çıkış sekmeleri bozulmuş.");
+    var buttons = Descendants(attendance).OfType<Button>().Select(x => x.Text ?? string.Empty).ToArray();
+    foreach (var required in new[] { "Göster", "Yeni Kayıt", "Düzenle", "Rapor" })
+        if (!buttons.Contains(required)) throw new InvalidOperationException("Giriş/Çıkış komutu eksik: " + required);
+    if (!Descendants(attendance).OfType<DataGridView>().Any())
+        throw new InvalidOperationException("Giriş/Çıkış listesi yok.");
 }
 
 using (var timesheet = new LegacyPuantajForm())
