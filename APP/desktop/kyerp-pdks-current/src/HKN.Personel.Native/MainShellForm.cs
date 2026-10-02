@@ -51,16 +51,11 @@ public sealed partial class MainShellForm : Form
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        switch (keyData)
+        var command = PdksCommandCatalog.ForShortcut(keyData);
+        if (command is not null && CanExecute(command))
         {
-            case Keys.F2: OpenLiveAttendance(); return true;
-            case Keys.F3: OpenPersonel(); return true;
-            case Keys.F4: OpenLegacyGirisCikis(); return true;
-            case Keys.F5: OpenLegacyPuantaj(); return true;
-            case Keys.F6: OpenLegacyBordro(); return true;
-            case Keys.F7: OpenOperationalReport(LegacyOperationalReport.PersonnelList); return true;
-            case Keys.Control | Keys.T: OpenDialogModule(PdksModule.Terminal); return true;
-            case Keys.Control | Keys.H: ShowHome(); return true;
+            ExecuteCommand(command.Id);
+            return true;
         }
         return base.ProcessCmdKey(ref msg, keyData);
     }
@@ -114,13 +109,8 @@ public sealed partial class MainShellForm : Form
         foreach (var button in tool.Items.OfType<ToolStripButton>()) button.Checked = button.Text == "Genel Bakış";
         personel = null;
         workspace.ShowSingle(new ModernHomeDashboard(
-            OpenLiveAttendance,
-            OpenLegacyGirisCikis,
-            OpenPersonel,
-            OpenLegacyPuantaj,
-            OpenLegacyBordro,
-            () => OpenReportCenter(null),
-            OpenTerminalCenter), "home", "Genel Bakış");
+            VisiblePrimaryCommands(),
+            ExecuteCommand), "home", "Genel Bakış");
         SetModernPage("Genel Bakış", "Günün personel hareketleri ve hızlı işlemler");
     }
 
