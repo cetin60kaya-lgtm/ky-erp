@@ -42,6 +42,9 @@ public sealed partial class MainShellForm
             case PdksCommandId.EarningsDeductions:
                 OpenLegacyKazancKesinti();
                 break;
+            case PdksCommandId.QuickOperations:
+                using (var quick = new ResponsibleQuickOperationsForm(this)) quick.ShowDialog(this);
+                break;
             case PdksCommandId.TimesheetDaily:
                 OpenPuantaj(0);
                 break;
@@ -75,6 +78,24 @@ public sealed partial class MainShellForm
             case PdksCommandId.Periods:
                 OpenDialogModule(PdksModule.Donemler);
                 break;
+            case PdksCommandId.WorkingDate:
+                OpenWorkingDate();
+                break;
+            case PdksCommandId.Holidays:
+                OpenLegacyTable("Genel Tatiller", "TATIL", true, new Size(1040, 680));
+                break;
+            case PdksCommandId.DailyWorkHours:
+                OpenLegacyTable("Günlük Çalışma Saatleri", "PUANBILGI", true, new Size(1120, 700));
+                break;
+            case PdksCommandId.AnnualWorkPlan:
+                OpenLegacyTable("Yıllık Çalışma Planı", "PLANA", true, new Size(1180, 720));
+                break;
+            case PdksCommandId.PayrollFields:
+                OpenDefinitions("Bordro");
+                break;
+            case PdksCommandId.EarningsTypes:
+                OpenLegacyTable("Kazanç / Kesinti Türleri", "AVTUR", true, new Size(1040, 680));
+                break;
             case PdksCommandId.Definitions:
                 OpenDefinitions("Bölümler");
                 break;
@@ -84,17 +105,20 @@ public sealed partial class MainShellForm
             case PdksCommandId.TerminalSettings:
                 OpenTerminalSettingsDirect();
                 break;
+            case PdksCommandId.TerminalProfiles:
+                OpenTerminalProfilesAdvanced();
+                break;
             case PdksCommandId.DataSources:
-                using (var data = new QuickDataSourceForm()) data.ShowDialog(this);
+                ShowModule(new QuickDataSourceForm(), PdksModule.Terminal);
                 break;
             case PdksCommandId.BackupRestore:
-                using (var backup = new BackupRestoreForm()) backup.ShowDialog(this);
+                ShowModule(new BackupRestoreForm(), PdksModule.Tanimlar);
                 break;
             case PdksCommandId.Integrations:
-                using (var integrations = new IntegrationCenterForm(this, currentUser)) integrations.ShowDialog(this);
+                ShowModule(new IntegrationCenterForm(this, currentUser), PdksModule.Tanimlar);
                 break;
             case PdksCommandId.AuditHistory:
-                using (var audit = new AuditHistoryForm()) audit.ShowDialog(this);
+                ShowModule(new AuditHistoryForm(), PdksModule.Raporlar);
                 break;
             case PdksCommandId.UserManagement:
                 OpenUserManagement();
@@ -130,8 +154,18 @@ public sealed partial class MainShellForm
             PdksCommandId.Reports or
             PdksCommandId.Groups or
             PdksCommandId.Periods or
+            PdksCommandId.WorkingDate or
+            PdksCommandId.Holidays or
+            PdksCommandId.DailyWorkHours or
+            PdksCommandId.AnnualWorkPlan or
+            PdksCommandId.PayrollFields or
+            PdksCommandId.EarningsTypes or
             PdksCommandId.Definitions or
-            PdksCommandId.TerminalCenter)
+            PdksCommandId.TerminalCenter or
+            PdksCommandId.DataSources or
+            PdksCommandId.BackupRestore or
+            PdksCommandId.Integrations or
+            PdksCommandId.AuditHistory)
         {
             SetModernPage(command.Title, command.Hint);
         }
