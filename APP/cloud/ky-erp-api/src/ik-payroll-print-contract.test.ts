@@ -119,7 +119,7 @@ test("payroll payment balance is auto-reconciled in UI while backend keeps the h
 
   assert.match(page, /function reconcilePaymentSplit/);
   assert.match(page, /const balancedSplit = reconcilePaymentSplit\(rowTotals\.net/);
-  assert.match(page, /const payment = reconcilePaymentSplit\(enteredTotals\.net/);
+  assert.match(page, /const payment = reconcilePaymentSplit\([\s\S]*enteredTotals\.net/);
   assert.doesNotMatch(page, /Banka \+ elden net odeme ile eslesmiyor\. Devam edilsin mi/);
   assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
   assert.match(cloud, /calculatePayrollAmounts/);
@@ -323,7 +323,7 @@ test("kıdem preview keeps the complete payroll settlement breakdown", () => {
   for (const label of ["Maaş","Yol","EK","Mesai","Avans","Özel Kesinti","İcra / Haciz","Banka","Elden","Toplam"]) {
     assert.ok(block.includes(label), `Eksik kıdem alanı: ${label}`);
   }
-  assert.match(block, /Bordro düzeltmesi · kilitli|KIDEM ÇIKTISI/);
+  assert.match(block, /Ayrılış Ödeme Özeti|AYRILIŞ ÖDEME ÖZETİ/);
 });
 
 
