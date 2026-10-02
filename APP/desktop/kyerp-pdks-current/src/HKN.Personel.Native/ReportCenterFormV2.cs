@@ -139,7 +139,7 @@ public sealed class ReportCenterForm : Form
         infoBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,155));
         summary.Dock=DockStyle.Fill;summary.TextAlign=ContentAlignment.MiddleLeft;summary.ForeColor=p.Muted;summary.Padding=new Padding(2,5,0,0);
         var fields = Button("Alanlar / Sıralama",()=>GridLayoutPersistence.ShowEditor(this,grid,"report-center","Rapor Alanları / Sıralama"));
-        fields.Dock=DockStyle.Fill;fields.Margin=new Padding(0,2,0,2);
+        fields.MinimumSize=Size.Empty;fields.MaximumSize=Size.Empty;fields.Dock=DockStyle.Fill;fields.Margin=new Padding(0,2,0,2);
         infoBar.Controls.Add(summary,0,0);infoBar.Controls.Add(fields,1,0);
         filterRoot.Controls.Add(infoBar,0,2);
 
