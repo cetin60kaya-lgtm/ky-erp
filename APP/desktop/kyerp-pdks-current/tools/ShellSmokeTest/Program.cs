@@ -114,6 +114,23 @@ using (var payroll = new LegacyBordroForm())
 
 form.Close();
 Application.DoEvents();
+using (var reportCenter = new ReportCenterForm())
+{
+    var method = typeof(ReportCenterForm).GetMethod("Query", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException("ReportCenter Query bulunamadı.");
+    foreach (var reportName in new[] { "Personel • Ad Soyad", "Giriş Çıkış • Tarihe Göre", "Bordro • Genel Maaş" })
+    {
+        try
+        {
+            _ = method.Invoke(reportCenter, new object?[] { reportName });
+        }
+        catch (System.Reflection.TargetInvocationException ex)
+        {
+            throw new InvalidOperationException("Rapor sorgusu başarısız: " + reportName + " -> " + (ex.InnerException?.Message ?? ex.Message), ex.InnerException ?? ex);
+        }
+    }
+}
+
 Console.WriteLine("KYERP PDKS 6.4.0 SHELL SMOKE OK");
 
 static IEnumerable<Control> Descendants(Control root)
