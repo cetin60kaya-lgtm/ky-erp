@@ -6,6 +6,7 @@ import {
   getIkAdvancedMonth,
   getIkAdvancedPayroll,
   getIkAdvancedPeriodState,
+  getIkAdvancedSyncState,
   prepareIkAdvancedPeriod,
   getIkAdvancedLeaveCenter,
   runIkAdvancedCloseCheck,
@@ -34,6 +35,8 @@ const LEAVE_TYPES = ["Yillik izin", "Normal izin", "Ucretsiz izin", "Mazeret izn
 const DAILY_TYPES = ["Isi vardi - sadece not", "Rapor", "Normal izin", "Ucretsiz izin", "Dogum izni", "Olum izni"];
 const DOCUMENT_LOG_WORDS = ["EVRAK", "BELGE", "SOZLESME", "RAPOR", "IZIN FORM"];
 const PAYROLL_LOG_WORDS = ["BORDRO", "ODEME", "FIS"];
+const IK_LIVE_SYNC_INTERVAL_MS = 1500;
+const IK_LIVE_SYNC_CHANNEL = "kyerp.ik.monthly.live.v1";
 
 function istanbulDateKey(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -290,6 +293,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const [leaveRangeStep, setLeaveRangeStep] = useState(0);
   const leaveAutoPreviewSeq = useRef(0);
   const loadRequestRef = useRef({ key: "", seq: 0, promise: null });
+  const liveVersionRef = useRef("");
+  const livePollBusyRef = useRef(false);
   const [sgkPreview, setSgkPreview] = useState(null);
   const [selectedPayrollIds, setSelectedPayrollIds] = useState([]);
   const documentInput = useRef(null);
@@ -445,16 +450,50 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   }, [load, initialPage]);
 
   useEffect(() => {
-    const refreshCurrentIkData = () => {
-      if (document.visibilityState === "visible") load();
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled || livePollBusyRef.current) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      livePollBusyRef.current = true;
+      try {
+        const state = await getIkAdvancedSyncState({ mainCompanyId: companyId }, { forceFresh: true, timeoutMs: 5000 });
+        const version = String(state?.version || "");
+        if (!version) return;
+        if (!liveVersionRef.current) { liveVersionRef.current = version; return; }
+        if (version === liveVersionRef.current) return;
+        if (busy || modal) {
+          if (!cancelled) setNotice((current) => current || "Canlı senkron: başka bilgisayarda değişiklik var. Açık işlem tamamlanınca ekran otomatik yenilenecek.");
+          return;
+        }
+        await load({ force: true, prepare: periodPrepared });
+        if (!cancelled) {
+          liveVersionRef.current = version;
+          setNotice("Canlı senkron: diğer bilgisayardaki İK değişiklikleri alındı.");
+        }
+      } catch {
+        // Canlı senkron yardımcı katmandır; geçici bağlantı hatası aylık İK işlemlerini durdurmaz.
+      } finally {
+        livePollBusyRef.current = false;
+      }
     };
-    window.addEventListener("focus", refreshCurrentIkData);
-    document.addEventListener("visibilitychange", refreshCurrentIkData);
+    const timer = window.setInterval(() => { void poll(); }, IK_LIVE_SYNC_INTERVAL_MS);
+    const onFocus = () => { void poll(); };
+    const onVisibility = () => { if (document.visibilityState === "visible") void poll(); };
+    const channel = typeof window.BroadcastChannel === "function" ? new window.BroadcastChannel(IK_LIVE_SYNC_CHANNEL) : null;
+    const onMutation = () => { void poll(); };
+    channel?.addEventListener?.("message", onMutation);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    void poll();
     return () => {
-      window.removeEventListener("focus", refreshCurrentIkData);
-      document.removeEventListener("visibilitychange", refreshCurrentIkData);
+      cancelled = true;
+      window.clearInterval(timer);
+      channel?.removeEventListener?.("message", onMutation);
+      channel?.close?.();
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [load]);
+  }, [busy, companyId, load, modal, periodPrepared]);
 
   const preparePeriod = async () => {
     setBusy(true);
@@ -2071,7 +2110,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     return <div className="daygrid">{Array.from({ length: totalDays }, (_, index) => {
       const day = index + 1;
       const selectedDay = selectedDays.includes(day);
-      return <button key={day} className={`day ${day === 12 ? "used" : ""} ${selectedDay ? "selected" : ""}`} onClick={() => setSelectedDays((old) => selectedDay ? old.filter((item) => item !== day) : [...old, day].sort((a, b) => a - b))}><b>{day}</b><span>{day === 12 ? "Kayit var" : "Bos"}</span></button>;
+      return <button key={day} className={`day ${selectedDay ? "selected" : ""}`} onClick={() => setSelectedDays((old) => selectedDay ? old.filter((item) => item !== day) : [...old, day].sort((a, b) => a - b))}><b>{day}</b><span>{selectedDay ? "Seçildi" : "Boş"}</span></button>;
     })}</div>;
   }
 
