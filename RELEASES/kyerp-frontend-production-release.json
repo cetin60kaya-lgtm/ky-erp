@@ -37,5 +37,7 @@
     "live-entry-verification",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "Sağ tık hızlı menüsü açıkken menü dışındaki herhangi bir yere tek sol tık yapıldığında menü anında kapanır. Menü içindeki işlem tıklamaları kendi aksiyonlarını çalıştırmaya devam eder. Normal sol tık davranışı engellenmez. Production lint, test, build, Pages deploy ve canlı bundle doğrulaması bu marker ile çalıştırılır."
+  "note": "İK Aylık final UI/code health: canonical 7 tabs, filters, payroll balance/snapshot/print safety, all tests green",
+  "sourceCommit": "5698f954b338bc0584aa39bbe985606c40b08d0c",
+  "requestedAt": "2026-10-02T17:24:00+03:00"
 }
