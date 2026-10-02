@@ -20,6 +20,8 @@ public sealed partial class MainShellForm
             return;
         }
 
+        SelectNavForCommand(id);
+
         switch (id)
         {
             case PdksCommandId.Home:
@@ -109,6 +111,29 @@ public sealed partial class MainShellForm
             case PdksCommandId.About:
                 using (var about = new AboutKy6Form()) about.ShowDialog(this);
                 break;
+        }
+
+        if (id is PdksCommandId.Home or
+            PdksCommandId.LiveAttendance or
+            PdksCommandId.EntryExit or
+            PdksCommandId.Personnel or
+            PdksCommandId.Leave or
+            PdksCommandId.EarningsDeductions or
+            PdksCommandId.TimesheetDaily or
+            PdksCommandId.TimesheetMonthly or
+            PdksCommandId.TimesheetResults or
+            PdksCommandId.PayrollGeneral or
+            PdksCommandId.PayrollPayments or
+            PdksCommandId.PayrollAdjustment or
+            PdksCommandId.PayrollPayslip or
+            PdksCommandId.PayrollOvertime or
+            PdksCommandId.Reports or
+            PdksCommandId.Groups or
+            PdksCommandId.Periods or
+            PdksCommandId.Definitions or
+            PdksCommandId.TerminalCenter)
+        {
+            SetModernPage(command.Title, command.Hint);
         }
     }
 
