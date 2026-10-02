@@ -7,6 +7,7 @@ import {
   hrListResponse,
   calculateAnnualLeaveRange,
   advancedEmployeeVisible,
+  applyHistoricalEmployeeValues,
   calculateOvertimeAmount,
   calculatePayrollAmounts,
 } from "./ik-relational-cloud.ts";
@@ -103,4 +104,31 @@ test("canonical payroll equation includes earnings and all deductions", () => {
 
 test("Istanbul business date does not fall back to the previous UTC day", () => {
   assert.equal(hrTodayIstanbul(new Date("2026-09-30T21:30:00.000Z")), "2026-10-01");
+});
+
+
+test("historical payroll rewinds salary and payment plan changes after the selected period", () => {
+  const current = {
+    id: "emp-1",
+    salary: 55000,
+    roadAllowance: 2000,
+    paymentChannel: "Banka + Elden",
+    bankPaymentType: "Banka + Elden",
+    bankAmount: 28075,
+    cashAmount: 28925,
+  };
+  const changes = [
+    { employee_id: "emp-1", field_name: "salary", old_value: "45000", new_value: "55000", effective_date: "2026-09-01", created_at: "2026-09-01T08:00:00Z" },
+    { employee_id: "emp-1", field_name: "bankAmount", old_value: "25000", new_value: "28075", effective_date: "2026-09-01", created_at: "2026-09-01T08:00:01Z" },
+    { employee_id: "emp-1", field_name: "cashAmount", old_value: "22000", new_value: "28925", effective_date: "2026-09-01", created_at: "2026-09-01T08:00:02Z" },
+  ];
+  const august = applyHistoricalEmployeeValues(current, changes, "2026-08-31");
+  assert.equal(august.salary, 45000);
+  assert.equal(august.bankAmount, 25000);
+  assert.equal(august.cashAmount, 22000);
+
+  const september = applyHistoricalEmployeeValues(current, changes, "2026-09-30");
+  assert.equal(september.salary, 55000);
+  assert.equal(september.bankAmount, 28075);
+  assert.equal(september.cashAmount, 28925);
 });
