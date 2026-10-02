@@ -212,14 +212,14 @@ public static class PdksTheme
                     tree.BackColor = p.Surface;
                     tree.ForeColor = p.Text;
                     break;
-                case Panel panel:
-                    panel.BackColor = MapBack(panel.BackColor, p);
-                    break;
                 case TableLayoutPanel table:
                     table.BackColor = MapBack(table.BackColor, p);
                     break;
                 case FlowLayoutPanel flow:
                     flow.BackColor = MapBack(flow.BackColor, p);
+                    break;
+                case Panel panel:
+                    panel.BackColor = MapBack(panel.BackColor, p);
                     break;
                 case SplitContainer split:
                     split.BackColor = p.Border;
