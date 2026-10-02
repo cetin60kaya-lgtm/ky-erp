@@ -2,6 +2,41 @@ namespace HKN.Personel.Native;
 
 public sealed partial class MainShellForm
 {
+    readonly Stack<PdksCommandId> navigationHistory = [];
+    PdksCommandId? currentWorkspaceCommand;
+    bool navigatingBack;
+
+    static bool IsWorkspaceCommand(PdksCommandId id) => id is
+        PdksCommandId.Home or
+        PdksCommandId.LiveAttendance or
+        PdksCommandId.EntryExit or
+        PdksCommandId.Personnel or
+        PdksCommandId.Leave or
+        PdksCommandId.EarningsDeductions or
+        PdksCommandId.TimesheetDaily or
+        PdksCommandId.TimesheetMonthly or
+        PdksCommandId.TimesheetResults or
+        PdksCommandId.PayrollGeneral or
+        PdksCommandId.PayrollPayments or
+        PdksCommandId.PayrollAdjustment or
+        PdksCommandId.PayrollPayslip or
+        PdksCommandId.PayrollOvertime or
+        PdksCommandId.Reports or
+        PdksCommandId.Groups or
+        PdksCommandId.Periods or
+        PdksCommandId.WorkingDate or
+        PdksCommandId.Holidays or
+        PdksCommandId.DailyWorkHours or
+        PdksCommandId.AnnualWorkPlan or
+        PdksCommandId.PayrollFields or
+        PdksCommandId.EarningsTypes or
+        PdksCommandId.Definitions or
+        PdksCommandId.TerminalCenter or
+        PdksCommandId.DataSources or
+        PdksCommandId.BackupRestore or
+        PdksCommandId.Integrations or
+        PdksCommandId.AuditHistory;
+
     bool CanExecute(PdksCommandDescriptor command)
     {
         if (command.AdminOnly && !currentUser.IsAdmin) return false;
@@ -18,6 +53,14 @@ public sealed partial class MainShellForm
         {
             MessageBox.Show("Bu işlem için yetkiniz yok.", "KYERP PDKS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
+        }
+
+        if (IsWorkspaceCommand(id))
+        {
+            if (!navigatingBack && currentWorkspaceCommand is PdksCommandId previous && previous != id)
+                navigationHistory.Push(previous);
+            currentWorkspaceCommand=id;
+            RefreshBackButton();
         }
 
         SelectNavForCommand(id);
@@ -187,5 +230,18 @@ public sealed partial class MainShellForm
         using var palette = new CommandPaletteForm(PdksCommandCatalog.All.Where(CanExecute));
         if (palette.ShowDialog(this) == DialogResult.OK && palette.SelectedCommand is PdksCommandId id)
             ExecuteCommand(id);
+    }
+
+    void NavigateBack()
+    {
+        if (navigationHistory.Count==0) return;
+        var target=navigationHistory.Pop();
+        navigatingBack=true;
+        try { ExecuteCommand(target); }
+        finally
+        {
+            navigatingBack=false;
+            RefreshBackButton();
+        }
     }
 }
