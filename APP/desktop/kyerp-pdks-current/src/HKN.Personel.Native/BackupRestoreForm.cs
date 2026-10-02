@@ -1,6 +1,6 @@
 namespace HKN.Personel.Native;
 
-internal sealed class BackupRestoreForm : Form
+public sealed class BackupRestoreForm : Form
 {
     readonly ListBox list = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true };
     readonly Label info = new() { Dock = DockStyle.Top, Height = 54, Padding = new Padding(10) };
