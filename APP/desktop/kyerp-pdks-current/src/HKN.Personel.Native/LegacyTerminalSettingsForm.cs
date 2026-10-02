@@ -24,10 +24,10 @@ public sealed class LegacyTerminalSettingsForm : Form
     {
         Text = "Terminal / Kart Cihazı Ayarları";
         StartPosition = FormStartPosition.CenterParent;
-        Size = new Size(1040, 690);
-        MinimumSize = new Size(960, 640);
+        Size = new Size(1180, 720);
+        MinimumSize = new Size(1040, 640);
         Font = new Font("Segoe UI", 9f);
-        BackColor = Color.FromArgb(246, 249, 253);
+        BackColor = Color.FromArgb(244, 247, 251);
         Build();
         Shown += async (_, _) =>
         {
@@ -49,128 +49,100 @@ public sealed class LegacyTerminalSettingsForm : Form
 
     void Build()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, Padding = new Padding(14), BackColor = BackColor };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 115));
+        var canvas=Color.FromArgb(244,247,251);
+        var surface=Color.White;
+        var border=Color.FromArgb(226,232,240);
+        var text=Color.FromArgb(15,23,42);
+        var muted=Color.FromArgb(100,116,139);
+
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, Padding = new Padding(16), BackColor = canvas };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
 
-        BuildGrid();
-        root.Controls.Add(grid, 0, 0);
+        var hero = new Panel { Dock = DockStyle.Fill, BackColor = surface, Padding = new Padding(18,12,18,10), Margin = new Padding(0,0,0,10) };
+        hero.Paint += (_,e)=>{using var p=new Pen(border);e.Graphics.DrawRectangle(p,0,0,Math.Max(0,hero.Width-1),Math.Max(0,hero.Height-1));};
+        var title = new Label { Text="Terminal Merkezi", AutoSize=true, Location=new Point(18,12), Font=new Font("Segoe UI",13f,FontStyle.Bold), ForeColor=text };
+        var hint = new Label { Text="Fiziksel kart cihazı bağlantısı, veri aktarımı ve sürücü işlemleri", AutoSize=true, Location=new Point(19,42), ForeColor=muted, Font=new Font("Segoe UI",8.8f) };
+        status.Location=new Point(650,18);status.Width=470;status.Height=34;status.TextAlign=ContentAlignment.MiddleRight;
+        hero.Controls.Add(title);hero.Controls.Add(hint);hero.Controls.Add(status);
+        root.Controls.Add(hero,0,0);
 
-        var devicePanel = new GroupBox { Text = "Cihaz Bağlantı Ayarları", Dock = DockStyle.Fill, Padding = new Padding(12) };
-        var deviceFields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 10, RowCount = 2 };
-        for (var i = 0; i < 10; i++) deviceFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10));
-        deviceFields.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-        deviceFields.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        AddField(deviceFields, 0, "Cihaz No", deviceNo);
-        AddField(deviceFields, 1, "Cihaz Adı", deviceName);
-        AddField(deviceFields, 2, "Makine No", machineNo);
-        AddField(deviceFields, 3, "Bağlantı Tipi", connectionType);
-        AddField(deviceFields, 4, "Com No", comPort);
-        AddField(deviceFields, 5, "Baudrate", baudRate);
-        AddField(deviceFields, 6, "IP Adres", ipAddress);
-        AddField(deviceFields, 7, "IP Port", ipPort);
-        AddField(deviceFields, 8, "Giriş / Çıkış", direction);
-        var statusBox = new Panel { Dock = DockStyle.Fill, Padding = new Padding(4, 2, 4, 2) };
-        status.Dock = DockStyle.Fill;
-        statusBox.Controls.Add(status);
-        deviceFields.Controls.Add(L("İşlem Durumu"), 9, 0);
-        deviceFields.Controls.Add(statusBox, 9, 1);
-        devicePanel.Controls.Add(deviceFields);
-        root.Controls.Add(devicePanel, 0, 1);
+        var setup = new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=2, RowCount=1, BackColor=canvas, Margin=Padding.Empty };
+        setup.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,64));
+        setup.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,36));
 
-        var rowActions = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(8, 12, 8, 0), WrapContents = false };
-        var add = Cmd("EKLE", 105);
-        var remove = Cmd("ÇIKART", 105);
-        var edit = Cmd("DÜZENLE", 105);
+        var gridCard=TerminalCard(border);
+        var gridHost=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Padding=new Padding(14),BackColor=surface};
+        gridHost.RowStyles.Add(new RowStyle(SizeType.Absolute,34));gridHost.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        gridHost.Controls.Add(new Label{Text="Tanımlı Cihaz",Dock=DockStyle.Fill,Font=new Font("Segoe UI",10.5f,FontStyle.Bold),ForeColor=text},0,0);
+        BuildGrid();grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.ColumnHeadersHeight=34;grid.RowTemplate.Height=31;grid.Margin=new Padding(0,4,0,0);
+        gridHost.Controls.Add(grid,0,1);gridCard.Controls.Add(gridHost);setup.Controls.Add(gridCard,0,0);
+
+        var connectionCard=TerminalCard(border);connectionCard.Margin=new Padding(12,0,0,0);
+        var connection=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=7,Padding=new Padding(16),BackColor=surface};
+        connection.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,112));connection.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        connection.Controls.Add(new Label{Text="Bağlantı Profili",Dock=DockStyle.Fill,Font=new Font("Segoe UI",10.5f,FontStyle.Bold),ForeColor=text},0,0);connection.SetColumnSpan(connection.GetControlFromPosition(0,0)!,2);
+        TerminalRow(connection,1,"Cihaz",deviceName);
+        var nums=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Margin=Padding.Empty};deviceNo.Width=70;machineNo.Width=70;nums.Controls.Add(new Label{Text="No",AutoSize=true,Padding=new Padding(0,7,4,0),ForeColor=muted});nums.Controls.Add(deviceNo);nums.Controls.Add(new Label{Text="Makine",AutoSize=true,Padding=new Padding(10,7,4,0),ForeColor=muted});nums.Controls.Add(machineNo);TerminalRow(connection,2,"Kimlik",nums);
+        var net=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,Margin=Padding.Empty};net.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,52));net.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,24));net.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,24));ipAddress.Dock=DockStyle.Fill;ipPort.Dock=DockStyle.Fill;connectionType.Dock=DockStyle.Fill;net.Controls.Add(ipAddress,0,0);net.Controls.Add(ipPort,1,0);net.Controls.Add(connectionType,2,0);TerminalRow(connection,3,"Ağ",net);
+        var serial=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Margin=Padding.Empty};serial.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));serial.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));comPort.Dock=DockStyle.Fill;baudRate.Dock=DockStyle.Fill;serial.Controls.Add(comPort,0,0);serial.Controls.Add(baudRate,1,0);TerminalRow(connection,4,"Seri",serial);
+        TerminalRow(connection,5,"Yön",direction);
+        var editBar=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,WrapContents=false,Padding=new Padding(0,5,0,0)};
+        var add=TerminalButton("EKLE",82,true);var remove=TerminalButton("ÇIKART",82,false);var edit=TerminalButton("DÜZENLE",90,false);
+        save.Width=90;save.Height=32;save.FlatStyle=FlatStyle.Flat;save.BackColor=Color.FromArgb(37,99,235);save.ForeColor=Color.White;save.FlatAppearance.BorderColor=save.BackColor;
         add.Click += (_, _) => { ApplyToFields(TerminalDeviceSettings.Default); SetEditing(true); };
-        remove.Click += (_, _) =>
-        {
-            if (MessageBox.Show("Ana cihaz ayarları varsayılana döndürülsün mü?", Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            TerminalDeviceSettingsStore.Save(TerminalDeviceSettings.Default);
-            LoadSettings();
-            SetEditing(false);
-        };
-        edit.Click += (_, _) => SetEditing(true);
-        save.Click += (_, _) => SaveSettings();
-        rowActions.Controls.AddRange([add, remove, edit, save]);
-        root.Controls.Add(rowActions, 0, 2);
+        remove.Click += (_, _) => { if(MessageBox.Show("Ana cihaz ayarları varsayılana döndürülsün mü?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;TerminalDeviceSettingsStore.Save(TerminalDeviceSettings.Default);LoadSettings();SetEditing(false); };
+        edit.Click += (_,_)=>SetEditing(true);save.Click += (_,_)=>SaveSettings();
+        editBar.Controls.Add(save);editBar.Controls.Add(edit);editBar.Controls.Add(remove);editBar.Controls.Add(add);connection.Controls.Add(editBar,1,6);
+        connectionCard.Controls.Add(connection);setup.Controls.Add(connectionCard,1,0);
+        root.Controls.Add(setup,0,1);
 
-        var operations = new GroupBox { Text = "Cihaz İşlemleri", Dock = DockStyle.Fill, Padding = new Padding(12) };
-        var opRoot = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
-        opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
-        opRoot.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var operationsCard=TerminalCard(border);
+        operationsCard.Margin=new Padding(0,12,0,0);
+        var opRoot=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=5,Padding=new Padding(18),BackColor=surface};
+        opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,34));opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,52));opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,50));opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,52));opRoot.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        opRoot.Controls.Add(new Label{Text="Cihaz İşlemleri",Dock=DockStyle.Fill,Font=new Font("Segoe UI",10.5f,FontStyle.Bold),ForeColor=text},0,0);
+        var opButtons=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,6,0,0)};
+        Button Action(string label,Func<Task> action,int width=145,bool primary=false){var b=TerminalButton(label,width,primary);b.Click+=async(_,_)=>{b.Enabled=false;try{await action();}finally{if(!IsDisposed)b.Enabled=true;}};opButtons.Controls.Add(b);return b;}
+        Action("BAĞLAN TEST",()=>TestConnectionAsync(true),125,true);
+        Action("CİHAZ TARİH/SAAT OKU",ReadDeviceTimeAsync,172);
+        Action("PC SAATİNE AYARLA",SetDeviceTimeAsync,158);
+        Action("CİHAZDAN OKU",PreviewPunchesAsync,132);
+        Action("KAYITLARI AKTAR",TransferNowAsync,142,true);
+        Action("SÜRÜCÜYÜ ONAR",RepairAsync,142);
+        opRoot.Controls.Add(opButtons,0,1);
 
-        var opButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true };
-        Button Action(string text, Func<Task> action, int width = 135)
-        {
-            var b = Cmd(text, width);
-            b.Click += async (_, _) =>
-            {
-                b.Enabled = false;
-                try { await action(); }
-                finally { if (!IsDisposed) b.Enabled = true; }
-            };
-            opButtons.Controls.Add(b);
-            return b;
-        }
-        Action("BAĞLAN TEST", () => TestConnectionAsync(true));
-        Action("CİHAZ TARİH/SAAT OKU", ReadDeviceTimeAsync, 178);
-        Action("PC SAATİNE AYARLA", SetDeviceTimeAsync, 165);
-        Action("CİHAZDAN OKU", PreviewPunchesAsync, 135);
-        Action("KAYITLARI AKTAR", TransferNowAsync, 145);
-        Action("SÜRÜCÜYÜ ONAR", RepairAsync, 145);
-        opRoot.Controls.Add(opButtons, 0, 0);
+        var transfer=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,RowCount=1};
+        transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,118));transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,42));transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,92));transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,90));
+        transfer.Controls.Add(new Label{Text="Aktarım Dosyası",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=muted,Font=new Font("Segoe UI",8.5f,FontStyle.Bold)},0,0);
+        transferFile.Dock=DockStyle.Fill;transferFile.Margin=new Padding(0,7,6,7);transfer.Controls.Add(transferFile,1,0);
+        var browse=TerminalButton("…",36,false);browse.Height=30;browse.Click+=(_,_)=>BrowseTransferFile();transfer.Controls.Add(browse,2,0);
+        transfer.Controls.Add(new Label{Text="Tolerans",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleRight,ForeColor=muted},3,0);tolerance.Dock=DockStyle.Fill;tolerance.Margin=new Padding(4,7,0,7);transfer.Controls.Add(tolerance,4,0);
+        opRoot.Controls.Add(transfer,0,2);
 
-        var transfer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2 };
-        transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
-        transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48));
-        transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
-        transfer.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        transfer.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        transfer.Controls.Add(L("Veri Aktarım Yolu"), 0, 0);
-        transferFile.Dock = DockStyle.Fill;
-        transferFile.Margin = new Padding(4, 7, 4, 7);
-        transfer.Controls.Add(transferFile, 1, 0);
-        var browse = Cmd("…", 40);
-        browse.Height = 29;
-        browse.Click += (_, _) => BrowseTransferFile();
-        transfer.Controls.Add(browse, 2, 0);
-        transfer.Controls.Add(L("Tolerans (dk)"), 3, 0);
-        tolerance.Dock = DockStyle.Fill;
-        tolerance.Margin = new Padding(4, 7, 4, 7);
-        transfer.Controls.Add(tolerance, 3, 1);
-        backup.Dock = DockStyle.Fill;
-        deleteAfter.Dock = DockStyle.Fill;
-        transfer.Controls.Add(backup, 0, 1);
-        transfer.SetColumnSpan(backup, 2);
-        transfer.Controls.Add(deleteAfter, 2, 1);
-        transfer.SetColumnSpan(deleteAfter, 1);
-        opRoot.Controls.Add(transfer, 0, 1);
+        var flags=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,8,0,0)};backup.AutoSize=true;deleteAfter.AutoSize=true;flags.Controls.Add(backup);flags.Controls.Add(deleteAfter);opRoot.Controls.Add(flags,0,3);
+        opRoot.Controls.Add(new Label{Text="Güvenlik: cihaz kayıtları otomatik silinmez. Kayıtlar TNF + FDB + canlı arşive doğrulanarak alınır.",Dock=DockStyle.Fill,ForeColor=muted,Font=new Font("Segoe UI",8.5f),TextAlign=ContentAlignment.TopLeft},0,4);
+        operationsCard.Controls.Add(opRoot);root.Controls.Add(operationsCard,0,2);
 
-        var note = new Label
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = false,
-            Text = "Güvenlik: cihaz kayıtları otomatik silinmez. Kayıtlar önce TNF + FDB + canlı arşive doğrulanarak alınır; yedekleme açık tutulur. Veri yoksa işlem hata üretmez.",
-            ForeColor = Color.FromArgb(70, 84, 103),
-            Padding = new Padding(4, 6, 4, 0)
-        };
-        opRoot.Controls.Add(note, 0, 2);
-        operations.Controls.Add(opRoot);
-        root.Controls.Add(operations, 0, 3);
-
-        var bottom = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 8, 0, 0) };
-        var close = Cmd("ÇIKIŞ", 110);
-        close.Click += (_, _) => Close();
-        bottom.Controls.Add(close);
-        root.Controls.Add(bottom, 0, 4);
-
+        var bottom=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,9,0,0),BackColor=canvas};var close=TerminalButton("ÇIKIŞ",96,false);close.Click+=(_,_)=>Close();bottom.Controls.Add(close);root.Controls.Add(bottom,0,3);
         Controls.Add(root);
+    }
+
+    static Panel TerminalCard(Color border)
+    {
+        var p=new Panel{Dock=DockStyle.Fill,BackColor=Color.White,Margin=Padding.Empty};p.Paint+=(_,e)=>{using var pen=new Pen(border);e.Graphics.DrawRectangle(pen,0,0,Math.Max(0,p.Width-1),Math.Max(0,p.Height-1));};return p;
+    }
+
+    static void TerminalRow(TableLayoutPanel table,int row,string caption,Control control)
+    {
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute,34));table.Controls.Add(new Label{Text=caption,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(100,116,139),Font=new Font("Segoe UI",8.3f,FontStyle.Bold)},0,row);control.Dock=DockStyle.Fill;control.Margin=new Padding(0,4,0,4);table.Controls.Add(control,1,row);
+    }
+
+    static Button TerminalButton(string text,int width,bool primary)
+    {
+        var b=new Button{Text=text,Width=width,Height=32,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",8.5f,FontStyle.Bold),BackColor=primary?Color.FromArgb(37,99,235):Color.White,ForeColor=primary?Color.White:Color.FromArgb(15,23,42),Margin=new Padding(0,0,8,0),Cursor=Cursors.Hand};b.FlatAppearance.BorderColor=primary?Color.FromArgb(37,99,235):Color.FromArgb(226,232,240);return b;
     }
 
     void BuildGrid()
