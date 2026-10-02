@@ -31,6 +31,7 @@ public sealed class LegacyOperationalReportForm : Form
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
         BackgroundColor = Color.White
     };
+    readonly Label summary = new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true};
     DataTable data = new();
     string LayoutKey => "operational-report-" + report;
 
@@ -65,40 +66,50 @@ public sealed class LegacyOperationalReportForm : Form
 
     void Build()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(12) };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        var p=PdksAppearance.Current;
+        BackColor=p.Canvas;
 
-        var filter = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(6, 8, 0, 0), WrapContents = false };
-        filter.Controls.Add(new Label { Text = "Tarih Aralığı", AutoSize = true, Padding = new Padding(0, 7, 8, 0) });
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(16),BackColor=p.Canvas};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,112));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
+
+        var filterCard=PdksUiKit.Card(16);
+        var filterRoot=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Surface,Margin=Padding.Empty};
+        filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
+        filterRoot.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        filterRoot.Controls.Add(new Label{Text=Text,Dock=DockStyle.Fill,Font=new Font("Segoe UI",11.5f,FontStyle.Bold),ForeColor=p.Text,TextAlign=ContentAlignment.MiddleLeft},0,0);
+
+        var filter=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(0,7,0,0),WrapContents=false,BackColor=p.Surface};
+        filter.Controls.Add(new Label{Text="Tarih Aralığı",AutoSize=true,Padding=new Padding(0,8,8,0),ForeColor=p.Muted,Font=new Font("Segoe UI",8.5f,FontStyle.Bold)});
         filter.Controls.Add(from);
-        filter.Controls.Add(new Label { Text = "—", AutoSize = true, Padding = new Padding(6, 7, 6, 0) });
+        filter.Controls.Add(new Label{Text="—",AutoSize=true,Padding=new Padding(6,8,6,0),ForeColor=p.Muted});
         filter.Controls.Add(to);
-        var show = new Button { Text = "Göster", Width = 90, Height = 32 };
-        show.Click += (_, _) => LoadData();
-        filter.Controls.Add(show);
-        var fields = new Button { Text = "Alanlar / Sıralama", Width = 145, Height = 32 };
-        fields.Click += (_, _) => GridLayoutPersistence.ShowEditor(this, grid, LayoutKey, Text + " • Alanlar / Sıralama");
-        filter.Controls.Add(fields);
-        root.Controls.Add(filter, 0, 0);
-        root.Controls.Add(grid, 0, 1);
+        filter.Controls.Add(Button("Göster",LoadData,true));
+        filter.Controls.Add(Button("Alanlar / Sıralama",()=>GridLayoutPersistence.ShowEditor(this,grid,LayoutKey,Text+" • Alanlar / Sıralama"),false,145));
+        summary.ForeColor=p.Muted;summary.Width=360;summary.Padding=new Padding(12,8,0,0);
+        filter.Controls.Add(summary);
+        filterRoot.Controls.Add(filter,0,1);
+        filterCard.Controls.Add(filterRoot);
+        root.Controls.Add(filterCard,0,0);
 
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 8, 0, 0) };
-        actions.Controls.Add(Button("Excel Aktar", () => Export(true)));
-        actions.Controls.Add(Button("PDF Aktar", () => Export(false)));
-        actions.Controls.Add(Button("Yazdır", Print));
-        actions.Controls.Add(Button("Önizle", Preview));
-        root.Controls.Add(actions, 0, 2);
+        root.Controls.Add(new Label{Text="Rapor Sonuçları",Dock=DockStyle.Fill,Font=new Font("Segoe UI",10.2f,FontStyle.Bold),ForeColor=p.Text,TextAlign=ContentAlignment.BottomLeft,Padding=new Padding(2,0,0,7)},0,1);
+
+        grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.RowTemplate.Height=31;grid.ColumnHeadersHeight=36;
+        root.Controls.Add(grid,0,2);
+
+        var actions=PdksUiKit.ActionBar(true,p.Canvas);
+        actions.Controls.Add(Button("Excel Aktar",()=>Export(true)));
+        actions.Controls.Add(Button("PDF Aktar",()=>Export(false)));
+        actions.Controls.Add(Button("Yazdır",Print));
+        actions.Controls.Add(Button("Önizle",Preview));
+        root.Controls.Add(actions,0,3);
         Controls.Add(root);
     }
 
-    static Button Button(string text, Action action)
-    {
-        var b = new Button { Text = text, Width = 110, Height = 34 };
-        b.Click += (_, _) => action();
-        return b;
-    }
+    static Button Button(string text,Action action,bool primary=false,int width=110)
+        => PdksUiKit.Button(text,width,primary?PdksActionRole.Primary:PdksActionRole.Secondary,action);
 
     void LoadData()
     {
@@ -113,10 +124,14 @@ public sealed class LegacyOperationalReportForm : Form
                     c.Width = c.HeaderText.Contains("Ad", StringComparison.OrdinalIgnoreCase) ? 140 : 90;
             }
             GridLayoutPersistence.Apply(grid, LayoutKey);
+            summary.Text=$"{data.Rows.Count:N0} kayıt • {from.Value:dd.MM.yyyy} - {to.Value:dd.MM.yyyy}";
+            summary.ForeColor=PdksAppearance.Current.Muted;
         }
         catch (Exception ex)
         {
-            PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"OperationalReport");
+            data=new DataTable();grid.DataSource=data;
+            summary.Text="Rapor alınamadı • "+PdksErrorPresenter.Report(ex,"OperationalReport.Load");
+            summary.ForeColor=PdksAppearance.Current.Danger;
         }
     }
 
