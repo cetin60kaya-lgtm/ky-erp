@@ -16,7 +16,7 @@ public sealed class LegacyPuantajForm : Form
     readonly ProgressBar progress1=new(){Dock=DockStyle.Fill};
     readonly ProgressBar progress2=new(){Dock=DockStyle.Fill};
 
-    public LegacyPuantajForm(){Text="Günlük ve Aylık Puantaj İşlemleri";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);MinimumSize=new Size(960,620);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);KeyPreview=true;Build();Shown+=(_,_)=>Init();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
+    public LegacyPuantajForm(int initialTab = 0){Text="Günlük ve Aylık Puantaj İşlemleri";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);MinimumSize=new Size(960,620);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);KeyPreview=true;Build();tabs.SelectedIndex=Math.Clamp(initialTab,0,tabs.TabPages.Count-1);Shown+=(_,_)=>Init();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
     static TextBox E()=>new();
     static DateTimePicker D()=>new(){Format=DateTimePickerFormat.Short};
     static ComboBox C()=>new(){DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="TEXT",ValueMember="KOD"};
