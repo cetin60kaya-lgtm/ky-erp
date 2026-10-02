@@ -35,6 +35,21 @@ if (!primary.Select(x=>x.Title).SequenceEqual(expectedPrimary))
 if (PdksCommandCatalog.All.Select(x=>x.Id).Distinct().Count() != PdksCommandCatalog.All.Count)
     throw new InvalidOperationException("Komut kataloğunda mükerrer komut var.");
 
+var workflow = PdksWorkflowCatalog.All.OrderBy(x=>x.Order).ToArray();
+var expectedWorkflow = new[]
+{
+    PdksCommandId.TerminalCenter,
+    PdksCommandId.EntryExit,
+    PdksCommandId.Personnel,
+    PdksCommandId.TimesheetMonthly,
+    PdksCommandId.PayrollGeneral,
+    PdksCommandId.Reports
+};
+if (!workflow.Select(x=>x.Command).SequenceEqual(expectedWorkflow))
+    throw new InvalidOperationException("Standart işlem sırası bozulmuş.");
+if (workflow.Select(x=>x.Order).Distinct().Count() != workflow.Length)
+    throw new InvalidOperationException("İş akışında mükerrer sıra var.");
+
 var shellButtons = Descendants(form).OfType<Button>().Select(x => x.Text ?? string.Empty).ToArray();
 foreach (var required in expectedPrimary)
     if (!shellButtons.Contains(required)) throw new InvalidOperationException("Modern navigasyon eksik: " + required);
