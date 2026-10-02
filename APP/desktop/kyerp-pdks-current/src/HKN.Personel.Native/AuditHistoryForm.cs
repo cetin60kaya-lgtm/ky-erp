@@ -27,7 +27,9 @@ internal sealed class AuditHistoryForm : Form
 
     void Build()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(12) };
+        var p=PdksAppearance.Current;
+        BackColor=p.Canvas;
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(14), BackColor=p.Canvas };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
@@ -38,11 +40,11 @@ internal sealed class AuditHistoryForm : Form
             Text = "AUDIT / İŞLEM GEÇMİŞİ",
             AutoSize = true,
             Font = new Font("Segoe UI", 12f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(28, 55, 90),
+            ForeColor = p.Text,
             Padding = new Padding(0, 4, 20, 0)
         });
-        var refresh = new Button { Text = "Yenile", Width = 90, Height = 30 };
-        refresh.Click += (_, _) => ReloadFiles();
+        var refresh = PdksUiKit.Button("Yenile",90,PdksActionRole.Primary,ReloadFiles);
+        refresh.Height=30;refresh.MinimumSize=new Size(90,30);refresh.MaximumSize=new Size(90,30);
         top.Controls.Add(refresh);
         root.Controls.Add(top, 0, 0);
 
