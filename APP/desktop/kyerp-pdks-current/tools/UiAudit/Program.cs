@@ -68,8 +68,16 @@ foreach (var report in Enum.GetValues<LegacyOperationalReport>())
     jobs.Add(($"30-Rapor-{captured}", () => new LegacyOperationalReportForm(captured)));
 }
 
+var only = Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_ONLY");
+if (!string.IsNullOrWhiteSpace(only))
+{
+    var filters=only.Split(';',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries);
+    jobs=jobs.Where(x=>filters.Any(f=>x.Name.Contains(f,StringComparison.OrdinalIgnoreCase))).ToList();
+}
+
 foreach (var job in jobs)
 {
+    Console.WriteLine("UI_AUDIT_START=" + job.Name);
     try
     {
         using var form = job.Factory();
@@ -78,6 +86,7 @@ foreach (var job in jobs)
             CaptureFormNoLoad(form, job.Name, root, log, errors);
         else
             CaptureForm(form, job.Name, root, log, errors);
+        Console.WriteLine("UI_AUDIT_DONE=" + job.Name);
     }
     catch (Exception ex)
     {
