@@ -40,7 +40,6 @@ public sealed partial class MainShellForm : Form
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
         ToolStripManager.Renderer = new ModernShellRenderer();
         BuildCanonicalMenuHost();
-        BuildCanonicalToolbarSeed();
         BuildStatus();
         Controls.Add(workspace); Controls.Add(tool); Controls.Add(MainMenuStrip!); Controls.Add(status);
         ApplyCanonicalStartup();
