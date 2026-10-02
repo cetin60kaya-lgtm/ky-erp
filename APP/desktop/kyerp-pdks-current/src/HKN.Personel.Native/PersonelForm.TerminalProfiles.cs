@@ -24,14 +24,16 @@ public partial class PersonelForm
             StartPosition = FormStartPosition.CenterScreen,
             Size = new Size(620, 610),
             MinimumSize = new Size(620, 610),
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false,
-            MinimizeBox = false,
+            FormBorderStyle = FormBorderStyle.Sizable,
+            MaximizeBox = true,
+            MinimizeBox = true,
             ShowInTaskbar = false,
-            Font = Font
+            Font = Font,
+            BackColor = PdksAppearance.Current.Canvas
         };
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 6, Padding = new Padding(12) };
+        var p=PdksAppearance.Current;
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 6, Padding = new Padding(16), BackColor=p.Canvas };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -39,9 +41,9 @@ public partial class PersonelForm
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
 
-        var head = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(12, 8, 12, 8) };
-        head.Controls.Add(new Label { Text = "Terminalden Gelen Kart Kayıtları", AutoSize = true, Location = new Point(12, 8), Font = new Font(Font.FontFamily, 12f, FontStyle.Bold), ForeColor = Color.FromArgb(27, 44, 68) });
-        head.Controls.Add(new Label { Text = $"{device.DeviceName} • {device.IpAddress}:{device.IpPort} • Makine {device.MachineNo}", AutoSize = true, Location = new Point(12, 36), ForeColor = Color.FromArgb(36, 107, 230) });
+        var head = PdksUiKit.Card(12);
+        head.Controls.Add(new Label { Text = "Terminalden Gelen Kart Kayıtları", AutoSize = true, Location = new Point(12, 8), Font = new Font(Font.FontFamily, 12f, FontStyle.Bold), ForeColor = p.Text });
+        head.Controls.Add(new Label { Text = $"{device.DeviceName} • {device.IpAddress}:{device.IpPort} • Makine {device.MachineNo}", AutoSize = true, Location = new Point(12, 36), ForeColor = p.Primary });
         root.Controls.Add(head, 0, 0);
 
         var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4 };
@@ -49,10 +51,10 @@ public partial class PersonelForm
         info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         info.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
         info.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
-        info.Controls.Add(new Label { Text = "TNF Dosyası", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
+        info.Controls.Add(PdksUiKit.FieldLabel("TNF Dosyası"), 0, 0);
         var fileBox = new TextBox { Dock = DockStyle.Fill, ReadOnly = true, Text = CompanyDataPaths.CurrentTnf, Margin = new Padding(3, 12, 3, 8) };
         info.Controls.Add(fileBox, 1, 0);
-        info.Controls.Add(new Label { Text = "Tolerans", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight }, 2, 0);
+        info.Controls.Add(new Label { Text = "Tolerans", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight, ForeColor=p.Muted, Font=new Font("Segoe UI",8.4f,FontStyle.Bold) }, 2, 0);
         var tolerance = new NumericUpDown { Minimum = 0, Maximum = 60, Value = device.ToleranceMinutes, Dock = DockStyle.Fill, Margin = new Padding(8, 10, 3, 8) };
         info.Controls.Add(tolerance, 3, 0);
         root.Controls.Add(info, 0, 1);
@@ -65,8 +67,10 @@ public partial class PersonelForm
             AllowUserToDeleteRows = false,
             AutoGenerateColumns = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            BackgroundColor = Color.White,
-            RowHeadersVisible = false
+            BackgroundColor = p.Surface,
+            RowHeadersVisible = false,
+            BorderStyle = BorderStyle.None,
+            ColumnHeadersHeight = 35
         };
         log.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Kart No", DataPropertyName = nameof(TerminalDevicePunch.EmployeeCode), Width = 100 });
         log.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tarih / Saat", DataPropertyName = nameof(TerminalDevicePunch.OccurredAt), Width = 170, DefaultCellStyle = new DataGridViewCellStyle { Format = "dd.MM.yyyy HH:mm:ss" } });
@@ -80,10 +84,10 @@ public partial class PersonelForm
         var progress = new ProgressBar { Dock = DockStyle.Fill, Minimum = 0, Maximum = 100 };
         root.Controls.Add(progress, 0, 4);
 
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 7, 0, 0), WrapContents = false };
-        var transfer = new Button { Text = "Aktar", Width = 135, Height = 34, Font = new Font(Font, FontStyle.Bold), ForeColor = Color.Navy };
-        var read = new Button { Text = "Cihaz Okut", Width = 135, Height = 34, Font = new Font(Font, FontStyle.Bold), ForeColor = Color.Navy };
-        var close = new Button { Text = "Kapat", Width = 100, Height = 34 };
+        var actions = PdksUiKit.ActionBar(true,p.Canvas);
+        var transfer = PdksUiKit.Button("Aktar",135,PdksActionRole.Primary);
+        var read = PdksUiKit.Button("Cihaz Okut",135,PdksActionRole.Secondary);
+        var close = PdksUiKit.Button("Kapat",100,PdksActionRole.Quiet);
         actions.Controls.AddRange([close, transfer, read]);
         root.Controls.Add(actions, 0, 5);
         dialog.Controls.Add(root);
@@ -114,7 +118,7 @@ public partial class PersonelForm
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.GetBaseException().Message, "Terminal Veri Transferi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                PdksErrorPresenter.Show(dialog,ex,"Terminal Veri Transferi",MessageBoxIcon.Warning,"Terminal.Transfer");
             }
             finally
             {
@@ -157,7 +161,7 @@ public partial class PersonelForm
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.GetBaseException().Message, "Terminal Veri Transferi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                PdksErrorPresenter.Show(dialog,ex,"Terminal Veri Transferi",MessageBoxIcon.Warning,"Terminal.Transfer");
             }
             finally
             {
@@ -181,17 +185,30 @@ public partial class PersonelForm
     {
         var store = new TerminalProfileStore(TerminalProfilePath, options);
         var profiles = new BindingList<TerminalTransferProfile>(store.Load().ToList());
-        using var dialog = new Form { Text = "Terminal Aktarım Profilleri", StartPosition = FormStartPosition.CenterParent, Size = new Size(1040, 590), MinimumSize = new Size(900, 520), Font = Font, ShowInTaskbar = false };
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(8) };
+        var p=PdksAppearance.Current;
+        using var dialog = new Form { Text = "Terminal Aktarım Profilleri", StartPosition = FormStartPosition.CenterParent, Size = new Size(1120, 650), MinimumSize = new Size(940, 560), Font = Font, ShowInTaskbar = false, BackColor=p.Canvas };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(16), BackColor=p.Canvas };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        var heading = new Label { Text = "Terminal Aktarım Profilleri", Dock = DockStyle.Fill, Font = new Font(Font.FontFamily, 12, FontStyle.Bold), ForeColor = Color.Navy, TextAlign = ContentAlignment.MiddleLeft }; root.Controls.Add(heading, 0, 0);
-        var grid = new DataGridView { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AutoGenerateColumns = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false, DataSource = profiles, BackgroundColor = Color.White };
+        var heading = new Label { Text = "Terminal Aktarım Profilleri", Dock = DockStyle.Fill, Font = new Font(Font.FontFamily, 12, FontStyle.Bold), ForeColor = p.Text, TextAlign = ContentAlignment.MiddleLeft }; root.Controls.Add(heading, 0, 0);
+        var grid = new DataGridView { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AutoGenerateColumns = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false, DataSource = profiles, BackgroundColor = p.Surface, BorderStyle=BorderStyle.None, RowHeadersVisible=false, ColumnHeadersHeight=35 };
         void Column(string property, string title, int width) { grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = property, HeaderText = title, Width = width }); }
         Column(nameof(TerminalTransferProfile.Name), "Profil", 210); Column(nameof(TerminalTransferProfile.FormatType), "Format", 90); Column(nameof(TerminalTransferProfile.DeviceId), "Cihaz", 100); Column(nameof(TerminalTransferProfile.TenantId), "Tenant", 105); Column(nameof(TerminalTransferProfile.CompanyId), "Firma", 105); Column(nameof(TerminalTransferProfile.WorkplaceId), "İşyeri", 105); Column(nameof(TerminalTransferProfile.Encoding), "Encoding", 85);
         grid.Columns.Add(new DataGridViewCheckBoxColumn { DataPropertyName = nameof(TerminalTransferProfile.IsDefault), HeaderText = "Varsayılan", Width = 80 });
         grid.Columns.Add(new DataGridViewCheckBoxColumn { DataPropertyName = nameof(TerminalTransferProfile.IsCanonical), HeaderText = "Korumalı", Width = 70 }); root.Controls.Add(grid, 0, 1);
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(2, 7, 2, 2), WrapContents = false };
-        Button Add(string text, Action action) { var button = new Button { Text = text, AutoSize = true, Height = 31, ForeColor = Color.Navy }; button.Click += (_, _) => { try { action(); } catch (Exception ex) { MessageBox.Show(ex.Message, "Terminal Profilleri", MessageBoxButtons.OK, MessageBoxIcon.Warning); } }; actions.Controls.Add(button); return button; }
+        var actions = PdksUiKit.ActionBar(false,p.Canvas);
+        Button Add(string text, Action action)
+        {
+            var role=text.Contains("Yeni",StringComparison.OrdinalIgnoreCase) || text.Contains("Varsayılan",StringComparison.OrdinalIgnoreCase)
+                ? PdksActionRole.Primary
+                : text.Contains("Sil",StringComparison.OrdinalIgnoreCase)
+                    ? PdksActionRole.Danger
+                    : PdksActionRole.Secondary;
+            var width=Math.Max(108,TextRenderer.MeasureText(text,new Font("Segoe UI",8.8f,FontStyle.Bold)).Width+24);
+            var button=PdksUiKit.Button(text,width,role);
+            button.Click += (_, _) => { try { action(); } catch (Exception ex) { PdksErrorPresenter.Show(dialog,ex,"Terminal Profilleri",MessageBoxIcon.Warning,"Terminal.Profiles"); } };
+            actions.Controls.Add(button);
+            return button;
+        }
         TerminalTransferProfile? Selected() => grid.CurrentRow?.DataBoundItem as TerminalTransferProfile;
         void Persist() { store.Save(profiles); profiles.ResetBindings(); }
         Add("Yeni Profil", () => { var profile = NewTerminalProfile(); if (EditTerminalProfile(profile, out var edited)) { profiles.Add(edited); Persist(); } });
@@ -199,7 +216,7 @@ public partial class PersonelForm
         Add("Düzenle", () => { var selected = Selected() ?? throw new InvalidOperationException("Bir profil seçin."); if (selected.IsCanonical) throw new InvalidOperationException("Canonical preset doğrudan değiştirilemez; önce kopyalayın."); if (EditTerminalProfile(selected, out var edited)) { var index = profiles.IndexOf(selected); profiles[index] = edited; Persist(); } });
         Add("Sil", () => { var selected = Selected() ?? throw new InvalidOperationException("Bir profil seçin."); if (selected.IsCanonical) throw new InvalidOperationException("Canonical preset silinemez."); if (MessageBox.Show($"{selected.Name} profili silinsin mi?", "Terminal Profilleri", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) { profiles.Remove(selected); Persist(); } });
         Add("Varsayılan Yap", () => { var selected = Selected() ?? throw new InvalidOperationException("Bir profil seçin."); for (int i = 0; i < profiles.Count; i++) profiles[i] = profiles[i] with { IsDefault = profiles[i].Id == selected.Id }; Persist(); });
-        var close = new Button { Text = "Kapat", Width = 95, Height = 31, DialogResult = DialogResult.OK, Anchor = AnchorStyles.Right }; actions.Controls.Add(close); root.Controls.Add(actions, 0, 2); dialog.Controls.Add(root); dialog.AcceptButton = close; dialog.ShowDialog(DialogOwner());
+        var close = PdksUiKit.Button("Kapat",95,PdksActionRole.Quiet);close.DialogResult=DialogResult.OK; actions.Controls.Add(close); root.Controls.Add(actions, 0, 2); dialog.Controls.Add(root); dialog.AcceptButton = close; dialog.ShowDialog(DialogOwner());
     }
 
     TerminalTransferProfile NewTerminalProfile() => new()
