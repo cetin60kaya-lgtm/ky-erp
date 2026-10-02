@@ -15,7 +15,8 @@ public enum PdksAccent
     Indigo,
     Violet,
     Orange,
-    Slate
+    Slate,
+    Custom
 }
 
 public sealed record PdksPalette(
@@ -47,6 +48,7 @@ public static class PdksAppearance
     {
         public string Mode { get; set; } = nameof(PdksThemeMode.Light);
         public string Accent { get; set; } = nameof(PdksAccent.Blue);
+        public string CustomAccent { get; set; } = "#2563EB";
     }
 
     static readonly string SettingsPath = Path.Combine(
@@ -55,6 +57,7 @@ public static class PdksAppearance
 
     static PdksThemeMode mode;
     static PdksAccent accent;
+    static Color customAccent = Color.FromArgb(37,99,235);
 
     static PdksAppearance()
     {
@@ -69,12 +72,22 @@ public static class PdksAppearance
 
     public static string ModeLabel => mode == PdksThemeMode.Dark ? "Koyu" : "Açık";
     public static string AccentLabel => AccentName(accent);
+    public static Color CustomAccentColor => customAccent;
 
     public static void Set(PdksThemeMode newMode, PdksAccent newAccent)
     {
         if (mode == newMode && accent == newAccent) return;
         mode = newMode;
         accent = newAccent;
+        Save();
+        Changed?.Invoke(null, EventArgs.Empty);
+    }
+
+    public static void SetCustomAccent(PdksThemeMode newMode, Color color)
+    {
+        mode = newMode;
+        accent = PdksAccent.Custom;
+        customAccent = Color.FromArgb(color.R,color.G,color.B);
         Save();
         Changed?.Invoke(null, EventArgs.Empty);
     }
@@ -87,6 +100,7 @@ public static class PdksAppearance
         PdksAccent.Violet => "Mor",
         PdksAccent.Orange => "Turuncu",
         PdksAccent.Slate => "Füme",
+        PdksAccent.Custom => "Özel",
         _ => value.ToString()
     };
 
@@ -98,6 +112,7 @@ public static class PdksAppearance
         PdksAccent.Violet => Color.FromArgb(124,58,237),
         PdksAccent.Orange => Color.FromArgb(234,88,12),
         PdksAccent.Slate => Color.FromArgb(71,85,105),
+        PdksAccent.Custom => customAccent,
         _ => Color.FromArgb(37,99,235)
     };
 
@@ -112,6 +127,7 @@ public static class PdksAppearance
             if (stored is null) return;
             if (Enum.TryParse(stored.Mode, true, out PdksThemeMode m)) mode = m;
             if (Enum.TryParse(stored.Accent, true, out PdksAccent a)) accent = a;
+            try { customAccent = ColorTranslator.FromHtml(stored.CustomAccent); } catch { customAccent = Color.FromArgb(37,99,235); }
         }
         catch { }
     }
@@ -121,7 +137,7 @@ public static class PdksAppearance
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-            var json = JsonSerializer.Serialize(new StoredSettings { Mode = mode.ToString(), Accent = accent.ToString() }, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(new StoredSettings { Mode = mode.ToString(), Accent = accent.ToString(), CustomAccent = ColorTranslator.ToHtml(customAccent) }, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(SettingsPath, json);
         }
         catch { }
