@@ -39,7 +39,7 @@ internal sealed class ReportCenterForm : Form
         "Tanımlar • Bölümler", "Tanımlar • Servisler", "Tanımlar • Görevler", "Tanımlar • Gruplar", "Tanımlar • Durumlar", "Tanımlar • Firmalar"
     ];
 
-    public ReportCenterForm()
+    public ReportCenterForm(string? initialCategory = null)
     {
         Text = "KY PDKS 6.0 • Rapor ve Çıktı Merkezi";
         StartPosition = FormStartPosition.CenterParent;
@@ -50,7 +50,13 @@ internal sealed class ReportCenterForm : Form
         to.Value = DateTime.Today;
         Build();
         report.Items.AddRange(Reports);
-        report.SelectedIndex = 0;
+        var initialIndex = 0;
+        if (!string.IsNullOrWhiteSpace(initialCategory))
+        {
+            var found = Array.FindIndex(Reports, x => x.StartsWith(initialCategory, StringComparison.OrdinalIgnoreCase));
+            if (found >= 0) initialIndex = found;
+        }
+        report.SelectedIndex = initialIndex;
         Shown += (_, _) => LoadData();
     }
 
