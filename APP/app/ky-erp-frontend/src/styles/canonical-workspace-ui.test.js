@@ -22,10 +22,10 @@ test("existing module and page layouts stay visible", () => {
 });
 
 test("daily operations uses the canonical sidebar and no second in-page navigator", () => {
-  assert.match(registry, /\["daily-entry", "Günlük Giriş", "takvim"\]/);
-  assert.match(registry, /\["daily-cards", "Personel Kartları", "users"\]/);
-  assert.match(registry, /\["daily-weekly", "Haftalık Özet", "raporlar"\]/);
-  assert.match(registry, /\["daily-payments", "Ödemeler", "odemeler"\]/);
+  assert.match(registry, /\["daily-entry", "Günlük Personel Girişi", "takvim"\]/);
+  assert.match(registry, /\["daily-cards", "Personel & Ücret Kartları", "users"\]/);
+  assert.match(registry, /\["daily-weekly", "Dönem Kontrolü", "raporlar"\]/);
+  assert.match(registry, /\["daily-payments", "Hakediş & Ödeme", "odemeler"\]/);
   assert.doesNotMatch(dailyWorkspace, /gop-legacy-nav/);
   assert.doesNotMatch(dailyWorkspace, /<nav/);
   assert.match(navigator, /return null/);
