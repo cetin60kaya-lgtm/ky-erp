@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiUpload } from "../../utils/api";
+import { apiGet, apiPost, apiUpload, downloadFile } from "../../utils/api";
 
 function unwrap(payload) {
   return payload &&
@@ -110,7 +110,13 @@ export async function uploadIkAdvancedDocument(file, params = {}) {
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== "") form.append(key, value);
   });
-  return unwrap(await apiUpload("/ik/advanced/documents/upload", form));
+  const result = unwrap(await apiUpload("/ik/advanced/documents/upload", form));
+  publishIkMutation("document-upload");
+  return result;
+}
+
+export async function downloadIkAdvancedDocument(documentId, fileName = "ik-evrak") {
+  return downloadFile(`/ik/advanced/documents/${encodeURIComponent(documentId)}/content`, undefined, fileName);
 }
 
 export async function previewIkAdvancedSgk(file, params = {}) {
