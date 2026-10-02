@@ -40,7 +40,7 @@ public sealed class LegacyPuantajForm : Form
     {
         var f=new FilterSet(E(),E(),D(),D(),C(),C(),C(),C(),C(),C());
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,BackColor=page.BackColor};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,178));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,226));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
@@ -85,7 +85,7 @@ public sealed class LegacyPuantajForm : Form
     {
         var f=new FilterSet(E(),E(),D(),D(),C(),C(),C(),C(),C(),C());
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,BackColor=page.BackColor};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,178));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,226));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
