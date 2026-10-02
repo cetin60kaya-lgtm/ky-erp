@@ -5,7 +5,7 @@ using KYERP.PDKS.Core.Payroll;
 
 namespace HKN.Personel.Native;
 
-internal sealed class MonthlyPayrollAdjustmentForm : Form
+public sealed class MonthlyPayrollAdjustmentForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
     readonly NumericUpDown year = new() { Minimum=2020, Maximum=2100, Width=78 };
