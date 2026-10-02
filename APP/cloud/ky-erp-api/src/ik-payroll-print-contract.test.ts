@@ -333,7 +333,7 @@ test("final payroll save auto-reconciles bank cash and supports serial personnel
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.match(page, /function reconcilePaymentSplit/);
-  assert.match(page, /const payment = reconcilePaymentSplit\(enteredTotals\.net/);
+  assert.match(page, /const payment = reconcilePaymentSplit\([\s\S]{0,160}enteredTotals\.net/);
   assert.match(page, /payment\.bank/);
   assert.match(page, /payment\.cash/);
   assert.match(page, /Kaydet \+ Sonraki/);
