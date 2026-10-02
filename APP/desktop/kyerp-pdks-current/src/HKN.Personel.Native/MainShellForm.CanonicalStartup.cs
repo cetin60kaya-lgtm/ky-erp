@@ -16,8 +16,6 @@ public sealed partial class MainShellForm
         {
             Text = $"KY PDKS • {branding.ReportHeader}";
             workspace.ApplyLayout(WorkspaceLayoutMode.Single);
-            BuildCanonicalMenu();
-            BuildCanonicalToolbar();
             BuildModernShell();
         }
         finally
