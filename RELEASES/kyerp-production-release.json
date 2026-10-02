@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-29T05:05:00+03:00",
-  "attempt": 105,
+  "requestedAt": "2026-10-02T14:25:00+03:00",
+  "attempt": 106,
   "scope": [
     "muhasebe-final-canonical",
     "muhasebe-seven-tab-shell",
@@ -20,9 +20,12 @@
     "cloudflare-pages-production",
     "live-api-health-auth-contract",
     "live-pages-domain-check",
-    "live-final-smoke"
+    "live-final-smoke",
+    "ik-monthly-employment-period-filter",
+    "ik-hire-exit-visibility",
+    "ik-monthly-payroll-correctness"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "a295bb471a97d01283bfead651e54a090a2c6a20",
-  "note": "Günlük Operasyon modülünü aylık İK'dan ayrı olarak canlıya alma; mevcut İK düzeni korunur"
+  "sourceCommit": "28bd67570b47cb8675005016ba638149bc08e0e3",
+  "note": "İK Aylık kurumsal düzeltme: işe giriş/işten çıkış dönem görünürlüğü, bordro/personel filtre doğruluğu ve net tarih gösterimi"
 }
