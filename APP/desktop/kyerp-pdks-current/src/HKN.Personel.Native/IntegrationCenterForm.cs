@@ -61,7 +61,7 @@ internal sealed class IntegrationCenterForm : Form
     {
         var p=PdksAppearance.Current;
         var panel = PdksUiKit.Card(14);
-        panel.Width = 405; panel.Height = 185; panel.Margin = new Padding(8); panel.Dock = DockStyle.None;
+        panel.Dock=DockStyle.None;panel.Size=new Size(405,185);panel.MinimumSize=new Size(405,185);panel.MaximumSize=new Size(405,185);panel.Margin=new Padding(8);
         var head = new Label { Text = title, Dock = DockStyle.Top, Height = 32, Font = new Font("Segoe UI", 11f, FontStyle.Bold), ForeColor = p.Text };
         var body = new Label { Text = description, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9f), ForeColor = p.Muted };
         var button = PdksUiKit.Button(buttonText,150,PdksActionRole.Primary);
