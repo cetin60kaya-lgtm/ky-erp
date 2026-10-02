@@ -10,6 +10,17 @@ function unwrap(payload) {
 }
 
 const ROOT = "/gunluk-operasyon";
+const DAILY_MUTATION_CHANNEL = "kyerp.dailyOperations.live.v1";
+function publishDailyMutation(type = "mutation") {
+  if (typeof window === "undefined" || typeof window.BroadcastChannel !== "function") return;
+  try {
+    const channel = new window.BroadcastChannel(DAILY_MUTATION_CHANNEL);
+    channel.postMessage({ type, at: Date.now() });
+    channel.close();
+  } catch {
+    // BroadcastChannel is an acceleration layer; D1 sync-state remains authoritative.
+  }
+}
 const freshOptions = (options = {}) => ({ ...options, forceFresh: options.forceFresh !== false });
 
 export async function getDailySyncState(params = {}, options = {}) {
