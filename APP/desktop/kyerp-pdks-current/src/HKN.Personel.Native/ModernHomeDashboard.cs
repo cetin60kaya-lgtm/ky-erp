@@ -18,7 +18,7 @@ internal sealed class ModernHomeDashboard : UserControl
     static readonly Color Canvas = Color.FromArgb(245,247,250);
     static readonly Color Surface = Color.White;
     static readonly Color Border = Color.FromArgb(226,232,240);
-    static readonly Color Text = Color.FromArgb(26,38,58);
+    static readonly Color TextColor = Color.FromArgb(26,38,58);
     static readonly Color Muted = Color.FromArgb(100,116,139);
     static readonly Color Blue = Color.FromArgb(37,99,235);
 
@@ -74,7 +74,7 @@ internal sealed class ModernHomeDashboard : UserControl
             Location=new Point(2,8),
             AutoSize=true,
             Font=new Font("Segoe UI",18f,FontStyle.Bold),
-            ForeColor=Text
+            ForeColor=TextColor
         });
         hero.Controls.Add(new Label
         {
@@ -100,7 +100,7 @@ internal sealed class ModernHomeDashboard : UserControl
             Dock=DockStyle.Fill,
             TextAlign=ContentAlignment.BottomLeft,
             Font=new Font("Segoe UI",11f,FontStyle.Bold),
-            ForeColor=Text
+            ForeColor=TextColor
         },0,2);
 
         var actionGrid = new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=3, RowCount=2, Padding=new Padding(0,8,0,6), BackColor=Canvas };
@@ -132,13 +132,13 @@ internal sealed class ModernHomeDashboard : UserControl
         card.Margin=new Padding(0,0,12,0);
         var iconBox=new PictureBox{Image=PdksToolbarIcons.Create(icon),SizeMode=PictureBoxSizeMode.CenterImage,Location=new Point(18,18),Size=new Size(38,38),BackColor=Color.FromArgb(239,246,255)};
         value.Location=new Point(72,15); value.Size=new Size(150,36);
-        var titleLabel=new Label{Text=title,Location=new Point(72,51),AutoSize=true,Font=new Font("Segoe UI",9.5f,FontStyle.Bold),ForeColor=Text};
+        var titleLabel=new Label{Text=title,Location=new Point(72,51),AutoSize=true,Font=new Font("Segoe UI",9.5f,FontStyle.Bold),ForeColor=TextColor};
         var sub=new Label{Text=subtitle,Location=new Point(18,82),AutoSize=true,Font=new Font("Segoe UI",8.5f),ForeColor=Muted};
         card.Controls.Add(iconBox);card.Controls.Add(value);card.Controls.Add(titleLabel);card.Controls.Add(sub);
         return card;
     }
 
-    static Label MetricValue()=>new(){Text="—",AutoSize=false,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",20f,FontStyle.Bold),ForeColor=Text};
+    static Label MetricValue()=>new(){Text="—",AutoSize=false,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",20f,FontStyle.Bold),ForeColor=TextColor};
 
     Control ActionCard(string title,string subtitle,PdksToolbarIcon icon,Action action)
     {
@@ -146,7 +146,7 @@ internal sealed class ModernHomeDashboard : UserControl
         card.Margin=new Padding(0,0,12,12);
         card.Cursor=Cursors.Hand;
         var pic=new PictureBox{Image=PdksToolbarIcons.Create(icon),Location=new Point(18,19),Size=new Size(38,38),SizeMode=PictureBoxSizeMode.CenterImage,BackColor=Color.Transparent};
-        var t=new Label{Text=title,Location=new Point(70,18),AutoSize=true,Font=new Font("Segoe UI",10.5f,FontStyle.Bold),ForeColor=Text,BackColor=Color.Transparent};
+        var t=new Label{Text=title,Location=new Point(70,18),AutoSize=true,Font=new Font("Segoe UI",10.5f,FontStyle.Bold),ForeColor=TextColor,BackColor=Color.Transparent};
         var s=new Label{Text=subtitle,Location=new Point(70,45),AutoSize=true,Font=new Font("Segoe UI",8.6f),ForeColor=Muted,BackColor=Color.Transparent};
         var arrow=new Label{Text="›",Dock=DockStyle.Right,Width=36,TextAlign=ContentAlignment.MiddleCenter,Font=new Font("Segoe UI",19f),ForeColor=Color.FromArgb(148,163,184),BackColor=Color.Transparent};
         card.Controls.Add(arrow);card.Controls.Add(pic);card.Controls.Add(t);card.Controls.Add(s);
@@ -161,7 +161,7 @@ internal sealed class ModernHomeDashboard : UserControl
     {
         var card=CardPanel();card.Margin=new Padding(0,0,12,0);card.Padding=new Padding(20);
         card.Controls.Add(new Label{Text=body,Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f),ForeColor=Muted,TextAlign=ContentAlignment.TopLeft,Padding=new Padding(0,44,0,0)});
-        card.Controls.Add(new Label{Text=title,Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Text});
+        card.Controls.Add(new Label{Text=title,Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=TextColor});
         return card;
     }
 
@@ -173,7 +173,7 @@ internal sealed class ModernHomeDashboard : UserControl
         terminalState.ForeColor=Muted;dbState.ForeColor=Muted;syncState.ForeColor=Muted;
         var body=new Panel{Dock=DockStyle.Fill,Padding=new Padding(0,44,0,0),BackColor=Surface};
         body.Controls.Add(syncState);body.Controls.Add(dbState);body.Controls.Add(terminalState);
-        card.Controls.Add(open);card.Controls.Add(body);card.Controls.Add(new Label{Text="Sistem Durumu",Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Text});
+        card.Controls.Add(open);card.Controls.Add(body);card.Controls.Add(new Label{Text="Sistem Durumu",Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=TextColor});
         return card;
     }
 
