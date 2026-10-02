@@ -30,18 +30,82 @@ public sealed class LegacyGirisCikisForm : Form
 
     void Build()
     {
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(14)};root.RowStyles.Add(new RowStyle(SizeType.Absolute,190));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
-        var filters=new TabControl{Dock=DockStyle.Fill};
-        var p=new TabPage("Giriş / Çıkış Parametreleri"){Padding=new Padding(12)};var pg=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=4};pg.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,130));pg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));pg.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,130));pg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));
-        Row(pg,0,"Kart No Başlangıç",cardStart); pg.Controls.Add(L("Tarih Başlangıç"),2,0);dateStart.Dock=DockStyle.Fill;pg.Controls.Add(dateStart,3,0);
-        Row(pg,1,"Kart No Bitiş",cardEnd); pg.Controls.Add(L("Tarih Bitiş"),2,1);dateEnd.Dock=DockStyle.Fill;pg.Controls.Add(dateEnd,3,1);
-        Row(pg,2,"Ad / Soyad",name); pg.Controls.Add(L("Kart Basma"),2,2);punch.Dock=DockStyle.Fill;pg.Controls.Add(punch,3,2);
-        var time=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};foreach(var c in new[]{inFirst,inLast,outFirst,outLast}){c.Width=55;time.Controls.Add(c);}time.Controls.Add(manual);pg.Controls.Add(L("Saat Aralığı"),0,3);pg.Controls.Add(time,1,3);pg.SetColumnSpan(time,3);p.Controls.Add(pg);
-        var f=new TabPage("Filtreleme"){Padding=new Padding(12)};var fg=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=3};fg.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,95));fg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));fg.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,95));fg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));Row(fg,0,"Grup",group);fg.Controls.Add(L("Servis"),2,0);service.Dock=DockStyle.Fill;fg.Controls.Add(service,3,0);Row(fg,1,"Bölüm",department);fg.Controls.Add(L("Durum"),2,1);status.Dock=DockStyle.Fill;fg.Controls.Add(status,3,1);Row(fg,2,"Firma",company);fg.Controls.Add(L("Görev"),2,2);duty.Dock=DockStyle.Fill;fg.Controls.Add(duty,3,2);f.Controls.Add(fg);
-        var sp=new TabPage("Sıralama"){Padding=new Padding(12)};var sg=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=2,RowCount=1,Height=42};sg.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,100));sg.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,260));sg.Controls.Add(L("Sıralama"),0,0);sort.Dock=DockStyle.Fill;sg.Controls.Add(sort,1,0);sp.Controls.Add(sg);filters.TabPages.AddRange([p,f,sp]);root.Controls.Add(filters,0,0);
-        AddCol("PKNO","Kart No",65);AddCol("AD","Adı",100);AddCol("SOYAD","Soyadı",100);AddCol("GTARIH","Giriş Tarihi",90);AddCol("GSAAT","Giriş Saati",80);AddCol("GTUR","Giriş",55);AddCol("CTARIH","Çıkış Tarihi",90);AddCol("CSAAT","Çıkış Saati",80);AddCol("CTUR","Çıkış",55);AddCol("GRUPAD","Grubu",110);AddCol("BOLUMAD","Bölümü",110);grid.Dock=DockStyle.Fill;grid.CellDoubleClick+=(_,_)=>EditSelected();root.Controls.Add(grid,0,1);
-        var bar=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,8,0,0)};var show=Btn("Göster",100);var add=Btn("Yeni Ekle",100);var edit=Btn("Değiştir",100);var del=Btn("Sil",90);var entryE=Btn("Girişi E Yap",105);var exitE=Btn("Çıkışı E Yap",105);var report=Btn("Rapor",90);show.Click+=(_,_)=>Reload();add.Click+=(_,_)=>EditRecord(null);edit.Click+=(_,_)=>EditSelected();del.Click+=(_,_)=>DeleteSelected();entryE.Click+=(_,_)=>SetManualSide(true);exitE.Click+=(_,_)=>SetManualSide(false);report.Click+=(_,_)=>PrintList();bar.Controls.AddRange([show,report,del,exitE,entryE,edit,add]);root.Controls.Add(bar,0,2);Controls.Add(root);var ctx=new ContextMenuStrip();ctx.Items.AddRange([MI("Sil",DeleteSelected),MI("Listedeki Kayıtları Sil",DeleteListed),MI("Yeni Ekle",()=>EditRecord(null)),MI("Değiştir",EditSelected),MI("Girişi E Yap",()=>SetManualSide(true)),MI("Çıkışı E Yap",()=>SetManualSide(false)),MI("Rapor",PrintList)]);grid.ContextMenuStrip=ctx;name.KeyDown+=(_,e)=>{if(e.KeyCode==Keys.Enter)Reload();};
+        BackColor=Color.FromArgb(244,247,251);
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(16),BackColor=BackColor};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,176));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
+
+        var filterCard=new Panel{Dock=DockStyle.Fill,BackColor=Color.White,Margin=new Padding(0,0,0,10)};
+        filterCard.Paint+=(_,e)=>{using var pen=new Pen(Color.FromArgb(226,232,240));e.Graphics.DrawRectangle(pen,0,0,Math.Max(0,filterCard.Width-1),Math.Max(0,filterCard.Height-1));};
+        var filterRoot=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=new Padding(16),BackColor=Color.White};
+        filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
+        filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+        filterRoot.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        filterRoot.Controls.Add(new Label{Text="Giriş / Çıkış Kayıtları",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42),TextAlign=ContentAlignment.MiddleLeft},0,0);
+
+        var primary=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=6,RowCount=1};
+        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,14));
+        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,14));
+        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,18));
+        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,18));
+        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));
+        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16));
+        AddFilterField(primary,0,"Kart Başlangıç",cardStart);
+        AddFilterField(primary,1,"Kart Bitiş",cardEnd);
+        AddFilterField(primary,2,"Başlangıç Tarihi",dateStart);
+        AddFilterField(primary,3,"Bitiş Tarihi",dateEnd);
+        AddFilterField(primary,4,"Ad / Soyad",name);
+        AddFilterField(primary,5,"Kart Basma",punch);
+        filterRoot.Controls.Add(primary,0,1);
+
+        var secondary=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=8,RowCount=1};
+        for(var i=0;i<8;i++)secondary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,12.5f));
+        AddFilterField(secondary,0,"Grup",group);
+        AddFilterField(secondary,1,"Bölüm",department);
+        AddFilterField(secondary,2,"Servis",service);
+        AddFilterField(secondary,3,"Durum",status);
+        AddFilterField(secondary,4,"Görev",duty);
+        AddFilterField(secondary,5,"Firma",company);
+        AddFilterField(secondary,6,"Sıralama",sort);
+        var manualHost=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(4,23,0,0),WrapContents=false};manual.AutoSize=true;manualHost.Controls.Add(manual);secondary.Controls.Add(manualHost,7,0);
+        filterRoot.Controls.Add(secondary,0,2);
+        filterCard.Controls.Add(filterRoot);
+        root.Controls.Add(filterCard,0,0);
+
+        AddCol("PKNO","Kart No",70);AddCol("AD","Adı",110);AddCol("SOYAD","Soyadı",110);AddCol("GTARIH","Giriş Tarihi",96);AddCol("GSAAT","Giriş Saati",84);AddCol("GTUR","Giriş",58);AddCol("CTARIH","Çıkış Tarihi",96);AddCol("CSAAT","Çıkış Saati",84);AddCol("CTUR","Çıkış",58);AddCol("GRUPAD","Grubu",120);AddCol("BOLUMAD","Bölümü",120);
+        grid.Dock=DockStyle.Fill;grid.Margin=new Padding(0);grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.RowTemplate.Height=30;grid.ColumnHeadersHeight=34;
+        grid.CellDoubleClick+=(_,_)=>EditSelected();
+        root.Controls.Add(grid,0,1);
+
+        var bar=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0),WrapContents=false,BackColor=BackColor};
+        var show=ModernGcButton("Göster",96,true);var add=ModernGcButton("Yeni Kayıt",105,true);var edit=ModernGcButton("Düzenle",92,false);var del=ModernGcButton("Sil",74,false,true);
+        var entryE=ModernGcButton("Girişi Manuel",112,false);var exitE=ModernGcButton("Çıkışı Manuel",118,false);var report=ModernGcButton("Rapor",88,false);
+        show.Click+=(_,_)=>Reload();add.Click+=(_,_)=>EditRecord(null);edit.Click+=(_,_)=>EditSelected();del.Click+=(_,_)=>DeleteSelected();entryE.Click+=(_,_)=>SetManualSide(true);exitE.Click+=(_,_)=>SetManualSide(false);report.Click+=(_,_)=>PrintList();
+        bar.Controls.AddRange([show,report,del,exitE,entryE,edit,add]);
+        root.Controls.Add(bar,0,2);
+        Controls.Add(root);
+
+        var ctx=new ContextMenuStrip();
+        ctx.Items.AddRange([MI("Sil",DeleteSelected),MI("Listedeki Kayıtları Sil",DeleteListed),MI("Yeni Ekle",()=>EditRecord(null)),MI("Değiştir",EditSelected),MI("Girişi E Yap",()=>SetManualSide(true)),MI("Çıkışı E Yap",()=>SetManualSide(false)),MI("Rapor",PrintList)]);
+        grid.ContextMenuStrip=ctx;
+        name.KeyDown+=(_,e)=>{if(e.KeyCode==Keys.Enter)Reload();};
     }
+
+    static void AddFilterField(TableLayoutPanel table,int column,string caption,Control control)
+    {
+        var host=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Margin=new Padding(0,0,10,0)};
+        host.RowStyles.Add(new RowStyle(SizeType.Absolute,20));host.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        host.Controls.Add(new Label{Text=caption,Dock=DockStyle.Fill,Font=new Font("Segoe UI",8f,FontStyle.Bold),ForeColor=Color.FromArgb(100,116,139),TextAlign=ContentAlignment.MiddleLeft},0,0);
+        control.Dock=DockStyle.Fill;control.Margin=new Padding(0,2,0,0);host.Controls.Add(control,0,1);table.Controls.Add(host,column,0);
+    }
+
+    static Button ModernGcButton(string text,int width,bool primary,bool danger=false)
+    {
+        var b=new Button{Text=text,Width=width,Height=36,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",8.8f,FontStyle.Bold),BackColor=primary?Color.FromArgb(37,99,235):Color.White,ForeColor=primary?Color.White:danger?Color.FromArgb(185,28,28):Color.FromArgb(15,23,42),Cursor=Cursors.Hand,Margin=new Padding(8,0,0,0)};
+        b.FlatAppearance.BorderColor=primary?Color.FromArgb(37,99,235):danger?Color.FromArgb(254,202,202):Color.FromArgb(226,232,240);return b;
+    }
+
     static ToolStripMenuItem MI(string text,Action a){var m=new ToolStripMenuItem(text);m.Click+=(_,_)=>a();return m;}
     void AddCol(string n,string h,int w)=>grid.Columns.Add(new DataGridViewTextBoxColumn{Name=n,DataPropertyName=n,HeaderText=h,Width=w});
     void Init()
