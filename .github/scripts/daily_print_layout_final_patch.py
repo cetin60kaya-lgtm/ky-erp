@@ -14,10 +14,13 @@ daily = r'''function printDailyPaymentSlips(range, rows = []) {
   const html = pages.map((pageRows, pageIndex) => `<section class="pay-page"><header><strong>GÜNLÜK PERSONEL ÖDEME FİŞLERİ</strong><span>${escapeHtml(dateText(range.start))} — ${escapeHtml(dateText(range.end))}</span><em>Sayfa ${pageIndex + 1} / ${pages.length}</em></header><div class="pay-grid">${pageRows.map((row, index) => {
     const dayCount = number(row.dayCount);
     const nightCount = number(row.nightCount);
+    const items = Array.isArray(row.items) ? row.items : [];
     const dayRate = number(row.dayRate ?? row.dayWage);
     const nightRate = number(row.nightRate ?? row.nightWage);
-    const dayTotal = number(row.dayTotal) || dayCount * dayRate;
-    const nightTotal = number(row.nightTotal) || nightCount * nightRate;
+    const dayItemTotal = items.filter((item) => String(item.shift || "").toLowerCase() === "day" && item.active !== false).reduce((sum, item) => sum + number(item.amount), 0);
+    const nightItemTotal = items.filter((item) => String(item.shift || "").toLowerCase() === "night" && item.active !== false).reduce((sum, item) => sum + number(item.amount), 0);
+    const dayTotal = number(row.dayTotal) || dayItemTotal || dayCount * dayRate;
+    const nightTotal = number(row.nightTotal) || nightItemTotal || nightCount * nightRate;
     const total = number(row.totalAmount ?? row.total) || dayTotal + nightTotal;
     const no = pageIndex * 10 + index + 1;
     return `<article class="pay-card"><div class="pay-name"><b>${no}. ${escapeHtml(row.name || row.fullName || "-")}</b><span>${escapeHtml(row.qualification || row.role || "-")}</span></div><div class="pay-shifts"><div><strong>GÜNDÜZ</strong><span>${dayCount} GÜN</span><b>${escapeHtml(money(dayTotal))}</b></div><div><strong>GECE</strong><span>${nightCount} GÜN</span><b>${escapeHtml(money(nightTotal))}</b></div></div><div class="pay-total"><span>TOPLAM ÖDEME</span><strong>${escapeHtml(money(total))}</strong></div></article>`;
