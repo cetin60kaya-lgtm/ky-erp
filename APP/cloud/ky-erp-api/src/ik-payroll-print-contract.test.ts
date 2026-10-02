@@ -351,19 +351,14 @@ test("final payroll save auto-reconciles bank cash and supports serial personnel
 });
 
 
-test("final payroll always reads live overtime advance deduction and garnishment movements", () => {
+test("saved payroll snapshots stay immutable while live-source differences remain detectable", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
-  assert.match(page, /const overtime = system\.overtime/);
-  assert.match(page, /const advance = system\.advance/);
-  assert.match(page, /const deduction = system\.deduction/);
-  assert.match(page, /const garnishment = system\.garnishment/);
+  assert.match(page, /saved\.final\.overtimeAmount !== undefined \? num\(saved\.final\.overtimeAmount\) : system\.overtime/);
+  assert.match(page, /saved\.final\.advanceAmount !== undefined \? num\(saved\.final\.advanceAmount\) : system\.advance/);
+  assert.match(page, /saved\.final\.deductionAmount !== undefined \? num\(saved\.final\.deductionAmount\) : system\.deduction/);
+  assert.match(page, /saved\.final\.garnishmentAmount !== undefined \? num\(saved\.final\.garnishmentAmount\) : system\.garnishment/);
   assert.match(page, /sourceChangedSinceSave/);
-  assert.match(page, /savedPaymentMatchesLiveNet/);
-  assert.match(page, /const liveBank = Math\.min\(liveTotals\.net, liveBankPlan\)/);
-  assert.match(page, /const useSavedPaymentSplit = !sourceChangedSinceSave && savedPaymentMatchesLiveNet/);
-
-  // planFor must be a pure live-source calculation; stale payroll snapshots cannot hide new movements.
-  assert.doesNotMatch(page, /const bank = saved\?\.final \? num\(saved\.final\.bank\)/);
-  assert.doesNotMatch(page, /const overtime = num\(saved\.final\.overtimeAmount\)/);
+  assert.match(page, /paidLocked: upper\(saved\.status\) === "PAID"/);
+  assert.match(page, /reconcilePaymentSplit\(savedTotals\.net, savedBank, savedCash/);
 });
