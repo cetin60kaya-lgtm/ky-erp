@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-10-02T15:20:00+03:00",
-  "attempt": 108,
+  "requestedAt": "2026-10-02T15:38:00+03:00",
+  "attempt": 109,
   "scope": [
     "ik-monthly-live-sync-1500ms",
     "ik-multi-pc-broadcast-sync",
@@ -20,9 +20,13 @@
     "cloudflare-worker-production",
     "cloudflare-pages-production",
     "live-api-health-auth-contract",
-    "live-pages-domain-check"
+    "live-pages-domain-check",
+    "ik-personnel-master-all-sgk-and-nonsgk",
+    "ik-pdks-strict-sgk-card-separation",
+    "ik-personnel-master-ui-counts",
+    "live-final-smoke"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "3e0a14f984f2a27a843c5b1a73f04e496c4e34d9",
-  "note": "İK Aylık maaş dağıtımı finali: kaydedilmiş/ödenmiş bordro snapshot değişmez; geçmiş dönem ücret izolasyonu, PAID kilidi, işe giriş/çıkış tutarlılığı ve Günlük Operasyon benzeri 1.5 sn çoklu-PC canlı senkron."
+  "sourceCommit": "bd42a8429e8438ed754ad0e48a035310cf6687f2",
+  "note": "İK personel ana kadrosu: SGK'lı ve SGK'sız tüm personeli göster; PDKS yalnız SGK'lı + kartlı ayrımı korunur"
 }
