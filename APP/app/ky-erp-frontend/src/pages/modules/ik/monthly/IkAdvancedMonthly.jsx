@@ -19,7 +19,6 @@ import {
   saveIkAdvancedPayrollLines,
   saveIkAdvancedFinalPayrollControl,
   saveIkAdvancedPersonCard,
-  saveIkAdvancedSettlementDraft,
   previewIkAdvancedSgk,
   confirmIkAdvancedSgk,
   updateIkAdvancedFinanceMovement,
@@ -1295,28 +1294,15 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     }
   };
 
-  const runClose = async () => {
+  const runClose = async (lock = false) => {
+    if (lock && !window.confirm(`${MONTHS[month - 1]} ${year} İK dönemi kapatılacak. Bordro, hareket ve izin kayıtları kilitlenecek. Devam edilsin mi?`)) return;
     setBusy(true);
     try {
-      const result = await runIkAdvancedCloseCheck({ mainCompanyId: companyId, year, month, lock: false });
-      setData((old) => ({ ...old, close: result, checks: result?.checks || old.checks }));
-      setNotice("Ay sonu kontrolu calistirildi.");
+      const result = await runIkAdvancedCloseCheck({ mainCompanyId: companyId, year, month, lock, reason: lock ? "Ay sonu kontrolleri tamamlandı ve dönem kapatıldı." : "Ay sonu kontrolü" });
+      setData((old) => ({ ...old, close: { ...(old.close || {}), ...result }, checks: result?.checks || old.checks }));
+      setNotice(lock ? "Dönem kapatıldı. Bordro, hareket ve izin kayıtları kilitlendi." : "Ay sonu kontrolü çalıştırıldı.");
     } catch (error) {
-      setNotice(error?.message || "Ay sonu kontrolu calismadi.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const saveSettlementDraft = async () => {
-    if (!selected) return setNotice("Personel secilmelidir.");
-    setBusy(true);
-    try {
-      await saveIkAdvancedSettlementDraft({ mainCompanyId: companyId, year, month, employeeId: selected.id, reason: "Kidem / ayrilis taslagi" });
-      setNotice("Kidem / ayrilis taslagi kaydedildi.");
-      await load({ force: true });
-    } catch (error) {
-      setNotice(error?.message || "Taslak kaydedilemedi.");
+      setNotice(error?.message || (lock ? "Dönem kapatılamadı." : "Ay sonu kontrolü çalışmadı."));
     } finally {
       setBusy(false);
     }
@@ -1828,11 +1814,11 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     }
     return (
       <section>
-        <div className="page-head"><div><h1>Son Bordro ve Odeme Merkezi</h1><p>Resmi bordro, puantaj, avans/kesinti ve banka odemesi cikti oncesi burada son kez duzenlenir.</p></div><span className={`badge ${balanced ? "green" : "red"}`}>{balanced ? "Odeme dengeli" : "Odeme kontrol gerekli"}</span></div>
+        <div className="page-head"><div><h1>Son Bordro ve Ödeme Merkezi</h1><p>Resmi bordro, puantaj, avans/kesinti ve banka ödemesi çıktı öncesi burada son kez kontrol edilir.</p></div><div className="group"><span className={`badge ${data.close?.isLocked ? "red" : "blue"}`}>{data.close?.isLocked ? "Dönem Kapalı" : "Dönem Açık"}</span><span className={`badge ${balanced ? "green" : "red"}`}>{balanced ? "Ödeme dengeli" : "Ödeme kontrol gerekli"}</span></div></div>
         {filters({ third: "Personel ara", fourth: "Odeme", fifth: "Durum" })}
         <div className="sumgrid short">{summaryBox("Odeme listesi", payrollRows.length, "", `${selectedPayrollIds.length || payrollRows.length} secili`)}{summaryBox("Resmi bordro neti", money(employees.reduce((sum,item)=>sum+num(item.sgkNet),0)))}{summaryBox("Banka", money(summary.bank))}{summaryBox("Elden", money(summary.cash))}{summaryBox("Avans / Kesinti", `${money(summary.advance)} / ${money(summary.deduction)}`, "orange")}{summaryBox("EK / İcra-Haciz", `${money(summary.extra)} / ${money(summary.garnishment)}`, summary.garnishment ? "orange" : "")}{summaryBox("Net Toplam", money(summary.net), balanced ? "green" : "red")}</div>
-        <div className="workbar"><div className="group"><button className="btn primary" onClick={refreshPayroll}>Yeniden Hesapla</button><button className="btn" onClick={savePayroll}>Secilileri Kaydet</button><button className="btn green" onClick={openBulkPayment}>Odeme Merkezi</button><button className="btn" onClick={() => openPayroll()}>Seciliyi Duzenle</button><button className="btn" onClick={printPayrollReport}>Ödeme Listesi / PDF</button><button className="btn" onClick={printPaymentSlips}>10’lu Toplu Fiş / PDF</button><button className="btn" onClick={() => setModal("fis")}>Tek Kişi Fişi</button></div><button className="btn green" onClick={exportPayroll}>Ödeme Listesi / Excel</button></div>
-        <div className={`warnline ${balanced ? "ok" : "warn"}`}>{balanced ? "Toplam odeme dengeli: Banka + Elden = Net Toplam." : "Toplam odeme banka + elden ile eslesmiyor."}</div>
+        <div className="workbar"><div className="group"><button className="btn primary" disabled={data.close?.isLocked} onClick={refreshPayroll}>Yeniden Hesapla</button><button className="btn" disabled={data.close?.isLocked} onClick={savePayroll}>Seçilileri Kaydet</button><button className="btn green" disabled={data.close?.isLocked || !balanced} onClick={openBulkPayment}>Ödeme Merkezi</button><button className="btn" disabled={data.close?.isLocked} onClick={() => openPayroll()}>Seçiliyi Düzenle</button><button className="btn" onClick={printPayrollReport}>Ödeme Listesi / PDF</button><button className="btn" onClick={printPaymentSlips}>10’lu Toplu Fiş / PDF</button><button className="btn" onClick={() => setModal("fis")}>Tek Kişi Fişi</button></div><button className="btn green" onClick={exportPayroll}>Ödeme Listesi / Excel</button></div>
+        {data.close?.isLocked ? <div className="warnline warn">Bu dönem kapalıdır. Kayıtlar değiştirilemez; çıktı ve geçmiş görüntüleme devam eder.</div> : <div className={`warnline ${balanced ? "ok" : "warn"}`}>{balanced ? "Toplam ödeme dengeli: Banka + Elden = Net Toplam." : "Toplam ödeme banka + elden ile eşleşmiyor. Ödeme işlemi kapalıdır."}</div>}
         <div className="card">
           <div className="ch"><div><b>Cikti Oncesi Son Bordro</b><span>Resmi Net bordro dosyasindan gelir; Banka + Elden = sirket net odemesi olmalidir.</span></div></div>
           <div className="tw payroll-screen-table-wrap"><table className="payroll-screen-table"><thead><tr>
@@ -1853,7 +1839,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               <td className="summary-col"><div className="payroll-cell-stack"><span><em>Avans</em><b>{money(row.advance)}</b></span><span><em>Kesinti</em><b>{money(row.deduction)}</b></span><span><em>İcra/Haciz</em><b>{money(row.garnishment)}</b></span></div></td>
               <td className="payment-col"><div className="payroll-cell-stack"><span><em>Banka</em><b>{money(row.bank)}</b></span><span><em>Elden</em><b>{money(row.cash)}</b></span><span className="cell-total net"><em>Net Ödenecek</em><b>{money(row.net)}</b></span></div></td>
               <td className="status-col"><span className={`badge ${num(row.employee.sgkNet)>0?"blue":"orange"}`}>{num(row.employee.sgkNet)>0?"Bordro":"Plan"}</span><span className={`badge ${upper(row.saved?.status)==="PAID"?"green":row.diff===0?"green":"red"}`}>{upper(row.saved?.status)==="PAID"?"Ödendi":row.diff===0?"Hazır":"Kontrol"}</span></td>
-              <td className="action-col"><button className="btn" disabled={upper(row.saved?.status)==="PAID"} onClick={()=>openPayroll(row)}>{upper(row.saved?.status)==="PAID"?"Kilitli":"Son Kontrol"}</button><button className="btn" onClick={()=>{setSelectedId(row.employee.id);setModal("fis");}}>Fiş</button></td>
+              <td className="action-col"><button className="btn" disabled={data.close?.isLocked || upper(row.saved?.status)==="PAID"} onClick={()=>openPayroll(row)}>{upper(row.saved?.status)==="PAID"?"Kilitli":"Son Kontrol"}</button><button className="btn" onClick={()=>{setSelectedId(row.employee.id);setModal("fis");}}>Fiş</button></td>
             </tr>)}
             <EmptyRow show={!payrollRows.length} colSpan={8} text="Bordro için personel bulunamadı." />
           </tbody></table></div>
@@ -1866,9 +1852,9 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   function renderEvrak() {
     return (
       <section>
-        <div className="page-head"><div><h1>SGK Bordro - Evrak - Ay Sonu</h1><p>Muhasebeden gelen XLS/XLSX bordrolari sirket personeliyle eslestirilir; harici kisiler odeme ve puantaja alinmaz.</p></div><span className={`badge ${data.sgkImport ? "green" : "orange"}`}>{data.sgkImport ? `Bordro v${data.sgkImport.versionNo}` : "Bordro bekleniyor"}</span></div>
+        <div className="page-head"><div><h1>SGK Bordro · Evrak · Ay Sonu</h1><p>Resmi bordro, personel evrakları ve dönem kapanışı aynı seçili ay üzerinden kontrol edilir.</p></div><div className="group"><span className={`badge ${data.sgkImport ? "green" : "orange"}`}>{data.sgkImport ? `SGK Bordro v${data.sgkImport.versionNo}` : "SGK bordro bekleniyor"}</span><span className={`badge ${data.close?.isLocked ? "red" : "blue"}`}>{data.close?.isLocked ? "Dönem Kapalı" : "Dönem Açık"}</span></div></div>
         {filters({ third: "Personel ara", fourth: "Evrak", fifth: "SGK" })}
-        <div className="workbar"><div className="group"><input ref={payrollInput} type="file" accept=".xls,.xlsx" multiple hidden onChange={(event)=>previewPayrollFiles(event.target.files)} /><button className="btn primary" onClick={() => payrollInput.current?.click()}>Bordro XLS Dosyalari Yukle</button><button className="btn" onClick={() => openDocument()}>Evrak Yukle</button><button className="btn" onClick={() => setModal("izinFis")}>Izin Formu</button><button className="btn" onClick={() => setModal("kidemCikti")}>Kidem Ciktisi</button><button className="btn" onClick={saveSettlementDraft}>Kidem / Ayrilis Taslagi</button><button className="btn orange" onClick={runClose}>Ay Sonu Kontrol</button></div></div>
+        <div className="workbar"><div className="group"><input ref={payrollInput} type="file" accept=".xls,.xlsx" multiple hidden onChange={(event)=>previewPayrollFiles(event.target.files)} /><button className="btn primary" disabled={data.close?.isLocked} onClick={() => payrollInput.current?.click()}>Resmi Bordro XLS/XLSX</button><button className="btn" onClick={() => openDocument()}>Evrak Yükle</button><button className="btn" onClick={() => setModal("izinFis")}>İzin Formu</button><button className="btn" onClick={() => setModal("kidemCikti")}>Ayrılış Ödeme Özeti</button><button className="btn orange" disabled={busy} onClick={() => runClose(false)}>Ay Sonu Kontrol</button><button className="btn red" disabled={busy || data.close?.isLocked || !checks.length || checks.some((item)=>!item.ok)} onClick={() => runClose(true)}>{data.close?.isLocked ? "Dönem Kapalı" : "Dönemi Kapat"}</button></div></div>
         <div className="sumgrid short">{summaryBox("Bordro satiri", safeList(data.sgkRows).length)}{summaryBox("Eslesen personel", safeList(data.sgkRows).filter((row)=>row.employeeId).length,"green")}{summaryBox("SGK gun",safeList(data.sgkRows).reduce((sum,row)=>sum+num(row.sgkDays),0))}{summaryBox("Resmi net",money(safeList(data.sgkRows).reduce((sum,row)=>sum+num(row.net),0)))}{summaryBox("Yeni giris",safeList(data.sgkRows).filter((row)=>row.hireDate?.startsWith(period)).length,"orange")}{summaryBox("Cikis",safeList(data.sgkRows).filter((row)=>row.exitDate?.startsWith(period)).length,"red")}</div>
         <div className="card sgk-payroll-card"><div className="ch"><div><b>Onayli Resmi Bordro Verisi</b><span>Net Istihkak banka listesine, SGK gun puantaj kontrolune aktarilir.</span></div><button className="btn" onClick={()=>go("bordro")}>Son Bordroya Git</button></div><div className="tw"><table><thead><tr><th>Personel</th><th>TC</th><th>Giris</th><th>Cikis</th><th>SGK Gun</th><th>Normal Kazanc</th><th>Toplam Kazanc</th><th>SGK Matrah</th><th>SGK Primi</th><th>Vergi</th><th>Net Istihkak</th><th>Kaynak</th></tr></thead><tbody>{safeList(data.sgkRows).map((row)=><tr key={row.id}><td>{row.fullName}</td><td>{row.identityNo||"-"}</td><td>{row.hireDate||"-"}</td><td>{row.exitDate||"-"}</td><td>{row.sgkDays}</td><td className="money">{money(row.normalEarning)}</td><td className="money">{money(row.gross)}</td><td className="money">{money(row.sgkBase)}</td><td className="money">{money(row.sgkPremium)}</td><td className="money">{money(num(row.incomeTax)+num(row.stampTax))}</td><td className="money">{money(row.net)}</td><td>{row.source?.sourceFile||data.sgkImport?.fileName||"-"}</td></tr>)}<EmptyRow show={!safeList(data.sgkRows).length} colSpan={12} text="Bu donem icin onayli bordro yok. Bir veya birden cok XLS dosyasi yukleyin." /></tbody></table></div></div>
         <div className="layout2"><div className="card"><div className="ch"><div><b>Evrak / Belge Baglantilari</b><span>Yuklenen belgeler burada listelenir.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>Belge Turu</th><th>Dosya</th><th>Tarih</th><th>Not</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{documents.map((doc) => <tr key={doc.id}><td>{employees.find((item) => item.id === doc.employeeId)?.fullName || "-"}</td><td>{doc.documentType || "-"}</td><td>{doc.fileName || "-"}</td><td>{doc.date || doc.createdAt || "-"}</td><td>{doc.note || doc.storagePath || "-"}</td><td><span className="badge green">{doc.status || "Kayitli"}</span></td><td><button className="btn" onClick={async () => { try { await downloadIkAdvancedDocument(doc.id, doc.fileName || "ik-evrak"); setNotice("Evrak indirildi."); } catch (error) { setNotice(error?.message || "Evrak indirilemedi."); } }}>İndir</button></td></tr>)}<EmptyRow show={!documents.length} colSpan={7} text="Kayitli evrak yok." /></tbody></table></div></div><div className="card"><div className="ch"><div><b>Eksik Evrak Kontrolu</b><span>Bordro loglari burada gorunmez.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>Eksik Belge</th><th>Tarih</th><th>Not</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{employees.filter((employee) => !docsFor(employee).length).map((employee) => <tr key={employee.id}><td>{employee.fullName}</td><td>Personel evragi</td><td>{period}</td><td>Evrak baglantisi yok</td><td><span className="badge orange">Eksik</span></td><td><button className="btn" onClick={() => openDocument(employee)}>Yukle</button></td></tr>)}<EmptyRow show={employees.every((employee) => docsFor(employee).length)} colSpan={6} text="Eksik evrak gorunmuyor." /></tbody></table></div></div></div>
