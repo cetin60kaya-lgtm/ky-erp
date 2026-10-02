@@ -19,33 +19,34 @@ internal sealed class ReportPreviewWindow : Form
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(1180, 760);
         MinimumSize = new Size(900, 620);
-        BackColor = Color.FromArgb(246, 249, 253);
+        BackColor = PdksAppearance.Current.Canvas;
         Font = new Font("Segoe UI", 9f);
         Build();
     }
 
     void Build()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(14) };
+        var p=PdksAppearance.Current;
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(14), BackColor=p.Canvas };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
 
-        var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(18, 10, 18, 8) };
+        var header = PdksUiKit.Card(0); header.Padding=new Padding(18,10,18,8);
         header.Controls.Add(new Label
         {
             Text = report.Title,
             AutoSize = true,
             Location = new Point(18, 12),
             Font = new Font("Segoe UI", 16f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(27, 44, 68)
+            ForeColor = p.Text
         });
         header.Controls.Add(new Label
         {
             Text = $"KY ERP • PDKS   •   {report.Rows.Count} kayıt   •   {DateTime.Now:dd.MM.yyyy HH:mm}",
             AutoSize = true,
             Location = new Point(20, 47),
-            ForeColor = Color.FromArgb(88, 103, 124)
+            ForeColor = p.Muted
         });
         root.Controls.Add(header, 0, 0);
 
@@ -56,7 +57,7 @@ internal sealed class ReportPreviewWindow : Form
         grid.AllowUserToOrderColumns = true;
         grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
-        grid.BackgroundColor = Color.White;
+        grid.BackgroundColor = p.Surface;
         grid.DataSource = ToTable(report);
         if (sourceWidths is not null && sourceWidths.Count == grid.Columns.Count)
             for (var i = 0; i < grid.Columns.Count; i++) grid.Columns[i].Width = Math.Clamp(sourceWidths[i], 35, 800);
@@ -64,7 +65,7 @@ internal sealed class ReportPreviewWindow : Form
             foreach (DataGridViewColumn c in grid.Columns) c.Width = Math.Max(80, c.Width);
         root.Controls.Add(grid, 0, 1);
 
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 10, 0, 0) };
+        var actions = PdksUiKit.ActionBar(true,p.Canvas);
         actions.Controls.Add(Action("Kapat", Close, 100));
         actions.Controls.Add(Action("CSV Aktar", ExportCsv, 110));
         actions.Controls.Add(Action("Excel Aktar", () => Export(true), 120));
@@ -79,15 +80,11 @@ internal sealed class ReportPreviewWindow : Form
 
     static Button Action(string text, Action action, int width, bool primary = false)
     {
-        var b = new Button
-        {
-            Text = text, Width = width, Height = 36, FlatStyle = FlatStyle.Flat,
-            BackColor = primary ? Color.FromArgb(36, 107, 230) : Color.White,
-            ForeColor = primary ? Color.White : Color.FromArgb(27, 44, 68),
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold)
-        };
-        b.FlatAppearance.BorderColor = primary ? b.BackColor : Color.FromArgb(216, 225, 236);
-        b.Click += (_, _) => action();
+        var role=primary?PdksActionRole.Primary:
+            text.Contains("Kapat",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Quiet:
+            PdksActionRole.Secondary;
+        var b=PdksUiKit.Button(text,width,role,action);
+        b.Height=36;b.MinimumSize=new Size(width,36);b.MaximumSize=new Size(width,36);
         return b;
     }
 
