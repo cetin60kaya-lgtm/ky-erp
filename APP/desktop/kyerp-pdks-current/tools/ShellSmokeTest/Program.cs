@@ -116,9 +116,15 @@ form.Close();
 Application.DoEvents();
 using (var reportCenter = new ReportCenterForm())
 {
-    var method = typeof(ReportCenterForm).GetMethod("Query", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+    var type = typeof(ReportCenterForm);
+    var method = type.GetMethod("Query", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
         ?? throw new InvalidOperationException("ReportCenter Query bulunamadı.");
-    foreach (var reportName in new[] { "Personel • Ad Soyad", "Giriş Çıkış • Tarihe Göre", "Bordro • Genel Maaş" })
+    var reportField = type.GetField("report", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException("ReportCenter rapor listesi bulunamadı.");
+    var combo = reportField.GetValue(reportCenter) as ComboBox
+        ?? throw new InvalidOperationException("ReportCenter rapor listesi okunamadı.");
+
+    foreach (var reportName in combo.Items.Cast<object>().Select(x => Convert.ToString(x) ?? string.Empty).Where(x => x.Length > 0))
     {
         try
         {
