@@ -118,7 +118,20 @@ public sealed partial class MainShellForm
             Padding = new Padding(14, 14, 14, 12)
         };
 
-        var brand = new Panel { Dock = DockStyle.Top, Height = 72, BackColor = p.Sidebar };
+        var layout=new TableLayoutPanel
+        {
+            Dock=DockStyle.Fill,
+            RowCount=3,
+            ColumnCount=1,
+            BackColor=p.Sidebar,
+            Margin=Padding.Empty,
+            Padding=Padding.Empty
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute,72));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute,102));
+
+        var brand = new Panel { Dock = DockStyle.Fill, BackColor = p.Sidebar };
         var badge = new RoundedLabel
         {
             Text = "KY",
@@ -149,7 +162,7 @@ public sealed partial class MainShellForm
             Font = new Font("Segoe UI", 8.2f),
             AutoEllipsis = true
         });
-        sidebar.Controls.Add(brand);
+        layout.Controls.Add(brand,0,0);
 
         var nav = new FlowLayoutPanel
         {
@@ -158,7 +171,8 @@ public sealed partial class MainShellForm
             WrapContents = false,
             AutoScroll = true,
             BackColor = p.Sidebar,
-            Padding = new Padding(0, 6, 0, 0)
+            Padding = new Padding(0, 6, 0, 0),
+            Margin=Padding.Empty
         };
 
         foreach(var group in VisiblePrimaryCommands().GroupBy(x=>x.Group))
@@ -167,15 +181,15 @@ public sealed partial class MainShellForm
             foreach(var command in group.OrderBy(x=>x.Order))
                 nav.Controls.Add(NavButton(command));
         }
-        sidebar.Controls.Add(nav);
+        layout.Controls.Add(nav,0,1);
 
         var bottom = new TableLayoutPanel
         {
-            Dock = DockStyle.Bottom,
-            Height = 102,
+            Dock = DockStyle.Fill,
             RowCount = 3,
             BackColor = p.Sidebar,
-            Padding = new Padding(0, 6, 0, 0)
+            Padding = new Padding(0, 6, 0, 0),
+            Margin=Padding.Empty
         };
         bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
@@ -196,10 +210,9 @@ public sealed partial class MainShellForm
             TextAlign = ContentAlignment.MiddleLeft,
             Padding = new Padding(10, 2, 0, 0)
         }, 0, 2);
-        sidebar.Controls.Add(bottom);
-        nav.SendToBack();
-        brand.BringToFront();
-        bottom.BringToFront();
+        layout.Controls.Add(bottom,0,2);
+
+        sidebar.Controls.Add(layout);
         return sidebar;
     }
 
@@ -323,10 +336,12 @@ public sealed partial class MainShellForm
         var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,BackColor=p.Surface,Margin=Padding.Empty};
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,500));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
         var left = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount=2, RowCount = 1, BackColor = p.Surface };
         left.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,48));
         left.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        left.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
         modernBackButton=PdksUiKit.Button("‹",34,PdksActionRole.Quiet,NavigateBack);
         modernBackButton.Font=new Font("Segoe UI",16f,FontStyle.Bold);
