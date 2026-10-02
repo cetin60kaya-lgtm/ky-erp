@@ -1512,6 +1512,82 @@ async function saveAdvancedSettlementDraft(c: Context<AppEnv>) {
   return okData(c, { id, employeeId, period, status: "DRAFT" }, 201);
 }
 
+function safeIkDocumentName(value: unknown) {
+  return text(value).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "evrak.bin";
+}
+
+async function uploadAdvancedDocument(c: Context<AppEnv>) {
+  const form = await c.req.formData();
+  const file = form.get("file");
+  if (!(file instanceof File)) return error(c, 400, "FILE_REQUIRED", "Yüklenecek evrak seçilmelidir.");
+  if (file.size <= 0) return error(c, 400, "FILE_EMPTY", "Seçilen evrak boş.");
+  if (file.size > 25 * 1024 * 1024) return error(c, 413, "FILE_TOO_LARGE", "İK evrakı en fazla 25 MB olabilir.");
+
+  const body: Row = {};
+  for (const [key, value] of form.entries()) if (!(value instanceof File)) body[key] = value;
+  const companyId = companyIdOf(c, body);
+  const employeeId = text(body.employeeId);
+  if (!(await employeeBelongsToCompany(c, employeeId, companyId))) {
+    return error(c, 400, "INVALID_EMPLOYEE", "Evrak için geçerli personel seçilmelidir.");
+  }
+
+  const id = crypto.randomUUID();
+  const documentDate = hrDateOnly(body.date) || hrTodayIstanbul();
+  const fileName = text(file.name) || "evrak.bin";
+  const storageKey = `ik/documents/${companyId}/${employeeId}/${documentDate.slice(0, 7)}/${id}-${safeIkDocumentName(fileName)}`;
+  await c.env.FILES.put(storageKey, file.stream(), {
+    httpMetadata: { contentType: file.type || "application/octet-stream" },
+    customMetadata: {
+      originalName: fileName.slice(0, 512),
+      employeeId,
+      companyId,
+      documentType: text(body.documentType || "Personel evrağı").slice(0, 128),
+    },
+  });
+
+  try {
+    await c.env.DB.prepare(`INSERT INTO hr_employee_documents
+      (id,employee_id,document_type,file_name,file_path,date,status)
+      VALUES (?,?,?,?,?,?,?)`)
+      .bind(id, employeeId, text(body.documentType || "Personel evrağı"), fileName, storageKey, documentDate, text(body.status || "KAYITLI"))
+      .run();
+  } catch (cause) {
+    await c.env.FILES.delete(storageKey).catch(() => undefined);
+    throw cause;
+  }
+
+  await audit(c, {
+    mainCompanyId: companyId,
+    period: documentDate.slice(0, 7),
+    employeeId,
+    entityType: "EVRAK",
+    action: "UPLOAD",
+    summary: `${fileName} İK evrakı yüklendi.`,
+    details: { id, documentType: text(body.documentType), storageKey, note: text(body.note), size: file.size },
+  });
+  return okData(c, { id, employeeId, documentType: text(body.documentType || "Personel evrağı"), fileName, storagePath: storageKey, date: documentDate, status: text(body.status || "KAYITLI") }, 201);
+}
+
+async function downloadAdvancedDocument(c: Context<AppEnv>) {
+  const companyId = companyIdOf(c);
+  const documentId = text(c.req.param("documentId"));
+  const row = await first(c, `SELECT d.id,d.file_name,d.file_path,d.document_type
+      FROM hr_employee_documents d
+      JOIN hr_monthly_employees e ON e.id=d.employee_id
+      WHERE d.id=? AND e.main_company_id=? LIMIT 1`, [documentId, companyId]);
+  if (!row) return error(c, 404, "DOCUMENT_NOT_FOUND", "Evrak bulunamadı.");
+  const storageKey = text(row.file_path);
+  if (!storageKey) return error(c, 404, "DOCUMENT_FILE_MISSING", "Evrak dosya bağlantısı bulunamadı.");
+  const object = await c.env.FILES.get(storageKey);
+  if (!object?.body) return error(c, 404, "DOCUMENT_OBJECT_MISSING", "Evrak dosyası depolamada bulunamadı.");
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("Cache-Control", "private, no-store");
+  headers.set("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(text(row.file_name) || "evrak")}`);
+  if (object.etag) headers.set("ETag", object.etag);
+  return new Response(object.body, { status: 200, headers });
+}
+
 async function runAdvancedCloseCheck(c: Context<AppEnv>) {
   const body = await bodyOf(c);
   const companyId = companyIdOf(c, body);
@@ -1879,6 +1955,8 @@ export function registerIkRelationalCloudRoutes(app: Hono<AppEnv>) {
   app.post("/api/ik/advanced/payroll/final-control", protect(saveAdvancedPayrollFinalControl));
   app.post("/api/ik/advanced/payroll/save", protect(saveAdvancedPayrollLines));
   app.post("/api/ik/advanced/settlement-draft", protect(saveAdvancedSettlementDraft));
+  app.post("/api/ik/advanced/documents/upload", protect(uploadAdvancedDocument));
+  app.get("/api/ik/advanced/documents/:documentId/content", protect(downloadAdvancedDocument));
   app.post("/api/ik/advanced/close-check", protect(runAdvancedCloseCheck));
   app.get("/api/ik/advanced/audit-logs", protect(auditLogs));
   app.get("/api/ik/advanced/leave-center", protect(leaveCenterV2));
