@@ -173,10 +173,13 @@ public sealed class LegacyDefinitionsForm : Form
 
     static void DefRow(TableLayoutPanel table,int row,string text,Control control)
     {
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute,40));table.Controls.Add(new Label{Text=text,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)},0,row);control.Dock=DockStyle.Fill;control.Margin=new Padding(3,6,3,6);table.Controls.Add(control,1,row);
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
+        table.Controls.Add(PdksUiKit.FieldLabel(text),0,row);
+        control.Dock=DockStyle.Fill;control.Margin=new Padding(0,6,0,6);table.Controls.Add(control,1,row);
     }
 
-    static Button Command(string text,int x,int y,int width=105)=>new(){Text=text,Width=Math.Max(width,100),Height=36,FlatStyle=FlatStyle.Flat,ForeColor=Color.FromArgb(27,44,68),BackColor=Color.White,Font=new Font("Segoe UI",9f,FontStyle.Bold),Cursor=Cursors.Hand};
+    static Button Command(string text,int x,int y,int width=105)
+        => PdksUiKit.Button(text,Math.Max(width,100),PdksUiKit.InferRole(new Button{Text=text}));
     public void SelectTab(string name)
     {
         foreach(TabPage p in tabs.TabPages)
