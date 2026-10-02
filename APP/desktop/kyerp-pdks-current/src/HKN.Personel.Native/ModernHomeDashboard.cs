@@ -136,7 +136,7 @@ internal sealed class ModernHomeDashboard : UserControl
         var lower = new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=2, Padding=new Padding(0,6,0,0), BackColor=p.Canvas };
         lower.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,65));
         lower.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));
-        lower.Controls.Add(InfoCard("Günün Akışı",BuildFlowText()),0,0);
+        lower.Controls.Add(WorkflowCard(),0,0);
         lower.Controls.Add(SystemCard(),1,0);
         root.Controls.Add(lower,0,4);
 
@@ -187,12 +187,46 @@ internal sealed class ModernHomeDashboard : UserControl
         return card;
     }
 
-    Control InfoCard(string title,string body)
+    Control WorkflowCard()
     {
         var p=PdksAppearance.Current;
         var card=CardPanel();card.Margin=new Padding(0,0,12,0);card.Padding=new Padding(20);
-        card.Controls.Add(new Label{Text=body,Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f),ForeColor=p.Muted,TextAlign=ContentAlignment.TopLeft,Padding=new Padding(0,44,0,0)});
-        card.Controls.Add(new Label{Text=title,Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text});
+        var layout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=7,BackColor=p.Surface,Margin=Padding.Empty};
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
+        for(var i=1;i<7;i++)layout.RowStyles.Add(new RowStyle(SizeType.Percent,16.666f));
+        layout.Controls.Add(new Label{Text="Standart İş Akışı",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text},0,0);
+
+        var steps=new (PdksCommandId Id,string Text)[]
+        {
+            (PdksCommandId.TerminalCenter,"1  Terminal verisini al ve doğrula"),
+            (PdksCommandId.EntryExit,"2  Giriş / çıkış eksiklerini düzelt"),
+            (PdksCommandId.Personnel,"3  Personel, izin ve ek ödemeleri kontrol et"),
+            (PdksCommandId.TimesheetMonthly,"4  Puantajı hesapla ve sonucu kontrol et"),
+            (PdksCommandId.PayrollGeneral,"5  Hakediş ve resmî bordroyu hazırla"),
+            (PdksCommandId.Reports,"6  Raporla, çıktı al ve dönemi kapat")
+        };
+        for(var i=0;i<steps.Length;i++)
+        {
+            var step=steps[i];
+            var b=new Button
+            {
+                Text=step.Text,
+                Dock=DockStyle.Fill,
+                FlatStyle=FlatStyle.Flat,
+                BackColor=p.Surface,
+                ForeColor=p.Muted,
+                Font=new Font("Segoe UI",8.6f,FontStyle.Regular),
+                TextAlign=ContentAlignment.MiddleLeft,
+                Cursor=Cursors.Hand,
+                Padding=new Padding(4,0,0,0),
+                Margin=new Padding(0,1,0,1)
+            };
+            b.FlatAppearance.BorderSize=0;
+            b.FlatAppearance.MouseOverBackColor=p.SurfaceAlt;
+            b.Click+=(_,_)=>execute(step.Id);
+            layout.Controls.Add(b,0,i+1);
+        }
+        card.Controls.Add(layout);
         return card;
     }
 
@@ -214,12 +248,6 @@ internal sealed class ModernHomeDashboard : UserControl
         var p=PdksAppearance.Current;
         return new ModernCardPanel{Dock=DockStyle.Fill,BackColor=p.Surface,Padding=new Padding(0),BorderColor=p.Border,Radius=12};
     }
-
-    static string BuildFlowText() =>
-        "1. Terminal hareketleri alınır ve doğrulanır\r\n\r\n" +
-        "2. Eksik / hatalı giriş-çıkışlar kontrol edilir\r\n\r\n" +
-        "3. İzin ve çalışma planı puantaja işlenir\r\n\r\n" +
-        "4. Hakediş ve resmî bordro ayrı motorlarda hesaplanır";
 
     void RefreshDashboard()
     {
