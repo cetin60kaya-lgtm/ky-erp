@@ -96,7 +96,7 @@ internal static class PdksCloudAgent
                     using var batch=JsonDocument.Parse(item.PayloadJson);
                     var root=batch.RootElement;
                     var rows=root.TryGetProperty("rows",out var rowsNode)?rowsNode.Clone():JsonDocument.Parse("[]").RootElement.Clone();
-                    var result=await SendAsync(credential,HttpMethod.Post,"/api/auth/pdks-device/time-events/import",new{source="KY PDKS 6.0 Desktop",rows},ct,item.IdempotencyKey);
+                    var result=await SendAsync(credential,HttpMethod.Post,"/api/auth/pdks-device/time-events/import",new{source="KY PDKS 6.4 Desktop",rows},ct,item.IdempotencyKey);
                     if(result.TryGetProperty("data",out var data)&&data.TryGetProperty("rejectedCount",out var rejected)&&rejected.GetInt32()>0)
                         throw new InvalidOperationException($"Cloud terminal aktarımında {rejected.GetInt32()} kayıt reddedildi.");
                 }
