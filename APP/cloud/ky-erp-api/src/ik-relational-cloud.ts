@@ -1640,8 +1640,16 @@ async function runAdvancedCloseCheck(c: Context<AppEnv>) {
     const exitDate = hrDateOnly(card.exit_date);
     return Boolean(exitDate && employee.hireDate && exitDate < employee.hireDate);
   });
+  const missingHire = visible.filter((employee) => !hrDateOnly(employee.hireDate));
+  const passiveWithoutExit = employees.filter((employee) => {
+    const card = cardsByEmployee.get(text(employee.id)) || {};
+    const lifecycle = upper(`${text(card.active_passive)} ${text(employee.status)}`);
+    return lifecycle.includes("PAS") && !hrDateOnly(card.exit_date);
+  });
   const checks = [
-    { type: "PERSONEL_TARIH", title: "İşe giriş / çıkış tarihleri", ok: badDates.length === 0, detail: badDates.length ? `${badDates.length} personelde tarih sırası hatalı.` : "İşe giriş / çıkış tarihleri tutarlı." },
+    { type: "PERSONEL_TARIH", title: "İşe giriş / çıkış tarih sırası", ok: badDates.length === 0, detail: badDates.length ? `${badDates.length} personelde tarih sırası hatalı.` : "İşe giriş / çıkış tarih sırası tutarlı." },
+    { type: "PERSONEL_GIRIS", title: "İşe giriş tarihleri", ok: missingHire.length === 0, detail: missingHire.length ? `${missingHire.length} dönem personelinde işe giriş tarihi eksik. Geçmiş dönem kapsamı kesinleştirilemez.` : "Dönem personelinin işe giriş tarihleri tam." },
+    { type: "PERSONEL_CIKIS", title: "Pasif personel çıkış tarihleri", ok: passiveWithoutExit.length === 0, detail: passiveWithoutExit.length ? `${passiveWithoutExit.length} pasif personelde işten çıkış tarihi eksik.` : "Pasif personelin çıkış tarihleri tam." },
     { type: "BORDRO_KAPSAM", title: "Bordro kapsamı", ok: missingPayroll.length === 0, detail: missingPayroll.length ? `${missingPayroll.length} dönem personelinin bordrosu henüz sabitlenmedi.` : `${visible.length} dönem personelinin bordrosu kayıtlı.` },
     { type: "ODEME_DENGE", title: "Banka + elden dengesi", ok: unbalanced.length === 0, detail: unbalanced.length ? `${unbalanced.length} bordro satırında ödeme dengesi bozuk.` : "Tüm bordro satırlarında banka + elden = net." },
     { type: "ODEME_DURUM", title: "Ödeme durumu", ok: unpaid.length === 0, detail: unpaid.length ? `${unpaid.length} bordro satırı henüz PAID durumunda değil.` : "Tüm bordrolar ödendi." },
