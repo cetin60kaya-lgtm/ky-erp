@@ -438,13 +438,33 @@ function normalizeDailyPerson(row = {}) {
     row?.qualification ||
     row?.title ||
     "";
+  const dayRate = toNumber(
+    row?.dayRate ??
+    row?.dayWage ??
+    row?.daytimeWage ??
+    row?.gunduzUcreti ??
+    row?.gunduzUcret ??
+    row?.gunduz_ucreti ??
+    row?.day_rate ??
+    row?.gunduz,
+  );
+  const nightRate = toNumber(
+    row?.nightRate ??
+    row?.nightWage ??
+    row?.nighttimeWage ??
+    row?.geceUcreti ??
+    row?.geceUcret ??
+    row?.gece_ucreti ??
+    row?.night_rate ??
+    row?.gece,
+  );
   return {
     ...row,
     id: row?.id,
     name: row?.fullName || row?.name || row?.adSoyad || "",
     role: standardSkillName(role) || role,
-    dayRate: toNumber(row?.dayRate ?? row?.dayWage ?? row?.daytimeWage ?? row?.gunduzUcreti),
-    nightRate: toNumber(row?.nightRate ?? row?.nightWage ?? row?.nighttimeWage ?? row?.geceUcreti),
+    dayRate,
+    nightRate,
     broker: row?.broker || row?.araci || row?.source || "Direkt",
     personnelNo: row?.personnelNo || row?.personelNo || "",
     note: row?.note || row?.not || "",
