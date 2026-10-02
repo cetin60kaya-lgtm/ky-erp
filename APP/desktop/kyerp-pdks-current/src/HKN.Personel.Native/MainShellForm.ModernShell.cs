@@ -46,7 +46,7 @@ public sealed partial class MainShellForm
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2,
+            RowCount = 3,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
             BackColor = p.Canvas
@@ -189,13 +189,13 @@ public sealed partial class MainShellForm
         var bottom = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            RowCount = 3,
+            RowCount = 2,
             BackColor = p.Sidebar,
             Padding = new Padding(0, 6, 0, 0),
             Margin=Padding.Empty
         };
-        bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        bottom.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        bottom.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
 
         var manage=CompactButton("Yönetim",PdksToolbarIcon.Groups);
         manage.Click+=(_,_)=>ShowManagementCenter();
