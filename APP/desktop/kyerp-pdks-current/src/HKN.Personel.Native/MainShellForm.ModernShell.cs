@@ -344,12 +344,16 @@ public sealed partial class MainShellForm
         var right = new FlowLayoutPanel
         {
             Dock = DockStyle.Right,
-            Width = 430,
+            Width = 560,
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
             BackColor = p.Surface,
             Padding = new Padding(0, 10, 0, 0)
         };
+        var quickSearch = PdksUiKit.Button("İşlem Ara   Ctrl+K",132,PdksActionRole.Secondary,OpenCommandPalette);
+        quickSearch.Height=34;quickSearch.MinimumSize=new Size(132,34);quickSearch.MaximumSize=new Size(132,34);
+        quickSearch.Margin=new Padding(10,0,0,0);
+
         var user = new RoundedLabel
         {
             AutoSize = false,
@@ -386,6 +390,7 @@ public sealed partial class MainShellForm
         right.Controls.Add(user);
         right.Controls.Add(modernClock);
         right.Controls.Add(live);
+        right.Controls.Add(quickSearch);
 
         bar.Controls.Add(right);
         bar.Controls.Add(left);
