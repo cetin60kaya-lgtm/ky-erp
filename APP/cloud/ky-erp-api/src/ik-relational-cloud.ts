@@ -885,6 +885,8 @@ async function advancedSyncState(c: Context<AppEnv>) {
     { key: "sgk", sql: "SELECT MAX(COALESCE(updated_at,'')) AS stamp,COUNT(*) AS count FROM ik_person_monthly_compliance WHERE main_company_id=?", values: [companyId] },
     { key: "audit", sql: "SELECT MAX(COALESCE(created_at,'')) AS stamp,COUNT(*) AS count FROM hr_monthly_audit_logs WHERE main_company_id=?", values: [companyId] },
     { key: "document", sql: "SELECT MAX(COALESCE(d.created_at,d.date,'')) AS stamp,COUNT(*) AS count FROM hr_employee_documents d JOIN hr_monthly_employees e ON e.id=d.employee_id WHERE e.main_company_id=?", values: [companyId] },
+    { key: "sgkImport", sql: "SELECT MAX(COALESCE(created_at,'')) AS stamp,COUNT(*) AS count FROM ik_sgk_imports WHERE main_company_id=?", values: [companyId] },
+    { key: "close", sql: "SELECT MAX(COALESCE(updated_at,created_at,'')) AS stamp,COUNT(*) AS count FROM ik_monthly_close WHERE main_company_id=?", values: [companyId] },
   ];
   const parts: string[] = [];
   let updatedAt = "";
@@ -985,7 +987,7 @@ async function advancedMonth(c: Context<AppEnv>) {
   const period = `${year}-${String(month).padStart(2, "0")}`;
   const periodStart = `${period}-01`;
   const periodEnd = `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
-  const [employees, cards, adjustments, leaves, payroll, documents, contracts, profiles, compliance, cardDayRows, calcRows, historyRows] = await Promise.all([
+  const [employees, cards, adjustments, leaves, payroll, documents, contracts, profiles, compliance, cardDayRows, calcRows, historyRows, sgkImportRows, closeRows, closeLogRows, latestCloseChecks] = await Promise.all([
     monthlyRows(c, companyId),
     all(c, "SELECT * FROM ik_person_card_settings WHERE main_company_id=?", [companyId]),
     adjustmentRows(c, companyId),
@@ -998,6 +1000,10 @@ async function advancedMonth(c: Context<AppEnv>) {
     all(c, "SELECT employee_id,COUNT(DISTINCT work_date) AS card_days FROM ik_time_clock_events WHERE main_company_id=? AND work_date BETWEEN ? AND ? GROUP BY employee_id", [companyId, periodStart, periodEnd]).catch(() => []),
     all(c, "SELECT file_name,data FROM json_store WHERE scope=? AND file_name LIKE ?", [IK_PERSON_CARD_CALC_SCOPE, `${companyId}:%`]).catch(() => []),
     all(c, "SELECT employee_id,field_name,old_value,new_value,effective_date,created_at FROM ik_employee_change_history WHERE main_company_id=? AND effective_date>? ORDER BY effective_date DESC,created_at DESC", [companyId, periodEnd]).catch(() => []),
+    all(c, "SELECT * FROM ik_sgk_imports WHERE main_company_id=? AND period_year=? AND period_month=? ORDER BY version_no DESC,created_at DESC LIMIT 1", [companyId, year, month]).catch(() => []),
+    all(c, "SELECT * FROM ik_monthly_close WHERE main_company_id=? AND period_year=? AND period_month=? LIMIT 1", [companyId, year, month]).catch(() => []),
+    all(c, "SELECT * FROM ik_monthly_close_logs WHERE main_company_id=? AND period_year=? AND period_month=? ORDER BY created_at DESC LIMIT 100", [companyId, year, month]).catch(() => []),
+    all(c, "SELECT details_json,created_at FROM hr_monthly_audit_logs WHERE main_company_id=? AND period=? AND entity_type='AY_SONU' AND action='CHECK' ORDER BY created_at DESC LIMIT 1", [companyId, period]).catch(() => []),
   ]);
   const calcPrefix = `${companyId}:`;
   const calcByEmployee = new Map<string, PersonCardCalc>();
@@ -1048,6 +1054,47 @@ async function advancedMonth(c: Context<AppEnv>) {
       };
     });
   const visibleEmployeeIds = new Set(mergedEmployees.map((employee) => text(employee.id)));
+  const sgkImport = sgkImportRows[0] || null;
+  const sgkRowsRaw = sgkImport
+    ? await all(c, "SELECT * FROM ik_sgk_rows WHERE import_id=? ORDER BY full_name COLLATE NOCASE,id", [text(sgkImport.id)]).catch(() => [])
+    : [];
+  const sgkRows = sgkRowsRaw.map((row) => {
+    let source: Row = {};
+    try { source = JSON.parse(text(row.raw_json) || "{}") as Row; } catch {}
+    return {
+      id: text(row.id),
+      importId: text(row.import_id),
+      employeeId: text(row.employee_id),
+      fullName: text(row.full_name),
+      identityNo: text(row.identity_no),
+      personCode: text(row.person_code),
+      hireDate: hrDateOnly(row.hire_date),
+      exitDate: hrDateOnly(row.exit_date),
+      sgkDays: number(row.sgk_days),
+      normalEarning: number(row.normal_earning),
+      otherEarning: number(row.other_earning),
+      gross: number(row.total_earning || row.gross),
+      sgkBase: number(row.sgk_base),
+      sgkPremium: number(row.sgk_premium),
+      unemploymentPremium: number(row.unemployment_premium),
+      incomeTax: number(row.income_tax),
+      stampTax: number(row.stamp_tax),
+      specialDeduction: number(row.special_deduction),
+      employerSgk: number(row.employer_sgk),
+      employerUnemployment: number(row.employer_unemployment),
+      sgkIncentive: number(row.sgk_incentive),
+      net: number(row.net),
+      employerNetCost: number(row.employer_net_cost),
+      differenceReason: text(row.difference_reason),
+      source,
+    };
+  });
+  const closeRow = closeRows[0] || {};
+  let checks: Row[] = [];
+  try {
+    const parsed = JSON.parse(text(latestCloseChecks[0]?.details_json) || "{}") as Row;
+    checks = Array.isArray(parsed?.checks) ? parsed.checks as Row[] : [];
+  } catch {}
   return okData(c, {
     year,
     month,
@@ -1058,11 +1105,16 @@ async function advancedMonth(c: Context<AppEnv>) {
     payroll: payroll.filter((row) => visibleEmployeeIds.has(text(row.employeeId))),
     documents: documents
       .filter((row) => visibleEmployeeIds.has(text(row.employee_id)))
-      .map((row) => ({ id: text(row.id), employeeId: text(row.employee_id), documentType: text(row.document_type), fileName: text(row.file_name), filePath: text(row.file_path), date: hrDateOnly(row.date), status: text(row.status) })),
+      .map((row) => ({ id: text(row.id), employeeId: text(row.employee_id), documentType: text(row.document_type), fileName: text(row.file_name), filePath: text(row.file_path), storagePath: text(row.file_path), date: hrDateOnly(row.date), status: text(row.status), note: text(row.note) })),
     contracts: contracts
       .filter((row) => visibleEmployeeIds.has(text(row.employee_id)))
       .map((row) => ({ id: text(row.id), employeeId: text(row.employee_id), salary: number(row.salary), roadAllowance: number(row.road_allowance), bankAmount: number(row.bank_amount), cashAmount: number(row.cash_amount), paymentType: text(row.bank_payment_type), startDate: hrDateOnly(row.contract_start || row.effective_date), endDate: hrDateOnly(row.contract_end), note: text(row.note) })),
-    resolvedDays: [], checks: [], close: { isLocked: false }, closeLogs: [],
+    sgkImport: sgkImport ? { id: text(sgkImport.id), fileName: text(sgkImport.file_name), versionNo: number(sgkImport.version_no) || 1, status: text(sgkImport.status) || "CONFIRMED", createdAt: sgkImport.created_at } : null,
+    sgkRows,
+    resolvedDays: [],
+    checks,
+    close: { isLocked: flag(closeRow.is_locked), lockedAt: closeRow.locked_at || null },
+    closeLogs: closeLogRows.map((row) => ({ id: text(row.id), action: text(row.action), reason: text(row.reason), userName: text(row.user_name), createdAt: row.created_at })),
   });
 }
 
