@@ -18,7 +18,7 @@ public sealed partial class LiveAttendanceForm : Form
     readonly Button syncNow = new(){Text="Eşitle",Width=76,Height=30};
     readonly Button clearLive = new(){Text="Önbellek Temizle",Width=115,Height=30};
     readonly FlowLayoutPanel cards = new(){Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(2)};
-    readonly TabControl tabs = new(){Dock=DockStyle.Fill};
+    readonly TabControl tabs = new(){Dock=DockStyle.Fill,Multiline=true,SizeMode=TabSizeMode.Normal};
     readonly Dictionary<string,DataGridView> grids = new();
     readonly Dictionary<string,Label> summaryCards = new(StringComparer.OrdinalIgnoreCase);
     readonly System.Windows.Forms.Timer timer = new(){Interval=20000};
@@ -190,7 +190,7 @@ public sealed partial class LiveAttendanceForm : Form
         if(recoveredLegacyDay==day)return;recoveredLegacyDay=day;
         var options=PdksOptions.FromEnvironment();
         var file=Path.Combine(options.RuntimeRoot,"Terminal Bilgi Aktar","backup",$"{day.Day}&{day.Month}&{day.Year}.txt");
-        if(!File.Exists(file))file=Path.Combine(@"D:\Hedef500\Hedef500","Terminal Bilgi Aktar","backup",$"{day.Day}&{day.Month}&{day.Year}.txt");
+        if(!File.Exists(file))file=Path.Combine(@"C:\Hedef500","Terminal Bilgi Aktar","backup",$"{day.Day}&{day.Month}&{day.Year}.txt");
         if(!File.Exists(file))return;
         try
         {
