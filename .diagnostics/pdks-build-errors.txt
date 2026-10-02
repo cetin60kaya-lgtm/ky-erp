@@ -1,5 +1,5 @@
-HEAD: 6a9e452f99a55ca67e4a85414736056c88266c5e
-UTC: 2026-10-02T14:47:58
+HEAD: 72caa13b3f01562a95be03b8fb9a7e8830e77d8c
+UTC: 2026-10-02T15:51:53
 
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\ManagementCenterForm.cs(143,29): error CS0136: A local or parameter named 'group' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
-D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\ManagementCenterForm.cs(143,29): error CS0136: A local or parameter named 'group' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.cs(70,56): error CS0026: Keyword 'this' is not valid in a static property, static method, or static field initializer [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
+D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\MainShellForm.cs(70,56): error CS0026: Keyword 'this' is not valid in a static property, static method, or static field initializer [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
