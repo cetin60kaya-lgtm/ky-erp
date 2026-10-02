@@ -13,8 +13,6 @@ public sealed partial class MainShellForm
         workspace.ApplyLayout(WorkspaceLayoutMode.Single);
 
         MainMenuStrip.Visible = false;
-        tool.Visible = false;
-        status.Visible = false;
 
         BuildModernShell();
     }
