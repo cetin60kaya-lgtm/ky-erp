@@ -177,7 +177,7 @@ public partial class PersonelForm
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             BackColor = UiSurface,
-            Padding = new Padding(0, 5, 0, 0)
+            Padding = new Padding(0, 3, 0, 0)
         };
         var add = ModernActionButton("Yeni Personel", true, () => OpenPersonEditor(true), 118);
         var edit = ModernActionButton("Düzenle", false, () => OpenPersonEditor(false), 88);
@@ -278,7 +278,7 @@ public partial class PersonelForm
         {
             Text = text,
             Width = width,
-            Height = 34,
+            Height = 30,
             FlatStyle = FlatStyle.Flat,
             BackColor = primary ? UiPrimary : UiSurface,
             ForeColor = primary ? Color.White : danger ? Color.FromArgb(185,28,28) : UiText,
