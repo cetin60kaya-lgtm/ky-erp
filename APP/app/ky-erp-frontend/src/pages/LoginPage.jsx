@@ -128,6 +128,7 @@ export default function LoginPage({ onClose }) {
     verifyOwnerRecovery,
     checkApproval,
     checkPhoneApproval,
+    verifyPhoneApprovalCode,
     resendPhoneApproval,
     useAuthenticatorFallback: runAuthenticatorFallback,
   } = useAuth();
@@ -409,6 +410,64 @@ export default function LoginPage({ onClose }) {
     }
   }
 
+  async function handleUnifiedSecurityCode(event) {
+    event?.preventDefault();
+    if (!flow.phoneApprovalId || !flow.phoneApprovalToken) return;
+    const cleanCode = String(code || "").replace(/\D/g, "");
+    if (!/^\d{6}$/.test(cleanCode)) {
+      setError("6 haneli doğrulama kodunu girin.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      try {
+        await verifyPhoneApprovalCode({
+          phoneApprovalId: flow.phoneApprovalId,
+          phoneApprovalToken: flow.phoneApprovalToken,
+          code: cleanCode,
+        });
+        const completed = await checkPhoneApproval({
+          phoneApprovalId: flow.phoneApprovalId,
+          phoneApprovalToken: flow.phoneApprovalToken,
+        });
+        setCode("");
+        applyResponse(completed);
+        return;
+      } catch (securityCodeError) {
+        if (!["SECURITY_LOGIN_CODE_INVALID", "SECURITY_LOGIN_CODE_EXPIRED", "SECURITY_LOGIN_CODE_LOCKED"].includes(String(securityCodeError?.code || ""))) {
+          throw securityCodeError;
+        }
+      }
+
+      const fallback = await runAuthenticatorFallback({
+        phoneApprovalId: flow.phoneApprovalId,
+        phoneApprovalToken: flow.phoneApprovalToken,
+      });
+      if (String(fallback?.stage || "").toUpperCase() !== "MFA_REQUIRED") {
+        setCode("");
+        applyResponse(fallback);
+        return;
+      }
+
+      const verified = await verifyMfa({
+        challengeId: fallback.challengeId,
+        challengeToken: fallback.challengeToken,
+        code: cleanCode,
+        provider: "",
+        resetProvider: "",
+      });
+      setCode("");
+      applyResponse(verified);
+    } catch (requestError) {
+      setError(requestError?.message || "Doğrulama kodu kabul edilmedi.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function switchToAuthenticator(method = "AUTHENTICATOR") {
     if (!flow.phoneApprovalId || !flow.phoneApprovalToken) return;
     try {
@@ -684,6 +743,13 @@ export default function LoginPage({ onClose }) {
                   <div><strong>Telefon yanıtı bekleniyor</strong><small>Onaylandığında bu ekran otomatik olarak devam eder.</small></div>
                 </div>
                 {phoneStatusMessage ? <div className="auth-notice auth-notice-compact"><strong>Telefon bağlantısı</strong><span>{phoneStatusMessage}</span></div> : null}
+                <form className="auth-form auth-form-compact" onSubmit={handleUnifiedSecurityCode}>
+                  <label>6 haneli doğrulama kodu
+                    <input className="auth-code-input" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
+                  </label>
+                  <small>KY Güvenlik giriş kodu veya kayıtlı Google / Microsoft Authenticator kodunu aynı alana yazabilirsiniz.</small>
+                  <button className="auth-primary" type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : "Kodu Doğrula"}</button>
+                </form>
                 <ErrorBox message={error} />
                 <button className="auth-secondary" type="button" onClick={resendPhoneApprovalNotification} disabled={loading}>Bildirimi Yeniden Gönder</button>
                 <button type="button" className="auth-ghost auth-ghost-compact" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
