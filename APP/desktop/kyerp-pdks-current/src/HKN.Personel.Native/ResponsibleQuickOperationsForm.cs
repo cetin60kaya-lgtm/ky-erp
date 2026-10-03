@@ -13,7 +13,7 @@ internal sealed class ResponsibleQuickOperationsForm : Form
         ClientSize = new Size(1040, 660);
         MinimumSize = new Size(920, 600);
         Font = new Font("Segoe UI", 9f);
-        BackColor = Color.FromArgb(244, 248, 252);
+        BackColor = PdksAppearance.Current.Canvas;
         Build();
     }
 
@@ -25,7 +25,7 @@ internal sealed class ResponsibleQuickOperationsForm : Form
             RowCount = 4,
             ColumnCount = 1,
             Padding = new Padding(24),
-            BackColor = BackColor
+            BackColor = PdksAppearance.Current.Canvas
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
@@ -37,7 +37,7 @@ internal sealed class ResponsibleQuickOperationsForm : Form
             Text = "Hızlı İşlemler",
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI", 18f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(28, 55, 90),
+            ForeColor = PdksAppearance.Current.Text,
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
 
@@ -45,7 +45,7 @@ internal sealed class ResponsibleQuickOperationsForm : Form
         {
             Text = "Firma sorumlusu için günlük düzeltme ve kontrol kısayolları. Bu merkez ayrı veri mantığı oluşturmaz; mevcut güvenli PDKS ekranlarını açar.",
             Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(78, 94, 116),
+            ForeColor = PdksAppearance.Current.Muted,
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 1);
 
@@ -92,12 +92,12 @@ internal sealed class ResponsibleQuickOperationsForm : Form
 
         root.Controls.Add(cards, 0, 2);
 
-        var footer = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(232, 241, 252), Padding = new Padding(14, 9, 14, 8) };
+        var footer = new Panel { Dock = DockStyle.Fill, BackColor = PdksAppearance.Current.PrimarySoft, Padding = new Padding(14, 9, 14, 8) };
         footer.Controls.Add(new Label
         {
             Text = "Güvenlik: toplu ve riskli işlemlerde Önizleme → Uygula zorunludur. Çoklu / belirsiz TNF eşleşmeleri otomatik düzeltilmez. Manuel değişiklikler işlem geçmişine yazılır.",
             Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(44, 75, 112),
+            ForeColor = PdksAppearance.Current.Primary,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft
         });
@@ -107,22 +107,17 @@ internal sealed class ResponsibleQuickOperationsForm : Form
 
     Control Card(string title, string body, string help, Action action)
     {
-        var panel = new Panel
-        {
-            Dock = DockStyle.Fill,
-            Margin = new Padding(7),
-            Padding = new Padding(16, 12, 16, 12),
-            BackColor = Color.White,
-            BorderStyle = BorderStyle.FixedSingle,
-            Cursor = Cursors.Hand
-        };
+        var p=PdksAppearance.Current;
+        var panel = PdksUiKit.Card(16);
+        panel.Margin=new Padding(7);
+        panel.Cursor=Cursors.Hand;
         var titleLabel = new Label
         {
             Text = title,
             Dock = DockStyle.Top,
             Height = 30,
             Font = new Font("Segoe UI", 11f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(29, 83, 156),
+            ForeColor = p.Primary,
             Cursor = Cursors.Hand
         };
         var bodyLabel = new Label
@@ -130,7 +125,7 @@ internal sealed class ResponsibleQuickOperationsForm : Form
             Text = body,
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI", 9.2f),
-            ForeColor = Color.FromArgb(47, 63, 84),
+            ForeColor = p.Text,
             TextAlign = ContentAlignment.MiddleLeft,
             Cursor = Cursors.Hand
         };
@@ -140,7 +135,7 @@ internal sealed class ResponsibleQuickOperationsForm : Form
             Dock = DockStyle.Bottom,
             Height = 24,
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(31, 111, 235),
+            ForeColor = p.Primary,
             TextAlign = ContentAlignment.MiddleRight,
             Cursor = Cursors.Hand
         };
