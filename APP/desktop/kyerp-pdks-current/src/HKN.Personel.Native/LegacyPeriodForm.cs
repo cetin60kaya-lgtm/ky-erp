@@ -7,7 +7,7 @@ namespace HKN.Personel.Native;
 public sealed class LegacyPeriodForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
-    readonly DataGridView grid = new(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=Color.White,AutoGenerateColumns=false};
+    readonly DataGridView grid = new(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=PdksAppearance.Current.Surface,AutoGenerateColumns=false};
     readonly TextBox name = new();
     readonly ComboBox group = new(){DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="AD",ValueMember="KOD"};
     readonly DateTimePicker start = new(){Format=DateTimePickerFormat.Custom,CustomFormat="dd MMMM yyyy dddd"};
@@ -21,43 +21,44 @@ public sealed class LegacyPeriodForm : Form
     readonly Button save = Cmd("Kaydet");
     int? code; bool adding; bool editing;
 
-    public LegacyPeriodForm(){Text="Dönem Tanımlamaları";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);MinimumSize=new Size(920,620);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);KeyPreview=true;Build();Shown+=(_,_)=>ReloadAll();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
-    static Label L(string t)=>new(){Text=t,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)};
-    static Button Cmd(string text,int width=112)=>new(){Text=text,Width=width,Height=36,FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9f,FontStyle.Bold)};
+    public LegacyPeriodForm(){Text="Dönem Tanımları";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);MinimumSize=new Size(920,620);Font=new Font("Segoe UI",9f);BackColor=PdksAppearance.Current.Canvas;KeyPreview=true;Build();Shown+=(_,_)=>ReloadAll();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
+    static Label L(string t)=>new(){Text=t,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=PdksAppearance.Current.Muted};
+    static Button Cmd(string text,int width=112)=>PdksUiKit.Button(text,width,PdksUiKit.InferRole(new Button{Text=text}));
     static void Row(TableLayoutPanel t,int r,string text,Control c){t.RowStyles.Add(new RowStyle(SizeType.Absolute,38));t.Controls.Add(L(text),0,r);c.Dock=DockStyle.Fill;c.Margin=new Padding(3,6,3,6);t.Controls.Add(c,1,r);}
 
     void Build()
     {
-        BackColor=Color.FromArgb(244,247,251);
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1,Padding=new Padding(16),BackColor=BackColor};
+        var p=PdksAppearance.Current;
+        BackColor=p.Canvas;
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1,Padding=new Padding(16),BackColor=p.Canvas};
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
 
-        var body=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,BackColor=BackColor,Margin=Padding.Empty};
+        var body=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,BackColor=p.Canvas,Margin=Padding.Empty};
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,42));
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,12));
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,58));
 
         var leftCard=PeriodCard();
-        var left=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=new Padding(16),BackColor=Color.White};
+        var left=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=new Padding(16),BackColor=p.Surface};
         left.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
         left.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
         left.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        left.Controls.Add(new Label{Text="Dönemler",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42)},0,0);
+        left.Controls.Add(new Label{Text="Dönemler",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text},0,0);
         var range=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,8,0,0)};
         filterStart.Width=92;filterEnd.Width=92;
         var between=PeriodButton("Aralığı Listele",100,false);var all=PeriodButton("Tümü",68,false);
         between.Click+=(_,_)=>ReloadGrid(true);all.Click+=(_,_)=>ReloadGrid(false);
-        range.Controls.Add(filterStart);range.Controls.Add(new Label{Text="—",AutoSize=true,Padding=new Padding(4,7,4,0),ForeColor=Color.FromArgb(100,116,139)});range.Controls.Add(filterEnd);range.Controls.Add(between);range.Controls.Add(all);
+        range.Controls.Add(filterStart);range.Controls.Add(new Label{Text="—",AutoSize=true,Padding=new Padding(4,7,4,0),ForeColor=p.Muted});range.Controls.Add(filterEnd);range.Controls.Add(between);range.Controls.Add(all);
         left.Controls.Add(range,0,1);
         grid.Dock=DockStyle.Fill;grid.Margin=new Padding(0,8,0,0);grid.BorderStyle=BorderStyle.None;grid.RowHeadersVisible=false;grid.RowTemplate.Height=31;grid.ColumnHeadersHeight=34;
         grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText="Dönem Adı",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});
         grid.SelectionChanged+=(_,_)=>{if(!editing)LoadSelected();};
         left.Controls.Add(grid,0,2);leftCard.Controls.Add(left);body.Controls.Add(leftCard,0,0);
-        body.Controls.Add(new Panel{Dock=DockStyle.Fill,BackColor=BackColor},1,0);
+        body.Controls.Add(new Panel{Dock=DockStyle.Fill,BackColor=p.Canvas},1,0);
 
         var rightCard=PeriodCard();
-        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(20),BackColor=Color.White};
+        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(20),BackColor=p.Surface};
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         editor.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
         editor.Controls.Add(new Label{Text="Dönem Bilgileri",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42)},0,0);editor.SetColumnSpan(editor.GetControlFromPosition(0,0)!,2);
@@ -67,9 +68,9 @@ public sealed class LegacyPeriodForm : Form
         rightCard.Controls.Add(editor);body.Controls.Add(rightCard,2,0);
         root.Controls.Add(body,0,0);
 
-        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0),WrapContents=false,BackColor=BackColor};
+        var actions=PdksUiKit.ActionBar(true,p.Canvas);
         var add=PeriodButton("Yeni Dönem",110,true);var edit=PeriodButton("Düzenle",90,false);var del=PeriodButton("Sil",72,false,true);var delAll=PeriodButton("Tümünü Sil",100,false,true);
-        save.Width=100;save.Height=34;save.FlatStyle=FlatStyle.Flat;save.BackColor=Color.FromArgb(37,99,235);save.ForeColor=Color.White;save.FlatAppearance.BorderColor=save.BackColor;save.Enabled=false;
+        save.Width=100;save.Height=34;save.MinimumSize=new Size(100,34);save.MaximumSize=new Size(100,34);PdksUiKit.ApplyButtonPalette(save,p,PdksActionRole.Primary);save.Enabled=false;
         add.Click+=(_,_)=>BeginNew();edit.Click+=(_,_)=>BeginEdit();save.Click+=(_,_)=>SaveCurrent();del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();
         actions.Controls.AddRange([save,delAll,del,edit,add]);root.Controls.Add(actions,0,1);Controls.Add(root);
         start.ValueChanged+=(_,_)=>UpdateTotal();end.ValueChanged+=(_,_)=>UpdateTotal();SetEdit(false);
@@ -77,8 +78,9 @@ public sealed class LegacyPeriodForm : Form
 
     static Panel PeriodCard()
     {
-        var p=new Panel{Dock=DockStyle.Fill,BackColor=Color.White,Margin=Padding.Empty};
-        p.Paint+=(_,e)=>{using var pen=new Pen(Color.FromArgb(226,232,240));e.Graphics.DrawRectangle(pen,0,0,Math.Max(0,p.Width-1),Math.Max(0,p.Height-1));};return p;
+        var p=PdksUiKit.Card(0);
+        p.Margin=Padding.Empty;
+        return p;
     }
 
     static void PeriodRow(TableLayoutPanel table,int row,string caption,Control control)
