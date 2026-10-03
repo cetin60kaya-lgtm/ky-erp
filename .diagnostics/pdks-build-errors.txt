@@ -1,5 +1,5 @@
-HEAD: 07642f9ee1e393013d52617a040fbcedac821459
-UTC: 2026-10-03T12:48:33
+HEAD: 17273caf3c7546ee0afdd24c22e27086d87716b0
+UTC: 2026-10-03T12:53:05
 
 D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\LegacyDefinitionsForm.cs(64,13): error CS0128: A local variable or function named 'p' is already defined in this scope [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
 D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\LegacyDefinitionsForm.cs(64,92): error CS0029: Cannot implicitly convert type 'HKN.Personel.Native.PdksPalette' to 'HKN.Personel.Native.LegacyDefinitionsForm.SimpleDefinitionPage' [D:\a\ky-erp\ky-erp\APP\desktop\kyerp-pdks-current\src\HKN.Personel.Native\HKN.Personel.Native.csproj]
