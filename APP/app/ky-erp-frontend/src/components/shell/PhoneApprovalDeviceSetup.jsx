@@ -218,17 +218,26 @@ export default function PhoneApprovalSetup({ onClose }) {
         <div className="phone-approval-grid phone-approval-grid-clean">
           <section className="phone-approval-card phone-approval-app-hero">
             <div className="phone-approval-card-head">
-              <div><span className="phone-approval-install-kicker">KY GÜVENLİK</span><h3>{securityDevices.length ? "Telefon onayı hazır" : "Güvenlik uygulamasını kur"}</h3><p>{securityDevices.length ? "Sunucu cihaz kaydı mevcut. Yeniden bağlama yalnız yeni 8 karakter kod ve ADMIN / KY ERP şifresiyle tamamlanır." : "KY ERP ve KY Güvenlik telefonda iki ayrı uygulama olarak çalışır."}</p></div>
+              <div><span className="phone-approval-install-kicker">KY GÜVENLİK</span><h3>{securityDevices.length ? "Telefon onayı hazır" : "Güvenlik uygulamasını kur"}</h3><p>{securityDevices.length ? "Sunucu cihaz kaydı mevcut. Normal kullanıcı yalnız kendi giriş kodunu kullanır; Süper Yönetici telefonu ek doğrulamayla sistem yönetimine açılır." : "KY ERP ve KY Güvenlik telefonda iki ayrı uygulama olarak çalışır."}</p></div>
               {securityDevices.length && !securityHasError ? <CheckCircle2 size={26}/> : <Smartphone size={26}/>}
             </div>
             {securityDevices.length ? <>
               <div className="phone-approval-status-card ok"><div><b>Bağlantı kayıtlı</b><span>{securityDevices[0]?.deviceLabel || "KY ERP Güvenlik"}</span></div><small>Son bağlantı: {securityDevices[0]?.lastSeenAt ? new Date(securityDevices[0].lastSeenAt).toLocaleString("tr-TR") : "Henüz yok"}</small><small>Son bildirim: {securityDevices[0]?.lastPushAt ? new Date(securityDevices[0].lastPushAt).toLocaleString("tr-TR") : "Henüz yok"}</small></div>
               <div className="phone-approval-main-actions"><button type="button" className="phone-approval-primary" onClick={openSecurityApp} disabled={busy}><ExternalLink size={17}/>{busy ? "Hazırlanıyor..." : "KY Güvenlik Aç"}</button><button type="button" onClick={refreshSecurityConnection} disabled={busy}><RefreshCw size={16}/> Bağlantıyı Kontrol Et</button></div>
-              <small className="phone-approval-help">Bağlantı yenilenecekse aşağıdan yeni 8 karakter kod üretin. Telefonda kod + mevcut ADMIN / KY ERP şifresi birlikte doğrulanır.</small>
+              <small className="phone-approval-help">Bağlantı yenilenecekse aşağıdan yeni 8 karakter kod üretin. Süper Yönetici telefonunda önce ek e-posta veya Authenticator doğrulaması tamamlanır.</small>
             </> : <>
               <div className="phone-approval-install-box compact"><strong>Telefonuna KY ERP Güvenlik uygulamasını kur</strong><small>Kurulum bağlantısı hazırlanırken 8 karakter güvenli bağlantı kodu da üretilir.</small><div className="phone-approval-install-actions"><button type="button" className="phone-approval-install-primary" onClick={() => openSecurityInstaller(clientPlatform === "ios" ? "ios" : "android")} disabled={busy}><Download size={18}/>{busy ? "Hazırlanıyor..." : clientPlatform === "ios" ? "iPhone / iPad’e Kur" : "Android’e Kur"}</button></div></div>
-              <small className="phone-approval-help">Kurulum tamamlandıktan sonra uygulamada 8 karakter bağlantı kodu ve mevcut ADMIN / KY ERP şifresi birlikte girilir.</small>
+              <small className="phone-approval-help">Kurulum tamamlandıktan sonra uygulamada 8 karakter bağlantı kodu ve mevcut KY ERP şifresi birlikte girilir.</small>
             </>}
+            {ownerStepUpRequired ? <div className="phone-approval-owner-stepup">
+              <div><strong>Süper Yönetici Telefon Yetkilendirmesi</strong><small>Bu yetki yalnız ekstra doğrulanmış tek telefonda açılır. Telefon değişirse veya yeniden kurulursa bu adım tekrar istenir.</small></div>
+              <label>6 haneli ek doğrulama kodu<input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={ownerStepUpCode} onChange={(event) => setOwnerStepUpCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000"/></label>
+              <div className="phone-approval-main-actions">
+                {ownerEmailReady ? <button type="button" onClick={sendOwnerEnrollmentEmailCode} disabled={busy}>{ownerEmailChallenge ? "E-posta Kodunu Yeniden Gönder" : "E-postaya Kod Gönder"}</button> : null}
+              </div>
+              <small>{ownerEmailChallenge ? `${ownerEmailChallenge.maskedEmail || config?.ownerEmailMasked || "E-posta"} adresine gönderilen kodu girin.` : ownerAuthenticatorProviders.length ? `${ownerAuthenticatorProviders.join(" / ")} Authenticator kodunu doğrudan girebilirsiniz${ownerEmailReady ? " veya e-postaya kod gönderebilirsiniz" : ""}.` : ownerEmailReady ? "E-postaya kod gönderip gelen 6 haneli kodu girin." : "Önce Süper Yönetici Güvenlik Merkezi’nde doğrulanmış e-posta veya Google/Microsoft Authenticator kurun."}</small>
+              {ownerAuthorizedDevice ? <small className="phone-approval-help">Yetkili sistem telefonu: {ownerAuthorizedDevice.deviceLabel || "KY Güvenlik"} · Yeni telefon yetkilendirilince eski telefonun sistem yönetimi kapanır.</small> : null}
+            </div> : null}
             {enrollment ? <div className="phone-approval-enrollment compact-code"><span>8 KARAKTER BAĞLANTI KODU · ZORUNLU</span><strong>{enrollment.enrollmentCode}</strong><div className="phone-approval-app-actions"><button type="button" onClick={copyEnrollment}>{copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Kopyalandı" : "Kopyala"}</button></div></div> : <button type="button" className="phone-approval-link-button" onClick={createEnrollment} disabled={busy}>Sorun olursa yedek bağlantı kodu oluştur</button>}
           </section>
           <section className="phone-approval-card">
@@ -239,7 +248,7 @@ export default function PhoneApprovalSetup({ onClose }) {
         </div>
 
         <footer>
-          <span>Yeni cihaz veya yeniden bağlama, 8 karakter KY Güvenlik bağlantı kodu + mevcut ADMIN / KY ERP şifresi doğrulanmadan tamamlanmaz.</span>
+          <span>Normal kullanıcı yalnız kendi giriş kodunu kullanır. Süper Yönetici sistem telefonu ise ek e-posta/Authenticator doğrulaması + 8 karakter bağlantı kodu + mevcut KY ERP şifresi olmadan yetkilendirilemez.</span>
           <button type="button" onClick={onClose}>Kapat</button>
         </footer>
       </section>
