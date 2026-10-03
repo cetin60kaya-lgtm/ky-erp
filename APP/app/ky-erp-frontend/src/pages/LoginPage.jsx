@@ -300,7 +300,7 @@ export default function LoginPage({ onClose }) {
     event?.preventDefault();
     const cleanCode = String(code || "").replace(/\D/g, "");
     if (!/^\d{6}$/.test(cleanCode)) {
-      setError("Authenticator uygulamasındaki 6 haneli kodu girin.");
+      setError("Google, Microsoft veya KY Güvenlik uygulamasındaki 6 haneli kodu girin.");
       return;
     }
     try {
@@ -310,7 +310,7 @@ export default function LoginPage({ onClose }) {
         challengeId: flow.challengeId,
         challengeToken: flow.challengeToken,
         code: cleanCode,
-        provider: normalizeProvider(flow.provider) || selectedProvider,
+        provider: String(flow.stage || "").toUpperCase() === "MFA_REQUIRED" ? "" : (normalizeProvider(flow.provider) || selectedProvider),
         resetProvider,
       }));
     } catch (requestError) {
@@ -669,7 +669,7 @@ export default function LoginPage({ onClose }) {
               <div className="auth-flow-block">
                 <div className="auth-provider-title">
                   <span className={`provider-mark provider-${currentProvider.toLowerCase()}`}>{PROVIDER_SHORT[currentProvider] || "A"}</span>
-                  <div><strong>{flow.providerLabel || currentLabel}</strong><small>Yeni doğrulama kurulumu</small></div>
+                  <div><strong>{flow.providerLabel || currentLabel}</strong><small>Google / Microsoft kurulumu veya KY Güvenlik kodu</small></div>
                 </div>
                 {flow.recoveryReenroll ? <div className="auth-notice"><strong>Güvenli yeniden kurulum</strong><span>Bu işlem oturum açmaz. Authenticator kaydı yenilenir ve sonrasında parola ile tekrar giriş yapılır.</span></div> : null}
                 <div className="auth-setup-grid">
@@ -677,8 +677,8 @@ export default function LoginPage({ onClose }) {
                   <div className="auth-setup-steps">
                     <p><span>1</span>Authenticator uygulamasını açın.</p>
                     <p><span>2</span>Hesap ekle → QR kodu tara seçin.</p>
-                    <p><span>3</span>QR kodunu okutun ve oluşan 6 haneli kodu girin.</p>
-                    {flow.secret ? <details><summary>Manuel kurulum anahtarı</summary><code>{flow.secret}</code></details> : null}
+                    <p><span>3</span>QR kodunu okutun ve oluşan 6 haneli kodu girin. Alternatif olarak KY Güvenlik uygulamasında doğrudan üretilen 6 haneli kodu da bu alana yazabilirsiniz.</p>
+                    {flow.secret ? <details><summary>Manuel kurulum anahtarı</summary><code>{flow.secret}</code></details> : null}<small>KY Güvenlik kodu için önce bilgisayarda bekleyen giriş oluşturmanız gerekmez.</small>
                   </div>
                 </div>
                 <ErrorBox message={qrError} />
@@ -687,7 +687,7 @@ export default function LoginPage({ onClose }) {
                     <input className="auth-code-input" autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
                   </label>
                   <ErrorBox message={error} />
-                  <button className="auth-primary" type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : "Kurulumu Doğrula"}</button>
+                  <button className="auth-primary" type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : "6 Haneli Kodu Doğrula"}</button>
                   {!flow.recoveryReenroll ? <button type="button" className="auth-ghost" onClick={() => resetToCredentials()} disabled={loading}>İptal ve geri dön</button> : null}
                 </form>
               </div>
@@ -751,17 +751,13 @@ export default function LoginPage({ onClose }) {
                       <div><span className="auth-section-label">AUTHENTICATOR</span><strong>{flow.policyLabel || (flow.requireBoth ? "Google + Microsoft" : "6 haneli doğrulama kodu")}</strong></div>
                       {flow.requireBoth ? <span className="auth-policy-badge">2/2 MFA</span> : <span className="auth-policy-badge">Yedek doğrulama</span>}
                     </div>
-                    <div className="provider-grid provider-grid-compact">
-                      {(availableProviders.length ? availableProviders : [currentProvider]).filter(Boolean).map((provider) => (
-                        <ProviderCard key={provider} provider={provider} selected={selectedProvider === provider && !verifiedProviders.includes(provider)} verified={verifiedProviders.includes(provider)} disabled={verifiedProviders.includes(provider) || loading} onClick={() => { setSelectedProvider(provider); setCode(""); setResetProvider(""); setError(""); }} />
-                      ))}
-                    </div>
+                    <div className="auth-notice auth-notice-compact"><strong>Tek doğrulama alanı</strong><span>Google Authenticator, Microsoft Authenticator veya KY Güvenlik kodunu aynı alana yazın. Sistem kodu ayrıca sağlayıcı seçimi istemez.</span></div>
                     {flow.requireBoth ? <div className="auth-progress-note auth-notice-compact"><strong>{verifiedProviders.length}/2 doğrulama tamamlandı</strong><span>{verifiedProviders.length ? verifiedProviders.map((item) => PROVIDER_LABELS[item]).join(", ") + " tamamlandı. Kalan doğrulamaya devam edin." : "Google veya Microsoft Authenticator kodlarından biriyle başlayın."}</span></div> : null}
                     <form className="auth-form auth-form-compact" onSubmit={handleMfa}>
-                      <label>{currentLabel} kodu<input className="auth-code-input" autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" /></label>
+                      <label>6 haneli doğrulama kodu<input className="auth-code-input" autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" /></label>
                       {resetProvider ? <div className="auth-notice auth-notice-compact"><strong>{PROVIDER_LABELS[resetProvider]} yeniden kurulacak</strong><span>Kimliğinizi önce {currentLabel} koduyla doğrulayın.</span></div> : null}
                       <ErrorBox message={error} />
-                      <button className="auth-primary" type="submit" disabled={loading || verifiedProviders.includes(currentProvider)}>{loading ? "Doğrulanıyor..." : resetProvider ? "Doğrula ve Yeniden Kur" : "Authenticator Kodunu Doğrula"}</button>
+                      <button className="auth-primary" type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : resetProvider ? "Doğrula ve Yeniden Kur" : "Kodu Doğrula"}</button>
                     </form>
                   </>
                 )}
