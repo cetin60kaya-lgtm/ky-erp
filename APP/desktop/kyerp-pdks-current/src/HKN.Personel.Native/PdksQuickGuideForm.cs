@@ -37,12 +37,13 @@ public sealed class PdksQuickGuideForm : Form
         ["1. Günlük İş Akışı"] = new(
             "Günlük İş Akışı",
             "Önerilen sıra:\r\n\r\n" +
-            "1) Canlı İzleme: Bugün kim geldi, kim kart basmadı, kim içeride/çıkış bekliyor kontrol edilir.\r\n" +
-            "2) Giriş-Çıkış: Eksik veya hatalı hareket varsa gerçek kayda göre düzeltilir.\r\n" +
-            "3) İzinler: İzinli/raporlu personelin kayıtları kontrol edilir.\r\n" +
-            "4) Puantaj: Kart + izin + tatil + çalışma planından günlük/aylık hesap yapılır.\r\n" +
-            "5) Bordro/Ödemeler: Puantaj sonuçları üzerinden ücret, mesai, ek kazanç ve kesintiler kontrol edilir.\r\n" +
-            "6) Raporlar: Sonuçlar yazdırılır veya PDF/Excel olarak alınır.\r\n\r\n" +
+            "1) Operasyon > Terminal: Yeni kart hareketleri alınır ve aktarım sonucu doğrulanır.\r\n" +
+            "2) Operasyon > Canlı Denetim: Kart basmayan, geç gelen, içeride kalan ve çıkışı eksik personel görülür.\r\n" +
+            "3) Operasyon > Giriş/Çıkış: Yalnız doğrulanmış eksik/hatalı hareketler düzeltilir.\r\n" +
+            "4) Personel/İzin: İzin, personel ve ek hareketler kontrol edilir.\r\n" +
+            "5) Puantaj: Kart + izin + tatil + çalışma planından günlük/aylık sonuç hesaplanır.\r\n" +
+            "6) Bordro: Hakediş ve resmî bordro/PEK ayrı olarak kontrol edilir.\r\n" +
+            "7) Raporlar: Sonuçlar yazdırılır veya PDF/Excel olarak alınır.\r\n\r\n" +
             "Kural: Gerçek kart hareketi yoksa sistemde yapay giriş/çıkış oluşturmayın. Eksik kaydı önce doğrulayın, sonra düzeltin."),
 
         ["2. Genel Bakış"] = new(
@@ -50,7 +51,12 @@ public sealed class PdksQuickGuideForm : Form
             "Uygulamanın başlangıç ekranıdır. Günün aktif personel, gelen personel, kart basmayan ve çıkış bekleyen sayılarını hızlıca gösterir.\r\n\r\n" +
             "Buradaki kartlar ayrıntı ekranlarının yerine geçmez; hangi bölüme bakmanız gerektiğini hızlıca anlamanız içindir."),
 
-        ["3. Canlı İzleme"] = new(
+        ["3. Operasyon Merkezi"] = new(
+            "Operasyon Merkezi",
+            "Günlük PDKS işleri tek merkezde toplanır. Önerilen sıra Terminalden Al → Canlı Kontrol → Eksikleri Düzelt → İzin/Ek Kayıt → Puantaja Geç şeklindedir.\r\n\r\n" +
+            "Sık kullanılan Canlı Denetim ve Giriş/Çıkış ekranları sol menüyü kalabalıklaştırmak yerine Operasyon altında bulunur."),
+
+        ["4. Canlı Denetim"] = new(
             "Canlı Personel Denetimi",
             "Bugünün hareketlerini operasyon gözüyle takip eder. Beklenen/gelen personel, kart basmayanlar, izinliler, içeride kalanlar, çıkışı eksik olanlar ve eşleşmeyen kartlar ayrı görünür.\r\n\r\n" +
             "Eşitle: terminalden yeni hareketleri alır.\r\n" +
@@ -58,12 +64,12 @@ public sealed class PdksQuickGuideForm : Form
             "Otomatik yenile: ekran açıkken güncel durumu izler.\r\n\r\n" +
             "Bir sorun gördüğünüzde önce personelin kart ve izin durumunu doğrulayın; düzeltmeyi Giriş-Çıkış ekranından yapın."),
 
-        ["4. Giriş-Çıkış"] = new(
+        ["5. Giriş-Çıkış"] = new(
             "Giriş-Çıkış Kayıtları",
             "Terminalden veya onaylı TNF kaynağından gelen gerçek kart hareketlerini inceler. Giriş ve çıkış çiftleri, tarih ve saat aralığı bu ekrandan kontrol edilir.\r\n\r\n" +
             "Elle düzeltme yalnız gerçek durumu doğrulamak için kullanılmalıdır. Aynı hareketi ikinci kez eklemeyin ve personelin işe giriş/çıkış tarihleri dışına kayıt taşımayın."),
 
-        ["5. Personel"] = new(
+        ["6. Personel"] = new(
             "Personel Bilgileri",
             "Personelin özlük kartını ve kişi bazlı PDKS geçmişini tek yerde toplar.\r\n\r\n" +
             "Personel Bilgileri: kimlik ve kişisel bilgiler.\r\n" +
@@ -73,7 +79,7 @@ public sealed class PdksQuickGuideForm : Form
             "Bilgi: puantaj özeti; normal çalışma, mesai, devamsızlık, geç kalma ve eksik süre.\r\n" +
             "Ödemeler: seçili personelin aylık bordro ve ödeme kontrolü."),
 
-        ["6. Puantaj"] = new(
+        ["7. Puantaj"] = new(
             "Günlük ve Aylık Puantaj",
             "Kart hareketleri, izinler, tatiller ve çalışma grubu/planına göre personel-gün sonuçlarını hesaplar.\r\n\r\n" +
             "Günlük Puantaj: dar bir tarih aralığı veya günlük kontrol için.\r\n" +
@@ -81,28 +87,32 @@ public sealed class PdksQuickGuideForm : Form
             "Puantaj Sonuçları: hesaplanan normal çalışma, mesai, izin, devamsızlık, geç kalma ve eksik süreleri incelemek için.\r\n\r\n" +
             "Hesaplamadan önce eksik kart/izin kayıtlarını düzeltmek daha güvenlidir."),
 
-        ["7. Bordro ve Ödemeler"] = new(
+        ["8. Bordro ve Ödemeler"] = new(
             "Bordro ve Ödemeler",
             "Aylık puantaj sonucunu ücret tarafında kontrol eder. Genel Maaş Bordrosu toplu görünüm; Personel > Ödemeler kişi bazlı görünüm içindir.\r\n\r\n" +
             "Yıl, ay ve bordro türünü seçip Göster ile veriyi getirirsiniz. Alanlar / Sıralama ekranı görünür kolonları ve sırasını ayarlar. Düzeni Kilitle yanlışlıkla kolon düzeninin bozulmasını önler.\r\n\r\n" +
             "PDF/Excel ve yazdırma işlemleri ekranda seçili/görünür bordro düzenini esas alır."),
 
-        ["8. Terminal"] = new(
+        ["9. Terminal"] = new(
             "Terminal ve Veri Aktarımı",
             "Kart cihazından ham hareketleri güvenli biçimde PDKS'e taşır. Son eşitleme zamanı ve okunan/eklenen/güncellenen kayıt sayıları terminalin çalışıp çalışmadığını anlamanıza yardım eder.\r\n\r\n" +
             "TNF canonical formatı: KartNo,Saat,GGAAYY,1,001. Aynı gerçek hareket tekrar aktarılırsa mükerrer kayıt üretilmemelidir."),
 
-        ["9. Tanımlar"] = new(
+        ["10. Tanımlar"] = new(
             "Yapılandırma / Tanımlar",
             "Günlük kullanımda sık değiştirilmemesi gereken sistem kurallarıdır. Bölüm, servis, görev, durum, firma, çalışma grubu, dönem, tatil ve çalışma planları burada tutulur.\r\n\r\n" +
             "Bu alanlardaki değişiklik puantaj sonucunu etkileyebileceği için yetkili kullanıcı tarafından yapılmalıdır."),
 
-        ["10. Raporlar"] = new(
+        ["11. Raporlar"] = new(
             "Raporlama ve Denetim",
             "Personel, izin, ek kazanç/kesinti, çalışma sistemi, yıllık izin ve bordro sonuçlarını çıktı haline getirir.\r\n\r\n" +
             "Rapor ekranı veri düzeltme yeri değildir. Hatalı sonuç görürseniz önce kaynağı (kart, izin, puantaj veya ödeme) düzeltip raporu yeniden oluşturun."),
 
-        ["11. Sorun Görürsem"] = new(
+        ["12. Görünüm ve Tema"] = new(
+            "Görünüm ve Tema",
+            "Uygulama teması, sol menü görünümü ve vurgu rengi birbirinden bağımsız ayarlanır. Sol menü Açık, Koyu veya Temayı Takip Et olabilir. Bu tercihler kaydedilir ve sonraki açılışta korunur."),
+
+        ["13. Sorun Görürsem"] = new(
             "Sorun Görürsem Nereden Başlamalıyım?",
             "Personel gelmiş ama görünmüyor → Canlı İzleme > Eşitle ve Terminal durumunu kontrol edin.\r\n" +
             "Giriş var çıkış yok → Giriş-Çıkış kaydını ve terminal hareketini kontrol edin.\r\n" +
