@@ -43,22 +43,23 @@ public partial class PersonelForm
 
     TabPage BuildOdemeClassic()
     {
-        var page=new TabPage("Ödemeler"){BackColor=Color.FromArgb(247,249,252)};
+        var p=PdksAppearance.Current;
+        var page=new TabPage("Ödemeler"){BackColor=p.Canvas};
         var lay=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(12)};
         lay.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
         lay.RowStyles.Add(new RowStyle(SizeType.Absolute,84));
         lay.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         lay.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
 
-        var top=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(7,7,0,0),WrapContents=false};
+        var top=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(7,7,0,0),WrapContents=false,BackColor=p.Surface};
         top.Controls.Add(new Label{Text="Dönem",AutoSize=true,Padding=new Padding(0,6,5,0),Font=new Font(Font,FontStyle.Bold)});
         periodO.Width=230;top.Controls.Add(periodO);
-        var refresh=new Button{Text="Yenile",Width=92,Height=30,Margin=new Padding(12,0,0,0),FlatStyle=FlatStyle.Flat,BackColor=Color.White};
-        refresh.Click+=(_,_)=>RefreshFullTabs();top.Controls.Add(refresh);lay.Controls.Add(top,0,0);
+        var refresh=PdksUiKit.Button("Yenile",92,PdksActionRole.Primary,RefreshFullTabs);
+        refresh.Height=30;refresh.MinimumSize=new Size(92,30);refresh.MaximumSize=new Size(92,30);refresh.Margin=new Padding(12,0,0,0);top.Controls.Add(refresh);lay.Controls.Add(top,0,0);
 
-        var info=new Panel{Dock=DockStyle.Fill,BackColor=Color.FromArgb(235,244,255),Padding=new Padding(18,12,18,10)};
-        var title=new Label{Text="Aylık Bordro ve Ödeme Merkezi",Dock=DockStyle.Top,Height=30,Font=new Font("Segoe UI",12f,FontStyle.Bold),ForeColor=Color.FromArgb(25,73,130)};
-        var note=new Label{Text="Maaş, gün/saat, mesai, izin/devamsızlık, ek kazanç, kesinti, avans, icra ve Banka/Elden dağılımını tek yerden düzenler. Ayı Kaydet işlemi gerçek UCRETLER kaynağına yazar.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f),ForeColor=Color.FromArgb(55,75,98)};
+        var info=new Panel{Dock=DockStyle.Fill,BackColor=p.PrimarySoft,Padding=new Padding(18,12,18,10)};
+        var title=new Label{Text="Aylık Bordro ve Ödeme Merkezi",Dock=DockStyle.Top,Height=30,Font=new Font("Segoe UI",12f,FontStyle.Bold),ForeColor=p.Primary};
+        var note=new Label{Text="Hakediş, resmî bordro/PEK ve banka tutarı ayrı hesaplanır. Aylık düzeltmeler personelin tek seferlik bordro profiline göre yürür.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f),ForeColor=p.Muted};
         info.Controls.Add(note);info.Controls.Add(title);lay.Controls.Add(info,0,1);
 
         var body=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Padding=new Padding(0,8,0,0)};
@@ -66,16 +67,18 @@ public partial class PersonelForm
         body.Controls.Add(gOdeme,0,0);
         var totals=new GroupBox{Text="Seçili Personel • Kontrol Özeti",Dock=DockStyle.Fill,Padding=new Padding(10)};
         var t=new TableLayoutPanel{Dock=DockStyle.Top,AutoSize=true,ColumnCount=4,RowCount=15};t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,34));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));
-        t.Controls.Add(new Label{Text="Normal Çalışma",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font(Font,FontStyle.Bold)},0,0);t.SetColumnSpan(t.GetControlFromPosition(0,0)!,4);odHours.BackColor=Color.FromArgb(25,42,64);odHours.ForeColor=Color.White;odHours.Font=new Font(Font,FontStyle.Bold);t.Controls.Add(odHours,0,1);t.Controls.Add(odDays,1,1);t.Controls.Add(odNormal,2,1);t.SetColumnSpan(odNormal,2);
+        t.Controls.Add(new Label{Text="Normal Çalışma",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font(Font,FontStyle.Bold)},0,0);t.SetColumnSpan(t.GetControlFromPosition(0,0)!,4);odHours.BackColor=p.PrimarySoft;odHours.ForeColor=p.Text;odHours.Font=new Font(Font,FontStyle.Bold);t.Controls.Add(odHours,0,1);t.Controls.Add(odDays,1,1);t.Controls.Add(odNormal,2,1);t.SetColumnSpan(odNormal,2);
         AddPairLabels(t,2,"Kesinti","Ek Kazanç");t.Controls.Add(odEkKes,0,3);t.SetColumnSpan(odEkKes,2);t.Controls.Add(odEkKaz,2,3);t.SetColumnSpan(odEkKaz,2);AddPairLabels(t,4,"Yol","Yemek");t.Controls.Add(odYol,0,5);t.SetColumnSpan(odYol,2);t.Controls.Add(odYemek,2,5);t.SetColumnSpan(odYemek,2);
         AddTotalSingle(t,6,"Ödenecek",odOdenecek);AddTotalSingle(t,7,"Ödenen Maaş",odOdenen);AddTotalSingle(t,8,"Kalan Maaş",odKalan);AddTotalSingle(t,9,"Mesai",odMesai);AddTotalSingle(t,10,"Ödenen Mesai",odOdenenMesai);AddTotalSingle(t,11,"Kalan Mesai",odKalanMesai);
-        var net=new Label{Text="Net Ödenecek",ForeColor=Color.FromArgb(0,91,187),Font=new Font("Segoe UI",10f,FontStyle.Bold),Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter};t.Controls.Add(net,0,12);t.SetColumnSpan(net,4);t.Controls.Add(odOdenecek,2,13);t.SetColumnSpan(odOdenecek,2);
+        var net=new Label{Text="Net Ödenecek",ForeColor=p.Primary,Font=new Font("Segoe UI",10f,FontStyle.Bold),Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter};t.Controls.Add(net,0,12);t.SetColumnSpan(net,4);t.Controls.Add(odOdenecek,2,13);t.SetColumnSpan(odOdenecek,2);
         totals.Controls.Add(t);body.Controls.Add(totals,1,0);lay.Controls.Add(body,0,2);
 
         var bar=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Padding=new Padding(20,7,20,4)};bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,70));bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));
-        var edit=new Button{Text="Aylık Düzeltme / Hızlı Ödeme",Dock=DockStyle.Fill,Margin=new Padding(0,0,16,0),FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(31,111,235),ForeColor=Color.White,Font=new Font("Segoe UI",10f,FontStyle.Bold)};edit.FlatAppearance.BorderSize=0;
-        edit.Click+=(_,_)=>{using var f=new MonthlyPayrollAdjustmentForm();f.ShowDialog(this);RefreshFullTabs();};
-        var calc=new Button{Text="Hesapları Yenile",Dock=DockStyle.Fill,FlatStyle=FlatStyle.Flat,BackColor=Color.White,Font=new Font(Font,FontStyle.Bold)};calc.Click+=(_,_)=>RefreshFullTabs();
+        var edit=PdksUiKit.Button("Aylık Düzeltme / Hızlı Ödeme",220,PdksActionRole.Primary);
+        edit.Dock=DockStyle.Fill;edit.MinimumSize=Size.Empty;edit.MaximumSize=Size.Empty;edit.Margin=new Padding(0,0,16,0);
+        edit.Click+=(_,_)=>{if(!RouteToShell(PdksCommandId.PayrollAdjustment)){using var f=new MonthlyPayrollAdjustmentForm();f.ShowDialog(this);}RefreshFullTabs();};
+        var calc=PdksUiKit.Button("Hesapları Yenile",150,PdksActionRole.Secondary,RefreshFullTabs);
+        calc.Dock=DockStyle.Fill;calc.MinimumSize=Size.Empty;calc.MaximumSize=Size.Empty;
         bar.Controls.Add(edit,0,0);bar.Controls.Add(calc,1,0);lay.Controls.Add(bar,0,3);page.Controls.Add(lay);return page;
     }
     void AddPairLabels(TableLayoutPanel t,int row,string a,string b){var la=new Label{Text=a,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};var lb=new Label{Text=b,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};t.Controls.Add(la,0,row);t.SetColumnSpan(la,2);t.Controls.Add(lb,2,row);t.SetColumnSpan(lb,2);}
