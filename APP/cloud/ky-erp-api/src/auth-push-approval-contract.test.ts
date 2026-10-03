@@ -200,6 +200,15 @@ test("trusted Security device keeps phone approval pending when push delivery is
 });
 
 
+test("KY Security background refresh keeps the rendered account stable and queues a trailing refresh",()=>{
+  assert.match(securityApp,/queueTrailingRefresh/);
+  assert.match(securityApp,/refreshState\(\{background:true,trailing:true\}\)/);
+  assert.match(securityApp,/if\(refreshState\.running\)\{if\(background\)queueTrailingRefresh\(\);return;\}/);
+  assert.doesNotMatch(securityApp,/renderAccount\(null,device\)/);
+  assert.match(securityHtml,/data-tab="approvals">Onaylar/);
+  assert.doesNotMatch(securityHtml,/data-tab="approvals" data-system-only/);
+});
+
 test("approved Security phone never re-enrolls just because Web Push rotates",()=>{
   assert.match(securityApp,/Onaylı cihaz · Telefon onayı hazır/);
   assert.match(securityApp,/Sessizce yenileniyor/);
