@@ -4,9 +4,9 @@ namespace HKN.Personel.Native;
 
 public partial class PersonelForm
 {
-    readonly NumericUpDown payrollNetEntitlement = new() { DecimalPlaces=2, Maximum=10_000_000m, ThousandsSeparator=true, Width=130 };
-    readonly ComboBox payrollPekMode = new() { DropDownStyle=ComboBoxStyle.DropDownList, Width=190 };
-    readonly NumericUpDown payrollManualPek = new() { DecimalPlaces=2, Maximum=10_000_000m, ThousandsSeparator=true, Width=130 };
+    readonly NumericUpDown payrollNetEntitlement = new() { DecimalPlaces=2, Maximum=10_000_000m, ThousandsSeparator=true, Width=130, ReadOnly=true, Enabled=false };
+    readonly ComboBox payrollPekMode = new() { DropDownStyle=ComboBoxStyle.DropDownList, Width=190, Enabled=false };
+    readonly NumericUpDown payrollManualPek = new() { DecimalPlaces=2, Maximum=10_000_000m, ThousandsSeparator=true, Width=130, ReadOnly=true, Enabled=false };
     readonly Label payrollMinimum = new() { AutoSize=true };
     readonly Label payrollOfficialNet = new() { AutoSize=true, Font=new Font("Segoe UI",9f,FontStyle.Bold) };
     readonly Label payrollDifference = new() { AutoSize=true, Font=new Font("Segoe UI",9f,FontStyle.Bold) };
@@ -47,16 +47,14 @@ public partial class PersonelForm
         table.Controls.Add(PayrollCaption("Aradaki Fark"),4,1);
         table.Controls.Add(payrollDifference,5,1);
 
+        payrollWarning.Text="Düzenlemek için Personeli Düzenle > Bordro / PEK sekmesini kullanın.";
+        payrollWarning.ForeColor=p.Muted;
         table.Controls.Add(payrollWarning,0,2);
-        table.SetColumnSpan(payrollWarning,5);
-        var save = PdksUiKit.Button("Profili Kaydet",118,PdksActionRole.Primary,SavePayrollProfile);
-        save.Height=32;save.MinimumSize=new Size(118,32);save.MaximumSize=new Size(118,32);save.Dock=DockStyle.Right;
-        table.Controls.Add(save,5,2);
+        table.SetColumnSpan(payrollWarning,6);
 
         payrollNetEntitlement.ValueChanged += (_,_) => RefreshPayrollProfilePreview();
         payrollPekMode.SelectedIndexChanged += (_,_) =>
         {
-            payrollManualPek.Enabled = payrollPekMode.SelectedIndex == 1;
             RefreshPayrollProfilePreview();
         };
         payrollManualPek.ValueChanged += (_,_) => RefreshPayrollProfilePreview();
@@ -81,7 +79,7 @@ public partial class PersonelForm
             payrollNetEntitlement.Value = Clamp(payrollNetEntitlement, profile.NetMonthlyEntitlement);
             payrollPekMode.SelectedIndex = profile.PekMode == PekMode.Manual ? 1 : 0;
             payrollManualPek.Value = Clamp(payrollManualPek, profile.ManualPekGross);
-            payrollManualPek.Enabled = payrollPekMode.SelectedIndex == 1;
+
         }
         finally
         {
