@@ -107,11 +107,6 @@ async function sessionRows(c: any, actor: AnyRow, companySlug: string, limit: nu
       ? c.env.DB.prepare(`${select} WHERE s.main_company_slug=? ORDER BY s.created_at DESC LIMIT ?`).bind(companySlug, limit).all()
       : c.env.DB.prepare(`${select} ORDER BY s.created_at DESC LIMIT ?`).bind(limit).all();
   }
-  const companyScope = scopeType(actor) === "COMPANY" && hasCap(actor, "SESSION_VIEW");
-  if (companyScope) {
-    const owner = isCompanyAdmin(actor.role) ? 1 : 0;
-    return c.env.DB.prepare(`${select} WHERE s.main_company_slug=? AND (UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN') OR (?=1 AND s.user_id=?)) ORDER BY s.created_at DESC LIMIT ?`).bind(text(actor.companySlug), owner, text(actor.userId), limit).all();
-  }
   return c.env.DB.prepare(`${select} WHERE s.user_id=? ORDER BY s.created_at DESC LIMIT ?`).bind(text(actor.userId), limit).all();
 }
 
@@ -165,11 +160,11 @@ async function buildActivity(c:any, actor:AnyRow, companySlug:string, limit:numb
                         JOIN auth_users u ON u.id=s.user_id
                         LEFT JOIN auth_user_security us ON us.user_id=u.id`;
   const approvals = companySlug
-    ? await c.env.DB.prepare(`${approvalSql} WHERE a.main_company_slug=? ORDER BY a.requested_at DESC LIMIT ?`).bind(companySlug,limit).all<AnyRow>()
-    : await c.env.DB.prepare(`${approvalSql} ORDER BY a.requested_at DESC LIMIT ?`).bind(limit).all<AnyRow>();
+    ? await c.env.DB.prepare(`${approvalSql} WHERE a.main_company_slug=? ORDER BY a.requested_at DESC LIMIT ?`).bind(companySlug,limit).all()
+    : await c.env.DB.prepare(`${approvalSql} ORDER BY a.requested_at DESC LIMIT ?`).bind(limit).all();
   const sessions = companySlug
-    ? await c.env.DB.prepare(`${sessionSql} WHERE s.main_company_slug=? ORDER BY s.created_at DESC LIMIT ?`).bind(companySlug,limit).all<AnyRow>()
-    : await c.env.DB.prepare(`${sessionSql} ORDER BY s.created_at DESC LIMIT ?`).bind(limit).all<AnyRow>();
+    ? await c.env.DB.prepare(`${sessionSql} WHERE s.main_company_slug=? ORDER BY s.created_at DESC LIMIT ?`).bind(companySlug,limit).all()
+    : await c.env.DB.prepare(`${sessionSql} ORDER BY s.created_at DESC LIMIT ?`).bind(limit).all();
 
   const items:AnyRow[]=[];
   for(const row of approvals.results||[]) {
