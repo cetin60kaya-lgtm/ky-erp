@@ -10,7 +10,7 @@ public partial class PersonelForm
     readonly Label payrollMinimum = new() { AutoSize=true };
     readonly Label payrollOfficialNet = new() { AutoSize=true, Font=new Font("Segoe UI",9f,FontStyle.Bold) };
     readonly Label payrollDifference = new() { AutoSize=true, Font=new Font("Segoe UI",9f,FontStyle.Bold) };
-    readonly Label payrollWarning = new() { AutoSize=false, Height=40, Dock=DockStyle.Fill, ForeColor=Color.FromArgb(168,72,36) };
+    readonly Label payrollWarning = new() { AutoSize=false, Height=40, Dock=DockStyle.Fill };
     bool payrollProfileLoading;
 
     Control BuildPayrollProfilePanel()
@@ -21,8 +21,10 @@ public partial class PersonelForm
             payrollPekMode.SelectedIndex = 0;
         }
 
-        var box = new GroupBox { Text="İç Hakediş / Resmî Bordro Profili", BackColor=Color.FromArgb(248,250,253), Padding=new Padding(10) };
-        var table = new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=6, RowCount=3 };
+        var p=PdksAppearance.Current;
+        payrollWarning.ForeColor=p.Warning;
+        var box = new GroupBox { Text="İç Hakediş / Resmî Bordro Profili", BackColor=p.SurfaceAlt, ForeColor=p.Text, Padding=new Padding(10) };
+        var table = new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=6, RowCount=3, BackColor=p.SurfaceAlt };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,145));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,95));
@@ -47,9 +49,8 @@ public partial class PersonelForm
 
         table.Controls.Add(payrollWarning,0,2);
         table.SetColumnSpan(payrollWarning,5);
-        var save = new Button { Text="Profili Kaydet", Width=118, Height=32, Dock=DockStyle.Right, Font=new Font("Segoe UI",9f,FontStyle.Bold), BackColor=Color.FromArgb(31,111,235), ForeColor=Color.White, FlatStyle=FlatStyle.Flat };
-        save.FlatAppearance.BorderSize=0;
-        save.Click += (_,_) => SavePayrollProfile();
+        var save = PdksUiKit.Button("Profili Kaydet",118,PdksActionRole.Primary,SavePayrollProfile);
+        save.Height=32;save.MinimumSize=new Size(118,32);save.MaximumSize=new Size(118,32);save.Dock=DockStyle.Right;
         table.Controls.Add(save,5,2);
 
         payrollNetEntitlement.ValueChanged += (_,_) => RefreshPayrollProfilePreview();
@@ -68,7 +69,7 @@ public partial class PersonelForm
     static Label PayrollCaption(string text) => new()
     {
         Text=text, Dock=DockStyle.Fill, TextAlign=ContentAlignment.MiddleLeft,
-        Font=new Font("Segoe UI",8.5f,FontStyle.Bold), ForeColor=Color.FromArgb(60,76,98)
+        Font=new Font("Segoe UI",8.5f,FontStyle.Bold), ForeColor=PdksAppearance.Current.Muted
     };
 
     void LoadPayrollProfilePanel(string cardNo, decimal fallbackNetSalary)
