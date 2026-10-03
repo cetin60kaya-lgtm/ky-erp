@@ -99,8 +99,10 @@ public partial class PersonelForm
 
     void BuildTabsClassic()
     {
-        tabs.TabPages.Clear(); tabs.Margin=Padding.Empty; tabs.Padding=new Point(7,3); tabs.Font=Font;
-        var info=new TabPage("Personel Bilgileri");var inner=new TabControl{Dock=DockStyle.Fill,Font=Font,Padding=new Point(7,3)};
+        var palette=PdksAppearance.Current;
+        tabs.TabPages.Clear(); tabs.Margin=Padding.Empty; tabs.Padding=new Point(7,3); tabs.Font=Font;tabs.BackColor=palette.Surface;
+        var info=new TabPage("Personel Bilgileri"){BackColor=palette.Surface,UseVisualStyleBackColor=false};
+        var inner=new TabControl{Dock=DockStyle.Fill,Font=Font,Padding=new Point(7,3),BackColor=palette.Surface};
         inner.TabPages.Add(BuildCanonicalBasicTab());
         inner.TabPages.Add(BuildCanonicalIdentityTab());
         inner.TabPages.Add(BuildCanonicalContactTab());
@@ -108,6 +110,7 @@ public partial class PersonelForm
         inner.TabPages.Add(BuildCanonicalWorkSgkTab());
         inner.TabPages.Add(BuildCanonicalExtraPaymentsTab());
         inner.TabPages.Add(BuildCanonicalPayrollTab());
+        foreach(TabPage page in inner.TabPages){page.BackColor=palette.Surface;page.UseVisualStyleBackColor=false;}
         info.Controls.Add(inner);
         tabs.TabPages.Add(info);
         tabs.TabPages.Add(BuildGirisClassic());
@@ -150,7 +153,24 @@ public partial class PersonelForm
         searchText.TextChanged+=(_,_)=>ApplyClassicSearch();searchField.SelectedIndexChanged+=(_,_)=>ApplyClassicSearch();scopeActive.CheckedChanged+=(_,_)=>{if(scopeActive.Checked)Reload();};scopePassive.CheckedChanged+=(_,_)=>{if(scopePassive.Checked)Reload();};scopeAll.CheckedChanged+=(_,_)=>{if(scopeAll.Checked)Reload();};return outer;
     }
     void QueuePersonLoad(){if(list.CurrentRow?.Cells["PKNO"].Value is not object v)return;pendingPersonPk=v.ToString()??"";personLoadTimer.Stop();personLoadTimer.Start();}
-    void PersonListFormat(object? sender,DataGridViewCellFormattingEventArgs e){if(e.RowIndex<0||!list.Columns.Contains("ICTARIH"))return;var st=e.CellStyle;if(st is null)return;var exited=list.Rows[e.RowIndex].Cells["ICTARIH"].Value is not null and not DBNull;var back=exited?Color.FromArgb(255,238,238):Color.FromArgb(238,250,240);var sel=exited?Color.FromArgb(250,220,220):Color.FromArgb(216,240,222);st.BackColor=back;st.ForeColor=Color.FromArgb(35,55,65);st.SelectionBackColor=sel;st.SelectionForeColor=Color.FromArgb(25,45,55);}
+    void PersonListFormat(object? sender,DataGridViewCellFormattingEventArgs e)
+    {
+        if(e.RowIndex<0||!list.Columns.Contains("ICTARIH"))return;
+        var st=e.CellStyle;if(st is null)return;
+        var exited=list.Rows[e.RowIndex].Cells["ICTARIH"].Value is not null and not DBNull;
+        var palette=PdksAppearance.Current;
+        if(palette.IsDark)
+        {
+            st.BackColor=exited?palette.DangerSoft:palette.SurfaceAlt;
+            st.ForeColor=palette.Text;
+            st.SelectionBackColor=palette.Selection;
+            st.SelectionForeColor=palette.Text;
+            return;
+        }
+        var back=exited?Color.FromArgb(255,238,238):Color.FromArgb(238,250,240);
+        var sel=exited?Color.FromArgb(250,220,220):Color.FromArgb(216,240,222);
+        st.BackColor=back;st.ForeColor=Color.FromArgb(35,55,65);st.SelectionBackColor=sel;st.SelectionForeColor=Color.FromArgb(25,45,55);
+    }
     Button NavButton(string text,int delta){var b=PdksUiKit.Button(text,32,PdksActionRole.Quiet,()=>MoveRow(delta));b.Height=28;b.MinimumSize=new Size(32,28);b.MaximumSize=new Size(32,28);b.Margin=new Padding(1,1,1,0);return b;}
     void MoveRow(int d){if(list.Rows.Count==0)return;int i=list.CurrentRow?.Index??0;i=Math.Max(0,Math.Min(list.Rows.Count-1,i+d));list.CurrentCell=list.Rows[i].Cells[0];}
     void ApplyClassicSearch(){if(list.DataSource is not DataTable dt)return;string s=searchText.Text.Replace("'","''").Trim();string c=searchField.SelectedIndex switch{1=>"AD",2=>"SOYAD",3=>"IGTARIH",4=>"ICTARIH",_=>"PKNO"};dt.DefaultView.RowFilter=s.Length==0?"":(c is "IGTARIH" or "ICTARIH"?$"CONVERT({c}, 'System.String') LIKE '%{s}%'":$"{c} LIKE '%{s}%'");UpdateClassicStats();}
