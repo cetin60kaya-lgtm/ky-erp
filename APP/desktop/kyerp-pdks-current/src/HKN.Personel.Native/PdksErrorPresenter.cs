@@ -9,7 +9,27 @@ public static class PdksErrorPresenter
 
         if(message.Contains("SQL error code = -104",StringComparison.OrdinalIgnoreCase) ||
            message.Contains("Token unknown",StringComparison.OrdinalIgnoreCase))
-            return "Veritabanı sorgusu çalıştırılamadı. Uyum kontrolü için teknik ayrıntı kayda alındı.";
+            return "Rapor veya sorgu, mevcut Firebird sürümüyle uyumlu değil. Teknik ayrıntı kayda alındı.";
+
+        if(message.Contains("SQL error code = -206",StringComparison.OrdinalIgnoreCase) ||
+           message.Contains("Column unknown",StringComparison.OrdinalIgnoreCase))
+            return "Beklenen veritabanı alanı bulunamadı. Şema uyumluluğu kontrol edilmelidir.";
+
+        if(message.Contains("SQL error code = -204",StringComparison.OrdinalIgnoreCase) ||
+           message.Contains("Table unknown",StringComparison.OrdinalIgnoreCase))
+            return "Beklenen veritabanı tablosu bulunamadı. Veri kaynağı sürümü kontrol edilmelidir.";
+
+        if(message.Contains("violation of PRIMARY or UNIQUE KEY",StringComparison.OrdinalIgnoreCase) ||
+           message.Contains("SQL error code = -803",StringComparison.OrdinalIgnoreCase))
+            return "Aynı kayıt zaten mevcut. Mükerrer kayıt oluşturulmadı.";
+
+        if(message.Contains("deadlock",StringComparison.OrdinalIgnoreCase) ||
+           message.Contains("lock conflict",StringComparison.OrdinalIgnoreCase))
+            return "Kayıt şu anda başka bir işlem tarafından kullanılıyor. Kısa süre sonra yeniden deneyin.";
+
+        if(message.Contains("conversion error",StringComparison.OrdinalIgnoreCase) ||
+           message.Contains("arithmetic exception",StringComparison.OrdinalIgnoreCase))
+            return "Veri biçimi beklenen yapıyla uyuşmuyor. İlgili alanları kontrol edin.";
 
         if(message.Contains("database",StringComparison.OrdinalIgnoreCase) &&
            (message.Contains("unavailable",StringComparison.OrdinalIgnoreCase) ||
