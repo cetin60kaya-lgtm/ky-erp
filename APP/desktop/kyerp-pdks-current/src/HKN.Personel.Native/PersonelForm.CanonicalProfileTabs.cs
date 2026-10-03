@@ -134,7 +134,7 @@ public partial class PersonelForm
         foreach (var key in new[] { "IGTARIH","ICTARIH","GRUPAD","BOLUMAD","SERVISAD","GOREVAD","DURUMAD","FIRMAAD" }) Set(key, Read(key));
         var profile = PayrollProfileStore.Load(Read("PKNO"), ReadDecimal(row, "MAAS"));
         Set("HAKEDIS", profile.NetMonthlyEntitlement.ToString("N2") + " ₺");
-        Set("PEKMODE", profile.PekMode == PekMode.LegalAutomatic ? "Mevzuata göre otomatik" : "Manuel PEK");
+        Set("PEKMODE", profile.PekMode == PekMode.LegalAutomatic ? "Mevzuata göre otomatik" : "Sabit PEK (tek tanım)");
     }
 
     static decimal ReadDecimal(DataRow row, string column)
