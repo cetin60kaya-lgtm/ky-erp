@@ -1,7 +1,7 @@
-/* KY ERP sabit açılır pencere kuralı:
-   - pencere merkezde kalır
-   - en/boy yalnız sağ-alt tutamaçtan ayarlanır
-   - son canonical ölçü sunucudan gelir
+/* KY ERP ortak açılır pencere kuralı:
+   - bütün modüllerde aynı modern köşe-ok tutamacı kullanılır
+   - her pencere tipi kendi benzersiz anahtarıyla ölçü saklar
+   - son ölçü sunucuda tutulduğu için bilgisayarlar arasında aynıdır
    - minimum ölçünün altında çubuk haline gelemez */
 
 [data-ky-resizable-dialog="true"] {
@@ -12,33 +12,56 @@
 
 .ky-modal-resize-handle {
   position: absolute !important;
-  right: 4px !important;
-  bottom: 4px !important;
+  right: 5px !important;
+  bottom: 5px !important;
   left: auto !important;
   top: auto !important;
-  display: block !important;
-  width: 24px !important;
-  height: 24px !important;
-  min-width: 24px !important;
-  min-height: 24px !important;
+  display: grid !important;
+  place-items: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
   padding: 0 !important;
   margin: 0 !important;
-  border: 0 !important;
-  border-radius: 5px !important;
-  background:
-    linear-gradient(135deg, transparent 0 42%, rgba(71, 85, 105, .35) 43% 49%, transparent 50% 60%, rgba(71, 85, 105, .55) 61% 67%, transparent 68% 78%, rgba(71, 85, 105, .75) 79% 85%, transparent 86%) !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  background: rgba(124, 147, 179, .08) !important;
   box-shadow: none !important;
+  color: #7c93b3 !important;
   cursor: nwse-resize !important;
   touch-action: none !important;
   z-index: 1000 !important;
-  opacity: .8 !important;
+  opacity: .96 !important;
+  transition: color .14s ease, background-color .14s ease, border-color .14s ease, transform .14s ease !important;
+}
+
+.ky-modal-resize-handle svg {
+  width: 17px !important;
+  height: 17px !important;
+  display: block !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.9 !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+  pointer-events: none !important;
 }
 
 .ky-modal-resize-handle:hover,
 .ky-modal-resize-handle:focus-visible {
   opacity: 1 !important;
-  background-color: rgba(226, 232, 240, .75) !important;
-  outline: 1px solid rgba(37, 99, 235, .35) !important;
+  color: #f59e0b !important;
+  background: rgba(245, 158, 11, .10) !important;
+  border-color: rgba(245, 158, 11, .28) !important;
+  outline: 0 !important;
+  transform: translate(-1px, -1px) !important;
+}
+
+.ky-modal-resize-handle:active {
+  color: #f97316 !important;
+  background: rgba(249, 115, 22, .12) !important;
+  transform: translate(0, 0) !important;
 }
 
 /* Eski CSS resize handle'ı gizlese bile canonical kural her modülde son sözü söyler. */
