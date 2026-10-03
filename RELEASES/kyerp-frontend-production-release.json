@@ -43,9 +43,13 @@
     "security-owner-phone-single-system-console",
     "security-company-login-activity-center",
     "security-self-login-approval-preserved",
-    "security-background-refresh-flicker-fixed"
+    "security-background-refresh-flicker-fixed",
+    "security-direct-ky-code-no-pending-request",
+    "security-google-microsoft-ky-single-code-field",
+    "security-owner-system-code-all-users",
+    "security-self-code-own-account-only"
   ],
-  "note": "KY Güvenlik: Süper Yönetici sistem telefonu e-posta/Authenticator ek doğrulamasıyla tek cihaza kilitlendi; firma firma giriş/çıkış takibi eklendi; normal kullanıcı kendi giriş onayı/kodu ile sınırlandı; arka plan yenileme ekran titremesi giderildi.",
-  "sourceCommit": "ba2d0ff01d0d97e2ee37eeeaedddfe9f439917b8",
-  "requestedAt": "2026-10-04T01:18:00+03:00"
+  "note": "KY Güvenlik direct code: kod üretimi artık bekleyen bilgisayar girişine bağlı değil. Normal kullanıcı kodu yalnız kendi hesabında, ekstra doğrulanmış Süper Yönetici sistem kodu kullanıcı adı+şifre sonrası tüm hesaplarda çalışır. Google, Microsoft ve KY Güvenlik kodları tek 6 haneli alandan doğrulanır.",
+  "sourceCommit": "9edc2106361698da27489e683bf4a0b27782e349",
+  "requestedAt": "2026-10-04T01:45:00+03:00"
 }
