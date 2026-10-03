@@ -58,10 +58,13 @@ public sealed class LegacyPeriodForm : Form
         body.Controls.Add(new Panel{Dock=DockStyle.Fill,BackColor=p.Canvas},1,0);
 
         var rightCard=PeriodCard();
-        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=12,Padding=new Padding(20),BackColor=p.Surface};
+        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=13,Padding=new Padding(20),BackColor=p.Surface};
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,175));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        editor.RowStyles.Clear();
         editor.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
-        editor.Controls.Add(new Label{Text="Dönem Bilgileri",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42)},0,0);editor.SetColumnSpan(editor.GetControlFromPosition(0,0)!,2);
+        for(var row=1;row<12;row++)editor.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+        editor.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        editor.Controls.Add(new Label{Text="Dönem Bilgileri",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text},0,0);editor.SetColumnSpan(editor.GetControlFromPosition(0,0)!,2);
         PeriodRow(editor,1,"Dönem Adı",name);PeriodRow(editor,2,"Çalışma Grubu",group);PeriodRow(editor,3,"Başlangıç",start);PeriodRow(editor,4,"Bitiş",end);PeriodRow(editor,5,"Toplam Gün",total);
         PeriodRow(editor,6,"Dönemlik Çalışma Eksiği",minusTime);PeriodRow(editor,7,"Eksik Gün",minusDay);PeriodRow(editor,8,"Ekleneceği Alan",plusArea);
         PeriodRow(editor,9,"Dönemlik Çalışma Fazlası",plusTime);PeriodRow(editor,10,"Fazla Gün",plusDay);PeriodRow(editor,11,"Çıkarılacağı Alan",minusArea);
@@ -85,8 +88,7 @@ public sealed class LegacyPeriodForm : Form
 
     static void PeriodRow(TableLayoutPanel table,int row,string caption,Control control)
     {
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
-        table.Controls.Add(new Label{Text=caption,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(100,116,139),Font=new Font("Segoe UI",8.5f,FontStyle.Bold)},0,row);
+        table.Controls.Add(new Label{Text=caption,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=PdksAppearance.Current.Muted,Font=new Font("Segoe UI",8.5f,FontStyle.Bold)},0,row);
         control.Dock=DockStyle.Fill;control.Margin=new Padding(0,6,0,6);table.Controls.Add(control,1,row);
     }
 
