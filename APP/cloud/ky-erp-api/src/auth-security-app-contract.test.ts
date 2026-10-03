@@ -74,13 +74,14 @@ test("trusted phone card keeps one server identity while push transport refreshe
   assert.match(push,/SECURITY_APP_CONNECTION_REFRESHED/);
   assert.match(push,/pushEndpointChanged/);
 });
-test("security app creates a one-minute challenge-bound login code with attempt limiting",()=>{
+test("security app creates a one-minute direct login code without a pending browser request",()=>{
   assert.match(push,/SECURITY_LOGIN_CODE_SECONDS = 60/);
-  assert.match(push,/SECURITY_LOGIN_CODE_MAX_ATTEMPTS = 5/);
+  assert.match(push,/DIRECT_SECURITY_CODE_SCOPE/);
   assert.match(push,/\/api\/auth\/push\/device\/login-code/);
-  assert.match(push,/SECURITY_APP_LOGIN_CODE_CREATED/);
-  assert.match(push,/verifySecurityLoginCode/);
-  assert.match(push,/SECURITY_APP_LOGIN_CODE_VERIFIED/);
+  assert.match(push,/scopeType: systemScope \? "SYSTEM" : "SELF"/);
+  assert.match(push,/DIRECT_KY_SECURITY_CODE_CREATED/);
+  assert.match(push,/verifyDirectSecurityLoginCode/);
+  assert.match(push,/DIRECT_KY_SECURITY_CODE_USED/);
 });
 
 test("push transport expiry never revokes the trusted security device and phone approval stays primary",()=>{
