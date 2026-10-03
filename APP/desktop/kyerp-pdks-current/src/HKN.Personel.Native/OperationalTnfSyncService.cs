@@ -68,7 +68,7 @@ internal static class OperationalTnfSyncService
         key = default;
         var p = line.Split(',');
         if (p.Length != 5 || p[0].Trim().Length == 0) return false;
-        if (!DateTime.TryParseExact(p[2].Trim(), "ddMMyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)) return false;
+        if (!TryParseTnfDay(p[2], out var day)) return false;
         key = (p[0].Trim().PadLeft(5, '0'), day.Date);
         return true;
     }
@@ -76,9 +76,29 @@ internal static class OperationalTnfSyncService
     static (DateTime Day, TimeSpan Time, string Card, string Raw) LineKey(string line)
     {
         var p = line.Split(',');
-        if (p.Length >= 3 && DateTime.TryParseExact(p[2].Trim(), "ddMMyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
+        if (p.Length >= 3 && TryParseTnfDay(p[2], out var day)
             && TimeSpan.TryParse(p[1].Trim(), out var time))
             return (day.Date, time, p[0].Trim(), line);
         return (DateTime.MaxValue, TimeSpan.MaxValue, line, line);
+    }
+
+    static bool TryParseTnfDay(string value, out DateTime day)
+    {
+        day = default;
+        var token = value.Trim();
+        if (token.Length != 6 || token.Any(ch => !char.IsDigit(ch))) return false;
+        if (!int.TryParse(token.AsSpan(0,2), NumberStyles.None, CultureInfo.InvariantCulture, out var d) ||
+            !int.TryParse(token.AsSpan(2,2), NumberStyles.None, CultureInfo.InvariantCulture, out var m) ||
+            !int.TryParse(token.AsSpan(4,2), NumberStyles.None, CultureInfo.InvariantCulture, out var y))
+            return false;
+        try
+        {
+            day = new DateTime(2000 + y, m, d);
+            return true;
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return false;
+        }
     }
 }
