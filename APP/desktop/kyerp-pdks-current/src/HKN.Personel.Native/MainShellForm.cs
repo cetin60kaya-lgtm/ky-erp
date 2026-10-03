@@ -59,7 +59,7 @@ public sealed partial class MainShellForm : Form
     {
         personel = null;
         workspace.ShowSingle(new ModernHomeDashboard(
-            VisiblePrimaryCommands(),
+            PdksCommandCatalog.All.Where(CanExecute),
             ExecuteCommand), "home", "Genel Bakış");
         SetModernPage("Genel Bakış", "Günün personel hareketleri ve hızlı işlemler");
     }
