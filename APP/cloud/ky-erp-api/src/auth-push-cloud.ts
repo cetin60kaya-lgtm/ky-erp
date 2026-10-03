@@ -26,6 +26,8 @@ const SECURITY_APP_VERSION = "security-v3.0";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
 // Telefon onayı birincil faktör olarak beklemede tutulur.
 const SECURITY_LOGIN_CODE_SECONDS = 60;
+const OWNER_MFA_CODE_SECONDS = 90;
+const OWNER_MFA_CODE_SCOPE = "AUTH_OWNER_MFA_CODE";
 const SECURITY_LOGIN_CODE_MAX_ATTEMPTS = 5;
 
 function text(value: unknown) {
@@ -220,7 +222,7 @@ async function managerApproverUserIds(c: any, companySlug: string) {
   for(const row of result.results || []) { const role=roleOf(row); if(isSuper(role) || (isCompanyAdmin(role) && text(row.main_company_slug)===text(companySlug))) ids.add(text(row.id)); }
   return ids;
 }
-function canApproveSessionTarget(actor: AnyRow, session: AnyRow) { const targetRole=roleOf({ role:session.target_role, platform_role:session.target_platform_role, role_override:session.target_role_override }); if(["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole)) return false; if(isSuper(actor.role)) return true; return isCompanyAdmin(actor.role) && text(actor.companySlug)===text(session.main_company_slug); }
+function canApproveSessionTarget(actor: AnyRow, session: AnyRow) { const targetRole=roleOf({ role:session.target_role, platform_role:session.target_platform_role, role_override:session.target_role_override }); if(isSuper(actor.role)) return true; if(["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole)) return false; return isCompanyAdmin(actor.role) && text(actor.companySlug)===text(session.main_company_slug); }
 async function sessionNeedsManagerReview(c: any, session: AnyRow) {
   let trust=await storeGet(c, SESSION_TRUST_SCOPE, text(session.id));
   if (!trust && text(session.id)) trust=await storePut(c, SESSION_TRUST_SCOPE, text(session.id), text(session.mainCompanySlug || session.main_company_slug), { sessionId:text(session.id), userId:text(session.userId || session.user_id), status:"PENDING", requestedAt:text(session.createdAt || session.created_at || nowIso()), source:"MANAGER_REVIEW" });
@@ -605,6 +607,42 @@ export async function verifySecurityLoginCode(c: any, idValue: unknown, tokenVal
   return { ok: true, code: "", row: update.row };
 }
 
+export async function verifyOwnerMfaCode(c: any, challengeIdValue: unknown, codeValue: unknown, targetUserIdValue: unknown) {
+  const challengeId = text(challengeIdValue);
+  const targetUserId = text(targetUserIdValue);
+  const candidate = text(codeValue).replace(/\D/g, "");
+  if (!challengeId || !targetUserId || !/^\d{6}$/.test(candidate)) return { ok: false, code: "OWNER_MFA_CODE_INVALID" };
+
+  const row = await storeGet(c, OWNER_MFA_CODE_SCOPE, challengeId);
+  if (!row || text(row.challengeId) !== challengeId || text(row.targetUserId) !== targetUserId) {
+    return { ok: false, code: "OWNER_MFA_CODE_INVALID" };
+  }
+  if (upper(row.status) !== "ACTIVE" || text(row.consumedAt) || Date.parse(text(row.expiresAt)) <= Date.now()) {
+    return { ok: false, code: "OWNER_MFA_CODE_EXPIRED" };
+  }
+  const attempts = Number(row.attempts || 0);
+  if (attempts >= SECURITY_LOGIN_CODE_MAX_ATTEMPTS) return { ok: false, code: "OWNER_MFA_CODE_LOCKED" };
+
+  const valid = safeEqual(text(row.codeHash), await sha256(`${text(row.codeSalt)}:${candidate}`));
+  if (!valid) {
+    await storePut(c, OWNER_MFA_CODE_SCOPE, challengeId, text(row.mainCompanySlug), { ...row, attempts: attempts + 1 });
+    return { ok: false, code: attempts + 1 >= SECURITY_LOGIN_CODE_MAX_ATTEMPTS ? "OWNER_MFA_CODE_LOCKED" : "OWNER_MFA_CODE_INVALID" };
+  }
+
+  const update = await atomicSecurityStatusUpdate(c, OWNER_MFA_CODE_SCOPE, row, "ACTIVE", {
+    status: "USED",
+    consumedAt: nowIso(),
+    usedAt: nowIso(),
+  });
+  if (!update.changed) return { ok: false, code: "OWNER_MFA_CODE_EXPIRED" };
+
+  await audit(c, "OWNER_MFA_CODE_USED", text(row.ownerUserId), targetUserId, text(row.mainCompanySlug), {
+    challengeId,
+    deviceId: text(row.deviceId),
+  });
+  return { ok: true, ownerUserId: text(row.ownerUserId), deviceId: text(row.deviceId) };
+}
+
 export async function consumePhoneApproval(c: any, idValue: unknown) {
   const row = await storeGet(c, PHONE_SCOPE, text(idValue));
   if (!row || upper(row.status) !== "APPROVED" || text(row.consumedAt)) return false;
@@ -628,8 +666,8 @@ export async function notifyManagerApproval(c: any, approvalId: string, companyS
 }
 
 export async function notifySessionApproval(c: any, session: AnyRow) {
-  const companySlug=text(session.mainCompanySlug || session.main_company_slug); const targetRole=roleOf({ role:session.role, platform_role:session.platform_role, role_override:session.role_override });
-  if (["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole) || !(await sessionNeedsManagerReview(c, session))) return { sent:0, recipients:0 };
+  const companySlug=text(session.mainCompanySlug || session.main_company_slug);
+  if (!(await sessionNeedsManagerReview(c, session))) return { sent:0, recipients:0 };
   const userIds=await managerApproverUserIds(c, companySlug); const devices: AnyRow[]=[]; for(const userId of userIds) devices.push(...await activeDevicesForUser(c,userId,"MANAGER"));
   const sent=await sendWakeMany(c,devices); await audit(c,"SESSION_MANAGER_PUSH_DISPATCHED","",text(session.userId || session.user_id),companySlug,{ sessionId:text(session.id), recipients:userIds.size, notifiedDevices:sent });
   return { sent, recipients:userIds.size };
@@ -1261,6 +1299,62 @@ export function registerAuthPushRoutes(app: any) {
     const actor = await actorFromDevice(c);
     if (!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED", "KY ERP Güvenlik cihazı doğrulanamadı."), 401);
 
+    if (isSuper(actor.role)) {
+      const target = await c.env.DB.prepare(
+        `SELECT ch.id,ch.user_id,ch.challenge_type,ch.created_at,ch.expires_at,
+                u.username,u.full_name,s.main_company_slug
+           FROM auth_login_challenges ch
+           JOIN auth_users u ON u.id=ch.user_id
+           LEFT JOIN auth_user_security s ON s.user_id=u.id
+          WHERE ch.consumed_at IS NULL
+            AND ch.expires_at>?
+            AND ch.challenge_type LIKE 'POLICY_%'
+          ORDER BY ch.created_at DESC
+          LIMIT 1`,
+      ).bind(nowIso()).first<AnyRow>();
+
+      if (!target) {
+        return c.json(jsonError("OWNER_MFA_CODE_NO_REQUEST", "Kod üretmek için önce hedef kullanıcıda kullanıcı adı ve şifre ile giriş başlatılmalıdır."), 404);
+      }
+
+      const code = randomSixDigitCode();
+      const salt = randomToken(12);
+      const maxExpiry = Date.parse(text(target.expires_at));
+      const expiresAt = new Date(Math.min(Date.now() + OWNER_MFA_CODE_SECONDS * 1000, maxExpiry)).toISOString();
+      await storePut(c, OWNER_MFA_CODE_SCOPE, text(target.id), text(target.main_company_slug || actor.companySlug), {
+        id: text(target.id),
+        challengeId: text(target.id),
+        targetUserId: text(target.user_id),
+        ownerUserId: actor.userId,
+        deviceId: actor.device.id,
+        status: "ACTIVE",
+        codeHash: await sha256(`${salt}:${code}`),
+        codeSalt: salt,
+        expiresAt,
+        attempts: 0,
+        consumedAt: "",
+        createdAt: nowIso(),
+      });
+      await audit(c, "OWNER_MFA_CODE_CREATED", actor.userId, text(target.user_id), text(target.main_company_slug || actor.companySlug), {
+        challengeId: text(target.id),
+        deviceId: actor.device.id,
+        expiresAt,
+      });
+      return c.json({
+        ok: true,
+        data: {
+          challengeId: text(target.id),
+          code,
+          expiresAt,
+          validSeconds: Math.max(1, Math.floor((Date.parse(expiresAt) - Date.now()) / 1000)),
+          scope: "TARGET_LOGIN",
+          targetUserId: text(target.user_id),
+          targetName: text(target.full_name || target.username),
+          targetCompanySlug: text(target.main_company_slug),
+        },
+      });
+    }
+
     const rows = (await storeList(c, PHONE_SCOPE))
       .filter((row: AnyRow) =>
         text(row.userId) === actor.userId &&
@@ -1297,6 +1391,7 @@ export function registerAuthPushRoutes(app: any) {
         code,
         expiresAt,
         validSeconds: SECURITY_LOGIN_CODE_SECONDS,
+        scope: "SELF",
         deviceLabel: friendlyDeviceLabel(row.deviceLabel, row.userAgent),
       },
     });
