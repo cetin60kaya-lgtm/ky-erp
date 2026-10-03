@@ -200,13 +200,19 @@ public sealed class LegacyDefinitionsForm : Form
         LoadFirmaList(); LoadBordroList();
     }
 
-    void LoadFirmaList()
+    void LoadFirmaList(int? preferredCode=null)
     {
         try
         {
             var dt=db.Query("select KOD,AD from FIRMA order by KOD"); var c=(ComboBox)firma["SELECT"];
             c.DropDownStyle=ComboBoxStyle.DropDownList; c.DataSource=dt; c.DisplayMember="AD"; c.ValueMember="KOD";
-            if(dt.Rows.Count>0)c.SelectedIndex=0; else {firmaCode=null;ClearFirmaFields();}
+            if(dt.Rows.Count>0)
+            {
+                if(preferredCode is not null && dt.AsEnumerable().Any(r=>Convert.ToInt32(r["KOD"])==preferredCode.Value)) c.SelectedValue=preferredCode.Value;
+                else c.SelectedIndex=0;
+                LoadFirma();
+            }
+            else {firmaCode=null;ClearFirmaFields();}
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions");}
     }
@@ -261,7 +267,7 @@ public sealed class LegacyDefinitionsForm : Form
                 db.Execute("update FIRMA set AD=@AD,ADRES=@ADR,TEL1=@T1,TEL2=@T2,FAX=@FAX,IL=@IL,ILCE=@ILCE,SSK=@SSK,AKTIF=@A where KOD=@K",
                     new FbParameter("@AD",ad),new FbParameter("@ADR",V("ADRES")),new FbParameter("@T1",V("TEL1")),new FbParameter("@T2",V("TEL2")),new FbParameter("@FAX",V("FAX")),new FbParameter("@IL",V("IL")),new FbParameter("@ILCE",V("ILCE")),new FbParameter("@SSK",V("SSK")),new FbParameter("@A",aktif),new FbParameter("@K",firmaCode));
             }
-            save.Enabled=false; SetFirmaEdit(false); c.DropDownStyle=ComboBoxStyle.DropDownList; LoadFirmaList();
+            var savedCode=firmaCode; save.Enabled=false; SetFirmaEdit(false); c.DropDownStyle=ComboBoxStyle.DropDownList; LoadFirmaList(savedCode);
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions");}
     }
@@ -289,12 +295,18 @@ public sealed class LegacyDefinitionsForm : Form
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions");}
     }
 
-    void LoadBordroList()
+    void LoadBordroList(int? preferredCode=null)
     {
         try
         {
             var g=(DataGridView)bordro["GRID"]; g.DataSource=db.Query("select KOD,AD,KAD,BKOD,CARPAN,CALAN,TIP from BORDRO order by KOD");
-            if(g.Rows.Count>0)g.CurrentCell=g.Rows[0].Cells[0]; else {bordroCode=null;ClearBordro();}
+            if(g.Rows.Count>0)
+            {
+                var row=preferredCode is null?g.Rows[0]:g.Rows.Cast<DataGridViewRow>().FirstOrDefault(r=>r.DataBoundItem is DataRowView v&&Convert.ToInt32(v.Row["KOD"])==preferredCode.Value)??g.Rows[0];
+                g.CurrentCell=row.Cells[0];
+                LoadBordro();
+            }
+            else {bordroCode=null;ClearBordro();}
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions");}
     }
@@ -342,7 +354,7 @@ public sealed class LegacyDefinitionsForm : Form
                 db.Execute("insert into BORDRO (KOD,AD,KAD,BKOD,CARPAN,CALAN,TIP) values (@K,@AD,@KA,@BK,@C,@CA,@T)",new FbParameter("@K",code),new FbParameter("@AD",ad),new FbParameter("@KA",DbOrNull(kad)),new FbParameter("@BK",DbOrNull(bkod)),new FbParameter("@C",carpan),new FbParameter("@CA",calan),new FbParameter("@T",tip));
             else
                 db.Execute("update BORDRO set AD=@AD,KAD=@KA,BKOD=@BK,CARPAN=@C,CALAN=@CA,TIP=@T where KOD=@K",new FbParameter("@AD",ad),new FbParameter("@KA",DbOrNull(kad)),new FbParameter("@BK",DbOrNull(bkod)),new FbParameter("@C",carpan),new FbParameter("@CA",calan),new FbParameter("@T",tip),new FbParameter("@K",bordroCode));
-            bordroCode=code; SetBordroEdit(false); save.Enabled=false; LoadBordroList();
+            bordroCode=code; SetBordroEdit(false); save.Enabled=false; LoadBordroList(code);
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions");}
     }
@@ -372,7 +384,7 @@ public sealed class LegacyDefinitionsForm : Form
         public Button EditButton(int x,int y){var b=B("&Değiştir",x,y);b.Click+=(_,_)=>{if(code is null)return;editing=true;edit.ReadOnly=false;if(saveButton is not null)saveButton.Enabled=true;edit.Focus();};return b;}
         public Button DeleteButton(int x,int y){var b=B("&Sil",x,y);b.Click+=(_,_)=>Delete();return b;}
         public Button DeleteAllButton(int x,int y){var b=B("Tü&münü Sil",x,y);b.Click+=(_,_)=>DeleteAll();return b;}
-        public void Reload(){try{grid.DataSource=db.Query($"select KOD,AD from {table} order by KOD");if(grid.Rows.Count>0)grid.CurrentCell=grid.Rows[0].Cells[0];else{code=null;edit.Clear();}}catch(Exception ex){PdksErrorPresenter.Show(null,ex,owner,MessageBoxIcon.Warning,"Definitions.Simple");}}
+        public void Reload(int? preferredCode=null){try{grid.DataSource=db.Query($"select KOD,AD from {table} order by KOD");if(grid.Rows.Count>0){var row=preferredCode is null?grid.Rows[0]:grid.Rows.Cast<DataGridViewRow>().FirstOrDefault(r=>r.DataBoundItem is DataRowView v&&Convert.ToInt32(v.Row["KOD"])==preferredCode.Value)??grid.Rows[0];grid.CurrentCell=row.Cells[0];LoadSelection();}else{code=null;edit.Clear();}}catch(Exception ex){PdksErrorPresenter.Show(null,ex,owner,MessageBoxIcon.Warning,"Definitions.Simple");}}
         void LoadSelection(){if(grid.CurrentRow?.DataBoundItem is not DataRowView v)return;code=Convert.ToInt32(v.Row["KOD"]);edit.Text=Convert.ToString(v.Row["AD"])??"";}
         void Save(Button save)
         {
@@ -381,7 +393,7 @@ public sealed class LegacyDefinitionsForm : Form
                 var ad=edit.Text.Trim();if(ad.Length==0)throw new InvalidOperationException("Ad alanı boş bırakılamaz.");
                 if(code is null){code=Convert.ToInt32(db.Scalar($"select coalesce(max(KOD),0)+1 from {table}")??1);db.Execute($"insert into {table} (KOD,AD) values (@K,@A)",new FbParameter("@K",code),new FbParameter("@A",ad));}
                 else db.Execute($"update {table} set AD=@A where KOD=@K",new FbParameter("@A",ad),new FbParameter("@K",code));
-                editing=false;edit.ReadOnly=true;save.Enabled=false;Reload();
+                var savedCode=code;editing=false;edit.ReadOnly=true;save.Enabled=false;Reload(savedCode);
             }
             catch(Exception ex){PdksErrorPresenter.Show(null,ex,owner,MessageBoxIcon.Warning,"Definitions.Simple");}
         }

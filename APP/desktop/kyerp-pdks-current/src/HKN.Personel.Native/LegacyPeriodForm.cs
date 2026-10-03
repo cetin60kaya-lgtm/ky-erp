@@ -107,7 +107,7 @@ public sealed class LegacyPeriodForm : Form
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Error,"Periods");}
     }
 
-    void ReloadGrid(bool filtered)
+    void ReloadGrid(bool filtered,int? preferredCode=null)
     {
         try
         {
@@ -115,7 +115,13 @@ public sealed class LegacyPeriodForm : Form
             DataTable dt;
             if(filtered)dt=db.Query(sql+" where BASTAR<=@B and BITTAR>=@A order by BASTAR,GRUP",new FbParameter("@A",filterStart.Value.Date),new FbParameter("@B",filterEnd.Value.Date));
             else dt=db.Query(sql+" order by BASTAR,GRUP");
-            grid.DataSource=dt;if(grid.Rows.Count>0){grid.CurrentCell=grid.Rows[0].Cells[0];LoadSelected();}else{code=null;ClearFields();}
+            grid.DataSource=dt;
+            if(grid.Rows.Count>0)
+            {
+                var row=preferredCode is null?grid.Rows[0]:grid.Rows.Cast<DataGridViewRow>().FirstOrDefault(r=>r.DataBoundItem is DataRowView v&&Convert.ToInt32(v.Row["KOD"])==preferredCode.Value)??grid.Rows[0];
+                grid.CurrentCell=row.Cells[0];LoadSelected();
+            }
+            else{code=null;ClearFields();}
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Periods");}
     }
@@ -132,7 +138,15 @@ public sealed class LegacyPeriodForm : Form
     static string S(DataRow r,string c)=>r[c]==DBNull.Value?"":Convert.ToString(r[c])??"";
     static string AsTime(object value){if(value==DBNull.Value)return "";var m=Convert.ToInt32(value);return $"{Math.Max(0,m)/60:00}:{Math.Max(0,m)%60:00}";}
     static void SelectValue(ComboBox c,object value){if(value!=DBNull.Value)c.SelectedValue=Convert.ToInt32(value);}
-    static object ParseTime(string value){if(string.IsNullOrWhiteSpace(value))return DBNull.Value;if(TimeSpan.TryParse(value.Trim(),out var t))return (int)Math.Round(t.TotalMinutes);if(int.TryParse(value,out var n))return n;throw new FormatException("Çalışma süresini SS:dd biçiminde girin.");}
+    static object ParseTime(string value)
+    {
+        value=value.Trim();if(value.Length==0)return DBNull.Value;
+        var parts=value.Split(':',StringSplitOptions.TrimEntries);
+        if(parts.Length==2&&int.TryParse(parts[0],out var h)&&h>=0&&int.TryParse(parts[1],out var m)&&m>=0&&m<60)return checked(h*60+m);
+        if(TimeSpan.TryParse(value,out var t)&&t.TotalMinutes>=0)return (int)Math.Round(t.TotalMinutes);
+        if(int.TryParse(value,out var n)&&n>=0)return n;
+        throw new FormatException("Çalışma süresini SS:dd biçiminde girin.");
+    }
     static object ParseDay(string value)=>string.IsNullOrWhiteSpace(value)?DBNull.Value:int.TryParse(value.Trim(),out var n)?n:throw new FormatException("Gün sayısı sayısal olmalıdır.");
     static object ComboValue(ComboBox c)=>c.SelectedValue is null||c.SelectedValue is DataRowView?DBNull.Value:Convert.ToInt32(c.SelectedValue);
 
@@ -162,7 +176,7 @@ public sealed class LegacyPeriodForm : Form
                 if(code is null)throw new InvalidOperationException("Bir dönem seçin.");
                 db.Execute("update DONEM set AD=@AD,BASTAR=@A,BITTAR=@B,ACESAAT=@ACE,SSKACE=@SSKACE,ACFSAAT=@ACF,SSKACF=@SSKACF,EBALAN=@EBA,CBALAN=@CBA,GRUP=@G where KOD=@K",[..values,new FbParameter("@K",code.Value)]);
             }
-            adding=false;SetEdit(false);save.Enabled=false;ReloadGrid(false);
+            var savedCode=code;adding=false;SetEdit(false);save.Enabled=false;ReloadGrid(false,savedCode);
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Periods");}
     }

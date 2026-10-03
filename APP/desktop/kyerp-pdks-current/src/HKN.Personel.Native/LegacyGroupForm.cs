@@ -84,12 +84,16 @@ public sealed class LegacyGroupForm : Form
         root.Controls.Add(body,0,0);
         var actions=PdksUiKit.ActionBar(true,p.Canvas);var save=Cmd("Kaydet");var add=Cmd("Yeni Ekle");var edit=Cmd("Değiştir");var del=Cmd("Sil");var delAll=Cmd("Tümünü Sil",120);save.Enabled=false;save.Click+=(_,_)=>Save();add.Click+=(_,_)=>BeginNew(save);edit.Click+=(_,_)=>BeginEdit(save);del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();actions.Controls.AddRange([save,delAll,del,edit,add]);root.Controls.Add(actions,0,1);Controls.Add(root);SetEditors(false);
     }
-    void Reload()
+    void Reload(int? preferredCode=null)
     {
         try
         {
             grid.DataSource=db.Query("select KOD,AD,VAD1,VAD2,VAD3,VAD4,VAD5,BASSAAT1,BASSAAT2,BASSAAT3,BASSAAT4,BASSAAT5,BITSAAT1,BITSAAT2,BITSAAT3,BITSAAT4,BITSAAT5,TSAAT,GSAAT,GDSAAT1,GDSAAT2,GDSAAT3,GDSAAT4,GDSAAT5,MKOD from GRUP order by KOD");
-            if(grid.Rows.Count>0){grid.CurrentCell=grid.Rows[0].Cells[0];LoadSelection();}
+            if(grid.Rows.Count>0)
+            {
+                var row=preferredCode is null?grid.Rows[0]:grid.Rows.Cast<DataGridViewRow>().FirstOrDefault(r=>r.DataBoundItem is DataRowView v&&Convert.ToInt32(v.Row["KOD"])==preferredCode.Value)??grid.Rows[0];
+                grid.CurrentCell=row.Cells[0];LoadSelection();
+            }
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Error,"Definitions.Groups");}
     }
@@ -115,8 +119,13 @@ public sealed class LegacyGroupForm : Form
     static object ParseTime(string value)
     {
         value=value.Trim();if(value.Length==0)return DBNull.Value;
-        if(TimeSpan.TryParse(value,out var ts))return (int)Math.Round(ts.TotalMinutes);
-        if(int.TryParse(value,out var n))return n;
+        var parts=value.Split(':',StringSplitOptions.TrimEntries);
+        if(parts.Length==2 &&
+           int.TryParse(parts[0],out var hours) && hours>=0 &&
+           int.TryParse(parts[1],out var minutes) && minutes>=0 && minutes<60)
+            return checked(hours*60+minutes);
+        if(TimeSpan.TryParse(value,out var ts)&&ts.TotalMinutes>=0)return (int)Math.Round(ts.TotalMinutes);
+        if(int.TryParse(value,out var n)&&n>=0)return n;
         throw new FormatException("Saat değerini SS:dd biçiminde girin.");
     }
 
@@ -152,7 +161,7 @@ public sealed class LegacyGroupForm : Form
             {
                 if(selectedCode is null)throw new InvalidOperationException("Bir grup seçin.");var ps=vals.Select((v,i)=>new FbParameter("@P"+i,v??DBNull.Value)).Append(new FbParameter("@K",selectedCode.Value)).ToArray();db.Execute($"update GRUP set {string.Join(',',cols.Select((c,i)=>c+"=@P"+i))} where KOD=@K",ps);
             }
-            SetEditors(false);adding=false;Reload();
+            var savedCode=selectedCode;SetEditors(false);adding=false;Reload(savedCode);
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions.Groups");}
     }

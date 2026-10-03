@@ -220,8 +220,197 @@ finally
     catch(Exception ex){log.Add("WARN|Temizlik|"+ex.Message);}
     form.Close();
 }
+RunDefinitionUiWorkflow(db,log);
 foreach(var x in log) Console.WriteLine(x);
 Console.WriteLine("LIVE_UI_WORKFLOW_PASS");
+
+static void RunDefinitionUiWorkflow(FirebirdDatabase db,List<string> log)
+{
+    using var form=new LegacyDefinitionsForm("Bölümler");
+    form.Show();Pump(500);
+    var tabs=FindControls<TabControl>(form).FirstOrDefault() ?? throw new Exception("Tanımlar sekmeleri bulunamadı.");
+    foreach(var item in new[]{("Bölümler","BOLUM"),("Servisler","SERVIS"),("Durum","DURUM"),("Görevler","GOREV")})
+    {
+        var page=tabs.TabPages.Cast<TabPage>().First(p=>p.Text==item.Item1);tabs.SelectedTab=page;Pump(150);
+        var add=FindButton(page,"Yeni Ekle") ?? throw new Exception(item.Item1+" Yeni Ekle bulunamadı.");
+        var save=FindButton(page,"Kaydet") ?? throw new Exception(item.Item1+" Kaydet bulunamadı.");
+        var edit=FindControls<TextBox>(page).FirstOrDefault() ?? throw new Exception(item.Item1+" edit alanı bulunamadı.");
+        db.Execute($"delete from {item.Item2} where AD starting with @P",new FbParameter("@P","UI TEST "+item.Item2));
+        var name="UI TEST "+item.Item2+" "+DateTime.Now.ToString("HHmmssfff");
+        int? code=null;
+        try
+        {
+            add.PerformClick();edit.Text=name;save.PerformClick();Pump(300);
+            code=Convert.ToInt32(db.Scalar($"select KOD from {item.Item2} where AD=@A",new FbParameter("@A",name)) ?? throw new Exception(item.Item1+" DB insert bulunamadı."));
+            var grid=FindControls<DataGridView>(page).First();
+            var selectedCode=grid.CurrentRow?.DataBoundItem is DataRowView rv?Convert.ToInt32(rv.Row["KOD"]):-1;
+            if(selectedCode!=code.Value)throw new Exception(item.Item1+" yeni kayıt seçili kalmadı.");
+            var change=FindButton(page,"Değiştir") ?? throw new Exception(item.Item1+" Değiştir bulunamadı.");
+            change.PerformClick();Pump(100);
+            Console.WriteLine($"STEP|DEF {item.Item1} change clicked saveEnabled={save.Enabled} editReadOnly={edit.ReadOnly} current={selectedCode} code={code.Value}");
+            edit.Text=name+" EDIT";
+            Console.WriteLine($"STEP|DEF {item.Item1} editText={edit.Text}");
+            Console.WriteLine($"STEP|DEF {item.Item1} beforeSave enabled={save.Enabled} visible={save.Visible} canSelect={save.CanSelect}");
+            save.PerformClick();Pump(350);
+            Console.WriteLine($"STEP|DEF {item.Item1} afterSave enabled={save.Enabled} visible={save.Visible}");
+            var actual=Convert.ToString(db.Scalar($"select AD from {item.Item2} where KOD=@K",new FbParameter("@K",code.Value)))??"";
+            Console.WriteLine($"STEP|DEF {item.Item1} actual={actual}");
+            if(actual!=name+" EDIT")throw new Exception(item.Item1+" UI update DB doğrulaması başarısız. actual="+actual);
+            var del=FindButton(page,"Sil") ?? throw new Exception(item.Item1+" Sil bulunamadı.");
+            AutoDismiss("Tanımlar");del.PerformClick();Pump(450);
+            if(Convert.ToInt32(db.Scalar($"select count(*) from {item.Item2} where KOD=@K",new FbParameter("@K",code.Value)))!=0)throw new Exception(item.Item1+" UI silme DB doğrulaması başarısız.");
+            log.Add("PASS|Tanımlar > "+item.Item1+" > Yeni/Değiştir/Sil > DB");
+            code=null;
+        }
+        finally
+        {
+            if(code is not null) db.Execute($"delete from {item.Item2} where KOD=@K",new FbParameter("@K",code.Value));
+            db.Execute($"delete from {item.Item2} where AD starting with @P",new FbParameter("@P","UI TEST "+item.Item2));
+        }
+    }
+
+    var firmaPage=tabs.TabPages.Cast<TabPage>().First(p=>p.Text=="Firma");tabs.SelectedTab=firmaPage;Pump(200);
+    var firmaName="UI TEST FIRMA "+DateTime.Now.ToString("HHmmssfff");
+    int? firmaCode=null;
+    try
+    {
+        var newFirma=FindButton(firmaPage,"Yeni Firma") ?? throw new Exception("Yeni Firma bulunamadı.");
+        var saveFirma=FindButton(firmaPage,"Kaydet") ?? throw new Exception("Firma Kaydet bulunamadı.");
+        newFirma.PerformClick();Pump(100);
+        var firmaCombo=FindFieldByLabel(firmaPage,"Firma Adı") as ComboBox ?? throw new Exception("Firma adı alanı bulunamadı.");
+        var address=FindFieldByLabel(firmaPage,"Adres") as TextBox ?? throw new Exception("Firma adres alanı bulunamadı.");
+        firmaCombo.Text=firmaName;address.Text="UI TEST ADRES";saveFirma.PerformClick();Pump(350);
+        firmaCode=Convert.ToInt32(db.Scalar("select KOD from FIRMA where AD=@A",new FbParameter("@A",firmaName)) ?? throw new Exception("Firma DB insert bulunamadı."));
+        if(!Equals(firmaCombo.SelectedValue,firmaCode.Value) && Convert.ToString(firmaCombo.SelectedValue)!=Convert.ToString(firmaCode.Value))throw new Exception("Yeni firma seçili kalmadı.");
+        var firmaCodeField=typeof(LegacyDefinitionsForm).GetField("firmaCode",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
+        if(Convert.ToInt32(firmaCodeField?.GetValue(form)??-1)!=firmaCode.Value)throw new Exception("Firma iç seçim kodu yeni kayıtta kalmadı.");
+        var editFirma=FindButton(firmaPage,"Düzenle") ?? throw new Exception("Firma Düzenle bulunamadı.");
+        editFirma.PerformClick();Pump(100);address.Text="UI TEST ADRES EDIT";saveFirma.PerformClick();Pump(300);
+        var actualAddress=Convert.ToString(db.Scalar("select ADRES from FIRMA where KOD=@K",new FbParameter("@K",firmaCode.Value)))??"";
+        if(actualAddress!="UI TEST ADRES EDIT")throw new Exception("Firma UI update DB doğrulaması başarısız.");
+        var delFirma=FindButton(firmaPage,"Sil") ?? throw new Exception("Firma Sil bulunamadı.");
+        AutoDismiss("Tanımlar");delFirma.PerformClick();Pump(450);
+        if(Convert.ToInt32(db.Scalar("select count(*) from FIRMA where KOD=@K",new FbParameter("@K",firmaCode.Value)))!=0)throw new Exception("Firma UI silme DB doğrulaması başarısız.");
+        log.Add("PASS|Tanımlar > Firma > Yeni/Düzenle/Sil > DB");firmaCode=null;
+    }
+    finally
+    {
+        if(firmaCode is not null) db.Execute("delete from FIRMA where KOD=@K",new FbParameter("@K",firmaCode.Value));
+        db.Execute("delete from FIRMA where AD starting with 'UI TEST FIRMA'");
+    }
+
+    var bordroPage=tabs.TabPages.Cast<TabPage>().First(p=>p.Text=="Bordro");tabs.SelectedTab=bordroPage;Pump(200);
+    var bordroName="UI TEST BORDRO "+DateTime.Now.ToString("HHmmssfff");
+    int? bordroCode=null;
+    try
+    {
+        var newBordro=FindButton(bordroPage,"Yeni Alan") ?? throw new Exception("Yeni Bordro Alanı bulunamadı.");
+        var saveBordro=FindButton(bordroPage,"Kaydet") ?? throw new Exception("Bordro Kaydet bulunamadı.");
+        newBordro.PerformClick();Pump(100);
+        (FindFieldByLabel(bordroPage,"Alan Adı") as TextBox ?? throw new Exception("Alan Adı bulunamadı.")).Text=bordroName;
+        (FindFieldByLabel(bordroPage,"Kısa Adı") as TextBox ?? throw new Exception("Kısa Adı bulunamadı.")).Text="UIT";
+        (FindFieldByLabel(bordroPage,"Katsayı") as TextBox ?? throw new Exception("Katsayı bulunamadı.")).Text="25";
+        var type=FindFieldByLabel(bordroPage,"Alan Türü") as ComboBox ?? throw new Exception("Alan Türü bulunamadı.");type.SelectedIndex=Math.Min(1,type.Items.Count-1);
+        var field=FindFieldByLabel(bordroPage,"Alan") as ComboBox ?? throw new Exception("Alan bulunamadı.");field.SelectedIndex=0;
+        saveBordro.PerformClick();Pump(350);
+        bordroCode=Convert.ToInt32(db.Scalar("select KOD from BORDRO where AD=@A",new FbParameter("@A",bordroName)) ?? throw new Exception("Bordro DB insert bulunamadı."));
+        var grid=FindControls<DataGridView>(bordroPage).First();
+        var selected=grid.CurrentRow?.DataBoundItem is DataRowView br?Convert.ToInt32(br.Row["KOD"]):-1;
+        if(selected!=bordroCode.Value)throw new Exception("Yeni bordro alanı seçili kalmadı.");
+        var bordroCodeField=typeof(LegacyDefinitionsForm).GetField("bordroCode",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
+        if(Convert.ToInt32(bordroCodeField?.GetValue(form)??-1)!=bordroCode.Value)throw new Exception("Bordro iç seçim kodu yeni kayıtta kalmadı.");
+        var editBordro=FindButton(bordroPage,"Düzenle") ?? throw new Exception("Bordro Düzenle bulunamadı.");
+        editBordro.PerformClick();Pump(100);
+        (FindFieldByLabel(bordroPage,"Alan Adı") as TextBox)!.Text=bordroName+" EDIT";saveBordro.PerformClick();Pump(300);
+        var actualBordro=Convert.ToString(db.Scalar("select AD from BORDRO where KOD=@K",new FbParameter("@K",bordroCode.Value)))??"";
+        if(actualBordro!=bordroName+" EDIT")throw new Exception("Bordro UI update DB doğrulaması başarısız.");
+        var delBordro=FindButton(bordroPage,"Sil") ?? throw new Exception("Bordro Sil bulunamadı.");
+        AutoDismiss("Tanımlar");delBordro.PerformClick();Pump(450);
+        if(Convert.ToInt32(db.Scalar("select count(*) from BORDRO where KOD=@K",new FbParameter("@K",bordroCode.Value)))!=0)throw new Exception("Bordro UI silme DB doğrulaması başarısız.");
+        log.Add("PASS|Tanımlar > Bordro > Yeni/Düzenle/Sil > DB");bordroCode=null;
+    }
+    finally
+    {
+        if(bordroCode is not null) db.Execute("delete from BORDRO where KOD=@K",new FbParameter("@K",bordroCode.Value));
+        db.Execute("delete from BORDRO where AD starting with 'UI TEST BORDRO'");
+    }
+    form.Close();
+
+    using var groupForm=new LegacyGroupForm();
+    groupForm.Show();Pump(450);
+    var groupName="UI TEST GRUP "+DateTime.Now.ToString("HHmmssfff");
+    int? groupCode=null;
+    try
+    {
+        var addGroup=FindButton(groupForm,"Yeni Ekle") ?? throw new Exception("Çalışma Grubu Yeni Ekle bulunamadı.");
+        var saveGroup=FindButton(groupForm,"Kaydet") ?? throw new Exception("Çalışma Grubu Kaydet bulunamadı.");
+        addGroup.PerformClick();Pump(100);
+        (FindFieldByLabel(groupForm,"Grup Adı") as TextBox ?? throw new Exception("Grup Adı bulunamadı.")).Text=groupName;
+        (FindFieldByLabel(groupForm,"Dönemlik Çalışma Saati") as TextBox ?? throw new Exception("Dönemlik Çalışma Saati bulunamadı.")).Text="10560";
+        (FindFieldByLabel(groupForm,"Günlük Çalışma Saati") as TextBox ?? throw new Exception("Günlük Çalışma Saati bulunamadı.")).Text="540";
+        (FindFieldByLabel(groupForm,"Terminal Kodu") as TextBox ?? throw new Exception("Terminal Kodu bulunamadı.")).Text="99";
+        saveGroup.PerformClick();Pump(350);
+        groupCode=Convert.ToInt32(db.Scalar("select KOD from GRUP where AD=@A",new FbParameter("@A",groupName)) ?? throw new Exception("Çalışma Grubu DB insert bulunamadı."));
+        var groupCodeField=typeof(LegacyGroupForm).GetField("selectedCode",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
+        if(Convert.ToInt32(groupCodeField?.GetValue(groupForm)??-1)!=groupCode.Value)throw new Exception("Çalışma grubu iç seçim kodu yeni kayıtta kalmadı.");
+        var editGroup=FindButton(groupForm,"Değiştir") ?? throw new Exception("Çalışma Grubu Değiştir bulunamadı.");
+        editGroup.PerformClick();Pump(100);
+        (FindFieldByLabel(groupForm,"Grup Adı") as TextBox)!.Text=groupName+" EDIT";
+        saveGroup.PerformClick();Pump(300);
+        var actualGroup=Convert.ToString(db.Scalar("select AD from GRUP where KOD=@K",new FbParameter("@K",groupCode.Value)))??"";
+        if(actualGroup!=groupName+" EDIT")throw new Exception("Çalışma Grubu UI update DB doğrulaması başarısız.");
+        var delGroup=FindButton(groupForm,"Sil") ?? throw new Exception("Çalışma Grubu Sil bulunamadı.");
+        AutoDismiss("Çalışma Grupları");delGroup.PerformClick();Pump(450);
+        if(Convert.ToInt32(db.Scalar("select count(*) from GRUP where KOD=@K",new FbParameter("@K",groupCode.Value)))!=0)throw new Exception("Çalışma Grubu UI silme DB doğrulaması başarısız.");
+        log.Add("PASS|Çalışma Grupları > Yeni/Değiştir/Sil > DB");groupCode=null;
+    }
+    finally
+    {
+        if(groupCode is not null) db.Execute("delete from GRUP where KOD=@K",new FbParameter("@K",groupCode.Value));
+        db.Execute("delete from GRUP where AD starting with 'UI TEST GRUP'");
+    }
+    groupForm.Close();
+
+    using var periodForm=new LegacyPeriodForm();
+    periodForm.Show();Pump(500);
+    var periodName="UI TEST DONEM "+DateTime.Now.ToString("HHmmssfff");
+    int? periodCode=null;
+    try
+    {
+        var addPeriod=FindButton(periodForm,"Yeni Dönem") ?? throw new Exception("Yeni Dönem bulunamadı.");
+        var savePeriod=FindButton(periodForm,"Kaydet") ?? throw new Exception("Dönem Kaydet bulunamadı.");
+        addPeriod.PerformClick();Pump(120);
+        (FindFieldByLabel(periodForm,"Dönem Adı") as TextBox ?? throw new Exception("Dönem Adı bulunamadı.")).Text=periodName;
+        var groupCombo=FindFieldByLabel(periodForm,"Çalışma Grubu") as ComboBox ?? throw new Exception("Dönem Çalışma Grubu bulunamadı.");
+        if(groupCombo.Items.Count==0)throw new Exception("Dönem çalışma grubu listesi boş.");groupCombo.SelectedIndex=0;
+        (FindFieldByLabel(periodForm,"Başlangıç") as DateTimePicker ?? throw new Exception("Dönem Başlangıç bulunamadı.")).Value=new DateTime(2098,1,1);
+        (FindFieldByLabel(periodForm,"Bitiş") as DateTimePicker ?? throw new Exception("Dönem Bitiş bulunamadı.")).Value=new DateTime(2098,1,31);
+        (FindFieldByLabel(periodForm,"Dönemlik Çalışma Eksiği") as TextBox ?? throw new Exception("Dönemlik Çalışma Eksiği bulunamadı.")).Text="176:00";
+        (FindFieldByLabel(periodForm,"Eksik Gün") as TextBox ?? throw new Exception("Eksik Gün bulunamadı.")).Text="1";
+        savePeriod.PerformClick();Pump(400);
+        periodCode=Convert.ToInt32(db.Scalar("select KOD from DONEM where AD=@A",new FbParameter("@A",periodName)) ?? throw new Exception("Dönem DB insert bulunamadı."));
+        var periodCodeField=typeof(LegacyPeriodForm).GetField("code",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
+        if(Convert.ToInt32(periodCodeField?.GetValue(periodForm)??-1)!=periodCode.Value)throw new Exception("Dönem iç seçim kodu yeni kayıtta kalmadı.");
+        var savedMinutes=Convert.ToInt32(db.Scalar("select ACESAAT from DONEM where KOD=@K",new FbParameter("@K",periodCode.Value))??-1);
+        if(savedMinutes!=10560)throw new Exception("Dönem 176:00 süre kaydı yanlış: "+savedMinutes);
+        var editPeriod=FindButton(periodForm,"Düzenle") ?? throw new Exception("Dönem Düzenle bulunamadı.");
+        editPeriod.PerformClick();Pump(120);
+        (FindFieldByLabel(periodForm,"Dönem Adı") as TextBox)!.Text=periodName+" EDIT";
+        savePeriod.PerformClick();Pump(350);
+        var actualPeriod=Convert.ToString(db.Scalar("select AD from DONEM where KOD=@K",new FbParameter("@K",periodCode.Value)))??"";
+        if(actualPeriod!=periodName+" EDIT")throw new Exception("Dönem UI update DB doğrulaması başarısız.");
+        var delPeriod=FindButton(periodForm,"Sil") ?? throw new Exception("Dönem Sil bulunamadı.");
+        AutoDismiss("Dönem Tanımları");delPeriod.PerformClick();Pump(500);
+        if(Convert.ToInt32(db.Scalar("select count(*) from DONEM where KOD=@K",new FbParameter("@K",periodCode.Value)))!=0)throw new Exception("Dönem UI silme DB doğrulaması başarısız.");
+        log.Add("PASS|Dönemler > Yeni/Düzenle/Sil + 176:00 > DB");periodCode=null;
+    }
+    finally
+    {
+        if(periodCode is not null) db.Execute("delete from DONEM where KOD=@K",new FbParameter("@K",periodCode.Value));
+        db.Execute("delete from DONEM where AD starting with 'UI TEST DONEM'");
+    }
+    periodForm.Close();
+}
 
 static void RunEditorButton(Button trigger,string title,Action<Form> interact)
 {
@@ -274,6 +463,9 @@ static bool TryDismissTopLevelWindow(string expectedTitle)
         return true;
     },IntPtr.Zero);
     if(match==IntPtr.Zero) return false;
+    // Native MessageBox confirmation: first try WM_COMMAND/IDYES, which works reliably
+    // even while the caller is blocked inside the modal loop.
+    Native.SendMessage(match,0x0111,(IntPtr)6,IntPtr.Zero);
     Native.EnumChildWindows(match,(h,_) =>
     {
         var sb=new StringBuilder(256);
@@ -314,7 +506,7 @@ static Control? FindFieldByLabel(Control root,string labelText)
     return null;
 }
 static Button? FindButton(Control root,string text)=>FindControls<Button>(root)
-    .Where(x=>x.Text.Trim().Equals(text,StringComparison.OrdinalIgnoreCase))
+    .Where(x=>x.Text.Replace("&","").Trim().Equals(text.Replace("&","").Trim(),StringComparison.OrdinalIgnoreCase))
     .OrderByDescending(x=>x.Visible)
     .ThenByDescending(x=>x.Enabled)
     .FirstOrDefault();
