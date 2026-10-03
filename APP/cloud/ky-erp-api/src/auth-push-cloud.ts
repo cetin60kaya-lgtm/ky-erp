@@ -530,7 +530,10 @@ async function securityAccountProfile(c: any, actor: AnyRow) {
       moduleKeys = [];
     }
   }
-  let securityCapabilities: string[] = ownerControlAuthorized ? [...SECURITY_CAPABILITIES] : [];
+  const companyApprover = Boolean(actor.companyApprover) && isCompanyAdmin(role);
+  let securityCapabilities: string[] = ownerControlAuthorized
+    ? [...SECURITY_CAPABILITIES]
+    : companyApprover ? ["LOGIN_APPROVE", "SESSION_APPROVE"] : [];
 
   return {
     userId: text(actor.userId),
@@ -540,8 +543,9 @@ async function securityAccountProfile(c: any, actor: AnyRow) {
     role,
     companySlug,
     companyName,
-    scopeType: ownerControlAuthorized ? "SYSTEM" : "USER",
+    scopeType: ownerControlAuthorized ? "SYSTEM" : (companyApprover ? "COMPANY" : "USER"),
     ownerControlAuthorized,
+    companyApprover,
     moduleKeys,
     securityCapabilities,
   };
