@@ -149,7 +149,9 @@ public sealed class LegacyDefinitionsForm : Form
         var editCard=PdksUiKit.Card();
         var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=7,Padding=new Padding(20),BackColor=p.Surface};
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,135));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        editor.RowStyles.Clear();
         editor.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
+        for(var row=1;row<7;row++)editor.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
         editor.Controls.Add(PdksUiKit.SectionTitle("Alan Bilgileri"),0,0);editor.SetColumnSpan(editor.GetControlFromPosition(0,0)!,2);
 
         var code=new Label{Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10f,FontStyle.Bold),ForeColor=p.Text};bordro["KOD"]=code;DefRow(editor,1,"Alan Kodu",code);
@@ -179,7 +181,6 @@ public sealed class LegacyDefinitionsForm : Form
 
     static void DefRow(TableLayoutPanel table,int row,string text,Control control)
     {
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
         table.Controls.Add(PdksUiKit.FieldLabel(text),0,row);
         control.Dock=DockStyle.Fill;control.Margin=new Padding(0,6,0,6);table.Controls.Add(control,1,row);
     }
