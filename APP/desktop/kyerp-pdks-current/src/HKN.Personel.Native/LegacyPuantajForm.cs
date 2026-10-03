@@ -16,20 +16,21 @@ public sealed class LegacyPuantajForm : Form
     readonly ProgressBar progress1=new(){Dock=DockStyle.Fill};
     readonly ProgressBar progress2=new(){Dock=DockStyle.Fill};
 
-    public LegacyPuantajForm(int initialTab = 0){Text="Günlük ve Aylık Puantaj İşlemleri";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);MinimumSize=new Size(960,620);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);KeyPreview=true;Build();tabs.SelectedIndex=Math.Clamp(initialTab,0,tabs.TabPages.Count-1);Shown+=(_,_)=>Init();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
+    public LegacyPuantajForm(int initialTab = 0){Text="Günlük ve Aylık Puantaj İşlemleri";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);MinimumSize=new Size(960,620);Font=new Font("Segoe UI",9f);BackColor=PdksAppearance.Current.Canvas;KeyPreview=true;Build();tabs.SelectedIndex=Math.Clamp(initialTab,0,tabs.TabPages.Count-1);Shown+=(_,_)=>Init();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
     static TextBox E()=>new();
     static DateTimePicker D()=>new(){Format=DateTimePickerFormat.Short};
     static ComboBox C()=>new(){DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="TEXT",ValueMember="KOD"};
-    static Label L(string text)=>new(){Text=text,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)};
+    static Label L(string text)=>new(){Text=text,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=PdksAppearance.Current.Muted};
     static void Row(TableLayoutPanel t,int r,string label,Control c){t.RowStyles.Add(new RowStyle(SizeType.Absolute,36));t.Controls.Add(L(label),0,r);c.Dock=DockStyle.Fill;c.Margin=new Padding(3,5,3,5);t.Controls.Add(c,1,r);}
     static Button B(string text,int width=145)=>new(){Text=text,Width=width,Height=36,MinimumSize=new Size(width,36),MaximumSize=new Size(width,36),FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9f,FontStyle.Bold)};
 
     void Build()
     {
-        BackColor=Color.FromArgb(244,247,251);
+        var p=PdksAppearance.Current;
+        BackColor=p.Canvas;
         tabs.Padding=new Point(18,8);
-        var daily=new TabPage("Günlük Puantaj"){Padding=new Padding(16),BackColor=Color.FromArgb(244,247,251)};
-        var monthly=new TabPage("Aylık Puantaj"){Padding=new Padding(16),BackColor=Color.FromArgb(244,247,251)};
+        var daily=new TabPage("Günlük Puantaj"){Padding=new Padding(16),BackColor=p.Canvas};
+        var monthly=new TabPage("Aylık Puantaj"){Padding=new Padding(16),BackColor=p.Canvas};
         tabs.TabPages.AddRange([daily,monthly]);
         Controls.Add(tabs);
         filters[daily]=BuildDaily(daily);
@@ -48,13 +49,13 @@ public sealed class LegacyPuantajForm : Form
         root.Controls.Add(FilterPanel(f,"Günlük puantaj filtresi","Kart hareketi, izin, tatil ve vardiya planlarından günlük puantaj oluşturur."),0,0);
 
         var listCard=Card();
-        var listLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Padding=new Padding(16),BackColor=Color.White};
+        var listLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Padding=new Padding(16),BackColor=PdksAppearance.Current.Surface};
         listLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
         listLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        listLayout.Controls.Add(new Label{Text="İşlenecek Personel",Dock=DockStyle.Fill,Font=new Font("Segoe UI",10.5f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42),TextAlign=ContentAlignment.MiddleLeft},0,0);
+        listLayout.Controls.Add(new Label{Text="İşlenecek Personel",Dock=DockStyle.Fill,Font=new Font("Segoe UI",10.5f,FontStyle.Bold),ForeColor=PdksAppearance.Current.Text,TextAlign=ContentAlignment.MiddleLeft},0,0);
         people.BorderStyle=BorderStyle.None;
-        people.BackColor=Color.White;
-        people.ForeColor=Color.FromArgb(15,23,42);
+        people.BackColor=PdksAppearance.Current.Surface;
+        people.ForeColor=PdksAppearance.Current.Text;
         people.Font=new Font("Segoe UI",9f);
         listLayout.Controls.Add(people,0,1);
         listCard.Controls.Add(listLayout);
@@ -96,7 +97,7 @@ public sealed class LegacyPuantajForm : Form
         info.Padding=new Padding(22);
         info.Controls.Add(new Label{
             Text="Aylık puantaj hesaplaması; giriş / çıkış, izin, resmi tatil ve çalışma grubunu birlikte değerlendirir.\r\nKaynak kayıtları düzeltildikten sonra ayı yeniden hesaplamak güvenlidir.",
-            Dock=DockStyle.Fill,Font=new Font("Segoe UI",10f),ForeColor=Color.FromArgb(71,85,105),TextAlign=ContentAlignment.MiddleLeft});
+            Dock=DockStyle.Fill,Font=new Font("Segoe UI",10f),ForeColor=PdksAppearance.Current.Muted,TextAlign=ContentAlignment.MiddleLeft});
         root.Controls.Add(info,0,1);
 
         var barProgress=new ProgressBar{Dock=DockStyle.Fill,Margin=new Padding(0,14,0,8),Height=14};
@@ -117,12 +118,12 @@ public sealed class LegacyPuantajForm : Form
     Control FilterPanel(FilterSet f,string title,string subtitle)
     {
         var card=Card();
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=new Padding(16),BackColor=Color.White};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=new Padding(16),BackColor=PdksAppearance.Current.Surface};
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,28));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,26));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.Controls.Add(new Label{Text=title,Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42)},0,0);
-        root.Controls.Add(new Label{Text=subtitle,Dock=DockStyle.Fill,Font=new Font("Segoe UI",8.5f),ForeColor=Color.FromArgb(100,116,139)},0,1);
+        root.Controls.Add(new Label{Text=subtitle,Dock=DockStyle.Fill,Font=new Font("Segoe UI",8.5f),ForeColor=PdksAppearance.Current.Muted},0,1);
 
         var fields=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,RowCount=2,Margin=new Padding(0,8,0,0)};
         for(var i=0;i<5;i++)fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));
@@ -133,7 +134,7 @@ public sealed class LegacyPuantajForm : Form
         };
         for(var i=0;i<items.Length;i++)
         {
-            var holder=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Margin=new Padding(0,0,12,0),BackColor=Color.White};
+            var holder=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Margin=new Padding(0,0,12,0),BackColor=PdksAppearance.Current.Surface};
             holder.RowStyles.Add(new RowStyle(SizeType.Absolute,20));holder.RowStyles.Add(new RowStyle(SizeType.Percent,100));
             holder.Controls.Add(new Label{Text=items[i].Text,Dock=DockStyle.Fill,ForeColor=Color.FromArgb(100,116,139),Font=new Font("Segoe UI",8f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft},0,0);
             items[i].Control.Dock=DockStyle.Fill;items[i].Control.Margin=new Padding(0,2,0,0);
@@ -147,12 +148,12 @@ public sealed class LegacyPuantajForm : Form
 
     static Panel Card()
     {
-        var p=new Panel{Dock=DockStyle.Fill,BackColor=Color.White,Padding=Padding.Empty,Margin=new Padding(0,0,0,10)};
-        p.Paint+=(_,e)=>{using var pen=new Pen(Color.FromArgb(226,232,240));e.Graphics.DrawRectangle(pen,0,0,Math.Max(0,p.Width-1),Math.Max(0,p.Height-1));};
+        var p=PdksUiKit.Card(0);
+        p.Margin=new Padding(0,0,0,10);
         return p;
     }
 
-    static FlowLayoutPanel ActionBar()=>new(){Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,WrapContents=false,Padding=new Padding(0,10,0,0),BackColor=Color.FromArgb(244,247,251)};
+    static FlowLayoutPanel ActionBar()=>PdksUiKit.ActionBar(true,PdksAppearance.Current.Canvas);
 
     static Button ModernButton(string text,int width,bool primary)
         => PdksUiKit.Button(text,width,primary?PdksActionRole.Primary:PdksActionRole.Secondary);
