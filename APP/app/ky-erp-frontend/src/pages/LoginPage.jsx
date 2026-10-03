@@ -128,6 +128,7 @@ export default function LoginPage({ onClose }) {
     verifyOwnerRecovery,
     checkApproval,
     checkPhoneApproval,
+    verifyPhoneApprovalCode,
     resendPhoneApproval,
     useAuthenticatorFallback: runAuthenticatorFallback,
   } = useAuth();
