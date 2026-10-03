@@ -28,7 +28,7 @@ Thread.Sleep(250);
 Application.DoEvents();
 
 var primary = PdksCommandCatalog.Primary.ToArray();
-var expectedPrimary = new[] { "Genel Bakış", "Canlı Denetim", "Giriş / Çıkış", "Personel", "Puantaj", "Bordro", "Raporlar", "Tanımlar", "Terminal" };
+var expectedPrimary = new[] { "Genel Bakış", "Operasyon", "Personel", "Puantaj", "Bordro", "Raporlar" };
 if (!primary.Select(x=>x.Title).SequenceEqual(expectedPrimary))
     throw new InvalidOperationException("Modern ana navigasyon sırası bozulmuş.");
 
@@ -53,7 +53,7 @@ if (workflow.Select(x=>x.Order).Distinct().Count() != workflow.Length)
 var shellButtons = Descendants(form).OfType<Button>().Select(x => x.Text ?? string.Empty).ToArray();
 foreach (var required in expectedPrimary)
     if (!shellButtons.Contains(required)) throw new InvalidOperationException("Modern navigasyon eksik: " + required);
-foreach (var required in new[] { "Yönetim", $"Tema • {PdksAppearance.ModeLabel}", "İşlem Ara  Ctrl+K" })
+foreach (var required in new[] { "Yönetim", $"Görünüm • {PdksAppearance.ModeLabel}", "İşlem Ara  Ctrl+K" })
     if (!shellButtons.Contains(required)) throw new InvalidOperationException("Kabuk komutu eksik: " + required);
 
 if (form.MainMenuStrip is null || form.MainMenuStrip.Visible)
