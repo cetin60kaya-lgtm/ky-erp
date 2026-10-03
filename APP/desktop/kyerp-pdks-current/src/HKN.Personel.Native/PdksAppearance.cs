@@ -8,6 +8,13 @@ public enum PdksThemeMode
     Dark
 }
 
+public enum PdksSidebarMode
+{
+    FollowTheme,
+    Light,
+    Dark
+}
+
 public enum PdksAccent
 {
     Blue,
@@ -48,6 +55,7 @@ public static class PdksAppearance
     {
         public string Mode { get; set; } = nameof(PdksThemeMode.Light);
         public string Accent { get; set; } = nameof(PdksAccent.Blue);
+        public string Sidebar { get; set; } = nameof(PdksSidebarMode.Light);
         public string CustomAccent { get; set; } = "#2563EB";
     }
 
@@ -57,6 +65,7 @@ public static class PdksAppearance
 
     static PdksThemeMode mode;
     static PdksAccent accent;
+    static PdksSidebarMode sidebarMode;
     static Color customAccent = Color.FromArgb(37,99,235);
 
     static PdksAppearance()
@@ -68,26 +77,39 @@ public static class PdksAppearance
 
     public static PdksThemeMode Mode => mode;
     public static PdksAccent Accent => accent;
-    public static PdksPalette Current => Build(mode, accent);
+    public static PdksSidebarMode SidebarMode => sidebarMode;
+    public static PdksPalette Current => Build(mode, accent, sidebarMode);
 
     public static string ModeLabel => mode == PdksThemeMode.Dark ? "Koyu" : "Açık";
+    public static string SidebarModeLabel => sidebarMode switch
+    {
+        PdksSidebarMode.Light => "Açık",
+        PdksSidebarMode.Dark => "Koyu",
+        _ => "Temayı Takip Et"
+    };
     public static string AccentLabel => AccentName(accent);
     public static Color CustomAccentColor => customAccent;
 
-    public static void Set(PdksThemeMode newMode, PdksAccent newAccent)
+    public static void Set(PdksThemeMode newMode, PdksAccent newAccent, PdksSidebarMode? newSidebar = null)
     {
-        if (mode == newMode && accent == newAccent) return;
+        var resolvedSidebar=newSidebar??sidebarMode;
+        if (mode == newMode && accent == newAccent && sidebarMode == resolvedSidebar) return;
         mode = newMode;
         accent = newAccent;
+        sidebarMode = resolvedSidebar;
         Save();
         Changed?.Invoke(null, EventArgs.Empty);
     }
 
-    public static void SetCustomAccent(PdksThemeMode newMode, Color color)
+    public static void SetCustomAccent(PdksThemeMode newMode, Color color, PdksSidebarMode? newSidebar = null)
     {
+        var resolvedSidebar=newSidebar??sidebarMode;
+        var normalized=Color.FromArgb(color.R,color.G,color.B);
+        if(mode==newMode && accent==PdksAccent.Custom && sidebarMode==resolvedSidebar && customAccent.ToArgb()==normalized.ToArgb())return;
         mode = newMode;
         accent = PdksAccent.Custom;
-        customAccent = Color.FromArgb(color.R,color.G,color.B);
+        sidebarMode = resolvedSidebar;
+        customAccent = normalized;
         Save();
         Changed?.Invoke(null, EventArgs.Empty);
     }
@@ -120,6 +142,7 @@ public static class PdksAppearance
     {
         mode = PdksThemeMode.Light;
         accent = PdksAccent.Blue;
+        sidebarMode = PdksSidebarMode.Light;
         try
         {
             if (!File.Exists(SettingsPath)) return;
@@ -127,6 +150,7 @@ public static class PdksAppearance
             if (stored is null) return;
             if (Enum.TryParse(stored.Mode, true, out PdksThemeMode m)) mode = m;
             if (Enum.TryParse(stored.Accent, true, out PdksAccent a)) accent = a;
+            if (Enum.TryParse(stored.Sidebar, true, out PdksSidebarMode s)) sidebarMode = s;
             try { customAccent = ColorTranslator.FromHtml(stored.CustomAccent); } catch { customAccent = Color.FromArgb(37,99,235); }
         }
         catch { }
@@ -137,15 +161,22 @@ public static class PdksAppearance
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-            var json = JsonSerializer.Serialize(new StoredSettings { Mode = mode.ToString(), Accent = accent.ToString(), CustomAccent = ColorTranslator.ToHtml(customAccent) }, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(new StoredSettings { Mode = mode.ToString(), Accent = accent.ToString(), Sidebar = sidebarMode.ToString(), CustomAccent = ColorTranslator.ToHtml(customAccent) }, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(SettingsPath, json);
         }
         catch { }
     }
 
-    static PdksPalette Build(PdksThemeMode selectedMode, PdksAccent selectedAccent)
+    static PdksPalette Build(PdksThemeMode selectedMode, PdksAccent selectedAccent, PdksSidebarMode selectedSidebar)
     {
         var primary = AccentColor(selectedAccent);
+        var darkSidebar = selectedSidebar == PdksSidebarMode.Dark ||
+                          (selectedSidebar == PdksSidebarMode.FollowTheme && selectedMode == PdksThemeMode.Dark);
+        var sidebar = darkSidebar ? Color.FromArgb(15,23,42) : Color.White;
+        var sidebarHover = darkSidebar ? Color.FromArgb(30,41,59) : Blend(primary,Color.White,.91);
+        var sidebarText = darkSidebar ? Color.FromArgb(241,245,249) : Color.FromArgb(15,23,42);
+        var sidebarMuted = darkSidebar ? Color.FromArgb(148,163,184) : Color.FromArgb(71,85,105);
+
         if (selectedMode == PdksThemeMode.Dark)
         {
             return new PdksPalette(
@@ -154,15 +185,15 @@ public static class PdksAppearance
                 Color.FromArgb(11,18,32),
                 Color.FromArgb(17,24,39),
                 Color.FromArgb(24,33,49),
-                Color.FromArgb(8,15,28),
-                Color.FromArgb(30,41,59),
+                sidebar,
+                sidebarHover,
                 Color.FromArgb(241,245,249),
                 Color.FromArgb(148,163,184),
                 Color.FromArgb(51,65,85),
                 primary,
                 Blend(primary, Color.FromArgb(17,24,39), .78),
-                Color.FromArgb(241,245,249),
-                Color.FromArgb(148,163,184),
+                sidebarText,
+                sidebarMuted,
                 Color.FromArgb(34,197,94),
                 Color.FromArgb(245,158,11),
                 Color.FromArgb(248,113,113),
@@ -178,15 +209,15 @@ public static class PdksAppearance
             Color.FromArgb(244,247,251),
             Color.White,
             Color.FromArgb(248,250,252),
-            Color.FromArgb(15,23,42),
-            Color.FromArgb(30,41,59),
+            sidebar,
+            sidebarHover,
             Color.FromArgb(15,23,42),
             Color.FromArgb(100,116,139),
             Color.FromArgb(226,232,240),
             primary,
             Blend(primary, Color.White, .90),
-            Color.White,
-            Color.FromArgb(203,213,225),
+            sidebarText,
+            sidebarMuted,
             Color.FromArgb(22,163,74),
             Color.FromArgb(202,118,35),
             Color.FromArgb(185,28,28),
