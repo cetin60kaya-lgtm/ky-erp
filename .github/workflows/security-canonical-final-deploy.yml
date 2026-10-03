@@ -1,17 +1,6 @@
 name: KY Security Canonical Final Deploy
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - APP/cloud/ky-erp-security-host/worker.js
-      - APP/cloud/ky-erp-security-host/wrangler.jsonc
-      - APP/app/ky-erp-frontend/src/security-pwa-install-enrollment-final.test.js
-      - APP/app/ky-erp-frontend/public/guvenlik/**
-      - APP/cloud/ky-erp-api/src/auth-security-mobile-control.ts
-      - APP/cloud/ky-erp-api/src/auth-push-cloud.ts
-      - .github/workflows/security-canonical-final-deploy.yml
   workflow_dispatch:
 
 permissions:
@@ -19,7 +8,7 @@ permissions:
 
 concurrency:
   group: kyerp-security-canonical-host
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy-security-host:
