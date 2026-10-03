@@ -529,9 +529,6 @@ export default function LoginPage({ onClose }) {
     return () => holder.replaceChildren();
   }, [flow.stage, otpUri]);
 
-  const availableProviders = Array.isArray(flow.availableProviders)
-    ? flow.availableProviders.map(normalizeProvider).filter(Boolean)
-    : [];
   const verifiedProviders = Array.isArray(flow.verifiedProviders)
     ? flow.verifiedProviders.map(normalizeProvider).filter(Boolean)
     : [];
