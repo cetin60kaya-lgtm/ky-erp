@@ -178,12 +178,8 @@ public sealed partial class MainShellForm
             Margin=Padding.Empty
         };
 
-        foreach(var group in VisiblePrimaryCommands().GroupBy(x=>x.Group))
-        {
-            nav.Controls.Add(SectionLabel(group.Key));
-            foreach(var command in group.OrderBy(x=>x.Order))
-                nav.Controls.Add(NavButton(command));
-        }
+        foreach(var command in VisiblePrimaryCommands().OrderBy(x=>x.Order))
+            nav.Controls.Add(NavButton(command));
         layout.Controls.Add(nav,0,1);
 
         var bottom = new TableLayoutPanel
@@ -199,7 +195,7 @@ public sealed partial class MainShellForm
 
         var manage=CompactButton("Yönetim",PdksToolbarIcon.Groups);
         manage.Click+=(_,_)=>ShowManagementCenter();
-        var theme=CompactButton($"Tema • {PdksAppearance.ModeLabel}",PdksToolbarIcon.Home);
+        var theme=CompactButton($"Görünüm • {PdksAppearance.ModeLabel}",PdksToolbarIcon.Home);
         theme.Click+=(_,_)=>OpenThemeSettings();
         bottom.Controls.Add(manage,0,0);
         bottom.Controls.Add(theme,0,1);
@@ -298,14 +294,24 @@ public sealed partial class MainShellForm
 
     static PdksCommandId PrimaryParent(PdksCommandId id) => id switch
     {
-        PdksCommandId.Leave or PdksCommandId.EarningsDeductions or PdksCommandId.QuickOperations or PdksCommandId.PayrollPayments => PdksCommandId.Personnel,
+        PdksCommandId.LiveAttendance or PdksCommandId.EntryExit or PdksCommandId.Leave or
+        PdksCommandId.EarningsDeductions or PdksCommandId.QuickOperations or
+        PdksCommandId.TerminalCenter or PdksCommandId.TerminalSettings or PdksCommandId.TerminalProfiles or
+        PdksCommandId.DataSources => PdksCommandId.Operations,
+        PdksCommandId.PayrollPayments => PdksCommandId.Personnel,
         PdksCommandId.TimesheetDaily or PdksCommandId.TimesheetResults => PdksCommandId.TimesheetMonthly,
         PdksCommandId.PayrollAdjustment or PdksCommandId.PayrollPayslip or PdksCommandId.PayrollOvertime => PdksCommandId.PayrollGeneral,
-        PdksCommandId.Groups or PdksCommandId.Periods or PdksCommandId.WorkingDate or PdksCommandId.Holidays or
-        PdksCommandId.DailyWorkHours or PdksCommandId.AnnualWorkPlan or PdksCommandId.PayrollFields or PdksCommandId.EarningsTypes => PdksCommandId.Definitions,
-        PdksCommandId.TerminalSettings or PdksCommandId.TerminalProfiles or PdksCommandId.DataSources => PdksCommandId.TerminalCenter,
         _ => id
     };
+
+    void ShowOperationsCenter()
+    {
+        var view=new OperationsCenterForm(
+            PdksCommandCatalog.All.Where(CanExecute),
+            ExecuteCommand);
+        ShowEmbedded(view,"operations-center","Operasyon");
+        SetModernPage("Operasyon","Canlı denetim, kart düzeltme ve günlük istisnalar");
+    }
 
     void ShowManagementCenter()
     {
