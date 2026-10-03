@@ -63,7 +63,7 @@ test("quick personnel groups stay tightly packed on small monitors", () => {
   assert.match(css, /\.gop-quick-dialog \.quick-groups\{[\s\S]*display:flex!important/);
   assert.match(css, /flex-direction:column!important/);
   assert.match(css, /\.gop-quick-dialog \.quick-group\{[\s\S]*flex:0 0 auto!important/);
-  assert.match(css, /--quick-card-w:260px!important/);
+  assert.match(css, /--quick-card-w:260px/);
 });
 
 
@@ -76,9 +76,14 @@ test("final quick cards use aligned grid columns with full-name room", () => {
   assert.match(css, /\.gop-quick-dialog \.quick-inline-divider\{/);
 });
 
-test("quick card density is responsive and no longer stored per computer", () => {
-  assert.doesNotMatch(workspace, /quickRowHeight|quickCardWidth|QUICK_ROW_HEIGHT_KEY|QUICK_CARD_WIDTH_KEY/);
-  assert.match(css, /--quick-row-h:38px!important/);
-  assert.match(css, /--quick-card-w:260px!important/);
+test("quick card density keeps the two manual row and width controls", () => {
+  assert.match(workspace, /QUICK_ROW_HEIGHT_KEY/);
+  assert.match(workspace, /QUICK_CARD_WIDTH_KEY/);
+  assert.match(workspace, /className="quick-density-controls"/);
+  assert.match(workspace, /min="30" max="60" step="2"/);
+  assert.match(workspace, /min="220" max="380" step="10"/);
+  assert.match(workspace, /"--quick-row-h": `\$\{quickRowHeight\}px`/);
+  assert.match(workspace, /"--quick-card-w": `\$\{quickCardWidth\}px`/);
+  assert.match(css, /QUICK-DENSITY-CONTROLS-RESTORED-2026-10-03/);
   assert.match(css, /grid-template-columns:repeat\(auto-fit,minmax\(var\(--quick-card-w\),1fr\)\)!important/);
 });
