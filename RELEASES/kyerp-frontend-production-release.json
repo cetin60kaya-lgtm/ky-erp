@@ -52,9 +52,10 @@
     "security-no-forced-google-setup",
     "security-existing-owner-phone-upgrade",
     "security-system-phone-stepup",
-    "security-unified-login-policy-copy"
+    "security-unified-login-policy-copy",
+    "owner-security-direct-system-phone-management"
   ],
-  "note": "KY Güvenlik kök düzeni: KY Güvenlik / Google / Microsoft tek 6 haneli doğrulama katmanında; Authenticator kaydı olmayan kullanıcı zorla Google QR kurulumuna gitmez; mevcut Süper Yönetici telefonu ek e-posta/Authenticator doğrulamasıyla yeniden kurmadan Sistem Telefonuna yükseltilebilir.",
-  "sourceCommit": "1dddacfc58347c3f8680c2e78d7cddf8b690d586",
-  "requestedAt": "2026-10-04T02:01:00+03:00"
+  "note": "Süper Yönetici & Güvenlik ekranına mevcut KY Güvenlik telefonunu doğrudan Sistem Telefonuna yükseltme/yönetme düğmesi eklendi.",
+  "sourceCommit": "82c8468121459c5f6c6fe6238b6d364b5170bb3f",
+  "requestedAt": "2026-10-04T02:08:00+03:00"
 }
