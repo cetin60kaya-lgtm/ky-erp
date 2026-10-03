@@ -107,7 +107,7 @@ exit 0
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Terminal sürücüsü onarılamadı: " + ex.GetBaseException().Message, "Terminal Sürücüsü", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            PdksErrorPresenter.Show(owner,ex,"Terminal Sürücüsü",MessageBoxIcon.Warning,"Terminal.DriverRepair");
             return false;
         }
     }
