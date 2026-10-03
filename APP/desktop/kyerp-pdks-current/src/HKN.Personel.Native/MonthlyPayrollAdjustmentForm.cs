@@ -15,7 +15,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
     {
         Dock=DockStyle.Fill, AllowUserToAddRows=false, AllowUserToDeleteRows=false,
         AutoGenerateColumns=false, SelectionMode=DataGridViewSelectionMode.FullRowSelect,
-        MultiSelect=true, BackgroundColor=Color.White, BorderStyle=BorderStyle.FixedSingle
+        MultiSelect=true, BackgroundColor=PdksAppearance.Current.Surface, BorderStyle=BorderStyle.None
     };
     readonly Label summary = new() { AutoSize=true, Font=new Font("Segoe UI",8.5f,FontStyle.Bold), ForeColor=PdksAppearance.Current.Muted };
     readonly Label selectedValue = KpiValue();
@@ -169,7 +169,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
 
     void AddCheck(string name,string header,int width)=>grid.Columns.Add(new DataGridViewCheckBoxColumn{Name=name,HeaderText=header,DataPropertyName=name,Width=width});
     void AddText(string name,string header,int width,bool readOnly,bool fill=false)=>grid.Columns.Add(new DataGridViewTextBoxColumn{Name=name,HeaderText=header,DataPropertyName=name,Width=width,ReadOnly=readOnly,AutoSizeMode=fill?DataGridViewAutoSizeColumnMode.Fill:DataGridViewAutoSizeColumnMode.None});
-    void AddMoney(string name,string header,int width,bool readOnly,Color? back=null)=>grid.Columns.Add(new DataGridViewTextBoxColumn{Name=name,HeaderText=header,DataPropertyName=name,Width=width,ReadOnly=readOnly,DefaultCellStyle=new DataGridViewCellStyle{Format="N2",Alignment=DataGridViewContentAlignment.MiddleRight,BackColor=back??Color.White}});
+    void AddMoney(string name,string header,int width,bool readOnly,Color? back=null)=>grid.Columns.Add(new DataGridViewTextBoxColumn{Name=name,HeaderText=header,DataPropertyName=name,Width=width,ReadOnly=readOnly,DefaultCellStyle=new DataGridViewCellStyle{Format="N2",Alignment=DataGridViewContentAlignment.MiddleRight,BackColor=back??PdksAppearance.Current.Surface}});
     static Label L(string text)=>new(){Text=text,AutoSize=true,Padding=new Padding(4,7,3,0),ForeColor=PdksAppearance.Current.Muted};
     Button B(string text,int width,Action action)
     {
