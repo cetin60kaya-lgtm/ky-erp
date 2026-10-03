@@ -938,6 +938,94 @@ export function registerAuthPushRoutes(app: any) {
     return c.json({ok:true,data:{challengeId:id,challengeToken:token,maskedEmail:maskOwnerEmail(user.email),expiresAt}});
   });
 
+  app.post("/api/auth/push/security-owner-device/authorize", async (c: any) => {
+    const current = await getAuthenticatedUser(c);
+    if (!current || !isSuper(roleOf(current))) {
+      return c.json(jsonError("OWNER_ONLY", "Sistem telefonu yetkilendirmesi yalnız Süper Yönetici içindir."), current ? 403 : 401);
+    }
+
+    const body = await bodyOf(c);
+    const deviceId = text(body.deviceId);
+    const user = await userRow(c, text(current.id));
+    const device = deviceId ? await storeGet(c, DEVICE_SCOPE, deviceId) : null;
+    if (
+      !user ||
+      !device ||
+      text(device.userId) !== text(user.id) ||
+      device.securityApp !== true ||
+      device.isActive === false ||
+      trustedDeviceIsRetired(device)
+    ) {
+      return c.json(jsonError("SECURITY_DEVICE_NOT_ELIGIBLE", "Yetkilendirilecek aktif KY Güvenlik telefonu bulunamadı."), 404);
+    }
+
+    let method = "";
+    const emailProof = objectOf(body.ownerEmailProof);
+    if (await verifyOwnerDeviceEmailProof(c, user, emailProof)) {
+      method = "EMAIL";
+    } else {
+      method = await verifyAnyOwnerAuthenticator(user, body.ownerAuthenticatorCode);
+    }
+    if (!method) {
+      return c.json(jsonError(
+        "OWNER_DEVICE_STEPUP_REQUIRED",
+        "Sistem telefonu yetkisi için doğrulanmış e-posta kodu veya mevcut Google/Microsoft Authenticator kodu gereklidir.",
+        {
+          emailReady: Boolean(user?.email_verified && text(user?.email)),
+          emailMasked: maskOwnerEmail(user?.email),
+          googleReady: Boolean(user?.google_mfa_enabled),
+          microsoftReady: Boolean(user?.microsoft_mfa_enabled),
+        },
+      ), 401);
+    }
+
+    const timestamp = nowIso();
+    const allDevices = await storeList(c, DEVICE_SCOPE);
+    for (const row of allDevices) {
+      if (
+        text(row.userId) === text(user.id) &&
+        row.securityApp === true &&
+        text(row.id) !== deviceId &&
+        row.ownerControlAuthorized === true
+      ) {
+        await saveDevice(c, {
+          ...row,
+          ownerControlAuthorized: false,
+          managerApprovalEnabled: isCompanyAdmin(roleOf(user)),
+          ownerControlRevokedAt: timestamp,
+          ownerControlRevokedReason: "Başka telefon Süper Yönetici Sistem Telefonu olarak yetkilendirildi",
+        });
+      }
+    }
+
+    const saved = await saveDevice(c, {
+      ...device,
+      ownerControlAuthorized: true,
+      ownerControlAuthorizedAt: timestamp,
+      ownerControlMethod: method,
+      managerApprovalEnabled: true,
+      ownerControlRevokedAt: "",
+      ownerControlRevokedReason: "",
+      lastSeenAt: timestamp,
+    });
+    await audit(c, "OWNER_SECURITY_DEVICE_AUTHORIZED", user.id, user.id, text(user.main_company_slug), {
+      deviceId: saved.id,
+      method,
+      deviceLabel: text(saved.deviceLabel),
+    });
+
+    return c.json({
+      ok: true,
+      data: {
+        deviceId: saved.id,
+        deviceLabel: text(saved.deviceLabel),
+        ownerControlAuthorized: true,
+        ownerControlAuthorizedAt: timestamp,
+        ownerControlMethod: method,
+      },
+    });
+  });
+
   app.post("/api/auth/push/security-enrollment/start", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current) return c.json(jsonError("UNAUTHORIZED", "Güvenlik uygulaması kurulumu için KY ERP oturumu gereklidir."), 401);
