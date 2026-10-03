@@ -69,7 +69,11 @@ public partial class PersonelForm
         var top=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=2,Padding=new Padding(6,5,6,2)};top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,70));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,205));top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));
         top.Controls.Add(new Label{Text="Dönem Adı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,0);periodB.Dock=DockStyle.Fill;top.Controls.Add(periodB,1,0);bilgiType.Items.AddRange(new object[]{"Tümü","Normal Çalışma","Mesai","Devamsızlık","Geç Kalma","Eksik Süre"});bilgiType.SelectedIndex=0;bilgiType.SelectedIndexChanged+=(_,_)=>ApplyTimesheetFilter();top.Controls.Add(bilgiType,3,0);
         top.Controls.Add(new Label{Text="Tarih Aralığı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,1);var dates=new Label{Text="",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};top.Controls.Add(dates,1,1);top.SetColumnSpan(dates,2);void upd(){var d=PeriodDates(periodB);dates.Text=$"{d.A:dd.MM.yyyy}     ile     {d.B:dd.MM.yyyy}";}periodB.SelectedIndexChanged+=(_,_)=>upd();var show=PdksUiKit.Button("Seçili Dönemi Göster",150,PdksActionRole.Primary,RefreshFullTabs);show.Dock=DockStyle.Fill;show.MinimumSize=Size.Empty;show.MaximumSize=Size.Empty;top.Controls.Add(show,3,1);
-        lay.Controls.Add(top,0,0);lay.Controls.Add(gBilgi,0,1);page.Controls.Add(lay);return page;
+        var gridHost=new Panel{Dock=DockStyle.Fill,BackColor=p.Surface};
+        bilgiEmpty.Text="Bu dönem için puantaj kaydı yok.\r\nKaynak kayıtlarını kontrol edip ana Puantaj ekranından hesaplayın.";
+        bilgiEmpty.ForeColor=p.Muted;
+        gridHost.Controls.Add(gBilgi);gridHost.Controls.Add(bilgiEmpty);
+        lay.Controls.Add(top,0,0);lay.Controls.Add(gridHost,0,1);page.Controls.Add(lay);return page;
     }
 
     TabPage BuildOdemeClassic()
