@@ -10,7 +10,7 @@ public sealed class UserManagementForm : Form
     readonly DataGridView rights = new()
     {
         Dock = DockStyle.Fill, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
-        RowHeadersVisible = false, BackgroundColor = Color.White, AutoGenerateColumns = false,
+        RowHeadersVisible = false, BackgroundColor = PdksAppearance.Current.Surface, AutoGenerateColumns = false,
         SelectionMode = DataGridViewSelectionMode.FullRowSelect
     };
     List<LocalUser> users = [];
