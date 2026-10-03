@@ -39,6 +39,7 @@ var workflow = PdksWorkflowCatalog.All.OrderBy(x=>x.Order).ToArray();
 var expectedWorkflow = new[]
 {
     PdksCommandId.TerminalCenter,
+    PdksCommandId.LiveAttendance,
     PdksCommandId.EntryExit,
     PdksCommandId.Personnel,
     PdksCommandId.TimesheetMonthly,
