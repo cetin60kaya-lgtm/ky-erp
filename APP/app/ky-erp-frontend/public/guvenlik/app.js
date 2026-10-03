@@ -28,6 +28,7 @@ let loginCodeTimer=null;
 let lastAutoRepairAt=0;
 let lastStableRefreshAt=0;
 let accountHydrated=false;
+let trailingRefreshTimer=null;
 renderVersion();
 
 function isIos(){const ua=String(navigator.userAgent||"");return /iPhone|iPad|iPod/i.test(ua)||(String(navigator.platform||"")==="MacIntel"&&Number(navigator.maxTouchPoints||0)>1)}
@@ -122,7 +123,7 @@ const MODULE_LABELS={ALL:"Tüm ERP",DASHBOARD:"Ana Panel",MUHASEBE:"Muhasebe",FI
 const SECURITY_CAP_LABELS={LOGIN_APPROVE:"Giriş Onayı",SESSION_APPROVE:"Oturum Onayı",SESSION_VIEW:"Oturumları Gör",SESSION_CLOSE:"Oturum Kapat",AUDIT_VIEW:"Güvenlik Geçmişi"};
 function accountRoleLabel(account){const role=String(account?.role||"").toUpperCase();if(["SUPER_ADMIN","ADMIN"].includes(role))return"Süper Yönetici";if(role==="COMPANY_ADMIN")return"Firma Sahibi";if((account?.moduleKeys||[]).includes("MUHASEBE"))return"Muhasebe";return ROLE_LABELS[role]||role.replaceAll("_"," ")||"Kullanıcı"}
 function setChipList(container,values,labelMap,emptyLabel){if(!container)return;container.innerHTML="";const list=Array.isArray(values)?values.filter(Boolean):[];if(!list.length){const chip=document.createElement("span");chip.className="account-chip muted-chip";chip.textContent=emptyLabel;container.appendChild(chip);return}for(const value of list){const chip=document.createElement("span");chip.className="account-chip";chip.textContent=labelMap[value]||String(value).replaceAll("_"," ");container.appendChild(chip)}}
-function renderAccount(account,device){if(!els.accountPanel)return;renderVersion(device?.lastKnownServerVersion||device?.serverVersion||"");const data=account&&typeof account==="object"?account:null;const label=data?accountRoleLabel(data):"Kontrol";els.accountFullName.textContent=data?.fullName||"Hesap doğrulanıyor";els.accountIdentity.textContent=data?`${label} · ERP rolü: ${String(data.role||"-").replaceAll("_"," ")}`:"Hesap bilgisi güvenli bağlantıdan alınacak.";els.accountRoleBadge.textContent=label;const ownerControl=Boolean(data?.userId)&&data?.scopeType==="SYSTEM"&&data?.ownerControlAuthorized===true;els.accountRoleBadge.classList.toggle("owner",ownerControl);els.accountEmail.textContent=data?.email||"Tanımlı değil";els.accountUsername.textContent=data?.username||"-";els.accountScope.textContent=ownerControl?"Tüm Sistem":"Kendi Hesabı";els.accountDevice.textContent=device?.deviceLabel||"KY Güvenlik cihazı";setChipList(els.accountModules,data?.moduleKeys||[],MODULE_LABELS,ownerControl?"Tüm ERP":"Kişisel giriş");setChipList(els.accountSecurityCaps,data?.securityCapabilities||[],SECURITY_CAP_LABELS,ownerControl?"Sistem güvenliği":"Yalnız kendi giriş kodu");document.body.classList.toggle("super-admin-security",ownerControl);document.querySelector("#superAdminConsole")?.classList.toggle("hidden",!ownerControl);document.querySelectorAll("[data-system-only]").forEach((el)=>el.classList.toggle("hidden",!ownerControl));if(!ownerControl)showTab("code");const labels={activity:"Hareketler ",approvals:"Sistem Onayları ",sessions:"Tüm Oturumlar ",computers:"Sistem Cihazları ",logs:"Denetim Logları"};for(const [tab,textValue] of Object.entries(labels)){const btn=document.querySelector(`.security-tabs button[data-tab="${tab}"]`);if(btn&&btn.firstChild)btn.firstChild.nodeValue=textValue}els.accountNote.textContent=ownerControl?"Bu telefon ekstra doğrulanmış Süper Yönetici güvenlik merkezidir. Tüm firmalardaki giriş, çıkış, oturum ve cihaz hareketleri bu telefondan izlenir.":(data?.username?`Bu cihaz yalnız ${data.username} hesabının kendi giriş kodunu üretir. Sistem yönetimi ve diğer kullanıcı hareketleri bu cihazda görünmez.`:"Bu cihaz yalnız bağlı hesabın kendi giriş kodunu üretir.")}
+function renderAccount(account,device){if(!els.accountPanel)return;renderVersion(device?.lastKnownServerVersion||device?.serverVersion||"");const data=account&&typeof account==="object"?account:null;const label=data?accountRoleLabel(data):"Kontrol";els.accountFullName.textContent=data?.fullName||"Hesap doğrulanıyor";els.accountIdentity.textContent=data?`${label} · ERP rolü: ${String(data.role||"-").replaceAll("_"," ")}`:"Hesap bilgisi güvenli bağlantıdan alınacak.";els.accountRoleBadge.textContent=label;const ownerControl=Boolean(data?.userId)&&data?.scopeType==="SYSTEM"&&data?.ownerControlAuthorized===true;const companyApprover=Boolean(data?.userId)&&data?.scopeType==="COMPANY";els.accountRoleBadge.classList.toggle("owner",ownerControl);els.accountEmail.textContent=data?.email||"Tanımlı değil";els.accountUsername.textContent=data?.username||"-";els.accountScope.textContent=ownerControl?"Tüm Sistem":companyApprover?(data?.companyName||data?.companySlug||"Firma"):"Kendi Hesabı";els.accountDevice.textContent=device?.deviceLabel||"KY Güvenlik cihazı";setChipList(els.accountModules,data?.moduleKeys||[],MODULE_LABELS,ownerControl?"Tüm ERP":"Kişisel giriş");setChipList(els.accountSecurityCaps,data?.securityCapabilities||[],SECURITY_CAP_LABELS,ownerControl?"Sistem güvenliği":companyApprover?"Firma giriş onayı":"Kendi giriş güvenliği");document.body.classList.toggle("super-admin-security",ownerControl);document.querySelector("#superAdminConsole")?.classList.toggle("hidden",!ownerControl);document.querySelectorAll("[data-system-only]").forEach((el)=>el.classList.toggle("hidden",!ownerControl));const activeTab=document.querySelector(".security-tabs button.active")?.dataset?.tab||"";if(!ownerControl&&["activity","sessions","computers","logs"].includes(activeTab))showTab("code");const labels={activity:"Hareketler ",approvals:ownerControl?"Sistem Onayları ":"Onaylar ",sessions:"Tüm Oturumlar ",computers:"Sistem Cihazları ",logs:"Denetim Logları"};for(const [tab,textValue] of Object.entries(labels)){const btn=document.querySelector(`.security-tabs button[data-tab="${tab}"]`);if(btn&&btn.firstChild)btn.firstChild.nodeValue=textValue}els.accountNote.textContent=ownerControl?"Bu telefon ekstra doğrulanmış Süper Yönetici güvenlik merkezidir. Tüm firmalardaki giriş, çıkış, oturum ve cihaz hareketleri bu telefondan izlenir.":companyApprover?"Bu telefon yalnız kendi firmasındaki gerekli giriş/oturum onaylarını ve kendi giriş kodunu gösterir. Sistem geneli yönetim görünmez.":(data?.username?`Bu cihaz yalnız ${data.username} hesabının kendi giriş onayı ve giriş kodunu gösterir. Sistem yönetimi ve diğer kullanıcı hareketleri görünmez.`:"Bu cihaz yalnız bağlı hesabın kendi giriş güvenliğini gösterir.")}
 function showRelink(){const linked=Boolean(enrollmentQuery.id&&enrollmentQuery.token);relinkMode=true;hideBoot();els.setupPanel.classList.remove("hidden");document.querySelector("#manualLinkDetails")?.classList.remove("hidden");els.passwordLabel?.classList.remove("hidden");els.deviceLabelWrap?.classList.toggle("hidden",linked);els.connectButton.classList.remove("hidden");els.setupTitle.textContent=linked?"Bu telefonu yeniden doğrula":"Yedek kod ile bağla";els.setupCopy.textContent="KY ERP ekranında üretilen 8 karakter Yedek Bağlantı Kodu ile Admin şifresini birlikte gir.";els.connectButton.textContent="Yedek Kod + Admin Şifresiyle Bağla";els.cancelRelinkButton.classList.toggle("hidden",!linked)}
 function hideRelink(){relinkMode=false;els.setupPanel.classList.add("hidden");els.cancelRelinkButton.classList.add("hidden")}
 function showSetupStart(){relinkMode=true;hideBoot();els.setupPanel.classList.remove("hidden");document.querySelector("#manualLinkDetails")?.classList.remove("hidden");els.passwordLabel?.classList.remove("hidden");els.deviceLabelWrap?.classList.add("hidden");els.connectButton.classList.remove("hidden");els.cancelRelinkButton.classList.add("hidden");els.setupTitle.textContent="Bu telefonu KY ERP’ye bağla";els.setupCopy.textContent="KY ERP ekranında üretilen 8 karakter Yedek Bağlantı Kodu + Admin şifresi birlikte doğrulanır.";els.connectButton.textContent="Yedek Kod + Admin Şifresiyle Bağla"}
@@ -287,6 +288,7 @@ async function refreshPending(preloadedItems=null){
   if(items.length){
     els.pendingPanel.classList.remove("hidden");els.emptyPanel.classList.add("hidden");
     for(const item of items)els.pendingList.appendChild(approvalCard(item));
+    if(!document.body.classList.contains("super-admin-security"))showTab("approvals");
     if("setAppBadge" in navigator)navigator.setAppBadge(items.length).catch(()=>{});
   }else{
     els.pendingPanel.classList.add("hidden");els.emptyPanel.classList.remove("hidden");
@@ -356,10 +358,19 @@ async function repairConnection(options={}){
   }
 }
 
+function queueTrailingRefresh(delayMs=650){
+  const wait=Math.max(150,Number(delayMs)||650);
+  clearTimeout(trailingRefreshTimer);
+  trailingRefreshTimer=setTimeout(()=>{
+    trailingRefreshTimer=null;
+    refreshState({background:true,trailing:true});
+  },wait);
+}
 async function refreshState(options={}){
   const background=Boolean(options?.background);
-  if(refreshState.running)return;
-  if(background&&Date.now()-lastStableRefreshAt<5000)return;
+  if(refreshState.running){if(background)queueTrailingRefresh();return;}
+  const refreshAge=Date.now()-lastStableRefreshAt;
+  if(background&&!options?.trailing&&refreshAge<5000){queueTrailingRefresh(5050-refreshAge);return;}
   refreshState.running=true;
   try{
   const device=await readDevice().catch(()=>null);
