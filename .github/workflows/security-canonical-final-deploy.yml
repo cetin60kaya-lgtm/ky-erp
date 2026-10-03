@@ -47,6 +47,8 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "CLOUDFLARE_API_TOKEN missing" >&2; exit 1; }
+          (cd APP/cloud/ky-erp-api && npm run typecheck)
+          (cd APP/cloud/ky-erp-api && node --experimental-strip-types --test src/auth-push-approval-contract.test.ts)
           node --check APP/cloud/ky-erp-security-host/worker.js
           node --check APP/app/ky-erp-frontend/public/guvenlik/app.js
           node --check APP/app/ky-erp-frontend/public/guvenlik/security-actions.js
