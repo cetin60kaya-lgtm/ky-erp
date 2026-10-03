@@ -327,7 +327,11 @@ public sealed partial class LiveAttendanceForm : Form
         }
         finally
         {
-            foreach(var grid in grids.Values)grid.ResumeLayout(false);tabs.ResumeLayout(false);cards.ResumeLayout(false);ResumeLayout(false);
+            foreach(var grid in grids.Values)grid.ResumeLayout(false);
+            tabs.ResumeLayout(false);
+            cards.ResumeLayout(true);
+            cards.PerformLayout();
+            ResumeLayout(true);
         }
     }
 
