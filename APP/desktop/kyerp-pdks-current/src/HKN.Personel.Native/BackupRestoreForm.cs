@@ -11,7 +11,7 @@ public sealed class BackupRestoreForm : Form
         MultiSelect=false,
         SelectionMode=DataGridViewSelectionMode.FullRowSelect,
         AutoGenerateColumns=false,
-        BackgroundColor=Color.White,
+        BackgroundColor=PdksAppearance.Current.Surface,
         BorderStyle=BorderStyle.None,
         RowHeadersVisible=false
     };
