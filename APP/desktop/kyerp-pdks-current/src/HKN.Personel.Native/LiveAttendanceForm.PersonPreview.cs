@@ -10,7 +10,7 @@ public sealed partial class LiveAttendanceForm
         Dock = DockStyle.Top,
         Height = 44,
         Font = new Font("Segoe UI", 13f, FontStyle.Bold),
-        ForeColor = Color.FromArgb(27, 44, 68),
+        ForeColor = PdksAppearance.Current.Text,
         TextAlign = ContentAlignment.MiddleLeft
     };
 
@@ -18,7 +18,7 @@ public sealed partial class LiveAttendanceForm
     {
         Dock = DockStyle.Fill,
         Font = new Font("Segoe UI", 9f),
-        ForeColor = Color.FromArgb(71, 86, 108),
+        ForeColor = PdksAppearance.Current.Muted,
         Padding = new Padding(0, 6, 0, 0)
     };
 
@@ -28,20 +28,10 @@ public sealed partial class LiveAttendanceForm
 
     static Button PreviewButton(string text, bool primary)
     {
-        var button = new Button
-        {
-            Text = text,
-            Width = 148,
-            Height = 36,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = primary ? Color.FromArgb(36, 107, 230) : Color.White,
-            ForeColor = primary ? Color.White : Color.FromArgb(31, 92, 180),
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor = Cursors.Hand
-        };
-        button.FlatAppearance.BorderColor = primary
-            ? Color.FromArgb(36, 107, 230)
-            : Color.FromArgb(196, 214, 240);
+        var button=PdksUiKit.Button(text,148,primary?PdksActionRole.Primary:PdksActionRole.Secondary);
+        button.Height=36;
+        button.MinimumSize=new Size(148,36);
+        button.MaximumSize=new Size(148,36);
         return button;
     }
 
@@ -53,7 +43,7 @@ public sealed partial class LiveAttendanceForm
             Orientation = Orientation.Vertical,
             SplitterWidth = 7,
             SplitterDistance = 820,
-            BackColor = Color.FromArgb(230, 236, 244)
+            BackColor = PdksAppearance.Current.Border
         };
         split.Panel1.Padding = new Padding(0, 0, 4, 0);
         split.Panel2.Padding = new Padding(8, 0, 0, 0);
@@ -66,7 +56,7 @@ public sealed partial class LiveAttendanceForm
         var shell = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = Color.White,
+            BackColor = PdksAppearance.Current.Surface,
             Padding = new Padding(16, 14, 16, 14)
         };
         var actions = new FlowLayoutPanel
