@@ -89,7 +89,7 @@ jobs:
           set -euo pipefail
           npx --yes wrangler@4.118.0 deploy --config wrangler.jsonc
 
-      - name: Verify installed-PWA launch compatibility
+      - name: Verify canonical Security PWA
         shell: bash
         run: |
           set -euo pipefail
