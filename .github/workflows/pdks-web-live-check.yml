@@ -1,14 +1,11 @@
 name: PDKS Web Live Check
 
 on:
-  pull_request:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - 'APP/app/ky-erp-frontend/**'
-      - 'APP/cloud/ky-erp-api/**'
-      - '.github/workflows/pdks-web-live-check.yml'
   workflow_dispatch:
+
+concurrency:
+  group: manual-pdks-web-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
