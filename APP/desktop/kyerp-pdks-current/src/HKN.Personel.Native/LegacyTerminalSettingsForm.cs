@@ -27,7 +27,7 @@ public sealed class LegacyTerminalSettingsForm : Form
         Size = new Size(1180, 720);
         MinimumSize = new Size(1040, 640);
         Font = new Font("Segoe UI", 9f);
-        BackColor = Color.FromArgb(244, 247, 251);
+        BackColor = PdksAppearance.Current.Canvas;
         Build();
         Shown += async (_, _) =>
         {
@@ -44,16 +44,17 @@ public sealed class LegacyTerminalSettingsForm : Form
         box.Items.AddRange(items.Cast<object>().ToArray());
         return box;
     }
-    static Button Cmd(string text, int width = 122) => new() { Text = text, Width = width, Height = 36, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
-    static Label L(string text) => new() { Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.FromArgb(55, 70, 92) };
+    static Button Cmd(string text, int width = 122) => PdksUiKit.Button(text,width,PdksActionRole.Secondary);
+    static Label L(string text) => new() { Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = PdksAppearance.Current.Muted };
 
     void Build()
     {
-        var canvas=Color.FromArgb(244,247,251);
-        var surface=Color.White;
-        var border=Color.FromArgb(226,232,240);
-        var text=Color.FromArgb(15,23,42);
-        var muted=Color.FromArgb(100,116,139);
+        var palette=PdksAppearance.Current;
+        var canvas=palette.Canvas;
+        var surface=palette.Surface;
+        var border=palette.Border;
+        var text=palette.Text;
+        var muted=palette.Muted;
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, Padding = new Padding(16), BackColor = canvas };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));
@@ -91,7 +92,7 @@ public sealed class LegacyTerminalSettingsForm : Form
         TerminalRow(connection,5,"Yön",direction);
         var editBar=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.LeftToRight,WrapContents=true,Padding=new Padding(0,5,0,0)};
         var add=TerminalButton("EKLE",62,true);var remove=TerminalButton("ÇIKART",68,false);var edit=TerminalButton("DÜZENLE",76,false);
-        save.Width=72;save.Height=32;save.FlatStyle=FlatStyle.Flat;save.BackColor=Color.FromArgb(37,99,235);save.ForeColor=Color.White;save.FlatAppearance.BorderColor=save.BackColor;
+        save.Width=72;save.Height=32;PdksUiKit.ApplyButtonPalette(save,palette,PdksActionRole.Primary);
         add.Click += (_, _) => { ApplyToFields(TerminalDeviceSettings.Default); SetEditing(true); };
         remove.Click += (_, _) => { if(MessageBox.Show("Ana cihaz ayarları varsayılana döndürülsün mü?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;TerminalDeviceSettingsStore.Save(TerminalDeviceSettings.Default);LoadSettings();SetEditing(false); };
         edit.Click += (_,_)=>SetEditing(true);save.Click += (_,_)=>SaveSettings();
@@ -132,12 +133,12 @@ public sealed class LegacyTerminalSettingsForm : Form
 
     static Panel TerminalCard(Color border)
     {
-        var p=new Panel{Dock=DockStyle.Fill,BackColor=Color.White,Margin=Padding.Empty};p.Paint+=(_,e)=>{using var pen=new Pen(border);e.Graphics.DrawRectangle(pen,0,0,Math.Max(0,p.Width-1),Math.Max(0,p.Height-1));};return p;
+        var p=PdksUiKit.Card(0);p.Margin=Padding.Empty;return p;
     }
 
     static void TerminalRow(TableLayoutPanel table,int row,string caption,Control control)
     {
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute,34));table.Controls.Add(new Label{Text=caption,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(100,116,139),Font=new Font("Segoe UI",8.3f,FontStyle.Bold)},0,row);control.Dock=DockStyle.Fill;control.Margin=new Padding(0,4,0,4);table.Controls.Add(control,1,row);
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute,34));table.Controls.Add(new Label{Text=caption,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=PdksAppearance.Current.Muted,Font=new Font("Segoe UI",8.3f,FontStyle.Bold)},0,row);control.Dock=DockStyle.Fill;control.Margin=new Padding(0,4,0,4);table.Controls.Add(control,1,row);
     }
 
     static Button TerminalButton(string text,int width,bool primary)
@@ -156,7 +157,7 @@ public sealed class LegacyTerminalSettingsForm : Form
         grid.MultiSelect = false;
         grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        grid.BackgroundColor = Color.White;
+        grid.BackgroundColor = PdksAppearance.Current.Surface;
         foreach (var name in new[] { "CihazNo", "CihazAdı", "MakineNo", "BağlantıTipi", "ComPort", "Baudrate", "IP Adres", "IP Port", "Giriş/Çıkış", "İşlem Durumu" })
             grid.Columns.Add(name.Replace(" ", ""), name);
         grid.CellDoubleClick += (_, _) => SetEditing(true);
@@ -298,8 +299,8 @@ public sealed class LegacyTerminalSettingsForm : Form
             return;
         }
 
-        using var preview = new Form { Text = $"Cihaz Kayıtları • {snap.Punches.Count}", StartPosition = FormStartPosition.CenterParent, Size = new Size(680, 520), Font = Font };
-        var list = new DataGridView { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AutoGenerateColumns = false, BackgroundColor = Color.White };
+        using var preview = new Form { Text = $"Cihaz Kayıtları • {snap.Punches.Count}", StartPosition = FormStartPosition.CenterParent, Size = new Size(760, 560), MinimumSize=new Size(680,500), Font = Font, BackColor=PdksAppearance.Current.Canvas };
+        var list = new DataGridView { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AutoGenerateColumns = false, BackgroundColor = PdksAppearance.Current.Surface };
         list.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Kart No", DataPropertyName = nameof(TerminalDevicePunch.EmployeeCode), Width = 100 });
         list.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tarih / Saat", DataPropertyName = nameof(TerminalDevicePunch.OccurredAt), Width = 180 });
         list.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Giriş/Çıkış", DataPropertyName = nameof(TerminalDevicePunch.InOut), Width = 100 });
@@ -340,6 +341,6 @@ public sealed class LegacyTerminalSettingsForm : Form
             try { text = System.Text.Encoding.UTF8.GetString(System.Text.Encoding.Latin1.GetBytes(text)); } catch { }
         }
         status.Text = text;
-        status.ForeColor = ok switch { true => Color.DarkGreen, false => Color.Firebrick, _ => Color.FromArgb(31, 92, 180) };
+        status.ForeColor = ok switch { true => PdksAppearance.Current.Success, false => PdksAppearance.Current.Danger, _ => PdksAppearance.Current.Primary };
     }
 }
