@@ -29,6 +29,7 @@ const SECURITY_APP_VERSION = "security-v3.0";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
 // Telefon onayı birincil faktör olarak beklemede tutulur.
 const SECURITY_LOGIN_CODE_SECONDS = 60;
+const DIRECT_SECURITY_CODE_SCOPE = "AUTH_SECURITY_DIRECT_LOGIN_CODE";
 const SECURITY_LOGIN_CODE_MAX_ATTEMPTS = 5;
 
 function text(value: unknown) {
@@ -650,6 +651,51 @@ export async function resendPhoneApprovalChallenge(c: any, idValue: unknown, tok
     approval,
     sent,
   };
+}
+
+export async function verifyDirectSecurityLoginCode(c: any, codeValue: unknown, targetUserIdValue: unknown) {
+  const candidate = text(codeValue).replace(/\D/g, "");
+  const targetUserId = text(targetUserIdValue);
+  if (!/^\d{6}$/.test(candidate) || !targetUserId) return { ok: false, code: "DIRECT_SECURITY_CODE_INVALID" };
+
+  const rows = (await storeList(c, DIRECT_SECURITY_CODE_SCOPE))
+    .filter((row: AnyRow) =>
+      upper(row.status) === "ACTIVE" &&
+      !text(row.consumedAt) &&
+      Date.parse(text(row.expiresAt)) > Date.now() &&
+      (upper(row.scopeType) === "SYSTEM" || text(row.targetUserId) === targetUserId)
+    )
+    .sort((a: AnyRow, b: AnyRow) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+
+  for (const row of rows) {
+    const attempts = Number(row.attempts || 0);
+    if (attempts >= SECURITY_LOGIN_CODE_MAX_ATTEMPTS) continue;
+    const valid = safeEqual(text(row.codeHash), await sha256(`${text(row.codeSalt)}:${candidate}`));
+    if (!valid) {
+      await storePut(c, DIRECT_SECURITY_CODE_SCOPE, text(row.id), text(row.mainCompanySlug), { ...row, attempts: attempts + 1 });
+      continue;
+    }
+    const updated = await atomicSecurityStatusUpdate(c, DIRECT_SECURITY_CODE_SCOPE, row, "ACTIVE", {
+      status: "USED",
+      consumedAt: nowIso(),
+      usedAt: nowIso(),
+      usedForUserId: targetUserId,
+    });
+    if (!updated.changed) continue;
+    await audit(c, "DIRECT_KY_SECURITY_CODE_USED", text(row.ownerUserId || row.userId), targetUserId, text(row.mainCompanySlug), {
+      deviceId: text(row.deviceId),
+      scopeType: upper(row.scopeType),
+    });
+    return {
+      ok: true,
+      code: "",
+      scopeType: upper(row.scopeType),
+      ownerUserId: text(row.ownerUserId || row.userId),
+      deviceId: text(row.deviceId),
+    };
+  }
+
+  return { ok: false, code: "DIRECT_SECURITY_CODE_INVALID" };
 }
 
 export async function verifySecurityLoginCode(c: any, idValue: unknown, tokenValue: unknown, codeValue: unknown) {
@@ -1444,43 +1490,45 @@ export function registerAuthPushRoutes(app: any) {
     const actor = await actorFromDevice(c);
     if (!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED", "KY ERP Güvenlik cihazı doğrulanamadı."), 401);
 
-    const rows = (await storeList(c, PHONE_SCOPE))
-      .filter((row: AnyRow) =>
-        text(row.userId) === actor.userId &&
-        upper(row.status) === "PENDING" &&
-        !text(row.consumedAt) &&
-        Date.parse(text(row.expiresAt)) > Date.now()
-      )
-      .sort((a: AnyRow, b: AnyRow) => String(b.requestedAt || "").localeCompare(String(a.requestedAt || "")));
-
-    const row = rows[0] || null;
-    if (!row) return c.json(jsonError("SECURITY_LOGIN_CODE_NO_REQUEST", "Kod üretmek için önce bilgisayarda KY ERP girişini başlatın."), 404);
-
+    const systemScope = isSuper(actor.role) && actor.ownerControlAuthorized === true;
+    const id = text(actor.device.id);
     const code = randomSixDigitCode();
     const salt = randomToken(12);
     const expiresAt = addSeconds(SECURITY_LOGIN_CODE_SECONDS);
-    await storePut(c, PHONE_SCOPE, text(row.id), text(row.mainCompanySlug), {
-      ...row,
-      securityCodeHash: await sha256(`${salt}:${code}`),
-      securityCodeSalt: salt,
-      securityCodeExpiresAt: expiresAt,
-      securityCodeAttempts: 0,
-      securityCodeDeviceId: actor.device.id,
-      securityCodeCreatedAt: nowIso(),
+
+    const previous = await storeGet(c, DIRECT_SECURITY_CODE_SCOPE, id);
+    await storePut(c, DIRECT_SECURITY_CODE_SCOPE, id, text(actor.companySlug), {
+      ...(previous || {}),
+      id,
+      userId: actor.userId,
+      ownerUserId: actor.userId,
+      targetUserId: systemScope ? "" : actor.userId,
+      mainCompanySlug: text(actor.companySlug),
+      deviceId: id,
+      scopeType: systemScope ? "SYSTEM" : "SELF",
+      status: "ACTIVE",
+      codeHash: await sha256(`${salt}:${code}`),
+      codeSalt: salt,
+      expiresAt,
+      attempts: 0,
+      consumedAt: "",
+      createdAt: nowIso(),
     });
-    await audit(c, "SECURITY_APP_LOGIN_CODE_CREATED", actor.userId, actor.userId, actor.companySlug, {
-      challengeId: row.id,
-      deviceId: actor.device.id,
+    await audit(c, "DIRECT_KY_SECURITY_CODE_CREATED", actor.userId, actor.userId, actor.companySlug, {
+      deviceId: id,
+      scopeType: systemScope ? "SYSTEM" : "SELF",
       expiresAt,
     });
     return c.json({
       ok: true,
       data: {
-        challengeId: row.id,
         code,
         expiresAt,
         validSeconds: SECURITY_LOGIN_CODE_SECONDS,
-        deviceLabel: friendlyDeviceLabel(row.deviceLabel, row.userAgent),
+        scopeType: systemScope ? "SYSTEM" : "SELF",
+        message: systemScope
+          ? "Bu kod 60 saniye boyunca kullanıcı adı ve şifresi doğrulanmış tüm KY ERP hesaplarında kullanılabilir."
+          : "Bu kod 60 saniye boyunca yalnız bağlı hesabın girişinde kullanılabilir.",
       },
     });
   });
