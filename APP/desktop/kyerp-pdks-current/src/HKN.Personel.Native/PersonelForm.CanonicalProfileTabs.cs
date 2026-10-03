@@ -8,8 +8,9 @@ public partial class PersonelForm
 
     TabPage BuildCanonicalBasicTab()
     {
-        var page = new TabPage("Temel Bilgiler");
-        var host = new TableLayoutPanel { Dock = DockStyle.Top, Height = 250, ColumnCount = 4, RowCount = 6, Padding = new Padding(14) };
+        var p=PdksAppearance.Current;
+        var page = new TabPage("Temel Bilgiler"){BackColor=p.Surface};
+        var host = new TableLayoutPanel { Dock = DockStyle.Top, Height = 250, ColumnCount = 4, RowCount = 6, Padding = new Padding(14), BackColor=p.Surface };
         host.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));
         host.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
         host.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));
@@ -24,8 +25,8 @@ public partial class PersonelForm
         for (var i = 0; i < fields.Length; i++)
         {
             var row = i / 2; var col = (i % 2) * 2;
-            host.Controls.Add(new Label { Text=fields[i].Item1, Dock=DockStyle.Fill, TextAlign=ContentAlignment.MiddleLeft, ForeColor=Color.FromArgb(70,85,105) }, col, row);
-            var value = new Label { Text="—", Dock=DockStyle.Fill, TextAlign=ContentAlignment.MiddleLeft, BorderStyle=BorderStyle.FixedSingle, BackColor=Color.White, Padding=new Padding(6,4,4,2) };
+            host.Controls.Add(new Label { Text=fields[i].Item1, Dock=DockStyle.Fill, TextAlign=ContentAlignment.MiddleLeft, ForeColor=p.Muted }, col, row);
+            var value = new Label { Text="—", Dock=DockStyle.Fill, TextAlign=ContentAlignment.MiddleLeft, BorderStyle=BorderStyle.FixedSingle, BackColor=p.SurfaceAlt, ForeColor=p.Text, Padding=new Padding(6,4,4,2) };
             canonicalProfileSummary[fields[i].Item2] = value;
             host.Controls.Add(value, col+1, row);
         }
@@ -98,10 +99,11 @@ public partial class PersonelForm
 
     TabPage BuildCanonicalFieldTab(string title, string[] fields)
     {
-        var page = new TabPage(title);
-        var scroll = new Panel { Dock=DockStyle.Fill, AutoScroll=true };
+        var p=PdksAppearance.Current;
+        var page = new TabPage(title){BackColor=p.Surface};
+        var scroll = new Panel { Dock=DockStyle.Fill, AutoScroll=true, BackColor=p.Surface };
         var rows = (fields.Length / 2 + 1) / 2;
-        var table = new TableLayoutPanel { Dock=DockStyle.Top, AutoSize=true, ColumnCount=4, RowCount=rows, Padding=new Padding(10) };
+        var table = new TableLayoutPanel { Dock=DockStyle.Top, AutoSize=true, ColumnCount=4, RowCount=rows, Padding=new Padding(10), BackColor=p.Surface };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,135));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,135));
@@ -110,8 +112,8 @@ public partial class PersonelForm
         {
             var pair=i/2; var row=pair/2; var col=(pair%2)*2;
             table.RowStyles.Add(new RowStyle(SizeType.Absolute,30));
-            table.Controls.Add(new Label { Text=fields[i], Dock=DockStyle.Fill, TextAlign=ContentAlignment.MiddleLeft }, col, row);
-            var box = new TextBox { Dock=DockStyle.Fill, BorderStyle=BorderStyle.FixedSingle, Margin=new Padding(0,2,8,2) };
+            table.Controls.Add(new Label { Text=fields[i], Dock=DockStyle.Fill, TextAlign=ContentAlignment.MiddleLeft, ForeColor=p.Muted }, col, row);
+            var box = new TextBox { Dock=DockStyle.Fill, BorderStyle=BorderStyle.FixedSingle, Margin=new Padding(0,2,8,2), ReadOnly=true, BackColor=p.SurfaceAlt, ForeColor=p.Text };
             f[fields[i+1]] = box;
             table.Controls.Add(box, col+1, row);
         }
