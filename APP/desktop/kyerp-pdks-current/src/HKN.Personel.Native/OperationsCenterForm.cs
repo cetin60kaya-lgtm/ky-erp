@@ -1,6 +1,6 @@
 namespace HKN.Personel.Native;
 
-internal sealed class OperationsCenterForm : Form
+public sealed class OperationsCenterForm : Form
 {
     readonly IReadOnlyDictionary<PdksCommandId,PdksCommandDescriptor> commands;
     readonly Action<PdksCommandId> execute;
