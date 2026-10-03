@@ -77,3 +77,12 @@ test("row and width sliders have a visibly wider operating range", () => {
   assert.match(workspace, /min="28" max="60" step="2"/);
   assert.match(workspace, /min="160" max="380" step="10"/);
 });
+
+
+test("inline quick card order keeps divider next to name and before wage/select/approval", () => {
+  assert.match(workspace, /quick-person-text[\s\S]*quick-inline-divider[\s\S]*money\(quick\.shift[\s\S]*Seçildi/);
+  assert.match(css, /QUICK-CARD-INLINE-FINAL-2026-10-03/);
+  assert.match(css, /\.gop-quick-dialog \.quick-main-toggle\{[\s\S]*display:inline-flex!important/);
+  assert.match(css, /\.gop-quick-dialog \.quick-inline-divider\{/);
+  assert.match(css, /border-left:0!important/);
+});

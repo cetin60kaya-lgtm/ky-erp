@@ -491,3 +491,115 @@
   .gop-quick-dialog .quick-main-toggle>b{width:62px!important}
   .gop-quick-dialog .quick-main-toggle>em{width:30px!important}
 }
+
+
+/* QUICK-CARD-INLINE-FINAL-2026-10-03 */
+/* Kart içi sıra: avatar -> isim/kod -> soft çizgi -> ücret -> seç -> onay. */
+.gop-quick-dialog .quick-person-grid{
+  grid-auto-rows:auto!important;
+}
+.gop-quick-dialog .quick-person{
+  display:flex!important;
+  align-items:stretch!important;
+  justify-content:flex-start!important;
+  gap:0!important;
+  min-width:0!important;
+  height:auto!important;
+  min-height:var(--quick-row-h)!important;
+}
+.gop-quick-dialog .quick-main-toggle{
+  display:inline-flex!important;
+  flex:0 1 auto!important;
+  width:auto!important;
+  max-width:calc(100% - 24px)!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:5px!important;
+  min-width:0!important;
+  min-height:var(--quick-row-h)!important;
+  height:auto!important;
+  padding:2px 4px!important;
+}
+.gop-quick-dialog .quick-avatar{
+  flex:0 0 auto!important;
+}
+.gop-quick-dialog .quick-person-text{
+  flex:0 1 auto!important;
+  width:auto!important;
+  min-width:0!important;
+  max-width:none!important;
+  overflow:visible!important;
+}
+.gop-quick-dialog .quick-person-text strong{
+  display:block!important;
+  width:auto!important;
+  max-width:none!important;
+  overflow:visible!important;
+  text-overflow:clip!important;
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+  font-size:8.2px!important;
+  line-height:1.05!important;
+}
+.gop-quick-dialog .quick-person-text small{
+  display:block!important;
+  width:auto!important;
+  max-width:100%!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+}
+.gop-quick-dialog .quick-inline-divider{
+  flex:0 0 1px!important;
+  align-self:stretch!important;
+  width:1px!important;
+  min-height:20px!important;
+  margin:2px 1px!important;
+  background:#d9e3ee!important;
+  border-radius:1px!important;
+}
+.gop-quick-dialog .quick-main-toggle>b{
+  flex:0 0 auto!important;
+  display:block!important;
+  width:auto!important;
+  min-width:58px!important;
+  height:auto!important;
+  margin:0!important;
+  padding:0!important;
+  border-left:0!important;
+  text-align:right!important;
+  font-size:7.2px!important;
+  font-weight:950!important;
+  color:#17385f!important;
+  white-space:nowrap!important;
+}
+.gop-quick-dialog .quick-main-toggle>em{
+  flex:0 0 auto!important;
+  display:block!important;
+  width:auto!important;
+  min-width:31px!important;
+  margin:0!important;
+  padding:0!important;
+  text-align:center!important;
+  font-size:6.7px!important;
+  font-weight:950!important;
+  white-space:nowrap!important;
+}
+.gop-quick-dialog .quick-check-button{
+  flex:0 0 24px!important;
+  width:24px!important;
+  min-width:24px!important;
+  max-width:24px!important;
+  min-height:var(--quick-row-h)!important;
+  height:auto!important;
+  margin:0!important;
+  border-left:1px solid #edf1f5!important;
+}
+@media (max-width:1366px), (max-height:820px){
+  .gop-quick-dialog .quick-main-toggle{gap:4px!important;padding:1px 3px!important}
+  .gop-quick-dialog .quick-person-text strong{font-size:7.8px!important}
+  .gop-quick-dialog .quick-person-text small{font-size:6px!important}
+  .gop-quick-dialog .quick-main-toggle>b{min-width:54px!important;font-size:6.8px!important}
+  .gop-quick-dialog .quick-main-toggle>em{min-width:28px!important;font-size:6.2px!important}
+  .gop-quick-dialog .quick-check-button{flex-basis:22px!important;width:22px!important;min-width:22px!important;max-width:22px!important}
+}
