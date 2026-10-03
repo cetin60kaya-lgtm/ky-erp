@@ -18,6 +18,15 @@ test("KY Security mobile control is restricted to the extra-verified owner phone
   assert.match(mobile,/companyStats/);
   assert.match(mobile,/activity/);
 });
+test("owner activity today counters are aggregated independently from the paginated timeline",async()=>{
+  const mobile=await readFile(mobileUrl,"utf8");
+  assert.match(mobile,/buildTodaySummary/);
+  assert.match(mobile,/SELECT COUNT\(\*\) AS total FROM auth_login_approvals/);
+  assert.match(mobile,/SELECT COUNT\(\*\) AS total FROM auth_sessions WHERE created_at/);
+  assert.match(mobile,/revoked_at IS NOT NULL/);
+  assert.match(mobile,/\.\.\.todaySummary/);
+});
+
 test("mobile session close is signed owner-phone-only audited and idempotent",async()=>{
   const mobile=await readFile(mobileUrl,"utf8");
   assert.match(mobile,/KYERP-MOBILE-CONTROL-V1/);
