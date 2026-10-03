@@ -1,23 +1,22 @@
 name: KY ERP Canonical UI Acceptance
 
 on:
-  push:
+  pull_request:
     branches:
       - codex/model-uretim-kontrol-merkezi-final
-      - codex/pdks-desktop-1.8.1-device-final-20260907
       - main
     paths:
       - 'APP/app/ky-erp-frontend/**'
       - 'APP/cloud/ky-erp-api/**'
       - '.github/workflows/ui-canonical-acceptance.yml'
-  pull_request:
-    paths:
-      - 'APP/app/ky-erp-frontend/**'
-      - 'APP/cloud/ky-erp-api/**'
-      - '.github/workflows/ui-canonical-acceptance.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: kyerp-canonical-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   frontend:
