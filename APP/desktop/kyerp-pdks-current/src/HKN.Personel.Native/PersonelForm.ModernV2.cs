@@ -179,10 +179,8 @@ public partial class PersonelForm
             BackColor = UiSurface,
             Padding = new Padding(0, 3, 0, 0)
         };
-        var add = ModernActionButton("Yeni Personel", true, () => OpenPersonEditor(true), 118);
-        var edit = ModernActionButton("Düzenle", false, () => OpenPersonEditor(false), 88);
+        var add = ModernActionButton("+ Yeni Personel", true, () => OpenPersonEditor(true), 124);
         bar.Controls.Add(add);
-        bar.Controls.Add(edit);
         return bar;
     }
 
@@ -230,7 +228,7 @@ public partial class PersonelForm
         return header;
     }
 
-    void AddModernHeaderField(TableLayoutPanel table, int index, string label, string key, bool editable = true)
+    void AddModernHeaderField(TableLayoutPanel table, int index, string label, string key, bool editable = false)
     {
         var row = index / 2;
         var col = (index % 2) * 2;
@@ -265,10 +263,8 @@ public partial class PersonelForm
             BackColor = UiSurface,
             Padding = new Padding(0, 6, 0, 0)
         };
-        bar.Controls.Add(ModernActionButton("Personel Bilgisi", false, () => { if(currentPk!="") LoadPerson(currentPk); }, 112));
-        bar.Controls.Add(ModernActionButton("Çıkış Ver", false, MarkExit, 94, danger:true));
-        bar.Controls.Add(ModernActionButton("Düzenle", false, () => OpenPersonEditor(false), 92));
-        bar.Controls.Add(ModernActionButton("Yeni Personel", true, () => OpenPersonEditor(true), 118));
+        bar.Controls.Add(ModernActionButton("Çıkış Ver", false, MarkExit, 96, danger:true));
+        bar.Controls.Add(ModernActionButton("Personeli Düzenle", true, () => OpenPersonEditor(false), 132));
         return bar;
     }
 
