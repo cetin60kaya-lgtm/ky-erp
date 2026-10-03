@@ -96,28 +96,20 @@ jobs:
           legacy_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://security.kyerp.net/security/)"
           test "$legacy_status" = "410"
 
-          primary_status="$(curl --silent --show-error --max-time 20 -o /tmp/security-primary.html -w '%{http_code}' https://security.kyerp.net/ky-guvenlik/)"
+          primary_status="$(curl --silent --show-error --max-time 20 -o /tmp/security-primary.html -w '%{http_code}' https://security.kyerp.net/guvenlik/)"
           test "$primary_status" = "200"
           grep -q '<title>KY ERP Güvenlik</title>' /tmp/security-primary.html
-          grep -q '/ky-guvenlik/app.js' /tmp/security-primary.html
+          grep -q '/guvenlik/app.js' /tmp/security-primary.html
           grep -q 'v3.0' /tmp/security-primary.html
 
-          compat_status="$(curl --silent --show-error --max-time 20 -o /tmp/security-compat.html -w '%{http_code}' https://security.kyerp.net/guvenlik/)"
-          test "$compat_status" = "200"
-          grep -q '<title>KY ERP Güvenlik</title>' /tmp/security-compat.html
-          grep -q '/guvenlik/app.js' /tmp/security-compat.html
+          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/manifest.webmanifest -o /tmp/manifest-primary.json
+          jq -e '.id == "/guvenlik/" and .start_url == "/guvenlik/" and .scope == "/guvenlik/"' /tmp/manifest-primary.json >/dev/null
 
-          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/ky-guvenlik/manifest.webmanifest -o /tmp/manifest-primary.json
-          jq -e '.id == "/ky-guvenlik/" and .start_url == "/ky-guvenlik/" and .scope == "/ky-guvenlik/"' /tmp/manifest-primary.json >/dev/null
-
-          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/manifest.webmanifest -o /tmp/manifest-compat.json
-          jq -e '.id == "/guvenlik/" and .start_url == "/guvenlik/" and .scope == "/guvenlik/"' /tmp/manifest-compat.json >/dev/null
-
-          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/ky-guvenlik/sw.js -o /tmp/sw-primary.js
-          grep -q 'const APP_URL="/ky-guvenlik/"' /tmp/sw-primary.js
+          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/sw.js -o /tmp/sw-primary.js
+          grep -q 'const APP_URL="/guvenlik/"' /tmp/sw-primary.js
           grep -q 'Eşleştirme No:' /tmp/sw-primary.js
 
-          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/ky-guvenlik/app.js -o /tmp/security-app.js
+          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/app.js -o /tmp/security-app.js
           grep -q 'Yedek Kod + Admin Şifresiyle Bağla' /tmp/security-app.js
           grep -q 'approve.disabled=true' /tmp/security-app.js
           grep -q 'createLocalUnlock' /tmp/security-app.js
@@ -131,4 +123,4 @@ jobs:
           legacy_asset_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -H 'Accept: application/javascript' https://security.kyerp.net/security/obsolete.js)"
           test "$legacy_asset_status" = "410"
 
-          echo "KY Security installed-PWA launch compatibility verification passed."
+          echo "KY Security canonical PWA deployment verification passed."
