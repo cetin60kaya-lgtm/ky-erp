@@ -7,7 +7,7 @@ namespace HKN.Personel.Native;
 public sealed class LegacyGirisCikisForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
-    readonly DataGridView grid = new(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=Color.White,AutoGenerateColumns=false};
+    readonly DataGridView grid = new(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=PdksAppearance.Current.Surface,AutoGenerateColumns=false};
     readonly TextBox cardStart = new(); readonly TextBox cardEnd = new(); readonly TextBox name = new();
     readonly ComboBox punch = new(){DropDownStyle=ComboBoxStyle.DropDownList};
     readonly DateTimePicker dateStart = D(); readonly DateTimePicker dateEnd = D();
@@ -19,30 +19,30 @@ public sealed class LegacyGirisCikisForm : Form
     readonly string? initialCard;
     readonly DateTime? initialDate;
 
-    public LegacyGirisCikisForm(string? initialCard=null, DateTime? initialDate=null){this.initialCard=initialCard;this.initialDate=initialDate;Text="Giriş ve Çıkışlar";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1220,740);MinimumSize=new Size(980,620);Font=new Font("Segoe UI",9f);BackColor=Color.FromArgb(246,249,253);KeyPreview=true;Build();Shown+=(_,_)=>Init();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
+    public LegacyGirisCikisForm(string? initialCard=null, DateTime? initialDate=null){this.initialCard=initialCard;this.initialDate=initialDate;Text="Giriş ve Çıkışlar";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1220,740);MinimumSize=new Size(980,620);Font=new Font("Segoe UI",9f);BackColor=PdksAppearance.Current.Canvas;KeyPreview=true;Build();Shown+=(_,_)=>Init();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
     static DateTimePicker D()=>new(){Format=DateTimePickerFormat.Short};
     static DateTimePicker D(int x,int y,int w)=>new(){Location=new Point(x,y),Size=new Size(w,21),Format=DateTimePickerFormat.Custom,CustomFormat="dd MMM yyyy"};
-    static Label L(string text,int x,int y)=>new(){Text=text,Location=new Point(x,y),AutoSize=true,ForeColor=Color.FromArgb(66,82,104)};
+    static Label L(string text,int x,int y)=>new(){Text=text,Location=new Point(x,y),AutoSize=true,ForeColor=PdksAppearance.Current.Muted};
     static ComboBox C()=>new(){DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="TEXT",ValueMember="KOD"};
-    static Label L(string text)=>new(){Text=text,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(66,82,104)};
+    static Label L(string text)=>new(){Text=text,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=PdksAppearance.Current.Muted};
     static void Row(TableLayoutPanel t,int r,string label,Control c){t.RowStyles.Add(new RowStyle(SizeType.Absolute,36));t.Controls.Add(L(label),0,r);c.Dock=DockStyle.Fill;c.Margin=new Padding(3,5,3,5);t.Controls.Add(c,1,r);}
     static Button Btn(string text,int width=110)=>new(){Text=text,Width=width,Height=36,MinimumSize=new Size(width,36),MaximumSize=new Size(width,36),FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",9f,FontStyle.Bold)};
 
     void Build()
     {
-        BackColor=Color.FromArgb(244,247,251);
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(16),BackColor=BackColor};
+        var p=PdksAppearance.Current;
+        BackColor=p.Canvas;
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(16),BackColor=p.Canvas};
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,176));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
 
-        var filterCard=new Panel{Dock=DockStyle.Fill,BackColor=Color.White,Margin=new Padding(0,0,0,10)};
-        filterCard.Paint+=(_,e)=>{using var pen=new Pen(Color.FromArgb(226,232,240));e.Graphics.DrawRectangle(pen,0,0,Math.Max(0,filterCard.Width-1),Math.Max(0,filterCard.Height-1));};
-        var filterRoot=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=new Padding(16),BackColor=Color.White};
+        var filterCard=PdksUiKit.Card(0);filterCard.Margin=new Padding(0,0,0,10);
+        var filterRoot=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=new Padding(16),BackColor=p.Surface};
         filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
         filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
         filterRoot.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        filterRoot.Controls.Add(new Label{Text="Giriş / Çıkış Kayıtları",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42),TextAlign=ContentAlignment.MiddleLeft},0,0);
+        filterRoot.Controls.Add(new Label{Text="Giriş / Çıkış Kayıtları",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text,TextAlign=ContentAlignment.MiddleLeft},0,0);
 
         var primary=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=6,RowCount=1};
         primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,14));
@@ -78,7 +78,7 @@ public sealed class LegacyGirisCikisForm : Form
         grid.CellDoubleClick+=(_,_)=>EditSelected();
         root.Controls.Add(grid,0,1);
 
-        var bar=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0),WrapContents=false,BackColor=BackColor};
+        var bar=PdksUiKit.ActionBar(true,p.Canvas);
         var show=ModernGcButton("Göster",96,true);var add=ModernGcButton("Yeni Kayıt",105,true);var edit=ModernGcButton("Düzenle",92,false);var del=ModernGcButton("Sil",74,false,true);
         var entryE=ModernGcButton("Girişi Manuel",112,false);var exitE=ModernGcButton("Çıkışı Manuel",118,false);var report=ModernGcButton("Rapor",88,false);
         show.Click+=(_,_)=>Reload();add.Click+=(_,_)=>EditRecord(null);edit.Click+=(_,_)=>EditSelected();del.Click+=(_,_)=>DeleteSelected();entryE.Click+=(_,_)=>SetManualSide(true);exitE.Click+=(_,_)=>SetManualSide(false);report.Click+=(_,_)=>PrintList();
@@ -96,7 +96,7 @@ public sealed class LegacyGirisCikisForm : Form
     {
         var host=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Margin=new Padding(0,0,10,0)};
         host.RowStyles.Add(new RowStyle(SizeType.Absolute,20));host.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        host.Controls.Add(new Label{Text=caption,Dock=DockStyle.Fill,Font=new Font("Segoe UI",8f,FontStyle.Bold),ForeColor=Color.FromArgb(100,116,139),TextAlign=ContentAlignment.MiddleLeft},0,0);
+        host.Controls.Add(new Label{Text=caption,Dock=DockStyle.Fill,Font=new Font("Segoe UI",8f,FontStyle.Bold),ForeColor=PdksAppearance.Current.Muted,TextAlign=ContentAlignment.MiddleLeft},0,0);
         control.Dock=DockStyle.Fill;control.Margin=new Padding(0,2,0,0);host.Controls.Add(control,0,1);table.Controls.Add(host,column,0);
     }
 
