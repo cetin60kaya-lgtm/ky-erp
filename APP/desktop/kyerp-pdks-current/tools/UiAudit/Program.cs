@@ -15,6 +15,7 @@ ApplyAuditAppearanceFromEnvironment();
 
 var noLoad = string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_NOLOAD"), "1", StringComparison.Ordinal);
 var visibleAudit = string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_VISIBLE"), "1", StringComparison.Ordinal);
+var loadReports = string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_LOAD_REPORTS"), "1", StringComparison.Ordinal);
 var workspaceRoot = Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT") ?? Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT", EnvironmentVariableTarget.User);
 var driveRoot = !string.IsNullOrWhiteSpace(workspaceRoot)
     ? Path.Combine(workspaceRoot, "08_TEST", "UI_AUDIT")
@@ -90,8 +91,8 @@ foreach (var job in jobs)
         using var form = job.Factory();
         PdksTheme.Apply(form);
         if (noLoad ||
-            job.Name.StartsWith("30-Rapor-", StringComparison.Ordinal) ||
-            job.Name.Equals("14-RaporMerkezi", StringComparison.Ordinal))
+            (!loadReports && (job.Name.StartsWith("30-Rapor-", StringComparison.Ordinal) ||
+                              job.Name.Equals("14-RaporMerkezi", StringComparison.Ordinal))))
             CaptureFormNoLoad(form, job.Name, root, log, errors);
         else
             CaptureForm(form, job.Name, root, log, errors, visibleAudit);

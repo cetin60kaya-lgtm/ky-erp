@@ -228,7 +228,7 @@ public sealed class LegacyBordroForm : Form
             grid.ResumeLayout();
 
             var total = data.AsEnumerable().Sum(r => r["Toplam"] == DBNull.Value ? 0m : Convert.ToDecimal(r["Toplam"]));
-            summary.Text = $"Aktif personel: {data.Rows.Count}  •  {MonthNames[a.Month - 1]} {a.Year}  •  {total:N2} ₺";
+            summary.Text = $"Bordro kaydı: {data.Rows.Count}  •  {MonthNames[a.Month - 1]} {a.Year}  •  {total:N2} ₺";
         }
         catch (Exception ex)
         {

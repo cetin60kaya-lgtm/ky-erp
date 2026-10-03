@@ -58,6 +58,19 @@ Pump(250);
 form.NavigateToCommand(PdksCommandId.Operations);
 Pump(350);
 
+var shellType = typeof(MainShellForm);
+var showManagement = shellType.GetMethod("ShowManagementCenter", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+    ?? throw new Exception("Management navigation method missing.");
+showManagement.Invoke(form, null);
+Pump(350);
+var activeNav = shellType.GetField("activeNavButton", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.GetValue(form);
+var manageButton = shellType.GetField("modernManageButton", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.GetValue(form) as Button
+    ?? throw new Exception("Management navigation button missing.");
+if (activeNav is not null)
+    throw new Exception("Primary navigation remained selected while Management Center is active.");
+if (manageButton.BackColor != PdksAppearance.Current.SidebarHover)
+    throw new Exception("Management navigation active state was not applied.");
+
 Console.WriteLine("KYERP PDKS 6.4.0 MODERN SHELL OK");
 form.Close();
 

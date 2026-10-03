@@ -70,7 +70,7 @@ public sealed class LegacyOperationalReportForm : Form
         BackColor=p.Canvas;
 
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(16),BackColor=p.Canvas};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,112));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,126));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
@@ -81,7 +81,7 @@ public sealed class LegacyOperationalReportForm : Form
         filterRoot.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         filterRoot.Controls.Add(new Label{Text=Text,Dock=DockStyle.Fill,Font=new Font("Segoe UI",11.5f,FontStyle.Bold),ForeColor=p.Text,TextAlign=ContentAlignment.MiddleLeft},0,0);
 
-        var filter=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(0,7,0,0),WrapContents=false,BackColor=p.Surface};
+        var filter=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(0,4,0,0),WrapContents=false,BackColor=p.Surface};
         filter.Controls.Add(new Label{Text="Tarih Aralığı",AutoSize=true,Padding=new Padding(0,8,8,0),ForeColor=p.Muted,Font=new Font("Segoe UI",8.5f,FontStyle.Bold)});
         filter.Controls.Add(from);
         filter.Controls.Add(new Label{Text="—",AutoSize=true,Padding=new Padding(6,8,6,0),ForeColor=p.Muted});

@@ -6,6 +6,12 @@ using KYERP.PDKS.Core.Attendance;
 using KYERP.PDKS.Core.Terminal;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+foreach (var key in new[] { "KY_PDKS_DB_PATH", "KY_PDKS_DB_HOST", "KY_PDKS_DB_PORT", "KY_PDKS_DB_USER", "KY_PDKS_DB_PASSWORD", "KYERP_PDKS_ROOT", "KY_PDKS_RUNTIME_ROOT", "KY_PDKS_REPORT_ROOT", "KY_PDKS_PERSONEL_EXE" })
+{
+    if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key))) continue;
+    var value = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User);
+    if (!string.IsNullOrWhiteSpace(value)) Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.Process);
+}
 
 var options = PdksOptions.FromEnvironment();
 var database = new FirebirdDatabase(options);
@@ -27,12 +33,22 @@ using var tx = c.BeginTransaction();
 try
 {
     int ps=Convert.ToInt32(Scalar(c,tx,"select coalesce(max(PS),0)+1 from KIMLIK"));
-    Exec(c,tx,"insert into KIMLIK (PS,PKNO,AD,SOYAD,IGTARIH,GRUP,BOLUM,DURUM,GOREV,MAAS,KULIZIN,CCKSAY) values (@PS,@PK,@AD,@SOY,@G,1,1,2,1,1000,0,0)",
+    Exec(c,tx,"insert into KIMLIK (PS,PKNO,AD,SOYAD,IGTARIH,GRUP,BOLUM,DURUM,GOREV,MAAS,KULIZIN,CCKSAY,ESDRM) values (@PS,@PK,@AD,@SOY,@G,1,1,2,1,1000,0,0,0)",
         new FbParameter("@PS",ps),new FbParameter("@PK",testPk),new FbParameter("@AD","SMOKE"),new FbParameter("@SOY","TEST"),new FbParameter("@G",new DateTime(2099,1,1)));
     Exec(c,tx,"update KIMLIK set AD='SMOKE2',ICTARIH=@D where PKNO=@PK",new FbParameter("@D",new DateTime(2099,1,31)),new FbParameter("@PK",testPk));
     var ad=Convert.ToString(Scalar(c,tx,"select AD from KIMLIK where PKNO=@PK",new FbParameter("@PK",testPk)));
     if(ad!="SMOKE2") throw new Exception("KIMLIK update doğrulanamadı");
     log.AppendLine("KIMLIK insert/update OK");
+
+    foreach(var defTable in new[]{"GRUP","BOLUM","SERVIS","GOREV","DURUM"})
+    {
+        int code=Convert.ToInt32(Scalar(c,tx,$"select coalesce(max(KOD),0)+1 from {defTable}"));
+        Exec(c,tx,$"insert into {defTable} (KOD,AD) values (@K,@A)",new FbParameter("@K",code),new FbParameter("@A","SMOKE"));
+        Exec(c,tx,$"update {defTable} set AD='SMOKE2' where KOD=@K",new FbParameter("@K",code));
+        if(Convert.ToString(Scalar(c,tx,$"select AD from {defTable} where KOD=@K",new FbParameter("@K",code)))!="SMOKE2")throw new Exception(defTable+" tanım update doğrulanamadı");
+        Exec(c,tx,$"delete from {defTable} where KOD=@K",new FbParameter("@K",code));
+        log.AppendLine(defTable+" definition insert/update/delete OK");
+    }
 
     int gs=Convert.ToInt32(Scalar(c,tx,"select coalesce(max(SIRA),0)+1 from GIRCIK"));
     Exec(c,tx,"insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,CTARIH,CSAAT,CDAKIKA,MKOD) values (@S,@PK,@D,'08:30',510,@D,'19:00',1140,'000')",
@@ -58,12 +74,26 @@ try
     Exec(c,tx,"delete from OZELIZIN where SIRA=@S and PKNO=@PK",new FbParameter("@S",iz),new FbParameter("@PK",testPk));
     log.AppendLine("OZELIZIN insert/update/delete OK");
 
-    int av=Convert.ToInt32(Scalar(c,tx,"select coalesce(max(KOD),0)+1 from AVANS"));
-    Exec(c,tx,"insert into AVANS (PKNO,TARIH,MIKTAR,VTARIH,TURKOD,KOD,TOPMIKTAR,TAKSITSAYISI,TAKSITNO,ACIKLAMA) values (@PK,@D,100,@D,2,@K,100,1,1,'SMOKE')",
-        new FbParameter("@PK",testPk),new FbParameter("@D",new DateTime(2099,1,4)),new FbParameter("@K",av));
-    Exec(c,tx,"update AVANS set MIKTAR=125,TOPMIKTAR=125,ACIKLAMA='SMOKE2' where KOD=@K and PKNO=@PK",new FbParameter("@K",av),new FbParameter("@PK",testPk));
+    int avRequested=Convert.ToInt32(Scalar(c,tx,"select coalesce(max(KOD),0)+1 from AVANS"));
+    Exec(c,tx,"insert into AVANS (PKNO,TARIH,MIKTAR,VTARIH,TURKOD,KOD,TOPMIKTAR,TAKSITSAYISI,TAKSITNO,ACIKLAMA) values (@PK,@D,@M,@D,2,@K,@A,1,1,'SMOKE')",
+        new FbParameter("@PK",testPk),new FbParameter("@D",new DateTime(2099,1,4)),new FbParameter("@M",100m),new FbParameter("@K",avRequested),new FbParameter("@A",100m));
+    int av=Convert.ToInt32(Scalar(c,tx,"select first 1 KOD from AVANS where PKNO=@PK and ACIKLAMA='SMOKE' order by KOD desc",new FbParameter("@PK",testPk)));
+    log.AppendLine($"AVANS trigger KOD requested={avRequested} actual={av}");
+    Exec(c,tx,"update AVANS set MIKTAR=@M,TOPMIKTAR=@A,ACIKLAMA='SMOKE2' where KOD=@K and PKNO=@PK",new FbParameter("@M",125m),new FbParameter("@A",125m),new FbParameter("@K",av),new FbParameter("@PK",testPk));
+    var avM=Convert.ToDecimal(Scalar(c,tx,"select MIKTAR from AVANS where KOD=@K and PKNO=@PK",new FbParameter("@K",av),new FbParameter("@PK",testPk)));
+    var avT=Convert.ToDecimal(Scalar(c,tx,"select TOPMIKTAR from AVANS where KOD=@K and PKNO=@PK",new FbParameter("@K",av),new FbParameter("@PK",testPk)));
+    log.AppendLine($"AVANS values after update MIKTAR={avM} TOPMIKTAR={avT}");
+    if(avM!=125m||avT!=125m)throw new Exception($"AVANS update doğrulanamadı MIKTAR={avM} TOPMIKTAR={avT}");
     Exec(c,tx,"delete from AVANS where KOD=@K and PKNO=@PK",new FbParameter("@K",av),new FbParameter("@PK",testPk));
     log.AppendLine("AVANS insert/update/delete OK");
+
+    var payA=new DateTime(2099,1,1);var payB=new DateTime(2099,1,31);
+    Exec(c,tx,"insert into ODEME(PKNO,BASTAR,BITTAR,NODENEN,NOTARIH,FMODENEN,FMOTARIH) values(@P,@A,@B,500,@D,50,@D)",
+        new FbParameter("@P",testPk),new FbParameter("@A",payA),new FbParameter("@B",payB),new FbParameter("@D",new DateTime(2099,2,1)));
+    Exec(c,tx,"update ODEME set NODENEN=550 where PKNO=@P and BASTAR=@A and BITTAR=@B",new FbParameter("@P",testPk),new FbParameter("@A",payA),new FbParameter("@B",payB));
+    if(Convert.ToDecimal(Scalar(c,tx,"select NODENEN from ODEME where PKNO=@P and BASTAR=@A and BITTAR=@B",new FbParameter("@P",testPk),new FbParameter("@A",payA),new FbParameter("@B",payB)))!=550m)throw new Exception("ODEME update doğrulanamadı");
+    Exec(c,tx,"delete from ODEME where PKNO=@P and BASTAR=@A and BITTAR=@B",new FbParameter("@P",testPk),new FbParameter("@A",payA),new FbParameter("@B",payB));
+    log.AppendLine("ODEME insert/update/delete OK");
 
     Exec(c,tx,"delete from KIMLIK where PKNO=@PK",new FbParameter("@PK",testPk));
     log.AppendLine("KIMLIK delete OK");
@@ -84,6 +114,34 @@ int residue = Convert.ToInt32(Scalar(c,null,"select count(*) from KIMLIK where P
 log.AppendLine($"AFTER active={activeAfter} left={totalAfter-activeAfter} total={totalAfter} residue={residue}");
 if(activeBefore!=activeAfter || totalBefore!=totalAfter || residue!=0) throw new Exception("Rollback sonrası üretim DB sayıları değişti");
 log.AppendLine("PRODUCTION_DB_UNCHANGED OK");
+using(var diag=new FbCommand("select PS,PKNO,AD,SOYAD,IGTARIH,ICTARIH,ESDRM from KIMLIK where trim(coalesce(AD,''))='' or trim(coalesce(SOYAD,''))='' or ESDRM is null order by PS desc",c))
+using(var dr=diag.ExecuteReader())
+{
+    var suspicious=new List<string>();
+    while(dr.Read()) suspicious.Add($"{dr["PS"]}|{dr["PKNO"]}|{dr["AD"]}|{dr["SOYAD"]}|{dr["IGTARIH"]}|{dr["ICTARIH"]}|{dr["ESDRM"]}");
+    log.AppendLine($"DATA_SUSPICIOUS_PERSONNEL={suspicious.Count}");
+    foreach(var line in suspicious.Take(30)) log.AppendLine("DATA_SUSPECT|"+line);
+}
+if(string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_CLEAN_INVALID"),"1",StringComparison.Ordinal))
+{
+    var testCards=new List<string>();
+    using(var find=new FbCommand("select PKNO from KIMLIK where PKNO starting with '999' and (trim(coalesce(AD,''))='' or upper(AD) starting with 'UI TEST')",c))
+    using(var fr=find.ExecuteReader()) while(fr.Read()) testCards.Add(Convert.ToString(fr[0])??"");
+    foreach(var pk in testCards.Where(x=>x.Length>0))
+    {
+        foreach(var table in new[]{"GIRCIK","PUANTAJ","OZELIZIN","AVANS","ODEME","UCRETLER"})
+        {
+            try{using var dep=new FbCommand($"delete from {table} where PKNO=@P",c);dep.Parameters.Add(new FbParameter("@P",pk));dep.ExecuteNonQuery();}catch{}
+        }
+        using var clean=new FbCommand("delete from KIMLIK where PKNO=@P",c);clean.Parameters.Add(new FbParameter("@P",pk));clean.ExecuteNonQuery();
+    }
+    log.AppendLine($"DATA_CLEAN_INVALID={testCards.Count}");
+}
+using(var latest=new FbCommand("select first 12 PS,PKNO,AD,SOYAD,IGTARIH,ICTARIH,ESDRM from KIMLIK order by PS desc",c))
+using(var lr=latest.ExecuteReader())
+{
+    while(lr.Read()) log.AppendLine($"DATA_LATEST|{lr["PS"]}|{lr["PKNO"]}|{lr["AD"]}|{lr["SOYAD"]}|{lr["IGTARIH"]}|{lr["ICTARIH"]}|{lr["ESDRM"]}");
+}
 var terminalPk=Convert.ToString(Scalar(c,null,"select first 1 PKNO from KIMLIK where PKNO is not null order by PKNO"))??throw new Exception("Terminal smoke testi için personel bulunamadı");
 var terminalDate=new DateTime(2099,12,30);var terminalBefore=Convert.ToInt32(Scalar(c,null,"select count(*) from GIRCIK where PKNO=@P and GTARIH=@D",new FbParameter("@P",terminalPk),new FbParameter("@D",terminalDate)));
 var terminalResult=new AttendanceImportService(database).Import([new(terminalPk,terminalDate.AddHours(8),"1","SMOKE",TerminalDirection.Entry,"smoke-a"),new(terminalPk,terminalDate.AddHours(8).AddMinutes(4),"1","SMOKE",TerminalDirection.Entry,"smoke-b")],5,rollbackOnly:true);

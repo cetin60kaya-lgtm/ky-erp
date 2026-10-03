@@ -8,6 +8,7 @@ internal sealed class ModernHomeDashboard : UserControl
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
     readonly IReadOnlyDictionary<PdksCommandId,PdksCommandDescriptor> commands;
     readonly Action<PdksCommandId> execute;
+    readonly string displayName;
     Label activeValue = MetricValue();
     Label arrivedValue = MetricValue();
     Label leaveValue = MetricValue();
@@ -27,10 +28,11 @@ internal sealed class ModernHomeDashboard : UserControl
         PdksCommandId.Reports
     ];
 
-    public ModernHomeDashboard(IEnumerable<PdksCommandDescriptor> commandSet, Action<PdksCommandId> commandExecutor)
+    public ModernHomeDashboard(IEnumerable<PdksCommandDescriptor> commandSet, Action<PdksCommandId> commandExecutor, string? userDisplayName = null)
     {
         commands = commandSet.ToDictionary(x=>x.Id);
         execute = commandExecutor;
+        displayName = string.IsNullOrWhiteSpace(userDisplayName) ? "Kullanıcı" : userDisplayName.Trim();
         Dock = DockStyle.Fill;
         Font = new Font("Segoe UI",9f);
         DoubleBuffered = true;
@@ -91,7 +93,7 @@ internal sealed class ModernHomeDashboard : UserControl
         var hero = new Panel { Dock=DockStyle.Fill, BackColor=p.Canvas };
         hero.Controls.Add(new Label
         {
-            Text=$"İyi çalışmalar, {Environment.UserName}",
+            Text=$"İyi çalışmalar, {displayName}",
             Location=new Point(2,2),
             AutoSize=true,
             Font=new Font("Segoe UI",17f,FontStyle.Bold),
@@ -269,8 +271,8 @@ internal sealed class ModernHomeDashboard : UserControl
         }
         else
         {
-            terminalState.Text="●  Terminal: bağlantı profili hazır";
-            terminalState.ForeColor=p.Success;
+            terminalState.Text="●  Terminal: profil hazır";
+            terminalState.ForeColor=p.Muted;
             syncState.Text=$"Son veri alımı: {state.LastAt:dd.MM.yyyy HH:mm} • {state.ReadCount:N0} kayıt";
         }
     }

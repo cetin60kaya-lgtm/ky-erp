@@ -14,6 +14,7 @@ public sealed partial class MainShellForm
     bool? shellActivityOk=true;
     System.Windows.Forms.Timer? modernClockTimer;
     Button? activeNavButton;
+    Button? modernManageButton;
     Button? modernBackButton;
     readonly Dictionary<PdksCommandId,Button> modernNavButtons = [];
     bool appearanceHooked;
@@ -94,6 +95,7 @@ public sealed partial class MainShellForm
         {
             var title=modernPageTitle?.Text ?? "Genel Bakış";
             var hint=modernPageHint?.Text ?? "KY PDKS çalışma alanı";
+            var managementActive=string.Equals(title,"Yönetim Merkezi",StringComparison.OrdinalIgnoreCase);
             var selected=modernNavButtons.FirstOrDefault(x=>x.Value==activeNavButton).Key;
 
             if(workspace.Parent is not null)workspace.Parent.Controls.Remove(workspace);
@@ -102,11 +104,12 @@ public sealed partial class MainShellForm
                 Controls.Remove(modernShell);
                 modernShell.Dispose();
             }
-            modernShell=null;modernPageTitle=null;modernPageHint=null;modernDbState=null;modernActivityState=null;modernClock=null;activeNavButton=null;modernBackButton=null;
+            modernShell=null;modernPageTitle=null;modernPageHint=null;modernDbState=null;modernActivityState=null;modernClock=null;activeNavButton=null;modernManageButton=null;modernBackButton=null;
             modernClockTimer?.Stop();modernClockTimer?.Dispose();modernClockTimer=null;
             BuildModernShell();
             SetModernPage(title,hint);
-            if(Enum.IsDefined(selected))SelectNavForCommand(selected);
+            if(managementActive)SelectManagementNav();
+            else if(Enum.IsDefined(selected))SelectNavForCommand(selected);
         }
         if(InvokeRequired)BeginInvoke((Action)rebuild);else rebuild();
     }
@@ -193,11 +196,11 @@ public sealed partial class MainShellForm
         bottom.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         bottom.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
 
-        var manage=CompactButton("Yönetim",PdksToolbarIcon.Groups);
-        manage.Click+=(_,_)=>ShowManagementCenter();
+        modernManageButton=CompactButton("Yönetim",PdksToolbarIcon.Groups);
+        modernManageButton.Click+=(_,_)=>ShowManagementCenter();
         var theme=CompactButton($"Görünüm • {PdksAppearance.ModeLabel}",PdksToolbarIcon.Home);
         theme.Click+=(_,_)=>OpenThemeSettings();
-        bottom.Controls.Add(manage,0,0);
+        bottom.Controls.Add(modernManageButton,0,0);
         bottom.Controls.Add(theme,0,1);
         layout.Controls.Add(bottom,0,2);
 
@@ -279,6 +282,11 @@ public sealed partial class MainShellForm
     void SelectNavForCommand(PdksCommandId id)
     {
         var p=PdksAppearance.Current;
+        if(modernManageButton is not null && !modernManageButton.IsDisposed)
+        {
+            modernManageButton.BackColor=p.Sidebar;
+            modernManageButton.ForeColor=p.SidebarMuted;
+        }
         var primary=PrimaryParent(id);
         if(!modernNavButtons.TryGetValue(primary,out var button))return;
 
@@ -290,6 +298,20 @@ public sealed partial class MainShellForm
         activeNavButton=button;
         button.BackColor=p.SidebarHover;
         button.ForeColor=p.SidebarText;
+    }
+
+    void SelectManagementNav()
+    {
+        var p=PdksAppearance.Current;
+        if(activeNavButton is not null && !activeNavButton.IsDisposed)
+        {
+            activeNavButton.BackColor=p.Sidebar;
+            activeNavButton.ForeColor=p.SidebarMuted;
+        }
+        activeNavButton=null;
+        if(modernManageButton is null || modernManageButton.IsDisposed)return;
+        modernManageButton.BackColor=p.SidebarHover;
+        modernManageButton.ForeColor=p.SidebarText;
     }
 
     static PdksCommandId PrimaryParent(PdksCommandId id) => id switch
@@ -325,6 +347,7 @@ public sealed partial class MainShellForm
             ExecuteCommand);
         ShowEmbedded(view, "management-center", "Yönetim Merkezi");
         SetModernPage("Yönetim Merkezi", "Personel, puantaj, bordro, tanımlar ve sistem işlemleri");
+        SelectManagementNav();
     }
 
     Control BuildModernTopbar()

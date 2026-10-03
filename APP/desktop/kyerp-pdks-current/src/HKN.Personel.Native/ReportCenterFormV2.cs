@@ -75,7 +75,7 @@ public sealed class ReportCenterForm : Form
             Padding = new Padding(16),
             BackColor = p.Canvas
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 152));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
@@ -91,7 +91,7 @@ public sealed class ReportCenterForm : Form
         };
         filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        filterRoot.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         filterRoot.Controls.Add(new Label
         {
             Text = "Rapor ve Çıktı Merkezi",
@@ -116,7 +116,7 @@ public sealed class ReportCenterForm : Form
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
-        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 104));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 116));
 
         report.Dock=DockStyle.Fill;report.Margin=new Padding(0,5,12,5);
         from.Dock=DockStyle.Fill;from.Margin=new Padding(0,5,12,5);

@@ -1,4 +1,5 @@
 using FirebirdSql.Data.FirebirdClient;
+using KYERP.PDKS.Core;
 using System.Data;
 using System.Globalization;
 
@@ -45,16 +46,33 @@ public partial class PersonelForm
     void SaveEditorPerson(bool create,string oldPk,string newPk,Dictionary<string,TextBox> ed,Dictionary<string,ComboBox> cb)
     {
         if(create&&Convert.ToInt32(S("select count(*) from KIMLIK where PKNO=@PK",new FbParameter("@PK",newPk)))>0)throw new Exception("Bu Kart No zaten kayıtlı.");
-        if(create){int ps=Convert.ToInt32(S("select coalesce(max(PS),0)+1 from KIMLIK"));Exec("insert into KIMLIK (PS,PKNO,AD,SOYAD,GRUP,BOLUM,DURUM,GOREV,KULIZIN,CCKSAY) values (@PS,@PK,'','',1,1,2,1,0,0)",new FbParameter("@PS",ps),new FbParameter("@PK",newPk));}
         string target=create?newPk:oldPk;var set=new List<string>();var pars=new List<FbParameter>();
         foreach(var kv in ed.Where(x=>x.Key!="PKNO")){set.Add(kv.Key+"=@"+kv.Key);pars.Add(new FbParameter("@"+kv.Key,EditorDbValue(kv.Key,kv.Value.Text)));}
         foreach(var kv in cb){set.Add(kv.Key+"=@"+kv.Key);object v=kv.Value.SelectedItem is EditorLookupItem li?li.Code:DBNull.Value;pars.Add(new FbParameter("@"+kv.Key,v));}
-        pars.Add(new FbParameter("@PK",target));Exec("update KIMLIK set "+string.Join(',',set)+" where PKNO=@PK",pars.ToArray());
-        MessageBox.Show(create?"Yeni personel eklendi.":"Personel bilgileri güncellendi.","Personel Bilgileri");
+        db.InTransaction((connection,transaction)=>
+        {
+            if(create)
+            {
+                using var psCmd=FirebirdDatabase.CreateCommand(connection,transaction,"select coalesce(max(PS),0)+1 from KIMLIK");
+                int ps=Convert.ToInt32(psCmd.ExecuteScalar());
+                using var ins=FirebirdDatabase.CreateCommand(connection,transaction,"insert into KIMLIK (PS,PKNO,AD,SOYAD,GRUP,BOLUM,DURUM,GOREV,KULIZIN,CCKSAY,ESDRM) values (@PS,@PK,'','',1,1,2,1,0,0,0)",new FbParameter("@PS",ps),new FbParameter("@PK",newPk));
+                ins.ExecuteNonQuery();
+            }
+            var updatePars=pars.Concat(new[]{new FbParameter("@PK",target)}).ToArray();
+            using var upd=FirebirdDatabase.CreateCommand(connection,transaction,"update KIMLIK set "+string.Join(',',set)+" where PKNO=@PK",updatePars);
+            if(upd.ExecuteNonQuery()!=1)throw new InvalidOperationException("Personel kaydı güncellenemedi.");
+            if(ed.TryGetValue("ICTARIH",out var exitDate)&&string.IsNullOrWhiteSpace(exitDate.Text))
+            {
+                using var clearExit=FirebirdDatabase.CreateCommand(connection,transaction,"update KIMLIK set ICTARIH=null where PKNO=@PK",new FbParameter("@PK",target));
+                clearExit.ExecuteNonQuery();
+            }
+            return 0;
+        });
+        if(!string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT"),"1",StringComparison.Ordinal))MessageBox.Show(create?"Yeni personel eklendi.":"Personel bilgileri güncellendi.","Personel Bilgileri");
     }
     object EditorDbValue(string key,string raw)
     {
-        string s=raw.Trim();if(s.Length==0)return DBNull.Value;
+        string s=raw.Trim();if(s.Length==0)return key is "ESDRM" or "KULIZIN" or "CCKSAY" or "AYNO" or "ELBNO" or "EKC" ? 0m : DBNull.Value;
         string[] dates={"IGTARIH","ICTARIH","DTARIH","NCVTAR","EVTAR","SGKGIRTAR"};if(dates.Contains(key)){if(DateTime.TryParse(s,new CultureInfo("tr-TR"),DateTimeStyles.None,out var d))return d.Date;throw new Exception(key+" tarih alanı geçersiz.");}
         string[] nums={"MAAS","NSUCRET","MSUCRET","EMAAS","GYUCRET","GYEMUCRET","KULIZIN","CCKSAY","AYNO","ELBNO","EKC","ESDRM"};if(nums.Contains(key)){if(decimal.TryParse(s,NumberStyles.Any,new CultureInfo("tr-TR"),out var n)||decimal.TryParse(s,NumberStyles.Any,CultureInfo.InvariantCulture,out n))return n;throw new Exception(key+" sayısal alanı geçersiz.");}
         return s;

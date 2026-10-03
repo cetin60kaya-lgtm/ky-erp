@@ -148,7 +148,7 @@ public partial class PersonelForm : Form
 
     void LoadPerson(string pk)
     {
-        currentPk=pk; var dt=Q("select first 1 k.*,g.AD as GRUPAD,b.AD as BOLUMAD,s.AD as SERVISAD,d.AD as DURUMAD,go.AD as GOREVAD,fi.AD as FIRMAAD from KIMLIK k left join GRUP g on g.KOD=k.GRUP left join BOLUM b on b.KOD=k.BOLUM left join SERVIS s on s.KOD=k.SERVIS left join DURUM d on d.KOD=k.DURUM left join GOREV go on go.KOD=k.GOREV left join FIRMA fi on fi.KOD=k.SIRKET where k.PKNO=@PK",new FbParameter("@PK",pk));
+        personLoadTimer.Stop();pendingPersonPk=pk;currentPk=pk; var dt=Q("select first 1 k.*,g.AD as GRUPAD,b.AD as BOLUMAD,s.AD as SERVISAD,d.AD as DURUMAD,go.AD as GOREVAD,fi.AD as FIRMAAD from KIMLIK k left join GRUP g on g.KOD=k.GRUP left join BOLUM b on b.KOD=k.BOLUM left join SERVIS s on s.KOD=k.SERVIS left join DURUM d on d.KOD=k.DURUM left join GOREV go on go.KOD=k.GOREV left join FIRMA fi on fi.KOD=k.SIRKET where k.PKNO=@PK",new FbParameter("@PK",pk));
         if(dt.Rows.Count==0)return;
         var r=dt.Rows[0];
         foreach(var kv in f)
@@ -174,8 +174,9 @@ public partial class PersonelForm : Form
     void MarkExit()
     {
         if(currentPk=="")return;
-        if(MessageBox.Show("Personel pasif/çıkış olarak işaretlensin mi?","Personel",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
-        Exec("update KIMLIK set ICTARIH=coalesce(ICTARIH,current_date) where PKNO=@P",new FbParameter("@P",currentPk)); Reload();
+        var autoConfirm=string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT"),"1",StringComparison.Ordinal);
+        if(!autoConfirm&&MessageBox.Show("Personel pasif/çıkış olarak işaretlensin mi?","Personel",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+        Exec("update KIMLIK set ICTARIH=coalesce(ICTARIH,@D) where PKNO=@P",new FbParameter("@D",DateTime.Today),new FbParameter("@P",currentPk)); Reload();
     }
 
     public void SelectPerson(string cardNo)

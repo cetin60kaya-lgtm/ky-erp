@@ -29,11 +29,11 @@ public sealed class LegacyTerminalSettingsForm : Form
         Font = new Font("Segoe UI", 9f);
         BackColor = PdksAppearance.Current.Canvas;
         Build();
-        Shown += async (_, _) =>
+        Shown += (_, _) =>
         {
             LoadSettings();
             SetEditing(false);
-            await TestConnectionAsync(false);
+            SetStatus("Ayarlar hazır • Bağlantıyı test etmek için BAĞLANTI TEST'e basın.", null);
         };
     }
 

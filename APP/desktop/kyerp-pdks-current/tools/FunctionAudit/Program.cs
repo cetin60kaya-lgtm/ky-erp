@@ -21,6 +21,8 @@ var results = new List<string>();
 RunLiveAttendanceChecks(errors, results);
 RunLiveIsolationChecks(errors, results);
 RunOperationalTnfChecks(errors, results);
+RunPersonEditorValueChecks(errors, results);
+RunReportCenterChecks(errors, results);
 Application.ThreadException += (_, e) => errors.Add("UI: " + e.Exception.GetBaseException().Message);
 
 var user = new LocalUser
@@ -105,6 +107,73 @@ Console.WriteLine($"FUNCTION_AUDIT_ERRORS={errors.Distinct().Count()}");
 Console.WriteLine(errors.Count == 0 ? "FUNCTION_AUDIT_PASS" : "FUNCTION_AUDIT_FAIL");
 shell.Close();
 Environment.Exit(errors.Count == 0 ? 0 : 1);
+
+static void RunPersonEditorValueChecks(List<string> errors, List<string> results)
+{
+    try
+    {
+        using var form = new PersonelForm();
+        var method = typeof(PersonelForm).GetMethod("EditorDbValue", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Personel editor değer dönüştürücü bulunamadı.");
+        var esdrm = method.Invoke(form, new object[] { "ESDRM", "" });
+        var ccks = method.Invoke(form, new object[] { "CCKSAY", "" });
+        var normal = method.Invoke(form, new object[] { "ADRES", "" });
+        if (Convert.ToDecimal(esdrm) != 0m || Convert.ToDecimal(ccks) != 0m || normal != DBNull.Value)
+            throw new InvalidOperationException("Boş sayısal alan varsayılanları doğru değil.");
+        results.Add("PASS|Personel editör boş zorunlu sayısal alanları 0 olarak kaydediyor");
+    }
+    catch (Exception ex)
+    {
+        var e = ex is TargetInvocationException tie && tie.InnerException is not null ? tie.InnerException.GetBaseException() : ex.GetBaseException();
+        errors.Add("Personel editör değer testi: " + e.Message);
+        results.Add("FAIL|Personel editör boş sayısal alan testi|" + e.Message);
+    }
+}
+
+static void RunReportCenterChecks(List<string> errors, List<string> results)
+{
+    try
+    {
+        using var form = new ReportCenterForm();
+        var type = typeof(ReportCenterForm);
+        var reportsField = type.GetField("Reports", BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Rapor kataloğu bulunamadı.");
+        var query = type.GetMethod("Query", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Rapor sorgu metodu bulunamadı.");
+        var reports = reportsField.GetValue(null) as string[]
+            ?? throw new InvalidOperationException("Rapor kataloğu okunamadı.");
+
+        var failed = 0;
+        var totalRows = 0;
+        foreach (var report in reports)
+        {
+            try
+            {
+                var table = query.Invoke(form, new object[] { report }) as System.Data.DataTable
+                    ?? throw new InvalidOperationException("Rapor DataTable döndürmedi.");
+                totalRows += table.Rows.Count;
+                results.Add($"PASS|RAPOR > {report}|{table.Rows.Count} kayıt");
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                var baseError = ex is TargetInvocationException tie && tie.InnerException is not null
+                    ? tie.InnerException.GetBaseException()
+                    : ex.GetBaseException();
+                errors.Add($"Rapor sorgusu [{report}]: {baseError.Message}");
+                results.Add($"FAIL|RAPOR > {report}|{baseError.Message}");
+            }
+        }
+
+        results.Add(failed == 0
+            ? $"PASS|Rapor merkezi tüm sorgular|{reports.Length} rapor, {totalRows} toplam satır"
+            : $"FAIL|Rapor merkezi tüm sorgular|{failed}/{reports.Length} hata");
+    }
+    catch (Exception ex)
+    {
+        errors.Add("Rapor merkezi toplu sorgu testi: " + ex.GetBaseException().Message);
+    }
+}
 
 static void RunOperationalTnfChecks(List<string> errors, List<string> results)
 {
