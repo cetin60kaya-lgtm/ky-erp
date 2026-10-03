@@ -16,7 +16,7 @@ public sealed class QuickDataSourceForm : Form
         MultiSelect=false,
         SelectionMode=DataGridViewSelectionMode.FullRowSelect,
         AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
-        BackgroundColor=Color.White,
+        BackgroundColor=PdksAppearance.Current.Surface,
         BorderStyle=BorderStyle.None,
         RowHeadersVisible=false
     };
@@ -41,8 +41,8 @@ public sealed class QuickDataSourceForm : Form
 
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(16),RowCount=5,ColumnCount=1,BackColor=p.Canvas};
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,88));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,94));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,94));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,108));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,108));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
@@ -83,7 +83,7 @@ public sealed class QuickDataSourceForm : Form
         var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=2,BackColor=p.Surface,Margin=Padding.Empty};
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,116));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
         var title=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Surface,Margin=Padding.Empty};
