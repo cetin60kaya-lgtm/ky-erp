@@ -85,7 +85,7 @@ using (var personnel = new PersonelForm())
     if (!tabs.TabPages.Cast<TabPage>().Select(x => x.Text).SequenceEqual(expected))
         throw new InvalidOperationException("Personel sekmeleri bozulmuş.");
     var inner = Descendants(tabs.TabPages[0]).OfType<TabControl>().First();
-    string[] innerExpected = ["Temel Bilgiler", "Kimlik", "İletişim / Kişisel", "Ehliyet / Belgeler", "İş / SGK", "Ek Ödemeler"];
+    string[] innerExpected = ["Temel Bilgiler", "Kimlik", "İletişim / Kişisel", "Ehliyet / Belgeler", "İş / SGK", "Ek Ödemeler", "Bordro / SGK"];
     if (!inner.TabPages.Cast<TabPage>().Select(x => x.Text).SequenceEqual(innerExpected))
         throw new InvalidOperationException("Personel bilgi iç sekmeleri bozulmuş.");
 }
