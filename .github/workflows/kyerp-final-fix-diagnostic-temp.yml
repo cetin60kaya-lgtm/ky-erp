@@ -1,15 +1,14 @@
 name: KYERP Final Fix Diagnostic TEMP
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - '.github/workflows/kyerp-final-fix-diagnostic-temp.yml'
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: manual-final-diagnostic-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ik-monthly-full-check:
