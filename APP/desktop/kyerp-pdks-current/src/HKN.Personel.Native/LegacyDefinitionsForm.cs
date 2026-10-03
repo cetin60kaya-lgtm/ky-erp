@@ -147,11 +147,12 @@ public sealed class LegacyDefinitionsForm : Form
         body.Controls.Add(new Panel{Dock=DockStyle.Fill,BackColor=p.Canvas},1,0);
 
         var editCard=PdksUiKit.Card();
-        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=7,Padding=new Padding(20),BackColor=p.Surface};
+        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=8,Padding=new Padding(20),BackColor=p.Surface};
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,135));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         editor.RowStyles.Clear();
         editor.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
         for(var row=1;row<7;row++)editor.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
+        editor.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         editor.Controls.Add(PdksUiKit.SectionTitle("Alan Bilgileri"),0,0);editor.SetColumnSpan(editor.GetControlFromPosition(0,0)!,2);
 
         var code=new Label{Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",10f,FontStyle.Bold),ForeColor=p.Text};bordro["KOD"]=code;DefRow(editor,1,"Alan Kodu",code);
@@ -160,7 +161,7 @@ public sealed class LegacyDefinitionsForm : Form
         var type=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};type.Items.AddRange(["Normal Mesai","Fazla Mesai","Ücretsiz İzin","Ücretli İzin"]);bordro["TIP"]=type;DefRow(editor,4,"Alan Türü",type);
         var factor=new TextBox{Dock=DockStyle.Fill,ReadOnly=true,MaxLength=3};bordro["CARPAN"]=factor;DefRow(editor,5,"Katsayı",factor);
         var field=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};field.Items.AddRange(["Normal Çalışma","Fazla Mesai"]);bordro["CALAN"]=field;DefRow(editor,6,"Alan",field);
-        var bcode=new TextBox{Visible=false};bordro["BKOD"]=bcode;editor.Controls.Add(bcode);
+        var bcode=new TextBox{Visible=false};bordro["BKOD"]=bcode;
         editCard.Controls.Add(editor);body.Controls.Add(editCard,2,0);root.Controls.Add(body,0,0);
 
         var actions=PdksUiKit.ActionBar();
