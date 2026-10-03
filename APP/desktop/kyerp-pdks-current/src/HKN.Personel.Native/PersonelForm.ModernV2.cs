@@ -2,12 +2,12 @@ namespace HKN.Personel.Native;
 
 public partial class PersonelForm
 {
-    static readonly Color UiCanvas = Color.FromArgb(244,247,251);
-    static readonly Color UiSurface = Color.White;
-    static readonly Color UiBorder = Color.FromArgb(226,232,240);
-    static readonly Color UiText = Color.FromArgb(15,23,42);
-    static readonly Color UiMuted = Color.FromArgb(100,116,139);
-    static readonly Color UiPrimary = Color.FromArgb(37,99,235);
+    static Color UiCanvas => PdksAppearance.Current.Canvas;
+    static Color UiSurface => PdksAppearance.Current.Surface;
+    static Color UiBorder => PdksAppearance.Current.Border;
+    static Color UiText => PdksAppearance.Current.Text;
+    static Color UiMuted => PdksAppearance.Current.Muted;
+    static Color UiPrimary => PdksAppearance.Current.Primary;
 
     void BuildUiModernV2()
     {
@@ -58,14 +58,14 @@ public partial class PersonelForm
         list.RowTemplate.Height = 32;
         list.ColumnHeadersHeight = 36;
         list.EnableHeadersVisualStyles = false;
-        list.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(248,250,252);
+        list.ColumnHeadersDefaultCellStyle.BackColor = PdksAppearance.Current.SurfaceAlt;
         list.ColumnHeadersDefaultCellStyle.ForeColor = UiMuted;
         list.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
         list.DefaultCellStyle.BackColor = UiSurface;
         list.DefaultCellStyle.ForeColor = UiText;
-        list.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219,234,254);
+        list.DefaultCellStyle.SelectionBackColor = PdksAppearance.Current.Selection;
         list.DefaultCellStyle.SelectionForeColor = UiText;
-        list.GridColor = Color.FromArgb(241,245,249);
+        list.GridColor = PdksAppearance.Current.GridHeader;
         leftLayout.Controls.Add(list, 0, 1);
 
         leftLayout.Controls.Add(BuildModernListActions(), 0, 2);
@@ -247,7 +247,7 @@ public partial class PersonelForm
             Dock = DockStyle.Fill,
             ReadOnly = !editable,
             BorderStyle = BorderStyle.FixedSingle,
-            BackColor = editable ? Color.White : Color.FromArgb(248,250,252),
+            BackColor = editable ? Color.White : PdksAppearance.Current.SurfaceAlt,
             ForeColor = UiText,
             Margin = new Padding(0, 3, 12, 3)
         };
