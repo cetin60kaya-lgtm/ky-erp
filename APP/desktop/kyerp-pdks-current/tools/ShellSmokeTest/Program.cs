@@ -66,6 +66,16 @@ if (form.Controls.OfType<ToolStrip>().Any(x => x is not MenuStrip && x.Visible))
 var palette = PdksAppearance.Current;
 if (palette.Primary == palette.Canvas)
     throw new InvalidOperationException("Tema vurgu rengi tuval renginden ayrı olmalı.");
+if (PdksAppearance.SidebarMode == PdksSidebarMode.Light && palette.Sidebar != Color.White)
+    throw new InvalidOperationException("Açık sol menü ayarı uygulanmıyor.");
+
+using (var operations = new OperationsCenterForm(PdksCommandCatalog.All, _ => { }))
+{
+    var texts=Descendants(operations).OfType<Label>().Select(x=>x.Text ?? string.Empty)
+        .Concat(Descendants(operations).OfType<Button>().Select(x=>x.Text ?? string.Empty)).ToArray();
+    foreach(var required in new[]{"Terminalden Al","Canlı Kontrol","Eksikleri Düzelt","İzin / Ek Kayıt","Puantaja Geç"})
+        if(!texts.Contains(required)) throw new InvalidOperationException("Operasyon adımı eksik: "+required);
+}
 
 using (var settings = new LegacyTerminalSettingsForm())
 {
@@ -93,7 +103,7 @@ using (var personnel = new PersonelForm())
 using (var attendance = new LegacyGirisCikisForm())
 {
     var buttons = Descendants(attendance).OfType<Button>().Select(x => x.Text ?? string.Empty).ToArray();
-    foreach (var required in new[] { "Göster", "Yeni Kayıt", "Düzenle", "Rapor" })
+    foreach (var required in new[] { "Göster", "+ Yeni Kayıt", "Düzenle", "Rapor", "Diğer İşlemler ▾" })
         if (!buttons.Contains(required)) throw new InvalidOperationException("Giriş/Çıkış komutu eksik: " + required);
     if (!Descendants(attendance).OfType<DataGridView>().Any())
         throw new InvalidOperationException("Giriş/Çıkış listesi yok.");
