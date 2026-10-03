@@ -16,7 +16,7 @@ public partial class PersonelForm
     bool refreshingFullTabs;
     bool fullTabsReady;
 
-    static DataGridView Grid(string name)=>new(){Name=name,Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
+    static DataGridView Grid(string name)=>new(){Name=name,Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=PdksAppearance.Current.Surface};
 
     void InitializePersonelBehavior()
     {
@@ -81,7 +81,7 @@ public partial class PersonelForm
             if(name=="Giriş / Çıkış"){var a=gFrom.Value.Date;var b=gTo.Value.Date.AddDays(1);gGiris.DataSource=Q("select SIRA,GTARIH as GIRIS_TARIHI,GSAAT as GIRIS_SAATI,CTARIH as CIKIS_TARIHI,CSAAT as CIKIS_SAATI,GTUR,CTUR from GIRCIK where PKNO=@PK and ((GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B)) order by coalesce(GTARIH,CTARIH)",new FbParameter("@PK",pk),new FbParameter("@A",a),new FbParameter("@B",b));}
             else if(name=="İzinler"){var a=iFrom.Value.Date;var b=iTo.Value.Date.AddDays(1);gIzin.DataSource=Q("select SIRA,TARIH,BASSAAT,BITSAAT,SURESAAT,SUREDAKIKA,EBALAN,TIP,MAZERET from OZELIZIN where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",pk),new FbParameter("@A",a),new FbParameter("@B",b));}
             else if(name=="Kazanç / Kesinti"){var a=eFrom.Value.Date;var b=eTo.Value.Date.AddDays(1);gEkk.DataSource=Q("select KOD,TARIH as ISLEM_TARIHI,VTARIH as VERILIS_TARIHI,TURKOD as TURU,MIKTAR,ACIKLAMA from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",pk),new FbParameter("@A",a),new FbParameter("@B",b));}
-            else if(name is "Puantaj Bilgisi" or "Ödemeler") LoadBilgiOdemeClassic();
+            else if(name is "Puantaj" or "Ödeme Özeti") LoadBilgiOdemeClassic();
         }
         finally { refreshingFullTabs=false; }
     }
@@ -120,7 +120,8 @@ public partial class PersonelForm
     {
         var d=PeriodDates(periodB);var b=d.B.AddDays(1);
         gBilgi.DataSource=Q("select TARIH,GIRIS as NC,SAAT2 as M50,SAAT3 as M100,SAAT4 as UIZIN,SAAT5,SAAT6,SAAT7,SAAT8,SAAT9,DEVAMSIZLIKS as DEVAMSIZLIK,GECS as GEC_KALMA,EKSIKS as EKSIK_SURE from PUANTAJ where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",currentPk),new FbParameter("@A",d.A),new FbParameter("@B",b));
-        gBilgi.DefaultCellStyle.BackColor=Color.Black;gBilgi.DefaultCellStyle.ForeColor=Color.White;gBilgi.ColumnHeadersDefaultCellStyle.BackColor=SystemColors.Control;gBilgi.ColumnHeadersDefaultCellStyle.ForeColor=Color.Black;gBilgi.EnableHeadersVisualStyles=false;
+        var palette=PdksAppearance.Current;
+        gBilgi.DefaultCellStyle.BackColor=palette.Surface;gBilgi.DefaultCellStyle.ForeColor=palette.Text;gBilgi.ColumnHeadersDefaultCellStyle.BackColor=palette.GridHeader;gBilgi.ColumnHeadersDefaultCellStyle.ForeColor=palette.Text;gBilgi.EnableHeadersVisualStyles=false;
         d=PeriodDates(periodO);b=d.B.AddDays(1);var pu=Q("select coalesce(sum(GUN1),0) NG,coalesce(sum(DAKIKA1),0) ND,coalesce(sum(DEVAMSIZLIKG),0) DG,coalesce(sum(GECG),0) GG,coalesce(sum(ERKENG),0) EG,coalesce(sum(EKSIKG),0) XG from PUANTAJ where PKNO=@PK and TARIH>=@A and TARIH<@B",new FbParameter("@PK",currentPk),new FbParameter("@A",d.A),new FbParameter("@B",b));
         var kr=Q("select MAAS from KIMLIK where PKNO=@PK",new FbParameter("@PK",currentPk));decimal maas=kr.Rows.Count==0||kr.Rows[0][0]==DBNull.Value?0:Convert.ToDecimal(kr.Rows[0][0]);var r=pu.Rows[0];decimal ng=Convert.ToDecimal(r["NG"]),dg=Convert.ToDecimal(r["DG"]);
         var finance=Q("select coalesce(sum(case when TURKOD=1 then MIKTAR else 0 end),0) EK,coalesce(sum(case when TURKOD=2 then MIKTAR else 0 end),0) KES from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B",new FbParameter("@PK",currentPk),new FbParameter("@A",d.A),new FbParameter("@B",b)).Rows[0];
