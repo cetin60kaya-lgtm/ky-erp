@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import * as XLSX from "xlsx";
+import { getAuthenticatedUser } from "./auth-cloud.ts";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -27,6 +28,19 @@ const number = (value: unknown) => {
 };
 const flag = (value: unknown) => value === true || value === 1 || value === "1";
 const nowIso = () => new Date().toISOString();
+
+function ikAdminRole(role: unknown) {
+  return ["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(upper(role));
+}
+
+function normalizeHknPersonnelCode(value: unknown) {
+  const raw = upper(value).replace(/\s+/g, "");
+  const match = raw.match(/^(?:HKN-?)?(\d+)$/);
+  if (!match) return "";
+  const numberValue = Number(match[1]);
+  if (!Number.isInteger(numberValue) || numberValue < 1 || numberValue > 99999) return "";
+  return `HKN-${String(numberValue).padStart(2, "0")}`;
+}
 
 export function canonicalHrCompanyId(value: unknown) {
   const normalized = text(value)
@@ -1496,6 +1510,112 @@ async function savePersonCard(c: Context<AppEnv>) {
     personnelStatus, period, sgkCovered, sgkDays, effectiveDate, changedFields: trackedChanges.map(([field]) => field),
   });
 }
+async function adminMaintainPerson(c: Context<AppEnv>) {
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c, body);
+  const employeeId = text(c.req.param("employeeId"));
+  const user = await getAuthenticatedUser(c);
+  if (!user) return error(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
+  if (!ikAdminRole(user.role)) {
+    return error(c, 403, "ADMIN_REQUIRED", "Personel numarası değiştirme ve kalıcı silme yalnız yönetici onayıyla yapılabilir.");
+  }
+
+  const current = await first(c, "SELECT * FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  if (!current) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
+  const currentCode = normalizeHknPersonnelCode(current.code) || text(current.code);
+  const action = upper(body.action);
+  const reason = text(body.reason);
+
+  if (action === "RECODE") {
+    const nextCode = normalizeHknPersonnelCode(body.personnelCode || body.code);
+    if (!nextCode) return error(c, 400, "PERSONNEL_CODE_INVALID", "Personel kodu HKN-01 biçiminde olmalıdır.");
+    if (nextCode === currentCode) return okData(c, { employeeId, code: currentCode, changed: false });
+    if (upper(body.confirmText) !== upper(currentCode)) {
+      return error(c, 400, "ADMIN_CONFIRMATION_REQUIRED", `Numara değişikliği için mevcut kodu (${currentCode}) onay alanına yazın.`);
+    }
+    const duplicate = await first(c, "SELECT id,full_name FROM hr_monthly_employees WHERE main_company_id=? AND UPPER(TRIM(code))=UPPER(TRIM(?)) AND id<>? LIMIT 1", [companyId, nextCode, employeeId]);
+    if (duplicate) return error(c, 409, "DUPLICATE_PERSONNEL_CODE", `${nextCode} başka bir personele ait.`);
+
+    const timestamp = nowIso();
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE hr_monthly_employees SET code=?,updated_at=? WHERE id=? AND main_company_id=?").bind(nextCode, timestamp, employeeId, companyId),
+      c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,personel_kodu,updated_at)
+        VALUES (?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET personel_kodu=excluded.personel_kodu,updated_at=excluded.updated_at`)
+        .bind(employeeId, companyId, nextCode, timestamp),
+      c.env.DB.prepare(`INSERT INTO ik_employee_change_history
+        (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        .bind(crypto.randomUUID(), companyId, employeeId, "ADMIN_PERSONNEL_CODE", "personnelCode", currentCode, nextCode, hrTodayIstanbul(), reason || "Yönetici onayıyla personel kodu değiştirildi.", text(user.id), timestamp),
+    ]);
+    await audit(c, {
+      mainCompanyId: companyId,
+      employeeId,
+      entityType: "PERSONEL",
+      action: "ADMIN_RECODE",
+      summary: `${text(current.full_name)} personel kodu ${currentCode} → ${nextCode} değiştirildi.`,
+      details: { oldCode: currentCode, newCode: nextCode, reason, actorUserId: text(user.id), actorRole: text(user.role) },
+    });
+    return okData(c, { employeeId, oldCode: currentCode, code: nextCode, changed: true });
+  }
+
+  if (action !== "HARD_DELETE") {
+    return error(c, 400, "ADMIN_ACTION_INVALID", "Yönetici işlemi RECODE veya HARD_DELETE olmalıdır.");
+  }
+  const expectedConfirm = `SİL ${currentCode}`;
+  if (upper(body.confirmText) !== upper(expectedConfirm)) {
+    return error(c, 400, "ADMIN_CONFIRMATION_REQUIRED", `Kalıcı silme için "${expectedConfirm}" yazılmalıdır.`);
+  }
+  if (reason.length < 5) return error(c, 400, "DELETE_REASON_REQUIRED", "Kalıcı silme için neden yazılmalıdır.");
+
+  const tables = await all(c, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
+  const cleanupTables = new Set(["ik_person_card_settings", "ik_person_hr_profiles", "ik_person_monthly_compliance"]);
+  const auditTables = new Set(["ik_employee_change_history", "hr_monthly_audit_logs", "ik_audit_logs", "auth_security_audit"]);
+  const blockers: Array<{ table: string; count: number }> = [];
+  for (const row of tables) {
+    const table = text(row.name);
+    if (!/^[A-Za-z0-9_]+$/.test(table) || table === "hr_monthly_employees" || cleanupTables.has(table) || auditTables.has(table)) continue;
+    let columns: Row[] = [];
+    try { columns = await all(c, `SELECT name FROM pragma_table_info('${table}')`); } catch { continue; }
+    const names = new Set(columns.map((column) => text(column.name)));
+    const employeeColumn = names.has("employee_id") ? "employee_id" : names.has("person_id") ? "person_id" : "";
+    if (!employeeColumn) continue;
+    try {
+      const countRow = await first(c, `SELECT COUNT(*) AS count FROM "${table}" WHERE "${employeeColumn}"=?`, [employeeId]);
+      const count = number(countRow?.count);
+      if (count > 0) blockers.push({ table, count });
+    } catch {}
+  }
+  if (blockers.length) {
+    return error(c, 409, "PERSONNEL_HAS_OPERATIONAL_HISTORY",
+      "Bu personelin maaş/izin/mesai/evrak veya diğer operasyon geçmişi var. Kayıt silinemez; işten çıkış tarihi ile pasife alınmalıdır.");
+  }
+
+  const timestamp = nowIso();
+  try { await c.env.DB.prepare("UPDATE ik_person_card_settings SET base_employee_id=NULL,updated_at=? WHERE base_employee_id=?").bind(timestamp, employeeId).run(); } catch {}
+  for (const table of cleanupTables) {
+    try {
+      const exists = await first(c, "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", [table]);
+      if (exists?.name) await c.env.DB.prepare(`DELETE FROM "${table}" WHERE employee_id=?`).bind(employeeId).run();
+    } catch {}
+  }
+  try {
+    await c.env.DB.prepare("DELETE FROM json_store WHERE scope='IK_PERSON_CARD_CALC' AND file_name LIKE ?").bind(`%${employeeId}%`).run();
+  } catch {}
+
+  const deleted = await c.env.DB.prepare("DELETE FROM hr_monthly_employees WHERE id=? AND main_company_id=?").bind(employeeId, companyId).run();
+  if (!number(deleted.meta?.changes)) return error(c, 500, "HARD_DELETE_FAILED", "Personel ana kaydı silinemedi.");
+
+  await audit(c, {
+    mainCompanyId: companyId,
+    employeeId: null,
+    entityType: "PERSONEL",
+    action: "ADMIN_HARD_DELETE",
+    summary: `${text(current.full_name)} (${currentCode}) yanlış/mükerrer personel kaydı yönetici onayıyla kalıcı silindi.`,
+    details: { deletedEmployeeId: employeeId, code: currentCode, fullName: text(current.full_name), reason, actorUserId: text(user.id), actorRole: text(user.role) },
+  });
+  return okData(c, { employeeId, code: currentCode, fullName: text(current.full_name), deleted: true });
+}
+
 async function saveAdvancedBulkCompensation(c: Context<AppEnv>) {
   const body = await bodyOf(c);
   const companyId = companyIdOf(c, body);
@@ -2708,6 +2828,7 @@ export function registerIkRelationalCloudRoutes(app: Hono<AppEnv>) {
   app.post("/api/ik/advanced/leave/preview", protect(async (c) => (await previewAdvancedLeaveV2(c)) as Response));
   app.post("/api/ik/advanced/leave/policy", protect(saveAdvancedLeavePolicyV2));
   app.post("/api/ik/advanced/person-card/:employeeId", protect(savePersonCard));
+  app.post("/api/ik/advanced/person-card/:employeeId/admin-maintenance", protect(adminMaintainPerson));
   app.post("/api/ik/advanced/compensation/bulk", protect(saveAdvancedBulkCompensation));
   app.post("/api/ik/advanced/finance-movement", protect(saveAdvancedFinance));
   app.post("/api/ik/advanced/finance-movement/update", protect(updateAdvancedFinance));

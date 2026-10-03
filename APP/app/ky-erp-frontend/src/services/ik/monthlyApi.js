@@ -60,6 +60,10 @@ export async function saveIkAdvancedPersonCard(employeeId, payload = {}) {
   return postAndPublish(`/ik/advanced/person-card/${encodeURIComponent(employeeId)}`, payload, "person-card");
 }
 
+export async function adminMaintainIkAdvancedPerson(employeeId, payload = {}) {
+  return postAndPublish(`/ik/advanced/person-card/${encodeURIComponent(employeeId)}/admin-maintenance`, payload, "person-admin-maintenance");
+}
+
 export async function saveIkAdvancedBulkCompensation(payload = {}) {
   return postAndPublish("/ik/advanced/compensation/bulk", payload, "compensation-bulk");
 }
