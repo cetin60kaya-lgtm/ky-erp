@@ -17,7 +17,7 @@ public partial class PersonelForm
     {
         if (payrollPekMode.Items.Count == 0)
         {
-            payrollPekMode.Items.AddRange(["Mevzuata göre otomatik", "Manuel PEK"]);
+            payrollPekMode.Items.AddRange(["Mevzuata göre otomatik", "Sabit PEK (tek tanım)"]);
             payrollPekMode.SelectedIndex = 0;
         }
 
@@ -36,7 +36,7 @@ public partial class PersonelForm
         table.Controls.Add(payrollNetEntitlement,1,0);
         table.Controls.Add(PayrollCaption("PEK Modu"),2,0);
         table.Controls.Add(payrollPekMode,3,0);
-        table.Controls.Add(PayrollCaption("Manuel PEK"),4,0);
+        table.Controls.Add(PayrollCaption("Sabit PEK (tek tanım)"),4,0);
         table.Controls.Add(payrollManualPek,5,0);
 
         table.Controls.Add(PayrollCaption("2026 Asgari"),0,1);
@@ -106,7 +106,7 @@ public partial class PersonelForm
             payrollDifference.Text = difference.ToString("N2") + " ₺";
 
             if (payrollPekMode.SelectedIndex == 1 && gross + 0.01m < requiredGross && payrollNetEntitlement.Value > official.NetWage + 0.01m)
-                payrollWarning.Text = "UYARI: Manuel PEK, tanımlı net hakedişi üretecek mevzuat brütünden düşük. Bu fark otomatik olarak elden ödeme sayılmaz; resmî bordro/PEK uyumu ayrıca kontrol edilmelidir.";
+                payrollWarning.Text = "UYARI: Sabit PEK, tanımlı net hakedişi üretecek mevzuat brütünden düşük. Bu fark otomatik olarak elden ödeme sayılmaz; resmî bordro/PEK uyumu ayrıca kontrol edilmelidir.";
             else
                 payrollWarning.Text = "İç hakediş ve resmî bordro ayrı hesaplanır. Banka tutarı resmî bordro netinden türetilir; fark yalnız mutabakat bilgisidir.";
         }
