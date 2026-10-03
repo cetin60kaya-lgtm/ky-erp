@@ -11,6 +11,8 @@ foreach (var key in new[] { "KY_PDKS_DB_PATH", "KY_PDKS_DB_HOST", "KY_PDKS_DB_PO
     if (!string.IsNullOrWhiteSpace(value)) Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.Process);
 }
 
+ApplyAuditAppearanceFromEnvironment();
+
 var noLoad = string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_NOLOAD"), "1", StringComparison.Ordinal);
 var visibleAudit = string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_VISIBLE"), "1", StringComparison.Ordinal);
 var workspaceRoot = Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT") ?? Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT", EnvironmentVariableTarget.User);
@@ -23,6 +25,10 @@ var root = Path.Combine(driveRoot, DateTime.Now.ToString("yyyyMMdd-HHmmss"));
 Directory.CreateDirectory(root);
 var log = new StringBuilder();
 var errors = new List<string>();
+var auditSizeLabel = Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_SIZE") ?? "native";
+var auditConfig = $"Theme={PdksAppearance.Mode}|Accent={PdksAppearance.Accent}|Sidebar={PdksAppearance.SidebarMode}|Size={auditSizeLabel}";
+log.AppendLine("AUDIT_CONFIG|" + auditConfig);
+Console.WriteLine("UI_AUDIT_CONFIG=" + auditConfig);
 
 var user = new LocalUser
 {
@@ -131,6 +137,7 @@ Environment.ExitCode = errors.Count == 0 ? 0 : 1;
 
 static void CaptureFormNoLoad(Form form, string name, string root, StringBuilder log, List<string> errors)
 {
+    ApplyAuditSize(form);
     form.CreateControl();
     form.PerformLayout();
     log.AppendLine($"FORM-NOLOAD|{name}|{form.Text}|{form.Width}x{form.Height}");
@@ -141,6 +148,7 @@ static void CaptureFormNoLoad(Form form, string name, string root, StringBuilder
 
 static void CaptureForm(Form form, string name, string root, StringBuilder log, List<string> errors, bool visibleAudit)
 {
+    ApplyAuditSize(form);
     form.StartPosition = FormStartPosition.Manual;
     form.ShowInTaskbar = false;
     form.Location = visibleAudit ? new Point(40, 40) : new Point(-32000, -32000);
@@ -308,6 +316,39 @@ static IEnumerable<Control> Descendants(Control root)
         yield return child;
         foreach (var descendant in Descendants(child)) yield return descendant;
     }
+}
+
+static void ApplyAuditAppearanceFromEnvironment()
+{
+    var modeText = Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_THEME");
+    var accentText = Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_ACCENT");
+    var sidebarText = Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_SIDEBAR");
+    if (string.IsNullOrWhiteSpace(modeText) && string.IsNullOrWhiteSpace(accentText) && string.IsNullOrWhiteSpace(sidebarText)) return;
+
+    _ = PdksAppearance.Current;
+    const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
+    var type = typeof(PdksAppearance);
+
+    if (Enum.TryParse<PdksThemeMode>(modeText, true, out var mode))
+        type.GetField("mode", flags)?.SetValue(null, mode);
+    if (Enum.TryParse<PdksAccent>(accentText, true, out var accent))
+        type.GetField("accent", flags)?.SetValue(null, accent);
+    if (Enum.TryParse<PdksSidebarMode>(sidebarText, true, out var sidebar))
+        type.GetField("sidebarMode", flags)?.SetValue(null, sidebar);
+}
+
+static void ApplyAuditSize(Form form)
+{
+    var raw = Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT_SIZE");
+    if (string.IsNullOrWhiteSpace(raw)) return;
+    var parts = raw.ToLowerInvariant().Split('x', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    if (parts.Length != 2 || !int.TryParse(parts[0], out var width) || !int.TryParse(parts[1], out var height)) return;
+    if (width < 640 || height < 480) return;
+
+    form.WindowState = FormWindowState.Normal;
+    form.MinimumSize = Size.Empty;
+    form.MaximumSize = Size.Empty;
+    form.Size = new Size(width, height);
 }
 
 static string Safe(string value)

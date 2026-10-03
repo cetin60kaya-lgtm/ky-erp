@@ -1,24 +1,83 @@
 using HKN.Personel.Native;
 
 ApplicationConfiguration.Initialize();
-foreach (var key in new[] { "KY_PDKS_DB_PATH", "KY_PDKS_DB_HOST", "KY_PDKS_DB_PORT", "KY_PDKS_DB_USER", "KY_PDKS_DB_PASSWORD", "KY_PDKS_RUNTIME_ROOT", "KY_PDKS_REPORT_ROOT", "KY_PDKS_PERSONEL_EXE" })
+foreach (var key in new[] { "KY_PDKS_DB_PATH", "KY_PDKS_DB_HOST", "KY_PDKS_DB_PORT", "KY_PDKS_DB_USER", "KY_PDKS_DB_PASSWORD", "KYERP_PDKS_ROOT", "KY_PDKS_RUNTIME_ROOT", "KY_PDKS_REPORT_ROOT", "KY_PDKS_PERSONEL_EXE" })
 {
     if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key))) continue;
     var value = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User);
     if (!string.IsNullOrWhiteSpace(value)) Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.Process);
 }
-var admin = new LocalUser { UserName="ADMIN", IsActive=true, IsAdmin=true, IsCompanyResponsible=true, Permissions=Enum.GetNames<PdksModule>().ToList() };
+
+PdksTheme.Install();
+Environment.SetEnvironmentVariable("KY_PDKS_UI_AUDIT", "1", EnvironmentVariableTarget.Process);
+
+var expectedPrimary = new[] { "Genel Bakış", "Operasyon", "Personel", "Puantaj", "Bordro", "Raporlar" };
+var catalogPrimary = PdksCommandCatalog.Primary.Select(x => x.Title).ToArray();
+if (!catalogPrimary.SequenceEqual(expectedPrimary))
+    throw new Exception("Primary catalog mismatch: " + string.Join(" | ", catalogPrimary));
+
+var admin = new LocalUser
+{
+    UserName = "ADMIN",
+    IsActive = true,
+    IsAdmin = true,
+    IsCompanyResponsible = true,
+    Permissions = Enum.GetNames<PdksModule>().ToList()
+};
+
 using var form = new MainShellForm(admin);
 form.Show();
-Application.DoEvents();
-var menu = form.MainMenuStrip!.Items.Cast<ToolStripItem>().Where(x=>x.Alignment!=ToolStripItemAlignment.Right).Select(x=>x.Text).ToArray();
-var expected = new[]{"Genel","Operasyon","Personel","Puantaj / Bordro","Raporlar","Yönetim","Ayarlar","Yardım"};
-if(!menu.SequenceEqual(expected)) throw new Exception("Menu mismatch: "+string.Join(" | ",menu));
-var toolbar=form.Controls.OfType<ToolStrip>().First(x=>x is not MenuStrip && x is not StatusStrip);
-var tools=toolbar.Items.OfType<ToolStripButton>().Select(x=>x.Text).ToArray();
-var expectedTools=new[]{"Genel Bakış","Canlı İzleme","Terminal","Giriş-Çıkış","Personel","Puantaj","Bordro"};
-if(!tools.SequenceEqual(expectedTools)) throw new Exception("Toolbar mismatch: "+string.Join(" | ",tools));
-var viewer=new LocalUser{UserName="VIEW",IsActive=true,Permissions=[PdksModule.Personel.ToString()],ReadOnlyPermissions=[PdksModule.Personel.ToString()]};
-if(!viewer.Can(PdksModule.Personel)||viewer.CanEdit(PdksModule.Personel)) throw new Exception("Read-only access failed");
-using var users = new UserManagementFormV2();
-Console.WriteLine("KYERP PDKS MODERN SHELL OK");
+Pump(700);
+
+var visibleButtons = FindControls<Button>(form)
+    .Where(x => x.Visible)
+    .Select(x => Clean(x.Text))
+    .Where(x => x.Length > 0)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+foreach (var title in expectedPrimary)
+    if (!visibleButtons.Contains(title))
+        throw new Exception("Primary navigation button missing: " + title);
+
+var forbiddenPrimary = new[] { "Terminal Merkezi", "Terminal Ayarları", "FDB / TNF Veri Kaynakları", "Yedekleme / Geri Yükleme", "Lisans" };
+if (PdksCommandCatalog.Primary.Any(x => forbiddenPrimary.Contains(x.Title, StringComparer.OrdinalIgnoreCase)))
+    throw new Exception("Technical command leaked into primary navigation.");
+
+var viewer = new LocalUser
+{
+    UserName = "VIEW",
+    IsActive = true,
+    Permissions = [PdksModule.Personel.ToString()],
+    ReadOnlyPermissions = [PdksModule.Personel.ToString()]
+};
+if (!viewer.Can(PdksModule.Personel) || viewer.CanEdit(PdksModule.Personel))
+    throw new Exception("Read-only access failed.");
+
+form.NavigateToCommand(PdksCommandId.Home);
+Pump(250);
+form.NavigateToCommand(PdksCommandId.Operations);
+Pump(350);
+
+Console.WriteLine("KYERP PDKS 6.4.0 MODERN SHELL OK");
+form.Close();
+
+static IEnumerable<T> FindControls<T>(Control root) where T : Control
+{
+    foreach (Control child in root.Controls)
+    {
+        if (child is T match) yield return match;
+        foreach (var nested in FindControls<T>(child)) yield return nested;
+    }
+}
+
+static string Clean(string? text) => (text ?? string.Empty).Replace("&&", "&").Trim();
+
+static void Pump(int milliseconds)
+{
+    var until = Environment.TickCount64 + milliseconds;
+    while (Environment.TickCount64 < until)
+    {
+        Application.DoEvents();
+        Thread.Sleep(25);
+    }
+}
