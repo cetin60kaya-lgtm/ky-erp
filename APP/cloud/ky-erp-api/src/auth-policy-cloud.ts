@@ -11,6 +11,7 @@ import {
   phoneApprovalFromRequest,
   resendPhoneApprovalChallenge,
   startPhoneApprovalChallenge,
+  verifyDirectSecurityLoginCode,
   verifySecurityLoginCode,
 } from "./auth-push-cloud";
 
@@ -505,13 +506,32 @@ async function issueSession(c: any, user: AnyRow, source: AnyRow = {}) {
     logAuthError(c, "AUTH_LAST_LOGIN_WRITE", error, { userId: user.id, sessionId: sid });
   }
   await audit(c, "SESSION_CREATED_POLICY", user.id, user.id, text(security.main_company_slug), sid, { policy, ttl, expiresAt });
-  if (text(source.phoneApprovalId)) {
+  const kySecurityCodeVerified = Boolean(source.kySecurityCodeVerified);
+  if (kySecurityCodeVerified) {
+    try {
+      await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, {
+        sessionId: sid,
+        userId: text(user.id),
+        status: "VERIFIED",
+        decidedByUserId: text(source.kySecurityOwnerUserId || user.id),
+        decidedByDeviceId: text(source.kySecurityDeviceId),
+        decidedAt: timestamp,
+        source: "KY_SECURITY_CODE",
+      });
+      await audit(c, "SESSION_VERIFIED_BY_KY_SECURITY_CODE", text(source.kySecurityOwnerUserId || user.id), user.id, text(security.main_company_slug), sid, {
+        kySecurityDeviceId: text(source.kySecurityDeviceId),
+        systemOverride: Boolean(source.kySecuritySystemOverride),
+      });
+    } catch (error) {
+      logAuthError(c, "KY_SECURITY_CODE_SESSION_TRUST_WRITE", error, { userId: user.id, sessionId: sid });
+    }
+  } else if (text(source.phoneApprovalId)) {
     try {
       await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, { sessionId: sid, userId: text(user.id), status: "VERIFIED", decidedByUserId: text(user.id), decidedByDeviceId: text(source.securityDeviceId), decidedAt: timestamp, source: "PHONE_LOGIN", phoneApprovalId: text(source.phoneApprovalId) });
       await audit(c, "SESSION_VERIFIED_BY_PHONE_LOGIN", user.id, user.id, text(security.main_company_slug), sid, { phoneApprovalId: text(source.phoneApprovalId), securityDeviceId: text(source.securityDeviceId) });
     } catch (error) { logAuthError(c, "PHONE_LOGIN_SESSION_TRUST_WRITE", error, { userId: user.id, sessionId: sid, phoneApprovalId: text(source.phoneApprovalId) }); }
   }
-  if (!text(source.phoneApprovalId)) {
+  if (!kySecurityCodeVerified && !text(source.phoneApprovalId)) {
     let reviewReady = false;
     try {
       await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, { sessionId: sid, userId: text(user.id), status: "PENDING", createdAt: timestamp, source: "SESSION_REVIEW" });
@@ -611,6 +631,7 @@ async function ownerRecoveryReadiness(c: any, user: AnyRow) {
 async function afterFactors(c: any, user: AnyRow, source: AnyRow) {
   const refreshed = await userById(c, user.id);
   const role = roleOf(refreshed || user);
+  if (Boolean(source?.kySecuritySystemOverride)) return issueSession(c, refreshed || user, source);
   const approvalRequired = Boolean(refreshed?.approval_required) && !isSuper(role) && !isCompanyAdmin(role);
   if (!approvalRequired) return issueSession(c, refreshed || user, source);
   const id = crypto.randomUUID();
@@ -934,6 +955,24 @@ export function registerAuthPolicyRoutes(app: any) {
     const user = await userById(c, text(challenge.user_id));
     if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
     const type = text(challenge.challenge_type);
+    if (type.startsWith("POLICY_")) {
+      const directKy = await verifyDirectSecurityLoginCode(c, body.code, user.id);
+      if (directKy.ok) {
+        await consumeChallenge(c, challenge);
+        await audit(c, "DIRECT_KY_SECURITY_MFA_VERIFIED", directKy.ownerUserId || user.id, user.id, text(user.main_company_slug), "", {
+          scopeType: directKy.scopeType,
+          deviceId: directKy.deviceId,
+          challengeType: type,
+        });
+        return c.json(await afterFactors(c, user, {
+          ...challenge,
+          kySecurityCodeVerified: true,
+          kySecurityOwnerUserId: directKy.ownerUserId,
+          kySecurityDeviceId: directKy.deviceId,
+          kySecuritySystemOverride: directKy.scopeType === "SYSTEM",
+        }));
+      }
+    }
     if (type === "POLICY_MFA_LEGACY_REQUIRED") {
       if (!(await verifyTotp(text(user.mfa_secret), body.code))) {
         return c.json(jsonError("MFA_CODE_INVALID", "Mevcut Authenticator kodu doğrulanamadı."), 401);
@@ -972,10 +1011,28 @@ export function registerAuthPolicyRoutes(app: any) {
 
     const role = roleOf(user);
     const policy = effectivePolicy(user, role);
-    const provider = normalizeProvider(body.provider);
+    const requestedProvider = normalizeProvider(body.provider);
     const allowed = policy === "GOOGLE" ? ["GOOGLE"] : policy === "MICROSOFT" ? ["MICROSOFT"] : ["GOOGLE", "MICROSOFT"];
-    if (!provider || !allowed.includes(provider) || !providerEnabled(user, provider)) return c.json(jsonError("MFA_PROVIDER_INVALID", "Seçilen Authenticator bu kullanıcı için kullanılamaz."), 400);
-    if (!(await verifyTotp(providerSecret(user, provider), body.code))) return c.json(jsonError("MFA_CODE_INVALID", "Authenticator kodu doğrulanamadı."), 401);
+    const alreadyVerified = new Set([
+      challenge.google_verified_at ? "GOOGLE" : "",
+      challenge.microsoft_verified_at ? "MICROSOFT" : "",
+    ].filter(Boolean));
+    const candidates = policy === "BOTH_MFA" ? allowed.filter((item) => !alreadyVerified.has(item)) : allowed;
+    let provider = requestedProvider;
+    if (provider) {
+      if (!candidates.includes(provider) || !providerEnabled(user, provider)) return c.json(jsonError("MFA_PROVIDER_INVALID", "Bu doğrulayıcı bu adım için kullanılamaz."), 400);
+      if (!(await verifyTotp(providerSecret(user, provider), body.code))) return c.json(jsonError("MFA_CODE_INVALID", "6 haneli doğrulama kodu kabul edilmedi."), 401);
+    } else {
+      provider = "";
+      for (const candidateProvider of candidates) {
+        if (!providerEnabled(user, candidateProvider)) continue;
+        if (await verifyTotp(providerSecret(user, candidateProvider), body.code)) {
+          provider = candidateProvider;
+          break;
+        }
+      }
+      if (!provider) return c.json(jsonError("MFA_CODE_INVALID", "Kod Google, Microsoft veya KY Güvenlik kodu olarak doğrulanamadı."), 401);
+    }
 
     const resetProvider = normalizeProvider(body.resetProvider);
     if (resetProvider && resetProvider !== provider && providerEnabled(user, provider)) {
