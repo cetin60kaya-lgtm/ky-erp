@@ -17,6 +17,10 @@ public sealed partial class LiveAttendanceForm : Form
     readonly Button refresh = PdksUiKit.Button("Yenile",76,PdksActionRole.Secondary);
     readonly Button syncNow = PdksUiKit.Button("Eşitle",76,PdksActionRole.Primary);
     readonly Button clearLive = PdksUiKit.Button("Önbellek Temizle",115,PdksActionRole.Quiet);
+    readonly Button assistantToggle = PdksUiKit.Button("Analiz Aç",88,PdksActionRole.Secondary);
+    TableLayoutPanel? liveLayout;
+    Control? assistantPanel;
+    bool assistantExpanded;
     readonly FlowLayoutPanel cards = new(){Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(2)};
     readonly TabControl tabs = new(){Dock=DockStyle.Fill,Multiline=true,SizeMode=TabSizeMode.Normal};
     readonly Dictionary<string,DataGridView> grids = new();
@@ -44,6 +48,7 @@ public sealed partial class LiveAttendanceForm : Form
         refresh.Click+=async (_,_)=>await SyncAndLoadAsync(false,true);
         syncNow.Click+=async (_,_)=>await SyncAndLoadAsync(true,true);
         clearLive.Click+=(_,_)=>{if(MessageBox.Show("Kısa canlı önbellek temizlensin mi?\n\nAna TNF, FDB ve 365 günlük canlı arşiv korunur.","Canlı Önbellek",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;TerminalSyncService.ClearLive();ShowLastSync();};
+        assistantToggle.Click+=(_,_)=>ToggleAssistant();
         date.ValueChanged+=async (_,_)=>{lastUiFingerprint="";await SyncAndLoadAsync(false,true);};
         timer.Tick+=async (_,_)=>{if(live.Checked&&Visible&&date.Value.Date==DateTime.Today)await SyncAndLoadAsync(false,false);};
         VisibleChanged+=(_,_)=>{if(IsDisposed)return;if(Visible)timer.Start();else timer.Stop();};
@@ -65,9 +70,10 @@ public sealed partial class LiveAttendanceForm : Form
     {
         var p=PdksAppearance.Current;
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(14),BackColor=p.Canvas};
+        liveLayout=root;
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,72));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,92));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,166));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,0));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
         var header=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,Padding=new Padding(16,8,16,8),BackColor=p.Surface};
@@ -80,15 +86,24 @@ public sealed partial class LiveAttendanceForm : Form
         titleBox.Controls.Add(new Label{Text="Kart hareketleri • eksik basımlar • izin • içeride kalanlar",Dock=DockStyle.Fill,TextAlign=ContentAlignment.TopLeft,ForeColor=p.Muted},0,1);
         header.Controls.Add(titleBox,0,0);
         var controls=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,FlowDirection=FlowDirection.LeftToRight,Padding=new Padding(0,12,0,0)};
-        controls.Controls.Add(date);controls.Controls.Add(live);controls.Controls.Add(refresh);controls.Controls.Add(syncNow);controls.Controls.Add(clearLive);header.Controls.Add(controls,1,0);
+        controls.Controls.Add(date);controls.Controls.Add(live);controls.Controls.Add(refresh);controls.Controls.Add(syncNow);controls.Controls.Add(assistantToggle);header.Controls.Add(controls,1,0);
         device.Dock=DockStyle.Fill;device.TextAlign=ContentAlignment.MiddleRight;device.Font=new Font("Segoe UI",9f,FontStyle.Bold);device.ForeColor=p.Success;header.Controls.Add(device,2,0);
         root.Controls.Add(header,0,0);
 
         cards.BackColor=Color.Transparent;cards.Padding=new Padding(0,8,0,6);root.Controls.Add(cards,0,1);
-        root.Controls.Add(BuildAssistantPanel(),0,2);
+        assistantPanel=BuildAssistantPanel();assistantPanel.Visible=false;root.Controls.Add(assistantPanel,0,2);
         AddTab("Genel");AddTab("Kart Basmayan");AddTab("Giriş Eksik");AddTab("İçeride / Çıkış Bekleyen");AddTab("İzinli");AddTab("Geç Giriş");AddTab("Erken Çıkış");AddTab("Tamamlanan");AddTab("Eşleşmeyen Kart");
         root.Controls.Add(BuildTrackingWorkspace(),0,3);Controls.Add(root);
     }
+    void ToggleAssistant()
+    {
+        assistantExpanded=!assistantExpanded;
+        assistantToggle.Text=assistantExpanded?"Analiz Kapat":"Analiz Aç";
+        if(assistantPanel is not null)assistantPanel.Visible=assistantExpanded;
+        if(liveLayout is not null && liveLayout.RowStyles.Count>2)
+            liveLayout.RowStyles[2].Height=assistantExpanded?166:0;
+    }
+
     void AddTab(string title)
     {
         var grid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,
@@ -210,9 +225,9 @@ public sealed partial class LiveAttendanceForm : Form
 
     void ShowDevice(TerminalDeviceSnapshot s)
     {
-        if(!s.Connected){device.Text="Kart cihazı: BAĞLI DEĞİL — "+s.Message;device.ForeColor=Color.DarkRed;return;}
+        if(!s.Connected){device.Text="Kart cihazı: BAĞLI DEĞİL — "+s.Message;device.ForeColor=PdksAppearance.Current.Danger;return;}
         device.Text=$"Kart cihazı: BAĞLI   Cihaz saati {s.DeviceTime:HH:mm:ss}   Yeni kayıt {Math.Max(0,s.NewLogCount)}   Kart {Math.Max(0,s.CardCount)}{legacyRecoveryText}";
-        device.ForeColor=Color.DarkGreen;
+        device.ForeColor=PdksAppearance.Current.Success;
     }
 
     void RecoverLegacyBackup(DateTime day)
