@@ -42,7 +42,7 @@ public partial class PersonelForm
             WrapContents = false,
             Padding = new Padding(10, 10, 18, 7),
             Margin = Padding.Empty,
-            BackColor = Color.FromArgb(247, 249, 252)
+            BackColor = PdksAppearance.Current.Canvas
         };
 
         var all = RecordActionButton("Tümünü Sil", deleteAll, destructive: true);
@@ -95,23 +95,9 @@ public partial class PersonelForm
     }
 
     static Button RecordActionButton(string text, Action action, bool primary = false, bool destructive = false)
-    {
-        var button = new Button
-        {
-            Text = text,
-            Width = text == "Tümünü Sil" ? 112 : 102,
-            Height = 34,
-            Margin = new Padding(8, 0, 0, 0),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = primary ? Color.FromArgb(31, 111, 235) : Color.White,
-            ForeColor = primary ? Color.White : destructive ? Color.FromArgb(177, 42, 42) : Color.FromArgb(35, 61, 90),
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor = Cursors.Hand
-        };
-        button.FlatAppearance.BorderColor = primary
-            ? Color.FromArgb(31, 111, 235)
-            : destructive ? Color.FromArgb(226, 183, 183) : Color.FromArgb(205, 216, 231);
-        button.Click += (_, _) => action();
-        return button;
-    }
+        => PdksUiKit.Button(
+            text,
+            text == "Tümünü Sil" ? 112 : 102,
+            primary ? PdksActionRole.Primary : destructive ? PdksActionRole.Danger : PdksActionRole.Secondary,
+            action);
 }
