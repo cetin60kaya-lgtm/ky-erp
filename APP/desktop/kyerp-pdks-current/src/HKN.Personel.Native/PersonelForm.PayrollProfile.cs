@@ -88,28 +88,6 @@ public partial class PersonelForm
         }
     }
 
-    void SavePayrollProfile()
-    {
-        if (string.IsNullOrWhiteSpace(currentPk))
-        {
-            MessageBox.Show("Önce personel seçin.", "Bordro Profili", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        var profile = new PayrollProfile(
-            currentPk,
-            payrollNetEntitlement.Value,
-            payrollPekMode.SelectedIndex == 1 ? PekMode.Manual : PekMode.LegalAutomatic,
-            payrollManualPek.Value,
-            DateTime.UtcNow,
-            Environment.UserName);
-        PayrollProfileStore.Save(profile);
-        RefreshPayrollProfilePreview();
-        if (canonicalProfileSummary.TryGetValue("HAKEDIS", out var hak)) hak.Text = profile.NetMonthlyEntitlement.ToString("N2") + " ₺";
-        if (canonicalProfileSummary.TryGetValue("PEKMODE", out var mode)) mode.Text = profile.PekMode == PekMode.LegalAutomatic ? "Mevzuata göre otomatik" : "Manuel PEK";
-        MessageBox.Show("Personelin bordro profili kaydedildi. Bundan sonraki dönemlerde aynı tanım kullanılacak.", "Bordro Profili", MessageBoxButtons.OK, MessageBoxIcon.Information);
-    }
-
     void RefreshPayrollProfilePreview()
     {
         if (payrollProfileLoading) return;
