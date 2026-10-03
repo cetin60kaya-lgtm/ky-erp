@@ -1,15 +1,14 @@
 name: PDKS Build Diagnostic
 
 on:
-  push:
-    branches:
-      - codex/kyerp-pdks-full-app-prep
-    paths:
-      - 'APP/desktop/kyerp-pdks-current/**'
-      - '.github/workflows/pdks-build-diagnostic.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: manual-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   diagnose:
