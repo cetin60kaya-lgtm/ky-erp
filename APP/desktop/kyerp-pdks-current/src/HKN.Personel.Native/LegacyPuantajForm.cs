@@ -122,7 +122,7 @@ public sealed class LegacyPuantajForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,28));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,26));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        root.Controls.Add(new Label{Text=title,Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42)},0,0);
+        root.Controls.Add(new Label{Text=title,Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=PdksAppearance.Current.Text},0,0);
         root.Controls.Add(new Label{Text=subtitle,Dock=DockStyle.Fill,Font=new Font("Segoe UI",8.5f),ForeColor=PdksAppearance.Current.Muted},0,1);
 
         var fields=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,RowCount=2,Margin=new Padding(0,8,0,0)};
@@ -136,7 +136,7 @@ public sealed class LegacyPuantajForm : Form
         {
             var holder=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Margin=new Padding(0,0,12,0),BackColor=PdksAppearance.Current.Surface};
             holder.RowStyles.Add(new RowStyle(SizeType.Absolute,20));holder.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-            holder.Controls.Add(new Label{Text=items[i].Text,Dock=DockStyle.Fill,ForeColor=Color.FromArgb(100,116,139),Font=new Font("Segoe UI",8f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft},0,0);
+            holder.Controls.Add(new Label{Text=items[i].Text,Dock=DockStyle.Fill,ForeColor=PdksAppearance.Current.Muted,Font=new Font("Segoe UI",8f,FontStyle.Bold),TextAlign=ContentAlignment.MiddleLeft},0,0);
             items[i].Control.Dock=DockStyle.Fill;items[i].Control.Margin=new Padding(0,2,0,0);
             holder.Controls.Add(items[i].Control,0,1);
             fields.Controls.Add(holder,i%5,i/5);
