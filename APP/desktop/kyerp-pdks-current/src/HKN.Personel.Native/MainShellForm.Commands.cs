@@ -8,6 +8,7 @@ public sealed partial class MainShellForm
 
     static bool IsWorkspaceCommand(PdksCommandId id) => id is
         PdksCommandId.Home or
+        PdksCommandId.Operations or
         PdksCommandId.LiveAttendance or
         PdksCommandId.EntryExit or
         PdksCommandId.Personnel or
@@ -69,6 +70,9 @@ public sealed partial class MainShellForm
         {
             case PdksCommandId.Home:
                 ShowHome();
+                break;
+            case PdksCommandId.Operations:
+                ShowOperationsCenter();
                 break;
             case PdksCommandId.LiveAttendance:
                 OpenLiveAttendance();
@@ -181,6 +185,7 @@ public sealed partial class MainShellForm
         }
 
         if (id is PdksCommandId.Home or
+            PdksCommandId.Operations or
             PdksCommandId.LiveAttendance or
             PdksCommandId.EntryExit or
             PdksCommandId.Personnel or
