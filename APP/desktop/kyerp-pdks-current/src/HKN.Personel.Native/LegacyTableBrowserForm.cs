@@ -17,7 +17,7 @@ public sealed class LegacyTableBrowserForm : Form
         AllowUserToDeleteRows = false, MultiSelect = false,
         SelectionMode = DataGridViewSelectionMode.FullRowSelect,
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells,
-        BackgroundColor = Color.White, RowHeadersWidth = 20
+        BackgroundColor = PdksAppearance.Current.Surface, RowHeadersWidth = 20
     };
     DataTable? data;
 
