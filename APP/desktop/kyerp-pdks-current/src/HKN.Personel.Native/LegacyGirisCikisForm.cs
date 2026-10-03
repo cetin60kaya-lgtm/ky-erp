@@ -79,10 +79,23 @@ public sealed class LegacyGirisCikisForm : Form
         root.Controls.Add(grid,0,1);
 
         var bar=PdksUiKit.ActionBar(true,p.Canvas);
-        var show=ModernGcButton("Göster",96,true);var add=ModernGcButton("Yeni Kayıt",105,true);var edit=ModernGcButton("Düzenle",92,false);var del=ModernGcButton("Sil",74,false,true);
-        var entryE=ModernGcButton("Girişi Manuel",112,false);var exitE=ModernGcButton("Çıkışı Manuel",118,false);var report=ModernGcButton("Rapor",88,false);
-        show.Click+=(_,_)=>Reload();add.Click+=(_,_)=>EditRecord(null);edit.Click+=(_,_)=>EditSelected();del.Click+=(_,_)=>DeleteSelected();entryE.Click+=(_,_)=>SetManualSide(true);exitE.Click+=(_,_)=>SetManualSide(false);report.Click+=(_,_)=>PrintList();
-        bar.Controls.AddRange([show,report,del,exitE,entryE,edit,add]);
+        var show=ModernGcButton("Göster",96,true);
+        var add=ModernGcButton("+ Yeni Kayıt",112,true);
+        var edit=ModernGcButton("Düzenle",92,false);
+        var report=ModernGcButton("Rapor",88,false);
+        var more=ModernGcButton("Diğer İşlemler ▾",132,false);
+        show.Click+=(_,_)=>Reload();
+        add.Click+=(_,_)=>EditRecord(null);
+        edit.Click+=(_,_)=>EditSelected();
+        report.Click+=(_,_)=>PrintList();
+        var moreMenu=new ContextMenuStrip{Font=new Font("Segoe UI",9f),BackColor=p.Surface,ForeColor=p.Text};
+        moreMenu.Items.Add(MI("Girişi Manuel Tamamla",()=>SetManualSide(true)));
+        moreMenu.Items.Add(MI("Çıkışı Manuel Tamamla",()=>SetManualSide(false)));
+        moreMenu.Items.Add(new ToolStripSeparator());
+        moreMenu.Items.Add(MI("Seçili Kaydı Sil",DeleteSelected));
+        moreMenu.Items.Add(MI("Listelenen Kayıtları Sil",DeleteListed));
+        more.Click+=(_,_)=>moreMenu.Show(more,new Point(0,more.Height));
+        bar.Controls.AddRange([more,report,edit,add,show]);
         root.Controls.Add(bar,0,2);
         Controls.Add(root);
 
@@ -149,10 +162,13 @@ public sealed class LegacyGirisCikisForm : Form
     {
         var selectedId=r is null?(int?)null:Convert.ToInt32(r["SIRA"]);var selectedPk=r is null?"":Convert.ToString(r["PKNO"])??"";
         var oldKeys=new List<(string Card,DateTime Day)>();if(r is not null){if(r["GTARIH"]!=DBNull.Value)oldKeys.Add((selectedPk,Convert.ToDateTime(r["GTARIH"]).Date));if(r["CTARIH"]!=DBNull.Value)oldKeys.Add((selectedPk,Convert.ToDateTime(r["CTARIH"]).Date));}
-        using var d=new Form{Text=r is null?"Giriş Çıkış Ekleme":"Giriş Çıkış Düzeltme",StartPosition=FormStartPosition.CenterParent,ClientSize=new Size(410,230),FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false};
+        using var d=new Form{Text=r is null?"Giriş / Çıkış Ekleme":"Giriş / Çıkış Düzenle",StartPosition=FormStartPosition.CenterParent,ClientSize=new Size(500,300),MinimumSize=new Size(480,280),FormBorderStyle=FormBorderStyle.Sizable,MaximizeBox=false,MinimizeBox=false,Font=new Font("Segoe UI",9f),BackColor=PdksAppearance.Current.Canvas};
         var card=new TextBox{Location=new Point(130,18),Size=new Size(90,21),Text=selectedPk};var gd=D(130,52,180);var gt=new TextBox{Location=new Point(315,52),Size=new Size(55,21)};var cd=D(130,86,180);var ct=new TextBox{Location=new Point(315,86),Size=new Size(55,21)};
         if(r is not null){if(r["GTARIH"]!=DBNull.Value)gd.Value=Convert.ToDateTime(r["GTARIH"]);if(r["CTARIH"]!=DBNull.Value)cd.Value=Convert.ToDateTime(r["CTARIH"]);gt.Text=Convert.ToString(r["GSAAT"]);ct.Text=Convert.ToString(r["CSAAT"]);}else{gd.Value=cd.Value=DateTime.Today;}
-        d.Controls.AddRange([L("Kart No",25,22),L("Giriş Tarihi / Saati",25,56),L("Çıkış Tarihi / Saati",25,90),card,gd,gt,cd,ct]);var ok=new Button{Text="Kaydet",Location=new Point(130,155),Size=new Size(95,32)};var cancel=new Button{Text="Kapat",Location=new Point(240,155),Size=new Size(95,32)};d.Controls.AddRange([ok,cancel]);cancel.Click+=(_,_)=>d.Close();
+        d.Controls.AddRange([L("Kart No",25,22),L("Giriş Tarihi / Saati",25,56),L("Çıkış Tarihi / Saati",25,90),card,gd,gt,cd,ct]);
+        var ok=PdksUiKit.Button("Kaydet",100,PdksActionRole.Primary);
+        var cancel=PdksUiKit.Button("Kapat",100,PdksActionRole.Quiet,()=>d.Close());
+        ok.Location=new Point(250,190);cancel.Location=new Point(360,190);d.Controls.AddRange([ok,cancel]);
         ok.Click+=(_,_)=>{try{var pk=card.Text.Trim().PadLeft(5,'0');if(pk.Length!=5)throw new InvalidOperationException("Kart numarası 5 haneli olmalıdır.");if(!TimeSpan.TryParse(gt.Text.Trim(),out var ti)||!TimeSpan.TryParse(ct.Text.Trim(),out var to))throw new InvalidOperationException("Saatleri SS:dd biçiminde girin.");var dep=db.Scalar("select BOLUM from KIMLIK where PKNO=@P",new FbParameter("@P",pk));var pars=new[]{new FbParameter("@P",pk),new FbParameter("@GD",gd.Value.Date),new FbParameter("@GS",$"{ti.Hours:00}:{ti.Minutes:00}"),new FbParameter("@GDK",(int)ti.TotalMinutes),new FbParameter("@CD",cd.Value.Date),new FbParameter("@CS",$"{to.Hours:00}:{to.Minutes:00}"),new FbParameter("@CDK",(int)to.TotalMinutes),new FbParameter("@B",dep??DBNull.Value)};if(selectedId is null){var seq=Convert.ToInt32(db.Scalar("select coalesce(max(SIRA),0)+1 from GIRCIK")??1);db.Execute("insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,CTARIH,CSAAT,CDAKIKA,CTUR,BOLUM) values (@Q,@P,@GD,@GS,@GDK,'E',@CD,@CS,@CDK,'E',@B)",[new FbParameter("@Q",seq),..pars]);ManualEditAudit.Record("INSERT",pk,gd.Value.Date,$"{ti.Hours:00}:{ti.Minutes:00}",$"{to.Hours:00}:{to.Minutes:00}");}else{db.Execute("update GIRCIK set PKNO=@P,GTARIH=@GD,GSAAT=@GS,GDAKIKA=@GDK,GTUR='E',CTARIH=@CD,CSAAT=@CS,CDAKIKA=@CDK,CTUR='E',BOLUM=@B where SIRA=@Q",[..pars,new FbParameter("@Q",selectedId.Value)]);ManualEditAudit.Record("UPDATE",pk,gd.Value.Date,$"{ti.Hours:00}:{ti.Minutes:00}",$"{to.Hours:00}:{to.Minutes:00}");}OperationalTnfSyncService.AlignPersonDays(db,oldKeys.Concat(new[]{(pk,gd.Value.Date),(pk,cd.Value.Date)}));d.DialogResult=DialogResult.OK;d.Close();}catch(Exception ex){PdksErrorPresenter.Show(d,ex,d.Text,MessageBoxIcon.Warning,"EntryExit.Editor");}};
         if(d.ShowDialog(this)==DialogResult.OK)Reload();
     }
@@ -165,10 +181,10 @@ public sealed class LegacyGirisCikisForm : Form
         if(dayValue==DBNull.Value)throw new InvalidOperationException(entry?"Giriş tarihi yok.":"Çıkış tarihi yok.");
         var day=Convert.ToDateTime(dayValue).Date;
         var old=Convert.ToString(r[entry?"GSAAT":"CSAAT"])??"";
-        using var d=new Form{Text=entry?"Girişi E Yap":"Çıkışı E Yap",StartPosition=FormStartPosition.CenterParent,ClientSize=new Size(330,145),FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false};
-        var box=new TextBox{Text=old,Location=new Point(115,30),Width=90};
-        d.Controls.AddRange([new Label{Text="Saat (SS:dd)",Location=new Point(25,34),AutoSize=true},box]);
-        var ok=new Button{Text="Kaydet",Location=new Point(115,82),Width=90,DialogResult=DialogResult.OK}; d.Controls.Add(ok); d.AcceptButton=ok;
+        using var d=new Form{Text=entry?"Manuel Giriş Saati":"Manuel Çıkış Saati",StartPosition=FormStartPosition.CenterParent,ClientSize=new Size(420,210),MinimumSize=new Size(400,190),FormBorderStyle=FormBorderStyle.Sizable,MaximizeBox=false,MinimizeBox=false,Font=new Font("Segoe UI",9f),BackColor=PdksAppearance.Current.Canvas};
+        var box=new TextBox{Text=old,Location=new Point(140,48),Width=120};
+        d.Controls.AddRange([new Label{Text="Saat (SS:dd)",Location=new Point(35,52),AutoSize=true,ForeColor=PdksAppearance.Current.Muted},box]);
+        var ok=PdksUiKit.Button("Kaydet",100,PdksActionRole.Primary);ok.Location=new Point(140,112);ok.DialogResult=DialogResult.OK; d.Controls.Add(ok); d.AcceptButton=ok;
         if(d.ShowDialog(this)!=DialogResult.OK)return;
         if(!TimeSpan.TryParse(box.Text.Trim(),out var t))throw new InvalidOperationException("Saat SS:dd biçiminde olmalıdır.");
         var formatted=$"{t.Hours:00}:{t.Minutes:00}"; var minutes=(int)t.TotalMinutes; var id=Convert.ToInt32(r["SIRA"]);
