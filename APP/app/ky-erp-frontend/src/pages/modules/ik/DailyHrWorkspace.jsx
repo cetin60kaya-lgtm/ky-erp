@@ -234,7 +234,7 @@ function printDailyPaymentSlips(range, rows = []) {
     css: `@page{size:A4 portrait;margin:5mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#000;background:#fff}.pay-print{width:200mm}.pay-page{width:200mm;height:287mm;display:flex;flex-direction:column;page-break-after:always;break-after:page;overflow:hidden}.pay-page:last-child{page-break-after:auto;break-after:auto}.pay-page>header{height:11mm;border:1px solid #000;display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:5mm;padding:1.5mm 3mm;margin-bottom:2.5mm}.pay-page>header strong{font-size:11.5pt}.pay-page>header span,.pay-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.pay-grid{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(5,47mm);gap:2.5mm 4mm}.pay-card{height:47mm;border:1px solid #000;padding:2.2mm 2.6mm;display:grid;grid-template-rows:auto 1fr;gap:1.5mm;break-inside:avoid;page-break-inside:avoid}.pay-name{display:flex;align-items:baseline;justify-content:space-between;gap:3mm;border-bottom:1px solid #000;padding-bottom:1mm}.pay-name b{font-size:10pt;text-transform:uppercase;line-height:1}.pay-name span{font-size:7.2pt;white-space:nowrap}.pay-lines{display:grid;gap:0;border:1px solid #000}.pay-lines>div{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:3mm;padding:1.4mm 2mm;min-height:8.5mm}.pay-lines>div+div{border-top:1px solid #000}.pay-lines span{font-size:8pt;font-weight:900}.pay-lines b{font-size:11pt;text-align:right}.pay-lines small{min-width:23mm;text-align:right;font-size:7pt;font-weight:700}.pay-lines .sum{grid-template-columns:1fr auto;background:#f7f7f7}.pay-lines .sum b{font-size:14pt}.page-grand{margin-top:auto;border:2px solid #000;min-height:15mm;padding:2.5mm 4mm;display:flex;align-items:center;justify-content:space-between}.page-grand span{font-size:11pt;font-weight:900}.page-grand strong{font-size:20pt;line-height:1;font-weight:900}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`
   });
 }
-function printWeeklyControlList(range, days, rows = []) {
+function printWeeklyMatrix(title, range, days, rows = []) {
   const source = Array.isArray(rows) ? rows : [];
   const rangeBoundDays = Array.isArray(days)
     ? days.filter((date) => (!range?.start || date >= range.start) && (!range?.end || date <= range.end)).slice(0, 7)
@@ -242,41 +242,83 @@ function printWeeklyControlList(range, days, rows = []) {
   const safeDays = rangeBoundDays.length ? rangeBoundDays : rangeDays(range?.start, range?.end).slice(0, 7);
   const printStart = range?.start || safeDays[0] || "";
   const printEnd = range?.end || safeDays[safeDays.length - 1] || printStart;
+  const dayTotals = safeDays.map((date) => source.reduce((sum, row) => {
+    const cell = row.days?.[date] || {};
+    if (cell.day) sum.day += 1;
+    if (cell.night) sum.night += 1;
+    return sum;
+  }, { day: 0, night: 0 }));
   const totals = source.reduce((sum, row) => ({
     people: sum.people + 1,
-    days: sum.days + number(row.dayCount) + number(row.nightCount),
+    day: sum.day + number(row.dayCount),
+    night: sum.night + number(row.nightCount),
     amount: sum.amount + number(row.totalAmount ?? row.total),
-  }), { people: 0, days: 0, amount: 0 });
+  }), { people: 0, day: 0, night: 0, amount: 0 });
+
   const pages = [];
-  for (let index = 0; index < source.length; index += 30) pages.push(source.slice(index, index + 30));
+  for (let index = 0; index < source.length; index += 26) pages.push(source.slice(index, index + 26));
   const headers = safeDays.map((date) => {
-    const weekday = new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`)).replace('.', '').toLocaleUpperCase("tr-TR");
-    return `<th class="date-col"><span>${escapeHtml(weekday)}</span><b>${escapeHtml(dateText(date, true))}</b></th>`;
+    const weekday = new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`)).replace(".", "").toLocaleUpperCase("tr-TR");
+    return `<th class="date-col"><span>${escapeHtml(weekday)}</span><b>${escapeHtml(dateText(date, true))}</b><small>G / N</small></th>`;
   }).join("");
+
   const html = pages.map((pageRows, pageIndex) => {
+    const pageDayTotals = safeDays.map((date) => pageRows.reduce((sum, row) => {
+      const cell = row.days?.[date] || {};
+      if (cell.day) sum.day += 1;
+      if (cell.night) sum.night += 1;
+      return sum;
+    }, { day: 0, night: 0 }));
+    const pageTotals = pageRows.reduce((sum, row) => ({
+      day: sum.day + number(row.dayCount),
+      night: sum.night + number(row.nightCount),
+      amount: sum.amount + number(row.totalAmount ?? row.total),
+    }), { day: 0, night: 0, amount: 0 });
     const body = pageRows.map((row, index) => {
       const dayCells = safeDays.map((date) => {
         const cell = row.days?.[date] || {};
         const dayOn = Boolean(cell.day);
         const nightOn = Boolean(cell.night);
-        return `<td class="work-cell"><span><b>G</b><i class="${dayOn ? "check day-on" : "off"}">${dayOn ? "✓" : "–"}</i></span><span><b>N</b><i class="${nightOn ? "check night-on" : "off"}">${nightOn ? "✓" : "–"}</i></span></td>`;
+        return `<td class="work-cell"><span class="${dayOn ? "on day" : "off"}"><b>G</b><i>${dayOn ? "✓" : "–"}</i></span><span class="${nightOn ? "on night" : "off"}"><b>N</b><i>${nightOn ? "✓" : "–"}</i></span></td>`;
       }).join("");
-      const totalDays = number(row.dayCount) + number(row.nightCount);
+      const dayCount = number(row.dayCount);
+      const nightCount = number(row.nightCount);
+      const totalDays = dayCount + nightCount;
       const totalAmount = number(row.totalAmount ?? row.total);
-      return `<tr><td class="no">${pageIndex * 30 + index + 1}</td><td class="person"><strong>${escapeHtml(row.name || row.fullName || "-")}</strong><small>${escapeHtml(row.personnelNo || "")}</small></td><td class="role">${escapeHtml(row.qualification || row.role || "-")}</td>${dayCells}<td class="total-days"><strong>${totalDays}</strong></td><td class="total-money"><strong>${escapeHtml(money(totalAmount))}</strong></td></tr>`;
+      return `<tr><td class="no">${pageIndex * 26 + index + 1}</td><td class="person"><strong>${escapeHtml(row.name || row.fullName || "-")}</strong><small>${escapeHtml(row.personnelNo || "")}</small></td><td class="role">${escapeHtml(row.qualification || row.role || "-")}</td>${dayCells}<td class="count"><strong>${dayCount}</strong></td><td class="count"><strong>${nightCount}</strong></td><td class="total-days"><strong>${totalDays}</strong></td><td class="total-money"><strong>${escapeHtml(money(totalAmount))}</strong></td></tr>`;
     }).join("");
-    return `<section class="week-page"><header><div><strong>GÜNLÜK PERSONEL HAFTALIK KONTROL LİSTESİ</strong><span>${escapeHtml(dateText(printStart))} — ${escapeHtml(dateText(printEnd))}</span></div><em>Sayfa ${pageIndex + 1} / ${pages.length}</em></header><table><thead><tr><th class="no">No</th><th class="person">Personel</th><th class="role">Vasıf</th>${headers}<th class="total-days">Toplam<br/>Gün</th><th class="total-money">Toplam Tutar</th></tr></thead><tbody>${body}</tbody></table><footer class="week-totals"><div><span>TOPLAM PERSONEL</span><strong>${totals.people}</strong></div><div><span>TOPLAM GÜN</span><strong>${totals.days}</strong></div><div class="grand"><span>GENEL TUTAR</span><strong>${escapeHtml(money(totals.amount))}</strong></div></footer></section>`;
+    const pageDayCells = pageDayTotals.map((item) => `<td class="day-total"><span>G ${item.day}</span><span>N ${item.night}</span></td>`).join("");
+    const generalDayCells = dayTotals.map((item) => `<td class="day-total general"><span>G ${item.day}</span><span>N ${item.night}</span></td>`).join("");
+    const lastPage = pageIndex === pages.length - 1;
+    return `<section class="week-page">
+      <header><div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(dateText(printStart))} — ${escapeHtml(dateText(printEnd))}</span></div><em>Sayfa ${pageIndex + 1} / ${pages.length}</em></header>
+      <table>
+        <thead><tr><th class="no">No</th><th class="person">Personel</th><th class="role">Vasıf</th>${headers}<th class="count">G</th><th class="count">N</th><th class="total-days">Toplam<br/>Gün</th><th class="total-money">Toplam Tutar</th></tr></thead>
+        <tbody>${body}</tbody>
+        <tfoot>
+          <tr class="page-total"><td colspan="3"><strong>SAYFA TOPLAMI</strong></td>${pageDayCells}<td class="count"><strong>${pageTotals.day}</strong></td><td class="count"><strong>${pageTotals.night}</strong></td><td class="total-days"><strong>${pageTotals.day + pageTotals.night}</strong></td><td class="total-money"><strong>${escapeHtml(money(pageTotals.amount))}</strong></td></tr>
+          ${lastPage ? `<tr class="grand-total"><td colspan="3"><strong>GENEL TOPLAM · ${totals.people} PERSONEL</strong></td>${generalDayCells}<td class="count"><strong>${totals.day}</strong></td><td class="count"><strong>${totals.night}</strong></td><td class="total-days"><strong>${totals.day + totals.night}</strong></td><td class="total-money"><strong>${escapeHtml(money(totals.amount))}</strong></td></tr>` : ""}
+        </tfoot>
+      </table>
+    </section>`;
   }).join("");
+
   return printHtmlDocument({
-    title: "KY ERP Günlük Personel Haftalık Kontrol Listesi",
+    title,
     html: `<main class="week-print">${html || '<p>Kayıt yok.</p>'}</main>`,
-    css: `@page{size:A4 landscape;margin:4.5mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#000;background:#fff}.week-print{width:288mm}.week-page{width:288mm;height:201mm;display:flex;flex-direction:column;page-break-after:always;break-after:page;overflow:hidden}.week-page:last-child{page-break-after:auto;break-after:auto}.week-page>header{height:10mm;border:1px solid #000;display:flex;align-items:center;justify-content:space-between;padding:1.2mm 2mm;margin-bottom:1.6mm}.week-page>header div{display:flex;align-items:baseline;gap:3mm}.week-page>header strong{font-size:10pt}.week-page>header span,.week-page>header em{font-size:6.6pt;font-style:normal;white-space:nowrap}.week-page table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:7.2pt}.week-page th,.week-page td{border:1px solid #000;padding:.42mm .55mm;line-height:1.05;vertical-align:middle}.week-page th{font-weight:900;text-align:center;height:8mm}.week-page td{height:5.25mm}.week-page .no{width:5.5mm;text-align:center}.week-page .person{width:46mm;text-align:left}.week-page .person strong{display:block;font-size:7.5pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .person small{display:block;font-size:5.8pt;line-height:1;color:#000}.week-page .role{width:25mm;text-align:left;font-size:7pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .date-col{width:19mm}.week-page .date-col span,.week-page .date-col b{display:block}.week-page .date-col span{font-size:6.4pt}.week-page .date-col b{font-size:7pt;margin-top:.5mm}.work-cell{padding:.12mm!important;text-align:center}.work-cell>span{display:inline-flex;align-items:center;justify-content:center;gap:.28mm;width:50%;font-size:7.2pt;font-weight:900;white-space:nowrap}.work-cell>span+span{border-left:1px solid #000}.work-cell b{font-size:7pt;font-weight:900;color:#000}.work-cell i{font-style:normal;font-size:9pt;font-weight:900;line-height:.9}.work-cell i.off{color:#777;font-size:6.5pt}.work-cell i.day-on{color:#ea580c}.work-cell i.night-on{color:#4338ca}.week-page .total-days{width:16mm;text-align:center}.week-page td.total-days strong{font-size:9pt}.week-page .total-money{width:34mm;text-align:right}.week-page th.total-money{text-align:center}.week-page td.total-money strong{font-size:8.5pt;white-space:nowrap}.week-totals{margin-top:auto;display:grid;grid-template-columns:1fr 1fr 1.45fr;gap:2mm;padding-top:2mm}.week-totals>div{border:1.5px solid #000;min-height:15mm;padding:1.8mm 2.3mm;display:flex;align-items:center;justify-content:space-between}.week-totals span{font-size:7.5pt;font-weight:900}.week-totals strong{font-size:17pt;line-height:1;font-weight:900}.week-totals .grand{border-width:2px}.week-totals .grand strong{font-size:15pt}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`
+    css: `@page{size:A4 landscape;margin:5mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#101828;background:#fff}.week-print{width:287mm}.week-page{width:287mm;min-height:198mm;display:flex;flex-direction:column;page-break-after:always;break-after:page}.week-page:last-child{page-break-after:auto;break-after:auto}.week-page>header{min-height:11mm;border:1.5px solid #111827;display:flex;align-items:center;justify-content:space-between;padding:1.6mm 2.4mm;margin-bottom:1.8mm;background:#f8fafc}.week-page>header div{display:flex;align-items:baseline;gap:4mm}.week-page>header strong{font-size:12pt;letter-spacing:.01em}.week-page>header span,.week-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.week-page table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:8pt}.week-page th,.week-page td{border:1px solid #667085;padding:.65mm .75mm;line-height:1.05;vertical-align:middle}.week-page th{font-weight:900;text-align:center;height:10mm;background:#eef2f7}.week-page td{height:6mm}.week-page .no{width:6mm;text-align:center}.week-page .person{width:41mm;text-align:left}.week-page .person strong{display:block;font-size:8.4pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .person small{display:block;margin-top:.4mm;font-size:6.2pt;color:#475467}.week-page .role{width:23mm;text-align:left;font-size:7.4pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .date-col{width:18mm}.week-page .date-col span,.week-page .date-col b,.week-page .date-col small{display:block}.week-page .date-col span{font-size:7pt}.week-page .date-col b{font-size:7.8pt;margin-top:.4mm}.week-page .date-col small{font-size:5.5pt;margin-top:.35mm;color:#667085}.work-cell{padding:.2mm!important;text-align:center}.work-cell>span{display:inline-flex;align-items:center;justify-content:center;gap:.45mm;width:50%;font-size:7.6pt;font-weight:900;white-space:nowrap}.work-cell>span+span{border-left:1px solid #98a2b3}.work-cell b{font-size:7pt}.work-cell i{font-style:normal;font-size:9pt;font-weight:900}.work-cell .day.on{color:#c2410c}.work-cell .night.on{color:#3730a3}.work-cell .off{color:#98a2b3}.week-page .count{width:10mm;text-align:center}.week-page .total-days{width:14mm;text-align:center}.week-page .total-money{width:29mm;text-align:right}.week-page th.total-money{text-align:center}.week-page td.total-money strong{font-size:8.6pt;white-space:nowrap}.week-page tfoot td{height:8mm;font-weight:900;background:#f8fafc}.week-page tfoot .day-total{text-align:center;padding:.3mm!important}.week-page tfoot .day-total span{display:block;font-size:6.6pt;line-height:1.15}.week-page tfoot .page-total td{border-top:1.5px solid #111827}.week-page tfoot .grand-total td{border-top:2px solid #111827;border-bottom:2px solid #111827;background:#eaf2ff;font-size:8.4pt}.week-page tfoot .grand-total .total-money strong{font-size:10pt}.week-page tfoot .general span{font-weight:900}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`,
   });
+}
+function printWeeklyControlList(range, days, rows = []) {
+  return printWeeklyMatrix("KY ERP GÜNLÜK PERSONEL HAFTALIK KONTROL LİSTESİ", range, days, rows);
+}
+function printWeeklySummary(range, days, rows = []) {
+  return printWeeklyMatrix("KY ERP GÜNLÜK OPERASYON HAFTALIK ÖZET", range, days, rows);
 }
 function printPaidPaymentReceipt(row = {}) {
   const items = Array.isArray(row.items) ? row.items : [];
   const details = items.length ? items.map((item) => `<tr><td>${escapeHtml(dateText(item.workDate))}</td><td>${item.shift === "night" ? "Gece" : "Gündüz"}</td><td>${escapeHtml(money(item.amount))}</td></tr>`).join("") : `<tr><td colspan="3">Gündüz ${number(row.dayCount)} · Gece ${number(row.nightCount)}</td></tr>`;
-  return printHtmlDocument({ title: `Ödeme Fişi ${row.paymentNo || ""}`, html: `<main class="paid-receipt"><header><h1>KY ERP PERSONEL ÖDEME FİŞİ</h1><b>${escapeHtml(row.paymentNo || "")}</b></header><section><div><span>Personel</span><strong>${escapeHtml(row.name || row.fullName || "-")}</strong></div><div><span>Hakediş Dönemi</span><strong>${escapeHtml(dateText(row.periodStart || row.startDate))} — ${escapeHtml(dateText(row.periodEnd || row.endDate))}</strong></div><div><span>Ödeme Tarihi</span><strong>${escapeHtml(dateText(row.paidDate || String(row.paidAt || "").slice(0,10)))}</strong></div><div><span>Ödeyen</span><strong>${escapeHtml(row.paidByLabel || "KY ERP Kullanıcısı")}</strong></div></section><table><thead><tr><th>Tarih</th><th>Vardiya</th><th>Tutar</th></tr></thead><tbody>${details}</tbody></table><footer><span>ÖDENDİ</span><strong>${escapeHtml(money(row.totalAmount))}</strong></footer></main>`, css: `@page{size:A4 portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#111}.paid-receipt{max-width:180mm;margin:auto}.paid-receipt header{display:flex;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:8px}.paid-receipt h1{font-size:16px;margin:0}.paid-receipt section{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}.paid-receipt section div{border:1px solid #bbb;padding:8px}.paid-receipt span{display:block;font-size:11px}.paid-receipt strong{font-size:14px}.paid-receipt table{width:100%;border-collapse:collapse}.paid-receipt th,.paid-receipt td{border:1px solid #777;padding:6px;text-align:left}.paid-receipt footer{margin-top:14px;border:2px solid #111;padding:12px;display:flex;justify-content:space-between;align-items:center}.paid-receipt footer span{font-size:18px;font-weight:900}.paid-receipt footer strong{font-size:24px}` });
+  return printHtmlDocument({ title: `Ödeme Fişi ${row.paymentNo || ""}`, html: `<main class="paid-receipt"><header><h1>KY ERP PERSONEL ÖDEME FİŞİ</h1><b>${escapeHtml(row.paymentNo || "")}</b></header><section><div><span>Personel</span><strong>${escapeHtml(row.name || row.fullName || "-")}</strong></div><div><span>Hakediş Dönemi</span><strong>${escapeHtml(dateText(row.periodStart || row.startDate))} — ${escapeHtml(dateText(row.periodEnd || row.endDate))}</strong></div><div><span>Ödeme Tarihi</span><strong>${escapeHtml(dateText(row.paidDate || String(row.paidAt || "").slice(0,10)))}</strong></div><div><span>Ödeyen</span><strong>${escapeHtml(row.paidByLabel || "KY ERP Kullanıcısı")}</strong></div></section><table><thead><tr><th>Tarih</th><th>Vardiya</th><th>Tutar</th></tr></thead><tbody>${details}</tbody></table><footer><span>TOPLAM ÖDEME</span><strong>${escapeHtml(money(row.totalAmount))}</strong></footer></main>`, css: `@page{size:A4 portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#111}.paid-receipt{max-width:180mm;margin:auto}.paid-receipt header{display:flex;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:8px}.paid-receipt h1{font-size:16px;margin:0}.paid-receipt section{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}.paid-receipt section div{border:1px solid #bbb;padding:8px}.paid-receipt span{display:block;font-size:11px}.paid-receipt strong{font-size:14px}.paid-receipt table{width:100%;border-collapse:collapse}.paid-receipt th,.paid-receipt td{border:1px solid #777;padding:6px;text-align:left}.paid-receipt footer{margin-top:14px;border:2px solid #111;padding:12px;display:flex;justify-content:space-between;align-items:center}.paid-receipt footer span{font-size:18px;font-weight:900}.paid-receipt footer strong{font-size:24px}` });
 }
 
 function actionLabel(row = {}) {
