@@ -24,7 +24,7 @@ internal static class TerminalDeviceClient
             if (p.Length >= 3 && p[0] == "ACTION") return new(p[1] == "OK", string.Join(" ", p.Skip(2)));
             if (p.Length >= 3 && p[0] == "STATUS" && p[1] == "ERROR") return new(false, string.Join(" ", p.Skip(2)));
         }
-        return new(false, string.IsNullOrWhiteSpace(run.Error) ? "Cihaz komutundan yanÄ±t alÄ±namadÄ±." : run.Error.Trim());
+        return new(false, string.IsNullOrWhiteSpace(run.Error) ? "Cihaz komutundan yanıt alınamadı." : run.Error.Trim());
     }
 
     static async Task<TerminalDeviceSnapshot> RunReadAsync(string mode, CancellationToken ct)
@@ -36,7 +36,7 @@ internal static class TerminalDeviceClient
     static async Task<(string Output, string Error)> RunBridgeAsync(string mode, CancellationToken ct)
     {
         var bridge = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_BRIDGE") ?? Path.Combine(AppContext.BaseDirectory, "KYERP.TerminalBridge.exe");
-        if (!File.Exists(bridge)) return ("STATUS|ERROR|Terminal kÃ¶prÃ¼sÃ¼ bulunamadÄ±. Tam kurulum paketini kullanÄ±n.", "");
+        if (!File.Exists(bridge)) return ("STATUS|ERROR|Terminal köprüsü bulunamadı. Tam kurulum paketini kullanın.", "");
 
         var sdk = TerminalSdkLocator.Resolve();
         if (!sdk.CanAttemptConnection) return ("STATUS|ERROR|" + sdk.Message, "");
@@ -74,7 +74,7 @@ internal static class TerminalDeviceClient
         try
         {
             process = Process.Start(psi);
-            if (process is null) return ("STATUS|ERROR|Terminal kÃ¶prÃ¼sÃ¼ baÅŸlatÄ±lamadÄ±.", "");
+            if (process is null) return ("STATUS|ERROR|Terminal köprüsü başlatılamadı.", "");
             var outputTask = process.StandardOutput.ReadToEndAsync(ct);
             var errorTask = process.StandardError.ReadToEndAsync(ct);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -85,7 +85,7 @@ internal static class TerminalDeviceClient
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             try { if (process is { HasExited: false }) process.Kill(true); } catch { }
-            return ("STATUS|ERROR|Kart cihazÄ± zaman aÅŸÄ±mÄ±na uÄŸradÄ±. IP/port ve aÄŸ eriÅŸimini kontrol edin.", "");
+            return ("STATUS|ERROR|Kart cihazı zaman aşımına uğradı. IP/port ve ağ erişimini kontrol edin.", "");
         }
         catch (Exception ex)
         {
@@ -99,11 +99,11 @@ internal static class TerminalDeviceClient
 
     static string FriendlyTerminalError(string message)
     {
-        if (string.IsNullOrWhiteSpace(message)) return "Terminal SDK hatasÄ±.";
-        if (message.Contains("entry point", StringComparison.OrdinalIgnoreCase) || message.Contains("giriÅŸ noktasÄ±", StringComparison.OrdinalIgnoreCase) || message.Contains("FM_RecordRead", StringComparison.OrdinalIgnoreCase))
-            return "Terminal SDK sÃ¼rÃ¼mÃ¼ uyumsuz. Hedef PDKS'nin Ã§alÄ±ÅŸan FP_CLOCK.ocx / DLL seti kullanÄ±lmalÄ±.";
+        if (string.IsNullOrWhiteSpace(message)) return "Terminal SDK hatası.";
+        if (message.Contains("entry point", StringComparison.OrdinalIgnoreCase) || message.Contains("giriş noktası", StringComparison.OrdinalIgnoreCase) || message.Contains("FM_RecordRead", StringComparison.OrdinalIgnoreCase))
+            return "Terminal SDK sürümü uyumsuz. Hedef PDKS'nin çalışan FP_CLOCK.ocx / DLL seti kullanılmalı.";
         if (message.Contains("class not registered", StringComparison.OrdinalIgnoreCase) || message.Contains("80040154", StringComparison.OrdinalIgnoreCase))
-            return "FP_CLOCK 32-bit ActiveX Windows'ta kayÄ±tlÄ± deÄŸil. Terminal Merkezi > SÃ¼rÃ¼cÃ¼yÃ¼ Onar iÅŸlemini kullanÄ±n.";
+            return "FP_CLOCK 32-bit ActiveX Windows'ta kayıtlı değil. Terminal Merkezi > Sürücüyü Onar işlemini kullanın.";
         return message.Replace("|", "/").Replace("\r", " ").Replace("\n", " ");
     }
 
@@ -135,7 +135,7 @@ internal static class TerminalDeviceClient
                 punches.Add(new(p[1], at, inout, verify, evt, terminal));
             }
         }
-        if (deviceTime is null) return TerminalDeviceSnapshot.Offline(string.IsNullOrWhiteSpace(error) ? "Kart cihazÄ±ndan geÃ§erli yanÄ±t alÄ±namadÄ±." : FriendlyTerminalError(error.Trim()));
-        return new(true, "BaÄŸlÄ±", deviceTime, newLogs, users, cards, punches);
+        if (deviceTime is null) return TerminalDeviceSnapshot.Offline(string.IsNullOrWhiteSpace(error) ? "Kart cihazından geçerli yanıt alınamadı." : FriendlyTerminalError(error.Trim()));
+        return new(true, "Bağlı", deviceTime, newLogs, users, cards, punches);
     }
 }
