@@ -208,7 +208,7 @@ from GIRCIK G left join KIMLIK K on K.PKNO=G.PKNO where 1=1";
     void GirisGridFormat(object? sender,DataGridViewCellFormattingEventArgs e)
     {
         if(e.RowIndex<0||e.ColumnIndex<0)return;var col=grid.Columns[e.ColumnIndex];if(col is null)return;var n=col.Name;
-        if(n is "GSAAT" or "CSAAT"){var style=e.CellStyle;if(style is null)return;style.BackColor=Color.Black;style.ForeColor=Color.Lime;style.SelectionBackColor=Color.Black;style.SelectionForeColor=Color.Lime;style.Font=new Font(Font,FontStyle.Bold);}
+        if(n is "GSAAT" or "CSAAT"){var style=e.CellStyle;if(style is null)return;style.Font=new Font(Font,FontStyle.Bold);}
         if(n is "GTARIH" or "CTARIH"&&e.Value is DateTime d){e.Value=d.ToString("dd MMM yyyy ddd",new System.Globalization.CultureInfo("tr-TR"));e.FormattingApplied=true;}
     }
     void UpdateGirisStatus(){if(Tag is GirisFilterState s&&s.Status.Items["COUNT"] is ToolStripStatusLabel l)l.Text=$"Listelenen Kayıt Sayısı : {grid.Rows.Count}";}
@@ -380,7 +380,17 @@ from GIRCIK G left join KIMLIK K on K.PKNO=G.PKNO where 1=1";
 
     // ---------------- COMMON DATA ----------------
     static void AddFilterRow(TableLayoutPanel table,string label,Control control,int row){if(table.RowCount<=row)table.RowCount=row+1;table.RowStyles.Add(new RowStyle(SizeType.Absolute,26));table.Controls.Add(new Label{Text=label,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,row);control.Dock=DockStyle.Fill;table.Controls.Add(control,1,row);}
-    static Button LegacyButton(string text,int width,int height)=>new(){Text=text,Width=width,Height=height,ForeColor=Color.Navy,Font=new Font("Microsoft Sans Serif",8.25f,FontStyle.Bold),UseVisualStyleBackColor=true};
+    static Button LegacyButton(string text,int width,int height)
+    {
+        var role=text.Contains("Sil",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Danger:
+                 text.Contains("Göster",StringComparison.OrdinalIgnoreCase) || text.Contains("Kaydet",StringComparison.OrdinalIgnoreCase) ||
+                 text.Contains("Ekle",StringComparison.OrdinalIgnoreCase) || text.Contains("Önizleme",StringComparison.OrdinalIgnoreCase)
+                    ? PdksActionRole.Primary:
+                 text.Contains("Kapat",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Quiet:PdksActionRole.Secondary;
+        var b=PdksUiKit.Button(text,width,role);
+        b.Height=height;b.MinimumSize=new Size(width,height);b.MaximumSize=new Size(width,height);
+        return b;
+    }
 
     void ReloadData()
     {
