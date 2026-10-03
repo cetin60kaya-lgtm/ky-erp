@@ -274,7 +274,7 @@ internal class LicenseActivationForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-        root.Controls.Add(new Label { Text = "Lisans / Demo Durumu", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 17f, FontStyle.Bold), ForeColor = Color.FromArgb(27, 44, 68), TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
+        root.Controls.Add(new Label { Text = "Lisans / Demo Durumu", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 17f, FontStyle.Bold), ForeColor = PdksAppearance.Current.Text, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
         root.Controls.Add(status, 0, 1);
         root.Controls.Add(activationKey, 0, 2);
         root.Controls.Add(activate, 0, 3);
@@ -341,7 +341,7 @@ internal sealed class CompanyLicenseCenterForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        var title = new Label { Text = "Firma Lisans Yönetimi", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 18f, FontStyle.Bold), ForeColor = Color.FromArgb(27, 44, 68), TextAlign = ContentAlignment.MiddleLeft };
+        var title = new Label { Text = "Firma Lisans Yönetimi", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 18f, FontStyle.Bold), ForeColor = PdksAppearance.Current.Text, TextAlign = ContentAlignment.MiddleLeft };
         root.Controls.Add(title, 0, 0); root.SetColumnSpan(title, 2);
         root.Controls.Add(status, 0, 1); root.SetColumnSpan(status, 2);
         root.Controls.Add(new Label { Text = "Bitiş Tarihi", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 2);
@@ -373,7 +373,7 @@ internal sealed class CompanyLicenseCenterForm : Form
         {
             Text = "7 günlük demo otomatik başlar. Demo ve süresi dolmuş lisanslarda uygulama görüntüleme/raporlama için açılır; veri değiştiren kritik işlemler kapalıdır. Super Admin erişimi kaybolmaz. TNF dosyaları lisans yüzünden silinmez. Canlı FDB/GDB dosyasının fiziksel disk şifrelemesi lisans kilidinden ayrı bir güvenlik katmanıdır.",
             Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(85, 95, 110),
+            ForeColor = PdksAppearance.Current.Muted,
             TextAlign = ContentAlignment.MiddleLeft
         };
         root.Controls.Add(note, 0, 6); root.SetColumnSpan(note, 2);
