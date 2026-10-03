@@ -1,17 +1,6 @@
 name: Günlük Operasyon Canlı Yayın
 
 on:
-  push:
-    branches: [codex/model-uretim-kontrol-merkezi-final]
-    paths:
-      - 'APP/app/ky-erp-frontend/src/pages/modules/ik/DailyHrWorkspace.jsx'
-      - 'APP/app/ky-erp-frontend/src/pages/modules/ik/daily-hr-workspace.css'
-      - 'APP/app/ky-erp-frontend/src/pages/modules/ik/daily-hr-workspace-final.css'
-      - 'APP/app/ky-erp-frontend/src/services/dailyOpsApi.js'
-      - 'APP/app/ky-erp-frontend/src/app/moduleRegistry.js'
-      - 'APP/app/ky-erp-frontend/public/manifest.webmanifest'
-      - 'APP/app/ky-erp-frontend/src/styles/canonical-workspace-ui.test.js'
-      - '.github/workflows/daily-payment-print-controls-final.yml'
   workflow_dispatch:
 
 permissions:
@@ -19,7 +8,7 @@ permissions:
 
 concurrency:
   group: daily-operations-production
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   validate-and-deploy:
