@@ -118,7 +118,7 @@ public partial class PersonelForm
         {
             Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,
             MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,
-            RowHeadersVisible=false,BackgroundColor=Color.White,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
+            RowHeadersVisible=false,BackgroundColor=PdksAppearance.Current.Surface,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
             ColumnHeadersHeight=20,RowTemplate={Height=20}
         };
         root.Controls.Add(list,0,0);
