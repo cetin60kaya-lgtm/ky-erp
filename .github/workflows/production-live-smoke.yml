@@ -1,12 +1,6 @@
 ﻿name: KY ERP Production Live Smoke
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - "APP/app/ky-erp-frontend/**"
-      - ".github/workflows/production-live-smoke.yml"
   workflow_dispatch:
 
 permissions:
