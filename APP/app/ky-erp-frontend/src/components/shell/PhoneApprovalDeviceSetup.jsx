@@ -17,6 +17,8 @@ export default function PhoneApprovalSetup({ onClose }) {
   const [enrollment, setEnrollment] = useState(null);
   const [copied, setCopied] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
+  const [ownerEmailChallenge, setOwnerEmailChallenge] = useState(null);
+  const [ownerStepUpCode, setOwnerStepUpCode] = useState("");
 
   const devices = useMemo(() => rowsOf(config), [config]);
   const inactiveDevices = useMemo(() => devices.filter((row) => !row.isActive), [devices]);
@@ -29,6 +31,10 @@ export default function PhoneApprovalSetup({ onClose }) {
     () => securityDevices.some((row) => Boolean(row.lastError)),
     [securityDevices],
   );
+  const ownerStepUpRequired = Boolean(config?.ownerEnrollmentStepUpRequired);
+  const ownerEmailReady = Boolean(config?.ownerEmailReady);
+  const ownerAuthenticatorProviders = Array.isArray(config?.ownerAuthenticatorProviders) ? config.ownerAuthenticatorProviders : [];
+  const ownerAuthorizedDevice = securityDevices.find((row) => row.ownerControlAuthorized) || null;
   const clientPlatform = useMemo(() => {
     try {
       const ua = String(window.navigator?.userAgent || "");
