@@ -65,6 +65,26 @@ public static class PdksUiKit
         return panel;
     }
 
+    public static Form Dialog(string title,Size size,Size? minimumSize=null,bool sizable=true)
+    {
+        var p=PdksAppearance.Current;
+        return new Form
+        {
+            Text=title,
+            StartPosition=FormStartPosition.CenterParent,
+            Size=size,
+            MinimumSize=minimumSize??size,
+            FormBorderStyle=sizable?FormBorderStyle.Sizable:FormBorderStyle.FixedDialog,
+            MaximizeBox=sizable,
+            MinimizeBox=sizable,
+            ShowInTaskbar=false,
+            Font=new Font("Segoe UI",9f),
+            BackColor=p.Canvas,
+            ForeColor=p.Text,
+            AutoScaleMode=AutoScaleMode.Dpi
+        };
+    }
+
     public static Label SectionTitle(string text,int height=34) => new()
     {
         Text=text,
