@@ -18,6 +18,21 @@ public partial class PersonelForm
         return host is not null && !host.IsDisposed ? host : this;
     }
 
+    MainShellForm? ShellHost()
+    {
+        foreach (Form form in Application.OpenForms)
+            if (form is MainShellForm shell && !shell.IsDisposed) return shell;
+        return Parent?.FindForm() as MainShellForm;
+    }
+
+    bool RouteToShell(PdksCommandId command)
+    {
+        var shell=ShellHost();
+        if(shell is null)return false;
+        shell.NavigateToCommand(command);
+        return true;
+    }
+
     public void ActivateModule(PdksModule module)
     {
         if (!TopLevel && !Visible) Show();
@@ -29,11 +44,21 @@ public partial class PersonelForm
             case PdksModule.EkKazancKesinti: tabs.SelectedIndex = 3; break;
             case PdksModule.Puantaj: tabs.SelectedIndex = 4; break;
             case PdksModule.Bordro: tabs.SelectedIndex = 5; break;
-            case PdksModule.GunlukOperasyon: ShowDailyOperations(); break;
-            case PdksModule.Tanimlar: ShowOrganizationDefinitions(); break;
-            case PdksModule.Donemler: ShowLegacyPeriods(); break;
-            case PdksModule.Terminal: ShowTerminalProfiles(); break;
-            case PdksModule.Raporlar: ShowReportCenter(); break;
+            case PdksModule.GunlukOperasyon:
+                if(!RouteToShell(PdksCommandId.LiveAttendance))ShowDailyOperations();
+                break;
+            case PdksModule.Tanimlar:
+                if(!RouteToShell(PdksCommandId.Definitions))ShowOrganizationDefinitions();
+                break;
+            case PdksModule.Donemler:
+                if(!RouteToShell(PdksCommandId.Periods))ShowLegacyPeriods();
+                break;
+            case PdksModule.Terminal:
+                if(!RouteToShell(PdksCommandId.TerminalCenter))ShowTerminalProfiles();
+                break;
+            case PdksModule.Raporlar:
+                if(!RouteToShell(PdksCommandId.Reports))ShowReportCenter();
+                break;
         }
     }
 
@@ -49,11 +74,21 @@ public partial class PersonelForm
     {
         switch (module)
         {
-            case PdksModule.GunlukOperasyon: ShowDailyOperations(); break;
-            case PdksModule.Tanimlar: ShowOrganizationDefinitions(); break;
-            case PdksModule.Donemler: ShowLegacyPeriods(); break;
-            case PdksModule.Terminal: ShowTerminalProfiles(); break;
-            case PdksModule.Raporlar: ShowReportCenter(); break;
+            case PdksModule.GunlukOperasyon:
+                if(!RouteToShell(PdksCommandId.LiveAttendance))ShowDailyOperations();
+                break;
+            case PdksModule.Tanimlar:
+                if(!RouteToShell(PdksCommandId.Definitions))ShowOrganizationDefinitions();
+                break;
+            case PdksModule.Donemler:
+                if(!RouteToShell(PdksCommandId.Periods))ShowLegacyPeriods();
+                break;
+            case PdksModule.Terminal:
+                if(!RouteToShell(PdksCommandId.TerminalCenter))ShowTerminalProfiles();
+                break;
+            case PdksModule.Raporlar:
+                if(!RouteToShell(PdksCommandId.Reports))ShowReportCenter();
+                break;
             default: ActivateModule(module); break;
         }
     }
