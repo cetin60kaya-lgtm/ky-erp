@@ -163,10 +163,7 @@ async function audit(c: any, action: string, actorId = "", targetId = "", compan
 }
 
 async function activeDevicesForUser(c: any, userId: string, purpose: "SELF" | "MANAGER") {
-  const devices = await securityDevicesForUser(c, userId, purpose);
-  return purpose === "MANAGER"
-    ? devices.filter((row: AnyRow) => row.ownerControlAuthorized === true && row.managerApprovalEnabled !== false)
-    : devices;
+  return securityDevicesForUser(c, userId, purpose);
 }
 
 async function supersedeOlderSelfChallenges(c: any, userId: string, replacementId: string) {
@@ -308,7 +305,12 @@ async function applicationOwnerUserIds(c: any) {
   for(const row of result.results || []) if(isSuper(roleOf(row))) ids.add(text(row.id));
   return ids;
 }
-function canApproveSessionTarget(actor: AnyRow, session: AnyRow) { return isSuper(actor.role) && actor.ownerControlAuthorized === true; }
+function canApproveSessionTarget(actor: AnyRow, session: AnyRow) {
+  const targetRole=roleOf({ role:session.target_role, platform_role:session.target_platform_role, role_override:session.target_role_override });
+  if (isSuper(actor.role)) return actor.ownerControlAuthorized === true;
+  if (["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole)) return false;
+  return isCompanyAdmin(actor.role) && actor.companyApprover === true && text(actor.companySlug)===text(session.main_company_slug);
+}
 async function sessionNeedsManagerReview(c: any, session: AnyRow) {
   let trust=await storeGet(c, SESSION_TRUST_SCOPE, text(session.id));
   if (!trust && text(session.id)) trust=await storePut(c, SESSION_TRUST_SCOPE, text(session.id), text(session.mainCompanySlug || session.main_company_slug), { sessionId:text(session.id), userId:text(session.userId || session.user_id), status:"PENDING", requestedAt:text(session.createdAt || session.created_at || nowIso()), source:"MANAGER_REVIEW" });
@@ -482,6 +484,7 @@ async function actorFromDevice(c: any) {
 
   const effectiveRole = roleOf(user);
   const ownerControlAuthorized = isSuper(effectiveRole) && device.ownerControlAuthorized === true;
+  const companyApprover = isCompanyAdmin(effectiveRole) && device.managerApprovalEnabled !== false;
   return {
     device,
     userId: text(user.id),
@@ -491,7 +494,10 @@ async function actorFromDevice(c: any) {
     email: text(user.email),
     fullName: text(user.full_name || user.username),
     ownerControlAuthorized,
-    securityCapabilities: ownerControlAuthorized ? [...SECURITY_CAPABILITIES] : [],
+    companyApprover,
+    securityCapabilities: ownerControlAuthorized
+      ? [...SECURITY_CAPABILITIES]
+      : companyApprover ? ["LOGIN_APPROVE", "SESSION_APPROVE"] : [],
   };
 }
 
@@ -542,7 +548,13 @@ async function securityAccountProfile(c: any, actor: AnyRow) {
 }
 
 function canApproveTarget(actor: AnyRow, approval: AnyRow, settings: AnyRow) {
-  if (isSuper(actor.role) && actor.ownerControlAuthorized === true) return true;
+  const targetRole = roleOf({ role: approval.target_role, platform_role: approval.target_platform_role, role_override: approval.target_role_override });
+  if (isSuper(actor.role)) return actor.ownerControlAuthorized === true;
+  if (isCompanyAdmin(actor.role)) {
+    return actor.companyApprover === true &&
+      text(actor.companySlug) === text(approval.main_company_slug) &&
+      !["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(targetRole);
+  }
   return false;
 }
 
@@ -771,7 +783,17 @@ async function pendingItems(c: any, actor: AnyRow) {
           WHERE a.status='PENDING' AND a.consumed_at IS NULL AND a.expires_at>?
           ORDER BY a.requested_at ASC`,
       ).bind(timestamp).all<AnyRow>()
-    : { results: [] };
+    : isCompanyAdmin(actor.role) && actor.companyApprover === true
+      ? await c.env.DB.prepare(
+          `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.user_agent,a.ip_address,a.requested_at,a.expires_at,
+                  u.full_name,u.username,u.role AS target_role,s.role_override AS target_role_override
+             FROM auth_login_approvals a
+             JOIN auth_users u ON u.id=a.user_id
+             LEFT JOIN auth_user_security s ON s.user_id=u.id
+            WHERE a.status='PENDING' AND a.consumed_at IS NULL AND a.expires_at>? AND a.main_company_slug=?
+            ORDER BY a.requested_at ASC`,
+        ).bind(timestamp, actor.companySlug).all<AnyRow>()
+      : { results: [] };
 
   for (const row of managerRows.results || []) {
     const settings = await companyApprovalSettings(c, text(row.main_company_slug));
@@ -790,8 +812,10 @@ async function pendingItems(c: any, actor: AnyRow) {
     });
   }
 
-  if (isSuper(actor.role) && actor.ownerControlAuthorized === true) {
-    const sessionResult = await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.user_agent,s.ip_address,s.created_at,s.expires_at,u.full_name,u.username,u.role AS target_role,u.platform_role AS target_platform_role,us.role_override AS target_role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.revoked_at IS NULL AND s.expires_at>? ORDER BY s.created_at DESC LIMIT 250`).bind(timestamp).all<AnyRow>();
+  if ((isSuper(actor.role) && actor.ownerControlAuthorized === true) || (isCompanyAdmin(actor.role) && actor.companyApprover === true)) {
+    const sessionResult = isSuper(actor.role)
+      ? await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.user_agent,s.ip_address,s.created_at,s.expires_at,u.full_name,u.username,u.role AS target_role,u.platform_role AS target_platform_role,us.role_override AS target_role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.revoked_at IS NULL AND s.expires_at>? ORDER BY s.created_at DESC LIMIT 250`).bind(timestamp).all<AnyRow>()
+      : await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.user_agent,s.ip_address,s.created_at,s.expires_at,u.full_name,u.username,u.role AS target_role,u.platform_role AS target_platform_role,us.role_override AS target_role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.main_company_slug=? ORDER BY s.created_at DESC LIMIT 150`).bind(timestamp, actor.companySlug).all<AnyRow>();
     for (const row of sessionResult.results || []) {
       if (!canApproveSessionTarget(actor,row) || !(await sessionNeedsManagerReview(c,row))) continue;
       items.push({ kind: SECURITY_APPROVAL_KINDS.SESSION, id: row.id, dedupeKey: `session:${text(row.id)}`, title: "KY ERP · Oturum Onayı", body: `${text(row.full_name || row.username)} · ${friendlyDeviceLabel(row.device_label,row.user_agent)} için oturum onayı bekleniyor.`, requestedAt: row.created_at, expiresAt: row.expires_at, mainCompanySlug: row.main_company_slug });
@@ -810,7 +834,20 @@ async function safePendingItems(c: any, actor: AnyRow) {
   try { return await pendingItems(c, actor); } catch (error) { console.error(JSON.stringify({level:"error",area:"KY_SECURITY_PENDING",message:error instanceof Error?error.message:String(error)})); return fallbackSelfPendingItems(c, actor); }
 }
 async function safeSecurityAccountProfile(c: any, actor: AnyRow) {
-  try { return await securityAccountProfile(c, actor); } catch (error) { console.error(JSON.stringify({level:"error",area:"KY_SECURITY_ACCOUNT",message:error instanceof Error?error.message:String(error)})); const role=upper(actor.role); return {userId:text(actor.userId),fullName:text(actor.fullName||actor.username||"Kullanıcı"),username:text(actor.username),email:text(actor.email),role,companySlug:text(actor.companySlug),companyName:text(actor.companySlug),scopeType:isSuper(role)?"SYSTEM":(isCompanyAdmin(role)?"COMPANY":"USER"),moduleKeys:isSuper(role)?["ALL"]:[],securityCapabilities:(isSuper(role)||isCompanyAdmin(role))?[...SECURITY_CAPABILITIES]:[]}; }
+  try { return await securityAccountProfile(c, actor); } catch (error) {
+    console.error(JSON.stringify({level:"error",area:"KY_SECURITY_ACCOUNT",message:error instanceof Error?error.message:String(error)}));
+    const role=upper(actor.role);
+    const ownerControlAuthorized=isSuper(role)&&actor.ownerControlAuthorized===true;
+    const companyApprover=isCompanyAdmin(role)&&actor.companyApprover===true;
+    return {
+      userId:text(actor.userId),fullName:text(actor.fullName||actor.username||"Kullanıcı"),username:text(actor.username),email:text(actor.email),
+      role,companySlug:text(actor.companySlug),companyName:text(actor.companySlug),
+      scopeType:ownerControlAuthorized?"SYSTEM":(companyApprover?"COMPANY":"USER"),
+      ownerControlAuthorized,
+      moduleKeys:ownerControlAuthorized?["ALL"]:[],
+      securityCapabilities:ownerControlAuthorized?[...SECURITY_CAPABILITIES]:(companyApprover?["LOGIN_APPROVE","SESSION_APPROVE"]:[]),
+    };
+  }
 }
 
 export async function invalidatePhoneLoginChallenges(c: any, userId: string) {
@@ -1055,7 +1092,7 @@ export function registerAuthPushRoutes(app: any) {
       securityApp: true,
       securityAppVersion: SECURITY_APP_VERSION,
       selfLoginEnabled: true,
-      managerApprovalEnabled: ownerControlAuthorized,
+      managerApprovalEnabled: ownerControlAuthorized || isCompanyAdmin(role),
       ownerControlAuthorized,
       ownerControlAuthorizedAt: ownerControlAuthorized ? nowIso() : "",
       ownerControlMethod: ownerControlAuthorized ? text(enrollment.ownerControlMethod) : "",
