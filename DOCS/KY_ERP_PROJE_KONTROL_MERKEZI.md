@@ -111,3 +111,15 @@ PDKS kart cihazı `KYERP.PDKS.Agent` Windows servisiyle korunur. File Hub provid
 - `CHANGELOG.md`
 
 **Son güncelleme: 03.09.2026 — Desktop-first kontrol düzeni ve GitHub proje devam merkezi kesinleştirildi.**
+
+
+## GitHub maliyet / Actions tek düzen — 04.10.2026
+
+- GitHub ek kullanım bütçeleri 0 USD ve limitte kullanım durdurma yaklaşımı korunur.
+- Copilot Free varsayılandır; ücretli Copilot/ek kredi/ücretli GitHub servisi kullanıcı açıkça istemedikçe açılmaz.
+- Otomatik CI için tek canonical kapı: `.github/workflows/ui-canonical-acceptance.yml`; normal geliştirmede yalnız hedef PR değişikliklerinde çalışır ve aynı işin eski koşusunu iptal eder.
+- PDKS Windows/native build, PDKS web kontrolü, Muhasebe geniş kabul, production smoke, security deploy ve günlük operasyon deploy akışları varsayılan olarak `workflow_dispatch` ile manuel çalıştırılır.
+- Production yayın akışları genel kod push'una bağlanmaz; açık release kaydı veya manuel tetik gerekir.
+- Yeni workflow eklemek yerine mevcut canonical akış genişletilir. Yeni otomatik push/schedule ancak kullanıcı açıkça onaylarsa eklenir.
+- Artifact retention varsayılan 3 gündür; workflow kendi commit/push işlemiyle sonsuz tetikleme döngüsü oluşturamaz.
+- Ayrıntılı ve üstün kural kökteki `AGENTS.md` içindeki **GitHub maliyet ve Actions ana kuralı — 04.10.2026** bölümüdür.
