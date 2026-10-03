@@ -881,6 +881,21 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setModal("bordroDuzelt");
   };
 
+  const editPayrollPaymentSplit = (side, value) => {
+    setModalDraft((old) => {
+      const amount = Math.max(0, num(value));
+      const draft = { ...old, [side]: amount, paymentEdit: side };
+      const totals = calcRow(draft);
+      const split = reconcilePaymentSplit(
+        totals.net,
+        side === "bank" ? amount : num(draft.bank),
+        side === "cash" ? amount : num(draft.cash),
+        side,
+      );
+      return { ...draft, bank: split.bank, cash: split.cash };
+    });
+  };
+
   const openDocument = (employee = selected) => {
     if (employee?.id) setSelectedId(employee.id);
     setModalDraft({ employeeId: employee?.id || "", documentType: "Personel evragi", note: "" });
@@ -2033,7 +2048,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         <div className="card"><div className="ch"><div><b>Hareketler</b><span>Bu liste hareket kaynağıdır; bordro sonucu Bordro & Ödeme ekranında kesinleşir.</span></div></div><div className="tw"><table><thead><tr><th>Tarih</th><th>Personel</th><th>Tip</th><th>Saat/Gun</th><th>Tutar</th><th>Odeme Sekli</th><th>Bordro Etkisi</th><th>Aciklama</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{filteredMovements.map((item) => {
           const employee = employees.find((row) => row.id === item.employeeId);
           const finalCorrection = upper(item.note).includes("SON BORDRO KONTROL");
-          return <tr key={item.id || `${item.employeeId}-${item.date}-${item.type}`}><td>{item.date || item.adjustmentDate || "-"}</td><td><span className="person">{employee?.fullName || item.fullName || "-"}</span><span className="code">{employee?.code || "-"}</span></td><td>{item.type}{item.type === "Mesai" ? <span className="code">{upper(item.note).includes("SON BORDRO KONTROL") ? "Son bordro düzeltmesi" : overtimeTypeLabel(item.overtimeMultiplier || (upper(item.note).includes("X2") ? 2 : 1.5))}</span> : null}</td><td>{item.hourOrDay || item.quantity || "-"}</td><td className="money">{money(item.amount)}</td><td>{item.paymentMethod || "-"}</td><td>{item.payrollEffect || "Bordroya yansir"}</td><td>{item.note || item.description || "-"}</td><td><span className="badge green">Kayitli</span></td><td><button className="btn" onClick={() => setNotice(item.note || "Hareket detayi acildi.")}>Detay</button> {finalCorrection ? <span className="badge blue">Bordro düzeltmesi · kilitli</span> : <><button className="btn" onClick={() => openFinance(item.type, item)}>Duzenle</button> <button className="btn red" onClick={() => deleteFinance(item)}>Sil</button></>}</td></tr>;
+          const correctionPayrollRow = finalCorrection ? payrollRows.find((row) => row.employee.id === item.employeeId) : null;
+          return <tr key={item.id || `${item.employeeId}-${item.date}-${item.type}`}><td>{item.date || item.adjustmentDate || "-"}</td><td><span className="person">{employee?.fullName || item.fullName || "-"}</span><span className="code">{employee?.code || "-"}</span></td><td>{item.type}{item.type === "Mesai" ? <span className="code">{upper(item.note).includes("SON BORDRO KONTROL") ? "Son bordro düzeltmesi" : overtimeTypeLabel(item.overtimeMultiplier || (upper(item.note).includes("X2") ? 2 : 1.5))}</span> : null}</td><td>{item.hourOrDay || item.quantity || "-"}</td><td className="money">{money(item.amount)}</td><td>{item.paymentMethod || "-"}</td><td>{item.payrollEffect || "Bordroya yansir"}</td><td>{item.note || item.description || "-"}</td><td><span className="badge green">Kayitli</span></td><td><button className="btn" onClick={() => setNotice(item.note || "Hareket detayi acildi.")}>Detay</button> {finalCorrection ? <><button className="btn" disabled={!correctionPayrollRow || data.close?.isLocked || upper(correctionPayrollRow?.saved?.status)==="PAID"} onClick={() => openPayroll(correctionPayrollRow)}>Bordrodan Düzelt</button> <span className="badge blue">Kaynak düzeltme</span></> : <><button className="btn" onClick={() => openFinance(item.type, item)}>Düzenle</button> <button className="btn red" onClick={() => deleteFinance(item)}>Sil</button></>}</td></tr>;
         })}<EmptyRow show={!filteredMovements.length} colSpan={10} text="Seçili filtrelerde hareket kaydı yok." /></tbody></table></div></div>
         <LogTable title="Hareket Loglari" rows={scopedLogs} onEdit={editFromLog} />
       </section>
@@ -2087,7 +2103,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     }
     return (
       <section>
-        <div className="page-head"><div><h1>Son Bordro ve Ödeme Merkezi</h1><p>Resmi bordro, puantaj, avans/kesinti ve banka ödemesi çıktı öncesi burada son kez kontrol edilir.</p></div><div className="group"><span className={`badge ${data.close?.isLocked ? "red" : "blue"}`}>{data.close?.isLocked ? "Dönem Kapalı" : "Dönem Açık"}</span><span className={`badge ${balanced ? "green" : "red"}`}>{balanced ? "Ödeme dengeli" : "Ödeme kontrol gerekli"}</span></div></div>
+        <div className="page-head"><div><h1>Son Bordro ve Ödeme Merkezi</h1><p>Resmi bordro, puantaj, avans/kesinti ve banka ödemesi çıktı öncesi burada son kez kontrol edilir.</p></div><div className="group"><span className="badge blue">{MONTHS[month - 1]} {year}</span><span className={`badge ${data.close?.isLocked ? "red" : "blue"}`}>{data.close?.isLocked ? "Dönem Kapalı" : "Dönem Açık"}</span><span className={`badge ${balanced ? "green" : "red"}`}>{balanced ? "Ödeme dengeli" : "Ödeme kontrol gerekli"}</span></div></div>
         {filters({ third: "Personel ara", fourth: "Odeme", fifth: "Durum" })}
         <div className="sumgrid short">{summaryBox("Ödeme listesi", filteredPayrollRows.length, "", `${payrollRows.length} toplam · ${selectedPayrollIds.length || payrollRows.length} seçili`)}{summaryBox("Resmi bordro neti", money(employees.reduce((sum,item)=>sum+num(item.sgkNet),0)))}{summaryBox("Banka", money(summary.bank))}{summaryBox("Elden", money(summary.cash))}{summaryBox("Avans / Kesinti", `${money(summary.advance)} / ${money(summary.deduction)}`, "orange")}{summaryBox("EK / İcra-Haciz", `${money(summary.extra)} / ${money(summary.garnishment)}`, summary.garnishment ? "orange" : "")}{summaryBox("Net Toplam", money(summary.net), balanced ? "green" : "red")}</div>
         <div className="workbar"><div className="group"><button className="btn primary" disabled={data.close?.isLocked} onClick={refreshPayroll}>Yeniden Hesapla</button><button className="btn" disabled={data.close?.isLocked} onClick={savePayroll}>Seçilileri Kaydet</button><button className="btn green" disabled={data.close?.isLocked || !balanced} onClick={openBulkPayment}>Ödeme Merkezi</button><button className="btn" disabled={data.close?.isLocked} onClick={() => openPayroll()}>Seçiliyi Düzenle</button><button className="btn" onClick={printPayrollReport}>Ödeme Listesi / PDF</button><button className="btn" onClick={printPaymentSlips}>10’lu Toplu Fiş / PDF</button><button className="btn" onClick={() => setModal("fis")}>Tek Kişi Fişi</button></div><button className="btn green" onClick={exportPayroll}>Ödeme Listesi / Excel</button></div>
@@ -2112,7 +2128,18 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               <td className="summary-col"><div className="payroll-cell-stack"><span><em>Avans</em><b>{money(row.advance)}</b></span><span><em>Kesinti</em><b>{money(row.deduction)}</b></span><span><em>İcra/Haciz</em><b>{money(row.garnishment)}</b></span></div></td>
               <td className="payment-col"><div className="payroll-cell-stack"><span><em>Banka</em><b>{money(row.bank)}</b></span><span><em>Elden</em><b>{money(row.cash)}</b></span><span className="cell-total net"><em>Net Ödenecek</em><b>{money(row.net)}</b></span></div></td>
               <td className="status-col"><span className={`badge ${num(row.employee.sgkNet)>0?"blue":"orange"}`}>{num(row.employee.sgkNet)>0?"Bordro":"Plan"}</span><span className={`badge ${upper(row.saved?.status)==="PAID"?"green":row.diff===0?"green":"red"}`}>{upper(row.saved?.status)==="PAID"?"Ödendi":row.diff===0?"Hazır":"Kontrol"}</span></td>
-              <td className="action-col"><button className="btn" disabled={data.close?.isLocked || upper(row.saved?.status)==="PAID"} onClick={()=>openPayroll(row)}>{upper(row.saved?.status)==="PAID"?"Kilitli":"Son Kontrol"}</button><button className="btn" onClick={()=>{setSelectedId(row.employee.id);setModal("fis");}}>Fiş</button></td>
+              <td className="action-col">
+                <details className="payroll-row-actions">
+                  <summary>İşlemler</summary>
+                  <div className="payroll-row-menu">
+                    <button className="btn" disabled={data.close?.isLocked || upper(row.saved?.status)==="PAID"} onClick={()=>openFinance("Mesai",{employeeId:row.employee.id})}>Mesai Ekle</button>
+                    <button className="btn" disabled={data.close?.isLocked || upper(row.saved?.status)==="PAID"} onClick={()=>openFinance("Avans",{employeeId:row.employee.id})}>Avans Ekle</button>
+                    <button className="btn" disabled={data.close?.isLocked || upper(row.saved?.status)==="PAID"} onClick={()=>openFinance("Ozel kesinti",{employeeId:row.employee.id})}>Kesinti Ekle</button>
+                    <button className="btn primary" disabled={data.close?.isLocked || upper(row.saved?.status)==="PAID"} onClick={()=>openPayroll(row)}>{upper(row.saved?.status)==="PAID"?"Kilitli":"Son Kontrol"}</button>
+                    <button className="btn" onClick={()=>{setSelectedId(row.employee.id);setModal("fis");}}>Fiş</button>
+                  </div>
+                </details>
+              </td>
             </tr>)}
             <EmptyRow show={!filteredPayrollRows.length} colSpan={8} text="Filtreye uygun bordro personeli bulunamadı." />
           </tbody></table></div>
@@ -2277,8 +2304,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                     <Field label="İcra / Haciz" half><input type="number" min="0" value={modalDraft.garnishment ?? ""} onChange={(event)=>setModalDraft((old)=>({...old,garnishment:event.target.value}))}/></Field>
                     <Field label="Hukuki Kesinti Türü" half><select value={modalDraft.legalType||"ICRA"} onChange={(event)=>setModalDraft((old)=>({...old,legalType:event.target.value}))}><option value="ICRA">İcra</option><option value="HACIZ">Haciz</option></select></Field>
                     <Field label="İcra/Haciz Kaynağı" half><select value={modalDraft.garnishmentSource||"Banka"} onChange={(event)=>setModalDraft((old)=>({...old,garnishmentSource:event.target.value}))}><option>Banka</option><option>Elden</option></select></Field>
-                    <Field label="Bankadan Ödenecek" half><input type="number" min="0" value={modalDraft.bank ?? ""} onChange={(event)=>setModalDraft((old)=>({...old,bank:event.target.value,paymentEdit:"bank"}))}/></Field>
-                    <Field label="Elden Ödenecek" half><input type="number" min="0" value={modalDraft.cash ?? ""} onChange={(event)=>setModalDraft((old)=>({...old,cash:event.target.value,paymentEdit:"cash"}))}/></Field>
+                    <Field label="Bankadan Ödenecek" half><input type="number" min="0" value={modalDraft.bank ?? ""} onChange={(event)=>editPayrollPaymentSplit("bank", event.target.value)}/></Field>
+                    <Field label="Elden Ödenecek" half><input type="number" min="0" value={modalDraft.cash ?? ""} onChange={(event)=>editPayrollPaymentSplit("cash", event.target.value)}/></Field>
                     <Field label="Son Kontrol Açıklaması" wide><textarea value={modalDraft.reason || ""} onChange={(event)=>setModalDraft((old)=>({...old,reason:event.target.value}))} placeholder="Örn. Ağustos maaş son kontrolü - banka ve mesai düzeltildi" /></Field>
                   </div>
                 </div>

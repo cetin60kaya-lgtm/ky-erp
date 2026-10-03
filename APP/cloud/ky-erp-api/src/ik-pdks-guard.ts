@@ -202,6 +202,7 @@ async function enforceAuditReadScope(c: Context<AppEnv>, next: () => Promise<voi
   const safeStatic = new Set([
     "/api/ik/personnel-control/profile",
     "/api/ik/personnel-control/people",
+    "/api/ik/personnel-control/pdks-people",
     "/api/ik/personnel-control/pdks-masters",
   ]);
   const personReadMatch = path.match(/^\/api\/ik\/personnel-control\/people\/([^/]+)\/(attendance(?:-v2)?|photo|photo-meta)$/i);
@@ -221,7 +222,7 @@ async function enforceAuditReadScope(c: Context<AppEnv>, next: () => Promise<voi
 
   let payload: any;
   try { payload = await c.res.clone().json(); } catch { return; }
-  if (path === "/api/ik/personnel-control/people") {
+  if (path === "/api/ik/personnel-control/people" || path === "/api/ik/personnel-control/pdks-people") {
     const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
     const filtered = rows
       .filter((row: Row) => allowedIds.has(text(row.id)) && text(row.cardNo || row.card_no))

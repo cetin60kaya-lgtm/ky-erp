@@ -20,49 +20,9 @@ function companyOf(c:Context<Env>,user:Row,body:Row={}){
   return text(c.req.header("X-KYERP-Tenant-Slug")||body.mainCompanyId||body.mainCompanySlug||c.req.query("mainCompanyId")||c.req.query("mainCompanySlug")||user.mainCompanySlug||user.security?.main_company_slug||"mecit-hakan").toLocaleLowerCase("tr-TR");
 }
 
-async function scopedPeople(c:Context<Env>){
-  const user=await getAuthenticatedUser(c) as Row|null;
-  if(!user)return c.json({ok:false,error:{code:"UNAUTHORIZED",message:"Oturum doğrulanamadı."}},401);
-  const company=companyOf(c,user);
-  const result=await c.env.DB.prepare(`SELECT
-    e.id,e.code,e.full_name,e.department,e.title,e.work_type,e.sgk_status,e.status,e.hire_date,
-    e.salary,e.road_allowance,e.bank_payment_type,e.bank_amount,e.cash_amount,e.overtime_hourly_base,
-    e.annual_leave_entitlement,e.annual_leave_carryover,e.note,e.created_at,e.updated_at,
-    s.card_no,s.identity_no,s.exit_date,s.active_passive,s.phone,s.payment_type,s.sgk_follow,s.personel_kodu
-    FROM hr_monthly_employees e
-    JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
-    WHERE e.main_company_id=?
-      AND TRIM(COALESCE(s.card_no,''))<>''
-      AND COALESCE(s.sgk_follow,1)<>0
-      AND UPPER(COALESCE(e.sgk_status,'VAR'))<>'YOK'
-    ORDER BY CASE WHEN UPPER(COALESCE(s.active_passive,e.status,'Aktif'))='AKTIF' THEN 0 ELSE 1 END,
-             COALESCE(NULLIF(TRIM(s.personel_kodu),''),NULLIF(TRIM(s.card_no),''),e.code),e.full_name`)
-    .bind(company).all<Row>();
-  const audit=String(user.role||"").toUpperCase().replace(/İ/g,"I")==="DENETIM"||text(user.username).toLocaleLowerCase("tr-TR")==="denetim";
-  const rows=(result.results||[]).map((row)=>{
-    const common:Row={
-      id:text(row.id),personnelCode:text(row.personel_kodu)||text(row.card_no)||text(row.code),fullName:text(row.full_name),
-      department:text(row.department),title:text(row.title),workType:text(row.work_type)||"Aylık",sgkStatus:"VAR",
-      status:text(row.active_passive)||text(row.status)||"Aktif",startDate:text(row.hire_date).slice(0,10),exitDate:text(row.exit_date).slice(0,10),
-      cardNo:text(row.card_no),activePassive:text(row.active_passive)||text(row.status)||"Aktif",phone:text(row.phone),
-      annualLeaveEntitlement:Number(row.annual_leave_entitlement||0),annualLeaveCarryover:Number(row.annual_leave_carryover||0),
-      createdAt:row.created_at,updatedAt:row.updated_at,
-    };
-    if(!audit)Object.assign(common,{
-      identityNo:text(row.identity_no),salary:Number(row.salary||0),roadAllowance:Number(row.road_allowance||0),
-      paymentChannel:text(row.bank_payment_type),bankAmount:Number(row.bank_amount||0),cashAmount:Number(row.cash_amount||0),
-      overtimeBaseHours:Number(row.overtime_hourly_base||225),note:text(row.note),
-    });
-    return common;
-  });
-  return c.json({ok:true,success:true,data:rows});
-}
-
 export function registerPdksWebChangeFeed(app:Hono<Env>){
-  // Bu route eski personnel-control /people route'undan önce kaydedilir. PDKS ekranı
-  // böylece yalnız Desktop PDKS kart havuzunu görür; İK Aylık kayıtları karışmaz.
-  app.get("/api/ik/personnel-control/people",scopedPeople);
-
+  // Bu katman yalnız web değişikliklerini sync event akışına yazar.
+  // Personel listesi route'u pdks-device-jobs.ts tarafından tek noktadan sağlanır.
   app.use("/api/ik/personnel-control/*",async(c,next)=>{
     const method=String(c.req.method||"GET").toUpperCase();
     if(!["POST","PATCH","PUT","DELETE"].includes(method))return next();
