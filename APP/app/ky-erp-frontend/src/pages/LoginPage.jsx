@@ -309,7 +309,7 @@ export default function LoginPage({ onClose }) {
         challengeId: flow.challengeId,
         challengeToken: flow.challengeToken,
         code: cleanCode,
-        provider: normalizeProvider(flow.provider) || selectedProvider,
+        provider: String(flow.stage || "").toUpperCase() === "MFA_REQUIRED" ? "" : (normalizeProvider(flow.provider) || selectedProvider),
         resetProvider,
       }));
     } catch (requestError) {
@@ -714,17 +714,16 @@ export default function LoginPage({ onClose }) {
                       <div><span className="auth-section-label">AUTHENTICATOR</span><strong>{flow.policyLabel || (flow.requireBoth ? "Google + Microsoft" : "6 haneli doğrulama kodu")}</strong></div>
                       {flow.requireBoth ? <span className="auth-policy-badge">2/2 MFA</span> : <span className="auth-policy-badge">Yedek doğrulama</span>}
                     </div>
-                    <div className="provider-grid provider-grid-compact">
-                      {(availableProviders.length ? availableProviders : [currentProvider]).filter(Boolean).map((provider) => (
-                        <ProviderCard key={provider} provider={provider} selected={selectedProvider === provider && !verifiedProviders.includes(provider)} verified={verifiedProviders.includes(provider)} disabled={verifiedProviders.includes(provider) || loading} onClick={() => { setSelectedProvider(provider); setCode(""); setResetProvider(""); setError(""); }} />
-                      ))}
+                    <div className="auth-notice auth-notice-compact">
+                      <strong>Tek kod alanı</strong>
+                      <span>Google veya Microsoft Authenticator kodunu doğrudan girin. Hangi uygulamadan geldiğini seçmeniz gerekmez.</span>
                     </div>
-                    {flow.requireBoth ? <div className="auth-progress-note auth-notice-compact"><strong>{verifiedProviders.length}/2 doğrulama tamamlandı</strong><span>{verifiedProviders.length ? verifiedProviders.map((item) => PROVIDER_LABELS[item]).join(", ") + " tamamlandı. Kalan doğrulamaya devam edin." : "Google veya Microsoft Authenticator kodlarından biriyle başlayın."}</span></div> : null}
+                    {flow.requireBoth ? <div className="auth-progress-note auth-notice-compact"><strong>{verifiedProviders.length}/2 doğrulama tamamlandı</strong><span>{verifiedProviders.length ? verifiedProviders.map((item) => PROVIDER_LABELS[item]).join(", ") + " tamamlandı. Kalan Authenticator kodunu aynı alana girin." : "Google veya Microsoft Authenticator kodlarından biriyle başlayın."}</span></div> : null}
                     <form className="auth-form auth-form-compact" onSubmit={handleMfa}>
-                      <label>{currentLabel} kodu<input className="auth-code-input" autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" /></label>
-                      {resetProvider ? <div className="auth-notice auth-notice-compact"><strong>{PROVIDER_LABELS[resetProvider]} yeniden kurulacak</strong><span>Kimliğinizi önce {currentLabel} koduyla doğrulayın.</span></div> : null}
+                      <label>6 haneli doğrulama kodu<input className="auth-code-input" autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" /></label>
+                      {resetProvider ? <div className="auth-notice auth-notice-compact"><strong>{PROVIDER_LABELS[resetProvider]} yeniden kurulacak</strong><span>Kimliğinizi kayıtlı Authenticator kodunuzla doğrulayın.</span></div> : null}
                       <ErrorBox message={error} />
-                      <button className="auth-primary" type="submit" disabled={loading || verifiedProviders.includes(currentProvider)}>{loading ? "Doğrulanıyor..." : resetProvider ? "Doğrula ve Yeniden Kur" : "Authenticator Kodunu Doğrula"}</button>
+                      <button className="auth-primary" type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : resetProvider ? "Doğrula ve Yeniden Kur" : "Kodu Doğrula"}</button>
                     </form>
                   </>
                 )}
