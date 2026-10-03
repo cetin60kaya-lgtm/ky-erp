@@ -1,14 +1,6 @@
 name: KY Security Enrollment API Deploy
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - APP/cloud/ky-erp-api/src/auth-security-mobile-control.ts
-      - APP/cloud/ky-erp-api/src/auth-push-cloud.ts
-      - APP/cloud/ky-erp-api/src/auth-security-core.ts
-      - .github/workflows/security-enrollment-api-deploy.yml
   workflow_dispatch:
 
 permissions:
@@ -16,7 +8,7 @@ permissions:
 
 concurrency:
   group: kyerp-security-enrollment-api
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
