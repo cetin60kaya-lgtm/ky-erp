@@ -245,7 +245,7 @@ public partial class PersonelForm
             Dock = DockStyle.Fill,
             ReadOnly = !editable,
             BorderStyle = BorderStyle.FixedSingle,
-            BackColor = editable ? Color.White : PdksAppearance.Current.SurfaceAlt,
+            BackColor = editable ? PdksAppearance.Current.Surface : PdksAppearance.Current.SurfaceAlt,
             ForeColor = UiText,
             Margin = new Padding(0, 3, 12, 3)
         };
