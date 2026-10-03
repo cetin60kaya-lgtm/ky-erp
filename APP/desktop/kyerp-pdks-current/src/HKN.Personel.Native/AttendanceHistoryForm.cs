@@ -12,7 +12,7 @@ public sealed class AttendanceHistoryForm : Form
     readonly DataGridView summary = Grid();
     readonly DataGridView detail = Grid();
     readonly Label archiveInfo = new() { AutoSize = false, Height = 38, TextAlign = ContentAlignment.MiddleLeft };
-    readonly Label status = new() { AutoSize = false, Height = 32, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.FromArgb(55, 70, 92) };
+    readonly Label status = new() { AutoSize = false, Height = 32, TextAlign = ContentAlignment.MiddleLeft, ForeColor = PdksAppearance.Current.Muted };
     bool loading;
     readonly bool allowArchiveCleanup;
 
