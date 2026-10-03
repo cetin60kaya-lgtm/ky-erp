@@ -31,14 +31,14 @@ jobs:
             root="$(curl --location --silent --show-error --max-time 15 https://kyerp.net/ || true)"
             login_code="$(curl --location --silent --show-error --output /tmp/login.html --write-out '%{http_code}' --max-time 15 https://kyerp.net/giris || true)"
             api_code="$(curl --silent --show-error --output /tmp/api.json --write-out '%{http_code}' --max-time 15 https://api.kyerp.net/api/health || true)"
-            security_code="$(curl --location --silent --show-error --output /tmp/security.html --write-out '%{http_code}' --max-time 15 https://security.kyerp.net/ky-guvenlik/ || true)"
+            security_code="$(curl --location --silent --show-error --output /tmp/security.html --write-out '%{http_code}' --max-time 15 https://security.kyerp.net/guvenlik/ || true)"
             if [ "$login_code" = "200" ] \
               && [ "$api_code" = "200" ] \
               && [ "$security_code" = "200" ] \
               && printf '%s' "$root" | grep -q '<title>KY ERP</title>' \
               && ! printf '%s' "$root" | grep -q 'app\.kyerp\.net' \
               && grep -q 'KY ERP' /tmp/login.html \
-              && grep -q 'KY ERP' /tmp/security.html; then
+              && grep -q '<title>KY ERP Güvenlik</title>' /tmp/security.html               && grep -q '/guvenlik/app.js' /tmp/security.html; then
               ok=1
               echo "Production smoke PASS on attempt ${attempt}."
               break
@@ -47,3 +47,10 @@ jobs:
             sleep 10
           done
           test "$ok" -eq 1
+
+          for legacy in security ky-guvenlik ky-guvenlik-recover; do
+            legacy_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 15 "https://security.kyerp.net/${legacy}/" || true)"
+            test "$legacy_status" = "410"
+          done
+
+          echo "Production smoke verified canonical KY Security /guvenlik/ and retired legacy routes."
