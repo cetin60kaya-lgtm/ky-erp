@@ -410,6 +410,35 @@ export default function LoginPage({ onClose }) {
     }
   }
 
+  async function handleSecurityLoginCode(event) {
+    event?.preventDefault();
+    if (!flow.phoneApprovalId || !flow.phoneApprovalToken) return;
+    const cleanCode = String(code || "").replace(/\D/g, "");
+    if (!/^\d{6}$/.test(cleanCode)) {
+      setError("6 haneli KY Güvenlik giriş kodunu girin.");
+      return;
+    }
+    try {
+      setLoading(true);
+      setError("");
+      await verifyPhoneApprovalCode({
+        phoneApprovalId: flow.phoneApprovalId,
+        phoneApprovalToken: flow.phoneApprovalToken,
+        code: cleanCode,
+      });
+      const completed = await checkPhoneApproval({
+        phoneApprovalId: flow.phoneApprovalId,
+        phoneApprovalToken: flow.phoneApprovalToken,
+      });
+      setCode("");
+      applyResponse(completed);
+    } catch (requestError) {
+      setError(requestError?.message || "KY Güvenlik giriş kodu doğrulanamadı.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function switchToAuthenticator(method = "AUTHENTICATOR") {
     if (!flow.phoneApprovalId || !flow.phoneApprovalToken) return;
     try {
