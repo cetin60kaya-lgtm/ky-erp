@@ -91,6 +91,7 @@ public partial class PersonelForm
         inner.TabPages.Add(BuildCanonicalDocumentsTab());
         inner.TabPages.Add(BuildCanonicalWorkSgkTab());
         inner.TabPages.Add(BuildCanonicalExtraPaymentsTab());
+        inner.TabPages.Add(BuildCanonicalPayrollTab());
         info.Controls.Add(inner);
         tabs.TabPages.Add(info);
         tabs.TabPages.Add(BuildGirisClassic());
