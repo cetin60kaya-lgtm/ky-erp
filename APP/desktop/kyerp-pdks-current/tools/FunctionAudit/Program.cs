@@ -7,6 +7,10 @@ using KYERP.PDKS.Core;
 using FirebirdSql.Data.FirebirdClient;
 
 ApplicationConfiguration.Initialize();
+StartupConfiguration.LoadSavedSettingsIntoProcess();
+CompanyDataPaths.Ensure();
+CompanyDataPaths.PinEnvironment();
+PdksTheme.Install();
 Environment.SetEnvironmentVariable("KY_PDKS_UI_AUDIT", "1", EnvironmentVariableTarget.Process);
 
 var errors = new List<string>();
@@ -34,46 +38,27 @@ using var shell = new MainShellForm(user)
 shell.Show();
 Pump(900);
 
-if (shell.MainMenuStrip is null)
+var visibleButtons = FindControls<Button>(shell)
+    .Where(x => x.Visible)
+    .Select(x => Clean(x.Text))
+    .Where(x => x.Length > 0)
+    .ToArray();
+foreach (var primary in PdksCommandCatalog.Primary)
+    if (!visibleButtons.Contains(primary.Title, StringComparer.OrdinalIgnoreCase))
+        errors.Add("Eksik ana navigasyon: " + primary.Title);
+
+var commands = PdksCommandCatalog.All
+    .Where(x => x.Id != PdksCommandId.Home)
+    .OrderBy(x => x.Order)
+    .ToArray();
+
+foreach (var command in commands)
 {
-    Console.WriteLine("ERROR|Ana menu yok");
-    Environment.Exit(2);
-}
-
-var topNames = shell.MainMenuStrip.Items.OfType<ToolStripMenuItem>().Where(x => x.Visible).Select(x => Clean(x.Text)).ToArray();
-var expected = new[] { "ANA SAYFA", "İŞLEMLER", "PERSONEL", "PUANTAJ", "BORDRO", "RAPORLAR", "TANIMLAR", "SİSTEM", "YARDIM" };
-foreach (var duplicate in topNames.GroupBy(x => x, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
-    errors.Add("Mükerrer üst menu: " + duplicate.Key);
-foreach (var name in expected.Where(x => !topNames.Contains(x, StringComparer.OrdinalIgnoreCase)))
-    errors.Add("Eksik üst menu: " + name);
-
-var leaves = new List<(string Path, ToolStripMenuItem Item)>();
-foreach (var top in shell.MainMenuStrip.Items.OfType<ToolStripMenuItem>().Where(x => x.Visible))
-    Collect(top, Clean(top.Text), leaves);
-
-var skipFragments = new[]
-{
-    "Hedef'ten Güncel Personel / Veri Al",
-    "KY ERP Web Sitesi"
-};
-
-foreach (var (path, item) in leaves)
-{
-    if (!item.Enabled)
-    {
-        results.Add("SKIP_DISABLED|" + path);
-        continue;
-    }
-    if (skipFragments.Any(x => path.Contains(x, StringComparison.OrdinalIgnoreCase)))
-    {
-        results.Add("SKIP_LIVE|" + path);
-        continue;
-    }
-
+    var path = command.Group + " > " + command.Title;
     Console.WriteLine("RUN|" + path);
     Console.Out.Flush();
     var beforeErrors = errors.Count;
-    using var closer = new System.Windows.Forms.Timer { Interval = 400 };
+    using var closer = new System.Windows.Forms.Timer { Interval = 450 };
     closer.Tick += (_, _) =>
     {
         NativeDialogs.CloseOwnMessageBoxes();
@@ -86,8 +71,8 @@ foreach (var (path, item) in leaves)
     closer.Start();
     try
     {
-        item.PerformClick();
-        Pump(800);
+        shell.NavigateToCommand(command.Id);
+        Pump(850);
         if (errors.Count == beforeErrors) results.Add("PASS|" + path);
         else results.Add("FAIL|" + path + "|" + errors[^1]);
     }
@@ -112,7 +97,7 @@ foreach (var (path, item) in leaves)
 
 foreach (var line in results) Console.WriteLine(line);
 foreach (var error in errors.Distinct()) Console.WriteLine("ERROR|" + error);
-Console.WriteLine($"FUNCTION_AUDIT_LEAVES={leaves.Count}");
+Console.WriteLine($"FUNCTION_AUDIT_COMMANDS={commands.Length}");
 Console.WriteLine($"FUNCTION_AUDIT_ERRORS={errors.Distinct().Count()}");
 Console.WriteLine(errors.Count == 0 ? "FUNCTION_AUDIT_PASS" : "FUNCTION_AUDIT_FAIL");
 shell.Close();
