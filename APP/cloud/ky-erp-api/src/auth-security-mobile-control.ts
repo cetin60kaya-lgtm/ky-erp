@@ -13,7 +13,8 @@ function nowIso() { return new Date().toISOString(); }
 function jsonError(code: string, message: string) { return { ok: false, error: { code, message } }; }
 function isSuper(role: unknown) { return ["SUPER_ADMIN", "ADMIN"].includes(upper(role)); }
 function isCompanyAdmin(role: unknown) { return upper(role) === "COMPANY_ADMIN"; }
-function hasCap(actor: AnyRow, cap: string) { return isSuper(actor.role) || isCompanyAdmin(actor.role) || (actor.securityCapabilities || []).includes(cap); }
+function hasOwnerControl(actor: AnyRow) { return isSuper(actor.role) && actor.ownerControlAuthorized === true; }
+function hasCap(actor: AnyRow, cap: string) { return hasOwnerControl(actor) && (actor.securityCapabilities || []).includes(cap); }
 function clientIp(c: any) { return text(c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For")?.split(",")[0]); }
 function browserDeviceId(label: unknown) { const value = text(label); return value.startsWith("BROWSER:") ? value.slice(8) : ""; }
 function trustedDeviceKey(userId: unknown, deviceId: unknown) { return `${text(userId)}:${text(deviceId)}`; }
@@ -78,7 +79,7 @@ async function verifyControlProof(actor: AnyRow, operation: string, targetId: st
   } catch { return false; }
 }
 async function listCompanies(c: any, actor: AnyRow) {
-  if (isSuper(actor.role) && await tableExists(c, "main_companies")) {
+  if (hasOwnerControl(actor) && await tableExists(c, "main_companies")) {
     const result = await c.env.DB.prepare("SELECT slug,name FROM main_companies WHERE is_active<>0 ORDER BY name COLLATE NOCASE ASC").all();
     return (result.results || []).map((row: AnyRow) => ({ slug: text(row.slug), name: text(row.name || row.slug) })).filter((row: AnyRow) => row.slug);
   }
@@ -92,26 +93,19 @@ async function listCompanies(c: any, actor: AnyRow) {
   return [{ slug, name }];
 }
 function scopeType(actor: AnyRow) {
-  if (isSuper(actor.role)) return "SYSTEM";
-  if (isCompanyAdmin(actor.role) || (actor.securityCapabilities || []).length) return "COMPANY";
-  return "SELF";
+  return hasOwnerControl(actor) ? "SYSTEM" : "SELF";
 }
 function normalizeCompanyFilter(actor: AnyRow, requested: unknown, companies: AnyRow[]) {
   const value = text(requested);
-  if (isSuper(actor.role)) return value && companies.some((row) => row.slug === value) ? value : "";
+  if (hasOwnerControl(actor)) return value && companies.some((row) => row.slug === value) ? value : "";
   return text(actor.companySlug);
 }
 async function sessionRows(c: any, actor: AnyRow, companySlug: string, limit: number) {
   const select = `SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override,CASE WHEN s.revoked_at IS NULL AND julianday(s.expires_at)>julianday('now') THEN 1 ELSE 0 END AS active_sql FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id`;
-  if (isSuper(actor.role)) {
+  if (hasOwnerControl(actor)) {
     return companySlug
       ? c.env.DB.prepare(`${select} WHERE s.main_company_slug=? ORDER BY s.created_at DESC LIMIT ?`).bind(companySlug, limit).all()
       : c.env.DB.prepare(`${select} ORDER BY s.created_at DESC LIMIT ?`).bind(limit).all();
-  }
-  const companyScope = scopeType(actor) === "COMPANY" && hasCap(actor, "SESSION_VIEW");
-  if (companyScope) {
-    const owner = isCompanyAdmin(actor.role) ? 1 : 0;
-    return c.env.DB.prepare(`${select} WHERE s.main_company_slug=? AND (UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN') OR (?=1 AND s.user_id=?)) ORDER BY s.created_at DESC LIMIT ?`).bind(text(actor.companySlug), owner, text(actor.userId), limit).all();
   }
   return c.env.DB.prepare(`${select} WHERE s.user_id=? ORDER BY s.created_at DESC LIMIT ?`).bind(text(actor.userId), limit).all();
 }
@@ -124,38 +118,124 @@ async function buildSessions(c: any, actor: AnyRow, companySlug: string, limit: 
     const role = effectiveRole(row); const trust = trusts.get(text(row.id)); const deviceId = browserDeviceId(row.device_label); const persistent = deviceId ? trustedDevices.get(trustedDeviceKey(row.user_id, deviceId)) : undefined;
     const explicit = upper(trust?.status || ""); const persistentTrusted = activeTrustedDevice(persistent) && !["REJECTED","SUSPICIOUS"].includes(explicit); const trustStatus = persistentTrusted ? "TRUSTED" : (explicit || (Number(row.active_sql || 0) === 1 ? "PENDING" : "EXPIRED"));
     const active = Number(row.active_sql || 0) === 1; const own = text(row.user_id) === text(actor.userId);
-    return { id:text(row.id),userId:text(row.user_id),username:text(row.username),fullName:text(row.full_name||row.username),role,mainCompanySlug:isSuper(role)?"":text(row.main_company_slug),deviceId,deviceLabel:text(row.device_label||"Tarayıcı"),userAgent:text(row.user_agent),ipAddress:text(row.ip_address),createdAt:row.created_at,approvedAt:row.approved_at,lastSeenAt:row.last_seen_at,expiresAt:row.expires_at,revokedAt:row.revoked_at||null,active,trustStatus,own,canClose:active&&canCloseSession(actor,row,role)};
+    return { id:text(row.id),userId:text(row.user_id),username:text(row.username),fullName:text(row.full_name||row.username),role,mainCompanySlug:text(row.main_company_slug),deviceId,deviceLabel:text(row.device_label||"Tarayıcı"),userAgent:text(row.user_agent),ipAddress:text(row.ip_address),createdAt:row.created_at,approvedAt:row.approved_at,lastSeenAt:row.last_seen_at,expiresAt:row.expires_at,revokedAt:row.revoked_at||null,active,trustStatus,own,canClose:active&&canCloseSession(actor,row,role)};
   });
 }
 function canCloseSession(actor: AnyRow, row: AnyRow, targetRole = effectiveRole(row)) {
-  if (text(row.user_id) === text(actor.userId)) return true;
-  if (isSuper(actor.role)) return true;
-  if (text(row.main_company_slug) !== text(actor.companySlug) || !hasCap(actor, "SESSION_CLOSE")) return false;
-  if (["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole)) return false;
-  return true;
+  return hasOwnerControl(actor);
 }
 async function buildTrustedDevices(c: any, actor: AnyRow, companySlug: string) {
   const rows = (await storeList(c, TRUSTED_DEVICE_SCOPE)).filter((row: AnyRow) => activeTrustedDevice(row));
   const result: AnyRow[] = [];
   for (const row of rows) {
-    if (isSuper(actor.role)) { if (companySlug && text(row.mainCompanySlug) !== companySlug) continue; }
-    else if (text(row.userId) !== text(actor.userId) && (!hasCap(actor,"SESSION_VIEW") || text(row.mainCompanySlug)!==text(actor.companySlug))) continue;
+    if (hasOwnerControl(actor)) { if (companySlug && text(row.mainCompanySlug) !== companySlug) continue; }
+    else continue;
     const user = await c.env.DB.prepare("SELECT u.username,u.full_name,u.role,u.platform_role,s.role_override FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.id=? LIMIT 1").bind(text(row.userId)).first();
     if (!user) continue; const role = effectiveRole(user); if (!isSuper(actor.role) && ["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(role) && text(row.userId)!==text(actor.userId)) continue;
-    result.push({deviceId:text(row.deviceId),userId:text(row.userId),username:text(user.username),fullName:text(user.full_name||user.username),role,mainCompanySlug:isSuper(role)?"":text(row.mainCompanySlug),deviceLabel:text(row.deviceLabel||"Güvenilir bilgisayar"),userAgent:text(row.userAgent),ipAddress:text(row.ipAddress),firstTrustedAt:row.firstTrustedAt||row.createdAt||null,lastTrustedAt:row.lastTrustedAt||row.updatedAt||null,own:text(row.userId)===text(actor.userId)});
+    result.push({deviceId:text(row.deviceId),userId:text(row.userId),username:text(user.username),fullName:text(user.full_name||user.username),role,mainCompanySlug:text(row.mainCompanySlug),deviceLabel:text(row.deviceLabel||"Güvenilir bilgisayar"),userAgent:text(row.userAgent),ipAddress:text(row.ipAddress),firstTrustedAt:row.firstTrustedAt||row.createdAt||null,lastTrustedAt:row.lastTrustedAt||row.updatedAt||null,own:text(row.userId)===text(actor.userId)});
   }
   return result.sort((a,b)=>String(b.lastTrustedAt||"").localeCompare(String(a.lastTrustedAt||"")));
 }
 async function buildAudit(c: any, actor: AnyRow, companySlug: string, limit: number) {
   const select = `SELECT a.*,au.full_name AS actor_name,tu.full_name AS target_name FROM auth_security_audit a LEFT JOIN auth_users au ON au.id=a.actor_user_id LEFT JOIN auth_users tu ON tu.id=a.target_user_id`;
   let result;
-  if (isSuper(actor.role)) result = companySlug
+  if (hasOwnerControl(actor)) result = companySlug
     ? await c.env.DB.prepare(`${select} WHERE a.main_company_slug=? ORDER BY a.created_at DESC LIMIT ?`).bind(companySlug,limit).all()
     : await c.env.DB.prepare(`${select} ORDER BY a.created_at DESC LIMIT ?`).bind(limit).all();
   else if (hasCap(actor,"AUDIT_VIEW")) result = await c.env.DB.prepare(`${select} WHERE a.main_company_slug=? ORDER BY a.created_at DESC LIMIT ?`).bind(text(actor.companySlug),limit).all();
   else result = await c.env.DB.prepare(`${select} WHERE a.actor_user_id=? OR a.target_user_id=? ORDER BY a.created_at DESC LIMIT ?`).bind(text(actor.userId),text(actor.userId),limit).all();
   return (result.results||[]).map((row:AnyRow)=>{const detail=objectOf(row.detail);return{id:text(row.id),createdAt:row.created_at,action:text(row.action),actorUserId:text(row.actor_user_id),actorName:text(row.actor_name),targetUserId:text(row.target_user_id),targetName:text(row.target_name),mainCompanySlug:text(row.main_company_slug),sessionId:text(row.session_id),ipAddress:text(row.ip_address),deviceId:text(detail.deviceId),deviceLabel:text(detail.deviceLabel),result:text(detail.result),detail};});
 }
+
+async function buildActivity(c:any, actor:AnyRow, companySlug:string, limit:number) {
+  if (!hasOwnerControl(actor)) return { items: [], companies: [] };
+  const approvalSql = `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.user_agent,a.ip_address,a.status,a.requested_at,a.decided_at,a.expires_at,
+                              u.username,u.full_name,d.full_name AS decided_by_name
+                         FROM auth_login_approvals a
+                         JOIN auth_users u ON u.id=a.user_id
+                         LEFT JOIN auth_users d ON d.id=a.decided_by`;
+  const sessionSql = `SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.user_agent,s.ip_address,s.created_at,s.last_seen_at,s.revoked_at,s.expires_at,
+                             u.username,u.full_name,u.role,u.platform_role,us.role_override
+                        FROM auth_sessions s
+                        JOIN auth_users u ON u.id=s.user_id
+                        LEFT JOIN auth_user_security us ON us.user_id=u.id`;
+  const approvals = companySlug
+    ? await c.env.DB.prepare(`${approvalSql} WHERE a.main_company_slug=? ORDER BY a.requested_at DESC LIMIT ?`).bind(companySlug,limit).all()
+    : await c.env.DB.prepare(`${approvalSql} ORDER BY a.requested_at DESC LIMIT ?`).bind(limit).all();
+  const sessions = companySlug
+    ? await c.env.DB.prepare(`${sessionSql} WHERE s.main_company_slug=? ORDER BY s.created_at DESC LIMIT ?`).bind(companySlug,limit).all()
+    : await c.env.DB.prepare(`${sessionSql} ORDER BY s.created_at DESC LIMIT ?`).bind(limit).all();
+
+  const items:AnyRow[]=[];
+  for(const row of approvals.results||[]) {
+    items.push({
+      id:`approval:${text(row.id)}`,type:"LOGIN_REQUEST",status:upper(row.status||"PENDING"),
+      userId:text(row.user_id),username:text(row.username),fullName:text(row.full_name||row.username),
+      mainCompanySlug:text(row.main_company_slug),deviceLabel:text(row.device_label||"Tarayıcı"),ipAddress:text(row.ip_address),
+      createdAt:row.requested_at,decidedAt:row.decided_at||null,decidedByName:text(row.decided_by_name),expiresAt:row.expires_at,
+    });
+  }
+  for(const row of sessions.results||[]) {
+    items.push({
+      id:`session-open:${text(row.id)}`,type:"SESSION_OPENED",status:"OPENED",
+      sessionId:text(row.id),userId:text(row.user_id),username:text(row.username),fullName:text(row.full_name||row.username),
+      role:effectiveRole(row),mainCompanySlug:text(row.main_company_slug),deviceLabel:text(row.device_label||"Tarayıcı"),ipAddress:text(row.ip_address),
+      createdAt:row.created_at,lastSeenAt:row.last_seen_at,expiresAt:row.expires_at,
+    });
+    if(row.revoked_at) items.push({
+      id:`session-close:${text(row.id)}`,type:"SESSION_CLOSED",status:"CLOSED",
+      sessionId:text(row.id),userId:text(row.user_id),username:text(row.username),fullName:text(row.full_name||row.username),
+      role:effectiveRole(row),mainCompanySlug:text(row.main_company_slug),deviceLabel:text(row.device_label||"Tarayıcı"),ipAddress:text(row.ip_address),
+      createdAt:row.revoked_at,
+    });
+  }
+  items.sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+  const limited=items.slice(0,Math.min(500,Math.max(limit,150)));
+  const stats=new Map<string,AnyRow>();
+  const ensure=(slug:string)=>{if(!stats.has(slug))stats.set(slug,{mainCompanySlug:slug,loginRequests:0,approved:0,denied:0,activeSessions:0,closedSessions:0,lastActivityAt:""});return stats.get(slug)!;};
+  for(const row of approvals.results||[]) {
+    const stat=ensure(text(row.main_company_slug)||"Sistem"); stat.loginRequests+=1;
+    if(upper(row.status)==="APPROVED")stat.approved+=1;
+    if(["DENIED","REJECTED"].includes(upper(row.status)))stat.denied+=1;
+    if(String(row.requested_at||"")>String(stat.lastActivityAt||""))stat.lastActivityAt=row.requested_at;
+  }
+  const now=Date.now();
+  for(const row of sessions.results||[]) {
+    const stat=ensure(text(row.main_company_slug)||"Sistem");
+    const active=!row.revoked_at&&Date.parse(text(row.expires_at))>now;
+    if(active)stat.activeSessions+=1;
+    if(row.revoked_at)stat.closedSessions+=1;
+    const last=row.revoked_at||row.last_seen_at||row.created_at;
+    if(String(last||"")>String(stat.lastActivityAt||""))stat.lastActivityAt=last;
+  }
+  return {items:limited,companies:Array.from(stats.values()).sort((a,b)=>String(b.lastActivityAt||"").localeCompare(String(a.lastActivityAt||"")))};
+}
+
+async function buildTodaySummary(c:any, companySlug:string) {
+  const start=new Date(); start.setUTCHours(0,0,0,0);
+  const end=new Date(start.getTime()+24*60*60*1000);
+  const from=start.toISOString(), to=end.toISOString();
+  async function count(sql:string, binds:unknown[]) {
+    const row=await c.env.DB.prepare(sql).bind(...binds).first();
+    return Number(row?.total||0);
+  }
+  const companyClause=companySlug?" AND main_company_slug=?":"";
+  const companyBind=companySlug?[companySlug]:[];
+  const loginRequestsToday=await count(
+    `SELECT COUNT(*) AS total FROM auth_login_approvals WHERE requested_at>=? AND requested_at<?${companyClause}`,
+    [from,to,...companyBind],
+  );
+  const successfulLoginsToday=await count(
+    `SELECT COUNT(*) AS total FROM auth_sessions WHERE created_at>=? AND created_at<?${companyClause}`,
+    [from,to,...companyBind],
+  );
+  const closedSessionsToday=await count(
+    `SELECT COUNT(*) AS total FROM auth_sessions WHERE revoked_at IS NOT NULL AND revoked_at>=? AND revoked_at<?${companyClause}`,
+    [from,to,...companyBind],
+  );
+  return { loginRequestsToday, successfulLoginsToday, closedSessionsToday };
+}
+
 async function writeAudit(c:any, actor:AnyRow, action:string, targetUserId:string, companySlug:string, sessionId:string, detail:AnyRow={}) {
   try { await c.env.DB.prepare(`INSERT INTO auth_security_audit(id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at) VALUES (?,?,?,?,?,?,?,?,?)`).bind(crypto.randomUUID(),text(actor.userId)||null,targetUserId||null,companySlug||null,action,sessionId||null,clientIp(c)||null,JSON.stringify(detail||{}),nowIso()).run(); } catch {}
 }
@@ -176,15 +256,17 @@ export function registerSecurityMobileControlRoutes(app:any, resolveActor:ActorR
 
   app.get("/api/auth/push/device/control-center", async (c:any) => {
     const actor=await resolveActor(c); if(!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED","KY Güvenlik cihazı doğrulanamadı."),401);
+    if(!hasOwnerControl(actor)) return c.json(jsonError("OWNER_PHONE_ONLY","Sistem Güvenlik Merkezi yalnız ekstra doğrulanmış Süper Yönetici telefonunda kullanılabilir."),403);
     const companies=await listCompanies(c,actor); const companySlug=normalizeCompanyFilter(actor,c.req.query("companySlug"),companies);
     const limit=Math.max(25,Math.min(300,Number(c.req.query("limit")||150)));
-    const sessions=await buildSessions(c,actor,companySlug,limit); const devices=await buildTrustedDevices(c,actor,companySlug); const audit=await buildAudit(c,actor,companySlug,limit);
+    const sessions=await buildSessions(c,actor,companySlug,limit); const devices=await buildTrustedDevices(c,actor,companySlug); const audit=await buildAudit(c,actor,companySlug,limit); const activity=await buildActivity(c,actor,companySlug,limit); const todaySummary=await buildTodaySummary(c,companySlug);
     const activeSessions=sessions.filter((row:AnyRow)=>row.active); const activeComputers=new Set(activeSessions.map((row:AnyRow)=>row.deviceId||`${row.deviceLabel}|${row.ipAddress}`).filter(Boolean));
-    return c.json({ok:true,data:{serverVersion,scopeType:scopeType(actor),role:upper(actor.role),companySlug,companies,capabilities:actor.securityCapabilities||[],summary:{activeSessions:activeSessions.length,connectedComputers:activeComputers.size,trustedDevices:devices.length,recentEvents:audit.length},sessions,devices,audit,checkedAt:nowIso()}});
+    return c.json({ok:true,data:{serverVersion,scopeType:scopeType(actor),ownerControlAuthorized:true,role:upper(actor.role),companySlug,companies,capabilities:actor.securityCapabilities||[],summary:{activeSessions:activeSessions.length,connectedComputers:activeComputers.size,trustedDevices:devices.length,recentEvents:audit.length,...todaySummary},sessions,devices,audit,activity:activity.items,companyStats:activity.companies,checkedAt:nowIso()}});
   });
 
   app.post("/api/auth/push/device/control-center/session/close", async (c:any) => {
     const actor=await resolveActor(c); if(!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED","KY Güvenlik cihazı doğrulanamadı."),401);
+    if(!hasOwnerControl(actor)) return c.json(jsonError("OWNER_PHONE_ONLY","Oturum kapatma yalnız doğrulanmış Süper Yönetici telefonundan yapılabilir."),403);
     const body=await c.req.json().catch(()=>({})); const sessionId=text(body.sessionId); if(!sessionId) return c.json(jsonError("SESSION_ID_REQUIRED","Oturum seçilmelidir."),400);
     const row=await c.env.DB.prepare(`SELECT s.*,u.role,u.platform_role,us.role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.id=? LIMIT 1`).bind(sessionId).first();
     if(!row) return c.json(jsonError("SESSION_NOT_FOUND","Oturum bulunamadı."),404); const targetRole=effectiveRole(row);

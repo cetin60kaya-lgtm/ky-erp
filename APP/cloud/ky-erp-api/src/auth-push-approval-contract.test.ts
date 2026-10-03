@@ -73,11 +73,13 @@ test("phone approval is primary while Authenticator remains an explicit fallback
   assert.match(authContext, /useAuthenticatorFallback/);
 });
 
-test("company owner and application owner are mandatory phone approvers", () => {
-  assert.match(push, /notifyCompanyOwner: true/);
-  assert.match(push, /notifyApplicationOwner: true/);
-  assert.match(push, /managerApproverUserIds/);
-  assert.match(push, /if \(isSuper\(actor\.role\)\) return true/);
+test("company owner approvals stay company-scoped while system approvals require the verified application-owner phone", () => {
+  assert.match(push, /ownerControlAuthorized/);
+  assert.match(push, /companyApprover/);
+  assert.match(push, /isSuper\(actor\.role\).*ownerControlAuthorized/);
+  assert.match(push, /isCompanyAdmin\(actor\.role\)/);
+  assert.match(push, /managerApprovalEnabled: ownerControlAuthorized \|\| isCompanyAdmin\(role\)/);
+  assert.match(push, /activeDevicesForUser/);
   assert.match(push, /SESSION_MANAGER_PUSH_DISPATCHED/);
   assert.match(push, /SECURITY_APPROVAL_KINDS\.SESSION/);
   assert.match(policy, /notifySessionApproval/);
@@ -197,6 +199,15 @@ test("trusted Security device keeps phone approval pending when push delivery is
   assert.match(push, /Bildirim kanalı geçici olarak yanıt vermedi/);
 });
 
+
+test("KY Security background refresh keeps the rendered account stable and queues a trailing refresh",()=>{
+  assert.match(securityApp,/queueTrailingRefresh/);
+  assert.match(securityApp,/refreshState\(\{background:true,trailing:true\}\)/);
+  assert.match(securityApp,/if\(refreshState\.running\)\{if\(background\)queueTrailingRefresh\(\);return;\}/);
+  assert.doesNotMatch(securityApp,/renderAccount\(null,device\)/);
+  assert.match(securityHtml,/data-tab="approvals">Onaylar/);
+  assert.doesNotMatch(securityHtml,/data-tab="approvals" data-system-only/);
+});
 
 test("approved Security phone never re-enrolls just because Web Push rotates",()=>{
   assert.match(securityApp,/Onaylı cihaz · Telefon onayı hazır/);

@@ -22,6 +22,9 @@ const ACTION_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ACTION;
 const SESSION_TRUST_SCOPE = AUTH_SECURITY_SCOPES.SESSION_TRUST;
 const TRUSTED_LOGIN_DEVICE_SCOPE = AUTH_SECURITY_SCOPES.TRUSTED_LOGIN_DEVICE;
 const SECURITY_ENROLL_SECONDS = 10 * 60;
+const OWNER_DEVICE_STEPUP_SCOPE = "AUTH_OWNER_DEVICE_STEPUP";
+const OWNER_DEVICE_STEPUP_SECONDS = 10 * 60;
+const OWNER_DEVICE_STEPUP_RESEND_SECONDS = 60;
 const SECURITY_APP_VERSION = "security-v3.0";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
 // Telefon onayı birincil faktör olarak beklemede tutulur.
@@ -92,14 +95,9 @@ function roleOf(row: AnyRow) {
 async function securityAppAccess(c: any, row: AnyRow) {
   const userId = text(row?.id || row?.userId);
   const role = roleOf({ role: row?.role, role_override: row?.role_override || row?.roleOverride });
-  const companySlug = text(row?.main_company_slug || row?.mainCompanySlug || row?.companySlug);
-  if (isSuper(role) || isCompanyAdmin(role)) return { eligible: true, capabilities: [...SECURITY_CAPABILITIES], source: "ROLE" };
-  if (!userId || !companySlug) return { eligible: false, capabilities: [], source: "NONE" };
-  const grant = await storeGet(c, SECURITY_GRANT_SCOPE, `${companySlug}:${userId}`);
-  const capabilities = grant?.isActive === false || !Array.isArray(grant?.capabilities)
-    ? []
-    : [...new Set(grant.capabilities.map(upper).filter((value: string) => SECURITY_CAPABILITIES.includes(value)))];
-  return { eligible: capabilities.length > 0, capabilities, source: capabilities.length ? "GRANT" : "NONE" };
+  if (!userId) return { eligible: false, capabilities: [], source: "NONE" };
+  if (isSuper(role)) return { eligible: true, capabilities: [...SECURITY_CAPABILITIES], source: "OWNER_ROLE" };
+  return { eligible: true, capabilities: [], source: "SELF_ONLY" };
 }
 function base64Url(bytes: Uint8Array) {
   let binary = "";
@@ -191,11 +189,92 @@ async function supersedeOlderSelfChallenges(c: any, userId: string, replacementI
 async function userRow(c: any, userId: string) {
   return c.env.DB.prepare(
     `SELECT u.id,u.username,u.full_name,u.password_hash,u.role,u.is_active,
-            s.email,s.main_company_slug,s.role_override
+            s.email,s.email_verified,s.main_company_slug,s.role_override,
+            s.google_mfa_secret,s.google_mfa_enabled,s.microsoft_mfa_secret,s.microsoft_mfa_enabled
        FROM auth_users u
        LEFT JOIN auth_user_security s ON s.user_id=u.id
       WHERE u.id=? LIMIT 1`,
   ).bind(userId).first<AnyRow>();
+}
+
+const OWNER_BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+function ownerBase32Decode(input: string) {
+  const clean = upper(input).replace(/[^A-Z2-7]/g, "");
+  let bits = 0, value = 0;
+  const output: number[] = [];
+  for (const char of clean) {
+    const index = OWNER_BASE32_ALPHABET.indexOf(char);
+    if (index < 0) continue;
+    value = (value << 5) | index;
+    bits += 5;
+    if (bits >= 8) {
+      output.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  return new Uint8Array(output);
+}
+async function ownerTotpCode(secret: string, timestampMs = Date.now()) {
+  let counter = BigInt(Math.floor(timestampMs / 1000 / 30));
+  const counterBytes = new Uint8Array(8);
+  for (let index = 7; index >= 0; index -= 1) { counterBytes[index] = Number(counter & 255n); counter >>= 8n; }
+  const key = await crypto.subtle.importKey("raw", ownerBase32Decode(secret), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, counterBytes));
+  const offset = signature[signature.length - 1] & 15;
+  const binary = ((signature[offset] & 127) << 24) | ((signature[offset + 1] & 255) << 16) | ((signature[offset + 2] & 255) << 8) | (signature[offset + 3] & 255);
+  return String(binary % 1_000_000).padStart(6, "0");
+}
+async function verifyOwnerTotp(secret: string, code: unknown) {
+  const candidate = text(code).replace(/\s+/g, "");
+  if (!/^\d{6}$/.test(candidate) || !secret) return false;
+  for (const offset of [-1, 0, 1]) if (safeEqual(await ownerTotpCode(secret, Date.now() + offset * 30_000), candidate)) return true;
+  return false;
+}
+async function verifyAnyOwnerAuthenticator(user: AnyRow, code: unknown) {
+  if (Boolean(user?.google_mfa_enabled) && await verifyOwnerTotp(text(user?.google_mfa_secret), code)) return "GOOGLE";
+  if (Boolean(user?.microsoft_mfa_enabled) && await verifyOwnerTotp(text(user?.microsoft_mfa_secret), code)) return "MICROSOFT";
+  return "";
+}
+function maskOwnerEmail(value: unknown) {
+  const raw=text(value); const [local,domain]=raw.split("@");
+  if(!local||!domain) return raw;
+  return `${local.slice(0,Math.min(2,local.length))}${"*".repeat(Math.max(2,local.length-2))}@${domain}`;
+}
+async function sendOwnerDeviceStepUpEmail(c: any, destination: string, code: string) {
+  if (c.env.RECOVERY_EMAIL_WEBHOOK_URL) {
+    const response = await fetch(text(c.env.RECOVERY_EMAIL_WEBHOOK_URL), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(c.env.RECOVERY_EMAIL_WEBHOOK_TOKEN ? { Authorization: `Bearer ${text(c.env.RECOVERY_EMAIL_WEBHOOK_TOKEN)}` } : {}) },
+      body: JSON.stringify({ channel: "email", to: destination, code, purpose: "KY ERP Süper Yönetici telefon yetkilendirmesi" }),
+    });
+    if (!response.ok) throw new Error("E-posta doğrulama servisi kodu kabul etmedi.");
+    return;
+  }
+  if (!c.env.RESEND_API_KEY) throw new Error("Süper Yönetici telefon kurulumu için e-posta doğrulama servisi bağlı değil.");
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${text(c.env.RESEND_API_KEY)}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: "KY ERP <admin@kyerp.net>",
+      to: [destination],
+      subject: "KY ERP Süper Yönetici telefon yetkilendirme kodu",
+      text: `KY ERP Süper Yönetici telefon yetkilendirme kodunuz: ${code}\n\nBu kod 10 dakika geçerlidir. Bu kurulumu siz başlatmadıysanız kodu paylaşmayın.`,
+    }),
+  });
+  if (!response.ok) throw new Error("Süper Yönetici telefon doğrulama e-postası gönderilemedi.");
+}
+async function verifyOwnerDeviceEmailProof(c: any, user: AnyRow, proof: AnyRow) {
+  const id=text(proof?.challengeId), token=text(proof?.challengeToken), otp=text(proof?.code).replace(/\D/g,"");
+  if(!id||!token||!/^\d{6}$/.test(otp)) return false;
+  const row=await storeGet(c,OWNER_DEVICE_STEPUP_SCOPE,id);
+  if(!row||text(row.userId)!==text(user.id)||upper(row.status)!=="PENDING"||text(row.consumedAt)||Date.parse(text(row.expiresAt))<=Date.now()) return false;
+  if(!safeEqual(text(row.tokenHash),await sha256(token))) return false;
+  const attempts=Number(row.attempts||0);
+  if(attempts>=5) return false;
+  const valid=safeEqual(text(row.otpHash),await sha256(`${text(row.otpSalt)}:${otp}`));
+  if(!valid){await storePut(c,OWNER_DEVICE_STEPUP_SCOPE,id,text(user.main_company_slug),{...row,attempts:attempts+1});return false;}
+  await storePut(c,OWNER_DEVICE_STEPUP_SCOPE,id,text(user.main_company_slug),{...row,status:"VERIFIED",verifiedAt:nowIso(),consumedAt:nowIso()});
+  return true;
 }
 
 async function companyApprovalSettings(c: any, companySlug: string) {
@@ -226,7 +305,12 @@ async function applicationOwnerUserIds(c: any) {
   for(const row of result.results || []) if(isSuper(roleOf(row))) ids.add(text(row.id));
   return ids;
 }
-function canApproveSessionTarget(actor: AnyRow, session: AnyRow) { const targetRole=roleOf({ role:session.target_role, platform_role:session.target_platform_role, role_override:session.target_role_override }); if(isSuper(actor.role)) return true; if(["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole)) return false; return isCompanyAdmin(actor.role) && text(actor.companySlug)===text(session.main_company_slug); }
+function canApproveSessionTarget(actor: AnyRow, session: AnyRow) {
+  const targetRole=roleOf({ role:session.target_role, platform_role:session.target_platform_role, role_override:session.target_role_override });
+  if (isSuper(actor.role)) return actor.ownerControlAuthorized === true;
+  if (["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole)) return false;
+  return isCompanyAdmin(actor.role) && actor.companyApprover === true && text(actor.companySlug)===text(session.main_company_slug);
+}
 async function sessionNeedsManagerReview(c: any, session: AnyRow) {
   let trust=await storeGet(c, SESSION_TRUST_SCOPE, text(session.id));
   if (!trust && text(session.id)) trust=await storePut(c, SESSION_TRUST_SCOPE, text(session.id), text(session.mainCompanySlug || session.main_company_slug), { sessionId:text(session.id), userId:text(session.userId || session.user_id), status:"PENDING", requestedAt:text(session.createdAt || session.created_at || nowIso()), source:"MANAGER_REVIEW" });
@@ -398,15 +482,22 @@ async function actorFromDevice(c: any) {
   const acceptedAppVersion = /^security-v\d+\.\d+$/i.test(reportedAppVersion) ? reportedAppVersion : text(device.securityAppVersion);
   c.executionCtx?.waitUntil?.(saveDevice(c, { ...device, mainCompanySlug: companySlug, securityAppVersion: acceptedAppVersion || SECURITY_APP_VERSION, lastSeenAt: nowIso(), trustedAt: device.trustedAt || device.createdAt || nowIso(), identityVersion: text(device.identityVersion || "TRUSTED_DEVICE_V1") }));
 
+  const effectiveRole = roleOf(user);
+  const ownerControlAuthorized = isSuper(effectiveRole) && device.ownerControlAuthorized === true;
+  const companyApprover = isCompanyAdmin(effectiveRole) && device.managerApprovalEnabled !== false;
   return {
     device,
     userId: text(user.id),
-    role: roleOf(user),
+    role: effectiveRole,
     companySlug,
     username: text(user.username),
     email: text(user.email),
     fullName: text(user.full_name || user.username),
-    securityCapabilities: appAccess.capabilities || [],
+    ownerControlAuthorized,
+    companyApprover,
+    securityCapabilities: ownerControlAuthorized
+      ? [...SECURITY_CAPABILITIES]
+      : companyApprover ? ["LOGIN_APPROVE", "SESSION_APPROVE"] : [],
   };
 }
 
@@ -425,10 +516,11 @@ async function securityAccountProfile(c: any, actor: AnyRow) {
     }
   }
 
+  const ownerControlAuthorized = Boolean(actor.ownerControlAuthorized) && isSuper(role);
   let moduleKeys: string[] = [];
-  if (isSuper(role)) {
+  if (ownerControlAuthorized) {
     moduleKeys = ["ALL"];
-  } else if (await tableExists(c, "auth_user_module_permissions")) {
+  } else if (!isSuper(role) && await tableExists(c, "auth_user_module_permissions")) {
     try {
       const result = await c.env.DB.prepare(
         "SELECT module_key FROM auth_user_module_permissions WHERE user_id=? AND can_view=1 ORDER BY module_key",
@@ -438,22 +530,10 @@ async function securityAccountProfile(c: any, actor: AnyRow) {
       moduleKeys = [];
     }
   }
-  if (isCompanyAdmin(role)) {
-    if (!moduleKeys.includes("ADMIN")) moduleKeys.push("ADMIN");
-    if (!moduleKeys.includes("STORAGE_ADMIN")) moduleKeys.push("STORAGE_ADMIN");
-  }
-
-  let securityCapabilities: string[] = [];
-  if (isSuper(role) || isCompanyAdmin(role)) {
-    securityCapabilities = [...SECURITY_CAPABILITIES];
-  } else if (companySlug) {
-    const grant = await storeGet(c, SECURITY_GRANT_SCOPE, `${companySlug}:${actor.userId}`);
-    if (grant?.isActive !== false && Array.isArray(grant?.capabilities)) {
-      securityCapabilities = [...new Set(
-        grant.capabilities.map(upper).filter((value: string) => SECURITY_CAPABILITIES.includes(value)),
-      )];
-    }
-  }
+  const companyApprover = Boolean(actor.companyApprover) && isCompanyAdmin(role);
+  let securityCapabilities: string[] = ownerControlAuthorized
+    ? [...SECURITY_CAPABILITIES]
+    : companyApprover ? ["LOGIN_APPROVE", "SESSION_APPROVE"] : [];
 
   return {
     userId: text(actor.userId),
@@ -463,7 +543,9 @@ async function securityAccountProfile(c: any, actor: AnyRow) {
     role,
     companySlug,
     companyName,
-    scopeType: isSuper(role) ? "SYSTEM" : (isCompanyAdmin(role) ? "COMPANY" : "USER"),
+    scopeType: ownerControlAuthorized ? "SYSTEM" : (companyApprover ? "COMPANY" : "USER"),
+    ownerControlAuthorized,
+    companyApprover,
     moduleKeys,
     securityCapabilities,
   };
@@ -471,8 +553,12 @@ async function securityAccountProfile(c: any, actor: AnyRow) {
 
 function canApproveTarget(actor: AnyRow, approval: AnyRow, settings: AnyRow) {
   const targetRole = roleOf({ role: approval.target_role, platform_role: approval.target_platform_role, role_override: approval.target_role_override });
-  if (isCompanyAdmin(actor.role)) return actor.companySlug === text(approval.main_company_slug) && !["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(targetRole);
-  if (isSuper(actor.role)) return true;
+  if (isSuper(actor.role)) return actor.ownerControlAuthorized === true;
+  if (isCompanyAdmin(actor.role)) {
+    return actor.companyApprover === true &&
+      text(actor.companySlug) === text(approval.main_company_slug) &&
+      !["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(targetRole);
+  }
   return false;
 }
 
@@ -691,26 +777,26 @@ async function pendingItems(c: any, actor: AnyRow) {
     "UPDATE auth_login_approvals SET status='EXPIRED' WHERE status='PENDING' AND expires_at<=?",
   ).bind(timestamp).run();
 
-  const managerRows = isCompanyAdmin(actor.role)
+  const managerRows = isSuper(actor.role) && actor.ownerControlAuthorized === true
     ? await c.env.DB.prepare(
         `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.user_agent,a.ip_address,a.requested_at,a.expires_at,
                 u.full_name,u.username,u.role AS target_role,s.role_override AS target_role_override
            FROM auth_login_approvals a
            JOIN auth_users u ON u.id=a.user_id
            LEFT JOIN auth_user_security s ON s.user_id=u.id
-          WHERE a.status='PENDING' AND a.consumed_at IS NULL AND a.expires_at>? AND a.main_company_slug=?
+          WHERE a.status='PENDING' AND a.consumed_at IS NULL AND a.expires_at>?
           ORDER BY a.requested_at ASC`,
-      ).bind(timestamp, actor.companySlug).all<AnyRow>()
-    : isSuper(actor.role)
+      ).bind(timestamp).all<AnyRow>()
+    : isCompanyAdmin(actor.role) && actor.companyApprover === true
       ? await c.env.DB.prepare(
           `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.user_agent,a.ip_address,a.requested_at,a.expires_at,
                   u.full_name,u.username,u.role AS target_role,s.role_override AS target_role_override
              FROM auth_login_approvals a
              JOIN auth_users u ON u.id=a.user_id
              LEFT JOIN auth_user_security s ON s.user_id=u.id
-            WHERE a.status='PENDING' AND a.consumed_at IS NULL AND a.expires_at>?
+            WHERE a.status='PENDING' AND a.consumed_at IS NULL AND a.expires_at>? AND a.main_company_slug=?
             ORDER BY a.requested_at ASC`,
-        ).bind(timestamp).all<AnyRow>()
+        ).bind(timestamp, actor.companySlug).all<AnyRow>()
       : { results: [] };
 
   for (const row of managerRows.results || []) {
@@ -730,10 +816,10 @@ async function pendingItems(c: any, actor: AnyRow) {
     });
   }
 
-  if (isSuper(actor.role) || isCompanyAdmin(actor.role)) {
-    const sessionResult = isCompanyAdmin(actor.role)
-      ? await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.user_agent,s.ip_address,s.created_at,s.expires_at,u.full_name,u.username,u.role AS target_role,u.platform_role AS target_platform_role,us.role_override AS target_role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.main_company_slug=? ORDER BY s.created_at DESC LIMIT 150`).bind(timestamp,actor.companySlug).all<AnyRow>()
-      : await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.user_agent,s.ip_address,s.created_at,s.expires_at,u.full_name,u.username,u.role AS target_role,u.platform_role AS target_platform_role,us.role_override AS target_role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.revoked_at IS NULL AND s.expires_at>? ORDER BY s.created_at DESC LIMIT 250`).bind(timestamp).all<AnyRow>();
+  if ((isSuper(actor.role) && actor.ownerControlAuthorized === true) || (isCompanyAdmin(actor.role) && actor.companyApprover === true)) {
+    const sessionResult = isSuper(actor.role)
+      ? await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.user_agent,s.ip_address,s.created_at,s.expires_at,u.full_name,u.username,u.role AS target_role,u.platform_role AS target_platform_role,us.role_override AS target_role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.revoked_at IS NULL AND s.expires_at>? ORDER BY s.created_at DESC LIMIT 250`).bind(timestamp).all<AnyRow>()
+      : await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.user_agent,s.ip_address,s.created_at,s.expires_at,u.full_name,u.username,u.role AS target_role,u.platform_role AS target_platform_role,us.role_override AS target_role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.main_company_slug=? ORDER BY s.created_at DESC LIMIT 150`).bind(timestamp, actor.companySlug).all<AnyRow>();
     for (const row of sessionResult.results || []) {
       if (!canApproveSessionTarget(actor,row) || !(await sessionNeedsManagerReview(c,row))) continue;
       items.push({ kind: SECURITY_APPROVAL_KINDS.SESSION, id: row.id, dedupeKey: `session:${text(row.id)}`, title: "KY ERP · Oturum Onayı", body: `${text(row.full_name || row.username)} · ${friendlyDeviceLabel(row.device_label,row.user_agent)} için oturum onayı bekleniyor.`, requestedAt: row.created_at, expiresAt: row.expires_at, mainCompanySlug: row.main_company_slug });
@@ -752,7 +838,20 @@ async function safePendingItems(c: any, actor: AnyRow) {
   try { return await pendingItems(c, actor); } catch (error) { console.error(JSON.stringify({level:"error",area:"KY_SECURITY_PENDING",message:error instanceof Error?error.message:String(error)})); return fallbackSelfPendingItems(c, actor); }
 }
 async function safeSecurityAccountProfile(c: any, actor: AnyRow) {
-  try { return await securityAccountProfile(c, actor); } catch (error) { console.error(JSON.stringify({level:"error",area:"KY_SECURITY_ACCOUNT",message:error instanceof Error?error.message:String(error)})); const role=upper(actor.role); return {userId:text(actor.userId),fullName:text(actor.fullName||actor.username||"Kullanıcı"),username:text(actor.username),email:text(actor.email),role,companySlug:text(actor.companySlug),companyName:text(actor.companySlug),scopeType:isSuper(role)?"SYSTEM":(isCompanyAdmin(role)?"COMPANY":"USER"),moduleKeys:isSuper(role)?["ALL"]:[],securityCapabilities:(isSuper(role)||isCompanyAdmin(role))?[...SECURITY_CAPABILITIES]:[]}; }
+  try { return await securityAccountProfile(c, actor); } catch (error) {
+    console.error(JSON.stringify({level:"error",area:"KY_SECURITY_ACCOUNT",message:error instanceof Error?error.message:String(error)}));
+    const role=upper(actor.role);
+    const ownerControlAuthorized=isSuper(role)&&actor.ownerControlAuthorized===true;
+    const companyApprover=isCompanyAdmin(role)&&actor.companyApprover===true;
+    return {
+      userId:text(actor.userId),fullName:text(actor.fullName||actor.username||"Kullanıcı"),username:text(actor.username),email:text(actor.email),
+      role,companySlug:text(actor.companySlug),companyName:text(actor.companySlug),
+      scopeType:ownerControlAuthorized?"SYSTEM":(companyApprover?"COMPANY":"USER"),
+      ownerControlAuthorized,
+      moduleKeys:ownerControlAuthorized?["ALL"]:[],
+      securityCapabilities:ownerControlAuthorized?[...SECURITY_CAPABILITIES]:(companyApprover?["LOGIN_APPROVE","SESSION_APPROVE"]:[]),
+    };
+  }
 }
 
 export async function invalidatePhoneLoginChallenges(c: any, userId: string) {
@@ -779,6 +878,20 @@ export function registerAuthPushRoutes(app: any) {
     });
   });
 
+  app.post("/api/auth/push/security-enrollment/owner-email/start", async (c: any) => {
+    const current = await getAuthenticatedUser(c);
+    if (!current || !isSuper(roleOf(current))) return c.json(jsonError("OWNER_ONLY", "Bu doğrulama yalnız Süper Yönetici telefon yetkilendirmesi içindir."), current ? 403 : 401);
+    const user = await userRow(c, text(current.id));
+    if (!user || !Boolean(user.email_verified) || !text(user.email)) return c.json(jsonError("OWNER_EMAIL_NOT_READY", "Süper Yönetici e-postası doğrulanmış olmalıdır."), 409);
+    const recent=(await storeList(c,OWNER_DEVICE_STEPUP_SCOPE)).filter((row:AnyRow)=>text(row.userId)===text(user.id)&&upper(row.status)==="PENDING"&&Date.now()-Date.parse(text(row.createdAt))<OWNER_DEVICE_STEPUP_RESEND_SECONDS*1000);
+    if(recent.length) return c.json(jsonError("OWNER_STEPUP_RATE_LIMIT","Yeni e-posta kodu istemeden önce 60 saniye bekleyin."),429);
+    const id=crypto.randomUUID(), token=randomToken(32), otp=randomSixDigitCode(), salt=randomToken(12), expiresAt=addSeconds(OWNER_DEVICE_STEPUP_SECONDS);
+    await storePut(c,OWNER_DEVICE_STEPUP_SCOPE,id,text(user.main_company_slug),{id,userId:text(user.id),tokenHash:await sha256(token),otpHash:await sha256(`${salt}:${otp}`),otpSalt:salt,status:"PENDING",attempts:0,createdAt:nowIso(),expiresAt,consumedAt:""});
+    try{await sendOwnerDeviceStepUpEmail(c,text(user.email),otp);}catch(error){await storePut(c,OWNER_DEVICE_STEPUP_SCOPE,id,text(user.main_company_slug),{id,userId:text(user.id),status:"FAILED",consumedAt:nowIso(),createdAt:nowIso(),expiresAt});return c.json(jsonError("OWNER_EMAIL_DELIVERY_FAILED",error instanceof Error?error.message:"E-posta kodu gönderilemedi."),503);}
+    await audit(c,"OWNER_SECURITY_DEVICE_STEPUP_EMAIL_SENT",user.id,user.id,text(user.main_company_slug),{challengeId:id,expiresAt});
+    return c.json({ok:true,data:{challengeId:id,challengeToken:token,maskedEmail:maskOwnerEmail(user.email),expiresAt}});
+  });
+
   app.post("/api/auth/push/security-enrollment/start", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current) return c.json(jsonError("UNAUTHORIZED", "Güvenlik uygulaması kurulumu için KY ERP oturumu gereklidir."), 401);
@@ -786,6 +899,35 @@ export function registerAuthPushRoutes(app: any) {
     if (!appAccess.eligible) return c.json(jsonError("SECURITY_APP_NOT_ALLOWED", "Bu hesaba KY Güvenlik uygulaması yetkisi verilmemiş."), 403);
 
     const body = await bodyOf(c);
+    const role = roleOf(current);
+    const currentUser = await userRow(c, text(current.id));
+    let ownerControlAuthorized = false;
+    let ownerControlMethod = "";
+    if (isSuper(role)) {
+      const emailProof = objectOf(body.ownerEmailProof);
+      if (await verifyOwnerDeviceEmailProof(c, currentUser, emailProof)) {
+        ownerControlAuthorized = true;
+        ownerControlMethod = "EMAIL";
+      } else {
+        const authenticatorProvider = await verifyAnyOwnerAuthenticator(currentUser, body.ownerAuthenticatorCode);
+        if (authenticatorProvider) {
+          ownerControlAuthorized = true;
+          ownerControlMethod = authenticatorProvider;
+        }
+      }
+      if (!ownerControlAuthorized) {
+        return c.json(jsonError(
+          "OWNER_DEVICE_STEPUP_REQUIRED",
+          "Süper Yönetici telefonu için 8 karakter bağlantı kodundan önce doğrulanmış e-posta kodu veya mevcut Google/Microsoft Authenticator kodu zorunludur.",
+          {
+            emailReady: Boolean(currentUser?.email_verified && text(currentUser?.email)),
+            emailMasked: maskOwnerEmail(currentUser?.email),
+            googleReady: Boolean(currentUser?.google_mfa_enabled),
+            microsoftReady: Boolean(currentUser?.microsoft_mfa_enabled),
+          },
+        ), 401);
+      }
+    }
     const requestedTargetDeviceId = text(body.targetDeviceId);
     const existingSecurityDevices = await securityDevicesForUser(c, text(current.id), "CONTROL");
     let targetDevice = requestedTargetDeviceId
@@ -823,6 +965,8 @@ export function registerAuthPushRoutes(app: any) {
       reservedDeviceId,
       createdFromIp: clientIp(c),
       createdFromUserAgent: userAgent(c),
+      ownerControlAuthorized,
+      ownerControlMethod,
     });
 
     await audit(c, "SECURITY_APP_ENROLLMENT_STARTED", current.id, current.id, companySlug, {
@@ -839,6 +983,8 @@ export function registerAuthPushRoutes(app: any) {
         enrollmentMode,
         targetDeviceId: text(targetDevice?.id),
         deviceIdHint: reservedDeviceId,
+        ownerControlAuthorized,
+        ownerControlMethod,
         appUrl: `https://security.kyerp.net/guvenlik/?enrollmentId=${encodeURIComponent(enrollmentId)}&enrollmentToken=${encodeURIComponent(enrollmentToken)}`,
       },
     });
@@ -931,6 +1077,7 @@ export function registerAuthPushRoutes(app: any) {
     const deviceToken = randomToken(36);
     const companySlug = text(user.main_company_slug || enrollment.mainCompanySlug || "mecit-hakan");
     const role = roleOf(user);
+    const ownerControlAuthorized = isSuper(role) && enrollment.ownerControlAuthorized === true;
     const label = text(body.deviceLabel || friendlyDeviceLabel("", userAgent(c))).slice(0, 180);
 
     const saved = await saveDevice(c, {
@@ -949,7 +1096,10 @@ export function registerAuthPushRoutes(app: any) {
       securityApp: true,
       securityAppVersion: SECURITY_APP_VERSION,
       selfLoginEnabled: true,
-      managerApprovalEnabled: isSuper(role) || isCompanyAdmin(role),
+      managerApprovalEnabled: ownerControlAuthorized || isCompanyAdmin(role),
+      ownerControlAuthorized,
+      ownerControlAuthorizedAt: ownerControlAuthorized ? nowIso() : "",
+      ownerControlMethod: ownerControlAuthorized ? text(enrollment.ownerControlMethod) : "",
       isActive: true,
       createdAt: existing?.createdAt || nowIso(),
       trustedAt: existing?.trustedAt || existing?.createdAt || nowIso(),
@@ -959,6 +1109,14 @@ export function registerAuthPushRoutes(app: any) {
       retiredAt: "",
       retiredReason: "",
     });
+
+    if (ownerControlAuthorized) {
+      for (const row of allDevices) {
+        if (text(row.userId) === text(user.id) && text(row.id) !== text(saved.id) && row.securityApp === true && row.ownerControlAuthorized === true) {
+          await saveDevice(c, { ...row, ownerControlAuthorized: false, managerApprovalEnabled: false, ownerControlRevokedAt: nowIso(), ownerControlRevokedReason: "Yeni Süper Yönetici telefonu yetkilendirildi" });
+        }
+      }
+    }
 
     // Aynı push kanalını daha önce kullanan başka bir güvenlik cihazı satırı varsa
     // güvenilir kimlik olarak çoğaltmayız; sunucunun sabitlediği cihaz kimliği kalır.
@@ -1004,6 +1162,8 @@ export function registerAuthPushRoutes(app: any) {
       relinkedDevice: Boolean(serverBoundCandidate || legacyReplaceCandidate),
       serverBoundDevice: Boolean(serverBoundDeviceId),
       enrollmentMode: text(enrollment.enrollmentMode || (serverBoundCandidate ? "RELINK" : "NEW")),
+      ownerControlAuthorized,
+      ownerControlMethod: ownerControlAuthorized ? text(enrollment.ownerControlMethod) : "",
       legacyDevicesRetired: true,
     });
 
@@ -1015,6 +1175,7 @@ export function registerAuthPushRoutes(app: any) {
         deviceLabel: label,
         securityApp: true,
         securityAppVersion: SECURITY_APP_VERSION,
+        ownerControlAuthorized,
       },
     });
   });
@@ -1071,6 +1232,8 @@ export function registerAuthPushRoutes(app: any) {
 
     const applicationServerKey = await securityPushPublicKey(c);
     const appAccess = await securityAppAccess(c, current);
+    const currentUser = await userRow(c, text(current.id));
+    const currentRole = roleOf(current);
     const devices = (await storeList(c, DEVICE_SCOPE))
       .filter((row: AnyRow) => text(row.userId) === text(current.id))
       .sort((a: AnyRow, b: AnyRow) => String(b.lastSeenAt || b.updatedAt || "").localeCompare(String(a.lastSeenAt || a.updatedAt || "")));
@@ -1081,6 +1244,14 @@ export function registerAuthPushRoutes(app: any) {
         supported: true,
         securityAppEligible: appAccess.eligible,
         securityCapabilities: appAccess.capabilities,
+        role: currentRole,
+        ownerEnrollmentStepUpRequired: isSuper(currentRole),
+        ownerEmailReady: Boolean(currentUser?.email_verified && text(currentUser?.email)),
+        ownerEmailMasked: maskOwnerEmail(currentUser?.email),
+        ownerAuthenticatorProviders: [
+          ...(Boolean(currentUser?.google_mfa_enabled) ? ["GOOGLE"] : []),
+          ...(Boolean(currentUser?.microsoft_mfa_enabled) ? ["MICROSOFT"] : []),
+        ],
         applicationServerKey,
         storage: "json_store",
         devices: devices.map((row: AnyRow) => ({
@@ -1088,6 +1259,9 @@ export function registerAuthPushRoutes(app: any) {
           deviceLabel: text(row.deviceLabel),
           selfLoginEnabled: row.selfLoginEnabled !== false,
           managerApprovalEnabled: row.managerApprovalEnabled !== false,
+          ownerControlAuthorized: row.ownerControlAuthorized === true,
+          ownerControlAuthorizedAt: row.ownerControlAuthorizedAt || null,
+          ownerControlMethod: text(row.ownerControlMethod),
           securityApp: row.securityApp === true,
           securityAppVersion: text(row.securityAppVersion),
           retiredReason: text(row.retiredReason),

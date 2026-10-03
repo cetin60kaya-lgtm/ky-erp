@@ -99,10 +99,10 @@ test("reactivated Security device clears stale retirement markers so phone login
   assert.match(core,/row\.securityApp !== true \|\| trustedDeviceIsRetired\(row\)/);
 });
 
-test("security device health returns the verified bound account identity and permission scope",()=>{
+test("security device health exposes system scope only to the extra-verified owner phone",()=>{
   assert.match(push,/securityAccountProfile/);
-  assert.match(push,/s\.email,s\.role_override,s\.main_company_slug/);
-  assert.match(push,/scopeType: isSuper\(role\) \? "SYSTEM"/);
+  assert.match(push,/ownerControlAuthorized/);
+  assert.match(push,/scopeType: ownerControlAuthorized \? "SYSTEM" : \(companyApprover \? "COMPANY" : "USER"\)/);
   assert.match(push,/moduleKeys/);
   assert.match(push,/securityCapabilities/);
   assert.match(push,/const account = await safeSecurityAccountProfile\(c, actor\)/);
@@ -112,10 +112,13 @@ test("security device health returns the verified bound account identity and per
 });
 
 
-test("security app install and runtime are limited to owners or delegated security users",()=>{
+test("security app is available for self-login code while system control is owner-phone only",()=>{
   assert.match(push,/securityAppAccess/);
-  assert.match(push,/SECURITY_APP_NOT_ALLOWED/);
+  assert.match(push,/source: "SELF_ONLY"/);
   assert.match(push,/securityAppEligible: appAccess.eligible/);
-  assert.match(push,/capabilities.length > 0/);
+  assert.match(push,/ownerControlAuthorized/);
+  assert.match(push,/OWNER_DEVICE_STEPUP_REQUIRED/);
+  assert.match(push,/verifyAnyOwnerAuthenticator/);
+  assert.match(push,/verifyOwnerDeviceEmailProof/);
   assert.match(push,/if \(!appAccess\.eligible\) return null/);
 });

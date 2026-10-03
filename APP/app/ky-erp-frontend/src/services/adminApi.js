@@ -44,6 +44,7 @@ export async function listUsers() {
   }
 }
 export async function getApplicationOwner() { return unwrap(await apiGet("/admin/security/application-owner", { _ts: Date.now() })); }
+export async function getSecurityAppConfig() { return unwrap(await apiGet("/auth/push/config", { _ts: Date.now() })); }
 
 export async function createUser(payload = {}) {
   const created = unwrap(await apiPost("/admin/users", payload));

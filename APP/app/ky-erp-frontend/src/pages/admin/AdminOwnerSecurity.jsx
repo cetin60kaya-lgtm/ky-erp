@@ -3,6 +3,7 @@ import { useAuth } from "../../context/AuthContext";
 import {
   confirmSecureMfaRenewal,
   getApplicationOwner,
+  getSecurityAppConfig,
   getDeliveryCapabilities,
   getOwnerRecoveryConfig,
   getOwnerSecurityActionStatus,
@@ -45,6 +46,7 @@ export default function AdminOwnerSecurity() {
   const [owner, setOwner] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [delivery, setDelivery] = useState(null);
+  const [securityAppConfig, setSecurityAppConfig] = useState(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Süper Yönetici güvenlik bilgileri yükleniyor...");
   const [editing, setEditing] = useState(false);
@@ -85,11 +87,12 @@ export default function AdminOwnerSecurity() {
   async function loadAll() {
     setBusy(true);
     try {
-      const [ownerResult, sessionResult, deliveryResult, recoveryResult] = await Promise.allSettled([
+      const [ownerResult, sessionResult, deliveryResult, recoveryResult, securityAppResult] = await Promise.allSettled([
         getApplicationOwner(),
         listActiveSessions(),
         getDeliveryCapabilities(),
         getOwnerRecoveryConfig(),
+        getSecurityAppConfig(),
       ]);
       if (ownerResult.status === "rejected") {
         setOwner(null);
@@ -104,6 +107,8 @@ export default function AdminOwnerSecurity() {
       else { setSessions([]); unavailable.push("aktif oturumlar"); }
       if (deliveryResult.status === "fulfilled") setDelivery(deliveryResult.value);
       else { setDelivery(null); unavailable.push("e-posta servisi"); }
+      if (securityAppResult.status === "fulfilled") setSecurityAppConfig(securityAppResult.value || null);
+      else { setSecurityAppConfig(null); unavailable.push("KY Güvenlik sistem telefonu"); }
       if (recoveryResult.status === "fulfilled") {
         const recovery = recoveryResult.value || null;
         const configured = Array.isArray(recovery?.questions) ? recovery.questions : [];
@@ -338,6 +343,16 @@ export default function AdminOwnerSecurity() {
         <div className="aos-owner-copy"><h2>{owner.fullName}</h2><p>@{owner.username} · {owner.email || "e-posta yok"}</p><div className="aos-tags"><span>Süper Yönetici</span><span>{owner.mainCompanySlug || "-"}</span><span className={owner.emailVerified ? "good" : "warn"}>{owner.emailVerified ? "E-posta doğrulandı" : "E-posta doğrulanmadı"}</span></div></div>
         <button className="primary" onClick={() => setEditing(true)}>Profili Düzenle</button>
       </> : <form className="aos-profile-form" onSubmit={saveProfile}><label>Ad Soyad<input value={profile.fullName} onChange={(e) => setProfile((v) => ({ ...v, fullName: e.target.value }))}/></label><label>Kullanıcı Adı<input value={profile.username} onChange={(e) => setProfile((v) => ({ ...v, username: e.target.value }))}/></label><label>E-posta<input type="email" value={profile.email} onChange={(e) => setProfile((v) => ({ ...v, email: e.target.value }))}/></label><div><button className="primary" type="submit">Kaydet</button><button type="button" onClick={() => setEditing(false)}>Vazgeç</button></div></form>}
+    </section>
+
+    <section className="aos-card">
+      <div className="aos-card-head"><div><h3>Süper Yönetici Sistem Telefonu</h3><p>Sistem geneli KY Güvenlik ekranı yalnız ekstra doğrulanmış tek telefonda açılır.</p></div><span className={securityAppConfig?.devices?.some?.((row) => row.ownerControlAuthorized) ? "state good" : "state warn"}>{securityAppConfig?.devices?.some?.((row) => row.ownerControlAuthorized) ? "Yetkili Telefon Var" : "Yetkili Telefon Yok"}</span></div>
+      {(() => {
+        const device = securityAppConfig?.devices?.find?.((row) => row.ownerControlAuthorized);
+        return device ? <div className="aos-email"><b>{device.deviceLabel || "KY ERP Güvenlik"}</b><small>Son bağlantı: {dateText(device.lastSeenAt)} · Yöntem: {device.ownerControlMethod || "Ek doğrulama"}</small></div> : <div className="aos-error">Yeni Süper Yönetici telefonu kurulurken doğrulanmış e-posta kodu veya mevcut Google/Microsoft Authenticator kodu + 8 karakter bağlantı kodu + KY ERP şifresi zorunludur.</div>;
+      })()}
+      <div className="aos-tags"><span>{securityAppConfig?.ownerEmailReady ? "E-posta hazır" : "E-posta bekliyor"}</span>{(securityAppConfig?.ownerAuthenticatorProviders || []).map((provider) => <span key={provider}>{PROVIDER_LABELS[provider] || provider}</span>)}</div>
+      <p>Telefon değiştirildiğinde yeni telefon ekstra doğrulamadan geçmeden sistem onayı, tüm oturumlar, cihazlar ve hareket geçmişi açılmaz. Yeni telefon yetkilendirilirse önceki telefonun sistem yönetim yetkisi otomatik kapanır.</p>
     </section>
 
     <div className="aos-grid">
