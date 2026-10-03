@@ -1,5 +1,6 @@
 using System.Data;
 using System.Text;
+using System.Text.RegularExpressions;
 using FirebirdSql.Data.FirebirdClient;
 
 namespace KYERP.PDKS.Core;
@@ -91,8 +92,23 @@ public sealed class FirebirdDatabase
 
     public static FbCommand CreateCommand(FbConnection connection, FbTransaction? transaction, string sql, params FbParameter[] parameters)
     {
-        var command = new FbCommand(sql, connection, transaction);
+        var command = new FbCommand(NormalizeLegacyDialectSql(sql), connection, transaction);
         if (parameters.Length > 0) command.Parameters.AddRange(parameters);
         return command;
+    }
+
+    public static string NormalizeLegacyDialectSql(string sql)
+    {
+        if (string.IsNullOrWhiteSpace(sql)) return sql;
+
+        // Production PDKS database is Firebird SQL Dialect 1.
+        // In dialect 1, double quotes are not safe for human-readable column aliases.
+        // Normalize only SELECT-list aliases and leave quoted text elsewhere untouched.
+        var aliasIndex = 0;
+        return Regex.Replace(
+            sql,
+            @"\s+""([^""]+)""(?=\s*(?:,|from\b))",
+            _ => " AS KY_ALIAS_" + (++aliasIndex).ToString("000"),
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 }
