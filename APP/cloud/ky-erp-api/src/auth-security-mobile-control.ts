@@ -211,6 +211,31 @@ async function buildActivity(c:any, actor:AnyRow, companySlug:string, limit:numb
   return {items:limited,companies:Array.from(stats.values()).sort((a,b)=>String(b.lastActivityAt||"").localeCompare(String(a.lastActivityAt||"")))};
 }
 
+async function buildTodaySummary(c:any, companySlug:string) {
+  const start=new Date(); start.setUTCHours(0,0,0,0);
+  const end=new Date(start.getTime()+24*60*60*1000);
+  const from=start.toISOString(), to=end.toISOString();
+  async function count(sql:string, binds:unknown[]) {
+    const row=await c.env.DB.prepare(sql).bind(...binds).first();
+    return Number(row?.total||0);
+  }
+  const companyClause=companySlug?" AND main_company_slug=?":"";
+  const companyBind=companySlug?[companySlug]:[];
+  const loginRequestsToday=await count(
+    `SELECT COUNT(*) AS total FROM auth_login_approvals WHERE requested_at>=? AND requested_at<?${companyClause}`,
+    [from,to,...companyBind],
+  );
+  const successfulLoginsToday=await count(
+    `SELECT COUNT(*) AS total FROM auth_sessions WHERE created_at>=? AND created_at<?${companyClause}`,
+    [from,to,...companyBind],
+  );
+  const closedSessionsToday=await count(
+    `SELECT COUNT(*) AS total FROM auth_sessions WHERE revoked_at IS NOT NULL AND revoked_at>=? AND revoked_at<?${companyClause}`,
+    [from,to,...companyBind],
+  );
+  return { loginRequestsToday, successfulLoginsToday, closedSessionsToday };
+}
+
 async function writeAudit(c:any, actor:AnyRow, action:string, targetUserId:string, companySlug:string, sessionId:string, detail:AnyRow={}) {
   try { await c.env.DB.prepare(`INSERT INTO auth_security_audit(id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at) VALUES (?,?,?,?,?,?,?,?,?)`).bind(crypto.randomUUID(),text(actor.userId)||null,targetUserId||null,companySlug||null,action,sessionId||null,clientIp(c)||null,JSON.stringify(detail||{}),nowIso()).run(); } catch {}
 }
@@ -234,11 +259,9 @@ export function registerSecurityMobileControlRoutes(app:any, resolveActor:ActorR
     if(!hasOwnerControl(actor)) return c.json(jsonError("OWNER_PHONE_ONLY","Sistem Güvenlik Merkezi yalnız ekstra doğrulanmış Süper Yönetici telefonunda kullanılabilir."),403);
     const companies=await listCompanies(c,actor); const companySlug=normalizeCompanyFilter(actor,c.req.query("companySlug"),companies);
     const limit=Math.max(25,Math.min(300,Number(c.req.query("limit")||150)));
-    const sessions=await buildSessions(c,actor,companySlug,limit); const devices=await buildTrustedDevices(c,actor,companySlug); const audit=await buildAudit(c,actor,companySlug,limit); const activity=await buildActivity(c,actor,companySlug,limit);
+    const sessions=await buildSessions(c,actor,companySlug,limit); const devices=await buildTrustedDevices(c,actor,companySlug); const audit=await buildAudit(c,actor,companySlug,limit); const activity=await buildActivity(c,actor,companySlug,limit); const todaySummary=await buildTodaySummary(c,companySlug);
     const activeSessions=sessions.filter((row:AnyRow)=>row.active); const activeComputers=new Set(activeSessions.map((row:AnyRow)=>row.deviceId||`${row.deviceLabel}|${row.ipAddress}`).filter(Boolean));
-    const today=new Date().toISOString().slice(0,10);
-    const todayActivity=activity.items.filter((row:AnyRow)=>String(row.createdAt||"").startsWith(today));
-    return c.json({ok:true,data:{serverVersion,scopeType:scopeType(actor),ownerControlAuthorized:true,role:upper(actor.role),companySlug,companies,capabilities:actor.securityCapabilities||[],summary:{activeSessions:activeSessions.length,connectedComputers:activeComputers.size,trustedDevices:devices.length,recentEvents:audit.length,loginRequestsToday:todayActivity.filter((row:AnyRow)=>row.type==="LOGIN_REQUEST").length,successfulLoginsToday:todayActivity.filter((row:AnyRow)=>row.type==="SESSION_OPENED").length,closedSessionsToday:todayActivity.filter((row:AnyRow)=>row.type==="SESSION_CLOSED").length},sessions,devices,audit,activity:activity.items,companyStats:activity.companies,checkedAt:nowIso()}});
+    return c.json({ok:true,data:{serverVersion,scopeType:scopeType(actor),ownerControlAuthorized:true,role:upper(actor.role),companySlug,companies,capabilities:actor.securityCapabilities||[],summary:{activeSessions:activeSessions.length,connectedComputers:activeComputers.size,trustedDevices:devices.length,recentEvents:audit.length,...todaySummary},sessions,devices,audit,activity:activity.items,companyStats:activity.companies,checkedAt:nowIso()}});
   });
 
   app.post("/api/auth/push/device/control-center/session/close", async (c:any) => {
