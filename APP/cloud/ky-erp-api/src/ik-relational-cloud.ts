@@ -437,11 +437,35 @@ function monthlyValues(body: Row, current: Row = {}) {
   };
 }
 
+async function nextMonthlyPersonnelCode(c: Context<AppEnv>, companyId: string) {
+  const row = await first(
+    c,
+    `SELECT MAX(CASE
+         WHEN UPPER(TRIM(code)) LIKE 'HKN-%'
+          AND CAST(SUBSTR(TRIM(code), 5) AS INTEGER) > 0
+         THEN CAST(SUBSTR(TRIM(code), 5) AS INTEGER)
+         ELSE 0
+       END) AS max_code
+       FROM hr_monthly_employees
+      WHERE main_company_id=?`,
+    [companyId],
+  );
+  const next = Math.max(0, Math.trunc(number(row?.max_code))) + 1;
+  return `HKN-${String(next).padStart(2, "0")}`;
+}
+
 async function createMonthly(c: Context<AppEnv>) {
   const body = await bodyOf(c);
   const companyId = companyIdOf(c, body);
   const value = monthlyValues(body);
   if (!value.fullName) return error(c, 400, "FULL_NAME_REQUIRED", "Ad soyad zorunludur.");
+  value.code = await nextMonthlyPersonnelCode(c, companyId);
+  const duplicateCode = await first(
+    c,
+    "SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND upper(trim(code))=upper(trim(?)) LIMIT 1",
+    [companyId, value.code],
+  );
+  if (duplicateCode) return error(c, 409, "DUPLICATE_PERSONNEL_CODE", "Bu HKN personel kodu zaten kullanılıyor.");
   const duplicate = await first(
     c,
     "SELECT id FROM hr_monthly_employees WHERE main_company_id = ? AND lower(trim(full_name)) = lower(trim(?)) LIMIT 1",
@@ -477,6 +501,7 @@ async function updateMonthly(c: Context<AppEnv>) {
   if (!current) return error(c, 404, "NOT_FOUND", "Aylık personel bulunamadı.");
   const value = monthlyValues(body, current);
   if (!value.fullName) return error(c, 400, "FULL_NAME_REQUIRED", "Ad soyad zorunludur.");
+  if (/^HKN-\d+$/i.test(text(current.code))) value.code = upper(current.code);
   const timestamp = nowIso();
   await c.env.DB.prepare(
     `UPDATE hr_monthly_employees SET code=?, full_name=?, department=?, title=?, work_type=?,
@@ -1070,47 +1095,70 @@ async function advancedMonth(c: Context<AppEnv>) {
     if (!fileName.startsWith(calcPrefix)) continue;
     calcByEmployee.set(fileName.slice(calcPrefix.length), parsePersonCardCalc(row));
   }
-  const rawEmployeesWithCalc = employees.map((employee) => applyHistoricalEmployeeValues({
+  const currentEmployeesWithCalc = employees.map((employee) => ({
     ...employee,
     deductionHourlyBase: number(calcByEmployee.get(text(employee.id))?.deductionHourlyBase) || 300,
-  }, historyRows, periodEnd));
+  }));
+  const rawEmployeesWithCalc = currentEmployeesWithCalc.map((employee) => applyHistoricalEmployeeValues(employee, historyRows, periodEnd));
   const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
   const profileByEmployee = new Map(profiles.map((row) => [text(row.employee_id), row]));
   const complianceByEmployee = new Map(compliance.map((row) => [text(row.employee_id), row]));
   const cardDaysByEmployee = new Map(cardDayRows.map((row) => [text(row.employee_id), number(row.card_days)]));
-  const mergedEmployees = rawEmployeesWithCalc
-    .filter((employee) => advancedEmployeeVisible(employee, cardsByEmployee.get(text(employee.id)) || {}, period))
-    .map((employee) => {
-      const card = cardsByEmployee.get(text(employee.id)) || {};
-      const profile = profileByEmployee.get(text(employee.id)) || {};
-      const monthlyCompliance = complianceByEmployee.get(text(employee.id));
-      const sgkValue = number(card.sgk_follow);
-      const fallbackSgk = card.sgk_follow === undefined ? text(employee.sgkStatus) !== "YOK" : sgkValue === 1;
-      const sgkFollow = monthlyCompliance ? number(monthlyCompliance.sgk_covered) === 1 : fallbackSgk;
-      const sgkDays = monthlyCompliance?.sgk_days === null || monthlyCompliance?.sgk_days === undefined ? null : number(monthlyCompliance.sgk_days);
-      const pdksCardDays = cardDaysByEmployee.get(text(employee.id)) || 0;
-      const sgkPdksMatch = sgkDays === null ? null : sgkDays === pdksCardDays;
-      return {
-        ...employee,
-        id: text(employee.id),
-        personnelStatus: text(profile.personnel_status) || text(employee.personnelStatus) || "NORMAL",
-        cardNo: text(card.card_no),
-        identityNo: text(card.identity_no),
-        exitDate: hrDateOnly(card.exit_date),
-        payrollIncluded: card.payroll_included === undefined ? true : flag(card.payroll_included),
-        cardSource: text(card.card_source) || "TNF",
-        personelKodu: text(card.personel_kodu) || text(employee.code),
-        activePassive: text(card.active_passive) || text(employee.status),
-        paymentType: text(card.payment_type) || text(employee.bankPaymentType),
-        sgkFollow,
-        sgkStatus: sgkFollow ? "VAR" : "YOK",
-        sgkDays,
-        sgkPeriod: period,
-        pdksCardDays,
-        sgkPdksMatch,
-        phone: text(card.phone),
-      };
-    });
+  const allEmployees = rawEmployeesWithCalc.map((employee) => {
+    const card = cardsByEmployee.get(text(employee.id)) || {};
+    const profile = profileByEmployee.get(text(employee.id)) || {};
+    const monthlyCompliance = complianceByEmployee.get(text(employee.id));
+    const sgkValue = number(card.sgk_follow);
+    const fallbackSgk = card.sgk_follow === undefined ? text(employee.sgkStatus) !== "YOK" : sgkValue === 1;
+    const sgkFollow = monthlyCompliance ? number(monthlyCompliance.sgk_covered) === 1 : fallbackSgk;
+    const sgkDays = monthlyCompliance?.sgk_days === null || monthlyCompliance?.sgk_days === undefined ? null : number(monthlyCompliance.sgk_days);
+    const pdksCardDays = cardDaysByEmployee.get(text(employee.id)) || 0;
+    const sgkPdksMatch = sgkDays === null ? null : sgkDays === pdksCardDays;
+    return {
+      ...employee,
+      id: text(employee.id),
+      personnelStatus: text(profile.personnel_status) || text(employee.personnelStatus) || "NORMAL",
+      cardNo: text(card.card_no),
+      identityNo: text(card.identity_no),
+      exitDate: hrDateOnly(card.exit_date),
+      payrollIncluded: card.payroll_included === undefined ? true : flag(card.payroll_included),
+      cardSource: text(card.card_source) || "TNF",
+      personelKodu: text(card.personel_kodu) || text(employee.code),
+      activePassive: text(card.active_passive) || text(employee.status),
+      paymentType: text(card.payment_type) || text(employee.bankPaymentType),
+      sgkFollow,
+      sgkStatus: sgkFollow ? "VAR" : "YOK",
+      sgkDays,
+      sgkPeriod: period,
+      pdksCardDays,
+      sgkPdksMatch,
+      phone: text(card.phone),
+    };
+  });
+  const masterEmployees = currentEmployeesWithCalc.map((employee) => {
+    const card = cardsByEmployee.get(text(employee.id)) || {};
+    const profile = profileByEmployee.get(text(employee.id)) || {};
+    const sgkValue = number(card.sgk_follow);
+    const sgkFollow = card.sgk_follow === undefined ? text(employee.sgkStatus) !== "YOK" : sgkValue === 1;
+    return {
+      ...employee,
+      id: text(employee.id),
+      personnelStatus: text(profile.personnel_status) || text(employee.personnelStatus) || "NORMAL",
+      cardNo: text(card.card_no),
+      identityNo: text(card.identity_no),
+      exitDate: hrDateOnly(card.exit_date),
+      payrollIncluded: card.payroll_included === undefined ? true : flag(card.payroll_included),
+      cardSource: text(card.card_source) || "TNF",
+      personelKodu: text(card.personel_kodu) || text(employee.code),
+      activePassive: text(card.active_passive) || text(employee.status),
+      paymentType: text(card.payment_type) || text(employee.bankPaymentType),
+      sgkFollow,
+      sgkStatus: sgkFollow ? "VAR" : "YOK",
+      phone: text(card.phone),
+    };
+  });
+  const mergedEmployees = allEmployees
+    .filter((employee) => advancedEmployeeVisible(employee, cardsByEmployee.get(text(employee.id)) || {}, period));
   const visibleEmployeeIds = new Set(mergedEmployees.map((employee) => text(employee.id)));
   const sgkImport = sgkImportRows[0] || null;
   const sgkRowsRaw = sgkImport
@@ -1171,7 +1219,10 @@ async function advancedMonth(c: Context<AppEnv>) {
     year,
     month,
     employees: employeesWithSgk,
-    rawEmployees: rawEmployeesWithCalc,
+    masterEmployees,
+    rawEmployees: allEmployees,
+    rawLeaves: leaves,
+    rawDocuments: documents.map((row) => ({ id: text(row.id), employeeId: text(row.employee_id), documentType: text(row.document_type), fileName: text(row.file_name), filePath: text(row.file_path), storagePath: text(row.file_path), date: hrDateOnly(row.date), status: text(row.status), note: text(row.note) })),
     adjustments: adjustments.filter((row) => visibleEmployeeIds.has(text(row.employeeId))),
     leaves: leaves.filter((row) => visibleEmployeeIds.has(text(row.employeeId))),
     payroll: payroll.filter((row) => visibleEmployeeIds.has(text(row.employeeId))),

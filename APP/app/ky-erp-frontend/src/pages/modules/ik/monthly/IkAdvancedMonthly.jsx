@@ -201,6 +201,25 @@ function sgkLabel(employee = {}) {
   return "Belirtilmemis";
 }
 
+function hknNumber(employee = {}) {
+  const code = String(employee.code || employee.personelKodu || "").trim().toLocaleUpperCase("tr-TR");
+  const match = /^HKN-(\d+)$/.exec(code);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
+function isHknEmployee(employee = {}) {
+  return Number.isFinite(hknNumber(employee)) && hknNumber(employee) !== Number.MAX_SAFE_INTEGER;
+}
+
+function sortHknEmployees(list = []) {
+  return [...list].sort((a, b) => hknNumber(a) - hknNumber(b) || String(a.fullName || "").localeCompare(String(b.fullName || ""), "tr"));
+}
+
+function nextHknCode(list = []) {
+  const max = list.reduce((value, employee) => Math.max(value, hknNumber(employee) === Number.MAX_SAFE_INTEGER ? 0 : hknNumber(employee)), 0);
+  return `HKN-${String(max + 1).padStart(2, "0")}`;
+}
+
 function paymentLabel(employee = {}) {
   const type = upper(employee.paymentType);
   if (type.includes("BANKA") && !type.includes("ELDEN")) return "Banka";
@@ -329,9 +348,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   }, [companyId, year, month]);
 
   const rawEmployees = safeList(data.rawEmployees).length ? safeList(data.rawEmployees) : safeList(data.employees);
+  const rawMasterEmployees = safeList(data.masterEmployees).length ? safeList(data.masterEmployees) : rawEmployees;
+  const masterEmployees = useMemo(() => sortHknEmployees(rawMasterEmployees.filter(isHknEmployee)), [rawMasterEmployees]);
   const employees = safeList(data.employees).filter((item) => payrollVisibleEmployee(item, period));
   const canonicalEmployeeIds = useMemo(() => new Set(employees.map((item) => item.id)), [employees]);
   const rawAdjustments = safeList(data.adjustments).filter((item) => canonicalEmployeeIds.has(item.employeeId));
+  const masterLeaves = safeList(data.rawLeaves).length ? safeList(data.rawLeaves) : safeList(data.leaves);
+  const masterDocuments = safeList(data.rawDocuments).length ? safeList(data.rawDocuments) : safeList(data.documents);
   const leaves = safeList(data.leaves).filter((item) => canonicalEmployeeIds.has(item.employeeId));
   const documents = safeList(data.documents).filter((item) => canonicalEmployeeIds.has(item.employeeId));
   const checks = safeList(data.checks);
@@ -540,9 +563,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setNotice("");
   };
 
-  const filteredEmployees = useMemo(() => {
+  const filterEmployeeList = useCallback((list) => {
     const needle = upper(search).trim();
-    return employees.filter((employee) => {
+    return list.filter((employee) => {
       const status = upper(`${employee.status || ""} ${employee.activePassive || ""}`);
       if (employeeStatusFilter === "ACTIVE" && status.includes("PAS")) return false;
       if (employeeStatusFilter === "PASSIVE" && !status.includes("PAS")) return false;
@@ -551,7 +574,10 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       const haystack = upper(`${employee.fullName || ""} ${employee.code || ""} ${employee.cardNo || ""} ${employee.identityNo || ""}`);
       return !needle || haystack.includes(needle);
     });
-  }, [employeeStatusFilter, employees, search, sgkFilter]);
+  }, [employeeStatusFilter, search, sgkFilter]);
+
+  const filteredEmployees = useMemo(() => filterEmployeeList(employees), [employees, filterEmployeeList]);
+  const filteredMasterEmployees = useMemo(() => filterEmployeeList(masterEmployees), [filterEmployeeList, masterEmployees]);
 
   const movements = useMemo(() => rawAdjustments
     .map((item) => ({ ...item, type: normalizeFinanceType(item.adjustmentType || item.type) }))
@@ -571,13 +597,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   }, [employees, movementEffectFilter, movementTypeFilter, movements, search]);
 
   const employeeLeave = useCallback((employee) => {
-    const own = leaves.filter((item) => item.employeeId === employee.id);
+    const own = masterLeaves.filter((item) => item.employeeId === employee.id);
     const annual = own.filter((item) => upper(item.recordType || item.type).includes("YILLIK")).reduce((sum, item) => sum + num(item.dayCount || item.days || 1), 0);
     const right = num(employee.annualLeaveEntitlement) + num(employee.annualLeaveCarryover);
     return { own, annual, right, balance: right - annual };
-  }, [leaves]);
+  }, [masterLeaves]);
 
-  const docsFor = useCallback((employee) => documents.filter((item) => item.employeeId === employee.id), [documents]);
+  const docsFor = useCallback((employee) => masterDocuments.filter((item) => item.employeeId === employee.id), [masterDocuments]);
 
   const planFor = useCallback((employee) => {
   const own = movements.filter((item) => item.employeeId === employee.id);
@@ -771,7 +797,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const openNewPerson = () => {
     if (data.close?.isLocked) return setNotice("Kapalı dönemde yeni personel kartı açılamaz.");
     setSelectedId("");
-    setModalDraft(draftPerson({ startDate: istanbulDateKey(), status: "AKTIF" }));
+    setModalDraft(draftPerson({ code: nextHknCode(masterEmployees), startDate: istanbulDateKey(), status: "AKTIF" }));
     setModal("personel");
   };
 
@@ -948,7 +974,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const editFromLog = (log) => {
     if (log.forceDetail) { setModalDraft(log); setModal("logDetay"); return; }
     const text = log.text || upper(`${log.actionType || ""} ${log.sourceScreen || ""} ${log.reason || ""}`);
-    const employee = employees.find((item) => item.id === log.employeeId) || selected;
+    const employee = masterEmployees.find((item) => item.id === log.employeeId) || selected;
     if (employee?.id) setSelectedId(employee.id);
     if (text.includes("TOPLU") && text.includes("AVANS")) return openFinance("Toplu avans");
     if (text.includes("AVANS")) return openFinance("Avans");
@@ -1055,6 +1081,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         employeeId = created?.id || created?.employeeId || "";
         createdEmployeeId = employeeId;
         if (!employeeId) throw new Error("Yeni personel kimliği alınamadı.");
+        cardPayload.personelKodu = created?.code || modalDraft.code;
       }
 
       await saveIkAdvancedPersonCard(employeeId, cardPayload);
@@ -1927,7 +1954,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   }
 
   function renderPersonel() {
-    const profile = filteredEmployees.find((item) => item.id === selected?.id) || filteredEmployees[0] || null;
+    const profile = filteredMasterEmployees.find((item) => item.id === selectedId) || filteredMasterEmployees[0] || null;
     const profileLeave = profile ? employeeLeave(profile) : { annual: 0, balance: 0 };
     const profileDocs = profile ? docsFor(profile) : [];
     const initials = (employee) => String(employee?.fullName || "?").trim().split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toLocaleUpperCase("tr-TR");
@@ -1941,9 +1968,9 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
 
         <div className="ik-pro-personnel-layout">
           <aside className="ik-pro-roster card">
-            <div className="ch"><div><b>Personel Listesi</b><span>{filteredEmployees.length} kayıt · seçim yaparak kartı açın</span></div></div>
+            <div className="ch"><div><b>İK Ana Personel Kadrosu</b><span>{filteredMasterEmployees.length} / {masterEmployees.length} HKN kayıt · aktif/pasif yalnız filtredir</span></div></div>
             <div className="ik-pro-roster-scroll">
-              {filteredEmployees.map((employee) => {
+              {filteredMasterEmployees.map((employee) => {
                 const leave = employeeLeave(employee);
                 const isActive = employee.id === profile?.id;
                 const passive = upper(employee.status || employee.activePassive).includes("PAS");
@@ -1961,7 +1988,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                   </button>
                 );
               })}
-              {!filteredEmployees.length && <div className="ik-pro-empty">Filtreye uygun personel bulunamadı.</div>}
+              {!filteredMasterEmployees.length && <div className="ik-pro-empty">Filtreye uygun HKN personeli bulunamadı.</div>}
             </div>
           </aside>
 
@@ -2008,11 +2035,11 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
 
         <details className="ik-pro-detail-table card">
           <summary>Detay Personel Tablosunu Aç <span>Tüm kolonlar ve teknik kontrol görünümü</span></summary>
-          <div className="tw"><table><thead><tr><th>Personel</th><th>Kod / Kart No</th><th>İşe Giriş</th><th>İşten Çıkış</th><th>SGK</th><th>Ödeme</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Banka Plan</th><th>Elden Plan</th><th>Kalan İzin</th><th>Evrak</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{filteredEmployees.map((employee) => {
+          <div className="tw"><table><thead><tr><th>Personel</th><th>Kod / Kart No</th><th>İşe Giriş</th><th>İşten Çıkış</th><th>SGK</th><th>Ödeme</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Banka Plan</th><th>Elden Plan</th><th>Kalan İzin</th><th>Evrak</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{filteredMasterEmployees.map((employee) => {
             const leave = employeeLeave(employee);
             const docCount = docsFor(employee).length;
             return <tr key={employee.id} onClick={() => setSelectedId(employee.id)}><td><span className="person">{employee.fullName}</span><span className="code">{employee.department || "-"}</span></td><td>{employee.code || "-"} / {employee.cardNo || "-"}</td><td><b>{employeeHireDate(employee) || "-"}</b></td><td><b>{employeeExitDate(employee) || "-"}</b></td><td>{sgkLabel(employee)}</td><td>{paymentLabel(employee)}</td><td className="money">{money(employee.salary)}</td><td className="money">{money(employee.roadAllowance)}</td><td className="money">{money(employee.extraPaymentAmount)}</td><td className="money">{money(employee.bankAmount)}</td><td className="money">{money(employee.cashAmount)}</td><td><span className={`badge ${leave.balance < 0 ? "red" : "green"}`}>{leave.balance}</span></td><td><span className={`badge ${docCount ? "green" : "orange"}`}>{docCount ? "Var" : "Eksik"}</span></td><td><span className={`badge ${upper(employee.status || employee.activePassive).includes("PAS") ? "red" : employeeExitDate(employee) ? "orange" : "green"}`}>{employmentPeriodLabel(employee, period)}</span></td><td><button className="btn" onClick={(event) => { event.stopPropagation(); openPerson(employee); }}>Düzenle</button> <button className="btn" onClick={(event) => { event.stopPropagation(); openDocument(employee); }}>Evrak</button></td></tr>;
-          })}<EmptyRow show={!filteredEmployees.length} colSpan={15} text="Personel bulunamadı." /></tbody></table></div>
+          })}<EmptyRow show={!filteredMasterEmployees.length} colSpan={15} text="Personel bulunamadı." /></tbody></table></div>
         </details>
 
         <LogTable title="Personel İşlem Logları" rows={scopedLogs} onEdit={editFromLog} />
@@ -2135,6 +2162,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                     <button className="btn" disabled={data.close?.isLocked || upper(row.saved?.status)==="PAID"} onClick={()=>openFinance("Mesai",{employeeId:row.employee.id})}>Mesai Ekle</button>
                     <button className="btn" disabled={data.close?.isLocked || upper(row.saved?.status)==="PAID"} onClick={()=>openFinance("Avans",{employeeId:row.employee.id})}>Avans Ekle</button>
                     <button className="btn" disabled={data.close?.isLocked || upper(row.saved?.status)==="PAID"} onClick={()=>openFinance("Ozel kesinti",{employeeId:row.employee.id})}>Kesinti Ekle</button>
+                    <button className="btn" onClick={()=>{setSelectedId(row.employee.id);setSearch(row.employee.code || row.employee.fullName);go("hareket");}}>Hareketleri Yönet</button>
                     <button className="btn primary" disabled={data.close?.isLocked || upper(row.saved?.status)==="PAID"} onClick={()=>openPayroll(row)}>{upper(row.saved?.status)==="PAID"?"Kilitli":"Son Kontrol"}</button>
                     <button className="btn" onClick={()=>{setSelectedId(row.employee.id);setModal("fis");}}>Fiş</button>
                   </div>
@@ -2165,7 +2193,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   }
 
   function withPerson(log) {
-    return { ...log, personName: employees.find((item) => item.id === log.employeeId)?.fullName || log.fullName || "-" };
+    return { ...log, personName: masterEmployees.find((item) => item.id === log.employeeId)?.fullName || log.fullName || "-" };
   }
 
   function renderModal() {
@@ -2173,7 +2201,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     if (modal === "personel") return (
       <Modal title="Personel Kartı ve Ödeme Ayarları" sub="Kimlik, çalışma, SGK, ücret, banka ve izin bilgilerini tek ekrandan yönetin" size="medium" onClose={() => setModal(null)}>
         <div className="modal-section-grid">
-          <div className="modal-section"><h3>Kimlik ve Çalışma Bilgileri</h3><div className="form"><Field label="Ad Soyad" half><input value={modalDraft.fullName||""} onChange={(event)=>setModalDraft((old)=>({...old,fullName:event.target.value}))}/></Field><Field label="TC Kimlik No"><input value={modalDraft.identityNo||""} maxLength={11} onChange={(event)=>setModalDraft((old)=>({...old,identityNo:event.target.value.replace(/\D/g,"")}))}/></Field><Field label="Personel Kodu"><input value={modalDraft.code||""} onChange={(event)=>setModalDraft((old)=>({...old,code:event.target.value}))}/></Field><Field label="Kart No"><input value={modalDraft.cardNo||""} onChange={(event)=>setModalDraft((old)=>({...old,cardNo:event.target.value}))}/></Field><Field label="İşe Giriş"><input type="date" value={modalDraft.startDate||""} onChange={(event)=>setModalDraft((old)=>({...old,startDate:event.target.value}))}/></Field><Field label="İşten Çıkış"><input type="date" value={modalDraft.exitDate||""} onChange={(event)=>setModalDraft((old)=>({...old,exitDate:event.target.value,status:event.target.value?"PASIF":old.status}))}/></Field><Field label="Görev"><input value={modalDraft.title||""} onChange={(event)=>setModalDraft((old)=>({...old,title:event.target.value}))}/></Field><Field label="Bölüm"><input value={modalDraft.department||""} onChange={(event)=>setModalDraft((old)=>({...old,department:event.target.value}))}/></Field><Field label="Durum"><select value={modalDraft.status||"AKTIF"} onChange={(event)=>setModalDraft((old)=>({...old,status:event.target.value}))}><option value="AKTIF">Aktif</option><option value="PASIF">Pasif</option></select></Field></div></div>
+          <div className="modal-section"><h3>Kimlik ve Çalışma Bilgileri</h3><div className="form"><Field label="Ad Soyad" half><input value={modalDraft.fullName||""} onChange={(event)=>setModalDraft((old)=>({...old,fullName:event.target.value}))}/></Field><Field label="TC Kimlik No"><input value={modalDraft.identityNo||""} maxLength={11} onChange={(event)=>setModalDraft((old)=>({...old,identityNo:event.target.value.replace(/\D/g,"")}))}/></Field><Field label="Personel Kodu (Otomatik)"><input value={modalDraft.code||""} readOnly /></Field><Field label="Kart No"><input value={modalDraft.cardNo||""} onChange={(event)=>setModalDraft((old)=>({...old,cardNo:event.target.value}))}/></Field><Field label="İşe Giriş"><input type="date" value={modalDraft.startDate||""} onChange={(event)=>setModalDraft((old)=>({...old,startDate:event.target.value}))}/></Field><Field label="İşten Çıkış"><input type="date" value={modalDraft.exitDate||""} onChange={(event)=>setModalDraft((old)=>({...old,exitDate:event.target.value,status:event.target.value?"PASIF":old.status}))}/></Field><Field label="Görev"><input value={modalDraft.title||""} onChange={(event)=>setModalDraft((old)=>({...old,title:event.target.value}))}/></Field><Field label="Bölüm"><input value={modalDraft.department||""} onChange={(event)=>setModalDraft((old)=>({...old,department:event.target.value}))}/></Field><Field label="Durum"><select value={modalDraft.status||"AKTIF"} onChange={(event)=>setModalDraft((old)=>({...old,status:event.target.value}))}><option value="AKTIF">Aktif</option><option value="PASIF">Pasif</option></select></Field></div></div>
           <div className="modal-section"><h3>SGK ve Bordro Kapsamı · {MONTHS[month-1]} {year}</h3><div className="form">
             <Field label="Personel Statüsü" half><select value={modalDraft.personnelStatus||"NORMAL"} onChange={(event)=>setModalDraft((old)=>({...old,personnelStatus:event.target.value}))}><option value="NORMAL">Normal</option><option value="RETIRED">Emekli</option></select></Field>
             <Field label="SGK Durumu" half><select value={modalDraft.sgkFollow||"BELIRTILMEMIS"} onChange={(event)=>setModalDraft((old)=>({...old,sgkFollow:event.target.value,sgkDays:event.target.value==="SGKSIZ"?0:old.sgkDays}))}><option value="SGKLI">SGK'lı</option><option value="SGKSIZ">SGK'sız</option><option value="BELIRTILMEMIS">Seçiniz</option></select></Field>

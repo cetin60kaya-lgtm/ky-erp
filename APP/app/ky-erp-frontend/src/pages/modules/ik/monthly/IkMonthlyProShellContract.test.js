@@ -61,6 +61,24 @@ test("new personnel is blocked in a closed period and duplicate card is checked 
   assert.match(monthly, /Bu kart numarası başka bir personele bağlı/);
 });
 
+test("personnel cards use the complete HKN master roster while payroll stays period scoped", () => {
+  assert.match(monthly, /const rawMasterEmployees = safeList\(data\.masterEmployees\)/);
+  assert.match(monthly, /const masterEmployees = useMemo\(\(\) => sortHknEmployees\(rawMasterEmployees\.filter\(isHknEmployee\)\)/);
+  assert.match(monthly, /const employees = safeList\(data\.employees\)\.filter\(\(item\) => payrollVisibleEmployee\(item, period\)\)/);
+  assert.match(monthly, /filteredMasterEmployees/);
+  assert.match(monthly, /İK Ana Personel Kadrosu/);
+  assert.match(monthly, /nextHknCode\(masterEmployees\)/);
+  assert.match(monthly, /Personel Kodu \(Otomatik\)/);
+});
+
+test("payroll person actions link to the same source movements", () => {
+  assert.match(monthly, /Hareketleri Yönet/);
+  assert.match(monthly, /Mesai Ekle/);
+  assert.match(monthly, /Avans Ekle/);
+  assert.match(monthly, /Kesinti Ekle/);
+  assert.match(monthly, /Bordrodan Düzelt/);
+});
+
 
 test("payroll and document controls filter the rows they display", () => {
   assert.match(monthly, /payrollPaymentFilter/);
