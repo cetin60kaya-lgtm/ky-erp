@@ -52,6 +52,16 @@ Run("legacy Turkish codepage registration", () =>
     Equal(1254, Encoding.GetEncoding(1254).CodePage);
 });
 
+Run("legacy dialect alias normalization", () =>
+{
+    var sql = "select AD \"Ad\", SOYAD \"Soyad\" from KIMLIK order by AD";
+    var normalized = FirebirdDatabase.NormalizeLegacyDialectSql(sql);
+    Equal(true, normalized.Contains("AD AS KY_ALIAS_001", StringComparison.OrdinalIgnoreCase));
+    Equal(true, normalized.Contains("SOYAD AS KY_ALIAS_002", StringComparison.OrdinalIgnoreCase));
+    Equal(false, normalized.Contains("\"Ad\"", StringComparison.Ordinal));
+    Equal("select * from KIMLIK where AD='TEST'", FirebirdDatabase.NormalizeLegacyDialectSql("select * from KIMLIK where AD='TEST'"));
+});
+
 Run("employee validation", () =>
 {
     Equal("01234", PdksValidation.EmployeeCode(" 01234 "));
