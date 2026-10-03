@@ -64,25 +64,20 @@ test("quick personnel groups stay tightly packed on small monitors", () => {
 });
 
 
-test("approved quick cards keep full names and a soft salary divider", () => {
-  assert.match(css, /QUICK-CARD-FINAL-MOCKUP-2026-10-03/);
-  assert.match(css, /white-space:normal!important/);
-  assert.match(css, /border-left:1px solid #d9e3ee!important/);
-  assert.match(css, /grid-template-columns:20px minmax\(0,1fr\) 72px 38px!important/);
-});
-
-test("row and width sliders have a visibly wider operating range", () => {
-  assert.match(workspace, /value >= 28 && value <= 60/);
-  assert.match(workspace, /value >= 160 && value <= 380/);
-  assert.match(workspace, /min="28" max="60" step="2"/);
-  assert.match(workspace, /min="160" max="380" step="10"/);
-});
-
-
-test("inline quick card order keeps divider next to name and before wage/select/approval", () => {
+test("final quick cards use aligned grid columns with full-name room", () => {
   assert.match(workspace, /quick-person-text[\s\S]*quick-inline-divider[\s\S]*money\(quick\.shift[\s\S]*Seçildi/);
-  assert.match(css, /QUICK-CARD-INLINE-FINAL-2026-10-03/);
-  assert.match(css, /\.gop-quick-dialog \.quick-main-toggle\{[\s\S]*display:inline-flex!important/);
+  assert.match(css, /QUICK-CARD-GRID-FINAL-2026-10-03/);
+  assert.match(css, /grid-template-columns:20px minmax\(0,1fr\) 1px 64px 38px!important/);
+  assert.match(css, /grid-template-columns:minmax\(0,1fr\) 24px!important/);
+  assert.match(css, /white-space:normal!important/);
   assert.match(css, /\.gop-quick-dialog \.quick-inline-divider\{/);
-  assert.match(css, /border-left:0!important/);
+});
+
+test("row and width controls use final grid-safe ranges and fresh saved defaults", () => {
+  assert.match(workspace, /quickRowHeight\.v3/);
+  assert.match(workspace, /quickCardWidth\.v3/);
+  assert.match(workspace, /value >= 30 && value <= 60/);
+  assert.match(workspace, /value >= 220 && value <= 380/);
+  assert.match(workspace, /min="30" max="60" step="2"/);
+  assert.match(workspace, /min="220" max="380" step="10"/);
 });
