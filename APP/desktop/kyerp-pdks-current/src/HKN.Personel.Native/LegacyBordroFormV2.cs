@@ -12,8 +12,8 @@ public sealed class LegacyBordroForm : Form
     readonly ComboBox year = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 112, FlatStyle = FlatStyle.Flat };
     readonly ComboBox month = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 145, FlatStyle = FlatStyle.Flat };
     readonly ComboBox type = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190, FlatStyle = FlatStyle.Flat };
-    readonly DataGridView grid = new() { Name = "BordroGrid", Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, AllowUserToOrderColumns = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None, BackgroundColor = Color.White, BorderStyle = BorderStyle.None, RowHeadersVisible = false };
-    readonly Label summary = new() { AutoSize = true, Padding = new Padding(14, 10, 8, 0), Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = Color.FromArgb(42, 70, 105) };
+    readonly DataGridView grid = new() { Name = "BordroGrid", Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, AllowUserToOrderColumns = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None, BackgroundColor = PdksAppearance.Current.Surface, BorderStyle = BorderStyle.None, RowHeadersVisible = false };
+    readonly Label summary = new() { AutoSize = true, Padding = new Padding(14, 10, 8, 0), Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = PdksAppearance.Current.Muted };
     readonly System.Windows.Forms.Timer reloadTimer = new() { Interval = 140 };
     DataTable data = new();
     bool loading;
@@ -31,17 +31,17 @@ public sealed class LegacyBordroForm : Form
         Size = new Size(1360, 760);
         MinimumSize = new Size(1000, 620);
         Font = new Font("Segoe UI", 9f);
-        BackColor = Color.FromArgb(246, 249, 253);
+        BackColor = PdksAppearance.Current.Canvas;
         DoubleBuffered = true;
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
         grid.RowTemplate.Height = 31;
         grid.ColumnHeadersHeight = 36;
         grid.EnableHeadersVisualStyles = false;
-        grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(248,250,252);
-        grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(71,85,105);
+        grid.ColumnHeadersDefaultCellStyle.BackColor = PdksAppearance.Current.GridHeader;
+        grid.ColumnHeadersDefaultCellStyle.ForeColor = PdksAppearance.Current.Muted;
         grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI",8.5f,FontStyle.Bold);
-        grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219,234,254);
-        grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(15,23,42);
+        grid.DefaultCellStyle.SelectionBackColor = PdksAppearance.Current.Selection;
+        grid.DefaultCellStyle.SelectionForeColor = PdksAppearance.Current.Text;
 
         type.Items.AddRange(["Genel Maaş Bordrosu", "Mesai Bordrosu", "Maaş Pusulası"]);
         type.SelectedIndex = Math.Clamp(initialType, 0, type.Items.Count - 1);
@@ -59,20 +59,20 @@ public sealed class LegacyBordroForm : Form
 
     void Build()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(16), BackColor = Color.FromArgb(244,247,251) };
+        var p=PdksAppearance.Current;
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(16), BackColor = p.Canvas };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
 
-        var periodCard = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(18, 12, 18, 10), Margin = new Padding(0, 0, 0, 10) };
-        periodCard.Paint += (_,e) => { using var pen = new Pen(Color.FromArgb(226,232,240)); e.Graphics.DrawRectangle(pen,0,0,Math.Max(0,periodCard.Width-1),Math.Max(0,periodCard.Height-1)); };
-        var periodLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, BackColor = Color.White };
+        var periodCard = PdksUiKit.Card(18); periodCard.Margin=new Padding(0,0,0,10);
+        var periodLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, BackColor = p.Surface };
         periodLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         periodLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         periodLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        periodLayout.Controls.Add(new Label { Text = "Bordro Merkezi", Dock = DockStyle.Fill, Font = new Font("Segoe UI",11f,FontStyle.Bold), ForeColor = Color.FromArgb(15,23,42), TextAlign = ContentAlignment.MiddleLeft },0,0);
+        periodLayout.Controls.Add(new Label { Text = "Bordro Merkezi", Dock = DockStyle.Fill, Font = new Font("Segoe UI",11f,FontStyle.Bold), ForeColor = p.Text, TextAlign = ContentAlignment.MiddleLeft },0,0);
 
-        var filters = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 9, RowCount = 1, BackColor = Color.White };
+        var filters = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 9, RowCount = 1, BackColor = p.Surface };
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 38));
@@ -94,16 +94,16 @@ public sealed class LegacyBordroForm : Form
 
         summary.Dock = DockStyle.Fill;
         summary.Padding = new Padding(2,4,0,0);
-        summary.ForeColor = Color.FromArgb(100,116,139);
+        summary.ForeColor = p.Muted;
         periodLayout.Controls.Add(summary,0,2);
         periodCard.Controls.Add(periodLayout);
         root.Controls.Add(periodCard, 0, 0);
 
-        var gridCard = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(1) };
+        var gridCard = PdksUiKit.Card(1);
         gridCard.Controls.Add(grid);
         root.Controls.Add(gridCard, 0, 1);
 
-        var bottom = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 10, 0, 0), BackColor = BackColor };
+        var bottom = PdksUiKit.ActionBar(true,p.Canvas);
         bottom.Controls.Add(Btn("Excel Aktar", () => Export(true), 118));
         bottom.Controls.Add(Btn("PDF Aktar", () => Export(false), 118));
         bottom.Controls.Add(Btn("Yazdır", Print, 104));
@@ -123,7 +123,7 @@ public sealed class LegacyBordroForm : Form
         Margin = new Padding(left, 0, 6, 0),
         Padding = new Padding(0, 8, 0, 0),
         Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-        ForeColor = Color.FromArgb(52, 73, 99)
+        ForeColor = PdksAppearance.Current.Muted
     };
 
     static Button Btn(string text, Action action, int width, bool primary = false)
