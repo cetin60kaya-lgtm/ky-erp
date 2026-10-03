@@ -14,7 +14,7 @@ public sealed class LiveArchiveControlForm : Form
         RowHeadersVisible = false,
         SelectionMode = DataGridViewSelectionMode.FullRowSelect,
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-        BackgroundColor = Color.White
+        BackgroundColor = PdksAppearance.Current.Surface
     };
 
     public LiveArchiveControlForm()
@@ -24,7 +24,7 @@ public sealed class LiveArchiveControlForm : Form
         Size = new Size(980, 680);
         MinimumSize = new Size(860, 560);
         Font = new Font("Segoe UI", 9f);
-        BackColor = Color.FromArgb(246, 249, 253);
+        BackColor = PdksAppearance.Current.Canvas;
         from.Value = DateTime.Today.AddDays(-6);
         to.Value = DateTime.Today;
         Build();
@@ -33,31 +33,33 @@ public sealed class LiveArchiveControlForm : Form
 
     void Build()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, Padding = new Padding(14) };
+        var p=PdksAppearance.Current;
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, Padding = new Padding(14), BackColor=p.Canvas };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
 
-        var head = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(14) };
+        var head = PdksUiKit.Card(14);
         head.Controls.Add(new Label
         {
             Text = "CANLI VERİ ARŞİVİ",
             AutoSize = true,
             Font = new Font("Segoe UI", 15f, FontStyle.Bold),
-            Location = new Point(12, 7)
+            Location = new Point(12, 7),
+            ForeColor = p.Text
         });
         head.Controls.Add(new Label
         {
             Text = "Yalnız fiziksel cihazdan okunan kart basımları. Uygulama düzeltmeleri ve ana TNF/FDB bu arşivi değiştirmez.",
             AutoSize = true,
-            ForeColor = Color.FromArgb(75, 88, 105),
+            ForeColor = p.Muted,
             Location = new Point(14, 38)
         });
         root.Controls.Add(head, 0, 0);
 
-        var filter = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(6, 10, 6, 0), WrapContents = false };
+        var filter = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(6, 10, 6, 0), WrapContents = false, BackColor=p.Canvas };
         filter.Controls.Add(new Label { Text = "Başlangıç", AutoSize = true, Padding = new Padding(0, 7, 4, 0) });
         filter.Controls.Add(from);
         filter.Controls.Add(new Label { Text = "Bitiş", AutoSize = true, Padding = new Padding(12, 7, 4, 0) });
@@ -68,7 +70,7 @@ public sealed class LiveArchiveControlForm : Form
         filter.Controls.Add(B("Kontrol Et", RefreshView));
         root.Controls.Add(filter, 0, 1);
 
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(6, 8, 6, 0), WrapContents = false };
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(6, 8, 6, 0), WrapContents = false, BackColor=p.Canvas };
         actions.Controls.Add(B("Tarih Aralığını Temizle", DeleteRange, 170));
         actions.Controls.Add(B("Canlı Veriyi Komple Temizle", ClearAll, 190));
         summary.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
@@ -80,7 +82,7 @@ public sealed class LiveArchiveControlForm : Form
         grid.Columns.Add("Deger", "Değer");
         root.Controls.Add(grid, 0, 3);
 
-        var bottom = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 8, 0, 0) };
+        var bottom = PdksUiKit.ActionBar(true,p.Canvas);
         var close = B("Kapat", Close, 110);
         bottom.Controls.Add(close);
         bottom.Controls.Add(new Label
@@ -88,7 +90,7 @@ public sealed class LiveArchiveControlForm : Form
             Text = "Temizleme yalnız CANLI ARŞİV'i etkiler; FDB ve ana TRYYYY.Tnf dosyasını silmez/değiştirmez.",
             AutoSize = true,
             Padding = new Padding(8, 8, 18, 0),
-            ForeColor = Color.DarkGreen,
+            ForeColor = p.Success,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold)
         });
         root.Controls.Add(bottom, 0, 4);
@@ -97,8 +99,16 @@ public sealed class LiveArchiveControlForm : Form
 
     static Button B(string text, Action action, int width = 110)
     {
-        var b = new Button { Text = text, Width = width, Height = 32, Margin = new Padding(5, 0, 5, 0) };
-        b.Click += (_, _) => action();
+        var role=text.Contains("Temizle",StringComparison.OrdinalIgnoreCase)
+            ? PdksActionRole.Danger
+            : text.Contains("Kontrol",StringComparison.OrdinalIgnoreCase)
+                ? PdksActionRole.Primary
+                : text.Contains("Kapat",StringComparison.OrdinalIgnoreCase)
+                    ? PdksActionRole.Quiet
+                    : PdksActionRole.Secondary;
+        var b=PdksUiKit.Button(text,width,role,action);
+        b.Height=32;b.MinimumSize=new Size(width,32);b.MaximumSize=new Size(width,32);
+        b.Margin=new Padding(5,0,5,0);
         return b;
     }
 
