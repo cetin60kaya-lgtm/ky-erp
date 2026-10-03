@@ -18,7 +18,7 @@ public sealed class LegacyDefinitionsForm : Form
     {
         Text="Tanımlar"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(1120,700); MinimumSize=new Size(900,600);
         FormBorderStyle=FormBorderStyle.Sizable; MaximizeBox=true; MinimizeBox=true; ShowInTaskbar=false;
-        Font=new Font("Segoe UI",9f); BackColor=Color.FromArgb(244,247,251); KeyPreview=true;
+        Font=new Font("Segoe UI",9f); BackColor=PdksAppearance.Current.Canvas; KeyPreview=true;
         Build();
         if(string.IsNullOrWhiteSpace(initialTab)) tabs.SelectedIndex=5; else SelectTab(initialTab);
         Shown+=(_,_)=>RefreshAll();
@@ -27,8 +27,9 @@ public sealed class LegacyDefinitionsForm : Form
 
     void Build()
     {
+        var p=PdksAppearance.Current;
         tabs.Padding=new Point(18,9);
-        tabs.BackColor=Color.FromArgb(244,247,251);
+        tabs.BackColor=p.Canvas;
         tabs.TabPages.Add(BuildSimple("Bölümler","BOLUM","Bölüm Adı","BOLUM"));
         tabs.TabPages.Add(BuildSimple("Servisler","SERVIS","Servis Adı","SERVIS"));
         tabs.TabPages.Add(BuildSimple("Durum","DURUM","Durum Adı","DURUM"));
@@ -40,31 +41,35 @@ public sealed class LegacyDefinitionsForm : Form
 
     TabPage BuildSimple(string title,string table,string fieldLabel,string kimlikColumn)
     {
-        var page=new TabPage(title){Padding=new Padding(16),BackColor=Color.FromArgb(244,247,251)};
-        var card=new Panel{Dock=DockStyle.Fill,BackColor=Color.White};
-        card.Paint+=(_,e)=>{using var pen=new Pen(Color.FromArgb(226,232,240));e.Graphics.DrawRectangle(pen,0,0,Math.Max(0,card.Width-1),Math.Max(0,card.Height-1));};
+        var p=PdksAppearance.Current;
+        var page=new TabPage(title){Padding=new Padding(16),BackColor=p.Canvas};
+        var card=PdksUiKit.Card();
 
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,Padding=new Padding(18),BackColor=Color.White};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,Padding=new Padding(18),BackColor=p.Surface};
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
-        root.Controls.Add(new Label{Text=title,Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=Color.FromArgb(15,23,42),TextAlign=ContentAlignment.MiddleLeft},0,0);
+        root.Controls.Add(new Label{Text=title,Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text,TextAlign=ContentAlignment.MiddleLeft},0,0);
 
         var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Padding=new Padding(0,4,0,4)};
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,120));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        editor.Controls.Add(new Label{Text=fieldLabel,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=Color.FromArgb(100,116,139),Font=new Font("Segoe UI",8.5f,FontStyle.Bold)},0,0);
+        editor.Controls.Add(new Label{Text=fieldLabel,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=p.Muted,Font=new Font("Segoe UI",8.5f,FontStyle.Bold)},0,0);
         var edit=new TextBox{Dock=DockStyle.Fill,MaxLength=50,ReadOnly=true,Margin=new Padding(0,7,0,7)};editor.Controls.Add(edit,1,0);root.Controls.Add(editor,0,1);
 
-        var grid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=Color.White,RowHeadersVisible=false,AutoGenerateColumns=false,BorderStyle=BorderStyle.None};
-        grid.RowTemplate.Height=31;grid.ColumnHeadersHeight=35;grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(248,250,252);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.FromArgb(71,85,105);
+        var grid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=p.Surface,RowHeadersVisible=false,AutoGenerateColumns=false,BorderStyle=BorderStyle.None};
+        grid.RowTemplate.Height=31;grid.ColumnHeadersHeight=35;grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=p.GridHeader;grid.ColumnHeadersDefaultCellStyle.ForeColor=p.Text;
         grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText=fieldLabel,AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});root.Controls.Add(grid,0,2);
 
         var p=new SimpleDefinitionPage(db,table,kimlikColumn,edit,grid,Text);simple[title]=p;
-        var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,10,0,0),WrapContents=false,BackColor=Color.White};
+        var actions=PdksUiKit.ActionBar(true,p.Surface);
         var save=p.SaveButton(0,0);var delAll=p.DeleteAllButton(0,0);var del=p.DeleteButton(0,0);var change=p.EditButton(0,0);var add=p.AddButton(0,0);
         foreach(var b in new[]{save,delAll,del,change,add}){b.Height=34;b.FlatStyle=FlatStyle.Flat;b.Font=new Font("Segoe UI",8.8f,FontStyle.Bold);}
-        add.BackColor=Color.FromArgb(37,99,235);add.ForeColor=Color.White;add.FlatAppearance.BorderColor=add.BackColor;
+        PdksUiKit.ApplyButtonPalette(add,p,PdksActionRole.Primary);
+        PdksUiKit.ApplyButtonPalette(change,p,PdksActionRole.Secondary);
+        PdksUiKit.ApplyButtonPalette(del,p,PdksActionRole.Danger);
+        PdksUiKit.ApplyButtonPalette(delAll,p,PdksActionRole.Danger);
+        PdksUiKit.ApplyButtonPalette(save,p,PdksActionRole.Primary);
         actions.Controls.Add(save);actions.Controls.Add(delAll);actions.Controls.Add(del);actions.Controls.Add(change);actions.Controls.Add(add);root.Controls.Add(actions,0,3);
         card.Controls.Add(root);page.Controls.Add(card);return page;
     }
