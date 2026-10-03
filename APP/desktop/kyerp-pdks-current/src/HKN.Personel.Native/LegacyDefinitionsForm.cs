@@ -41,35 +41,35 @@ public sealed class LegacyDefinitionsForm : Form
 
     TabPage BuildSimple(string title,string table,string fieldLabel,string kimlikColumn)
     {
-        var p=PdksAppearance.Current;
-        var page=new TabPage(title){Padding=new Padding(16),BackColor=p.Canvas};
+        var palette=PdksAppearance.Current;
+        var page=new TabPage(title){Padding=new Padding(16),BackColor=palette.Canvas};
         var card=PdksUiKit.Card();
 
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,Padding=new Padding(18),BackColor=p.Surface};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,Padding=new Padding(18),BackColor=palette.Surface};
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
-        root.Controls.Add(new Label{Text=title,Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text,TextAlign=ContentAlignment.MiddleLeft},0,0);
+        root.Controls.Add(new Label{Text=title,Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=palette.Text,TextAlign=ContentAlignment.MiddleLeft},0,0);
 
         var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Padding=new Padding(0,4,0,4)};
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,120));editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        editor.Controls.Add(new Label{Text=fieldLabel,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=p.Muted,Font=new Font("Segoe UI",8.5f,FontStyle.Bold)},0,0);
+        editor.Controls.Add(new Label{Text=fieldLabel,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=palette.Muted,Font=new Font("Segoe UI",8.5f,FontStyle.Bold)},0,0);
         var edit=new TextBox{Dock=DockStyle.Fill,MaxLength=50,ReadOnly=true,Margin=new Padding(0,7,0,7)};editor.Controls.Add(edit,1,0);root.Controls.Add(editor,0,1);
 
-        var grid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=p.Surface,RowHeadersVisible=false,AutoGenerateColumns=false,BorderStyle=BorderStyle.None};
-        grid.RowTemplate.Height=31;grid.ColumnHeadersHeight=35;grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=p.GridHeader;grid.ColumnHeadersDefaultCellStyle.ForeColor=p.Text;
+        var grid=new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=false,BackgroundColor=palette.Surface,RowHeadersVisible=false,AutoGenerateColumns=false,BorderStyle=BorderStyle.None};
+        grid.RowTemplate.Height=31;grid.ColumnHeadersHeight=35;grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=palette.GridHeader;grid.ColumnHeadersDefaultCellStyle.ForeColor=palette.Text;
         grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText=fieldLabel,AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});root.Controls.Add(grid,0,2);
 
         var p=new SimpleDefinitionPage(db,table,kimlikColumn,edit,grid,Text);simple[title]=p;
-        var actions=PdksUiKit.ActionBar(true,p.Surface);
+        var actions=PdksUiKit.ActionBar(true,palette.Surface);
         var save=p.SaveButton(0,0);var delAll=p.DeleteAllButton(0,0);var del=p.DeleteButton(0,0);var change=p.EditButton(0,0);var add=p.AddButton(0,0);
         foreach(var b in new[]{save,delAll,del,change,add}){b.Height=34;b.FlatStyle=FlatStyle.Flat;b.Font=new Font("Segoe UI",8.8f,FontStyle.Bold);}
-        PdksUiKit.ApplyButtonPalette(add,p,PdksActionRole.Primary);
-        PdksUiKit.ApplyButtonPalette(change,p,PdksActionRole.Secondary);
-        PdksUiKit.ApplyButtonPalette(del,p,PdksActionRole.Danger);
-        PdksUiKit.ApplyButtonPalette(delAll,p,PdksActionRole.Danger);
-        PdksUiKit.ApplyButtonPalette(save,p,PdksActionRole.Primary);
+        PdksUiKit.ApplyButtonPalette(add,palette,PdksActionRole.Primary);
+        PdksUiKit.ApplyButtonPalette(change,palette,PdksActionRole.Secondary);
+        PdksUiKit.ApplyButtonPalette(del,palette,PdksActionRole.Danger);
+        PdksUiKit.ApplyButtonPalette(delAll,palette,PdksActionRole.Danger);
+        PdksUiKit.ApplyButtonPalette(save,palette,PdksActionRole.Primary);
         actions.Controls.Add(save);actions.Controls.Add(delAll);actions.Controls.Add(del);actions.Controls.Add(change);actions.Controls.Add(add);root.Controls.Add(actions,0,3);
         card.Controls.Add(root);page.Controls.Add(card);return page;
     }
