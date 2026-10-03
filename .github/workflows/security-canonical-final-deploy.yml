@@ -53,9 +53,10 @@ jobs:
           node --check APP/app/ky-erp-frontend/public/guvenlik/sw.js
           node --check APP/app/ky-erp-frontend/public/guvenlik/security-control-center.js
           node --test APP/app/ky-erp-frontend/src/security-pwa-install-enrollment-final.test.js
-          grep -q 'const SOURCE_PREFIX="/guvenlik"' APP/cloud/ky-erp-security-host/worker.js
-          grep -q 'const PRIMARY_PREFIX="/ky-guvenlik"' APP/cloud/ky-erp-security-host/worker.js
-          grep -q 'COMPAT_PREFIXES' APP/cloud/ky-erp-security-host/worker.js
+          grep -q 'const APP_PREFIX="/guvenlik"' APP/cloud/ky-erp-security-host/worker.js
+          grep -q 'const APP_URL="/guvenlik/"' APP/cloud/ky-erp-security-host/worker.js
+          grep -q 'LEGACY_PREFIXES' APP/cloud/ky-erp-security-host/worker.js
+          ! grep -q 'PRIMARY_PREFIX\|COMPAT_PREFIXES' APP/cloud/ky-erp-security-host/worker.js
           ! grep -q 'security-foreground-sync.js' APP/app/ky-erp-frontend/public/guvenlik/index.html
           ! grep -q 'MutationObserver' APP/app/ky-erp-frontend/public/guvenlik/security-control-center.js
           grep -q 'id="bootPanel"' APP/app/ky-erp-frontend/public/guvenlik/index.html
