@@ -86,7 +86,7 @@ internal sealed class ModernHomeDashboard : UserControl
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,114));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,28));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,220));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,228));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,252));
 
         var hero = new Panel { Dock=DockStyle.Fill, BackColor=p.Canvas };
         hero.Controls.Add(new Label
@@ -191,12 +191,12 @@ internal sealed class ModernHomeDashboard : UserControl
     {
         var p=PdksAppearance.Current;
         var card=CardPanel();card.Margin=new Padding(0,0,12,0);card.Padding=new Padding(20);
-        var layout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=7,BackColor=p.Surface,Margin=Padding.Empty};
+        var steps=PdksWorkflowCatalog.All.OrderBy(x=>x.Order).ToArray();
+        var layout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=steps.Length+1,BackColor=p.Surface,Margin=Padding.Empty};
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
-        for(var i=1;i<7;i++)layout.RowStyles.Add(new RowStyle(SizeType.Percent,16.666f));
+        for(var i=0;i<steps.Length;i++)layout.RowStyles.Add(new RowStyle(SizeType.Percent,100f/steps.Length));
         layout.Controls.Add(new Label{Text="Standart İş Akışı",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text},0,0);
 
-        var steps=PdksWorkflowCatalog.All.OrderBy(x=>x.Order).ToArray();
         for(var i=0;i<steps.Length;i++)
         {
             var step=steps[i];
