@@ -320,6 +320,25 @@ export default function LoginPage({ onClose }) {
     }
   }
 
+  async function startProviderSetup(provider) {
+    const normalized = normalizeProvider(provider);
+    if (!normalized || loading) return;
+    try {
+      setLoading(true);
+      setError("");
+      setCode("");
+      applyResponse(await verifyMfa({
+        challengeId: flow.challengeId,
+        challengeToken: flow.challengeToken,
+        setupProvider: normalized,
+      }));
+    } catch (requestError) {
+      setError(requestError?.message || "Authenticator kurulumu başlatılamadı.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function updateCapsLock(event) {
     setCapsLock(Boolean(event?.getModifierState?.("CapsLock")));
   }
@@ -531,6 +550,9 @@ export default function LoginPage({ onClose }) {
 
   const verifiedProviders = Array.isArray(flow.verifiedProviders)
     ? flow.verifiedProviders.map(normalizeProvider).filter(Boolean)
+    : [];
+  const setupProviders = Array.isArray(flow.setupProviders)
+    ? flow.setupProviders.map(normalizeProvider).filter(Boolean)
     : [];
   const currentProvider = normalizeProvider(flow.provider) || selectedProvider;
   const currentLabel = PROVIDER_LABELS[currentProvider] || "Authenticator";
@@ -745,10 +767,14 @@ export default function LoginPage({ onClose }) {
                 ) : (
                   <>
                     <div className="auth-policy-row auth-policy-row-compact">
-                      <div><span className="auth-section-label">AUTHENTICATOR</span><strong>{flow.policyLabel || (flow.requireBoth ? "Google + Microsoft" : "6 haneli doğrulama kodu")}</strong></div>
-                      {flow.requireBoth ? <span className="auth-policy-badge">2/2 MFA</span> : <span className="auth-policy-badge">Yedek doğrulama</span>}
+                      <div><span className="auth-section-label">GÜVENLİ DOĞRULAMA</span><strong>{flow.policyLabel || (flow.requireBoth ? "Google + Microsoft" : "6 haneli doğrulama kodu")}</strong></div>
+                      {flow.requireBoth ? <span className="auth-policy-badge">2/2 MFA</span> : <span className="auth-policy-badge">Tek alan</span>}
                     </div>
-                    <div className="auth-notice auth-notice-compact"><strong>Tek doğrulama alanı</strong><span>Google Authenticator, Microsoft Authenticator veya KY Güvenlik kodunu aynı alana yazın. Sistem kodu ayrıca sağlayıcı seçimi istemez.</span></div>
+                    <div className="auth-notice auth-notice-compact"><strong>Tek doğrulama alanı</strong><span>Google Authenticator, Microsoft Authenticator veya KY Güvenlik kodunu aynı alana yazın. KY Güvenlik Sistem Kodu, kullanıcıda Authenticator kurulmamış olsa bile çalışır.</span></div>
+                    {setupProviders.length ? <div className="auth-recovery-actions auth-recovery-actions-compact">
+                      {setupProviders.includes("GOOGLE") ? <button type="button" className="auth-secondary" onClick={() => startProviderSetup("GOOGLE")} disabled={loading}>Google Authenticator Kur</button> : null}
+                      {setupProviders.includes("MICROSOFT") ? <button type="button" className="auth-secondary" onClick={() => startProviderSetup("MICROSOFT")} disabled={loading}>Microsoft Authenticator Kur</button> : null}
+                    </div> : null}
                     {flow.requireBoth ? <div className="auth-progress-note auth-notice-compact"><strong>{verifiedProviders.length}/2 doğrulama tamamlandı</strong><span>{verifiedProviders.length ? verifiedProviders.map((item) => PROVIDER_LABELS[item]).join(", ") + " tamamlandı. Kalan doğrulamaya devam edin." : "Google veya Microsoft Authenticator kodlarından biriyle başlayın."}</span></div> : null}
                     <form className="auth-form auth-form-compact" onSubmit={handleMfa}>
                       <label>6 haneli doğrulama kodu<input className="auth-code-input" autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" /></label>

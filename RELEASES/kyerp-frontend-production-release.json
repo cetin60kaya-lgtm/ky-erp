@@ -47,9 +47,14 @@
     "security-direct-ky-code-no-pending-request",
     "security-google-microsoft-ky-single-code-field",
     "security-owner-system-code-all-users",
-    "security-self-code-own-account-only"
+    "security-self-code-own-account-only",
+    "security-unified-factor-engine",
+    "security-no-forced-google-setup",
+    "security-existing-owner-phone-upgrade",
+    "security-system-phone-stepup",
+    "security-unified-login-policy-copy"
   ],
-  "note": "KY Güvenlik direct code: kod üretimi artık bekleyen bilgisayar girişine bağlı değil. Normal kullanıcı kodu yalnız kendi hesabında, ekstra doğrulanmış Süper Yönetici sistem kodu kullanıcı adı+şifre sonrası tüm hesaplarda çalışır. Google, Microsoft ve KY Güvenlik kodları tek 6 haneli alandan doğrulanır.",
-  "sourceCommit": "9edc2106361698da27489e683bf4a0b27782e349",
-  "requestedAt": "2026-10-04T01:45:00+03:00"
+  "note": "KY Güvenlik kök düzeni: KY Güvenlik / Google / Microsoft tek 6 haneli doğrulama katmanında; Authenticator kaydı olmayan kullanıcı zorla Google QR kurulumuna gitmez; mevcut Süper Yönetici telefonu ek e-posta/Authenticator doğrulamasıyla yeniden kurmadan Sistem Telefonuna yükseltilebilir.",
+  "sourceCommit": "1dddacfc58347c3f8680c2e78d7cddf8b690d586",
+  "requestedAt": "2026-10-04T02:01:00+03:00"
 }

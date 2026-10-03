@@ -673,9 +673,9 @@ export function AuthProvider({ children }) {
     return finalizeResponse(await directAuthRequest("/auth/login", { body }));
   }), [finalizeResponse, runAuthOnce]);
 
-  const verifyMfa = useCallback(({ challengeId, challengeToken, code, provider = "", resetProvider = "" }) =>
-    runAuthOnce(`MFA:${challengeId}:${provider || "AUTO"}`, async () => finalizeResponse(await directAuthRequest("/auth/mfa/verify", {
-      body: { challengeId, challengeToken, code, provider, resetProvider },
+  const verifyMfa = useCallback(({ challengeId, challengeToken, code = "", provider = "", resetProvider = "", setupProvider = "" }) =>
+    runAuthOnce(`MFA:${challengeId}:${setupProvider ? `SETUP-${setupProvider}` : (provider || "AUTO")}`, async () => finalizeResponse(await directAuthRequest("/auth/mfa/verify", {
+      body: { challengeId, challengeToken, code, provider, resetProvider, setupProvider },
     }))), [finalizeResponse, runAuthOnce]);
 
   const recoverMfa = useCallback(({ challengeId, challengeToken, recoveryCode }) =>

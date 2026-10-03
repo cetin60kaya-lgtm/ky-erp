@@ -110,9 +110,9 @@ function policyLabel(policy: string) {
     PASSWORD_ONLY: "Sadece parola",
     GOOGLE: "Parola + Google Authenticator",
     MICROSOFT: "Parola + Microsoft Authenticator",
-    ANY_MFA: "Parola + Google veya Microsoft",
+    ANY_MFA: "Parola + KY Güvenlik / Google / Microsoft",
     BOTH_MFA: "Parola + Google ve Microsoft",
-  }[policy] || "Parola + Google veya Microsoft";
+  }[policy] || "Parola + KY Güvenlik / Google / Microsoft";
 }
 function normalizeSessionSeconds(value: unknown, fallback = 36000) {
   const parsed = Number(value);
@@ -682,23 +682,33 @@ async function beginPolicyLogin(c: any, user: AnyRow, source: AnyRow = {}, optio
     return afterFactors(c, refreshed || user, source);
   }
 
-  if (policy === "GOOGLE" && !available.includes("GOOGLE")) return beginProviderSetup(c, refreshed || user, "GOOGLE", source);
-  if (policy === "MICROSOFT" && !available.includes("MICROSOFT")) return beginProviderSetup(c, refreshed || user, "MICROSOFT", source);
-  if (policy === "BOTH_MFA") {
-    if (!available.includes("GOOGLE")) return beginProviderSetup(c, refreshed || user, "GOOGLE", source);
-    if (!available.includes("MICROSOFT")) return beginProviderSetup(c, refreshed || user, "MICROSOFT", source);
-  }
-  if (policy === "ANY_MFA" && !available.length) return beginProviderSetup(c, refreshed || user, "GOOGLE", source);
-
-  const allowed = policy === "GOOGLE" ? ["GOOGLE"] : policy === "MICROSOFT" ? ["MICROSOFT"] : policy === "BOTH_MFA" ? ["GOOGLE", "MICROSOFT"] : available;
+  // KY Güvenlik artık Google/Microsoft ile aynı 6 haneli doğrulama katmanının parçasıdır.
+  // Kullanıcıda Authenticator kaydı olmasa bile doğrudan genel MFA ekranı açılır;
+  // böylece kendi KY kodu veya doğrulanmış Sistem Telefonu kodu QR kurulumuna zorlanmadan kullanılabilir.
+  const allowed = policy === "GOOGLE"
+    ? (available.includes("GOOGLE") ? ["GOOGLE"] : [])
+    : policy === "MICROSOFT"
+      ? (available.includes("MICROSOFT") ? ["MICROSOFT"] : [])
+      : policy === "BOTH_MFA"
+        ? ["GOOGLE", "MICROSOFT"].filter((provider) => available.includes(provider))
+        : available;
+  const setupProviders = policy === "GOOGLE"
+    ? (available.includes("GOOGLE") ? [] : ["GOOGLE"])
+    : policy === "MICROSOFT"
+      ? (available.includes("MICROSOFT") ? [] : ["MICROSOFT"])
+      : policy === "BOTH_MFA"
+        ? ["GOOGLE", "MICROSOFT"].filter((provider) => !available.includes(provider))
+        : available.length ? [] : ["GOOGLE", "MICROSOFT"];
   const challenge = await createChallenge(c, refreshed || user, "POLICY_MFA_REQUIRED", source, policy, ttl);
   return {
     ok: true, stage: "MFA_REQUIRED", challengeId: challenge.id, challengeToken: challenge.challengeToken,
     challengeExpiresAt: addSeconds(CHALLENGE_SECONDS), policy, policyLabel: policyLabel(policy),
-    availableProviders: allowed, requiredProviders: allowed, verifiedProviders: [],
+    availableProviders: allowed, setupProviders, requiredProviders: policy === "BOTH_MFA" ? ["GOOGLE", "MICROSOFT"] : allowed, verifiedProviders: [],
     requireBoth: policy === "BOTH_MFA", ownerRecoveryAvailable: Boolean(ownerRecovery.ready),
     recoveryChannels: isSuper(role) ? { email: Boolean(ownerRecovery.emailReady), sms: Boolean(ownerRecovery.smsReady) } : undefined,
-    message: policy === "BOTH_MFA" ? "Google ve Microsoft Authenticator kodlarının ikisi de gereklidir." : `${policyLabel(policy)} ile doğrulayın.`,
+    message: policy === "BOTH_MFA"
+      ? "Google ve Microsoft kodları gerekir; doğrulanmış KY Güvenlik Sistem Kodu bu adımı tek kullanımlık olarak devralabilir."
+      : "Google, Microsoft veya KY Güvenlik uygulamasındaki 6 haneli kodu girin.",
   };
 }
 
@@ -1008,6 +1018,26 @@ export function registerAuthPolicyRoutes(app: any) {
       return c.json(await afterFactors(c, refreshed || user, challenge));
     }
     if (type !== "POLICY_MFA_REQUIRED") return c.json(jsonError("MFA_CHALLENGE_TYPE", "Bu doğrulama isteği bu işlem için kullanılamaz."), 400);
+
+    const requestedSetupProvider = normalizeProvider(body.setupProvider);
+    if (requestedSetupProvider) {
+      const role = roleOf(user);
+      const policy = effectivePolicy(user, role);
+      const permitted = policy === "GOOGLE"
+        ? ["GOOGLE"]
+        : policy === "MICROSOFT"
+          ? ["MICROSOFT"]
+          : ["GOOGLE", "MICROSOFT"];
+      if (!permitted.includes(requestedSetupProvider)) {
+        return c.json(jsonError("MFA_PROVIDER_INVALID", "Bu Authenticator sağlayıcısı seçili giriş politikası için kullanılamaz."), 400);
+      }
+      if (providerEnabled(user, requestedSetupProvider)) {
+        return c.json(jsonError("MFA_PROVIDER_ALREADY_ENABLED", "Bu Authenticator zaten etkin. 6 haneli kodu doğrudan girin."), 409);
+      }
+      await consumeChallenge(c, challenge);
+      await audit(c, "MFA_PROVIDER_SETUP_REQUESTED_FROM_UNIFIED_CHALLENGE", user.id, user.id, text(user.main_company_slug), "", { provider: requestedSetupProvider, policy });
+      return c.json(await beginProviderSetup(c, user, requestedSetupProvider, challenge));
+    }
 
     const role = roleOf(user);
     const policy = effectivePolicy(user, role);
