@@ -106,6 +106,39 @@ export default function PhoneApprovalSetup({ onClose }) {
       setBusy(false);
     }
   }
+  async function authorizeExistingOwnerDevice() {
+    if (busy || !securityDevices.length || ownerAuthorizedDevice) return;
+    const cleanStepUpCode = String(ownerStepUpCode || "").replace(/\D/g, "");
+    if (!/^\d{6}$/.test(cleanStepUpCode)) {
+      setMessage("Hata: Mevcut telefonu Sistem Telefonu yapmak için e-posta veya Google/Microsoft Authenticator uygulamasındaki 6 haneli ek doğrulama kodunu girin.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const targetDevice = securityDevices[0];
+      const payload = { deviceId: targetDevice.id };
+      if (ownerEmailChallenge) {
+        payload.ownerEmailProof = {
+          challengeId: ownerEmailChallenge.challengeId,
+          challengeToken: ownerEmailChallenge.challengeToken,
+          code: cleanStepUpCode,
+        };
+      } else {
+        payload.ownerAuthenticatorCode = cleanStepUpCode;
+      }
+      const response = await apiPost("/auth/push/security-owner-device/authorize", payload);
+      const data = response?.data || response;
+      setOwnerStepUpCode("");
+      setOwnerEmailChallenge(null);
+      setMessage(`Sistem Telefonu yetkisi aktif: ${data?.deviceLabel || targetDevice.deviceLabel || "KY Güvenlik"}. Bu telefondan üretilen Sistem Kodu artık tüm kullanıcı hesaplarında kullanılabilir.`);
+      await load();
+    } catch (error) {
+      setMessage(`Hata: ${error?.message || "Mevcut telefon Sistem Telefonu olarak yetkilendirilemedi."}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function createEnrollment() {
     const data = await issueEnrollment({ exposeCode: true });
     if (!data) return;
@@ -234,9 +267,10 @@ export default function PhoneApprovalSetup({ onClose }) {
               <label>6 haneli ek doğrulama kodu<input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={ownerStepUpCode} onChange={(event) => setOwnerStepUpCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000"/></label>
               <div className="phone-approval-main-actions">
                 {ownerEmailReady ? <button type="button" onClick={sendOwnerEnrollmentEmailCode} disabled={busy}>{ownerEmailChallenge ? "E-posta Kodunu Yeniden Gönder" : "E-postaya Kod Gönder"}</button> : null}
+                {securityDevices.length && !ownerAuthorizedDevice ? <button type="button" className="phone-approval-primary" onClick={authorizeExistingOwnerDevice} disabled={busy}>{busy ? "Yetkilendiriliyor..." : "Bu Telefonu Sistem Telefonu Yap"}</button> : null}
               </div>
               <small>{ownerEmailChallenge ? `${ownerEmailChallenge.maskedEmail || config?.ownerEmailMasked || "E-posta"} adresine gönderilen kodu girin.` : ownerAuthenticatorProviders.length ? `${ownerAuthenticatorProviders.join(" / ")} Authenticator kodunu doğrudan girebilirsiniz${ownerEmailReady ? " veya e-postaya kod gönderebilirsiniz" : ""}.` : ownerEmailReady ? "E-postaya kod gönderip gelen 6 haneli kodu girin." : "Önce Süper Yönetici Güvenlik Merkezi’nde doğrulanmış e-posta veya Google/Microsoft Authenticator kurun."}</small>
-              {ownerAuthorizedDevice ? <small className="phone-approval-help">Yetkili sistem telefonu: {ownerAuthorizedDevice.deviceLabel || "KY Güvenlik"} · Yeni telefon yetkilendirilince eski telefonun sistem yönetimi kapanır.</small> : null}
+              {ownerAuthorizedDevice ? <small className="phone-approval-help">Yetkili Sistem Telefonu: {ownerAuthorizedDevice.deviceLabel || "KY Güvenlik"} · Bu telefondan üretilen Sistem Kodu tüm kullanıcı hesaplarında geçerlidir. Yeni telefon yetkilendirilince eski telefonun sistem yönetimi kapanır.</small> : securityDevices.length ? <small className="phone-approval-help">Bu mevcut telefonu yeniden kurmadan Sistem Telefonu yapabilirsiniz. Ek doğrulama tamamlandığında telefonun tam sistem yetkisi anında açılır.</small> : null}
             </div> : null}
             {enrollment ? <div className="phone-approval-enrollment compact-code"><span>8 KARAKTER BAĞLANTI KODU · ZORUNLU</span><strong>{enrollment.enrollmentCode}</strong><div className="phone-approval-app-actions"><button type="button" onClick={copyEnrollment}>{copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Kopyalandı" : "Kopyala"}</button></div></div> : <button type="button" className="phone-approval-link-button" onClick={createEnrollment} disabled={busy}>Sorun olursa yedek bağlantı kodu oluştur</button>}
           </section>
@@ -248,7 +282,7 @@ export default function PhoneApprovalSetup({ onClose }) {
         </div>
 
         <footer>
-          <span>Normal kullanıcı yalnız kendi giriş kodunu kullanır. Süper Yönetici sistem telefonu ise ek e-posta/Authenticator doğrulaması + 8 karakter bağlantı kodu + mevcut KY ERP şifresi olmadan yetkilendirilemez.</span>
+          <span>Normal kullanıcı yalnız kendi giriş kodunu kullanır. Mevcut Süper Yönetici telefonu ek e-posta/Authenticator doğrulamasıyla yerinde Sistem Telefonuna yükseltilebilir; yeni telefon kurulumu ise ek doğrulama + 8 karakter bağlantı kodu + KY ERP şifresi ister.</span>
           <button type="button" onClick={onClose}>Kapat</button>
         </footer>
       </section>
