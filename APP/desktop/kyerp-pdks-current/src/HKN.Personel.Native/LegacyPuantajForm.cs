@@ -127,6 +127,8 @@ public sealed class LegacyPuantajForm : Form
 
         var fields=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,RowCount=2,Margin=new Padding(0,8,0,0)};
         for(var i=0;i<5;i++)fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));
+        fields.RowStyles.Add(new RowStyle(SizeType.Percent,50));
+        fields.RowStyles.Add(new RowStyle(SizeType.Percent,50));
         var items=new (string Text,Control Control)[]
         {
             ("Kart Başlangıç",f.CardStart),("Kart Bitiş",f.CardEnd),("Başlangıç",f.Start),("Bitiş",f.End),("Grup",f.Group),
