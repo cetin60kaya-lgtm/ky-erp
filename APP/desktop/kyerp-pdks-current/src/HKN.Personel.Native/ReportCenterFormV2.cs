@@ -23,7 +23,7 @@ public sealed class ReportCenterForm : Form
         AllowUserToDeleteRows = false,
         AllowUserToOrderColumns = true,
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
-        BackgroundColor = Color.White
+        BackgroundColor = PdksAppearance.Current.Surface
     };
     readonly Label summary = new() { AutoSize = true, Padding = new Padding(8, 10, 8, 0) };
     DataTable data = new();
