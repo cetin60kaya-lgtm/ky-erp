@@ -7,9 +7,12 @@ using KYERP.PDKS.Core;
 using FirebirdSql.Data.FirebirdClient;
 
 ApplicationConfiguration.Initialize();
-StartupConfiguration.LoadSavedSettingsIntoProcess();
-CompanyDataPaths.Ensure();
-CompanyDataPaths.PinEnvironment();
+foreach (var key in new[] { "KY_PDKS_DB_PATH", "KY_PDKS_DB_HOST", "KY_PDKS_DB_PORT", "KY_PDKS_DB_USER", "KY_PDKS_DB_PASSWORD", "KYERP_PDKS_ROOT", "KY_PDKS_RUNTIME_ROOT", "KY_PDKS_REPORT_ROOT", "KY_PDKS_PERSONEL_EXE" })
+{
+    if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key))) continue;
+    var value = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User);
+    if (!string.IsNullOrWhiteSpace(value)) Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.Process);
+}
 PdksTheme.Install();
 Environment.SetEnvironmentVariable("KY_PDKS_UI_AUDIT", "1", EnvironmentVariableTarget.Process);
 
