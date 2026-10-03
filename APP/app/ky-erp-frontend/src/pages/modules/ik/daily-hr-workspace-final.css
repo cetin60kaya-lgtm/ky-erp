@@ -362,3 +362,132 @@
   .gop-quick-dialog{--quick-card-w:175px}
   .gop-quick-dialog .quick-person-text small{display:none!important}
 }
+
+
+/* QUICK-CARD-FINAL-MOCKUP-2026-10-03 */
+/* Onaylanan hızlı giriş kart tasarımı: tam isim + soft ayırıcı + ücret + seçim. */
+.gop-quick-dialog .quick-person-grid{
+  grid-template-columns:repeat(auto-fit,minmax(var(--quick-card-w),1fr))!important;
+  gap:2px!important;
+  align-content:start!important;
+}
+.gop-quick-dialog .quick-person{
+  grid-template-columns:minmax(0,1fr) 24px!important;
+  min-width:0!important;
+  height:var(--quick-row-h)!important;
+  min-height:var(--quick-row-h)!important;
+  overflow:hidden!important;
+}
+.gop-quick-dialog .quick-main-toggle{
+  grid-template-columns:20px minmax(0,1fr) 72px 38px!important;
+  column-gap:6px!important;
+  align-items:center!important;
+  min-width:0!important;
+  height:var(--quick-row-h)!important;
+  min-height:var(--quick-row-h)!important;
+  padding:2px 5px!important;
+}
+.gop-quick-dialog .quick-avatar{
+  width:20px!important;
+  height:20px!important;
+  font-size:8px!important;
+}
+.gop-quick-dialog .quick-person-text{
+  min-width:0!important;
+  overflow:visible!important;
+}
+.gop-quick-dialog .quick-person-text strong{
+  display:block!important;
+  max-width:none!important;
+  overflow:visible!important;
+  text-overflow:clip!important;
+  white-space:normal!important;
+  word-break:normal!important;
+  overflow-wrap:anywhere!important;
+  font-size:8.2px!important;
+  line-height:1.05!important;
+  font-weight:950!important;
+  color:#17324e!important;
+}
+.gop-quick-dialog .quick-person-text small{
+  display:block!important;
+  max-width:100%!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+  margin-top:1px!important;
+  font-size:6.4px!important;
+  line-height:1!important;
+}
+.gop-quick-dialog .quick-main-toggle>b{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  width:72px!important;
+  height:22px!important;
+  margin:0!important;
+  padding-left:8px!important;
+  border-left:1px solid #d9e3ee!important;
+  font-size:7.2px!important;
+  font-weight:950!important;
+  color:#17385f!important;
+  white-space:nowrap!important;
+}
+.gop-quick-dialog .quick-main-toggle>em{
+  width:38px!important;
+  text-align:center!important;
+  font-size:6.7px!important;
+  font-weight:950!important;
+  white-space:nowrap!important;
+}
+.gop-quick-dialog .quick-check-button{
+  width:24px!important;
+  min-width:24px!important;
+  max-width:24px!important;
+}
+.gop-quick-dialog .quick-group{
+  flex:0 0 auto!important;
+  height:auto!important;
+  min-height:0!important;
+}
+.gop-quick-dialog .quick-groups{
+  display:flex!important;
+  flex-direction:column!important;
+  justify-content:flex-start!important;
+  align-items:stretch!important;
+  gap:3px!important;
+}
+
+/* Satır/En kontrolünün görseli aynı kalır; etkisi daha geniş aralıkta çalışır. */
+.gop-quick-dialog .quick-row-height input,
+.gop-quick-dialog .quick-card-width input{
+  width:92px!important;
+}
+
+@media (max-width:1366px), (max-height:820px){
+  .gop-quick-dialog .quick-main-toggle{
+    grid-template-columns:18px minmax(0,1fr) 66px 34px!important;
+    column-gap:4px!important;
+    padding:1px 4px!important;
+  }
+  .gop-quick-dialog .quick-avatar{width:18px!important;height:18px!important;font-size:7px!important}
+  .gop-quick-dialog .quick-person-text strong{font-size:7.8px!important}
+  .gop-quick-dialog .quick-person-text small{font-size:6px!important}
+  .gop-quick-dialog .quick-main-toggle>b{
+    width:66px!important;
+    height:20px!important;
+    padding-left:6px!important;
+    font-size:6.8px!important;
+  }
+  .gop-quick-dialog .quick-main-toggle>em{width:34px!important;font-size:6.3px!important}
+}
+@media (max-width:1050px){
+  .gop-quick-dialog .quick-person-grid{
+    grid-template-columns:repeat(auto-fit,minmax(max(var(--quick-card-w),220px),1fr))!important;
+  }
+  .gop-quick-dialog .quick-main-toggle{
+    grid-template-columns:18px minmax(0,1fr) 62px 30px!important;
+  }
+  .gop-quick-dialog .quick-main-toggle>b{width:62px!important}
+  .gop-quick-dialog .quick-main-toggle>em{width:30px!important}
+}
