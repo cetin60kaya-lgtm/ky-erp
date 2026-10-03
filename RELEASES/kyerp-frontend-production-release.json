@@ -3,7 +3,7 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-09-30",
+  "releaseDate": "2026-10-03",
   "scope": [
     "classic-page-layout-restored",
     "button-driven-centered-action-dialogs",
@@ -35,9 +35,12 @@
     "frontend-lint-test-build",
     "cloudflare-pages-production",
     "live-entry-verification",
-    "live-daily-operations-chunk-sha256-verification"
+    "live-daily-operations-chunk-sha256-verification",
+    "security-login-short-code-input",
+    "security-super-admin-session-approval-scope",
+    "security-canonical-guvenlik-release"
   ],
-  "note": "İK Aylık final UI/code health: canonical 7 tabs, filters, payroll balance/snapshot/print safety, all tests green",
-  "sourceCommit": "5698f954b338bc0584aa39bbe985606c40b08d0c",
-  "requestedAt": "2026-10-02T17:24:00+03:00"
+  "note": "KY Güvenlik final: canonical /guvenlik akışı, Süper Yönetici sistem geneli oturum onayı ve bekleyen girişe bağlı kısa kod alanı; frontend lint/test/build + canlı doğrulama.",
+  "sourceCommit": "eddb1b3203336a8db4c1a4230ac6702de0daa657",
+  "requestedAt": "2026-10-03T20:30:00+03:00"
 }

@@ -220,7 +220,13 @@ async function managerApproverUserIds(c: any, companySlug: string) {
   for(const row of result.results || []) { const role=roleOf(row); if(isSuper(role) || (isCompanyAdmin(role) && text(row.main_company_slug)===text(companySlug))) ids.add(text(row.id)); }
   return ids;
 }
-function canApproveSessionTarget(actor: AnyRow, session: AnyRow) { const targetRole=roleOf({ role:session.target_role, platform_role:session.target_platform_role, role_override:session.target_role_override }); if(["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole)) return false; if(isSuper(actor.role)) return true; return isCompanyAdmin(actor.role) && text(actor.companySlug)===text(session.main_company_slug); }
+async function applicationOwnerUserIds(c: any) {
+  const result=await c.env.DB.prepare(`SELECT u.id,u.role,u.platform_role,s.role_override FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.is_active=1`).all<AnyRow>();
+  const ids=new Set<string>();
+  for(const row of result.results || []) if(isSuper(roleOf(row))) ids.add(text(row.id));
+  return ids;
+}
+function canApproveSessionTarget(actor: AnyRow, session: AnyRow) { const targetRole=roleOf({ role:session.target_role, platform_role:session.target_platform_role, role_override:session.target_role_override }); if(isSuper(actor.role)) return true; if(["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole)) return false; return isCompanyAdmin(actor.role) && text(actor.companySlug)===text(session.main_company_slug); }
 async function sessionNeedsManagerReview(c: any, session: AnyRow) {
   let trust=await storeGet(c, SESSION_TRUST_SCOPE, text(session.id));
   if (!trust && text(session.id)) trust=await storePut(c, SESSION_TRUST_SCOPE, text(session.id), text(session.mainCompanySlug || session.main_company_slug), { sessionId:text(session.id), userId:text(session.userId || session.user_id), status:"PENDING", requestedAt:text(session.createdAt || session.created_at || nowIso()), source:"MANAGER_REVIEW" });
@@ -628,10 +634,13 @@ export async function notifyManagerApproval(c: any, approvalId: string, companyS
 }
 
 export async function notifySessionApproval(c: any, session: AnyRow) {
-  const companySlug=text(session.mainCompanySlug || session.main_company_slug); const targetRole=roleOf({ role:session.role, platform_role:session.platform_role, role_override:session.role_override });
-  if (["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole) || !(await sessionNeedsManagerReview(c, session))) return { sent:0, recipients:0 };
-  const userIds=await managerApproverUserIds(c, companySlug); const devices: AnyRow[]=[]; for(const userId of userIds) devices.push(...await activeDevicesForUser(c,userId,"MANAGER"));
-  const sent=await sendWakeMany(c,devices); await audit(c,"SESSION_MANAGER_PUSH_DISPATCHED","",text(session.userId || session.user_id),companySlug,{ sessionId:text(session.id), recipients:userIds.size, notifiedDevices:sent });
+  const companySlug=text(session.mainCompanySlug || session.main_company_slug);
+  const targetRole=roleOf({ role:session.role, platform_role:session.platform_role, role_override:session.role_override });
+  if (!(await sessionNeedsManagerReview(c, session))) return { sent:0, recipients:0 };
+  const privilegedTarget=["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole);
+  const userIds=privilegedTarget ? await applicationOwnerUserIds(c) : await managerApproverUserIds(c, companySlug);
+  const devices: AnyRow[]=[]; for(const userId of userIds) devices.push(...await activeDevicesForUser(c,userId,"MANAGER"));
+  const sent=await sendWakeMany(c,devices); await audit(c,"SESSION_MANAGER_PUSH_DISPATCHED","",text(session.userId || session.user_id),companySlug,{ sessionId:text(session.id), targetRole, privilegedTarget, recipients:userIds.size, notifiedDevices:sent });
   return { sent, recipients:userIds.size };
 }
 

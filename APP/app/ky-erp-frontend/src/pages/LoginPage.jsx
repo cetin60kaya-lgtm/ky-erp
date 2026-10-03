@@ -128,6 +128,7 @@ export default function LoginPage({ onClose }) {
     verifyOwnerRecovery,
     checkApproval,
     checkPhoneApproval,
+    verifyPhoneApprovalCode,
     resendPhoneApproval,
     useAuthenticatorFallback: runAuthenticatorFallback,
   } = useAuth();
@@ -409,6 +410,35 @@ export default function LoginPage({ onClose }) {
     }
   }
 
+  async function handleSecurityLoginCode(event) {
+    event?.preventDefault();
+    if (!flow.phoneApprovalId || !flow.phoneApprovalToken) return;
+    const cleanCode = String(code || "").replace(/\D/g, "");
+    if (!/^\d{6}$/.test(cleanCode)) {
+      setError("6 haneli KY Güvenlik giriş kodunu girin.");
+      return;
+    }
+    try {
+      setLoading(true);
+      setError("");
+      await verifyPhoneApprovalCode({
+        phoneApprovalId: flow.phoneApprovalId,
+        phoneApprovalToken: flow.phoneApprovalToken,
+        code: cleanCode,
+      });
+      const completed = await checkPhoneApproval({
+        phoneApprovalId: flow.phoneApprovalId,
+        phoneApprovalToken: flow.phoneApprovalToken,
+      });
+      setCode("");
+      applyResponse(completed);
+    } catch (requestError) {
+      setError(requestError?.message || "KY Güvenlik giriş kodu doğrulanamadı.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function switchToAuthenticator(method = "AUTHENTICATOR") {
     if (!flow.phoneApprovalId || !flow.phoneApprovalToken) return;
     try {
@@ -684,6 +714,13 @@ export default function LoginPage({ onClose }) {
                   <div><strong>Telefon yanıtı bekleniyor</strong><small>Onaylandığında bu ekran otomatik olarak devam eder.</small></div>
                 </div>
                 {phoneStatusMessage ? <div className="auth-notice auth-notice-compact"><strong>Telefon bağlantısı</strong><span>{phoneStatusMessage}</span></div> : null}
+                <form className="auth-form auth-form-compact" onSubmit={handleSecurityLoginCode}>
+                  <label>KY Güvenlik giriş kodu
+                    <input className="auth-code-input" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
+                  </label>
+                  <small>Telefon bildirimine alternatif olarak KY Güvenlik uygulamasındaki Giriş Kodu bölümünden üretilen kısa süreli kodu kullanabilirsiniz.</small>
+                  <button className="auth-primary" type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : "KY Güvenlik Kodunu Doğrula"}</button>
+                </form>
                 <ErrorBox message={error} />
                 <button className="auth-secondary" type="button" onClick={resendPhoneApprovalNotification} disabled={loading}>Bildirimi Yeniden Gönder</button>
                 <button type="button" className="auth-ghost auth-ghost-compact" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
