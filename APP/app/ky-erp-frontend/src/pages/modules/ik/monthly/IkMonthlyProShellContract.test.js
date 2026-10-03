@@ -151,5 +151,7 @@ test("personnel card supports clear exit/reactivation plus admin recode and guar
   assert.match(monthly, /adminMaintainIkAdvancedPerson/);
   assert.match(monthly, /HKN Numarasını Değiştir/);
   assert.match(monthly, /Yanlış \/ Mükerrer Kaydı Kalıcı Sil/);
+  assert.match(monthly, /Mükerrer Kaydı Doğru Personelle Birleştir/);
+  assert.match(monthly, /BIRLESTIR \$\{modalDraft\.code\}/);
   assert.match(monthly, /SİL \$\{modalDraft\.code/);
 });

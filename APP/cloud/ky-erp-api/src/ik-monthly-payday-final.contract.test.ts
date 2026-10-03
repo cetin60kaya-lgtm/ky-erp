@@ -106,6 +106,9 @@ test("canonical personnel admin maintenance requires admin and protects operatio
   assert.match(relational, /ADMIN_REQUIRED/);
   assert.match(relational, /ADMIN_RECODE/);
   assert.match(relational, /ADMIN_HARD_DELETE/);
+  assert.match(relational, /ADMIN_PERSONNEL_MERGE/);
+  assert.match(relational, /PERSONNEL_MERGE_CONFLICT/);
+  assert.match(relational, /BIRLESTIR \$\{currentCode\} > \$\{targetCode\}/);
   assert.match(relational, /PERSONNEL_HAS_OPERATIONAL_HISTORY/);
   assert.match(relational, /SİL \$\{currentCode\}/);
   assert.match(relational, /\/api\/ik\/advanced\/person-card\/:employeeId\/admin-maintenance/);

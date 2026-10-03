@@ -317,6 +317,8 @@ function draftPerson(employee = {}) {
     adminNewCode: employee.code || "",
     adminCodeConfirm: "",
     adminDeleteConfirm: "",
+    adminMergeTargetId: "",
+    adminMergeConfirm: "",
     adminReason: "",
   };
 }
@@ -871,6 +873,36 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       await load({ force: true, prepare: true });
     } catch (error) {
       setNotice(error?.message || "Personel kodu değiştirilemedi.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const adminMergePerson = async () => {
+    if (!modalDraft.id) return setNotice("Kaydedilmemiş personel birleştirilemez.");
+    const target = masterEmployees.find((item) => item.id === modalDraft.adminMergeTargetId);
+    if (!target) return setNotice("Doğru personel kaydını seçin.");
+    const expected = `BIRLESTIR ${modalDraft.code} > ${target.code}`;
+    if (upper(modalDraft.adminMergeConfirm).replaceAll("İ", "I") !== upper(expected)) {
+      return setNotice(`Birleştirme onayı için "${expected}" yazın.`);
+    }
+    if ((modalDraft.adminReason || "").trim().length < 5) return setNotice("Personel birleştirme nedenini yazın.");
+    if (!window.confirm(`${modalDraft.fullName} (${modalDraft.code}) kaydı, ${target.fullName} (${target.code}) kaydına birleştirilecek. Bağlı mesai/avans/izin/PDKS kayıtları doğru personele aktarılacak ve yanlış ana kart kaldırılacak. Devam edilsin mi?`)) return;
+    setBusy(true);
+    try {
+      const result = await adminMaintainIkAdvancedPerson(modalDraft.id, {
+        mainCompanyId: companyId,
+        action: "MERGE",
+        targetEmployeeId: target.id,
+        confirmText: modalDraft.adminMergeConfirm,
+        reason: modalDraft.adminReason,
+      });
+      setModal(null);
+      setSelectedId(target.id);
+      setNotice(`${modalDraft.code} kaydı ${result?.targetCode || target.code} personeline birleştirildi; bağlı geçmiş kayıtlar korundu.`);
+      await load({ force: true, prepare: true });
+    } catch (error) {
+      setNotice(error?.message || "Personel kayıtları birleştirilemedi.");
     } finally {
       setBusy(false);
     }
@@ -2510,13 +2542,16 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               <Field label="Mevcut HKN"><input value={modalDraft.code||""} readOnly /></Field>
               <Field label="Yeni HKN Kodu"><input value={modalDraft.adminNewCode||""} onChange={(event)=>setModalDraft((old)=>({...old,adminNewCode:event.target.value.toLocaleUpperCase("tr-TR")}))} placeholder="HKN-23" /></Field>
               <Field label="Kod Değişikliği Onayı"><input value={modalDraft.adminCodeConfirm||""} onChange={(event)=>setModalDraft((old)=>({...old,adminCodeConfirm:event.target.value}))} placeholder={modalDraft.code || "Mevcut kodu yazın"} /></Field>
-              <Field label="Yönetici Açıklaması"><input value={modalDraft.adminReason||""} onChange={(event)=>setModalDraft((old)=>({...old,adminReason:event.target.value}))} placeholder="Yanlış kayıt / kod düzeltmesi nedeni" /></Field>
+              <Field label="Yönetici Açıklaması"><input value={modalDraft.adminReason||""} onChange={(event)=>setModalDraft((old)=>({...old,adminReason:event.target.value}))} placeholder="Yanlış kayıt / kod düzeltmesi / birleştirme nedeni" /></Field>
+              <Field label="Doğru Personelle Birleştir"><select value={modalDraft.adminMergeTargetId||""} onChange={(event)=>setModalDraft((old)=>({...old,adminMergeTargetId:event.target.value,adminMergeConfirm:""}))}><option value="">Birleştirme yapma</option>{masterEmployees.filter((item)=>item.id!==modalDraft.id).map((item)=><option key={item.id} value={item.id}>{item.code || "HKN yok"} · {item.fullName}{employeeExitDate(item) ? " · Pasif" : " · Aktif"}</option>)}</select></Field>
+              <Field label="Birleştirme Onayı"><input value={modalDraft.adminMergeConfirm||""} onChange={(event)=>setModalDraft((old)=>({...old,adminMergeConfirm:event.target.value}))} placeholder={modalDraft.adminMergeTargetId ? `BIRLESTIR ${modalDraft.code} > ${masterEmployees.find((item)=>item.id===modalDraft.adminMergeTargetId)?.code || "HKN-XX"}` : "Önce doğru personeli seçin"} /></Field>
               <Field label="Kalıcı Silme Onayı" wide><input value={modalDraft.adminDeleteConfirm||""} onChange={(event)=>setModalDraft((old)=>({...old,adminDeleteConfirm:event.target.value}))} placeholder={`SİL ${modalDraft.code || "HKN-XX"}`} /></Field>
             </div>
             <div className="admin-personnel-actions">
               <button type="button" className="btn" disabled={busy || !modalDraft.adminNewCode || upper(modalDraft.adminNewCode)===upper(modalDraft.code)} onClick={adminRecodePerson}>HKN Numarasını Değiştir</button>
+              <button type="button" className="btn orange" disabled={busy || !modalDraft.adminMergeTargetId} onClick={adminMergePerson}>Mükerrer Kaydı Doğru Personelle Birleştir</button>
               <button type="button" className="btn red" disabled={busy} onClick={adminHardDeletePerson}>Yanlış / Mükerrer Kaydı Kalıcı Sil</button>
-              <span className="badge orange">Geçmiş işlem varsa kalıcı silme engellenir; personel çıkış tarihiyle pasife alınır.</span>
+              <span className="badge orange">Bağlı geçmiş varsa Birleştir kullanılır; geçmiş hareketler doğru personele aktarılır. Boş yanlış kayıt doğrudan silinebilir.</span>
             </div>
           </div> : null}
         </div>
