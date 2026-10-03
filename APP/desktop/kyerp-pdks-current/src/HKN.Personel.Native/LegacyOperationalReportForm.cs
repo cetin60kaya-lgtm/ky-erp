@@ -29,7 +29,7 @@ public sealed class LegacyOperationalReportForm : Form
         AllowUserToDeleteRows = false,
         AllowUserToOrderColumns = true,
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
-        BackgroundColor = Color.White
+        BackgroundColor = PdksAppearance.Current.Surface
     };
     readonly Label summary = new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true};
     DataTable data = new();
