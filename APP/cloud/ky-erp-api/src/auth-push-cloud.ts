@@ -220,7 +220,7 @@ async function managerApproverUserIds(c: any, companySlug: string) {
   for(const row of result.results || []) { const role=roleOf(row); if(isSuper(role) || (isCompanyAdmin(role) && text(row.main_company_slug)===text(companySlug))) ids.add(text(row.id)); }
   return ids;
 }
-function canApproveSessionTarget(actor: AnyRow, session: AnyRow) { const targetRole=roleOf({ role:session.target_role, platform_role:session.target_platform_role, role_override:session.target_role_override }); if(["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole)) return false; if(isSuper(actor.role)) return true; return isCompanyAdmin(actor.role) && text(actor.companySlug)===text(session.main_company_slug); }
+function canApproveSessionTarget(actor: AnyRow, session: AnyRow) { const targetRole=roleOf({ role:session.target_role, platform_role:session.target_platform_role, role_override:session.target_role_override }); if(isSuper(actor.role)) return true; if(["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole)) return false; return isCompanyAdmin(actor.role) && text(actor.companySlug)===text(session.main_company_slug); }
 async function sessionNeedsManagerReview(c: any, session: AnyRow) {
   let trust=await storeGet(c, SESSION_TRUST_SCOPE, text(session.id));
   if (!trust && text(session.id)) trust=await storePut(c, SESSION_TRUST_SCOPE, text(session.id), text(session.mainCompanySlug || session.main_company_slug), { sessionId:text(session.id), userId:text(session.userId || session.user_id), status:"PENDING", requestedAt:text(session.createdAt || session.created_at || nowIso()), source:"MANAGER_REVIEW" });
