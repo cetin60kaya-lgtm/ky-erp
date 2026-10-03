@@ -98,7 +98,7 @@ export default function PhoneApprovalSetup({ onClose }) {
       const data = response?.data || response;
       setOwnerEmailChallenge(data);
       setOwnerStepUpCode("");
-      setMessage(`${data?.maskedEmail || config?.ownerEmailMasked || "Doğrulanmış e-posta"} adresine 6 haneli Süper Yönetici telefon yetkilendirme kodu gönderildi.`);
+      setMessage(`E-posta sağlayıcısı ${data?.maskedEmail || config?.ownerEmailMasked || "doğrulanmış adres"} için 6 haneli telefon yetkilendirme kodu isteğini kabul etti. Teslimat birkaç saniye sürebilir; gelen kutusunu kontrol edin.`);
     } catch (error) {
       setOwnerEmailChallenge(null);
       setMessage(`Hata: ${error?.message || "Süper Yönetici telefon doğrulama e-postası gönderilemedi."}`);
