@@ -285,3 +285,80 @@
   .quick-day-list{width:100%}
   .gop-quick-dialog .gop-shift-switch{align-self:flex-end}
 }
+
+
+/* DAILY-QUICK-CARDS-DENSE-2026-10-03 */
+/* Gün kartlarında eski G/N + kişi bilgisini minimal şekilde geri getir. */
+.kyop-day-counts{display:flex!important;align-items:center!important;gap:4px!important;margin-top:3px!important;white-space:nowrap!important}
+.kyop-day-counts span{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-width:0!important;padding:1px 4px!important;border-radius:5px!important;font-size:7px!important;line-height:1.2!important;font-weight:950!important}
+.kyop-day-counts .day{background:#fff1e6!important;color:#c2410c!important}
+.kyop-day-counts .night{background:#eef2ff!important;color:#3730a3!important}
+.kyop-day-counts .people{background:#eff6ff!important;color:#1d4ed8!important}
+
+/* Hızlı giriş günlerinde de G/N/kişi tek satır, küçük ve okunur. */
+.quick-day-list>button{height:auto!important;min-height:43px!important}
+.quick-day-list>button>em{display:flex!important;align-items:center!important;justify-content:center!important;gap:3px!important;margin-top:2px!important;font-style:normal!important;white-space:nowrap!important}
+.quick-day-list>button>em b{font-size:6px!important;line-height:1!important;font-weight:950!important;color:#64748b!important}
+.quick-day-list>button>em b:first-child{color:#c2410c!important}
+.quick-day-list>button>em b:nth-child(2){color:#3730a3!important}
+.quick-day-list>button>em b:last-child{color:#1d4ed8!important}
+
+/* Kritik: vasıf grupları kalan yüksekliğe yayılmasın; aralarında boşluk üretmesin. */
+.gop-quick-dialog .quick-groups{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:stretch!important;
+  justify-content:flex-start!important;
+  align-content:flex-start!important;
+  gap:4px!important;
+  overflow:auto!important;
+}
+.gop-quick-dialog .quick-group{
+  flex:0 0 auto!important;
+  height:auto!important;
+  min-height:0!important;
+  margin:0!important;
+}
+.gop-quick-dialog .quick-person-grid{
+  align-content:start!important;
+  grid-auto-flow:row!important;
+  grid-auto-rows:var(--quick-row-h)!important;
+}
+
+/* Kişi kartı: tek satırda daha okunaklı, ama küçük monitörde alanı gereksiz büyütmez. */
+.gop-quick-dialog{--quick-card-w:205px}
+.gop-quick-dialog .quick-person{
+  min-height:var(--quick-row-h)!important;
+  height:var(--quick-row-h)!important;
+  overflow:hidden!important;
+}
+.gop-quick-dialog .quick-main-toggle{
+  min-height:var(--quick-row-h)!important;
+  height:var(--quick-row-h)!important;
+  grid-template-columns:18px minmax(74px,1fr) 56px 31px!important;
+  column-gap:4px!important;
+  padding:1px 3px!important;
+}
+.gop-quick-dialog .quick-avatar{width:17px!important;height:17px!important;font-size:7px!important}
+.gop-quick-dialog .quick-person-text strong{font-size:8px!important;line-height:1!important}
+.gop-quick-dialog .quick-person-text small{font-size:6.2px!important;line-height:1!important;margin-top:1px!important}
+.gop-quick-dialog .quick-main-toggle>b{width:56px!important;font-size:6.7px!important}
+.gop-quick-dialog .quick-main-toggle>em{width:31px!important;font-size:6.4px!important}
+.gop-quick-dialog .quick-check-button{min-height:var(--quick-row-h)!important;height:var(--quick-row-h)!important}
+
+@media (max-width:1366px), (max-height:820px){
+  .kyop-day-counts{gap:2px!important;margin-top:2px!important}
+  .kyop-day-counts span{font-size:6px!important;padding:1px 3px!important}
+  .quick-day-list>button{min-height:38px!important}
+  .quick-day-list>button>em{gap:2px!important;margin-top:1px!important}
+  .quick-day-list>button>em b{font-size:5.6px!important}
+  .gop-quick-dialog{--quick-card-w:185px}
+  .gop-quick-dialog .quick-groups{gap:3px!important}
+  .gop-quick-dialog .quick-main-toggle{grid-template-columns:17px minmax(62px,1fr) 50px 28px!important}
+  .gop-quick-dialog .quick-main-toggle>b{width:50px!important;font-size:6.2px!important}
+  .gop-quick-dialog .quick-main-toggle>em{width:28px!important;font-size:6px!important}
+}
+@media (max-width:980px){
+  .gop-quick-dialog{--quick-card-w:175px}
+  .gop-quick-dialog .quick-person-text small{display:none!important}
+}

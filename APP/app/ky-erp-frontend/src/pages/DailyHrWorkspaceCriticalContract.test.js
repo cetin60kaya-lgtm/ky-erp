@@ -44,3 +44,21 @@ test("quick entry remains compact on smaller monitors", () => {
   assert.match(css, /max-width:1366px/);
   assert.match(css, /max-height:820px/);
 });
+
+
+test("daily and quick day cards expose compact day/night/person counts", () => {
+  assert.match(workspace, /kyop-day-counts/);
+  assert.match(workspace, /G \{item\.dayCount\}/);
+  assert.match(workspace, /N \{item\.nightCount\}/);
+  assert.match(workspace, /daySummaryByDate\.get\(date\)/);
+  assert.match(workspace, /G \{summary\.dayCount\}/);
+  assert.match(workspace, /N \{summary\.nightCount\}/);
+});
+
+test("quick personnel groups stay tightly packed on small monitors", () => {
+  assert.match(css, /DAILY-QUICK-CARDS-DENSE-2026-10-03/);
+  assert.match(css, /\.gop-quick-dialog \.quick-groups\{[\s\S]*display:flex!important/);
+  assert.match(css, /flex-direction:column!important/);
+  assert.match(css, /\.gop-quick-dialog \.quick-group\{[\s\S]*flex:0 0 auto!important/);
+  assert.match(css, /--quick-card-w:205px/);
+});
