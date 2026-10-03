@@ -63,7 +63,7 @@ jobs:
           ! grep -q 'MutationObserver' APP/app/ky-erp-frontend/public/guvenlik/security-control-center.js
           grep -q 'id="bootPanel"' APP/app/ky-erp-frontend/public/guvenlik/index.html
           grep -q 'Yedek Kod + Admin Şifresiyle Bağla' APP/app/ky-erp-frontend/public/guvenlik/app.js
-          grep -q 'Eşleştirme No:' APP/app/ky-erp-frontend/public/guvenlik/sw.js
+          grep -q 'matchNumber:String' APP/app/ky-erp-frontend/public/guvenlik/sw.js
           grep -q 'env.ASSETS' APP/cloud/ky-erp-security-host/worker.js
           grep -q '"binding": "ASSETS"' APP/cloud/ky-erp-security-host/wrangler.jsonc
 
