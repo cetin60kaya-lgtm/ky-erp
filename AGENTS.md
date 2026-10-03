@@ -235,3 +235,19 @@ Her değişiklik sonunda şunları raporla:
 - deploy durumu,
 - canlı doğrulama durumu,
 - son commit SHA.
+
+
+## GitHub maliyet ve Actions ana kuralı — 04.10.2026
+
+Bu kural KY ERP üzerinde çalışan tüm AI ajanları, ChatGPT/Codex sohbetleri ve GitHub otomasyonları için zorunludur.
+
+- GitHub ücretli ek kullanım bütçesi varsayılan olarak **0 USD** kabul edilir. Actions, Codespaces/Kod Alanları, Packages/Paketler, Git LFS ve ek AI kredi ürünlerinde bütçe aşımıyla ücretli kullanıma geçilmez.
+- **Copilot Free** varsayılandır. Kullanıcı açıkça istemedikçe Copilot Pro/Pro+ veya başka ücretli GitHub servisi açılmaz, yükseltilmez ve ödeme yeniden denenmez.
+- Yeni GitHub Actions workflow oluşturma varsayılanı `workflow_dispatch` (manuel) olmalıdır. Otomatik `push`, `schedule` veya geniş kapsamlı `pull_request` tetikleyicisi ancak zorunluysa ve mevcut canonical kontrol akışında çözülemiyorsa eklenir.
+- Otomatik CI için **tek canonical kapı** kullanılır: frontend + Worker temel kontrolü. Aynı işi yapan ikinci/üçüncü workflow oluşturulmaz.
+- Windows hosted runner yalnız gerçekten Windows/PDKS/native derleme zorunluysa kullanılır; bu işler varsayılan olarak manuel çalıştırılır. Normal web/Worker kontrollerinde Ubuntu tercih edilir.
+- Production deploy, D1 migration, canlı smoke ve benzeri pahalı/etkili işler genel kod push'unda otomatik koşturulmaz; açık release tetikleyicisi veya manuel dispatch kullanılır.
+- Bir workflow kendi branch'ine commit/push atarak kendisini yeniden tetikleyen döngü oluşturamaz.
+- Tüm otomatik workflow'larda uygun `paths` filtresi ve `concurrency.cancel-in-progress: true` kullanılır. Eski koşu tamamlanmadan yeni aynı iş geldiyse eski koşu iptal edilir.
+- Artifact/log saklama süresi varsayılan **3 gün**; özel gerekçe yoksa 7/14/30 gün kullanılmaz.
+- Her yeni sohbet/ajan GitHub workflow değiştirmeden önce bu bölümü kontrol eder; maliyeti artıracak bir değişiklik kullanıcı açıkça onaylamadıkça yapılmaz.
