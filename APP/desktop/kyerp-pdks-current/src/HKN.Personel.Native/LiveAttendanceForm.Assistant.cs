@@ -55,11 +55,12 @@ public sealed partial class LiveAttendanceForm
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        var askRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4 };
+        var askRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5 };
         askRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
         askRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        askRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118));
+        askRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126));
         askRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 113));
+        askRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 123));
         askRow.Controls.Add(new Label
         {
             Text = "✦ Denetim Asistanı",
@@ -71,6 +72,7 @@ public sealed partial class LiveAttendanceForm
         askRow.Controls.Add(assistantQuery, 1, 0);
         askRow.Controls.Add(assistantAsk, 2, 0);
         askRow.Controls.Add(assistantAction, 3, 0);
+        askRow.Controls.Add(clearLive, 4, 0);
         layout.Controls.Add(askRow, 0, 0);
         assistantChips.Controls.Add(Chip("Bugün sabah kart basmayanlar"));
         assistantChips.Controls.Add(Chip("Şu an içeride olanlar"));
