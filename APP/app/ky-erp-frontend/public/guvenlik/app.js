@@ -320,7 +320,8 @@ async function generateLoginCode(){
     els.loginCodeValue.textContent=String(data.code||"").replace(/(\d{3})(\d{3})/,"$1 $2");
     els.loginCodeBox.className="login-code-box active";
     startLoginCodeCountdown(data.expiresAt);
-    toast("60 saniyelik KY Güvenlik giriş kodu üretildi.");
+    const systemCode=String(data.scopeType||"").toUpperCase()==="SYSTEM";
+    toast(systemCode?"60 saniyelik KY Güvenlik Sistem Kodu üretildi. Tüm hesaplarda kullanılabilir.":"60 saniyelik KY Güvenlik giriş kodu üretildi. Yalnız bu hesapta geçerlidir.");
   }catch(error){
     els.loginCodeValue.textContent="— — — — — —";
     els.loginCodeCountdown.textContent="Kod üretilemedi";
