@@ -11,28 +11,8 @@ public sealed partial class LiveAttendanceForm
         Dock = DockStyle.Fill,
         Font = new Font("Segoe UI", 10f)
     };
-    readonly Button assistantAsk = new()
-    {
-        Text = "Analizi Çalıştır",
-        Width = 110,
-        Height = 30,
-        FlatStyle = FlatStyle.Flat,
-        BackColor = Color.FromArgb(36,107,230),
-        ForeColor = Color.White,
-        Font = new Font("Segoe UI",9f,FontStyle.Bold),
-        Cursor = Cursors.Hand
-    };
-    readonly Button assistantAction = new()
-    {
-        Text = "İşlem Aç",
-        Width = 105,
-        Height = 30,
-        FlatStyle = FlatStyle.Flat,
-        BackColor = Color.FromArgb(24,145,84),
-        ForeColor = Color.White,
-        Font = new Font("Segoe UI",9f,FontStyle.Bold),
-        Cursor = Cursors.Hand
-    };
+    readonly Button assistantAsk = PdksUiKit.Button("Analizi Çalıştır",118,PdksActionRole.Primary);
+    readonly Button assistantAction = PdksUiKit.Button("İşleme Git",105,PdksActionRole.Secondary);
     readonly Label assistantSummary = new()
     {
         Dock = DockStyle.Fill,
@@ -56,19 +36,14 @@ public sealed partial class LiveAttendanceForm
         SelectionMode = DataGridViewSelectionMode.FullRowSelect,
         MultiSelect = false,
         RowHeadersVisible = false,
-        BackgroundColor = Color.White
+        BackgroundColor = PdksAppearance.Current.Surface
     };
 
     Control BuildAssistantPanel()
     {
-        var shell = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Color.FromArgb(247, 250, 255),
-            Padding = new Padding(10, 8, 10, 8),
-            Margin = new Padding(0, 3, 0, 6),
-            BorderStyle = BorderStyle.FixedSingle
-        };
+        var p=PdksAppearance.Current;
+        var shell = PdksUiKit.Card(10);
+        shell.Margin=new Padding(0,3,0,6);
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -91,7 +66,7 @@ public sealed partial class LiveAttendanceForm
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(36, 107, 230)
+            ForeColor = p.Primary
         }, 0, 0);
         askRow.Controls.Add(assistantQuery, 1, 0);
         askRow.Controls.Add(assistantAsk, 2, 0);
@@ -104,7 +79,9 @@ public sealed partial class LiveAttendanceForm
         assistantChips.Controls.Add(Chip("Bu hafta geç gelenler"));
         layout.Controls.Add(assistantChips, 0, 1);
 
-        assistantSummary.Text = "Analiz hazır • Canlı devam verisini sorgulayabilir veya hızlı analizlerden birini seçebilirsiniz.";
+        assistantSummary.Text = "İstisna analizi • hızlı sorgulardan birini seçin veya kendi sorgunuzu yazın.";
+        assistantSummary.ForeColor=p.Muted;
+        assistantChips.BackColor=p.Surface;
         layout.Controls.Add(assistantSummary, 0, 2);
         shell.Controls.Add(layout);
 
@@ -123,18 +100,10 @@ public sealed partial class LiveAttendanceForm
 
     Button Chip(string text)
     {
-        var b = new Button
-        {
-            Text = text,
-            AutoSize = true,
-            Height = 30,
-            Margin = new Padding(0, 0, 7, 0),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.White,
-            ForeColor = Color.FromArgb(45, 65, 90),
-            Cursor = Cursors.Hand
-        };
-        b.FlatAppearance.BorderColor = Color.FromArgb(214, 225, 240);
+        var b = PdksUiKit.Button(text,Math.Max(120,TextRenderer.MeasureText(text,new Font("Segoe UI",8.5f)).Width+22),PdksActionRole.Secondary);
+        b.AutoSize=true;
+        b.Height=30;
+        b.Margin=new Padding(0,0,7,0);
         b.Click += (_, _) =>
         {
             assistantQuery.Text = text;
@@ -170,7 +139,7 @@ public sealed partial class LiveAttendanceForm
         catch (Exception ex)
         {
             assistantSummary.Text = "Analiz çalıştırılamadı: " + ex.Message;
-            assistantSummary.ForeColor = Color.FromArgb(185, 56, 48);
+            assistantSummary.ForeColor = PdksAppearance.Current.Danger;
         }
     }
     IEnumerable<AssistantRow> FilterAssistantRows(DateTime day, string query)
@@ -265,7 +234,7 @@ public sealed partial class LiveAttendanceForm
         assistantSummary.Text = rows.Count == 0
             ? $"✓ {query} • {period}: sorun bulunmadı."
             : $"⚠ {query} • {period}: {rows.Count} kayıt bulundu. Satıra çift tıklayarak o güne geçebilirsin.";
-        assistantSummary.ForeColor = rows.Count == 0 ? Color.FromArgb(24, 145, 84) : Color.FromArgb(198, 108, 24);
+        assistantSummary.ForeColor = rows.Count == 0 ? PdksAppearance.Current.Success : PdksAppearance.Current.Warning;
     }
 
     void FocusSelectedResult()
