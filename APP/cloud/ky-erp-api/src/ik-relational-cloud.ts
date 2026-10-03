@@ -693,6 +693,15 @@ async function saveAdvancedFinance(c: Context<AppEnv>) {
       .bind(crypto.randomUUID(), employeeId, date, adjustmentType, storedHourOrDay, rowAmount, isOvertime ? "Bordro" : paymentMethod, isOvertime || isAbsence ? "Bordroya yansir" : payrollEffect, rowNote, status, nowIso()));
   }
   await c.env.DB.batch(statements);
+  await audit(c, {
+    mainCompanyId: companyId,
+    period: date.slice(0, 7),
+    employeeId: employeeIds.length === 1 ? employeeIds[0] : undefined,
+    entityType: "HAREKET",
+    action: "FINANCE_CREATE",
+    summary: `${adjustmentType} kaydı eklendi.`,
+    details: { employeeIds, adjustmentType, date, hourOrDay, amount, paymentMethod, payrollEffect },
+  });
   return okData(c, { savedCount: statements.length, employeeIds, adjustmentType, overtimeMultiplier: isOvertime ? multiplier : undefined });
 }
 
@@ -750,6 +759,15 @@ async function updateAdvancedFinance(c: Context<AppEnv>) {
       isOvertime || isAbsence ? "Bordroya yansir" : text(body.payrollEffect || current.payroll_effect),
       note, text(body.status || current.status), id).run();
   const saved = await first(c, "SELECT * FROM hr_monthly_adjustments_v2 WHERE id=?", [id]);
+  await audit(c, {
+    mainCompanyId: companyId,
+    period: targetDate.slice(0, 7),
+    employeeId,
+    entityType: "HAREKET",
+    action: "FINANCE_UPDATE",
+    summary: `${adjustmentType} kaydı düzenlendi.`,
+    details: { id, before: mapAdjustment(current), after: mapAdjustment(saved || current) },
+  });
   return okData(c, mapAdjustment(saved || current));
 }
 
@@ -757,7 +775,7 @@ async function deleteAdvancedFinance(c: Context<AppEnv>) {
   const body = await bodyOf(c);
   const id = text(body.id);
   const companyId = companyIdOf(c, body);
-  const current = await first(c, "SELECT a.id,a.note,a.date FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
+  const current = await first(c, "SELECT a.id,a.employee_id,a.adjustment_type,a.amount,a.payment_method,a.payroll_effect,a.note,a.date FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
   if (!current) return error(c, 404, "NOT_FOUND", "Mesai/avans/kesinti kaydı bulunamadı.");
   if (upper(current.note).includes("SON BORDRO KONTROL")) {
     return error(c, 409, "FINAL_CONTROL_CORRECTION_IMMUTABLE", "Son bordro kontrolü düzeltmesi hareket ekranından silinemez.");
@@ -766,6 +784,15 @@ async function deleteAdvancedFinance(c: Context<AppEnv>) {
   const deleteLock = await rejectAdvancedPeriodLocked(c, companyId, number(deleteDate.slice(0, 4)), number(deleteDate.slice(5, 7)));
   if (deleteLock) return deleteLock;
   await c.env.DB.prepare("DELETE FROM hr_monthly_adjustments_v2 WHERE id=?").bind(id).run();
+  await audit(c, {
+    mainCompanyId: companyId,
+    period: deleteDate.slice(0, 7),
+    employeeId: text(current.employee_id),
+    entityType: "HAREKET",
+    action: "FINANCE_DELETE",
+    summary: `${text(current.adjustment_type)} kaydı silindi.`,
+    details: { id, adjustmentType: text(current.adjustment_type), amount: number(current.amount), date: deleteDate },
+  });
   return okData(c, { id, deleted: true });
 }
 

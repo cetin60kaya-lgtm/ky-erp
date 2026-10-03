@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { canonicalHrCompanyId } from "./ik-relational-cloud";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -31,12 +32,13 @@ function todayIstanbul(now = new Date()) {
 }
 
 function companyOf(c: Context<AppEnv>, body: Row = {}) {
-  return text(
-    c.req.header("X-KYERP-Tenant-Slug") ||
+  return canonicalHrCompanyId(
+    text((c as any).get?.("pdksCompany")) ||
+      c.req.header("X-KYERP-Tenant-Slug") ||
       body.mainCompanyId || body.mainCompanySlug ||
       c.req.query("mainCompanyId") || c.req.query("mainCompanySlug") ||
       DEFAULT_COMPANY,
-  ).toLocaleLowerCase("tr-TR");
+  );
 }
 
 async function bodyOf(c: Context<AppEnv>): Promise<Row> {
@@ -72,7 +74,9 @@ function normalizeScope(value: unknown) {
 async function authContext(c: Context<AppEnv>) {
   const user = await getAuthenticatedUser(c);
   if (!user) return null;
-  const company = text(user.mainCompanySlug || user.security?.main_company_slug || companyOf(c)) || DEFAULT_COMPANY;
+  const requestedCompany = companyOf(c);
+  const ownCompany = canonicalHrCompanyId(user.mainCompanySlug || user.security?.main_company_slug || DEFAULT_COMPANY);
+  const company = canonicalHrCompanyId(requestedCompany || ownCompany || DEFAULT_COMPANY);
   let row: Row | null = null;
   try {
     row = await first(c, "SELECT scope FROM ik_user_hr_scope WHERE user_id=? AND main_company_id=? LIMIT 1", [user.id, company]);
@@ -80,7 +84,7 @@ async function authContext(c: Context<AppEnv>) {
     row = null;
   }
   const username = text(user.username).toLocaleLowerCase("tr-TR");
-  const scope = row?.scope ? normalizeScope(row.scope) : username === "denetim" ? "AUDIT" : "FULL";
+  const scope = adminRole(user.role) ? "FULL" : row?.scope ? normalizeScope(row.scope) : username === "denetim" ? "AUDIT" : "FULL";
   return { user, company, scope, audit: scope === "AUDIT" };
 }
 
@@ -324,7 +328,7 @@ async function auditVisibleForPeriod(c: Context<AppEnv>, company: string, row: R
 
 async function personRows(c: Context<AppEnv>, auth: Row) {
   if (!auth.audit) await ensurePersonnelCodes(c, auth.company);
-  const rows = await all(c, `${personSelect(auth.audit)} ORDER BY e.code COLLATE NOCASE,e.full_name COLLATE NOCASE`, [auth.company]);
+  const rows = await all(c, `${personSelect(auth.audit)} ORDER BY CASE WHEN UPPER(e.code) LIKE 'HKN-%' THEN CAST(SUBSTR(e.code,5) AS INTEGER) ELSE 999999 END,e.code COLLATE NOCASE,e.full_name COLLATE NOCASE`, [auth.company]);
   const period = requestedPeriod(c);
   const result: Row[] = [];
   for (const row of rows) {
