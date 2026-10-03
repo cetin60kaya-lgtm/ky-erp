@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import PhoneApprovalSetup from "../../components/shell/PhoneApprovalDeviceSetup";
 import {
   confirmSecureMfaRenewal,
   getApplicationOwner,
@@ -47,6 +48,7 @@ export default function AdminOwnerSecurity() {
   const [sessions, setSessions] = useState([]);
   const [delivery, setDelivery] = useState(null);
   const [securityAppConfig, setSecurityAppConfig] = useState(null);
+  const [phoneSetupOpen, setPhoneSetupOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Süper Yönetici güvenlik bilgileri yükleniyor...");
   const [editing, setEditing] = useState(false);
@@ -352,6 +354,7 @@ export default function AdminOwnerSecurity() {
         return device ? <div className="aos-email"><b>{device.deviceLabel || "KY ERP Güvenlik"}</b><small>Son bağlantı: {dateText(device.lastSeenAt)} · Yöntem: {device.ownerControlMethod || "Ek doğrulama"}</small></div> : <div className="aos-error">Yeni Süper Yönetici telefonu kurulurken doğrulanmış e-posta kodu veya mevcut Google/Microsoft Authenticator kodu + 8 karakter bağlantı kodu + KY ERP şifresi zorunludur.</div>;
       })()}
       <div className="aos-tags"><span>{securityAppConfig?.ownerEmailReady ? "E-posta hazır" : "E-posta bekliyor"}</span>{(securityAppConfig?.ownerAuthenticatorProviders || []).map((provider) => <span key={provider}>{PROVIDER_LABELS[provider] || provider}</span>)}</div>
+      <div className="aos-row"><button className="primary" type="button" onClick={() => setPhoneSetupOpen(true)}>{securityAppConfig?.devices?.some?.((row) => row.ownerControlAuthorized) ? "Sistem Telefonunu Yönet" : "Mevcut Telefonu Sistem Telefonu Yap"}</button></div>
       <p>Telefon değiştirildiğinde yeni telefon ekstra doğrulamadan geçmeden sistem onayı, tüm oturumlar, cihazlar ve hareket geçmişi açılmaz. Yeni telefon yetkilendirilirse önceki telefonun sistem yönetim yetkisi otomatik kapanır.</p>
     </section>
 
@@ -431,5 +434,6 @@ export default function AdminOwnerSecurity() {
       <div className="aos-card-head"><div><h3>Süper Yönetici Oturumları</h3><p>Bu cihaz güvenli çıkış yapabilir; diğer cihazlar tek tek sonlandırılabilir.</p></div><span className="state">{ownerSessions.length} aktif</span></div>
       <div className="aos-session-table"><div className="head"><span>Cihaz</span><span>Oluşturma</span><span>Son Görülme</span><span>İşlem</span></div>{ownerSessions.length ? ownerSessions.map((row) => { const current = String(row.id) === String(currentSessionId); return <div className="line" key={row.id}><span><b>{friendlyDevice(row)}</b>{current && <small>Bu cihaz</small>}</span><span>{dateText(row.createdAt || row.created_at)}</span><span>{dateText(row.lastSeenAt || row.last_seen_at)}</span><span><button className="danger" disabled={busy} onClick={() => closeSession(row)}>{current ? "Güvenli Çıkış" : "Oturumu Sonlandır"}</button></span></div>; }) : <div className="empty">Aktif oturum bulunamadı.</div>}</div>
     </section>
+    {phoneSetupOpen ? <PhoneApprovalSetup onClose={() => { setPhoneSetupOpen(false); loadAll(); }} /> : null}
   </div>;
 }
