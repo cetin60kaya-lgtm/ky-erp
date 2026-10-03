@@ -51,7 +51,7 @@ public partial class PersonelForm
             Dock = DockStyle.Fill,
             ColumnCount = 7,
             RowCount = 2,
-            BackColor = Color.White,
+            BackColor = PdksAppearance.Current.Surface,
             Padding = new Padding(10, 6, 10, 5),
             Margin = Padding.Empty
         };
@@ -83,7 +83,7 @@ public partial class PersonelForm
         to.Dock = DockStyle.Fill;
         to.Margin = new Padding(0, 1, 0, 1);
         header.Controls.Add(from, 1, 1);
-        header.Controls.Add(new Label { Text = "—", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.FromArgb(90, 105, 125) }, 2, 1);
+        header.Controls.Add(new Label { Text = "—", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = PdksAppearance.Current.Muted }, 2, 1);
         header.Controls.Add(to, 3, 1);
         header.SetColumnSpan(to, 2);
 
@@ -109,7 +109,7 @@ public partial class PersonelForm
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
             Padding = new Padding(8, 9, 12, 6),
-            BackColor = Color.FromArgb(248, 250, 253),
+            BackColor = PdksAppearance.Current.Canvas,
             Margin = Padding.Empty
         };
 
@@ -122,7 +122,7 @@ public partial class PersonelForm
                 Width = text == "Tümünü Sil" ? 116 : 104,
                 Height = 34,
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.White,
+                BackColor = PdksAppearance.Current.Surface,
                 ForeColor = text.Contains("Sil", StringComparison.OrdinalIgnoreCase) ? Color.FromArgb(173, 47, 47) : Color.FromArgb(31, 78, 139),
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 Image = ClassicGlyph(text),
@@ -193,7 +193,7 @@ public partial class PersonelForm
             Dock = DockStyle.Fill,
             ColumnCount = 4,
             RowCount = 1,
-            BackColor = Color.White,
+            BackColor = PdksAppearance.Current.Surface,
             Padding = new Padding(12, 9, 12, 8),
             Margin = Padding.Empty
         };
@@ -224,24 +224,14 @@ public partial class PersonelForm
         Dock = DockStyle.Fill,
         TextAlign = ContentAlignment.MiddleLeft,
         Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-        ForeColor = Color.FromArgb(48, 69, 96),
+        ForeColor = PdksAppearance.Current.Muted,
         Margin = Padding.Empty
     };
 
     static Button ModernHeaderButton(string text, int width)
     {
-        var button = new Button
-        {
-            Text = text,
-            Width = width,
-            Height = 32,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(31, 111, 235),
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor = Cursors.Hand
-        };
-        button.FlatAppearance.BorderSize = 0;
+        var button=PdksUiKit.Button(text,width,PdksActionRole.Primary);
+        button.Height=32;button.MinimumSize=new Size(width,32);button.MaximumSize=new Size(width,32);
         return button;
     }
 
