@@ -1,16 +1,14 @@
 name: PDKS Native Final Build
 
 on:
-  push:
-    branches:
-      - codex/kyerp-pdks-full-app-prep
-    paths:
-      - 'APP/desktop/kyerp-pdks-current/**'
-      - '.github/workflows/pdks-native-final-build.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: manual-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -65,4 +63,4 @@ jobs:
             out/KY-PDKS-6.3.7-CANLI.zip
             out/KY-PDKS-6.3.7-CANLI.zip.sha256.txt
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
