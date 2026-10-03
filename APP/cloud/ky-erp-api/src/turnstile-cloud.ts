@@ -35,9 +35,12 @@ export function turnstileHostnameAllowed(hostname: unknown) {
 export function turnstilePublicConfig(c: any) {
   const siteKey = text(c.env.TURNSTILE_SITE_KEY);
   const secret = text(c.env.TURNSTILE_SECRET_KEY);
+  const origin = text(c.req.header("Origin"));
+  const required = turnstileRequiredForOrigin(origin);
   return {
-    enabled: Boolean(siteKey && secret),
-    siteKey: siteKey || "",
+    enabled: Boolean(required && siteKey && secret),
+    siteKey: required ? (siteKey || "") : "",
+    required,
   };
 }
 
