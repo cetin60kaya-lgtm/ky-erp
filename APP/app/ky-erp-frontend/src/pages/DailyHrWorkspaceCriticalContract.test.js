@@ -13,18 +13,21 @@ test("daily operations quick entry keeps existing personnel visible and protects
   assert.match(workspace, /Hızlı giriş personel listesi eksik yüklendi/);
 });
 
-test("daily entry exposes compact date navigation and day double click quick entry", () => {
+test("daily entry keeps double-click quick entry and quick dialog uses a wide day dropdown", () => {
   assert.match(workspace, /kyop-range-summary/);
   assert.match(workspace, /onDoubleClick=\{\(\) => void openQuick\(item\.date, shift\)\}/);
-  assert.match(workspace, /className="quick-day-list"/);
+  assert.match(workspace, /quick-active-day-card/);
+  assert.match(workspace, /quick-day-popover-grid/);
+  assert.match(workspace, /quickDayPickerOpen/);
   assert.doesNotMatch(workspace, /onClick=\{openQuick\}/);
 });
 
-test("quick entry and person editor persist independent modal sizes", () => {
-  assert.match(workspace, /DIALOG_SIZE_PREFIX/);
-  assert.match(workspace, /writeDialogSize\(kind, next\[kind\]\)/);
-  assert.match(workspace, /daily-operations-quick-entry/);
-  assert.match(workspace, /daily-operations-person-editor/);
+test("daily operation popups use independent canonical shared dialog keys", () => {
+  assert.match(workspace, /data-ky-dialog-key="gunluk-operasyon\.hizli-personel-girisi"/);
+  assert.match(workspace, /data-ky-dialog-key="gunluk-operasyon\.personel-karti"/);
+  assert.match(workspace, /data-ky-dialog-key="gunluk-operasyon\.log-analiz"/);
+  assert.match(workspace, /data-ky-dialog-key="gunluk-operasyon\.excel-onizleme"/);
+  assert.doesNotMatch(workspace, /DIALOG_SIZE_PREFIX|DialogSizer|dialogSizes/);
 });
 
 test("weekly control print is landscape and period summary prints totals", () => {
@@ -38,11 +41,11 @@ test("weekly control print is landscape and period summary prints totals", () =>
 });
 
 test("quick entry remains compact on smaller monitors", () => {
-  assert.match(css, /DAILY-OPERATIONS-CRITICALS-2026-10-03/);
-  assert.match(css, /\.quick-day-list/);
-  assert.match(css, /\.kyop-days/);
-  assert.match(css, /max-width:1366px/);
-  assert.match(css, /max-height:820px/);
+  assert.match(css, /QUICK-ENTRY-WORKSPACE-FINAL-2026-10-03/);
+  assert.match(css, /quick-day-popover-grid/);
+  assert.match(css, /quick-status-strip/);
+  assert.match(css, /max-width:1100px/);
+  assert.match(css, /max-height:720px/);
 });
 
 
@@ -60,7 +63,7 @@ test("quick personnel groups stay tightly packed on small monitors", () => {
   assert.match(css, /\.gop-quick-dialog \.quick-groups\{[\s\S]*display:flex!important/);
   assert.match(css, /flex-direction:column!important/);
   assert.match(css, /\.gop-quick-dialog \.quick-group\{[\s\S]*flex:0 0 auto!important/);
-  assert.match(css, /--quick-card-w:205px/);
+  assert.match(css, /--quick-card-w:260px!important/);
 });
 
 
@@ -73,11 +76,9 @@ test("final quick cards use aligned grid columns with full-name room", () => {
   assert.match(css, /\.gop-quick-dialog \.quick-inline-divider\{/);
 });
 
-test("row and width controls use final grid-safe ranges and fresh saved defaults", () => {
-  assert.match(workspace, /quickRowHeight\.v3/);
-  assert.match(workspace, /quickCardWidth\.v3/);
-  assert.match(workspace, /value >= 30 && value <= 60/);
-  assert.match(workspace, /value >= 220 && value <= 380/);
-  assert.match(workspace, /min="30" max="60" step="2"/);
-  assert.match(workspace, /min="220" max="380" step="10"/);
+test("quick card density is responsive and no longer stored per computer", () => {
+  assert.doesNotMatch(workspace, /quickRowHeight|quickCardWidth|QUICK_ROW_HEIGHT_KEY|QUICK_CARD_WIDTH_KEY/);
+  assert.match(css, /--quick-row-h:38px!important/);
+  assert.match(css, /--quick-card-w:260px!important/);
+  assert.match(css, /grid-template-columns:repeat\(auto-fit,minmax\(var\(--quick-card-w\),1fr\)\)!important/);
 });

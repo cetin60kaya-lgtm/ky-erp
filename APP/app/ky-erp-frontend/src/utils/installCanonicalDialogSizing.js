@@ -69,25 +69,40 @@ function isUsablePanel(element) {
   return true;
 }
 
+function explicitDialogKey(element) {
+  const raw = text(
+    element.dataset.kyDialogKey
+    || element.dataset.modalSizeKey
+    || element.dataset.dialogSizeKey
+    || element.getAttribute("data-modal-key"),
+  );
+  if (!raw) return "";
+  if (raw.includes(".")) return raw;
+  return `${moduleKeyOf(element)}.${slug(raw) || "dialog"}`;
+}
+
 function keyOf(element) {
-  const explicit = text(element.dataset.kyDialogKey);
+  const explicit = explicitDialogKey(element);
   if (explicit) return explicit;
+
   const className = text(element.className);
   const moduleKey = moduleKeyOf(element);
   if (/ccw-transaction/.test(className)) return "muhasebe.cari-hareket";
   if (/ccw-modal/.test(className)) return "muhasebe.firma-karti";
-  if (/gop-dialog/.test(className)) return "gunluk-operasyon.personel-karti";
   if (/eb-document-modal/.test(className)) return "e-belge.belge-detay";
   if (/pc2-drawer/.test(className)) return `imalat.${element.classList.contains("wide") ? "genis-islem" : "islem"}`;
   if (/ikpf-new/.test(className)) return "ik.yeni-personel";
   if (/ikpf-main/.test(className) && element.closest(".ikpf-editing")) return "ik.personel-duzenle";
+
+  const stableId = text(element.id || element.getAttribute("data-testid") || element.getAttribute("name"));
+  if (stableId) return `${moduleKey}.${slug(stableId) || "dialog"}`;
+
   const parentLabel = element.parentElement?.getAttribute?.("aria-label");
   const label = text(element.getAttribute("aria-label") || parentLabel);
-  if (label) return `${moduleKey}.${slug(label) || "dialog"}`;
   const title = text(element.querySelector("h1,h2,h3,[class*='title']")?.textContent);
-  if (title) return `${moduleKey}.${slug(title) || "dialog"}`;
   const classToken = className.split(/\s+/).find((item) => PANEL_CLASS.test(item) && !BACKDROP_CLASS.test(item) && !PART_CLASS.test(item));
-  return `${moduleKey}.${slug(classToken || "dialog")}`;
+  const descriptor = [classToken, label || title].filter(Boolean).join(" ");
+  return `${moduleKey}.${slug(descriptor || "dialog")}`;
 }
 
 function viewportBounds() {
@@ -122,7 +137,7 @@ async function loadSharedSize(key, element) {
     if (!cache.has(key)) cache.set(key, getDialogLayout(key).catch(() => null));
     const result = await cache.get(key);
     element.dataset.kyDialogCanPersist = result?.canPersist ? "true" : "false";
-    if (result?.layout) applySize(element, result.layout);
+    if (result?.layout && element.dataset.kyDialogUserResized !== "true") applySize(element, result.layout);
   } catch {
     element.dataset.kyDialogCanPersist = "false";
   }
@@ -134,14 +149,16 @@ function addHandle(element, key) {
   const handle = document.createElement("button");
   handle.type = "button";
   handle.className = "ky-modal-resize-handle";
-  handle.setAttribute("aria-label", "Pencere en ve boyunu değiştir");
-  handle.title = "En / boy ayarla";
+  handle.setAttribute("aria-label", "Pencere boyutunu değiştir");
+  handle.title = "Pencereyi büyüt / küçült";
+  handle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 16 16 8M11 8h5v5M8 11v5h5"/></svg>';
   handle.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); });
   handle.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
     handle.setPointerCapture?.(event.pointerId);
+    element.dataset.kyDialogUserResized = "true";
     const rect = element.getBoundingClientRect();
     const startX = event.clientX;
     const startY = event.clientY;
@@ -150,8 +167,8 @@ function addHandle(element, key) {
 
     const move = (moveEvent) => {
       const next = clampSize(
-        startWidth + ((moveEvent.clientX - startX) * 2),
-        startHeight + ((moveEvent.clientY - startY) * 2),
+        startWidth + (moveEvent.clientX - startX),
+        startHeight + (moveEvent.clientY - startY),
       );
       applySize(element, next);
     };
@@ -161,7 +178,7 @@ function addHandle(element, key) {
       handle.removeEventListener("pointercancel", finish);
       const rectNow = element.getBoundingClientRect();
       const finalSize = clampSize(rectNow.width, rectNow.height);
-      if (element.dataset.kyDialogCanPersist !== "true") return;
+      if (element.dataset.kyDialogCanPersist === "false") return;
       try {
         const saved = await saveDialogLayout(key, finalSize);
         if (saved?.layout) cache.set(key, Promise.resolve(saved));
@@ -179,6 +196,9 @@ function addHandle(element, key) {
 function enhance(rawElement) {
   const element = directPanelFromBackdrop(rawElement);
   if (!isUsablePanel(element) || element.dataset.kyResizableDialog === "true") return;
+  const owningDialog = element.parentElement?.closest?.("[data-ky-resizable-dialog='true']");
+  const cameFromBackdrop = rawElement !== element;
+  if (owningDialog && !cameFromBackdrop) return;
   const key = keyOf(element);
   if (!key || (key.endsWith(".dialog") && moduleKeyOf(element) === "global")) return;
   element.dataset.kyResizableDialog = "true";
