@@ -11,7 +11,7 @@ public sealed class LegacyGroupForm : Form
     readonly TextBox periodHours = new();
     readonly TextBox dailyHours = new();
     readonly TextBox terminalCode = new();
-    readonly DataGridView grid = new(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,BackgroundColor=Color.White,AutoGenerateColumns=false};
+    readonly DataGridView grid = new(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,BackgroundColor=PdksAppearance.Current.Surface,AutoGenerateColumns=false};
     readonly TextBox[] dayShift = new TextBox[5];
     readonly TextBox[] starts = new TextBox[5];
     readonly TextBox[] ends = new TextBox[5];
