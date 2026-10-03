@@ -37,7 +37,7 @@ public partial class PersonelForm
 
         var net=new NumericUpDown{DecimalPlaces=2,Maximum=10_000_000m,ThousandsSeparator=true,Dock=DockStyle.Fill,Margin=new Padding(0,6,0,6)};
         var mode=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Dock=DockStyle.Fill,Margin=new Padding(0,6,0,6)};
-        mode.Items.AddRange(["Mevzuata göre otomatik","Manuel PEK"]);mode.SelectedIndex=0;
+        mode.Items.AddRange(["Mevzuata göre otomatik","Sabit PEK (tek tanım)"]);mode.SelectedIndex=0;
         var manual=new NumericUpDown{DecimalPlaces=2,Maximum=10_000_000m,ThousandsSeparator=true,Dock=DockStyle.Fill,Margin=new Padding(0,6,0,6),Enabled=false};
         var official=new Label{Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",9.5f,FontStyle.Bold),ForeColor=p.Text};
         var difference=new Label{Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",9.5f,FontStyle.Bold),ForeColor=p.Primary};
@@ -52,7 +52,7 @@ public partial class PersonelForm
 
         Row(1,"Net Hakediş Maaşı",net);
         Row(2,"PEK Modu",mode);
-        Row(3,"Manuel PEK Brüt",manual);
+        Row(3,"Sabit / Bildirilen PEK Brüt",manual);
         Row(4,"Resmî Bordro Neti",official);
         Row(5,"Aradaki Fark",difference);
         Row(6,"Kontrol",warning);
@@ -138,7 +138,7 @@ public partial class PersonelForm
 
             var mismatch=controls.PekMode.SelectedIndex==1 && gross+0.01m<requiredGross && entitlement>official.NetWage+0.01m;
             controls.Warning.Text=mismatch
-                ?"Manuel PEK, bu net hakedişi üretecek mevzuat brütünden düşük. Kaydetmeden önce bordro/PEK uyumunu kontrol edin."
+                ?"Sabit PEK, bu net hakedişi üretecek mevzuat brütünden düşük. Kaydetmeden önce bordro/PEK uyumunu kontrol edin."
                 :"Profil hazır. Aylık hakediş ve resmî bordro birbirine karıştırılmadan ayrı hesaplanacak.";
             controls.Warning.ForeColor=mismatch?p.Warning:p.Success;
         }
