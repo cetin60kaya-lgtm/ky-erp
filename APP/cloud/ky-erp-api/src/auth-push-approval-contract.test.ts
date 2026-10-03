@@ -73,11 +73,12 @@ test("phone approval is primary while Authenticator remains an explicit fallback
   assert.match(authContext, /useAuthenticatorFallback/);
 });
 
-test("company owner and application owner are mandatory phone approvers", () => {
-  assert.match(push, /notifyCompanyOwner: true/);
-  assert.match(push, /notifyApplicationOwner: true/);
-  assert.match(push, /managerApproverUserIds/);
-  assert.match(push, /if \(isSuper\(actor\.role\)\) return true/);
+test("only the extra-verified application owner phone can approve system login and session requests", () => {
+  assert.match(push, /ownerControlAuthorized/);
+  assert.match(push, /isSuper\(actor\.role\) && actor\.ownerControlAuthorized === true/);
+  assert.match(push, /activeDevicesForUser/);
+  assert.match(push, /purpose === "MANAGER"/);
+  assert.match(push, /row\.ownerControlAuthorized === true/);
   assert.match(push, /SESSION_MANAGER_PUSH_DISPATCHED/);
   assert.match(push, /SECURITY_APPROVAL_KINDS\.SESSION/);
   assert.match(policy, /notifySessionApproval/);
