@@ -70,7 +70,8 @@ test("personnel cards use the complete HKN master roster while payroll stays per
   assert.match(monthly, /filteredMasterEmployees/);
   assert.match(monthly, /İK Ana Personel Kadrosu/);
   assert.match(monthly, /nextHknCode\(masterEmployees\)/);
-  assert.match(monthly, /Personel Kodu \(Otomatik\)/);
+  assert.match(monthly, /Personel Kodu/);
+  assert.match(monthly, /HKN Numarasını Değiştir/);
 });
 
 test("payroll person actions link to the same source movements", () => {
@@ -134,4 +135,21 @@ test("official payroll output is the payment completion action", () => {
   assert.match(monthly, /Bordroyu Tamamla \/ PDF/);
   assert.match(monthly, /10['’]lu Fiş \+ Tamamla/);
   assert.match(monthly, /Tamamla \/ Excel/);
+});
+
+
+test("all IK dialogs use the shared overflow-safe modal standard", () => {
+  assert.match(css, /\/\* IK modal standard - all dialogs \*\//);
+  assert.match(css, /\.modal-bg \.mb\{[\s\S]*overflow-y:auto;[\s\S]*overflow-x:hidden;/);
+  assert.match(css, /\.modal-bg \.mf\{[\s\S]*margin:auto 0 0;/);
+  assert.match(css, /\.modal-bg \.tw,[\s\S]*overflow:auto;/);
+});
+
+test("personnel card supports clear exit/reactivation plus admin recode and guarded hard delete", () => {
+  assert.match(monthly, /İşten Çıkış Bugün/);
+  assert.match(monthly, /Aktife Geri Al/);
+  assert.match(monthly, /adminMaintainIkAdvancedPerson/);
+  assert.match(monthly, /HKN Numarasını Değiştir/);
+  assert.match(monthly, /Yanlış \/ Mükerrer Kaydı Kalıcı Sil/);
+  assert.match(monthly, /SİL \$\{modalDraft\.code/);
 });

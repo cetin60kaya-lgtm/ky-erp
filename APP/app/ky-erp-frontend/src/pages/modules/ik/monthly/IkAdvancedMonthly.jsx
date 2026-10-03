@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import {
   createIkAdvancedPerson,
+  adminMaintainIkAdvancedPerson,
   deleteIkAdvancedFinanceMovement,
   getIkAdvancedAuditLogs,
   getIkAdvancedMonth,
@@ -313,6 +314,10 @@ function draftPerson(employee = {}) {
     note: employee.note || "",
     effectiveDate: employee.effectiveDate || istanbulDateKey(),
     changeNote: "",
+    adminNewCode: employee.code || "",
+    adminCodeConfirm: "",
+    adminDeleteConfirm: "",
+    adminReason: "",
   };
 }
 
@@ -846,6 +851,54 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setSelectedId(employee.id);
     setModalDraft(draftPerson(employee));
     setModal("personel");
+  };
+
+  const adminRecodePerson = async () => {
+    if (!modalDraft.id) return setNotice("Önce personel kartını kaydedin.");
+    if (!modalDraft.adminNewCode?.trim()) return setNotice("Yeni HKN personel kodunu girin.");
+    if (!modalDraft.adminCodeConfirm?.trim()) return setNotice(`Yönetici onayı için mevcut kodu (${modalDraft.code}) yazın.`);
+    setBusy(true);
+    try {
+      const result = await adminMaintainIkAdvancedPerson(modalDraft.id, {
+        mainCompanyId: companyId,
+        action: "RECODE",
+        personnelCode: modalDraft.adminNewCode,
+        confirmText: modalDraft.adminCodeConfirm,
+        reason: modalDraft.adminReason || "Yönetici onayıyla personel kodu düzeltildi.",
+      });
+      setModal(null);
+      setNotice(`Personel kodu ${result?.oldCode || modalDraft.code} → ${result?.code || modalDraft.adminNewCode} olarak değiştirildi.`);
+      await load({ force: true, prepare: true });
+    } catch (error) {
+      setNotice(error?.message || "Personel kodu değiştirilemedi.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const adminHardDeletePerson = async () => {
+    if (!modalDraft.id) return setNotice("Kaydedilmemiş personel silinemez.");
+    const expected = `SİL ${modalDraft.code}`;
+    if (upper(modalDraft.adminDeleteConfirm) !== upper(expected)) return setNotice(`Kalıcı silme için "${expected}" yazın.`);
+    if ((modalDraft.adminReason || "").trim().length < 5) return setNotice("Kalıcı silme nedeni yazın.");
+    if (!window.confirm(`${modalDraft.fullName} (${modalDraft.code}) kalıcı silinecek. Bu işlem yalnız yanlış/mükerrer ve operasyon geçmişi olmayan kayıtlar için yapılabilir. Devam edilsin mi?`)) return;
+    setBusy(true);
+    try {
+      await adminMaintainIkAdvancedPerson(modalDraft.id, {
+        mainCompanyId: companyId,
+        action: "HARD_DELETE",
+        confirmText: modalDraft.adminDeleteConfirm,
+        reason: modalDraft.adminReason,
+      });
+      setModal(null);
+      setSelectedId("");
+      setNotice(`${modalDraft.fullName} (${modalDraft.code}) yanlış/mükerrer personel kaydı kalıcı silindi.`);
+      await load({ force: true, prepare: true });
+    } catch (error) {
+      setNotice(error?.message || "Personel kaydı silinemedi.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const openFinance = (type, row = null) => {
@@ -2438,7 +2491,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     if (modal === "personel") return (
       <Modal title="Personel Kartı ve Ödeme Ayarları" sub="Kimlik, çalışma, SGK, ücret, banka ve izin bilgilerini tek ekrandan yönetin" size="medium" onClose={() => setModal(null)}>
         <div className="modal-section-grid">
-          <div className="modal-section"><h3>Kimlik ve Çalışma Bilgileri</h3><div className="form"><Field label="Ad Soyad" half><input value={modalDraft.fullName||""} onChange={(event)=>setModalDraft((old)=>({...old,fullName:event.target.value}))}/></Field><Field label="TC Kimlik No"><input value={modalDraft.identityNo||""} maxLength={11} onChange={(event)=>setModalDraft((old)=>({...old,identityNo:event.target.value.replace(/\D/g,"")}))}/></Field><Field label="Personel Kodu (Otomatik)"><input value={modalDraft.code||""} readOnly /></Field><Field label="Kart No"><input value={modalDraft.cardNo||""} onChange={(event)=>setModalDraft((old)=>({...old,cardNo:event.target.value}))}/></Field><Field label="İşe Giriş"><input type="date" value={modalDraft.startDate||""} onChange={(event)=>setModalDraft((old)=>({...old,startDate:event.target.value}))}/></Field><Field label="İşten Çıkış"><input type="date" value={modalDraft.exitDate||""} onChange={(event)=>setModalDraft((old)=>({...old,exitDate:event.target.value,status:event.target.value?"Pasif":"Aktif"}))}/></Field><Field label="Görev"><input value={modalDraft.title||""} onChange={(event)=>setModalDraft((old)=>({...old,title:event.target.value}))}/></Field><Field label="Bölüm"><input value={modalDraft.department||""} onChange={(event)=>setModalDraft((old)=>({...old,department:event.target.value}))}/></Field><Field label="Çalışma Durumu"><input value={modalDraft.exitDate ? "İşten ayrılmış / çıkış kayıtlı" : "Aktif"} readOnly /></Field></div></div>
+          <div className="modal-section"><h3>Kimlik ve Çalışma Bilgileri</h3><div className="form"><Field label="Ad Soyad" half><input value={modalDraft.fullName||""} onChange={(event)=>setModalDraft((old)=>({...old,fullName:event.target.value}))}/></Field><Field label="TC Kimlik No"><input value={modalDraft.identityNo||""} maxLength={11} onChange={(event)=>setModalDraft((old)=>({...old,identityNo:event.target.value.replace(/\D/g,"")}))}/></Field><Field label="Personel Kodu"><input value={modalDraft.code||""} readOnly /></Field><Field label="Kart No"><input value={modalDraft.cardNo||""} onChange={(event)=>setModalDraft((old)=>({...old,cardNo:event.target.value}))}/></Field><Field label="İşe Giriş"><input type="date" value={modalDraft.startDate||""} onChange={(event)=>setModalDraft((old)=>({...old,startDate:event.target.value}))}/></Field><Field label="İşten Çıkış"><input type="date" value={modalDraft.exitDate||""} onChange={(event)=>setModalDraft((old)=>({...old,exitDate:event.target.value,status:event.target.value?"Pasif":"Aktif"}))}/></Field><Field label="Görev"><input value={modalDraft.title||""} onChange={(event)=>setModalDraft((old)=>({...old,title:event.target.value}))}/></Field><Field label="Bölüm"><input value={modalDraft.department||""} onChange={(event)=>setModalDraft((old)=>({...old,department:event.target.value}))}/></Field><Field label="Çalışma Durumu"><input value={modalDraft.exitDate ? "İşten ayrılmış / pasif" : "Aktif"} readOnly /><div className="employment-actions">{modalDraft.exitDate ? <button type="button" className="btn" onClick={()=>setModalDraft((old)=>({...old,exitDate:"",status:"Aktif",changeNote:old.changeNote||"Personel yeniden aktife alındı"}))}>Aktife Geri Al</button> : <button type="button" className="btn orange" onClick={()=>setModalDraft((old)=>({...old,exitDate:istanbulDateKey(),status:"Pasif",changeNote:old.changeNote||"İşten çıkış kaydı"}))}>İşten Çıkış Bugün</button>}</div></Field></div></div>
           <div className="modal-section"><h3>SGK ve Bordro Kapsamı · {MONTHS[month-1]} {year}</h3><div className="form">
             <Field label="Personel Statüsü" half><select value={modalDraft.personnelStatus||"NORMAL"} onChange={(event)=>setModalDraft((old)=>({...old,personnelStatus:event.target.value}))}><option value="NORMAL">Normal</option><option value="RETIRED">Emekli</option></select></Field>
             <Field label="SGK Durumu" half><select value={modalDraft.sgkFollow||"BELIRTILMEMIS"} onChange={(event)=>setModalDraft((old)=>({...old,sgkFollow:event.target.value,sgkDays:event.target.value==="SGKSIZ"?0:old.sgkDays}))}><option value="SGKLI">SGK'lı</option><option value="SGKSIZ">SGK'sız</option><option value="BELIRTILMEMIS">Seçiniz</option></select></Field>
@@ -2451,6 +2504,21 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
             {modalDraft.personnelStatus==="RETIRED" ? <div className="wide warnline">Emekli personel aktif çalışan olarak devam edebilir. Emekli statüsü SGK durumundan bağımsızdır.</div> : null}
           </div></div>
           <div className="modal-section"><h3>Ücret ve Ödeme Planı</h3><div className="form"><Field label="Gerçek Maaş"><input type="number" value={modalDraft.salary||""} onChange={(event)=>setModalDraft((old)=>({...old,salary:event.target.value}))}/></Field><Field label="Baz Personel"><select value={modalDraft.baseEmployeeId||""} onChange={(event)=>setModalDraft((old)=>({...old,baseEmployeeId:event.target.value}))}><option value="">Yok - gerçek maaşı kullan</option>{rawEmployees.filter((item)=>item.id!==modalDraft.id).map((item)=><option key={item.id} value={item.id}>{item.fullName} - {money(item.salary)}{upper(item.status).includes("PAS") ? " · Pasif referans" : ""}</option>)}</select></Field><Field label="Bordro Baz Maaşı"><input value={money(modalDraft.baseEmployeeId?rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary:modalDraft.salary)} readOnly/></Field><Field label="EK"><input value={money(modalDraft.baseEmployeeId?Math.max(num(modalDraft.salary)-num(rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary),0):0)} readOnly/></Field><Field label="Yol Yardımı"><input type="number" value={modalDraft.roadAllowance||""} onChange={(event)=>setModalDraft((old)=>({...old,roadAllowance:event.target.value}))}/></Field><Field label="Mesai Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.overtimeHourlyBase||225} onChange={(event)=>setModalDraft((old)=>({...old,overtimeHourlyBase:event.target.value}))}/></Field><Field label="Kesinti Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.deductionHourlyBase||300} onChange={(event)=>setModalDraft((old)=>({...old,deductionHourlyBase:event.target.value}))}/></Field><Field label="Ödeme Tipi"><select value={modalDraft.paymentType||"BANKA_ELDEN"} onChange={(event)=>setModalDraft((old)=>({...old,paymentType:event.target.value}))}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field><Field label="Banka Planı"><input type="number" value={modalDraft.bankAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,bankAmount:event.target.value}))}/></Field><Field label="Elden Planı"><input type="number" value={modalDraft.cashAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,cashAmount:event.target.value}))}/></Field><Field label="Resmi Bordro Net"><input value={money(selected?.sgkNet)} readOnly/></Field><Field label="Geçerlilik Tarihi"><input type="date" value={modalDraft.effectiveDate||""} onChange={(event)=>setModalDraft((old)=>({...old,effectiveDate:event.target.value}))}/></Field><Field label="Değişiklik Açıklaması" wide><input value={modalDraft.changeNote||""} onChange={(event)=>setModalDraft((old)=>({...old,changeNote:event.target.value}))} placeholder="Örn. Ekim 2026 maaş/yol revizyonu"/></Field><Field label="Not" wide><textarea value={modalDraft.note||""} onChange={(event)=>setModalDraft((old)=>({...old,note:event.target.value}))}/></Field></div></div>
+          {modalDraft.id ? <div className="admin-personnel-box">
+            <div className="admin-personnel-head"><div><b>Yönetici İşlemleri</b><span>Personel numarası değişikliği ve yanlış/mükerrer kayıt silme yalnız yönetici onayıyla çalışır; tüm işlemler loglanır.</span></div><span className="badge red">Admin Onayı</span></div>
+            <div className="admin-personnel-grid">
+              <Field label="Mevcut HKN"><input value={modalDraft.code||""} readOnly /></Field>
+              <Field label="Yeni HKN Kodu"><input value={modalDraft.adminNewCode||""} onChange={(event)=>setModalDraft((old)=>({...old,adminNewCode:event.target.value.toLocaleUpperCase("tr-TR")}))} placeholder="HKN-23" /></Field>
+              <Field label="Kod Değişikliği Onayı"><input value={modalDraft.adminCodeConfirm||""} onChange={(event)=>setModalDraft((old)=>({...old,adminCodeConfirm:event.target.value}))} placeholder={modalDraft.code || "Mevcut kodu yazın"} /></Field>
+              <Field label="Yönetici Açıklaması"><input value={modalDraft.adminReason||""} onChange={(event)=>setModalDraft((old)=>({...old,adminReason:event.target.value}))} placeholder="Yanlış kayıt / kod düzeltmesi nedeni" /></Field>
+              <Field label="Kalıcı Silme Onayı" wide><input value={modalDraft.adminDeleteConfirm||""} onChange={(event)=>setModalDraft((old)=>({...old,adminDeleteConfirm:event.target.value}))} placeholder={`SİL ${modalDraft.code || "HKN-XX"}`} /></Field>
+            </div>
+            <div className="admin-personnel-actions">
+              <button type="button" className="btn" disabled={busy || !modalDraft.adminNewCode || upper(modalDraft.adminNewCode)===upper(modalDraft.code)} onClick={adminRecodePerson}>HKN Numarasını Değiştir</button>
+              <button type="button" className="btn red" disabled={busy} onClick={adminHardDeletePerson}>Yanlış / Mükerrer Kaydı Kalıcı Sil</button>
+              <span className="badge orange">Geçmiş işlem varsa kalıcı silme engellenir; personel çıkış tarihiyle pasife alınır.</span>
+            </div>
+          </div> : null}
         </div>
         <ModalFooter onClose={() => setModal(null)} actions={<button className="btn primary" disabled={busy} onClick={savePerson}>{busy?"Kaydediliyor":"Tüm Değişiklikleri Kaydet"}</button>} />
       </Modal>

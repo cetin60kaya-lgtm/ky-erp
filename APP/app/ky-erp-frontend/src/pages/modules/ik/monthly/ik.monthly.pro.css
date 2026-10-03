@@ -931,3 +931,136 @@
   .ik-monthly-pro .ik-pro-leave-balance{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ik-monthly-pro .ik-pro-leave-ledger>summary{align-items:flex-start;flex-direction:column}
 }
+
+/* IK modal standard - all dialogs */
+.modal-bg{
+  padding:clamp(10px,2vw,24px);
+  overflow:hidden;
+}
+.modal-bg .modal{
+  max-width:100%;
+  max-height:calc(100dvh - 2 * clamp(10px,2vw,24px));
+  min-width:0;
+  min-height:0;
+}
+.modal-bg .mh{
+  flex:0 0 auto;
+  min-width:0;
+  padding:12px 18px;
+}
+.modal-bg .mh>div{min-width:0}
+.modal-bg .mh b,.modal-bg .mh small{overflow-wrap:anywhere}
+.modal-bg .mb{
+  flex:1 1 auto;
+  min-width:0;
+  min-height:0;
+  max-width:100%;
+  padding:16px 18px 0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+}
+.modal-bg .mb>*,
+.modal-bg .modal-section-grid,
+.modal-bg .modal-section,
+.modal-bg .form,
+.modal-bg .drawer-grid,
+.modal-bg .leave-modal-layout,
+.modal-bg .payroll-final-layout,
+.modal-bg .payroll-final-main{
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+}
+.modal-bg .form>*{min-width:0}
+.modal-bg input,
+.modal-bg select,
+.modal-bg textarea{
+  min-width:0;
+  max-width:100%;
+}
+.modal-bg .mf{
+  position:sticky;
+  bottom:0;
+  flex:0 0 auto;
+  width:100%;
+  max-width:100%;
+  margin:auto 0 0;
+  padding:12px 0 14px;
+  box-sizing:border-box;
+  background:#fbfdff;
+  border-top:1px solid var(--line);
+}
+.modal-bg .mf .group{
+  min-width:0;
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+.modal-bg .tw,
+.modal-bg .selectlist,
+.modal-bg .leave-day-proof-table,
+.modal-bg .leave-proof-table,
+.modal-bg .payroll-person-rail-list{
+  max-width:100%;
+  min-width:0;
+  overflow:auto;
+  overscroll-behavior:contain;
+}
+.modal-bg .admin-personnel-box{
+  grid-column:1/-1;
+  margin-top:4px;
+  padding:12px;
+  border:1px solid #f0c8c8;
+  border-radius:10px;
+  background:#fffafa;
+}
+.modal-bg .admin-personnel-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+}
+.modal-bg .admin-personnel-head span{display:block;margin-top:3px;color:#7a6670;font-size:10px}
+.modal-bg .admin-personnel-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:9px;
+}
+.modal-bg .admin-personnel-grid .wide{grid-column:1/-1}
+.modal-bg .admin-personnel-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+  margin-top:10px;
+}
+.modal-bg .employment-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:5px;
+}
+@media(max-width:900px){
+  .modal-bg{padding:8px}
+  .modal-bg .modal,
+  .modal-bg .modal.small,
+  .modal-bg .modal.medium,
+  .modal-bg .modal.wide,
+  .modal-bg .modal.leave-dialog{
+    width:calc(100vw - 16px);
+    height:calc(100dvh - 16px);
+    max-height:calc(100dvh - 16px);
+  }
+  .modal-bg .mb{padding:12px 12px 0}
+  .modal-bg .admin-personnel-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:560px){
+  .modal-bg .admin-personnel-grid{grid-template-columns:1fr}
+  .modal-bg .mh{padding:10px 12px}
+  .modal-bg .mf{align-items:stretch;flex-direction:column-reverse}
+  .modal-bg .mf .group{justify-content:stretch}
+  .modal-bg .mf .group .btn,.modal-bg .mf>.btn{width:100%}
+}

@@ -97,3 +97,16 @@ test("final payroll output path freezes rows and marks them paid in one workflow
   assert.match(monthly, /Bordroyu Tamamla \/ PDF/);
   assert.match(monthly, /window\.confirm/);
 });
+
+
+test("canonical personnel admin maintenance requires admin and protects operational history", () => {
+  const relational = api("ik-relational-cloud.ts");
+  assert.match(relational, /async function adminMaintainPerson/);
+  assert.match(relational, /getAuthenticatedUser/);
+  assert.match(relational, /ADMIN_REQUIRED/);
+  assert.match(relational, /ADMIN_RECODE/);
+  assert.match(relational, /ADMIN_HARD_DELETE/);
+  assert.match(relational, /PERSONNEL_HAS_OPERATIONAL_HISTORY/);
+  assert.match(relational, /SİL \$\{currentCode\}/);
+  assert.match(relational, /\/api\/ik\/advanced\/person-card\/:employeeId\/admin-maintenance/);
+});
