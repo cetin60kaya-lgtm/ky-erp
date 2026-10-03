@@ -3,6 +3,7 @@ namespace HKN.Personel.Native;
 public sealed class ThemeSettingsForm : Form
 {
     readonly ComboBox mode = new(){DropDownStyle=ComboBoxStyle.DropDownList};
+    readonly ComboBox sidebar = new(){DropDownStyle=ComboBoxStyle.DropDownList};
     readonly FlowLayoutPanel accents = new(){Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,1,0,0)};
     readonly Panel preview = new(){Dock=DockStyle.Fill};
     PdksAccent selectedAccent = PdksAppearance.Accent;
@@ -12,8 +13,8 @@ public sealed class ThemeSettingsForm : Form
     {
         Text="Tema ve Görünüm";
         StartPosition=FormStartPosition.CenterParent;
-        Size=new Size(720,520);
-        MinimumSize=new Size(680,480);
+        Size=new Size(760,560);
+        MinimumSize=new Size(720,520);
         Font=new Font("Segoe UI",9f);
         Build();
         LoadCurrent();
@@ -27,7 +28,7 @@ public sealed class ThemeSettingsForm : Form
 
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(18),BackColor=p.Canvas};
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,86));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,132));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,174));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
 
@@ -38,16 +39,20 @@ public sealed class ThemeSettingsForm : Form
         heroLayout.Controls.Add(new Label{
             Text="Tema ve Görünüm",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",13f,FontStyle.Bold),ForeColor=p.Text},0,0);
         heroLayout.Controls.Add(new Label{
-            Text="Tema modu ve vurgu rengi birbirinden bağımsızdır. Seçim tüm uygulamaya uygulanır ve kaydedilir.",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",8.8f),ForeColor=p.Muted},0,1);
+            Text="Uygulama teması, sol menü görünümü ve vurgu rengi birbirinden bağımsızdır. Her seçim kalıcı olarak kaydedilir.",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Segoe UI",8.8f),ForeColor=p.Muted},0,1);
         hero.Controls.Add(heroLayout);
         root.Controls.Add(hero,0,0);
 
-        var settings=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=2,Padding=new Padding(18,14,18,10),BackColor=p.Surface,Margin=new Padding(0,10,0,10)};
+        var settings=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=3,Padding=new Padding(18,14,18,10),BackColor=p.Surface,Margin=new Padding(0,10,0,10)};
         settings.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        settings.RowStyles.Add(new RowStyle(SizeType.Absolute,42));settings.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        settings.Controls.Add(Label("Tema"),0,0);
+        settings.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+        settings.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+        settings.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        settings.Controls.Add(Label("Uygulama Teması"),0,0);
         mode.Items.AddRange(["Açık","Koyu"]);mode.Dock=DockStyle.Fill;mode.Margin=new Padding(0,6,0,6);settings.Controls.Add(mode,1,0);
-        settings.Controls.Add(Label("Vurgu Rengi"),0,1);
+        settings.Controls.Add(Label("Sol Menü"),0,1);
+        sidebar.Items.AddRange(["Açık","Koyu","Temayı Takip Et"]);sidebar.Dock=DockStyle.Fill;sidebar.Margin=new Padding(0,6,0,6);settings.Controls.Add(sidebar,1,1);
+        settings.Controls.Add(Label("Vurgu Rengi"),0,2);
         foreach(var a in Enum.GetValues<PdksAccent>())
         {
             var sample=a==PdksAccent.Custom?selectedCustomAccent:PdksAppearance.AccentColor(a);
@@ -74,7 +79,7 @@ public sealed class ThemeSettingsForm : Form
             };
             accents.Controls.Add(b);
         }
-        settings.Controls.Add(accents,1,1);
+        settings.Controls.Add(accents,1,2);
         root.Controls.Add(settings,0,1);
 
         preview.Margin=new Padding(0,0,0,10);
@@ -87,11 +92,18 @@ public sealed class ThemeSettingsForm : Form
 
         Controls.Add(root);
         mode.SelectedIndexChanged+=(_,_)=>UpdatePreview();
+        sidebar.SelectedIndexChanged+=(_,_)=>UpdatePreview();
     }
 
     void LoadCurrent()
     {
         mode.SelectedIndex=PdksAppearance.Mode==PdksThemeMode.Dark?1:0;
+        sidebar.SelectedIndex=PdksAppearance.SidebarMode switch
+        {
+            PdksSidebarMode.Dark => 1,
+            PdksSidebarMode.FollowTheme => 2,
+            _ => 0
+        };
         selectedAccent=PdksAppearance.Accent;
         selectedCustomAccent=PdksAppearance.CustomAccentColor;
         UpdateAccentSelection();
@@ -106,9 +118,15 @@ public sealed class ThemeSettingsForm : Form
 
     void UpdatePreview()
     {
-        if(mode.SelectedIndex<0)return;
+        if(mode.SelectedIndex<0 || sidebar.SelectedIndex<0)return;
         var previewMode=mode.SelectedIndex==1?PdksThemeMode.Dark:PdksThemeMode.Light;
-        var palette=BuildPreviewPalette(previewMode,selectedAccent,selectedCustomAccent);
+        var previewSidebar=sidebar.SelectedIndex switch
+        {
+            1 => PdksSidebarMode.Dark,
+            2 => PdksSidebarMode.FollowTheme,
+            _ => PdksSidebarMode.Light
+        };
+        var palette=BuildPreviewPalette(previewMode,selectedAccent,selectedCustomAccent,previewSidebar);
 
         preview.Controls.Clear();
         preview.BackColor=palette.Canvas;
@@ -127,21 +145,43 @@ public sealed class ThemeSettingsForm : Form
         preview.Controls.Add(shell);
     }
 
-    static PdksPalette BuildPreviewPalette(PdksThemeMode themeMode,PdksAccent accent,Color customAccent)
+    static PdksPalette BuildPreviewPalette(PdksThemeMode themeMode,PdksAccent accent,Color customAccent,PdksSidebarMode sidebarMode)
     {
         var primary=accent==PdksAccent.Custom?customAccent:PdksAppearance.AccentColor(accent);
+        var darkSidebar=sidebarMode==PdksSidebarMode.Dark ||
+                        (sidebarMode==PdksSidebarMode.FollowTheme && themeMode==PdksThemeMode.Dark);
+        var side=darkSidebar?Color.FromArgb(15,23,42):Color.White;
+        var sideHover=darkSidebar?Color.FromArgb(30,41,59):Blend(primary,Color.White,.91);
+        var sideText=darkSidebar?Color.FromArgb(241,245,249):Color.FromArgb(15,23,42);
+        var sideMuted=darkSidebar?Color.FromArgb(148,163,184):Color.FromArgb(71,85,105);
+
         if(themeMode==PdksThemeMode.Dark)
-            return new PdksPalette("Koyu",true,Color.FromArgb(11,18,32),Color.FromArgb(17,24,39),Color.FromArgb(24,33,49),Color.FromArgb(8,15,28),Color.FromArgb(30,41,59),Color.FromArgb(241,245,249),Color.FromArgb(148,163,184),Color.FromArgb(51,65,85),primary,Color.FromArgb(30,41,59),Color.FromArgb(241,245,249),Color.FromArgb(148,163,184),Color.FromArgb(34,197,94),Color.FromArgb(245,158,11),Color.FromArgb(248,113,113),Color.FromArgb(69,27,31),Color.FromArgb(30,41,59),Color.FromArgb(30,41,59),Color.FromArgb(15,23,42));
-        return new PdksPalette("Açık",false,Color.FromArgb(244,247,251),Color.White,Color.FromArgb(248,250,252),Color.FromArgb(15,23,42),Color.FromArgb(30,41,59),Color.FromArgb(15,23,42),Color.FromArgb(100,116,139),Color.FromArgb(226,232,240),primary,Color.FromArgb(239,246,255),Color.White,Color.FromArgb(203,213,225),Color.FromArgb(22,163,74),Color.FromArgb(202,118,35),Color.FromArgb(185,28,28),Color.FromArgb(255,241,240),Color.FromArgb(219,234,254),Color.FromArgb(241,245,249),Color.White);
+            return new PdksPalette("Koyu",true,Color.FromArgb(11,18,32),Color.FromArgb(17,24,39),Color.FromArgb(24,33,49),side,sideHover,Color.FromArgb(241,245,249),Color.FromArgb(148,163,184),Color.FromArgb(51,65,85),primary,Blend(primary,Color.FromArgb(17,24,39),.78),sideText,sideMuted,Color.FromArgb(34,197,94),Color.FromArgb(245,158,11),Color.FromArgb(248,113,113),Color.FromArgb(69,27,31),Color.FromArgb(30,41,59),Color.FromArgb(30,41,59),Color.FromArgb(15,23,42));
+        return new PdksPalette("Açık",false,Color.FromArgb(244,247,251),Color.White,Color.FromArgb(248,250,252),side,sideHover,Color.FromArgb(15,23,42),Color.FromArgb(100,116,139),Color.FromArgb(226,232,240),primary,Blend(primary,Color.White,.90),sideText,sideMuted,Color.FromArgb(22,163,74),Color.FromArgb(202,118,35),Color.FromArgb(185,28,28),Color.FromArgb(255,241,240),Blend(primary,Color.White,.84),Color.FromArgb(241,245,249),Color.White);
+    }
+
+    static Color Blend(Color a,Color b,double amountOfB)
+    {
+        amountOfB=Math.Clamp(amountOfB,0,1);var amountOfA=1d-amountOfB;
+        return Color.FromArgb(
+            (int)Math.Round(a.R*amountOfA+b.R*amountOfB),
+            (int)Math.Round(a.G*amountOfA+b.G*amountOfB),
+            (int)Math.Round(a.B*amountOfA+b.B*amountOfB));
     }
 
     void ApplySelection()
     {
         var selectedMode=mode.SelectedIndex==1?PdksThemeMode.Dark:PdksThemeMode.Light;
+        var selectedSidebar=sidebar.SelectedIndex switch
+        {
+            1 => PdksSidebarMode.Dark,
+            2 => PdksSidebarMode.FollowTheme,
+            _ => PdksSidebarMode.Light
+        };
         if(selectedAccent==PdksAccent.Custom)
-            PdksAppearance.SetCustomAccent(selectedMode,selectedCustomAccent);
+            PdksAppearance.SetCustomAccent(selectedMode,selectedCustomAccent,selectedSidebar);
         else
-            PdksAppearance.Set(selectedMode,selectedAccent);
+            PdksAppearance.Set(selectedMode,selectedAccent,selectedSidebar);
         PdksTheme.ReapplyOpenForms();
         DialogResult=DialogResult.OK;
         Close();
