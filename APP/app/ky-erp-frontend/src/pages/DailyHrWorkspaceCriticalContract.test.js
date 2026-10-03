@@ -30,14 +30,18 @@ test("daily operation popups use independent canonical shared dialog keys", () =
   assert.doesNotMatch(workspace, /DIALOG_SIZE_PREFIX|DialogSizer|dialogSizes/);
 });
 
-test("weekly control print is landscape and period summary prints totals", () => {
+test("weekly control and summary prints use the same readable landscape personnel matrix", () => {
+  assert.match(workspace, /function printWeeklyMatrix/);
+  assert.match(workspace, /function printWeeklyControlList/);
+  assert.match(workspace, /function printWeeklySummary/);
   assert.match(workspace, /@page\{size:A4 landscape/);
-  assert.match(workspace, /TOPLAM PERSONEL/);
-  assert.match(workspace, /TOPLAM GÜNDÜZ/);
-  assert.match(workspace, /TOPLAM GECE/);
-  assert.match(workspace, /GENEL TOPLAM GÜN/);
-  assert.match(workspace, /TOPLAM TUTAR/);
-  assert.match(workspace, /showTotals: true/);
+  assert.match(workspace, /SAYFA TOPLAMI/);
+  assert.match(workspace, /GENEL TOPLAM · \$\{totals\.people\} PERSONEL/);
+  assert.match(workspace, /pageDayTotals/);
+  assert.match(workspace, /dayTotals/);
+  assert.match(workspace, /Toplam<br\/>Gün/);
+  assert.match(workspace, /Toplam Tutar/);
+  assert.match(workspace, /printWeeklySummary\(range, days, weeklyControlRows\)/);
 });
 
 test("quick entry remains compact on smaller monitors", () => {
@@ -86,4 +90,17 @@ test("quick card density keeps the two manual row and width controls", () => {
   assert.match(workspace, /"--quick-card-w": `\$\{quickCardWidth\}px`/);
   assert.match(css, /QUICK-DENSITY-CONTROLS-RESTORED-2026-10-03/);
   assert.match(css, /grid-template-columns:repeat\(auto-fit,minmax\(var\(--quick-card-w\),1fr\)\)!important/);
+});
+
+
+test("completed past weeks do not stay in payment waiting UI and print completes open payment", () => {
+  assert.match(workspace, /function isPastCompletedWeek/);
+  assert.match(workspace, /paymentPeriodIsHistorical/);
+  assert.match(workspace, /visiblePaymentRows/);
+  assert.match(workspace, /paymentPageOpenMetrics/);
+  assert.match(workspace, /Geçmiş hafta tamamlandı/);
+  assert.match(workspace, /Çıktı = ödeme tamamlandı/);
+  assert.match(workspace, /createDailyPayment/);
+  assert.match(workspace, /TOPLAM ÖDEME/);
+  assert.doesNotMatch(workspace, /<footer><span>ÖDENDİ<\/span>/);
 });
