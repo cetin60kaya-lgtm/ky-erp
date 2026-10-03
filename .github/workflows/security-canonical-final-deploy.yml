@@ -93,32 +93,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          probe="${GITHUB_SHA}-${GITHUB_RUN_ID}"
-          enrollment_id="TESTCANONICAL"
-          enrollment_token="TESTTOKEN"
-          legacy_url="https://security.kyerp.net/security/?enrollmentId=${enrollment_id}&enrollmentToken=${enrollment_token}&mode=link&probe=${probe}"
-
-          ok=0
-          for attempt in 1 2 3 4 5 6 7 8; do
-            curl -sS --max-time 20 -H 'Accept: text/html' -D /tmp/security.headers -o /dev/null "$legacy_url" || true
-            status="$(awk 'toupper($1) ~ /^HTTP\// {code=$2} END{print code}' /tmp/security.headers)"
-            location="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^[^:]+:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' /tmp/security.headers)"
-            release="$(awk 'BEGIN{IGNORECASE=1} /^x-kyerp-security-app:/{sub(/^[^:]+:[[:space:]]*/,""); sub(/\r$/,""); print; exit}' /tmp/security.headers)"
-            echo "Attempt ${attempt}: status=${status:-none} release=${release:-none} location=${location:-none}"
-
-            if [ "$status" = "308" ] \
-              && [ "$release" = "fresh-v3-compat" ] \
-              && printf '%s' "$location" | grep -Fq 'https://security.kyerp.net/ky-guvenlik/' \
-              && printf '%s' "$location" | grep -Fq "enrollmentId=${enrollment_id}" \
-              && printf '%s' "$location" | grep -Fq "enrollmentToken=${enrollment_token}" \
-              && printf '%s' "$location" | grep -Fq 'mode=link' \
-              && ! printf '%s' "$location" | grep -Fq 'probe='; then
-              ok=1
-              break
-            fi
-            sleep 3
-          done
-          test "$ok" -eq 1
+          legacy_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://security.kyerp.net/security/)"
+          test "$legacy_status" = "410"
 
           primary_status="$(curl --silent --show-error --max-time 20 -o /tmp/security-primary.html -w '%{http_code}' https://security.kyerp.net/ky-guvenlik/)"
           test "$primary_status" = "200"
