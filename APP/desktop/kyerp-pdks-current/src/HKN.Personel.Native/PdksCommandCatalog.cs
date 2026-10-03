@@ -3,6 +3,7 @@ namespace HKN.Personel.Native;
 public enum PdksCommandId
 {
     Home,
+    Operations,
     LiveAttendance,
     EntryExit,
     Personnel,
@@ -66,17 +67,16 @@ public static class PdksCommandCatalog
 {
     static readonly PdksCommandDescriptor[] Items =
     [
-        new(PdksCommandId.Home,"Genel Bakış","Günün personel hareketleri ve hızlı işlemler",PdksModule.Home,PdksToolbarIcon.Home,"ÇALIŞMA",10,PdksCommandPlacement.Primary,Keys.Control|Keys.H),
-        new(PdksCommandId.LiveAttendance,"Canlı Denetim","Anlık kart hareketleri, eksikler ve içeride olanlar",PdksModule.GunlukOperasyon,PdksToolbarIcon.Live,"ÇALIŞMA",20,PdksCommandPlacement.Primary,Keys.F2),
-        new(PdksCommandId.EntryExit,"Giriş / Çıkış","Kart hareketlerini görüntüle ve düzelt",PdksModule.GirisCikis,PdksToolbarIcon.EntryExit,"ÇALIŞMA",30,PdksCommandPlacement.Primary,Keys.F4),
-        new(PdksCommandId.Personnel,"Personel","Personel kartı, özlük ve çalışma bilgileri",PdksModule.Personel,PdksToolbarIcon.Personnel,"İNSAN KAYNAKLARI",40,PdksCommandPlacement.Primary,Keys.F3),
-        new(PdksCommandId.TimesheetMonthly,"Puantaj","Günlük ve aylık çalışma hesapları",PdksModule.Puantaj,PdksToolbarIcon.Timesheet,"HESAPLAMA",50,PdksCommandPlacement.Primary,Keys.F5),
-        new(PdksCommandId.PayrollGeneral,"Bordro","Hakediş, resmî bordro ve ödeme",PdksModule.Bordro,PdksToolbarIcon.Payroll,"HESAPLAMA",60,PdksCommandPlacement.Primary,Keys.F6),
-        new(PdksCommandId.Reports,"Raporlar","Operasyon, puantaj ve bordro raporları",PdksModule.Raporlar,PdksToolbarIcon.Results,"HESAPLAMA",70,PdksCommandPlacement.Primary,Keys.F7),
-        new(PdksCommandId.Definitions,"Tanımlar","Organizasyon, bordro ve çalışma tanımları",PdksModule.Tanimlar,PdksToolbarIcon.Departments,"YAPILANDIRMA",80,PdksCommandPlacement.Primary),
-        new(PdksCommandId.TerminalCenter,"Terminal","Kart cihazı, aktarım ve bağlantı merkezi",PdksModule.Terminal,PdksToolbarIcon.Transfer,"YAPILANDIRMA",90,PdksCommandPlacement.Primary,Keys.Control|Keys.T),
+        new(PdksCommandId.Home,"Genel Bakış","Günün personel hareketleri ve hızlı işlemler",PdksModule.Home,PdksToolbarIcon.Home,"ANA",10,PdksCommandPlacement.Primary,Keys.Control|Keys.H),
+        new(PdksCommandId.Operations,"Operasyon","Canlı denetim, kart düzeltme ve günlük istisnalar",PdksModule.GunlukOperasyon,PdksToolbarIcon.Live,"ANA",20,PdksCommandPlacement.Primary),
+        new(PdksCommandId.Personnel,"Personel","Personel kartı, özlük ve çalışma bilgileri",PdksModule.Personel,PdksToolbarIcon.Personnel,"ANA",30,PdksCommandPlacement.Primary,Keys.F3),
+        new(PdksCommandId.TimesheetMonthly,"Puantaj","Günlük ve aylık çalışma hesapları",PdksModule.Puantaj,PdksToolbarIcon.Timesheet,"ANA",40,PdksCommandPlacement.Primary,Keys.F5),
+        new(PdksCommandId.PayrollGeneral,"Bordro","Hakediş, resmî bordro ve ödeme",PdksModule.Bordro,PdksToolbarIcon.Payroll,"ANA",50,PdksCommandPlacement.Primary,Keys.F6),
+        new(PdksCommandId.Reports,"Raporlar","Operasyon, puantaj ve bordro raporları",PdksModule.Raporlar,PdksToolbarIcon.Results,"ANA",60,PdksCommandPlacement.Primary,Keys.F7),
 
-        new(PdksCommandId.Leave,"İzin İşlemleri","Personel izin kayıtları",PdksModule.Izinler,PdksToolbarIcon.Periods,"PERSONEL",110,PdksCommandPlacement.Management),
+        new(PdksCommandId.LiveAttendance,"Canlı Denetim","Anlık kart hareketleri, eksikler ve içeride olanlar",PdksModule.GunlukOperasyon,PdksToolbarIcon.Live,"OPERASYON",90,PdksCommandPlacement.Management,Keys.F2),
+        new(PdksCommandId.EntryExit,"Giriş / Çıkış","Kart hareketlerini görüntüle, düzelt ve manuel tamamla",PdksModule.GirisCikis,PdksToolbarIcon.EntryExit,"OPERASYON",100,PdksCommandPlacement.Management,Keys.F4),
+        new(PdksCommandId.Leave,"İzin İşlemleri","Personel izin kayıtları ve kişi bazlı izin hareketleri",PdksModule.Izinler,PdksToolbarIcon.Periods,"OPERASYON",110,PdksCommandPlacement.Management),
         new(PdksCommandId.EarningsDeductions,"Kazanç / Kesinti / Avans","Ek kazanç, kesinti ve avans girişleri",PdksModule.EkKazancKesinti,PdksToolbarIcon.Advances,"PERSONEL",120,PdksCommandPlacement.Management),
         new(PdksCommandId.QuickOperations,"Toplu İşlemler","Yetkili hızlı personel ve veri işlemleri",PdksModule.Personel,PdksToolbarIcon.Results,"PERSONEL",130,PdksCommandPlacement.Management,ResponsibleOnly:true),
 
@@ -88,6 +88,7 @@ public static class PdksCommandCatalog
         new(PdksCommandId.PayrollPayslip,"Maaş Pusulası","Maaş bordrosu / pusula görünümü",PdksModule.Bordro,PdksToolbarIcon.Payroll,"BORDRO",330,PdksCommandPlacement.Management),
         new(PdksCommandId.PayrollOvertime,"Mesai Bordrosu","Mesai odaklı bordro görünümü",PdksModule.Bordro,PdksToolbarIcon.Payroll,"BORDRO",340,PdksCommandPlacement.Management),
 
+        new(PdksCommandId.Definitions,"Tanımlar Merkezi","Organizasyon, bordro ve çalışma tanımlarına tek noktadan eriş",PdksModule.Tanimlar,PdksToolbarIcon.Departments,"TANIMLAR",400,PdksCommandPlacement.Management),
         new(PdksCommandId.Groups,"Çalışma Grupları / Vardiyalar","Vardiya ve çalışma grubu tanımları",PdksModule.Tanimlar,PdksToolbarIcon.Groups,"TANIMLAR",410,PdksCommandPlacement.Management),
         new(PdksCommandId.Periods,"Dönemler","Çalışma ve bordro dönemleri",PdksModule.Donemler,PdksToolbarIcon.Periods,"TANIMLAR",420,PdksCommandPlacement.Management),
         new(PdksCommandId.WorkingDate,"Çalışma Tarihi","Aktif çalışma tarihini seç ve yönet",PdksModule.Donemler,PdksToolbarIcon.WorkDate,"TANIMLAR",430,PdksCommandPlacement.Management),
@@ -97,6 +98,7 @@ public static class PdksCommandCatalog
         new(PdksCommandId.PayrollFields,"Bordro Alanları","Bordro alan ve katsayı tanımları",PdksModule.Tanimlar,PdksToolbarIcon.Payroll,"TANIMLAR",470,PdksCommandPlacement.Management),
         new(PdksCommandId.EarningsTypes,"Kazanç / Kesinti Türleri","Avans, kazanç ve kesinti türleri",PdksModule.Tanimlar,PdksToolbarIcon.Advances,"TANIMLAR",480,PdksCommandPlacement.Management),
 
+        new(PdksCommandId.TerminalCenter,"Terminal Merkezi","Kart cihazı, aktarım ve bağlantı merkezi",PdksModule.Terminal,PdksToolbarIcon.Transfer,"SİSTEM",500,PdksCommandPlacement.Management,Keys.Control|Keys.T),
         new(PdksCommandId.TerminalSettings,"Terminal Ayarları","Cihaz bağlantı profili ve sürücü ayarları",PdksModule.Terminal,PdksToolbarIcon.Transfer,"SİSTEM",510,PdksCommandPlacement.Management),
         new(PdksCommandId.TerminalProfiles,"Gelişmiş Terminal Profilleri","Terminal profili ve aktarım eşleme ayarları",PdksModule.Terminal,PdksToolbarIcon.Transfer,"SİSTEM",515,PdksCommandPlacement.Management),
         new(PdksCommandId.DataSources,"FDB / TNF Veri Kaynakları","Veri kaynağı ve aktarım dosyaları",PdksModule.Terminal,PdksToolbarIcon.Transfer,"SİSTEM",520,PdksCommandPlacement.Management),
