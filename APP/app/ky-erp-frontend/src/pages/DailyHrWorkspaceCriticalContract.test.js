@@ -62,3 +62,18 @@ test("quick personnel groups stay tightly packed on small monitors", () => {
   assert.match(css, /\.gop-quick-dialog \.quick-group\{[\s\S]*flex:0 0 auto!important/);
   assert.match(css, /--quick-card-w:205px/);
 });
+
+
+test("approved quick cards keep full names and a soft salary divider", () => {
+  assert.match(css, /QUICK-CARD-FINAL-MOCKUP-2026-10-03/);
+  assert.match(css, /white-space:normal!important/);
+  assert.match(css, /border-left:1px solid #d9e3ee!important/);
+  assert.match(css, /grid-template-columns:20px minmax\(0,1fr\) 72px 38px!important/);
+});
+
+test("row and width sliders have a visibly wider operating range", () => {
+  assert.match(workspace, /value >= 28 && value <= 60/);
+  assert.match(workspace, /value >= 160 && value <= 380/);
+  assert.match(workspace, /min="28" max="60" step="2"/);
+  assert.match(workspace, /min="160" max="380" step="10"/);
+});
