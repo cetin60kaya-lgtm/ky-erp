@@ -66,17 +66,33 @@ public partial class PersonelForm
         });
 
     TabPage BuildCanonicalExtraPaymentsTab()
-    {
-        var page = BuildCanonicalFieldTab("Ek Ödemeler", new[]
+        => BuildCanonicalFieldTab("Ek Ödemeler", new[]
         {
             "Fazla Mesai Ücreti","MSUCRET","Günlük Yol Ücreti","GYUCRET","Günlük Yemek Ücreti","GYEMUCRET",
             "Kullandığı İzin","KULIZIN","Kullandığı Cihaz","EKC"
         });
-        var profile = BuildPayrollProfilePanel();
-        profile.Dock = DockStyle.Bottom;
-        profile.Height = 176;
-        page.Controls.Add(profile);
-        profile.BringToFront();
+
+    TabPage BuildCanonicalPayrollTab()
+    {
+        var p=PdksAppearance.Current;
+        var page=new TabPage("Bordro / SGK"){BackColor=p.Canvas,Padding=new Padding(12)};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Canvas};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.Controls.Add(new Label
+        {
+            Text="Tek seferlik hakediş ve resmî bordro profili",
+            Dock=DockStyle.Fill,
+            Padding=new Padding(8,8,0,0),
+            Font=new Font("Segoe UI",10.5f,FontStyle.Bold),
+            ForeColor=p.Text,
+            TextAlign=ContentAlignment.MiddleLeft
+        },0,0);
+        var profile=BuildPayrollProfilePanel();
+        profile.Dock=DockStyle.Top;
+        profile.Height=190;
+        root.Controls.Add(profile,0,1);
+        page.Controls.Add(root);
         return page;
     }
 
