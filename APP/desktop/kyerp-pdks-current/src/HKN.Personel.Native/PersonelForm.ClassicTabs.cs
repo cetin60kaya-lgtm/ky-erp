@@ -14,37 +14,68 @@ public partial class PersonelForm
 
     TabPage BuildPeriodGridClassic(string title,ComboBox per,DateTimePicker from,DateTimePicker to,DataGridView grid)
     {
-        var page=new TabPage(title);var lay=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=Padding.Empty};
-        lay.RowStyles.Add(new RowStyle(SizeType.Absolute,66));lay.RowStyles.Add(new RowStyle(SizeType.Percent,100));lay.RowStyles.Add(new RowStyle(SizeType.Absolute,45));
-        var top=ClassicPeriodHeader(per,from,to);lay.Controls.Add(top,0,0);lay.Controls.Add(grid,0,1);
-        var bot=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(5,7,45,0),WrapContents=false};
-        foreach(var s in new[]{"Tümünü Sil","Sil","Değiştir","Yeni Ekle"}){var b=new Button{Text=s,Width=96,Height=29,ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold),Image=ClassicGlyph(s),ImageAlign=ContentAlignment.MiddleLeft};bot.Controls.Add(b);}lay.Controls.Add(bot,0,2);page.Controls.Add(lay);return page;
+        var p=PdksAppearance.Current;
+        var page=new TabPage(title){BackColor=p.Canvas,Padding=new Padding(10)};
+        var lay=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=Padding.Empty,BackColor=p.Canvas};
+        lay.RowStyles.Add(new RowStyle(SizeType.Absolute,82));
+        lay.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        lay.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
+
+        lay.Controls.Add(ClassicPeriodHeader(per,from,to),0,0);
+        grid.Margin=Padding.Empty;grid.BorderStyle=BorderStyle.None;grid.BackgroundColor=p.Surface;lay.Controls.Add(grid,0,1);
+
+        var bot=PdksUiKit.ActionBar(true,p.Canvas);
+        foreach(var s in new[]{"Tümünü Sil","Sil","Değiştir","Yeni Ekle"})
+        {
+            var role=s.Contains("Sil",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Danger:
+                     s=="Yeni Ekle"?PdksActionRole.Primary:PdksActionRole.Secondary;
+            bot.Controls.Add(PdksUiKit.Button(s,s=="Tümünü Sil"?108:96,role));
+        }
+        lay.Controls.Add(bot,0,2);
+        page.Controls.Add(lay);
+        return page;
     }
+
     Control ClassicPeriodHeader(ComboBox per,DateTimePicker from,DateTimePicker to)
     {
-        var top=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1,Padding=new Padding(6,4,6,2),Margin=Padding.Empty};
-        top.RowStyles.Add(new RowStyle(SizeType.Percent,50)); top.RowStyles.Add(new RowStyle(SizeType.Percent,50));
-        var r1=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Margin=Padding.Empty};
-        r1.Controls.Add(new Label{Text="Dönem Adı",Width=68,Height=24,TextAlign=ContentAlignment.MiddleLeft}); per.Width=205; r1.Controls.Add(per);
-        var show=new Button{Text="Seçili Tarihi Göster",Width=150,Height=28,Margin=new Padding(62,0,0,0),ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold),UseVisualStyleBackColor=true}; show.Click+=(_,_)=>RefreshFullTabs(); r1.Controls.Add(show);
-        var r2=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Margin=Padding.Empty};
-        r2.Controls.Add(new Label{Text="Tarih Aralığı",Width=68,Height=24,TextAlign=ContentAlignment.MiddleLeft}); from.Width=95; to.Width=95; r2.Controls.Add(from); r2.Controls.Add(new Label{Text="ile",AutoSize=true,Padding=new Padding(4,6,4,0)}); r2.Controls.Add(to);
-        top.Controls.Add(r1,0,0); top.Controls.Add(r2,0,1); return top;
+        var p=PdksAppearance.Current;
+        var top=PdksUiKit.Card(12);
+        var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=7,RowCount=2,BackColor=p.Surface,Margin=Padding.Empty};
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,72));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,230));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,86));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,28));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+
+        layout.Controls.Add(PdksUiKit.FieldLabel("Dönem"),0,0);
+        per.Dock=DockStyle.Fill;per.Margin=new Padding(0,5,12,5);layout.Controls.Add(per,1,0);
+        var show=PdksUiKit.Button("Seçili Dönemi Göster",150,PdksActionRole.Primary,RefreshFullTabs);
+        show.Dock=DockStyle.Right;show.Margin=new Padding(8,4,0,4);layout.Controls.Add(show,6,0);
+
+        layout.Controls.Add(PdksUiKit.FieldLabel("Tarih Aralığı"),0,1);
+        from.Dock=DockStyle.Fill;from.Margin=new Padding(0,5,8,5);layout.Controls.Add(from,3,1);
+        layout.Controls.Add(new Label{Text="—",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,ForeColor=p.Muted},4,1);
+        to.Dock=DockStyle.Fill;to.Margin=new Padding(0,5,8,5);layout.Controls.Add(to,5,1);
+        top.Controls.Add(layout);
+        return top;
     }
 
     TabPage BuildBilgiClassic()
     {
-        var page=new TabPage("Puantaj Bilgisi");var lay=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2};lay.RowStyles.Add(new RowStyle(SizeType.Absolute,66));lay.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        var p=PdksAppearance.Current;
+        var page=new TabPage("Puantaj"){BackColor=p.Canvas,Padding=new Padding(10)};var lay=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Canvas};lay.RowStyles.Add(new RowStyle(SizeType.Absolute,66));lay.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         var top=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=2,Padding=new Padding(6,5,6,2)};top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,70));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,205));top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));
         top.Controls.Add(new Label{Text="Dönem Adı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,0);periodB.Dock=DockStyle.Fill;top.Controls.Add(periodB,1,0);bilgiType.Items.AddRange(new object[]{"Tümü","Normal Çalışma","Mesai","Devamsızlık","Geç Kalma","Eksik Süre"});bilgiType.SelectedIndex=0;bilgiType.SelectedIndexChanged+=(_,_)=>ApplyTimesheetFilter();top.Controls.Add(bilgiType,3,0);
-        top.Controls.Add(new Label{Text="Tarih Aralığı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,1);var dates=new Label{Text="",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};top.Controls.Add(dates,1,1);top.SetColumnSpan(dates,2);void upd(){var d=PeriodDates(periodB);dates.Text=$"{d.A:dd.MM.yyyy}     ile     {d.B:dd.MM.yyyy}";}periodB.SelectedIndexChanged+=(_,_)=>upd();var show=new Button{Text="Seçili Tarihi Göster",Dock=DockStyle.Fill,ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold),Image=ClassicGlyph("Göster"),ImageAlign=ContentAlignment.MiddleLeft};show.Click+=(_,_)=>RefreshFullTabs();top.Controls.Add(show,3,1);
+        top.Controls.Add(new Label{Text="Tarih Aralığı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,1);var dates=new Label{Text="",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};top.Controls.Add(dates,1,1);top.SetColumnSpan(dates,2);void upd(){var d=PeriodDates(periodB);dates.Text=$"{d.A:dd.MM.yyyy}     ile     {d.B:dd.MM.yyyy}";}periodB.SelectedIndexChanged+=(_,_)=>upd();var show=PdksUiKit.Button("Seçili Dönemi Göster",150,PdksActionRole.Primary,RefreshFullTabs);show.Dock=DockStyle.Fill;show.MinimumSize=Size.Empty;show.MaximumSize=Size.Empty;top.Controls.Add(show,3,1);
         lay.Controls.Add(top,0,0);lay.Controls.Add(gBilgi,0,1);page.Controls.Add(lay);return page;
     }
 
     TabPage BuildOdemeClassic()
     {
         var p=PdksAppearance.Current;
-        var page=new TabPage("Ödemeler"){BackColor=p.Canvas};
+        var page=new TabPage("Ödeme Özeti"){BackColor=p.Canvas};
         var lay=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(12)};
         lay.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
         lay.RowStyles.Add(new RowStyle(SizeType.Absolute,84));
@@ -58,8 +89,8 @@ public partial class PersonelForm
         refresh.Height=30;refresh.MinimumSize=new Size(92,30);refresh.MaximumSize=new Size(92,30);refresh.Margin=new Padding(12,0,0,0);top.Controls.Add(refresh);lay.Controls.Add(top,0,0);
 
         var info=new Panel{Dock=DockStyle.Fill,BackColor=p.PrimarySoft,Padding=new Padding(18,12,18,10)};
-        var title=new Label{Text="Aylık Bordro ve Ödeme Merkezi",Dock=DockStyle.Top,Height=30,Font=new Font("Segoe UI",12f,FontStyle.Bold),ForeColor=p.Primary};
-        var note=new Label{Text="Hakediş, resmî bordro/PEK ve banka tutarı ayrı hesaplanır. Aylık düzeltmeler personelin tek seferlik bordro profiline göre yürür.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f),ForeColor=p.Muted};
+        var title=new Label{Text="Kişi Bazlı Ödeme Özeti",Dock=DockStyle.Top,Height=30,Font=new Font("Segoe UI",12f,FontStyle.Bold),ForeColor=p.Primary};
+        var note=new Label{Text="Bu ekran yalnız seçili personelin dönem özetini gösterir. Toplu hesaplama, düzeltme ve ödeme işlemleri ana Bordro modülünde yapılır.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f),ForeColor=p.Muted};
         info.Controls.Add(note);info.Controls.Add(title);lay.Controls.Add(info,0,1);
 
         var body=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Padding=new Padding(0,8,0,0)};
@@ -74,7 +105,7 @@ public partial class PersonelForm
         totals.Controls.Add(t);body.Controls.Add(totals,1,0);lay.Controls.Add(body,0,2);
 
         var bar=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Padding=new Padding(20,7,20,4)};bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,70));bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));
-        var edit=PdksUiKit.Button("Aylık Düzeltme / Hızlı Ödeme",220,PdksActionRole.Primary);
+        var edit=PdksUiKit.Button("Bordro İşlemlerine Git",190,PdksActionRole.Primary);
         edit.Dock=DockStyle.Fill;edit.MinimumSize=Size.Empty;edit.MaximumSize=Size.Empty;edit.Margin=new Padding(0,0,16,0);
         edit.Click+=(_,_)=>{if(!RouteToShell(PdksCommandId.PayrollAdjustment)){using var f=new MonthlyPayrollAdjustmentForm();f.ShowDialog(this);}RefreshFullTabs();};
         var calc=PdksUiKit.Button("Hesapları Yenile",150,PdksActionRole.Secondary,RefreshFullTabs);
