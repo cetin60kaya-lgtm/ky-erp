@@ -102,7 +102,7 @@ test("reactivated Security device clears stale retirement markers so phone login
 test("security device health exposes system scope only to the extra-verified owner phone",()=>{
   assert.match(push,/securityAccountProfile/);
   assert.match(push,/ownerControlAuthorized/);
-  assert.match(push,/scopeType: ownerControlAuthorized \? "SYSTEM" : "USER"/);
+  assert.match(push,/scopeType: ownerControlAuthorized \? "SYSTEM" : \(companyApprover \? "COMPANY" : "USER"\)/);
   assert.match(push,/moduleKeys/);
   assert.match(push,/securityCapabilities/);
   assert.match(push,/const account = await safeSecurityAccountProfile\(c, actor\)/);
