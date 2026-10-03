@@ -98,7 +98,8 @@ test("selected-month employment state ignores today's passive flag and uses hire
   assert.match(monthly, /periodEmploymentState/);
   assert.match(monthly, /Dönemde Aktif/);
   assert.match(monthly, /Çıkış Ayı/);
-  assert.match(monthly, /\["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED"\]/);
+  assert.match(monthly, /\["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED", "MISSING_HIRE_DATE"\]/);
+  assert.match(monthly, /Giriş Tarihi Eksik/);
 });
 
 test("IK uses one canonical monthly workspace for personnel salary movements leave and payroll", () => {

@@ -923,7 +923,7 @@ export function employmentStateAtPeriod(employee: Row, card: Row, period: string
 
 export function advancedEmployeeVisible(employee: Row, card: Row, period: string) {
   if (card.payroll_included !== undefined && card.payroll_included !== null && !flag(card.payroll_included)) return false;
-  return ["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED"].includes(employmentStateAtPeriod(employee, card, period));
+  return ["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED", "MISSING_HIRE_DATE"].includes(employmentStateAtPeriod(employee, card, period));
 }
 
 const HISTORICAL_PAYROLL_FIELDS = new Set([

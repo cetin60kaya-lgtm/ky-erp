@@ -190,7 +190,7 @@ function employmentStateAtPeriod(employee = {}, period = "") {
 }
 function payrollVisibleEmployee(employee = {}, period = "") {
   if (employee.payrollIncluded === false) return false;
-  return ["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED"].includes(employmentStateAtPeriod(employee, period));
+  return ["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED", "MISSING_HIRE_DATE"].includes(employmentStateAtPeriod(employee, period));
 }
 function employmentPeriodLabel(employee = {}, period = "") {
   const state = employmentStateAtPeriod(employee, period);
@@ -601,9 +601,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     return list.filter((employee) => {
       if (periodAware) {
         const state = employmentStateAtPeriod(employee, period);
-        const worksInPeriod = ["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED"].includes(state);
+        const worksInPeriod = ["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED", "MISSING_HIRE_DATE"].includes(state);
         if (employeeStatusFilter === "ACTIVE" && !worksInPeriod) return false;
-        if (employeeStatusFilter === "PASSIVE" && worksInPeriod) return false;
+        if (employeeStatusFilter === "PASSIVE" && !["EXIT_MONTH", "ENTERED_EXITED"].includes(state)) return false;
       } else {
         const status = upper(`${employee.status || ""} ${employee.activePassive || ""}`);
         if (employeeStatusFilter === "ACTIVE" && status.includes("PAS")) return false;
