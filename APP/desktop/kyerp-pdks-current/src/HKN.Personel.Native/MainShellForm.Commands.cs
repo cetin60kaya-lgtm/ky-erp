@@ -223,6 +223,8 @@ public sealed partial class MainShellForm
             .GroupBy(x=>x.Group)
             .OrderBy(x=>x.Min(c=>c.Order));
 
+    public void NavigateToCommand(PdksCommandId id) => ExecuteCommand(id);
+
     void OpenThemeSettings() => ExecuteCommand(PdksCommandId.Theme);
 
     void OpenCommandPalette()
