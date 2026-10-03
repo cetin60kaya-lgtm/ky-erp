@@ -12,6 +12,7 @@ public partial class PersonelForm
     readonly DataGridView gGiris=Grid("GIRCIK"), gIzin=Grid("IZIN"), gEkk=Grid("AVANS"), gBilgi=Grid("BILGI"), gOdeme=Grid("ODEME");
     readonly Label payNormal=new(){AutoSize=true}, payEk=new(){AutoSize=true}, payKes=new(){AutoSize=true}, payNet=new(){AutoSize=true};
     readonly ComboBox bilgiType=new(){Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};
+    readonly Label bilgiEmpty=new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,AutoSize=false,Font=new Font("Segoe UI",10f,FontStyle.Bold),Visible=false};
     readonly System.Windows.Forms.Timer slider=new(){Interval=3000};
     bool refreshingFullTabs;
     bool fullTabsReady;
@@ -82,8 +83,16 @@ public partial class PersonelForm
             else if(name=="İzinler"){var a=iFrom.Value.Date;var b=iTo.Value.Date.AddDays(1);gIzin.DataSource=Q("select SIRA,TARIH,BASSAAT,BITSAAT,SURESAAT,SUREDAKIKA,EBALAN,TIP,MAZERET from OZELIZIN where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",pk),new FbParameter("@A",a),new FbParameter("@B",b));}
             else if(name=="Kazanç / Kesinti"){var a=eFrom.Value.Date;var b=eTo.Value.Date.AddDays(1);gEkk.DataSource=Q("select KOD,TARIH as ISLEM_TARIHI,VTARIH as VERILIS_TARIHI,TURKOD as TURU,MIKTAR,ACIKLAMA from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",pk),new FbParameter("@A",a),new FbParameter("@B",b));}
             else if(name is "Puantaj" or "Ödeme Özeti") LoadBilgiOdemeClassic();
+            UpdatePuantajEmptyState();
         }
         finally { refreshingFullTabs=false; }
+    }
+
+    void UpdatePuantajEmptyState()
+    {
+        var count=gBilgi.Rows.Cast<DataGridViewRow>().Count(r=>!r.IsNewRow);
+        bilgiEmpty.Visible=count==0;
+        if(bilgiEmpty.Visible)bilgiEmpty.BringToFront();else gBilgi.BringToFront();
     }
 
     void RefreshFullTabs()
@@ -103,6 +112,7 @@ public partial class PersonelForm
             gEkk.DataSource = Q("select KOD,TARIH as ISLEM_TARIHI,VTARIH as VERILIS_TARIHI,TURKOD as TURU,MIKTAR,ACIKLAMA from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH", new FbParameter("@PK",pk), new FbParameter("@A",a), new FbParameter("@B",b));
 
             LoadBilgiOdemeClassic();
+            UpdatePuantajEmptyState();
         }
         catch(Exception ex)
         {
