@@ -73,7 +73,7 @@ internal static class TerminalProfileEditor
                 };
                 result.Validate(); dialog.DialogResult = DialogResult.OK; dialog.Close();
             }
-            catch (Exception exception) { MessageBox.Show(exception.Message, "Profil Doğrulama", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+            catch (Exception exception) { PdksErrorPresenter.Show(dialog,exception,"Profil Doğrulama",MessageBoxIcon.Warning,"Terminal.ProfileValidation"); }
         };
         var accepted = dialog.ShowDialog(owner) == DialogResult.OK && result is not null;
         edited = result ?? profile; return accepted;
