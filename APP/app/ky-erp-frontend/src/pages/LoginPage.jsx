@@ -714,6 +714,13 @@ export default function LoginPage({ onClose }) {
                   <div><strong>Telefon yanıtı bekleniyor</strong><small>Onaylandığında bu ekran otomatik olarak devam eder.</small></div>
                 </div>
                 {phoneStatusMessage ? <div className="auth-notice auth-notice-compact"><strong>Telefon bağlantısı</strong><span>{phoneStatusMessage}</span></div> : null}
+                <form className="auth-form auth-form-compact" onSubmit={handleSecurityLoginCode}>
+                  <label>KY Güvenlik giriş kodu
+                    <input className="auth-code-input" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
+                  </label>
+                  <small>Telefon bildirimine alternatif olarak KY Güvenlik uygulamasındaki Giriş Kodu bölümünden üretilen kısa süreli kodu kullanabilirsiniz.</small>
+                  <button className="auth-primary" type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : "KY Güvenlik Kodunu Doğrula"}</button>
+                </form>
                 <ErrorBox message={error} />
                 <button className="auth-secondary" type="button" onClick={resendPhoneApprovalNotification} disabled={loading}>Bildirimi Yeniden Gönder</button>
                 <button type="button" className="auth-ghost auth-ghost-compact" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
