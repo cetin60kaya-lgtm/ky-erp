@@ -42,7 +42,7 @@ public partial class PersonelForm
     }
 
     ComboBox NewFilterBox()=>new(){Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};
-    DataGridView PeopleGrid()=>new(){Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,RowHeadersVisible=false,BackgroundColor=Color.White};
+    DataGridView PeopleGrid()=>new(){Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,MultiSelect=true,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,RowHeadersVisible=false,BackgroundColor=PdksAppearance.Current.Surface};
 
     DataTable LoadGirisPeople()
     {
