@@ -972,10 +972,29 @@ export function registerAuthPolicyRoutes(app: any) {
 
     const role = roleOf(user);
     const policy = effectivePolicy(user, role);
-    const provider = normalizeProvider(body.provider);
+    const requestedProvider = normalizeProvider(body.provider);
     const allowed = policy === "GOOGLE" ? ["GOOGLE"] : policy === "MICROSOFT" ? ["MICROSOFT"] : ["GOOGLE", "MICROSOFT"];
-    if (!provider || !allowed.includes(provider) || !providerEnabled(user, provider)) return c.json(jsonError("MFA_PROVIDER_INVALID", "Seçilen Authenticator bu kullanıcı için kullanılamaz."), 400);
-    if (!(await verifyTotp(providerSecret(user, provider), body.code))) return c.json(jsonError("MFA_CODE_INVALID", "Authenticator kodu doğrulanamadı."), 401);
+    const alreadyVerified = new Set([
+      challenge.google_verified_at ? "GOOGLE" : "",
+      challenge.microsoft_verified_at ? "MICROSOFT" : "",
+    ].filter(Boolean));
+    const candidates = policy === "BOTH_MFA" ? allowed.filter((item) => !alreadyVerified.has(item)) : allowed;
+    let provider = requestedProvider;
+
+    if (provider) {
+      if (!candidates.includes(provider) || !providerEnabled(user, provider)) return c.json(jsonError("MFA_PROVIDER_INVALID", "Bu doğrulayıcı bu adım için kullanılamaz."), 400);
+      if (!(await verifyTotp(providerSecret(user, provider), body.code))) return c.json(jsonError("MFA_CODE_INVALID", "6 haneli doğrulama kodu kabul edilmedi."), 401);
+    } else {
+      provider = "";
+      for (const candidateProvider of candidates) {
+        if (!providerEnabled(user, candidateProvider)) continue;
+        if (await verifyTotp(providerSecret(user, candidateProvider), body.code)) {
+          provider = candidateProvider;
+          break;
+        }
+      }
+      if (!provider) return c.json(jsonError("MFA_CODE_INVALID", "6 haneli doğrulama kodu kabul edilmedi."), 401);
+    }
 
     const resetProvider = normalizeProvider(body.resetProvider);
     if (resetProvider && resetProvider !== provider && providerEnabled(user, provider)) {
