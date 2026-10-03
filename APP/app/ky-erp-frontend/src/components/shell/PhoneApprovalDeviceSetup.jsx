@@ -68,8 +68,18 @@ export default function PhoneApprovalSetup({ onClose }) {
     setBusy(true);
     setCopied(false);
     try {
-      const response = await apiPost("/auth/push/security-enrollment/start", { targetDeviceId: securityDevices[0]?.id || "" });
+      const cleanStepUpCode = String(ownerStepUpCode || "").replace(/\D/g, "");
+      if (ownerStepUpRequired && !/^\d{6}$/.test(cleanStepUpCode)) {
+        setMessage("Hata: Süper Yönetici telefon kurulumu için e-postadaki veya Google/Microsoft Authenticator uygulamasındaki 6 haneli ek doğrulama kodunu girin.");
+        return null;
+      }
+      const targetDeviceId = ownerAuthorizedDevice?.id || securityDevices[0]?.id || "";
+      const payload = { targetDeviceId };
+      if (ownerStepUpRequired && ownerEmailChallenge) payload.ownerEmailProof = { challengeId: ownerEmailChallenge.challengeId, challengeToken: ownerEmailChallenge.challengeToken, code: cleanStepUpCode };
+      else if (ownerStepUpRequired) payload.ownerAuthenticatorCode = cleanStepUpCode;
+      const response = await apiPost("/auth/push/security-enrollment/start", payload);
       const data = response?.data || response;
+      if (ownerStepUpRequired) { setOwnerStepUpCode(""); setOwnerEmailChallenge(null); }
       if (exposeCode) setEnrollment(data);
       return data;
     } catch (error) {
@@ -80,10 +90,26 @@ export default function PhoneApprovalSetup({ onClose }) {
     }
   }
 
+  async function sendOwnerEnrollmentEmailCode() {
+    if (!ownerEmailReady || busy) return;
+    setBusy(true);
+    try {
+      const response = await apiPost("/auth/push/security-enrollment/owner-email/start", {});
+      const data = response?.data || response;
+      setOwnerEmailChallenge(data);
+      setOwnerStepUpCode("");
+      setMessage(`${data?.maskedEmail || config?.ownerEmailMasked || "Doğrulanmış e-posta"} adresine 6 haneli Süper Yönetici telefon yetkilendirme kodu gönderildi.`);
+    } catch (error) {
+      setOwnerEmailChallenge(null);
+      setMessage(`Hata: ${error?.message || "Süper Yönetici telefon doğrulama e-postası gönderilemedi."}`);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function createEnrollment() {
     const data = await issueEnrollment({ exposeCode: true });
     if (!data) return;
-    setMessage("8 karakter bağlantı kodu hazır. Telefonda bu kodu ve mevcut ADMIN / KY ERP şifresini birlikte girin.");
+    setMessage(ownerStepUpRequired ? "Ek Süper Yönetici doğrulaması tamamlandı. 8 karakter bağlantı kodu hazır; telefonda bu kodu ve mevcut KY ERP şifresini birlikte girin." : "8 karakter bağlantı kodu hazır. Telefonda bu kodu ve mevcut KY ERP şifresini birlikte girin.");
   }
 
   async function copyEnrollment() {
@@ -91,13 +117,13 @@ export default function PhoneApprovalSetup({ onClose }) {
     const text = [
       "KY ERP Güvenlik",
       `Bağlantı kodu: ${enrollment.enrollmentCode || ""}`,
-      "Telefon uygulamasında bu kod + mevcut ADMIN / KY ERP şifresi birlikte doğrulanır.",
+      "Telefon uygulamasında bu kod + mevcut KY ERP şifresi birlikte doğrulanır.",
       "Uygulama: https://security.kyerp.net/guvenlik/",
     ].join("\n");
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      setMessage("Bağlantı kodu panoya kopyalandı. Telefonda kod + ADMIN / KY ERP şifresi ile tamamlayın.");
+      setMessage("Bağlantı kodu panoya kopyalandı. Telefonda kod + mevcut KY ERP şifresi ile tamamlayın.");
     } catch {
       setMessage("Kopyalama yapılamadı. 8 karakter bağlantı kodunu telefona elle girin.");
     }
