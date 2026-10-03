@@ -108,7 +108,7 @@ public static class PdksCommandCatalog
         new(PdksCommandId.UserManagement,"Kullanıcı / Yetki","Kullanıcı ve modül erişim yetkileri",PdksModule.KullaniciYonetimi,PdksToolbarIcon.Personnel,"SİSTEM",560,PdksCommandPlacement.Management,AdminOnly:true),
         new(PdksCommandId.License,"Lisans","Firma lisansı ve aktivasyon",PdksModule.Tanimlar,PdksToolbarIcon.Results,"SİSTEM",570,PdksCommandPlacement.Management,SuperAdminOnly:true),
 
-        new(PdksCommandId.Theme,"Tema ve Görünüm","Açık/koyu tema ile vurgu rengini ayrı yönet",PdksModule.Home,PdksToolbarIcon.Home,"GÖRÜNÜM",610,PdksCommandPlacement.Management),
+        new(PdksCommandId.Theme,"Tema ve Görünüm","Uygulama teması, sol menü ve vurgu rengini ayrı yönet",PdksModule.Home,PdksToolbarIcon.Home,"GÖRÜNÜM",610,PdksCommandPlacement.Management),
         new(PdksCommandId.QuickGuide,"Hızlı Kullanım Rehberi","Temel işlem akışları ve kısa yollar",PdksModule.Home,PdksToolbarIcon.Results,"YARDIM",710,PdksCommandPlacement.Management),
         new(PdksCommandId.About,"Hakkında","KY PDKS sürüm ve ürün bilgileri",PdksModule.Home,PdksToolbarIcon.Results,"YARDIM",720,PdksCommandPlacement.Management)
     ];
