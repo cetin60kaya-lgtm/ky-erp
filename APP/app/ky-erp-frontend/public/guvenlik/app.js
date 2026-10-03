@@ -26,6 +26,8 @@ let busy=false;
 let relinkMode=false;
 let loginCodeTimer=null;
 let lastAutoRepairAt=0;
+let lastStableRefreshAt=0;
+let accountHydrated=false;
 renderVersion();
 
 function isIos(){const ua=String(navigator.userAgent||"");return /iPhone|iPad|iPod/i.test(ua)||(String(navigator.platform||"")==="MacIntel"&&Number(navigator.maxTouchPoints||0)>1)}
@@ -355,6 +357,11 @@ async function repairConnection(options={}){
 }
 
 async function refreshState(options={}){
+  const background=Boolean(options?.background);
+  if(refreshState.running)return;
+  if(background&&Date.now()-lastStableRefreshAt<5000)return;
+  refreshState.running=true;
+  try{
   const device=await readDevice().catch(()=>null);
   if(device?.deviceId&&device?.canonicalRevision!==CANONICAL_DEVICE_REVISION&&!enrollmentQuery.id){
     showSetupStart();
@@ -368,11 +375,14 @@ async function refreshState(options={}){
     if(enrollmentQuery.id&&enrollmentQuery.token)showRelink();else showSetupStart();
     els.appPanel.classList.add("hidden");els.pendingPanel.classList.add("hidden");els.emptyPanel.classList.add("hidden");setBadge(enrollmentQuery.id&&enrollmentQuery.token?"Bağlantı hazır":"ERP’den başlat");return;
   }
-  els.appPanel.classList.add("hidden");els.readyPanel.classList.remove("hidden");if(!relinkMode)els.setupPanel.classList.add("hidden");
-  renderAccount(null,device);
-  els.deviceSummary.textContent=(device.deviceLabel||"KY ERP Güvenlik cihazı")+" · Güvenli cihaz imzası aktif"+(device.localUnlockCredentialId?" · Cihaz kilidi aktif":"");
-  setHealth(els.keyHealth,"Hazır","ok");setHealth(els.unlockHealth,device.localUnlockCredentialId?"Aktif":"Onayda zorunlu",device.localUnlockCredentialId?"ok":"warn");
-  els.readyTitle.textContent="Bağlantı doğrulanıyor";els.readyMark.textContent="↻";setBadge("Kontrol","");
+  const firstHydration=!accountHydrated;
+  if(firstHydration)els.appPanel.classList.add("hidden");
+  els.readyPanel.classList.remove("hidden");if(!relinkMode)els.setupPanel.classList.add("hidden");
+  if(firstHydration){
+    els.deviceSummary.textContent=(device.deviceLabel||"KY ERP Güvenlik cihazı")+" · Güvenli cihaz imzası aktif"+(device.localUnlockCredentialId?" · Cihaz kilidi aktif":"");
+    setHealth(els.keyHealth,"Hazır","ok");setHealth(els.unlockHealth,device.localUnlockCredentialId?"Aktif":"Onayda zorunlu",device.localUnlockCredentialId?"ok":"warn");
+    els.readyTitle.textContent="Bağlantı doğrulanıyor";els.readyMark.textContent="↻";setBadge("Kontrol","");
+  }
   try{
     await ensureWorker();
     const health=(await deviceFetch("/auth/push/device/health"))?.data||{};
@@ -383,6 +393,8 @@ async function refreshState(options={}){
     await writeDevice(versionRecord).catch(()=>{});
     renderVersion(health.serverVersion||"");
     renderAccount(health.account,{...(health.device||device),lastKnownServerVersion:health.serverVersion||""});
+    accountHydrated=true;
+    lastStableRefreshAt=Date.now();
     hideBoot();els.appPanel.classList.remove("hidden");
     els.readyTitle.textContent="Onaylı cihaz · Telefon onayı hazır";els.readyMark.textContent="✓";setBadge("Bağlı","ok");
     setHealth(els.apiHealth,"Bağlı","ok");
@@ -435,6 +447,9 @@ async function refreshState(options={}){
     if(["PUSH_DEVICE_RECOVERY_UNAUTHORIZED"].includes(code))showRelink();
     if(code!=="NETWORK_ERROR"&&code!=="REQUEST_TIMEOUT")toast(error?.message||"Telefon bağlantısı doğrulanamadı.");
   }
+  }finally{
+    refreshState.running=false;
+  }
 }
 if(!window.KYSecurityInstaller)window.addEventListener("beforeinstallprompt",(event)=>{event.preventDefault();installPrompt=event;renderInstall()});
 if(!window.KYSecurityInstaller)window.addEventListener("appinstalled",()=>{
@@ -472,16 +487,16 @@ els.connectButton.addEventListener("click",connectDevice);
 els.generateCodeButton.addEventListener("click",generateLoginCode);
 document.querySelectorAll(".security-tabs button").forEach((button)=>button.addEventListener("click",()=>showTab(button.dataset.tab)));
 document.querySelectorAll("[data-owner-open]").forEach((button)=>button.addEventListener("click",()=>showTab(button.dataset.ownerOpen)));
-els.refreshButton.addEventListener("click",refreshState);
+els.refreshButton.addEventListener("click",()=>refreshState({force:true}));
 els.enableUnlockButton?.addEventListener("click",enableLocalUnlock);
 els.repairButton.addEventListener("click",async()=>{const repaired=await repairConnection();if(repaired)await refreshState({skipAutoRepair:true})});
 els.relinkButton.addEventListener("click",showRelink);
 els.cancelRelinkButton.addEventListener("click",()=>{hideRelink();refreshState()});
-document.addEventListener("visibilitychange",()=>{if(isStandalone()&&document.visibilityState==="visible"&&els.setupPanel.classList.contains("hidden"))refreshState()});
-window.addEventListener("focus",()=>{if(isStandalone()&&els.setupPanel.classList.contains("hidden")&&!(["INPUT","TEXTAREA"].includes(document.activeElement?.tagName||"")))refreshState()});
-window.addEventListener("online",()=>{if(!isStandalone())return;toast("İnternet bağlantısı geri geldi. Bağlantı kontrol ediliyor.");refreshState()});
+document.addEventListener("visibilitychange",()=>{if(isStandalone()&&document.visibilityState==="visible"&&els.setupPanel.classList.contains("hidden"))refreshState({background:true})});
+window.addEventListener("focus",()=>{if(isStandalone()&&els.setupPanel.classList.contains("hidden")&&!(["INPUT","TEXTAREA"].includes(document.activeElement?.tagName||"")))refreshState({background:true})});
+window.addEventListener("online",()=>{if(!isStandalone())return;toast("İnternet bağlantısı geri geldi. Bağlantı kontrol ediliyor.");refreshState({background:true})});
 window.addEventListener("offline",()=>{setBadge("Çevrimdışı","bad");if(els.readyTitle)els.readyTitle.textContent="Telefon çevrimdışı"});
-navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(isStandalone()&&els.setupPanel.classList.contains("hidden")&&["KYERP_SECURITY_PUSH_WAKE","KYERP_SECURITY_PENDING_WAKE","KYERP_SECURITY_CONNECTION_WAKE"].includes(event.data?.type))refreshState()});
+navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(isStandalone()&&els.setupPanel.classList.contains("hidden")&&["KYERP_SECURITY_PUSH_WAKE","KYERP_SECURITY_PENDING_WAKE","KYERP_SECURITY_CONNECTION_WAKE"].includes(event.data?.type))refreshState({background:true})});
 window.KYSecurityRuntime={deviceFetch,readDevice,writeDevice,confirmLocalUnlock,base64Url,toast,refreshState,CLIENT_VERSION};
 window.dispatchEvent(new CustomEvent("kysecurity:runtime-ready"));
 (async function boot(){
