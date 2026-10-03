@@ -13,7 +13,6 @@ import AppShellV3 from "./layouts/AppShellV3";
 import CanonicalTaskNavigator from "./components/erp/CanonicalTaskNavigator";
 
 const AdminPage = lazyWithRetry(() => import("./pages/modules/AdminPage"), "admin-v3");
-const IkPersonnelFinancePage = lazyWithRetry(() => import("./pages/modules/ik/monthly/IkPersonnelFinancePage"), "ik-personnel-finance-v1");
 const IkAuditPersonnelPage = lazyWithRetry(() => import("./pages/modules/ik/audit/IkAuditPersonnelPage"), "ik-audit-personnel-v1");
 const IkFinancePage = lazyWithRetry(() => import("./pages/modules/ik/monthly/IkFinancePage"), "ik-finance-v1");
 const DailyHrWorkspace = lazyWithRetry(() => import("./pages/modules/ik/DailyHrWorkspace"), "daily-hr-workspace-v1");
@@ -32,7 +31,6 @@ const MODULE_LOADERS = {
   admin: () => import("./pages/modules/AdminPage"),
   depolama: () => import("./pages/modules/AdminPage"),
   ik: () => Promise.all([
-    import("./pages/modules/ik/monthly/IkPersonnelFinancePage"),
     import("./pages/modules/ik/monthly/IkFinancePage"),
     import("./pages/modules/ik/audit/IkAuditPersonnelPage"),
   ]),
@@ -303,9 +301,6 @@ export default function AppV3() {
     if (activeModule?.key === "boyahane") return <BoyahanePage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "ik") {
       if (isAuditAccount) return <IkAuditPersonnelPage />;
-      if (["personel-kartlari", "ucret-odeme-plani"].includes(activeTab)) {
-        return <IkPersonnelFinancePage focus={activeTab === "ucret-odeme-plani" ? "ucret" : "personel"} {...sharedProps} />;
-      }
       return <IkFinancePage activeTab={activeTab} {...sharedProps} />;
     }
     if (activeModule?.key === "gunluk-operasyon") return <DailyHrWorkspace activeTab={activeTab} {...sharedProps} />;

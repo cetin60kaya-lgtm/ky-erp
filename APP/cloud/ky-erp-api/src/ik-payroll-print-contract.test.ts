@@ -17,9 +17,9 @@ test("IK payroll report and payment slips use the canonical print service contra
   assert.match(service, /fullDocument/);
   assert.match(service, /win\.print\(\)/);
 
-  assert.ok(page.includes("Ödeme Listesi / PDF"));
-  assert.ok(page.includes("10’lu Toplu Fiş / PDF"));
-  assert.ok(page.includes("Tek Kişi Fişi"));
+  assert.ok(page.includes("Bordroyu Tamamla / PDF"));
+  assert.match(page, /10['’]lu Fiş \+ Tamamla/);
+  assert.ok(page.includes("Tek Kişi Fiş + Tamamla"));
   assert.ok(page.includes("printHtmlDocument({ title: `İK Ödeme Listesi"));
   assert.ok(page.includes("printHtmlDocument({ title: `Toplu Personel Ödeme Fişleri"));
   assert.ok(page.includes("printHtmlDocument({ title: `Ödeme Fişi"));
@@ -132,7 +132,7 @@ test("payment list PDF is a compact single-row list and prints one totals row on
   const end = page.indexOf("const legalLabel =", start);
   const block = page.slice(start, end);
 
-  assert.match(page, /const exportPayroll = \(\) =>/);
+  assert.match(page, /const exportPayroll = async \(\) =>/);
   assert.match(page, /excelRows\.push\(\{/);
   assert.match(page, /personel: "TOPLAM"/);
   assert.match(block, /const rows = payrollRows\.filter/);
@@ -147,8 +147,8 @@ test("payment list PDF is a compact single-row list and prints one totals row on
   assert.doesNotMatch(block, /Hak Ediş<\/th>/);
   assert.doesNotMatch(block, /Durum<\/th>/);
   assert.match(block, /toplam yalnız listenin en sonunda bir kez gösterilir/);
-  assert.ok(page.includes("Ödeme Listesi / PDF"));
-  assert.ok(page.includes("Ödeme Listesi / Excel"));
+  assert.ok(page.includes("Bordroyu Tamamla / PDF"));
+  assert.ok(page.includes("Tamamla / Excel"));
 });
 
 
@@ -312,7 +312,9 @@ test("IK validates monthly SGK before card writes and final-control corrections 
   const cardSave = cloud.slice(cardSaveStart, cardSaveEnd);
   assert.ok(cardSave.indexOf("SGK_DAYS_INVALID") < cardSave.indexOf("INSERT INTO ik_person_card_settings"));
   assert.match(cloud, /FINAL_CONTROL_CORRECTION_IMMUTABLE/);
-  assert.match(cloud, /wasPassive/);
+  assert.match(cloud, /PERSONNEL_VERSION_CONFLICT/);
+  assert.match(cloud, /HIRE_DATE_REQUIRED/);
+  assert.match(cloud, /const activePassive = effectiveExitDate \? "Pasif" : "Aktif"/);
   assert.match(cloud, /hrTodayIstanbul\(\)/);
 });
 

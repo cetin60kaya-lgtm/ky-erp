@@ -6,6 +6,7 @@ import {
   hrTodayIstanbul,
   hrListResponse,
   calculateAnnualLeaveRange,
+  employmentStateAtPeriod,
   advancedEmployeeVisible,
   applyHistoricalEmployeeValues,
   calculateOvertimeAmount,
@@ -62,21 +63,29 @@ test("10 Aug 2026 leave start and 31 Aug return counts exactly 18 days", () => {
 });
 
 
-test("passive employee remains in final payroll month when exit date is in that period", () => {
+test("historical employment state is driven by hire/exit dates, not today's passive flag", () => {
+  const employee = { status: "Pasif", hireDate: "2025-11-15" };
+  const card = { payroll_included: 1, active_passive: "Pasif", exit_date: "2026-09-06" };
+
+  assert.equal(employmentStateAtPeriod(employee, card, "2025-10"), "NOT_STARTED");
+  assert.equal(employmentStateAtPeriod(employee, card, "2025-11"), "NEW_HIRE");
+  assert.equal(employmentStateAtPeriod(employee, card, "2026-07"), "ACTIVE");
+  assert.equal(employmentStateAtPeriod(employee, card, "2026-09"), "EXIT_MONTH");
+  assert.equal(employmentStateAtPeriod(employee, card, "2026-10"), "EXITED");
+
+  assert.equal(advancedEmployeeVisible(employee, card, "2026-07"), true);
+  assert.equal(advancedEmployeeVisible(employee, card, "2026-09"), true);
+  assert.equal(advancedEmployeeVisible(employee, card, "2026-10"), false);
+});
+
+test("missing hire or passive-without-exit lifecycle is never silently accepted into payroll", () => {
+  assert.equal(employmentStateAtPeriod({ status: "Aktif" }, {}, "2026-10"), "MISSING_HIRE_DATE");
   assert.equal(
-    advancedEmployeeVisible(
-      { status: "Pasif" },
-      { payroll_included: 1, active_passive: "Pasif", exit_date: "2026-09-06" },
-      "2026-09",
-    ),
-    true,
+    employmentStateAtPeriod({ status: "Pasif", hireDate: "2025-01-01" }, { active_passive: "Pasif" }, "2026-10"),
+    "MISSING_EXIT_DATE",
   );
   assert.equal(
-    advancedEmployeeVisible(
-      { status: "Pasif" },
-      { payroll_included: 1, active_passive: "Pasif", exit_date: "2026-09-06" },
-      "2026-10",
-    ),
+    advancedEmployeeVisible({ status: "Pasif", hireDate: "2025-01-01" }, { active_passive: "Pasif" }, "2026-10"),
     false,
   );
 });
@@ -131,4 +140,43 @@ test("historical payroll rewinds salary and payment plan changes after the selec
   assert.equal(september.salary, 55000);
   assert.equal(september.bankAmount, 28075);
   assert.equal(september.cashAmount, 28925);
+});
+
+
+test("KY annual leave policy can exclude Saturday Sunday and full public holidays day by day", () => {
+  const result = calculateAnnualLeaveRange(
+    "2026-08-28",
+    "2026-09-02",
+    [1, 2, 3, 4, 5],
+    true,
+    [{ date: "2026-08-30", name: "Zafer Bayramı", fraction: 1 }],
+  );
+  assert.equal(result.calendarDays, 5);
+  assert.equal(result.countedDays, 3);
+  assert.deepEqual(result.dayDetails.map((row) => [row.date, row.weekdayName, row.counted]), [
+    ["2026-08-28", "Cuma", 1],
+    ["2026-08-29", "Cumartesi", 0],
+    ["2026-08-30", "Pazar", 0],
+    ["2026-08-31", "Pazartesi", 1],
+    ["2026-09-01", "Salı", 1],
+  ]);
+  assert.match(result.dayDetails.find((row) => row.date === "2026-08-30")?.reason || "", /Haftalık|Zafer/);
+});
+
+test("half-day public holiday deducts only half a leave day when the weekday is counted", () => {
+  const result = calculateAnnualLeaveRange(
+    "2026-10-28",
+    "2026-10-30",
+    [1, 2, 3, 4, 5],
+    true,
+    [
+      { date: "2026-10-28", name: "Cumhuriyet Bayramı Arifesi", fraction: 0.5 },
+      { date: "2026-10-29", name: "Cumhuriyet Bayramı", fraction: 1 },
+    ],
+  );
+  assert.equal(result.countedDays, 0.5);
+  assert.equal(result.dayDetails[0]?.counted, 0.5);
+  assert.equal(result.dayDetails[0]?.status, "PARTIAL");
+  assert.equal(result.dayDetails[1]?.counted, 0);
+  assert.equal(result.dayDetails[1]?.status, "EXCLUDED");
 });
