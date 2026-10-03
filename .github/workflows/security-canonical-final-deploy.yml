@@ -109,7 +109,7 @@ jobs:
 
           curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/sw.js -o /tmp/sw-primary.js
           grep -q 'const APP_URL="/guvenlik/"' /tmp/sw-primary.js
-          grep -q 'Eşleştirme No:' /tmp/sw-primary.js
+          grep -q 'matchNumber:String' /tmp/sw-primary.js
 
           curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/app.js -o /tmp/security-app.js
           grep -q 'Yedek Kod + Admin Şifresiyle Bağla' /tmp/security-app.js
