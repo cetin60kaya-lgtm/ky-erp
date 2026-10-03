@@ -15,15 +15,17 @@ public partial class PersonelForm
     readonly Label stLeft = new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};
     readonly Label stTotal = new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};
     readonly Label stListed = new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};
-    readonly PictureBox photo = new(){Dock=DockStyle.Fill,BorderStyle=BorderStyle.FixedSingle,SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.White};
+    readonly PictureBox photo = new(){Dock=DockStyle.Fill,BorderStyle=BorderStyle.FixedSingle,SizeMode=PictureBoxSizeMode.Zoom,BackColor=PdksAppearance.Current.SurfaceAlt};
     readonly System.Windows.Forms.Timer personLoadTimer = new(){Interval=70};
     string pendingPersonPk = "";
 
     void BuildUiClassic()
     {
-        AutoScaleMode=AutoScaleMode.None;
-        Font=new Font("Microsoft Sans Serif",8.25f,FontStyle.Regular,GraphicsUnit.Point);
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=3,Padding=new Padding(6,25,6,0),Margin=Padding.Empty};
+        AutoScaleMode=AutoScaleMode.Dpi;
+        Font=new Font("Segoe UI",9f,FontStyle.Regular,GraphicsUnit.Point);
+        var palette=PdksAppearance.Current;
+        BackColor=palette.Canvas;
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=3,Padding=new Padding(12,12,12,0),Margin=Padding.Empty,BackColor=palette.Canvas};
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,450)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute,77)); root.RowStyles.Add(new RowStyle(SizeType.Absolute,22));
         BuildClassicList(); root.Controls.Add(list,0,0); BuildClassicRight(root); root.Controls.Add(BuildClassicSearch(),0,1); var st=BuildClassicStatus(); root.Controls.Add(st,0,2); root.SetColumnSpan(st,2);
@@ -36,9 +38,12 @@ public partial class PersonelForm
     Control BuildClassicStatusPlaceholder()=>new Panel{Visible=false};
     void BuildClassicList()
     {
-        list.Dock=DockStyle.Fill; list.Margin=new Padding(0); list.BorderStyle=BorderStyle.FixedSingle; list.BackgroundColor=SystemColors.Control;
-        list.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None; list.RowHeadersWidth=18; list.RowHeadersVisible=true;
-        list.ColumnHeadersHeight=20; list.RowTemplate.Height=20; list.AllowUserToResizeRows=false; list.MultiSelect=false;
+        var p=PdksAppearance.Current;
+        list.Dock=DockStyle.Fill; list.Margin=new Padding(0); list.BorderStyle=BorderStyle.None; list.BackgroundColor=p.Surface;
+        list.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None; list.RowHeadersWidth=18; list.RowHeadersVisible=false;
+        list.ColumnHeadersHeight=34; list.RowTemplate.Height=29; list.AllowUserToResizeRows=false; list.MultiSelect=false;
+        list.EnableHeadersVisualStyles=false;list.ColumnHeadersDefaultCellStyle.BackColor=p.GridHeader;list.ColumnHeadersDefaultCellStyle.ForeColor=p.Text;
+        list.DefaultCellStyle.SelectionBackColor=p.Selection;list.DefaultCellStyle.SelectionForeColor=p.Text;
         list.DefaultCellStyle.Font=Font; list.ColumnHeadersDefaultCellStyle.Font=Font; list.SelectionMode=DataGridViewSelectionMode.FullRowSelect;
         list.SelectionChanged += (_,_)=>QueuePersonLoad();
         list.CellFormatting += PersonListFormat;
@@ -59,11 +64,19 @@ public partial class PersonelForm
         right.RowStyles.Add(new RowStyle(SizeType.Absolute,137)); right.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         right.Controls.Add(BuildClassicHeader(),0,0); BuildTabsClassic(); right.Controls.Add(tabs,0,1); root.Controls.Add(right,1,0);
         var buttons=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(6,12,52,0),WrapContents=false};
-        buttons.Controls.Add(ClassicButton("Per. Bilgisi",100,()=>{if(currentPk!="")LoadPerson(currentPk);})); buttons.Controls.Add(ClassicButton("Sil",100,MarkExit));
-        buttons.Controls.Add(ClassicButton("Değiştir",100,()=>OpenPersonEditor(false))); buttons.Controls.Add(ClassicButton("Yeni Ekle",100,()=>OpenPersonEditor(true))); root.Controls.Add(buttons,1,1); Action syncTabLayout=()=>{bool info=tabs.SelectedIndex<=0||tabs.SelectedTab?.Text=="Personel Bilgileri";buttons.Visible=info;}; tabs.SelectedIndexChanged+=(_,_)=>syncTabLayout(); syncTabLayout();
+        buttons.BackColor=PdksAppearance.Current.Canvas;
+        buttons.Controls.Add(ClassicButton("Personel Bilgisi",118,()=>{if(currentPk!="")LoadPerson(currentPk);})); buttons.Controls.Add(ClassicButton("Çıkış Ver",100,MarkExit));
+        buttons.Controls.Add(ClassicButton("Personeli Düzenle",132,()=>OpenPersonEditor(false))); buttons.Controls.Add(ClassicButton("+ Yeni Personel",120,()=>OpenPersonEditor(true))); root.Controls.Add(buttons,1,1); Action syncTabLayout=()=>{bool info=tabs.SelectedIndex<=0||tabs.SelectedTab?.Text=="Personel Bilgileri";buttons.Visible=info;}; tabs.SelectedIndexChanged+=(_,_)=>syncTabLayout(); syncTabLayout();
     }
 
-    Button ClassicButton(string text,int w,Action a){var b=new Button{Text=text,Width=w,Height=31,Font=new Font(Font,FontStyle.Bold),ForeColor=Color.Navy,Image=ClassicGlyph(text),ImageAlign=ContentAlignment.MiddleLeft,UseVisualStyleBackColor=true};b.Click+=(_,_)=>a();return b;}
+    Button ClassicButton(string text,int w,Action a)
+    {
+        var role=text.Contains("Çıkış",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Danger:
+                 text.Contains("Yeni",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Primary:PdksActionRole.Secondary;
+        var b=PdksUiKit.Button(text,w,role,a);
+        b.Height=34;b.MinimumSize=new Size(w,34);b.MaximumSize=new Size(w,34);
+        return b;
+    }
     Control BuildClassicHeader()
     {
         var p=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,RowCount=6,Padding=new Padding(5,3,5,3),Margin=Padding.Empty};
@@ -77,8 +90,11 @@ public partial class PersonelForm
 
     void HeaderField(TableLayoutPanel p,int i,string label,string key,bool edit=true)
     {
-        int row=i/2;int col=(i%2)*2;var l=new Label{Text=label,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Margin=new Padding(0,1,2,1)};
-        var t=new TextBox{Dock=DockStyle.Fill,ReadOnly=!edit,Margin=new Padding(0,1,2,1),BorderStyle=BorderStyle.FixedSingle};f[key]=t;p.Controls.Add(l,col,row);p.Controls.Add(t,col+1,row);
+        var palette=PdksAppearance.Current;
+        int row=i/2;int col=(i%2)*2;
+        var l=new Label{Text=label,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Margin=new Padding(0,1,4,1),ForeColor=palette.Muted,Font=new Font("Segoe UI",8.2f,FontStyle.Bold)};
+        var t=new TextBox{Dock=DockStyle.Fill,ReadOnly=true,Margin=new Padding(0,1,6,1),BorderStyle=BorderStyle.FixedSingle,BackColor=palette.SurfaceAlt,ForeColor=palette.Text};
+        f[key]=t;p.Controls.Add(l,col,row);p.Controls.Add(t,col+1,row);
     }
 
     void BuildTabsClassic()
@@ -135,7 +151,7 @@ public partial class PersonelForm
     }
     void QueuePersonLoad(){if(list.CurrentRow?.Cells["PKNO"].Value is not object v)return;pendingPersonPk=v.ToString()??"";personLoadTimer.Stop();personLoadTimer.Start();}
     void PersonListFormat(object? sender,DataGridViewCellFormattingEventArgs e){if(e.RowIndex<0||!list.Columns.Contains("ICTARIH"))return;var st=e.CellStyle;if(st is null)return;var exited=list.Rows[e.RowIndex].Cells["ICTARIH"].Value is not null and not DBNull;var back=exited?Color.FromArgb(255,238,238):Color.FromArgb(238,250,240);var sel=exited?Color.FromArgb(250,220,220):Color.FromArgb(216,240,222);st.BackColor=back;st.ForeColor=Color.FromArgb(35,55,65);st.SelectionBackColor=sel;st.SelectionForeColor=Color.FromArgb(25,45,55);}
-    Button NavButton(string text,int delta){var b=new Button{Text=text,Width=28,Height=27,Margin=new Padding(1,1,1,0),ForeColor=Color.RoyalBlue};b.Click+=(_,_)=>MoveRow(delta);return b;}
+    Button NavButton(string text,int delta){var b=PdksUiKit.Button(text,32,PdksActionRole.Quiet,()=>MoveRow(delta));b.Height=28;b.MinimumSize=new Size(32,28);b.MaximumSize=new Size(32,28);b.Margin=new Padding(1,1,1,0);return b;}
     void MoveRow(int d){if(list.Rows.Count==0)return;int i=list.CurrentRow?.Index??0;i=Math.Max(0,Math.Min(list.Rows.Count-1,i+d));list.CurrentCell=list.Rows[i].Cells[0];}
     void ApplyClassicSearch(){if(list.DataSource is not DataTable dt)return;string s=searchText.Text.Replace("'","''").Trim();string c=searchField.SelectedIndex switch{1=>"AD",2=>"SOYAD",3=>"IGTARIH",4=>"ICTARIH",_=>"PKNO"};dt.DefaultView.RowFilter=s.Length==0?"":(c is "IGTARIH" or "ICTARIH"?$"CONVERT({c}, 'System.String') LIKE '%{s}%'":$"{c} LIKE '%{s}%'");UpdateClassicStats();}
     void SortChanged(object? sender,EventArgs e){if(sender is RadioButton r&&r.Checked&&list.DataSource is DataTable dt)dt.DefaultView.Sort=$"{r.Tag} ASC";}
@@ -157,13 +173,30 @@ public partial class PersonelForm
         gGiris.CellFormatting-=GirisFormat;gGiris.CellFormatting+=GirisFormat;gBilgi.CellFormatting-=BilgiFormat;gBilgi.CellFormatting+=BilgiFormat;
         gGiris.DataBindingComplete-=GirisBound;gGiris.DataBindingComplete+=GirisBound;gIzin.DataBindingComplete-=IzinBound;gIzin.DataBindingComplete+=IzinBound;gEkk.DataBindingComplete-=EkkBound;gEkk.DataBindingComplete+=EkkBound;gBilgi.DataBindingComplete-=BilgiBound;gBilgi.DataBindingComplete+=BilgiBound;gOdeme.DataBindingComplete-=OdemeBound;gOdeme.DataBindingComplete+=OdemeBound;
     }
-    void StyleGrid(DataGridView g){g.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;g.RowHeadersWidth=18;g.RowTemplate.Height=20;g.ColumnHeadersHeight=20;g.BackgroundColor=SystemColors.Control;g.BorderStyle=BorderStyle.FixedSingle;g.GridColor=SystemColors.ControlDark;g.DefaultCellStyle.Font=Font;g.ColumnHeadersDefaultCellStyle.Font=Font;g.EnableHeadersVisualStyles=true;}
+    void StyleGrid(DataGridView g)
+    {
+        var p=PdksAppearance.Current;
+        g.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;g.RowHeadersVisible=false;g.RowTemplate.Height=29;g.ColumnHeadersHeight=34;
+        g.BackgroundColor=p.Surface;g.BorderStyle=BorderStyle.None;g.GridColor=p.Border;g.DefaultCellStyle.Font=Font;
+        g.DefaultCellStyle.BackColor=p.Surface;g.DefaultCellStyle.ForeColor=p.Text;g.DefaultCellStyle.SelectionBackColor=p.Selection;g.DefaultCellStyle.SelectionForeColor=p.Text;
+        g.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",8.5f,FontStyle.Bold);g.ColumnHeadersDefaultCellStyle.BackColor=p.GridHeader;g.ColumnHeadersDefaultCellStyle.ForeColor=p.Text;g.EnableHeadersVisualStyles=false;
+    }
 
     void GirisBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gGiris,"SIRA",0,false);SetCol(gGiris,"GIRIS_TARIHI",104,true,"Giriş Tarihi");SetCol(gGiris,"GIRIS_SAATI",72,true,"Giriş Saati");SetCol(gGiris,"GTUR",34,true,"Tür");SetCol(gGiris,"CIKIS_TARIHI",104,true,"Çıkış Tarihi");SetCol(gGiris,"CIKIS_SAATI",72,true,"Çıkış Saati");SetCol(gGiris,"CTUR",34,true,"Tür");OrderGirisColumns();}
     void IzinBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gIzin,"SIRA",0,false);SetCol(gIzin,"SUREDAKIKA",0,false);SetCol(gIzin,"EBALAN",0,false);SetCol(gIzin,"TARIH",120,true,"Tarih");SetCol(gIzin,"BASSAAT",62,true,"Baş. Saat");SetCol(gIzin,"BITSAAT",62,true,"Bit. Saat");SetCol(gIzin,"SURESAAT",62,true,"Süre");SetCol(gIzin,"TIP",90,true,"Tip");SetCol(gIzin,"MAZERET",210,true,"Mazeret");}
     void EkkBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gEkk,"KOD",0,false);SetCol(gEkk,"ISLEM_TARIHI",108,true,"İşlem Tar.");SetCol(gEkk,"VERILIS_TARIHI",108,true,"Ver. Tar.");SetCol(gEkk,"TURU",85,true,"Türü");SetCol(gEkk,"MIKTAR",85,true,"Miktar");SetCol(gEkk,"ACIKLAMA",175,true,"Açıklama");}
     void BilgiBound(object? s,DataGridViewBindingCompleteEventArgs e){string[] n={"TARIH","NC","M50","M100","UIZIN","SAAT5","SAAT6","SAAT7","SAAT8","SAAT9","DEVAMSIZLIK","GEC_KALMA","EKSIK_SURE"};string[] h={"TARİH","N.Ç.","% 50","%100","Üsz.İ","5","6","7","8","9","Dvms.","Geç K.","Eks."};int[] w={105,48,48,48,42,36,36,36,36,36,50,50,50};for(int i=0;i<n.Length;i++)SetCol(gBilgi,n[i],w[i],true,h[i]);}
     void SetCol(DataGridView g,string n,int w,bool vis,string? h=null){if(!g.Columns.Contains(n))return;var c=g.Columns[n];c.Visible=vis;if(vis)c.Width=w;if(h!=null)c.HeaderText=h;}
-    void GirisFormat(object? s,DataGridViewCellFormattingEventArgs e){if(e.RowIndex<0||e.ColumnIndex<0||e.ColumnIndex>=gGiris.Columns.Count)return;var st=e.CellStyle;if(st is null)return;var col=gGiris.Columns[e.ColumnIndex];if(col is null)return;string n=col.Name;if(n is "GIRIS_SAATI" or "CIKIS_SAATI"){st.BackColor=Color.Black;st.ForeColor=Color.Lime;st.SelectionBackColor=Color.Black;st.SelectionForeColor=Color.Lime;st.Font=new Font(Font,FontStyle.Bold);}if((n is "GIRIS_TARIHI" or "CIKIS_TARIHI")&&e.Value is DateTime d){e.Value=d.ToString("dd MMM yyyy ddd",new CultureInfo("tr-TR"));e.FormattingApplied=true;}}
-    void BilgiFormat(object? s,DataGridViewCellFormattingEventArgs e){if(e.RowIndex<0)return;var st=e.CellStyle;if(st is null)return;st.BackColor=Color.Black;st.ForeColor=Color.Lime;st.SelectionBackColor=Color.Black;st.SelectionForeColor=Color.Lime;if(e.ColumnIndex==0){st.BackColor=Color.White;st.ForeColor=Color.Black;st.SelectionBackColor=SystemColors.Highlight;st.SelectionForeColor=SystemColors.HighlightText;if(e.Value is DateTime d){e.Value=d.ToString("dd MMM yyyy ddd",new CultureInfo("tr-TR"));e.FormattingApplied=true;}}}
+    void GirisFormat(object? s,DataGridViewCellFormattingEventArgs e)
+    {
+        if(e.RowIndex<0||e.ColumnIndex<0||e.ColumnIndex>=gGiris.Columns.Count)return;
+        var st=e.CellStyle;if(st is null)return;var col=gGiris.Columns[e.ColumnIndex];if(col is null)return;string n=col.Name;
+        if(n is "GIRIS_SAATI" or "CIKIS_SAATI")st.Font=new Font(Font,FontStyle.Bold);
+        if((n is "GIRIS_TARIHI" or "CIKIS_TARIHI")&&e.Value is DateTime d){e.Value=d.ToString("dd MMM yyyy ddd",new CultureInfo("tr-TR"));e.FormattingApplied=true;}
+    }
+    void BilgiFormat(object? s,DataGridViewCellFormattingEventArgs e)
+    {
+        if(e.RowIndex<0)return;
+        if(e.ColumnIndex==0&&e.Value is DateTime d){e.Value=d.ToString("dd MMM yyyy ddd",new CultureInfo("tr-TR"));e.FormattingApplied=true;}
+    }
 }
