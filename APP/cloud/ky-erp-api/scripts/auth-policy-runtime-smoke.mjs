@@ -272,17 +272,29 @@ try {
     method: "POST",
     body: JSON.stringify({ username: "smoke-mfa", password, deviceLabel: "MFA Smoke" }),
   });
-  assert(mfaSetup.status === 200 && mfaSetup.body?.stage === "MFA_SETUP", "ANY_MFA kaydı yoksa QR kurulumuna gitmeli", mfaSetup);
-  assert(/^otpauth:\/\/totp\//.test(String(mfaSetup.body?.otpauthUri || "")), "MFA_SETUP geçerli otpauth URI üretmeli", mfaSetup.body);
-  assert(Boolean(mfaSetup.body?.secret), "MFA_SETUP yalnız kurulum aşamasında secret döndürmeli", mfaSetup.body);
+  assert(mfaSetup.status === 200 && mfaSetup.body?.stage === "MFA_REQUIRED", "ANY_MFA kaydı yoksa birleşik doğrulama ekranına gitmeli", mfaSetup);
+  assert(Array.isArray(mfaSetup.body?.setupProviders) && mfaSetup.body.setupProviders.includes("GOOGLE") && mfaSetup.body.setupProviders.includes("MICROSOFT"), "Authenticator kaydı yoksa Google ve Microsoft kurulum seçenekleri sunulmalı", mfaSetup.body);
+  assert(!mfaSetup.body?.secret && !mfaSetup.body?.otpauthUri, "Birleşik doğrulama aşaması QR secret döndürmemeli", mfaSetup.body);
 
-  const mfaSetupVerify = await request("/api/auth/mfa/verify", {
+  const mfaSetupStart = await request("/api/auth/mfa/verify", {
     method: "POST",
     body: JSON.stringify({
       challengeId: mfaSetup.body.challengeId,
       challengeToken: mfaSetup.body.challengeToken,
+      setupProvider: "GOOGLE",
+    }),
+  });
+  assert(mfaSetupStart.status === 200 && mfaSetupStart.body?.stage === "MFA_SETUP", "Google kurulumu açıkça seçilince QR kurulumuna geçmeli", mfaSetupStart);
+  assert(/^otpauth:\/\/totp\//.test(String(mfaSetupStart.body?.otpauthUri || "")), "MFA_SETUP geçerli otpauth URI üretmeli", mfaSetupStart.body);
+  assert(Boolean(mfaSetupStart.body?.secret), "MFA_SETUP yalnız kurulum aşamasında secret döndürmeli", mfaSetupStart.body);
+
+  const mfaSetupVerify = await request("/api/auth/mfa/verify", {
+    method: "POST",
+    body: JSON.stringify({
+      challengeId: mfaSetupStart.body.challengeId,
+      challengeToken: mfaSetupStart.body.challengeToken,
       provider: "GOOGLE",
-      code: totp(mfaSetup.body.secret),
+      code: totp(mfaSetupStart.body.secret),
     }),
   });
   assert(mfaSetupVerify.status === 200 && mfaSetupVerify.body?.stage === "AUTHENTICATED", "Yeni Google kurulumu gerçek TOTP ile doğrulanıp oturum açmalı", mfaSetupVerify);
