@@ -29,6 +29,18 @@ test("IK master people route is never shadowed by the PDKS card population", () 
   assert.match(personnel, /nextPersonnelCode/);
 });
 
+test("monthly personnel API returns the full HKN master roster and allocates the next HKN code", () => {
+  const relational = api("ik-relational-cloud.ts");
+  assert.match(relational, /async function nextMonthlyPersonnelCode/);
+  assert.match(relational, /MAX\(CASE[\s\S]*UPPER\(TRIM\(code\)\) LIKE 'HKN-%'/);
+  assert.match(relational, /value\.code = await nextMonthlyPersonnelCode/);
+  assert.match(relational, /const allEmployees = rawEmployeesWithCalc\.map/);
+  assert.match(relational, /masterEmployees,/);
+  assert.match(relational, /rawEmployees: allEmployees/);
+  assert.match(relational, /rawLeaves: leaves/);
+  assert.match(relational, /rawDocuments: documents\.map/);
+});
+
 test("finance create update delete mutations are visible to live sync", () => {
   const relational = api("ik-relational-cloud.ts");
   assert.match(relational, /action:\s*"FINANCE_CREATE"/);
