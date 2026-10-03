@@ -1558,8 +1558,97 @@ async function adminMaintainPerson(c: Context<AppEnv>) {
     return okData(c, { employeeId, oldCode: currentCode, code: nextCode, changed: true });
   }
 
+  if (action === "MERGE") {
+    const targetEmployeeId = text(body.targetEmployeeId);
+    if (!targetEmployeeId || targetEmployeeId === employeeId) {
+      return error(c, 400, "MERGE_TARGET_INVALID", "Birleştirme için farklı bir doğru personel seçilmelidir.");
+    }
+    const target = await first(c, "SELECT * FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [targetEmployeeId, companyId]);
+    if (!target) return error(c, 404, "MERGE_TARGET_NOT_FOUND", "Doğru personel kaydı bulunamadı.");
+    const targetCode = normalizeHknPersonnelCode(target.code) || text(target.code);
+    const expectedMergeConfirm = `BIRLESTIR ${currentCode} > ${targetCode}`;
+    if (upper(body.confirmText).replaceAll("İ", "I") !== upper(expectedMergeConfirm)) {
+      return error(c, 400, "ADMIN_CONFIRMATION_REQUIRED", `Birleştirme için "${expectedMergeConfirm}" yazılmalıdır.`);
+    }
+    if (reason.length < 5) return error(c, 400, "MERGE_REASON_REQUIRED", "Personel birleştirme nedeni yazılmalıdır.");
+
+    const tables = await all(c, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
+    const skipTables = new Set(["hr_monthly_employees", "ik_person_card_settings", "ik_person_hr_profiles"]);
+    const statements: D1PreparedStatement[] = [];
+    const moved: Array<{ table: string; count: number }> = [];
+
+    for (const row of tables) {
+      const table = text(row.name);
+      if (!/^[A-Za-z0-9_]+$/.test(table) || skipTables.has(table)) continue;
+      let columns: Row[] = [];
+      try { columns = await all(c, `SELECT name FROM pragma_table_info('${table}')`); } catch { continue; }
+      if (!columns.some((column) => text(column.name) === "employee_id")) continue;
+      let count = 0;
+      try {
+        const countRow = await first(c, `SELECT COUNT(*) AS count FROM "${table}" WHERE employee_id=?`, [employeeId]);
+        count = number(countRow?.count);
+      } catch { continue; }
+      if (!count) continue;
+      statements.push(c.env.DB.prepare(`UPDATE "${table}" SET employee_id=? WHERE employee_id=?`).bind(targetEmployeeId, employeeId));
+      moved.push({ table, count });
+    }
+
+    try {
+      statements.push(
+        c.env.DB.prepare("UPDATE ik_person_card_settings SET base_employee_id=NULL,updated_at=? WHERE employee_id=? AND base_employee_id=?")
+          .bind(nowIso(), targetEmployeeId, employeeId),
+        c.env.DB.prepare("UPDATE ik_person_card_settings SET base_employee_id=?,updated_at=? WHERE base_employee_id=? AND employee_id<>?")
+          .bind(targetEmployeeId, nowIso(), employeeId, targetEmployeeId),
+        c.env.DB.prepare("DELETE FROM ik_person_card_settings WHERE employee_id=? AND main_company_id=?")
+          .bind(employeeId, companyId),
+        c.env.DB.prepare("DELETE FROM ik_person_hr_profiles WHERE employee_id=? AND main_company_id=?")
+          .bind(employeeId, companyId),
+        c.env.DB.prepare("DELETE FROM hr_monthly_employees WHERE id=? AND main_company_id=?")
+          .bind(employeeId, companyId),
+      );
+      await c.env.DB.batch(statements);
+    } catch (cause) {
+      return error(c, 409, "PERSONNEL_MERGE_CONFLICT",
+        "Personel kayıtlarında aynı dönem/gün/grup için çakışan bağlı kayıt var. Birleştirme yapılmadı; çakışan kayıt önce düzeltilmelidir.");
+    }
+
+    try {
+      await c.env.DB.prepare("DELETE FROM json_store WHERE scope='IK_PERSON_CARD_CALC' AND file_name LIKE ?")
+        .bind(`%${employeeId}%`).run();
+    } catch {}
+
+    await audit(c, {
+      mainCompanyId: companyId,
+      employeeId: targetEmployeeId,
+      entityType: "PERSONEL",
+      action: "ADMIN_PERSONNEL_MERGE",
+      summary: `${text(current.full_name)} (${currentCode}) kaydı ${text(target.full_name)} (${targetCode}) kaydıyla birleştirildi.`,
+      details: {
+        sourceEmployeeId: employeeId,
+        sourceCode: currentCode,
+        sourceName: text(current.full_name),
+        targetEmployeeId,
+        targetCode,
+        targetName: text(target.full_name),
+        reason,
+        moved,
+        actorUserId: text(user.id),
+        actorRole: text(user.role),
+      },
+    });
+    return okData(c, {
+      merged: true,
+      sourceEmployeeId: employeeId,
+      sourceCode: currentCode,
+      targetEmployeeId,
+      targetCode,
+      targetName: text(target.full_name),
+      moved,
+    });
+  }
+
   if (action !== "HARD_DELETE") {
-    return error(c, 400, "ADMIN_ACTION_INVALID", "Yönetici işlemi RECODE veya HARD_DELETE olmalıdır.");
+    return error(c, 400, "ADMIN_ACTION_INVALID", "Yönetici işlemi RECODE, MERGE veya HARD_DELETE olmalıdır.");
   }
   const expectedConfirm = `SİL ${currentCode}`;
   if (upper(body.confirmText) !== upper(expectedConfirm)) {
