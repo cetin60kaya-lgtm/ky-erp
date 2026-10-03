@@ -137,7 +137,7 @@ async function loadSharedSize(key, element) {
     if (!cache.has(key)) cache.set(key, getDialogLayout(key).catch(() => null));
     const result = await cache.get(key);
     element.dataset.kyDialogCanPersist = result?.canPersist ? "true" : "false";
-    if (result?.layout) applySize(element, result.layout);
+    if (result?.layout && element.dataset.kyDialogUserResized !== "true") applySize(element, result.layout);
   } catch {
     element.dataset.kyDialogCanPersist = "false";
   }
@@ -158,6 +158,7 @@ function addHandle(element, key) {
     event.preventDefault();
     event.stopPropagation();
     handle.setPointerCapture?.(event.pointerId);
+    element.dataset.kyDialogUserResized = "true";
     const rect = element.getBoundingClientRect();
     const startX = event.clientX;
     const startY = event.clientY;
@@ -177,7 +178,7 @@ function addHandle(element, key) {
       handle.removeEventListener("pointercancel", finish);
       const rectNow = element.getBoundingClientRect();
       const finalSize = clampSize(rectNow.width, rectNow.height);
-      if (element.dataset.kyDialogCanPersist !== "true") return;
+      if (element.dataset.kyDialogCanPersist === "false") return;
       try {
         const saved = await saveDialogLayout(key, finalSize);
         if (saved?.layout) cache.set(key, Promise.resolve(saved));
@@ -195,6 +196,9 @@ function addHandle(element, key) {
 function enhance(rawElement) {
   const element = directPanelFromBackdrop(rawElement);
   if (!isUsablePanel(element) || element.dataset.kyResizableDialog === "true") return;
+  const owningDialog = element.parentElement?.closest?.("[data-ky-resizable-dialog='true']");
+  const cameFromBackdrop = rawElement !== element;
+  if (owningDialog && !cameFromBackdrop) return;
   const key = keyOf(element);
   if (!key || (key.endsWith(".dialog") && moduleKeyOf(element) === "global")) return;
   element.dataset.kyResizableDialog = "true";
