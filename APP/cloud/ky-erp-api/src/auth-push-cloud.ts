@@ -634,10 +634,13 @@ export async function notifyManagerApproval(c: any, approvalId: string, companyS
 }
 
 export async function notifySessionApproval(c: any, session: AnyRow) {
-  const companySlug=text(session.mainCompanySlug || session.main_company_slug); const targetRole=roleOf({ role:session.role, platform_role:session.platform_role, role_override:session.role_override });
-  if (["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole) || !(await sessionNeedsManagerReview(c, session))) return { sent:0, recipients:0 };
-  const userIds=await managerApproverUserIds(c, companySlug); const devices: AnyRow[]=[]; for(const userId of userIds) devices.push(...await activeDevicesForUser(c,userId,"MANAGER"));
-  const sent=await sendWakeMany(c,devices); await audit(c,"SESSION_MANAGER_PUSH_DISPATCHED","",text(session.userId || session.user_id),companySlug,{ sessionId:text(session.id), recipients:userIds.size, notifiedDevices:sent });
+  const companySlug=text(session.mainCompanySlug || session.main_company_slug);
+  const targetRole=roleOf({ role:session.role, platform_role:session.platform_role, role_override:session.role_override });
+  if (!(await sessionNeedsManagerReview(c, session))) return { sent:0, recipients:0 };
+  const privilegedTarget=["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole);
+  const userIds=privilegedTarget ? await applicationOwnerUserIds(c) : await managerApproverUserIds(c, companySlug);
+  const devices: AnyRow[]=[]; for(const userId of userIds) devices.push(...await activeDevicesForUser(c,userId,"MANAGER"));
+  const sent=await sendWakeMany(c,devices); await audit(c,"SESSION_MANAGER_PUSH_DISPATCHED","",text(session.userId || session.user_id),companySlug,{ sessionId:text(session.id), targetRole, privilegedTarget, recipients:userIds.size, notifiedDevices:sent });
   return { sent, recipients:userIds.size };
 }
 
