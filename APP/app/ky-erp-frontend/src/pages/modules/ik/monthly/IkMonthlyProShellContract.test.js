@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const monthly = readFileSync(new URL("./IkAdvancedMonthly.jsx", import.meta.url), "utf8");
+const app = readFileSync(new URL("../../../../AppV3.jsx", import.meta.url), "utf8");
+const financePage = readFileSync(new URL("./IkFinancePage.jsx", import.meta.url), "utf8");
 const shell = readFileSync(new URL("./IkMonthlyProShell.jsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("./ik.monthly.pro.css", import.meta.url), "utf8");
 
@@ -88,4 +90,47 @@ test("payroll and document controls filter the rows they display", () => {
   assert.match(monthly, /documentFilter/);
   assert.match(monthly, /visibleDocumentEmployeeIds/);
   assert.match(monthly, /filteredDocuments\.map/);
+});
+
+
+test("selected-month employment state ignores today's passive flag and uses hire exit dates", () => {
+  assert.match(monthly, /function employmentStateAtPeriod/);
+  assert.match(monthly, /periodEmploymentState/);
+  assert.match(monthly, /Dönemde Aktif/);
+  assert.match(monthly, /Çıkış Ayı/);
+  assert.match(monthly, /\["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED"\]/);
+});
+
+test("IK uses one canonical monthly workspace for personnel salary movements leave and payroll", () => {
+  assert.doesNotMatch(app, /IkPersonnelFinancePage/);
+  assert.match(app, /IkFinancePage/);
+  assert.match(financePage, /"personel-kartlari": "personel"/);
+  assert.match(monthly, /renderPersonel\(\)/);
+  assert.match(monthly, /renderUcret\(\)/);
+});
+
+test("canonical personnel workspace supports selected bulk salary and road changes with history", () => {
+  assert.match(monthly, /saveIkAdvancedBulkCompensation/);
+  assert.match(monthly, /Toplu Ücret \/ Yol Düzenleme/);
+  assert.match(monthly, /SALARY_PERCENT/);
+  assert.match(monthly, /ROAD_SET/);
+  assert.match(monthly, /ROAD_PERCENT/);
+  assert.match(monthly, /Geçerlilik Tarihi/);
+});
+
+test("annual leave keeps proof-grade day-by-day snapshots and printable ledger", () => {
+  assert.match(monthly, /Gün Gün İzin Dökümü/);
+  assert.match(monthly, /leavePreview\.dayDetails/);
+  assert.match(monthly, /Gün Dökümünü Yazdır \/ PDF/);
+  assert.match(monthly, /policySnapshot/);
+  assert.match(monthly, /effectType/);
+});
+
+test("official payroll output is the payment completion action", () => {
+  assert.match(monthly, /const finalizePayrollForOutput/);
+  assert.match(monthly, /status:\s*"PAID"/);
+  assert.match(monthly, /window\.confirm/);
+  assert.match(monthly, /Bordroyu Tamamla \/ PDF/);
+  assert.match(monthly, /10['’]lu Fiş \+ Tamamla/);
+  assert.match(monthly, /Tamamla \/ Excel/);
 });

@@ -115,6 +115,7 @@ async function first(c: Context<AppEnv>, sql: string, values: unknown[] = []) {
 function mapMonthly(row: Row): Row {
   const hireDate = hrDateOnly(row.hire_date);
   const paymentType = text(row.bank_payment_type) || "Banka + Elden";
+  const version = [text(row.updated_at), text(row.card_updated_at)].filter(Boolean).sort().at(-1) || text(row.updated_at || row.created_at);
   return {
     id: text(row.id),
     mainCompanyId: canonicalHrCompanyId(row.main_company_id),
@@ -153,6 +154,8 @@ function mapMonthly(row: Row): Row {
     note: text(row.note),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    cardUpdatedAt: row.card_updated_at,
+    version,
   };
 }
 
@@ -296,7 +299,8 @@ async function monthlyRows(c: Context<AppEnv>, companyId = companyIdOf(c)) {
               s.garnishment_source,
               s.legal_start_period,
               s.legal_end_period,
-              s.garnishment_note
+              s.garnishment_note,
+              s.updated_at AS card_updated_at
          FROM hr_monthly_employees e
          LEFT JOIN ik_person_card_settings s
            ON s.employee_id = e.id AND s.main_company_id = e.main_company_id
@@ -459,6 +463,8 @@ async function createMonthly(c: Context<AppEnv>) {
   const companyId = companyIdOf(c, body);
   const value = monthlyValues(body);
   if (!value.fullName) return error(c, 400, "FULL_NAME_REQUIRED", "Ad soyad zorunludur.");
+  if (!value.hireDate) return error(c, 400, "HIRE_DATE_REQUIRED", "İşe giriş tarihi zorunludur.");
+  value.status = "Aktif";
   value.code = await nextMonthlyPersonnelCode(c, companyId);
   const duplicateCode = await first(
     c,
@@ -671,10 +677,16 @@ async function saveAdvancedFinance(c: Context<AppEnv>) {
     ? [...new Set(body.employeeIds.map((value: unknown) => text(value)).filter(Boolean))]
     : [singleEmployeeId].filter(Boolean);
   if (!employeeIds.length) return error(c, 400, "EMPLOYEE_REQUIRED", isBulkAdvance ? "Toplu işlem için employeeIds zorunludur." : "Tekli işlem için employeeId zorunludur.");
-  const valid = await all(c, `SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND id IN (${employeeIds.map(() => "?").join(",")})`, [companyId, ...employeeIds]);
+  const valid = await all(c, `SELECT e.id,e.hire_date,s.exit_date FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.main_company_id=? AND e.id IN (${employeeIds.map(() => "?").join(",")})`, [companyId, ...employeeIds]);
   if (valid.length !== employeeIds.length) return error(c, 400, "INVALID_EMPLOYEE", "Başka firmaya ait veya geçersiz personel var.");
 
   const date = hrDateOnly(body.date) || hrTodayIstanbul();
+  const invalidEmployment = valid.find((row) => {
+    const hire = hrDateOnly(row.hire_date);
+    const exit = hrDateOnly(row.exit_date);
+    return (hire && date < hire) || (exit && date > exit);
+  });
+  if (invalidEmployment) return error(c, 409, "FINANCE_OUTSIDE_EMPLOYMENT", "Mesai/avans/kesinti tarihi personelin çalışma dönemi dışında olamaz.");
   const dateYear = number(date.slice(0, 4));
   const dateMonth = number(date.slice(5, 7));
   const financeLock = await rejectAdvancedPeriodLocked(c, companyId, dateYear, dateMonth);
@@ -744,10 +756,15 @@ async function updateAdvancedFinance(c: Context<AppEnv>) {
     return error(c, 400, "SINGLE_EMPLOYEE_ONLY", "Hareket güncellemesinde yalnız employeeId kullanılmalıdır.");
   }
   const employeeId = text(body.employeeId || current.employee_id);
-  const valid = await first(c, "SELECT id FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  const valid = await first(c, `SELECT e.id,e.hire_date,s.exit_date FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.id=? AND e.main_company_id=? LIMIT 1`, [employeeId, companyId]);
   if (!valid) return error(c, 400, "INVALID_EMPLOYEE", "Başka firmaya ait veya geçersiz personel var.");
 
   const targetDate = hrDateOnly(body.date || current.date);
+  const validHire = hrDateOnly(valid.hire_date);
+  const validExit = hrDateOnly(valid.exit_date);
+  if ((validHire && targetDate < validHire) || (validExit && targetDate > validExit)) {
+    return error(c, 409, "FINANCE_OUTSIDE_EMPLOYMENT", "Mesai/avans/kesinti tarihi personelin çalışma dönemi dışında olamaz.");
+  }
   const updateLock = await rejectAdvancedPeriodLocked(c, companyId, number(targetDate.slice(0, 4)), number(targetDate.slice(5, 7)));
   if (updateLock) return updateLock;
 
@@ -883,20 +900,30 @@ async function createSalaryContract(c: Context<AppEnv>) {
   return okData(c, row || { id, employeeId }, 201);
 }
 
-export function advancedEmployeeVisible(employee: Row, card: Row, period: string) {
-  if (card.payroll_included !== undefined && card.payroll_included !== null && !flag(card.payroll_included)) return false;
+export function employmentStateAtPeriod(employee: Row, card: Row, period: string) {
   const year = number(period.slice(0, 4));
   const month = number(period.slice(5, 7));
-  if (!year || month < 1 || month > 12) return false;
+  if (!year || month < 1 || month > 12) return "INVALID_PERIOD";
   const periodStart = `${period}-01`;
   const periodEnd = `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
   const hireDate = hrDateOnly(employee.hireDate || employee.startDate || employee.hire_date);
   const exitDate = hrDateOnly(card.exit_date || employee.exitDate || employee.exit_date);
-  if (hireDate && hireDate > periodEnd) return false;
-  if (exitDate && exitDate < periodStart) return false;
-  const status = upper(`${text(card.active_passive)} ${text(employee.status)}`);
-  if (status.includes("PAS") && !exitDate) return false;
-  return true;
+  const currentStatus = upper(`${text(card.active_passive)} ${text(employee.status)}`);
+
+  if (!hireDate) return "MISSING_HIRE_DATE";
+  if (exitDate && exitDate < hireDate) return "INVALID_LIFECYCLE";
+  if (hireDate > periodEnd) return "NOT_STARTED";
+  if (exitDate && exitDate < periodStart) return "EXITED";
+  if (currentStatus.includes("PAS") && !exitDate) return "MISSING_EXIT_DATE";
+  if (hireDate.startsWith(period) && exitDate?.startsWith(period)) return "ENTERED_EXITED";
+  if (hireDate.startsWith(period)) return "NEW_HIRE";
+  if (exitDate?.startsWith(period)) return "EXIT_MONTH";
+  return "ACTIVE";
+}
+
+export function advancedEmployeeVisible(employee: Row, card: Row, period: string) {
+  if (card.payroll_included !== undefined && card.payroll_included !== null && !flag(card.payroll_included)) return false;
+  return ["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED"].includes(employmentStateAtPeriod(employee, card, period));
 }
 
 const HISTORICAL_PAYROLL_FIELDS = new Set([
@@ -908,6 +935,7 @@ const HISTORICAL_PAYROLL_FIELDS = new Set([
   "cashAmount",
   "overtimeBaseHours",
   "overtimeHourlyBase",
+  "deductionHourlyBase",
 ]);
 
 export function applyHistoricalEmployeeValues(employee: Row, changeRows: Row[] = [], periodEnd = "") {
@@ -925,7 +953,7 @@ export function applyHistoricalEmployeeValues(employee: Row, changeRows: Row[] =
     const field = text(row.field_name || row.fieldName);
     if (!HISTORICAL_PAYROLL_FIELDS.has(field)) continue;
     const oldValue = row.old_value ?? row.oldValue;
-    if (["salary", "roadAllowance", "bankAmount", "cashAmount", "overtimeBaseHours", "overtimeHourlyBase"].includes(field)) {
+    if (["salary", "roadAllowance", "bankAmount", "cashAmount", "overtimeBaseHours", "overtimeHourlyBase", "deductionHourlyBase"].includes(field)) {
       result[field] = number(oldValue);
       if (field === "overtimeBaseHours") result.overtimeHourlyBase = number(oldValue) || 225;
       if (field === "overtimeHourlyBase") result.overtimeBaseHours = number(oldValue) || 225;
@@ -1125,7 +1153,8 @@ async function advancedMonth(c: Context<AppEnv>) {
       cardSource: text(card.card_source) || "TNF",
       personelKodu: text(card.personel_kodu) || text(employee.code),
       activePassive: text(card.active_passive) || text(employee.status),
-      paymentType: text(card.payment_type) || text(employee.bankPaymentType),
+      periodEmploymentState: employmentStateAtPeriod(employee, card, period),
+      paymentType: text(employee.bankPaymentType) || text(card.payment_type),
       sgkFollow,
       sgkStatus: sgkFollow ? "VAR" : "YOK",
       sgkDays,
@@ -1151,6 +1180,7 @@ async function advancedMonth(c: Context<AppEnv>) {
       cardSource: text(card.card_source) || "TNF",
       personelKodu: text(card.personel_kodu) || text(employee.code),
       activePassive: text(card.active_passive) || text(employee.status),
+      periodEmploymentState: employmentStateAtPeriod(employee, card, period),
       paymentType: text(card.payment_type) || text(employee.bankPaymentType),
       sgkFollow,
       sgkStatus: sgkFollow ? "VAR" : "YOK",
@@ -1302,6 +1332,11 @@ async function savePersonCard(c: Context<AppEnv>) {
   const current = await first(c, "SELECT * FROM hr_monthly_employees WHERE id=? AND main_company_id=?", [employeeId, companyId]);
   if (!current) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
   const currentCard = await first(c, "SELECT * FROM ik_person_card_settings WHERE employee_id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  const currentVersion = [text(current.updated_at), text(currentCard?.updated_at)].filter(Boolean).sort().at(-1) || text(current.updated_at || current.created_at);
+  const expectedVersion = text(body.expectedVersion);
+  if (expectedVersion && expectedVersion !== currentVersion) {
+    return error(c, 409, "PERSONNEL_VERSION_CONFLICT", "Personel kartı başka bir bilgisayarda değişti. Güncel kaydı yeniden yükleyip değişikliği tekrar kontrol edin.");
+  }
   const currentCalc = await personCardCalc(c, companyId, employeeId);
   const cardNo = text(body.cardNo);
   if (cardNo) {
@@ -1327,6 +1362,7 @@ async function savePersonCard(c: Context<AppEnv>) {
   const period = /^\d{4}-\d{2}$/.test(text(body.period))
     ? text(body.period)
     : `${number(body.year) || new Date().getFullYear()}-${String(number(body.month) || new Date().getMonth() + 1).padStart(2, "0")}`;
+  const effectiveDate = hrDateOnly(body.effectiveDate) || hrTodayIstanbul();
   const cardLock = await rejectAdvancedPeriodLocked(c, companyId, number(period.slice(0, 4)), number(period.slice(5, 7)));
   if (cardLock) return cardLock;
   const sgkCovered = body.sgkFollow === true || upper(body.sgkStatus) === "VAR";
@@ -1336,13 +1372,18 @@ async function savePersonCard(c: Context<AppEnv>) {
     return error(c, 400, "SGK_DAYS_INVALID", `SGK gün sayısı 0-${maxSgkDays} arasında olmalıdır.`);
   }
   const sgkDays = sgkCovered ? rawSgkDays : 0;
-  const activePassive = text(body.activePassive || body.status || currentCard?.active_passive || current.status) || "AKTIF";
-  const wasPassive = upper(currentCard?.active_passive || current.status).includes("PAS");
-  const isPassive = upper(activePassive).includes("PAS");
-  const explicitExitDate = hrDateOnly(body.exitDate);
-  const effectiveExitDate = isPassive
-    ? (explicitExitDate || (wasPassive ? hrDateOnly(currentCard?.exit_date) : "") || hrDateOnly(body.effectiveDate) || hrTodayIstanbul())
-    : null;
+  const hireDate = hrDateOnly(body.hireDate || body.startDate || current.hire_date);
+  if (!hireDate) return error(c, 400, "HIRE_DATE_REQUIRED", "İşe giriş tarihi zorunludur.");
+  const effectiveExitDate = hrDateOnly(body.exitDate);
+  if (effectiveExitDate && effectiveExitDate < hireDate) {
+    return error(c, 400, "EXIT_BEFORE_HIRE", "İşten çıkış tarihi işe giriş tarihinden önce olamaz.");
+  }
+  const activePassive = effectiveExitDate ? "Pasif" : "Aktif";
+  body.hireDate = hireDate;
+  body.startDate = hireDate;
+  body.exitDate = effectiveExitDate;
+  body.activePassive = activePassive;
+  body.status = activePassive;
   await c.env.DB.prepare(
     `INSERT INTO ik_person_card_settings (
        employee_id,main_company_id,card_no,identity_no,payroll_included,card_source,personel_kodu,exit_date,
@@ -1398,13 +1439,144 @@ async function savePersonCard(c: Context<AppEnv>) {
       .bind(companyId, employeeId, period, sgkCovered ? 1 : 0, sgkDays, text(body.sgkNote), text(body.userName) || "IK", nowIso()),
   ]);
   await updateMonthlyEmployeeFromCard(c, employeeId, companyId, body, current);
+
+  const updatedEmployee = await first(c, "SELECT * FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  const updatedCard = await first(c, "SELECT * FROM ik_person_card_settings WHERE employee_id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  const trackedChanges = [
+    ["salary", number(current.salary), number(updatedEmployee?.salary)],
+    ["roadAllowance", number(current.road_allowance), number(updatedEmployee?.road_allowance)],
+    ["bankPaymentType", text(current.bank_payment_type), text(updatedEmployee?.bank_payment_type)],
+    ["bankAmount", number(current.bank_amount), number(updatedEmployee?.bank_amount)],
+    ["cashAmount", number(current.cash_amount), number(updatedEmployee?.cash_amount)],
+    ["overtimeHourlyBase", number(current.overtime_hourly_base) || 225, number(updatedEmployee?.overtime_hourly_base) || 225],
+    ["deductionHourlyBase", number(currentCalc.deductionHourlyBase) || 300, deductionHourlyBase],
+    ["startDate", hrDateOnly(current.hire_date), hrDateOnly(updatedEmployee?.hire_date)],
+    ["exitDate", hrDateOnly(currentCard?.exit_date), hrDateOnly(updatedCard?.exit_date)],
+    ["employmentStatus", text(currentCard?.active_passive || current.status), text(updatedCard?.active_passive || updatedEmployee?.status)],
+  ].filter(([, before, after]) => String(before ?? "") !== String(after ?? ""));
+
+  if (trackedChanges.length) {
+    const historyStatements = trackedChanges.map(([field, before, after]) => c.env.DB.prepare(`INSERT INTO ik_employee_change_history
+      (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(
+        crypto.randomUUID(), companyId, employeeId,
+        ["salary","roadAllowance","bankPaymentType","bankAmount","cashAmount","overtimeHourlyBase","deductionHourlyBase"].includes(String(field)) ? "COMPENSATION" : "PERSONNEL",
+        String(field), text(before), text(after), effectiveDate,
+        text(body.changeNote || body.note) || "İK personel / ücret kartı güncellendi",
+        text(body.userId || body.userName) || "IK", nowIso(),
+      ));
+    await c.env.DB.batch(historyStatements);
+
+    const compensationChanged = trackedChanges.some(([field]) => ["salary","roadAllowance","bankPaymentType","bankAmount","cashAmount"].includes(String(field)));
+    if (compensationChanged) {
+      await c.env.DB.prepare(`INSERT INTO hr_salary_contracts
+        (id,employee_id,salary,road_allowance,bank_payment_type,bank_amount,cash_amount,contract_type,contract_start,contract_end,effective_date,note,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
+          crypto.randomUUID(), employeeId, number(updatedEmployee?.salary), number(updatedEmployee?.road_allowance),
+          text(updatedEmployee?.bank_payment_type) || "BANKA_ELDEN", number(updatedEmployee?.bank_amount), number(updatedEmployee?.cash_amount),
+          "İK ücret değişikliği", effectiveDate, null, effectiveDate,
+          text(body.changeNote || body.note) || "İK ücret / ödeme planı güncellendi", nowIso(),
+        ).run();
+    }
+    await audit(c, {
+      mainCompanyId: companyId,
+      period: effectiveDate.slice(0, 7),
+      employeeId,
+      entityType: "PERSONEL",
+      action: "PERSON_CARD_UPDATE",
+      summary: `${trackedChanges.length} personel/ücret alanı güncellendi.`,
+      details: { effectiveDate, changes: trackedChanges.map(([field, before, after]) => ({ field, before, after })) },
+    });
+  }
+
   return okData(c, {
     employeeId, saved: true, baseEmployeeId, extraPaymentAmount: autoExtra,
     legalDeductionType: legalType, garnishmentSource: legalSource,
     overtimeHourlyBase, deductionHourlyBase,
-    personnelStatus, period, sgkCovered, sgkDays,
+    personnelStatus, period, sgkCovered, sgkDays, effectiveDate, changedFields: trackedChanges.map(([field]) => field),
   });
 }
+async function saveAdvancedBulkCompensation(c: Context<AppEnv>) {
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c, body);
+  const employeeIds = Array.isArray(body.employeeIds)
+    ? [...new Set(body.employeeIds.map((value: unknown) => text(value)).filter(Boolean))]
+    : [];
+  if (!employeeIds.length) return error(c, 400, "EMPLOYEE_REQUIRED", "Toplu düzenleme için en az bir personel seçilmelidir.");
+
+  const action = upper(body.action);
+  if (!["SALARY_PERCENT", "ROAD_SET", "ROAD_PERCENT"].includes(action)) {
+    return error(c, 400, "BULK_COMPENSATION_ACTION_INVALID", "Toplu ücret işlemi geçersiz.");
+  }
+  const effectiveDate = hrDateOnly(body.effectiveDate) || hrTodayIstanbul();
+  const lock = await rejectAdvancedPeriodLocked(c, companyId, number(effectiveDate.slice(0, 4)), number(effectiveDate.slice(5, 7)));
+  if (lock) return lock;
+
+  const percent = number(body.percent);
+  const value = number(body.value);
+  if (action.endsWith("_PERCENT") && (percent <= -100 || percent > 500)) {
+    return error(c, 400, "PERCENT_INVALID", "Yüzde değişim -100 ile 500 arasında olmalıdır.");
+  }
+  if (action === "ROAD_SET" && value < 0) {
+    return error(c, 400, "ROAD_VALUE_INVALID", "Yol yardımı negatif olamaz.");
+  }
+
+  const placeholders = employeeIds.map(() => "?").join(",");
+  const rows = await all(c, `SELECT id,full_name,code,salary,road_allowance,bank_payment_type,bank_amount,cash_amount
+    FROM hr_monthly_employees WHERE main_company_id=? AND id IN (${placeholders})`, [companyId, ...employeeIds]);
+  if (rows.length !== employeeIds.length) return error(c, 400, "INVALID_EMPLOYEE", "Seçimde başka firmaya ait veya bulunamayan personel var.");
+
+  const note = text(body.note) || (action === "SALARY_PERCENT"
+    ? `Toplu maaş değişimi %${percent}`
+    : action === "ROAD_SET" ? `Toplu yol yardımı: ${value}` : `Toplu yol değişimi %${percent}`);
+  const statements: D1PreparedStatement[] = [];
+  const preview: Row[] = [];
+  const timestamp = nowIso();
+
+  for (const row of rows) {
+    const oldSalary = number(row.salary);
+    const oldRoad = number(row.road_allowance);
+    const nextSalary = action === "SALARY_PERCENT" ? Math.max(0, Math.round(oldSalary * (1 + percent / 100) * 100) / 100) : oldSalary;
+    const nextRoad = action === "ROAD_SET"
+      ? Math.max(0, Math.round(value * 100) / 100)
+      : action === "ROAD_PERCENT" ? Math.max(0, Math.round(oldRoad * (1 + percent / 100) * 100) / 100) : oldRoad;
+    const field = action === "SALARY_PERCENT" ? "salary" : "roadAllowance";
+    const before = action === "SALARY_PERCENT" ? oldSalary : oldRoad;
+    const after = action === "SALARY_PERCENT" ? nextSalary : nextRoad;
+    if (Math.abs(after - before) <= 0.001) continue;
+
+    statements.push(
+      c.env.DB.prepare("UPDATE hr_monthly_employees SET salary=?,road_allowance=?,updated_at=? WHERE id=? AND main_company_id=?")
+        .bind(nextSalary, nextRoad, timestamp, text(row.id), companyId),
+      c.env.DB.prepare(`INSERT INTO ik_employee_change_history
+        (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        .bind(crypto.randomUUID(), companyId, text(row.id), "COMPENSATION", field, text(before), text(after), effectiveDate, note, text(body.userId || body.userName) || "IK", timestamp),
+      c.env.DB.prepare(`INSERT INTO hr_salary_contracts
+        (id,employee_id,salary,road_allowance,bank_payment_type,bank_amount,cash_amount,contract_type,contract_start,contract_end,effective_date,note,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .bind(crypto.randomUUID(), text(row.id), nextSalary, nextRoad, text(row.bank_payment_type) || "BANKA_ELDEN",
+          number(row.bank_amount), number(row.cash_amount), "Toplu ücret değişikliği", effectiveDate, null, effectiveDate, note, timestamp),
+    );
+    preview.push({
+      employeeId: text(row.id), fullName: text(row.full_name), code: text(row.code),
+      field, before, after, difference: Math.round((after - before) * 100) / 100,
+    });
+  }
+
+  if (!preview.length) return okData(c, { changed: 0, rows: [], effectiveDate, message: "Seçili personelde değişecek tutar yok." });
+  await c.env.DB.batch(statements);
+  await audit(c, {
+    mainCompanyId: companyId,
+    period: effectiveDate.slice(0, 7),
+    entityType: "UCRET",
+    action: "BULK_COMPENSATION_UPDATE",
+    summary: `${preview.length} personelde toplu ücret/yol düzenlemesi yapıldı.`,
+    details: { action, percent, value, effectiveDate, note, employeeIds, rows: preview },
+  });
+  return okData(c, { changed: preview.length, rows: preview, effectiveDate, action, note });
+}
+
 async function updateMonthlyEmployeeFromCard(c: Context<AppEnv>, employeeId: string, companyId: string, body: Row, current: Row) {
   const merged: Row = { ...current, ...body, code: body.personelKodu || body.code || current.code, bankPaymentType: body.paymentType || current.bank_payment_type, sgkStatus: body.sgkFollow === false ? "YOK" : "VAR", status: body.activePassive || body.status || current.status };
   const value = monthlyValues(merged, current);
@@ -2088,12 +2260,24 @@ async function auditLogs(c: Context<AppEnv>) {
 }
 
 
-const DEFAULT_TR_OFFICIAL_HOLIDAYS_2026 = [
-  "2026-01-01",
-  "2026-03-19", "2026-03-20", "2026-03-21", "2026-03-22",
-  "2026-04-23", "2026-05-01", "2026-05-19",
-  "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-05-30",
-  "2026-07-15", "2026-08-30", "2026-10-28", "2026-10-29",
+const DEFAULT_TR_OFFICIAL_HOLIDAY_RULES_2026 = [
+  { date: "2026-01-01", name: "Yılbaşı", fraction: 1 },
+  { date: "2026-03-19", name: "Ramazan Bayramı Arefesi", fraction: 0.5 },
+  { date: "2026-03-20", name: "Ramazan Bayramı 1. Gün", fraction: 1 },
+  { date: "2026-03-21", name: "Ramazan Bayramı 2. Gün", fraction: 1 },
+  { date: "2026-03-22", name: "Ramazan Bayramı 3. Gün", fraction: 1 },
+  { date: "2026-04-23", name: "Ulusal Egemenlik ve Çocuk Bayramı", fraction: 1 },
+  { date: "2026-05-01", name: "Emek ve Dayanışma Günü", fraction: 1 },
+  { date: "2026-05-19", name: "Atatürk'ü Anma, Gençlik ve Spor Bayramı", fraction: 1 },
+  { date: "2026-05-26", name: "Kurban Bayramı Arefesi", fraction: 0.5 },
+  { date: "2026-05-27", name: "Kurban Bayramı 1. Gün", fraction: 1 },
+  { date: "2026-05-28", name: "Kurban Bayramı 2. Gün", fraction: 1 },
+  { date: "2026-05-29", name: "Kurban Bayramı 3. Gün", fraction: 1 },
+  { date: "2026-05-30", name: "Kurban Bayramı 4. Gün", fraction: 1 },
+  { date: "2026-07-15", name: "Demokrasi ve Milli Birlik Günü", fraction: 1 },
+  { date: "2026-08-30", name: "Zafer Bayramı", fraction: 1 },
+  { date: "2026-10-28", name: "Cumhuriyet Bayramı Arifesi", fraction: 0.5 },
+  { date: "2026-10-29", name: "Cumhuriyet Bayramı", fraction: 1 },
 ];
 
 function addIsoDays(value: string, amount: number) {
@@ -2106,47 +2290,85 @@ function addIsoDays(value: string, amount: number) {
 export function calculateAnnualLeaveRange(
   startDate: string,
   returnDate: string,
-  countedWeekdays: number[] = [1, 2, 3, 4, 5, 6],
+  countedWeekdays: number[] = [1, 2, 3, 4, 5],
   excludeOfficialHolidays = true,
-  officialHolidayDates: string[] = [],
+  officialHolidayRules: Array<string | Row> = [],
 ) {
-  const official = new Set(officialHolidayDates);
+  const weekdayNames = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+  const official = new Map<string, { name: string; fraction: number }>();
+  for (const rule of officialHolidayRules) {
+    if (typeof rule === "string") {
+      official.set(rule, { name: "Resmi tatil", fraction: 1 });
+      continue;
+    }
+    const date = hrDateOnly(rule?.date || rule?.holidayDate || rule?.workDate);
+    if (!date) continue;
+    official.set(date, {
+      name: text(rule?.name || rule?.title) || "Resmi tatil",
+      fraction: Math.max(0, Math.min(1, number(rule?.fraction ?? rule?.holidayFraction ?? 1) || 1)),
+    });
+  }
+
   const counted = new Set(countedWeekdays.map(Number));
   const countedDates: string[] = [];
   const excludedDates: Array<{ date: string; reason: string }> = [];
+  const partialDates: Array<{ date: string; reason: string; counted: number }> = [];
   const calendarDates: string[] = [];
+  const dayDetails: Row[] = [];
+  let countedDays = 0;
+
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(returnDate) || returnDate <= startDate) {
-    return { startDate, returnDate, lastLeaveDate: "", calendarDays: 0, calendarDates, countedDays: 0, countedDates, excludedDates };
+    return { startDate, returnDate, lastLeaveDate: "", calendarDays: 0, calendarDates, countedDays, countedDates, excludedDates, partialDates, dayDetails };
   }
+
   for (let date = startDate, guard = 0; date < returnDate && guard < 371; date = addIsoDays(date, 1), guard += 1) {
     calendarDates.push(date);
     const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
-    const isHoliday = official.has(date);
     const weekdayCounted = counted.has(weekday);
-    if (weekdayCounted && !(excludeOfficialHolidays && isHoliday)) {
-      countedDates.push(date);
-    } else {
-      const reasons: string[] = [];
-      if (!weekdayCounted) reasons.push(weekday === 0 ? "Pazar / haftalık tatil" : "Şirket izin sayım günü değil");
-      if (excludeOfficialHolidays && isHoliday) reasons.push("Resmi tatil");
-      excludedDates.push({ date, reason: reasons.join(" + ") || "Sayılmayan gün" });
+    const holiday = official.get(date);
+    let countedAmount = weekdayCounted ? 1 : 0;
+    const reasons: string[] = [];
+
+    if (!weekdayCounted) reasons.push("Haftalık izin / şirket sayım günü değil");
+    if (weekdayCounted && excludeOfficialHolidays && holiday) {
+      countedAmount = Math.max(0, countedAmount - holiday.fraction);
+      reasons.push(holiday.fraction >= 1 ? holiday.name : `${holiday.name} (yarım gün)`);
     }
+
+    countedAmount = Math.round(countedAmount * 2) / 2;
+    countedDays += countedAmount;
+    if (countedAmount > 0) countedDates.push(date);
+    if (countedAmount === 0) excludedDates.push({ date, reason: reasons.join(" + ") || "Sayılmayan gün" });
+    if (countedAmount > 0 && countedAmount < 1) partialDates.push({ date, reason: reasons.join(" + ") || "Kısmi resmi tatil", counted: countedAmount });
+    dayDetails.push({
+      date,
+      weekday,
+      weekdayName: weekdayNames[weekday],
+      counted: countedAmount,
+      holidayName: holiday?.name || "",
+      holidayFraction: holiday?.fraction || 0,
+      status: countedAmount === 1 ? "COUNTED" : countedAmount === 0 ? "EXCLUDED" : "PARTIAL",
+      reason: reasons.join(" + ") || "Yıllık izinden sayılır",
+    });
   }
+
   return {
     startDate,
     returnDate,
     lastLeaveDate: calendarDates.at(-1) || "",
     calendarDays: calendarDates.length,
     calendarDates,
-    countedDays: countedDates.length,
+    countedDays: Math.round(countedDays * 2) / 2,
     countedDates,
     excludedDates,
+    partialDates,
+    dayDetails,
   };
 }
 
 async function leavePolicyV2(c: Context<AppEnv>, companyId = companyIdOf(c)) {
   const row = await first(c, "SELECT * FROM ik_leave_counting_policy WHERE main_company_id=? LIMIT 1", [companyId]);
-  let countedWeekdays = [1, 2, 3, 4, 5, 6];
+  let countedWeekdays = [1, 2, 3, 4, 5];
   try {
     const parsed = JSON.parse(text(row?.counted_weekdays_json) || "[]");
     if (Array.isArray(parsed) && parsed.length) countedWeekdays = parsed.map(Number).filter((day) => day >= 0 && day <= 6);
@@ -2161,7 +2383,7 @@ async function leavePolicyV2(c: Context<AppEnv>, companyId = companyIdOf(c)) {
 }
 
 async function officialHolidayDatesV2(c: Context<AppEnv>, companyId: string) {
-  const dates = new Set<string>(DEFAULT_TR_OFFICIAL_HOLIDAYS_2026);
+  const rules = new Map<string, Row>(DEFAULT_TR_OFFICIAL_HOLIDAY_RULES_2026.map((item) => [item.date, { ...item }]));
   try {
     const exists = await first(c, "SELECT name FROM sqlite_master WHERE type='table' AND name='json_store' LIMIT 1");
     if (exists?.name) {
@@ -2170,18 +2392,23 @@ async function officialHolidayDatesV2(c: Context<AppEnv>, companyId: string) {
         try {
           const parsed = JSON.parse(text(row.data) || "{}");
           const date = hrDateOnly(parsed?.date || parsed?.holidayDate || parsed?.workDate);
-          if (date) dates.add(date);
+          if (!date) continue;
+          rules.set(date, {
+            date,
+            name: text(parsed?.name || parsed?.title) || "Şirket / resmi tatil",
+            fraction: Math.max(0, Math.min(1, number(parsed?.fraction ?? parsed?.holidayFraction ?? 1) || 1)),
+          });
         } catch {}
       }
     }
   } catch {}
-  return [...dates];
+  return [...rules.values()].sort((a, b) => text(a.date).localeCompare(text(b.date)));
 }
 
 async function saveAdvancedLeavePolicyV2(c: Context<AppEnv>) {
   const body = await bodyOf(c);
   const companyId = companyIdOf(c, body);
-  const rawDays = Array.isArray(body.countedWeekdays) ? body.countedWeekdays : [1, 2, 3, 4, 5, 6];
+  const rawDays = Array.isArray(body.countedWeekdays) ? body.countedWeekdays : [1, 2, 3, 4, 5];
   const countedWeekdays = [...new Set(rawDays.map(Number).filter((day) => day >= 0 && day <= 6))].sort();
   if (!countedWeekdays.length) return error(c, 400, "LEAVE_POLICY_EMPTY", "En az bir izin sayım günü seçilmelidir.");
   const excludeOfficialHolidays = body.excludeOfficialHolidays !== false;
@@ -2213,10 +2440,16 @@ async function previewAdvancedLeaveV2(c: Context<AppEnv>, supplied?: Row) {
   const employees = await monthlyRows(c, companyId);
   const employee = employees.find((row) => text(row.id) === employeeId);
   if (!employee) return supplied ? null : error(c, 400, "INVALID_EMPLOYEE", "Personel bulunamadı.");
+  const employeeCard = await first(c, "SELECT exit_date FROM ik_person_card_settings WHERE employee_id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]).catch(() => null);
+  const hireDate = hrDateOnly(employee.hireDate || employee.startDate || employee.hire_date);
+  const exitDate = hrDateOnly(employeeCard?.exit_date || employee.exitDate || employee.exit_date);
+  if (hireDate && startDate < hireDate) return supplied ? null : error(c, 409, "LEAVE_BEFORE_HIRE", "İzin başlangıcı personelin işe giriş tarihinden önce olamaz.");
+  if (exitDate && startDate > exitDate) return supplied ? null : error(c, 409, "LEAVE_AFTER_EXIT", "İzin başlangıcı personelin işten çıkış tarihinden sonra olamaz.");
   const policy = await leavePolicyV2(c, companyId);
   const officialHolidays = await officialHolidayDatesV2(c, companyId);
   const range = calculateAnnualLeaveRange(startDate, returnDate, policy.countedWeekdays, policy.excludeOfficialHolidays, officialHolidays);
   if (!range.calendarDays || range.calendarDays > 370) return supplied ? null : error(c, 400, "LEAVE_RANGE_INVALID", "İzin aralığı 1 ile 370 takvim günü arasında olmalıdır.");
+  if (exitDate && range.lastLeaveDate > exitDate) return supplied ? null : error(c, 409, "LEAVE_AFTER_EXIT", "İzin günleri personelin işten çıkış tarihinden sonraya taşamaz.");
 
   const currentId = text(body.id);
   const overlaps = await all(c, `SELECT id,employee_id,start_date,end_date,status,record_type
@@ -2267,9 +2500,14 @@ async function saveAdvancedLeaveRecordV2(c: Context<AppEnv>) {
   const isAnnual = upper(recordType).includes("YILLIK") || Boolean(text(body.returnDate));
   if (!isAnnual) {
     if (!(await employeeBelongsToCompany(c, employeeId, companyId))) return error(c, 400, "INVALID_EMPLOYEE", "Personel bulunamadı.");
+    const employment = await first(c, `SELECT e.hire_date,s.exit_date FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.id=? AND e.main_company_id=? LIMIT 1`, [employeeId, companyId]);
     const startDate = hrDateOnly(body.startDate || body.start);
     const endDate = hrDateOnly(body.endDate || body.end || startDate);
     if (!startDate || !endDate || endDate < startDate) return error(c, 400, "DATE_REQUIRED", "Geçerli izin başlangıç ve bitiş tarihi zorunludur.");
+    const hireDate = hrDateOnly(employment?.hire_date);
+    const exitDate = hrDateOnly(employment?.exit_date);
+    if (hireDate && startDate < hireDate) return error(c, 409, "LEAVE_BEFORE_HIRE", "İzin personelin işe giriş tarihinden önce olamaz.");
+    if (exitDate && endDate > exitDate) return error(c, 409, "LEAVE_AFTER_EXIT", "İzin personelin işten çıkış tarihinden sonraya taşamaz.");
     const leaveLock = await rejectAdvancedPeriodLocked(c, companyId, number(startDate.slice(0, 4)), number(startDate.slice(5, 7)));
     if (leaveLock) return leaveLock;
     const dates = Array.isArray(body.dates) ? body.dates.map(hrDateOnly).filter(Boolean) : [];
@@ -2295,19 +2533,30 @@ async function saveAdvancedLeaveRecordV2(c: Context<AppEnv>) {
   const marker = `ik-leave-plan:${planId}`;
   const documentNo = text(body.documentNo || body.documentId);
   const note = text(body.note);
+  const effectType = text(body.effectType || body.wageEffect) || "Ücretli";
   const excludedDates = Array.isArray(preview.excludedDates) ? preview.excludedDates : [];
+  const calculationSnapshot = {
+    policy: preview.policy,
+    countedDays: preview.countedDays,
+    countedDates: preview.countedDates,
+    excludedDates: preview.excludedDates,
+    partialDates: preview.partialDates,
+    dayDetails: preview.dayDetails,
+    officialHolidays: preview.officialHolidays,
+    calculatedAt: nowIso(),
+  };
   await c.env.DB.prepare(`INSERT INTO ik_leave_plans
-    (id,main_company_id,employee_id,record_type,start_date,end_date,return_date,counted_days,excluded_json,status,document_no,note,created_by,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET employee_id=excluded.employee_id,record_type=excluded.record_type,start_date=excluded.start_date,end_date=excluded.end_date,return_date=excluded.return_date,counted_days=excluded.counted_days,excluded_json=excluded.excluded_json,status=excluded.status,document_no=excluded.document_no,note=excluded.note,updated_at=excluded.updated_at`)
-    .bind(planId, companyId, employeeId, recordType, text(preview.startDate), text(preview.lastLeaveDate), text(preview.returnDate), number(preview.countedDays), JSON.stringify(excludedDates), status, documentNo, note, text(body.userName) || "Sistem", nowIso(), nowIso()).run();
+    (id,main_company_id,employee_id,record_type,effect_type,start_date,end_date,return_date,counted_days,excluded_json,calculation_json,status,document_no,note,created_by,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET employee_id=excluded.employee_id,record_type=excluded.record_type,effect_type=excluded.effect_type,start_date=excluded.start_date,end_date=excluded.end_date,return_date=excluded.return_date,counted_days=excluded.counted_days,excluded_json=excluded.excluded_json,calculation_json=excluded.calculation_json,status=excluded.status,document_no=excluded.document_no,note=excluded.note,updated_at=excluded.updated_at`)
+    .bind(planId, companyId, employeeId, recordType, effectType, text(preview.startDate), text(preview.lastLeaveDate), text(preview.returnDate), number(preview.countedDays), JSON.stringify(excludedDates), JSON.stringify(calculationSnapshot), status, documentNo, note, text(body.userName) || "Sistem", nowIso(), nowIso()).run();
   await c.env.DB.prepare("DELETE FROM hr_leave_records_v2 WHERE document_path=?").bind(marker).run();
   let recordId = "";
   if (status !== "PLANNED") {
     recordId = crypto.randomUUID();
     await c.env.DB.prepare(`INSERT INTO hr_leave_records_v2
       (id,employee_id,record_type,effect_type,start_date,end_date,day_count,document_path,note,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(recordId, employeeId, recordType, text(body.effectType || body.wageEffect) || "Ücretli", text(preview.startDate), text(preview.lastLeaveDate), number(preview.countedDays), marker, note, nowIso()).run();
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(recordId, employeeId, recordType, effectType, text(preview.startDate), text(preview.lastLeaveDate), number(preview.countedDays), marker, note, nowIso()).run();
   }
   await audit(c, { mainCompanyId: companyId, period: text(preview.startDate).slice(0, 7), employeeId, entityType: "IZIN", action: status === "PLANNED" ? "PLAN" : "APPROVE", summary: `${recordType}: ${number(preview.countedDays)} gün`, details: { planId, recordId, startDate: preview.startDate, lastLeaveDate: preview.lastLeaveDate, returnDate: preview.returnDate, countedDays: preview.countedDays } });
   return okData(c, { ...preview, planId, recordId, status, message: status === "PLANNED" ? "Yıllık izin planı kaydedildi." : "Yıllık izin resmi kaydı oluşturuldu." }, 201);
@@ -2338,15 +2587,42 @@ async function leaveCenterV2(c: Context<AppEnv>) {
   const managedPlans = managedRows.map((row) => {
     const employee = employeeMap.get(text(row.employee_id));
     let excludedDates: unknown[] = [];
+    let calculation: Row = {};
     try { const parsed = JSON.parse(text(row.excluded_json) || "[]"); if (Array.isArray(parsed)) excludedDates = parsed; } catch {}
-    return { id: text(row.id), employeeId: text(row.employee_id), fullName: text(employee?.fullName) || "-", code: text(employee?.code), department: text(employee?.department), title: text(employee?.title), recordType: text(row.record_type), startDate: hrDateOnly(row.start_date), endDate: hrDateOnly(row.end_date), lastLeaveDate: hrDateOnly(row.end_date), returnDate: hrDateOnly(row.return_date), countedDays: number(row.counted_days), excludedDates, status: text(row.status), documentNo: text(row.document_no), note: text(row.note), createdAt: row.created_at, updatedAt: row.updated_at, legacy: false };
+    try { const parsed = JSON.parse(text(row.calculation_json) || "{}"); if (parsed && typeof parsed === "object") calculation = parsed; } catch {}
+    return {
+      id: text(row.id),
+      employeeId: text(row.employee_id),
+      fullName: text(employee?.fullName) || "-",
+      code: text(employee?.code),
+      department: text(employee?.department),
+      title: text(employee?.title),
+      recordType: text(row.record_type),
+      effectType: text(row.effect_type) || "Ücretli",
+      startDate: hrDateOnly(row.start_date),
+      endDate: hrDateOnly(row.end_date),
+      lastLeaveDate: hrDateOnly(row.end_date),
+      returnDate: hrDateOnly(row.return_date),
+      countedDays: number(row.counted_days),
+      excludedDates,
+      countedDates: Array.isArray(calculation.countedDates) ? calculation.countedDates : [],
+      partialDates: Array.isArray(calculation.partialDates) ? calculation.partialDates : [],
+      dayDetails: Array.isArray(calculation.dayDetails) ? calculation.dayDetails : [],
+      policySnapshot: calculation.policy || null,
+      status: text(row.status),
+      documentNo: text(row.document_no),
+      note: text(row.note),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      legacy: false,
+    };
   });
   const legacyRows = await all(c, `SELECT l.* FROM hr_leave_records_v2 l JOIN hr_monthly_employees e ON e.id=l.employee_id
       WHERE e.main_company_id=? AND (l.document_path IS NULL OR l.document_path NOT LIKE 'ik-leave-plan:%') ORDER BY l.start_date ASC`, [companyId]);
   const legacyPlans = legacyRows.filter((row) => upper(row.record_type).includes("YILLIK")).map((row) => {
     const employee = employeeMap.get(text(row.employee_id));
     const endDate = hrDateOnly(row.end_date);
-    return { id: `legacy:${text(row.id)}`, employeeId: text(row.employee_id), fullName: text(employee?.fullName) || "-", code: text(employee?.code), department: text(employee?.department), title: text(employee?.title), recordType: text(row.record_type), startDate: hrDateOnly(row.start_date), endDate, lastLeaveDate: endDate, returnDate: addIsoDays(endDate, 1), countedDays: number(row.day_count), excludedDates: [], status: "TAKEN", documentNo: "", note: text(row.note), createdAt: row.created_at, updatedAt: row.created_at, legacy: true };
+    return { id: `legacy:${text(row.id)}`, employeeId: text(row.employee_id), fullName: text(employee?.fullName) || "-", code: text(employee?.code), department: text(employee?.department), title: text(employee?.title), recordType: text(row.record_type), effectType: text(row.effect_type) || "Ücretli", startDate: hrDateOnly(row.start_date), endDate, lastLeaveDate: endDate, returnDate: addIsoDays(endDate, 1), countedDays: number(row.day_count), excludedDates: [], countedDates: [], partialDates: [], dayDetails: [], policySnapshot: null, status: "TAKEN", documentNo: "", note: text(row.note), createdAt: row.created_at, updatedAt: row.created_at, legacy: true };
   });
   const plans = [...managedPlans, ...legacyPlans].sort((a, b) => text(a.startDate).localeCompare(text(b.startDate)));
   const active = managedPlans.filter((row) => row.status !== "CANCELLED");
@@ -2369,7 +2645,7 @@ async function leaveCenterV2(c: Context<AppEnv>) {
 
 async function leaveCenter(c: Context<AppEnv>) {
   const plans = await leaveRows(c);
-  return okData(c, { policy: { countedWeekdays: [1, 2, 3, 4, 5, 6], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 }, plans, conflicts: [] });
+  return okData(c, { policy: { countedWeekdays: [1, 2, 3, 4, 5], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 }, plans, conflicts: [] });
 }
 
 async function cancelAdvancedLeave(c: Context<AppEnv>) {
@@ -2432,6 +2708,7 @@ export function registerIkRelationalCloudRoutes(app: Hono<AppEnv>) {
   app.post("/api/ik/advanced/leave/preview", protect(async (c) => (await previewAdvancedLeaveV2(c)) as Response));
   app.post("/api/ik/advanced/leave/policy", protect(saveAdvancedLeavePolicyV2));
   app.post("/api/ik/advanced/person-card/:employeeId", protect(savePersonCard));
+  app.post("/api/ik/advanced/compensation/bulk", protect(saveAdvancedBulkCompensation));
   app.post("/api/ik/advanced/finance-movement", protect(saveAdvancedFinance));
   app.post("/api/ik/advanced/finance-movement/update", protect(updateAdvancedFinance));
   app.post("/api/ik/advanced/finance-movement/delete", protect(deleteAdvancedFinance));

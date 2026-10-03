@@ -61,3 +61,39 @@ test("payroll row exposes quick source actions and balanced bank cash editing", 
   assert.match(monthly, /Bordrodan Düzelt/);
   assert.match(monthly, /reconcilePaymentSplit/);
 });
+
+
+test("canonical monthly domain owns date-driven lifecycle and history-safe bulk compensation", () => {
+  const relational = api("ik-relational-cloud.ts");
+  assert.match(relational, /function employmentStateAtPeriod/);
+  assert.match(relational, /MISSING_HIRE_DATE/);
+  assert.match(relational, /MISSING_EXIT_DATE/);
+  assert.match(relational, /async function saveAdvancedBulkCompensation/);
+  assert.match(relational, /SALARY_PERCENT/);
+  assert.match(relational, /ROAD_SET/);
+  assert.match(relational, /ROAD_PERCENT/);
+  assert.match(relational, /BULK_COMPENSATION_UPDATE/);
+  assert.match(relational, /hr_salary_contracts/);
+  assert.match(relational, /\/api\/ik\/advanced\/compensation\/bulk/);
+});
+
+test("leave plans persist day-by-day calculation proof and wage effect", () => {
+  const relational = api("ik-relational-cloud.ts");
+  assert.match(relational, /DEFAULT_TR_OFFICIAL_HOLIDAY_RULES_2026/);
+  assert.match(relational, /partialDates/);
+  assert.match(relational, /dayDetails/);
+  assert.match(relational, /calculation_json/);
+  assert.match(relational, /effect_type/);
+  assert.match(relational, /calculationSnapshot/);
+  assert.match(relational, /\[1, 2, 3, 4, 5\]/);
+});
+
+test("final payroll output path freezes rows and marks them paid in one workflow", () => {
+  const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(monthly, /finalizePayrollForOutput/);
+  assert.match(monthly, /saveIkAdvancedFinalPayrollControl/);
+  assert.match(monthly, /saveIkAdvancedPayrollLines/);
+  assert.match(monthly, /status:\s*"PAID"/);
+  assert.match(monthly, /Bordroyu Tamamla \/ PDF/);
+  assert.match(monthly, /window\.confirm/);
+});

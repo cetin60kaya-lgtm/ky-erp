@@ -24,7 +24,7 @@ test("monthly IK exposes one canonical seven-tab workspace", () => {
     "SGK / Evrak / Ay Sonu",
   ]) assert.ok(registry.includes(tab), `Eksik İK sekmesi: ${tab}`);
 
-  assert.match(app, /IkPersonnelFinancePage/);
+  assert.doesNotMatch(app, /IkPersonnelFinancePage/);
   assert.match(app, /IkFinancePage/);
   assert.match(finance, /openModule=\{openModule\}/);
 });
@@ -80,27 +80,23 @@ test("employment period and payroll snapshot safety stay enforced", () => {
   assert.match(page, /sourceChangedSinceSave/);
 });
 
-test("monthly live sync is enabled on both personnel and finance screens", () => {
-  const personnelPage = frontend("pages/modules/ik/monthly/IkPersonnelFinancePage.jsx");
+test("monthly live sync is owned by the single canonical personnel and finance workspace", () => {
   const financePage = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
-
-  for (const source of [personnelPage, financePage]) {
-    assert.match(source, /BroadcastChannel/);
-    assert.match(source, /IK_LIVE_SYNC_INTERVAL_MS = 1500/);
-    assert.match(source, /getIkAdvancedSyncState/);
-  }
+  assert.match(financePage, /BroadcastChannel/);
+  assert.match(financePage, /IK_LIVE_SYNC_INTERVAL_MS = 1500/);
+  assert.match(financePage, /getIkAdvancedSyncState/);
 });
 
 test("payroll outputs and SGK close controls remain present", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   for (const label of [
-    "Ödeme Listesi / PDF",
-    "Ödeme Listesi / Excel",
-    "10’lu Toplu Fiş / PDF",
-    "Tek Kişi Fişi",
+    "Bordroyu Tamamla / PDF",
+    "Tamamla / Excel",
     "Ay Sonu Kontrol",
     "Dönemi Kapat",
   ]) assert.ok(page.includes(label), `Eksik çıktı/kapanış kontrolü: ${label}`);
+  assert.match(page, /10['’]lu Fiş \+ Tamamla/);
+  assert.match(page, /Tek Kişi Fiş \+ Tamamla/);
 
   assert.match(page, /printHtmlDocument/);
   assert.match(page, /exportRowsToExcelFile/);

@@ -2,6 +2,7 @@ import IkAdvancedMonthly from "./IkAdvancedMonthly";
 
 const MODE_BY_TAB = {
   ozet: "ozet",
+  "personel-kartlari": "personel",
   "ucret-odeme-plani": "ucret",
   "mesai-avans": "mesai",
   "yillik-izin": "izin",

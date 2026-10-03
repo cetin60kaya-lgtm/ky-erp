@@ -894,3 +894,40 @@
     font-size: 16px;
   }
 }
+
+/* 2026-10-03 accountant workflow: proof-grade leave ledger */
+.ik-monthly-pro .leave-day-proof{margin-top:10px;border:1px solid #dbe5ef;border-radius:8px;background:#fff;overflow:hidden}
+.ik-monthly-pro .leave-day-proof>b{display:block;padding:8px 10px;background:#f2f6fb;color:#24415f;font-size:11px}
+.ik-monthly-pro .leave-day-proof-table{max-height:230px;overflow:auto}
+.ik-monthly-pro .leave-day-proof-table>div{display:grid;grid-template-columns:92px 90px 80px minmax(160px,1fr);gap:8px;align-items:center;padding:6px 9px;border-top:1px solid #edf1f6;font-size:10px}
+.ik-monthly-pro .leave-day-proof-table .head{position:sticky;top:0;background:#f8fafc;font-weight:800;z-index:1}
+.ik-monthly-pro .leave-day-proof-table .excluded{background:#fff6f6}
+.ik-monthly-pro .leave-day-proof-table .partial{background:#fff9e8}
+.ik-monthly-pro .leave-day-proof-table .counted{background:#f7fff9}
+.ik-monthly-pro .leave-proof-head{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.ik-monthly-pro .leave-proof-head>div{border:1px solid #d6e0eb;border-radius:8px;background:#f9fbfd;padding:10px}
+.ik-monthly-pro .leave-proof-head span,.ik-monthly-pro .leave-proof-head small{display:block;color:#718096;font-size:9px}
+.ik-monthly-pro .leave-proof-head b{display:block;margin:3px 0;font-size:12px;color:#173b70}
+.ik-monthly-pro .leave-proof-table{max-height:420px;overflow:auto}
+.ik-monthly-pro .leave-proof-note{display:grid;gap:4px;margin-top:10px;padding:9px;border:1px solid #dde5ee;border-radius:8px;background:#fafcff}
+@media(max-width:820px){
+  .ik-monthly-pro .leave-proof-head{grid-template-columns:1fr 1fr}
+  .ik-monthly-pro .leave-day-proof-table>div{grid-template-columns:86px 70px 70px minmax(140px,1fr)}
+}
+
+/* Personel karti - ispatlanabilir yillik izin sicili */
+.ik-monthly-pro .ik-pro-leave-ledger{margin-top:12px;border:1px solid #dbe5ef;border-radius:10px;background:#fff;overflow:hidden}
+.ik-monthly-pro .ik-pro-leave-ledger>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:#f6f9fc;font-size:11px;font-weight:900;color:#24415f;cursor:pointer}
+.ik-monthly-pro .ik-pro-leave-ledger>summary span{font-size:9px;font-weight:600;color:#718096}
+.ik-monthly-pro .ik-pro-leave-balance{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;padding:10px 12px}
+.ik-monthly-pro .ik-pro-leave-balance>div,.ik-monthly-pro .ik-pro-leave-years>div{border:1px solid #dbe5ef;border-radius:8px;padding:8px;background:#fbfdff}
+.ik-monthly-pro .ik-pro-leave-balance span,.ik-monthly-pro .ik-pro-leave-years span,.ik-monthly-pro .ik-pro-leave-years small{display:block;font-size:8.5px;color:#748398}
+.ik-monthly-pro .ik-pro-leave-balance b,.ik-monthly-pro .ik-pro-leave-years b{display:block;margin-top:3px;color:#173b70;font-size:11px}
+.ik-monthly-pro .ik-pro-leave-years{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:7px;padding:0 12px 10px}
+.ik-monthly-pro .ik-pro-leave-years .empty{opacity:.7}
+.ik-monthly-pro .ik-pro-leave-records{max-height:290px;overflow:auto;border-top:1px solid #e7edf4}
+.ik-monthly-pro .ik-pro-leave-records .code{display:block;margin-top:2px}
+@media(max-width:820px){
+  .ik-monthly-pro .ik-pro-leave-balance{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ik-monthly-pro .ik-pro-leave-ledger>summary{align-items:flex-start;flex-direction:column}
+}

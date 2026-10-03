@@ -29,7 +29,7 @@ test("IK visible navigation is personnel and finance only; PDKS attendance dupli
 test("IK rendering never mounts a second PDKS or puantaj workspace", () => {
   const app = frontend("AppV3.jsx");
 
-  assert.match(app, /IkPersonnelFinancePage/);
+  assert.doesNotMatch(app, /IkPersonnelFinancePage/);
   assert.match(app, /IkFinancePage/);
   assert.doesNotMatch(app, /IkPdksSyncPage/);
   assert.doesNotMatch(app, /IkPersonnelCenterPage/);
@@ -48,25 +48,20 @@ test("monthly IK overview does not fetch or render live PDKS operations", () => 
   assert.match(monthly, /İzin, rapor ve günlük devam hareketleri PDKS bölümünden yönetilir/);
 });
 
-test("IK personnel card exposes authoritative annual leave entitlement, used and remaining balance", () => {
-  const page = frontend("pages/modules/ik/monthly/IkPersonnelFinancePage.jsx");
-  const service = frontend("services/ik/personnelApi.js");
+test("IK canonical personnel card exposes annual leave entitlement used and remaining balance", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
-  assert.match(page, /getIkControlLeaveEntitlement/);
-  assert.match(service, /people\/\$\{encodeURIComponent\(employeeId\)\}\/leave-entitlement/);
   for (const label of [
-    "Yıllık İzin Hakediş / Bakiye",
-    "Hakediş",
-    "Devreden",
-    "Toplam Hak",
-    "Kullanılan",
-    "Kalan",
-    "Hakediş Geçmişi",
+    "Yıllık İzin",
+    "Kalan İzin",
+    "İzin Gir",
   ]) assert.ok(page.includes(label), `Eksik yıllık izin alanı: ${label}`);
 
-  assert.match(page, /leaveEntitlement\.remaining/);
-  assert.match(page, /leaveEntitlement\?\.used/);
-  assert.match(page, /leaveLedgerRows/);
+  assert.match(page, /employeeLeave/);
+  assert.match(page, /annualLeaveEntitlement/);
+  assert.match(page, /annualLeaveCarryover/);
+  assert.match(page, /profileLeave\.balance/);
+  assert.match(page, /profileLeave\.annual/);
 });
 
 test("annual leave used balance and IK leave history use modern PDKS plus legacy history without exact duplicates", () => {
