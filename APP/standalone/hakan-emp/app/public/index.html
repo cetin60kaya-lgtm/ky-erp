@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>HAKAN EMP</title>
 <meta name="theme-color" content="#2f2d43">
-<link rel="stylesheet" href="/app.css?v=final6">
+<link rel="stylesheet" href="/app.css?v=final7">
 </head>
 <body>
 <div class="app-shell">
@@ -16,9 +16,10 @@
     <nav class="nav">
       <button class="nav-item active" data-page="production"><i>İ</i><span>İmalat</span></button>
       <button class="nav-item" data-page="cari"><i>C</i><span>Cari</span></button>
-      <button class="nav-item" data-page="reminders"><i>Ö</i><span>Ödeme Hatırlatma</span></button>
       <button class="nav-item" data-page="checks"><i>Ç</i><span>Çek</span></button>
       <button class="nav-item" data-page="settings"><i>A</i><span>Ayarlar</span></button>
+      <button class="nav-item" data-page="notes"><i>N</i><span>Notlarım</span></button>
+      <button class="nav-item" data-page="reminders"><i>Ö</i><span>Ödeme Hatırlatma</span></button>
     </nav>
     <div class="side-sync"><span id="sideSyncDot"></span><div><b id="sideSyncTitle">OneDrive</b><small id="sideSyncText">kontrol ediliyor</small></div></div>
   </aside>
@@ -79,6 +80,22 @@
       </div>
     </section>
 
+    <section class="page" id="notes">
+      <div class="summary four note-summary">
+        <article><span>AKTİF NOT</span><b id="nActive">0</b><small>bekleyen</small></article>
+        <article><span>SABİTLENEN</span><b id="nPinned">0</b><small>önemli</small></article>
+        <article><span>TAMAMLANDI</span><b id="nDone">0</b><small>kapatılan</small></article>
+        <article><span>PASİF</span><b id="nPassive">0</b><small>arşiv</small></article>
+      </div>
+      <div class="panel notes-panel">
+        <div class="module-toolbar">
+          <div class="tabs scroll"><button class="tab active" data-note-view="ACTIVE">Aktif</button><button class="tab" data-note-view="PINNED">Sabitlenen</button><button class="tab" data-note-view="DONE">Tamamlandı</button><button class="tab" data-note-view="ALL">Tümü</button></div>
+          <div class="filters"><div class="search"><span>⌕</span><input id="noteSearch" placeholder="Başlık, not, kişi veya kategori ara"></div><button class="small-btn primary" onclick="openNote()">+ Yeni Not</button></div>
+        </div>
+        <div id="noteRows" class="note-board"></div>
+      </div>
+    </section>
+
     <section class="page" id="reminders">
       <div class="summary four">
         <article><span>BEKLEYEN</span><b id="rPending">0</b><small>ödeme</small></article>
@@ -104,10 +121,10 @@
         <article><span>GELEN PORTFÖY</span><b id="chIncoming">₺0</b><small>çek</small></article>
         <article><span>ÖDENEN</span><b id="chPaid">₺0</b><small>toplam</small></article>
       </div>
-      <div class="panel check-panel">
+      <div class="panel check-panel check-sheet-panel">
         <div class="check-toolbar">
           <div class="tabs scroll"><button class="tab active" data-check-view="PAYABLE">Ödenecek</button><button class="tab" data-check-view="MONTH">Bu Ay</button><button class="tab" data-check-view="THREE">3 Ay</button><button class="tab" data-check-view="PAID">Ödendi</button><button class="tab" data-check-view="IN">Gelen</button><button class="tab" data-check-view="OUT">Giden</button><button class="tab" data-check-view="ALL">Tümü</button></div>
-          <div class="filters"><div class="search"><span>⌕</span><input id="checkSearch" placeholder="Firma, banka, çek no veya açıklama"></div><button class="small-btn primary" onclick="openCheck()">+ Çek Ekle</button></div>
+          <div class="filters check-actions"><div class="search"><span>⌕</span><input id="checkSearch" placeholder="Firma, banka, çek no veya açıklama"></div><button class="small-btn" onclick="printChecks()">A4 Yatay</button><button class="small-btn" onclick="exportChecksCsv()">Excel / CSV</button><button class="small-btn primary" onclick="openCheck()">+ Çek Ekle</button></div>
         </div>
         <div id="checkRows" class="check-groups"></div>
       </div>
@@ -115,7 +132,7 @@
 
     <section class="page" id="settings">
       <div class="settings-tabs"><button class="settings-tab active" data-setting="companies">Firma Ayarları</button><button class="settings-tab" data-setting="production">İmalat Ayarları</button><button class="settings-tab" data-setting="machines">Makine & Makinacı</button><button class="settings-tab" data-setting="cari">Cari Ayarları</button><button class="settings-tab" data-setting="checks">Çek Ayarları</button><button class="settings-tab" data-setting="sync">Senkron & Yedek</button></div>
-      <div class="setting-pane active" id="setting-companies"><div class="panel"><div class="panel-title"><div><h2>Firma Ayarları</h2><p>Cari ve imalat işlemlerinde kullanılacak firmalar.</p></div><button class="small-btn primary" onclick="openCompany()">+ Firma Ekle</button></div><div class="table-head settings-company-grid"><span>FİRMA</span><span>AÇILIŞ</span><span>FATURA</span><span>ÖDEME</span><span>BAKİYE</span><span></span></div><div id="settingsCompanyRows"></div></div></div>
+      <div class="setting-pane active" id="setting-companies"><div class="panel"><div class="panel-title"><div><h2>Firma Ayarları</h2><p>Cari ve imalat işlemlerinde kullanılacak firmalar.</p></div><button class="small-btn primary" onclick="openCompany()">+ Firma Ekle</button></div><div class="table-head settings-company-grid"><span>FİRMA</span><span>AÇILIŞ</span><span>FATURA</span><span>ÖDEME</span><span>BAKİYE</span><span>DURUM</span><span></span></div><div id="settingsCompanyRows"></div></div></div>
       <div class="setting-pane" id="setting-production"><div class="settings-grid"><div class="panel"><div class="panel-title"><div><h2>İmalat Ayarları</h2><p>Hızlı giriş varsayılanları ve takip kuralı.</p></div></div><form class="settings-form" id="productionSettingsForm"><label>Varsayılan Firma<select name="default_company_id" id="setDefaultCompany"></select></label><label>Varsayılan Vardiya<select name="default_shift" id="setDefaultShift"><option>Gündüz</option><option>Gece</option></select></label><div class="rule-box"><b>Üretim alanları</b><span>Adet · Makine · Vardiya · Makinacı · Kumaş Sakatı · Baskı Sakatı</span></div><button class="wide-btn primary">Kaydet</button></form></div><div class="panel info-panel"><div class="panel-title"><div><h2>İmalat Kuralı</h2></div></div><div class="rule-list"><div><b>Üretim bitti, irsaliye yok</b><span>İRSALİYE İSTE</span></div><div><b>İrsaliye eksik</b><span>Eksik adet görünür</span></div><div><b>Fatura eksik</b><span>Kesilecek adet görünür</span></div><div><b>Hepsi tamam</b><span>İş tamamlanır</span></div></div></div></div></div>
       <div class="setting-pane" id="setting-machines">
         <div class="machine-settings-layout">
@@ -124,7 +141,7 @@
             <div id="operatorRows" class="operator-list"></div>
           </div>
           <div class="panel">
-            <div class="panel-title"><div><h2>Makine & Vardiya Ataması</h2><p>Gündüz/gece makinacısını istediğin zaman değiştir.</p></div></div>
+            <div class="panel-title"><div><h2>Makine & Vardiya Ataması</h2><p>Makine ekle, düzenle, pasif et; vardiya makinacısını değiştir.</p></div><button class="small-btn primary" onclick="openMachine()">+ Makine</button></div>
             <div class="table-head machine-grid"><span>NO</span><span>MAKİNE</span><span>GÜNDÜZ MAKİNACI</span><span>GECE MAKİNACI</span><span></span></div>
             <div id="machineRows"></div>
           </div>
@@ -142,7 +159,7 @@
 
 <div class="modal" id="modal"></div>
 <div id="toast"></div>
-<script src="/app.js?v=final6"></script>
+<script src="/app.js?v=final7"></script>
 </body></html>
 
 [executed on device: Desen (c4d4b6e1-fe7e-407d-9528-93c354170ca0)]
