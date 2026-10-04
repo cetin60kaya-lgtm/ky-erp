@@ -1,7 +1,5 @@
-[Reading 337 lines from start (total: 337 lines, 0 remaining)]
-
-let core={rows:[],summary:{},models:[],machines:[],operators:[],companies:[]},done={rows:[]},cari={rows:[],movements:[]},reminders={rows:[]},checks={rows:[]},sync={},settings={values:{}};
-let prodView='OPEN',remView='PENDING',checkView='PAYABLE',selectedCompanyId=0,currentModel=null,currentDetail=null;
+let core={rows:[],summary:{},models:[],machines:[],operators:[],companies:[]},done={rows:[]},cari={rows:[],movements:[]},allCompanies={rows:[]},machinesAll={rows:[]},notes={rows:[]},reminders={rows:[]},checks={rows:[]},sync={},settings={values:{}};
+let prodView='OPEN',noteView='ACTIVE',remView='PENDING',checkView='PAYABLE',selectedCompanyId=0,currentModel=null,currentDetail=null;
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const n=v=>Number(v||0),fmt=v=>new Intl.NumberFormat('tr-TR').format(n(v)),money=v=>'₺'+new Intl.NumberFormat('tr-TR',{maximumFractionDigits:2}).format(n(v)),today=()=>new Date().toISOString().slice(0,10),norm=s=>String(s||'').trim().toLocaleUpperCase('tr-TR'),esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 const dateTR=s=>{const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'.'+m[2]+'.'+m[1]:(s||'—')};
@@ -9,8 +7,8 @@ async function api(url,opt){const r=await fetch(url,opt);let j={};try{j=await r.
 const post=(u,x)=>api(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(x)});
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(window.__t);window.__t=setTimeout(()=>e.classList.remove('show'),1800)}
 
-const meta={production:['HAKAN EMP / İMALAT','İmalat Takip','Gelen adet → üretim → irsaliye → fatura → kalan.'],cari:['HAKAN EMP / CARİ','Cari Takip','Firma seç, bakiye ve bütün hareketleri tek ekranda gör.'],reminders:['HAKAN EMP / ÖDEME','Ödeme Hatırlatma','Yaklaşan, geciken ve ödenen ödemeleri takip et.'],checks:['HAKAN EMP / ÇEK','Çek Takip','Ay ay çekler, taraf, açıklama, makbuz ve görsel.'],settings:['HAKAN EMP / AYARLAR','Ayarlar','Firma, imalat, makine, cari, çek ve senkron ayarları.']};
-function navigate(p){$$('.page').forEach(x=>x.classList.remove('active'));$$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===p));$('#'+p).classList.add('active');$('#crumb').textContent=meta[p][0];$('#pageTitle').textContent=meta[p][1];$('#pageSub').textContent=meta[p][2];if(p==='production')renderProduction();if(p==='cari')renderCari();if(p==='reminders')renderReminders();if(p==='checks')renderChecks();if(p==='settings')renderSettings()}
+const meta={production:['HAKAN EMP / İMALAT','İmalat Takip','Gelen adet → üretim → irsaliye → fatura → kalan.'],cari:['HAKAN EMP / CARİ','Cari Takip','Firma seç, bakiye ve bütün hareketleri tek ekranda gör.'],checks:['HAKAN EMP / ÇEK','Çek Takip','Ay ay ayrılmış çekler, toplamlar, makbuz ve çıktı.'],settings:['HAKAN EMP / AYARLAR','Ayarlar','Firma, imalat, makine, cari, çek ve senkron ayarları.'],notes:['HAKAN EMP / NOTLAR','Notlarım','Patron ile muhasebe arasındaki aktif not ve görev panosu.'],reminders:['HAKAN EMP / ÖDEME','Ödeme Hatırlatma','Yaklaşan, geciken ve ödenen ödemeleri takip et.']};
+function navigate(p){$('.page').forEach(x=>x.classList.remove('active'));$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===p));$('#'+p).classList.add('active');$('#crumb').textContent=meta[p][0];$('#pageTitle').textContent=meta[p][1];$('#pageSub').textContent=meta[p][2];if(p==='production')renderProduction();if(p==='cari')renderCari();if(p==='checks')renderChecks();if(p==='settings')renderSettings();if(p==='notes')renderNotes();if(p==='reminders')renderReminders()}
 $$('.nav-item').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
 
 function syncModalLayers(){
