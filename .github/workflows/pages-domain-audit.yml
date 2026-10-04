@@ -1,8 +1,12 @@
 name: KY ERP Pages Alan Adı Denetimi
 
 on:
-  # Automatic GitHub Actions disabled. Run only by explicit manual request.
   workflow_dispatch:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - '.github/deploy/pages-domain-audit-trigger'
 permissions:
   contents: write
   issues: write
