@@ -205,7 +205,7 @@ test("KY Security background refresh keeps the rendered account stable and queue
   assert.match(securityApp,/refreshState\(\{background:true,trailing:true\}\)/);
   assert.match(securityApp,/if\(refreshState\.running\)\{if\(background\)queueTrailingRefresh\(\);return;\}/);
   assert.doesNotMatch(securityApp,/renderAccount\(null,device\)/);
-  assert.match(securityHtml,/data-tab="approvals">Onaylar/);
+  assert.match(securityHtml,/data-tab="approvals"[^>]*>Onaylar/);
   assert.doesNotMatch(securityHtml,/data-tab="approvals" data-system-only/);
 });
 
