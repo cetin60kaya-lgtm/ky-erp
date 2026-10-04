@@ -28,7 +28,7 @@ Thread.Sleep(250);
 Application.DoEvents();
 
 var primary = PdksCommandCatalog.Primary.ToArray();
-var expectedPrimary = new[] { "Genel Bakış", "Operasyon", "Personel", "Puantaj", "Bordro", "Raporlar" };
+var expectedPrimary = new[] { "Genel Bakış", "Giriş / Çıkış", "Personel", "Puantaj", "Bordro", "Raporlar" };
 if (!primary.Select(x=>x.Title).SequenceEqual(expectedPrimary))
     throw new InvalidOperationException("Modern ana navigasyon sırası bozulmuş.");
 
@@ -54,7 +54,7 @@ if (workflow.Select(x=>x.Order).Distinct().Count() != workflow.Length)
     throw new InvalidOperationException("İş akışında mükerrer sıra var.");
 
 var shellButtons = Descendants(form).OfType<Button>().Select(x => x.Text ?? string.Empty).ToArray();
-var expectedSidebar = new[] { "Genel Bakış", "Operasyon", "Personel", "Giriş / Çıkış", "İzin İşlemleri", "Puantaj", "Bordro", "Raporlar", "Yıllık Dönemler", "Tanımlar Merkezi" };
+var expectedSidebar = new[] { "Genel Bakış", "Giriş / Çıkış", "Personel", "Puantaj", "Bordro", "Raporlar" };
 foreach (var required in expectedSidebar)
     if (!shellButtons.Contains(required)) throw new InvalidOperationException("Sol navigasyon eksik: " + required);
 foreach (var required in new[] { "Yönetim", $"Görünüm • {PdksAppearance.ModeLabel}", "İşlem Ara  Ctrl+K" })
@@ -76,7 +76,7 @@ using (var operations = new OperationsCenterForm(PdksCommandCatalog.All, _ => { 
 {
     var texts=Descendants(operations).OfType<Label>().Select(x=>x.Text ?? string.Empty)
         .Concat(Descendants(operations).OfType<Button>().Select(x=>x.Text ?? string.Empty)).ToArray();
-    foreach(var required in new[]{"Terminalden Al","Canlı Kontrol","İstisnaları Gör","Eksikleri Düzelt","İzin / Ek Kayıt","Puantaja Geç"})
+    foreach(var required in new[]{"Kart Kayıtları","Canlı Durum","Eksikler / Geç","Devam Geçmişi","İzin İşlemleri","Puantaja Geç"})
         if(!texts.Contains(required)) throw new InvalidOperationException("Operasyon adımı eksik: "+required);
 }
 
@@ -99,7 +99,7 @@ using (var periodControl = new PeriodControlCenterForm())
 using (var definitions = new DefinitionsCenterForm(_ => { }, _ => { }))
 {
     var labels = Descendants(definitions).OfType<Label>().Select(x => x.Text ?? string.Empty).ToArray();
-    foreach (var required in new[] { "Bölümler", "Çalışma Grupları", "Yıllık Dönemler", "Genel Tatiller", "Bordro Alanları", "Kazanç / Kesinti Türleri" })
+    foreach (var required in new[] { "Bölümler", "Çalışma Grupları", "Dönem Altyapısı (Otomatik)", "Genel Tatiller", "Bordro Alanları", "Kazanç / Kesinti Türleri" })
         if (!labels.Contains(required)) throw new InvalidOperationException("Tanımlar merkezi kısayolu eksik: " + required);
 }
 using (var groups = new LegacyGroupForm())
