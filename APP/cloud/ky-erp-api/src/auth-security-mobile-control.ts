@@ -345,7 +345,7 @@ export function registerSecurityMobileControlRoutes(app:any, resolveActor:ActorR
     if(!current||text(current.userId)!==text(actor.userId)||text(current.deletedAt)) return c.json(jsonError("NOTE_NOT_FOUND","Not bulunamadı."),404);
     const body=await c.req.json().catch(()=>({})); const remindAt=body.remindAt===undefined?text(current.remindAt):text(body.remindAt);
     if(remindAt&&Number.isNaN(Date.parse(remindAt))) return c.json(jsonError("NOTE_REMINDER_INVALID","Hatırlatma tarihi geçerli değil."),400);
-    const next={...current,title:body.title===undefined?text(current.title):text(body.title).slice(0,120),body:body.body===undefined?text(current.body):text(body.body).slice(0,4000),remindAt:remindAt?new Date(remindAt).toISOString():"",done:body.done===undefined?Boolean(current.done):Boolean(body.done)};
+    const next:AnyRow={...current,title:body.title===undefined?text(current.title):text(body.title).slice(0,120),body:body.body===undefined?text(current.body):text(body.body).slice(0,4000),remindAt:remindAt?new Date(remindAt).toISOString():"",done:body.done===undefined?Boolean(current.done):Boolean(body.done)};
     if(next.remindAt!==text(current.remindAt)||next.done!==Boolean(current.done)) next.notifiedAt="";
     const saved=await storePut(c,NOTE_SCOPE,id,text(actor.companySlug),next); return c.json({ok:true,data:saved});
   });
