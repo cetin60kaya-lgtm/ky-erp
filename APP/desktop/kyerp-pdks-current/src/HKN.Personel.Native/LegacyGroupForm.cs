@@ -24,7 +24,7 @@ public sealed class LegacyGroupForm : Form
     {
         Text="Çalışma Grupları"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(1100,680); MinimumSize=new Size(900,600);
         Font=new Font("Segoe UI",9f); BackColor=PdksAppearance.Current.Canvas; KeyPreview=true;
-        Build(); Shown+=(_,_)=>Reload(); KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};
+        Build(); Shown+=(_,_)=>{PdksCoreWorkGroups.Normalize(db);Reload();}; KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};
     }
 
     static Label L(string text)=>PdksUiKit.FieldLabel(text);
@@ -82,13 +82,33 @@ public sealed class LegacyGroupForm : Form
         }
         shiftCard.Controls.Add(shifts);body.Controls.Add(shiftCard,2,0);
         root.Controls.Add(body,0,0);
-        var actions=PdksUiKit.ActionBar(true,p.Canvas);var save=Cmd("Kaydet");var add=Cmd("Yeni Ekle");var edit=Cmd("Değiştir");var del=Cmd("Sil");var delAll=Cmd("Tümünü Sil",120);save.Enabled=false;save.Click+=(_,_)=>Save();add.Click+=(_,_)=>BeginNew(save);edit.Click+=(_,_)=>BeginEdit(save);del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();actions.Controls.AddRange([save,delAll,del,edit,add]);root.Controls.Add(actions,0,1);Controls.Add(root);SetEditors(false);
+        var actions=PdksUiKit.ActionBar(true,p.Canvas);
+        var save=Cmd("Kaydet");
+        var edit=Cmd("Değiştir");
+        save.Enabled=false;
+        save.Click+=(_,_)=>Save();
+        edit.Click+=(_,_)=>BeginEdit(save);
+        actions.Controls.AddRange([save,edit]);
+        root.Controls.Add(actions,0,1);
+        Controls.Add(root);
+        SetEditors(false);
     }
     void Reload(int? preferredCode=null)
     {
         try
         {
-            grid.DataSource=db.Query("select KOD,AD,VAD1,VAD2,VAD3,VAD4,VAD5,BASSAAT1,BASSAAT2,BASSAAT3,BASSAAT4,BASSAAT5,BITSAAT1,BITSAAT2,BITSAAT3,BITSAAT4,BITSAAT5,TSAAT,GSAAT,GDSAAT1,GDSAAT2,GDSAAT3,GDSAAT4,GDSAAT5,MKOD from GRUP order by KOD");
+            var allowed=PdksCoreWorkGroups.CanonicalTable(db);
+            if(allowed.Rows.Count==0) throw new InvalidOperationException("MESAİLİ GRUP ve İDARİ GRUP tanımları bulunamadı.");
+            var codes=allowed.AsEnumerable().Select(r=>Convert.ToInt32(r["KOD"])).ToArray();
+            var parts=new List<DataRow>();
+            foreach(var code in codes)
+            {
+                var dt=db.Query("select KOD,AD,VAD1,VAD2,VAD3,VAD4,VAD5,BASSAAT1,BASSAAT2,BASSAAT3,BASSAAT4,BASSAAT5,BITSAAT1,BITSAAT2,BITSAAT3,BITSAAT4,BITSAAT5,TSAAT,GSAAT,GDSAAT1,GDSAAT2,GDSAAT3,GDSAAT4,GDSAAT5,MKOD from GRUP where KOD=@K",new FbParameter("@K",code));
+                if(dt.Rows.Count>0) parts.Add(dt.Rows[0]);
+            }
+            var table=parts.Count==0?db.Query("select KOD,AD,VAD1,VAD2,VAD3,VAD4,VAD5,BASSAAT1,BASSAAT2,BASSAAT3,BASSAAT4,BASSAAT5,BITSAAT1,BITSAAT2,BITSAAT3,BITSAAT4,BITSAAT5,TSAAT,GSAAT,GDSAAT1,GDSAAT2,GDSAAT3,GDSAAT4,GDSAAT5,MKOD from GRUP where 1=0"):parts[0].Table.Clone();
+            foreach(var row in parts)table.ImportRow(row);
+            grid.DataSource=table;
             if(grid.Rows.Count>0)
             {
                 var row=preferredCode is null?grid.Rows[0]:grid.Rows.Cast<DataGridViewRow>().FirstOrDefault(r=>r.DataBoundItem is DataRowView v&&Convert.ToInt32(v.Row["KOD"])==preferredCode.Value)??grid.Rows[0];
