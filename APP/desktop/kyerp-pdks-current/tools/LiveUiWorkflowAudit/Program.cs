@@ -566,47 +566,62 @@ static void RunDefinitionUiWorkflow(FirebirdDatabase db,List<string> log)
     groupForm.Close();
 
     using var periodForm=new LegacyPeriodForm();
-    periodForm.Show();Pump(500);
-    var periodName="UI TEST DONEM "+DateTime.Now.ToString("HHmmssfff");
-    int? periodCode=null;
+    periodForm.Show();Pump(550);
+    var yearField=typeof(LegacyPeriodForm).GetField("year",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)
+        ?.GetValue(periodForm) as ComboBox ?? throw new Exception("Dönem yıl seçimi bulunamadı.");
+    if(!yearField.Items.Cast<object>().Any(x=>Convert.ToInt32(x)==DateTime.Today.Year))
+        throw new Exception("Dönem yıl listesinde güncel yıl yok.");
+
+    var auditYear=yearField.Items.Cast<object>().Select(Convert.ToInt32)
+        .Where(y=>y>=DateTime.Today.Year)
+        .OrderByDescending(y=>y)
+        .FirstOrDefault(y=>Convert.ToInt32(db.Scalar(
+            "select count(*) from DONEM where BASTAR>=@A and BASTAR<@B",
+            new FbParameter("@A",new DateTime(y,1,1)),
+            new FbParameter("@B",new DateTime(y,1,1).AddYears(1)))??0)==0);
+    if(auditYear==0)throw new Exception("Otomatik dönem testi için boş yıl bulunamadı.");
+
     try
     {
-        var yearField=typeof(LegacyPeriodForm).GetField("year",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)
-            ?.GetValue(periodForm) as ComboBox ?? throw new Exception("Dönem yıl seçimi bulunamadı.");
-        if(!yearField.Items.Cast<object>().Any(x=>Convert.ToInt32(x)==DateTime.Today.Year))
-            throw new Exception("Dönem yıl listesinde güncel yıl yok.");
+        yearField.SelectedItem=auditYear;Pump(900);
+        var periodGrid=FindControls<DataGridView>(periodForm).FirstOrDefault() ?? throw new Exception("Dönem ay listesi bulunamadı.");
+        var monthRows=periodGrid.Rows.Cast<DataGridViewRow>().Where(r=>!r.IsNewRow).ToArray();
+        if(monthRows.Length!=12)throw new Exception($"Dönem ekranı 12 ay göstermeli; görünen: {monthRows.Length}.");
 
-        var addPeriod=FindButton(periodForm,"Yeni Dönem") ?? throw new Exception("Yeni Dönem bulunamadı.");
-        var savePeriod=FindButton(periodForm,"Kaydet") ?? throw new Exception("Dönem Kaydet bulunamadı.");
-        addPeriod.PerformClick();Pump(120);
-        (FindFieldByLabel(periodForm,"Dönem Adı") as TextBox ?? throw new Exception("Dönem Adı bulunamadı.")).Text=periodName;
-        var groupCombo=FindFieldByLabel(periodForm,"Çalışma Grubu") as ComboBox ?? throw new Exception("Dönem Çalışma Grubu bulunamadı.");
-        if(groupCombo.Items.Count!=2)throw new Exception("Dönemde yalnız iki çalışma grubu olmalıdır.");groupCombo.SelectedIndex=0;
-        var maxYear=Convert.ToInt32(db.Scalar("select coalesce(max(extract(year from BASTAR)),2026) from DONEM")??2026);
-        var auditYear=Math.Min(9998,maxYear+2);
-        (FindFieldByLabel(periodForm,"Başlangıç") as DateTimePicker ?? throw new Exception("Dönem Başlangıç bulunamadı.")).Value=new DateTime(auditYear,1,1);
-        (FindFieldByLabel(periodForm,"Bitiş") as DateTimePicker ?? throw new Exception("Dönem Bitiş bulunamadı.")).Value=new DateTime(auditYear,1,31);
-        savePeriod.PerformClick();Pump(400);
-        periodCode=Convert.ToInt32(db.Scalar("select KOD from DONEM where AD=@A",new FbParameter("@A",periodName)) ?? throw new Exception("Dönem DB insert bulunamadı."));
-        var periodCodeField=typeof(LegacyPeriodForm).GetField("code",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
-        if(Convert.ToInt32(periodCodeField?.GetValue(periodForm)??-1)!=periodCode.Value)throw new Exception("Dönem iç seçim kodu yeni kayıtta kalmadı.");
-        var editPeriod=FindButton(periodForm,"Düzenle") ?? throw new Exception("Dönem Düzenle bulunamadı.");
-        editPeriod.PerformClick();Pump(120);
-        (FindFieldByLabel(periodForm,"Dönem Adı") as TextBox)!.Text=periodName+" EDIT";
-        savePeriod.PerformClick();Pump(350);
-        var actualPeriod=Convert.ToString(db.Scalar("select AD from DONEM where KOD=@K",new FbParameter("@K",periodCode.Value)))??"";
-        if(actualPeriod!=periodName+" EDIT")throw new Exception("Dönem UI update DB doğrulaması başarısız.");
-        var delPeriod=FindButton(periodForm,"Sil") ?? throw new Exception("Dönem Sil bulunamadı.");
-        AutoDismiss("Dönemler");delPeriod.PerformClick();Pump(500);
-        if(Convert.ToInt32(db.Scalar("select count(*) from DONEM where KOD=@K",new FbParameter("@K",periodCode.Value)))!=0)throw new Exception("Dönem UI silme DB doğrulaması başarısız.");
-        log.Add("PASS|Dönemler > yıl bazlı Yeni/Düzenle/Sil > DB");periodCode=null;
+        if(FindButton(periodForm,"Yeni Dönem") is not null || FindButton(periodForm,"Düzenle") is not null ||
+           FindButton(periodForm,"Sil") is not null || FindButton(periodForm,"Kaydet") is not null)
+            throw new Exception("Dönem ekranında manuel ay×grup CRUD görünmemeli.");
+        if(FindButton(periodForm,"Yılı Hazırla") is null)
+            throw new Exception("Dönem ekranında tek adımlı Yılı Hazırla komutu bulunamadı.");
+
+        var a=new DateTime(auditYear,1,1);
+        var b=a.AddYears(1);
+        var systemRows=Convert.ToInt32(db.Scalar(
+            "select count(*) from DONEM where BASTAR>=@A and BASTAR<@B",
+            new FbParameter("@A",a),new FbParameter("@B",b))??0);
+        if(systemRows!=24)throw new Exception($"Arka planda 12 ay × 2 çekirdek grup = 24 dönem bekleniyordu; bulunan: {systemRows}.");
+
+        var groupCounts=db.Query(
+            "select g.AD,count(*) ADET from DONEM d join GRUP g on g.KOD=d.GRUP where d.BASTAR>=@A and d.BASTAR<@B group by g.AD order by g.AD",
+            new FbParameter("@A",a),new FbParameter("@B",b));
+        var counts=groupCounts.AsEnumerable().ToDictionary(r=>Convert.ToString(r["AD"])?.Trim()??"",r=>Convert.ToInt32(r["ADET"]));
+        if(!counts.TryGetValue("MESAİLİ GRUP",out var mesaili)||mesaili!=12 ||
+           !counts.TryGetValue("İDARİ GRUP",out var idari)||idari!=12)
+            throw new Exception("Otomatik dönem dağılımı MESAİLİ=12 / İDARİ=12 olmalıdır.");
+
+        if(monthRows.Any(r=>!string.Equals(Convert.ToString(r.Cells["DURUM"].Value),"Hazır",StringComparison.Ordinal)))
+            throw new Exception("12 aylık dönem görünümünde hazır olmayan ay kaldı.");
+
+        log.Add("PASS|Dönemler > Yıl→Ay 12 satır > MESAİLİ/İDARİ arka planda otomatik 24 kayıt > DB");
     }
     finally
     {
-        if(periodCode is not null) db.Execute("delete from DONEM where KOD=@K",new FbParameter("@K",periodCode.Value));
-        db.Execute("delete from DONEM where AD starting with 'UI TEST DONEM'");
+        var a=new DateTime(auditYear,1,1);
+        var b=a.AddYears(1);
+        periodForm.Close();
+        db.Execute("delete from DONEM where BASTAR>=@A and BASTAR<@B",
+            new FbParameter("@A",a),new FbParameter("@B",b));
     }
-    periodForm.Close();
 }
 
 static void RunEditorButton(Button trigger,string title,Action<Form> interact)
