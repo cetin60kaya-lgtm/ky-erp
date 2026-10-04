@@ -75,10 +75,10 @@ public sealed class ResponsibleQuickOperationsForm : Form
             "İzin kayıtlarını kişi ve tarih bazında yönetir; puantaja girecek mazeret ve süreyi doğrular.",
             () => shell.NavigateToCommand(PdksCommandId.Leave)), 0, 1);
 
-        cards.Controls.Add(Card("4. PUANTAJ KONTROL",
-            "Günlük / Aylık Hesapla\r\nGeç • Erken • Eksik • Devamsız",
-            "Kart hareketi, izin, tatil ve vardiya planlarından puantaj üretir ve sonucu kontrol eder.",
-            () => shell.NavigateToCommand(PdksCommandId.TimesheetMonthly)), 1, 1);
+        cards.Controls.Add(Card("4. İSTİSNA / PUANTAJ",
+            "Eksik • Geç • Erken • Devamsız\r\nMesai • İzin Uyuşmazlığı",
+            "Önce sorunlu personel-gün kayıtlarını tek listede gösterir; buradan düzeltme veya puantaj ekranına geçilir.",
+            () => shell.NavigateToCommand(PdksCommandId.AttendanceExceptions)), 1, 1);
 
         cards.Controls.Add(Card("5. AVANS / KAZANÇ / KESİNTİ",
             "Avans Gir • Ek Kazanç\r\nKesinti ve Açıklama Kontrolü",
