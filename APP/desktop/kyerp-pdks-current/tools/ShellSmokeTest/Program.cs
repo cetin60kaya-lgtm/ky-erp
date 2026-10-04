@@ -112,6 +112,11 @@ using (var periods = new LegacyPeriodForm())
 {
     if (!Descendants(periods).OfType<ComboBox>().Any())
         throw new InvalidOperationException("Dönem ekranında yıl seçimi yok.");
+    var buttons=Descendants(periods).OfType<Button>().Select(x=>(x.Text??string.Empty).Replace("&",string.Empty)).ToArray();
+    if (!buttons.Contains("Yılı Hazırla"))
+        throw new InvalidOperationException("Dönem ekranında Yılı Hazırla komutu yok.");
+    if (buttons.Any(x=>x is "Yeni Dönem" or "Düzenle" or "Sil" or "Kaydet"))
+        throw new InvalidOperationException("Dönem ekranı ay×grup manuel CRUD göstermemeli.");
 }
 
 using (var settings = new LegacyTerminalSettingsForm())
