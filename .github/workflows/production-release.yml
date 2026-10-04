@@ -287,6 +287,20 @@ jobs:
             exit 1
           fi
 
+          echo "0059 Denetim final operasyon semasi kontrol ediliyor..."
+          test -f migrations/0059_compliance_final_operations.sql
+          compliance_final_state="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('compliance_audit_documents','compliance_audit_shares','compliance_finding_capa','compliance_finding_evidence');" --json)"
+          compliance_final_tables="$(jq -r '.[0].results[0].n // -1' <<<"$compliance_final_state")"
+          if [ "$compliance_final_tables" = "0" ]; then
+            echo "0059 semasi yok; additive migration uygulanacak."
+            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0059_compliance_final_operations.sql
+          elif [ "$compliance_final_tables" = "4" ]; then
+            echo "0059 semasi zaten tam; tekrar uygulanmiyor."
+          else
+            echo "GUVENLIK DURDURMASI: 0059 kismi sema bulundu (tables=$compliance_final_tables)." >&2
+            exit 1
+          fi
+
       - name: Migration sonrasi File Hub + Muhasebe + FIBE + PDKS + AI ucretlendirme semasini dogrula
         working-directory: APP/cloud/ky-erp-api
         shell: bash
@@ -329,6 +343,8 @@ jobs:
 
           compliance="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS tables_ok FROM sqlite_master WHERE type='table' AND name IN ('compliance_controls','compliance_requirement_controls','compliance_document_controls','compliance_external_refs','compliance_system_evidence','compliance_requirement_applicability');" --json)"
           jq -e '.[0].results[0].tables_ok == 6' <<<"$compliance" >/dev/null || { echo "Denetim 0058 semasi eksik" >&2; exit 1; }
+          compliance_final="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS tables_ok FROM sqlite_master WHERE type='table' AND name IN ('compliance_audit_documents','compliance_audit_shares','compliance_finding_capa','compliance_finding_evidence');" --json)"
+          jq -e '.[0].results[0].tables_ok == 4' <<<"$compliance_final" >/dev/null || { echo "Denetim 0059 final semasi eksik" >&2; exit 1; }
 
       - name: Worker'i api.kyerp.net production'a dagit
         working-directory: APP/cloud/ky-erp-api
