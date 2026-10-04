@@ -32,7 +32,9 @@ test("IK master people route is never shadowed by the PDKS card population", () 
 test("monthly personnel API returns the full HKN master roster and allocates the next HKN code", () => {
   const relational = api("ik-relational-cloud.ts");
   assert.match(relational, /async function nextMonthlyPersonnelCode/);
-  assert.match(relational, /MAX\(CASE[\s\S]*UPPER\(TRIM\(code\)\) LIKE 'HKN-%'/);
+  assert.match(relational, /SELECT MAX\(code_no\) AS max_code FROM/);
+  assert.match(relational, /ik_employee_change_history/);
+  assert.match(relational, /field_name='personnelCode'/);
   assert.match(relational, /value\.code = await nextMonthlyPersonnelCode/);
   assert.match(relational, /const allEmployees = rawEmployeesWithCalc\.map/);
   assert.match(relational, /masterEmployees,/);
@@ -108,8 +110,9 @@ test("canonical personnel admin maintenance requires admin and protects operatio
   assert.match(relational, /ADMIN_HARD_DELETE/);
   assert.match(relational, /ADMIN_PERSONNEL_MERGE/);
   assert.match(relational, /PERSONNEL_MERGE_CONFLICT/);
-  assert.match(relational, /BIRLESTIR \$\{currentCode\} > \$\{targetCode\}/);
+  assert.match(relational, /ADMIN_PERSONNEL_MERGE_CODE_RETIRED/);
+  assert.match(relational, /ADMIN_PERSONNEL_CODE_RETIRED/);
   assert.match(relational, /PERSONNEL_HAS_OPERATIONAL_HISTORY/);
-  assert.match(relational, /SİL \$\{currentCode\}/);
+  assert.doesNotMatch(relational, /ADMIN_CONFIRMATION_REQUIRED/);
   assert.match(relational, /\/api\/ik\/advanced\/person-card\/:employeeId\/admin-maintenance/);
 });
