@@ -546,38 +546,23 @@ static void RunDefinitionUiWorkflow(FirebirdDatabase db,List<string> log)
     form.Close();
 
     using var groupForm=new LegacyGroupForm();
-    groupForm.Show();Pump(450);
-    var groupName="UI TEST GRUP "+DateTime.Now.ToString("HHmmssfff");
-    int? groupCode=null;
-    try
-    {
-        var addGroup=FindButton(groupForm,"Yeni Ekle") ?? throw new Exception("Çalışma Grubu Yeni Ekle bulunamadı.");
-        var saveGroup=FindButton(groupForm,"Kaydet") ?? throw new Exception("Çalışma Grubu Kaydet bulunamadı.");
-        addGroup.PerformClick();Pump(100);
-        (FindFieldByLabel(groupForm,"Grup Adı") as TextBox ?? throw new Exception("Grup Adı bulunamadı.")).Text=groupName;
-        (FindFieldByLabel(groupForm,"Dönemlik Çalışma Saati") as TextBox ?? throw new Exception("Dönemlik Çalışma Saati bulunamadı.")).Text="10560";
-        (FindFieldByLabel(groupForm,"Günlük Çalışma Saati") as TextBox ?? throw new Exception("Günlük Çalışma Saati bulunamadı.")).Text="540";
-        (FindFieldByLabel(groupForm,"Terminal Kodu") as TextBox ?? throw new Exception("Terminal Kodu bulunamadı.")).Text="99";
-        saveGroup.PerformClick();Pump(350);
-        groupCode=Convert.ToInt32(db.Scalar("select KOD from GRUP where AD=@A",new FbParameter("@A",groupName)) ?? throw new Exception("Çalışma Grubu DB insert bulunamadı."));
-        var groupCodeField=typeof(LegacyGroupForm).GetField("selectedCode",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
-        if(Convert.ToInt32(groupCodeField?.GetValue(groupForm)??-1)!=groupCode.Value)throw new Exception("Çalışma grubu iç seçim kodu yeni kayıtta kalmadı.");
-        var editGroup=FindButton(groupForm,"Değiştir") ?? throw new Exception("Çalışma Grubu Değiştir bulunamadı.");
-        editGroup.PerformClick();Pump(100);
-        (FindFieldByLabel(groupForm,"Grup Adı") as TextBox)!.Text=groupName+" EDIT";
-        saveGroup.PerformClick();Pump(300);
-        var actualGroup=Convert.ToString(db.Scalar("select AD from GRUP where KOD=@K",new FbParameter("@K",groupCode.Value)))??"";
-        if(actualGroup!=groupName+" EDIT")throw new Exception("Çalışma Grubu UI update DB doğrulaması başarısız.");
-        var delGroup=FindButton(groupForm,"Sil") ?? throw new Exception("Çalışma Grubu Sil bulunamadı.");
-        AutoDismiss("Çalışma Grupları");delGroup.PerformClick();Pump(450);
-        if(Convert.ToInt32(db.Scalar("select count(*) from GRUP where KOD=@K",new FbParameter("@K",groupCode.Value)))!=0)throw new Exception("Çalışma Grubu UI silme DB doğrulaması başarısız.");
-        log.Add("PASS|Çalışma Grupları > Yeni/Değiştir/Sil > DB");groupCode=null;
-    }
-    finally
-    {
-        if(groupCode is not null) db.Execute("delete from GRUP where KOD=@K",new FbParameter("@K",groupCode.Value));
-        db.Execute("delete from GRUP where AD starting with 'UI TEST GRUP'");
-    }
+    groupForm.Show();Pump(500);
+    var groupGrid=FindControls<DataGridView>(groupForm).FirstOrDefault() ?? throw new Exception("Çalışma grubu listesi bulunamadı.");
+    var groupNames=groupGrid.Rows.Cast<DataGridViewRow>()
+        .Where(r=>!r.IsNewRow)
+        .Select(r=>Convert.ToString(r.Cells["AD"].Value)?.Trim()??"")
+        .Where(x=>x.Length>0)
+        .ToArray();
+    if(groupNames.Length!=2 || !groupNames.Contains("MESAİLİ GRUP") || !groupNames.Contains("İDARİ GRUP"))
+        throw new Exception("Çalışma grupları yalnız MESAİLİ GRUP ve İDARİ GRUP olmalıdır: "+string.Join(", ",groupNames));
+    if(FindButton(groupForm,"Yeni Ekle") is not null || FindButton(groupForm,"Sil") is not null || FindButton(groupForm,"Tümünü Sil") is not null)
+        throw new Exception("Sabit çalışma gruplarında ekleme/silme komutu görünmemeli.");
+    var editGroup=FindButton(groupForm,"Değiştir") ?? throw new Exception("Çalışma Grubu Değiştir bulunamadı.");
+    editGroup.PerformClick();Pump(100);
+    var fixedName=FindFieldByLabel(groupForm,"Grup Adı") as TextBox ?? throw new Exception("Grup Adı bulunamadı.");
+    var daily=FindFieldByLabel(groupForm,"Günlük Çalışma Saati") as TextBox ?? throw new Exception("Günlük Çalışma Saati bulunamadı.");
+    if(!fixedName.ReadOnly || daily.ReadOnly) throw new Exception("Grup adı sabit, vardiya/saat alanları düzenlenebilir olmalıdır.");
+    log.Add("PASS|Çalışma Grupları > yalnız MESAİLİ + İDARİ > ad sabit / saatler düzenlenebilir");
     groupForm.Close();
 
     using var periodForm=new LegacyPeriodForm();
@@ -586,22 +571,23 @@ static void RunDefinitionUiWorkflow(FirebirdDatabase db,List<string> log)
     int? periodCode=null;
     try
     {
+        var yearField=typeof(LegacyPeriodForm).GetField("year",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)
+            ?.GetValue(periodForm) as ComboBox ?? throw new Exception("Dönem yıl seçimi bulunamadı.");
+        if(!yearField.Items.Cast<object>().Any(x=>Convert.ToInt32(x)==DateTime.Today.Year))
+            throw new Exception("Dönem yıl listesinde güncel yıl yok.");
+
         var addPeriod=FindButton(periodForm,"Yeni Dönem") ?? throw new Exception("Yeni Dönem bulunamadı.");
         var savePeriod=FindButton(periodForm,"Kaydet") ?? throw new Exception("Dönem Kaydet bulunamadı.");
         addPeriod.PerformClick();Pump(120);
         (FindFieldByLabel(periodForm,"Dönem Adı") as TextBox ?? throw new Exception("Dönem Adı bulunamadı.")).Text=periodName;
         var groupCombo=FindFieldByLabel(periodForm,"Çalışma Grubu") as ComboBox ?? throw new Exception("Dönem Çalışma Grubu bulunamadı.");
-        if(groupCombo.Items.Count==0)throw new Exception("Dönem çalışma grubu listesi boş.");groupCombo.SelectedIndex=0;
+        if(groupCombo.Items.Count!=2)throw new Exception("Dönemde yalnız iki çalışma grubu olmalıdır.");groupCombo.SelectedIndex=0;
         (FindFieldByLabel(periodForm,"Başlangıç") as DateTimePicker ?? throw new Exception("Dönem Başlangıç bulunamadı.")).Value=new DateTime(2098,1,1);
         (FindFieldByLabel(periodForm,"Bitiş") as DateTimePicker ?? throw new Exception("Dönem Bitiş bulunamadı.")).Value=new DateTime(2098,1,31);
-        (FindFieldByLabel(periodForm,"Dönemlik Çalışma Eksiği") as TextBox ?? throw new Exception("Dönemlik Çalışma Eksiği bulunamadı.")).Text="176:00";
-        (FindFieldByLabel(periodForm,"Eksik Gün") as TextBox ?? throw new Exception("Eksik Gün bulunamadı.")).Text="1";
         savePeriod.PerformClick();Pump(400);
         periodCode=Convert.ToInt32(db.Scalar("select KOD from DONEM where AD=@A",new FbParameter("@A",periodName)) ?? throw new Exception("Dönem DB insert bulunamadı."));
         var periodCodeField=typeof(LegacyPeriodForm).GetField("code",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
         if(Convert.ToInt32(periodCodeField?.GetValue(periodForm)??-1)!=periodCode.Value)throw new Exception("Dönem iç seçim kodu yeni kayıtta kalmadı.");
-        var savedMinutes=Convert.ToInt32(db.Scalar("select ACESAAT from DONEM where KOD=@K",new FbParameter("@K",periodCode.Value))??-1);
-        if(savedMinutes!=10560)throw new Exception("Dönem 176:00 süre kaydı yanlış: "+savedMinutes);
         var editPeriod=FindButton(periodForm,"Düzenle") ?? throw new Exception("Dönem Düzenle bulunamadı.");
         editPeriod.PerformClick();Pump(120);
         (FindFieldByLabel(periodForm,"Dönem Adı") as TextBox)!.Text=periodName+" EDIT";
@@ -609,9 +595,9 @@ static void RunDefinitionUiWorkflow(FirebirdDatabase db,List<string> log)
         var actualPeriod=Convert.ToString(db.Scalar("select AD from DONEM where KOD=@K",new FbParameter("@K",periodCode.Value)))??"";
         if(actualPeriod!=periodName+" EDIT")throw new Exception("Dönem UI update DB doğrulaması başarısız.");
         var delPeriod=FindButton(periodForm,"Sil") ?? throw new Exception("Dönem Sil bulunamadı.");
-        AutoDismiss("Dönem Tanımları");delPeriod.PerformClick();Pump(500);
+        AutoDismiss("Dönemler");delPeriod.PerformClick();Pump(500);
         if(Convert.ToInt32(db.Scalar("select count(*) from DONEM where KOD=@K",new FbParameter("@K",periodCode.Value)))!=0)throw new Exception("Dönem UI silme DB doğrulaması başarısız.");
-        log.Add("PASS|Dönemler > Yeni/Düzenle/Sil + 176:00 > DB");periodCode=null;
+        log.Add("PASS|Dönemler > yıl bazlı Yeni/Düzenle/Sil > DB");periodCode=null;
     }
     finally
     {
