@@ -163,7 +163,7 @@ test("push approval hides raw browser ids and uses Android friendly device label
 });
 
 test("phone approval keeps one latest self request, one visible notification and serialized status checks", () => {
-  assert.match(push, /let latestSelfPending = ""/);
+  assert.match(push, /latestSelfPendingByUser = new Map/);
   assert.match(push, /dedupeKey: `self:/);
   assert.match(push, /idempotent: true/);
   assert.match(serviceWorker, /registration\.unregister/);
