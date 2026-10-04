@@ -1,4 +1,4 @@
-deploy: platform-admin-security-v4
-canonical: 2be5f673532b0d5831bae2b2d0b7069f1aa072cf
-requested: 2026-10-04T04:36:00+03:00
-reason: verify-lazy-admin-chunk-and-publish
+deploy: security-approvals-front-codeinput-hotfix
+canonical: f38daba5f92ffdc1ce782da2f828d130d106df97
+requested: 2026-10-04T16:12:00Z
+reason: approvals-first-and-stable-code-input
