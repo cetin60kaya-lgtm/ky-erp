@@ -2,13 +2,13 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-10-04T09:18:00+03:00",
-  "attempt": 114,
+  "requestedAt": "2026-10-04T09:21:00+03:00",
+  "attempt": 115,
   "scope": [
-    "security-remove-unused-xlsx-high-vulnerability",
-    "compliance-shared-evidence-control-library",
-    "compliance-multi-standard-evidence-reuse",
-    "compliance-inditex-zara-zdhc-oeko-higg-catalog",
+    "security-upgrade-sheetjs-xlsx-0.20.3-official-cdn",
+    "ik-sgk-excel-import-preserved",
+    "compliance-shared-evidence",
+    "compliance-standard-catalog",
     "compliance-erp-evidence",
     "compliance-renewal-engine",
     "compliance-audit-workspaces",
@@ -17,6 +17,6 @@
     "single-production-release"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "b98428c43f17e888112330be05489eeac59ffeb6",
-  "note": "Release preflight xlsx high advisory nedeniyle durdu. Worker kodunda kullanılmayan xlsx ve yalnız ona ait transitif bağımlılıklar kaldırıldı; güvenlik audit kapısı korunarak Denetim Merkezi release tekrarlandı."
+  "sourceCommit": "eced2c7abc8a4849c1f4cd4a7714d4f6715af00c",
+  "note": "SGK Excel fonksiyonu icin eski npm xlsx 0.18.5 yerine SheetJS resmi CDN 0.20.3 kullanildi; guvenlik audit kapisi korunarak Denetim Merkezi release tekrarlandi."
 }
