@@ -9,11 +9,11 @@ public sealed partial class MainShellForm
     void InitializeTerminalAutoSync()
     {
         terminalAutoTimer.Tick += async (_, _) => await CheckTerminalAutoSyncAsync();
-        Shown += async (_, _) =>
+        Shown += (_, _) =>
         {
             if (IsDisposed) return;
             terminalAutoTimer.Start();
-            await CheckTerminalAutoSyncAsync(true);
+            SetShellActivity("Terminal kontrolü arka planda hazır", true);
         };
         FormClosed += (_, _) => terminalAutoTimer.Stop();
     }
