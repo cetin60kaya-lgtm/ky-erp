@@ -1,5 +1,6 @@
 import { useAuth } from "../../context/AuthContext";
 import AdminSystemOverview from "../admin/AdminSystemOverview";
+import AdminPlatformHub from "../admin/AdminPlatformHub";
 import AdminCompanyOverview from "../admin/AdminCompanyOverview";
 import AdminOwnerSecurity from "../admin/AdminOwnerSecurity";
 import SecurityCenterPanel from "../admin/SecurityCenterPanel";
@@ -35,6 +36,8 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
     }
     return <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
+  if (owner) return <AdminPlatformHub activeTab={activeTab} activeMainCompany={activeMainCompany} />;
+
   if (activeTab === "admin-yonetim-ozeti") {
     return owner
       ? <AdminSystemOverview activeMainCompany={activeMainCompany} />
