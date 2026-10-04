@@ -98,7 +98,7 @@ public static class PdksCommandCatalog
 
         new(PdksCommandId.Definitions,"Tanımlar Merkezi","Organizasyon, bordro ve çalışma tanımlarına tek noktadan eriş",PdksModule.Tanimlar,PdksToolbarIcon.Departments,"TANIMLAR",400,PdksCommandPlacement.Management),
         new(PdksCommandId.Groups,"Çalışma Grupları / Vardiyalar","Vardiya ve çalışma grubu tanımları",PdksModule.Tanimlar,PdksToolbarIcon.Groups,"TANIMLAR",410,PdksCommandPlacement.Management),
-        new(PdksCommandId.Periods,"Dönemler","Çalışma ve bordro dönemleri",PdksModule.Donemler,PdksToolbarIcon.Periods,"TANIMLAR",420,PdksCommandPlacement.Management),
+        new(PdksCommandId.Periods,"Yıllık Dönemler","Ay/yıl bazlı çalışma ve bordro dönemleri",PdksModule.Donemler,PdksToolbarIcon.Periods,"TANIMLAR",420,PdksCommandPlacement.Management),
         new(PdksCommandId.WorkingDate,"Çalışma Tarihi","Aktif çalışma tarihini seç ve yönet",PdksModule.Donemler,PdksToolbarIcon.WorkDate,"TANIMLAR",430,PdksCommandPlacement.Management),
         new(PdksCommandId.Holidays,"Genel Tatiller","Resmî ve özel tatil günleri",PdksModule.Tanimlar,PdksToolbarIcon.Periods,"TANIMLAR",440,PdksCommandPlacement.Management),
         new(PdksCommandId.DailyWorkHours,"Günlük Çalışma Saatleri","Günlük süre ve çalışma alanı tanımları",PdksModule.Tanimlar,PdksToolbarIcon.Timesheet,"TANIMLAR",450,PdksCommandPlacement.Management),
