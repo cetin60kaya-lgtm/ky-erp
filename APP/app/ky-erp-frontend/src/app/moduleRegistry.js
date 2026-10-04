@@ -133,6 +133,7 @@ const COMPLIANCE_MODULE = {
       label: "Kontrol Merkezi",
       tabs: [
         ["denetim-genel", "Genel Bakış", "dashboard"],
+        ["denetim-dosyalari", "Denetim Dosyaları", "file-check"],
         ["denetim-evraklar", "Evrak Takip", "dosya"],
         ["denetim-takvim", "Süre & Takvim", "takvim"],
         ["denetim-capa", "Düzeltici Faaliyet / CAPA", "uyari"],
@@ -322,6 +323,8 @@ export const MODULE_ROUTE_ALIASES = {
   },
   compliance: {
     genel: "denetim-genel",
+    denetimler: "denetim-dosyalari",
+    audit: "denetim-dosyalari",
     evraklar: "denetim-evraklar",
     evrak: "denetim-evraklar",
     takvim: "denetim-takvim",
