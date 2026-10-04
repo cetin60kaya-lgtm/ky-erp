@@ -10,6 +10,9 @@ public sealed partial class MainShellForm
         PdksCommandId.Home or
         PdksCommandId.Operations or
         PdksCommandId.LiveAttendance or
+        PdksCommandId.AttendanceExceptions or
+        PdksCommandId.AttendanceHistory or
+        PdksCommandId.DepartmentAttendanceAnalytics or
         PdksCommandId.EntryExit or
         PdksCommandId.Personnel or
         PdksCommandId.Leave or
@@ -19,6 +22,7 @@ public sealed partial class MainShellForm
         PdksCommandId.TimesheetResults or
         PdksCommandId.PayrollGeneral or
         PdksCommandId.PayrollPayments or
+        PdksCommandId.PeriodControlCenter or
         PdksCommandId.PayrollAdjustment or
         PdksCommandId.PayrollPayslip or
         PdksCommandId.PayrollOvertime or
@@ -83,6 +87,9 @@ public sealed partial class MainShellForm
             case PdksCommandId.AttendanceHistory:
                 ShowModule(new AttendanceHistoryForm(false), PdksModule.GunlukOperasyon);
                 break;
+            case PdksCommandId.DepartmentAttendanceAnalytics:
+                ShowModule(new DepartmentAttendanceAnalyticsForm(), PdksModule.GunlukOperasyon);
+                break;
             case PdksCommandId.EntryExit:
                 OpenLegacyGirisCikis();
                 break;
@@ -112,6 +119,9 @@ public sealed partial class MainShellForm
                 break;
             case PdksCommandId.PayrollPayments:
                 OpenPersonelTab(PdksModule.Bordro);
+                break;
+            case PdksCommandId.PeriodControlCenter:
+                ShowModule(new PeriodControlCenterForm(NavigateToCommand), PdksModule.Bordro);
                 break;
             case PdksCommandId.PayrollAdjustment:
                 ShowModule(new MonthlyPayrollAdjustmentForm(), PdksModule.Bordro);
@@ -193,6 +203,9 @@ public sealed partial class MainShellForm
         if (id is PdksCommandId.Home or
             PdksCommandId.Operations or
             PdksCommandId.LiveAttendance or
+            PdksCommandId.AttendanceExceptions or
+            PdksCommandId.AttendanceHistory or
+            PdksCommandId.DepartmentAttendanceAnalytics or
             PdksCommandId.EntryExit or
             PdksCommandId.Personnel or
             PdksCommandId.Leave or
@@ -202,6 +215,7 @@ public sealed partial class MainShellForm
             PdksCommandId.TimesheetResults or
             PdksCommandId.PayrollGeneral or
             PdksCommandId.PayrollPayments or
+            PdksCommandId.PeriodControlCenter or
             PdksCommandId.PayrollAdjustment or
             PdksCommandId.PayrollPayslip or
             PdksCommandId.PayrollOvertime or
