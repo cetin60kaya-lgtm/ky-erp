@@ -103,21 +103,23 @@ export const MODULES = [
       {
         label: "Platform Yönetimi",
         tabs: [
-          ["admin-yonetim-ozeti", "Yönetim Konsolu", "dashboard"],
-          ["uygulama-sahibi", "Süper Yönetici & Güvenlik", "ayarlar"],
-          ["kullanicilar", "Kullanıcı & Yetkiler", "users"],
-          ["ana-firma-ayarlar", "Firmalar & Organizasyon", "ayarlar"],
+          ["admin-yonetim-ozeti", "Yönetim", "dashboard"],
+          ["admin-guvenlik", "Güvenlik", "guvenlik"],
+          ["admin-sistem", "Sistem", "ayarlar"],
         ],
       },
-      {
-        label: "Dosya ve Güvenlik",
-        tabs: [
-          ["dosya-klasor-yonetimi", "Dosya ve Klasör Yönetimi", "dosya"],
-          ["eslestirmeler", "Eşleştirmeler", "file-check"],
-          ["yedekleme-loglar", "Yedekleme / Loglar", "raporlar"],
-          ["surum-merkezi", "Sürüm Merkezi", "ayarlar"],
-        ],
-      },
+    ],
+    hiddenTabs: [
+      ["uygulama-sahibi", "Süper Yönetici & Güvenlik", "ayarlar"],
+      ["kullanicilar", "Kullanıcı & Yetkiler", "users"],
+      ["ana-firma-ayarlar", "Firmalar & Organizasyon", "ayarlar"],
+      ["firma-ucretlendirme", "Firma Paket / Kullanım", "odemeler"],
+      ["dosya-klasor-yonetimi", "Dosya ve Klasör Yönetimi", "dosya"],
+      ["eslestirmeler", "Eşleştirmeler", "file-check"],
+      ["yedekleme-loglar", "Yedekleme / Loglar", "raporlar"],
+      ["surum-merkezi", "Sürüm Merkezi", "ayarlar"],
+      ["uygulama-ayarlari", "Uygulama Ayarları", "ayarlar"],
+      ["giris-onaylari", "Giriş Onayları", "file-check"],
     ],
   },
   {

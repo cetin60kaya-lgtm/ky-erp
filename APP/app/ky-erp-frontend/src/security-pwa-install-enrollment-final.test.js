@@ -61,7 +61,7 @@ test("legacy security paths are retired instead of redirected into a compatibili
 test("enrollment no longer waits for platform biometric creation",()=>{
   assert.doesNotMatch(app,/localUnlockCredentialId=await createLocalUnlock/);
   assert.match(app,/let localUnlockCredentialId="";/);
-  assert.match(app,/security-v3\.0/);
+  assert.match(app,/security-v4\.0/);
 });
 
 test("trusted-device enrollment requires 8 character backup code plus ERP password",()=>{

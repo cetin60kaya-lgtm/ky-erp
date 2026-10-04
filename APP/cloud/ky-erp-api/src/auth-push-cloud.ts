@@ -25,7 +25,7 @@ const SECURITY_ENROLL_SECONDS = 10 * 60;
 const OWNER_DEVICE_STEPUP_SCOPE = "AUTH_OWNER_DEVICE_STEPUP";
 const OWNER_DEVICE_STEPUP_SECONDS = 10 * 60;
 const OWNER_DEVICE_STEPUP_RESEND_SECONDS = 60;
-const SECURITY_APP_VERSION = "security-v3.0";
+const SECURITY_APP_VERSION = "security-v4.0";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
 // Telefon onayı birincil faktör olarak beklemede tutulur.
 const SECURITY_LOGIN_CODE_SECONDS = 60;
@@ -498,7 +498,7 @@ async function actorFromDevice(c: any) {
     companyApprover,
     securityCapabilities: ownerControlAuthorized
       ? [...SECURITY_CAPABILITIES]
-      : companyApprover ? ["LOGIN_APPROVE", "SESSION_APPROVE"] : [],
+      : companyApprover ? ["LOGIN_APPROVE", "SESSION_APPROVE", "SESSION_VIEW", "SESSION_CLOSE", "AUDIT_VIEW"] : [],
   };
 }
 
@@ -534,7 +534,7 @@ async function securityAccountProfile(c: any, actor: AnyRow) {
   const companyApprover = Boolean(actor.companyApprover) && isCompanyAdmin(role);
   let securityCapabilities: string[] = ownerControlAuthorized
     ? [...SECURITY_CAPABILITIES]
-    : companyApprover ? ["LOGIN_APPROVE", "SESSION_APPROVE"] : [];
+    : companyApprover ? ["LOGIN_APPROVE", "SESSION_APPROVE", "SESSION_VIEW", "SESSION_CLOSE", "AUDIT_VIEW"] : [];
 
   return {
     userId: text(actor.userId),
@@ -658,12 +658,25 @@ export async function verifyDirectSecurityLoginCode(c: any, codeValue: unknown, 
   const targetUserId = text(targetUserIdValue);
   if (!/^\d{6}$/.test(candidate) || !targetUserId) return { ok: false, code: "DIRECT_SECURITY_CODE_INVALID" };
 
+  const target = await c.env.DB.prepare(
+    `SELECT u.id,u.role,u.platform_role,s.role_override,s.main_company_slug
+       FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id
+      WHERE u.id=? AND u.is_active=1 LIMIT 1`,
+  ).bind(targetUserId).first<AnyRow>();
+  if (!target) return { ok: false, code: "DIRECT_SECURITY_CODE_INVALID" };
+  const targetCompanySlug = text(target.main_company_slug);
+  const targetRole = roleOf(target);
+
   const rows = (await storeList(c, DIRECT_SECURITY_CODE_SCOPE))
     .filter((row: AnyRow) =>
       upper(row.status) === "ACTIVE" &&
       !text(row.consumedAt) &&
       Date.parse(text(row.expiresAt)) > Date.now() &&
-      (upper(row.scopeType) === "SYSTEM" || text(row.targetUserId) === targetUserId)
+      (
+        upper(row.scopeType) === "SYSTEM" ||
+        text(row.targetUserId) === targetUserId ||
+        (upper(row.scopeType) === "COMPANY" && !isSuper(targetRole) && targetCompanySlug && text(row.mainCompanySlug) === targetCompanySlug)
+      )
     )
     .sort((a: AnyRow, b: AnyRow) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 
@@ -895,7 +908,7 @@ async function safeSecurityAccountProfile(c: any, actor: AnyRow) {
       scopeType:ownerControlAuthorized?"SYSTEM":(companyApprover?"COMPANY":"USER"),
       ownerControlAuthorized,
       moduleKeys:ownerControlAuthorized?["ALL"]:[],
-      securityCapabilities:ownerControlAuthorized?[...SECURITY_CAPABILITIES]:(companyApprover?["LOGIN_APPROVE","SESSION_APPROVE"]:[]),
+      securityCapabilities:ownerControlAuthorized?[...SECURITY_CAPABILITIES]:(companyApprover?["LOGIN_APPROVE","SESSION_APPROVE","SESSION_VIEW","SESSION_CLOSE","AUDIT_VIEW"]:[]),
     };
   }
 }
@@ -1579,6 +1592,7 @@ export function registerAuthPushRoutes(app: any) {
     if (!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED", "KY ERP Güvenlik cihazı doğrulanamadı."), 401);
 
     const systemScope = isSuper(actor.role) && actor.ownerControlAuthorized === true;
+    const companyScope = !systemScope && isCompanyAdmin(actor.role) && actor.companyApprover === true;
     const id = text(actor.device.id);
     const code = randomSixDigitCode();
     const salt = randomToken(12);
@@ -1590,10 +1604,10 @@ export function registerAuthPushRoutes(app: any) {
       id,
       userId: actor.userId,
       ownerUserId: actor.userId,
-      targetUserId: systemScope ? "" : actor.userId,
+      targetUserId: systemScope || companyScope ? "" : actor.userId,
       mainCompanySlug: text(actor.companySlug),
       deviceId: id,
-      scopeType: systemScope ? "SYSTEM" : "SELF",
+      scopeType: systemScope ? "SYSTEM" : (companyScope ? "COMPANY" : "SELF"),
       status: "ACTIVE",
       codeHash: await sha256(`${salt}:${code}`),
       codeSalt: salt,
@@ -1604,7 +1618,7 @@ export function registerAuthPushRoutes(app: any) {
     });
     await audit(c, "DIRECT_KY_SECURITY_CODE_CREATED", actor.userId, actor.userId, actor.companySlug, {
       deviceId: id,
-      scopeType: systemScope ? "SYSTEM" : "SELF",
+      scopeType: systemScope ? "SYSTEM" : (companyScope ? "COMPANY" : "SELF"),
       expiresAt,
     });
     return c.json({
@@ -1613,10 +1627,12 @@ export function registerAuthPushRoutes(app: any) {
         code,
         expiresAt,
         validSeconds: SECURITY_LOGIN_CODE_SECONDS,
-        scopeType: systemScope ? "SYSTEM" : "SELF",
+        scopeType: systemScope ? "SYSTEM" : (companyScope ? "COMPANY" : "SELF"),
         message: systemScope
           ? "Bu kod 60 saniye boyunca kullanıcı adı ve şifresi doğrulanmış tüm KY ERP hesaplarında kullanılabilir."
-          : "Bu kod 60 saniye boyunca yalnız bağlı hesabın girişinde kullanılabilir.",
+          : companyScope
+            ? "Bu kod 60 saniye boyunca yalnız bu firmadaki kullanıcı adı ve şifresi doğrulanmış hesaplarda kullanılabilir."
+            : "Bu kod 60 saniye boyunca yalnız bağlı hesabın girişinde kullanılabilir.",
       },
     });
   });

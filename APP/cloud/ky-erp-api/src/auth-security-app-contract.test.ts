@@ -61,7 +61,7 @@ test("access refresh reuses the same security device id instead of creating dupl
   assert.match(push,/const existing = serverBoundCandidate \|\| legacyReplaceCandidate/);
   assert.match(push,/SECURITY_DEVICE_RELINK_INVALID/);
   assert.match(push,/relinkedDevice: Boolean\(serverBoundCandidate \|\| legacyReplaceCandidate\)/);
-  assert.match(push,/SECURITY_APP_VERSION = "security-v3\.0"/);
+  assert.match(push,/SECURITY_APP_VERSION = "security-v4\.0"/);
 });
 
 
@@ -78,7 +78,7 @@ test("security app creates a one-minute direct login code without a pending brow
   assert.match(push,/SECURITY_LOGIN_CODE_SECONDS = 60/);
   assert.match(push,/DIRECT_SECURITY_CODE_SCOPE/);
   assert.match(push,/\/api\/auth\/push\/device\/login-code/);
-  assert.match(push,/scopeType: systemScope \? "SYSTEM" : "SELF"/);
+  assert.match(push,/scopeType: systemScope \? "SYSTEM" : \(companyScope \? "COMPANY" : "SELF"\)/);
   assert.match(push,/DIRECT_KY_SECURITY_CODE_CREATED/);
   assert.match(push,/verifyDirectSecurityLoginCode/);
   assert.match(push,/DIRECT_KY_SECURITY_CODE_USED/);
@@ -113,7 +113,7 @@ test("security device health exposes system scope only to the extra-verified own
 });
 
 
-test("security app is available for self-login code while system control is owner-phone only",()=>{
+test("security app keeps self login while company and system control stay role scoped",()=>{
   assert.match(push,/securityAppAccess/);
   assert.match(push,/source: "SELF_ONLY"/);
   assert.match(push,/securityAppEligible: appAccess.eligible/);

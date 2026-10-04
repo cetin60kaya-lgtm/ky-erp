@@ -43,6 +43,7 @@ jobs:
           node --check APP/app/ky-erp-frontend/public/guvenlik/security-actions.js
           node --check APP/app/ky-erp-frontend/public/guvenlik/sw.js
           node --check APP/app/ky-erp-frontend/public/guvenlik/security-control-center.js
+          node --check APP/app/ky-erp-frontend/public/guvenlik/security-workspace.js
           node --test APP/app/ky-erp-frontend/src/security-pwa-install-enrollment-final.test.js
           grep -q 'const APP_PREFIX="/guvenlik"' APP/cloud/ky-erp-security-host/worker.js
           grep -q 'const APP_URL="/guvenlik/"' APP/cloud/ky-erp-security-host/worker.js
@@ -91,7 +92,7 @@ jobs:
           test "$primary_status" = "200"
           grep -q '<title>KY ERP Güvenlik</title>' /tmp/security-primary.html
           grep -q '/guvenlik/app.js' /tmp/security-primary.html
-          grep -q 'v3.0' /tmp/security-primary.html
+          grep -q 'v4.0' /tmp/security-primary.html
 
           curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/manifest.webmanifest -o /tmp/manifest-primary.json
           jq -e '.id == "/guvenlik/" and .start_url == "/guvenlik/" and .scope == "/guvenlik/"' /tmp/manifest-primary.json >/dev/null

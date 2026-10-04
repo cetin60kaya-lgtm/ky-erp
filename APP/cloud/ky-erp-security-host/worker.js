@@ -9,7 +9,7 @@ function headers(base=new Headers()){
   h.set("Cache-Control","no-store, max-age=0, must-revalidate");
   h.set("CDN-Cache-Control","no-store");
   h.set("Pragma","no-cache");
-  h.set("X-KYERP-Security-App","fresh-v3");
+  h.set("X-KYERP-Security-App","fresh-v4");
   return h;
 }
 function isNav(req){return req.mode==="navigate"||String(req.headers.get("accept")||"").includes("text/html")}

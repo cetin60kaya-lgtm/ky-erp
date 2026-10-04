@@ -196,15 +196,10 @@ function withoutStorageDuplicates(module) {
 function withCompanyBilling(module) {
   if (module.key !== "admin") return module;
   const billingTab = ["firma-ucretlendirme", "Firma Paket / Kullanım", "odemeler"];
-  if ((module.groups || []).some((group) => (group.tabs || []).some(([key]) => key === billingTab[0]))) return module;
-  const groups = (module.groups || []).map((group, groupIndex) => {
-    if (groupIndex !== 0) return group;
-    const tabs = [...(group.tabs || [])];
-    const companyIndex = tabs.findIndex(([key]) => key === "ana-firma-ayarlar");
-    tabs.splice(companyIndex >= 0 ? companyIndex + 1 : tabs.length, 0, billingTab);
-    return { ...group, tabs };
-  });
-  return { ...module, groups };
+  const alreadyVisible = (module.groups || []).some((group) => (group.tabs || []).some(([key]) => key === billingTab[0]));
+  const alreadyHidden = (module.hiddenTabs || []).some(([key]) => key === billingTab[0]);
+  if (alreadyVisible || alreadyHidden) return module;
+  return { ...module, hiddenTabs: [...(module.hiddenTabs || []), billingTab] };
 }
 
 function withOperationalGroups(module) {
@@ -309,7 +304,7 @@ export const MODULE_ROUTE_ALIASES = {
     "giris-onay": "admin-yonetim-ozeti",
     onaylar: "admin-yonetim-ozeti",
     "bekleyen-girisler": "admin-yonetim-ozeti",
-    "giris-onaylari": "admin-yonetim-ozeti",
+    "giris-onaylari": "admin-guvenlik",
   },
   iletisim: {
     mail: "mail-gelen",
