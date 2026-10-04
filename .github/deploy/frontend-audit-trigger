@@ -1,0 +1,3 @@
+audit: frontend-dependencies
+requested: 2026-10-04T04:41:00+03:00
+reason: post-release-high-advisory-check
