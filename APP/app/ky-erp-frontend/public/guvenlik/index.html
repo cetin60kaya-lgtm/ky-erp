@@ -18,6 +18,7 @@
   <link rel="icon" href="/guvenlik/kyerp-security-icon.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="/guvenlik/kyerp-security-apple-touch.png" />
   <link rel="stylesheet" href="/guvenlik/app.css" />
+  <link rel="stylesheet" href="/guvenlik/security-workspace.css" />
   <title>KY ERP Güvenlik</title>
 </head>
 <body>
@@ -25,7 +26,7 @@
     <header class="security-header">
       <div class="security-brand">
         <span class="security-logo">KY</span>
-        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v3.0</span></small></div>
+        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v4.0</span></small></div>
       </div>
       <span id="connectionBadge" class="security-badge">Kontrol</span>
     </header>
@@ -95,7 +96,7 @@
           <div><span>Kullanıcı adı</span><b id="accountUsername">-</b></div>
           <div><span>Firma / Kapsam</span><b id="accountScope">-</b></div>
           <div><span>Bağlı cihaz</span><b id="accountDevice">-</b></div>
-          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v3.0</b></div>
+          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v4.0</b></div>
         </div>
         <div class="account-access-block">
           <span>ERP erişimi</span>
@@ -113,13 +114,20 @@
         <div class="super-admin-actions"><button type="button" data-owner-open="activity"><b>Giriş Hareketleri</b><span>Firma firma giriş, çıkış ve denemeler</span></button><button type="button" data-owner-open="approvals"><b>Sistem Onayları</b><span>Giriş, oturum ve kritik işlemler</span></button><button type="button" data-owner-open="sessions"><b>Aktif Oturumlar</b><span>Tüm firmalar ve kullanıcılar</span></button><button type="button" data-owner-open="computers"><b>Sistem Cihazları</b><span>Bilgisayar ve güvenilir cihazlar</span></button><button type="button" data-owner-open="logs"><b>Denetim Logları</b><span>Güvenlik hareketleri ve geçmiş</span></button></div>
       </section>
 
+      <section id="companyAdminConsole" class="security-card super-admin-console company-admin-console hidden">
+        <div class="super-admin-console-head"><div><span class="eyebrow">FİRMA GÜVENLİĞİ</span><h2>Firma Güvenlik Merkezi</h2><p class="muted">Yalnız kendi firmanızın girişleri, aktif oturumları, güvenilir cihazları ve güvenlik hareketleri burada yönetilir.</p></div><span class="super-admin-crown">F</span></div>
+        <div class="super-admin-actions"><button type="button" data-company-open="activity"><b>Giriş Hareketleri</b><span>Firmanızdaki giriş ve çıkışlar</span></button><button type="button" data-company-open="approvals"><b>Firma Onayları</b><span>Giriş ve oturum istekleri</span></button><button type="button" data-company-open="sessions"><b>Aktif Oturumlar</b><span>Firmanızdaki kullanıcı oturumları</span></button><button type="button" data-company-open="logs"><b>Güvenlik Geçmişi</b><span>Firma kapsamındaki olaylar</span></button></div>
+      </section>
+
       <nav class="security-tabs" aria-label="KY ERP Güvenlik bölümleri">
-        <button type="button" data-tab="activity" data-system-only>Hareketler</button>
+        <button type="button" data-tab="activity" data-control-only>Hareketler</button>
         <button type="button" data-tab="approvals">Onaylar <span id="tabCount">0</span></button>
-        <button type="button" data-tab="sessions" data-system-only>Oturumlar <span id="sessionTabCount">0</span></button>
-        <button type="button" data-tab="computers" data-system-only>Bilgisayarlar <span id="computerTabCount">0</span></button>
-        <button type="button" data-tab="logs" data-system-only>Loglar</button>
+        <button type="button" data-tab="sessions" data-control-only>Oturumlar <span id="sessionTabCount">0</span></button>
+        <button type="button" data-tab="computers" data-control-only>Bilgisayarlar <span id="computerTabCount">0</span></button>
+        <button type="button" data-tab="logs" data-control-only>Loglar</button>
         <button type="button" data-tab="code" class="active">Giriş Kodu</button>
+        <button type="button" data-tab="notes">Notlarım <span id="noteDueCount">0</span></button>
+        <button type="button" data-tab="chat">Chat <span id="chatUnreadCount">0</span></button>
         <button type="button" data-tab="device">Bu Telefon</button>
       </nav>
 
@@ -129,7 +137,7 @@
         <small id="controlCheckedAt">Son kontrol: -</small>
       </section>
 
-      <section id="activityTab" class="security-tab-panel hidden" data-system-only>
+      <section id="activityTab" class="security-tab-panel hidden" data-control-only>
         <section class="security-card">
           <div class="pending-title"><div><span class="eyebrow">SİSTEM HAREKETLERİ</span><h2>Firma Firma Giriş Takibi</h2></div></div>
           <div class="control-summary-grid">
@@ -159,7 +167,7 @@
         </section>
       </section>
 
-      <section id="sessionsTab" class="security-tab-panel hidden" data-system-only>
+      <section id="sessionsTab" class="security-tab-panel hidden" data-control-only>
         <section class="security-card">
           <div class="pending-title"><div><span class="eyebrow">AKTİF ERİŞİM</span><h2>ERP Oturumları</h2></div></div>
           <div class="control-summary-grid"><div><span>Aktif oturum</span><b id="summaryActiveSessions">0</b></div><div><span>Bağlı bilgisayar</span><b id="summaryComputers">0</b></div><div><span>Güvenilir cihaz</span><b id="summaryTrustedDevices">0</b></div><div><span>Son olay</span><b id="summaryEvents">0</b></div></div>
@@ -167,11 +175,11 @@
         </section>
       </section>
 
-      <section id="computersTab" class="security-tab-panel hidden" data-system-only>
+      <section id="computersTab" class="security-tab-panel hidden" data-control-only>
         <section class="security-card"><span class="eyebrow">BAĞLI BİLGİSAYARLAR</span><h2>Aktif bilgisayarlar ve güvenilir cihazlar</h2><div id="computerList" class="control-list"></div></section>
       </section>
 
-      <section id="logsTab" class="security-tab-panel hidden" data-system-only>
+      <section id="logsTab" class="security-tab-panel hidden" data-control-only>
         <section class="security-card"><span class="eyebrow">GÜVENLİK GEÇMİŞİ</span><h2>Giriş ve işlem logları</h2><div id="securityLogList" class="control-list"></div></section>
       </section>
 
@@ -179,7 +187,7 @@
         <section class="security-card code-card">
           <span class="eyebrow">KY GÜVENLİK GİRİŞ KODU</span>
           <h2>6 haneli kısa süreli kod</h2>
-          <p class="muted">Kod üretmek için bilgisayarda önceden giriş isteği başlatmanız gerekmez. Normal kullanıcıda kod yalnız kendi hesabında; doğrulanmış Süper Yönetici telefonunda tüm KY ERP hesaplarında çalışır.</p>
+          <p class="muted">Kod üretmek için bilgisayarda önceden giriş isteği başlatmanız gerekmez. Normal kullanıcı kodu yalnız kendi hesabında, Firma Sahibi kodu yalnız kendi firmasında, doğrulanmış Süper Yönetici kodu tüm KY ERP hesaplarında çalışır.</p>
           <div id="loginCodeBox" class="login-code-box idle">
             <strong id="loginCodeValue">— — — — — —</strong>
             <span id="loginCodeCountdown">Kod üretilmedi</span>
@@ -187,7 +195,38 @@
           <button id="generateCodeButton" class="primary" type="button">Giriş Kodu Üret</button>
           <div class="note">
             <b>Tek kullanımlık güvenlik</b>
-            <span>Kod 60 saniye geçerlidir ve tek kullanımlıktır. Normal kullanıcı kodu yalnız kendi hesabında; doğrulanmış Süper Yönetici sistem kodu tüm hesaplarda kullanılabilir.</span>
+            <span>Kod 60 saniye geçerli ve tek kullanımlıdır. Kapsam sunucuda hesap rolüne göre zorunlu uygulanır; telefon arayüzü bu sınırı genişletemez.</span>
+          </div>
+        </section>
+      </section>
+
+      <section id="notesTab" class="security-tab-panel hidden">
+        <section class="security-card workspace-card">
+          <div class="workspace-head"><div><span class="eyebrow">KİŞİSEL ALAN</span><h2>Notlarım & Hatırlatmalar</h2><p class="muted">Notlar yalnız bağlı kullanıcı hesabına aittir. Hatırlatma zamanı geldiğinde KY Güvenlik içinde uyarılır.</p></div><button id="newNoteButton" class="primary" type="button">+ Yeni Not</button></div>
+          <form id="noteForm" class="workspace-form hidden">
+            <input id="noteId" type="hidden" />
+            <label>Başlık<input id="noteTitle" maxlength="120" placeholder="Kısa başlık" /></label>
+            <label>Not<textarea id="noteBody" maxlength="4000" rows="4" placeholder="Notunuzu yazın"></textarea></label>
+            <label>Hatırlatma<input id="noteRemindAt" type="datetime-local" /></label>
+            <div class="workspace-actions"><button class="primary" type="submit">Kaydet</button><button id="cancelNoteButton" type="button">Vazgeç</button></div>
+          </form>
+          <div id="noteList" class="workspace-list"></div>
+        </section>
+      </section>
+
+      <section id="chatTab" class="security-tab-panel hidden">
+        <section class="security-card workspace-card">
+          <div class="workspace-head"><div><span class="eyebrow">KY ERP İÇ MESAJLAŞMA</span><h2>Kullanıcı Chat</h2><p class="muted">Aktif KY ERP kullanıcıları birbirine doğrudan mesaj gönderebilir. Mesajı yalnız gönderen ve alıcı görür.</p></div><button id="chatRefreshButton" type="button">Yenile</button></div>
+          <div class="chat-layout">
+            <aside id="chatUsers" class="chat-users"></aside>
+            <section class="chat-thread">
+              <div id="chatPeer" class="chat-peer">Sohbet için kullanıcı seçin</div>
+              <div id="chatMessages" class="chat-messages"></div>
+              <form id="chatForm" class="chat-compose">
+                <textarea id="chatMessage" maxlength="2000" rows="2" placeholder="Mesaj yazın" disabled></textarea>
+                <button id="chatSendButton" class="primary" type="submit" disabled>Gönder</button>
+              </form>
+            </section>
           </div>
         </section>
       </section>
@@ -233,5 +272,6 @@
   <script defer src="/guvenlik/app.js"></script>
   <script defer src="/guvenlik/security-actions.js"></script>
   <script defer src="/guvenlik/security-control-center.js"></script>
+  <script defer src="/guvenlik/security-workspace.js"></script>
 </body>
 </html>
