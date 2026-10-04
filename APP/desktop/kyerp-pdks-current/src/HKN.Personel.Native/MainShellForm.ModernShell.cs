@@ -434,8 +434,8 @@ public sealed partial class MainShellForm
         var view=new OperationsCenterForm(
             PdksCommandCatalog.All.Where(CanExecute),
             ExecuteCommand);
-        ShowEmbedded(view,"operations-center","Operasyon");
-        SetModernPage("Operasyon","Canlı denetim, kart düzeltme ve günlük istisnalar");
+        ShowEmbedded(view,"attendance-center","Giriş / Çıkış");
+        SetModernPage("Giriş / Çıkış","Bugünün durumu, kart kayıtları, eksikler ve devam analizi");
     }
 
     void ShowManagementCenter()
