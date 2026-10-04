@@ -48,3 +48,7 @@ function ok(v,m){if(!v)throw new Error('ASSERT '+m)}
 
   console.log(JSON.stringify({ok:true,companies:all.rows.length,notes:notes.rows.length,machineSoftDelete:true}));
 })().catch(e=>{console.error(e.stack||e);process.exitCode=1}).finally(()=>{child.kill();setTimeout(()=>{try{fs.rmSync(tmp,{recursive:true,force:true})}catch{}},100)});
+
+// UI selector guard
+const uiJs=fs.readFileSync(path.join(root,'app','public','app.js'),'utf8');
+if(/(?<!\$)\$\('[^']+'\)\.forEach/.test(uiJs))throw new Error('UI selector guard: use $$() for NodeList forEach');
