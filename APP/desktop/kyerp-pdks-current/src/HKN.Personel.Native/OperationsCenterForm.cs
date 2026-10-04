@@ -7,11 +7,11 @@ public sealed class OperationsCenterForm : Form
 
     static readonly PdksCommandId[] Daily =
     [
+        PdksCommandId.Operations,
         PdksCommandId.LiveAttendance,
         PdksCommandId.AttendanceExceptions,
         PdksCommandId.AttendanceHistory,
         PdksCommandId.DepartmentAttendanceAnalytics,
-        PdksCommandId.EntryExit,
         PdksCommandId.Leave,
         PdksCommandId.EarningsDeductions,
         PdksCommandId.TimesheetMonthly,
@@ -22,7 +22,7 @@ public sealed class OperationsCenterForm : Form
     {
         commands=commandSet.Where(x=>Daily.Contains(x.Id)).ToDictionary(x=>x.Id);
         execute=commandExecutor;
-        Text="Operasyon";
+        Text="Giriş / Çıkış";
         FormBorderStyle=FormBorderStyle.None;
         TopLevel=false;
         Dock=DockStyle.Fill;
@@ -59,14 +59,14 @@ public sealed class OperationsCenterForm : Form
 
         var hero=new Panel{Dock=DockStyle.Fill,BackColor=p.Canvas};
         hero.Controls.Add(new Label{
-            Text="Günlük Operasyon",
+            Text="Giriş / Çıkış Merkezi",
             Location=new Point(4,4),
             AutoSize=true,
             Font=new Font("Segoe UI",17f,FontStyle.Bold),
             ForeColor=p.Text
         });
         hero.Controls.Add(new Label{
-            Text="Önce istisnaları gör, sonra düzelt; puantaja temiz veri gönder.",
+            Text="Bugünün devam durumunu gör, kart kayıtlarını düzelt ve puantaja temiz veri gönder.",
             Location=new Point(6,40),
             AutoSize=true,
             Font=new Font("Segoe UI",9.2f),
@@ -78,11 +78,11 @@ public sealed class OperationsCenterForm : Form
         for(var i=0;i<6;i++)flow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16.666f));
         var steps=new (string Title,string Text,PdksCommandId Id)[]
         {
-            ("1","Terminalden Al",PdksCommandId.TerminalCenter),
-            ("2","Canlı Kontrol",PdksCommandId.LiveAttendance),
-            ("3","İstisnaları Gör",PdksCommandId.AttendanceExceptions),
-            ("4","Eksikleri Düzelt",PdksCommandId.EntryExit),
-            ("5","İzin / Ek Kayıt",PdksCommandId.Leave),
+            ("1","Kart Kayıtları",PdksCommandId.Operations),
+            ("2","Canlı Durum",PdksCommandId.LiveAttendance),
+            ("3","Eksikler / Geç",PdksCommandId.AttendanceExceptions),
+            ("4","Devam Geçmişi",PdksCommandId.AttendanceHistory),
+            ("5","İzin İşlemleri",PdksCommandId.Leave),
             ("6","Puantaja Geç",PdksCommandId.TimesheetMonthly)
         };
         for(var i=0;i<steps.Length;i++)flow.Controls.Add(Step(steps[i].Title,steps[i].Text,steps[i].Id),i,0);
