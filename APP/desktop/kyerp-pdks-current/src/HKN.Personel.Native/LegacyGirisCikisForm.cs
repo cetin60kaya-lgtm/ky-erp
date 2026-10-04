@@ -11,7 +11,7 @@ public sealed class LegacyGirisCikisForm : Form
     readonly TextBox cardStart = new(); readonly TextBox cardEnd = new(); readonly TextBox name = new();
     readonly ComboBox punch = new(){DropDownStyle=ComboBoxStyle.DropDownList};
     readonly DateTimePicker dateStart = D(); readonly DateTimePicker dateEnd = D();
-    readonly TextBox inFirst = new(){Text=":"}, inLast = new(){Text=":"}, outFirst = new(){Text=":"}, outLast = new(){Text=":"};
+    readonly TextBox inFirst = new(){PlaceholderText="08:20"}, inLast = new(){PlaceholderText="08:35"}, outFirst = new(){PlaceholderText="18:50"}, outLast = new(){PlaceholderText="19:10"};
     readonly CheckBox manual = new(){Text="Sadece manuel",AutoSize=true};
     readonly ComboBox group=C(), department=C(), company=C(), service=C(), status=C(), duty=C(), sort=new(){DropDownStyle=ComboBoxStyle.DropDownList};
     readonly ToolStripStatusLabel statusText = new(){Spring=true,TextAlign=ContentAlignment.MiddleLeft};
@@ -33,13 +33,14 @@ public sealed class LegacyGirisCikisForm : Form
         var p=PdksAppearance.Current;
         BackColor=p.Canvas;
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(16),BackColor=p.Canvas};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,176));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,238));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
 
         var filterCard=PdksUiKit.Card(0);filterCard.Margin=new Padding(0,0,0,10);
-        var filterRoot=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=new Padding(16),BackColor=p.Surface};
+        var filterRoot=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(16),BackColor=p.Surface};
         filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
+        filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
         filterRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
         filterRoot.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         filterRoot.Controls.Add(new Label{Text="Giriş / Çıkış Kayıtları",Dock=DockStyle.Fill,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text,TextAlign=ContentAlignment.MiddleLeft},0,0);
@@ -70,6 +71,27 @@ public sealed class LegacyGirisCikisForm : Form
         AddFilterField(secondary,6,"Sıralama",sort);
         var manualHost=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(4,23,0,0),WrapContents=false};manual.AutoSize=true;manualHost.Controls.Add(manual);secondary.Controls.Add(manualHost,7,0);
         filterRoot.Controls.Add(secondary,0,2);
+
+        var advanced=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=6,RowCount=1,Margin=Padding.Empty};
+        advanced.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16));
+        advanced.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16));
+        advanced.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16));
+        advanced.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16));
+        advanced.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,18));
+        advanced.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,18));
+        AddFilterField(advanced,0,"Giriş Saati ≥",inFirst);
+        AddFilterField(advanced,1,"Giriş Saati ≤",inLast);
+        AddFilterField(advanced,2,"Çıkış Saati ≥",outFirst);
+        AddFilterField(advanced,3,"Çıkış Saati ≤",outLast);
+        var hint=new Label
+        {
+            Text="Saat filtreleri isteğe bağlıdır. Boş bırakırsanız tüm saatler listelenir.",
+            Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=p.Muted,
+            Font=new Font("Segoe UI",8.2f),Padding=new Padding(8,20,4,0)
+        };
+        advanced.Controls.Add(hint,4,0);
+        advanced.SetColumnSpan(hint,2);
+        filterRoot.Controls.Add(advanced,0,3);
         filterCard.Controls.Add(filterRoot);
         root.Controls.Add(filterCard,0,0);
 
