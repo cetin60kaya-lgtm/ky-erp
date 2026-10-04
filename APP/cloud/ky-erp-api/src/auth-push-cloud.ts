@@ -25,7 +25,7 @@ const SECURITY_ENROLL_SECONDS = 10 * 60;
 const OWNER_DEVICE_STEPUP_SCOPE = "AUTH_OWNER_DEVICE_STEPUP";
 const OWNER_DEVICE_STEPUP_SECONDS = 10 * 60;
 const OWNER_DEVICE_STEPUP_RESEND_SECONDS = 60;
-const SECURITY_APP_VERSION = "security-v3.0";
+const SECURITY_APP_VERSION = "security-v4.0";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
 // Telefon onayı birincil faktör olarak beklemede tutulur.
 const SECURITY_LOGIN_CODE_SECONDS = 60;
