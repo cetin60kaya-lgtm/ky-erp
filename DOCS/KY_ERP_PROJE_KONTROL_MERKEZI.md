@@ -480,3 +480,13 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Yeni workflow eklemek yerine mevcut canonical akış genişletilir. Yeni otomatik push/schedule ancak kullanıcı açıkça onaylarsa eklenir.
 - Artifact retention varsayılan 3 gündür; workflow kendi commit/push işlemiyle sonsuz tetikleme döngüsü oluşturamaz.
 - Ayrıntılı ve üstün kural kökteki `AGENTS.md` içindeki **GitHub maliyet ve Actions ana kuralı — 04.10.2026** bölümüdür.
+
+
+## Remote Desktop / MCP kota koruma — 04.10.2026
+
+- Remote Desktop Commander artık varsayılan araç değildir; yalnız gerçekten yerel PC işi için kullanılır.
+- Repo/GitHub, Cloudflare, public web, sohbet dosyaları ve genel analiz işlerinde ilgili connector/Files/container/web tercih edilir; hedef Remote çağrısı 0'dır.
+- Basit yerel iş hedefi 1–3, orta iş 5–8 çağrıdır. 10 üzeri tahmin ediliyorsa önce komutlar tek PowerShell/batch scriptine birleştirilir.
+- `start_process` + `read_process_output` polling döngüsü, aynı dosyayı tekrar tekrar okuma ve çok sayıda küçük edit çağrısı yasaktır.
+- Çoklu dosya/klasör işlemleri tek çağrıda batch edilir; son doğrulama mümkünse tek kontrolle yapılır.
+- Ayrıntılı ve üstün kural kökteki `AGENTS.md` içindeki **Remote Desktop Commander kullanım ana kuralı — 04.10.2026** bölümüdür.
