@@ -344,7 +344,16 @@ export function registerSecurityMobileControlRoutes(app:any, resolveActor:ActorR
   app.get("/api/auth/push/device/workspace/chat/users", async (c:any) => {
     const actor=await resolveActor(c); if(!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED","KY Güvenlik cihazı doğrulanamadı."),401);
     const result=await c.env.DB.prepare(`SELECT u.id,u.username,u.full_name,u.role,u.platform_role,s.role_override,s.main_company_slug FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.is_active=1 AND u.id<>? ORDER BY u.full_name COLLATE NOCASE,u.username COLLATE NOCASE LIMIT 500`).bind(text(actor.userId)).all();
-    const items=(result.results||[]).map((row:AnyRow)=>({id:text(row.id),username:text(row.username),fullName:text(row.full_name||row.username),role:effectiveRole(row),mainCompanySlug:text(row.main_company_slug)}));
+    const recent=await c.env.DB.prepare(`SELECT data,created_at FROM json_store WHERE scope=? AND (json_extract(data,'$.senderUserId')=? OR json_extract(data,'$.recipientUserId')=?) ORDER BY created_at DESC LIMIT 500`).bind(CHAT_SCOPE,text(actor.userId),text(actor.userId)).all();
+    const meta=new Map<string,AnyRow>();
+    for(const row of recent.results||[]){
+      const msg=objectOf(row.data); const sender=text(msg.senderUserId),recipient=text(msg.recipientUserId); const peer=sender===text(actor.userId)?recipient:sender; if(!peer)continue;
+      const current=meta.get(peer)||{unread:0,lastMessage:"",lastMessageAt:""};
+      if(!current.lastMessage){current.lastMessage=text(msg.message).slice(0,120);current.lastMessageAt=text(msg.createdAt||row.created_at);}
+      if(recipient===text(actor.userId)&&!text(msg.readAt))current.unread+=1;
+      meta.set(peer,current);
+    }
+    const items=(result.results||[]).map((row:AnyRow)=>{const extra=meta.get(text(row.id))||{};return{id:text(row.id),username:text(row.username),fullName:text(row.full_name||row.username),role:effectiveRole(row),mainCompanySlug:text(row.main_company_slug),unread:Number(extra.unread||0),lastMessage:text(extra.lastMessage),lastMessageAt:text(extra.lastMessageAt)};}).sort((a:AnyRow,b:AnyRow)=>String(b.lastMessageAt||"").localeCompare(String(a.lastMessageAt||""))||String(a.fullName||"").localeCompare(String(b.fullName||""),"tr"));
     return c.json({ok:true,data:{items}});
   });
 
