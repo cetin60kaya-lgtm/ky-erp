@@ -39,9 +39,13 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
   if (owner) return <AdminPlatformHub activeTab={activeTab} activeMainCompany={activeMainCompany} />;
 
   if (activeTab === "admin-yonetim-ozeti") {
-    return owner
-      ? <AdminSystemOverview activeMainCompany={activeMainCompany} />
-      : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
+    return <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
+  }
+  if (activeTab === "admin-guvenlik") {
+    return companyAdmin ? <SecurityCenterPanel /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
+  }
+  if (activeTab === "admin-sistem") {
+    return companyAdmin ? <AdminCompanyAuthority activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "uygulama-sahibi") {
     return owner ? <><AdminOwnerSecurity /><SecurityCenterPanel /></> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
