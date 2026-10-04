@@ -1,8 +1,12 @@
 name: KY ERP Frontend Dependency Security
 
 on:
-  # Automatic GitHub Actions disabled. Run only when explicitly requested.
   workflow_dispatch:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - '.github/deploy/frontend-audit-trigger'
 permissions:
   contents: read
 
