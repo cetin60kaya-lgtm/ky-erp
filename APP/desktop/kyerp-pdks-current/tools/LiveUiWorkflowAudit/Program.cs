@@ -591,8 +591,8 @@ static void RunDefinitionUiWorkflow(FirebirdDatabase db,List<string> log)
         if(FindButton(periodForm,"Yeni Dönem") is not null || FindButton(periodForm,"Düzenle") is not null ||
            FindButton(periodForm,"Sil") is not null || FindButton(periodForm,"Kaydet") is not null)
             throw new Exception("Dönem ekranında manuel ay×grup CRUD görünmemeli.");
-        if(FindButton(periodForm,"Yılı Hazırla") is null)
-            throw new Exception("Dönem ekranında tek adımlı Yılı Hazırla komutu bulunamadı.");
+        if(FindButton(periodForm,"Yılı Hazırla") is not null)
+            throw new Exception("Yıllık dönemler kullanıcıdan hazırlama komutu istememeli; yıl seçimi otomatik olmalı.");
 
         var a=new DateTime(auditYear,1,1);
         var b=a.AddYears(1);
@@ -612,7 +612,7 @@ static void RunDefinitionUiWorkflow(FirebirdDatabase db,List<string> log)
         if(monthRows.Any(r=>!string.Equals(Convert.ToString(r.Cells["DURUM"].Value),"Hazır",StringComparison.Ordinal)))
             throw new Exception("12 aylık dönem görünümünde hazır olmayan ay kaldı.");
 
-        log.Add("PASS|Dönemler > Yıl→Ay 12 satır > MESAİLİ/İDARİ arka planda otomatik 24 kayıt > DB");
+        log.Add("PASS|Yıllık Dönemler > yıl seçimi > 12 ay görünür > MESAİLİ/İDARİ arka planda otomatik 24 kayıt > DB");
     }
     finally
     {
