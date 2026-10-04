@@ -304,7 +304,7 @@ export const MODULE_ROUTE_ALIASES = {
     "giris-onay": "admin-yonetim-ozeti",
     onaylar: "admin-yonetim-ozeti",
     "bekleyen-girisler": "admin-yonetim-ozeti",
-    "giris-onaylari": "admin-yonetim-ozeti",
+    "giris-onaylari": "admin-guvenlik",
   },
   iletisim: {
     mail: "mail-gelen",
