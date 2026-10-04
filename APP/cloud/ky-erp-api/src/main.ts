@@ -30,6 +30,7 @@ import { registerAiCloudRoutes } from "./ai-cloud";
 import { registerComplianceCenterRoutes } from "./compliance-center-cloud";
 import { registerComplianceConfigRoutes } from "./compliance-config-cloud";
 import { registerComplianceSharedEvidenceRoutes } from "./compliance-shared-evidence";
+import { registerComplianceOperationsRoutes } from "./compliance-operations-cloud";
 import { registerBoyahaneColorAssistantRoutes } from "./boyahane-color-assistant";
 import { registerBoyahaneColorIdentityRoutes } from "./boyahane-color-identity";
 import { registerBoyahaneColorJobRoutes } from "./boyahane-color-job";
@@ -182,6 +183,7 @@ registerAiCloudRoutes(app);
 registerComplianceCenterRoutes(app);
 registerComplianceConfigRoutes(app);
 registerComplianceSharedEvidenceRoutes(app);
+registerComplianceOperationsRoutes(app);
 registerProductionRuntimeV2Routes(app);
 registerProductionCenterRoutes(app);
 registerNotificationRoutes(app);
@@ -258,7 +260,7 @@ shell.use("/api/*", async (c, next) => {
   const url = new URL(c.req.url);
   const path = url.pathname;
   const isLocal = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
-  const isPublic = path === "/api/health" || path === "/api/system/status" || path.startsWith("/api/auth/") || path.startsWith("/api/build-agent/") || path.startsWith("/api/system-agent/");
+  const isPublic = path === "/api/health" || path === "/api/system/status" || path.startsWith("/api/auth/") || path.startsWith("/api/build-agent/") || path.startsWith("/api/system-agent/") || path.startsWith("/api/compliance-public/");
   if (isLocal || isPublic) return next();
 
   const authenticated = await getAuthenticatedUser(c);
