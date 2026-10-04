@@ -20,6 +20,7 @@ public sealed class LegacyPeriodForm : Form
     readonly Label idariState = ValueLabel();
     readonly Label overallState = ValueLabel(11f,FontStyle.Bold);
     bool loading;
+    bool firstLoad=true;
 
     public LegacyPeriodForm()
     {
@@ -189,13 +190,14 @@ public sealed class LegacyPeriodForm : Form
         {
             var y=SelectedYear();
             var inserted=0;
-            if(y>=DateTime.Today.Year&&PdksPeriodService.CountYearRows(db,y)==0)
+            if(!firstLoad&&y>=DateTime.Today.Year&&PdksPeriodService.CountYearRows(db,y)==0)
                 inserted=PdksPeriodService.EnsureYear(db,y);
 
             var dt=PdksPeriodService.BuildYearOverview(db,y);
             grid.DataSource=dt;
             var ready=dt.AsEnumerable().Count(r=>string.Equals(Convert.ToString(r["DURUM"]),"Hazır",StringComparison.Ordinal));
             yearSummary.Text=$"12 ay • {ready}/12 hazır"+(inserted>0?$" • {inserted} sistem kaydı oluşturuldu":"");
+            firstLoad=false;
 
             if(grid.Rows.Count==0)return;
             var month=preferredMonth??(y==DateTime.Today.Year?DateTime.Today.Month:1);
