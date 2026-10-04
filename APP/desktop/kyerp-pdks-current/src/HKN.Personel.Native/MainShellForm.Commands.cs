@@ -160,7 +160,7 @@ public sealed partial class MainShellForm
                 OpenLegacyTable("Kazanç / Kesinti Türleri", "AVTUR", true, new Size(1040, 680));
                 break;
             case PdksCommandId.Definitions:
-                OpenDefinitions("Bölümler");
+                ShowModule(new DefinitionsCenterForm(OpenDefinitions, NavigateToCommand), PdksModule.Tanimlar);
                 break;
             case PdksCommandId.TerminalCenter:
                 OpenTerminalCenter();
