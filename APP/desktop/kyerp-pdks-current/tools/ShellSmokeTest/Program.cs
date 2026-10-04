@@ -41,7 +41,7 @@ var expectedWorkflow = new[]
     PdksCommandId.TerminalCenter,
     PdksCommandId.LiveAttendance,
     PdksCommandId.AttendanceExceptions,
-    PdksCommandId.EntryExit,
+    PdksCommandId.Operations,
     PdksCommandId.Personnel,
     PdksCommandId.TimesheetMonthly,
     PdksCommandId.PeriodControlCenter,
