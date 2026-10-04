@@ -823,7 +823,7 @@ async function pendingItems(c: any, actor: AnyRow) {
     .sort((a: AnyRow, b: AnyRow) =>
       String(b.requestedAt || b.createdAt || "").localeCompare(String(a.requestedAt || a.createdAt || "")));
 
-  let latestSelfPending = "";
+  const latestSelfPendingByUser = new Map<string, string>();
   for (const row of selfRows) {
     let current = row;
     if (upper(current.status) === "PENDING" && !text(current.consumedAt) && Date.parse(text(current.expiresAt)) <= Date.now()) {
@@ -832,6 +832,8 @@ async function pendingItems(c: any, actor: AnyRow) {
     }
     if (upper(current.status) !== "PENDING" || text(current.consumedAt)) continue;
 
+    const targetUserId = text(current.userId);
+    const latestSelfPending = latestSelfPendingByUser.get(targetUserId) || "";
     if (latestSelfPending) {
       const update = await atomicPhoneUpdate(c, current, "PENDING", {
         status: "SUPERSEDED",
@@ -846,7 +848,7 @@ async function pendingItems(c: any, actor: AnyRow) {
     const targetUser = await userRow(c, text(current.userId));
     if (!canApprovePhoneChallenge(actor, current, targetUser)) continue;
 
-    latestSelfPending = text(current.id);
+    latestSelfPendingByUser.set(targetUserId, text(current.id));
     const ownRequest = text(current.userId) === text(actor.userId);
     const targetName = text(targetUser?.full_name || targetUser?.username || "Kullanıcı");
     items.push({
