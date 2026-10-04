@@ -22,7 +22,7 @@ function addcol(t,n,ddl){if(!cols(t).includes(n))db.exec(`ALTER TABLE ${t} ADD C
 function dir(p){if(p&&!fs.existsSync(p))fs.mkdirSync(p,{recursive:true})}
 function oneDrive(){return ['D:/Onedrive-Hkn/OneDrive','D:/onedrive-Hkn/OneDrive','D:/onedrive hkngursu/OneDrive',process.env.OneDrive,process.env.OneDriveCommercial].filter(Boolean).find(p=>fs.existsSync(p))||''}
 
-const OD=oneDrive(),SYNC=OD?path.join(OD,'HAKAN EMP','SYNC'):'',PCOUT=SYNC?path.join(SYNC,'PC-OUTBOX'):'',ANDOUT=SYNC?path.join(SYNC,'ANDROID-OUTBOX'):'',ACK=SYNC?path.join(SYNC,'ACK'):'',ARCH=SYNC?path.join(SYNC,'ARCHIVE'):'';
+const OD=process.env.HAKAN_EMP_DISABLE_SYNC==='1'?'':oneDrive(),SYNC=OD?path.join(OD,'HAKAN EMP','SYNC'):'',PCOUT=SYNC?path.join(SYNC,'PC-OUTBOX'):'',ANDOUT=SYNC?path.join(SYNC,'ANDROID-OUTBOX'):'',ACK=SYNC?path.join(SYNC,'ACK'):'',ARCH=SYNC?path.join(SYNC,'ARCHIVE'):'';
 const IMGROOT=OD?path.join(OD,'HAKAN EMP','BELGELER','CEKLER'):path.join(DATA_ROOT,'check-images');
 [SYNC,PCOUT,ANDOUT,ACK,ARCH,IMGROOT].filter(Boolean).forEach(dir);
 
