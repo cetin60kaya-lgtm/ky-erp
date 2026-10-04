@@ -54,8 +54,9 @@ if (workflow.Select(x=>x.Order).Distinct().Count() != workflow.Length)
     throw new InvalidOperationException("İş akışında mükerrer sıra var.");
 
 var shellButtons = Descendants(form).OfType<Button>().Select(x => x.Text ?? string.Empty).ToArray();
-foreach (var required in expectedPrimary)
-    if (!shellButtons.Contains(required)) throw new InvalidOperationException("Modern navigasyon eksik: " + required);
+var expectedSidebar = new[] { "Genel Bakış", "Operasyon", "Personel", "Giriş / Çıkış", "İzin İşlemleri", "Puantaj", "Bordro", "Raporlar", "Dönemler", "Tanımlar Merkezi" };
+foreach (var required in expectedSidebar)
+    if (!shellButtons.Contains(required)) throw new InvalidOperationException("Sol navigasyon eksik: " + required);
 foreach (var required in new[] { "Yönetim", $"Görünüm • {PdksAppearance.ModeLabel}", "İşlem Ara  Ctrl+K" })
     if (!shellButtons.Contains(required)) throw new InvalidOperationException("Kabuk komutu eksik: " + required);
 
@@ -93,6 +94,24 @@ using (var periodControl = new PeriodControlCenterForm())
 {
     if (!Descendants(periodControl).OfType<DataGridView>().Any())
         throw new InvalidOperationException("Dönem kontrol merkezi listesi yok.");
+}
+
+using (var definitions = new DefinitionsCenterForm(_ => { }, _ => { }))
+{
+    var labels = Descendants(definitions).OfType<Label>().Select(x => x.Text ?? string.Empty).ToArray();
+    foreach (var required in new[] { "Bölümler", "Çalışma Grupları", "Dönemler", "Genel Tatiller", "Bordro Alanları", "Kazanç / Kesinti Türleri" })
+        if (!labels.Contains(required)) throw new InvalidOperationException("Tanımlar merkezi kısayolu eksik: " + required);
+}
+using (var groups = new LegacyGroupForm())
+{
+    var buttons = Descendants(groups).OfType<Button>().Select(x => (x.Text ?? string.Empty).Replace("&", string.Empty)).ToArray();
+    if (buttons.Contains("Yeni Ekle") || buttons.Contains("Tümünü Sil"))
+        throw new InvalidOperationException("Çalışma grupları yalnız MESAİLİ ve İDARİ olarak sabitlenmeli.");
+}
+using (var periods = new LegacyPeriodForm())
+{
+    if (!Descendants(periods).OfType<ComboBox>().Any())
+        throw new InvalidOperationException("Dönem ekranında yıl seçimi yok.");
 }
 
 using (var settings = new LegacyTerminalSettingsForm())
