@@ -83,6 +83,9 @@ jobs:
             --argjson dns "$(jq -c '[.result[]? | {id,type,name,content,proxied}]' pages-audit/dns.json 2>/dev/null || echo '[]')" \
             '{projectSuccess:$projectSuccess,productionBranch:$productionBranch,latest:{id:$latestId,url:$latestUrl,branch:$latestBranch,environment:$latestEnvironment,aliases:$aliases},targetDomains:$targetDomains,kyerpDomainOwners:$owners,html:{liveTitle:$liveTitle,latestTitle:$latestTitle,liveScript:$liveScript,latestScript:$latestScript},dns:$dns}' \
             > pages-audit/summary.json
+          jq '[.result[0:10][]? | {id,url,environment,branch:(.deployment_trigger.metadata.branch // ""),aliases:(.aliases // []),latest_stage:(.latest_stage // {}),stages:(.stages // []),created_on,modified_on}]' pages-audit/deployments.json > pages-audit/deployment-statuses.json
+          jq --slurpfile deployments pages-audit/deployment-statuses.json --slurpfile project pages-audit/project.json '. + {deployments:$deployments[0],projectSource:($project[0].result.source.config // {})}' pages-audit/summary.json > pages-audit/summary.next.json
+          mv pages-audit/summary.next.json pages-audit/summary.json
           cat pages-audit/summary.json
 
       - name: Denetim sonucunu repo dosyasına yaz
