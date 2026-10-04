@@ -266,6 +266,22 @@ async function buildTodaySummary(c:any, companySlug:string) {
 async function writeAudit(c:any, actor:AnyRow, action:string, targetUserId:string, companySlug:string, sessionId:string, detail:AnyRow={}) {
   try { await c.env.DB.prepare(`INSERT INTO auth_security_audit(id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at) VALUES (?,?,?,?,?,?,?,?,?)`).bind(crypto.randomUUID(),text(actor.userId)||null,targetUserId||null,companySlug||null,action,sessionId||null,clientIp(c)||null,JSON.stringify(detail||{}),nowIso()).run(); } catch {}
 }
+export async function runSecurityWorkspaceReminderSweep(env:any) {
+  const c:any={env};
+  if(!(await tableExists(c,"json_store"))) return {checked:0,notified:0};
+  const timestamp=nowIso();
+  const result=await env.DB.prepare(`SELECT id,main_company_slug,file_name,data FROM json_store WHERE scope=? AND COALESCE(json_extract(data,'$.deletedAt'),'')='' AND COALESCE(json_extract(data,'$.done'),0)=0 AND COALESCE(json_extract(data,'$.remindAt'),'')<>'' AND json_extract(data,'$.remindAt')<=? AND COALESCE(json_extract(data,'$.notifiedAt'),'')='' ORDER BY json_extract(data,'$.remindAt') ASC LIMIT 50`).bind(NOTE_SCOPE,timestamp).all();
+  let notified=0;
+  for(const row of result.results||[]){
+    const note=objectOf(row.data); const userId=text(note.userId); if(!userId)continue;
+    const devices=await securityDevicesForUser(c,userId,"CONTROL"); if(!devices.length)continue;
+    const sent=await sendSecurityWakeMany(c,devices); if(sent<1)continue;
+    await storePut(c,NOTE_SCOPE,text(note.id||row.file_name),text(row.main_company_slug),{...note,notifiedAt:timestamp});
+    notified+=1;
+  }
+  return {checked:Number(result.results?.length||0),notified};
+}
+
 export function registerSecurityMobileControlRoutes(app:any, resolveActor:ActorResolver, serverVersion:string) {
   app.use("/api/auth/push/security-enrollment/complete", async (c:any, next:any) => {
     const body = await enrollmentBody(c);
