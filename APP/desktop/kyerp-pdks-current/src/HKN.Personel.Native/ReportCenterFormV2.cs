@@ -32,9 +32,9 @@ public sealed class ReportCenterForm : Form
     [
         "Personel • Ad Soyad", "Personel • Kart No / Ad Soyad", "Personel • Kart / Ad Soyad / Maaş",
         "Personel • Kart / Ad Soyad / Maaş / İşe Giriş", "Personel • Kart / Ad Soyad / Bölüm",
-        "Giriş Çıkış • Tarihe Göre", "Giriş Çıkış • Ad Soyada Göre", "Giriş Çıkış • Bölüme Göre",
+        "Giriş Çıkış • Tarihe Göre", "Giriş Çıkış • Ad Soyada Göre", "Giriş Çıkış • Bölüme Göre", "Giriş Çıkış • Eksik Hareketler", "Giriş Çıkış • Ara / Dışarı Süresi",
         "Puantaj • Genel", "Puantaj • Kişiye Göre", "Puantaj • Tarihe Göre", "Puantaj • Bölüme Göre", "Puantaj • Çalışan", "Puantaj • Devamsızlık", "Puantaj • Geç",
-        "Puantaj • Erken", "Puantaj • Eksik Çalışma", "Puantaj • Eksik Süre", "Puantaj • Mesai Kalan", "Puantaj • Mesai Kalmayan",
+        "Puantaj • Erken", "Puantaj • Eksik Çalışma", "Puantaj • Eksik Süre", "Puantaj • Uyuşmazlıklar", "Puantaj • İzinli Günde Hareket", "Puantaj • Tatil Çalışması", "Puantaj • Devam Özeti", "Puantaj • Mesai Kalan", "Puantaj • Mesai Kalmayan",
         "İzin • Genel", "İzin • Yıllık Hakediş", "Ek Kazanç / Kesinti", "Avanslar",
         "Bordro • Genel Maaş", "Bordro • Mesai", "Bordro • Maaş Pusulası", "Bordro • Ücret Dönemleri", "Bordro • Ödemeler", "Bordro • Maaş Geçmişi",
         "Tanımlar • Bölümler", "Tanımlar • Servisler", "Tanımlar • Görevler", "Tanımlar • Gruplar", "Tanımlar • Durumlar", "Tanımlar • Firmalar"
@@ -244,6 +244,8 @@ public sealed class ReportCenterForm : Form
         "Giriş Çıkış • Tarihe Göre" => GirisCikis("g.GTARIH,g.PKNO"),
         "Giriş Çıkış • Ad Soyada Göre" => GirisCikis("k.AD,k.SOYAD,g.GTARIH"),
         "Giriş Çıkış • Bölüme Göre" => GirisCikis("b.AD,g.GTARIH,k.AD,k.SOYAD"),
+        "Giriş Çıkış • Eksik Hareketler" => MissingMovementReport(),
+        "Giriş Çıkış • Ara / Dışarı Süresi" => OutsideTimeReport(),
         "Puantaj • Genel" => Puantaj("1=1"),
         "Puantaj • Kişiye Göre" => Puantaj("1=1", "p.PKNO,p.TARIH"),
         "Puantaj • Tarihe Göre" => Puantaj("1=1", "p.TARIH,k.AD,k.SOYAD"),
@@ -254,6 +256,10 @@ public sealed class ReportCenterForm : Form
         "Puantaj • Erken" => Puantaj("coalesce(p.ERKENG,0)>0 or coalesce(p.ERKEND,0)>0"),
         "Puantaj • Eksik Çalışma" => Puantaj("coalesce(p.EKSIKG,0)>0"),
         "Puantaj • Eksik Süre" => Puantaj("coalesce(p.EKSIKD,0)>0"),
+        "Puantaj • Uyuşmazlıklar" => Puantaj("coalesce(p.DEVAMSIZLIKG,0)>0 or coalesce(p.GECG,0)>0 or coalesce(p.ERKENG,0)>0 or coalesce(p.EKSIKG,0)>0"),
+        "Puantaj • İzinli Günde Hareket" => LeaveMovementReport(),
+        "Puantaj • Tatil Çalışması" => Puantaj("coalesce(p.GUN2,0)>0 or coalesce(p.GUN3,0)>0"),
+        "Puantaj • Devam Özeti" => AttendanceSummaryReport(),
         "Puantaj • Mesai Kalan" => Puantaj("coalesce(p.DAKIKA2,0)>0 or coalesce(p.DAKIKA3,0)>0"),
         "Puantaj • Mesai Kalmayan" => Puantaj("coalesce(p.DAKIKA2,0)=0 and coalesce(p.DAKIKA3,0)=0"),
         "İzin • Genel" => ReportQuery("select o.TARIH \"Tarih\",o.PKNO \"Kart No\",k.AD \"Ad\",k.SOYAD \"Soyad\",o.MAZERET \"Mazeret\",o.TIP \"Tür\",o.SURESAAT \"Süre\",o.BASSAAT \"Başlangıç\",o.BITSAAT \"Bitiş\" from OZELIZIN o left join KIMLIK k on k.PKNO=o.PKNO where o.TARIH>=@A and o.TARIH<@B and " + CardWhere("o.PKNO") + " order by o.TARIH,o.PKNO", RangeCard()),
@@ -284,6 +290,53 @@ public sealed class ReportCenterForm : Form
         "p.SAAT1 \"Normal\",p.SAAT2 \"%50 Mesai\",p.SAAT3 \"%100 Mesai\",p.DEVAMSIZLIKS \"Devamsızlık\",p.GECS \"Geç\",p.ERKENS \"Erken\",p.EKSIKS \"Eksik Süre\" " +
         "from PUANTAJ p left join KIMLIK k on k.PKNO=p.PKNO " + (withDepartment ? "left join BOLUM b on b.KOD=k.BOLUM " : "") +
         "where p.TARIH>=@A and p.TARIH<@B and " + condition + " and " + CardWhere("p.PKNO") + " order by " + order, RangeCard());
+
+    DataTable MissingMovementReport() => ReportQuery(
+        "select g.PKNO \"Kart No\",k.AD \"Ad\",k.SOYAD \"Soyad\",g.GTARIH \"Tarih\",g.GSAAT \"Giriş\",g.CSAAT \"Çıkış\",b.AD \"Bölüm\" " +
+        "from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO left join BOLUM b on b.KOD=k.BOLUM " +
+        "where g.GTARIH>=@A and g.GTARIH<@B and " + CardWhere("g.PKNO") + " and (g.GSAAT is null or trim(g.GSAAT)='' or g.CSAAT is null or trim(g.CSAAT)='') order by g.GTARIH,g.PKNO",
+        RangeCard());
+
+    DataTable LeaveMovementReport() => ReportQuery(
+        "select o.TARIH \"Tarih\",o.PKNO \"Kart No\",k.AD \"Ad\",k.SOYAD \"Soyad\",b.AD \"Bölüm\",o.MAZERET \"İzin / Mazeret\",g.GSAAT \"Giriş\",g.CSAAT \"Çıkış\" " +
+        "from OZELIZIN o join GIRCIK g on g.PKNO=o.PKNO and g.GTARIH>=o.TARIH and g.GTARIH<dateadd(1 day to o.TARIH) " +
+        "left join KIMLIK k on k.PKNO=o.PKNO left join BOLUM b on b.KOD=k.BOLUM " +
+        "where o.TARIH>=@A and o.TARIH<@B and " + CardWhere("o.PKNO") + " order by o.TARIH,o.PKNO",
+        RangeCard());
+
+    DataTable AttendanceSummaryReport() => ReportQuery(
+        "select p.PKNO \"Kart No\",k.AD \"Ad\",k.SOYAD \"Soyad\",b.AD \"Bölüm\",count(*) \"Puantaj Gün\"," +
+        "sum(coalesce(p.GUN1,0)) \"Normal Gün\",sum(coalesce(p.DEVAMSIZLIKG,0)) \"Devamsız Gün\",sum(coalesce(p.GECG,0)) \"Geç Gün\"," +
+        "sum(coalesce(p.ERKENG,0)) \"Erken Gün\",sum(coalesce(p.EKSIKG,0)) \"Eksik Gün\",sum(coalesce(p.DAKIKA2,0)+coalesce(p.DAKIKA3,0)) \"Mesai Dakika\" " +
+        "from PUANTAJ p left join KIMLIK k on k.PKNO=p.PKNO left join BOLUM b on b.KOD=k.BOLUM " +
+        "where p.TARIH>=@A and p.TARIH<@B and " + CardWhere("p.PKNO") + " group by p.PKNO,k.AD,k.SOYAD,b.AD order by p.PKNO",
+        RangeCard());
+
+    DataTable OutsideTimeReport()
+    {
+        var src=ReportQuery(
+            "select g.PKNO \"Kart No\",k.AD \"Ad\",k.SOYAD \"Soyad\",b.AD \"Bölüm\",g.GTARIH \"Tarih\",g.GSAAT \"Giriş\",g.CSAAT \"Çıkış\",g.GDAKIKA \"Giriş Dakika\",g.CDAKIKA \"Çıkış Dakika\" " +
+            "from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO left join BOLUM b on b.KOD=k.BOLUM where g.GTARIH>=@A and g.GTARIH<@B and " + CardWhere("g.PKNO") + " order by g.PKNO,g.GTARIH,g.GDAKIKA",
+            RangeCard());
+        var result=new DataTable();
+        foreach(var c in new[]{"Tarih","Kart No","Ad Soyad","Bölüm","Önceki Çıkış","Sonraki Giriş","Dışarı Süresi"}) result.Columns.Add(c);
+        result.Columns.Add("Dakika",typeof(int));
+        foreach(var group in src.AsEnumerable().GroupBy(r=>new{Pk=Convert.ToString(r["Kart No"])??"",Day=Convert.ToDateTime(r["Tarih"]).Date}))
+        {
+            var rows=group.OrderBy(r=>r["Giriş Dakika"] is DBNull?0:Convert.ToInt32(r["Giriş Dakika"])).ToArray();
+            for(var i=1;i<rows.Length;i++)
+            {
+                var prevOut=rows[i-1]["Çıkış Dakika"] is DBNull?0:Convert.ToInt32(rows[i-1]["Çıkış Dakika"]);
+                var nextIn=rows[i]["Giriş Dakika"] is DBNull?0:Convert.ToInt32(rows[i]["Giriş Dakika"]);
+                var gap=nextIn-prevOut;
+                if(prevOut<=0||gap<=0)continue;
+                result.Rows.Add(group.Key.Day.ToString("dd.MM.yyyy"),group.Key.Pk,
+                    ($"{rows[i]["Ad"]} {rows[i]["Soyad"]}").Trim(),rows[i]["Bölüm"],
+                    rows[i-1]["Çıkış"],rows[i]["Giriş"],$"{gap/60:00}:{gap%60:00}",gap);
+            }
+        }
+        return result;
+    }
 
     DataTable GeneralSalaryReport() => ReportQuery(
         "select u.PKNO \"Kart No\",k.AD \"Ad\",k.SOYAD \"Soyad\",u.DMAAS \"Maaş\",u.GUN1 \"Normal Gün\",u.SAAT1 \"Normal Saat\",u.SAAT2 \"%50 Mesai\",u.SAAT3 \"%100 Mesai\",u.GUN4 \"Ücretsiz İzin Gün\",u.DEVG \"Devamsız Gün\",u.DEVS \"Devamsız Saat\",u.EKG \"Eksik Gün\",u.EKS \"Eksik Saat\",u.EKKAZ \"Ek Kazanç\",u.EKKES \"Kesinti\",u.EX1 \"Avans\",u.EX4 \"İcra\",u.NCKALAN \"Maaş Kalan\",u.FMKALAN \"Mesai Kalan\",(coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0)) \"Net\",u.EX2 \"Banka\",u.EX3 \"BES\",((coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0))-coalesce(u.EX2,0)) \"Elden\" " +
