@@ -1,4 +1,12 @@
-import { AUTH_SECURITY_SCOPES, securityStoreGet as storeGet, securityStoreList as storeList, tableExists } from "./auth-security-core";
+import {
+  AUTH_SECURITY_SCOPES,
+  securityStoreGet as storeGet,
+  securityStoreList as storeList,
+  securityStorePut as storePut,
+  securityDevicesForUser,
+  sendSecurityWakeMany,
+  tableExists,
+} from "./auth-security-core";
 
 type AnyRow = Record<string, any>;
 type ActorResolver = (c: any) => Promise<AnyRow | null>;
@@ -6,6 +14,10 @@ type ActorResolver = (c: any) => Promise<AnyRow | null>;
 const TRUST_SCOPE = AUTH_SECURITY_SCOPES.SESSION_TRUST;
 const TRUSTED_DEVICE_SCOPE = AUTH_SECURITY_SCOPES.TRUSTED_LOGIN_DEVICE;
 const ENROLL_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ENROLLMENT;
+const NOTE_SCOPE = "KY_SECURITY_PERSONAL_NOTE_V1";
+const CHAT_SCOPE = "KY_SECURITY_CHAT_DM_V1";
+const NOTE_LIMIT = 250;
+const CHAT_MESSAGE_LIMIT = 120;
 
 function text(value: unknown) { return value === undefined || value === null ? "" : String(value).trim(); }
 function upper(value: unknown) { return text(value).toUpperCase().replace(/İ/g, "I"); }
@@ -14,7 +26,7 @@ function jsonError(code: string, message: string) { return { ok: false, error: {
 function isSuper(role: unknown) { return ["SUPER_ADMIN", "ADMIN"].includes(upper(role)); }
 function isCompanyAdmin(role: unknown) { return upper(role) === "COMPANY_ADMIN"; }
 function hasOwnerControl(actor: AnyRow) { return isSuper(actor.role) && actor.ownerControlAuthorized === true; }
-function hasCap(actor: AnyRow, cap: string) { return hasOwnerControl(actor) && (actor.securityCapabilities || []).includes(cap); }
+function hasCap(actor: AnyRow, cap: string) { return hasOwnerControl(actor) || (actor.securityCapabilities || []).includes(cap); }
 function clientIp(c: any) { return text(c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For")?.split(",")[0]); }
 function browserDeviceId(label: unknown) { const value = text(label); return value.startsWith("BROWSER:") ? value.slice(8) : ""; }
 function trustedDeviceKey(userId: unknown, deviceId: unknown) { return `${text(userId)}:${text(deviceId)}`; }
@@ -93,7 +105,9 @@ async function listCompanies(c: any, actor: AnyRow) {
   return [{ slug, name }];
 }
 function scopeType(actor: AnyRow) {
-  return hasOwnerControl(actor) ? "SYSTEM" : "SELF";
+  if (hasOwnerControl(actor)) return "SYSTEM";
+  if (isCompanyAdmin(actor.role) && actor.companyApprover === true) return "COMPANY";
+  return "USER";
 }
 function normalizeCompanyFilter(actor: AnyRow, requested: unknown, companies: AnyRow[]) {
   const value = text(requested);
@@ -106,6 +120,9 @@ async function sessionRows(c: any, actor: AnyRow, companySlug: string, limit: nu
     return companySlug
       ? c.env.DB.prepare(`${select} WHERE s.main_company_slug=? ORDER BY s.created_at DESC LIMIT ?`).bind(companySlug, limit).all()
       : c.env.DB.prepare(`${select} ORDER BY s.created_at DESC LIMIT ?`).bind(limit).all();
+  }
+  if (isCompanyAdmin(actor.role) && actor.companyApprover === true && hasCap(actor, "SESSION_VIEW")) {
+    return c.env.DB.prepare(`${select} WHERE s.main_company_slug=? ORDER BY s.created_at DESC LIMIT ?`).bind(text(actor.companySlug), limit).all();
   }
   return c.env.DB.prepare(`${select} WHERE s.user_id=? ORDER BY s.created_at DESC LIMIT ?`).bind(text(actor.userId), limit).all();
 }
@@ -122,14 +139,22 @@ async function buildSessions(c: any, actor: AnyRow, companySlug: string, limit: 
   });
 }
 function canCloseSession(actor: AnyRow, row: AnyRow, targetRole = effectiveRole(row)) {
-  return hasOwnerControl(actor);
+  if (hasOwnerControl(actor)) return true;
+  if (!isCompanyAdmin(actor.role) || actor.companyApprover !== true || !hasCap(actor, "SESSION_CLOSE")) return false;
+  if (text(row.main_company_slug) !== text(actor.companySlug)) return false;
+  const own = text(row.user_id) === text(actor.userId);
+  if (own) return true;
+  return !["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(upper(targetRole));
 }
 async function buildTrustedDevices(c: any, actor: AnyRow, companySlug: string) {
   const rows = (await storeList(c, TRUSTED_DEVICE_SCOPE)).filter((row: AnyRow) => activeTrustedDevice(row));
   const result: AnyRow[] = [];
   for (const row of rows) {
-    if (hasOwnerControl(actor)) { if (companySlug && text(row.mainCompanySlug) !== companySlug) continue; }
-    else continue;
+    if (hasOwnerControl(actor)) {
+      if (companySlug && text(row.mainCompanySlug) !== companySlug) continue;
+    } else if (isCompanyAdmin(actor.role) && actor.companyApprover === true && hasCap(actor, "SESSION_VIEW")) {
+      if (text(row.mainCompanySlug) !== text(actor.companySlug)) continue;
+    } else continue;
     const user = await c.env.DB.prepare("SELECT u.username,u.full_name,u.role,u.platform_role,s.role_override FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.id=? LIMIT 1").bind(text(row.userId)).first();
     if (!user) continue; const role = effectiveRole(user); if (!isSuper(actor.role) && ["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(role) && text(row.userId)!==text(actor.userId)) continue;
     result.push({deviceId:text(row.deviceId),userId:text(row.userId),username:text(user.username),fullName:text(user.full_name||user.username),role,mainCompanySlug:text(row.mainCompanySlug),deviceLabel:text(row.deviceLabel||"Güvenilir bilgisayar"),userAgent:text(row.userAgent),ipAddress:text(row.ipAddress),firstTrustedAt:row.firstTrustedAt||row.createdAt||null,lastTrustedAt:row.lastTrustedAt||row.updatedAt||null,own:text(row.userId)===text(actor.userId)});
@@ -148,7 +173,9 @@ async function buildAudit(c: any, actor: AnyRow, companySlug: string, limit: num
 }
 
 async function buildActivity(c:any, actor:AnyRow, companySlug:string, limit:number) {
-  if (!hasOwnerControl(actor)) return { items: [], companies: [] };
+  const companyControl = isCompanyAdmin(actor.role) && actor.companyApprover === true && (hasCap(actor, "LOGIN_APPROVE") || hasCap(actor, "SESSION_VIEW"));
+  if (!hasOwnerControl(actor) && !companyControl) return { items: [], companies: [] };
+  if (!hasOwnerControl(actor)) companySlug = text(actor.companySlug);
   const approvalSql = `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.user_agent,a.ip_address,a.status,a.requested_at,a.decided_at,a.expires_at,
                               u.username,u.full_name,d.full_name AS decided_by_name
                          FROM auth_login_approvals a
@@ -256,17 +283,19 @@ export function registerSecurityMobileControlRoutes(app:any, resolveActor:ActorR
 
   app.get("/api/auth/push/device/control-center", async (c:any) => {
     const actor=await resolveActor(c); if(!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED","KY Güvenlik cihazı doğrulanamadı."),401);
-    if(!hasOwnerControl(actor)) return c.json(jsonError("OWNER_PHONE_ONLY","Sistem Güvenlik Merkezi yalnız ekstra doğrulanmış Süper Yönetici telefonunda kullanılabilir."),403);
+    const companyControl=isCompanyAdmin(actor.role)&&actor.companyApprover===true&&(hasCap(actor,"LOGIN_APPROVE")||hasCap(actor,"SESSION_VIEW")||hasCap(actor,"AUDIT_VIEW"));
+    if(!hasOwnerControl(actor)&&!companyControl) return c.json(jsonError("SECURITY_SCOPE_FORBIDDEN","Bu hesapta firma güvenlik merkezi yetkisi bulunmuyor."),403);
     const companies=await listCompanies(c,actor); const companySlug=normalizeCompanyFilter(actor,c.req.query("companySlug"),companies);
     const limit=Math.max(25,Math.min(300,Number(c.req.query("limit")||150)));
     const sessions=await buildSessions(c,actor,companySlug,limit); const devices=await buildTrustedDevices(c,actor,companySlug); const audit=await buildAudit(c,actor,companySlug,limit); const activity=await buildActivity(c,actor,companySlug,limit); const todaySummary=await buildTodaySummary(c,companySlug);
     const activeSessions=sessions.filter((row:AnyRow)=>row.active); const activeComputers=new Set(activeSessions.map((row:AnyRow)=>row.deviceId||`${row.deviceLabel}|${row.ipAddress}`).filter(Boolean));
-    return c.json({ok:true,data:{serverVersion,scopeType:scopeType(actor),ownerControlAuthorized:true,role:upper(actor.role),companySlug,companies,capabilities:actor.securityCapabilities||[],summary:{activeSessions:activeSessions.length,connectedComputers:activeComputers.size,trustedDevices:devices.length,recentEvents:audit.length,...todaySummary},sessions,devices,audit,activity:activity.items,companyStats:activity.companies,checkedAt:nowIso()}});
+    return c.json({ok:true,data:{serverVersion,scopeType:scopeType(actor),ownerControlAuthorized:hasOwnerControl(actor),companyApprover:companyControl,role:upper(actor.role),companySlug,companies,capabilities:actor.securityCapabilities||[],summary:{activeSessions:activeSessions.length,connectedComputers:activeComputers.size,trustedDevices:devices.length,recentEvents:audit.length,...todaySummary},sessions,devices,audit,activity:activity.items,companyStats:activity.companies,checkedAt:nowIso()}});
   });
 
   app.post("/api/auth/push/device/control-center/session/close", async (c:any) => {
     const actor=await resolveActor(c); if(!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED","KY Güvenlik cihazı doğrulanamadı."),401);
-    if(!hasOwnerControl(actor)) return c.json(jsonError("OWNER_PHONE_ONLY","Oturum kapatma yalnız doğrulanmış Süper Yönetici telefonundan yapılabilir."),403);
+    const companyControl=isCompanyAdmin(actor.role)&&actor.companyApprover===true&&hasCap(actor,"SESSION_CLOSE");
+    if(!hasOwnerControl(actor)&&!companyControl) return c.json(jsonError("SESSION_CLOSE_FORBIDDEN","Bu hesapta oturum kapatma yetkisi bulunmuyor."),403);
     const body=await c.req.json().catch(()=>({})); const sessionId=text(body.sessionId); if(!sessionId) return c.json(jsonError("SESSION_ID_REQUIRED","Oturum seçilmelidir."),400);
     const row=await c.env.DB.prepare(`SELECT s.*,u.role,u.platform_role,us.role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.id=? LIMIT 1`).bind(sessionId).first();
     if(!row) return c.json(jsonError("SESSION_NOT_FOUND","Oturum bulunamadı."),404); const targetRole=effectiveRole(row);
@@ -274,7 +303,73 @@ export function registerSecurityMobileControlRoutes(app:any, resolveActor:ActorR
     if(!(await verifyControlProof(actor,"SESSION_CLOSE",sessionId,body.timestamp,body.signature))) return c.json(jsonError("SECURITY_DEVICE_SIGNATURE_INVALID","Telefon güvenlik imzası doğrulanamadı."),401);
     if(text(row.revoked_at)||Date.parse(text(row.expires_at))<=Date.now()) return c.json({ok:true,data:{sessionId,closed:true,alreadyClosed:true}});
     const timestamp=nowIso(); await c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=?,revoked_by=? WHERE id=? AND revoked_at IS NULL").bind(timestamp,text(actor.userId),sessionId).run();
-    await writeAudit(c,actor,"SESSION_CLOSED_FROM_KY_SECURITY_MOBILE",text(row.user_id),text(row.main_company_slug),sessionId,{deviceId:text(actor.device?.id),deviceLabel:text(actor.device?.deviceLabel),targetRole});
+    await writeAudit(c,actor,"SESSION_CLOSED_FROM_KY_SECURITY_MOBILE",text(row.user_id),text(row.main_company_slug),sessionId,{deviceId:text(actor.device?.id),deviceLabel:text(actor.device?.deviceLabel),targetRole,scopeType:scopeType(actor)});
     return c.json({ok:true,data:{sessionId,closed:true,revokedAt:timestamp}});
+  });
+
+  app.get("/api/auth/push/device/workspace/notes", async (c:any) => {
+    const actor=await resolveActor(c); if(!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED","KY Güvenlik cihazı doğrulanamadı."),401);
+    const rows=(await storeList(c,NOTE_SCOPE)).filter((row:AnyRow)=>text(row.userId)===text(actor.userId)&&!text(row.deletedAt)).slice(0,NOTE_LIMIT);
+    const now=Date.now();
+    return c.json({ok:true,data:{items:rows.map((row:AnyRow)=>({...row,due:Boolean(row.remindAt)&&!row.done&&Date.parse(text(row.remindAt))<=now})),checkedAt:nowIso()}});
+  });
+
+  app.post("/api/auth/push/device/workspace/notes", async (c:any) => {
+    const actor=await resolveActor(c); if(!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED","KY Güvenlik cihazı doğrulanamadı."),401);
+    const body=await c.req.json().catch(()=>({})); const title=text(body.title).slice(0,120); const note=text(body.body).slice(0,4000);
+    if(!title&&!note) return c.json(jsonError("NOTE_EMPTY","Not başlığı veya içeriği girilmelidir."),400);
+    const remindAt=text(body.remindAt); if(remindAt&&Number.isNaN(Date.parse(remindAt))) return c.json(jsonError("NOTE_REMINDER_INVALID","Hatırlatma tarihi geçerli değil."),400);
+    const id=crypto.randomUUID(); const saved=await storePut(c,NOTE_SCOPE,id,text(actor.companySlug),{id,userId:text(actor.userId),title,body:note,remindAt:remindAt?new Date(remindAt).toISOString():"",done:false,notifiedAt:"",deletedAt:""});
+    return c.json({ok:true,data:saved},201);
+  });
+
+  app.patch("/api/auth/push/device/workspace/notes/:id", async (c:any) => {
+    const actor=await resolveActor(c); if(!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED","KY Güvenlik cihazı doğrulanamadı."),401);
+    const id=text(c.req.param("id")); const current=await storeGet(c,NOTE_SCOPE,id);
+    if(!current||text(current.userId)!==text(actor.userId)||text(current.deletedAt)) return c.json(jsonError("NOTE_NOT_FOUND","Not bulunamadı."),404);
+    const body=await c.req.json().catch(()=>({})); const remindAt=body.remindAt===undefined?text(current.remindAt):text(body.remindAt);
+    if(remindAt&&Number.isNaN(Date.parse(remindAt))) return c.json(jsonError("NOTE_REMINDER_INVALID","Hatırlatma tarihi geçerli değil."),400);
+    const next={...current,title:body.title===undefined?text(current.title):text(body.title).slice(0,120),body:body.body===undefined?text(current.body):text(body.body).slice(0,4000),remindAt:remindAt?new Date(remindAt).toISOString():"",done:body.done===undefined?Boolean(current.done):Boolean(body.done)};
+    if(next.remindAt!==text(current.remindAt)||next.done!==Boolean(current.done)) next.notifiedAt="";
+    const saved=await storePut(c,NOTE_SCOPE,id,text(actor.companySlug),next); return c.json({ok:true,data:saved});
+  });
+
+  app.delete("/api/auth/push/device/workspace/notes/:id", async (c:any) => {
+    const actor=await resolveActor(c); if(!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED","KY Güvenlik cihazı doğrulanamadı."),401);
+    const id=text(c.req.param("id")); const current=await storeGet(c,NOTE_SCOPE,id);
+    if(!current||text(current.userId)!==text(actor.userId)||text(current.deletedAt)) return c.json(jsonError("NOTE_NOT_FOUND","Not bulunamadı."),404);
+    const saved=await storePut(c,NOTE_SCOPE,id,text(actor.companySlug),{...current,deletedAt:nowIso()}); return c.json({ok:true,data:{id:saved.id,deleted:true}});
+  });
+
+  app.get("/api/auth/push/device/workspace/chat/users", async (c:any) => {
+    const actor=await resolveActor(c); if(!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED","KY Güvenlik cihazı doğrulanamadı."),401);
+    const result=await c.env.DB.prepare(`SELECT u.id,u.username,u.full_name,u.role,u.platform_role,s.role_override,s.main_company_slug FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.is_active=1 AND u.id<>? ORDER BY u.full_name COLLATE NOCASE,u.username COLLATE NOCASE LIMIT 500`).bind(text(actor.userId)).all();
+    const items=(result.results||[]).map((row:AnyRow)=>({id:text(row.id),username:text(row.username),fullName:text(row.full_name||row.username),role:effectiveRole(row),mainCompanySlug:text(row.main_company_slug)}));
+    return c.json({ok:true,data:{items}});
+  });
+
+  app.get("/api/auth/push/device/workspace/chat/messages", async (c:any) => {
+    const actor=await resolveActor(c); if(!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED","KY Güvenlik cihazı doğrulanamadı."),401);
+    const peerId=text(c.req.query("with")); if(!peerId) return c.json(jsonError("CHAT_PEER_REQUIRED","Sohbet kullanıcısı seçilmelidir."),400);
+    const peer=await c.env.DB.prepare("SELECT id FROM auth_users WHERE id=? AND is_active=1 LIMIT 1").bind(peerId).first(); if(!peer) return c.json(jsonError("CHAT_PEER_NOT_FOUND","Kullanıcı bulunamadı."),404);
+    const limit=Math.max(20,Math.min(CHAT_MESSAGE_LIMIT,Number(c.req.query("limit")||80)));
+    const result=await c.env.DB.prepare(`SELECT id,data,created_at,updated_at FROM json_store WHERE scope=? AND ((json_extract(data,'$.senderUserId')=? AND json_extract(data,'$.recipientUserId')=?) OR (json_extract(data,'$.senderUserId')=? AND json_extract(data,'$.recipientUserId')=?)) ORDER BY created_at DESC LIMIT ?`).bind(CHAT_SCOPE,text(actor.userId),peerId,peerId,text(actor.userId),limit).all();
+    const timestamp=nowIso();
+    await c.env.DB.prepare(`UPDATE json_store SET data=json_set(data,'$.readAt',?),updated_at=? WHERE scope=? AND json_extract(data,'$.recipientUserId')=? AND json_extract(data,'$.senderUserId')=? AND COALESCE(json_extract(data,'$.readAt'),'')=''`).bind(timestamp,timestamp,CHAT_SCOPE,text(actor.userId),peerId).run();
+    const items=(result.results||[]).map((row:AnyRow)=>objectOf(row.data)).reverse();
+    return c.json({ok:true,data:{items,peerId,checkedAt:timestamp}});
+  });
+
+  app.post("/api/auth/push/device/workspace/chat/messages", async (c:any) => {
+    const actor=await resolveActor(c); if(!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED","KY Güvenlik cihazı doğrulanamadı."),401);
+    const body=await c.req.json().catch(()=>({})); const recipientUserId=text(body.toUserId); const message=text(body.message).slice(0,2000);
+    if(!recipientUserId||!message) return c.json(jsonError("CHAT_MESSAGE_REQUIRED","Alıcı ve mesaj zorunludur."),400);
+    if(recipientUserId===text(actor.userId)) return c.json(jsonError("CHAT_SELF_NOT_ALLOWED","Kendinize mesaj gönderemezsiniz."),400);
+    const recipient=await c.env.DB.prepare(`SELECT u.id,u.username,u.full_name,s.main_company_slug FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.id=? AND u.is_active=1 LIMIT 1`).bind(recipientUserId).first();
+    if(!recipient) return c.json(jsonError("CHAT_PEER_NOT_FOUND","Alıcı kullanıcı bulunamadı."),404);
+    const id=crypto.randomUUID(); const createdAt=nowIso();
+    const saved=await storePut(c,CHAT_SCOPE,id,text(actor.companySlug),{id,senderUserId:text(actor.userId),senderName:text(actor.fullName||actor.username),senderUsername:text(actor.username),senderCompanySlug:text(actor.companySlug),recipientUserId,recipientName:text(recipient.full_name||recipient.username),recipientCompanySlug:text(recipient.main_company_slug),message,readAt:"",createdAt});
+    const devices=await securityDevicesForUser(c,recipientUserId,"CONTROL"); if(devices.length){const wake=sendSecurityWakeMany(c,devices);if(c.executionCtx?.waitUntil)c.executionCtx.waitUntil(wake);else await wake;}
+    return c.json({ok:true,data:saved},201);
   });
 }
