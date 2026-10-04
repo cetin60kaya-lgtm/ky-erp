@@ -151,7 +151,7 @@ public sealed class LegacyGroupForm : Form
 
     void SetEditors(bool enabled)
     {
-        name.ReadOnly=!enabled;periodHours.ReadOnly=!enabled;dailyHours.ReadOnly=!enabled;terminalCode.ReadOnly=!enabled;
+        name.ReadOnly=true;periodHours.ReadOnly=!enabled;dailyHours.ReadOnly=!enabled;terminalCode.ReadOnly=!enabled;
         foreach(var b in dayShift.Concat(starts).Concat(ends).Concat(shiftNames))b.ReadOnly=!enabled;
         editing=enabled;
     }
