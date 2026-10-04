@@ -58,7 +58,7 @@ public sealed class DefinitionsCenterForm : Form
         columns.Controls.Add(Section("Çalışma / Bordro",
         [
             ("Çalışma Grupları","Yalnız MESAİLİ GRUP ve İDARİ GRUP",()=>navigate(PdksCommandId.Groups)),
-            ("Yıllık Dönemler","Yıl seçilir; 12 ay ve grup altyapısı sistem tarafından otomatik yönetilir",()=>navigate(PdksCommandId.Periods)),
+            ("Dönem Altyapısı (Otomatik)","Normal kullanımda açılmaz; ay/yıl ve grup kayıtlarını sistem otomatik yönetir",()=>navigate(PdksCommandId.Periods)),
             ("Genel Tatiller","Resmî ve özel tatil günleri",()=>navigate(PdksCommandId.Holidays)),
             ("Günlük Çalışma Saatleri","Normal günlük süre ve alan tanımları",()=>navigate(PdksCommandId.DailyWorkHours)),
             ("Yıllık Çalışma Planı","Yıllık çalışma takvimi",()=>navigate(PdksCommandId.AnnualWorkPlan)),
@@ -69,7 +69,7 @@ public sealed class DefinitionsCenterForm : Form
         root.Controls.Add(columns,0,1);
         root.Controls.Add(new Label
         {
-            Text="Buradaki tanımlar günlük işlemlerin temelidir. Çalışma grupları sabittir; yıllık dönemler ay bazında otomatik hazırlanır ve kullanıcı teknik grup kayıtlarıyla uğraşmaz.",
+            Text="Günlük kullanıcı yalnız gerekli iş tanımlarını görür. Dönem, çalışma tarihi ve teknik cihaz ayrıntıları sistem tarafından arka planda yönetilir.",
             Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=p.Muted,
             Font=new Font("Segoe UI",8.6f),Padding=new Padding(4,12,0,0)
         },0,2);
