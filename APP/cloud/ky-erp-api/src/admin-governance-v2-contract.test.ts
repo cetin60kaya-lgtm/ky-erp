@@ -8,10 +8,13 @@ test("admin navigation is corporate and has no standalone login approval tab", (
   const registry = read("../../../app/ky-erp-frontend/src/app/moduleRegistry.js");
   const base = read("../../../app/ky-erp-frontend/src/app/moduleRegistryBase.js");
   assert.doesNotMatch(registry, /withLoginApprovals/);
-  assert.match(registry, /"giris-onaylari": "admin-yonetim-ozeti"/);
+  assert.match(registry, /"giris-onaylari": "admin-guvenlik"/);
   assert.match(base, /"Süper Yönetici & Güvenlik"/);
   assert.match(base, /"Kullanıcı & Yetkiler"/);
   assert.match(base, /"Firmalar & Organizasyon"/);
+  assert.match(base, /\["admin-yonetim-ozeti", "Yönetim"/);
+  assert.match(base, /\["admin-guvenlik", "Güvenlik"/);
+  assert.match(base, /\["admin-sistem", "Sistem"/);
 });
 
 test("management console contains the compact decision center", () => {
