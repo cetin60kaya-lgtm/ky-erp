@@ -352,5 +352,3 @@ $('#backupNow').onclick=async()=>{await post('/api/backup',{});toast('Tam yedek 
 async function loadAll(){try{[core,done,cari,allCompanies,machinesAll,notes,reminders,checks,sync,settings]=await Promise.all([api('/api/dashboard'),api('/api/completed'),api('/api/companies'),api('/api/companies-all'),api('/api/machines-all'),api('/api/notes'),api('/api/reminders'),api('/api/checks'),api('/api/sync/status'),api('/api/settings')]);if(!selectedCompanyId&&cari.rows?.[0])selectedCompanyId=n(cari.rows[0].id);renderProduction();renderCari();renderChecks();renderSettingsCompanies();renderOperators();renderMachines();renderNotes();renderReminders();renderSync();renderSettingForms()}catch(e){toast(e.message)}}
 $('#refreshBtn').onclick=async()=>{await loadAll();toast('Güncellendi')};
 loadAll();
-
-[executed on device: Desen (c4d4b6e1-fe7e-407d-9528-93c354170ca0)]
