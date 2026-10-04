@@ -8,7 +8,7 @@ const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'hakan-emp-smoke-'));
 const port=18991;
 const child=spawn(process.execPath,[path.join(root,'app','server.js')],{
   cwd:root,
-  env:{...process.env,HAKAN_EMP_APP_ROOT:path.join(root,'app'),HAKAN_EMP_DATA_DIR:tmp,HAKAN_EMP_PORT:String(port)},
+  env:{...process.env,HAKAN_EMP_APP_ROOT:path.join(root,'app'),HAKAN_EMP_DATA_DIR:tmp,HAKAN_EMP_PORT:String(port),HAKAN_EMP_DISABLE_SYNC:'1'},
   stdio:['ignore','pipe','pipe']
 });
 const base='http://127.0.0.1:'+port;
