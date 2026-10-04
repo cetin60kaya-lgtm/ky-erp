@@ -39,11 +39,14 @@ public sealed class PdksQuickGuideForm : Form
             "Önerilen sıra:\r\n\r\n" +
             "1) Operasyon > Terminal: Yeni kart hareketleri alınır ve aktarım sonucu doğrulanır.\r\n" +
             "2) Operasyon > Canlı Denetim: Kart basmayan, geç gelen, içeride kalan ve çıkışı eksik personel görülür.\r\n" +
-            "3) Operasyon > Giriş/Çıkış: Yalnız doğrulanmış eksik/hatalı hareketler düzeltilir.\r\n" +
-            "4) Personel/İzin: İzin, personel ve ek hareketler kontrol edilir.\r\n" +
-            "5) Puantaj: Kart + izin + tatil + çalışma planından günlük/aylık sonuç hesaplanır.\r\n" +
-            "6) Bordro: Hakediş ve resmî bordro/PEK ayrı olarak kontrol edilir.\r\n" +
-            "7) Raporlar: Sonuçlar yazdırılır veya PDF/Excel olarak alınır.\r\n\r\n" +
+            "3) Operasyon > İstisna Merkezi: Eksik çıkış, geç/erken, devamsızlık, mesai ve izin uyuşmazlıkları tek listede kontrol edilir.\r\n" +
+            "4) Operasyon > Devam Geçmişi / Bölüm Devam Analizi: kişi-gün ve bölüm bazında devam verisi karşılaştırılır.\r\n" +
+            "5) Operasyon > Giriş/Çıkış: Yalnız doğrulanmış eksik/hatalı hareketler düzeltilir.\r\n" +
+            "6) Personel/İzin: İzin, personel ve ek hareketler kontrol edilir.\r\n" +
+            "7) Puantaj: Kart + izin + tatil + çalışma planından günlük/aylık sonuç hesaplanır.\r\n" +
+            "8) Bordro > Dönem Kontrol Merkezi: eksik kart, puantaj, bordro ve ödeme durumu ay kapanmadan kontrol edilir.\r\n" +
+            "9) Bordro / Ödeme: Hakediş ve resmî bordro/PEK ayrı olarak kontrol edilir.\r\n" +
+            "10) Raporlar: Sonuçlar yazdırılır veya PDF/Excel olarak alınır.\r\n\r\n" +
             "Kural: Gerçek kart hareketi yoksa sistemde yapay giriş/çıkış oluşturmayın. Eksik kaydı önce doğrulayın, sonra düzeltin."),
 
         ["2. Genel Bakış"] = new(
@@ -53,7 +56,7 @@ public sealed class PdksQuickGuideForm : Form
 
         ["3. Operasyon Merkezi"] = new(
             "Operasyon Merkezi",
-            "Günlük PDKS işleri tek merkezde toplanır. Önerilen sıra Terminalden Al → Canlı Kontrol → Eksikleri Düzelt → İzin/Ek Kayıt → Puantaja Geç şeklindedir.\r\n\r\n" +
+            "Günlük PDKS işleri tek merkezde toplanır. Önerilen sıra Terminalden Al → Canlı Kontrol → İstisnaları Gör → Eksikleri Düzelt → İzin/Ek Kayıt → Puantaja Geç şeklindedir. Bölüm Devam Analizi yöneticiye bölüm bazında geç, erken, devamsızlık ve mesai görünümü verir.\r\n\r\n" +
             "Sık kullanılan Canlı Denetim ve Giriş/Çıkış ekranları sol menüyü kalabalıklaştırmak yerine Operasyon altında bulunur."),
 
         ["4. Canlı Denetim"] = new(
