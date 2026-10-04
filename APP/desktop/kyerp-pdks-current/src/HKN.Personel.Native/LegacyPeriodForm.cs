@@ -126,7 +126,7 @@ public sealed class LegacyPeriodForm : Form
         year.SelectedIndexChanged+=(_,_)=>{if(!loading)ReloadGrid();};
         start.ValueChanged+=(_,_)=>{UpdateTotal();SuggestName();};
         end.ValueChanged+=(_,_)=>UpdateTotal();
-        group.SelectedValueChanged+=(_,_)=>SuggestName();
+        group.SelectedValueChanged+=(_,_)=>{SuggestName();if(adding)LoadDefaultsForNewPeriod();};
         SetEdit(false);
     }
 
@@ -276,12 +276,43 @@ public sealed class LegacyPeriodForm : Form
         UpdateTotal();
     }
 
+    void LoadDefaultsForNewPeriod()
+    {
+        if(group.SelectedValue is null||group.SelectedValue is DataRowView)return;
+        try
+        {
+            var g=Convert.ToInt32(group.SelectedValue);
+            var latest=db.Query(
+                "select first 1 ACESAAT,SSKACE,ACFSAAT,SSKACF,EBALAN,CBALAN from DONEM where GRUP=@G order by BASTAR desc,KOD desc",
+                new FbParameter("@G",g));
+            if(latest.Rows.Count==0)
+            {
+                minusTime.Text="00:00";minusDay.Text="0";plusTime.Text="00:00";plusDay.Text="0";
+                if(plusArea.Items.Count>0)plusArea.SelectedIndex=0;
+                if(minusArea.Items.Count>0)minusArea.SelectedIndex=0;
+                return;
+            }
+            var r=latest.Rows[0];
+            minusTime.Text=AsTime(r["ACESAAT"]);
+            minusDay.Text=S(r,"SSKACE");
+            plusTime.Text=AsTime(r["ACFSAAT"]);
+            plusDay.Text=S(r,"SSKACF");
+            SelectValue(plusArea,r["EBALAN"]);
+            SelectValue(minusArea,r["CBALAN"]);
+        }
+        catch
+        {
+            minusTime.Text="00:00";minusDay.Text="0";plusTime.Text="00:00";plusDay.Text="0";
+        }
+    }
+
     void BeginNew()
     {
         code=null;
         adding=true;
         ClearFields();
         if(group.Items.Count>0)group.SelectedIndex=0;
+        LoadDefaultsForNewPeriod();
         SetEdit(true);
         save.Enabled=true;
         SuggestName(true);
