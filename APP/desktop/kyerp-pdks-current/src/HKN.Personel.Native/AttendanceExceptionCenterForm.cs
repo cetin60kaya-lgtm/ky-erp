@@ -94,7 +94,7 @@ public sealed class AttendanceExceptionCenterForm : Form
         bar.Controls.Add(Field("Tür", kind));
         bar.Controls.Add(Field("Kart", card));
         var refresh = PdksUiKit.Button("Yenile", 100, PdksActionRole.Primary, RefreshData);
-        refresh.Margin = new Padding(8, 17, 0, 0);
+        refresh.Margin = new Padding(8, 8, 0, 0);
         bar.Controls.Add(refresh);
         filters.Controls.Add(bar);
         root.Controls.Add(filters, 0, 1);
