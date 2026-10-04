@@ -8,6 +8,8 @@ public sealed class OperationsCenterForm : Form
     static readonly PdksCommandId[] Daily =
     [
         PdksCommandId.LiveAttendance,
+        PdksCommandId.AttendanceExceptions,
+        PdksCommandId.AttendanceHistory,
         PdksCommandId.EntryExit,
         PdksCommandId.Leave,
         PdksCommandId.EarningsDeductions,
@@ -71,15 +73,16 @@ public sealed class OperationsCenterForm : Form
         });
         root.Controls.Add(hero,0,0);
 
-        var flow=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,BackColor=p.Canvas,Padding=new Padding(0,0,0,10)};
-        for(var i=0;i<5;i++)flow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));
+        var flow=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=6,BackColor=p.Canvas,Padding=new Padding(0,0,0,10)};
+        for(var i=0;i<6;i++)flow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16.666f));
         var steps=new (string Title,string Text,PdksCommandId Id)[]
         {
             ("1","Terminalden Al",PdksCommandId.TerminalCenter),
             ("2","Canlı Kontrol",PdksCommandId.LiveAttendance),
-            ("3","Eksikleri Düzelt",PdksCommandId.EntryExit),
-            ("4","İzin / Ek Kayıt",PdksCommandId.Leave),
-            ("5","Puantaja Geç",PdksCommandId.TimesheetMonthly)
+            ("3","İstisnaları Gör",PdksCommandId.AttendanceExceptions),
+            ("4","Eksikleri Düzelt",PdksCommandId.EntryExit),
+            ("5","İzin / Ek Kayıt",PdksCommandId.Leave),
+            ("6","Puantaja Geç",PdksCommandId.TimesheetMonthly)
         };
         for(var i=0;i<steps.Length;i++)flow.Controls.Add(Step(steps[i].Title,steps[i].Text,steps[i].Id),i,0);
         root.Controls.Add(flow,0,1);
