@@ -16,15 +16,12 @@ public sealed class LegacyPeriodForm : Form
     readonly Label yearSummary = new(){AutoSize=true,ForeColor=PdksAppearance.Current.Muted,Padding=new Padding(10,10,0,0)};
     readonly Label selectedMonth = ValueLabel(15f,FontStyle.Bold);
     readonly Label selectedRange = ValueLabel();
-    readonly Label mesailiState = ValueLabel();
-    readonly Label idariState = ValueLabel();
     readonly Label overallState = ValueLabel(11f,FontStyle.Bold);
     bool loading;
-    bool firstLoad=true;
 
     public LegacyPeriodForm()
     {
-        Text="Dönemler";
+        Text="Yıllık Dönemler";
         StartPosition=FormStartPosition.CenterScreen;
         Size=new Size(1180,720);
         MinimumSize=new Size(920,620);
@@ -74,7 +71,7 @@ public sealed class LegacyPeriodForm : Form
 
         left.Controls.Add(new Label
         {
-            Text="Her ay ekranda tek satırdır. MESAİLİ ve İDARİ dönem kayıtları arka planda sistem tarafından yönetilir.",
+            Text="Kullanıcı yalnız yılı seçer. 12 aylık çalışma/bordro dönemi sistem tarafından otomatik hazırlanır.",
             Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=p.Muted,
             Font=new Font("Segoe UI",8.5f)
         },0,2);
@@ -85,9 +82,9 @@ public sealed class LegacyPeriodForm : Form
         grid.RowHeadersVisible=false;
         grid.RowTemplate.Height=31;
         grid.ColumnHeadersHeight=34;
-        grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AY",DataPropertyName="AY",HeaderText="Ay",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});
-        grid.Columns.Add(new DataGridViewTextBoxColumn{Name="MESAILI",DataPropertyName="MESAILI",HeaderText="MESAİLİ",Width=92});
-        grid.Columns.Add(new DataGridViewTextBoxColumn{Name="IDARI",DataPropertyName="IDARI",HeaderText="İDARİ",Width=92});
+        grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AY",DataPropertyName="AY",HeaderText="Dönem",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});
+        grid.Columns.Add(new DataGridViewTextBoxColumn{Name="BASTAR",DataPropertyName="BASTAR",HeaderText="Başlangıç",Width=105,DefaultCellStyle=new DataGridViewCellStyle{Format="dd.MM.yyyy"}});
+        grid.Columns.Add(new DataGridViewTextBoxColumn{Name="BITTAR",DataPropertyName="BITTAR",HeaderText="Bitiş",Width=105,DefaultCellStyle=new DataGridViewCellStyle{Format="dd.MM.yyyy"}});
         grid.Columns.Add(new DataGridViewTextBoxColumn{Name="DURUM",DataPropertyName="DURUM",HeaderText="Durum",Width=92});
         grid.SelectionChanged+=(_,_)=>LoadSelected();
         left.Controls.Add(grid,0,3);
@@ -96,40 +93,36 @@ public sealed class LegacyPeriodForm : Form
         body.Controls.Add(new Panel{Dock=DockStyle.Fill,BackColor=p.Canvas},1,0);
 
         var rightCard=PdksUiKit.Card();
-        var details=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=8,Padding=new Padding(22),BackColor=p.Surface};
+        var details=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=6,Padding=new Padding(22),BackColor=p.Surface};
         details.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));
         details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         details.RowStyles.Add(new RowStyle(SizeType.Absolute,46));
-        for(var i=1;i<=5;i++)details.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
-        details.RowStyles.Add(new RowStyle(SizeType.Absolute,90));
+        for(var i=1;i<=3;i++)details.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
+        details.RowStyles.Add(new RowStyle(SizeType.Absolute,120));
         details.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        details.Controls.Add(PdksUiKit.SectionTitle("Seçili Ay"),0,0);
+        details.Controls.Add(PdksUiKit.SectionTitle("Seçili Dönem"),0,0);
         details.SetColumnSpan(details.GetControlFromPosition(0,0)!,2);
         DetailRow(details,1,"Dönem",selectedMonth);
         DetailRow(details,2,"Tarih Aralığı",selectedRange);
-        DetailRow(details,3,"MESAİLİ",mesailiState);
-        DetailRow(details,4,"İDARİ",idariState);
-        DetailRow(details,5,"Genel Durum",overallState);
+        DetailRow(details,3,"Durum",overallState);
         var note=new Label
         {
-            Text="Yeni bir yıl seçildiğinde o yıla ait hiç dönem yoksa 12 ay otomatik hazırlanır. Eski veya kısmi yıllarda “Yılı Hazırla” eksik ayları tamamlar; mevcut kayıtlar değiştirilmez.",
+            Text="Standart kullanım: Ay ve yıl kullanıcı tarafından seçilir; çalışma grubu ayrıntıları kullanıcıya ayrı dönemler olarak gösterilmez. MESAİLİ / İDARİ altyapı kayıtları sistem tarafından arka planda tamamlanır.",
             Dock=DockStyle.Fill,ForeColor=p.Muted,Font=new Font("Segoe UI",8.7f),
-            Padding=new Padding(0,12,4,0)
+            Padding=new Padding(0,14,4,0)
         };
-        details.Controls.Add(note,0,6);
+        details.Controls.Add(note,0,4);
         details.SetColumnSpan(note,2);
         rightCard.Controls.Add(details);
         body.Controls.Add(rightCard,2,0);
         root.Controls.Add(body,0,0);
 
         var actions=PdksUiKit.ActionBar(true,p.Canvas);
-        var prepare=PdksUiKit.Button("Yılı Hazırla",118,PdksActionRole.Primary);
-        var refresh=PdksUiKit.Button("Yenile",82,PdksActionRole.Secondary);
+        var refresh=PdksUiKit.Button("Yenile",82,PdksActionRole.Primary);
         var close=PdksUiKit.Button("Kapat",82,PdksActionRole.Secondary);
-        prepare.Click+=(_,_)=>PrepareYear();
         refresh.Click+=(_,_)=>ReloadGrid();
         close.Click+=(_,_)=>Close();
-        actions.Controls.AddRange([close,refresh,prepare]);
+        actions.Controls.AddRange([close,refresh]);
         root.Controls.Add(actions,0,1);
         Controls.Add(root);
 
@@ -189,15 +182,12 @@ public sealed class LegacyPeriodForm : Form
         try
         {
             var y=SelectedYear();
-            var inserted=0;
-            if(!firstLoad&&y>=DateTime.Today.Year&&PdksPeriodService.CountYearRows(db,y)==0)
-                inserted=PdksPeriodService.EnsureYear(db,y);
+            var inserted=y>=DateTime.Today.Year?PdksPeriodService.EnsureYear(db,y):0;
 
             var dt=PdksPeriodService.BuildYearOverview(db,y);
             grid.DataSource=dt;
             var ready=dt.AsEnumerable().Count(r=>string.Equals(Convert.ToString(r["DURUM"]),"Hazır",StringComparison.Ordinal));
-            yearSummary.Text=$"12 ay • {ready}/12 hazır"+(inserted>0?$" • {inserted} sistem kaydı oluşturuldu":"");
-            firstLoad=false;
+            yearSummary.Text=$"12 aylık dönem • {ready}/12 hazır"+(inserted>0?$" • {inserted} altyapı kaydı tamamlandı":"");
 
             if(grid.Rows.Count==0)return;
             var month=preferredMonth??(y==DateTime.Today.Year?DateTime.Today.Month:1);
@@ -210,30 +200,12 @@ public sealed class LegacyPeriodForm : Form
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Periods");}
     }
 
-    void PrepareYear()
-    {
-        try
-        {
-            var y=SelectedYear();
-            var month=CurrentMonth();
-            var inserted=PdksPeriodService.EnsureYear(db,y);
-            ReloadGrid(month);
-            yearSummary.Text+=(inserted==0?" • eksik dönem yok":$" • {inserted} eksik kayıt tamamlandı");
-        }
-        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Periods.PrepareYear");}
-    }
-
-    int CurrentMonth()
-        =>grid.CurrentRow?.DataBoundItem is DataRowView v?Convert.ToInt32(v.Row["AYNO"]):1;
-
     void LoadSelected()
     {
         if(grid.CurrentRow?.DataBoundItem is not DataRowView view)return;
         var r=view.Row;
         selectedMonth.Text=$"{S(r,"AY")} {SelectedYear()}";
         selectedRange.Text=$"{Convert.ToDateTime(r["BASTAR"]):dd.MM.yyyy} – {Convert.ToDateTime(r["BITTAR"]):dd.MM.yyyy}";
-        mesailiState.Text=S(r,"MESAILI");
-        idariState.Text=S(r,"IDARI");
         overallState.Text=S(r,"DURUM");
     }
 
