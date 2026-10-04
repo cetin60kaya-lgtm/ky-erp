@@ -155,3 +155,12 @@ test("personnel card supports clear exit/reactivation plus admin recode and guar
   assert.match(monthly, /BIRLESTIR \$\{modalDraft\.code\}/);
   assert.match(monthly, /SİL \$\{modalDraft\.code/);
 });
+
+
+test("monthly payroll and movement list use only the selected period movements", () => {
+  assert.match(monthly, /const periodMovements = useMemo/);
+  assert.match(monthly, /String\(item\.date \|\| ""\)\.startsWith\(period\)/);
+  assert.match(monthly, /return periodMovements\.filter/);
+  assert.match(monthly, /const own = periodMovements\.filter/);
+  assert.match(monthly, /\[periodMovements, payrollLines, rawEmployees\]/);
+});

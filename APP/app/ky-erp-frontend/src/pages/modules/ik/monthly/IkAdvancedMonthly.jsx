@@ -630,9 +630,14 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     .map((item) => ({ ...item, type: normalizeFinanceType(item.adjustmentType || item.type) }))
     .filter((item) => item.type), [rawAdjustments]);
 
+  const periodMovements = useMemo(
+    () => movements.filter((item) => String(item.date || "").startsWith(period)),
+    [movements, period],
+  );
+
   const filteredMovements = useMemo(() => {
     const needle = upper(search).trim();
-    return movements.filter((item) => {
+    return periodMovements.filter((item) => {
       if (movementTypeFilter !== "ALL" && item.type !== movementTypeFilter) return false;
       const effect = upper(item.payrollEffect || "Bordroya yansir");
       if (movementEffectFilter === "PAYROLL" && effect.includes("SADECE")) return false;
@@ -641,7 +646,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       const employee = employees.find((row) => row.id === item.employeeId);
       return upper(`${employee?.fullName || item.fullName || ""} ${employee?.code || ""} ${item.note || item.description || ""}`).includes(needle);
     });
-  }, [employees, movementEffectFilter, movementTypeFilter, movements, search]);
+  }, [employees, movementEffectFilter, movementTypeFilter, periodMovements, search]);
 
   const employeeLeave = useCallback((employee) => {
     const own = masterLeaves.filter((item) => item.employeeId === employee.id);
@@ -653,7 +658,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const docsFor = useCallback((employee) => masterDocuments.filter((item) => item.employeeId === employee.id), [masterDocuments]);
 
   const planFor = useCallback((employee) => {
-  const own = movements.filter((item) => item.employeeId === employee.id);
+  const own = periodMovements.filter((item) => item.employeeId === employee.id);
   const effective = own.filter((item) => !upper(item.payrollEffect).includes("SADECE"));
   const overtimeRows = effective.filter((item) => item.type === "Mesai");
   const advanceRows = effective.filter((item) => item.type === "Avans" || item.type === "Toplu avans");
@@ -695,7 +700,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     bank, cash, saved,
     ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank, cash }),
   };
-}, [movements, payrollLines, rawEmployees]);
+}, [periodMovements, payrollLines, rawEmployees]);
 
   const payrollRows = useMemo(() => periodPrepared ? employees.map((employee) => {
   const system = planFor(employee);
