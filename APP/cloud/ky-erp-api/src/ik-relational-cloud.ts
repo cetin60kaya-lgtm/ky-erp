@@ -458,15 +458,35 @@ function monthlyValues(body: Row, current: Row = {}) {
 async function nextMonthlyPersonnelCode(c: Context<AppEnv>, companyId: string) {
   const row = await first(
     c,
-    `SELECT MAX(CASE
+    `SELECT MAX(code_no) AS max_code FROM (
+       SELECT CASE
          WHEN UPPER(TRIM(code)) LIKE 'HKN-%'
           AND CAST(SUBSTR(TRIM(code), 5) AS INTEGER) > 0
          THEN CAST(SUBSTR(TRIM(code), 5) AS INTEGER)
          ELSE 0
-       END) AS max_code
+       END AS code_no
        FROM hr_monthly_employees
-      WHERE main_company_id=?`,
-    [companyId],
+       WHERE main_company_id=?
+       UNION ALL
+       SELECT CASE
+         WHEN UPPER(TRIM(old_value)) LIKE 'HKN-%'
+          AND CAST(SUBSTR(TRIM(old_value), 5) AS INTEGER) > 0
+         THEN CAST(SUBSTR(TRIM(old_value), 5) AS INTEGER)
+         ELSE 0
+       END AS code_no
+       FROM ik_employee_change_history
+       WHERE main_company_id=? AND field_name='personnelCode'
+       UNION ALL
+       SELECT CASE
+         WHEN UPPER(TRIM(new_value)) LIKE 'HKN-%'
+          AND CAST(SUBSTR(TRIM(new_value), 5) AS INTEGER) > 0
+         THEN CAST(SUBSTR(TRIM(new_value), 5) AS INTEGER)
+         ELSE 0
+       END AS code_no
+       FROM ik_employee_change_history
+       WHERE main_company_id=? AND field_name='personnelCode'
+     )`,
+    [companyId, companyId, companyId],
   );
   const next = Math.max(0, Math.trunc(number(row?.max_code))) + 1;
   return `HKN-${String(next).padStart(2, "0")}`;
@@ -1530,9 +1550,6 @@ async function adminMaintainPerson(c: Context<AppEnv>) {
     const nextCode = normalizeHknPersonnelCode(body.personnelCode || body.code);
     if (!nextCode) return error(c, 400, "PERSONNEL_CODE_INVALID", "Personel kodu HKN-01 biçiminde olmalıdır.");
     if (nextCode === currentCode) return okData(c, { employeeId, code: currentCode, changed: false });
-    if (upper(body.confirmText) !== upper(currentCode)) {
-      return error(c, 400, "ADMIN_CONFIRMATION_REQUIRED", `Numara değişikliği için mevcut kodu (${currentCode}) onay alanına yazın.`);
-    }
     const duplicate = await first(c, "SELECT id,full_name FROM hr_monthly_employees WHERE main_company_id=? AND UPPER(TRIM(code))=UPPER(TRIM(?)) AND id<>? LIMIT 1", [companyId, nextCode, employeeId]);
     if (duplicate) return error(c, 409, "DUPLICATE_PERSONNEL_CODE", `${nextCode} başka bir personele ait.`);
 
@@ -1545,7 +1562,7 @@ async function adminMaintainPerson(c: Context<AppEnv>) {
       c.env.DB.prepare(`INSERT INTO ik_employee_change_history
         (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-        .bind(crypto.randomUUID(), companyId, employeeId, "ADMIN_PERSONNEL_CODE", "personnelCode", currentCode, nextCode, hrTodayIstanbul(), reason || "Yönetici onayıyla personel kodu değiştirildi.", text(user.id), timestamp),
+        .bind(crypto.randomUUID(), companyId, employeeId, "ADMIN_PERSONNEL_CODE", "personnelCode", currentCode, nextCode, hrTodayIstanbul(), reason || "Yönetici tarafından personel kodu düzeltildi.", text(user.id), timestamp),
     ]);
     await audit(c, {
       mainCompanyId: companyId,
@@ -1566,11 +1583,7 @@ async function adminMaintainPerson(c: Context<AppEnv>) {
     const target = await first(c, "SELECT * FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [targetEmployeeId, companyId]);
     if (!target) return error(c, 404, "MERGE_TARGET_NOT_FOUND", "Doğru personel kaydı bulunamadı.");
     const targetCode = normalizeHknPersonnelCode(target.code) || text(target.code);
-    const expectedMergeConfirm = `BIRLESTIR ${currentCode} > ${targetCode}`;
-    if (upper(body.confirmText).replaceAll("İ", "I") !== upper(expectedMergeConfirm)) {
-      return error(c, 400, "ADMIN_CONFIRMATION_REQUIRED", `Birleştirme için "${expectedMergeConfirm}" yazılmalıdır.`);
-    }
-    if (reason.length < 5) return error(c, 400, "MERGE_REASON_REQUIRED", "Personel birleştirme nedeni yazılmalıdır.");
+    const mergeReason = reason || "Yönetici tarafından mükerrer personel kaydı doğru personelle birleştirildi.";
 
     const tables = await all(c, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
     const skipTables = new Set(["hr_monthly_employees", "ik_person_card_settings", "ik_person_hr_profiles"]);
@@ -1603,6 +1616,10 @@ async function adminMaintainPerson(c: Context<AppEnv>) {
           .bind(employeeId, companyId),
         c.env.DB.prepare("DELETE FROM ik_person_hr_profiles WHERE employee_id=? AND main_company_id=?")
           .bind(employeeId, companyId),
+        c.env.DB.prepare(`INSERT INTO ik_employee_change_history
+          (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+          .bind(crypto.randomUUID(), companyId, targetEmployeeId, "ADMIN_PERSONNEL_MERGE_CODE_RETIRED", "personnelCode", currentCode, targetCode, hrTodayIstanbul(), mergeReason, text(user.id), nowIso()),
         c.env.DB.prepare("DELETE FROM hr_monthly_employees WHERE id=? AND main_company_id=?")
           .bind(employeeId, companyId),
       );
@@ -1630,7 +1647,7 @@ async function adminMaintainPerson(c: Context<AppEnv>) {
         targetEmployeeId,
         targetCode,
         targetName: text(target.full_name),
-        reason,
+        reason: mergeReason,
         moved,
         actorUserId: text(user.id),
         actorRole: text(user.role),
@@ -1650,11 +1667,7 @@ async function adminMaintainPerson(c: Context<AppEnv>) {
   if (action !== "HARD_DELETE") {
     return error(c, 400, "ADMIN_ACTION_INVALID", "Yönetici işlemi RECODE, MERGE veya HARD_DELETE olmalıdır.");
   }
-  const expectedConfirm = `SİL ${currentCode}`;
-  if (upper(body.confirmText) !== upper(expectedConfirm)) {
-    return error(c, 400, "ADMIN_CONFIRMATION_REQUIRED", `Kalıcı silme için "${expectedConfirm}" yazılmalıdır.`);
-  }
-  if (reason.length < 5) return error(c, 400, "DELETE_REASON_REQUIRED", "Kalıcı silme için neden yazılmalıdır.");
+  const deleteReason = reason || "Yönetici tarafından yanlış/mükerrer boş personel kaydı silindi.";
 
   const tables = await all(c, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
   const cleanupTables = new Set(["ik_person_card_settings", "ik_person_hr_profiles", "ik_person_monthly_compliance"]);
@@ -1676,7 +1689,7 @@ async function adminMaintainPerson(c: Context<AppEnv>) {
   }
   if (blockers.length) {
     return error(c, 409, "PERSONNEL_HAS_OPERATIONAL_HISTORY",
-      "Bu personelin maaş/izin/mesai/evrak veya diğer operasyon geçmişi var. Kayıt silinemez; işten çıkış tarihi ile pasife alınmalıdır.");
+      "Bu kayıtta geçmiş işlem var; doğrudan silinemez. Doğru Personel seçip Birleştir işlemini kullanın.");
   }
 
   const timestamp = nowIso();
@@ -1691,6 +1704,11 @@ async function adminMaintainPerson(c: Context<AppEnv>) {
     await c.env.DB.prepare("DELETE FROM json_store WHERE scope='IK_PERSON_CARD_CALC' AND file_name LIKE ?").bind(`%${employeeId}%`).run();
   } catch {}
 
+  await c.env.DB.prepare(`INSERT INTO ik_employee_change_history
+    (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+    .bind(crypto.randomUUID(), companyId, employeeId, "ADMIN_PERSONNEL_CODE_RETIRED", "personnelCode", currentCode, "RETIRED", hrTodayIstanbul(), deleteReason, text(user.id), timestamp).run();
+
   const deleted = await c.env.DB.prepare("DELETE FROM hr_monthly_employees WHERE id=? AND main_company_id=?").bind(employeeId, companyId).run();
   if (!number(deleted.meta?.changes)) return error(c, 500, "HARD_DELETE_FAILED", "Personel ana kaydı silinemedi.");
 
@@ -1700,7 +1718,7 @@ async function adminMaintainPerson(c: Context<AppEnv>) {
     entityType: "PERSONEL",
     action: "ADMIN_HARD_DELETE",
     summary: `${text(current.full_name)} (${currentCode}) yanlış/mükerrer personel kaydı yönetici onayıyla kalıcı silindi.`,
-    details: { deletedEmployeeId: employeeId, code: currentCode, fullName: text(current.full_name), reason, actorUserId: text(user.id), actorRole: text(user.role) },
+    details: { deletedEmployeeId: employeeId, code: currentCode, fullName: text(current.full_name), reason: deleteReason, actorUserId: text(user.id), actorRole: text(user.role) },
   });
   return okData(c, { employeeId, code: currentCode, fullName: text(current.full_name), deleted: true });
 }

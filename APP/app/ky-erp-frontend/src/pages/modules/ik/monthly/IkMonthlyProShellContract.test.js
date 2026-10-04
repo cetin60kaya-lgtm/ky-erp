@@ -71,7 +71,7 @@ test("personnel cards use the complete HKN master roster while payroll stays per
   assert.match(monthly, /İK Ana Personel Kadrosu/);
   assert.match(monthly, /nextHknCode\(masterEmployees\)/);
   assert.match(monthly, /Personel Kodu/);
-  assert.match(monthly, /HKN Numarasını Değiştir/);
+  assert.match(monthly, /HKN Değiştir/);
 });
 
 test("payroll person actions link to the same source movements", () => {
@@ -145,15 +145,16 @@ test("all IK dialogs use the shared overflow-safe modal standard", () => {
   assert.match(css, /\.modal-bg \.tw,[\s\S]*overflow:auto;/);
 });
 
-test("personnel card supports clear exit/reactivation plus admin recode and guarded hard delete", () => {
+test("personnel card supports clear exit/reactivation plus simplified admin maintenance", () => {
   assert.match(monthly, /İşten Çıkış Bugün/);
   assert.match(monthly, /Aktife Geri Al/);
   assert.match(monthly, /adminMaintainIkAdvancedPerson/);
-  assert.match(monthly, /HKN Numarasını Değiştir/);
-  assert.match(monthly, /Yanlış \/ Mükerrer Kaydı Kalıcı Sil/);
-  assert.match(monthly, /Mükerrer Kaydı Doğru Personelle Birleştir/);
-  assert.match(monthly, /BIRLESTIR \$\{modalDraft\.code\}/);
-  assert.match(monthly, /SİL \$\{modalDraft\.code/);
+  assert.match(monthly, /canAdminMaintainPersonnel/);
+  assert.match(monthly, /HKN Değiştir/);
+  assert.match(monthly, />Birleştir<\/button>/);
+  assert.match(monthly, />Sil<\/button>/);
+  assert.match(monthly, /adminActionMessage/);
+  assert.doesNotMatch(monthly, /adminCodeConfirm|adminDeleteConfirm|adminMergeConfirm/);
 });
 
 
