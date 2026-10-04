@@ -434,14 +434,15 @@ public sealed partial class MainShellForm
             ForeColor = p.Muted,
             Font = new Font("Segoe UI", 8.8f, FontStyle.Bold)
         };
+        var testMode = string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_SKIP_LOGIN"),"1",StringComparison.OrdinalIgnoreCase);
         var live = new Label
         {
             AutoSize = false,
-            Width = 108,
+            Width = testMode ? 118 : 108,
             Height = 34,
-            Text = "● SİSTEM AKTİF",
+            Text = testMode ? "● TEST MODU" : "● SİSTEM AKTİF",
             TextAlign = ContentAlignment.MiddleCenter,
-            ForeColor = p.Success,
+            ForeColor = testMode ? p.Warning : p.Success,
             Font = new Font("Segoe UI", 8.2f, FontStyle.Bold)
         };
         right.Controls.Add(user);

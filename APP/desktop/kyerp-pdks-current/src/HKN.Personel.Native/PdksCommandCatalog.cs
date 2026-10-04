@@ -78,7 +78,7 @@ public static class PdksCommandCatalog
         new(PdksCommandId.EntryExit,"Giriş / Çıkış","Kart hareketlerini görüntüle, düzelt ve manuel tamamla",PdksModule.GirisCikis,PdksToolbarIcon.EntryExit,"OPERASYON",100,PdksCommandPlacement.Management,Keys.F4),
         new(PdksCommandId.Leave,"İzin İşlemleri","Personel izin kayıtları ve kişi bazlı izin hareketleri",PdksModule.Izinler,PdksToolbarIcon.Periods,"OPERASYON",110,PdksCommandPlacement.Management),
         new(PdksCommandId.EarningsDeductions,"Kazanç / Kesinti / Avans","Ek kazanç, kesinti ve avans girişleri",PdksModule.EkKazancKesinti,PdksToolbarIcon.Advances,"PERSONEL",120,PdksCommandPlacement.Management),
-        new(PdksCommandId.QuickOperations,"Toplu İşlemler","Yetkili hızlı personel ve veri işlemleri",PdksModule.Personel,PdksToolbarIcon.Results,"PERSONEL",130,PdksCommandPlacement.Management,ResponsibleOnly:true),
+        new(PdksCommandId.QuickOperations,"Hızlı İşlemler","Personel, kart, izin, puantaj, bordro, ödeme ve rapor kısayolları",PdksModule.Personel,PdksToolbarIcon.Results,"PERSONEL",130,PdksCommandPlacement.Management,ResponsibleOnly:true),
 
         new(PdksCommandId.TimesheetDaily,"Günlük Puantaj","Seçilen gün/aralık için puantaj kontrolü",PdksModule.Puantaj,PdksToolbarIcon.Timesheet,"PUANTAJ",210,PdksCommandPlacement.Management),
         new(PdksCommandId.TimesheetResults,"Puantaj Sonuçları","Hesaplanan puantaj kayıtlarını görüntüle",PdksModule.Puantaj,PdksToolbarIcon.Results,"PUANTAJ",220,PdksCommandPlacement.Management),

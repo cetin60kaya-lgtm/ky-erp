@@ -56,8 +56,8 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
         AddMoney("EKKES","Kesinti",78,false);
         AddMoney("EX1","Avans",76,false);
         AddMoney("EX4","İcra",72,false);
-        AddMoney("NCKALAN","Maaş Kalan",94,false);
-        AddMoney("FMKALAN","Mesai Kalan",94,false);
+        AddMoney("NCKALAN","Maaş Kalan",94,true,PdksAppearance.Current.SurfaceAlt);
+        AddMoney("FMKALAN","Mesai Kalan",94,true,PdksAppearance.Current.SurfaceAlt);
         AddMoney("HAKEDIS_NET","Hak Edilen Net",105,true,PdksAppearance.Current.PrimarySoft);
         AddMoney("PEK_BRUT","Hesaplanan PEK",108,true,PdksAppearance.Current.SurfaceAlt);
         AddMoney("RESMI_NET","Resmî Bordro Neti",112,true,PdksAppearance.Current.SurfaceAlt);
@@ -288,7 +288,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
     void SetAll(bool value){foreach(DataRow r in data.Rows)r["SEC"]=value;RefreshSummary();}
     void RecalculateAll()
     {
-        foreach(DataRow row in data.Rows) RecalcRow(row,"Temiz");
+        foreach(DataRow row in data.Rows) RecalcRow(row,"Değişti");
         grid.Refresh();
         RefreshSummary();
     }
@@ -297,18 +297,25 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
     {
         try
         {
-            ValidateRows(data.Rows.Cast<DataRow>());
+            var changed=data.AsEnumerable().Where(r=>!string.Equals(Convert.ToString(r["DURUM"]),"Temiz",StringComparison.OrdinalIgnoreCase)).ToList();
+            if(changed.Count==0)
+            {
+                if(!string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT"),"1",StringComparison.Ordinal))
+                    MessageBox.Show("Kaydedilecek değişiklik yok.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);
+                return;
+            }
+            ValidateRows(changed);
             db.InTransaction((c,t)=>
             {
-                foreach(DataRow r in data.Rows)
+                foreach(DataRow r in changed)
                 {
-                    using var cmd=FirebirdDatabase.CreateCommand(c,t,"update UCRETLER set DMAAS=@M,GUN1=@G1,SAAT1=@S1,SAAT2=@S2,SAAT3=@S3,GUN4=@G4,DEVG=@DG,EKS=@ES,EKKAZ=@EK,EKKES=@KS,EX1=@AV,EX2=@BN,EX4=@IC,NCKALAN=@NC,FMKALAN=@FM where PKNO=@P and BASTAR=@A and BITTAR=@B",
-                        new FbParameter("@M",Val(r,"DMAAS")),new FbParameter("@G1",Obj(r,"GUN1")),new FbParameter("@S1",Obj(r,"SAAT1")),new FbParameter("@S2",Obj(r,"SAAT2")),new FbParameter("@S3",Obj(r,"SAAT3")),new FbParameter("@G4",Obj(r,"GUN4")),new FbParameter("@DG",Obj(r,"DEVG")),new FbParameter("@ES",Obj(r,"EKS")),new FbParameter("@EK",Val(r,"EKKAZ")),new FbParameter("@KS",Val(r,"EKKES")),new FbParameter("@AV",Val(r,"EX1")),new FbParameter("@BN",Val(r,"EX2")),new FbParameter("@IC",Val(r,"EX4")),new FbParameter("@NC",Val(r,"NCKALAN")),new FbParameter("@FM",Val(r,"FMKALAN")),new FbParameter("@P",Convert.ToString(r["PKNO"])??""),new FbParameter("@A",Convert.ToDateTime(r["BASTAR"])),new FbParameter("@B",Convert.ToDateTime(r["BITTAR"])));
+                    using var cmd=FirebirdDatabase.CreateCommand(c,t,"update UCRETLER set DMAAS=@M,GUN1=@G1,SAAT1=@S1,SAAT2=@S2,SAAT3=@S3,GUN4=@G4,DEVG=@DG,EKS=@ES,EKKAZ=@EK,EKKES=@KS,EX1=@AV,EX2=@BN,EX4=@IC where PKNO=@P and BASTAR=@A and BITTAR=@B",
+                        new FbParameter("@M",Val(r,"DMAAS")),new FbParameter("@G1",Obj(r,"GUN1")),new FbParameter("@S1",Obj(r,"SAAT1")),new FbParameter("@S2",Obj(r,"SAAT2")),new FbParameter("@S3",Obj(r,"SAAT3")),new FbParameter("@G4",Obj(r,"GUN4")),new FbParameter("@DG",Obj(r,"DEVG")),new FbParameter("@ES",Obj(r,"EKS")),new FbParameter("@EK",Val(r,"EKKAZ")),new FbParameter("@KS",Val(r,"EKKES")),new FbParameter("@AV",Val(r,"EX1")),new FbParameter("@BN",Val(r,"EX2")),new FbParameter("@IC",Val(r,"EX4")),new FbParameter("@P",Convert.ToString(r["PKNO"])??""),new FbParameter("@A",Convert.ToDateTime(r["BASTAR"])),new FbParameter("@B",Convert.ToDateTime(r["BITTAR"])));
                     if(cmd.ExecuteNonQuery()!=1)throw new InvalidOperationException($"{r["PKNO"]} bordro satırı güncellenemedi.");
                 }
                 return 0;
             });
-            MessageBox.Show($"{data.Rows.Count} personelin aylık bordro kaynağı güncellendi.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);Reload();
+            if(!string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT"),"1",StringComparison.Ordinal))MessageBox.Show($"{changed.Count} personelin aylık bordro kaynağı güncellendi.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);Reload();
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Error,"Payroll.Adjustment");}
     }
@@ -334,7 +341,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
                 }
                 return 0;
             });
-            MessageBox.Show($"{rows.Count} personelin ödemesi işlendi.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);
+            if(!string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT"),"1",StringComparison.Ordinal))MessageBox.Show($"{rows.Count} personelin ödemesi işlendi.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Error,"Payroll.Adjustment");}
     }

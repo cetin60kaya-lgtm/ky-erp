@@ -200,7 +200,8 @@ public sealed class LegacyPuantajForm : Form
         {
             if(f.End.Value.Date<f.Start.Value.Date)throw new InvalidOperationException("Bitiş tarihi başlangıç tarihinden önce olamaz.");
             var q=EmployeeFilter(f);var emp=db.Query($"select k.PKNO,k.BOLUM,k.GRUP from KIMLIK k where {q.Sql}",q.Params.ToArray());if(emp.Rows.Count==0){MessageBox.Show("Seçime uygun personel bulunamadı.",Text);return;}
-            if(MessageBox.Show($"{f.Start.Value:dd.MM.yyyy} - {f.End.Value:dd.MM.yyyy} aralığındaki giriş-çıkış, izin, tatil ve grup planlarından puantaj oluşturulsun/güncellensin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+            var auditMode=string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT"),"1",StringComparison.Ordinal);
+            if(!auditMode && MessageBox.Show($"{f.Start.Value:dd.MM.yyyy} - {f.End.Value:dd.MM.yyyy} aralığındaki giriş-çıkış, izin, tatil ve grup planlarından puantaj oluşturulsun/güncellensin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
             var employees=emp.AsEnumerable().Select(r=>new Employee(Convert.ToString(r["PKNO"])??"",ReadInt(r,"BOLUM"),ReadInt(r,"GRUP"))).ToArray();var allowed=employees.Select(x=>x.Code).ToHashSet();
             var a=f.Start.Value.Date;var b=f.End.Value.Date.AddDays(1);
             var gc=db.Query("select PKNO,GTARIH,GSAAT,CTARIH,CSAAT from GIRCIK where GTARIH>=@A and GTARIH<@B order by PKNO,GTARIH",new FbParameter("@A",a),new FbParameter("@B",b));
@@ -213,7 +214,7 @@ public sealed class LegacyPuantajForm : Form
             var schedules=group.AsEnumerable().ToDictionary(r=>Convert.ToInt32(r["KOD"]),BuildShifts);
             var dayCount=(f.End.Value.Date-a).Days+1;pb.Minimum=0;pb.Maximum=Math.Max(1,employees.Length*dayCount);pb.Value=0;
             var changed=db.InTransaction((con,tr)=>{var n=0;foreach(var employee in employees)for(var day=a;day<b;day=day.AddDays(1)){movements.TryGetValue((employee.Code,day),out var movement);leaves.TryGetValue((employee.Code,day),out var leaveTime);var shift=ChooseShift(schedules.GetValueOrDefault(employee.Group??-1),movement.Entry);var result=DailyAttendanceCalculator.Calculate(new(day,shift.Start,shift.End,shift.Work,movement.Entry,movement.Exit,leaveTime.Paid,leaveTime.Unpaid,holidays.Contains((employee.Code,day))));Upsert(con,tr,employee,day,result);n++;if(pb.Value<pb.Maximum)pb.Value++;}return n;});
-            pb.Value=pb.Maximum;if(bar is null){progress2.Minimum=0;progress2.Maximum=1;progress2.Value=1;}MessageBox.Show($"Puantaj işlemi tamamlandı. {changed} personel-gün kaydı işlendi.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);
+            pb.Value=pb.Maximum;if(bar is null){progress2.Minimum=0;progress2.Maximum=1;progress2.Value=1;}if(!auditMode)MessageBox.Show($"Puantaj işlemi tamamlandı. {changed} personel-gün kaydı işlendi.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Timesheet");}
     }

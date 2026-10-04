@@ -13,6 +13,7 @@ internal sealed class ModernHomeDashboard : UserControl
     Label arrivedValue = MetricValue();
     Label leaveValue = MetricValue();
     Label pendingValue = MetricValue();
+    Label attentionState = StatusLabel();
     Label terminalState = StatusLabel();
     Label dbState = StatusLabel();
     Label syncState = StatusLabel();
@@ -20,9 +21,9 @@ internal sealed class ModernHomeDashboard : UserControl
 
     static readonly PdksCommandId[] QuickOrder =
     [
+        PdksCommandId.QuickOperations,
         PdksCommandId.LiveAttendance,
         PdksCommandId.EntryExit,
-        PdksCommandId.Personnel,
         PdksCommandId.TimesheetMonthly,
         PdksCommandId.PayrollGeneral,
         PdksCommandId.Reports
@@ -62,7 +63,7 @@ internal sealed class ModernHomeDashboard : UserControl
         {
             Controls.Clear();
             activeValue=MetricValue();arrivedValue=MetricValue();leaveValue=MetricValue();pendingValue=MetricValue();
-            terminalState=StatusLabel();dbState=StatusLabel();syncState=StatusLabel();
+            attentionState=StatusLabel();terminalState=StatusLabel();dbState=StatusLabel();syncState=StatusLabel();
             Build();
             RefreshDashboard();
         }
@@ -231,10 +232,10 @@ internal sealed class ModernHomeDashboard : UserControl
         var card=CardPanel();card.Padding=new Padding(20);card.Margin=Padding.Empty;
         var open=new Button{Text="Terminal Merkezini Aç",Dock=DockStyle.Bottom,Height=36,FlatStyle=FlatStyle.Flat,BackColor=p.Surface,ForeColor=p.Primary,Font=new Font("Segoe UI",9f,FontStyle.Bold),Cursor=Cursors.Hand};
         open.FlatAppearance.BorderColor=p.Border;open.Click+=(_,_)=>execute(PdksCommandId.TerminalCenter);
-        terminalState.ForeColor=p.Muted;dbState.ForeColor=p.Muted;syncState.ForeColor=p.Muted;
-        var body=new Panel{Dock=DockStyle.Fill,Padding=new Padding(0,44,0,0),BackColor=p.Surface};
-        body.Controls.Add(syncState);body.Controls.Add(dbState);body.Controls.Add(terminalState);
-        card.Controls.Add(open);card.Controls.Add(body);card.Controls.Add(new Label{Text="Sistem Durumu",Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text});
+        attentionState.ForeColor=p.Muted;terminalState.ForeColor=p.Muted;dbState.ForeColor=p.Muted;syncState.ForeColor=p.Muted;
+        var body=new Panel{Dock=DockStyle.Fill,Padding=new Padding(0,6,0,2),BackColor=p.Surface};
+        body.Controls.Add(syncState);body.Controls.Add(dbState);body.Controls.Add(terminalState);body.Controls.Add(attentionState);
+        card.Controls.Add(open);card.Controls.Add(body);card.Controls.Add(new Label{Text="Bugün / Sistem",Dock=DockStyle.Top,Height=34,Font=new Font("Segoe UI",11f,FontStyle.Bold),ForeColor=p.Text});
         return card;
     }
 
@@ -252,11 +253,19 @@ internal sealed class ModernHomeDashboard : UserControl
             var active=Convert.ToInt32(db.Scalar("select count(*) from KIMLIK where ICTARIH is null"));
             var arrived=Convert.ToInt32(db.Scalar("select count(distinct PKNO) from GIRCIK where GTARIH>=@A and GTARIH<@B",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
             var leave=Convert.ToInt32(db.Scalar("select count(distinct PKNO) from OZELIZIN where TARIH>=@A and TARIH<@B",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
+            var missingExit=Convert.ToInt32(db.Scalar("select count(distinct PKNO) from GIRCIK where GTARIH>=@A and GTARIH<@B and (CSAAT is null or trim(CSAAT)='')",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
+            var late=Convert.ToInt32(db.Scalar("select count(distinct PKNO) from PUANTAJ where TARIH>=@A and TARIH<@B and coalesce(GECD,0)>0",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
+            var absent=Convert.ToInt32(db.Scalar("select count(distinct PKNO) from PUANTAJ where TARIH>=@A and TARIH<@B and coalesce(DEVAMSIZLIKD,0)>0",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
+            var overtime=Convert.ToInt32(db.Scalar("select count(distinct PKNO) from PUANTAJ where TARIH>=@A and TARIH<@B and (coalesce(DAKIKA2,0)+coalesce(DAKIKA3,0))>0",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
             activeValue.Text=active.ToString("N0");arrivedValue.Text=arrived.ToString("N0");leaveValue.Text=leave.ToString("N0");pendingValue.Text=Math.Max(0,active-arrived-leave).ToString("N0");
+            attentionState.Text=$"●  Dikkat: {missingExit} eksik çıkış • {late} geç • {absent} devamsız • {overtime} mesai";
+            attentionState.ForeColor=(missingExit+late+absent)>0?PdksAppearance.Current.Warning:PdksAppearance.Current.Success;
         }
         catch
         {
             activeValue.Text=arrivedValue.Text=leaveValue.Text=pendingValue.Text="—";
+            attentionState.Text="●  Dikkat verisi alınamadı";
+            attentionState.ForeColor=PdksAppearance.Current.Warning;
         }
 
         var p=PdksAppearance.Current;

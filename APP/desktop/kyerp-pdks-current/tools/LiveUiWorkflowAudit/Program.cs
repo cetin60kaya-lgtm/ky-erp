@@ -146,6 +146,8 @@ try
     log.Add("PASS|Personel > Ödeme > üretim repository kaydet/güncelle > DB");
     db.Execute("delete from ODEME where PKNO=@P",new FbParameter("@P",testPk));
 
+    RunAccountingEndToEnd(db,c,form,testPk,log);
+
     var tabs=FindControls<TabControl>(form).OrderByDescending(x=>x.TabPages.Count).FirstOrDefault();
     if(tabs is null) throw new Exception("Personel sekmeleri bulunamadı.");
     foreach(TabPage page in tabs.TabPages)
@@ -223,6 +225,214 @@ finally
 RunDefinitionUiWorkflow(db,log);
 foreach(var x in log) Console.WriteLine(x);
 Console.WriteLine("LIVE_UI_WORKFLOW_PASS");
+
+static void RunAccountingEndToEnd(FirebirdDatabase db,FbConnection c,PersonelForm personForm,string testPk,List<string> log)
+{
+    var day=DateTime.Today;
+    Exec(c,"delete from GIRCIK where PKNO=@P",new FbParameter("@P",testPk));
+    Exec(c,"delete from PUANTAJ where PKNO=@P",new FbParameter("@P",testPk));
+    try{Exec(c,"delete from ODEME where PKNO=@P",new FbParameter("@P",testPk));}catch{}
+    try{Exec(c,"delete from UCRETLER where PKNO=@P",new FbParameter("@P",testPk));}catch{}
+
+    var loadPeople=typeof(PersonelForm).GetMethod("LoadGirisPeople",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)
+        ?? throw new Exception("Muhasebe akışı: LoadGirisPeople bulunamadı.");
+    var insertAttendance=typeof(PersonelForm).GetMethod("InsertGirisCikis",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic,null,new[]{typeof(DataTable),typeof(DateTime),typeof(DateTime),typeof(int),typeof(int)},null)
+        ?? throw new Exception("Muhasebe akışı: InsertGirisCikis bulunamadı.");
+    var all=(DataTable)(loadPeople.Invoke(personForm,null)??throw new Exception("Muhasebe akışı personel listesi alınamadı."));
+    var one=all.Clone();var found=all.Select("PKNO='"+testPk.Replace("'","''")+"'");
+    if(found.Length!=1)throw new Exception("Muhasebe akışı test personeli seçilemedi.");
+    one.ImportRow(found[0]);
+    var added=Convert.ToInt32(insertAttendance.Invoke(personForm,new object[]{one,day.Date.AddHours(8).AddMinutes(28),day.Date.AddHours(19).AddMinutes(2),0,0}));
+    if(added!=1||Convert.ToInt32(db.Scalar("select count(*) from GIRCIK where PKNO=@P and GTARIH>=@A and GTARIH<@B",new FbParameter("@P",testPk),new FbParameter("@A",day.Date),new FbParameter("@B",day.Date.AddDays(1))))!=1)
+        throw new Exception("Muhasebe akışı kart hareketi DB doğrulaması başarısız.");
+    log.Add("PASS|MUHASEBE AKIŞI > Kart hareketi ekleme > DB");
+
+    using(var puantaj=new LegacyPuantajForm(0))
+    {
+        puantaj.Show();Pump(650);
+        var page=FindControls<TabControl>(puantaj).First().TabPages[0];
+        var edits=FindControls<TextBox>(page).ToArray();var dates=FindControls<DateTimePicker>(page).ToArray();
+        if(edits.Length<2||dates.Length<2)throw new Exception("Muhasebe akışı puantaj filtreleri bulunamadı.");
+        edits[0].Text=testPk;edits[1].Text=testPk;dates[0].Value=day.Date;dates[1].Value=day.Date;Pump(250);
+        var calc=FindButton(page,"Puantajı Hesapla")??throw new Exception("Puantajı Hesapla bulunamadı.");
+        calc.PerformClick();Pump(700);
+        var count=Convert.ToInt32(db.Scalar("select count(*) from PUANTAJ where PKNO=@P and TARIH>=@A and TARIH<@B",new FbParameter("@P",testPk),new FbParameter("@A",day.Date),new FbParameter("@B",day.Date.AddDays(1))));
+        if(count!=1)throw new Exception("Muhasebe akışı puantaj DB doğrulaması başarısız.");
+        puantaj.Close();
+    }
+    log.Add("PASS|MUHASEBE AKIŞI > Günlük puantaj hesapla > DB");
+
+    var periodStart=new DateTime(day.Year,day.Month,1);var periodEnd=periodStart.AddMonths(1).AddDays(-1);
+    PreparePayrollFixture(db,testPk,periodStart,periodEnd);
+    log.Add("PASS|MUHASEBE AKIŞI > Test personeli için bordro kaynağı oluşturuldu");
+    RunPayrollWorkflow(db,testPk,periodStart,periodEnd,log);
+    VerifyAccountingReports(testPk,periodStart,periodEnd,log);
+}
+
+#pragma warning disable CS8321
+static void PayrollUiTestBody(FirebirdDatabase db,MonthlyPayrollAdjustmentForm form,System.Reflection.FieldInfo dataField,System.Reflection.MethodInfo recalc,DataTable data,DateTime periodStart,DateTime periodEnd,List<string> log)
+{
+    decimal M(DataRow r,string n){try{return r[n]==DBNull.Value?0m:Convert.ToDecimal(r[n]);}catch{return 0m;}}
+    var row=data.AsEnumerable().FirstOrDefault(r=>M(r,"HAKEDIS_NET")>0m&&!string.Equals(Convert.ToString(r["DURUM"]),"PEK UYUMSUZ",StringComparison.OrdinalIgnoreCase))
+        ?? throw new Exception("Ödeme testi için uygun aktif bordro satırı bulunamadı.");
+    var pk=Convert.ToString(row["PKNO"])?.Trim()??throw new Exception("Bordro kart no boş.");
+    var a=Convert.ToDateTime(row["BASTAR"]);var b=Convert.ToDateTime(row["BITTAR"]);
+    var original=db.Query("select first 1 DMAAS,GUN1,SAAT1,SAAT2,SAAT3,GUN4,DEVG,EKS,EKKAZ,EKKES,EX1,EX2,EX4,NCKALAN,FMKALAN from UCRETLER where PKNO=@P and BASTAR=@A and BITTAR=@B",
+        new FbParameter("@P",pk),new FbParameter("@A",a),new FbParameter("@B",b));
+    if(original.Rows.Count!=1)throw new Exception("Bordro kaynak satırı yedeklenemedi.");
+    var payments=db.Query("select PKNO,BASTAR,BITTAR,NODENEN,NOTARIH,FMODENEN,FMOTARIH from ODEME where PKNO=@P and BASTAR=@A and BITTAR=@B",
+        new FbParameter("@P",pk),new FbParameter("@A",a),new FbParameter("@B",b));
+    try
+    {
+        ExecutePayrollUiTest(db,form,dataField,recalc,row,pk,a,b,periodStart,periodEnd,log);
+    }
+    finally
+    {
+        RestorePayrollTestData(db,pk,a,b,original.Rows[0],payments,log);
+    }
+}
+
+static void ExecutePayrollUiTest(FirebirdDatabase db,MonthlyPayrollAdjustmentForm form,System.Reflection.FieldInfo dataField,System.Reflection.MethodInfo recalc,DataRow row,string pk,DateTime a,DateTime b,DateTime periodStart,DateTime periodEnd,List<string> log)
+{
+    decimal M(DataRow r,string n){try{return r[n]==DBNull.Value?0m:Convert.ToDecimal(r[n]);}catch{return 0m;}}
+    var expectedEarn=M(row,"EKKAZ")+1.25m;
+    row["EKKAZ"]=expectedEarn;row["EKKES"]=M(row,"EKKES")+0.50m;row["EX1"]=M(row,"EX1")+2.50m;
+    recalc.Invoke(form,new object[]{row,"Değişti"});
+    FindControls<DataGridView>(form).First().Refresh();Pump(180);
+    (FindButton(form,"Ayı Kaydet")??throw new Exception("Ayı Kaydet bulunamadı.")).PerformClick();Pump(700);
+    var savedEarn=Convert.ToDecimal(db.Scalar("select EKKAZ from UCRETLER where PKNO=@P and BASTAR=@A and BITTAR=@B",new FbParameter("@P",pk),new FbParameter("@A",a),new FbParameter("@B",b))??0m);
+    if(savedEarn!=expectedEarn)throw new Exception($"Bordro UI kayıt doğrulaması başarısız: {savedEarn} != {expectedEarn}");
+    log.Add($"PASS|MUHASEBE AKIŞI > {pk} bordro düzeltme > Ayı Kaydet > DB");
+
+    var data=(DataTable)(dataField.GetValue(form)??throw new Exception("Bordro yenileme sonrası veri alınamadı."));
+    row=data.AsEnumerable().FirstOrDefault(r=>string.Equals(Convert.ToString(r["PKNO"])?.Trim(),pk,StringComparison.Ordinal)&&Convert.ToDateTime(r["BASTAR"])==a)
+        ?? throw new Exception("Ödeme için bordro satırı yeniden bulunamadı.");
+    row["SEC"]=true;
+    (FindButton(form,"Seçili Ödemeleri İşle")??throw new Exception("Seçili Ödemeleri İşle bulunamadı.")).PerformClick();Pump(650);
+    var paid=Convert.ToDecimal(db.Scalar("select first 1 NODENEN from ODEME where PKNO=@P and BASTAR=@A and BITTAR=@B",new FbParameter("@P",pk),new FbParameter("@A",a),new FbParameter("@B",b))??0m);
+    if(paid<=0m)throw new Exception("Banka ödeme kaydı oluşmadı.");
+    log.Add($"PASS|MUHASEBE AKIŞI > {pk} banka ödemesi > {paid:N2} > DB");
+    VerifyAccountingReports(pk,periodStart,periodEnd,log);
+}
+
+static void RestorePayrollTestData(FirebirdDatabase db,string pk,DateTime a,DateTime b,DataRow old,DataTable payments,List<string> log)
+{
+    var fields=new[]{"DMAAS","GUN1","SAAT1","SAAT2","SAAT3","GUN4","DEVG","EKS","EKKAZ","EKKES","EX1","EX2","EX4"};
+    var sets=new List<string>();var pars=new List<FbParameter>();var n=0;
+    foreach(var f in fields)
+    {
+        var q="@R"+n++;sets.Add(f+"="+q);pars.Add(new FbParameter(q,old[f] is DBNull?DBNull.Value:old[f]));
+    }
+    pars.Add(new FbParameter("@P",pk));pars.Add(new FbParameter("@A",a));pars.Add(new FbParameter("@B",b));
+    db.Execute("update UCRETLER set "+string.Join(',',sets)+" where PKNO=@P and BASTAR=@A and BITTAR=@B",pars.ToArray());
+    db.Execute("delete from ODEME where PKNO=@P and BASTAR=@A and BITTAR=@B",new FbParameter("@P",pk),new FbParameter("@A",a),new FbParameter("@B",b));
+    foreach(DataRow p in payments.Rows)
+        db.Execute("insert into ODEME(PKNO,BASTAR,BITTAR,NODENEN,NOTARIH,FMODENEN,FMOTARIH) values(@P,@A,@B,@N,@NT,@F,@FT)",
+            new FbParameter("@P",p["PKNO"]),new FbParameter("@A",p["BASTAR"]),new FbParameter("@B",p["BITTAR"]),new FbParameter("@N",p["NODENEN"]),new FbParameter("@NT",p["NOTARIH"]),new FbParameter("@F",p["FMODENEN"]),new FbParameter("@FT",p["FMOTARIH"]));
+    log.Add($"PASS|MUHASEBE AKIŞI > {pk} test değişiklikleri geri alındı");
+}
+
+#pragma warning restore CS8321
+
+static void PreparePayrollFixture(FirebirdDatabase db,string testPk,DateTime start,DateTime end)
+{
+    var source=db.Query("select first 1 * from UCRETLER order by BASTAR desc");
+    if(source.Rows.Count==0)throw new Exception("Muhasebe akışı için örnek UCRETLER kaydı yok.");
+    var row=source.Rows[0];var names=new List<string>();var marks=new List<string>();var pars=new List<FbParameter>();var i=0;
+    foreach(DataColumn col in source.Columns)
+    {
+        var name=col.ColumnName;
+        if(name is "FMKALAN" or "NCMAAS" or "NCKALAN")continue;
+        object value=row[name];
+        switch(name.ToUpperInvariant())
+        {
+            case "PKNO":value=testPk;break;case "BASTAR":value=start;break;case "BITTAR":value=end;break;
+            case "DMAAS":value=30000m;break;case "GUN1":value=30;break;case "SAAT1":value="240:00";break;
+            case "SAAT2":value="08:00";break;case "SAAT3":value="00:00";break;case "GUN4":value=0;break;
+            case "DEVG":value=0;break;case "EKS":value="00:00";break;case "EKKAZ":value=500m;break;
+            case "EKKES":value=100m;break;case "EX1":value=1000m;break;case "EX2":value=0m;break;
+            case "EX4":value=0m;break;case "NCKALAN":value=30000m;break;case "FMKALAN":value=1500m;break;
+        }
+        var p="@V"+i++;names.Add(name);marks.Add(p);pars.Add(new FbParameter(p,value is DBNull?DBNull.Value:value));
+    }
+    try{db.Execute($"insert into UCRETLER ({string.Join(',',names)}) values ({string.Join(',',marks)})",pars.ToArray());}
+    catch
+    {
+        db.Execute("insert into UCRETLER (PKNO,BASTAR,BITTAR,DMAAS,GUN1,SAAT1,SAAT2,SAAT3,GUN4,DEVG,EKS,EKKAZ,EKKES,EX1,EX2,EX4) values (@P,@A,@B,30000,30,'240:00','08:00','00:00',0,0,'00:00',500,100,1000,0,0)",
+            new FbParameter("@P",testPk),new FbParameter("@A",start),new FbParameter("@B",end));
+    }
+    var count=Convert.ToInt32(db.Scalar("select count(*) from UCRETLER where PKNO=@P and BASTAR=@A and BITTAR=@B",new FbParameter("@P",testPk),new FbParameter("@A",start),new FbParameter("@B",end)));
+    if(count!=1)throw new Exception("Muhasebe akışı bordro kaynağı oluşturulamadı.");
+}
+
+static void RunPayrollWorkflow(FirebirdDatabase db,string testPk,DateTime start,DateTime end,List<string> log)
+{
+    using var form=new MonthlyPayrollAdjustmentForm();
+    form.Show();Pump(800);
+    var type=typeof(MonthlyPayrollAdjustmentForm);
+    var dataField=type.GetField("data",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)
+        ?? throw new Exception("Aylık bordro veri alanı bulunamadı.");
+    var recalc=type.GetMethod("RecalcRow",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)
+        ?? throw new Exception("Aylık bordro satır hesaplama metodu bulunamadı.");
+    var data=(DataTable)(dataField.GetValue(form)??throw new Exception("Aylık bordro verisi alınamadı."));
+    var rows=data.Select("PKNO='"+testPk.Replace("'","''")+"'");
+    if(rows.Length!=1)throw new Exception("Aylık bordro ekranında test personeli görünmedi.");
+    var row=rows[0];
+    row["EKKAZ"]=750m;row["EKKES"]=125m;row["EX1"]=900m;row["NCKALAN"]=31000m;row["FMKALAN"]=1750m;
+    recalc.Invoke(form,new object[]{row,"Değişti"});
+    FindControls<DataGridView>(form).First().Refresh();Pump(150);
+
+    var save=FindButton(form,"Ayı Kaydet")??throw new Exception("Ayı Kaydet bulunamadı.");
+    save.PerformClick();Pump(700);
+    var ekkaz=Convert.ToDecimal(db.Scalar("select EKKAZ from UCRETLER where PKNO=@P and BASTAR=@A and BITTAR=@B",new FbParameter("@P",testPk),new FbParameter("@A",start),new FbParameter("@B",end)));
+    var avans=Convert.ToDecimal(db.Scalar("select EX1 from UCRETLER where PKNO=@P and BASTAR=@A and BITTAR=@B",new FbParameter("@P",testPk),new FbParameter("@A",start),new FbParameter("@B",end)));
+    if(ekkaz!=750m||avans!=900m)throw new Exception($"Aylık bordro kaydı DB doğrulanamadı: EKKAZ={ekkaz}, AVANS={avans}");
+    log.Add("PASS|MUHASEBE AKIŞI > Bordro düzeltme > Ayı Kaydet > DB");
+
+    data=(DataTable)(dataField.GetValue(form)??throw new Exception("Bordro kaydet sonrası veri alınamadı."));
+    rows=data.Select("PKNO='"+testPk.Replace("'","''")+"'");
+    if(rows.Length!=1)throw new Exception("Ödeme için test personeli bulunamadı.");
+    rows[0]["SEC"]=true;
+    var post=FindButton(form,"Seçili Ödemeleri İşle")??throw new Exception("Seçili Ödemeleri İşle bulunamadı.");
+    post.PerformClick();Pump(650);
+    var paid=Convert.ToDecimal(db.Scalar("select first 1 NODENEN from ODEME where PKNO=@P and BASTAR=@A and BITTAR=@B",new FbParameter("@P",testPk),new FbParameter("@A",start),new FbParameter("@B",end))??0m);
+    if(paid<=0)throw new Exception("Banka ödeme kaydı oluşmadı.");
+    log.Add($"PASS|MUHASEBE AKIŞI > Banka ödemesi işle > {paid:N2} > DB");
+    form.Close();
+}
+
+static void VerifyAccountingReports(string testPk,DateTime start,DateTime end,List<string> log)
+{
+    using(var bordro=new LegacyBordroForm(0))
+    {
+        var bt=typeof(LegacyBordroForm);
+        var by=(ComboBox)(bt.GetField("year",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(bordro)??throw new Exception("Bordro yıl alanı bulunamadı."));
+        var bm=(ComboBox)(bt.GetField("month",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(bordro)??throw new Exception("Bordro ay alanı bulunamadı."));
+        by.SelectedItem=start.Year;bm.SelectedIndex=start.Month-1;
+        bordro.Show();Pump(800);
+        var grid=FindControls<DataGridView>(bordro).FirstOrDefault(g=>g.Columns.Cast<DataGridViewColumn>().Any(c=>c.HeaderText=="Kart No"))
+            ?? throw new Exception("Bordro merkezi grid bulunamadı.");
+        var found=grid.Rows.Cast<DataGridViewRow>().Any(r=>r.Cells.Cast<DataGridViewCell>().Any(c=>c.OwningColumn?.HeaderText=="Kart No"&&string.Equals(Convert.ToString(c.Value)?.Trim(),testPk,StringComparison.Ordinal)));
+        if(!found)throw new Exception("Bordro merkezinde test personeli görünmedi.");
+        log.Add("PASS|MUHASEBE AKIŞI > Bordro merkezi > test personeli görünür");
+        bordro.Close();
+    }
+
+    using(var reportForm=new ReportCenterForm("Bordro"))
+    {
+        reportForm.Show();Pump(600);
+        var type=typeof(ReportCenterForm);
+        var report=(ComboBox)(type.GetField("report",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(reportForm)??throw new Exception("Rapor seçicisi bulunamadı."));
+        var from=(DateTimePicker)(type.GetField("from",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(reportForm)??throw new Exception("Rapor başlangıç alanı bulunamadı."));
+        var to=(DateTimePicker)(type.GetField("to",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(reportForm)??throw new Exception("Rapor bitiş alanı bulunamadı."));
+        var grid=(DataGridView)(type.GetField("grid",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(reportForm)??throw new Exception("Rapor grid bulunamadı."));
+        from.Value=start;to.Value=end;report.SelectedItem="Bordro • Ödemeler";Pump(650);
+        var found=grid.Rows.Cast<DataGridViewRow>().Any(r=>r.Cells.Cast<DataGridViewCell>().Any(c=>string.Equals(Convert.ToString(c.Value)?.Trim(),testPk,StringComparison.Ordinal)));
+        if(!found)throw new Exception("Ödeme raporunda test personeli görünmedi.");
+        log.Add("PASS|MUHASEBE AKIŞI > Ödeme raporu > DB/UI karşılaştırma");
+        reportForm.Close();
+    }
+}
 
 static void RunDefinitionUiWorkflow(FirebirdDatabase db,List<string> log)
 {

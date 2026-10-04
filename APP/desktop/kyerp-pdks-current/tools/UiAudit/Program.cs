@@ -61,7 +61,8 @@ var jobs = new List<(string Name, Func<Form> Factory)>
     ("16-YedekYonetimi", () => new BackupRestoreForm()),
     ("17-VeriKaynaklari", () => new QuickDataSourceForm()),
     ("18-IslemGecmisi", () => new AuditHistoryForm()),
-    ("19-TerminalMerkezi", () => new TerminalCenterForm(null, new LegacyTerminalSettingsForm()))
+    ("19-TerminalMerkezi", () => new TerminalCenterForm(null, new LegacyTerminalSettingsForm())),
+    ("21-HizliIslemler", () => QuickOperationsAuditForm(user))
 };
 
 foreach (var view in Enum.GetValues<LegacyDataView>())
@@ -135,6 +136,14 @@ Console.WriteLine($"UI_AUDIT_FORMS={jobs.Count + (includeTransfer ? 1 : 0)}");
 Console.WriteLine($"UI_AUDIT_ERRORS={errors.Count}");
 foreach (var error in errors) Console.WriteLine("ERROR=" + error);
 Environment.ExitCode = errors.Count == 0 ? 0 : 1;
+
+static Form QuickOperationsAuditForm(LocalUser user)
+{
+    var shell = new MainShellForm(user);
+    var form = new ResponsibleQuickOperationsForm(shell);
+    form.Disposed += (_, _) => shell.Dispose();
+    return form;
+}
 
 static void CaptureFormNoLoad(Form form, string name, string root, StringBuilder log, List<string> errors)
 {

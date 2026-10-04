@@ -227,7 +227,8 @@ public sealed class LegacyBordroForm : Form
             GridLayoutPersistence.Apply(grid, LayoutKey);
             grid.ResumeLayout();
 
-            var total = data.AsEnumerable().Sum(r => r["Toplam"] == DBNull.Value ? 0m : Convert.ToDecimal(r["Toplam"]));
+            var totalColumn=data.Columns.Contains("Hak Edilen Net")?"Hak Edilen Net":data.Columns.Contains("TOPLAM")?"TOPLAM":null;
+            var total=totalColumn is null?0m:data.AsEnumerable().Sum(r=>r[totalColumn]==DBNull.Value?0m:Convert.ToDecimal(r[totalColumn]));
             summary.Text = $"Bordro kaydı: {data.Rows.Count}  •  {MonthNames[a.Month - 1]} {a.Year}  •  {total:N2} ₺";
         }
         catch (Exception ex)

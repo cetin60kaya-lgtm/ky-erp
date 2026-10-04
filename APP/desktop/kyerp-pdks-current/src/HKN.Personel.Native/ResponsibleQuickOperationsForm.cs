@@ -1,6 +1,6 @@
 namespace HKN.Personel.Native;
 
-internal sealed class ResponsibleQuickOperationsForm : Form
+public sealed class ResponsibleQuickOperationsForm : Form
 {
     readonly MainShellForm shell;
     readonly ToolTip tips = new();
@@ -8,10 +8,10 @@ internal sealed class ResponsibleQuickOperationsForm : Form
     public ResponsibleQuickOperationsForm(MainShellForm owner)
     {
         shell = owner;
-        Text = "Hızlı İşlemler • Firma Sorumlusu";
+        Text = "Hızlı İşlemler • Yetkili Kullanıcı";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(1040, 660);
-        MinimumSize = new Size(920, 600);
+        ClientSize = new Size(1120, 760);
+        MinimumSize = new Size(980, 680);
         Font = new Font("Segoe UI", 9f);
         BackColor = PdksAppearance.Current.Canvas;
         Build();
@@ -43,7 +43,7 @@ internal sealed class ResponsibleQuickOperationsForm : Form
 
         root.Controls.Add(new Label
         {
-            Text = "Firma sorumlusu için günlük düzeltme ve kontrol kısayolları. Bu merkez ayrı veri mantığı oluşturmaz; mevcut güvenli PDKS ekranlarını açar.",
+            Text = "Muhasebe ve personel operasyonunda en sık kullanılan işlemler. Personel → kart/izin → puantaj → bordro/ödeme → rapor akışını tek noktadan yürütür.",
             Dock = DockStyle.Fill,
             ForeColor = PdksAppearance.Current.Muted,
             TextAlign = ContentAlignment.MiddleLeft
@@ -53,49 +53,59 @@ internal sealed class ResponsibleQuickOperationsForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 3,
+            RowCount = 4,
             Padding = new Padding(0, 6, 0, 8)
         };
         cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        for (var i = 0; i < 3; i++) cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33.333f));
+        for (var i = 0; i < 4; i++) cards.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
 
         cards.Controls.Add(Card("1. PERSONEL",
-            "Personel Veri Düzeltme\r\nAktif / Pasif Kontrol",
-            "Personel kartındaki kart no, tarih, maaş, bölüm, görev, banka, telefon, grup, servis ve şirket gibi alanları kullanıcı dostu adlarla düzenler.",
-            () => shell.OpenPersonelForResponsible()), 0, 0);
+            "Yeni Personel • Düzenle\r\nAktif / Pasif • Özlük",
+            "Personel kartı, işe giriş/çıkış tarihi, maaş, bölüm, görev, banka, telefon, grup, servis ve şirket alanlarını yönetir.",
+            () => shell.NavigateToCommand(PdksCommandId.Personnel)), 0, 0);
 
         cards.Controls.Add(Card("2. KART HAREKETLERİ",
-            "Giriş / Çıkış Düzelt\r\nEksik Giriş / Çıkış Ekle\r\nToplu Kart İşlemi",
-            "GIRCIK kayıtlarının günlük düzeltme ekranını açar. Toplu işlemlerde Önizleme → Uygula kuralı geçerlidir.",
-            () => shell.OpenEntryExitForResponsible()), 1, 0);
+            "Giriş / Çıkış Düzelt\r\nEksik Kaydı Tamamla • E İşareti",
+            "GIRCIK kayıtlarını günlük olarak kontrol eder; eksik ve hatalı kart hareketlerini doğrulanmış şekilde düzeltir.",
+            () => shell.NavigateToCommand(PdksCommandId.EntryExit)), 1, 0);
 
-        cards.Controls.Add(Card("3. E / HARİÇ TUTMA",
-            "E İşareti Ver\r\nE İşaretini Kaldır\r\nToplu E İşlemi",
-            "Giriş ve çıkış tarafındaki E işaretini kontrollü yönetmek için kart hareketi ekranını açar.",
-            () => shell.OpenEntryExitForResponsible()), 0, 1);
+        cards.Controls.Add(Card("3. İZİN / MAZERET",
+            "İzin Gir • İzin Düzelt\r\nÜcretli / Ücretsiz • Saatlik",
+            "İzin kayıtlarını kişi ve tarih bazında yönetir; puantaja girecek mazeret ve süreyi doğrular.",
+            () => shell.NavigateToCommand(PdksCommandId.Leave)), 0, 1);
 
-        cards.Controls.Add(Card("4. DATA KONTROL",
-            "Genel Kontrol\r\nEksik TNF • Fazla TNF • Saat Farkı\r\nİncelenecekler",
-            "FDB/GDB ve TNF kaynaklarının kontrol merkezini açar. Belirsiz çoklu eşleşmeler otomatik değiştirilmez.",
-            () => shell.OpenQuickDataForResponsible()), 1, 1);
+        cards.Controls.Add(Card("4. PUANTAJ KONTROL",
+            "Günlük / Aylık Hesapla\r\nGeç • Erken • Eksik • Devamsız",
+            "Kart hareketi, izin, tatil ve vardiya planlarından puantaj üretir ve sonucu kontrol eder.",
+            () => shell.NavigateToCommand(PdksCommandId.TimesheetMonthly)), 1, 1);
 
-        cards.Controls.Add(Card("5. TNF",
-            "TNF Listele • TNF Sırala\r\nEksikleri Ekle • Fazlaları Temizle\r\nYedek / Geri Yükleme",
-            "Canonical TNF kaynağını seçme ve yönetim merkezini açar. Riskli dosya değişikliklerinde önce yedek alınmalıdır.",
-            () => shell.OpenQuickDataForResponsible()), 0, 2);
+        cards.Controls.Add(Card("5. AVANS / KAZANÇ / KESİNTİ",
+            "Avans Gir • Ek Kazanç\r\nKesinti ve Açıklama Kontrolü",
+            "Muhasebenin dönem içinde girdiği avans, ek kazanç ve kesinti kayıtlarını personel bazında yönetir.",
+            () => shell.NavigateToCommand(PdksCommandId.EarningsDeductions)), 0, 2);
 
         cards.Controls.Add(Card("6. BORDRO / ÖDEME",
-            "Bordro Veri Düzeltme\r\nÖdeme Düzeltme\r\nAvans Düzeltme",
-            "UCRETLER / ODEME / AVANS verilerini mevcut bordro ve hızlı ödeme ekranları üzerinden kontrollü düzenler.",
-            () => shell.OpenPayrollAdjustmentForResponsible()), 1, 2);
+            "Bordro Düzelt • Resmî Net\r\nBanka Ödemesi • Kalan",
+            "UCRETLER ve ODEME verilerini aylık bordro düzeltme ve hızlı ödeme ekranından kontrollü yönetir.",
+            () => shell.NavigateToCommand(PdksCommandId.PayrollAdjustment)), 1, 2);
+
+        cards.Controls.Add(Card("7. RAPOR / ÇIKTI",
+            "Puantaj • Bordro • Ödeme\r\nPDF / Excel • Kontrol Listeleri",
+            "Muhasebe ve personel raporlarını tek merkezden görüntüler, filtreler ve çıktı alır.",
+            () => shell.NavigateToCommand(PdksCommandId.Reports)), 0, 3);
+
+        cards.Controls.Add(Card("8. VERİ / TERMİNAL",
+            "Terminal • TNF • Veri Kontrol\r\nYedek / Entegrasyon",
+            "Kart cihazı ve TNF/FDB veri kaynaklarını kontrol eder. Riskli veri işlemlerinde yedek kuralı geçerlidir.",
+            () => shell.OpenQuickDataForResponsible()), 1, 3);
 
         root.Controls.Add(cards, 0, 2);
 
         var footer = new Panel { Dock = DockStyle.Fill, BackColor = PdksAppearance.Current.PrimarySoft, Padding = new Padding(14, 9, 14, 8) };
         footer.Controls.Add(new Label
         {
-            Text = "Güvenlik: toplu ve riskli işlemlerde Önizleme → Uygula zorunludur. Çoklu / belirsiz TNF eşleşmeleri otomatik düzeltilmez. Manuel değişiklikler işlem geçmişine yazılır.",
+            Text = "Önerilen sıra: Personel → Kart / İzin → Puantaj → Avans / Kesinti → Bordro / Ödeme → Rapor. Toplu ve riskli veri işlemlerinde önce yedek alınır.",
             Dock = DockStyle.Fill,
             ForeColor = PdksAppearance.Current.Primary,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),

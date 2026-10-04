@@ -21,15 +21,28 @@ static class Program
         CompanyDataPaths.PinEnvironment();
         PdksTheme.Install();
 
-        if (!LocalAuthStore.HasUsers)
+        var skipLogin = IsLoginBypassEnabled();
+        LocalUser user;
+        if (skipLogin)
         {
-            using var bootstrap = new BootstrapAdminForm();
-            if (bootstrap.ShowDialog() != DialogResult.OK) return;
+            user = LocalAuthStore.Load().FirstOrDefault(x => x.IsSuperAdmin && x.IsActive)
+                ?? new LocalUser { UserName = "ADMIN", IsActive = true, IsAdmin = true };
+            File.AppendAllText(
+                Path.Combine(CompanyDataPaths.Logs, "startup.log"),
+                $"{DateTime.Now:O} TEST/DEMO login bypass active.{Environment.NewLine}");
         }
+        else
+        {
+            if (!LocalAuthStore.HasUsers)
+            {
+                using var bootstrap = new BootstrapAdminForm();
+                if (bootstrap.ShowDialog() != DialogResult.OK) return;
+            }
 
-        using var login = new LoginForm();
-        if (login.ShowDialog() != DialogResult.OK || login.AuthenticatedUser is null) return;
-        var user = login.AuthenticatedUser;
+            using var login = new LoginForm();
+            if (login.ShowDialog() != DialogResult.OK || login.AuthenticatedUser is null) return;
+            user = login.AuthenticatedUser;
+        }
 
         var licenseActive = CompanyLicenseGuard.EnsureAccess(out _, out var licenseMessage);
         if (!licenseActive)
@@ -58,5 +71,14 @@ static class Program
         }
 
         Application.Run(new MainShellForm(user));
+    }
+
+    static bool IsLoginBypassEnabled()
+    {
+        var value = Environment.GetEnvironmentVariable("KY_PDKS_SKIP_LOGIN");
+        return value is not null &&
+               (value.Equals("1", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("yes", StringComparison.OrdinalIgnoreCase));
     }
 }
