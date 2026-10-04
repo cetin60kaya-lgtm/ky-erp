@@ -1,5 +1,3 @@
-[Reading 41 lines from start (total: 41 lines, 0 remaining)]
-
 const {app,BrowserWindow,dialog}=require('electron');
 const fs=require('fs');
 const path=require('path');
@@ -41,5 +39,3 @@ async function createWindow(){
 app.whenReady().then(createWindow);
 app.on('second-instance',()=>{if(win){if(win.isMinimized())win.restore();win.focus()}});
 app.on('window-all-closed',()=>app.quit());
-
-[executed on device: Desen (c4d4b6e1-fe7e-407d-9528-93c354170ca0)]
