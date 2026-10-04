@@ -72,7 +72,7 @@ public static class PdksCommandCatalog
     static readonly PdksCommandDescriptor[] Items =
     [
         new(PdksCommandId.Home,"Genel Bakış","Günün personel hareketleri ve hızlı işlemler",PdksModule.Home,PdksToolbarIcon.Home,"ANA",10,PdksCommandPlacement.Primary,Keys.Control|Keys.H),
-        new(PdksCommandId.Operations,"Operasyon Merkezi","Canlı denetim ve günlük istisna araçları",PdksModule.GunlukOperasyon,PdksToolbarIcon.Live,"GÜNLÜK DEVAM",20,PdksCommandPlacement.Hidden),
+        new(PdksCommandId.Operations,"Kart Kayıtları","Ham giriş/çıkış kayıtlarını görüntüle ve düzelt",PdksModule.GirisCikis,PdksToolbarIcon.EntryExit,"GÜNLÜK DEVAM",20,PdksCommandPlacement.Hidden),
         new(PdksCommandId.Personnel,"Personel","Personel kartı, özlük ve çalışma bilgileri",PdksModule.Personel,PdksToolbarIcon.Personnel,"ANA",30,PdksCommandPlacement.Primary,Keys.F3),
         new(PdksCommandId.TimesheetMonthly,"Puantaj","Günlük ve aylık çalışma hesapları",PdksModule.Puantaj,PdksToolbarIcon.Timesheet,"ANA",40,PdksCommandPlacement.Primary,Keys.F5),
         new(PdksCommandId.PayrollGeneral,"Bordro","Hakediş, resmî bordro ve ödeme",PdksModule.Bordro,PdksToolbarIcon.Payroll,"ANA",50,PdksCommandPlacement.Primary,Keys.F6),
