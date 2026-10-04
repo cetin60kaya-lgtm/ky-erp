@@ -5,6 +5,8 @@ public enum PdksCommandId
     Home,
     Operations,
     LiveAttendance,
+    AttendanceExceptions,
+    AttendanceHistory,
     EntryExit,
     Personnel,
     Leave,
@@ -75,6 +77,8 @@ public static class PdksCommandCatalog
         new(PdksCommandId.Reports,"Raporlar","Operasyon, puantaj ve bordro raporları",PdksModule.Raporlar,PdksToolbarIcon.Results,"ANA",60,PdksCommandPlacement.Primary,Keys.F7),
 
         new(PdksCommandId.LiveAttendance,"Canlı Denetim","Anlık kart hareketleri, eksikler ve içeride olanlar",PdksModule.GunlukOperasyon,PdksToolbarIcon.Live,"OPERASYON",90,PdksCommandPlacement.Management,Keys.F2),
+        new(PdksCommandId.AttendanceExceptions,"İstisna Merkezi","Eksik çıkış, geç, erken, devamsızlık, mesai ve izin uyuşmazlıkları",PdksModule.GunlukOperasyon,PdksToolbarIcon.Results,"OPERASYON",95,PdksCommandPlacement.Management),
+        new(PdksCommandId.AttendanceHistory,"Devam Geçmişi","Kart basılan/basılmayan günler, eksik giriş-çıkış ve aylık devam özeti",PdksModule.GunlukOperasyon,PdksToolbarIcon.Results,"OPERASYON",97,PdksCommandPlacement.Management),
         new(PdksCommandId.EntryExit,"Giriş / Çıkış","Kart hareketlerini görüntüle, düzelt ve manuel tamamla",PdksModule.GirisCikis,PdksToolbarIcon.EntryExit,"OPERASYON",100,PdksCommandPlacement.Management,Keys.F4),
         new(PdksCommandId.Leave,"İzin İşlemleri","Personel izin kayıtları ve kişi bazlı izin hareketleri",PdksModule.Izinler,PdksToolbarIcon.Periods,"OPERASYON",110,PdksCommandPlacement.Management),
         new(PdksCommandId.EarningsDeductions,"Kazanç / Kesinti / Avans","Ek kazanç, kesinti ve avans girişleri",PdksModule.EkKazancKesinti,PdksToolbarIcon.Advances,"PERSONEL",120,PdksCommandPlacement.Management),
