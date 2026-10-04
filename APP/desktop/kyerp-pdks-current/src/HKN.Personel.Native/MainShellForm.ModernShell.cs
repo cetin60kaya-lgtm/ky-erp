@@ -17,6 +17,19 @@ public sealed partial class MainShellForm
     Button? modernManageButton;
     Button? modernBackButton;
     readonly Dictionary<PdksCommandId,Button> modernNavButtons = [];
+    static readonly PdksCommandId[] SidebarOrder =
+    [
+        PdksCommandId.Home,
+        PdksCommandId.Operations,
+        PdksCommandId.Personnel,
+        PdksCommandId.EntryExit,
+        PdksCommandId.Leave,
+        PdksCommandId.TimesheetMonthly,
+        PdksCommandId.PayrollGeneral,
+        PdksCommandId.Reports,
+        PdksCommandId.Periods,
+        PdksCommandId.Definitions
+    ];
     bool appearanceHooked;
 
     void BuildModernShell()
@@ -181,8 +194,11 @@ public sealed partial class MainShellForm
             Margin=Padding.Empty
         };
 
-        foreach(var command in VisiblePrimaryCommands().OrderBy(x=>x.Order))
-            nav.Controls.Add(NavButton(command));
+        foreach(var id in SidebarOrder)
+        {
+            var command=PdksCommandCatalog.Get(id);
+            if(CanExecute(command))nav.Controls.Add(NavButton(command));
+        }
         layout.Controls.Add(nav,0,1);
 
         var bottom = new TableLayoutPanel
@@ -316,13 +332,23 @@ public sealed partial class MainShellForm
 
     static PdksCommandId PrimaryParent(PdksCommandId id) => id switch
     {
-        PdksCommandId.LiveAttendance or PdksCommandId.EntryExit or PdksCommandId.Leave or
-        PdksCommandId.EarningsDeductions or PdksCommandId.QuickOperations or
-        PdksCommandId.TerminalCenter or PdksCommandId.TerminalSettings or PdksCommandId.TerminalProfiles or
-        PdksCommandId.DataSources => PdksCommandId.Operations,
-        PdksCommandId.PayrollPayments => PdksCommandId.Personnel,
-        PdksCommandId.TimesheetDaily or PdksCommandId.TimesheetResults => PdksCommandId.TimesheetMonthly,
-        PdksCommandId.PayrollAdjustment or PdksCommandId.PayrollPayslip or PdksCommandId.PayrollOvertime => PdksCommandId.PayrollGeneral,
+        PdksCommandId.LiveAttendance or PdksCommandId.AttendanceExceptions or
+        PdksCommandId.AttendanceHistory or PdksCommandId.DepartmentAttendanceAnalytics or
+        PdksCommandId.QuickOperations or PdksCommandId.TerminalCenter or
+        PdksCommandId.TerminalSettings or PdksCommandId.TerminalProfiles or PdksCommandId.DataSources
+            => PdksCommandId.Operations,
+        PdksCommandId.EarningsDeductions or PdksCommandId.PayrollPayments
+            => PdksCommandId.Personnel,
+        PdksCommandId.TimesheetDaily or PdksCommandId.TimesheetResults
+            => PdksCommandId.TimesheetMonthly,
+        PdksCommandId.PayrollAdjustment or PdksCommandId.PeriodControlCenter or
+        PdksCommandId.PayrollPayslip or PdksCommandId.PayrollOvertime
+            => PdksCommandId.PayrollGeneral,
+        PdksCommandId.WorkingDate
+            => PdksCommandId.Periods,
+        PdksCommandId.Groups or PdksCommandId.Holidays or PdksCommandId.DailyWorkHours or
+        PdksCommandId.AnnualWorkPlan or PdksCommandId.PayrollFields or PdksCommandId.EarningsTypes
+            => PdksCommandId.Definitions,
         _ => id
     };
 
