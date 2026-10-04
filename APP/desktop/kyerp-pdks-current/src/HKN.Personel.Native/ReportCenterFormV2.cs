@@ -11,8 +11,7 @@ public sealed class ReportCenterForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
     readonly ComboBox report = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 330 };
-    readonly DateTimePicker from = new() { Format = DateTimePickerFormat.Short, Width = 120 };
-    readonly DateTimePicker to = new() { Format = DateTimePickerFormat.Short, Width = 120 };
+    readonly DateTimePicker period = new() { Format = DateTimePickerFormat.Custom, CustomFormat = "MMMM yyyy", ShowUpDown = true, Width = 150 };
     readonly TextBox card = new() { Width = 90 };
     readonly DataGridView grid = new()
     {
@@ -47,8 +46,7 @@ public sealed class ReportCenterForm : Form
         Size = new Size(1240, 760);
         MinimumSize = new Size(980, 620);
         Font = new Font("Segoe UI", 9f);
-        from.Value = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-        to.Value = DateTime.Today;
+        period.Value = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         Build();
         report.Items.AddRange(Reports);
         var initialIndex = 0;
@@ -110,29 +108,24 @@ public sealed class ReportCenterForm : Form
         };
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 52));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 76));
-        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126));
-        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 52));
-        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 62));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 154));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 116));
 
         report.Dock=DockStyle.Fill;report.Margin=new Padding(0,5,12,5);
-        from.Dock=DockStyle.Fill;from.Margin=new Padding(0,5,12,5);
-        to.Dock=DockStyle.Fill;to.Margin=new Padding(0,5,12,5);
+        period.Dock=DockStyle.Fill;period.Margin=new Padding(0,5,12,5);
         card.Dock=DockStyle.Fill;card.Margin=new Padding(0,5,12,5);
         var show = Button("Göster",LoadData,true);show.Dock=DockStyle.Fill;show.Margin=new Padding(0,5,0,5);
 
         filters.Controls.Add(PdksUiKit.FieldLabel("Rapor"),0,0);
         filters.Controls.Add(report,1,0);
-        filters.Controls.Add(PdksUiKit.FieldLabel("Başlangıç"),2,0);
-        filters.Controls.Add(from,3,0);
-        filters.Controls.Add(PdksUiKit.FieldLabel("Bitiş"),4,0);
-        filters.Controls.Add(to,5,0);
-        filters.Controls.Add(PdksUiKit.FieldLabel("Kart"),6,0);
-        filters.Controls.Add(card,7,0);
-        filters.Controls.Add(show,8,0);
+        filters.Controls.Add(PdksUiKit.FieldLabel("Dönem"),2,0);
+        filters.Controls.Add(period,3,0);
+        filters.Controls.Add(PdksUiKit.FieldLabel("Kart"),4,0);
+        filters.Controls.Add(card,5,0);
+        filters.Controls.Add(show,6,0);
         filterRoot.Controls.Add(filters,0,1);
 
         var infoBar = new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,BackColor=p.Surface};
@@ -174,6 +167,7 @@ public sealed class ReportCenterForm : Form
 
         Controls.Add(root);
         card.KeyDown += (_,e)=>{if(e.KeyCode==Keys.Enter)LoadData();};
+        period.ValueChanged += (_,_) => LoadData();
     }
 
     static Label Label(string text) => new() { Text = text, AutoSize = true, Padding = new Padding(10, 7, 4, 0), ForeColor=PdksAppearance.Current.Muted };
@@ -183,7 +177,11 @@ public sealed class ReportCenterForm : Form
         return PdksUiKit.Button(text,text.Contains("Alanlar")?140:112,role,action);
     }
 
-    FbParameter[] Range() => [new("@A", from.Value.Date), new("@B", to.Value.Date.AddDays(1))];
+    FbParameter[] Range()
+    {
+        var a=new DateTime(period.Value.Year,period.Value.Month,1);
+        return [new("@A",a),new("@B",a.AddMonths(1))];
+    }
     string CardWhere(string field = "k.PKNO") => string.IsNullOrWhiteSpace(card.Text) ? "1=1" : $"{field}=@P";
     FbParameter[] RangeCard() => string.IsNullOrWhiteSpace(card.Text) ? Range() : [..Range(), new FbParameter("@P", card.Text.Trim().PadLeft(5, '0'))];
 
@@ -350,7 +348,7 @@ public sealed class ReportCenterForm : Form
         "select u.PKNO \"Kart No\",k.AD \"Ad\",k.SOYAD \"Soyad\",b.AD \"Bölüm\",k.IGTARIH \"İşe Giriş\",k.ICTARIH \"İşten Çıkış\",u.DMAAS \"Maaş\",u.GUN1 \"Normal Gün\",u.SAAT1 \"Normal Saat\",u.UCRET1 \"Normal Ücret\",u.SAAT2 \"%50 Mesai\",u.UCRET2 \"%50 Ücret\",u.SAAT3 \"%100 Mesai\",u.UCRET3 \"%100 Ücret\",u.DEVG \"Devamsız Gün\",u.DEVS \"Devamsız Saat\",u.DEVU \"Devamsız Tutar\",u.GUN9 \"Yıllık İzin Gün\",u.GUN5 \"Ücretli İzin Gün\",u.GUN4 \"Ücretsiz İzin Gün\",u.EX1 \"Avans\",u.EX4 \"İcra\",u.NCKALAN \"Maaş Kalan\",u.FMKALAN \"Mesai Kalan\",(coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0)) \"Net Kazanç\",u.EX2 \"Banka\",u.EX3 \"BES\",((coalesce(u.NCKALAN,0)+coalesce(u.FMKALAN,0))-coalesce(u.EX2,0)) \"Elden\" " +
         "from UCRETLER u left join KIMLIK k on k.PKNO=u.PKNO left join BOLUM b on b.KOD=k.BOLUM where u.BASTAR<@B and coalesce(u.BITTAR,u.BASTAR)>=@A and " + CardWhere("u.PKNO") + " order by u.PKNO", RangeCard());
 
-    ReportTable Table() => GridReportAdapter.ToReport(grid, data, $"{report.SelectedItem} • {from.Value:dd.MM.yyyy} - {to.Value:dd.MM.yyyy}");
+    ReportTable Table() => GridReportAdapter.ToReport(grid, data, $"{report.SelectedItem} • {period.Value:MMMM yyyy}");
     IReadOnlyList<int> Widths() => GridReportAdapter.VisibleWidths(grid);
     void Preview() { try { LoadData(); ReportPrintHelper.Preview(this, Table(), grid.Columns.Count > 7, Widths()); } catch (Exception ex) { Error(ex); } }
     void Print() { try { LoadData(); ReportPrintHelper.Print(this, Table(), grid.Columns.Count > 7, Widths()); } catch (Exception ex) { Error(ex); } }
