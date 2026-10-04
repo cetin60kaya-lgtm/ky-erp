@@ -54,7 +54,7 @@ if (workflow.Select(x=>x.Order).Distinct().Count() != workflow.Length)
     throw new InvalidOperationException("İş akışında mükerrer sıra var.");
 
 var shellButtons = Descendants(form).OfType<Button>().Select(x => x.Text ?? string.Empty).ToArray();
-var expectedSidebar = new[] { "Genel Bakış", "Operasyon", "Personel", "Giriş / Çıkış", "İzin İşlemleri", "Puantaj", "Bordro", "Raporlar", "Dönemler", "Tanımlar Merkezi" };
+var expectedSidebar = new[] { "Genel Bakış", "Operasyon", "Personel", "Giriş / Çıkış", "İzin İşlemleri", "Puantaj", "Bordro", "Raporlar", "Yıllık Dönemler", "Tanımlar Merkezi" };
 foreach (var required in expectedSidebar)
     if (!shellButtons.Contains(required)) throw new InvalidOperationException("Sol navigasyon eksik: " + required);
 foreach (var required in new[] { "Yönetim", $"Görünüm • {PdksAppearance.ModeLabel}", "İşlem Ara  Ctrl+K" })
@@ -99,7 +99,7 @@ using (var periodControl = new PeriodControlCenterForm())
 using (var definitions = new DefinitionsCenterForm(_ => { }, _ => { }))
 {
     var labels = Descendants(definitions).OfType<Label>().Select(x => x.Text ?? string.Empty).ToArray();
-    foreach (var required in new[] { "Bölümler", "Çalışma Grupları", "Dönemler", "Genel Tatiller", "Bordro Alanları", "Kazanç / Kesinti Türleri" })
+    foreach (var required in new[] { "Bölümler", "Çalışma Grupları", "Yıllık Dönemler", "Genel Tatiller", "Bordro Alanları", "Kazanç / Kesinti Türleri" })
         if (!labels.Contains(required)) throw new InvalidOperationException("Tanımlar merkezi kısayolu eksik: " + required);
 }
 using (var groups = new LegacyGroupForm())
@@ -111,12 +111,14 @@ using (var groups = new LegacyGroupForm())
 using (var periods = new LegacyPeriodForm())
 {
     if (!Descendants(periods).OfType<ComboBox>().Any())
-        throw new InvalidOperationException("Dönem ekranında yıl seçimi yok.");
+        throw new InvalidOperationException("Yıllık dönem ekranında yıl seçimi yok.");
     var buttons=Descendants(periods).OfType<Button>().Select(x=>(x.Text??string.Empty).Replace("&",string.Empty)).ToArray();
-    if (!buttons.Contains("Yılı Hazırla"))
-        throw new InvalidOperationException("Dönem ekranında Yılı Hazırla komutu yok.");
-    if (buttons.Any(x=>x is "Yeni Dönem" or "Düzenle" or "Sil" or "Kaydet"))
-        throw new InvalidOperationException("Dönem ekranı ay×grup manuel CRUD göstermemeli.");
+    if (buttons.Any(x=>x is "Yılı Hazırla" or "Yeni Dönem" or "Düzenle" or "Sil" or "Kaydet"))
+        throw new InvalidOperationException("Yıllık dönem ekranı kullanıcıya teknik hazırlama / CRUD komutu göstermemeli.");
+    var periodGrid=Descendants(periods).OfType<DataGridView>().First();
+    var headers=periodGrid.Columns.Cast<DataGridViewColumn>().Select(x=>x.HeaderText).ToArray();
+    foreach (var required in new[] { "Dönem", "Başlangıç", "Bitiş", "Durum" })
+        if (!headers.Contains(required)) throw new InvalidOperationException("Yıllık dönem kolonu eksik: " + required);
 }
 
 using (var settings = new LegacyTerminalSettingsForm())
