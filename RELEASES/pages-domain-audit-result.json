@@ -1,27 +1,31 @@
 {
   "projectSuccess": "true",
-  "productionBranch": "agent/uretim-tek-merkez",
+  "productionBranch": "codex/model-uretim-kontrol-merkezi-final",
   "latest": {
-    "id": "a4ef1c35-4097-4d88-ad6c-75c9b14f0207",
-    "url": "https://a4ef1c35.ky-erp-frontend.pages.dev",
-    "branch": "agent/uretim-tek-merkez",
+    "id": "da9dfe97-af82-48f6-87ff-76b157824b88",
+    "url": "https://da9dfe97.ky-erp-frontend.pages.dev",
+    "branch": "codex/model-uretim-kontrol-merkezi-final",
     "environment": "production",
-    "aliases": [
-      "https://app.kyerp.net"
-    ]
+    "aliases": []
   },
   "targetDomains": [
     {
-      "name": "app.kyerp.net",
+      "name": "kyerp.net",
       "status": "active"
     }
   ],
-  "kyerpDomainOwners": [],
+  "kyerpDomainOwners": [
+    {
+      "project": "ky-erp-frontend",
+      "name": "kyerp.net",
+      "status": "active"
+    }
+  ],
   "html": {
-    "liveTitle": "ky-erp-frontend",
-    "latestTitle": "KY ERP",
-    "liveScript": "./assets/index-FJFFthaj.js",
-    "latestScript": "/assets/index-BiazjG5j.js"
+    "liveTitle": "KY ERP",
+    "latestTitle": "Deployment Not Found",
+    "liveScript": "/assets/index-DkCKzxzd.js",
+    "latestScript": ""
   },
   "dns": []
 }
