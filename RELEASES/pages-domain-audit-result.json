@@ -2,8 +2,8 @@
   "projectSuccess": "true",
   "productionBranch": "codex/model-uretim-kontrol-merkezi-final",
   "latest": {
-    "id": "da9dfe97-af82-48f6-87ff-76b157824b88",
-    "url": "https://da9dfe97.ky-erp-frontend.pages.dev",
+    "id": "5d53e421-a01c-41f4-9e27-d776ca18418e",
+    "url": "https://5d53e421.ky-erp-frontend.pages.dev",
     "branch": "codex/model-uretim-kontrol-merkezi-final",
     "environment": "production",
     "aliases": []
@@ -27,5 +27,498 @@
     "liveScript": "/assets/index-DkCKzxzd.js",
     "latestScript": ""
   },
-  "dns": []
+  "dns": [],
+  "deployments": [
+    {
+      "id": "5d53e421-a01c-41f4-9e27-d776ca18418e",
+      "url": "https://5d53e421.ky-erp-frontend.pages.dev",
+      "environment": "production",
+      "branch": "codex/model-uretim-kontrol-merkezi-final",
+      "aliases": [],
+      "latest_stage": {
+        "name": "queued",
+        "started_on": null,
+        "ended_on": null,
+        "status": "idle"
+      },
+      "stages": [
+        {
+          "name": "queued",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "initialize",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "clone_repo",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "build",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "deploy",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        }
+      ],
+      "created_on": "2026-10-04T02:00:22.133654Z",
+      "modified_on": "2026-10-04T02:00:22.133654Z"
+    },
+    {
+      "id": "270af248-c998-4252-b303-77afff72de86",
+      "url": "https://270af248.ky-erp-frontend.pages.dev",
+      "environment": "production",
+      "branch": "codex/model-uretim-kontrol-merkezi-final",
+      "aliases": [],
+      "latest_stage": {
+        "name": "queued",
+        "started_on": null,
+        "ended_on": null,
+        "status": "idle"
+      },
+      "stages": [
+        {
+          "name": "queued",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "initialize",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "clone_repo",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "build",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "deploy",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        }
+      ],
+      "created_on": "2026-10-04T02:00:13.586895Z",
+      "modified_on": "2026-10-04T02:00:13.586895Z"
+    },
+    {
+      "id": "1e92565c-bfd0-4aaa-9128-807f2b009ea3",
+      "url": "https://1e92565c.ky-erp-frontend.pages.dev",
+      "environment": "production",
+      "branch": "codex/model-uretim-kontrol-merkezi-final",
+      "aliases": [],
+      "latest_stage": {
+        "name": "queued",
+        "started_on": null,
+        "ended_on": null,
+        "status": "idle"
+      },
+      "stages": [
+        {
+          "name": "queued",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "initialize",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "clone_repo",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "build",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "deploy",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        }
+      ],
+      "created_on": "2026-10-04T01:58:26.450318Z",
+      "modified_on": "2026-10-04T01:58:26.450318Z"
+    },
+    {
+      "id": "da9dfe97-af82-48f6-87ff-76b157824b88",
+      "url": "https://da9dfe97.ky-erp-frontend.pages.dev",
+      "environment": "production",
+      "branch": "codex/model-uretim-kontrol-merkezi-final",
+      "aliases": [],
+      "latest_stage": {
+        "name": "queued",
+        "started_on": null,
+        "ended_on": null,
+        "status": "idle"
+      },
+      "stages": [
+        {
+          "name": "queued",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "initialize",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "clone_repo",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "build",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "deploy",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        }
+      ],
+      "created_on": "2026-10-04T01:58:14.38891Z",
+      "modified_on": "2026-10-04T01:58:14.38891Z"
+    },
+    {
+      "id": "b7e2d892-6edc-4005-b709-679e114af6a7",
+      "url": "https://b7e2d892.ky-erp-frontend.pages.dev",
+      "environment": "production",
+      "branch": "codex/model-uretim-kontrol-merkezi-final",
+      "aliases": [],
+      "latest_stage": {
+        "name": "queued",
+        "started_on": null,
+        "ended_on": null,
+        "status": "idle"
+      },
+      "stages": [
+        {
+          "name": "queued",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "initialize",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "clone_repo",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "build",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "deploy",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        }
+      ],
+      "created_on": "2026-10-04T01:58:06.336702Z",
+      "modified_on": "2026-10-04T01:58:06.336702Z"
+    },
+    {
+      "id": "6a013c6e-812f-40ee-a417-23188cc4b62e",
+      "url": "https://6a013c6e.ky-erp-frontend.pages.dev",
+      "environment": "production",
+      "branch": "codex/model-uretim-kontrol-merkezi-final",
+      "aliases": [
+        "https://kyerp.net"
+      ],
+      "latest_stage": {
+        "name": "deploy",
+        "started_on": null,
+        "ended_on": "2026-10-04T01:54:59.651746Z",
+        "status": "success"
+      },
+      "stages": [
+        {
+          "name": "queued",
+          "started_on": "2026-10-04T01:54:58.228189Z",
+          "ended_on": null,
+          "status": "active"
+        },
+        {
+          "name": "initialize",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "clone_repo",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "build",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "deploy",
+          "started_on": null,
+          "ended_on": "2026-10-04T01:54:59.651746Z",
+          "status": "success"
+        }
+      ],
+      "created_on": "2026-10-04T01:54:58.228189Z",
+      "modified_on": "2026-10-04T01:54:59.651746Z"
+    },
+    {
+      "id": "625e6319-fd5c-4a4a-a665-d396ec64a54a",
+      "url": "https://625e6319.ky-erp-frontend.pages.dev",
+      "environment": "production",
+      "branch": "codex/model-uretim-kontrol-merkezi-final",
+      "aliases": [],
+      "latest_stage": {
+        "name": "queued",
+        "started_on": null,
+        "ended_on": null,
+        "status": "idle"
+      },
+      "stages": [
+        {
+          "name": "queued",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "initialize",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "clone_repo",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "build",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "deploy",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        }
+      ],
+      "created_on": "2026-10-04T01:54:21.556404Z",
+      "modified_on": "2026-10-04T01:54:21.556404Z"
+    },
+    {
+      "id": "4ae72925-624e-4232-857c-63cb9d73c8b3",
+      "url": "https://4ae72925.ky-erp-frontend.pages.dev",
+      "environment": "production",
+      "branch": "codex/model-uretim-kontrol-merkezi-final",
+      "aliases": [],
+      "latest_stage": {
+        "name": "queued",
+        "started_on": null,
+        "ended_on": null,
+        "status": "idle"
+      },
+      "stages": [
+        {
+          "name": "queued",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "initialize",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "clone_repo",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "build",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "deploy",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        }
+      ],
+      "created_on": "2026-10-04T01:54:12.190739Z",
+      "modified_on": "2026-10-04T01:54:12.190739Z"
+    },
+    {
+      "id": "42837715-2037-40cf-b494-8292945df9a7",
+      "url": "https://42837715.ky-erp-frontend.pages.dev",
+      "environment": "production",
+      "branch": "codex/model-uretim-kontrol-merkezi-final",
+      "aliases": [],
+      "latest_stage": {
+        "name": "deploy",
+        "started_on": null,
+        "ended_on": "2026-10-04T01:50:49.015676Z",
+        "status": "success"
+      },
+      "stages": [
+        {
+          "name": "queued",
+          "started_on": "2026-10-04T01:50:47.957495Z",
+          "ended_on": null,
+          "status": "active"
+        },
+        {
+          "name": "initialize",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "clone_repo",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "build",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "deploy",
+          "started_on": null,
+          "ended_on": "2026-10-04T01:50:49.015676Z",
+          "status": "success"
+        }
+      ],
+      "created_on": "2026-10-04T01:50:47.957495Z",
+      "modified_on": "2026-10-04T01:50:49.015676Z"
+    },
+    {
+      "id": "562ed05d-4959-40a4-a522-233ea9448799",
+      "url": "https://562ed05d.ky-erp-frontend.pages.dev",
+      "environment": "production",
+      "branch": "codex/model-uretim-kontrol-merkezi-final",
+      "aliases": [],
+      "latest_stage": {
+        "name": "queued",
+        "started_on": null,
+        "ended_on": null,
+        "status": "idle"
+      },
+      "stages": [
+        {
+          "name": "queued",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "initialize",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "clone_repo",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "build",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        },
+        {
+          "name": "deploy",
+          "started_on": null,
+          "ended_on": null,
+          "status": "idle"
+        }
+      ],
+      "created_on": "2026-10-04T01:50:20.474548Z",
+      "modified_on": "2026-10-04T01:50:20.474548Z"
+    }
+  ],
+  "projectSource": {
+    "owner": "cetin60kaya-lgtm",
+    "owner_id": "255660302",
+    "repo_name": "ky-erp",
+    "repo_id": "1313268129",
+    "production_branch": "codex/model-uretim-kontrol-merkezi-final",
+    "pr_comments_enabled": true,
+    "deployments_enabled": true,
+    "production_deployments_enabled": true,
+    "preview_deployment_setting": "none",
+    "preview_branch_includes": [
+      "*"
+    ],
+    "preview_branch_excludes": [],
+    "path_includes": [
+      "APP/app/ky-erp-frontend/*"
+    ],
+    "path_excludes": []
+  }
 }
