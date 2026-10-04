@@ -584,10 +584,10 @@ async function approvalObserverDevices(c: any, user: AnyRow, companySlug: string
 
 export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: AnyRow = {}) {
   const selfDevices = await activeDevicesForUser(c, text(user.id), "SELF");
+  if (!selfDevices.length) return null;
   const companySlug = text(user.main_company_slug || user.mainCompanySlug || "mecit-hakan");
   const observerDevices = await approvalObserverDevices(c, user, companySlug);
   const devices = [...new Map([...selfDevices, ...observerDevices].map((device: AnyRow) => [text(device.id), device])).values()];
-  if (!devices.length) return null;
 
   const id = crypto.randomUUID();
   const token = randomToken(32);
