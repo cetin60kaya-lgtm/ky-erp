@@ -582,8 +582,10 @@ static void RunDefinitionUiWorkflow(FirebirdDatabase db,List<string> log)
         (FindFieldByLabel(periodForm,"Dönem Adı") as TextBox ?? throw new Exception("Dönem Adı bulunamadı.")).Text=periodName;
         var groupCombo=FindFieldByLabel(periodForm,"Çalışma Grubu") as ComboBox ?? throw new Exception("Dönem Çalışma Grubu bulunamadı.");
         if(groupCombo.Items.Count!=2)throw new Exception("Dönemde yalnız iki çalışma grubu olmalıdır.");groupCombo.SelectedIndex=0;
-        (FindFieldByLabel(periodForm,"Başlangıç") as DateTimePicker ?? throw new Exception("Dönem Başlangıç bulunamadı.")).Value=new DateTime(2098,1,1);
-        (FindFieldByLabel(periodForm,"Bitiş") as DateTimePicker ?? throw new Exception("Dönem Bitiş bulunamadı.")).Value=new DateTime(2098,1,31);
+        var maxYear=Convert.ToInt32(db.Scalar("select coalesce(max(extract(year from BASTAR)),2026) from DONEM")??2026);
+        var auditYear=Math.Min(9998,maxYear+2);
+        (FindFieldByLabel(periodForm,"Başlangıç") as DateTimePicker ?? throw new Exception("Dönem Başlangıç bulunamadı.")).Value=new DateTime(auditYear,1,1);
+        (FindFieldByLabel(periodForm,"Bitiş") as DateTimePicker ?? throw new Exception("Dönem Bitiş bulunamadı.")).Value=new DateTime(auditYear,1,31);
         savePeriod.PerformClick();Pump(400);
         periodCode=Convert.ToInt32(db.Scalar("select KOD from DONEM where AD=@A",new FbParameter("@A",periodName)) ?? throw new Exception("Dönem DB insert bulunamadı."));
         var periodCodeField=typeof(LegacyPeriodForm).GetField("code",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
