@@ -7,6 +7,7 @@ import AdminCompanyBilling from "./AdminCompanyBilling";
 import AdminOwnerSecurity from "./AdminOwnerSecurity";
 import SecurityCenterPanel from "./SecurityCenterPanel";
 import AdminApplicationSettings from "./AdminApplicationSettings";
+import AdminStorageCenter from "./AdminStorageCenter";
 import AdminMappings from "./AdminMappings";
 import AdminBackupLogs from "./AdminBackupLogs";
 import AdminBuildCenter from "./AdminBuildCenter";
@@ -37,6 +38,7 @@ const GROUPS = {
     copy: "Uygulama ayarları, eşleştirmeler, yedek ve sürüm yönetimi.",
     panels: [
       ["application", "Uygulama"],
+      ["storage", "Dosya / Depolama"],
       ["mappings", "Eşleştirmeler"],
       ["backup", "Yedek / Log"],
       ["build", "Sürüm / Build"],
@@ -54,6 +56,7 @@ const ROUTE_TARGETS = {
   "giris-onaylari": ["security", "securityCenter"],
   "admin-sistem": ["system", "application"],
   "uygulama-ayarlari": ["system", "application"],
+  "dosya-klasor-yonetimi": ["system", "storage"],
   "eslestirmeler": ["system", "mappings"],
   "yedekleme-loglar": ["system", "backup"],
   "surum-merkezi": ["system", "build"],
@@ -86,6 +89,7 @@ export default function AdminPlatformHub({ activeTab, activeMainCompany }) {
     if (panel === "owner") return <AdminOwnerSecurity />;
     if (panel === "securityCenter") return <SecurityCenterPanel />;
     if (panel === "application") return <AdminApplicationSettings />;
+    if (panel === "storage") return <AdminStorageCenter activeMainCompany={activeMainCompany} />;
     if (panel === "mappings") return <AdminMappings activeMainCompany={activeMainCompany} />;
     if (panel === "backup") return <AdminBackupLogs activeMainCompany={activeMainCompany} />;
     if (panel === "build") return <AdminBuildCenter />;
