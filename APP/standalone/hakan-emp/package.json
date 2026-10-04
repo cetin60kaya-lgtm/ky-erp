@@ -1,0 +1,39 @@
+[Reading 35 lines from start (total: 35 lines, 0 remaining)]
+
+{
+  "name": "hakan-emp",
+  "version": "1.2.1",
+  "description": "HAKAN EMP - İmalat, Cari ve Çek Takip",
+  "main": "main.cjs",
+  "author": "HAKAN EMP",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.hakanemp.desktop",
+    "productName": "HAKAN EMP",
+    "asar": true,
+    "files": [
+      "main.cjs",
+      "app/**/*",
+      "seed/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "HAKAN-EMP-1.2.1.exe"
+    }
+  }
+}
+
+[executed on device: Desen (c4d4b6e1-fe7e-407d-9528-93c354170ca0)]
