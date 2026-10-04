@@ -77,6 +77,12 @@ public sealed partial class MainShellForm
             case PdksCommandId.LiveAttendance:
                 OpenLiveAttendance();
                 break;
+            case PdksCommandId.AttendanceExceptions:
+                ShowModule(new AttendanceExceptionCenterForm(NavigateToCommand), PdksModule.GunlukOperasyon);
+                break;
+            case PdksCommandId.AttendanceHistory:
+                ShowModule(new AttendanceHistoryForm(false), PdksModule.GunlukOperasyon);
+                break;
             case PdksCommandId.EntryExit:
                 OpenLegacyGirisCikis();
                 break;
