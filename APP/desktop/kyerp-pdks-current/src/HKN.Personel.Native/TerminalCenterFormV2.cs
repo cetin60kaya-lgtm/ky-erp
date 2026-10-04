@@ -23,10 +23,7 @@ public sealed class TerminalCenterForm : Form
         Font = new Font("Segoe UI", 9f);
         DoubleBuffered = true;
         Build();
-        if (Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT") != "1")
-            Shown += async (_, _) => await CheckDeviceAsync(false);
-        else
-            SetStatus("UI denetimi • cihaz sorgusu atlandı", null);
+        Shown += (_, _) => RefreshSdkStatus();
     }
 
     void Build()
