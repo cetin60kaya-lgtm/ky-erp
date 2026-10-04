@@ -43,6 +43,21 @@ jobs:
           npm run lint
           npm test
           npm run build
+      - name: Align Cloudflare Pages production branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}"
+          project="$(curl --fail --silent --show-error -H "$auth" "$base")"
+          current="$(jq -r '.result.production_branch // empty' <<<"$project")"
+          echo "Pages production branch: ${current:-<empty>}"
+          if [ "$current" != "$PROD_BRANCH" ]; then
+            updated="$(curl --fail --silent --show-error -X PATCH -H "$auth" -H 'Content-Type: application/json' --data "{"production_branch":"$PROD_BRANCH"}" "$base")"
+            jq -e --arg b "$PROD_BRANCH" '.success == true and .result.production_branch == $b' <<<"$updated" >/dev/null
+            echo "Pages production branch canonical branch'e alindi."
+          fi
+
       - name: Deploy Cloudflare Pages production
         working-directory: APP/app/ky-erp-frontend
         shell: bash
@@ -59,6 +74,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}"
+          project="$(curl --fail --silent --show-error -H "$auth" "$base")"
+          jq -e --arg b "$PROD_BRANCH" '.success == true and .result.production_branch == $b' <<<"$project" >/dev/null
+          echo "Canonical deployment URL: $(jq -r '.result.canonical_deployment.url // empty' <<<"$project")"
           ready=0
           for attempt in $(seq 1 30); do
             curl --location --fail --silent --show-error https://kyerp.net/ > /tmp/kyerp-home.html || true
