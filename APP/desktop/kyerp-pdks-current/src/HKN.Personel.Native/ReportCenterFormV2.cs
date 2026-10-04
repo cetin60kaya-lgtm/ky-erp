@@ -10,6 +10,7 @@ namespace HKN.Personel.Native;
 public sealed class ReportCenterForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
+    readonly ComboBox category = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140, FlatStyle = FlatStyle.Flat };
     readonly ComboBox report = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 330 };
     readonly ComboBox month = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 130, FlatStyle = FlatStyle.Flat };
     readonly ComboBox year = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 92, FlatStyle = FlatStyle.Flat };
@@ -34,6 +35,8 @@ public sealed class ReportCenterForm : Form
         "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
     ];
 
+    static readonly string[] Categories = ["Personel","Giriş Çıkış","Puantaj","İzin / Ek Kayıt","Bordro","Tanımlar"];
+
     static readonly string[] Reports =
     [
         "Personel • Personel Listesi", "Personel • Ücret ve İşe Giriş", "Personel • Bölüm / Firma",
@@ -57,16 +60,13 @@ public sealed class ReportCenterForm : Form
         var currentYear = DateTime.Today.Year;
         for (var y = currentYear + 1; y >= 2015; y--) year.Items.Add(y);
         year.SelectedItem = currentYear;
+        category.Items.AddRange(Categories.Cast<object>().ToArray());
+        var requestedCategory = NormalizeCategory(initialCategory);
+        category.SelectedItem = Categories.Contains(requestedCategory) ? requestedCategory : Categories[0];
         Build();
-        report.Items.AddRange(Reports);
-        var initialIndex = 0;
-        if (!string.IsNullOrWhiteSpace(initialCategory))
-        {
-            var found = Array.FindIndex(Reports, x => x.StartsWith(initialCategory, StringComparison.OrdinalIgnoreCase));
-            if (found >= 0) initialIndex = found;
-        }
-        report.SelectedIndex = initialIndex;
-        report.SelectedIndexChanged += (_, _) => LoadData();
+        RebuildReportItems(initialCategory);
+        category.SelectedIndexChanged += (_, _) => RebuildReportItems();
+        report.SelectedIndexChanged += (_, _) => { if (IsHandleCreated) LoadData(); };
         Shown += (_, _) => BeginInvoke((Action)LoadData);
     }
 
@@ -112,35 +112,40 @@ public sealed class ReportCenterForm : Form
         var filters = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 9,
+            ColumnCount = 11,
             RowCount = 1,
             BackColor = p.Surface
         };
-        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 52));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 62));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 138));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
-        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 122));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 114));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
-        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 82));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 40));
-        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
-        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 104));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 82));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
 
+        category.Dock=DockStyle.Fill;category.Margin=new Padding(0,5,10,5);
         report.Dock=DockStyle.Fill;report.Margin=new Padding(0,5,12,5);
         month.Dock=DockStyle.Fill;month.Margin=new Padding(0,5,10,5);
         year.Dock=DockStyle.Fill;year.Margin=new Padding(0,5,10,5);
         card.Dock=DockStyle.Fill;card.Margin=new Padding(0,5,10,5);
         var show = Button("Göster",LoadData,true);show.Dock=DockStyle.Fill;show.Margin=new Padding(0,5,0,5);
 
-        filters.Controls.Add(PdksUiKit.FieldLabel("Rapor"),0,0);
-        filters.Controls.Add(report,1,0);
-        filters.Controls.Add(PdksUiKit.FieldLabel("Ay"),2,0);
-        filters.Controls.Add(month,3,0);
-        filters.Controls.Add(PdksUiKit.FieldLabel("Yıl"),4,0);
-        filters.Controls.Add(year,5,0);
-        filters.Controls.Add(PdksUiKit.FieldLabel("Kart"),6,0);
-        filters.Controls.Add(card,7,0);
-        filters.Controls.Add(show,8,0);
+        filters.Controls.Add(PdksUiKit.FieldLabel("Grup"),0,0);
+        filters.Controls.Add(category,1,0);
+        filters.Controls.Add(PdksUiKit.FieldLabel("Rapor"),2,0);
+        filters.Controls.Add(report,3,0);
+        filters.Controls.Add(PdksUiKit.FieldLabel("Ay"),4,0);
+        filters.Controls.Add(month,5,0);
+        filters.Controls.Add(PdksUiKit.FieldLabel("Yıl"),6,0);
+        filters.Controls.Add(year,7,0);
+        filters.Controls.Add(PdksUiKit.FieldLabel("Kart"),8,0);
+        filters.Controls.Add(card,9,0);
+        filters.Controls.Add(show,10,0);
         filterRoot.Controls.Add(filters,0,1);
 
         var infoBar = new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,BackColor=p.Surface};
@@ -191,6 +196,49 @@ public sealed class ReportCenterForm : Form
     {
         var role=primary?PdksActionRole.Primary:text.Contains("Kapat",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Quiet:PdksActionRole.Secondary;
         return PdksUiKit.Button(text,text.Contains("Alanlar")?140:112,role,action);
+    }
+
+    static string NormalizeCategory(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "Personel";
+        if (value.StartsWith("Giriş",StringComparison.OrdinalIgnoreCase)) return "Giriş Çıkış";
+        if (value.StartsWith("Puantaj",StringComparison.OrdinalIgnoreCase)) return "Puantaj";
+        if (value.StartsWith("İzin",StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith("Ek Kazanç",StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith("Avans",StringComparison.OrdinalIgnoreCase)) return "İzin / Ek Kayıt";
+        if (value.StartsWith("Bordro",StringComparison.OrdinalIgnoreCase)) return "Bordro";
+        if (value.StartsWith("Tanımlar",StringComparison.OrdinalIgnoreCase)) return "Tanımlar";
+        if (value.StartsWith("Personel",StringComparison.OrdinalIgnoreCase)) return "Personel";
+        return value;
+    }
+
+    static string CategoryOf(string reportName)
+    {
+        if (reportName.StartsWith("Giriş Çıkış",StringComparison.OrdinalIgnoreCase)) return "Giriş Çıkış";
+        if (reportName.StartsWith("Puantaj",StringComparison.OrdinalIgnoreCase)) return "Puantaj";
+        if (reportName.StartsWith("İzin",StringComparison.OrdinalIgnoreCase) ||
+            reportName.StartsWith("Ek Kazanç",StringComparison.OrdinalIgnoreCase) ||
+            reportName.Equals("Avanslar",StringComparison.OrdinalIgnoreCase)) return "İzin / Ek Kayıt";
+        if (reportName.StartsWith("Bordro",StringComparison.OrdinalIgnoreCase)) return "Bordro";
+        if (reportName.StartsWith("Tanımlar",StringComparison.OrdinalIgnoreCase)) return "Tanımlar";
+        return "Personel";
+    }
+
+    void RebuildReportItems(string? preferred = null)
+    {
+        var selectedCategory = Convert.ToString(category.SelectedItem) ?? "Personel";
+        var items = Reports.Where(x=>CategoryOf(x)==selectedCategory).ToArray();
+        report.BeginUpdate();
+        try
+        {
+            report.Items.Clear();
+            report.Items.AddRange(items.Cast<object>().ToArray());
+            var preferredItem = !string.IsNullOrWhiteSpace(preferred)
+                ? items.FirstOrDefault(x=>x.StartsWith(preferred,StringComparison.OrdinalIgnoreCase))
+                : null;
+            report.SelectedItem = preferredItem ?? items.FirstOrDefault();
+        }
+        finally { report.EndUpdate(); }
     }
 
     DateTime PeriodStart()
