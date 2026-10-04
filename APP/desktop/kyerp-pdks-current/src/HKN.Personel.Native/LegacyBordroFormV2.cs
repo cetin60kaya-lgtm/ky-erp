@@ -54,7 +54,7 @@ public sealed class LegacyBordroForm : Form
 
         reloadTimer.Tick += (_, _) => { reloadTimer.Stop(); LoadData(); };
         Build();
-        Shown += (_, _) => { GridLayoutPersistence.Attach(grid, LayoutKey); LoadData(); };
+        Shown += (_, _) => BeginInvoke((Action)(() => { GridLayoutPersistence.Attach(grid, LayoutKey); LoadData(); }));
     }
 
     void Build()
