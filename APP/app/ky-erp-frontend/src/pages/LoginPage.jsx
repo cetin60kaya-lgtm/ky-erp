@@ -232,14 +232,14 @@ export default function LoginPage({ onClose }) {
     return available.find((item) => !verified.includes(item)) || direct || available[0] || "GOOGLE";
   }
 
-  function applyResponse(response) {
+  function applyResponse(response, options = {}) {
     const stage = String(response?.stage || "").toUpperCase();
     if (!stage) {
       setError("Giriş servisi geçerli bir aşama döndürmedi. Yeniden deneyin.");
       return;
     }
     setError("");
-    setCode("");
+    if (!options.preserveCode) setCode("");
     setResetProvider("");
     setQrError("");
     if (["MFA_REQUIRED", "MFA_SETUP"].includes(stage)) setSelectedProvider(chooseNextProvider(response));
@@ -399,7 +399,7 @@ export default function LoginPage({ onClose }) {
         return;
       }
       if (nextStage !== "PHONE_APPROVAL_PENDING") state.settled = true;
-      applyResponse(response);
+      applyResponse(response, { preserveCode: nextStage === "PHONE_APPROVAL_PENDING" });
     } catch (requestError) {
       if (String(requestError?.code || "") === "PHONE_APPROVAL_CONSUMED") {
         setError("Telefon onayı işlendi. Aynı onaya tekrar basmayın; oturum sonucu tamamlanıyor.");
@@ -735,7 +735,7 @@ export default function LoginPage({ onClose }) {
                 {phoneStatusMessage ? <div className="auth-notice auth-notice-compact"><strong>Telefon bağlantısı</strong><span>{phoneStatusMessage}</span></div> : null}
                 <form className="auth-form auth-form-compact" onSubmit={handleSecurityLoginCode}>
                   <label>KY Güvenlik giriş kodu
-                    <input className="auth-code-input" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
+                    <input className="auth-code-input" inputMode="numeric" autoComplete="off" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" aria-label="KY Güvenlik 6 haneli giriş kodu" />
                   </label>
                   <small>Telefon bildirimine alternatif olarak KY Güvenlik uygulamasındaki Giriş Kodu bölümünden üretilen kısa süreli kodu kullanabilirsiniz.</small>
                   <button className="auth-primary" type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : "KY Güvenlik Kodunu Doğrula"}</button>
