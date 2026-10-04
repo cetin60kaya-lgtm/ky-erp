@@ -85,7 +85,7 @@ public sealed class LegacyBordroForm : Form
 
         filters.Controls.Add(Caption("Yıl"),0,0); year.Dock=DockStyle.Fill; year.Margin=new Padding(0,4,10,6); filters.Controls.Add(year,1,0);
         filters.Controls.Add(Caption("Ay"),2,0); month.Dock=DockStyle.Fill; month.Margin=new Padding(0,4,10,6); filters.Controls.Add(month,3,0);
-        filters.Controls.Add(Caption("Tür"),4,0); type.Dock=DockStyle.Fill; type.Margin=new Padding(0,4,10,6); filters.Controls.Add(type,5,0);
+        filters.Controls.Add(Caption("Görünüm"),4,0); type.Dock=DockStyle.Fill; type.Margin=new Padding(0,4,10,6); filters.Controls.Add(type,5,0);
 
         var show = Btn("Göster", LoadData, 88, true); show.Dock=DockStyle.Fill; show.Margin=new Padding(0,4,8,6); filters.Controls.Add(show,6,0);
         var layout = Btn("Alanlar / Sıralama", () => GridLayoutPersistence.ShowEditor(this, grid, LayoutKey, "Bordro Alanları / Sıralama"), 140); layout.Dock=DockStyle.Fill; layout.Margin=new Padding(0,4,8,6); filters.Controls.Add(layout,7,0);
@@ -225,11 +225,12 @@ public sealed class LegacyBordroForm : Form
             }
             typeof(DataGridView).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.SetValue(grid, true);
             GridLayoutPersistence.Apply(grid, LayoutKey);
+            ApplyViewColumns();
             grid.ResumeLayout();
 
             var totalColumn=data.Columns.Contains("Hak Edilen Net")?"Hak Edilen Net":data.Columns.Contains("TOPLAM")?"TOPLAM":null;
             var total=totalColumn is null?0m:data.AsEnumerable().Sum(r=>r[totalColumn]==DBNull.Value?0m:Convert.ToDecimal(r[totalColumn]));
-            summary.Text = $"Bordro kaydı: {data.Rows.Count}  •  {MonthNames[a.Month - 1]} {a.Year}  •  {total:N2} ₺";
+            summary.Text = $"{ViewDescription()}  •  {data.Rows.Count} kişi  •  {MonthNames[a.Month - 1]} {a.Year}  •  {total:N2} ₺";
         }
         catch (Exception ex)
         {
@@ -284,6 +285,38 @@ public sealed class LegacyBordroForm : Form
         }
     }
 
+    string ViewDescription() => type.SelectedIndex switch
+    {
+        1 => "Mesai Bordrosu: yalnız fazla mesai saat ve tutarları",
+        2 => "Maaş Pusulası: seçili personelin ayrıntılı kazanç / kesinti dökümü",
+        _ => "Genel Maaş Bordrosu: aylık hakediş ve ödeme özeti"
+    };
+
+    void ApplyViewColumns()
+    {
+        if (type.SelectedIndex == 2)
+        {
+            foreach (DataGridViewColumn c in grid.Columns) c.Visible = true;
+            return;
+        }
+
+        var visible = type.SelectedIndex == 1
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "S.No","Kart No","Ad Soyad","Maaş","%50 Mesai Saat","%100 Mesai Saat",
+                "Mesai Saat","Mesai","Mesai Ödeme","Hak Edilen Net","İmza"
+            }
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "S.No","Kart No","Ad Soyad","Maaş","Yol","Normal Gün","Ek Kazanç","Kesinti",
+                "Avans","Maaş Ödeme","Mesai Ödeme","Hak Edilen Net","Banka Kayıtlı",
+                "Bankaya Ödenecek","Kayıtlı Fark","İmza"
+            };
+
+        foreach (DataGridViewColumn c in grid.Columns)
+            c.Visible = visible.Contains(c.HeaderText);
+    }
+
     static decimal Money(DataRow row, string column)
     {
         if(!row.Table.Columns.Contains(column)||row[column]==DBNull.Value)return 0m;
@@ -301,7 +334,26 @@ public sealed class LegacyBordroForm : Form
     {
         var a = PeriodStart();
         var z = a.AddMonths(1).AddDays(-1);
-        return GridReportAdapter.ToReport(grid, data, $"{a:dd.MM.yyyy} - {z:dd.MM.yyyy} {type.SelectedItem}");
+        var title = $"{a:dd.MM.yyyy} - {z:dd.MM.yyyy} {type.SelectedItem}";
+
+        if (type.SelectedIndex == 2 && grid.CurrentRow is DataGridViewRow selected && !selected.IsNewRow)
+        {
+            var columns = grid.Columns.Cast<DataGridViewColumn>()
+                .Where(c => c.Visible)
+                .OrderBy(c => c.DisplayIndex)
+                .ToArray();
+            var values = columns
+                .Select(c => Convert.ToString(selected.Cells[c.Index].FormattedValue) ?? string.Empty)
+                .ToArray();
+            var person = selected.Cells.Cast<DataGridViewCell>()
+                .FirstOrDefault(c => grid.Columns[c.ColumnIndex].HeaderText == "Ad Soyad")?.FormattedValue?.ToString();
+            return new ReportTable(
+                string.IsNullOrWhiteSpace(person) ? title : title + " • " + person,
+                columns.Select(c => c.HeaderText).ToArray(),
+                [values]);
+        }
+
+        return GridReportAdapter.ToReport(grid, data, title);
     }
 
     IReadOnlyList<int> Widths() => GridReportAdapter.VisibleWidths(grid);
