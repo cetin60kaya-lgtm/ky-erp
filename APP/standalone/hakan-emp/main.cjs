@@ -32,7 +32,12 @@ async function createWindow(){
   });
   win.setMenuBarVisibility(false);
   setTimeout(async()=>{
-    try{await win.loadURL('http://127.0.0.1:18789/?desktop=1');win.maximize();win.show()}
+    try{
+      await win.loadURL('http://127.0.0.1:18789/?desktop=1');
+      win.webContents.setZoomFactor(1.18);
+      win.maximize();
+      win.show()
+    }
     catch(e){dialog.showErrorBox('HAKAN EMP','Uygulama arayüzü açılamadı: '+e.message)}
   },700);
 }
