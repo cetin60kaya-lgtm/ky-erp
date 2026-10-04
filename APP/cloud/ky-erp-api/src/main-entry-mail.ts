@@ -16,7 +16,7 @@ const text=(v:unknown)=>v==null?"":String(v).trim();
 const upper=(v:unknown)=>text(v).toUpperCase().replace(/İ/g,"I");
 const LIVE_ORIGINS=new Set(["https://kyerp.net","https://www.kyerp.net", "https://security.kyerp.net"]);
 const LOCAL=/^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
-const PREVIEW=/^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i;
+const PREVIEW=/^https:\/\/(?:[a-z0-9-]+\.)?ky-erp-frontend\.pages\.dev$/i;
 const allowedOrigin=(origin:string)=>LIVE_ORIGINS.has(origin)||LOCAL.test(origin)||PREVIEW.test(origin)?origin:undefined;
 
 const overlay=new Hono<Env>();

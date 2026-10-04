@@ -87,7 +87,7 @@ const LIVE_ORIGINS = new Set([
 ]);
 
 const LOCAL_DEV_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
-const PAGES_PREVIEW_ORIGIN = /^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i;
+const PAGES_PREVIEW_ORIGIN = /^https:\/\/(?:[a-z0-9-]+\.)?ky-erp-frontend\.pages\.dev$/i;
 
 function allowedOrigin(origin: string) {
   if (LIVE_ORIGINS.has(origin)) return origin;
