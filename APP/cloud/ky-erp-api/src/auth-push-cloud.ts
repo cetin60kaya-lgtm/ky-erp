@@ -563,14 +563,35 @@ function canApproveTarget(actor: AnyRow, approval: AnyRow, settings: AnyRow) {
   return false;
 }
 
+function canApprovePhoneChallenge(actor: AnyRow, challenge: AnyRow, targetUser: AnyRow | null) {
+  if (text(challenge.userId) === text(actor.userId)) return true;
+  if (isSuper(actor.role)) return actor.ownerControlAuthorized === true;
+  const targetRole = roleOf(targetUser || {});
+  return isCompanyAdmin(actor.role) &&
+    actor.companyApprover === true &&
+    text(actor.companySlug) === text(challenge.mainCompanySlug) &&
+    !["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(targetRole);
+}
+
+async function approvalObserverDevices(c: any, user: AnyRow, companySlug: string) {
+  const targetRole = roleOf(user);
+  const privilegedTarget = ["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(targetRole);
+  const userIds = privilegedTarget ? await applicationOwnerUserIds(c) : await managerApproverUserIds(c, companySlug);
+  const devices: AnyRow[] = [];
+  for (const userId of userIds) devices.push(...await activeDevicesForUser(c, userId, "MANAGER"));
+  return devices;
+}
+
 export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: AnyRow = {}) {
-  const devices = await activeDevicesForUser(c, text(user.id), "SELF");
-  if (!devices.length) return null;
+  const selfDevices = await activeDevicesForUser(c, text(user.id), "SELF");
+  if (!selfDevices.length) return null;
+  const companySlug = text(user.main_company_slug || user.mainCompanySlug || "mecit-hakan");
+  const observerDevices = await approvalObserverDevices(c, user, companySlug);
+  const devices = [...new Map([...selfDevices, ...observerDevices].map((device: AnyRow) => [text(device.id), device])).values()];
 
   const id = crypto.randomUUID();
   const token = randomToken(32);
   const matchNumber = randomMatchNumber();
-  const companySlug = text(user.main_company_slug || user.mainCompanySlug || "mecit-hakan");
 
   // Aynı kullanıcı yeniden girişe basarsa eski bekleyen telefon isteğini "reddedildi"
   // yapmayız. Sessizce SUPERSEDED kapatılır; telefonda yalnız en yeni istek yaşar.
@@ -794,11 +815,15 @@ async function pendingItems(c: any, actor: AnyRow) {
   const items: AnyRow[] = [];
 
   const selfRows = (await storeList(c, PHONE_SCOPE))
-    .filter((row: AnyRow) => text(row.userId) === actor.userId)
+    .filter((row: AnyRow) => {
+      if (text(row.userId) === text(actor.userId)) return true;
+      if (isSuper(actor.role) && actor.ownerControlAuthorized === true) return true;
+      return isCompanyAdmin(actor.role) && actor.companyApprover === true && text(row.mainCompanySlug) === text(actor.companySlug);
+    })
     .sort((a: AnyRow, b: AnyRow) =>
       String(b.requestedAt || b.createdAt || "").localeCompare(String(a.requestedAt || a.createdAt || "")));
 
-  let latestSelfPending = "";
+  const latestSelfPendingByUser = new Map<string, string>();
   for (const row of selfRows) {
     let current = row;
     if (upper(current.status) === "PENDING" && !text(current.consumedAt) && Date.parse(text(current.expiresAt)) <= Date.now()) {
@@ -807,6 +832,8 @@ async function pendingItems(c: any, actor: AnyRow) {
     }
     if (upper(current.status) !== "PENDING" || text(current.consumedAt)) continue;
 
+    const targetUserId = text(current.userId);
+    const latestSelfPending = latestSelfPendingByUser.get(targetUserId) || "";
     if (latestSelfPending) {
       const update = await atomicPhoneUpdate(c, current, "PENDING", {
         status: "SUPERSEDED",
@@ -818,17 +845,26 @@ async function pendingItems(c: any, actor: AnyRow) {
       continue;
     }
 
-    latestSelfPending = text(current.id);
+    const targetUser = await userRow(c, text(current.userId));
+    if (!canApprovePhoneChallenge(actor, current, targetUser)) continue;
+
+    latestSelfPendingByUser.set(targetUserId, text(current.id));
+    const ownRequest = text(current.userId) === text(actor.userId);
+    const targetName = text(targetUser?.full_name || targetUser?.username || "Kullanıcı");
     items.push({
       kind: "SELF_LOGIN",
       id: current.id,
-      dedupeKey: `self:${actor.userId}`,
-      title: "KY ERP · Giriş Onayı",
-      body: `${friendlyDeviceLabel(current.deviceLabel, current.userAgent)} için giriş onayı bekleniyor.`,
+      dedupeKey: `self:${text(current.userId)}`,
+      title: ownRequest ? "KY ERP · Giriş Onayı" : "KY ERP · Kullanıcı Giriş Onayı",
+      body: ownRequest
+        ? `${friendlyDeviceLabel(current.deviceLabel, current.userAgent)} için giriş onayı bekleniyor.`
+        : `${targetName} · ${friendlyDeviceLabel(current.deviceLabel, current.userAgent)} için giriş onayı bekleniyor.`,
       matchNumber: text(current.matchNumber),
       requestedAt: current.requestedAt,
       expiresAt: current.expiresAt,
-      mainCompanySlug: actor.companySlug,
+      mainCompanySlug: text(current.mainCompanySlug || actor.companySlug),
+      targetUserId: text(current.userId),
+      targetUserName: targetName,
     });
   }
 
@@ -1669,13 +1705,15 @@ export function registerAuthPushRoutes(app: any) {
 
     if (kind === "SELF_LOGIN") {
       const row = await storeGet(c, PHONE_SCOPE, id);
-      if (!row || text(row.userId) !== actor.userId) {
-        return c.json(jsonError("PHONE_APPROVAL_NOT_FOUND", "Giriş onayı bulunamadı."), 404);
+      if (!row) return c.json(jsonError("PHONE_APPROVAL_NOT_FOUND", "Giriş onayı bulunamadı."), 404);
+      const targetUser = await userRow(c, text(row.userId));
+      if (!canApprovePhoneChallenge(actor, row, targetUser)) {
+        return c.json(jsonError("PHONE_APPROVAL_FORBIDDEN", "Bu giriş onayı hesabınızın güvenlik kapsamı dışında."), 403);
       }
 
       if (decision === "APPROVE" && requiresLoginNumberMatch(actor.device)) {
         if (!matchNumber || matchNumber !== text(row.matchNumber)) {
-          await audit(c, "PHONE_LOGIN_MATCH_NUMBER_FAILED", actor.userId, actor.userId, actor.companySlug, { challengeId: id, deviceId: actor.device.id });
+          await audit(c, "PHONE_LOGIN_MATCH_NUMBER_FAILED", actor.userId, text(row.userId), text(row.mainCompanySlug || actor.companySlug), { challengeId: id, deviceId: actor.device.id });
           return c.json(jsonError("PHONE_MATCH_NUMBER_INVALID", "Bilgisayardaki eşleştirme numarası doğrulanamadı."), 400);
         }
       }
@@ -1705,7 +1743,7 @@ export function registerAuthPushRoutes(app: any) {
         ...(status === "DENIED" ? { consumedAt: nowIso() } : {}),
       });
       const finalStatus = upper(update.row?.status || status);
-      await audit(c, decision === "APPROVE" ? "PHONE_LOGIN_APPROVED" : "PHONE_LOGIN_DENIED", actor.userId, actor.userId, actor.companySlug, { challengeId: id, deviceId: actor.device.id, applied: update.changed });
+      await audit(c, decision === "APPROVE" ? "PHONE_LOGIN_APPROVED" : "PHONE_LOGIN_DENIED", actor.userId, text(row.userId), text(row.mainCompanySlug || actor.companySlug), { challengeId: id, deviceId: actor.device.id, applied: update.changed, scopeType: isSuper(actor.role) && actor.ownerControlAuthorized === true ? "SYSTEM" : (isCompanyAdmin(actor.role) && actor.companyApprover === true ? "COMPANY" : "SELF") });
       return c.json({ ok: true, data: { kind, id, status: finalStatus, applied: update.changed } });
     }
 
