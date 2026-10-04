@@ -342,11 +342,14 @@ public sealed class LegacyPeriodForm : Form
             }
 
             var savedCode=code;
+            var savedYear=start.Value.Year;
             adding=false;
             SetEdit(false);
             save.Enabled=false;
             ReloadYears();
-            year.SelectedItem=start.Value.Year;
+            loading=true;
+            try { year.SelectedItem=savedYear; }
+            finally { loading=false; }
             ReloadGrid(savedCode);
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Periods");}
