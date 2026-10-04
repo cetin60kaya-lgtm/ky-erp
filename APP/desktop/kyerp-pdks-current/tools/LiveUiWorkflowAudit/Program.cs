@@ -423,9 +423,10 @@ static void VerifyAccountingReports(string testPk,DateTime start,DateTime end,Li
         reportForm.Show();Pump(600);
         var type=typeof(ReportCenterForm);
         var report=(ComboBox)(type.GetField("report",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(reportForm)??throw new Exception("Rapor seçicisi bulunamadı."));
-        var period=(DateTimePicker)(type.GetField("period",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(reportForm)??throw new Exception("Rapor dönem alanı bulunamadı."));
+        var month=(ComboBox)(type.GetField("month",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(reportForm)??throw new Exception("Rapor ay alanı bulunamadı."));
+        var year=(ComboBox)(type.GetField("year",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(reportForm)??throw new Exception("Rapor yıl alanı bulunamadı."));
         var grid=(DataGridView)(type.GetField("grid",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(reportForm)??throw new Exception("Rapor grid bulunamadı."));
-        period.Value=new DateTime(start.Year,start.Month,1);report.SelectedItem="Bordro • Ödemeler";Pump(650);
+        year.SelectedItem=start.Year;month.SelectedIndex=start.Month-1;report.SelectedItem="Bordro • Ödemeler";Pump(650);
         var found=grid.Rows.Cast<DataGridViewRow>().Any(r=>r.Cells.Cast<DataGridViewCell>().Any(c=>string.Equals(Convert.ToString(c.Value)?.Trim(),testPk,StringComparison.Ordinal)));
         if(!found)throw new Exception("Ödeme raporunda test personeli görünmedi.");
         log.Add("PASS|MUHASEBE AKIŞI > Ödeme raporu > DB/UI karşılaştırma");
