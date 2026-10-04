@@ -76,7 +76,7 @@ public sealed partial class MainShellForm
                 ShowHome();
                 break;
             case PdksCommandId.Operations:
-                ShowOperationsCenter();
+                OpenLegacyGirisCikis();
                 break;
             case PdksCommandId.LiveAttendance:
                 OpenLiveAttendance();
@@ -91,7 +91,7 @@ public sealed partial class MainShellForm
                 ShowModule(new DepartmentAttendanceAnalyticsForm(), PdksModule.GunlukOperasyon);
                 break;
             case PdksCommandId.EntryExit:
-                OpenLegacyGirisCikis();
+                ShowOperationsCenter();
                 break;
             case PdksCommandId.Personnel:
                 OpenPersonel();
