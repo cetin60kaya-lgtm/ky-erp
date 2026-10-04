@@ -78,7 +78,7 @@ test("historical employment state is driven by hire/exit dates, not today's pass
   assert.equal(advancedEmployeeVisible(employee, card, "2026-10"), false);
 });
 
-test("legacy active employee with missing hire stays visible but blocks clean close; passive without exit stays out", () => {
+test("missing lifecycle dates stay visible for payroll but block clean close", () => {
   assert.equal(employmentStateAtPeriod({ status: "Aktif" }, {}, "2026-10"), "MISSING_HIRE_DATE");
   assert.equal(advancedEmployeeVisible({ status: "Aktif" }, {}, "2026-10"), true);
   assert.equal(
@@ -87,7 +87,7 @@ test("legacy active employee with missing hire stays visible but blocks clean cl
   );
   assert.equal(
     advancedEmployeeVisible({ status: "Pasif", hireDate: "2025-01-01" }, { active_passive: "Pasif" }, "2026-10"),
-    false,
+    true,
   );
 });
 
