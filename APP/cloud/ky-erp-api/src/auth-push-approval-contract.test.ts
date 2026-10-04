@@ -205,7 +205,7 @@ test("KY Security background refresh keeps the rendered account stable and queue
   assert.match(securityApp,/refreshState\(\{background:true,trailing:true\}\)/);
   assert.match(securityApp,/if\(refreshState\.running\)\{if\(background\)queueTrailingRefresh\(\);return;\}/);
   assert.doesNotMatch(securityApp,/renderAccount\(null,device\)/);
-  assert.match(securityHtml,/data-tab="approvals">Onaylar/);
+  assert.match(securityHtml,/data-tab="approvals"[^>]*>Onaylar/);
   assert.doesNotMatch(securityHtml,/data-tab="approvals" data-system-only/);
 });
 
@@ -248,4 +248,23 @@ test("approved phone decision clears the Android notification immediately",()=>{
   assert.match(securityApp,/getNotifications\(\)/);
   assert.match(securityApp,/openApproval/);
   assert.match(securityApp,/await finalizeApprovalNotification\(decision\);const kind=/);
+});
+
+
+test("Security PWA opens approvals first and foregrounds only newly arriving requests",()=>{
+  assert.match(securityApp,/renderInstall\(\);showTab\("approvals"\)/);
+  assert.match(securityApp,/manualTabSelection/);
+  assert.match(securityApp,/pendingSignature/);
+  assert.match(securityApp,/hasNewPending/);
+  assert.match(securityApp,/showTab\("approvals"\)/);
+  assert.match(securityApp,/showTab\(button\.dataset\.tab,\{user:true\}\)/);
+  assert.match(securityHtml,/data-tab="approvals" class="active"/);
+  assert.match(securityHtml,/id="approvalsTab" class="security-tab-panel"/);
+});
+
+test("phone approval polling never clears a partially typed KY Security code",()=>{
+  assert.match(login,/function applyResponse\(response, options = \{\}\)/);
+  assert.match(login,/if \(!options\.preserveCode\) setCode\(""\)/);
+  assert.match(login,/preserveCode: nextStage === "PHONE_APPROVAL_PENDING"/);
+  assert.match(login,/aria-label="KY Güvenlik 6 haneli giriş kodu"/);
 });
