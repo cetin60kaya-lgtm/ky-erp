@@ -16,6 +16,9 @@ public sealed partial class MainShellForm
     Button? activeNavButton;
     Button? modernManageButton;
     Button? modernBackButton;
+    Panel? modernContentPanel;
+    Panel? navigationCover;
+    bool navigationBusy;
     readonly Dictionary<PdksCommandId,Button> modernNavButtons = [];
     static readonly PdksCommandId[] SidebarOrder =
     [
@@ -77,6 +80,7 @@ public sealed partial class MainShellForm
             Padding = new Padding(18, 14, 18, 16),
             Margin = Padding.Empty
         };
+        modernContentPanel = content;
         if (workspace.Parent is not null) workspace.Parent.Controls.Remove(workspace);
         workspace.Dock = DockStyle.Fill;
         content.Controls.Add(workspace);
@@ -117,7 +121,7 @@ public sealed partial class MainShellForm
                 Controls.Remove(modernShell);
                 modernShell.Dispose();
             }
-            modernShell=null;modernPageTitle=null;modernPageHint=null;modernDbState=null;modernActivityState=null;modernClock=null;activeNavButton=null;modernManageButton=null;modernBackButton=null;
+            modernShell=null;modernPageTitle=null;modernPageHint=null;modernDbState=null;modernActivityState=null;modernClock=null;activeNavButton=null;modernManageButton=null;modernBackButton=null;modernContentPanel=null;navigationCover=null;navigationBusy=false;
             modernClockTimer?.Stop();modernClockTimer?.Dispose();modernClockTimer=null;
             BuildModernShell();
             SetModernPage(title,hint);
@@ -265,9 +269,79 @@ public sealed partial class MainShellForm
         button.FlatAppearance.BorderSize = 0;
         button.FlatAppearance.MouseOverBackColor = p.SidebarHover;
         button.FlatAppearance.MouseDownBackColor = p.SidebarHover;
-        button.Click += (_, _) => ExecuteCommand(command.Id);
+        button.Click += async (_, _) => await NavigateWithCoverAsync(command.Id);
         modernNavButtons[command.Id]=button;
         return button;
+    }
+
+    async Task NavigateWithCoverAsync(PdksCommandId id)
+    {
+        if (navigationBusy) return;
+        navigationBusy = true;
+        try
+        {
+            ShowNavigationCover(PdksCommandCatalog.Get(id).Title);
+            await Task.Delay(20);
+            ExecuteCommand(id);
+        }
+        finally
+        {
+            HideNavigationCover();
+            navigationBusy = false;
+        }
+    }
+
+    void ShowNavigationCover(string title)
+    {
+        if (modernContentPanel is null || modernContentPanel.IsDisposed) return;
+        var p = PdksAppearance.Current;
+        navigationCover?.Dispose();
+
+        var cover = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = p.Canvas,
+            Padding = new Padding(24)
+        };
+        var center = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            BackColor = p.Canvas
+        };
+        center.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        center.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        center.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        var card = PdksUiKit.Card(18);
+        card.MaximumSize = new Size(430, 72);
+        card.MinimumSize = new Size(360, 72);
+        card.Anchor = AnchorStyles.None;
+        card.Controls.Add(new Label
+        {
+            Text = title + " açılıyor…",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+            ForeColor = p.Text
+        });
+        center.Controls.Add(card, 0, 1);
+        cover.Controls.Add(center);
+        modernContentPanel.Controls.Add(cover);
+        cover.BringToFront();
+        navigationCover = cover;
+        UseWaitCursor = true;
+        cover.Refresh();
+    }
+
+    void HideNavigationCover()
+    {
+        UseWaitCursor = false;
+        if (navigationCover is null) return;
+        if (modernContentPanel is not null && !modernContentPanel.IsDisposed)
+            modernContentPanel.Controls.Remove(navigationCover);
+        navigationCover.Dispose();
+        navigationCover = null;
     }
 
     Button CompactButton(string text,PdksToolbarIcon icon)
