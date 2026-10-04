@@ -17,6 +17,7 @@ public partial class PersonelForm : Form
     readonly StatusStrip status = new();
     readonly ToolStripStatusLabel stats = new() { Spring=true, TextAlign=ContentAlignment.MiddleLeft };
     string currentPk = "";
+    bool startupLoaded;
 
     public PersonelForm()
     {
@@ -33,15 +34,21 @@ public partial class PersonelForm : Form
         RepairRecordActionBars();
         WireLegacyPeriodSelectors();
 
-        Load += (_,_) =>
+        Shown += (_,_) =>
         {
-            fullTabsReady=false;
-            Reload();
-            LoadPeriods();
-            fullTabsReady=true;
-            SyncPeriodsToPerson();
-            RefreshSelectedTab();
-            ApplyClassicGridStyles();
+            if (startupLoaded) return;
+            startupLoaded=true;
+            BeginInvoke((Action)(() =>
+            {
+                if (IsDisposed) return;
+                fullTabsReady=false;
+                Reload();
+                LoadPeriods();
+                fullTabsReady=true;
+                SyncPeriodsToPerson();
+                RefreshSelectedTab();
+                ApplyClassicGridStyles();
+            }));
         };
     }
     void BuildMenu()
