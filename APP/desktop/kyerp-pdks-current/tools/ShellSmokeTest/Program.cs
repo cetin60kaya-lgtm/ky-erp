@@ -40,9 +40,11 @@ var expectedWorkflow = new[]
 {
     PdksCommandId.TerminalCenter,
     PdksCommandId.LiveAttendance,
+    PdksCommandId.AttendanceExceptions,
     PdksCommandId.EntryExit,
     PdksCommandId.Personnel,
     PdksCommandId.TimesheetMonthly,
+    PdksCommandId.PeriodControlCenter,
     PdksCommandId.PayrollGeneral,
     PdksCommandId.Reports
 };
@@ -73,8 +75,24 @@ using (var operations = new OperationsCenterForm(PdksCommandCatalog.All, _ => { 
 {
     var texts=Descendants(operations).OfType<Label>().Select(x=>x.Text ?? string.Empty)
         .Concat(Descendants(operations).OfType<Button>().Select(x=>x.Text ?? string.Empty)).ToArray();
-    foreach(var required in new[]{"Terminalden Al","Canlı Kontrol","Eksikleri Düzelt","İzin / Ek Kayıt","Puantaja Geç"})
+    foreach(var required in new[]{"Terminalden Al","Canlı Kontrol","İstisnaları Gör","Eksikleri Düzelt","İzin / Ek Kayıt","Puantaja Geç"})
         if(!texts.Contains(required)) throw new InvalidOperationException("Operasyon adımı eksik: "+required);
+}
+
+using (var exceptions = new AttendanceExceptionCenterForm())
+{
+    if (!Descendants(exceptions).OfType<DataGridView>().Any())
+        throw new InvalidOperationException("İstisna merkezi listesi yok.");
+}
+using (var department = new DepartmentAttendanceAnalyticsForm())
+{
+    if (!Descendants(department).OfType<DataGridView>().Any())
+        throw new InvalidOperationException("Bölüm devam analizi listesi yok.");
+}
+using (var periodControl = new PeriodControlCenterForm())
+{
+    if (!Descendants(periodControl).OfType<DataGridView>().Any())
+        throw new InvalidOperationException("Dönem kontrol merkezi listesi yok.");
 }
 
 using (var settings = new LegacyTerminalSettingsForm())
