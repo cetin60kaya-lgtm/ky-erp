@@ -13,3 +13,12 @@ Zorunlu kurallar:
 - Otomatik workflow'larda path filtresi + concurrency cancellation kullanılır.
 - Artifact retention varsayılan 3 gündür.
 - Maliyeti artırabilecek GitHub ayarı veya yeni otomasyon kullanıcı açıkça onaylamadan etkinleştirilmez.
+
+
+## Remote Desktop kota koruma
+- Remote Desktop yalnız gerçekten yerel Windows/Photoshop/Illustrator/PDKS/cihaz/dosya işi için kullanılır.
+- GitHub, Cloudflare, web ve repo işleri için Remote kullanma.
+- Basit iş 1-3, orta iş 5-8 Remote çağrısını hedefler; 10 üzeri gerekiyorsa önce tek/batch PowerShell scriptine birleştir.
+- start_process/read_process_output polling döngülerinden kaçın; uzun işi mümkünse tek komutta tamamla.
+- Birden fazla dosya için read_multiple_files veya tek script kullan; aynı dosyayı/klasörü tekrar tekrar okuma.
+- Remote, uygun başka bir connector/tool varken kullanılmaz.
