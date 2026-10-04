@@ -23,15 +23,11 @@ public sealed partial class MainShellForm
     static readonly PdksCommandId[] SidebarOrder =
     [
         PdksCommandId.Home,
-        PdksCommandId.Operations,
-        PdksCommandId.Personnel,
         PdksCommandId.EntryExit,
-        PdksCommandId.Leave,
+        PdksCommandId.Personnel,
         PdksCommandId.TimesheetMonthly,
         PdksCommandId.PayrollGeneral,
-        PdksCommandId.Reports,
-        PdksCommandId.Periods,
-        PdksCommandId.Definitions
+        PdksCommandId.Reports
     ];
     bool appearanceHooked;
 
@@ -269,19 +265,22 @@ public sealed partial class MainShellForm
         button.FlatAppearance.BorderSize = 0;
         button.FlatAppearance.MouseOverBackColor = p.SidebarHover;
         button.FlatAppearance.MouseDownBackColor = p.SidebarHover;
-        button.Click += async (_, _) => await NavigateWithCoverAsync(command.Id);
+        button.Click += async (_, _) => await NavigateWithTransitionAsync(command.Id);
         modernNavButtons[command.Id]=button;
         return button;
     }
 
-    async Task NavigateWithCoverAsync(PdksCommandId id)
+    async Task NavigateWithTransitionAsync(PdksCommandId id)
     {
-        if (navigationBusy) return;
+        if (navigationBusy || currentWorkspaceCommand == id) return;
         navigationBusy = true;
+        var command = PdksCommandCatalog.Get(id);
         try
         {
-            ShowNavigationCover(PdksCommandCatalog.Get(id).Title);
-            await Task.Delay(20);
+            SelectNavForCommand(id);
+            SetModernPage(command.Title, command.Hint);
+            ShowNavigationCover(command.Title);
+            await Task.Yield();
             ExecuteCommand(id);
         }
         finally
@@ -303,40 +302,32 @@ public sealed partial class MainShellForm
             BackColor = p.Canvas,
             Padding = new Padding(24)
         };
-        var center = new TableLayoutPanel
+        cover.Controls.Add(new Label
         {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 3,
-            BackColor = p.Canvas
-        };
-        center.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        center.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
-        center.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        var card = PdksUiKit.Card(18);
-        card.MaximumSize = new Size(430, 72);
-        card.MinimumSize = new Size(360, 72);
-        card.Anchor = AnchorStyles.None;
-        card.Controls.Add(new Label
-        {
-            Text = title + " açılıyor…",
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+            Text = title,
+            Dock = DockStyle.Top,
+            Height = 34,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 13f, FontStyle.Bold),
             ForeColor = p.Text
         });
-        center.Controls.Add(card, 0, 1);
-        cover.Controls.Add(center);
+        cover.Controls.Add(new Label
+        {
+            Text = "Ekran hazırlanıyor…",
+            Dock = DockStyle.Top,
+            Height = 28,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 9f),
+            ForeColor = p.Muted
+        });
         modernContentPanel.Controls.Add(cover);
         cover.BringToFront();
         navigationCover = cover;
-        UseWaitCursor = true;
         cover.Refresh();
     }
 
     void HideNavigationCover()
     {
-        UseWaitCursor = false;
         if (navigationCover is null) return;
         if (modernContentPanel is not null && !modernContentPanel.IsDisposed)
             modernContentPanel.Controls.Remove(navigationCover);
@@ -406,23 +397,23 @@ public sealed partial class MainShellForm
 
     static PdksCommandId PrimaryParent(PdksCommandId id) => id switch
     {
-        PdksCommandId.LiveAttendance or PdksCommandId.AttendanceExceptions or
-        PdksCommandId.AttendanceHistory or PdksCommandId.DepartmentAttendanceAnalytics or
-        PdksCommandId.QuickOperations or PdksCommandId.TerminalCenter or
-        PdksCommandId.TerminalSettings or PdksCommandId.TerminalProfiles or PdksCommandId.DataSources
-            => PdksCommandId.Operations,
-        PdksCommandId.EarningsDeductions or PdksCommandId.PayrollPayments
+        PdksCommandId.Operations or PdksCommandId.LiveAttendance or PdksCommandId.AttendanceExceptions or
+        PdksCommandId.AttendanceHistory or PdksCommandId.DepartmentAttendanceAnalytics
+            => PdksCommandId.EntryExit,
+        PdksCommandId.TerminalCenter or PdksCommandId.TerminalSettings or
+        PdksCommandId.TerminalProfiles or PdksCommandId.DataSources
+            => PdksCommandId.EntryExit,
+        PdksCommandId.Leave or PdksCommandId.EarningsDeductions or PdksCommandId.PayrollPayments or PdksCommandId.QuickOperations
             => PdksCommandId.Personnel,
         PdksCommandId.TimesheetDaily or PdksCommandId.TimesheetResults
             => PdksCommandId.TimesheetMonthly,
         PdksCommandId.PayrollAdjustment or PdksCommandId.PeriodControlCenter or
         PdksCommandId.PayrollPayslip or PdksCommandId.PayrollOvertime
             => PdksCommandId.PayrollGeneral,
-        PdksCommandId.WorkingDate
-            => PdksCommandId.Periods,
-        PdksCommandId.Groups or PdksCommandId.Holidays or PdksCommandId.DailyWorkHours or
-        PdksCommandId.AnnualWorkPlan or PdksCommandId.PayrollFields or PdksCommandId.EarningsTypes
-            => PdksCommandId.Definitions,
+        PdksCommandId.WorkingDate or PdksCommandId.Periods or PdksCommandId.Groups or
+        PdksCommandId.Holidays or PdksCommandId.DailyWorkHours or PdksCommandId.AnnualWorkPlan or
+        PdksCommandId.PayrollFields or PdksCommandId.EarningsTypes or PdksCommandId.Definitions
+            => PdksCommandId.Home,
         _ => id
     };
 
