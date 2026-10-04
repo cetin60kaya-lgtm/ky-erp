@@ -9,6 +9,7 @@ import { requireOwnerSecurityApp } from "./owner-security-device-guard";
 import { registerErpCommandGatewayRoutes } from "./erp-command-gateway";
 import { registerAiPlatformAccessRoutes } from "./ai-platform-access";
 import { registerUiDialogLayoutRoutes } from "./ui-dialog-layout-cloud";
+import { runSecurityWorkspaceReminderSweep } from "./auth-security-mobile-control";
 
 type Env = { Bindings: Cloudflare.Env };
 
@@ -85,6 +86,9 @@ security.onError((error, c) => {
 });
 
 export default {
+  async scheduled(_controller: ScheduledController, env: Cloudflare.Env, ctx: ExecutionContext) {
+    ctx.waitUntil(runSecurityWorkspaceReminderSweep(env));
+  },
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext) {
     const path = new URL(request.url).pathname;
     if (path === "/api/ai/command" || path.startsWith("/api/ai/command/") || path === "/api/ai/platform-access" || path.startsWith("/api/ai/platform-access/") || /^\/api\/admin\/users\/[^/]+\/ai-platform-access$/.test(path)) return command.fetch(request, env, ctx);
