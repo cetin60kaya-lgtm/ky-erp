@@ -1,3 +1,3 @@
-deploy: security-phone-approval-scope-hotfix
-canonical: 456352ba62dfa4a112733ca701353d981bae77e2
-requested: 2026-10-04T15:46:00Z
+deploy: security-approvals-front-codeinput-hotfix
+canonical: f38daba5f92ffdc1ce782da2f828d130d106df97
+requested: 2026-10-04T16:12:00Z
