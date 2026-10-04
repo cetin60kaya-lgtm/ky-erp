@@ -1,4 +1,4 @@
 deploy: platform-admin-security-v4
-canonical: e63509b826e7264ae3e305b4d917d942f9cf7aa7
-requested: 2026-10-04T01:56:00Z
-reason: align-pages-production-branch
+canonical: 2be5f673532b0d5831bae2b2d0b7069f1aa072cf
+requested: 2026-10-04T04:36:00+03:00
+reason: verify-lazy-admin-chunk-and-publish
