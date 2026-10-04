@@ -1,0 +1,80 @@
+name: KY ERP Frontend Canonical Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - '.github/deploy/frontend-trigger'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-frontend-canonical-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Frontend test build deploy verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      FRONTEND_DIR: APP/app/ky-erp-frontend
+      PAGES_PROJECT: ky-erp-frontend
+      PROD_BRANCH: codex/model-uretim-kontrol-merkezi-final
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+      - name: Frontend lint test build
+        working-directory: APP/app/ky-erp-frontend
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+      - name: Deploy Cloudflare Pages production
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "$PROD_BRANCH"
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          npx --yes wrangler@4.118.0 pages deploy dist \
+            --project-name "$PAGES_PROJECT" \
+            --branch "$PROD_BRANCH" \
+            --commit-hash "$GITHUB_SHA" \
+            --commit-message "KY ERP frontend canonical $GITHUB_SHA"
+      - name: Verify live canonical bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=0
+          for attempt in $(seq 1 30); do
+            curl --location --fail --silent --show-error https://kyerp.net/ > /tmp/kyerp-home.html || true
+            script="$(grep -oE '<script[^>]+src="[^"]+"' /tmp/kyerp-home.html | head -1 | sed -n 's/.*src="\([^"]*\)"/\1/p' || true)"
+            if [ -n "$script" ]; then
+              case "$script" in
+                http://*|https://*) script_url="$script" ;;
+                /*) script_url="https://kyerp.net${script}" ;;
+                *) script_url="https://kyerp.net/${script#./}" ;;
+              esac
+              if curl --location --fail --silent --show-error "$script_url" > /tmp/kyerp-live.js && grep -q "KY ERP Yönetim Merkezi" /tmp/kyerp-live.js; then
+                ready=1
+                echo "Canlı bundle doğrulandı: $script_url"
+                break
+              fi
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
