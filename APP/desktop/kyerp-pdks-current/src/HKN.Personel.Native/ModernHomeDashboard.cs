@@ -23,6 +23,8 @@ internal sealed class ModernHomeDashboard : UserControl
     [
         PdksCommandId.QuickOperations,
         PdksCommandId.LiveAttendance,
+        PdksCommandId.AttendanceExceptions,
+        PdksCommandId.AttendanceHistory,
         PdksCommandId.EntryExit,
         PdksCommandId.TimesheetMonthly,
         PdksCommandId.PayrollGeneral,
