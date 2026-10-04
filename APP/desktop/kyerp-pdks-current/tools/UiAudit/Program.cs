@@ -62,7 +62,10 @@ var jobs = new List<(string Name, Func<Form> Factory)>
     ("17-VeriKaynaklari", () => new QuickDataSourceForm()),
     ("18-IslemGecmisi", () => new AuditHistoryForm()),
     ("19-TerminalMerkezi", () => new TerminalCenterForm(null, new LegacyTerminalSettingsForm())),
-    ("21-HizliIslemler", () => QuickOperationsAuditForm(user))
+    ("21-HizliIslemler", () => QuickOperationsAuditForm(user)),
+    ("22-IstisnaMerkezi", () => new AttendanceExceptionCenterForm()),
+    ("23-BolumDevamAnalizi", () => new DepartmentAttendanceAnalyticsForm()),
+    ("24-DonemKontrolMerkezi", () => new PeriodControlCenterForm())
 };
 
 foreach (var view in Enum.GetValues<LegacyDataView>())
