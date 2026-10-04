@@ -19,7 +19,7 @@ public sealed class LegacyGirisCikisForm : Form
     readonly string? initialCard;
     readonly DateTime? initialDate;
 
-    public LegacyGirisCikisForm(string? initialCard=null, DateTime? initialDate=null){this.initialCard=initialCard;this.initialDate=initialDate;Text="Giriş ve Çıkışlar";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1220,740);MinimumSize=new Size(980,620);Font=new Font("Segoe UI",9f);BackColor=PdksAppearance.Current.Canvas;KeyPreview=true;Build();Shown+=(_,_)=>Init();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
+    public LegacyGirisCikisForm(string? initialCard=null, DateTime? initialDate=null){this.initialCard=initialCard;this.initialDate=initialDate;Text="Giriş ve Çıkışlar";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1220,740);MinimumSize=new Size(980,620);Font=new Font("Segoe UI",9f);BackColor=PdksAppearance.Current.Canvas;KeyPreview=true;Build();Shown+=(_,_)=>BeginInvoke((Action)Init);KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
     static DateTimePicker D()=>new(){Format=DateTimePickerFormat.Short};
     static DateTimePicker D(int x,int y,int w)=>new(){Location=new Point(x,y),Size=new Size(w,21),Format=DateTimePickerFormat.Custom,CustomFormat="dd MMM yyyy"};
     static Label L(string text,int x,int y)=>new(){Text=text,Location=new Point(x,y),AutoSize=true,ForeColor=PdksAppearance.Current.Muted};
