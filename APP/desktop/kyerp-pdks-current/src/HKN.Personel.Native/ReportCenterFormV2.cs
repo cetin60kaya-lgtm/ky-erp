@@ -67,7 +67,7 @@ public sealed class ReportCenterForm : Form
         }
         report.SelectedIndex = initialIndex;
         report.SelectedIndexChanged += (_, _) => LoadData();
-        Shown += (_, _) => LoadData();
+        Shown += (_, _) => BeginInvoke((Action)LoadData);
     }
 
     void Build()
