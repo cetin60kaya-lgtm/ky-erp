@@ -79,22 +79,23 @@ jobs:
           project="$(curl --fail --silent --show-error -H "$auth" "$base")"
           jq -e --arg b "$PROD_BRANCH" '.success == true and .result.production_branch == $b' <<<"$project" >/dev/null
           echo "Canonical deployment URL: $(jq -r '.result.canonical_deployment.url // empty' <<<"$project")"
+          marker_file="$(grep -R -l --include='*.js' 'KY ERP Yönetim Merkezi' APP/app/ky-erp-frontend/dist/assets | head -1 || true)"
+          test -n "$marker_file" || { echo "Platform Yönetimi marker chunk build içinde bulunamadı." >&2; exit 1; }
+          marker_asset="/assets/$(basename "$marker_file")"
+          marker_sha="$(sha256sum "$marker_file" | awk '{print $1}')"
           ready=0
           for attempt in $(seq 1 30); do
-            curl --location --fail --silent --show-error https://kyerp.net/ > /tmp/kyerp-home.html || true
-            script="$(grep -oE '<script[^>]+src="[^"]+"' /tmp/kyerp-home.html | head -1 | sed -n 's/.*src="\([^"]*\)"/\1/p' || true)"
-            if [ -n "$script" ]; then
-              case "$script" in
-                http://*|https://*) script_url="$script" ;;
-                /*) script_url="https://kyerp.net${script}" ;;
-                *) script_url="https://kyerp.net/${script#./}" ;;
-              esac
-              if curl --location --fail --silent --show-error "$script_url" > /tmp/kyerp-live.js && grep -q "KY ERP Yönetim Merkezi" /tmp/kyerp-live.js; then
+            code="$(curl --location --silent --show-error -o /tmp/kyerp-live-admin.js -w '%{http_code}' --max-time 20 -H 'Cache-Control: no-cache' "https://kyerp.net${marker_asset}?release=${GITHUB_SHA}-${attempt}" || true)"
+            live_sha=""
+            if [ "$code" = "200" ]; then
+              live_sha="$(sha256sum /tmp/kyerp-live-admin.js | awk '{print $1}')"
+              if [ "$live_sha" = "$marker_sha" ] && grep -q 'KY ERP Yönetim Merkezi' /tmp/kyerp-live-admin.js; then
                 ready=1
-                echo "Canlı bundle doğrulandı: $script_url"
+                echo "Canlı Platform Yönetimi chunk doğrulandı: $marker_asset sha=$live_sha"
                 break
               fi
             fi
+            echo "Canlı chunk bekleniyor $attempt/30: $marker_asset http=$code live_sha=$live_sha"
             sleep 2
           done
           test "$ready" -eq 1
