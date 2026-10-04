@@ -1,3 +1,4 @@
 deploy: platform-admin-security-v4
 canonical: e63509b826e7264ae3e305b4d917d942f9cf7aa7
-requested: 2026-10-04T01:50:00Z
+requested: 2026-10-04T01:56:00Z
+reason: align-pages-production-branch
