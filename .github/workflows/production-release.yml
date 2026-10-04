@@ -272,6 +272,21 @@ jobs:
             exit 1
           fi
 
+
+          echo "0058 Denetim ortak kanit semasi kontrol ediliyor..."
+          test -f migrations/0058_compliance_shared_evidence.sql
+          compliance_shared_state="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('compliance_controls','compliance_requirement_controls','compliance_document_controls','compliance_external_refs','compliance_system_evidence','compliance_requirement_applicability');" --json)"
+          compliance_shared_tables="$(jq -r '.[0].results[0].n // -1' <<<"$compliance_shared_state")"
+          if [ "$compliance_shared_tables" = "0" ]; then
+            echo "0058 semasi yok; tam D1 yedegi sonrasi additive migration uygulanacak."
+            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0058_compliance_shared_evidence.sql
+          elif [ "$compliance_shared_tables" = "6" ]; then
+            echo "0058 semasi zaten tam; tekrar uygulanmiyor."
+          else
+            echo "GUVENLIK DURDURMASI: 0058 kismi sema bulundu (tables=$compliance_shared_tables)." >&2
+            exit 1
+          fi
+
       - name: Migration sonrasi File Hub + Muhasebe + FIBE + PDKS + AI ucretlendirme semasini dogrula
         working-directory: APP/cloud/ky-erp-api
         shell: bash
@@ -311,6 +326,9 @@ jobs:
           jq -e '.[0].results[0].company_cols == 6 and .[0].results[0].fibe_tables == 2' <<<"$fibe" >/dev/null || { echo "FIBE/hizli muhasebe 0040 semasi eksik" >&2; exit 1; }
           hr_compliance="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('ik_person_hr_profiles') WHERE name IN ('employee_id','main_company_id','personnel_status')) AS profile_cols, (SELECT COUNT(*) FROM pragma_table_info('ik_person_monthly_compliance') WHERE name IN ('main_company_id','employee_id','period','sgk_covered','sgk_days')) AS compliance_cols;" --json)"
           jq -e '.[0].results[0].profile_cols == 3 and .[0].results[0].compliance_cols == 5' <<<"$hr_compliance" >/dev/null || { echo "IK emekli/aylik SGK 0045 semasi eksik" >&2; exit 1; }
+
+          compliance="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS tables_ok FROM sqlite_master WHERE type='table' AND name IN ('compliance_controls','compliance_requirement_controls','compliance_document_controls','compliance_external_refs','compliance_system_evidence','compliance_requirement_applicability');" --json)"
+          jq -e '.[0].results[0].tables_ok == 6' <<<"$compliance" >/dev/null || { echo "Denetim 0058 semasi eksik" >&2; exit 1; }
 
       - name: Worker'i api.kyerp.net production'a dagit
         working-directory: APP/cloud/ky-erp-api
