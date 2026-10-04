@@ -21,11 +21,9 @@ internal sealed class ModernHomeDashboard : UserControl
 
     static readonly PdksCommandId[] QuickOrder =
     [
-        PdksCommandId.QuickOperations,
-        PdksCommandId.LiveAttendance,
-        PdksCommandId.AttendanceExceptions,
-        PdksCommandId.AttendanceHistory,
         PdksCommandId.EntryExit,
+        PdksCommandId.AttendanceExceptions,
+        PdksCommandId.Leave,
         PdksCommandId.TimesheetMonthly,
         PdksCommandId.PayrollGeneral,
         PdksCommandId.Reports
@@ -40,8 +38,8 @@ internal sealed class ModernHomeDashboard : UserControl
         Font = new Font("Segoe UI",9f);
         DoubleBuffered = true;
         Build();
-        Shown += (_,_) => RefreshDashboard();
-        timer.Tick += (_,_) => RefreshDashboard();
+        Shown += async (_,_) => await RefreshDashboardAsync();
+        timer.Tick += async (_,_) => await RefreshDashboardAsync();
         PdksAppearance.Changed += AppearanceChanged;
         if (Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT") != "1") timer.Start();
         Disposed += (_,_) =>
@@ -49,7 +47,6 @@ internal sealed class ModernHomeDashboard : UserControl
             timer.Stop();
             PdksAppearance.Changed -= AppearanceChanged;
         };
-        RefreshDashboard();
     }
 
     event EventHandler? Shown
@@ -67,7 +64,7 @@ internal sealed class ModernHomeDashboard : UserControl
             activeValue=MetricValue();arrivedValue=MetricValue();leaveValue=MetricValue();pendingValue=MetricValue();
             attentionState=StatusLabel();terminalState=StatusLabel();dbState=StatusLabel();syncState=StatusLabel();
             Build();
-            RefreshDashboard();
+            _ = RefreshDashboardAsync();
         }
         if (InvokeRequired) BeginInvoke((Action)rebuild); else rebuild();
     }
@@ -247,34 +244,65 @@ internal sealed class ModernHomeDashboard : UserControl
         return new ModernCardPanel{Dock=DockStyle.Fill,BackColor=p.Surface,Padding=new Padding(0),BorderColor=p.Border,Radius=12};
     }
 
-    void RefreshDashboard()
+    sealed record DashboardSnapshot(
+        int Active,int Arrived,int Leave,int MissingExit,int Late,int Absent,int Overtime,
+        bool DbReady,DateTime? LastSync,int LastRead,string? Error);
+
+    async Task RefreshDashboardAsync()
     {
+        if (IsDisposed) return;
+        DashboardSnapshot snapshot;
         try
         {
-            var today=DateTime.Today;var tomorrow=today.AddDays(1);
-            var active=Convert.ToInt32(db.Scalar("select count(*) from KIMLIK where ICTARIH is null"));
-            var arrived=Convert.ToInt32(db.Scalar("select count(distinct PKNO) from GIRCIK where GTARIH>=@A and GTARIH<@B",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
-            var leave=Convert.ToInt32(db.Scalar("select count(distinct PKNO) from OZELIZIN where TARIH>=@A and TARIH<@B",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
-            var missingExit=Convert.ToInt32(db.Scalar("select count(distinct PKNO) from GIRCIK where GTARIH>=@A and GTARIH<@B and (CSAAT is null or trim(CSAAT)='')",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
-            var late=Convert.ToInt32(db.Scalar("select count(distinct PKNO) from PUANTAJ where TARIH>=@A and TARIH<@B and coalesce(GECD,0)>0",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
-            var absent=Convert.ToInt32(db.Scalar("select count(distinct PKNO) from PUANTAJ where TARIH>=@A and TARIH<@B and coalesce(DEVAMSIZLIKD,0)>0",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
-            var overtime=Convert.ToInt32(db.Scalar("select count(distinct PKNO) from PUANTAJ where TARIH>=@A and TARIH<@B and (coalesce(DAKIKA2,0)+coalesce(DAKIKA3,0))>0",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
-            activeValue.Text=active.ToString("N0");arrivedValue.Text=arrived.ToString("N0");leaveValue.Text=leave.ToString("N0");pendingValue.Text=Math.Max(0,active-arrived-leave).ToString("N0");
-            attentionState.Text=$"●  Dikkat: {missingExit} eksik çıkış • {late} geç • {absent} devamsız • {overtime} mesai";
-            attentionState.ForeColor=(missingExit+late+absent)>0?PdksAppearance.Current.Warning:PdksAppearance.Current.Success;
+            snapshot = await Task.Run(() =>
+            {
+                try
+                {
+                    var database = new FirebirdDatabase(PdksOptions.FromEnvironment());
+                    var today=DateTime.Today;var tomorrow=today.AddDays(1);
+                    var active=Convert.ToInt32(database.Scalar("select count(*) from KIMLIK where ICTARIH is null"));
+                    var arrived=Convert.ToInt32(database.Scalar("select count(distinct PKNO) from GIRCIK where GTARIH>=@A and GTARIH<@B",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
+                    var leave=Convert.ToInt32(database.Scalar("select count(distinct PKNO) from OZELIZIN where TARIH>=@A and TARIH<@B",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
+                    var missingExit=Convert.ToInt32(database.Scalar("select count(distinct PKNO) from GIRCIK where GTARIH>=@A and GTARIH<@B and (CSAAT is null or trim(CSAAT)='')",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
+                    var late=Convert.ToInt32(database.Scalar("select count(distinct PKNO) from PUANTAJ where TARIH>=@A and TARIH<@B and coalesce(GECD,0)>0",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
+                    var absent=Convert.ToInt32(database.Scalar("select count(distinct PKNO) from PUANTAJ where TARIH>=@A and TARIH<@B and coalesce(DEVAMSIZLIKD,0)>0",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
+                    var overtime=Convert.ToInt32(database.Scalar("select count(distinct PKNO) from PUANTAJ where TARIH>=@A and TARIH<@B and (coalesce(DAKIKA2,0)+coalesce(DAKIKA3,0))>0",new FbParameter("@A",today),new FbParameter("@B",tomorrow)));
+                    var sync=TerminalSyncService.ReadState();
+                    return new DashboardSnapshot(active,arrived,leave,missingExit,late,absent,overtime,
+                        StartupConfiguration.IsReady(),sync?.LastAt,sync?.ReadCount ?? 0,null);
+                }
+                catch(Exception ex)
+                {
+                    return new DashboardSnapshot(0,0,0,0,0,0,0,StartupConfiguration.IsReady(),null,0,ex.GetBaseException().Message);
+                }
+            });
         }
-        catch
+        catch (Exception ex)
         {
-            activeValue.Text=arrivedValue.Text=leaveValue.Text=pendingValue.Text="—";
-            attentionState.Text="●  Dikkat verisi alınamadı";
-            attentionState.ForeColor=PdksAppearance.Current.Warning;
+            snapshot = new DashboardSnapshot(0,0,0,0,0,0,0,StartupConfiguration.IsReady(),null,0,ex.GetBaseException().Message);
         }
 
+        if (IsDisposed) return;
         var p=PdksAppearance.Current;
-        dbState.Text=StartupConfiguration.IsReady()?"●  Veritabanı: bağlı":"●  Veritabanı: bağlantı bekliyor";
-        dbState.ForeColor=StartupConfiguration.IsReady()?p.Success:p.Warning;
-        var state=TerminalSyncService.ReadState();
-        if(state?.LastAt is null)
+        if(snapshot.Error is not null)
+        {
+            activeValue.Text=arrivedValue.Text=leaveValue.Text=pendingValue.Text="—";
+            attentionState.Text="●  Günlük özet yüklenemedi";
+            attentionState.ForeColor=p.Warning;
+        }
+        else
+        {
+            activeValue.Text=snapshot.Active.ToString("N0");
+            arrivedValue.Text=snapshot.Arrived.ToString("N0");
+            leaveValue.Text=snapshot.Leave.ToString("N0");
+            pendingValue.Text=Math.Max(0,snapshot.Active-snapshot.Arrived-snapshot.Leave).ToString("N0");
+            attentionState.Text=$"●  Dikkat: {snapshot.MissingExit} eksik çıkış • {snapshot.Late} geç • {snapshot.Absent} devamsız • {snapshot.Overtime} mesai";
+            attentionState.ForeColor=(snapshot.MissingExit+snapshot.Late+snapshot.Absent)>0?p.Warning:p.Success;
+        }
+
+        dbState.Text=snapshot.DbReady?"●  Veritabanı: bağlı":"●  Veritabanı: bağlantı bekliyor";
+        dbState.ForeColor=snapshot.DbReady?p.Success:p.Warning;
+        if(snapshot.LastSync is null)
         {
             terminalState.Text="●  Terminal: son eşitleme yok";
             terminalState.ForeColor=p.Warning;
@@ -284,7 +312,7 @@ internal sealed class ModernHomeDashboard : UserControl
         {
             terminalState.Text="●  Terminal: profil hazır";
             terminalState.ForeColor=p.Muted;
-            syncState.Text=$"Son veri alımı: {state.LastAt:dd.MM.yyyy HH:mm} • {state.ReadCount:N0} kayıt";
+            syncState.Text=$"Son veri alımı: {snapshot.LastSync:dd.MM.yyyy HH:mm} • {snapshot.LastRead:N0} kayıt";
         }
     }
 
