@@ -90,10 +90,10 @@ public sealed class ResponsibleQuickOperationsForm : Form
             "UCRETLER ve ODEME verilerini aylık bordro düzeltme ve hızlı ödeme ekranından kontrollü yönetir.",
             () => shell.NavigateToCommand(PdksCommandId.PayrollAdjustment)), 1, 2);
 
-        cards.Controls.Add(Card("7. RAPOR / ÇIKTI",
-            "Puantaj • Bordro • Ödeme\r\nPDF / Excel • Kontrol Listeleri",
-            "Muhasebe ve personel raporlarını tek merkezden görüntüler, filtreler ve çıktı alır.",
-            () => shell.NavigateToCommand(PdksCommandId.Reports)), 0, 3);
+        cards.Controls.Add(Card("7. DÖNEM KONTROL / RAPOR",
+            "Eksik Kart • Puantaj • Bordro\r\nÖdeme • Rapor • Kontrol Listesi",
+            "Ay kapanmadan önce eksik kart, puantaj, bordro ve ödeme durumunu tek ekranda kontrol eder.",
+            () => shell.NavigateToCommand(PdksCommandId.PeriodControlCenter)), 0, 3);
 
         cards.Controls.Add(Card("8. VERİ / TERMİNAL",
             "Terminal • TNF • Veri Kontrol\r\nYedek / Entegrasyon",
