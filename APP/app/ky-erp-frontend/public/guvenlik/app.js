@@ -29,6 +29,9 @@ let lastAutoRepairAt=0;
 let lastStableRefreshAt=0;
 let accountHydrated=false;
 let trailingRefreshTimer=null;
+let manualTabSelection=false;
+let lastPendingSignature="";
+let pendingStateHydrated=false;
 renderVersion();
 
 function isIos(){const ua=String(navigator.userAgent||"");return /iPhone|iPad|iPod/i.test(ua)||(String(navigator.platform||"")==="MacIntel"&&Number(navigator.maxTouchPoints||0)>1)}
@@ -207,7 +210,8 @@ function renderInstall(){
 
   els.installPanel.classList.add("hidden");
 }
-function showTab(name){
+function showTab(name,options={}){
+  if(options?.user===true)manualTabSelection=true;
   document.querySelectorAll(".security-tabs button").forEach((button)=>button.classList.toggle("active",button.dataset.tab===name));
   ["activity","approvals","sessions","computers","logs","code","notes","chat","device"].forEach((tab)=>document.querySelector("#"+tab+"Tab")?.classList.toggle("hidden",tab!==name));
   window.dispatchEvent(new CustomEvent("kysecurity:tab",{detail:{tab:name}}));
@@ -284,11 +288,16 @@ async function decide(item,decision,matchNumber=""){if(busy)return;busy=true;try
 async function refreshPending(preloadedItems=null){
   let items=preloadedItems;
   if(!Array.isArray(items)){const payload=await deviceFetch("/auth/push/device/pending");items=Array.isArray(payload?.data?.items)?payload.data.items:[]}
+  const pendingSignature=items.map((item)=>String(item?.kind||"")+":"+String(item?.id||"")).sort().join("|");
+  const hasNewPending=Boolean(pendingSignature&&pendingSignature!==lastPendingSignature);
+  const firstPendingLoad=!pendingStateHydrated;
+  pendingStateHydrated=true;
+  lastPendingSignature=pendingSignature;
   els.pendingList.innerHTML="";els.pendingCount.textContent=String(items.length);if(els.tabCount)els.tabCount.textContent=String(items.length);
   if(items.length){
     els.pendingPanel.classList.remove("hidden");els.emptyPanel.classList.add("hidden");
     for(const item of items)els.pendingList.appendChild(approvalCard(item));
-    if(!document.body.classList.contains("super-admin-security"))showTab("approvals");
+    if(firstPendingLoad||hasNewPending||!manualTabSelection)showTab("approvals");
     if("setAppBadge" in navigator)navigator.setAppBadge(items.length).catch(()=>{});
   }else{
     els.pendingPanel.classList.add("hidden");els.emptyPanel.classList.remove("hidden");
@@ -497,9 +506,9 @@ els.installButton.addEventListener("click",async()=>{
 });
 els.connectButton.addEventListener("click",connectDevice);
 els.generateCodeButton.addEventListener("click",generateLoginCode);
-document.querySelectorAll(".security-tabs button").forEach((button)=>button.addEventListener("click",()=>showTab(button.dataset.tab)));
-document.querySelectorAll("[data-owner-open]").forEach((button)=>button.addEventListener("click",()=>showTab(button.dataset.ownerOpen)));
-document.querySelectorAll("[data-company-open]").forEach((button)=>button.addEventListener("click",()=>showTab(button.dataset.companyOpen)));
+document.querySelectorAll(".security-tabs button").forEach((button)=>button.addEventListener("click",()=>showTab(button.dataset.tab,{user:true})));
+document.querySelectorAll("[data-owner-open]").forEach((button)=>button.addEventListener("click",()=>showTab(button.dataset.ownerOpen,{user:true})));
+document.querySelectorAll("[data-company-open]").forEach((button)=>button.addEventListener("click",()=>showTab(button.dataset.companyOpen,{user:true})));
 els.refreshButton.addEventListener("click",()=>refreshState({force:true}));
 els.enableUnlockButton?.addEventListener("click",enableLocalUnlock);
 els.repairButton.addEventListener("click",async()=>{const repaired=await repairConnection();if(repaired)await refreshState({skipAutoRepair:true})});
@@ -521,7 +530,7 @@ window.dispatchEvent(new CustomEvent("kysecurity:runtime-ready"));
     const url=new URL(location.href);const direct={id:String(url.searchParams.get("enrollmentId")||""),token:String(url.searchParams.get("enrollmentToken")||"")};
     if(direct.id&&direct.token){persistEnrollmentLink(direct);enrollmentQuery=direct}else enrollmentQuery=restoreEnrollmentLink();
     const localDevice=await readDevice().catch(()=>null);
-    renderInstall();showTab("code");
+    renderInstall();showTab("approvals");
     if(enrollmentQuery.id&&enrollmentQuery.token&&!localDevice?.deviceId){showRelink();toast("KY ERP bağlantısı hazır. 8 karakter Yedek Bağlantı Kodunu ve Admin şifresini gir.")}
     else if(!localDevice?.deviceId){showSetupStart();setBadge("Bağlantı gerekli");}
     await refreshState();
