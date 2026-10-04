@@ -1,0 +1,148 @@
+[Reading 144 lines from start (total: 144 lines, 0 remaining)]
+
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>HAKAN EMP</title>
+<meta name="theme-color" content="#2f2d43">
+<link rel="stylesheet" href="/app.css?v=final6">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">H</div><div><b>HAKAN EMP</b><span>İmalat & Finans</span></div></div>
+    <nav class="nav">
+      <button class="nav-item active" data-page="production"><i>İ</i><span>İmalat</span></button>
+      <button class="nav-item" data-page="cari"><i>C</i><span>Cari</span></button>
+      <button class="nav-item" data-page="reminders"><i>Ö</i><span>Ödeme Hatırlatma</span></button>
+      <button class="nav-item" data-page="checks"><i>Ç</i><span>Çek</span></button>
+      <button class="nav-item" data-page="settings"><i>A</i><span>Ayarlar</span></button>
+    </nav>
+    <div class="side-sync"><span id="sideSyncDot"></span><div><b id="sideSyncTitle">OneDrive</b><small id="sideSyncText">kontrol ediliyor</small></div></div>
+  </aside>
+
+  <main class="workspace">
+    <header class="topbar">
+      <div><small id="crumb">HAKAN EMP / İMALAT</small><h1 id="pageTitle">İmalat Takip</h1><p id="pageSub">Gelen adet → üretim → irsaliye → fatura → kalan.</p></div>
+      <div class="quick-actions">
+        <button onclick="openJob()">+ İş Aç</button>
+        <button class="primary serial-entry-btn" onclick="openSerialProduction()">⚡ Seri Üretim</button>
+        <button onclick="openDispatch()">+ İrsaliye</button>
+        <button onclick="openInvoice()">+ Fatura</button>
+        <button class="icon" id="refreshBtn">↻</button>
+      </div>
+    </header>
+
+    <section class="page active" id="production">
+      <div class="summary four">
+        <article><span>AÇIK İŞ</span><b id="sOpen">0</b><small>model</small></article>
+        <article><span>GELEN İMALAT</span><b id="sIncoming">0</b><small>adet</small></article>
+        <article><span>BASILAN</span><b id="sProduced">0</b><small>adet</small></article>
+        <article><span>FATURA BEKLEYEN</span><b id="sInvoiceReady">0</b><small>adet</small></article>
+      </div>
+
+      <div class="panel flush">
+        <div class="module-toolbar">
+          <div class="tabs"><button class="tab active" data-prod-view="OPEN">Açık İşler</button><button class="tab" data-prod-view="DONE">Tamamlananlar</button></div>
+          <div class="filters"><div class="search"><span>⌕</span><input id="prodSearch" placeholder="Model ara"></div><select id="prodStatus"><option value="">Tüm durumlar</option><option value="NEED_DISPATCH">İrsaliye iste</option><option value="DISPATCH_SHORT">İrsaliye eksik</option><option value="INVOICE">Fatura kesilecek</option><option value="PRODUCTION">Üretim devam</option></select></div>
+        </div>
+        <div class="table-head prod-grid"><span>MODEL</span><span>GELEN</span><span>ÜRETİM</span><span>İRSALİYE</span><span>FATURA</span><span>KALAN</span><span>DURUM</span></div>
+        <div id="prodRows"></div>
+      </div>
+    </section>
+
+    <section class="page" id="cari">
+      <div class="summary four">
+        <article><span>TOPLAM AÇIK BAKİYE</span><b id="cTotalBalance">₺0</b><small>tüm firmalar</small></article>
+        <article><span>TOPLAM FATURA</span><b id="cTotalInvoices">₺0</b><small>kesilen</small></article>
+        <article><span>TOPLAM TAHSİLAT</span><b id="cTotalPayments">₺0</b><small>alınan ödeme</small></article>
+        <article><span>AKTİF FİRMA</span><b id="cCompanyCount">0</b><small>firma kartı</small></article>
+      </div>
+      <div class="cari-layout">
+        <div class="panel company-panel">
+          <div class="panel-title compact"><div><h2>Firmalar</h2><p>Firmayı seç, bütün hareketini sağda gör.</p></div><button class="small-btn primary" onclick="openCompany()">+ Firma</button></div>
+          <div class="company-search search"><span>⌕</span><input id="companySearch" placeholder="Firma ara"></div>
+          <div id="companyList" class="company-list"></div>
+        </div>
+        <div class="panel company-detail-panel">
+          <div id="companyEmpty" class="company-empty"><div class="empty-icon">C</div><h3>Firma seç</h3><p>Sol listeden firmaya tıkla; bakiye, faturalar, ödemeler ve hareketler burada açılsın.</p></div>
+          <div id="companyDetail" class="hidden">
+            <div class="company-detail-head"><div><small>CARİ KART</small><h2 id="cdName">—</h2><p id="cdNote"></p></div><div class="detail-actions-inline"><button onclick="openCompanyEditSelected()">Firma Düzenle</button><button onclick="openInvoiceForSelected()">+ Fatura</button><button class="primary" onclick="openPaymentForSelected()">+ Ödeme Al</button></div></div>
+            <div class="company-kpis"><div><span>GÜNCEL BAKİYE</span><b id="cdBalance">₺0</b></div><div><span>FATURA</span><b id="cdInvoice">₺0</b></div><div><span>TAHSİLAT</span><b id="cdPayment">₺0</b></div><div><span>HAREKET</span><b id="cdMovementCount">0</b></div></div>
+            <div class="detail-section-title"><b>Firma Hareketleri</b><span>Yeni → Eski</span></div>
+            <div class="table-head company-movement-grid"><span>TARİH</span><span>İŞLEM</span><span>MODEL / BELGE</span><span>AÇIKLAMA</span><span>TUTAR</span></div>
+            <div id="companyMovementRows"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="reminders">
+      <div class="summary four">
+        <article><span>BEKLEYEN</span><b id="rPending">0</b><small>ödeme</small></article>
+        <article><span>7 GÜN İÇİNDE</span><b id="rWeek">0</b><small>yaklaşan</small></article>
+        <article><span>GECİKEN</span><b id="rOverdue">0</b><small>ödeme</small></article>
+        <article><span>ÖDENDİ</span><b id="rPaid">0</b><small>tamamlanan</small></article>
+      </div>
+      <div class="panel flush">
+        <div class="module-toolbar">
+          <div class="tabs scroll"><button class="tab active" data-rem-view="PENDING">Bekleyen</button><button class="tab" data-rem-view="OVERDUE">Geciken</button><button class="tab" data-rem-view="PAID">Ödendi</button><button class="tab" data-rem-view="ALL">Tümü</button></div>
+          <div class="filters"><div class="search"><span>⌕</span><input id="remSearch" placeholder="Kişi, firma veya not ara"></div><button class="small-btn warn" onclick="openReminder()">+ Ödeme Hatırlat</button></div>
+        </div>
+        <div class="table-head reminder-grid"><span>VADE</span><span>KİME / NE İÇİN</span><span>AÇIKLAMA</span><span>TUTAR</span><span>DURUM</span><span></span></div>
+        <div id="reminderRows"></div>
+      </div>
+    </section>
+
+    <section class="page" id="checks">
+      <div class="summary five">
+        <article><span>ÖDENECEK</span><b id="chPayable">₺0</b><small>açık</small></article>
+        <article><span>BU AY</span><b id="chMonth">₺0</b><small>vade</small></article>
+        <article><span>90 GÜN</span><b id="ch90">₺0</b><small>yaklaşan</small></article>
+        <article><span>GELEN PORTFÖY</span><b id="chIncoming">₺0</b><small>çek</small></article>
+        <article><span>ÖDENEN</span><b id="chPaid">₺0</b><small>toplam</small></article>
+      </div>
+      <div class="panel check-panel">
+        <div class="check-toolbar">
+          <div class="tabs scroll"><button class="tab active" data-check-view="PAYABLE">Ödenecek</button><button class="tab" data-check-view="MONTH">Bu Ay</button><button class="tab" data-check-view="THREE">3 Ay</button><button class="tab" data-check-view="PAID">Ödendi</button><button class="tab" data-check-view="IN">Gelen</button><button class="tab" data-check-view="OUT">Giden</button><button class="tab" data-check-view="ALL">Tümü</button></div>
+          <div class="filters"><div class="search"><span>⌕</span><input id="checkSearch" placeholder="Firma, banka, çek no veya açıklama"></div><button class="small-btn primary" onclick="openCheck()">+ Çek Ekle</button></div>
+        </div>
+        <div id="checkRows" class="check-groups"></div>
+      </div>
+    </section>
+
+    <section class="page" id="settings">
+      <div class="settings-tabs"><button class="settings-tab active" data-setting="companies">Firma Ayarları</button><button class="settings-tab" data-setting="production">İmalat Ayarları</button><button class="settings-tab" data-setting="machines">Makine & Makinacı</button><button class="settings-tab" data-setting="cari">Cari Ayarları</button><button class="settings-tab" data-setting="checks">Çek Ayarları</button><button class="settings-tab" data-setting="sync">Senkron & Yedek</button></div>
+      <div class="setting-pane active" id="setting-companies"><div class="panel"><div class="panel-title"><div><h2>Firma Ayarları</h2><p>Cari ve imalat işlemlerinde kullanılacak firmalar.</p></div><button class="small-btn primary" onclick="openCompany()">+ Firma Ekle</button></div><div class="table-head settings-company-grid"><span>FİRMA</span><span>AÇILIŞ</span><span>FATURA</span><span>ÖDEME</span><span>BAKİYE</span><span></span></div><div id="settingsCompanyRows"></div></div></div>
+      <div class="setting-pane" id="setting-production"><div class="settings-grid"><div class="panel"><div class="panel-title"><div><h2>İmalat Ayarları</h2><p>Hızlı giriş varsayılanları ve takip kuralı.</p></div></div><form class="settings-form" id="productionSettingsForm"><label>Varsayılan Firma<select name="default_company_id" id="setDefaultCompany"></select></label><label>Varsayılan Vardiya<select name="default_shift" id="setDefaultShift"><option>Gündüz</option><option>Gece</option></select></label><div class="rule-box"><b>Üretim alanları</b><span>Adet · Makine · Vardiya · Makinacı · Kumaş Sakatı · Baskı Sakatı</span></div><button class="wide-btn primary">Kaydet</button></form></div><div class="panel info-panel"><div class="panel-title"><div><h2>İmalat Kuralı</h2></div></div><div class="rule-list"><div><b>Üretim bitti, irsaliye yok</b><span>İRSALİYE İSTE</span></div><div><b>İrsaliye eksik</b><span>Eksik adet görünür</span></div><div><b>Fatura eksik</b><span>Kesilecek adet görünür</span></div><div><b>Hepsi tamam</b><span>İş tamamlanır</span></div></div></div></div></div>
+      <div class="setting-pane" id="setting-machines">
+        <div class="machine-settings-layout">
+          <div class="panel operator-panel">
+            <div class="panel-title"><div><h2>Makinacılar</h2><p>İsim listesi burada tutulur; makineden makineye atanabilir.</p></div><button class="small-btn primary" onclick="openOperator()">+ Makinacı</button></div>
+            <div id="operatorRows" class="operator-list"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title"><div><h2>Makine & Vardiya Ataması</h2><p>Gündüz/gece makinacısını istediğin zaman değiştir.</p></div></div>
+            <div class="table-head machine-grid"><span>NO</span><span>MAKİNE</span><span>GÜNDÜZ MAKİNACI</span><span>GECE MAKİNACI</span><span></span></div>
+            <div id="machineRows"></div>
+          </div>
+        </div>
+      </div>
+      <div class="setting-pane" id="setting-cari"><div class="settings-grid"><div class="panel info-panel"><div class="panel-title"><div><h2>Cari Ayarları</h2></div></div><div class="rule-list"><div><b>Fatura</b><span>Firmaya alacak ekler</span></div><div><b>Ödeme</b><span>Bakiyeden düşer</span></div><div><b>Firma</b><span>Cari ekranından seçilir</span></div></div></div><div class="panel info-panel"><div class="panel-title"><div><h2>Firma Yönetimi</h2></div></div><div class="rule-box">Firma ekleme ve açılış bakiyesi için <b>Firma Ayarları</b> sekmesini kullan.</div></div></div></div>
+      <div class="setting-pane" id="setting-checks"><div class="settings-grid"><div class="panel"><div class="panel-title"><div><h2>Çek Ayarları</h2><p>Yaklaşan çek ve makbuz görünümü.</p></div></div><form class="settings-form" id="checkSettingsForm"><label>Yaklaşan Çek Süresi<select name="check_horizon_days" id="setCheckHorizon"><option value="30">30 gün</option><option value="60">60 gün</option><option value="90">90 gün</option><option value="120">120 gün</option></select></label><label>Makbuz bilgisini öne çıkar<select name="receipt_required" id="setReceiptRequired"><option value="1">Evet</option><option value="0">Hayır</option></select></label><button class="wide-btn primary">Kaydet</button></form></div><div class="panel info-panel"><div class="panel-title"><div><h2>Listede Gösterilenler</h2></div></div><div class="rule-list"><div><b>Taraf</b><span>Kimden / kime</span></div><div><b>Açıklama</b><span>Karşılığı + not</span></div><div><b>Makbuz</b><span>Alındı + alan kişi</span></div><div><b>Görsel</b><span>Detayda açılır</span></div></div></div></div></div>
+      <div class="setting-pane" id="setting-sync"><div class="settings-grid"><div class="panel sync-panel"><div class="panel-title"><div><h2>OneDrive Senkron</h2><p>Sadece yeni işlemleri taşır.</p></div></div><div class="sync-box"><div class="sync-status"><span id="syncDot"></span><div><b id="syncTitle">Kontrol ediliyor</b><small id="syncText">—</small></div></div><div class="info-row"><span>Son senkron</span><b id="syncLast">—</b></div><div class="info-row"><span>PC gönderim</span><b id="syncOut">0</b></div><div class="info-row"><span>Android alma</span><b id="syncIn">0</b></div><div class="info-row"><span>Otomatik</span><b>10 dakika</b></div><button class="wide-btn primary" id="syncNow">Şimdi Eşitle</button><button class="wide-btn" id="backupNow">Tam Yedek Al</button></div></div><div class="panel info-panel"><div class="panel-title"><div><h2>Senkron Mantığı</h2></div></div><div class="rule-list"><div><b>Gönderim</b><span>Sadece yeni event</span></div><div><b>Tekrar koruması</b><span>Aynı event iki kez işlenmez</span></div><div><b>Yedek</b><span>Tam DB yalnız yedek için</span></div></div></div></div></div>
+    </section>
+  </main>
+</div>
+
+<div class="backdrop" id="backdrop" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer"><div class="drawer-head"><button class="dialog-close" onclick="closeDrawer()">×</button><div><small id="dCompany">FİRMA</small><h2 id="dTitle">Model</h2></div><div class="window-hint">Boyutu sol alttan ayarla</div></div><div id="drawerBody"></div><div class="resize-handle resize-handle-left" data-resize="drawer" title="Boyutu ayarla"></div></aside>
+
+<div class="modal" id="modal"></div>
+<div id="toast"></div>
+<script src="/app.js?v=final6"></script>
+</body></html>
+
+[executed on device: Desen (c4d4b6e1-fe7e-407d-9528-93c354170ca0)]
