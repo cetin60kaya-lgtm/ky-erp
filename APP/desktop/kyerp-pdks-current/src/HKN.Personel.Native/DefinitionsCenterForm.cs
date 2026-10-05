@@ -49,7 +49,7 @@ public sealed class DefinitionsCenterForm : Form
         columns.Controls.Add(Section("Personel / Organizasyon",
         [
             ("Bölümler","Personelin bağlı olduğu bölüm tanımları",()=>openDefinitions("Bölümler")),
-            ("Servisler","Servis / ulaşım tanımları",()=>openDefinitions("Servisler")),
+            ("Servis Hatları","Personelin ulaşım hattı; araç, şoför, saat, güzergâh ve atanan personel",()=>navigate(PdksCommandId.ServiceRoutes)),
             ("Görevler","Görev ve pozisyon tanımları",()=>openDefinitions("Görevler")),
             ("Durum","Personel durum tanımları",()=>openDefinitions("Durum")),
             ("Firma / İşyeri","Personelin bağlı olduğu işyeri; tek firma kullanılıyorsa tek kayıt yeterlidir",()=>openDefinitions("Firma"))
@@ -58,10 +58,10 @@ public sealed class DefinitionsCenterForm : Form
         columns.Controls.Add(Section("Çalışma / Bordro",
         [
             ("Çalışma Grupları","Yalnız MESAİLİ GRUP ve İDARİ GRUP",()=>navigate(PdksCommandId.Groups)),
-            ("Dönem Altyapısı (Otomatik)","Normal kullanımda açılmaz; ay/yıl ve grup kayıtlarını sistem otomatik yönetir",()=>navigate(PdksCommandId.Periods)),
+            ("Aylık Dönemler","Ay/yıl bazında dönemleri gör; MESAİLİ ve İDARİ teknik kayıtları sistem eşler",()=>navigate(PdksCommandId.Periods)),
             ("Genel Tatiller","Resmî ve özel tatil günleri",()=>navigate(PdksCommandId.Holidays)),
             ("Günlük Çalışma Saatleri","Normal günlük süre ve alan tanımları",()=>navigate(PdksCommandId.DailyWorkHours)),
-            ("Yıllık Çalışma Planı","Yıllık çalışma takvimi",()=>navigate(PdksCommandId.AnnualWorkPlan)),
+            ("Yıllık Çalışma Takvimi","Tarih + çalışma grubu + günlük plan eşleşmesini okunur şekilde yönet",()=>navigate(PdksCommandId.AnnualWorkPlan)),
             ("Bordro Alanları","Bordro alan ve katsayıları",()=>openDefinitions("Bordro")),
             ("Kazanç / Kesinti Türleri","Avans, kazanç ve kesinti tipleri",()=>navigate(PdksCommandId.EarningsTypes))
         ]),1,0);
@@ -69,7 +69,7 @@ public sealed class DefinitionsCenterForm : Form
         root.Controls.Add(columns,0,1);
         root.Controls.Add(new Label
         {
-            Text="Günlük kullanıcı yalnız gerekli iş tanımlarını görür. Dönem, çalışma tarihi ve teknik cihaz ayrıntıları sistem tarafından arka planda yönetilir.",
+            Text="Tanımlar silinmez; anlaşılır iş ekranlarına çevrilir. Çalışma grubu kart politikasını, servis hattı personel ulaşımını, takvim ise günlük planı belirler.",
             Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=p.Muted,
             Font=new Font("Segoe UI",8.6f),Padding=new Padding(4,12,0,0)
         },0,2);
