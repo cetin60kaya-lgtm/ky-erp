@@ -214,7 +214,7 @@ internal static class TerminalLiveArchiveService
                 return p.Length == 0 || !normalized.Contains(NormalizeCode(p[0]));
             }).ToArray();
             File.WriteAllLines(CompanyDataPaths.LiveFile, keep, Encoding.UTF8);
-            HideLive();
+            try { File.SetAttributes(CompanyDataPaths.LiveFile, File.GetAttributes(CompanyDataPaths.LiveFile) | FileAttributes.Hidden); } catch { }
         }
         return removed;
     }
