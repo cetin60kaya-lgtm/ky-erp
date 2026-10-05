@@ -101,6 +101,27 @@ test("pre-payroll control is one source editor for person wage payment and movem
   assert.match(monthly, /Mesai \/ Avans \/ Kesinti ekranına doğrudan yazılır/);
 });
 
+test("pre-payroll control keeps EK explicit and auto-balances payment channels", () => {
+  assert.match(monthly, /function paymentSplitByType/);
+  assert.match(monthly, /if \(onlyCash\) return \{ bank: 0, cash: net, mode: "ELDEN" \}/);
+  assert.match(monthly, /if \(onlyBank\) return \{ bank: net, cash: 0, mode: "BANKA" \}/);
+  assert.match(monthly, /cash: round\(net - bank\)/);
+  assert.match(monthly, /extraPaymentAmount: sourceExtra/);
+  assert.match(monthly, /<Field label="EK Ödeme"/);
+  assert.match(monthly, /Sadece Elden: tahmini netin tamamı otomatik Elden'e atanır/);
+  assert.match(monthly, /Banka \+ Elden: Banka tutarı sabit kalır/);
+});
+
+test("pre-payroll modal has one main scroll owner and no overlapping sticky footer", () => {
+  assert.match(monthly, /size="wide prepayroll-dialog"/);
+  assert.match(monthly, /alignPrePayrollDialog/);
+  assert.match(css, /IK_PREPAYROLL_CONTROL_V3/);
+  assert.match(css, /\.prepayroll-dialog \.payroll-final-main\{/);
+  assert.match(css, /overflow-y:auto/);
+  assert.match(css, /\.prepayroll-dialog \.payroll-person-rail-list\{/);
+  assert.match(css, /\.prepayroll-dialog \.ik-section-tabs\{/);
+});
+
 test("personnel edit modal switches person without closing", () => {
   assert.match(monthly, /const switchPersonInModal = \(employeeId\) =>/);
   assert.match(monthly, /Personel Seç/);
