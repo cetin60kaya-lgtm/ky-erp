@@ -52,7 +52,7 @@ public sealed class LiveArchiveControlForm : Form
         });
         head.Controls.Add(new Label
         {
-            Text = "Yalnız fiziksel cihazdan okunan kart basımları. Uygulama düzeltmeleri ve ana TNF/FDB bu arşivi değiştirmez.",
+            Text = "CANLI çalışma arşivi. CİHAZ kanıt arşivi ayrıdır; CANLI temizlense bile tarih/saatli cihaz TNF ve HAM dosyaları korunur.",
             AutoSize = true,
             ForeColor = p.Muted,
             Location = new Point(14, 38)
@@ -87,7 +87,7 @@ public sealed class LiveArchiveControlForm : Form
         bottom.Controls.Add(close);
         bottom.Controls.Add(new Label
         {
-            Text = "Temizleme yalnız CANLI ARŞİV'i etkiler; FDB ve ana TRYYYY.Tnf dosyasını silmez/değiştirmez.",
+            Text = "Temizleme yalnız CANLI'yı etkiler; DATA/FDB, yıllık TRYYYY.Tnf ve CİHAZ kanıt arşivi korunur.",
             AutoSize = true,
             Padding = new Padding(8, 8, 18, 0),
             ForeColor = p.Success,
@@ -134,7 +134,7 @@ public sealed class LiveArchiveControlForm : Form
     {
         var a = from.Value.Date;
         var b = to.Value.Date;
-        if (MessageBox.Show($"CANLI ARŞİV içinden {a:dd.MM.yyyy} - {b:dd.MM.yyyy} tarih aralığı silinsin mi?\n\nAna TNF ve FDB etkilenmez.", Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        if (MessageBox.Show($"CANLI ARŞİV içinden {a:dd.MM.yyyy} - {b:dd.MM.yyyy} tarih aralığı silinsin mi?\n\nDATA/FDB, yıllık TNF ve CİHAZ arşivi etkilenmez.", Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         var removed = TerminalLiveArchiveService.DeleteRange(a, b);
         RefreshView();
         MessageBox.Show($"Canlı arşivden {removed:N0} kayıt temizlendi.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -142,7 +142,7 @@ public sealed class LiveArchiveControlForm : Form
 
     void ClearAll()
     {
-        if (MessageBox.Show("CANLI TNF + ham canlı arşivin TAMAMI temizlensin mi?\n\nAna TNF ve FDB etkilenmez.", Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        if (MessageBox.Show("CANLI TNF + ham canlı arşivin TAMAMI temizlensin mi?\n\nDATA/FDB, yıllık TNF ve CİHAZ arşivi etkilenmez.", Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         if (MessageBox.Show("Bu işlem geri alınamaz. Canlı arşivin tamamını temizlemek istediğinize emin misiniz?", Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         var removed = TerminalLiveArchiveService.ClearAll();
         RefreshView();
