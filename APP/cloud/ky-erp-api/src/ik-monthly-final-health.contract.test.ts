@@ -76,7 +76,8 @@ test("employment period and payroll snapshot safety stay enforced", () => {
   assert.match(relational, /PAYMENT_TOTAL_MISMATCH/);
   assert.match(personnel, /effectiveExitDate/);
   assert.match(personnel, /EXIT_BEFORE_HIRE/);
-  assert.match(page, /paidLocked: upper\(saved\.status\) === "PAID"/);
+  assert.match(page, /if \(upper\(saved\.status\) !== "PAID"\)/);
+  assert.match(page, /paidLocked: true/);
   assert.match(page, /sourceChangedSinceSave/);
 });
 
