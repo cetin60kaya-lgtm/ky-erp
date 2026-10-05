@@ -122,9 +122,22 @@ using (var periodControl = new PeriodControlCenterForm())
 using (var definitions = new DefinitionsCenterForm(_ => { }, _ => { }))
 {
     var labels = Descendants(definitions).OfType<Label>().Select(x => x.Text ?? string.Empty).ToArray();
-    foreach (var required in new[] { "Bölümler", "Çalışma Grupları", "Dönem Altyapısı (Otomatik)", "Genel Tatiller", "Bordro Alanları", "Kazanç / Kesinti Türleri" })
+    foreach (var required in new[] { "Bölümler", "Servis Hatları", "Çalışma Grupları", "Aylık Dönemler", "Yıllık Çalışma Takvimi", "Genel Tatiller", "Bordro Alanları", "Kazanç / Kesinti Türleri" })
         if (!labels.Contains(required)) throw new InvalidOperationException("Tanımlar merkezi kısayolu eksik: " + required);
 }
+using (var serviceRoutes = new ServiceRouteForm())
+{
+    var labels=Descendants(serviceRoutes).OfType<Label>().Select(x=>x.Text??"").ToArray();
+    foreach(var required in new[]{"Personel Servis Hatları","Hat Bilgileri"})
+        if(!labels.Contains(required))throw new InvalidOperationException("Servis hattı ekranı eksik: "+required);
+}
+using (var workCalendar = new AnnualWorkPlanForm())
+{
+    var labels=Descendants(workCalendar).OfType<Label>().Select(x=>x.Text??"").ToArray();
+    if(!labels.Contains("Yıllık Çalışma Takvimi"))
+        throw new InvalidOperationException("Yıllık çalışma takvimi başlığı yok.");
+}
+
 using (var groups = new LegacyGroupForm())
 {
     var buttons = Descendants(groups).OfType<Button>().Select(x => (x.Text ?? string.Empty).Replace("&", string.Empty)).ToArray();
@@ -215,7 +228,7 @@ using (var reportCenter = new ReportCenterForm())
     }
 }
 
-Console.WriteLine("KYERP PDKS 6.6.1 SHELL SMOKE OK");
+Console.WriteLine("KYERP PDKS 6.7.0 SHELL SMOKE OK");
 
 static IEnumerable<Control> Descendants(Control root)
 {
