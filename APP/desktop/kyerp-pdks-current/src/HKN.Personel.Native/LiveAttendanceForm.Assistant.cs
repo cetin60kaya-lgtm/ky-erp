@@ -207,8 +207,8 @@ public sealed partial class LiveAttendanceForm
             leaveMap.TryGetValue(code, out var leaveInfo);
             var fullLeave = leaveInfo.Minutes > 0 && leaveInfo.Minutes >= Math.Max(420, schedule.WorkMinutes);
             var expected = schedule.WorkMinutes > 0 && !fullLeave;
-            var status = Status(day, schedule, expected, fullLeave, movement.Entry, movement.Exit);
-            var warning = Warning(schedule, movement.Entry, movement.Exit, status);
+            var status = Status(day, schedule, expected, fullLeave, movement.Entry, movement.Exit, "", "");
+            var warning = Warning(movement.Entry, movement.Exit, "", "", status);
             rows.Add(new DailyRow(code, $"{S(employee, "AD")} {S(employee, "SOYAD")}".Trim(), groupName,
                 schedule.Name, movement.Entry?.ToString("HH:mm") ?? "", movement.Exit?.ToString("HH:mm") ?? "",
                 "", "", status, warning, expected, fullLeave, movement.Entry.HasValue, movement.Exit.HasValue));
