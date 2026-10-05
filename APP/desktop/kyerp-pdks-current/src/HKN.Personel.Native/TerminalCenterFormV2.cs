@@ -23,7 +23,12 @@ public sealed class TerminalCenterForm : Form
         Font = new Font("Segoe UI", 9f);
         DoubleBuffered = true;
         Build();
-        Shown += (_, _) => RefreshSdkStatus();
+        Shown += async (_, _) =>
+        {
+            RefreshSdkStatus();
+            await Task.Yield();
+            await CheckDeviceAsync(false);
+        };
     }
 
     void Build()
@@ -155,10 +160,13 @@ public sealed class TerminalCenterForm : Form
 
     async Task<TerminalDeviceSnapshot> ProbeDeviceAsync()
     {
-        var files = TerminalSdkDiagnostics.Check();
-        if (!files.Ok) return TerminalDeviceSnapshot.Offline(files.Message);
         SetStatus("Cihaz kontrol ediliyor…", null);
-        return await TerminalDeviceClient.ReadAsync(false);
+        return await Task.Run(async () =>
+        {
+            var files = TerminalSdkDiagnostics.Check();
+            if (!files.Ok) return TerminalDeviceSnapshot.Offline(files.Message);
+            return await TerminalDeviceClient.ReadAsync(false);
+        });
     }
 
     void ShowConnected(TerminalDeviceSnapshot snapshot, bool showDialog)
