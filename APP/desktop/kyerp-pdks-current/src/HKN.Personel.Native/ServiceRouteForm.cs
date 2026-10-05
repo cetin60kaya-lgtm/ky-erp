@@ -18,6 +18,7 @@ public sealed class ServiceRouteForm : Form
     readonly TextBox morning=new(){PlaceholderText="07:00"};
     readonly TextBox evening=new(){PlaceholderText="19:15"};
     readonly TextBox plate=new();
+    readonly NumericUpDown capacity=new(){Minimum=0,Maximum=200,Width=100};
     readonly TextBox driver=new();
     readonly TextBox phone=new();
     readonly TextBox stops=new(){Multiline=true,ScrollBars=ScrollBars.Vertical};
@@ -66,11 +67,11 @@ public sealed class ServiceRouteForm : Form
         body.Controls.Add(new Panel{Dock=DockStyle.Fill,BackColor=p.Canvas},1,0);
 
         var editCard=PdksUiKit.Card(16);
-        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=10,Padding=new Padding(14),BackColor=p.Surface};
+        var editor=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=11,Padding=new Padding(14),BackColor=p.Surface};
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         editor.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
-        for(var i=1;i<=7;i++)editor.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+        for(var i=1;i<=8;i++)editor.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
         editor.RowStyles.Add(new RowStyle(SizeType.Percent,50));
         editor.RowStyles.Add(new RowStyle(SizeType.Percent,50));
         editor.Controls.Add(PdksUiKit.SectionTitle("Hat Bilgileri"),0,0);editor.SetColumnSpan(editor.GetControlFromPosition(0,0)!,2);
@@ -79,10 +80,11 @@ public sealed class ServiceRouteForm : Form
         Row(editor,3,"Sabah Çıkış",morning);
         Row(editor,4,"Akşam Dönüş",evening);
         Row(editor,5,"Araç / Plaka",plate);
-        Row(editor,6,"Şoför",driver);
-        Row(editor,7,"Şoför Telefon",phone);
-        Row(editor,8,"Duraklar / Güzergâh",stops);
-        Row(editor,9,"Not",notes);
+        Row(editor,6,"Kapasite",capacity);
+        Row(editor,7,"Şoför",driver);
+        Row(editor,8,"Şoför Telefon",phone);
+        Row(editor,9,"Duraklar / Güzergâh",stops);
+        Row(editor,10,"Not",notes);
         assigned.ForeColor=p.Primary;assigned.Font=new Font("Segoe UI",9f,FontStyle.Bold);
         info.ForeColor=p.Muted;
         var stats=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=34,BackColor=p.Surface,Padding=new Padding(0,7,0,0)};
@@ -157,6 +159,7 @@ public sealed class ServiceRouteForm : Form
         morning.Text=p?.MorningDeparture??"";
         evening.Text=p?.EveningReturn??"";
         plate.Text=p?.VehiclePlate??"";
+        capacity.Value=Math.Clamp(p?.Capacity??0,0,200);
         driver.Text=p?.DriverName??"";
         phone.Text=p?.DriverPhone??"";
         stops.Text=p?.Stops??"";
@@ -179,12 +182,12 @@ public sealed class ServiceRouteForm : Form
     {
         editing=value;
         foreach(var x in new Control[]{name,morning,evening,plate,driver,phone,stops,notes})x.Enabled=value;
-        active.Enabled=value;save.Enabled=value;
+        capacity.Enabled=value;active.Enabled=value;save.Enabled=value;
     }
     void Clear()
     {
         foreach(var x in new[]{name,morning,evening,plate,driver,phone,stops,notes})x.Clear();
-        active.Checked=true;assigned.Text="Aktif personel: 0";info.Text="";
+        active.Checked=true;capacity.Value=0;assigned.Text="Aktif personel: 0";info.Text="";
     }
 
     void Save()
@@ -203,7 +206,7 @@ public sealed class ServiceRouteForm : Form
                 db.Execute("update SERVIS set AD=@A where KOD=@K",new FbParameter("@A",routeName),new FbParameter("@K",selectedCode.Value));
             }
             ServiceRouteStore.Save(new ServiceRouteProfile(selectedCode.Value,routeName,active.Checked,
-                morning.Text.Trim(),evening.Text.Trim(),plate.Text.Trim(),driver.Text.Trim(),phone.Text.Trim(),stops.Text.Trim(),notes.Text.Trim()));
+                morning.Text.Trim(),evening.Text.Trim(),plate.Text.Trim(),(int)capacity.Value,driver.Text.Trim(),phone.Text.Trim(),stops.Text.Trim(),notes.Text.Trim()));
             SetEdit(false);Reload();
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions.ServiceRoutes.Save");}
