@@ -21,6 +21,7 @@ var results = new List<string>();
 RunLiveAttendanceChecks(errors, results);
 RunLiveIsolationChecks(errors, results);
 RunOperationalTnfChecks(errors, results);
+RunBulkCorrectionChecks(errors, results);
 RunPersonEditorValueChecks(errors, results);
 RunReportCenterChecks(errors, results);
 Application.ThreadException += (_, e) => errors.Add("UI: " + e.Exception.GetBaseException().Message);
@@ -172,6 +173,63 @@ static void RunReportCenterChecks(List<string> errors, List<string> results)
     catch (Exception ex)
     {
         errors.Add("Rapor merkezi toplu sorgu testi: " + ex.GetBaseException().Message);
+    }
+}
+
+static void RunBulkCorrectionChecks(List<string> errors, List<string> results)
+{
+    var database = new FirebirdDatabase(PdksOptions.FromEnvironment());
+    var day = new DateTime(2097, 11, 15);
+    var card = "";
+    var id = 0;
+    try
+    {
+        var people = database.Query("select first 1 PKNO from KIMLIK order by PKNO");
+        card = Convert.ToString(people.Rows[0][0])?.Trim() ?? throw new InvalidOperationException("Test personeli yok.");
+        database.Execute("delete from GIRCIK where PKNO=@P and ((GTARIH=@D) or (CTARIH=@D))",
+            new FbParameter("@P",card),new FbParameter("@D",day));
+        id = Convert.ToInt32(database.Scalar("select coalesce(max(SIRA),0)+1 from GIRCIK") ?? 1);
+        database.Execute("insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,CTARIH,CSAAT,CDAKIKA,CTUR,MKOD) values (@I,@P,@D,'09:45',585,'',@D,'17:30',1050,'','000')",
+            new FbParameter("@I",id),new FbParameter("@P",card),new FbParameter("@D",day));
+
+        var service=typeof(LiveAttendanceForm).Assembly.GetType("HKN.Personel.Native.AttendanceBulkCorrectionService")
+            ?? throw new InvalidOperationException("Toplu düzeltme servisi bulunamadı.");
+        var entry=service.GetMethod("NormalizeEntries",BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Geç giriş düzeltme metodu bulunamadı.");
+        var exit=service.GetMethod("NormalizeExits",BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Erken çıkış düzeltme metodu bulunamadı.");
+        entry.Invoke(null,new object[]{database,new[]{card},day,new TimeSpan(8,20,0),new TimeSpan(8,35,0)});
+        exit.Invoke(null,new object[]{database,new[]{card},day,new TimeSpan(18,50,0),new TimeSpan(19,5,0)});
+
+        var row=database.Query("select GSAAT,GDAKIKA,GTUR,CSAAT,CDAKIKA,CTUR from GIRCIK where SIRA=@I",
+            new FbParameter("@I",id)).Rows[0];
+        var gm=Convert.ToInt32(row["GDAKIKA"]);var cm=Convert.ToInt32(row["CDAKIKA"]);
+        if(gm<500||gm>515||cm<1130||cm>1145)errors.Add("Toplu saat düzeltme aralık kuralı bozuk.");
+        if(string.Equals(Convert.ToString(row["GTUR"])?.Trim(),"E",StringComparison.OrdinalIgnoreCase)||
+           string.Equals(Convert.ToString(row["CTUR"])?.Trim(),"E",StringComparison.OrdinalIgnoreCase))
+            errors.Add("Normal saat düzeltmesi yanlışlıkla E oluşturdu.");
+
+        var tnf=Path.Combine(Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT")??string.Empty,"TNF","TR2097.Tnf");
+        var lines=File.Exists(tnf)?File.ReadAllLines(tnf):[];
+        var gs=Convert.ToString(row["GSAAT"])?.Trim();var cs=Convert.ToString(row["CSAAT"])?.Trim();
+        if(!lines.Any(x=>x.StartsWith($"{card},{gs},151197,1,001",StringComparison.Ordinal))||
+           !lines.Any(x=>x.StartsWith($"{card},{cs},151197,1,001",StringComparison.Ordinal)))
+            errors.Add("Toplu düzeltme sonrası DATA-TNF dakika eşitliği kurulamadı.");
+
+        var failed=errors.Any(x=>x.Contains("Toplu saat",StringComparison.OrdinalIgnoreCase)||
+                                x.Contains("Normal saat",StringComparison.OrdinalIgnoreCase)||
+                                x.Contains("Toplu düzeltme",StringComparison.OrdinalIgnoreCase));
+        results.Add(failed?"FAIL|Toplu geç giriş / erken çıkış ve DATA-TNF eşitleme":"PASS|Toplu geç giriş / erken çıkış DATA-TNF ile aynı dakikaya çekiliyor");
+    }
+    catch(Exception ex){errors.Add("Toplu düzeltme regresyon testi: "+ex.GetBaseException().Message);}
+    finally
+    {
+        if(id!=0)try
+        {
+            database.Execute("delete from GIRCIK where SIRA=@I",new FbParameter("@I",id));
+            var service=typeof(LiveAttendanceForm).Assembly.GetType("HKN.Personel.Native.OperationalTnfSyncService");
+            service?.GetMethod("AlignPersonDay",BindingFlags.Static|BindingFlags.NonPublic)?.Invoke(null,new object[]{database,card,day});
+        }catch{}
     }
 }
 
