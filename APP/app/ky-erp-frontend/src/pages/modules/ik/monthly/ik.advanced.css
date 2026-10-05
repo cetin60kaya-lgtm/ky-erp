@@ -2677,3 +2677,18 @@
     width: 150px;
   }
 }
+
+.ik-html .payroll-screen-table tfoot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+.ik-html .payroll-screen-table .payroll-screen-total td {
+  background: #edf4fa;
+  border-top: 2px solid #274760;
+  font-weight: 800;
+  vertical-align: top;
+}
+.ik-html .payroll-screen-table .payroll-screen-total td:first-child {
+  background: #edf4fa;
+}
