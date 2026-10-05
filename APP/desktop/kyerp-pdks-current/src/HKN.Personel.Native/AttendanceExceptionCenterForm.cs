@@ -31,6 +31,7 @@ public sealed class AttendanceExceptionCenterForm : Form
     };
     readonly Label status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
     DataTable all = new();
+    IReadOnlyDictionary<int,AttendanceGroupPolicy> groupPolicies = new Dictionary<int,AttendanceGroupPolicy>();
 
     static readonly string[] Kinds =
     [
@@ -194,6 +195,7 @@ public sealed class AttendanceExceptionCenterForm : Form
     {
         try
         {
+            groupPolicies = AttendanceGroupPolicyStore.Load(db);
             var result = NewTable();
             AddMissingExits(result);
             AddPuantajExceptions(result);
@@ -236,22 +238,26 @@ public sealed class AttendanceExceptionCenterForm : Form
     void AddMissingExits(DataTable target)
     {
         var dt = db.Query(
-            "select g.GTARIH,g.PKNO,k.AD,k.SOYAD,b.AD BOLUM,g.GSAAT,g.CSAAT " +
-            "from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO left join BOLUM b on b.KOD=k.BOLUM " +
+            "select g.GTARIH,g.PKNO,k.AD,k.SOYAD,b.AD BOLUM,k.GRUP,coalesce(gr.AD,'') GRUP_AD,g.GSAAT,g.CSAAT " +
+            "from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO left join BOLUM b on b.KOD=k.BOLUM left join GRUP gr on gr.KOD=k.GRUP " +
             "where g.GTARIH>=@A and g.GTARIH<@B and " + CardFilter("g") + " and (g.CTARIH is null or g.CSAAT is null or trim(g.CSAAT)='') " +
             "order by g.GTARIH,g.PKNO", RangeParameters());
         foreach (DataRow r in dt.Rows)
+        {
+            if (!Tracked(r)) continue;
             target.Rows.Add(Convert.ToDateTime(r["GTARIH"]).Date, r["PKNO"], PersonName(r), r["BOLUM"], "Eksik Çıkış", "Giriş var, çıkış tamamlanmamış", r["GSAAT"], "", 0);
+        }
     }
 
     void AddPuantajExceptions(DataTable target)
     {
         var dt = db.Query(
-            "select p.TARIH,p.PKNO,k.AD,k.SOYAD,b.AD BOLUM,p.GIRIS,p.CIKIS,p.GECD,p.GECS,p.ERKEND,p.ERKENS,p.DEVAMSIZLIKD,p.DEVAMSIZLIKS,p.EKSIKD,p.EKSIKS,p.DAKIKA2,p.DAKIKA3 " +
-            "from PUANTAJ p left join KIMLIK k on k.PKNO=p.PKNO left join BOLUM b on b.KOD=k.BOLUM " +
+            "select p.TARIH,p.PKNO,k.AD,k.SOYAD,b.AD BOLUM,k.GRUP,coalesce(gr.AD,'') GRUP_AD,p.GIRIS,p.CIKIS,p.GECD,p.GECS,p.ERKEND,p.ERKENS,p.DEVAMSIZLIKD,p.DEVAMSIZLIKS,p.EKSIKD,p.EKSIKS,p.DAKIKA2,p.DAKIKA3 " +
+            "from PUANTAJ p left join KIMLIK k on k.PKNO=p.PKNO left join BOLUM b on b.KOD=k.BOLUM left join GRUP gr on gr.KOD=k.GRUP " +
             "where p.TARIH>=@A and p.TARIH<@B and " + CardFilter("p") + " order by p.TARIH,p.PKNO", RangeParameters());
         foreach (DataRow r in dt.Rows)
         {
+            if (!Tracked(r)) continue;
             var date = Convert.ToDateTime(r["TARIH"]).Date;
             var pk = r["PKNO"];
             var name = PersonName(r);
@@ -270,12 +276,22 @@ public sealed class AttendanceExceptionCenterForm : Form
     void AddLeaveDayMovements(DataTable target)
     {
         var dt = db.Query(
-            "select distinct o.TARIH,o.PKNO,k.AD,k.SOYAD,b.AD BOLUM,o.MAZERET,g.GSAAT,g.CSAAT " +
+            "select distinct o.TARIH,o.PKNO,k.AD,k.SOYAD,b.AD BOLUM,k.GRUP,coalesce(gr.AD,'') GRUP_AD,o.MAZERET,g.GSAAT,g.CSAAT " +
             "from OZELIZIN o join GIRCIK g on g.PKNO=o.PKNO and g.GTARIH>=o.TARIH and g.GTARIH<dateadd(1 day to o.TARIH) " +
-            "left join KIMLIK k on k.PKNO=o.PKNO left join BOLUM b on b.KOD=k.BOLUM " +
+            "left join KIMLIK k on k.PKNO=o.PKNO left join BOLUM b on b.KOD=k.BOLUM left join GRUP gr on gr.KOD=k.GRUP " +
             "where o.TARIH>=@A and o.TARIH<@B and " + CardFilter("o") + " order by o.TARIH,o.PKNO", RangeParameters());
         foreach (DataRow r in dt.Rows)
+        {
+            if (!Tracked(r)) continue;
             target.Rows.Add(Convert.ToDateTime(r["TARIH"]).Date, r["PKNO"], PersonName(r), r["BOLUM"], "İzinli Günde Hareket", Convert.ToString(r["MAZERET"]) ?? "İzin", r["GSAAT"], r["CSAAT"], 0);
+        }
+    }
+
+    bool Tracked(DataRow r)
+    {
+        var code=r.Table.Columns.Contains("GRUP") && r["GRUP"]!=DBNull.Value ? Convert.ToInt32(r["GRUP"]) : -1;
+        var name=r.Table.Columns.Contains("GRUP_AD") && r["GRUP_AD"]!=DBNull.Value ? Convert.ToString(r["GRUP_AD"])??"" : "";
+        return AttendanceGroupPolicyStore.RequiresCardTracking(groupPolicies,code,name);
     }
 
     static void AddIf(DataTable target, DateTime date, object pk, string name, object department, string type, object detailValue, int minutes, string entry, string exit)
