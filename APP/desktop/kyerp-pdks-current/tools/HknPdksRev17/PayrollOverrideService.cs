@@ -27,7 +27,7 @@ internal static class PayrollOverrideService
 
     internal static readonly string[] UiEditFields =
     [
-        "GUN1", "SAAT1", "UCRET1", "NCGUN", "NCSAAT", "NCUCRET",
+        "DMAAS", "GUN1", "SAAT1", "UCRET1", "NCGUN", "NCSAAT", "NCUCRET",
         "SAAT2", "UCRET2", "SAAT3", "UCRET3", "GUN4", "SAAT4",
         "DEVG", "DEVS", "GECS", "EKS", "EKKAZ", "EKKES", "EX2",
         "NCMAAS", "NCKALAN", "FMSAAT", "FMUCRET", "FMODENEN", "FMKALAN"
@@ -271,7 +271,7 @@ end");
         var end = start.AddMonths(1);
         var last = end.AddDays(-1);
 
-        var rawSql = @"select u.PKNO,u.BASTAR,u.BITTAR,k.IGTARIH,k.AD,k.SOYAD,k.MAAS as KART_MAAS,
+        var rawSql = @"select u.PKNO,u.BASTAR,u.BITTAR,k.IGTARIH,k.AD,k.SOYAD,u.DMAAS,
             u.NCGUN,u.NCSAAT,u.NCUCRET,u.SAAT2,u.UCRET2,u.SAAT3,u.UCRET3,u.GUN4,u.SAAT4,
             u.DEVG,u.DEVS,u.GECS,u.EKS,u.EKKAZ,u.EKKES,u.EX2,u.NCMAAS,u.NCKALAN,u.FMSAAT,u.FMUCRET,u.FMODENEN,u.FMKALAN
             from UCRETLER u inner join KIMLIK k on k.PKNO=u.PKNO
@@ -315,7 +315,7 @@ end");
             t.Rows.Add(
                 personCard, row["BASTAR"], row["BITTAR"], no, personCard,
                 row["IGTARIH"] == DBNull.Value ? "" : Convert.ToDateTime(row["IGTARIH"]).ToString("dd.MM.yyyy"),
-                (V("AD") + " " + V("SOYAD")).Trim(), V("KART_MAAS"),
+                (V("AD") + " " + V("SOYAD")).Trim(), V("DMAAS"),
                 V("NCGUN"), V("NCSAAT"), V("SAAT2"), V("SAAT3"), Join(V("GUN4"), V("SAAT4")),
                 Join(V("DEVG"), V("DEVS")), V("GECS"), V("EKS"), advances.TryGetValue(personCard, out var avans) ? avans : "0",
                 V("EX2"), V("NCMAAS"), Join(V("FMSAAT"), V("FMUCRET")), V("NCKALAN"),
