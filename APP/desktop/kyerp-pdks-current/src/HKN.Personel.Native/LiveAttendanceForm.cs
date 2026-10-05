@@ -92,7 +92,7 @@ public sealed partial class LiveAttendanceForm : Form
 
         cards.BackColor=Color.Transparent;cards.Padding=new Padding(0,8,0,6);root.Controls.Add(cards,0,1);
         assistantPanel=BuildAssistantPanel();assistantPanel.Visible=false;root.Controls.Add(assistantPanel,0,2);
-        AddTab("Genel");AddTab("Kart Basmayan");AddTab("Giriş Eksik");AddTab("İçeride / Çıkış Bekleyen");AddTab("İzinli");AddTab("Geç Giriş");AddTab("Erken Çıkış");AddTab("Tamamlanan");AddTab("Eşleşmeyen Kart");
+        AddTab("Genel");AddTab("Kart Basmayan");AddTab("Giriş Eksik");AddTab("İçeride / Çıkış Bekleyen");AddTab("İzinli");AddTab("Erken Giriş");AddTab("Geç Giriş");AddTab("Erken Çıkış");AddTab("Geç Çıkış");AddTab("Tamamlanan");AddTab("Eşleşmeyen Kart");
         root.Controls.Add(BuildTrackingWorkspace(),0,3);Controls.Add(root);
     }
     void ToggleAssistant()
@@ -292,8 +292,8 @@ public sealed partial class LiveAttendanceForm : Form
             leaveMap.TryGetValue(code,out var leaveInfo);
             var fullLeave=leaveInfo.Minutes>0&&leaveInfo.Minutes>=Math.Max(420,schedule.WorkMinutes);
             var expected=schedule.WorkMinutes>0&&!fullLeave;
-            var status=Status(day,schedule,expected,fullLeave,entry,exit);
-            var warning=Warning(schedule,entry,exit,status);
+            var status=Status(day,schedule,expected,fullLeave,entry,exit,op.EntryType,op.ExitType);
+            var warning=Warning(entry,exit,op.EntryType,op.ExitType,status);
             rows.Add(new DailyRow(code,$"{S(employee,"AD")} {S(employee,"SOYAD")}".Trim(),groupName,schedule.Name,
                 entry?.ToString("HH:mm")??"",exit?.ToString("HH:mm")??"",entrySource,exitSource,status,warning,
                 expected,fullLeave,entry.HasValue,exit.HasValue));
@@ -320,15 +320,17 @@ public sealed partial class LiveAttendanceForm : Form
             grids["Giriş Eksik"].DataSource=Table(rows.Where(r=>r.Status=="Giriş Kartı Yok"));
             grids["İçeride / Çıkış Bekleyen"].DataSource=Table(rows.Where(r=>r.Status is "İçeride" or "Çıkış Kartı Yok"));
             grids["İzinli"].DataSource=Table(rows.Where(r=>r.FullLeave));
+            grids["Erken Giriş"].DataSource=Table(rows.Where(r=>r.Warning.Contains("Erken giriş",StringComparison.OrdinalIgnoreCase)));
             grids["Geç Giriş"].DataSource=Table(rows.Where(r=>r.Warning.Contains("Geç giriş",StringComparison.OrdinalIgnoreCase)));
             grids["Erken Çıkış"].DataSource=Table(rows.Where(r=>r.Warning.Contains("Erken çıkış",StringComparison.OrdinalIgnoreCase)));
-            grids["Tamamlanan"].DataSource=Table(rows.Where(r=>r.HasEntry&&r.HasExit));
+            grids["Geç Çıkış"].DataSource=Table(rows.Where(r=>r.Warning.Contains("Geç çıkış",StringComparison.OrdinalIgnoreCase)));
+            grids["Tamamlanan"].DataSource=Table(rows.Where(r=>r.Status=="Tamamlandı"));
             grids["Eşleşmeyen Kart"].DataSource=UnmatchedTable();
             var p=PdksAppearance.Current;
             Card("Beklenen",rows.Count(r=>r.Expected),p.PrimarySoft);Card("Gelen",rows.Count(r=>r.Expected&&r.HasEntry),p.SurfaceAlt);
             Card("Kart Basmayan",rows.Count(r=>r.Status=="Kart Basmadı"),p.DangerSoft);Card("İzinli",rows.Count(r=>r.FullLeave),p.PrimarySoft);
             Card("İçeride",rows.Count(r=>r.Status=="İçeride"),p.SurfaceAlt);Card("Çıkış Eksik",rows.Count(r=>r.Status=="Çıkış Kartı Yok"),p.DangerSoft);
-            Card("Tamamlanan",rows.Count(r=>r.HasEntry&&r.HasExit),p.SurfaceAlt);Card("Eşleşmeyen",unmatched.Count(x=>x.At.Date==day.Date),p.DangerSoft);
+            Card("Tamamlanan",rows.Count(r=>r.Status=="Tamamlandı"),p.SurfaceAlt);Card("Eşleşmeyen",unmatched.Count(x=>x.At.Date==day.Date),p.DangerSoft);
 
             foreach(var pair in selected)
             {
@@ -444,23 +446,50 @@ public sealed partial class LiveAttendanceForm : Form
         return map.GetValueOrDefault(code)??new Schedule("Tanımsız",510,515,1140,1110,day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday?0:450);
     }
 
-    static string Status(DateTime day,Schedule s,bool expected,bool fullLeave,DateTime? entry,DateTime? exit)
+    static string Status(DateTime day,Schedule s,bool expected,bool fullLeave,DateTime? entry,DateTime? exit,string entryType,string exitType)
     {
-        if(fullLeave)return "İzinli";if(!expected)return entry.HasValue?"Plansız Kart":"Çalışma Yok";
+        if(fullLeave)return "İzinli";
+        if(!expected)return entry.HasValue?"Plansız Kart":"Çalışma Yok";
         var now=DateTime.Now;var historical=day.Date<now.Date;var today=day.Date==now.Date;var minute=now.Hour*60+now.Minute;
-        if(!entry.HasValue){if(exit.HasValue)return "Giriş Kartı Yok";return historical||(today&&minute>s.EntryTolerance)?"Kart Basmadı":"Bekleniyor";}
-        if(!exit.HasValue)return historical||(today&&minute>s.ExpectedExit+15)?"Çıkış Kartı Yok":"İçeride";
+        if(!entry.HasValue)
+        {
+            if(exit.HasValue)return "Giriş Kartı Yok";
+            return historical||(today&&minute>AttendanceTolerancePolicy.EntryLatestMinute)?"Kart Basmadı":"Bekleniyor";
+        }
+        if(!exit.HasValue)
+            return historical||(today&&minute>AttendanceTolerancePolicy.ExitLatestMinute)?"Çıkış Kartı Yok":"İçeride";
+        if(IsEType(entryType)||IsEType(exitType))return "E İşlemli";
+        if(!AttendanceTolerancePolicy.IsAcceptedEntry(entry.Value)||!AttendanceTolerancePolicy.IsAcceptedExit(exit.Value))
+            return "Düzeltme Gerekli";
         return "Tamamlandı";
     }
 
-    static string Warning(Schedule s,DateTime? entry,DateTime? exit,string status)
+    static string Warning(DateTime? entry,DateTime? exit,string entryType,string exitType,string status)
     {
         if(status is "İzinli" or "Çalışma Yok" or "Kart Basmadı" or "Giriş Kartı Yok" or "Çıkış Kartı Yok")return status;
         var list=new List<string>();
-        if(entry.HasValue&&Minute(entry.Value)>s.EntryTolerance)list.Add($"Geç giriş +{Minute(entry.Value)-s.ExpectedEntry} dk");
-        if(exit.HasValue&&Minute(exit.Value)<s.ExitTolerance)list.Add($"Erken çıkış {s.ExpectedExit-Minute(exit.Value)} dk");
+        if(IsEType(entryType))list.Add("E giriş • ADMIN/elle");
+        if(IsEType(exitType))list.Add("E çıkış • ADMIN/elle");
+        if(entry.HasValue&&!IsEType(entryType))
+        {
+            var kind=AttendanceTolerancePolicy.EntryException(entry.Value);
+            if(kind=="Erken Giriş")
+                list.Add($"Erken giriş -{AttendanceTolerancePolicy.EntryEarliestMinute-Minute(entry.Value)} dk • kabul {AttendanceTolerancePolicy.EntryWindowText}");
+            else if(kind=="Geç Giriş")
+                list.Add($"Geç giriş +{Minute(entry.Value)-AttendanceTolerancePolicy.EntryLatestMinute} dk • kabul {AttendanceTolerancePolicy.EntryWindowText}");
+        }
+        if(exit.HasValue&&!IsEType(exitType))
+        {
+            var kind=AttendanceTolerancePolicy.ExitException(exit.Value);
+            if(kind=="Erken Çıkış")
+                list.Add($"Erken çıkış -{AttendanceTolerancePolicy.ExitEarliestMinute-Minute(exit.Value)} dk • kabul {AttendanceTolerancePolicy.ExitWindowText}");
+            else if(kind=="Geç Çıkış")
+                list.Add($"Geç çıkış +{Minute(exit.Value)-AttendanceTolerancePolicy.ExitLatestMinute} dk • kabul {AttendanceTolerancePolicy.ExitWindowText}");
+        }
         return string.Join(" / ",list);
     }
+
+    static bool IsEType(string? value)=>string.Equals(value?.Trim(),"E",StringComparison.OrdinalIgnoreCase);
     static void PaintRows(DataGridView grid)
     {
         var p=PdksAppearance.Current;
@@ -472,6 +501,8 @@ public sealed partial class LiveAttendanceForm : Form
                 "Kart Basmadı" or "Giriş Kartı Yok" or "Çıkış Kartı Yok"=>p.DangerSoft,
                 "İzinli"=>p.PrimarySoft,
                 "İçeride"=>p.SurfaceAlt,
+                "Düzeltme Gerekli"=>p.DangerSoft,
+                "E İşlemli"=>StatusCardBack("warning"),
                 "Tamamlandı"=>p.Surface,
                 _=>grid.Columns.Contains("Uyarı") && !string.IsNullOrWhiteSpace(Convert.ToString(row.Cells["Uyarı"].Value)) ? p.PrimarySoft : p.SurfaceAlt
             };
