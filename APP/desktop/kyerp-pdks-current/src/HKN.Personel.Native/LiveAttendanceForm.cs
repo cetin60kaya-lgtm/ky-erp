@@ -277,11 +277,14 @@ public sealed partial class LiveAttendanceForm : Form
         var leaveMap=leaves.AsEnumerable().GroupBy(r=>S(r,"PKNO")).ToDictionary(g=>g.Key,g=>LeaveInfo(g));
         var planMap=plans.AsEnumerable().GroupBy(r=>I(r,"GKOD")).ToDictionary(g=>g.Key,g=>ReadSchedule(g.First()));
         var fallbackMap=fallback.AsEnumerable().ToDictionary(r=>I(r,"KOD"),ReadSchedule);
+        var groupPolicies=AttendanceGroupPolicyStore.Load(db);
         var rows=new List<DailyRow>();
         foreach(DataRow employee in employees.Rows)
         {
             var code=S(employee,"PKNO");var group=employee["GRUP"]==DBNull.Value?-1:I(employee,"GRUP");
-            var groupName=S(employee,"GRUP_AD");var schedule=planMap.GetValueOrDefault(group)??FallbackSchedule(groupName,day,fallbackMap);
+            var groupName=S(employee,"GRUP_AD");
+            if(!AttendanceGroupPolicyStore.RequiresCardTracking(groupPolicies,group,groupName))continue;
+            var schedule=planMap.GetValueOrDefault(group)??FallbackSchedule(groupName,day,fallbackMap);
             punchMap.TryGetValue(code,out var personPunches);
             var physical=PhysicalMovement(personPunches??Array.Empty<TerminalDevicePunch>());
             operationalMap.TryGetValue(code,out var op);
