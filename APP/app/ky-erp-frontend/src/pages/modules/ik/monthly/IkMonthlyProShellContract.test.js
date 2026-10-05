@@ -117,7 +117,7 @@ test("person card save stays usable when the selected historical month is locked
   assert.match(monthly, /skipPeriodCompliance: Boolean\(data\.close\?\.isLocked\)/);
   assert.match(monthly, /periodComplianceSkipped/);
   assert.match(monthly, /person-save-message/);
-  assert.match(monthly, /dönemi kapalı olduğu için yalnız dönemsel SGK alanlarına dokunulmadı/);
+  assert.match(monthly, /dönemi kapalı olduğu için dönemsel SGK alanlarına dokunulmadı/);
   assert.match(monthly, /disabled=\{Boolean\(data\.close\?\.isLocked\) \|\| modalDraft\.sgkDaySource==="RESMI_BORDRO"\}/);
 });
 
