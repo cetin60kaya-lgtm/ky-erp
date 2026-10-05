@@ -211,7 +211,7 @@ public sealed partial class LiveAttendanceForm
             var warning = Warning(schedule, movement.Entry, movement.Exit, status);
             rows.Add(new DailyRow(code, $"{S(employee, "AD")} {S(employee, "SOYAD")}".Trim(), groupName,
                 schedule.Name, movement.Entry?.ToString("HH:mm") ?? "", movement.Exit?.ToString("HH:mm") ?? "",
-                status, warning, expected, fullLeave, movement.Entry.HasValue, movement.Exit.HasValue));
+                "", "", status, warning, expected, fullLeave, movement.Entry.HasValue, movement.Exit.HasValue));
         }
         return rows;
     }
