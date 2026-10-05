@@ -9,13 +9,33 @@ public sealed partial class MainShellForm
     void InitializeTerminalAutoSync()
     {
         terminalAutoTimer.Tick += async (_, _) => await CheckTerminalAutoSyncAsync();
-        Shown += (_, _) =>
+        Shown += async (_, _) =>
         {
             if (IsDisposed) return;
             terminalAutoTimer.Start();
-            SetShellActivity("Terminal kontrolü arka planda hazır", true);
+            SetShellActivity("Terminal kontrol ediliyor…", true);
+            await Task.Delay(250);
+            await RefreshTerminalHealthAsync();
         };
         FormClosed += (_, _) => terminalAutoTimer.Stop();
+    }
+
+    async Task RefreshTerminalHealthAsync()
+    {
+        try
+        {
+            var snapshot = await Task.Run(async () => await TerminalDeviceClient.ReadAsync(false));
+            if (IsDisposed) return;
+            SetShellActivity(
+                snapshot.Connected
+                    ? $"Kart cihazı bağlı • {snapshot.DeviceTime:HH:mm:ss} • yeni {Math.Max(0, snapshot.NewLogCount)}"
+                    : "Kart cihazı: " + ShortTerminalMessage(snapshot.Message),
+                snapshot.Connected);
+        }
+        catch (Exception ex)
+        {
+            if (!IsDisposed) SetShellActivity("Kart cihazı: " + ShortTerminalMessage(ex.Message), false);
+        }
     }
 
     async Task CheckTerminalAutoSyncAsync(bool force = false)
