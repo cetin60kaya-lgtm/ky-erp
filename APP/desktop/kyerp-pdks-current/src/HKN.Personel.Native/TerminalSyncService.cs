@@ -86,9 +86,9 @@ internal static class TerminalSyncService
             var punches = snapshot.Punches.OrderBy(x => x.OccurredAt).ToArray();
             if (punches.Length == 0)
             {
-                var autoAlign = TryAutoAlignYesterday();
+                var noDataAlign = TryAutoAlignYesterday();
                 return Save(new(DateTime.Now, 0, 0, 0, 0, 0, false,
-                    "Aktarılacak veri yok. Cihazda kayıt bulunamadı; cihazdan hiçbir şey silinmedi. " + autoAlign, scheduleKey));
+                    "Aktarılacak veri yok. Cihazda kayıt bulunamadı; cihazdan hiçbir şey silinmedi. " + noDataAlign, scheduleKey));
             }
 
             // Physical terminal data is source evidence. Keep both a short live cache and a durable live TNF/raw archive.
