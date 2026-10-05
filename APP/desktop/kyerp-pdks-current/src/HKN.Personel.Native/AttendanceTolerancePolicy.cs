@@ -37,6 +37,6 @@ internal static class AttendanceTolerancePolicy
         return string.Empty;
     }
 
-    public static string EntryWindowText => $"{EntryEarliest:hh\:mm}-{EntryLatest:hh\:mm}";
-    public static string ExitWindowText => $"{ExitEarliest:hh\:mm}-{ExitLatest:hh\:mm}";
+    public static string EntryWindowText => $"{EntryEarliest.ToString(@"hh\\:mm")}-{EntryLatest.ToString(@"hh\\:mm")}";
+    public static string ExitWindowText => $"{ExitEarliest.ToString(@"hh\\:mm")}-{ExitLatest.ToString(@"hh\\:mm")}";
 }
