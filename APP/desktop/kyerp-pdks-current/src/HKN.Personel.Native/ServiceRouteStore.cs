@@ -9,6 +9,7 @@ internal sealed record ServiceRouteProfile(
     string MorningDeparture,
     string EveningReturn,
     string VehiclePlate,
+    int Capacity,
     string DriverName,
     string DriverPhone,
     string Stops,
