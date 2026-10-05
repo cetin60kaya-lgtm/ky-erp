@@ -83,7 +83,7 @@ public partial class PersonelForm
         p.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,78)); p.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,92)); p.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,58)); p.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100)); p.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,96));
         for(int i=0;i<6;i++)p.RowStyles.Add(new RowStyle(SizeType.Percent,16.66f));
         HeaderField(p,0,"Kart Numarası","PKNO"); HeaderField(p,1,"Grubu","GRUPAD",false); HeaderField(p,2,"Adı","AD"); HeaderField(p,3,"Bölümü","BOLUMAD",false);
-        HeaderField(p,4,"Soyadı","SOYAD"); HeaderField(p,5,"Durum","DURUMAD",false); HeaderField(p,6,"Maaşı","MAAS"); HeaderField(p,7,"Servis","SERVISAD",false);
+        HeaderField(p,4,"Soyadı","SOYAD"); HeaderField(p,5,"Durum","DURUMAD",false); HeaderField(p,6,"Maaşı","MAAS"); HeaderField(p,7,"Servis Hattı","SERVISAD",false);
         HeaderField(p,8,"İşe Giriş Tarihi","IGTARIH"); HeaderField(p,9,"Görev","GOREVAD",false); HeaderField(p,10,"Çıkış Tarihi","ICTARIH"); HeaderField(p,11,"Firma","FIRMAAD",false);
         p.Controls.Add(photo,4,0); p.SetRowSpan(photo,6); return p;
     }
