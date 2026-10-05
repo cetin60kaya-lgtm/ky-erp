@@ -91,19 +91,21 @@ internal static class CompanyDataPaths
     static void MigrateLegacyLayout()
     {
         var oldDataRoot = Path.Combine(WorkspaceRoot, "03_DATA", CompanyName);
-        CopyDirectoryIfExists(oldDataRoot, Data, "*.FDB");
-        CopyDirectoryIfExists(oldDataRoot, Data, "*.GDB");
-        CopyDirectoryIfExists(Path.Combine(WorkspaceRoot, "04_TNF", CompanyName), Tnf, "*.Tnf");
+        // İlk 6.5 geçişinde eski yerleşim çalışan/otoriter kaynaktır.
+        // Daha önce test sırasında oluşmuş yeni klasörler varsa canlı DB/TNF ile güncellenir.
+        CopyDirectoryIfExists(oldDataRoot, Data, "*.FDB", overwrite: true);
+        CopyDirectoryIfExists(oldDataRoot, Data, "*.GDB", overwrite: true);
+        CopyDirectoryIfExists(Path.Combine(WorkspaceRoot, "04_TNF", CompanyName), Tnf, "*.Tnf", overwrite: true);
         CopyDirectoryTreeIfExists(Path.Combine(WorkspaceRoot, "05_BACKUP", CompanyName), Backup);
         CopyDirectoryTreeIfExists(Path.Combine(WorkspaceRoot, "09_LOG", CompanyName), Logs);
-        CopyDirectoryTreeIfExists(Path.Combine(oldDataRoot, ".system"), SystemData);
+        CopyDirectoryTreeIfExists(Path.Combine(oldDataRoot, ".system"), SystemData, overwrite: true);
         CopyDirectoryTreeIfExists(Path.Combine(oldDataRoot, "Reports"), Reports);
 
         var oldDb = Path.Combine(oldDataRoot, "KY_PDKS_DATA.FDB");
-        if (!File.Exists(Database) && File.Exists(oldDb)) File.Copy(oldDb, Database, false);
+        if (File.Exists(oldDb)) File.Copy(oldDb, Database, true);
     }
 
-    static void CopyDirectoryTreeIfExists(string source, string destination)
+    static void CopyDirectoryTreeIfExists(string source, string destination, bool overwrite = false)
     {
         if (!Directory.Exists(source)) return;
         try
@@ -118,7 +120,7 @@ internal static class CompanyDataPaths
                 var relative = Path.GetRelativePath(source, file);
                 var target = Path.Combine(destination, relative);
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                if (!File.Exists(target)) File.Copy(file, target, false);
+                if (overwrite || !File.Exists(target)) File.Copy(file, target, overwrite);
             }
         }
         catch { }
@@ -134,7 +136,7 @@ internal static class CompanyDataPaths
         }
     }
 
-    static void CopyDirectoryIfExists(string source, string destination, string pattern)
+    static void CopyDirectoryIfExists(string source, string destination, string pattern, bool overwrite = false)
     {
         if (!Directory.Exists(source)) return;
         Directory.CreateDirectory(destination);
@@ -143,7 +145,7 @@ internal static class CompanyDataPaths
             foreach (var file in Directory.EnumerateFiles(source, pattern, SearchOption.TopDirectoryOnly))
             {
                 var target = Path.Combine(destination, Path.GetFileName(file));
-                if (!File.Exists(target)) File.Copy(file, target, false);
+                if (overwrite || !File.Exists(target)) File.Copy(file, target, overwrite);
             }
         }
         catch { }
