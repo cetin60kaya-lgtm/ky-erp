@@ -88,13 +88,16 @@ test("IK refresh uses canonical personnel and latest-wins request guard", () => 
   assert.match(cloud, /payroll: payroll\.filter/);
 });
 
-test("IK base salary reference uses raw employees and overtime metadata is stripped on type change", () => {
+test("IK reference person stays informational while overtime uses the employee real salary", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.match(page, /baseEmployeeId \? rawEmployees\.find/);
   assert.match(page, /const employee = rawEmployees\.find/);
-  assert.match(cloud, /new Map\(rawEmployees\.map/);
+  assert.match(page, /const baseSalary = num\(employee\.salary\)/);
+  assert.match(cloud, /SELECT salary,overtime_hourly_base/);
+  assert.match(cloud, /return calculateOvertimeAmount\(salary, hours, multiplierValue, divisor\)/);
+  assert.doesNotMatch(cloud, /new Map\(rawEmployees\.map/);
   assert.match(cloud, /text\(body\.note \?\? overtimeMetaFromNote\(current\.note\)\.note\)/);
   assert.match(cloud, /exit_date=excluded\.exit_date/);
 });
@@ -314,7 +317,7 @@ test("EK is an explicit canonical amount and is never inferred from salary diffe
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.match(page, /extraPaymentAmount: sourceExtra/);
-  assert.match(page, /extra: num\(employee\.extraPaymentAmount\)/);
+  assert.match(page, /const extra = num\(employee\.extraPaymentAmount\)/);
   assert.match(cloud, /const extraPaymentAmount = number\(body\.extraPaymentAmount \?\? currentCard\?\.extra_payment_amount\)/);
   assert.match(cloud, /const extra = number\(employee\.extraPaymentAmount\)/);
   assert.doesNotMatch(cloud, /autoExtra/);
