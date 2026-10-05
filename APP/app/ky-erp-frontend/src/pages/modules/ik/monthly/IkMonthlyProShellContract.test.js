@@ -111,6 +111,8 @@ test("pre-payroll control keeps EK explicit and auto-balances payment channels",
   assert.match(monthly, /<Field label="EK Ödeme"/);
   assert.match(monthly, /Sadece Elden: tahmini netin tamamı otomatik Elden'e atanır/);
   assert.match(monthly, /Banka \+ Elden: Banka tutarı sabit kalır/);
+  assert.match(monthly, /Bordro Öncesi Giriş Kontrolü/);
+  assert.match(monthly, /Giriş Kontrol/);
 });
 
 test("pre-payroll modal has one main scroll owner and no overlapping sticky footer", () => {
@@ -189,7 +191,7 @@ test("person card separates SGK source, suggestion and PDKS control days", () =>
 });
 
 test("payroll person actions open final mode on the same canonical source editor", () => {
-  assert.match(monthly, /Kaynakları Düzenle/);
+  assert.match(monthly, /Son Kontrol \/ Düzenle/);
   assert.match(monthly, /Kaynak Hareketleri \/ Log/);
   assert.match(monthly, /Çift tık: gerçek kaynakları düzenle/);
   assert.match(monthly, /openPayPlan\(row\.employee, "FINAL", row\)/);
