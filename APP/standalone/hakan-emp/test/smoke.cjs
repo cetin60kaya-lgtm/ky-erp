@@ -52,3 +52,9 @@ function ok(v,m){if(!v)throw new Error('ASSERT '+m)}
 // UI selector guard
 const uiJs=fs.readFileSync(path.join(root,'app','public','app.js'),'utf8');
 if(/(?<!\$)\$\('[^']+'\)\.forEach/.test(uiJs))throw new Error('UI selector guard: use $$() for NodeList forEach');
+
+// interaction layer guard
+const uiCss=fs.readFileSync(path.join(root,'app','public','app.css'),'utf8');
+if(!uiCss.includes('.drawer{z-index:80!important}'))throw new Error('interaction layer guard: drawer must be above backdrop');
+if(!uiCss.includes('.backdrop{z-index:70!important}'))throw new Error('interaction layer guard: backdrop z-index missing');
+if(!uiCss.includes('.modal{z-index:100!important}'))throw new Error('interaction layer guard: modal must be above drawer');
