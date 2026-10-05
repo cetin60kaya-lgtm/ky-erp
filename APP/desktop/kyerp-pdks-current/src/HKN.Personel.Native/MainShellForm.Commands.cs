@@ -29,6 +29,7 @@ public sealed partial class MainShellForm
         PdksCommandId.PayrollOvertime or
         PdksCommandId.Reports or
         PdksCommandId.Groups or
+        PdksCommandId.ServiceRoutes or
         PdksCommandId.Periods or
         PdksCommandId.WorkingDate or
         PdksCommandId.Holidays or
@@ -142,6 +143,9 @@ public sealed partial class MainShellForm
             case PdksCommandId.Groups:
                 OpenGroups();
                 break;
+            case PdksCommandId.ServiceRoutes:
+                ShowModule(new ServiceRouteForm(), PdksModule.Tanimlar);
+                break;
             case PdksCommandId.Periods:
                 OpenDialogModule(PdksModule.Donemler);
                 break;
@@ -155,7 +159,7 @@ public sealed partial class MainShellForm
                 OpenLegacyTable("Günlük Çalışma Saatleri", "PUANBILGI", true, new Size(1120, 700));
                 break;
             case PdksCommandId.AnnualWorkPlan:
-                OpenLegacyTable("Yıllık Çalışma Planı", "PLANA", true, new Size(1180, 720));
+                ShowModule(new AnnualWorkPlanForm(), PdksModule.Tanimlar);
                 break;
             case PdksCommandId.PayrollFields:
                 OpenDefinitions("Bordro");
