@@ -21,7 +21,7 @@ public sealed class LegacyPeriodForm : Form
 
     public LegacyPeriodForm()
     {
-        Text="Yıllık Dönemler";
+        Text="Aylık Dönemler";
         StartPosition=FormStartPosition.CenterScreen;
         Size=new Size(1180,720);
         MinimumSize=new Size(920,620);
@@ -71,7 +71,7 @@ public sealed class LegacyPeriodForm : Form
 
         left.Controls.Add(new Label
         {
-            Text="Kullanıcı yalnız yılı seçer. 12 aylık çalışma/bordro dönemi sistem tarafından otomatik hazırlanır.",
+            Text="Yılı seçin; 12 ay tek listede görünür. Her ayın MESAİLİ ve İDARİ teknik kayıtları sistem tarafından birlikte hazırlanır.",
             Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=p.Muted,
             Font=new Font("Segoe UI",8.5f)
         },0,2);
