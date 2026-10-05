@@ -86,7 +86,7 @@ test("payroll separates active and selected-month leavers while excluding earlie
   assert.match(monthly, /payrollEmploymentFilter/);
   assert.match(monthly, />Aktif \(/);
   assert.match(monthly, />İşten Ayrılan \(/);
-  assert.match(monthly, /\["ACTIVE", "NEW_HIRE", "MISSING_HIRE_DATE"\]/);
+  assert.match(monthly, /\["ACTIVE", "NEW_HIRE", "MISSING_HIRE_DATE", "MISSING_EXIT_DATE"\]/);
   assert.match(monthly, /\["EXIT_MONTH", "ENTERED_EXITED"\]/);
   assert.match(monthly, /Seçili aydan önce ayrılan personel bordroya alınmaz/);
 });
@@ -182,7 +182,7 @@ test("selected-month employment state ignores today's passive flag and explains 
   assert.match(monthly, /\$\{periodName\} · Aktif/);
   assert.match(monthly, /\$\{periodName\} · İşe Başlamamış/);
   assert.match(monthly, /\$\{periodName\} · Çıkış Ayı/);
-  assert.match(monthly, /\["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED", "MISSING_HIRE_DATE"\]/);
+  assert.match(monthly, /\["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED", "MISSING_HIRE_DATE", "MISSING_EXIT_DATE"\]/);
   assert.match(monthly, /Giriş Tarihi Eksik/);
 });
 
