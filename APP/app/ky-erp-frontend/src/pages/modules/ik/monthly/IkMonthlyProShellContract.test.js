@@ -81,6 +81,14 @@ test("personnel selection survives live refresh against the full master roster",
   assert.match(monthly, /setSelectedId\(\(old\) => masterSelectionIds\.has\(old\)/);
 });
 
+test("person card save stays usable when the selected historical month is locked", () => {
+  assert.match(monthly, /skipPeriodCompliance: Boolean\(data\.close\?\.isLocked\)/);
+  assert.match(monthly, /periodComplianceSkipped/);
+  assert.match(monthly, /person-save-message/);
+  assert.match(monthly, /dönemi kapalı olduğu için yalnız dönemsel SGK alanlarına dokunulmadı/);
+  assert.match(monthly, /disabled=\{Boolean\(data\.close\?\.isLocked\)\}/);
+});
+
 test("monthly write dialogs surface validation and accept API-valid SGK day values", () => {
   assert.match(monthly, /const hasSgkDays = modalDraft\.sgkDays !== ""/);
   assert.match(monthly, /SGK gün sayısı 0-\$\{totalDays\} arasında olmalıdır/);

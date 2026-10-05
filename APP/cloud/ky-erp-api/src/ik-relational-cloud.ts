@@ -1397,8 +1397,12 @@ async function savePersonCard(c: Context<AppEnv>) {
     ? text(body.period)
     : `${number(body.year) || new Date().getFullYear()}-${String(number(body.month) || new Date().getMonth() + 1).padStart(2, "0")}`;
   const effectiveDate = hrDateOnly(body.effectiveDate) || hrTodayIstanbul();
-  const cardLock = await rejectAdvancedPeriodLocked(c, companyId, number(period.slice(0, 4)), number(period.slice(5, 7)));
-  if (cardLock) return cardLock;
+  const periodLockRow = await advancedPeriodLockRow(c, companyId, number(period.slice(0, 4)), number(period.slice(5, 7)));
+  const periodLocked = flag(periodLockRow?.is_locked);
+  const skipPeriodCompliance = body.skipPeriodCompliance === true;
+  if (periodLocked && !skipPeriodCompliance) {
+    return error(c, 409, "IK_PERIOD_LOCKED", "Seçili dönem kapalı. Personel ana kartını güncellemek için dönemsel SGK alanlarını değiştirmeden tekrar kaydedin.");
+  }
   const sgkCovered = body.sgkFollow === true || upper(body.sgkStatus) === "VAR";
   const maxSgkDays = new Date(Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0).getDate() || 31;
   const rawSgkDays = body.sgkDays === null || body.sgkDays === undefined || body.sgkDays === "" ? null : Math.round(number(body.sgkDays));
@@ -1460,18 +1464,23 @@ async function savePersonCard(c: Context<AppEnv>) {
     text(body.legalStartPeriod), text(body.legalEndPeriod), text(body.garnishmentNote), nowIso(),
   ).run();
   await savePersonCardCalc(c, companyId, employeeId, deductionHourlyBase);
-  await c.env.DB.batch([
+  const profileStatements: D1PreparedStatement[] = [
     c.env.DB.prepare(`INSERT INTO ik_person_hr_profiles(employee_id,main_company_id,personnel_status,updated_by,updated_at)
       VALUES (?,?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET
       main_company_id=excluded.main_company_id,personnel_status=excluded.personnel_status,
       updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
       .bind(employeeId, companyId, personnelStatus, text(body.userName) || "IK", nowIso()),
-    c.env.DB.prepare(`INSERT INTO ik_person_monthly_compliance(main_company_id,employee_id,period,sgk_covered,sgk_days,note,updated_by,updated_at)
-      VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(main_company_id,employee_id,period) DO UPDATE SET
-      sgk_covered=excluded.sgk_covered,sgk_days=excluded.sgk_days,note=excluded.note,
-      updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
-      .bind(companyId, employeeId, period, sgkCovered ? 1 : 0, sgkDays, text(body.sgkNote), text(body.userName) || "IK", nowIso()),
-  ]);
+  ];
+  if (!periodLocked) {
+    profileStatements.push(
+      c.env.DB.prepare(`INSERT INTO ik_person_monthly_compliance(main_company_id,employee_id,period,sgk_covered,sgk_days,note,updated_by,updated_at)
+        VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(main_company_id,employee_id,period) DO UPDATE SET
+        sgk_covered=excluded.sgk_covered,sgk_days=excluded.sgk_days,note=excluded.note,
+        updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+        .bind(companyId, employeeId, period, sgkCovered ? 1 : 0, sgkDays, text(body.sgkNote), text(body.userName) || "IK", nowIso()),
+    );
+  }
+  await c.env.DB.batch(profileStatements);
   await updateMonthlyEmployeeFromCard(c, employeeId, companyId, body, current);
 
   const updatedEmployee = await first(c, "SELECT * FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
@@ -1527,7 +1536,9 @@ async function savePersonCard(c: Context<AppEnv>) {
     employeeId, saved: true, baseEmployeeId, extraPaymentAmount: autoExtra,
     legalDeductionType: legalType, garnishmentSource: legalSource,
     overtimeHourlyBase, deductionHourlyBase,
-    personnelStatus, period, sgkCovered, sgkDays, effectiveDate, changedFields: trackedChanges.map(([field]) => field),
+    personnelStatus, period, sgkCovered, sgkDays, effectiveDate,
+    periodComplianceSkipped: periodLocked,
+    changedFields: trackedChanges.map(([field]) => field),
   });
 }
 async function adminMaintainPerson(c: Context<AppEnv>) {

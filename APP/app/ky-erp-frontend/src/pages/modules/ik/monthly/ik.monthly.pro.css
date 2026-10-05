@@ -1098,3 +1098,16 @@
   .modal-bg .mf .group{justify-content:stretch}
   .modal-bg .mf .group .btn,.modal-bg .mf>.btn{width:100%}
 }
+
+.ik-monthly-pro .person-save-message,
+.modal-bg .person-save-message{
+  margin:10px 0 0;
+  padding:10px 12px;
+  border:1px solid #f3b36b;
+  border-radius:9px;
+  background:#fff8eb;
+  color:#7c2d12;
+  font-size:12px;
+  font-weight:800;
+  line-height:1.4;
+}

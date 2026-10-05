@@ -43,6 +43,15 @@ test("monthly personnel API returns the full HKN master roster and allocates the
   assert.match(relational, /rawDocuments: documents\.map/);
 });
 
+test("closed month protects monthly SGK compliance without blocking master personnel card updates", () => {
+  const relational = api("ik-relational-cloud.ts");
+  assert.match(relational, /const periodLocked = flag\(periodLockRow\?\.is_locked\)/);
+  assert.match(relational, /const skipPeriodCompliance = body\.skipPeriodCompliance === true/);
+  assert.match(relational, /if \(periodLocked && !skipPeriodCompliance\)/);
+  assert.match(relational, /if \(!periodLocked\) \{/);
+  assert.match(relational, /periodComplianceSkipped: periodLocked/);
+});
+
 test("person card SGK day contract accepts zero or unknown values consistently", () => {
   const relational = api("ik-relational-cloud.ts");
   const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
