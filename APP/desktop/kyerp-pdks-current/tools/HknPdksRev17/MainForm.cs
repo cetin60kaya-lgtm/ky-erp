@@ -199,6 +199,16 @@ public sealed partial class MainForm : Form
 		Width = 220
 	};
 
+	private readonly Label payrollLockStatus = new Label
+	{
+		AutoSize = true,
+		Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+		Padding = new Padding(8, 8, 8, 0)
+	};
+
+	private readonly Button payrollPeriodLockButton = new Button { Width = 130, Height = 30 };
+	private readonly Button payrollPersonLockButton = new Button { Width = 150, Height = 30 };
+
 	private readonly DateTimePicker paymentMonth = MonthPicker();
 
 	private readonly NumericUpDown paymentYear = new NumericUpDown
@@ -243,13 +253,13 @@ public sealed partial class MainForm : Form
 		Format = DateTimePickerFormat.Short
 	};
 
-	private readonly MaskedTextBox inMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Entry));
+	private readonly MaskedTextBox inMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.EntryEarly));
 
-	private readonly MaskedTextBox inMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Entry));
+	private readonly MaskedTextBox inMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.EntryLate));
 
-	private readonly MaskedTextBox outMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Exit));
+	private readonly MaskedTextBox outMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.ExitEarly));
 
-	private readonly MaskedTextBox outMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Exit));
+	private readonly MaskedTextBox outMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.ExitLate));
 
 	private FirebirdDatabase? db;
 	internal WorkTimePolicy WorkHours { get; private set; } = WorkTimePolicy.Default;
@@ -258,8 +268,10 @@ public sealed partial class MainForm : Form
 	{
 		if (WorkHours == policy) return;
 		WorkHours = policy;
-		inMin.Text = inMax.Text = WorkTimePolicy.Format(policy.Entry);
-		outMin.Text = outMax.Text = WorkTimePolicy.Format(policy.Exit);
+		inMin.Text = WorkTimePolicy.Format(policy.EntryEarly);
+		inMax.Text = WorkTimePolicy.Format(policy.EntryLate);
+		outMin.Text = WorkTimePolicy.Format(policy.ExitEarly);
+		outMax.Text = WorkTimePolicy.Format(policy.ExitLate);
 		WorkHoursChanged?.Invoke(this, EventArgs.Empty);
 	}
 
@@ -267,7 +279,7 @@ public sealed partial class MainForm : Form
 
 	public MainForm()
 	{
-		Text = "HKN PDKS REV21 — Hızlı Veri";
+		Text = "HKN PDKS REV22 — Hızlı Veri";
 		base.StartPosition = FormStartPosition.CenterScreen;
 		base.Width = 1380;
 		base.Height = 820;
@@ -723,38 +735,28 @@ public sealed partial class MainForm : Form
 
 	private Control BuildPayroll()
 	{
-		Panel obj = new Panel
-		{
-			Dock = DockStyle.Fill
-		};
+		Panel obj = new Panel { Dock = DockStyle.Fill };
 		FlowLayoutPanel flowLayoutPanel = new FlowLayoutPanel
 		{
 			Dock = DockStyle.Top,
-			Height = 46
+			Height = 84,
+			AutoScroll = true
 		};
-		flowLayoutPanel.Controls.Add(new Label
-		{
-			Text = "Yıl",
-			AutoSize = true,
-			Padding = new Padding(0, 8, 3, 0)
-		});
+		flowLayoutPanel.Controls.Add(new Label { Text = "Yıl", AutoSize = true, Padding = new Padding(0, 8, 3, 0) });
 		flowLayoutPanel.Controls.Add(payrollYear);
-		flowLayoutPanel.Controls.Add(new Label
-		{
-			Text = "Ay",
-			AutoSize = true,
-			Padding = new Padding(7, 8, 3, 0)
-		});
+		flowLayoutPanel.Controls.Add(new Label { Text = "Ay", AutoSize = true, Padding = new Padding(7, 8, 3, 0) });
 		flowLayoutPanel.Controls.Add(payrollMonthNo);
-		flowLayoutPanel.Controls.Add(new Label
-		{
-			Text = "Personel",
-			AutoSize = true,
-			Padding = new Padding(7, 8, 3, 0)
-		});
+		flowLayoutPanel.Controls.Add(new Label { Text = "Personel", AutoSize = true, Padding = new Padding(7, 8, 3, 0) });
 		flowLayoutPanel.Controls.Add(payrollPerson);
 		flowLayoutPanel.Controls.Add(WideBtn("Bordroyu Listele", LoadPayroll, 135));
-		flowLayoutPanel.Controls.Add(WideBtn("Seçili Bordroyu Düzenle", EditPayrollSelected, 190));
+		flowLayoutPanel.Controls.Add(WideBtn("Bordroyu Düzenle", EditPayrollSelected, 145));
+		payrollPeriodLockButton.Click += (_, _) => TogglePayrollPeriodLock();
+		payrollPersonLockButton.Click += (_, _) => TogglePayrollPersonLock();
+		flowLayoutPanel.Controls.Add(payrollPeriodLockButton);
+		flowLayoutPanel.Controls.Add(payrollPersonLockButton);
+		flowLayoutPanel.Controls.Add(WideBtn("Çakışan Kaydı Temizle", CleanPayrollOverlap, 175));
+		flowLayoutPanel.Controls.Add(WideBtn("Override Temizle", ClearPayrollOverride, 130));
+		flowLayoutPanel.Controls.Add(payrollLockStatus);
 		obj.Controls.Add(payrollGrid);
 		obj.Controls.Add(flowLayoutPanel);
 		return obj;
@@ -1058,6 +1060,7 @@ public sealed partial class MainForm : Form
 			sourceStatus.ForeColor = Color.DarkGreen;
 			try
 			{
+				await Task.Run(() => PayrollOverrideService.EnsureSchema(database!));
 				var policy = await Task.Run(() => WorkTimePolicy.Read(database!, CancellationToken.None));
 				if (!IsDisposed && ReferenceEquals(db, database))
 				{
@@ -1193,7 +1196,7 @@ public sealed partial class MainForm : Form
 		}
 		DataGridViewRow dataGridViewRow = peopleGrid.SelectedRows[0];
 		string text = Convert.ToString(dataGridViewRow.Cells["PKNO"].Value) ?? "";
-		using PersonnelEditForm personnelEditForm = new PersonnelEditForm(dataGridViewRow);
+		using PersonnelEditForm personnelEditForm = new PersonnelEditForm(db, dataGridViewRow);
 		if (personnelEditForm.ShowDialog(this) == DialogResult.OK && MessageBox.Show(text + " personel kartı güncellenecek. Devam?", "Personel", MessageBoxButtons.YesNo) == DialogResult.Yes)
 		{
 			List<string> list = new List<string>();
@@ -1328,22 +1331,151 @@ public sealed partial class MainForm : Form
 
 	private void LoadPayroll()
 	{
-		if (db == null)
-		{
-			return;
-		}
+		if (db == null) return;
 		try
 		{
-			DateTime dateTime = new DateTime((int)payrollYear.Value, (payrollMonthNo.SelectedIndex == 0) ? 1 : payrollMonthNo.SelectedIndex, 1);
-			DateTime dateTime2 = ((payrollMonthNo.SelectedIndex == 0) ? dateTime.AddYears(1) : dateTime.AddMonths(1));
-			string text = SelectedCard(payrollPerson);
-			string sql = "select u.*,k.AD,k.SOYAD,k.MAAS as KART_MAAS from UCRETLER u inner join KIMLIK k on k.PKNO=u.PKNO where k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and u.BASTAR>=@A and u.BASTAR<@B" + ((text == null) ? "" : " and u.PKNO=@P") + " order by u.PKNO";
-			payrollGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
+			PayrollOverrideService.EnsureSchema(db);
+			int year = (int)payrollYear.Value;
+			string? card = SelectedCard(payrollPerson);
+			if (payrollMonthNo.SelectedIndex == 0)
+			{
+				DateTime start = new DateTime(year, 1, 1);
+				DateTime end = start.AddYears(1);
+				string sql = "select u.*,k.AD,k.SOYAD,k.MAAS as KART_MAAS from UCRETLER u inner join KIMLIK k on k.PKNO=u.PKNO where u.BASTAR>=@A and u.BASTAR<@B" + (card == null ? "" : " and u.PKNO=@P") + " order by u.PKNO,u.BASTAR";
+				payrollGrid.DataSource = card == null
+					? db.Query(sql, new FbParameter("@A", start), new FbParameter("@B", end))
+					: db.Query(sql, new FbParameter("@A", start), new FbParameter("@B", end), new FbParameter("@P", card));
+			}
+			else
+			{
+				payrollGrid.DataSource = PayrollOverrideService.GetMonthRows(db, year, payrollMonthNo.SelectedIndex, card);
+			}
+			RefreshPayrollLockUi();
+			ColorPayrollRows();
 		}
 		catch (Exception ex)
 		{
 			MessageBox.Show(ex.Message, "Bordro");
 		}
+	}
+
+	private void RefreshPayrollLockUi()
+	{
+		if (db == null)
+		{
+			payrollLockStatus.Text = "";
+			return;
+		}
+		if (payrollMonthNo.SelectedIndex == 0)
+		{
+			payrollLockStatus.Text = "Kilit işlemleri için belirli bir ay seçin.";
+			payrollLockStatus.ForeColor = Color.DimGray;
+			payrollPeriodLockButton.Text = "Ayı Kilitle";
+			payrollPersonLockButton.Text = "Personeli Kilitle";
+			payrollPeriodLockButton.Enabled = false;
+			payrollPersonLockButton.Enabled = false;
+			return;
+		}
+		payrollPeriodLockButton.Enabled = true;
+		int year = (int)payrollYear.Value;
+		int month = payrollMonthNo.SelectedIndex;
+		string? card = SelectedCard(payrollPerson);
+		bool periodLocked = PayrollOverrideService.IsPeriodLocked(db, year, month);
+		bool personLocked = card != null && PayrollOverrideService.IsPersonLocked(db, card, year, month);
+		string monthName = CultureInfo.GetCultureInfo("tr-TR").DateTimeFormat.GetMonthName(month);
+		string state = periodLocked ? "DÖNEM KİLİTLİ" : personLocked ? "PERSONEL KİLİTLİ" : "AÇIK";
+		payrollLockStatus.Text = $"{monthName} {year} • {state}";
+		payrollLockStatus.ForeColor = periodLocked ? Color.DarkRed : personLocked ? Color.DarkOrange : Color.DarkGreen;
+		payrollPeriodLockButton.Text = periodLocked ? "Ay Kilidini Aç" : "Ayı Kilitle";
+		payrollPeriodLockButton.BackColor = periodLocked ? Color.MistyRose : SystemColors.Control;
+		payrollPersonLockButton.Enabled = card != null;
+		payrollPersonLockButton.Text = personLocked ? "Personel Kilidini Aç" : "Bu Personeli Kilitle";
+		payrollPersonLockButton.BackColor = personLocked ? Color.Bisque : SystemColors.Control;
+	}
+
+	private void ColorPayrollRows()
+	{
+		foreach (DataGridViewRow row in payrollGrid.Rows)
+		{
+			if (row.IsNewRow || !payrollGrid.Columns.Contains("KILIT_DURUMU")) continue;
+			string state = Convert.ToString(row.Cells["KILIT_DURUMU"].Value) ?? "";
+			if (state == "Dönem Kilitli") row.DefaultCellStyle.BackColor = Color.MistyRose;
+			else if (state == "Personel Kilitli") row.DefaultCellStyle.BackColor = Color.Bisque;
+			else if (state == "Manuel Düzeltilmiş") row.DefaultCellStyle.BackColor = Color.LightCyan;
+			else row.DefaultCellStyle.BackColor = Color.Honeydew;
+		}
+	}
+
+	private bool SpecificPayrollPeriod(out int year, out int month)
+	{
+		year = (int)payrollYear.Value;
+		month = payrollMonthNo.SelectedIndex;
+		if (month != 0) return true;
+		MessageBox.Show("Kilit / override işlemi için belirli bir ay seçin.", "Bordro");
+		return false;
+	}
+
+	private void TogglePayrollPeriodLock()
+	{
+		if (db == null || !SpecificPayrollPeriod(out int year, out int month)) return;
+		bool locked = PayrollOverrideService.IsPeriodLocked(db, year, month);
+		string name = CultureInfo.GetCultureInfo("tr-TR").DateTimeFormat.GetMonthName(month);
+		string question = locked ? $"{name} {year} dönem kilidi açılsın mı?" : $"{name} {year} TÜM PERSONEL için kilitlensin mi?";
+		if (MessageBox.Show(question, "Dönem Kilidi", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+		PayrollOverrideService.SetPeriodLock(db, year, month, !locked, "Bordro ana ekranı");
+		LoadPayroll();
+	}
+
+	private void TogglePayrollPersonLock()
+	{
+		if (db == null || !SpecificPayrollPeriod(out int year, out int month)) return;
+		string? card = SelectedCard(payrollPerson);
+		if (card == null)
+		{
+			MessageBox.Show("Önce tek personel seçin.", "Personel Kilidi");
+			return;
+		}
+		bool locked = PayrollOverrideService.IsPersonLocked(db, card, year, month);
+		if (MessageBox.Show($"{card} • {month:00}/{year} " + (locked ? "kilidi açılsın mı?" : "bordrosu kilitlensin mi?"), "Personel Kilidi", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+		PayrollOverrideService.SetPersonLock(db, card, year, month, !locked, "Bordro ana ekranı");
+		LoadPayroll();
+	}
+
+	private void CleanPayrollOverlap()
+	{
+		if (db == null || !SpecificPayrollPeriod(out int year, out int month)) return;
+		string? card = SelectedCard(payrollPerson);
+		if (card == null && payrollGrid.SelectedRows.Count == 1) card = Convert.ToString(payrollGrid.SelectedRows[0].Cells["PKNO"].Value);
+		if (string.IsNullOrWhiteSpace(card))
+		{
+			MessageBox.Show("Önce tek personel seçin veya bordro satırını işaretleyin.", "Çakışan Kayıt");
+			return;
+		}
+		var status = PayrollOverrideService.Status(db, card, year, month);
+		if (!status.HasOverlap)
+		{
+			MessageBox.Show("Çakışan dönem kaydı yok.", "Bordro");
+			return;
+		}
+		if (MessageBox.Show("Doğru aylık satır korunacak; yalnız aynı ayın 1'inden başlayıp sonraki aya taşan satır silinecek. Devam?", "Çakışan Kaydı Temizle", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+		int count = PayrollOverrideService.CleanSafeOverlap(db, card, year, month);
+		MessageBox.Show(count + " taşan kayıt temizlendi.", "Bordro");
+		LoadPayroll();
+	}
+
+	private void ClearPayrollOverride()
+	{
+		if (db == null || !SpecificPayrollPeriod(out int year, out int month)) return;
+		string? card = SelectedCard(payrollPerson);
+		if (card == null && payrollGrid.SelectedRows.Count == 1) card = Convert.ToString(payrollGrid.SelectedRows[0].Cells["PKNO"].Value);
+		if (string.IsNullOrWhiteSpace(card))
+		{
+			MessageBox.Show("Önce tek personel seçin.", "Override");
+			return;
+		}
+		if (MessageBox.Show($"{card} {month:00}/{year} manuel override kayıtları pasif yapılsın mı?", "Override Temizle", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+		PayrollOverrideService.ClearOverrides(db, card, year, month);
+		LoadPayroll();
 	}
 
 	private void RebuildDays()
@@ -1619,13 +1751,22 @@ public sealed partial class MainForm : Form
 		dataTable.Columns.Add("Tarih", typeof(DateTime));
 		dataTable.Columns.Add("Giriş");
 		dataTable.Columns.Add("Çıkış");
+		Dictionary<string, int> lastEntry = new Dictionary<string, int>(StringComparer.Ordinal);
+		Dictionary<string, int> lastExit = new Dictionary<string, int>(StringComparer.Ordinal);
 		foreach (DateTime item in list2)
 		{
 			List<int> list3 = DistributedMinutes(num, num2, list.Count, item, 17);
 			List<int> list4 = DistributedMinutes(num3, num4, list.Count, item, 71);
 			for (int num5 = 0; num5 < list.Count; num5++)
 			{
-				dataTable.Rows.Add(list[num5], item, FromMinute(list3[num5]), FromMinute(list4[num5]));
+				string card = list[num5];
+				if (num2 > num && lastEntry.TryGetValue(card, out int previousEntry) && list3[num5] == previousEntry)
+					list3[num5] = num + (list3[num5] - num + 1) % (num2 - num + 1);
+				if (num4 > num3 && lastExit.TryGetValue(card, out int previousExit) && list4[num5] == previousExit)
+					list4[num5] = num3 + (list4[num5] - num3 + 1) % (num4 - num3 + 1);
+				lastEntry[card] = list3[num5];
+				lastExit[card] = list4[num5];
+				dataTable.Rows.Add(card, item, FromMinute(list3[num5]), FromMinute(list4[num5]));
 			}
 		}
 		return dataTable;
@@ -1652,20 +1793,25 @@ public sealed partial class MainForm : Form
 			throw new InvalidOperationException("Saat aralığı hatalı.");
 		}
 		int span = max - min + 1;
-		List<int> list = (from i in Enumerable.Range(0, count)
-			select min + i % span).ToList();
-		Random random = new Random(HashCode.Combine(day.Year, day.DayOfYear, salt, count));
-		for (int num = list.Count - 1; num > 0; num--)
+		Random random = new Random(HashCode.Combine(day.Year, day.DayOfYear, salt, count, min, max));
+		List<int> pool = Enumerable.Range(min, span).ToList();
+		for (int i = pool.Count - 1; i > 0; i--)
 		{
-			int num2 = random.Next(num + 1);
-			List<int> list2 = list;
-			int index = num;
-			List<int> list3 = list;
-			int index2 = num2;
-			int value = list[num2];
-			int value2 = list[num];
-			list2[index] = value;
-			list3[index2] = value2;
+			int j = random.Next(i + 1);
+			(pool[i], pool[j]) = (pool[j], pool[i]);
+		}
+		List<int> list = new List<int>(count);
+		for (int i = 0; i < count; i++)
+		{
+			if (i > 0 && i % span == 0)
+			{
+				for (int j = pool.Count - 1; j > 0; j--)
+				{
+					int k = random.Next(j + 1);
+					(pool[j], pool[k]) = (pool[k], pool[j]);
+				}
+			}
+			list.Add(pool[i % span]);
 		}
 		return list;
 	}
@@ -2258,26 +2404,32 @@ public sealed partial class MainForm : Form
 			MessageBox.Show("Tek bordro satırı seçin.");
 			return;
 		}
-		DataGridViewRow dataGridViewRow = payrollGrid.SelectedRows[0];
-		string text = Convert.ToString(dataGridViewRow.Cells["PKNO"].Value) ?? "";
-		DateTime dateTime = Convert.ToDateTime(dataGridViewRow.Cells["BASTAR"].Value);
-		using PayrollEditForm payrollEditForm = new PayrollEditForm(text, dataGridViewRow);
-		if (payrollEditForm.ShowDialog(this) == DialogResult.OK && MessageBox.Show(text + " bordro kaydı güncellenecek. Devam?", "Bordro", MessageBoxButtons.YesNo) == DialogResult.Yes)
+		try
 		{
-			List<string> list = new List<string>();
-			List<FbParameter> list2 = new List<FbParameter>();
-			int num = 0;
-			string[] fields = PayrollEditForm.Fields;
-			foreach (string text2 in fields)
+			DataGridViewRow row = payrollGrid.SelectedRows[0];
+			string card = Convert.ToString(row.Cells["PKNO"].Value) ?? "";
+			DateTime start = Convert.ToDateTime(row.Cells["BASTAR"].Value);
+			int year = start.Year;
+			int month = start.Month;
+			var preferred = PayrollOverrideService.PreferredRow(db, card, year, month);
+			if (preferred is null)
 			{
-				string text3 = "@V" + num++;
-				list.Add(text2 + "=" + text3);
-				list2.Add(new FbParameter(text3, PayrollValue(text2, payrollEditForm.Get(text2))));
+				MessageBox.Show("Seçili ay için doğru UCRETLER satırı bulunamadı.", "Bordro");
+				return;
 			}
-			list2.Add(new FbParameter("@P", text));
-			list2.Add(new FbParameter("@B", dateTime));
-			db.Execute("update UCRETLER set " + string.Join(",", list) + " where PKNO=@P and BASTAR=@B", list2.ToArray());
+			var state = PayrollOverrideService.Status(db, card, year, month);
+			if (state.HasOverlap)
+				MessageBox.Show("Çakışan dönem kaydı bulundu. Düzenleme doğru aylık satıra uygulanacak; taşan satırı ayrıca temizleyebilirsiniz.", "Bordro", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+			using PayrollEditForm form = new PayrollEditForm(card, PayrollOverrideService.RowValues(preferred));
+			if (form.ShowDialog(this) != DialogResult.OK) return;
+			if (MessageBox.Show(card + " bordro değişiklikleri MANUEL OVERRIDE olarak kaydedilecek. Devam?", "Bordro", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+			var changed = PayrollOverrideService.SaveOverrides(db, card, year, month, form.Values(), form.AutoHours, "Bordro ana ekranı");
+			MessageBox.Show(changed.Length == 0 ? "Değişiklik yok." : "Kaydedildi: " + string.Join(", ", changed), "Bordro");
 			LoadPayroll();
+		}
+		catch (Exception ex)
+		{
+			MessageBox.Show(ex.Message, "Bordro", MessageBoxButtons.OK, MessageBoxIcon.Error);
 		}
 	}
 
