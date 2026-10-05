@@ -43,6 +43,15 @@ test("monthly personnel API returns the full HKN master roster and allocates the
   assert.match(relational, /rawDocuments: documents\.map/);
 });
 
+test("person card SGK day contract accepts zero or unknown values consistently", () => {
+  const relational = api("ik-relational-cloud.ts");
+  const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(relational, /rawSgkDays < 0 \|\| rawSgkDays > maxSgkDays/);
+  assert.match(relational, /SGK gün sayısı 0-\$\{maxSgkDays\} arasında olmalıdır/);
+  assert.match(monthly, /SGK gün sayısı 0-\$\{totalDays\} arasında olmalıdır/);
+  assert.match(monthly, /hasSgkDays \? Math\.round\(num\(modalDraft\.sgkDays\)\) : null/);
+});
+
 test("finance create update delete mutations are visible to live sync", () => {
   const relational = api("ik-relational-cloud.ts");
   assert.match(relational, /action:\s*"FINANCE_CREATE"/);
