@@ -1027,20 +1027,42 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setModal(normalized === "Toplu avans" ? "topluAvans" : normalized === "Avans" ? "avans" : ["Ozel kesinti", "Icra", "Haciz", "Eksik gün", "Eksik saat"].includes(normalized) ? "kesinti" : "mesai");
   };
 
-  const prePayrollDraft = (employee) => ({
-    ...draftPerson(employee),
-    movementEditor: {
-      id: "",
-      adjustmentType: "Mesai",
-      date: dateKey(year, month, 1),
-      hourOrDay: "",
-      amount: "",
-      overtimeMultiplier: 1.5,
-      paymentMethod: "Bordro",
-      payrollEffect: "Bordroya yansir",
-      note: "",
-    },
-  });
+  const prePayrollDraft = (employee, controlMode = "ENTRY", payrollRow = null) => {
+    const base = draftPerson(employee);
+    const row = payrollRow || payrollRows.find((item) => item.employee.id === employee?.id) || null;
+    return {
+      ...base,
+      controlMode,
+      finalEditor: {
+        salary: row ? num(row.salary) : num(base.salary),
+        road: row ? num(row.road) : num(base.roadAllowance),
+        extra: row ? num(row.extra) : num(base.extraPaymentAmount),
+        overtime: row ? num(row.overtime) : 0,
+        advance: row ? num(row.advance) : 0,
+        deduction: row ? num(row.deduction) : 0,
+        garnishment: row ? num(row.garnishment) : 0,
+        bank: row ? num(row.bank) : num(base.bankAmount),
+        cash: row ? num(row.cash) : num(base.cashAmount),
+        paymentType: base.paymentType || "BANKA_ELDEN",
+        advanceSource: row?.advanceSource || "Elden",
+        deductionSource: row?.deductionSource || "Elden",
+        garnishmentSource: row?.garnishmentSource === "ELDEN" ? "Elden" : "Banka",
+        legalType: row?.legalType === "HACIZ" ? "HACIZ" : "ICRA",
+        reason: controlMode === "FINAL" ? "Son bordro kontrolü" : "Bordro öncesi giriş kontrolü",
+      },
+      movementEditor: {
+        id: "",
+        adjustmentType: "Mesai",
+        date: dateKey(year, month, 1),
+        hourOrDay: "",
+        amount: "",
+        overtimeMultiplier: 1.5,
+        paymentMethod: "Bordro",
+        payrollEffect: "Bordroya yansir",
+        note: "",
+      },
+    };
+  };
 
   const alignPrePayrollDialog = (employeeId, resetMain = true) => {
     if (typeof document === "undefined") return;
@@ -1063,10 +1085,10 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     });
   };
 
-  const openPayPlan = (employee) => {
-    if (!employee) return setNotice("Personel seçilmeden bordro öncesi kontrol açılamaz.");
+  const openPayPlan = (employee, controlMode = "ENTRY", payrollRow = null) => {
+    if (!employee) return setNotice("Personel seçilmeden kontrol ekranı açılamaz.");
     setSelectedId(employee.id);
-    setModalDraft(prePayrollDraft(employee));
+    setModalDraft(prePayrollDraft(employee, controlMode, payrollRow));
     setNotice("");
     setModal("ucret");
     alignPrePayrollDialog(employee.id);
@@ -1076,8 +1098,10 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     if (busy) return;
     const employee = employees.find((item) => item.id === employeeId) || masterEmployees.find((item) => item.id === employeeId);
     if (!employee) return;
+    const controlMode = modalDraft.controlMode || "ENTRY";
+    const payrollRow = controlMode === "FINAL" ? payrollRows.find((item) => item.employee.id === employee.id) : null;
     setSelectedId(employee.id);
-    setModalDraft(prePayrollDraft(employee));
+    setModalDraft(prePayrollDraft(employee, controlMode, payrollRow));
     setNotice("");
     alignPrePayrollDialog(employee.id);
   };
@@ -1211,9 +1235,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   };
 
   const openPayroll = (row = payrollRows.find((item) => item.employee.id === selected?.id)) => {
-    if (!row) return setNotice("Personel seçilmeden kaynak kontrolü açılamaz.");
+    if (!row) return setNotice("Personel seçilmeden son bordro kontrolü açılamaz.");
     if (upper(row.saved?.status) === "PAID") return setNotice("Bu bordronun ödemesi tamamlandı. Kaynak tutarlar kilitlidir; yalnız fiş ve rapor alınabilir.");
-    openPayPlan(row.employee);
+    openPayPlan(row.employee, "FINAL", row);
   };
 
   const openDocument = (employee = selected) => {
