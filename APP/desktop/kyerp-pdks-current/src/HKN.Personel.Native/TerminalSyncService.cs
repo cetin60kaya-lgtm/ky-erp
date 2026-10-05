@@ -60,6 +60,7 @@ internal static class TerminalSyncService
             if (punches.Length == 0)
                 return SaveLive(new(DateTime.Now, 0, 0, 0, 0, 0, false, "Canlı kontrol: cihaz bağlı, yeni fiziksel kart kaydı yok. Ana FDB/TNF değiştirilmedi.", null));
             BackupPunches(punches);
+            DeviceEvidenceArchiveService.SaveRead(punches, source + " • CANLI OKUMA");
             AppendLive(punches);
             var added = TerminalLiveArchiveService.Append(punches);
             return SaveLive(new(DateTime.Now, punches.Length, added, 0, punches.Length - added, 0, false, $"{source}: {punches.Length} fiziksel kayıt okundu; canlı arşive {added} yeni kayıt eklendi. Ana FDB/TNF değiştirilmedi.", null));
@@ -88,6 +89,7 @@ internal static class TerminalSyncService
 
             // Physical terminal data is source evidence. Keep both a short live cache and a durable live TNF/raw archive.
             if (deviceSettings.BackupBeforeTransfer) BackupPunches(punches);
+            DeviceEvidenceArchiveService.SaveRead(punches, source + " • SENKRON OKUMA");
             AppendLive(punches);
             TerminalLiveArchiveService.Append(punches);
             AppendTnf(punches);
