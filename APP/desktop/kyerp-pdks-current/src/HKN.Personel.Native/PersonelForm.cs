@@ -84,7 +84,7 @@ public partial class PersonelForm : Form
         AddField(top,0,"Kart Numarası","PKNO"); AddField(top,1,"Grubu","GRUPAD",false);
         AddField(top,2,"Adı","AD"); AddField(top,3,"Bölümü","BOLUMAD",false);
         AddField(top,4,"Soyadı","SOYAD"); AddField(top,5,"Durum","DURUMAD",false);
-        AddField(top,6,"Maaşı","MAAS"); AddField(top,7,"Servis","SERVISAD",false);
+        AddField(top,6,"Maaşı","MAAS"); AddField(top,7,"Servis Hattı","SERVISAD",false);
         AddField(top,8,"İşe Giriş Tarihi","IGTARIH"); AddField(top,9,"Görev","GOREVAD",false);
         AddField(top,10,"Çıkış Tarihi","ICTARIH"); AddField(top,11,"Firma","FIRMAAD",false);
         right.Controls.Add(top,0,0);
