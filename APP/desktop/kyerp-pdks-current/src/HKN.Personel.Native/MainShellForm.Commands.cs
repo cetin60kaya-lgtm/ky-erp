@@ -10,6 +10,7 @@ public sealed partial class MainShellForm
         PdksCommandId.Home or
         PdksCommandId.Operations or
         PdksCommandId.LiveAttendance or
+        PdksCommandId.MonthlyAttendanceAdmin or
         PdksCommandId.AttendanceExceptions or
         PdksCommandId.AttendanceHistory or
         PdksCommandId.DepartmentAttendanceAnalytics or
@@ -80,6 +81,9 @@ public sealed partial class MainShellForm
                 break;
             case PdksCommandId.LiveAttendance:
                 OpenLiveAttendance();
+                break;
+            case PdksCommandId.MonthlyAttendanceAdmin:
+                ShowModule(new MonthlyAttendanceAdminForm(currentUser), PdksModule.GirisCikis);
                 break;
             case PdksCommandId.AttendanceExceptions:
                 ShowModule(new AttendanceExceptionCenterForm(NavigateToCommand), PdksModule.GunlukOperasyon);
