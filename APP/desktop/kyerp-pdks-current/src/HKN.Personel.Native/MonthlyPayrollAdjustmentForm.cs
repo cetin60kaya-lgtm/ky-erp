@@ -29,8 +29,9 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
     bool loading;
     bool periodProtected;
 
-    public MonthlyPayrollAdjustmentForm()
+    public MonthlyPayrollAdjustmentForm(string? initialPersonCard = null, DateTime? initialPeriod = null)
     {
+        this.initialPersonCard = initialPersonCard;
         Text="Aylık Düzeltme ve Hızlı Ödeme";
         StartPosition=FormStartPosition.CenterParent;
         Width=1500; Height=780; MinimumSize=new Size(1180,650);
