@@ -51,12 +51,7 @@ internal static class TerminalDeviceSettingsStore
             }
 
             var loaded = JsonSerializer.Deserialize<TerminalDeviceSettings>(File.ReadAllText(FilePath));
-            var normalized = Normalize(loaded ?? TerminalDeviceSettings.Default);
-            // 6.3.3 safety migration: older test builds could persist automatic device deletion as true.
-            // Never carry that destructive preference forward silently.
-            if (loaded is not null && loaded.DeleteAfterValidatedTransfer)
-                Save(normalized);
-            return normalized;
+            return Normalize(loaded ?? TerminalDeviceSettings.Default);
         }
         catch
         {
@@ -86,8 +81,8 @@ internal static class TerminalDeviceSettingsStore
             IpPort = value.IpPort <= 0 ? defaults.IpPort : value.IpPort,
             Direction = string.IsNullOrWhiteSpace(value.Direction) ? defaults.Direction : value.Direction.Trim(),
             TransferFile = string.IsNullOrWhiteSpace(value.TransferFile) ? defaults.TransferFile : value.TransferFile.Trim(),
-            DeleteAfterValidatedTransfer = false,
-            BackupBeforeTransfer = true,
+            DeleteAfterValidatedTransfer = value.DeleteAfterValidatedTransfer,
+            BackupBeforeTransfer = value.BackupBeforeTransfer,
             ToleranceMinutes = Math.Clamp(value.ToleranceMinutes, 0, 60)
         };
     }
