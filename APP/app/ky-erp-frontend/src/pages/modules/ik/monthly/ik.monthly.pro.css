@@ -1421,3 +1421,41 @@
     position:static;
   }
 }
+
+
+/* IK_PAYROLL_CONTROL_MODES_V1 */
+.modal-bg .prepayroll-dialog .final-manual-grid{
+  grid-template-columns:minmax(0,1.45fr) minmax(320px,.55fr);
+}
+.modal-bg .prepayroll-dialog .final-manual-card .form{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+}
+.modal-bg .prepayroll-dialog .final-result-card{
+  align-self:start;
+}
+.modal-bg .prepayroll-dialog .entry-plan-card input[readonly]{
+  background:#f4f7fb;
+  border-color:#dce5ef;
+}
+.modal-bg .prepayroll-dialog .entry-control-mode .source-movement-section{
+  border-color:#c9d9ef;
+}
+.modal-bg .prepayroll-dialog .final-control-mode .source-movement-section{
+  border-color:#c7d7cc;
+}
+.modal-bg .prepayroll-dialog .source-movement-section{
+  margin-top:10px;
+}
+@media(max-width:1180px){
+  .modal-bg .prepayroll-dialog .final-manual-grid{
+    grid-template-columns:1fr;
+  }
+  .modal-bg .prepayroll-dialog .final-manual-card .form{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media(max-width:760px){
+  .modal-bg .prepayroll-dialog .final-manual-card .form{
+    grid-template-columns:1fr;
+  }
+}
