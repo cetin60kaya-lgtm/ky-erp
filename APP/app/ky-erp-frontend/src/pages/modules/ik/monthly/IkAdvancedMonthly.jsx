@@ -1862,23 +1862,29 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     const periodLabel = `${MONTHS[month - 1]} ${year}`;
 
     const html = `<html><head><meta charset="utf-8"><style>
-      @page{size:A4 landscape;margin:5mm}
+      @page{size:A4 landscape;margin:7mm}
       *{box-sizing:border-box}
-      body{font-family:Arial,Helvetica,sans-serif;color:#14263a;margin:0;font-size:6.6px}
-      h1{font-size:15px;margin:0}.sub{color:#60758a;margin-top:2px}
-      .warning{margin:5px 0;padding:5px 7px;border:1px solid #f2b86b;background:#fff8ea;font-weight:800}
-      .stats{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin:6px 0}
-      .stat{border:1px solid #c9d5e1;padding:4px}.stat span{display:block;color:#6b7c8f;font-size:5.8px}.stat b{display:block;font-size:8px;margin-top:1px}
+      body{font-family:Arial,Helvetica,sans-serif;color:#14263a;margin:0;font-size:8pt}
+      h1{font-size:16pt;margin:0}.sub{color:#60758a;margin-top:2px;font-size:7.5pt}
+      h2{font-size:11pt;margin:0 0 5px}
+      .warning{margin:6px 0;padding:5px 7px;border:1px solid #f2b86b;background:#fff8ea;font-weight:800;font-size:7.5pt}
+      .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:6px 0 8px}
+      .stat{border:1px solid #c9d5e1;padding:5px 6px}.stat span{display:block;color:#6b7c8f;font-size:6.5pt}.stat b{display:block;font-size:9pt;margin-top:1px}
+      .report-section{margin-top:7px}
+      .report-section.payment{page-break-before:always;break-before:page;margin-top:0}
       table{width:100%;border-collapse:collapse;table-layout:fixed}
-      thead{display:table-header-group}tr{break-inside:avoid}
-      th,td{border:1px solid #b9c7d4;padding:2.5px 2px;vertical-align:middle}
-      th{background:#edf3f8;text-align:center;font-size:5.8px}
-      td{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-      td.person{text-align:left;width:12%}.person b{display:block}.person small{display:block;color:#6c7d8e;font-size:5.4px}
-      td.status{text-align:left;font-size:5.7px;white-space:normal}
-      .total td{font-weight:900;background:#eaf1f7;border-top:2px solid #14263a}
-      .checks{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:7px}
-      .checks h2{font-size:9px;margin:0 0 3px}.checks ul{margin:0;padding-left:14px;line-height:1.4}.checks li.warn{color:#9a4a00}.checks li.ok{color:#176b37}
+      thead{display:table-header-group}
+      tr{break-inside:avoid;page-break-inside:avoid}
+      th,td{border:1px solid #aebdcc;padding:4px 5px;vertical-align:middle;line-height:1.18}
+      th{background:#edf3f8;text-align:center;font-size:7.5pt}
+      td{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:8.5pt}
+      td.person{text-align:left;white-space:normal}.person b{display:block;font-size:8.5pt}.person small{display:block;color:#6c7d8e;font-size:6.4pt;margin-top:1px}
+      td.status{text-align:left;white-space:normal;font-size:7pt}
+      .earned col.person{width:24%}.earned col.status{width:14%}.earned col.days{width:9%}.earned col.money{width:10.6%}
+      .payment-table col.person{width:25%}.payment-table col.money{width:10.71%}
+      .total td{font-weight:900;background:#eaf1f7;border-top:2px solid #14263a;font-size:8.5pt}
+      .checks{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}
+      .checks h2{font-size:9pt;margin:0 0 3px}.checks ul{margin:0;padding-left:16px;line-height:1.45;font-size:7pt}.checks li.warn{color:#9a4a00}.checks li.ok{color:#176b37}
     </style></head><body>
       <h1>Aylık İK Kontrol Çıktısı</h1>
       <div class="sub">${escapeHtml(periodLabel)} · ${rows.length} bordro personeli · Bu belge yalnız kontrol içindir, ödeme onayı veya bordro tamamlama işlemi yapmaz.</div>
@@ -1886,41 +1892,51 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       <div class="stats">
         <div class="stat"><span>AKTİF</span><b>${activeCount}</b></div>
         <div class="stat"><span>AY İÇİNDE AYRILAN</span><b>${exitedCount}</b></div>
+        <div class="stat"><span>MAAŞ TOPLAM</span><b>${money(totals.salary)}</b></div>
+        <div class="stat"><span>NET TOPLAM</span><b>${money(totals.net)}</b></div>
         <div class="stat"><span>TAMAMLANAN</span><b>${paidCount}</b></div>
         <div class="stat"><span>ÖDEME KONTROL</span><b>${controlCount}</b></div>
-        <div class="stat"><span>MAAŞ TOPLAM</span><b>${money(totals.salary)}</b></div>
         <div class="stat"><span>YOL TOPLAM</span><b>${money(totals.road)}</b></div>
         <div class="stat"><span>MESAI TOPLAM</span><b>${money(totals.overtime)}</b></div>
-        <div class="stat"><span>NET TOPLAM</span><b>${money(totals.net)}</b></div>
       </div>
-      <table>
-        <thead><tr>
-          <th>Personel / HKN</th><th>Durum</th><th>SGK / PDKS</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Mesai</th><th>Hak Ediş</th>
-          <th>Avans</th><th>Kesinti</th><th>İcra/Haciz</th><th>Top. Kesinti</th><th>Banka</th><th>Elden</th><th>Net</th>
-        </tr></thead>
-        <tbody>
-          ${rows.map((row) => {
-            const totalDeduction = num(row.advance) + num(row.deduction) + num(row.garnishment);
-            return `<tr>
+
+      <div class="report-section">
+        <h2>1. Hak Ediş Kontrolü</h2>
+        <table class="earned">
+          <colgroup><col class="person"><col class="status"><col class="days"><col class="money"><col class="money"><col class="money"><col class="money"><col class="money"></colgroup>
+          <thead><tr><th>Personel / HKN</th><th>Dönem Durumu</th><th>SGK / PDKS</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Mesai</th><th>Hak Ediş</th></tr></thead>
+          <tbody>
+            ${rows.map((row) => `<tr>
               <td class="person"><b>${escapeHtml(row.employee.fullName)}</b><small>${escapeHtml(row.employee.code || "-")} · Giriş ${escapeHtml(employeeHireDate(row.employee) || "-")} · Çıkış ${escapeHtml(employeeExitDate(row.employee) || "-")}</small></td>
               <td class="status">${escapeHtml(employmentPeriodLabel(row.employee, period))}<br>${upper(row.saved?.status) === "PAID" ? "Tamamlandı" : Math.abs(num(row.diff)) <= 0.01 ? "Hazır" : "Kontrol"}</td>
               <td>${num(row.employee.sgkDays) || "-"} / ${num(row.employee.pdksCardDays) || "-"}</td>
-              <td>${money(row.salary)}</td><td>${money(row.road)}</td><td>${money(row.extra)}</td><td>${money(row.overtime)}</td><td>${money(row.hakedis)}</td>
-              <td>${money(row.advance)}</td><td>${money(row.deduction)}</td><td>${money(row.garnishment)}</td><td>${money(totalDeduction)}</td>
-              <td>${money(row.bank)}</td><td>${money(row.cash)}</td><td><b>${money(row.net)}</b></td>
-            </tr>`;
-          }).join("")}
-          <tr class="total">
-            <td>GENEL TOPLAM · ${rows.length} kişi</td><td>-</td><td>${totals.sgkDays} / ${totals.pdksDays}</td>
-            <td>${money(totals.salary)}</td><td>${money(totals.road)}</td><td>${money(totals.extra)}</td><td>${money(totals.overtime)}</td><td>${money(totals.hakedis)}</td>
-            <td>${money(totals.advance)}</td><td>${money(totals.deduction)}</td><td>${money(totals.garnishment)}</td><td>${money(totals.totalDeduction)}</td>
-            <td>${money(totals.bank)}</td><td>${money(totals.cash)}</td><td>${money(totals.net)}</td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="checks">
-        <div><h2>Akıllı Kontrol Uyarıları</h2><ul>${issueRows || "<li>Aktif uyarı yok.</li>"}</ul></div>
-        <div><h2>Ay Sonu Kontrolleri</h2><ul>${checkRows || "<li>Ay Sonu Kontrol henüz çalıştırılmadı.</li>"}</ul></div>
+              <td>${money(row.salary)}</td><td>${money(row.road)}</td><td>${money(row.extra)}</td><td>${money(row.overtime)}</td><td><b>${money(row.hakedis)}</b></td>
+            </tr>`).join("")}
+            <tr class="total"><td>GENEL TOPLAM · ${rows.length} kişi</td><td>-</td><td>${totals.sgkDays} / ${totals.pdksDays}</td><td>${money(totals.salary)}</td><td>${money(totals.road)}</td><td>${money(totals.extra)}</td><td>${money(totals.overtime)}</td><td>${money(totals.hakedis)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="report-section payment">
+        <h2>2. Kesinti ve Ödeme Kontrolü</h2>
+        <table class="payment-table">
+          <colgroup><col class="person"><col class="money"><col class="money"><col class="money"><col class="money"><col class="money"><col class="money"><col class="money"></colgroup>
+          <thead><tr><th>Personel / HKN</th><th>Avans</th><th>Kesinti</th><th>İcra/Haciz</th><th>Top. Kesinti</th><th>Banka</th><th>Elden</th><th>Net</th></tr></thead>
+          <tbody>
+            ${rows.map((row) => {
+              const totalDeduction = num(row.advance) + num(row.deduction) + num(row.garnishment);
+              return `<tr>
+                <td class="person"><b>${escapeHtml(row.employee.fullName)}</b><small>${escapeHtml(row.employee.code || "-")} · ${upper(row.saved?.status) === "PAID" ? "Tamamlandı" : Math.abs(num(row.diff)) <= 0.01 ? "Hazır" : "Kontrol"}</small></td>
+                <td>${money(row.advance)}</td><td>${money(row.deduction)}</td><td>${money(row.garnishment)}</td><td>${money(totalDeduction)}</td><td>${money(row.bank)}</td><td>${money(row.cash)}</td><td><b>${money(row.net)}</b></td>
+              </tr>`;
+            }).join("")}
+            <tr class="total"><td>GENEL TOPLAM · ${rows.length} kişi</td><td>${money(totals.advance)}</td><td>${money(totals.deduction)}</td><td>${money(totals.garnishment)}</td><td>${money(totals.totalDeduction)}</td><td>${money(totals.bank)}</td><td>${money(totals.cash)}</td><td>${money(totals.net)}</td></tr>
+          </tbody>
+        </table>
+        <div class="checks">
+          <div><h2>Akıllı Kontrol Uyarıları</h2><ul>${issueRows || "<li>Aktif uyarı yok.</li>"}</ul></div>
+          <div><h2>Ay Sonu Kontrolleri</h2><ul>${checkRows || "<li>Ay Sonu Kontrol henüz çalıştırılmadı.</li>"}</ul></div>
+        </div>
       </div>
     </body></html>`;
 
