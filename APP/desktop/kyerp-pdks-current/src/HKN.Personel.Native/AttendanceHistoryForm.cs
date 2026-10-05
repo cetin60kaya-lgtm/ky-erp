@@ -16,7 +16,7 @@ public sealed class AttendanceHistoryForm : Form
     bool loading;
     readonly bool allowArchiveCleanup;
 
-    sealed record EmployeeRow(string Code, string Name, DateTime Hire, DateTime? Exit);
+    sealed record EmployeeRow(string Code, string Name, DateTime Hire, DateTime? Exit, int GroupCode, string GroupName);
     sealed record MovementRow(string Code, DateTime Day, TimeSpan? Entry, TimeSpan? Exit);
     sealed record DayState(DateTime Day, string Code, string Name, string Entry, string Exit, string State);
 
@@ -198,12 +198,17 @@ public sealed class AttendanceHistoryForm : Form
 
     List<DayState> LoadPeriod(DateTime a, DateTime b)
     {
-        var employeesTable = db.Query(@"select PKNO,AD,SOYAD,IGTARIH,ICTARIH from KIMLIK
-            where (IGTARIH is null or IGTARIH<=@B) and (ICTARIH is null or ICTARIH>=@A) order by PKNO",
+        var employeesTable = db.Query(@"select k.PKNO,k.AD,k.SOYAD,k.IGTARIH,k.ICTARIH,k.GRUP,coalesce(g.AD,'') GRUP_AD
+            from KIMLIK k left join GRUP g on g.KOD=k.GRUP
+            where (k.IGTARIH is null or k.IGTARIH<=@B) and (k.ICTARIH is null or k.ICTARIH>=@A) order by k.PKNO",
             new FbParameter("@A", a), new FbParameter("@B", b.AddDays(1)));
+        var policies=AttendanceGroupPolicyStore.Load(db);
         var employees = employeesTable.AsEnumerable().Select(r => new EmployeeRow(
             S(r, "PKNO"), $"{S(r, "AD")} {S(r, "SOYAD")}".Trim(),
-            D(r, "IGTARIH") ?? a, D(r, "ICTARIH"))).Where(x => !string.IsNullOrWhiteSpace(x.Code)).ToArray();
+            D(r, "IGTARIH") ?? a, D(r, "ICTARIH"),
+            r["GRUP"]==DBNull.Value?-1:Convert.ToInt32(r["GRUP"]),S(r,"GRUP_AD")))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Code) && AttendanceGroupPolicyStore.RequiresCardTracking(policies,x.GroupCode,x.GroupName))
+            .ToArray();
 
         var movements = TerminalLiveArchiveService.ReadPhysicalPunches(a, b)
             .GroupBy(x => (x.EmployeeCode, x.OccurredAt.Date))
