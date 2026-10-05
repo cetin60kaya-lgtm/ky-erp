@@ -106,7 +106,7 @@ test("payroll row opens fully editable final mode on canonical sources", () => {
   const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
   assert.match(monthly, /payroll-row-actions/);
-  assert.match(monthly, /Kaynakları Düzenle/);
+  assert.match(monthly, /Son Kontrol \/ Düzenle/);
   assert.match(monthly, /Kaynak Hareketleri \/ Log/);
   assert.match(monthly, /openPayPlan\(row\.employee, "FINAL", row\)/);
   assert.match(monthly, /Son Kontrolü Kaydet/);
