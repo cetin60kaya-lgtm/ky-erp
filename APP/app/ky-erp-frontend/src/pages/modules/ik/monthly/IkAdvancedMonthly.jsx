@@ -2842,14 +2842,16 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       const personMovements = movements
         .filter((item) => item.employeeId === modalDraft.id && String(item.date || item.adjustmentDate || "").startsWith(period))
         .sort((a, b) => String(b.date || b.adjustmentDate || "").localeCompare(String(a.date || a.adjustmentDate || "")));
-      const movementTotals = personMovements.reduce((acc, item) => {
-        const type = normalizeFinanceType(item.type || item.adjustmentType);
-        if (type === "Mesai") acc.overtime += num(item.amount);
-        else if (type === "Avans") acc.advance += num(item.amount);
-        else if (["Icra", "Haciz"].includes(type)) acc.garnishment += num(item.amount);
-        else acc.deduction += num(item.amount);
-        return acc;
-      }, { overtime: 0, advance: 0, deduction: 0, garnishment: 0 });
+      const movementTotals = personMovements
+        .filter((item) => !upper(item.payrollEffect).includes("SADECE"))
+        .reduce((acc, item) => {
+          const type = normalizeFinanceType(item.type || item.adjustmentType);
+          if (type === "Mesai") acc.overtime += num(item.amount);
+          else if (type === "Avans" || type === "Toplu avans") acc.advance += num(item.amount);
+          else if (["Icra", "Haciz"].includes(type)) acc.garnishment += num(item.amount);
+          else if (["Ozel kesinti", "Eksik gün", "Eksik saat"].includes(type)) acc.deduction += num(item.amount);
+          return acc;
+        }, { overtime: 0, advance: 0, deduction: 0, garnishment: 0 });
       const planExtra = num(modalDraft.extraPaymentAmount);
       const preBaseTotals = calcRow({
         salary: modalDraft.salary,
