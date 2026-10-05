@@ -259,6 +259,9 @@ public sealed partial class LiveAttendanceForm : Form
             where (k.IGTARIH is null or k.IGTARIH<@B) and (k.ICTARIH is null or k.ICTARIH>=@A)
             order by k.PKNO",new FbParameter("@A",day),new FbParameter("@B",next));
         var physicalPunches=TerminalLiveArchiveService.ReadPhysicalPunches(day,day);
+        var operationalMoves=db.Query(@"select PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,CTARIH,CSAAT,CDAKIKA,CTUR from GIRCIK
+            where (GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B) order by PKNO,SIRA",
+            new FbParameter("@A",day),new FbParameter("@B",next));
         var leaves=db.Query(@"select PKNO,TIP,MAZERET,SUREDAKIKA,BASSAAT,BITSAAT from OZELIZIN
             where TARIH>=@A and TARIH<@B order by PKNO",new FbParameter("@A",day),new FbParameter("@B",next));
         var plans=db.Query(@"select p.GKOD,p.MTKOD,b.AD PLAN_AD,b.IGIRISS,b.GGTOL,b.DCIKISS,b.ECTOL,b.DEVAMSIZLIK
@@ -266,6 +269,7 @@ public sealed partial class LiveAttendanceForm : Form
             new FbParameter("@A",day),new FbParameter("@B",next));
         var fallback=db.Query("select KOD,AD,IGIRISS,GGTOL,DCIKISS,ECTOL,DEVAMSIZLIK from PUANBILGI");
         var punchMap=physicalPunches.GroupBy(x=>x.EmployeeCode).ToDictionary(g=>g.Key,g=>g.OrderBy(x=>x.OccurredAt).ToArray(),StringComparer.OrdinalIgnoreCase);
+        var operationalMap=operationalMoves.AsEnumerable().GroupBy(r=>S(r,"PKNO")).ToDictionary(g=>g.Key,g=>OperationalMovement(g),StringComparer.OrdinalIgnoreCase);
         CaptureUnmatched(physicalPunches.Select(x=>(x.EmployeeCode,x.OccurredAt,"Fiziksel cihaz")),day);
         var leaveMap=leaves.AsEnumerable().GroupBy(r=>S(r,"PKNO")).ToDictionary(g=>g.Key,g=>LeaveInfo(g));
         var planMap=plans.AsEnumerable().GroupBy(r=>I(r,"GKOD")).ToDictionary(g=>g.Key,g=>ReadSchedule(g.First()));
@@ -275,14 +279,21 @@ public sealed partial class LiveAttendanceForm : Form
         {
             var code=S(employee,"PKNO");var group=employee["GRUP"]==DBNull.Value?-1:I(employee,"GRUP");
             var groupName=S(employee,"GRUP_AD");var schedule=planMap.GetValueOrDefault(group)??FallbackSchedule(groupName,day,fallbackMap);
-            punchMap.TryGetValue(code,out var personPunches);var movement=PhysicalMovement(personPunches??Array.Empty<TerminalDevicePunch>());leaveMap.TryGetValue(code,out var leaveInfo);
+            punchMap.TryGetValue(code,out var personPunches);
+            var physical=PhysicalMovement(personPunches??Array.Empty<TerminalDevicePunch>());
+            operationalMap.TryGetValue(code,out var op);
+            var entry=op.Entry??physical.Entry;
+            var exit=op.Exit??physical.Exit;
+            var entrySource=SourceLabel(op.Entry,op.EntryType,physical.Entry);
+            var exitSource=SourceLabel(op.Exit,op.ExitType,physical.Exit);
+            leaveMap.TryGetValue(code,out var leaveInfo);
             var fullLeave=leaveInfo.Minutes>0&&leaveInfo.Minutes>=Math.Max(420,schedule.WorkMinutes);
             var expected=schedule.WorkMinutes>0&&!fullLeave;
-            var status=Status(day,schedule,expected,fullLeave,movement.Entry,movement.Exit);
-            var warning=Warning(schedule,movement.Entry,movement.Exit,status);
+            var status=Status(day,schedule,expected,fullLeave,entry,exit);
+            var warning=Warning(schedule,entry,exit,status);
             rows.Add(new DailyRow(code,$"{S(employee,"AD")} {S(employee,"SOYAD")}".Trim(),groupName,schedule.Name,
-                movement.Entry?.ToString("HH:mm")??"",movement.Exit?.ToString("HH:mm")??"",status,warning,
-                expected,fullLeave,movement.Entry.HasValue,movement.Exit.HasValue));
+                entry?.ToString("HH:mm")??"",exit?.ToString("HH:mm")??"",entrySource,exitSource,status,warning,
+                expected,fullLeave,entry.HasValue,exit.HasValue));
         }
         Bind(rows,day,forceUi);
     }
@@ -290,7 +301,7 @@ public sealed partial class LiveAttendanceForm : Form
     void Bind(List<DailyRow> rows,DateTime day,bool forceUi)
     {
         var fingerprint=day.ToString("yyyyMMdd",CultureInfo.InvariantCulture)+"|"+
-            string.Join("|",rows.Select(r=>$"{r.Code}~{r.Entry}~{r.Exit}~{r.Status}~{r.Warning}"))+"|"+
+            string.Join("|",rows.Select(r=>$"{r.Code}~{r.Entry}~{r.Exit}~{r.EntrySource}~{r.ExitSource}~{r.Status}~{r.Warning}"))+"|"+
             string.Join("|",unmatched.Where(x=>x.At.Date==day.Date).OrderBy(x=>x.At).Select(x=>$"{x.Code}~{x.At:HHmmss}"));
         if(!forceUi&&lastRenderedDay==day.Date&&string.Equals(lastUiFingerprint,fingerprint,StringComparison.Ordinal))return;
 
@@ -355,8 +366,8 @@ public sealed partial class LiveAttendanceForm : Form
 
     static DataTable Table(IEnumerable<DailyRow> source)
     {
-        var table=new DataTable();foreach(var name in new[]{"Kart No","Ad Soyad","Grup","Gün Planı","Giriş","Çıkış","Durum","Uyarı"})table.Columns.Add(name);
-        foreach(var r in source)table.Rows.Add(r.Code,r.Name,r.Group,r.Plan,r.Entry,r.Exit,r.Status,r.Warning);
+        var table=new DataTable();foreach(var name in new[]{"Kart No","Ad Soyad","Grup","Gün Planı","Giriş","Giriş Kaynak","Çıkış","Çıkış Kaynak","Durum","Uyarı"})table.Columns.Add(name);
+        foreach(var r in source)table.Rows.Add(r.Code,r.Name,r.Group,r.Plan,r.Entry,r.EntrySource,r.Exit,r.ExitSource,r.Status,r.Warning);
         return table;
     }
 
@@ -366,6 +377,36 @@ public sealed partial class LiveAttendanceForm : Form
         var entries=ordered.Where(x=>x.OccurredAt.TimeOfDay<TimeSpan.FromHours(12)).Select(x=>x.OccurredAt).ToArray();
         var exits=ordered.Where(x=>x.OccurredAt.TimeOfDay>=TimeSpan.FromHours(12)).Select(x=>x.OccurredAt).ToArray();
         return(entries.Length==0?null:entries.Min(),exits.Length==0?null:exits.Max());
+    }
+
+    static (DateTime? Entry,DateTime? Exit,string EntryType,string ExitType) OperationalMovement(IEnumerable<DataRow> rows)
+    {
+        DateTime? entry=null,exit=null;string entryType="",exitType="";
+        foreach(var row in rows)
+        {
+            var g=At(row,"GTARIH","GSAAT","GDAKIKA");
+            if(g.HasValue && (!entry.HasValue || g.Value<entry.Value)){entry=g;entryType=S(row,"GTUR");}
+            var c=At(row,"CTARIH","CSAAT","CDAKIKA");
+            if(c.HasValue && (!exit.HasValue || c.Value>exit.Value)){exit=c;exitType=S(row,"CTUR");}
+        }
+        return(entry,exit,entryType,exitType);
+    }
+
+    static string SourceLabel(DateTime? operational,string type,DateTime? physical)
+    {
+        if(operational.HasValue)
+        {
+            if(string.Equals(type?.Trim(),"E",StringComparison.OrdinalIgnoreCase))return "E • Elle";
+            if(physical.HasValue)
+            {
+                var sameMinute=operational.Value.Date==physical.Value.Date &&
+                    operational.Value.Hour==physical.Value.Hour &&
+                    operational.Value.Minute==physical.Value.Minute;
+                return sameMinute?"Fiziksel":"Düzeltilmiş";
+            }
+            return "DATA";
+        }
+        return physical.HasValue?"Fiziksel • Bekliyor":"";
     }
 
     static (DateTime? Entry,DateTime? Exit) Movement(IEnumerable<DataRow> rows)
@@ -441,6 +482,6 @@ public sealed partial class LiveAttendanceForm : Form
     static int I0(DataRow r,string c)=>r.Table.Columns.Contains(c)&&r[c]!=DBNull.Value?Convert.ToInt32(r[c]):0;
 
     sealed record Schedule(string Name,int ExpectedEntry,int EntryTolerance,int ExpectedExit,int ExitTolerance,int WorkMinutes);
-    sealed record DailyRow(string Code,string Name,string Group,string Plan,string Entry,string Exit,string Status,string Warning,
+    sealed record DailyRow(string Code,string Name,string Group,string Plan,string Entry,string Exit,string EntrySource,string ExitSource,string Status,string Warning,
         bool Expected,bool FullLeave,bool HasEntry,bool HasExit);
 }
