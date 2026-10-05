@@ -1853,13 +1853,15 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     const periodLabel = `${MONTHS[month - 1]} ${year}`;
     const rowCount = rows.length;
     const density = rowCount <= 20 ? "normal" : rowCount <= 26 ? "tight" : "ultra";
+    const printScale = Math.min(1, 19 / Math.max(19, rowCount));
+    const sheetWidth = 100 / printScale;
 
     const html = `<html><head><meta charset="utf-8"><style>
       @page{size:A4 landscape;margin:3mm}
       *{box-sizing:border-box}
       html,body{margin:0;padding:0}
       body{font-family:Arial,Helvetica,sans-serif;color:#14263a}
-      .sheet{width:100%}
+      .sheet{width:${sheetWidth.toFixed(3)}%;zoom:${printScale.toFixed(3)}}
       .head{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin:0 0 3mm;padding-bottom:1.5mm;border-bottom:1px solid #9aabbc}
       h1{font-size:10pt;line-height:1;margin:0}
       .sub{font-size:6.2pt;color:#60758a;margin-top:1mm}
