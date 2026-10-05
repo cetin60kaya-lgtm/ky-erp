@@ -467,6 +467,14 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
 
         const nextEmployees = safeList(result?.employees).filter((item) => payrollVisibleEmployee(item, period));
         const currentIds = new Set(nextEmployees.map((item) => item.id));
+        // Personel Kartları tam HKN ana kadrosunu gösterir. Canlı yenileme sırasında
+        // seçimi yalnız bordro-dönemi IDsine göre doğrulamak, dönem dışı/eksik tarihli
+        // bir karta tıklandığında seçimi ilk bordro personeline geri sıçratıyordu.
+        const masterSelectionIds = new Set([
+          ...safeList(result?.masterEmployees).map((item) => item.id),
+          ...safeList(result?.rawEmployees).map((item) => item.id),
+          ...nextEmployees.map((item) => item.id),
+        ].filter(Boolean));
         const cleanResult = result ? {
           ...result,
           adjustments: safeList(result.adjustments).filter((item) => currentIds.has(item.employeeId)),
@@ -496,7 +504,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         }
         setLeaveCenter(center || { plans: [], conflicts: [] });
         if (center?.policy) setPolicyDraft(center.policy);
-        setSelectedId((old) => currentIds.has(old) ? old : nextEmployees[0]?.id || "");
+        setSelectedId((old) => masterSelectionIds.has(old) ? old : nextEmployees[0]?.id || safeList(result?.masterEmployees)[0]?.id || "");
         setSelectedPayrollIds((old) => old.filter((id) => currentIds.has(id)));
         setNotice(auxiliaryFailed ? "İK ana verisi yüklendi; bazı yardımcı özetler geçici olarak alınamadı." : "");
         return true;
