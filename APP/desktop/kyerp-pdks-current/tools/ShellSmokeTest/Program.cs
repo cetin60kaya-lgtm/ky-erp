@@ -134,8 +134,8 @@ using (var settings = new LegacyTerminalSettingsForm())
 
 using (var personnel = new PersonelForm())
 {
-    var tabs = Descendants(personnel).OfType<TabControl>().First(x => x.TabPages.Count == 6);
-    string[] expected = ["Personel Bilgileri", "Giriş / Çıkış", "İzinler", "Kazanç / Kesinti", "Puantaj", "Ödeme Özeti"];
+    var tabs = Descendants(personnel).OfType<TabControl>().First(x => x.TabPages.Count == 7);
+    string[] expected = ["Personel Bilgileri", "Giriş / Çıkış", "İzinler", "Kazanç / Kesinti", "Puantaj", "Bordro", "Ödeme Özeti"];
     if (!tabs.TabPages.Cast<TabPage>().Select(x => x.Text).SequenceEqual(expected))
         throw new InvalidOperationException("Personel sekmeleri bozulmuş.");
     var inner = Descendants(tabs.TabPages[0]).OfType<TabControl>().First();
