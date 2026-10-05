@@ -633,19 +633,13 @@ async function saveAdjustment(c: Context<AppEnv>) {
 }
 
 async function overtimeAmountForEmployee(c: Context<AppEnv>, companyId: string, employeeId: string, hours: number, multiplierValue: unknown) {
-  const employee = await first(c, `SELECT e.salary,e.overtime_hourly_base,s.base_employee_id
-    FROM hr_monthly_employees e
-    LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
-    WHERE e.id=? AND e.main_company_id=? LIMIT 1`, [employeeId, companyId]);
+  const employee = await first(c, `SELECT salary,overtime_hourly_base
+    FROM hr_monthly_employees
+    WHERE id=? AND main_company_id=? LIMIT 1`, [employeeId, companyId]);
   if (!employee) return 0;
-  let baseSalary = number(employee.salary);
-  const baseEmployeeId = text(employee.base_employee_id);
-  if (baseEmployeeId) {
-    const baseEmployee = await first(c, "SELECT salary FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [baseEmployeeId, companyId]);
-    if (baseEmployee) baseSalary = number(baseEmployee.salary);
-  }
+  const salary = number(employee.salary);
   const divisor = number(employee.overtime_hourly_base) || 225;
-  return calculateOvertimeAmount(baseSalary, hours, multiplierValue, divisor);
+  return calculateOvertimeAmount(salary, hours, multiplierValue, divisor);
 }
 
 const IK_PERSON_CARD_CALC_SCOPE = "IK_PERSON_CARD_CALC";
@@ -1391,7 +1385,6 @@ async function advancedPayroll(c: Context<AppEnv>) {
   const rawEmployees = currentEmployees.map((employee) => applyHistoricalEmployeeValues(employee, historyRows, periodEnd));
   const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
   const employees = rawEmployees.filter((employee) => advancedEmployeeVisible(employee, cardsByEmployee.get(text(employee.id)) || {}, period));
-  const employeesById = new Map(rawEmployees.map((employee) => [text(employee.id), employee]));
   const byEmployee = new Map(saved.filter((row) => number(row.year) === year && number(row.month) === month).map((row) => [text(row.employeeId), row]));
   const normalizeType = (value: unknown) => { const valueUpper = upper(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
   const lines = employees.map((employee) => {
