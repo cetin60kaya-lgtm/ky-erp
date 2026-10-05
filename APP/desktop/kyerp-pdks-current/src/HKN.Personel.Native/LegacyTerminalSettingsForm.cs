@@ -14,8 +14,8 @@ public sealed class LegacyTerminalSettingsForm : Form
     readonly ComboBox direction = Combo("GİRİŞ", "ÇIKIŞ");
     readonly TextBox transferFile = new();
     readonly NumericUpDown tolerance = Number(0, 60);
-    readonly CheckBox deleteAfter = new() { Text = "Cihaz kayıtlarını otomatik silme (güvenlik gereği kapalı)", Enabled = false, Checked = false };
-    readonly CheckBox backup = new() { Text = "Veriler yedek alınsın" };
+    readonly CheckBox deleteAfter = new() { Text = "Doğrulanan aktarım sonrası cihaz loglarını temizle", Checked = false };
+    readonly CheckBox backup = new() { Text = "Ham cihaz aktarımını ayrıca yedekle", Checked = true };
     readonly Label status = new() { AutoSize = false, Height = 30, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
     readonly Button save = Cmd("KAYDET", 110);
     bool editing;
@@ -102,29 +102,55 @@ public sealed class LegacyTerminalSettingsForm : Form
 
         var operationsCard=TerminalCard(border);
         operationsCard.Margin=new Padding(0,12,0,0);
-        var opRoot=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=5,Padding=new Padding(18),BackColor=surface};
-        opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,34));opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,92));opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,50));opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,52));opRoot.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        var opRoot=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=6,Padding=new Padding(18),BackColor=surface};
+        opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
+        opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,92));
+        opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,50));
+        opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,46));
+        opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
+        opRoot.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         opRoot.Controls.Add(new Label{Text="Cihaz İşlemleri",Dock=DockStyle.Fill,Font=new Font("Segoe UI",10.5f,FontStyle.Bold),ForeColor=text},0,0);
-        var opButtons=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,AutoScroll=true,Padding=new Padding(0,6,0,0)};
-        Button Action(string label,Func<Task> action,int width=145,bool primary=false){var b=TerminalButton(label,width,primary);b.Click+=async(_,_)=>{b.Enabled=false;try{await action();}finally{if(!IsDisposed)b.Enabled=true;}};opButtons.Controls.Add(b);return b;}
-        Action("BAĞLANTI TESTİ",()=>TestConnectionAsync(true),145,true);
-        Action("CİHAZ SAATİNİ OKU",ReadDeviceTimeAsync,165);
-        Action("PC SAATİYLE EŞİTLE",SetDeviceTimeAsync,165);
-        Action("LOGLARI OKU",PreviewPunchesAsync,130);
-        Action("TNF + FDB AKTAR",TransferNowAsync,150,true);
-        Action("SÜRÜCÜYÜ ONAR",RepairAsync,142);
+
+        var opButtons=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=2,Padding=new Padding(0,5,0,5),Margin=Padding.Empty};
+        for(var i=0;i<3;i++)opButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,33.333f));
+        opButtons.RowStyles.Add(new RowStyle(SizeType.Percent,50));opButtons.RowStyles.Add(new RowStyle(SizeType.Percent,50));
+        Button Action(string label,Func<Task> action,bool primary=false)
+        {
+            var b=TerminalButton(label,150,primary);
+            b.Dock=DockStyle.Fill;b.Margin=new Padding(0,0,10,6);b.MaximumSize=Size.Empty;b.MinimumSize=new Size(0,32);
+            b.Click+=async(_,_)=>{b.Enabled=false;try{await action();}finally{if(!IsDisposed)b.Enabled=true;}};
+            return b;
+        }
+        opButtons.Controls.Add(Action("BAĞLANTI TESTİ",()=>TestConnectionAsync(true),true),0,0);
+        opButtons.Controls.Add(Action("CİHAZ SAATİNİ OKU",ReadDeviceTimeAsync),1,0);
+        opButtons.Controls.Add(Action("PC SAATİYLE EŞİTLE",SetDeviceTimeAsync),2,0);
+        opButtons.Controls.Add(Action("LOGLARI OKU",PreviewPunchesAsync),0,1);
+        opButtons.Controls.Add(Action("TNF + FDB AKTAR",TransferNowAsync,true),1,1);
+        opButtons.Controls.Add(Action("SÜRÜCÜYÜ ONAR",RepairAsync),2,1);
         opRoot.Controls.Add(opButtons,0,1);
 
-        var transfer=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,RowCount=1};
-        transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,118));transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,42));transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,92));transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,90));
+        var transfer=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,RowCount=1,Margin=Padding.Empty};
+        transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,118));transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,48));transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,92));transfer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,90));
         transfer.Controls.Add(new Label{Text="Aktarım Dosyası",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=muted,Font=new Font("Segoe UI",8.5f,FontStyle.Bold)},0,0);
-        transferFile.Dock=DockStyle.Fill;transferFile.Margin=new Padding(0,7,6,7);transfer.Controls.Add(transferFile,1,0);
-        var browse=TerminalButton("…",36,false);browse.Height=30;browse.Click+=(_,_)=>BrowseTransferFile();transfer.Controls.Add(browse,2,0);
+        transferFile.Dock=DockStyle.Fill;transferFile.Margin=new Padding(0,7,8,7);transfer.Controls.Add(transferFile,1,0);
+        var browse=TerminalButton("…",38,false);browse.Dock=DockStyle.Fill;browse.Margin=new Padding(0,7,8,7);browse.MaximumSize=Size.Empty;browse.Click+=(_,_)=>BrowseTransferFile();transfer.Controls.Add(browse,2,0);
         transfer.Controls.Add(new Label{Text="Tolerans",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleRight,ForeColor=muted},3,0);tolerance.Dock=DockStyle.Fill;tolerance.Margin=new Padding(4,7,0,7);transfer.Controls.Add(tolerance,4,0);
         opRoot.Controls.Add(transfer,0,2);
 
-        var flags=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,8,0,0)};backup.AutoSize=true;deleteAfter.AutoSize=true;flags.Controls.Add(backup);flags.Controls.Add(deleteAfter);opRoot.Controls.Add(flags,0,3);
-        opRoot.Controls.Add(new Label{Text="Güvenlik: cihaz kayıtları otomatik silinmez. Kayıtlar TNF + FDB + canlı arşive doğrulanarak alınır.",Dock=DockStyle.Fill,ForeColor=muted,Font=new Font("Segoe UI",8.5f),TextAlign=ContentAlignment.TopLeft},0,4);
+        var flags=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,Padding=new Padding(0,7,0,0),Margin=Padding.Empty};
+        backup.AutoSize=true;deleteAfter.AutoSize=true;backup.Margin=new Padding(0,4,22,0);deleteAfter.Margin=new Padding(0,4,0,0);
+        flags.Controls.Add(backup);flags.Controls.Add(deleteAfter);opRoot.Controls.Add(flags,0,3);
+
+        var liveTools=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,Padding=new Padding(0,9,0,0),Margin=Padding.Empty};
+        liveTools.Controls.Add(new Label{Text="CANLI ARŞİV",AutoSize=true,Padding=new Padding(0,8,12,0),ForeColor=muted,Font=new Font("Segoe UI",8.5f,FontStyle.Bold)});
+        var keepWeek=TerminalButton("SON 7 GÜNÜ KORU / TEMİZLE",210,false);keepWeek.Click+=async(_,_)=>await ClearLiveExceptWeekAsync();
+        var clearLive=TerminalButton("CANLIYI TAM SIFIRLA",175,false);PdksUiKit.ApplyButtonPalette(clearLive,palette,PdksActionRole.Danger);clearLive.Click+=async(_,_)=>await ClearAllLiveAsync();
+        liveTools.Controls.Add(keepWeek);liveTools.Controls.Add(clearLive);opRoot.Controls.Add(liveTools,0,4);
+
+        opRoot.Controls.Add(new Label{
+            Text="Akış: cihazdan oku → CANLI arşiv + ana TNF + FDB doğrula → yukarıdaki seçenek açıksa yalnız cihaz loglarını temizle. CANLI arşiv bağımsızdır; buradaki CANLI temizliği ana TNF/FDB'ye dokunmaz.",
+            Dock=DockStyle.Fill,ForeColor=muted,Font=new Font("Segoe UI",8.5f),TextAlign=ContentAlignment.TopLeft,Padding=new Padding(0,6,0,0)
+        },0,5);
         operationsCard.Controls.Add(opRoot);root.Controls.Add(operationsCard,0,2);
 
         var bottom=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(0,9,0,0),BackColor=canvas};var close=TerminalButton("ÇIKIŞ",96,false);close.Click+=(_,_)=>Close();bottom.Controls.Add(close);root.Controls.Add(bottom,0,3);
@@ -220,6 +246,11 @@ public sealed class LegacyTerminalSettingsForm : Form
         try
         {
             var value = ReadFields();
+            if (value.DeleteAfterValidatedTransfer &&
+                MessageBox.Show(
+                    "Bu seçenek açıkken her başarılı ve tam doğrulanmış aktarımın ardından cihazdaki geçiş logları temizlenir.\n\nKayıtlar önce CANLI arşiv + ana TNF + FDB'ye alınmadan silinmez. Bu ayar kaydedilsin mi?",
+                    "Aktarım Sonrası Cihaz Temizliği", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                return;
             TerminalDeviceSettingsStore.Save(value);
             RefreshGrid(value, "Kaydedildi");
             SetEditing(false);
@@ -234,9 +265,7 @@ public sealed class LegacyTerminalSettingsForm : Form
     void SetEditing(bool value)
     {
         editing = value;
-        foreach (var c in new Control[] { deviceNo, deviceName, machineNo, connectionType, comPort, baudRate, ipAddress, ipPort, direction, transferFile, tolerance, backup }) c.Enabled = value;
-        deleteAfter.Enabled = false;
-        deleteAfter.Checked = false;
+        foreach (var c in new Control[] { deviceNo, deviceName, machineNo, connectionType, comPort, baudRate, ipAddress, ipPort, direction, transferFile, tolerance, backup, deleteAfter }) c.Enabled = value;
         save.Enabled = value;
     }
 
@@ -320,6 +349,24 @@ public sealed class LegacyTerminalSettingsForm : Form
         }
         var detail = result.Message + $"\n\nOkunan: {result.ReadCount}\nYeni: {result.Inserted}\nGüncellenen: {result.Updated}\nMükerrer: {result.Duplicates}\nAtlanan: {result.Skipped}\nCihaz temizlendi: {(result.DeviceCleared ? "Evet" : "Hayır")}";
         MessageBox.Show(detail, Text, MessageBoxButtons.OK, result.Skipped == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+    }
+
+    async Task ClearLiveExceptWeekAsync()
+    {
+        if (MessageBox.Show(
+            "CANLI arşivde yalnız son 7 takvim günü korunsun, daha eski CANLI kayıtlar temizlensin mi?\n\nAna TNF, FDB ve cihaz kayıtları değişmez.",
+            "CANLI Arşiv Temizliği", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        var result = await Task.Run(TerminalMaintenanceService.ClearLiveExceptLastWeek);
+        MessageBox.Show(result.Message, "CANLI Arşiv", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    async Task ClearAllLiveAsync()
+    {
+        if (MessageBox.Show(
+            "CANLI arşiv tamamen sıfırlansın mı?\n\nBu işlem yalnız CANLI önizleme/ham arşivini temizler; ana TNF, FDB ve cihaz kayıtlarına dokunmaz.",
+            "CANLI Arşivi Sıfırla", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        var result = await Task.Run(TerminalMaintenanceService.ClearAllLive);
+        MessageBox.Show(result.Message, "CANLI Arşiv", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     async Task RepairAsync()
