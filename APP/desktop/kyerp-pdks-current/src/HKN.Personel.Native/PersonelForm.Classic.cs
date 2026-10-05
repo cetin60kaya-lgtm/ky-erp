@@ -117,6 +117,7 @@ public partial class PersonelForm
         tabs.TabPages.Add(BuildIzinClassic());
         tabs.TabPages.Add(BuildEkkClassic());
         tabs.TabPages.Add(BuildBilgiClassic());
+        tabs.TabPages.Add(BuildPersonMonthlyPayrollTab());
         tabs.TabPages.Add(BuildOdemeClassic());
         ApplyClassicGridStyles();
     }
