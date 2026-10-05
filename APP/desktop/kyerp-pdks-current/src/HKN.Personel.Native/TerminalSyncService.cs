@@ -104,10 +104,26 @@ internal static class TerminalSyncService
             await PdksCloudAgent.EnqueueTerminalSyncAsync(punches, imported, ct);
             _ = PdksCloudAgent.RunOnceAsync(ct);
 
-            // Safety rule: Sync never calls EmptyGeneralLogData/clearlogs.
-            // Device cleanup, if ever needed later, must be a separate explicit administrator operation.
-            var keepMessage = $"{source}: {punches.Length} kayıt CANLI TNF + TNF + FDB doğrulandı. Cihaz kayıtları KORUNDU; otomatik silme kapalı.";
-            return Save(new(DateTime.Now, punches.Length, imported.Inserted, imported.Updated, imported.Duplicates, imported.Skipped, false, keepMessage, scheduleKey));
+            var deviceCleared = false;
+            var cleanupMessage = "Cihaz kayıtları KORUNDU.";
+            if (deviceSettings.DeleteAfterValidatedTransfer)
+            {
+                var clear = await TerminalDeviceClient.ClearLogsAsync(ct);
+                if (!clear.Success)
+                {
+                    var warning = $"{source}: {punches.Length} kayıt CANLI TNF + TNF + FDB doğrulandı; ancak cihaz logları temizlenemedi: {clear.Message}";
+                    return Save(new(DateTime.Now, punches.Length, imported.Inserted, imported.Updated, imported.Duplicates, imported.Skipped, false, warning, scheduleKey));
+                }
+
+                var verify = await TerminalDeviceClient.ReadAsync(false, ct);
+                deviceCleared = verify.Connected;
+                cleanupMessage = deviceCleared
+                    ? "Doğrulama başarılı; cihaz logları temizlendi."
+                    : "Cihaz logları temizlendi; son bağlantı doğrulaması alınamadı.";
+            }
+
+            var finalMessage = $"{source}: {punches.Length} kayıt CANLI TNF + TNF + FDB doğrulandı. {cleanupMessage}";
+            return Save(new(DateTime.Now, punches.Length, imported.Inserted, imported.Updated, imported.Duplicates, imported.Skipped, deviceCleared, finalMessage, scheduleKey));
         }
         catch (Exception ex)
         {
