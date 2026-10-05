@@ -76,8 +76,16 @@ using (var operations = new OperationsCenterForm(PdksCommandCatalog.All, _ => { 
 {
     var texts=Descendants(operations).OfType<Label>().Select(x=>x.Text ?? string.Empty)
         .Concat(Descendants(operations).OfType<Button>().Select(x=>x.Text ?? string.Empty)).ToArray();
-    foreach(var required in new[]{"Kart Kayıtları","Canlı Durum","Eksikler / Geç","Devam Geçmişi","İzin İşlemleri","Puantaja Geç"})
+    foreach(var required in new[]{"Kart Kayıtları","Canlı Durum","Eksikler / Geç","Devam Geçmişi","Aylık Kart Düzeltme","İzin İşlemleri","Puantaja Geç"})
         if(!texts.Contains(required)) throw new InvalidOperationException("Operasyon adımı eksik: "+required);
+}
+
+using (var operatorOperations = new OperationsCenterForm(PdksCommandCatalog.All.Where(x=>!x.AdminOnly&&!x.SuperAdminOnly), _ => { }))
+{
+    var texts=Descendants(operatorOperations).OfType<Label>().Select(x=>x.Text ?? string.Empty)
+        .Concat(Descendants(operatorOperations).OfType<Button>().Select(x=>x.Text ?? string.Empty)).ToArray();
+    if(texts.Contains("Kart Kayıtları")||texts.Contains("Aylık Kart Düzeltme"))
+        throw new InvalidOperationException("Normal kullanıcıya ADMIN kart düzeltme işlemleri görünmemeli.");
 }
 
 using (var liveReadOnly = new LiveAttendanceForm())
