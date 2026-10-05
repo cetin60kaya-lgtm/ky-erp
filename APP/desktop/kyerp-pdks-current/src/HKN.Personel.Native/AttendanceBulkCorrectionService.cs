@@ -23,13 +23,21 @@ internal static class AttendanceBulkCorrectionService
         FirebirdDatabase db, IEnumerable<string> cards, DateTime day, TimeSpan from, TimeSpan to) =>
         Normalize(db, cards, day, from, to, entry: false);
 
+    public static AttendanceBulkCorrectionResult AddNormalEntries(
+        FirebirdDatabase db, IEnumerable<string> cards, DateTime day, TimeSpan from, TimeSpan to) =>
+        AddMissing(db, cards, day, from, to, entry: true, manualE: false);
+
+    public static AttendanceBulkCorrectionResult AddNormalExits(
+        FirebirdDatabase db, IEnumerable<string> cards, DateTime day, TimeSpan from, TimeSpan to) =>
+        AddMissing(db, cards, day, from, to, entry: false, manualE: false);
+
     public static AttendanceBulkCorrectionResult AddManualEntries(
         FirebirdDatabase db, IEnumerable<string> cards, DateTime day, TimeSpan from, TimeSpan to) =>
-        AddManual(db, cards, day, from, to, entry: true);
+        AddMissing(db, cards, day, from, to, entry: true, manualE: true);
 
     public static AttendanceBulkCorrectionResult AddManualExits(
         FirebirdDatabase db, IEnumerable<string> cards, DateTime day, TimeSpan from, TimeSpan to) =>
-        AddManual(db, cards, day, from, to, entry: false);
+        AddMissing(db, cards, day, from, to, entry: false, manualE: true);
 
     static AttendanceBulkCorrectionResult Normalize(
         FirebirdDatabase db, IEnumerable<string> sourceCards, DateTime day, TimeSpan from, TimeSpan to, bool entry)
@@ -103,8 +111,8 @@ internal static class AttendanceBulkCorrectionService
             $"{op}: {changedCards.Count} kayıt {from:hh\\:mm}-{to:hh\\:mm} aralığına dağıtıldı; DATA ve yıllık TNF birlikte eşitlendi. E oluşturulmadı. Atlanan={skipped}.");
     }
 
-    static AttendanceBulkCorrectionResult AddManual(
-        FirebirdDatabase db, IEnumerable<string> sourceCards, DateTime day, TimeSpan from, TimeSpan to, bool entry)
+    static AttendanceBulkCorrectionResult AddMissing(
+        FirebirdDatabase db, IEnumerable<string> sourceCards, DateTime day, TimeSpan from, TimeSpan to, bool entry, bool manualE)
     {
         ValidateRange(from, to);
         var cards = NormalizeCards(sourceCards);
@@ -112,11 +120,12 @@ internal static class AttendanceBulkCorrectionService
         var audit = new List<string>();
         var rollback = new List<(string Card,int Sira,bool Inserted,bool Entry)>();
         var skipped = 0;
+        var type = manualE ? "E" : "";
 
         foreach (var card in cards)
         {
-            var minute = StableMinute(card, day, entry ? "E_GIRIS" : "E_CIKIS", from, to);
-            var time = TimeSpan.FromMinutes(minute).ToString(@"hh\\:mm", CultureInfo.InvariantCulture);
+            var minute = StableMinute(card, day, manualE ? (entry ? "E_GIRIS" : "E_CIKIS") : (entry ? "NORMAL_GIRIS_EKLE" : "NORMAL_CIKIS_EKLE"), from, to);
+            var time = TimeSpan.FromMinutes(minute).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
 
             if (entry)
             {
@@ -131,17 +140,17 @@ internal static class AttendanceBulkCorrectionService
                 if (exitOnly.Rows.Count > 0)
                 {
                     var sira = Convert.ToInt32(exitOnly.Rows[0]["SIRA"]);
-                    db.Execute("update GIRCIK set GTARIH=@D,GSAAT=@T,GDAKIKA=@M,GTUR='E' where SIRA=@S and PKNO=@P",
+                    db.Execute("update GIRCIK set GTARIH=@D,GSAAT=@T,GDAKIKA=@M,GTUR=@TYPE where SIRA=@S and PKNO=@P",
                         new FbParameter("@D", day.Date), new FbParameter("@T", time), new FbParameter("@M", minute),
-                        new FbParameter("@S", sira), new FbParameter("@P", card));
+                        new FbParameter("@TYPE", type), new FbParameter("@S", sira), new FbParameter("@P", card));
                     rollback.Add((card,sira,false,true));
                 }
                 else
                 {
                     var sira = Convert.ToInt32(db.Scalar("select coalesce(max(SIRA),0)+1 from GIRCIK") ?? 1);
-                    db.Execute("insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,MKOD) values (@S,@P,@D,@T,@M,'E',0)",
+                    db.Execute("insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,MKOD) values (@S,@P,@D,@T,@M,@TYPE,0)",
                         new FbParameter("@S", sira), new FbParameter("@P", card), new FbParameter("@D", day.Date),
-                        new FbParameter("@T", time), new FbParameter("@M", minute));
+                        new FbParameter("@T", time), new FbParameter("@M", minute), new FbParameter("@TYPE", type));
                     rollback.Add((card,sira,true,true));
                 }
             }
@@ -158,14 +167,14 @@ internal static class AttendanceBulkCorrectionService
                 if (open.Rows.Count == 0) { skipped++; continue; }
 
                 var sira = Convert.ToInt32(open.Rows[0]["SIRA"]);
-                db.Execute("update GIRCIK set CTARIH=@D,CSAAT=@T,CDAKIKA=@M,CTUR='E' where SIRA=@S and PKNO=@P",
+                db.Execute("update GIRCIK set CTARIH=@D,CSAAT=@T,CDAKIKA=@M,CTUR=@TYPE where SIRA=@S and PKNO=@P",
                     new FbParameter("@D", day.Date), new FbParameter("@T", time), new FbParameter("@M", minute),
-                    new FbParameter("@S", sira), new FbParameter("@P", card));
+                    new FbParameter("@TYPE", type), new FbParameter("@S", sira), new FbParameter("@P", card));
                 rollback.Add((card,sira,false,false));
             }
 
             changedCards.Add(card);
-            audit.Add($"{card};{day:yyyy-MM-dd};{(entry ? "ELLE_GIRIS_E" : "ELLE_CIKIS_E")};;{time};E=EVET");
+            audit.Add($"{card};{day:yyyy-MM-dd};{(manualE ? (entry ? "ELLE_GIRIS_E" : "ELLE_CIKIS_E") : (entry ? "NORMAL_GIRIS_EKLE" : "NORMAL_CIKIS_EKLE"))};;{time};E={(manualE ? "EVET" : "HAYIR")}");
         }
 
         if (changedCards.Count > 0)
@@ -199,9 +208,14 @@ internal static class AttendanceBulkCorrectionService
             }
         }
 
-        var op = entry ? "Toplu E giriş" : "Toplu E çıkış";
+        var op = manualE
+            ? (entry ? "E giriş ekleme" : "E çıkış ekleme")
+            : (entry ? "Normal giriş ekleme" : "Normal çıkış ekleme");
+        var storage = manualE
+            ? "DATA kaydı oluşturuldu; E kayıtları yıllık TNF'ye yazılmadı."
+            : "DATA ve yıllık TNF aynı dakika ile güncellendi; E oluşturulmadı.";
         return new(op, cards.Length, changedCards.Count, skipped, changedCards,
-            $"{op}: {changedCards.Count} DATA kaydı oluşturuldu. E kayıtları yıllık TNF'ye yazılmadı; uygulamada E olarak kalır. Atlanan={skipped}.");
+            $"{op}: {changedCards.Count} kayıt {from:hh\:mm}-{to:hh\:mm} aralığında oluşturuldu. {storage} Atlanan={skipped}.");
     }
 
     static string[] NormalizeCards(IEnumerable<string> source) =>
