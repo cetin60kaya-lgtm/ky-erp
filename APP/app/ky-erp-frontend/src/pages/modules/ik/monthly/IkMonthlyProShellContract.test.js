@@ -74,6 +74,23 @@ test("personnel cards use the complete HKN master roster while payroll stays per
   assert.match(monthly, /HKN Değiştir/);
 });
 
+test("person card save keeps the modal open for serial personnel editing", () => {
+  assert.match(monthly, /const successMessage = savedCard\?\.periodComplianceSkipped/);
+  assert.match(monthly, /formMessage: successMessage/);
+  assert.match(monthly, /version: savedCard\?\.version \|\| savedCard\?\.updatedAt \|\| old\.version/);
+  assert.match(monthly, /await load\(\{ force: true, silent: true \}\)/);
+  assert.doesNotMatch(monthly, /setSelectedId\(employeeId\);\s*setModal\(null\);\s*setNotice\(/);
+});
+
+test("payroll separates active and selected-month leavers while excluding earlier exits", () => {
+  assert.match(monthly, /payrollEmploymentFilter/);
+  assert.match(monthly, />Aktif \(/);
+  assert.match(monthly, />İşten Ayrılan \(/);
+  assert.match(monthly, /\["ACTIVE", "NEW_HIRE", "MISSING_HIRE_DATE"\]/);
+  assert.match(monthly, /\["EXIT_MONTH", "ENTERED_EXITED"\]/);
+  assert.match(monthly, /Seçili aydan önce ayrılan personel bordroya alınmaz/);
+});
+
 test("personnel edit modal switches person without closing", () => {
   assert.match(monthly, /const switchPersonInModal = \(employeeId\) =>/);
   assert.match(monthly, /Personel Seç/);
