@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>HAKAN EMP</title>
 <meta name="theme-color" content="#2f2d43">
-<link rel="stylesheet" href="/app.css?v=final9">
+<link rel="stylesheet" href="/app.css?v=final10">
 </head>
 <body>
 <div class="app-shell">
@@ -35,19 +35,25 @@
     </header>
 
     <section class="page active" id="production">
-      <div class="summary four">
-        <article><span>AÇIK İŞ</span><b id="sOpen">0</b><small>model</small></article>
-        <article><span>GELEN İMALAT</span><b id="sIncoming">0</b><small>adet</small></article>
-        <article><span>BASILAN</span><b id="sProduced">0</b><small>adet</small></article>
+      <div class="week-pool-bar">
+        <div class="week-pool-title"><small>HAFTALIK İMALAT DÖNEMİ</small><b id="weekLabel">—</b><span id="weekSub">Fiş tarihi hangi haftadaysa kayıt o haftaya gider.</span></div>
+        <div class="week-nav"><button onclick="moveWeek(-7)">← Önceki</button><button class="current" onclick="goCurrentWeek()">Bu Hafta</button><button onclick="moveWeek(7)">Sonraki →</button></div>
+      </div>
+      <div class="summary five">
+        <article><span>AÇIK HAVUZ</span><b id="sOpen">0</b><small>aktif model</small></article>
+        <article><span>BU HAFTA MODEL</span><b id="sWeekModels">0</b><small>işlem gören</small></article>
+        <article><span>BU HAFTA ÜRETİM</span><b id="sWeekProduced">0</b><small>adet</small></article>
+        <article><span>BU HAFTA SAKAT</span><b id="sWeekDefects">0</b><small id="sWeekEntries">0 fiş</small></article>
         <article><span>FATURA BEKLEYEN</span><b id="sInvoiceReady">0</b><small>adet</small></article>
       </div>
 
-      <div class="panel flush">
+      <div class="panel flush pool-panel">
         <div class="module-toolbar">
-          <div class="tabs"><button class="tab active" data-prod-view="OPEN">Açık İşler</button><button class="tab" data-prod-view="DONE">Tamamlananlar</button></div>
+          <div class="tabs"><button class="tab active" data-prod-view="OPEN">İmalat Havuzu</button><button class="tab" data-prod-view="DONE">Tamamlananlar</button></div>
           <div class="filters"><div class="search"><span>⌕</span><input id="prodSearch" placeholder="Model ara"></div><select id="prodStatus"><option value="">Tüm durumlar</option><option value="NEED_DISPATCH">İrsaliye iste</option><option value="DISPATCH_SHORT">İrsaliye eksik</option><option value="INVOICE">Fatura kesilecek</option><option value="PRODUCTION">Üretim devam</option></select></div>
         </div>
-        <div class="table-head prod-grid"><span>MODEL</span><span>GELEN</span><span>ÜRETİM</span><span>İRSALİYE</span><span>FATURA</span><span>KALAN</span><span>DURUM</span></div>
+        <div class="pool-note">Açık model haftalar boyunca havuzda kalır. Seçili hafta yalnız üretim fişlerini ayırır. İrsaliye + fatura tamamlanınca model otomatik Tamamlananlar'a geçer.</div>
+        <div class="table-head prod-grid"><span>MODEL</span><span>GELEN</span><span>BU HAFTA</span><span>TOPLAM ÜRETİM</span><span>İRSALİYE</span><span>FATURA</span><span>KALAN</span><span>DURUM</span></div>
         <div id="prodRows"></div>
       </div>
     </section>
@@ -157,5 +163,5 @@
 
 <div class="modal" id="modal"></div>
 <div id="toast"></div>
-<script src="/app.js?v=final7"></script>
+<script src="/app.js?v=final10"></script>
 </body></html>
