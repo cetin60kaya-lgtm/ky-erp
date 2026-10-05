@@ -268,15 +268,33 @@ end");
     {
         EnsureSchema(db);
         var start = new DateTime(year, month, 1);
-        var last = start.AddMonths(1).AddDays(-1);
+        var end = start.AddMonths(1);
+        var last = end.AddDays(-1);
+
         var rawSql = @"select u.PKNO,u.BASTAR,u.BITTAR,k.IGTARIH,k.AD,k.SOYAD,k.MAAS as KART_MAAS,
             u.NCGUN,u.NCSAAT,u.NCUCRET,u.SAAT2,u.UCRET2,u.SAAT3,u.UCRET3,u.GUN4,u.SAAT4,
             u.DEVG,u.DEVS,u.GECS,u.EKS,u.EKKAZ,u.EKKES,u.EX2,u.NCMAAS,u.NCKALAN,u.FMSAAT,u.FMUCRET,u.FMODENEN,u.FMKALAN
             from UCRETLER u inner join KIMLIK k on k.PKNO=u.PKNO
-            where u.BASTAR=@A and u.BITTAR=@E" + (string.IsNullOrWhiteSpace(card) ? "" : " and u.PKNO=@P") + " order by u.PKNO";
+            where u.BASTAR=@A and u.BITTAR=@E
+              and k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A)" +
+            (string.IsNullOrWhiteSpace(card) ? "" : " and u.PKNO=@P") + " order by u.PKNO";
         var raw = string.IsNullOrWhiteSpace(card)
-            ? db.Query(rawSql, new FbParameter("@A", start), new FbParameter("@E", last))
-            : db.Query(rawSql, new FbParameter("@A", start), new FbParameter("@E", last), new FbParameter("@P", card));
+            ? db.Query(rawSql, new FbParameter("@A", start), new FbParameter("@B", end), new FbParameter("@E", last))
+            : db.Query(rawSql, new FbParameter("@A", start), new FbParameter("@B", end), new FbParameter("@E", last), new FbParameter("@P", card));
+
+        var periodLocked = IsPeriodLocked(db, year, month);
+        var personLocks = db.Query("select PKNO from PDKS_PERSONEL_DONEM_KILIT where YIL=@Y and AY=@M and KILITLI=1",
+            new FbParameter("@Y", year), new FbParameter("@M", month)).AsEnumerable()
+            .Select(r => Convert.ToString(r["PKNO"]) ?? "").ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var overrides = db.Query("select distinct PKNO from PDKS_BORDRO_OVERRIDE where YIL=@Y and AY=@M and AKTIF=1",
+            new FbParameter("@Y", year), new FbParameter("@M", month)).AsEnumerable()
+            .Select(r => Convert.ToString(r["PKNO"]) ?? "").ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var overlaps = db.Query(@"select PKNO from UCRETLER where BASTAR<@B and BITTAR>=@A group by PKNO having count(*)>1",
+            new FbParameter("@A", start), new FbParameter("@B", end)).AsEnumerable()
+            .Select(r => Convert.ToString(r["PKNO"]) ?? "").ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var advances = db.Query(@"select PKNO,coalesce(sum(MIKTAR),0) TOPLAM from AVANS where TARIH>=@A and TARIH<@B group by PKNO",
+            new FbParameter("@A", start), new FbParameter("@B", end)).AsEnumerable()
+            .ToDictionary(r => Convert.ToString(r["PKNO"]) ?? "", r => Convert.ToString(r["TOPLAM"], CultureInfo.CurrentCulture) ?? "0", StringComparer.OrdinalIgnoreCase);
 
         var t = new DataTable();
         foreach (var name in new[]
@@ -291,20 +309,17 @@ end");
         {
             no++;
             var personCard = Convert.ToString(row["PKNO"]) ?? "";
-            var s = Status(db, personCard, year, month);
-            var advance = db.Scalar("select coalesce(sum(MIKTAR),0) from AVANS where PKNO=@P and TARIH>=@A and TARIH<@B",
-                new FbParameter("@P", personCard), new FbParameter("@A", start), new FbParameter("@B", start.AddMonths(1)));
             string V(string name) => row.Table.Columns.Contains(name) && row[name] != DBNull.Value ? Convert.ToString(row[name], CultureInfo.CurrentCulture)?.Trim() ?? "" : "";
             string Join(params string[] values) => string.Join(" / ", values.Where(x => !string.IsNullOrWhiteSpace(x) && x != "0" && x != "00:00"));
+            var lockText = periodLocked ? "AY KİLİTLİ" : personLocks.Contains(personCard) ? "PERSONEL KİLİTLİ" : overrides.Contains(personCard) ? "DÜZENLENMİŞ" : "";
             t.Rows.Add(
                 personCard, row["BASTAR"], row["BITTAR"], no, personCard,
                 row["IGTARIH"] == DBNull.Value ? "" : Convert.ToDateTime(row["IGTARIH"]).ToString("dd.MM.yyyy"),
                 (V("AD") + " " + V("SOYAD")).Trim(), V("KART_MAAS"),
                 V("NCGUN"), V("NCSAAT"), V("SAAT2"), V("SAAT3"), Join(V("GUN4"), V("SAAT4")),
-                Join(V("DEVG"), V("DEVS")), V("GECS"), V("EKS"), Convert.ToString(advance, CultureInfo.CurrentCulture),
+                Join(V("DEVG"), V("DEVS")), V("GECS"), V("EKS"), advances.TryGetValue(personCard, out var avans) ? avans : "0",
                 V("EX2"), V("NCMAAS"), Join(V("FMSAAT"), V("FMUCRET")), V("NCKALAN"),
-                s.PeriodLocked ? "AY KİLİTLİ" : s.PersonLocked ? "PERSONEL KİLİTLİ" : s.HasOverride ? "DÜZENLENMİŞ" : "",
-                s.HasOverlap ? "Çakışan dönem kaydı var" : "");
+                lockText, overlaps.Contains(personCard) ? "Çakışan dönem kaydı var" : "");
         }
         return t;
     }
