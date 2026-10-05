@@ -208,16 +208,20 @@ public sealed class MonthlyAttendanceAdminForm : Form
 
     List<MonthRow> LoadRows(DateTime a, DateTime b)
     {
-        var employeesTable = db.Query(@"select PKNO,AD,SOYAD,IGTARIH,ICTARIH from KIMLIK
-            where (IGTARIH is null or IGTARIH<=@B) and (ICTARIH is null or ICTARIH>=@A) order by PKNO",
+        var employeesTable = db.Query(@"select k.PKNO,k.AD,k.SOYAD,k.IGTARIH,k.ICTARIH,k.GRUP,coalesce(g.AD,'') GRUP_AD
+            from KIMLIK k left join GRUP g on g.KOD=k.GRUP
+            where (k.IGTARIH is null or k.IGTARIH<=@B) and (k.ICTARIH is null or k.ICTARIH>=@A) order by k.PKNO",
             new FbParameter("@A", a), new FbParameter("@B", b.AddDays(1)));
+        var groupPolicies=AttendanceGroupPolicyStore.Load(db);
         var employees = employeesTable.AsEnumerable()
             .Select(r => new Employee(
                 S(r,"PKNO"),
                 $"{S(r,"AD")} {S(r,"SOYAD")}".Trim(),
                 D(r,"IGTARIH") ?? a,
-                D(r,"ICTARIH")))
-            .Where(x => x.Code.Length > 0)
+                D(r,"ICTARIH"),
+                r["GRUP"]==DBNull.Value?-1:Convert.ToInt32(r["GRUP"]),
+                S(r,"GRUP_AD")))
+            .Where(x => x.Code.Length > 0 && AttendanceGroupPolicyStore.RequiresCardTracking(groupPolicies,x.GroupCode,x.GroupName))
             .ToArray();
 
         var movementTable = db.Query(@"select PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,CTARIH,CSAAT,CDAKIKA,CTUR from GIRCIK
@@ -629,7 +633,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
     static string S(DataRow r,string c)=>r[c]==DBNull.Value?"":Convert.ToString(r[c])?.Trim()??"";
     static DateTime? D(DataRow r,string c)=>r[c]==DBNull.Value?null:Convert.ToDateTime(r[c]).Date;
 
-    sealed record Employee(string Code,string Name,DateTime Hire,DateTime? Exit);
+    sealed record Employee(string Code,string Name,DateTime Hire,DateTime? Exit,int GroupCode,string GroupName);
     sealed class Movement
     {
         public DateTime? Entry { get; set; }
