@@ -258,7 +258,11 @@ public sealed partial class LiveAttendanceForm : Form
             from KIMLIK k left join GRUP g on g.KOD=k.GRUP
             where (k.IGTARIH is null or k.IGTARIH<@B) and (k.ICTARIH is null or k.ICTARIH>=@A)
             order by k.PKNO",new FbParameter("@A",day),new FbParameter("@B",next));
-        var physicalPunches=TerminalLiveArchiveService.ReadPhysicalPunches(day,day);
+        var physicalPunches=TerminalLiveArchiveService.ReadPhysicalPunches(day,day)
+            .Concat(DeviceEvidenceArchiveService.ReadDailyPunches(day))
+            .GroupBy(x=>$"{x.EmployeeCode}|{x.OccurredAt:yyyyMMddHHmm}",StringComparer.Ordinal)
+            .Select(g=>g.OrderByDescending(x=>x.VerifyMode).First())
+            .OrderBy(x=>x.OccurredAt).ToArray();
         var operationalMoves=db.Query(@"select PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,CTARIH,CSAAT,CDAKIKA,CTUR from GIRCIK
             where (GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B) order by PKNO,SIRA",
             new FbParameter("@A",day),new FbParameter("@B",next));
