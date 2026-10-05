@@ -192,7 +192,7 @@ function employmentStateAtPeriod(employee = {}, period = "") {
 }
 function payrollVisibleEmployee(employee = {}, period = "") {
   if (employee.payrollIncluded === false) return false;
-  return ["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED", "MISSING_HIRE_DATE"].includes(employmentStateAtPeriod(employee, period));
+  return ["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED", "MISSING_HIRE_DATE", "MISSING_EXIT_DATE"].includes(employmentStateAtPeriod(employee, period));
 }
 function employmentPeriodLabel(employee = {}, period = "") {
   const state = employmentStateAtPeriod(employee, period);
@@ -791,7 +791,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       const employee = row.employee || {};
       if (needle && !upper(`${employee.fullName || ""} ${employee.code || ""} ${employee.department || ""}`).includes(needle)) return false;
       const employmentState = employmentStateAtPeriod(employee, period);
-      const activeInPeriod = ["ACTIVE", "NEW_HIRE", "MISSING_HIRE_DATE"].includes(employmentState);
+      const activeInPeriod = ["ACTIVE", "NEW_HIRE", "MISSING_HIRE_DATE", "MISSING_EXIT_DATE"].includes(employmentState);
       const leftInPeriod = ["EXIT_MONTH", "ENTERED_EXITED"].includes(employmentState);
       if (payrollEmploymentFilter === "ACTIVE" && !activeInPeriod) return false;
       if (payrollEmploymentFilter === "EXITED" && !leftInPeriod) return false;
@@ -2529,7 +2529,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         <div className="page-head"><div><h1>Son Bordro ve Ödeme Merkezi</h1><p>Resmi bordro, puantaj, avans/kesinti ve banka ödemesi çıktı öncesi burada son kez kontrol edilir.</p></div><div className="group"><span className="badge blue">{MONTHS[month - 1]} {year}</span><span className={`badge ${data.close?.isLocked ? "red" : "blue"}`}>{data.close?.isLocked ? "Dönem Kapalı" : "Dönem Açık"}</span><span className={`badge ${balanced ? "green" : "red"}`}>{balanced ? "Ödeme dengeli" : "Ödeme kontrol gerekli"}</span></div></div>
         {filters({ third: "Personel ara", fourth: "Odeme", fifth: "Durum" })}
         <div className="workbar payroll-employment-switch"><div className="group">
-          <button type="button" className={`btn ${payrollEmploymentFilter === "ACTIVE" ? "primary" : ""}`} onClick={() => setPayrollEmploymentFilter("ACTIVE")}>Aktif ({payrollRows.filter((row) => ["ACTIVE","NEW_HIRE","MISSING_HIRE_DATE"].includes(employmentStateAtPeriod(row.employee, period))).length})</button>
+          <button type="button" className={`btn ${payrollEmploymentFilter === "ACTIVE" ? "primary" : ""}`} onClick={() => setPayrollEmploymentFilter("ACTIVE")}>Aktif ({payrollRows.filter((row) => ["ACTIVE","NEW_HIRE","MISSING_HIRE_DATE","MISSING_EXIT_DATE"].includes(employmentStateAtPeriod(row.employee, period))).length})</button>
           <button type="button" className={`btn ${payrollEmploymentFilter === "EXITED" ? "orange" : ""}`} onClick={() => setPayrollEmploymentFilter("EXITED")}>İşten Ayrılan ({payrollRows.filter((row) => ["EXIT_MONTH","ENTERED_EXITED"].includes(employmentStateAtPeriod(row.employee, period))).length})</button>
         </div><span>Seçili aydan önce ayrılan personel bordroya alınmaz.</span></div>
         <div className="sumgrid short">{summaryBox("Ödeme listesi", filteredPayrollRows.length, "", `${payrollRows.length} toplam · ${selectedPayrollIds.length || payrollRows.length} seçili`)}{summaryBox("Resmi bordro neti", money(employees.reduce((sum,item)=>sum+num(item.sgkNet),0)))}{summaryBox("Banka", money(summary.bank))}{summaryBox("Elden", money(summary.cash))}{summaryBox("Avans / Kesinti", `${money(summary.advance)} / ${money(summary.deduction)}`, "orange")}{summaryBox("EK / İcra-Haciz", `${money(summary.extra)} / ${money(summary.garnishment)}`, summary.garnishment ? "orange" : "")}{summaryBox("Net Toplam", money(summary.net), balanced ? "green" : "red")}</div>
