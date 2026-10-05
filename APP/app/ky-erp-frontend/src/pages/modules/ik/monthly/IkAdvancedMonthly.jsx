@@ -1178,8 +1178,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     if (!modalDraft.startDate) return failPersonSave("İşe giriş tarihi zorunludur.");
     if (!data.close?.isLocked && !["SGKLI", "SGKSIZ"].includes(modalDraft.sgkFollow)) return failPersonSave("Bu ay için SGK durumu seçilmelidir.");
     const hasSgkDays = modalDraft.sgkDays !== "" && modalDraft.sgkDays !== null && modalDraft.sgkDays !== undefined;
-    if (!data.close?.isLocked && modalDraft.sgkFollow === "SGKLI" && hasSgkDays && (num(modalDraft.sgkDays) < 0 || num(modalDraft.sgkDays) > totalDays)) {
-      return failPersonSave(`SGK gün sayısı 0-${totalDays} arasında olmalıdır. Resmi gün henüz belli değilse alanı boş bırakabilirsiniz.`);
+    if (!data.close?.isLocked && modalDraft.sgkFollow === "SGKLI" && hasSgkDays && (num(modalDraft.sgkDays) < 0 || num(modalDraft.sgkDays) > 30)) {
+      return failPersonSave("SGK gün sayısı 0-30 arasında olmalıdır. Resmi gün henüz belli değilse alanı boş bırakabilirsiniz.");
     }
     if (modalDraft.exitDate && modalDraft.exitDate < modalDraft.startDate) return failPersonSave("İşten çıkış tarihi işe giriş tarihinden önce olamaz.");
     const derivedEmploymentStatus = modalDraft.exitDate ? "Pasif" : "Aktif";
