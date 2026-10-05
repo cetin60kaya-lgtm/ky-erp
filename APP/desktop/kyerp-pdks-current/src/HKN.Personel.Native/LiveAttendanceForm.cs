@@ -258,7 +258,8 @@ public sealed partial class LiveAttendanceForm : Form
             from KIMLIK k left join GRUP g on g.KOD=k.GRUP
             where (k.IGTARIH is null or k.IGTARIH<@B) and (k.ICTARIH is null or k.ICTARIH>=@A)
             order by k.PKNO",new FbParameter("@A",day),new FbParameter("@B",next));
-        var physicalPunches=TerminalLiveArchiveService.ReadPhysicalPunches(day,day)
+        var livePhysicalPunches=TerminalLiveArchiveService.ReadPhysicalPunches(day,day);
+        var physicalPunches=livePhysicalPunches
             .Concat(DeviceEvidenceArchiveService.ReadDailyPunches(day))
             .GroupBy(x=>$"{x.EmployeeCode}|{x.OccurredAt:yyyyMMddHHmm}",StringComparer.Ordinal)
             .Select(g=>g.OrderByDescending(x=>x.VerifyMode).First())
@@ -274,7 +275,7 @@ public sealed partial class LiveAttendanceForm : Form
         var fallback=db.Query("select KOD,AD,IGIRISS,GGTOL,DCIKISS,ECTOL,DEVAMSIZLIK from PUANBILGI");
         var punchMap=physicalPunches.GroupBy(x=>x.EmployeeCode).ToDictionary(g=>g.Key,g=>g.OrderBy(x=>x.OccurredAt).ToArray(),StringComparer.OrdinalIgnoreCase);
         var operationalMap=operationalMoves.AsEnumerable().GroupBy(r=>S(r,"PKNO")).ToDictionary(g=>g.Key,g=>OperationalMovement(g),StringComparer.OrdinalIgnoreCase);
-        CaptureUnmatched(physicalPunches.Select(x=>(x.EmployeeCode,x.OccurredAt,"Fiziksel cihaz")),day);
+        CaptureUnmatched(livePhysicalPunches.Select(x=>(x.EmployeeCode,x.OccurredAt,"Fiziksel cihaz")),day);
         var leaveMap=leaves.AsEnumerable().GroupBy(r=>S(r,"PKNO")).ToDictionary(g=>g.Key,g=>LeaveInfo(g));
         var planMap=plans.AsEnumerable().GroupBy(r=>I(r,"GKOD")).ToDictionary(g=>g.Key,g=>ReadSchedule(g.First()));
         var fallbackMap=fallback.AsEnumerable().ToDictionary(r=>I(r,"KOD"),ReadSchedule);
