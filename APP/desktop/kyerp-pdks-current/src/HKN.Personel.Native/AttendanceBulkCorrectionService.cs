@@ -66,7 +66,7 @@ internal static class AttendanceBulkCorrectionService
             var oldTime = Convert.ToString(row[entry ? "GSAAT" : "CSAAT"])?.Trim() ?? string.Empty;
             int? oldMinute = row[entry ? "GDAKIKA" : "CDAKIKA"] == DBNull.Value ? null : Convert.ToInt32(row[entry ? "GDAKIKA" : "CDAKIKA"]);
             var minute = StableMinute(card, day, entry ? "NORMAL_GIRIS" : "NORMAL_CIKIS", from, to);
-            var newTime = TimeSpan.FromMinutes(minute).ToString(@"hh\\:mm", CultureInfo.InvariantCulture);
+            var newTime = TimeSpan.FromMinutes(minute).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
             var sira = Convert.ToInt32(row["SIRA"]);
 
             var affected = db.Execute(entry
@@ -125,7 +125,7 @@ internal static class AttendanceBulkCorrectionService
         foreach (var card in cards)
         {
             var minute = StableMinute(card, day, manualE ? (entry ? "E_GIRIS" : "E_CIKIS") : (entry ? "NORMAL_GIRIS_EKLE" : "NORMAL_CIKIS_EKLE"), from, to);
-            var time = TimeSpan.FromMinutes(minute).ToString(@"hh\\:mm", CultureInfo.InvariantCulture);
+            var time = TimeSpan.FromMinutes(minute).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
 
             if (entry)
             {
