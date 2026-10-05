@@ -409,7 +409,7 @@ public sealed partial class MainShellForm
 
     static PdksCommandId PrimaryParent(PdksCommandId id) => id switch
     {
-        PdksCommandId.Operations or PdksCommandId.LiveAttendance or PdksCommandId.AttendanceExceptions or
+        PdksCommandId.Operations or PdksCommandId.LiveAttendance or PdksCommandId.MonthlyAttendanceAdmin or PdksCommandId.AttendanceExceptions or
         PdksCommandId.AttendanceHistory or PdksCommandId.DepartmentAttendanceAnalytics
             => PdksCommandId.EntryExit,
         PdksCommandId.TerminalCenter or PdksCommandId.TerminalSettings or
