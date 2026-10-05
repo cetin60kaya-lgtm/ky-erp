@@ -22,10 +22,10 @@ public sealed class LegacyTerminalSettingsForm : Form
 
     public LegacyTerminalSettingsForm()
     {
-        Text = "Terminal / Kart Cihazı Ayarları";
+        Text = "Gelişmiş Hedef Terminal Ayarları";
         StartPosition = FormStartPosition.CenterParent;
-        Size = new Size(1180, 720);
-        MinimumSize = new Size(1040, 640);
+        Size = new Size(1240, 760);
+        MinimumSize = new Size(1040, 680);
         Font = new Font("Segoe UI", 9f);
         BackColor = PdksAppearance.Current.Canvas;
         Build();
@@ -65,7 +65,7 @@ public sealed class LegacyTerminalSettingsForm : Form
         var hero = new Panel { Dock = DockStyle.Fill, BackColor = surface, Padding = new Padding(18,12,18,10), Margin = new Padding(0,0,0,10) };
         hero.Paint += (_,e)=>{using var p=new Pen(border);e.Graphics.DrawRectangle(p,0,0,Math.Max(0,hero.Width-1),Math.Max(0,hero.Height-1));};
         var title = new Label { Text="Terminal Merkezi", AutoSize=true, Location=new Point(18,12), Font=new Font("Segoe UI",13f,FontStyle.Bold), ForeColor=text };
-        var hint = new Label { Text="Fiziksel kart cihazı bağlantısı, veri aktarımı ve sürücü işlemleri", AutoSize=true, Location=new Point(19,42), ForeColor=muted, Font=new Font("Segoe UI",8.8f) };
+        var hint = new Label { Text="Yalnız mevcut Hedef / FP_CLOCK cihazının gelişmiş bağlantı profili. Günlük kullanıcı, kart ve log işlemleri Terminal & Kimlik Merkezi'nden yapılır.", AutoSize=true, Location=new Point(19,42), ForeColor=muted, Font=new Font("Segoe UI",8.8f) };
         status.Location=new Point(650,18);status.Width=470;status.Height=34;status.TextAlign=ContentAlignment.MiddleRight;
         hero.Controls.Add(title);hero.Controls.Add(hint);hero.Controls.Add(status);
         root.Controls.Add(hero,0,0);
@@ -103,15 +103,15 @@ public sealed class LegacyTerminalSettingsForm : Form
         var operationsCard=TerminalCard(border);
         operationsCard.Margin=new Padding(0,12,0,0);
         var opRoot=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=5,Padding=new Padding(18),BackColor=surface};
-        opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,34));opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,52));opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,50));opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,52));opRoot.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,34));opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,92));opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,50));opRoot.RowStyles.Add(new RowStyle(SizeType.Absolute,52));opRoot.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         opRoot.Controls.Add(new Label{Text="Cihaz İşlemleri",Dock=DockStyle.Fill,Font=new Font("Segoe UI",10.5f,FontStyle.Bold),ForeColor=text},0,0);
-        var opButtons=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Padding=new Padding(0,6,0,0)};
+        var opButtons=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,AutoScroll=true,Padding=new Padding(0,6,0,0)};
         Button Action(string label,Func<Task> action,int width=145,bool primary=false){var b=TerminalButton(label,width,primary);b.Click+=async(_,_)=>{b.Enabled=false;try{await action();}finally{if(!IsDisposed)b.Enabled=true;}};opButtons.Controls.Add(b);return b;}
-        Action("BAĞLAN TEST",()=>TestConnectionAsync(true),125,true);
-        Action("CİHAZ TARİH/SAAT OKU",ReadDeviceTimeAsync,172);
-        Action("PC SAATİNE AYARLA",SetDeviceTimeAsync,158);
-        Action("CİHAZDAN OKU",PreviewPunchesAsync,132);
-        Action("KAYITLARI AKTAR",TransferNowAsync,142,true);
+        Action("BAĞLANTI TESTİ",()=>TestConnectionAsync(true),145,true);
+        Action("CİHAZ SAATİNİ OKU",ReadDeviceTimeAsync,165);
+        Action("PC SAATİYLE EŞİTLE",SetDeviceTimeAsync,165);
+        Action("LOGLARI OKU",PreviewPunchesAsync,130);
+        Action("TNF + FDB AKTAR",TransferNowAsync,150,true);
         Action("SÜRÜCÜYÜ ONAR",RepairAsync,142);
         opRoot.Controls.Add(opButtons,0,1);
 
