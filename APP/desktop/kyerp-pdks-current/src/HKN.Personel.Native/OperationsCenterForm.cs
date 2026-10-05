@@ -9,6 +9,7 @@ public sealed class OperationsCenterForm : Form
     [
         PdksCommandId.Operations,
         PdksCommandId.LiveAttendance,
+        PdksCommandId.MonthlyAttendanceAdmin,
         PdksCommandId.AttendanceExceptions,
         PdksCommandId.AttendanceHistory,
         PdksCommandId.DepartmentAttendanceAnalytics,
