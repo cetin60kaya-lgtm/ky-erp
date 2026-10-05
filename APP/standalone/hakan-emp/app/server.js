@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { spawn } = require('child_process');
 const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = process.env.HAKAN_EMP_APP_ROOT || __dirname;
@@ -23,8 +24,14 @@ function dir(p){if(p&&!fs.existsSync(p))fs.mkdirSync(p,{recursive:true})}
 function oneDrive(){return ['D:/Onedrive-Hkn/OneDrive','D:/onedrive-Hkn/OneDrive','D:/onedrive hkngursu/OneDrive',process.env.OneDrive,process.env.OneDriveCommercial].filter(Boolean).find(p=>fs.existsSync(p))||''}
 
 const OD=process.env.HAKAN_EMP_DISABLE_SYNC==='1'?'':oneDrive(),SYNC=OD?path.join(OD,'HAKAN EMP','SYNC'):'',PCOUT=SYNC?path.join(SYNC,'PC-OUTBOX'):'',ANDOUT=SYNC?path.join(SYNC,'ANDROID-OUTBOX'):'',ACK=SYNC?path.join(SYNC,'ACK'):'',ARCH=SYNC?path.join(SYNC,'ARCHIVE'):'';
-const IMGROOT=OD?path.join(OD,'HAKAN EMP','BELGELER','CEKLER'):path.join(DATA_ROOT,'check-images');
-[SYNC,PCOUT,ANDOUT,ACK,ARCH,IMGROOT].filter(Boolean).forEach(dir);
+const DEFAULT_APP_ROOT=OD?path.join(OD,'HAKAN EMP'):DATA_ROOT;
+const DEFAULT_IMGROOT=path.join(DEFAULT_APP_ROOT,'CEK GORSELLERI');
+const DEFAULT_INVOICE_ROOT=path.join(DEFAULT_APP_ROOT,'FATURA HAVUZU');
+const DEFAULT_INVOICE_IN=path.join(DEFAULT_INVOICE_ROOT,'GELEN');
+const DEFAULT_INVOICE_DONE=path.join(DEFAULT_INVOICE_ROOT,'ISLENDI');
+const DEFAULT_INVOICE_PENDING=path.join(DEFAULT_INVOICE_ROOT,'ESLESTIRME BEKLIYOR');
+const DEFAULT_INVOICE_ERROR=path.join(DEFAULT_INVOICE_ROOT,'HATALI');
+[SYNC,PCOUT,ANDOUT,ACK,ARCH,DEFAULT_IMGROOT,DEFAULT_INVOICE_IN,DEFAULT_INVOICE_DONE,DEFAULT_INVOICE_PENDING,DEFAULT_INVOICE_ERROR].filter(Boolean).forEach(dir);
 
 db.exec(`
 PRAGMA journal_mode=WAL;
