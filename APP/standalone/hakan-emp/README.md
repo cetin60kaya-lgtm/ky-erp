@@ -27,7 +27,7 @@ cd "APP\standalone\hakan-emp"
 npm run dist
 ```
 
-Portable output: `dist\HAKAN-EMP-1.3.0.exe`.
+Portable output: `dist\HAKAN-EMP-1.4.0.exe`.
 
 ## Current workflow
 
@@ -37,3 +37,13 @@ Portable output: `dist\HAKAN-EMP-1.3.0.exe`.
 - Notes: Patron ↔ Muhasebe notes, priority, pinning, active/passive/completed states.
 - Payment reminders: current-account company or free-person reminder.
 - Settings: company, production, machine/operator, cheque, sync and backup.
+
+## Weekly manufacturing pool
+
+- Active work lives in one manufacturing pool until dispatch and invoice quantities are fully balanced.
+- Production slips are grouped automatically by their slip date into Monday-Sunday seven-day periods.
+- Changing the selected week resets only the weekly production view; it never deletes or resets the active job's historical production.
+- The same open model can receive new production slips in later weeks without reopening the model.
+- When incoming/production/dispatch/invoice balance reaches completion, the job automatically leaves the active pool and appears under Completed.
+- The model drawer is the single work center for new production, incoming quantity adjustment, dispatch, invoice, current account and internal notes.
+- Historical data is preserved. No weekly rollover deletes prior records.
