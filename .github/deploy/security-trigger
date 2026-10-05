@@ -1,3 +1,3 @@
-deploy: security-approvals-front-codeinput-hotfix
-canonical: f38daba5f92ffdc1ce782da2f828d130d106df97
-requested: 2026-10-04T16:12:00Z
+deploy: security-push-live-sync-hotfix
+canonical: ae39b30a3ec885994c2e1bdee9339b294f52534e
+requested: 2026-10-05T07:30:00Z
