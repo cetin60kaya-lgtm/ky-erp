@@ -287,7 +287,7 @@ public sealed class TerminalCenterForm : Form
         var p = PdksAppearance.Current;
         var page = Page("Kayıt / Senkron");
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, Padding = new Padding(12), BackColor = p.Canvas };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var bar = PdksUiKit.Card(10);
@@ -296,6 +296,8 @@ public sealed class TerminalCenterForm : Form
         flow.Controls.Add(ActionButton("TNF + FDB'ye Aktar", 170, SyncNowAsync, true));
         flow.Controls.Add(ActionButton("Aktarıp Logları Temizle", 195, SyncAndClearLogsAsync, false, PdksActionRole.Danger));
         flow.Controls.Add(ActionButton("Arşivle ve Logları Sıfırla", 205, ArchiveAndClearLogsAsync, false, PdksActionRole.Danger));
+        flow.Controls.Add(ActionButton("CANLI • Son 7 Günü Koru", 195, ClearLiveExceptWeekAsync, false));
+        flow.Controls.Add(ActionButton("CANLI • Tam Sıfırla", 165, ClearAllLiveAsync, false, PdksActionRole.Danger));
         bar.Controls.Add(flow);
         root.Controls.Add(bar, 0, 0);
 
@@ -631,6 +633,32 @@ public sealed class TerminalCenterForm : Form
         MessageBox.Show(result.Message, "Logları Sıfırla", MessageBoxButtons.OK, result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         await RefreshDeviceStatusAsync();
         if (result.Success) logsGrid.Rows.Clear();
+    }
+
+    Task ClearLiveExceptWeekAsync()
+    {
+        if (MessageBox.Show(
+            "CANLI arşivde yalnız son 7 takvim günü korunsun, daha eski CANLI kayıtlar temizlensin mi?\n\nAna TNF, FDB ve cihaz kayıtları değişmez.",
+            "CANLI Arşiv Temizliği", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            return Task.CompletedTask;
+
+        var result = TerminalMaintenanceService.ClearLiveExceptLastWeek();
+        SetStatus(result.Message, true);
+        MessageBox.Show(result.Message, "CANLI Arşiv", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return Task.CompletedTask;
+    }
+
+    Task ClearAllLiveAsync()
+    {
+        if (MessageBox.Show(
+            "CANLI arşiv tamamen sıfırlansın mı?\n\nBu işlem yalnız CANLI önizleme/ham arşivini temizler; ana TNF, FDB ve cihaz kayıtlarına dokunmaz.",
+            "CANLI Arşivi Sıfırla", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+            return Task.CompletedTask;
+
+        var result = TerminalMaintenanceService.ClearAllLive();
+        SetStatus(result.Message, true);
+        MessageBox.Show(result.Message, "CANLI Arşiv", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return Task.CompletedTask;
     }
 
     async Task ClearUsersAsync()
