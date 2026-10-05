@@ -269,17 +269,19 @@ test("IK overview is finance-focused and leaves live attendance operations to PD
   assert.match(page, /Tek Kişi Fişi/);
 });
 
-test("payroll edit UI uses one source center while final-control remains a snapshot boundary", () => {
+test("payroll final control exposes every financial value and saves back to canonical sources", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const api = frontend("services/ik/monthlyApi.js");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
-  assert.match(page, /Modal title="Bordro Öncesi Personel Kontrolü"/);
-  for (const label of ["Gerçek Maaş", "Yol Yardımı", "Banka Planı", "Elden Planı", "Mesai Saati", "Tutar"]) {
-    assert.ok(page.includes(label), `Eksik kaynak düzenleme alanı: ${label}`);
+  assert.match(page, /const modalTitle = finalMode \? "Son Bordro Kontrolü" : "Bordro Öncesi Giriş Kontrolü"/);
+  for (const label of ["Maaş", "Yol", "EK Ödeme", "Mesai Toplamı", "Avans Toplamı", "Kesinti Toplamı", "İcra \/ Haciz", "Bankadan Ödenecek", "Elden Ödenecek"]) {
+    assert.ok(page.includes(label), `Eksik son kontrol alanı: ${label}`);
   }
-  assert.match(page, /savePrePayrollMovement/);
-  assert.match(page, /savePerson/);
+  assert.match(page, /saveFinalPayrollControl/);
+  assert.match(page, /saveIkAdvancedPersonCard/);
+  assert.match(page, /saveIkAdvancedFinalPayrollControl/);
+  assert.match(page, /Ana Plan Salt Okunur/);
   assert.doesNotMatch(page, /modal === "bordroDuzelt"/);
   assert.doesNotMatch(page, /savePayrollOverride/);
   assert.match(api, /\/ik\/advanced\/payroll\/final-control/);
