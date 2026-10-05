@@ -27,7 +27,6 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
     readonly string? initialPersonCard;
     DataTable data = new();
     bool loading;
-    bool periodProtected;
 
     public MonthlyPayrollAdjustmentForm(string? initialPersonCard = null, DateTime? initialPeriod = null)
     {
@@ -360,7 +359,6 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
         try
         {
             var info=PayrollPeriodLockService.Get(db,Period().A);
-            periodProtected=info.Locked;
             periodLockButton.Text=info.Locked?"Ay Kilidini Aç":"Ayı Kilitle";
             periodLockState.Text=PayrollPeriodLockService.Caption(info);
             periodLockState.ForeColor=info.Locked?PdksAppearance.Current.Warning:PdksAppearance.Current.Success;
