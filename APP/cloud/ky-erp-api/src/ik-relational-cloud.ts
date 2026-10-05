@@ -1597,8 +1597,14 @@ async function savePersonCard(c: Context<AppEnv>) {
     });
   }
 
+  const freshVersionRow = await first(c, `SELECT e.code,e.updated_at,s.updated_at AS card_updated_at
+      FROM hr_monthly_employees e
+      LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
+      WHERE e.id=? AND e.main_company_id=? LIMIT 1`, [employeeId, companyId]);
+  const freshVersion = [text(freshVersionRow?.updated_at), text(freshVersionRow?.card_updated_at)].filter(Boolean).sort().at(-1) || "";
   return okData(c, {
-    employeeId, saved: true, baseEmployeeId, extraPaymentAmount: autoExtra,
+    employeeId, saved: true, code: text(freshVersionRow?.code), version: freshVersion, updatedAt: freshVersion,
+    baseEmployeeId, extraPaymentAmount: autoExtra,
     legalDeductionType: legalType, garnishmentSource: legalSource,
     overtimeHourlyBase, deductionHourlyBase,
     personnelStatus, period, sgkCovered, sgkDays, effectiveDate,
