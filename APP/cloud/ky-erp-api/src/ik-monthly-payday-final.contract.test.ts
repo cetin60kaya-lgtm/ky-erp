@@ -102,16 +102,15 @@ test("finance create update delete mutations are visible to live sync", () => {
   assert.match(relational, /key:\s*"audit"/);
 });
 
-test("payroll row exposes quick source actions and balanced bank cash editing", () => {
+test("payroll row edits canonical sources instead of a separate payroll override", () => {
   const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
   assert.match(monthly, /payroll-row-actions/);
-  assert.match(monthly, /Mesai Ekle/);
-  assert.match(monthly, /Avans Ekle/);
-  assert.match(monthly, /Kesinti Ekle/);
-  assert.match(monthly, /editPayrollPaymentSplit/);
-  assert.match(monthly, /Bordrodan Düzelt/);
-  assert.match(monthly, /reconcilePaymentSplit/);
+  assert.match(monthly, /Kaynakları Düzenle/);
+  assert.match(monthly, /Kaynak Hareketleri \/ Log/);
+  assert.match(monthly, /openPayPlan\(row\.employee\)/);
+  assert.doesNotMatch(monthly, /editPayrollPaymentSplit/);
+  assert.doesNotMatch(monthly, /Bordrodan Düzelt/);
 });
 
 
