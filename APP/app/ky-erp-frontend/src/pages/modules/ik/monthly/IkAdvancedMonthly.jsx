@@ -366,6 +366,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const [movementEffectFilter, setMovementEffectFilter] = useState("ALL");
   const [payrollPaymentFilter, setPayrollPaymentFilter] = useState("ALL");
   const [payrollStatusFilter, setPayrollStatusFilter] = useState("ALL");
+  const [payrollEmploymentFilter, setPayrollEmploymentFilter] = useState("ACTIVE");
   const [documentFilter, setDocumentFilter] = useState("ALL");
   const [selectedId, setSelectedId] = useState("");
   const [modal, setModal] = useState(null);
@@ -627,6 +628,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setMovementEffectFilter("ALL");
     setPayrollPaymentFilter("ALL");
     setPayrollStatusFilter("ALL");
+    setPayrollEmploymentFilter("ACTIVE");
     setDocumentFilter("ALL");
     setNotice("");
   };
@@ -788,6 +790,11 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     return payrollRows.filter((row) => {
       const employee = row.employee || {};
       if (needle && !upper(`${employee.fullName || ""} ${employee.code || ""} ${employee.department || ""}`).includes(needle)) return false;
+      const employmentState = employmentStateAtPeriod(employee, period);
+      const activeInPeriod = ["ACTIVE", "NEW_HIRE", "MISSING_HIRE_DATE"].includes(employmentState);
+      const leftInPeriod = ["EXIT_MONTH", "ENTERED_EXITED"].includes(employmentState);
+      if (payrollEmploymentFilter === "ACTIVE" && !activeInPeriod) return false;
+      if (payrollEmploymentFilter === "EXITED" && !leftInPeriod) return false;
       if (payrollPaymentFilter === "BANK" && num(row.bank) <= 0) return false;
       if (payrollPaymentFilter === "CASH" && num(row.cash) <= 0) return false;
       if (payrollPaymentFilter === "MIXED" && !(num(row.bank) > 0 && num(row.cash) > 0)) return false;
@@ -797,7 +804,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       if (payrollStatusFilter === "CONTROL" && (paid || Math.abs(num(row.diff)) <= 0.01)) return false;
       return true;
     });
-  }, [payrollRows, payrollPaymentFilter, payrollStatusFilter, search]);
+  }, [payrollRows, payrollEmploymentFilter, payrollPaymentFilter, payrollStatusFilter, period, search]);
 
   const visibleDocumentEmployeeIds = useMemo(() => {
     const needle = upper(search).trim();
@@ -1288,14 +1295,20 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       }
 
       const savedCard = await saveIkAdvancedPersonCard(employeeId, cardPayload);
+      const successMessage = savedCard?.periodComplianceSkipped
+        ? `Kaydedildi ✓ ${MONTHS[month - 1]} ${year} dönemi kapalı olduğu için dönemsel SGK alanlarına dokunulmadı.`
+        : "Kaydedildi ✓";
       setSelectedId(employeeId);
-      setModal(null);
-      setNotice(
-        savedCard?.periodComplianceSkipped
-          ? `Personel kartı güncellendi. ${MONTHS[month - 1]} ${year} dönemi kapalı olduğu için yalnız dönemsel SGK alanlarına dokunulmadı.`
-          : (modalDraft.id ? "Personel kartı güncellendi." : "Yeni personel kartı oluşturuldu."),
-      );
-      await load({ force: true });
+      setModalDraft((old) => ({
+        ...old,
+        id: employeeId,
+        code: savedCard?.code || cardPayload.personelKodu || old.code,
+        version: savedCard?.version || savedCard?.updatedAt || old.version,
+        formMessage: successMessage,
+        changeNote: "",
+      }));
+      setNotice("");
+      await load({ force: true, silent: true });
     } catch (error) {
       const detail = error?.message || "Personel kartı kaydedilemedi.";
       const message = createdEmployeeId ? `Personel ana kaydı oluştu ancak kart ayrıntıları tamamlanamadı: ${detail}` : detail;
@@ -2515,6 +2528,10 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       <section>
         <div className="page-head"><div><h1>Son Bordro ve Ödeme Merkezi</h1><p>Resmi bordro, puantaj, avans/kesinti ve banka ödemesi çıktı öncesi burada son kez kontrol edilir.</p></div><div className="group"><span className="badge blue">{MONTHS[month - 1]} {year}</span><span className={`badge ${data.close?.isLocked ? "red" : "blue"}`}>{data.close?.isLocked ? "Dönem Kapalı" : "Dönem Açık"}</span><span className={`badge ${balanced ? "green" : "red"}`}>{balanced ? "Ödeme dengeli" : "Ödeme kontrol gerekli"}</span></div></div>
         {filters({ third: "Personel ara", fourth: "Odeme", fifth: "Durum" })}
+        <div className="workbar payroll-employment-switch"><div className="group">
+          <button type="button" className={`btn ${payrollEmploymentFilter === "ACTIVE" ? "primary" : ""}`} onClick={() => setPayrollEmploymentFilter("ACTIVE")}>Aktif ({payrollRows.filter((row) => ["ACTIVE","NEW_HIRE","MISSING_HIRE_DATE"].includes(employmentStateAtPeriod(row.employee, period))).length})</button>
+          <button type="button" className={`btn ${payrollEmploymentFilter === "EXITED" ? "orange" : ""}`} onClick={() => setPayrollEmploymentFilter("EXITED")}>İşten Ayrılan ({payrollRows.filter((row) => ["EXIT_MONTH","ENTERED_EXITED"].includes(employmentStateAtPeriod(row.employee, period))).length})</button>
+        </div><span>Seçili aydan önce ayrılan personel bordroya alınmaz.</span></div>
         <div className="sumgrid short">{summaryBox("Ödeme listesi", filteredPayrollRows.length, "", `${payrollRows.length} toplam · ${selectedPayrollIds.length || payrollRows.length} seçili`)}{summaryBox("Resmi bordro neti", money(employees.reduce((sum,item)=>sum+num(item.sgkNet),0)))}{summaryBox("Banka", money(summary.bank))}{summaryBox("Elden", money(summary.cash))}{summaryBox("Avans / Kesinti", `${money(summary.advance)} / ${money(summary.deduction)}`, "orange")}{summaryBox("EK / İcra-Haciz", `${money(summary.extra)} / ${money(summary.garnishment)}`, summary.garnishment ? "orange" : "")}{summaryBox("Net Toplam", money(summary.net), balanced ? "green" : "red")}</div>
         <div className="workbar"><div className="group"><button className="btn primary" disabled={busy || data.close?.isLocked} onClick={refreshPayroll}>Yeniden Hesapla</button><button className="btn" disabled={busy || data.close?.isLocked} onClick={savePayroll}>Ara Kaydet</button><button className="btn" disabled={busy || data.close?.isLocked} onClick={() => openPayroll()}>Seçiliyi Düzenle</button><button className="btn" disabled={busy || !balanced} onClick={openBulkPayment}>Banka / Toplu Çıktı</button><button className="btn green" disabled={busy || !balanced} onClick={printPayrollReport}>Bordroyu Tamamla / PDF</button><button className="btn green" disabled={busy || !balanced} onClick={printPaymentSlips}>10’lu Fiş + Tamamla</button><button className="btn green" disabled={busy} onClick={() => setModal("fis")}>Tek Kişi Fiş + Tamamla</button></div><button className="btn green" disabled={busy || !balanced} onClick={exportPayroll}>Tamamla / Excel</button></div>
         {data.close?.isLocked ? <div className="warnline warn">Bu dönem kapalıdır. Tamamlanmış bordrolar tekrar görüntülenebilir ve yeniden çıktı alınabilir.</div> : <div className={`warnline ${balanced ? "ok" : "warn"}`}>{balanced ? "Banka + Elden = Net. Resmi bordro/PDF/fiş/Excel çıktısını almak aynı anda ödeme tamamlandı onayıdır; ayrıca Ödendi işlemi yapılmaz." : "Toplam ödeme banka + elden ile eşleşmiyor. Final çıktı alınamaz."}</div>}
