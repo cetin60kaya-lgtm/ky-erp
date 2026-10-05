@@ -1469,7 +1469,7 @@ async function savePersonCard(c: Context<AppEnv>) {
     return error(c, 409, "IK_PERIOD_LOCKED", "Seçili dönem kapalı. Personel ana kartını güncellemek için dönemsel SGK alanlarını değiştirmeden tekrar kaydedin.");
   }
   const sgkCovered = body.sgkFollow === true || upper(body.sgkStatus) === "VAR";
-  const maxSgkDays = new Date(Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0).getDate() || 31;
+  const maxSgkDays = 30;
   const rawSgkDays = body.sgkDays === null || body.sgkDays === undefined || body.sgkDays === "" ? null : Math.round(number(body.sgkDays));
   if (rawSgkDays !== null && (rawSgkDays < 0 || rawSgkDays > maxSgkDays)) {
     return error(c, 400, "SGK_DAYS_INVALID", `SGK gün sayısı 0-${maxSgkDays} arasında olmalıdır.`);
