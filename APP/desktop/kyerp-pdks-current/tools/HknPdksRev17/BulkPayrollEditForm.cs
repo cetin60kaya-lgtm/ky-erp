@@ -54,6 +54,7 @@ public sealed class BulkPayrollEditForm : Form
         outer.RowCount++;
 
         AddGroup(outer, "NORMAL ÇALIŞMA");
+        AddField(outer, "DMAAS", "Maaşı");
         AddField(outer, "GUN1", "N.Çalışma Gün");
         AddField(outer, "SAAT1", "N.Çalışma Saat");
         AddField(outer, "UCRET1", "Normal Ücret");
