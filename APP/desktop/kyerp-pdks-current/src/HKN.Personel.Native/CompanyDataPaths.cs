@@ -76,14 +76,38 @@ internal static class CompanyDataPaths
 
     static void MigrateLegacyLayout()
     {
-        CopyDirectoryIfExists(Path.Combine(WorkspaceRoot, "03_DATA", CompanyName), Data, "*.FDB");
-        CopyDirectoryIfExists(Path.Combine(WorkspaceRoot, "03_DATA", CompanyName), Data, "*.GDB");
+        var oldDataRoot = Path.Combine(WorkspaceRoot, "03_DATA", CompanyName);
+        CopyDirectoryIfExists(oldDataRoot, Data, "*.FDB");
+        CopyDirectoryIfExists(oldDataRoot, Data, "*.GDB");
         CopyDirectoryIfExists(Path.Combine(WorkspaceRoot, "04_TNF", CompanyName), Tnf, "*.Tnf");
-        CopyDirectoryIfExists(Path.Combine(WorkspaceRoot, "05_BACKUP", CompanyName), Backup, "*");
-        CopyDirectoryIfExists(Path.Combine(WorkspaceRoot, "09_LOG", CompanyName), Logs, "*");
+        CopyDirectoryTreeIfExists(Path.Combine(WorkspaceRoot, "05_BACKUP", CompanyName), Backup);
+        CopyDirectoryTreeIfExists(Path.Combine(WorkspaceRoot, "09_LOG", CompanyName), Logs);
+        CopyDirectoryTreeIfExists(Path.Combine(oldDataRoot, ".system"), SystemData);
+        CopyDirectoryTreeIfExists(Path.Combine(oldDataRoot, "Reports"), Reports);
 
-        var oldDb = Path.Combine(WorkspaceRoot, "03_DATA", CompanyName, "KY_PDKS_DATA.FDB");
+        var oldDb = Path.Combine(oldDataRoot, "KY_PDKS_DATA.FDB");
         if (!File.Exists(Database) && File.Exists(oldDb)) File.Copy(oldDb, Database, false);
+    }
+
+    static void CopyDirectoryTreeIfExists(string source, string destination)
+    {
+        if (!Directory.Exists(source)) return;
+        try
+        {
+            foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(source, directory);
+                Directory.CreateDirectory(Path.Combine(destination, relative));
+            }
+            foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(source, file);
+                var target = Path.Combine(destination, relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                if (!File.Exists(target)) File.Copy(file, target, false);
+            }
+        }
+        catch { }
     }
 
     static void HideLegacyFolders()
