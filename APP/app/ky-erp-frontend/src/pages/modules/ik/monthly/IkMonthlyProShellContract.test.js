@@ -211,10 +211,16 @@ test("annual leave keeps proof-grade day-by-day snapshots and printable ledger",
   assert.match(monthly, /effectType/);
 });
 
-test("monthly control report is non-finalizing and includes full payroll totals", () => {
+test("monthly control report is non-finalizing, auto-fit and keeps full payroll totals", () => {
   assert.match(monthly, /const printMonthlyControlReport = async \(\) =>/);
   assert.match(monthly, /Aylık Kontrol Çıktısı/);
   assert.match(monthly, /Bu raporu almak hiçbir personeli “Ödendi” yapmaz/);
+  assert.match(monthly, /1\. Hak Ediş Kontrolü/);
+  assert.match(monthly, /2\. Kesinti ve Ödeme Kontrolü/);
+  assert.match(monthly, /report-section payment/);
+  assert.match(monthly, /page-break-before:always/);
+  assert.match(monthly, /earned col\.person\{width:24%\}/);
+  assert.match(monthly, /payment-table col\.person\{width:25%\}/);
   assert.match(monthly, /GENEL TOPLAM/);
   assert.match(monthly, /Top\. Kesinti/);
   assert.match(monthly, /salary: sum\.salary \+ num\(row\.salary\)/);
