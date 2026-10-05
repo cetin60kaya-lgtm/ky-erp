@@ -191,7 +191,23 @@ public sealed class LegacyPuantajForm : Form
 
     void ReloadPeople(FilterSet f)
     {
-        if(!IsHandleCreated)return;try{var q=EmployeeFilter(f);var dt=db.Query($"select k.PKNO,k.AD,k.SOYAD,k.IGTARIH from KIMLIK k where {q.Sql} order by k.PKNO",q.Params.ToArray());people.BeginUpdate();people.Items.Clear();foreach(DataRow r in dt.Rows)people.Items.Add($"{r["PKNO"],-6} {r["AD"]} {r["SOYAD"]}");people.EndUpdate();}catch{ }
+        if(!IsHandleCreated)return;
+        try
+        {
+            var q=EmployeeFilter(f);
+            var dt=db.Query($"select k.PKNO,k.AD,k.SOYAD,k.IGTARIH,k.GRUP,coalesce(g.AD,'') GRUP_AD from KIMLIK k left join GRUP g on g.KOD=k.GRUP where {q.Sql} order by k.PKNO",q.Params.ToArray());
+            var policies=AttendanceGroupPolicyStore.Load(db);
+            people.BeginUpdate();people.Items.Clear();
+            foreach(DataRow r in dt.Rows)
+            {
+                var groupCode=r["GRUP"]==DBNull.Value?-1:Convert.ToInt32(r["GRUP"]);
+                var groupName=Convert.ToString(r["GRUP_AD"])?.Trim()??"";
+                if(!AttendanceGroupPolicyStore.RequiresCardTracking(policies,groupCode,groupName))continue;
+                people.Items.Add($"{r["PKNO"],-6} {r["AD"]} {r["SOYAD"]}");
+            }
+            people.EndUpdate();
+        }
+        catch{ }
     }
 
     void Calculate(FilterSet f,ProgressBar? bar=null)
@@ -201,10 +217,16 @@ public sealed class LegacyPuantajForm : Form
             if(f.End.Value.Date<f.Start.Value.Date)throw new InvalidOperationException("Bitiş tarihi başlangıç tarihinden önce olamaz.");
             var kilit = PayrollPeriodLockService.FirstLocked(db, f.Start.Value.Date, f.End.Value.Date);
             if(kilit is not null){ MessageBox.Show($"{kilit.Month:00}.{kilit.Year} bordro dönemi kilitli. Puantaj hesaplama bu aya veri yazamaz.","Dönem Kilitli",MessageBoxButtons.OK,MessageBoxIcon.Warning); return; }
-            var q=EmployeeFilter(f);var emp=db.Query($"select k.PKNO,k.BOLUM,k.GRUP from KIMLIK k where {q.Sql}",q.Params.ToArray());if(emp.Rows.Count==0){MessageBox.Show("Seçime uygun personel bulunamadı.",Text);return;}
+            var q=EmployeeFilter(f);
+            var emp=db.Query($"select k.PKNO,k.BOLUM,k.GRUP,coalesce(g.AD,'') GRUP_AD from KIMLIK k left join GRUP g on g.KOD=k.GRUP where {q.Sql}",q.Params.ToArray());
+            var policies=AttendanceGroupPolicyStore.Load(db);
+            var employees=emp.AsEnumerable()
+                .Where(r=>AttendanceGroupPolicyStore.RequiresCardTracking(policies,ReadInt(r,"GRUP")??-1,Convert.ToString(r["GRUP_AD"])??""))
+                .Select(r=>new Employee(Convert.ToString(r["PKNO"])??"",ReadInt(r,"BOLUM"),ReadInt(r,"GRUP"))).ToArray();
+            if(employees.Length==0){MessageBox.Show("Seçime uygun kart takipli personel bulunamadı. Kart takibi kapalı grupların mevcut puantajı değiştirilmez.",Text);return;}
             var auditMode=string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT"),"1",StringComparison.Ordinal);
-            if(!auditMode && MessageBox.Show($"{f.Start.Value:dd.MM.yyyy} - {f.End.Value:dd.MM.yyyy} aralığındaki giriş-çıkış, izin, tatil ve grup planlarından puantaj oluşturulsun/güncellensin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
-            var employees=emp.AsEnumerable().Select(r=>new Employee(Convert.ToString(r["PKNO"])??"",ReadInt(r,"BOLUM"),ReadInt(r,"GRUP"))).ToArray();var allowed=employees.Select(x=>x.Code).ToHashSet();
+            if(!auditMode && MessageBox.Show($"{f.Start.Value:dd.MM.yyyy} - {f.End.Value:dd.MM.yyyy} aralığındaki giriş-çıkış, izin, tatil ve grup planlarından puantaj oluşturulsun/güncellensin mi?\n\nKart takibi kapalı gruplar bu hesaplamaya alınmaz.",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+            var allowed=employees.Select(x=>x.Code).ToHashSet();
             var a=f.Start.Value.Date;var b=f.End.Value.Date.AddDays(1);
             var gc=db.Query("select PKNO,GTARIH,GSAAT,CTARIH,CSAAT from GIRCIK where GTARIH>=@A and GTARIH<@B order by PKNO,GTARIH",new FbParameter("@A",a),new FbParameter("@B",b));
             var leave=db.Query("select PKNO,TARIH,SUREDAKIKA,TIP from OZELIZIN where TARIH>=@A and TARIH<@B",new FbParameter("@A",a),new FbParameter("@B",b));
