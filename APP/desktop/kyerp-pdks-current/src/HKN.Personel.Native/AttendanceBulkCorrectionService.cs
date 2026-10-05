@@ -56,7 +56,7 @@ internal static class AttendanceBulkCorrectionService
 
             var oldTime = Convert.ToString(row[entry ? "GSAAT" : "CSAAT"])?.Trim() ?? string.Empty;
             var minute = StableMinute(card, day, entry ? "NORMAL_GIRIS" : "NORMAL_CIKIS", from, to);
-            var newTime = TimeSpan.FromMinutes(minute).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
+            var newTime = TimeSpan.FromMinutes(minute).ToString(@"hh\\:mm", CultureInfo.InvariantCulture);
             var sira = Convert.ToInt32(row["SIRA"]);
 
             var affected = db.Execute(entry
@@ -80,7 +80,7 @@ internal static class AttendanceBulkCorrectionService
 
         var op = entry ? "Geç giriş düzeltme" : "Erken çıkış düzeltme";
         return new(op, cards.Length, changedCards.Count, skipped, changedCards,
-            $"{op}: {changedCards.Count} kayıt {from:hh\:mm}-{to:hh\:mm} aralığına dağıtıldı; DATA ve yıllık TNF birlikte eşitlendi. E oluşturulmadı. Atlanan={skipped}.");
+            $"{op}: {changedCards.Count} kayıt {from:hh\\:mm}-{to:hh\\:mm} aralığına dağıtıldı; DATA ve yıllık TNF birlikte eşitlendi. E oluşturulmadı. Atlanan={skipped}.");
     }
 
     static AttendanceBulkCorrectionResult AddManual(
@@ -95,7 +95,7 @@ internal static class AttendanceBulkCorrectionService
         foreach (var card in cards)
         {
             var minute = StableMinute(card, day, entry ? "E_GIRIS" : "E_CIKIS", from, to);
-            var time = TimeSpan.FromMinutes(minute).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
+            var time = TimeSpan.FromMinutes(minute).ToString(@"hh\\:mm", CultureInfo.InvariantCulture);
 
             if (entry)
             {
