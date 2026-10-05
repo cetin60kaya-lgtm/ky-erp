@@ -49,7 +49,8 @@ internal static class Program
                     else if (mode == "users") ReadUsers(clock, machine);
                     else if (mode == "deleteuser")
                     {
-                        if (args.Length < 6 || !int.TryParse(args[5], NumberStyles.Integer, CultureInfo.InvariantCulture, out var enroll))
+                        int enroll;
+                        if (args.Length < 6 || !int.TryParse(args[5], NumberStyles.Integer, CultureInfo.InvariantCulture, out enroll))
                             return Fail("Silinecek kullanıcı numarası geçersiz.");
                         bool ok = DeleteUser(clock, machine, enroll);
                         Console.WriteLine(ok ? "ACTION|OK|DELETEUSER|" + enroll : "ACTION|ERROR|DELETEUSER|" + enroll);
@@ -63,9 +64,11 @@ internal static class Program
                     }
                     else if (mode == "movecard")
                     {
+                        int oldEnroll;
+                        int newEnroll;
                         if (args.Length < 7 ||
-                            !int.TryParse(args[5], NumberStyles.Integer, CultureInfo.InvariantCulture, out var oldEnroll) ||
-                            !int.TryParse(args[6], NumberStyles.Integer, CultureInfo.InvariantCulture, out var newEnroll))
+                            !int.TryParse(args[5], NumberStyles.Integer, CultureInfo.InvariantCulture, out oldEnroll) ||
+                            !int.TryParse(args[6], NumberStyles.Integer, CultureInfo.InvariantCulture, out newEnroll))
                             return Fail("Kart taşıma için eski/yeni kullanıcı numarası geçersiz.");
                         bool ok = MoveCard(clock, machine, oldEnroll, newEnroll);
                         Console.WriteLine(ok ? "ACTION|OK|MOVECARD|" + oldEnroll + "|" + newEnroll : "ACTION|ERROR|MOVECARD|" + oldEnroll + "|" + newEnroll);
@@ -113,7 +116,8 @@ internal static class Program
                 try { ok = clock.GetAllUserID(machine, ref enroll, ref enrollMachine, ref backup, ref privilege, ref enabled); }
                 catch { break; }
                 if (!ok) break;
-                if (!users.TryGetValue(enroll, out var row))
+                UserRow row;
+                if (!users.TryGetValue(enroll, out row))
                 {
                     row = new UserRow { Enroll = enroll, Privilege = privilege, Enabled = enabled };
                     users[enroll] = row;
