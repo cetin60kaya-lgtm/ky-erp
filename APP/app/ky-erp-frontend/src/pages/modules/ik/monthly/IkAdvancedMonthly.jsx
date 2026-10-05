@@ -1182,21 +1182,6 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     openPayPlan(row.employee);
   };
 
-  const editPayrollPaymentSplit = (side, value) => {
-    setModalDraft((old) => {
-      const amount = Math.max(0, num(value));
-      const draft = { ...old, [side]: amount, paymentEdit: side };
-      const totals = calcRow(draft);
-      const split = reconcilePaymentSplit(
-        totals.net,
-        side === "bank" ? amount : num(draft.bank),
-        side === "cash" ? amount : num(draft.cash),
-        side,
-      );
-      return { ...draft, bank: split.bank, cash: split.cash };
-    });
-  };
-
   const openDocument = (employee = selected) => {
     if (employee?.id) setSelectedId(employee.id);
     setModalDraft({ employeeId: employee?.id || "", documentType: "Personel evragi", note: "" });
@@ -2855,8 +2840,18 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
 
               <div className="modal-section-grid payroll-control-grid">
                 <div className="modal-section">
-                  <h3>Ücret ve Ödeme Planı · Kaynak Kayıt</h3>
+                  <h3>Personel + Ücret + Ödeme Planı · Tek Kaynak</h3>
                   <div className="form">
+                    <Field label="Ad Soyad" half><input value={modalDraft.fullName || ""} onChange={(event) => setModalDraft((old) => ({ ...old, fullName: event.target.value, formMessage: "" }))} /></Field>
+                    <Field label="Personel Kodu" half><input value={modalDraft.code || ""} readOnly /></Field>
+                    <Field label="Bölüm" half><input value={modalDraft.department || ""} onChange={(event) => setModalDraft((old) => ({ ...old, department: event.target.value, formMessage: "" }))} /></Field>
+                    <Field label="Görev" half><input value={modalDraft.title || ""} onChange={(event) => setModalDraft((old) => ({ ...old, title: event.target.value, formMessage: "" }))} /></Field>
+                    <Field label="İşe Giriş" half><input type="date" value={modalDraft.startDate || ""} onChange={(event) => setModalDraft((old) => ({ ...old, startDate: event.target.value, formMessage: "" }))} /></Field>
+                    <Field label="İşten Çıkış" half><input type="date" value={modalDraft.exitDate || ""} onChange={(event) => setModalDraft((old) => ({ ...old, exitDate: event.target.value, formMessage: "" }))} /></Field>
+                    <Field label="SGK Durumu" half><select value={modalDraft.sgkFollow || "BELIRTILMEMIS"} disabled={Boolean(data.close?.isLocked) || modalDraft.sgkDaySource==="RESMI_BORDRO"} onChange={(event) => setModalDraft((old) => ({ ...old, sgkFollow: event.target.value, sgkDays: event.target.value==="SGKSIZ"?0:old.sgkDays, sgkDaySourceIntent:"MANUEL", formMessage:"" }))}><option value="SGKLI">SGK'lı</option><option value="SGKSIZ">SGK'sız</option><option value="BELIRTILMEMIS">Seçiniz</option></select></Field>
+                    <Field label="SGK Gün" half><input type="number" min="0" max="30" value={modalDraft.sgkDays ?? ""} disabled={Boolean(data.close?.isLocked) || modalDraft.sgkFollow==="SGKSIZ" || modalDraft.sgkDaySource==="RESMI_BORDRO"} onChange={(event) => setModalDraft((old) => ({ ...old, sgkDays: event.target.value, sgkDaySourceIntent:"MANUEL", formMessage:"" }))} /></Field>
+                    <Field label="Yıllık İzin Hakkı" half><input type="number" min="0" value={modalDraft.annualLeaveEntitlement ?? ""} onChange={(event) => setModalDraft((old) => ({ ...old, annualLeaveEntitlement: event.target.value, formMessage: "" }))} /></Field>
+                    <Field label="Devreden İzin" half><input type="number" min="0" value={modalDraft.annualLeaveCarryover ?? ""} onChange={(event) => setModalDraft((old) => ({ ...old, annualLeaveCarryover: event.target.value, formMessage: "" }))} /></Field>
                     <Field label="Gerçek Maaş" half><input type="number" min="0" value={modalDraft.salary || ""} onChange={(event) => setModalDraft((old) => ({ ...old, salary: event.target.value, formMessage: "" }))} /></Field>
                     <Field label="Yol Yardımı" half><input type="number" min="0" value={modalDraft.roadAllowance || ""} onChange={(event) => setModalDraft((old) => ({ ...old, roadAllowance: event.target.value, formMessage: "" }))} /></Field>
                     <Field label="Banka Planı" half><input type="number" min="0" value={modalDraft.bankAmount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, bankAmount: event.target.value, formMessage: "" }))} /></Field>
@@ -2867,7 +2862,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                     <Field label="Geçerlilik Tarihi" half><input type="date" value={modalDraft.effectiveDate || ""} onChange={(event) => setModalDraft((old) => ({ ...old, effectiveDate: event.target.value, formMessage: "" }))} /></Field>
                     <Field label="Değişiklik Açıklaması" wide><input value={modalDraft.changeNote || ""} onChange={(event) => setModalDraft((old) => ({ ...old, changeNote: event.target.value }))} placeholder="Örn. Eylül 2026 bordro öncesi kontrol" /></Field>
                   </div>
-                  <div className="row-actions"><button type="button" className="btn primary" disabled={busy} onClick={savePerson}>{busy ? "Kaydediliyor" : "Ücret Planını Kaydet"}</button></div>
+                  {modalDraft.sgkDaySource==="RESMI_BORDRO" ? <div className="warnline">SGK günü resmi bordro kaynağından geldiği için burada değiştirilmez; diğer personel ve ücret alanları kaydedilebilir.</div> : null}
+                  <div className="row-actions"><button type="button" className="btn primary" disabled={busy} onClick={savePerson}>{busy ? "Kaydediliyor" : "Personel / Ücret Kaynağını Kaydet"}</button></div>
                 </div>
 
                 <div className="modal-section payroll-smart-check">
