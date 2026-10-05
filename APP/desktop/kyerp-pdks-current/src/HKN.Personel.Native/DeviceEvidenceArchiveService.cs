@@ -41,14 +41,24 @@ internal static class DeviceEvidenceArchiveService
                 .ToArray();
             File.WriteAllLines(readTnf, readLines, Encoding.ASCII);
 
-            var dailyTnf = CompanyDataPaths.DeviceDailyTnf(stamp.Date);
-            MergeDaily(dailyTnf, readLines);
+            var dailyPaths = new List<string>();
+            var rawPaths = new List<string>();
+            foreach (var group in punches.GroupBy(x => x.OccurredAt.Date).OrderBy(x => x.Key))
+            {
+                var dailyTnf = CompanyDataPaths.DeviceDailyTnf(group.Key);
+                Directory.CreateDirectory(Path.GetDirectoryName(dailyTnf)!);
+                MergeDaily(dailyTnf, group.Select(ToTnf).Distinct(StringComparer.Ordinal));
+                dailyPaths.Add(dailyTnf);
 
-            var rawPath = Path.Combine(
-                CompanyDataPaths.DeviceRawFolder(stamp),
-                $"CIHAZ_HAM_{stamp:yyyy-MM-dd_HH-mm-ss}.raw");
-            File.WriteAllLines(rawPath, punches.Select(ToRaw), Encoding.UTF8);
+                var rawFolder = CompanyDataPaths.DeviceRawFolder(group.Key);
+                Directory.CreateDirectory(rawFolder);
+                var rawPath = Path.Combine(rawFolder, $"CIHAZ_HAM_{group.Key:yyyy-MM-dd}_{stamp:HH-mm-ss}.raw");
+                File.WriteAllLines(rawPath, group.Select(ToRaw), Encoding.UTF8);
+                rawPaths.Add(rawPath);
+            }
 
+            var primaryDaily = dailyPaths.FirstOrDefault() ?? CompanyDataPaths.DeviceDailyTnf(stamp.Date);
+            var primaryRaw = rawPaths.FirstOrDefault() ?? Path.Combine(CompanyDataPaths.DeviceRawFolder(stamp), $"CIHAZ_HAM_{stamp:yyyy-MM-dd_HH-mm-ss}.raw");
             var hash = Sha256(readTnf);
             var manifest = Path.Combine(readFolder, $"CIHAZ_OKUMA_{stamp:yyyy-MM-dd_HH-mm-ss}_BILGI.txt");
             File.WriteAllText(manifest,
@@ -58,14 +68,14 @@ internal static class DeviceEvidenceArchiveService
                 $"OkumaZamanı={stamp:yyyy-MM-dd HH:mm:ss}{Environment.NewLine}" +
                 $"KayıtSayısı={punches.Length}{Environment.NewLine}" +
                 $"TNF={Path.GetFileName(readTnf)}{Environment.NewLine}" +
-                $"GünlükTNF={Path.GetFileName(dailyTnf)}{Environment.NewLine}" +
-                $"Ham={Path.GetFileName(rawPath)}{Environment.NewLine}" +
+                $"GünlükTNF={string.Join(" | ", dailyPaths)}{Environment.NewLine}" +
+                $"Ham={string.Join(" | ", rawPaths)}{Environment.NewLine}" +
                 $"SHA256={hash}{Environment.NewLine}" +
                 $"TNFFormat=KartNo,HH:mm,GGAAYY,1,001{Environment.NewLine}",
                 Encoding.UTF8);
 
             AppendAudit(stamp, operation, punches.Length, readTnf, hash);
-            return new(punches.Length, readTnf, dailyTnf, rawPath, manifest, hash);
+            return new(punches.Length, readTnf, primaryDaily, primaryRaw, manifest, hash);
         }
     }
 
