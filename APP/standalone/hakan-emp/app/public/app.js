@@ -13,7 +13,7 @@ const post=(u,x)=>api(u,{method:'POST',headers:{'Content-Type':'application/json
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(window.__t);window.__t=setTimeout(()=>e.classList.remove('show'),1800)}
 
 const meta={production:['HAKAN EMP / İMALAT','İmalat Havuzu','Haftalık üretim fişleri + açık iş havuzu + irsaliye/fatura dengesi.'],cari:['HAKAN EMP / CARİ','Cari Takip','Firma seç, bakiye ve bütün hareketleri tek ekranda gör.'],invoicePool:['HAKAN EMP / FATURA','Fatura Havuzu','PDF klasörünü otomatik oku, modeli eşleştir ve faturayı havuza işle.'],checks:['HAKAN EMP / ÇEK','Çek Takip','Ay ay ayrılmış çekler, toplamlar, makbuz ve çıktı.'],settings:['HAKAN EMP / AYARLAR','Ayarlar','Firma, imalat, makine, cari, çek, dosya ve senkron ayarları.'],notes:['HAKAN EMP / NOTLAR','Notlarım','Patron ile muhasebe arasındaki aktif not ve görev panosu.'],reminders:['HAKAN EMP / ÖDEME','Ödeme Hatırlatma','Yaklaşan, geciken ve ödenen ödemeleri takip et.']};
-function navigate(p){$('.page').forEach(x=>x.classList.remove('active'));$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===p));$('#'+p).classList.add('active');$('#crumb').textContent=meta[p][0];$('#pageTitle').textContent=meta[p][1];$('#pageSub').textContent=meta[p][2];if(p==='production')renderProduction();if(p==='cari')renderCari();if(p==='invoicePool')renderInvoicePool();if(p==='checks')renderChecks();if(p==='settings')renderSettings();if(p==='notes')renderNotes();if(p==='reminders')renderReminders()}
+function navigate(p){$$('.page').forEach(x=>x.classList.remove('active'));$$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===p));$('#'+p).classList.add('active');$('#crumb').textContent=meta[p][0];$('#pageTitle').textContent=meta[p][1];$('#pageSub').textContent=meta[p][2];if(p==='production')renderProduction();if(p==='cari')renderCari();if(p==='invoicePool')renderInvoicePool();if(p==='checks')renderChecks();if(p==='settings')renderSettings();if(p==='notes')renderNotes();if(p==='reminders')renderReminders()}
 $$('.nav-item').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
 
 function syncModalLayers(){
@@ -429,7 +429,7 @@ function renderInvoicePool(){
   '</div>';
  }).join(''):'<div class="empty">Fatura havuzunda kayıt yok.</div>';
 }
-$('[data-invoice-view]').forEach(b=>b.onclick=()=>{$('[data-invoice-view]').forEach(x=>x.classList.remove('active'));b.classList.add('active');invoiceView=b.dataset.invoiceView;renderInvoicePool()});
+$$('[data-invoice-view]').forEach(b=>b.onclick=()=>{$$('[data-invoice-view]').forEach(x=>x.classList.remove('active'));b.classList.add('active');invoiceView=b.dataset.invoiceView;renderInvoicePool()});
 if($('#invoicePoolSearch'))$('#invoicePoolSearch').oninput=renderInvoicePool;
 function invoiceOpenModelOptions(selected=''){return (core.rows||[]).map(r=>'<option value="'+r.model_id+'" '+(String(r.model_id)===String(selected)?'selected':'')+'>'+esc(r.model_name)+' — '+esc(r.company_name||'Firma yok')+'</option>').join('')}
 function openInvoicePoolMatch(id){
