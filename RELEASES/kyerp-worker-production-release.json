@@ -3,23 +3,19 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "8a48d513f66385ada294d56ceccaa52b31f068f8",
-  "requestedAt": "2026-09-29T05:00:00+03:00",
-  "attempt": 4,
+  "sourceCommit": "4a4a8cea53342c1811008f5e6e5ce24035442ae5",
+  "requestedAt": "2026-10-06T01:19:41+03:00",
+  "attempt": 5,
   "scope": [
-    "muhasebe-final-canonical",
-    "accounting-payment-idempotency",
-    "accounting-transaction-direction-normalization",
-    "accounting-live-revision",
-    "mail-provider-accepted-send-contract",
-    "migration-0050-mail-core",
-    "migration-0051-mail-user-state",
-    "migration-0055-accounting-workspace-core",
+    "ik-monthly-single-source",
+    "ik-explicit-extra-payment",
+    "ik-payment-source-aware-bank-cash",
+    "ik-atomic-final-payroll-control",
+    "ik-real-salary-overtime-source",
     "worker-typecheck-test-build",
     "d1-full-predeploy-backup",
-    "d1-no-reset",
     "cloudflare-worker-production",
     "live-api-health-check"
   ],
-  "note": "Muhasebe final kabul production Worker release. Canonical source merge 8a48d513f66385ada294d56ceccaa52b31f068f8 passed final acceptance on the production branch. Release order is full D1 backup, additive 0050/0051/0055 migrations with schema proof, Worker deploy and live API health. No D1 reset."
+  "note": "IK Aylik 06.10.2026 Worker release. PR #388 acceptance PASS. Explicit EK, source-aware payment split and atomic final payroll control."
 }
