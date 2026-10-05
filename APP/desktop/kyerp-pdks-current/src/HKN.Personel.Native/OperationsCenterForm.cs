@@ -75,18 +75,19 @@ public sealed class OperationsCenterForm : Form
         });
         root.Controls.Add(hero,0,0);
 
-        var flow=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=6,BackColor=p.Canvas,Padding=new Padding(0,0,0,10)};
-        for(var i=0;i<6;i++)flow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,16.666f));
-        var steps=new (string Title,string Text,PdksCommandId Id)[]
+        var stepSource=new (string Text,PdksCommandId Id)[]
         {
-            ("1","Kart Kayıtları",PdksCommandId.Operations),
-            ("2","Canlı Durum",PdksCommandId.LiveAttendance),
-            ("3","Eksikler / Geç",PdksCommandId.AttendanceExceptions),
-            ("4","Devam Geçmişi",PdksCommandId.AttendanceHistory),
-            ("5","İzin İşlemleri",PdksCommandId.Leave),
-            ("6","Puantaja Geç",PdksCommandId.TimesheetMonthly)
+            ("Canlı Durum",PdksCommandId.LiveAttendance),
+            ("Eksikler / Geç",PdksCommandId.AttendanceExceptions),
+            ("Devam Geçmişi",PdksCommandId.AttendanceHistory),
+            ("Aylık Kart Düzeltme",PdksCommandId.MonthlyAttendanceAdmin),
+            ("İzin İşlemleri",PdksCommandId.Leave),
+            ("Puantaja Geç",PdksCommandId.TimesheetMonthly)
         };
-        for(var i=0;i<steps.Length;i++)flow.Controls.Add(Step(steps[i].Title,steps[i].Text,steps[i].Id),i,0);
+        var steps=stepSource.Where(x=>commands.ContainsKey(x.Id)).ToArray();
+        var flow=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=Math.Max(1,steps.Length),BackColor=p.Canvas,Padding=new Padding(0,0,0,10)};
+        for(var i=0;i<Math.Max(1,steps.Length);i++)flow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100f/Math.Max(1,steps.Length)));
+        for(var i=0;i<steps.Length;i++)flow.Controls.Add(Step((i+1).ToString(),steps[i].Text,steps[i].Id),i,0);
         root.Controls.Add(flow,0,1);
 
         root.Controls.Add(new Label{
