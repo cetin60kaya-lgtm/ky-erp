@@ -79,6 +79,20 @@ test("official SGK import preserves monthly compliance while person master data 
   assert.match(relational, /periodComplianceSkipped: periodLocked \|\| preservePeriodCompliance/);
 });
 
+test("person card save returns a fresh version for repeated in-modal saves", () => {
+  const relational = api("ik-relational-cloud.ts");
+  assert.match(relational, /freshVersionRow/);
+  assert.match(relational, /card_updated_at/);
+  assert.match(relational, /version: freshVersion/);
+  assert.match(relational, /updatedAt: freshVersion/);
+});
+
+test("payroll domain excludes people who left before the selected period", () => {
+  const relational = api("ik-relational-cloud.ts");
+  assert.match(relational, /if \(exitDate && exitDate < periodStart\) return "EXITED"/);
+  assert.match(relational, /\["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED", "MISSING_HIRE_DATE", "MISSING_EXIT_DATE"\]\.includes\(employmentStateAtPeriod/);
+});
+
 test("finance create update delete mutations are visible to live sync", () => {
   const relational = api("ik-relational-cloud.ts");
   assert.match(relational, /action:\s*"FINANCE_CREATE"/);
