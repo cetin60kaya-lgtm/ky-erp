@@ -2967,6 +2967,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     }
 
     if (modal === "ucret") {
+      const finalMode = modalDraft.controlMode === "FINAL";
       const periodPeople = employees.length ? employees : masterEmployees;
       const currentIndex = periodPeople.findIndex((item) => item.id === modalDraft.id);
       const previousPerson = currentIndex > 0 ? periodPeople[currentIndex - 1] : null;
@@ -2984,6 +2985,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           else if (["Ozel kesinti", "Eksik gün", "Eksik saat"].includes(type)) acc.deduction += num(item.amount);
           return acc;
         }, { overtime: 0, advance: 0, deduction: 0, garnishment: 0 });
+
       const planExtra = num(modalDraft.extraPaymentAmount);
       const preBaseTotals = calcRow({
         salary: modalDraft.salary,
@@ -3006,18 +3008,58 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         bank: modalPayment.bank,
         cash: modalPayment.cash,
       });
+
+      const finalEditor = modalDraft.finalEditor || {};
+      const finalTotals = calcRow({
+        salary: finalEditor.salary,
+        road: finalEditor.road,
+        extra: finalEditor.extra,
+        overtime: finalEditor.overtime,
+        advance: finalEditor.advance,
+        deduction: finalEditor.deduction,
+        garnishment: finalEditor.garnishment,
+        bank: finalEditor.bank,
+        cash: finalEditor.cash,
+      });
+      const setFinalValue = (key, value) => setModalDraft((old) => ({
+        ...old,
+        finalEditor: { ...(old.finalEditor || {}), [key]: value },
+        formMessage: "",
+      }));
+      const autoBalanceFinalPayment = () => {
+        const netOnly = calcRow({
+          salary: finalEditor.salary,
+          road: finalEditor.road,
+          extra: finalEditor.extra,
+          overtime: finalEditor.overtime,
+          advance: finalEditor.advance,
+          deduction: finalEditor.deduction,
+          garnishment: finalEditor.garnishment,
+        }).net;
+        const split = paymentSplitByType(finalEditor.paymentType || modalDraft.paymentType, netOnly, finalEditor.bank);
+        setModalDraft((old) => ({
+          ...old,
+          finalEditor: { ...(old.finalEditor || {}), bank: split.bank, cash: split.cash },
+          formMessage: "",
+        }));
+      };
+
       const editor = modalDraft.movementEditor || {};
       const previewMovementAmount = editor.adjustmentType === "Mesai"
         ? overtimeAmountFor(modalDraft.id, editor.hourOrDay, editor.overtimeMultiplier)
         : num(editor.amount);
+      const modalTitle = finalMode ? "Son Bordro Kontrolü" : "Bordro Öncesi Giriş Kontrolü";
+      const modalSub = finalMode
+        ? `${MONTHS[month - 1]} ${year} · Tüm finans alanları elle düzenlenebilir; kayıt gerçek kaynaklara işlenir`
+        : `${MONTHS[month - 1]} ${year} · Ücret planı salt okunur; aylık girişleri kontrol edip hareket kaydı yapın`;
 
       return (
-        <Modal title="Bordro Öncesi Personel Kontrolü" sub={`${MONTHS[month - 1]} ${year} · Kaynakları düzeltin; bordroya geçtiğinizde hesap doğru gelsin`} size="wide prepayroll-dialog" onClose={() => setModal(null)}>
-          <div className="payroll-final-layout">
+        <Modal title={modalTitle} sub={modalSub} size="wide prepayroll-dialog" onClose={() => setModal(null)}>
+          <div className={`payroll-final-layout ${finalMode ? "final-control-mode" : "entry-control-mode"}`}>
             <aside className="payroll-person-rail">
               <div className="payroll-person-rail-head">
                 <div><b>Personeller</b><span>{currentIndex >= 0 ? currentIndex + 1 : 0} / {periodPeople.length}</span></div>
-                <small>Personeli seçin; kayıt sonrası pencere açık kalır.</small>
+                <small>{finalMode ? "Son kontrol için kişiyi seçin; kaydet sonrası pencere açık kalır." : "Aylık giriş kontrolü için personeli seçin."}</small>
               </div>
               <div className="payroll-person-rail-list">
                 {periodPeople.map((employee, index) => <button type="button" key={employee.id} data-employee-id={employee.id} className={employee.id === modalDraft.id ? "active" : ""} disabled={busy} onClick={() => switchPayPlanPerson(employee.id)}>
@@ -3033,64 +3075,96 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                 <label><span>Personel Seç</span><select value={modalDraft.id || ""} disabled={busy} onChange={(event) => switchPayPlanPerson(event.target.value)}>{periodPeople.map((employee) => <option key={employee.id} value={employee.id}>{employee.code || "HKN yok"} · {employee.fullName}</option>)}</select></label>
                 <span className="person-modal-position">{currentIndex >= 0 ? currentIndex + 1 : 0} / {periodPeople.length}</span>
                 <button type="button" className="btn" disabled={busy || !nextPerson} onClick={() => nextPerson && switchPayPlanPerson(nextPerson.id)}>Sonraki →</button>
-                <small>Kaydet personeli kapatmaz. Kişi değiştirmeden önce mevcut alanları kaydedin.</small>
+                <small>{finalMode ? "Son Kontrolü Kaydet personeli kapatmaz; sonraki kişiye geçebilirsiniz." : "Bu ekranda ücret ana planı değiştirilmez; aylık hareket girişi yapılır."}</small>
               </div>
 
-              <div className="modal-section-grid payroll-control-grid">
-                <div className="modal-section">
-                  <h3>Personel + Ücret + Ödeme Planı · Tek Kaynak</h3>
-                  <div className="form">
-                    <Field label="Ad Soyad" half><input value={modalDraft.fullName || ""} onChange={(event) => setModalDraft((old) => ({ ...old, fullName: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="Personel Kodu" half><input value={modalDraft.code || ""} readOnly /></Field>
-                    <Field label="Bölüm" half><input value={modalDraft.department || ""} onChange={(event) => setModalDraft((old) => ({ ...old, department: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="Görev" half><input value={modalDraft.title || ""} onChange={(event) => setModalDraft((old) => ({ ...old, title: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="İşe Giriş" half><input type="date" value={modalDraft.startDate || ""} onChange={(event) => setModalDraft((old) => ({ ...old, startDate: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="İşten Çıkış" half><input type="date" value={modalDraft.exitDate || ""} onChange={(event) => setModalDraft((old) => ({ ...old, exitDate: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="SGK Durumu" half><select value={modalDraft.sgkFollow || "BELIRTILMEMIS"} disabled={Boolean(data.close?.isLocked) || modalDraft.sgkDaySource==="RESMI_BORDRO"} onChange={(event) => setModalDraft((old) => ({ ...old, sgkFollow: event.target.value, sgkDays: event.target.value==="SGKSIZ"?0:old.sgkDays, sgkDaySourceIntent:"MANUEL", formMessage:"" }))}><option value="SGKLI">SGK'lı</option><option value="SGKSIZ">SGK'sız</option><option value="BELIRTILMEMIS">Seçiniz</option></select></Field>
-                    <Field label="SGK Gün" half><input type="number" min="0" max="30" value={modalDraft.sgkDays ?? ""} disabled={Boolean(data.close?.isLocked) || modalDraft.sgkFollow==="SGKSIZ" || modalDraft.sgkDaySource==="RESMI_BORDRO"} onChange={(event) => setModalDraft((old) => ({ ...old, sgkDays: event.target.value, sgkDaySourceIntent:"MANUEL", formMessage:"" }))} /></Field>
-                    <Field label="Yıllık İzin Hakkı" half><input type="number" min="0" value={modalDraft.annualLeaveEntitlement ?? ""} onChange={(event) => setModalDraft((old) => ({ ...old, annualLeaveEntitlement: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="Devreden İzin" half><input type="number" min="0" value={modalDraft.annualLeaveCarryover ?? ""} onChange={(event) => setModalDraft((old) => ({ ...old, annualLeaveCarryover: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="Gerçek Maaş" half><input type="number" min="0" value={modalDraft.salary || ""} onChange={(event) => setModalDraft((old) => ({ ...old, salary: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="Yol Yardımı" half><input type="number" min="0" value={modalDraft.roadAllowance || ""} onChange={(event) => setModalDraft((old) => ({ ...old, roadAllowance: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="EK Ödeme" half><input type="number" min="0" value={modalDraft.extraPaymentAmount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, extraPaymentAmount: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="Ödeme Tipi" half><select value={modalDraft.paymentType || "BANKA_ELDEN"} onChange={(event) => setModalDraft((old) => ({ ...old, paymentType: event.target.value, bankAmount: event.target.value === "Elden" ? 0 : old.bankAmount, formMessage: "" }))}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field>
-                    <Field label="Banka Planı" half><input type="number" min="0" value={modalPayment.bank} readOnly={modalPayment.mode !== "BANKA_ELDEN"} onChange={(event) => setModalDraft((old) => ({ ...old, bankAmount: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="Elden Planı" half><input type="number" min="0" value={modalPayment.cash} readOnly /></Field>
-                    <Field label="Mesai Saat Böleni" half><input type="number" min="1" step="1" value={modalDraft.overtimeHourlyBase || 225} onChange={(event) => setModalDraft((old) => ({ ...old, overtimeHourlyBase: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="Kesinti Saat Böleni" half><input type="number" min="1" step="1" value={modalDraft.deductionHourlyBase || 300} onChange={(event) => setModalDraft((old) => ({ ...old, deductionHourlyBase: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="Geçerlilik Tarihi" half><input type="date" value={modalDraft.effectiveDate || ""} onChange={(event) => setModalDraft((old) => ({ ...old, effectiveDate: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="Değişiklik Açıklaması" wide><input value={modalDraft.changeNote || ""} onChange={(event) => setModalDraft((old) => ({ ...old, changeNote: event.target.value }))} placeholder="Örn. Eylül 2026 bordro öncesi kontrol" /></Field>
+              {finalMode ? (
+                <div className="modal-section-grid payroll-control-grid final-manual-grid">
+                  <div className="modal-section final-manual-card">
+                    <h3>Son Kontrol · Tüm Finans Alanları Elle Açık</h3>
+                    <div className="form">
+                      <Field label="Maaş" half><input type="number" min="0" value={finalEditor.salary ?? ""} onChange={(event) => setFinalValue("salary", event.target.value)} /></Field>
+                      <Field label="Yol" half><input type="number" min="0" value={finalEditor.road ?? ""} onChange={(event) => setFinalValue("road", event.target.value)} /></Field>
+                      <Field label="EK Ödeme" half><input type="number" min="0" value={finalEditor.extra ?? ""} onChange={(event) => setFinalValue("extra", event.target.value)} /></Field>
+                      <Field label="Mesai Toplamı" half><input type="number" min="0" value={finalEditor.overtime ?? ""} onChange={(event) => setFinalValue("overtime", event.target.value)} /></Field>
+                      <Field label="Avans Toplamı" half><input type="number" min="0" value={finalEditor.advance ?? ""} onChange={(event) => setFinalValue("advance", event.target.value)} /></Field>
+                      <Field label="Kesinti Toplamı" half><input type="number" min="0" value={finalEditor.deduction ?? ""} onChange={(event) => setFinalValue("deduction", event.target.value)} /></Field>
+                      <Field label="İcra / Haciz" half><input type="number" min="0" value={finalEditor.garnishment ?? ""} onChange={(event) => setFinalValue("garnishment", event.target.value)} /></Field>
+                      <Field label="Hukuki Kesinti Türü" half><select value={finalEditor.legalType || "ICRA"} onChange={(event) => setFinalValue("legalType", event.target.value)}><option value="ICRA">İcra</option><option value="HACIZ">Haciz</option></select></Field>
+                      <Field label="Avans Kaynağı" half><select value={finalEditor.advanceSource || "Elden"} onChange={(event) => setFinalValue("advanceSource", event.target.value)}><option>Elden</option><option>Banka</option></select></Field>
+                      <Field label="Kesinti Kaynağı" half><select value={finalEditor.deductionSource || "Elden"} onChange={(event) => setFinalValue("deductionSource", event.target.value)}><option>Elden</option><option>Banka</option></select></Field>
+                      <Field label="İcra/Haciz Kaynağı" half><select value={finalEditor.garnishmentSource || "Banka"} onChange={(event) => setFinalValue("garnishmentSource", event.target.value)}><option>Banka</option><option>Elden</option></select></Field>
+                      <Field label="Ödeme Tipi" half><select value={finalEditor.paymentType || "BANKA_ELDEN"} onChange={(event) => setFinalValue("paymentType", event.target.value)}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field>
+                      <Field label="Bankadan Ödenecek" half><input type="number" min="0" value={finalEditor.bank ?? ""} onChange={(event) => setFinalValue("bank", event.target.value)} /></Field>
+                      <Field label="Elden Ödenecek" half><input type="number" min="0" value={finalEditor.cash ?? ""} onChange={(event) => setFinalValue("cash", event.target.value)} /></Field>
+                      <Field label="Son Kontrol Açıklaması" wide><input value={finalEditor.reason || ""} onChange={(event) => setFinalValue("reason", event.target.value)} placeholder="Örn. Eylül son bordro kontrolü" /></Field>
+                    </div>
+                    <div className="row-actions">
+                      <button type="button" className="btn" disabled={busy} onClick={autoBalanceFinalPayment}>Banka / Elden Otomatik Dengele</button>
+                      <button type="button" className="btn primary" disabled={busy || Math.abs(finalTotals.diff) > 0.01} onClick={saveFinalPayrollControl}>{busy ? "Kaydediliyor" : "Son Kontrolü Kaydet"}</button>
+                    </div>
                   </div>
-                  {modalDraft.sgkDaySource==="RESMI_BORDRO" ? <div className="warnline">SGK günü resmi bordro kaynağından geldiği için burada değiştirilmez; diğer personel ve ücret alanları kaydedilebilir.</div> : null}
-                  <div className="row-actions"><button type="button" className="btn primary" disabled={busy} onClick={savePerson}>{busy ? "Kaydediliyor" : "Personel / Ücret Kaynağını Kaydet"}</button></div>
-                </div>
 
-                <div className="modal-section payroll-smart-check">
-                  <h3>Bordro Öncesi Akıllı Kontrol</h3>
-                  <div className="import-summary payment-summary">
-                    <div><span>Maaş</span><b>{money(modalDraft.salary)}</b></div>
-                    <div><span>Yol</span><b>{money(modalDraft.roadAllowance)}</b></div>
-                    <div className={planExtra > 0 ? "summary-highlight" : ""}><span>EK Ödeme</span><b>{money(planExtra)}</b></div>
-                    <div><span>Mesai</span><b>{money(movementTotals.overtime)}</b></div>
-                    <div><span>Avans</span><b>{money(movementTotals.advance)}</b></div>
-                    <div><span>Kesinti + İcra</span><b>{money(movementTotals.deduction + movementTotals.garnishment)}</b></div>
-                    <div><span>Tahmini Hak Ediş</span><b>{money(preTotals.hakedis)}</b></div>
-                    <div><span>Tahmini Net</span><b>{money(preTotals.net)}</b></div>
-                    <div><span>Banka</span><b>{money(modalPayment.bank)}</b></div>
-                    <div><span>Elden</span><b>{money(modalPayment.cash)}</b></div>
-                  </div>
-                  <div className="warnline ok">
-                    {modalPayment.mode === "ELDEN"
-                      ? "Sadece Elden: tahmini netin tamamı otomatik Elden'e atanır."
-                      : modalPayment.mode === "BANKA"
-                        ? "Sadece Banka: tahmini netin tamamı otomatik Banka'ya atanır."
-                        : "Banka + Elden: Banka tutarı sabit kalır, tahmini netin kalan kısmı otomatik Elden'e atanır."}
+                  <div className="modal-section payroll-smart-check final-result-card">
+                    <h3>Son Bordro Sonucu</h3>
+                    <div className="import-summary payment-summary">
+                      <div><span>Maaş</span><b>{money(finalEditor.salary)}</b></div>
+                      <div><span>Yol</span><b>{money(finalEditor.road)}</b></div>
+                      <div className={num(finalEditor.extra) > 0 ? "summary-highlight" : ""}><span>EK</span><b>{money(finalEditor.extra)}</b></div>
+                      <div><span>Mesai</span><b>{money(finalEditor.overtime)}</b></div>
+                      <div><span>Hak Ediş</span><b>{money(finalTotals.hakedis)}</b></div>
+                      <div><span>Toplam Kesinti</span><b>{money(num(finalEditor.advance) + num(finalEditor.deduction) + num(finalEditor.garnishment))}</b></div>
+                      <div><span>Net Ödenecek</span><b>{money(finalTotals.net)}</b></div>
+                      <div><span>Banka</span><b>{money(finalEditor.bank)}</b></div>
+                      <div><span>Elden</span><b>{money(finalEditor.cash)}</b></div>
+                      <div><span>Fark</span><b>{money(Math.abs(finalTotals.diff))}</b></div>
+                    </div>
+                    <div className={`warnline ${Math.abs(finalTotals.diff) <= 0.01 ? "ok" : "warn"}`}>
+                      {Math.abs(finalTotals.diff) <= 0.01
+                        ? "Banka + Elden = Net Ödenecek. Son kontrol kayda hazır."
+                        : `Banka + Elden ile Net arasında ${money(Math.abs(finalTotals.diff))} fark var. Kaydetmeden önce düzeltin veya Otomatik Dengele kullanın.`}
+                    </div>
+                    <div className="warnline">Bu ekrandaki Maaş/Yol/EK değişikliği ücret kaynağına; Mesai/Avans/Kesinti/İcra değişikliği hareket kaynağına yazılır.</div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="modal-section-grid payroll-control-grid entry-readonly-grid">
+                  <div className="modal-section entry-plan-card">
+                    <h3>Bordro Öncesi Giriş Kontrolü · Ana Plan Salt Okunur</h3>
+                    <div className="form">
+                      <Field label="Ad Soyad" half><input value={modalDraft.fullName || ""} readOnly /></Field>
+                      <Field label="Personel Kodu" half><input value={modalDraft.code || ""} readOnly /></Field>
+                      <Field label="SGK Durumu" half><input value={modalDraft.sgkFollow === "SGKLI" ? "SGK'lı" : modalDraft.sgkFollow === "SGKSIZ" ? "SGK'sız" : "Belirtilmemiş"} readOnly /></Field>
+                      <Field label="SGK Gün" half><input value={modalDraft.sgkDays ?? ""} readOnly /></Field>
+                      <Field label="Maaş" half><input value={money(modalDraft.salary)} readOnly /></Field>
+                      <Field label="Yol" half><input value={money(modalDraft.roadAllowance)} readOnly /></Field>
+                      <Field label="EK Ödeme" half><input value={money(planExtra)} readOnly /></Field>
+                      <Field label="Ödeme Tipi" half><input value={paymentLabel({ paymentType: modalDraft.paymentType, bankAmount: modalPayment.bank, cashAmount: modalPayment.cash })} readOnly /></Field>
+                      <Field label="Banka" half><input value={money(modalPayment.bank)} readOnly /></Field>
+                      <Field label="Elden" half><input value={money(modalPayment.cash)} readOnly /></Field>
+                    </div>
+                    <div className="warnline">Maaş / Yol / EK / Banka / Elden bu giriş kontrol ekranında değiştirilmez. Ana plan değişikliği Personel Kartı / Ücret Planı üzerinden yapılır.</div>
+                  </div>
 
-              <div className="modal-section">
-                <div className="ch"><div><b>Aylık Hareket Kaynakları</b><span>Buradaki kayıtlar Mesai / Avans / Kesinti ekranına doğrudan yazılır.</span></div></div>
+                  <div className="modal-section payroll-smart-check">
+                    <h3>Aylık Giriş Kontrolü</h3>
+                    <div className="import-summary payment-summary">
+                      <div><span>Mesai</span><b>{money(movementTotals.overtime)}</b></div>
+                      <div><span>Avans</span><b>{money(movementTotals.advance)}</b></div>
+                      <div><span>Kesinti</span><b>{money(movementTotals.deduction)}</b></div>
+                      <div><span>İcra/Haciz</span><b>{money(movementTotals.garnishment)}</b></div>
+                      <div><span>Tahmini Hak Ediş</span><b>{money(preTotals.hakedis)}</b></div>
+                      <div><span>Tahmini Net</span><b>{money(preTotals.net)}</b></div>
+                      <div><span>Banka</span><b>{money(modalPayment.bank)}</b></div>
+                      <div><span>Elden</span><b>{money(modalPayment.cash)}</b></div>
+                    </div>
+                    <div className="warnline ok">Bu ekran aylık Mesai / Avans / Kesinti / İcra-Haciz giriş ve kontrol ekranıdır.</div>
+                  </div>
+                </div>
+              )}
+
+              <div className="modal-section source-movement-section">
+                <div className="ch"><div><b>{finalMode ? "Kaynak Hareketleri / Log" : "Aylık Hareket Girişi"}</b><span>Buradaki kayıtlar Mesai / Avans / Kesinti ekranına doğrudan yazılır ve bordro aynı kaynaktan beslenir.</span></div></div>
                 <div className="ik-section-tabs">
                   {["Mesai","Avans","Ozel kesinti","Icra","Haciz"].map((type) => <button type="button" key={type} className={editor.adjustmentType === type ? "active" : ""} onClick={() => editPrePayrollMovement(null, type)}>{type === "Ozel kesinti" ? "Kesinti" : type}</button>)}
                 </div>
