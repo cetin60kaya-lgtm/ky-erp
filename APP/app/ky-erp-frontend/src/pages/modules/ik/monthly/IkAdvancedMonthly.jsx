@@ -3083,20 +3083,20 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                   <div className="modal-section final-manual-card">
                     <h3>Son Kontrol · Tüm Finans Alanları Elle Açık</h3>
                     <div className="form">
-                      <Field label="Maaş" half><input type="number" min="0" value={finalEditor.salary ?? ""} onChange={(event) => setFinalValue("salary", event.target.value)} /></Field>
-                      <Field label="Yol" half><input type="number" min="0" value={finalEditor.road ?? ""} onChange={(event) => setFinalValue("road", event.target.value)} /></Field>
-                      <Field label="EK Ödeme" half><input type="number" min="0" value={finalEditor.extra ?? ""} onChange={(event) => setFinalValue("extra", event.target.value)} /></Field>
-                      <Field label="Mesai Toplamı" half><input type="number" min="0" value={finalEditor.overtime ?? ""} onChange={(event) => setFinalValue("overtime", event.target.value)} /></Field>
-                      <Field label="Avans Toplamı" half><input type="number" min="0" value={finalEditor.advance ?? ""} onChange={(event) => setFinalValue("advance", event.target.value)} /></Field>
-                      <Field label="Kesinti Toplamı" half><input type="number" min="0" value={finalEditor.deduction ?? ""} onChange={(event) => setFinalValue("deduction", event.target.value)} /></Field>
-                      <Field label="İcra / Haciz" half><input type="number" min="0" value={finalEditor.garnishment ?? ""} onChange={(event) => setFinalValue("garnishment", event.target.value)} /></Field>
-                      <Field label="Hukuki Kesinti Türü" half><select value={finalEditor.legalType || "ICRA"} onChange={(event) => setFinalValue("legalType", event.target.value)}><option value="ICRA">İcra</option><option value="HACIZ">Haciz</option></select></Field>
-                      <Field label="Avans Kaynağı" half><select value={finalEditor.advanceSource || "Elden"} onChange={(event) => setFinalValue("advanceSource", event.target.value)}><option>Elden</option><option>Banka</option></select></Field>
-                      <Field label="Kesinti Kaynağı" half><select value={finalEditor.deductionSource || "Elden"} onChange={(event) => setFinalValue("deductionSource", event.target.value)}><option>Elden</option><option>Banka</option></select></Field>
-                      <Field label="İcra/Haciz Kaynağı" half><select value={finalEditor.garnishmentSource || "Banka"} onChange={(event) => setFinalValue("garnishmentSource", event.target.value)}><option>Banka</option><option>Elden</option></select></Field>
-                      <Field label="Ödeme Tipi" half><select value={finalEditor.paymentType || "BANKA_ELDEN"} onChange={(event) => setFinalValue("paymentType", event.target.value)}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field>
-                      <Field label="Bankadan Ödenecek" half><input type="number" min="0" value={finalEditor.bank ?? ""} onChange={(event) => setFinalValue("bank", event.target.value)} /></Field>
-                      <Field label="Elden Ödenecek" half><input type="number" min="0" value={finalEditor.cash ?? ""} onChange={(event) => setFinalValue("cash", event.target.value)} /></Field>
+                      <Field label="Maaş"><input type="number" min="0" value={finalEditor.salary ?? ""} onChange={(event) => setFinalValue("salary", event.target.value)} /></Field>
+                      <Field label="Yol"><input type="number" min="0" value={finalEditor.road ?? ""} onChange={(event) => setFinalValue("road", event.target.value)} /></Field>
+                      <Field label="EK Ödeme"><input type="number" min="0" value={finalEditor.extra ?? ""} onChange={(event) => setFinalValue("extra", event.target.value)} /></Field>
+                      <Field label="Mesai Toplamı"><input type="number" min="0" value={finalEditor.overtime ?? ""} onChange={(event) => setFinalValue("overtime", event.target.value)} /></Field>
+                      <Field label="Avans Toplamı"><input type="number" min="0" value={finalEditor.advance ?? ""} onChange={(event) => setFinalValue("advance", event.target.value)} /></Field>
+                      <Field label="Kesinti Toplamı"><input type="number" min="0" value={finalEditor.deduction ?? ""} onChange={(event) => setFinalValue("deduction", event.target.value)} /></Field>
+                      <Field label="İcra / Haciz"><input type="number" min="0" value={finalEditor.garnishment ?? ""} onChange={(event) => setFinalValue("garnishment", event.target.value)} /></Field>
+                      <Field label="Hukuki Kesinti Türü"><select value={finalEditor.legalType || "ICRA"} onChange={(event) => setFinalValue("legalType", event.target.value)}><option value="ICRA">İcra</option><option value="HACIZ">Haciz</option></select></Field>
+                      <Field label="Avans Kaynağı"><select value={finalEditor.advanceSource || "Elden"} onChange={(event) => setFinalValue("advanceSource", event.target.value)}><option>Elden</option><option>Banka</option></select></Field>
+                      <Field label="Kesinti Kaynağı"><select value={finalEditor.deductionSource || "Elden"} onChange={(event) => setFinalValue("deductionSource", event.target.value)}><option>Elden</option><option>Banka</option></select></Field>
+                      <Field label="İcra/Haciz Kaynağı"><select value={finalEditor.garnishmentSource || "Banka"} onChange={(event) => setFinalValue("garnishmentSource", event.target.value)}><option>Banka</option><option>Elden</option></select></Field>
+                      <Field label="Ödeme Tipi"><select value={finalEditor.paymentType || "BANKA_ELDEN"} onChange={(event) => setFinalValue("paymentType", event.target.value)}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field>
+                      <Field label="Bankadan Ödenecek"><input type="number" min="0" value={finalEditor.bank ?? ""} onChange={(event) => setFinalValue("bank", event.target.value)} /></Field>
+                      <Field label="Elden Ödenecek"><input type="number" min="0" value={finalEditor.cash ?? ""} onChange={(event) => setFinalValue("cash", event.target.value)} /></Field>
                       <Field label="Son Kontrol Açıklaması" wide><input value={finalEditor.reason || ""} onChange={(event) => setFinalValue("reason", event.target.value)} placeholder="Örn. Eylül son bordro kontrolü" /></Field>
                     </div>
                     <div className="row-actions">
