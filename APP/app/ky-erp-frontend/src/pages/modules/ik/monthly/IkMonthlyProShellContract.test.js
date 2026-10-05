@@ -74,6 +74,11 @@ test("personnel cards use the complete HKN master roster while payroll stays per
   assert.match(monthly, /HKN Değiştir/);
 });
 
+test("personnel list keeps single-click selection and opens edit on double click", () => {
+  assert.match(monthly, /title="Tek tık: seç · Çift tık: düzenle"/);
+  assert.match(monthly, /onClick=\{\(\) => setSelectedId\(employee\.id\)\} onDoubleClick=\{\(\) => openPerson\(employee\)\}/);
+});
+
 test("personnel selection survives live refresh against the full master roster", () => {
   assert.match(monthly, /const masterSelectionIds = new Set/);
   assert.match(monthly, /safeList\(result\?\.masterEmployees\)\.map\(\(item\) => item\.id\)/);
