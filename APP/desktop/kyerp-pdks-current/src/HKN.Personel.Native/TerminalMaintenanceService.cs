@@ -100,6 +100,9 @@ internal static class TerminalMaintenanceService
         if (failed)
             return new(false, "Cihaz logları silinmedi. Önce aktarım doğrulaması tamamlanmalı. " + sync.Message, 0, sync.ReadCount);
 
+        if (sync.DeviceCleared)
+            return new(true, $"Cihaz logları güvenli biçimde aktarıldı ve temizlendi. Önce {sync.ReadCount} kayıt CANLI TNF + TNF + FDB üzerinde doğrulandı.", sync.ReadCount, sync.ReadCount);
+
         var clear = await TerminalDeviceClient.ClearLogsAsync(ct);
         if (!clear.Success) return new(false, "Kayıtlar aktarıldı ancak cihaz logları temizlenemedi: " + clear.Message, 0, sync.ReadCount);
 
@@ -137,6 +140,24 @@ internal static class TerminalMaintenanceService
         var message = $"Cihaz kullanıcı/kart kayıtları sıfırlandı. İşlem öncesi {users.Count} kullanıcı envanteri arşivlendi.";
         if (status.Connected && status.UserCount > 0) message += $" Cihaz {status.UserCount} kullanıcı bildiriyor; model bazı kimlik türlerini ayrı tutuyor olabilir.";
         return new(true, message, users.Count, users.Count);
+    }
+
+    public static TerminalMaintenanceResult ClearLiveExceptLastWeek()
+    {
+        var keepFrom = DateTime.Today.AddDays(-6);
+        var removed = TerminalLiveArchiveService.DeleteBefore(keepFrom);
+        return new(true,
+            $"Canlı arşiv temizlendi. {keepFrom:dd.MM.yyyy} ve sonrası (son 7 takvim günü) korundu; {removed} canlı arşiv satırı kaldırıldı. Ana TNF/FDB değişmedi.",
+            removed);
+    }
+
+    public static TerminalMaintenanceResult ClearAllLive()
+    {
+        var removed = TerminalLiveArchiveService.ClearAll();
+        TerminalSyncService.ClearLive();
+        return new(true,
+            $"Canlı arşiv tamamen sıfırlandı; {removed} CANLI TNF kaydı temizlendi. Ana TNF/FDB ve cihaz verisi değişmedi.",
+            removed);
     }
 
     static void SavePunchSnapshot(IEnumerable<TerminalDevicePunch> punches, string prefix)
