@@ -782,10 +782,6 @@ async function updateAdvancedFinance(c: Context<AppEnv>) {
   const companyId = companyIdOf(c, body);
   const current = await first(c, "SELECT a.* FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
   if (!current) return error(c, 404, "NOT_FOUND", "Mesai/avans/kesinti kaydı bulunamadı.");
-  if (upper(current.note).includes("SON BORDRO KONTROL")) {
-    return error(c, 409, "FINAL_CONTROL_CORRECTION_IMMUTABLE", "Son bordro kontrolü düzeltmesi hareket ekranından değiştirilemez.");
-  }
-
   if (Array.isArray(body.employeeIds) && body.employeeIds.length) {
     return error(c, 400, "SINGLE_EMPLOYEE_ONLY", "Hareket güncellemesinde yalnız employeeId kullanılmalıdır.");
   }
@@ -2019,7 +2015,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     const id = crypto.randomUUID();
     correctionIds.push(id);
     const paymentMethod = kind === "overtime" ? "Bordro" : (upper(source).includes("BANKA") ? "Banka" : "Elden");
-    const note = `Son bordro kontrolü düzeltmesi · önce ${current[kind].toFixed(2)} · sonra ${desired[kind].toFixed(2)} · ${reason}`;
+    const note = `Bordro kaynak kontrolü · önce ${current[kind].toFixed(2)} · sonra ${desired[kind].toFixed(2)} · ${reason}`;
     statements.push(
       c.env.DB.prepare(`INSERT INTO hr_monthly_adjustments_v2
         (id,employee_id,date,adjustment_type,hour_or_day,amount,payment_method,payroll_effect,note,status,created_at)
@@ -2028,11 +2024,11 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     );
   };
 
-  pushCorrection("overtime", "Mesai - Son Bordro Düzeltme", "Bordro");
-  pushCorrection("advance", "Avans - Son Bordro Düzeltme", text(body.advanceSource) || "Elden");
-  pushCorrection("deduction", "Ozel kesinti - Son Bordro Düzeltme", text(body.deductionSource) || "Elden");
+  pushCorrection("overtime", "Mesai", "Bordro");
+  pushCorrection("advance", "Avans", text(body.advanceSource) || "Elden");
+  pushCorrection("deduction", "Ozel kesinti", text(body.deductionSource) || "Elden");
   const legalType = upper(body.legalType) === "HACIZ" ? "Haciz" : "Icra";
-  pushCorrection("garnishment", `${legalType} - Son Bordro Düzeltme`, text(body.garnishmentSource) || "Banka");
+  pushCorrection("garnishment", legalType, text(body.garnishmentSource) || "Banka");
 
   const existing = await first(c, "SELECT id,status,created_at FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND employee_id=? LIMIT 1", [companyId, year, month, employeeId]);
   if (upper(existing?.status) === "PAID") {
@@ -2064,7 +2060,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     employeeId,
     entityType: "BORDRO",
     action: "FINAL_CONTROL",
-    summary: "Son bordro kontrolü kaynak hareketleriyle birlikte kaydedildi.",
+    summary: "Bordro snapshotı kaynak kayıtlarla uyumlu biçimde kaydedildi.",
     details: { reason, current, desired, net, correctionIds },
   });
   return okData(c, { employeeId, period, current, final: { ...desired, total: net }, correctionIds });
