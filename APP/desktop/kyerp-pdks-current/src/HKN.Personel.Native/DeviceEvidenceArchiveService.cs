@@ -79,6 +79,26 @@ internal static class DeviceEvidenceArchiveService
         }
     }
 
+    public static IReadOnlyList<TerminalDevicePunch> ReadDailyPunches(DateTime day)
+    {
+        CompanyDataPaths.Ensure();
+        var path = CompanyDataPaths.DeviceDailyTnf(day.Date);
+        if (!File.Exists(path)) return Array.Empty<TerminalDevicePunch>();
+        var result = new List<TerminalDevicePunch>();
+        foreach (var line in File.ReadLines(path))
+        {
+            try
+            {
+                var record = TnfRecord.Parse(line);
+                var at = record.Date.ToDateTime(record.Time);
+                if (at.Date != day.Date) continue;
+                result.Add(new TerminalDevicePunch(record.EmployeeCode, at, 0, 0, 1, 1));
+            }
+            catch { }
+        }
+        return result.OrderBy(x => x.OccurredAt).ToArray();
+    }
+
     static void MergeDaily(string path, IEnumerable<string> additions)
     {
         var lines = File.Exists(path)
