@@ -120,7 +120,8 @@ test("payroll payment balance is auto-reconciled in UI while backend keeps the h
 
   assert.match(page, /function reconcilePaymentSplit/);
   assert.match(page, /const balancedSplit = reconcilePaymentSplit\(rowTotals\.net/);
-  assert.match(page, /const payment = reconcilePaymentSplit\([\s\S]*enteredTotals\.net/);
+  assert.match(page, /Banka \+ Elden planı tahmini net ile dengeli/);
+  assert.match(page, /preTotals\.diff/);
   assert.doesNotMatch(page, /Banka \+ elden net odeme ile eslesmiyor\. Devam edilsin mi/);
   assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
   assert.match(cloud, /calculatePayrollAmounts/);
