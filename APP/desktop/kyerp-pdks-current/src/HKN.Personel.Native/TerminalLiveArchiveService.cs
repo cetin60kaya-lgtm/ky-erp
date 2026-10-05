@@ -159,6 +159,74 @@ internal static class TerminalLiveArchiveService
         return removed;
     }
 
+    public static int DeleteEmployeeCodes(IEnumerable<string> employeeCodes)
+    {
+        Ensure();
+        var normalized = new HashSet<string>(
+            employeeCodes.Where(x => !string.IsNullOrWhiteSpace(x)).Select(NormalizeCode),
+            StringComparer.Ordinal);
+        if (normalized.Count == 0) return 0;
+
+        var removed = 0;
+        foreach (var file in Directory.GetFiles(TnfRoot, "CANLI_TR*.Tnf"))
+        {
+            var lines = File.ReadAllLines(file);
+            var keep = new List<string>(lines.Length);
+            foreach (var line in lines)
+            {
+                if (TryParseTnf(line, out var code, out _) && normalized.Contains(NormalizeCode(code)))
+                {
+                    removed++;
+                    continue;
+                }
+                keep.Add(line);
+            }
+            File.WriteAllLines(file, keep, Encoding.ASCII);
+        }
+
+        foreach (var file in Directory.GetFiles(RawRoot, "*.raw", SearchOption.AllDirectories))
+        {
+            var lines = File.ReadAllLines(file);
+            var keep = new List<string>(lines.Length);
+            foreach (var line in lines)
+            {
+                var p = line.Split('|');
+                if (p.Length > 0 && normalized.Contains(NormalizeCode(p[0])))
+                {
+                    removed++;
+                    continue;
+                }
+                keep.Add(line);
+            }
+            if (keep.Count == 0)
+            {
+                try { File.Delete(file); } catch { }
+            }
+            else File.WriteAllLines(file, keep, Encoding.UTF8);
+        }
+
+        if (File.Exists(CompanyDataPaths.LiveFile))
+        {
+            var lines = File.ReadAllLines(CompanyDataPaths.LiveFile);
+            var keep = lines.Where(line =>
+            {
+                var p = line.Split('|');
+                return p.Length == 0 || !normalized.Contains(NormalizeCode(p[0]));
+            }).ToArray();
+            File.WriteAllLines(CompanyDataPaths.LiveFile, keep, Encoding.UTF8);
+            HideLive();
+        }
+        return removed;
+    }
+
+    static string NormalizeCode(string value)
+    {
+        var text = value.Trim();
+        return int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number)
+            ? number.ToString("00000", CultureInfo.InvariantCulture)
+            : text;
+    }
+
     public static int ClearAll()
     {
         Ensure();
