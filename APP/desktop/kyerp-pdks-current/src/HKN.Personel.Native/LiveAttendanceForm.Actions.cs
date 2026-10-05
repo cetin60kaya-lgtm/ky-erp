@@ -82,7 +82,7 @@ public sealed partial class LiveAttendanceForm
     async Task AddManualEAsync(bool entry)
     {
         var tab=entry?"Giriş Eksik":"İçeride / Çıkış Bekleyen";
-        var cards=CardsFromGrid(tab);
+        var cards=entry?CardsFromGrid(tab):CardsFromGrid(tab,"Çıkış Kartı Yok");
         if(cards.Length==0)
         {
             MessageBox.Show($"{tab} listesinde E yapılacak personel yok.","Canlı Denetim",MessageBoxButtons.OK,MessageBoxIcon.Information);
@@ -164,11 +164,13 @@ public sealed partial class LiveAttendanceForm
         finally{SetActionBusy(false);}
     }
 
-    string[] CardsFromGrid(string tab)
+    string[] CardsFromGrid(string tab,string? requiredStatus=null)
     {
         if(!grids.TryGetValue(tab,out var grid)||!grid.Columns.Contains("Kart No"))return [];
         return grid.Rows.Cast<DataGridViewRow>()
             .Where(r=>!r.IsNewRow)
+            .Where(r=>string.IsNullOrWhiteSpace(requiredStatus) ||
+                (grid.Columns.Contains("Durum") && string.Equals(Convert.ToString(r.Cells["Durum"].Value),requiredStatus,StringComparison.OrdinalIgnoreCase)))
             .Select(r=>Convert.ToString(r.Cells["Kart No"].Value)?.Trim()??"")
             .Where(x=>x.Length>0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
