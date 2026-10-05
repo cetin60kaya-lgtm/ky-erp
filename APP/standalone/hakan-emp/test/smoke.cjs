@@ -46,7 +46,27 @@ function ok(v,m){if(!v)throw new Error('ASSERT '+m)}
   const rm2=await api('/api/machine-remove','POST',{machineNo:'98'});ok(rm2.soft===true,'used machine soft delete');
   machines=await api('/api/machines-all');ok(machines.rows.some(x=>x.machine_no==='98'&&x.active===0),'used machine passive');
 
-  console.log(JSON.stringify({ok:true,companies:all.rows.length,notes:notes.rows.length,machineSoftDelete:true}));
+  // Weekly pool: the same open job stays in the pool across weeks.
+  await api('/api/job-adjust','POST',{batchId:job.batchId,expectedQty:70,ground:'SİYAH',orderNo:'SMOKE'});
+  await api('/api/production','POST',{modelId:job.modelId,date:'2026-10-05',machineNo:'98',shift:'Gündüz',operator:'Ali',qty:40,fabricDefect:1,printDefect:2});
+  await api('/api/production','POST',{modelId:job.modelId,date:'2026-10-12',machineNo:'98',shift:'Gece',operator:'MURAT',qty:20,fabricDefect:0,printDefect:1});
+  const w1=await api('/api/dashboard?week=2026-10-05');
+  const w2=await api('/api/dashboard?week=2026-10-12');
+  const rw1=w1.rows.find(x=>x.model_id===job.modelId),rw2=w2.rows.find(x=>x.model_id===job.modelId);
+  ok(w1.week.start==='2026-10-05'&&w1.week.end==='2026-10-11','week 1 range');
+  ok(rw1&&rw1.week_produced===40&&rw1.week_entries===1,'week 1 production');
+  ok(rw2&&rw2.week_produced===20&&rw2.week_entries===1,'week 2 production');
+  ok(rw2.produced_qty===70,'general production preserved across weeks');
+
+  // Pool completion: dispatch + invoice balance closes the job automatically.
+  await api('/api/financial','POST',{modelId:job.modelId,type:'dispatch',date:'2026-10-13',docNo:'SMOKE-I',qty:70,companyId:c.id});
+  await api('/api/financial','POST',{modelId:job.modelId,type:'invoice',date:'2026-10-13',docNo:'SMOKE-F',qty:70,amount:700,companyId:c.id,note:'smoke'});
+  const openAfter=await api('/api/dashboard?week=2026-10-12');
+  const doneAfter=await api('/api/completed?week=2026-10-12');
+  ok(!openAfter.rows.some(x=>x.model_id===job.modelId),'completed model leaves active pool');
+  ok(doneAfter.rows.some(x=>x.model_id===job.modelId&&x.status==='TAMAM'),'completed model enters completed pool');
+
+  console.log(JSON.stringify({ok:true,companies:all.rows.length,notes:notes.rows.length,machineSoftDelete:true,weeklyPool:true,autoComplete:true}));
 })().catch(e=>{console.error(e.stack||e);process.exitCode=1}).finally(()=>{child.kill();setTimeout(()=>{try{fs.rmSync(tmp,{recursive:true,force:true})}catch{}},100)});
 
 // UI selector guard
