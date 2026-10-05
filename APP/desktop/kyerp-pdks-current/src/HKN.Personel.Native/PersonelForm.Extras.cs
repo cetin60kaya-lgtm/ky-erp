@@ -82,6 +82,7 @@ public partial class PersonelForm
             if(name=="Giriş / Çıkış"){var a=gFrom.Value.Date;var b=gTo.Value.Date.AddDays(1);gGiris.DataSource=Q("select SIRA,GTARIH as GIRIS_TARIHI,GSAAT as GIRIS_SAATI,CTARIH as CIKIS_TARIHI,CSAAT as CIKIS_SAATI,GTUR,CTUR from GIRCIK where PKNO=@PK and ((GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B)) order by coalesce(GTARIH,CTARIH)",new FbParameter("@PK",pk),new FbParameter("@A",a),new FbParameter("@B",b));}
             else if(name=="İzinler"){var a=iFrom.Value.Date;var b=iTo.Value.Date.AddDays(1);gIzin.DataSource=Q("select SIRA,TARIH,BASSAAT,BITSAAT,SURESAAT,SUREDAKIKA,EBALAN,TIP,MAZERET from OZELIZIN where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",pk),new FbParameter("@A",a),new FbParameter("@B",b));}
             else if(name=="Kazanç / Kesinti"){var a=eFrom.Value.Date;var b=eTo.Value.Date.AddDays(1);gEkk.DataSource=Q("select KOD,TARIH as ISLEM_TARIHI,VTARIH as VERILIS_TARIHI,TURKOD as TURU,MIKTAR,ACIKLAMA from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",pk),new FbParameter("@A",a),new FbParameter("@B",b));}
+            else if(name=="Bordro") LoadPersonPayrollTab();
             else if(name is "Puantaj" or "Ödeme Özeti") LoadBilgiOdemeClassic();
             UpdatePuantajEmptyState();
         }
@@ -112,6 +113,7 @@ public partial class PersonelForm
             gEkk.DataSource = Q("select KOD,TARIH as ISLEM_TARIHI,VTARIH as VERILIS_TARIHI,TURKOD as TURU,MIKTAR,ACIKLAMA from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH", new FbParameter("@PK",pk), new FbParameter("@A",a), new FbParameter("@B",b));
 
             LoadBilgiOdemeClassic();
+            LoadPersonPayrollTab();
             UpdatePuantajEmptyState();
         }
         catch(Exception ex)
