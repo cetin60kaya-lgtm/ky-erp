@@ -112,6 +112,8 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
         filters.Controls.Add(L("Ay"));filters.Controls.Add(month);
         filters.Controls.Add(L("Personel"));filters.Controls.Add(person);
         filters.Controls.Add(B("Yenile",86,Reload));
+        filters.Controls.Add(periodLockButton);
+        filters.Controls.Add(periodLockState);
         summary.Text="Kaynak: UCRETLER • Resmî net / banka otomatik";
         summary.Padding=new Padding(12,8,0,0);
         filters.Controls.Add(summary);
