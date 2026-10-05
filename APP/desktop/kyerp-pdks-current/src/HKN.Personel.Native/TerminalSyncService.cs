@@ -96,16 +96,21 @@ internal static class TerminalSyncService
             DeviceEvidenceArchiveService.SaveRead(punches, source + " • SENKRON OKUMA");
             AppendLive(punches);
             TerminalLiveArchiveService.Append(punches);
-            AppendTnf(punches);
 
             var records = punches.Select(ToRecord).ToArray();
-            var imported = new AttendanceImportService(new FirebirdDatabase(PdksOptions.FromEnvironment())).Import(records, deviceSettings.ToleranceMinutes);
+            var operationalDb = new FirebirdDatabase(PdksOptions.FromEnvironment());
+            var imported = new AttendanceImportService(operationalDb).Import(records, deviceSettings.ToleranceMinutes);
             var accounted = imported.Inserted + imported.Updated + imported.Duplicates;
             if (imported.Skipped != 0 || accounted != punches.Length)
             {
-                var validation = $"{source}: doğrulama başarısız; okunan={punches.Length}, işlenen={accounted}, atlanan={imported.Skipped}. Cihaz kayıtları KORUNDU.";
+                var validation = $"{source}: doğrulama başarısız; okunan={punches.Length}, işlenen={accounted}, atlanan={imported.Skipped}. Ana TNF değiştirilmedi; cihaz kayıtları KORUNDU.";
                 return Save(new(DateTime.Now, punches.Length, imported.Inserted, imported.Updated, imported.Duplicates, imported.Skipped, false, validation, scheduleKey));
             }
+
+            // Resmî yıllık TNF yalnız DATA/FDB'den üretilir. E kayıtları OperationalTnfSyncService tarafından dışarıda bırakılır.
+            OperationalTnfSyncService.AlignPersonDays(
+                operationalDb,
+                punches.Select(x => (x.EmployeeCode, x.OccurredAt.Date)));
 
             await PdksCloudAgent.EnqueueTerminalSyncAsync(punches, imported, ct);
             _ = PdksCloudAgent.RunOnceAsync(ct);
