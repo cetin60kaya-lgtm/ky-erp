@@ -6,84 +6,120 @@ namespace QuickDataTool;
 
 public sealed class PayrollEditForm : Form
 {
-	private readonly Dictionary<string, TextBox> boxes = new Dictionary<string, TextBox>();
+    private readonly Dictionary<string, TextBox> boxes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly CheckBox autoHours = new()
+    {
+        Text = "Normal Gün değişirse SAAT1 + NCGUN + NCSAAT günlük çalışma süresine göre otomatik eşitlensin",
+        AutoSize = true,
+        Checked = true
+    };
 
-	public static readonly string[] Fields = new string[75]
-	{
-		"DMAAS", "GUN1", "SAAT1", "UCRET1", "GUN2", "SAAT2", "UCRET2", "GUN3", "SAAT3", "UCRET3",
-		"GUN4", "SAAT4", "UCRET4", "GUN5", "SAAT5", "UCRET5", "GUN6", "SAAT6", "UCRET6", "GUN7",
-		"SAAT7", "UCRET7", "GUN8", "SAAT8", "UCRET8", "GUN9", "SAAT9", "UCRET9", "GUN10", "SAAT10",
-		"UCRET10", "NCGUN", "NCSAAT", "NCUCRET", "NCODENEN", "FMSAAT", "FMUCRET", "FMODENEN", "DEVS", "DEVG",
-		"DEVU", "DEVCEZAS", "DEVCEZAU", "ERS", "ERG", "ERU", "ERCEZAS", "ERCEZAU", "GECS", "GECG",
-		"GECU", "GECCEZAS", "GECCEZAU", "EKS", "EKG", "EKU", "EKCEZAS", "EKCEZAU", "AYS", "AYU",
-		"TOPEKS", "YOLU", "YEMEKU", "DEVIR", "EX1", "EX2", "EX3", "EX4", "EX5", "EX6",
-		"EKKES", "EKKAZ", "SSKG", "BOLUM", "MESAIKESINTIS"
-	};
+    public static readonly string[] Fields = PayrollOverrideService.EditableFields;
+    public bool AutoHours => autoHours.Checked;
 
-	public string Get(string key)
-	{
-		return boxes[key].Text.Trim();
-	}
+    public string Get(string key) => boxes[key].Text.Trim();
 
-	public PayrollEditForm(string card, DataGridViewRow row)
-	{
-		Text = "Bordro Düzenle - " + card;
-		base.Width = 760;
-		base.Height = 760;
-		base.StartPosition = FormStartPosition.CenterParent;
-		TableLayoutPanel tableLayoutPanel = new TableLayoutPanel
-		{
-			Dock = DockStyle.Fill,
-			Padding = new Padding(14),
-			ColumnCount = 2,
-			AutoScroll = true
-		};
-		tableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210f));
-		tableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-		string[] fields = Fields;
-		foreach (string text in fields)
-		{
-			DataGridView? dataGridView = row.DataGridView;
-			string text2 = ((dataGridView != null && dataGridView.Columns.Contains(text)) ? (Convert.ToString(row.Cells[text].Value) ?? "") : "");
-			TextBox textBox = new TextBox
-			{
-				Dock = DockStyle.Top,
-				Text = text2
-			};
-			boxes[text] = textBox;
-			tableLayoutPanel.Controls.Add(new Label
-			{
-				Text = text,
-				Dock = DockStyle.Top,
-				Height = 28
-			}, 0, tableLayoutPanel.RowCount);
-			tableLayoutPanel.Controls.Add(textBox, 1, tableLayoutPanel.RowCount);
-			tableLayoutPanel.RowCount++;
-		}
-		Button button = new Button
-		{
-			Text = "Kaydet",
-			DialogResult = DialogResult.OK,
-			Width = 120
-		};
-		Button button2 = new Button
-		{
-			Text = "Vazgeç",
-			DialogResult = DialogResult.Cancel,
-			Width = 120
-		};
-		FlowLayoutPanel flowLayoutPanel = new FlowLayoutPanel
-		{
-			Dock = DockStyle.Top,
-			FlowDirection = FlowDirection.RightToLeft,
-			Height = 48
-		};
-		flowLayoutPanel.Controls.Add(button);
-		flowLayoutPanel.Controls.Add(button2);
-		tableLayoutPanel.Controls.Add(flowLayoutPanel, 0, tableLayoutPanel.RowCount);
-		tableLayoutPanel.SetColumnSpan(flowLayoutPanel, 2);
-		base.Controls.Add(tableLayoutPanel);
-		base.AcceptButton = button;
-		base.CancelButton = button2;
-	}
+    public Dictionary<string, string> Values()
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var field in Fields) result[field] = Get(field);
+        return result;
+    }
+
+    public PayrollEditForm(string card, DataGridViewRow row)
+        : this(card, FromRow(row))
+    {
+    }
+
+    public PayrollEditForm(string card, IReadOnlyDictionary<string, string> values)
+    {
+        Text = "Bordro Düzenle - " + card;
+        Width = 790;
+        Height = 800;
+        StartPosition = FormStartPosition.CenterParent;
+
+        var outer = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(14),
+            ColumnCount = 2,
+            AutoScroll = true
+        };
+        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220f));
+        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+
+        var note = new Label
+        {
+            Text = "Yalnız değiştirdiğiniz alanlar MANUEL OVERRIDE olarak saklanır. Diğer maaş / ödeme / kesinti alanlarına dokunulmaz.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(700, 0),
+            ForeColor = System.Drawing.Color.DarkSlateBlue
+        };
+        outer.Controls.Add(note, 0, outer.RowCount);
+        outer.SetColumnSpan(note, 2);
+        outer.RowCount++;
+
+        outer.Controls.Add(autoHours, 0, outer.RowCount);
+        outer.SetColumnSpan(autoHours, 2);
+        outer.RowCount++;
+
+        foreach (var field in Fields)
+        {
+            values.TryGetValue(field, out var value);
+            var box = new TextBox { Dock = DockStyle.Top, Text = value ?? "" };
+            boxes[field] = box;
+            outer.Controls.Add(new Label { Text = LabelFor(field), Dock = DockStyle.Top, Height = 28 }, 0, outer.RowCount);
+            outer.Controls.Add(box, 1, outer.RowCount);
+            outer.RowCount++;
+        }
+
+        var save = new Button { Text = "Kaydet", DialogResult = DialogResult.OK, Width = 120 };
+        var cancel = new Button { Text = "Vazgeç", DialogResult = DialogResult.Cancel, Width = 120 };
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            FlowDirection = FlowDirection.RightToLeft,
+            Height = 48
+        };
+        buttons.Controls.Add(save);
+        buttons.Controls.Add(cancel);
+        outer.Controls.Add(buttons, 0, outer.RowCount);
+        outer.SetColumnSpan(buttons, 2);
+
+        Controls.Add(outer);
+        AcceptButton = save;
+        CancelButton = cancel;
+    }
+
+    private static Dictionary<string, string> FromRow(DataGridViewRow row)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var field in Fields)
+        {
+            var grid = row.DataGridView;
+            result[field] = grid != null && grid.Columns.Contains(field)
+                ? Convert.ToString(row.Cells[field].Value) ?? ""
+                : "";
+        }
+        return result;
+    }
+
+    private static string LabelFor(string field) => field switch
+    {
+        "GUN1" => "Normal Gün (GUN1)",
+        "SAAT1" => "Normal Saat (SAAT1)",
+        "UCRET1" => "Normal Ücret (UCRET1)",
+        "NCGUN" => "Net Çalışma Günü (NCGUN)",
+        "NCSAAT" => "Net Çalışma Saati (NCSAAT)",
+        "NCUCRET" => "Net Çalışma Ücreti (NCUCRET)",
+        "FMSAAT" => "Fazla Mesai Saati (FMSAAT)",
+        "FMUCRET" => "Fazla Mesai Ücreti (FMUCRET)",
+        "FMODENEN" => "Mesai Ödenen (FMODENEN)",
+        "FMKALAN" => "Mesai Kalan (FMKALAN)",
+        "EKKAZ" => "Ek Kazanç (EKKAZ)",
+        "EKKES" => "Ek Kesinti (EKKES)",
+        "NCMAAS" => "Maaş (NCMAAS)",
+        "NCKALAN" => "Maaş Kalan (NCKALAN)",
+        _ => field
+    };
 }
