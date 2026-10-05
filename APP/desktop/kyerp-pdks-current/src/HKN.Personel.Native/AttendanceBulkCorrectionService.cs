@@ -56,7 +56,7 @@ internal static class AttendanceBulkCorrectionService
             if (string.Equals(tur, "E", StringComparison.OrdinalIgnoreCase)) { skipped++; continue; }
 
             var oldTime = Convert.ToString(row[entry ? "GSAAT" : "CSAAT"])?.Trim() ?? string.Empty;
-            var oldMinute = row[entry ? "GDAKIKA" : "CDAKIKA"] == DBNull.Value ? null : Convert.ToInt32(row[entry ? "GDAKIKA" : "CDAKIKA"]);
+            int? oldMinute = row[entry ? "GDAKIKA" : "CDAKIKA"] == DBNull.Value ? null : Convert.ToInt32(row[entry ? "GDAKIKA" : "CDAKIKA"]);
             var minute = StableMinute(card, day, entry ? "NORMAL_GIRIS" : "NORMAL_CIKIS", from, to);
             var newTime = TimeSpan.FromMinutes(minute).ToString(@"hh\\:mm", CultureInfo.InvariantCulture);
             var sira = Convert.ToInt32(row["SIRA"]);
