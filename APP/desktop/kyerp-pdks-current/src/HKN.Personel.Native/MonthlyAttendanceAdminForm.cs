@@ -53,7 +53,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
             throw new UnauthorizedAccessException("Aylık kart düzeltme ekranı yalnız ADMIN içindir.");
 
         period.Value = DateTime.Today;
-        filter.Items.AddRange(["Sorunlular", "Tümü", "Kart Basmadı", "Giriş Eksik", "Çıkış Eksik", "Geç Giriş", "Erken Çıkış", "E Kayıtları", "Tamam"]);
+        filter.Items.AddRange(["Sorunlular", "Tümü", "Kart Basmadı", "Giriş Eksik", "Çıkış Eksik", "Erken Giriş", "Geç Giriş", "Erken Çıkış", "Geç Çıkış", "E Kayıtları", "Tamam"]);
         filter.SelectedIndex = 0;
 
         Build();
@@ -92,7 +92,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
         };
         var info = new Label
         {
-            Text = "ADMIN • Normal kayıt = DATA + yıllık TNF aynı dakika • E = yalnız DATA, TNF dışı • Cihaz ham arşivi değişmez",
+            Text = $"ADMIN • Kabul: Giriş {AttendanceTolerancePolicy.EntryWindowText} • Çıkış {AttendanceTolerancePolicy.ExitWindowText} • Normal = DATA+TNF • E yalnız DATA",
             Dock = DockStyle.Fill,
             ForeColor = p.Muted,
             TextAlign = ContentAlignment.MiddleRight
@@ -290,8 +290,16 @@ public sealed class MonthlyAttendanceAdminForm : Form
                     {
                         if(!entry.HasValue) statusParts.Add("Giriş Eksik");
                         if(!exit.HasValue) statusParts.Add("Çıkış Eksik");
-                        if(entry.HasValue && !IsE(entryType) && entry.Value.TimeOfDay > new TimeSpan(8,35,0)) statusParts.Add("Geç Giriş");
-                        if(exit.HasValue && !IsE(exitType) && exit.Value.TimeOfDay < new TimeSpan(18,50,0)) statusParts.Add("Erken Çıkış");
+                        if(entry.HasValue && !IsE(entryType))
+                        {
+                            var entryException=AttendanceTolerancePolicy.EntryException(entry.Value);
+                            if(entryException.Length>0)statusParts.Add(entryException);
+                        }
+                        if(exit.HasValue && !IsE(exitType))
+                        {
+                            var exitException=AttendanceTolerancePolicy.ExitException(exit.Value);
+                            if(exitException.Length>0)statusParts.Add(exitException);
+                        }
                         if(IsE(entryType)) statusParts.Add("E Giriş");
                         if(IsE(exitType)) statusParts.Add("E Çıkış");
                         if(statusParts.Count==0) statusParts.Add("Tamam");
@@ -321,8 +329,10 @@ public sealed class MonthlyAttendanceAdminForm : Form
             "Kart Basmadı" => source.Where(x => x.Status.Contains("Kart Basmadı",StringComparison.OrdinalIgnoreCase)),
             "Giriş Eksik" => source.Where(x => x.Status.Contains("Giriş Eksik",StringComparison.OrdinalIgnoreCase)),
             "Çıkış Eksik" => source.Where(x => x.Status.Contains("Çıkış Eksik",StringComparison.OrdinalIgnoreCase)),
+            "Erken Giriş" => source.Where(x => x.Status.Contains("Erken Giriş",StringComparison.OrdinalIgnoreCase)),
             "Geç Giriş" => source.Where(x => x.Status.Contains("Geç Giriş",StringComparison.OrdinalIgnoreCase)),
             "Erken Çıkış" => source.Where(x => x.Status.Contains("Erken Çıkış",StringComparison.OrdinalIgnoreCase)),
+            "Geç Çıkış" => source.Where(x => x.Status.Contains("Geç Çıkış",StringComparison.OrdinalIgnoreCase)),
             "E Kayıtları" => source.Where(x => IsE(x.EntryType)||IsE(x.ExitType)),
             "Tamam" => source.Where(x => x.Status=="Tamam"),
             _ => source
@@ -389,7 +399,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
         var selected=Selected().Where(x=>x.Workday && (entry?!x.Entry.HasValue:!x.Exit.HasValue)).ToList();
         if(selected.Count==0){MessageBox.Show("Seçimde uygun eksik kayıt yok.",Text);return;}
 
-        var defaults=entry?(new TimeSpan(8,20,0),new TimeSpan(8,35,0)):(new TimeSpan(18,50,0),new TimeSpan(19,5,0));
+        var defaults=entry?(AttendanceTolerancePolicy.EntryEarliest,AttendanceTolerancePolicy.EntryLatest):(AttendanceTolerancePolicy.ExitEarliest,AttendanceTolerancePolicy.ExitLatest);
         var range=AskTimeRange(manualE?(entry?"E Giriş Ekle":"E Çıkış Ekle"):(entry?"Normal Giriş Ekle":"Normal Çıkış Ekle"),defaults.Item1,defaults.Item2);
         if(range is null)return;
 
@@ -424,7 +434,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
         if(!EnsureAdmin())return;
         var selected=Selected().Where(x=>x.Workday && (entry?x.Entry.HasValue&&!IsE(x.EntryType):x.Exit.HasValue&&!IsE(x.ExitType))).ToList();
         if(selected.Count==0){MessageBox.Show("Seçimde düzenlenecek normal kayıt yok.",Text);return;}
-        var defaults=entry?(new TimeSpan(8,20,0),new TimeSpan(8,35,0)):(new TimeSpan(18,50,0),new TimeSpan(19,5,0));
+        var defaults=entry?(AttendanceTolerancePolicy.EntryEarliest,AttendanceTolerancePolicy.EntryLatest):(AttendanceTolerancePolicy.ExitEarliest,AttendanceTolerancePolicy.ExitLatest);
         var range=AskTimeRange(entry?"Giriş Saatini Düzenle":"Çıkış Saatini Düzenle",defaults.Item1,defaults.Item2);
         if(range is null)return;
         if(MessageBox.Show($"{selected.Count} kişi-gün {range.Value.Start:hh\\:mm}-{range.Value.End:hh\\:mm} aralığına dağıtılacak.\n\nDATA ve yıllık TNF birlikte değişir; cihaz ham arşivi değişmez; E oluşturulmaz.",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
