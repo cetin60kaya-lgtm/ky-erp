@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
+using KYERP.PDKS.Core;
 
 namespace QuickDataTool;
 
@@ -59,7 +60,7 @@ public sealed class PersonnelEditForm : Form
 		return value.Text.Trim();
 	}
 
-	public PersonnelEditForm(DataGridViewRow row)
+	public PersonnelEditForm(FirebirdDatabase database, DataGridViewRow row)
 	{
 		string text = Convert.ToString(row.Cells["PKNO"].Value) ?? "";
 		Text = "Personel Kartı Düzenle - " + text;
@@ -86,6 +87,9 @@ public sealed class PersonnelEditForm : Form
 			"CCKSAY", "ESINIF", "EVTEL", "EVILILCE", "GSM", "EBELGENO", "EVTAR", "EKC", "ICIKSEBEB", "ADRES",
 			"BHNO"
 		}));
+		TabPage payrollPage = new TabPage("Bordro");
+		payrollPage.Controls.Add(new PayrollPersonControl(database, text));
+		tabControl.TabPages.Add(payrollPage);
 		FlowLayoutPanel flowLayoutPanel = new FlowLayoutPanel
 		{
 			Dock = DockStyle.Top,
