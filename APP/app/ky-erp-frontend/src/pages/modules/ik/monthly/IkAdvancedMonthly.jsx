@@ -291,6 +291,17 @@ function reconcilePaymentSplit(netValue, bankValue, cashValue, preferred = "cash
   return { bank: round(net - nextCash), cash: nextCash, adjusted: true };
 }
 
+function paymentSplitByType(paymentType, netValue, bankValue = 0) {
+  const net = Math.max(round(netValue), 0);
+  const type = upper(paymentType);
+  const onlyCash = type.includes("ELDEN") && !type.includes("BANKA");
+  const onlyBank = type.includes("BANKA") && !type.includes("ELDEN");
+  if (onlyCash) return { bank: 0, cash: net, mode: "ELDEN" };
+  if (onlyBank) return { bank: net, cash: 0, mode: "BANKA" };
+  const bank = Math.min(Math.max(round(bankValue), 0), net);
+  return { bank, cash: round(net - bank), mode: "BANKA_ELDEN" };
+}
+
 function draftPerson(employee = {}) {
   return {
     id: employee.id || "",
@@ -713,15 +724,15 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const garnishmentSource = legalBank > 0 && legalCash > 0 ? "KARMA" : legalCash > 0 ? "ELDEN" : "BANKA";
   const actualSalary = num(employee.salary);
   const baseEmployee = employee.baseEmployeeId ? rawEmployees.find((item) => item.id === employee.baseEmployeeId) : null;
-  const salary = baseEmployee ? num(baseEmployee.salary) : actualSalary;
+  const salary = actualSalary;
   const road = num(employee.roadAllowance);
-  const extraLabel = "EK";
-  const extra = baseEmployee ? Math.max(round(actualSalary - salary), 0) : num(employee.extraPaymentAmount);
+  const extraLabel = employee.extraPaymentLabel || "EK";
+  const extra = num(employee.extraPaymentAmount);
   const pre = calcRow({ salary, road, overtime, extra, advance, deduction, garnishment });
   const saved = payrollLines.find((line) => line.employeeId === employee.id);
-  const bankPlanAfterDeductions = Math.max(num(employee.bankAmount) - bankDeductions, 0);
-  const bank = Math.min(pre.net, bankPlanAfterDeductions);
-  const cash = Math.max(pre.net - bank, 0);
+  const payment = paymentSplitByType(employee.paymentType, pre.net, employee.bankAmount);
+  const bank = payment.bank;
+  const cash = payment.cash;
   return {
     employee, actualSalary, baseEmployee, salary, road, extraLabel, extra, overtime, advance, deduction,
     legalType, garnishmentSource, garnishment, legalBank, legalCash, bankDeductions, cashDeductions,
