@@ -202,3 +202,24 @@
 .adjust-warning{grid-column:1/-1;padding:8px 10px;border-radius:7px;background:#fff7df;border:1px solid #ecdca4;color:#78632c;font-size:8px}
 @media(max-width:1180px){.prod-grid{grid-template-columns:minmax(170px,1.3fr) repeat(6,minmax(70px,.6fr)) minmax(135px,.9fr)!important}.week-detail-strip{grid-template-columns:1.2fr repeat(3,.7fr)}}
 @media(max-width:820px){.week-pool-bar{align-items:flex-start;display:grid}.week-nav{width:100%}.week-nav button{flex:1}.prod-grid{grid-template-columns:1fr 1fr!important}.prod-grid>:first-child{grid-column:1/-1!important}.prod-grid>*:nth-child(6){display:block!important}.week-detail-strip{grid-template-columns:1fr 1fr}.week-detail-strip>div:first-child{grid-column:1/-1}}
+
+
+/* FINAL11 — Fatura Havuzu + dosya otomasyonu */
+.invoice-pool-panel{overflow:hidden}
+.invoice-pool-grid{grid-template-columns:minmax(155px,1.25fr) 78px minmax(145px,1.15fr) minmax(145px,1.15fr) 72px 92px minmax(150px,1.1fr) 105px!important;align-items:center}
+.invoice-pool-grid>div{min-width:0}
+.invoice-pool-grid .cell-main small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.invoice-status-end{display:flex;justify-content:flex-end;align-items:center}
+.invoice-status-end .status{min-width:82px;justify-content:center;text-align:center}
+.match-ok{display:inline-flex;align-items:center;padding:4px 7px;border-radius:999px;background:#edf9f2;color:#25734b;font-size:7px;font-weight:900}
+.match-error{display:block;color:#a94b4b;font-size:7px;line-height:1.25;max-width:190px}
+.mini-action{border:1px solid #d8dee8;border-radius:7px;background:#fff;padding:5px 8px;font-size:7px;font-weight:900;cursor:pointer}
+.mini-action.warn{border-color:#f0d5a2;background:#fff7e8;color:#9b6410}
+.file-settings-grid{grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr)}
+.folder-settings-form label.full,.folder-settings-form .full{grid-column:1/-1}
+.folder-settings-form input{font-family:Consolas,"Segoe UI",sans-serif;font-size:8px}
+.folder-settings-form label small{font-size:7px;color:#7b8495;margin-left:4px}
+.folder-rule-list{margin-top:12px}
+.invoice-pool-summary article:last-child b{font-size:13px}
+@media(max-width:1180px){.invoice-pool-grid{grid-template-columns:minmax(135px,1.1fr) 74px minmax(120px,1fr) minmax(120px,1fr) 66px 88px minmax(125px,1fr) 96px!important}.file-settings-grid{grid-template-columns:1fr}}
+@media(max-width:820px){.invoice-pool-grid{grid-template-columns:1fr 1fr!important}.invoice-pool-grid>:first-child,.invoice-pool-grid>:nth-child(3),.invoice-pool-grid>:nth-child(4),.invoice-pool-grid>:nth-child(7){grid-column:1/-1}.invoice-status-end{justify-content:flex-start}}
