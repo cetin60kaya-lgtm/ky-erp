@@ -190,7 +190,7 @@ public partial class PersonelForm
     void SelectPeriodForToday(ComboBox c){if(c.DataSource is not DataTable d)return;int grp=0;try{var k=Q("select GRUP from KIMLIK where PKNO=@PK",new FirebirdSql.Data.FirebirdClient.FbParameter("@PK",currentPk));if(k.Rows.Count>0&&k.Rows[0][0]!=DBNull.Value)grp=Convert.ToInt32(k.Rows[0][0]);}catch{}for(int i=0;i<d.Rows.Count;i++){var r=d.Rows[i];if(r["BASTAR"]==DBNull.Value||r["BITTAR"]==DBNull.Value)continue;var a=((DateTime)r["BASTAR"]).Date;var b=((DateTime)r["BITTAR"]).Date;int g=r["GRUP"]==DBNull.Value?0:Convert.ToInt32(r["GRUP"]);if(DateTime.Today.Date>=a&&DateTime.Today.Date<=b&&(grp==0||g==grp)){c.SelectedIndex=i;return;}}}
     void ApplyClassicGridStyles()
     {
-        StyleGrid(gGiris);StyleGrid(gIzin);StyleGrid(gEkk);StyleGrid(gBilgi);StyleGrid(gOdeme);
+        StyleGrid(gGiris);StyleGrid(gIzin);StyleGrid(gEkk);StyleGrid(gBilgi);StyleGrid(gOdeme);StyleGrid(personPayrollGrid);
         gGiris.CellFormatting-=GirisFormat;gGiris.CellFormatting+=GirisFormat;gBilgi.CellFormatting-=BilgiFormat;gBilgi.CellFormatting+=BilgiFormat;
         gGiris.DataBindingComplete-=GirisBound;gGiris.DataBindingComplete+=GirisBound;gIzin.DataBindingComplete-=IzinBound;gIzin.DataBindingComplete+=IzinBound;gEkk.DataBindingComplete-=EkkBound;gEkk.DataBindingComplete+=EkkBound;gBilgi.DataBindingComplete-=BilgiBound;gBilgi.DataBindingComplete+=BilgiBound;gOdeme.DataBindingComplete-=OdemeBound;gOdeme.DataBindingComplete+=OdemeBound;
     }
