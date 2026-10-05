@@ -380,7 +380,7 @@ static void RunLiveAttendanceChecks(List<string> errors, List<string> results)
         using var form = new LiveAttendanceForm();
         var tabs = FindControls<TabControl>(form).FirstOrDefault();
         var names = tabs?.TabPages.Cast<TabPage>().Select(x => x.Text).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
-        foreach (var required in new[] { "Giriş Eksik", "Geç Giriş", "Erken Çıkış" })
+        foreach (var required in new[] { "Giriş Eksik", "Erken Giriş", "Geç Giriş", "Erken Çıkış", "Geç Çıkış" })
             if (!names.Contains(required)) errors.Add("Canlı denetim sekmesi eksik: " + required);
         var scheduleType = typeof(LiveAttendanceForm).GetNestedType("Schedule", BindingFlags.NonPublic);
         var status = typeof(LiveAttendanceForm).GetMethod("Status", BindingFlags.NonPublic | BindingFlags.Static);
@@ -390,11 +390,17 @@ static void RunLiveAttendanceChecks(List<string> errors, List<string> results)
             var schedule = Activator.CreateInstance(scheduleType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null,
                 new object[] { "Test", 510, 525, 1140, 1110, 450 }, null);
             var day = DateTime.Today.AddDays(-1);
-            var exitOnly = status.Invoke(null, new object?[] { day, schedule, true, false, null, day.AddHours(19) }) as string;
+            var exitOnly = status.Invoke(null, new object?[] { day, schedule, true, false, null, day.AddHours(19), "", "" }) as string;
             if (!string.Equals(exitOnly, "Giriş Kartı Yok", StringComparison.Ordinal)) errors.Add("Exit-only canlı hareket yanlış sınıflandı: " + exitOnly);
+
+            var normal = status.Invoke(null, new object?[] { day, schedule, true, false, day.AddHours(8).AddMinutes(30), day.AddHours(19), "", "" }) as string;
+            if (!string.Equals(normal, "Tamamlandı", StringComparison.Ordinal)) errors.Add("Kabul aralığındaki temiz gün Tamamlandı sayılmadı: " + normal);
+
+            var earlyExit = status.Invoke(null, new object?[] { day, schedule, true, false, day.AddHours(8).AddMinutes(30), day.AddHours(9).AddMinutes(21), "", "" }) as string;
+            if (!string.Equals(earlyExit, "Düzeltme Gerekli", StringComparison.Ordinal)) errors.Add("09:21 çıkış yanlışlıkla Tamamlandı kabul edildi: " + earlyExit);
         }
-        var failed = errors.Any(x => x.Contains("Canlı denetim", StringComparison.OrdinalIgnoreCase) || x.Contains("Exit-only", StringComparison.OrdinalIgnoreCase));
-        results.Add(failed ? "FAIL|Canlı denetim durum/sekme regresyonu" : "PASS|Canlı denetim giriş-çıkış ve geç/erken filtreleri");
+        var failed = errors.Any(x => x.Contains("Canlı denetim", StringComparison.OrdinalIgnoreCase) || x.Contains("Exit-only", StringComparison.OrdinalIgnoreCase) || x.Contains("09:21", StringComparison.OrdinalIgnoreCase) || x.Contains("Tamamlandı sayılmadı", StringComparison.OrdinalIgnoreCase));
+        results.Add(failed ? "FAIL|Canlı denetim durum/sekme/tolerans regresyonu" : "PASS|Canlı denetim yalnız kabul aralığındaki günü Tamamlandı sayıyor; 09:21 çıkış reddediliyor");
     }
     catch (Exception ex) { errors.Add("Canlı denetim regresyon testi: " + ex.GetBaseException().Message); }
 }
