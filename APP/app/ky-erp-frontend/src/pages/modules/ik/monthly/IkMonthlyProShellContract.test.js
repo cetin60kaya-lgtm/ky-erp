@@ -89,9 +89,9 @@ test("person card save stays usable when the selected historical month is locked
   assert.match(monthly, /disabled=\{Boolean\(data\.close\?\.isLocked\)\}/);
 });
 
-test("monthly write dialogs surface validation and accept API-valid SGK day values", () => {
+test("monthly write dialogs surface validation and accept canonical SGK day values", () => {
   assert.match(monthly, /const hasSgkDays = modalDraft\.sgkDays !== ""/);
-  assert.match(monthly, /SGK gün sayısı 0-\$\{totalDays\} arasında olmalıdır/);
+  assert.match(monthly, /SGK gün sayısı 0-30 arasında olmalıdır/);
   assert.match(monthly, /hasSgkDays \? Math\.round\(num\(modalDraft\.sgkDays\)\) : null/);
   assert.match(monthly, /modal && notice \? createPortal/);
   assert.match(css, /\.ik-modal-notice\{/);
@@ -103,6 +103,25 @@ test("monthly mutation buttons are guarded against duplicate submit while busy",
   assert.match(monthly, /disabled=\{busy \|\| !balanced\} onClick=\{printPayrollReport\}/);
   assert.match(monthly, /disabled=\{busy \|\| !balanced\} onClick=\{exportPayroll\}/);
   assert.match(monthly, /disabled=\{busy \|\| data\.close\?\.isLocked\} onClick=\{refreshPayroll\}/);
+});
+
+test("live sync is quiet, slower and does not show loading loops for background refresh", () => {
+  assert.match(monthly, /const IK_LIVE_SYNC_INTERVAL_MS = 15000/);
+  assert.match(monthly, /lastSuccessfulLoadStartedAtRef/);
+  assert.match(monthly, /silent = false/);
+  assert.match(monthly, /load\(\{ force: true, prepare: periodPrepared, silent: true \}\)/);
+  assert.doesNotMatch(monthly, /başka bilgisayarda değişiklik var/);
+});
+
+test("person card separates SGK source, suggestion and PDKS control days", () => {
+  assert.match(monthly, /SGK Gün \(Kayıt\)/);
+  assert.match(monthly, /Önerilen SGK Gün/);
+  assert.match(monthly, /PDKS Kartlı Gün \(Kontrol\)/);
+  assert.match(monthly, /SGK Gün Kaynağı/);
+  assert.match(monthly, /Öneriyi Kullan/);
+  assert.match(monthly, /RESMI_BORDRO/);
+  assert.match(monthly, /SISTEM_ONERISI/);
+  assert.match(css, /\.inline-action-field/);
 });
 
 test("payroll person actions link to the same source movements", () => {
@@ -125,11 +144,12 @@ test("payroll and document controls filter the rows they display", () => {
 });
 
 
-test("selected-month employment state ignores today's passive flag and uses hire exit dates", () => {
+test("selected-month employment state ignores today's passive flag and explains the selected period", () => {
   assert.match(monthly, /function employmentStateAtPeriod/);
   assert.match(monthly, /periodEmploymentState/);
-  assert.match(monthly, /Dönemde Aktif/);
-  assert.match(monthly, /Çıkış Ayı/);
+  assert.match(monthly, /\$\{periodName\} · Aktif/);
+  assert.match(monthly, /\$\{periodName\} · İşe Başlamamış/);
+  assert.match(monthly, /\$\{periodName\} · Çıkış Ayı/);
   assert.match(monthly, /\["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED", "MISSING_HIRE_DATE"\]/);
   assert.match(monthly, /Giriş Tarihi Eksik/);
 });
