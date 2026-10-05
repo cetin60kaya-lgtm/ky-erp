@@ -163,7 +163,7 @@ using (var timesheet = new LegacyPuantajForm())
 using (var payroll = new LegacyBordroForm())
 {
     var buttons = Descendants(payroll).OfType<Button>().Select(x => x.Text ?? string.Empty).ToArray();
-    foreach (var required in new[] { "Göster", "Alanlar / Sıralama", "Düzeni Kilitle", "Önizle", "Yazdır", "PDF Aktar", "Excel Aktar" })
+    foreach (var required in new[] { "Göster", "Alanlar / Sıralama", "Ay Kilidi", "Önizle", "Yazdır", "PDF Aktar", "Excel Aktar" })
         if (!buttons.Contains(required)) throw new InvalidOperationException("Bordro komutu eksik: " + required);
 }
 
