@@ -41,6 +41,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
         month.Items.AddRange(System.Globalization.CultureInfo.GetCultureInfo("tr-TR").DateTimeFormat.MonthNames.Take(12).Cast<object>().ToArray());
         month.SelectedIndex=selectedPeriod.Month-1;
         person.Items.Add("Tüm Aktif Personel"); person.SelectedIndex=0;
+        periodLockButton=B("Ayı Kilitle",118,TogglePeriodLock);
         BuildGrid(); BuildUi();
         Shown+=(_,_)=>Reload();
     }
