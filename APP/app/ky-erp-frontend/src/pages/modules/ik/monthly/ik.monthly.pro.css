@@ -1166,3 +1166,9 @@
   .modal-bg .person-modal-nav label{grid-column:1/-1;grid-row:1}
   .modal-bg .person-modal-position{display:none}
 }
+
+.ik-monthly-pro .payroll-screen-total td{
+  background:#edf4fa;
+  border-top:2px solid #274760;
+  font-weight:800;
+}
