@@ -22,6 +22,9 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
     readonly Label entitlementValue = KpiValue();
     readonly Label officialValue = KpiValue();
     readonly Label differenceValue = KpiValue();
+    readonly Button periodLockButton;
+    readonly Label periodLockState = new(){AutoSize=true,Font=new Font("Segoe UI",8.5f,FontStyle.Bold),Padding=new Padding(10,8,0,0)};
+    readonly string? initialPersonCard;
     DataTable data = new();
     bool loading;
     bool periodProtected;
