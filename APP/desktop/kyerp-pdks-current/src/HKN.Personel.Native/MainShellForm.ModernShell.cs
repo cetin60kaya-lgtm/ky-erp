@@ -592,7 +592,7 @@ public sealed partial class MainShellForm
         var version = new Label
         {
             Dock = DockStyle.Fill,
-            Text = $"KY PDKS 6.6.1  •  {PdksAppearance.ModeLabel} / {PdksAppearance.AccentLabel}",
+            Text = $"KY PDKS 6.7.0  •  {PdksAppearance.ModeLabel} / {PdksAppearance.AccentLabel}",
             TextAlign = ContentAlignment.MiddleRight,
             ForeColor = p.Muted,
             Font = new Font("Segoe UI", 7.8f)
