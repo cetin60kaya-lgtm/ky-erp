@@ -561,7 +561,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
         return map;
     }
 
-    static (DateTime? Entry,DateTime? Exit) Physical(IEnumerable<KYERP.PDKS.Core.Terminal.TerminalDevicePunch> rows)
+    static (DateTime? Entry,DateTime? Exit) Physical(IEnumerable<TerminalDevicePunch> rows)
     {
         var ordered=rows.OrderBy(x=>x.OccurredAt).ToArray();
         var morning=ordered.Where(x=>x.OccurredAt.TimeOfDay<TimeSpan.FromHours(12)).Select(x=>x.OccurredAt).ToArray();
