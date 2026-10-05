@@ -34,6 +34,7 @@ internal static class CompanyDataPaths
     public static string Database => Path.Combine(Data, "KY_PDKS_DATA.FDB");
     public static string LiveFile => Path.Combine(Terminal, "live.dat");
     public static string PendingRestoreMarker => Path.Combine(Config, "pending-restore.txt");
+    public static string WorkspaceMigrationMarker => Path.Combine(Config, "workspace-migration-650.done");
     public static string CurrentTnf => Path.Combine(Tnf, $"TR{DateTime.Today.Year}.Tnf");
 
     public static string DeviceDayFolder(DateTime day) =>
@@ -51,11 +52,24 @@ internal static class CompanyDataPaths
     public static void Ensure()
     {
         Directory.CreateDirectory(WorkspaceRoot);
-        MigrateLegacyLayout();
+        var migrationNeeded = !File.Exists(WorkspaceMigrationMarker);
+        if (migrationNeeded) MigrateLegacyLayout();
         HideLegacyFolders();
 
         foreach (var path in new[] { Data, Tnf, Device, Audit, Backup, Reports, Logs, SystemData, Terminal, Import, Config, Archive })
             Directory.CreateDirectory(path);
+
+        if (migrationNeeded)
+        {
+            try
+            {
+                File.WriteAllText(
+                    WorkspaceMigrationMarker,
+                    $"KY PDKS 6.5 workspace migration completed {DateTime.Now:O}{Environment.NewLine}" +
+                    $"DATA={Data}{Environment.NewLine}TNF={Tnf}{Environment.NewLine}CIHAZ={Device}{Environment.NewLine}");
+            }
+            catch { }
+        }
 
         try { File.SetAttributes(SystemData, File.GetAttributes(SystemData) | FileAttributes.Hidden); } catch { }
 
