@@ -303,6 +303,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
     void SetAll(bool value){foreach(DataRow r in data.Rows)r["SEC"]=value;RefreshSummary();}
     void RecalculateAll()
     {
+        if(PayrollPeriodLockService.IsLocked(db,Period().A)){MessageBox.Show("Bu ay kilitli. Bordro kaynak değerleri yeniden hesaplanamaz.","Dönem Kilitli",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
         foreach(DataRow row in data.Rows) RecalcRow(row,"Değişti");
         grid.Refresh();
         RefreshSummary();
