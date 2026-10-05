@@ -613,7 +613,7 @@ public sealed class TerminalCenterForm : Form
     async Task SyncAndClearLogsAsync()
     {
         if (MessageBox.Show(
-            "Cihaz logları önce TNF + FDB'ye doğrulanacak, yalnız doğrulama başarılı olursa cihazdan silinecek. Devam edilsin mi?",
+            "Cihaz logları önce tarih/saatli CİHAZ TNF + HAM arşivine alınacak, ardından DATA/FDB + yıllık TNF doğrulanacak. Yalnız tüm doğrulama başarılı olursa cihazdan silinecek. Devam edilsin mi?",
             "Aktarıp Logları Temizle", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         SetStatus("Aktarım doğrulanıyor; başarılıysa cihaz logları temizlenecek…", null);
         var result = await TerminalMaintenanceService.SyncAndClearLogsAsync();
@@ -625,7 +625,7 @@ public sealed class TerminalCenterForm : Form
 
     async Task ArchiveAndClearLogsAsync()
     {
-        if (!ConfirmDanger("Cihazdaki TÜM geçiş logları silinecek. Silmeden önce fiziksel kayıtların ham/canlı arşivi alınacak.\n\nAna FDB/TNF'ye otomatik ekleme yapılmadan sıfırlamak istediğinizden emin misiniz?"))
+        if (!ConfirmDanger("Cihazdaki TÜM geçiş logları silinecek. Silmeden önce tarih/saatli CİHAZ_OKUMA TNF, günlük TNF, HAM kayıt ve CANLI arşiv oluşturulacak.\n\nAna FDB/TNF'ye otomatik ekleme yapılmadan sıfırlamak istediğinizden emin misiniz?"))
             return;
         SetStatus("Cihaz logları arşivlenip sıfırlanıyor…", null);
         var result = await TerminalMaintenanceService.ArchiveAndClearLogsAsync();
