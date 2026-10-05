@@ -63,7 +63,7 @@ public sealed partial class LiveAttendanceForm
 
         var verb=entry?"giriş":"çıkış";
         if(MessageBox.Show(
-            $"{cards.Length} personelin {verb} saati {range.Value.Start:hh\:mm}-{range.Value.End:hh\:mm} aralığına doğal dağıtılsın mı?\n\nDATA ve yıllık TNF aynı dakikaya çekilir. Cihazın fiziksel ham kaydı değişmez. E oluşturulmaz.",
+            $"{cards.Length} personelin {verb} saati {range.Value.Start:hh\\:mm}-{range.Value.End:hh\\:mm} aralığına doğal dağıtılsın mı?\n\nDATA ve yıllık TNF aynı dakikaya çekilir. Cihazın fiziksel ham kaydı değişmez. E oluşturulmaz.",
             "Toplu Saat Düzeltme",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
 
         SetActionBusy(true);
