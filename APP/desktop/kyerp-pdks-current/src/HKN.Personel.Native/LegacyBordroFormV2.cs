@@ -89,7 +89,7 @@ public sealed class LegacyBordroForm : Form
 
         var show = Btn("Göster", LoadData, 88, true); show.Dock=DockStyle.Fill; show.Margin=new Padding(0,4,8,6); filters.Controls.Add(show,6,0);
         var layout = Btn("Alanlar / Sıralama", () => GridLayoutPersistence.ShowEditor(this, grid, LayoutKey, "Bordro Alanları / Sıralama"), 140); layout.Dock=DockStyle.Fill; layout.Margin=new Padding(0,4,8,6); filters.Controls.Add(layout,7,0);
-        var lockButton = Btn("Düzeni Kilitle", ToggleLock, 118); lockButton.Dock=DockStyle.Left; lockButton.Margin=new Padding(0,4,8,6); filters.Controls.Add(lockButton,8,0);
+        var lockButton = Btn("Ay Kilidi", TogglePeriodLock, 118); lockButton.Dock=DockStyle.Left; lockButton.Margin=new Padding(0,4,8,6); filters.Controls.Add(lockButton,8,0);
         periodLayout.Controls.Add(filters,0,1);
 
         summary.Dock = DockStyle.Fill;
@@ -230,7 +230,8 @@ public sealed class LegacyBordroForm : Form
 
             var totalColumn=data.Columns.Contains("Hak Edilen Net")?"Hak Edilen Net":data.Columns.Contains("TOPLAM")?"TOPLAM":null;
             var total=totalColumn is null?0m:data.AsEnumerable().Sum(r=>r[totalColumn]==DBNull.Value?0m:Convert.ToDecimal(r[totalColumn]));
-            summary.Text = $"{ViewDescription()}  •  {data.Rows.Count} kişi  •  {MonthNames[a.Month - 1]} {a.Year}  •  {total:N2} ₺";
+            var lockInfo=PayrollPeriodLockService.Get(db,a);
+            summary.Text = $"{ViewDescription()}  •  {data.Rows.Count} kişi  •  {MonthNames[a.Month - 1]} {a.Year}  •  {total:N2} ₺  •  {PayrollPeriodLockService.Caption(lockInfo)}";
         }
         catch (Exception ex)
         {
@@ -321,6 +322,20 @@ public sealed class LegacyBordroForm : Form
     {
         if(!row.Table.Columns.Contains(column)||row[column]==DBNull.Value)return 0m;
         try{return Convert.ToDecimal(row[column]);}catch{return 0m;}
+    }
+
+    void TogglePeriodLock()
+    {
+        try
+        {
+            var p=PeriodStart();
+            var info=PayrollPeriodLockService.Get(db,p);
+            var next=!info.Locked;
+            if(next && MessageBox.Show($"{MonthNames[p.Month-1]} {p.Year} dönemi kilitlensin mi? Puantaj hesaplama ve bordro kaynak düzenleme bu ayı değiştiremez.","Ay Kilidi",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+            PayrollPeriodLockService.Set(db,p,next,next?"Bordro merkezinden dönem kilitlendi":"Bordro merkezinden kilit açıldı");
+            LoadData();
+        }
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Error,"Payroll.Lock");}
     }
 
     void ToggleLock()
