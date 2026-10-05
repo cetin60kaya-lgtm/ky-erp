@@ -319,6 +319,7 @@ function draftPerson(employee = {}) {
     adminMergeTargetId: "",
     adminReason: "",
     adminActionMessage: "",
+    formMessage: "",
   };
 }
 
@@ -1150,30 +1151,36 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   };
 
   const savePerson = async () => {
-    if (!modalDraft.fullName?.trim()) return setNotice("Personel adı boş olamaz.");
-    if (!modalDraft.startDate) return setNotice("İşe giriş tarihi zorunludur.");
-    if (!["SGKLI", "SGKSIZ"].includes(modalDraft.sgkFollow)) return setNotice("Bu ay için SGK durumu seçilmelidir.");
+    const failPersonSave = (message) => {
+      setModalDraft((old) => ({ ...old, formMessage: message }));
+      setNotice(message);
+      return false;
+    };
+    setModalDraft((old) => ({ ...old, formMessage: "" }));
+    if (!modalDraft.fullName?.trim()) return failPersonSave("Personel adı boş olamaz.");
+    if (!modalDraft.startDate) return failPersonSave("İşe giriş tarihi zorunludur.");
+    if (!data.close?.isLocked && !["SGKLI", "SGKSIZ"].includes(modalDraft.sgkFollow)) return failPersonSave("Bu ay için SGK durumu seçilmelidir.");
     const hasSgkDays = modalDraft.sgkDays !== "" && modalDraft.sgkDays !== null && modalDraft.sgkDays !== undefined;
-    if (modalDraft.sgkFollow === "SGKLI" && hasSgkDays && (num(modalDraft.sgkDays) < 0 || num(modalDraft.sgkDays) > totalDays)) {
-      return setNotice(`SGK gün sayısı 0-${totalDays} arasında olmalıdır. Resmi gün henüz belli değilse alanı boş bırakabilirsiniz.`);
+    if (!data.close?.isLocked && modalDraft.sgkFollow === "SGKLI" && hasSgkDays && (num(modalDraft.sgkDays) < 0 || num(modalDraft.sgkDays) > totalDays)) {
+      return failPersonSave(`SGK gün sayısı 0-${totalDays} arasında olmalıdır. Resmi gün henüz belli değilse alanı boş bırakabilirsiniz.`);
     }
-    if (modalDraft.exitDate && modalDraft.exitDate < modalDraft.startDate) return setNotice("İşten çıkış tarihi işe giriş tarihinden önce olamaz.");
+    if (modalDraft.exitDate && modalDraft.exitDate < modalDraft.startDate) return failPersonSave("İşten çıkış tarihi işe giriş tarihinden önce olamaz.");
     const derivedEmploymentStatus = modalDraft.exitDate ? "Pasif" : "Aktif";
-    if (!modalDraft.paymentType) return setNotice("Ödeme tipi boş olamaz.");
-    if (!modalDraft.effectiveDate) return setNotice("Ücret/personel değişikliği için geçerlilik tarihi zorunludur.");
-    if (num(modalDraft.salary) < 0) return setNotice("Maaş negatif olamaz.");
-    if (num(modalDraft.overtimeHourlyBase) <= 0) return setNotice("Mesai saat böleni 0'dan büyük olmalıdır.");
-    if (num(modalDraft.deductionHourlyBase) <= 0) return setNotice("Kesinti saat böleni 0'dan büyük olmalıdır.");
-    if (!modalDraft.id && data.close?.isLocked) return setNotice("Kapalı dönemde yeni personel kartı açılamaz.");
+    if (!modalDraft.paymentType) return failPersonSave("Ödeme tipi boş olamaz.");
+    if (!modalDraft.effectiveDate) return failPersonSave("Ücret/personel değişikliği için geçerlilik tarihi zorunludur.");
+    if (num(modalDraft.salary) < 0) return failPersonSave("Maaş negatif olamaz.");
+    if (num(modalDraft.overtimeHourlyBase) <= 0) return failPersonSave("Mesai saat böleni 0'dan büyük olmalıdır.");
+    if (num(modalDraft.deductionHourlyBase) <= 0) return failPersonSave("Kesinti saat böleni 0'dan büyük olmalıdır.");
+    if (!modalDraft.id && data.close?.isLocked) return failPersonSave("Kapalı dönemde yeni personel kartı açılamaz.");
 
     const normalizedCardNo = String(modalDraft.cardNo || "").trim();
     const duplicateCard = normalizedCardNo && rawEmployees.some((item) => item.id !== modalDraft.id && String(item.cardNo || "").trim() === normalizedCardNo);
-    if (duplicateCard) return setNotice("Bu kart numarası başka bir personele bağlı.");
+    if (duplicateCard) return failPersonSave("Bu kart numarası başka bir personele bağlı.");
 
     const baseEmployee = modalDraft.baseEmployeeId ? rawEmployees.find((item) => item.id === modalDraft.baseEmployeeId) : null;
-    if (modalDraft.baseEmployeeId === modalDraft.id) return setNotice("Personel kendisini baz personel olarak seçemez.");
-    if (modalDraft.baseEmployeeId && !baseEmployee) return setNotice("Baz personel bulunamadı.");
-    if (baseEmployee && num(baseEmployee.salary) > num(modalDraft.salary)) return setNotice("Baz personel maaşı gerçek maaştan yüksek olamaz.");
+    if (modalDraft.baseEmployeeId === modalDraft.id) return failPersonSave("Personel kendisini baz personel olarak seçemez.");
+    if (modalDraft.baseEmployeeId && !baseEmployee) return failPersonSave("Baz personel bulunamadı.");
+    if (baseEmployee && num(baseEmployee.salary) > num(modalDraft.salary)) return failPersonSave("Baz personel maaşı gerçek maaştan yüksek olamaz.");
 
     const autoExtra = baseEmployee ? Math.max(round(num(modalDraft.salary) - num(baseEmployee.salary)), 0) : 0;
     const planTotal = num(modalDraft.bankAmount) + num(modalDraft.cashAmount);
@@ -1190,6 +1197,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       period,
       year,
       month,
+      skipPeriodCompliance: Boolean(data.close?.isLocked),
       sgkFollow: modalDraft.sgkFollow === "SGKLI",
       sgkDays: modalDraft.sgkFollow === "SGKLI" ? (hasSgkDays ? Math.round(num(modalDraft.sgkDays)) : null) : 0,
       paymentType: modalDraft.paymentType,
@@ -1218,6 +1226,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     };
 
     setBusy(true);
+    setModalDraft((old) => ({ ...old, formMessage: "Kaydediliyor..." }));
     let createdEmployeeId = "";
     try {
       let employeeId = modalDraft.id;
@@ -1249,14 +1258,20 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         cardPayload.expectedVersion = created?.version || created?.updatedAt || "";
       }
 
-      await saveIkAdvancedPersonCard(employeeId, cardPayload);
+      const savedCard = await saveIkAdvancedPersonCard(employeeId, cardPayload);
       setSelectedId(employeeId);
       setModal(null);
-      setNotice(modalDraft.id ? "Personel kartı güncellendi." : "Yeni personel kartı oluşturuldu.");
+      setNotice(
+        savedCard?.periodComplianceSkipped
+          ? `Personel kartı güncellendi. ${MONTHS[month - 1]} ${year} dönemi kapalı olduğu için yalnız dönemsel SGK alanlarına dokunulmadı.`
+          : (modalDraft.id ? "Personel kartı güncellendi." : "Yeni personel kartı oluşturuldu."),
+      );
       await load({ force: true });
     } catch (error) {
       const detail = error?.message || "Personel kartı kaydedilemedi.";
-      setNotice(createdEmployeeId ? `Personel ana kaydı oluştu ancak kart ayrıntıları tamamlanamadı: ${detail}` : detail);
+      const message = createdEmployeeId ? `Personel ana kaydı oluştu ancak kart ayrıntıları tamamlanamadı: ${detail}` : detail;
+      setModalDraft((old) => ({ ...old, formMessage: message }));
+      setNotice(message);
     } finally {
       setBusy(false);
     }
@@ -2543,12 +2558,13 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           <div className="modal-section"><h3>Kimlik ve Çalışma Bilgileri</h3><div className="form"><Field label="Ad Soyad" half><input value={modalDraft.fullName||""} onChange={(event)=>setModalDraft((old)=>({...old,fullName:event.target.value}))}/></Field><Field label="TC Kimlik No"><input value={modalDraft.identityNo||""} maxLength={11} onChange={(event)=>setModalDraft((old)=>({...old,identityNo:event.target.value.replace(/\D/g,"")}))}/></Field><Field label="Personel Kodu"><input value={modalDraft.code||""} readOnly /></Field><Field label="Kart No"><input value={modalDraft.cardNo||""} onChange={(event)=>setModalDraft((old)=>({...old,cardNo:event.target.value}))}/></Field><Field label="İşe Giriş"><input type="date" value={modalDraft.startDate||""} onChange={(event)=>setModalDraft((old)=>({...old,startDate:event.target.value}))}/></Field><Field label="İşten Çıkış"><input type="date" value={modalDraft.exitDate||""} onChange={(event)=>setModalDraft((old)=>({...old,exitDate:event.target.value,status:event.target.value?"Pasif":"Aktif"}))}/></Field><Field label="Görev"><input value={modalDraft.title||""} onChange={(event)=>setModalDraft((old)=>({...old,title:event.target.value}))}/></Field><Field label="Bölüm"><input value={modalDraft.department||""} onChange={(event)=>setModalDraft((old)=>({...old,department:event.target.value}))}/></Field><Field label="Çalışma Durumu"><input value={modalDraft.exitDate ? "İşten ayrılmış / pasif" : "Aktif"} readOnly /><div className="employment-actions">{modalDraft.exitDate ? <button type="button" className="btn" onClick={()=>setModalDraft((old)=>({...old,exitDate:"",status:"Aktif",changeNote:old.changeNote||"Personel yeniden aktife alındı"}))}>Aktife Geri Al</button> : <button type="button" className="btn orange" onClick={()=>setModalDraft((old)=>({...old,exitDate:istanbulDateKey(),status:"Pasif",changeNote:old.changeNote||"İşten çıkış kaydı"}))}>İşten Çıkış Bugün</button>}</div></Field></div></div>
           <div className="modal-section"><h3>SGK ve Bordro Kapsamı · {MONTHS[month-1]} {year}</h3><div className="form">
             <Field label="Personel Statüsü" half><select value={modalDraft.personnelStatus||"NORMAL"} onChange={(event)=>setModalDraft((old)=>({...old,personnelStatus:event.target.value}))}><option value="NORMAL">Normal</option><option value="RETIRED">Emekli</option></select></Field>
-            <Field label="SGK Durumu" half><select value={modalDraft.sgkFollow||"BELIRTILMEMIS"} onChange={(event)=>setModalDraft((old)=>({...old,sgkFollow:event.target.value,sgkDays:event.target.value==="SGKSIZ"?0:old.sgkDays}))}><option value="SGKLI">SGK'lı</option><option value="SGKSIZ">SGK'sız</option><option value="BELIRTILMEMIS">Seçiniz</option></select></Field>
-            <Field label="Bu Ay SGK Gün" half><input type="number" min="0" max={totalDays} value={modalDraft.sgkDays??""} disabled={modalDraft.sgkFollow==="SGKSIZ"} onChange={(event)=>setModalDraft((old)=>({...old,sgkDays:event.target.value}))}/></Field>
+            <Field label="SGK Durumu" half><select value={modalDraft.sgkFollow||"BELIRTILMEMIS"} disabled={Boolean(data.close?.isLocked)} onChange={(event)=>setModalDraft((old)=>({...old,sgkFollow:event.target.value,sgkDays:event.target.value==="SGKSIZ"?0:old.sgkDays}))}><option value="SGKLI">SGK'lı</option><option value="SGKSIZ">SGK'sız</option><option value="BELIRTILMEMIS">Seçiniz</option></select></Field>
+            <Field label="Bu Ay SGK Gün" half><input type="number" min="0" max={totalDays} value={modalDraft.sgkDays??""} disabled={Boolean(data.close?.isLocked) || modalDraft.sgkFollow==="SGKSIZ"} onChange={(event)=>setModalDraft((old)=>({...old,sgkDays:event.target.value}))}/></Field>
             <Field label="Gerçek PDKS Kart Günü" half><input value={modalDraft.pdksCardDays??0} readOnly/></Field>
             <Field label="Bordro Kapsamı" half><select value={modalDraft.payrollIncluded===false?"HARIC":"DAHIL"} onChange={(event)=>setModalDraft((old)=>({...old,payrollIncluded:event.target.value==="DAHIL"}))}><option value="DAHIL">Şirket bordrosuna dahil</option><option value="HARIC">Harici - ödeme ve puantaja alma</option></select></Field>
             <Field label="Yıllık İzin Hakkı"><input type="number" value={modalDraft.annualLeaveEntitlement||""} onChange={(event)=>setModalDraft((old)=>({...old,annualLeaveEntitlement:event.target.value}))}/></Field>
             <Field label="Devreden İzin"><input type="number" value={modalDraft.annualLeaveCarryover||""} onChange={(event)=>setModalDraft((old)=>({...old,annualLeaveCarryover:event.target.value}))}/></Field>
+            {data.close?.isLocked ? <div className="wide warnline warn">{MONTHS[month-1]} {year} dönemi kapalı. Bu dönemin SGK durumu/günü değiştirilemez; personel ana kartı ve yeni geçerlilik tarihli ücret bilgileri kaydedilebilir.</div> : null}
             {modalDraft.sgkFollow==="SGKLI" && modalDraft.sgkDays!=="" && num(modalDraft.sgkDays)!==num(modalDraft.pdksCardDays) ? <div className="wide warnline warn">İç kontrol: Bu ay SGK günü {num(modalDraft.sgkDays)}, gerçek kart günü {num(modalDraft.pdksCardDays)}. Denetim görünümünde bu iç uyarı gösterilmez; gerçek PDKS kaydı otomatik üretilmez.</div> : null}
             {modalDraft.personnelStatus==="RETIRED" ? <div className="wide warnline">Emekli personel aktif çalışan olarak devam edebilir. Emekli statüsü SGK durumundan bağımsızdır.</div> : null}
           </div></div>
@@ -2569,8 +2585,9 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               <span className="badge orange">Geçmiş işlem varsa Sil engellenir ve Birleştir kullanılır. Silinen/eski HKN kodu emekliye ayrılır; yeni personele tekrar otomatik verilmez.</span>
             </div>
           </div> : null}
+          {modalDraft.formMessage ? <div className="person-save-message" role="alert">{modalDraft.formMessage}</div> : null}
         </div>
-        <ModalFooter onClose={() => setModal(null)} actions={<button className="btn primary" disabled={busy} onClick={savePerson}>{busy?"Kaydediliyor":"Tüm Değişiklikleri Kaydet"}</button>} />
+        <ModalFooter onClose={() => setModal(null)} actions={<button type="button" className="btn primary" disabled={busy} onClick={savePerson}>{busy?"Kaydediliyor":"Tüm Değişiklikleri Kaydet"}</button>} />
       </Modal>
     );
 
