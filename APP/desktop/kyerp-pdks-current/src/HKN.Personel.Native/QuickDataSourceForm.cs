@@ -51,12 +51,12 @@ public sealed class QuickDataSourceForm : Form
         heroGrid.RowStyles.Add(new RowStyle(SizeType.Absolute,32));
         heroGrid.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         heroGrid.Controls.Add(new Label{Text="Veri Kaynakları",Dock=DockStyle.Fill,Font=new Font("Segoe UI",12.5f,FontStyle.Bold),ForeColor=p.Text,TextAlign=ContentAlignment.MiddleLeft},0,0);
-        heroGrid.Controls.Add(new Label{Text="Canlı Firebird veritabanını ve terminal/TNF kaynağını tek noktadan doğrulayın. FDB değişikliği yalnız bağlantı testi başarılı olursa kalıcılaştırılır.",Dock=DockStyle.Fill,ForeColor=p.Muted,TextAlign=ContentAlignment.MiddleLeft},0,1);
+        heroGrid.Controls.Add(new Label{Text="DATA/FDB, yıllık TRYYYY.Tnf ve cihaz kanıt arşivini tek noktadan doğrulayın. Ana TNF her zaman DATA ile dakika bazında uyumlu tutulur; E kayıtları TNF dışındadır.",Dock=DockStyle.Fill,ForeColor=p.Muted,TextAlign=ContentAlignment.MiddleLeft},0,1);
         hero.Controls.Add(heroGrid);
         root.Controls.Add(hero,0,0);
 
         root.Controls.Add(SourceCard("Canlı şirket veritabanı (.FDB / .GDB)","Personel, puantaj ve bordronun ana veri kaynağı",gdb,PickGdb),0,1);
-        root.Controls.Add(SourceCard("Terminal / denetim datası (.TNF / .TXT)","Kart hareketi aktarımı ve denetim için kullanılan kaynak",terminal,PickTerminal),0,2);
+        root.Controls.Add(SourceCard("Yıllık denetim TNF (TRYYYY.Tnf)","DATA/FDB'nin E olmayan kart hareketlerinin yıl bazlı dış karşılığı",terminal,PickTerminal),0,2);
 
         var bar=PdksUiKit.ActionBar(false,p.Canvas);
         bar.Controls.Add(PdksUiKit.Button("Otomatik Tanı",110,PdksActionRole.Secondary,Detect));
@@ -145,7 +145,9 @@ public sealed class QuickDataSourceForm : Form
 
             var tf=new FileInfo(terminal.Text.Trim());
             var lines=tf.Exists?File.ReadLines(tf.FullName).Count():0;
-            table.Rows.Add("Terminal / TNF",terminal.Text,tf.Exists?"Hazır":"Bulunamadı",tf.Exists?$"{lines:N0} satır":"-");
+            table.Rows.Add("Yıllık TNF",terminal.Text,tf.Exists?"Hazır":"Bulunamadı",tf.Exists?$"{lines:N0} satır":"-");
+            table.Rows.Add("CİHAZ kanıt arşivi",CompanyDataPaths.Device,Directory.Exists(CompanyDataPaths.Device)?"Hazır":"Bulunamadı",
+                Directory.Exists(CompanyDataPaths.Device)?$"{Directory.GetFiles(CompanyDataPaths.Device,"CIHAZ_OKUMA_*.Tnf",SearchOption.AllDirectories).Length:N0} okuma":"-");
 
             grid.DataSource=table;
             var ready=gf.Exists&&tf.Exists;
