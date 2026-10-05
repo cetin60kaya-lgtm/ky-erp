@@ -215,7 +215,13 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
             data.Columns.Add("DURUM",typeof(string));
             foreach(DataRow r in data.Rows){r["SEC"]=false;RecalcRow(r,"Temiz");}
             grid.DataSource=data;
-            LoadPeopleFilter(); ApplyPersonFilter(); RefreshSummary();
+            LoadPeopleFilter();
+            if(!string.IsNullOrWhiteSpace(initialPersonCard))
+            {
+                var item=person.Items.Cast<object>().Select(Convert.ToString).FirstOrDefault(x=>x is not null && x.StartsWith(initialPersonCard+" ",StringComparison.OrdinalIgnoreCase));
+                if(item is not null) person.SelectedItem=item;
+            }
+            ApplyPersonFilter(); RefreshSummary(); RefreshPeriodLockUi();
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Payroll.Adjustment");}
         finally{loading=false;}
