@@ -737,36 +737,53 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const saved = payrollLines.find((line) => line.employeeId === employee.id);
   if (!saved?.final) return system;
 
-  // Bir bordro satırı Son Kontrol/Kaydet ile sunucuya yazıldıktan sonra o dönemin
-  // ödeme rakamları snapshot olarak okunur. Özellikle PAID satırlarında sonraki
-  // personel kartı veya hareket değişiklikleri eski fiş/ödeme tutarını oynatamaz.
-  const salary = saved.final.salaryPay !== undefined ? num(saved.final.salaryPay) : system.salary;
-  const road = saved.final.roadPay !== undefined ? num(saved.final.roadPay) : system.road;
-  const extraLabel = "EK";
-  const extra = saved.final.premiumAmount !== undefined ? num(saved.final.premiumAmount) : system.extra;
-  const overtime = saved.final.overtimeAmount !== undefined ? num(saved.final.overtimeAmount) : system.overtime;
-  const advance = saved.final.advanceAmount !== undefined ? num(saved.final.advanceAmount) : system.advance;
-  const deduction = saved.final.deductionAmount !== undefined ? num(saved.final.deductionAmount) : system.deduction;
-  const garnishment = saved.final.garnishmentAmount !== undefined ? num(saved.final.garnishmentAmount) : system.garnishment;
-  const savedTotals = calcRow({ salary, road, extra, overtime, advance, deduction, garnishment });
-  const savedBank = saved.final.bank !== undefined ? num(saved.final.bank) : system.bank;
-  const savedCash = saved.final.cash !== undefined ? num(saved.final.cash) : system.cash;
-  const savedPayment = reconcilePaymentSplit(savedTotals.net, savedBank, savedCash);
-
+  const snapshot = {
+    salary: saved.final.salaryPay !== undefined ? num(saved.final.salaryPay) : system.salary,
+    road: saved.final.roadPay !== undefined ? num(saved.final.roadPay) : system.road,
+    extra: saved.final.premiumAmount !== undefined ? num(saved.final.premiumAmount) : system.extra,
+    overtime: saved.final.overtimeAmount !== undefined ? num(saved.final.overtimeAmount) : system.overtime,
+    advance: saved.final.advanceAmount !== undefined ? num(saved.final.advanceAmount) : system.advance,
+    deduction: saved.final.deductionAmount !== undefined ? num(saved.final.deductionAmount) : system.deduction,
+    garnishment: saved.final.garnishmentAmount !== undefined ? num(saved.final.garnishmentAmount) : system.garnishment,
+    bank: saved.final.bank !== undefined ? num(saved.final.bank) : system.bank,
+    cash: saved.final.cash !== undefined ? num(saved.final.cash) : system.cash,
+  };
   const sourceChangedSinceSave = [
-    system.overtime - overtime,
-    system.advance - advance,
-    system.deduction - deduction,
-    system.garnishment - garnishment,
+    system.salary - snapshot.salary,
+    system.road - snapshot.road,
+    system.extra - snapshot.extra,
+    system.overtime - snapshot.overtime,
+    system.advance - snapshot.advance,
+    system.deduction - snapshot.deduction,
+    system.garnishment - snapshot.garnishment,
+    system.bank - snapshot.bank,
+    system.cash - snapshot.cash,
   ].some((value) => Math.abs(round(value)) > 0.01);
 
+  // Tek kaynak kuralı: ödeme tamamlanana kadar bordro sonucu daima canlı kaynaklardan okunur.
+  // Snapshot yalnız tarihsel kanıttır. PAID olduktan sonra geçmiş fiş/ödeme değişmesin diye snapshot kilitlenir.
+  if (upper(saved.status) !== "PAID") {
+    return { ...system, saved, sourceChangedSinceSave, paidLocked: false };
+  }
+
+  const snapshotTotals = calcRow(snapshot);
+  const snapshotPayment = reconcilePaymentSplit(snapshotTotals.net, snapshot.bank, snapshot.cash);
   return {
     ...system,
-    salary, road, extraLabel, extra, overtime, advance, deduction, garnishment,
-    bank: savedPayment.bank, cash: savedPayment.cash, saved,
+    salary: snapshot.salary,
+    road: snapshot.road,
+    extraLabel: "EK",
+    extra: snapshot.extra,
+    overtime: snapshot.overtime,
+    advance: snapshot.advance,
+    deduction: snapshot.deduction,
+    garnishment: snapshot.garnishment,
+    bank: snapshotPayment.bank,
+    cash: snapshotPayment.cash,
+    saved,
     sourceChangedSinceSave,
-    paidLocked: upper(saved.status) === "PAID",
-    ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank: savedPayment.bank, cash: savedPayment.cash }),
+    paidLocked: true,
+    ...calcRow({ ...snapshot, bank: snapshotPayment.bank, cash: snapshotPayment.cash }),
   };
 }): [], [employees, payrollLines, planFor, periodPrepared]);
 
