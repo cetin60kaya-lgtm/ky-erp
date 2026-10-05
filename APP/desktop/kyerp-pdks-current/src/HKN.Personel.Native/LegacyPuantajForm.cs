@@ -199,6 +199,8 @@ public sealed class LegacyPuantajForm : Form
         var pb=bar??progress1;try
         {
             if(f.End.Value.Date<f.Start.Value.Date)throw new InvalidOperationException("Bitiş tarihi başlangıç tarihinden önce olamaz.");
+            var kilit = PayrollPeriodLockService.FirstLocked(db, f.Start.Value.Date, f.End.Value.Date);
+            if(kilit is not null){ MessageBox.Show($"{kilit.Month:00}.{kilit.Year} bordro dönemi kilitli. Puantaj hesaplama bu aya veri yazamaz.","Dönem Kilitli",MessageBoxButtons.OK,MessageBoxIcon.Warning); return; }
             var q=EmployeeFilter(f);var emp=db.Query($"select k.PKNO,k.BOLUM,k.GRUP from KIMLIK k where {q.Sql}",q.Params.ToArray());if(emp.Rows.Count==0){MessageBox.Show("Seçime uygun personel bulunamadı.",Text);return;}
             var auditMode=string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT"),"1",StringComparison.Ordinal);
             if(!auditMode && MessageBox.Show($"{f.Start.Value:dd.MM.yyyy} - {f.End.Value:dd.MM.yyyy} aralığındaki giriş-çıkış, izin, tatil ve grup planlarından puantaj oluşturulsun/güncellensin mi?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
