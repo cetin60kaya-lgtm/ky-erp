@@ -91,6 +91,16 @@ test("payroll separates active and selected-month leavers while excluding earlie
   assert.match(monthly, /Seçili aydan önce ayrılan personel bordroya alınmaz/);
 });
 
+test("pre-payroll control is one source editor for person wage payment and movements", () => {
+  assert.match(monthly, /Bordro Öncesi Personel Kontrolü/);
+  assert.match(monthly, /Personel \+ Ücret \+ Ödeme Planı · Tek Kaynak/);
+  assert.match(monthly, /Aylık Hareket Kaynakları/);
+  assert.match(monthly, /savePrePayrollMovement/);
+  assert.match(monthly, /deletePrePayrollMovement/);
+  assert.match(monthly, /Personel \/ Ücret Kaynağını Kaydet/);
+  assert.match(monthly, /Mesai \/ Avans \/ Kesinti ekranına doğrudan yazılır/);
+});
+
 test("personnel edit modal switches person without closing", () => {
   assert.match(monthly, /const switchPersonInModal = \(employeeId\) =>/);
   assert.match(monthly, /Personel Seç/);
@@ -156,12 +166,12 @@ test("person card separates SGK source, suggestion and PDKS control days", () =>
   assert.match(css, /\.inline-action-field/);
 });
 
-test("payroll person actions link to the same source movements", () => {
-  assert.match(monthly, /Hareketleri Yönet/);
-  assert.match(monthly, /Mesai Ekle/);
-  assert.match(monthly, /Avans Ekle/);
-  assert.match(monthly, /Kesinti Ekle/);
-  assert.match(monthly, /Bordrodan Düzelt/);
+test("payroll person actions open the same canonical source editor", () => {
+  assert.match(monthly, /Kaynakları Düzenle/);
+  assert.match(monthly, /Kaynak Hareketleri \/ Log/);
+  assert.match(monthly, /Çift tık: gerçek kaynakları düzenle/);
+  assert.match(monthly, /openPayPlan\(row\.employee\)/);
+  assert.doesNotMatch(monthly, /Bordrodan Düzelt/);
 });
 
 

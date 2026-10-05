@@ -120,7 +120,8 @@ test("payroll payment balance is auto-reconciled in UI while backend keeps the h
 
   assert.match(page, /function reconcilePaymentSplit/);
   assert.match(page, /const balancedSplit = reconcilePaymentSplit\(rowTotals\.net/);
-  assert.match(page, /const payment = reconcilePaymentSplit\([\s\S]*enteredTotals\.net/);
+  assert.match(page, /Banka \+ Elden planı tahmini net ile dengeli/);
+  assert.match(page, /preTotals\.diff/);
   assert.doesNotMatch(page, /Banka \+ elden net odeme ile eslesmiyor\. Devam edilsin mi/);
   assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
   assert.match(cloud, /calculatePayrollAmounts/);
@@ -266,24 +267,26 @@ test("IK overview is finance-focused and leaves live attendance operations to PD
   assert.match(page, /Tek Kişi Fişi/);
 });
 
-test("final payroll control edits every amount and writes movement deltas back to source", () => {
+test("payroll edit UI uses one source center while final-control remains a snapshot boundary", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const api = frontend("services/ik/monthlyApi.js");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
-  assert.match(page, /Modal title="Son Bordro Kontrolü"/);
-  for (const label of ["Maaş", "Yol", "EK / İlave Ödeme", "Mesai Toplamı", "Avans", "Özel Kesinti", "İcra / Haciz", "Bankadan Ödenecek", "Elden Ödenecek"]) {
-    assert.ok(page.includes(label), `Eksik son bordro alanı: ${label}`);
+  assert.match(page, /Modal title="Bordro Öncesi Personel Kontrolü"/);
+  for (const label of ["Gerçek Maaş", "Yol Yardımı", "Banka Planı", "Elden Planı", "Mesai Saati", "Tutar"]) {
+    assert.ok(page.includes(label), `Eksik kaynak düzenleme alanı: ${label}`);
   }
-  assert.match(page, /saveIkAdvancedFinalPayrollControl/);
-  assert.match(page, /Kaydet \+ Fişi Aç/);
+  assert.match(page, /savePrePayrollMovement/);
+  assert.match(page, /savePerson/);
+  assert.doesNotMatch(page, /modal === "bordroDuzelt"/);
+  assert.doesNotMatch(page, /savePayrollOverride/);
   assert.match(api, /\/ik\/advanced\/payroll\/final-control/);
 
   assert.match(cloud, /async function saveAdvancedPayrollFinalControl/);
-  assert.match(cloud, /Mesai - Son Bordro Düzeltme/);
-  assert.match(cloud, /Avans - Son Bordro Düzeltme/);
-  assert.match(cloud, /Ozel kesinti - Son Bordro Düzeltme/);
-  assert.match(cloud, /Son bordro kontrolü düzeltmesi/);
+  assert.match(cloud, /pushCorrection\("overtime", "Mesai", "Bordro"\)/);
+  assert.match(cloud, /pushCorrection\("advance", "Avans"/);
+  assert.match(cloud, /pushCorrection\("deduction", "Ozel kesinti"/);
+  assert.match(cloud, /Bordro kaynak kontrolü/);
   assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
   assert.match(cloud, /action: "FINAL_CONTROL"/);
   assert.match(cloud, /status=excluded\.status/);
@@ -305,13 +308,15 @@ test("PDKS report people query follows the selected historical year and month", 
   assert.match(report, /getPdksPeople\(\{year,month\}\)/);
 });
 
-test("IK validates monthly SGK before card writes and final-control corrections are immutable", () => {
+test("IK validates monthly SGK before card writes and source corrections stay editable", () => {
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
   const cardSaveStart = cloud.indexOf("async function savePersonCard");
   const cardSaveEnd = cloud.indexOf("async function updateMonthlyEmployeeFromCard", cardSaveStart);
   const cardSave = cloud.slice(cardSaveStart, cardSaveEnd);
   assert.ok(cardSave.indexOf("SGK_DAYS_INVALID") < cardSave.indexOf("INSERT INTO ik_person_card_settings"));
-  assert.match(cloud, /FINAL_CONTROL_CORRECTION_IMMUTABLE/);
+  assert.doesNotMatch(cloud, /FINAL_CONTROL_CORRECTION_IMMUTABLE/);
+  assert.match(cloud, /FINANCE_UPDATE/);
+  assert.match(cloud, /FINANCE_DELETE/);
   assert.match(cloud, /PERSONNEL_VERSION_CONFLICT/);
   assert.match(cloud, /HIRE_DATE_REQUIRED/);
   assert.match(cloud, /const activePassive = effectiveExitDate \? "Pasif" : "Aktif"/);
@@ -330,38 +335,33 @@ test("kıdem preview keeps the complete payroll settlement breakdown", () => {
 });
 
 
-test("final payroll save auto-reconciles bank cash and supports serial personnel review", () => {
+test("unified source editor supports serial personnel review without closing", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const css = frontend("pages/modules/ik/monthly/ik.advanced.css");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
-  assert.match(page, /function reconcilePaymentSplit/);
-  assert.match(page, /const payment = reconcilePaymentSplit\([\s\S]{0,160}enteredTotals\.net/);
-  assert.match(page, /payment\.bank/);
-  assert.match(page, /payment\.cash/);
-  assert.match(page, /Kaydet \+ Sonraki/);
-  assert.match(page, /Personeller/);
+  assert.match(page, /switchPayPlanPerson/);
+  assert.match(page, /Personel Seç/);
+  assert.match(page, /← Önceki/);
+  assert.match(page, /Sonraki →/);
+  assert.match(page, /Personel \/ Ücret Kaynağını Kaydet/);
+  assert.match(page, /personMovements/);
   assert.match(page, /payroll-person-rail-list/);
-  assert.match(page, /openPayroll\(nextRow\)/);
-  assert.doesNotMatch(page, /disabled=\{busy\|\|Math\.abs\(totals\.diff\)>0\.01\}/);
 
   assert.match(css, /payroll-final-layout/);
   assert.match(css, /payroll-person-rail/);
   assert.match(css, /payroll-control-grid/);
-
-  // Backend still keeps the hard invariant; only the UI reconciles before posting.
   assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
 });
 
 
-test("saved payroll snapshots stay immutable while live-source differences remain detectable", () => {
+test("only paid payroll snapshots are immutable; unpaid payroll follows live sources", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
-  assert.match(page, /saved\.final\.overtimeAmount !== undefined \? num\(saved\.final\.overtimeAmount\) : system\.overtime/);
-  assert.match(page, /saved\.final\.advanceAmount !== undefined \? num\(saved\.final\.advanceAmount\) : system\.advance/);
-  assert.match(page, /saved\.final\.deductionAmount !== undefined \? num\(saved\.final\.deductionAmount\) : system\.deduction/);
-  assert.match(page, /saved\.final\.garnishmentAmount !== undefined \? num\(saved\.final\.garnishmentAmount\) : system\.garnishment/);
+  assert.match(page, /if \(upper\(saved\.status\) !== "PAID"\)/);
+  assert.match(page, /return \{ \.\.\.system, saved, sourceChangedSinceSave, paidLocked: false \}/);
+  assert.match(page, /paidLocked: true/);
   assert.match(page, /sourceChangedSinceSave/);
-  assert.match(page, /paidLocked: upper\(saved\.status\) === "PAID"/);
-  assert.match(page, /reconcilePaymentSplit\(savedTotals\.net, savedBank, savedCash/);
+  assert.match(page, /snapshotPayment/);
+  assert.match(page, /Tek kaynak kuralı/);
 });
