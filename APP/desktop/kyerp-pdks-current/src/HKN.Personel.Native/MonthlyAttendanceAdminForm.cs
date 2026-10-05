@@ -339,7 +339,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
 
         foreach(var r in source.OrderBy(x=>x.Day).ThenBy(x=>x.Card))
             table.Rows.Add(false,r.Key,r.Day.ToString("dd.MM.yyyy"),r.Day.ToString("dddd",CultureInfo.GetCultureInfo("tr-TR")),
-                r.Card,r.Name,Clock(r.Entry),TypeLabel(r.EntryType),Clock(r.Exit),TypeLabel(r.ExitType),
+                r.Card,r.Name,Clock(r.Entry),r.Entry.HasValue?TypeLabel(r.EntryType):"",Clock(r.Exit),r.Exit.HasValue?TypeLabel(r.ExitType):"",
                 Clock(r.PhysicalEntry),Clock(r.PhysicalExit),r.Status,r.TnfStatus);
 
         grid.DataSource=table;
@@ -355,7 +355,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
         if(e.RowIndex<0||!grid.Columns.Contains("Durum"))return;
         var state=Convert.ToString(grid.Rows[e.RowIndex].Cells["Durum"].Value)??"";
         if(state.Contains("E ",StringComparison.OrdinalIgnoreCase))
-            grid.Rows[e.RowIndex].DefaultCellStyle.BackColor=PdksAppearance.Current.WarningSoft;
+            grid.Rows[e.RowIndex].DefaultCellStyle.BackColor=PdksAppearance.Current.IsDark?Color.FromArgb(69,52,21):Color.FromArgb(255,248,220);
         else if(state is not "Tamam" and not "Hafta Sonu" and not "Tatil" and not "İzinli")
             grid.Rows[e.RowIndex].DefaultCellStyle.BackColor=PdksAppearance.Current.DangerSoft;
     }
