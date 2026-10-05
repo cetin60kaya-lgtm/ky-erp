@@ -427,7 +427,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
         var defaults=entry?(new TimeSpan(8,20,0),new TimeSpan(8,35,0)):(new TimeSpan(18,50,0),new TimeSpan(19,5,0));
         var range=AskTimeRange(entry?"Giriş Saatini Düzenle":"Çıkış Saatini Düzenle",defaults.Item1,defaults.Item2);
         if(range is null)return;
-        if(MessageBox.Show($"{selected.Count} kişi-gün {range.Value.Start:hh\:mm}-{range.Value.End:hh\:mm} aralığına dağıtılacak.\n\nDATA ve yıllık TNF birlikte değişir; cihaz ham arşivi değişmez; E oluşturulmaz.",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+        if(MessageBox.Show($"{selected.Count} kişi-gün {range.Value.Start:hh\\:mm}-{range.Value.End:hh\\:mm} aralığına dağıtılacak.\n\nDATA ve yıllık TNF birlikte değişir; cihaz ham arşivi değişmez; E oluşturulmaz.",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
 
         SetBusy(true);
         try
