@@ -121,7 +121,7 @@ test("payroll payment balance is auto-reconciled in UI while backend keeps the h
   assert.match(page, /function reconcilePaymentSplit/);
   assert.match(page, /function paymentSplitByType/);
   assert.match(page, /const balancedSplit = reconcilePaymentSplit\(rowTotals\.net/);
-  assert.match(page, /Banka \+ Elden: Banka tutarı sabit kalır/);
+  assert.match(page, /const autoBalanceFinalPayment = \(\) =>/);
   assert.match(page, /const modalPayment = paymentSplitByType/);
   assert.match(page, /const sourcePayment = paymentSplitByType/);
   assert.doesNotMatch(page, /Banka \+ elden net odeme ile eslesmiyor\. Devam edilsin mi/);
@@ -348,7 +348,8 @@ test("unified source editor supports serial personnel review without closing", (
   assert.match(page, /Personel Seç/);
   assert.match(page, /← Önceki/);
   assert.match(page, /Sonraki →/);
-  assert.match(page, /Personel \/ Ücret Kaynağını Kaydet/);
+  assert.match(page, /Son Kontrolü Kaydet/);
+  assert.match(page, /Bordro Öncesi Giriş Kontrolü/);
   assert.match(page, /personMovements/);
   assert.match(page, /payroll-person-rail-list/);
 
