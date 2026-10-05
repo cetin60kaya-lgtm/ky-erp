@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const pdfParse = require('pdf-parse');
 const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = process.env.HAKAN_EMP_APP_ROOT || __dirname;
@@ -97,6 +98,143 @@ try{
    for(const name of [m.day_operator,m.night_operator].map(txt).filter(Boolean))iq.run(name,norm(name));
  }
 }catch(e){console.error('OPERATOR_SEED',e.message)}
+
+
+function setting(k,fallback=''){return db.prepare('SELECT v FROM settings WHERE k=?').get(k)?.v??fallback}
+function saveSetting(k,v){db.prepare('INSERT OR REPLACE INTO settings(k,v) VALUES(?,?)').run(k,txt(v))}
+function documentFolders(){
+ const f={
+  invoiceWatchEnabled:setting('invoice_watch_enabled','1')!=='0',
+  invoiceScanSeconds:Math.max(10,num(setting('invoice_scan_seconds','30'))||30),
+  invoiceInboxDir:setting('invoice_inbox_dir',DEFAULT_INVOICE_IN),
+  invoiceDoneDir:setting('invoice_done_dir',DEFAULT_INVOICE_DONE),
+  invoicePendingDir:setting('invoice_pending_dir',DEFAULT_INVOICE_PENDING),
+  invoiceErrorDir:setting('invoice_error_dir',DEFAULT_INVOICE_ERROR),
+  checkImageDir:setting('check_image_dir',DEFAULT_IMGROOT)
+ };
+ [f.invoiceInboxDir,f.invoiceDoneDir,f.invoicePendingDir,f.invoiceErrorDir,f.checkImageDir].filter(Boolean).forEach(dir);
+ return f;
+}
+function seedFolderSettings(){
+ const d={invoice_watch_enabled:'1',invoice_scan_seconds:'30',invoice_inbox_dir:DEFAULT_INVOICE_IN,invoice_done_dir:DEFAULT_INVOICE_DONE,invoice_pending_dir:DEFAULT_INVOICE_PENDING,invoice_error_dir:DEFAULT_INVOICE_ERROR,check_image_dir:DEFAULT_IMGROOT};
+ for(const [k,v] of Object.entries(d))if(!db.prepare('SELECT 1 FROM settings WHERE k=?').get(k))saveSetting(k,v);
+ documentFolders();
+}
+seedFolderSettings();
+
+function parseTrNumber(v){
+ const raw=txt(v).replace(/\s/g,'').replace(/[^0-9,.-]/g,'');
+ if(!raw)return 0;
+ if(raw.includes(','))return num(raw.replace(/\./g,'').replace(',','.'));
+ const parts=raw.split('.');
+ if(parts.length>1&&parts.slice(1).every(x=>x.length===3))return num(parts.join(''));
+ return num(raw);
+}
+function safeName(v){return txt(v).replace(/[<>:"/\\|?*\x00-\x1F]/g,'_').replace(/\s+/g,' ').slice(0,120)||'BILINMEYEN'}
+function fileHash(p){const h=crypto.createHash('sha256');h.update(fs.readFileSync(p));return h.digest('hex')}
+function moveUnique(src,destDir,name=''){
+ dir(destDir);const ext=path.extname(src)||'.pdf',base=safeName(name||path.basename(src,ext));let dest=path.join(destDir,base+ext),i=1;
+ while(fs.existsSync(dest)){dest=path.join(destDir,base+'_'+i+ext);i++}
+ fs.renameSync(src,dest);return dest;
+}
+function invoiceTextClean(v){return String(v||'').replace(/\u00ad/g,'-').replace(/\u00a0/g,' ').replace(/\r/g,'').replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n')}
+function invoiceDateFromText(t){
+ const m=t.match(/Fatura\s*Tarihi\s*:\s*(\d{2})\D(\d{2})\D(\d{4})/i)||t.match(/\b(\d{2})[.\/-](\d{2})[.\/-](20\d{2})\b/);
+ return m?m[3]+'-'+m[2]+'-'+m[1]:today();
+}
+function bestInvoiceCompany(t){
+ const nt=norm(t),all=db.prepare('SELECT * FROM companies WHERE active=1 ORDER BY LENGTH(name) DESC').all();
+ let best=null;
+ for(const c of all){const cn=norm(c.name);if(cn&&nt.includes(cn)){best=c;break}const tokens=cn.split(' ').filter(x=>x.length>=4);const hit=tokens.filter(x=>nt.includes(x)).length;if(tokens.length&&hit/Math.min(tokens.length,4)>=.75)best=best||c}
+ return best;
+}
+function invoiceModelCandidates(t,fileName=''){
+ const nt=norm(t),nf=norm(path.basename(fileName,path.extname(fileName))).replace(/HKN\d+/g,' ').replace(/\b(KALAN|FATURA|TAHA|MODAKS)\b/g,' ');
+ const models=db.prepare("SELECT m.id,m.name,m.norm,m.company_id,b.id batch_id,b.status FROM models m JOIN batches b ON b.model_id=m.id AND b.status='OPEN' ORDER BY LENGTH(m.name) DESC").all();
+ const scored=[];
+ for(const m of models){
+  const mn=norm(m.name);let score=0;
+  if(nt.includes(mn))score=Math.max(score,.96);
+  if(nf.includes(mn))score=Math.max(score,1);
+  const mt=mn.split(/[^A-ZÇĞİÖŞÜ0-9]+/).filter(x=>x.length>=3),hits=mt.filter(x=>nt.includes(x)||nf.includes(x)).length;
+  if(mt.length)score=Math.max(score,hits/mt.length*.9);
+  if(score>=.55)scored.push({...m,score});
+ }
+ return scored.sort((a,b)=>b.score-a.score||b.name.length-a.name.length).slice(0,8);
+}
+function extractInvoiceMeta(text,fileName=''){
+ const t=invoiceTextClean(text),invoiceNo=(t.match(/Fatura\s*No\s*:\s*([A-Z]{2,5}\d{8,})/i)||t.match(/\b(HKN\d{10,})\b/i)||[])[1]||'';
+ const date=invoiceDateFromText(t);
+ const qtyMatch=t.match(/(?:^|\n)\s*([0-9][0-9.,]*)\s*Adet\b/i);
+ const amountMatch=t.match(/Ödenecek\s*Tutar\s*([0-9][0-9.,]*)\s*TL/i)||t.match(/Vergiler\s*Dahil\s*Toplam\s*Tutar\s*([0-9][0-9.,]*)\s*TL/i);
+ const company=bestInvoiceCompany(t),candidates=invoiceModelCandidates(t,fileName),best=candidates[0]||null;
+ return{invoiceNo:txt(invoiceNo),date,qty:parseTrNumber(qtyMatch?.[1]),amount:parseTrNumber(amountMatch?.[1]),company,candidates,best,text:t};
+}
+function invoicePoolRows(){
+ const rows=db.prepare(`SELECT p.*,c.name matched_company,m.name matched_model FROM invoice_pool p LEFT JOIN companies c ON c.id=p.company_id LEFT JOIN models m ON m.id=p.model_id ORDER BY CASE p.status WHEN 'PENDING' THEN 0 WHEN 'NEW' THEN 1 WHEN 'ERROR' THEN 2 ELSE 3 END,p.created_at DESC,p.id DESC LIMIT 1000`).all();
+ const counts={};for(const r of db.prepare('SELECT status,COUNT(*) c FROM invoice_pool GROUP BY status').all())counts[r.status]=num(r.c);
+ return{rows,counts,folders:documentFolders(),lastScan:setting('invoice_last_scan','')};
+}
+function invoiceAlreadyPosted(no){
+ if(!txt(no))return false;
+ return !!db.prepare("SELECT 1 FROM financial WHERE type='invoice' AND doc_no=? LIMIT 1").get(txt(no));
+}
+function archiveInvoicePoolRow(id){
+ const r=db.prepare('SELECT * FROM invoice_pool WHERE id=?').get(num(id));if(!r)return '';
+ if(!r.current_path||!fs.existsSync(r.current_path))return r.current_path||'';
+ const f=documentFolders(),ym=(r.invoice_date||today()).slice(0,7).split('-'),companyName=r.company_name||db.prepare('SELECT name FROM companies WHERE id=?').get(num(r.company_id))?.name||'FIRMA';
+ const destDir=path.join(f.invoiceDoneDir,ym[0]||'TARIHSIZ',ym[1]||'00',safeName(companyName));
+ const dest=moveUnique(r.current_path,destDir,path.basename(r.file_name,path.extname(r.file_name)));
+ db.prepare('UPDATE invoice_pool SET current_path=?,updated_at=? WHERE id=?').run(dest,nowIso(),num(id));return dest;
+}
+function postInvoicePoolRow(id,overrides={}){
+ const r=db.prepare('SELECT * FROM invoice_pool WHERE id=?').get(num(id));if(!r)throw Error('Fatura havuz kaydı bulunamadı');
+ if(r.status==='PROCESSED')return{ok:true,id:r.id,already:true};
+ const modelId=num(overrides.modelId)||num(r.model_id),companyId=num(overrides.companyId)||num(r.company_id),qty=num(overrides.qty)||num(r.qty),amount=Object.prototype.hasOwnProperty.call(overrides,'amount')?num(overrides.amount):num(r.amount),docNo=txt(overrides.invoiceNo)||txt(r.invoice_no),date=txt(overrides.date)||txt(r.invoice_date)||today();
+ if(!modelId)throw Error('Model eşleştirmesi gerekli');if(!companyId)throw Error('Firma eşleştirmesi gerekli');if(qty<=0)throw Error('Fatura adedi okunamadı');
+ if(invoiceAlreadyPosted(docNo)){db.prepare("UPDATE invoice_pool SET status='PROCESSED',processed_at=?,error='Aynı fatura no daha önce işlendi',updated_at=? WHERE id=?").run(nowIso(),nowIso(),r.id);archiveInvoicePoolRow(r.id);return{ok:true,id:r.id,duplicate:true}}
+ const open=db.prepare("SELECT id FROM batches WHERE model_id=? AND status='OPEN' ORDER BY id DESC LIMIT 1").get(modelId);if(!open)throw Error('Seçilen modelin açık havuz işi yok');
+ financial({batchId:open.id,companyId,date,docNo,qty,amount,note:'Fatura Havuzu: '+r.file_name,type:'invoice'});
+ db.prepare("UPDATE invoice_pool SET status='PROCESSED',invoice_no=?,invoice_date=?,company_id=?,model_id=?,batch_id=?,qty=?,amount=?,processed_at=?,error='',updated_at=? WHERE id=?").run(docNo,date,companyId,modelId,open.id,qty,amount,nowIso(),nowIso(),r.id);
+ archiveInvoicePoolRow(r.id);return{ok:true,id:r.id,batchId:open.id}
+}
+async function ingestInvoicePdf(file){
+ const folders=documentFolders(),hash=fileHash(file),existing=db.prepare('SELECT * FROM invoice_pool WHERE file_hash=?').get(hash);
+ if(existing){if(fs.existsSync(file)){const d=existing.status==='PROCESSED'?folders.invoiceDoneDir:existing.status==='ERROR'?folders.invoiceErrorDir:folders.invoicePendingDir;try{moveUnique(file,d,path.basename(file,path.extname(file)))}catch{}}return{duplicate:true,id:existing.id}}
+ let id=0;
+ try{
+  const parsed=await pdfParse(fs.readFileSync(file)),meta=extractInvoiceMeta(parsed.text,path.basename(file)),best=meta.best,company=meta.company;
+  const duplicateNo=meta.invoiceNo&&invoiceAlreadyPosted(meta.invoiceNo);
+  let status='PENDING',err='';
+  if(!meta.invoiceNo)err='Fatura no okunamadı';else if(meta.qty<=0)err='Fatura adedi okunamadı';else if(!company)err='Firma eşleşmedi';else if(!best||best.score<.85)err='Model eşleştirmesi gerekli';
+  const ins=db.prepare(`INSERT INTO invoice_pool(file_hash,file_name,source_path,current_path,status,invoice_no,invoice_date,company_id,company_name,model_text,model_id,batch_id,qty,amount,parse_text,error,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  id=Number(ins.run(hash,path.basename(file),file,file,status,meta.invoiceNo,meta.date,company?.id||0,company?.name||'',best?.name||'',best?.id||0,best?.batch_id||0,meta.qty,meta.amount,meta.text.slice(0,20000),duplicateNo?'Aynı fatura no daha önce işlendi':err,nowIso()).lastInsertRowid);
+  if(duplicateNo){db.prepare("UPDATE invoice_pool SET status='PROCESSED',processed_at=?,updated_at=? WHERE id=?").run(nowIso(),nowIso(),id);archiveInvoicePoolRow(id);return{ok:true,id,duplicate:true}}
+  if(!err){return postInvoicePoolRow(id)}
+  const dest=moveUnique(file,folders.invoicePendingDir,path.basename(file,path.extname(file)));db.prepare('UPDATE invoice_pool SET current_path=?,updated_at=? WHERE id=?').run(dest,nowIso(),id);return{ok:true,id,pending:true}
+ }catch(e){
+  try{
+   if(!id)id=Number(db.prepare("INSERT OR IGNORE INTO invoice_pool(file_hash,file_name,source_path,current_path,status,error,updated_at) VALUES(?,?,?,?,?,?,?)").run(hash,path.basename(file),file,file,'ERROR',e.message,nowIso()).lastInsertRowid||0);
+   const dest=fs.existsSync(file)?moveUnique(file,folders.invoiceErrorDir,path.basename(file,path.extname(file))):file;if(id)db.prepare("UPDATE invoice_pool SET status='ERROR',current_path=?,error=?,updated_at=? WHERE id=?").run(dest,e.message,nowIso(),id);
+  }catch{}
+  return{ok:false,id,error:e.message}
+ }
+}
+let invoiceScanBusy=false,lastInvoiceScanAt=0;
+async function scanInvoicePool(force=false){
+ const f=documentFolders();if(!f.invoiceWatchEnabled&&!force)return{enabled:false,scanned:0};
+ const now=Date.now();if(!force&&now-lastInvoiceScanAt<f.invoiceScanSeconds*1000)return{enabled:true,skipped:true,scanned:0};if(invoiceScanBusy)return{enabled:true,busy:true,scanned:0};
+ invoiceScanBusy=true;lastInvoiceScanAt=now;let scanned=0,processed=0,pending=0,errors=0;
+ try{
+  dir(f.invoiceInboxDir);const files=fs.readdirSync(f.invoiceInboxDir).filter(x=>path.extname(x).toLowerCase()==='.pdf').sort();
+  for(const name of files){const full=path.join(f.invoiceInboxDir,name);try{const st=fs.statSync(full);if(Date.now()-st.mtimeMs<2000)continue}catch{continue}
+   const r=await ingestInvoicePdf(full);scanned++;if(r?.error)errors++;else if(r?.pending)pending++;else processed++;
+  }
+  saveSetting('invoice_last_scan',nowIso());return{enabled:true,scanned,processed,pending,errors}
+ }finally{invoiceScanBusy=false}
+}
+setTimeout(()=>scanInvoicePool(true).catch(e=>console.error('INVOICE_SCAN',e.message)),1800);
+setInterval(()=>scanInvoicePool(false).catch(e=>console.error('INVOICE_SCAN',e.message)),5000);
 
 function backup(){try{db.exec('PRAGMA wal_checkpoint(TRUNCATE)');const p=path.join(DATA_ROOT,'backup');dir(p);const f=path.join(p,'IMALAT_'+nowIso().replace(/[:.]/g,'-')+'.db');fs.copyFileSync(DB_PATH,f);const a=fs.readdirSync(p).filter(x=>x.endsWith('.db')).sort().reverse();for(const x of a.slice(30))fs.unlinkSync(path.join(p,x))}catch(e){console.error('BACKUP',e.message)}} backup();
 
