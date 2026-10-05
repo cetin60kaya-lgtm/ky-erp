@@ -37,7 +37,7 @@ test("monthly personnel API returns the full HKN master roster and allocates the
   assert.match(relational, /field_name='personnelCode'/);
   assert.match(relational, /value\.code = await nextMonthlyPersonnelCode/);
   assert.match(relational, /const allEmployees = rawEmployeesWithCalc\.map/);
-  assert.match(relational, /masterEmployees,/);
+  assert.match(relational, /masterEmployees: masterEmployeesWithSgk/);
   assert.match(relational, /rawEmployees: allEmployees/);
   assert.match(relational, /rawLeaves: leaves/);
   assert.match(relational, /rawDocuments: documents\.map/);
@@ -48,17 +48,35 @@ test("closed month protects monthly SGK compliance without blocking master perso
   assert.match(relational, /const periodLocked = flag\(periodLockRow\?\.is_locked\)/);
   assert.match(relational, /const skipPeriodCompliance = body\.skipPeriodCompliance === true/);
   assert.match(relational, /if \(periodLocked && !skipPeriodCompliance\)/);
-  assert.match(relational, /if \(!periodLocked\) \{/);
+  assert.match(relational, /if \(!periodLocked && !preservePeriodCompliance\) \{/);
   assert.match(relational, /periodComplianceSkipped: periodLocked/);
 });
 
-test("person card SGK day contract accepts zero or unknown values consistently", () => {
+test("person card SGK day contract accepts zero or unknown values and caps a month at 30", () => {
   const relational = api("ik-relational-cloud.ts");
   const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(relational, /const maxSgkDays = 30/);
   assert.match(relational, /rawSgkDays < 0 \|\| rawSgkDays > maxSgkDays/);
   assert.match(relational, /SGK gün sayısı 0-\$\{maxSgkDays\} arasında olmalıdır/);
-  assert.match(monthly, /SGK gün sayısı 0-\$\{totalDays\} arasında olmalıdır/);
+  assert.match(monthly, /SGK gün sayısı 0-30 arasında olmalıdır/);
   assert.match(monthly, /hasSgkDays \? Math\.round\(num\(modalDraft\.sgkDays\)\) : null/);
+});
+
+test("SGK suggestion is date-driven, PDKS stays control-only and official payroll wins", () => {
+  const relational = api("ik-relational-cloud.ts");
+  assert.match(relational, /export function suggestedSgkDaysAtPeriod/);
+  assert.match(relational, /coverageStart === periodStart && coverageEnd === periodEnd\) return 30/);
+  assert.match(relational, /Math\.max\(0, Math\.min\(30,/);
+  assert.match(relational, /COUNT\(DISTINCT work_date\) AS card_days FROM ik_time_clock_events/);
+  assert.match(relational, /sgkDaySource: "RESMI_BORDRO"/);
+  assert.match(relational, /masterEmployees: masterEmployeesWithSgk/);
+});
+
+test("official SGK import preserves monthly compliance while person master data can still save", () => {
+  const relational = api("ik-relational-cloud.ts");
+  assert.match(relational, /const preservePeriodCompliance = body\.preservePeriodCompliance === true/);
+  assert.match(relational, /if \(!periodLocked && !preservePeriodCompliance\)/);
+  assert.match(relational, /periodComplianceSkipped: periodLocked \|\| preservePeriodCompliance/);
 });
 
 test("finance create update delete mutations are visible to live sync", () => {
