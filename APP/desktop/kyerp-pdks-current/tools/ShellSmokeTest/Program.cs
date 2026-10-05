@@ -80,6 +80,21 @@ using (var operations = new OperationsCenterForm(PdksCommandCatalog.All, _ => { 
         if(!texts.Contains(required)) throw new InvalidOperationException("Operasyon adımı eksik: "+required);
 }
 
+using (var liveReadOnly = new LiveAttendanceForm())
+{
+    var buttons = Descendants(liveReadOnly).OfType<Button>().Select(x => x.Text ?? string.Empty).ToArray();
+    foreach (var forbidden in new[] { "Geç Girişi Düzenle", "Erken Çıkışı Düzenle", "Toplu E Giriş", "Toplu E Çıkış", "Günü Eşitle", "Ayı Eşitle" })
+        if (buttons.Contains(forbidden)) throw new InvalidOperationException("Canlı Denetim salt okunur olmalı; admin düzeltme komutu sızdı: " + forbidden);
+}
+if (!PdksCommandCatalog.Get(PdksCommandId.MonthlyAttendanceAdmin).AdminOnly)
+    throw new InvalidOperationException("Aylık Kart Düzeltme komutu ADMIN özel olmalı.");
+using (var adminMonth = new MonthlyAttendanceAdminForm(user))
+{
+    var buttons = Descendants(adminMonth).OfType<Button>().Select(x => x.Text ?? string.Empty).ToArray();
+    foreach (var required in new[] { "Normal Giriş Ekle", "Normal Çıkış Ekle", "Giriş Saatini Düzenle", "Çıkış Saatini Düzenle", "E Giriş Ekle", "E Çıkış Ekle", "Ayı DATA ↔ TNF Eşitle", "E İmza PDF" })
+        if (!buttons.Contains(required)) throw new InvalidOperationException("ADMIN aylık düzeltme komutu eksik: " + required);
+}
+
 using (var exceptions = new AttendanceExceptionCenterForm())
 {
     if (!Descendants(exceptions).OfType<DataGridView>().Any())
