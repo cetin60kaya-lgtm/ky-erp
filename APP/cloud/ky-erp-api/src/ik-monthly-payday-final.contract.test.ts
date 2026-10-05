@@ -37,7 +37,7 @@ test("monthly personnel API returns the full HKN master roster and allocates the
   assert.match(relational, /field_name='personnelCode'/);
   assert.match(relational, /value\.code = await nextMonthlyPersonnelCode/);
   assert.match(relational, /const allEmployees = rawEmployeesWithCalc\.map/);
-  assert.match(relational, /masterEmployees,/);
+  assert.match(relational, /masterEmployees: masterEmployeesWithSgk/);
   assert.match(relational, /rawEmployees: allEmployees/);
   assert.match(relational, /rawLeaves: leaves/);
   assert.match(relational, /rawDocuments: documents\.map/);
@@ -48,7 +48,7 @@ test("closed month protects monthly SGK compliance without blocking master perso
   assert.match(relational, /const periodLocked = flag\(periodLockRow\?\.is_locked\)/);
   assert.match(relational, /const skipPeriodCompliance = body\.skipPeriodCompliance === true/);
   assert.match(relational, /if \(periodLocked && !skipPeriodCompliance\)/);
-  assert.match(relational, /if \(!periodLocked\) \{/);
+  assert.match(relational, /if \(!periodLocked && !preservePeriodCompliance\) \{/);
   assert.match(relational, /periodComplianceSkipped: periodLocked/);
 });
 
