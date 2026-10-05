@@ -1,5 +1,5 @@
-let core={rows:[],summary:{},models:[],machines:[],operators:[],companies:[]},done={rows:[]},cari={rows:[],movements:[]},allCompanies={rows:[]},machinesAll={rows:[]},notes={rows:[]},reminders={rows:[]},checks={rows:[]},sync={},settings={values:{}};
-let prodView='OPEN',noteView='ACTIVE',remView='PENDING',checkView='PAYABLE',selectedCompanyId=0,currentModel=null,currentDetail=null,weekCursor='';
+let core={rows:[],summary:{},models:[],machines:[],operators:[],companies:[]},done={rows:[]},cari={rows:[],movements:[]},allCompanies={rows:[]},machinesAll={rows:[]},notes={rows:[]},reminders={rows:[]},checks={rows:[]},invoicePool={rows:[],counts:{},folders:{}},sync={},settings={values:{}};
+let prodView='OPEN',noteView='ACTIVE',remView='PENDING',checkView='PAYABLE',invoiceView='ALL',selectedCompanyId=0,currentModel=null,currentDetail=null,weekCursor='';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const n=v=>Number(v||0),fmt=v=>new Intl.NumberFormat('tr-TR').format(n(v)),money=v=>'₺'+new Intl.NumberFormat('tr-TR',{maximumFractionDigits:2}).format(n(v)),today=()=>new Date().toISOString().slice(0,10),norm=s=>String(s||'').trim().toLocaleUpperCase('tr-TR'),esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 const dateTR=s=>{const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'.'+m[2]+'.'+m[1]:(s||'—')};
@@ -12,8 +12,8 @@ async function api(url,opt){const r=await fetch(url,opt);let j={};try{j=await r.
 const post=(u,x)=>api(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(x)});
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(window.__t);window.__t=setTimeout(()=>e.classList.remove('show'),1800)}
 
-const meta={production:['HAKAN EMP / İMALAT','İmalat Havuzu','Haftalık üretim fişleri + açık iş havuzu + irsaliye/fatura dengesi.'],cari:['HAKAN EMP / CARİ','Cari Takip','Firma seç, bakiye ve bütün hareketleri tek ekranda gör.'],checks:['HAKAN EMP / ÇEK','Çek Takip','Ay ay ayrılmış çekler, toplamlar, makbuz ve çıktı.'],settings:['HAKAN EMP / AYARLAR','Ayarlar','Firma, imalat, makine, cari, çek ve senkron ayarları.'],notes:['HAKAN EMP / NOTLAR','Notlarım','Patron ile muhasebe arasındaki aktif not ve görev panosu.'],reminders:['HAKAN EMP / ÖDEME','Ödeme Hatırlatma','Yaklaşan, geciken ve ödenen ödemeleri takip et.']};
-function navigate(p){$$('.page').forEach(x=>x.classList.remove('active'));$$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===p));$('#'+p).classList.add('active');$('#crumb').textContent=meta[p][0];$('#pageTitle').textContent=meta[p][1];$('#pageSub').textContent=meta[p][2];if(p==='production')renderProduction();if(p==='cari')renderCari();if(p==='checks')renderChecks();if(p==='settings')renderSettings();if(p==='notes')renderNotes();if(p==='reminders')renderReminders()}
+const meta={production:['HAKAN EMP / İMALAT','İmalat Havuzu','Haftalık üretim fişleri + açık iş havuzu + irsaliye/fatura dengesi.'],cari:['HAKAN EMP / CARİ','Cari Takip','Firma seç, bakiye ve bütün hareketleri tek ekranda gör.'],invoicePool:['HAKAN EMP / FATURA','Fatura Havuzu','PDF klasörünü otomatik oku, modeli eşleştir ve faturayı havuza işle.'],checks:['HAKAN EMP / ÇEK','Çek Takip','Ay ay ayrılmış çekler, toplamlar, makbuz ve çıktı.'],settings:['HAKAN EMP / AYARLAR','Ayarlar','Firma, imalat, makine, cari, çek, dosya ve senkron ayarları.'],notes:['HAKAN EMP / NOTLAR','Notlarım','Patron ile muhasebe arasındaki aktif not ve görev panosu.'],reminders:['HAKAN EMP / ÖDEME','Ödeme Hatırlatma','Yaklaşan, geciken ve ödenen ödemeleri takip et.']};
+function navigate(p){$('.page').forEach(x=>x.classList.remove('active'));$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===p));$('#'+p).classList.add('active');$('#crumb').textContent=meta[p][0];$('#pageTitle').textContent=meta[p][1];$('#pageSub').textContent=meta[p][2];if(p==='production')renderProduction();if(p==='cari')renderCari();if(p==='invoicePool')renderInvoicePool();if(p==='checks')renderChecks();if(p==='settings')renderSettings();if(p==='notes')renderNotes();if(p==='reminders')renderReminders()}
 $$('.nav-item').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
 
 function syncModalLayers(){
@@ -399,14 +399,69 @@ function renderMachines(){if(!$('#machineRows'))return;const a=machinesAll.rows|
 function openMachine(no=''){const m=no?(machinesAll.rows||[]).find(x=>String(x.machine_no)===String(no)):null;modal(m?'Makine Düzenle':'Yeni Makine','Makine adı, numarası ve vardiya makinacılarını yönet.',`<form class="form" id="machineForm"><input type="hidden" name="originalMachineNo" value="${esc(m?.machine_no||'')}"><label class="field">Makine No<input name="machineNo" value="${esc(m?.machine_no||'')}" autofocus required></label><label class="field">Makine Adı<input name="machineName" value="${esc(m?.machine_name||'')}" required></label><label class="field">Gündüz Makinacı<select name="dayOperator">${operatorOptions(m?.day_operator||'')}</select></label><label class="field">Gece Makinacı<select name="nightOperator">${operatorOptions(m?.night_operator||'')}</select></label><label class="field">Durum<select name="active"><option value="1" ${m?.active===0?'':'selected'}>Aktif</option><option value="0" ${m?.active===0?'selected':''}>Pasif</option></select></label><div class="form-actions"><button type="button" onclick="closeModal()">Vazgeç</button><button class="primary">Makineyi Kaydet</button></div></form>`);$('#machineForm').onsubmit=async e=>{e.preventDefault();try{await post('/api/machine',Object.fromEntries(new FormData(e.target)));closeModal();toast('Makine kaydedildi');await loadAll()}catch(err){toast(err.message)}}}
 window.openMachine=openMachine;
 async function removeMachine(no){if(!confirm('Makine çıkarılsın mı? Geçmiş üretimi varsa silinmez, pasif yapılır.'))return;try{const r=await post('/api/machine-remove',{machineNo:no});toast(r.soft?'Geçmiş kayıt nedeniyle makine pasif yapıldı':'Makine silindi');await loadAll()}catch(e){toast(e.message)}} window.removeMachine=removeMachine;
-function renderSettingForms(){const v=settings.values||{};$('#setDefaultCompany').innerHTML='<option value="">Firma seç</option>'+companyOptions(v.default_company_id||'');$('#setDefaultShift').value=v.default_shift||'Gündüz';$('#setCheckHorizon').value=v.check_horizon_days||'90';$('#setReceiptRequired').value=v.receipt_required??'1'}
+
+function invoiceStatusMeta(status){
+ const m={PROCESSED:['İŞLENDİ ✓','green'],PENDING:['EŞLEŞTİR','orange'],ERROR:['HATALI','red'],NEW:['BEKLİYOR','blue']};
+ return m[status]||[status||'BEKLİYOR','blue'];
+}
+function renderInvoicePool(){
+ const c=invoicePool.counts||{};
+ $('#ipPending').textContent=fmt(c.PENDING||0);
+ $('#ipProcessed').textContent=fmt(c.PROCESSED||0);
+ $('#ipError').textContent=fmt(c.ERROR||0);
+ $('#ipLastScan').textContent=invoicePool.lastScan?new Date(invoicePool.lastScan).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'}):'—';
+ let rows=[...(invoicePool.rows||[])],q=norm($('#invoicePoolSearch')?.value||'');
+ if(invoiceView!=='ALL')rows=rows.filter(r=>r.status===invoiceView);
+ if(q)rows=rows.filter(r=>norm([r.invoice_no,r.company_name,r.matched_company,r.model_text,r.matched_model,r.file_name].join(' ')).includes(q));
+ $('#invoicePoolRows').innerHTML=rows.length?rows.map(r=>{
+  const [label,color]=invoiceStatusMeta(r.status),company=r.matched_company||r.company_name||'—',model=r.matched_model||r.model_text||'—';
+  const match=r.status==='PENDING'?'<button class="mini-action warn" onclick="openInvoicePoolMatch('+r.id+')">Eşleştir</button>':r.status==='PROCESSED'?'<span class="match-ok">Otomatik / Onaylı</span>':r.error?'<span class="match-error">'+esc(r.error)+'</span>':'—';
+  const statusAction=r.status==='PENDING'?'<span class="status orange">EŞLEŞTİR</span>':r.status==='PROCESSED'?'<span class="status green">İŞLENDİ ✓</span>':r.status==='ERROR'?'<span class="status red">HATALI</span>':'<span class="status blue">BEKLİYOR</span>';
+  return '<div class="data-row invoice-pool-grid">'+
+   '<div class="cell-main"><b>'+esc(r.invoice_no||'Fatura no yok')+'</b><small>'+esc(r.file_name||'')+'</small></div>'+
+   '<div>'+dateTR(r.invoice_date)+'</div>'+
+   '<div class="cell-main"><b>'+esc(company)+'</b></div>'+
+   '<div class="cell-main"><b>'+esc(model)+'</b></div>'+
+   '<div class="num">'+fmt(r.qty)+'</div>'+
+   '<div class="num">'+money(r.amount)+'</div>'+
+   '<div>'+match+'</div>'+
+   '<div class="invoice-status-end">'+statusAction+'</div>'+
+  '</div>';
+ }).join(''):'<div class="empty">Fatura havuzunda kayıt yok.</div>';
+}
+$('[data-invoice-view]').forEach(b=>b.onclick=()=>{$('[data-invoice-view]').forEach(x=>x.classList.remove('active'));b.classList.add('active');invoiceView=b.dataset.invoiceView;renderInvoicePool()});
+if($('#invoicePoolSearch'))$('#invoicePoolSearch').oninput=renderInvoicePool;
+function invoiceOpenModelOptions(selected=''){return (core.rows||[]).map(r=>'<option value="'+r.model_id+'" '+(String(r.model_id)===String(selected)?'selected':'')+'>'+esc(r.model_name)+' — '+esc(r.company_name||'Firma yok')+'</option>').join('')}
+function openInvoicePoolMatch(id){
+ const r=(invoicePool.rows||[]).find(x=>n(x.id)===n(id));if(!r)return;
+ modal('Faturayı Eşleştir','PDF okundu. Firma ve modeli doğrula; onaydan sonra havuza işlenir.',`<form class="form" id="invoicePoolMatchForm">
+ <input type="hidden" name="id" value="${r.id}">
+ <label class="field full">PDF / Fatura<input value="${esc((r.invoice_no||'')+' · '+(r.file_name||''))}" disabled></label>
+ <label class="field">Firma<select name="companyId" required>${companyOptions(r.company_id||'')}</select></label>
+ <label class="field">Model<select name="modelId" required><option value="">Model seç</option>${invoiceOpenModelOptions(r.model_id||'')}</select></label>
+ <label class="field">Fatura Tarihi<input name="date" type="date" value="${esc(r.invoice_date||today())}" required></label>
+ <label class="field">Fatura No<input name="invoiceNo" value="${esc(r.invoice_no||'')}" required></label>
+ <label class="field">Adet<input name="qty" type="number" step="0.01" min="0.01" value="${n(r.qty)}" required></label>
+ <label class="field">Ödenecek Tutar<input name="amount" type="number" step="0.01" min="0" value="${n(r.amount)}"></label>
+ <div class="form-actions"><button type="button" onclick="closeModal()">Vazgeç</button><button class="primary">Eşleştir ve İşle</button></div>
+ </form>`);
+ $('#invoicePoolMatchForm').onsubmit=async e=>{e.preventDefault();try{await post('/api/invoice-pool/post',Object.fromEntries(new FormData(e.target)));closeModal();toast('Fatura işlendi ve dosya taşındı');await loadAll();navigate('invoicePool')}catch(err){toast(err.message)}}
+}
+window.openInvoicePoolMatch=openInvoicePoolMatch;
+async function scanInvoiceNow(){try{const r=await post('/api/invoice-pool/scan',{});toast((r.scanned||0)+' PDF kontrol edildi');await loadAll();renderInvoicePool()}catch(e){toast(e.message)}}
+if($('#invoiceScanNow'))$('#invoiceScanNow').onclick=scanInvoiceNow;
+if($('#folderScanNow'))$('#folderScanNow').onclick=scanInvoiceNow;
+
+function renderSettingForms(){const v=settings.values||{},f=settings.folders||{};$('#setDefaultCompany').innerHTML='<option value="">Firma seç</option>'+companyOptions(v.default_company_id||'');$('#setDefaultShift').value=v.default_shift||'Gündüz';$('#setCheckHorizon').value=v.check_horizon_days||'90';$('#setReceiptRequired').value=v.receipt_required??'1';$('#setInvoiceInbox').value=v.invoice_inbox_dir||f.invoiceInboxDir||'';$('#setInvoiceDone').value=v.invoice_done_dir||f.invoiceDoneDir||'';$('#setInvoicePending').value=v.invoice_pending_dir||f.invoicePendingDir||'';$('#setInvoiceError').value=v.invoice_error_dir||f.invoiceErrorDir||'';$('#setInvoiceWatch').value=v.invoice_watch_enabled??'1';$('#setInvoiceScanSeconds').value=v.invoice_scan_seconds||'30';$('#setCheckImageDir').value=v.check_image_dir||f.checkImageDir||''}
 $('#productionSettingsForm').onsubmit=async e=>{e.preventDefault();await post('/api/settings',Object.fromEntries(new FormData(e.target)));toast('İmalat ayarları kaydedildi');await loadAll()};
 $('#checkSettingsForm').onsubmit=async e=>{e.preventDefault();await post('/api/settings',Object.fromEntries(new FormData(e.target)));toast('Çek ayarları kaydedildi');await loadAll()};
+$('#fileSettingsForm').onsubmit=async e=>{e.preventDefault();await post('/api/settings',Object.fromEntries(new FormData(e.target)));toast('Fatura havuzu klasörleri kaydedildi');await loadAll()};
+$('#checkFolderSettingsForm').onsubmit=async e=>{e.preventDefault();await post('/api/settings',Object.fromEntries(new FormData(e.target)));toast('Çek görsel klasörü kaydedildi');await loadAll()};
 
 function renderSync(){const ok=!!sync.enabled;$('#sideSyncDot').classList.toggle('ok',ok);$('#syncDot').classList.toggle('ok',ok);$('#sideSyncTitle').textContent=ok?'OneDrive aktif':'OneDrive yok';$('#sideSyncText').textContent=ok?'10 dk otomatik':'bağlantı yok';$('#syncTitle').textContent=ok?'Senkron Hazır':'OneDrive Bulunamadı';$('#syncText').textContent=ok?'Sadece yeni işlemler taşınır.':'OneDrive kökü bulunamadı.';$('#syncLast').textContent=sync.lastSync?new Date(sync.lastSync).toLocaleString('tr-TR'):'Henüz yok';$('#syncOut').textContent=sync.pendingOut||0;$('#syncIn').textContent=sync.pendingIn||0}
 $('#syncNow').onclick=async()=>{try{await post('/api/sync/now',{});toast('Senkron tamamlandı');await loadAll()}catch(e){toast(e.message)}};
 $('#backupNow').onclick=async()=>{await post('/api/backup',{});toast('Tam yedek alındı')};
 
-async function loadAll(){try{[core,done,cari,allCompanies,machinesAll,notes,reminders,checks,sync,settings]=await Promise.all([api('/api/dashboard?week='+encodeURIComponent(weekCursor)),api('/api/completed?week='+encodeURIComponent(weekCursor)),api('/api/companies'),api('/api/companies-all'),api('/api/machines-all'),api('/api/notes'),api('/api/reminders'),api('/api/checks'),api('/api/sync/status'),api('/api/settings')]);if(!selectedCompanyId&&cari.rows?.[0])selectedCompanyId=n(cari.rows[0].id);renderProduction();renderCari();renderChecks();renderSettingsCompanies();renderOperators();renderMachines();renderNotes();renderReminders();renderSync();renderSettingForms()}catch(e){toast(e.message)}}
+async function loadAll(){try{[core,done,cari,allCompanies,machinesAll,notes,reminders,checks,invoicePool,sync,settings]=await Promise.all([api('/api/dashboard?week='+encodeURIComponent(weekCursor)),api('/api/completed?week='+encodeURIComponent(weekCursor)),api('/api/companies'),api('/api/companies-all'),api('/api/machines-all'),api('/api/notes'),api('/api/reminders'),api('/api/checks'),api('/api/invoice-pool'),api('/api/sync/status'),api('/api/settings')]);if(!selectedCompanyId&&cari.rows?.[0])selectedCompanyId=n(cari.rows[0].id);renderProduction();renderCari();renderInvoicePool();renderChecks();renderSettingsCompanies();renderOperators();renderMachines();renderNotes();renderReminders();renderSync();renderSettingForms()}catch(e){toast(e.message)}}
 $('#refreshBtn').onclick=async()=>{await loadAll();toast('Güncellendi')};
 loadAll();
