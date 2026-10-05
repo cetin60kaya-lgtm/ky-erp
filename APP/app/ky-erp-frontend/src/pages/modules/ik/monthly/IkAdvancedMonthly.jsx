@@ -1194,6 +1194,114 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     }
   };
 
+  const saveFinalPayrollControl = async () => {
+    const editor = { ...(modalDraft.finalEditor || {}) };
+    if (!modalDraft.id) return setModalDraft((old) => ({ ...old, formMessage: "Personel seçilmeden son kontrol kaydedilemez." }));
+    const desired = {
+      salary: Math.max(num(editor.salary), 0),
+      road: Math.max(num(editor.road), 0),
+      extra: Math.max(num(editor.extra), 0),
+      overtime: Math.max(num(editor.overtime), 0),
+      advance: Math.max(num(editor.advance), 0),
+      deduction: Math.max(num(editor.deduction), 0),
+      garnishment: Math.max(num(editor.garnishment), 0),
+      bank: Math.max(num(editor.bank), 0),
+      cash: Math.max(num(editor.cash), 0),
+    };
+    const totals = calcRow(desired);
+    if (Math.abs(totals.diff) > 0.01) {
+      return setModalDraft((old) => ({ ...old, formMessage: `Banka + Elden toplamı Net ile eşleşmeli. Fark: ${money(Math.abs(totals.diff))}` }));
+    }
+    const resolvedPaymentType = desired.bank > 0 && desired.cash > 0 ? "BANKA_ELDEN" : desired.bank > 0 ? "Banka" : "Elden";
+    const hasSgkDays = modalDraft.sgkDays !== "" && modalDraft.sgkDays !== null && modalDraft.sgkDays !== undefined;
+    const cardPayload = {
+      mainCompanyId: companyId,
+      expectedVersion: modalDraft.version || "",
+      fullName: modalDraft.fullName,
+      personelKodu: modalDraft.code,
+      cardNo: modalDraft.cardNo,
+      identityNo: modalDraft.identityNo,
+      personnelStatus: modalDraft.personnelStatus || "NORMAL",
+      period,
+      year,
+      month,
+      skipPeriodCompliance: Boolean(data.close?.isLocked),
+      sgkFollow: modalDraft.sgkFollow === "SGKLI",
+      sgkDays: modalDraft.sgkFollow === "SGKLI" ? (hasSgkDays ? Math.round(num(modalDraft.sgkDays)) : null) : 0,
+      sgkDaySource: modalDraft.sgkDaySourceIntent || modalDraft.sgkDaySource || "MANUEL",
+      sgkNote: `[KYERP:SGK_SOURCE=${modalDraft.sgkDaySourceIntent || modalDraft.sgkDaySource || "MANUEL"}]`,
+      preservePeriodCompliance: modalDraft.sgkDaySource === "RESMI_BORDRO",
+      paymentType: resolvedPaymentType,
+      salary: desired.salary,
+      roadAllowance: desired.road,
+      bankAmount: desired.bank,
+      cashAmount: desired.cash,
+      baseEmployeeId: modalDraft.baseEmployeeId || "",
+      extraPaymentLabel: "EK",
+      extraPaymentAmount: desired.extra,
+      overtimeHourlyBase: num(modalDraft.overtimeHourlyBase) || 225,
+      deductionHourlyBase: num(modalDraft.deductionHourlyBase) || 300,
+      payrollIncluded: modalDraft.payrollIncluded !== false,
+      hireDate: modalDraft.startDate,
+      exitDate: modalDraft.exitDate,
+      title: modalDraft.title,
+      department: modalDraft.department,
+      annualLeaveEntitlement: num(modalDraft.annualLeaveEntitlement),
+      annualLeaveCarryover: num(modalDraft.annualLeaveCarryover),
+      activePassive: modalDraft.exitDate ? "Pasif" : "Aktif",
+      status: modalDraft.exitDate ? "Pasif" : "Aktif",
+      note: modalDraft.note,
+      phone: modalDraft.phone,
+      effectiveDate: modalDraft.effectiveDate || istanbulDateKey(),
+      changeNote: editor.reason || "Son bordro kontrolü",
+    };
+
+    setBusy(true);
+    setModalDraft((old) => ({ ...old, formMessage: "Son kontrol kaynaklara kaydediliyor..." }));
+    try {
+      const savedCard = await saveIkAdvancedPersonCard(modalDraft.id, cardPayload);
+      await saveIkAdvancedFinalPayrollControl({
+        mainCompanyId: companyId,
+        year,
+        month,
+        employeeId: modalDraft.id,
+        salary: desired.salary,
+        road: desired.road,
+        extra: desired.extra,
+        overtime: desired.overtime,
+        advance: desired.advance,
+        deduction: desired.deduction,
+        garnishment: desired.garnishment,
+        bank: desired.bank,
+        cash: desired.cash,
+        advanceSource: editor.advanceSource || "Elden",
+        deductionSource: editor.deductionSource || "Elden",
+        garnishmentSource: editor.garnishmentSource || "Banka",
+        legalType: editor.legalType || "ICRA",
+        reason: editor.reason || "Son bordro kontrolü",
+      });
+      setModalDraft((old) => ({
+        ...old,
+        version: savedCard?.version || savedCard?.updatedAt || old.version,
+        salary: desired.salary,
+        roadAllowance: desired.road,
+        extraPaymentAmount: desired.extra,
+        paymentType: resolvedPaymentType,
+        bankAmount: desired.bank,
+        cashAmount: desired.cash,
+        finalEditor: { ...old.finalEditor, ...desired, paymentType: resolvedPaymentType },
+        formMessage: "Son bordro kontrolü kaydedildi ✓ Maaş/ödeme planı ve hareket kaynakları güncellendi.",
+      }));
+      setNotice("");
+      await load({ force: true, silent: true });
+    } catch (error) {
+      setModalDraft((old) => ({ ...old, formMessage: error?.message || "Son bordro kontrolü kaydedilemedi." }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+
   const openLeave = (kind = "yillik", forced = "", employeeOverride = null) => {
     const targetEmployee = employeeOverride || selected;
     if (!targetEmployee) return setNotice("Personel secilmeden kayit yapilamaz.");
