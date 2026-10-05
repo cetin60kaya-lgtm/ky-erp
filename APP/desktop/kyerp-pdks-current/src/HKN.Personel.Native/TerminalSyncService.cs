@@ -87,7 +87,7 @@ internal static class TerminalSyncService
                 return Save(new(DateTime.Now, 0, 0, 0, 0, 0, false, "Aktarılacak veri yok. Cihazda kayıt bulunamadı; cihazdan hiçbir şey silinmedi.", scheduleKey));
 
             // Physical terminal data is source evidence. Keep both a short live cache and a durable live TNF/raw archive.
-            BackupPunches(punches);
+            if (deviceSettings.BackupBeforeTransfer) BackupPunches(punches);
             AppendLive(punches);
             TerminalLiveArchiveService.Append(punches);
             AppendTnf(punches);
