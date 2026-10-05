@@ -125,7 +125,7 @@ internal static class AttendanceBulkCorrectionService
         foreach (var card in cards)
         {
             var minute = StableMinute(card, day, manualE ? (entry ? "E_GIRIS" : "E_CIKIS") : (entry ? "NORMAL_GIRIS_EKLE" : "NORMAL_CIKIS_EKLE"), from, to);
-            var time = TimeSpan.FromMinutes(minute).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
+            var time = TimeSpan.FromMinutes(minute).ToString(@"hh\\:mm", CultureInfo.InvariantCulture);
 
             if (entry)
             {
@@ -215,7 +215,7 @@ internal static class AttendanceBulkCorrectionService
             ? "DATA kaydı oluşturuldu; E kayıtları yıllık TNF'ye yazılmadı."
             : "DATA ve yıllık TNF aynı dakika ile güncellendi; E oluşturulmadı.";
         return new(op, cards.Length, changedCards.Count, skipped, changedCards,
-            $"{op}: {changedCards.Count} kayıt {from:hh\:mm}-{to:hh\:mm} aralığında oluşturuldu. {storage} Atlanan={skipped}.");
+            $"{op}: {changedCards.Count} kayıt {from:hh\\:mm}-{to:hh\\:mm} aralığında oluşturuldu. {storage} Atlanan={skipped}.");
     }
 
     static string[] NormalizeCards(IEnumerable<string> source) =>
