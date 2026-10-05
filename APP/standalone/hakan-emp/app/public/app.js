@@ -1,13 +1,18 @@
 let core={rows:[],summary:{},models:[],machines:[],operators:[],companies:[]},done={rows:[]},cari={rows:[],movements:[]},allCompanies={rows:[]},machinesAll={rows:[]},notes={rows:[]},reminders={rows:[]},checks={rows:[]},sync={},settings={values:{}};
-let prodView='OPEN',noteView='ACTIVE',remView='PENDING',checkView='PAYABLE',selectedCompanyId=0,currentModel=null,currentDetail=null;
+let prodView='OPEN',noteView='ACTIVE',remView='PENDING',checkView='PAYABLE',selectedCompanyId=0,currentModel=null,currentDetail=null,weekCursor='';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const n=v=>Number(v||0),fmt=v=>new Intl.NumberFormat('tr-TR').format(n(v)),money=v=>'₺'+new Intl.NumberFormat('tr-TR',{maximumFractionDigits:2}).format(n(v)),today=()=>new Date().toISOString().slice(0,10),norm=s=>String(s||'').trim().toLocaleUpperCase('tr-TR'),esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 const dateTR=s=>{const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'.'+m[2]+'.'+m[1]:(s||'—')};
+function isoLocal(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function addDaysIso(s,days){const d=new Date((s||today())+'T12:00:00');d.setDate(d.getDate()+Number(days||0));return isoLocal(d)}
+function weekStartIso(s=today()){const d=new Date((s||today())+'T12:00:00'),shift=(d.getDay()+6)%7;d.setDate(d.getDate()-shift);return isoLocal(d)}
+function weekLabelText(start){const end=addDaysIso(start,6);return dateTR(start)+' — '+dateTR(end)}
+weekCursor=weekStartIso(today());
 async function api(url,opt){const r=await fetch(url,opt);let j={};try{j=await r.json()}catch{}if(!r.ok)throw Error(j.error||'İşlem başarısız');return j}
 const post=(u,x)=>api(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(x)});
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(window.__t);window.__t=setTimeout(()=>e.classList.remove('show'),1800)}
 
-const meta={production:['HAKAN EMP / İMALAT','İmalat Takip','Gelen adet → üretim → irsaliye → fatura → kalan.'],cari:['HAKAN EMP / CARİ','Cari Takip','Firma seç, bakiye ve bütün hareketleri tek ekranda gör.'],checks:['HAKAN EMP / ÇEK','Çek Takip','Ay ay ayrılmış çekler, toplamlar, makbuz ve çıktı.'],settings:['HAKAN EMP / AYARLAR','Ayarlar','Firma, imalat, makine, cari, çek ve senkron ayarları.'],notes:['HAKAN EMP / NOTLAR','Notlarım','Patron ile muhasebe arasındaki aktif not ve görev panosu.'],reminders:['HAKAN EMP / ÖDEME','Ödeme Hatırlatma','Yaklaşan, geciken ve ödenen ödemeleri takip et.']};
+const meta={production:['HAKAN EMP / İMALAT','İmalat Havuzu','Haftalık üretim fişleri + açık iş havuzu + irsaliye/fatura dengesi.'],cari:['HAKAN EMP / CARİ','Cari Takip','Firma seç, bakiye ve bütün hareketleri tek ekranda gör.'],checks:['HAKAN EMP / ÇEK','Çek Takip','Ay ay ayrılmış çekler, toplamlar, makbuz ve çıktı.'],settings:['HAKAN EMP / AYARLAR','Ayarlar','Firma, imalat, makine, cari, çek ve senkron ayarları.'],notes:['HAKAN EMP / NOTLAR','Notlarım','Patron ile muhasebe arasındaki aktif not ve görev panosu.'],reminders:['HAKAN EMP / ÖDEME','Ödeme Hatırlatma','Yaklaşan, geciken ve ödenen ödemeleri takip et.']};
 function navigate(p){$$('.page').forEach(x=>x.classList.remove('active'));$$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===p));$('#'+p).classList.add('active');$('#crumb').textContent=meta[p][0];$('#pageTitle').textContent=meta[p][1];$('#pageSub').textContent=meta[p][2];if(p==='production')renderProduction();if(p==='cari')renderCari();if(p==='checks')renderChecks();if(p==='settings')renderSettings();if(p==='notes')renderNotes();if(p==='reminders')renderReminders()}
 $$('.nav-item').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
 
