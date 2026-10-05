@@ -955,6 +955,27 @@ export function employmentStateAtPeriod(employee: Row, card: Row, period: string
   return "ACTIVE";
 }
 
+export function suggestedSgkDaysAtPeriod(employee: Row, card: Row, period: string, sgkCovered = true) {
+  if (!sgkCovered) return 0;
+  const year = number(period.slice(0, 4));
+  const month = number(period.slice(5, 7));
+  if (!year || month < 1 || month > 12) return null;
+  const periodStart = `${period}-01`;
+  const periodEnd = `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
+  const hireDate = hrDateOnly(employee.hireDate || employee.startDate || employee.hire_date);
+  const exitDate = hrDateOnly(card.exit_date || employee.exitDate || employee.exit_date);
+  if (!hireDate || (exitDate && exitDate < hireDate)) return null;
+  if (hireDate > periodEnd || (exitDate && exitDate < periodStart)) return 0;
+  const coverageStart = hireDate > periodStart ? hireDate : periodStart;
+  const coverageEnd = exitDate && exitDate < periodEnd ? exitDate : periodEnd;
+  if (coverageStart > coverageEnd) return 0;
+  if (coverageStart === periodStart && coverageEnd === periodEnd) return 30;
+  const startMs = Date.parse(`${coverageStart}T00:00:00Z`);
+  const endMs = Date.parse(`${coverageEnd}T00:00:00Z`);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
+  return Math.max(0, Math.min(30, Math.floor((endMs - startMs) / 86_400_000) + 1));
+}
+
 export function advancedEmployeeVisible(employee: Row, card: Row, period: string) {
   if (card.payroll_included !== undefined && card.payroll_included !== null && !flag(card.payroll_included)) return false;
   return ["ACTIVE", "NEW_HIRE", "EXIT_MONTH", "ENTERED_EXITED", "MISSING_HIRE_DATE", "MISSING_EXIT_DATE"].includes(employmentStateAtPeriod(employee, card, period));
@@ -1174,6 +1195,15 @@ async function advancedMonth(c: Context<AppEnv>) {
     const fallbackSgk = card.sgk_follow === undefined ? text(employee.sgkStatus) !== "YOK" : sgkValue === 1;
     const sgkFollow = monthlyCompliance ? number(monthlyCompliance.sgk_covered) === 1 : fallbackSgk;
     const sgkDays = monthlyCompliance?.sgk_days === null || monthlyCompliance?.sgk_days === undefined ? null : number(monthlyCompliance.sgk_days);
+    const suggestedSgkDays = suggestedSgkDaysAtPeriod(employee, card, period, sgkFollow);
+    const sgkNote = text(monthlyCompliance?.note);
+    const sgkDaySource = !sgkFollow
+      ? "SGK_DISI"
+      : sgkDays === null
+        ? "ONERI"
+        : sgkNote.includes("[KYERP:SGK_SOURCE=SISTEM_ONERISI]")
+          ? "SISTEM_ONERISI"
+          : "MANUEL";
     const pdksCardDays = cardDaysByEmployee.get(text(employee.id)) || 0;
     const sgkPdksMatch = sgkDays === null ? null : sgkDays === pdksCardDays;
     return {
@@ -1192,6 +1222,9 @@ async function advancedMonth(c: Context<AppEnv>) {
       sgkFollow,
       sgkStatus: sgkFollow ? "VAR" : "YOK",
       sgkDays,
+      suggestedSgkDays,
+      sgkDaySource,
+      sgkNote,
       sgkPeriod: period,
       pdksCardDays,
       sgkPdksMatch,
@@ -1201,8 +1234,21 @@ async function advancedMonth(c: Context<AppEnv>) {
   const masterEmployees = currentEmployeesWithCalc.map((employee) => {
     const card = cardsByEmployee.get(text(employee.id)) || {};
     const profile = profileByEmployee.get(text(employee.id)) || {};
+    const monthlyCompliance = complianceByEmployee.get(text(employee.id));
     const sgkValue = number(card.sgk_follow);
-    const sgkFollow = card.sgk_follow === undefined ? text(employee.sgkStatus) !== "YOK" : sgkValue === 1;
+    const fallbackSgk = card.sgk_follow === undefined ? text(employee.sgkStatus) !== "YOK" : sgkValue === 1;
+    const sgkFollow = monthlyCompliance ? number(monthlyCompliance.sgk_covered) === 1 : fallbackSgk;
+    const sgkDays = monthlyCompliance?.sgk_days === null || monthlyCompliance?.sgk_days === undefined ? null : number(monthlyCompliance.sgk_days);
+    const suggestedSgkDays = suggestedSgkDaysAtPeriod(employee, card, period, sgkFollow);
+    const sgkNote = text(monthlyCompliance?.note);
+    const sgkDaySource = !sgkFollow
+      ? "SGK_DISI"
+      : sgkDays === null
+        ? "ONERI"
+        : sgkNote.includes("[KYERP:SGK_SOURCE=SISTEM_ONERISI]")
+          ? "SISTEM_ONERISI"
+          : "MANUEL";
+    const pdksCardDays = cardDaysByEmployee.get(text(employee.id)) || 0;
     return {
       ...employee,
       id: text(employee.id),
@@ -1218,6 +1264,13 @@ async function advancedMonth(c: Context<AppEnv>) {
       paymentType: text(card.payment_type) || text(employee.bankPaymentType),
       sgkFollow,
       sgkStatus: sgkFollow ? "VAR" : "YOK",
+      sgkDays,
+      suggestedSgkDays,
+      sgkDaySource,
+      sgkNote,
+      sgkPeriod: period,
+      pdksCardDays,
+      sgkPdksMatch: sgkDays === null ? null : sgkDays === pdksCardDays,
       phone: text(card.phone),
     };
   });
@@ -1269,10 +1322,21 @@ async function advancedMonth(c: Context<AppEnv>) {
     current.sgkGross = number(current.sgkGross) + number(row.gross);
     sgkByEmployee.set(employeeId, current);
   }
-  const employeesWithSgk = mergedEmployees.map((employee) => {
+  const withOfficialSgk = (employee: Row) => {
     const official = sgkByEmployee.get(text(employee.id));
-    return official ? { ...employee, sgkDays: number(official.sgkDays), sgkNet: number(official.sgkNet), sgkGross: number(official.sgkGross), sgkImportVersion: number(sgkImport?.version_no) || 1 } : employee;
-  });
+    return official
+      ? {
+          ...employee,
+          sgkDays: number(official.sgkDays),
+          sgkDaySource: "RESMI_BORDRO",
+          sgkNet: number(official.sgkNet),
+          sgkGross: number(official.sgkGross),
+          sgkImportVersion: number(sgkImport?.version_no) || 1,
+        }
+      : employee;
+  };
+  const employeesWithSgk = mergedEmployees.map(withOfficialSgk);
+  const masterEmployeesWithSgk = masterEmployees.map(withOfficialSgk);
   const closeRow = closeRows[0] || {};
   let checks: Row[] = [];
   try {
@@ -1283,7 +1347,7 @@ async function advancedMonth(c: Context<AppEnv>) {
     year,
     month,
     employees: employeesWithSgk,
-    masterEmployees,
+    masterEmployees: masterEmployeesWithSgk,
     rawEmployees: allEmployees,
     rawLeaves: leaves,
     rawDocuments: documents.map((row) => ({ id: text(row.id), employeeId: text(row.employee_id), documentType: text(row.document_type), fileName: text(row.file_name), filePath: text(row.file_path), storagePath: text(row.file_path), date: hrDateOnly(row.date), status: text(row.status), note: text(row.note) })),
@@ -1400,6 +1464,7 @@ async function savePersonCard(c: Context<AppEnv>) {
   const periodLockRow = await advancedPeriodLockRow(c, companyId, number(period.slice(0, 4)), number(period.slice(5, 7)));
   const periodLocked = flag(periodLockRow?.is_locked);
   const skipPeriodCompliance = body.skipPeriodCompliance === true;
+  const preservePeriodCompliance = body.preservePeriodCompliance === true;
   if (periodLocked && !skipPeriodCompliance) {
     return error(c, 409, "IK_PERIOD_LOCKED", "Seçili dönem kapalı. Personel ana kartını güncellemek için dönemsel SGK alanlarını değiştirmeden tekrar kaydedin.");
   }
@@ -1471,7 +1536,7 @@ async function savePersonCard(c: Context<AppEnv>) {
       updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
       .bind(employeeId, companyId, personnelStatus, text(body.userName) || "IK", nowIso()),
   ];
-  if (!periodLocked) {
+  if (!periodLocked && !preservePeriodCompliance) {
     profileStatements.push(
       c.env.DB.prepare(`INSERT INTO ik_person_monthly_compliance(main_company_id,employee_id,period,sgk_covered,sgk_days,note,updated_by,updated_at)
         VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(main_company_id,employee_id,period) DO UPDATE SET
@@ -1537,7 +1602,7 @@ async function savePersonCard(c: Context<AppEnv>) {
     legalDeductionType: legalType, garnishmentSource: legalSource,
     overtimeHourlyBase, deductionHourlyBase,
     personnelStatus, period, sgkCovered, sgkDays, effectiveDate,
-    periodComplianceSkipped: periodLocked,
+    periodComplianceSkipped: periodLocked || preservePeriodCompliance,
     changedFields: trackedChanges.map(([field]) => field),
   });
 }
