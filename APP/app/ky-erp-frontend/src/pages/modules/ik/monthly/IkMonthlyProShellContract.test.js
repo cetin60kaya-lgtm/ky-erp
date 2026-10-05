@@ -109,8 +109,9 @@ test("pre-payroll control keeps EK explicit and auto-balances payment channels",
   assert.match(monthly, /cash: round\(net - bank\)/);
   assert.match(monthly, /extraPaymentAmount: sourceExtra/);
   assert.match(monthly, /<Field label="EK Ödeme"/);
-  assert.match(monthly, /Sadece Elden: tahmini netin tamamı otomatik Elden'e atanır/);
-  assert.match(monthly, /Banka \+ Elden: Banka tutarı sabit kalır/);
+  assert.match(monthly, /if \(onlyCash\) return \{ bank: 0, cash: net, mode: "ELDEN" \}/);
+  assert.match(monthly, /if \(onlyBank\) return \{ bank: net, cash: 0, mode: "BANKA" \}/);
+  assert.match(monthly, /cash: round\(net - bank\)/);
   assert.match(monthly, /Bordro Öncesi Giriş Kontrolü/);
   assert.match(monthly, /Giriş Kontrol/);
 });
