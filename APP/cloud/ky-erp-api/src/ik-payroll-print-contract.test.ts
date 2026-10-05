@@ -304,6 +304,9 @@ test("payroll final control exposes every financial value and saves back to cano
   assert.match(cloud, /Bordro kaynak kontrolü/);
   assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
   assert.match(cloud, /PAYMENT_SOURCE_MISMATCH/);
+  assert.match(cloud, /UPDATE hr_monthly_adjustments_v2 SET payment_method=\? WHERE id=\?/);
+  assert.match(cloud, /UPDATE hr_monthly_adjustments_v2 SET adjustment_type=\? WHERE id=\?/);
+  assert.match(cloud, /const bankDeductionsAfter = Math\.max/);
   assert.match(cloud, /"FINAL_CONTROL"/);
   assert.match(cloud, /Son bordro kontrolü ücret planı, hareket kaynakları ve snapshot ile atomik kaydedildi/);
   assert.match(cloud, /await c\.env\.DB\.batch\(statements\)/);
