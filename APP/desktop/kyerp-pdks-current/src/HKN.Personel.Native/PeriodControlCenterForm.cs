@@ -234,7 +234,7 @@ public sealed class PeriodControlCenterForm : Form
                 else if (movementDays == 0 && punchDays == 0) state = "HAREKET YOK";
                 else state = "TAMAM";
 
-                if (tracked && state is "DÜZELT" or "PUANTAJ EKSİK") problems++;
+                if (tracked && state is ("DÜZELT" or "PUANTAJ EKSİK")) problems++;
                 if (tracked && punchDays > 0 && movementDays <= punchDays && missing == 0) punchReady++;
                 if (hasPayroll) payrollReady++;
                 if (hasPayment) payments++;
