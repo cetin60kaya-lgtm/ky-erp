@@ -227,6 +227,74 @@ internal static class TerminalLiveArchiveService
             : text;
     }
 
+    public static int DeleteBefore(DateTime keepFrom)
+    {
+        Ensure();
+        keepFrom = keepFrom.Date;
+        var removed = 0;
+
+        foreach (var file in Directory.GetFiles(TnfRoot, "CANLI_TR*.Tnf"))
+        {
+            var lines = File.ReadAllLines(file);
+            var keep = new List<string>(lines.Length);
+            foreach (var line in lines)
+            {
+                if (TryParseTnfDate(line, out var day) && day.Date < keepFrom)
+                {
+                    removed++;
+                    continue;
+                }
+                keep.Add(line);
+            }
+            File.WriteAllLines(file, keep, Encoding.ASCII);
+        }
+
+        foreach (var file in Directory.GetFiles(RawRoot, "*.raw", SearchOption.AllDirectories))
+        {
+            var lines = File.ReadAllLines(file);
+            var keep = new List<string>(lines.Length);
+            foreach (var line in lines)
+            {
+                var p = line.Split('|');
+                if (p.Length > 1 &&
+                    DateTime.TryParse(p[1], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var at) &&
+                    at.Date < keepFrom)
+                {
+                    removed++;
+                    continue;
+                }
+                keep.Add(line);
+            }
+            if (keep.Count == 0)
+            {
+                try { File.Delete(file); } catch { }
+            }
+            else File.WriteAllLines(file, keep, Encoding.UTF8);
+        }
+
+        if (File.Exists(CompanyDataPaths.LiveFile))
+        {
+            var lines = File.ReadAllLines(CompanyDataPaths.LiveFile);
+            var keep = new List<string>(lines.Length);
+            foreach (var line in lines)
+            {
+                var p = line.Split('|');
+                if (p.Length > 1 &&
+                    DateTime.TryParse(p[1], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var at) &&
+                    at.Date < keepFrom)
+                {
+                    removed++;
+                    continue;
+                }
+                keep.Add(line);
+            }
+            File.WriteAllLines(CompanyDataPaths.LiveFile, keep, Encoding.UTF8);
+            try { File.SetAttributes(CompanyDataPaths.LiveFile, File.GetAttributes(CompanyDataPaths.LiveFile) | FileAttributes.Hidden); } catch { }
+        }
+
+        return removed;
+    }
+
     public static int ClearAll()
     {
         Ensure();
