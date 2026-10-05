@@ -128,7 +128,7 @@ using (var settings = new LegacyTerminalSettingsForm())
         if (!columns.Contains(required)) throw new InvalidOperationException("Terminal ayar kolonu eksik: " + required);
 
     var buttons = Descendants(settings).OfType<Button>().Select(x => (x.Text ?? string.Empty).Replace("&", string.Empty)).ToArray();
-    foreach (var required in new[] { "EKLE", "ÇIKART", "DÜZENLE", "KAYDET", "BAĞLAN TEST", "CİHAZ TARİH/SAAT OKU", "PC SAATİNE AYARLA", "CİHAZDAN OKU", "KAYITLARI AKTAR", "SÜRÜCÜYÜ ONAR", "ÇIKIŞ" })
+    foreach (var required in new[] { "EKLE", "ÇIKART", "DÜZENLE", "KAYDET", "BAĞLANTI TESTİ", "CİHAZ SAATİNİ OKU", "PC SAATİYLE EŞİTLE", "LOGLARI OKU", "TNF + FDB AKTAR", "SÜRÜCÜYÜ ONAR", "ÇIKIŞ" })
         if (!buttons.Contains(required)) throw new InvalidOperationException("Terminal ayar komutu eksik: " + required);
 }
 
