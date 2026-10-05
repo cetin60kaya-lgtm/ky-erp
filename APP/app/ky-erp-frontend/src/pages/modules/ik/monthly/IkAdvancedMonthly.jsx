@@ -41,7 +41,7 @@ const LEAVE_TYPES = ["Yillik izin", "Normal izin", "Ucretsiz izin", "Mazeret izn
 const DAILY_TYPES = ["Isi vardi - sadece not", "Rapor", "Normal izin", "Ucretsiz izin", "Dogum izni", "Olum izni"];
 const DOCUMENT_LOG_WORDS = ["EVRAK", "BELGE", "SOZLESME", "RAPOR", "IZIN FORM"];
 const PAYROLL_LOG_WORDS = ["BORDRO", "ODEME", "FIS"];
-const IK_LIVE_SYNC_INTERVAL_MS = 1500;
+const IK_LIVE_SYNC_INTERVAL_MS = 15000;
 const IK_LIVE_SYNC_CHANNEL = "kyerp.ik.monthly.live.v1";
 
 function istanbulDateKey(now = new Date()) {
@@ -196,12 +196,14 @@ function payrollVisibleEmployee(employee = {}, period = "") {
 }
 function employmentPeriodLabel(employee = {}, period = "") {
   const state = employmentStateAtPeriod(employee, period);
-  if (state === "NEW_HIRE") return "Yeni Giriş";
-  if (state === "EXIT_MONTH") return "Çıkış Ayı";
-  if (state === "ENTERED_EXITED") return "Giriş / Çıkış";
-  if (state === "ACTIVE") return "Dönemde Aktif";
-  if (state === "EXITED") return "Ayrılmış";
-  if (state === "NOT_STARTED") return "Henüz Başlamadı";
+  const [year, month] = String(period || "").split("-").map(Number);
+  const periodName = year && month >= 1 && month <= 12 ? `${MONTHS[month - 1]} ${year}` : "Seçili dönem";
+  if (state === "NEW_HIRE") return `${periodName} · Yeni Giriş`;
+  if (state === "EXIT_MONTH") return `${periodName} · Çıkış Ayı`;
+  if (state === "ENTERED_EXITED") return `${periodName} · Giriş / Çıkış`;
+  if (state === "ACTIVE") return `${periodName} · Aktif`;
+  if (state === "EXITED") return `${periodName} · Önceden Ayrılmış`;
+  if (state === "NOT_STARTED") return `${periodName} · İşe Başlamamış`;
   if (state === "MISSING_HIRE_DATE") return "Giriş Tarihi Eksik";
   if (state === "MISSING_EXIT_DATE") return "Çıkış Tarihi Eksik";
   return "Tarih Kontrolü";
@@ -231,6 +233,16 @@ function sgkLabel(employee = {}) {
   if (employee.sgkFollow === true) return "SGK'li";
   if (employee.sgkFollow === false) return "SGK'siz";
   return "Belirtilmemis";
+}
+
+function sgkDaySourceLabel(value) {
+  const source = upper(value);
+  if (source === "RESMI_BORDRO") return "Resmi Bordro";
+  if (source === "SISTEM_ONERISI") return "Sistem Önerisi";
+  if (source === "MANUEL") return "Manuel";
+  if (source === "ONERI") return "Henüz kaydedilmedi";
+  if (source === "SGK_DISI") return "SGK dışı";
+  return "Belirsiz";
 }
 
 function hknNumber(employee = {}) {
@@ -290,6 +302,9 @@ function draftPerson(employee = {}) {
     personnelStatus: employee.personnelStatus === "RETIRED" ? "RETIRED" : "NORMAL",
     sgkFollow: employee.sgkFollow === true ? "SGKLI" : employee.sgkFollow === false ? "SGKSIZ" : "BELIRTILMEMIS",
     sgkDays: employee.sgkDays ?? "",
+    suggestedSgkDays: employee.suggestedSgkDays ?? null,
+    sgkDaySource: employee.sgkDaySource || (employee.sgkDays === null || employee.sgkDays === undefined ? "ONERI" : "MANUEL"),
+    sgkDaySourceIntent: employee.sgkDaySource || (employee.sgkDays === null || employee.sgkDays === undefined ? "ONERI" : "MANUEL"),
     pdksCardDays: employee.pdksCardDays ?? 0,
     sgkPdksMatch: employee.sgkPdksMatch ?? null,
     paymentType: employee.paymentType || "BANKA_ELDEN",
@@ -367,6 +382,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const loadRequestRef = useRef({ key: "", seq: 0, promise: null });
   const liveVersionRef = useRef("");
   const livePollBusyRef = useRef(false);
+  const lastSuccessfulLoadStartedAtRef = useRef(0);
   const [sgkPreview, setSgkPreview] = useState(null);
   const [selectedPayrollIds, setSelectedPayrollIds] = useState([]);
   const documentInput = useRef(null);
@@ -405,7 +421,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const totalDays = daysInMonth(year, month);
   const selected = employees.find((item) => item.id === selectedId) || employees[0] || null;
 
-  const load = useCallback(async ({ force = false, prepare = false } = {}) => {
+  const load = useCallback(async ({ force = false, prepare = false, silent = false } = {}) => {
     const requestKey = `${companyId}|${year}|${month}`;
     let activeRequest = loadRequestRef.current;
     if (activeRequest.promise) {
@@ -415,8 +431,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     }
 
     const requestId = activeRequest.seq + 1;
+    const loadStartedAt = Date.now();
     const task = (async () => {
-      setBusy(true);
+      if (!silent) setBusy(true);
       try {
         const [resultState, auditState, centerState, periodState] = await Promise.allSettled([
           getIkAdvancedMonth(params({ mainCompanyId: companyId, year, month })),
@@ -507,15 +524,16 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         if (center?.policy) setPolicyDraft(center.policy);
         setSelectedId((old) => masterSelectionIds.has(old) ? old : nextEmployees[0]?.id || safeList(result?.masterEmployees)[0]?.id || "");
         setSelectedPayrollIds((old) => old.filter((id) => currentIds.has(id)));
-        setNotice(auxiliaryFailed ? "İK ana verisi yüklendi; bazı yardımcı özetler geçici olarak alınamadı." : "");
+        lastSuccessfulLoadStartedAtRef.current = loadStartedAt;
+        if (!silent) setNotice(auxiliaryFailed ? "İK ana verisi yüklendi; bazı yardımcı özetler geçici olarak alınamadı." : "");
         return true;
       } catch (error) {
-        if (loadRequestRef.current.seq === requestId) {
+        if (!silent && loadRequestRef.current.seq === requestId) {
           setNotice(error?.message || "IK aylik verisi alinamadi.");
         }
         return false;
       } finally {
-        if (loadRequestRef.current.seq === requestId) setBusy(false);
+        if (!silent && loadRequestRef.current.seq === requestId) setBusy(false);
       }
     })();
 
@@ -545,15 +563,14 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         if (!version) return;
         if (!liveVersionRef.current) { liveVersionRef.current = version; return; }
         if (version === liveVersionRef.current) return;
-        if (busy || modal) {
-          if (!cancelled) setNotice((current) => current || "Canlı senkron: başka bilgisayarda değişiklik var. Açık işlem tamamlanınca ekran otomatik yenilenecek.");
+        const updatedAtMs = Date.parse(String(state?.updatedAt || ""));
+        if (updatedAtMs && lastSuccessfulLoadStartedAtRef.current && updatedAtMs <= lastSuccessfulLoadStartedAtRef.current) {
+          liveVersionRef.current = version;
           return;
         }
-        await load({ force: true, prepare: periodPrepared });
-        if (!cancelled) {
-          liveVersionRef.current = version;
-          setNotice("Canlı senkron: diğer bilgisayardaki İK değişiklikleri alındı.");
-        }
+        if (busy || modal) return;
+        const refreshed = await load({ force: true, prepare: periodPrepared, silent: true });
+        if (!cancelled && refreshed) liveVersionRef.current = version;
       } catch {
         // Canlı senkron yardımcı katmandır; geçici bağlantı hatası aylık İK işlemlerini durdurmaz.
       } finally {
@@ -1200,6 +1217,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       skipPeriodCompliance: Boolean(data.close?.isLocked),
       sgkFollow: modalDraft.sgkFollow === "SGKLI",
       sgkDays: modalDraft.sgkFollow === "SGKLI" ? (hasSgkDays ? Math.round(num(modalDraft.sgkDays)) : null) : 0,
+      sgkDaySource: modalDraft.sgkDaySourceIntent || modalDraft.sgkDaySource || "MANUEL",
+      sgkNote: `[KYERP:SGK_SOURCE=${modalDraft.sgkDaySourceIntent || modalDraft.sgkDaySource || "MANUEL"}]`,
+      preservePeriodCompliance: modalDraft.sgkDaySource === "RESMI_BORDRO",
       paymentType: modalDraft.paymentType,
       salary: num(modalDraft.salary),
       roadAllowance: num(modalDraft.roadAllowance),
@@ -2310,7 +2330,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               </div>
 
               <div className="ik-pro-profile-grid">
-                <div><span>SGK</span><b>{sgkLabel(profile)}</b><small>{profile.sgkFollow === false ? "PDKS dışı" : `${num(profile.sgkDays)} gün`}</small></div>
+                <div><span>SGK</span><b>{sgkLabel(profile)}</b><small>{profile.sgkFollow === false ? "SGK dışı" : profile.sgkDays !== null && profile.sgkDays !== undefined ? `${num(profile.sgkDays)} gün · ${sgkDaySourceLabel(profile.sgkDaySource)}` : profile.suggestedSgkDays !== null && profile.suggestedSgkDays !== undefined ? `Öneri: ${profile.suggestedSgkDays} gün` : "Gün bilgisi bekleniyor"}</small></div>
                 <div><span>İşe Giriş</span><b>{employeeHireDate(profile) || "Eksik"}</b><small>{employeeExitDate(profile) ? `Çıkış: ${employeeExitDate(profile)}` : "Aktif çalışma"}</small></div>
                 <div><span>Ödeme Tipi</span><b>{paymentLabel(profile)}</b><small>Banka + elden planı</small></div>
                 <div><span>Yıllık İzin</span><b>{profileLeave.balance} gün</b><small>{profileLeave.annual} gün kullanılmış</small></div>
@@ -2558,14 +2578,17 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           <div className="modal-section"><h3>Kimlik ve Çalışma Bilgileri</h3><div className="form"><Field label="Ad Soyad" half><input value={modalDraft.fullName||""} onChange={(event)=>setModalDraft((old)=>({...old,fullName:event.target.value}))}/></Field><Field label="TC Kimlik No"><input value={modalDraft.identityNo||""} maxLength={11} onChange={(event)=>setModalDraft((old)=>({...old,identityNo:event.target.value.replace(/\D/g,"")}))}/></Field><Field label="Personel Kodu"><input value={modalDraft.code||""} readOnly /></Field><Field label="Kart No"><input value={modalDraft.cardNo||""} onChange={(event)=>setModalDraft((old)=>({...old,cardNo:event.target.value}))}/></Field><Field label="İşe Giriş"><input type="date" value={modalDraft.startDate||""} onChange={(event)=>setModalDraft((old)=>({...old,startDate:event.target.value}))}/></Field><Field label="İşten Çıkış"><input type="date" value={modalDraft.exitDate||""} onChange={(event)=>setModalDraft((old)=>({...old,exitDate:event.target.value,status:event.target.value?"Pasif":"Aktif"}))}/></Field><Field label="Görev"><input value={modalDraft.title||""} onChange={(event)=>setModalDraft((old)=>({...old,title:event.target.value}))}/></Field><Field label="Bölüm"><input value={modalDraft.department||""} onChange={(event)=>setModalDraft((old)=>({...old,department:event.target.value}))}/></Field><Field label="Çalışma Durumu"><input value={modalDraft.exitDate ? "İşten ayrılmış / pasif" : "Aktif"} readOnly /><div className="employment-actions">{modalDraft.exitDate ? <button type="button" className="btn" onClick={()=>setModalDraft((old)=>({...old,exitDate:"",status:"Aktif",changeNote:old.changeNote||"Personel yeniden aktife alındı"}))}>Aktife Geri Al</button> : <button type="button" className="btn orange" onClick={()=>setModalDraft((old)=>({...old,exitDate:istanbulDateKey(),status:"Pasif",changeNote:old.changeNote||"İşten çıkış kaydı"}))}>İşten Çıkış Bugün</button>}</div></Field></div></div>
           <div className="modal-section"><h3>SGK ve Bordro Kapsamı · {MONTHS[month-1]} {year}</h3><div className="form">
             <Field label="Personel Statüsü" half><select value={modalDraft.personnelStatus||"NORMAL"} onChange={(event)=>setModalDraft((old)=>({...old,personnelStatus:event.target.value}))}><option value="NORMAL">Normal</option><option value="RETIRED">Emekli</option></select></Field>
-            <Field label="SGK Durumu" half><select value={modalDraft.sgkFollow||"BELIRTILMEMIS"} disabled={Boolean(data.close?.isLocked)} onChange={(event)=>setModalDraft((old)=>({...old,sgkFollow:event.target.value,sgkDays:event.target.value==="SGKSIZ"?0:old.sgkDays}))}><option value="SGKLI">SGK'lı</option><option value="SGKSIZ">SGK'sız</option><option value="BELIRTILMEMIS">Seçiniz</option></select></Field>
-            <Field label="Bu Ay SGK Gün" half><input type="number" min="0" max={totalDays} value={modalDraft.sgkDays??""} disabled={Boolean(data.close?.isLocked) || modalDraft.sgkFollow==="SGKSIZ"} onChange={(event)=>setModalDraft((old)=>({...old,sgkDays:event.target.value}))}/></Field>
-            <Field label="Gerçek PDKS Kart Günü" half><input value={modalDraft.pdksCardDays??0} readOnly/></Field>
+            <Field label="SGK Durumu" half><select value={modalDraft.sgkFollow||"BELIRTILMEMIS"} disabled={Boolean(data.close?.isLocked) || modalDraft.sgkDaySource==="RESMI_BORDRO"} onChange={(event)=>setModalDraft((old)=>({...old,sgkFollow:event.target.value,sgkDays:event.target.value==="SGKSIZ"?0:old.sgkDays,sgkDaySourceIntent:"MANUEL"}))}><option value="SGKLI">SGK'lı</option><option value="SGKSIZ">SGK'sız</option><option value="BELIRTILMEMIS">Seçiniz</option></select></Field>
+            <Field label="SGK Gün (Kayıt)" half><input type="number" min="0" max={30} value={modalDraft.sgkDays??""} placeholder={modalDraft.suggestedSgkDays===null||modalDraft.suggestedSgkDays===undefined?"":String(modalDraft.suggestedSgkDays)} disabled={Boolean(data.close?.isLocked) || modalDraft.sgkFollow==="SGKSIZ" || modalDraft.sgkDaySource==="RESMI_BORDRO"} onChange={(event)=>setModalDraft((old)=>({...old,sgkDays:event.target.value,sgkDaySourceIntent:"MANUEL"}))}/></Field>
+            <Field label="Önerilen SGK Gün" half><div className="inline-action-field"><input value={modalDraft.suggestedSgkDays??""} readOnly/><button type="button" className="btn" disabled={Boolean(data.close?.isLocked) || modalDraft.sgkFollow!=="SGKLI" || modalDraft.sgkDaySource==="RESMI_BORDRO" || modalDraft.suggestedSgkDays===null || modalDraft.suggestedSgkDays===undefined} onClick={()=>setModalDraft((old)=>({...old,sgkDays:old.suggestedSgkDays,sgkDaySourceIntent:"SISTEM_ONERISI"}))}>Öneriyi Kullan</button></div></Field>
+            <Field label="PDKS Kartlı Gün (Kontrol)" half><input value={modalDraft.pdksCardDays??0} readOnly/></Field>
+            <Field label="SGK Gün Kaynağı" half><input value={sgkDaySourceLabel(modalDraft.sgkDaySourceIntent||modalDraft.sgkDaySource)} readOnly/></Field>
             <Field label="Bordro Kapsamı" half><select value={modalDraft.payrollIncluded===false?"HARIC":"DAHIL"} onChange={(event)=>setModalDraft((old)=>({...old,payrollIncluded:event.target.value==="DAHIL"}))}><option value="DAHIL">Şirket bordrosuna dahil</option><option value="HARIC">Harici - ödeme ve puantaja alma</option></select></Field>
             <Field label="Yıllık İzin Hakkı"><input type="number" value={modalDraft.annualLeaveEntitlement||""} onChange={(event)=>setModalDraft((old)=>({...old,annualLeaveEntitlement:event.target.value}))}/></Field>
             <Field label="Devreden İzin"><input type="number" value={modalDraft.annualLeaveCarryover||""} onChange={(event)=>setModalDraft((old)=>({...old,annualLeaveCarryover:event.target.value}))}/></Field>
             {data.close?.isLocked ? <div className="wide warnline warn">{MONTHS[month-1]} {year} dönemi kapalı. Bu dönemin SGK durumu/günü değiştirilemez; personel ana kartı ve yeni geçerlilik tarihli ücret bilgileri kaydedilebilir.</div> : null}
-            {modalDraft.sgkFollow==="SGKLI" && modalDraft.sgkDays!=="" && num(modalDraft.sgkDays)!==num(modalDraft.pdksCardDays) ? <div className="wide warnline warn">İç kontrol: Bu ay SGK günü {num(modalDraft.sgkDays)}, gerçek kart günü {num(modalDraft.pdksCardDays)}. Denetim görünümünde bu iç uyarı gösterilmez; gerçek PDKS kaydı otomatik üretilmez.</div> : null}
+            {modalDraft.sgkDaySource==="RESMI_BORDRO" ? <div className="wide warnline">SGK günü resmi bordro dosyasından geliyor. Bu değer personel kartından değiştirilmez; düzeltme SGK / Ay Sonu bölümündeki resmi dosya üzerinden yapılır.</div> : null}
+            {modalDraft.sgkFollow==="SGKLI" && modalDraft.sgkDays!=="" && num(modalDraft.sgkDays)!==num(modalDraft.pdksCardDays) ? <div className="wide warnline warn">Kontrol farkı: SGK günü {num(modalDraft.sgkDays)}, PDKS kartlı gün {num(modalDraft.pdksCardDays)}. PDKS kartlı gün yalnız kontrol verisidir; izin/hafta tatili ve diğer yasal nedenlerle SGK günüyle bire bir aynı olmak zorunda değildir.</div> : null}
             {modalDraft.personnelStatus==="RETIRED" ? <div className="wide warnline">Emekli personel aktif çalışan olarak devam edebilir. Emekli statüsü SGK durumundan bağımsızdır.</div> : null}
           </div></div>
           <div className="modal-section"><h3>Ücret ve Ödeme Planı</h3><div className="form"><Field label="Gerçek Maaş"><input type="number" value={modalDraft.salary||""} onChange={(event)=>setModalDraft((old)=>({...old,salary:event.target.value}))}/></Field><Field label="Baz Personel"><select value={modalDraft.baseEmployeeId||""} onChange={(event)=>setModalDraft((old)=>({...old,baseEmployeeId:event.target.value}))}><option value="">Yok - gerçek maaşı kullan</option>{rawEmployees.filter((item)=>item.id!==modalDraft.id).map((item)=><option key={item.id} value={item.id}>{item.fullName} - {money(item.salary)}{upper(item.status).includes("PAS") ? " · Pasif referans" : ""}</option>)}</select></Field><Field label="Bordro Baz Maaşı"><input value={money(modalDraft.baseEmployeeId?rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary:modalDraft.salary)} readOnly/></Field><Field label="EK"><input value={money(modalDraft.baseEmployeeId?Math.max(num(modalDraft.salary)-num(rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary),0):0)} readOnly/></Field><Field label="Yol Yardımı"><input type="number" value={modalDraft.roadAllowance||""} onChange={(event)=>setModalDraft((old)=>({...old,roadAllowance:event.target.value}))}/></Field><Field label="Mesai Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.overtimeHourlyBase||225} onChange={(event)=>setModalDraft((old)=>({...old,overtimeHourlyBase:event.target.value}))}/></Field><Field label="Kesinti Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.deductionHourlyBase||300} onChange={(event)=>setModalDraft((old)=>({...old,deductionHourlyBase:event.target.value}))}/></Field><Field label="Ödeme Tipi"><select value={modalDraft.paymentType||"BANKA_ELDEN"} onChange={(event)=>setModalDraft((old)=>({...old,paymentType:event.target.value}))}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field><Field label="Banka Planı"><input type="number" value={modalDraft.bankAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,bankAmount:event.target.value}))}/></Field><Field label="Elden Planı"><input type="number" value={modalDraft.cashAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,cashAmount:event.target.value}))}/></Field><Field label="Resmi Bordro Net"><input value={money(selected?.sgkNet)} readOnly/></Field><Field label="Geçerlilik Tarihi"><input type="date" value={modalDraft.effectiveDate||""} onChange={(event)=>setModalDraft((old)=>({...old,effectiveDate:event.target.value}))}/></Field><Field label="Değişiklik Açıklaması" wide><input value={modalDraft.changeNote||""} onChange={(event)=>setModalDraft((old)=>({...old,changeNote:event.target.value}))} placeholder="Örn. Ekim 2026 maaş/yol revizyonu"/></Field><Field label="Not" wide><textarea value={modalDraft.note||""} onChange={(event)=>setModalDraft((old)=>({...old,note:event.target.value}))}/></Field></div></div>
