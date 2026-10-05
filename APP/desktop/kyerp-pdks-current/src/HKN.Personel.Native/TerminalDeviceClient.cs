@@ -9,22 +9,71 @@ internal sealed record TerminalDeviceSnapshot(bool Connected, string Message, Da
     public static TerminalDeviceSnapshot Offline(string message) => new(false, message, null, -1, -1, -1, Array.Empty<TerminalDevicePunch>());
 }
 internal sealed record TerminalCommandResult(bool Success, string Message);
+internal sealed record TerminalDeviceUser(int UserId, string Name, IReadOnlyList<int> Backups, int Privilege, bool Enabled)
+{
+    public string CredentialSummary => string.Join(", ", Backups.Select(BackupName).Distinct());
+    static string BackupName(int value) => value switch
+    {
+        >= 0 and <= 9 => "Parmak İzi",
+        10 => "PIN",
+        11 => "Kart",
+        12 => "Tüm Kayıtlar",
+        13 => "Parmak İzi",
+        >= 20 and <= 27 => "Yüz",
+        50 => "AI Yüz",
+        _ => "Kimlik " + value.ToString(CultureInfo.InvariantCulture)
+    };
+}
 
 internal static class TerminalDeviceClient
 {
     public static TerminalDeviceSettings Settings => TerminalDeviceSettingsStore.Load();
     public static Task<TerminalDeviceSnapshot> ReadAsync(bool readPunches, CancellationToken cancellationToken = default) => RunReadAsync(readPunches ? "read" : "status", cancellationToken);
 
-    public static async Task<TerminalCommandResult> ExecuteAsync(string mode, CancellationToken cancellationToken = default)
+    public static async Task<IReadOnlyList<TerminalDeviceUser>> ReadUsersAsync(CancellationToken cancellationToken = default)
     {
-        var run = await RunBridgeAsync(mode, cancellationToken);
+        var run = await RunBridgeAsync("users", cancellationToken);
+        var result = new List<TerminalDeviceUser>();
+        foreach (var raw in run.Output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var p = raw.Split('|');
+            if (p.Length < 6 || p[0] != "USER" || !int.TryParse(p[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)) continue;
+            var backups = p[3].Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => int.TryParse(x, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : -1)
+                .Where(x => x >= 0).Distinct().Order().ToArray();
+            _ = int.TryParse(p[4], NumberStyles.Integer, CultureInfo.InvariantCulture, out var privilege);
+            _ = int.TryParse(p[5], NumberStyles.Integer, CultureInfo.InvariantCulture, out var enabled);
+            result.Add(new(id, p[2], backups, privilege, enabled != 2));
+        }
+        if (result.Count == 0 && run.Output.Contains("STATUS|ERROR|", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(ParseBridgeError(run.Output, run.Error));
+        return result.OrderBy(x => x.UserId).ToArray();
+    }
+
+    public static Task<TerminalCommandResult> DeleteUserAsync(int userId, CancellationToken cancellationToken = default) =>
+        ExecuteAsync("deleteuser", cancellationToken, userId.ToString(CultureInfo.InvariantCulture));
+
+    public static Task<TerminalCommandResult> ClearUsersAsync(CancellationToken cancellationToken = default) =>
+        ExecuteAsync("clearusers", cancellationToken);
+
+    public static Task<TerminalCommandResult> MoveCardAsync(int oldUserId, int newUserId, CancellationToken cancellationToken = default) =>
+        ExecuteAsync("movecard", cancellationToken,
+            oldUserId.ToString(CultureInfo.InvariantCulture),
+            newUserId.ToString(CultureInfo.InvariantCulture));
+
+    public static Task<TerminalCommandResult> ClearLogsAsync(CancellationToken cancellationToken = default) =>
+        ExecuteAsync("clearlogs", cancellationToken);
+
+    public static async Task<TerminalCommandResult> ExecuteAsync(string mode, CancellationToken cancellationToken = default, params string[] arguments)
+    {
+        var run = await RunBridgeAsync(mode, cancellationToken, arguments);
         foreach (var raw in run.Output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
         {
             var p = raw.Split('|');
             if (p.Length >= 3 && p[0] == "ACTION") return new(p[1] == "OK", string.Join(" ", p.Skip(2)));
             if (p.Length >= 3 && p[0] == "STATUS" && p[1] == "ERROR") return new(false, string.Join(" ", p.Skip(2)));
         }
-        return new(false, string.IsNullOrWhiteSpace(run.Error) ? "Cihaz komutundan yanıt alınamadı." : run.Error.Trim());
+        return new(false, string.IsNullOrWhiteSpace(run.Error) ? ParseBridgeError(run.Output, run.Error) : run.Error.Trim());
     }
 
     static async Task<TerminalDeviceSnapshot> RunReadAsync(string mode, CancellationToken ct)
@@ -33,7 +82,20 @@ internal static class TerminalDeviceClient
         return Parse(run.Output, run.Error);
     }
 
-    static async Task<(string Output, string Error)> RunBridgeAsync(string mode, CancellationToken ct)
+    static string ParseBridgeError(string output, string error)
+    {
+        foreach (var raw in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var p = raw.Split('|');
+            if (p.Length >= 3 && p[0] == "STATUS" && p[1] == "ERROR")
+                return string.Join(" ", p.Skip(2));
+            if (p.Length >= 3 && p[0] == "ACTION" && p[1] == "ERROR")
+                return string.Join(" ", p.Skip(2));
+        }
+        return string.IsNullOrWhiteSpace(error) ? "Terminal köprüsünden geçerli yanıt alınamadı." : FriendlyTerminalError(error.Trim());
+    }
+
+    static async Task<(string Output, string Error)> RunBridgeAsync(string mode, CancellationToken ct, params string[] arguments)
     {
         var bridge = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_BRIDGE") ?? Path.Combine(AppContext.BaseDirectory, "KYERP.TerminalBridge.exe");
         if (!File.Exists(bridge)) return ("STATUS|ERROR|Terminal köprüsü bulunamadı. Tam kurulum paketini kullanın.", "");
@@ -69,6 +131,7 @@ internal static class TerminalDeviceClient
         psi.ArgumentList.Add(port);
         psi.ArgumentList.Add(machine);
         psi.ArgumentList.Add(password);
+        foreach (var argument in arguments) psi.ArgumentList.Add(argument);
 
         Process? process = null;
         try
