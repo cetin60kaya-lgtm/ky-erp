@@ -188,7 +188,7 @@ test("bordro Excel exports the same core amounts shown on screen", () => {
 test("forced refresh waits for an active read before starting the canonical reread", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
-  assert.match(page, /const load = useCallback\(async \(\{ force = false, prepare = false \} = \{\}\) =>/);
+  assert.match(page, /const load = useCallback\(async \(\{ force = false, prepare = false, silent = false \} = \{\}\) =>/);
   assert.match(page, /if \(!force && activeRequest\.key === requestKey\) return activeRequest\.promise/);
   assert.match(page, /await activeRequest\.promise/);
   assert.match(page, /await load\(\{ force: true \}\)/);
@@ -210,9 +210,9 @@ test("retired personnel and monthly SGK are independent and PDKS mismatch is int
 
   assert.match(page, /Personel Statüsü/);
   assert.match(page, /value="RETIRED">Emekli/);
-  assert.match(page, /Bu Ay SGK Gün/);
-  assert.match(page, /Gerçek PDKS Kart Günü/);
-  assert.match(page, /Denetim görünümünde bu iç uyarı gösterilmez/);
+  assert.match(page, /SGK Gün \(Kayıt\)/);
+  assert.match(page, /PDKS Kartlı Gün \(Kontrol\)/);
+  assert.match(page, /PDKS kartlı gün yalnız kontrol verisidir/);
   assert.match(page, /personnelStatus: modalDraft\.personnelStatus/);
   assert.match(page, /sgkDays: modalDraft\.sgkFollow === "SGKLI"/);
 
