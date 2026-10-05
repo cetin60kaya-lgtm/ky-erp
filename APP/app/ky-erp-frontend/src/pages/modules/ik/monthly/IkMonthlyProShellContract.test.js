@@ -74,6 +74,16 @@ test("personnel cards use the complete HKN master roster while payroll stays per
   assert.match(monthly, /HKN Değiştir/);
 });
 
+test("personnel edit modal switches person without closing", () => {
+  assert.match(monthly, /const switchPersonInModal = \(employeeId\) =>/);
+  assert.match(monthly, /Personel Seç/);
+  assert.match(monthly, /← Önceki/);
+  assert.match(monthly, /Sonraki →/);
+  assert.match(monthly, /switchPersonInModal\(event\.target\.value\)/);
+  assert.match(monthly, /person-modal-position/);
+  assert.match(css, /\.person-modal-nav\{/);
+});
+
 test("personnel list keeps single-click selection and opens edit on double click", () => {
   assert.match(monthly, /title="Tek tık: seç · Çift tık: düzenle"/);
   assert.match(monthly, /onClick=\{\(\) => setSelectedId\(employee\.id\)\} onDoubleClick=\{\(\) => openPerson\(employee\)\}/);
