@@ -1031,12 +1031,34 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     },
   });
 
+  const alignPrePayrollDialog = (employeeId, resetMain = true) => {
+    if (typeof document === "undefined") return;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const root = document.querySelector(".modal-bg .prepayroll-dialog");
+        if (!root) return;
+        if (resetMain) {
+          const main = root.querySelector(".payroll-final-main");
+          if (main) main.scrollTop = 0;
+        }
+        const buttons = root.querySelectorAll(".payroll-person-rail-list button[data-employee-id]");
+        for (const button of buttons) {
+          if (button.dataset.employeeId === String(employeeId || "")) {
+            button.scrollIntoView({ block: "nearest" });
+            break;
+          }
+        }
+      });
+    });
+  };
+
   const openPayPlan = (employee) => {
     if (!employee) return setNotice("Personel seçilmeden bordro öncesi kontrol açılamaz.");
     setSelectedId(employee.id);
     setModalDraft(prePayrollDraft(employee));
     setNotice("");
     setModal("ucret");
+    alignPrePayrollDialog(employee.id);
   };
 
   const switchPayPlanPerson = (employeeId) => {
@@ -1046,6 +1068,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setSelectedId(employee.id);
     setModalDraft(prePayrollDraft(employee));
     setNotice("");
+    alignPrePayrollDialog(employee.id);
   };
 
   const editPrePayrollMovement = (row = null, forcedType = "") => {
@@ -2814,7 +2837,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         : num(editor.amount);
 
       return (
-        <Modal title="Bordro Öncesi Personel Kontrolü" sub={`${MONTHS[month - 1]} ${year} · Kaynakları düzeltin; bordroya geçtiğinizde hesap doğru gelsin`} size="wide" onClose={() => setModal(null)}>
+        <Modal title="Bordro Öncesi Personel Kontrolü" sub={`${MONTHS[month - 1]} ${year} · Kaynakları düzeltin; bordroya geçtiğinizde hesap doğru gelsin`} size="wide prepayroll-dialog" onClose={() => setModal(null)}>
           <div className="payroll-final-layout">
             <aside className="payroll-person-rail">
               <div className="payroll-person-rail-head">
@@ -2822,7 +2845,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                 <small>Personeli seçin; kayıt sonrası pencere açık kalır.</small>
               </div>
               <div className="payroll-person-rail-list">
-                {periodPeople.map((employee, index) => <button type="button" key={employee.id} className={employee.id === modalDraft.id ? "active" : ""} disabled={busy} onClick={() => switchPayPlanPerson(employee.id)}>
+                {periodPeople.map((employee, index) => <button type="button" key={employee.id} data-employee-id={employee.id} className={employee.id === modalDraft.id ? "active" : ""} disabled={busy} onClick={() => switchPayPlanPerson(employee.id)}>
                   <span><b>{index + 1}. {employee.fullName}</b><small>{employee.code || "HKN yok"}</small></span>
                   <em className="ready">{employmentPeriodLabel(employee, period)}</em>
                 </button>)}
@@ -2914,7 +2937,6 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               {modalDraft.formMessage ? <div className="person-save-message" role="alert">{modalDraft.formMessage}</div> : null}
             </div>
           </div>
-          <ModalFooter onClose={() => setModal(null)} actions={<><button type="button" className="btn" disabled={busy || !previousPerson} onClick={() => previousPerson && switchPayPlanPerson(previousPerson.id)}>← Önceki</button><button type="button" className="btn primary" disabled={busy || !nextPerson} onClick={() => nextPerson && switchPayPlanPerson(nextPerson.id)}>Sonraki →</button></>} />
         </Modal>
       );
     }
