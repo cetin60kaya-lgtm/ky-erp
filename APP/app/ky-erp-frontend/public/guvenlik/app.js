@@ -29,6 +29,8 @@ let lastAutoRepairAt=0;
 let lastStableRefreshAt=0;
 let accountHydrated=false;
 let trailingRefreshTimer=null;
+let pendingPollTimer=null;
+let pushSyncAt=0;
 let manualTabSelection=false;
 let lastPendingSignature="";
 let pendingStateHydrated=false;
@@ -246,7 +248,7 @@ async function connectDevice(){
       throw error;
     }
     const data=response.data;
-    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v3.0",canonicalRevision:CANONICAL_DEVICE_REVISION,savedAt:new Date().toISOString()};
+    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,pushEndpoint:String(subscription.endpoint||""),securityAppVersion:data.securityAppVersion||"security-v3.0",canonicalRevision:CANONICAL_DEVICE_REVISION,savedAt:new Date().toISOString()};
     await writeDevice(record);
     cleanEnrollmentQuery();enrollmentQuery={id:"",token:""};els.password.value="";els.enrollmentCode.value="";relinkMode=false;
     toast("Cihaz kaydedildi. KY ERP hesabi dogrulaniyor...");
@@ -337,6 +339,26 @@ async function generateLoginCode(){
     toast(error?.message||"Giriş kodu üretilemedi.");
   }finally{busy=false;els.generateCodeButton.disabled=false}
 }
+async function syncPushChannel(options={}){
+  const force=Boolean(options?.force);
+  const device=await readDevice().catch(()=>null);
+  if(!device?.deviceId||!device?.deviceToken||!device?.signingPrivateKey)return false;
+  if(!force&&Date.now()-pushSyncAt<300000)return true;
+  try{
+    const bundle=await ensurePushSubscription(false);
+    const endpoint=String(bundle.subscription?.endpoint||"");
+    if(!endpoint)return false;
+    if(!force&&device.pushEndpoint===endpoint){pushSyncAt=Date.now();return true}
+    const response=await deviceFetch("/auth/push/device/subscription",{method:"POST",body:{deviceLabel:device.deviceLabel||defaultDeviceLabel(),subscription:bundle.subscription.toJSON()}});
+    await writeDevice({...device,pushEndpoint:endpoint,pushSyncedAt:response?.data?.syncedAt||new Date().toISOString()});
+    pushSyncAt=Date.now();
+    return true;
+  }catch(error){
+    if(!options?.silent)toast(error?.message||"Bildirim kanalı eşitlenemedi.");
+    return false;
+  }
+}
+
 async function repairConnection(options={}){
   const automatic=Boolean(options?.automatic);
   if(busy)return false;
@@ -352,7 +374,7 @@ async function repairConnection(options={}){
     const bundle=await ensurePushSubscription(true);
     const response=await deviceFetch("/auth/push/device/refresh",{method:"POST",body:{deviceLabel:device.deviceLabel||defaultDeviceLabel(),subscription:bundle.subscription.toJSON()}});
     const data=response?.data||{};
-    await writeDevice({...device,deviceId:data.deviceId||device.deviceId,deviceToken:data.deviceToken||device.deviceToken,deviceLabel:data.deviceLabel||device.deviceLabel,securityAppVersion:data.securityAppVersion||device.securityAppVersion||"security-v3.0",refreshedAt:data.refreshedAt||new Date().toISOString()});
+    await writeDevice({...device,deviceId:data.deviceId||device.deviceId,deviceToken:data.deviceToken||device.deviceToken,deviceLabel:data.deviceLabel||device.deviceLabel,pushEndpoint:String(bundle.subscription?.endpoint||device.pushEndpoint||""),securityAppVersion:data.securityAppVersion||device.securityAppVersion||"security-v3.0",refreshedAt:data.refreshedAt||new Date().toISOString()});
     bundle.worker.active?.postMessage({type:"KYERP_SECURITY_CLEAR_NOTIFICATION"});
     if(!automatic)toast("Bağlantı yenilendi. Bildirim ve giriş onayı yeniden hazır.");
     return true;
@@ -406,6 +428,7 @@ async function refreshState(options={}){
   }
   try{
     await ensureWorker();
+    await syncPushChannel({silent:true,force:!device.pushEndpoint});
     const health=(await deviceFetch("/auth/push/device/health"))?.data||{};
     if(!health?.account?.userId)throw Object.assign(new Error("KY ERP hesabı doğrulanamadı. Mevcut KY ERP şifrenle bağlantıyı bir kez yenile."),{code:"ACCOUNT_PROFILE_MISSING"});
     if(enrollmentQuery.id&&enrollmentQuery.token){cleanEnrollmentQuery();enrollmentQuery={id:"",token:""};relinkMode=false;}
@@ -514,11 +537,35 @@ els.enableUnlockButton?.addEventListener("click",enableLocalUnlock);
 els.repairButton.addEventListener("click",async()=>{const repaired=await repairConnection();if(repaired)await refreshState({skipAutoRepair:true})});
 els.relinkButton.addEventListener("click",showRelink);
 els.cancelRelinkButton.addEventListener("click",()=>{hideRelink();refreshState()});
-document.addEventListener("visibilitychange",()=>{if(isStandalone()&&document.visibilityState==="visible"&&els.setupPanel.classList.contains("hidden"))refreshState({background:true})});
-window.addEventListener("focus",()=>{if(isStandalone()&&els.setupPanel.classList.contains("hidden")&&!(["INPUT","TEXTAREA"].includes(document.activeElement?.tagName||"")))refreshState({background:true})});
+document.addEventListener("visibilitychange",()=>{
+  if(!isStandalone())return;
+  if(document.visibilityState==="visible"&&els.setupPanel.classList.contains("hidden")){
+    syncPushChannel({silent:true}).catch(()=>{});
+    refreshPending().catch(()=>{});
+    refreshState({background:true});
+    startPendingForegroundPoll();
+  }else stopPendingForegroundPoll();
+});
+window.addEventListener("focus",()=>{if(isStandalone()&&els.setupPanel.classList.contains("hidden")&&!(["INPUT","TEXTAREA"].includes(document.activeElement?.tagName||""))){syncPushChannel({silent:true}).catch(()=>{});refreshPending().catch(()=>{});refreshState({background:true})}});
 window.addEventListener("online",()=>{if(!isStandalone())return;toast("İnternet bağlantısı geri geldi. Bağlantı kontrol ediliyor.");refreshState({background:true})});
 window.addEventListener("offline",()=>{setBadge("Çevrimdışı","bad");if(els.readyTitle)els.readyTitle.textContent="Telefon çevrimdışı"});
-navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(isStandalone()&&els.setupPanel.classList.contains("hidden")&&["KYERP_SECURITY_PUSH_WAKE","KYERP_SECURITY_PENDING_WAKE","KYERP_SECURITY_CONNECTION_WAKE"].includes(event.data?.type))refreshState({background:true})});
+function stopPendingForegroundPoll(){if(pendingPollTimer){clearInterval(pendingPollTimer);pendingPollTimer=null}}
+function startPendingForegroundPoll(){
+  stopPendingForegroundPoll();
+  if(!isStandalone())return;
+  pendingPollTimer=setInterval(()=>{
+    if(document.visibilityState!=="visible"||busy||refreshState.running||!els.setupPanel.classList.contains("hidden"))return;
+    refreshPending().catch(()=>{});
+  },2500);
+}
+navigator.serviceWorker?.addEventListener?.("message",(event)=>{
+  if(!isStandalone()||!els.setupPanel.classList.contains("hidden"))return;
+  if(["KYERP_SECURITY_PUSH_WAKE","KYERP_SECURITY_PENDING_WAKE"].includes(event.data?.type)){
+    refreshPending().catch(()=>{});
+    return;
+  }
+  if(event.data?.type==="KYERP_SECURITY_CONNECTION_WAKE")refreshState({background:true});
+});
 window.KYSecurityRuntime={deviceFetch,readDevice,writeDevice,confirmLocalUnlock,base64Url,toast,refreshState,CLIENT_VERSION};
 window.dispatchEvent(new CustomEvent("kysecurity:runtime-ready"));
 (async function boot(){
@@ -534,6 +581,7 @@ window.dispatchEvent(new CustomEvent("kysecurity:runtime-ready"));
     if(enrollmentQuery.id&&enrollmentQuery.token&&!localDevice?.deviceId){showRelink();toast("KY ERP bağlantısı hazır. 8 karakter Yedek Bağlantı Kodunu ve Admin şifresini gir.")}
     else if(!localDevice?.deviceId){showSetupStart();setBadge("Bağlantı gerekli");}
     await refreshState();
+    startPendingForegroundPoll();
     void ensureWorker().then(()=>renderInstall()).catch(()=>{});
   }catch(error){
     showSetupStart();setBadge("Bağlantı gerekli","bad");toast(error?.message||"KY Güvenlik açılışı tamamlanamadı. Şifreni girip bağlantıyı tamamla.");

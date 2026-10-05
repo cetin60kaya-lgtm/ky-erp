@@ -20,7 +20,9 @@ test("system and company observers are woken without replacing target user's sel
   assert.match(source,/const selfDevices = await activeDevicesForUser/);
   assert.match(source,/if \(!selfDevices\.length\) return null/);
   assert.match(source,/approvalObserverDevices/);
-  assert.match(source,/new Map\(\[\.\.\.selfDevices, \.\.\.observerDevices\]/);
+  assert.match(source,/const observerCandidates = await approvalObserverDevices/);
+  assert.match(source,/const selfEndpoints = new Set/);
+  assert.match(source,/observerCandidates\.filter/);
 });
 
 test("pending challenge dedupe is isolated per target user",()=>{

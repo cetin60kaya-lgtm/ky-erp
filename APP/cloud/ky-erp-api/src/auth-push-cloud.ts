@@ -586,8 +586,12 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
   const selfDevices = await activeDevicesForUser(c, text(user.id), "SELF");
   if (!selfDevices.length) return null;
   const companySlug = text(user.main_company_slug || user.mainCompanySlug || "mecit-hakan");
-  const observerDevices = await approvalObserverDevices(c, user, companySlug);
-  const devices = [...new Map([...selfDevices, ...observerDevices].map((device: AnyRow) => [text(device.id), device])).values()];
+  const observerCandidates = await approvalObserverDevices(c, user, companySlug);
+  const selfEndpoints = new Set(selfDevices.map((device: AnyRow) => pushEndpointOf(device)).filter(Boolean));
+  const observerDevices = observerCandidates.filter((device: AnyRow) => {
+    const endpoint = pushEndpointOf(device);
+    return endpoint && !selfEndpoints.has(endpoint);
+  });
 
   const id = crypto.randomUUID();
   const token = randomToken(32);
@@ -617,14 +621,23 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
     consumedAt: "",
   });
 
-  const sent = await sendWakeMany(c, devices);
+  const selfSent = await sendWakeMany(c, selfDevices);
+  const observerSent = await sendWakeMany(c, observerDevices);
+  const sent = selfSent + observerSent;
   await audit(
     c,
     sent ? "PHONE_LOGIN_APPROVAL_REQUESTED" : "PHONE_LOGIN_APPROVAL_PUSH_DEFERRED",
     user.id,
     user.id,
     companySlug,
-    { challengeId: id, notifiedDevices: sent },
+    {
+      challengeId: id,
+      notifiedDevices: sent,
+      selfDevices: selfDevices.length,
+      selfNotifiedDevices: selfSent,
+      observerDevices: observerDevices.length,
+      observerNotifiedDevices: observerSent,
+    },
   );
   return {
     ok: true,
@@ -634,6 +647,8 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
     phoneApprovalExpiresAt: expiresAt,
     matchNumber,
     notifiedDevices: sent,
+    selfNotifiedDevices: selfSent,
+    observerNotifiedDevices: observerSent,
     pushDelivered: sent > 0,
     message: sent
       ? "Telefonunuza KY ERP giriş onayı gönderildi. KY ERP Güvenlik uygulamasından Onayla veya Reddet seçin."
@@ -660,17 +675,32 @@ export async function resendPhoneApprovalChallenge(c: any, idValue: unknown, tok
   if (upper(approval.status) !== "PENDING" || text(approval.consumedAt)) {
     return { ok: false, code: "PHONE_APPROVAL_NOT_PENDING", approval, sent: 0 };
   }
-  const devices = await activeDevicesForUser(c, text(approval.userId), "SELF");
-  const sent = await sendWakeMany(c, devices);
+  const selfDevices = await activeDevicesForUser(c, text(approval.userId), "SELF");
+  const targetUser = await userRow(c, text(approval.userId));
+  const observerCandidates = targetUser ? await approvalObserverDevices(c, targetUser, text(approval.mainCompanySlug)) : [];
+  const selfEndpoints = new Set(selfDevices.map((device: AnyRow) => pushEndpointOf(device)).filter(Boolean));
+  const observerDevices = observerCandidates.filter((device: AnyRow) => {
+    const endpoint = pushEndpointOf(device);
+    return endpoint && !selfEndpoints.has(endpoint);
+  });
+  const selfSent = await sendWakeMany(c, selfDevices);
+  const observerSent = await sendWakeMany(c, observerDevices);
+  const sent = selfSent + observerSent;
   await audit(c, "PHONE_LOGIN_APPROVAL_RESENT", approval.userId, approval.userId, text(approval.mainCompanySlug), {
     challengeId: approval.id,
     notifiedDevices: sent,
+    selfDevices: selfDevices.length,
+    selfNotifiedDevices: selfSent,
+    observerDevices: observerDevices.length,
+    observerNotifiedDevices: observerSent,
   });
   return {
-    ok: devices.length > 0,
+    ok: selfDevices.length + observerDevices.length > 0,
     code: sent > 0 ? "" : "PHONE_APPROVAL_PUSH_DEFERRED",
     approval,
     sent,
+    selfSent,
+    observerSent,
   };
 }
 
@@ -1575,6 +1605,75 @@ export function registerAuthPushRoutes(app: any) {
         identityVersion: text(actor.device.identityVersion || "TRUSTED_DEVICE_V1"),
         lastError: text(actor.device.lastError),
       },
+    }});
+  });
+
+  app.post("/api/auth/push/device/subscription", async (c: any) => {
+    const actor = await signedSecurityActorForRecovery(c);
+    if (!actor) return c.json(jsonError("PUSH_DEVICE_RECOVERY_UNAUTHORIZED", "Güvenlik cihazı bildirim kanalı doğrulanamadı."), 401);
+    const body = await bodyOf(c);
+    const subscription = objectOf(body.subscription);
+    const endpoint = text(subscription.endpoint);
+    if (!/^https:\/\//i.test(endpoint)) return c.json(jsonError("PUSH_SUBSCRIPTION_INVALID", "Telefon bildirim aboneliği geçersiz."), 400);
+
+    const allDevices = await storeList(c, DEVICE_SCOPE);
+    const conflict = allDevices.find((row: AnyRow) =>
+      pushEndpointOf(row) === endpoint &&
+      text(row.userId) !== text(actor.userId) &&
+      row.securityApp === true &&
+      !trustedDeviceIsRetired(row)
+    );
+    if (conflict) return c.json(jsonError("PUSH_ENDPOINT_ALREADY_BOUND", "Bu bildirim kanalı başka bir KY ERP hesabına bağlı."), 409);
+
+    const timestamp = nowIso();
+    const saved = await saveDevice(c, {
+      ...actor.device,
+      mainCompanySlug: actor.companySlug,
+      pushEndpoint: endpoint,
+      pushChannel: {
+        ...actor.device.pushChannel,
+        type: "WEB_PUSH",
+        endpoint,
+        reachable: true,
+        invalidAt: "",
+        lastRefreshAt: timestamp,
+        lastError: "",
+      },
+      deviceLabel: text(body.deviceLabel || actor.device.deviceLabel || friendlyDeviceLabel("", userAgent(c))).slice(0, 180),
+      userAgent: userAgent(c),
+      securityApp: true,
+      securityAppVersion: SECURITY_APP_VERSION,
+      isActive: true,
+      lastSeenAt: timestamp,
+      lastRefreshAt: timestamp,
+      pushReachable: true,
+      pushInvalidAt: "",
+      lastError: "",
+      retiredAt: "",
+      retiredReason: "",
+    });
+
+    for (const row of allDevices) {
+      if (
+        text(row.userId) === text(actor.userId) &&
+        text(row.id) !== text(saved.id) &&
+        row.securityApp === true &&
+        pushEndpointOf(row) === endpoint &&
+        !trustedDeviceIsRetired(row)
+      ) {
+        await saveDevice(c, { ...row, isActive: false, retiredAt: timestamp, retiredReason: "Bildirim kanalı aktif güvenlik cihazına birleştirildi" });
+      }
+    }
+
+    await audit(c, "SECURITY_PUSH_SUBSCRIPTION_SYNCED", actor.userId, actor.userId, actor.companySlug, {
+      deviceId: saved.id,
+      endpointChanged: pushEndpointOf(actor.device) !== endpoint,
+    });
+    return c.json({ ok: true, data: {
+      deviceId: saved.id,
+      pushReachable: true,
+      pushEndpointChanged: pushEndpointOf(actor.device) !== endpoint,
+      syncedAt: timestamp,
     }});
   });
 

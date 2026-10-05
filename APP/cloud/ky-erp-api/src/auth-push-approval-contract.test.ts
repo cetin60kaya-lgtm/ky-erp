@@ -102,7 +102,7 @@ test("dedicated Security app owns signed API calls while the service worker is p
   assert.match(securityApp, /X-KYERP-Push-Token/);
   assert.match(securityWorker, /const TAG="kyerp-security-approval"/);
   assert.match(securityWorker, /tag:TAG/);
-  assert.match(securityWorker, /renotify:false/);
+  assert.match(securityWorker, /renotify:true/);
   assert.doesNotMatch(securityWorker, /action:"approve"/);
   assert.doesNotMatch(securityWorker, /action:"deny"/);
 });
@@ -156,7 +156,7 @@ test("push approval hides raw browser ids and uses Android friendly device label
   assert.match(push, /Android tablet/);
   assert.match(push, /friendlyDeviceLabel\(current\.deviceLabel, current\.userAgent\)/);
   assert.match(push, /friendlyDeviceLabel\(row\.device_label, row\.user_agent\)/);
-  assert.match(securityWorker, /vibrate:\[180,80,180\]/);
+  assert.match(securityWorker, /vibrate:\[220,90,220\]/);
   assert.match(push, /supersedeOlderSelfChallenges/);
   assert.match(push, /SUPERSEDED/);
   assert.match(policy, /PHONE_APPROVAL_SUPERSEDED/);
@@ -169,7 +169,7 @@ test("phone approval keeps one latest self request, one visible notification and
   assert.match(serviceWorker, /registration\.unregister/);
   assert.match(securityWorker, /const TAG="kyerp-security-approval"/);
   assert.match(securityWorker, /tag:TAG/);
-  assert.match(securityWorker, /renotify:false/);
+  assert.match(securityWorker, /renotify:true/);
   assert.doesNotMatch(securityWorker, /kyerp-result-/);
   assert.match(securityApp, /createSigningKey/);
   assert.match(securityApp, /signDecision/);
@@ -267,4 +267,27 @@ test("phone approval polling never clears a partially typed KY Security code",()
   assert.match(login,/if \(!options\.preserveCode\) setCode\(""\)/);
   assert.match(login,/preserveCode: nextStage === "PHONE_APPROVAL_PENDING"/);
   assert.match(login,/aria-label="KY Güvenlik 6 haneli giriş kodu"/);
+});
+
+
+test("system and company observer phones receive both initial and resend phone approval wake attempts",()=>{
+  assert.match(push,/observerCandidates = await approvalObserverDevices/);
+  assert.match(push,/observerNotifiedDevices/);
+  assert.match(push,/selfNotifiedDevices/);
+  assert.match(push,/PHONE_LOGIN_APPROVAL_RESENT/);
+  assert.match(push,/const targetUser = await userRow\(c, text\(approval\.userId\)\)/);
+  assert.match(push,/observerSent = await sendWakeMany\(c, observerDevices\)/);
+});
+
+test("Security PWA continuously foreground-syncs pending approvals and repairs rotated push subscriptions",()=>{
+  assert.match(push,/\/api\/auth\/push\/device\/subscription/);
+  assert.match(push,/SECURITY_PUSH_SUBSCRIPTION_SYNCED/);
+  assert.match(securityApp,/async function syncPushChannel/);
+  assert.match(securityApp,/pushEndpoint:String\(subscription\.endpoint/);
+  assert.match(securityApp,/refreshPending\(\)\.catch/);
+  assert.match(securityApp,/pendingPollTimer=setInterval/);
+  assert.match(securityApp,/2500/);
+  assert.match(securityWorker,/broadcast\("KYERP_SECURITY_PUSH_WAKE"\).*showNotification/s);
+  assert.match(securityWorker,/renotify:true/);
+  assert.match(securityWorker,/silent:false/);
 });
