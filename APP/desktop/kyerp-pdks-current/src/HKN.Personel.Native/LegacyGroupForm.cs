@@ -11,6 +11,8 @@ public sealed class LegacyGroupForm : Form
     readonly TextBox periodHours = new();
     readonly TextBox dailyHours = new();
     readonly TextBox terminalCode = new();
+    readonly CheckBox cardTracking = new(){Text="Bu grup için kart basma / devam takibi zorunlu",AutoSize=true};
+    readonly Label acceptance = new(){AutoSize=true};
     readonly DataGridView grid = new(){ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,MultiSelect=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,BackgroundColor=PdksAppearance.Current.Surface,AutoGenerateColumns=false};
     readonly TextBox[] dayShift = new TextBox[5];
     readonly TextBox[] starts = new TextBox[5];
@@ -44,16 +46,23 @@ public sealed class LegacyGroupForm : Form
         var leftCard=PdksUiKit.Card();
         var left=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(16),BackColor=p.Surface};
         left.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
-        left.RowStyles.Add(new RowStyle(SizeType.Absolute,190));
+        left.RowStyles.Add(new RowStyle(SizeType.Absolute,260));
         left.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         left.Controls.Add(PdksUiKit.SectionTitle("Çalışma Grubu"),0,0);
-        var details=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=4,Padding=new Padding(0,6,0,4),BackColor=p.Surface};
+        var details=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=6,Padding=new Padding(0,6,0,4),BackColor=p.Surface};
         details.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));
         details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         Row(details,0,"Grup Adı",name);
         Row(details,1,"Dönemlik Çalışma Saati",periodHours);
         Row(details,2,"Günlük Çalışma Saati",dailyHours);
         Row(details,3,"Terminal Kodu",terminalCode);
+        details.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+        details.Controls.Add(L("Kart Takibi"),0,4);
+        cardTracking.Dock=DockStyle.Fill;cardTracking.Margin=new Padding(0,10,0,6);details.Controls.Add(cardTracking,1,4);
+        details.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+        details.Controls.Add(L("Kabul Aralığı"),0,5);
+        acceptance.Text=$"Giriş {AttendanceTolerancePolicy.EntryWindowText}  •  Çıkış {AttendanceTolerancePolicy.ExitWindowText}";
+        acceptance.Dock=DockStyle.Fill;acceptance.TextAlign=ContentAlignment.MiddleLeft;acceptance.ForeColor=p.Muted;details.Controls.Add(acceptance,1,5);
         left.Controls.Add(details,0,1);
         grid.Dock=DockStyle.Fill;grid.Columns.Add(new DataGridViewTextBoxColumn{Name="AD",DataPropertyName="AD",HeaderText="Çalışma Grubu",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});
         grid.SelectionChanged+=(_,_)=>{if(!editing)LoadSelection();};
@@ -127,6 +136,8 @@ public sealed class LegacyGroupForm : Form
     {
         var r=CurrentData();if(r is null)return;selectedCode=Convert.ToInt32(r["KOD"]);adding=false;
         name.Text=S(r,"AD");periodHours.Text=TimeText(r,"TSAAT");dailyHours.Text=TimeText(r,"GSAAT");terminalCode.Text=S(r,"MKOD");
+        var policies=AttendanceGroupPolicyStore.Load(db);
+        cardTracking.Checked=AttendanceGroupPolicyStore.RequiresCardTracking(policies,selectedCode.Value,name.Text);
         for(int i=0;i<5;i++)
         {
             shiftNames[i].Text=S(r,$"VAD{i+1}");starts[i].Text=TimeText(r,$"BASSAAT{i+1}");ends[i].Text=TimeText(r,$"BITSAAT{i+1}");dayShift[i].Text=TimeText(r,$"GDSAAT{i+1}");
@@ -151,14 +162,14 @@ public sealed class LegacyGroupForm : Form
 
     void SetEditors(bool enabled)
     {
-        name.ReadOnly=true;periodHours.ReadOnly=!enabled;dailyHours.ReadOnly=!enabled;terminalCode.ReadOnly=!enabled;
+        name.ReadOnly=true;periodHours.ReadOnly=!enabled;dailyHours.ReadOnly=!enabled;terminalCode.ReadOnly=!enabled;cardTracking.Enabled=enabled;
         foreach(var b in dayShift.Concat(starts).Concat(ends).Concat(shiftNames))b.ReadOnly=!enabled;
         editing=enabled;
     }
 
     void ClearEditors()
     {
-        name.Clear();periodHours.Clear();dailyHours.Clear();terminalCode.Clear();foreach(var b in dayShift.Concat(starts).Concat(ends).Concat(shiftNames))b.Clear();
+        name.Clear();periodHours.Clear();dailyHours.Clear();terminalCode.Clear();cardTracking.Checked=true;foreach(var b in dayShift.Concat(starts).Concat(ends).Concat(shiftNames))b.Clear();
     }
 
     void BeginNew(Button save){selectedCode=null;adding=true;ClearEditors();SetEditors(true);save.Enabled=true;name.Focus();}
@@ -181,7 +192,9 @@ public sealed class LegacyGroupForm : Form
             {
                 if(selectedCode is null)throw new InvalidOperationException("Bir grup seçin.");var ps=vals.Select((v,i)=>new FbParameter("@P"+i,v??DBNull.Value)).Append(new FbParameter("@K",selectedCode.Value)).ToArray();db.Execute($"update GRUP set {string.Join(',',cols.Select((c,i)=>c+"=@P"+i))} where KOD=@K",ps);
             }
-            var savedCode=selectedCode;SetEditors(false);adding=false;Reload(savedCode);
+            var savedCode=selectedCode;
+            if(savedCode.HasValue)AttendanceGroupPolicyStore.Save(db,savedCode.Value,ad,cardTracking.Checked);
+            SetEditors(false);adding=false;Reload(savedCode);
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Warning,"Definitions.Groups");}
     }
