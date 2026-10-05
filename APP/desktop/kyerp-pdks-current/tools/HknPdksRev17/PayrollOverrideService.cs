@@ -25,6 +25,14 @@ internal static class PayrollOverrideService
         "EKKES", "EKKAZ", "NCMAAS", "NCKALAN", "SSKG", "BOLUM", "MESAIKESINTIS"
     ];
 
+    internal static readonly string[] UiEditFields =
+    [
+        "GUN1", "SAAT1", "UCRET1", "NCGUN", "NCSAAT", "NCUCRET",
+        "SAAT2", "UCRET2", "SAAT3", "UCRET3", "GUN4", "SAAT4",
+        "DEVG", "DEVS", "GECS", "EKS", "EKKAZ", "EKKES", "EX2",
+        "NCMAAS", "NCKALAN", "FMSAAT", "FMUCRET", "FMODENEN", "FMKALAN"
+    ];
+
     private sealed record ColumnInfo(string Name, int Type);
 
     internal static void EnsureSchema(FirebirdDatabase db)
@@ -260,21 +268,43 @@ end");
     {
         EnsureSchema(db);
         var start = new DateTime(year, month, 1);
-        var end = start.AddMonths(1);
-        var sql = @"select u.*,k.AD,k.SOYAD,k.MAAS as KART_MAAS from UCRETLER u
-            inner join KIMLIK k on k.PKNO=u.PKNO
-            where u.BASTAR<@B and u.BITTAR>=@A" + (string.IsNullOrWhiteSpace(card) ? "" : " and u.PKNO=@P") + " order by u.PKNO,u.BASTAR,u.BITTAR";
-        var t = string.IsNullOrWhiteSpace(card)
-            ? db.Query(sql, new FbParameter("@A", start), new FbParameter("@B", end))
-            : db.Query(sql, new FbParameter("@A", start), new FbParameter("@B", end), new FbParameter("@P", card));
-        if (!t.Columns.Contains("KILIT_DURUMU")) t.Columns.Add("KILIT_DURUMU");
-        if (!t.Columns.Contains("CAKISMA")) t.Columns.Add("CAKISMA");
-        foreach (DataRow row in t.Rows)
+        var last = start.AddMonths(1).AddDays(-1);
+        var rawSql = @"select u.PKNO,u.BASTAR,u.BITTAR,k.IGTARIH,k.AD,k.SOYAD,k.MAAS as KART_MAAS,
+            u.NCGUN,u.NCSAAT,u.NCUCRET,u.SAAT2,u.UCRET2,u.SAAT3,u.UCRET3,u.GUN4,u.SAAT4,
+            u.DEVG,u.DEVS,u.GECS,u.EKS,u.EKKAZ,u.EKKES,u.EX2,u.NCMAAS,u.NCKALAN,u.FMSAAT,u.FMUCRET,u.FMODENEN,u.FMKALAN
+            from UCRETLER u inner join KIMLIK k on k.PKNO=u.PKNO
+            where u.BASTAR=@A and u.BITTAR=@E" + (string.IsNullOrWhiteSpace(card) ? "" : " and u.PKNO=@P") + " order by u.PKNO";
+        var raw = string.IsNullOrWhiteSpace(card)
+            ? db.Query(rawSql, new FbParameter("@A", start), new FbParameter("@E", last))
+            : db.Query(rawSql, new FbParameter("@A", start), new FbParameter("@E", last), new FbParameter("@P", card));
+
+        var t = new DataTable();
+        foreach (var name in new[]
         {
-            var c = Convert.ToString(row["PKNO"]) ?? "";
-            var s = Status(db, c, year, month);
-            row["KILIT_DURUMU"] = s.Text;
-            row["CAKISMA"] = s.HasOverlap ? "Çakışan dönem kaydı bulundu" : "";
+            "PKNO","BASTAR","BITTAR","S.No","Kart No","İ.G.T","Adı Soyadı","Maaşı",
+            "N.Çalışma Gün","N.Çalışma Saat","H.İ.M","H.S.M","Ü.Siz İzin","Dev.","Geç","Eksik",
+            "Avans","Banka","Maaş","Mesai","Net","Kilit","Uyarı"
+        }) t.Columns.Add(name);
+
+        int no = 0;
+        foreach (DataRow row in raw.Rows)
+        {
+            no++;
+            var personCard = Convert.ToString(row["PKNO"]) ?? "";
+            var s = Status(db, personCard, year, month);
+            var advance = db.Scalar("select coalesce(sum(MIKTAR),0) from AVANS where PKNO=@P and TARIH>=@A and TARIH<@B",
+                new FbParameter("@P", personCard), new FbParameter("@A", start), new FbParameter("@B", start.AddMonths(1)));
+            string V(string name) => row.Table.Columns.Contains(name) && row[name] != DBNull.Value ? Convert.ToString(row[name], CultureInfo.CurrentCulture)?.Trim() ?? "" : "";
+            string Join(params string[] values) => string.Join(" / ", values.Where(x => !string.IsNullOrWhiteSpace(x) && x != "0" && x != "00:00"));
+            t.Rows.Add(
+                personCard, row["BASTAR"], row["BITTAR"], no, personCard,
+                row["IGTARIH"] == DBNull.Value ? "" : Convert.ToDateTime(row["IGTARIH"]).ToString("dd.MM.yyyy"),
+                (V("AD") + " " + V("SOYAD")).Trim(), V("KART_MAAS"),
+                V("NCGUN"), V("NCSAAT"), V("SAAT2"), V("SAAT3"), Join(V("GUN4"), V("SAAT4")),
+                Join(V("DEVG"), V("DEVS")), V("GECS"), V("EKS"), Convert.ToString(advance, CultureInfo.CurrentCulture),
+                V("EX2"), V("NCMAAS"), Join(V("FMSAAT"), V("FMUCRET")), V("NCKALAN"),
+                s.PeriodLocked ? "AY KİLİTLİ" : s.PersonLocked ? "PERSONEL KİLİTLİ" : s.HasOverride ? "DÜZENLENMİŞ" : "",
+                s.HasOverlap ? "Çakışan dönem kaydı var" : "");
         }
         return t;
     }
@@ -295,7 +325,7 @@ end");
         var manual = Convert.ToInt32(db.Scalar("select count(*) from PDKS_BORDRO_OVERRIDE where PKNO=@P and YIL=@Y and AY=@A and AKTIF=1",
             new FbParameter("@P", card), new FbParameter("@Y", year), new FbParameter("@A", month)) ?? 0) > 0;
         var overlap = GetOverlaps(db, card, year, month).Rows.Count > 1;
-        var text = period ? "Dönem Kilitli" : person ? "Personel Kilitli" : manual ? "Manuel Düzeltilmiş" : "Otomatik";
+        var text = period ? "AY KİLİTLİ" : person ? "PERSONEL KİLİTLİ" : manual ? "DÜZENLENMİŞ" : "";
         return new(period, person, manual, overlap, text);
     }
 
