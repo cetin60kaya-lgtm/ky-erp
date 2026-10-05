@@ -24,6 +24,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
     readonly Label differenceValue = KpiValue();
     DataTable data = new();
     bool loading;
+    bool periodProtected;
 
     public MonthlyPayrollAdjustmentForm()
     {
