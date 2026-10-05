@@ -1443,7 +1443,6 @@ async function savePersonCard(c: Context<AppEnv>) {
   const baseEmployee = baseEmployeeId ? await first(c, "SELECT id,salary FROM hr_monthly_employees WHERE id=? AND main_company_id=?", [baseEmployeeId, companyId]) : null;
   if (baseEmployeeId && !baseEmployee) return error(c, 400, "INVALID_BASE_EMPLOYEE", "Baz personel bulunamadı.");
   const actualSalary = number(body.salary ?? current.salary);
-  if (baseEmployee && number(baseEmployee.salary) > actualSalary) return error(c, 400, "BASE_SALARY_HIGH", "Baz personel maaşı gerçek maaştan yüksek olamaz.");
   const extraPaymentAmount = number(body.extraPaymentAmount ?? currentCard?.extra_payment_amount);
   if (extraPaymentAmount < 0) return error(c, 400, "EXTRA_PAYMENT_INVALID", "EK ödeme negatif olamaz.");
   const legalTypeRaw = upper(body.legalDeductionType);
