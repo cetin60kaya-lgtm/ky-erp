@@ -62,6 +62,7 @@ public sealed class PayrollEditForm : Form
         outer.RowCount++;
 
         AddGroup(outer, "NORMAL ÇALIŞMA");
+        AddField(outer, values, "DMAAS", "Maaşı");
         AddField(outer, values, "GUN1", "N.Çalışma Gün");
         AddField(outer, values, "SAAT1", "N.Çalışma Saat");
         AddField(outer, values, "UCRET1", "Normal Ücret");
