@@ -72,7 +72,7 @@ public partial class PersonelForm
                 new FbParameter("@P",currentPk),new FbParameter("@A",a),new FbParameter("@B",b));
             var info=PayrollPeriodLockService.Get(db,a);
             personPayrollLockState.Text=PayrollPeriodLockService.Caption(info);
-            personPayrollLockState.ForeColor=info.Locked?p.Warning:p.Success;
+            personPayrollLockState.ForeColor=info.Locked?PdksAppearance.Current.Warning:PdksAppearance.Current.Success;
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,"Personel Bordro",MessageBoxIcon.Warning,"Personnel.Payroll");}
     }
