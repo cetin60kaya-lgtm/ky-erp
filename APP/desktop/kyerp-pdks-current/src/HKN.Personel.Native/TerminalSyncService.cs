@@ -85,7 +85,11 @@ internal static class TerminalSyncService
 
             var punches = snapshot.Punches.OrderBy(x => x.OccurredAt).ToArray();
             if (punches.Length == 0)
-                return Save(new(DateTime.Now, 0, 0, 0, 0, 0, false, "Aktarılacak veri yok. Cihazda kayıt bulunamadı; cihazdan hiçbir şey silinmedi.", scheduleKey));
+            {
+                var autoAlign = TryAutoAlignYesterday();
+                return Save(new(DateTime.Now, 0, 0, 0, 0, 0, false,
+                    "Aktarılacak veri yok. Cihazda kayıt bulunamadı; cihazdan hiçbir şey silinmedi. " + autoAlign, scheduleKey));
+            }
 
             // Physical terminal data is source evidence. Keep both a short live cache and a durable live TNF/raw archive.
             if (deviceSettings.BackupBeforeTransfer) BackupPunches(punches);
@@ -124,7 +128,8 @@ internal static class TerminalSyncService
                     : "Cihaz logları temizlendi; son bağlantı doğrulaması alınamadı.";
             }
 
-            var finalMessage = $"{source}: {punches.Length} kayıt CANLI TNF + TNF + FDB doğrulandı. {cleanupMessage}";
+            var autoAlign = TryAutoAlignYesterday();
+            var finalMessage = $"{source}: {punches.Length} kayıt cihaz arşivi + CANLI + yıllık TNF + DATA/FDB üzerinde doğrulandı. {cleanupMessage} {autoAlign}";
             return Save(new(DateTime.Now, punches.Length, imported.Inserted, imported.Updated, imported.Duplicates, imported.Skipped, deviceCleared, finalMessage, scheduleKey));
         }
         catch (Exception ex)
@@ -132,6 +137,20 @@ internal static class TerminalSyncService
             return Save(new(DateTime.Now, 0, 0, 0, 0, 0, false, "Eşitleme hatası: " + ex.Message + " Cihaz kayıtları silinmedi.", scheduleKey));
         }
         finally { Gate.Release(); }
+    }
+
+    static string TryAutoAlignYesterday()
+    {
+        try
+        {
+            var day = DateTime.Today.AddDays(-1);
+            var result = OperationalTnfSyncService.AlignDay(new FirebirdDatabase(PdksOptions.FromEnvironment()), day);
+            return $"Önceki gün otomatik eşitleme: {(result.ExactMatch ? "UYUMLU" : "FARK")} ({day:dd.MM.yyyy}).";
+        }
+        catch (Exception ex)
+        {
+            return "Önceki gün otomatik eşitleme uyarısı: " + ex.Message;
+        }
     }
 
     public static void ClearLive()
