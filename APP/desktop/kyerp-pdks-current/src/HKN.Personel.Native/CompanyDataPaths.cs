@@ -52,6 +52,7 @@ internal static class CompanyDataPaths
     {
         Directory.CreateDirectory(WorkspaceRoot);
         MigrateLegacyLayout();
+        HideLegacyFolders();
 
         foreach (var path in new[] { Data, Tnf, Device, Audit, Backup, Reports, Logs, SystemData, Terminal, Import, Config, Archive })
             Directory.CreateDirectory(path);
@@ -83,6 +84,16 @@ internal static class CompanyDataPaths
 
         var oldDb = Path.Combine(WorkspaceRoot, "03_DATA", CompanyName, "KY_PDKS_DATA.FDB");
         if (!File.Exists(Database) && File.Exists(oldDb)) File.Copy(oldDb, Database, false);
+    }
+
+    static void HideLegacyFolders()
+    {
+        foreach (var name in new[] { "03_DATA", "04_TNF", "05_BACKUP", "09_LOG", "TEMP" })
+        {
+            var path = Path.Combine(WorkspaceRoot, name);
+            if (!Directory.Exists(path)) continue;
+            try { File.SetAttributes(path, File.GetAttributes(path) | FileAttributes.Hidden); } catch { }
+        }
     }
 
     static void CopyDirectoryIfExists(string source, string destination, string pattern)
