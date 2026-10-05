@@ -57,7 +57,7 @@ public sealed class DefinitionsCenterForm : Form
 
         columns.Controls.Add(Section("Çalışma / Bordro",
         [
-            ("Çalışma Grupları","Yalnız MESAİLİ GRUP ve İDARİ GRUP",()=>navigate(PdksCommandId.Groups)),
+            ("Çalışma Grupları","MESAİLİ / İDARİ çalışma politikası, vardiya saatleri ve kart takibi zorunluluğu",()=>navigate(PdksCommandId.Groups)),
             ("Aylık Dönemler","Ay/yıl bazında dönemleri gör; MESAİLİ ve İDARİ teknik kayıtları sistem eşler",()=>navigate(PdksCommandId.Periods)),
             ("Genel Tatiller","Resmî ve özel tatil günleri",()=>navigate(PdksCommandId.Holidays)),
             ("Günlük Çalışma Saatleri","Normal günlük süre ve alan tanımları",()=>navigate(PdksCommandId.DailyWorkHours)),
