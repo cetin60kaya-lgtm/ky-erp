@@ -180,7 +180,7 @@ static void RunOperationalTnfChecks(List<string> errors, List<string> results)
     var database = new FirebirdDatabase(PdksOptions.FromEnvironment());
     var day = new DateTime(2098, 12, 15);
     var workspace = Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT") ?? string.Empty;
-    var tnfPath = Path.Combine(workspace, "04_TNF", "Hakan Emprime", "TR2098.Tnf");
+    var tnfPath = Path.Combine(workspace, "TNF", "TR2098.Tnf");
     var card = ""; var id = 0;
     try
     {
@@ -217,7 +217,7 @@ static void RunLiveIsolationChecks(List<string> errors, List<string> results)
     {
         var workspace = Environment.GetEnvironmentVariable("KYERP_PDKS_ROOT") ?? string.Empty;
         var dbPath = Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH") ?? string.Empty;
-        var tnfPath = Path.Combine(workspace, "04_TNF", "Hakan Emprime", $"TR{DateTime.Today.Year}.Tnf");
+        var tnfPath = Path.Combine(workspace, "TNF", $"TR{DateTime.Today.Year}.Tnf");
         string Hash(string path) => File.Exists(path) ? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))) : "MISSING";
         string DbFingerprint()
         {
