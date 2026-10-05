@@ -117,6 +117,8 @@ using (var periodControl = new PeriodControlCenterForm())
 {
     if (!Descendants(periodControl).OfType<DataGridView>().Any())
         throw new InvalidOperationException("Dönem kontrol merkezi listesi yok.");
+    if (!Descendants(periodControl).OfType<ComboBox>().Any() || !Descendants(periodControl).OfType<NumericUpDown>().Any())
+        throw new InvalidOperationException("Dönem kontrolünde Ay ve Yıl ayrı seçimler olmalı.");
 }
 
 using (var definitions = new DefinitionsCenterForm(_ => { }, _ => { }))
@@ -143,6 +145,8 @@ using (var groups = new LegacyGroupForm())
     var buttons = Descendants(groups).OfType<Button>().Select(x => (x.Text ?? string.Empty).Replace("&", string.Empty)).ToArray();
     if (buttons.Contains("Yeni Ekle") || buttons.Contains("Tümünü Sil"))
         throw new InvalidOperationException("Çalışma grupları yalnız MESAİLİ ve İDARİ olarak sabitlenmeli.");
+    if (!Descendants(groups).OfType<CheckBox>().Any(x => (x.Text ?? "").Contains("kart basma", StringComparison.OrdinalIgnoreCase)))
+        throw new InvalidOperationException("Çalışma grubunda kart takibi politikası görünür olmalı.");
 }
 using (var periods = new LegacyPeriodForm())
 {
