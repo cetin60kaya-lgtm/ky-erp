@@ -365,7 +365,7 @@ public sealed partial class MainShellForm
         var p=PdksAppearance.Current;
         var descriptor=PdksCommandCatalog.Get(id);
         if(descriptor.Placement==PdksCommandPlacement.Management ||
-           id is PdksCommandId.Definitions or PdksCommandId.Groups or PdksCommandId.Periods or
+           id is PdksCommandId.Definitions or PdksCommandId.Groups or PdksCommandId.ServiceRoutes or PdksCommandId.Periods or
                  PdksCommandId.Holidays or PdksCommandId.DailyWorkHours or PdksCommandId.AnnualWorkPlan or
                  PdksCommandId.PayrollFields or PdksCommandId.EarningsTypes or PdksCommandId.TerminalCenter or
                  PdksCommandId.TerminalSettings or PdksCommandId.TerminalProfiles or PdksCommandId.DataSources or
