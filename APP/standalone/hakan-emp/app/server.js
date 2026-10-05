@@ -48,6 +48,31 @@ CREATE TABLE IF NOT EXISTS payment_reminders(id INTEGER PRIMARY KEY AUTOINCREMEN
 CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY AUTOINCREMENT,uid TEXT UNIQUE NOT NULL,title TEXT,body TEXT NOT NULL,author TEXT DEFAULT 'Muhasebe',target TEXT DEFAULT 'Patron',category TEXT DEFAULT 'Genel',priority TEXT DEFAULT 'NORMAL',status TEXT DEFAULT 'AKTİF',active INTEGER DEFAULT 1,pinned INTEGER DEFAULT 0,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS checks(id INTEGER PRIMARY KEY AUTOINCREMENT,direction TEXT NOT NULL,due_date TEXT,bank TEXT,serial_no TEXT,counterparty TEXT,drawer TEXT,amount REAL DEFAULT 0,status TEXT DEFAULT 'ÖDENECEK',account_no TEXT,iban TEXT,note TEXT,source TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS sync_events(event_id TEXT PRIMARY KEY,source_device TEXT,event_type TEXT,payload TEXT,direction TEXT,status TEXT DEFAULT 'NEW',created_at TEXT DEFAULT CURRENT_TIMESTAMP,applied_at TEXT);
+CREATE TABLE IF NOT EXISTS invoice_pool(
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ file_hash TEXT UNIQUE,
+ file_name TEXT NOT NULL,
+ source_path TEXT,
+ current_path TEXT,
+ status TEXT DEFAULT 'NEW',
+ invoice_no TEXT,
+ invoice_date TEXT,
+ company_id INTEGER,
+ company_name TEXT,
+ model_text TEXT,
+ model_id INTEGER,
+ batch_id INTEGER,
+ qty REAL DEFAULT 0,
+ amount REAL DEFAULT 0,
+ parse_text TEXT,
+ error TEXT,
+ processed_at TEXT,
+ created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+ updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_invoice_pool_status ON invoice_pool(status,created_at);
+CREATE INDEX IF NOT EXISTS idx_invoice_pool_invoice_no ON invoice_pool(invoice_no);
+
 `);
 addcol('models','company_id','INTEGER'); addcol('machines','active','INTEGER DEFAULT 1'); addcol('batches','expected_qty','REAL DEFAULT 0'); addcol('batches','production_done','INTEGER DEFAULT 0'); addcol('batches','completed_at','TEXT');
 addcol('financial','amount','REAL DEFAULT 0'); addcol('financial','company_id','INTEGER');
