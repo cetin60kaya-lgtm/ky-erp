@@ -66,7 +66,20 @@ function ok(v,m){if(!v)throw new Error('ASSERT '+m)}
   ok(!openAfter.rows.some(x=>x.model_id===job.modelId),'completed model leaves active pool');
   ok(doneAfter.rows.some(x=>x.model_id===job.modelId&&x.status==='TAMAM'),'completed model enters completed pool');
 
-  console.log(JSON.stringify({ok:true,companies:all.rows.length,notes:notes.rows.length,machineSoftDelete:true,weeklyPool:true,autoComplete:true}));
+  const ip=await api('/api/invoice-pool');
+  ok(ip&&ip.folders&&ip.folders.invoiceInboxDir,'invoice pool folders');
+  ok(Array.isArray(ip.rows),'invoice pool rows');
+  const fs0=await api('/api/settings');
+  ok(fs0.folders&&fs0.folders.checkImageDir,'check image folder setting');
+  const setFolder=path.join(tmp,'custom-invoice-inbox');
+  await api('/api/settings','POST',{invoice_watch_enabled:'1',invoice_scan_seconds:'15',invoice_inbox_dir:setFolder,check_image_dir:path.join(tmp,'check-images-custom')});
+  const fs1=await api('/api/settings');
+  ok(fs1.values.invoice_inbox_dir===setFolder,'invoice folder saved');
+  ok(fs1.values.invoice_scan_seconds==='15','invoice scan seconds saved');
+  const scan=await api('/api/invoice-pool/scan','POST',{});
+  ok(scan.ok===true,'invoice pool manual scan');
+
+  console.log(JSON.stringify({ok:true,companies:all.rows.length,notes:notes.rows.length,machineSoftDelete:true,weeklyPool:true,autoComplete:true,invoicePool:true,folderSettings:true}));
 })().catch(e=>{console.error(e.stack||e);process.exitCode=1}).finally(()=>{child.kill();setTimeout(()=>{try{fs.rmSync(tmp,{recursive:true,force:true})}catch{}},100)});
 
 // UI selector guard
@@ -78,3 +91,9 @@ const uiCss=fs.readFileSync(path.join(root,'app','public','app.css'),'utf8');
 if(!uiCss.includes('.drawer{z-index:80!important}'))throw new Error('interaction layer guard: drawer must be above backdrop');
 if(!uiCss.includes('.backdrop{z-index:70!important}'))throw new Error('interaction layer guard: backdrop z-index missing');
 if(!uiCss.includes('.modal{z-index:100!important}'))throw new Error('interaction layer guard: modal must be above drawer');
+
+const uiHtml=fs.readFileSync(path.join(root,'app','public','index.html'),'utf8');
+if(!uiHtml.includes('id="invoicePool"')||!uiHtml.includes('data-setting="files"'))throw new Error('invoice pool UI guard');
+if(!uiJs.includes('İŞLENDİ ✓')||!uiJs.includes('renderInvoicePool'))throw new Error('invoice pool status guard');
+const serverJs=fs.readFileSync(path.join(root,'app','server.js'),'utf8');
+if(!serverJs.includes('setInterval(()=>scanInvoicePool(false)')||!serverJs.includes("require('pdf-parse')"))throw new Error('invoice watcher guard');
