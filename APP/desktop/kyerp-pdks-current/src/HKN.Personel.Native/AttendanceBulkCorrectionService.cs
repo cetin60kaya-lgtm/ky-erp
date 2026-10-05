@@ -38,6 +38,7 @@ internal static class AttendanceBulkCorrectionService
         var cards = NormalizeCards(sourceCards);
         var changedCards = new List<string>();
         var audit = new List<string>();
+        var rollback = new List<(string Card,int Sira,string OldTime,int? OldMinute)>();
         var skipped = 0;
 
         foreach (var card in cards)
@@ -55,6 +56,7 @@ internal static class AttendanceBulkCorrectionService
             if (string.Equals(tur, "E", StringComparison.OrdinalIgnoreCase)) { skipped++; continue; }
 
             var oldTime = Convert.ToString(row[entry ? "GSAAT" : "CSAAT"])?.Trim() ?? string.Empty;
+            var oldMinute = row[entry ? "GDAKIKA" : "CDAKIKA"] == DBNull.Value ? null : Convert.ToInt32(row[entry ? "GDAKIKA" : "CDAKIKA"]);
             var minute = StableMinute(card, day, entry ? "NORMAL_GIRIS" : "NORMAL_CIKIS", from, to);
             var newTime = TimeSpan.FromMinutes(minute).ToString(@"hh\\:mm", CultureInfo.InvariantCulture);
             var sira = Convert.ToInt32(row["SIRA"]);
@@ -68,14 +70,32 @@ internal static class AttendanceBulkCorrectionService
                 new FbParameter("@P", card));
             if (affected <= 0) { skipped++; continue; }
 
+            rollback.Add((card,sira,oldTime,oldMinute));
             changedCards.Add(card);
             audit.Add($"{card};{day:yyyy-MM-dd};{(entry ? "GIRIS_NORMALIZE" : "CIKIS_NORMALIZE")};{oldTime};{newTime};E=HAYIR");
         }
 
         if (changedCards.Count > 0)
         {
-            OperationalTnfSyncService.AlignPersonDays(db, changedCards.Select(x => (x, day.Date)));
-            WriteAudit(audit);
+            try
+            {
+                OperationalTnfSyncService.AlignPersonDays(db, changedCards.Select(x => (x, day.Date)));
+                WriteAudit(audit);
+            }
+            catch
+            {
+                foreach (var item in rollback)
+                {
+                    db.Execute(entry
+                        ? "update GIRCIK set GSAAT=@T,GDAKIKA=@M where SIRA=@S and PKNO=@P"
+                        : "update GIRCIK set CSAAT=@T,CDAKIKA=@M where SIRA=@S and PKNO=@P",
+                        new FbParameter("@T", string.IsNullOrWhiteSpace(item.OldTime) ? DBNull.Value : item.OldTime),
+                        new FbParameter("@M", item.OldMinute.HasValue ? item.OldMinute.Value : DBNull.Value),
+                        new FbParameter("@S", item.Sira),
+                        new FbParameter("@P", item.Card));
+                }
+                throw;
+            }
         }
 
         var op = entry ? "Geç giriş düzeltme" : "Erken çıkış düzeltme";
@@ -90,6 +110,7 @@ internal static class AttendanceBulkCorrectionService
         var cards = NormalizeCards(sourceCards);
         var changedCards = new List<string>();
         var audit = new List<string>();
+        var rollback = new List<(string Card,int Sira,bool Inserted,bool Entry)>();
         var skipped = 0;
 
         foreach (var card in cards)
@@ -113,6 +134,7 @@ internal static class AttendanceBulkCorrectionService
                     db.Execute("update GIRCIK set GTARIH=@D,GSAAT=@T,GDAKIKA=@M,GTUR='E' where SIRA=@S and PKNO=@P",
                         new FbParameter("@D", day.Date), new FbParameter("@T", time), new FbParameter("@M", minute),
                         new FbParameter("@S", sira), new FbParameter("@P", card));
+                    rollback.Add((card,sira,false,true));
                 }
                 else
                 {
@@ -120,6 +142,7 @@ internal static class AttendanceBulkCorrectionService
                     db.Execute("insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,MKOD) values (@S,@P,@D,@T,@M,'E',0)",
                         new FbParameter("@S", sira), new FbParameter("@P", card), new FbParameter("@D", day.Date),
                         new FbParameter("@T", time), new FbParameter("@M", minute));
+                    rollback.Add((card,sira,true,true));
                 }
             }
             else
@@ -138,6 +161,7 @@ internal static class AttendanceBulkCorrectionService
                 db.Execute("update GIRCIK set CTARIH=@D,CSAAT=@T,CDAKIKA=@M,CTUR='E' where SIRA=@S and PKNO=@P",
                     new FbParameter("@D", day.Date), new FbParameter("@T", time), new FbParameter("@M", minute),
                     new FbParameter("@S", sira), new FbParameter("@P", card));
+                rollback.Add((card,sira,false,false));
             }
 
             changedCards.Add(card);
@@ -146,8 +170,33 @@ internal static class AttendanceBulkCorrectionService
 
         if (changedCards.Count > 0)
         {
-            OperationalTnfSyncService.AlignPersonDays(db, changedCards.Select(x => (x, day.Date)));
-            WriteAudit(audit);
+            try
+            {
+                OperationalTnfSyncService.AlignPersonDays(db, changedCards.Select(x => (x, day.Date)));
+                WriteAudit(audit);
+            }
+            catch
+            {
+                foreach (var item in rollback.AsEnumerable().Reverse())
+                {
+                    if (item.Inserted)
+                    {
+                        db.Execute("delete from GIRCIK where SIRA=@S and PKNO=@P",
+                            new FbParameter("@S",item.Sira),new FbParameter("@P",item.Card));
+                    }
+                    else if (item.Entry)
+                    {
+                        db.Execute("update GIRCIK set GTARIH=null,GSAAT=null,GDAKIKA=null,GTUR=null where SIRA=@S and PKNO=@P",
+                            new FbParameter("@S",item.Sira),new FbParameter("@P",item.Card));
+                    }
+                    else
+                    {
+                        db.Execute("update GIRCIK set CTARIH=null,CSAAT=null,CDAKIKA=null,CTUR=null where SIRA=@S and PKNO=@P",
+                            new FbParameter("@S",item.Sira),new FbParameter("@P",item.Card));
+                    }
+                }
+                throw;
+            }
         }
 
         var op = entry ? "Toplu E giriş" : "Toplu E çıkış";
