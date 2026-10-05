@@ -46,6 +46,31 @@ internal static class Program
                         : "";
                     Console.WriteLine("STATUS|OK|" + deviceTime + "|" + newLogs + "|" + users + "|" + cards);
                     if (mode == "read") ReadNew(clock, machine);
+                    else if (mode == "users") ReadUsers(clock, machine);
+                    else if (mode == "deleteuser")
+                    {
+                        if (args.Length < 6 || !int.TryParse(args[5], NumberStyles.Integer, CultureInfo.InvariantCulture, out var enroll))
+                            return Fail("Silinecek kullanıcı numarası geçersiz.");
+                        bool ok = DeleteUser(clock, machine, enroll);
+                        Console.WriteLine(ok ? "ACTION|OK|DELETEUSER|" + enroll : "ACTION|ERROR|DELETEUSER|" + enroll);
+                        return ok ? 0 : 5;
+                    }
+                    else if (mode == "clearusers")
+                    {
+                        int removed = ClearUsers(clock, machine);
+                        Console.WriteLine(removed >= 0 ? "ACTION|OK|CLEARUSERS|" + removed : "ACTION|ERROR|CLEARUSERS");
+                        return removed >= 0 ? 0 : 6;
+                    }
+                    else if (mode == "movecard")
+                    {
+                        if (args.Length < 7 ||
+                            !int.TryParse(args[5], NumberStyles.Integer, CultureInfo.InvariantCulture, out var oldEnroll) ||
+                            !int.TryParse(args[6], NumberStyles.Integer, CultureInfo.InvariantCulture, out var newEnroll))
+                            return Fail("Kart taşıma için eski/yeni kullanıcı numarası geçersiz.");
+                        bool ok = MoveCard(clock, machine, oldEnroll, newEnroll);
+                        Console.WriteLine(ok ? "ACTION|OK|MOVECARD|" + oldEnroll + "|" + newEnroll : "ACTION|ERROR|MOVECARD|" + oldEnroll + "|" + newEnroll);
+                        return ok ? 0 : 7;
+                    }
                     else if (mode == "clearlogs")
                     {
                         bool ok = clock.EmptyGeneralLogData(machine);
@@ -64,6 +89,134 @@ internal static class Program
             }
             catch (Exception ex) { return Fail(ex.GetBaseException().Message); }
         }
+    }
+
+    private sealed class UserRow
+    {
+        public int Enroll;
+        public int Privilege;
+        public int Enabled;
+        public readonly System.Collections.Generic.HashSet<int> Backups = new System.Collections.Generic.HashSet<int>();
+    }
+
+    private static void ReadUsers(dynamic clock, int machine)
+    {
+        var users = new System.Collections.Generic.Dictionary<int, UserRow>();
+        bool prepared = false;
+        try { prepared = clock.ReadAllUserID(machine); } catch { prepared = false; }
+        if (prepared)
+        {
+            while (true)
+            {
+                int enroll = 0, enrollMachine = 0, backup = 0, privilege = 0, enabled = 0;
+                bool ok;
+                try { ok = clock.GetAllUserID(machine, ref enroll, ref enrollMachine, ref backup, ref privilege, ref enabled); }
+                catch { break; }
+                if (!ok) break;
+                if (!users.TryGetValue(enroll, out var row))
+                {
+                    row = new UserRow { Enroll = enroll, Privilege = privilege, Enabled = enabled };
+                    users[enroll] = row;
+                }
+                row.Backups.Add(backup);
+            }
+        }
+
+        foreach (var pair in users)
+        {
+            var row = pair.Value;
+            string name = "";
+            try
+            {
+                object value = "";
+                int enrollMachine = machine;
+                if (clock.GetUserName(0, machine, row.Enroll, enrollMachine, ref value))
+                    name = Convert.ToString(value, CultureInfo.InvariantCulture) ?? "";
+            }
+            catch { }
+
+            var backups = string.Join(",", new System.Collections.Generic.List<int>(row.Backups).ConvertAll(x => x.ToString(CultureInfo.InvariantCulture)).ToArray());
+            Console.WriteLine("USER|" + row.Enroll.ToString(CultureInfo.InvariantCulture) + "|" +
+                Safe(name) + "|" + backups + "|" + row.Privilege.ToString(CultureInfo.InvariantCulture) + "|" +
+                row.Enabled.ToString(CultureInfo.InvariantCulture));
+        }
+        Console.WriteLine("USERS_END|" + users.Count.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static bool DeleteUser(dynamic clock, int machine, int enroll)
+    {
+        bool any = false;
+        try { any = clock.DeleteEnrollData(machine, enroll, machine, 12) || any; } catch { }
+        for (int backup = 20; backup <= 27; backup++)
+        {
+            try { any = clock.DeleteEnrollData(machine, enroll, machine, backup) || any; } catch { }
+        }
+        try { any = clock.DeleteEnrollData(machine, enroll, machine, 50) || any; } catch { }
+        return any;
+    }
+
+    private static int ClearUsers(dynamic clock, int machine)
+    {
+        var ids = new System.Collections.Generic.HashSet<int>();
+        try
+        {
+            if (!clock.ReadAllUserID(machine)) return -1;
+            while (true)
+            {
+                int enroll = 0, enrollMachine = 0, backup = 0, privilege = 0, enabled = 0;
+                bool ok = clock.GetAllUserID(machine, ref enroll, ref enrollMachine, ref backup, ref privilege, ref enabled);
+                if (!ok) break;
+                ids.Add(enroll);
+            }
+        }
+        catch { return -1; }
+
+        int removed = 0;
+        foreach (var id in ids)
+            if (DeleteUser(clock, machine, id)) removed++;
+        return removed;
+    }
+
+    private static bool MoveCard(dynamic clock, int machine, int oldEnroll, int newEnroll)
+    {
+        if (oldEnroll == newEnroll) return true;
+        int privilege = 0;
+        int cardNumber = 0;
+        object data = 0;
+        bool read = false;
+        try { read = clock.GetEnrollData(machine, oldEnroll, machine, 11, ref privilege, ref data, ref cardNumber); }
+        catch { read = false; }
+        if (!read) return false;
+
+        bool written = false;
+        try { written = clock.SetEnrollData(machine, newEnroll, machine, 11, privilege, ref data, cardNumber); }
+        catch { written = false; }
+        if (!written) return false;
+
+        int verifyPrivilege = 0;
+        int verifyCard = 0;
+        object verifyData = 0;
+        bool verified = false;
+        try { verified = clock.GetEnrollData(machine, newEnroll, machine, 11, ref verifyPrivilege, ref verifyData, ref verifyCard); }
+        catch { verified = false; }
+        if (!verified || verifyCard != cardNumber) return false;
+
+        try
+        {
+            object name = "";
+            int enrollMachine = machine;
+            if (clock.GetUserName(0, machine, oldEnroll, enrollMachine, ref name))
+                clock.SetUserName(0, machine, newEnroll, machine, ref name);
+        }
+        catch { }
+
+        try { return clock.DeleteEnrollData(machine, oldEnroll, machine, 11); }
+        catch { return false; }
+    }
+
+    private static string Safe(string value)
+    {
+        return (value ?? "").Replace("|", "/").Replace("\r", " ").Replace("\n", " ");
     }
 
     private static void ReadNew(dynamic clock, int machine)
