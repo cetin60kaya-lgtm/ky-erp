@@ -69,10 +69,11 @@ public sealed partial class LiveAttendanceForm : Form
     void Build()
     {
         var p=PdksAppearance.Current;
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(14),BackColor=p.Canvas};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=5,Padding=new Padding(14),BackColor=p.Canvas};
         liveLayout=root;
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,72));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,92));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,70));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,0));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
@@ -91,17 +92,18 @@ public sealed partial class LiveAttendanceForm : Form
         root.Controls.Add(header,0,0);
 
         cards.BackColor=Color.Transparent;cards.Padding=new Padding(0,8,0,6);root.Controls.Add(cards,0,1);
-        assistantPanel=BuildAssistantPanel();assistantPanel.Visible=false;root.Controls.Add(assistantPanel,0,2);
+        root.Controls.Add(BuildAttendanceActions(),0,2);
+        assistantPanel=BuildAssistantPanel();assistantPanel.Visible=false;root.Controls.Add(assistantPanel,0,3);
         AddTab("Genel");AddTab("Kart Basmayan");AddTab("Giriş Eksik");AddTab("İçeride / Çıkış Bekleyen");AddTab("İzinli");AddTab("Geç Giriş");AddTab("Erken Çıkış");AddTab("Tamamlanan");AddTab("Eşleşmeyen Kart");
-        root.Controls.Add(BuildTrackingWorkspace(),0,3);Controls.Add(root);
+        root.Controls.Add(BuildTrackingWorkspace(),0,4);Controls.Add(root);
     }
     void ToggleAssistant()
     {
         assistantExpanded=!assistantExpanded;
         assistantToggle.Text=assistantExpanded?"Analiz Kapat":"Analiz Aç";
         if(assistantPanel is not null)assistantPanel.Visible=assistantExpanded;
-        if(liveLayout is not null && liveLayout.RowStyles.Count>2)
-            liveLayout.RowStyles[2].Height=assistantExpanded?166:0;
+        if(liveLayout is not null && liveLayout.RowStyles.Count>3)
+            liveLayout.RowStyles[3].Height=assistantExpanded?166:0;
     }
 
     void AddTab(string title)
