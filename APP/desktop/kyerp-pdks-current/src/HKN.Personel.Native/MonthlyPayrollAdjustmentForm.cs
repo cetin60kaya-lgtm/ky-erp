@@ -36,9 +36,10 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
         StartPosition=FormStartPosition.CenterParent;
         Width=1500; Height=780; MinimumSize=new Size(1180,650);
         Font=new Font("Segoe UI",9f); BackColor=PdksAppearance.Current.Canvas;
-        year.Value=DateTime.Today.Year;
+        var selectedPeriod=initialPeriod??DateTime.Today;
+        year.Value=selectedPeriod.Year;
         month.Items.AddRange(System.Globalization.CultureInfo.GetCultureInfo("tr-TR").DateTimeFormat.MonthNames.Take(12).Cast<object>().ToArray());
-        month.SelectedIndex=DateTime.Today.Month-1;
+        month.SelectedIndex=selectedPeriod.Month-1;
         person.Items.Add("Tüm Aktif Personel"); person.SelectedIndex=0;
         BuildGrid(); BuildUi();
         Shown+=(_,_)=>Reload();
