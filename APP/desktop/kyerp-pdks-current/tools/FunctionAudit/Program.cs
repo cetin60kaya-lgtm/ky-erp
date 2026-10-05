@@ -216,10 +216,44 @@ static void RunBulkCorrectionChecks(List<string> errors, List<string> results)
            !lines.Any(x=>x.StartsWith($"{card},{cs},151197,1,001",StringComparison.Ordinal)))
             errors.Add("Toplu düzeltme sonrası DATA-TNF dakika eşitliği kurulamadı.");
 
+        var addNormal=service.GetMethod("AddNormalEntries",BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Normal eksik giriş ekleme metodu bulunamadı.");
+        var addE=service.GetMethod("AddManualEntries",BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("E giriş ekleme metodu bulunamadı.");
+        var tnfService=typeof(LiveAttendanceForm).Assembly.GetType("HKN.Personel.Native.OperationalTnfSyncService")
+            ?? throw new InvalidOperationException("TNF eşitleme servisi bulunamadı.");
+        var align=tnfService.GetMethod("AlignPersonDay",BindingFlags.Static|BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Kişi/gün TNF eşitleme metodu bulunamadı.");
+
+        database.Execute("update GIRCIK set GTARIH=null,GSAAT=null,GDAKIKA=null,GTUR=null where SIRA=@I",new FbParameter("@I",id));
+        align.Invoke(null,new object[]{database,card,day});
+        addNormal.Invoke(null,new object[]{database,new[]{card},day,new TimeSpan(8,20,0),new TimeSpan(8,35,0)});
+        row=database.Query("select GSAAT,GTUR,CSAAT,CTUR from GIRCIK where SIRA=@I",new FbParameter("@I",id)).Rows[0];
+        gs=Convert.ToString(row["GSAAT"])?.Trim();cs=Convert.ToString(row["CSAAT"])?.Trim();
+        lines=File.Exists(tnf)?File.ReadAllLines(tnf):[];
+        if(string.Equals(Convert.ToString(row["GTUR"])?.Trim(),"E",StringComparison.OrdinalIgnoreCase))
+            errors.Add("Normal eksik giriş ekleme yanlışlıkla E oluşturdu.");
+        if(!lines.Any(x=>x.StartsWith($"{card},{gs},151197,1,001",StringComparison.Ordinal)))
+            errors.Add("Normal eksik giriş DATA-TNF'ye birlikte yazılmadı.");
+
+        database.Execute("update GIRCIK set GTARIH=null,GSAAT=null,GDAKIKA=null,GTUR=null where SIRA=@I",new FbParameter("@I",id));
+        align.Invoke(null,new object[]{database,card,day});
+        addE.Invoke(null,new object[]{database,new[]{card},day,new TimeSpan(8,20,0),new TimeSpan(8,35,0)});
+        row=database.Query("select GSAAT,GTUR,CSAAT,CTUR from GIRCIK where SIRA=@I",new FbParameter("@I",id)).Rows[0];
+        gs=Convert.ToString(row["GSAAT"])?.Trim();cs=Convert.ToString(row["CSAAT"])?.Trim();
+        lines=File.Exists(tnf)?File.ReadAllLines(tnf):[];
+        if(!string.Equals(Convert.ToString(row["GTUR"])?.Trim(),"E",StringComparison.OrdinalIgnoreCase))
+            errors.Add("E giriş yalnız açık ADMIN işlemiyle üretilemedi.");
+        if(lines.Any(x=>x.StartsWith($"{card},{gs},151197,1,001",StringComparison.Ordinal))||
+           !lines.Any(x=>x.StartsWith($"{card},{cs},151197,1,001",StringComparison.Ordinal)))
+            errors.Add("E giriş TNF dışı kalmadı veya normal çıkış TNF'den kayboldu.");
+
         var failed=errors.Any(x=>x.Contains("Toplu saat",StringComparison.OrdinalIgnoreCase)||
                                 x.Contains("Normal saat",StringComparison.OrdinalIgnoreCase)||
-                                x.Contains("Toplu düzeltme",StringComparison.OrdinalIgnoreCase));
-        results.Add(failed?"FAIL|Toplu geç giriş / erken çıkış ve DATA-TNF eşitleme":"PASS|Toplu geç giriş / erken çıkış DATA-TNF ile aynı dakikaya çekiliyor");
+                                x.Contains("Toplu düzeltme",StringComparison.OrdinalIgnoreCase)||
+                                x.Contains("Normal eksik giriş",StringComparison.OrdinalIgnoreCase)||
+                                x.Contains("E giriş",StringComparison.OrdinalIgnoreCase));
+        results.Add(failed?"FAIL|Toplu kart düzeltme / E ayrımı ve DATA-TNF eşitleme":"PASS|Normal eksik/düzeltme DATA+TNF, E ise yalnız DATA kuralı doğru");
     }
     catch(Exception ex){errors.Add("Toplu düzeltme regresyon testi: "+ex.GetBaseException().Message);}
     finally
