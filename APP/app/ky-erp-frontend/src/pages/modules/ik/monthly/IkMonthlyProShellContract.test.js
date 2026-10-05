@@ -91,14 +91,39 @@ test("payroll separates active and selected-month leavers while excluding earlie
   assert.match(monthly, /Seçili aydan önce ayrılan personel bordroya alınmaz/);
 });
 
-test("pre-payroll control is one source editor for person wage payment and movements", () => {
-  assert.match(monthly, /Bordro Öncesi Personel Kontrolü/);
-  assert.match(monthly, /Personel \+ Ücret \+ Ödeme Planı · Tek Kaynak/);
-  assert.match(monthly, /Aylık Hareket Kaynakları/);
+test("entry control and final payroll control are distinct modes on the same source editor", () => {
+  assert.match(monthly, /Bordro Öncesi Giriş Kontrolü/);
+  assert.match(monthly, /Son Bordro Kontrolü/);
+  assert.match(monthly, /controlMode === "FINAL"/);
+  assert.match(monthly, /Ana Plan Salt Okunur/);
+  assert.match(monthly, /Tüm Finans Alanları Elle Açık/);
   assert.match(monthly, /savePrePayrollMovement/);
-  assert.match(monthly, /deletePrePayrollMovement/);
-  assert.match(monthly, /Personel \/ Ücret Kaynağını Kaydet/);
-  assert.match(monthly, /Mesai \/ Avans \/ Kesinti ekranına doğrudan yazılır/);
+  assert.match(monthly, /saveFinalPayrollControl/);
+  assert.match(monthly, /Kaynak Hareketleri \/ Log/);
+});
+
+test("pre-payroll control keeps EK explicit and auto-balances payment channels", () => {
+  assert.match(monthly, /function paymentSplitByType/);
+  assert.match(monthly, /if \(onlyCash\) return \{ bank: 0, cash: net, mode: "ELDEN" \}/);
+  assert.match(monthly, /if \(onlyBank\) return \{ bank: net, cash: 0, mode: "BANKA" \}/);
+  assert.match(monthly, /cash: round\(net - bank\)/);
+  assert.match(monthly, /extraPaymentAmount: sourceExtra/);
+  assert.match(monthly, /<Field label="EK Ödeme"/);
+  assert.match(monthly, /if \(onlyCash\) return \{ bank: 0, cash: net, mode: "ELDEN" \}/);
+  assert.match(monthly, /if \(onlyBank\) return \{ bank: net, cash: 0, mode: "BANKA" \}/);
+  assert.match(monthly, /cash: round\(net - bank\)/);
+  assert.match(monthly, /Bordro Öncesi Giriş Kontrolü/);
+  assert.match(monthly, /Giriş Kontrol/);
+});
+
+test("pre-payroll modal has one main scroll owner and no overlapping sticky footer", () => {
+  assert.match(monthly, /size="wide prepayroll-dialog"/);
+  assert.match(monthly, /alignPrePayrollDialog/);
+  assert.match(css, /IK_PREPAYROLL_CONTROL_V3/);
+  assert.match(css, /\.prepayroll-dialog \.payroll-final-main\{/);
+  assert.match(css, /overflow-y:auto/);
+  assert.match(css, /\.prepayroll-dialog \.payroll-person-rail-list\{/);
+  assert.match(css, /\.prepayroll-dialog \.ik-section-tabs\{/);
 });
 
 test("personnel edit modal switches person without closing", () => {
@@ -166,11 +191,11 @@ test("person card separates SGK source, suggestion and PDKS control days", () =>
   assert.match(css, /\.inline-action-field/);
 });
 
-test("payroll person actions open the same canonical source editor", () => {
-  assert.match(monthly, /Kaynakları Düzenle/);
+test("payroll person actions open final mode on the same canonical source editor", () => {
+  assert.match(monthly, /Son Kontrol \/ Düzenle/);
   assert.match(monthly, /Kaynak Hareketleri \/ Log/);
   assert.match(monthly, /Çift tık: gerçek kaynakları düzenle/);
-  assert.match(monthly, /openPayPlan\(row\.employee\)/);
+  assert.match(monthly, /openPayPlan\(row\.employee, "FINAL", row\)/);
   assert.doesNotMatch(monthly, /Bordrodan Düzelt/);
 });
 
