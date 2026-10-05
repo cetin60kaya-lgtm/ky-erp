@@ -888,6 +888,15 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setModal("personel");
   };
 
+  const switchPersonInModal = (employeeId) => {
+    if (busy) return;
+    const employee = masterEmployees.find((item) => item.id === employeeId);
+    if (!employee) return;
+    setSelectedId(employee.id);
+    setModalDraft(draftPerson(employee));
+    setNotice("");
+  };
+
   const adminRecodePerson = async () => {
     if (!modalDraft.id) return setModalDraft((old) => ({ ...old, adminActionMessage: "Önce personel kartını kaydedin." }));
     if (!modalDraft.adminNewCode?.trim()) return setModalDraft((old) => ({ ...old, adminActionMessage: "Yeni HKN personel kodunu girin." }));
@@ -2298,7 +2307,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                 const periodLabel = employmentPeriodLabel(employee, period);
                 const periodTone = employmentPeriodTone(employee, period);
                 return (
-                  <button type="button" key={employee.id} className={`ik-pro-roster-item ${isActive ? "active" : ""}`} onClick={() => setSelectedId(employee.id)}>
+                  <button type="button" key={employee.id} className={`ik-pro-roster-item ${isActive ? "active" : ""}`} title="Tek tık: seç · Çift tık: düzenle" onClick={() => setSelectedId(employee.id)} onDoubleClick={() => openPerson(employee)}>
                     <span className="ik-pro-avatar">{initials(employee)}</span>
                     <span className="ik-pro-roster-copy">
                       <b>{employee.fullName}</b>
@@ -2380,7 +2389,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           <div className="tw"><table><thead><tr><th>Personel</th><th>Kod / Kart No</th><th>İşe Giriş</th><th>İşten Çıkış</th><th>SGK</th><th>Ödeme</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Banka Plan</th><th>Elden Plan</th><th>Kalan İzin</th><th>Evrak</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{filteredMasterEmployees.map((employee) => {
             const leave = employeeLeave(employee);
             const docCount = docsFor(employee).length;
-            return <tr key={employee.id} onClick={() => setSelectedId(employee.id)}><td><span className="person">{employee.fullName}</span><span className="code">{employee.department || "-"}</span></td><td>{employee.code || "-"} / {employee.cardNo || "-"}</td><td><b>{employeeHireDate(employee) || "-"}</b></td><td><b>{employeeExitDate(employee) || "-"}</b></td><td>{sgkLabel(employee)}</td><td>{paymentLabel(employee)}</td><td className="money">{money(employee.salary)}</td><td className="money">{money(employee.roadAllowance)}</td><td className="money">{money(employee.extraPaymentAmount)}</td><td className="money">{money(employee.bankAmount)}</td><td className="money">{money(employee.cashAmount)}</td><td><span className={`badge ${leave.balance < 0 ? "red" : "green"}`}>{leave.balance}</span></td><td><span className={`badge ${docCount ? "green" : "orange"}`}>{docCount ? "Var" : "Eksik"}</span></td><td><span className={`badge ${employmentPeriodTone(employee, period)}`}>{employmentPeriodLabel(employee, period)}</span></td><td><button className="btn" onClick={(event) => { event.stopPropagation(); openPerson(employee); }}>Düzenle</button> <button className="btn" onClick={(event) => { event.stopPropagation(); openDocument(employee); }}>Evrak</button></td></tr>;
+            return <tr key={employee.id} title="Tek tık: seç · Çift tık: düzenle" onClick={() => setSelectedId(employee.id)} onDoubleClick={() => openPerson(employee)}><td><span className="person">{employee.fullName}</span><span className="code">{employee.department || "-"}</span></td><td>{employee.code || "-"} / {employee.cardNo || "-"}</td><td><b>{employeeHireDate(employee) || "-"}</b></td><td><b>{employeeExitDate(employee) || "-"}</b></td><td>{sgkLabel(employee)}</td><td>{paymentLabel(employee)}</td><td className="money">{money(employee.salary)}</td><td className="money">{money(employee.roadAllowance)}</td><td className="money">{money(employee.extraPaymentAmount)}</td><td className="money">{money(employee.bankAmount)}</td><td className="money">{money(employee.cashAmount)}</td><td><span className={`badge ${leave.balance < 0 ? "red" : "green"}`}>{leave.balance}</span></td><td><span className={`badge ${docCount ? "green" : "orange"}`}>{docCount ? "Var" : "Eksik"}</span></td><td><span className={`badge ${employmentPeriodTone(employee, period)}`}>{employmentPeriodLabel(employee, period)}</span></td><td><button className="btn" onClick={(event) => { event.stopPropagation(); openPerson(employee); }}>Düzenle</button> <button className="btn" onClick={(event) => { event.stopPropagation(); openDocument(employee); }}>Evrak</button></td></tr>;
           })}<EmptyRow show={!filteredMasterEmployees.length} colSpan={15} text="Personel bulunamadı." /></tbody></table></div>
         </details>
 
@@ -2572,8 +2581,24 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
 
   function renderModal() {
     if (!modal) return null;
-    if (modal === "personel") return (
+    if (modal === "personel") {
+      const personIndex = masterEmployees.findIndex((item) => item.id === modalDraft.id);
+      const previousPerson = personIndex > 0 ? masterEmployees[personIndex - 1] : null;
+      const nextPerson = personIndex >= 0 && personIndex < masterEmployees.length - 1 ? masterEmployees[personIndex + 1] : null;
+      return (
       <Modal title="Personel Kartı ve Ödeme Ayarları" sub="Kimlik, çalışma, SGK, ücret, banka ve izin bilgilerini tek ekrandan yönetin" size="medium" onClose={() => setModal(null)}>
+        {modalDraft.id ? <div className="person-modal-nav">
+          <button type="button" className="btn" disabled={busy || !previousPerson} onClick={() => previousPerson && switchPersonInModal(previousPerson.id)}>← Önceki</button>
+          <label>
+            <span>Personel Seç</span>
+            <select value={modalDraft.id || ""} disabled={busy} onChange={(event) => switchPersonInModal(event.target.value)}>
+              {masterEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.code || "HKN yok"} · {employee.fullName}</option>)}
+            </select>
+          </label>
+          <span className="person-modal-position">{personIndex >= 0 ? personIndex + 1 : 0} / {masterEmployees.length}</span>
+          <button type="button" className="btn" disabled={busy || !nextPerson} onClick={() => nextPerson && switchPersonInModal(nextPerson.id)}>Sonraki →</button>
+          <small>Kişi değiştirildiğinde kaydedilmemiş alanlar bırakılır; önce Kaydet'e basın.</small>
+        </div> : null}
         <div className="modal-section-grid">
           <div className="modal-section"><h3>Kimlik ve Çalışma Bilgileri</h3><div className="form"><Field label="Ad Soyad" half><input value={modalDraft.fullName||""} onChange={(event)=>setModalDraft((old)=>({...old,fullName:event.target.value}))}/></Field><Field label="TC Kimlik No"><input value={modalDraft.identityNo||""} maxLength={11} onChange={(event)=>setModalDraft((old)=>({...old,identityNo:event.target.value.replace(/\D/g,"")}))}/></Field><Field label="Personel Kodu"><input value={modalDraft.code||""} readOnly /></Field><Field label="Kart No"><input value={modalDraft.cardNo||""} onChange={(event)=>setModalDraft((old)=>({...old,cardNo:event.target.value}))}/></Field><Field label="İşe Giriş"><input type="date" value={modalDraft.startDate||""} onChange={(event)=>setModalDraft((old)=>({...old,startDate:event.target.value}))}/></Field><Field label="İşten Çıkış"><input type="date" value={modalDraft.exitDate||""} onChange={(event)=>setModalDraft((old)=>({...old,exitDate:event.target.value,status:event.target.value?"Pasif":"Aktif"}))}/></Field><Field label="Görev"><input value={modalDraft.title||""} onChange={(event)=>setModalDraft((old)=>({...old,title:event.target.value}))}/></Field><Field label="Bölüm"><input value={modalDraft.department||""} onChange={(event)=>setModalDraft((old)=>({...old,department:event.target.value}))}/></Field><Field label="Çalışma Durumu"><input value={modalDraft.exitDate ? "İşten ayrılmış / pasif" : "Aktif"} readOnly /><div className="employment-actions">{modalDraft.exitDate ? <button type="button" className="btn" onClick={()=>setModalDraft((old)=>({...old,exitDate:"",status:"Aktif",changeNote:old.changeNote||"Personel yeniden aktife alındı"}))}>Aktife Geri Al</button> : <button type="button" className="btn orange" onClick={()=>setModalDraft((old)=>({...old,exitDate:istanbulDateKey(),status:"Pasif",changeNote:old.changeNote||"İşten çıkış kaydı"}))}>İşten Çıkış Bugün</button>}</div></Field></div></div>
           <div className="modal-section"><h3>SGK ve Bordro Kapsamı · {MONTHS[month-1]} {year}</h3><div className="form">
@@ -2612,7 +2637,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         </div>
         <ModalFooter onClose={() => setModal(null)} actions={<button type="button" className="btn primary" disabled={busy} onClick={savePerson}>{busy?"Kaydediliyor":"Tüm Değişiklikleri Kaydet"}</button>} />
       </Modal>
-    );
+      );
+    }
 
     if (modal === "ucret") return (
       <Modal title="Ücret ve Ödeme Planı" sub="Maaş, yol, banka/elden dağılımı ve saat bazlarını düzenleyin" size="medium" onClose={() => setModal(null)}>
