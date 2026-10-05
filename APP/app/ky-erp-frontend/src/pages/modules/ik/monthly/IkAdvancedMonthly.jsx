@@ -2850,9 +2850,17 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         else acc.deduction += num(item.amount);
         return acc;
       }, { overtime: 0, advance: 0, deduction: 0, garnishment: 0 });
-      const planExtra = modalDraft.baseEmployeeId
-        ? Math.max(num(modalDraft.salary) - num(rawEmployees.find((item) => item.id === modalDraft.baseEmployeeId)?.salary), 0)
-        : num(modalDraft.extraPaymentAmount);
+      const planExtra = num(modalDraft.extraPaymentAmount);
+      const preBaseTotals = calcRow({
+        salary: modalDraft.salary,
+        road: modalDraft.roadAllowance,
+        extra: planExtra,
+        overtime: movementTotals.overtime,
+        advance: movementTotals.advance,
+        deduction: movementTotals.deduction,
+        garnishment: movementTotals.garnishment,
+      });
+      const modalPayment = paymentSplitByType(modalDraft.paymentType, preBaseTotals.net, modalDraft.bankAmount);
       const preTotals = calcRow({
         salary: modalDraft.salary,
         road: modalDraft.roadAllowance,
@@ -2861,8 +2869,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         advance: movementTotals.advance,
         deduction: movementTotals.deduction,
         garnishment: movementTotals.garnishment,
-        bank: modalDraft.bankAmount,
-        cash: modalDraft.cashAmount,
+        bank: modalPayment.bank,
+        cash: modalPayment.cash,
       });
       const editor = modalDraft.movementEditor || {};
       const previewMovementAmount = editor.adjustmentType === "Mesai"
@@ -2910,9 +2918,10 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                     <Field label="Devreden İzin" half><input type="number" min="0" value={modalDraft.annualLeaveCarryover ?? ""} onChange={(event) => setModalDraft((old) => ({ ...old, annualLeaveCarryover: event.target.value, formMessage: "" }))} /></Field>
                     <Field label="Gerçek Maaş" half><input type="number" min="0" value={modalDraft.salary || ""} onChange={(event) => setModalDraft((old) => ({ ...old, salary: event.target.value, formMessage: "" }))} /></Field>
                     <Field label="Yol Yardımı" half><input type="number" min="0" value={modalDraft.roadAllowance || ""} onChange={(event) => setModalDraft((old) => ({ ...old, roadAllowance: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="Banka Planı" half><input type="number" min="0" value={modalDraft.bankAmount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, bankAmount: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="Elden Planı" half><input type="number" min="0" value={modalDraft.cashAmount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, cashAmount: event.target.value, formMessage: "" }))} /></Field>
-                    <Field label="Ödeme Tipi" half><select value={modalDraft.paymentType || "BANKA_ELDEN"} onChange={(event) => setModalDraft((old) => ({ ...old, paymentType: event.target.value, formMessage: "" }))}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field>
+                    <Field label="EK Ödeme" half><input type="number" min="0" value={modalDraft.extraPaymentAmount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, extraPaymentAmount: event.target.value, formMessage: "" }))} /></Field>
+                    <Field label="Ödeme Tipi" half><select value={modalDraft.paymentType || "BANKA_ELDEN"} onChange={(event) => setModalDraft((old) => ({ ...old, paymentType: event.target.value, bankAmount: event.target.value === "Elden" ? 0 : old.bankAmount, formMessage: "" }))}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field>
+                    <Field label="Banka Planı" half><input type="number" min="0" value={modalPayment.bank} readOnly={modalPayment.mode !== "BANKA_ELDEN"} onChange={(event) => setModalDraft((old) => ({ ...old, bankAmount: event.target.value, formMessage: "" }))} /></Field>
+                    <Field label="Elden Planı" half><input type="number" min="0" value={modalPayment.cash} readOnly /></Field>
                     <Field label="Mesai Saat Böleni" half><input type="number" min="1" step="1" value={modalDraft.overtimeHourlyBase || 225} onChange={(event) => setModalDraft((old) => ({ ...old, overtimeHourlyBase: event.target.value, formMessage: "" }))} /></Field>
                     <Field label="Kesinti Saat Böleni" half><input type="number" min="1" step="1" value={modalDraft.deductionHourlyBase || 300} onChange={(event) => setModalDraft((old) => ({ ...old, deductionHourlyBase: event.target.value, formMessage: "" }))} /></Field>
                     <Field label="Geçerlilik Tarihi" half><input type="date" value={modalDraft.effectiveDate || ""} onChange={(event) => setModalDraft((old) => ({ ...old, effectiveDate: event.target.value, formMessage: "" }))} /></Field>
@@ -2925,19 +2934,23 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                 <div className="modal-section payroll-smart-check">
                   <h3>Bordro Öncesi Akıllı Kontrol</h3>
                   <div className="import-summary payment-summary">
-                    <div><span>Maaş + Yol + EK</span><b>{money(num(modalDraft.salary) + num(modalDraft.roadAllowance) + planExtra)}</b></div>
+                    <div><span>Maaş</span><b>{money(modalDraft.salary)}</b></div>
+                    <div><span>Yol</span><b>{money(modalDraft.roadAllowance)}</b></div>
+                    <div className={planExtra > 0 ? "summary-highlight" : ""}><span>EK Ödeme</span><b>{money(planExtra)}</b></div>
                     <div><span>Mesai</span><b>{money(movementTotals.overtime)}</b></div>
                     <div><span>Avans</span><b>{money(movementTotals.advance)}</b></div>
                     <div><span>Kesinti + İcra</span><b>{money(movementTotals.deduction + movementTotals.garnishment)}</b></div>
                     <div><span>Tahmini Hak Ediş</span><b>{money(preTotals.hakedis)}</b></div>
                     <div><span>Tahmini Net</span><b>{money(preTotals.net)}</b></div>
-                    <div><span>Banka Planı</span><b>{money(modalDraft.bankAmount)}</b></div>
-                    <div><span>Elden Planı</span><b>{money(modalDraft.cashAmount)}</b></div>
+                    <div><span>Banka</span><b>{money(modalPayment.bank)}</b></div>
+                    <div><span>Elden</span><b>{money(modalPayment.cash)}</b></div>
                   </div>
-                  <div className={`warnline ${Math.abs(preTotals.diff) <= 0.01 ? "ok" : "warn"}`}>
-                    {Math.abs(preTotals.diff) <= 0.01
-                      ? "Banka + Elden planı tahmini net ile dengeli."
-                      : `Kontrol: Banka + Elden ile tahmini net arasında ${money(Math.abs(preTotals.diff))} fark var.`}
+                  <div className="warnline ok">
+                    {modalPayment.mode === "ELDEN"
+                      ? "Sadece Elden: tahmini netin tamamı otomatik Elden'e atanır."
+                      : modalPayment.mode === "BANKA"
+                        ? "Sadece Banka: tahmini netin tamamı otomatik Banka'ya atanır."
+                        : "Banka + Elden: Banka tutarı sabit kalır, tahmini netin kalan kısmı otomatik Elden'e atanır."}
                   </div>
                 </div>
               </div>
