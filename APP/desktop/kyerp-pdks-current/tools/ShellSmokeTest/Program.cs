@@ -215,7 +215,7 @@ using (var reportCenter = new ReportCenterForm())
     }
 }
 
-Console.WriteLine("KYERP PDKS 6.6.0 SHELL SMOKE OK");
+Console.WriteLine("KYERP PDKS 6.6.1 SHELL SMOKE OK");
 
 static IEnumerable<Control> Descendants(Control root)
 {
