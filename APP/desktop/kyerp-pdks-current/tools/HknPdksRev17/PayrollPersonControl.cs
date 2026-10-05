@@ -48,7 +48,7 @@ internal sealed class PayrollPersonControl : UserControl
         top.Controls.Add(personLock);
         top.Controls.Add(periodLock);
         top.Controls.Add(Button("Çakışan Kaydı Temizle", CleanOverlap, 175));
-        top.Controls.Add(Button("Override Temizle", ClearOverride, 130));
+        top.Controls.Add(Button("Düzeltmeyi Sıfırla", ClearOverride, 145));
         top.Controls.Add(status);
         top.Controls.Add(warning);
 
@@ -106,7 +106,7 @@ internal sealed class PayrollPersonControl : UserControl
             using var form = new PayrollEditForm(card, PayrollOverrideService.RowValues(row));
             if (form.ShowDialog(this) != DialogResult.OK) return;
             var changed = PayrollOverrideService.SaveOverrides(db, card, Year, Month, form.Values(), form.AutoHours, "Personel kartı / Bordro");
-            MessageBox.Show(this, changed.Length == 0 ? "Değişiklik yok." : "Manuel override kaydedildi: " + string.Join(", ", changed), "Bordro");
+            MessageBox.Show(this, changed.Length == 0 ? "Değişiklik yok." : "Bordro kaydedildi: " + string.Join(", ", changed), "Bordro");
             RefreshData();
         }
         catch (Exception ex)
@@ -159,10 +159,10 @@ internal sealed class PayrollPersonControl : UserControl
     {
         try
         {
-            if (MessageBox.Show(this, "Bu personelin seçili ay manuel override kayıtları pasif yapılsın mı? UCRETLER mevcut değerleri hemen değiştirilmez; sonraki hesaplamalarda otomatik değerler kullanılabilir.", "Override Temizle", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+            if (MessageBox.Show(this, "Bu personelin seçili ay bordro düzeltmeleri kaldırılsın mı? Mevcut değerler hemen değiştirilmez; sonraki hesaplamada normal değerler kullanılabilir.", "Düzeltmeyi Sıfırla", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
             PayrollOverrideService.ClearOverrides(db, card, Year, Month);
             RefreshData();
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Override"); }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Bordro"); }
     }
 }
