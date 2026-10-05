@@ -255,7 +255,7 @@ static void RunBulkCorrectionChecks(List<string> errors, List<string> results)
                                 x.Contains("E giriş",StringComparison.OrdinalIgnoreCase));
         results.Add(failed?"FAIL|Toplu kart düzeltme / E ayrımı ve DATA-TNF eşitleme":"PASS|Normal eksik/düzeltme DATA+TNF, E ise yalnız DATA kuralı doğru");
     }
-    catch(Exception ex){errors.Add("Toplu düzeltme regresyon testi: "+ex.GetBaseException().Message);}
+    catch(Exception ex){errors.Add("Toplu düzeltme regresyon testi: "+ex.GetBaseException());}
     finally
     {
         if(id!=0)try
