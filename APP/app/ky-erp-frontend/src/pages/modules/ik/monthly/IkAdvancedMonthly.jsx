@@ -772,6 +772,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
 
   const summary = useMemo(() => payrollRows.reduce((acc, row) => ({
     count: acc.count + 1,
+    salary: round(acc.salary + row.salary),
+    road: round(acc.road + row.road),
+    hakedis: round(acc.hakedis + row.hakedis),
     bank: round(acc.bank + row.bank),
     cash: round(acc.cash + row.cash),
     net: round(acc.net + row.net),
@@ -783,7 +786,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     annual: acc.annual + employeeLeave(row.employee).annual,
     docsMissing: acc.docsMissing + (docsFor(row.employee).length ? 0 : 1),
     manual: acc.manual + (row.saved?.override ? 1 : 0),
-  }), { count: 0, bank: 0, cash: 0, net: 0, advance: 0, deduction: 0, extra: 0, garnishment: 0, overtime: 0, annual: 0, docsMissing: 0, manual: 0 }), [payrollRows, employeeLeave, docsFor]);
+  }), { count: 0, salary: 0, road: 0, hakedis: 0, bank: 0, cash: 0, net: 0, advance: 0, deduction: 0, extra: 0, garnishment: 0, overtime: 0, annual: 0, docsMissing: 0, manual: 0 }), [payrollRows, employeeLeave, docsFor]);
 
   const filteredPayrollRows = useMemo(() => {
     const needle = upper(search).trim();
@@ -1827,6 +1830,108 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setNotice(`${rows.length} personelin ödeme listesi Excel'e hazırlandı; en altta sütun toplamları var.`);
   };
 
+  const printMonthlyControlReport = async () => {
+    const rows = payrollRows;
+    if (!periodPrepared) return setNotice("Aylık kontrol çıktısı için önce seçili bordro dönemini hazırlayın.");
+    if (!rows.length) return setNotice("Aylık kontrol çıktısı için personel bulunamadı.");
+
+    const totals = rows.reduce((sum, row) => ({
+      salary: sum.salary + num(row.salary),
+      road: sum.road + num(row.road),
+      extra: sum.extra + num(row.extra),
+      overtime: sum.overtime + num(row.overtime),
+      hakedis: sum.hakedis + num(row.hakedis),
+      advance: sum.advance + num(row.advance),
+      deduction: sum.deduction + num(row.deduction),
+      garnishment: sum.garnishment + num(row.garnishment),
+      totalDeduction: sum.totalDeduction + num(row.advance) + num(row.deduction) + num(row.garnishment),
+      bank: sum.bank + num(row.bank),
+      cash: sum.cash + num(row.cash),
+      net: sum.net + num(row.net),
+      officialNet: sum.officialNet + num(row.employee?.sgkNet),
+      sgkDays: sum.sgkDays + num(row.employee?.sgkDays),
+      pdksDays: sum.pdksDays + num(row.employee?.pdksCardDays),
+    }), { salary: 0, road: 0, extra: 0, overtime: 0, hakedis: 0, advance: 0, deduction: 0, garnishment: 0, totalDeduction: 0, bank: 0, cash: 0, net: 0, officialNet: 0, sgkDays: 0, pdksDays: 0 });
+
+    const activeCount = rows.filter((row) => ["ACTIVE", "NEW_HIRE", "MISSING_HIRE_DATE", "MISSING_EXIT_DATE"].includes(employmentStateAtPeriod(row.employee, period))).length;
+    const exitedCount = rows.filter((row) => ["EXIT_MONTH", "ENTERED_EXITED"].includes(employmentStateAtPeriod(row.employee, period))).length;
+    const paidCount = rows.filter((row) => upper(row.saved?.status) === "PAID").length;
+    const controlCount = rows.filter((row) => Math.abs(num(row.diff)) > 0.01).length;
+    const issueRows = smartIssues.map((item) => `<li><b>${escapeHtml(item.title)}</b> — ${escapeHtml(item.detail || "-")}</li>`).join("");
+    const checkRows = checks.map((item) => `<li class="${item.ok ? "ok" : "warn"}"><b>${escapeHtml(item.title || item.type || "Kontrol")}</b> — ${escapeHtml(item.detail || (item.ok ? "Tamam" : "Kontrol gerekli"))}</li>`).join("");
+    const periodLabel = `${MONTHS[month - 1]} ${year}`;
+
+    const html = `<html><head><meta charset="utf-8"><style>
+      @page{size:A4 landscape;margin:5mm}
+      *{box-sizing:border-box}
+      body{font-family:Arial,Helvetica,sans-serif;color:#14263a;margin:0;font-size:6.6px}
+      h1{font-size:15px;margin:0}.sub{color:#60758a;margin-top:2px}
+      .warning{margin:5px 0;padding:5px 7px;border:1px solid #f2b86b;background:#fff8ea;font-weight:800}
+      .stats{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin:6px 0}
+      .stat{border:1px solid #c9d5e1;padding:4px}.stat span{display:block;color:#6b7c8f;font-size:5.8px}.stat b{display:block;font-size:8px;margin-top:1px}
+      table{width:100%;border-collapse:collapse;table-layout:fixed}
+      thead{display:table-header-group}tr{break-inside:avoid}
+      th,td{border:1px solid #b9c7d4;padding:2.5px 2px;vertical-align:middle}
+      th{background:#edf3f8;text-align:center;font-size:5.8px}
+      td{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+      td.person{text-align:left;width:12%}.person b{display:block}.person small{display:block;color:#6c7d8e;font-size:5.4px}
+      td.status{text-align:left;font-size:5.7px;white-space:normal}
+      .total td{font-weight:900;background:#eaf1f7;border-top:2px solid #14263a}
+      .checks{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:7px}
+      .checks h2{font-size:9px;margin:0 0 3px}.checks ul{margin:0;padding-left:14px;line-height:1.4}.checks li.warn{color:#9a4a00}.checks li.ok{color:#176b37}
+    </style></head><body>
+      <h1>Aylık İK Kontrol Çıktısı</h1>
+      <div class="sub">${escapeHtml(periodLabel)} · ${rows.length} bordro personeli · Bu belge yalnız kontrol içindir, ödeme onayı veya bordro tamamlama işlemi yapmaz.</div>
+      <div class="warning">KONTROL ÇIKTISI — Bu raporu almak hiçbir personeli “Ödendi” yapmaz ve dönemi kilitlemez.</div>
+      <div class="stats">
+        <div class="stat"><span>AKTİF</span><b>${activeCount}</b></div>
+        <div class="stat"><span>AY İÇİNDE AYRILAN</span><b>${exitedCount}</b></div>
+        <div class="stat"><span>TAMAMLANAN</span><b>${paidCount}</b></div>
+        <div class="stat"><span>ÖDEME KONTROL</span><b>${controlCount}</b></div>
+        <div class="stat"><span>MAAŞ TOPLAM</span><b>${money(totals.salary)}</b></div>
+        <div class="stat"><span>YOL TOPLAM</span><b>${money(totals.road)}</b></div>
+        <div class="stat"><span>MESAI TOPLAM</span><b>${money(totals.overtime)}</b></div>
+        <div class="stat"><span>NET TOPLAM</span><b>${money(totals.net)}</b></div>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Personel / HKN</th><th>Durum</th><th>SGK / PDKS</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Mesai</th><th>Hak Ediş</th>
+          <th>Avans</th><th>Kesinti</th><th>İcra/Haciz</th><th>Top. Kesinti</th><th>Banka</th><th>Elden</th><th>Net</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map((row) => {
+            const totalDeduction = num(row.advance) + num(row.deduction) + num(row.garnishment);
+            return `<tr>
+              <td class="person"><b>${escapeHtml(row.employee.fullName)}</b><small>${escapeHtml(row.employee.code || "-")} · Giriş ${escapeHtml(employeeHireDate(row.employee) || "-")} · Çıkış ${escapeHtml(employeeExitDate(row.employee) || "-")}</small></td>
+              <td class="status">${escapeHtml(employmentPeriodLabel(row.employee, period))}<br>${upper(row.saved?.status) === "PAID" ? "Tamamlandı" : Math.abs(num(row.diff)) <= 0.01 ? "Hazır" : "Kontrol"}</td>
+              <td>${num(row.employee.sgkDays) || "-"} / ${num(row.employee.pdksCardDays) || "-"}</td>
+              <td>${money(row.salary)}</td><td>${money(row.road)}</td><td>${money(row.extra)}</td><td>${money(row.overtime)}</td><td>${money(row.hakedis)}</td>
+              <td>${money(row.advance)}</td><td>${money(row.deduction)}</td><td>${money(row.garnishment)}</td><td>${money(totalDeduction)}</td>
+              <td>${money(row.bank)}</td><td>${money(row.cash)}</td><td><b>${money(row.net)}</b></td>
+            </tr>`;
+          }).join("")}
+          <tr class="total">
+            <td>GENEL TOPLAM · ${rows.length} kişi</td><td>-</td><td>${totals.sgkDays} / ${totals.pdksDays}</td>
+            <td>${money(totals.salary)}</td><td>${money(totals.road)}</td><td>${money(totals.extra)}</td><td>${money(totals.overtime)}</td><td>${money(totals.hakedis)}</td>
+            <td>${money(totals.advance)}</td><td>${money(totals.deduction)}</td><td>${money(totals.garnishment)}</td><td>${money(totals.totalDeduction)}</td>
+            <td>${money(totals.bank)}</td><td>${money(totals.cash)}</td><td>${money(totals.net)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="checks">
+        <div><h2>Akıllı Kontrol Uyarıları</h2><ul>${issueRows || "<li>Aktif uyarı yok.</li>"}</ul></div>
+        <div><h2>Ay Sonu Kontrolleri</h2><ul>${checkRows || "<li>Ay Sonu Kontrol henüz çalıştırılmadı.</li>"}</ul></div>
+      </div>
+    </body></html>`;
+
+    try {
+      await printHtmlDocument({ title: `Aylık İK Kontrol Çıktısı - ${period}`, html });
+      setNotice("Aylık kontrol çıktısı açıldı. Bu işlem ödeme durumunu değiştirmez.");
+    } catch (error) {
+      setNotice(error?.message || "Aylık kontrol çıktısı açılamadı.");
+    }
+  };
+
   const printPayrollReport = async () => {
     const rows = payrollRows.filter((row) => !selectedPayrollIds.length || selectedPayrollIds.includes(row.employee.id));
     if (!rows.length) return setNotice("Ödeme listesi için personel bulunamadı.");
@@ -2532,8 +2637,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           <button type="button" className={`btn ${payrollEmploymentFilter === "ACTIVE" ? "primary" : ""}`} onClick={() => setPayrollEmploymentFilter("ACTIVE")}>Aktif ({payrollRows.filter((row) => ["ACTIVE","NEW_HIRE","MISSING_HIRE_DATE","MISSING_EXIT_DATE"].includes(employmentStateAtPeriod(row.employee, period))).length})</button>
           <button type="button" className={`btn ${payrollEmploymentFilter === "EXITED" ? "orange" : ""}`} onClick={() => setPayrollEmploymentFilter("EXITED")}>İşten Ayrılan ({payrollRows.filter((row) => ["EXIT_MONTH","ENTERED_EXITED"].includes(employmentStateAtPeriod(row.employee, period))).length})</button>
         </div><span>Seçili aydan önce ayrılan personel bordroya alınmaz.</span></div>
-        <div className="sumgrid short">{summaryBox("Ödeme listesi", filteredPayrollRows.length, "", `${payrollRows.length} toplam · ${selectedPayrollIds.length || payrollRows.length} seçili`)}{summaryBox("Resmi bordro neti", money(employees.reduce((sum,item)=>sum+num(item.sgkNet),0)))}{summaryBox("Banka", money(summary.bank))}{summaryBox("Elden", money(summary.cash))}{summaryBox("Avans / Kesinti", `${money(summary.advance)} / ${money(summary.deduction)}`, "orange")}{summaryBox("EK / İcra-Haciz", `${money(summary.extra)} / ${money(summary.garnishment)}`, summary.garnishment ? "orange" : "")}{summaryBox("Net Toplam", money(summary.net), balanced ? "green" : "red")}</div>
-        <div className="workbar"><div className="group"><button className="btn primary" disabled={busy || data.close?.isLocked} onClick={refreshPayroll}>Yeniden Hesapla</button><button className="btn" disabled={busy || data.close?.isLocked} onClick={savePayroll}>Ara Kaydet</button><button className="btn" disabled={busy || data.close?.isLocked} onClick={() => openPayroll()}>Seçiliyi Düzenle</button><button className="btn" disabled={busy || !balanced} onClick={openBulkPayment}>Banka / Toplu Çıktı</button><button className="btn green" disabled={busy || !balanced} onClick={printPayrollReport}>Bordroyu Tamamla / PDF</button><button className="btn green" disabled={busy || !balanced} onClick={printPaymentSlips}>10’lu Fiş + Tamamla</button><button className="btn green" disabled={busy} onClick={() => setModal("fis")}>Tek Kişi Fiş + Tamamla</button></div><button className="btn green" disabled={busy || !balanced} onClick={exportPayroll}>Tamamla / Excel</button></div>
+        <div className="sumgrid short">{summaryBox("Ödeme listesi", filteredPayrollRows.length, "", `${payrollRows.length} toplam · ${selectedPayrollIds.length || payrollRows.length} seçili`)}{summaryBox("Maaş", money(summary.salary))}{summaryBox("Yol", money(summary.road))}{summaryBox("Mesai", money(summary.overtime))}{summaryBox("Hak Ediş", money(summary.hakedis))}{summaryBox("Avans / Kesinti", `${money(summary.advance)} / ${money(summary.deduction)}`, "orange")}{summaryBox("İcra / Haciz", money(summary.garnishment), summary.garnishment ? "orange" : "")}{summaryBox("Banka", money(summary.bank))}{summaryBox("Elden", money(summary.cash))}{summaryBox("Net Toplam", money(summary.net), balanced ? "green" : "red")}</div>
+        <div className="workbar"><div className="group"><button className="btn primary" disabled={busy || data.close?.isLocked} onClick={refreshPayroll}>Yeniden Hesapla</button><button className="btn" disabled={busy || data.close?.isLocked} onClick={savePayroll}>Ara Kaydet</button><button className="btn" disabled={busy || data.close?.isLocked} onClick={() => openPayroll()}>Seçiliyi Düzenle</button><button className="btn orange" disabled={busy || !payrollRows.length} onClick={printMonthlyControlReport}>Aylık Kontrol Çıktısı</button><button className="btn" disabled={busy || !balanced} onClick={openBulkPayment}>Banka / Toplu Çıktı</button><button className="btn green" disabled={busy || !balanced} onClick={printPayrollReport}>Bordroyu Tamamla / PDF</button><button className="btn green" disabled={busy || !balanced} onClick={printPaymentSlips}>10’lu Fiş + Tamamla</button><button className="btn green" disabled={busy} onClick={() => setModal("fis")}>Tek Kişi Fiş + Tamamla</button></div><button className="btn green" disabled={busy || !balanced} onClick={exportPayroll}>Tamamla / Excel</button></div>
         {data.close?.isLocked ? <div className="warnline warn">Bu dönem kapalıdır. Tamamlanmış bordrolar tekrar görüntülenebilir ve yeniden çıktı alınabilir.</div> : <div className={`warnline ${balanced ? "ok" : "warn"}`}>{balanced ? "Banka + Elden = Net. Resmi bordro/PDF/fiş/Excel çıktısını almak aynı anda ödeme tamamlandı onayıdır; ayrıca Ödendi işlemi yapılmaz." : "Toplam ödeme banka + elden ile eşleşmiyor. Final çıktı alınamaz."}</div>}
         <div className="card">
           <div className="ch"><div><b>Çıktı Öncesi Son Bordro</b><span>Resmi Net SGK bordrosundan kontrol amaçlı gelir; şirket ödemesinde Banka + Elden = Net Ödenecek zorunludur.</span></div></div>
@@ -2570,7 +2675,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               </td>
             </tr>)}
             <EmptyRow show={!filteredPayrollRows.length} colSpan={8} text="Filtreye uygun bordro personeli bulunamadı." />
-          </tbody></table></div>
+          </tbody>{filteredPayrollRows.length ? <tfoot><tr className="payroll-screen-total"><td></td><td><b>GENEL TOPLAM · {filteredPayrollRows.length} kişi</b></td><td><div className="payroll-cell-stack"><span><em>SGK Gün</em><b>{filteredPayrollRows.reduce((sum,row)=>sum+num(row.employee.sgkDays),0)}</b></span><span><em>Resmi Net</em><b>{money(filteredPayrollRows.reduce((sum,row)=>sum+num(row.employee.sgkNet),0))}</b></span></div></td><td><div className="payroll-cell-stack"><span><em>Maaş</em><b>{money(filteredPayrollRows.reduce((sum,row)=>sum+num(row.salary),0))}</b></span><span><em>Yol / EK</em><b>{money(filteredPayrollRows.reduce((sum,row)=>sum+num(row.road),0))} / {money(filteredPayrollRows.reduce((sum,row)=>sum+num(row.extra),0))}</b></span><span><em>Mesai</em><b>{money(filteredPayrollRows.reduce((sum,row)=>sum+num(row.overtime),0))}</b></span><span className="cell-total"><em>Hak Ediş</em><b>{money(filteredPayrollRows.reduce((sum,row)=>sum+num(row.hakedis),0))}</b></span></div></td><td><div className="payroll-cell-stack"><span><em>Avans</em><b>{money(filteredPayrollRows.reduce((sum,row)=>sum+num(row.advance),0))}</b></span><span><em>Kesinti</em><b>{money(filteredPayrollRows.reduce((sum,row)=>sum+num(row.deduction),0))}</b></span><span><em>İcra/Haciz</em><b>{money(filteredPayrollRows.reduce((sum,row)=>sum+num(row.garnishment),0))}</b></span></div></td><td><div className="payroll-cell-stack"><span><em>Banka</em><b>{money(filteredPayrollRows.reduce((sum,row)=>sum+num(row.bank),0))}</b></span><span><em>Elden</em><b>{money(filteredPayrollRows.reduce((sum,row)=>sum+num(row.cash),0))}</b></span><span className="cell-total net"><em>Net Ödenecek</em><b>{money(filteredPayrollRows.reduce((sum,row)=>sum+num(row.net),0))}</b></span></div></td><td><span className="badge blue">Kontrol</span></td><td>-</td></tr></tfoot> : null}</table></div>
         </div>
         <LogTable title="Bordro Islem Loglari" rows={scopedLogs} onEdit={editFromLog} />
       </section>

@@ -211,6 +211,27 @@ test("annual leave keeps proof-grade day-by-day snapshots and printable ledger",
   assert.match(monthly, /effectType/);
 });
 
+test("monthly control report is non-finalizing and includes full payroll totals", () => {
+  assert.match(monthly, /const printMonthlyControlReport = async \(\) =>/);
+  assert.match(monthly, /Aylık Kontrol Çıktısı/);
+  assert.match(monthly, /Bu raporu almak hiçbir personeli “Ödendi” yapmaz/);
+  assert.match(monthly, /GENEL TOPLAM/);
+  assert.match(monthly, /Top\. Kesinti/);
+  assert.match(monthly, /salary: sum\.salary \+ num\(row\.salary\)/);
+  assert.match(monthly, /road: sum\.road \+ num\(row\.road\)/);
+  assert.match(monthly, /overtime: sum\.overtime \+ num\(row\.overtime\)/);
+  assert.match(monthly, /totalDeduction: sum\.totalDeduction \+ num\(row\.advance\) \+ num\(row\.deduction\) \+ num\(row\.garnishment\)/);
+  assert.doesNotMatch(monthly, /printMonthlyControlReport[\s\S]{0,1200}finalizePayrollForOutput/);
+});
+
+test("payroll screen shows salary road overtime and sticky grand totals", () => {
+  assert.match(monthly, /summaryBox\("Maaş", money\(summary\.salary\)\)/);
+  assert.match(monthly, /summaryBox\("Yol", money\(summary\.road\)\)/);
+  assert.match(monthly, /summaryBox\("Mesai", money\(summary\.overtime\)\)/);
+  assert.match(monthly, /payroll-screen-total/);
+  assert.match(css, /\.payroll-screen-total/);
+});
+
 test("official payroll output is the payment completion action", () => {
   assert.match(monthly, /const finalizePayrollForOutput/);
   assert.match(monthly, /status:\s*"PAID"/);
