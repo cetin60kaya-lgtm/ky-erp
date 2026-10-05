@@ -119,15 +119,27 @@ internal static class TerminalMaintenanceService
         if (!snapshot.Connected) return new(false, snapshot.Message);
         var punches = snapshot.Punches.OrderBy(x => x.OccurredAt).ToArray();
         var archived = 0;
+        DeviceEvidenceWriteResult? evidence = null;
         if (punches.Length > 0)
         {
+            evidence = DeviceEvidenceArchiveService.SaveRead(punches, "CİHAZ LOG TEMİZLİĞİ ÖNCESİ YEDEK");
             archived = TerminalLiveArchiveService.Append(punches);
             SavePunchSnapshot(punches, "CIHAZ_LOG_SIFIRLAMA");
         }
 
         var clear = await TerminalDeviceClient.ClearLogsAsync(ct);
         if (!clear.Success) return new(false, "Cihaz logları temizlenemedi: " + clear.Message, 0, archived);
-        return new(true, $"Cihaz logları sıfırlandı. Silmeden önce {punches.Length} fiziksel kayıt ham/canlı arşive alındı.", punches.Length, archived);
+
+        var verify = await TerminalDeviceClient.ReadAsync(false, ct);
+        var verifyText = verify.Connected
+            ? $" Cihaz doğrulaması: yeni log {Math.Max(0, verify.NewLogCount)}."
+            : " Cihaz temizlendi; son bağlantı doğrulaması alınamadı.";
+        var evidenceText = evidence is null
+            ? " Cihazda yedeklenecek log yoktu."
+            : $" Yedek TNF: {evidence.ReadTnfPath}. SHA256: {evidence.Sha256}.";
+        return new(true,
+            $"Cihaz logları sıfırlandı. Silmeden önce {punches.Length} fiziksel kayıt CİHAZ arşivine ve CANLI arşive alındı.{evidenceText}{verifyText}",
+            punches.Length, archived);
     }
 
     public static async Task<TerminalMaintenanceResult> ClearUsersAsync(CancellationToken ct = default)
