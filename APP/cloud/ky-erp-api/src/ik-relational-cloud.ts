@@ -849,9 +849,6 @@ async function deleteAdvancedFinance(c: Context<AppEnv>) {
   const companyId = companyIdOf(c, body);
   const current = await first(c, "SELECT a.id,a.employee_id,a.adjustment_type,a.amount,a.payment_method,a.payroll_effect,a.note,a.date FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
   if (!current) return error(c, 404, "NOT_FOUND", "Mesai/avans/kesinti kaydı bulunamadı.");
-  if (upper(current.note).includes("SON BORDRO KONTROL")) {
-    return error(c, 409, "FINAL_CONTROL_CORRECTION_IMMUTABLE", "Son bordro kontrolü düzeltmesi hareket ekranından silinemez.");
-  }
   const deleteDate = hrDateOnly(current.date);
   const deleteLock = await rejectAdvancedPeriodLocked(c, companyId, number(deleteDate.slice(0, 4)), number(deleteDate.slice(5, 7)));
   if (deleteLock) return deleteLock;
