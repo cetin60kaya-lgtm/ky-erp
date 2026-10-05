@@ -18,6 +18,7 @@ Environment.SetEnvironmentVariable("KY_PDKS_UI_AUDIT", "1", EnvironmentVariableT
 
 var errors = new List<string>();
 var results = new List<string>();
+RunAttendanceTolerancePolicyChecks(errors, results);
 RunLiveAttendanceChecks(errors, results);
 RunLiveIsolationChecks(errors, results);
 RunOperationalTnfChecks(errors, results);
@@ -343,6 +344,33 @@ static void RunLiveIsolationChecks(List<string> errors, List<string> results)
         results.Add(failed ? "FAIL|Canlı kontrol fiziksel arşiv izolasyonu" : "PASS|Canlı kontrol fiziksel arşivi FDB/TNF'den bağımsız");
     }
     catch (Exception ex) { errors.Add("Canlı kontrol izolasyon testi: " + ex.GetBaseException().Message); }
+}
+
+static void RunAttendanceTolerancePolicyChecks(List<string> errors, List<string> results)
+{
+    try
+    {
+        var policy = typeof(LiveAttendanceForm).Assembly.GetType("HKN.Personel.Native.AttendanceTolerancePolicy")
+            ?? throw new InvalidOperationException("AttendanceTolerancePolicy bulunamadı.");
+        var entry = policy.GetMethod("IsAcceptedEntry", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("IsAcceptedEntry bulunamadı.");
+        var exit = policy.GetMethod("IsAcceptedExit", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("IsAcceptedExit bulunamadı.");
+
+        bool Entry(int h,int m) => (bool)(entry.Invoke(null,[new DateTime(2026,10,5,h,m,0)]) ?? false);
+        bool Exit(int h,int m) => (bool)(exit.Invoke(null,[new DateTime(2026,10,5,h,m,0)]) ?? false);
+
+        if(!Entry(8,20)||!Entry(8,35)||Entry(8,19)||Entry(8,36))
+            errors.Add("Sabit giriş kabul penceresi bozuk; beklenen 08:20-08:35.");
+        if(!Exit(18,50)||!Exit(19,5)||Exit(9,21)||Exit(18,49)||Exit(19,6))
+            errors.Add("Sabit çıkış kabul penceresi bozuk; beklenen 18:50-19:05 ve 09:21 kabul edilmemeli.");
+
+        var failed=errors.Any(x=>x.Contains("kabul penceresi",StringComparison.OrdinalIgnoreCase));
+        results.Add(failed
+            ?"FAIL|Sabit giriş/çıkış kabul penceresi"
+            :"PASS|Sabit tolerans: giriş 08:20-08:35, çıkış 18:50-19:05; dışı tamamlandı sayılmaz");
+    }
+    catch(Exception ex){errors.Add("Tolerans regresyon testi: "+ex.GetBaseException().Message);}
 }
 
 static void RunLiveAttendanceChecks(List<string> errors, List<string> results)
