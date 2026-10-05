@@ -176,3 +176,12 @@
 .check-row{border-bottom:1px solid #e5e8ed}.check-row:last-child{border-bottom:0}.check-actions{grid-template-columns:minmax(220px,1fr) auto auto auto!important}
 @media(max-width:1180px){.note-board{grid-template-columns:repeat(2,minmax(0,1fr))}.model-work-grid{grid-template-columns:1fr}.model-action-card{position:static;display:grid;grid-template-columns:repeat(2,1fr);gap:6px}.model-action-card h3,.model-action-card p{grid-column:1/-1}.month-metrics{grid-template-columns:repeat(2,minmax(105px,1fr))}.check-column-head{display:none}}
 @media(max-width:820px){.settings-company-grid{grid-template-columns:1fr 1fr}.settings-company-grid>:first-child{grid-column:1/-1}.machine-manage{grid-template-columns:48px 1fr}.machine-manage>:nth-child(3),.machine-manage>:nth-child(4){display:none}.machine-manage .row-actions{grid-column:1/-1;justify-content:flex-end}.note-board{grid-template-columns:1fr}.month-head-pro{display:grid!important;gap:9px}.month-metrics{grid-template-columns:repeat(2,1fr)}.check-actions{grid-template-columns:1fr 1fr!important}.check-actions .search{grid-column:1/-1}.model-action-card{grid-template-columns:1fr 1fr}.nav{grid-template-columns:repeat(6,1fr)!important}.nav-item{font-size:6.5px!important;padding:3px 1px!important}}
+
+
+/* FINAL9 — interaction layer safety */
+.backdrop{z-index:70!important}
+.drawer{z-index:80!important}
+.modal{z-index:100!important}
+#toast{z-index:120!important}
+.drawer.show{pointer-events:auto!important}
+.backdrop:not(.show){pointer-events:none!important}
