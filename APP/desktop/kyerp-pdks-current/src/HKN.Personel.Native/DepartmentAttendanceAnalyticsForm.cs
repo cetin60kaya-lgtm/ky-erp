@@ -146,54 +146,59 @@ public sealed class DepartmentAttendanceAnalyticsForm : Form
             if (b <= a) throw new InvalidOperationException("Bitiş tarihi başlangıç tarihinden önce olamaz.");
 
             var rows = new Dictionary<string, DepartmentRow>(StringComparer.OrdinalIgnoreCase);
+            var policies=AttendanceGroupPolicyStore.Load(db);
 
             var head = db.Query(
-                "select coalesce(b.AD,'(Bölümsüz)') BOLUM,count(*) AKTIF " +
-                "from KIMLIK k left join BOLUM b on b.KOD=k.BOLUM " +
+                "select coalesce(b.AD,'(Bölümsüz)') BOLUM,k.GRUP,coalesce(gr.AD,'') GRUP_AD,count(*) AKTIF " +
+                "from KIMLIK k left join BOLUM b on b.KOD=k.BOLUM left join GRUP gr on gr.KOD=k.GRUP " +
                 "where coalesce(k.IGTARIH,@A)<@B and (k.ICTARIH is null or k.ICTARIH>=@A) " +
-                "group by b.AD order by b.AD",
+                "group by b.AD,k.GRUP,gr.AD order by b.AD",
                 new FbParameter("@A", a), new FbParameter("@B", b));
             foreach (DataRow r in head.Rows)
             {
+                if(!Tracked(r,policies))continue;
                 var key = Convert.ToString(r["BOLUM"]) ?? "(Bölümsüz)";
-                rows[key] = new DepartmentRow(key) { Active = Convert.ToInt32(r["AKTIF"]) };
+                if(!rows.TryGetValue(key,out var item))rows[key]=item=new DepartmentRow(key);
+                item.Active += Convert.ToInt32(r["AKTIF"]);
             }
 
             var arrived = db.Query(
-                "select coalesce(b.AD,'(Bölümsüz)') BOLUM,count(distinct g.PKNO) GELEN,count(*) HAREKET " +
-                "from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO left join BOLUM b on b.KOD=k.BOLUM " +
-                "where g.GTARIH>=@A and g.GTARIH<@B group by b.AD",
+                "select coalesce(b.AD,'(Bölümsüz)') BOLUM,k.GRUP,coalesce(gr.AD,'') GRUP_AD,count(distinct g.PKNO) GELEN,count(*) HAREKET " +
+                "from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO left join BOLUM b on b.KOD=k.BOLUM left join GRUP gr on gr.KOD=k.GRUP " +
+                "where g.GTARIH>=@A and g.GTARIH<@B group by b.AD,k.GRUP,gr.AD",
                 new FbParameter("@A", a), new FbParameter("@B", b));
             foreach (DataRow r in arrived.Rows)
             {
+                if(!Tracked(r,policies))continue;
                 var key = Convert.ToString(r["BOLUM"]) ?? "(Bölümsüz)";
                 if (!rows.TryGetValue(key, out var item)) rows[key] = item = new DepartmentRow(key);
-                item.Arrived = Convert.ToInt32(r["GELEN"]);
-                item.Movements = Convert.ToInt32(r["HAREKET"]);
+                item.Arrived += Convert.ToInt32(r["GELEN"]);
+                item.Movements += Convert.ToInt32(r["HAREKET"]);
             }
 
             var punch = db.Query(
-                "select coalesce(b.AD,'(Bölümsüz)') BOLUM," +
+                "select coalesce(b.AD,'(Bölümsüz)') BOLUM,k.GRUP,coalesce(gr.AD,'') GRUP_AD," +
                 "count(*) PUANTAJ," +
                 "sum(coalesce(p.GECG,0)) GECG,sum(coalesce(p.ERKENG,0)) ERKENG,sum(coalesce(p.DEVAMSIZLIKG,0)) DEVG,sum(coalesce(p.EKSIKG,0)) EKSIKG," +
                 "sum(coalesce(p.GECD,0)) GECD,sum(coalesce(p.ERKEND,0)) ERKEND,sum(coalesce(p.EKSIKD,0)) EKSIKD," +
                 "sum(coalesce(p.DAKIKA2,0)+coalesce(p.DAKIKA3,0)) MESAI " +
-                "from PUANTAJ p left join KIMLIK k on k.PKNO=p.PKNO left join BOLUM b on b.KOD=k.BOLUM " +
-                "where p.TARIH>=@A and p.TARIH<@B group by b.AD",
+                "from PUANTAJ p left join KIMLIK k on k.PKNO=p.PKNO left join BOLUM b on b.KOD=k.BOLUM left join GRUP gr on gr.KOD=k.GRUP " +
+                "where p.TARIH>=@A and p.TARIH<@B group by b.AD,k.GRUP,gr.AD",
                 new FbParameter("@A", a), new FbParameter("@B", b));
             foreach (DataRow r in punch.Rows)
             {
+                if(!Tracked(r,policies))continue;
                 var key = Convert.ToString(r["BOLUM"]) ?? "(Bölümsüz)";
                 if (!rows.TryGetValue(key, out var item)) rows[key] = item = new DepartmentRow(key);
-                item.TimesheetDays = I(r, "PUANTAJ");
-                item.LateDays = I(r, "GECG");
-                item.EarlyDays = I(r, "ERKENG");
-                item.AbsentDays = I(r, "DEVG");
-                item.MissingDays = I(r, "EKSIKG");
-                item.LateMinutes = I(r, "GECD");
-                item.EarlyMinutes = I(r, "ERKEND");
-                item.MissingMinutes = I(r, "EKSIKD");
-                item.OvertimeMinutes = I(r, "MESAI");
+                item.TimesheetDays += I(r, "PUANTAJ");
+                item.LateDays += I(r, "GECG");
+                item.EarlyDays += I(r, "ERKENG");
+                item.AbsentDays += I(r, "DEVG");
+                item.MissingDays += I(r, "EKSIKG");
+                item.LateMinutes += I(r, "GECD");
+                item.EarlyMinutes += I(r, "ERKEND");
+                item.MissingMinutes += I(r, "EKSIKD");
+                item.OvertimeMinutes += I(r, "MESAI");
             }
 
             var table = new DataTable();
@@ -208,7 +213,7 @@ public sealed class DepartmentAttendanceAnalyticsForm : Form
             lateValue.Text = rows.Values.Sum(x => x.LateDays).ToString("N0");
             absentValue.Text = rows.Values.Sum(x => x.AbsentDays).ToString("N0");
             overtimeValue.Text = AsTime(rows.Values.Sum(x => x.OvertimeMinutes));
-            status.Text = $"{a:dd.MM.yyyy} - {to.Value.Date:dd.MM.yyyy} • {rows.Count:N0} bölüm • devam/mesai karşılaştırması";
+            status.Text = $"{a:dd.MM.yyyy} - {to.Value.Date:dd.MM.yyyy} • {rows.Count:N0} bölüm • yalnız kart takibi zorunlu gruplar";
         }
         catch (Exception ex)
         {
@@ -216,6 +221,13 @@ public sealed class DepartmentAttendanceAnalyticsForm : Form
             status.Text = "Analiz alınamadı • " + PdksErrorPresenter.Report(ex, "DepartmentAttendanceAnalytics.Refresh");
             status.ForeColor = PdksAppearance.Current.Danger;
         }
+    }
+
+    static bool Tracked(DataRow row,IReadOnlyDictionary<int,AttendanceGroupPolicy> policies)
+    {
+        var code=row.Table.Columns.Contains("GRUP")&&row["GRUP"]!=DBNull.Value?Convert.ToInt32(row["GRUP"]):-1;
+        var name=row.Table.Columns.Contains("GRUP_AD")&&row["GRUP_AD"]!=DBNull.Value?Convert.ToString(row["GRUP_AD"])??"":"";
+        return AttendanceGroupPolicyStore.RequiresCardTracking(policies,code,name);
     }
 
     static int I(DataRow row, string name)
