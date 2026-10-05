@@ -95,7 +95,9 @@ public sealed class LegacyTerminalSettingsForm : Form
         save.Width=72;save.Height=32;PdksUiKit.ApplyButtonPalette(save,palette,PdksActionRole.Primary);
         add.Click += (_, _) => { ApplyToFields(TerminalDeviceSettings.Default); SetEditing(true); };
         remove.Click += (_, _) => { if(MessageBox.Show("Ana cihaz ayarları varsayılana döndürülsün mü?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;TerminalDeviceSettingsStore.Save(TerminalDeviceSettings.Default);LoadSettings();SetEditing(false); };
-        edit.Click += (_,_)=>SetEditing(true);save.Click += (_,_)=>SaveSettings();
+        edit.Click += (_,_)=>SetEditing(true);
+        deleteAfter.CheckedChanged += (_,_)=> { if (IsHandleCreated) save.Enabled = true; };
+        save.Click += (_,_)=>SaveSettings();
         editBar.Controls.Add(save);editBar.Controls.Add(edit);editBar.Controls.Add(remove);editBar.Controls.Add(add);connection.Controls.Add(editBar,1,6);
         connectionCard.Controls.Add(connection);setup.Controls.Add(connectionCard,1,0);
         root.Controls.Add(setup,0,1);
@@ -265,7 +267,8 @@ public sealed class LegacyTerminalSettingsForm : Form
     void SetEditing(bool value)
     {
         editing = value;
-        foreach (var c in new Control[] { deviceNo, deviceName, machineNo, connectionType, comPort, baudRate, ipAddress, ipPort, direction, transferFile, tolerance, backup, deleteAfter }) c.Enabled = value;
+        foreach (var c in new Control[] { deviceNo, deviceName, machineNo, connectionType, comPort, baudRate, ipAddress, ipPort, direction, transferFile, tolerance, backup }) c.Enabled = value;
+        deleteAfter.Enabled = true;
         save.Enabled = value;
     }
 
