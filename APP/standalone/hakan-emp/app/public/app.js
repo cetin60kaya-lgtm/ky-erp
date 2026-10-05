@@ -35,11 +35,41 @@ function defaultCompanyId(){return n(settings.values?.default_company_id)||n(sel
 function openOptions(selected='',companyId=0){let a=core.rows||[];if(companyId)a=a.filter(r=>n(r.company_id)===n(companyId));return a.map(r=>`<option value="${r.model_id}" ${String(r.model_id)===String(selected)?'selected':''}>${esc(r.model_name)}${r.company_name?' — '+esc(r.company_name):''}</option>`).join('')}
 function operatorOptions(selected=''){const a=core.operators||[];return '<option value="">Makinacı seç</option>'+a.map(o=>`<option value="${esc(o.name)}" ${norm(o.name)===norm(selected)?'selected':''}>${esc(o.name)}</option>`).join('')}
 
+function updateWeekUi(){
+ const w=core.week||{start:weekCursor,end:addDaysIso(weekCursor,6)};weekCursor=w.start||weekCursor;
+ if($('#weekLabel'))$('#weekLabel').textContent=weekLabelText(weekCursor);
+ if($('#weekSub'))$('#weekSub').textContent=(core.summary?.weekEntries||0)+' üretim fişi · Fiş tarihi hangi haftadaysa kayıt o haftaya gider.';
+}
+async function loadProductionPeriod(){
+ try{
+  [core,done]=await Promise.all([api('/api/dashboard?week='+encodeURIComponent(weekCursor)),api('/api/completed?week='+encodeURIComponent(weekCursor))]);
+  renderProduction();
+ }catch(e){toast(e.message)}
+}
+async function moveWeek(days){weekCursor=weekStartIso(addDaysIso(weekCursor,days));await loadProductionPeriod()} window.moveWeek=moveWeek;
+async function goCurrentWeek(){weekCursor=weekStartIso(today());await loadProductionPeriod()} window.goCurrentWeek=goCurrentWeek;
+
 function renderProduction(){
- const s=core.summary||{};$('#sOpen').textContent=fmt(s.open);$('#sIncoming').textContent=fmt(s.incoming);$('#sProduced').textContent=fmt(s.produced);$('#sInvoiceReady').textContent=fmt(s.invoiceReady);
+ const sm=core.summary||{};updateWeekUi();
+ $('#sOpen').textContent=fmt(sm.open);
+ $('#sWeekModels').textContent=fmt(sm.weekModels);
+ $('#sWeekProduced').textContent=fmt(sm.weekProduced);
+ $('#sWeekDefects').textContent=fmt(sm.weekDefects);
+ $('#sWeekEntries').textContent=fmt(sm.weekEntries)+' fiş';
+ $('#sInvoiceReady').textContent=fmt(sm.invoiceReady);
  let a=prodView==='OPEN'?[...(core.rows||[])]:[...(done.rows||[])],q=norm($('#prodSearch').value),f=$('#prodStatus').value;
- if(q)a=a.filter(r=>norm((r.model_name||'')+' '+(r.company_name||'')).includes(q));if(f&&prodView==='OPEN')a=a.filter(r=>r.action_code===f);
- $('#prodRows').innerHTML=a.length?a.map(r=>`<div class="data-row prod-grid clickable" onclick="openModel(${r.model_id})"><div class="cell-main"><b>${esc(r.model_name)}</b><small>${esc(r.company_name||'Firma yok')}${r.ground?' · Zemin '+esc(r.ground):''} · Son ${dateTR(r.last_date)}</small></div><div class="num">${fmt(r.incoming_qty)}</div><div class="num">${fmt(r.produced_qty)}</div><div class="num">${fmt(r.dispatch_qty)}</div><div class="num">${fmt(r.invoice_qty)}</div><div class="num">${fmt(r.invoice_remaining)}</div><div><span class="status ${r.color||'green'}">${prodView==='DONE'?'TAMAM':esc(r.action)}</span></div></div>`).join(''):'<div class="empty">Kayıt yok.</div>'
+ if(q)a=a.filter(r=>norm((r.model_name||'')+' '+(r.company_name||'')+' '+(r.ground||'')).includes(q));
+ if(f&&prodView==='OPEN')a=a.filter(r=>r.action_code===f);
+ $('#prodRows').innerHTML=a.length?a.map(r=>`<div class="data-row prod-grid clickable ${n(r.week_entries)?'week-active-row':''}" onclick="openModel(${r.model_id})">
+   <div class="cell-main"><b>${esc(r.model_name)}</b><small>${esc(r.company_name||'Firma yok')}${r.ground?' · Zemin '+esc(r.ground):''} · Son ${dateTR(r.last_date)}</small></div>
+   <div class="num">${fmt(r.incoming_qty)}</div>
+   <div class="num week-num"><b>${fmt(r.week_produced)}</b><small>${fmt(r.week_entries)} fiş${n(r.week_fabric_defect)+n(r.week_print_defect)?' · '+fmt(n(r.week_fabric_defect)+n(r.week_print_defect))+' sakat':''}</small></div>
+   <div class="num">${fmt(r.produced_qty)}</div>
+   <div class="num">${fmt(r.dispatch_qty)}</div>
+   <div class="num">${fmt(r.invoice_qty)}</div>
+   <div class="num">${fmt(r.invoice_remaining)}</div>
+   <div><span class="status ${r.color||'green'}">${prodView==='DONE'?'TAMAM':esc(r.action)}</span></div>
+  </div>`).join(''):'<div class="empty">'+(prodView==='OPEN'?'Havuzda açık iş yok.':'Tamamlanan iş yok.')+'</div>'
 }
 $$('[data-prod-view]').forEach(b=>b.onclick=()=>{$$('[data-prod-view]').forEach(x=>x.classList.remove('active'));b.classList.add('active');prodView=b.dataset.prodView;$('#prodStatus').disabled=prodView==='DONE';renderProduction()});
 $('#prodSearch').oninput=renderProduction;$('#prodStatus').onchange=renderProduction;
