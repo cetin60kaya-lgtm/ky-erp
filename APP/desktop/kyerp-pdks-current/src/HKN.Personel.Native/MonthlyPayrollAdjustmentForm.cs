@@ -313,6 +313,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
     {
         try
         {
+            if(PayrollPeriodLockService.IsLocked(db,Period().A)){MessageBox.Show("Bu ay kilitli. Aylık bordro kaynak değerleri değiştirilemez.","Dönem Kilitli",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
             var changed=data.AsEnumerable().Where(r=>!string.Equals(Convert.ToString(r["DURUM"]),"Temiz",StringComparison.OrdinalIgnoreCase)).ToList();
             if(changed.Count==0)
             {
