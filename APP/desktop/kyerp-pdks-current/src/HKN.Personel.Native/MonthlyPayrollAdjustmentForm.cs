@@ -337,6 +337,43 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Error,"Payroll.Adjustment");}
     }
 
+    void TogglePeriodLock()
+    {
+        try
+        {
+            var p=Period();
+            var current=PayrollPeriodLockService.Get(db,p.A);
+            var next=!current.Locked;
+            if(next && !string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT"),"1",StringComparison.Ordinal))
+            {
+                var answer=MessageBox.Show($"{p.A:MMMM yyyy} dönemi kilitlensin mi? Kilitliyken puantaj ve bordro kaynak değerleri değiştirilemez.","Ayı Kilitle",MessageBoxButtons.YesNo,MessageBoxIcon.Warning);
+                if(answer!=DialogResult.Yes)return;
+            }
+            PayrollPeriodLockService.Set(db,p.A,next,next?"Aylık bordro onaylandı":"Kilit açıldı");
+            RefreshPeriodLockUi();
+        }
+        catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Error,"Payroll.Lock");}
+    }
+
+    void RefreshPeriodLockUi()
+    {
+        try
+        {
+            var info=PayrollPeriodLockService.Get(db,Period().A);
+            periodProtected=info.Locked;
+            periodLockButton.Text=info.Locked?"Ay Kilidini Aç":"Ayı Kilitle";
+            periodLockState.Text=PayrollPeriodLockService.Caption(info);
+            periodLockState.ForeColor=info.Locked?PdksAppearance.Current.Warning:PdksAppearance.Current.Success;
+            foreach(DataGridViewColumn c in grid.Columns)
+            {
+                if(c.Name=="SEC")continue;
+                if(c.Name is "PKNO" or "PERSONEL" or "NCKALAN" or "FMKALAN" or "HAKEDIS_NET" or "PEK_BRUT" or "RESMI_NET" or "FARK" or "EX2" or "DURUM")continue;
+                c.ReadOnly=info.Locked;
+            }
+        }
+        catch{ }
+    }
+
     void PostSelectedPayments()
     {
         var rows=Selected().ToList();if(rows.Count==0){MessageBox.Show("Ödeme için personel seçin.",Text);return;}
