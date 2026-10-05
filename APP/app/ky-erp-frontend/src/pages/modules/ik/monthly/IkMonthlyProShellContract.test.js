@@ -74,6 +74,13 @@ test("personnel cards use the complete HKN master roster while payroll stays per
   assert.match(monthly, /HKN Değiştir/);
 });
 
+test("personnel selection survives live refresh against the full master roster", () => {
+  assert.match(monthly, /const masterSelectionIds = new Set/);
+  assert.match(monthly, /safeList\(result\?\.masterEmployees\)\.map\(\(item\) => item\.id\)/);
+  assert.match(monthly, /safeList\(result\?\.rawEmployees\)\.map\(\(item\) => item\.id\)/);
+  assert.match(monthly, /setSelectedId\(\(old\) => masterSelectionIds\.has\(old\)/);
+});
+
 test("payroll person actions link to the same source movements", () => {
   assert.match(monthly, /Hareketleri Yönet/);
   assert.match(monthly, /Mesai Ekle/);
