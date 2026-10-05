@@ -8,7 +8,8 @@ public sealed class PeriodControlCenterForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
     readonly Action<PdksCommandId>? navigate;
-    readonly DateTimePicker month = new() { Format = DateTimePickerFormat.Custom, CustomFormat = "MMMM yyyy", ShowUpDown = true, Width = 150 };
+    readonly ComboBox month = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
+    readonly NumericUpDown year = new() { Minimum = 2000, Maximum = 2100, Width = 88 };
     readonly DataGridView grid = new()
     {
         Dock = DockStyle.Fill,
@@ -34,7 +35,9 @@ public sealed class PeriodControlCenterForm : Form
         Size = new Size(1320, 760);
         MinimumSize = new Size(1100, 650);
         Font = new Font("Segoe UI", 9f);
-        month.Value = DateTime.Today;
+        month.Items.AddRange(System.Globalization.DateTimeFormatInfo.GetInstance(new System.Globalization.CultureInfo("tr-TR")).MonthNames.Take(12).Select(x=>x.ToUpper(new System.Globalization.CultureInfo("tr-TR"))).Cast<object>().ToArray());
+        month.SelectedIndex = DateTime.Today.Month-1;
+        year.Value = DateTime.Today.Year;
         Build();
         Shown += (_, _) => RefreshData();
     }
@@ -73,7 +76,8 @@ public sealed class PeriodControlCenterForm : Form
 
         var filters = PdksUiKit.Card(12);
         var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(12, 10, 8, 8), BackColor = p.Surface };
-        bar.Controls.Add(Field("Dönem", month));
+        bar.Controls.Add(Field("Ay", month));
+        bar.Controls.Add(Field("Yıl", year));
         var refresh = PdksUiKit.Button("Kontrol Et", 110, PdksActionRole.Primary, RefreshData);
         refresh.Margin = new Padding(8, 8, 0, 0);
         bar.Controls.Add(refresh);
@@ -158,11 +162,11 @@ public sealed class PeriodControlCenterForm : Form
     {
         try
         {
-            var a = new DateTime(month.Value.Year, month.Value.Month, 1);
+            var a = new DateTime((int)year.Value, month.SelectedIndex + 1, 1);
             var b = a.AddMonths(1);
             var active = db.Query(
-                "select k.PKNO,k.AD,k.SOYAD,coalesce(b.AD,'') BOLUM " +
-                "from KIMLIK k left join BOLUM b on b.KOD=k.BOLUM " +
+                "select k.PKNO,k.AD,k.SOYAD,k.GRUP,coalesce(g.AD,'') GRUPAD,coalesce(b.AD,'') BOLUM " +
+                "from KIMLIK k left join BOLUM b on b.KOD=k.BOLUM left join GRUP g on g.KOD=k.GRUP " +
                 "where coalesce(k.IGTARIH,@A)<@B and (k.ICTARIH is null or k.ICTARIH>=@A) order by k.PKNO",
                 new FbParameter("@A", a), new FbParameter("@B", b));
 
@@ -193,7 +197,7 @@ public sealed class PeriodControlCenterForm : Form
             var paid = Index(payment);
 
             var table = new DataTable();
-            foreach (var c in new[] { "Durum", "Kart No", "Ad Soyad", "Bölüm", "Hareket Gün", "Puantaj Gün", "Eksik Hareket", "İstisna", "İzin", "Mesai", "Bordro", "Ödeme" }) table.Columns.Add(c);
+            foreach (var c in new[] { "Durum", "Kart No", "Ad Soyad", "Grup", "Kart Takibi", "Bölüm", "Hareket Gün", "Puantaj Gün", "Eksik Hareket", "İstisna", "İzin", "Mesai", "Bordro", "Ödeme" }) table.Columns.Add(c);
 
             var problems = 0;
             var punchReady = 0;
@@ -201,9 +205,13 @@ public sealed class PeriodControlCenterForm : Form
             var payments = 0;
             var complete = 0;
 
+            var policies=AttendanceGroupPolicyStore.Load(db);
             foreach (DataRow person in active.Rows)
             {
                 var pk = Convert.ToString(person["PKNO"])?.Trim() ?? "";
+                var groupCode=person["GRUP"]==DBNull.Value?-1:Convert.ToInt32(person["GRUP"]);
+                var groupName=Convert.ToString(person["GRUPAD"])?.Trim()??"";
+                var tracked=AttendanceGroupPolicyStore.RequiresCardTracking(policies,groupCode,groupName);
                 var m = Get(mov, pk);
                 var p = Get(pun, pk);
                 var l = Get(lev, pk);
@@ -218,15 +226,16 @@ public sealed class PeriodControlCenterForm : Form
                 var hasPayment = I(pd, "ODEME") > 0;
 
                 string state;
-                if (missing > 0) state = "DÜZELT";
+                if (!tracked) state = "KART TAKİBİ YOK";
+                else if (missing > 0) state = "DÜZELT";
                 else if (movementDays > punchDays) state = "PUANTAJ EKSİK";
                 else if (punchDays > 0 && !hasPayroll) state = "BORDRO BEKLİYOR";
                 else if (hasPayroll && !hasPayment) state = "ÖDEME BEKLİYOR";
                 else if (movementDays == 0 && punchDays == 0) state = "HAREKET YOK";
                 else state = "TAMAM";
 
-                if (state is "DÜZELT" or "PUANTAJ EKSİK") problems++;
-                if (punchDays > 0 && movementDays <= punchDays && missing == 0) punchReady++;
+                if (tracked && state is "DÜZELT" or "PUANTAJ EKSİK") problems++;
+                if (tracked && punchDays > 0 && movementDays <= punchDays && missing == 0) punchReady++;
                 if (hasPayroll) payrollReady++;
                 if (hasPayment) payments++;
                 if (state == "TAMAM") complete++;
@@ -235,6 +244,8 @@ public sealed class PeriodControlCenterForm : Form
                     state,
                     pk,
                     ($"{Convert.ToString(person["AD"])} {Convert.ToString(person["SOYAD"])}").Trim(),
+                    groupName,
+                    tracked ? "Zorunlu" : "Muaf",
                     Convert.ToString(person["BOLUM"]) ?? "",
                     movementDays,
                     punchDays,
@@ -275,6 +286,8 @@ public sealed class PeriodControlCenterForm : Form
                 "Durum" => 125,
                 "Kart No" => 78,
                 "Ad Soyad" => 180,
+                "Grup" => 135,
+                "Kart Takibi" => 92,
                 "Bölüm" => 135,
                 _ => 92
             };
