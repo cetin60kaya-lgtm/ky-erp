@@ -932,6 +932,40 @@
   .ik-monthly-pro .ik-pro-leave-ledger>summary{align-items:flex-start;flex-direction:column}
 }
 
+/* Modal işlem sonucu / doğrulama mesajı: modal perdesinin üstünde görünür. */
+.ik-modal-notice{
+  position:fixed;
+  top:18px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:7000;
+  width:min(720px,calc(100vw - 28px));
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:11px 13px;
+  border:1px solid #f3b36b;
+  border-radius:10px;
+  background:#fff8eb;
+  color:#7c2d12;
+  box-shadow:0 14px 40px rgba(15,23,42,.24);
+  font-size:12px;
+  font-weight:800;
+}
+.ik-modal-notice span{min-width:0;overflow-wrap:anywhere}
+.ik-modal-notice button{
+  flex:0 0 auto;
+  height:30px;
+  padding:0 10px;
+  border:1px solid #e6a75e;
+  border-radius:8px;
+  background:#fff;
+  color:#7c2d12;
+  font:inherit;
+  cursor:pointer;
+}
+
 /* IK modal standard - all dialogs */
 .modal-bg{
   padding:clamp(10px,2vw,24px);

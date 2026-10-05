@@ -81,6 +81,22 @@ test("personnel selection survives live refresh against the full master roster",
   assert.match(monthly, /setSelectedId\(\(old\) => masterSelectionIds\.has\(old\)/);
 });
 
+test("monthly write dialogs surface validation and accept API-valid SGK day values", () => {
+  assert.match(monthly, /const hasSgkDays = modalDraft\.sgkDays !== ""/);
+  assert.match(monthly, /SGK gün sayısı 0-\$\{totalDays\} arasında olmalıdır/);
+  assert.match(monthly, /hasSgkDays \? Math\.round\(num\(modalDraft\.sgkDays\)\) : null/);
+  assert.match(monthly, /modal && notice \? createPortal/);
+  assert.match(css, /\.ik-modal-notice\{/);
+});
+
+test("monthly mutation buttons are guarded against duplicate submit while busy", () => {
+  assert.match(monthly, /disabled=\{busy\} onClick=\{saveFinance\}/);
+  assert.match(monthly, /disabled=\{busy\} onClick=\{saveLeave\}/);
+  assert.match(monthly, /disabled=\{busy \|\| !balanced\} onClick=\{printPayrollReport\}/);
+  assert.match(monthly, /disabled=\{busy \|\| !balanced\} onClick=\{exportPayroll\}/);
+  assert.match(monthly, /disabled=\{busy \|\| data\.close\?\.isLocked\} onClick=\{refreshPayroll\}/);
+});
+
 test("payroll person actions link to the same source movements", () => {
   assert.match(monthly, /Hareketleri Yönet/);
   assert.match(monthly, /Mesai Ekle/);
