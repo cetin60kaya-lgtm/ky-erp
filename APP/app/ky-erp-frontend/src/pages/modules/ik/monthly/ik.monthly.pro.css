@@ -1111,3 +1111,17 @@
   font-weight:800;
   line-height:1.4;
 }
+
+.modal-bg .inline-action-field{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.modal-bg .inline-action-field input{
+  min-width:0;
+  flex:1 1 auto;
+}
+.modal-bg .inline-action-field .btn{
+  flex:0 0 auto;
+  white-space:nowrap;
+}
