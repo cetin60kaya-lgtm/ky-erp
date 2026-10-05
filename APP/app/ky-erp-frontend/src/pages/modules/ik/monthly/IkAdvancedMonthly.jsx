@@ -1434,7 +1434,6 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     const baseEmployee = modalDraft.baseEmployeeId ? rawEmployees.find((item) => item.id === modalDraft.baseEmployeeId) : null;
     if (modalDraft.baseEmployeeId === modalDraft.id) return failPersonSave("Personel kendisini baz personel olarak seçemez.");
     if (modalDraft.baseEmployeeId && !baseEmployee) return failPersonSave("Baz personel bulunamadı.");
-    if (baseEmployee && num(baseEmployee.salary) > num(modalDraft.salary)) return failPersonSave("Baz personel maaşı gerçek maaştan yüksek olamaz.");
 
     const sourceExtra = Math.max(num(modalDraft.extraPaymentAmount), 0);
     const sourcePlanEarnings = calcRow({
