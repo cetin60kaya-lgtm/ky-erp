@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>HAKAN EMP</title>
 <meta name="theme-color" content="#2f2d43">
-<link rel="stylesheet" href="/app.css?v=final10">
+<link rel="stylesheet" href="/app.css?v=final11">
 </head>
 <body>
 <div class="app-shell">
@@ -14,6 +14,7 @@
     <nav class="nav">
       <button class="nav-item active" data-page="production"><i>İ</i><span>İmalat</span></button>
       <button class="nav-item" data-page="cari"><i>C</i><span>Cari</span></button>
+      <button class="nav-item" data-page="invoicePool"><i>F</i><span>Fatura Havuzu</span></button>
       <button class="nav-item" data-page="checks"><i>Ç</i><span>Çek</span></button>
       <button class="nav-item" data-page="settings"><i>A</i><span>Ayarlar</span></button>
       <button class="nav-item" data-page="notes"><i>N</i><span>Notlarım</span></button>
@@ -117,6 +118,34 @@
       </div>
     </section>
 
+
+    <section class="page" id="invoicePool">
+      <div class="summary four invoice-pool-summary">
+        <article><span>BEKLEYEN</span><b id="ipPending">0</b><small>eşleştirme / kontrol</small></article>
+        <article><span>İŞLENDİ</span><b id="ipProcessed">0</b><small>otomatik + elle onay</small></article>
+        <article><span>HATALI</span><b id="ipError">0</b><small>okunamayan PDF</small></article>
+        <article><span>SON TARAMA</span><b id="ipLastScan">—</b><small>uygulama içi tarama</small></article>
+      </div>
+      <div class="panel flush invoice-pool-panel">
+        <div class="module-toolbar">
+          <div class="tabs scroll">
+            <button class="tab active" data-invoice-view="ALL">Tümü</button>
+            <button class="tab" data-invoice-view="PENDING">Eşleştirme Bekleyen</button>
+            <button class="tab" data-invoice-view="PROCESSED">İşlendi</button>
+            <button class="tab" data-invoice-view="ERROR">Hatalı</button>
+          </div>
+          <div class="filters">
+            <div class="search"><span>⌕</span><input id="invoicePoolSearch" placeholder="Fatura no, firma veya model ara"></div>
+            <button class="small-btn" id="invoiceScanNow">Klasörü Tara</button>
+            <button class="small-btn primary" onclick="openInvoice()">+ Hızlı Fatura</button>
+          </div>
+        </div>
+        <div class="pool-note">PDF'yi izlenen klasöre bırak. Uygulama okur, eşleştirir, sisteme yazar ve başarılı dosyayı kendi işlenmiş klasörüne taşır. Elle hızlı fatura girişi her zaman kullanılabilir.</div>
+        <div class="table-head invoice-pool-grid"><span>FATURA NO</span><span>TARİH</span><span>FİRMA</span><span>MODEL</span><span>ADET</span><span>TUTAR</span><span>EŞLEŞME</span><span>DURUM</span></div>
+        <div id="invoicePoolRows"></div>
+      </div>
+    </section>
+
     <section class="page" id="checks">
       <div class="summary five">
         <article><span>ÖDENECEK</span><b id="chPayable">₺0</b><small>açık</small></article>
@@ -135,7 +164,7 @@
     </section>
 
     <section class="page" id="settings">
-      <div class="settings-tabs"><button class="settings-tab active" data-setting="companies">Firma Ayarları</button><button class="settings-tab" data-setting="production">İmalat Ayarları</button><button class="settings-tab" data-setting="machines">Makine & Makinacı</button><button class="settings-tab" data-setting="cari">Cari Ayarları</button><button class="settings-tab" data-setting="checks">Çek Ayarları</button><button class="settings-tab" data-setting="sync">Senkron & Yedek</button></div>
+      <div class="settings-tabs"><button class="settings-tab active" data-setting="companies">Firma Ayarları</button><button class="settings-tab" data-setting="production">İmalat Ayarları</button><button class="settings-tab" data-setting="machines">Makine & Makinacı</button><button class="settings-tab" data-setting="cari">Cari Ayarları</button><button class="settings-tab" data-setting="checks">Çek Ayarları</button><button class="settings-tab" data-setting="files">Dosya & Otomasyon</button><button class="settings-tab" data-setting="sync">Senkron & Yedek</button></div>
       <div class="setting-pane active" id="setting-companies"><div class="panel"><div class="panel-title"><div><h2>Firma Ayarları</h2><p>Cari ve imalat işlemlerinde kullanılacak firmalar.</p></div><button class="small-btn primary" onclick="openCompany()">+ Firma Ekle</button></div><div class="table-head settings-company-grid"><span>FİRMA</span><span>AÇILIŞ</span><span>FATURA</span><span>ÖDEME</span><span>BAKİYE</span><span>DURUM</span><span></span></div><div id="settingsCompanyRows"></div></div></div>
       <div class="setting-pane" id="setting-production"><div class="settings-grid"><div class="panel"><div class="panel-title"><div><h2>İmalat Ayarları</h2><p>Hızlı giriş varsayılanları ve takip kuralı.</p></div></div><form class="settings-form" id="productionSettingsForm"><label>Varsayılan Firma<select name="default_company_id" id="setDefaultCompany"></select></label><label>Varsayılan Vardiya<select name="default_shift" id="setDefaultShift"><option>Gündüz</option><option>Gece</option></select></label><div class="rule-box"><b>Üretim alanları</b><span>Adet · Makine · Vardiya · Makinacı · Kumaş Sakatı · Baskı Sakatı</span></div><button class="wide-btn primary">Kaydet</button></form></div><div class="panel info-panel"><div class="panel-title"><div><h2>İmalat Kuralı</h2></div></div><div class="rule-list"><div><b>Üretim bitti, irsaliye yok</b><span>İRSALİYE İSTE</span></div><div><b>İrsaliye eksik</b><span>Eksik adet görünür</span></div><div><b>Fatura eksik</b><span>Kesilecek adet görünür</span></div><div><b>Hepsi tamam</b><span>İş tamamlanır</span></div></div></div></div></div>
       <div class="setting-pane" id="setting-machines">
@@ -153,6 +182,37 @@
       </div>
       <div class="setting-pane" id="setting-cari"><div class="settings-grid"><div class="panel info-panel"><div class="panel-title"><div><h2>Cari Ayarları</h2></div></div><div class="rule-list"><div><b>Fatura</b><span>Firmaya alacak ekler</span></div><div><b>Ödeme</b><span>Bakiyeden düşer</span></div><div><b>Firma</b><span>Cari ekranından seçilir</span></div></div></div><div class="panel info-panel"><div class="panel-title"><div><h2>Firma Yönetimi</h2></div></div><div class="rule-box">Firma ekleme ve açılış bakiyesi için <b>Firma Ayarları</b> sekmesini kullan.</div></div></div></div>
       <div class="setting-pane" id="setting-checks"><div class="settings-grid"><div class="panel"><div class="panel-title"><div><h2>Çek Ayarları</h2><p>Yaklaşan çek ve makbuz görünümü.</p></div></div><form class="settings-form" id="checkSettingsForm"><label>Yaklaşan Çek Süresi<select name="check_horizon_days" id="setCheckHorizon"><option value="30">30 gün</option><option value="60">60 gün</option><option value="90">90 gün</option><option value="120">120 gün</option></select></label><label>Makbuz bilgisini öne çıkar<select name="receipt_required" id="setReceiptRequired"><option value="1">Evet</option><option value="0">Hayır</option></select></label><button class="wide-btn primary">Kaydet</button></form></div><div class="panel info-panel"><div class="panel-title"><div><h2>Listede Gösterilenler</h2></div></div><div class="rule-list"><div><b>Taraf</b><span>Kimden / kime</span></div><div><b>Açıklama</b><span>Karşılığı + not</span></div><div><b>Makbuz</b><span>Alındı + alan kişi</span></div><div><b>Görsel</b><span>Detayda açılır</span></div></div></div></div></div>
+
+      <div class="setting-pane" id="setting-files">
+        <div class="settings-grid file-settings-grid">
+          <div class="panel">
+            <div class="panel-title"><div><h2>Fatura Havuzu Klasörleri</h2><p>Klasör taraması HAKAN EMP uygulamasının kendi içinde çalışır.</p></div></div>
+            <form class="settings-form folder-settings-form" id="fileSettingsForm">
+              <label class="full">Kontrol Edilen Klasör<input name="invoice_inbox_dir" id="setInvoiceInbox"></label>
+              <label class="full">İşlenen Faturaların Taşınacağı Klasör<input name="invoice_done_dir" id="setInvoiceDone"></label>
+              <label class="full">Eşleştirme Bekleyen Klasör<input name="invoice_pending_dir" id="setInvoicePending"></label>
+              <label class="full">Hatalı / Okunamayan Klasör<input name="invoice_error_dir" id="setInvoiceError"></label>
+              <label>Otomatik Tarama<select name="invoice_watch_enabled" id="setInvoiceWatch"><option value="1">Aktif</option><option value="0">Pasif</option></select></label>
+              <label>Tarama Aralığı<input name="invoice_scan_seconds" id="setInvoiceScanSeconds" type="number" min="10" step="5"><small>saniye</small></label>
+              <div class="form-actions full"><button type="button" id="folderScanNow">Şimdi Tara</button><button class="primary">Klasör Ayarlarını Kaydet</button></div>
+            </form>
+          </div>
+          <div class="panel">
+            <div class="panel-title"><div><h2>Çek Görsel Klasörü</h2><p>Çek görselleri burada yıl/ay altında saklanır.</p></div></div>
+            <form class="settings-form" id="checkFolderSettingsForm">
+              <label class="full">Çek Görsel Klasörü<input name="check_image_dir" id="setCheckImageDir"></label>
+              <button class="wide-btn primary">Kaydet</button>
+            </form>
+            <div class="rule-list folder-rule-list">
+              <div><b>Fatura başarılı</b><span>İŞLENDİ / Yıl / Ay / Firma</span></div>
+              <div><b>Model bulunamaz</b><span>Eşleştirme Bekleyen</span></div>
+              <div><b>PDF okunamaz</b><span>Hatalı</span></div>
+              <div><b>Tekrar koruması</b><span>Fatura No + dosya hash</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="setting-pane" id="setting-sync"><div class="settings-grid"><div class="panel sync-panel"><div class="panel-title"><div><h2>OneDrive Senkron</h2><p>Sadece yeni işlemleri taşır.</p></div></div><div class="sync-box"><div class="sync-status"><span id="syncDot"></span><div><b id="syncTitle">Kontrol ediliyor</b><small id="syncText">—</small></div></div><div class="info-row"><span>Son senkron</span><b id="syncLast">—</b></div><div class="info-row"><span>PC gönderim</span><b id="syncOut">0</b></div><div class="info-row"><span>Android alma</span><b id="syncIn">0</b></div><div class="info-row"><span>Otomatik</span><b>10 dakika</b></div><button class="wide-btn primary" id="syncNow">Şimdi Eşitle</button><button class="wide-btn" id="backupNow">Tam Yedek Al</button></div></div><div class="panel info-panel"><div class="panel-title"><div><h2>Senkron Mantığı</h2></div></div><div class="rule-list"><div><b>Gönderim</b><span>Sadece yeni event</span></div><div><b>Tekrar koruması</b><span>Aynı event iki kez işlenmez</span></div><div><b>Yedek</b><span>Tam DB yalnız yedek için</span></div></div></div></div></div>
     </section>
   </main>
@@ -163,5 +223,5 @@
 
 <div class="modal" id="modal"></div>
 <div id="toast"></div>
-<script src="/app.js?v=final10"></script>
+<script src="/app.js?v=final11"></script>
 </body></html>
