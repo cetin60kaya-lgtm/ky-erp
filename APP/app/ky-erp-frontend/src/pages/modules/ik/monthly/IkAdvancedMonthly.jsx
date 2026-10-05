@@ -1343,9 +1343,28 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     if (modalDraft.baseEmployeeId && !baseEmployee) return failPersonSave("Baz personel bulunamadı.");
     if (baseEmployee && num(baseEmployee.salary) > num(modalDraft.salary)) return failPersonSave("Baz personel maaşı gerçek maaştan yüksek olamaz.");
 
-    const autoExtra = baseEmployee ? Math.max(round(num(modalDraft.salary) - num(baseEmployee.salary)), 0) : 0;
-    const planTotal = num(modalDraft.bankAmount) + num(modalDraft.cashAmount);
-    if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) && !window.confirm("Banka plan + elden plan gerçek maaş ve yol toplamından yüksek. Devam edilsin mi?")) return;
+    const sourceExtra = Math.max(num(modalDraft.extraPaymentAmount), 0);
+    const ownSourceMovements = periodMovements
+      .filter((item) => item.employeeId === modalDraft.id)
+      .filter((item) => !upper(item.payrollEffect).includes("SADECE"));
+    const sourceMovementTotals = ownSourceMovements.reduce((acc, item) => {
+      const type = normalizeFinanceType(item.type || item.adjustmentType);
+      if (type === "Mesai") acc.overtime += num(item.amount);
+      else if (type === "Avans" || type === "Toplu avans") acc.advance += num(item.amount);
+      else if (["Icra", "Haciz"].includes(type)) acc.garnishment += num(item.amount);
+      else if (["Ozel kesinti", "Eksik gün", "Eksik saat"].includes(type)) acc.deduction += num(item.amount);
+      return acc;
+    }, { overtime: 0, advance: 0, deduction: 0, garnishment: 0 });
+    const sourceTotals = calcRow({
+      salary: modalDraft.salary,
+      road: modalDraft.roadAllowance,
+      extra: sourceExtra,
+      overtime: sourceMovementTotals.overtime,
+      advance: sourceMovementTotals.advance,
+      deduction: sourceMovementTotals.deduction,
+      garnishment: sourceMovementTotals.garnishment,
+    });
+    const sourcePayment = paymentSplitByType(modalDraft.paymentType, sourceTotals.net, modalDraft.bankAmount);
 
     const cardPayload = {
       mainCompanyId: companyId,
@@ -1367,11 +1386,11 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       paymentType: modalDraft.paymentType,
       salary: num(modalDraft.salary),
       roadAllowance: num(modalDraft.roadAllowance),
-      bankAmount: num(modalDraft.bankAmount),
-      cashAmount: num(modalDraft.cashAmount),
+      bankAmount: sourcePayment.bank,
+      cashAmount: sourcePayment.cash,
       baseEmployeeId: modalDraft.baseEmployeeId || "",
       extraPaymentLabel: "EK",
-      extraPaymentAmount: autoExtra,
+      extraPaymentAmount: sourceExtra,
       overtimeHourlyBase: num(modalDraft.overtimeHourlyBase) || 225,
       deductionHourlyBase: num(modalDraft.deductionHourlyBase) || 300,
       payrollIncluded: modalDraft.payrollIncluded !== false,
@@ -1408,8 +1427,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
           salary: num(modalDraft.salary),
           roadAllowance: num(modalDraft.roadAllowance),
           bankPaymentType: modalDraft.paymentType,
-          bankAmount: num(modalDraft.bankAmount),
-          cashAmount: num(modalDraft.cashAmount),
+          bankAmount: sourcePayment.bank,
+          cashAmount: sourcePayment.cash,
           overtimeHourlyBase: num(modalDraft.overtimeHourlyBase) || 225,
           annualLeaveEntitlement: num(modalDraft.annualLeaveEntitlement),
           annualLeaveCarryover: num(modalDraft.annualLeaveCarryover),
@@ -1432,6 +1451,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         id: employeeId,
         code: savedCard?.code || cardPayload.personelKodu || old.code,
         version: savedCard?.version || savedCard?.updatedAt || old.version,
+        extraPaymentAmount: sourceExtra,
+        bankAmount: sourcePayment.bank,
+        cashAmount: sourcePayment.cash,
         formMessage: successMessage,
         changeNote: "",
       }));
