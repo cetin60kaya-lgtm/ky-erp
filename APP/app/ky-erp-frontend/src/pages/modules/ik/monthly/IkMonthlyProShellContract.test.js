@@ -103,15 +103,15 @@ test("entry control and final payroll control are distinct modes on the same sou
 });
 
 test("pre-payroll control keeps EK explicit and auto-balances payment channels", () => {
-  assert.match(monthly, /function paymentSplitByType/);
+  assert.match(monthly, /function paymentSplitByType\(paymentType, netValue, bankValue = 0, bankDeductionsValue = 0\)/);
   assert.match(monthly, /if \(onlyCash\) return \{ bank: 0, cash: net, mode: "ELDEN" \}/);
   assert.match(monthly, /if \(onlyBank\) return \{ bank: net, cash: 0, mode: "BANKA" \}/);
+  assert.match(monthly, /const bankPlan = Math\.max\(round\(bankValue\), 0\)/);
+  assert.match(monthly, /const bankDeductions = Math\.max\(round\(bankDeductionsValue\), 0\)/);
+  assert.match(monthly, /const bank = Math\.min\(Math\.max\(round\(bankPlan - bankDeductions\), 0\), net\)/);
   assert.match(monthly, /cash: round\(net - bank\)/);
   assert.match(monthly, /extraPaymentAmount: sourceExtra/);
   assert.match(monthly, /<Field label="EK Ödeme"/);
-  assert.match(monthly, /if \(onlyCash\) return \{ bank: 0, cash: net, mode: "ELDEN" \}/);
-  assert.match(monthly, /if \(onlyBank\) return \{ bank: net, cash: 0, mode: "BANKA" \}/);
-  assert.match(monthly, /cash: round\(net - bank\)/);
   assert.match(monthly, /Bordro Öncesi Giriş Kontrolü/);
   assert.match(monthly, /Giriş Kontrol/);
 });
@@ -124,6 +124,8 @@ test("pre-payroll modal has one main scroll owner and no overlapping sticky foot
   assert.match(css, /overflow-y:auto/);
   assert.match(css, /\.prepayroll-dialog \.payroll-person-rail-list\{/);
   assert.match(css, /\.prepayroll-dialog \.ik-section-tabs\{/);
+  assert.match(css, /@media\(max-width:1180px\)\{[\s\S]*?\.prepayroll-dialog input,[\s\S]*?min-height:44px/);
+  assert.match(css, /@media\(max-width:1180px\)\{[\s\S]*?\.ik-section-tabs button,[\s\S]*?min-height:44px/);
 });
 
 test("personnel edit modal switches person without closing", () => {
@@ -189,6 +191,16 @@ test("person card separates SGK source, suggestion and PDKS control days", () =>
   assert.match(monthly, /RESMI_BORDRO/);
   assert.match(monthly, /SISTEM_ONERISI/);
   assert.match(css, /\.inline-action-field/);
+});
+
+test("final payroll save uses one backend mutation and keeps the modal open", () => {
+  const start = monthly.indexOf("const saveFinalPayrollControl = async");
+  const end = monthly.indexOf("const openLeave =", start);
+  const block = monthly.slice(start, end);
+  assert.match(block, /const savedFinal = await saveIkAdvancedFinalPayrollControl/);
+  assert.doesNotMatch(block, /saveIkAdvancedPersonCard/);
+  assert.match(block, /formMessage: "Son bordro kontrolü atomik kaydedildi/);
+  assert.doesNotMatch(block, /setModal\(null\)/);
 });
 
 test("payroll person actions open final mode on the same canonical source editor", () => {

@@ -210,6 +210,19 @@ export function calculatePayrollAmounts(input: {
   return { earnings, net };
 }
 
+function paymentSplitByTypeAndSource(paymentTypeValue: unknown, netValue: unknown, bankPlanValue: unknown, bankDeductionsValue: unknown = 0) {
+  const net = Math.max(Math.round(number(netValue) * 100) / 100, 0);
+  const type = upper(paymentTypeValue);
+  const onlyCash = type.includes("ELDEN") && !type.includes("BANKA");
+  const onlyBank = type.includes("BANKA") && !type.includes("ELDEN");
+  if (onlyCash) return { bank: 0, cash: net, mode: "ELDEN" };
+  if (onlyBank) return { bank: net, cash: 0, mode: "BANKA" };
+  const bankPlan = Math.max(Math.round(number(bankPlanValue) * 100) / 100, 0);
+  const bankDeductions = Math.max(Math.round(number(bankDeductionsValue) * 100) / 100, 0);
+  const bank = Math.min(net, Math.max(Math.round((bankPlan - bankDeductions) * 100) / 100, 0));
+  return { bank, cash: Math.max(Math.round((net - bank) * 100) / 100, 0), mode: "BANKA_ELDEN" };
+}
+
 function overtimeMetaFromNote(value: unknown) {
   const raw = text(value);
   const match = raw.match(/^\[OT:(1\.5|2):(WEEKDAY_50|WEEKEND_100)\]\s*/i);
@@ -620,19 +633,13 @@ async function saveAdjustment(c: Context<AppEnv>) {
 }
 
 async function overtimeAmountForEmployee(c: Context<AppEnv>, companyId: string, employeeId: string, hours: number, multiplierValue: unknown) {
-  const employee = await first(c, `SELECT e.salary,e.overtime_hourly_base,s.base_employee_id
-    FROM hr_monthly_employees e
-    LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
-    WHERE e.id=? AND e.main_company_id=? LIMIT 1`, [employeeId, companyId]);
+  const employee = await first(c, `SELECT salary,overtime_hourly_base
+    FROM hr_monthly_employees
+    WHERE id=? AND main_company_id=? LIMIT 1`, [employeeId, companyId]);
   if (!employee) return 0;
-  let baseSalary = number(employee.salary);
-  const baseEmployeeId = text(employee.base_employee_id);
-  if (baseEmployeeId) {
-    const baseEmployee = await first(c, "SELECT salary FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [baseEmployeeId, companyId]);
-    if (baseEmployee) baseSalary = number(baseEmployee.salary);
-  }
+  const salary = number(employee.salary);
   const divisor = number(employee.overtime_hourly_base) || 225;
-  return calculateOvertimeAmount(baseSalary, hours, multiplierValue, divisor);
+  return calculateOvertimeAmount(salary, hours, multiplierValue, divisor);
 }
 
 const IK_PERSON_CARD_CALC_SCOPE = "IK_PERSON_CARD_CALC";
@@ -1378,14 +1385,12 @@ async function advancedPayroll(c: Context<AppEnv>) {
   const rawEmployees = currentEmployees.map((employee) => applyHistoricalEmployeeValues(employee, historyRows, periodEnd));
   const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
   const employees = rawEmployees.filter((employee) => advancedEmployeeVisible(employee, cardsByEmployee.get(text(employee.id)) || {}, period));
-  const employeesById = new Map(rawEmployees.map((employee) => [text(employee.id), employee]));
   const byEmployee = new Map(saved.filter((row) => number(row.year) === year && number(row.month) === month).map((row) => [text(row.employeeId), row]));
   const normalizeType = (value: unknown) => { const valueUpper = upper(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
   const lines = employees.map((employee) => {
     const row = byEmployee.get(text(employee.id));
-    const baseEmployee = employee.baseEmployeeId ? employeesById.get(text(employee.baseEmployeeId)) : null;
-    const baseSalary = baseEmployee ? number(baseEmployee.salary) : number(employee.salary);
-    const extra = baseEmployee ? Math.max(number(employee.salary) - baseSalary, 0) : number(employee.extraPaymentAmount);
+    const salary = number(employee.salary);
+    const extra = number(employee.extraPaymentAmount);
     const own = adjustments.filter((item) => text(item.employeeId) === text(employee.id) && text(item.date).startsWith(period) && !upper(item.payrollEffect).includes("SADECE"));
     const overtime = own.filter((item) => normalizeType(item.adjustmentType) === "MESAI").reduce((sum, item) => sum + number(item.amount), 0);
     const advanceRows = own.filter((item) => ["AVANS", "TOPLU_AVANS"].includes(normalizeType(item.adjustmentType)));
@@ -1396,7 +1401,7 @@ async function advancedPayroll(c: Context<AppEnv>) {
     const garnishment = legalRows.reduce((sum, item) => sum + number(item.amount), 0);
     const bankDeductions = [...advanceRows, ...deductionRows, ...legalRows].filter((item) => upper(item.paymentMethod).includes("BANKA")).reduce((sum, item) => sum + number(item.amount), 0);
     const { net: baseNet } = calculatePayrollAmounts({
-      salary: baseSalary,
+      salary,
       road: employee.roadAllowance,
       extra,
       overtime,
@@ -1404,9 +1409,8 @@ async function advancedPayroll(c: Context<AppEnv>) {
       deduction,
       garnishment,
     });
-    const systemBank = Math.min(baseNet, Math.max(number(employee.bankAmount) - bankDeductions, 0));
-    const systemCash = Math.max(baseNet - systemBank, 0);
-    const systemFinal = { salaryPay: baseSalary, roadPay: number(employee.roadAllowance), overtimeAmount: overtime, premiumAmount: extra, garnishmentAmount: garnishment, deductionAmount: deduction, advanceAmount: advance, bank: systemBank, cash: systemCash, total: baseNet };
+    const systemPayment = paymentSplitByTypeAndSource(employee.paymentType, baseNet, employee.bankAmount, bankDeductions);
+    const systemFinal = { salaryPay: salary, roadPay: number(employee.roadAllowance), overtimeAmount: overtime, premiumAmount: extra, garnishmentAmount: garnishment, deductionAmount: deduction, advanceAmount: advance, bank: systemPayment.bank, cash: systemPayment.cash, total: baseNet };
     const savedStatus = upper(row?.status);
     const hasSavedFinal = Boolean(row && ["OVERRIDE", "CALCULATED", "PAID", "MANUAL_APPROVED"].includes(savedStatus));
     const final = hasSavedFinal ? { salaryPay: row.salary, roadPay: row.roadAllowance, overtimeAmount: row.overtimeAmount, premiumAmount: row.premiumAmount, garnishmentAmount: row.garnishmentAmount, deductionAmount: row.deductionAmount, advanceAmount: row.advanceAmount, bank: row.bankAmount, cash: row.cashAmount, total: row.totalAmount } : systemFinal;
@@ -1439,8 +1443,8 @@ async function savePersonCard(c: Context<AppEnv>) {
   const baseEmployee = baseEmployeeId ? await first(c, "SELECT id,salary FROM hr_monthly_employees WHERE id=? AND main_company_id=?", [baseEmployeeId, companyId]) : null;
   if (baseEmployeeId && !baseEmployee) return error(c, 400, "INVALID_BASE_EMPLOYEE", "Baz personel bulunamadı.");
   const actualSalary = number(body.salary ?? current.salary);
-  if (baseEmployee && number(baseEmployee.salary) > actualSalary) return error(c, 400, "BASE_SALARY_HIGH", "Baz personel maaşı gerçek maaştan yüksek olamaz.");
-  const autoExtra = baseEmployee ? Math.max(actualSalary - number(baseEmployee.salary), 0) : 0;
+  const extraPaymentAmount = number(body.extraPaymentAmount ?? currentCard?.extra_payment_amount);
+  if (extraPaymentAmount < 0) return error(c, 400, "EXTRA_PAYMENT_INVALID", "EK ödeme negatif olamaz.");
   const legalTypeRaw = upper(body.legalDeductionType);
   const legalType = legalTypeRaw === "HACIZ" ? "HACIZ" : legalTypeRaw === "ICRA" ? "ICRA" : "YOK";
   const legalAmount = legalType === "YOK" ? 0 : number(body.garnishmentAmount);
@@ -1517,7 +1521,7 @@ async function savePersonCard(c: Context<AppEnv>) {
     text(body.cardSource) || "TNF", text(body.personelKodu || body.code), effectiveExitDate,
     activePassive, text(body.workType) || "AYLIK",
     body.sgkFollow === null ? 2 : body.sgkFollow === false ? 0 : 1, text(body.paymentType) || "BANKA_ELDEN",
-    text(body.note), text(body.phone), "EK", autoExtra, baseEmployeeId, legalType,
+    text(body.note), text(body.phone), "EK", extraPaymentAmount, baseEmployeeId, legalType,
     legalType !== "YOK" && legalAmount > 0 ? 1 : 0, legalAmount, legalSource,
     text(body.legalStartPeriod), text(body.legalEndPeriod), text(body.garnishmentNote), nowIso(),
   ).run();
@@ -1549,6 +1553,7 @@ async function savePersonCard(c: Context<AppEnv>) {
     ["bankPaymentType", text(current.bank_payment_type), text(updatedEmployee?.bank_payment_type)],
     ["bankAmount", number(current.bank_amount), number(updatedEmployee?.bank_amount)],
     ["cashAmount", number(current.cash_amount), number(updatedEmployee?.cash_amount)],
+    ["extraPaymentAmount", number(currentCard?.extra_payment_amount), number(updatedCard?.extra_payment_amount)],
     ["overtimeHourlyBase", number(current.overtime_hourly_base) || 225, number(updatedEmployee?.overtime_hourly_base) || 225],
     ["deductionHourlyBase", number(currentCalc.deductionHourlyBase) || 300, deductionHourlyBase],
     ["startDate", hrDateOnly(current.hire_date), hrDateOnly(updatedEmployee?.hire_date)],
@@ -1561,7 +1566,7 @@ async function savePersonCard(c: Context<AppEnv>) {
       (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(
         crypto.randomUUID(), companyId, employeeId,
-        ["salary","roadAllowance","bankPaymentType","bankAmount","cashAmount","overtimeHourlyBase","deductionHourlyBase"].includes(String(field)) ? "COMPENSATION" : "PERSONNEL",
+        ["salary","roadAllowance","bankPaymentType","bankAmount","cashAmount","extraPaymentAmount","overtimeHourlyBase","deductionHourlyBase"].includes(String(field)) ? "COMPENSATION" : "PERSONNEL",
         String(field), text(before), text(after), effectiveDate,
         text(body.changeNote || body.note) || "İK personel / ücret kartı güncellendi",
         text(body.userId || body.userName) || "IK", nowIso(),
@@ -1597,7 +1602,7 @@ async function savePersonCard(c: Context<AppEnv>) {
   const freshVersion = [text(freshVersionRow?.updated_at), text(freshVersionRow?.card_updated_at)].filter(Boolean).sort().at(-1) || "";
   return okData(c, {
     employeeId, saved: true, code: text(freshVersionRow?.code), version: freshVersion, updatedAt: freshVersion,
-    baseEmployeeId, extraPaymentAmount: autoExtra,
+    baseEmployeeId, extraPaymentAmount,
     legalDeductionType: legalType, garnishmentSource: legalSource,
     overtimeHourlyBase, deductionHourlyBase,
     personnelStatus, period, sgkCovered, sgkDays, effectiveDate,
@@ -1898,9 +1903,8 @@ async function saveAdvancedPayrollOverride(c: Context<AppEnv>) {
   const employee = await first(c, `SELECT e.*, s.extra_payment_amount, s.base_employee_id FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.id=? AND e.main_company_id=?`, [employeeId, companyId]);
   if (!employee) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
   const existing = await first(c, "SELECT * FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND employee_id=?", [companyId, year, month, employeeId]);
-  const baseEmployee = text(employee.base_employee_id) ? await first(c, "SELECT id,salary FROM hr_monthly_employees WHERE id=? AND main_company_id=?", [text(employee.base_employee_id), companyId]) : null;
-  const baseSalary = baseEmployee ? number(baseEmployee.salary) : number(employee.salary);
-  const autoPremium = baseEmployee ? Math.max(number(employee.salary) - baseSalary, 0) : number(employee.extra_payment_amount);
+  const salary = number(employee.salary);
+  const premium = number(employee.extra_payment_amount);
   const allAdjustments = await adjustmentRows(c, companyId);
   const normalizeType = (value: unknown) => { const valueUpper = upper(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
   const own = allAdjustments.filter((item) => text(item.employeeId) === employeeId && text(item.date).startsWith(period) && !upper(item.payrollEffect).includes("SADECE"));
@@ -1912,10 +1916,8 @@ async function saveAdvancedPayrollOverride(c: Context<AppEnv>) {
   const deductionDefault = deductionRows.reduce((sum, item) => sum + number(item.amount), 0);
   const garnishmentDefault = legalRows.reduce((sum, item) => sum + number(item.amount), 0);
   const bankDeductions = [...advanceRows, ...deductionRows, ...legalRows].filter((item) => upper(item.paymentMethod).includes("BANKA")).reduce((sum, item) => sum + number(item.amount), 0);
-  const salary = baseSalary;
   const road = number(employee.road_allowance);
   const overtimeFinal = overtime;
-  const premium = autoPremium;
   const deduction = deductionDefault;
   const advance = advanceDefault;
   const garnishment = garnishmentDefault;
@@ -1928,11 +1930,11 @@ async function saveAdvancedPayrollOverride(c: Context<AppEnv>) {
     deduction,
     garnishment,
   });
-  const plannedBank = Math.max(number(employee.bank_amount) - bankDeductions, 0);
+  const defaultPayment = paymentSplitByTypeAndSource(employee.bank_payment_type, calculatedTotal, employee.bank_amount, bankDeductions);
   const bankProvided = override.bank !== undefined;
   const cashProvided = override.cash !== undefined;
-  let bank = bankProvided ? Math.max(0, number(override.bank)) : Math.min(calculatedTotal, plannedBank);
-  let cash = cashProvided ? Math.max(0, number(override.cash)) : Math.max(calculatedTotal - bank, 0);
+  let bank = bankProvided ? Math.max(0, number(override.bank)) : defaultPayment.bank;
+  let cash = cashProvided ? Math.max(0, number(override.cash)) : defaultPayment.cash;
   if (bankProvided && !cashProvided) cash = Math.max(calculatedTotal - bank, 0);
   if (!bankProvided && cashProvided) bank = Math.max(calculatedTotal - cash, 0);
   const paymentDiff = Math.round((bank + cash - calculatedTotal) * 100) / 100;
@@ -1957,8 +1959,15 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   const period = `${year}-${String(month).padStart(2, "0")}`;
   const payrollLock = await rejectAdvancedPeriodLocked(c, companyId, year, month);
   if (payrollLock) return payrollLock;
-  const employee = await first(c, "SELECT id,full_name FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+
+  const employee = await first(c, "SELECT * FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
   if (!employee) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
+  const currentCard = await first(c, "SELECT * FROM ik_person_card_settings WHERE employee_id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  const currentVersion = [text(employee.updated_at), text(currentCard?.updated_at)].filter(Boolean).sort().at(-1) || text(employee.updated_at || employee.created_at);
+  const expectedVersion = text(body.expectedVersion);
+  if (expectedVersion && expectedVersion !== currentVersion) {
+    return error(c, 409, "PERSONNEL_VERSION_CONFLICT", "Personel/ücret kaynağı başka bir oturumda değişti. Güncel kaydı yükleyip son kontrolü tekrar yapın.");
+  }
 
   const desired = {
     salary: Math.max(0, number(body.salary)),
@@ -1971,11 +1980,24 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     bank: Math.max(0, number(body.bank)),
     cash: Math.max(0, number(body.cash)),
   };
-  const { net } = calculatePayrollAmounts(desired);
+  const { earnings, net } = calculatePayrollAmounts(desired);
   const paymentDiff = Math.round((desired.bank + desired.cash - net) * 100) / 100;
   if (Math.abs(paymentDiff) > 0.01) {
     return error(c, 409, "PAYMENT_TOTAL_MISMATCH", "Banka + elden toplamı net ödenecek tutara eşit olmalıdır.");
   }
+
+  const requestedPaymentType = upper(body.paymentType);
+  const requestedOnlyCash = requestedPaymentType.includes("ELDEN") && !requestedPaymentType.includes("BANKA");
+  const requestedOnlyBank = requestedPaymentType.includes("BANKA") && !requestedPaymentType.includes("ELDEN");
+  const resolvedPaymentType = requestedOnlyCash
+    ? "Elden"
+    : requestedOnlyBank
+      ? "Banka"
+      : desired.bank > 0 && desired.cash > 0
+        ? "BANKA_ELDEN"
+        : desired.bank > 0
+          ? "Banka"
+          : "Elden";
 
   const allAdjustments = await adjustmentRows(c, companyId);
   const normalizeType = (value: unknown) => {
@@ -1984,7 +2006,8 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     if (valueUpper.includes("AVANS")) return "AVANS";
     if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ";
     if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA";
-    if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI";
+    if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI";
+    if (valueUpper.includes("KESINT")) return "KESINTI";
     if (valueUpper.includes("MESAI")) return "MESAI";
     return valueUpper;
   };
@@ -1993,25 +2016,73 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     text(item.date).startsWith(period) &&
     !upper(item.payrollEffect).includes("SADECE")
   );
+  const overtimeRows = own.filter((item) => normalizeType(item.adjustmentType) === "MESAI");
+  const advanceRows = own.filter((item) => ["AVANS","TOPLU_AVANS"].includes(normalizeType(item.adjustmentType)));
+  const deductionRows = own.filter((item) => normalizeType(item.adjustmentType) === "KESINTI");
+  const legalRows = own.filter((item) => ["ICRA","HACIZ"].includes(normalizeType(item.adjustmentType)));
   const current = {
-    overtime: own.filter((item) => normalizeType(item.adjustmentType) === "MESAI").reduce((sum, item) => sum + number(item.amount), 0),
-    advance: own.filter((item) => ["AVANS","TOPLU_AVANS"].includes(normalizeType(item.adjustmentType))).reduce((sum, item) => sum + number(item.amount), 0),
-    deduction: own.filter((item) => normalizeType(item.adjustmentType) === "KESINTI").reduce((sum, item) => sum + number(item.amount), 0),
-    garnishment: own.filter((item) => ["ICRA","HACIZ"].includes(normalizeType(item.adjustmentType))).reduce((sum, item) => sum + number(item.amount), 0),
+    overtime: overtimeRows.reduce((sum, item) => sum + number(item.amount), 0),
+    advance: advanceRows.reduce((sum, item) => sum + number(item.amount), 0),
+    deduction: deductionRows.reduce((sum, item) => sum + number(item.amount), 0),
+    garnishment: legalRows.reduce((sum, item) => sum + number(item.amount), 0),
   };
+  const currentBankDeductions = [...advanceRows, ...deductionRows, ...legalRows]
+    .filter((item) => upper(item.paymentMethod).includes("BANKA"))
+    .reduce((sum, item) => sum + number(item.amount), 0);
 
   const timestamp = nowIso();
   const correctionDate = hrDateOnly(body.date) || `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
   const reason = text(body.reason) || "Son bordro kontrolü";
   const statements: D1PreparedStatement[] = [];
   const correctionIds: string[] = [];
+  const sourceUpdateIds: string[] = [];
+  const legalTypeUpdateIds: string[] = [];
+  const normalizeSource = (value: unknown) => upper(value).includes("BANKA") ? "Banka" : "Elden";
+  const advanceSource = normalizeSource(body.advanceSource);
+  const deductionSource = normalizeSource(body.deductionSource);
+  const garnishmentSource = normalizeSource(body.garnishmentSource);
+  const legalTypeCode = upper(body.legalType) === "HACIZ" ? "HACIZ" : "ICRA";
+  const legalType = legalTypeCode === "HACIZ" ? "Haciz" : "Icra";
+
+  const reclassifySource = (rows: Row[], targetSource: string) => {
+    for (const item of rows) {
+      if (normalizeSource(item.paymentMethod) === targetSource) continue;
+      const id = text(item.id);
+      if (!id) continue;
+      sourceUpdateIds.push(id);
+      statements.push(
+        c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET payment_method=? WHERE id=?")
+          .bind(targetSource, id),
+      );
+    }
+  };
+  reclassifySource(advanceRows, advanceSource);
+  reclassifySource(deductionRows, deductionSource);
+  reclassifySource(legalRows, garnishmentSource);
+
+  for (const item of legalRows) {
+    if (normalizeType(item.adjustmentType) === legalTypeCode) continue;
+    const id = text(item.id);
+    if (!id) continue;
+    legalTypeUpdateIds.push(id);
+    statements.push(
+      c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET adjustment_type=? WHERE id=?")
+        .bind(legalType, id),
+    );
+  }
+
+  const bankDeductionsAfter = Math.max(0, Math.round((
+    (advanceSource === "Banka" ? desired.advance : 0) +
+    (deductionSource === "Banka" ? desired.deduction : 0) +
+    (garnishmentSource === "Banka" ? desired.garnishment : 0)
+  ) * 100) / 100);
 
   const pushCorrection = (kind: "overtime" | "advance" | "deduction" | "garnishment", adjustmentType: string, source: string) => {
     const delta = Math.round((desired[kind] - current[kind]) * 100) / 100;
     if (Math.abs(delta) <= 0.01) return;
     const id = crypto.randomUUID();
     correctionIds.push(id);
-    const paymentMethod = kind === "overtime" ? "Bordro" : (upper(source).includes("BANKA") ? "Banka" : "Elden");
+    const paymentMethod = kind === "overtime" ? "Bordro" : normalizeSource(source);
     const note = `Bordro kaynak kontrolü · önce ${current[kind].toFixed(2)} · sonra ${desired[kind].toFixed(2)} · ${reason}`;
     statements.push(
       c.env.DB.prepare(`INSERT INTO hr_monthly_adjustments_v2
@@ -2022,15 +2093,74 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   };
 
   pushCorrection("overtime", "Mesai", "Bordro");
-  pushCorrection("advance", "Avans", text(body.advanceSource) || "Elden");
-  pushCorrection("deduction", "Ozel kesinti", text(body.deductionSource) || "Elden");
-  const legalType = upper(body.legalType) === "HACIZ" ? "Haciz" : "Icra";
-  pushCorrection("garnishment", legalType, text(body.garnishmentSource) || "Banka");
+  pushCorrection("advance", "Avans", advanceSource);
+  pushCorrection("deduction", "Ozel kesinti", deductionSource);
+  pushCorrection("garnishment", legalType, garnishmentSource);
+
+  const resolvedUpper = upper(resolvedPaymentType);
+  const onlyCash = resolvedUpper.includes("ELDEN") && !resolvedUpper.includes("BANKA");
+  const onlyBank = resolvedUpper.includes("BANKA") && !resolvedUpper.includes("ELDEN");
+  const bankPlan = onlyCash
+    ? 0
+    : onlyBank
+      ? earnings
+      : Math.min(earnings, Math.max(Math.round((desired.bank + bankDeductionsAfter) * 100) / 100, 0));
+  const cashPlan = onlyBank ? 0 : onlyCash ? earnings : Math.max(Math.round((earnings - bankPlan) * 100) / 100, 0);
+  const canonicalPayment = paymentSplitByTypeAndSource(resolvedPaymentType, net, bankPlan, bankDeductionsAfter);
+  if (Math.abs(canonicalPayment.bank - desired.bank) > 0.01 || Math.abs(canonicalPayment.cash - desired.cash) > 0.01) {
+    return error(c, 409, "PAYMENT_SOURCE_MISMATCH", "Banka/Elden dağılımı hareket kaynaklarıyla uyumlu değil. Otomatik dengeleyip tekrar kaydedin.");
+  }
 
   const existing = await first(c, "SELECT id,status,created_at FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND employee_id=? LIMIT 1", [companyId, year, month, employeeId]);
   if (upper(existing?.status) === "PAID") {
     return error(c, 409, "PAYROLL_PAID_LOCKED", "Ödemesi tamamlanmış bordro doğrudan değiştirilemez. Önce ödeme kaydını yetkili işlemle geri açın.");
   }
+
+  statements.push(
+    c.env.DB.prepare(`UPDATE hr_monthly_employees
+      SET salary=?,road_allowance=?,bank_payment_type=?,bank_amount=?,cash_amount=?,updated_at=?
+      WHERE id=? AND main_company_id=?`)
+      .bind(desired.salary, desired.road, resolvedPaymentType, bankPlan, cashPlan, timestamp, employeeId, companyId),
+  );
+  statements.push(
+    c.env.DB.prepare(`INSERT INTO ik_person_card_settings
+      (employee_id,main_company_id,payment_type,extra_payment_label,extra_payment_amount,updated_at)
+      VALUES (?,?,?,?,?,?)
+      ON CONFLICT(employee_id) DO UPDATE SET
+        main_company_id=excluded.main_company_id,payment_type=excluded.payment_type,
+        extra_payment_label=excluded.extra_payment_label,extra_payment_amount=excluded.extra_payment_amount,
+        updated_at=excluded.updated_at`)
+      .bind(employeeId, companyId, resolvedPaymentType, "EK", desired.extra, timestamp),
+  );
+
+  const financialChanges = [
+    ["salary", number(employee.salary), desired.salary],
+    ["roadAllowance", number(employee.road_allowance), desired.road],
+    ["bankPaymentType", text(employee.bank_payment_type), resolvedPaymentType],
+    ["bankAmount", number(employee.bank_amount), bankPlan],
+    ["cashAmount", number(employee.cash_amount), cashPlan],
+    ["extraPaymentAmount", number(currentCard?.extra_payment_amount), desired.extra],
+  ].filter(([, before, after]) => String(before ?? "") !== String(after ?? ""));
+
+  for (const [field, before, after] of financialChanges) {
+    statements.push(
+      c.env.DB.prepare(`INSERT INTO ik_employee_change_history
+        (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        .bind(crypto.randomUUID(), companyId, employeeId, "COMPENSATION", String(field), text(before), text(after), correctionDate, reason, text(body.userId || body.userName) || "IK", timestamp),
+    );
+  }
+
+  const salaryPlanChanged = financialChanges.some(([field]) => ["salary","roadAllowance","bankPaymentType","bankAmount","cashAmount"].includes(String(field)));
+  if (salaryPlanChanged) {
+    statements.push(
+      c.env.DB.prepare(`INSERT INTO hr_salary_contracts
+        (id,employee_id,salary,road_allowance,bank_payment_type,bank_amount,cash_amount,contract_type,contract_start,contract_end,effective_date,note,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .bind(crypto.randomUUID(), employeeId, desired.salary, desired.road, resolvedPaymentType, bankPlan, cashPlan, "Son bordro kontrolü", correctionDate, null, correctionDate, reason, timestamp),
+    );
+  }
+
   const payrollId = text(existing?.id) || crypto.randomUUID();
   statements.push(
     c.env.DB.prepare(`INSERT INTO hr_payrolls_v2
@@ -2050,19 +2180,52 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
       ),
   );
 
-  await c.env.DB.batch(statements);
-  await audit(c, {
-    mainCompanyId: companyId,
-    period,
-    employeeId,
-    entityType: "BORDRO",
-    action: "FINAL_CONTROL",
-    summary: "Bordro snapshotı kaynak kayıtlarla uyumlu biçimde kaydedildi.",
-    details: { reason, current, desired, net, correctionIds },
+  const auditDetails = JSON.stringify({
+    reason,
+    current,
+    desired,
+    net,
+    correctionIds,
+    sourceUpdateIds,
+    legalTypeUpdateIds,
+    paymentType: resolvedPaymentType,
+    bankPlan,
+    cashPlan,
+    bankDeductionsBefore: currentBankDeductions,
+    bankDeductionsAfter,
+    sourceUpdateIds,
+    legalTypeUpdateIds,
+    financialChanges: financialChanges.map(([field, before, after]) => ({ field, before, after })),
   });
-  return okData(c, { employeeId, period, current, final: { ...desired, total: net }, correctionIds });
-}
+  statements.push(
+    c.env.DB.prepare(`INSERT INTO hr_monthly_audit_logs
+      (id,main_company_id,period,employee_id,entity_type,action,summary,details_json,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`)
+      .bind(crypto.randomUUID(), companyId, period, employeeId, "BORDRO", "FINAL_CONTROL", "Son bordro kontrolü ücret planı, hareket kaynakları ve snapshot ile atomik kaydedildi.", auditDetails, timestamp),
+  );
 
+  await c.env.DB.batch(statements);
+  const freshVersionRow = await first(c, `SELECT e.updated_at,s.updated_at AS card_updated_at
+      FROM hr_monthly_employees e
+      LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
+      WHERE e.id=? AND e.main_company_id=? LIMIT 1`, [employeeId, companyId]);
+  const version = [text(freshVersionRow?.updated_at), text(freshVersionRow?.card_updated_at)].filter(Boolean).sort().at(-1) || timestamp;
+
+  return okData(c, {
+    employeeId,
+    period,
+    current,
+    final: { ...desired, total: net },
+    correctionIds,
+    paymentType: resolvedPaymentType,
+    bankPlan,
+    cashPlan,
+    bankDeductions: bankDeductionsAfter,
+    version,
+    updatedAt: version,
+    changedFields: financialChanges.map(([field]) => field),
+  });
+}
 
 async function saveAdvancedPayrollLines(c: Context<AppEnv>) {
   const body = await bodyOf(c);

@@ -88,13 +88,16 @@ test("IK refresh uses canonical personnel and latest-wins request guard", () => 
   assert.match(cloud, /payroll: payroll\.filter/);
 });
 
-test("IK base salary reference uses raw employees and overtime metadata is stripped on type change", () => {
+test("IK reference person stays informational while overtime uses the employee real salary", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.match(page, /baseEmployeeId \? rawEmployees\.find/);
   assert.match(page, /const employee = rawEmployees\.find/);
-  assert.match(cloud, /new Map\(rawEmployees\.map/);
+  assert.match(page, /const baseSalary = num\(employee\.salary\)/);
+  assert.match(cloud, /SELECT salary,overtime_hourly_base/);
+  assert.match(cloud, /return calculateOvertimeAmount\(salary, hours, multiplierValue, divisor\)/);
+  assert.doesNotMatch(cloud, /new Map\(rawEmployees\.map/);
   assert.match(cloud, /text\(body\.note \?\? overtimeMetaFromNote\(current\.note\)\.note\)/);
   assert.match(cloud, /exit_date=excluded\.exit_date/);
 });
@@ -119,13 +122,17 @@ test("payroll payment balance is auto-reconciled in UI while backend keeps the h
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.match(page, /function reconcilePaymentSplit/);
-  assert.match(page, /function paymentSplitByType/);
+  assert.match(page, /function paymentSplitByType\(paymentType, netValue, bankValue = 0, bankDeductionsValue = 0\)/);
+  assert.match(page, /const bank = Math\.min\(Math\.max\(round\(bankPlan - bankDeductions\), 0\), net\)/);
   assert.match(page, /const balancedSplit = reconcilePaymentSplit\(rowTotals\.net/);
   assert.match(page, /const autoBalanceFinalPayment = \(\) =>/);
-  assert.match(page, /const modalPayment = paymentSplitByType/);
-  assert.match(page, /const sourcePayment = paymentSplitByType/);
+  assert.match(page, /const modalPayment = paymentSplitByType\(modalDraft\.paymentType, preBaseTotals\.net, modalDraft\.bankAmount, movementBankDeductions\)/);
+  assert.match(page, /const sourcePayment = paymentSplitByType\(modalDraft\.paymentType, sourcePlanEarnings, modalDraft\.bankAmount\)/);
   assert.doesNotMatch(page, /Banka \+ elden net odeme ile eslesmiyor\. Devam edilsin mi/);
   assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
+  assert.match(cloud, /PAYMENT_SOURCE_MISMATCH/);
+  assert.match(cloud, /function paymentSplitByTypeAndSource/);
+  assert.match(cloud, /bankPlan - bankDeductions/);
   assert.match(cloud, /calculatePayrollAmounts/);
 });
 
@@ -279,8 +286,12 @@ test("payroll final control exposes every financial value and saves back to cano
     assert.ok(page.includes(label), `Eksik son kontrol alanı: ${label}`);
   }
   assert.match(page, /saveFinalPayrollControl/);
-  assert.match(page, /saveIkAdvancedPersonCard/);
   assert.match(page, /saveIkAdvancedFinalPayrollControl/);
+  const finalStart = page.indexOf("const saveFinalPayrollControl = async");
+  const finalEnd = page.indexOf("const openLeave =", finalStart);
+  const finalBlock = page.slice(finalStart, finalEnd);
+  assert.match(finalBlock, /const savedFinal = await saveIkAdvancedFinalPayrollControl/);
+  assert.doesNotMatch(finalBlock, /saveIkAdvancedPersonCard/);
   assert.match(page, /Ana Plan Salt Okunur/);
   assert.doesNotMatch(page, /modal === "bordroDuzelt"/);
   assert.doesNotMatch(page, /savePayrollOverride/);
@@ -292,9 +303,29 @@ test("payroll final control exposes every financial value and saves back to cano
   assert.match(cloud, /pushCorrection\("deduction", "Ozel kesinti"/);
   assert.match(cloud, /Bordro kaynak kontrolü/);
   assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
-  assert.match(cloud, /action: "FINAL_CONTROL"/);
+  assert.match(cloud, /PAYMENT_SOURCE_MISMATCH/);
+  assert.match(cloud, /UPDATE hr_monthly_adjustments_v2 SET payment_method=\? WHERE id=\?/);
+  assert.match(cloud, /UPDATE hr_monthly_adjustments_v2 SET adjustment_type=\? WHERE id=\?/);
+  assert.match(cloud, /const bankDeductionsAfter = Math\.max/);
+  assert.match(cloud, /"FINAL_CONTROL"/);
+  assert.match(cloud, /Son bordro kontrolü ücret planı, hareket kaynakları ve snapshot ile atomik kaydedildi/);
+  assert.match(cloud, /await c\.env\.DB\.batch\(statements\)/);
   assert.match(cloud, /status=excluded\.status/);
   assert.match(cloud, /app\.post\("\/api\/ik\/advanced\/payroll\/final-control"/);
+});
+
+
+test("EK is an explicit canonical amount and is never inferred from salary difference", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.match(page, /extraPaymentAmount: sourceExtra/);
+  assert.match(page, /const extra = num\(employee\.extraPaymentAmount\)/);
+  assert.match(cloud, /const extraPaymentAmount = number\(body\.extraPaymentAmount \?\? currentCard\?\.extra_payment_amount\)/);
+  assert.match(cloud, /const extra = number\(employee\.extraPaymentAmount\)/);
+  assert.doesNotMatch(cloud, /autoExtra/);
+  assert.doesNotMatch(cloud, /autoPremium/);
+  assert.doesNotMatch(cloud, /Math\.max\(actualSalary - number\(baseEmployee\.salary\), 0\)/);
 });
 
 

@@ -1380,6 +1380,15 @@
 }
 
 @media(max-width:1180px){
+  .modal-bg .prepayroll-dialog input,
+  .modal-bg .prepayroll-dialog select{
+    min-height:44px;
+    height:44px;
+  }
+  .modal-bg .prepayroll-dialog .ik-section-tabs button,
+  .modal-bg .prepayroll-dialog .person-modal-nav .btn{
+    min-height:44px;
+  }
   .modal-bg .prepayroll-dialog .payroll-final-layout{
     grid-template-columns:210px minmax(0,1fr);
   }

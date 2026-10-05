@@ -291,14 +291,16 @@ function reconcilePaymentSplit(netValue, bankValue, cashValue, preferred = "cash
   return { bank: round(net - nextCash), cash: nextCash, adjusted: true };
 }
 
-function paymentSplitByType(paymentType, netValue, bankValue = 0) {
+function paymentSplitByType(paymentType, netValue, bankValue = 0, bankDeductionsValue = 0) {
   const net = Math.max(round(netValue), 0);
   const type = upper(paymentType);
   const onlyCash = type.includes("ELDEN") && !type.includes("BANKA");
   const onlyBank = type.includes("BANKA") && !type.includes("ELDEN");
   if (onlyCash) return { bank: 0, cash: net, mode: "ELDEN" };
   if (onlyBank) return { bank: net, cash: 0, mode: "BANKA" };
-  const bank = Math.min(Math.max(round(bankValue), 0), net);
+  const bankPlan = Math.max(round(bankValue), 0);
+  const bankDeductions = Math.max(round(bankDeductionsValue), 0);
+  const bank = Math.min(Math.max(round(bankPlan - bankDeductions), 0), net);
   return { bank, cash: round(net - bank), mode: "BANKA_ELDEN" };
 }
 
@@ -730,7 +732,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const extra = num(employee.extraPaymentAmount);
   const pre = calcRow({ salary, road, overtime, extra, advance, deduction, garnishment });
   const saved = payrollLines.find((line) => line.employeeId === employee.id);
-  const payment = paymentSplitByType(employee.paymentType, pre.net, employee.bankAmount);
+  const payment = paymentSplitByType(employee.paymentType, pre.net, employee.bankAmount, bankDeductions);
   const bank = payment.bank;
   const cash = payment.cash;
   return {
@@ -1213,58 +1215,17 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       return setModalDraft((old) => ({ ...old, formMessage: `Banka + Elden toplamı Net ile eşleşmeli. Fark: ${money(Math.abs(totals.diff))}` }));
     }
     const resolvedPaymentType = desired.bank > 0 && desired.cash > 0 ? "BANKA_ELDEN" : desired.bank > 0 ? "Banka" : "Elden";
-    const hasSgkDays = modalDraft.sgkDays !== "" && modalDraft.sgkDays !== null && modalDraft.sgkDays !== undefined;
-    const cardPayload = {
-      mainCompanyId: companyId,
-      expectedVersion: modalDraft.version || "",
-      fullName: modalDraft.fullName,
-      personelKodu: modalDraft.code,
-      cardNo: modalDraft.cardNo,
-      identityNo: modalDraft.identityNo,
-      personnelStatus: modalDraft.personnelStatus || "NORMAL",
-      period,
-      year,
-      month,
-      skipPeriodCompliance: Boolean(data.close?.isLocked),
-      sgkFollow: modalDraft.sgkFollow === "SGKLI",
-      sgkDays: modalDraft.sgkFollow === "SGKLI" ? (hasSgkDays ? Math.round(num(modalDraft.sgkDays)) : null) : 0,
-      sgkDaySource: modalDraft.sgkDaySourceIntent || modalDraft.sgkDaySource || "MANUEL",
-      sgkNote: `[KYERP:SGK_SOURCE=${modalDraft.sgkDaySourceIntent || modalDraft.sgkDaySource || "MANUEL"}]`,
-      preservePeriodCompliance: modalDraft.sgkDaySource === "RESMI_BORDRO",
-      paymentType: resolvedPaymentType,
-      salary: desired.salary,
-      roadAllowance: desired.road,
-      bankAmount: desired.bank,
-      cashAmount: desired.cash,
-      baseEmployeeId: modalDraft.baseEmployeeId || "",
-      extraPaymentLabel: "EK",
-      extraPaymentAmount: desired.extra,
-      overtimeHourlyBase: num(modalDraft.overtimeHourlyBase) || 225,
-      deductionHourlyBase: num(modalDraft.deductionHourlyBase) || 300,
-      payrollIncluded: modalDraft.payrollIncluded !== false,
-      hireDate: modalDraft.startDate,
-      exitDate: modalDraft.exitDate,
-      title: modalDraft.title,
-      department: modalDraft.department,
-      annualLeaveEntitlement: num(modalDraft.annualLeaveEntitlement),
-      annualLeaveCarryover: num(modalDraft.annualLeaveCarryover),
-      activePassive: modalDraft.exitDate ? "Pasif" : "Aktif",
-      status: modalDraft.exitDate ? "Pasif" : "Aktif",
-      note: modalDraft.note,
-      phone: modalDraft.phone,
-      effectiveDate: modalDraft.effectiveDate || istanbulDateKey(),
-      changeNote: editor.reason || "Son bordro kontrolü",
-    };
 
     setBusy(true);
-    setModalDraft((old) => ({ ...old, formMessage: "Son kontrol kaynaklara kaydediliyor..." }));
+    setModalDraft((old) => ({ ...old, formMessage: "Son kontrol tek işlemde kaynaklara kaydediliyor..." }));
     try {
-      const savedCard = await saveIkAdvancedPersonCard(modalDraft.id, cardPayload);
-      await saveIkAdvancedFinalPayrollControl({
+      const savedFinal = await saveIkAdvancedFinalPayrollControl({
         mainCompanyId: companyId,
         year,
         month,
         employeeId: modalDraft.id,
+        expectedVersion: modalDraft.version || "",
+        paymentType: resolvedPaymentType,
         salary: desired.salary,
         road: desired.road,
         extra: desired.extra,
@@ -1280,17 +1241,18 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         legalType: editor.legalType || "ICRA",
         reason: editor.reason || "Son bordro kontrolü",
       });
+      const nextPaymentType = savedFinal?.paymentType || resolvedPaymentType;
       setModalDraft((old) => ({
         ...old,
-        version: savedCard?.version || savedCard?.updatedAt || old.version,
+        version: savedFinal?.version || savedFinal?.updatedAt || old.version,
         salary: desired.salary,
         roadAllowance: desired.road,
         extraPaymentAmount: desired.extra,
-        paymentType: resolvedPaymentType,
-        bankAmount: desired.bank,
-        cashAmount: desired.cash,
-        finalEditor: { ...old.finalEditor, ...desired, paymentType: resolvedPaymentType },
-        formMessage: "Son bordro kontrolü kaydedildi ✓ Maaş/ödeme planı ve hareket kaynakları güncellendi.",
+        paymentType: nextPaymentType,
+        bankAmount: savedFinal?.bankPlan ?? old.bankAmount,
+        cashAmount: savedFinal?.cashPlan ?? old.cashAmount,
+        finalEditor: { ...old.finalEditor, ...desired, paymentType: nextPaymentType },
+        formMessage: "Son bordro kontrolü atomik kaydedildi ✓ Ücret planı, hareket kaynakları ve bordro snapshotı birlikte güncellendi.",
       }));
       setNotice("");
       await load({ force: true, silent: true });
@@ -1300,7 +1262,6 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       setBusy(false);
     }
   };
-
 
   const openLeave = (kind = "yillik", forced = "", employeeOverride = null) => {
     const targetEmployee = employeeOverride || selected;
@@ -1473,30 +1434,14 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     const baseEmployee = modalDraft.baseEmployeeId ? rawEmployees.find((item) => item.id === modalDraft.baseEmployeeId) : null;
     if (modalDraft.baseEmployeeId === modalDraft.id) return failPersonSave("Personel kendisini baz personel olarak seçemez.");
     if (modalDraft.baseEmployeeId && !baseEmployee) return failPersonSave("Baz personel bulunamadı.");
-    if (baseEmployee && num(baseEmployee.salary) > num(modalDraft.salary)) return failPersonSave("Baz personel maaşı gerçek maaştan yüksek olamaz.");
 
     const sourceExtra = Math.max(num(modalDraft.extraPaymentAmount), 0);
-    const ownSourceMovements = periodMovements
-      .filter((item) => item.employeeId === modalDraft.id)
-      .filter((item) => !upper(item.payrollEffect).includes("SADECE"));
-    const sourceMovementTotals = ownSourceMovements.reduce((acc, item) => {
-      const type = normalizeFinanceType(item.type || item.adjustmentType);
-      if (type === "Mesai") acc.overtime += num(item.amount);
-      else if (type === "Avans" || type === "Toplu avans") acc.advance += num(item.amount);
-      else if (["Icra", "Haciz"].includes(type)) acc.garnishment += num(item.amount);
-      else if (["Ozel kesinti", "Eksik gün", "Eksik saat"].includes(type)) acc.deduction += num(item.amount);
-      return acc;
-    }, { overtime: 0, advance: 0, deduction: 0, garnishment: 0 });
-    const sourceTotals = calcRow({
+    const sourcePlanEarnings = calcRow({
       salary: modalDraft.salary,
       road: modalDraft.roadAllowance,
       extra: sourceExtra,
-      overtime: sourceMovementTotals.overtime,
-      advance: sourceMovementTotals.advance,
-      deduction: sourceMovementTotals.deduction,
-      garnishment: sourceMovementTotals.garnishment,
-    });
-    const sourcePayment = paymentSplitByType(modalDraft.paymentType, sourceTotals.net, modalDraft.bankAmount);
+    }).hakedis;
+    const sourcePayment = paymentSplitByType(modalDraft.paymentType, sourcePlanEarnings, modalDraft.bankAmount);
 
     const cardPayload = {
       mainCompanyId: companyId,
@@ -1604,8 +1549,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const overtimeAmountFor = (employeeId, hours, multiplier) => {
     const employee = rawEmployees.find((item) => item.id === employeeId);
     if (!employee) return 0;
-    const baseEmployee = employee.baseEmployeeId ? rawEmployees.find((item) => item.id === employee.baseEmployeeId) : null;
-    const baseSalary = num(baseEmployee?.salary ?? employee.salary);
+    const baseSalary = num(employee.salary);
     const divisor = num(employee.overtimeHourlyBase || employee.overtimeBaseHours) || 225;
     if (baseSalary <= 0 || divisor <= 0 || num(hours) <= 0) return 0;
     return round((baseSalary / divisor) * num(hours) * normalizeOvertimeMultiplier(multiplier));
@@ -2942,7 +2886,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
             {modalDraft.sgkFollow==="SGKLI" && modalDraft.sgkDays!=="" && num(modalDraft.sgkDays)!==num(modalDraft.pdksCardDays) ? <div className="wide warnline warn">Kontrol farkı: SGK günü {num(modalDraft.sgkDays)}, PDKS kartlı gün {num(modalDraft.pdksCardDays)}. PDKS kartlı gün yalnız kontrol verisidir; izin/hafta tatili ve diğer yasal nedenlerle SGK günüyle bire bir aynı olmak zorunda değildir.</div> : null}
             {modalDraft.personnelStatus==="RETIRED" ? <div className="wide warnline">Emekli personel aktif çalışan olarak devam edebilir. Emekli statüsü SGK durumundan bağımsızdır.</div> : null}
           </div></div>
-          <div className="modal-section"><h3>Ücret ve Ödeme Planı</h3><div className="form"><Field label="Gerçek Maaş"><input type="number" value={modalDraft.salary||""} onChange={(event)=>setModalDraft((old)=>({...old,salary:event.target.value}))}/></Field><Field label="Baz Personel"><select value={modalDraft.baseEmployeeId||""} onChange={(event)=>setModalDraft((old)=>({...old,baseEmployeeId:event.target.value}))}><option value="">Yok - gerçek maaşı kullan</option>{rawEmployees.filter((item)=>item.id!==modalDraft.id).map((item)=><option key={item.id} value={item.id}>{item.fullName} - {money(item.salary)}{upper(item.status).includes("PAS") ? " · Pasif referans" : ""}</option>)}</select></Field><Field label="Bordro Baz Maaşı"><input value={money(modalDraft.baseEmployeeId?rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary:modalDraft.salary)} readOnly/></Field><Field label="EK"><input value={money(modalDraft.baseEmployeeId?Math.max(num(modalDraft.salary)-num(rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary),0):0)} readOnly/></Field><Field label="Yol Yardımı"><input type="number" value={modalDraft.roadAllowance||""} onChange={(event)=>setModalDraft((old)=>({...old,roadAllowance:event.target.value}))}/></Field><Field label="Mesai Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.overtimeHourlyBase||225} onChange={(event)=>setModalDraft((old)=>({...old,overtimeHourlyBase:event.target.value}))}/></Field><Field label="Kesinti Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.deductionHourlyBase||300} onChange={(event)=>setModalDraft((old)=>({...old,deductionHourlyBase:event.target.value}))}/></Field><Field label="Ödeme Tipi"><select value={modalDraft.paymentType||"BANKA_ELDEN"} onChange={(event)=>setModalDraft((old)=>({...old,paymentType:event.target.value}))}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field><Field label="Banka Planı"><input type="number" value={modalDraft.bankAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,bankAmount:event.target.value}))}/></Field><Field label="Elden Planı"><input type="number" value={modalDraft.cashAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,cashAmount:event.target.value}))}/></Field><Field label="Resmi Bordro Net"><input value={money(selected?.sgkNet)} readOnly/></Field><Field label="Geçerlilik Tarihi"><input type="date" value={modalDraft.effectiveDate||""} onChange={(event)=>setModalDraft((old)=>({...old,effectiveDate:event.target.value}))}/></Field><Field label="Değişiklik Açıklaması" wide><input value={modalDraft.changeNote||""} onChange={(event)=>setModalDraft((old)=>({...old,changeNote:event.target.value}))} placeholder="Örn. Ekim 2026 maaş/yol revizyonu"/></Field><Field label="Not" wide><textarea value={modalDraft.note||""} onChange={(event)=>setModalDraft((old)=>({...old,note:event.target.value}))}/></Field></div></div>
+          <div className="modal-section"><h3>Ücret ve Ödeme Planı</h3><div className="form"><Field label="Gerçek Maaş"><input type="number" value={modalDraft.salary||""} onChange={(event)=>setModalDraft((old)=>({...old,salary:event.target.value}))}/></Field><Field label="Referans Personel"><select value={modalDraft.baseEmployeeId||""} onChange={(event)=>setModalDraft((old)=>({...old,baseEmployeeId:event.target.value}))}><option value="">Referans yok</option>{rawEmployees.filter((item)=>item.id!==modalDraft.id).map((item)=><option key={item.id} value={item.id}>{item.fullName} - {money(item.salary)}{upper(item.status).includes("PAS") ? " · Pasif referans" : ""}</option>)}</select></Field><Field label="Referans Maaş"><input value={modalDraft.baseEmployeeId?money(rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary):"-"} readOnly/></Field><Field label="EK Ödeme"><input type="number" min="0" value={modalDraft.extraPaymentAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,extraPaymentAmount:event.target.value}))}/></Field><Field label="Yol Yardımı"><input type="number" value={modalDraft.roadAllowance||""} onChange={(event)=>setModalDraft((old)=>({...old,roadAllowance:event.target.value}))}/></Field><Field label="Mesai Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.overtimeHourlyBase||225} onChange={(event)=>setModalDraft((old)=>({...old,overtimeHourlyBase:event.target.value}))}/></Field><Field label="Kesinti Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.deductionHourlyBase||300} onChange={(event)=>setModalDraft((old)=>({...old,deductionHourlyBase:event.target.value}))}/></Field><Field label="Ödeme Tipi"><select value={modalDraft.paymentType||"BANKA_ELDEN"} onChange={(event)=>setModalDraft((old)=>({...old,paymentType:event.target.value}))}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field><Field label="Banka Planı"><input type="number" value={modalDraft.bankAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,bankAmount:event.target.value}))}/></Field><Field label="Elden Planı"><input type="number" value={modalDraft.cashAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,cashAmount:event.target.value}))}/></Field><Field label="Resmi Bordro Net"><input value={money(selected?.sgkNet)} readOnly/></Field><Field label="Geçerlilik Tarihi"><input type="date" value={modalDraft.effectiveDate||""} onChange={(event)=>setModalDraft((old)=>({...old,effectiveDate:event.target.value}))}/></Field><Field label="Değişiklik Açıklaması" wide><input value={modalDraft.changeNote||""} onChange={(event)=>setModalDraft((old)=>({...old,changeNote:event.target.value}))} placeholder="Örn. Ekim 2026 maaş/yol revizyonu"/></Field><Field label="Not" wide><textarea value={modalDraft.note||""} onChange={(event)=>setModalDraft((old)=>({...old,note:event.target.value}))}/></Field></div></div>
           {modalDraft.id && canAdminMaintainPersonnel ? <div className="admin-personnel-box">
             <div className="admin-personnel-head"><div><b>Yönetici İşlemleri</b><span>Yanlış veya mükerrer kayıtları doğrudan düzeltin. Yazılı onay kodu yok; butona basınca tek onay sorulur ve işlem loglanır.</span></div><span className="badge red">Yönetici</span></div>
             <div className="admin-personnel-grid">
@@ -2975,16 +2919,22 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       const personMovements = movements
         .filter((item) => item.employeeId === modalDraft.id && String(item.date || item.adjustmentDate || "").startsWith(period))
         .sort((a, b) => String(b.date || b.adjustmentDate || "").localeCompare(String(a.date || a.adjustmentDate || "")));
-      const movementTotals = personMovements
-        .filter((item) => !upper(item.payrollEffect).includes("SADECE"))
-        .reduce((acc, item) => {
+      const effectiveMovements = personMovements.filter((item) => !upper(item.payrollEffect).includes("SADECE"));
+      const movementTotals = effectiveMovements.reduce((acc, item) => {
+        const type = normalizeFinanceType(item.type || item.adjustmentType);
+        if (type === "Mesai") acc.overtime += num(item.amount);
+        else if (type === "Avans" || type === "Toplu avans") acc.advance += num(item.amount);
+        else if (["Icra", "Haciz"].includes(type)) acc.garnishment += num(item.amount);
+        else if (["Ozel kesinti", "Eksik gün", "Eksik saat"].includes(type)) acc.deduction += num(item.amount);
+        return acc;
+      }, { overtime: 0, advance: 0, deduction: 0, garnishment: 0 });
+      const movementBankDeductions = effectiveMovements
+        .filter((item) => {
           const type = normalizeFinanceType(item.type || item.adjustmentType);
-          if (type === "Mesai") acc.overtime += num(item.amount);
-          else if (type === "Avans" || type === "Toplu avans") acc.advance += num(item.amount);
-          else if (["Icra", "Haciz"].includes(type)) acc.garnishment += num(item.amount);
-          else if (["Ozel kesinti", "Eksik gün", "Eksik saat"].includes(type)) acc.deduction += num(item.amount);
-          return acc;
-        }, { overtime: 0, advance: 0, deduction: 0, garnishment: 0 });
+          return ["Avans", "Toplu avans", "Ozel kesinti", "Eksik gün", "Eksik saat", "Icra", "Haciz"].includes(type);
+        })
+        .filter((item) => upper(item.paymentMethod).includes("BANKA"))
+        .reduce((sum, item) => sum + num(item.amount), 0);
 
       const planExtra = num(modalDraft.extraPaymentAmount);
       const preBaseTotals = calcRow({
@@ -2996,7 +2946,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         deduction: movementTotals.deduction,
         garnishment: movementTotals.garnishment,
       });
-      const modalPayment = paymentSplitByType(modalDraft.paymentType, preBaseTotals.net, modalDraft.bankAmount);
+      const modalPayment = paymentSplitByType(modalDraft.paymentType, preBaseTotals.net, modalDraft.bankAmount, movementBankDeductions);
       const preTotals = calcRow({
         salary: modalDraft.salary,
         road: modalDraft.roadAllowance,
@@ -3354,8 +3304,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   const isKesinti = ["Ozel kesinti", "Icra", "Haciz", "Eksik gün", "Eksik saat"].includes(type);
   const isLegal = ["Icra", "Haciz"].includes(type);
   const financeEmployee = employees.find((employee) => employee.id === modalDraft.employeeId) || null;
-  const financeBaseEmployee = financeEmployee?.baseEmployeeId ? employees.find((employee) => employee.id === financeEmployee.baseEmployeeId) : null;
-  const overtimeBaseSalary = num(financeBaseEmployee?.salary ?? financeEmployee?.salary);
+  const overtimeBaseSalary = num(financeEmployee?.salary);
   const overtimeDivisor = num(financeEmployee?.overtimeHourlyBase || financeEmployee?.overtimeBaseHours) || 225;
   const overtimeHourly = overtimeDivisor > 0 ? round(overtimeBaseSalary / overtimeDivisor) : 0;
   const multiplier = normalizeOvertimeMultiplier(modalDraft.overtimeMultiplier);
