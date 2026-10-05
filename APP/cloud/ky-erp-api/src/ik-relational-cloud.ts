@@ -2016,14 +2016,17 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     text(item.date).startsWith(period) &&
     !upper(item.payrollEffect).includes("SADECE")
   );
+  const overtimeRows = own.filter((item) => normalizeType(item.adjustmentType) === "MESAI");
+  const advanceRows = own.filter((item) => ["AVANS","TOPLU_AVANS"].includes(normalizeType(item.adjustmentType)));
+  const deductionRows = own.filter((item) => normalizeType(item.adjustmentType) === "KESINTI");
+  const legalRows = own.filter((item) => ["ICRA","HACIZ"].includes(normalizeType(item.adjustmentType)));
   const current = {
-    overtime: own.filter((item) => normalizeType(item.adjustmentType) === "MESAI").reduce((sum, item) => sum + number(item.amount), 0),
-    advance: own.filter((item) => ["AVANS","TOPLU_AVANS"].includes(normalizeType(item.adjustmentType))).reduce((sum, item) => sum + number(item.amount), 0),
-    deduction: own.filter((item) => normalizeType(item.adjustmentType) === "KESINTI").reduce((sum, item) => sum + number(item.amount), 0),
-    garnishment: own.filter((item) => ["ICRA","HACIZ"].includes(normalizeType(item.adjustmentType))).reduce((sum, item) => sum + number(item.amount), 0),
+    overtime: overtimeRows.reduce((sum, item) => sum + number(item.amount), 0),
+    advance: advanceRows.reduce((sum, item) => sum + number(item.amount), 0),
+    deduction: deductionRows.reduce((sum, item) => sum + number(item.amount), 0),
+    garnishment: legalRows.reduce((sum, item) => sum + number(item.amount), 0),
   };
-  const currentBankDeductions = own
-    .filter((item) => ["AVANS","TOPLU_AVANS","KESINTI","ICRA","HACIZ"].includes(normalizeType(item.adjustmentType)))
+  const currentBankDeductions = [...advanceRows, ...deductionRows, ...legalRows]
     .filter((item) => upper(item.paymentMethod).includes("BANKA"))
     .reduce((sum, item) => sum + number(item.amount), 0);
 
@@ -2032,16 +2035,54 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   const reason = text(body.reason) || "Son bordro kontrolü";
   const statements: D1PreparedStatement[] = [];
   const correctionIds: string[] = [];
-  let bankDeductionsAfter = currentBankDeductions;
+  const sourceUpdateIds: string[] = [];
+  const legalTypeUpdateIds: string[] = [];
+  const normalizeSource = (value: unknown) => upper(value).includes("BANKA") ? "Banka" : "Elden";
+  const advanceSource = normalizeSource(body.advanceSource);
+  const deductionSource = normalizeSource(body.deductionSource);
+  const garnishmentSource = normalizeSource(body.garnishmentSource);
+  const legalTypeCode = upper(body.legalType) === "HACIZ" ? "HACIZ" : "ICRA";
+  const legalType = legalTypeCode === "HACIZ" ? "Haciz" : "Icra";
+
+  const reclassifySource = (rows: Row[], targetSource: string) => {
+    for (const item of rows) {
+      if (normalizeSource(item.paymentMethod) === targetSource) continue;
+      const id = text(item.id);
+      if (!id) continue;
+      sourceUpdateIds.push(id);
+      statements.push(
+        c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET payment_method=? WHERE id=?")
+          .bind(targetSource, id),
+      );
+    }
+  };
+  reclassifySource(advanceRows, advanceSource);
+  reclassifySource(deductionRows, deductionSource);
+  reclassifySource(legalRows, garnishmentSource);
+
+  for (const item of legalRows) {
+    if (normalizeType(item.adjustmentType) === legalTypeCode) continue;
+    const id = text(item.id);
+    if (!id) continue;
+    legalTypeUpdateIds.push(id);
+    statements.push(
+      c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET adjustment_type=? WHERE id=?")
+        .bind(legalType, id),
+    );
+  }
+
+  const bankDeductionsAfter = Math.max(0, Math.round((
+    (advanceSource === "Banka" ? desired.advance : 0) +
+    (deductionSource === "Banka" ? desired.deduction : 0) +
+    (garnishmentSource === "Banka" ? desired.garnishment : 0)
+  ) * 100) / 100);
 
   const pushCorrection = (kind: "overtime" | "advance" | "deduction" | "garnishment", adjustmentType: string, source: string) => {
     const delta = Math.round((desired[kind] - current[kind]) * 100) / 100;
     if (Math.abs(delta) <= 0.01) return;
     const id = crypto.randomUUID();
     correctionIds.push(id);
-    const bankSource = kind !== "overtime" && upper(source).includes("BANKA");
-    const paymentMethod = kind === "overtime" ? "Bordro" : (bankSource ? "Banka" : "Elden");
-    if (bankSource) bankDeductionsAfter = Math.max(0, Math.round((bankDeductionsAfter + delta) * 100) / 100);
+    const paymentMethod = kind === "overtime" ? "Bordro" : normalizeSource(source);
     const note = `Bordro kaynak kontrolü · önce ${current[kind].toFixed(2)} · sonra ${desired[kind].toFixed(2)} · ${reason}`;
     statements.push(
       c.env.DB.prepare(`INSERT INTO hr_monthly_adjustments_v2
@@ -2052,10 +2093,9 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   };
 
   pushCorrection("overtime", "Mesai", "Bordro");
-  pushCorrection("advance", "Avans", text(body.advanceSource) || "Elden");
-  pushCorrection("deduction", "Ozel kesinti", text(body.deductionSource) || "Elden");
-  const legalType = upper(body.legalType) === "HACIZ" ? "Haciz" : "Icra";
-  pushCorrection("garnishment", legalType, text(body.garnishmentSource) || "Banka");
+  pushCorrection("advance", "Avans", advanceSource);
+  pushCorrection("deduction", "Ozel kesinti", deductionSource);
+  pushCorrection("garnishment", legalType, garnishmentSource);
 
   const resolvedUpper = upper(resolvedPaymentType);
   const onlyCash = resolvedUpper.includes("ELDEN") && !resolvedUpper.includes("BANKA");
@@ -2146,11 +2186,15 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     desired,
     net,
     correctionIds,
+    sourceUpdateIds,
+    legalTypeUpdateIds,
     paymentType: resolvedPaymentType,
     bankPlan,
     cashPlan,
     bankDeductionsBefore: currentBankDeductions,
     bankDeductionsAfter,
+    sourceUpdateIds,
+    legalTypeUpdateIds,
     financialChanges: financialChanges.map(([field, before, after]) => ({ field, before, after })),
   });
   statements.push(
