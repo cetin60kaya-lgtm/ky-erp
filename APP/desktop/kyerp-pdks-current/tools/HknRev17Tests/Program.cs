@@ -207,12 +207,13 @@ internal static class Program
               "REV23 one-click adds missing DB normal entry and exit into same TNF");
 
         database.Execute("insert into GIRCIK(SIRA,PKNO,GTARIH,GSAAT,GTUR) values(5,'00048','2026-09-29','08:40','')");
-        var ambiguous = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
-        var protectedBytes = File.ReadAllBytes(tnfPath);
-        var refused = false;
-        try { SyncEngine.DirectSyncSourceAsync(database, ambiguous, CancellationToken.None).GetAwaiter().GetResult(); }
-        catch (InvalidOperationException) { refused = true; }
-        Check(refused && File.ReadAllBytes(tnfPath).SequenceEqual(protectedBytes), "REV23 refuses ambiguous duplicate DB and leaves TNF untouched");
+        var duplicateDb = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
+        Check(Count(duplicateDb.Table, "İNCELE") == 0 && Count(duplicateDb.Table, "TNF EKLE") == 1,
+            "REV24 exact mode treats every normal DB movement as source truth without side interpretation");
+        SyncEngine.DirectSyncSourceAsync(database, duplicateDb, CancellationToken.None).GetAwaiter().GetResult();
+        var duplicateDbAfter = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
+        Check(duplicateDbAfter.Table.AsEnumerable().All(row => row.Field<string>("İşlem") == "YOK"),
+            "REV24 exact mode mirrors duplicate/multiple DB normal movements literally into TNF");
     }
 
     static void FixtureCorrections()
