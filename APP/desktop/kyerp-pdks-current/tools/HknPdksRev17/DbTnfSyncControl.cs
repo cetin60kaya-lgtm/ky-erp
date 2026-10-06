@@ -118,7 +118,7 @@ internal sealed partial class DbTnfSyncControl : UserControl
             Button("DB GÜVENLİLERİ DÜZELT", RepairDbAsync, 190, Color.MistyRose, personBar);
             Button("DB EKSİKLERİ TAMAMLA", CompleteDbAsync, 190, Color.LemonChiffon, personBar);
         }
-        Button("ÇIKTI OLARAK HAZIRLA", ApplyAllSafeAsync, 185, Color.Honeydew, personBar);
+        Button(tnfOnly ? "TNF'Yİ DB'YE GÖRE DÜZELT" : "ÇIKTI OLARAK HAZIRLA", ApplyAllSafeAsync, tnfOnly ? 215 : 185, tnfOnly ? Color.LightGreen : Color.Honeydew, personBar);
         Button(tnfOnly ? "ÇIKTIYI AÇ" : "ÇIKTI DOSYALARINI AÇ", OpenOutputsAsync, 185, group: personBar);
         var paths = new Label { AutoSize = true, MaximumSize = new Size(1450, 65), Padding = new Padding(4) };
         void UpdatePaths() => paths.Text = "DB: " + (main.GetType().GetField("dbPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) as TextBox)?.Text + "\nTNF: " + TnfPathBox?.Text;
