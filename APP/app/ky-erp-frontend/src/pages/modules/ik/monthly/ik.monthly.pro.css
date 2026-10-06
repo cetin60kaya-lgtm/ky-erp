@@ -2169,10 +2169,25 @@
   .ik-monthly-pro .ik-leave-preset-row .btn,
   .ik-monthly-pro .ik-leave-quick-form input,
   .ik-monthly-pro .ik-leave-quick-form select,
+  .ik-monthly-pro .ik-leave-quick-form textarea,
   .ik-monthly-pro .ik-leave-settings-form input,
+  .ik-monthly-pro .ik-leave-settings-form select,
+  .ik-monthly-pro .ik-leave-settings-form textarea,
   .ik-monthly-pro .ik-leave-cash-form input,
-  .ik-monthly-pro .ik-leave-cash-form select {
+  .ik-monthly-pro .ik-leave-cash-form select,
+  .ik-monthly-pro .ik-leave-cash-form textarea {
     min-height: 44px;
+  }
+  .ik-monthly-pro .ik-leave-quick-form input,
+  .ik-monthly-pro .ik-leave-quick-form select,
+  .ik-monthly-pro .ik-leave-quick-form textarea,
+  .ik-monthly-pro .ik-leave-settings-form input,
+  .ik-monthly-pro .ik-leave-settings-form select,
+  .ik-monthly-pro .ik-leave-settings-form textarea,
+  .ik-monthly-pro .ik-leave-cash-form input,
+  .ik-monthly-pro .ik-leave-cash-form select,
+  .ik-monthly-pro .ik-leave-cash-form textarea {
+    font-size: 16px;
   }
   .ik-monthly-pro .ik-leave-request {
     grid-template-columns: 1fr;
