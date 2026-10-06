@@ -57,7 +57,10 @@ internal static class MonthlyTests
         check(snapshot.Issues.Any(issue => issue.Kind == "EKSİK ÇIKIŞ" && issue.Day.Day == 4), "REV21 missing exit detected");
         check(snapshot.Issues.Any(issue => issue.Kind == "HİÇ BASMAMIŞ" && issue.Day.Day == 11), "REV21 no attendance requires whole day consent");
         var single = MonthlyDbAudit.Complete(snapshot, new(false, true, false, false), "", CancellationToken.None);
-        check(single.Length == 2 && single.Any(issue=>issue.Id==3 && issue.Time=="19:00") && single.Any(issue=>issue.Id==11 && issue.Side=="Giriş" && issue.Time=="08:30"), "REV21 entry-only and exit-only days complete only absent side; leave excluded");
+        check(single.Length == 2 &&
+            single.Any(issue => issue.Id == 3 && issue.Side == "Çıkış" && MonthlyDbAudit.Clock(issue.Time, out var exitMinute) && exitMinute >= snapshot.WorkHours.ExitEarly && exitMinute <= snapshot.WorkHours.ExitLate) &&
+            single.Any(issue => issue.Id == 11 && issue.Side == "Giriş" && MonthlyDbAudit.Clock(issue.Time, out var entryMinute) && entryMinute >= snapshot.WorkHours.EntryEarly && entryMinute <= snapshot.WorkHours.EntryLate),
+            "REV23 entry-only and exit-only days complete only absent side with natural clock; leave excluded");
         var all = MonthlyDbAudit.Complete(snapshot, new(false, true, true, true), "", CancellationToken.None);
         check(all.Length > single.Length, "REV21 whole day generation only after explicit setting");
         check(all.All(issue => issue.Day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday && !MonthlyDbAudit.Holiday(issue.Day)), "REV21 weekends official holidays and eve excluded");
@@ -95,16 +98,21 @@ internal static class MonthlyTests
             row.Field<string>("Taraf") == issue.Side && row.Field<string>("DB Saat") == issue.Time && row.Field<string>("TNF Saat") == issue.Time && row.Field<string>("İşlem") == "YOK")),
             "REV21 post-commit readonly recheck confirms generated DB and TNF sides match");
         check(Convert.ToString(database.Scalar("select GSAAT from GIRCIK where SIRA=3"))!.Trim() == "08:50", "REV21 real late entry stays 08:50 after completion");
-        check(Convert.ToString(database.Scalar("select CSAAT from GIRCIK where SIRA=3"))!.Trim() == "19:00", "REV21 only missing exit filled");
+        var generatedExit = single.Single(issue => issue.Id == 3 && issue.Side == "Çıkış").Time;
+        var generatedEntry = single.Single(issue => issue.Id == 11 && issue.Side == "Giriş").Time;
+        check(Convert.ToString(database.Scalar("select CSAAT from GIRCIK where SIRA=3"))!.Trim() == generatedExit, "REV23 only missing exit filled with generated natural time");
         check(Convert.ToString(database.Scalar("select CSAAT from GIRCIK where SIRA=11"))!.Trim()=="18:20" &&
-            Convert.ToString(database.Scalar("select GSAAT from GIRCIK where SIRA=11"))!.Trim()=="08:30", "REV21 exit-only real early departure unchanged after missing entry generated");
+            Convert.ToString(database.Scalar("select GSAAT from GIRCIK where SIRA=11"))!.Trim()==generatedEntry, "REV23 exit-only real early departure unchanged after natural missing entry generated");
         sync = Read();
         snapshot = MonthlyDbAudit.Read(database, sync, CancellationToken.None);
         all = MonthlyDbAudit.Complete(snapshot, new(false, false, true, false), "", CancellationToken.None);
         var wholeCompletion = SyncEngine.CompleteDbAndTnfAsync(database, sync, snapshot, all, CancellationToken.None).GetAwaiter().GetResult();
         check(all.All(issue => File.ReadAllLines(wholeCompletion.Outputs.CorrectedPath).Contains($"{issue.Card},{issue.Time},{issue.Day:ddMMyy},1,001")),
             "REV21 explicitly approved whole days produce paired DB rows and identical TNF rows in one workflow");
-        check(Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where GTARIH='2026-05-11' and GSAAT='08:30' and CSAAT='19:00'")) == 1, "REV21 whole-day completion inserts one paired row");
+        var wholeDayEntry = all.Single(issue => issue.Day.Day == 11 && issue.Side == "Giriş").Time;
+        var wholeDayExit = all.Single(issue => issue.Day.Day == 11 && issue.Side == "Çıkış").Time;
+        check(Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where GTARIH='2026-05-11' and GSAAT=@G and CSAAT=@C",
+            new FbParameter("@G", wholeDayEntry), new FbParameter("@C", wholeDayExit))) == 1, "REV23 whole-day completion inserts one paired row with natural times");
         sync = Read();
         snapshot = MonthlyDbAudit.Read(database, sync, CancellationToken.None);
         var noCalendar = snapshot with { Excluded = new(snapshot.Excluded) { ("00056", new(2026, 5, 4)) } };
@@ -129,7 +137,7 @@ internal static class MonthlyTests
         check(rejected && Convert.ToInt32(database.Scalar("select count(*) from GIRCIK where GTARIH=@D", new FbParameter("@D",newDay))) == 0, "REV21 changed leave plan aborts batch before writes");
         database.Execute("delete from OZELIZIN where TARIH=@D", new FbParameter("@D", newDay));
         database.Execute("update GIRCIK set CTARIH=null,CSAAT=null,CDAKIKA=null,CTUR=null where GTARIH='2026-05-13'");
-        database.Execute("alter table GIRCIK add constraint FIXTURE_FAIL check (GTARIH <> '2026-05-12' or GSAAT <> '08:30')");
+        database.Execute("alter table GIRCIK add constraint FIXTURE_FAIL check (GTARIH <> '2026-05-12')");
         sync = Read();
         snapshot = MonthlyDbAudit.Read(database, sync, CancellationToken.None);
         var rollbackPlan = MonthlyDbAudit.Complete(snapshot, new(false,true,true,false), "", CancellationToken.None)
