@@ -2944,10 +2944,10 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
 
     return (
       <section className="ik-leave-center-v3">
-        <div className="page-head">
+        <div className="page-head ik-leave-page-head">
           <div>
             <h1>Yıllık İzin & Personel İzin Dosyası</h1>
-            <p>Personel seçin; hakediş, devreden, kullanılan, planlanan, gün gün hesap, izin ücreti talebi, form ve geçmiş aynı dosyada yönetilsin.</p>
+            <p>Personel bazlı hakediş, bakiye, hızlı izin, sicil, takvim ve izin ücreti işlemleri.</p>
           </div>
           <div className="group">
             <span className="badge green">{currentPlans.length} bugün izinli</span>
@@ -2955,7 +2955,9 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           </div>
         </div>
 
-        {filters({ third: "Personel ara", fourth: "Durum", fifth: "SGK" })}
+        <div className="ik-leave-filterbar">
+          {filters({ third: "Personel ara", fourth: "Durum", fifth: "SGK" })}
+        </div>
 
         <div className="ik-leave-workspace">
           <aside className="card ik-leave-roster">
@@ -2999,7 +3001,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                 <div><span>Kullanılan / Onaylı</span><b>{num(person.usedDays)} gün</b><small>Bakiyeden ayrılmış</small></div>
                 <div><span>Planlanan</span><b>{num(person.plannedDays)} gün</b><small>Henüz kesinleşmeyen</small></div>
                 <div className={num(person.balance) < 0 ? "danger" : "success"}><span>Kalan</span><b>{num(person.balance)} gün</b><small>Plan sonrası {num(person.projectedBalance)} gün</small></div>
-                <div><span>Kıdem / Yaş</span><b>{num(person.serviceYears)} yıl · {person.age ?? "-"} yaş</b><small>{durationLabel(employeeHireDate(person), today)}</small></div>
+                <div><span>Kıdem / Yaş</span><b>{num(person.serviceYears)} yıl · {person.age ?? "Yaş eksik"}</b><small>{durationLabel(employeeHireDate(person), today)}</small></div>
               </div>
 
               <div className="ik-leave-proof-strip">
@@ -3011,10 +3013,10 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               <nav className="ik-leave-tabs">
                 {[
                   ["overview", "Özet & Hızlı İzin"],
-                  ["history", "Sicil & Gün Dökümü"],
+                  ["history", "Sicil & Günler"],
                   ["calendar", "Takvim & Ekip"],
-                  ["other", "Rapor / Diğer İzin"],
-                  ["cash", "İzin Ücreti / Talep"],
+                  ["other", "Rapor / Diğer"],
+                  ["cash", "İzin Ücreti"],
                   ["settings", "Hakediş & Ayarlar"],
                 ].map(([key, label]) => <button type="button" key={key} className={leaveDeskTab === key ? "active" : ""} onClick={() => setLeaveDeskTab(key)}>{label}</button>)}
               </nav>
