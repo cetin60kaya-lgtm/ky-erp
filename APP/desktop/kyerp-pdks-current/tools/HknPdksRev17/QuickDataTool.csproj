@@ -10,8 +10,8 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Product>HKN PDKS REV22</Product>
-    <Version>22.0.0</Version>
+    <Product>HKN PDKS REV23</Product>
+    <Version>23.0.0</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
