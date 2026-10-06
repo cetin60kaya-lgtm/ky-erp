@@ -451,7 +451,7 @@ public sealed class TerminalCenterForm : Form
 
     void ApplySnapshot(TerminalDeviceSnapshot snapshot)
     {
-        connectionValue.Text = snapshot.Connected ? "BAĞLI" : "BAĞLI DEĞİL";
+        connectionValue.Text = snapshot.Connected ? "BAĞLI" : "KAPALI / ERİŞİLEMİYOR";
         connectionValue.ForeColor = snapshot.Connected ? PdksAppearance.Current.Success : PdksAppearance.Current.Danger;
         clockValue.Text = snapshot.DeviceTime?.ToString("HH:mm:ss") ?? "—";
         usersValue.Text = snapshot.UserCount >= 0 ? snapshot.UserCount.ToString("N0") : "—";
@@ -461,7 +461,7 @@ public sealed class TerminalCenterForm : Form
         syncValue.Text = sync?.LastAt?.ToString("dd.MM HH:mm") ?? "—";
         SetStatus(snapshot.Connected
             ? $"CİHAZ BAĞLI • {TerminalDeviceSettingsStore.Load().IpAddress}:{TerminalDeviceSettingsStore.Load().IpPort}"
-            : "Cihaz bağlantısı yok • " + snapshot.Message,
+            : "Cihaz kapalı / erişilemiyor • " + snapshot.Message,
             snapshot.Connected);
     }
 
