@@ -16,6 +16,8 @@ import {
   saveIkAdvancedLeave,
   previewIkAdvancedLeave,
   saveIkAdvancedLeavePolicy,
+  saveIkAdvancedLeaveProfile,
+  saveIkAdvancedLeaveCashRequest,
   cancelIkAdvancedLeave,
   saveIkAdvancedFinanceMovement,
   saveIkAdvancedPayrollLines,
@@ -100,6 +102,33 @@ function dateKey(year, month, day = 1) {
 
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
+}
+
+function addDateDays(value, amount = 1) {
+  const date = new Date(String(value || "") + "T00:00:00.000Z");
+  if (Number.isNaN(date.getTime())) return "";
+  date.setUTCDate(date.getUTCDate() + amount);
+  return date.toISOString().slice(0, 10);
+}
+
+function durationLabel(startValue, endValue = istanbulDateKey()) {
+  const start = String(startValue || "").slice(0, 10);
+  const end = String(endValue || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || end < start) return "-";
+  let years = Number(end.slice(0, 4)) - Number(start.slice(0, 4));
+  let months = Number(end.slice(5, 7)) - Number(start.slice(5, 7));
+  let days = Number(end.slice(8, 10)) - Number(start.slice(8, 10));
+  if (days < 0) {
+    months -= 1;
+    const previousMonth = Number(end.slice(5, 7)) === 1 ? 12 : Number(end.slice(5, 7)) - 1;
+    const previousMonthYear = previousMonth === 12 ? Number(end.slice(0, 4)) - 1 : Number(end.slice(0, 4));
+    days += new Date(previousMonthYear, previousMonth, 0).getDate();
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  return Math.max(0, years) + " yıl " + Math.max(0, months) + " ay " + Math.max(0, days) + " gün";
 }
 
 function safeList(value) {
@@ -385,9 +414,16 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const [modal, setModal] = useState(null);
   const [modalDraft, setModalDraft] = useState({});
   const [selectedDays, setSelectedDays] = useState([1]);
-  const [leaveView, setLeaveView] = useState("annual");
-  const [annualView, setAnnualView] = useState("control");
-  const [leaveCenter, setLeaveCenter] = useState({ policy: { countedWeekdays: [1, 2, 3, 4, 5], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 }, plans: [], conflicts: [] });
+  const [leaveDeskTab, setLeaveDeskTab] = useState("overview");
+  const [leaveDetailPlanId, setLeaveDetailPlanId] = useState("");
+  const [leaveCenter, setLeaveCenter] = useState({ policy: { countedWeekdays: [1, 2, 3, 4, 5], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 }, plans: [], conflicts: [], employees: [], cashRequests: [] });
+  const [quickLeaveDraft, setQuickLeaveDraft] = useState(() => {
+    const today = istanbulDateKey();
+    return { startDate: today, returnDate: addDateDays(today, 1), status: "APPROVED", note: "" };
+  });
+  const [quickLeavePreview, setQuickLeavePreview] = useState(null);
+  const [leaveProfileDraft, setLeaveProfileDraft] = useState({ birthDate: "", annualLeaveEntitlement: "", annualLeaveCarryover: "", adjustmentDays: "", adjustmentReason: "" });
+  const [leaveCashDraft, setLeaveCashDraft] = useState({ requestType: "ACTIVE_EMPLOYMENT_REQUEST", requestDate: istanbulDateKey(), requestedDays: "", note: "" });
   const [leavePreview, setLeavePreview] = useState(null);
   const [policyDraft, setPolicyDraft] = useState({ countedWeekdays: [1, 2, 3, 4, 5], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 });
   const [leaveCalendarMonth, setLeaveCalendarMonth] = useState(`${initial.year}-${String(initial.month).padStart(2, "0")}`);
@@ -668,6 +704,35 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
 
   const filteredEmployees = useMemo(() => filterEmployeeList(employees, true), [employees, filterEmployeeList]);
   const filteredMasterEmployees = useMemo(() => filterEmployeeList(masterEmployees, true), [filterEmployeeList, masterEmployees]);
+
+  const leaveEmployeeMap = useMemo(
+    () => new Map(safeList(leaveCenter.employees).map((employee) => [employee.id, employee])),
+    [leaveCenter.employees],
+  );
+  const leaveRoster = useMemo(
+    () => filteredMasterEmployees.map((employee) => ({ ...employee, ...(leaveEmployeeMap.get(employee.id) || {}) })),
+    [filteredMasterEmployees, leaveEmployeeMap],
+  );
+  const leaveSelected = leaveEmployeeMap.get(selectedId)
+    || leaveRoster.find((employee) => employee.id === selectedId)
+    || leaveRoster[0]
+    || null;
+
+  useEffect(() => {
+    if (!leaveSelected) return;
+    const today = istanbulDateKey();
+    setLeaveProfileDraft({
+      birthDate: leaveSelected.birthDate || "",
+      annualLeaveEntitlement: leaveSelected.recordedEntitlement ?? leaveSelected.annualLeaveEntitlement ?? "",
+      annualLeaveCarryover: leaveSelected.annualCarryover ?? leaveSelected.annualLeaveCarryover ?? "",
+      adjustmentDays: "",
+      adjustmentReason: "",
+    });
+    setQuickLeaveDraft({ startDate: today, returnDate: addDateDays(today, 1), status: "APPROVED", note: "" });
+    setQuickLeavePreview(null);
+    setLeaveCashDraft({ requestType: "ACTIVE_EMPLOYMENT_REQUEST", requestDate: today, requestedDays: "", note: "" });
+    setLeaveDetailPlanId("");
+  }, [leaveSelected?.id, leaveSelected?.birthDate, leaveSelected?.recordedEntitlement, leaveSelected?.annualCarryover]);
 
   const movements = useMemo(() => rawAdjustments
     .map((item) => ({ ...item, type: normalizeFinanceType(item.adjustmentType || item.type) }))
@@ -1294,7 +1359,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   };
 
   const editLeavePlan = (plan) => {
-    const employee = employees.find((item) => item.id === plan.employeeId);
+    const employee = masterEmployees.find((item) => item.id === plan.employeeId);
     if (employee) setSelectedId(employee.id);
     setLeavePreview(null);
     setLeaveCalendarMonth(plan.startDate.slice(0, 7));
@@ -1754,6 +1819,146 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       setNotice("Sirket izin gun sayim ayarlari kaydedildi.");
       await load({ force: true });
     } catch (error) { setNotice(error?.message || "Izin ayarlari kaydedilemedi."); } finally { setBusy(false); }
+  };
+
+  const runQuickLeavePreview = async () => {
+    if (!leaveSelected?.id) return setNotice("Önce personel seçin.");
+    if (!quickLeaveDraft.startDate || !quickLeaveDraft.returnDate || quickLeaveDraft.returnDate <= quickLeaveDraft.startDate) {
+      return setNotice("İzne çıkış ve işe dönüş tarihlerini kontrol edin.");
+    }
+    setBusy(true);
+    try {
+      const result = await previewIkAdvancedLeave({
+        mainCompanyId: companyId,
+        employeeId: leaveSelected.id,
+        startDate: quickLeaveDraft.startDate,
+        endDate: quickLeaveDraft.returnDate,
+        returnDate: quickLeaveDraft.returnDate,
+        recordType: "Yillik izin",
+      });
+      setQuickLeavePreview(result);
+      setNotice("");
+      return result;
+    } catch (error) {
+      setQuickLeavePreview(null);
+      setNotice(error?.message || "İzin hesabı yapılamadı.");
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveQuickLeave = async () => {
+    if (!leaveSelected?.id) return setNotice("Önce personel seçin.");
+    setBusy(true);
+    try {
+      const preview = quickLeavePreview || await previewIkAdvancedLeave({
+        mainCompanyId: companyId,
+        employeeId: leaveSelected.id,
+        startDate: quickLeaveDraft.startDate,
+        endDate: quickLeaveDraft.returnDate,
+        returnDate: quickLeaveDraft.returnDate,
+        recordType: "Yillik izin",
+      });
+      if (preview?.hasCriticalConflict) return setNotice("Bu personelin aynı tarihlerde başka izin kaydı var. Kayıt engellendi.");
+      if (preview?.balanceAfter < 0 && !window.confirm("İzin sonrası bakiye " + preview.balanceAfter + " gün olacak. Devam edilsin mi?")) return;
+      const allowDepartmentConflict = preview?.hasDepartmentWarning ? window.confirm("Aynı bölümde izin çakışması var. Yetkili onayıyla devam edilsin mi?") : false;
+      if (preview?.hasDepartmentWarning && !allowDepartmentConflict) return;
+      const saved = await saveIkAdvancedLeave({
+        mainCompanyId: companyId,
+        employeeId: leaveSelected.id,
+        startDate: quickLeaveDraft.startDate,
+        endDate: quickLeaveDraft.returnDate,
+        returnDate: quickLeaveDraft.returnDate,
+        recordType: "Yillik izin",
+        status: quickLeaveDraft.status,
+        effectType: "Ucretli",
+        documentNo: "",
+        note: quickLeaveDraft.note,
+        allowDepartmentConflict,
+      });
+      setQuickLeavePreview(null);
+      setLeaveDetailPlanId(saved?.planId || "");
+      setNotice("Yıllık izin kaydı gün gün hesaplanarak kaydedildi.");
+      await load({ force: true });
+    } catch (error) {
+      setNotice(error?.message || "Yıllık izin kaydedilemedi.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveLeaveProfile = async () => {
+    if (!leaveSelected?.id) return setNotice("Önce personel seçin.");
+    setBusy(true);
+    try {
+      await saveIkAdvancedLeaveProfile({
+        mainCompanyId: companyId,
+        employeeId: leaveSelected.id,
+        birthDate: leaveProfileDraft.birthDate,
+        annualLeaveEntitlement: leaveProfileDraft.annualLeaveEntitlement,
+        annualLeaveCarryover: leaveProfileDraft.annualLeaveCarryover,
+        adjustmentDays: leaveProfileDraft.adjustmentDays,
+        adjustmentReason: leaveProfileDraft.adjustmentReason,
+        adjustmentDate: istanbulDateKey(),
+        userName: user?.fullName || user?.name || user?.email || "IK",
+      });
+      setNotice("İzin hesabı, doğum tarihi ve gerekçeli bakiye bilgileri kaydedildi.");
+      await load({ force: true });
+    } catch (error) {
+      setNotice(error?.message || "İzin hesap ayarları kaydedilemedi.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveLeaveCashRequest = async () => {
+    if (!leaveSelected?.id) return setNotice("Önce personel seçin.");
+    if (num(leaveCashDraft.requestedDays) <= 0) return setNotice("Talep edilen gün sıfırdan büyük olmalıdır.");
+    setBusy(true);
+    try {
+      const saved = await saveIkAdvancedLeaveCashRequest({
+        mainCompanyId: companyId,
+        employeeId: leaveSelected.id,
+        requestType: leaveCashDraft.requestType,
+        requestDate: leaveCashDraft.requestDate,
+        requestedDays: num(leaveCashDraft.requestedDays),
+        note: leaveCashDraft.note,
+        status: "REQUESTED",
+        userName: user?.fullName || user?.name || user?.email || "IK",
+      });
+      setLeaveCashDraft((old) => ({ ...old, requestedDays: "", note: "" }));
+      setNotice("İzin ücreti talebi kaydedildi. Yıllık izin bakiyesi değiştirilmedi. Referans tutar: " + money(saved?.referenceAmount));
+      await load({ force: true });
+    } catch (error) {
+      setNotice(error?.message || "İzin ücreti talebi kaydedilemedi.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updateLeaveCashRequestStatus = async (request, status) => {
+    setBusy(true);
+    try {
+      await saveIkAdvancedLeaveCashRequest({
+        mainCompanyId: companyId,
+        id: request.id,
+        employeeId: request.employeeId,
+        requestType: request.requestType,
+        requestDate: request.requestDate,
+        requestedDays: request.requestedDays,
+        note: request.note,
+        decisionNote: request.decisionNote,
+        status,
+        userName: user?.fullName || user?.name || user?.email || "IK",
+      });
+      setNotice("İzin ücreti talep durumu güncellendi; izin bakiyesine düşüm yapılmadı.");
+      await load({ force: true });
+    } catch (error) {
+      setNotice(error?.message || "Talep durumu güncellenemedi.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const cancelLeave = async (plan) => {
@@ -2704,68 +2909,242 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   }
 
   function renderIzin() {
-    const otherLeaves = leaves.filter((item) => !upper(item.recordType || item.type).includes("YILLIK"));
-    const dailyRecords = safeList(data.attendance).filter((item) => !["G", "W", "X"].includes(upper(item.status)));
-    const plans = safeList(leaveCenter.plans).filter((item) => item.status !== "CANCELLED");
     const today = istanbulDateKey();
+    const plans = safeList(leaveCenter.plans).filter((item) => item.status !== "CANCELLED");
     const currentPlans = plans.filter((item) => item.startDate <= today && item.endDate >= today);
-    const upcomingPlans = plans.filter((item) => item.startDate > today).sort((a, b) => a.startDate.localeCompare(b.startDate));
-    const yearPlans = plans.filter((item) => item.startDate?.startsWith(String(year)) || item.endDate?.startsWith(String(year)));
-    const historyEmployee = masterEmployees.find((item) => item.id === selectedId) || filteredMasterEmployees[0] || null;
-    const historyPlans = historyEmployee
-      ? safeList(leaveCenter.plans).filter((item) => item.employeeId === historyEmployee.id && item.status !== "CANCELLED")
+    const person = leaveSelected;
+    const personPlans = person
+      ? plans.filter((item) => item.employeeId === person.id).sort((a, b) => String(b.startDate).localeCompare(String(a.startDate)))
       : [];
-    const annualHistory = [...historyPlans.reduce((map, item) => {
+    const personCashRequests = person
+      ? safeList(leaveCenter.cashRequests).filter((item) => item.employeeId === person.id)
+      : [];
+    const selectedPlan = personPlans.find((item) => item.id === leaveDetailPlanId) || personPlans[0] || null;
+    const personOtherLeaves = person
+      ? masterLeaves.filter((item) => item.employeeId === person.id && !upper(item.recordType || item.type).includes("YILLIK"))
+      : [];
+    const departmentPlans = person
+      ? plans.filter((item) => item.employeeId !== person.id && item.department && item.department === person.department && item.endDate >= today)
+      : [];
+    const personConflicts = person
+      ? safeList(leaveCenter.conflicts).filter((item) => safeList(item.people).includes(person.fullName))
+      : [];
+    const annualHistory = personPlans.reduce((map, item) => {
       const historyYear = String(item.startDate || "").slice(0, 4) || "Tarihsiz";
-      const current = map.get(historyYear) || { year: historyYear, used: 0, paid: 0, unpaid: 0, excluded: 0, records: 0 };
+      const current = map.get(historyYear) || { year: historyYear, records: 0, days: 0 };
       current.records += 1;
-      current.used += num(item.countedDays);
-      current.excluded += safeList(item.excludedDates).length;
-      if (upper(item.effectType).includes("UCRETSIZ")) current.unpaid += num(item.countedDays);
-      else current.paid += num(item.countedDays);
+      current.days += num(item.countedDays);
       map.set(historyYear, current);
       return map;
-    }, new Map()).values()].sort((a, b) => String(b.year).localeCompare(String(a.year)));
-    const statusLabel = (value) => value === "PLANNED" ? "Planlandi" : value === "APPROVED" ? "Onaylandi" : value === "TAKEN" ? "Kullanildi" : "Iptal";
-    return (
-      <section>
-        <div className="page-head"><div><h1>Izin ve Resmi Devam Kayitlari</h1><p>Yillik izin resmi sicili ile rapor, mazeret ve diger gunluk durumlar birbirinden ayridir.</p></div></div>
-        {filters({ third: "Personel ara", fourth: "Durum turu", fifth: "Gosterim" })}
-        <div className="ik-section-tabs leave-main-tabs"><button className={leaveView === "annual" && annualView === "control" ? "active" : ""} onClick={() => { setLeaveView("annual"); setAnnualView("control"); }}>Genel Bakis</button><button className={leaveView === "annual" && annualView === "calendar" ? "active" : ""} onClick={() => { setLeaveView("annual"); setAnnualView("calendar"); }}>Yillik Izin</button><button className={leaveView === "other" ? "active" : ""} onClick={() => setLeaveView("other")}>Rapor / Diger Izin</button><button className={leaveView === "annual" && annualView === "registry" ? "active" : ""} onClick={() => { setLeaveView("annual"); setAnnualView("registry"); }}>Izin Sicili</button><button className={leaveView === "annual" && annualView === "policy" ? "active" : ""} onClick={() => { setLeaveView("annual"); setAnnualView("policy"); }}>Ayarlar</button></div>
-        {leaveView === "annual" ? <>
-          <div className="workbar"><div className="group"><button className="btn primary" onClick={() => openLeave("yillik")}>Yeni Izin / Plan</button><button className="btn green" onClick={() => setModal("izinFis")}>A5 Resmi Izin Formu</button></div><button className="btn" onClick={() => exportRowsToExcelFile(`yillik-izin-sicili-${year}.xlsx`, plans.map((item) => ({ personel: item.fullName, bolum: item.department, izinTuru: item.recordType, baslangic: item.startDate, bitis: item.endDate, iseDonus: item.returnDate, sayilanGun: item.countedDays, ucretDurumu: item.effectType || "Ücretli", sayilmayanGun: safeList(item.excludedDates).length, durum: statusLabel(item.status) })))}>Izin Plani Excel</button></div>
+    }, new Map());
+    const annualHistoryRows = [...annualHistory.values()].sort((a, b) => String(b.year).localeCompare(String(a.year)));
+    const initials = (value) => String(value || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("tr-TR");
+    const cashStatusLabel = (value) => upper(value) === "REVIEWED" ? "İncelendi" : upper(value) === "DECLINED" ? "Reddedildi" : upper(value) === "CLOSED" ? "Kapandı" : "Talep";
+    const selectedYearPlans = personPlans.filter((item) => item.startDate?.startsWith(String(year)) || item.endDate?.startsWith(String(year)));
+    const exportPlans = person ? personPlans : plans;
 
-          {annualView === "control" && <>
-            <div className="sumgrid short">{summaryBox("Bugun izinde", currentPlans.length, currentPlans.length ? "orange" : "green")}{summaryBox("Yaklasan plan", upcomingPlans.length)}{summaryBox("Yillik izin kaydi", yearPlans.length)}{summaryBox("Cakisma uyarisi", safeList(leaveCenter.conflicts).length, safeList(leaveCenter.conflicts).length ? "red" : "green")}{summaryBox("Bakiye asimi", employees.filter((item) => employeeLeave(item).balance < 0).length, "red")}{summaryBox("Sayim duzeni", `${safeList(leaveCenter.policy?.countedWeekdays).length} gun/hafta`)}</div>
-            <div className="leave-control-grid"><div className="card"><div className="ch"><div><b>Bugun Izinde Olanlar</b><span>Aktif izinler ve ise donus tarihleri.</span></div></div><div className="leave-card-list">{currentPlans.map((item) => <div className="leave-person-card" key={item.id}><div><b>{item.fullName}</b><span>{item.department || "Bolum belirtilmemis"}</span></div><div><strong>{item.startDate} - {item.endDate}</strong><span>Ise donus: {item.returnDate}</span></div><span className="badge orange">{statusLabel(item.status)}</span></div>)}{!currentPlans.length && <div className="empty-panel">Bugun izinli personel yok.</div>}</div></div><div className="card"><div className="ch"><div><b>Yaklasan Izinler</b><span>En yakin planlar; duzenleme ve form cikisi hazir.</span></div></div><div className="leave-card-list">{upcomingPlans.slice(0, 8).map((item) => <div className="leave-person-card" key={item.id}><div><b>{item.fullName}</b><span>{item.department || "-"}</span></div><div><strong>{item.startDate}</strong><span>{item.countedDays} gun / Donus {item.returnDate}</span></div><div className="row-actions"><button className="btn" onClick={() => editLeavePlan(item)}>Duzenle</button><button className="btn" onClick={() => printLeaveForm(employees.find((employee) => employee.id === item.employeeId), item)}>Form</button></div></div>)}{!upcomingPlans.length && <div className="empty-panel">Yaklasan izin plani yok.</div>}</div></div></div>
-            <div className="card"><div className="ch"><div><b>Cakisma ve Onay Kontrolu</b><span>Ayni personel cakismasi engellenir; ayni bolum cakismasi yetkili onayi ister.</span></div></div><div className="tw"><table><thead><tr><th>Seviye</th><th>Personeller</th><th>Bolum</th><th>Cakisan Tarih</th><th>Aciklama</th></tr></thead><tbody>{safeList(leaveCenter.conflicts).map((item) => <tr key={item.id}><td><span className={`badge ${item.severity === "CRITICAL" ? "red" : "orange"}`}>{item.severity === "CRITICAL" ? "Kritik" : "Uyari"}</span></td><td>{safeList(item.people).join(" / ")}</td><td>{item.department || "-"}</td><td>{item.startDate} - {item.endDate}</td><td>{item.message}</td></tr>)}<EmptyRow show={!safeList(leaveCenter.conflicts).length} colSpan={5} text="Cakisan izin kaydi yok." /></tbody></table></div></div>
-          </>}
-          {annualView === "calendar" && <div className="card"><div className="ch"><div><b>{year} Yillik Izin Plani</b><span>Gecmis, mevcut ve ileri tarihli izinler tek zaman cizelgesinde.</span></div></div><div className="leave-year-board">{MONTHS.map((name, index) => { const prefix = `${year}-${String(index + 1).padStart(2, "0")}`; const rows = yearPlans.filter((item) => item.startDate?.startsWith(prefix) || (item.startDate < `${prefix}-31` && item.endDate >= `${prefix}-01`)); return <div className="leave-month" key={name}><h3>{name}<span>{rows.length}</span></h3>{rows.map((item) => <button key={item.id} onClick={() => editLeavePlan(item)}><b>{item.fullName}</b><span>{item.startDate.slice(8)} - {item.endDate.slice(8)} / {item.countedDays} gun</span><small>{item.department || "-"} - {statusLabel(item.status)}</small></button>)}{!rows.length && <em>Plan yok</em>}</div>; })}</div></div>}
-          {annualView === "registry" && <><div className="card"><div className="ch"><div><b>Yillik Izin Plan ve Kullanim Kayitlari</b><span>Geriye donuk kayit, ileri plan, duzenleme, iptal ve A5 form islemleri.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>Bolum</th><th>Tur</th><th>Ücret</th><th>Izne Cikis</th><th>Son Izin Gunu</th><th>Ise Donus</th><th>Sayilan</th><th>Haric</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{safeList(leaveCenter.plans).map((item) => <tr key={item.id}><td><span className="person">{item.fullName}</span><span className="code">{item.code || "-"}</span></td><td>{item.department || "-"}</td><td>{item.recordType}</td><td>{item.effectType || "Ücretli"}</td><td>{item.startDate}</td><td>{item.endDate}</td><td>{item.returnDate}</td><td><b>{item.countedDays} gun</b></td><td>{safeList(item.excludedDates).length}</td><td><span className={`badge ${item.status === "CANCELLED" ? "red" : item.status === "PLANNED" ? "blue" : "green"}`}>{item.legacy ? "Eski resmi kayit" : statusLabel(item.status)}</span></td><td><button className="btn" disabled={item.status === "CANCELLED" || item.legacy} title={item.legacy ? "Eski kayit yeni plan ekranindan degistirilemez" : ""} onClick={() => editLeavePlan(item)}>Duzenle</button> <button className="btn" onClick={() => openLeaveProof(item)}>Gün Dökümü</button> <button className="btn" onClick={() => printLeaveForm(employees.find((employee) => employee.id === item.employeeId), item)}>Form</button> <button className="btn red" disabled={item.status === "CANCELLED" || item.legacy} onClick={() => cancelLeave(item)}>Iptal</button></td></tr>)}<EmptyRow show={!safeList(leaveCenter.plans).length} colSpan={11} text="Izin plan kaydi yok." /></tbody></table></div></div><div className="card"><div className="ch"><div><b>Personel Izin Bakiyeleri</b><span>Hak edis, devir, resmi kullanim ve kalan bakiye.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>Ise Giris</th><th>Hak Edilen</th><th>Devir</th><th>Kullanilan</th><th>Kalan</th><th>Islem</th></tr></thead><tbody>{filteredEmployees.map((employee) => { const leave = employeeLeave(employee); return <tr key={employee.id}><td>{employee.fullName}</td><td>{employee.hireDate || "-"}</td><td>{num(employee.annualLeaveEntitlement)}</td><td>{num(employee.annualLeaveCarryover)}</td><td>{leave.annual}</td><td><span className={`badge ${leave.balance < 0 ? "red" : "green"}`}>{leave.balance}</span></td><td><button className="btn" onClick={() => openLeave("yillik", "", employee)}>Izin Gir</button> <button className="btn" onClick={() => { setSelectedId(employee.id); setModal("izinFis"); }}>Form</button></td></tr>; })}</tbody></table></div></div>
-            <div className="card leave-history-card">
-              <div className="ch"><div><b>Seçili Personel · Yıllık İzin Geçmişi</b><span>{historyEmployee ? historyEmployee.fullName + " · " + (historyEmployee.code || "-") : "Personel seçin"} · önceki yıllar dahil ispatlanabilir kullanım özeti</span></div></div>
-              {historyEmployee ? <>
-                <div className="sumgrid short">
-                  {summaryBox("Hak Ediş", num(historyEmployee.annualLeaveEntitlement) + " gün")}
-                  {summaryBox("Devreden", num(historyEmployee.annualLeaveCarryover) + " gün")}
-                  {summaryBox("Toplam Kullanım", historyPlans.reduce((sum, item) => sum + num(item.countedDays), 0) + " gün")}
-                  {summaryBox("Kayıt Sayısı", historyPlans.length)}
-                </div>
-                <div className="tw"><table><thead><tr><th>Yıl</th><th>Kayıt</th><th>Sayılmış Gün</th><th>Ücretli</th><th>Ücretsiz</th><th>Sayılmayan</th><th>Detay</th></tr></thead><tbody>
-                  {annualHistory.map((row) => <tr key={row.year}><td><b>{row.year}</b></td><td>{row.records}</td><td><b>{row.used} gün</b></td><td>{row.paid} gün</td><td>{row.unpaid} gün</td><td>{row.excluded} gün</td><td>{historyPlans.filter((item) => String(item.startDate || "").startsWith(row.year)).map((item) => <button type="button" className="btn" key={item.id} onClick={() => openLeaveProof(item)}>{item.startDate} · {item.countedDays} gün</button>)}</td></tr>)}
-                  <EmptyRow show={!annualHistory.length} colSpan={7} text="Bu personel için kayıtlı yıllık izin geçmişi yok." />
-                </tbody></table></div>
-                <div className="warnline ok">Gün Dökümü her izin kaydında tarih tarih; sayıldı / sayılmadı nedeni, hafta sonu / resmi tatil bilgisi ve ücret durumunu gösterir. Personele gösterilecek kanıt buradan alınır.</div>
-              </> : <div className="ik-pro-empty">İzin geçmişini görmek için personel seçin.</div>}
+    return (
+      <section className="ik-leave-center-v3">
+        <div className="page-head">
+          <div>
+            <h1>Yıllık İzin & Personel İzin Dosyası</h1>
+            <p>Personel seçin; hakediş, devreden, kullanılan, planlanan, gün gün hesap, izin ücreti talebi, form ve geçmiş aynı dosyada yönetilsin.</p>
+          </div>
+          <div className="group">
+            <span className="badge green">{currentPlans.length} bugün izinli</span>
+            <span className={safeList(leaveCenter.conflicts).length ? "badge orange" : "badge green"}>{safeList(leaveCenter.conflicts).length} çakışma</span>
+          </div>
+        </div>
+
+        {filters({ third: "Personel ara", fourth: "Durum", fifth: "SGK" })}
+
+        <div className="ik-leave-workspace">
+          <aside className="card ik-leave-roster">
+            <div className="ik-leave-roster-head">
+              <div><b>Personeller</b><span>{leaveRoster.length} kayıt · kalan izin hızlı görünüm</span></div>
+              <span className="badge blue">{year}</span>
             </div>
-          </>}
-          {annualView === "policy" && <div className="card leave-policy-card"><div className="ch"><div><b>Sirket Yillik Izin Gun Sayim Duzeni</b><span>Kod degisikligi olmadan haftalik sayilan gunleri ve resmi tatil kuralini yonetin.</span></div></div><div className="leave-policy-grid"><div><h3>Haftalik Sayilan Gunler</h3><p>Izin araliginda isaretli gunler yillik izin bakiyesinden duser.</p><div className="weekday-picker">{["Pazar", "Pazartesi", "Sali", "Carsamba", "Persembe", "Cuma", "Cumartesi"].map((name, day) => <label className={safeList(policyDraft.countedWeekdays).includes(day) ? "checked" : ""} key={name}><input type="checkbox" checked={safeList(policyDraft.countedWeekdays).includes(day)} onChange={(event) => setPolicyDraft((old) => ({ ...old, countedWeekdays: event.target.checked ? [...new Set([...safeList(old.countedWeekdays), day])].sort() : safeList(old.countedWeekdays).filter((value) => value !== day) }))} /><b>{name}</b><span>{safeList(policyDraft.countedWeekdays).includes(day) ? "Izinden sayilir" : "Sayilmaz"}</span></label>)}</div></div><div className="policy-side"><Field label="Resmi tatiller"><select value={policyDraft.excludeOfficialHolidays === false ? "COUNT" : "EXCLUDE"} onChange={(event) => setPolicyDraft((old) => ({ ...old, excludeOfficialHolidays: event.target.value === "EXCLUDE" }))}><option value="EXCLUDE">Izinden sayma</option><option value="COUNT">Izinden say</option></select></Field><Field label="Bolumde ayni anda izinli personel siniri"><input type="number" min="1" value={policyDraft.maxConcurrentDepartment || 1} onChange={(event) => setPolicyDraft((old) => ({ ...old, maxConcurrentDepartment: Number(event.target.value) }))} /></Field><div className="warnline ok">KY işyeri varsayılanı: Pazartesi-Cuma sayılır; Cumartesi, Pazar ve resmi tatiller sayılmaz. Günler şirket politikasından değiştirilebilir.</div><button className="btn primary" disabled={busy} onClick={saveLeavePolicy}>Ayarlari Kaydet</button></div></div></div>}
-        </> : <>
-          <div className="workbar"><div className="group"><button className="btn red" onClick={() => openLeave("gunluk", "Rapor")}>Rapor Kaydi</button><button className="btn orange" onClick={() => openLeave("gunluk")}>Mazeret / Gunluk Durum</button><button className="btn" onClick={() => openLeave("gunluk", "Istisna")}>Istisna</button></div></div>
-          <div className="sumgrid short">{summaryBox("Rapor", otherLeaves.filter((item)=>upper(item.recordType).includes("RAPOR")).length, "orange")}{summaryBox("Ucretsiz izin", otherLeaves.filter((item)=>upper(item.recordType).includes("UCRETSIZ")).length)}{summaryBox("Mazeret", otherLeaves.filter((item)=>upper(item.recordType).includes("MAZERET")).length)}{summaryBox("Gunluk durum", dailyRecords.length)}{summaryBox("Belgesiz rapor", otherLeaves.filter((item)=>upper(item.recordType).includes("RAPOR")&&!item.documentPath).length, "red")}{summaryBox("Toplam kayit", otherLeaves.length+dailyRecords.length)}</div>
-          <div className="card"><div className="ch"><div><b>Rapor, Mazeret ve Diger Izin Kayitlari</b><span>Yillik izin bakiyesinden ayri resmi devam kayitlari.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>Tur / Durum</th><th>Baslangic</th><th>Bitis</th><th>Gun</th><th>Ucret Etkisi</th><th>Belge</th><th>Not</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{otherLeaves.map((item) => { const employee=employees.find((row)=>row.id===item.employeeId); return <tr key={item.id}><td>{employee?.fullName || "-"}</td><td>{item.recordType || "-"}</td><td>{item.startDate || "-"}</td><td>{item.endDate || "-"}</td><td>{item.dayCount || 0}</td><td>{item.effectType || "-"}</td><td><span className={`badge ${item.documentPath ? "green" : "orange"}`}>{item.documentPath ? "Var" : "Eksik"}</span></td><td>{item.note || "-"}</td><td><span className="badge green">Kayitli</span></td><td><button className="btn" onClick={() => openLeave("gunluk", item.recordType, employee)}>Duzenle</button></td></tr>; })}<EmptyRow show={!otherLeaves.length} colSpan={10} text="Bu donemde diger izin / rapor kaydi yok." /></tbody></table></div></div>
-        </>}
-        <LogTable title="Izin ve Gunluk Durum Loglari" rows={scopedLogs} onEdit={editFromLog} />
+            <div className="ik-leave-roster-list">
+              {leaveRoster.map((employee) => {
+                const isActive = employee.id === person?.id;
+                const activeLeave = currentPlans.some((plan) => plan.employeeId === employee.id);
+                return (
+                  <button type="button" key={employee.id} className={isActive ? "ik-leave-roster-row active" : "ik-leave-roster-row"} onClick={() => setSelectedId(employee.id)}>
+                    <span className="ik-pro-avatar">{initials(employee.fullName)}</span>
+                    <span className="copy"><b>{employee.fullName}</b><small>{employee.code || "-"} · {employee.department || "Bölüm yok"}</small></span>
+                    <span className="balance"><b>{num(employee.balance)} gün</b><small>{activeLeave ? "Şu an izinde" : num(employee.projectedBalance) !== num(employee.balance) ? "Plan sonrası " + num(employee.projectedBalance) : "Kalan"}</small></span>
+                  </button>
+                );
+              })}
+              {!leaveRoster.length && <div className="empty-panel">Filtreye uygun personel yok.</div>}
+            </div>
+          </aside>
+
+          <main className="ik-leave-person-file">
+            {!person ? <div className="card empty-panel">İzin dosyasını açmak için soldan personel seçin.</div> : <>
+              <div className="ik-leave-person-hero">
+                <div className="ik-leave-person-id">
+                  <span className="ik-pro-avatar large">{initials(person.fullName)}</span>
+                  <div><span className="eyebrow">PERSONEL İZİN DOSYASI</span><h2>{person.fullName}</h2><p>{person.code || "-"} · {person.department || "-"} · {person.title || "Unvan yok"}</p></div>
+                </div>
+                <div className="ik-leave-hero-actions">
+                  <button className="btn primary" onClick={() => { setLeaveDeskTab("overview"); setQuickLeavePreview(null); }}>Hızlı İzin</button>
+                  <button className="btn green" onClick={() => { setSelectedId(person.id); setModal("izinFis"); }}>A5 İzin Formu</button>
+                  <button className="btn" onClick={() => exportRowsToExcelFile("izin-sicili-" + (person.code || person.id) + "-" + year + ".xlsx", exportPlans.map((item) => ({ personel: item.fullName, personelNo: item.code, izinTuru: item.recordType, cikis: item.startDate, sonIzinGunu: item.endDate, iseDonus: item.returnDate, sayilanGun: item.countedDays, haricGun: safeList(item.excludedDates).length, durum: leavePlanStatusLabel(item.status), not: item.note || "" })))}>Sicil Excel</button>
+                </div>
+              </div>
+
+              <div className="ik-leave-kpi-grid">
+                <div><span>Kanuni Hak</span><b>{num(person.statutoryEntitlement)} gün</b><small>{person.leaveEligible ? "Kıdeme/yaşa göre asgari" : "1 yıl dolmadı"}</small></div>
+                <div><span>Devreden</span><b>{num(person.annualCarryover)} gün</b><small>Önceki dönem</small></div>
+                <div><span>Kullanılan / Onaylı</span><b>{num(person.usedDays)} gün</b><small>Bakiyeden ayrılmış</small></div>
+                <div><span>Planlanan</span><b>{num(person.plannedDays)} gün</b><small>Henüz kesinleşmeyen</small></div>
+                <div className={num(person.balance) < 0 ? "danger" : "success"}><span>Kalan</span><b>{num(person.balance)} gün</b><small>Plan sonrası {num(person.projectedBalance)} gün</small></div>
+                <div><span>Kıdem / Yaş</span><b>{num(person.serviceYears)} yıl · {person.age ?? "-"} yaş</b><small>{durationLabel(employeeHireDate(person), today)}</small></div>
+              </div>
+
+              <div className="ik-leave-proof-strip">
+                <div><b>Hesap</b><span>{num(person.effectiveEntitlement)} hak + {num(person.annualCarryover)} devir + {num(person.balanceAdjustment)} düzeltme − {num(person.usedDays)} kullanılan/onaylı = <strong>{num(person.balance)} gün</strong></span></div>
+                <div><b>Sonraki hakediş</b><span>{person.nextEntitlementDate || "İşe giriş tarihi kontrol edilmeli"}</span></div>
+                <div><b>PDKS kartlı gün</b><span>{year}: {num(person.pdksWorkedDaysYear)} · toplam kayıt: {num(person.pdksWorkedDaysTotal)}</span><small>PDKS günü bilgi amaçlıdır; kanuni kıdem hesabının yerine geçmez.</small></div>
+              </div>
+
+              <nav className="ik-leave-tabs">
+                {[
+                  ["overview", "Özet & Hızlı İzin"],
+                  ["history", "Sicil & Gün Dökümü"],
+                  ["calendar", "Takvim & Ekip"],
+                  ["other", "Rapor / Diğer İzin"],
+                  ["cash", "İzin Ücreti / Talep"],
+                  ["settings", "Hakediş & Ayarlar"],
+                ].map(([key, label]) => <button type="button" key={key} className={leaveDeskTab === key ? "active" : ""} onClick={() => setLeaveDeskTab(key)}>{label}</button>)}
+              </nav>
+
+              {leaveDeskTab === "overview" && <>
+                <div className="ik-leave-overview-grid">
+                  <div className="card ik-leave-quick-card">
+                    <div className="ch"><div><b>Hızlı Yıllık İzin Girişi</b><span>İzne çıkış ve işe dönüşü seçin; sistem hafta tatili/resmi tatili gün gün ayırsın.</span></div></div>
+                    <div className="ik-leave-quick-form">
+                      <label><span>İzne çıkış</span><input type="date" value={quickLeaveDraft.startDate} onChange={(event) => { setQuickLeaveDraft((old) => ({ ...old, startDate: event.target.value })); setQuickLeavePreview(null); }} /></label>
+                      <label><span>İşe dönüş</span><input type="date" value={quickLeaveDraft.returnDate} onChange={(event) => { setQuickLeaveDraft((old) => ({ ...old, returnDate: event.target.value })); setQuickLeavePreview(null); }} /></label>
+                      <label><span>Kayıt durumu</span><select value={quickLeaveDraft.status} onChange={(event) => setQuickLeaveDraft((old) => ({ ...old, status: event.target.value }))}><option value="APPROVED">Onaylandı / Kullanıma hazır</option><option value="PLANNED">Planlandı</option><option value="TAKEN">Kullanıldı</option></select></label>
+                      <label className="wide"><span>Not</span><input value={quickLeaveDraft.note} onChange={(event) => setQuickLeaveDraft((old) => ({ ...old, note: event.target.value }))} placeholder="Opsiyonel açıklama" /></label>
+                    </div>
+                    <div className="ik-leave-preset-row">
+                      <button className="btn" onClick={() => { const start = today; setQuickLeaveDraft((old) => ({ ...old, startDate: start, returnDate: addDateDays(start, 1) })); setQuickLeavePreview(null); }}>Bugün · 1 gün</button>
+                      <button className="btn" onClick={() => { const start = addDateDays(today, 1); setQuickLeaveDraft((old) => ({ ...old, startDate: start, returnDate: addDateDays(start, 1) })); setQuickLeavePreview(null); }}>Yarın · 1 gün</button>
+                      <button className="btn" onClick={() => openLeave("yillik", "", person)}>Gelişmiş İzin Ekranı</button>
+                    </div>
+                    {quickLeavePreview ? <div className="ik-leave-quick-preview">
+                      <div><span>Takvim</span><b>{num(quickLeavePreview.calendarDays)} gün</b></div>
+                      <div><span>Bakiyeden düşen</span><b>{num(quickLeavePreview.countedDays)} gün</b></div>
+                      <div><span>Hariç</span><b>{safeList(quickLeavePreview.excludedDates).length} gün</b></div>
+                      <div><span>İzin sonrası</span><b>{num(quickLeavePreview.balanceAfter)} gün</b></div>
+                    </div> : <div className="ik-leave-quick-placeholder">Önce “Günleri Hesapla” ile hafta tatili, resmi tatil ve bakiyeyi doğrulayın.</div>}
+                    <div className="workbar">
+                      <div className="group"><button className="btn" onClick={runQuickLeavePreview} disabled={busy}>Günleri Hesapla</button><button className="btn primary" onClick={saveQuickLeave} disabled={busy}>İzni Kaydet</button></div>
+                    </div>
+                  </div>
+
+                  <div className="card">
+                    <div className="ch"><div><b>Personelin İzin Gerçeği</b><span>Personelle mutabakat için tek bakışta açıklanabilir hesap.</span></div></div>
+                    <div className="ik-leave-fact-list">
+                      <div><span>İşe giriş</span><b>{employeeHireDate(person) || "-"}</b></div>
+                      <div><span>Doğum tarihi / yaş</span><b>{person.birthDate || "Eksik"} · {person.age ?? "-"} yaş</b></div>
+                      <div><span>Hizmet süresi</span><b>{durationLabel(employeeHireDate(person), today)}</b></div>
+                      <div><span>Kayıtlı yıllık hak</span><b>{num(person.recordedEntitlement)} gün</b></div>
+                      <div><span>Kanuni asgari</span><b>{num(person.statutoryEntitlement)} gün</b></div>
+                      <div><span>Gerekçeli düzeltme toplamı</span><b>{num(person.balanceAdjustment)} gün</b></div>
+                    </div>
+                    <div className="warnline ok">Kalan izin, tek bir elle yazılmış sayıdan değil; hakediş + devir + gerekçeli düzeltme − resmi/onaylı kullanım hareketlerinden oluşur.</div>
+                  </div>
+                </div>
+
+                <div className="ik-leave-overview-grid">
+                  <div className="card"><div className="ch"><div><b>Son / Yaklaşan İzinler</b><span>Seçili personelin en yakın kayıtları.</span></div></div><div className="leave-card-list">
+                    {personPlans.slice(0, 6).map((item) => <button className="ik-leave-mini-plan" key={item.id} onClick={() => { setLeaveDetailPlanId(item.id); setLeaveDeskTab("history"); }}><span><b>{item.startDate} → {item.returnDate || item.endDate}</b><small>{item.countedDays} gün · {item.recordType}</small></span><span className={"badge " + (upper(item.status) === "PLANNED" ? "blue" : "green")}>{leavePlanStatusLabel(item.status)}</span></button>)}
+                    {!personPlans.length && <div className="empty-panel">Yıllık izin kaydı yok.</div>}
+                  </div></div>
+                  <div className="card"><div className="ch"><div><b>Kontrol Uyarıları</b><span>Çakışma ve bakiye riski.</span></div></div><div className="ik-leave-alert-list">
+                    {num(person.balance) < 0 && <div className="danger"><b>Bakiye eksi</b><span>{num(person.balance)} gün</span></div>}
+                    {!person.birthDate && <div className="warning"><b>Doğum tarihi eksik</b><span>Yaşa bağlı 20 günlük asgari hak doğrulanamıyor.</span></div>}
+                    {personConflicts.map((item) => <div className="warning" key={item.id}><b>{item.startDate} - {item.endDate}</b><span>{item.message}</span></div>)}
+                    {num(person.balance) >= 0 && person.birthDate && !personConflicts.length && <div className="success"><b>Kontrol temiz</b><span>Bakiye ve çakışma tarafında kritik uyarı yok.</span></div>}
+                  </div></div>
+                </div>
+              </>}
+
+              {leaveDeskTab === "history" && <>
+                <div className="card">
+                  <div className="ch"><div><b>Yıllık İzin Sicili</b><span>Ne zaman çıktı, kaç gün kullandı, ne zaman döndü ve kayıt durumu.</span></div><span className="badge blue">{personPlans.length} kayıt</span></div>
+                  <div className="tw"><table><thead><tr><th>İzne Çıkış</th><th>Son İzin Günü</th><th>İşe Dönüş</th><th>Sayılmış</th><th>Hariç</th><th>Durum</th><th>Not</th><th>İşlem</th></tr></thead><tbody>
+                    {personPlans.map((item) => <tr key={item.id} className={selectedPlan?.id === item.id ? "selected-row" : ""}><td><b>{item.startDate}</b></td><td>{item.endDate}</td><td>{item.returnDate || "-"}</td><td><b>{num(item.countedDays)} gün</b></td><td>{safeList(item.excludedDates).length}</td><td><span className={"badge " + (upper(item.status) === "PLANNED" ? "blue" : "green")}>{item.legacy ? "Eski kayıt" : leavePlanStatusLabel(item.status)}</span></td><td>{item.note || "-"}</td><td><div className="row-actions"><button className="btn" onClick={() => setLeaveDetailPlanId(item.id)}>Günler</button><button className="btn" disabled={item.legacy} onClick={() => editLeavePlan(item)}>Düzenle</button><button className="btn" onClick={() => printLeaveForm(person, item)}>Form</button><button className="btn red" disabled={item.legacy} onClick={() => cancelLeave(item)}>İptal</button></div></td></tr>)}
+                    <EmptyRow show={!personPlans.length} colSpan={8} text="Yıllık izin sicili boş." />
+                  </tbody></table></div>
+                </div>
+
+                <div className="ik-leave-overview-grid">
+                  <div className="card">
+                    <div className="ch"><div><b>Gün Gün İzin Dökümü</b><span>{selectedPlan ? selectedPlan.startDate + " → " + (selectedPlan.returnDate || selectedPlan.endDate) : "Yukarıdan kayıt seçin"}</span></div></div>
+                    <div className="tw"><table><thead><tr><th>Tarih</th><th>Gün</th><th>İzinden Düşen</th><th>Resmi Tatil</th><th>Neden</th></tr></thead><tbody>
+                      {safeList(selectedPlan?.dayDetails).map((day) => <tr key={day.date}><td><b>{day.date}</b></td><td>{day.weekdayName || "-"}</td><td><span className={"badge " + (num(day.counted) > 0 ? "green" : "blue")}>{num(day.counted)} gün</span></td><td>{day.holidayName || "-"}</td><td>{day.reason || "-"}</td></tr>)}
+                      <EmptyRow show={!safeList(selectedPlan?.dayDetails).length} colSpan={5} text={selectedPlan?.legacy ? "Eski kayıtta gün gün hesap snapshotı bulunmuyor." : "Gün dökümü için izin kaydı seçin."} />
+                    </tbody></table></div>
+                  </div>
+                  <div className="card">
+                    <div className="ch"><div><b>Yıllara Göre Mutabakat</b><span>Personelin hangi yıl kaç gün izin kaydı olduğu.</span></div></div>
+                    <div className="tw"><table><thead><tr><th>Yıl</th><th>Kayıt</th><th>Toplam Gün</th></tr></thead><tbody>{annualHistoryRows.map((row) => <tr key={row.year}><td><b>{row.year}</b></td><td>{row.records}</td><td><b>{row.days} gün</b></td></tr>)}<EmptyRow show={!annualHistoryRows.length} colSpan={3} text="Geçmiş izin kaydı yok." /></tbody></table></div>
+                  </div>
+                </div>
+              </>}
+
+              {leaveDeskTab === "calendar" && <>
+                <div className="card"><div className="ch"><div><b>{year} · {person.fullName} İzin Takvimi</b><span>Yıllık planı ay ay görün.</span></div></div><div className="leave-year-board">{MONTHS.map((name, index) => { const prefix = String(year) + "-" + String(index + 1).padStart(2, "0"); const rows = selectedYearPlans.filter((item) => item.startDate?.startsWith(prefix) || (item.startDate < prefix + "-31" && item.endDate >= prefix + "-01")); return <div className="leave-month" key={name}><h3>{name}<span>{rows.length}</span></h3>{rows.map((item) => <button key={item.id} onClick={() => { setLeaveDetailPlanId(item.id); setLeaveDeskTab("history"); }}><b>{item.startDate.slice(8)} - {(item.endDate || "").slice(8)}</b><span>{item.countedDays} gün</span><small>{leavePlanStatusLabel(item.status)}</small></button>)}{!rows.length && <em>Plan yok</em>}</div>; })}</div></div>
+                <div className="ik-leave-overview-grid">
+                  <div className="card"><div className="ch"><div><b>Aynı Bölüm Yaklaşan İzinleri</b><span>{person.department || "Bölüm belirtilmemiş"} ekibinde iş gücü planı.</span></div></div><div className="leave-card-list">{departmentPlans.slice(0, 12).map((item) => <div className="leave-person-card" key={item.id}><div><b>{item.fullName}</b><span>{item.department || "-"}</span></div><div><strong>{item.startDate} - {item.endDate}</strong><span>{item.countedDays} gün</span></div><span className="badge blue">{leavePlanStatusLabel(item.status)}</span></div>)}{!departmentPlans.length && <div className="empty-panel">Aynı bölümde yaklaşan izin yok.</div>}</div></div>
+                  <div className="card"><div className="ch"><div><b>Çakışma Kontrolü</b><span>Aynı personel kritik; bölüm kapasitesi uyarı üretir.</span></div></div><div className="ik-leave-alert-list">{personConflicts.map((item) => <div className={item.severity === "CRITICAL" ? "danger" : "warning"} key={item.id}><b>{item.startDate} - {item.endDate}</b><span>{item.message}</span></div>)}{!personConflicts.length && <div className="success"><b>Çakışma yok</b><span>Seçili personelin aktif planlarında çakışma bulunmadı.</span></div>}</div></div>
+                </div>
+              </>}
+
+              {leaveDeskTab === "other" && <>
+                <div className="workbar"><div className="group"><button className="btn primary" onClick={() => openLeave("gunluk", "Rapor", person)}>Rapor Gir</button><button className="btn" onClick={() => openLeave("gunluk", "Normal izin", person)}>Normal İzin</button><button className="btn" onClick={() => openLeave("gunluk", "Ucretsiz izin", person)}>Ücretsiz İzin</button><button className="btn" onClick={() => openLeave("gunluk", "Mazeret izni", person)}>Mazeret</button></div></div>
+                <div className="card"><div className="ch"><div><b>Rapor / Mazeret / Diğer İzin Sicili</b><span>Yıllık izin bakiyesinden ayrı devam kayıtları.</span></div></div><div className="tw"><table><thead><tr><th>Tür</th><th>Başlangıç</th><th>Bitiş</th><th>Gün</th><th>Ücret Etkisi</th><th>Belge</th><th>Not</th></tr></thead><tbody>{personOtherLeaves.map((item) => <tr key={item.id}><td><b>{item.recordType || item.type || "-"}</b></td><td>{item.startDate || item.start || "-"}</td><td>{item.endDate || item.end || "-"}</td><td>{num(item.dayCount || item.days)}</td><td>{item.effectType || item.effect || "-"}</td><td><span className={"badge " + (item.documentPath ? "green" : "orange")}>{item.documentPath ? "Var" : "Eksik"}</span></td><td>{item.note || item.description || "-"}</td></tr>)}<EmptyRow show={!personOtherLeaves.length} colSpan={7} text="Diğer izin / rapor kaydı yok." /></tbody></table></div></div>
+              </>}
+
+              {leaveDeskTab === "cash" && <>
+                <div className="warnline warn ik-leave-legal-note"><b>Önemli:</b> İş ilişkisi devam ederken “izne çıkmayayım, parasını alayım” talebi kayıt altına alınabilir; bu kayıt yıllık izin bakiyesini otomatik düşürmez. İşten çıkış kullanılmamış izin ödemesi de bu ekranda yalnız talep/hesap kaydıdır; gerçek bordro/ödeme ayrıca tamamlanır.</div>
+                <div className="ik-leave-overview-grid">
+                  <div className="card"><div className="ch"><div><b>İzin Ücreti Talebi Aç</b><span>Talep ile gerçek ödeme ve izin bakiyesi birbirine karışmasın.</span></div></div><div className="ik-leave-cash-form">
+                    <label><span>Talep tipi</span><select value={leaveCashDraft.requestType} onChange={(event) => setLeaveCashDraft((old) => ({ ...old, requestType: event.target.value }))}><option value="ACTIVE_EMPLOYMENT_REQUEST">Çalışırken izin yerine ücret talebi</option><option value="TERMINATION_PAYOUT">İşten çıkış kullanılmamış izin hesabı</option></select></label>
+                    <label><span>Talep tarihi</span><input type="date" value={leaveCashDraft.requestDate} onChange={(event) => setLeaveCashDraft((old) => ({ ...old, requestDate: event.target.value }))} /></label>
+                    <label><span>Talep edilen gün</span><input type="number" step="0.5" min="0" value={leaveCashDraft.requestedDays} onChange={(event) => setLeaveCashDraft((old) => ({ ...old, requestedDays: event.target.value }))} /></label>
+                    <label className="wide"><span>Personel beyanı / not</span><textarea value={leaveCashDraft.note} onChange={(event) => setLeaveCashDraft((old) => ({ ...old, note: event.target.value }))} placeholder="Personelin talebi, görüşme notu veya açıklama" /></label>
+                    <button className="btn primary wide" onClick={saveLeaveCashRequest} disabled={busy}>Talebi Kaydet</button>
+                  </div></div>
+                  <div className="card"><div className="ch"><div><b>Bu Personelin Talep Geçmişi</b><span>Referans tutar maaş/30 × gün olarak yalnız iç kontrol amacıyla gösterilir.</span></div></div><div className="ik-leave-request-list">{personCashRequests.map((request) => <div className="ik-leave-request" key={request.id}><div><b>{request.requestDate} · {request.requestedDays} gün</b><span>{request.requestType === "TERMINATION_PAYOUT" ? "İşten çıkış izin hesabı" : "Çalışırken ücret talebi"}</span><small>{request.note || "Not yok"}</small></div><div><strong>{money(request.referenceAmount)}</strong><span className="badge blue">{cashStatusLabel(request.status)}</span></div><div className="row-actions"><button className="btn" onClick={() => updateLeaveCashRequestStatus(request, "REVIEWED")}>İncelendi</button><button className="btn red" onClick={() => updateLeaveCashRequestStatus(request, "DECLINED")}>Reddet</button><button className="btn green" onClick={() => updateLeaveCashRequestStatus(request, "CLOSED")}>Kapat</button></div></div>)}{!personCashRequests.length && <div className="empty-panel">İzin ücreti talebi yok.</div>}</div></div>
+                </div>
+              </>}
+
+              {leaveDeskTab === "settings" && <>
+                <div className="ik-leave-overview-grid">
+                  <div className="card"><div className="ch"><div><b>Personel Hakediş & Bakiye Ayarı</b><span>Doğum tarihi yaş kuralını; hakediş ve devir ise resmi bakiye hesabını besler.</span></div></div><div className="ik-leave-settings-form">
+                    <label><span>Doğum tarihi</span><input type="date" value={leaveProfileDraft.birthDate} onChange={(event) => setLeaveProfileDraft((old) => ({ ...old, birthDate: event.target.value }))} /></label>
+                    <label><span>Kayıtlı yıllık hak</span><input type="number" step="0.5" min="0" value={leaveProfileDraft.annualLeaveEntitlement} onChange={(event) => setLeaveProfileDraft((old) => ({ ...old, annualLeaveEntitlement: event.target.value }))} /></label>
+                    <label><span>Devreden izin</span><input type="number" step="0.5" min="0" value={leaveProfileDraft.annualLeaveCarryover} onChange={(event) => setLeaveProfileDraft((old) => ({ ...old, annualLeaveCarryover: event.target.value }))} /></label>
+                    <label><span>Bakiye düzeltme (+ / -)</span><input type="number" step="0.5" value={leaveProfileDraft.adjustmentDays} onChange={(event) => setLeaveProfileDraft((old) => ({ ...old, adjustmentDays: event.target.value }))} placeholder="Örn. 2 veya -1" /></label>
+                    <label className="wide"><span>Düzeltme gerekçesi</span><textarea value={leaveProfileDraft.adjustmentReason} onChange={(event) => setLeaveProfileDraft((old) => ({ ...old, adjustmentReason: event.target.value }))} placeholder="Manuel düzeltme varsa gerekçe zorunlu" /></label>
+                    <div className="wide ik-leave-law-summary"><b>Sistem önerisi: {num(person.statutoryEntitlement)} gün kanuni asgari</b><span>İşe giriş {employeeHireDate(person) || "-"} · yaş {person.age ?? "-"} · kıdem {num(person.serviceYears)} yıl. Sistem kayıtlı hakkı kanuni asgarinin altına kaydetmez.</span></div>
+                    <button className="btn primary wide" onClick={saveLeaveProfile} disabled={busy}>Hakediş Bilgilerini Kaydet</button>
+                  </div>
+                  <div className="ik-leave-adjustment-history"><b>Gerekçeli Düzeltme Geçmişi</b>{safeList(person.leaveProfile?.adjustments).slice().reverse().map((item) => <div key={item.id}><span>{item.date || "-"}</span><strong>{num(item.days) > 0 ? "+" : ""}{num(item.days)} gün</strong><small>{item.reason || "-"} · {item.actor || "IK"}</small></div>)}{!safeList(person.leaveProfile?.adjustments).length && <span className="empty-panel">Manuel bakiye düzeltmesi yok.</span>}</div></div>
+
+                  <div className="card"><div className="ch"><div><b>Şirket İzin Sayım Politikası</b><span>Haftanın hangi günlerinin yıllık izinden sayılacağını ve resmi tatil davranışını yönetin.</span></div></div><div className="leave-policy-grid"><div><div className="weekday-picker">{[[1,"Pazartesi"],[2,"Salı"],[3,"Çarşamba"],[4,"Perşembe"],[5,"Cuma"],[6,"Cumartesi"],[0,"Pazar"]].map(([day,label]) => { const checked=safeList(policyDraft.countedWeekdays).includes(day); return <label key={day} className={checked ? "checked" : ""}><input type="checkbox" checked={checked} onChange={(event) => setPolicyDraft((old) => ({ ...old, countedWeekdays: event.target.checked ? [...new Set([...safeList(old.countedWeekdays), day])].sort() : safeList(old.countedWeekdays).filter((value) => value !== day) }))} /><b>{label}</b><span>{checked ? "İzinden sayılır" : "Hafta tatili / sayılmaz"}</span></label>; })}</div></div><div className="policy-side"><label className="ik-check-row"><input type="checkbox" checked={policyDraft.excludeOfficialHolidays !== false} onChange={(event) => setPolicyDraft((old) => ({ ...old, excludeOfficialHolidays: event.target.checked }))} /> Resmi tatilleri yıllık izinden düşme</label><label><span>Aynı bölüm eş zamanlı izin sınırı</span><input type="number" min="1" value={policyDraft.maxConcurrentDepartment || 1} onChange={(event) => setPolicyDraft((old) => ({ ...old, maxConcurrentDepartment: Math.max(1, num(event.target.value)) }))} /></label><button className="btn primary" onClick={saveLeavePolicy} disabled={busy}>Şirket Politikasını Kaydet</button></div></div></div>
+                </div>
+              </>}
+            </>}
+          </main>
+        </div>
+        <LogTable title="İzin İşlem Logları" rows={scopedLogs} onEdit={editFromLog} />
       </section>
     );
   }
