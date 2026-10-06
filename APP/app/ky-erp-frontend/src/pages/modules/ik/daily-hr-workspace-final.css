@@ -235,9 +235,12 @@
 
 /* DAILY-OPERATIONS-CRITICALS-2026-10-03 */
 /* Gün seçimi: yalnız gün/tarih görünür; çift tık davranışı JSX tarafında hızlı girişi açar. */
-.kyop-range-summary{min-height:31px;display:grid;align-content:center;gap:1px;padding:3px 9px;border:1px solid #cad6e6;border-radius:7px;background:#f8fbff;white-space:nowrap}
-.kyop-range-summary span{font-size:7px;font-weight:900;color:#6b7f96;text-transform:uppercase;letter-spacing:.04em}
-.kyop-range-summary strong{font-size:9px;color:#17385f}
+.kyop-manual-range{min-height:31px;display:flex;align-items:center;gap:5px;padding:3px 7px;border:1px solid #cad6e6;border-radius:7px;background:#f8fbff;white-space:nowrap}
+.kyop-manual-range label{display:grid;grid-template-columns:auto 98px;align-items:center;gap:4px;margin:0}
+.kyop-manual-range label>span{font-size:6.7px;font-weight:900;color:#6b7f96;text-transform:uppercase;letter-spacing:.03em}
+.kyop-manual-range input[type="date"]{width:98px;min-width:98px;height:24px;padding:1px 4px;border:1px solid #cbd7e6;border-radius:5px;background:#fff;color:#17385f;font-size:8px;font-weight:800}
+.kyop-manual-range>i{font-style:normal;color:#8aa0b8;font-size:10px;font-weight:900}
+@media(max-width:1100px){.kyop-manual-range label{grid-template-columns:1fr}.kyop-manual-range label>span{display:none}.kyop-manual-range input[type="date"]{width:94px;min-width:94px}}
 .kyop-days{grid-template-columns:repeat(7,minmax(88px,1fr))!important;gap:5px!important;overflow-x:auto;padding-bottom:1px}
 .kyop-days>button{min-height:50px!important;padding:6px 8px!important;align-content:center!important}
 .kyop-days small{font-size:8px!important}
