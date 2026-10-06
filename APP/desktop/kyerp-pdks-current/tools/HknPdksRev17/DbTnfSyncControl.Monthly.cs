@@ -102,10 +102,8 @@ internal sealed partial class DbTnfSyncControl
         scope.SelectedIndex = 0;
         var single = new CheckBox { Left = 20, Top = 65, Width = 550, Text = "Sadece eksik tek tarafı tamamla", Checked = true };
         var whole = new CheckBox { Left = 20, Top = 95, Width = 550, Text = "Hiç basmamış uygun iş gününe giriş + çıkış ÜRET (açık onay)" };
-        var natural = new RadioButton { Left = 20, Top = 130, Width = 270, Text = "Doğal dağılım", Checked = true };
-        var fixedTime = new RadioButton { Left = 300, Top = 130, Width = 280, Text = "Sabit referans: 08:30 / 19:00" };
+        var natural = new Label { Left = 20, Top = 130, Width = 555, Text = "Doğal dağılım ZORUNLU — sabit saat üretilmez." };
         var policy = monthlySnapshot!.WorkHours;
-        fixedTime.Text = $"Sabit referans: {WorkTimePolicy.Format(policy.Entry)} / {WorkTimePolicy.Format(policy.Exit)}";
         var entryMin = new DateTimePicker { Left = 210, Top = 170, Width = 95, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddMinutes(policy.EntryEarly) };
         var entryMax = new DateTimePicker { Left = 340, Top = 170, Width = 95, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddMinutes(policy.EntryLate) };
         var exitMin = new DateTimePicker { Left = 210, Top = 205, Width = 95, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddMinutes(policy.ExitEarly) };
@@ -114,12 +112,12 @@ internal sealed partial class DbTnfSyncControl
         var explanation = new Label { Left = 20, Top = 290, Width = 555, Height = 60, Text = $"Kaynak: {policy.Source}. Mevcut gerçek kart saatleri değiştirilmez. Yalnız eksik kayıt üretilir ve AYNI saatle düzeltilmiş TNF'ye aktarılır. Orijinal TNF korunur. Tatil koruması: 2026." };
         var preview = new Button { Left = 20, Top = 355, Width = 230, Text = "ÜRETİLECEK SAATLERİ ONAYLA" };
         preview.Click += (_, _) => { if (!calendar.Checked) { MessageBox.Show(dialog, "Tatil/izin planlarını doğrulamadan saat üretilemez."); return; } dialog.DialogResult = DialogResult.OK; };
-        dialog.Controls.AddRange([scope, single, whole, natural, fixedTime,
+        dialog.Controls.AddRange([scope, single, whole, natural,
             new Label { Left = 20, Top = 175, Text = "Giriş üretim aralığı", Width = 180 }, entryMin, entryMax,
             new Label { Left = 20, Top = 210, Text = "Çıkış üretim aralığı", Width = 180 }, exitMin, exitMax,
             new Label { Left = 315, Top = 175, Text = "–", Width = 20 }, new Label { Left = 315, Top = 210, Text = "–", Width = 20 }, calendar, explanation, preview]);
         if (dialog.ShowDialog(main) != DialogResult.OK) return;
-        var settings = CompletionSettings.For(policy, scope.SelectedIndex == 1, single.Checked, whole.Checked, natural.Checked) with {
+        var settings = CompletionSettings.For(policy, scope.SelectedIndex == 1, single.Checked, whole.Checked, true) with {
             EntryMin = entryMin.Value.Hour * 60 + entryMin.Value.Minute, EntryMax = entryMax.Value.Hour * 60 + entryMax.Value.Minute,
             ExitMin = exitMin.Value.Hour * 60 + exitMin.Value.Minute, ExitMax = exitMax.Value.Hour * 60 + exitMax.Value.Minute };
         var current = monthlySnapshot!;
@@ -171,7 +169,7 @@ internal sealed partial class DbTnfSyncControl
                 lastOutputs = null;
             }
             success = true;
-            SyncEngine.Log($"REV21 monthly_db_action={title} completed backup={Path.GetFileName(backup)}");
+            SyncEngine.Log($"REV23 monthly_db_action={title} completed backup={Path.GetFileName(backup)}");
         }
         catch (OperationCanceledException) { summary.Text = "İşlem iptal edildi; commit öncesindeki değişiklikler geri alındı."; }
         catch (CompletionPublicationException exception)
