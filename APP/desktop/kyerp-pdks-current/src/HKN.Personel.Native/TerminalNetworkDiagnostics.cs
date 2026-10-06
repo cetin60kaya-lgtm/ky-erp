@@ -25,7 +25,7 @@ internal static class TerminalNetworkDiagnostics
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new(true, false, $"{ip}:{port} zaman aşımına uğradı. Cihaz IP/port veya ağ bağlantısı yanlış olabilir.");
+            return new(true, false, $"{ip}:{port} erişilemiyor. Cihaz kapalı olabilir veya Ethernet/ağ bağlantısı yok.");
         }
         catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionRefused)
         {
@@ -33,7 +33,7 @@ internal static class TerminalNetworkDiagnostics
         }
         catch (SocketException ex)
         {
-            return new(true, false, $"{ip}:{port} ağ bağlantısı açılamadı ({ex.SocketErrorCode}). IP, kablo/ağ ve cihaz portunu kontrol edin.");
+            return new(true, false, $"{ip}:{port} erişilemiyor ({ex.SocketErrorCode}). Cihaz kapalı olabilir; IP, Ethernet kablosu ve ağ bağlantısını kontrol edin.");
         }
         catch (Exception ex)
         {
