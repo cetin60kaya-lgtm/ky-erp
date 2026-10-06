@@ -464,7 +464,6 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const rawAdjustments = safeList(data.adjustments).filter((item) => canonicalEmployeeIds.has(item.employeeId));
   const masterLeaves = safeList(data.rawLeaves).length ? safeList(data.rawLeaves) : safeList(data.leaves);
   const masterDocuments = safeList(data.rawDocuments).length ? safeList(data.rawDocuments) : safeList(data.documents);
-  const leaves = safeList(data.leaves).filter((item) => canonicalEmployeeIds.has(item.employeeId));
   const documents = safeList(data.documents).filter((item) => canonicalEmployeeIds.has(item.employeeId));
   const checks = safeList(data.checks);
   const payrollLines = safeList(payrollData?.lines).filter((line) => canonicalEmployeeIds.has(line.employeeId || line.employee?.id));
