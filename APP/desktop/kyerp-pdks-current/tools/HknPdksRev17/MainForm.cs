@@ -283,7 +283,7 @@ public sealed partial class MainForm : Form
 
 	public MainForm()
 	{
-		Text = "HKN PDKS REV23 — Hızlı Veri";
+		Text = "HKN PDKS REV24 — Hızlı Veri";
 		base.StartPosition = FormStartPosition.CenterScreen;
 		base.Width = 1380;
 		base.Height = 820;
@@ -401,7 +401,7 @@ public sealed partial class MainForm : Form
 		tabs.TabPages.Add(Page("E İşlem Geçmişi", BuildEHistory()));
 		tabs.TabPages.Add(Page("Bordro", BuildPayroll()));
 		tabs.TabPages.Add(Page("Ödeme / Avans", BuildPayments()));
-		tabs.TabPages.Add(Page("Data Kontrol", BuildAudit()));
+		tabs.TabPages.Add(Page("DB - TNF Eşitle", BuildAudit()));
 		tableLayoutPanel.Controls.Add(tabs, 0, 1);
 		base.Controls.Add(tableLayoutPanel);
 	}
@@ -914,52 +914,7 @@ public sealed partial class MainForm : Form
 
 	private Control BuildAudit()
 	{
-		Panel obj = new Panel
-		{
-			Dock = DockStyle.Fill
-		};
-		FlowLayoutPanel flowLayoutPanel = new FlowLayoutPanel
-		{
-			Dock = DockStyle.Top,
-			Height = 82,
-			WrapContents = true
-		};
-		flowLayoutPanel.Controls.Add(new Label
-		{
-			Text = "Yıl",
-			AutoSize = true,
-			Padding = new Padding(0, 8, 3, 0)
-		});
-		flowLayoutPanel.Controls.Add(auditYear);
-		flowLayoutPanel.Controls.Add(new Label
-		{
-			Text = "Ay",
-			AutoSize = true,
-			Padding = new Padding(7, 8, 3, 0)
-		});
-		flowLayoutPanel.Controls.Add(auditMonthNo);
-		flowLayoutPanel.Controls.Add(new Label
-		{
-			Text = "Aktif Personel",
-			AutoSize = true,
-			Padding = new Padding(7, 8, 3, 0)
-		});
-		flowLayoutPanel.Controls.Add(auditPerson);
-		flowLayoutPanel.Controls.Add(WideBtn("Kontrol Et", LoadAudit, 100));
-		flowLayoutPanel.Controls.Add(WideBtn("Seçili Eksikleri Ekle", delegate
-		{
-			ApplyMissingTnf(selectedOnly: true);
-		}, 155));
-		flowLayoutPanel.Controls.Add(WideBtn("Tüm Eksikleri Ekle", delegate
-		{
-			ApplyMissingTnf(selectedOnly: false);
-		}, 145));
-		flowLayoutPanel.Controls.Add(WideBtn("Fazla TNF Temizle", CleanExtraTnf, 145));
-		flowLayoutPanel.Controls.Add(WideBtn("Saat Farkını Düzelt", FixTimeMismatchTnf, 155));
-		flowLayoutPanel.Controls.Add(WideBtn("TNF Listele", LoadTnfAudit, 105));
-		obj.Controls.Add(auditGrid);
-		obj.Controls.Add(flowLayoutPanel);
-		return obj;
+		return new DbTnfSyncControl(this, false);
 	}
 
 	private void DetectSources()
