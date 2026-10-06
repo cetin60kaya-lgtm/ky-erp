@@ -13,8 +13,13 @@ test("daily operations quick entry keeps existing personnel visible and protects
   assert.match(workspace, /Hızlı giriş personel listesi eksik yüklendi/);
 });
 
-test("daily entry keeps double-click quick entry and quick dialog uses a wide day dropdown", () => {
-  assert.match(workspace, /kyop-range-summary/);
+test("daily entry keeps manual start/end range, double-click quick entry and wide day dropdown", () => {
+  assert.match(workspace, /kyop-manual-range/);
+  assert.match(workspace, /aria-label="Tarih aralığını elle seç"/);
+  assert.match(workspace, /<span>Başlangıç<\/span><input type="date" value=\{range\.start\}/);
+  assert.match(workspace, /<span>Bitiş<\/span><input type="date" value=\{range\.end\}/);
+  assert.match(workspace, /shiftRange\(-1\)/);
+  assert.match(workspace, /shiftRange\(1\)/);
   assert.match(workspace, /onDoubleClick=\{\(\) => void openQuick\(item\.date, shift\)\}/);
   assert.match(workspace, /quick-active-day-card/);
   assert.match(workspace, /quick-day-popover-grid/);
@@ -103,4 +108,12 @@ test("completed past weeks do not stay in payment waiting UI and print completes
   assert.match(workspace, /createDailyPayment/);
   assert.match(workspace, /TOPLAM ÖDEME/);
   assert.doesNotMatch(workspace, /<footer><span>ÖDENDİ<\/span>/);
+});
+
+
+test("manual daily range keeps arbitrary ranges instead of forcing Monday-Sunday", () => {
+  assert.match(workspace, /setSafeRange\(value > range\.end \? \{ start: value, end: value \} : \{ \.\.\.range, start: value \}\)/);
+  assert.match(workspace, /setSafeRange\(value < range\.start \? \{ start: value, end: value \} : \{ \.\.\.range, end: value \}\)/);
+  assert.match(workspace, /rangeSpanDays\(resolved\.start, resolved\.end\) > 31/);
+  assert.doesNotMatch(workspace, /kyop-range-summary/);
 });
