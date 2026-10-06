@@ -11,55 +11,76 @@ internal static partial class SyncEngine
         var table = EmptyTable();
         var dbGroups = database.ToLookup(move => (move.Card, move.Date));
         var tnfGroups = terminal.ToLookup(move => (move.Card, move.Date));
+        var format = new TnfFormat();
         table.BeginLoadData();
-        foreach (var key in dbGroups.Select(group => group.Key).Union(tnfGroups.Select(group => group.Key)).OrderBy(key => key.Card).ThenBy(key => key.Date))
+
+        foreach (var key in dbGroups.Select(group => group.Key).Union(tnfGroups.Select(group => group.Key))
+                     .OrderBy(key => key.Card).ThenBy(key => key.Date))
         {
             token.ThrowIfCancellationRequested();
-            var db = dbGroups[key].ToArray();
-            var lines = tnfGroups[key].OrderBy(line => line.Index).ToArray();
-            var buckets = new Dictionary<string, List<TnfMovement>> { ["Giriş"] = [], ["Çıkış"] = [] };
-            var times = db.GroupBy(move => move.Time).ToDictionary(group => group.Key, group => group.Select(move => move.Side).Distinct().ToArray());
-            var invalid = db.Any(move => move.Side is not ("Giriş" or "Çıkış") || !move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase) && !CanBuild(move, new TnfFormat())) ||
-                db.GroupBy(move => move.Side).Any(group => group.Count() > 1) || times.Any(group => group.Value.Length > 1);
-            void Add(DbMovement? move, TnfMovement? line, string side, string status, string operation, string detail)
-                => table.Rows.Add(key.Card, people.GetValueOrDefault(key.Card)?.Name ?? "KIMLIK YOK", key.Date.ToString("dd.MM.yyyy"), side,
-                    move?.Time ?? "", move?.Tur ?? "", line?.Time ?? "", line?.Raw ?? "", status, operation, move?.Id ?? -1, line?.Index ?? -1, false, detail, false);
-            if (invalid)
+            var allDb = dbGroups[key].OrderBy(move => move.Id).ToArray();
+            var normalDb = allDb.Where(move => !move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)).ToArray();
+            var eDb = allDb.Where(move => move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)).ToArray();
+            var lines = tnfGroups[key].OrderBy(line => line.Index).ToList();
+            var used = new HashSet<int>();
+            var name = people.GetValueOrDefault(key.Card)?.Name ?? "KIMLIK YOK";
+
+            void Add(DbMovement? move, TnfMovement? line, string status, string operation, string detail)
+                => table.Rows.Add(key.Card, name, key.Date.ToString("dd.MM.yyyy"),
+                    move?.Side ?? (line is null ? "Belirsiz" : ClockSide(line.Time)),
+                    move?.Time ?? "", move?.Tur ?? (line is null ? "" : "TNF"),
+                    line?.Time ?? "", line?.Raw ?? "", status, operation,
+                    move?.Id ?? -1, line?.Index ?? -1, false, detail, false);
+
+            foreach (var source in normalDb)
             {
-                var count = Math.Max(db.Length, lines.Length);
-                for (var index = 0; index < count; index++) Add(index < db.Length ? db[index] : null, index < lines.Length ? lines[index] : null,
-                    index < db.Length ? db[index].Side : ClockSide(lines[index].Time), "DB HAZIRLANMALI", "İNCELE", "DB tekil/aktarılabilir değil. Önce DB KAYIT'ta seçilen günü hazırlayın; TNF mükerreri tek başına incele nedeni değildir.");
-                continue;
-            }
-            foreach (var line in lines)
-            {
-                var exact = times.GetValueOrDefault(line.Time);
-                var side = exact is { Length: 1 } ? exact[0] : DbRecordService.IntendedSide(line.Time);
-                buckets[side].Add(line);
-            }
-            foreach (var side in new[] { "Giriş", "Çıkış" })
-            {
-                var source = db.SingleOrDefault(move => move.Side == side);
-                var candidates = buckets[side].OrderByDescending(line => line.Time == source?.Time).ThenBy(line => line.Index).ToArray();
-                if (source is null)
+                token.ThrowIfCancellationRequested();
+                if (!CanBuild(source, format))
                 {
-                    foreach (var line in candidates) Add(null, line, side, "FAZLA TNF", "TNF SİL FAZLA", "DB'de bu taraf yok; TNF silinecek.");
+                    Add(source, null, "DB AKTARILAMAZ", "İNCELE",
+                        "DB kart/tarih/saat bilgisi standart TNF satırına dönüştürülemiyor.");
                     continue;
                 }
-                if (source.Tur.Equals("E", StringComparison.OrdinalIgnoreCase))
+
+                TnfMovement? match = null;
+                foreach (var line in lines)
                 {
-                    if (candidates.Length == 0) Add(source, null, side, "E KAYDI", "YOK", "E doğru: TNF yok, eksik=0.");
-                    foreach (var line in candidates) Add(source, line, side, "E HATASI", "TNF SİL E", "E tarafının tüm TNF karşılıkları silinecek; normal kayıt üretilmez.");
+                    if (used.Contains(line.Index) || line.Time != source.Time) continue;
+                    match = line;
+                    break;
+                }
+
+                if (match is null)
+                {
+                    Add(source, null, "TNF EKSİK", "TNF EKLE",
+                        "DB normal hareketi TNF'de yok; aynen eklenecek.");
                     continue;
                 }
-                if (candidates.Length == 0) { Add(source, null, side, "TNF EKSİK", "TNF EKLE", "DB kart/tarih/saati bire bir düzeltilmiş TNF'ye eklenecek."); continue; }
-                var keeper = candidates[0];
-                var canonical = $"{source.Card},{source.Time},{source.Date:ddMMyy},1,001";
-                var equal = keeper.Raw.TrimStart('\uFEFF') == canonical;
-                Add(source, keeper, side, equal ? "✓ UYUMLU" : "SAAT / FORMAT FARKI", equal ? "YOK" : "TNF DÜZELT", "Tek DB kaydına uyan ilk TNF tutulur; diğer satırlar güvenli silinir.");
-                foreach (var duplicate in candidates.Skip(1)) Add(null, duplicate, side, "FAZLA TNF", "TNF SİL FAZLA", "Tekil DB tarafı için fazla/mükerrer TNF satırı; otomatik silinecek.");
+
+                used.Add(match.Index);
+                var canonical = format.Build(source.Card, source.Date, source.Time);
+                var equal = match.Standard && match.Raw.TrimStart('﻿') == canonical;
+                Add(source, match, equal ? "✓ UYUMLU" : "FORMAT FARKI",
+                    equal ? "YOK" : "TNF DÜZELT",
+                    equal ? "DB ve TNF bire bir aynı." : "Aynı DB saati var; TNF satırı standart biçime çekilecek.");
             }
+
+            foreach (var line in lines.Where(line => !used.Contains(line.Index)))
+            {
+                token.ThrowIfCancellationRequested();
+                var isECounterpart = eDb.Any(move => move.Time == line.Time);
+                Add(isECounterpart ? eDb.First(move => move.Time == line.Time) : null, line,
+                    isECounterpart ? "E KAYDI TNF'DE" : "FAZLA TNF",
+                    isECounterpart ? "TNF SİL E" : "TNF SİL FAZLA",
+                    isECounterpart
+                        ? "DB'de E olan hareket TNF'de bulunmaz; satır silinecek."
+                        : "DB'de karşılığı olmayan/fazla/mükerrer TNF satırı silinecek.");
+            }
+
+            foreach (var e in eDb.Where(e => lines.All(line => line.Time != e.Time)))
+                Add(e, null, "E KAYDI", "YOK", "DB'de E kaydı var; TNF'de olmaması doğru.");
         }
+
         table.EndLoadData();
         return table;
     }
