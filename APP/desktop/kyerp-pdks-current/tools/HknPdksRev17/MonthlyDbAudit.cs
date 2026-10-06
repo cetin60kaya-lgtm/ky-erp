@@ -224,7 +224,7 @@ internal static class MonthlyDbAudit
                 if (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || Holiday(day) || excluded.Contains((person.Card, day))) continue;
                 issues.Add(new(person.Card, day, "HİÇ BASMAMIŞ", "Tam gün üretimi için açık kullanıcı onayı gerekir."));
             }
-        var normalization = MonthlyDbNormalization.Plan(request, moves, people, schedules, excluded, locked, shiftDays ?? [], false, "", token);
+        var normalization = MonthlyDbNormalization.Plan(request, moves, people, schedules, excluded, locked, shiftDays ?? [], true, "", token);
         issues.RemoveAll(issue => normalization.NormalDays.Contains((issue.Card, issue.Day)) &&
             (issue.Kind is "MÜKERRER" or "FAZLA TARAF" or "EKSİK GİRİŞ" or "EKSİK ÇIKIŞ" or "HİÇ BASMAMIŞ" ||
              issue.Kind == "İNCELE" && issue.Detail == "Çoklu taraf / olası iki vardiya. Gerçek çiftler otomatik silinmez."));
@@ -255,6 +255,15 @@ internal static class MonthlyDbAudit
         var moves = Movements(snapshot.Records, snapshot.Request).GroupBy(move => (move.Card, move.Date)).ToDictionary(group => group.Key, group => group.ToArray());
         var plans = snapshot.Schedules.ToDictionary(schedule => (schedule.Card, schedule.Day));
         var result = new List<MonthlyIssue>();
+        var previous = new Dictionary<(string Card, string Side), int>();
+        int NaturalMinute(string card, string side, int minimum, int maximum)
+        {
+            var minute = RandomNumberGenerator.GetInt32(minimum, maximum + 1);
+            if (maximum > minimum && previous.TryGetValue((card, side), out var last) && minute == last)
+                minute = minimum + (minute - minimum + 1) % (maximum - minimum + 1);
+            previous[(card, side)] = minute;
+            return minute;
+        }
         foreach (var issue in snapshot.Issues.Where(issue => issue.Kind is "EKSİK GİRİŞ" or "EKSİK ÇIKIŞ" or "HİÇ BASMAMIŞ"))
         {
             token.ThrowIfCancellationRequested();
@@ -266,8 +275,8 @@ internal static class MonthlyDbAudit
                 !Clock(schedule.Entry, out var plannedEntry) || !Clock(schedule.Exit, out var plannedExit) || plannedEntry != policy.Entry || plannedExit != policy.Exit) continue;
             var existing = moves.GetValueOrDefault(key) ?? [];
             if (existing.Length > 1 || existing.Any(move => move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase) || !Clock(move.Time, out _))) continue;
-            var entry = settings.Natural ? RandomNumberGenerator.GetInt32(settings.EntryMin, settings.EntryMax + 1) : settings.Entry;
-            var exit = settings.Natural ? RandomNumberGenerator.GetInt32(settings.ExitMin, settings.ExitMax + 1) : settings.Exit;
+            var entry = NaturalMinute(issue.Card, "Giriş", settings.EntryMin, settings.EntryMax);
+            var exit = NaturalMinute(issue.Card, "Çıkış", settings.ExitMin, settings.ExitMax);
             if (issue.Kind == "EKSİK GİRİŞ" && Clock(existing[0].Time, out var currentExit) && entry >= currentExit || issue.Kind == "EKSİK ÇIKIŞ" && Clock(existing[0].Time, out var currentEntry) && exit <= currentEntry) continue;
             if (issue.Kind is "EKSİK GİRİŞ" or "HİÇ BASMAMIŞ") result.Add(new(issue.Card, issue.Day, "EKLE", "Kullanıcı onaylı üretilmiş eksik taraf", true, existing.FirstOrDefault()?.Id ?? -1, "Giriş", Time(entry)));
             if (issue.Kind is "EKSİK ÇIKIŞ" or "HİÇ BASMAMIŞ") result.Add(new(issue.Card, issue.Day, "EKLE", "Kullanıcı onaylı üretilmiş eksik taraf", true, existing.FirstOrDefault()?.Id ?? -1, "Çıkış", Time(exit)));
