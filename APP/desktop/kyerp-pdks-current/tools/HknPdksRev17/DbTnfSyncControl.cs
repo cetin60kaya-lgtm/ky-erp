@@ -89,7 +89,7 @@ internal sealed partial class DbTnfSyncControl : UserControl
         Font = new Font("Segoe UI", 9);
         BackColor = Color.White;
         month.Items.AddRange(["Tümü", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]);
-        month.SelectedIndex = DateTime.Today.Month;
+        month.SelectedIndex = 0;
         statusFilter.Items.AddRange(["Tümü", "Aktif", "Pasif"]);
         statusFilter.SelectedIndex = 0;
         var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(5), WrapContents = false, FlowDirection = FlowDirection.TopDown };
@@ -109,17 +109,26 @@ internal sealed partial class DbTnfSyncControl : UserControl
             operationControls.Add(button);
             (group ?? checkBar).Controls.Add(button);
         }
-        Button(tnfOnly ? "KONTROL ET" : "BU AYI KONTROL ET", () => RunAuditAsync(false), 155);
-        Button(tnfOnly ? "SON KONTROL" : "SON TAM KONTROL", () => RunAuditAsync(false), 145, Color.LightBlue);
-        if (!tnfOnly)
-            Button("TEK TIK DB → TNF EŞİTLE", OneClickExactSyncAsync, 235, Color.LightGreen, personBar);
-        if (!tnfOnly)
+        if (tnfOnly)
         {
-            Button("DB GÜVENLİLERİ DÜZELT", RepairDbAsync, 190, Color.MistyRose, personBar);
-            Button("DB EKSİKLERİ TAMAMLA", CompleteDbAsync, 190, Color.LemonChiffon, personBar);
+            Button("KONTROL ET", () => RunAuditAsync(month.SelectedIndex == 0), 145);
+            Button("TNF'Yİ DB'YE GÖRE DÜZELT", ApplyAllSafeAsync, 215, Color.LightGreen, personBar);
+            Button("ÇIKTIYI AÇ", OpenOutputsAsync, 145, group: personBar);
         }
-        Button(tnfOnly ? "TNF'Yİ DB'YE GÖRE DÜZELT" : "ÇIKTI OLARAK HAZIRLA", ApplyAllSafeAsync, tnfOnly ? 215 : 185, tnfOnly ? Color.LightGreen : Color.Honeydew, personBar);
-        Button(tnfOnly ? "ÇIKTIYI AÇ" : "ÇIKTI DOSYALARINI AÇ", OpenOutputsAsync, 185, group: personBar);
+        else
+        {
+            Button("KONTROL ET", () => RunAuditAsync(month.SelectedIndex == 0), 145);
+            Button("DB → TNF BİRE BİR EŞİTLE", OneClickExactSyncAsync, 260, Color.LightGreen, personBar);
+            var rule = new Label
+            {
+                Text = "KURAL: DB ANA KAYNAK • Ay=Tümü ise TÜM YIL • Eksik ekle • Fazla/mükerrer sil • Saat DB'ye çek • E kayıtları TNF'de olmaz",
+                AutoSize = true,
+                Padding = new Padding(10, 9, 0, 0),
+                ForeColor = Color.DarkGreen,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+            };
+            personBar.Controls.Add(rule);
+        }
         var paths = new Label { AutoSize = true, MaximumSize = new Size(1450, 65), Padding = new Padding(4) };
         void UpdatePaths() => paths.Text = "DB: " + (main.GetType().GetField("dbPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) as TextBox)?.Text + "\nTNF: " + TnfPathBox?.Text;
         UpdatePaths();
@@ -146,7 +155,14 @@ internal sealed partial class DbTnfSyncControl : UserControl
         bar.SetFlowBreak(workTimeInformation, true);
         var selectedPersonBar = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
         bar.Controls.Add(selectedPersonBar);
-        if (!tnfOnly) Button("BU PERSONELİ DB'YE GÖRE DÜZELT", ApplyPersonAsync, 265, Color.LightGreen, selectedPersonBar);
+        if (!tnfOnly)
+            selectedPersonBar.Controls.Add(new Label
+            {
+                Text = "Tek kural vardır: TNF, seçilen ay/yıl için DB'nin bire bir kopyasıdır.",
+                AutoSize = true,
+                Padding = new Padding(4, 8, 0, 0),
+                ForeColor = Color.DarkSlateGray
+            });
         cancel.Click += (_, _) => cancellation?.Cancel();
         checkBar.Controls.AddRange([progressBar, cancel]);
         operationControls.AddRange([year, month, statusFilter, errorsOnly, hasMovement, search]);
@@ -297,6 +313,28 @@ internal sealed partial class DbTnfSyncControl : UserControl
         var path = TnfPathBox?.Text.Trim() ?? "";
         if (!File.Exists(path)) throw new FileNotFoundException("TNF dosyasını seçin.");
         return Path.GetFullPath(path);
+    }
+
+    string EnsureTnfSourceForSync()
+    {
+        var path = TnfPathBox?.Text.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            var dbBox = main.GetType().GetField("dbPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) as TextBox;
+            var dbSource = dbBox?.Text.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(dbSource)) throw new InvalidOperationException("Önce DB kaynağını seçin.");
+            path = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(dbSource))!, $"TR{(int)year.Value}.Tnf");
+            if (TnfPathBox is { } tnfBox) tnfBox.Text = path;
+        }
+        path = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(path)!;
+        Directory.CreateDirectory(directory);
+        if (!File.Exists(path))
+        {
+            File.WriteAllBytes(path, []);
+            details.Text = $"TNF yoktu; yeni dosya oluşturuldu: {path}";
+        }
+        return path;
     }
 
     AuditRequest Request(bool full)
@@ -498,7 +536,9 @@ internal sealed partial class DbTnfSyncControl : UserControl
         if (IsBusy) return;
         lastOutputs = null;
         outputSourcePath = "";
-        await RunAuditAsync(false);
+        var createdPath = EnsureTnfSourceForSync();
+        var fullYear = month.SelectedIndex == 0;
+        await RunAuditAsync(fullYear);
         if (snapshot is null || IsDisposed) return;
 
         var review = snapshot.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") == "İNCELE");
@@ -515,7 +555,8 @@ internal sealed partial class DbTnfSyncControl : UserControl
         }
 
         var counts = rows.GroupBy(row => row.Field<string>("İşlem")!).ToDictionary(group => group.Key, group => group.Count());
-        var message = $"DB ANA KAYNAK kabul edilerek seçili ay doğrudan eşitlenecek.\n\n" +
+        var periodText = fullYear ? $"{year.Value:0} TÜM YIL" : $"{month.Text} {year.Value:0}";
+        var message = $"DB ANA KAYNAK kabul edilerek {periodText} TNF ile BİRE BİR eşitlenecek.\n\n" +
             $"Eksik TNF eklenecek: {counts.GetValueOrDefault("TNF EKLE")}\n" +
             $"Fazla/mükerrer TNF silinecek: {counts.GetValueOrDefault("TNF SİL FAZLA")}\n" +
             $"E kayıtlarının TNF karşılığı silinecek: {counts.GetValueOrDefault("TNF SİL E")}\n" +
@@ -533,12 +574,12 @@ internal sealed partial class DbTnfSyncControl : UserControl
         SetBusy(true);
         try
         {
-            summary.Text = "REV23 eşitliyor: yedek → eksik ekle → fazla/mükerrer/E sil → saatleri DB'ye çek → son doğrulama...";
+            summary.Text = "Eşitleniyor: DB ana kaynak → eksik ekle → fazla/mükerrer/E sil → saatleri DB'ye çek → son doğrulama...";
             var result = await Task.Run(() => SyncEngine.DirectSyncSourceAsync(database, previous, token), token);
             lastOutputs = null;
             outputSourcePath = "";
-            details.Text = $"REV23 TAMAMLANDI. Ana TNF doğrudan DB ile eşitlendi. Yedek: {result.BackupPath}";
-            summary.Text = $"REV23 EŞİTLEME TAMAM | Eksik +{result.Added} | Fazla -{result.RemovedExtra} | E -{result.RemovedE} | Saat düzelt {result.Corrected} | Toplam {result.Total}";
+            details.Text = $"TAMAMLANDI. TNF artık DB ile bire bir. Yedek: {result.BackupPath}";
+            summary.Text = $"DB = TNF BİRE BİR | Eksik +{result.Added} | Fazla/mükerrer -{result.RemovedExtra} | E -{result.RemovedE} | Saat {result.Corrected} | Toplam {result.Total}";
         }
         catch (OperationCanceledException)
         {
@@ -556,12 +597,12 @@ internal sealed partial class DbTnfSyncControl : UserControl
         }
         if (!IsDisposed)
         {
-            await RunAuditAsync(false);
+            await RunAuditAsync(fullYear);
             if (snapshot is not null)
             {
                 var remaining = snapshot.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") != "YOK");
                 if (remaining == 0)
-                    summary.Text = "REV23 SON KONTROL: DB = TNF BİRE BİR UYUMLU • E kayıtları TNF'de yok • Eksik/Fazla/Saat Farkı/İncele = 0";
+                    summary.Text = $"SON KONTROL: {periodText} • DB = TNF BİRE BİR • E TNF'DE YOK • Eksik/Fazla/Mükerrer/Saat Farkı/İncele = 0";
             }
         }
     }
