@@ -112,6 +112,8 @@ internal static class TerminalDeviceClient
         {
             var network = await TerminalNetworkDiagnostics.CheckAsync(ip, ethernetPort, ct);
             if (!network.AddressValid) return ("STATUS|ERROR|" + network.Message, "");
+            if (!network.PortOpen)
+                return ("STATUS|ERROR|Cihaz kapalı veya ağ bağlantısı yok. " + network.Message, "");
         }
         var workingDirectory = Directory.Exists(sdk.WorkingDirectory) ? sdk.WorkingDirectory : AppContext.BaseDirectory;
 
