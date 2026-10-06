@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 namespace QuickDataTool;
 
 internal sealed record TnfOutputs(string CorrectedPath, string MissingPath, string BackupPath, int MissingCount);
+internal sealed record DirectTnfSyncResult(string SourcePath, string BackupPath, int Added, int RemovedExtra, int RemovedE, int Corrected, int Total);
 
 internal sealed class StagedTnfOutputs(TnfOutputs outputs, string correctedTemporary, string missingTemporary) : IDisposable
 {
@@ -94,6 +95,103 @@ internal static partial class SyncEngine
         var plan = PrepareOutputs(snapshot, selected, cancellation);
         if (snapshot.Request.Exact) VerifyExactOutput(snapshot, plan.Corrected, cancellation);
         return await WriteOutputsAsync(snapshot, plan.Corrected, plan.Missing, cancellation).ConfigureAwait(false);
+    }
+
+    internal static async Task<DirectTnfSyncResult> DirectSyncSourceAsync(KYERP.PDKS.Core.FirebirdDatabase database, AuditSnapshot snapshot, CancellationToken cancellation)
+    {
+        if (!snapshot.Request.Exact) throw new InvalidOperationException("Doğrudan eşitleme yalnız bire bir DB ana kaynak modunda çalışır.");
+        var fresh = await ReadAsync(database, snapshot.Request, cancellation).ConfigureAwait(false);
+        if (fresh.FileHash != snapshot.FileHash || fresh.DbHash != snapshot.DbHash)
+            throw new InvalidOperationException("DB veya TNF değişmiş. Önce yeniden kontrol edin.");
+
+        var review = fresh.Table.AsEnumerable().Where(row => row.Field<string>("İşlem") == "İNCELE").ToArray();
+        if (review.Length > 0)
+            throw new InvalidOperationException($"DB ana kaynakta {review.Length} belirsiz/teknik kayıt var. TNF değiştirilmedi; önce bu DB kayıtlarını düzeltin.");
+
+        var selected = fresh.Table.AsEnumerable().Where(SafeOperation).ToArray();
+        var plan = PrepareOutputs(fresh, selected, cancellation);
+        VerifyExactOutput(fresh, plan.Corrected, cancellation);
+
+        var source = Path.GetFullPath(fresh.Request.Path);
+        var directory = Path.GetDirectoryName(source)!;
+        if (Path.GetFileName(directory).Equals("_TNF_CIKTILARI", StringComparison.OrdinalIgnoreCase))
+            directory = Directory.GetParent(directory)!.FullName;
+        var backupDirectory = Path.Combine(directory, "_YEDEK");
+        Directory.CreateDirectory(backupDirectory);
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture) + "_" + Guid.NewGuid().ToString("N")[..8];
+        var backupPath = Path.Combine(backupDirectory, Path.GetFileNameWithoutExtension(source) + "_REV23_ONCESI_" + stamp + Path.GetExtension(source));
+
+        byte[] original;
+        await using (var stream = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            original = new byte[stream.Length];
+            await stream.ReadExactlyAsync(original, cancellation).ConfigureAwait(false);
+        }
+        if (Convert.ToHexString(SHA256.HashData(original)) != fresh.FileHash)
+            throw new InvalidOperationException("TNF kontrol sırasında değişmiş; eşitleme iptal edildi.");
+
+        await AtomicWriteAsync(backupPath, original, cancellation).ConfigureAwait(false);
+        var replacement = EncodeLines(plan.Corrected, fresh.Encoding);
+        try
+        {
+            await AtomicReplaceAsync(source, replacement, cancellation).ConfigureAwait(false);
+            var verify = await ReadAsync(database, fresh.Request with { Path = source }, cancellation).ConfigureAwait(false);
+            var remaining = verify.Table.AsEnumerable().Where(row => row.Field<string>("İşlem") != "YOK").ToArray();
+            if (remaining.Length > 0)
+                throw new InvalidOperationException($"Son doğrulamada {remaining.Length} uyumsuzluk kaldı.");
+        }
+        catch
+        {
+            await AtomicReplaceAsync(source, original, CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+
+        var counts = selected.GroupBy(row => row.Field<string>("İşlem")!).ToDictionary(group => group.Key, group => group.Count());
+        return new(source, backupPath,
+            counts.GetValueOrDefault("TNF EKLE"),
+            counts.GetValueOrDefault("TNF SİL FAZLA"),
+            counts.GetValueOrDefault("TNF SİL E"),
+            counts.GetValueOrDefault("TNF DÜZELT"),
+            selected.Length);
+    }
+
+    static async Task AtomicReplaceAsync(string destination, byte[] bytes, CancellationToken cancellation)
+    {
+        var temporary = destination + ".rev23." + Guid.NewGuid().ToString("N") + ".tmp";
+        var rollback = destination + ".rev23." + Guid.NewGuid().ToString("N") + ".rollback";
+        try
+        {
+            await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                await stream.WriteAsync(bytes, cancellation).ConfigureAwait(false);
+                stream.Flush(true);
+            }
+            cancellation.ThrowIfCancellationRequested();
+            try
+            {
+                File.Replace(temporary, destination, null, true);
+            }
+            catch (Exception exception) when (exception is IOException or PlatformNotSupportedException or UnauthorizedAccessException)
+            {
+                File.Move(destination, rollback, false);
+                try
+                {
+                    File.Move(temporary, destination, false);
+                    File.Delete(rollback);
+                }
+                catch
+                {
+                    if (File.Exists(destination)) File.Delete(destination);
+                    if (File.Exists(rollback)) File.Move(rollback, destination, false);
+                    throw;
+                }
+            }
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+            if (File.Exists(rollback)) File.Delete(rollback);
+        }
     }
 
     internal static async Task<TnfOutputs> WriteOutputsAsync(AuditSnapshot snapshot, string[] corrected, string[] missing, CancellationToken cancellation)
