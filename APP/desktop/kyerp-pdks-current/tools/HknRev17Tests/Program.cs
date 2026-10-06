@@ -47,7 +47,8 @@ internal static class Program
             var duplicateMismatch = Compare([Db()], [Tnf(time: "08:02"), Tnf(1, "08:24")]);
             Check(Count(duplicateMismatch, "TNF DÜZELT") == 1 && Count(duplicateMismatch, "TNF SİL FAZLA") == 1 && Count(duplicateMismatch, "İNCELE") == 0, "unique DB safely corrects closest mismatching TNF and removes surplus same-side line");
             Check(Count(Compare([Db(), Db(2)], [Tnf()]), "İNCELE") == 2, "duplicate DB is never auto corrected");
-            Check(Count(Compare([Db()], [Tnf(time: "08:24"), Tnf(1, "08:25")]), "İNCELE") == 2, "ambiguous time correspondence");
+            var twoWrongTnf = Compare([Db()], [Tnf(time: "08:24"), Tnf(1, "08:25")]);
+            Check(Count(twoWrongTnf, "TNF DÜZELT") == 1 && Count(twoWrongTnf, "TNF SİL FAZLA") == 1 && Count(twoWrongTnf, "İNCELE") == 0, "single DB auto-resolves multiple same-side TNF by closest clock");
             Check(Count(Compare([Db(), Db(2, "19:00", side: "Çıkış")], [Tnf(), Tnf(1, "19:00")]), "YOK") == 2, "two sides exact");
             Check(Count(Compare([Db(), Db(2, "19:00", "E", "Çıkış")], [Tnf(time: "08:24"), Tnf(1, "19:01")]), "TNF SİL E") == 1, "unique mismatching E safe while separate normal side preserved");
             Check(Count(Compare([Db(time: "")], []), "İNCELE") == 1, "blank DB time needs review");
