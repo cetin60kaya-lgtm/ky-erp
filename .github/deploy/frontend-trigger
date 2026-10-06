@@ -1,4 +1,4 @@
-deploy: security-push-live-sync-hotfix
-canonical: ae39b30a3ec885994c2e1bdee9339b294f52534e
-requested: 2026-10-05T07:30:00Z
-reason: live-pending-poll-push-sync
+deploy: daily-manual-range-20261006
+canonical: 0088fefa3028a7dc7d2f52d008e1f50b50674695
+requested: 2026-10-06T14:47:00Z
+reason: restore-manual-start-end-date-range
