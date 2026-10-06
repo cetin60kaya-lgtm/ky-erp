@@ -44,3 +44,12 @@ test("annual leave mobile fields use 16px controls", () => {
   assert.match(css, /ik-leave-cash-form textarea/);
   assert.match(css, /font-size:\s*16px/);
 });
+
+
+test("final polish keeps leave workspace compact and focused", () => {
+  assert.match(source, /ik-leave-page-head/);
+  assert.match(source, /ik-leave-filterbar/);
+  assert.match(css, /IK_YILLIK_IZIN_FINAL_POLISH_2026_10_06/);
+  assert.match(css, /grid-template-columns:\s*minmax\(238px, 250px\) minmax\(0, 1fr\)/);
+  assert.match(css, /ik-leave-overview-grid[\s\S]*1\.32fr/);
+});
