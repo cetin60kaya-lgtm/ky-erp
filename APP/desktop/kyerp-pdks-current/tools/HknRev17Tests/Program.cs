@@ -186,25 +186,25 @@ internal static class Program
         var originalBytes = File.ReadAllBytes(tnfPath);
         var request = new AuditRequest(tnfPath, new(2026,9,1), new(2026,10,1), "", Format, true);
         var before = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
-        Check(Count(before.Table, "İNCELE") == 0, "REV23 exact audit has no review for unique DB with duplicate/surplus TNF");
-        Check(Count(before.Table, "TNF SİL E") == 1, "REV23 exact audit marks E counterpart for removal");
-        Check(Count(before.Table, "TNF EKLE") == 2, "REV23 exact audit detects both missing normal sides");
-        Check(Count(before.Table, "TNF SİL FAZLA") >= 3, "REV23 exact audit detects duplicate/surplus TNF");
-        Check(Count(before.Table, "TNF DÜZELT") == 2, "REV23 exact audit detects both wrong entry clocks");
+        Check(Count(before.Table, "İNCELE") == 0, "REV24 exact audit has no interpretation/review for valid DB movements");
+        Check(Count(before.Table, "TNF SİL E") == 1, "REV24 exact audit removes E counterpart");
+        Check(Count(before.Table, "TNF EKLE") == 4, "REV24 exact audit adds every DB-normal movement missing from TNF");
+        Check(Count(before.Table, "TNF SİL FAZLA") == 5, "REV24 exact audit deletes every TNF row without exact DB-normal counterpart");
+        Check(Count(before.Table, "TNF DÜZELT") == 0, "REV24 wrong clocks are delete-plus-add, not interpreted");
 
         var result = SyncEngine.DirectSyncSourceAsync(database, before, CancellationToken.None).GetAwaiter().GetResult();
-        Check(File.Exists(result.BackupPath) && File.ReadAllBytes(result.BackupPath).SequenceEqual(originalBytes), "REV23 one-click backup preserves original TNF bytes");
+        Check(File.Exists(result.BackupPath) && File.ReadAllBytes(result.BackupPath).SequenceEqual(originalBytes), "REV24 one-click backup preserves original TNF bytes");
         var after = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
-        Check(after.Table.AsEnumerable().All(row => row.Field<string>("İşlem") == "YOK"), "REV23 one-click final TNF is DB-exact with zero remaining operations");
+        Check(after.Table.AsEnumerable().All(row => row.Field<string>("İşlem") == "YOK"), "REV24 one-click final TNF is DB-exact with zero remaining operations");
         var finalLines = File.ReadAllLines(tnfPath);
         Check(finalLines.Contains(Format.Build("00048", new(2026,9,29), "08:32")) &&
               finalLines.Contains(Format.Build("00048", new(2026,9,30), "08:27")) &&
               !finalLines.Contains(Format.Build("00048", new(2026,9,28), "08:30")) &&
               !finalLines.Contains(Format.Build("00099", new(2026,9,29), "09:00")),
-              "REV23 one-click corrects clocks, removes E and deletes DB-less TNF");
+              "REV24 one-click corrects clocks, removes E and deletes DB-less TNF");
         Check(finalLines.Contains(Format.Build("00048", new(2026,9,1), "08:25")) &&
               finalLines.Contains(Format.Build("00048", new(2026,9,1), "18:58")),
-              "REV23 one-click adds missing DB normal entry and exit into same TNF");
+              "REV24 one-click adds missing DB normal entry and exit into same TNF");
 
         database.Execute("insert into GIRCIK(SIRA,PKNO,GTARIH,GSAAT,GTUR) values(5,'00048','2026-09-29','08:40','')");
         var duplicateDb = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
