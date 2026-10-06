@@ -74,12 +74,18 @@ internal static partial class SyncEngine
             {
                 var dbLines = movements.Where(movement => movement.Side == side).ToArray();
                 var tnfLines = assigned[side];
-                var anchoredSurplus = dbLines.Length == 1 && tnfLines.Count > 1 && !uncertainDate &&
-                    tnfLines.Count(line => line.Time == dbLines[0].Time) == 1 && !tnfLines.Any(line => duplicateTimes.Contains(line.Time));
-                if (anchoredSurplus) tnfLines = tnfLines.OrderBy(line => line.Time == dbLines[0].Time ? 0 : 1).ThenBy(line => line.Time).ThenBy(line => line.Index).ToList();
+                var safeTnfSurplus = dbLines.Length == 1 && tnfLines.Count > 1 && !uncertainDate &&
+                    CanBuild(dbLines[0], format) && tnfLines.All(line => line.Standard);
+                if (safeTnfSurplus)
+                {
+                    var dbClock = TimeSpan.ParseExact(dbLines[0].Time, @"hh\:mm", CultureInfo.InvariantCulture);
+                    tnfLines = tnfLines.OrderBy(line => line.Time == dbLines[0].Time ? 0 : 1)
+                        .ThenBy(line => Math.Abs((TimeSpan.ParseExact(line.Time, @"hh\:mm", CultureInfo.InvariantCulture) - dbClock).TotalMinutes))
+                        .ThenBy(line => line.Index).ToList();
+                }
                 var eOnly = dbLines.Length > 0 && dbLines.All(movement => movement.Tur.Equals("E", StringComparison.OrdinalIgnoreCase));
                 var eClockConflict = dbLines.Any(movement => !movement.Tur.Equals("E", StringComparison.OrdinalIgnoreCase) && movements.Any(other => other.Time == movement.Time && other.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)));
-                var multiple = eClockConflict || !eOnly && movements.Length > 0 && (dbLines.Length > 1 || tnfLines.Count > 1 && !anchoredSurplus || tnfLines.Any(line => duplicateTimes.Contains(line.Time)));
+                var multiple = eClockConflict || !eOnly && movements.Length > 0 && (dbLines.Length > 1 || tnfLines.Count > 1 && !safeTnfSurplus);
                 for (var index = 0; index < Math.Max(dbLines.Length, tnfLines.Count); index++)
                 {
                     var db = index < dbLines.Length ? dbLines[index] : null;
