@@ -142,6 +142,7 @@ internal static class Program
 
     static void Rev23OneClickExactSync()
     {
+        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
         var directory = Path.Combine(Path.GetTempPath(), "HKN_REV23_SYNC_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var dbPath = Path.Combine(directory, "REV23.GDB");
