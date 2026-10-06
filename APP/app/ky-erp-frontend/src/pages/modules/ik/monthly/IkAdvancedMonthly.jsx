@@ -732,7 +732,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setQuickLeavePreview(null);
     setLeaveCashDraft({ requestType: "ACTIVE_EMPLOYMENT_REQUEST", requestDate: today, requestedDays: "", note: "" });
     setLeaveDetailPlanId("");
-  }, [leaveSelected?.id, leaveSelected?.birthDate, leaveSelected?.recordedEntitlement, leaveSelected?.annualCarryover]);
+  }, [leaveSelected]);
 
   const movements = useMemo(() => rawAdjustments
     .map((item) => ({ ...item, type: normalizeFinanceType(item.adjustmentType || item.type) }))
