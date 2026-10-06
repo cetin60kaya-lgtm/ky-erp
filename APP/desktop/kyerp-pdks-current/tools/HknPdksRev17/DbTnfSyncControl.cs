@@ -23,7 +23,7 @@ internal sealed partial class DbTnfSyncControl : UserControl
     TnfOutputs? lastOutputs;
     string outputSourcePath = "";
     readonly Label personnelSummary = new() { Dock = DockStyle.Fill, Padding = new Padding(12), Font = new Font("Segoe UI", 11), Text = "Karşılaştırmak için soldan personel seçin." };
-    readonly Label details = new() { Dock = DockStyle.Bottom, Height = 64, Padding = new Padding(8), Text = "Ayı kontrol edin → DB güvenlileri düzeltin / eksikleri ayrı onayla tamamlayın → TNF'yi DB'ye göre hazırlayın. Gerçek saatler, orijinal TNF ve belirsiz vardiyalar korunur." };
+    readonly Label details = new() { Dock = DockStyle.Bottom, Height = 64, Padding = new Padding(8), Text = "DB ANA KAYNAK. TNF yalnız DB'deki normal hareketleri bire bir taşır; E kayıtları TNF'ye yazılmaz. Eksik eklenir, fazla/mükerrer silinir, saat DB'ye çekilir." };
     readonly ProgressBar progressBar = new() { Width = 105, Height = 26, Style = ProgressBarStyle.Marquee, Visible = false };
     readonly Button cancel = new() { Text = "İptal", Width = 65, Height = 32, Enabled = false };
     readonly DataGridView peopleGrid = Grid();
@@ -185,10 +185,7 @@ internal sealed partial class DbTnfSyncControl : UserControl
         var tabs = new TabControl { Dock = DockStyle.Fill };
         var tnfPage = new TabPage("DB / TNF — AYNI HİZADA");
         tnfPage.Controls.Add(comparison);
-        var dbPage = new TabPage("DB KONTROL / ONAY BEKLEYEN EKSİKLER");
         ConfigureMonthlyGrid();
-        dbPage.Controls.Add(monthlyGrid);
-        if (!tnfOnly) tabs.TabPages.Add(dbPage);
         tabs.TabPages.Add(tnfPage);
         right.Controls.Add(tabs, 0, 1);
         split.Panel2.Controls.Add(right);
@@ -455,8 +452,8 @@ internal sealed partial class DbTnfSyncControl : UserControl
             var prepared = await Task.Run(async () =>
             {
                 var result = await SyncEngine.ReadAsync(database, request, token, progress, listOnly);
-                var monthly = !tnfOnly && !listOnly && request.End == request.Start.AddMonths(1) ? MonthlyDbAudit.Read(database, result, token) : null;
-                var workHours = monthly?.WorkHours ?? WorkTimePolicy.Read(database, token);
+                MonthlyAuditSnapshot? monthly = null;
+                var workHours = WorkTimePolicy.Read(database, token);
                 return (Result: result, Monthly: monthly, WorkHours: workHours, View: PrepareMonthlyView(result, monthly, token), Summary: Summary(result.Table));
             }, token);
             token.ThrowIfCancellationRequested();
