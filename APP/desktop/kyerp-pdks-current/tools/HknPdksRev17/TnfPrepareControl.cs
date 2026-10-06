@@ -107,13 +107,13 @@ internal sealed class TnfPrepareControl : UserControl
 		Width = 115
 	};
 
-	private readonly MaskedTextBox inMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Entry));
+	private readonly MaskedTextBox inMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.EntryEarly));
 
-	private readonly MaskedTextBox inMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Entry));
+	private readonly MaskedTextBox inMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.EntryLate));
 
-	private readonly MaskedTextBox outMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Exit));
+	private readonly MaskedTextBox outMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.ExitEarly));
 
-	private readonly MaskedTextBox outMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.Exit));
+	private readonly MaskedTextBox outMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.ExitLate));
 	private readonly Label workTimeInformation = new() { AutoSize = true, ForeColor = Color.DarkSlateBlue, Padding = new Padding(4), Text = WorkTimePolicy.Default.Information };
 	private WorkTimePolicy WorkHours => main is MainForm application ? application.WorkHours : WorkTimePolicy.Default;
 
@@ -179,8 +179,10 @@ internal sealed class TnfPrepareControl : UserControl
 		Build();
 		void RefreshWorkHours()
 		{
-			inMin.Text = inMax.Text = WorkTimePolicy.Format(WorkHours.Entry);
-			outMin.Text = outMax.Text = WorkTimePolicy.Format(WorkHours.Exit);
+			inMin.Text = WorkTimePolicy.Format(WorkHours.EntryEarly);
+			inMax.Text = WorkTimePolicy.Format(WorkHours.EntryLate);
+			outMin.Text = WorkTimePolicy.Format(WorkHours.ExitEarly);
+			outMax.Text = WorkTimePolicy.Format(WorkHours.ExitLate);
 			workTimeInformation.Text = WorkHours.Information;
 		}
 		RefreshWorkHours();
@@ -603,13 +605,22 @@ internal sealed class TnfPrepareControl : UserControl
 		dataTable.Columns.Add("Tarih", typeof(DateTime));
 		dataTable.Columns.Add("Giriş");
 		dataTable.Columns.Add("Çıkış");
+		Dictionary<string, int> lastEntry = new Dictionary<string, int>(StringComparer.Ordinal);
+		Dictionary<string, int> lastExit = new Dictionary<string, int>(StringComparer.Ordinal);
 		foreach (DateTime item in list2)
 		{
 			List<int> list3 = DistributedMinutes(num, num2, list.Count, item, 17);
 			List<int> list4 = DistributedMinutes(num3, num4, list.Count, item, 71);
 			for (int num5 = 0; num5 < list.Count; num5++)
 			{
-				dataTable.Rows.Add(list[num5], item, FromMinute(list3[num5]), FromMinute(list4[num5]));
+				string card = list[num5];
+				if (num2 > num && lastEntry.TryGetValue(card, out int previousEntry) && list3[num5] == previousEntry)
+					list3[num5] = num + (list3[num5] - num + 1) % (num2 - num + 1);
+				if (num4 > num3 && lastExit.TryGetValue(card, out int previousExit) && list4[num5] == previousExit)
+					list4[num5] = num3 + (list4[num5] - num3 + 1) % (num4 - num3 + 1);
+				lastEntry[card] = list3[num5];
+				lastExit[card] = list4[num5];
+				dataTable.Rows.Add(card, item, FromMinute(list3[num5]), FromMinute(list4[num5]));
 			}
 		}
 		return dataTable;
@@ -763,20 +774,25 @@ internal sealed class TnfPrepareControl : UserControl
 			throw new InvalidOperationException("Saat aralığı hatalı.");
 		}
 		int span = max - min + 1;
-		List<int> list = (from i in Enumerable.Range(0, count)
-			select min + i % span).ToList();
-		Random random = new Random(HashCode.Combine(day.Year, day.DayOfYear, salt, count));
-		for (int num = list.Count - 1; num > 0; num--)
+		Random random = new Random(HashCode.Combine(day.Year, day.DayOfYear, salt, count, min, max));
+		List<int> pool = Enumerable.Range(min, span).ToList();
+		for (int i = pool.Count - 1; i > 0; i--)
 		{
-			int num2 = random.Next(num + 1);
-			List<int> list2 = list;
-			int index = num;
-			List<int> list3 = list;
-			int index2 = num2;
-			int value = list[num2];
-			int value2 = list[num];
-			list2[index] = value;
-			list3[index2] = value2;
+			int j = random.Next(i + 1);
+			(pool[i], pool[j]) = (pool[j], pool[i]);
+		}
+		List<int> list = new List<int>(count);
+		for (int i = 0; i < count; i++)
+		{
+			if (i > 0 && i % span == 0)
+			{
+				for (int j = pool.Count - 1; j > 0; j--)
+				{
+					int k = random.Next(j + 1);
+					(pool[j], pool[k]) = (pool[k], pool[j]);
+				}
+			}
+			list.Add(pool[i % span]);
 		}
 		return list;
 	}
