@@ -643,6 +643,97 @@ async function overtimeAmountForEmployee(c: Context<AppEnv>, companyId: string, 
 }
 
 const IK_PERSON_CARD_CALC_SCOPE = "IK_PERSON_CARD_CALC";
+const IK_LEAVE_PROFILE_SCOPE = "IK_LEAVE_PROFILE";
+const IK_LEAVE_CASH_REQUEST_SCOPE = "IK_LEAVE_CASH_REQUEST";
+
+function fullYearsBetween(startValue: unknown, endValue: unknown) {
+  const start = hrDateOnly(startValue);
+  const end = hrDateOnly(endValue);
+  if (!start || !end || end < start) return 0;
+  let years = number(end.slice(0, 4)) - number(start.slice(0, 4));
+  if (end.slice(5) < start.slice(5)) years -= 1;
+  return Math.max(0, years);
+}
+
+function anniversaryInYear(dateValue: unknown, year: number) {
+  const date = hrDateOnly(dateValue);
+  if (!date || !year) return "";
+  const month = number(date.slice(5, 7));
+  const day = number(date.slice(8, 10));
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return String(year) + "-" + String(month).padStart(2, "0") + "-" + String(Math.min(day, lastDay)).padStart(2, "0");
+}
+
+export function calculateStatutoryAnnualLeave(hireDateValue: unknown, birthDateValue: unknown, asOfValue: unknown = hrTodayIstanbul()) {
+  const hireDate = hrDateOnly(hireDateValue);
+  const birthDate = hrDateOnly(birthDateValue);
+  const asOf = hrDateOnly(asOfValue) || hrTodayIstanbul();
+  const serviceYears = fullYearsBetween(hireDate, asOf);
+  const age = birthDate ? fullYearsBetween(birthDate, asOf) : null;
+  let entitlementDays = serviceYears < 1 ? 0 : serviceYears <= 5 ? 14 : serviceYears < 15 ? 20 : 26;
+  if (serviceYears >= 1 && age !== null && (age <= 18 || age >= 50)) entitlementDays = Math.max(entitlementDays, 20);
+  const anniversaryThisYear = anniversaryInYear(hireDate, number(asOf.slice(0, 4)));
+  const nextEntitlementDate = !hireDate ? "" : anniversaryThisYear > asOf
+    ? anniversaryThisYear
+    : anniversaryInYear(hireDate, number(asOf.slice(0, 4)) + 1);
+  return { hireDate, birthDate, asOf, serviceYears, age, entitlementDays, nextEntitlementDate, eligible: serviceYears >= 1 };
+}
+
+type LeaveProfile = {
+  birthDate: string;
+  adjustments: Row[];
+  updatedAt?: string;
+};
+
+function leaveProfileFileName(companyId: string, employeeId: string) {
+  return companyId + ":" + employeeId;
+}
+
+function parseLeaveProfile(row: Row | null | undefined): LeaveProfile {
+  try {
+    const parsed = JSON.parse(text(row?.data) || "{}") as Row;
+    return {
+      birthDate: hrDateOnly(parsed.birthDate),
+      adjustments: Array.isArray(parsed.adjustments) ? parsed.adjustments as Row[] : [],
+      updatedAt: text(parsed.updatedAt || row?.updated_at),
+    };
+  } catch {
+    return { birthDate: "", adjustments: [] };
+  }
+}
+
+function leaveAdjustmentTotal(profile: LeaveProfile | null | undefined) {
+  return (profile?.adjustments || []).reduce((sum, item) => sum + number(item.days), 0);
+}
+
+async function leaveProfile(c: Context<AppEnv>, companyId: string, employeeId: string): Promise<LeaveProfile> {
+  const row = await first(c, "SELECT data,updated_at FROM json_store WHERE scope=? AND file_name=? LIMIT 1", [IK_LEAVE_PROFILE_SCOPE, leaveProfileFileName(companyId, employeeId)]).catch(() => null);
+  return parseLeaveProfile(row);
+}
+
+async function leaveProfileMap(c: Context<AppEnv>, companyId: string): Promise<Map<string, LeaveProfile>> {
+  const rows = await all(c, "SELECT file_name,data,updated_at FROM json_store WHERE scope=? AND file_name LIKE ?", [IK_LEAVE_PROFILE_SCOPE, companyId + ":%"]).catch(() => []);
+  const prefix = companyId + ":";
+  const result = new Map<string, LeaveProfile>();
+  for (const row of rows) {
+    const fileName = text(row.file_name);
+    if (!fileName.startsWith(prefix)) continue;
+    result.set(fileName.slice(prefix.length), parseLeaveProfile(row));
+  }
+  return result;
+}
+
+async function leaveCashRequests(c: Context<AppEnv>, companyId: string): Promise<Row[]> {
+  const rows = await all(c, "SELECT id,file_name,data,created_at,updated_at FROM json_store WHERE scope=? AND main_company_slug=? ORDER BY updated_at DESC", [IK_LEAVE_CASH_REQUEST_SCOPE, companyId]).catch(() => []);
+  return rows.map((row) => {
+    try {
+      const parsed = JSON.parse(text(row.data) || "{}") as Row;
+      return { ...parsed, id: text(parsed.id || row.id), createdAt: parsed.createdAt || row.created_at, updatedAt: parsed.updatedAt || row.updated_at };
+    } catch {
+      return null;
+    }
+  }).filter(Boolean) as Row[];
+}
 
 type PersonCardCalc = {
   deductionHourlyBase: number;
@@ -2943,7 +3034,13 @@ async function previewAdvancedLeaveV2(c: Context<AppEnv>, supplied?: Row) {
       FROM hr_leave_records_v2 l JOIN hr_monthly_employees e ON e.id=l.employee_id
       WHERE l.employee_id=? AND e.main_company_id=? AND UPPER(l.record_type) LIKE '%YILLIK%'
         AND (?='' OR COALESCE(l.document_path,'')<>?)`, [employeeId, companyId, marker, marker]);
-  const annualRight = number(employee.annualLeaveEntitlement) + number(employee.annualLeaveCarryover);
+  const profile = await leaveProfile(c, companyId, employeeId);
+  const statutory = calculateStatutoryAnnualLeave(hireDate, profile.birthDate, startDate);
+  const recordedEntitlement = number(employee.annualLeaveEntitlement);
+  const effectiveEntitlement = Math.max(recordedEntitlement, statutory.entitlementDays);
+  const carryover = number(employee.annualLeaveCarryover);
+  const adjustmentDays = leaveAdjustmentTotal(profile);
+  const annualRight = effectiveEntitlement + carryover + adjustmentDays;
   const annualUsed = number(usedRow?.total);
   const balanceBefore = annualRight - annualUsed;
   const balanceAfter = balanceBefore - range.countedDays;
@@ -2952,6 +3049,15 @@ async function previewAdvancedLeaveV2(c: Context<AppEnv>, supplied?: Row) {
     conflicts,
     hasCriticalConflict: conflicts.some((row) => row.severity === "CRITICAL"),
     hasDepartmentWarning: conflicts.some((row) => row.severity === "WARNING"),
+    statutoryEntitlement: statutory.entitlementDays,
+    recordedEntitlement,
+    effectiveEntitlement,
+    annualCarryover: carryover,
+    balanceAdjustment: adjustmentDays,
+    birthDate: profile.birthDate,
+    age: statutory.age,
+    serviceYears: statutory.serviceYears,
+    nextEntitlementDate: statutory.nextEntitlementDate,
     annualRight, annualUsed, balanceBefore, balanceAfter,
   };
   return supplied ? data : okData(c, data);
@@ -3043,10 +3149,153 @@ async function cancelAdvancedLeaveV2(c: Context<AppEnv>) {
   return okData(c, { id, cancelled: true, message: "İzin kaydı iptal edildi; izin bakiyesi etkisi geri alındı." });
 }
 
+async function saveAdvancedLeaveProfileV2(c: Context<AppEnv>) {
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c, body);
+  const employeeId = text(body.employeeId || body.personId);
+  const employee = await first(c, "SELECT id,full_name,hire_date,annual_leave_entitlement,annual_leave_carryover FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  if (!employee) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
+
+  const current = await leaveProfile(c, companyId, employeeId);
+  const birthDate = body.birthDate === undefined ? current.birthDate : hrDateOnly(body.birthDate);
+  if (birthDate && birthDate > hrTodayIstanbul()) return error(c, 400, "BIRTH_DATE_INVALID", "Doğum tarihi gelecekte olamaz.");
+
+  const entitlementProvided = body.annualLeaveEntitlement !== undefined && body.annualLeaveEntitlement !== null && body.annualLeaveEntitlement !== "";
+  const carryoverProvided = body.annualLeaveCarryover !== undefined && body.annualLeaveCarryover !== null && body.annualLeaveCarryover !== "";
+  const entitlement = entitlementProvided ? Math.max(0, number(body.annualLeaveEntitlement)) : number(employee.annual_leave_entitlement);
+  const carryover = carryoverProvided ? number(body.annualLeaveCarryover) : number(employee.annual_leave_carryover);
+  if (carryover < 0) return error(c, 400, "LEAVE_CARRYOVER_INVALID", "Devreden izin negatif olamaz.");
+
+  const statutory = calculateStatutoryAnnualLeave(employee.hire_date, birthDate, hrTodayIstanbul());
+  if (entitlementProvided && statutory.eligible && entitlement < statutory.entitlementDays) {
+    return error(c, 400, "LEAVE_ENTITLEMENT_BELOW_STATUTORY", "Yıllık izin hakkı kanuni asgari hakkın altına indirilemez.");
+  }
+
+  const adjustments = [...current.adjustments];
+  const adjustmentProvided = body.adjustmentDays !== undefined && body.adjustmentDays !== null && body.adjustmentDays !== "";
+  const adjustmentDays = adjustmentProvided ? number(body.adjustmentDays) : 0;
+  if (adjustmentProvided && Math.abs(adjustmentDays) > 0) {
+    const reason = text(body.adjustmentReason || body.reason);
+    if (!reason) return error(c, 400, "LEAVE_ADJUSTMENT_REASON_REQUIRED", "İzin bakiye düzeltmesi için gerekçe zorunludur.");
+    adjustments.push({
+      id: crypto.randomUUID(),
+      date: hrDateOnly(body.adjustmentDate) || hrTodayIstanbul(),
+      days: adjustmentDays,
+      reason,
+      actor: text(body.userName || body.userId) || "IK",
+      createdAt: nowIso(),
+    });
+  }
+
+  const profileData = {
+    birthDate,
+    adjustments,
+    updatedAt: nowIso(),
+    updatedBy: text(body.userName || body.userId) || "IK",
+  };
+  const id = "ik-leave-profile:" + companyId + ":" + employeeId;
+  const fileName = leaveProfileFileName(companyId, employeeId);
+  const statements: D1PreparedStatement[] = [
+    c.env.DB.prepare("INSERT INTO json_store (id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET scope=excluded.scope,main_company_slug=excluded.main_company_slug,file_name=excluded.file_name,data=excluded.data,updated_at=excluded.updated_at")
+      .bind(id, IK_LEAVE_PROFILE_SCOPE, companyId, fileName, JSON.stringify(profileData), nowIso(), nowIso()),
+  ];
+  if (entitlementProvided || carryoverProvided) {
+    statements.push(c.env.DB.prepare("UPDATE hr_monthly_employees SET annual_leave_entitlement=?,annual_leave_carryover=?,updated_at=? WHERE id=? AND main_company_id=?")
+      .bind(entitlement, carryover, nowIso(), employeeId, companyId));
+  }
+  await c.env.DB.batch(statements);
+  await audit(c, {
+    mainCompanyId: companyId,
+    employeeId,
+    entityType: "IZIN_BAKIYE",
+    action: adjustmentProvided && adjustmentDays ? "BALANCE_ADJUST" : "PROFILE_UPDATE",
+    summary: adjustmentProvided && adjustmentDays ? "Yıllık izin bakiyesi gerekçeli düzeltildi." : "Yıllık izin profil bilgileri güncellendi.",
+    details: { birthDate, entitlement, carryover, adjustmentDays, adjustmentReason: text(body.adjustmentReason || body.reason), statutory },
+  });
+  return okData(c, {
+    employeeId,
+    birthDate,
+    annualLeaveEntitlement: entitlement,
+    annualLeaveCarryover: carryover,
+    balanceAdjustment: adjustments.reduce((sum, item) => sum + number(item.days), 0),
+    adjustments,
+    statutory,
+    saved: true,
+  });
+}
+
+async function saveAdvancedLeaveCashRequestV2(c: Context<AppEnv>) {
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c, body);
+  const employeeId = text(body.employeeId || body.personId);
+  const employee = await first(c, "SELECT e.id,e.full_name,e.salary,e.hire_date,s.exit_date FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.id=? AND e.main_company_id=? LIMIT 1", [employeeId, companyId]);
+  if (!employee) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
+
+  const requestedDays = Math.max(0, number(body.requestedDays || body.days));
+  if (requestedDays <= 0) return error(c, 400, "LEAVE_CASH_DAYS_REQUIRED", "Talep edilen izin günü sıfırdan büyük olmalıdır.");
+  const requestTypeRaw = upper(body.requestType);
+  const requestType = requestTypeRaw === "TERMINATION_PAYOUT" ? "TERMINATION_PAYOUT" : "ACTIVE_EMPLOYMENT_REQUEST";
+  const statusRaw = upper(body.status);
+  const status = ["REQUESTED", "REVIEWED", "DECLINED", "CLOSED"].includes(statusRaw) ? statusRaw : "REQUESTED";
+  const id = text(body.id) || crypto.randomUUID();
+  const existing = text(body.id)
+    ? await first(c, "SELECT data,created_at FROM json_store WHERE id=? AND scope=? AND main_company_slug=? LIMIT 1", [id, IK_LEAVE_CASH_REQUEST_SCOPE, companyId]).catch(() => null)
+    : null;
+  let existingData: Row = {};
+  try { existingData = JSON.parse(text(existing?.data) || "{}") as Row; } catch {}
+
+  const requestDate = hrDateOnly(body.requestDate) || hrTodayIstanbul();
+  const referenceDailyAmount = Math.round((Math.max(0, number(employee.salary)) / 30) * 100) / 100;
+  const referenceAmount = Math.round(referenceDailyAmount * requestedDays * 100) / 100;
+  const data = {
+    id,
+    employeeId,
+    fullName: text(employee.full_name),
+    requestType,
+    requestDate,
+    requestedDays,
+    referenceDailyAmount,
+    referenceAmount,
+    status,
+    note: text(body.note),
+    decisionNote: text(body.decisionNote),
+    exitDate: hrDateOnly(employee.exit_date),
+    balanceEffectDays: 0,
+    legalNotice: requestType === "ACTIVE_EMPLOYMENT_REQUEST"
+      ? "İş ilişkisi devam ederken izin yerine yapılan ödeme yıllık izin bakiyesini kapatmaz."
+      : "İşten çıkış izin ücreti bu talep ekranında yalnız kayda alınır; gerçek ödeme/bordro işlemi ayrıca tamamlanır.",
+    createdAt: existingData.createdAt || existing?.created_at || nowIso(),
+    updatedAt: nowIso(),
+    updatedBy: text(body.userName || body.userId) || "IK",
+  };
+  const fileName = companyId + ":" + employeeId + ":" + id;
+  await c.env.DB.prepare("INSERT INTO json_store (id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET scope=excluded.scope,main_company_slug=excluded.main_company_slug,file_name=excluded.file_name,data=excluded.data,updated_at=excluded.updated_at")
+    .bind(id, IK_LEAVE_CASH_REQUEST_SCOPE, companyId, fileName, JSON.stringify(data), data.createdAt, data.updatedAt).run();
+  await audit(c, {
+    mainCompanyId: companyId,
+    employeeId,
+    entityType: "IZIN_UCRET_TALEBI",
+    action: existing ? "UPDATE" : "CREATE",
+    summary: "İzin ücreti talebi kaydedildi; yıllık izin bakiyesine otomatik düşüm yapılmadı.",
+    details: { id, requestType, requestDate, requestedDays, referenceAmount, status, balanceEffectDays: 0 },
+  });
+  return okData(c, data, existing ? 200 : 201);
+}
+
 async function leaveCenterV2(c: Context<AppEnv>) {
   const companyId = companyIdOf(c);
   const policy = await leavePolicyV2(c, companyId);
   const employees = await monthlyRows(c, companyId);
+  const profiles = await leaveProfileMap(c, companyId);
+  const cashRequests = await leaveCashRequests(c, companyId);
+  const today = hrTodayIstanbul();
+  const currentYear = today.slice(0, 4);
+  const [workedTotalRows, workedYearRows] = await Promise.all([
+    all(c, "SELECT employee_id,COUNT(DISTINCT work_date) AS worked_days FROM ik_time_clock_events WHERE main_company_id=? GROUP BY employee_id", [companyId]).catch(() => []),
+    all(c, "SELECT employee_id,COUNT(DISTINCT work_date) AS worked_days FROM ik_time_clock_events WHERE main_company_id=? AND work_date LIKE ? GROUP BY employee_id", [companyId, currentYear + "-%"]).catch(() => []),
+  ]);
+  const workedTotal = new Map(workedTotalRows.map((row) => [text(row.employee_id), number(row.worked_days)]));
+  const workedYear = new Map(workedYearRows.map((row) => [text(row.employee_id), number(row.worked_days)]));
   const employeeMap = new Map(employees.map((row) => [text(row.id), row]));
   const managedRows = await all(c, "SELECT * FROM ik_leave_plans WHERE main_company_id=? ORDER BY start_date ASC", [companyId]);
   const managedPlans = managedRows.map((row) => {
@@ -3105,7 +3354,46 @@ async function leaveCenterV2(c: Context<AppEnv>) {
       if (sameEmployee || departmentCount > policy.maxConcurrentDepartment) conflicts.push({ id: `${a.id}:${b.id}`, severity: sameEmployee ? "CRITICAL" : "WARNING", department: a.department || b.department, startDate: overlapStart, endDate: overlapEnd, people: [a.fullName, b.fullName], message: sameEmployee ? "Aynı personelin çakışan izin kayıtları var." : `${a.department || "Aynı bölüm"} için eş zamanlı izin sınırı aşılıyor.` });
     }
   }
-  return okData(c, { policy, employees, plans, conflicts });
+  const enrichedEmployees = employees.map((employee) => {
+    const employeeId = text(employee.id);
+    const profile = profiles.get(employeeId) || { birthDate: "", adjustments: [] };
+    const statutory = calculateStatutoryAnnualLeave(employee.hireDate || employee.hire_date, profile.birthDate, today);
+    const recordedEntitlement = number(employee.annualLeaveEntitlement);
+    const effectiveEntitlement = Math.max(recordedEntitlement, statutory.entitlementDays);
+    const carryover = number(employee.annualLeaveCarryover);
+    const balanceAdjustment = leaveAdjustmentTotal(profile);
+    const personPlans = plans.filter((plan) => text(plan.employeeId) === employeeId && plan.status !== "CANCELLED");
+    const usedOrApprovedDays = personPlans.filter((plan) => plan.legacy || ["APPROVED", "TAKEN"].includes(upper(plan.status))).reduce((sum, plan) => sum + number(plan.countedDays), 0);
+    const takenDays = personPlans.filter((plan) => plan.legacy || upper(plan.status) === "TAKEN" || (upper(plan.status) === "APPROVED" && text(plan.endDate) < today)).reduce((sum, plan) => sum + number(plan.countedDays), 0);
+    const approvedUpcomingDays = personPlans.filter((plan) => upper(plan.status) === "APPROVED" && text(plan.endDate) >= today).reduce((sum, plan) => sum + number(plan.countedDays), 0);
+    const plannedDays = personPlans.filter((plan) => upper(plan.status) === "PLANNED").reduce((sum, plan) => sum + number(plan.countedDays), 0);
+    const annualRight = effectiveEntitlement + carryover + balanceAdjustment;
+    const balance = annualRight - usedOrApprovedDays;
+    return {
+      ...employee,
+      birthDate: profile.birthDate,
+      leaveProfile: profile,
+      statutoryEntitlement: statutory.entitlementDays,
+      recordedEntitlement,
+      effectiveEntitlement,
+      annualCarryover: carryover,
+      balanceAdjustment,
+      annualRight,
+      usedDays: usedOrApprovedDays,
+      takenDays,
+      approvedUpcomingDays,
+      plannedDays,
+      balance,
+      projectedBalance: balance - plannedDays,
+      age: statutory.age,
+      serviceYears: statutory.serviceYears,
+      nextEntitlementDate: statutory.nextEntitlementDate,
+      leaveEligible: statutory.eligible,
+      pdksWorkedDaysTotal: workedTotal.get(employeeId) || 0,
+      pdksWorkedDaysYear: workedYear.get(employeeId) || 0,
+    };
+  });
+  return okData(c, { policy, employees: enrichedEmployees, plans, conflicts, cashRequests, asOf: today });
 }
 
 async function leaveCenter(c: Context<AppEnv>) {
@@ -3172,6 +3460,8 @@ export function registerIkRelationalCloudRoutes(app: Hono<AppEnv>) {
   app.get("/api/ik/advanced/leave-center", protect(leaveCenterV2));
   app.post("/api/ik/advanced/leave/preview", protect(async (c) => (await previewAdvancedLeaveV2(c)) as Response));
   app.post("/api/ik/advanced/leave/policy", protect(saveAdvancedLeavePolicyV2));
+  app.post("/api/ik/advanced/leave/profile", protect(saveAdvancedLeaveProfileV2));
+  app.post("/api/ik/advanced/leave/cash-request", protect(saveAdvancedLeaveCashRequestV2));
   app.post("/api/ik/advanced/person-card/:employeeId", protect(savePersonCard));
   app.post("/api/ik/advanced/person-card/:employeeId/admin-maintenance", protect(adminMaintainPerson));
   app.post("/api/ik/advanced/compensation/bulk", protect(saveAdvancedBulkCompensation));
