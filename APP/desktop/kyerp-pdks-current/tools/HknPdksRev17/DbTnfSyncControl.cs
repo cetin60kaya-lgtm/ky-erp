@@ -452,7 +452,7 @@ internal sealed partial class DbTnfSyncControl : UserControl
             var prepared = await Task.Run(async () =>
             {
                 var result = await SyncEngine.ReadAsync(database, request, token, progress, listOnly);
-                MonthlyAuditSnapshot? monthly = null;
+                MonthlyDbSnapshot? monthly = null;
                 var workHours = WorkTimePolicy.Read(database, token);
                 return (Result: result, Monthly: monthly, WorkHours: workHours, View: PrepareMonthlyView(result, monthly, token), Summary: Summary(result.Table));
             }, token);
