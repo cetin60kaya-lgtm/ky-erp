@@ -283,7 +283,7 @@ public sealed partial class MainForm : Form
 
 	public MainForm()
 	{
-		Text = "HKN PDKS REV22 — Hızlı Veri";
+		Text = "HKN PDKS REV23 — Hızlı Veri";
 		base.StartPosition = FormStartPosition.CenterScreen;
 		base.Width = 1380;
 		base.Height = 820;
