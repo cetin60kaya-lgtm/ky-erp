@@ -124,6 +124,7 @@ internal static class Program
             Check(Count(Compare([Db(), late], []), "TNF EKLE") == 2, "empty TNF still detects full-year DB");
             var listing = SyncEngine.ListTerminal([Tnf(), Tnf(1)], People, CancellationToken.None);
             Check(listing.Rows.Count == 2 && listing.Rows[0].Field<string>("Durum") == "TNF LİSTE", "terminal listing preserves physical duplicate rows");
+            Rev23OneClickExactSync();
             WorkTimeTests.Run(Check);
             SeparatedWorkflowTests.Run(Check, args.Length == 2 ? args[0] : null, args.Length == 2 ? args[1] : null);
             MonthlyTests.Run(Check, args.Length == 2 ? args[0] : null, args.Length == 2 ? args[1] : null);
@@ -136,6 +137,80 @@ internal static class Program
             return 0;
         }
         catch (Exception exception) { Console.Error.WriteLine(exception); return 1; }
+    }
+
+    static void Rev23OneClickExactSync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "HKN_REV23_SYNC_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var dbPath = Path.Combine(directory, "REV23.GDB");
+        var tnfPath = Path.Combine(directory, "TR2026.Tnf");
+        var options = PdksOptions.FromEnvironment() with { DatabasePath = dbPath, DatabaseUser = "SYSDBA", DatabasePassword = "masterkey" };
+        var connectionString = new FirebirdSql.Data.FirebirdClient.FbConnectionStringBuilder
+        {
+            Database = dbPath, DataSource = options.DatabaseHost, Port = options.DatabasePort,
+            UserID = options.DatabaseUser, Password = options.DatabasePassword, Dialect = 1, Charset = "WIN1254", Pooling = false
+        }.ToString();
+        FirebirdSql.Data.FirebirdClient.FbConnection.CreateDatabase(connectionString);
+        var database = new FirebirdDatabase(options);
+        database.Execute("create table DURUM(KOD varchar(10), AD varchar(60))");
+        database.Execute("create table KIMLIK(PKNO varchar(5), AD varchar(30), SOYAD varchar(30), IGTARIH timestamp, ICTARIH timestamp, DURUM varchar(10))");
+        database.Execute("create table GIRCIK(SIRA integer, PKNO varchar(5), GTARIH timestamp, GSAAT varchar(5), GTUR varchar(1), GDAKIKA integer, CTARIH timestamp, CSAAT varchar(5), CTUR varchar(1), CDAKIKA integer)");
+        database.Execute("insert into DURUM values('A','Aktif')");
+        database.Execute("insert into KIMLIK values('00048','ALI','AKKAYA','2025-02-22',null,'A')");
+        void Pair(int id, DateTime day, string entry, string exit) => database.Execute(
+            "insert into GIRCIK(SIRA,PKNO,GTARIH,GSAAT,GTUR,CTARIH,CSAAT,CTUR) values(@I,'00048',@D,@G,'',@D,@C,'')",
+            new FirebirdSql.Data.FirebirdClient.FbParameter("@I", id),
+            new FirebirdSql.Data.FirebirdClient.FbParameter("@D", day),
+            new FirebirdSql.Data.FirebirdClient.FbParameter("@G", entry),
+            new FirebirdSql.Data.FirebirdClient.FbParameter("@C", exit));
+        Pair(1, new(2026,9,29), "08:32", "18:57");
+        Pair(2, new(2026,9,30), "08:27", "18:55");
+        Pair(3, new(2026,9,1), "08:25", "18:58");
+        database.Execute("insert into GIRCIK(SIRA,PKNO,GTARIH,GSAAT,GTUR) values(4,'00048','2026-09-28','08:30','E')");
+
+        var originalLines = new[]
+        {
+            Format.Build("00048", new(2026,9,28), "08:30"),
+            Format.Build("00048", new(2026,9,29), "08:02"),
+            Format.Build("00048", new(2026,9,29), "08:23"),
+            Format.Build("00048", new(2026,9,29), "18:57"),
+            Format.Build("00048", new(2026,9,30), "08:05"),
+            Format.Build("00048", new(2026,9,30), "08:30"),
+            Format.Build("00048", new(2026,9,30), "18:55"),
+            Format.Build("00099", new(2026,9,29), "09:00")
+        };
+        File.WriteAllLines(tnfPath, originalLines);
+        var originalBytes = File.ReadAllBytes(tnfPath);
+        var request = new AuditRequest(tnfPath, new(2026,9,1), new(2026,10,1), "", Format, true);
+        var before = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
+        Check(Count(before.Table, "İNCELE") == 0, "REV23 exact audit has no review for unique DB with duplicate/surplus TNF");
+        Check(Count(before.Table, "TNF SİL E") == 1, "REV23 exact audit marks E counterpart for removal");
+        Check(Count(before.Table, "TNF EKLE") == 2, "REV23 exact audit detects both missing normal sides");
+        Check(Count(before.Table, "TNF SİL FAZLA") >= 3, "REV23 exact audit detects duplicate/surplus TNF");
+        Check(Count(before.Table, "TNF DÜZELT") == 2, "REV23 exact audit detects both wrong entry clocks");
+
+        var result = SyncEngine.DirectSyncSourceAsync(database, before, CancellationToken.None).GetAwaiter().GetResult();
+        Check(File.Exists(result.BackupPath) && File.ReadAllBytes(result.BackupPath).SequenceEqual(originalBytes), "REV23 one-click backup preserves original TNF bytes");
+        var after = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
+        Check(after.Table.AsEnumerable().All(row => row.Field<string>("İşlem") == "YOK"), "REV23 one-click final TNF is DB-exact with zero remaining operations");
+        var finalLines = File.ReadAllLines(tnfPath);
+        Check(finalLines.Contains(Format.Build("00048", new(2026,9,29), "08:32")) &&
+              finalLines.Contains(Format.Build("00048", new(2026,9,30), "08:27")) &&
+              !finalLines.Contains(Format.Build("00048", new(2026,9,28), "08:30")) &&
+              !finalLines.Contains(Format.Build("00099", new(2026,9,29), "09:00")),
+              "REV23 one-click corrects clocks, removes E and deletes DB-less TNF");
+        Check(finalLines.Contains(Format.Build("00048", new(2026,9,1), "08:25")) &&
+              finalLines.Contains(Format.Build("00048", new(2026,9,1), "18:58")),
+              "REV23 one-click adds missing DB normal entry and exit into same TNF");
+
+        database.Execute("insert into GIRCIK(SIRA,PKNO,GTARIH,GSAAT,GTUR) values(5,'00048','2026-09-29','08:40','')");
+        var ambiguous = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
+        var protectedBytes = File.ReadAllBytes(tnfPath);
+        var refused = false;
+        try { SyncEngine.DirectSyncSourceAsync(database, ambiguous, CancellationToken.None).GetAwaiter().GetResult(); }
+        catch (InvalidOperationException) { refused = true; }
+        Check(refused && File.ReadAllBytes(tnfPath).SequenceEqual(protectedBytes), "REV23 refuses ambiguous duplicate DB and leaves TNF untouched");
     }
 
     static void FixtureCorrections()
