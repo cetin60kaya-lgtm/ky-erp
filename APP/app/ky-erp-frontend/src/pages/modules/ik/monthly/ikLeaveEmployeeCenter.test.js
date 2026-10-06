@@ -36,3 +36,11 @@ test("annual leave workspace remains touch friendly", () => {
   assert.match(css, /ik-leave-roster-row/);
   assert.match(css, /min-height:\s*44px/);
 });
+
+
+test("annual leave mobile fields use 16px controls", () => {
+  assert.match(css, /ik-leave-quick-form textarea/);
+  assert.match(css, /ik-leave-settings-form textarea/);
+  assert.match(css, /ik-leave-cash-form textarea/);
+  assert.match(css, /font-size:\s*16px/);
+});
