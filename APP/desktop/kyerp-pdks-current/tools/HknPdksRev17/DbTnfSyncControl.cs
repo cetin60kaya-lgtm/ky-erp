@@ -112,11 +112,13 @@ internal sealed partial class DbTnfSyncControl : UserControl
         Button(tnfOnly ? "KONTROL ET" : "BU AYI KONTROL ET", () => RunAuditAsync(false), 155);
         Button(tnfOnly ? "SON KONTROL" : "SON TAM KONTROL", () => RunAuditAsync(false), 145, Color.LightBlue);
         if (!tnfOnly)
+            Button("TEK TIK DB → TNF EŞİTLE", OneClickExactSyncAsync, 235, Color.LightGreen, personBar);
+        if (!tnfOnly)
         {
             Button("DB GÜVENLİLERİ DÜZELT", RepairDbAsync, 190, Color.MistyRose, personBar);
             Button("DB EKSİKLERİ TAMAMLA", CompleteDbAsync, 190, Color.LemonChiffon, personBar);
         }
-        Button("TNF'Yİ DB'YE GÖRE DÜZELT", ApplyAllSafeAsync, 215, Color.LightGreen, personBar);
+        Button("ÇIKTI OLARAK HAZIRLA", ApplyAllSafeAsync, 185, Color.Honeydew, personBar);
         Button(tnfOnly ? "ÇIKTIYI AÇ" : "ÇIKTI DOSYALARINI AÇ", OpenOutputsAsync, 185, group: personBar);
         var paths = new Label { AutoSize = true, MaximumSize = new Size(1450, 65), Padding = new Padding(4) };
         void UpdatePaths() => paths.Text = "DB: " + (main.GetType().GetField("dbPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) as TextBox)?.Text + "\nTNF: " + TnfPathBox?.Text;
@@ -311,7 +313,7 @@ internal sealed partial class DbTnfSyncControl : UserControl
         var end = full || month.SelectedIndex == 0 ? start.AddYears(1) : start.AddMonths(1);
         var settings = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HKN-PDKS", "TNF_FORMAT_AYAR.json");
         var format = File.Exists(settings) ? JsonSerializer.Deserialize<TnfFormat>(File.ReadAllText(settings)) ?? new TnfFormat() : new TnfFormat();
-        return new(path, start, end, "", tnfOnly ? new TnfFormat() : format, tnfOnly);
+        return new(path, start, end, "", new TnfFormat(), true);
     }
 
     void SetBusy(bool busy)
@@ -438,7 +440,7 @@ internal sealed partial class DbTnfSyncControl : UserControl
             if (monthlySnapshot is not null) details.Text = MonthlyDbAudit.Summary(monthlySnapshot);
             if (lastOutputs is not null && request.Path == lastOutputs.CorrectedPath && lastOutputs.MissingCount > 0)
                 summary.Text += $" | EKSİK TNF HAZIR: {lastOutputs.MissingCount}";
-            SyncEngine.Log($"REV21 db_query_ms={prepared.Result.DbMilliseconds} monthly_db_audit_ms={prepared.Monthly?.Milliseconds ?? 0} tnf_read_parse_ms={prepared.Result.TnfMilliseconds} compare_ms={prepared.Result.CompareMilliseconds} grid_bind_ms={LastGridMilliseconds} total_ms={LastTotalMilliseconds} db_events={prepared.Result.Db.Count} rows={prepared.Result.Table.Rows.Count}");
+            SyncEngine.Log($"REV23 db_query_ms={prepared.Result.DbMilliseconds} monthly_db_audit_ms={prepared.Monthly?.Milliseconds ?? 0} tnf_read_parse_ms={prepared.Result.TnfMilliseconds} compare_ms={prepared.Result.CompareMilliseconds} grid_bind_ms={LastGridMilliseconds} total_ms={LastTotalMilliseconds} db_events={prepared.Result.Db.Count} rows={prepared.Result.Table.Rows.Count}");
         }
         catch (OperationCanceledException) { if (!IsDisposed) summary.Text = "Kontrol iptal edildi; sonuç uygulanamaz."; }
         catch (Exception exception) { if (!IsDisposed) { summary.Text = "Kontrol başarısız; eski sonuç uygulanamaz."; MessageBox.Show(main, exception.Message, "DB - TNF Eşitle", MessageBoxButtons.OK, MessageBoxIcon.Error); } }
@@ -489,6 +491,79 @@ internal sealed partial class DbTnfSyncControl : UserControl
         if (lastOutputs is null) { MessageBox.Show(main, "Henüz çıktı hazırlanmadı."); return Task.CompletedTask; }
         Process.Start(new ProcessStartInfo("explorer.exe", Path.GetDirectoryName(lastOutputs.CorrectedPath)!) { UseShellExecute = true });
         return Task.CompletedTask;
+    }
+
+    async Task OneClickExactSyncAsync()
+    {
+        if (IsBusy) return;
+        lastOutputs = null;
+        outputSourcePath = "";
+        await RunAuditAsync(false);
+        if (snapshot is null || IsDisposed) return;
+
+        var review = snapshot.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") == "İNCELE");
+        var rows = PlanAllCorrections();
+        if (review > 0)
+        {
+            MessageBox.Show(main, $"DB ana kaynakta {review} belirsiz/teknik kayıt var. TNF değiştirilmedi.\n\nBunlar yalnız DB tarafı tekil olmadığı veya kayıt teknik olarak aktarılamadığı zaman kalır.", "REV23 — Eşitleme durdu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        if (rows.Length == 0)
+        {
+            MessageBox.Show(main, "DB ve TNF zaten bire bir uyumlu. E kayıtları TNF'de yok; eksik/fazla/saat farkı bulunmadı.", "REV23 — Uyumlu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var counts = rows.GroupBy(row => row.Field<string>("İşlem")!).ToDictionary(group => group.Key, group => group.Count());
+        var message = $"DB ANA KAYNAK kabul edilerek seçili ay doğrudan eşitlenecek.\n\n" +
+            $"Eksik TNF eklenecek: {counts.GetValueOrDefault("TNF EKLE")}\n" +
+            $"Fazla/mükerrer TNF silinecek: {counts.GetValueOrDefault("TNF SİL FAZLA")}\n" +
+            $"E kayıtlarının TNF karşılığı silinecek: {counts.GetValueOrDefault("TNF SİL E")}\n" +
+            $"Saat/format DB'ye çekilecek: {counts.GetValueOrDefault("TNF DÜZELT")}\n" +
+            $"Toplam işlem: {rows.Length}\n\n" +
+            $"Önce _YEDEK alınır. İşlem sonunda TNF tekrar DB ile bire bir doğrulanır; doğrulama geçmezse eski TNF otomatik geri yüklenir.\n\nDevam?";
+        if (MessageBox.Show(main, message, "REV23 — TEK TIK DB → TNF EŞİTLE", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+
+        var previous = snapshot;
+        var database = snapshotDatabase!;
+        SetSnapshot(null);
+        monthlySnapshot = null;
+        cancellation = new CancellationTokenSource();
+        var token = cancellation.Token;
+        SetBusy(true);
+        try
+        {
+            summary.Text = "REV23 eşitliyor: yedek → eksik ekle → fazla/mükerrer/E sil → saatleri DB'ye çek → son doğrulama...";
+            var result = await Task.Run(() => SyncEngine.DirectSyncSourceAsync(database, previous, token), token);
+            lastOutputs = null;
+            outputSourcePath = "";
+            details.Text = $"REV23 TAMAMLANDI. Ana TNF doğrudan DB ile eşitlendi. Yedek: {result.BackupPath}";
+            summary.Text = $"REV23 EŞİTLEME TAMAM | Eksik +{result.Added} | Fazla -{result.RemovedExtra} | E -{result.RemovedE} | Saat düzelt {result.Corrected} | Toplam {result.Total}";
+        }
+        catch (OperationCanceledException)
+        {
+            summary.Text = "REV23 eşitleme iptal edildi.";
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(main, exception.Message, "REV23 — Eşitleme başarısız / TNF geri korundu", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            cancellation?.Dispose();
+            cancellation = null;
+            if (!IsDisposed) SetBusy(false);
+        }
+        if (!IsDisposed)
+        {
+            await RunAuditAsync(false);
+            if (snapshot is not null)
+            {
+                var remaining = snapshot.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") != "YOK");
+                if (remaining == 0)
+                    summary.Text = "REV23 SON KONTROL: DB = TNF BİRE BİR UYUMLU • E kayıtları TNF'de yok • Eksik/Fazla/Saat Farkı/İncele = 0";
+            }
+        }
     }
 
     async Task ApplyAllSafeAsync()
