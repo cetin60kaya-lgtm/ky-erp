@@ -105,7 +105,9 @@ internal static class SeparatedWorkflowTests
         var shifted = firstLine.Remove(6, 5).Insert(6, time == "08:15" ? "08:16" : "08:15");
         File.WriteAllLines(tnfPath, mismatch.Lines.Select(line => line == firstLine ? shifted : line));
         var clockMismatch = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
-        check(clockMismatch.Table.AsEnumerable().Any(row => row.Field<string>("İşlem") == "TNF DÜZELT"), "TNF DÜZENLE unique clock mismatch directly corrected to exact DB minute");
+        check(clockMismatch.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") == "TNF EKLE") == 1 &&
+              clockMismatch.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") == "TNF SİL FAZLA") == 1,
+              "REV24 exact clock mismatch is delete-plus-add with no side interpretation");
         RunUi(database, check);
         RunOperationTests(database, check);
         RunComparisonUi(database, tnfPath, directory, check);
