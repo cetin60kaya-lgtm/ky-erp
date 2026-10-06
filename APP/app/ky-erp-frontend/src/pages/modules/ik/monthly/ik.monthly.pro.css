@@ -1468,3 +1468,719 @@
     grid-template-columns:1fr;
   }
 }
+
+
+/* IK_LEAVE_EMPLOYEE_CENTER_V3 */
+.ik-monthly-pro .ik-leave-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 330px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.ik-monthly-pro .ik-leave-roster {
+  position: sticky;
+  top: 8px;
+  overflow: hidden;
+}
+
+.ik-monthly-pro .ik-leave-roster-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--pro-border);
+  background: #fbfcfe;
+}
+
+.ik-monthly-pro .ik-leave-roster-head b,
+.ik-monthly-pro .ik-leave-roster-head span {
+  display: block;
+}
+
+.ik-monthly-pro .ik-leave-roster-head > div > b {
+  font-size: 13px;
+  color: var(--pro-ink);
+}
+
+.ik-monthly-pro .ik-leave-roster-head > div > span {
+  margin-top: 3px;
+  color: var(--pro-subtle);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.ik-monthly-pro .ik-leave-roster-list {
+  max-height: 690px;
+  overflow: auto;
+  padding: 7px;
+}
+
+.ik-monthly-pro .ik-leave-roster-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  min-height: 63px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--pro-ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ik-monthly-pro .ik-leave-roster-row + .ik-leave-roster-row {
+  margin-top: 3px;
+}
+
+.ik-monthly-pro .ik-leave-roster-row:hover {
+  background: #f5f8fb;
+}
+
+.ik-monthly-pro .ik-leave-roster-row.active {
+  border-color: #b7cdf1;
+  background: #eef4ff;
+  box-shadow: inset 3px 0 0 var(--pro-accent);
+}
+
+.ik-monthly-pro .ik-leave-roster-row .copy,
+.ik-monthly-pro .ik-leave-roster-row .balance {
+  min-width: 0;
+}
+
+.ik-monthly-pro .ik-leave-roster-row .copy b,
+.ik-monthly-pro .ik-leave-roster-row .copy small,
+.ik-monthly-pro .ik-leave-roster-row .balance b,
+.ik-monthly-pro .ik-leave-roster-row .balance small {
+  display: block;
+}
+
+.ik-monthly-pro .ik-leave-roster-row .copy b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.ik-monthly-pro .ik-leave-roster-row .copy small {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--pro-subtle);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ik-monthly-pro .ik-leave-roster-row .balance {
+  text-align: right;
+}
+
+.ik-monthly-pro .ik-leave-roster-row .balance b {
+  color: var(--pro-accent);
+  font-size: 11px;
+}
+
+.ik-monthly-pro .ik-leave-roster-row .balance small {
+  margin-top: 3px;
+  color: var(--pro-subtle);
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.ik-monthly-pro .ik-leave-person-file {
+  min-width: 0;
+}
+
+.ik-monthly-pro .ik-leave-person-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border: 1px solid var(--pro-border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgba(23, 42, 61, .05);
+}
+
+.ik-monthly-pro .ik-leave-person-id {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.ik-monthly-pro .ik-leave-person-id > div {
+  min-width: 0;
+}
+
+.ik-monthly-pro .ik-leave-person-id .eyebrow {
+  display: block;
+  color: #6c7f94;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .1em;
+}
+
+.ik-monthly-pro .ik-leave-person-id h2 {
+  margin: 3px 0 0;
+  color: #17304a;
+  font-size: 18px;
+}
+
+.ik-monthly-pro .ik-leave-person-id p {
+  margin: 4px 0 0;
+  color: var(--pro-subtle);
+  font-size: 10px;
+}
+
+.ik-monthly-pro .ik-leave-hero-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ik-monthly-pro .ik-leave-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.ik-monthly-pro .ik-leave-kpi-grid > div {
+  min-width: 0;
+  min-height: 86px;
+  padding: 11px 12px;
+  border: 1px solid var(--pro-border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(23, 42, 61, .04);
+}
+
+.ik-monthly-pro .ik-leave-kpi-grid span,
+.ik-monthly-pro .ik-leave-kpi-grid b,
+.ik-monthly-pro .ik-leave-kpi-grid small {
+  display: block;
+}
+
+.ik-monthly-pro .ik-leave-kpi-grid span {
+  color: var(--pro-subtle);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.ik-monthly-pro .ik-leave-kpi-grid b {
+  margin-top: 7px;
+  color: var(--pro-ink);
+  font-size: 17px;
+}
+
+.ik-monthly-pro .ik-leave-kpi-grid small {
+  margin-top: 4px;
+  color: #7b8b9d;
+  font-size: 8px;
+  line-height: 1.25;
+}
+
+.ik-monthly-pro .ik-leave-kpi-grid > div.success {
+  border-color: #b9e2cf;
+  background: #f2fbf6;
+}
+
+.ik-monthly-pro .ik-leave-kpi-grid > div.success b {
+  color: var(--pro-success);
+}
+
+.ik-monthly-pro .ik-leave-kpi-grid > div.danger {
+  border-color: #edc3c3;
+  background: #fff5f5;
+}
+
+.ik-monthly-pro .ik-leave-kpi-grid > div.danger b {
+  color: var(--pro-danger);
+}
+
+.ik-monthly-pro .ik-leave-proof-strip {
+  display: grid;
+  grid-template-columns: minmax(380px, 1.5fr) minmax(170px, .55fr) minmax(220px, .75fr);
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.ik-monthly-pro .ik-leave-proof-strip > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #d7e3ee;
+  border-radius: 11px;
+  background: #f8fbfd;
+}
+
+.ik-monthly-pro .ik-leave-proof-strip b,
+.ik-monthly-pro .ik-leave-proof-strip span,
+.ik-monthly-pro .ik-leave-proof-strip small {
+  display: block;
+}
+
+.ik-monthly-pro .ik-leave-proof-strip b {
+  color: #425a72;
+  font-size: 9px;
+}
+
+.ik-monthly-pro .ik-leave-proof-strip span {
+  margin-top: 4px;
+  color: #1d3853;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.ik-monthly-pro .ik-leave-proof-strip strong {
+  color: var(--pro-accent);
+}
+
+.ik-monthly-pro .ik-leave-proof-strip small {
+  margin-top: 3px;
+  color: var(--pro-subtle);
+  font-size: 8px;
+}
+
+.ik-monthly-pro .ik-leave-tabs {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding: 6px;
+  margin-bottom: 9px;
+  border: 1px solid var(--pro-border);
+  border-radius: 12px;
+  background: #fff;
+  scrollbar-width: thin;
+}
+
+.ik-monthly-pro .ik-leave-tabs button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #5d7084;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ik-monthly-pro .ik-leave-tabs button:hover {
+  background: #f2f6fa;
+}
+
+.ik-monthly-pro .ik-leave-tabs button.active {
+  background: #eaf1ff;
+  color: #225fc7;
+}
+
+.ik-monthly-pro .ik-leave-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(330px, .85fr);
+  gap: 9px;
+  margin-bottom: 9px;
+}
+
+.ik-monthly-pro .ik-leave-quick-card {
+  overflow: hidden;
+}
+
+.ik-monthly-pro .ik-leave-quick-form,
+.ik-monthly-pro .ik-leave-settings-form,
+.ik-monthly-pro .ik-leave-cash-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 11px;
+}
+
+.ik-monthly-pro .ik-leave-settings-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ik-monthly-pro .ik-leave-cash-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ik-monthly-pro .ik-leave-quick-form label,
+.ik-monthly-pro .ik-leave-settings-form label,
+.ik-monthly-pro .ik-leave-cash-form label,
+.ik-monthly-pro .policy-side label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: #53687e;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.ik-monthly-pro .ik-leave-quick-form .wide,
+.ik-monthly-pro .ik-leave-settings-form .wide,
+.ik-monthly-pro .ik-leave-cash-form .wide {
+  grid-column: 1 / -1;
+}
+
+.ik-monthly-pro .ik-leave-quick-form input,
+.ik-monthly-pro .ik-leave-quick-form select,
+.ik-monthly-pro .ik-leave-settings-form input,
+.ik-monthly-pro .ik-leave-settings-form textarea,
+.ik-monthly-pro .ik-leave-cash-form input,
+.ik-monthly-pro .ik-leave-cash-form select,
+.ik-monthly-pro .ik-leave-cash-form textarea,
+.ik-monthly-pro .policy-side input {
+  min-height: 40px;
+  width: 100%;
+}
+
+.ik-monthly-pro .ik-leave-settings-form textarea,
+.ik-monthly-pro .ik-leave-cash-form textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.ik-monthly-pro .ik-leave-preset-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 0 11px 9px;
+}
+
+.ik-monthly-pro .ik-leave-quick-preview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  padding: 0 11px 11px;
+}
+
+.ik-monthly-pro .ik-leave-quick-preview > div {
+  padding: 9px;
+  border: 1px solid #dbe6f0;
+  border-radius: 9px;
+  background: #f8fbfd;
+}
+
+.ik-monthly-pro .ik-leave-quick-preview span,
+.ik-monthly-pro .ik-leave-quick-preview b {
+  display: block;
+}
+
+.ik-monthly-pro .ik-leave-quick-preview span {
+  color: var(--pro-subtle);
+  font-size: 8px;
+}
+
+.ik-monthly-pro .ik-leave-quick-preview b {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.ik-monthly-pro .ik-leave-quick-placeholder {
+  margin: 0 11px 11px;
+  padding: 11px;
+  border: 1px dashed #c9d7e4;
+  border-radius: 9px;
+  background: #fbfcfe;
+  color: var(--pro-subtle);
+  font-size: 9px;
+}
+
+.ik-monthly-pro .ik-leave-fact-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  padding: 10px;
+  background: #eef2f6;
+}
+
+.ik-monthly-pro .ik-leave-fact-list > div {
+  padding: 10px;
+  background: #fff;
+}
+
+.ik-monthly-pro .ik-leave-fact-list span,
+.ik-monthly-pro .ik-leave-fact-list b {
+  display: block;
+}
+
+.ik-monthly-pro .ik-leave-fact-list span {
+  color: var(--pro-subtle);
+  font-size: 8px;
+}
+
+.ik-monthly-pro .ik-leave-fact-list b {
+  margin-top: 4px;
+  color: #203b55;
+  font-size: 11px;
+}
+
+.ik-monthly-pro .ik-leave-mini-plan {
+  width: 100%;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid #e8eef4;
+  background: #fff;
+  color: var(--pro-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ik-monthly-pro .ik-leave-mini-plan:hover {
+  background: #f7faff;
+}
+
+.ik-monthly-pro .ik-leave-mini-plan b,
+.ik-monthly-pro .ik-leave-mini-plan small {
+  display: block;
+}
+
+.ik-monthly-pro .ik-leave-mini-plan small {
+  margin-top: 3px;
+  color: var(--pro-subtle);
+  font-size: 9px;
+}
+
+.ik-monthly-pro .ik-leave-alert-list {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.ik-monthly-pro .ik-leave-alert-list > div {
+  padding: 10px;
+  border-left: 4px solid #c7d2dd;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.ik-monthly-pro .ik-leave-alert-list > div.warning {
+  border-left-color: var(--pro-warning);
+  background: #fff9ef;
+}
+
+.ik-monthly-pro .ik-leave-alert-list > div.danger {
+  border-left-color: var(--pro-danger);
+  background: #fff4f4;
+}
+
+.ik-monthly-pro .ik-leave-alert-list > div.success {
+  border-left-color: var(--pro-success);
+  background: #f1faf5;
+}
+
+.ik-monthly-pro .ik-leave-alert-list b,
+.ik-monthly-pro .ik-leave-alert-list span {
+  display: block;
+}
+
+.ik-monthly-pro .ik-leave-alert-list b {
+  font-size: 10px;
+}
+
+.ik-monthly-pro .ik-leave-alert-list span {
+  margin-top: 3px;
+  color: #65788b;
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.ik-monthly-pro .selected-row {
+  background: #eef5ff !important;
+}
+
+.ik-monthly-pro .ik-leave-legal-note {
+  margin-bottom: 9px;
+  line-height: 1.45;
+}
+
+.ik-monthly-pro .ik-leave-request-list {
+  max-height: 460px;
+  overflow: auto;
+  padding: 9px;
+}
+
+.ik-monthly-pro .ik-leave-request {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid #e0e8f0;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.ik-monthly-pro .ik-leave-request + .ik-leave-request {
+  margin-top: 7px;
+}
+
+.ik-monthly-pro .ik-leave-request > div:first-child b,
+.ik-monthly-pro .ik-leave-request > div:first-child span,
+.ik-monthly-pro .ik-leave-request > div:first-child small {
+  display: block;
+}
+
+.ik-monthly-pro .ik-leave-request > div:first-child b {
+  font-size: 10px;
+}
+
+.ik-monthly-pro .ik-leave-request > div:first-child span,
+.ik-monthly-pro .ik-leave-request > div:first-child small {
+  margin-top: 3px;
+  color: var(--pro-subtle);
+  font-size: 9px;
+}
+
+.ik-monthly-pro .ik-leave-request > div:nth-child(2) {
+  display: grid;
+  align-content: start;
+  justify-items: end;
+  gap: 5px;
+}
+
+.ik-monthly-pro .ik-leave-request > .row-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.ik-monthly-pro .ik-leave-law-summary {
+  padding: 10px;
+  border: 1px solid #c5d9f7;
+  border-radius: 9px;
+  background: #f2f7ff;
+}
+
+.ik-monthly-pro .ik-leave-law-summary b,
+.ik-monthly-pro .ik-leave-law-summary span {
+  display: block;
+}
+
+.ik-monthly-pro .ik-leave-law-summary b {
+  color: #245db5;
+  font-size: 10px;
+}
+
+.ik-monthly-pro .ik-leave-law-summary span {
+  margin-top: 4px;
+  color: #57718d;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.ik-monthly-pro .ik-leave-adjustment-history {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  padding: 11px;
+  border-top: 1px solid var(--pro-border);
+  background: #fbfcfe;
+}
+
+.ik-monthly-pro .ik-leave-adjustment-history > b {
+  color: #29445e;
+  font-size: 10px;
+}
+
+.ik-monthly-pro .ik-leave-adjustment-history > div {
+  display: grid;
+  grid-template-columns: 90px 75px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #e1e9f1;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 9px;
+}
+
+.ik-monthly-pro .ik-leave-adjustment-history small {
+  color: var(--pro-subtle);
+}
+
+@media (max-width: 1280px) {
+  .ik-monthly-pro .ik-leave-workspace {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+  .ik-monthly-pro .ik-leave-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .ik-monthly-pro .ik-leave-proof-strip {
+    grid-template-columns: 1fr 1fr;
+  }
+  .ik-monthly-pro .ik-leave-proof-strip > div:first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 980px) {
+  .ik-monthly-pro .ik-leave-workspace {
+    grid-template-columns: 1fr;
+  }
+  .ik-monthly-pro .ik-leave-roster {
+    position: static;
+  }
+  .ik-monthly-pro .ik-leave-roster-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 300px;
+  }
+  .ik-monthly-pro .ik-leave-overview-grid {
+    grid-template-columns: 1fr;
+  }
+  .ik-monthly-pro .ik-leave-person-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .ik-monthly-pro .ik-leave-hero-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 680px) {
+  .ik-monthly-pro .ik-leave-roster-list,
+  .ik-monthly-pro .ik-leave-kpi-grid,
+  .ik-monthly-pro .ik-leave-proof-strip,
+  .ik-monthly-pro .ik-leave-quick-form,
+  .ik-monthly-pro .ik-leave-settings-form,
+  .ik-monthly-pro .ik-leave-cash-form,
+  .ik-monthly-pro .ik-leave-quick-preview,
+  .ik-monthly-pro .ik-leave-fact-list {
+    grid-template-columns: 1fr;
+  }
+  .ik-monthly-pro .ik-leave-proof-strip > div:first-child {
+    grid-column: auto;
+  }
+  .ik-monthly-pro .ik-leave-roster-row,
+  .ik-monthly-pro .ik-leave-tabs button,
+  .ik-monthly-pro .ik-leave-hero-actions .btn,
+  .ik-monthly-pro .ik-leave-preset-row .btn,
+  .ik-monthly-pro .ik-leave-quick-form input,
+  .ik-monthly-pro .ik-leave-quick-form select,
+  .ik-monthly-pro .ik-leave-settings-form input,
+  .ik-monthly-pro .ik-leave-cash-form input,
+  .ik-monthly-pro .ik-leave-cash-form select {
+    min-height: 44px;
+  }
+  .ik-monthly-pro .ik-leave-request {
+    grid-template-columns: 1fr;
+  }
+  .ik-monthly-pro .ik-leave-request > div:nth-child(2) {
+    justify-items: start;
+  }
+  .ik-monthly-pro .ik-leave-adjustment-history > div {
+    grid-template-columns: 1fr;
+  }
+}

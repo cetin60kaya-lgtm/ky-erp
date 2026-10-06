@@ -88,6 +88,14 @@ export async function saveIkAdvancedLeavePolicy(payload = {}) {
   return postAndPublish("/ik/advanced/leave/policy", payload, "leave-policy");
 }
 
+export async function saveIkAdvancedLeaveProfile(payload = {}) {
+  return postAndPublish("/ik/advanced/leave/profile", payload, "leave-profile");
+}
+
+export async function saveIkAdvancedLeaveCashRequest(payload = {}) {
+  return postAndPublish("/ik/advanced/leave/cash-request", payload, "leave-cash-request");
+}
+
 export async function cancelIkAdvancedLeave(payload = {}) {
   return postAndPublish("/ik/advanced/leave/cancel", payload, "leave-cancel");
 }
