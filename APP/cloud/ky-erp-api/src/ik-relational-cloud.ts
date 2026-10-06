@@ -86,6 +86,32 @@ function companyIdOf(c: Context<AppEnv>, body: Row = {}) {
   );
 }
 
+async function requireIkWriteAccess(c: Context<AppEnv>, body: Row, capability: "update" | "approve" = "update") {
+  const user = await getAuthenticatedUser(c);
+  if (!user) return { response: error(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.") };
+  const role = upper(user.role);
+  const globalAdmin = ["SUPER_ADMIN", "ADMIN"].includes(role);
+  const companyAdmin = role === "COMPANY_ADMIN";
+  const sessionCompanyId = canonicalHrCompanyId(user.mainCompanySlug);
+  const requestedCompanyId = companyIdOf(c, body);
+  if (!globalAdmin && requestedCompanyId !== sessionCompanyId) {
+    return { response: error(c, 403, "TENANT_FORBIDDEN", "Bu firma için İK işlemi yapamazsınız.") };
+  }
+  const permission = Array.isArray(user.permissions)
+    ? user.permissions.find((item: Row) => upper(item.moduleKey) === "IK")
+    : null;
+  const allowed = globalAdmin || companyAdmin || (capability === "approve"
+    ? flag(permission?.canApprove)
+    : flag(permission?.canUpdate) || flag(permission?.canCreate));
+  if (!allowed) {
+    return { response: error(c, 403, "IK_PERMISSION_REQUIRED", capability === "approve" ? "İK onay yetkisi gereklidir." : "İK yazma yetkisi gereklidir.") };
+  }
+  return {
+    user,
+    companyId: globalAdmin ? requestedCompanyId : sessionCompanyId,
+  };
+}
+
 async function bodyOf(c: Context<AppEnv>): Promise<Row> {
   try {
     const payload: unknown = await c.req.json();
@@ -113,7 +139,7 @@ function okDataItems(c: Context<AppEnv>, data: unknown, items: unknown[]) {
   return c.json({ ok: true, success: true, data, items });
 }
 
-function error(c: Context<AppEnv>, status: 400 | 404 | 409 | 500, code: string, message: string) {
+function error(c: Context<AppEnv>, status: 400 | 401 | 403 | 404 | 409 | 500, code: string, message: string) {
   return c.json({ ok: false, success: false, error: { code, message } }, status);
 }
 
@@ -644,6 +670,7 @@ async function overtimeAmountForEmployee(c: Context<AppEnv>, companyId: string, 
 
 const IK_PERSON_CARD_CALC_SCOPE = "IK_PERSON_CARD_CALC";
 const IK_LEAVE_PROFILE_SCOPE = "IK_LEAVE_PROFILE";
+const IK_LEAVE_BALANCE_ADJUSTMENT_SCOPE = "IK_LEAVE_BALANCE_ADJUSTMENT";
 const IK_LEAVE_CASH_REQUEST_SCOPE = "IK_LEAVE_CASH_REQUEST";
 
 function fullYearsBetween(startValue: unknown, endValue: unknown) {
@@ -706,19 +733,64 @@ function leaveAdjustmentTotal(profile: LeaveProfile | null | undefined) {
   return (profile?.adjustments || []).reduce((sum, item) => sum + number(item.days), 0);
 }
 
+function parseLeaveAdjustment(row: Row | null | undefined): Row | null {
+  try {
+    const parsed = JSON.parse(text(row?.data) || "{}") as Row;
+    const employeeId = text(parsed.employeeId);
+    if (!employeeId) return null;
+    return {
+      id: text(parsed.id || row?.id),
+      employeeId,
+      date: hrDateOnly(parsed.date),
+      days: number(parsed.days),
+      reason: text(parsed.reason),
+      actor: text(parsed.actor),
+      createdAt: text(parsed.createdAt || row?.created_at),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function leaveAdjustmentRows(c: Context<AppEnv>, companyId: string, employeeId = ""): Promise<Row[]> {
+  const prefix = employeeId ? companyId + ":" + employeeId + ":%" : companyId + ":%";
+  const rows = await all(
+    c,
+    "SELECT id,file_name,data,created_at FROM json_store WHERE scope=? AND main_company_slug=? AND file_name LIKE ? ORDER BY created_at ASC",
+    [IK_LEAVE_BALANCE_ADJUSTMENT_SCOPE, companyId, prefix],
+  ).catch(() => []);
+  return rows.map(parseLeaveAdjustment).filter(Boolean) as Row[];
+}
+
 async function leaveProfile(c: Context<AppEnv>, companyId: string, employeeId: string): Promise<LeaveProfile> {
-  const row = await first(c, "SELECT data,updated_at FROM json_store WHERE scope=? AND file_name=? LIMIT 1", [IK_LEAVE_PROFILE_SCOPE, leaveProfileFileName(companyId, employeeId)]).catch(() => null);
-  return parseLeaveProfile(row);
+  const [row, adjustmentRows] = await Promise.all([
+    first(c, "SELECT data,updated_at FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=? LIMIT 1", [IK_LEAVE_PROFILE_SCOPE, companyId, leaveProfileFileName(companyId, employeeId)]).catch(() => null),
+    leaveAdjustmentRows(c, companyId, employeeId),
+  ]);
+  const profile = parseLeaveProfile(row);
+  profile.adjustments = [...profile.adjustments, ...adjustmentRows].sort((a, b) => text(a.createdAt).localeCompare(text(b.createdAt)));
+  return profile;
 }
 
 async function leaveProfileMap(c: Context<AppEnv>, companyId: string): Promise<Map<string, LeaveProfile>> {
-  const rows = await all(c, "SELECT file_name,data,updated_at FROM json_store WHERE scope=? AND file_name LIKE ?", [IK_LEAVE_PROFILE_SCOPE, companyId + ":%"]).catch(() => []);
+  const [rows, adjustmentRows] = await Promise.all([
+    all(c, "SELECT file_name,data,updated_at FROM json_store WHERE scope=? AND main_company_slug=? AND file_name LIKE ?", [IK_LEAVE_PROFILE_SCOPE, companyId, companyId + ":%"]).catch(() => []),
+    leaveAdjustmentRows(c, companyId),
+  ]);
   const prefix = companyId + ":";
   const result = new Map<string, LeaveProfile>();
   for (const row of rows) {
     const fileName = text(row.file_name);
     if (!fileName.startsWith(prefix)) continue;
     result.set(fileName.slice(prefix.length), parseLeaveProfile(row));
+  }
+  for (const adjustment of adjustmentRows) {
+    const employeeId = text(adjustment.employeeId);
+    if (!employeeId) continue;
+    const profile = result.get(employeeId) || { birthDate: "", adjustments: [] };
+    profile.adjustments.push(adjustment);
+    profile.adjustments.sort((a, b) => text(a.createdAt).localeCompare(text(b.createdAt)));
+    result.set(employeeId, profile);
   }
   return result;
 }
@@ -3151,7 +3223,10 @@ async function cancelAdvancedLeaveV2(c: Context<AppEnv>) {
 
 async function saveAdvancedLeaveProfileV2(c: Context<AppEnv>) {
   const body = await bodyOf(c);
-  const companyId = companyIdOf(c, body);
+  const access = await requireIkWriteAccess(c, body, "update");
+  if (access.response) return access.response;
+  const companyId = access.companyId;
+  const actor = text(access.user?.fullName || access.user?.username || access.user?.id) || "IK";
   const employeeId = text(body.employeeId || body.personId);
   const employee = await first(c, "SELECT id,full_name,hire_date,annual_leave_entitlement,annual_leave_carryover FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
   if (!employee) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
@@ -3171,54 +3246,62 @@ async function saveAdvancedLeaveProfileV2(c: Context<AppEnv>) {
     return error(c, 400, "LEAVE_ENTITLEMENT_BELOW_STATUTORY", "Yıllık izin hakkı kanuni asgari hakkın altına indirilemez.");
   }
 
-  const adjustments = [...current.adjustments];
   const adjustmentProvided = body.adjustmentDays !== undefined && body.adjustmentDays !== null && body.adjustmentDays !== "";
   const adjustmentDays = adjustmentProvided ? number(body.adjustmentDays) : 0;
-  if (adjustmentProvided && Math.abs(adjustmentDays) > 0) {
-    const reason = text(body.adjustmentReason || body.reason);
-    if (!reason) return error(c, 400, "LEAVE_ADJUSTMENT_REASON_REQUIRED", "İzin bakiye düzeltmesi için gerekçe zorunludur.");
-    adjustments.push({
-      id: crypto.randomUUID(),
-      date: hrDateOnly(body.adjustmentDate) || hrTodayIstanbul(),
-      days: adjustmentDays,
-      reason,
-      actor: text(body.userName || body.userId) || "IK",
-      createdAt: nowIso(),
-    });
+  const adjustmentReason = text(body.adjustmentReason || body.reason);
+  if (adjustmentProvided && Math.abs(adjustmentDays) > 0 && !adjustmentReason) {
+    return error(c, 400, "LEAVE_ADJUSTMENT_REASON_REQUIRED", "İzin bakiye düzeltmesi için gerekçe zorunludur.");
   }
 
+  const timestamp = nowIso();
   const profileData = {
     birthDate,
-    adjustments,
-    updatedAt: nowIso(),
-    updatedBy: text(body.userName || body.userId) || "IK",
+    updatedAt: timestamp,
+    updatedBy: actor,
   };
-  const id = "ik-leave-profile:" + companyId + ":" + employeeId;
+  const profileId = "ik-leave-profile:" + companyId + ":" + employeeId;
   const fileName = leaveProfileFileName(companyId, employeeId);
   const statements: D1PreparedStatement[] = [
     c.env.DB.prepare("INSERT INTO json_store (id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET scope=excluded.scope,main_company_slug=excluded.main_company_slug,file_name=excluded.file_name,data=excluded.data,updated_at=excluded.updated_at")
-      .bind(id, IK_LEAVE_PROFILE_SCOPE, companyId, fileName, JSON.stringify(profileData), nowIso(), nowIso()),
+      .bind(profileId, IK_LEAVE_PROFILE_SCOPE, companyId, fileName, JSON.stringify(profileData), timestamp, timestamp),
   ];
   if (entitlementProvided || carryoverProvided) {
     statements.push(c.env.DB.prepare("UPDATE hr_monthly_employees SET annual_leave_entitlement=?,annual_leave_carryover=?,updated_at=? WHERE id=? AND main_company_id=?")
-      .bind(entitlement, carryover, nowIso(), employeeId, companyId));
+      .bind(entitlement, carryover, timestamp, employeeId, companyId));
+  }
+  if (adjustmentProvided && Math.abs(adjustmentDays) > 0) {
+    const adjustmentId = crypto.randomUUID();
+    const adjustment = {
+      id: adjustmentId,
+      employeeId,
+      date: hrDateOnly(body.adjustmentDate) || hrTodayIstanbul(),
+      days: adjustmentDays,
+      reason: adjustmentReason,
+      actor,
+      createdAt: timestamp,
+    };
+    statements.push(
+      c.env.DB.prepare("INSERT INTO json_store (id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?)")
+        .bind("ik-leave-adjustment:" + adjustmentId, IK_LEAVE_BALANCE_ADJUSTMENT_SCOPE, companyId, companyId + ":" + employeeId + ":" + adjustmentId, JSON.stringify(adjustment), timestamp, timestamp),
+    );
   }
   await c.env.DB.batch(statements);
+  const freshProfile = await leaveProfile(c, companyId, employeeId);
   await audit(c, {
     mainCompanyId: companyId,
     employeeId,
     entityType: "IZIN_BAKIYE",
     action: adjustmentProvided && adjustmentDays ? "BALANCE_ADJUST" : "PROFILE_UPDATE",
     summary: adjustmentProvided && adjustmentDays ? "Yıllık izin bakiyesi gerekçeli düzeltildi." : "Yıllık izin profil bilgileri güncellendi.",
-    details: { birthDate, entitlement, carryover, adjustmentDays, adjustmentReason: text(body.adjustmentReason || body.reason), statutory },
+    details: { birthDate, entitlement, carryover, adjustmentDays, adjustmentReason, statutory, actorUserId: text(access.user?.id) },
   });
   return okData(c, {
     employeeId,
     birthDate,
     annualLeaveEntitlement: entitlement,
     annualLeaveCarryover: carryover,
-    balanceAdjustment: adjustments.reduce((sum, item) => sum + number(item.days), 0),
-    adjustments,
+    balanceAdjustment: leaveAdjustmentTotal(freshProfile),
+    adjustments: freshProfile.adjustments,
     statutory,
     saved: true,
   });
@@ -3226,7 +3309,11 @@ async function saveAdvancedLeaveProfileV2(c: Context<AppEnv>) {
 
 async function saveAdvancedLeaveCashRequestV2(c: Context<AppEnv>) {
   const body = await bodyOf(c);
-  const companyId = companyIdOf(c, body);
+  const requestedStatus = upper(body.status) || "REQUESTED";
+  const access = await requireIkWriteAccess(c, body, requestedStatus === "REQUESTED" ? "update" : "approve");
+  if (access.response) return access.response;
+  const companyId = access.companyId;
+  const actor = text(access.user?.fullName || access.user?.username || access.user?.id) || "IK";
   const employeeId = text(body.employeeId || body.personId);
   const employee = await first(c, "SELECT e.id,e.full_name,e.salary,e.hire_date,s.exit_date FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.id=? AND e.main_company_id=? LIMIT 1", [employeeId, companyId]);
   if (!employee) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
@@ -3266,7 +3353,7 @@ async function saveAdvancedLeaveCashRequestV2(c: Context<AppEnv>) {
       : "İşten çıkış izin ücreti bu talep ekranında yalnız kayda alınır; gerçek ödeme/bordro işlemi ayrıca tamamlanır.",
     createdAt: existingData.createdAt || existing?.created_at || nowIso(),
     updatedAt: nowIso(),
-    updatedBy: text(body.userName || body.userId) || "IK",
+    updatedBy: actor,
   };
   const fileName = companyId + ":" + employeeId + ":" + id;
   await c.env.DB.prepare("INSERT INTO json_store (id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET scope=excluded.scope,main_company_slug=excluded.main_company_slug,file_name=excluded.file_name,data=excluded.data,updated_at=excluded.updated_at")
@@ -3277,7 +3364,7 @@ async function saveAdvancedLeaveCashRequestV2(c: Context<AppEnv>) {
     entityType: "IZIN_UCRET_TALEBI",
     action: existing ? "UPDATE" : "CREATE",
     summary: "İzin ücreti talebi kaydedildi; yıllık izin bakiyesine otomatik düşüm yapılmadı.",
-    details: { id, requestType, requestDate, requestedDays, referenceAmount, status, balanceEffectDays: 0 },
+    details: { id, requestType, requestDate, requestedDays, referenceAmount, status, balanceEffectDays: 0, actorUserId: text(access.user?.id) },
   });
   return okData(c, data, existing ? 200 : 201);
 }
