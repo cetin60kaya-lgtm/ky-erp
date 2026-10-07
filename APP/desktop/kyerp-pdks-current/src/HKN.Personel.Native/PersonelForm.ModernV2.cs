@@ -164,11 +164,10 @@ public partial class PersonelForm
         filter.Controls.Add(scopePassive);
         filter.Controls.Add(scopeAll);
 
-        searchText.TextChanged += (_,_) => ApplyClassicSearch();
-        searchField.SelectedIndexChanged += (_,_) => ApplyClassicSearch();
-        scopeActive.CheckedChanged += (_,_) => { if(scopeActive.Checked) Reload(); };
-        scopePassive.CheckedChanged += (_,_) => { if(scopePassive.Checked) Reload(); };
-        scopeAll.CheckedChanged += (_,_) => { if(scopeAll.Checked) Reload(); };
+        // Filtreler mevcut personel tablosunun DefaultView'i üzerinde çalışır.
+        // Aktif/Pasif geçişinde DB'yi yeniden okumak UI'yi donduruyor ve seçim yarışına yol açıyordu.
+        searchText.TextChanged += (_,_) => ApplyEmploymentScopeAndSearch();
+        searchField.SelectedIndexChanged += (_,_) => ApplyEmploymentScopeAndSearch();
 
         box.Controls.Add(filter, 0, 1);
         return box;
