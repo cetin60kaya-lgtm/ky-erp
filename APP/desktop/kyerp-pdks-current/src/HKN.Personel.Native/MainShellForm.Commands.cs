@@ -84,7 +84,7 @@ public sealed partial class MainShellForm
                 OpenLiveAttendance();
                 break;
             case PdksCommandId.MonthlyAttendanceAdmin:
-                ShowModule(new MonthlyAttendanceAdminForm(currentUser), PdksModule.GirisCikis);
+                ShowCachedModule("monthly-attendance-admin", () => new MonthlyAttendanceAdminForm(currentUser), PdksModule.GirisCikis, "Aylık Kart Düzeltme • ADMIN");
                 break;
             case PdksCommandId.AttendanceExceptions:
                 ShowModule(new AttendanceExceptionCenterForm(NavigateToCommand), PdksModule.GunlukOperasyon);
@@ -129,7 +129,7 @@ public sealed partial class MainShellForm
                 ShowModule(new PeriodControlCenterForm(NavigateToCommand), PdksModule.Bordro);
                 break;
             case PdksCommandId.PayrollAdjustment:
-                ShowModule(new MonthlyPayrollAdjustmentForm(), PdksModule.Bordro);
+                ShowCachedModule("payroll-adjustment", () => new MonthlyPayrollAdjustmentForm(), PdksModule.Bordro, "Aylık Bordro / Ödeme");
                 break;
             case PdksCommandId.PayrollPayslip:
                 OpenBordro(2);
