@@ -28,8 +28,8 @@ public partial class PersonelForm
 
     void EmploymentScopeChanged(object? sender, EventArgs e)
     {
-        if (sender is RadioButton radio && radio.Checked && IsHandleCreated && !IsDisposed)
-            BeginInvoke(new Action(ApplyEmploymentScopeAndSearch));
+        if (sender is not RadioButton radio || !radio.Checked || !IsHandleCreated || IsDisposed) return;
+        ApplyEmploymentScopeAndSearch();
     }
 
     void ApplyEmploymentScopeAndSearch()
@@ -54,23 +54,54 @@ public partial class PersonelForm
             filters.Add($"CONVERT({column}, 'System.String') LIKE '%{term}%'");
         }
 
+        var selectedPk = list.CurrentRow?.DataBoundItem is DataRowView current
+            ? Convert.ToString(current.Row["PKNO"])?.Trim()
+            : currentPk;
+
+        list.SuspendLayout();
         try
         {
-            dt.DefaultView.RowFilter = string.Join(" AND ", filters);
-        }
-        catch
-        {
-            // Never leave a stale filter if a legacy database exposes a different column type.
-            dt.DefaultView.RowFilter = scopeActive.Checked ? "ICTARIH IS NULL" : scopePassive.Checked ? "ICTARIH IS NOT NULL" : string.Empty;
-        }
+            // Filtre değişirken CurrentCell eski/filtre dışı veya görünmez kolonda kalırsa
+            // WinForms "Geçerli hücre görünmez bir hücreye ayarlanamaz" hatası verebilir.
+            list.CurrentCell = null;
 
-        if (list.Columns.Contains("ICTARIH"))
-            list.Columns["ICTARIH"].Visible = !scopeActive.Checked;
-        if (list.Columns.Contains("MAAS"))
-            list.Columns["MAAS"].Visible = true;
+            try
+            {
+                dt.DefaultView.RowFilter = string.Join(" AND ", filters);
+            }
+            catch
+            {
+                dt.DefaultView.RowFilter = scopeActive.Checked ? "ICTARIH IS NULL" : scopePassive.Checked ? "ICTARIH IS NOT NULL" : string.Empty;
+            }
+
+            ConfigureListColumns();
+            list.ClearSelection();
+
+            DataGridViewRow? target = null;
+            if (!string.IsNullOrWhiteSpace(selectedPk))
+            {
+                target = list.Rows.Cast<DataGridViewRow>().FirstOrDefault(r =>
+                    r.DataBoundItem is DataRowView drv &&
+                    string.Equals(Convert.ToString(drv.Row["PKNO"])?.Trim(), selectedPk, StringComparison.OrdinalIgnoreCase));
+            }
+            target ??= list.Rows.Cast<DataGridViewRow>().FirstOrDefault(r => r.Visible && !r.IsNewRow);
+
+            var visibleColumn = list.Columns.Cast<DataGridViewColumn>()
+                .Where(col => col.Visible)
+                .OrderBy(col => col.DisplayIndex)
+                .FirstOrDefault();
+
+            if (target is not null && visibleColumn is not null)
+            {
+                target.Selected = true;
+                list.CurrentCell = target.Cells[visibleColumn.Index];
+            }
+        }
+        finally
+        {
+            list.ResumeLayout();
+        }
 
         UpdateClassicStats();
-        if (list.Rows.Count > 0 && list.CurrentRow is null)
-            list.CurrentCell = list.Rows[0].Cells[0];
     }
 }
