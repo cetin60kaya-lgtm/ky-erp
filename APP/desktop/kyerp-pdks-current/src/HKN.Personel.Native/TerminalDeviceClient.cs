@@ -6,6 +6,9 @@ namespace HKN.Personel.Native;
 internal sealed record TerminalDevicePunch(string EmployeeCode, DateTime OccurredAt, int InOut, int VerifyMode, int EventCode, int TerminalNumber);
 internal sealed record TerminalDeviceSnapshot(bool Connected, string Message, DateTime? DeviceTime, int NewLogCount, int UserCount, int CardCount, IReadOnlyList<TerminalDevicePunch> Punches)
 {
+    public string SerialNumber { get; init; } = "";
+    public string ProductCode { get; init; } = "";
+    public string FirmwareVersion { get; init; } = "";
     public static TerminalDeviceSnapshot Offline(string message) => new(false, message, null, -1, -1, -1, Array.Empty<TerminalDevicePunch>());
 }
 internal sealed record TerminalCommandResult(bool Success, string Message);
@@ -28,7 +31,7 @@ internal sealed record TerminalDeviceUser(int UserId, string Name, IReadOnlyList
 internal static class TerminalDeviceClient
 {
     public static TerminalDeviceSettings Settings => TerminalDeviceSettingsStore.Load();
-    public static Task<TerminalDeviceSnapshot> ReadAsync(bool readPunches, CancellationToken cancellationToken = default) => RunReadAsync(readPunches ? "read" : "status", cancellationToken);
+    public static Task<TerminalDeviceSnapshot> ReadAsync(bool readPunches, CancellationToken cancellationToken = default) => RunReadAsync(readPunches, cancellationToken);
 
     public static async Task<IReadOnlyList<TerminalDeviceUser>> ReadUsersAsync(CancellationToken cancellationToken = default)
     {
@@ -76,10 +79,34 @@ internal static class TerminalDeviceClient
         return new(false, string.IsNullOrWhiteSpace(run.Error) ? ParseBridgeError(run.Output, run.Error) : run.Error.Trim());
     }
 
-    static async Task<TerminalDeviceSnapshot> RunReadAsync(string mode, CancellationToken ct)
+    static async Task<TerminalDeviceSnapshot> RunReadAsync(bool readPunches, CancellationToken ct)
     {
+        var prepared = await PrepareDetectedProfileAsync(ct);
+        var mode = !readPunches ? "status" :
+            prepared.LogReadMode.Equals("All", StringComparison.OrdinalIgnoreCase) ? "readall" : "read";
         var run = await RunBridgeAsync(mode, ct);
-        return Parse(run.Output, run.Error);
+        var snapshot = Parse(run.Output, run.Error);
+        if (snapshot.Connected)
+        {
+            var active = TerminalDeviceSettingsStore.Load();
+            TerminalDeviceSettingsStore.UpdateDetectedIdentity(
+                active.MacAddress,
+                active.Manufacturer,
+                snapshot.ProductCode,
+                snapshot.SerialNumber,
+                snapshot.FirmwareVersion);
+        }
+        return snapshot;
+    }
+
+    static async Task<TerminalDeviceSettings> PrepareDetectedProfileAsync(CancellationToken ct)
+    {
+        var saved = TerminalDeviceSettingsStore.Load();
+        if (!saved.ConnectionType.Equals("Ethernet", StringComparison.OrdinalIgnoreCase))
+            return saved;
+        var mac = await TerminalNetworkDiagnostics.ResolveMacAsync(saved.IpAddress, ct);
+        if (string.IsNullOrWhiteSpace(mac)) return saved;
+        return TerminalDeviceSettingsStore.SelectForDetectedMac(mac, saved.IpAddress);
     }
 
     static string ParseBridgeError(string output, string error)
@@ -103,7 +130,7 @@ internal static class TerminalDeviceClient
         var sdk = TerminalSdkLocator.Resolve();
         if (!sdk.CanAttemptConnection) return ("STATUS|ERROR|" + sdk.Message, "");
 
-        var saved = TerminalDeviceSettingsStore.Load();
+        var saved = await PrepareDetectedProfileAsync(ct);
         var ip = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_IP") ?? saved.IpAddress;
         var port = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_PORT") ?? saved.IpPort.ToString(CultureInfo.InvariantCulture);
         var machine = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_MACHINE") ?? saved.MachineNo.ToString(CultureInfo.InvariantCulture);
@@ -179,10 +206,20 @@ internal static class TerminalDeviceClient
         var users = -1;
         var cards = -1;
         var punches = new List<TerminalDevicePunch>();
+        var serial = "";
+        var product = "";
+        var firmware = "";
         foreach (var raw in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
         {
             var p = raw.Split('|');
             if (p.Length >= 3 && p[0] == "STATUS" && p[1] == "ERROR") return TerminalDeviceSnapshot.Offline(string.Join(" ", p.Skip(2)));
+            if (p.Length >= 4 && p[0] == "IDENTITY")
+            {
+                serial = p[1];
+                product = p[2];
+                firmware = p[3];
+                continue;
+            }
             if (p.Length >= 6 && p[0] == "STATUS" && p[1] == "OK")
             {
                 if (DateTime.TryParseExact(p[2], "s", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)) deviceTime = dt;
@@ -201,6 +238,11 @@ internal static class TerminalDeviceClient
             }
         }
         if (deviceTime is null) return TerminalDeviceSnapshot.Offline(string.IsNullOrWhiteSpace(error) ? "Kart cihazından geçerli yanıt alınamadı." : FriendlyTerminalError(error.Trim()));
-        return new(true, "Bağlı", deviceTime, newLogs, users, cards, punches);
+        return new(true, "Bağlı", deviceTime, newLogs, users, cards, punches)
+        {
+            SerialNumber = serial,
+            ProductCode = product,
+            FirmwareVersion = firmware
+        };
     }
 }
