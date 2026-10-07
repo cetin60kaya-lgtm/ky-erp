@@ -13,7 +13,7 @@ internal static class Program
 		{
 			if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(variable)))
 			{
-				string environmentVariable = Environment.GetEnvironmentVariable(variable, EnvironmentVariableTarget.User);
+				string? environmentVariable = Environment.GetEnvironmentVariable(variable, EnvironmentVariableTarget.User);
 				if (!string.IsNullOrWhiteSpace(environmentVariable))
 				{
 					Environment.SetEnvironmentVariable(variable, environmentVariable);
