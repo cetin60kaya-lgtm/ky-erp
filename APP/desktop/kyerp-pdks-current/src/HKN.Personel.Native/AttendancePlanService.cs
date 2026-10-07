@@ -166,6 +166,34 @@ internal static class AttendancePlanService
             canApply);
     }
 
+    public static void ValidateDatabasePlan(
+        FirebirdDatabase db,
+        AttendancePlanPreview preview)
+    {
+        if (!preview.CanApply) throw new InvalidOperationException("Önizleme uygulanabilir değil.");
+        using var connection = db.OpenConnection();
+        using var transaction = connection.BeginTransaction();
+        try
+        {
+            foreach (var item in preview.Items)
+            {
+                if (preview.Mode == AttendancePlanMode.ConvertToE)
+                    ApplyE(connection, transaction, item);
+                else
+                    ApplyFullRepair(connection, transaction, item);
+            }
+
+            var cards = preview.Items.Select(x => x.Card).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            CleanupEmptyRows(connection, transaction, cards, preview.From, preview.To);
+            transaction.Rollback();
+        }
+        catch
+        {
+            try { transaction.Rollback(); } catch { }
+            throw;
+        }
+    }
+
     public static AttendancePlanApplyResult Apply(
         FirebirdDatabase db,
         AttendancePlanPreview preview)
