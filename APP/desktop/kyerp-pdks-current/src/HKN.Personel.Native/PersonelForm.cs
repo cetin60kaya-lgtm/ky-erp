@@ -194,7 +194,7 @@ public partial class PersonelForm : Form
         UpdateCanonicalProfileSummary(r);
         LoadPayrollProfilePanel(pk, ReadDecimal(r, "MAAS"));
 
-        if (fullTabsReady && IsHandleCreated)
+        if (fullTabsReady && IsHandleCreated && tabs.SelectedIndex > 0)
         {
             SyncPeriodsToPerson();
             RefreshSelectedTab();
