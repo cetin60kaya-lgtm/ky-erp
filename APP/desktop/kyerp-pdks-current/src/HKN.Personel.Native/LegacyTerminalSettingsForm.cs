@@ -18,6 +18,7 @@ public sealed class LegacyTerminalSettingsForm : Form
     readonly CheckBox backup = new() { Text = "Ham cihaz aktarımını ayrıca yedekle", Checked = true };
     readonly Label status = new() { AutoSize = false, Height = 30, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
     readonly Button save = Cmd("KAYDET", 110);
+    TerminalDeviceSettings? selectedProfile;
     bool editing;
 
     public LegacyTerminalSettingsForm()
@@ -65,7 +66,7 @@ public sealed class LegacyTerminalSettingsForm : Form
         var hero = new Panel { Dock = DockStyle.Fill, BackColor = surface, Padding = new Padding(18,12,18,10), Margin = new Padding(0,0,0,10) };
         hero.Paint += (_,e)=>{using var p=new Pen(border);e.Graphics.DrawRectangle(p,0,0,Math.Max(0,hero.Width-1),Math.Max(0,hero.Height-1));};
         var title = new Label { Text="Terminal Merkezi", AutoSize=true, Location=new Point(18,12), Font=new Font("Segoe UI",13f,FontStyle.Bold), ForeColor=text };
-        var hint = new Label { Text="Yalnız mevcut Hedef / FP_CLOCK cihazının gelişmiş bağlantı profili. Günlük kullanıcı, kart ve log işlemleri Terminal & Kimlik Merkezi'nden yapılır.", AutoSize=true, Location=new Point(19,42), ForeColor=muted, Font=new Font("Segoe UI",8.8f) };
+        var hint = new Label { Text="Her fiziksel terminal MAC adresiyle ayrı profil olarak saklanır. Marka/model, seri, firmware ve okuma yöntemi cihaz bazında korunur.", AutoSize=true, Location=new Point(19,42), ForeColor=muted, Font=new Font("Segoe UI",8.8f) };
         status.Location=new Point(650,18);status.Width=470;status.Height=34;status.TextAlign=ContentAlignment.MiddleRight;
         hero.Controls.Add(title);hero.Controls.Add(hint);hero.Controls.Add(status);
         root.Controls.Add(hero,0,0);
@@ -91,14 +92,36 @@ public sealed class LegacyTerminalSettingsForm : Form
         var serial=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Margin=Padding.Empty};serial.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));serial.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));comPort.Dock=DockStyle.Fill;baudRate.Dock=DockStyle.Fill;serial.Controls.Add(comPort,0,0);serial.Controls.Add(baudRate,1,0);TerminalRow(connection,4,"Seri",serial);
         TerminalRow(connection,5,"Yön",direction);
         var editBar=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.LeftToRight,WrapContents=true,Padding=new Padding(0,5,0,0)};
-        var add=TerminalButton("EKLE",62,true);var remove=TerminalButton("ÇIKART",68,false);var edit=TerminalButton("DÜZENLE",76,false);
+        var add=TerminalButton("EKLE",62,true);var remove=TerminalButton("ÇIKART",68,false);var edit=TerminalButton("DÜZENLE",76,false);var activate=TerminalButton("AKTİF",68,true);
         save.Width=72;save.Height=32;PdksUiKit.ApplyButtonPalette(save,palette,PdksActionRole.Primary);
-        add.Click += (_, _) => { ApplyToFields(TerminalDeviceSettings.Default); SetEditing(true); };
-        remove.Click += (_, _) => { if(MessageBox.Show("Ana cihaz ayarları varsayılana döndürülsün mü?",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;TerminalDeviceSettingsStore.Save(TerminalDeviceSettings.Default);LoadSettings();SetEditing(false); };
+        add.Click += (_, _) =>
+        {
+            var all = TerminalDeviceSettingsStore.LoadAll();
+            var nextNo = all.Count == 0 ? 1 : all.Max(x => x.DeviceNo) + 1;
+            selectedProfile = TerminalDeviceSettings.Default with { DeviceNo = nextNo, DeviceName = $"cihaz{nextNo}", MacAddress = "", Manufacturer = "", Model = "", SerialNumber = "", FirmwareVersion = "", LogReadMode = "New" };
+            ApplyToFields(selectedProfile);
+            SetEditing(true);
+        };
+        remove.Click += (_, _) =>
+        {
+            var selected = selectedProfile;
+            if (selected is null) return;
+            if(MessageBox.Show($"{selected.DeviceName} profili silinsin mi?\n\nMAC: {(string.IsNullOrWhiteSpace(selected.MacAddress) ? "tanımsız" : selected.MacAddress)}",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+            TerminalDeviceSettingsStore.Remove(selected);
+            LoadSettings();
+            SetEditing(false);
+        };
+        activate.Click += (_, _) =>
+        {
+            if (selectedProfile is null) return;
+            TerminalDeviceSettingsStore.SetActive(selectedProfile);
+            LoadSettings();
+            SetStatus($"Aktif cihaz: {selectedProfile.DeviceName} • {selectedProfile.MacAddress}", true);
+        };
         edit.Click += (_,_)=>SetEditing(true);
         deleteAfter.CheckedChanged += (_,_)=> { if (IsHandleCreated) save.Enabled = true; };
         save.Click += (_,_)=>SaveSettings();
-        editBar.Controls.Add(save);editBar.Controls.Add(edit);editBar.Controls.Add(remove);editBar.Controls.Add(add);connection.Controls.Add(editBar,1,6);
+        editBar.Controls.Add(save);editBar.Controls.Add(activate);editBar.Controls.Add(edit);editBar.Controls.Add(remove);editBar.Controls.Add(add);connection.Controls.Add(editBar,1,6);
         connectionCard.Controls.Add(connection);setup.Controls.Add(connectionCard,1,0);
         root.Controls.Add(setup,0,1);
 
@@ -186,9 +209,22 @@ public sealed class LegacyTerminalSettingsForm : Form
         grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         grid.BackgroundColor = PdksAppearance.Current.Surface;
-        foreach (var name in new[] { "CihazNo", "CihazAdı", "MakineNo", "BağlantıTipi", "ComPort", "Baudrate", "IP Adres", "IP Port", "Giriş/Çıkış", "İşlem Durumu" })
-            grid.Columns.Add(name.Replace(" ", ""), name);
-        grid.CellDoubleClick += (_, _) => SetEditing(true);
+        foreach (var name in new[] { "Aktif", "CihazNo", "CihazAdı", "MAC", "Marka/Model", "MakineNo", "Bağlantı", "IP", "Port", "Okuma", "Durum" })
+            grid.Columns.Add(name.Replace(" ", "").Replace("/", ""), name);
+        grid.CellClick += (_, e) =>
+        {
+            if (e.RowIndex < 0 || e.RowIndex >= grid.Rows.Count) return;
+            if (grid.Rows[e.RowIndex].Tag is not TerminalDeviceSettings selected) return;
+            selectedProfile = selected;
+            ApplyToFields(selected);
+        };
+        grid.CellDoubleClick += (_, e) =>
+        {
+            if (e.RowIndex < 0 || grid.Rows[e.RowIndex].Tag is not TerminalDeviceSettings selected) return;
+            selectedProfile = selected;
+            ApplyToFields(selected);
+            SetEditing(true);
+        };
     }
 
     static void AddField(TableLayoutPanel table, int column, string label, Control control)
@@ -202,8 +238,9 @@ public sealed class LegacyTerminalSettingsForm : Form
     void LoadSettings()
     {
         var value = TerminalDeviceSettingsStore.Load();
+        selectedProfile = value;
         ApplyToFields(value);
-        RefreshGrid(value, "Kontrol bekliyor");
+        RefreshGrid("Kontrol bekliyor");
     }
 
     void ApplyToFields(TerminalDeviceSettings value)
@@ -227,7 +264,7 @@ public sealed class LegacyTerminalSettingsForm : Form
     {
         if (string.IsNullOrWhiteSpace(ipAddress.Text)) throw new InvalidOperationException("IP adresi boş bırakılamaz.");
         if (!int.TryParse(baudRate.Text.Trim(), out var baud) || baud <= 0) throw new InvalidOperationException("Baudrate geçersiz.");
-        return new TerminalDeviceSettings(
+        var value = new TerminalDeviceSettings(
             (int)deviceNo.Value,
             string.IsNullOrWhiteSpace(deviceName.Text) ? "Cihaz1" : deviceName.Text.Trim(),
             (int)machineNo.Value,
@@ -241,6 +278,17 @@ public sealed class LegacyTerminalSettingsForm : Form
             deleteAfter.Checked,
             backup.Checked,
             (int)tolerance.Value);
+        var source = selectedProfile;
+        return source is null ? value : value with
+        {
+            MacAddress = source.MacAddress,
+            Manufacturer = source.Manufacturer,
+            Model = source.Model,
+            SerialNumber = source.SerialNumber,
+            FirmwareVersion = source.FirmwareVersion,
+            AdapterProfile = source.AdapterProfile,
+            LogReadMode = source.LogReadMode
+        };
     }
 
     void SaveSettings()
@@ -254,7 +302,8 @@ public sealed class LegacyTerminalSettingsForm : Form
                     "Aktarım Sonrası Cihaz Temizliği", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                 return;
             TerminalDeviceSettingsStore.Save(value);
-            RefreshGrid(value, "Kaydedildi");
+            selectedProfile = value;
+            RefreshGrid("Kaydedildi");
             SetEditing(false);
             MessageBox.Show("Kart cihazı ayarları kaydedildi.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
@@ -272,11 +321,28 @@ public sealed class LegacyTerminalSettingsForm : Form
         save.Enabled = value;
     }
 
-    void RefreshGrid(TerminalDeviceSettings value, string state)
+    void RefreshGrid(string state)
     {
         grid.Rows.Clear();
-        grid.Rows.Add(value.DeviceNo, value.DeviceName, value.MachineNo, value.ConnectionType, value.ComPort, value.BaudRate, value.IpAddress, value.IpPort, value.Direction, state);
-        if (grid.Rows.Count > 0) grid.Rows[0].Selected = true;
+        var active = TerminalDeviceSettingsStore.Load();
+        foreach (var value in TerminalDeviceSettingsStore.LoadAll())
+        {
+            var isActive = value.HardwareKey.Equals(active.HardwareKey, StringComparison.OrdinalIgnoreCase);
+            var rowIndex = grid.Rows.Add(
+                isActive ? "●" : "",
+                value.DeviceNo,
+                value.DeviceName,
+                string.IsNullOrWhiteSpace(value.MacAddress) ? "—" : value.MacAddress,
+                value.IdentityText,
+                value.MachineNo,
+                value.ConnectionType,
+                value.IpAddress,
+                value.IpPort,
+                value.LogReadMode,
+                isActive ? state : "Kayıtlı");
+            grid.Rows[rowIndex].Tag = value;
+            if (isActive) grid.Rows[rowIndex].Selected = true;
+        }
     }
 
     async Task TestConnectionAsync(bool showMessage)
@@ -289,13 +355,14 @@ public sealed class LegacyTerminalSettingsForm : Form
             if (snap.Connected)
             {
                 SetStatus($"Bağlantı var • {snap.DeviceTime:dd.MM.yyyy HH:mm:ss}", true);
-                RefreshGrid(saved, "Bağlantı var");
-                if (showMessage) MessageBox.Show($"Cihaz bağlantısı başarılı.\nIP: {saved.IpAddress}:{saved.IpPort}\nMakine: {saved.MachineNo}\nCihaz saati: {snap.DeviceTime:dd.MM.yyyy HH:mm:ss}", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                LoadSettings();
+                var current = TerminalDeviceSettingsStore.Load();
+                if (showMessage) MessageBox.Show($"Cihaz bağlantısı başarılı.\nProfil: {current.DeviceName}\nMAC: {current.MacAddress}\nMarka/Model: {current.IdentityText}\nSeri: {current.SerialNumber}\nFirmware: {current.FirmwareVersion}\nIP: {current.IpAddress}:{current.IpPort}\nMakine: {current.MachineNo}\nCihaz saati: {snap.DeviceTime:dd.MM.yyyy HH:mm:ss}", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else
             {
                 SetStatus("Bağlantı yok • " + snap.Message, false);
-                RefreshGrid(saved, "Bağlantı yok");
+                RefreshGrid("Bağlantı yok");
                 if (showMessage) MessageBox.Show(snap.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
