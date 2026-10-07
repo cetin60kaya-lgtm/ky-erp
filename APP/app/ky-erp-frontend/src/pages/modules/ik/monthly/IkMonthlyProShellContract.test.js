@@ -262,7 +262,7 @@ test("annual leave keeps proof-grade day-by-day snapshots and printable ledger",
 
 test("monthly control report is a single adaptive financial sheet with only bottom totals", () => {
   assert.match(monthly, /const printMonthlyControlReport = async \(\) =>/);
-  assert.match(monthly, /Aylık Kontrol Çıktısı/);
+  assert.match(monthly, /Aylık İK Kontrol Çıktısı/);
   assert.match(monthly, /yalnız kontrol amaçlıdır; ödeme\/final işlemi yapmaz/);
   assert.match(monthly, /const printScale = Math\.min\(1, 19 \/ Math\.max\(19, rowCount\)\)/);
   assert.match(monthly, /sheetWidth = 100 \/ printScale/);
@@ -294,8 +294,8 @@ test("official payroll outputs are read-only and month lock is the only edit loc
   assert.doesNotMatch(monthly, /Bordroyu Tamamla \/ PDF/);
   assert.doesNotMatch(monthly, /Tamamla \/ Excel/);
   assert.match(monthly, />Bordro PDF</);
-  assert.match(monthly, />Ayı Kilitle</);
-  assert.match(monthly, />Kilidi Aç</);
+  assert.ok(monthly.includes('"Ayı Kilitle"'));
+  assert.ok(monthly.includes('"Kilidi Aç"'));
   assert.match(monthly, /runClose\(data\.close\?\.isLocked \? "UNLOCK" : "LOCK"\)/);
   assert.match(css, /IK_BORDRO_MONTH_LOCK_2026_10_07/);
 });
