@@ -15,9 +15,19 @@ public partial class PersonelForm
         try
         {
             syncingPeriodSelection = true;
-            var q = Q("select GRUP from KIMLIK where PKNO=@PK", new FbParameter("@PK", currentPk));
-            if (q.Rows.Count == 0 || q.Rows[0][0] == DBNull.Value) return;
-            int group = Convert.ToInt32(q.Rows[0][0]);
+            int group;
+            if (personCache.TryGetValue(currentPk, out var cached) &&
+                cached.Table.Columns.Contains("GRUP") &&
+                cached["GRUP"] != DBNull.Value)
+            {
+                group = Convert.ToInt32(cached["GRUP"]);
+            }
+            else
+            {
+                var q = Q("select GRUP from KIMLIK where PKNO=@PK", new FbParameter("@PK", currentPk));
+                if (q.Rows.Count == 0 || q.Rows[0][0] == DBNull.Value) return;
+                group = Convert.ToInt32(q.Rows[0][0]);
+            }
 
             var g = SelectPeriodForGroup(periodG, group);
             var i = SelectPeriodForGroup(periodI, group);
