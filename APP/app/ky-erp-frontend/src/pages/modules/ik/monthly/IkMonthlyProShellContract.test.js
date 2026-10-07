@@ -12,7 +12,8 @@ test("monthly HR uses the professional command shell without replacing payroll r
   assert.match(monthly, /IkMonthlyProShell/);
   assert.match(monthly, /periodPrepared=\{periodPrepared\}/);
   assert.match(monthly, /balanced=\{periodPrepared && balanced\}/);
-  assert.match(monthly, /paidCount=\{payrollRows\.filter/);
+  assert.match(monthly, /payrollCount=\{payrollRows\.length\}/);
+  assert.doesNotMatch(monthly, /paidCount=/);
   assert.match(monthly, /renderBordro\(\)/);
   assert.match(monthly, /renderEvrak\(\)/);
   assert.match(monthly, /reconcilePaymentSplit/);
@@ -31,8 +32,8 @@ test("professional shell exposes the seven canonical HR work areas", () => {
   labels.forEach((label) => assert.ok(shell.includes(label), label));
   assert.ok(shell.includes("Dönem Hazırlığı"));
   assert.ok(shell.includes("Kontrol"));
-  assert.ok(shell.includes("Ödeme"));
-  assert.ok(shell.includes("Kapanış"));
+  assert.ok(shell.includes("Bordro Hazır"));
+  assert.ok(shell.includes("Ay Kilidi"));
 });
 
 test("monthly HR professional UI stays responsive and keeps dense tables usable", () => {
@@ -91,12 +92,13 @@ test("payroll separates active and selected-month leavers while excluding earlie
   assert.match(monthly, /Seçili aydan önce ayrılan personel bordroya alınmaz/);
 });
 
-test("entry control and final payroll control are distinct modes on the same source editor", () => {
+test("entry control and final payroll control share the same editable source editor while month is open", () => {
   assert.match(monthly, /Bordro Öncesi Giriş Kontrolü/);
   assert.match(monthly, /Son Bordro Kontrolü/);
   assert.match(monthly, /controlMode === "FINAL"/);
-  assert.match(monthly, /Ana Plan Salt Okunur/);
-  assert.match(monthly, /Tüm Finans Alanları Elle Açık/);
+  assert.match(monthly, /ENTRY_EDIT/);
+  assert.match(monthly, /editableMode/);
+  assert.match(monthly, /Düzenlenebilir/);
   assert.match(monthly, /savePrePayrollMovement/);
   assert.match(monthly, /saveFinalPayrollControl/);
   assert.match(monthly, /Kaynak Hareketleri \/ Log/);
@@ -287,13 +289,15 @@ test("payroll screen shows salary road overtime and sticky grand totals", () => 
   assert.match(css, /\.payroll-screen-total/);
 });
 
-test("official payroll output is the payment completion action", () => {
-  assert.match(monthly, /const finalizePayrollForOutput/);
-  assert.match(monthly, /status:\s*"PAID"/);
-  assert.match(monthly, /window\.confirm/);
-  assert.match(monthly, /Bordroyu Tamamla \/ PDF/);
-  assert.match(monthly, /10['’]lu Fiş \+ Tamamla/);
-  assert.match(monthly, /Tamamla \/ Excel/);
+test("official payroll outputs are read-only and month lock is the only edit lock", () => {
+  assert.match(monthly, /const validatePayrollOutput/);
+  assert.doesNotMatch(monthly, /Bordroyu Tamamla \/ PDF/);
+  assert.doesNotMatch(monthly, /Tamamla \/ Excel/);
+  assert.match(monthly, />Bordro PDF</);
+  assert.match(monthly, />Ayı Kilitle</);
+  assert.match(monthly, />Kilidi Aç</);
+  assert.match(monthly, /runClose\(data\.close\?\.isLocked \? "UNLOCK" : "LOCK"\)/);
+  assert.match(css, /IK_BORDRO_MONTH_LOCK_2026_10_07/);
 });
 
 
