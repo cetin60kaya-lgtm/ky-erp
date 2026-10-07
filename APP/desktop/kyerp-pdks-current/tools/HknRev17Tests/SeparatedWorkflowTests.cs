@@ -136,7 +136,7 @@ internal static class SeparatedWorkflowTests
     static void RunComparisonUi(FirebirdDatabase database, string path, string directory, Action<bool, string> check)
     {
         using var owner = new ProbeForm(database, path);
-        using var control = new DbTnfSyncControl(owner, true);
+        using var control = new DbTnfSyncControl(owner);
         owner.Controls.Add(control);
         var timer = Stopwatch.StartNew();
         long last = 0, maximum = 0;
@@ -153,9 +153,9 @@ internal static class SeparatedWorkflowTests
                 maximum = Math.Max(maximum, timer.ElapsedMilliseconds - last);
                 var dbGrid = (DataGridView)typeof(DbTnfSyncControl).GetField("dbGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
                 var tnfGrid = (DataGridView)typeof(DbTnfSyncControl).GetField("tnfGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
-                check(control.LastSnapshot?.Request.Exact == true && dbGrid.DataSource is BindingSource dbSource && tnfGrid.DataSource is BindingSource tnfSource && ReferenceEquals(dbSource.DataSource, tnfSource.DataSource), "TNF DÜZENLE actual mode SELECT-only audit uses identical aligned PairView binding");
-                check(maximum < 2000, "TNF DÜZENLE actual-mode UI heartbeat below two seconds");
-                Console.WriteLine($"REV21_SEPARATE_UI grid_bind_ms={control.LastGridMilliseconds} total_ms={control.LastTotalMilliseconds} max_heartbeat_gap_ms={maximum}");
+                check(control.LastSnapshot?.Request.Exact == true && dbGrid.DataSource is BindingSource dbSource && tnfGrid.DataSource is BindingSource tnfSource && ReferenceEquals(dbSource.DataSource, tnfSource.DataSource), "REV25 exact DB-TNF audit uses identical aligned PairView binding");
+                check(maximum < 2000, "REV25 exact DB-TNF UI heartbeat below two seconds");
+                Console.WriteLine($"REV25_EXACT_UI grid_bind_ms={control.LastGridMilliseconds} total_ms={control.LastTotalMilliseconds} max_heartbeat_gap_ms={maximum}");
                 using var image = new System.Drawing.Bitmap(owner.Width, owner.Height);
                 owner.DrawToBitmap(image, new(0, 0, owner.Width, owner.Height));
                 image.Save(Path.Combine(directory, "TNF_SEPARATE_UI_" + Guid.NewGuid().ToString("N") + ".png"));
@@ -192,10 +192,12 @@ internal static class SeparatedWorkflowTests
             ((DataGridView)Field(control, "preview")).Columns.Count == 7, "DB KAYIT only six operations and seven preview columns");
         var days = (CheckedListBox)Field(control, "days");
         check(days.CheckedItems.Count < days.Items.Count && days.CheckedItems.Count > 0, "DB KAYIT UI weekends initially unchecked; weekdays checked");
-        using var tnf = new DbTnfSyncControl(main, true);
+        using var tnf = new DbTnfSyncControl(main);
         IEnumerable<Control> Descendants(Control root) => root.Controls.Cast<Control>().SelectMany(child => Descendants(child).Prepend(child));
         var buttons = Descendants(tnf).OfType<Button>().Select(button => button.Text).ToArray();
-        check(buttons.Contains("TNF'Yİ DB'YE GÖRE DÜZELT") && !buttons.Any(text => text.Contains("DB GÜVENLİ") || text.Contains("DB EKSİK")), "TNF UI separated; no DB write buttons reachable");
+        check(buttons.Contains("TEK ATIŞ KONTROL + DÜZELT") &&
+            !buttons.Any(text => text.Contains("DB GÜVENLİ") || text.Contains("DB EKSİK") || text.Contains("ÇIKTIYI")),
+            "REV25 exact UI exposes one TNF correction action and no legacy write/export buttons");
     }
 
     static void RunOperationTests(FirebirdDatabase database, Action<bool, string> check)
