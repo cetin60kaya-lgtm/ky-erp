@@ -63,17 +63,20 @@ internal static class WorkTimeTests
         var start = new DateTime(2026, 5, 4);
         var days = Enumerable.Range(0, 12).Select(offset => start.AddDays(offset)).ToArray();
         var snapshot = new DbRecordSnapshot(start, days[^1].AddDays(1), ["00001"], days, records,
-            [new DbRecordPerson("00001", "Fixture")], [], "TEST") { WorkHours = custom };
-        var plan = DbRecordService.Plan(snapshot, CancellationToken.None);
+            [new DbRecordPerson("00001", "Fixture")], "TEST", DbRecordMode.RepairAll) { WorkHours = custom };
+        var changes = DbRecordService.PlanChanges(snapshot, CancellationToken.None);
 
-        check(plan.Length == days.Length &&
-              plan.All(item =>
-                  MonthlyDbAudit.Clock(item.Entry, out var entry) && entry >= custom.EntryEarly && entry <= custom.EntryLate &&
-                  MonthlyDbAudit.Clock(item.Exit, out var exit) && exit >= custom.ExitEarly && exit <= custom.ExitLate),
+        var entries = changes.Where(change => change.Side == "Giriş" && change.Operation == "EKLE")
+            .OrderBy(change => change.Day).ToArray();
+        var exits = changes.Where(change => change.Side == "Çıkış" && change.Operation == "EKLE")
+            .OrderBy(change => change.Day).ToArray();
+        check(entries.Length == days.Length && exits.Length == days.Length &&
+              entries.All(item => MonthlyDbAudit.Clock(item.NewTime, out var minute) && minute >= custom.EntryEarly && minute <= custom.EntryLate) &&
+              exits.All(item => MonthlyDbAudit.Clock(item.NewTime, out var minute) && minute >= custom.ExitEarly && minute <= custom.ExitLate),
               "REV25 DB-first generation always obeys shared Hedef ranges");
 
-        check(plan.Zip(plan.Skip(1)).All(pair =>
-                  pair.First.Entry != pair.Second.Entry && pair.First.Exit != pair.Second.Exit),
+        check(entries.Zip(entries.Skip(1)).All(pair => pair.First.NewTime != pair.Second.NewTime) &&
+              exits.Zip(exits.Skip(1)).All(pair => pair.First.NewTime != pair.Second.NewTime),
               "REV25 naturally generated consecutive days do not repeat the same minute");
 
         var preserved = records.NewRow();
@@ -86,9 +89,9 @@ internal static class WorkTimeTests
         preserved["CSAAT"] = "19:00";
         preserved["CTUR"] = "";
         records.Rows.Add(preserved);
-        var withReal = snapshot with { Records = records };
-        var first = DbRecordService.Plan(withReal, CancellationToken.None).Single(item => item.Day == start);
-        check(first.Entry == "09:00" && first.Exit == "19:00",
+        var withReal = snapshot with { Records = records, Days = [start] };
+        var realChanges = DbRecordService.PlanChanges(withReal, CancellationToken.None);
+        check(realChanges.Length == 0,
               "REV25 valid real DB clocks are preserved exactly");
     }
 }
