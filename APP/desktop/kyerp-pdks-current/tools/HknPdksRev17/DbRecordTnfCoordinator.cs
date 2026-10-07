@@ -32,7 +32,7 @@ internal static class DbRecordTnfCoordinator
         if (keys.Count == 0) throw new InvalidOperationException("TNF eşitleme kapsamı boş.");
         var source = File.ReadAllLines(path).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
         source.RemoveAll(line => TryKey(line, out var key) && keys.Contains(key));
-        var expected = new HashSet<string>(StringComparer.Ordinal);
+        var expected = new List<string>();
         foreach (var key in keys)
         {
             token.ThrowIfCancellationRequested();
@@ -48,7 +48,7 @@ internal static class DbRecordTnfCoordinator
             }
         }
         source.AddRange(expected);
-        var sorted = source.Distinct(StringComparer.Ordinal).OrderBy(LineKey).ToArray();
+        var sorted = source.OrderBy(LineKey).ToArray();
         var directory = Path.GetDirectoryName(path)!;
         var backupDirectory = Path.Combine(directory, "_YEDEK");
         Directory.CreateDirectory(backupDirectory);
@@ -60,7 +60,7 @@ internal static class DbRecordTnfCoordinator
         return new(path, backup, temporary);
     }
 
-    static void AddSide(HashSet<string> expected, FbDataReader reader, string card, DateTime day, string prefix)
+    static void AddSide(List<string> expected, FbDataReader reader, string card, DateTime day, string prefix)
     {
         var dateOrdinal = reader.GetOrdinal(prefix + "TARIH");
         var timeOrdinal = reader.GetOrdinal(prefix + "SAAT");
