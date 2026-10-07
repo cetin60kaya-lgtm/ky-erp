@@ -74,58 +74,97 @@ internal sealed partial class DbTnfSyncControl : UserControl
         month.SelectedIndex = 0;
         statusFilter.Items.AddRange(["Tümü", "Aktif", "Pasif"]);
         statusFilter.SelectedIndex = 0;
-        var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(5), WrapContents = false, FlowDirection = FlowDirection.TopDown };
-        var checkBar = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        var personBar = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        bar.Controls.AddRange([checkBar, personBar]);
-        checkBar.Controls.AddRange([new Label { Text = "Yıl", AutoSize = true, Padding = new Padding(0,8,0,0) }, year,
-            new Label { Text = "Ay", AutoSize = true, Padding = new Padding(0,8,0,0) }, month]);
-        void Button(string text, Func<Task> action, int width, Color? color = null, FlowLayoutPanel? group = null)
+        var commandCard = new Panel
         {
-            var button = new Button { Text = text, Width = width, Height = 34, FlatStyle = FlatStyle.Flat, BackColor = color ?? Color.WhiteSmoke };
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(247, 249, 252),
+            Padding = new Padding(8, 6, 8, 4)
+        };
+        var commandLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        commandLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        commandLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 27));
+        commandLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var commandBar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(0) };
+        commandBar.Controls.AddRange([
+            new Label { Text = "Yıl", AutoSize = true, Padding = new Padding(0, 8, 2, 0) }, year,
+            new Label { Text = "Ay", AutoSize = true, Padding = new Padding(10, 8, 2, 0) }, month
+        ]);
+
+        void Button(string text, Func<Task> action, int width, Color? color = null)
+        {
+            var button = new Button
+            {
+                Text = text,
+                Width = width,
+                Height = 32,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = color ?? Color.White,
+                Font = new Font("Segoe UI", 9, color is null ? FontStyle.Regular : FontStyle.Bold)
+            };
             button.Click += async (_, _) =>
             {
                 try { await action(); }
-                catch (Exception exception) { if (!main.IsDisposed) MessageBox.Show(main, exception.Message, "DB - TNF Eşitle", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+                catch (Exception exception)
+                {
+                    if (!main.IsDisposed) MessageBox.Show(main, exception.Message, "DB - TNF Eşitle", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             };
             operationControls.Add(button);
-            (group ?? checkBar).Controls.Add(button);
+            commandBar.Controls.Add(button);
         }
-        Button("KONTROL ET", () => RunAuditAsync(month.SelectedIndex == 0), 145);
-        Button("TEK ATIŞ KONTROL + DÜZELT", OneClickExactSyncAsync, 280, Color.LightGreen, personBar);
-        personBar.Controls.Add(new Label
+
+        Button("KONTROL ET", () => RunAuditAsync(month.SelectedIndex == 0), 125);
+        Button("TEK ATIŞ KONTROL + DÜZELT", OneClickExactSyncAsync, 245, Color.FromArgb(205, 243, 210));
+        commandBar.Controls.Add(progressBar);
+        commandBar.Controls.Add(cancel);
+        cancel.Click += (_, _) => cancellation?.Cancel();
+
+        var ruleLine = new Label
         {
-            Text = "DB ANA KAYNAK • Tümü = tüm yıl • Eksik eklenir • Fazla/mükerrer/bozuk silinir • E TNF'ye yazılmaz",
-            AutoSize = true,
-            Padding = new Padding(10, 9, 0, 0),
+            Dock = DockStyle.Fill,
+            Text = "DB ANA KAYNAK  •  Tümü = tüm yıl  •  Eksik eklenir  •  Fazla / mükerrer silinir  •  E TNF'ye yazılmaz",
             ForeColor = Color.DarkGreen,
-            Font = new Font("Segoe UI", 9, FontStyle.Bold)
-        });
-        var paths = new Label { AutoSize = true, MaximumSize = new Size(1450, 65), Padding = new Padding(4) };
-        void UpdatePaths() => paths.Text = "DB: " + (main.GetType().GetField("dbPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) as TextBox)?.Text + "\nTNF: " + TnfPathBox?.Text;
+            Font = new Font("Segoe UI", 9, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+
+        var sourceLine = new Label
+        {
+            Dock = DockStyle.Fill,
+            AutoEllipsis = true,
+            ForeColor = Color.DimGray,
+            Font = new Font("Segoe UI", 8.5f)
+        };
+        void UpdatePaths()
+        {
+            var dbText = (main.GetType().GetField("dbPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) as TextBox)?.Text ?? "";
+            sourceLine.Text = $"DB: {dbText}    |    TNF: {TnfPathBox?.Text ?? ""}    |    {workTimeInformation.Text}";
+        }
         UpdatePaths();
         if (TnfPathBox is { } sourceBox) sourceBox.TextChanged += (_, _) => UpdatePaths();
         if (main.GetType().GetField("dbPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) is TextBox databaseBox)
             databaseBox.TextChanged += (_, _) => { UpdatePaths(); InvalidateResult(); };
-        bar.Controls.Add(paths);
-        bar.SetFlowBreak(paths, true);
-        bar.Controls.Add(workTimeInformation);
-        bar.SetFlowBreak(workTimeInformation, true);
-        var selectedPersonBar = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        bar.Controls.Add(selectedPersonBar);
-        selectedPersonBar.Controls.Add(new Label
+        if (main is MainForm workTimeSource)
         {
-            Text = "Tek kural: TNF, seçilen kapsam için DB normal hareketlerinin bire bir aynasıdır.",
-            AutoSize = true,
-            Padding = new Padding(4, 8, 0, 0),
-            ForeColor = Color.DarkSlateGray
-        });
-        cancel.Click += (_, _) => cancellation?.Cancel();
-        checkBar.Controls.AddRange([progressBar, cancel]);
-        operationControls.AddRange([year, month, statusFilter, errorsOnly, hasMovement, search]);
-        var split = new SplitContainer { Dock = DockStyle.Fill, FixedPanel = FixedPanel.None, SplitterWidth = 7, Width = 1300, SplitterDistance = 610, Panel1MinSize = 360, Panel2MinSize = 360 };
-        var filters = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, Padding = new Padding(3), WrapContents = false };
-        var showAll = new Button { Text = "TÜM PERSONELİ GÖSTER", Width = 165, Height = 30 };
+            EventHandler refreshSourceLine = (_, _) => UpdatePaths();
+            workTimeSource.WorkHoursChanged += refreshSourceLine;
+            Disposed += (_, _) => workTimeSource.WorkHoursChanged -= refreshSourceLine;
+        }
+
+        commandLayout.Controls.Add(commandBar, 0, 0);
+        commandLayout.Controls.Add(ruleLine, 0, 1);
+        commandLayout.Controls.Add(sourceLine, 0, 2);
+        commandCard.Controls.Add(commandLayout);
+
+        var showAll = new Button
+        {
+            Text = "TÜM PERSONELİ GÖSTER",
+            Width = 165,
+            Height = 29,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.White
+        };
         showAll.Click += (_, _) =>
         {
             statusFilter.SelectedIndex = 0;
@@ -134,49 +173,92 @@ internal sealed partial class DbTnfSyncControl : UserControl
             search.Clear();
             FilterPeople();
         };
+
+        var filters = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 38,
+            Padding = new Padding(4, 4, 4, 2),
+            WrapContents = false,
+            BackColor = Color.FromArgb(247, 249, 252)
+        };
         filters.Controls.AddRange([showAll, statusFilter, errorsOnly, hasMovement, search]);
-        split.Panel1.Controls.Add(peopleGrid);
-        split.Panel1.Controls.Add(filters);
-        var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
-        right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(234, 242, 250) };
-        header.Controls.Add(personnelSummary);
-        right.Controls.Add(header, 0, 0);
-        var comparison = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+
+        var peoplePanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0), BackColor = Color.White };
+        peoplePanel.Controls.Add(peopleGrid);
+        peoplePanel.Controls.Add(filters);
+        peoplePanel.Controls.Add(new Label
+        {
+            Dock = DockStyle.Top,
+            Height = 28,
+            Text = "PERSONEL KONTROL ÖZETİ",
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            BackColor = Color.FromArgb(225, 233, 241),
+            Padding = new Padding(7, 5, 0, 0)
+        });
+
+        var personCard = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(234, 242, 250), Padding = new Padding(8, 5, 8, 5) };
+        personnelSummary.Dock = DockStyle.Fill;
+        personnelSummary.Padding = new Padding(2);
+        personnelSummary.Font = new Font("Segoe UI", 9);
+        personnelSummary.TextAlign = ContentAlignment.MiddleLeft;
+        personCard.Controls.Add(personnelSummary);
+
+        var comparison = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Padding(0) };
         comparison.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         comparison.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         comparison.Controls.Add(GridPanel("DB — ANA KAYNAK", dbGrid), 0, 0);
         comparison.Controls.Add(GridPanel("TNF — DB İLE EŞİTLENECEK", tnfGrid), 1, 0);
-        var tabs = new TabControl { Dock = DockStyle.Fill };
-        var tnfPage = new TabPage("DB / TNF — AYNI HİZADA");
-        tnfPage.Controls.Add(comparison);
-        tabs.TabPages.Add(tnfPage);
-        right.Controls.Add(tabs, 0, 1);
-        split.Panel2.Controls.Add(right);
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+
+        var comparisonPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0), BackColor = Color.White };
+        comparisonPanel.Controls.Add(comparison);
+        comparisonPanel.Controls.Add(new Label
+        {
+            Dock = DockStyle.Top,
+            Height = 28,
+            Text = "SEÇİLİ PERSONEL — DB / TNF KARŞILAŞTIRMA",
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            BackColor = Color.FromArgb(225, 233, 241),
+            Padding = new Padding(7, 5, 0, 0)
+        });
+
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(8, 6, 8, 8) };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 48));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-        bar.Dock = details.Dock = summary.Dock = DockStyle.Fill;
-        summary.BackColor = Color.FromArgb(234,242,250);
-        layout.Controls.Add(bar, 0, 0);
-        layout.Controls.Add(split, 0, 1);
-        layout.Controls.Add(details, 0, 2);
-        layout.Controls.Add(summary, 0, 3);
+
+        details.Dock = DockStyle.Fill;
+        details.Height = 42;
+        details.Padding = new Padding(8, 5, 8, 5);
+        details.BackColor = Color.FromArgb(247, 249, 252);
+        details.Text = "DB ANA KAYNAK. Seçili personelin DB ve TNF kayıtları aşağıda yan yana gösterilir.";
+
+        summary.Dock = DockStyle.Fill;
+        summary.Height = 54;
+        summary.Padding = new Padding(8, 7, 8, 7);
+        summary.BackColor = Color.FromArgb(234, 242, 250);
+        summary.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+
+        layout.Controls.Add(commandCard, 0, 0);
+        layout.Controls.Add(peoplePanel, 0, 1);
+        layout.Controls.Add(personCard, 0, 2);
+        layout.Controls.Add(comparisonPanel, 0, 3);
+        layout.Controls.Add(details, 0, 4);
+        layout.Controls.Add(summary, 0, 5);
         Controls.Add(layout);
-        AddColumn(peopleGrid, "Card", "Kart", 55);
-        AddColumn(peopleGrid, "Name", "Ad Soyad", 120);
-        AddColumn(peopleGrid, "DbStatus", "DB Durumu", 100);
-        AddColumn(peopleGrid, "Status", "Efektif Durum", 145);
-        AddColumn(peopleGrid, "DbCount", "DB Hareket", 80);
-        AddColumn(peopleGrid, "TnfCount", "TNF Hareket", 80);
+        AddColumn(peopleGrid, "Card", "Kart", 62);
+        AddColumn(peopleGrid, "Name", "Ad Soyad", 170);
+        AddColumn(peopleGrid, "Status", "Durum", 95);
+        AddColumn(peopleGrid, "DbCount", "DB", 62);
+        AddColumn(peopleGrid, "TnfCount", "TNF", 62);
         AddColumn(peopleGrid, "Missing", "Eksik", 55);
         AddColumn(peopleGrid, "Extra", "Fazla", 55);
-        AddColumn(peopleGrid, "TimeDifference", "Saat Farkı", 80);
-        AddColumn(peopleGrid, "EErrors", "E Hatası", 65);
+        AddColumn(peopleGrid, "TimeDifference", "Saat Farkı", 70);
+        AddColumn(peopleGrid, "EErrors", "E", 45);
         AddColumn(peopleGrid, "Review", "İncele", 55);
         peopleGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         peopleGrid.Font = new Font("Segoe UI", 8);
