@@ -22,6 +22,8 @@ internal sealed class DbRecordControl : UserControl
     readonly Button cancel = new() { Text = "İptal", Width = 65, Enabled = false };
     CancellationTokenSource? cancellation;
     FirebirdDatabase? peopleDatabase;
+    DateTime peopleFrom;
+    DateTime peopleTo;
     FirebirdDatabase? previewDatabase;
     DbRecordSnapshot? snapshot;
     bool updating;
@@ -38,8 +40,8 @@ internal sealed class DbRecordControl : UserControl
         Font = new Font("Segoe UI", 9);
         month.Items.AddRange(["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]);
         month.SelectedIndex = DateTime.Today.Month - 1;
-        operation.Items.AddRange(["Giriş Ekle", "Çıkış Ekle", "Giriş + Çıkış Ekle", "Saat Düzelt", "Mükerrer Temizle", "Fazla Kayıt Temizle"]);
-        operation.SelectedIndex = 2;
+        operation.Items.AddRange(["TAM DÜZELT (ÖNERİLEN)", "Giriş Ekle", "Çıkış Ekle", "Giriş + Çıkış Ekle", "Saat Düzelt", "Mükerrer Temizle", "Fazla Kayıt Temizle"]);
+        operation.SelectedIndex = 0;
         var top = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(5), WrapContents = true };
         void Field(string title, Control control) { top.Controls.Add(new Label { Text = title, AutoSize = true, Padding = new Padding(4, 7, 0, 0) }); top.Controls.Add(control); controls.Add(control); }
         Field("Yıl", year); Field("Ay", month); Field("Başlangıç", start); Field("Bitiş", end);
@@ -55,7 +57,7 @@ internal sealed class DbRecordControl : UserControl
         Button("HAFTA SONUNU KALDIR", RemoveWeekends, 190);
         Button("SEÇİMİ TEMİZLE", () => { Check(people, false); Check(days, false); }, 155);
         Button("ÖNİZLE", async () => await PreviewAsync(), 105);
-        Button("DB'YE UYGULA", async () => await ApplyAsync(), 140);
+        Button("UYGULA (DB + TNF)", async () => await ApplyAsync(), 165);
         cancel.Click += (_, _) => cancellation?.Cancel();
         buttons.Controls.AddRange([progress, cancel]);
         var content = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2 };
@@ -71,11 +73,12 @@ internal sealed class DbRecordControl : UserControl
         layout.RowStyles.Add(new(SizeType.AutoSize)); layout.RowStyles.Add(new(SizeType.AutoSize)); layout.RowStyles.Add(new(SizeType.Percent, 100));
         layout.RowStyles.Add(new(SizeType.Absolute, 60)); layout.RowStyles.Add(new(SizeType.Absolute, 42));
         layout.Controls.Add(top, 0, 0); layout.Controls.Add(buttons, 0, 1); layout.Controls.Add(content, 0, 2);
-        layout.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(8), Text = "Giriş: 08:15–08:45 | Çıkış: 18:30–19:30 | Yeni saatler doğal dağılır.\nYalnız seçilen işlem, personel ve günler değiştirilir. E türleri korunur; ana TNF aynı işlemde otomatik hizalanır." }, 0, 3);
+        layout.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(8), Text = "TAM DÜZELT: eksik normal kayıtları tamamlar, ters tarafı düzeltir, aralık dışı saati doğal aralığa çeker ve mükerreri temizler.\nNormal kayıt = DB + TNF. E kayıtları korunur ve TNF'de bulunmaz. Önizlemede görülen plan UYGULA sırasında değişmez." }, 0, 3);
         layout.Controls.Add(status, 0, 4); Controls.Add(layout);
         controls.AddRange([people, days]);
         year.ValueChanged += (_, _) => SetMonth(); month.SelectedIndexChanged += (_, _) => SetMonth();
-        start.ValueChanged += (_, _) => { if (!updating) RebuildDays(); }; end.ValueChanged += (_, _) => { if (!updating) RebuildDays(); };
+        start.ValueChanged += async (_, _) => { if (!updating) { RebuildDays(); peopleDatabase = null; await LoadPeopleAsync(); } };
+        end.ValueChanged += async (_, _) => { if (!updating) { RebuildDays(); peopleDatabase = null; await LoadPeopleAsync(); } };
         people.ItemCheck += (_, _) => InvalidatePreview(); days.ItemCheck += (_, _) => InvalidatePreview(); operation.SelectedIndexChanged += (_, _) => InvalidatePreview();
         VisibleChanged += async (_, _) => { if (Visible && !ReferenceEquals(peopleDatabase, Database)) await LoadPeopleAsync(); };
         if (main.GetType().GetField("dbPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) is TextBox path)
@@ -113,9 +116,16 @@ internal sealed class DbRecordControl : UserControl
         cancellation = new(); Busy(true);
         try
         {
-            var result = await Task.Run(() => DbRecordService.ReadPeople(database, cancellation.Token), cancellation.Token);
+            var from = start.Value.Date;
+            var to = end.Value.Date;
+            var result = await Task.Run(() => DbRecordService.ReadPeople(database, cancellation.Token)
+                .Where(person => (!person.Hire.HasValue || person.Hire.Value.Date <= to) &&
+                                 (!person.Exit.HasValue || person.Exit.Value.Date >= from))
+                .ToArray(), cancellation.Token);
             if (IsDisposed || !ReferenceEquals(database, Database)) return;
-            people.Items.Clear(); people.Items.AddRange(result); peopleDatabase = database; status.Text = $"{result.Length} personel yüklendi. Personel/gün seçin.";
+            people.Items.Clear(); people.Items.AddRange(result);
+            peopleDatabase = database; peopleFrom = from; peopleTo = to;
+            status.Text = $"{result.Length} dönem personeli yüklendi. Personel/gün seçin.";
         }
         catch (OperationCanceledException) { }
         catch (Exception exception) { if (!IsDisposed) status.Text = "Personel yüklenemedi: " + exception.Message; }
@@ -125,7 +135,7 @@ internal sealed class DbRecordControl : UserControl
     internal async Task PreviewAsync()
     {
         if (cancellation is not null) return;
-        if (!ReferenceEquals(peopleDatabase, Database)) await LoadPeopleAsync();
+        if (!ReferenceEquals(peopleDatabase, Database) || peopleFrom != start.Value.Date || peopleTo != end.Value.Date) await LoadPeopleAsync();
         var cards = people.CheckedItems.Cast<DbRecordPerson>().Select(person => person.Card).ToArray();
         var dates = days.CheckedItems.Cast<DayItem>().Select(day => day.Day).ToArray();
         cancellation = new(); Busy(true); snapshot = null;
@@ -133,11 +143,12 @@ internal sealed class DbRecordControl : UserControl
         try
         {
             var database = Database ?? throw new InvalidOperationException("Önce DB'ye bağlanın.");
-            var mode = (DbRecordMode)(operation.SelectedIndex + 1);
+            var mode = (DbRecordMode)operation.SelectedIndex;
             var result = await Task.Run(() => DbRecordService.Read(database, cards, dates, cancellation.Token, mode: mode), cancellation.Token);
             if (IsDisposed || !ReferenceEquals(database, Database)) return;
             snapshot = result; previewDatabase = database; preview.DataSource = result.Changes;
-            status.Text = $"{operation.Text} | Personel: {cards.Length} | Gün: {dates.Length} | Yapılacak işlem: {result.Changes.Length} | {timer.ElapsedMilliseconds} ms";
+            var count = mode == DbRecordMode.Normalize ? result.Plan.Count(x => x.Operation != "UYUMLU") : result.Changes.Length;
+            status.Text = $"{operation.Text} | Personel: {cards.Length} | Gün: {dates.Length} | Yapılacak işlem: {count} | {timer.ElapsedMilliseconds} ms";
         }
         catch (OperationCanceledException) { if (!IsDisposed) status.Text = "İptal edildi."; }
         catch (Exception exception) { if (!IsDisposed) { status.Text = exception.Message; MessageBox.Show(main, exception.Message, "DB KAYIT", MessageBoxButtons.OK, MessageBoxIcon.Warning); } }
