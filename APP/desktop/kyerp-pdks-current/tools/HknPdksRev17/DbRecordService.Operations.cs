@@ -10,18 +10,19 @@ internal static partial class DbRecordService
     internal static DbRecordChange[] PlanChanges(DbRecordSnapshot snapshot, CancellationToken token)
     {
         var grouped = Movements(snapshot).ToLookup(move => (move.Card, move.Date));
-        var names = snapshot.People.ToDictionary(person => person.Card, person => person.Name);
+        var peopleByCard = snapshot.People.ToDictionary(person => person.Card);
         var previous = new Dictionary<(string Card, string Side), int>();
         var changes = new List<DbRecordChange>();
         foreach (var card in snapshot.Cards)
         foreach (var day in snapshot.Days)
         {
             token.ThrowIfCancellationRequested();
+            if (!peopleByCard.TryGetValue(card, out var person) || !person.EmployedOn(day)) continue;
             var movements = grouped[(card, day)].ToArray();
             if (movements.Any(move => !MonthlyDbAudit.Clock(move.Time, out _)))
                 throw new InvalidOperationException($"{card} / {day:dd.MM.yyyy}: bozuk DB saati; işlem yapılmadı.");
             var normal = movements.Where(move => !move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)).ToArray();
-            var name = names[card];
+            var name = person.Name;
             void Add(string side)
             {
                 if (movements.Any(move => move.Side == side)) return;
