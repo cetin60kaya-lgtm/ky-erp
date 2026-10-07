@@ -837,31 +837,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     system.cash - snapshot.cash,
   ].some((value) => Math.abs(round(value)) > 0.01);
 
-  // Tek kaynak kuralı: ödeme tamamlanana kadar bordro sonucu daima canlı kaynaklardan okunur.
-  // Snapshot yalnız tarihsel kanıttır. PAID olduktan sonra geçmiş fiş/ödeme değişmesin diye snapshot kilitlenir.
-  if (upper(saved.status) !== "PAID") {
-    return { ...system, saved, sourceChangedSinceSave, paidLocked: false };
-  }
-
-  const snapshotTotals = calcRow(snapshot);
-  const snapshotPayment = reconcilePaymentSplit(snapshotTotals.net, snapshot.bank, snapshot.cash);
-  return {
-    ...system,
-    salary: snapshot.salary,
-    road: snapshot.road,
-    extraLabel: "EK",
-    extra: snapshot.extra,
-    overtime: snapshot.overtime,
-    advance: snapshot.advance,
-    deduction: snapshot.deduction,
-    garnishment: snapshot.garnishment,
-    bank: snapshotPayment.bank,
-    cash: snapshotPayment.cash,
-    saved,
-    sourceChangedSinceSave,
-    paidLocked: true,
-    ...calcRow({ ...snapshot, bank: snapshotPayment.bank, cash: snapshotPayment.cash }),
-  };
+  // Tek kaynak kuralı: bordro sonucu ay kilitlenene kadar her zaman canlı kaynaklardan okunur.
+  // Eski PAID/snapshot kayıtları yalnız tarihsel kanıttır; düzenleme kilidi değildir.
+  return { ...system, saved, sourceChangedSinceSave, paidLocked: false };
 }): [], [employees, payrollLines, planFor, periodPrepared]);
 
   const summary = useMemo(() => payrollRows.reduce((acc, row) => ({
@@ -895,10 +873,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       if (payrollPaymentFilter === "BANK" && num(row.bank) <= 0) return false;
       if (payrollPaymentFilter === "CASH" && num(row.cash) <= 0) return false;
       if (payrollPaymentFilter === "MIXED" && !(num(row.bank) > 0 && num(row.cash) > 0)) return false;
-      const paid = upper(row.saved?.status) === "PAID";
-      if (payrollStatusFilter === "PAID" && !paid) return false;
-      if (payrollStatusFilter === "READY" && (paid || Math.abs(num(row.diff)) > 0.01)) return false;
-      if (payrollStatusFilter === "CONTROL" && (paid || Math.abs(num(row.diff)) <= 0.01)) return false;
+      if (payrollStatusFilter === "READY" && Math.abs(num(row.diff)) > 0.01) return false;
+      if (payrollStatusFilter === "CONTROL" && Math.abs(num(row.diff)) <= 0.01) return false;
       return true;
     });
   }, [payrollRows, payrollEmploymentFilter, payrollPaymentFilter, payrollStatusFilter, period, search]);
@@ -1165,7 +1141,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     if (busy) return;
     const employee = employees.find((item) => item.id === employeeId) || masterEmployees.find((item) => item.id === employeeId);
     if (!employee) return;
-    const controlMode = modalDraft.controlMode || "ENTRY";
+    const controlMode = modalDraft.controlMode || "ENTRY_EDIT";
     const payrollRow = controlMode === "ENTRY" ? null : payrollRows.find((item) => item.employee.id === employee.id);
     setSelectedId(employee.id);
     setModalDraft(prePayrollDraft(employee, controlMode, payrollRow));
@@ -2003,7 +1979,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         });
       }
       await saveIkAdvancedPayrollLines({ mainCompanyId: companyId, year, month, employeeIds: rows.map((row) => row.employee.id), status: "CALCULATED", reason: "Bordro kaydı" });
-      setNotice(`${rows.length} personelin bordrosu seçili dönem değerleriyle sabitlendi.`);
+      setNotice(`${rows.length} personelin bordro ara kaydı güncellendi. Ay kilidi açık olduğu sürece düzenleme devam edebilir.`);
       await load({ force: true, prepare: true });
     } catch (error) {
       setNotice(error?.message || "Bordro kaydedilemedi.");
@@ -2619,7 +2595,6 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         issueCount={smartIssues.length}
         employeeCount={employees.length}
         sgkCount={employees.filter(isSgk).length}
-        paidCount={payrollRows.filter((row) => upper(row.saved?.status) === "PAID").length}
         payrollCount={payrollRows.length}
         companyName={activeMainCompany?.name || activeMainCompany?.title || "KY ERP"}
       >
@@ -2658,7 +2633,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       : fifth === "Bordro etkisi"
         ? <div><label>Bordro Etkisi</label><select value={movementEffectFilter} onChange={(event) => setMovementEffectFilter(event.target.value)}><option value="ALL">Tümü</option><option value="PAYROLL">Bordroya Yansır</option><option value="INFO">Sadece Kayıt</option></select></div>
         : fifth === "Durum"
-          ? <div><label>Bordro Durumu</label><select value={payrollStatusFilter} onChange={(event) => setPayrollStatusFilter(event.target.value)}><option value="ALL">Tümü</option><option value="READY">Hazır</option><option value="CONTROL">Kontrol gerekli</option><option value="PAID">Tamamlandı / Çıktı</option></select></div>
+          ? <div><label>Bordro Durumu</label><select value={payrollStatusFilter} onChange={(event) => setPayrollStatusFilter(event.target.value)}><option value="ALL">Tümü</option><option value="READY">Hazır</option><option value="CONTROL">Kontrol gerekli</option></select></div>
           : null;
     return (
       <div className="filters ik-essential-filters">
@@ -3665,15 +3640,15 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         <Modal title={modal === "fis" ? "Tek Kişi Ödeme Fişi" : "Ayrılış Ödeme Özeti"} sub={modal === "fis" ? "Personeli seçin; yanlış tutar varsa son bordrodan düzeltip yalnız bu fişi tekrar alın." : "Yazdırmadan önce önizleme"} size="small" onClose={() => setModal(null)}>
           {modal === "fis" && <div className="form"><Field label="Fişi alınacak personel" wide><select value={row?.employee?.id || ""} onChange={(event)=>setSelectedId(event.target.value)}>{payrollRows.map((item)=><option key={item.employee.id} value={item.employee.id}>{item.employee.fullName} · {item.employee.code || "HKN yok"}</option>)}</select></Field></div>}
           <div className="print-sheet"><h2>{modal === "fis" ? "ÖDEME FİŞİ" : "AYRILIŞ ÖDEME ÖZETİ"}</h2><div className="print-row"><span>Personel</span><b>{row?.employee?.fullName || "-"}</b></div><div className="print-row"><span>Dönem</span><b>{MONTHS[month - 1]} {year}</b></div>{modal === "fis" ? <><div className="print-row"><span>Mesai</span><b>{money(row?.overtime)}</b></div><div className="print-row"><span>Avans / Kesinti / İcra-Haciz</span><b>{money(num(row?.advance)+num(row?.deduction)+num(row?.garnishment))}</b></div><div className="print-row"><span>Banka</span><b>{money(row?.bank)}</b></div><div className="print-row" style={{fontSize:18,fontWeight:900,border:"2px solid #111",padding:8}}><span>ELDEN</span><b>{money(row?.cash)}</b></div><div className="print-row" style={{fontSize:20,fontWeight:900,border:"2px solid #111",padding:8,marginTop:6}}><span>TOPLAM ÖDEME</span><b>{money(row?.net)}</b></div></> : <><div className="print-row"><span>Maaş</span><b>{money(row?.salary)}</b></div><div className="print-row"><span>Yol</span><b>{money(row?.road)}</b></div><div className="print-row"><span>EK</span><b>{money(row?.extra)}</b></div><div className="print-row"><span>Mesai</span><b>{money(row?.overtime)}</b></div><div className="print-row"><span>Avans</span><b>{money(row?.advance)}</b></div><div className="print-row"><span>Özel Kesinti</span><b>{money(row?.deduction)}</b></div><div className="print-row"><span>İcra / Haciz</span><b>{money(row?.garnishment)}</b></div><div className="print-row"><span>Banka</span><b>{money(row?.bank)}</b></div><div className="print-row"><span>Elden</span><b>{money(row?.cash)}</b></div><div className="print-row"><span>Toplam</span><b>{money(row?.net)}</b></div></>}</div>
-          <ModalFooter onClose={() => setModal(null)} actions={modal === "fis" ? <><button className="btn" disabled={!row || upper(row?.saved?.status)==="PAID"} onClick={()=>openPayroll(row)}>Yanlışsa Düzenle</button><button className="btn primary" disabled={!row} onClick={() => printSlip(row)}>Sadece Bu Fişi Yazdır / PDF</button></> : <button className="btn primary" disabled={!row} onClick={() => printSettlement(row)}>Yazdır / PDF</button>} />
+          <ModalFooter onClose={() => setModal(null)} actions={modal === "fis" ? <><button className="btn" disabled={!row || data.close?.isLocked} onClick={()=>openPayroll(row)}>Yanlışsa Düzenle</button><button className="btn primary" disabled={!row} onClick={() => printSlip(row)}>Sadece Bu Fişi Yazdır / PDF</button></> : <button className="btn primary" disabled={!row} onClick={() => printSettlement(row)}>Yazdır / PDF</button>} />
         </Modal>
       );
     }
 
     if (modal === "topluOdeme") {
       const previewRows = modalDraft.group === "SELECTED" && selectedPayrollIds.length ? payrollRows.filter((row)=>selectedPayrollIds.includes(row.employee.id)) : modalDraft.group === "BANK" ? payrollRows.filter((row)=>row.bank>0) : modalDraft.group === "CASH" ? payrollRows.filter((row)=>row.cash>0) : payrollRows;
-      return <Modal title="Banka / Toplu Çıktı Merkezi" sub="Banka Excelini ödeme öncesi hazırlayın; resmi bordro çıktısı alındığında sistem otomatik tamamlar" size="medium" onClose={() => setModal(null)}>
-        <div className="drawer-grid"><div className="form"><Field label="Odeme tarihi" half><input type="date" value={modalDraft.paymentDate||""} onChange={(event)=>setModalDraft((old)=>({...old,paymentDate:event.target.value}))} /></Field><Field label="Personel grubu" half><select value={modalDraft.group||"BANK"} onChange={(event)=>setModalDraft((old)=>({...old,group:event.target.value}))}><option value="BANK">Banka odemesi olanlar</option><option value="CASH">Elden odemesi olanlar</option><option value="SELECTED">Tabloda secili personel</option><option value="ALL">Tum personel</option></select></Field><Field label="Yapilacak islem" wide><select value={modalDraft.action||"BANK_LIST"} onChange={(event)=>setModalDraft((old)=>({...old,action:event.target.value}))}><option value="BANK_LIST">Banka ödeme Exceli hazırla</option><option value="REPORT">Bordroyu tamamla + PDF / imza raporu</option></select></Field><Field label="Aciklama / banka referansi" wide><textarea value={modalDraft.note||""} onChange={(event)=>setModalDraft((old)=>({...old,note:event.target.value}))} placeholder="Odeme aciklamasi, banka referansi veya kontrol notu" /></Field><div className="wide warnline warn">Banka Exceli yalnız hazırlık listesidir ve bordroyu tamamlamaz. Resmi bordro/PDF/fiş çıktısı alındığında seçili personel ödeme tamamlandı kabul edilir ve snapshot kilitlenir.</div></div><div><div className="import-summary payment-summary"><div><span>Personel</span><b>{previewRows.length}</b></div><div><span>Banka</span><b>{money(previewRows.reduce((sum,row)=>sum+row.bank,0))}</b></div><div><span>Elden</span><b>{money(previewRows.reduce((sum,row)=>sum+row.cash,0))}</b></div><div><span>Net</span><b>{money(previewRows.reduce((sum,row)=>sum+row.net,0))}</b></div></div><div className="tw payment-preview"><table><thead><tr><th>Personel</th><th>Banka</th><th>Elden</th><th>Net</th><th>Durum</th></tr></thead><tbody>{previewRows.map((row)=><tr key={row.employee.id}><td>{row.employee.fullName}</td><td className="money">{money(row.bank)}</td><td className="money">{money(row.cash)}</td><td className="money">{money(row.net)}</td><td><span className={`badge ${row.diff===0?"green":"red"}`}>{row.diff===0?"Hazir":"Kontrol"}</span></td></tr>)}</tbody></table></div></div></div>
+      return <Modal title="Banka / Toplu Çıktı Merkezi" sub="Banka Exceli ve bordro raporu yalnız çıktı üretir; ay kilidi ayrı yönetilir." size="medium" onClose={() => setModal(null)}>
+        <div className="drawer-grid"><div className="form"><Field label="Odeme tarihi" half><input type="date" value={modalDraft.paymentDate||""} onChange={(event)=>setModalDraft((old)=>({...old,paymentDate:event.target.value}))} /></Field><Field label="Personel grubu" half><select value={modalDraft.group||"BANK"} onChange={(event)=>setModalDraft((old)=>({...old,group:event.target.value}))}><option value="BANK">Banka odemesi olanlar</option><option value="CASH">Elden odemesi olanlar</option><option value="SELECTED">Tabloda secili personel</option><option value="ALL">Tum personel</option></select></Field><Field label="Yapilacak islem" wide><select value={modalDraft.action||"BANK_LIST"} onChange={(event)=>setModalDraft((old)=>({...old,action:event.target.value}))}><option value="BANK_LIST">Banka ödeme Exceli hazırla</option><option value="REPORT">PDF / imza raporu hazırla</option></select></Field><Field label="Aciklama / banka referansi" wide><textarea value={modalDraft.note||""} onChange={(event)=>setModalDraft((old)=>({...old,note:event.target.value}))} placeholder="Odeme aciklamasi, banka referansi veya kontrol notu" /></Field><div className="wide warnline warn">Banka Exceli yalnız hazırlık listesidir ve bordroyu tamamlamaz. Resmi bordro/PDF/fiş çıktısı alındığında seçili personel ödeme tamamlandı kabul edilir ve snapshot kilitlenir.</div></div><div><div className="import-summary payment-summary"><div><span>Personel</span><b>{previewRows.length}</b></div><div><span>Banka</span><b>{money(previewRows.reduce((sum,row)=>sum+row.bank,0))}</b></div><div><span>Elden</span><b>{money(previewRows.reduce((sum,row)=>sum+row.cash,0))}</b></div><div><span>Net</span><b>{money(previewRows.reduce((sum,row)=>sum+row.net,0))}</b></div></div><div className="tw payment-preview"><table><thead><tr><th>Personel</th><th>Banka</th><th>Elden</th><th>Net</th><th>Durum</th></tr></thead><tbody>{previewRows.map((row)=><tr key={row.employee.id}><td>{row.employee.fullName}</td><td className="money">{money(row.bank)}</td><td className="money">{money(row.cash)}</td><td className="money">{money(row.net)}</td><td><span className={`badge ${row.diff===0?"green":"red"}`}>{row.diff===0?"Hazir":"Kontrol"}</span></td></tr>)}</tbody></table></div></div></div>
         <ModalFooter onClose={() => setModal(null)} actions={<button className="btn primary" disabled={busy} onClick={runBulkPayment}>{modalDraft.action==="BANK_LIST"?"Excel Hazırla":"Tamamla ve Raporu Aç"}</button>} />
       </Modal>;
     }
