@@ -45,8 +45,9 @@ internal static class PayrollOverrideService
             db.Execute("create table PDKS_BYPASS (CONNECTION_ID integer not null)");
         else if (!FieldExists(db, "PDKS_BYPASS", "CONNECTION_ID"))
             db.Execute("alter table PDKS_BYPASS add CONNECTION_ID integer");
-        // Old REV22 global bypass rows must never survive an upgrade.
-        db.Execute("delete from PDKS_BYPASS");
+        // Eski REV22 global bypass kalıntıları NULL bağlantı kimliğiyle zararsız olsa da temizlenir.
+        // Aktif başka bir REV25 bağlantısının connection-scoped bypass satırına dokunulmaz.
+        db.Execute("delete from PDKS_BYPASS where CONNECTION_ID is null");
 
         if (!TableExists(db, "PDKS_BORDRO_OVERRIDE"))
             db.Execute(@"create table PDKS_BORDRO_OVERRIDE (
