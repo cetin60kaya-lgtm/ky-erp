@@ -13,62 +13,100 @@ internal static partial class DbRecordService
         var names = snapshot.People.ToDictionary(person => person.Card, person => person.Name);
         var previous = new Dictionary<(string Card, string Side), int>();
         var changes = new List<DbRecordChange>();
+
         foreach (var card in snapshot.Cards)
         foreach (var day in snapshot.Days)
         {
             token.ThrowIfCancellationRequested();
-            var movements = grouped[(card, day)].ToArray();
+            var movements = grouped[(card, day)].OrderBy(move => move.Id).ThenBy(move => move.Side).ToArray();
             if (movements.Any(move => !MonthlyDbAudit.Clock(move.Time, out _)))
                 throw new InvalidOperationException($"{card} / {day:dd.MM.yyyy}: bozuk DB saati; işlem yapılmadı.");
+
             var normal = movements.Where(move => !move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)).ToArray();
+            var protectedSides = movements.Where(move => move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase))
+                .Select(move => move.Side).ToHashSet(StringComparer.Ordinal);
             var name = names[card];
-            void Add(string side)
+
+            void AddOnly(string side)
             {
+                // Kullanıcının açık "ekle" işlemi mevcut fiziksel tarafı ve E tarafını asla ezmez.
                 if (movements.Any(move => move.Side == side)) return;
-                changes.Add(new(card, name, day, side, "BOŞ", FormatMinute(GenerateMinute(card, side, previous, snapshot.WorkHours)), "EKLE", -1, ""));
+                changes.Add(new(card, name, day, side, "BOŞ",
+                    FormatMinute(GenerateMinute(card, side, previous, snapshot.WorkHours)),
+                    "EKLE", -1, ""));
             }
+
             DbMovement Keeper(IEnumerable<DbMovement> candidates, string side) => candidates
                 .OrderByDescending(move => InRange(snapshot.WorkHours, side, move.Time))
                 .ThenByDescending(move => move.Side == side)
-                .ThenBy(move => Distance(move.Time, side, snapshot.WorkHours)).ThenBy(move => move.Id).First();
+                .ThenBy(move => Distance(move.Time, side, snapshot.WorkHours))
+                .ThenBy(move => move.Id)
+                .First();
+
+            void RepairSide(string side)
+            {
+                // E gerçek bir istisnadır. O fiziksel taraf kullanıcıya ait özel kayıt sayılır ve otomatik tamir dokunmaz.
+                if (protectedSides.Contains(side)) return;
+
+                var candidates = normal
+                    .Where(move => IntendedSide(move.Time, snapshot.WorkHours) == side)
+                    .ToArray();
+
+                if (candidates.Length == 0)
+                {
+                    changes.Add(new(card, name, day, side, "BOŞ",
+                        FormatMinute(GenerateMinute(card, side, previous, snapshot.WorkHours)),
+                        "EKLE", -1, ""));
+                    return;
+                }
+
+                var keeper = Keeper(candidates, side);
+                var targetTime = InRange(snapshot.WorkHours, side, keeper.Time)
+                    ? keeper.Time
+                    : FormatMinute(GenerateMinute(card, side, previous, snapshot.WorkHours));
+
+                if (keeper.Side != side || keeper.Time != targetTime)
+                    changes.Add(new(card, name, day, side, keeper.Time, targetTime,
+                        "DÜZELT", keeper.Id, keeper.Side));
+
+                foreach (var extra in candidates.Where(move => move.Id != keeper.Id).OrderBy(move => move.Id))
+                    changes.Add(new(card, name, day, side, extra.Time, "-",
+                        "SİL", extra.Id, extra.Side));
+            }
+
             switch (snapshot.Mode)
             {
-                case DbRecordMode.AddEntry: Add("Giriş"); break;
-                case DbRecordMode.AddExit: Add("Çıkış"); break;
-                case DbRecordMode.AddBoth: Add("Giriş"); Add("Çıkış"); break;
-                case DbRecordMode.CorrectTime:
-                    foreach (var side in new[] { "Giriş", "Çıkış" })
-                    {
-                        var candidates = normal.Where(move => IntendedSide(move.Time, snapshot.WorkHours) == side).ToArray();
-                        if (candidates.Length == 0 || movements.Any(move => move.Side == side && move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase))) continue;
-                        var keeper = Keeper(candidates, side);
-                        var time = InRange(snapshot.WorkHours, side, keeper.Time) ? keeper.Time : FormatMinute(GenerateMinute(card, side, previous, snapshot.WorkHours));
-                        if (keeper.Side != side || keeper.Time != time)
-                            changes.Add(new(card, name, day, side, keeper.Time, time, "DÜZELT", keeper.Id, keeper.Side));
-                    }
+                case DbRecordMode.AddEntry:
+                    AddOnly("Giriş");
                     break;
-                case DbRecordMode.RemoveDuplicates:
-                case DbRecordMode.RemoveExtra:
-                    foreach (var side in new[] { "Giriş", "Çıkış" })
-                    {
-                        var candidates = normal.Where(move => move.Side == side).ToArray();
-                        if (candidates.Length < 2) continue;
-                        var keeper = Keeper(candidates, side);
-                        foreach (var extra in candidates.Where(move => move.Id != keeper.Id).OrderBy(move => move.Id))
-                            changes.Add(new(card, name, day, side, extra.Time, "-", "SİL", extra.Id, side));
-                    }
+                case DbRecordMode.AddExit:
+                    AddOnly("Çıkış");
                     break;
-                default: throw new InvalidOperationException("İşlem seçimi geçersiz.");
+                case DbRecordMode.AddBoth:
+                    AddOnly("Giriş");
+                    AddOnly("Çıkış");
+                    break;
+                case DbRecordMode.RepairAll:
+                    RepairSide("Giriş");
+                    RepairSide("Çıkış");
+                    break;
+                default:
+                    throw new InvalidOperationException("İşlem seçimi geçersiz.");
             }
         }
-        return changes.ToArray();
-    }
 
-    static string FormatMinute(int minute) => TimeSpan.FromMinutes(minute).ToString(@"hh\:mm", System.Globalization.CultureInfo.InvariantCulture);
+        return changes
+            .OrderBy(change => change.Card)
+            .ThenBy(change => change.Day)
+            .ThenBy(change => change.Side == "Giriş" ? 0 : 1)
+            .ThenBy(change => change.Operation == "DÜZELT" ? 0 : change.Operation == "SİL" ? 1 : 2)
+            .ThenBy(change => change.Id)
+            .ToArray();
+    }
 
     internal static async Task<string> ApplyChangesAsync(FirebirdDatabase database, DbRecordSnapshot snapshot, string? tnfPath, CancellationToken token)
     {
-        if (!Enum.IsDefined(snapshot.Mode) || snapshot.Mode == DbRecordMode.Normalize || snapshot.Changes.Length == 0)
+        if (!Enum.IsDefined(snapshot.Mode) || snapshot.Changes.Length == 0)
             throw new InvalidOperationException("Önizlenecek DB işlemi bulunamadı.");
         var structural = PlanChanges(snapshot, token);
         if (snapshot.Changes.Length != structural.Length || snapshot.Changes.Where((change, index) =>
