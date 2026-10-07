@@ -136,7 +136,17 @@ internal sealed class WorkspaceDockHost : UserControl
             if (old is not null)
             {
                 slot.Host.Controls.Remove(old);
-                try { old.Dispose(); } catch { }
+                if (old is PersonelForm)
+                {
+                    // Personel ekranı yüzlerce kontrol ve sekme içeriyor. Menüden başka
+                    // bir modüle geçince dispose edilirse geri dönüşte tamamen yeniden
+                    // kuruluyor ve birkaç saniyelik donma yaratıyor. Bellekte sıcak tut.
+                    old.Visible = false;
+                }
+                else
+                {
+                    try { old.Dispose(); } catch { }
+                }
             }
         }
         finally
