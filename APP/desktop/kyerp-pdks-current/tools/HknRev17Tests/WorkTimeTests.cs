@@ -67,11 +67,15 @@ internal static class WorkTimeTests
         var settings = CompletionSettings.For(custom, false, true, false, false);
         check(settings.Entry == custom.Entry && settings.EntryMin == custom.EntryEarly && settings.ExitMax == custom.ExitLate, "REV21 completion references use same DB policy");
         using var main = new MainForm();
-        using var tnf = new TnfPrepareControl(main);
         main.SetWorkHours(custom);
-        string Field(object owner, string name) => ((MaskedTextBox)owner.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(owner)!).Text;
-        check(main.WorkHours == custom && Field(tnf, "inMin") == "08:45" && Field(tnf, "inMax") == "09:15", "REV25 shell and TNF prepare share the DB work-time policy");
-        main.SetWorkHours(policy);
-        check(main.WorkHours == policy && Field(tnf, "outMin") == "18:30" && Field(tnf, "outMax") == "19:30", "REV25 source reset propagates the full exit distribution range to consumers");
+        check(main.WorkHours == custom, "REV25 shell keeps the DB work-time policy as the single source");
+        var records = new DataTable();
+        foreach (var column in new[] { "SIRA","PKNO","GTARIH","GSAAT","GTUR","CTARIH","CSAAT","CTUR" }) records.Columns.Add(column);
+        var snapshot = new DbRecordSnapshot(day, day.AddDays(1), ["00001"], [day], records,
+            [new DbRecordPerson("00001","Fixture")], [], "TEST") { WorkHours = custom };
+        var plan = DbRecordService.Plan(snapshot, CancellationToken.None).Single();
+        check(MonthlyDbAudit.Clock(plan.Entry, out var generatedEntry) && generatedEntry >= custom.EntryEarly && generatedEntry <= custom.EntryLate &&
+              MonthlyDbAudit.Clock(plan.Exit, out var generatedExit) && generatedExit >= custom.ExitEarly && generatedExit <= custom.ExitLate,
+              "REV25 DB-first record generation obeys the shared Hedef time ranges");
     }
 }
