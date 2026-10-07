@@ -102,7 +102,7 @@ internal static partial class DbRecordService
             var exit = Keeper("Çıkış");
             string Time(DbMovement? keeper, string side)
             {
-                var minute = keeper is not null && MonthlyDbNormalization.InRange(side, keeper.Time)
+                var minute = keeper is not null && InRange(snapshot.WorkHours, side, keeper.Time)
                     ? ParseMinute(keeper.Time) : GenerateMinute(card, side, previous, snapshot.WorkHours);
                 previous[(card, side)] = minute;
                 return TimeSpan.FromMinutes(minute).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
