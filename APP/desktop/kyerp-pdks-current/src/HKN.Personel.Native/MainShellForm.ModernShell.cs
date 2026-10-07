@@ -279,9 +279,19 @@ public sealed partial class MainShellForm
         {
             SelectNavForCommand(id);
             SetModernPage(command.Title, command.Hint);
-            ShowNavigationCover(command.Title);
+            SetShellActivity("Açılıyor • " + command.Title);
             await Task.Yield();
+
+            // Eski sürümde tüm çalışma alanı "Ekran hazırlanıyor" perdesiyle kapatılıyor,
+            // ağır bir form hazırlanırken uygulama donmuş gibi görünüyordu. Mevcut ekran
+            // görünür kalır; yeni ekran hazır olduğunda tek seferde yer değiştirir.
             ExecuteCommand(id);
+            SetShellActivity("Hazır", true);
+        }
+        catch
+        {
+            SetShellActivity("Ekran açılamadı", false);
+            throw;
         }
         finally
         {
