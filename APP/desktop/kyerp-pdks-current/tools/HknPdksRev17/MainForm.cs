@@ -723,6 +723,7 @@ public sealed partial class MainForm : Form
 		}
 	}
 
+
 	private void EditSelectedPayment()
 	{
 		if (db == null || paymentGrid.SelectedRows.Count != 1)
@@ -730,16 +731,30 @@ public sealed partial class MainForm : Form
 			MessageBox.Show("Tek ödeme satırı seçin.");
 			return;
 		}
-		DataGridViewRow dataGridViewRow = paymentGrid.SelectedRows[0];
-		using RecordEditForm recordEditForm = new RecordEditForm("Ödeme Düzenle", dataGridViewRow, "NODENEN", "NOTARIH", "FMODENEN", "FMOTARIH");
-		if (recordEditForm.ShowDialog(this) == DialogResult.OK)
+		var row = paymentGrid.SelectedRows[0];
+		using var form = new RecordEditForm("Ödeme Düzenle", row, "NODENEN", "NOTARIH", "FMODENEN", "FMOTARIH");
+		if (form.ShowDialog(this) != DialogResult.OK) return;
+		try
 		{
-			string value = Convert.ToString(dataGridViewRow.Cells["PKNO"].Value) ?? "";
-			DateTime dateTime = Convert.ToDateTime(dataGridViewRow.Cells["BASTAR"].Value);
-			db.Execute("update ODEME set NODENEN=@N,NOTARIH=@NT,FMODENEN=@F,FMOTARIH=@FT where PKNO=@P and BASTAR=@B", new FbParameter("@N", Num(recordEditForm.Get("NODENEN"))), new FbParameter("@NT", DateOrDbNull(recordEditForm.Get("NOTARIH"))), new FbParameter("@F", Num(recordEditForm.Get("FMODENEN"))), new FbParameter("@FT", DateOrDbNull(recordEditForm.Get("FMOTARIH"))), new FbParameter("@P", value), new FbParameter("@B", dateTime));
+			var card = Convert.ToString(row.Cells["PKNO"].Value) ?? "";
+			var start = Convert.ToDateTime(row.Cells["BASTAR"].Value);
+			var affected = db.Execute("update ODEME set NODENEN=@N,NOTARIH=@NT,FMODENEN=@F,FMOTARIH=@FT where PKNO=@P and BASTAR=@B",
+				new FbParameter("@N", Num(form.Get("NODENEN"))),
+				new FbParameter("@NT", DateOrDbNull(form.Get("NOTARIH"))),
+				new FbParameter("@F", Num(form.Get("FMODENEN"))),
+				new FbParameter("@FT", DateOrDbNull(form.Get("FMOTARIH"))),
+				new FbParameter("@P", card), new FbParameter("@B", start));
+			if (affected != 1) throw new InvalidOperationException($"Ödeme kaydı tekil değil veya değişti. Güncellenen satır: {affected}.");
 			LoadPayments();
+			MessageBox.Show("Ödeme kaydedildi.", "Ödeme", MessageBoxButtons.OK, MessageBoxIcon.Information);
+		}
+		catch (Exception ex)
+		{
+			MessageBox.Show(ex.Message, "Ödeme kaydedilemedi", MessageBoxButtons.OK, MessageBoxIcon.Error);
 		}
 	}
+
+
 
 	private void EditSelectedAdvance()
 	{
@@ -748,15 +763,32 @@ public sealed partial class MainForm : Form
 			MessageBox.Show("Tek avans satırı seçin.");
 			return;
 		}
-		DataGridViewRow dataGridViewRow = advanceGrid.SelectedRows[0];
-		using RecordEditForm recordEditForm = new RecordEditForm("Avans Düzenle", dataGridViewRow, "TARIH", "MIKTAR", "VTARIH", "TURKOD", "TOPMIKTAR", "TAKSITSAYISI", "TAKSITNO", "ACIKLAMA");
-		if (recordEditForm.ShowDialog(this) == DialogResult.OK)
+		var row = advanceGrid.SelectedRows[0];
+		using var form = new RecordEditForm("Avans Düzenle", row, "TARIH", "MIKTAR", "VTARIH", "TURKOD", "TOPMIKTAR", "TAKSITSAYISI", "TAKSITNO", "ACIKLAMA");
+		if (form.ShowDialog(this) != DialogResult.OK) return;
+		try
 		{
-			int num = Convert.ToInt32(dataGridViewRow.Cells["KOD"].Value);
-			db.Execute("update AVANS set TARIH=@T,MIKTAR=@M,VTARIH=@V,TURKOD=@TK,TOPMIKTAR=@TM,TAKSITSAYISI=@TS,TAKSITNO=@TN,ACIKLAMA=@A where KOD=@K", new FbParameter("@T", DateOrDbNull(recordEditForm.Get("TARIH"))), new FbParameter("@M", Num(recordEditForm.Get("MIKTAR"))), new FbParameter("@V", DateOrDbNull(recordEditForm.Get("VTARIH"))), new FbParameter("@TK", IntNum(recordEditForm.Get("TURKOD"))), new FbParameter("@TM", Num(recordEditForm.Get("TOPMIKTAR"))), new FbParameter("@TS", IntNum(recordEditForm.Get("TAKSITSAYISI"))), new FbParameter("@TN", IntNum(recordEditForm.Get("TAKSITNO"))), new FbParameter("@A", recordEditForm.Get("ACIKLAMA")), new FbParameter("@K", num));
+			var key = Convert.ToInt32(row.Cells["KOD"].Value);
+			var affected = db.Execute("update AVANS set TARIH=@T,MIKTAR=@M,VTARIH=@V,TURKOD=@TK,TOPMIKTAR=@TM,TAKSITSAYISI=@TS,TAKSITNO=@TN,ACIKLAMA=@A where KOD=@K",
+				new FbParameter("@T", DateOrDbNull(form.Get("TARIH"))),
+				new FbParameter("@M", Num(form.Get("MIKTAR"))),
+				new FbParameter("@V", DateOrDbNull(form.Get("VTARIH"))),
+				new FbParameter("@TK", IntNum(form.Get("TURKOD"))),
+				new FbParameter("@TM", Num(form.Get("TOPMIKTAR"))),
+				new FbParameter("@TS", IntNum(form.Get("TAKSITSAYISI"))),
+				new FbParameter("@TN", IntNum(form.Get("TAKSITNO"))),
+				new FbParameter("@A", form.Get("ACIKLAMA")),
+				new FbParameter("@K", key));
+			if (affected != 1) throw new InvalidOperationException($"Avans kaydı tekil değil veya değişti. Güncellenen satır: {affected}.");
 			LoadAdvances();
+			MessageBox.Show("Avans kaydedildi.", "Avans", MessageBoxButtons.OK, MessageBoxIcon.Information);
+		}
+		catch (Exception ex)
+		{
+			MessageBox.Show(ex.Message, "Avans kaydedilemedi", MessageBoxButtons.OK, MessageBoxIcon.Error);
 		}
 	}
+
 
 	private void DetectSources()
 	{
@@ -985,6 +1017,7 @@ public sealed partial class MainForm : Form
 		}
 	}
 
+
 	private void EditSelectedPerson()
 	{
 		if (db == null || peopleGrid.SelectedRows.Count != 1)
@@ -992,41 +1025,38 @@ public sealed partial class MainForm : Form
 			MessageBox.Show("Tek personel seçin.");
 			return;
 		}
-		DataGridViewRow dataGridViewRow = peopleGrid.SelectedRows[0];
-		string text = Convert.ToString(dataGridViewRow.Cells["PKNO"].Value) ?? "";
-		using PersonnelEditForm personnelEditForm = new PersonnelEditForm(db, dataGridViewRow);
-		if (personnelEditForm.ShowDialog(this) == DialogResult.OK && MessageBox.Show(text + " personel kartı güncellenecek. Devam?", "Personel", MessageBoxButtons.YesNo) == DialogResult.Yes)
+		var row = peopleGrid.SelectedRows[0];
+		var card = Convert.ToString(row.Cells["PKNO"].Value) ?? "";
+		using var form = new PersonnelEditForm(db, row);
+		if (form.ShowDialog(this) != DialogResult.OK) return;
+		if (MessageBox.Show(card + " personel kartı güncellenecek. Devam?", "Personel", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+		try
 		{
-			List<string> list = new List<string>();
-			List<FbParameter> list2 = new List<FbParameter>();
-			int num = 0;
-			string[] editableFields = PersonnelEditForm.EditableFields;
-			foreach (string text2 in editableFields)
+			var sets = new List<string>();
+			var parameters = new List<FbParameter>();
+			var index = 0;
+			foreach (var field in PersonnelEditForm.EditableFields)
 			{
-				string text3 = "@P" + num++;
-				list.Add(text2 + "=" + text3);
-				list2.Add(new FbParameter(text3, PersonValue(text2, personnelEditForm.Get(text2))));
+				var parameter = "@P" + index++;
+				sets.Add(field + "=" + parameter);
+				parameters.Add(new FbParameter(parameter, PersonValue(field, form.Get(field))));
 			}
-			list.Add("IGTARIH=@IG");
-			list.Add("ICTARIH=@IC");
-			list2.Add(new FbParameter("@IG", personnelEditForm.HireDate));
-			DateTime? exitDate = personnelEditForm.ExitDate;
-			object value;
-			if (exitDate.HasValue)
-			{
-				DateTime valueOrDefault = exitDate.GetValueOrDefault();
-				value = valueOrDefault;
-			}
-			else
-			{
-				value = DBNull.Value;
-			}
-			list2.Add(new FbParameter("@IC", value));
-			list2.Add(new FbParameter("@CARD", text));
-			db.Execute("update KIMLIK set " + string.Join(",", list) + " where PKNO=@CARD", list2.ToArray());
+			sets.Add("IGTARIH=@IG");
+			sets.Add("ICTARIH=@IC");
+			parameters.Add(new FbParameter("@IG", form.HireDate));
+			parameters.Add(new FbParameter("@IC", form.ExitDate is DateTime exitDate ? exitDate : DBNull.Value));
+			parameters.Add(new FbParameter("@CARD", card));
+			var affected = db.Execute("update KIMLIK set " + string.Join(",", sets) + " where PKNO=@CARD", parameters.ToArray());
+			if (affected != 1) throw new InvalidOperationException($"Personel kartı tekil değil veya değişti. Güncellenen satır: {affected}.");
 			LoadPeople();
+			MessageBox.Show("Personel kartı kaydedildi.", "Personel", MessageBoxButtons.OK, MessageBoxIcon.Information);
+		}
+		catch (Exception ex)
+		{
+			MessageBox.Show(ex.Message, "Personel kaydedilemedi", MessageBoxButtons.OK, MessageBoxIcon.Error);
 		}
 	}
+
 
 	private static object PersonValue(string field, string text)
 	{
@@ -1048,32 +1078,38 @@ public sealed partial class MainForm : Form
 		return text;
 	}
 
+
 	private static double Num(string s)
 	{
-		if (!double.TryParse(s, out var result))
-		{
-			return 0.0;
-		}
-		return result;
+		s = s.Trim();
+		if (s.Length == 0) return 0d;
+		if (double.TryParse(s, NumberStyles.Number, CultureInfo.CurrentCulture, out var value)) return value;
+		if (double.TryParse(s.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out value)) return value;
+		throw new InvalidOperationException($"Sayısal değer geçersiz: '{s}'.");
 	}
+
+
 
 	private static int IntNum(string s)
 	{
-		if (!int.TryParse(s, out var result))
-		{
-			return 0;
-		}
-		return result;
+		s = s.Trim();
+		if (s.Length == 0) return 0;
+		if (int.TryParse(s, NumberStyles.Integer, CultureInfo.CurrentCulture, out var value)) return value;
+		throw new InvalidOperationException($"Tam sayı değeri geçersiz: '{s}'.");
 	}
+
+
 
 	private static object DateOrDbNull(string s)
 	{
-		if (!DateTime.TryParse(s, out var result))
-		{
-			return DBNull.Value;
-		}
-		return result;
+		s = s.Trim();
+		if (s.Length == 0) return DBNull.Value;
+		var formats = new[] { "dd.MM.yyyy", "d.M.yyyy", "dd/MM/yyyy", "d/M/yyyy", "yyyy-MM-dd" };
+		if (DateTime.TryParseExact(s, formats, CultureInfo.GetCultureInfo("tr-TR"), DateTimeStyles.None, out var exact)) return exact.Date;
+		if (DateTime.TryParse(s, CultureInfo.GetCultureInfo("tr-TR"), DateTimeStyles.None, out var value)) return value.Date;
+		throw new InvalidOperationException($"Tarih geçersiz: '{s}'. Örnek: 31.08.2026");
 	}
+
 
 	private static string? SelectedCard(ComboBox cb)
 	{
