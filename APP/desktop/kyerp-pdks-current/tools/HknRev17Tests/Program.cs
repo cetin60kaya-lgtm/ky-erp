@@ -442,9 +442,9 @@ internal static class Program
             last = clock.ElapsedMilliseconds;
             await control.RunAuditAsync(false);
             await Task.Delay(100);
-            Check(control.LastMonthlySnapshot is not null && control.LastSnapshot!.Request.Start==new DateTime(2026,5,1) && control.LastSnapshot.Request.End==new DateTime(2026,6,1), "REV21 monthly UI audits full selected month with DB findings");
+            Check(control.LastSnapshot is not null && control.LastSnapshot.Request.Start==new DateTime(2026,5,1) && control.LastSnapshot.Request.End==new DateTime(2026,6,1), "REV25 selected-month exact UI audits the full requested month without a second interpretation engine");
             Check(maximum < 2000, "REV21 monthly DB/TNF UI heartbeat stays below two seconds");
-            Console.WriteLine($"REV21_MONTHLY_UI grid_bind_ms={control.LastGridMilliseconds} total_ms={control.LastTotalMilliseconds} max_heartbeat_gap_ms={maximum}");
+            Console.WriteLine($"REV25_EXACT_UI grid_bind_ms={control.LastGridMilliseconds} total_ms={control.LastTotalMilliseconds} max_heartbeat_gap_ms={maximum}");
             using (var image = new System.Drawing.Bitmap(owner.Width,owner.Height)) { owner.DrawToBitmap(image, new System.Drawing.Rectangle(0,0,owner.Width,owner.Height)); image.Save("D:/Googledrive/KYERP-PDKS-MASAUSTU/08_TEST/REV21_UI_READONLY.png"); }
             }
             catch (Exception exception) { uiFailure = exception; }
