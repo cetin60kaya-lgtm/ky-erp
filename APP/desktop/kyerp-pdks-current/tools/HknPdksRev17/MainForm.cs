@@ -767,7 +767,8 @@ public sealed partial class MainForm : Form
 		});
 		flowLayoutPanel.Controls.Add(paymentPerson);
 		flowLayoutPanel.Controls.Add(WideBtn("Ödemeleri Listele", LoadPayments, 145));
-		flowLayoutPanel.Controls.Add(WideBtn("Seçili Ödemeyi Düzenle", EditSelectedPayment, 190));
+		flowLayoutPanel.Controls.Add(WideBtn("TOPLU BANKA ÖDEMESİ", OpenBulkBankPayments, 180));
+		flowLayoutPanel.Controls.Add(WideBtn("Seçili Ödemeyi Düzenle", EditSelectedPayment, 180));
 		panel.Controls.Add(paymentGrid);
 		panel.Controls.Add(flowLayoutPanel);
 		Panel panel2 = new Panel
@@ -801,12 +802,37 @@ public sealed partial class MainForm : Form
 		});
 		flowLayoutPanel2.Controls.Add(advancePerson);
 		flowLayoutPanel2.Controls.Add(WideBtn("Avansları Listele", LoadAdvances, 145));
-		flowLayoutPanel2.Controls.Add(WideBtn("Seçili Avansı Düzenle", EditSelectedAdvance, 185));
+		flowLayoutPanel2.Controls.Add(WideBtn("TOPLU AVANS", OpenBulkAdvances, 130));
+		flowLayoutPanel2.Controls.Add(WideBtn("Seçili Avansı Düzenle", EditSelectedAdvance, 175));
 		panel2.Controls.Add(advanceGrid);
 		panel2.Controls.Add(flowLayoutPanel2);
 		obj.TabPages.Add(Page("Ödemeler", panel));
 		obj.TabPages.Add(Page("Avanslar", panel2));
 		return obj;
+	}
+
+	private DateTime PaymentPeriod(NumericUpDown year, ComboBox month)
+	{
+		var m = month.SelectedIndex is >= 1 and <= 12 ? month.SelectedIndex : DateTime.Today.Month;
+		return new DateTime((int)year.Value, m, 1);
+	}
+
+	private void OpenBulkBankPayments()
+	{
+		if (db == null) return;
+		if (paymentMonthNo.SelectedIndex is < 1 or > 12) { MessageBox.Show("Toplu banka ödemesi için tek bir ay seçin."); return; }
+		using var form = new BulkBankPaymentDialogRev27(db, PaymentPeriod(paymentYear, paymentMonthNo));
+		form.ShowDialog(this);
+		LoadPayments();
+	}
+
+	private void OpenBulkAdvances()
+	{
+		if (db == null) return;
+		if (advanceMonthNo.SelectedIndex is < 1 or > 12) { MessageBox.Show("Toplu avans için tek bir ay seçin."); return; }
+		using var form = new BulkAdvanceDialogRev27(db, PaymentPeriod(advanceYear, advanceMonthNo));
+		form.ShowDialog(this);
+		LoadAdvances();
 	}
 
 	private void LoadPayments()
