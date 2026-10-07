@@ -78,6 +78,13 @@ public sealed partial class MainForm : Form
 		Padding = new Padding(10, 8, 0, 0)
 	};
 
+	private readonly Label payrollSummary = new Label
+	{
+		AutoSize = true,
+		Padding = new Padding(10, 8, 0, 0),
+		ForeColor = Color.DimGray
+	};
+
 	private readonly CheckedListBox ePeopleList = new CheckedListBox
 	{
 		Dock = DockStyle.Fill,
@@ -695,43 +702,31 @@ public sealed partial class MainForm : Form
 
 	private Control BuildPayroll()
 	{
-		Panel obj = new Panel
-		{
-			Dock = DockStyle.Fill
-		};
-		FlowLayoutPanel flowLayoutPanel = new FlowLayoutPanel
+		Panel obj = new Panel { Dock = DockStyle.Fill };
+		FlowLayoutPanel bar = new FlowLayoutPanel
 		{
 			Dock = DockStyle.Top,
-			Height = 46
+			Height = 82,
+			WrapContents = true,
+			Padding = new Padding(2, 4, 2, 2)
 		};
-		flowLayoutPanel.Controls.Add(new Label
-		{
-			Text = "Yıl",
-			AutoSize = true,
-			Padding = new Padding(0, 8, 3, 0)
-		});
-		flowLayoutPanel.Controls.Add(payrollYear);
-		flowLayoutPanel.Controls.Add(new Label
-		{
-			Text = "Ay",
-			AutoSize = true,
-			Padding = new Padding(7, 8, 3, 0)
-		});
-		flowLayoutPanel.Controls.Add(payrollMonthNo);
-		flowLayoutPanel.Controls.Add(new Label
-		{
-			Text = "Personel",
-			AutoSize = true,
-			Padding = new Padding(7, 8, 3, 0)
-		});
-		flowLayoutPanel.Controls.Add(payrollPerson);
-		flowLayoutPanel.Controls.Add(WideBtn("Bordroyu Listele", LoadPayroll, 135));
-		flowLayoutPanel.Controls.Add(WideBtn("Düzenle", EditPayrollSelectedRev26, 95));
-		flowLayoutPanel.Controls.Add(WideBtn("Ayı Kilitle", () => Rev26SetMonthLock(true), 110));
-		flowLayoutPanel.Controls.Add(WideBtn("Seçilenleri Kilitle", () => Rev26SetSelectedLocks(true), 145));
-		flowLayoutPanel.Controls.Add(WideBtn("Kilidi Aç", Rev26Unlock, 105));
+		bar.Controls.Add(new Label { Text = "Yıl", AutoSize = true, Padding = new Padding(0, 8, 3, 0) });
+		bar.Controls.Add(payrollYear);
+		bar.Controls.Add(new Label { Text = "Ay", AutoSize = true, Padding = new Padding(7, 8, 3, 0) });
+		bar.Controls.Add(payrollMonthNo);
+		bar.Controls.Add(new Label { Text = "Personel", AutoSize = true, Padding = new Padding(7, 8, 3, 0) });
+		bar.Controls.Add(payrollPerson);
+		bar.Controls.Add(WideBtn("Listele", LoadPayroll, 92));
+		bar.Controls.Add(WideBtn("Düzenle", EditPayrollSelectedRev26, 92));
+		bar.Controls.Add(WideBtn("Genel PDF", ExportGeneralPayroll, 100));
+		bar.Controls.Add(WideBtn("Kişisel PDF", ExportPersonalPayroll, 105));
+		bar.Controls.Add(WideBtn("Rapor Ayarları", OpenPayrollReportSettings, 120));
+		bar.Controls.Add(WideBtn("Ayı Kilitle", () => Rev26SetMonthLock(true), 105));
+		bar.Controls.Add(WideBtn("Seçilenleri Kilitle", () => Rev26SetSelectedLocks(true), 140));
+		bar.Controls.Add(WideBtn("Kilidi Aç", Rev26Unlock, 100));
+		bar.Controls.Add(payrollSummary);
 		obj.Controls.Add(payrollGrid);
-		obj.Controls.Add(flowLayoutPanel);
+		obj.Controls.Add(bar);
 		return obj;
 	}
 
@@ -1316,23 +1311,75 @@ public sealed partial class MainForm : Form
 
 	private void LoadPayroll()
 	{
-		if (db == null)
-		{
-			return;
-		}
+		if (db == null) return;
 		try
 		{
-			DateTime dateTime = new DateTime((int)payrollYear.Value, (payrollMonthNo.SelectedIndex == 0) ? 1 : payrollMonthNo.SelectedIndex, 1);
-			DateTime dateTime2 = ((payrollMonthNo.SelectedIndex == 0) ? dateTime.AddYears(1) : dateTime.AddMonths(1));
-			string text = SelectedCard(payrollPerson);
-			string sql = "select u.*,k.AD,k.SOYAD,k.MAAS as KART_MAAS from UCRETLER u inner join KIMLIK k on k.PKNO=u.PKNO where k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and u.BASTAR>=@A and u.BASTAR<@B" + ((text == null) ? "" : " and u.PKNO=@P") + " order by u.PKNO";
-			payrollGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
+			DateTime from = new DateTime((int)payrollYear.Value, payrollMonthNo.SelectedIndex == 0 ? 1 : payrollMonthNo.SelectedIndex, 1);
+			DateTime to = payrollMonthNo.SelectedIndex == 0 ? from.AddYears(1) : from.AddMonths(1);
+			string? card = SelectedCard(payrollPerson);
+			string sql = "select u.*,k.AD,k.SOYAD,k.IGTARIH,k.MAAS as KART_MAAS from UCRETLER u inner join KIMLIK k on k.PKNO=u.PKNO where k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and u.BASTAR>=@A and u.BASTAR<@B" + (card == null ? "" : " and u.PKNO=@P") + " order by u.PKNO";
+			var table = card == null
+				? db.Query(sql, new FbParameter("@A", from), new FbParameter("@B", to))
+				: db.Query(sql, new FbParameter("@A", from), new FbParameter("@B", to), new FbParameter("@P", card));
+			payrollGrid.DataSource = table;
+			ConfigurePayrollGrid();
 			ApplyRev26LockColors();
+			payrollSummary.Text = table.Rows.Count == 0
+				? $"{(payrollMonthNo.SelectedIndex == 0 ? payrollYear.Value.ToString("0") : from.ToString("MMMM yyyy", new CultureInfo("tr-TR")))} için bordro kaydı yok"
+				: $"{table.Rows.Count} bordro kaydı • Düzenleme / PDF / kilit işlemleri hazır";
 		}
 		catch (Exception ex)
 		{
+			payrollSummary.Text = "Bordro yüklenemedi";
 			MessageBox.Show(ex.Message, "Bordro");
 		}
+	}
+
+	private void ConfigurePayrollGrid()
+	{
+		foreach (DataGridViewColumn col in payrollGrid.Columns) { col.Visible = false; col.SortMode = DataGridViewColumnSortMode.NotSortable; }
+		var specs = new (string Name,string Header,int Width)[]
+		{
+			("PKNO","Kart",65),("AD","Ad",88),("SOYAD","Soyad",100),("IGTARIH","İşe Giriş",88),
+			("DMAAS","Maaş",90),("GUN1","Normal Gün",72),("SAAT1","Normal Saat",78),
+			("SAAT2","%50 Mesai",72),("SAAT3","%100 Mesai",78),("EX1","Avans",85),("EX2","Banka",88),
+			("NCKALAN","Maaş Kalan",92),("FMKALAN","Mesai Kalan",92)
+		};
+		var index=0;
+		foreach(var spec in specs)
+		{
+			if(!payrollGrid.Columns.Contains(spec.Name)) continue;
+			var col=payrollGrid.Columns[spec.Name]; col.Visible=true; col.HeaderText=spec.Header; col.Width=spec.Width; col.DisplayIndex=index++;
+		}
+	}
+
+	private DateTime SelectedPayrollPeriod()
+	{
+		var month = payrollMonthNo.SelectedIndex is >= 1 and <= 12 ? payrollMonthNo.SelectedIndex : DateTime.Today.Month;
+		return new DateTime((int)payrollYear.Value, month, 1);
+	}
+
+	private void ExportGeneralPayroll()
+	{
+		if (db == null) return;
+		if (payrollMonthNo.SelectedIndex is < 1 or > 12) { MessageBox.Show("Genel bordro için tek bir ay seçin."); return; }
+		PayrollReportServiceRev27.ExportGeneral(this, db, SelectedPayrollPeriod());
+	}
+
+	private void ExportPersonalPayroll()
+	{
+		if (db == null) return;
+		if (payrollMonthNo.SelectedIndex is < 1 or > 12) { MessageBox.Show("Kişisel bordro için tek bir ay seçin."); return; }
+		var row = payrollGrid.CurrentRow;
+		var card = row is null || row.IsNewRow || !payrollGrid.Columns.Contains("PKNO") ? "" : Convert.ToString(row.Cells["PKNO"].Value)?.Trim() ?? "";
+		if (card.Length == 0) { MessageBox.Show("Kişisel bordro için personel satırı seçin."); return; }
+		PayrollReportServiceRev27.ExportPersonal(this, db, card, SelectedPayrollPeriod());
+	}
+
+	private void OpenPayrollReportSettings()
+	{
+		using var form = new PayrollReportSettingsFormRev27();
+		form.ShowDialog(this);
 	}
 
 	private void RebuildDays()
