@@ -392,13 +392,13 @@ test("unified source editor supports serial personnel review without closing", (
 });
 
 
-test("only paid payroll snapshots are immutable; unpaid payroll follows live sources", () => {
+test("open month always follows live payroll sources regardless of legacy PAID snapshots", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
-  assert.match(page, /if \(upper\(saved\.status\) !== "PAID"\)/);
   assert.match(page, /return \{ \.\.\.system, saved, sourceChangedSinceSave, paidLocked: false \}/);
-  assert.match(page, /paidLocked: true/);
+  assert.match(page, /Eski PAID\/snapshot kayıtları yalnız tarihsel kanıttır/);
+  assert.doesNotMatch(page, /paidLocked: true/);
+  assert.doesNotMatch(page, /snapshotPayment/);
   assert.match(page, /sourceChangedSinceSave/);
-  assert.match(page, /snapshotPayment/);
   assert.match(page, /Tek kaynak kuralı/);
 });
