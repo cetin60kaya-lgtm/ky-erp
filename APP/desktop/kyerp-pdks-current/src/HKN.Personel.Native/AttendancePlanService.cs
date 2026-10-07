@@ -477,15 +477,15 @@ internal static class AttendancePlanService
         if (item.Action == "TERS TARAFI DÜZELT")
         {
             if (!item.RowSira.HasValue) throw new InvalidOperationException("Ters taraf düzeltmesi için kaynak satır bulunamadı.");
-            var minute = (int)item.PlannedAt.TimeOfDay.TotalMinutes;
-            var time = item.PlannedAt.ToString("HH:mm", CultureInfo.InvariantCulture);
-            var sql = item.Side == AttendancePlanSide.Exit
+            var moveMinute = (int)item.PlannedAt.TimeOfDay.TotalMinutes;
+            var moveTime = item.PlannedAt.ToString("HH:mm", CultureInfo.InvariantCulture);
+            var moveSql = item.Side == AttendancePlanSide.Exit
                 ? "update GIRCIK set GTARIH=null,GSAAT=null,GDAKIKA=null,GTUR=null,CTARIH=@D,CSAAT=@T,CDAKIKA=@M,CTUR='' where SIRA=@S and PKNO=@P"
                 : "update GIRCIK set CTARIH=null,CSAAT=null,CDAKIKA=null,CTUR=null,GTARIH=@D,GSAAT=@T,GDAKIKA=@M,GTUR='' where SIRA=@S and PKNO=@P";
-            using var move = FirebirdDatabase.CreateCommand(connection, transaction, sql,
+            using var move = FirebirdDatabase.CreateCommand(connection, transaction, moveSql,
                 new FbParameter("@D", item.Day.Date),
-                new FbParameter("@T", time),
-                new FbParameter("@M", minute),
+                new FbParameter("@T", moveTime),
+                new FbParameter("@M", moveMinute),
                 new FbParameter("@S", item.RowSira.Value),
                 new FbParameter("@P", item.Card));
             if (move.ExecuteNonQuery() != 1)
