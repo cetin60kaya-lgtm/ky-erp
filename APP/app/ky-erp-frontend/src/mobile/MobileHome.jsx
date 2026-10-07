@@ -43,6 +43,15 @@ export default function MobileHome() {
           <div className="ky-mobile-arrow">›</div>
         </div>
 
+        <div className="ky-mobile-module-card" onClick={() => navigate("/mobile/pdks")}>
+          <div className="ky-mobile-icon">⏱️</div>
+          <div>
+            <h3>PDKS</h3>
+            <p>Canlı geçişler, içerideki personel ve kart cihazı</p>
+          </div>
+          <div className="ky-mobile-arrow">›</div>
+        </div>
+
         <div className="ky-mobile-module-card" onClick={() => navigate("/mobile/imalat")}>
           <div className="ky-mobile-icon">🏭</div>
           <div>
