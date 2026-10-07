@@ -708,7 +708,7 @@ public sealed partial class MainForm : Form
 		{
 			DateTime dateTime = new DateTime((int)paymentYear.Value, (paymentMonthNo.SelectedIndex == 0) ? 1 : paymentMonthNo.SelectedIndex, 1);
 			DateTime dateTime2 = ((paymentMonthNo.SelectedIndex == 0) ? dateTime.AddYears(1) : dateTime.AddMonths(1));
-			string text = SelectedCard(paymentPerson);
+			string? text = SelectedCard(paymentPerson);
 			string sql = "select o.PKNO,k.AD,k.SOYAD,k.MAAS as KART_MAAS,o.BASTAR,o.BITTAR,o.NODENEN,o.NOTARIH,o.FMODENEN,o.FMOTARIH from ODEME o inner join KIMLIK k on k.PKNO=o.PKNO where k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and o.BASTAR>=@A and o.BASTAR<@B" + ((text == null) ? "" : " and o.PKNO=@P") + " order by o.PKNO";
 			paymentGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
 		}
@@ -720,7 +720,7 @@ public sealed partial class MainForm : Form
 		{
 			DateTime dateTime = new DateTime((int)advanceYear.Value, (advanceMonthNo.SelectedIndex == 0) ? 1 : advanceMonthNo.SelectedIndex, 1);
 			DateTime dateTime2 = ((advanceMonthNo.SelectedIndex == 0) ? dateTime.AddYears(1) : dateTime.AddMonths(1));
-			string text = SelectedCard(advancePerson);
+			string? text = SelectedCard(advancePerson);
 			string sql = "select a.KOD,a.PKNO,k.AD,k.SOYAD,a.TARIH,a.MIKTAR,a.VTARIH,a.TURKOD,a.TOPMIKTAR,a.TAKSITSAYISI,a.TAKSITNO,a.ACIKLAMA from AVANS a inner join KIMLIK k on k.PKNO=a.PKNO where k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and a.TARIH>=@A and a.TARIH<@B" + ((text == null) ? "" : " and a.PKNO=@P") + " order by a.TARIH desc,a.KOD desc";
 			advanceGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
 		}
@@ -808,7 +808,7 @@ public sealed partial class MainForm : Form
 			}
 			root = Directory.GetParent(root)?.FullName ?? root;
 		}
-		string environmentVariable = Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH", EnvironmentVariableTarget.User);
+		string? environmentVariable = Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH", EnvironmentVariableTarget.User);
 		string[] source = new string[3]
 		{
 			"D:\\Hedef500\\Hedef500\\Data\\DATABASE.GDB",
@@ -879,8 +879,8 @@ public sealed partial class MainForm : Form
 	private async void Connect()
 	{
 		SetWorkHours(WorkTimePolicy.Default);
-		FirebirdDatabase database;
-		PdksOptions pdksOptions;
+		FirebirdDatabase? database;
+		PdksOptions? pdksOptions;
 		string user;
 		string error;
 		if (string.IsNullOrWhiteSpace(dbPath.Text) || !File.Exists(dbPath.Text))
@@ -893,6 +893,12 @@ public sealed partial class MainForm : Form
 		{
 			db = null;
 			sourceStatus.Text = "Bağlantı yok: " + error;
+			sourceStatus.ForeColor = Color.DarkRed;
+		}
+		else if (database is null || pdksOptions is null)
+		{
+			db = null;
+			sourceStatus.Text = "Bağlantı nesnesi oluşturulamadı.";
 			sourceStatus.ForeColor = Color.DarkRed;
 		}
 		else
@@ -987,7 +993,7 @@ public sealed partial class MainForm : Form
 			ComboBox[] array2 = new ComboBox[5] { ioPerson, eHistoryPerson, payrollPerson, paymentPerson, advancePerson };
 			foreach (ComboBox comboBox in array2)
 			{
-				string text5 = comboBox.SelectedItem?.ToString();
+				string? text5 = comboBox.SelectedItem?.ToString();
 				comboBox.Items.Clear();
 				comboBox.Items.Add("Tümü");
 				foreach (DataRow row2 in dataTable.Rows)
@@ -1118,7 +1124,7 @@ public sealed partial class MainForm : Form
 
 	private static string? SelectedCard(ComboBox cb)
 	{
-		string text = cb.SelectedItem?.ToString();
+		string? text = cb.SelectedItem?.ToString();
 		if (!string.IsNullOrWhiteSpace(text) && !(text == "Tümü"))
 		{
 			return text.Substring(0, 5);
@@ -1136,12 +1142,12 @@ public sealed partial class MainForm : Form
 		eEnd.Value = value2;
 		RebuildEDays();
 		if (!loadingEPeople) _ = LoadEPeopleAsync();
-		string text = SelectedCard(ePerson);
+		string? text = SelectedCard(ePerson);
 		if (text != null)
 		{
 			for (int i = 0; i < ePeopleList.Items.Count; i++)
 			{
-				ePeopleList.SetItemChecked(i, ePeopleList.Items[i].ToString().StartsWith(text));
+				ePeopleList.SetItemChecked(i, (Convert.ToString(ePeopleList.Items[i]) ?? "").StartsWith(text, StringComparison.Ordinal));
 			}
 		}
 	}
@@ -1158,7 +1164,7 @@ public sealed partial class MainForm : Form
 			int selectedIndex = ioMonthNo.SelectedIndex;
 			DateTime dateTime = ((selectedIndex == 0) ? new DateTime(year, 1, 1) : new DateTime(year, selectedIndex, 1));
 			DateTime dateTime2 = ((selectedIndex == 0) ? dateTime.AddYears(1) : dateTime.AddMonths(1));
-			string text = SelectedCard(ioPerson);
+			string? text = SelectedCard(ioPerson);
 			string sql = "select g.SIRA,g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g inner join KIMLIK k on k.PKNO=g.PKNO where k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))" + ((text == null) ? "" : " and g.PKNO=@P") + " order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
 			ioGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
 		}
@@ -1612,7 +1618,7 @@ public sealed partial class MainForm : Form
 		int selectedIndex = eHistoryMonth.SelectedIndex;
 		DateTime dateTime = ((selectedIndex == 0) ? new DateTime(year, 1, 1) : new DateTime(year, selectedIndex, 1));
 		DateTime dateTime2 = ((selectedIndex == 0) ? dateTime.AddYears(1) : dateTime.AddMonths(1));
-		string text = SelectedCard(eHistoryPerson);
+		string? text = SelectedCard(eHistoryPerson);
 		string sql = "select g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR from GIRCIK g inner join KIMLIK k on k.PKNO=g.PKNO where k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and (g.GTUR='E' or g.CTUR='E') and ((g.GTARIH>=@A and g.GTARIH<@B) or (g.CTARIH>=@A and g.CTARIH<@B))" + ((text == null) ? "" : " and g.PKNO=@P") + " order by coalesce(g.GTARIH,g.CTARIH),g.PKNO";
 		DataTable dataTable = ((text == null) ? db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
 		DataTable dataTable2 = new DataTable();
@@ -1649,7 +1655,7 @@ public sealed partial class MainForm : Form
 			select c.ColumnName) };
 		foreach (DataRow row in dataTable.Rows)
 		{
-			list.Add(string.Join(";", row.ItemArray.Select((object x) => Convert.ToString(x)?.Replace(";", ",") ?? "")));
+			list.Add(string.Join(";", row.ItemArray.Select((object? x) => Convert.ToString(x)?.Replace(";", ",") ?? "")));
 		}
 		File.WriteAllLines(text, list, Encoding.UTF8);
 		MessageBox.Show("İmza çıktısı hazır:\n" + text);
