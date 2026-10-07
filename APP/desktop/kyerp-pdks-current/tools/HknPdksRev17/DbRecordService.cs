@@ -21,6 +21,7 @@ internal sealed record DbRecordSnapshot(DateTime Start, DateTime End, string[] C
     DataTable Records, DbRecordPerson[] People, DbRecordDay[] Plan, string Fingerprint, DbRecordMode Mode = DbRecordMode.Normalize)
 {
     internal DbRecordChange[] Changes { get; init; } = [];
+    internal WorkTimePolicy WorkHours { get; init; } = WorkTimePolicy.Default;
 }
 
 internal static partial class DbRecordService
@@ -70,7 +71,8 @@ internal static partial class DbRecordService
         adapter.Fill(records);
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new {
             People = people, Rows = records.AsEnumerable().Select(row => row.ItemArray.Select(value => value == DBNull.Value ? null : value)).ToArray() }))));
-        var snapshot = new DbRecordSnapshot(start, end, cards, days, records, people, [], fingerprint, mode);
+        var workHours = WorkTimePolicy.Read(connection, transaction, token);
+        var snapshot = new DbRecordSnapshot(start, end, cards, days, records, people, [], fingerprint, mode) { WorkHours = workHours };
         snapshot = mode == DbRecordMode.Normalize ? snapshot with { Plan = Plan(snapshot, token) }
             : snapshot with { Changes = PlanChanges(snapshot, token) };
         ownedTransaction?.Rollback();
@@ -93,15 +95,15 @@ internal static partial class DbRecordService
             var moves = grouped[(card, day)].OrderBy(move => move.Id).ToArray();
             if (moves.Any(move => !MonthlyDbAudit.Clock(move.Time, out _)))
                 throw new InvalidOperationException($"{card} / {day:dd.MM.yyyy}: bozuk DB saati; önizleme uygulanamaz.");
-            DbMovement? Keeper(string side) => moves.Where(move => IntendedSide(move.Time) == side)
-                .OrderByDescending(move => MonthlyDbNormalization.InRange(side, move.Time))
-                .ThenByDescending(move => move.Side == side).ThenBy(move => Distance(move.Time, side)).ThenBy(move => move.Id).FirstOrDefault();
+            DbMovement? Keeper(string side) => moves.Where(move => IntendedSide(move.Time, snapshot.WorkHours) == side)
+                .OrderByDescending(move => InRange(snapshot.WorkHours, side, move.Time))
+                .ThenByDescending(move => move.Side == side).ThenBy(move => Distance(move.Time, side, snapshot.WorkHours)).ThenBy(move => move.Id).FirstOrDefault();
             var entry = Keeper("Giriş");
             var exit = Keeper("Çıkış");
             string Time(DbMovement? keeper, string side)
             {
                 var minute = keeper is not null && MonthlyDbNormalization.InRange(side, keeper.Time)
-                    ? ParseMinute(keeper.Time) : GenerateMinute(card, side, previous);
+                    ? ParseMinute(keeper.Time) : GenerateMinute(card, side, previous, snapshot.WorkHours);
                 previous[(card, side)] = minute;
                 return TimeSpan.FromMinutes(minute).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
             }
@@ -119,15 +121,19 @@ internal static partial class DbRecordService
         return result.ToArray();
     }
 
-    internal static string IntendedSide(string time) => Distance(time, "Giriş") <= Distance(time, "Çıkış") ? "Giriş" : "Çıkış";
+    internal static bool InRange(WorkTimePolicy policy, string side, string time) => MonthlyDbAudit.Clock(time, out var minute) &&
+        (side == "Giriş" ? minute >= policy.EntryEarly && minute <= policy.EntryLate :
+         side == "Çıkış" && minute >= policy.ExitEarly && minute <= policy.ExitLate);
+    internal static string IntendedSide(string time, WorkTimePolicy policy) => Distance(time, "Giriş", policy) <= Distance(time, "Çıkış", policy) ? "Giriş" : "Çıkış";
     static int ParseMinute(string time) => MonthlyDbAudit.Clock(time, out var minute) ? minute : throw new InvalidOperationException("Bozuk saat.");
-    static int Distance(string time, string side) => Math.Abs(ParseMinute(time) - (side == "Giriş" ? 510 : 1140));
-    static int GenerateMinute(string card, string side, Dictionary<(string Card, string Side), int> previous)
+    static int Distance(string time, string side, WorkTimePolicy policy) => Math.Abs(ParseMinute(time) - (side == "Giriş" ? policy.Entry : policy.Exit));
+    static int GenerateMinute(string card, string side, Dictionary<(string Card, string Side), int> previous, WorkTimePolicy policy)
     {
-        var minimum = side == "Giriş" ? 495 : 1110;
-        var maximum = side == "Giriş" ? 525 : 1170;
+        var minimum = side == "Giriş" ? policy.EntryEarly : policy.ExitEarly;
+        var maximum = side == "Giriş" ? policy.EntryLate : policy.ExitLate;
         var minute = RandomNumberGenerator.GetInt32(minimum, maximum + 1);
-        if (previous.TryGetValue((card, side), out var last) && last == minute) minute = minimum + (minute - minimum + 1) % (maximum - minimum + 1);
+        if (previous.TryGetValue((card, side), out var last) && last == minute && maximum > minimum)
+            minute = minimum + (minute - minimum + 1) % (maximum - minimum + 1);
         previous[(card, side)] = minute;
         return minute;
     }
@@ -146,7 +152,7 @@ internal static partial class DbRecordService
             throw new InvalidOperationException("Önizleme kayıt kimlikleri değişmiş; yeniden önizleyin.");
         if (snapshot.Plan.Length != (long)snapshot.Cards.Length * snapshot.Days.Length || snapshot.Plan.Select(plan => (plan.Card, plan.Day)).Distinct().Count() != snapshot.Plan.Length ||
             snapshot.Plan.Any(plan => !cards.Contains(plan.Card) || !days.Contains(plan.Day) ||
-                !MonthlyDbNormalization.InRange("Giriş", plan.Entry) || !MonthlyDbNormalization.InRange("Çıkış", plan.Exit)))
+                !InRange(snapshot.WorkHours, "Giriş", plan.Entry) || !InRange(snapshot.WorkHours, "Çıkış", plan.Exit)))
             throw new InvalidOperationException("Önizleme planı kapsam/saat koşullarını sağlamıyor.");
         var backup = await MonthlyDbWriter.BackupAsync(database, token).ConfigureAwait(false);
         using var connection = database.OpenConnection();
