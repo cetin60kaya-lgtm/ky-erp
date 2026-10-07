@@ -25,12 +25,12 @@ internal static partial class DbRecordService
             void Add(string side)
             {
                 if (movements.Any(move => move.Side == side)) return;
-                changes.Add(new(card, name, day, side, "BOŞ", FormatMinute(GenerateMinute(card, side, previous)), "EKLE", -1, ""));
+                changes.Add(new(card, name, day, side, "BOŞ", FormatMinute(GenerateMinute(card, side, previous, snapshot.WorkHours)), "EKLE", -1, ""));
             }
             DbMovement Keeper(IEnumerable<DbMovement> candidates, string side) => candidates
-                .OrderByDescending(move => MonthlyDbNormalization.InRange(side, move.Time))
+                .OrderByDescending(move => InRange(snapshot.WorkHours, side, move.Time))
                 .ThenByDescending(move => move.Side == side)
-                .ThenBy(move => Distance(move.Time, side)).ThenBy(move => move.Id).First();
+                .ThenBy(move => Distance(move.Time, side, snapshot.WorkHours)).ThenBy(move => move.Id).First();
             switch (snapshot.Mode)
             {
                 case DbRecordMode.AddEntry: Add("Giriş"); break;
@@ -39,10 +39,10 @@ internal static partial class DbRecordService
                 case DbRecordMode.CorrectTime:
                     foreach (var side in new[] { "Giriş", "Çıkış" })
                     {
-                        var candidates = normal.Where(move => IntendedSide(move.Time) == side).ToArray();
+                        var candidates = normal.Where(move => IntendedSide(move.Time, snapshot.WorkHours) == side).ToArray();
                         if (candidates.Length == 0 || movements.Any(move => move.Side == side && move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase))) continue;
                         var keeper = Keeper(candidates, side);
-                        var time = MonthlyDbNormalization.InRange(side, keeper.Time) ? keeper.Time : FormatMinute(GenerateMinute(card, side, previous));
+                        var time = InRange(snapshot.WorkHours, side, keeper.Time) ? keeper.Time : FormatMinute(GenerateMinute(card, side, previous, snapshot.WorkHours));
                         if (keeper.Side != side || keeper.Time != time)
                             changes.Add(new(card, name, day, side, keeper.Time, time, "DÜZELT", keeper.Id, keeper.Side));
                     }
@@ -73,8 +73,8 @@ internal static partial class DbRecordService
         var structural = PlanChanges(snapshot, token);
         if (snapshot.Changes.Length != structural.Length || snapshot.Changes.Where((change, index) =>
             change with { NewTime = structural[index].NewTime } != structural[index] ||
-            change.Operation != "SİL" && !MonthlyDbNormalization.InRange(change.Side, change.NewTime) ||
-            change.Operation == "DÜZELT" && MonthlyDbNormalization.InRange(change.Side, change.ExistingTime) && change.NewTime != change.ExistingTime).Any())
+            change.Operation != "SİL" && !InRange(snapshot.WorkHours, change.Side, change.NewTime) ||
+            change.Operation == "DÜZELT" && InRange(snapshot.WorkHours, change.Side, change.ExistingTime) && change.NewTime != change.ExistingTime).Any())
             throw new InvalidOperationException("Önizleme değişmiş veya saat kapsam dışında; yeniden önizleyin.");
         var backup = await MonthlyDbWriter.BackupAsync(database, token).ConfigureAwait(false);
         using var connection = database.OpenConnection();
