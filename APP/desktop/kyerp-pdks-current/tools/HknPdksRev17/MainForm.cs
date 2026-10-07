@@ -42,7 +42,9 @@ public sealed partial class MainForm : Form
 
 	private readonly Label sourceStatus = new Label
 	{
-		AutoSize = true
+		AutoSize = true,
+		Font = new Font("Segoe UI Semibold", 9f),
+		Padding = new Padding(0, 4, 0, 0)
 	};
 
 	private readonly TabControl tabs = new TabControl
@@ -233,6 +235,7 @@ public sealed partial class MainForm : Form
 		eSide.Items.AddRange(new object[3] { "Giriş E", "Çıkış E", "Giriş + Çıkış E" });
 		eSide.SelectedIndex = 0;
 		Build();
+		AppTheme.Apply(this);
 		personFilter.SelectedIndexChanged += delegate
 		{
 			LoadPeople();
@@ -905,7 +908,9 @@ public sealed partial class MainForm : Form
 				if (!IsDisposed && ReferenceEquals(db, database))
 				{
 					SetWorkHours(policy);
-					sourceStatus.Text += "   |   " + policy.Information;
+					var readiness = await Task.Run(() => SystemReadinessService.Validate(database!, tnfPath.Text, policy));
+					sourceStatus.Text = readiness.Summary + "   |   " + policy.Information;
+					sourceStatus.ForeColor = Color.DarkGreen;
 				}
 			}
 			catch (Exception)
