@@ -42,7 +42,11 @@ internal static class PayrollOverrideService
             if (Prepared.Contains(db)) return;
         }
         if (!TableExists(db, "PDKS_BYPASS"))
-            db.Execute("create table PDKS_BYPASS (ID integer)");
+            db.Execute("create table PDKS_BYPASS (CONNECTION_ID bigint not null)");
+        else if (!FieldExists(db, "PDKS_BYPASS", "CONNECTION_ID"))
+            db.Execute("alter table PDKS_BYPASS add CONNECTION_ID bigint");
+        // Old REV22 global bypass rows must never survive an upgrade.
+        db.Execute("delete from PDKS_BYPASS where CONNECTION_ID=CURRENT_CONNECTION");
 
         if (!TableExists(db, "PDKS_BORDRO_OVERRIDE"))
             db.Execute(@"create table PDKS_BORDRO_OVERRIDE (
@@ -97,6 +101,11 @@ internal static class PayrollOverrideService
 
     private static bool IndexExists(FirebirdDatabase db, string name) =>
         Convert.ToInt32(db.Scalar("select count(*) from rdb$indices where rdb$index_name=@N", new FbParameter("@N", name)) ?? 0) > 0;
+
+    private static bool FieldExists(FirebirdDatabase db, string table, string field) =>
+        Convert.ToInt32(db.Scalar(@"select count(*) from rdb$relation_fields
+            where rdb$relation_name=@T and rdb$field_name=@F",
+            new FbParameter("@T", table), new FbParameter("@F", field)) ?? 0) > 0;
 
     private static bool ExceptionExists(FirebirdDatabase db, string name) =>
         Convert.ToInt32(db.Scalar("select count(*) from rdb$exceptions where rdb$exception_name=@N", new FbParameter("@N", name)) ?? 0) > 0;
@@ -167,7 +176,7 @@ declare variable N integer;
 declare variable Z smallint;
 declare variable V varchar(120);
 begin
-  if (not exists(select 1 from PDKS_BYPASS)) then
+  if (not exists(select 1 from PDKS_BYPASS b where b.CONNECTION_ID=CURRENT_CONNECTION)) then
   begin
     if {lockOldU} then
     begin
@@ -190,7 +199,7 @@ declare variable N integer;
 declare variable Z smallint;
 declare variable V varchar(120);
 begin
-  if (not exists(select 1 from PDKS_BYPASS)) then
+  if (not exists(select 1 from PDKS_BYPASS b where b.CONNECTION_ID=CURRENT_CONNECTION)) then
   begin
     if {lockNewU} then exception PDKS_KILITLI_DONEM;
     Y=extract(year from NEW.BASTAR); A=extract(month from NEW.BASTAR); P=NEW.PKNO;
@@ -201,7 +210,7 @@ end";
 
         db.Execute($@"create or alter trigger PDKS_UCRET_LOCK_D for UCRETLER active before delete position 0 as
 begin
-  if (not exists(select 1 from PDKS_BYPASS) and {lockOldU}) then
+  if (not exists(select 1 from PDKS_BYPASS b where b.CONNECTION_ID=CURRENT_CONNECTION) and {lockOldU}) then
     exception PDKS_KILITLI_DONEM;
 end");
 
@@ -212,7 +221,7 @@ end");
 
         db.Execute($@"create or alter trigger PDKS_PUANTAJ_LOCK_U for PUANTAJ active before update position 0 as
 begin
-  if (not exists(select 1 from PDKS_BYPASS) and ({periodOldP} or {personOldP})) then
+  if (not exists(select 1 from PDKS_BYPASS b where b.CONNECTION_ID=CURRENT_CONNECTION) and ({periodOldP} or {personOldP})) then
   begin
     {freezeP}
   end
@@ -222,12 +231,12 @@ end");
         // so Hedef can continue calculating other personnel in the same batch; UCRETLER stays protected by the person lock.
         db.Execute($@"create or alter trigger PDKS_PUANTAJ_LOCK_I for PUANTAJ active before insert position 0 as
 begin
-  if (not exists(select 1 from PDKS_BYPASS) and {periodNewP}) then
+  if (not exists(select 1 from PDKS_BYPASS b where b.CONNECTION_ID=CURRENT_CONNECTION) and {periodNewP}) then
     exception PDKS_KILITLI_DONEM;
 end");
         db.Execute($@"create or alter trigger PDKS_PUANTAJ_LOCK_D for PUANTAJ active before delete position 0 as
 begin
-  if (not exists(select 1 from PDKS_BYPASS) and {periodOldP}) then
+  if (not exists(select 1 from PDKS_BYPASS b where b.CONNECTION_ID=CURRENT_CONNECTION) and {periodOldP}) then
     exception PDKS_KILITLI_DONEM;
 end");
     }
@@ -438,7 +447,7 @@ end");
         var finish = Convert.ToDateTime(row["BITTAR"]);
         db.InTransaction((connection, tx) =>
         {
-            using (var bypass = FirebirdDatabase.CreateCommand(connection, tx, "insert into PDKS_BYPASS(ID) values(1)"))
+            using (var bypass = FirebirdDatabase.CreateCommand(connection, tx, "insert into PDKS_BYPASS(CONNECTION_ID) values(CURRENT_CONNECTION)"))
                 bypass.ExecuteNonQuery();
 
             var sets = new List<string>();
@@ -475,7 +484,7 @@ end");
                     insertOverride.ExecuteNonQuery();
                 }
             }
-            using (var clearBypass = FirebirdDatabase.CreateCommand(connection, tx, "delete from PDKS_BYPASS")) clearBypass.ExecuteNonQuery();
+            using (var clearBypass = FirebirdDatabase.CreateCommand(connection, tx, "delete from PDKS_BYPASS where CONNECTION_ID=CURRENT_CONNECTION")) clearBypass.ExecuteNonQuery();
             return 0;
         });
         return changed.ToArray();
@@ -501,7 +510,7 @@ end");
 
         return db.InTransaction((connection, tx) =>
         {
-            using (var bypass = FirebirdDatabase.CreateCommand(connection, tx, "insert into PDKS_BYPASS(ID) values(1)")) bypass.ExecuteNonQuery();
+            using (var bypass = FirebirdDatabase.CreateCommand(connection, tx, "insert into PDKS_BYPASS(CONNECTION_ID) values(CURRENT_CONNECTION)")) bypass.ExecuteNonQuery();
             var count = 0;
             foreach (var row in bad)
             {
@@ -510,7 +519,7 @@ end");
                     new FbParameter("@P", card), new FbParameter("@S", Convert.ToDateTime(row["BASTAR"])), new FbParameter("@E", Convert.ToDateTime(row["BITTAR"])));
                 count += cmd.ExecuteNonQuery();
             }
-            using (var clearBypass = FirebirdDatabase.CreateCommand(connection, tx, "delete from PDKS_BYPASS")) clearBypass.ExecuteNonQuery();
+            using (var clearBypass = FirebirdDatabase.CreateCommand(connection, tx, "delete from PDKS_BYPASS where CONNECTION_ID=CURRENT_CONNECTION")) clearBypass.ExecuteNonQuery();
             return count;
         });
     }
