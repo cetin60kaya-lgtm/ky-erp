@@ -242,36 +242,14 @@ public sealed partial class MainForm : Form
 		{
 			LoadPeople();
 		};
-		eStart.ValueChanged += delegate
-		{
-			RebuildEDays();
-		};
-		eEnd.ValueChanged += delegate
-		{
-			RebuildEDays();
-		};
-		eYear.ValueChanged += delegate
-		{
-			ApplyEPeriodFilter();
-		};
-		eMonthNo.SelectedIndexChanged += delegate
-		{
-			ApplyEPeriodFilter();
-		};
-		ePerson.SelectedIndexChanged += delegate
-		{
-			if (!loadingEPeople) ApplyEPeriodFilter();
-		};
 		base.Shown += delegate
 		{
 			DetectSources();
 		};
-		ioYear.Value = eYear.Value = eHistoryYear.Value = DateTime.Today.Year;
+		ioYear.Value = DateTime.Today.Year;
 		var previousMonth = DateTime.Today.AddMonths(-1);
 		payrollYear.Value = previousMonth.Year;
 		payrollMonthNo.SelectedIndex = previousMonth.Month;
-		paymentYear.Value = advanceYear.Value = previousMonth.Year;
-		paymentMonthNo.SelectedIndex = advanceMonthNo.SelectedIndex = previousMonth.Month;
 	}
 
 	private static DataGridView Grid()
@@ -1030,7 +1008,7 @@ public sealed partial class MainForm : Form
 					peopleGrid.Columns[item2.Key].HeaderText = item2.Value;
 				}
 			}
-			ComboBox[] array2 = new ComboBox[5] { ioPerson, eHistoryPerson, payrollPerson, paymentPerson, advancePerson };
+			ComboBox[] array2 = new ComboBox[2] { ioPerson, payrollPerson };
 			foreach (ComboBox comboBox in array2)
 			{
 				string? text5 = comboBox.SelectedItem?.ToString();
@@ -1042,8 +1020,6 @@ public sealed partial class MainForm : Form
 				}
 				comboBox.SelectedItem = ((text5 != null && comboBox.Items.Contains(text5)) ? text5 : "Tümü");
 			}
-			ApplyEPeriodFilter();
-			LoadEHistory();
 			ColorPeopleRows();
 		}
 		catch (Exception ex)
