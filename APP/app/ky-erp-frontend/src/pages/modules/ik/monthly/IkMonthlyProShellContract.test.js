@@ -328,3 +328,10 @@ test("monthly payroll and movement list use only the selected period movements",
   assert.match(monthly, /const own = periodMovements\.filter/);
   assert.match(monthly, /\[periodMovements, payrollLines, rawEmployees\]/);
 });
+
+
+test("movement rows keep only edit and delete actions", () => {
+  assert.doesNotMatch(monthly, /Hareket detayı açıldı/);
+  assert.match(monthly, /onClick=\{\(\) => openFinance\(displayType, item\)\}>Düzenle<\/button>/);
+  assert.match(monthly, /onClick=\{\(\) => deleteFinance\(item\)\}>Sil<\/button>/);
+});
