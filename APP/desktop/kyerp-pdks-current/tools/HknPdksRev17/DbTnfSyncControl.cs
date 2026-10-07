@@ -18,7 +18,7 @@ internal sealed partial class DbTnfSyncControl : UserControl
     readonly CheckBox hasMovement = new() { Text = "Dönemde hareketi olan", AutoSize = true, Checked = false };
     readonly Label summary = new() { Dock = DockStyle.Bottom, Height = 42, Padding = new Padding(8), Text = "Önce DB'ye bağlanın; Kontrol Et veya SON TAM KONTROL çalıştırın." };
     readonly Label personnelSummary = new() { Dock = DockStyle.Fill, Padding = new Padding(12), Font = new Font("Segoe UI", 11), Text = "Karşılaştırmak için soldan personel seçin." };
-    readonly Label details = new() { Dock = DockStyle.Bottom, Height = 64, Padding = new Padding(8), Text = "DB ANA KAYNAK. TNF yalnız DB'deki normal hareketleri bire bir taşır; E kayıtları TNF'ye yazılmaz. Eksik eklenir, fazla/mükerrer silinir, saat DB'ye çekilir." };
+    readonly Label details = new() { Dock = DockStyle.Fill, Height = 86, Padding = new Padding(6), Text = "DB ANA KAYNAK\nSeçili personelin DB ve TNF kayıtları yukarıda yan yana gösterilir. Eksik eklenir; fazla/mükerrer silinir; E TNF'ye yazılmaz." };
     readonly ProgressBar progressBar = new() { Width = 105, Height = 26, Style = ProgressBarStyle.Marquee, Visible = false };
     readonly Button cancel = new() { Text = "İptal", Width = 65, Height = 32, Enabled = false };
     readonly DataGridView peopleGrid = Grid();
@@ -135,11 +135,25 @@ internal sealed partial class DbTnfSyncControl : UserControl
             FilterPeople();
         };
         filters.Controls.AddRange([showAll, statusFilter, errorsOnly, hasMovement, search]);
-        split.Panel1.Controls.Add(peopleGrid);
-        split.Panel1.Controls.Add(filters);
+        var left = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
+        left.Controls.Add(filters, 0, 0);
+        left.Controls.Add(peopleGrid, 0, 1);
+
+        var leftInfo = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(234, 242, 250), Padding = new Padding(7, 4, 7, 4) };
+        personnelSummary.Dock = DockStyle.Fill;
+        personnelSummary.Font = new Font("Segoe UI", 9);
+        personnelSummary.Padding = new Padding(2);
+        personnelSummary.TextAlign = ContentAlignment.MiddleLeft;
+        leftInfo.Controls.Add(personnelSummary);
+        left.Controls.Add(leftInfo, 0, 2);
+        split.Panel1.Controls.Add(left);
+
         var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
         var comparison = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         comparison.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         comparison.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -150,24 +164,26 @@ internal sealed partial class DbTnfSyncControl : UserControl
         tnfPage.Controls.Add(comparison);
         tabs.TabPages.Add(tnfPage);
         right.Controls.Add(tabs, 0, 0);
-        var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(234, 242, 250) };
-        personnelSummary.Font = new Font("Segoe UI", 9);
-        personnelSummary.Padding = new Padding(8, 5, 8, 5);
-        header.Controls.Add(personnelSummary);
-        right.Controls.Add(header, 0, 1);
+
+        var rightInfo = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(234, 242, 250), Padding = new Padding(7, 4, 7, 4) };
+        details.Dock = DockStyle.Fill;
+        details.Height = 86;
+        details.Padding = new Padding(2);
+        details.TextAlign = ContentAlignment.MiddleLeft;
+        rightInfo.Controls.Add(details);
+        right.Controls.Add(rightInfo, 0, 1);
         split.Panel2.Controls.Add(right);
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-        bar.Dock = details.Dock = summary.Dock = DockStyle.Fill;
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        bar.Dock = summary.Dock = DockStyle.Fill;
         summary.BackColor = Color.FromArgb(234,242,250);
         layout.Controls.Add(bar, 0, 0);
         layout.Controls.Add(split, 0, 1);
-        layout.Controls.Add(details, 0, 2);
-        layout.Controls.Add(summary, 0, 3);
+        layout.Controls.Add(summary, 0, 2);
         Controls.Add(layout);
         AddColumn(peopleGrid, "Card", "Kart", 60);
         AddColumn(peopleGrid, "Name", "Ad Soyad", 150);
@@ -380,7 +396,7 @@ internal sealed partial class DbTnfSyncControl : UserControl
             visiblePairs = [];
             Bind(dbGrid, visiblePairs);
             Bind(tnfGrid, visiblePairs);
-            personnelSummary.Text = "Filtreye uygun personel yok. TÜM PERSONELİ GÖSTER ile filtreleri sıfırlayabilirsiniz.";
+            personnelSummary.Text = "Filtreye uygun personel yok.\nTÜM PERSONELİ GÖSTER ile filtreleri sıfırlayın.";
             return;
         }
         selectedCard = person.Card == "FORMAT" ? "" : person.Card;
