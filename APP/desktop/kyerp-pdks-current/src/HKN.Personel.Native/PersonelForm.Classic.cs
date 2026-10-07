@@ -61,14 +61,9 @@ public partial class PersonelForm
 
         var specs = new (string Name,string Header,int Width)[]
         {
-            ("PKNO","Kart No",62),
-            ("ADSOYAD","Ad Soyad",150),
-            ("GRUPAD","Grup",102),
-            ("BOLUMAD","Bölüm",92),
-            ("GOREVAD","Görev",108),
-            ("IGTARIH","İşe Giriş",86),
-            ("ICTARIH","İşten Çıkış",86),
-            ("MAAS","Maaş",88)
+            ("PKNO","Kart No",68),
+            ("ADSOYAD","Personel Ad Soyad",170),
+            ("GRUPAD","Grup",104)
         };
         var index=0;
         foreach(var spec in specs)
@@ -80,156 +75,7 @@ public partial class PersonelForm
             col.Width=spec.Width;
             col.DisplayIndex=index++;
             col.DefaultCellStyle.NullValue="";
-            if(spec.Name=="MAAS") col.DefaultCellStyle.Format="N2";
         }
-
-        if(list.Columns.Contains("ICTARIH"))
-            list.Columns["ICTARIH"].Visible=!scopeActive.Checked;
-    }
-
-    void BuildClassicRight(TableLayoutPanel root)
-    {
-        var right=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Margin=new Padding(4,0,0,0)};
-        right.RowStyles.Add(new RowStyle(SizeType.Absolute,137)); right.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        right.Controls.Add(BuildClassicHeader(),0,0); BuildTabsClassic(); right.Controls.Add(tabs,0,1); root.Controls.Add(right,1,0);
-        var buttons=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(6,12,52,0),WrapContents=false};
-        buttons.BackColor=PdksAppearance.Current.Canvas;
-        buttons.Controls.Add(ClassicButton("Personel Bilgisi",118,()=>{if(currentPk!="")LoadPerson(currentPk);})); buttons.Controls.Add(ClassicButton("Çıkış Ver",100,MarkExit));
-        buttons.Controls.Add(ClassicButton("Personeli Düzenle",132,()=>OpenPersonEditor(false))); buttons.Controls.Add(ClassicButton("+ Yeni Personel",120,()=>OpenPersonEditor(true))); root.Controls.Add(buttons,1,1); Action syncTabLayout=()=>{bool info=tabs.SelectedIndex<=0||tabs.SelectedTab?.Text=="Personel Bilgileri";buttons.Visible=info;}; tabs.SelectedIndexChanged+=(_,_)=>syncTabLayout(); syncTabLayout();
-    }
-
-    Button ClassicButton(string text,int w,Action a)
-    {
-        var role=text.Contains("Çıkış",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Danger:
-                 text.Contains("Yeni",StringComparison.OrdinalIgnoreCase)?PdksActionRole.Primary:PdksActionRole.Secondary;
-        var b=PdksUiKit.Button(text,w,role,a);
-        b.Height=34;b.MinimumSize=new Size(w,34);b.MaximumSize=new Size(w,34);
-        return b;
-    }
-    Control BuildClassicHeader()
-    {
-        var p=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,RowCount=6,Padding=new Padding(5,3,5,3),Margin=Padding.Empty};
-        p.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,78)); p.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,92)); p.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,58)); p.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100)); p.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,96));
-        for(int i=0;i<6;i++)p.RowStyles.Add(new RowStyle(SizeType.Percent,16.66f));
-        HeaderField(p,0,"Kart Numarası","PKNO"); HeaderField(p,1,"Grubu","GRUPAD",false); HeaderField(p,2,"Adı","AD"); HeaderField(p,3,"Bölümü","BOLUMAD",false);
-        HeaderField(p,4,"Soyadı","SOYAD"); HeaderField(p,5,"Durum","DURUMAD",false); HeaderField(p,6,"Maaşı","MAAS"); HeaderField(p,7,"Servis Hattı","SERVISAD",false);
-        HeaderField(p,8,"İşe Giriş Tarihi","IGTARIH"); HeaderField(p,9,"Görev","GOREVAD",false); HeaderField(p,10,"Çıkış Tarihi","ICTARIH"); HeaderField(p,11,"Firma","FIRMAAD",false);
-        p.Controls.Add(photo,4,0); p.SetRowSpan(photo,6); return p;
-    }
-
-    void HeaderField(TableLayoutPanel p,int i,string label,string key,bool edit=true)
-    {
-        var palette=PdksAppearance.Current;
-        int row=i/2;int col=(i%2)*2;
-        var l=new Label{Text=label,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Margin=new Padding(0,1,4,1),ForeColor=palette.Muted,Font=new Font("Segoe UI",8.2f,FontStyle.Bold)};
-        var t=new TextBox{Dock=DockStyle.Fill,ReadOnly=true,Margin=new Padding(0,1,6,1),BorderStyle=BorderStyle.FixedSingle,BackColor=palette.SurfaceAlt,ForeColor=palette.Text};
-        f[key]=t;p.Controls.Add(l,col,row);p.Controls.Add(t,col+1,row);
-    }
-
-    void BuildTabsClassic()
-    {
-        var palette=PdksAppearance.Current;
-        tabs.TabPages.Clear(); tabs.Margin=Padding.Empty; tabs.Padding=new Point(7,3); tabs.Font=Font;tabs.BackColor=palette.Surface;
-        var info=new TabPage("Personel Bilgileri"){BackColor=palette.Surface,UseVisualStyleBackColor=false};
-        var inner=new TabControl{Dock=DockStyle.Fill,Font=Font,Padding=new Point(7,3),BackColor=palette.Surface};
-        inner.TabPages.Add(BuildCanonicalBasicTab());
-        inner.TabPages.Add(BuildCanonicalIdentityTab());
-        inner.TabPages.Add(BuildCanonicalContactTab());
-        inner.TabPages.Add(BuildCanonicalDocumentsTab());
-        inner.TabPages.Add(BuildCanonicalWorkSgkTab());
-        inner.TabPages.Add(BuildCanonicalExtraPaymentsTab());
-        inner.TabPages.Add(BuildCanonicalPayrollTab());
-        foreach(TabPage page in inner.TabPages){page.BackColor=palette.Surface;page.UseVisualStyleBackColor=false;}
-        info.Controls.Add(inner);
-        tabs.TabPages.Add(info);
-        tabs.TabPages.Add(BuildGirisClassic());
-        tabs.TabPages.Add(BuildIzinClassic());
-        tabs.TabPages.Add(BuildEkkClassic());
-        tabs.TabPages.Add(BuildBilgiClassic());
-        tabs.TabPages.Add(BuildPersonMonthlyPayrollTab());
-        tabs.TabPages.Add(BuildOdemeClassic());
-        ApplyClassicGridStyles();
-    }
-
-    TabPage BuildKimlikClassic()
-    {
-        var page=new TabPage("Kimlik Bilgileri");var t=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=9,Padding=new Padding(4)};
-        t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,42));t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,58));
-        string[] z={"Ulusal Kimlik No","UKNO","Cinsiyeti","CINSIYET","Nüfusa Kayıtlı Olduğu İl","IL","Kan Grubu","KGB","Nüfusa Kayıtlı Olduğu İlçe","ILCE","Cilt No","CILTNO","Doğum Tarihi","DTARIH","Sayfa No","SAYFANO","Doğum Yeri","DYER","Kayıt No","KAYITNO","Baba Adı","BABAAD","Kütük Sıra No","KSIRANO","Ana Adı","ANAAD","N. C. Verildiği Yer","VYER","Medeni Hali","MEDHAL","N. C. Verildiği Tarih","NCVTAR","Uyruğu","UYRUK","N. C. Veriliş Nedeni","NCVNED"};
-        FillPairs(t,z);page.Controls.Add(t);return page;
-    }
-    TabPage BuildKisiselClassic()
-    {
-        var page=new TabPage("Kişisel Bilgileri");var t=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=14,Padding=new Padding(4)};
-        t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,42));t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,58));
-        string[] z={"Vergi Kimlik No","VKNO","SSK No","SSKNO","Askerlik Durumu","ASDURUM","Elbise Beden No","ELBNO","Eğitim Durumu","EGTDURUM","Ayakkabı No","AYNO","Yabancı Dil","YDIL","Kullandığı İzin","KULIZIN","Uzmanlık Alanı","UALAN","Çocuk Sayısı","CCKSAY","Ehliyetin Sınıfı","ESINIF","Ev Telefonu","EVTEL","Ehliyetin Verildiği İl/İlçe","EVILILCE","Cep Telefonu","GSM","Ehliyet Belge Numarası","EBELGENO","Fazla Mesai Ücreti","MSUCRET","Ehliyetin Verildiği Tarih","EVTAR","Günlük Yemek Ücreti","GYEMUCRET","Kullandığı Cihaz","EKC","Günlük Yol Ücreti","GYUCRET","Eski Maaşı","EMAAS","İşten Çıkış Sebebi","ICIKSEBEB","Saat Ücreti","NSUCRET","Adres","ADRES","Banka Hesap No","BHNO","SGK İşe Giriş Tarihi","SGKGIRTAR"};
-        FillPairs(t,z);page.Controls.Add(t);return page;
-    }
-
-    void FillPairs(TableLayoutPanel t,string[] z)
-    {
-        for(int i=0;i<z.Length;i+=2){int n=i/2,row=n/2,col=(n%2)*2;if(string.IsNullOrWhiteSpace(z[i]))continue;
-            var l=new Label{Text=z[i],Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Margin=new Padding(0,0,2,0)};var b=new TextBox{Dock=DockStyle.Fill,BorderStyle=BorderStyle.FixedSingle,Margin=new Padding(0,0,3,1)};
-            if(!string.IsNullOrEmpty(z[i+1]))f[z[i+1]]=b;t.Controls.Add(l,col,row);t.Controls.Add(b,col+1,row);}
-    }
-
-    Control BuildClassicSearch()
-    {
-        var outer=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,Padding=new Padding(0,4,0,0),Margin=Padding.Empty};outer.RowStyles.Add(new RowStyle(SizeType.Absolute,34));outer.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        var row=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Margin=Padding.Empty};var prev=NavButton("◀",-1);var next=NavButton("▶",1);searchField.Items.AddRange(new object[]{"Kart No","Ad","Soyad","İşe Giriş Tarihi","İşten Çıkış Tarihi"});searchField.SelectedIndex=0;
-        row.Controls.Add(prev);row.Controls.Add(new Label{Text="Ara",AutoSize=true,Padding=new Padding(3,7,2,0)});row.Controls.Add(searchField);row.Controls.Add(searchText);row.Controls.Add(scopeActive);row.Controls.Add(scopePassive);row.Controls.Add(scopeAll);row.Controls.Add(next);outer.Controls.Add(row,0,0);
-        var g=new GroupBox{Text="Sıralama Şekli",Dock=DockStyle.Fill,Padding=new Padding(5,0,0,0)};string[] names={"Kart No","Ad","Soyad","İşe Giriş Tarihi","İşten Çıkış Tarihi"};string[] cols={"PKNO","AD","SOYAD","IGTARIH","ICTARIH"};
-        for(int i=0;i<names.Length;i++){var r=new RadioButton{Text=names[i],AutoSize=true,Checked=i==0,Tag=cols[i],Margin=new Padding(2,3,4,0)};r.CheckedChanged+=SortChanged;sortPanel.Controls.Add(r);}g.Controls.Add(sortPanel);outer.Controls.Add(g,0,1);
-        searchText.TextChanged+=(_,_)=>ApplyClassicSearch();searchField.SelectedIndexChanged+=(_,_)=>ApplyClassicSearch();scopeActive.CheckedChanged+=(_,_)=>{if(scopeActive.Checked)Reload();};scopePassive.CheckedChanged+=(_,_)=>{if(scopePassive.Checked)Reload();};scopeAll.CheckedChanged+=(_,_)=>{if(scopeAll.Checked)Reload();};return outer;
-    }
-    void QueuePersonLoad(){if(list.CurrentRow?.Cells["PKNO"].Value is not object v)return;pendingPersonPk=v.ToString()??"";personLoadTimer.Stop();personLoadTimer.Start();}
-    void PersonListFormat(object? sender,DataGridViewCellFormattingEventArgs e)
-    {
-        if(e.RowIndex<0||!list.Columns.Contains("ICTARIH"))return;
-        var st=e.CellStyle;if(st is null)return;
-        var exited=list.Rows[e.RowIndex].Cells["ICTARIH"].Value is not null and not DBNull;
-        var palette=PdksAppearance.Current;
-        if(palette.IsDark)
-        {
-            st.BackColor=exited?palette.DangerSoft:palette.SurfaceAlt;
-            st.ForeColor=palette.Text;
-            st.SelectionBackColor=palette.Selection;
-            st.SelectionForeColor=palette.Text;
-            return;
-        }
-        var back=exited?Color.FromArgb(255,238,238):Color.FromArgb(238,250,240);
-        var sel=exited?Color.FromArgb(250,220,220):Color.FromArgb(216,240,222);
-        st.BackColor=back;st.ForeColor=Color.FromArgb(35,55,65);st.SelectionBackColor=sel;st.SelectionForeColor=Color.FromArgb(25,45,55);
-    }
-    Button NavButton(string text,int delta){var b=PdksUiKit.Button(text,32,PdksActionRole.Quiet,()=>MoveRow(delta));b.Height=28;b.MinimumSize=new Size(32,28);b.MaximumSize=new Size(32,28);b.Margin=new Padding(1,1,1,0);return b;}
-    void MoveRow(int d){if(list.Rows.Count==0)return;int i=list.CurrentRow?.Index??0;i=Math.Max(0,Math.Min(list.Rows.Count-1,i+d));list.CurrentCell=list.Rows[i].Cells[0];}
-    void ApplyClassicSearch(){if(list.DataSource is not DataTable dt)return;string s=searchText.Text.Replace("'","''").Trim();string c=searchField.SelectedIndex switch{1=>"AD",2=>"SOYAD",3=>"IGTARIH",4=>"ICTARIH",_=>"PKNO"};dt.DefaultView.RowFilter=s.Length==0?"":(c is "IGTARIH" or "ICTARIH"?$"CONVERT({c}, 'System.String') LIKE '%{s}%'":$"{c} LIKE '%{s}%'");UpdateClassicStats();}
-    void SortChanged(object? sender,EventArgs e){if(sender is RadioButton r&&r.Checked&&list.DataSource is DataTable dt)dt.DefaultView.Sort=$"{r.Tag} ASC";}
-
-    Control BuildClassicStatus()
-    {
-        var p=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,Margin=Padding.Empty,CellBorderStyle=TableLayoutPanelCellBorderStyle.Single};
-        for(int i=0;i<4;i++)p.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));p.Controls.Add(stActive,0,0);p.Controls.Add(stLeft,1,0);p.Controls.Add(stTotal,2,0);p.Controls.Add(stListed,3,0);return p;
-    }
-    void UpdateClassicStats()
-    {
-        try{int a=Convert.ToInt32(S("select count(*) from KIMLIK where ICTARIH is null"));int t=Convert.ToInt32(S("select count(*) from KIMLIK"));stActive.Text=$"Aktif Çalışan Personel : {a}";stLeft.Text=$"İşten Ayrılan Personel : {t-a}";stTotal.Text=$"Toplam Personel : {t}";stListed.Text=$"Listelenen Personel : {list.Rows.Count}";}catch{}
-    }
-
-    void SelectPeriodForToday(ComboBox c){if(c.DataSource is not DataTable d)return;int grp=0;try{var k=Q("select GRUP from KIMLIK where PKNO=@PK",new FirebirdSql.Data.FirebirdClient.FbParameter("@PK",currentPk));if(k.Rows.Count>0&&k.Rows[0][0]!=DBNull.Value)grp=Convert.ToInt32(k.Rows[0][0]);}catch{}for(int i=0;i<d.Rows.Count;i++){var r=d.Rows[i];if(r["BASTAR"]==DBNull.Value||r["BITTAR"]==DBNull.Value)continue;var a=((DateTime)r["BASTAR"]).Date;var b=((DateTime)r["BITTAR"]).Date;int g=r["GRUP"]==DBNull.Value?0:Convert.ToInt32(r["GRUP"]);if(DateTime.Today.Date>=a&&DateTime.Today.Date<=b&&(grp==0||g==grp)){c.SelectedIndex=i;return;}}}
-    void ApplyClassicGridStyles()
-    {
-        StyleGrid(gGiris);StyleGrid(gIzin);StyleGrid(gEkk);StyleGrid(gBilgi);StyleGrid(gOdeme);StyleGrid(personPayrollGrid);
-        gGiris.CellFormatting-=GirisFormat;gGiris.CellFormatting+=GirisFormat;gBilgi.CellFormatting-=BilgiFormat;gBilgi.CellFormatting+=BilgiFormat;
-        gGiris.DataBindingComplete-=GirisBound;gGiris.DataBindingComplete+=GirisBound;gIzin.DataBindingComplete-=IzinBound;gIzin.DataBindingComplete+=IzinBound;gEkk.DataBindingComplete-=EkkBound;gEkk.DataBindingComplete+=EkkBound;gBilgi.DataBindingComplete-=BilgiBound;gBilgi.DataBindingComplete+=BilgiBound;gOdeme.DataBindingComplete-=OdemeBound;gOdeme.DataBindingComplete+=OdemeBound;
-    }
-    void StyleGrid(DataGridView g)
-    {
-        var p=PdksAppearance.Current;
-        g.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;g.RowHeadersVisible=false;g.RowTemplate.Height=29;g.ColumnHeadersHeight=34;
-        g.BackgroundColor=p.Surface;g.BorderStyle=BorderStyle.None;g.GridColor=p.Border;g.DefaultCellStyle.Font=Font;
-        g.DefaultCellStyle.BackColor=p.Surface;g.DefaultCellStyle.ForeColor=p.Text;g.DefaultCellStyle.SelectionBackColor=p.Selection;g.DefaultCellStyle.SelectionForeColor=p.Text;
-        g.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",8.5f,FontStyle.Bold);g.ColumnHeadersDefaultCellStyle.BackColor=p.GridHeader;g.ColumnHeadersDefaultCellStyle.ForeColor=p.Text;g.EnableHeadersVisualStyles=false;
     }
 
     void GirisBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gGiris,"SIRA",0,false);SetCol(gGiris,"GIRIS_TARIHI",104,true,"Giriş Tarihi");SetCol(gGiris,"GIRIS_SAATI",78,true,"Giriş");SetCol(gGiris,"GTUR",0,false);SetCol(gGiris,"CIKIS_TARIHI",104,true,"Çıkış Tarihi");SetCol(gGiris,"CIKIS_SAATI",78,true,"Çıkış");SetCol(gGiris,"CTUR",0,false);OrderGirisColumns();}
