@@ -13,6 +13,7 @@ const PAGE_LABELS = {
   "/mobile/muhasebe/urunler": "Ürünler",
   "/mobile/ik": "İnsan Kaynakları",
   "/mobile/ik/aylik": "Aylık Personel",
+  "/mobile/pdks": "PDKS Canlı",
   "/mobile/imalat": "İmalat Merkezi",
   "/mobile/imalat/gunluk": "İmalat Günlük",
   "/mobile/imalat/rapor": "İmalat Rapor",
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { path: "/mobile/yonetim", label: "Yönetim", icon: "📊" },
   { path: "/mobile/muhasebe", label: "Muhasebe", icon: "💼" },
   { path: "/mobile/ik", label: "İK", icon: "👥" },
+  { path: "/mobile/pdks", label: "PDKS", icon: "⏱️" },
   { path: "/mobile/imalat", label: "İmalat", icon: "🏭" },
   { path: "/mobile/desen", label: "Desen", icon: "🖼️" },
 ];
@@ -45,6 +47,7 @@ function isNavActive(item, currentPath) {
   if (item.path === "/mobile/yonetim") return currentPath.startsWith("/mobile/yonetim");
   if (item.path === "/mobile/muhasebe") return currentPath.startsWith("/mobile/muhasebe");
   if (item.path === "/mobile/ik") return currentPath.startsWith("/mobile/ik");
+  if (item.path === "/mobile/pdks") return currentPath.startsWith("/mobile/pdks");
   if (item.path === "/mobile/imalat") return currentPath.startsWith("/mobile/imalat");
   if (item.path === "/mobile/desen") return currentPath.startsWith("/mobile/desen") || currentPath.startsWith("/mobile/boyahane");
   return false;
