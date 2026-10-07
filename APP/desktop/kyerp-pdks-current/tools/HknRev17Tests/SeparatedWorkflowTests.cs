@@ -43,7 +43,7 @@ internal static class SeparatedWorkflowTests
         check(wrong.Entry == "08:33" && wrong.Exit == "18:56", "DB KAYIT wrong sides corrected without changing in-band clocks");
         var irfan = snapshot.Plan.Single(plan => plan.Card == "00056" && plan.Day.Day == 7);
         check(irfan.Entry == "08:23" && irfan.Exit == "18:51" && irfan.Operation.Contains("SİLİNECEK"), "DB KAYIT extra 19:00 entry removed; correct pair retained");
-        check(snapshot.Plan.All(plan => MonthlyDbNormalization.InRange("Giriş", plan.Entry) && MonthlyDbNormalization.InRange("Çıkış", plan.Exit)), "DB KAYIT generated and corrected clocks all within inclusive bands");
+        check(snapshot.Plan.All(plan => DbRecordService.InRange(snapshot.WorkHours, "Giriş", plan.Entry) && DbRecordService.InRange(snapshot.WorkHours, "Çıkış", plan.Exit)), "REV25 DB KAYIT generated and corrected clocks all within shared policy bands");
         var absent = snapshot.Plan.Where(plan => plan.Card == "00053").ToArray();
         check(absent.Zip(absent.Skip(1)).All(pair => pair.First.Entry != pair.Second.Entry && pair.First.Exit != pair.Second.Exit), "DB KAYIT natural generated clocks do not repeat on consecutive selected days");
         var malicious = snapshot with { Plan = snapshot.Plan.Select((plan, index) => index == 0 ? plan with { EntryId = 98765 } : plan).ToArray() };
