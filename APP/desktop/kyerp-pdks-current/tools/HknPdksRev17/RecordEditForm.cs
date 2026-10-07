@@ -72,5 +72,6 @@ public sealed class RecordEditForm : Form
 		base.Controls.Add(tableLayoutPanel);
 		base.AcceptButton = button;
 		base.CancelButton = button2;
+		AppTheme.Apply(this);
 	}
 }
