@@ -27,7 +27,7 @@ dotnet run --project $tests -c Release
 if ($LASTEXITCODE -ne 0) { throw 'REV25 testleri başarısız.' }
 
 Write-Host 'REV25 tek EXE publish...' -ForegroundColor Cyan
-dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o $publish
+dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o $publish
 if ($LASTEXITCODE -ne 0) { throw 'REV25 publish başarısız.' }
 
 $publishedExe = Join-Path $publish 'QuickDataTool.exe'
