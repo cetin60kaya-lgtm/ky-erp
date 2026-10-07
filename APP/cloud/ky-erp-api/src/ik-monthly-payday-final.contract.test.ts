@@ -147,8 +147,8 @@ test("payroll output is read-only while month lock owns editability", () => {
   assert.doesNotMatch(monthly, /Bordroyu Tamamla \/ PDF/);
   assert.doesNotMatch(monthly, /10['’]lu Fiş \+ Tamamla/);
   assert.match(monthly, />Bordro PDF</);
-  assert.match(monthly, />Ayı Kilitle</);
-  assert.match(monthly, />Kilidi Aç</);
+  assert.ok(monthly.includes('"Ayı Kilitle"'));
+  assert.ok(monthly.includes('"Kilidi Aç"'));
   assert.match(monthly, /unlock,/);
   assert.match(relational, /body\.unlock === true/);
   assert.match(relational, /"UNLOCK"/);
