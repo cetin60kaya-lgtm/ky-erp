@@ -69,7 +69,7 @@ internal static partial class DbRecordService
                     changes.Add(new(card, name, day, side, keeper.Time, targetTime,
                         "DÜZELT", keeper.Id, keeper.Side));
 
-                foreach (var extra in candidates.Where(move => move.Id != keeper.Id).OrderBy(move => move.Id))
+                foreach (var extra in candidates.Where(move => move.Id != keeper.Id || move.Side != keeper.Side).OrderBy(move => move.Id).ThenBy(move => move.Side))
                     changes.Add(new(card, name, day, side, extra.Time, "-",
                         "SİL", extra.Id, extra.Side));
             }
