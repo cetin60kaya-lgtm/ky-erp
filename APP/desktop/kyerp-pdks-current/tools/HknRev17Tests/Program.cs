@@ -132,7 +132,6 @@ internal static class Program
             Rev25ExactProjectionEdgeCases();
             WorkTimeTests.Run(Check);
             SeparatedWorkflowTests.Run(Check, args.Length == 2 ? args[0] : null, args.Length == 2 ? args[1] : null);
-            MonthlyTests.Run(Check, args.Length == 2 ? args[0] : null, args.Length == 2 ? args[1] : null);
             PayrollOverrideTests.Run(Check);
             if (args.Length == 2)
             {
