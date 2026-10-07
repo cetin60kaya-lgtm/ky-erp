@@ -83,7 +83,7 @@ internal static class SeparatedWorkflowTests
               "REV25 E movement is never written to TNF");
 
         var addEntryDay = new DateTime(2026,11,10);
-        db.Execute("insert into GIRCIK(SIRA,PKNO,CTARIH,CSAAT,CDAKIKA,CTUR,MKOD) values(10,'00056',@D,'18:55',1135,'','000')",
+        db.Execute("insert into GIRCIK(SIRA,PKNO,CTARIH,CSAAT,CDAKIKA,CTUR,MKOD) values(10010,'00056',@D,'18:55',1135,'','000')",
             new FbParameter("@D", addEntryDay));
         var addEntry = DbRecordService.Read(db, ["00056"], [addEntryDay], CancellationToken.None, mode: DbRecordMode.AddEntry);
         check(addEntry.Changes.Length == 1 && addEntry.Changes[0].Side == "Giriş" && addEntry.Changes[0].Operation == "EKLE",
@@ -93,7 +93,7 @@ internal static class SeparatedWorkflowTests
               "REV25 Giriş Ekle is idempotent");
 
         var addExitDay = new DateTime(2026,11,11);
-        db.Execute("insert into GIRCIK(SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,MKOD) values(11,'00056',@D,'08:30',510,'','000')",
+        db.Execute("insert into GIRCIK(SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,MKOD) values(10011,'00056',@D,'08:30',510,'','000')",
             new FbParameter("@D", addExitDay));
         var addExit = DbRecordService.Read(db, ["00056"], [addExitDay], CancellationToken.None, mode: DbRecordMode.AddExit);
         check(addExit.Changes.Length == 1 && addExit.Changes[0].Side == "Çıkış",
@@ -108,7 +108,7 @@ internal static class SeparatedWorkflowTests
 
         var staleDay = new DateTime(2026,11,16);
         var stale = DbRecordService.Read(db, ["00056"], [staleDay], CancellationToken.None, mode: DbRecordMode.AddBoth);
-        db.Execute("insert into GIRCIK(SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,MKOD) values(16,'00056',@D,'08:31',511,'','000')",
+        db.Execute("insert into GIRCIK(SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,MKOD) values(10016,'00056',@D,'08:31',511,'','000')",
             new FbParameter("@D", staleDay));
         var rejected = false;
         try { DbRecordService.ApplyAsync(db, stale, missingTnf, CancellationToken.None).GetAwaiter().GetResult(); }
