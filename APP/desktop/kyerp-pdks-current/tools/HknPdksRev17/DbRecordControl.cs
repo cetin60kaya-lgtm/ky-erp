@@ -17,6 +17,7 @@ internal sealed class DbRecordControl : UserControl
     readonly DataGridView preview = new() { Dock = DockStyle.Fill, ReadOnly = true, AutoGenerateColumns = false, AllowUserToAddRows = false,
         RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, BackgroundColor = Color.White };
     readonly Label status = new() { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(8), Text = "DB'ye bağlanın; personeller otomatik yüklenir. Gün/personel seçip ÖNİZLE çalıştırın." };
+    readonly Label workTimeInformation = new() { Dock = DockStyle.Fill, Padding = new Padding(8), Text = "Saatler sabit değildir. Giriş/çıkış aralığı Hedef DB çalışma ayarından alınır; yeni saatler bu aralıkta doğal dağıtılır." };
     readonly ProgressBar progress = new() { Width = 110, Style = ProgressBarStyle.Marquee, Visible = false };
     readonly List<Control> controls = [];
     readonly Button cancel = new() { Text = "İptal", Width = 65, Enabled = false };
@@ -71,7 +72,7 @@ internal sealed class DbRecordControl : UserControl
         layout.RowStyles.Add(new(SizeType.AutoSize)); layout.RowStyles.Add(new(SizeType.AutoSize)); layout.RowStyles.Add(new(SizeType.Percent, 100));
         layout.RowStyles.Add(new(SizeType.Absolute, 60)); layout.RowStyles.Add(new(SizeType.Absolute, 42));
         layout.Controls.Add(top, 0, 0); layout.Controls.Add(buttons, 0, 1); layout.Controls.Add(content, 0, 2);
-        layout.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(8), Text = "Giriş: 08:15–08:45 | Çıkış: 18:30–19:30 | Yeni saatler doğal dağılır.\nYalnız seçilen işlem, personel ve günler değiştirilir. E türleri korunur; ana TNF aynı işlemde otomatik hizalanır." }, 0, 3);
+        layout.Controls.Add(workTimeInformation, 0, 3);
         layout.Controls.Add(status, 0, 4); Controls.Add(layout);
         controls.AddRange([people, days]);
         year.ValueChanged += (_, _) => SetMonth(); month.SelectedIndexChanged += (_, _) => SetMonth();
@@ -137,6 +138,7 @@ internal sealed class DbRecordControl : UserControl
             var result = await Task.Run(() => DbRecordService.Read(database, cards, dates, cancellation.Token, mode: mode), cancellation.Token);
             if (IsDisposed || !ReferenceEquals(database, Database)) return;
             snapshot = result; previewDatabase = database; preview.DataSource = result.Changes;
+            workTimeInformation.Text = $"Saatler sabit değildir. {result.WorkHours.Information}. Yeni saatler yalnız bu aralık içinde doğal dağıtılır; ardışık günlerde aynı dakika tekrarı engellenir. E türleri korunur; ana TNF aynı işlemde DB'ye göre hizalanır.";
             status.Text = $"{operation.Text} | Personel: {cards.Length} | Gün: {dates.Length} | Yapılacak işlem: {result.Changes.Length} | {timer.ElapsedMilliseconds} ms";
         }
         catch (OperationCanceledException) { if (!IsDisposed) status.Text = "İptal edildi."; }
