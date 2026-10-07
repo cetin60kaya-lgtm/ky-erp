@@ -299,7 +299,8 @@ test("payroll final control exposes every financial value and saves back to cano
   assert.match(api, /\/ik\/advanced\/payroll\/final-control/);
 
   assert.match(cloud, /async function saveAdvancedPayrollFinalControl/);
-  assert.match(cloud, /pushCorrection\("overtime", "Mesai", "Bordro"\)/);
+  assert.doesNotMatch(cloud, /pushCorrection\("overtime", "Mesai", "Bordro"\)/);
+  assert.match(cloud, /OVERTIME_SOURCE_MISMATCH/);
   assert.match(cloud, /pushCorrection\("advance", "Avans"/);
   assert.match(cloud, /pushCorrection\("deduction", "Ozel kesinti"/);
   assert.match(cloud, /Bordro kaynak kontrolü/);
