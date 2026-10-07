@@ -35,12 +35,16 @@ if (-not (Test-Path $publishedExe)) { throw 'QuickDataTool.exe oluşmadı.' }
 Copy-Item $publishedExe $finalExe -Force
 
 $hash = (Get-FileHash $finalExe -Algorithm SHA256).Hash
-$head = ''
-$branchName = ''
-try {
-    $head = (git -C $root rev-parse HEAD).Trim()
-    $branchName = (git -C $root branch --show-current).Trim()
-} catch {}
+$head = $env:GITHUB_SHA
+$branchName = $env:GITHUB_REF_NAME
+if (Test-Path (Join-Path $root '.git')) {
+    try {
+        $head = (git -C $root rev-parse HEAD 2>$null).Trim()
+        $branchName = (git -C $root branch --show-current 2>$null).Trim()
+    } catch {}
+}
+if ([string]::IsNullOrWhiteSpace($head)) { $head = 'source-snapshot' }
+if ([string]::IsNullOrWhiteSpace($branchName)) { $branchName = 'codex/kyerp-pdks-full-app-prep' }
 
 $info = @(
     'HKN PDKS REV25 FINAL'
