@@ -38,29 +38,43 @@ internal static class Program
             form.Show();
             Application.DoEvents();
             dynamic clock = host.Clock;
-            if (clock == null) return Fail("FP_CLOCK ActiveX başlatılamadı.");
+            if (clock == null) return Fail("Terminal ActiveX sürücüsü başlatılamadı.");
+            var ps2000 = adapter.IndexOf("PS2000", StringComparison.OrdinalIgnoreCase) >= 0;
             try
             {
                 string endpoint = ip;
-                if (!clock.SetIPAddress(ref endpoint, port, password)) return Fail("Cihaz IP/port ayarı kabul edilmedi.");
-                if (!clock.OpenCommPort(machine)) { int err = 0; try { clock.GetLastError(ref err); } catch { } return Fail("Kart cihazına bağlantı açılamadı. SDK hata kodu: " + err); }
+                if (ps2000)
+                {
+                    if (!clock.ConnectTcpip(machine, ref endpoint, port, password))
+                    {
+                        int err = 0; try { clock.GetLastError(ref err); } catch { }
+                        return Fail("PS-2000/A3 cihaz bağlantısı açılamadı. SDK hata kodu: " + err);
+                    }
+                }
+                else
+                {
+                    if (!clock.SetIPAddress(ref endpoint, port, password)) return Fail("Cihaz IP/port ayarı kabul edilmedi.");
+                    if (!clock.OpenCommPort(machine)) { int err = 0; try { clock.GetLastError(ref err); } catch { } return Fail("Kart cihazına bağlantı açılamadı. SDK hata kodu: " + err); }
+                }
                 try
                 {
-                    clock.ReadMark = false;
+                    try { clock.ReadMark = false; } catch { }
                     try { clock.EnableDevice(machine, false); } catch { }
-                    int year = 0, month = 0, day = 0, hour = 0, minute = 0, dayOfWeek = 0;
-                    bool timeOk = clock.GetDeviceTime(machine, ref year, ref month, ref day, ref hour, ref minute, ref dayOfWeek);
+                    int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0, dayOfWeek = 0;
+                    bool timeOk = ps2000
+                        ? clock.GetDeviceTime(machine, ref year, ref month, ref day, ref hour, ref minute, ref second, ref dayOfWeek)
+                        : clock.GetDeviceTime(machine, ref year, ref month, ref day, ref hour, ref minute, ref dayOfWeek);
                     int users = Status(clock, machine, 2);
                     int newLogs = Status(clock, machine, 6);
                     int cards = Status(clock, machine, 7);
                     var deviceTime = timeOk
-                        ? new DateTime(year, month, day, hour, minute, 0).ToString("s", CultureInfo.InvariantCulture)
+                        ? new DateTime(year, month, day, hour, minute, ps2000 ? second : 0).ToString("s", CultureInfo.InvariantCulture)
                         : "";
                     Console.WriteLine("STATUS|OK|" + deviceTime + "|" + newLogs + "|" + users + "|" + cards);
                     var identity = ReadIdentity(clock, machine);
                     Console.WriteLine("IDENTITY|" + Safe(identity.SerialNumber) + "|" + Safe(identity.ProductCode) + "|" + Safe(identity.FirmwareVersion));
-                    if (mode == "read") ReadNew(clock, machine);
-                    else if (mode == "readall") ReadAll(clock, machine);
+                    if (mode == "read") ReadNew(clock, machine, ps2000);
+                    else if (mode == "readall") ReadAll(clock, machine, ps2000);
                     else if (mode == "users") ReadUsers(clock, machine);
                     else if (mode == "deleteuser")
                     {
@@ -106,7 +120,8 @@ internal static class Program
                 finally
                 {
                     try { clock.EnableDevice(machine, true); } catch { }
-                    try { clock.CloseCommPort(); } catch { }
+                    if (ps2000) { try { clock.Disconnect(); } catch { } }
+                    else { try { clock.CloseCommPort(); } catch { } }
                 }
             }
             catch (Exception ex) { return Fail(ex.GetBaseException().Message); }
@@ -273,7 +288,7 @@ internal static class Program
         return (value ?? "").Replace("|", "/").Replace("\r", " ").Replace("\n", " ");
     }
 
-    private static void ReadNew(dynamic clock, int machine)
+    private static void ReadNew(dynamic clock, int machine, bool ps2000)
     {
         var count = 0;
         bool prepared = false;
@@ -289,9 +304,14 @@ internal static class Program
                 bool ok = false;
                 try
                 {
-                    ok = clock.GetGeneralLogDataWithSecond(
-                        machine, ref terminal, ref enroll, ref enrollMachine, ref verify, ref inout, ref evt,
-                        ref year, ref month, ref day, ref hour, ref minute, ref second);
+                    if (ps2000)
+                        ok = clock.GetGeneralLogData(
+                            machine, ref terminal, ref enroll, ref enrollMachine, ref verify,
+                            ref year, ref month, ref day, ref hour, ref minute, ref second);
+                    else
+                        ok = clock.GetGeneralLogDataWithSecond(
+                            machine, ref terminal, ref enroll, ref enrollMachine, ref verify, ref inout, ref evt,
+                            ref year, ref month, ref day, ref hour, ref minute, ref second);
                 }
                 catch { ok = false; }
                 if (!ok) break;
@@ -300,38 +320,6 @@ internal static class Program
                 catch { continue; }
                 WriteLog(enroll, at, inout, verify, evt, terminal);
                 count++;
-            }
-        }
-
-        // Some PS-2000/A3 family terminals expose new-log status but do not return
-        // records through the WithSecond getter. Fall back to the legacy getter.
-        if (count == 0)
-        {
-            prepared = false;
-            try { prepared = clock.ReadGeneralLogData(machine); }
-            catch { prepared = false; }
-
-            if (prepared)
-            {
-                while (true)
-                {
-                    int terminal = 0, enroll = 0, enrollMachine = 0, verify = 0, inout = 0, evt = 0;
-                    int year = 0, month = 0, day = 0, hour = 0, minute = 0;
-                    bool ok = false;
-                    try
-                    {
-                        ok = clock.GetGeneralLogData(
-                            machine, ref terminal, ref enroll, ref enrollMachine, ref verify, ref inout, ref evt,
-                            ref year, ref month, ref day, ref hour, ref minute);
-                    }
-                    catch { ok = false; }
-                    if (!ok) break;
-                    DateTime at;
-                    try { at = new DateTime(year, month, day, hour, minute, 0); }
-                    catch { continue; }
-                    WriteLog(enroll, at, inout, verify, evt, terminal);
-                    count++;
-                }
             }
         }
 
@@ -347,7 +335,7 @@ internal static class Program
             at.ToString("s", CultureInfo.InvariantCulture) + "|" + inout + "|" + verify + "|" + evt + "|" + terminal);
     }
 
-    private static void ReadAll(dynamic clock, int machine)
+    private static void ReadAll(dynamic clock, int machine, bool ps2000)
     {
         var count = 0;
         bool prepared = false;
@@ -364,7 +352,13 @@ internal static class Program
                 bool ok;
                 try
                 {
-                    if (useAllGetter)
+                    if (ps2000)
+                    {
+                        ok = clock.GetAllGLogData(
+                            machine, ref terminal, ref enroll, ref enrollMachine, ref verify,
+                            ref year, ref month, ref day, ref hour, ref minute, ref second);
+                    }
+                    else if (useAllGetter)
                         ok = clock.GetAllGLogDataWithSecond(
                             machine, ref terminal, ref enroll, ref enrollMachine, ref verify, ref inout, ref evt,
                             ref year, ref month, ref day, ref hour, ref minute, ref second);
@@ -375,7 +369,7 @@ internal static class Program
                 }
                 catch
                 {
-                    if (!useAllGetter) break;
+                    if (ps2000 || !useAllGetter) break;
                     useAllGetter = false;
                     continue;
                 }
