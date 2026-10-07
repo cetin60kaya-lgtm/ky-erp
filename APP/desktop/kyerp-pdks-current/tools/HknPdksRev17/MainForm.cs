@@ -211,6 +211,7 @@ public sealed partial class MainForm : Form
 	};
 
 	private FirebirdDatabase? db;
+	internal FirebirdDatabase? Database => db;
 	internal WorkTimePolicy WorkHours { get; private set; } = WorkTimePolicy.Default;
 	internal event EventHandler? WorkHoursChanged;
 	internal void SetWorkHours(WorkTimePolicy policy)
@@ -264,7 +265,12 @@ public sealed partial class MainForm : Form
 		{
 			DetectSources();
 		};
-		ioYear.Value = eYear.Value = eHistoryYear.Value = payrollYear.Value = paymentYear.Value = advanceYear.Value = DateTime.Today.Year;
+		ioYear.Value = eYear.Value = eHistoryYear.Value = DateTime.Today.Year;
+		var previousMonth = DateTime.Today.AddMonths(-1);
+		payrollYear.Value = previousMonth.Year;
+		payrollMonthNo.SelectedIndex = previousMonth.Month;
+		paymentYear.Value = advanceYear.Value = previousMonth.Year;
+		paymentMonthNo.SelectedIndex = advanceMonthNo.SelectedIndex = previousMonth.Month;
 	}
 
 	private static DataGridView Grid()
@@ -315,9 +321,9 @@ public sealed partial class MainForm : Form
 		tabs.TabPages.Add(Page("Personel", BuildPeople()));
 		tabs.TabPages.Add(Page("Giriş-Çıkış", BuildIo()));
 		tabs.TabPages.Add(Page("Kayıt Düzeltme", new DbRecordControl(this)));
-		tabs.TabPages.Add(Page("E İşlemleri", BuildEWorkspace()));
+		tabs.TabPages.Add(Page("E İşlemleri", new EOperationsControl(this)));
 		tabs.TabPages.Add(Page("Bordro", BuildPayroll()));
-		tabs.TabPages.Add(Page("Ödeme / Avans", BuildPayments()));
+		tabs.TabPages.Add(Page("Ödeme / Avans", new PaymentOperationsControl(this)));
 		tabs.TabPages.Add(Page("DB - TNF Eşitle", new DbTnfSyncControl(this)));
 
 		tableLayoutPanel.Controls.Add(tabs, 0, 1);
