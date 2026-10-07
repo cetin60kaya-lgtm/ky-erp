@@ -127,10 +127,31 @@ internal static class TerminalDeviceClient
         var bridge = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_BRIDGE") ?? Path.Combine(AppContext.BaseDirectory, "KYERP.TerminalBridge.exe");
         if (!File.Exists(bridge)) return ("STATUS|ERROR|Terminal köprüsü bulunamadı. Tam kurulum paketini kullanın.", "");
 
-        var sdk = TerminalSdkLocator.Resolve();
-        if (!sdk.CanAttemptConnection) return ("STATUS|ERROR|" + sdk.Message, "");
-
         var saved = await PrepareDetectedProfileAsync(ct);
+        var adapter = string.IsNullOrWhiteSpace(saved.AdapterProfile) ? "FP_CLOCK" : saved.AdapterProfile.Trim();
+        var ps2000 = adapter.Contains("PS2000", StringComparison.OrdinalIgnoreCase);
+
+        string workingDirectory;
+        if (ps2000)
+        {
+            var candidates = new[]
+            {
+                Path.Combine(AppContext.BaseDirectory, "TerminalSdkPS2000"),
+                @"D:\GoogleDrive\Hakan Emp\OTOMASYON\KY-CONTROL\PAYLOAD\PS2000_ANALIZ",
+                @"D:\Googledrive\Hakan Emp\OTOMASYON\KY-CONTROL\PAYLOAD\PS2000_ANALIZ"
+            };
+            workingDirectory = candidates.FirstOrDefault(x =>
+                Directory.Exists(x) && File.Exists(Path.Combine(x, "SBXPC.ocx"))) ?? "";
+            if (string.IsNullOrWhiteSpace(workingDirectory))
+                return ("STATUS|ERROR|PS-2000 / SBXPC terminal sürücüsü bulunamadı.", "");
+        }
+        else
+        {
+            var sdk = TerminalSdkLocator.Resolve();
+            if (!sdk.CanAttemptConnection) return ("STATUS|ERROR|" + sdk.Message, "");
+            workingDirectory = Directory.Exists(sdk.WorkingDirectory) ? sdk.WorkingDirectory : AppContext.BaseDirectory;
+        }
+
         var ip = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_IP") ?? saved.IpAddress;
         var port = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_PORT") ?? saved.IpPort.ToString(CultureInfo.InvariantCulture);
         var machine = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_MACHINE") ?? saved.MachineNo.ToString(CultureInfo.InvariantCulture);
@@ -140,10 +161,8 @@ internal static class TerminalDeviceClient
             var network = await TerminalNetworkDiagnostics.CheckAsync(ip, ethernetPort, ct);
             if (!network.AddressValid) return ("STATUS|ERROR|" + network.Message, "");
             if (!network.PortOpen)
-                return ("STATUS|ERROR|Cihaz kapalı veya ağ bağlantısı yok. " + network.Message, "");
+                return ("STATUS|ERROR|Cihaz ağına erişilemiyor. " + network.Message, "");
         }
-        var workingDirectory = Directory.Exists(sdk.WorkingDirectory) ? sdk.WorkingDirectory : AppContext.BaseDirectory;
-
         var psi = new ProcessStartInfo(bridge)
         {
             UseShellExecute = false,
@@ -154,7 +173,11 @@ internal static class TerminalDeviceClient
         };
         var existingPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
         psi.Environment["PATH"] = workingDirectory + Path.PathSeparator + existingPath;
-        psi.Environment["KY_PDKS_TERMINAL_SDK"] = workingDirectory;
+        psi.Environment["KY_PDKS_TERMINAL_ADAPTER"] = adapter;
+        if (ps2000)
+            psi.Environment["KY_PDKS_TERMINAL_SDK_PS2000"] = workingDirectory;
+        else
+            psi.Environment["KY_PDKS_TERMINAL_SDK"] = workingDirectory;
         psi.ArgumentList.Add(mode);
         psi.ArgumentList.Add(ip);
         psi.ArgumentList.Add(port);
@@ -195,7 +218,7 @@ internal static class TerminalDeviceClient
         if (message.Contains("entry point", StringComparison.OrdinalIgnoreCase) || message.Contains("giriş noktası", StringComparison.OrdinalIgnoreCase) || message.Contains("FM_RecordRead", StringComparison.OrdinalIgnoreCase))
             return "Terminal SDK sürümü uyumsuz. Hedef PDKS'nin çalışan FP_CLOCK.ocx / DLL seti kullanılmalı.";
         if (message.Contains("class not registered", StringComparison.OrdinalIgnoreCase) || message.Contains("80040154", StringComparison.OrdinalIgnoreCase))
-            return "FP_CLOCK 32-bit ActiveX Windows'ta kayıtlı değil. Terminal Merkezi > Sürücüyü Onar işlemini kullanın.";
+            return "Terminal 32-bit ActiveX sürücüsü kayıtlı değil. Terminal Merkezi > Sürücüyü Onar işlemini kullanın.";
         return message.Replace("|", "/").Replace("\r", " ").Replace("\n", " ");
     }
 
