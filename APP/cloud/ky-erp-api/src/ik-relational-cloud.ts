@@ -2275,9 +2275,6 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   }
 
   const existing = await first(c, "SELECT id,status,created_at FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND employee_id=? LIMIT 1", [companyId, year, month, employeeId]);
-  if (upper(existing?.status) === "PAID") {
-    return error(c, 409, "PAYROLL_PAID_LOCKED", "Ödemesi tamamlanmış bordro doğrudan değiştirilemez. Önce ödeme kaydını yetkili işlemle geri açın.");
-  }
 
   statements.push(
     c.env.DB.prepare(`UPDATE hr_monthly_employees
@@ -2835,7 +2832,6 @@ async function runAdvancedCloseCheck(c: Context<AppEnv>) {
   const payrollByEmployee = new Map(payroll.map((row) => [text(row.employee_id), row]));
   const missingPayroll = visible.filter((employee) => !payrollByEmployee.has(text(employee.id)));
   const unbalanced = payroll.filter((row) => Math.abs(number(row.bank_amount) + number(row.cash_amount) - number(row.total_amount)) > 0.01);
-  const unpaid = payroll.filter((row) => upper(row.status) !== "PAID");
   const badDates = visible.filter((employee) => {
     const card = cardsByEmployee.get(text(employee.id)) || {};
     const exitDate = hrDateOnly(card.exit_date);
@@ -2853,10 +2849,29 @@ async function runAdvancedCloseCheck(c: Context<AppEnv>) {
     { type: "PERSONEL_CIKIS", title: "Pasif personel çıkış tarihleri", ok: passiveWithoutExit.length === 0, detail: passiveWithoutExit.length ? `${passiveWithoutExit.length} pasif personelde işten çıkış tarihi eksik.` : "Pasif personelin çıkış tarihleri tam." },
     { type: "BORDRO_KAPSAM", title: "Bordro kapsamı", ok: missingPayroll.length === 0, detail: missingPayroll.length ? `${missingPayroll.length} dönem personelinin bordrosu henüz sabitlenmedi.` : `${visible.length} dönem personelinin bordrosu kayıtlı.` },
     { type: "ODEME_DENGE", title: "Banka + elden dengesi", ok: unbalanced.length === 0, detail: unbalanced.length ? `${unbalanced.length} bordro satırında ödeme dengesi bozuk.` : "Tüm bordro satırlarında banka + elden = net." },
-    { type: "ODEME_DURUM", title: "Ödeme durumu", ok: unpaid.length === 0, detail: unpaid.length ? `${unpaid.length} bordro satırı henüz PAID durumunda değil.` : "Tüm bordrolar ödendi." },
+    { type: "BORDRO_HAZIR", title: "Bordro düzenleme dengesi", ok: missingPayroll.length === 0 && unbalanced.length === 0, detail: missingPayroll.length || unbalanced.length ? "Eksik veya dengesiz bordro satırları düzeltilmelidir." : "Bordro satırları ay kilidine hazır." },
   ];
   await audit(c, { mainCompanyId: companyId, period, entityType: "AY_SONU", action: "CHECK", summary: "Ay sonu kontrolü çalıştırıldı.", details: { checks, periodEnd } });
   let lockRow = await advancedPeriodLockRow(c, companyId, year, month);
+  if (body.unlock === true) {
+    const timestamp = nowIso();
+    const id = crypto.randomUUID();
+    await c.env.DB.batch([
+      c.env.DB.prepare(`INSERT INTO ik_monthly_close
+        (id,main_company_id,period_year,period_month,is_locked,locked_at,created_at,updated_at)
+        VALUES (?,?,?,?,0,NULL,?,?)
+        ON CONFLICT(main_company_id,period_year,period_month) DO UPDATE SET
+          is_locked=0,locked_at=NULL,updated_at=excluded.updated_at`)
+        .bind(id, companyId, year, month, timestamp, timestamp),
+      c.env.DB.prepare(`INSERT INTO ik_monthly_close_logs
+        (id,main_company_id,period_year,period_month,action,reason,old_json,new_json,user_name,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`)
+        .bind(crypto.randomUUID(), companyId, year, month, "UNLOCK", text(body.reason || "Yetkili kullanıcı dönemi yeniden açtı."), JSON.stringify({ isLocked: flag(lockRow?.is_locked) }), JSON.stringify({ isLocked: false }), text(body.userName || "Sistem"), timestamp),
+    ]);
+    await audit(c, { mainCompanyId: companyId, period, entityType: "AY_SONU", action: "UNLOCK", summary: "İK aylık dönem kilidi açıldı.", details: { reason: text(body.reason) } });
+    lockRow = await advancedPeriodLockRow(c, companyId, year, month);
+    return okData(c, { year, month, period, periodEnd, checks, isLocked: false, lockedAt: null });
+  }
   if (body.lock === true) {
     const blocking = checks.filter((item) => !item.ok);
     if (blocking.length) return error(c, 409, "IK_CLOSE_BLOCKED", `${blocking.length} açık kontrol maddesi varken dönem kapatılamaz.`, { checks });
