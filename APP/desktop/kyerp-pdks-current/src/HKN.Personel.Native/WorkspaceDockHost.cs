@@ -136,11 +136,12 @@ internal sealed class WorkspaceDockHost : UserControl
             if (old is not null)
             {
                 slot.Host.Controls.Remove(old);
-                if (old is PersonelForm)
+                if (old is PersonelForm ||
+                    string.Equals(Convert.ToString(old.Tag), "KYERP_WORKSPACE_KEEP_ALIVE", StringComparison.Ordinal))
                 {
-                    // Personel ekranı yüzlerce kontrol ve sekme içeriyor. Menüden başka
-                    // bir modüle geçince dispose edilirse geri dönüşte tamamen yeniden
-                    // kuruluyor ve birkaç saniyelik donma yaratıyor. Bellekte sıcak tut.
+                    // Ağır ana modüller menü değişiminde dispose edilmez. Böylece Personel,
+                    // Puantaj, Bordro ve Aylık Düzeltme geri dönüşlerinde formu/DB lookup'larını
+                    // tekrar kurmaz; yalnız görünürlük değişir.
                     old.Visible = false;
                 }
                 else
