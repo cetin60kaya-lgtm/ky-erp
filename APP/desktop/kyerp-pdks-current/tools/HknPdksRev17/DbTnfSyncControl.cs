@@ -224,21 +224,21 @@ internal sealed partial class DbTnfSyncControl : UserControl
 
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(8, 6, 8, 8) };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 48));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
 
         details.Dock = DockStyle.Fill;
-        details.Height = 42;
+        details.Height = 34;
         details.Padding = new Padding(8, 5, 8, 5);
         details.BackColor = Color.FromArgb(247, 249, 252);
         details.Text = "DB ANA KAYNAK. Seçili personelin DB ve TNF kayıtları aşağıda yan yana gösterilir.";
 
         summary.Dock = DockStyle.Fill;
-        summary.Height = 54;
+        summary.Height = 46;
         summary.Padding = new Padding(8, 7, 8, 7);
         summary.BackColor = Color.FromArgb(234, 242, 250);
         summary.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
@@ -461,14 +461,17 @@ internal sealed partial class DbTnfSyncControl : UserControl
             visiblePairs = [];
             Bind(dbGrid, visiblePairs);
             Bind(tnfGrid, visiblePairs);
-            personnelSummary.Text = "Filtreye uygun personel yok. Tümü / Sadece Hatalı filtresini kontrol edin.";
+            personnelSummary.Text = "Filtreye uygun personel yok. TÜM PERSONELİ GÖSTER ile filtreleri sıfırlayabilirsiniz.";
             return;
         }
         selectedCard = person.Card == "FORMAT" ? "" : person.Card;
         visiblePairs = byCard.GetValueOrDefault(selectedCard) ?? [];
         Bind(dbGrid, visiblePairs);
         Bind(tnfGrid, visiblePairs);
-        personnelSummary.Text = $"{person.Card}  {person.Name}\nDB Durumu (DURUM.AD): {person.DbStatus}\nİşe Giriş Tarihi: {person.Hire}     İşten Çıkış Tarihi: {person.Exit}\nEfektif Durum: {person.Status} (dönem sonu)     {person.Note}\nDB Hareket: {person.DbCount}     TNF Hareket: {person.TnfCount}\nSonuç: {person.Result}";
+        personnelSummary.Text =
+            $"{person.Card}  {person.Name}   •   {person.Status}   •   İşe Giriş: {person.Hire}   •   İşten Çıkış: {person.Exit}\n" +
+            $"DB: {person.DbCount} hareket   •   TNF: {person.TnfCount} hareket   •   Eksik: {person.Missing}   •   Fazla: {person.Extra}   •   Saat Farkı: {person.TimeDifference}   •   E: {person.EErrors}\n" +
+            $"Sonuç: {person.Result}";
     }
 
     internal async Task RunAuditAsync(bool full, bool listOnly = false, AuditRequest? scope = null)
