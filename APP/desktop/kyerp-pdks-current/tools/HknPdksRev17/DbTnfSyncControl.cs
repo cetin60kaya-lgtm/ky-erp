@@ -632,12 +632,13 @@ internal sealed partial class DbTnfSyncControl : UserControl
         catch (OperationCanceledException) { summary.Text = "Çıktı hazırlama iptal edildi."; }
         catch (Exception exception) { MessageBox.Show(main, exception.Message, "Çıktı hazırlanamadı", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally { cancellation.Dispose(); cancellation = null; if (!IsDisposed) SetBusy(false); }
-        if (succeeded && !IsDisposed)
+        var published = lastOutputs;
+        if (succeeded && !IsDisposed && published is not null)
         {
             await RunAuditAsync(false);
             if (snapshot is not null)
             {
-                details.Text = tnfOnly ? $"Orijinal TNF korundu; DB değişmedi. SON KONTROL düzeltilmiş dosyada yapıldı: {lastOutputs.CorrectedPath}" : $"Orijinal TNF korundu. SON TAM KONTROL düzeltilmiş dosyada yapıldı. Eksik dosyasını Hedef'e ayrıca okutun. Çıktı: {lastOutputs.CorrectedPath}";
+                details.Text = tnfOnly ? $"Orijinal TNF korundu; DB değişmedi. SON KONTROL düzeltilmiş dosyada yapıldı: {published.CorrectedPath}" : $"Orijinal TNF korundu. SON TAM KONTROL düzeltilmiş dosyada yapıldı. Çıktı: {published.CorrectedPath}";
             }
         }
     }
