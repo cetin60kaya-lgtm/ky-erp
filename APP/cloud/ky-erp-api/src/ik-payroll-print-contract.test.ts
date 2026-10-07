@@ -17,9 +17,9 @@ test("IK payroll report and payment slips use the canonical print service contra
   assert.match(service, /fullDocument/);
   assert.match(service, /win\.print\(\)/);
 
-  assert.ok(page.includes("Bordroyu Tamamla / PDF"));
-  assert.match(page, /10['’]lu Fiş \+ Tamamla/);
-  assert.ok(page.includes("Tek Kişi Fiş + Tamamla"));
+  assert.ok(page.includes(">Bordro PDF<"));
+  assert.match(page, /10['’]lu Fiş/);
+  assert.ok(page.includes(">Tek Kişi Fiş<"));
   assert.ok(page.includes("printHtmlDocument({ title: `İK Ödeme Listesi"));
   assert.ok(page.includes("printHtmlDocument({ title: `Toplu Personel Ödeme Fişleri"));
   assert.ok(page.includes("printHtmlDocument({ title: `Ödeme Fişi"));
@@ -157,8 +157,9 @@ test("payment list PDF is a compact single-row list and prints one totals row on
   assert.doesNotMatch(block, /Hak Ediş<\/th>/);
   assert.doesNotMatch(block, /Durum<\/th>/);
   assert.match(block, /toplam yalnız listenin en sonunda bir kez gösterilir/);
-  assert.ok(page.includes("Bordroyu Tamamla / PDF"));
-  assert.ok(page.includes("Tamamla / Excel"));
+  assert.ok(page.includes(">Bordro PDF<"));
+  assert.ok(page.includes(">Excel<"));
+  assert.doesNotMatch(page, /Tamamla \/ Excel/);
 });
 
 
