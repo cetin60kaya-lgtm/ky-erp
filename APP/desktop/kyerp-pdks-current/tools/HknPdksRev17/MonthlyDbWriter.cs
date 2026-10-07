@@ -19,7 +19,7 @@ internal static class MonthlyDbWriter
         var executable = FindGbak();
         var directory = Path.Combine(Path.GetDirectoryName(settings.Database)!, "_YEDEK");
         Directory.CreateDirectory(directory);
-        var target = Path.Combine(directory, $"DATABASE_REV21_{DateTime.Now:yyyyMMdd_HHmmss_fff}_{Guid.NewGuid():N}.fbk");
+        var target = Path.Combine(directory, $"DATABASE_REV25_{DateTime.Now:yyyyMMdd_HHmmss_fff}_{Guid.NewGuid():N}.fbk");
         var start = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true };
         start.ArgumentList.Add("-b");
         start.ArgumentList.Add("-g");
@@ -37,7 +37,7 @@ internal static class MonthlyDbWriter
         await Task.WhenAll(errors, output).ConfigureAwait(false);
         if (process.ExitCode != 0 || !File.Exists(target) || new FileInfo(target).Length == 0)
             throw new InvalidOperationException($"gbak yedeği başarısız (kod {process.ExitCode}); DB değişmedi. Firebird erişimini ve yedek klasörünü kontrol edin.");
-        SyncEngine.Log($"REV21 gbak_backup_ok file={Path.GetFileName(target)} bytes={new FileInfo(target).Length}");
+        SyncEngine.Log($"REV25 gbak_backup_ok file={Path.GetFileName(target)} bytes={new FileInfo(target).Length}");
         return target;
     }
 
@@ -151,7 +151,7 @@ internal static class MonthlyDbWriter
             }
             token.ThrowIfCancellationRequested();
             transaction.Commit();
-            SyncEngine.Log($"REV21 db_batch_committed count={operations.Length} backup={Path.GetFileName(backup)}");
+            SyncEngine.Log($"REV25 db_batch_committed count={operations.Length} backup={Path.GetFileName(backup)}");
             return backup;
         }
         catch { try { transaction.Rollback(); } catch { } throw; }
