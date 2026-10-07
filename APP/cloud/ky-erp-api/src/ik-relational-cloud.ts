@@ -2254,7 +2254,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
 
   const manualDeductionRows = deductionRows.filter((item) => {
     const valueUpper = upper(item.adjustmentType);
-    return valueUpper.includes("KESINT") &&
+    return (valueUpper.includes("KESINT") || valueUpper.includes("KESİNT")) &&
       !valueUpper.includes("EKSIK") &&
       !valueUpper.includes("EKSİK") &&
       !valueUpper.includes("DEVAMSIZ") &&
