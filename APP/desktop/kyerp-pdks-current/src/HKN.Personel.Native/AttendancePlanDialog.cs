@@ -272,6 +272,9 @@ internal sealed class AttendancePlanDialog : Form
                 frozenPlan = AttendancePlanService.BuildEPlan(db, targets, a, b);
             }
 
+            if (frozenPlan is not null && frozenPlan.CanApply && frozenPlan.Items.Count > 0)
+                AttendancePlanService.ValidateDatabasePlan(db, frozenPlan);
+
             BindPreview();
         }
         catch (Exception ex)
