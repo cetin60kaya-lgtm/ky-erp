@@ -111,14 +111,14 @@ internal sealed partial class DbTnfSyncControl : UserControl
         }
         if (tnfOnly)
         {
-            Button("KONTROL ET", () => RunAuditAsync(month.SelectedIndex == 0), 145);
+            Button("SADECE KONTROL", () => RunAuditAsync(month.SelectedIndex == 0), 145);
             Button("TNF'Yİ DB'YE GÖRE DÜZELT", ApplyAllSafeAsync, 215, Color.LightGreen, personBar);
             Button("ÇIKTIYI AÇ", OpenOutputsAsync, 145, group: personBar);
         }
         else
         {
             Button("KONTROL ET", () => RunAuditAsync(month.SelectedIndex == 0), 145);
-            Button("DB → TNF BİRE BİR EŞİTLE", OneClickExactSyncAsync, 260, Color.LightGreen, personBar);
+            Button("TEK ATIŞ KONTROL + DÜZELT", OneClickExactSyncAsync, 280, Color.LightGreen, personBar);
             var rule = new Label
             {
                 Text = "KURAL: DB ANA KAYNAK • Ay=Tümü ise TÜM YIL • Eksik ekle • Fazla/mükerrer sil • Saat DB'ye çek • E kayıtları TNF'de olmaz",
@@ -475,7 +475,7 @@ internal sealed partial class DbTnfSyncControl : UserControl
             if (monthlySnapshot is not null) details.Text = MonthlyDbAudit.Summary(monthlySnapshot);
             if (lastOutputs is not null && request.Path == lastOutputs.CorrectedPath && lastOutputs.MissingCount > 0)
                 summary.Text += $" | EKSİK TNF HAZIR: {lastOutputs.MissingCount}";
-            SyncEngine.Log($"REV23 db_query_ms={prepared.Result.DbMilliseconds} monthly_db_audit_ms={prepared.Monthly?.Milliseconds ?? 0} tnf_read_parse_ms={prepared.Result.TnfMilliseconds} compare_ms={prepared.Result.CompareMilliseconds} grid_bind_ms={LastGridMilliseconds} total_ms={LastTotalMilliseconds} db_events={prepared.Result.Db.Count} rows={prepared.Result.Table.Rows.Count}");
+            SyncEngine.Log($"REV25 db_query_ms={prepared.Result.DbMilliseconds} monthly_db_audit_ms={prepared.Monthly?.Milliseconds ?? 0} tnf_read_parse_ms={prepared.Result.TnfMilliseconds} compare_ms={prepared.Result.CompareMilliseconds} grid_bind_ms={LastGridMilliseconds} total_ms={LastTotalMilliseconds} db_events={prepared.Result.Db.Count} rows={prepared.Result.Table.Rows.Count}");
         }
         catch (OperationCanceledException) { if (!IsDisposed) summary.Text = "Kontrol iptal edildi; sonuç uygulanamaz."; }
         catch (Exception exception) { if (!IsDisposed) { summary.Text = "Kontrol başarısız; eski sonuç uygulanamaz."; MessageBox.Show(main, exception.Message, "DB - TNF Eşitle", MessageBoxButtons.OK, MessageBoxIcon.Error); } }
@@ -542,12 +542,12 @@ internal sealed partial class DbTnfSyncControl : UserControl
         var rows = PlanAllCorrections();
         if (review > 0)
         {
-            MessageBox.Show(main, $"DB ana kaynakta {review} belirsiz/teknik kayıt var. TNF değiştirilmedi.\n\nBunlar yalnız DB tarafı tekil olmadığı veya kayıt teknik olarak aktarılamadığı zaman kalır.", "REV23 — Eşitleme durdu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(main, $"DB ana kaynakta {review} belirsiz/teknik kayıt var. TNF değiştirilmedi.\n\nBunlar yalnız DB tarafı tekil olmadığı veya kayıt teknik olarak aktarılamadığı zaman kalır.", "REV25 — Eşitleme durdu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         if (rows.Length == 0)
         {
-            MessageBox.Show(main, "DB ve TNF zaten bire bir uyumlu. E kayıtları TNF'de yok; eksik/fazla/saat farkı bulunmadı.", "REV23 — Uyumlu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(main, "DB ve TNF zaten bire bir uyumlu. E kayıtları TNF'de yok; eksik/fazla/saat farkı bulunmadı.", "REV25 — Uyumlu", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -560,7 +560,7 @@ internal sealed partial class DbTnfSyncControl : UserControl
             $"Saat/format DB'ye çekilecek: {counts.GetValueOrDefault("TNF DÜZELT")}\n" +
             $"Toplam işlem: {rows.Length}\n\n" +
             $"Önce _YEDEK alınır. İşlem sonunda TNF tekrar DB ile bire bir doğrulanır; doğrulama geçmezse eski TNF otomatik geri yüklenir.\n\nDevam?";
-        if (MessageBox.Show(main, message, "REV23 — TEK TIK DB → TNF EŞİTLE", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        if (MessageBox.Show(main, message, "REV25 — TEK TIK DB → TNF EŞİTLE", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
         var previous = snapshot;
         var database = snapshotDatabase!;
@@ -580,11 +580,11 @@ internal sealed partial class DbTnfSyncControl : UserControl
         }
         catch (OperationCanceledException)
         {
-            summary.Text = "REV23 eşitleme iptal edildi.";
+            summary.Text = "REV25 eşitleme iptal edildi.";
         }
         catch (Exception exception)
         {
-            MessageBox.Show(main, exception.Message, "REV23 — Eşitleme başarısız / TNF geri korundu", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(main, exception.Message, "REV25 — Eşitleme başarısız / TNF geri korundu", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
