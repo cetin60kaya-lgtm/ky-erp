@@ -140,14 +140,19 @@ test("leave plans persist day-by-day calculation proof and wage effect", () => {
   assert.match(relational, /\[1, 2, 3, 4, 5\]/);
 });
 
-test("final payroll output path freezes rows and marks them paid in one workflow", () => {
+test("payroll output is read-only while month lock owns editability", () => {
   const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
-  assert.match(monthly, /finalizePayrollForOutput/);
-  assert.match(monthly, /saveIkAdvancedFinalPayrollControl/);
-  assert.match(monthly, /saveIkAdvancedPayrollLines/);
-  assert.match(monthly, /status:\s*"PAID"/);
-  assert.match(monthly, /Bordroyu Tamamla \/ PDF/);
-  assert.match(monthly, /window\.confirm/);
+  const relational = api("ik-relational-cloud.ts");
+  assert.match(monthly, /validatePayrollOutput/);
+  assert.doesNotMatch(monthly, /Bordroyu Tamamla \/ PDF/);
+  assert.doesNotMatch(monthly, /10['’]lu Fiş \+ Tamamla/);
+  assert.match(monthly, />Bordro PDF</);
+  assert.match(monthly, />Ayı Kilitle</);
+  assert.match(monthly, />Kilidi Aç</);
+  assert.match(monthly, /unlock,/);
+  assert.match(relational, /body\.unlock === true/);
+  assert.match(relational, /"UNLOCK"/);
+  assert.doesNotMatch(relational, /PAYROLL_PAID_LOCKED/);
 });
 
 
