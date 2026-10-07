@@ -5,18 +5,18 @@ public sealed partial class MainShellForm
     void OpenPuantaj(int tabIndex)
     {
         if (!Ready(PdksModule.Puantaj)) return;
-        ShowModule(new LegacyPuantajForm(tabIndex), PdksModule.Puantaj);
+        ShowCachedModule("puantaj:" + tabIndex, () => new LegacyPuantajForm(tabIndex), PdksModule.Puantaj, "Puantaj");
     }
 
     void OpenBordro(int typeIndex)
     {
         if (!Ready(PdksModule.Bordro)) return;
-        ShowModule(new LegacyBordroForm(typeIndex), PdksModule.Bordro);
+        ShowCachedModule("bordro:" + typeIndex, () => new LegacyBordroForm(typeIndex), PdksModule.Bordro, "Bordro");
     }
 
     void OpenReportCenter(string? category)
     {
         if (!Ready(PdksModule.Raporlar)) return;
-        ShowModule(new ReportCenterForm(category), PdksModule.Raporlar);
+        ShowCachedModule("reports:" + (category ?? "all"), () => new ReportCenterForm(category), PdksModule.Raporlar, "Raporlar");
     }
 }
