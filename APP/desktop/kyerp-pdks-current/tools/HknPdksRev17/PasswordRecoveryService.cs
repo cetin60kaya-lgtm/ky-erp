@@ -69,7 +69,12 @@ internal static class PasswordRecoveryService
         catch { return false; }
     }
 
-    internal static void RegenerateRecoveryCode() => EnsureRecoveryCode(true);
+    internal static void RegenerateRecoveryCode()
+    {
+        try { if (File.Exists(RecoveryPath)) File.Delete(RecoveryPath); } catch { }
+        try { if (File.Exists(RecoveryTextPath)) File.Delete(RecoveryTextPath); } catch { }
+        EnsureRecoveryCode();
+    }
 
     static Verifier CreateVerifier(string secret)
     {
