@@ -76,7 +76,8 @@ internal sealed class DbRecordControl : UserControl
         layout.Controls.Add(status, 0, 4); Controls.Add(layout);
         controls.AddRange([people, days]);
         year.ValueChanged += (_, _) => SetMonth(); month.SelectedIndexChanged += (_, _) => SetMonth();
-        start.ValueChanged += (_, _) => { if (!updating) RebuildDays(); }; end.ValueChanged += (_, _) => { if (!updating) RebuildDays(); };
+        start.ValueChanged += async (_, _) => { if (!updating) { RebuildDays(); await LoadPeopleAsync(); } };
+        end.ValueChanged += async (_, _) => { if (!updating) { RebuildDays(); await LoadPeopleAsync(); } };
         people.ItemCheck += (_, _) => InvalidatePreview(); days.ItemCheck += (_, _) => InvalidatePreview(); operation.SelectedIndexChanged += (_, _) => InvalidatePreview();
         VisibleChanged += async (_, _) => { if (Visible && !ReferenceEquals(peopleDatabase, Database)) await LoadPeopleAsync(); };
         if (main.GetType().GetField("dbPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) is TextBox path)
@@ -114,9 +115,13 @@ internal sealed class DbRecordControl : UserControl
         cancellation = new(); Busy(true);
         try
         {
-            var result = await Task.Run(() => DbRecordService.ReadPeople(database, cancellation.Token), cancellation.Token);
+            var periodStart = start.Value.Date;
+            var periodEnd = end.Value.Date;
+            var active = await Task.Run(() => PeriodPersonnelService.ReadActive(database, periodStart, periodEnd), cancellation.Token);
+            var result = active.Select(person => new DbRecordPerson(person.Card, person.Name)).ToArray();
             if (IsDisposed || !ReferenceEquals(database, Database)) return;
-            people.Items.Clear(); people.Items.AddRange(result); peopleDatabase = database; status.Text = $"{result.Length} personel yüklendi. Personel/gün seçin.";
+            people.Items.Clear(); people.Items.AddRange(result); peopleDatabase = database;
+            status.Text = $"{result.Length} aktif personel yüklendi ({periodStart:dd.MM.yyyy}-{periodEnd:dd.MM.yyyy}). Personel/gün seçin.";
         }
         catch (OperationCanceledException) { }
         catch (Exception exception) { if (!IsDisposed) status.Text = "Personel yüklenemedi: " + exception.Message; }
