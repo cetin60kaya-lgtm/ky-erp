@@ -1,8 +1,6 @@
-using System.ComponentModel;
 using System.Data;
 using System.Diagnostics;
 using System.Reflection;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using KYERP.PDKS.Core;
 
@@ -43,20 +41,9 @@ internal sealed partial class DbTnfSyncControl : UserControl
     FirebirdDatabase? Database => main.GetType().GetField("db", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) as FirebirdDatabase;
     TextBox? TnfPathBox => main.GetType().GetField("tnfPath", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(main) as TextBox;
 
-    internal sealed class PairView(DataRow row) : INotifyPropertyChanged
+    internal sealed class PairView(DataRow row)
     {
         internal DataRow Row => row;
-        public event PropertyChangedEventHandler? PropertyChanged;
-        public bool Selected
-        {
-            get => row.Field<bool>("Seç");
-            set
-            {
-                if (Selected == value) return;
-                row["Seç"] = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Selected)));
-            }
-        }
         public string Date => row.Field<string>("Tarih") ?? "-";
         public string Side => row.Field<string>("Taraf") ?? "Belirsiz";
         public string DbTime => row.Field<int>("DbId") >= 0 ? row.Field<string>("DB Saat") ?? "" : "BOŞ";
@@ -65,7 +52,6 @@ internal sealed partial class DbTnfSyncControl : UserControl
         public string Status => row.Field<string>("Durum") ?? "İNCELE";
         public string Operation => row.Field<string>("İşlem") ?? "İNCELE";
         public string Detail => row.Field<string>("Açıklama") ?? "Bozuk TNF satırı; otomatik işlem yapılmaz.";
-        internal bool Safe => IsSafeOperation(Row);
     }
 
     internal sealed record PersonView(string Card, string Name, string DbStatus, string Status, string Hire, string Exit,
@@ -441,9 +427,6 @@ internal sealed partial class DbTnfSyncControl : UserControl
         int Count(string operation) => counts.GetValueOrDefault(operation);
         return $"Uyumlu={Count("YOK")}  Eksik={Count("TNF EKLE")}  Fazla={Count("TNF SİL FAZLA")}  Saat Farkı={Count("TNF DÜZELT")}  E Kayıt Hatası={Count("TNF SİL E")}  İncele={Count("İNCELE")}";
     }
-
-    internal static bool IsSafeOperation(DataRow row)
-        => row.Field<string>("İşlem") is "TNF EKLE" or "TNF SİL FAZLA" or "TNF SİL E" or "TNF DÜZELT";
 
     void SetSnapshot(AuditSnapshot? value) => snapshot = value;
 
