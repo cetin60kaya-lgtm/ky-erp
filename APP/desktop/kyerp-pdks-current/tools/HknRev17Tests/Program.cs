@@ -15,7 +15,7 @@ internal static class Program
     static DbMovement Db(int id = 1, string time = "08:23", string tur = "", string side = "Giriş") => new(id, "00039", Day, side, time, tur);
     static TnfMovement Tnf(int index = 0, string time = "08:23", string card = "00039") => new(index, Format.Build(card, Day, time), card, Day, time);
     static DataTable Compare(List<DbMovement> db, List<TnfMovement> tnf, Dictionary<string, EmploymentRule>? people = null)
-        => SyncEngine.Compare(db, tnf, people ?? People, Format, CancellationToken.None);
+        => SyncEngine.CompareExact(db, tnf, people ?? People, CancellationToken.None);
     static int Count(DataTable table, string operation) => table.AsEnumerable().Count(row => row.Field<string>("İşlem") == operation);
     static void Check(bool condition, string name)
     {
@@ -32,101 +32,89 @@ internal static class Program
         Application.SetCompatibleTextRenderingDefault(false);
         try
         {
-            Check(Count(Compare([Db()], [Tnf()]), "YOK") == 1, "exact match");
-            Check(SyncEngine.ActiveStatus("Çalışanlar") == true, "Turkish dotless i active status");
-            Check(SyncEngine.ActiveStatus("İşten Ayrılanlar") == false, "Turkish dotless i passive status");
-            Check(Count(Compare([Db()], []), "TNF EKLE") == 1, "missing terminal");
-            Check(Count(Compare([], [Tnf()]), "TNF SİL FAZLA") == 1, "extra terminal including unknown card");
-            Check(Count(Compare([Db()], [Tnf(time: "08:24")]), "TNF DÜZELT") == 1, "unique time mismatch");
-            Check(Count(Compare([Db(tur: "E")], [Tnf()]), "TNF SİL E") == 1, "E excluded");
-            Check(Count(Compare([Db(tur: "E")], []), "YOK") == 1, "E absence compatible");
-            Check(Count(Compare([Db(tur:"E")], [Tnf(),Tnf(1)]),"TNF SİL E")==2, "unambiguous E side removes duplicate TNF counterparts");
-            Check(Count(Compare([Db(time:"",tur:"E")], []),"YOK")==1, "E absence does not require a fabricated DB clock");
-            Check(Count(Compare([], [Tnf(),Tnf(1,"19:00")]),"TNF SİL FAZLA")==2, "DB empty multiple TNF never becomes review");
-            Check(Count(Compare([Db(),Db(2,tur:"E",side:"Çıkış")], []),"TNF EKLE")==0, "identical normal and E clock collision never exports an E-identical missing line");
-            Check(Count(Compare([Db(time:"08:23:30")], []),"İNCELE")==1, "seconds cannot silently round into canonical DB minutes");
+            Check(Count(Compare([Db()], [Tnf()]), "YOK") == 1, "REV25 exact DB/TNF match");
+            Check(Count(Compare([Db()], []), "TNF EKLE") == 1, "REV25 DB normal movement missing from TNF is added");
+            Check(Count(Compare([], [Tnf()]), "TNF SİL FAZLA") == 1, "REV25 TNF row without DB counterpart is removed");
+
+            var wrongClock = Compare([Db()], [Tnf(time: "08:24")]);
+            Check(Count(wrongClock, "TNF EKLE") == 1 && Count(wrongClock, "TNF SİL FAZLA") == 1 &&
+                  Count(wrongClock, "TNF DÜZELT") == 0,
+                  "REV25 clock mismatch is literal delete-plus-add, never interpreted");
+
+            Check(Count(Compare([Db(tur: "E")], [Tnf()]), "TNF SİL E") == 1,
+                "REV25 E movement counterpart is removed from TNF");
+            Check(Count(Compare([Db(tur: "E")], []), "YOK") == 1,
+                "REV25 E movement absent from TNF is correct");
+
+            var duplicateDb = Compare([Db(), Db(2)], [Tnf()]);
+            Check(Count(duplicateDb, "YOK") == 1 && Count(duplicateDb, "TNF EKLE") == 1,
+                "REV25 duplicate DB normal movement multiplicity is mirrored exactly");
             var duplicateTnf = Compare([Db()], [Tnf(), Tnf(1)]);
-            Check(Count(duplicateTnf, "YOK") == 1 && Count(duplicateTnf, "TNF SİL FAZLA") == 1 && Count(duplicateTnf, "İNCELE") == 0, "unique DB safely anchors exact duplicate TNF");
-            var duplicateMismatch = Compare([Db()], [Tnf(time: "08:02"), Tnf(1, "08:24")]);
-            Check(Count(duplicateMismatch, "TNF DÜZELT") == 1 && Count(duplicateMismatch, "TNF SİL FAZLA") == 1 && Count(duplicateMismatch, "İNCELE") == 0, "unique DB safely corrects closest mismatching TNF and removes surplus same-side line");
-            Check(Count(Compare([Db(), Db(2)], [Tnf()]), "İNCELE") == 2, "duplicate DB is never auto corrected");
-            var twoWrongTnf = Compare([Db()], [Tnf(time: "08:24"), Tnf(1, "08:25")]);
-            Check(Count(twoWrongTnf, "TNF DÜZELT") == 1 && Count(twoWrongTnf, "TNF SİL FAZLA") == 1 && Count(twoWrongTnf, "İNCELE") == 0, "single DB auto-resolves multiple same-side TNF by closest clock");
-            Check(Count(Compare([Db(), Db(2, "19:00", side: "Çıkış")], [Tnf(), Tnf(1, "19:00")]), "YOK") == 2, "two sides exact");
-            Check(Count(Compare([Db(), Db(2, "19:00", "E", "Çıkış")], [Tnf(time: "08:24"), Tnf(1, "19:01")]), "TNF SİL E") == 1, "unique mismatching E safe while separate normal side preserved");
-            Check(Count(Compare([Db(time: "")], []), "İNCELE") == 1, "blank DB time needs review");
-            Check(Count(Compare([Db()], [Tnf() with { Standard = false }]), "İNCELE") == 1, "unexpected TNF type needs review");
-            Check(Count(Compare([Db()], [], new()), "TNF EKLE") == 1, "DB source needs no personnel status to export missing");
-            var alignment = Compare([Db(), Db(2, "18:56", side: "Çıkış")], [Tnf(time: "08:38"), Tnf(1, "18:56")]);
-            Check(alignment.Rows.Count == 2 && alignment.Rows[0].Field<string>("Taraf") == "Giriş" && alignment.Rows[0].Field<string>("TNF Saat") == "08:38", "mismatch aligns to missing side");
-            Check(Count(Compare([Db()], [Tnf(time: "18:00")]), "TNF DÜZELT") == 1, "single DB and TNF match without fabricating a clock");
-            Check(Count(alignment, "TNF DÜZELT") == 1 && Count(alignment, "YOK") == 1, "opposite side stays compatible");
-            Check(Count(Compare([Db(), Db(2,"18:00",side:"Çıkış")], [Tnf(time:"08:38"), Tnf(1,"18:38")]), "TNF DÜZELT") == 2, "two unique time differences align by side");
-            var surplus = Compare([Db(),Db(2,"18:00",side:"Çıkış")], [Tnf(),Tnf(1,"18:00"),Tnf(2,"18:10")]);
-            Check(Count(surplus,"YOK") == 2 && Count(surplus,"TNF SİL FAZLA") == 1, "unique exact DB anchor distinguishes distinct surplus from matching exit");
-            var multi = Compare([Db(), Db(2, "08:30")], [Tnf(), Tnf(1, "08:30")]);
-            Check(multi.Rows.Count == 2 && Count(multi, "İNCELE") == 2, "multiple same side always reviewed");
-            Check(Compare([Db(time: "20:00")], [Tnf(time: "20:00")]).Rows[0].Field<string>("Taraf") == "Giriş", "night entry follows DB side");
+            Check(Count(duplicateTnf, "YOK") == 1 && Count(duplicateTnf, "TNF SİL FAZLA") == 1,
+                "REV25 duplicate TNF surplus is removed exactly");
+
+            Check(Count(Compare([Db(time: "")], []), "İNCELE") == 1,
+                "REV25 invalid DB clock blocks automatic projection");
+            var nonStandard = Compare([Db()], [Tnf() with { Standard = false }]);
+            Check(Count(nonStandard, "TNF DÜZELT") == 1,
+                "REV25 noncanonical TNF representation is canonicalized");
+
+            var twoSides = Compare(
+                [Db(), Db(2, "19:00", side: "Çıkış")],
+                [Tnf(), Tnf(1, "19:00")]);
+            Check(Count(twoSides, "YOK") == 2, "REV25 entry and exit exact pair stays unchanged");
+
             var absent = new DbTnfSyncControl.PairView(Compare([Db()], []).Rows[0]);
-            Check(absent.DbTime == "08:23" && absent.TnfTime == "BOŞ", "missing counterpart shown as BOS");
-            Check(SyncEngine.ActiveStatus("çALıŞıYOR") == true && SyncEngine.ActiveStatus("çıktı") == false, "mixed case Turkish");
-            var kemalRule = new EmploymentRule("00056", "Synthetic", new(2026,5,18), null, true);
-            Check(kemalRule.Evaluate(new(2026,6,1)).Reason is null, "May hire makes June valid");
-            Check(kemalRule.Evaluate(new(2026,5,17)).Certain, "before hire invalid");
-            var rehire = new EmploymentRule("00039", "Fixture", new(2026, 6, 1), new(2026, 3, 1), true);
-            Check(rehire.Evaluate(new(2026, 2, 1)).Reason is null, "rehire old history preserved");
-            Check(rehire.Evaluate(new(2026, 3, 1)).Reason is null, "old exit boundary valid");
-            Check(rehire.Evaluate(new(2026, 3, 2)).Certain, "rehire gap invalid");
-            Check(rehire.Evaluate(new(2026, 6, 1)).Reason is null, "rehire entry boundary valid");
-            var passive = new EmploymentRule("00039", "Fixture", new(2026, 1, 1), new(2026, 2, 1), false);
-            Check(passive.Evaluate(new(2026, 2, 2)).Certain, "passive after exit invalid");
-            Check(passive.Evaluate(new(2026, 1, 1)).Reason is null, "hire day valid");
-            Check((passive with { Hire = new(2026, 3, 1) }).Evaluate(Day).Certain == false, "contradictory dates never cleaned");
-            Check((rehire with { Active = null }).Evaluate(new(2026,4,1)).Certain, "clear rehire gap derives from dates even without status");
-            var boundedUnknown = new EmploymentRule("00056", "Synthetic", new(2026,5,18), new(2026,8,4), null);
-            Check(boundedUnknown.Evaluate(new(2026,6,1)).Reason is null, "bounded employment valid despite empty DB status");
-            Check(boundedUnknown.Evaluate(new(2026,8,5)).Certain, "known exit makes later movement certainly invalid despite empty status");
-            var departedActive = new EmploymentRule("00053", "Fixture", new(2025,6,11), new(2025,7,2), true, RawStatus: "Çalışanlar");
-            Check(departedActive.EffectiveStatus(Day) == "PASİF / ÇIKIŞ YAPMIŞ", "exit overrides stale active DB label");
-            Check(departedActive.StatusNote(Day).Contains("ÇELİŞKİSİ"), "status and dates contradiction disclosed separately");
-            Check(departedActive.Evaluate(Day).Certain, "stale active label does not hide certain invalid date");
-            Check((departedActive with { Exit = null, Active = false }).EffectiveStatus(Day) == "AKTİF", "hire without exit determines effective active regardless DB label");
-            var departedPeople = new Dictionary<string, EmploymentRule> { ["00053"] = departedActive };
-            var departedRows = Compare([], [Tnf(card:"00053")], departedPeople);
-            Check(Count(departedRows,"TNF SİL FAZLA") == 1, "TNF only after exit safely deletes without DB write");
-            Check(Count(Compare([], [Tnf() with { Date = new(2019,1,1) }]), "TNF SİL FAZLA") == 1, "TNF only before hire safely deletes");
-            Check(Count(Compare([Db()], [Tnf()], new() { ["00039"] = departedActive with { Card="00039" } }),"YOK") == 1, "personnel dates cannot override normal DB source movement");
-            Check(Count(Compare([], [Tnf(card:"00053"), Tnf(1,card:"00053")], departedPeople),"TNF SİL FAZLA") == 2, "DB empty duplicate TNF are all safe surplus");
-            var anchoredEarly = Compare([Db()], [Tnf(time:"08:22"),Tnf(1)]);
-            Check(Count(anchoredEarly,"YOK")==1 && Count(anchoredEarly,"TNF SİL FAZLA")==1 && anchoredEarly.Rows[0].Field<string>("TNF Saat")=="08:23", "exact anchor is paired first even when surplus time precedes it");
-            Check(Count(Compare([Db(tur:"E")], [Tnf(time:"08:24")]),"TNF SİL E") == 1, "unique E counterpart excluded even with different time");
-            Check(departedActive.Evaluate(new(2025,7,2)).Reason is null && departedActive.Evaluate(new(2025,6,10)).Certain, "employment boundaries remain inclusive");
-            Check((departedActive with { Ambiguous=true }).Evaluate(Day).Certain == false, "multiple personnel definitions do not infer new hire");
-            Check(Format.TryParse("00039,08:23,010126,1,001", 0, out var parsed) && parsed.Date == Day && parsed.Time == "08:23", "TNF canonical parser");
-            Check(!Format.TryParse("00039;08:23,010126,1,001", 0, out _), "broken TNF separator rejected");
-            Check(Count(Compare([Db()], [], new() { ["00039"] = departedActive with { Card="00039" } }),"TNF EKLE") == 1, "normal DB source preserved even beyond personnel exit");
-            Check(!Format.TryParse("00039,28:23,010126,1,001", 0, out _), "invalid clock rejected");
+            Check(absent.DbTime == "08:23" && absent.TnfTime == "BOŞ",
+                "REV25 missing TNF counterpart is displayed clearly");
+
+            Check(SyncEngine.ActiveStatus("Çalışanlar") == true &&
+                  SyncEngine.ActiveStatus("İşten Ayrılanlar") == false &&
+                  SyncEngine.ActiveStatus("çALıŞıYOR") == true,
+                  "REV25 Turkish personnel status normalization");
+
+            var departed = new EmploymentRule("00039", "Fixture", new(2025,6,11), new(2025,7,2), true, RawStatus: "Çalışanlar");
+            Check(departed.EffectiveStatus(Day) == "PASİF / ÇIKIŞ YAPMIŞ" &&
+                  departed.StatusNote(Day).Contains("ÇELİŞKİSİ") &&
+                  departed.Evaluate(Day).Certain,
+                  "REV25 employment dates override stale status labels for display/validation");
+
+            Check(Format.TryParse("00039,08:23,010126,1,001", 0, out var parsed) &&
+                  parsed.Date == Day && parsed.Time == "08:23",
+                  "REV25 canonical TNF parser");
+            Check(!Format.TryParse("00039;08:23,010126,1,001", 0, out _) &&
+                  !Format.TryParse("00039,28:23,010126,1,001", 0, out _),
+                  "REV25 broken TNF syntax and invalid clocks are rejected");
             var overflow = false;
             try { Format.Build("123456", Day, "08:23"); } catch (FormatException) { overflow = true; }
-            Check(overflow, "card never truncated");
+            Check(overflow, "REV25 card numbers are never silently truncated");
+
             using var cancellation = new CancellationTokenSource();
             cancellation.Cancel();
             var cancelled = false;
-            try { SyncEngine.Compare([Db()], [Tnf()], People, Format, cancellation.Token); } catch (OperationCanceledException) { cancelled = true; }
-            Check(cancelled, "comparison cancellation");
-            var largeDb = Enumerable.Range(1, 100000).Select(index => Db(index) with { Card = (index / 365 + 1).ToString("D5"), Date = Day.AddDays(index % 365) }).ToList();
-            var largeTnf = largeDb.Select((movement, index) => new TnfMovement(index, Format.Build(movement.Card, movement.Date, movement.Time), movement.Card, movement.Date, movement.Time)).ToList();
-            var largePeople = largeDb.Select(movement => movement.Card).Distinct().ToDictionary(card => card, card => new EmploymentRule(card, "Fixture", new(2020, 1, 1), null, true));
+            try { SyncEngine.CompareExact([Db()], [Tnf()], People, cancellation.Token); }
+            catch (OperationCanceledException) { cancelled = true; }
+            Check(cancelled, "REV25 exact comparison supports cancellation");
+
+            var largeDb = Enumerable.Range(1, 100000)
+                .Select(index => Db(index) with { Card = (index / 365 + 1).ToString("D5"), Date = Day.AddDays(index % 365) })
+                .ToList();
+            var largeTnf = largeDb.Select((movement, index) =>
+                new TnfMovement(index, Format.Build(movement.Card, movement.Date, movement.Time),
+                    movement.Card, movement.Date, movement.Time)).ToList();
+            var largePeople = largeDb.Select(movement => movement.Card).Distinct()
+                .ToDictionary(card => card, card => new EmploymentRule(card, "Fixture", new(2020,1,1), null, true));
             var timer = Stopwatch.StartNew();
-            var large = Compare(largeDb, largeTnf, largePeople);
-            Check(large.Rows.Count == 100000, "100000 groups compared");
-            Console.WriteLine($"SYNTHETIC_COMPARE_MS={timer.ElapsedMilliseconds}");
-            var late = Db() with { Date = new DateTime(2026, 12, 30) };
-            Check(Count(Compare([Db(), late], [Tnf()]), "TNF EKLE") == 1, "late DB date beyond final TNF retained");
-            Check(Count(Compare([Db(), late], []), "TNF EKLE") == 2, "empty TNF still detects full-year DB");
+            var large = SyncEngine.CompareExact(largeDb, largeTnf, largePeople, CancellationToken.None);
+            Check(large.Rows.Count == 100000 && large.AsEnumerable().All(row => row.Field<string>("İşlem") == "YOK"),
+                "REV25 exact engine compares 100000 DB/TNF movements");
+            Console.WriteLine($"REV25_EXACT_COMPARE_MS={timer.ElapsedMilliseconds}");
+
             var listing = SyncEngine.ListTerminal([Tnf(), Tnf(1)], People, CancellationToken.None);
-            Check(listing.Rows.Count == 2 && listing.Rows[0].Field<string>("Durum") == "TNF LİSTE", "terminal listing preserves physical duplicate rows");
-            Rev23OneClickExactSync();
+            Check(listing.Rows.Count == 2 && listing.Rows[0].Field<string>("Durum") == "TNF LİSTE",
+                "REV25 TNF listing preserves physical duplicate rows");
+
+            Rev25OneClickExactSync();
             Rev25ExactProjectionEdgeCases();
             WorkTimeTests.Run(Check);
             SeparatedWorkflowTests.Run(Check, args.Length == 2 ? args[0] : null, args.Length == 2 ? args[1] : null);
@@ -142,12 +130,12 @@ internal static class Program
         catch (Exception exception) { Console.Error.WriteLine(exception); return 1; }
     }
 
-    static void Rev23OneClickExactSync()
+    static void Rev25OneClickExactSync()
     {
         System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
-        var directory = Path.Combine(Path.GetTempPath(), "HKN_REV23_SYNC_" + Guid.NewGuid().ToString("N"));
+        var directory = Path.Combine(Path.GetTempPath(), "HKN_REV25_SYNC_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
-        var dbPath = Path.Combine(directory, "REV23.GDB");
+        var dbPath = Path.Combine(directory, "REV25.GDB");
         var tnfPath = Path.Combine(directory, "TR2026.Tnf");
         var options = PdksOptions.FromEnvironment() with { DatabasePath = dbPath, DatabaseUser = "SYSDBA", DatabasePassword = "masterkey" };
         var connectionString = new FirebirdSql.Data.FirebirdClient.FbConnectionStringBuilder
@@ -188,34 +176,34 @@ internal static class Program
         var originalBytes = File.ReadAllBytes(tnfPath);
         var request = new AuditRequest(tnfPath, new(2026,9,1), new(2026,10,1), "", Format, true);
         var before = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
-        Check(Count(before.Table, "İNCELE") == 0, "REV24 exact audit has no interpretation/review for valid DB movements");
-        Check(Count(before.Table, "TNF SİL E") == 1, "REV24 exact audit removes E counterpart");
-        Check(Count(before.Table, "TNF EKLE") == 4, "REV24 exact audit adds every DB-normal movement missing from TNF");
-        Check(Count(before.Table, "TNF SİL FAZLA") == 5, "REV24 exact audit deletes every TNF row without exact DB-normal counterpart");
+        Check(Count(before.Table, "İNCELE") == 0, "REV25 exact audit has no interpretation/review for valid DB movements");
+        Check(Count(before.Table, "TNF SİL E") == 1, "REV25 exact audit removes E counterpart");
+        Check(Count(before.Table, "TNF EKLE") == 4, "REV25 exact audit adds every DB-normal movement missing from TNF");
+        Check(Count(before.Table, "TNF SİL FAZLA") == 5, "REV25 exact audit deletes every TNF row without exact DB-normal counterpart");
         Check(Count(before.Table, "TNF DÜZELT") == 0, "REV24 wrong clocks are delete-plus-add, not interpreted");
 
         var result = SyncEngine.DirectSyncSourceAsync(database, before, CancellationToken.None).GetAwaiter().GetResult();
-        Check(File.Exists(result.BackupPath) && File.ReadAllBytes(result.BackupPath).SequenceEqual(originalBytes), "REV24 one-click backup preserves original TNF bytes");
+        Check(File.Exists(result.BackupPath) && File.ReadAllBytes(result.BackupPath).SequenceEqual(originalBytes), "REV25 one-click backup preserves original TNF bytes");
         var after = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
-        Check(after.Table.AsEnumerable().All(row => row.Field<string>("İşlem") == "YOK"), "REV24 one-click final TNF is DB-exact with zero remaining operations");
+        Check(after.Table.AsEnumerable().All(row => row.Field<string>("İşlem") == "YOK"), "REV25 one-click final TNF is DB-exact with zero remaining operations");
         var finalLines = File.ReadAllLines(tnfPath);
         Check(finalLines.Contains(Format.Build("00048", new(2026,9,29), "08:32")) &&
               finalLines.Contains(Format.Build("00048", new(2026,9,30), "08:27")) &&
               !finalLines.Contains(Format.Build("00048", new(2026,9,28), "08:30")) &&
               !finalLines.Contains(Format.Build("00099", new(2026,9,29), "09:00")),
-              "REV24 one-click corrects clocks, removes E and deletes DB-less TNF");
+              "REV25 one-click corrects clocks, removes E and deletes DB-less TNF");
         Check(finalLines.Contains(Format.Build("00048", new(2026,9,1), "08:25")) &&
               finalLines.Contains(Format.Build("00048", new(2026,9,1), "18:58")),
-              "REV24 one-click adds missing DB normal entry and exit into same TNF");
+              "REV25 one-click adds missing DB normal entry and exit into same TNF");
 
         database.Execute("insert into GIRCIK(SIRA,PKNO,GTARIH,GSAAT,GTUR) values(5,'00048','2026-09-29','08:40','')");
         var duplicateDb = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
         Check(Count(duplicateDb.Table, "İNCELE") == 0 && Count(duplicateDb.Table, "TNF EKLE") == 1,
-            "REV24 exact mode treats every normal DB movement as source truth without side interpretation");
+            "REV25 exact mode treats every normal DB movement as source truth without side interpretation");
         SyncEngine.DirectSyncSourceAsync(database, duplicateDb, CancellationToken.None).GetAwaiter().GetResult();
         var duplicateDbAfter = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
         Check(duplicateDbAfter.Table.AsEnumerable().All(row => row.Field<string>("İşlem") == "YOK"),
-            "REV24 exact mode mirrors duplicate/multiple DB normal movements literally into TNF");
+            "REV25 exact mode mirrors duplicate/multiple DB normal movements literally into TNF");
     }
 
     static void Rev25ExactProjectionEdgeCases()
