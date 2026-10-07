@@ -16,6 +16,7 @@ public partial class PersonelForm : Form
     readonly TabControl tabs = new() { Dock=DockStyle.Fill };
     readonly StatusStrip status = new();
     readonly ToolStripStatusLabel stats = new() { Spring=true, TextAlign=ContentAlignment.MiddleLeft };
+    readonly Dictionary<string, DataRow> personCache = new(StringComparer.OrdinalIgnoreCase);
     string currentPk = "";
     bool startupLoaded;
 
@@ -142,8 +143,27 @@ public partial class PersonelForm : Form
 
     void Reload()
     {
-        list.DataSource=Q("select PKNO,AD,SOYAD,IGTARIH,ICTARIH from KIMLIK order by PKNO");
+        var table = Q(@"select k.*,g.AD as GRUPAD,b.AD as BOLUMAD,s.AD as SERVISAD,d.AD as DURUMAD,
+                go.AD as GOREVAD,fi.AD as FIRMAAD
+            from KIMLIK k
+            left join GRUP g on g.KOD=k.GRUP
+            left join BOLUM b on b.KOD=k.BOLUM
+            left join SERVIS s on s.KOD=k.SERVIS
+            left join DURUM d on d.KOD=k.DURUM
+            left join GOREV go on go.KOD=k.GOREV
+            left join FIRMA fi on fi.KOD=k.SIRKET
+            order by k.PKNO");
+        if (!table.Columns.Contains("ADSOYAD")) table.Columns.Add("ADSOYAD", typeof(string));
+        personCache.Clear();
+        foreach (DataRow row in table.Rows)
+        {
+            row["ADSOYAD"] = $"{Convert.ToString(row["AD"])?.Trim()} {Convert.ToString(row["SOYAD"])?.Trim()}".Trim();
+            var key = Convert.ToString(row["PKNO"])?.Trim() ?? "";
+            if (key.Length > 0) personCache[key] = row;
+        }
+        list.DataSource = table;
         stats.Text=$"{list.Rows.Count} personel";
+        if (IsHandleCreated) BeginInvoke(new Action(ApplyEmploymentScopeAndSearch));
     }
 
     void Filter(string s)
@@ -155,16 +175,30 @@ public partial class PersonelForm : Form
 
     void LoadPerson(string pk)
     {
-        personLoadTimer.Stop();pendingPersonPk=pk;currentPk=pk; var dt=Q("select first 1 k.*,g.AD as GRUPAD,b.AD as BOLUMAD,s.AD as SERVISAD,d.AD as DURUMAD,go.AD as GOREVAD,fi.AD as FIRMAAD from KIMLIK k left join GRUP g on g.KOD=k.GRUP left join BOLUM b on b.KOD=k.BOLUM left join SERVIS s on s.KOD=k.SERVIS left join DURUM d on d.KOD=k.DURUM left join GOREV go on go.KOD=k.GOREV left join FIRMA fi on fi.KOD=k.SIRKET where k.PKNO=@PK",new FbParameter("@PK",pk));
-        if(dt.Rows.Count==0)return;
-        var r=dt.Rows[0];
+        personLoadTimer.Stop();
+        pendingPersonPk = pk;
+        if (!personCache.TryGetValue(pk, out var r))
+        {
+            var dt = Q("select first 1 k.*,g.AD as GRUPAD,b.AD as BOLUMAD,s.AD as SERVISAD,d.AD as DURUMAD,go.AD as GOREVAD,fi.AD as FIRMAAD from KIMLIK k left join GRUP g on g.KOD=k.GRUP left join BOLUM b on b.KOD=k.BOLUM left join SERVIS s on s.KOD=k.SERVIS left join DURUM d on d.KOD=k.DURUM left join GOREV go on go.KOD=k.GOREV left join FIRMA fi on fi.KOD=k.SIRKET where k.PKNO=@PK",new FbParameter("@PK",pk));
+            if(dt.Rows.Count==0)return;
+            r=dt.Rows[0];
+            personCache[pk]=r;
+        }
+
+        currentPk = pk;
         foreach(var kv in f)
         {
-            if(dt.Columns.Contains(kv.Key)) kv.Value.Text = r[kv.Key] is DateTime d ? d.ToString("dd.MM.yyyy") : Convert.ToString(r[kv.Key]) ?? "";
-            else if(dt.Columns.Contains(kv.Key.Replace("AD",""))) kv.Value.Text = Convert.ToString(r[kv.Key.Replace("AD","")]) ?? "";
+            if(r.Table.Columns.Contains(kv.Key)) kv.Value.Text = r[kv.Key] is DateTime d ? d.ToString("dd.MM.yyyy") : Convert.ToString(r[kv.Key]) ?? "";
+            else if(r.Table.Columns.Contains(kv.Key.Replace("AD",""))) kv.Value.Text = Convert.ToString(r[kv.Key.Replace("AD","")]) ?? "";
         }
         UpdateCanonicalProfileSummary(r);
         LoadPayrollProfilePanel(pk, ReadDecimal(r, "MAAS"));
+
+        if (fullTabsReady && IsHandleCreated)
+        {
+            SyncPeriodsToPerson();
+            RefreshSelectedTab();
+        }
     }
 
     void SaveCurrent()
