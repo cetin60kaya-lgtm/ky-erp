@@ -413,7 +413,12 @@ internal sealed partial class DbTnfSyncControl : UserControl
             FilterPeople();
             LastGridMilliseconds = bind.ElapsedMilliseconds;
             LastTotalMilliseconds = total.ElapsedMilliseconds;
-            summary.Text = $"{(full ? "SON TAM KONTROL" : listOnly ? "TNF Listele" : "Kontrol")} {request.Start:dd.MM.yyyy}–{request.End:dd.MM.yyyy} | {prepared.Summary}";
+            var remaining = prepared.Result.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") != "YOK");
+            summary.Text = remaining == 0
+                ? $"✓ TAM UYUMLU • {request.Start:dd.MM.yyyy}–{request.End.AddDays(-1):dd.MM.yyyy} • {prepared.Result.Db.Count} DB hareketi • fark 0"
+                : $"{(full ? "TÜM YIL KONTROL" : listOnly ? "TNF Listele" : "Kontrol")} {request.Start:dd.MM.yyyy}–{request.End.AddDays(-1):dd.MM.yyyy} | {prepared.Summary}";
+            summary.BackColor = remaining == 0 ? Color.Honeydew : Color.AliceBlue;
+            summary.ForeColor = remaining == 0 ? Color.DarkGreen : Color.Black;
             SyncEngine.Log($"REV25 db_query_ms={prepared.Result.DbMilliseconds} tnf_read_parse_ms={prepared.Result.TnfMilliseconds} compare_ms={prepared.Result.CompareMilliseconds} grid_bind_ms={LastGridMilliseconds} total_ms={LastTotalMilliseconds} db_events={prepared.Result.Db.Count} rows={prepared.Result.Table.Rows.Count}");
         }
         catch (OperationCanceledException) { if (!IsDisposed) summary.Text = "Kontrol iptal edildi; sonuç uygulanamaz."; }
@@ -501,7 +506,11 @@ internal sealed partial class DbTnfSyncControl : UserControl
             {
                 var remaining = snapshot.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") != "YOK");
                 if (remaining == 0)
-                    summary.Text = $"SON KONTROL: {periodText} • DB = TNF BİRE BİR • E TNF'DE YOK • Eksik/Fazla/Mükerrer/Saat Farkı/İncele = 0";
+                {
+                    summary.Text = $"✓ SON KONTROL • {periodText} • DB = TNF BİRE BİR • E TNF'DE YOK • fark 0";
+                    summary.BackColor = Color.Honeydew;
+                    summary.ForeColor = Color.DarkGreen;
+                }
             }
         }
     }
