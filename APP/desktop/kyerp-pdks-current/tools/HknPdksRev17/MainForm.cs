@@ -908,19 +908,28 @@ public sealed partial class MainForm : Form
 			sourceStatus.ForeColor = Color.DarkGreen;
 			try
 			{
-				await Task.Run(() => PayrollOverrideService.EnsureSchema(database!));
+				// Önce yalnız okunur sağlık kontrolü: yanlış/eksik DB üzerinde şema değişikliği yapılmaz.
 				var policy = await Task.Run(() => WorkTimePolicy.Read(database!, CancellationToken.None));
+				var readiness = await Task.Run(() => SystemReadinessService.Validate(database!, tnfPath.Text, policy));
+				// Temel Hedef şeması doğrulandıktan sonra yalnız REV25'e ait bordro koruma şeması hazırlanır.
+				await Task.Run(() => PayrollOverrideService.EnsureSchema(database!));
 				if (!IsDisposed && ReferenceEquals(db, database))
 				{
 					SetWorkHours(policy);
-					var readiness = await Task.Run(() => SystemReadinessService.Validate(database!, tnfPath.Text, policy));
 					sourceStatus.Text = readiness.Summary + "   |   " + policy.Information;
 					sourceStatus.ForeColor = Color.DarkGreen;
 				}
 			}
-			catch (Exception)
+			catch (Exception ex)
 			{
-				if (!IsDisposed && ReferenceEquals(db, database)) sourceStatus.Text += "   |   " + WorkTimePolicy.Default.Information;
+				if (!IsDisposed && ReferenceEquals(db, database))
+				{
+					db = null;
+					options = null;
+					SetWorkHours(WorkTimePolicy.Default);
+					sourceStatus.Text = "BAĞLANTI / SİSTEM KONTROLÜ BAŞARISIZ: " + ex.Message;
+					sourceStatus.ForeColor = Color.DarkRed;
+				}
 			}
 		}
 	}
