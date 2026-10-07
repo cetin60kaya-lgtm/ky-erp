@@ -38,17 +38,6 @@ public partial class PersonelForm
         if (periodSynchronizationWired) return;
         periodSynchronizationWired = true;
 
-        list.SelectionChanged += (_, _) =>
-        {
-            if (!fullTabsReady || IsDisposed || syncingPeriodSelection) return;
-            BeginInvoke(new Action(() =>
-            {
-                if (IsDisposed) return;
-                SyncPeriodsToPerson();
-                RefreshSelectedTab();
-            }));
-        };
-
         HookPeriod(periodG, gFrom, gTo);
         HookPeriod(periodI, iFrom, iTo);
         HookPeriod(periodE, eFrom, eTo);
