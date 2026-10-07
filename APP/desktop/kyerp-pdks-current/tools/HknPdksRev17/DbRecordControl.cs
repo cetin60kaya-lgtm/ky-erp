@@ -39,8 +39,8 @@ internal sealed class DbRecordControl : UserControl
         Font = new Font("Segoe UI", 9);
         month.Items.AddRange(["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]);
         month.SelectedIndex = DateTime.Today.Month - 1;
-        operation.Items.AddRange(["Giriş Ekle", "Çıkış Ekle", "Giriş + Çıkış Ekle", "Saat Düzelt", "Mükerrer Temizle", "Fazla Kayıt Temizle"]);
-        operation.SelectedIndex = 2;
+        operation.Items.AddRange(["TAM DÜZELT (ÖNERİLEN)", "Giriş Ekle", "Çıkış Ekle", "Giriş + Çıkış Ekle"]);
+        operation.SelectedIndex = 0;
         var top = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(5), WrapContents = true };
         void Field(string title, Control control) { top.Controls.Add(new Label { Text = title, AutoSize = true, Padding = new Padding(4, 7, 0, 0) }); top.Controls.Add(control); controls.Add(control); }
         Field("Yıl", year); Field("Ay", month); Field("Başlangıç", start); Field("Bitiş", end);
@@ -134,7 +134,14 @@ internal sealed class DbRecordControl : UserControl
         try
         {
             var database = Database ?? throw new InvalidOperationException("Önce DB'ye bağlanın.");
-            var mode = (DbRecordMode)(operation.SelectedIndex + 1);
+            var mode = operation.SelectedIndex switch
+            {
+                0 => DbRecordMode.RepairAll,
+                1 => DbRecordMode.AddEntry,
+                2 => DbRecordMode.AddExit,
+                3 => DbRecordMode.AddBoth,
+                _ => throw new InvalidOperationException("İşlem seçimi geçersiz.")
+            };
             var result = await Task.Run(() => DbRecordService.Read(database, cards, dates, cancellation.Token, mode: mode), cancellation.Token);
             if (IsDisposed || !ReferenceEquals(database, Database)) return;
             snapshot = result; previewDatabase = database; preview.DataSource = result.Changes;
@@ -142,7 +149,7 @@ internal sealed class DbRecordControl : UserControl
             status.Text = $"{operation.Text} | Personel: {cards.Length} | Gün: {dates.Length} | Yapılacak işlem: {result.Changes.Length} | {timer.ElapsedMilliseconds} ms";
         }
         catch (OperationCanceledException) { if (!IsDisposed) status.Text = "İptal edildi."; }
-        catch (Exception exception) { if (!IsDisposed) { status.Text = exception.Message; MessageBox.Show(main, exception.Message, "DB KAYIT", MessageBoxButtons.OK, MessageBoxIcon.Warning); } }
+        catch (Exception exception) { if (!IsDisposed) { status.Text = exception.Message; MessageBox.Show(main, exception.Message, "Kayıt Düzeltme", MessageBoxButtons.OK, MessageBoxIcon.Warning); } }
         finally { cancellation?.Dispose(); cancellation = null; if (!IsDisposed) Busy(false); }
     }
 
@@ -152,7 +159,7 @@ internal sealed class DbRecordControl : UserControl
         if (snapshot is null || !ReferenceEquals(previewDatabase, Database)) { MessageBox.Show(main, "Önce ÖNİZLE çalıştırın."); return; }
         var current = snapshot;
         if (current.Changes.Length == 0) { status.Text = "Seçilen işlem için yapılacak değişiklik yok."; return; }
-        if (MessageBox.Show(main, $"{current.Cards.Length} personel / {current.Days.Length} seçili gün.\nİşlem: {operation.Text}\nÖnizlemedeki {current.Changes.Length} değişiklik uygulanacak; diğer kayıtlar ve E türleri korunacak.\nİşlemden önce DB ve TNF yedeği alınır. DB + ana TNF tek işlemde birlikte hizalanır. Devam?", "DB KAYIT — işlem onayı", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        if (MessageBox.Show(main, $"{current.Cards.Length} personel / {current.Days.Length} seçili gün.\nİşlem: {operation.Text}\nÖnizlemedeki {current.Changes.Length} değişiklik uygulanacak; diğer kayıtlar ve E türleri korunacak.\nİşlemden önce DB ve TNF yedeği alınır. DB + ana TNF tek işlemde birlikte hizalanır. Devam?", "Kayıt Düzeltme — işlem onayı", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         var tnf = main is MainForm application
             ? application.ResolveTnfPath((int)year.Value)
             : TnfBox?.Text?.Trim() ?? "";
