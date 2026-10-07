@@ -104,22 +104,20 @@ internal static partial class SyncEngine
         if (fresh.FileHash != snapshot.FileHash || fresh.DbHash != snapshot.DbHash)
             throw new InvalidOperationException("DB veya TNF değişmiş. Önce yeniden kontrol edin.");
 
-        var review = fresh.Table.AsEnumerable().Where(row => row.Field<string>("İşlem") == "İNCELE").ToArray();
-        if (review.Length > 0)
-            throw new InvalidOperationException($"DB ana kaynakta {review.Length} belirsiz/teknik kayıt var. TNF değiştirilmedi; önce bu DB kayıtlarını düzeltin.");
+        var blocking = fresh.Table.AsEnumerable().Where(row => row.Field<string>("İşlem") == "İNCELE").ToArray();
+        if (blocking.Length > 0)
+            throw new InvalidOperationException($"DB/TNF içinde {blocking.Length} teknik olarak aktarılamayan kayıt var. TNF değiştirilmedi.");
 
         var selected = fresh.Table.AsEnumerable().Where(SafeOperation).ToArray();
-        var plan = PrepareOutputs(fresh, selected, cancellation);
-        VerifyExactOutput(fresh, plan.Corrected, cancellation);
+        var corrected = BuildExactProjection(fresh, cancellation);
+        VerifyExactOutput(fresh, corrected, cancellation);
 
         var source = Path.GetFullPath(fresh.Request.Path);
         var directory = Path.GetDirectoryName(source)!;
-        if (Path.GetFileName(directory).Equals("_TNF_CIKTILARI", StringComparison.OrdinalIgnoreCase))
-            directory = Directory.GetParent(directory)!.FullName;
         var backupDirectory = Path.Combine(directory, "_YEDEK");
         Directory.CreateDirectory(backupDirectory);
         var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture) + "_" + Guid.NewGuid().ToString("N")[..8];
-        var backupPath = Path.Combine(backupDirectory, Path.GetFileNameWithoutExtension(source) + "_REV23_ONCESI_" + stamp + Path.GetExtension(source));
+        var backupPath = Path.Combine(backupDirectory, Path.GetFileNameWithoutExtension(source) + "_REV25_ONCESI_" + stamp + Path.GetExtension(source));
 
         byte[] original;
         await using (var stream = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read))
@@ -131,7 +129,7 @@ internal static partial class SyncEngine
             throw new InvalidOperationException("TNF kontrol sırasında değişmiş; eşitleme iptal edildi.");
 
         await AtomicWriteAsync(backupPath, original, cancellation).ConfigureAwait(false);
-        var replacement = EncodeLines(plan.Corrected, fresh.Encoding);
+        var replacement = EncodeLines(corrected, fresh.Encoding);
         try
         {
             await AtomicReplaceAsync(source, replacement, cancellation).ConfigureAwait(false);
@@ -154,6 +152,47 @@ internal static partial class SyncEngine
             counts.GetValueOrDefault("TNF DÜZELT"),
             selected.Length);
     }
+
+    internal static string[] BuildExactProjection(AuditSnapshot snapshot, CancellationToken cancellation)
+    {
+        var format = new TnfFormat();
+        var result = new List<(DateTime Day, TimeSpan Time, string Card, int Order, string Raw)>();
+
+        // Seçili kapsam dışındaki geçerli TNF satırları korunur. Kapsam içi bölüm tamamen DB'den yeniden kurulur.
+        for (var index = 0; index < snapshot.Lines.Length; index++)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            var raw = snapshot.Lines[index];
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            if (!format.TryParse(raw, index, out var move))
+            {
+                // Tüm yıl eşitlemede dosya o yıla ait kabul edilir; bozuk satırlar temizlenir.
+                // Dar kapsamda tarihi bilinmeyen satır korunur.
+                var fullYear = snapshot.Request.Start.Month == 1 && snapshot.Request.Start.Day == 1 &&
+                    snapshot.Request.End == snapshot.Request.Start.AddYears(1);
+                if (!fullYear) result.Add((DateTime.MaxValue, TimeSpan.MaxValue, "", index, raw.Trim()));
+                continue;
+            }
+            var inScope = move.Date >= snapshot.Request.Start && move.Date < snapshot.Request.End &&
+                (snapshot.Request.Card.Length == 0 || snapshot.Request.Card == move.Card);
+            if (!inScope)
+                result.Add((move.Date, TimeSpan.ParseExact(move.Time, @"hh\:mm", CultureInfo.InvariantCulture), move.Card, index, move.Raw));
+        }
+
+        foreach (var move in snapshot.Db.Where(move => !move.Tur.Equals("E", StringComparison.OrdinalIgnoreCase))
+                     .OrderBy(move => move.Date).ThenBy(move => move.Time).ThenBy(move => move.Card).ThenBy(move => move.Id).ThenBy(move => move.Side))
+        {
+            cancellation.ThrowIfCancellationRequested();
+            if (!CanBuild(move, format))
+                throw new InvalidOperationException($"{move.Card} {move.Date:dd.MM.yyyy} {move.Time}: DB kaydı standart TNF satırına dönüştürülemiyor.");
+            var clock = TimeSpan.ParseExact(move.Time, @"hh\:mm", CultureInfo.InvariantCulture);
+            result.Add((move.Date, clock, move.Card, move.Id, format.Build(move.Card, move.Date, move.Time)));
+        }
+
+        return result.OrderBy(item => item.Day).ThenBy(item => item.Time).ThenBy(item => item.Card)
+            .ThenBy(item => item.Order).Select(item => item.Raw).ToArray();
+    }
+
 
     static async Task AtomicReplaceAsync(string destination, byte[] bytes, CancellationToken cancellation)
     {
