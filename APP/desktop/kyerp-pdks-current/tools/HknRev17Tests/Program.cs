@@ -401,16 +401,12 @@ internal static class Program
             var searchBox = (TextBox)typeof(DbTnfSyncControl).GetField("search", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
             searchBox.Text = "00053";
             var departedPairs = ((BindingSource)dbGrid.DataSource!).List.Cast<DbTnfSyncControl.PairView>().ToArray();
-            Check(departedPairs.Length > 0 && departedPairs.Any(pair=>pair.Safe), "TNF only person remains visible and actionable");
-            var unselectedPlan = control.PlanVisibleCorrections(false);
-            Check(unselectedPlan.Length > 0 && unselectedPlan.All(row=>row.Field<string>("Kart No")=="00053"), "bulk person plan needs no checkbox and cannot include other card");
-            Check(control.PlanVisibleCorrections(true).Length==0, "checkbox plan still requires explicit selection");
-            Check(unselectedPlan.Length==departedPairs.Count(pair=>pair.Safe), "bulk person plan includes every safe visible operation");
-            Check(DbTnfSyncControl.CorrectionSummary(unselectedPlan).Contains("Fazla TNF:"), "confirmation gives operation count summary");
+            Check(departedPairs.Length > 0 && departedPairs.All(pair => pair.Row.Field<string>("Kart No") == "00053"),
+                "REV25 person filter changes only the visible comparison, not the global exact plan");
             var globalPlan = control.PlanAllCorrections();
-            Check(globalPlan.Length == control.LastSnapshot!.Table.AsEnumerable().Count(SyncEngine.SafeOperation) && globalPlan.Select(row => row.Field<string>("Kart No")).Distinct().Count() > 1,
-                "REV21 global TNF plan includes all snapshot people despite visible person filter");
-            Check(DbTnfSyncControl.CorrectionSummary(globalPlan, 0, true, 12).Contains("İşlenecek Personel: Tüm ay / 12 kişi"), "REV21 global confirmation displays whole-month scope rather than selected person");
+            Check(globalPlan.Length == control.LastSnapshot!.Table.AsEnumerable().Count(SyncEngine.SafeOperation) &&
+                  globalPlan.Select(row => row.Field<string>("Kart No")).Where(card => !string.IsNullOrWhiteSpace(card)).Distinct().Count() > 1,
+                "REV25 one-shot plan always includes every safe operation in the audited scope");
             var personLabel = (Label)typeof(DbTnfSyncControl).GetField("personnelSummary", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
             Check(personLabel.Text.Contains("DB Durumu (DURUM.AD)") && personLabel.Text.Contains("Efektif Durum: PASİF") && personLabel.Text.Contains("ÇELİŞKİSİ"), "summary separates raw status effective status and date contradiction");
             searchBox.Text = "00003";
