@@ -129,6 +129,7 @@ internal sealed class EOperationsControl : UserControl
     void ConfigurePeopleGrid()
     {
         people.ReadOnly = false;
+        people.AutoGenerateColumns = false;
         people.Columns.Clear();
         void C(string name, string title, int width, bool readOnly = true)
         {
@@ -157,6 +158,7 @@ internal sealed class EOperationsControl : UserControl
     void ConfigurePreviewGrid()
     {
         preview.ReadOnly = true;
+        preview.AutoGenerateColumns = false;
         preview.Columns.Clear();
         foreach (var column in new[] { ("Kart","Kart"), ("AdSoyad","Ad Soyad"), ("Tarih","Tarih"), ("Taraf","Taraf"), ("Saat","Saat"), ("Islem","İşlem") })
             preview.Columns.Add(new DataGridViewTextBoxColumn { Name = column.Item1, HeaderText = column.Item2, DataPropertyName = column.Item1, ReadOnly = true });
