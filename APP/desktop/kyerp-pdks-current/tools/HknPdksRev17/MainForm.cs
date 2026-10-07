@@ -56,10 +56,6 @@ public sealed partial class MainForm : Form
 
 	private readonly DataGridView payrollGrid = Grid();
 
-	private readonly DataGridView bulkGrid = Grid();
-
-	private readonly DataGridView auditGrid = Grid();
-
 	private readonly DataGridView eGrid = Grid();
 
 	private readonly DataGridView paymentGrid = Grid();
@@ -106,20 +102,6 @@ public sealed partial class MainForm : Form
 		Width = 120
 	};
 
-	private readonly CheckedListBox peopleList = new CheckedListBox
-	{
-		Dock = DockStyle.Fill,
-		CheckOnClick = true
-	};
-
-	private readonly CheckedListBox dayList = new CheckedListBox
-	{
-		Dock = DockStyle.Fill,
-		CheckOnClick = true
-	};
-
-	private readonly DateTimePicker ioMonth = MonthPicker();
-
 	private readonly NumericUpDown ioYear = new NumericUpDown
 	{
 		Minimum = 2010m,
@@ -130,21 +112,6 @@ public sealed partial class MainForm : Form
 	private readonly ComboBox ioMonthNo = MonthCombo();
 
 	private readonly ComboBox ioPerson = new ComboBox
-	{
-		DropDownStyle = ComboBoxStyle.DropDownList,
-		Width = 220
-	};
-
-	private readonly NumericUpDown auditYear = new NumericUpDown
-	{
-		Minimum = 2010m,
-		Maximum = 2100m,
-		Width = 75
-	};
-
-	private readonly ComboBox auditMonthNo = MonthCombo();
-
-	private readonly ComboBox auditPerson = new ComboBox
 	{
 		DropDownStyle = ComboBoxStyle.DropDownList,
 		Width = 220
@@ -182,8 +149,6 @@ public sealed partial class MainForm : Form
 		Width = 220
 	};
 
-	private readonly DateTimePicker payrollMonth = MonthPicker();
-
 	private readonly NumericUpDown payrollYear = new NumericUpDown
 	{
 		Minimum = 2010m,
@@ -213,8 +178,6 @@ public sealed partial class MainForm : Form
 	private readonly Button payrollPersonLockButton = new Button { Width = 150, Height = 30 };
 	private readonly Button payrollPersonUnlockButton = new Button { Width = 135, Height = 30 };
 
-	private readonly DateTimePicker paymentMonth = MonthPicker();
-
 	private readonly NumericUpDown paymentYear = new NumericUpDown
 	{
 		Minimum = 2010m,
@@ -229,8 +192,6 @@ public sealed partial class MainForm : Form
 		DropDownStyle = ComboBoxStyle.DropDownList,
 		Width = 220
 	};
-
-	private readonly DateTimePicker advanceMonth = MonthPicker();
 
 	private readonly NumericUpDown advanceYear = new NumericUpDown
 	{
@@ -247,24 +208,6 @@ public sealed partial class MainForm : Form
 		Width = 220
 	};
 
-	private readonly DateTimePicker rangeStart = new DateTimePicker
-	{
-		Format = DateTimePickerFormat.Short
-	};
-
-	private readonly DateTimePicker rangeEnd = new DateTimePicker
-	{
-		Format = DateTimePickerFormat.Short
-	};
-
-	private readonly MaskedTextBox inMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.EntryEarly));
-
-	private readonly MaskedTextBox inMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.EntryLate));
-
-	private readonly MaskedTextBox outMin = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.ExitEarly));
-
-	private readonly MaskedTextBox outMax = TimeBox(WorkTimePolicy.Format(WorkTimePolicy.Default.ExitLate));
-
 	private FirebirdDatabase? db;
 	internal WorkTimePolicy WorkHours { get; private set; } = WorkTimePolicy.Default;
 	internal event EventHandler? WorkHoursChanged;
@@ -272,10 +215,6 @@ public sealed partial class MainForm : Form
 	{
 		if (WorkHours == policy) return;
 		WorkHours = policy;
-		inMin.Text = WorkTimePolicy.Format(policy.EntryEarly);
-		inMax.Text = WorkTimePolicy.Format(policy.EntryLate);
-		outMin.Text = WorkTimePolicy.Format(policy.ExitEarly);
-		outMax.Text = WorkTimePolicy.Format(policy.ExitLate);
 		WorkHoursChanged?.Invoke(this, EventArgs.Empty);
 	}
 
@@ -322,15 +261,7 @@ public sealed partial class MainForm : Form
 		{
 			DetectSources();
 		};
-		ioYear.Value = (auditYear.Value = (eYear.Value = (eHistoryYear.Value = (payrollYear.Value = (paymentYear.Value = (advanceYear.Value = DateTime.Today.Year))))));
-		rangeStart.ValueChanged += delegate
-		{
-			RebuildDays();
-		};
-		rangeEnd.ValueChanged += delegate
-		{
-			RebuildDays();
-		};
+		ioYear.Value = eYear.Value = eHistoryYear.Value = payrollYear.Value = paymentYear.Value = advanceYear.Value = DateTime.Today.Year;
 	}
 
 	private static DataGridView Grid()
@@ -348,16 +279,6 @@ public sealed partial class MainForm : Form
 		};
 	}
 
-	private static DateTimePicker MonthPicker()
-	{
-		return new DateTimePicker
-		{
-			Format = DateTimePickerFormat.Custom,
-			CustomFormat = "MMMM yyyy",
-			ShowUpDown = true
-		};
-	}
-
 	private static ComboBox MonthCombo()
 	{
 		ComboBox comboBox = new ComboBox
@@ -372,15 +293,6 @@ public sealed partial class MainForm : Form
 		});
 		comboBox.SelectedIndex = DateTime.Today.Month;
 		return comboBox;
-	}
-
-	private static MaskedTextBox TimeBox(string value)
-	{
-		return new MaskedTextBox("00:00")
-		{
-			Text = value,
-			Width = 60
-		};
 	}
 
 	private void Build()
@@ -987,16 +899,6 @@ public sealed partial class MainForm : Form
 			int num2 = Convert.ToInt32(db.Scalar("select count(*) from KIMLIK where ICTARIH is not null and ICTARIH<@TODAY", new FbParameter("@TODAY", DateTime.Today)) ?? ((object)0));
 			personSummary.Text = $"Aktif: {num}   Pasif: {num2}   Toplam: {num + num2}";
 			DataTable dataTable = db.Query("select PKNO,AD,SOYAD from KIMLIK where (ICTARIH is null or ICTARIH>=@TODAY) order by PKNO", new FbParameter("@TODAY", DateTime.Today));
-			peopleList.Items.Clear();
-			foreach (DataRow row in dataTable.Rows)
-			{
-				string text4 = Convert.ToString(row["PKNO"]) ?? "";
-				string item = $"{text4}  {row["AD"]} {row["SOYAD"]}";
-				if (!(text4 == "00001"))
-				{
-					peopleList.Items.Add(item, isChecked: false);
-				}
-			}
 			if (peopleGrid.Columns.Contains("ICTARIH"))
 			{
 				peopleGrid.Columns["ICTARIH"].HeaderText = "İşten Çıkış";
@@ -1045,7 +947,7 @@ public sealed partial class MainForm : Form
 					peopleGrid.Columns[item2.Key].HeaderText = item2.Value;
 				}
 			}
-			ComboBox[] array2 = new ComboBox[6] { ioPerson, auditPerson, eHistoryPerson, payrollPerson, paymentPerson, advancePerson };
+			ComboBox[] array2 = new ComboBox[5] { ioPerson, eHistoryPerson, payrollPerson, paymentPerson, advancePerson };
 			foreach (ComboBox comboBox in array2)
 			{
 				string text5 = comboBox.SelectedItem?.ToString();
@@ -1592,12 +1494,6 @@ public sealed partial class MainForm : Form
 			MessageBox.Show(ex.Message, "Toplu E", MessageBoxButtons.OK, MessageBoxIcon.Error);
 		}
 		finally { stagedTnf?.Dispose(); }
-	}
-
-	private static object? Scalar(FbConnection c, FbTransaction tx, string sql, params FbParameter[] p)
-	{
-		using FbCommand fbCommand = FirebirdDatabase.CreateCommand(c, tx, sql, p);
-		return fbCommand.ExecuteScalar();
 	}
 
 	private static int Exec(FbConnection c, FbTransaction tx, string sql, params FbParameter[] p)
