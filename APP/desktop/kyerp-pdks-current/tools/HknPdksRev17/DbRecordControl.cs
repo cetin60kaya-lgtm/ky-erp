@@ -146,7 +146,15 @@ internal sealed class DbRecordControl : UserControl
             var mode = (DbRecordMode)operation.SelectedIndex;
             var result = await Task.Run(() => DbRecordService.Read(database, cards, dates, cancellation.Token, mode: mode), cancellation.Token);
             if (IsDisposed || !ReferenceEquals(database, Database)) return;
-            snapshot = result; previewDatabase = database; preview.DataSource = result.Changes;
+            snapshot = result; previewDatabase = database;
+            preview.DataSource = mode == DbRecordMode.Normalize
+                ? result.Plan.Where(x => x.Operation != "UYUMLU")
+                    .SelectMany(x => new[]
+                    {
+                        new DbRecordChange(x.Card, x.Name, x.Day, "Giriş", x.ExistingEntry, x.Entry, x.Operation, x.EntryId, "Giriş"),
+                        new DbRecordChange(x.Card, x.Name, x.Day, "Çıkış", x.ExistingExit, x.Exit, x.Operation, x.ExitId, "Çıkış")
+                    }).ToArray()
+                : result.Changes;
             var count = mode == DbRecordMode.Normalize ? result.Plan.Count(x => x.Operation != "UYUMLU") : result.Changes.Length;
             status.Text = $"{operation.Text} | Personel: {cards.Length} | Gün: {dates.Length} | Yapılacak işlem: {count} | {timer.ElapsedMilliseconds} ms";
         }
@@ -160,8 +168,11 @@ internal sealed class DbRecordControl : UserControl
         if (cancellation is not null) return;
         if (snapshot is null || !ReferenceEquals(previewDatabase, Database)) { MessageBox.Show(main, "Önce ÖNİZLE çalıştırın."); return; }
         var current = snapshot;
-        if (current.Changes.Length == 0) { status.Text = "Seçilen işlem için yapılacak değişiklik yok."; return; }
-        if (MessageBox.Show(main, $"{current.Cards.Length} personel / {current.Days.Length} seçili gün.\nİşlem: {operation.Text}\nÖnizlemedeki {current.Changes.Length} değişiklik uygulanacak; diğer kayıtlar ve E türleri korunacak.\nİşlemden önce DB ve TNF yedeği alınır. DB + ana TNF tek işlemde birlikte hizalanır. Devam?", "DB KAYIT — işlem onayı", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        var changeCount = current.Mode == DbRecordMode.Normalize
+            ? current.Plan.Count(x => x.Operation != "UYUMLU")
+            : current.Changes.Length;
+        if (changeCount == 0) { status.Text = "Seçilen işlem için yapılacak değişiklik yok."; return; }
+        if (MessageBox.Show(main, $"{current.Cards.Length} personel / {current.Days.Length} seçili gün.\nİşlem: {operation.Text}\nÖnizlemedeki {changeCount} kişi-gün değişikliği aynen uygulanacak; diğer kayıtlar ve E türleri korunacak.\nİşlemden önce DB ve TNF yedeği alınır. DB + ana TNF tek işlemde birlikte hizalanır. Devam?", "DB KAYIT — işlem onayı", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         var tnf = TnfBox?.Text?.Trim() ?? "";
         if (!File.Exists(tnf)) { MessageBox.Show(main, "Ana TNF dosyasını seçin. DB KAYIT artık DB + TNF birlikte çalışır.", "DB KAYIT", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         cancellation = new(); Busy(true); var succeeded = false; string backup = "";
