@@ -1649,95 +1649,71 @@ public sealed partial class MainForm : Form
 	private void AddEPreviewRow(DataTable t, string[] lines, DataRow r, string card, string name, DateTime day, bool entry)
 	{
 		string time = Convert.ToString(r[entry ? "GSAAT" : "CSAAT"]) ?? "";
-		string text = Convert.ToString(r[entry ? "GTUR" : "CTUR"]) ?? "";
-		string[] array = lines.Where((string x) => SameTnfSide(x, card, day, entry)).ToArray();
-		string[] array2 = array.Where((string x) => x.Split(',').Length > 1 && x.Split(',')[1] == time).ToArray();
-		string[] array3 = ((array2.Length != 0) ? array2 : array);
-		string text2 = ((array2.Length == 1) ? "Hazır - tam eşleşme" : ((array3.Length == 0) ? "Hazır - TNF yok" : ((array3.Length == 1) ? "Hazır - tek taraf adayı" : "ÇAKIŞMA")));
-		t.Rows.Add(r["SIRA"], card, name, day.ToString("dd.MM.yyyy"), entry ? "Giriş" : "Çıkış", time, text, string.Join(" | ", array3), text2);
+		string currentType = Convert.ToString(r[entry ? "GTUR" : "CTUR"]) ?? "";
+		string exact = $"{card},{time},{day:ddMMyy},1,001";
+		int exactCount = lines.Count(x => string.Equals(x.Trim(), exact, StringComparison.OrdinalIgnoreCase));
+		string candidate = exactCount == 0 ? "" : exactCount == 1 ? exact : $"{exact} × {exactCount}";
+		string state = exactCount == 0 ? "Hazır - TNF karşılığı yok" : "Hazır - E sonrası TNF'den kaldırılacak";
+		t.Rows.Add(r["SIRA"], card, name, day.ToString("dd.MM.yyyy"), entry ? "Giriş" : "Çıkış", time, currentType, candidate, state);
 	}
 
 	private void ApplyBulkE()
 	{
-		if (db == null)
-		{
-			return;
-		}
+		if (db == null) return;
 		DataTable dataTable;
-		try
-		{
-			dataTable = BuildBulkEPreview();
-		}
-		catch (Exception ex)
-		{
-			MessageBox.Show(ex.Message, "E İşlemleri");
-			return;
-		}
+		try { dataTable = BuildBulkEPreview(); }
+		catch (Exception ex) { MessageBox.Show(ex.Message, "E İşlemleri"); return; }
+
 		if (dataTable.Rows.Count == 0)
 		{
 			MessageBox.Show("E'ye çevrilecek normal kayıt bulunamadı.");
+			return;
 		}
-		else if (dataTable.AsEnumerable().Any((DataRow r) => Convert.ToString(r["Durum"]) == "ÇAKIŞMA"))
+		if (string.IsNullOrWhiteSpace(tnfPath.Text) || !File.Exists(tnfPath.Text))
 		{
-			MessageBox.Show("Çakışmalı TNF satırı var. Uygulama durduruldu.", "E İşlemleri", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
+			MessageBox.Show("Ana TNF dosyasını seçin. E işlemi DB ve TNF'yi birlikte günceller.");
+			return;
 		}
-		else if (!File.Exists(tnfPath.Text))
+		if (MessageBox.Show($"{dataTable.Rows.Count} taraf E yapılacak. DB ana kaynak kabul edilip ilgili kişi/gün TNF kayıtları işlem sonunda otomatik yeniden oluşturulacak; E kayıtları TNF'de olmayacak. Devam?", "Toplu E", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+			return;
+
+		string dbBackup;
+		try { dbBackup = MonthlyDbWriter.BackupAsync(db, CancellationToken.None).GetAwaiter().GetResult(); }
+		catch (Exception ex) { MessageBox.Show(ex.Message, "E İşlemleri - DB yedeği alınamadı", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+
+		using FbConnection fbConnection = db.OpenConnection();
+		using FbTransaction fbTransaction = fbConnection.BeginTransaction();
+		StagedDbRecordTnf? stagedTnf = null;
+		try
 		{
-			MessageBox.Show("TNF dosyasını seçin.");
+			var scope = new HashSet<(string Card, DateTime Day)>();
+			foreach (DataRow row in dataTable.Rows)
+			{
+				int id = Convert.ToInt32(row["SIRA"]);
+				string card = Convert.ToString(row["Kart No"]) ?? "";
+				DateTime day = DateTime.ParseExact(Convert.ToString(row["Tarih"]) ?? "", "dd.MM.yyyy", CultureInfo.InvariantCulture);
+				bool entry = Convert.ToString(row["Taraf"]) == "Giriş";
+				if (Exec(fbConnection, fbTransaction, entry ? "update GIRCIK set GTUR='E' where SIRA=@S" : "update GIRCIK set CTUR='E' where SIRA=@S", new FbParameter("@S", id)) != 1)
+					throw new InvalidOperationException("DB kaydı değişti; E işlemi geri alındı.");
+				scope.Add((card, day));
+			}
+
+			stagedTnf = DbRecordTnfCoordinator.Stage(fbConnection, fbTransaction, tnfPath.Text, scope, CancellationToken.None);
+			stagedTnf.Publish();
+			try { fbTransaction.Commit(); }
+			catch { stagedTnf.Restore(); throw; }
+
+			eGrid.DataSource = BuildBulkEPreview();
+			LoadIo();
+			MessageBox.Show($"Toplu E tamamlandı. DB ve TNF birlikte güncellendi.\nDB yedeği: {dbBackup}\nTNF yedeği: {stagedTnf.BackupPath}", "HKN PDKS");
 		}
-		else
+		catch (Exception ex)
 		{
-			if (MessageBox.Show($"{dataTable.Rows.Count} taraf E yapılacak ve TNF karşılıkları temizlenecek. Devam?", "Toplu E", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-			{
-				return;
-			}
-			string text = tnfPath.Text + ".bak_Ebulk_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
-			File.Copy(tnfPath.Text, text, overwrite: true);
-			List<string> list = (from x in File.ReadAllLines(tnfPath.Text)
-				where !string.IsNullOrWhiteSpace(x)
-				select x).ToList();
-			using FbConnection fbConnection = db.OpenConnection();
-			using FbTransaction fbTransaction = fbConnection.BeginTransaction();
-			try
-			{
-				foreach (DataRow row in dataTable.Rows)
-				{
-					int num = Convert.ToInt32(row["SIRA"]);
-					string card = Convert.ToString(row["Kart No"]);
-					DateTime day = DateTime.ParseExact(Convert.ToString(row["Tarih"]), "dd.MM.yyyy", null);
-					bool entry = Convert.ToString(row["Taraf"]) == "Giriş";
-					string time = Convert.ToString(row["Saat"]);
-					Exec(fbConnection, fbTransaction, entry ? "update GIRCIK set GTUR='E' where SIRA=@S" : "update GIRCIK set CTUR='E' where SIRA=@S", new FbParameter("@S", num));
-					List<(string, int)> list2 = (from z in list.Select((string x, int i) => (x: x, i: i))
-						where SameTnfSide(z.x, card, day, entry)
-						select z).ToList();
-					List<(string, int)> list3 = list2.Where<(string, int)>(((string x, int i) z) => z.x.Split(',').Length > 1 && z.x.Split(',')[1] == time).ToList();
-					List<(string, int)> list4 = ((list3.Count == 1) ? list3 : ((list2.Count == 1) ? list2 : new List<(string, int)>()));
-					if (list4.Count == 1)
-					{
-						list.Remove(list4[0].Item1);
-					}
-				}
-				File.WriteAllLines(tnfPath.Text, list);
-				fbTransaction.Commit();
-				eGrid.DataSource = BuildBulkEPreview();
-				LoadIo();
-				LoadAudit();
-				MessageBox.Show("Toplu E tamamlandı. TNF yedeği: " + text, "HKN PDKS");
-			}
-			catch (Exception ex2)
-			{
-				try
-				{
-					fbTransaction.Rollback();
-				}
-				catch
-				{
-				}
-				File.Copy(text, tnfPath.Text, overwrite: true);
-				MessageBox.Show(ex2.Message, "Toplu E", MessageBoxButtons.OK, MessageBoxIcon.Hand);
-			}
+			try { fbTransaction.Rollback(); } catch { }
+			stagedTnf?.Restore();
+			MessageBox.Show(ex.Message, "Toplu E", MessageBoxButtons.OK, MessageBoxIcon.Error);
 		}
+		finally { stagedTnf?.Dispose(); }
 	}
 
 	private void PreviewBulk()
@@ -2027,96 +2003,61 @@ public sealed partial class MainForm : Form
 
 	private void MarkSelectedE(bool entry)
 	{
-		if (db == null || ioGrid.SelectedRows.Count == 0)
+		if (db == null || ioGrid.SelectedRows.Count == 0) return;
+		if (string.IsNullOrWhiteSpace(tnfPath.Text) || !File.Exists(tnfPath.Text))
 		{
+			MessageBox.Show("Ana TNF dosyasını seçin. E işlemi DB ve TNF'yi birlikte günceller.", "E Düzeltme");
 			return;
 		}
-		if (!File.Exists(tnfPath.Text))
+
+		var rows = ioGrid.SelectedRows.Cast<DataGridViewRow>().Where(r => !r.IsNewRow).ToList();
+		var scope = new HashSet<(string Card, DateTime Day)>();
+		foreach (var row in rows)
 		{
-			MessageBox.Show("TNF dosyasını seçin.", "E Düzeltme");
-			return;
+			string card = Convert.ToString(row.Cells["PKNO"].Value) ?? "";
+			object dateValue = entry ? row.Cells["GTARIH"].Value : row.Cells["CTARIH"].Value;
+			string time = Convert.ToString(entry ? row.Cells["GSAAT"].Value : row.Cells["CSAAT"].Value) ?? "";
+			if (dateValue == null || dateValue == DBNull.Value || string.IsNullOrWhiteSpace(time))
+			{
+				MessageBox.Show(card + ": seçilen tarafta tarih/saat yok.", "E Düzeltme", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+				return;
+			}
+			scope.Add((card, Convert.ToDateTime(dateValue).Date));
 		}
-		List<DataGridViewRow> list = (from DataGridViewRow r in ioGrid.SelectedRows
-			where !r.IsNewRow
-			select r).ToList();
-		List<string> source = (from x in File.ReadAllLines(tnfPath.Text)
-			where !string.IsNullOrWhiteSpace(x)
-			select x).ToList();
-		HashSet<int> remove = new HashSet<int>();
+
+		if (MessageBox.Show($"{rows.Count} kayıt için {(entry ? "giriş" : "çıkış")} tarafı E yapılacak. Sonra ilgili kişi/gün TNF kayıtları doğrudan DB'den yeniden kurulacak; E kayıtları TNF'de olmayacak. Devam?", "E Düzeltme", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+			return;
+
+		string dbBackup;
+		try { dbBackup = MonthlyDbWriter.BackupAsync(db, CancellationToken.None).GetAwaiter().GetResult(); }
+		catch (Exception ex) { MessageBox.Show(ex.Message, "E Düzeltme - DB yedeği alınamadı", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+
+		using FbConnection connection = db.OpenConnection();
+		using FbTransaction transaction = connection.BeginTransaction();
+		StagedDbRecordTnf? stagedTnf = null;
 		try
 		{
-			foreach (DataGridViewRow item in list)
+			foreach (var row in rows)
 			{
-				string card = Convert.ToString(item.Cells["PKNO"].Value) ?? "";
-				object obj = (entry ? item.Cells["GTARIH"].Value : item.Cells["CTARIH"].Value);
-				string time = Convert.ToString(entry ? item.Cells["GSAAT"].Value : item.Cells["CSAAT"].Value) ?? "";
-				if (obj == null || obj == DBNull.Value || string.IsNullOrWhiteSpace(time))
-				{
-					throw new InvalidOperationException(card + ": seçilen tarafta tarih/saat yok.");
-				}
-				DateTime day = Convert.ToDateTime(obj).Date;
-				List<(string, int)> list2 = (from z in source.Select((string x, int i) => (x: x, i: i))
-					where SameTnfSide(z.x, card, day, entry)
-					select z).ToList();
-				List<(string, int)> list3 = list2.Where<(string, int)>(((string x, int i) z) => z.x.Split(',')[1] == time).ToList();
-				List<(string, int)> list4 = ((list3.Count > 0) ? list3 : list2);
-				if (list4.Count > 1)
-				{
-					throw new InvalidOperationException($"{card} {day:dd.MM.yyyy}: aynı tarafta birden fazla TNF adayı var.");
-				}
-				if (list4.Count == 1)
-				{
-					remove.Add(list4[0].Item2);
-				}
+				int id = Convert.ToInt32(row.Cells["SIRA"].Value);
+				if (Exec(connection, transaction, entry ? "update GIRCIK set GTUR='E' where SIRA=@S" : "update GIRCIK set CTUR='E' where SIRA=@S", new FbParameter("@S", id)) != 1)
+					throw new InvalidOperationException("DB kaydı değişti; E işlemi geri alındı.");
 			}
+			stagedTnf = DbRecordTnfCoordinator.Stage(connection, transaction, tnfPath.Text, scope, CancellationToken.None);
+			stagedTnf.Publish();
+			try { transaction.Commit(); }
+			catch { stagedTnf.Restore(); throw; }
+
+			LoadIo();
+			MessageBox.Show($"E işlemi tamamlandı. DB ve TNF birlikte güncellendi.\nDB yedeği: {dbBackup}\nTNF yedeği: {stagedTnf.BackupPath}", "HKN PDKS");
 		}
 		catch (Exception ex)
 		{
-			MessageBox.Show(ex.Message, "E Düzeltme", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
-			return;
+			try { transaction.Rollback(); } catch { }
+			stagedTnf?.Restore();
+			MessageBox.Show(ex.Message, "E Düzeltme", MessageBoxButtons.OK, MessageBoxIcon.Error);
 		}
-		if (MessageBox.Show($"{list.Count} kayıt için {(entry ? "giriş" : "çıkış")} tarafı E yapılacak. TNF'deki karşılık temizlenecek. Devam?", "E Düzeltme", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-		{
-			return;
-		}
-		string text = tnfPath.Text + ".bak_E_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
-		File.Copy(tnfPath.Text, text, overwrite: true);
-		using FbConnection fbConnection = db.OpenConnection();
-		using FbTransaction fbTransaction = fbConnection.BeginTransaction();
-		try
-		{
-			foreach (DataGridViewRow item2 in list)
-			{
-				int num = Convert.ToInt32(item2.Cells["SIRA"].Value);
-				Exec(fbConnection, fbTransaction, entry ? "update GIRCIK set GTUR='E' where SIRA=@S" : "update GIRCIK set CTUR='E' where SIRA=@S", new FbParameter("@S", num));
-			}
-			string[] contents = source.Where((string _, int i) => !remove.Contains(i)).ToArray();
-			File.WriteAllLines(tnfPath.Text, contents);
-			try
-			{
-				fbTransaction.Commit();
-			}
-			catch
-			{
-				File.Copy(text, tnfPath.Text, overwrite: true);
-				throw;
-			}
-			LoadIo();
-			LoadAudit();
-			MessageBox.Show($"E işlemi tamamlandı. TNF'den {remove.Count} satır temizlendi. Yedek: {text}", "HKN PDKS");
-		}
-		catch (Exception ex2)
-		{
-			try
-			{
-				fbTransaction.Rollback();
-			}
-			catch
-			{
-			}
-			File.Copy(text, tnfPath.Text, overwrite: true);
-			MessageBox.Show(ex2.Message, "E Düzeltme", MessageBoxButtons.OK, MessageBoxIcon.Hand);
-		}
+		finally { stagedTnf?.Dispose(); }
 	}
 
 	private void LoadEHistory()
