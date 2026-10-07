@@ -319,7 +319,6 @@ public sealed partial class MainForm : Form
 		tabs.TabPages.Add(Page("Bordro", BuildPayroll()));
 		tabs.TabPages.Add(Page("Ödeme / Avans", BuildPayments()));
 		tabs.TabPages.Add(Page("DB - TNF Eşitle", new DbTnfSyncControl(this)));
-		tabs.TabPages.Add(Page("TNF Hazırla", new TnfPrepareControl(this)));
 
 		tableLayoutPanel.Controls.Add(tabs, 0, 1);
 		base.Controls.Add(tableLayoutPanel);
