@@ -2197,9 +2197,6 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     garnishment: legalRows.reduce((sum, item) => sum + number(item.amount), 0),
   };
   const toCents = (value: unknown) => Math.round(number(value) * 100);
-  if (toCents(desired.overtime) !== toCents(current.overtime)) {
-    return error(c, 409, "OVERTIME_SOURCE_MISMATCH", "Mesai toplamı gerçek Mesai hareketleriyle uyuşmuyor. Mesaiyi Mesai / Avans / Kesinti ekranındaki saat ve oran kaydından düzenleyin.");
-  }
   const currentBankDeductions = [...advanceRows, ...deductionRows, ...legalRows]
     .filter((item) => upper(item.paymentMethod).includes("BANKA"))
     .reduce((sum, item) => sum + number(item.amount), 0);
@@ -2273,12 +2270,45 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     if (toCents(currentAmount) === toCents(desiredAmount) || rows.length <= 1) return null;
     return error(c, 409, "FINANCE_SOURCE_AMBIGUOUS", label + " için birden fazla gerçek kaynak kaydı var. Toplamı tek satıra ezmemek için ilgili hareketi Mesai / Avans / Kesinti ekranından düzenleyin.");
   };
+  const ambiguousOvertime = ensureUnambiguous("Mesai", overtimeRows, current.overtime, desired.overtime);
+  if (ambiguousOvertime) return ambiguousOvertime;
+  if (!overtimeRows.length && toCents(desired.overtime) > 0) {
+    return error(c, 409, "OVERTIME_SOURCE_REQUIRED", "Mesai toplamı için önce gerçek bir Mesai kaydı gerekir. Saat ve oranı Mesai / Avans / Kesinti ekranından girin.");
+  }
+  if (overtimeRows.length === 1 && toCents(desired.overtime) !== toCents(current.overtime) && toCents(desired.overtime) > 0 && desired.salary <= 0) {
+    return error(c, 409, "OVERTIME_SOURCE_INVALID", "Mesai kaynağını güncellemek için geçerli maaş tutarı gereklidir.");
+  }
   const ambiguousAdvance = ensureUnambiguous("Avans", advanceRows, current.advance, desired.advance);
   if (ambiguousAdvance) return ambiguousAdvance;
   const ambiguousDeduction = ensureUnambiguous("Kesinti", manualDeductionRows, currentManualDeduction, desiredManualDeduction);
   if (ambiguousDeduction) return ambiguousDeduction;
   const ambiguousLegal = ensureUnambiguous("İcra / Haciz", legalRows, current.garnishment, desired.garnishment);
   if (ambiguousLegal) return ambiguousLegal;
+
+  const syncOvertimeSource = () => {
+    const target = Math.max(Math.round(desired.overtime * 100) / 100, 0);
+    const currentAmount = overtimeRows.reduce((sum, item) => sum + number(item.amount), 0);
+    if (toCents(target) === toCents(currentAmount)) return;
+    const existingRow = overtimeRows[0];
+    if (!existingRow) return;
+    const id = text(existingRow.id);
+    if (!id) return;
+    if (toCents(target) === 0) {
+      sourceDeletedIds.push(id);
+      statements.push(c.env.DB.prepare("DELETE FROM hr_monthly_adjustments_v2 WHERE id=?").bind(id));
+      return;
+    }
+    const multiplier = overtimeMultiplierValue(existingRow.overtimeMultiplier || 1.5);
+    const divisor = number(employee.overtime_hourly_base) || 225;
+    const salaryBasis = Math.max(desired.salary, 0);
+    const rawHours = (target * divisor) / (salaryBasis * multiplier);
+    const nextHours = Math.max(Math.round(rawHours * 1000000) / 1000000, 0);
+    sourceUpdateIds.push(id);
+    statements.push(
+      c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET hour_or_day=?,amount=?,payment_method='Bordro',payroll_effect='Bordroya yansir' WHERE id=?")
+        .bind(nextHours, target, id),
+    );
+  };
 
   const syncCanonicalSource = (rows: Row[], desiredAmount: number, adjustmentType: string, source: string) => {
     const target = Math.max(Math.round(desiredAmount * 100) / 100, 0);
@@ -2305,6 +2335,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
       .bind(id, employeeId, correctionDate, adjustmentType, 0, target, normalizeSource(source), "Bordroya yansir", reason, "APPROVED", timestamp));
   };
 
+  syncOvertimeSource();
   syncCanonicalSource(advanceRows, desired.advance, advanceRows[0] ? text(advanceRows[0].adjustmentType) : "Avans", advanceSource);
   syncCanonicalSource(manualDeductionRows, desiredManualDeduction, manualDeductionRows[0] ? text(manualDeductionRows[0].adjustmentType) : "Ozel kesinti", deductionSource);
   syncCanonicalSource(legalRows, desired.garnishment, legalType, garnishmentSource);

@@ -178,6 +178,7 @@ test("legacy synthetic overtime corrections never count as real overtime", () =>
   assert.match(relational, /function isLegacySyntheticOvertimeCorrection/);
   assert.match(relational, /BORDRO KAYNAK KONTROL/);
   assert.match(relational, /!isLegacySyntheticOvertimeCorrection\(row\)/);
-  assert.match(relational, /OVERTIME_SOURCE_MISMATCH/);
+  assert.match(relational, /OVERTIME_SOURCE_REQUIRED/);
+  assert.match(relational, /syncOvertimeSource/);
   assert.doesNotMatch(relational, /pushCorrection\("overtime"/);
 });
