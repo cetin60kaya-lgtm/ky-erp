@@ -70,8 +70,8 @@ internal static class WorkTimeTests
         using var tnf = new TnfPrepareControl(main);
         main.SetWorkHours(custom);
         string Field(object owner, string name) => ((MaskedTextBox)owner.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(owner)!).Text;
-        check(Field(main, "inMin") == "08:45" && Field(main, "inMax") == "09:15" && Field(tnf, "inMin") == "08:45" && Field(tnf, "inMax") == "09:15", "REV23 bulk and TNF prepare share full DB entry distribution range");
+        check(main.WorkHours == custom && Field(tnf, "inMin") == "08:45" && Field(tnf, "inMax") == "09:15", "REV25 shell and TNF prepare share the DB work-time policy");
         main.SetWorkHours(policy);
-        check(Field(tnf, "outMin") == "18:30" && Field(tnf, "outMax") == "19:30", "REV23 source reset propagates full exit distribution range to every consumer");
+        check(main.WorkHours == policy && Field(tnf, "outMin") == "18:30" && Field(tnf, "outMax") == "19:30", "REV25 source reset propagates the full exit distribution range to consumers");
     }
 }
