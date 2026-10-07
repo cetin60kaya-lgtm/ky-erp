@@ -180,7 +180,7 @@ internal static class Program
         Check(Count(before.Table, "TNF SİL E") == 1, "REV25 exact audit removes E counterpart");
         Check(Count(before.Table, "TNF EKLE") == 4, "REV25 exact audit adds every DB-normal movement missing from TNF");
         Check(Count(before.Table, "TNF SİL FAZLA") == 5, "REV25 exact audit deletes every TNF row without exact DB-normal counterpart");
-        Check(Count(before.Table, "TNF DÜZELT") == 0, "REV24 wrong clocks are delete-plus-add, not interpreted");
+        Check(Count(before.Table, "TNF DÜZELT") == 0, "REV25 wrong clocks are delete-plus-add, not interpreted");
 
         var result = SyncEngine.DirectSyncSourceAsync(database, before, CancellationToken.None).GetAwaiter().GetResult();
         Check(File.Exists(result.BackupPath) && File.ReadAllBytes(result.BackupPath).SequenceEqual(originalBytes), "REV25 one-click backup preserves original TNF bytes");
