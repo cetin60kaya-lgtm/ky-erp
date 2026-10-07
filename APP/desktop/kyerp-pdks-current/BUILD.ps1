@@ -48,4 +48,26 @@ if ($terminalSdkSource) {
     Write-Warning "Fiziksel terminal SDK kaynagi bulunamadi; cihaz ActiveX dosyalari pakete eklenmedi."
 }
 
+$ps2000Candidates = @(
+    "D:\GoogleDrive\Hakan Emp\OTOMASYON\KY-CONTROL\PAYLOAD\PS2000_ANALIZ",
+    "D:\Googledrive\Hakan Emp\OTOMASYON\KY-CONTROL\PAYLOAD\PS2000_ANALIZ",
+    "C:\Users\DESEN\Desktop\KY PDKS TEST 01-10-2026\TerminalSdkPS2000"
+)
+$ps2000Source = $ps2000Candidates | Where-Object {
+    (Test-Path (Join-Path $_ "SBXPC.ocx")) -and
+    (Test-Path (Join-Path $_ "SBXPCDLL.dll")) -and
+    (Test-Path (Join-Path $_ "SBPCCOMM.dll")) -and
+    (Test-Path (Join-Path $_ "GEN_FONT.dll"))
+} | Select-Object -First 1
+if ($ps2000Source) {
+    $ps2000Out = Join-Path $personelOut "TerminalSdkPS2000"
+    New-Item -ItemType Directory -Force -Path $ps2000Out | Out-Null
+    foreach ($name in @("SBXPC.ocx","SBXPCDLL.dll","SBPCCOMM.dll","GEN_FONT.dll")) {
+        Copy-Item (Join-Path $ps2000Source $name) $ps2000Out -Force
+    }
+    Write-Host "PS-2000 SDK eklendi: $ps2000Source" -ForegroundColor Green
+} else {
+    Write-Warning "PS-2000 / SBXPC SDK bulunamadi; yeni A3 terminal pakete eklenmedi."
+}
+
 Write-Host "KYERP PDKS BUILD OK" -ForegroundColor Green
