@@ -50,7 +50,7 @@ export default function MobilePDKS() {
     return () => window.clearInterval(timer);
   }, [load]);
 
-  const metrics = dashboard?.metrics || {};
+  const metrics = useMemo(() => dashboard?.metrics || {}, [dashboard]);
   const cards = useMemo(() => [
     ["İçeride", metrics.inside || 0],
     ["Geç Kalan", metrics.late || 0],
