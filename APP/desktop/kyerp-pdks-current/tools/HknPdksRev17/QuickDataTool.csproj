@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <Compile Remove="MainForm26.cs" />
+    <Compile Remove="MainForm26.cs;DbTnfSyncInjector.cs;TnfPrepareInjector.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -12,6 +12,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);CS8600;CS8602;CS8604;CS8622</NoWarn>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Product>HKN PDKS REV27</Product>
