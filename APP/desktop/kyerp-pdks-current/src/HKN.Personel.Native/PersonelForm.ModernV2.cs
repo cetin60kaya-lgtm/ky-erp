@@ -107,7 +107,12 @@ public partial class PersonelForm
         Controls.Add(root);
 
         list.DataBindingComplete += (_,_) => { ConfigureListColumns(); UpdateClassicStats(); };
-        tabs.SelectedIndexChanged += (_,_) => { ApplyClassicGridStyles(); RefreshSelectedTab(); };
+        tabs.SelectedIndexChanged += (_,_) =>
+        {
+            if (fullTabsReady) SyncPeriodsToPerson();
+            ApplyClassicGridStyles();
+            RefreshSelectedTab();
+        };
         personLoadTimer.Tick += (_,_) =>
         {
             personLoadTimer.Stop();
