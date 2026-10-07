@@ -16,8 +16,9 @@ public sealed class LegacyPuantajForm : Form
     readonly ProgressBar progress1=new(){Dock=DockStyle.Fill};
     readonly ProgressBar progress2=new(){Dock=DockStyle.Fill};
     readonly System.Windows.Forms.Timer filterDebounce = new() { Interval = 220 };
+    FilterSet? pendingFilter;
 
-    public LegacyPuantajForm(int initialTab = 0){Text="Puantaj";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);MinimumSize=new Size(960,620);Font=new Font("Segoe UI",9f);BackColor=PdksAppearance.Current.Canvas;KeyPreview=true;filterDebounce.Tick+=(_,_)=>{filterDebounce.Stop();if(filterDebounce.Tag is FilterSet active)ReloadPeople(active);};Build();tabs.SelectedIndex=Math.Clamp(initialTab,0,tabs.TabPages.Count-1);Shown+=(_,_)=>BeginInvoke((Action)Init);KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};Disposed+=(_,_)=>filterDebounce.Dispose();}
+    public LegacyPuantajForm(int initialTab = 0){Text="Puantaj";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);MinimumSize=new Size(960,620);Font=new Font("Segoe UI",9f);BackColor=PdksAppearance.Current.Canvas;KeyPreview=true;filterDebounce.Tick+=(_,_)=>{filterDebounce.Stop();var active=pendingFilter;pendingFilter=null;if(active is not null)ReloadPeople(active);};Build();tabs.SelectedIndex=Math.Clamp(initialTab,0,tabs.TabPages.Count-1);Shown+=(_,_)=>BeginInvoke((Action)Init);KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};Disposed+=(_,_)=>filterDebounce.Dispose();}
     static TextBox E()=>new();
     static DateTimePicker D()=>new(){Format=DateTimePickerFormat.Short};
     static ComboBox C()=>new(){DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="TEXT",ValueMember="KOD"};
@@ -207,7 +208,7 @@ public sealed class LegacyPuantajForm : Form
     {
         if(!IsHandleCreated||IsDisposed)return;
         filterDebounce.Stop();
-        filterDebounce.Tag=f;
+        pendingFilter=f;
         filterDebounce.Start();
     }
 
