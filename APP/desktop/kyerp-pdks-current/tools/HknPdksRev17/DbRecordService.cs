@@ -161,7 +161,7 @@ internal static partial class DbRecordService
         try
         {
             var fresh = Read(database, snapshot.Cards, snapshot.Days, token, connection, transaction);
-            if (fresh.Fingerprint != snapshot.Fingerprint) throw new InvalidOperationException("DB/personel değişti; önizlemeyi yenileyin. DB değişmedi.");
+            if (fresh.Fingerprint != snapshot.Fingerprint || fresh.WorkHours != snapshot.WorkHours) throw new InvalidOperationException("DB/personel/çalışma saati ayarı değişti; önizlemeyi yenileyin. DB değişmedi.");
             await File.WriteAllTextAsync(backup + ".rows.json", JsonSerializer.Serialize(new {
                 Before = snapshot.Records.AsEnumerable().Select(row => snapshot.Records.Columns.Cast<DataColumn>().ToDictionary(column => column.ColumnName, column => row[column] == DBNull.Value ? null : row[column])).ToArray(), snapshot.Plan }), token).ConfigureAwait(false);
             int Execute(string sql, params FbParameter[] parameters)
