@@ -176,9 +176,10 @@ public sealed partial class MainForm : Form
 		Margin = new Padding(8, 0, 0, 0)
 	};
 
-	private readonly Button payrollPeriodLockButton = new Button { Width = 125, Height = 30 };
-	private readonly Button payrollPersonLockButton = new Button { Width = 150, Height = 30 };
-	private readonly Button payrollPersonUnlockButton = new Button { Width = 135, Height = 30 };
+	private readonly Button payrollPeriodLockButton = new Button { Text = "Ayı Kilitle", Width = 125, Height = 30 };
+	private readonly Button payrollPersonLockButton = new Button { Text = "Seçilenleri Kilitle", Width = 150, Height = 30 };
+	private readonly Button payrollPersonUnlockButton = new Button { Text = "Kilidi Aç", Width = 135, Height = 30 };
+	private readonly Label payrollInfoStatus = new Label { Dock = DockStyle.Bottom, Height = 34, Padding = new Padding(8), ForeColor = Color.DimGray };
 
 	private readonly NumericUpDown paymentYear = new NumericUpDown
 	{
@@ -621,9 +622,10 @@ public sealed partial class MainForm : Form
 		flowLayoutPanel.Controls.Add(payrollPeriodLockButton);
 		flowLayoutPanel.Controls.Add(payrollPersonLockButton);
 		flowLayoutPanel.Controls.Add(payrollPersonUnlockButton);
-		flowLayoutPanel.Controls.Add(WideBtn("Çakışanları Temizle", CleanPayrollOverlap, 155));
+		flowLayoutPanel.Controls.Add(WideBtn("Çakışan Bordro Dönemini Temizle", CleanPayrollOverlap, 220));
 		flowLayoutPanel.Controls.Add(payrollLockStatus);
 		obj.Controls.Add(payrollGrid);
+		obj.Controls.Add(payrollInfoStatus);
 		obj.Controls.Add(flowLayoutPanel);
 		return obj;
 	}
@@ -1236,6 +1238,16 @@ public sealed partial class MainForm : Form
 			RefreshPayrollLockUi();
 			ConfigurePayrollGrid();
 			ColorPayrollRows();
+			var count = payrollGrid.Rows.Cast<DataGridViewRow>().Count(row => !row.IsNewRow);
+			if (payrollMonthNo.SelectedIndex == 0)
+				payrollInfoStatus.Text = $"{year} yılı • {count} bordro satırı.";
+			else
+			{
+				var name = CultureInfo.GetCultureInfo("tr-TR").DateTimeFormat.GetMonthName(payrollMonthNo.SelectedIndex);
+				payrollInfoStatus.Text = count == 0
+					? $"{name} {year} için bordro kaydı yok."
+					: $"{name} {year} • {count} personel bordrosu. Maaşı = UCRETLER.DMAAS, Banka = EX2.";
+			}
 		}
 		catch (Exception ex)
 		{
