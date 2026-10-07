@@ -161,12 +161,12 @@ internal static partial class SyncEngine
         using (var reader = new StringReader(encoding.GetString(bytes).TrimStart('\uFEFF')))
             while (reader.ReadLine() is { } line) { cancellation.ThrowIfCancellationRequested(); lines.Add(line); }
         var tnf = new List<TnfMovement>();
-        var invalid = new List<string>();
+        var invalid = new List<(int Index, string Raw)>();
         for (var index = 0; index < lines.Count; index++)
         {
             cancellation.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(lines[index])) continue;
-            if (!request.Format.TryParse(lines[index], index, out var movement)) invalid.Add(lines[index]);
+            if (!request.Format.TryParse(lines[index], index, out var movement)) invalid.Add((index, lines[index]));
             else if (movement.Date >= request.Start && movement.Date < request.End &&
                 (request.Card.Length == 0 || request.Card == movement.Card)) tnf.Add(movement);
         }
@@ -178,7 +178,12 @@ internal static partial class SyncEngine
         timer.Restart();
         progress?.Report("Kart + tarih karşılaştırılıyor...");
         var table = listOnly ? ListTerminal(tnf, people, cancellation) : request.Exact ? CompareExact(movements, tnf, people, cancellation) : Compare(movements, tnf, people, request.Format, cancellation);
-        foreach (var raw in invalid) table.Rows.Add("", "", "", "", "", "", "", raw, "BOZUK TNF / İNCELE", "İNCELE", -1, -1, false);
+        var fullYearExact = request.Exact && request.Start.Month == 1 && request.Start.Day == 1 && request.End == request.Start.AddYears(1);
+        foreach (var invalidLine in invalid)
+            table.Rows.Add("", "", "", "", "", "", "", invalidLine.Raw,
+                fullYearExact ? "BOZUK / FAZLA TNF" : "BOZUK TNF / İNCELE",
+                fullYearExact ? "TNF SİL FAZLA" : "İNCELE", -1, invalidLine.Index, false,
+                fullYearExact ? "Tüm yıl bire bir eşitlemede standart dışı TNF satırı kaldırılacak." : "Satırın tarihi okunamadığı için dar kapsamda otomatik silinmez.");
         return new(request, table, movements, people, lines.ToArray(), encoding, Convert.ToHexString(SHA256.HashData(bytes)),
             DbFingerprint(movements, people), dbMilliseconds, tnfMilliseconds, timer.ElapsedMilliseconds);
     }
