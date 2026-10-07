@@ -178,12 +178,11 @@ internal static partial class SyncEngine
         timer.Restart();
         progress?.Report("Kart + tarih karşılaştırılıyor...");
         var table = listOnly ? ListTerminal(tnf, people, cancellation) : request.Exact ? CompareExact(movements, tnf, people, cancellation) : Compare(movements, tnf, people, request.Format, cancellation);
-        var fullYearExact = request.Exact && request.Start.Month == 1 && request.Start.Day == 1 && request.End == request.Start.AddYears(1);
         foreach (var invalidLine in invalid)
             table.Rows.Add("", "", "", "", "", "", "", invalidLine.Raw,
-                fullYearExact ? "BOZUK / FAZLA TNF" : "BOZUK TNF / İNCELE",
-                fullYearExact ? "TNF SİL FAZLA" : "İNCELE", -1, invalidLine.Index, false,
-                fullYearExact ? "Tüm yıl bire bir eşitlemede standart dışı TNF satırı kaldırılacak." : "Satırın tarihi okunamadığı için dar kapsamda otomatik silinmez.");
+                request.Exact ? "BOZUK / FAZLA TNF" : "BOZUK TNF / İNCELE",
+                request.Exact ? "TNF SİL FAZLA" : "İNCELE", -1, invalidLine.Index, false,
+                request.Exact ? "DB ana kaynak modunda standart dışı TNF satırı kaldırılacak." : "Satırın tarihi okunamadığı için otomatik işlem yapılmaz.");
         return new(request, table, movements, people, lines.ToArray(), encoding, Convert.ToHexString(SHA256.HashData(bytes)),
             DbFingerprint(movements, people), dbMilliseconds, tnfMilliseconds, timer.ElapsedMilliseconds);
     }
