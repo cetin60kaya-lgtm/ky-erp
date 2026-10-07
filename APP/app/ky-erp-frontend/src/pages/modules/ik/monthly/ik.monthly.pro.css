@@ -2506,3 +2506,56 @@
     min-height: 58px;
   }
 }
+
+
+/* IK_BORDRO_MONTH_LOCK_2026_10_07 */
+.ik-monthly-pro .payroll-clean-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  padding:7px 8px;
+}
+.ik-monthly-pro .payroll-clean-actions .payroll-edit-actions,
+.ik-monthly-pro .payroll-clean-actions .payroll-output-actions{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  flex-wrap:wrap;
+}
+.ik-monthly-pro .payroll-clean-actions .payroll-output-actions{
+  padding-left:8px;
+  border-left:1px solid #dbe5ef;
+}
+.ik-monthly-pro .payroll-clean-actions .payroll-lock-toggle{
+  margin-left:auto;
+  min-width:108px;
+  min-height:36px;
+  font-weight:900;
+  letter-spacing:.01em;
+}
+.ik-monthly-pro .payroll-clean-actions .payroll-lock-toggle.red{
+  box-shadow:0 0 0 2px rgba(185,28,28,.08);
+}
+.ik-monthly-pro .payroll-clean-actions .payroll-lock-toggle.primary{
+  box-shadow:0 0 0 2px rgba(37,99,235,.08);
+}
+@media (max-width:1180px){
+  .ik-monthly-pro .payroll-clean-actions{
+    align-items:stretch;
+  }
+  .ik-monthly-pro .payroll-clean-actions .payroll-edit-actions,
+  .ik-monthly-pro .payroll-clean-actions .payroll-output-actions{
+    width:100%;
+  }
+  .ik-monthly-pro .payroll-clean-actions .payroll-output-actions{
+    padding-left:0;
+    padding-top:6px;
+    border-left:0;
+    border-top:1px solid #dbe5ef;
+  }
+  .ik-monthly-pro .payroll-clean-actions .payroll-lock-toggle{
+    margin-left:0;
+    min-height:44px;
+  }
+}
