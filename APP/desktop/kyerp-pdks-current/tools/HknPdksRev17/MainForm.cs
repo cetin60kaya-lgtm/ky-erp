@@ -226,7 +226,7 @@ public sealed partial class MainForm : Form
 
 	public MainForm()
 	{
-		Text = "HKN PDKS REV25 — Hızlı Veri";
+		Text = "HKN PDKS REV26 — Hızlı Veri";
 		base.StartPosition = FormStartPosition.CenterScreen;
 		base.Width = 1380;
 		base.Height = 820;
@@ -299,7 +299,7 @@ public sealed partial class MainForm : Form
 		// Kullanıcı yalnız gerçek iş akışlarını görür; eski Toplu İşlem ve eski Audit ekranları üretim menüsünden çıkarılmıştır.
 		tabs.TabPages.Add(Page("Personel", BuildPeople()));
 		tabs.TabPages.Add(Page("Giriş-Çıkış", BuildIo()));
-		tabs.TabPages.Add(Page("Kayıt Düzeltme", new DbRecordControl(this)));
+		tabs.TabPages.Add(Page("Kayıt Düzenleme", new DbRecordControl(this)));
 		tabs.TabPages.Add(Page("E İşlemleri", new EOperationsControl(this)));
 		tabs.TabPages.Add(Page("Bordro", BuildPayroll()));
 		tabs.TabPages.Add(Page("Ödeme / Avans", new PaymentOperationsControl(this)));
