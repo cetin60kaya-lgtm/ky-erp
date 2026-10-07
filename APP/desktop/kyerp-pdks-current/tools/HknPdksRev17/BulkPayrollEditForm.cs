@@ -98,6 +98,7 @@ public sealed class BulkPayrollEditForm : Form
         Controls.Add(outer);
         AcceptButton = apply;
         CancelButton = cancel;
+        AppTheme.Apply(this);
     }
 
     public Dictionary<string,string> SelectedValues()
