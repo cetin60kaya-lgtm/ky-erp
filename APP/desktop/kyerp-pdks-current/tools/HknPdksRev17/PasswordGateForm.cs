@@ -146,12 +146,13 @@ internal sealed class PasswordGateForm : Form
         table.Controls.Add(newPassword,1,1);
         table.Controls.Add(new Label { Text = "Yeni Şifre Tekrar", AutoSize = true, Padding = new Padding(0,7,0,0) },0,2);
         table.Controls.Add(repeat,1,2);
-        table.Controls.Add(new Label
+        var recoveryInfo = new Label
         {
             Text = "Kurtarma kodu dosyası:\n" + PasswordRecoveryService.RecoveryTextPath,
             AutoSize = true, MaximumSize = new Size(540,0), ForeColor = Color.DimGray, Padding = new Padding(0,8,0,0)
-        },0,3);
-        table.SetColumnSpan(table.GetControlFromPosition(0,3),2);
+        };
+        table.Controls.Add(recoveryInfo,0,3);
+        table.SetColumnSpan(recoveryInfo,2);
 
         var reset = new Button { Text = "ŞİFREYİ SIFIRLA", Width = 150, Height = 34 };
         var cancel = new Button { Text = "VAZGEÇ", Width = 100, Height = 34, DialogResult = DialogResult.Cancel };
