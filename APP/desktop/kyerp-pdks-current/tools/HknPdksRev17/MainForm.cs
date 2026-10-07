@@ -283,7 +283,7 @@ public sealed partial class MainForm : Form
 
 	public MainForm()
 	{
-		Text = "HKN PDKS REV24 — Hızlı Veri";
+		Text = "HKN PDKS REV25 — Hızlı Veri";
 		base.StartPosition = FormStartPosition.CenterScreen;
 		base.Width = 1380;
 		base.Height = 820;
@@ -394,14 +394,18 @@ public sealed partial class MainForm : Form
 		tableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 122f));
 		tableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 		tableLayoutPanel.Controls.Add(BuildSources(), 0, 0);
+
+		// REV25: Tek ana menü sahibi vardır. Runtime injector / ikinci sekme ağacı yoktur.
+		// Kullanıcı yalnız gerçek iş akışlarını görür; eski Toplu İşlem ve eski Audit ekranları üretim menüsünden çıkarılmıştır.
 		tabs.TabPages.Add(Page("Personel", BuildPeople()));
 		tabs.TabPages.Add(Page("Giriş-Çıkış", BuildIo()));
-		tabs.TabPages.Add(Page("Toplu İşlem", BuildBulk()));
-		tabs.TabPages.Add(Page("E İşlemleri", BuildE()));
-		tabs.TabPages.Add(Page("E İşlem Geçmişi", BuildEHistory()));
+		tabs.TabPages.Add(Page("Kayıt Düzeltme", new DbRecordControl(this)));
+		tabs.TabPages.Add(Page("E İşlemleri", BuildEWorkspace()));
 		tabs.TabPages.Add(Page("Bordro", BuildPayroll()));
 		tabs.TabPages.Add(Page("Ödeme / Avans", BuildPayments()));
-		tabs.TabPages.Add(Page("DB - TNF Eşitle", BuildAudit()));
+		tabs.TabPages.Add(Page("DB - TNF Eşitle", new DbTnfSyncControl(this)));
+		tabs.TabPages.Add(Page("TNF Hazırla", new TnfPrepareControl(this)));
+
 		tableLayoutPanel.Controls.Add(tabs, 0, 1);
 		base.Controls.Add(tableLayoutPanel);
 	}
@@ -620,6 +624,14 @@ public sealed partial class MainForm : Form
 		obj.Controls.Add(flowLayoutPanel2, 0, 2);
 		obj.SetColumnSpan(flowLayoutPanel2, 3);
 		return obj;
+	}
+
+	private Control BuildEWorkspace()
+	{
+		TabControl workspace = new TabControl { Dock = DockStyle.Fill };
+		workspace.TabPages.Add(Page("E Yap / Düzelt", BuildE()));
+		workspace.TabPages.Add(Page("E Geçmişi / İmza", BuildEHistory()));
+		return workspace;
 	}
 
 	private Control BuildE()
