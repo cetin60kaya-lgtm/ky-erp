@@ -300,7 +300,9 @@ test("payroll final control exposes every financial value and saves back to cano
 
   assert.match(cloud, /async function saveAdvancedPayrollFinalControl/);
   assert.doesNotMatch(cloud, /pushCorrection\(/);
-  assert.match(cloud, /OVERTIME_SOURCE_MISMATCH/);
+  assert.match(cloud, /OVERTIME_SOURCE_REQUIRED/);
+  assert.match(cloud, /syncOvertimeSource/);
+  assert.match(cloud, /UPDATE hr_monthly_adjustments_v2 SET hour_or_day=\?,amount=\?,payment_method='Bordro',payroll_effect='Bordroya yansir' WHERE id=\?/);
   assert.match(cloud, /const toCents =/);
   assert.match(cloud, /syncCanonicalSource/);
   assert.match(cloud, /UPDATE hr_monthly_adjustments_v2 SET amount=\?,payment_method=\?,payroll_effect=\?,adjustment_type=\? WHERE id=\?/);
@@ -419,4 +421,18 @@ test("one-cent finance edits update the canonical row instead of creating correc
   assert.match(block, /UPDATE hr_monthly_adjustments_v2 SET amount=\?,payment_method=\?,payroll_effect=\?,adjustment_type=\? WHERE id=\?/);
   assert.doesNotMatch(block, /Math\.abs\(delta\) <= 0\.01/);
   assert.doesNotMatch(block, /Bordro kaynak kontrolü · önce/);
+});
+
+
+test("single overtime source is updated in place without correction rows", () => {
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+  const start = cloud.indexOf("async function saveAdvancedPayrollFinalControl");
+  const end = cloud.indexOf("async function saveAdvancedPayrollLines", start);
+  const block = cloud.slice(start, end);
+  assert.match(block, /ensureUnambiguous\("Mesai"/);
+  assert.match(block, /syncOvertimeSource/);
+  assert.match(block, /OVERTIME_SOURCE_REQUIRED/);
+  assert.match(block, /rawHours/);
+  assert.match(block, /hour_or_day=\?,amount=\?/);
+  assert.doesNotMatch(block, /pushCorrection\(/);
 });
