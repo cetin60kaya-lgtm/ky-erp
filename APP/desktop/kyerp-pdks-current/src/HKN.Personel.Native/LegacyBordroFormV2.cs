@@ -165,7 +165,7 @@ public sealed class LegacyBordroForm : Form
 
     static readonly (string Technical, string Caption)[] ColumnMap =
     [
-        ("KART_NO", "Kart No"), ("IGT", "İ.G.T"), ("AD_SOYAD", "Ad Soyad"), ("MAAS", "Maaş"), ("YOL", "Yol"),
+        ("KART_NO", "Kart No"), ("SSK_NO", "SGK Sicil No"), ("IGT", "İ.G.T"), ("AD_SOYAD", "Ad Soyad"), ("MAAS", "Maaş"), ("YOL", "Yol"),
         ("NORMAL_GUN", "Normal Gün"), ("NORMAL_SAAT", "Normal Saat"), ("MESAI50_SAAT", "%50 Mesai Saat"),
         ("MESAI100_SAAT", "%100 Mesai Saat"), ("MESAI_SAAT", "Mesai Saat"), ("MESAI", "Mesai"),
         ("UCRETSIZ_IZIN_GUN", "Ücretsiz İzin Gün"), ("UCRETLI_IZIN_GUN", "Ücretli İzin Gün"), ("YILLIK_IZIN_GUN", "Yıllık İzin Gün"),
@@ -188,7 +188,7 @@ public sealed class LegacyBordroForm : Form
             var road = RoadExpression();
 
             var raw = db.Query(
-                "select u.PKNO KART_NO,k.IGTARIH IGT,(trim(coalesce(k.AD,''))||' '||trim(coalesce(k.SOYAD,''))) AD_SOYAD," +
+                "select u.PKNO KART_NO,k.SSKNO SSK_NO,k.IGTARIH IGT,(trim(coalesce(k.AD,''))||' '||trim(coalesce(k.SOYAD,''))) AD_SOYAD," +
                 "u.DMAAS MAAS," + road + " YOL,u.GUN1 NORMAL_GUN,u.SAAT1 NORMAL_SAAT," +
                 "u.SAAT2 MESAI50_SAAT,u.SAAT3 MESAI100_SAAT,u.SAAT8 MESAI_SAAT,u.UCRET8 MESAI," +
                 "u.GUN4 UCRETSIZ_IZIN_GUN,u.GUN5 UCRETLI_IZIN_GUN,u.GUN9 YILLIK_IZIN_GUN," +
@@ -321,7 +321,7 @@ public sealed class LegacyBordroForm : Form
             }
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "S.No","Kart No","Ad Soyad","Maaş","Yol","Normal Gün","Ek Kazanç","Kesinti",
+                "S.No","Kart No","SGK Sicil No","İ.G.T","Ad Soyad","Maaş","Yol","Normal Gün","Normal Saat","Ek Kazanç","Kesinti",
                 "Avans","Maaş Ödeme","Mesai Ödeme","Hak Edilen Net","Banka Kayıtlı",
                 "Bankaya Ödenecek","Kayıtlı Fark","İmza"
             };
@@ -375,6 +375,8 @@ public sealed class LegacyBordroForm : Form
         var settings = PayrollReportSettingsStore.Load();
         var reportName = type.SelectedIndex == 2 ? settings.PersonalTitle : settings.GeneralTitle;
         var title = $"{settings.CompanyTitle} • {a:dd.MM.yyyy} - {z:dd.MM.yyyy} {reportName}";
+        if (type.SelectedIndex != 2 && settings.ShowWorkplaceRegistration && !string.IsNullOrWhiteSpace(settings.WorkplaceRegistrationNo))
+            title += $" • İşyeri Sicil: {settings.WorkplaceRegistrationNo}";
 
         if (type.SelectedIndex == 2 && grid.CurrentRow is DataGridViewRow selected && !selected.IsNewRow)
         {
