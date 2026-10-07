@@ -2874,7 +2874,6 @@ async function runAdvancedCloseCheck(c: Context<AppEnv>) {
   }
   if (body.lock === true) {
     const blocking = checks.filter((item) => !item.ok);
-    if (blocking.length) return error(c, 409, "IK_CLOSE_BLOCKED", `${blocking.length} açık kontrol maddesi varken dönem kapatılamaz.`, { checks });
     const timestamp = nowIso();
     const id = crypto.randomUUID();
     await c.env.DB.batch([
@@ -2889,7 +2888,7 @@ async function runAdvancedCloseCheck(c: Context<AppEnv>) {
         VALUES (?,?,?,?,?,?,?,?,?,?)`)
         .bind(crypto.randomUUID(), companyId, year, month, "LOCK", text(body.reason || "Ay sonu kontrolleri tamamlandı."), JSON.stringify({ isLocked: flag(lockRow?.is_locked) }), JSON.stringify({ isLocked: true }), text(body.userName || "Sistem"), timestamp),
     ]);
-    await audit(c, { mainCompanyId: companyId, period, entityType: "AY_SONU", action: "LOCK", summary: "İK aylık dönem kapatıldı.", details: { checks } });
+    await audit(c, { mainCompanyId: companyId, period, entityType: "AY_SONU", action: "LOCK", summary: "İK aylık dönem kullanıcı onayıyla kilitlendi.", details: { checks, blockingCount: blocking.length } });
     lockRow = await advancedPeriodLockRow(c, companyId, year, month);
   }
   return okData(c, { year, month, period, periodEnd, checks, isLocked: flag(lockRow?.is_locked), lockedAt: lockRow?.locked_at || null });
