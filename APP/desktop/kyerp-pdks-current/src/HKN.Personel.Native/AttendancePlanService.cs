@@ -648,6 +648,35 @@ internal static class AttendancePlanService
             }
             catch { }
         }
+        // Genel tatil takvimi kişi bağımsızdır. Şema eski Hedef sürümlerinde değişebildiği için
+        // tarih alanını metadata üzerinden bulup tatil gününün tamamını otomatik üretim dışında bırakırız.
+        try
+        {
+            var meta = db.Query(@"select trim(rf.rdb$field_name) FIELD_NAME
+                from rdb$relation_fields rf
+                where upper(trim(rf.rdb$relation_name))='TATIL'
+                order by rf.rdb$field_position");
+            var names = meta.AsEnumerable()
+                .Select(r => Convert.ToString(r["FIELD_NAME"])?.Trim() ?? "")
+                .Where(x => x.Length > 0)
+                .ToArray();
+            var dateColumn = new[] { "TARIH", "GUN", "BASTAR", "BASLANGIC", "TARIH1" }
+                .FirstOrDefault(x => names.Contains(x, StringComparer.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(dateColumn))
+            {
+                var holidays = db.Query($"select {dateColumn} TARIH from TATIL where {dateColumn}>=@A and {dateColumn}<@B",
+                    new FbParameter("@A", from.Date),
+                    new FbParameter("@B", to.Date.AddDays(1)));
+                foreach (DataRow row in holidays.Rows)
+                {
+                    if (row["TARIH"] == DBNull.Value) continue;
+                    var day = Convert.ToDateTime(row["TARIH"]).Date;
+                    foreach (var card in wanted) result.Add((card, day));
+                }
+            }
+        }
+        catch { }
+
         return result;
     }
 
