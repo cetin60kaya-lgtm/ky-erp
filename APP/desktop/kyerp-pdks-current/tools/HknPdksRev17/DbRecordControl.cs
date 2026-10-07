@@ -153,8 +153,14 @@ internal sealed class DbRecordControl : UserControl
         var current = snapshot;
         if (current.Changes.Length == 0) { status.Text = "Seçilen işlem için yapılacak değişiklik yok."; return; }
         if (MessageBox.Show(main, $"{current.Cards.Length} personel / {current.Days.Length} seçili gün.\nİşlem: {operation.Text}\nÖnizlemedeki {current.Changes.Length} değişiklik uygulanacak; diğer kayıtlar ve E türleri korunacak.\nİşlemden önce DB ve TNF yedeği alınır. DB + ana TNF tek işlemde birlikte hizalanır. Devam?", "DB KAYIT — işlem onayı", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-        var tnf = TnfBox?.Text?.Trim() ?? "";
-        if (!File.Exists(tnf)) { MessageBox.Show(main, "Ana TNF dosyasını seçin. DB KAYIT artık DB + TNF birlikte çalışır.", "DB KAYIT", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        var tnf = main is MainForm application
+            ? application.ResolveTnfPath((int)year.Value)
+            : TnfBox?.Text?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(tnf))
+        {
+            MessageBox.Show(main, "TNF yolu belirlenemedi.", "Kayıt Düzeltme", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
         cancellation = new(); Busy(true); var succeeded = false; string backup = "";
         try { backup = await Task.Run(() => DbRecordService.ApplyAsync(previewDatabase!, current, tnf, cancellation.Token), cancellation.Token); succeeded = true; }
         catch (OperationCanceledException) { if (!IsDisposed) status.Text = "İptal edildi; DB transaction geri alındı."; }
