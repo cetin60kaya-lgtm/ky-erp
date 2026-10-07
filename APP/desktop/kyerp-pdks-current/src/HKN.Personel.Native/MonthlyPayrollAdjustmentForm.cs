@@ -134,6 +134,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
         fast.Controls.Add(B("Tümünü Seç",96,()=>SetAll(true)));
         fast.Controls.Add(B("Seçimi Kaldır",112,()=>SetAll(false)));
         fast.Controls.Add(B("Bordrodan Banka Tutarını Doldur",218,RecalculateAll));
+        fast.Controls.Add(B("Toplu Avans",112,OpenBulkAdvance));
         fast.Controls.Add(new Label{Text="Banka tutarı resmî bordro netinden otomatik hesaplanır; PEK uyumsuzluğu varsa ödeme engellenir.",AutoSize=true,Padding=new Padding(14,8,0,0),ForeColor=p.Muted});
         root.Controls.Add(fast,0,2);
 
@@ -372,6 +373,13 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
             }
         }
         catch{ }
+    }
+
+    void OpenBulkAdvance()
+    {
+        using var form = new BulkAdvanceDialog(db, Period().A);
+        form.ShowDialog(this);
+        Reload();
     }
 
     void PostSelectedPayments()
