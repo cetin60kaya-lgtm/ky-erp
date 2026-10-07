@@ -31,6 +31,22 @@ public sealed partial class MainShellForm : Form
         ShowHome();
         InitializeTerminalAutoSync();
         InitializeCloudSync();
+
+        // Personel ekranı ilk menü tıklamasında kurulup kullanıcıyı bekletmesin.
+        // Ana ekran çizildikten sonra bir kez gizli olarak ısıtılır ve menüler arası
+        // geçişlerde WorkspaceDockHost tarafından dispose edilmeden korunur.
+        Shown += (_, _) =>
+        {
+            var warmup = new System.Windows.Forms.Timer { Interval = 900 };
+            warmup.Tick += (_, _) =>
+            {
+                warmup.Stop();
+                warmup.Dispose();
+                if (IsDisposed || personel is not null) return;
+                try { EnsurePersonel(); } catch { }
+            };
+            warmup.Start();
+        };
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -57,7 +73,6 @@ public sealed partial class MainShellForm : Form
     }
     void ShowHome()
     {
-        personel = null;
         workspace.ShowSingle(new ModernHomeDashboard(
             PdksCommandCatalog.All.Where(CanExecute),
             ExecuteCommand,
