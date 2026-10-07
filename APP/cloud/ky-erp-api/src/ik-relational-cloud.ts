@@ -2275,6 +2275,9 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   if (!overtimeRows.length && toCents(desired.overtime) > 0) {
     return error(c, 409, "OVERTIME_SOURCE_REQUIRED", "Mesai toplamı için önce gerçek bir Mesai kaydı gerekir. Saat ve oranı Mesai / Avans / Kesinti ekranından girin.");
   }
+  if (overtimeRows.length === 1 && toCents(desired.overtime) !== toCents(current.overtime) && toCents(desired.overtime) > 0 && desired.salary <= 0) {
+    return error(c, 409, "OVERTIME_SOURCE_INVALID", "Mesai kaynağını güncellemek için geçerli maaş tutarı gereklidir.");
+  }
   const ambiguousAdvance = ensureUnambiguous("Avans", advanceRows, current.advance, desired.advance);
   if (ambiguousAdvance) return ambiguousAdvance;
   const ambiguousDeduction = ensureUnambiguous("Kesinti", manualDeductionRows, currentManualDeduction, desiredManualDeduction);
@@ -2298,9 +2301,6 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     const multiplier = overtimeMultiplierValue(existingRow.overtimeMultiplier || 1.5);
     const divisor = number(employee.overtime_hourly_base) || 225;
     const salaryBasis = Math.max(desired.salary, 0);
-    if (salaryBasis <= 0 || divisor <= 0 || multiplier <= 0) {
-      throw new Error("Mesai kaynağı saat bazına dönüştürülemedi.");
-    }
     const rawHours = (target * divisor) / (salaryBasis * multiplier);
     const nextHours = Math.max(Math.round(rawHours * 1000000) / 1000000, 0);
     sourceUpdateIds.push(id);
