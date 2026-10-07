@@ -283,39 +283,11 @@ public sealed partial class MainForm : Form
 		{
 			ApplyPeopleFilter();
 		};
-		eStart.ValueChanged += delegate
-		{
-			RebuildEDays();
-		};
-		eEnd.ValueChanged += delegate
-		{
-			RebuildEDays();
-		};
-		eYear.ValueChanged += delegate
-		{
-			ApplyEPeriodFilter();
-		};
-		eMonthNo.SelectedIndexChanged += delegate
-		{
-			ApplyEPeriodFilter();
-		};
-		ePerson.SelectedIndexChanged += delegate
-		{
-			if (!loadingEPeople) ApplyEPeriodFilter();
-		};
 		base.Shown += delegate
 		{
 			DetectSources();
 		};
 		ioYear.Value = (auditYear.Value = (eYear.Value = (eHistoryYear.Value = (payrollYear.Value = (paymentYear.Value = (advanceYear.Value = DateTime.Today.Year))))));
-		rangeStart.ValueChanged += delegate
-		{
-			RebuildDays();
-		};
-		rangeEnd.ValueChanged += delegate
-		{
-			RebuildDays();
-		};
 	}
 
 	private static DataGridView Grid()
@@ -1072,6 +1044,7 @@ public sealed partial class MainForm : Form
 			{
 				if (!IsDisposed && ReferenceEquals(db, database)) sourceStatus.Text += "   |   " + WorkTimePolicy.Default.Information;
 			}
+			if (!IsDisposed && ReferenceEquals(db, database)) LoadPeople();
 		}
 	}
 
