@@ -53,7 +53,7 @@ public sealed class PersonnelEditForm : Form
 
 	public string Get(string key)
 	{
-		if (!boxes.TryGetValue(key, out TextBox value))
+		if (!boxes.TryGetValue(key, out var value) || value is null)
 		{
 			return "";
 		}
