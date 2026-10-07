@@ -30,7 +30,7 @@ internal static partial class SyncEngine
                     move?.Side ?? (line is null ? "Belirsiz" : ClockSide(line.Time)),
                     move?.Time ?? "", move?.Tur ?? (line is null ? "" : "TNF"),
                     line?.Time ?? "", line?.Raw ?? "", status, operation,
-                    move?.Id ?? -1, line?.Index ?? -1, false, detail, false);
+                    move?.Id ?? -1, line?.Index ?? -1, false, detail);
 
             foreach (var source in normalDb)
             {
