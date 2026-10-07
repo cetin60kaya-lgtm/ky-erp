@@ -68,11 +68,12 @@ internal sealed class PaymentOperationsControl : UserControl
         Field("Yıl", year); Field("Ay", month); Field("Ödeme Tarihi", paymentDate);
         top.Controls.Add(Button("LİSTELE", LoadBank, 95));
         top.Controls.Add(Button("TÜMÜNÜ SEÇ", SelectAllBank, 110));
+        top.Controls.Add(Button("SEÇİMİ TEMİZLE", ClearBankSelection, 125));
         top.Controls.Add(Button("BORDRODAN DOLDUR", FillFromPayroll, 155));
         top.Controls.Add(Button("TOPLU BANKA ÖDEMESİ", ApplyBank, 180, Color.Honeydew));
         top.Controls.Add(new Label
         {
-            Text = "Bordrodaki Banka (EX2) değeri aynen kullanılır. Yalnız mevcut tekil ODEME satırları güvenli şekilde güncellenir.",
+            Text = "Bordrodaki Banka (EX2) değeri aynen kullanılabilir. ODEME kaydı yoksa yeni kayıt açılır; mevcut tekil kayıt varsa güncellenir. Mükerrer kayıt otomatik işlenmez.",
             AutoSize = true, Padding = new Padding(12, 8, 0, 0), ForeColor = Color.DarkSlateGray
         });
         panel.Controls.Add(bankGrid);
@@ -174,15 +175,15 @@ internal sealed class PaymentOperationsControl : UserControl
                 var ready = rows.Length == 1;
                 var current = ready && rows[0]["NODENEN"] != DBNull.Value ? Convert.ToDouble(rows[0]["NODENEN"],CultureInfo.CurrentCulture) : 0d;
                 var date = ready && rows[0]["NOTARIH"] != DBNull.Value ? Convert.ToDateTime(rows[0]["NOTARIH"]).ToString("dd.MM.yyyy") : "";
-                var state = rows.Length == 0 ? "ODEME kaydı yok" : rows.Length > 1 ? "Mükerrer ODEME kaydı" : "Hazır";
-                t.Rows.Add(ready && bank != 0d, card,
+                var state = rows.Length == 0 ? "Yeni kayıt açılacak" : rows.Length > 1 ? "Mükerrer ODEME kaydı" : "Hazır";
+                t.Rows.Add(rows.Length <= 1 && bank != 0d, card,
                     ((Convert.ToString(row["AD"]) ?? "")+" "+(Convert.ToString(row["SOYAD"]) ?? "")).Trim(),
                     bank,current,current,date,state);
             }
             bankGrid.DataSource = t;
             FormatMoney();
             LoadAdvancePeople();
-            bankStatus.Text = $"{a:MMMM yyyy}: {t.Rows.Count} aktif bordrolu personel • Hazır {t.AsEnumerable().Count(r=>Convert.ToString(r["Durum"])=="Hazır")} • ODEME satırı olmayan {t.AsEnumerable().Count(r=>Convert.ToString(r["Durum"])=="ODEME kaydı yok")}";
+            bankStatus.Text = $"{a:MMMM yyyy}: {t.Rows.Count} aktif bordrolu personel • Mevcut ödeme kaydı {t.AsEnumerable().Count(r=>Convert.ToString(r["Durum"])=="Hazır")} • Yeni açılacak {t.AsEnumerable().Count(r=>Convert.ToString(r["Durum"])=="Yeni kayıt açılacak")} • Mükerrer {t.AsEnumerable().Count(r=>Convert.ToString(r["Durum"])=="Mükerrer ODEME kaydı")}";
         }
         catch (Exception ex) { bankStatus.Text = ex.Message; MessageBox.Show(main, ex.Message, "Banka Ödemesi", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
@@ -197,7 +198,20 @@ internal sealed class PaymentOperationsControl : UserControl
     {
         bankGrid.EndEdit();
         foreach (DataGridViewRow row in bankGrid.Rows)
-            if (!row.IsNewRow) row.Cells["Sec"].Value = Convert.ToString(row.Cells["Durum"].Value) == "Hazır";
+        {
+            if (row.IsNewRow) continue;
+            var state = Convert.ToString(row.Cells["Durum"].Value) ?? "";
+            row.Cells["Sec"].Value = state != "Mükerrer ODEME kaydı";
+        }
+        bankStatus.Text = "Mükerrer ODEME kaydı olanlar hariç tüm personel seçildi.";
+    }
+
+    void ClearBankSelection()
+    {
+        bankGrid.EndEdit();
+        foreach (DataGridViewRow row in bankGrid.Rows)
+            if (!row.IsNewRow) row.Cells["Sec"].Value = false;
+        bankStatus.Text = "Ödeme seçimi temizlendi.";
     }
 
     void FillFromPayroll()
@@ -205,7 +219,7 @@ internal sealed class PaymentOperationsControl : UserControl
         bankGrid.EndEdit();
         foreach (DataGridViewRow row in bankGrid.Rows)
         {
-            if (row.IsNewRow || Convert.ToString(row.Cells["Durum"].Value) != "Hazır") continue;
+            if (row.IsNewRow || Convert.ToString(row.Cells["Durum"].Value) == "Mükerrer ODEME kaydı") continue;
             row.Cells["Sec"].Value = true;
             row.Cells["Odenecek"].Value = Convert.ToDouble(row.Cells["BankaBordro"].Value ?? 0d);
         }
@@ -221,8 +235,8 @@ internal sealed class PaymentOperationsControl : UserControl
             .Where(row => !row.IsNewRow && Convert.ToBoolean(row.Cells["Sec"].Value ?? false))
             .ToArray();
         if (selected.Length == 0) { MessageBox.Show(main,"Ödeme yapılacak personel seçilmedi."); return; }
-        var invalid = selected.Where(row => Convert.ToString(row.Cells["Durum"].Value) != "Hazır").ToArray();
-        if (invalid.Length > 0) { MessageBox.Show(main,"Seçimde tekil ODEME kaydı olmayan personel var. İşlem yapılmadı."); return; }
+        var invalid = selected.Where(row => Convert.ToString(row.Cells["Durum"].Value) == "Mükerrer ODEME kaydı").ToArray();
+        if (invalid.Length > 0) { MessageBox.Show(main,"Seçimde mükerrer ODEME kaydı olan personel var. Önce mükerrer kaydı düzeltin; işlem yapılmadı."); return; }
         var values = new List<(string Card,double Amount)>();
         foreach (var row in selected)
         {
@@ -233,7 +247,9 @@ internal sealed class PaymentOperationsControl : UserControl
             values.Add((Convert.ToString(row.Cells["Kart"].Value) ?? "",amount));
         }
         var (a,_,last) = Period();
-        if (MessageBox.Show(main,$"{values.Count} personele banka ödemesi kaydedilecek. Bordrodaki işaret aynen korunur; toplam {values.Sum(x=>x.Amount):N2}. Devam?","Toplu Banka Ödemesi",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes) return;
+        var createCount = selected.Count(row => Convert.ToString(row.Cells["Durum"].Value) == "Yeni kayıt açılacak");
+        var updateCount = selected.Length - createCount;
+        if (MessageBox.Show(main,$"{values.Count} personele banka ödemesi kaydedilecek.\nYeni ODEME kaydı: {createCount}\nGüncellenecek kayıt: {updateCount}\nToplam: {values.Sum(x=>x.Amount):N2}\n\nDevam?","Toplu Banka Ödemesi",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes) return;
         string backup;
         try { backup = MonthlyDbWriter.BackupAsync(db,CancellationToken.None).GetAwaiter().GetResult(); }
         catch(Exception ex){MessageBox.Show(main,ex.Message,"DB yedeği alınamadı",MessageBoxButtons.OK,MessageBoxIcon.Error);return;}
@@ -244,11 +260,29 @@ internal sealed class PaymentOperationsControl : UserControl
             {
                 foreach (var item in values)
                 {
-                    using var cmd = FirebirdDatabase.CreateCommand(connection,tx,
-                        "update ODEME set NODENEN=@N,NOTARIH=@T where PKNO=@P and BASTAR=@A and BITTAR=@E",
-                        new FbParameter("@N",item.Amount),new FbParameter("@T",paymentDate.Value.Date),
+                    using var countCommand = FirebirdDatabase.CreateCommand(connection,tx,
+                        "select count(*) from ODEME where PKNO=@P and BASTAR=@A and BITTAR=@E",
                         new FbParameter("@P",item.Card),new FbParameter("@A",a),new FbParameter("@E",last));
-                    if (cmd.ExecuteNonQuery()!=1) throw new InvalidOperationException(item.Card+": ODEME satırı tekil değil veya değişti. Tüm toplu ödeme geri alındı.");
+                    var rowCount = Convert.ToInt32(countCommand.ExecuteScalar() ?? 0);
+                    if (rowCount > 1) throw new InvalidOperationException(item.Card+": mükerrer ODEME satırı var. Tüm toplu ödeme geri alındı.");
+
+                    if (rowCount == 0)
+                    {
+                        using var insert = FirebirdDatabase.CreateCommand(connection,tx,
+                            "insert into ODEME (PKNO,BASTAR,BITTAR,NODENEN,NOTARIH,FMODENEN,FMOTARIH) values (@P,@A,@E,@N,@T,@F,@FT)",
+                            new FbParameter("@P",item.Card),new FbParameter("@A",a),new FbParameter("@E",last),
+                            new FbParameter("@N",item.Amount),new FbParameter("@T",paymentDate.Value.Date),
+                            new FbParameter("@F",0d),new FbParameter("@FT",DBNull.Value));
+                        if (insert.ExecuteNonQuery()!=1) throw new InvalidOperationException(item.Card+": yeni ODEME kaydı açılamadı. Tüm toplu ödeme geri alındı.");
+                    }
+                    else
+                    {
+                        using var update = FirebirdDatabase.CreateCommand(connection,tx,
+                            "update ODEME set NODENEN=@N,NOTARIH=@T where PKNO=@P and BASTAR=@A and BITTAR=@E",
+                            new FbParameter("@N",item.Amount),new FbParameter("@T",paymentDate.Value.Date),
+                            new FbParameter("@P",item.Card),new FbParameter("@A",a),new FbParameter("@E",last));
+                        if (update.ExecuteNonQuery()!=1) throw new InvalidOperationException(item.Card+": ODEME satırı değişti. Tüm toplu ödeme geri alındı.");
+                    }
                 }
                 return 0;
             });
