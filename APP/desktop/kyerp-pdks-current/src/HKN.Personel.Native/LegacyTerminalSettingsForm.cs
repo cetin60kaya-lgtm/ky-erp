@@ -209,7 +209,7 @@ public sealed class LegacyTerminalSettingsForm : Form
         grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         grid.BackgroundColor = PdksAppearance.Current.Surface;
-        foreach (var name in new[] { "Aktif", "CihazNo", "CihazAdı", "MAC", "Marka/Model", "MakineNo", "Bağlantı", "IP", "Port", "Okuma", "Durum" })
+        foreach (var name in new[] { "Aktif", "CihazNo", "CihazAdı", "MAC", "Marka/Model", "MakineNo", "BağlantıTipi", "ComPort", "Baudrate", "IP Adres", "IP Port", "Giriş/Çıkış", "Okuma", "İşlem Durumu" })
             grid.Columns.Add(name.Replace(" ", "").Replace("/", ""), name);
         grid.CellClick += (_, e) =>
         {
@@ -336,8 +336,11 @@ public sealed class LegacyTerminalSettingsForm : Form
                 value.IdentityText,
                 value.MachineNo,
                 value.ConnectionType,
+                value.ComPort,
+                value.BaudRate,
                 value.IpAddress,
                 value.IpPort,
+                value.Direction,
                 value.LogReadMode,
                 isActive ? state : "Kayıtlı");
             grid.Rows[rowIndex].Tag = value;
