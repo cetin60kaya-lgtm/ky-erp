@@ -148,6 +148,7 @@ internal static class DbConnectionHelper
 		form.Controls.Add(tableLayoutPanel);
 		form.AcceptButton = button;
 		form.CancelButton = button2;
+		AppTheme.Apply(form);
 		form.Shown += delegate
 		{
 			passBox.Focus();
