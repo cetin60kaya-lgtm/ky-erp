@@ -44,7 +44,8 @@ internal sealed class PaymentOperationsControl : UserControl
         BackgroundColor = Color.White,
         SelectionMode = DataGridViewSelectionMode.FullRowSelect,
         MultiSelect = true,
-        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
+        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+        AutoGenerateColumns = readOnly
     };
 
     void Build()
