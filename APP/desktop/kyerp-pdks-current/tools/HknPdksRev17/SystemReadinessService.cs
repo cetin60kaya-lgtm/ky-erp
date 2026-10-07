@@ -25,6 +25,8 @@ internal static class SystemReadinessService
 
         if (missing.Count > 0)
             throw new InvalidOperationException("Hedef DB şeması eksik/uyumsuz. Bulunamayan tablolar: " + string.Join(", ", missing));
+        if (!policy.Valid)
+            throw new InvalidOperationException("Hedef çalışma saati ayarı geçersiz. Kayıt üretimi güvenlik nedeniyle açılmadı.");
 
         var personnel = Convert.ToInt32(db.Scalar("select count(*) from KIMLIK") ?? 0);
         var movements = Convert.ToInt32(db.Scalar("select count(*) from GIRCIK") ?? 0);
