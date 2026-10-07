@@ -73,10 +73,28 @@ internal static class PayrollOverrideTests
             "REV25 recalculation reapplies only overridden fields and preserves unrelated recalculated values");
 
         PayrollOverrideService.SetPersonLock(db, "00002", 2026, 8, true, "REV25 TEST");
+
+        var lockedRow = PayrollOverrideService.PreferredRow(db, "00002", 2026, 8)!;
+        var lockedValues = PayrollOverrideService.RowValues(lockedRow);
+        lockedValues["GUN1"] = "5";
+        PayrollOverrideService.SaveOverrides(db, "00002", 2026, 8, lockedValues, true, "REV25 LOCKED EDIT");
+        check(Convert.ToDouble(db.Scalar("select GUN1 from UCRETLER where PKNO='00002'")) == 5 &&
+              Convert.ToString(db.Scalar("select SAAT1 from UCRETLER where PKNO='00002'"))!.Trim() == "37:30",
+            "REV25 explicit user edit can update a locked person through connection-scoped bypass");
+
+        using (var bypassConnection = db.OpenConnection())
+        using (var bypassTx = bypassConnection.BeginTransaction())
+        {
+            using var bypass = FirebirdDatabase.CreateCommand(bypassConnection, bypassTx,
+                "insert into PDKS_BYPASS(CONNECTION_ID) values(CURRENT_CONNECTION)");
+            bypass.ExecuteNonQuery();
+            bypassTx.Commit();
+        }
         db.Execute("update UCRETLER set GUN1=30,SAAT1='225:00',EX2=888 where PKNO='00002'");
-        check(Convert.ToDouble(db.Scalar("select GUN1 from UCRETLER where PKNO='00002'")) == 4 &&
+        check(Convert.ToDouble(db.Scalar("select GUN1 from UCRETLER where PKNO='00002'")) == 5 &&
               Convert.ToDouble(db.Scalar("select EX2 from UCRETLER where PKNO='00002'")) == 777,
-            "REV25 person lock freezes the full UCRETLER row");
+            "REV25 person lock freezes UCRETLER even when another connection left a bypass row");
+        db.Execute("delete from PDKS_BYPASS");
 
         db.Execute("update UCRETLER set GUN1=22 where PKNO='00003'");
         check(Convert.ToDouble(db.Scalar("select GUN1 from UCRETLER where PKNO='00003'")) == 22,
