@@ -226,7 +226,7 @@ internal static partial class DbRecordService
             stagedTnf?.Publish();
             try { transaction.Commit(); }
             catch { stagedTnf?.Restore(); throw; }
-            SyncEngine.Log($"REV21 db_record_committed people={snapshot.Cards.Length} days={snapshot.Days.Length} changed={changed.Length} tnf={(stagedTnf is null ? "off" : "aligned")}");
+            SyncEngine.Log($"REV25 db_record_committed people={snapshot.Cards.Length} days={snapshot.Days.Length} changed={changed.Length} tnf={(stagedTnf is null ? "off" : "aligned")}");
             return backup;
         }
         catch { try { transaction.Rollback(); } catch { } throw; }
