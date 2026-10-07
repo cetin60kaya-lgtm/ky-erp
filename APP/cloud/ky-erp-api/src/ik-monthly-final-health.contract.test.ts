@@ -66,7 +66,7 @@ test("monthly filters are real controls and filter personnel and finance movemen
   assert.match(page, /Sadece Kayıt/);
 });
 
-test("employment period and payroll snapshot safety stay enforced", () => {
+test("employment period safety stays enforced while old PAID snapshots do not lock an open month", () => {
   const relational = cloud("ik-relational-cloud.ts");
   const personnel = cloud("ik-personnel-control.ts");
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
@@ -76,9 +76,10 @@ test("employment period and payroll snapshot safety stay enforced", () => {
   assert.match(relational, /PAYMENT_TOTAL_MISMATCH/);
   assert.match(personnel, /effectiveExitDate/);
   assert.match(personnel, /EXIT_BEFORE_HIRE/);
-  assert.match(page, /if \(upper\(saved\.status\) !== "PAID"\)/);
-  assert.match(page, /paidLocked: true/);
+  assert.match(page, /Eski PAID\/snapshot kayıtları yalnız tarihsel kanıttır/);
+  assert.match(page, /paidLocked: false/);
   assert.match(page, /sourceChangedSinceSave/);
+  assert.doesNotMatch(relational, /PAYROLL_PAID_LOCKED/);
 });
 
 test("monthly live sync is owned by the single canonical personnel and finance workspace", () => {
@@ -88,16 +89,19 @@ test("monthly live sync is owned by the single canonical personnel and finance w
   assert.match(financePage, /getIkAdvancedSyncState/);
 });
 
-test("payroll outputs and SGK close controls remain present", () => {
+test("payroll outputs and month lock controls stay separate", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   for (const label of [
-    "Bordroyu Tamamla / PDF",
-    "Tamamla / Excel",
+    "Bordro PDF",
+    "Excel",
     "Ay Sonu Kontrol",
-    "Dönemi Kapat",
+    "Ayı Kilitle",
+    "Kilidi Aç",
   ]) assert.ok(page.includes(label), `Eksik çıktı/kapanış kontrolü: ${label}`);
-  assert.match(page, /10['’]lu Fiş \+ Tamamla/);
-  assert.match(page, /Tek Kişi Fiş \+ Tamamla/);
+  assert.match(page, /10['’]lu Fiş/);
+  assert.match(page, />Tek Kişi Fiş</);
+  assert.doesNotMatch(page, /Bordroyu Tamamla \/ PDF/);
+  assert.doesNotMatch(page, /Tamamla \/ Excel/);
 
   assert.match(page, /printHtmlDocument/);
   assert.match(page, /exportRowsToExcelFile/);
