@@ -143,7 +143,7 @@ internal static class TerminalDeviceSettingsStore
                 Model = "",
                 SerialNumber = "",
                 FirmwareVersion = "",
-                AdapterProfile = "FP_CLOCK",
+                AdapterProfile = mac.StartsWith("00-23-79-", StringComparison.OrdinalIgnoreCase) ? "PS2000_SBXPC" : "FP_CLOCK",
                 LogReadMode = "New"
             });
             var devices = registry.Devices.Select(Normalize).ToList();
@@ -296,8 +296,12 @@ internal static class TerminalDeviceSettingsStore
             Model = value.Model?.Trim() ?? "",
             SerialNumber = value.SerialNumber?.Trim() ?? "",
             FirmwareVersion = value.FirmwareVersion?.Trim() ?? "",
-            AdapterProfile = string.IsNullOrWhiteSpace(value.AdapterProfile) ? "FP_CLOCK" : value.AdapterProfile.Trim(),
-            LogReadMode = value.LogReadMode.Equals("All", StringComparison.OrdinalIgnoreCase) ? "All" : "New"
+            AdapterProfile = mac.StartsWith("00-23-79-", StringComparison.OrdinalIgnoreCase)
+                ? "PS2000_SBXPC"
+                : (string.IsNullOrWhiteSpace(value.AdapterProfile) ? "FP_CLOCK" : value.AdapterProfile.Trim()),
+            LogReadMode = mac.StartsWith("00-23-79-", StringComparison.OrdinalIgnoreCase)
+                ? "New"
+                : (value.LogReadMode.Equals("All", StringComparison.OrdinalIgnoreCase) ? "All" : "New")
         };
     }
 }
