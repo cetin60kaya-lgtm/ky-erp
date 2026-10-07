@@ -1528,11 +1528,9 @@ public sealed partial class MainForm : Form
 			MessageBox.Show("E'ye çevrilecek normal kayıt bulunamadı.");
 			return;
 		}
-		if (string.IsNullOrWhiteSpace(tnfPath.Text) || !File.Exists(tnfPath.Text))
-		{
-			MessageBox.Show("Ana TNF dosyasını seçin. E işlemi DB ve TNF'yi birlikte günceller.");
-			return;
-		}
+		string eTnfPath;
+		try { eTnfPath = ResolveTnfPath((int)eYear.Value); }
+		catch (Exception ex) { MessageBox.Show(ex.Message, "E İşlemleri", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 		if (MessageBox.Show($"{dataTable.Rows.Count} taraf E yapılacak. DB ana kaynak kabul edilip ilgili kişi/gün TNF kayıtları işlem sonunda otomatik yeniden oluşturulacak; E kayıtları TNF'de olmayacak. Devam?", "Toplu E", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
 			return;
 
@@ -1557,7 +1555,7 @@ public sealed partial class MainForm : Form
 				scope.Add((card, day));
 			}
 
-			stagedTnf = DbRecordTnfCoordinator.Stage(fbConnection, fbTransaction, tnfPath.Text, scope, CancellationToken.None);
+			stagedTnf = DbRecordTnfCoordinator.Stage(fbConnection, fbTransaction, eTnfPath, scope, CancellationToken.None);
 			stagedTnf.Publish();
 			try { fbTransaction.Commit(); }
 			catch { stagedTnf.Restore(); throw; }
@@ -1584,9 +1582,21 @@ public sealed partial class MainForm : Form
 	private void MarkSelectedE(bool entry)
 	{
 		if (db == null || ioGrid.SelectedRows.Count == 0) return;
-		if (string.IsNullOrWhiteSpace(tnfPath.Text) || !File.Exists(tnfPath.Text))
+		string eTnfPath;
+		try
 		{
-			MessageBox.Show("Ana TNF dosyasını seçin. E işlemi DB ve TNF'yi birlikte günceller.", "E Düzeltme");
+			var sourceYear = ioGrid.SelectedRows.Cast<DataGridViewRow>()
+				.Where(r => !r.IsNewRow)
+				.Select(r => entry ? r.Cells["GTARIH"].Value : r.Cells["CTARIH"].Value)
+				.Where(v => v != null && v != DBNull.Value)
+				.Select(v => Convert.ToDateTime(v).Year)
+				.Distinct().ToArray();
+			if (sourceYear.Length != 1) throw new InvalidOperationException("Seçilen E kayıtları tek bir yıla ait olmalıdır.");
+			eTnfPath = ResolveTnfPath(sourceYear[0]);
+		}
+		catch (Exception ex)
+		{
+			MessageBox.Show(ex.Message, "E Düzeltme", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 			return;
 		}
 
@@ -1623,7 +1633,7 @@ public sealed partial class MainForm : Form
 				if (Exec(connection, transaction, entry ? "update GIRCIK set GTUR='E' where SIRA=@S" : "update GIRCIK set CTUR='E' where SIRA=@S", new FbParameter("@S", id)) != 1)
 					throw new InvalidOperationException("DB kaydı değişti; E işlemi geri alındı.");
 			}
-			stagedTnf = DbRecordTnfCoordinator.Stage(connection, transaction, tnfPath.Text, scope, CancellationToken.None);
+			stagedTnf = DbRecordTnfCoordinator.Stage(connection, transaction, eTnfPath, scope, CancellationToken.None);
 			stagedTnf.Publish();
 			try { transaction.Commit(); }
 			catch { stagedTnf.Restore(); throw; }
