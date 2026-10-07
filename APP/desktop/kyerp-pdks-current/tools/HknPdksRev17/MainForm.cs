@@ -846,6 +846,30 @@ public sealed partial class MainForm : Form
 		}
 	}
 
+	internal string ResolveTnfPath(int targetYear)
+	{
+		var current = tnfPath.Text.Trim();
+		if (!string.IsNullOrWhiteSpace(current))
+		{
+			var directory = Path.GetDirectoryName(Path.GetFullPath(current));
+			var fileName = Path.GetFileName(current);
+			if (fileName.StartsWith("TR", StringComparison.OrdinalIgnoreCase) && fileName.EndsWith(".Tnf", StringComparison.OrdinalIgnoreCase))
+			{
+				var desired = Path.Combine(directory ?? AppContext.BaseDirectory, $"TR{targetYear}.Tnf");
+				tnfPath.Text = desired;
+				UpdateSourceStatus();
+				return desired;
+			}
+			return Path.GetFullPath(current);
+		}
+		var dbFile = dbPath.Text.Trim();
+		if (string.IsNullOrWhiteSpace(dbFile)) throw new InvalidOperationException("Önce veritabanı kaynağını seçin.");
+		var result = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(dbFile))!, $"TR{targetYear}.Tnf");
+		tnfPath.Text = result;
+		UpdateSourceStatus();
+		return result;
+	}
+
 	private void PickTnf()
 	{
 		OpenFileDialog openFileDialog = new OpenFileDialog
