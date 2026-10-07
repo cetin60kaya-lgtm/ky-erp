@@ -51,7 +51,15 @@ internal sealed record TerminalDeviceSettings(
         File.Exists(@"D:\Hedef500\Hedef500\Terminal Bilgi Aktar\timerecords.txt") ? @"D:\Hedef500\Hedef500\Terminal Bilgi Aktar\timerecords.txt" : @"C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt",
         false,
         true,
-        5);
+        5)
+    {
+        MacAddress = "00-01-A9-12-2D-00",
+        Manufacturer = "Hedef / FP_CLOCK",
+        Model = "TH600",
+        FirmwareVersion = "V9.4",
+        AdapterProfile = "FP_CLOCK",
+        LogReadMode = "New"
+    };
 
     public static string NormalizeMac(string? value) =>
         string.Join("-", (value ?? "").Replace(":", "").Replace("-", "").Replace(".", "")
@@ -136,7 +144,7 @@ internal static class TerminalDeviceSettingsStore
                 SerialNumber = "",
                 FirmwareVersion = "",
                 AdapterProfile = "FP_CLOCK",
-                LogReadMode = "All"
+                LogReadMode = "New"
             });
             var devices = registry.Devices.Select(Normalize).ToList();
             devices.Add(detected);
@@ -163,11 +171,17 @@ internal static class TerminalDeviceSettingsStore
             if (index < 0) return Load();
 
             var current = Normalize(registry.Devices[index]);
+            var resolvedModel = string.IsNullOrWhiteSpace(model) ? current.Model : model.Trim();
+            var resolvedManufacturer = string.IsNullOrWhiteSpace(manufacturer) ? current.Manufacturer : manufacturer.Trim();
+            var resolvedName = current.DeviceName;
+            if (mac.StartsWith("00-23-79-", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(resolvedModel))
+                resolvedName = $"PS-2000 {resolvedModel}";
             var updated = Normalize(current with
             {
+                DeviceName = resolvedName,
                 MacAddress = string.IsNullOrWhiteSpace(mac) ? current.MacAddress : mac,
-                Manufacturer = string.IsNullOrWhiteSpace(manufacturer) ? current.Manufacturer : manufacturer.Trim(),
-                Model = string.IsNullOrWhiteSpace(model) ? current.Model : model.Trim(),
+                Manufacturer = resolvedManufacturer,
+                Model = resolvedModel,
                 SerialNumber = string.IsNullOrWhiteSpace(serialNumber) ? current.SerialNumber : serialNumber.Trim(),
                 FirmwareVersion = string.IsNullOrWhiteSpace(firmwareVersion) ? current.FirmwareVersion : firmwareVersion.Trim()
             });
@@ -251,7 +265,7 @@ internal static class TerminalDeviceSettingsStore
     static string GuessManufacturer(string mac)
     {
         if (mac.StartsWith("00-23-79-", StringComparison.OrdinalIgnoreCase))
-            return "Union Business Machines Co. Ltd.";
+            return "PS-2000 / PROXSEN";
         return "";
     }
 
@@ -259,6 +273,9 @@ internal static class TerminalDeviceSettingsStore
     {
         var defaults = TerminalDeviceSettings.Default;
         var mac = TerminalDeviceSettings.NormalizeMac(value.MacAddress);
+        if (string.IsNullOrWhiteSpace(mac) && value.DeviceNo == 1 &&
+            value.DeviceName.Equals("cihaz1", StringComparison.OrdinalIgnoreCase))
+            mac = "00-01-A9-12-2D-00";
         return value with
         {
             DeviceNo = value.DeviceNo <= 0 ? defaults.DeviceNo : value.DeviceNo,
