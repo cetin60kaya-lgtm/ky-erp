@@ -106,6 +106,7 @@ internal sealed class PasswordGateForm : Form
 		base.Controls.Add(flowLayoutPanel);
 		base.AcceptButton = button;
 		base.CancelButton = button2;
+		AppTheme.Apply(this);
 		base.Shown += delegate
 		{
 			password.Focus();
