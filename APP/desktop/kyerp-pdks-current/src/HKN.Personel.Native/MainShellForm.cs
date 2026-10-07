@@ -6,6 +6,7 @@ public sealed partial class MainShellForm : Form
 {
     readonly LocalUser currentUser;
     readonly WorkspaceDockHost workspace;
+    readonly Dictionary<string, Form> moduleCache = new(StringComparer.OrdinalIgnoreCase);
     PersonelForm? personel;
     CompanyBranding branding = CompanyBranding.Empty;
 
@@ -264,6 +265,24 @@ public sealed partial class MainShellForm : Form
         AccessGuard.Apply(form, module, currentUser);
         var host = new ModuleHostForm(form, ShowHome);
         ShowEmbedded(host, "module:" + form.GetType().Name + ":" + form.Text, form.Text);
+    }
+
+    void ShowCachedModule(string cacheKey, Func<Form> factory, PdksModule module, string? title = null)
+    {
+        if (moduleCache.TryGetValue(cacheKey, out var cached) && !cached.IsDisposed)
+        {
+            ShowEmbedded(cached, "cached:" + cacheKey, title ?? cached.Text);
+            return;
+        }
+
+        var form = factory();
+        AccessGuard.Apply(form, module, currentUser);
+        var host = new ModuleHostForm(form, ShowHome)
+        {
+            Tag = "KYERP_WORKSPACE_KEEP_ALIVE"
+        };
+        moduleCache[cacheKey] = host;
+        ShowEmbedded(host, "cached:" + cacheKey, title ?? form.Text);
     }
 
     void ShowEmbedded(Form form, string key, string title)
