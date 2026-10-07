@@ -4,7 +4,14 @@ using System.Windows.Forms;
 
 public sealed class ClockHost : AxHost
 {
-    public ClockHost() : base("{87733EE1-D095-442B-A200-6DE90C5C8318}") { }
+    public const string FpClockClsid = "{87733EE1-D095-442B-A200-6DE90C5C8318}";
+    public const string Ps2000Clsid = "{2894E36D-6941-48E0-ABF9-0D38241884FB}";
+
+    public ClockHost(string adapter) : base(
+        adapter != null && adapter.IndexOf("PS2000", StringComparison.OrdinalIgnoreCase) >= 0
+            ? Ps2000Clsid
+            : FpClockClsid) { }
+
     public object Clock { get { return GetOcx(); } }
 }
 
@@ -18,9 +25,13 @@ internal static class Program
         var port = args.Length > 2 ? int.Parse(args[2], CultureInfo.InvariantCulture) : 5005;
         var machine = args.Length > 3 ? int.Parse(args[3], CultureInfo.InvariantCulture) : 1;
         var password = args.Length > 4 ? int.Parse(args[4], CultureInfo.InvariantCulture) : 0;
+        var adapter = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_ADAPTER") ?? "FP_CLOCK";
+        if (adapter.IndexOf("PS2000", StringComparison.OrdinalIgnoreCase) >= 0)
+            EnsurePs2000Registration();
+
         Application.EnableVisualStyles();
         using (var form = HiddenForm())
-        using (var host = new ClockHost())
+        using (var host = new ClockHost(adapter))
         {
             host.Dock = DockStyle.Fill;
             form.Controls.Add(host);
@@ -385,6 +396,42 @@ internal static class Program
         int value = 0;
         try { return clock.GetDeviceStatus(machine, code, ref value) ? value : -1; }
         catch { return -1; }
+    }
+
+    private static void EnsurePs2000Registration()
+    {
+        try
+        {
+            var configured = Environment.GetEnvironmentVariable("KY_PDKS_TERMINAL_SDK_PS2000");
+            var folder = !string.IsNullOrWhiteSpace(configured)
+                ? configured.Trim().Trim('"')
+                : System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TerminalSdkPS2000");
+
+            if (!System.IO.Directory.Exists(folder) || !System.IO.File.Exists(System.IO.Path.Combine(folder, "SBXPC.ocx")))
+            {
+                var current = Environment.CurrentDirectory;
+                if (System.IO.File.Exists(System.IO.Path.Combine(current, "SBXPC.ocx")))
+                    folder = current;
+            }
+
+            var ocx = System.IO.Path.Combine(folder, "SBXPC.ocx");
+            if (!System.IO.File.Exists(ocx)) return;
+
+            using (var hkcu = Microsoft.Win32.RegistryKey.OpenBaseKey(
+                Microsoft.Win32.RegistryHive.CurrentUser,
+                Microsoft.Win32.RegistryView.Registry32))
+            using (var clsid = hkcu.CreateSubKey(@"Software\Classes\CLSID\{2894E36D-6941-48E0-ABF9-0D38241884FB}", true))
+            {
+                clsid.SetValue(null, "SBXPC Control");
+                using (var inproc = clsid.CreateSubKey("InprocServer32", true))
+                {
+                    inproc.SetValue(null, ocx);
+                    inproc.SetValue("ThreadingModel", "Apartment");
+                }
+                using (clsid.CreateSubKey("Control", true)) { }
+            }
+        }
+        catch { }
     }
 
     private static Form HiddenForm()
