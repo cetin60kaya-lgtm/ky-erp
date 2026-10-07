@@ -64,6 +64,11 @@ public partial class PersonelForm
             dt.DefaultView.RowFilter = scopeActive.Checked ? "ICTARIH IS NULL" : scopePassive.Checked ? "ICTARIH IS NOT NULL" : string.Empty;
         }
 
+        if (list.Columns.Contains("ICTARIH"))
+            list.Columns["ICTARIH"].Visible = !scopeActive.Checked;
+        if (list.Columns.Contains("MAAS"))
+            list.Columns["MAAS"].Visible = true;
+
         UpdateClassicStats();
         if (list.Rows.Count > 0 && list.CurrentRow is null)
             list.CurrentCell = list.Rows[0].Cells[0];
