@@ -42,9 +42,9 @@ internal static class PayrollOverrideService
             if (Prepared.Contains(db)) return;
         }
         if (!TableExists(db, "PDKS_BYPASS"))
-            db.Execute("create table PDKS_BYPASS (CONNECTION_ID bigint not null)");
+            db.Execute("create table PDKS_BYPASS (CONNECTION_ID integer not null)");
         else if (!FieldExists(db, "PDKS_BYPASS", "CONNECTION_ID"))
-            db.Execute("alter table PDKS_BYPASS add CONNECTION_ID bigint");
+            db.Execute("alter table PDKS_BYPASS add CONNECTION_ID integer");
         // Old REV22 global bypass rows must never survive an upgrade.
         db.Execute("delete from PDKS_BYPASS");
 
