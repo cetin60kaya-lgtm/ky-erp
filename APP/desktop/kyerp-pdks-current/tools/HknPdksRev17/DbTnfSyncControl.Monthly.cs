@@ -169,7 +169,7 @@ internal sealed partial class DbTnfSyncControl
                 lastOutputs = null;
             }
             success = true;
-            SyncEngine.Log($"REV23 monthly_db_action={title} completed backup={Path.GetFileName(backup)}");
+            SyncEngine.Log($"REV25 monthly_db_action={title} completed backup={Path.GetFileName(backup)}");
         }
         catch (OperationCanceledException) { summary.Text = "İşlem iptal edildi; commit öncesindeki değişiklikler geri alındı."; }
         catch (CompletionPublicationException exception)
