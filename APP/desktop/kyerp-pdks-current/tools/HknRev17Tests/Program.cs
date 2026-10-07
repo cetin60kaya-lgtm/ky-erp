@@ -27,7 +27,9 @@ internal static class Program
     [STAThread]
     static int Main(string[] args)
     {
-        ApplicationConfiguration.Initialize();
+        Application.SetHighDpiMode(HighDpiMode.SystemAware);
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
         try
         {
             Check(Count(Compare([Db()], [Tnf()]), "YOK") == 1, "exact match");
