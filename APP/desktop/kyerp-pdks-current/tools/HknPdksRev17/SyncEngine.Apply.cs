@@ -166,11 +166,7 @@ internal static partial class SyncEngine
             if (string.IsNullOrWhiteSpace(raw)) continue;
             if (!format.TryParse(raw, index, out var move))
             {
-                // Tüm yıl eşitlemede dosya o yıla ait kabul edilir; bozuk satırlar temizlenir.
-                // Dar kapsamda tarihi bilinmeyen satır korunur.
-                var fullYear = snapshot.Request.Start.Month == 1 && snapshot.Request.Start.Day == 1 &&
-                    snapshot.Request.End == snapshot.Request.Start.AddYears(1);
-                if (!fullYear) result.Add((DateTime.MaxValue, TimeSpan.MaxValue, "", index, raw.Trim()));
+                // Exact modda geçersiz TNF satırı hiçbir DB hareketini temsil edemez; temizlenir.
                 continue;
             }
             var inScope = move.Date >= snapshot.Request.Start && move.Date < snapshot.Request.End &&
