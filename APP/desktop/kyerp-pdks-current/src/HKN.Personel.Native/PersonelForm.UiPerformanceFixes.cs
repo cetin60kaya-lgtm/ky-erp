@@ -11,27 +11,15 @@ public partial class PersonelForm
         if (modernTabLayoutApplied) return;
         modernTabLayoutApplied = true;
 
-        try
-        {
-            ReplacePeriodHeader("Giriş / Çıkış", periodG, gFrom, gTo);
-            ReplacePeriodHeader("İzinler", periodI, iFrom, iTo);
-            ReplacePeriodHeader("Kazanç / Kesinti", periodE, eFrom, eTo);
-            ReplaceRecordActionBar("Giriş / Çıkış", gGiris);
-            ReplaceRecordActionBar("İzinler", gIzin);
-            ReplaceRecordActionBar("Kazanç / Kesinti", gEkk);
-            ReplacePaymentHeader();
-            InstallRecordContextMenus();
-            EnableSmoothGrid(list);
-            EnableSmoothGrid(gGiris);
-            EnableSmoothGrid(gIzin);
-            EnableSmoothGrid(gEkk);
-            EnableSmoothGrid(gBilgi);
-            EnableSmoothGrid(gOdeme);
-        }
-        catch
-        {
-            // Görsel iyileştirme ana işleyişi engellememeli.
-        }
+        // Ağır ekran geçişlerinde aynı sekme başlıklarını ve aksiyon barlarını ikinci kez
+        // söküp yeniden kurmak ciddi UI donmasına yol açıyordu. Nihai düzen artık
+        // BuildTabsClassic + RepairRecordActionBars tarafından tek kez kuruluyor.
+        EnableSmoothGrid(list);
+        EnableSmoothGrid(gGiris);
+        EnableSmoothGrid(gIzin);
+        EnableSmoothGrid(gEkk);
+        EnableSmoothGrid(gBilgi);
+        EnableSmoothGrid(gOdeme);
     }
 
     void ReplacePeriodHeader(string tabTitle, ComboBox periodBox, DateTimePicker from, DateTimePicker to)
