@@ -8,9 +8,11 @@ using KYERP.PDKS.Core;
 
 namespace QuickDataTool;
 
-internal sealed record DbRecordPerson(string Card, string Name)
+internal sealed record DbRecordPerson(string Card, string Name, DateTime? Hire, DateTime? Exit)
 {
     public override string ToString() => $"{Card}  {Name}";
+    internal bool EmployedOn(DateTime day)
+        => (!Hire.HasValue || Hire.Value.Date <= day.Date) && (!Exit.HasValue || Exit.Value.Date >= day.Date);
 }
 internal sealed record DbRecordDay(string Card, string Name, DateTime Day, string ExistingEntry, string Entry,
     string ExistingExit, string Exit, string Operation, int EntryId, int ExitId);
@@ -30,13 +32,17 @@ internal static partial class DbRecordService
     {
         using var owned = existingConnection is null ? database.OpenConnection() : null;
         var connection = existingConnection ?? owned!;
-        using var command = new FbCommand("select PKNO,AD,SOYAD from KIMLIK order by PKNO", connection, transaction) { CommandTimeout = 60 };
+        using var command = new FbCommand("select PKNO,AD,SOYAD,IGTARIH,ICTARIH from KIMLIK order by PKNO", connection, transaction) { CommandTimeout = 60 };
         using var registration = token.Register(command.Cancel);
         using var adapter = new FbDataAdapter(command);
         var table = new DataTable();
         adapter.Fill(table);
-        return table.AsEnumerable().Select(row => new DbRecordPerson(Convert.ToString(row["PKNO"])!.Trim(),
-            $"{row["AD"]} {row["SOYAD"]}".Trim())).Where(person => person.Card.Length > 0).Distinct().ToArray();
+        return table.AsEnumerable().Select(row => new DbRecordPerson(
+            Convert.ToString(row["PKNO"])!.Trim(),
+            $"{row["AD"]} {row["SOYAD"]}".Trim(),
+            row["IGTARIH"] == DBNull.Value ? null : Convert.ToDateTime(row["IGTARIH"]).Date,
+            row["ICTARIH"] == DBNull.Value ? null : Convert.ToDateTime(row["ICTARIH"]).Date))
+            .Where(person => person.Card.Length > 0).Distinct().ToArray();
     }
 
     internal static DbRecordSnapshot Read(FirebirdDatabase database, IEnumerable<string> selectedCards,
@@ -83,13 +89,14 @@ internal static partial class DbRecordService
     internal static DbRecordDay[] Plan(DbRecordSnapshot snapshot, CancellationToken token)
     {
         var grouped = Movements(snapshot).ToLookup(move => (move.Card, move.Date));
-        var names = snapshot.People.ToDictionary(person => person.Card, person => person.Name);
+        var peopleByCard = snapshot.People.ToDictionary(person => person.Card);
         var previous = new Dictionary<(string Card, string Side), int>();
         var result = new List<DbRecordDay>();
         foreach (var card in snapshot.Cards)
         foreach (var day in snapshot.Days)
         {
             token.ThrowIfCancellationRequested();
+            if (!peopleByCard.TryGetValue(card, out var person) || !person.EmployedOn(day)) continue;
             var moves = grouped[(card, day)].OrderBy(move => move.Id).ToArray();
             if (moves.Any(move => !MonthlyDbAudit.Clock(move.Time, out _)))
                 throw new InvalidOperationException($"{card} / {day:dd.MM.yyyy}: bozuk DB saati; önizleme uygulanamaz.");
@@ -112,7 +119,7 @@ internal static partial class DbRecordService
             if (moves.Length > (entry is null ? 0 : 1) + (exit is null ? 0 : 1)) actions.Add("MÜKERRER / FAZLA SİLİNECEK");
             if (entry is not null && (entry.Side != "Giriş" || entry.Time != entryTime || entry.Tur.Equals("E", StringComparison.OrdinalIgnoreCase)) ||
                 exit is not null && (exit.Side != "Çıkış" || exit.Time != exitTime || exit.Tur.Equals("E", StringComparison.OrdinalIgnoreCase))) actions.Add("DÜZELTİLECEK");
-            result.Add(new(card, names[card], day, string.Join(" / ", moves.Where(move => move.Side == "Giriş").Select(move => move.Time)), entryTime,
+            result.Add(new(card, person.Name, day, string.Join(" / ", moves.Where(move => move.Side == "Giriş").Select(move => move.Time)), entryTime,
                 string.Join(" / ", moves.Where(move => move.Side == "Çıkış").Select(move => move.Time)), exitTime,
                 actions.Count == 0 ? "UYUMLU" : string.Join("; ", actions), entry?.Id ?? -1, exit?.Id ?? -1));
         }
@@ -144,8 +151,12 @@ internal static partial class DbRecordService
         if (snapshot.Plan.Any(plan => !structural.TryGetValue((plan.Card, plan.Day), out var original) ||
             plan.EntryId != original.EntryId || plan.ExitId != original.ExitId || plan.Operation != original.Operation))
             throw new InvalidOperationException("Önizleme kayıt kimlikleri değişmiş; yeniden önizleyin.");
-        if (snapshot.Plan.Length != (long)snapshot.Cards.Length * snapshot.Days.Length || snapshot.Plan.Select(plan => (plan.Card, plan.Day)).Distinct().Count() != snapshot.Plan.Length ||
+        var peopleByCard = snapshot.People.ToDictionary(person => person.Card);
+        var expectedPlanCount = snapshot.Cards.Sum(card => snapshot.Days.Count(day =>
+            peopleByCard.TryGetValue(card, out var person) && person.EmployedOn(day)));
+        if (snapshot.Plan.Length != expectedPlanCount || snapshot.Plan.Select(plan => (plan.Card, plan.Day)).Distinct().Count() != snapshot.Plan.Length ||
             snapshot.Plan.Any(plan => !cards.Contains(plan.Card) || !days.Contains(plan.Day) ||
+                !peopleByCard.TryGetValue(plan.Card, out var person) || !person.EmployedOn(plan.Day) ||
                 !MonthlyDbNormalization.InRange("Giriş", plan.Entry) || !MonthlyDbNormalization.InRange("Çıkış", plan.Exit)))
             throw new InvalidOperationException("Önizleme planı kapsam/saat koşullarını sağlamıyor.");
         var backup = await MonthlyDbWriter.BackupAsync(database, token).ConfigureAwait(false);
