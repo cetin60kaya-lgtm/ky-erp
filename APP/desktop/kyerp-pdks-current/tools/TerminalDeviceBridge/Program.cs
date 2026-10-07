@@ -45,7 +45,10 @@ internal static class Program
                         ? new DateTime(year, month, day, hour, minute, 0).ToString("s", CultureInfo.InvariantCulture)
                         : "";
                     Console.WriteLine("STATUS|OK|" + deviceTime + "|" + newLogs + "|" + users + "|" + cards);
+                    var identity = ReadIdentity(clock, machine);
+                    Console.WriteLine("IDENTITY|" + Safe(identity.SerialNumber) + "|" + Safe(identity.ProductCode) + "|" + Safe(identity.FirmwareVersion));
                     if (mode == "read") ReadNew(clock, machine);
+                    else if (mode == "readall") ReadAll(clock, machine);
                     else if (mode == "users") ReadUsers(clock, machine);
                     else if (mode == "deleteuser")
                     {
@@ -92,6 +95,37 @@ internal static class Program
             }
             catch (Exception ex) { return Fail(ex.GetBaseException().Message); }
         }
+    }
+
+    private sealed class DeviceIdentity
+    {
+        public string SerialNumber = "";
+        public string ProductCode = "";
+        public string FirmwareVersion = "";
+    }
+
+    private static DeviceIdentity ReadIdentity(dynamic clock, int machine)
+    {
+        var result = new DeviceIdentity();
+        try
+        {
+            string value = "";
+            if (clock.GetSerialNumber(machine, ref value)) result.SerialNumber = value ?? "";
+        }
+        catch { }
+        try
+        {
+            string value = "";
+            if (clock.GetProductCode(machine, ref value)) result.ProductCode = value ?? "";
+        }
+        catch { }
+        try
+        {
+            string value = "";
+            if (clock.GetFirmwareVersion(machine, ref value)) result.FirmwareVersion = value ?? "";
+        }
+        catch { }
+        return result;
     }
 
     private sealed class UserRow
@@ -239,6 +273,50 @@ internal static class Program
                 bool ok = clock.GetGeneralLogDataWithSecond(
                     machine, ref terminal, ref enroll, ref enrollMachine, ref verify, ref inout, ref evt,
                     ref year, ref month, ref day, ref hour, ref minute, ref second);
+                if (!ok) break;
+                DateTime at;
+                try { at = new DateTime(year, month, day, hour, minute, second); }
+                catch { continue; }
+                Console.WriteLine("LOG|" + enroll.ToString("00000", CultureInfo.InvariantCulture) + "|" +
+                    at.ToString("s", CultureInfo.InvariantCulture) + "|" + inout + "|" + verify + "|" + evt + "|" + terminal);
+                count++;
+            }
+        }
+        Console.WriteLine("END|" + count);
+    }
+
+    private static void ReadAll(dynamic clock, int machine)
+    {
+        var count = 0;
+        bool prepared = false;
+        try { prepared = clock.ReadAllGLogData(machine); }
+        catch { prepared = false; }
+
+        if (prepared)
+        {
+            bool useAllGetter = true;
+            while (true)
+            {
+                int terminal = 0, enroll = 0, enrollMachine = 0, verify = 0, inout = 0, evt = 0;
+                int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
+                bool ok;
+                try
+                {
+                    if (useAllGetter)
+                        ok = clock.GetAllGLogDataWithSecond(
+                            machine, ref terminal, ref enroll, ref enrollMachine, ref verify, ref inout, ref evt,
+                            ref year, ref month, ref day, ref hour, ref minute, ref second);
+                    else
+                        ok = clock.GetGeneralLogDataWithSecond(
+                            machine, ref terminal, ref enroll, ref enrollMachine, ref verify, ref inout, ref evt,
+                            ref year, ref month, ref day, ref hour, ref minute, ref second);
+                }
+                catch
+                {
+                    if (!useAllGetter) break;
+                    useAllGetter = false;
+                    continue;
+                }
                 if (!ok) break;
                 DateTime at;
                 try { at = new DateTime(year, month, day, hour, minute, second); }
