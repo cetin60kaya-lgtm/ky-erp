@@ -2196,8 +2196,9 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     deduction: deductionRows.reduce((sum, item) => sum + number(item.amount), 0),
     garnishment: legalRows.reduce((sum, item) => sum + number(item.amount), 0),
   };
-  if (Math.abs(Math.round((desired.overtime - current.overtime) * 100) / 100) > 0.01) {
-    return error(c, 409, "OVERTIME_SOURCE_MISMATCH", "Mesai toplamı kaynak hareketlerle uyuşmuyor. Mesaiyi Mesai / Avans / Kesinti ekranındaki gerçek kayıttan düzenleyin.");
+  const toCents = (value: unknown) => Math.round(number(value) * 100);
+  if (toCents(desired.overtime) !== toCents(current.overtime)) {
+    return error(c, 409, "OVERTIME_SOURCE_MISMATCH", "Mesai toplamı gerçek Mesai hareketleriyle uyuşmuyor. Mesaiyi Mesai / Avans / Kesinti ekranındaki saat ve oran kaydından düzenleyin.");
   }
   const currentBankDeductions = [...advanceRows, ...deductionRows, ...legalRows]
     .filter((item) => upper(item.paymentMethod).includes("BANKA"))
@@ -2207,8 +2208,9 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   const correctionDate = hrDateOnly(body.date) || `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
   const reason = text(body.reason) || "Son bordro kontrolü";
   const statements: D1PreparedStatement[] = [];
-  const correctionIds: string[] = [];
   const sourceUpdateIds: string[] = [];
+  const sourceCreatedIds: string[] = [];
+  const sourceDeletedIds: string[] = [];
   const legalTypeUpdateIds: string[] = [];
   const normalizeSource = (value: unknown) => upper(value).includes("BANKA") ? "Banka" : "Elden";
   const advanceSource = normalizeSource(body.advanceSource);
@@ -2250,24 +2252,62 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     (garnishmentSource === "Banka" ? desired.garnishment : 0)
   ) * 100) / 100);
 
-  const pushCorrection = (kind: "overtime" | "advance" | "deduction" | "garnishment", adjustmentType: string, source: string) => {
-    const delta = Math.round((desired[kind] - current[kind]) * 100) / 100;
-    if (Math.abs(delta) <= 0.01) return;
+  const manualDeductionRows = deductionRows.filter((item) => {
+    const valueUpper = upper(item.adjustmentType);
+    return valueUpper.includes("KESINT") &&
+      !valueUpper.includes("EKSIK") &&
+      !valueUpper.includes("EKSİK") &&
+      !valueUpper.includes("DEVAMSIZ") &&
+      !valueUpper.includes("GELMEDI") &&
+      !valueUpper.includes("GELMEDİ");
+  });
+  const derivedDeductionRows = deductionRows.filter((item) => !manualDeductionRows.some((manual) => text(manual.id) === text(item.id)));
+  const derivedDeductionTotal = derivedDeductionRows.reduce((sum, item) => sum + number(item.amount), 0);
+  if (toCents(desired.deduction) < toCents(derivedDeductionTotal)) {
+    return error(c, 409, "DERIVED_DEDUCTION_LOCKED", "Kesinti toplamı eksik gün/saat gibi hesaplanan kaynakların altına indirilemez. Önce ilgili kaynak hareketini düzenleyin.");
+  }
+  const desiredManualDeduction = Math.max(Math.round((desired.deduction - derivedDeductionTotal) * 100) / 100, 0);
+  const currentManualDeduction = manualDeductionRows.reduce((sum, item) => sum + number(item.amount), 0);
+
+  const ensureUnambiguous = (label: string, rows: Row[], currentAmount: number, desiredAmount: number) => {
+    if (toCents(currentAmount) === toCents(desiredAmount) || rows.length <= 1) return null;
+    return error(c, 409, "FINANCE_SOURCE_AMBIGUOUS", label + " için birden fazla gerçek kaynak kaydı var. Toplamı tek satıra ezmemek için ilgili hareketi Mesai / Avans / Kesinti ekranından düzenleyin.");
+  };
+  const ambiguousAdvance = ensureUnambiguous("Avans", advanceRows, current.advance, desired.advance);
+  if (ambiguousAdvance) return ambiguousAdvance;
+  const ambiguousDeduction = ensureUnambiguous("Kesinti", manualDeductionRows, currentManualDeduction, desiredManualDeduction);
+  if (ambiguousDeduction) return ambiguousDeduction;
+  const ambiguousLegal = ensureUnambiguous("İcra / Haciz", legalRows, current.garnishment, desired.garnishment);
+  if (ambiguousLegal) return ambiguousLegal;
+
+  const syncCanonicalSource = (rows: Row[], desiredAmount: number, adjustmentType: string, source: string) => {
+    const target = Math.max(Math.round(desiredAmount * 100) / 100, 0);
+    const currentAmount = rows.reduce((sum, item) => sum + number(item.amount), 0);
+    if (toCents(target) === toCents(currentAmount)) return;
+    const existingRow = rows[0];
+    if (existingRow) {
+      const id = text(existingRow.id);
+      if (!id) return;
+      if (toCents(target) === 0) {
+        sourceDeletedIds.push(id);
+        statements.push(c.env.DB.prepare("DELETE FROM hr_monthly_adjustments_v2 WHERE id=?").bind(id));
+        return;
+      }
+      sourceUpdateIds.push(id);
+      statements.push(c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET amount=?,payment_method=?,payroll_effect=?,adjustment_type=? WHERE id=?")
+        .bind(target, normalizeSource(source), "Bordroya yansir", adjustmentType || text(existingRow.adjustmentType), id));
+      return;
+    }
+    if (toCents(target) === 0) return;
     const id = crypto.randomUUID();
-    correctionIds.push(id);
-    const paymentMethod = kind === "overtime" ? "Bordro" : normalizeSource(source);
-    const note = `Bordro kaynak kontrolü · önce ${current[kind].toFixed(2)} · sonra ${desired[kind].toFixed(2)} · ${reason}`;
-    statements.push(
-      c.env.DB.prepare(`INSERT INTO hr_monthly_adjustments_v2
-        (id,employee_id,date,adjustment_type,hour_or_day,amount,payment_method,payroll_effect,note,status,created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-        .bind(id, employeeId, correctionDate, adjustmentType, 0, delta, paymentMethod, "Bordroya yansir", note, "APPROVED", timestamp),
-    );
+    sourceCreatedIds.push(id);
+    statements.push(c.env.DB.prepare("INSERT INTO hr_monthly_adjustments_v2 (id,employee_id,date,adjustment_type,hour_or_day,amount,payment_method,payroll_effect,note,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+      .bind(id, employeeId, correctionDate, adjustmentType, 0, target, normalizeSource(source), "Bordroya yansir", reason, "APPROVED", timestamp));
   };
 
-  pushCorrection("advance", "Avans", advanceSource);
-  pushCorrection("deduction", "Ozel kesinti", deductionSource);
-  pushCorrection("garnishment", legalType, garnishmentSource);
+  syncCanonicalSource(advanceRows, desired.advance, advanceRows[0] ? text(advanceRows[0].adjustmentType) : "Avans", advanceSource);
+  syncCanonicalSource(manualDeductionRows, desiredManualDeduction, manualDeductionRows[0] ? text(manualDeductionRows[0].adjustmentType) : "Ozel kesinti", deductionSource);
+  syncCanonicalSource(legalRows, desired.garnishment, legalType, garnishmentSource);
 
   const resolvedUpper = upper(resolvedPaymentType);
   const onlyCash = resolvedUpper.includes("ELDEN") && !resolvedUpper.includes("BANKA");
@@ -2354,8 +2394,9 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     current,
     desired,
     net,
-    correctionIds,
     sourceUpdateIds,
+    sourceCreatedIds,
+    sourceDeletedIds,
     legalTypeUpdateIds,
     paymentType: resolvedPaymentType,
     bankPlan,
@@ -2370,7 +2411,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     c.env.DB.prepare(`INSERT INTO hr_monthly_audit_logs
       (id,main_company_id,period,employee_id,entity_type,action,summary,details_json,created_at)
       VALUES (?,?,?,?,?,?,?,?,?)`)
-      .bind(crypto.randomUUID(), companyId, period, employeeId, "BORDRO", "FINAL_CONTROL", "Son bordro kontrolü ücret planı, hareket kaynakları ve snapshot ile atomik kaydedildi.", auditDetails, timestamp),
+      .bind(crypto.randomUUID(), companyId, period, employeeId, "BORDRO", "FINAL_CONTROL", "Son bordro kontrolü ücret planını, mevcut gerçek hareket kaynaklarını ve bordro snapshotını atomik güncelledi.", auditDetails, timestamp),
   );
 
   await c.env.DB.batch(statements);
@@ -2385,7 +2426,6 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     period,
     current,
     final: { ...desired, total: net },
-    correctionIds,
     paymentType: resolvedPaymentType,
     bankPlan,
     cashPlan,
