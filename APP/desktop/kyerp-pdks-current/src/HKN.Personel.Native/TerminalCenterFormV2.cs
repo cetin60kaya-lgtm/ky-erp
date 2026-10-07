@@ -209,16 +209,16 @@ public sealed class TerminalCenterForm : Form
         var infoTable = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 3, BackColor = p.Surface };
         for (var i = 0; i < 4; i++) infoTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
         AddInfo(infoTable, 0, 0, "Cihaz", settings.DeviceName);
-        AddInfo(infoTable, 1, 0, "Sağlayıcı", "Hedef / FP_CLOCK");
+        AddInfo(infoTable, 1, 0, "Marka / Model", settings.IdentityText);
         AddInfo(infoTable, 2, 0, "Bağlantı", settings.ConnectionType);
         AddInfo(infoTable, 3, 0, "Yön", settings.Direction);
         AddInfo(infoTable, 0, 1, "IP", settings.IpAddress);
         AddInfo(infoTable, 1, 1, "Port", settings.IpPort.ToString(CultureInfo.InvariantCulture));
         AddInfo(infoTable, 2, 1, "Makine No", settings.MachineNo.ToString(CultureInfo.InvariantCulture));
-        AddInfo(infoTable, 3, 1, "Seri", $"{settings.ComPort} / {settings.BaudRate}");
+        AddInfo(infoTable, 3, 1, "MAC", string.IsNullOrWhiteSpace(settings.MacAddress) ? "—" : settings.MacAddress);
         infoTable.Controls.Add(new Label
         {
-            Text = "Mevcut cihaz gerçek Hedef/FP_CLOCK adaptörüyle çalışır. Yeni marka geldiğinde aynı merkeze yeni sürücü/adaptör eklenir.",
+            Text = $"Aktif profil: {settings.DeviceName} • Adaptör: {settings.AdapterProfile} • Okuma: {settings.LogReadMode} • Seri: {(string.IsNullOrWhiteSpace(settings.SerialNumber) ? "—" : settings.SerialNumber)} • Firmware: {(string.IsNullOrWhiteSpace(settings.FirmwareVersion) ? "—" : settings.FirmwareVersion)}",
             Dock = DockStyle.Fill,
             ForeColor = p.Muted,
             Padding = new Padding(0, 7, 0, 0)
@@ -460,7 +460,7 @@ public sealed class TerminalCenterForm : Form
         var sync = TerminalSyncService.ReadState();
         syncValue.Text = sync?.LastAt?.ToString("dd.MM HH:mm") ?? "—";
         SetStatus(snapshot.Connected
-            ? $"CİHAZ BAĞLI • {TerminalDeviceSettingsStore.Load().IpAddress}:{TerminalDeviceSettingsStore.Load().IpPort}"
+            ? $"CİHAZ BAĞLI • {TerminalDeviceSettingsStore.Load().DeviceName} • {TerminalDeviceSettingsStore.Load().MacAddress} • {TerminalDeviceSettingsStore.Load().IpAddress}:{TerminalDeviceSettingsStore.Load().IpPort}"
             : "Cihaz kapalı / erişilemiyor • " + snapshot.Message,
             snapshot.Connected);
     }
