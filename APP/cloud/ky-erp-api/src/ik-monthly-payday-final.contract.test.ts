@@ -171,3 +171,13 @@ test("canonical personnel admin maintenance requires admin and protects operatio
   assert.doesNotMatch(relational, /ADMIN_CONFIRMATION_REQUIRED/);
   assert.match(relational, /\/api\/ik\/advanced\/person-card\/:employeeId\/admin-maintenance/);
 });
+
+
+test("legacy synthetic overtime corrections never count as real overtime", () => {
+  const relational = api("ik-relational-cloud.ts");
+  assert.match(relational, /function isLegacySyntheticOvertimeCorrection/);
+  assert.match(relational, /BORDRO KAYNAK KONTROL/);
+  assert.match(relational, /!isLegacySyntheticOvertimeCorrection\(row\)/);
+  assert.match(relational, /OVERTIME_SOURCE_MISMATCH/);
+  assert.doesNotMatch(relational, /pushCorrection\("overtime"/);
+});
