@@ -345,8 +345,7 @@ internal sealed partial class DbTnfSyncControl : UserControl
         if (!full && month.SelectedIndex == 0) throw new InvalidOperationException("Aylık kontrol için tek bir ay seçin.");
         var start = new DateTime(selectedYear, full || month.SelectedIndex == 0 ? 1 : month.SelectedIndex, 1);
         var end = full || month.SelectedIndex == 0 ? start.AddYears(1) : start.AddMonths(1);
-        var settings = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HKN-PDKS", "TNF_FORMAT_AYAR.json");
-        var format = File.Exists(settings) ? JsonSerializer.Deserialize<TnfFormat>(File.ReadAllText(settings)) ?? new TnfFormat() : new TnfFormat();
+        // REV25 canonical format is fixed: KartNo,Saat,GGAAYY,1,001. User-specific layout overrides are intentionally ignored.
         return new(path, start, end, "", new TnfFormat(), true);
     }
 
