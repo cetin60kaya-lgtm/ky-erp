@@ -292,6 +292,12 @@ function mapAdjustment(row: Row): Row {
   };
 }
 
+function isLegacySyntheticOvertimeCorrection(row: Row) {
+  return upper(row.adjustmentType || row.type).includes("MESAI")
+    && Math.abs(number(row.hourOrDay || row.hours)) <= 0.0001
+    && upper(row.note).includes("BORDRO KAYNAK KONTROL");
+}
+
 function mapLeave(row: Row): Row {
   return {
     id: text(row.id),
@@ -380,6 +386,7 @@ async function adjustmentRows(c: Context<AppEnv>, companyId = companyIdOf(c)) {
   );
   return rows
     .map(mapAdjustment)
+    .filter((row) => !isLegacySyntheticOvertimeCorrection(row))
     .filter((row) => !year || text(row.date).startsWith(`${year}-${month}`));
 }
 
@@ -2189,6 +2196,9 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     deduction: deductionRows.reduce((sum, item) => sum + number(item.amount), 0),
     garnishment: legalRows.reduce((sum, item) => sum + number(item.amount), 0),
   };
+  if (Math.abs(Math.round((desired.overtime - current.overtime) * 100) / 100) > 0.01) {
+    return error(c, 409, "OVERTIME_SOURCE_MISMATCH", "Mesai toplamı kaynak hareketlerle uyuşmuyor. Mesaiyi Mesai / Avans / Kesinti ekranındaki gerçek kayıttan düzenleyin.");
+  }
   const currentBankDeductions = [...advanceRows, ...deductionRows, ...legalRows]
     .filter((item) => upper(item.paymentMethod).includes("BANKA"))
     .reduce((sum, item) => sum + number(item.amount), 0);
@@ -2255,7 +2265,6 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     );
   };
 
-  pushCorrection("overtime", "Mesai", "Bordro");
   pushCorrection("advance", "Avans", advanceSource);
   pushCorrection("deduction", "Ozel kesinti", deductionSource);
   pushCorrection("garnishment", legalType, garnishmentSource);
