@@ -11,7 +11,7 @@ internal static class MonthlyDbNormalization
     internal const int EntryMax = 525;
     internal const int ExitMin = 1110;
     internal const int ExitMax = 1170;
-    internal const string Information = "Normalleştirme: 08:15–08:45 / 18:30–19:30 | Kaynak: REV21 kullanıcı kuralı | Normal gün: 1 giriş + 1 çıkış";
+    internal const string Information = "Normalleştirme: 08:15–08:45 / 18:30–19:30 | Kaynak: ortak çalışma kuralı | Normal gün: 1 giriş + 1 çıkış";
     internal static bool IsReplacement(MonthlyIssue operation) => operation.Kind is "SAAT DÜZELT" or "TARAF DÜZELT";
     internal static bool InRange(string side, string time) => MonthlyDbAudit.Clock(time, out var minute) &&
         (side == "Giriş" ? minute >= EntryMin && minute <= EntryMax : side == "Çıkış" && minute >= ExitMin && minute <= ExitMax);
