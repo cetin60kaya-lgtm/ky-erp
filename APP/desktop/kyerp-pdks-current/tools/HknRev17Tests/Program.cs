@@ -434,8 +434,8 @@ internal static class Program
             Check(Count(planCheck,"TNF SİL FAZLA")==0 && Count(planCheck,"TNF DÜZELT")==0 && Count(planCheck,"TNF SİL E")==0, "live memory-only output plan reaches zero safe surplus time and E errors");
             Check(dbGrid.Columns.Cast<DataGridViewColumn>().All(column=>column is not DataGridViewCheckBoxColumn), "simplified grids contain no selection checkbox");
             var buttons=Descendants(control).OfType<Button>().Where(button=>button.Text!="İptal").Select(button=>button.Text).ToArray();
-            Check(buttons.Length==2 && buttons.Contains("KONTROL ET") && buttons.Contains("TEK ATIŞ KONTROL + DÜZELT"),
-                "REV25 DB-TNF screen has only read-only control and the single exact correction action");
+            Check(buttons.Length==3 && buttons.Contains("KONTROL ET") && buttons.Contains("TEK ATIŞ KONTROL + DÜZELT") && buttons.Contains("TÜM PERSONELİ GÖSTER"),
+                "REV25 DB-TNF screen has read-only control, single exact correction and explicit show-all filter");
             Console.WriteLine($"REV20_READONLY_PLAN safe={safeRows.Length} missing={livePlan.Missing.Length} corrected_lines={livePlan.Corrected.Length} plan_ms={planClock.ElapsedMilliseconds}");
             await control.RunAuditAsync(true, true);
             var grid = (DataGridView)typeof(DbTnfSyncControl).GetField("dbGrid", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(control)!;
