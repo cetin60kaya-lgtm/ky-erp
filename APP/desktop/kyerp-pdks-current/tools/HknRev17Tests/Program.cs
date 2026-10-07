@@ -455,7 +455,10 @@ internal static class Program
         Check(before == Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(tnfPath))), "live TNF untouched");
         using var main = new MainForm();
         var tabs = (TabControl)typeof(MainForm).GetField("tabs", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(main)!;
-        Check(tabs.TabPages.Count >= 7, "REV15 main modules construct");
+        var tabNames = tabs.TabPages.Cast<TabPage>().Select(page => page.Text).ToArray();
+        var expectedTabs = new[] { "Personel", "Giriş-Çıkış", "Kayıt Düzeltme", "E İşlemleri", "Bordro", "Ödeme / Avans", "DB - TNF Eşitle", "TNF Hazırla" };
+        Check(tabNames.SequenceEqual(expectedTabs), "REV25 single-owner simple menu has only the eight production workflows");
+        Check(!tabNames.Any(name => name is "Toplu İşlem" or "AYLIK KONTROL" or "TNF DÜZENLE"), "REV25 legacy duplicate workflow tabs are gone");
         Check(typeof(PasswordGateForm).GetField("Expected", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null) is byte[] { Length: 32 }, "original password gate retained with embedded private verifier");
     }
 
