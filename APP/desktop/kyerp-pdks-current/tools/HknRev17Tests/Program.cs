@@ -2,6 +2,7 @@ using System.Data;
 using System.Diagnostics;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text;
 using KYERP.PDKS.Core;
 using QuickDataTool;
 
