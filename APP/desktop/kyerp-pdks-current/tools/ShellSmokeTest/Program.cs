@@ -99,8 +99,10 @@ if (!PdksCommandCatalog.Get(PdksCommandId.MonthlyAttendanceAdmin).AdminOnly)
 using (var adminMonth = new MonthlyAttendanceAdminForm(user))
 {
     var buttons = Descendants(adminMonth).OfType<Button>().Select(x => x.Text ?? string.Empty).ToArray();
-    foreach (var required in new[] { "Normal Giriş Ekle", "Normal Çıkış Ekle", "Giriş Saatini Düzenle", "Çıkış Saatini Düzenle", "E Giriş Ekle", "E Çıkış Ekle", "Ayı DATA ↔ TNF Eşitle", "E İmza PDF" })
+    foreach (var required in new[] { "TAM DÜZELT / KAYIT OLUŞTUR", "E İŞLEMLERİ", "Ay DATA ↔ TNF Eşitle", "E İmza PDF" })
         if (!buttons.Contains(required)) throw new InvalidOperationException("ADMIN aylık düzeltme komutu eksik: " + required);
+    if (!Descendants(adminMonth).OfType<ComboBox>().Any() || !Descendants(adminMonth).OfType<NumericUpDown>().Any())
+        throw new InvalidOperationException("ADMIN aylık düzeltmede Ay ve Yıl ayrı seçimler olmalı.");
 }
 
 using (var exceptions = new AttendanceExceptionCenterForm())
