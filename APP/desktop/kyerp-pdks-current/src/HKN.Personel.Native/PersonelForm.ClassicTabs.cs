@@ -1,5 +1,6 @@
 using FirebirdSql.Data.FirebirdClient;
 using System.Data;
+using System.Globalization;
 
 namespace HKN.Personel.Native;
 
@@ -49,8 +50,9 @@ public partial class PersonelForm
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
 
-        layout.Controls.Add(PdksUiKit.FieldLabel("Dönem"),0,0);
-        per.Dock=DockStyle.Fill;per.Margin=new Padding(0,5,12,5);layout.Controls.Add(per,1,0);
+        layout.Controls.Add(PdksUiKit.FieldLabel("Ay / Yıl"),0,0);
+        per.Visible=false;
+        layout.Controls.Add(BuildMonthYearPeriodSelector(per,from,to),1,0);
         var show=PdksUiKit.Button("Seçili Dönemi Göster",150,PdksActionRole.Primary,RefreshFullTabs);
         show.Dock=DockStyle.Right;show.Margin=new Padding(8,4,0,4);layout.Controls.Add(show,6,0);
 
@@ -62,12 +64,91 @@ public partial class PersonelForm
         return top;
     }
 
+    Control BuildMonthYearPeriodSelector(ComboBox period, DateTimePicker? from = null, DateTimePicker? to = null)
+    {
+        var p=PdksAppearance.Current;
+        var panel=new FlowLayoutPanel
+        {
+            Dock=DockStyle.Fill,
+            FlowDirection=FlowDirection.LeftToRight,
+            WrapContents=false,
+            Margin=Padding.Empty,
+            Padding=new Padding(0,3,0,0),
+            BackColor=p.Surface
+        };
+        var month=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=116,FlatStyle=FlatStyle.Flat};
+        month.Items.AddRange(CultureInfo.GetCultureInfo("tr-TR").DateTimeFormat.MonthNames.Take(12).Cast<object>().ToArray());
+        var year=new NumericUpDown{Minimum=2015,Maximum=2100,Width=78};
+        month.SelectedIndex=DateTime.Today.Month-1;
+        year.Value=DateTime.Today.Year;
+        var syncing=false;
+
+        void SyncFromPeriod()
+        {
+            if(syncing)return;
+            var row=SelectedPeriodRow(period);
+            if(row is null||row["BASTAR"]==DBNull.Value)return;
+            var d=Convert.ToDateTime(row["BASTAR"]).Date;
+            syncing=true;
+            try
+            {
+                month.SelectedIndex=d.Month-1;
+                year.Value=Math.Clamp(d.Year,(int)year.Minimum,(int)year.Maximum);
+                if(from is not null&&to is not null)SetDateRange(row,from,to);
+            }
+            finally{syncing=false;}
+        }
+
+        void SelectPeriod()
+        {
+            if(syncing||month.SelectedIndex<0||period.DataSource is not DataTable table)return;
+            var a=new DateTime((int)year.Value,month.SelectedIndex+1,1);
+            var b=a.AddMonths(1).AddDays(-1);
+            var group=-1;
+            if(personCache.TryGetValue(currentPk,out var pr)&&pr.Table.Columns.Contains("GRUP")&&pr["GRUP"]!=DBNull.Value)
+                group=Convert.ToInt32(pr["GRUP"]);
+
+            var row=table.AsEnumerable()
+                .Where(r=>group<0||(r["GRUP"]!=DBNull.Value&&Convert.ToInt32(r["GRUP"])==group))
+                .Where(r=>r["BASTAR"]!=DBNull.Value&&r["BITTAR"]!=DBNull.Value)
+                .FirstOrDefault(r=>Convert.ToDateTime(r["BASTAR"]).Date<=b&&Convert.ToDateTime(r["BITTAR"]).Date>=a);
+
+            syncing=true;
+            try
+            {
+                if(row is not null)
+                {
+                    period.SelectedValue=row["KOD"];
+                    if(from is not null&&to is not null)SetDateRange(row,from,to);
+                }
+                else if(from is not null&&to is not null)
+                {
+                    from.Value=a;
+                    to.Value=b;
+                }
+            }
+            finally{syncing=false;}
+            if(fullTabsReady)RefreshSelectedTab();
+        }
+
+        period.SelectedIndexChanged+=(_,_)=>SyncFromPeriod();
+        month.SelectedIndexChanged+=(_,_)=>SelectPeriod();
+        year.ValueChanged+=(_,_)=>SelectPeriod();
+        panel.HandleCreated+=(_,_)=>SyncFromPeriod();
+
+        panel.Controls.Add(new Label{Text="Ay",AutoSize=true,Padding=new Padding(0,7,4,0),ForeColor=p.Muted});
+        panel.Controls.Add(month);
+        panel.Controls.Add(new Label{Text="Yıl",AutoSize=true,Padding=new Padding(8,7,4,0),ForeColor=p.Muted});
+        panel.Controls.Add(year);
+        return panel;
+    }
+
     TabPage BuildBilgiClassic()
     {
         var p=PdksAppearance.Current;
         var page=new TabPage("Puantaj"){BackColor=p.Canvas,Padding=new Padding(10)};var lay=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,BackColor=p.Canvas};lay.RowStyles.Add(new RowStyle(SizeType.Absolute,66));lay.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         var top=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=2,Padding=new Padding(6,5,6,2)};top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,70));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,205));top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));
-        top.Controls.Add(new Label{Text="Dönem Adı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,0);periodB.Dock=DockStyle.Fill;top.Controls.Add(periodB,1,0);bilgiType.Items.AddRange(new object[]{"Tümü","Normal Çalışma","Mesai","Devamsızlık","Geç Kalma","Eksik Süre"});bilgiType.SelectedIndex=0;bilgiType.SelectedIndexChanged+=(_,_)=>ApplyTimesheetFilter();top.Controls.Add(bilgiType,3,0);
+        top.Controls.Add(new Label{Text="Ay / Yıl",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,0);periodB.Visible=false;top.Controls.Add(BuildMonthYearPeriodSelector(periodB),1,0);bilgiType.Items.AddRange(new object[]{"Tümü","Normal Çalışma","Mesai","Devamsızlık","Geç Kalma","Eksik Süre"});bilgiType.SelectedIndex=0;bilgiType.SelectedIndexChanged+=(_,_)=>ApplyTimesheetFilter();top.Controls.Add(bilgiType,3,0);
         top.Controls.Add(new Label{Text="Tarih Aralığı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,1);var dates=new Label{Text="",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};top.Controls.Add(dates,1,1);top.SetColumnSpan(dates,2);void upd(){var d=PeriodDates(periodB);dates.Text=$"{d.A:dd.MM.yyyy}     ile     {d.B:dd.MM.yyyy}";}periodB.SelectedIndexChanged+=(_,_)=>upd();var show=PdksUiKit.Button("Seçili Dönemi Göster",150,PdksActionRole.Primary,RefreshFullTabs);show.Dock=DockStyle.Fill;show.MinimumSize=Size.Empty;show.MaximumSize=Size.Empty;top.Controls.Add(show,3,1);
         var gridHost=new Panel{Dock=DockStyle.Fill,BackColor=p.Surface};
         bilgiEmpty.Text="Bu dönem için puantaj kaydı yok.\r\nKaynak kayıtlarını kontrol edip ana Puantaj ekranından hesaplayın.";
@@ -87,8 +168,8 @@ public partial class PersonelForm
         lay.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
 
         var top=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(7,7,0,0),WrapContents=false,BackColor=p.Surface};
-        top.Controls.Add(new Label{Text="Dönem",AutoSize=true,Padding=new Padding(0,6,5,0),Font=new Font(Font,FontStyle.Bold)});
-        periodO.Width=230;top.Controls.Add(periodO);
+        top.Controls.Add(new Label{Text="Ay / Yıl",AutoSize=true,Padding=new Padding(0,6,5,0),Font=new Font(Font,FontStyle.Bold)});
+        periodO.Visible=false;top.Controls.Add(BuildMonthYearPeriodSelector(periodO));
         var refresh=PdksUiKit.Button("Yenile",92,PdksActionRole.Primary,RefreshFullTabs);
         refresh.Height=30;refresh.MinimumSize=new Size(92,30);refresh.MaximumSize=new Size(92,30);refresh.Margin=new Padding(12,0,0,0);top.Controls.Add(refresh);lay.Controls.Add(top,0,0);
 
