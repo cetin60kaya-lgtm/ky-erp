@@ -3,19 +3,18 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "4a4a8cea53342c1811008f5e6e5ce24035442ae5",
-  "requestedAt": "2026-10-06T01:19:41+03:00",
-  "attempt": 5,
+  "sourceCommit": "e16b8a49da2d19e655ce410eb1e41e30cfb03c74",
+  "requestedAt": "2026-10-07T17:46:00+03:00",
+  "attempt": 6,
   "scope": [
-    "ik-monthly-single-source",
-    "ik-explicit-extra-payment",
-    "ik-payment-source-aware-bank-cash",
-    "ik-atomic-final-payroll-control",
-    "ik-real-salary-overtime-source",
+    "ik-finance-single-source",
+    "ik-overtime-no-synthetic-correction",
+    "ik-legacy-synthetic-overtime-filter",
+    "ik-overtime-source-mismatch-guard",
     "worker-typecheck-test-build",
     "d1-full-predeploy-backup",
     "cloudflare-worker-production",
     "live-api-health-check"
   ],
-  "note": "IK Aylik 06.10.2026 Worker release. PR #388 acceptance PASS. Explicit EK, source-aware payment split and atomic final payroll control."
+  "note": "IK Mesai mukerrer kaynak duzeltmesi. 0 saatlik Bordro kaynak kontrolu Mesai satirlari canonical kaynaktan cikarilir; yeni sentetik Mesai correction uretilmez. PR #396 acceptance PASS."
 }
