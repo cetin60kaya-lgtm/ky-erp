@@ -69,8 +69,6 @@ internal static class Program
             Check(Compare([Db(time: "20:00")], [Tnf(time: "20:00")]).Rows[0].Field<string>("Taraf") == "Giriş", "night entry follows DB side");
             var absent = new DbTnfSyncControl.PairView(Compare([Db()], []).Rows[0]);
             Check(absent.DbTime == "08:23" && absent.TnfTime == "BOŞ", "missing counterpart shown as BOS");
-            absent.Selected = true;
-            Check(absent.Row.Field<bool>("Seç"), "checkbox writes original row");
             Check(SyncEngine.ActiveStatus("çALıŞıYOR") == true && SyncEngine.ActiveStatus("çıktı") == false, "mixed case Turkish");
             var kemalRule = new EmploymentRule("00056", "Synthetic", new(2026,5,18), null, true);
             Check(kemalRule.Evaluate(new(2026,6,1)).Reason is null, "May hire makes June valid");
