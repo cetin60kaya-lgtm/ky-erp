@@ -145,6 +145,7 @@ public sealed class PersonnelEditForm : Form
 		base.Controls.Add(flowLayoutPanel2);
 		base.AcceptButton = button;
 		base.CancelButton = button2;
+		AppTheme.Apply(this);
 	}
 
 	private TabPage Page(string title, DataGridViewRow row, string[] fields)
