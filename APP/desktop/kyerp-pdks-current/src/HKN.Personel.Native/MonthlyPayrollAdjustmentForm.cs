@@ -11,6 +11,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
     readonly NumericUpDown year = new() { Minimum=2020, Maximum=2100, Width=78 };
     readonly ComboBox month = new() { DropDownStyle=ComboBoxStyle.DropDownList, Width=125 };
     readonly ComboBox person = new() { DropDownStyle=ComboBoxStyle.DropDownList, Width=210 };
+    readonly DateTimePicker paymentDate = new() { Format=DateTimePickerFormat.Custom, CustomFormat="dd.MM.yyyy", Width=112 };
     readonly DataGridView grid = new()
     {
         Dock=DockStyle.Fill, AllowUserToAddRows=false, AllowUserToDeleteRows=false,
@@ -31,7 +32,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
     public MonthlyPayrollAdjustmentForm(string? initialPersonCard = null, DateTime? initialPeriod = null)
     {
         this.initialPersonCard = initialPersonCard;
-        Text="Aylık Düzeltme ve Hızlı Ödeme";
+        Text="Aylık Bordro ve Toplu Banka Ödemesi";
         StartPosition=FormStartPosition.CenterParent;
         Width=1500; Height=780; MinimumSize=new Size(1180,650);
         Font=new Font("Segoe UI",9f); BackColor=PdksAppearance.Current.Canvas;
@@ -99,7 +100,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
         headerGrid.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         headerGrid.Controls.Add(new Label
         {
-            Text="Aylık Bordro Düzeltme ve Hızlı Ödeme",
+            Text="Aylık Bordro ve Toplu Banka Ödemesi",
             Dock=DockStyle.Fill,
             Font=new Font("Segoe UI",12f,FontStyle.Bold),
             ForeColor=p.Text,
@@ -110,6 +111,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
         filters.Controls.Add(L("Yıl"));filters.Controls.Add(year);
         filters.Controls.Add(L("Ay"));filters.Controls.Add(month);
         filters.Controls.Add(L("Personel"));filters.Controls.Add(person);
+        filters.Controls.Add(L("Ödeme Tarihi"));filters.Controls.Add(paymentDate);
         filters.Controls.Add(B("Yenile",86,Reload));
         filters.Controls.Add(periodLockButton);
         filters.Controls.Add(periodLockState);
@@ -131,7 +133,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
         var fast=PdksUiKit.ActionBar(false,p.Canvas);
         fast.Controls.Add(B("Tümünü Seç",96,()=>SetAll(true)));
         fast.Controls.Add(B("Seçimi Kaldır",112,()=>SetAll(false)));
-        fast.Controls.Add(B("Resmî Bordroyu Yenile",166,RecalculateAll));
+        fast.Controls.Add(B("Bordrodan Banka Tutarını Doldur",218,RecalculateAll));
         fast.Controls.Add(new Label{Text="Banka tutarı resmî bordro netinden otomatik hesaplanır; PEK uyumsuzluğu varsa ödeme engellenir.",AutoSize=true,Padding=new Padding(14,8,0,0),ForeColor=p.Muted});
         root.Controls.Add(fast,0,2);
 
@@ -144,7 +146,7 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
 
         var bottom=PdksUiKit.ActionBar(true,p.Canvas);
         bottom.Controls.Add(B("Ayı Kaydet",130,SaveMonth));
-        bottom.Controls.Add(B("Seçili Ödemeleri İşle",170,PostSelectedPayments));
+        bottom.Controls.Add(B("Seçili Banka Ödemelerini İşle",222,PostSelectedPayments));
         bottom.Controls.Add(B("Kapat",90,Close));
         root.Controls.Add(bottom,0,4);
         Controls.Add(root);
@@ -389,11 +391,11 @@ public sealed class MonthlyPayrollAdjustmentForm : Form
                 {
                     var pk=Convert.ToString(r["PKNO"])??"";var a=Convert.ToDateTime(r["BASTAR"]);var b=Convert.ToDateTime(r["BITTAR"]);
                     using(var del=FirebirdDatabase.CreateCommand(c,t,"delete from ODEME where PKNO=@P and BASTAR=@A and BITTAR=@B",new FbParameter("@P",pk),new FbParameter("@A",a),new FbParameter("@B",b)))del.ExecuteNonQuery();
-                    using var ins=FirebirdDatabase.CreateCommand(c,t,"insert into ODEME(PKNO,BASTAR,BITTAR,NODENEN,NOTARIH,FMODENEN,FMOTARIH) values(@P,@A,@B,@N,@D,0,@D)",new FbParameter("@P",pk),new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@N",Dec(r,"EX2")),new FbParameter("@D",DateTime.Today));ins.ExecuteNonQuery();
+                    using var ins=FirebirdDatabase.CreateCommand(c,t,"insert into ODEME(PKNO,BASTAR,BITTAR,NODENEN,NOTARIH,FMODENEN,FMOTARIH) values(@P,@A,@B,@N,@D,0,@D)",new FbParameter("@P",pk),new FbParameter("@A",a),new FbParameter("@B",b),new FbParameter("@N",Dec(r,"EX2")),new FbParameter("@D",paymentDate.Value.Date));ins.ExecuteNonQuery();
                 }
                 return 0;
             });
-            if(!string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT"),"1",StringComparison.Ordinal))MessageBox.Show($"{rows.Count} personelin ödemesi işlendi.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);
+            if(!string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_UI_AUDIT"),"1",StringComparison.Ordinal))MessageBox.Show($"{rows.Count} personelin banka ödemesi {paymentDate.Value:dd.MM.yyyy} tarihine işlendi.",Text,MessageBoxButtons.OK,MessageBoxIcon.Information);
         }
         catch(Exception ex){PdksErrorPresenter.Show(this,ex,Text,MessageBoxIcon.Error,"Payroll.Adjustment");}
     }
