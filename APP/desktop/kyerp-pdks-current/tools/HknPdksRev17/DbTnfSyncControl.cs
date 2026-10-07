@@ -14,7 +14,7 @@ internal sealed partial class DbTnfSyncControl : UserControl
     readonly ComboBox month = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
     readonly TextBox search = new() { Width = 180, PlaceholderText = "Kart / ad soyad ara" };
     readonly ComboBox statusFilter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 90 };
-    readonly CheckBox errorsOnly = new() { Text = "Sadece Hatalı", AutoSize = true, Checked = true };
+    readonly CheckBox errorsOnly = new() { Text = "Sadece fark olanlar", AutoSize = true, Checked = false };
     readonly CheckBox hasMovement = new() { Text = "Dönemde hareketi olan", AutoSize = true, Checked = false };
     readonly Label summary = new() { Dock = DockStyle.Bottom, Height = 42, Padding = new Padding(8), Text = "Önce DB'ye bağlanın; Kontrol Et veya SON TAM KONTROL çalıştırın." };
     readonly Label personnelSummary = new() { Dock = DockStyle.Fill, Padding = new Padding(12), Font = new Font("Segoe UI", 11), Text = "Karşılaştırmak için soldan personel seçin." };
@@ -123,13 +123,22 @@ internal sealed partial class DbTnfSyncControl : UserControl
         cancel.Click += (_, _) => cancellation?.Cancel();
         checkBar.Controls.AddRange([progressBar, cancel]);
         operationControls.AddRange([year, month, statusFilter, errorsOnly, hasMovement, search]);
-        var split = new SplitContainer { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1, SplitterWidth = 7, Width = 1300, SplitterDistance = 710, Panel1MinSize = 250, Panel2MinSize = 300 };
-        var filters = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 63, Padding = new Padding(3) };
-        filters.Controls.AddRange([statusFilter, errorsOnly, hasMovement, search]);
+        var split = new SplitContainer { Dock = DockStyle.Fill, FixedPanel = FixedPanel.None, SplitterWidth = 7, Width = 1300, SplitterDistance = 610, Panel1MinSize = 360, Panel2MinSize = 360 };
+        var filters = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, Padding = new Padding(3), WrapContents = false };
+        var showAll = new Button { Text = "TÜM PERSONELİ GÖSTER", Width = 165, Height = 30 };
+        showAll.Click += (_, _) =>
+        {
+            statusFilter.SelectedIndex = 0;
+            errorsOnly.Checked = false;
+            hasMovement.Checked = false;
+            search.Clear();
+            FilterPeople();
+        };
+        filters.Controls.AddRange([showAll, statusFilter, errorsOnly, hasMovement, search]);
         split.Panel1.Controls.Add(peopleGrid);
         split.Panel1.Controls.Add(filters);
         var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
         right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(234, 242, 250) };
         header.Controls.Add(personnelSummary);
@@ -149,8 +158,8 @@ internal sealed partial class DbTnfSyncControl : UserControl
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
         bar.Dock = details.Dock = summary.Dock = DockStyle.Fill;
         summary.BackColor = Color.FromArgb(234,242,250);
         layout.Controls.Add(bar, 0, 0);
@@ -414,6 +423,12 @@ internal sealed partial class DbTnfSyncControl : UserControl
             LastGridMilliseconds = bind.ElapsedMilliseconds;
             LastTotalMilliseconds = total.ElapsedMilliseconds;
             var remaining = prepared.Result.Table.AsEnumerable().Count(row => row.Field<string>("İşlem") != "YOK");
+            if (remaining == 0)
+            {
+                statusFilter.SelectedIndex = 0;
+                errorsOnly.Checked = false;
+                hasMovement.Checked = false;
+            }
             summary.Text = remaining == 0
                 ? $"✓ TAM UYUMLU • {request.Start:dd.MM.yyyy}–{request.End.AddDays(-1):dd.MM.yyyy} • {prepared.Result.Db.Count} DB hareketi • fark 0"
                 : $"{(full ? "TÜM YIL KONTROL" : listOnly ? "TNF Listele" : "Kontrol")} {request.Start:dd.MM.yyyy}–{request.End.AddDays(-1):dd.MM.yyyy} | {prepared.Summary}";
