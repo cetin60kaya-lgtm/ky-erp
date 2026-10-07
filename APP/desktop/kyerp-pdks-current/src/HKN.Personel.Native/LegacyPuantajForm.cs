@@ -15,8 +15,9 @@ public sealed class LegacyPuantajForm : Form
     readonly ListBox people=new(){Dock=DockStyle.Fill,IntegralHeight=false};
     readonly ProgressBar progress1=new(){Dock=DockStyle.Fill};
     readonly ProgressBar progress2=new(){Dock=DockStyle.Fill};
+    readonly System.Windows.Forms.Timer filterDebounce = new() { Interval = 220 };
 
-    public LegacyPuantajForm(int initialTab = 0){Text="Günlük ve Aylık Puantaj İşlemleri";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);MinimumSize=new Size(960,620);Font=new Font("Segoe UI",9f);BackColor=PdksAppearance.Current.Canvas;KeyPreview=true;Build();tabs.SelectedIndex=Math.Clamp(initialTab,0,tabs.TabPages.Count-1);Shown+=(_,_)=>BeginInvoke((Action)Init);KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};}
+    public LegacyPuantajForm(int initialTab = 0){Text="Puantaj";StartPosition=FormStartPosition.CenterScreen;Size=new Size(1180,720);MinimumSize=new Size(960,620);Font=new Font("Segoe UI",9f);BackColor=PdksAppearance.Current.Canvas;KeyPreview=true;filterDebounce.Tick+=(_,_)=>{filterDebounce.Stop();if(filterDebounce.Tag is FilterSet active)ReloadPeople(active);};Build();tabs.SelectedIndex=Math.Clamp(initialTab,0,tabs.TabPages.Count-1);Shown+=(_,_)=>BeginInvoke((Action)Init);KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};Disposed+=(_,_)=>filterDebounce.Dispose();}
     static TextBox E()=>new();
     static DateTimePicker D()=>new(){Format=DateTimePickerFormat.Short};
     static ComboBox C()=>new(){DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="TEXT",ValueMember="KOD"};
@@ -86,26 +87,51 @@ public sealed class LegacyPuantajForm : Form
     {
         var f=new FilterSet(E(),E(),D(),D(),C(),C(),C(),C(),C(),C());
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,BackColor=page.BackColor};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,226));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,94));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,54));
 
-        root.Controls.Add(FilterPanel(f,"Aylık puantaj filtresi","Seçilen dönem için personel bazında aylık puantajı toplu olarak hesaplar."),0,0);
+        var header=Card();
+        header.Padding=new Padding(16);
+        var bar=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,BackColor=PdksAppearance.Current.Surface,Padding=new Padding(0,8,0,0)};
+        var month=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=118,FlatStyle=FlatStyle.Flat};
+        month.Items.AddRange(CultureInfo.GetCultureInfo("tr-TR").DateTimeFormat.MonthNames.Take(12).Cast<object>().ToArray());
+        month.SelectedIndex=DateTime.Today.Month-1;
+        var year=new NumericUpDown{Minimum=2015,Maximum=2100,Width=82,Value=DateTime.Today.Year};
+        bar.Controls.Add(new Label{Text="Ay",AutoSize=true,Padding=new Padding(0,8,5,0),Font=new Font("Segoe UI",9f,FontStyle.Bold)});
+        bar.Controls.Add(month);
+        bar.Controls.Add(new Label{Text="Yıl",AutoSize=true,Padding=new Padding(12,8,5,0),Font=new Font("Segoe UI",9f,FontStyle.Bold)});
+        bar.Controls.Add(year);
+        bar.Controls.Add(new Label{Text="Grup",AutoSize=true,Padding=new Padding(18,8,5,0),Font=new Font("Segoe UI",9f,FontStyle.Bold)});
+        f.Group.Width=160;bar.Controls.Add(f.Group);
+        header.Controls.Add(bar);
+        root.Controls.Add(header,0,0);
+
+        void SyncMonth()
+        {
+            if(month.SelectedIndex<0)return;
+            var a=new DateTime((int)year.Value,month.SelectedIndex+1,1);
+            f.Start.Value=a;
+            f.End.Value=a.AddMonths(1).AddDays(-1);
+            QueueReload(f);
+        }
+        month.SelectedIndexChanged+=(_,_)=>SyncMonth();
+        year.ValueChanged+=(_,_)=>SyncMonth();
 
         var info=Card();
         info.Padding=new Padding(22);
         info.Controls.Add(new Label{
-            Text="Aylık puantaj hesaplaması; giriş / çıkış, izin, resmi tatil ve çalışma grubunu birlikte değerlendirir.\r\nKaynak kayıtları düzeltildikten sonra ayı yeniden hesaplamak güvenlidir.",
+            Text="Seçilen ayın aktif ve kart takipli personelleri hesaplanır. Giriş/çıkış, izin, resmi tatil ve grup çalışma saatleri birlikte değerlendirilir. Önce kart düzeltmelerini tamamlayın, sonra AYI HESAPLA.",
             Dock=DockStyle.Fill,Font=new Font("Segoe UI",10f),ForeColor=PdksAppearance.Current.Muted,TextAlign=ContentAlignment.MiddleLeft});
         root.Controls.Add(info,0,1);
 
-        var barProgress=new ProgressBar{Dock=DockStyle.Fill,Margin=new Padding(0,14,0,8),Height=14};
+        var barProgress=new ProgressBar{Dock=DockStyle.Fill,Margin=new Padding(0,10,0,6),Height=14};
         root.Controls.Add(barProgress,0,2);
 
         var actions=ActionBar();
-        var calc=ModernButton("Ayı Hesapla",145,true);
-        var result=ModernButton("Puantaj Sonuçları",155,false);
+        var calc=ModernButton("AYI HESAPLA",150,true);
+        var result=ModernButton("SONUÇLARI GÖR",155,false);
         calc.Click+=(_,_)=>Calculate(f,barProgress);
         result.Click+=(_,_)=>ShowResults(f);
         actions.Controls.Add(calc);actions.Controls.Add(result);
@@ -172,8 +198,17 @@ public sealed class LegacyPuantajForm : Form
 
     void Hook(FilterSet f)
     {
-        f.CardStart.TextChanged+=(_,_)=>ReloadPeople(f);f.CardEnd.TextChanged+=(_,_)=>ReloadPeople(f);
-        foreach(var c in f.Combos)c.SelectedIndexChanged+=(_,_)=>ReloadPeople(f);
+        f.CardStart.TextChanged+=(_,_)=>QueueReload(f);
+        f.CardEnd.TextChanged+=(_,_)=>QueueReload(f);
+        foreach(var combo in f.Combos)combo.SelectedIndexChanged+=(_,_)=>QueueReload(f);
+    }
+
+    void QueueReload(FilterSet f)
+    {
+        if(!IsHandleCreated||IsDisposed)return;
+        filterDebounce.Stop();
+        filterDebounce.Tag=f;
+        filterDebounce.Start();
     }
 
     void LoadLookup(ComboBox c,string table)
