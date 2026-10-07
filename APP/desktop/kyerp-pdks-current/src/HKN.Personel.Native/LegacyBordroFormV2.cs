@@ -14,6 +14,7 @@ public sealed class LegacyBordroForm : Form
     readonly ComboBox type = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190, FlatStyle = FlatStyle.Flat };
     readonly DataGridView grid = new() { Name = "BordroGrid", Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, AllowUserToOrderColumns = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None, BackgroundColor = PdksAppearance.Current.Surface, BorderStyle = BorderStyle.None, RowHeadersVisible = false };
     readonly Label summary = new() { AutoSize = true, Padding = new Padding(14, 10, 8, 0), Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = PdksAppearance.Current.Muted };
+    readonly Label emptyState = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 13f, FontStyle.Bold), ForeColor = PdksAppearance.Current.Muted, Visible = false };
     readonly System.Windows.Forms.Timer reloadTimer = new() { Interval = 140 };
     DataTable data = new();
     bool loading;
@@ -43,7 +44,7 @@ public sealed class LegacyBordroForm : Form
         grid.DefaultCellStyle.SelectionBackColor = PdksAppearance.Current.Selection;
         grid.DefaultCellStyle.SelectionForeColor = PdksAppearance.Current.Text;
 
-        type.Items.AddRange(["Genel Maaş Bordrosu", "Mesai Bordrosu", "Maaş Pusulası"]);
+        type.Items.AddRange(["Genel Maaş Bordrosu", "Mesai Bordrosu", "Kişisel Bordro"]);
         type.SelectedIndex = Math.Clamp(initialType, 0, type.Items.Count - 1);
 
         var currentYear = DateTime.Today.Year;
@@ -81,6 +82,7 @@ public sealed class LegacyBordroForm : Form
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 132));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         filters.Controls.Add(Caption("Yıl"),0,0); year.Dock=DockStyle.Fill; year.Margin=new Padding(0,4,10,6); filters.Controls.Add(year,1,0);
@@ -89,7 +91,8 @@ public sealed class LegacyBordroForm : Form
 
         var show = Btn("Göster", LoadData, 88, true); show.Dock=DockStyle.Fill; show.Margin=new Padding(0,4,8,6); filters.Controls.Add(show,6,0);
         var layout = Btn("Alanlar / Sıralama", () => GridLayoutPersistence.ShowEditor(this, grid, LayoutKey, "Bordro Alanları / Sıralama"), 140); layout.Dock=DockStyle.Fill; layout.Margin=new Padding(0,4,8,6); filters.Controls.Add(layout,7,0);
-        var lockButton = Btn("Ay Kilidi", TogglePeriodLock, 118); lockButton.Dock=DockStyle.Left; lockButton.Margin=new Padding(0,4,8,6); filters.Controls.Add(lockButton,8,0);
+        var reportSettings = Btn("Rapor Ayarları", OpenReportSettings, 122); reportSettings.Dock=DockStyle.Fill; reportSettings.Margin=new Padding(0,4,8,6); filters.Controls.Add(reportSettings,8,0);
+        var lockButton = Btn("Ay Kilidi", TogglePeriodLock, 118); lockButton.Dock=DockStyle.Left; lockButton.Margin=new Padding(0,4,8,6); filters.Controls.Add(lockButton,9,0);
         periodLayout.Controls.Add(filters,0,1);
 
         summary.Dock = DockStyle.Fill;
@@ -101,6 +104,8 @@ public sealed class LegacyBordroForm : Form
 
         var gridCard = PdksUiKit.Card(1);
         gridCard.Controls.Add(grid);
+        gridCard.Controls.Add(emptyState);
+        emptyState.BringToFront();
         root.Controls.Add(gridCard, 0, 1);
 
         var bottom = PdksUiKit.ActionBar(true,p.Canvas);
@@ -231,7 +236,14 @@ public sealed class LegacyBordroForm : Form
             var totalColumn=data.Columns.Contains("Hak Edilen Net")?"Hak Edilen Net":data.Columns.Contains("TOPLAM")?"TOPLAM":null;
             var total=totalColumn is null?0m:data.AsEnumerable().Sum(r=>r[totalColumn]==DBNull.Value?0m:Convert.ToDecimal(r[totalColumn]));
             var lockInfo=PayrollPeriodLockService.Get(db,a);
-            summary.Text = $"{ViewDescription()}  •  {data.Rows.Count} kişi  •  {MonthNames[a.Month - 1]} {a.Year}  •  {total:N2} ₺  •  {PayrollPeriodLockService.Caption(lockInfo)}";
+            var settings = PayrollReportSettingsStore.Load();
+            emptyState.Visible = data.Rows.Count == 0;
+            emptyState.Text = data.Rows.Count == 0
+                ? $"{MonthNames[a.Month - 1]} {a.Year} için bordro kaydı yok"
+                : "";
+            summary.Text = data.Rows.Count == 0
+                ? $"{MonthNames[a.Month - 1]} {a.Year} • bordro kaydı yok • {PayrollPeriodLockService.Caption(lockInfo)}"
+                : $"{ViewDescription()}  •  {data.Rows.Count} kişi  •  {MonthNames[a.Month - 1]} {a.Year}  •  {total:N2} ₺  •  {PayrollPeriodLockService.Caption(lockInfo)}";
         }
         catch (Exception ex)
         {
@@ -314,8 +326,19 @@ public sealed class LegacyBordroForm : Form
                 "Bankaya Ödenecek","Kayıtlı Fark","İmza"
             };
 
+        var settings = PayrollReportSettingsStore.Load();
+        if (!settings.ShowSignatureColumn) visible.Remove("İmza");
+        if (!settings.IncludeBankColumn)
+        {
+            visible.Remove("Banka Kayıtlı");
+            visible.Remove("Bankaya Ödenecek");
+        }
+
         foreach (DataGridViewColumn c in grid.Columns)
             c.Visible = visible.Contains(c.HeaderText);
+
+        if (grid.Columns.Contains("İmza"))
+            grid.Columns["İmza"].HeaderText = settings.EmployeeSignatureCaption;
     }
 
     static decimal Money(DataRow row, string column)
@@ -349,7 +372,9 @@ public sealed class LegacyBordroForm : Form
     {
         var a = PeriodStart();
         var z = a.AddMonths(1).AddDays(-1);
-        var title = $"{a:dd.MM.yyyy} - {z:dd.MM.yyyy} {type.SelectedItem}";
+        var settings = PayrollReportSettingsStore.Load();
+        var reportName = type.SelectedIndex == 2 ? settings.PersonalTitle : settings.GeneralTitle;
+        var title = $"{settings.CompanyTitle} • {a:dd.MM.yyyy} - {z:dd.MM.yyyy} {reportName}";
 
         if (type.SelectedIndex == 2 && grid.CurrentRow is DataGridViewRow selected && !selected.IsNewRow)
         {
@@ -372,15 +397,76 @@ public sealed class LegacyBordroForm : Form
     }
 
     IReadOnlyList<int> Widths() => GridReportAdapter.VisibleWidths(grid);
-    void Preview() { LoadData(); ReportPrintHelper.Preview(this, Report(), true, Widths()); }
-    void Print() { LoadData(); ReportPrintHelper.Print(this, Report(), true, Widths()); }
+
+    string? SelectedCard()
+    {
+        if (grid.CurrentRow is null || grid.CurrentRow.IsNewRow) return null;
+        foreach (DataGridViewCell cell in grid.CurrentRow.Cells)
+        {
+            if (grid.Columns[cell.ColumnIndex].HeaderText == "Kart No")
+                return Convert.ToString(cell.Value)?.Trim();
+        }
+        return null;
+    }
+
+    void Preview()
+    {
+        LoadData();
+        if (type.SelectedIndex == 2)
+        {
+            var card = SelectedCard();
+            if (string.IsNullOrWhiteSpace(card)) { MessageBox.Show("Kişisel bordro için personel seçin.", Text); return; }
+            PersonalPayrollReportService.Preview(this, db, card, PeriodStart());
+            return;
+        }
+        ReportPrintHelper.Preview(this, Report(), true, Widths());
+    }
+
+    void Print()
+    {
+        LoadData();
+        if (type.SelectedIndex == 2)
+        {
+            var card = SelectedCard();
+            if (string.IsNullOrWhiteSpace(card)) { MessageBox.Show("Kişisel bordro için personel seçin.", Text); return; }
+            PersonalPayrollReportService.Preview(this, db, card, PeriodStart());
+            return;
+        }
+        ReportPrintHelper.Print(this, Report(), true, Widths());
+    }
 
     void Export(bool excel)
     {
         LoadData();
         var p = PeriodStart();
+        if (type.SelectedIndex == 2 && !excel)
+        {
+            var card = SelectedCard();
+            if (string.IsNullOrWhiteSpace(card)) { MessageBox.Show("Kişisel bordro için personel seçin.", Text); return; }
+            using var savePersonal = new SaveFileDialog
+            {
+                Filter = "PDF (*.pdf)|*.pdf",
+                DefaultExt = "pdf",
+                FileName = $"Kisisel-Bordro-{card}-{p:yyyyMM}"
+            };
+            if (savePersonal.ShowDialog(this) != DialogResult.OK) return;
+            PersonalPayrollReportService.ExportPdf(this, db, card, p, savePersonal.FileName);
+            return;
+        }
+
         using var save = new SaveFileDialog { Filter = excel ? "Excel (*.xlsx)|*.xlsx" : "PDF (*.pdf)|*.pdf", DefaultExt = excel ? "xlsx" : "pdf", FileName = $"{type.SelectedItem}-{p:yyyyMM}".Replace(' ', '-') };
         if (save.ShowDialog(this) != DialogResult.OK) return;
         if (excel) ReportExporter.ExportExcel(save.FileName, Report()); else ReportExporter.ExportPdf(save.FileName, Report());
+    }
+
+    void OpenReportSettings()
+    {
+        using var form = new PayrollReportSettingsForm();
+        if (form.ShowDialog(this) == DialogResult.OK)
+        {
+            LoadData();
+            GridLayoutPersistence.Apply(grid, LayoutKey);
+            ApplyViewColumns();
+        }
     }
 }
