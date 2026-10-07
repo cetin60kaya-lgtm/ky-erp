@@ -23,18 +23,17 @@ export default function IkMonthlyProShell({
   issueCount,
   employeeCount,
   sgkCount,
-  paidCount,
   payrollCount,
   companyName,
   children,
 }) {
   const reviewDone = periodPrepared && balanced && issueCount === 0;
-  const paymentDone = payrollCount > 0 && paidCount === payrollCount;
+  const payrollReady = periodPrepared && balanced && payrollCount > 0;
   const stages = [
     { label: "Dönem Hazırlığı", done: periodPrepared, active: !periodPrepared },
     { label: "Kontrol", done: reviewDone, active: periodPrepared && !reviewDone },
-    { label: "Ödeme", done: paymentDone, active: reviewDone && !paymentDone },
-    { label: "Kapanış", done: isLocked, active: paymentDone && !isLocked },
+    { label: "Bordro Hazır", done: payrollReady, active: reviewDone && !payrollReady },
+    { label: "Ay Kilidi", done: isLocked, active: payrollReady && !isLocked },
   ];
 
   return (
@@ -70,7 +69,7 @@ export default function IkMonthlyProShell({
           <span><b>{employeeCount}</b>Dönem personeli</span>
           <span><b>{sgkCount}</b>SGK'lı</span>
           <span><b>{issueCount}</b>Açık kontrol</span>
-          <span><b>{payrollCount ? `${paidCount}/${payrollCount}` : "—"}</b>Ödenen bordro</span>
+          <span><b>{payrollCount || "—"}</b>Bordro satırı</span>
         </div>
         <div className="ik-pro-flow" aria-label="Ay sonu ilerleme">
           {stages.map((stage, index) => (
