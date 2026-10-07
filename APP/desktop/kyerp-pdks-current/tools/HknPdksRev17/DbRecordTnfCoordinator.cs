@@ -5,10 +5,10 @@ using KYERP.PDKS.Core;
 
 namespace QuickDataTool;
 
-internal sealed class StagedDbRecordTnf(string path, string backup, string temporary) : IDisposable
+internal sealed class StagedDbRecordTnf(string path, string backup, string temporary, bool sourceExisted) : IDisposable
 {
     bool published;
-    internal string BackupPath => backup;
+    internal string BackupPath => sourceExisted ? backup : "TNF yoktu; işlem sırasında oluşturuldu.";
     internal void Publish()
     {
         File.Move(temporary, path, true);
@@ -16,7 +16,9 @@ internal sealed class StagedDbRecordTnf(string path, string backup, string tempo
     }
     internal void Restore()
     {
-        if (published && File.Exists(backup)) File.Copy(backup, path, true);
+        if (!published) return;
+        if (sourceExisted && File.Exists(backup)) File.Copy(backup, path, true);
+        else if (!sourceExisted && File.Exists(path)) File.Delete(path);
     }
     public void Dispose() { if (File.Exists(temporary)) File.Delete(temporary); }
 }
@@ -26,11 +28,17 @@ internal static class DbRecordTnfCoordinator
     internal static StagedDbRecordTnf Stage(FbConnection connection, FbTransaction transaction, string path,
         IEnumerable<(string Card, DateTime Day)> scope, CancellationToken token)
     {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-            throw new FileNotFoundException("DB işlemi için ana TNF dosyası bulunamadı.", path);
+        if (string.IsNullOrWhiteSpace(path))
+            throw new InvalidOperationException("TNF yolu boş.");
+        path = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(path) ?? throw new InvalidOperationException("TNF klasörü belirlenemedi.");
+        Directory.CreateDirectory(directory);
+        var sourceExisted = File.Exists(path);
         var keys = scope.Select(x => (Card: x.Card.Trim().PadLeft(5, '0'), Day: x.Day.Date)).Distinct().ToHashSet();
         if (keys.Count == 0) throw new InvalidOperationException("TNF eşitleme kapsamı boş.");
-        var source = File.ReadAllLines(path).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+        var source = sourceExisted
+            ? File.ReadAllLines(path).Where(x => !string.IsNullOrWhiteSpace(x)).ToList()
+            : new List<string>();
         source.RemoveAll(line => TryKey(line, out var key) && keys.Contains(key));
         var expected = new List<string>();
         foreach (var key in keys)
@@ -49,15 +57,27 @@ internal static class DbRecordTnfCoordinator
         }
         source.AddRange(expected);
         var sorted = source.OrderBy(LineKey).ToArray();
-        var directory = Path.GetDirectoryName(path)!;
         var backupDirectory = Path.Combine(directory, "_YEDEK");
         Directory.CreateDirectory(backupDirectory);
         var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture);
         var backup = Path.Combine(backupDirectory, Path.GetFileNameWithoutExtension(path) + "_DBKAYIT_" + stamp + ".Tnf");
         var temporary = path + ".dbkayit." + Guid.NewGuid().ToString("N") + ".tmp";
-        File.Copy(path, backup, false);
+        if (sourceExisted) File.Copy(path, backup, false);
         File.WriteAllLines(temporary, sorted, Encoding.ASCII);
-        return new(path, backup, temporary);
+        VerifyTemporary(temporary, keys, expected);
+        return new(path, backup, temporary, sourceExisted);
+    }
+
+    static void VerifyTemporary(string temporary, HashSet<(string Card, DateTime Day)> keys, List<string> expected)
+    {
+        var actual = File.ReadAllLines(temporary)
+            .Where(line => TryKey(line, out var key) && keys.Contains(key))
+            .Select(line => line.Trim())
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var wanted = expected.Select(line => line.Trim()).Order(StringComparer.Ordinal).ToArray();
+        if (!actual.SequenceEqual(wanted))
+            throw new InvalidOperationException("TNF geçici dosya doğrulaması başarısız; ana TNF değiştirilmedi.");
     }
 
     static void AddSide(List<string> expected, FbDataReader reader, string card, DateTime day, string prefix)
