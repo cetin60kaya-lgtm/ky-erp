@@ -264,10 +264,11 @@ public sealed partial class MainForm : Form
 	}
 
 	private PdksOptions? options;
+	private DataTable? peopleCache;
 
 	public MainForm()
 	{
-		Text = "HKN PDKS REV21 — Hızlı Veri";
+		Text = "HKN PDKS REV27 — Hızlı Veri";
 		base.StartPosition = FormStartPosition.CenterScreen;
 		base.Width = 1380;
 		base.Height = 820;
@@ -280,7 +281,7 @@ public sealed partial class MainForm : Form
 		Build();
 		personFilter.SelectedIndexChanged += delegate
 		{
-			LoadPeople();
+			ApplyPeopleFilter();
 		};
 		eStart.ValueChanged += delegate
 		{
@@ -380,12 +381,11 @@ public sealed partial class MainForm : Form
 		tableLayoutPanel.Controls.Add(BuildSources(), 0, 0);
 		tabs.TabPages.Add(Page("Personel", BuildPeople()));
 		tabs.TabPages.Add(Page("Giriş-Çıkış", BuildIo()));
-		tabs.TabPages.Add(Page("Toplu İşlem", BuildBulk()));
-		tabs.TabPages.Add(Page("E İşlemleri", BuildE()));
-		tabs.TabPages.Add(Page("E İşlem Geçmişi", BuildEHistory()));
+		tabs.TabPages.Add(Page("Kayıt Düzeltme", new DbRecordControl(this)));
+		tabs.TabPages.Add(Page("E İşlemleri", new EPlanControl(this)));
 		tabs.TabPages.Add(Page("Bordro", BuildPayroll()));
 		tabs.TabPages.Add(Page("Ödeme / Avans", BuildPayments()));
-		tabs.TabPages.Add(Page("Data Kontrol", BuildAudit()));
+		tabs.TabPages.Add(Page("DB - TNF Eşitle", new DbTnfSyncControl(this)));
 		tableLayoutPanel.Controls.Add(tabs, 0, 1);
 		base.Controls.Add(tableLayoutPanel);
 	}
@@ -754,7 +754,10 @@ public sealed partial class MainForm : Form
 		});
 		flowLayoutPanel.Controls.Add(payrollPerson);
 		flowLayoutPanel.Controls.Add(WideBtn("Bordroyu Listele", LoadPayroll, 135));
-		flowLayoutPanel.Controls.Add(WideBtn("Seçili Bordroyu Düzenle", EditPayrollSelected, 190));
+		flowLayoutPanel.Controls.Add(WideBtn("Düzenle", EditPayrollSelectedRev26, 95));
+		flowLayoutPanel.Controls.Add(WideBtn("Ayı Kilitle", () => Rev26SetMonthLock(true), 110));
+		flowLayoutPanel.Controls.Add(WideBtn("Seçilenleri Kilitle", () => Rev26SetSelectedLocks(true), 145));
+		flowLayoutPanel.Controls.Add(WideBtn("Kilidi Aç", Rev26Unlock, 105));
 		obj.Controls.Add(payrollGrid);
 		obj.Controls.Add(flowLayoutPanel);
 		return obj;
@@ -1074,93 +1077,46 @@ public sealed partial class MainForm : Form
 
 	private void LoadPeople()
 	{
-		if (db == null)
-		{
-			return;
-		}
+		if (db == null) return;
 		try
 		{
-			string text = personFilter.SelectedItem?.ToString() ?? "Aktif";
-			string text2 = ((text == "Aktif") ? " where (ICTARIH is null or ICTARIH>=@TODAY)" : ((text == "Pasif") ? " where ICTARIH is not null and ICTARIH<@TODAY" : ""));
-			string text3 = ((text == "Tümü") ? " order by case when (ICTARIH is null or ICTARIH>=@TODAY) then 0 else 1 end, PKNO" : " order by PKNO");
-			peopleGrid.DataSource = db.Query("select * from KIMLIK" + text2 + text3, new FbParameter("@TODAY", DateTime.Today));
-			int num = Convert.ToInt32(db.Scalar("select count(*) from KIMLIK where ICTARIH is null or ICTARIH>=@TODAY", new FbParameter("@TODAY", DateTime.Today)) ?? ((object)0));
-			int num2 = Convert.ToInt32(db.Scalar("select count(*) from KIMLIK where ICTARIH is not null and ICTARIH<@TODAY", new FbParameter("@TODAY", DateTime.Today)) ?? ((object)0));
-			personSummary.Text = $"Aktif: {num}   Pasif: {num2}   Toplam: {num + num2}";
-			DataTable dataTable = db.Query("select PKNO,AD,SOYAD from KIMLIK where (ICTARIH is null or ICTARIH>=@TODAY) order by PKNO", new FbParameter("@TODAY", DateTime.Today));
+			var table = db.Query(@"select k.*,coalesce(g.AD,'') GRUPAD
+				from KIMLIK k left join GRUP g on g.KOD=k.GRUP
+				order by k.PKNO");
+			if (!table.Columns.Contains("ADSOYAD")) table.Columns.Add("ADSOYAD", typeof(string));
+			if (!table.Columns.Contains("AKTIFMI")) table.Columns.Add("AKTIFMI", typeof(bool));
+
+			foreach (DataRow row in table.Rows)
+			{
+				row["ADSOYAD"] = $"{Convert.ToString(row["AD"])?.Trim()} {Convert.ToString(row["SOYAD"])?.Trim()}".Trim();
+				var exit = row["ICTARIH"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(row["ICTARIH"]).Date;
+				row["AKTIFMI"] = !exit.HasValue || exit.Value >= DateTime.Today;
+			}
+
+			peopleCache = table;
+			peopleGrid.DataSource = table.DefaultView;
+			ConfigurePeopleGrid();
+
+			var active = table.AsEnumerable().Where(r => r.Field<bool>("AKTIFMI")).OrderBy(r => Convert.ToString(r["PKNO"])).ToArray();
 			peopleList.Items.Clear();
-			foreach (DataRow row in dataTable.Rows)
+			foreach (var row in active)
 			{
-				string text4 = Convert.ToString(row["PKNO"]) ?? "";
-				string item = $"{text4}  {row["AD"]} {row["SOYAD"]}";
-				if (!(text4 == "00001"))
-				{
-					peopleList.Items.Add(item, isChecked: false);
-				}
+				var card = Convert.ToString(row["PKNO"])?.Trim() ?? "";
+				if (card == "00001") continue;
+				peopleList.Items.Add($"{card}  {row["ADSOYAD"]}", false);
 			}
-			if (peopleGrid.Columns.Contains("ICTARIH"))
+
+			foreach (var combo in new[] { ioPerson, auditPerson, eHistoryPerson, payrollPerson, paymentPerson, advancePerson })
 			{
-				peopleGrid.Columns["ICTARIH"].HeaderText = "İşten Çıkış";
+				var selected = combo.SelectedItem?.ToString();
+				combo.Items.Clear();
+				combo.Items.Add("Tümü");
+				foreach (var row in active)
+					combo.Items.Add($"{Convert.ToString(row["PKNO"])?.Trim()}  {row["ADSOYAD"]}");
+				combo.SelectedItem = selected is not null && combo.Items.Contains(selected) ? selected : "Tümü";
 			}
-			HashSet<string> hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-			{
-				"PKNO", "SICILNO", "AD", "SOYAD", "IGTARIH", "ICTARIH", "DURUM", "MAAS", "NSUCRET", "MSUCRET",
-				"BOLUM", "GOREV", "BHNO", "GSM"
-			};
-			foreach (DataGridViewColumn column in peopleGrid.Columns)
-			{
-				column.Visible = hashSet.Contains(column.Name);
-			}
-			string[] array = new string[14]
-			{
-				"PKNO", "AD", "SOYAD", "SICILNO", "BOLUM", "GOREV", "DURUM", "IGTARIH", "ICTARIH", "MAAS",
-				"NSUCRET", "MSUCRET", "BHNO", "GSM"
-			};
-			for (int i = 0; i < array.Length; i++)
-			{
-				if (peopleGrid.Columns.Contains(array[i]))
-				{
-					peopleGrid.Columns[array[i]].DisplayIndex = i;
-				}
-			}
-			foreach (KeyValuePair<string, string> item2 in new Dictionary<string, string>
-			{
-				["PKNO"] = "Kart No",
-				["AD"] = "Ad",
-				["SOYAD"] = "Soyad",
-				["SICILNO"] = "Sicil No",
-				["BOLUM"] = "Bölüm",
-				["GOREV"] = "Görev",
-				["DURUM"] = "Durum",
-				["IGTARIH"] = "İşe Giriş",
-				["ICTARIH"] = "İşten Çıkış",
-				["MAAS"] = "Maaş",
-				["NSUCRET"] = "Saat Ücreti",
-				["MSUCRET"] = "Fazla Mesai",
-				["BHNO"] = "Banka Hesap No",
-				["GSM"] = "Cep Telefonu"
-			})
-			{
-				if (peopleGrid.Columns.Contains(item2.Key))
-				{
-					peopleGrid.Columns[item2.Key].HeaderText = item2.Value;
-				}
-			}
-			ComboBox[] array2 = new ComboBox[6] { ioPerson, auditPerson, eHistoryPerson, payrollPerson, paymentPerson, advancePerson };
-			foreach (ComboBox comboBox in array2)
-			{
-				string text5 = comboBox.SelectedItem?.ToString();
-				comboBox.Items.Clear();
-				comboBox.Items.Add("Tümü");
-				foreach (DataRow row2 in dataTable.Rows)
-				{
-					comboBox.Items.Add($"{row2["PKNO"]}  {row2["AD"]} {row2["SOYAD"]}");
-				}
-				comboBox.SelectedItem = ((text5 != null && comboBox.Items.Contains(text5)) ? text5 : "Tümü");
-			}
-			ApplyEPeriodFilter();
-			LoadEHistory();
-			ColorPeopleRows();
+
+			ApplyPeopleFilter();
 		}
 		catch (Exception ex)
 		{
@@ -1168,19 +1124,78 @@ public sealed partial class MainForm : Form
 		}
 	}
 
+	private void ApplyPeopleFilter()
+	{
+		if (peopleCache is null || peopleGrid.DataSource is not DataView view) return;
+		var selectedCard = peopleGrid.CurrentRow?.DataBoundItem is DataRowView current
+			? Convert.ToString(current.Row["PKNO"])?.Trim()
+			: null;
+
+		peopleGrid.SuspendLayout();
+		try
+		{
+			peopleGrid.CurrentCell = null;
+			view.RowFilter = personFilter.SelectedItem?.ToString() switch
+			{
+				"Aktif" => "AKTIFMI = true",
+				"Pasif" => "AKTIFMI = false",
+				_ => ""
+			};
+			ConfigurePeopleGrid();
+			peopleGrid.ClearSelection();
+
+			DataGridViewRow? target = null;
+			if (!string.IsNullOrWhiteSpace(selectedCard))
+				target = peopleGrid.Rows.Cast<DataGridViewRow>().FirstOrDefault(r =>
+					r.DataBoundItem is DataRowView drv &&
+					string.Equals(Convert.ToString(drv.Row["PKNO"])?.Trim(), selectedCard, StringComparison.OrdinalIgnoreCase));
+			target ??= peopleGrid.Rows.Cast<DataGridViewRow>().FirstOrDefault(r => !r.IsNewRow && r.Visible);
+
+			var firstVisible = peopleGrid.Columns.Cast<DataGridViewColumn>()
+				.Where(x => x.Visible).OrderBy(x => x.DisplayIndex).FirstOrDefault();
+			if (target is not null && firstVisible is not null)
+			{
+				target.Selected = true;
+				peopleGrid.CurrentCell = target.Cells[firstVisible.Index];
+			}
+		}
+		finally { peopleGrid.ResumeLayout(); }
+
+		var active = peopleCache.AsEnumerable().Count(r => r.Field<bool>("AKTIFMI"));
+		var passive = peopleCache.Rows.Count - active;
+		personSummary.Text = $"Aktif: {active}   Pasif: {passive}   Toplam: {peopleCache.Rows.Count}";
+		ColorPeopleRows();
+	}
+
+	private void ConfigurePeopleGrid()
+	{
+		foreach (DataGridViewColumn column in peopleGrid.Columns)
+		{
+			column.Visible = false;
+			column.SortMode = DataGridViewColumnSortMode.NotSortable;
+		}
+
+		var columns = new[] { ("PKNO", "Kart No", 72), ("ADSOYAD", "Personel Ad Soyad", 190), ("GRUPAD", "Grup", 118) };
+		for (var i = 0; i < columns.Length; i++)
+		{
+			if (!peopleGrid.Columns.Contains(columns[i].Item1)) continue;
+			var column = peopleGrid.Columns[columns[i].Item1];
+			column.Visible = true;
+			column.HeaderText = columns[i].Item2;
+			column.Width = columns[i].Item3;
+			column.DisplayIndex = i;
+		}
+	}
+
 	private void ColorPeopleRows()
 	{
-		foreach (DataGridViewRow item in (IEnumerable)peopleGrid.Rows)
+		foreach (DataGridViewRow row in peopleGrid.Rows)
 		{
-			if (!item.IsNewRow)
-			{
-				object value = item.Cells["ICTARIH"].Value;
-				DateTime result;
-				bool flag = value == null || value == DBNull.Value || (DateTime.TryParse(Convert.ToString(value), out result) && result.Date >= DateTime.Today);
-				item.DefaultCellStyle.BackColor = (flag ? Color.Honeydew : Color.MistyRose);
-				item.DefaultCellStyle.SelectionBackColor = (flag ? Color.PaleGreen : Color.LightSalmon);
-				item.DefaultCellStyle.ForeColor = Color.Black;
-			}
+			if (row.IsNewRow || row.DataBoundItem is not DataRowView drv) continue;
+			var active = drv.Row.Table.Columns.Contains("AKTIFMI") && drv.Row.Field<bool>("AKTIFMI");
+			row.DefaultCellStyle.BackColor = active ? Color.Honeydew : Color.MistyRose;
+			row.DefaultCellStyle.SelectionBackColor = active ? Color.PaleGreen : Color.LightSalmon;
+			row.DefaultCellStyle.ForeColor = Color.Black;
 		}
 	}
 
@@ -1339,6 +1354,7 @@ public sealed partial class MainForm : Form
 			string text = SelectedCard(payrollPerson);
 			string sql = "select u.*,k.AD,k.SOYAD,k.MAAS as KART_MAAS from UCRETLER u inner join KIMLIK k on k.PKNO=u.PKNO where k.IGTARIH<@B and (k.ICTARIH is null or k.ICTARIH>=@A) and u.BASTAR>=@A and u.BASTAR<@B" + ((text == null) ? "" : " and u.PKNO=@P") + " order by u.PKNO";
 			payrollGrid.DataSource = ((text == null) ? db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2)) : db.Query(sql, new FbParameter("@A", dateTime), new FbParameter("@B", dateTime2), new FbParameter("@P", text)));
+			ApplyRev26LockColors();
 		}
 		catch (Exception ex)
 		{
