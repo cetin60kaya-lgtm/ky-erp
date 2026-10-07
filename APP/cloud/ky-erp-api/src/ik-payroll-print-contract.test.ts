@@ -299,18 +299,22 @@ test("payroll final control exposes every financial value and saves back to cano
   assert.match(api, /\/ik\/advanced\/payroll\/final-control/);
 
   assert.match(cloud, /async function saveAdvancedPayrollFinalControl/);
-  assert.doesNotMatch(cloud, /pushCorrection\("overtime", "Mesai", "Bordro"\)/);
+  assert.doesNotMatch(cloud, /pushCorrection\(/);
   assert.match(cloud, /OVERTIME_SOURCE_MISMATCH/);
-  assert.match(cloud, /pushCorrection\("advance", "Avans"/);
-  assert.match(cloud, /pushCorrection\("deduction", "Ozel kesinti"/);
-  assert.match(cloud, /Bordro kaynak kontrolü/);
+  assert.match(cloud, /const toCents =/);
+  assert.match(cloud, /syncCanonicalSource/);
+  assert.match(cloud, /UPDATE hr_monthly_adjustments_v2 SET amount=\?,payment_method=\?,payroll_effect=\?,adjustment_type=\? WHERE id=\?/);
+  assert.match(cloud, /FINANCE_SOURCE_AMBIGUOUS/);
+  assert.match(cloud, /DERIVED_DEDUCTION_LOCKED/);
+  assert.match(cloud, /sourceCreatedIds/);
+  assert.match(cloud, /sourceDeletedIds/);
   assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
   assert.match(cloud, /PAYMENT_SOURCE_MISMATCH/);
   assert.match(cloud, /UPDATE hr_monthly_adjustments_v2 SET payment_method=\? WHERE id=\?/);
   assert.match(cloud, /UPDATE hr_monthly_adjustments_v2 SET adjustment_type=\? WHERE id=\?/);
   assert.match(cloud, /const bankDeductionsAfter = Math\.max/);
   assert.match(cloud, /"FINAL_CONTROL"/);
-  assert.match(cloud, /Son bordro kontrolü ücret planı, hareket kaynakları ve snapshot ile atomik kaydedildi/);
+  assert.match(cloud, /mevcut gerçek hareket kaynaklarını ve bordro snapshotını atomik güncelledi/);
   assert.match(cloud, /await c\.env\.DB\.batch\(statements\)/);
   assert.match(cloud, /status=excluded\.status/);
   assert.match(cloud, /app\.post\("\/api\/ik\/advanced\/payroll\/final-control"/);
@@ -402,4 +406,17 @@ test("open month always follows live payroll sources regardless of legacy PAID s
   assert.doesNotMatch(page, /snapshotPayment/);
   assert.match(page, /sourceChangedSinceSave/);
   assert.match(page, /Tek kaynak kuralı/);
+});
+
+
+test("one-cent finance edits update the canonical row instead of creating correction rows", () => {
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+  const start = cloud.indexOf("async function saveAdvancedPayrollFinalControl");
+  const end = cloud.indexOf("async function saveAdvancedPayrollLines", start);
+  const block = cloud.slice(start, end);
+  assert.match(block, /const toCents = \(value: unknown\) => Math\.round\(number\(value\) \* 100\)/);
+  assert.match(block, /toCents\(target\) === toCents\(currentAmount\)/);
+  assert.match(block, /UPDATE hr_monthly_adjustments_v2 SET amount=\?,payment_method=\?,payroll_effect=\?,adjustment_type=\? WHERE id=\?/);
+  assert.doesNotMatch(block, /Math\.abs\(delta\) <= 0\.01/);
+  assert.doesNotMatch(block, /Bordro kaynak kontrolü · önce/);
 });
