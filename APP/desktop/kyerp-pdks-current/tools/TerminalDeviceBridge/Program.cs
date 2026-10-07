@@ -36,6 +36,7 @@ internal static class Program
                 try
                 {
                     clock.ReadMark = false;
+                    try { clock.EnableDevice(machine, false); } catch { }
                     int year = 0, month = 0, day = 0, hour = 0, minute = 0, dayOfWeek = 0;
                     bool timeOk = clock.GetDeviceTime(machine, ref year, ref month, ref day, ref hour, ref minute, ref dayOfWeek);
                     int users = Status(clock, machine, 2);
@@ -91,7 +92,11 @@ internal static class Program
                     }
                     return 0;
                 }
-                finally { try { clock.CloseCommPort(); } catch { } }
+                finally
+                {
+                    try { clock.EnableDevice(machine, true); } catch { }
+                    try { clock.CloseCommPort(); } catch { }
+                }
             }
             catch (Exception ex) { return Fail(ex.GetBaseException().Message); }
         }
@@ -270,19 +275,65 @@ internal static class Program
             {
                 int terminal = 0, enroll = 0, enrollMachine = 0, verify = 0, inout = 0, evt = 0;
                 int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
-                bool ok = clock.GetGeneralLogDataWithSecond(
-                    machine, ref terminal, ref enroll, ref enrollMachine, ref verify, ref inout, ref evt,
-                    ref year, ref month, ref day, ref hour, ref minute, ref second);
+                bool ok = false;
+                try
+                {
+                    ok = clock.GetGeneralLogDataWithSecond(
+                        machine, ref terminal, ref enroll, ref enrollMachine, ref verify, ref inout, ref evt,
+                        ref year, ref month, ref day, ref hour, ref minute, ref second);
+                }
+                catch { ok = false; }
                 if (!ok) break;
                 DateTime at;
                 try { at = new DateTime(year, month, day, hour, minute, second); }
                 catch { continue; }
-                Console.WriteLine("LOG|" + enroll.ToString("00000", CultureInfo.InvariantCulture) + "|" +
-                    at.ToString("s", CultureInfo.InvariantCulture) + "|" + inout + "|" + verify + "|" + evt + "|" + terminal);
+                WriteLog(enroll, at, inout, verify, evt, terminal);
                 count++;
             }
         }
-        Console.WriteLine("END|" + count);
+
+        // Some PS-2000/A3 family terminals expose new-log status but do not return
+        // records through the WithSecond getter. Fall back to the legacy getter.
+        if (count == 0)
+        {
+            prepared = false;
+            try { prepared = clock.ReadGeneralLogData(machine); }
+            catch { prepared = false; }
+
+            if (prepared)
+            {
+                while (true)
+                {
+                    int terminal = 0, enroll = 0, enrollMachine = 0, verify = 0, inout = 0, evt = 0;
+                    int year = 0, month = 0, day = 0, hour = 0, minute = 0;
+                    bool ok = false;
+                    try
+                    {
+                        ok = clock.GetGeneralLogData(
+                            machine, ref terminal, ref enroll, ref enrollMachine, ref verify, ref inout, ref evt,
+                            ref year, ref month, ref day, ref hour, ref minute);
+                    }
+                    catch { ok = false; }
+                    if (!ok) break;
+                    DateTime at;
+                    try { at = new DateTime(year, month, day, hour, minute, 0); }
+                    catch { continue; }
+                    WriteLog(enroll, at, inout, verify, evt, terminal);
+                    count++;
+                }
+            }
+        }
+
+        int lastError = 0;
+        try { clock.GetLastError(ref lastError); } catch { }
+        Console.WriteLine("READINFO|" + count.ToString(CultureInfo.InvariantCulture) + "|" + lastError.ToString(CultureInfo.InvariantCulture));
+        Console.WriteLine("END|" + count.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static void WriteLog(int enroll, DateTime at, int inout, int verify, int evt, int terminal)
+    {
+        Console.WriteLine("LOG|" + enroll.ToString("00000", CultureInfo.InvariantCulture) + "|" +
+            at.ToString("s", CultureInfo.InvariantCulture) + "|" + inout + "|" + verify + "|" + evt + "|" + terminal);
     }
 
     private static void ReadAll(dynamic clock, int machine)
