@@ -53,9 +53,38 @@ public partial class PersonelForm
     void ConfigureListColumns()
     {
         if(list.Columns.Count==0)return;
-        string[] names={"PKNO","AD","SOYAD","IGTARIH","ICTARIH"}; int[] widths={48,76,86,84,84}; string[] heads={"Kart No","Adı","Soyadı","İş. Gir. Tar.","İş. Çıkış Tar."};
-        for(int i=0;i<names.Length;i++)if(list.Columns.Contains(names[i])){var c=list.Columns[names[i]];c.HeaderText=heads[i];c.Width=widths[i];c.DefaultCellStyle.NullValue="";}
-        foreach(DataGridViewColumn c in list.Columns)c.SortMode=DataGridViewColumnSortMode.NotSortable;
+        foreach(DataGridViewColumn c in list.Columns)
+        {
+            c.Visible=false;
+            c.SortMode=DataGridViewColumnSortMode.NotSortable;
+        }
+
+        var specs = new (string Name,string Header,int Width)[]
+        {
+            ("PKNO","Kart No",62),
+            ("ADSOYAD","Ad Soyad",150),
+            ("GRUPAD","Grup",102),
+            ("BOLUMAD","Bölüm",92),
+            ("GOREVAD","Görev",108),
+            ("IGTARIH","İşe Giriş",86),
+            ("ICTARIH","İşten Çıkış",86),
+            ("MAAS","Maaş",88)
+        };
+        var index=0;
+        foreach(var spec in specs)
+        {
+            if(!list.Columns.Contains(spec.Name)) continue;
+            var col=list.Columns[spec.Name];
+            col.Visible=true;
+            col.HeaderText=spec.Header;
+            col.Width=spec.Width;
+            col.DisplayIndex=index++;
+            col.DefaultCellStyle.NullValue="";
+            if(spec.Name=="MAAS") col.DefaultCellStyle.Format="N2";
+        }
+
+        if(list.Columns.Contains("ICTARIH"))
+            list.Columns["ICTARIH"].Visible=!scopeActive.Checked;
     }
 
     void BuildClassicRight(TableLayoutPanel root)
@@ -203,7 +232,7 @@ public partial class PersonelForm
         g.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",8.5f,FontStyle.Bold);g.ColumnHeadersDefaultCellStyle.BackColor=p.GridHeader;g.ColumnHeadersDefaultCellStyle.ForeColor=p.Text;g.EnableHeadersVisualStyles=false;
     }
 
-    void GirisBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gGiris,"SIRA",0,false);SetCol(gGiris,"GIRIS_TARIHI",104,true,"Giriş Tarihi");SetCol(gGiris,"GIRIS_SAATI",72,true,"Giriş Saati");SetCol(gGiris,"GTUR",34,true,"Tür");SetCol(gGiris,"CIKIS_TARIHI",104,true,"Çıkış Tarihi");SetCol(gGiris,"CIKIS_SAATI",72,true,"Çıkış Saati");SetCol(gGiris,"CTUR",34,true,"Tür");OrderGirisColumns();}
+    void GirisBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gGiris,"SIRA",0,false);SetCol(gGiris,"GIRIS_TARIHI",104,true,"Giriş Tarihi");SetCol(gGiris,"GIRIS_SAATI",78,true,"Giriş");SetCol(gGiris,"GTUR",0,false);SetCol(gGiris,"CIKIS_TARIHI",104,true,"Çıkış Tarihi");SetCol(gGiris,"CIKIS_SAATI",78,true,"Çıkış");SetCol(gGiris,"CTUR",0,false);OrderGirisColumns();}
     void IzinBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gIzin,"SIRA",0,false);SetCol(gIzin,"SUREDAKIKA",0,false);SetCol(gIzin,"EBALAN",0,false);SetCol(gIzin,"TARIH",120,true,"Tarih");SetCol(gIzin,"BASSAAT",62,true,"Baş. Saat");SetCol(gIzin,"BITSAAT",62,true,"Bit. Saat");SetCol(gIzin,"SURESAAT",62,true,"Süre");SetCol(gIzin,"TIP",90,true,"Tip");SetCol(gIzin,"MAZERET",210,true,"Mazeret");}
     void EkkBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gEkk,"KOD",0,false);SetCol(gEkk,"ISLEM_TARIHI",108,true,"İşlem Tar.");SetCol(gEkk,"VERILIS_TARIHI",108,true,"Ver. Tar.");SetCol(gEkk,"TURU",85,true,"Türü");SetCol(gEkk,"MIKTAR",85,true,"Miktar");SetCol(gEkk,"ACIKLAMA",175,true,"Açıklama");}
     void BilgiBound(object? s,DataGridViewBindingCompleteEventArgs e){string[] n={"TARIH","NC","M50","M100","UIZIN","SAAT5","SAAT6","SAAT7","SAAT8","SAAT9","DEVAMSIZLIK","GEC_KALMA","EKSIK_SURE"};string[] h={"TARİH","N.Ç.","% 50","%100","Üsz.İ","5","6","7","8","9","Dvms.","Geç K.","Eks."};int[] w={105,48,48,48,42,36,36,36,36,36,50,50,50};for(int i=0;i<n.Length;i++)SetCol(gBilgi,n[i],w[i],true,h[i]);}
@@ -212,7 +241,23 @@ public partial class PersonelForm
     {
         if(e.RowIndex<0||e.ColumnIndex<0||e.ColumnIndex>=gGiris.Columns.Count)return;
         var st=e.CellStyle;if(st is null)return;var col=gGiris.Columns[e.ColumnIndex];if(col is null)return;string n=col.Name;
-        if(n is "GIRIS_SAATI" or "CIKIS_SAATI")st.Font=new Font(Font,FontStyle.Bold);
+        if(n is "GIRIS_SAATI" or "CIKIS_SAATI")
+        {
+            st.Font=new Font(Font,FontStyle.Bold);
+            var typeColumn=n=="GIRIS_SAATI"?"GTUR":"CTUR";
+            var isE=gGiris.Columns.Contains(typeColumn) &&
+                string.Equals(Convert.ToString(gGiris.Rows[e.RowIndex].Cells[typeColumn].Value)?.Trim(),"E",StringComparison.OrdinalIgnoreCase);
+            if(isE)
+            {
+                st.BackColor=PdksAppearance.Current.IsDark?Color.FromArgb(75,57,20):Color.FromArgb(255,245,204);
+                st.ForeColor=PdksAppearance.Current.IsDark?Color.FromArgb(255,224,142):Color.FromArgb(135,84,0);
+                if(e.Value is not null)
+                {
+                    e.Value=(Convert.ToString(e.Value)?.Trim()??"")+"  E";
+                    e.FormattingApplied=true;
+                }
+            }
+        }
         if((n is "GIRIS_TARIHI" or "CIKIS_TARIHI")&&e.Value is DateTime d){e.Value=d.ToString("dd MMM yyyy ddd",new CultureInfo("tr-TR"));e.FormattingApplied=true;}
     }
     void BilgiFormat(object? s,DataGridViewCellFormattingEventArgs e)
