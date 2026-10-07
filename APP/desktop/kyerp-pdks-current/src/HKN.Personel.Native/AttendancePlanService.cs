@@ -88,8 +88,9 @@ internal static class AttendancePlanService
                     ((r.EntryAt.HasValue && r.EntryAt.Value.Date == day.Date) ||
                      (r.ExitAt.HasValue && r.ExitAt.Value.Date == day.Date))).ToArray();
 
-                BuildNormalSide(result, employee, day, dayRows, AttendancePlanSide.Entry);
-                BuildNormalSide(result, employee, day, dayRows, AttendancePlanSide.Exit);
+                var effectiveRows = NormalizeWrongSides(result, employee, day, dayRows);
+                BuildNormalSide(result, employee, day, effectiveRows, AttendancePlanSide.Entry);
+                BuildNormalSide(result, employee, day, effectiveRows, AttendancePlanSide.Exit);
             }
         }
 
@@ -253,6 +254,64 @@ internal static class AttendancePlanService
         return cards.Select(x => (x.Card, x.Name, CountCurrentE(rows, x.Card, from, to))).ToArray();
     }
 
+    static IReadOnlyList<MovementRow> NormalizeWrongSides(
+        List<AttendancePlanItem> plan,
+        Employee employee,
+        DateTime day,
+        IReadOnlyList<MovementRow> source)
+    {
+        var rows = source.ToList();
+        var normal = rows.Where(r => !IsE(r.EntryType) && !IsE(r.ExitType)).ToArray();
+        var properEntries = normal.Where(r => r.EntryAt.HasValue && r.EntryAt.Value.Date == day.Date && r.EntryAt.Value.TimeOfDay < TimeSpan.FromHours(12)).ToArray();
+        var properExits = normal.Where(r => r.ExitAt.HasValue && r.ExitAt.Value.Date == day.Date && r.ExitAt.Value.TimeOfDay >= TimeSpan.FromHours(12)).ToArray();
+
+        if (properExits.Length == 0)
+        {
+            var wrong = normal.Where(r => r.EntryAt.HasValue && r.EntryAt.Value.Date == day.Date && r.EntryAt.Value.TimeOfDay >= TimeSpan.FromHours(12))
+                .OrderByDescending(r => r.EntryAt)
+                .FirstOrDefault();
+            if (wrong is not null && wrong.EntryAt.HasValue)
+            {
+                var at = wrong.EntryAt.Value;
+                var target = InRange(at.TimeOfDay, AttendanceTolerancePolicy.ExitEarliest, AttendanceTolerancePolicy.ExitLatest)
+                    ? at
+                    : day.Date.AddMinutes(StableMinute(employee.Card, day, AttendancePlanSide.Exit, AttendanceTolerancePolicy.ExitEarliest, AttendanceTolerancePolicy.ExitLatest));
+                plan.Add(new(employee.Card, employee.Name, day, AttendancePlanSide.Exit, "TERS TARAFI DÜZELT",
+                    wrong.Sira, at, "MOVE_ENTRY_TO_EXIT", target, ""));
+                ReplaceRow(rows, wrong with { EntryAt = null, EntryType = "", ExitAt = target, ExitType = "" });
+            }
+        }
+
+        normal = rows.Where(r => !IsE(r.EntryType) && !IsE(r.ExitType)).ToArray();
+        properEntries = normal.Where(r => r.EntryAt.HasValue && r.EntryAt.Value.Date == day.Date && r.EntryAt.Value.TimeOfDay < TimeSpan.FromHours(12)).ToArray();
+        if (properEntries.Length == 0)
+        {
+            var wrong = normal.Where(r => r.ExitAt.HasValue && r.ExitAt.Value.Date == day.Date && r.ExitAt.Value.TimeOfDay < TimeSpan.FromHours(12))
+                .OrderBy(r => r.ExitAt)
+                .FirstOrDefault();
+            if (wrong is not null && wrong.ExitAt.HasValue)
+            {
+                var at = wrong.ExitAt.Value;
+                var target = InRange(at.TimeOfDay, AttendanceTolerancePolicy.EntryEarliest, AttendanceTolerancePolicy.EntryLatest)
+                    ? at
+                    : day.Date.AddMinutes(StableMinute(employee.Card, day, AttendancePlanSide.Entry, AttendanceTolerancePolicy.EntryEarliest, AttendanceTolerancePolicy.EntryLatest));
+                plan.Add(new(employee.Card, employee.Name, day, AttendancePlanSide.Entry, "TERS TARAFI DÜZELT",
+                    wrong.Sira, at, "MOVE_EXIT_TO_ENTRY", target, ""));
+                ReplaceRow(rows, wrong with { EntryAt = target, EntryType = "", ExitAt = null, ExitType = "" });
+            }
+        }
+
+        return rows;
+    }
+
+    static void ReplaceRow(List<MovementRow> rows, MovementRow replacement)
+    {
+        var index = rows.FindIndex(x => x.Sira == replacement.Sira);
+        if (index >= 0) rows[index] = replacement;
+    }
+
+    static bool InRange(TimeSpan value, TimeSpan from, TimeSpan to) => value >= from && value <= to;
+
     static void BuildNormalSide(
         List<AttendancePlanItem> plan,
         Employee employee,
@@ -415,6 +474,25 @@ internal static class AttendancePlanService
 
     static void ApplyFullRepair(FbConnection connection, FbTransaction transaction, AttendancePlanItem item)
     {
+        if (item.Action == "TERS TARAFI DÜZELT")
+        {
+            if (!item.RowSira.HasValue) throw new InvalidOperationException("Ters taraf düzeltmesi için kaynak satır bulunamadı.");
+            var minute = (int)item.PlannedAt.TimeOfDay.TotalMinutes;
+            var time = item.PlannedAt.ToString("HH:mm", CultureInfo.InvariantCulture);
+            var sql = item.Side == AttendancePlanSide.Exit
+                ? "update GIRCIK set GTARIH=null,GSAAT=null,GDAKIKA=null,GTUR=null,CTARIH=@D,CSAAT=@T,CDAKIKA=@M,CTUR='' where SIRA=@S and PKNO=@P"
+                : "update GIRCIK set CTARIH=null,CSAAT=null,CDAKIKA=null,CTUR=null,GTARIH=@D,GSAAT=@T,GDAKIKA=@M,GTUR='' where SIRA=@S and PKNO=@P";
+            using var move = FirebirdDatabase.CreateCommand(connection, transaction, sql,
+                new FbParameter("@D", item.Day.Date),
+                new FbParameter("@T", time),
+                new FbParameter("@M", minute),
+                new FbParameter("@S", item.RowSira.Value),
+                new FbParameter("@P", item.Card));
+            if (move.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException($"{item.Card} {item.Day:dd.MM.yyyy}: ters taraf düzeltmesi uygulanamadı.");
+            return;
+        }
+
         if (item.RemoveOnly)
         {
             if (!item.RowSira.HasValue) return;
