@@ -25,13 +25,7 @@ internal static class PayrollOverrideService
         "EKKES", "EKKAZ", "NCMAAS", "NCKALAN", "SSKG", "BOLUM", "MESAIKESINTIS"
     ];
 
-    internal static readonly string[] UiEditFields =
-    [
-        "DMAAS", "GUN1", "SAAT1", "UCRET1", "NCGUN", "NCSAAT", "NCUCRET",
-        "SAAT2", "UCRET2", "SAAT3", "UCRET3", "GUN4", "SAAT4",
-        "DEVG", "DEVS", "GECS", "EKS", "EKKAZ", "EKKES", "EX2",
-        "NCMAAS", "NCKALAN", "FMSAAT", "FMUCRET", "FMODENEN", "FMKALAN"
-    ];
+    internal static readonly string[] UiEditFields = EditableFields;
 
     private sealed record ColumnInfo(string Name, int Type);
 
@@ -415,6 +409,9 @@ end");
     internal static string[] SaveOverrides(FirebirdDatabase db, string card, int year, int month, IDictionary<string, string> requested, bool autoHours, string note)
     {
         EnsureSchema(db);
+        if (IsPeriodLocked(db, year, month) || IsPersonLocked(db, card, year, month))
+            throw new InvalidOperationException("Bu bordro dönemi kilitli. Önce kilidi açın.");
+
         var row = PreferredRow(db, card, year, month) ?? throw new InvalidOperationException("Seçili ay için UCRETLER kaydı bulunamadı.");
         var values = new Dictionary<string, string>(requested, StringComparer.OrdinalIgnoreCase);
 
@@ -444,31 +441,11 @@ end");
         }
         if (changed.Count == 0) return [];
 
-        var start = Convert.ToDateTime(row["BASTAR"]);
-        var finish = Convert.ToDateTime(row["BITTAR"]);
+        var startDate = Convert.ToDateTime(row["BASTAR"]);
+        var finishDate = Convert.ToDateTime(row["BITTAR"]);
+
         db.InTransaction((connection, tx) =>
         {
-            using (var bypass = FirebirdDatabase.CreateCommand(connection, tx, "insert into PDKS_BYPASS(CONNECTION_ID) values(CURRENT_CONNECTION)"))
-                bypass.ExecuteNonQuery();
-
-            var sets = new List<string>();
-            var parameters = new List<FbParameter>();
-            var i = 0;
-            foreach (var field in changed)
-            {
-                var name = "@V" + i++;
-                sets.Add(field + "=" + name);
-                parameters.Add(new FbParameter(name, TypedValue(field, values[field])));
-            }
-            parameters.Add(new FbParameter("@P", card));
-            parameters.Add(new FbParameter("@S", start));
-            parameters.Add(new FbParameter("@E", finish));
-            using (var update = FirebirdDatabase.CreateCommand(connection, tx,
-                "update UCRETLER set " + string.Join(",", sets) + " where PKNO=@P and BASTAR=@S and BITTAR=@E", parameters.ToArray()))
-            {
-                if (update.ExecuteNonQuery() != 1) throw new InvalidOperationException("Bordro satırı tekil değil; güvenli güncelleme yapılmadı.");
-            }
-
             foreach (var field in changed)
             {
                 var raw = values[field].Trim();
@@ -478,14 +455,55 @@ end");
                     new FbParameter("@P", card), new FbParameter("@Y", year), new FbParameter("@A", month), new FbParameter("@F", field),
                     new FbParameter("@V", value), new FbParameter("@Z", isNull), new FbParameter("@N", note ?? "")
                 ];
-                using var updateOverride = FirebirdDatabase.CreateCommand(connection, tx, @"update PDKS_BORDRO_OVERRIDE set FIELD_VALUE=@V,IS_NULL=@Z,AKTIF=1,KAYIT_TARIHI=current_timestamp,ACIKLAMA=@N where PKNO=@P and YIL=@Y and AY=@A and FIELD_NAME=@F", P());
+                using var updateOverride = FirebirdDatabase.CreateCommand(connection, tx,
+                    @"update PDKS_BORDRO_OVERRIDE set FIELD_VALUE=@V,IS_NULL=@Z,AKTIF=1,KAYIT_TARIHI=current_timestamp,ACIKLAMA=@N where PKNO=@P and YIL=@Y and AY=@A and FIELD_NAME=@F", P());
                 if (updateOverride.ExecuteNonQuery() == 0)
                 {
-                    using var insertOverride = FirebirdDatabase.CreateCommand(connection, tx, @"insert into PDKS_BORDRO_OVERRIDE(PKNO,YIL,AY,FIELD_NAME,FIELD_VALUE,IS_NULL,AKTIF,KAYIT_TARIHI,ACIKLAMA) values(@P,@Y,@A,@F,@V,@Z,1,current_timestamp,@N)", P());
+                    using var insertOverride = FirebirdDatabase.CreateCommand(connection, tx,
+                        @"insert into PDKS_BORDRO_OVERRIDE(PKNO,YIL,AY,FIELD_NAME,FIELD_VALUE,IS_NULL,AKTIF,KAYIT_TARIHI,ACIKLAMA) values(@P,@Y,@A,@F,@V,@Z,1,current_timestamp,@N)", P());
                     insertOverride.ExecuteNonQuery();
                 }
             }
-            using (var clearBypass = FirebirdDatabase.CreateCommand(connection, tx, "delete from PDKS_BYPASS where CONNECTION_ID=CURRENT_CONNECTION")) clearBypass.ExecuteNonQuery();
+
+            using (var bypass = FirebirdDatabase.CreateCommand(connection, tx, "insert into PDKS_BYPASS(CONNECTION_ID) values(CURRENT_CONNECTION)"))
+                bypass.ExecuteNonQuery();
+
+            var sets = new List<string>();
+            var parameters = new List<FbParameter>();
+            for (var i = 0; i < changed.Count; i++)
+            {
+                var field = changed[i];
+                var name = "@V" + i;
+                sets.Add(field + "=" + name);
+                parameters.Add(new FbParameter(name, TypedValue(field, values[field])));
+            }
+            parameters.Add(new FbParameter("@P", card));
+            parameters.Add(new FbParameter("@S", startDate));
+            parameters.Add(new FbParameter("@E", finishDate));
+            using (var update = FirebirdDatabase.CreateCommand(connection, tx,
+                "update UCRETLER set " + string.Join(",", sets) + " where PKNO=@P and BASTAR=@S and BITTAR=@E", parameters.ToArray()))
+            {
+                if (update.ExecuteNonQuery() != 1) throw new InvalidOperationException("Bordro satırı tekil değil; güvenli güncelleme yapılmadı.");
+            }
+
+            using (var verify = FirebirdDatabase.CreateCommand(connection, tx,
+                "select " + string.Join(",", changed) + " from UCRETLER where PKNO=@P and BASTAR=@S and BITTAR=@E",
+                new FbParameter("@P", card), new FbParameter("@S", startDate), new FbParameter("@E", finishDate)))
+            using (var reader = verify.ExecuteReader())
+            {
+                if (!reader.Read()) throw new InvalidOperationException("Kaydedilen bordro satırı tekrar okunamadı.");
+                foreach (var field in changed)
+                {
+                    var actual = reader[field];
+                    var expected = IsTextField(field) ? values[field].Trim() : Canonical(field, TypedValue(field, values[field]));
+                    var actualCanonical = Canonical(field, actual);
+                    if (!string.Equals(expected, actualCanonical, StringComparison.Ordinal))
+                        throw new InvalidOperationException(field + " kaydı DB doğrulamasından geçmedi.");
+                }
+            }
+
+            using (var clearBypass = FirebirdDatabase.CreateCommand(connection, tx, "delete from PDKS_BYPASS where CONNECTION_ID=CURRENT_CONNECTION"))
+                clearBypass.ExecuteNonQuery();
             return 0;
         });
         return changed.ToArray();
