@@ -120,7 +120,7 @@ internal sealed class PaymentOperationsControl : UserControl
         C("Odenecek","Ödenecek",95,false);
         C("SonOdemeTarihi","Son Ödeme Tarihi",95);
         C("Durum","Durum",180);
-        bankGrid.CellValidating += (_, e) =>
+        bankGrid.CellValidating += (sender, e) =>
         {
             if (bankGrid.Columns[e.ColumnIndex].Name != "Odenecek") return;
             if (!TryNumber(Convert.ToString(e.FormattedValue) ?? "", out _))
