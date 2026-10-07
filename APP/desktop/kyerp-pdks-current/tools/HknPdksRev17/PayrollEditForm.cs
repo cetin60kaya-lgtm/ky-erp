@@ -106,6 +106,7 @@ public sealed class PayrollEditForm : Form
         Controls.Add(outer);
         AcceptButton = save;
         CancelButton = cancel;
+        AppTheme.Apply(this);
     }
 
     private void AddField(TableLayoutPanel outer, IReadOnlyDictionary<string,string> values, string field, string label)
