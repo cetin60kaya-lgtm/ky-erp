@@ -11,13 +11,13 @@ public sealed class MonthlyAttendanceAdminForm : Form
 {
     readonly LocalUser user;
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
-    readonly DateTimePicker period = new()
-    {
-        Format = DateTimePickerFormat.Custom,
-        CustomFormat = "MMMM yyyy",
-        ShowUpDown = true,
-        Width = 130
-    };
+    static readonly string[] MonthNames =
+    [
+        "Ocak","Şubat","Mart","Nisan","Mayıs","Haziran",
+        "Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"
+    ];
+    readonly ComboBox month = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 118, FlatStyle = FlatStyle.Flat };
+    readonly NumericUpDown year = new() { Minimum = 2015, Maximum = 2100, Width = 82 };
     readonly ComboBox filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
     readonly TextBox search = new() { Width = 180, PlaceholderText = "Kart / personel ara" };
     readonly Label summary = new() { AutoSize = true, Padding = new Padding(10, 8, 0, 0) };
@@ -52,7 +52,9 @@ public sealed class MonthlyAttendanceAdminForm : Form
         if (!user.IsAdmin)
             throw new UnauthorizedAccessException("Aylık kart düzeltme ekranı yalnız ADMIN içindir.");
 
-        period.Value = DateTime.Today;
+        month.Items.AddRange(MonthNames.Cast<object>().ToArray());
+        month.SelectedIndex = DateTime.Today.Month - 1;
+        year.Value = DateTime.Today.Year;
         filter.Items.AddRange(["Sorunlular", "Tümü", "Kart Basmadı", "Giriş Eksik", "Çıkış Eksik", "Erken Giriş", "Geç Giriş", "Erken Çıkış", "Geç Çıkış", "E Kayıtları", "Tamam"]);
         filter.SelectedIndex = 0;
 
@@ -60,6 +62,8 @@ public sealed class MonthlyAttendanceAdminForm : Form
         Shown += (_, _) => ReloadMonth();
         filter.SelectedIndexChanged += (_, _) => BindGrid();
         search.TextChanged += (_, _) => BindGrid();
+        month.SelectedIndexChanged += (_, _) => { if (IsHandleCreated) ReloadMonth(); };
+        year.ValueChanged += (_, _) => { if (IsHandleCreated) ReloadMonth(); };
     }
 
     void Build()
@@ -75,7 +79,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
 
         var header = PdksUiKit.Card(14);
@@ -92,7 +96,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
         };
         var info = new Label
         {
-            Text = $"ADMIN • Kabul: Giriş {AttendanceTolerancePolicy.EntryWindowText} • Çıkış {AttendanceTolerancePolicy.ExitWindowText} • Normal = DATA+TNF • E yalnız DATA",
+            Text = $"ADMIN • Normal = DATA + TNF • E = yalnız DATA • Önizle → Uygula • Giriş {AttendanceTolerancePolicy.EntryWindowText} • Çıkış {AttendanceTolerancePolicy.ExitWindowText}",
             Dock = DockStyle.Fill,
             ForeColor = p.Muted,
             TextAlign = ContentAlignment.MiddleRight
@@ -105,7 +109,9 @@ public sealed class MonthlyAttendanceAdminForm : Form
         var filters = PdksUiKit.Card(8);
         var filterFlow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(8, 5, 4, 0), BackColor = p.Surface };
         filterFlow.Controls.Add(L("Ay"));
-        filterFlow.Controls.Add(period);
+        filterFlow.Controls.Add(month);
+        filterFlow.Controls.Add(L("Yıl"));
+        filterFlow.Controls.Add(year);
         filterFlow.Controls.Add(L("Görünüm"));
         filterFlow.Controls.Add(filter);
         filterFlow.Controls.Add(search);
@@ -132,27 +138,20 @@ public sealed class MonthlyAttendanceAdminForm : Form
         root.Controls.Add(gridCard, 0, 2);
 
         var actions = PdksUiKit.Card(8);
-        var actionRoot = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, BackColor = p.Surface };
-        actionRoot.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        actionRoot.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-
-        var row1 = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(6, 4, 0, 0), BackColor = p.Surface };
-        row1.Controls.Add(B("Normal Giriş Ekle", 145, PdksActionRole.Primary, async (_, _) => await AddMissingAsync(true, false)));
-        row1.Controls.Add(B("Normal Çıkış Ekle", 145, PdksActionRole.Primary, async (_, _) => await AddMissingAsync(false, false)));
-        row1.Controls.Add(B("Giriş Saatini Düzenle", 160, PdksActionRole.Secondary, async (_, _) => await NormalizeAsync(true)));
-        row1.Controls.Add(B("Çıkış Saatini Düzenle", 160, PdksActionRole.Secondary, async (_, _) => await NormalizeAsync(false)));
-        row1.Controls.Add(B("E Giriş Ekle", 115, PdksActionRole.Secondary, async (_, _) => await AddMissingAsync(true, true)));
-        row1.Controls.Add(B("E Çıkış Ekle", 115, PdksActionRole.Secondary, async (_, _) => await AddMissingAsync(false, true)));
-
-        var row2 = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(6, 4, 0, 0), BackColor = p.Surface };
-        row2.Controls.Add(B("Seçileni Eşitle", 130, PdksActionRole.Secondary, (_, _) => AlignSelected()));
-        row2.Controls.Add(B("Ayı DATA ↔ TNF Eşitle", 170, PdksActionRole.Primary, (_, _) => AlignMonth()));
-        row2.Controls.Add(B("E İmza PDF", 115, PdksActionRole.Secondary, (_, _) => ExportESignaturePdf()));
-        row2.Controls.Add(B("Eşleşmeyeni Cihazdan Sil", 190, PdksActionRole.Danger, async (_, _) => await DeleteUnmatchedAsync()));
-
-        actionRoot.Controls.Add(row1, 0, 0);
-        actionRoot.Controls.Add(row2, 0, 1);
-        actions.Controls.Add(actionRoot);
+        var actionBar = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            WrapContents = false,
+            FlowDirection = FlowDirection.LeftToRight,
+            Padding = new Padding(6, 12, 0, 0),
+            BackColor = p.Surface
+        };
+        actionBar.Controls.Add(B("TAM DÜZELT / KAYIT OLUŞTUR", 220, PdksActionRole.Primary, (_, _) => OpenPlanner(AttendancePlanMode.FullRepair)));
+        actionBar.Controls.Add(B("E İŞLEMLERİ", 130, PdksActionRole.Secondary, (_, _) => OpenPlanner(AttendancePlanMode.ConvertToE)));
+        actionBar.Controls.Add(B("Seçileni DATA ↔ TNF Eşitle", 190, PdksActionRole.Secondary, (_, _) => AlignSelected()));
+        actionBar.Controls.Add(B("Ay DATA ↔ TNF Eşitle", 170, PdksActionRole.Secondary, (_, _) => AlignMonth()));
+        actionBar.Controls.Add(B("E İmza PDF", 115, PdksActionRole.Quiet, (_, _) => ExportESignaturePdf()));
+        actions.Controls.Add(actionBar);
         root.Controls.Add(actions, 0, 3);
 
         status.ForeColor = p.Muted;
@@ -192,7 +191,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
         {
             status.Text = "Aylık kart verileri hazırlanıyor…";
             UseWaitCursor = true;
-            var a = new DateTime(period.Value.Year, period.Value.Month, 1);
+            var a = SelectedMonthStart();
             var b = a.AddMonths(1).AddDays(-1);
             allRows = LoadRows(a, b);
             BindGrid();
@@ -349,19 +348,27 @@ public sealed class MonthlyAttendanceAdminForm : Form
         var table = new DataTable();
         table.Columns.Add("Seç", typeof(bool));
         table.Columns.Add("Key");
-        foreach(var c in new[]{"Tarih","Gün","Kart No","Ad Soyad","Giriş","G.Tip","Çıkış","Ç.Tip","Fiziksel Giriş","Fiziksel Çıkış","Durum","TNF"})table.Columns.Add(c);
+        foreach(var name in new[]{"Tarih","Gün","Kart No","Ad Soyad","Giriş","Çıkış","Durum","Kaynak","TNF"}) table.Columns.Add(name);
 
         foreach(var r in source.OrderBy(x=>x.Day).ThenBy(x=>x.Card))
+        {
+            var sourceText = IsE(r.EntryType) && IsE(r.ExitType) ? "Giriş E • Çıkış E"
+                : IsE(r.EntryType) ? "Giriş E"
+                : IsE(r.ExitType) ? "Çıkış E"
+                : "";
             table.Rows.Add(false,r.Key,r.Day.ToString("dd.MM.yyyy"),r.Day.ToString("dddd",CultureInfo.GetCultureInfo("tr-TR")),
-                r.Card,r.Name,Clock(r.Entry),r.Entry.HasValue?TypeLabel(r.EntryType):"",Clock(r.Exit),r.Exit.HasValue?TypeLabel(r.ExitType):"",
-                Clock(r.PhysicalEntry),Clock(r.PhysicalExit),r.Status,r.TnfStatus);
+                r.Card,r.Name,Clock(r.Entry),Clock(r.Exit),r.Status,sourceText,r.TnfStatus);
+        }
 
         grid.DataSource=table;
-        if(grid.Columns.Contains("Key"))grid.Columns["Key"].Visible=false;
-        if(grid.Columns.Contains("Seç"))grid.Columns["Seç"].Width=42;
-        foreach(var n in new[]{"Tarih","Gün","Kart No","Giriş","G.Tip","Çıkış","Ç.Tip"})
-            if(grid.Columns.Contains(n))grid.Columns[n].AutoSizeMode=DataGridViewAutoSizeColumnMode.AllCells;
-        summary.Text=$"Gösterilen {table.Rows.Count:N0} / Toplam {allRows.Count:N0}";
+        if(grid.Columns.Contains("Key")) grid.Columns["Key"].Visible=false;
+        if(grid.Columns.Contains("Seç")) grid.Columns["Seç"].Width=42;
+        foreach(var n in new[]{"Tarih","Gün","Kart No","Giriş","Çıkış","Kaynak","TNF"})
+            if(grid.Columns.Contains(n)) grid.Columns[n].AutoSizeMode=DataGridViewAutoSizeColumnMode.AllCells;
+        if(grid.Columns.Contains("Ad Soyad")) grid.Columns["Ad Soyad"].Width=190;
+        if(grid.Columns.Contains("Durum")) grid.Columns["Durum"].AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill;
+        var problemCount = allRows.Count(x => x.Workday && x.Status != "Tamam");
+        summary.Text=$"Gösterilen {table.Rows.Count:N0} • Sorunlu gün {problemCount:N0} • Toplam {allRows.Count:N0} kişi-gün";
     }
 
     void GridCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
@@ -471,7 +478,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
     void AlignMonth()
     {
         if(!EnsureAdmin())return;
-        var a=new DateTime(period.Value.Year,period.Value.Month,1);
+        var a=SelectedMonthStart();
         if(MessageBox.Show($"{a:MMMM yyyy} DATA/FDB ↔ TR{a.Year}.Tnf dakika bazında tamamen eşitlensin mi?\n\nE kayıtları TNF'ye yazılmaz.",Text,MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
         var result=OperationalTnfSyncService.AlignMonth(db,a.Year,a.Month);
         ReloadMonth();
@@ -491,7 +498,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
         }
         if(rows.Count==0){MessageBox.Show("Seçili ayda E kaydı yok.",Text);return;}
 
-        var month=new DateTime(period.Value.Year,period.Value.Month,1);
+        var month=SelectedMonthStart();
         var dir=Path.Combine(CompanyDataPaths.Reports,"E_IMZA_FORMLARI",month.ToString("yyyy"),month.ToString("MM"));
         Directory.CreateDirectory(dir);
         var path=Path.Combine(dir,$"E_IMZA_{month:yyyy-MM}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf");
@@ -516,6 +523,24 @@ public sealed class MonthlyAttendanceAdminForm : Form
             MessageBox.Show(result.Message,Text,MessageBoxButtons.OK,result.Success?MessageBoxIcon.Information:MessageBoxIcon.Warning);
         }
         finally{SetBusy(false);}
+    }
+
+    DateTime SelectedMonthStart()
+    {
+        var selectedYear = (int)year.Value;
+        var selectedMonth = month.SelectedIndex >= 0 ? month.SelectedIndex + 1 : DateTime.Today.Month;
+        return new DateTime(selectedYear, selectedMonth, 1);
+    }
+
+    void OpenPlanner(AttendancePlanMode mode)
+    {
+        if (!EnsureAdmin()) return;
+        var selected = Selected().Select(x => x.Card).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var start = SelectedMonthStart();
+        var end = start.AddMonths(1).AddDays(-1);
+        using var form = new AttendancePlanDialog(db, mode, start, end, selected);
+        form.ShowDialog(this);
+        ReloadMonth();
     }
 
     void SetBusy(bool busy)
@@ -611,8 +636,8 @@ public sealed class MonthlyAttendanceAdminForm : Form
             if(IsE(exitType))e++;
             else {expected++;if(tnf.Contains($"{card},{exit:HH:mm},{day:ddMMyy},1,001"))matched++;}
         }
-        if(expected==0)return e>0?"E • TNF dışı":"-";
-        return matched==expected?(e>0?"Uyumlu + E":"Uyumlu"):$"Fark {matched}/{expected}";
+        if(expected==0)return e>0?"✓ E • TNF boş":"—";
+        return matched==expected?(e>0?"✓ Uyumlu + E":"✓ Uyumlu"):$"⚠ Fark {matched}/{expected}";
     }
 
     static DateTime? At(DataRow r,string dateCol,string timeCol,string minuteCol)
