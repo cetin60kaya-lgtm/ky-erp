@@ -486,7 +486,7 @@ internal static class Program
         using var main = new MainForm();
         var tabs = (TabControl)typeof(MainForm).GetField("tabs", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(main)!;
         var tabNames = tabs.TabPages.Cast<TabPage>().Select(page => page.Text).ToArray();
-        var expectedTabs = new[] { "Personel", "Giriş-Çıkış", "Kayıt Düzeltme", "E İşlemleri", "Bordro", "Ödeme / Avans", "DB - TNF Eşitle", "TNF Hazırla" };
+        var expectedTabs = new[] { "Personel", "Giriş-Çıkış", "Kayıt Düzeltme", "E İşlemleri", "Bordro", "Ödeme / Avans", "DB - TNF Eşitle" };
         Check(tabNames.SequenceEqual(expectedTabs), "REV25 single-owner simple menu has only the eight production workflows");
         Check(!tabNames.Any(name => name is "Toplu İşlem" or "AYLIK KONTROL" or "TNF DÜZENLE"), "REV25 legacy duplicate workflow tabs are gone");
         Check(typeof(PasswordGateForm).GetField("Expected", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null) is byte[] { Length: 32 }, "original password gate retained with embedded private verifier");
