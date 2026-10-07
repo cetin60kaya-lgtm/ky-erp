@@ -126,6 +126,7 @@ internal static class Program
             var listing = SyncEngine.ListTerminal([Tnf(), Tnf(1)], People, CancellationToken.None);
             Check(listing.Rows.Count == 2 && listing.Rows[0].Field<string>("Durum") == "TNF LİSTE", "terminal listing preserves physical duplicate rows");
             Rev23OneClickExactSync();
+            Rev25ExactProjectionEdgeCases();
             WorkTimeTests.Run(Check);
             SeparatedWorkflowTests.Run(Check, args.Length == 2 ? args[0] : null, args.Length == 2 ? args[1] : null);
             MonthlyTests.Run(Check, args.Length == 2 ? args[0] : null, args.Length == 2 ? args[1] : null);
@@ -215,6 +216,31 @@ internal static class Program
         var duplicateDbAfter = SyncEngine.ReadAsync(database, request, CancellationToken.None).GetAwaiter().GetResult();
         Check(duplicateDbAfter.Table.AsEnumerable().All(row => row.Field<string>("İşlem") == "YOK"),
             "REV24 exact mode mirrors duplicate/multiple DB normal movements literally into TNF");
+    }
+
+    static void Rev25ExactProjectionEdgeCases()
+    {
+        var request = new AuditRequest("TR2026.Tnf", new DateTime(2026,1,1), new DateTime(2027,1,1), "", Format, true);
+        var outside = Format.Build("00039", new DateTime(2025,12,31), "19:00");
+        var malformed = "BOZUK-SATIR";
+        var lines = new[] { outside, malformed, "", Format.Build("00039", new DateTime(2026,1,2), "07:00") };
+        var db = new List<DbMovement>
+        {
+            new(1,"00039",new DateTime(2026,1,2),"Giriş","08:25",""),
+            new(2,"00039",new DateTime(2026,1,2),"Giriş","08:25",""),
+            new(3,"00039",new DateTime(2026,1,2),"Çıkış","18:55",""),
+            new(4,"00039",new DateTime(2026,1,2),"Giriş","09:00","E")
+        };
+        var snap = new AuditSnapshot(request, SyncEngine.CompareExact(db, [], People, CancellationToken.None), db, People,
+            lines, new UTF8Encoding(false), "", "", 0, 0, 0);
+        var output = SyncEngine.BuildExactProjection(snap, CancellationToken.None);
+        Check(output.Contains(outside), "REV25 exact projection preserves valid TNF rows outside selected year");
+        Check(!output.Contains(malformed) && !output.Any(string.IsNullOrWhiteSpace), "REV25 exact projection removes malformed and blank TNF rows");
+        var duplicate = Format.Build("00039", new DateTime(2026,1,2), "08:25");
+        Check(output.Count(line => line == duplicate) == 2, "REV25 exact projection preserves DB duplicate multiplicity exactly");
+        Check(output.Contains(Format.Build("00039", new DateTime(2026,1,2), "18:55")) &&
+              !output.Contains(Format.Build("00039", new DateTime(2026,1,2), "09:00")),
+              "REV25 exact projection includes normal DB sides and excludes E");
     }
 
     static void FixtureCorrections()
