@@ -91,6 +91,9 @@ async function directSnapshot(env: any) {
     await writer.write(command);
     await sleep(110);
   }
+  // Hedef/FP_CLOCK status akışının kapanış komutu. Cihazı normal çalışma
+  // durumuna geri bırakır; kart/log/saat verisi yazmaz veya silmez.
+  await writer.write(packet(0x010c, 0, 0, machine));
   await sleep(380);
   stop = true;
   try { socket.close(); } catch {}
