@@ -154,7 +154,8 @@ internal static class SeparatedWorkflowTests
             root.Controls.Cast<Control>().SelectMany(child => Descendants(child).Prepend(child));
         var buttons = Descendants(exact).OfType<Button>().Select(button => button.Text).ToArray();
         check(buttons.Count(text => text == "TEK ATIŞ KONTROL + DÜZELT") == 1 &&
+              buttons.Count(text => text == "TÜM PERSONELİ GÖSTER") == 1 &&
               !buttons.Any(text => text.Contains("GÜVENLİ") || text.Contains("AYLIK") || text.Contains("ÇIKTIYI")),
-              "REV25 DB-TNF UI has one correction action and no legacy write paths");
+              "REV25 DB-TNF UI has one correction action, explicit show-all filter and no legacy write paths");
     }
 }
