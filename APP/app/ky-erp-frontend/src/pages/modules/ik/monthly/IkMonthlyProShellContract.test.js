@@ -101,7 +101,11 @@ test("entry control and final payroll control share the same editable source edi
   assert.match(monthly, /Düzenlenebilir/);
   assert.match(monthly, /savePrePayrollMovement/);
   assert.match(monthly, /saveFinalPayrollControl/);
-  assert.match(monthly, /Kaynak Hareketleri \/ Log/);
+  assert.match(monthly, /Kişinin O Ayki Hareketleri/);
+  assert.match(monthly, /const sourceTotals = sourceRows.reduce/);
+  assert.match(monthly, /const personMonthLogs = logs.filter/);
+  assert.match(monthly, /const split = paymentSplitByType\(editor.paymentType/);
+  assert.match(monthly, /Özet · Ücret \/ Bordro \/ Personel Logu/);
 });
 
 test("pre-payroll control keeps EK explicit and auto-balances payment channels", () => {
