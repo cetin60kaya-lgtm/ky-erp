@@ -23,3 +23,13 @@ test("CORS never replaces PDKS authentication and audit scope guards",()=>{
   assert.match(operation,/requireFull/);
   assert.match(operation,/app\.get\("\/api\/ik\/personnel-control\/operations\/payroll"/);
 });
+
+test("PDKS masters GET never creates a shift, schema or a fabricated default record",()=>{
+  const master=readFileSync(resolve(here,"ik-pdks-master.ts"),"utf8");
+  const block=master.split('app.get("/api/ik/personnel-control/pdks-masters"')[1]
+    ?.split('app.post("/api/ik/personnel-control/work-groups"')[0];
+  assert.ok(block);
+  assert.doesNotMatch(block,/ensureSchema|ensurePdksPolicySchema|ensureDefaultGroup|INSERT INTO/);
+  assert.match(block,/sqlite_master/);
+  assert.match(block,/PDKS_SCHEMA_NOT_READY/);
+});
