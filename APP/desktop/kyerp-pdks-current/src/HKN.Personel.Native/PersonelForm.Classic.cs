@@ -50,31 +50,56 @@ public partial class PersonelForm
         typeof(DataGridView).GetProperty("DoubleBuffered",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.SetValue(list,true);
     }
 
+    DataTable? configuredPersonnelList;
+    bool configuringPersonnelColumns;
+
     void ConfigureListColumns()
     {
-        if(list.Columns.Count==0)return;
-        foreach(DataGridViewColumn col in list.Columns)
-        {
-            col.Visible=false;
-            col.SortMode=DataGridViewColumnSortMode.NotSortable;
-        }
+        if (configuringPersonnelColumns || list.Columns.Count == 0) return;
+        var source = list.DataSource as DataTable;
+        // Filtering a DataView can raise DataBindingComplete again without
+        // changing the underlying table. Re-hiding the current column was
+        // responsible for "Geçerli hücre görünmez bir hücreye ayarlanamaz".
+        if (source is not null && ReferenceEquals(configuredPersonnelList, source)) return;
 
-        var specs = new (string Name,string Header,int Width)[]
+        configuringPersonnelColumns = true;
+        list.SuspendLayout();
+        try
         {
-            ("PKNO","Kart No",68),
-            ("ADSOYAD","Personel Ad Soyad",170),
-            ("GRUPAD","Grup",104)
-        };
-        var index=0;
-        foreach(var spec in specs)
+            if (list.CurrentCell is not null)
+            {
+                try { list.CurrentCell = null; }
+                catch (InvalidOperationException) { return; }
+            }
+            var visible = new (string Name, string Header, int Width)[]
+            {
+                ("PKNO", "Kart No", 68),
+                ("ADSOYAD", "Personel Ad Soyad", 170),
+                ("GRUPAD", "Grup", 104)
+            };
+            // Hide only columns that differ from the target layout.
+            foreach (DataGridViewColumn column in list.Columns)
+            {
+                var shouldShow = visible.Any(spec => spec.Name == column.Name);
+                if (column.Visible != shouldShow) column.Visible = shouldShow;
+                column.SortMode = DataGridViewColumnSortMode.NotSortable;
+            }
+            for (var i = 0; i < visible.Length; i++)
+            {
+                var spec = visible[i];
+                if (!list.Columns.Contains(spec.Name)) continue;
+                var column = list.Columns[spec.Name];
+                column.HeaderText = spec.Header;
+                column.Width = spec.Width;
+                column.DisplayIndex = i;
+                column.DefaultCellStyle.NullValue = "";
+            }
+            configuredPersonnelList = source;
+        }
+        finally
         {
-            if(!list.Columns.Contains(spec.Name)) continue;
-            var col=list.Columns[spec.Name];
-            col.Visible=true;
-            col.HeaderText=spec.Header;
-            col.Width=spec.Width;
-            col.DisplayIndex=index++;
-            col.DefaultCellStyle.NullValue="";
+            list.ResumeLayout();
+            configuringPersonnelColumns = false;
         }
     }
 
