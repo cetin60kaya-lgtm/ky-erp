@@ -83,7 +83,7 @@ export function getDataRequirement(tab) {
 }
 
 export function safeFileNameSegment(value) {
-  return String(value ?? "").replace(/[^a-zA-Z0-9_\-]/g,"_").slice(0,80);
+  return String(value ?? "").replace(/[^a-zA-Z0-9_-]/g,"_").slice(0,80);
 }
 
 export function csvForTable(columns, rows) {
