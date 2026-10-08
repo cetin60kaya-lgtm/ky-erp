@@ -10,11 +10,14 @@ import { normalizePerson } from "./productData.js";
 const empty = (status = "idle") => ({key:"",status,payload:null,error:""});
 const errorMessage = (e) => String(e?.message || "Sunucuya ulaşılamadı.");
 const keyOf = (...fields) => JSON.stringify(fields);
-const ADDITIONAL = new Set(["masters","holidays","leaves","month","payroll","audit","config"]);
+const ADDITIONAL = new Set([
+  "masters","holidays","leaves","month","month-adjustments",
+  "monthly-attendance","payroll","audit","config","corrections",
+]);
 
 export function useUnifiedPdksData({
   company,year,month,personId,requirement,previewOnly=false,
-  auditHint=false,reloadToken=0,needsPeople=false,
+  auditHint=false,reloadToken=0,needsPeople=false,allowHeavy=false,
 }) {
   const [profileState,setProfileState] = useState(empty());
   const [peopleState,setPeopleState] = useState(empty());
@@ -36,7 +39,8 @@ export function useUnifiedPdksData({
   const days=useMemo(()=>
     attendanceReady && Array.isArray(attendanceState.payload) ? attendanceState.payload : [],
     [attendanceReady,attendanceState.payload]);
-  const resourceKey=keyOf(company,year,month,requirement,reloadToken,audit);
+  const resourceKey=keyOf(company,year,month,requirement,
+    requirement==="corrections"?personId:null,reloadToken,audit);
   const resourceReady=resourceState.key===resourceKey && resourceState.status==="ready";
   const resourceLoading=resourceState.key===resourceKey && resourceState.status==="loading";
   const resourceError=resourceState.key===resourceKey && resourceState.status==="error" ? resourceState.error : "";
@@ -87,11 +91,15 @@ export function useUnifiedPdksData({
 
   useEffect(()=>{
     if(previewOnly || !company || !ADDITIONAL.has(requirement) || !profileReady ||
-       (requirement==="payroll" && audit))return undefined;
+       (requirement==="payroll" && audit) ||
+       (requirement==="monthly-attendance" && !allowHeavy) ||
+       (requirement==="corrections" && (!personId || !peopleReady)))return undefined;
     let cancelled=false;
     setResourceState({key:resourceKey,status:"loading",payload:null,error:""});
     import("./readService.js")
-      .then((api)=>api.readTabSource(requirement,{mainCompanyId:company,year,month},{audit}))
+      .then((api)=>api.readTabSource(requirement,
+        {mainCompanyId:company,year,month,personId},
+        {audit,isCancelled:()=>cancelled}))
       .then((payload)=>{
         if(!cancelled)setResourceState({key:resourceKey,status:"ready",payload,error:""});
       })
@@ -99,7 +107,8 @@ export function useUnifiedPdksData({
         if(!cancelled)setResourceState({key:resourceKey,status:"error",payload:null,error:errorMessage(e)});
       });
     return ()=>{cancelled=true;};
-  },[previewOnly,company,year,month,requirement,profileReady,audit,resourceKey]);
+  },[previewOnly,company,year,month,requirement,personId,peopleReady,
+    profileReady,audit,resourceKey,allowHeavy]);
 
   const peopleStatus=previewOnly?"preview":!company?"not-configured":
     !profileReady ? (profileState.key===profileKey?profileState.status:"loading") :
