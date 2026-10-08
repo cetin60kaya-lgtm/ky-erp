@@ -36,15 +36,24 @@ export default function AdminCompanyPersonnelPanel({companySlug}) {
     setBusy(true);setMessage("");
     try {
       await managerPersonnelRequest("accounts",{method:"POST",body:{companySlug,employeeId:selected,username:username.trim(),password,occupation,machineId,workplaceEnabled:workplace,mobileEnabled:true}});
-      setMessage("Personel hesabi olusturuldu. Ilk telefon/bilgisayar onayi beklenir.");
+      setMessage("Personel hesabi olusturuldu. Hesap ve cihaz ayri ayri onaylanmalidir.");
       setSelected("");setUsername("");setPassword("");await refresh();
+    }catch(e){setMessage("Hata: "+e.message);}finally{setBusy(false);}
+  }
+  async function decideAccount(userId,decision) {
+    if(decision==="REVOKE"&&!window.confirm("Personel hesap onayi ve mevcut cihaz yetkileri iptal edilsin mi?"))return;
+    setBusy(true);
+    try {
+      await managerPersonnelRequest("accounts/"+encodeURIComponent(userId)+"/decision",{method:"POST",body:{companySlug,decision}});
+      setMessage(decision==="APPROVE"?"Personel hesabi onaylandi. Cihaz icin ayrica onay gerekir.":"Hesap onayi ve cihaz erisimleri kaldirildi.");
+      await refresh();
     }catch(e){setMessage("Hata: "+e.message);}finally{setBusy(false);}
   }
   async function decide(id,decision) {
     setBusy(true);
     try {
       await managerPersonnelRequest("devices/"+encodeURIComponent(id)+"/decision",{method:"POST",body:{companySlug,decision}});
-      setMessage(decision==="APPROVE"?"Personel ve cihazi onaylandi.":decision==="REVOKE"?"Cihaz erisimi iptal edildi.":"Cihaz reddedildi.");
+      setMessage(decision==="APPROVE"?"Yalniz cihaz onaylandi. Hesap icin ayri onay gereklidir.":decision==="REVOKE"?"Cihaz erisimi iptal edildi.":"Cihaz reddedildi.");
       await refresh();
     }catch(e){setMessage("Hata: "+e.message);}finally{setBusy(false);}
   }
@@ -83,7 +92,7 @@ export default function AdminCompanyPersonnelPanel({companySlug}) {
       </form>
       <div className="admpro-card" style={{boxShadow:"none"}}>
         <h4>Yeni Cihaz Onayları ({pending.length})</h4>
-        {!pending.length?<p>Bekleyen cihaz bulunmuyor.</p>:pending.map(d=><div key={d.id} style={{padding:"10px 0",borderBottom:"1px solid #e1e7ec"}}><strong>{d.full_name}</strong><div style={{fontSize:12}}>{d.label} · {d.kind==="WORKPLACE"?"İşyeri bilgisayarı":"Telefon"} · {String(d.created_at).slice(0,16)}</div><div className="admpro-actions"><button className="primary" type="button" disabled={busy} onClick={()=>decide(d.id,"APPROVE")}>Personel + Cihazı Onayla</button><button type="button" disabled={busy} onClick={()=>decide(d.id,"DENY")}>Reddet</button></div></div>)}
+        {!pending.length?<p>Bekleyen cihaz bulunmuyor.</p>:pending.map(d=><div key={d.id} style={{padding:"10px 0",borderBottom:"1px solid #e1e7ec"}}><strong>{d.full_name}</strong><div style={{fontSize:12}}>{d.label} · {d.kind==="WORKPLACE"?"İşyeri bilgisayarı":"Telefon"} · {String(d.created_at).slice(0,16)}</div><div className="admpro-actions"><button className="primary" type="button" disabled={busy} onClick={()=>decide(d.id,"APPROVE")}>Cihazı Onayla</button><button type="button" disabled={busy} onClick={()=>decide(d.id,"DENY")}>Reddet</button></div></div>)}
         <h4>Onaylı Cihazlar ({approvedDevices.length})</h4>
         {!approvedDevices.length?<p>Henüz onaylı cihaz yok.</p>:approvedDevices.map(d=><div key={d.id} style={{padding:"8px 0",borderBottom:"1px solid #e1e7ec"}}><strong>{d.full_name}</strong><div style={{fontSize:12}}>{d.label} · {d.kind==="WORKPLACE"?"İşyeri PC":"Telefon"}</div><button type="button" disabled={busy} onClick={()=>{if(window.confirm("Bu cihazın erişimini iptal etmek istiyor musunuz?"))decide(d.id,"REVOKE");}}>Cihaz Yetkisini İptal Et</button></div>)}
         <h4>Cihaz Onaylamaya Yetkili Kullanıcı</h4>
@@ -93,7 +102,7 @@ export default function AdminCompanyPersonnelPanel({companySlug}) {
     </div>
     <h4>Personel Hesapları ({active.length})</h4>
     <div className="admpro-table"><table><thead><tr><th>Personel</th><th>Vasıf</th><th>Giris</th><th>Telefon</th><th>İşyeri PC</th><th>Durum</th></tr></thead><tbody>
-      {active.map(row=><tr key={row.accountUserId}><td>{row.fullName}<br/><small>{row.code}</small></td><td>{row.occupation}{row.machineId?" · "+row.machineId:""}</td><td>{companySlug+"--"+row.username}</td><td><label><input type="checkbox" checked={row.mobileEnabled} disabled={busy} onChange={e=>toggle(row,"mobileEnabled",e.target.checked)}/> Açık</label></td><td><label><input type="checkbox" checked={row.workplaceEnabled} disabled={busy} onChange={e=>toggle(row,"workplaceEnabled",e.target.checked)}/> Açık</label></td><td>{row.approved?"Ilk onayli":"Cihaz bekliyor"} · {row.active?"Aktif":"Pasif"}<div><button type="button" disabled={busy} onClick={()=>toggle(row,"isActive",!row.active)}>{row.active?"Hesabı Kapat":"Hesabı Aç"}</button></div></td></tr>)}
+      {active.map(row=><tr key={row.accountUserId}><td>{row.fullName}<br/><small>{row.code}</small></td><td>{row.occupation}{row.machineId?" · "+row.machineId:""}</td><td>{companySlug+"--"+row.username}</td><td><label><input type="checkbox" checked={row.mobileEnabled} disabled={busy} onChange={e=>toggle(row,"mobileEnabled",e.target.checked)}/> Açık</label></td><td><label><input type="checkbox" checked={row.workplaceEnabled} disabled={busy} onChange={e=>toggle(row,"workplaceEnabled",e.target.checked)}/> Açık</label></td><td>{row.approved?"Hesap onaylı":"Hesap onayı bekliyor"} · {row.active?"Aktif":"Pasif"}<div className="admpro-actions">{row.approved?<button type="button" disabled={busy} onClick={()=>decideAccount(row.accountUserId,"REVOKE")}>Hesap Onayını Kaldır</button>:<button type="button" className="primary" disabled={busy||!row.active} onClick={()=>decideAccount(row.accountUserId,"APPROVE")}>Hesabı Onayla</button>}<button type="button" disabled={busy} onClick={()=>toggle(row,"isActive",!row.active)}>{row.active?"Hesabı Kapat":"Hesabı Aç"}</button></div></td></tr>)}
       {!active.length?<tr><td colSpan="6">Firma personeli icin henuz mobil hesap yok.</td></tr>:null}
     </tbody></table></div>
   </section>;

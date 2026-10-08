@@ -42,6 +42,23 @@ test("read-only personal view reads limited HR and clock fields; no payroll colu
   assert.match(api,/app\.post\("\/api\/employee-portal\/work\/machine-production"/);
   assert.match(api,/savePersonnelProductionEntry/);
 });
+test("account approval and device approval are independent administrator decisions",()=>{
+  assert.match(api,/admin\/accounts\/:userId\/decision/);
+  assert.match(api,/PERSONNEL_ACCOUNT_APPROVED|PERSONNEL_ACCOUNT_"\+\(decision/);
+  const from=api.indexOf('app.post("/api/employee-portal/admin/devices/:id/decision"');
+  assert.ok(from>0);
+  const deviceDecision=api.slice(from);
+  assert.doesNotMatch(deviceDecision,/SET activated_at=/);
+  assert.match(api,/status='REVOKED'/);
+});
+test("production request validates model and machine, uses stable idempotency key",()=>{
+  const runtime=read("src/production-runtime-v2.ts");
+  assert.match(runtime,/Uretim islem kimligi gerekli/);
+  assert.match(runtime,/machine_shift_defaults WHERE main_company_slug/);
+  assert.match(runtime,/model_records WHERE main_company_slug/);
+  assert.match(runtime,/const recordId="personnel-"/);
+  assert.match(runtime,/reused:true/);
+});
 test("disabled manager approval does not leak into old phone/session approvals",()=>{
   assert.match(security,/LOGIN_POLICY_NO_MANAGER_REVIEW/);
   assert.match(security,/phoneFactorAllowed/);

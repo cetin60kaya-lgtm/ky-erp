@@ -781,6 +781,7 @@ async function saveEntry(c: Context<AppEnv>, body: Row, forcedId = "") {
     submittedByUserId: text(body.submittedByUserId),
     submittedFromDeviceId: text(body.submittedFromDeviceId),
     source: text(body.portalSource) === "PERSONNEL_PORTAL" ? "PERSONNEL_PORTAL" : "PRODUCTION_V2",
+    requestId: text(body.requestId),
   };
   const duplicate = model.productionEntries?.some(
     (row: Row) =>
@@ -792,7 +793,7 @@ async function saveEntry(c: Context<AppEnv>, body: Row, forcedId = "") {
       normalize(row.operatorName) === normalize(operatorName) &&
       normalize(row.shift) === normalize(shift),
   );
-  if (duplicate) throw new Error("Aynı üretim kaydı daha önce girilmiş görünüyor.");
+  if (duplicate && text(body.portalSource) !== "PERSONNEL_PORTAL") throw new Error("Aynı üretim kaydı daha önce girilmiş görünüyor.");
 
   const existing = forcedId
     ? await c.env.DB.prepare(
@@ -877,15 +878,41 @@ export async function savePersonnelProductionEntry(c: Context<AppEnv>, context: 
   const printDefectQty = Number(input.printDefectQty || 0);
   if (![quantity,fabricDefectQty,printDefectQty].every(Number.isInteger) || quantity <= 0 || fabricDefectQty < 0 || printDefectQty < 0 || fabricDefectQty + printDefectQty > quantity) throw new Error("Uretim ve sakat adetlerini kontrol edin.");
   const shift = text(input.shift) === "Gece" ? "Gece" : "Gündüz";
-  return saveEntry(c, {
-    mainCompanySlug: company, modelId: text(input.modelId),
-    machineId, machineName: machineId, operatorName,
+  const modelId=text(input.modelId), printRegion=text(input.printRegion || "Ön").slice(0,80);
+  const requestId=text(input.requestId).toLowerCase();
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(requestId))throw new Error("Uretim islem kimligi gerekli.");
+  const [machine,model]=await Promise.all([
+    c.env.DB.prepare("SELECT id,machine_no,machine_name FROM machine_shift_defaults WHERE main_company_slug=? AND deleted_at IS NULL AND COALESCE(is_active,1)<>0 AND (id=? OR machine_no=?) LIMIT 1").bind(company,machineId,machineId).first<Row>(),
+    c.env.DB.prepare("SELECT id,model_name,status FROM model_records WHERE main_company_slug=? AND id=? AND deleted_at IS NULL LIMIT 1").bind(company,modelId).first<Row>(),
+  ]);
+  if(!machine)throw new Error("Atanmis makine bu firmada aktif degil.");
+  if(!model || ["COMPLETED","CLOSED","CANCELLED","TAMAMLANDI","KAPALI","IPTAL"].includes(normalize(model.status)))throw new Error("Model acik ve bu firmaya ait olmalidir.");
+  const machineName=text(machine.machine_name || machine.machine_no || machine.id);
+  // Tek islem kimligi sabit bir canonical production_records ID'ye donusur.
+  // Baglanti koparsa AYNI requestId bir kez daha gonderilebilir; ikinci uretim acilmaz.
+  const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode([company,text(context.userId),text(context.deviceId),requestId].join("|")));
+  const recordId="personnel-"+Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("").slice(0,48);
+  const existing=await c.env.DB.prepare("SELECT id,model_id,model_name,machine_name,total_quantity,raw FROM production_records WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1").bind(recordId,company).first<Row>();
+  if(existing){
+    const raw=objectOf(existing.raw);
+    if(text(raw.requestId)!==requestId || text(existing.model_id)!==modelId || num(existing.total_quantity)!==quantity ||
+       num(raw.fabricDefectQty)!==fabricDefectQty || num(raw.printDefectQty)!==printDefectQty ||
+       text(raw.shift)!==shift || text(raw.printRegion)!==printRegion ||
+       text(raw.employeeId)!==employeeId || text(raw.submittedByUserId)!==text(context.userId))
+       throw new Error("Islem kimligi farkli uretim bilgileri icin kullanilamaz.");
+    return {id:recordId,modelId,modelName:text(existing.model_name),quantity,
+      netQty:quantity-fabricDefectQty-printDefectQty,machineId,machineName,shift,printArea:printRegion,reused:true};
+  }
+  const saved=await saveEntry(c, {
+    mainCompanySlug: company, modelId, requestId,
+    machineId, machineName, operatorName,
     quantity, fabricDefectQty, printDefectQty,
-    printRegion: text(input.printRegion || "Ön").slice(0,80), shift,
+    printRegion, shift,
     date: text(context.date), employeeId,
     submittedByUserId: text(context.userId),submittedFromDeviceId:text(context.deviceId),
     portalSource: "PERSONNEL_PORTAL",
-  });
+  },recordId);
+  return {...saved,requestId,reused:false};
 }
 
 function reportFilter(rows: Row[], query: Row) {

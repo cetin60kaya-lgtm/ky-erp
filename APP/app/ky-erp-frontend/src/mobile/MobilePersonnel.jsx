@@ -56,7 +56,14 @@ export default function MobilePersonnel() {
     if(!window.confirm("Bu modele "+total+" adet uretim kaydi islenecek. Onayliyor musunuz?"))return;
     setLoading(true);setMessage("");
     try {
-      const saved=await personnelRequest("employee-portal/work/machine-production",{method:"POST",device,body:{modelId:model,quantity:total,fabricDefectQty:fabricQty,printDefectQty:printQty,shift,printRegion:region}});
+      const payload={modelId:model,quantity:total,fabricDefectQty:fabricQty,printDefectQty:printQty,shift,printRegion:region};
+      const pendingKey="kyerp-personnel-production-pending";
+      const fingerprint=JSON.stringify({userId:account.userId,deviceId:device.deviceId,payload});
+      let old=null;try{old=JSON.parse(sessionStorage.getItem(pendingKey)||"null");}catch{old=null;}
+      const requestId=old?.fingerprint===fingerprint&&old?.requestId?old.requestId:crypto.randomUUID();
+      sessionStorage.setItem(pendingKey,JSON.stringify({fingerprint,requestId}));
+      const saved=await personnelRequest("employee-portal/work/machine-production",{method:"POST",device,body:{...payload,requestId}});
+      sessionStorage.removeItem(pendingKey);
       setQuantity("");setFabric("0");setPrint("0");setModel("");
       await reload();
       setMessage("Üretim kaydı tamamlandı: "+saved.modelName+" · "+saved.quantity+" adet. Kayıt ortak modele işlendi.");
@@ -74,8 +81,9 @@ export default function MobilePersonnel() {
     {message?<div style={{...box,color:"#a14419"}} role="status">{message}</div>:null}
     {!account?<div style={box}>{loading?"Yukleniyor...":"Hesap acilamadi. Firma personel yetkilisine basvurun."}<p><button type="button" onClick={reload}>Yenile</button></p></div>:null}
     {account&&!authorized?<section style={box}>
-      <h3 style={{marginTop:0}}>İlk Cihaz Onayı</h3>
+      <h3 style={{marginTop:0}}>Hesap ve Cihaz Onayı</h3>
       <p style={subtle}>Personel hesabı: {account.occupation}. Bilgileriniz yalnızca onaylı cihazınızda açılır.</p>
+      {!account.accountApproved?<p><strong>Personel hesabınız ayrıca onay bekliyor.</strong> Cihaz onaylanmış olsa da hesap onayı olmadan bilgiler açılmaz.</p>:null}
       {device&&activeDevice?.status==="PENDING"?<p><strong>Cihazınız onay bekliyor.</strong> Firma yetkilinizden onay isteyin.</p>:null}
       {device&&activeDevice?.status==="APPROVED"&&account.accountApproved?<p>Cihaz onaylandı. <button type="button" onClick={reload}>Bilgilerimi Aç</button></p>:null}
       {device&&["REVOKED","DENIED"].includes(activeDevice?.status)?<p>Eski cihaz yetkisi sona erdi. Firma yetkilinizle gorusup yeni cihaz kaydi olusturun.</p>:null}

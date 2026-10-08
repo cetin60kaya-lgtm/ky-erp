@@ -32,6 +32,13 @@ test("device public key registered while private key never exported",()=>{
   assert.match(api,/KYERP-EMP-DEVICE-V1/);
   assert.match(api,/X-KYERP-Employee-Signature/);
 });
+test("separate staff/account approval and safe production retries",()=>{
+  assert.match(panel,/decideAccount/);
+  assert.match(panel,/Hesabı Onayla/);
+  assert.match(panel,/Cihazı Onayla/);
+  assert.match(staff,/kyerp-personnel-production-pending/);
+  assert.match(staff,/requestId/);
+});
 test("company users are separated from employee access",()=>{
   assert.match(admin,/AdminCompanyPersonnelPanel/);
   assert.match(panel,/employeeId:selected/);

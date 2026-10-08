@@ -92,7 +92,7 @@ async function prove(c:any) {
   if(!(await ready(c)))return {response:err(c,503,"PERSONNEL_SCHEMA_NOT_READY","0060 personel erisim veritabani gecisi gereklidir.")};
   const ctx=await ownAccount(c);
   if(!ctx)return {response:err(c,403,"PERSONNEL_ACCOUNT_REQUIRED","Firma personel erisim hesabi bulunamadi.")};
-  if(!text(ctx.account.activated_at))return {response:err(c,403,"PERSONNEL_NOT_APPROVED","Ilk personel ve cihaz onayi bekleniyor.")};
+  if(!text(ctx.account.activated_at))return {response:err(c,403,"PERSONNEL_NOT_APPROVED","Personel hesabi onayi bekleniyor.")};
   const device=await authorizedDevice(c,ctx);
   if(!device)return {response:err(c,403,"PERSONNEL_DEVICE_REQUIRED","Bu cihaz onayli degil veya cihaz imzasi dogrulanamadi.")};
   return {...ctx,device};
@@ -219,6 +219,32 @@ export function registerEmployeePortalRoutes(app:any) {
     await audit(c,actor.user.id,uid,actor.company,"PERSONNEL_ACCOUNT_CREATED",{employeeId,occupation,machineId});
     return ok(c,{id,userId:uid,username:local,loginUsername:username,occupation,accountApproved:false});
   });
+  // Personel hesabinin ilk onayi cihaz onayindan AYRI ve yalniz firma yoneticisine aittir.
+  app.post("/api/employee-portal/admin/accounts/:userId/decision",async(c:any)=>{
+    if(!(await ready(c)))return err(c,503,"PERSONNEL_SCHEMA_NOT_READY","0060 semasi gerekli.");
+    const body=await bodyOf(c),actor=await manager(c,body.companySlug,true);
+    if(!actor)return err(c,403,"COMPANY_ADMIN_REQUIRED","Firma yetkilisi gerekli.");
+    const decision=roleOf(body.decision);
+    if(!["APPROVE","REVOKE"].includes(decision))return err(c,400,"ACCOUNT_DECISION_INVALID","Hesabi onaylama veya onayi kaldirma karari gerekli.");
+    const target=await c.env.DB.prepare("SELECT id,auth_user_id,is_active,activated_at FROM ky_employee_portal_accounts WHERE auth_user_id=? AND main_company_slug=? LIMIT 1").bind(c.req.param("userId"),actor.company).first();
+    if(!target)return err(c,404,"PERSONNEL_ACCOUNT_NOT_FOUND","Firma personel hesabi bulunamadi.");
+    if(decision==="APPROVE"&&!Number(target.is_active))return err(c,409,"PERSONNEL_ACCOUNT_INACTIVE","Pasif personel hesabi onaylanamaz.");
+    const timestamp=nowIso();
+    if(decision==="APPROVE"){
+      const result=await c.env.DB.prepare("UPDATE ky_employee_portal_accounts SET activated_at=?,approved_by_user_id=?,updated_at=? WHERE id=? AND main_company_slug=? AND activated_at IS NULL").bind(timestamp,actor.user.id,timestamp,target.id,actor.company).run();
+      if(Number(result?.meta?.changes||0)!==1)return err(c,409,"ACCOUNT_STATE_CHANGED","Hesap zaten onayli veya durumu degismis.");
+    }else{
+      // Hesap onayi geri alindiginda mevcut cihazlar da iptal edilir; tekrar onay atlanamaz.
+      if(!text(target.activated_at))return err(c,409,"ACCOUNT_STATE_CHANGED","Hesap zaten onaysiz.");
+      await c.env.DB.batch([
+        c.env.DB.prepare("UPDATE ky_employee_portal_accounts SET activated_at=NULL,approved_by_user_id=NULL,updated_at=? WHERE id=? AND main_company_slug=?").bind(timestamp,target.id,actor.company),
+        c.env.DB.prepare("UPDATE ky_employee_portal_devices SET status='REVOKED',revoked_at=?,updated_at=? WHERE account_user_id=? AND main_company_slug=? AND status='APPROVED'").bind(timestamp,timestamp,target.auth_user_id,actor.company),
+        c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=COALESCE(revoked_at,?) WHERE user_id=? AND revoked_at IS NULL").bind(timestamp,target.auth_user_id),
+      ]);
+    }
+    await audit(c,actor.user.id,target.auth_user_id,actor.company,"PERSONNEL_ACCOUNT_"+(decision==="APPROVE"?"APPROVED":"APPROVAL_REVOKED"));
+    return ok(c,{userId:target.auth_user_id,accountApproved:decision==="APPROVE"});
+  });
   app.patch("/api/employee-portal/admin/accounts/:userId",async(c:any)=>{
     if(!(await ready(c)))return err(c,503,"PERSONNEL_SCHEMA_NOT_READY","0060 semasi gerekli.");
     const body=await bodyOf(c),actor=await manager(c,body.companySlug,true);if(!actor)return err(c,403,"COMPANY_ADMIN_REQUIRED","Firma sahibi gerekli.");
@@ -268,7 +294,7 @@ export function registerEmployeePortalRoutes(app:any) {
     const expected=decision==="REVOKE"?"APPROVED":"PENDING",timestamp=nowIso();
     const result=await c.env.DB.prepare("UPDATE ky_employee_portal_devices SET status=?,approved_by_user_id=?,approved_at=CASE WHEN ?='APPROVED' THEN ? ELSE approved_at END,revoked_at=CASE WHEN ?='REVOKED' THEN ? ELSE revoked_at END,updated_at=? WHERE id=? AND main_company_slug=? AND status=?").bind(wanted,actor.user.id,wanted,timestamp,wanted,timestamp,timestamp,device.id,actor.company,expected).run();
     if(Number(result?.meta?.changes||0)!==1)return err(c,409,"DEVICE_STATE_CHANGED","Cihaz karari daha once degistirilmis.");
-    if(wanted==="APPROVED")await c.env.DB.prepare("UPDATE ky_employee_portal_accounts SET activated_at=COALESCE(activated_at,?),approved_by_user_id=COALESCE(approved_by_user_id,?),updated_at=? WHERE auth_user_id=? AND main_company_slug=?").bind(timestamp,actor.user.id,timestamp,device.account_user_id,actor.company).run();
+    // Cihaz karari hesap onayini DEGISTIRMEZ. Iki onay birbirinden bagimsizdir.
     await audit(c,actor.user.id,device.account_user_id,actor.company,"PERSONNEL_DEVICE_"+wanted,{deviceId:device.id,kind:device.kind});
     return ok(c,{id:device.id,status:wanted,kind:device.kind});
   });
