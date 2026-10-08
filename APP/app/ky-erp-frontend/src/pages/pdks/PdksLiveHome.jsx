@@ -2,21 +2,27 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getPdksLiveDashboard } from "../../services/pdksApi";
 import "./PdksLiveHome.css";
 
-const fmtDate = (value) => {
-  if (!value) return "-";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" });
+const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+const SYNC_WINDOW_MS = 10 * 60 * 1000;
+const recent = (value, windowMs) => {
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) && timestamp <= Date.now() + 60000 && Date.now() - timestamp < windowMs;
 };
-const isOnline = (value) => Boolean(value) && Date.now() - new Date(value).getTime() < 300000;
-
-const QUICK = [
-  ["giris-cikislar", "Giriş / Çıkış", "Son kart hareketleri ve personel geçişleri", "↔"],
-  ["puantaj-sonuclari", "Puantaj Özeti", "Çalışma, eksik basım, geç/erken ve mesai", "▦"],
-  ["personel-bilgileri", "Personel", "İK ana kaynağındaki kartlı çalışanlar", "♟"],
-  ["izinler", "İzinler", "İK izin kaydının puantaj yansıması", "◷"],
-  ["cihaz-baglantilari", "Cihaz Sağlığı", "Windows Agent ve terminal bağlantıları", "▣"],
-  ["denetim-yillik-temp", "Yıllık Denetim", "Kart ve puantaj denetim paketini hazırla", "✓"],
-]
+const fmt = value => {
+  if (!value) return "Henüz yok";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Bilinmiyor" : date.toLocaleString("tr-TR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
+};
+const initials = name => String(name || "?").trim().split(/\s+/).slice(0, 2).map(part => part[0] || "").join("").toLocaleUpperCase("tr-TR");
+const ACTIONS = [
+  ["giris-cikislar", "Giriş / Çıkış", "Hareketleri incele"],
+  ["personel-bilgileri", "Personel", "Kart ve özlük referansı"],
+  ["puantaj", "Puantaj", "Aylık çalışma kontrolü"],
+  ["izinler", "İzinler", "İzin ve talepler"],
+  ["cihaz-baglantilari", "Cihaz Merkezi", "Terminal ve ajan"],
+  ["raporlar", "Raporlar", "Devam ve denetim"],
+];
 
 export default function PdksLiveHome({ activeMainCompany, openModule }) {
   const company = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
@@ -33,98 +39,121 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
       setData(result || { metrics: {}, events: [], liveCards: [], devices: [] });
       setLastRefresh(new Date());
     } catch (cause) {
-      setError(cause?.message || "Canlı PDKS verisi alınamadı.");
+      setError(cause?.message || "PDKS özeti alınamadı.");
     } finally {
       setBusy(false);
     }
   }, [company]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    const id = window.setInterval(load, 60000);
-    return () => window.clearInterval(id);
+    const timer = window.setInterval(() => { void load(); }, 60000);
+    return () => window.clearInterval(timer);
   }, [load]);
 
-  const metrics = useMemo(() => data?.metrics || {}, [data]);
-  const cards = useMemo(() => [
-    ["Bugün Devamsız", metrics.absent || 0, "bad", "⊘", "raporlar"],
-    ["Geç Kalan", metrics.late || 0, "warn", "◷", "raporlar"],
-    ["Aktif Personel", metrics.activePersonnel || 0, "ok", "♟", "personel-bilgileri"],
-    ["İzinli Personel", metrics.permitted || 0, "accent", "⌛", "izinler"],
-    ["İçerideki Personel", metrics.inside || 0, "teal", "↪", "giris-cikislar"],
-    ["Eksik Basım", metrics.missingPunch || 0, "violet", "!", "puantaj"],
-  ], [metrics]);
-
-  const go = (tabKey) => openModule?.("pdks", { tabKey });
+  const metrics = data?.metrics || {};
+  const devices = Array.isArray(data?.devices) ? data.devices : [];
+  const activeDevices = devices.filter(row => Number(row.active) !== 0);
+  const onlineCount = activeDevices.filter(row => recent(row.lastSeenAt, ONLINE_WINDOW_MS)).length;
+  const lastSyncedDevice = activeDevices
+    .filter(row => row.lastSyncAt)
+    .sort((a,b) => new Date(b.lastSyncAt).getTime() - new Date(a.lastSyncAt).getTime())[0];
+  const hasRecentSync = activeDevices.some(row =>
+    recent(row.lastSeenAt, ONLINE_WINDOW_MS) && recent(row.lastSyncAt, SYNC_WINDOW_MS));
+  const freshness = hasRecentSync ? "fresh" : onlineCount ? "warning" : "offline";
+  const stateLabel = hasRecentSync ? "Senkron güncel" : onlineCount ? "Ajan bağlı, aktarım doğrulanmadı" : "Veri güncelliği doğrulanmadı";
+  const checkedValue = (value) => hasRecentSync ? Number(value || 0).toLocaleString("tr-TR") : "—";
+  const summary = useMemo(() => [
+    {label:"Aktif personel",value:Number(metrics.activePersonnel || 0).toLocaleString("tr-TR"),hint:"İK ana kaynağı",to:"personel-bilgileri",key:"people"},
+    {label:"İçeride",value:checkedValue(metrics.inside),hint:"Doğrulanmış geçiş",to:"giris-cikislar",key:"inside"},
+    {label:"Geç gelen",value:checkedValue(metrics.late),hint:"Seçili gün",to:"giris-cikislar",key:"late"},
+    {label:"Eksik kart",value:checkedValue(metrics.missingPunch),hint:"Düzeltme bekleyen",to:"puantaj",key:"missing"},
+    {label:"İzinli",value:Number(metrics.permitted || 0).toLocaleString("tr-TR"),hint:"Onaylı izinler",to:"izinler",key:"leave"},
+    {label:"Devamsızlık",value:checkedValue(metrics.absent),hint:"Senkron sonrası kesinleşir",to:"raporlar",key:"absent"},
+  ], [metrics, hasRecentSync]);
+  const go = tabKey => openModule?.("pdks", { tabKey });
+  const liveCards = Array.isArray(data?.liveCards) ? data.liveCards : [];
 
   return (
     <div className="plh-page">
       <header className="plh-hero">
         <div>
-          <span className="plh-kicker">KY ERP · PDKS CANLI MERKEZ</span>
-          <h1>Canlı Geçişler</h1>
-          <p>Kart cihazı, Windows Agent, D1 ve İK tek veri akışında. Sayfa açıkken her dakika otomatik yenilenir.</p>
+          <span className="plh-kicker">KY ERP / PERSONEL DEVAM KONTROL</span>
+          <h1>Günlük kontrol merkezi</h1>
+          <p>Personel, kart geçişleri ve cihaz sağlığını tek ekrandan takip edin.</p>
         </div>
-        <div className="plh-livebox">
-          <i className={busy ? "pulse" : ""} />
-          <span>{busy ? "Yenileniyor" : "Canlı"}</span>
-          <small>{lastRefresh ? `Son: ${lastRefresh.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}` : "Bağlanıyor"}</small>
-          <button type="button" onClick={load} disabled={busy}>Yenile</button>
+        <div className="plh-toolbar">
+          <div className={"plh-sync-status "+freshness} role="status">
+            <i aria-hidden="true"/>
+            <div><strong>{stateLabel}</strong><small>Son terminal aktarımı: {fmt(lastSyncedDevice?.lastSyncAt)}</small></div>
+          </div>
+          <button type="button" onClick={load} disabled={busy}>{busy ? "Yenileniyor..." : "Yenile"}</button>
         </div>
       </header>
 
-      {error ? <div className="plh-error">{error}</div> : null}
+      {!hasRecentSync ? (
+        <div className="plh-warning" role="status">
+          <strong>Güncel kart verisi doğrulanamadı.</strong>
+          <span>Terminal ya da Windows ajanı son 10 dakika içinde doğrulanmış senkron bildirmedi. Devamsızlık, içerideki kişi, geç gelen ve eksik basım sayıları kesin bilgi olarak gösterilmiyor.</span>
+          <button type="button" onClick={() => go("cihaz-baglantilari")}>Bağlantıyı İncele</button>
+        </div>
+      ) : null}
+      {error ? <div className="plh-error" role="alert">{error}</div> : null}
 
-      <section className="plh-metrics">
-        {cards.map(([label, value, tone, icon, tab]) => (
-          <button type="button" key={label} className={`plh-metric ${tone}`} onClick={() => go(tab)}>
-            <b className="plh-metric-icon">{icon}</b>
-            <span><strong>{Number(value).toLocaleString("tr-TR")}</strong><small>{label}</small></span>
-            <em>›</em>
+      <section className="plh-metrics" aria-label="Günlük özet">
+        {summary.map(card => (
+          <button type="button" className={"plh-metric "+card.key} key={card.key} onClick={() => go(card.to)}>
+            <span className="plh-metric-label">{card.label}</span>
+            <strong>{card.value}</strong>
+            <small>{card.hint}</small>
           </button>
         ))}
       </section>
 
-      <section className="plh-section">
-        <div className="plh-title"><div><span>GERÇEK ZAMANLI</span><h2>Son Geçişler</h2></div><button type="button" onClick={() => go("giris-cikislar")}>Tümünü Aç</button></div>
-        <div className="plh-live-grid">
-          {(data.liveCards || []).slice(0, 10).map((row) => (
-            <button type="button" className="plh-person-card" key={`${row.employeeId}-${row.lastTime}`} onClick={() => go("giris-cikislar")}>
-              <div className="plh-avatar">{String(row.fullName || "?").split(/\s+/).slice(0,2).map((v) => v[0]).join("")}</div>
-              <div><strong>{row.fullName}</strong><small>{row.department || "Bölüm yok"}</small><span className={row.inside ? "in" : "out"}>{row.inside ? "Giriş / İçeride" : "Çıkış"} · {row.lastTime}</span></div>
+      <div className="plh-content">
+        <section className="plh-section plh-activity">
+          <header className="plh-title">
+            <div><span>PERSONEL HAREKETLERİ</span><h2>Son geçişler</h2></div>
+            <button type="button" onClick={() => go("giris-cikislar")}>Tüm hareketler</button>
+          </header>
+          <div className="plh-movement-head"><span>Personel</span><span>Bölüm</span><span>Son saat</span><span>Durum</span></div>
+          {liveCards.length ? liveCards.slice(0, 12).map((row,index) => (
+            <button type="button" className="plh-movement" key={row.employeeId || String(index)} onClick={() => go("giris-cikislar")}>
+              <span className="plh-movement-person"><b className="plh-avatar">{initials(row.fullName)}</b><strong>{row.fullName || "Personel"}</strong></span>
+              <span className="plh-movement-muted">{row.department || "—"}</span>
+              <span className="plh-clock">{row.lastTime || "—"}</span>
+              <span className={"plh-movement-state "+(row.inside?"inside":"outside")}>{row.inside?"İçeride":"Çıkış"}</span>
             </button>
-          ))}
-          {!data.liveCards?.length ? <div className="plh-empty">Bugün henüz canlı kart geçişi yok.</div> : null}
-        </div>
-      </section>
-
-      <div className="plh-two">
-        <section className="plh-section">
-          <div className="plh-title"><div><span>TEK TIK</span><h2>Hızlı İşlemler</h2></div></div>
-          <div className="plh-quick">
-            {QUICK.map(([tab, label, hint, icon], index) => (
-              <button type="button" key={`${tab}-${index}`} onClick={() => go(tab)}>
-                <i>{icon}</i><span><strong>{label}</strong><small>{hint}</small></span><b>›</b>
-              </button>
-            ))}
-          </div>
+          )) : <div className="plh-empty">{hasRecentSync ? "Bugün henüz kart hareketi bulunamadı." : "Son hareketler için terminal aktarımının doğrulanması bekleniyor."}</div>}
         </section>
 
-        <section className="plh-section plh-device-section">
-          <div className="plh-title"><div><span>AGENT / TERMİNAL</span><h2>Cihaz Sağlığı</h2></div><button type="button" onClick={() => go("cihaz-baglantilari")}>Cihaz Merkezi</button></div>
-          <div className="plh-device-summary">
-            <div><strong>{metrics.onlineDevices || 0}</strong><span>Çevrimiçi</span></div>
-            <div><strong>{Math.max(0, (metrics.deviceCount || 0) - (metrics.onlineDevices || 0))}</strong><span>Çevrimdışı</span></div>
-            <div><strong>{metrics.deviceCount || 0}</strong><span>Toplam</span></div>
-          </div>
-          <div className="plh-device-list">
-            {(data.devices || []).slice(0, 8).map((row) => (
-              <div key={row.id}><i className={Number(row.active) === 0 ? "passive" : isOnline(row.lastSeenAt) ? "online" : "offline"} /><span><strong>{row.deviceLabel}</strong><small>{row.machineName || "Bilgisayar adı yok"}</small></span><em>{row.lastSeenAt ? fmtDate(row.lastSeenAt) : "Bağlanmadı"}</em></div>
-            ))}
-            {!data.devices?.length ? <div className="plh-empty">Henüz yetkilendirilmiş terminal yok.</div> : null}
-          </div>
-        </section>
+        <aside className="plh-side">
+          <section className="plh-section plh-device-section">
+            <header className="plh-title"><div><span>BAĞLANTI</span><h2>Terminal & Ajan</h2></div><button type="button" onClick={() => go("cihaz-baglantilari")}>Yönet</button></header>
+            <div className="plh-device-summary">
+              <div><strong>{onlineCount}</strong><span>Çevrimiçi</span></div>
+              <div><strong>{Math.max(0,activeDevices.length-onlineCount)}</strong><span>Çevrimdışı</span></div>
+              <div><strong>{devices.length}</strong><span>Tanımlı</span></div>
+            </div>
+            <div className="plh-device-list">
+              {devices.slice(0,5).map(row => <div key={row.id}>
+                <i className={Number(row.active)===0?"passive":recent(row.lastSeenAt,ONLINE_WINDOW_MS)?"online":"offline"}/>
+                <span><strong>{row.deviceLabel || "Cihaz"}</strong><small>{row.machineName || "Bilgisayar adı yok"}</small></span>
+                <em>{row.lastSeenAt ? fmt(row.lastSeenAt) : "Bağlanmadı"}</em>
+              </div>)}
+              {!devices.length ? <div className="plh-empty">Henüz kayıtlı cihaz yok.</div> : null}
+            </div>
+          </section>
+
+          <section className="plh-section plh-actions">
+            <header className="plh-title"><div><span>TEK TIK</span><h2>Hızlı erişim</h2></div></header>
+            <div className="plh-quick">
+              {ACTIONS.map(([tab,label,hint]) => <button type="button" key={tab} onClick={()=>go(tab)}><span><strong>{label}</strong><small>{hint}</small></span><b aria-hidden="true">→</b></button>)}
+            </div>
+          </section>
+        </aside>
       </div>
+      <p className="plh-footnote">Web PDKS; masaüstünün senkron görünümüdür. Tarayıcı yenilenmesi, terminalden yeni kayıt alındığı anlamına gelmez.{lastRefresh ? " Son web kontrolü: "+lastRefresh.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"}) : ""}</p>
     </div>
   );
 }
