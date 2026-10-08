@@ -31,9 +31,14 @@ const route=(preview)=>{
 const fresh=(path,params)=>apiGet(path,params,{forceFresh:true,cache:false});
 const arr=(x)=>Array.isArray(x)?x:[];
 const same=(a,b)=>String(a??"")===String(b??"");
-const ensureReadback=async(preview)=>{
+const ensureReadback=async(preview,accepted)=>{
   const {id,payload:p,company}=preview;
   const companyParams={mainCompanyId:company};
+  // A newly created record must be the exact row returned by the server,
+  // not a different older row with matching employee/date/amount fields.
+  const created=new Set(["work-group","personnel-group","service","holiday","leave","advance"]);
+  if(created.has(id) && !accepted?.id)throw new Error("PDKS_WRITE_RECEIPT_ID_MISSING");
+  const savedId=String(accepted?.id||"");
   if(["work-group","personnel-group","assign-work-group","assign-personnel-group",
       "service","assign-service"].includes(id)){
     const masters=canonical(await fresh(base+"/pdks-masters",companyParams));
@@ -47,19 +52,21 @@ const ensureReadback=async(preview)=>{
     };
     const [key,match]=lookup[id];
     if(!Array.isArray(masters?.[key]))throw new Error("PDKS_READBACK_SHAPE_INVALID");
-    return arr(masters[key]).some(match);
+    return arr(masters[key]).some((row)=>match(row) &&
+      (!created.has(id)||String(row.id)===savedId));
   }
   if(id==="holiday"){
     const rows=canonical(await fresh(base+"/operations/holidays",{...companyParams,year:p.date.slice(0,4)}));
     if(!Array.isArray(rows))throw new Error("PDKS_READBACK_SHAPE_INVALID");
-    return rows.some((row)=>same(row.date,p.date) && same(row.name,p.name)&&Boolean(row.halfDay)===p.halfDay);
+    return rows.some((row)=>same(row.id,savedId)&&same(row.date,p.date) &&
+      same(row.name,p.name)&&Boolean(row.halfDay)===p.halfDay);
   }
   if(id==="leave"){
     const rows=canonical(await fresh(base+"/operations/leaves",{
       ...companyParams,from:p.startDate,to:p.endDate,
     }));
     if(!Array.isArray(rows?.plans))throw new Error("PDKS_READBACK_SHAPE_INVALID");
-    return rows.plans.some((row)=>same(row.employeeId,p.employeeId)&&
+    return rows.plans.some((row)=>same(row.id,savedId)&&same(row.employeeId,p.employeeId)&&
       same(row.startDate,p.startDate)&&same(row.endDate,p.endDate)&&
       String(row.recordType||"").toLocaleUpperCase("tr-TR").includes(p.recordType));
   }
@@ -67,7 +74,7 @@ const ensureReadback=async(preview)=>{
     const [year,month]=p.date.split("-").map(Number);
     const rows=canonical(await fresh(base+"/operations/month",{...companyParams,year,month}));
     if(!Array.isArray(rows?.adjustments))throw new Error("PDKS_READBACK_SHAPE_INVALID");
-    return rows.adjustments.some((row)=>same(row.employeeId,p.employeeId)&&
+    return rows.adjustments.some((row)=>same(row.id,savedId)&&same(row.employeeId,p.employeeId)&&
       same(row.date,p.date)&&/AVANS/.test(String(row.adjustmentType).toLocaleUpperCase("tr-TR"))&&
       Number(row.amount)===p.amount);
   }
@@ -96,7 +103,7 @@ export async function submitAndVerify(preview){
   if(!accepted || typeof accepted!=="object")
     throw new Error("PDKS_WRITE_RESPONSE_INVALID");
   let verified=false;
-  try{verified=await ensureReadback(preview);}
+  try{verified=await ensureReadback(preview,accepted);}
   catch(error){
     const failure=new Error("Sunucu cevap verdi fakat geri okuma doğrulanamadı. Tekrar kayıt yapmayın; önce kaydı denetleyin.");
     failure.code="PDKS_READBACK_UNKNOWN";
