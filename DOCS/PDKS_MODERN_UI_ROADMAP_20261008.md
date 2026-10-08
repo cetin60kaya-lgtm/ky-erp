@@ -67,3 +67,26 @@ Base: `codex/model-uretim-kontrol-merkezi-final` @ `863fbef72e748cb9b0d7143366a4
 
 ### Üretim kapısı
 Tek başına frontend build başarılı olmak production merge için yeterli değildir. 15 genel KY ERP sözleşme hatası ayrıştırılmalı; baseline ile karşılaştırılıp PDKS kaynaklı regresyon olmadığı gösterilmeli. Üretim D1/DB/TNF erişimi/senkron değişikliği için daha sıkı kabul uygulanmalı.
+
+
+## 08.10.2026 — Masaüstü tamamlanan kaynak düzeltmeleri ve SON TEST
+
+**Ayrı kanonik desktop dalı:** `feature/pdks-desktop-navigation-fix-20261008` (kaynak `pdks-desktop`; web dalına desktop projesi kopyalanmadı).
+
+Son test HEAD: `80690d7ae4abe124bbc8be5b3ae22a837c25d8f0`.
+
+- `PersonelForm.ModernV2.cs`: Personel arama handler'ı tek sahibi olan ScopeFilterFix üzerinden çalışır; yinelenen olay kaldırıldı.
+- `PersonelForm.ScopeFilterFix.cs`: Aktif/Pasif/Tümü sırasında yerinde DataView filtreleme, yeniden giriş koruması, gecikmiş kişi seçimi sıfırlama, görünmez hücreye CurrentCell atamama.
+- `PersonelForm.Classic.cs`: Kart No / Ad Soyad / Grup dışında liste sütunları tek seferlik düzenlenir; sütunlar her DataBindingComplete'de yeniden gizlenmez.
+- `AttendancePlanDialog.cs`: tarih/dönem değişikliğinde 220ms debounce ile tekrarlı Firebird okuma azaltıldı. Önizle tıklamasında seçili son dönemin uygun personeli senkron tekrar kontrol edilir. Plan donmuş olur; Uygula yeni random plan üretmez.
+- `MonthlyAttendanceAdminForm.cs`: E kayıtlarının TNF'de kalma durumu sahte "✓ E TNF boş" olarak sunulmaz. Giriş/çıkış normal olsa bile yalnız TNF farkı "Sorunlular", "Sorunluları Seç" ve renk vurgusunda yer alır. Her şey read-only raporlama UI kontrolüdür; veri hiçbir testte değiştirilmedi.
+
+**DESEN üzerindeki KY-CONTROL v2 ajanıyla izole çalışma alanında nihai kanıt:**
+- `dotnet build KYERP.PDKS.sln -c Release -warnaserror`: BUILD_EXIT=0 / 0 Hata.
+- `dotnet run --project tools/ContractTests/ContractTests.csproj -c Release --no-build`: CONTRACT_EXIT=0, `KYERP PDKS CONTRACT TESTS OK`. Terminal duplicate guard, TNF import/export, attendance, payroll ve 2026 official payroll dahil bütün contract testleri PASS.
+- `dotnet run --project tools/ShellSmokeTest/ShellSmokeTest.csproj -c Release --no-build`: SHELL_EXIT=0, `KYERP PDKS 6.7.0 SHELL SMOKE OK`.
+- Agent OUTBOX günlükleri: `PDKS_DESKTOP_FINAL_GATE_20261008.log` ve önceki `PDKS_DESKTOP_LAST_VERIFY_20261008.log`.
+- Web son `npm run lint`, 9/9 dedicated test, `npm run build`: PASS. Drive: `PDKS_VERIFIED_WEB_LINT.log`, `PDKS_VERIFIED_WEB_PDKS_TEST.log`, `PDKS_VERIFIED_WEB_BUILD.log`.
+- Genel web tam testte 296 içinde 15 PDKS dışı sözleşme başarısızlığı devam ediyor (önceki baseline ile aynı sayı). Bu dal üzerinde bütün KY ERP temiz kabulü iddia edilmez.
+
+**Açık kabul kapıları:** Yaşayan Firebird/TNF verileriyle hiç yazmadan ekran/işlem ve gerçek cihaz E kanıtı doğrulaması, WinForms GUI üzerinden Active/Pasif hızlı geçiş ve aylık admin, .NET release publish + SDK paket doğrulama, web ERP production HEAD yeniden uzlaşması, rol yetki/kişisel bordro/PDF imza ve mobil Android/iOS gerçek cihaz testleri, desktop↔D1 tutarlılığı. Bu gerçekleşmeden "tamam" veya canlı deployment denmez. Remote/Desktop Commander sadece zorunlu işlemde; GitHub Actions bu etapta kullanılarak test yapılmadı.
