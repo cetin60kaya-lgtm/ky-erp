@@ -190,3 +190,55 @@ kapatmaz/değiştirmez.
 Terminal sürücülerinin tümü, canlı senkron consumer/ACK, bordro işlemleri,
 Android/iOS native build, production deploy ve gerçek uçtan uca kabul hâlâ AÇIK.
 Bu maddeler geçmeden uygulama bitmiş veya her markaya uyumlu ilan edilmeyecektir.
+
+
+## 11. Tek veri katmanı / 49 ekran bağımsız kaynak denetimi
+
+Kullanıcının **"yama değil tek düzen"** talebi nedeniyle yeni KY PDKS Unified
+ekranlarına eski WinForms form yığını veya `PdksPageV2` bileşeni konulmadı.
+Arayüzün tek kaynağı `PdksUnifiedApp.jsx`, menünün tek kaynağı
+`productModel.js`, ekran/veri eşlemesinin tek kaynağı
+`tabBindings.js`, ağ okuma oturumunun tek kaynağı
+`useUnifiedPdksData.js` ve API köprüsü `readService.js`'dir.
+
+**Gerçek API cevapları denetlendi:**
+
+- `/pdks-people`: kart/SGK kapsamındaki personel; tarihsel ay için işe giriş
+  ve işten ayrılış dönemi ayrı değerlendirilir. Kaynaksız ad/kart oluşturulmaz.
+- `/people/:id/attendance-v2`: seçili kişinin gerçek D1 aylık günleri ve
+  sunucunun çalışma özeti. Bu API şirket genelinde anlık terminal okuması
+  **değildir**; yanlışlıkla terminal canlı görüntüsü olarak sunulmaz.
+- `/pdks-masters`: `groups`, `services`, `personnelGroups` ve ilişkiler;
+  vardiya planının tek tek personel/gün atamasıyla aynı şey değildir.
+- `/operations/leaves`: `plans` ve `dayCount` alanları, yıllık izin kuralları.
+- `/operations/holidays`: resmî tatil dizisi.
+- `/operations/month`: yalnız **`adjustments` ve `close`**! Bunu aylık
+  puantaj diye yanlış göstermiyoruz.
+- `/operations/payroll`: **`lines`** (salary, overtimeAmount,
+  advanceAmount, deductionAmount, bankAmount, cashAmount, totalAmount);
+  **brüt ve yemek**, API'de açıkça gelmiyorsa asla uydurulmaz.
+- `/operations/audit-logs`: eylem, kullanıcı, ekran ve zaman.
+- `/people/:id/corrections`: seçili personele ait düzeltme geçmişi.
+
+**Aylık puantajın tek işlevsel okumayolu:** `readCompleteMonth` her personeli
+belirli eşzamanlılık sınırıyla `attendance-v2` üzerinden sorgular ve
+yalnız gerçek `summary` sonucunu kullanır. Kullanıcı açıkça "Aylık
+puantajı hazırla" dediğinde sorgu başlar; bütün personel cevapları
+alınmadan rapor tamamlandı denilmez. Eksik cevapta sıfır yazılmaz,
+kısmi ay raporu sunulmaz. Cloud kotasını korur.
+
+**Uygulanan menü davranışı:** arama, dönem, seçim, yenileme, gerçek
+kaynağa bağlı tablo, güvenli CSV, Personel 360°, dönem/geçmiş durumu,
+yetki daraltma, yükleniyor/hata/kaynak-biçimi ayırımı.
+Tek bir kaynak değişimi eski firma veya ay verisini yeni ekrana
+karıştıramaz. Denetim hesabı `requireFull` isteyen Cloud endpointlerine
+doğrudan istemci isteği göndermez; sunucuda ayrıca yetki denetimi şarttır.
+
+**Önemli tamamlanma sınırı:** 49 alt ekranın tamamı navigasyon olarak
+mevcuttur; gerçek okuma kaynağı bulunan ekranlar doğrulanan uçlara
+bağlanır. Yetkili Windows Agent veya API'si olmayan ekranlar
+"Entegrasyon bekliyor" durumundadır. Bu bir düzeltme değil,
+yanlış veriyle çalışma riskine karşı işlevin bilinçli olarak
+**kapalı** tutulmasıdır. Henüz **49/49 aktif işlev** denemez.
+Veri yazma ancak gerçek tek işlem motoru, ay kilidi, kayıt onayı,
+idempotency, FDB/TNF mutabakatı ve rollback testleri ardından açılır.
