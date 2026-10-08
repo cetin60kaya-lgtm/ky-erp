@@ -15,6 +15,21 @@ internal static class Program
             UnifiedLocalActionPlanner.AssertContract();
             return;
         }
+        if (args.Contains("--agent-schema-probe", StringComparer.OrdinalIgnoreCase))
+        {
+            var report = FirebirdSchemaProbe.RunAsync().GetAwaiter().GetResult();
+            var output = Environment.GetEnvironmentVariable("KY_PDKS_SCHEMA_PROBE_OUTPUT");
+            if (!string.IsNullOrWhiteSpace(output))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+                File.WriteAllText(output, report, new System.Text.UTF8Encoding(false));
+            }
+            else
+            {
+                Console.WriteLine(report);
+            }
+            return;
+        }
         if (args.Contains("--agent-once", StringComparer.OrdinalIgnoreCase))
         {
             _ = UnifiedSyncAgent.RunOnceAsync().GetAwaiter().GetResult();
