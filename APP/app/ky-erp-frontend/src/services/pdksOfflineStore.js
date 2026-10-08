@@ -69,9 +69,11 @@ async function queueAll() {
 }
 
 function networkFailure(error) {
-  if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
-  if (["NETWORK_ERROR", "REQUEST_TIMEOUT"].includes(String(error?.code || "").toUpperCase())) return true;
+  // Authorization and server errors must never fall back to cached data,
+  // even when the browser happens to report that it is offline.
   if (Number(error?.status || 0) >= 400) return false;
+  if (["NETWORK_ERROR", "REQUEST_TIMEOUT"].includes(String(error?.code || "").toUpperCase())) return true;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
   const message = String(error?.message || error || "").toLowerCase();
   return error instanceof TypeError || message.includes("network") || message.includes("fetch") || message.includes("internet") || message.includes("offline");
 }
