@@ -17,12 +17,13 @@ const ADDITIONAL = new Set([
 
 export function useUnifiedPdksData({
   company,year,month,personId,requirement,previewOnly=false,
-  auditHint=false,reloadToken=0,needsPeople=false,allowHeavy=false,
+  auditHint=false,reloadToken=0,needsPeople=false,allowHeavy=false,detailTab="identity",
 }) {
   const [profileState,setProfileState] = useState(empty());
   const [peopleState,setPeopleState] = useState(empty());
   const [attendanceState,setAttendanceState] = useState(empty());
   const [resourceState,setResourceState] = useState(empty());
+  const [detailState,setDetailState] = useState(empty());
 
   const profileKey=keyOf(company,reloadToken);
   const profileReady=profileState.key===profileKey && profileState.status==="ready";
@@ -112,6 +113,37 @@ export function useUnifiedPdksData({
   },[previewOnly,company,year,month,requirement,personId,peopleReady,
     profileReady,audit,resourceKey,allowHeavy]);
 
+  const detailSources={
+    attendance:"attendance",timesheet:"attendance",shift:"masters",
+    leave:"leaves",payroll:"payroll",history:"corrections",
+  };
+  const detailSource=detailSources[detailTab]||"unconnected";
+  const detailKey=keyOf(company,year,month,personId,detailSource,detailTab,reloadToken,audit);
+  const detailReady=detailState.key===detailKey && detailState.status==="ready";
+  const detailLoading=detailState.key===detailKey && detailState.status==="loading";
+  const detailError=detailState.key===detailKey && detailState.status==="error" ?
+    detailState.error:"";
+
+  useEffect(()=>{
+    if(previewOnly || !company || !personId || !profileReady ||
+       detailSource==="unconnected" || audit && !["attendance"].includes(detailSource))
+      return undefined;
+    let cancelled=false;
+    setDetailState({key:detailKey,status:"loading",payload:null,error:""});
+    import("./readService.js").then((api)=>
+      detailSource==="attendance"
+        ? api.readDays(personId,year,month,{mainCompanyId:company})
+        : api.readTabSource(detailSource,{mainCompanyId:company,year,month,personId},
+            {audit,isCancelled:()=>cancelled})
+    ).then((payload)=>{
+      if(!cancelled)setDetailState({key:detailKey,status:"ready",payload,error:""});
+    }).catch((error)=>{
+      if(!cancelled)setDetailState({key:detailKey,status:"error",payload:null,error:errorMessage(error)});
+    });
+    return ()=>{cancelled=true;};
+  },[previewOnly,company,personId,profileReady,detailKey,
+    detailSource,audit,year,month]);
+
   const peopleStatus=previewOnly?"preview":!company?"not-configured":
     !profileReady ? (profileState.key===profileKey?profileState.status:"loading") :
     !needsPeople?"idle" :
@@ -127,6 +159,10 @@ export function useUnifiedPdksData({
       attendanceState.status==="loading",
     resource:resourceReady?resourceState.payload:null,
     resourceReady,resourceLoading,resourceError,error,
+    detail:{status:detailReady?"ready":detailLoading?"loading":
+      detailError?"error":audit && detailSource!=="unconnected" &&
+      detailSource!=="attendance"?"forbidden":"unconnected",
+      payload:detailReady?detailState.payload:null,error:detailError},
     sourceReady: requirement==="people" ? peopleReady :
       requirement==="attendance" ? attendanceReady :
       ADDITIONAL.has(requirement) ? resourceReady : false,
