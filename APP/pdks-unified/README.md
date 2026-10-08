@@ -282,3 +282,53 @@ gerçek mutabakatı ve onaylı yazma, ücret/izin işlemlerinin güvenli apply
 sözleşmesi, Cloud olay ACK/recovery, Android APK/iOS IPA,
 production dağıtımı ve gerçek personel kaynağı kabulü.
 Bu adımlar tamamlanmadan tam canlı ürün kabulü yapılmaz.
+
+
+## 13. Yönetim işlemlerinin tek merkezi (Cloud yönetim alanı)
+
+Yeni kodun **tek işlem kataloğu**:
+`APP/app/ky-erp-frontend/src/pages/pdksUnified/operationCatalog.js`.
+Tüm modüllerde **aynı** `UnifiedOperationPanel.jsx` arayüzü ve
+`operationTransport.js` taşıması kullanılır; dağınık ayrı kaydet
+butonları ve görünmeyen otomatik kayıtlar bulunmaz.
+
+Desteklenen 11 Cloud D1 işlemi:
+1. Çalışma vardiyası tanımlama.
+2. Personel grubu tanımlama ve kart zorunluluğu kuralı.
+3. Personele çalışma vardiyası atama.
+4. Personele çalışma grubu atama.
+5. Servis hattı tanımlama.
+6. Personele servis hattı atama.
+7. Resmî tatil tanımı ve yarım gün çalışma kararı.
+8. İzin onayı/kaydı.
+9. Avans kaydı.
+10. Mesai kaydı: hafta içi/hafta sonu/tatil, %50/%100 açık oran,
+    onaylı saat ve tutar; oran mevcut şemada notta korunur.
+11. Kesinti kaydı.
+
+Her işlemde: firma, ilgili personel ve varsa aktif grup/servis
+bağlantısı doğrulanır; gerekçe, tarih ve tutar/saat koşulları
+zorunludur; dondurulmuş JSON önizlemesi verilir, kullanıcı
+`ONAYLIYORUM` yazar, **tek** POST yapılır ve önbelleksiz GET ile
+işlem sonucunun **aynı kayıt ID'sine** sahip olduğu doğrulanır.
+Mükerrer çalışma vardiyası/grup/servis kodu eski tanımı sessizce
+güncelleyemez. Bağlantı koptuğunda otomatik tekrar yoktur.
+Tarayıcı içinde aynı isteği yeniden gönderme engellenir.
+
+**D1 dışında asla otomatik mutabakat iddiası yok:**
+FDB, resmî yıllık TNF, fiziksel terminal RAW yalnız mevcut ayrı
+Windows hizmeti/yetkili denetim tarafından yönetilir. Uzak API'nin
+sunucu seviyesinde kalıcı idempotency, atomik denetim günlüğü,
+Firebird/TNF outbox/ACK ve geri alma motoru **henüz bağlı değildir**.
+Bu sebeple yüksek riskli işlemlerde kaydetme sonucu kesin değilse
+yeniden deneme yerine manuel kanıt kontrolü gerekir.
+
+**Test modunda** (`/pdks-studio`) bütün 11 işlem formunun
+alan/yerleşim testleri yapılır; hiçbir POST butonu etkinleşmez,
+sahte personel veya gerçek kart saati üretilmez. Bunun gerçek
+Cloud üzerinde yetkili kullanıcıyla yazma/readback kabul testi
+olmadığı açıkça gösterilir.
+
+**Canlıya geçiş:** Backend idempotency, API işlem yetkisi, audit,
+lokal kayıt mutabakatı ve sahada onay testleri geçmeden
+bu branch production'a dağıtılmaz.
