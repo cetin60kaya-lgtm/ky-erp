@@ -86,7 +86,7 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
   },[company,year]);
 
   useEffect(()=>{void loadCore()},[loadCore]);
-  useEffect(()=>{void loadPerson();return()=>{detailRequest.current++}},[loadPerson]);
+  useEffect(()=>{const token=detailRequest;void loadPerson();return()=>{token.current++}},[loadPerson]);
   useEffect(()=>{
     if(centerTab!=="izin"&&modal!=="leave")return;
     void loadLeaveContext();
