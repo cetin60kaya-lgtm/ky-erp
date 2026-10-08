@@ -259,11 +259,15 @@ export default function PdksUnifiedApp({
   const requirement=sourceForTab(tab.id,{audit:profileAudit});
   const needsPeople=tab.id==="today" || requirement==="people" ||
     requirement==="attendance" || requirement==="corrections";
+  // Personnel 360 reads only while its own detail panel is actually visible.
+  const detailVisible=section.id==="people" &&
+    ["people","cards","employment"].includes(tab.id);
   const monthKey=[company,period.year,period.month,requirement].join("|");
   const allowHeavy=requirement==="monthly-attendance" && monthlyRequestKey===monthKey;
   const data=useUnifiedPdksData({
     company,year:period.year,month:period.month,personId:selectedId,requirement,
-    previewOnly,auditHint:isAuditAccount,reloadToken,needsPeople,allowHeavy,detailTab:personTab,
+    previewOnly,auditHint:isAuditAccount,reloadToken,needsPeople,allowHeavy,
+    detailTab:detailVisible?personTab:"identity",
   });
   const selectedPerson=data.people.find((person)=>person.id===selectedId)||data.people[0]||null;
   const realAttendance=requirement==="attendance";
