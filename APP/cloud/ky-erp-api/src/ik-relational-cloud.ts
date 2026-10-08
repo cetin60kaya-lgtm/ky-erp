@@ -3299,6 +3299,15 @@ async function saveAdvancedLeaveRecordV2(c: Context<AppEnv>) {
     if (advanceAccess.response) return advanceAccess.response;
   }
   const planId = text(body.id) || crypto.randomUUID();
+  const existingPlan = body.id
+    ? await first(c, "SELECT main_company_id,employee_id,status FROM ik_leave_plans WHERE id=? LIMIT 1", [planId])
+    : null;
+  if (body.id && (!existingPlan || text(existingPlan.main_company_id) !== companyId)) {
+    return error(c, 404, "LEAVE_PLAN_NOT_FOUND", "Bu firmada düzenlenecek izin planı bulunamadı.");
+  }
+  if (existingPlan && text(existingPlan.employee_id) !== employeeId) {
+    return error(c, 409, "LEAVE_PERSON_IMMUTABLE", "İzin kaydının personeli değiştirilemez; mevcut izni iptal edip doğru kişi için yeni kayıt açın.");
+  }
   const marker = `ik-leave-plan:${planId}`;
   const documentNo = text(body.documentNo || body.documentId);
   const note = text(body.note);
@@ -3649,10 +3658,83 @@ async function cancelAdvancedLeave(c: Context<AppEnv>) {
   return okData(c, { id, cancelled: true });
 }
 
+const IK_RETIRED_WRITE_ROUTES = new Set([
+  "/api/ik/monthly-employees/leave-balances",
+  "/api/ik/leaves",
+  "/api/ik/advanced/payroll/override",
+]);
+
+/**
+ * All relational IK endpoints enter through a single session/tenant/capability gate.
+ * Parsing from a clone preserves the original JSON or multipart request for handlers.
+ * Historical direct-write endpoints are retired instead of bypassing the new ledger.
+ */
+async function ikRelationalAccess(c: Context<AppEnv>): Promise<Response | null> {
+  const method = c.req.method.toUpperCase();
+  const path = c.req.path;
+  const user = await getAuthenticatedUser(c);
+  if (!user) return error(c, 401, "UNAUTHORIZED", "İK için oturum doğrulanamadı.");
+  const role = financeKey(user.role);
+  const admin = ["SUPER_ADMIN","ADMIN"].includes(role);
+  const companyAdmin = role === "COMPANY_ADMIN";
+  const readOnly = method === "GET" || method === "HEAD" || path === "/api/ik/advanced/leave/preview";
+  let body: Row = {};
+  if (method !== "GET" && method !== "HEAD") {
+    const raw = c.req.raw.clone();
+    const type = text(c.req.header("content-type")).toLowerCase();
+    try {
+      if (type.includes("application/json")) {
+        const value = await raw.json() as unknown;
+        if (value && typeof value === "object" && !Array.isArray(value)) body = value as Row;
+      } else if (type.includes("multipart/form-data")) {
+        const form = await raw.formData();
+        for (const key of ["mainCompanyId","mainCompanySlug","main_company_id","main_company_slug"]) {
+          const value = form.get(key);
+          if (typeof value === "string") body[key] = value;
+        }
+      }
+    } catch { return error(c, 400, "IK_BODY_INVALID", "İK isteği okunamadı."); }
+  }
+  const sessionCompanyId = canonicalHrCompanyId(user.mainCompanySlug);
+  const requestedCompanyId = companyIdOf(c, body);
+  if (!admin && requestedCompanyId !== sessionCompanyId) {
+    return error(c, 403, "TENANT_FORBIDDEN", "Başka firmaya ait İK verisine erişim yok.");
+  }
+  const explicitTenant = text(body.mainCompanyId || body.mainCompanySlug || body.main_company_id || body.main_company_slug);
+  const headerTenant = text(c.req.header("X-KYERP-Tenant-Slug"));
+  if (explicitTenant && headerTenant && canonicalHrCompanyId(explicitTenant) !== canonicalHrCompanyId(headerTenant)) {
+    return error(c, 403, "TENANT_CONFLICT", "İstek firması ile oturum firma başlığı farklı.");
+  }
+  const permission = Array.isArray(user.permissions)
+    ? user.permissions.find((p: Row) => financeKey(p.moduleKey || p.module_key) === "IK")
+    : null;
+  const allowed = admin || companyAdmin || (readOnly
+    ? flag(permission?.canView) || flag(permission?.canUpdate) || flag(permission?.canCreate) || flag(permission?.canApprove)
+    : flag(permission?.canUpdate) || flag(permission?.canCreate));
+  if (!allowed) return error(c, 403, "IK_PERMISSION_REQUIRED", "Bu İK işlemi için yetkiniz yok.");
+
+  if (!readOnly && (
+    IK_RETIRED_WRITE_ROUTES.has(path) ||
+    /^\/api\/ik\/leaves\/[^/]+$/.test(path) ||
+    path === "/api/ik/advanced/payroll/override"
+  )) return error(c, 410, "IK_LEGACY_WRITE_RETIRED", "Eski İK yazma yolu kapatıldı. Güncel Personel / İzin / Bordro ekranını kullanın.");
+
+  const requiresApproval = path === "/api/ik/advanced/sgk/confirm"
+    || (path === "/api/ik/advanced/payroll/save" && financeKey(body.status) === "PAID")
+    || (path === "/api/ik/advanced/leave" && ["APPROVED","TAKEN"].includes(financeKey(body.status)))
+    || (path === "/api/ik/advanced/leave/cash-request" && financeKey(body.status) !== "" && financeKey(body.status) !== "REQUESTED");
+  if (requiresApproval && !(admin || companyAdmin || flag(permission?.canApprove))) {
+    return error(c, 403, "IK_APPROVAL_REQUIRED", "Bu işlem için İK onay yetkisi gerekir.");
+  }
+  return null;
+}
 function protect(handler: (c: Context<AppEnv>) => Promise<Response>) {
   return async (c: Context<AppEnv>) => {
-    try { return await handler(c); }
-    catch (cause) {
+    try {
+      const rejected = await ikRelationalAccess(c);
+      if (rejected) return rejected;
+      return await handler(c);
+    } catch (cause) {
       console.error(JSON.stringify({ message: "IK relational route failed", path: c.req.path, error: cause instanceof Error ? cause.message : String(cause) }));
       return error(c, 500, "IK_DATABASE_ERROR", "İK ilişkisel verisi işlenemedi.");
     }
