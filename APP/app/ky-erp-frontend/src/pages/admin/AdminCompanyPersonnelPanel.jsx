@@ -6,6 +6,7 @@ const rows=value=>Array.isArray(value)?value:Array.isArray(value?.items)?value.i
 export default function AdminCompanyPersonnelPanel({companySlug}) {
   const [employees,setEmployees]=useState([]);
   const [pending,setPending]=useState([]);
+  const [approvedDevices,setApprovedDevices]=useState([]);
   const [users,setUsers]=useState([]);
   const [selected,setSelected]=useState("");
   const [username,setUsername]=useState("");
@@ -23,6 +24,7 @@ export default function AdminCompanyPersonnelPanel({companySlug}) {
       const [result,allUsers]=await Promise.all([managerPersonnelRequest("employees",{companySlug}),listUsers()]);
       setEmployees(result.employees||[]);
       setPending(result.pendingDevices||[]);
+      setApprovedDevices(result.approvedDevices||[]);
       setUsers(rows(allUsers).filter(u=>String(u.mainCompanySlug)===String(companySlug)&&u.isActive!==false&&u.role!=="PERSONNEL"));
     }catch(e){setMessage("Hata: "+e.message);}
     finally{setBusy(false);}
@@ -42,7 +44,7 @@ export default function AdminCompanyPersonnelPanel({companySlug}) {
     setBusy(true);
     try {
       await managerPersonnelRequest("devices/"+encodeURIComponent(id)+"/decision",{method:"POST",body:{companySlug,decision}});
-      setMessage(decision==="APPROVE"?"Personel ve cihazi onaylandi.":"Cihaz reddedildi.");
+      setMessage(decision==="APPROVE"?"Personel ve cihazi onaylandi.":decision==="REVOKE"?"Cihaz erisimi iptal edildi.":"Cihaz reddedildi.");
       await refresh();
     }catch(e){setMessage("Hata: "+e.message);}finally{setBusy(false);}
   }
@@ -82,6 +84,8 @@ export default function AdminCompanyPersonnelPanel({companySlug}) {
       <div className="admpro-card" style={{boxShadow:"none"}}>
         <h4>Yeni Cihaz Onaylari ({pending.length})</h4>
         {!pending.length?<p>Bekleyen cihaz bulunmuyor.</p>:pending.map(d=><div key={d.id} style={{padding:"10px 0",borderBottom:"1px solid #e1e7ec"}}><strong>{d.full_name}</strong><div style={{fontSize:12}}>{d.label} · {d.kind==="WORKPLACE"?"Isyeri bilgisayari":"Telefon"} · {String(d.created_at).slice(0,16)}</div><div className="admpro-actions"><button className="primary" type="button" disabled={busy} onClick={()=>decide(d.id,"APPROVE")}>Personel + Cihazi Onayla</button><button type="button" disabled={busy} onClick={()=>decide(d.id,"DENY")}>Reddet</button></div></div>)}
+        <h4>Onayli Cihazlar ({approvedDevices.length})</h4>
+        {!approvedDevices.length?<p>Henuz onayli cihaz yok.</p>:approvedDevices.map(d=><div key={d.id} style={{padding:"8px 0",borderBottom:"1px solid #e1e7ec"}}><strong>{d.full_name}</strong><div style={{fontSize:12}}>{d.label} · {d.kind==="WORKPLACE"?"Isyeri PC":"Telefon"}</div><button type="button" disabled={busy} onClick={()=>{if(window.confirm("Bu cihazin erisimini iptal etmek istiyor musunuz?"))decide(d.id,"REVOKE");}}>Cihaz Yetkisini Iptal Et</button></div>)}
         <h4>Cihaz Onaylamaya Yetkili Kullanici</h4>
         <label>Firma sahibi bir kullaniciya cihaz onay hakkini devredebilir<select value={approverId} onChange={e=>setApproverId(e.target.value)}><option value="">Kullanici seciniz</option>{users.map(u=><option key={u.id} value={u.id}>{u.fullName||u.username} · {u.role}</option>)}</select></label>
         <div className="admpro-actions"><button type="button" disabled={busy||!approverId} onClick={delegate}>Onay Yetkisi Ver</button></div>
