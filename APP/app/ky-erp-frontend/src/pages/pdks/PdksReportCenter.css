@@ -50,3 +50,11 @@
 @media(max-width:1400px){.prp-page .prp-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:990px){.prp-page .prp-head{flex-direction:column;align-items:flex-start}.prp-page .prp-toolbar{align-items:flex-start}}
 @media(max-width:700px){.prp-page{padding:10px}.prp-page .prp-head{padding:17px}.prp-page .prp-head h1{font-size:21px}.prp-page .prp-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.prp-page .prp-stats>div{padding:12px}.prp-page .prp-toolbar{padding:12px}.prp-search-actions{flex-wrap:wrap;width:100%}.prp-search-actions input{flex:1;min-width:140px}.prp-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.prp-page .prp-period>label{display:grid;gap:5px;color:#627991;font-weight:800;font-size:11px}
+.prp-page .prp-period>label input{width:95px}
+.prp-page .prp-progress,.prp-page .prp-warning{padding:12px 16px;border-radius:10px;margin:0 0 13px;font-size:12px;line-height:1.5;font-weight:650}
+.prp-page .prp-progress{background:#eff6ff;border:1px solid #cee0f8;color:#426588}
+.prp-page .prp-warning{background:#fff8ed;border:1px solid #f2d7a9;color:#996012}
+.prp-page button:disabled{opacity:.48;cursor:not-allowed}
+@media(max-width:700px){.prp-page .prp-period{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.prp-page .prp-period>label input,.prp-page .prp-period>label select{width:100%}.prp-page .prp-period>button{grid-column:1/-1}}
