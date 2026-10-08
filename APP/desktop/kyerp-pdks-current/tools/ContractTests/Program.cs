@@ -178,6 +178,14 @@ Run("terminal duplicate tolerance window", () =>
     Throws(()=>AttendanceImportService.DuplicateMinuteRange(510,61));
 });
 
+Run("terminal incomplete batch rejects every write", () =>
+{
+    var accepted = new AttendanceImportDetailedResult(new AttendanceImportResult(2, 1, 1, 0), []);
+    Equal(accepted, AttendanceImportService.EnsureCompleteBatch(accepted));
+    var partial = new AttendanceImportDetailedResult(new AttendanceImportResult(2, 1, 0, 1), []);
+    Throws(() => AttendanceImportService.EnsureCompleteBatch(partial));
+});
+
 Run("organization definition reference whitelist", () =>
 {
     Equal("KIMLIK.GRUP",DefinitionUsageGuard.ReferenceFields(OrganizationDefinitionKind.Group)[0]);
