@@ -717,6 +717,7 @@ export function calculateStatutoryAnnualLeave(hireDateValue: unknown, birthDateV
 type LeaveProfile = {
   birthDate: string;
   adjustments: Row[];
+  carryoverBasisYear?: string;
   updatedAt?: string;
 };
 
@@ -730,6 +731,7 @@ function parseLeaveProfile(row: Row | null | undefined): LeaveProfile {
     return {
       birthDate: hrDateOnly(parsed.birthDate),
       adjustments: Array.isArray(parsed.adjustments) ? parsed.adjustments as Row[] : [],
+      carryoverBasisYear: text(parsed.carryoverBasisYear),
       updatedAt: text(parsed.updatedAt || row?.updated_at),
     };
   } catch {
@@ -745,8 +747,41 @@ export function calculateAnnualLeaveBalance(input: { entitlement: number; carryo
   return { annualRight, usedDays, balance, projectedBalance: Math.round((balance - plannedDays) * 2) / 2, excessDays: Math.max(0, -balance) };
 }
 
-function leaveAdjustmentTotal(profile: LeaveProfile | null | undefined) {
-  return (profile?.adjustments || []).reduce((sum, item) => sum + number(item.days), 0);
+export function leaveAdjustmentTotal(profile: LeaveProfile | null | undefined, year = hrTodayIstanbul().slice(0, 4)) {
+  // A correction belongs to its recorded year. It must not be re-added in every later year.
+  return (profile?.adjustments || [])
+    .filter((item) => hrDateOnly(item.date || item.createdAt).startsWith(year))
+    .reduce((sum, item) => sum + number(item.days), 0);
+}
+export function annualLeaveDaysForYear(plan: Row, year: string): number {
+  let calculation: Row = {};
+  try {
+    calculation = typeof plan.calculation_json === "string"
+      ? JSON.parse(plan.calculation_json) as Row
+      : {};
+  } catch {}
+  const details = Array.isArray(plan.dayDetails) ? plan.dayDetails : Array.isArray(calculation.dayDetails) ? calculation.dayDetails : null;
+  if (details && details.length) {
+    return Math.round(details.filter((day: Row) => hrDateOnly(day.date).startsWith(year))
+      .reduce((sum: number, day: Row) => sum + number(day.counted), 0) * 2) / 2;
+  }
+  const start = hrDateOnly(plan.startDate || plan.start_date);
+  return start.startsWith(year) ? number(plan.countedDays ?? plan.counted_days ?? plan.day_count) : 0;
+}
+async function annualUsedForYear(c: Context<AppEnv>, companyId: string, employeeId: string, year: string, excludingPlanId = "") {
+  const [managed, legacy] = await Promise.all([
+    all(c, `SELECT id,start_date,counted_days,calculation_json FROM ik_leave_plans
+      WHERE main_company_id=? AND employee_id=? AND status IN ('APPROVED','TAKEN') AND id<>?`,
+      [companyId,employeeId,excludingPlanId]),
+    all(c, `SELECT l.start_date,l.day_count FROM hr_leave_records_v2 l
+      JOIN hr_monthly_employees e ON e.id=l.employee_id
+      WHERE e.main_company_id=? AND l.employee_id=?
+      AND UPPER(l.record_type) LIKE '%YILLIK%'
+      AND (l.document_path IS NULL OR l.document_path NOT LIKE 'ik-leave-plan:%')`,
+      [companyId,employeeId]),
+  ]);
+  return Math.round((managed.reduce((total, row) => total + annualLeaveDaysForYear(row, year), 0)
+    + legacy.reduce((total, row) => total + annualLeaveDaysForYear(row, year), 0)) * 2) / 2;
 }
 
 function parseLeaveAdjustment(row: Row | null | undefined): Row | null {
@@ -3210,22 +3245,15 @@ async function previewAdvancedLeaveV2(c: Context<AppEnv>, supplied?: Row) {
       message: same ? "Personelin aynı tarihlerde başka izin kaydı var." : sameDepartment && departmentLimitExceeded ? `${text(employee.department) || "Aynı bölüm"} için eş zamanlı izin sınırı aşılıyor.` : "Başka personelin izin planıyla tarih kesişiyor.",
     };
   });
-  const marker = currentId ? `ik-leave-plan:${currentId}` : "";
-  // Kullanım seçili hakediş yılından düşülür; önceki yılların kaydı geçmişte kalır.
-  // Onaylı yönetilen kayıtlar hr_leave_records_v2 üzerinde tek marker ile temsil edilir.
   const entitlementYear = startDate.slice(0, 4);
-  const usedRow = await first(c, `SELECT COALESCE(SUM(l.day_count),0) AS total
-      FROM hr_leave_records_v2 l JOIN hr_monthly_employees e ON e.id=l.employee_id
-      WHERE l.employee_id=? AND e.main_company_id=? AND UPPER(l.record_type) LIKE '%YILLIK%'
-        AND SUBSTR(l.start_date,1,4)=?
-        AND (?='' OR COALESCE(l.document_path,'')<>?)`, [employeeId, companyId, entitlementYear, marker, marker]);
+  const usedDaysInYear = await annualUsedForYear(c, companyId, employeeId, entitlementYear, currentId);
   const profile = await leaveProfile(c, companyId, employeeId);
   const statutory = calculateStatutoryAnnualLeave(hireDate, profile.birthDate, startDate);
   const recordedEntitlement = number(employee.annualLeaveEntitlement);
   const effectiveEntitlement = Math.max(recordedEntitlement, statutory.entitlementDays);
   const carryover = number(employee.annualLeaveCarryover);
-  const adjustmentDays = leaveAdjustmentTotal(profile);
-  const annualUsed = number(usedRow?.total);
+  const adjustmentDays = leaveAdjustmentTotal(profile, entitlementYear);
+  const annualUsed = usedDaysInYear;
   const balanceState = calculateAnnualLeaveBalance({ entitlement: effectiveEntitlement, carryover, adjustment: adjustmentDays, used: annualUsed });
   const annualRight = balanceState.annualRight;
   const balanceBefore = balanceState.balance;
@@ -3408,6 +3436,7 @@ async function saveAdvancedLeaveProfileV2(c: Context<AppEnv>) {
     birthDate,
     updatedAt: timestamp,
     updatedBy: actor,
+    carryoverBasisYear: carryoverProvided ? hrTodayIstanbul().slice(0, 4) : current.carryoverBasisYear || "",
   };
   const profileId = "ik-leave-profile:" + companyId + ":" + employeeId;
   const fileName = leaveProfileFileName(companyId, employeeId);
@@ -3526,7 +3555,11 @@ async function leaveCenterV2(c: Context<AppEnv>) {
   const profiles = await leaveProfileMap(c, companyId);
   const cashRequests = await leaveCashRequests(c, companyId);
   const today = hrTodayIstanbul();
-  const currentYear = today.slice(0, 4);
+  const requestedYear = text(c.req.query("year"));
+  const currentYear = /^20\d{2}$/.test(requestedYear) ? requestedYear : today.slice(0, 4);
+  const asOfDate = currentYear === today.slice(0, 4)
+    ? today
+    : currentYear < today.slice(0, 4) ? `${currentYear}-12-31` : `${currentYear}-01-01`;
   const [workedTotalRows, workedYearRows] = await Promise.all([
     all(c, "SELECT employee_id,COUNT(DISTINCT work_date) AS worked_days FROM ik_time_clock_events WHERE main_company_id=? GROUP BY employee_id", [companyId]).catch(() => []),
     all(c, "SELECT employee_id,COUNT(DISTINCT work_date) AS worked_days FROM ik_time_clock_events WHERE main_company_id=? AND work_date LIKE ? GROUP BY employee_id", [companyId, currentYear + "-%"]).catch(() => []),
@@ -3599,18 +3632,19 @@ async function leaveCenterV2(c: Context<AppEnv>) {
   const enrichedEmployees = employees.map((employee) => {
     const employeeId = text(employee.id);
     const profile = profiles.get(employeeId) || { birthDate: "", adjustments: [] };
-    const statutory = calculateStatutoryAnnualLeave(employee.hireDate || employee.hire_date, profile.birthDate, today);
+    const statutory = calculateStatutoryAnnualLeave(employee.hireDate || employee.hire_date, profile.birthDate, asOfDate);
     const recordedEntitlement = number(employee.annualLeaveEntitlement);
     const effectiveEntitlement = Math.max(recordedEntitlement, statutory.entitlementDays);
     const carryover = number(employee.annualLeaveCarryover);
-    const balanceAdjustment = leaveAdjustmentTotal(profile);
+    const balanceAdjustment = leaveAdjustmentTotal(profile, currentYear);
     const personPlans = plans.filter((plan) => text(plan.employeeId) === employeeId && plan.status !== "CANCELLED");
-    const annualPersonPlans = personPlans.filter((plan) => text(plan.startDate).startsWith(currentYear));
+    const annualPersonPlans = personPlans.filter((plan) => annualLeaveDaysForYear(plan, currentYear) > 0);
     const usedAllTimeDays = personPlans.filter((plan) => plan.legacy || ["APPROVED", "TAKEN"].includes(upper(plan.status))).reduce((sum, plan) => sum + number(plan.countedDays), 0);
-    const usedOrApprovedDays = annualPersonPlans.filter((plan) => plan.legacy || ["APPROVED", "TAKEN"].includes(upper(plan.status))).reduce((sum, plan) => sum + number(plan.countedDays), 0);
-    const takenDays = annualPersonPlans.filter((plan) => plan.legacy || upper(plan.status) === "TAKEN" || (upper(plan.status) === "APPROVED" && text(plan.endDate) < today)).reduce((sum, plan) => sum + number(plan.countedDays), 0);
-    const approvedUpcomingDays = annualPersonPlans.filter((plan) => upper(plan.status) === "APPROVED" && text(plan.endDate) >= today).reduce((sum, plan) => sum + number(plan.countedDays), 0);
-    const plannedDays = annualPersonPlans.filter((plan) => upper(plan.status) === "PLANNED").reduce((sum, plan) => sum + number(plan.countedDays), 0);
+    const daysThisYear = (rows: Row[]) => rows.reduce((sum, plan) => sum + annualLeaveDaysForYear(plan, currentYear), 0);
+    const usedOrApprovedDays = daysThisYear(annualPersonPlans.filter((plan) => plan.legacy || ["APPROVED", "TAKEN"].includes(upper(plan.status))));
+    const takenDays = daysThisYear(annualPersonPlans.filter((plan) => plan.legacy || upper(plan.status) === "TAKEN" || (upper(plan.status) === "APPROVED" && text(plan.endDate) < asOfDate)));
+    const approvedUpcomingDays = daysThisYear(annualPersonPlans.filter((plan) => upper(plan.status) === "APPROVED" && text(plan.endDate) >= asOfDate));
+    const plannedDays = daysThisYear(annualPersonPlans.filter((plan) => upper(plan.status) === "PLANNED"));
     const balanceState = calculateAnnualLeaveBalance({ entitlement: effectiveEntitlement, carryover, adjustment: balanceAdjustment, used: usedOrApprovedDays, planned: plannedDays });
     const { annualRight, balance } = balanceState;
     return {
@@ -3624,6 +3658,10 @@ async function leaveCenterV2(c: Context<AppEnv>) {
       balanceAdjustment,
       annualRight,
       entitlementYear: currentYear,
+      asOfDate,
+      carryoverBasisYear: profile.carryoverBasisYear || "",
+      carryoverReconciliationRequired: Boolean(profile.carryoverBasisYear && profile.carryoverBasisYear !== currentYear)
+        || (currentYear !== today.slice(0, 4) && !profile.carryoverBasisYear),
       usedDaysAllTime: usedAllTimeDays,
       advanceLeaveDays: balanceState.excessDays,
       usedDays: usedOrApprovedDays,
