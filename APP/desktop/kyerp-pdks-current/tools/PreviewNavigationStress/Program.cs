@@ -71,6 +71,25 @@ for (var pass = 0; pass < 12; pass++)
         routes++;
     }
 }
+// The entire application must keep a single workspace instance across
+// Home, Personnel and Entry/Exit. This catches accidental regressions that
+// instantiate/dispose a new Form for every click (the old R5 architecture).
+var instanceField = typeof(MainShellForm).GetField("unifiedPreviewWorkspace",
+    BindingFlags.NonPublic | BindingFlags.Instance)
+    ?? throw new InvalidOperationException("Single workspace ownership is missing.");
+var instance = instanceField.GetValue(form) as PdksVisualPreviewWorkspace
+    ?? throw new InvalidOperationException("No shared visual workspace created.");
+if (instance.CachedPageCount > 5)
+    throw new InvalidOperationException("Unbounded screen cache: " + instance.CachedPageCount);
+form.NavigateToCommand(PdksCommandId.Home);
+Application.DoEvents();
+form.NavigateToCommand(PdksCommandId.Personnel);
+Application.DoEvents();
+if (!ReferenceEquals(instance, instanceField.GetValue(form)))
+    throw new InvalidOperationException("Navigating Home created another workspace instance.");
+if (instance.IsDisposed || instance.CachedPageCount > 5)
+    throw new InvalidOperationException("Shared workspace was disposed or exceeded cache limit.");
+
 GC.Collect();
 GC.WaitForPendingFinalizers();
 GC.Collect();
