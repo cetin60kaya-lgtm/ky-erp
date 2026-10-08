@@ -9,7 +9,7 @@ import {displayValue,normalizePerson,toPersonRows,toAttendanceRows} from "./prod
 
 const SOURCES = Object.freeze({
   // Read-only people/physical-card administration.
-  people:"people",cards:"people",employment:"people",departments:"people",
+  people:"people",cards:"people",employment:"people",departments:"masters",
   groups:"masters",routes:"masters",rules:"config",
   // Only selected-person attendance. Real live aggregate not yet certified.
   punches:"attendance",exceptions:"attendance",history:"attendance",daily:"attendance",
@@ -79,16 +79,24 @@ export function rowsForTab(id,payload,{people=[],selectedPerson=null,year=null,m
   if(["people","cards","employment"].includes(id))
     return {rows:toPersonRows(people,id),supported:true,scope:"assigned-card-roster"};
   if(id==="departments"){
-    const groups=new Map();
-    for(const raw of people) {
-      const p=normalizePerson(raw);
-      if(p.department==="—")continue;
-      groups.set(p.department,(groups.get(p.department)||0)+1);
-    }
-    return {rows:[...groups].map(([name,count])=>({
-      _id:name,"Bölüm":name,"Grup":"—","Vardiya":"—","Kişi":String(count),
-      "Yönetici":"—","Durum":"Kartlı personel kapsamı",
-    })),supported:true,scope:"assigned-card-roster"};
+    if(!Array.isArray(payload?.groups)||!Array.isArray(payload?.personnelGroups)||
+       !Array.isArray(payload?.groupAssignments)||
+       !Array.isArray(payload?.personnelGroupAssignments))
+      return {rows:[],supported:false};
+    const count=(assignments,key,id)=>assignments.filter((a)=>String(a[key])===String(id)).length;
+    const shifts=payload.groups.map((record)=>({
+      _id:"shift:"+record.id,"Bölüm":"Vardiya","Grup":record.name||"—",
+      "Vardiya":[record.entryTime,record.exitTime].filter(Boolean).join(" – ")||"—",
+      "Kişi":String(count(payload.groupAssignments,"groupId",record.id)),
+      "Yönetici":"—","Durum":Number(record.active)===0?"Pasif":"Aktif",
+    }));
+    const groupRows=payload.personnelGroups.map((record)=>({
+      _id:"personnel-group:"+record.id,"Bölüm":"Personel grubu",
+      "Grup":record.name||"—","Vardiya":record.defaultShiftId||"—",
+      "Kişi":String(count(payload.personnelGroupAssignments,"personnelGroupId",record.id)),
+      "Yönetici":"—","Durum":Number(record.active)===0?"Pasif":"Aktif",
+    }));
+    return {rows:[...shifts,...groupRows],supported:true,scope:"verified-cloud-master"};
   }
   if(attendanceTypes.has(id)){
     const days=arr(payload,"days");
@@ -116,10 +124,17 @@ export function rowsForTab(id,payload,{people=[],selectedPerson=null,year=null,m
     "Tarih":["date"],"Tatil Adı":["name"],"Süre":["halfDay"],
     "Çalışma Kararı":["workDecision"],"Durum":["status"],
   });
-  if(id==="routes")return toRows({rows:arr(payload?.services)},{
-    "Hat":["code","name"],"Güzergâh":["routeNote"],
-    "Personel":["employeeCount"],"Dönem":["period"],"Durum":["active"],
-  });
+  if(id==="routes"){
+    if(!Array.isArray(payload?.services)||!Array.isArray(payload?.serviceAssignments))
+      return {rows:[],supported:false};
+    return {rows:payload.services.map((record)=>({
+      _id:String(record.id),"Hat":record.code||record.name||"—",
+      "Güzergâh":record.routeNote||"—",
+      "Personel":String(payload.serviceAssignments.filter((a)=>
+        String(a.serviceId)===String(record.id)).length),
+      "Dönem":"—","Durum":Number(record.active)===0?"Pasif":"Aktif",
+    })),supported:true,scope:"verified-cloud-master"};
+  }
   if(id==="groups")return toRows({rows:arr(payload?.personnelGroups)},{
     "Grup":["name"],"Vardiya":["defaultShiftId"],
     "Kişi":["employeeCount"],"Bölüm":["department"],
