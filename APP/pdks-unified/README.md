@@ -554,3 +554,42 @@ Tam kanıt, risk ve sonraki basamak:
 **Kalan sıra:** Gerçek staging D1 → idempotent local SQL ledger/action
 handler → FDB/TNF normal/E transaction recovery → cihaz SDK/terminal →
 puantaj/bordro → 49 sekme gerçek ekran → Android/iOS signing → final release.
+
+
+## 19. 08.10.2026 — GERÇEK WINDOWS ↔ LOCAL CLOUD E2E KABULÜ
+
+**En güncel kaynak bu bölümdür.** §18 kaynak/test altyapısının tarihsel kabulüdür.
+
+- Yeni `src/ik-pdks-unified-agent.e2e.test.mjs`: Hono HTTP test Cloud
+  sunucusunu `127.0.0.1` üzerinde açar; gerçek Windows
+  `KY.PDKS.Unified.dll --agent-once` sürecini başlatır; Firebird
+  **gbak ile restore edilmiş izole kopya** üzerinde `KIMLIK/GIRCIK`
+  kaynak doğrulaması yapar; tek firma+cihaz HMAC imzalı komutunu okur.
+- `personnel-group` ve `holiday` yerel politika mirror örnekleri
+  dosyaya yazılır; Cloud outbox ACK `ACKED` ve boş kuyruk sınanır.
+- Üçüncü örnek ACK HTTP **503 kesintisi** simüle eder; ajan çıkışı
+  başarısız olur ancak local receipt journal'a kalıcı yazılmıştır.
+  Cloud lease sonlandırılıp aynı işlem yeniden alındığında **policy
+  dosyasının SHA256 ve değişiklik zamanı sabit kalarak**, aynı journal
+  fişinden Cloud ACK başarıyla tekrarlanır.
+- **V10 DESEN KY-CONTROL raporu:** 
+  `D:\GoogleDrive\Hakan Emp\OTOMASYON\KY-CONTROL\OUTBOX\PDKS_AGENT_E2E_V10.log`.
+  `RESULT=PASS`, Windows derleme 0 hata/uyarı, gerçek Windows
+  + yerel HTTP Cloud + SQLite D1 taklidi + kopya Firebird E2E testi
+  **1/1 PASS**; `LIVE_FDB_WRITE=NONE`, `ANNUAL_TNF_WRITE=NONE`.
+- Hızlı yeniden test npm komutları:
+  `npm run test:pdks-unified:cloud`;
+  `npm run test:pdks-unified:e2e` (yalnız Windows + E2E staging
+  `KY_PDKS_UNIFIED_DLL` ve `KY_PDKS_STAGE_FDB_PATH` ile).
+- **V10 sonrası güvenlik sıkılaştırması**: `ACKED` artık
+  `localReceiptHmac` bağımsız HMAC imzası olmadan reddedilir;
+  Agent receipt SHA-256'sı teslimat hash'ine bağlanır. Bu değişiklik
+  V11 kabul testinin ardından üretim onayı için ayrıca değerlendirilir.
+- **Gerçek Cloudflare staging D1 testi hâlâ yapılmadı**; local Hono
+  + SQLite D1 taklidini staging Cloudflare veya üretim D1 olarak
+  sunmayın. Agent otomatik başlatma, prod merge/migration/yazma kapalı.
+
+Sonraki üretim engelleri: gerçek Cloudflare D1 staging/tenant oturum
+kabulü; 9 Firebird action için provably-idempotent local SQL ledger +
+transaction recovery; terminal RAW/E/TNF ve puantaj hesaplama; UI
+49 sekme saha kabulü; Android/iOS signing. PR #404 **DRAFT**.
