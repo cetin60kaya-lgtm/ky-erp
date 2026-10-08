@@ -112,8 +112,7 @@ export async function submitAndVerify(preview){
     if(!posted?.receiptId||posted.cloudState!=="COMMITTED")
       throw new Error("PDKS_COMMIT_RECEIPT_MISSING");
   }catch(error){
-    if(error?.status>=400 && error?.status<500 && error?.status!==408 &&
-       error?.status!==409 && error?.status!==429){
+    if(error?.status>=400 && error?.status<500 && error?.status!==408){
       // Known validation/permission denial: no retry, but UI can correct.
       sent.delete(fingerprint);
       throw error;
