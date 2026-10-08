@@ -5,10 +5,12 @@
  * ingestion are separate protected services. D1 views have NO FDB/TNF ACK.
  */
 import {
-  getPdksAttendance,getPdksPeople,getPdksProfile,getPdksMasters,
-  getPdksAdvancedMonth,getPdksPayroll,getPdksLeaveCenter,
-  getPdksAuditLogs,getPdksHolidays,getPdksModernConfig,getPdksCorrections,
+  getPdksAttendance,getPdksPeople,getPdksProfile,
+  getPdksPayroll,getPdksAuditLogs,getPdksModernConfig,getPdksCorrections,
 } from "../../services/pdksApi";
+import {apiGet} from "../../utils/api";
+const fresh=(path,params)=>apiGet(path,params,{forceFresh:true,cache:false})
+  .then((response)=>response?.ok===true && Object.hasOwn(response,"data")?response.data:response);
 
 export const readPeople=(params)=>getPdksPeople(params);
 export const readProfile=(params)=>getPdksProfile(params);
@@ -68,11 +70,12 @@ export async function readTabSource(source,{mainCompanyId,year,month,personId}={
   if(!mainCompanyId)throw new Error("PDKS_FIRMA_SECILMEDI");
   const p={mainCompanyId,year,month};
   switch(source){
-    case "masters":return getPdksMasters(p);
-    case "holidays":return getPdksHolidays({mainCompanyId,year});
-    case "leaves":return getPdksLeaveCenter({mainCompanyId,
-      from:`${year}-01-01`,to:`${year}-12-31`});
-    case "month":case "month-adjustments":return getPdksAdvancedMonth(p);
+    case "masters":return fresh("/ik/personnel-control/pdks-masters",p);
+    case "holidays":return fresh("/ik/personnel-control/operations/holidays",{mainCompanyId,year});
+    case "leaves":return fresh("/ik/personnel-control/operations/leaves",{
+      mainCompanyId,from:`${year}-01-01`,to:`${year}-12-31`});
+    case "month":case "month-adjustments":
+      return fresh("/ik/personnel-control/operations/month",p);
     case "monthly-attendance":return readCompleteMonth(p,options);
     case "audit":return getPdksAuditLogs({mainCompanyId,
       period:period(year,month),limit:200});
