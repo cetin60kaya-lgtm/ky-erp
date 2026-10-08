@@ -68,3 +68,12 @@ test("PDKS imported card dates and reused physical cards must fail closed", () =
   assert.match(bridge, /if \(existing && text\(existing\.id\) !== text\(row\.id\)\)/);
   assert.match(bridge, /conflicting\.add\(card\)/);
 });
+
+test("Legacy web PDKS editor also requires evidence and does not invent a normal time", () => {
+  const legacy = source("../pages/modules/PdksPageV2.jsx");
+  assert.match(legacy, /useState\(\{ date: isoToday\(\), time: "", direction: "AUTO", note: "" \}\)/);
+  assert.match(legacy, /useState\(\{ date: isoToday\(\), status: "CALISTI", entry: "", exit: "", note: "" \}\)/);
+  assert.match(legacy, /Web kart hareketinde gerçek tarih, saat ve gerekçe zorunludur/);
+  assert.match(legacy, /Firebird\/TNF mutabakatı ayrıca doğrulanmalıdır/);
+  assert.doesNotMatch(legacy, /Windows PDKS aynı kaydı görecek/);
+});
