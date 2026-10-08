@@ -11,6 +11,9 @@ const MFA_LOGIN_POLICIES = new Set(["GOOGLE", "MICROSOFT", "ANY_MFA", "BOTH_MFA"
 const LIVE_BROWSER_ORIGINS = new Set([
   "https://kyerp.net",
   "https://www.kyerp.net",
+  "https://app.kyerp.net",
+  "capacitor://localhost",
+  "https://localhost",
   "https://security.kyerp.net",
 ]);
 const LOCAL_DEV_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
