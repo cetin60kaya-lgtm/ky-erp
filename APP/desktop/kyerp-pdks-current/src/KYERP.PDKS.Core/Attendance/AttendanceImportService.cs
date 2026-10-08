@@ -7,12 +7,20 @@ public sealed record AttendanceImportResult(int Inserted, int Updated, int Dupli
 public sealed record AttendanceImportItemResult(ProfiledTerminalRecord Record, string Status, string Reason);
 public sealed record AttendanceImportDetailedResult(AttendanceImportResult Summary, IReadOnlyList<AttendanceImportItemResult> Items);
 
+// An incomplete transfer must roll back all writes in the current Firebird transaction.
+// The caller can still report every skipped record from Details without losing evidence.
+public sealed class AttendanceImportRejectedException(AttendanceImportDetailedResult details)
+    : InvalidOperationException($"Terminal batch rejected: {details.Summary.Skipped} skipped record(s).")
+{
+    public AttendanceImportDetailedResult Details { get; } = details;
+}
+
 public sealed class AttendanceImportService(FirebirdDatabase database)
 {
     public AttendanceImportResult Import(IReadOnlyList<ProfiledTerminalRecord> records, int duplicateToleranceMinutes = 0, bool rollbackOnly = false) =>
         ImportDetailed(records, duplicateToleranceMinutes, rollbackOnly).Summary;
 
-    public AttendanceImportDetailedResult ImportDetailed(IReadOnlyList<ProfiledTerminalRecord> records, int duplicateToleranceMinutes = 0, bool rollbackOnly = false) =>
+    public AttendanceImportDetailedResult ImportDetailed(IReadOnlyList<ProfiledTerminalRecord> records, int duplicateToleranceMinutes = 0, bool rollbackOnly = false, bool requireCompleteBatch = false) =>
         database.InTransaction((connection, transaction) =>
         {
             if(duplicateToleranceMinutes is < 0 or > 60)throw new ArgumentOutOfRangeException(nameof(duplicateToleranceMinutes),"Terminal toleransı 0-60 dakika arasında olmalıdır.");
@@ -80,9 +88,13 @@ public sealed class AttendanceImportService(FirebirdDatabase database)
                     items.Add(new(record,"Skipped","Geçersiz giriş/çıkış yönü"));
                 }
             }
-            return new AttendanceImportDetailedResult(
+            var result = new AttendanceImportDetailedResult(
                 new AttendanceImportResult(inserted,updated,duplicates,skipped),
                 items);
+            // Throw *inside* InTransaction so that any inserted/updated rows are rolled back.
+            if (requireCompleteBatch && skipped > 0)
+                throw new AttendanceImportRejectedException(result);
+            return result;
         },rollbackOnly);
 
     static bool EmployeeExists(FbConnection c,FbTransaction tx,string employeeCode,DateTime date)=>Convert.ToInt32(Scalar(c,tx,"select count(*) from KIMLIK where PKNO=@PK and (IGTARIH is null or IGTARIH<=@D) and (ICTARIH is null or ICTARIH>=@D)",new FbParameter("@PK",employeeCode),new FbParameter("@D",date)))>0;
