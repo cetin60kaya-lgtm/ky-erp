@@ -135,6 +135,11 @@ async function ownInfo(c:any,ctx:any) {
   };
 }
 export function registerEmployeePortalRoutes(app:any) {
+  // Firma secimi icin yalniz aktif sirket adlari yayinlanir; kisi veya mali veri yok.
+  app.get("/api/employee-portal/companies",async(c:any)=>{
+    const rows=await c.env.DB.prepare("SELECT slug,name FROM main_companies WHERE COALESCE(is_active,1)<>0 ORDER BY name COLLATE NOCASE").all();
+    return ok(c,(rows.results||[]).map((row:any)=>({slug:text(row.slug),name:text(row.name)})));
+  });
   app.get("/api/employee-portal/account",async(c:any)=>{
     if(!(await ready(c)))return err(c,503,"PERSONNEL_SCHEMA_NOT_READY","0060 personel erisim semasi gerekli.");
     const ctx=await ownAccount(c);if(!ctx)return err(c,403,"PERSONNEL_ACCOUNT_REQUIRED","Personel hesabi bulunamadi.");
