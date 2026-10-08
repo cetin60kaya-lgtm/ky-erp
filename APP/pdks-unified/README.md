@@ -242,3 +242,43 @@ yanlış veriyle çalışma riskine karşı işlevin bilinçli olarak
 **kapalı** tutulmasıdır. Henüz **49/49 aktif işlev** denemez.
 Veri yazma ancak gerçek tek işlem motoru, ay kilidi, kayıt onayı,
 idempotency, FDB/TNF mutabakatı ve rollback testleri ardından açılır.
+
+
+## 12. Personel 360° ve kurumsal bütünleşik test kabulü
+
+**Ana menü ve gerçek çalışma alanı tek kod:** `PdksUnifiedApp.jsx`.
+Eski `PdksPageV2` yeniden açılmaz. `PersonDetails` verileri
+`useUnifiedPdksData` içinden, yalnız ilgili kişi/sekme açıkken gelir.
+
+- Özlük/kart: gerçek kayıt, dönem bazlı işe giriş/çıkış.
+- Devam: seçili kişinin `attendance-v2` günleri.
+- Vardiya: `pdks-masters.groups/groupAssignments` içindeki gerçek atama.
+- İzin: `operations/leaves.plans` listesinden aynı personel ID'si.
+- Puantaj: seçili kişinin sunucunun `summary` alanı.
+- Bordro: yalnız FULL yetkili, `operations/payroll.lines` ve aynı personel ID'si.
+- İşlem geçmişi: `people/:id/corrections` (yalnız gerçek alanlar).
+- Evrak: ayrı yetkili belge bağlantısı henüz yok; veri açılmaz.
+
+**Güvenli backend ilkesi:** `GET /pdks-masters` artık asla
+`CREATE TABLE` / `INSERT DEFAULT` çalıştırmaz. Gerekli tabloların
+varlığını kontrol edip hazırlık eksikse 503 + `PDKS_SCHEMA_NOT_READY` verir;
+tablolar yalnız açık yönetim/migrasyon aşamasında hazırlanabilir.
+
+**Mobil CORS:** Cloudflare API kaynak dalında tam köken izinleri:
+`https://app.kyerp.net`, `capacitor://localhost`, `https://localhost`.
+Wildcard yok; yetki/oturum denetimi aynen sunucuda kalır.
+
+**Son DESEN test kapısı** (`KY-PDKS-PERSONEL360-CANONICAL-GATE.txt`):
+`FETCH=0`, `CHECKOUT=0`, `PDKS_UNIT=0`,
+`PDKS_LINT=0`, `PDKS_BUILD=0`, `PDKS_BROWSER_49=0`,
+`CLOUD_TEST=0`, `CLOUD_TYPECHECK=0`,
+`DEVICE_SYNC=0`, `WINDOWS=0`.
+Sıfır çıkış kodu ilgili kontrolün geçtiğini gösterir. Test için
+üretim veritabanına, terminale ve Canlı Cloudflare'ye yazılmadı.
+
+**Açık işlemler:** fiziksel cihaz markalarının model bazlı sürücüleri,
+Windows Agent ile canlı güvenilir olay alışverişi, FDB + normal yıllık TNF
+gerçek mutabakatı ve onaylı yazma, ücret/izin işlemlerinin güvenli apply
+sözleşmesi, Cloud olay ACK/recovery, Android APK/iOS IPA,
+production dağıtımı ve gerçek personel kaynağı kabulü.
+Bu adımlar tamamlanmadan tam canlı ürün kabulü yapılmaz.
