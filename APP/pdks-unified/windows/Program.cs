@@ -16,6 +16,23 @@ internal static class Program
             Console.WriteLine(report);
             return;
         }
+        if (args.Contains("--agent-safety-selftest", StringComparer.OrdinalIgnoreCase))
+        {
+            // All tests use isolated temporary directories; no production FDB,
+            // annual TNF or terminal RAW files are written by this command.
+            UnifiedLocalActionPlanner.AssertContract();
+            Console.WriteLine("PASS LOCAL_PLAN");
+            UnifiedJournalStore.SelfTestAsync().GetAwaiter().GetResult();
+            Console.WriteLine("PASS DURABLE_JOURNAL");
+            UnifiedLocalPolicyStore.SelfTestAsync().GetAwaiter().GetResult();
+            Console.WriteLine("PASS POLICY_MIRROR");
+            AtomicTnfFileStore.AssertContractAsync().GetAwaiter().GetResult();
+            Console.WriteLine("PASS TNF_ATOMIC_STORE");
+            UnifiedAgentRunner.SelfTestAsync().GetAwaiter().GetResult();
+            Console.WriteLine("PASS AGENT_LOOP");
+            Console.WriteLine("RESULT=PASS AGENT_SAFETY_SELFTEST");
+            return;
+        }
         if (args.Contains("--agent-plan-selftest", StringComparer.OrdinalIgnoreCase))
         {
             UnifiedLocalActionPlanner.AssertContract();
