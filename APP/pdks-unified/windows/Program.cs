@@ -15,6 +15,11 @@ internal static class Program
             UnifiedLocalActionPlanner.AssertContract();
             return;
         }
+        if (args.Contains("--tnf-store-selftest", StringComparer.OrdinalIgnoreCase))
+        {
+            AtomicTnfFileStore.AssertContractAsync().GetAwaiter().GetResult();
+            return;
+        }
         if (args.Contains("--agent-schema-probe", StringComparer.OrdinalIgnoreCase))
         {
             var report = FirebirdSchemaProbe.RunAsync().GetAwaiter().GetResult();
