@@ -10,7 +10,8 @@ const csvCell=(v)=>{const raw=String(v??"");return /[;"\r\n]/.test(raw)?`"${raw.
 function downloadCsv(name,rows){const body=rows.map(row=>row.map(csvCell).join(";")).join("\r\n");const blob=new Blob(["\ufeff",body],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)}
 const trStatus=(v)=>({CALISTI:"Çalıştı",EKSIK_BASIM:"Eksik Basım",KART_YOK:"Kart Yok",YILLIK_IZIN:"Yıllık İzin",YARIM_GUN_IZIN:"Yarım Gün İzin",IZIN:"İzin",RAPOR:"Rapor",UCRETSIZ:"Ücretsiz İzin",RESMI_TATIL:"Resmî Tatil",RESMI_TATIL_CALISMA:"Resmî Tatil Çalışma",YARIM_GUN_TATIL:"Yarım Gün Tatil",YARIM_GUN_TATIL_CALISMA:"Yarım Gün Tatil Çalışma",HAFTA_TATILI:"Hafta Tatili",HAFTA_TATILI_CALISMA:"Hafta Tatili Çalışma",DONEM_DISI:"Dönem Dışı"})[String(v||"").toUpperCase()]||String(v||"-");
 
-export default function PdksReportCenter(){
+export default function PdksReportCenter({activeMainCompany}){
+  const company=activeMainCompany?.slug||activeMainCompany?.id||"mecit-hakan";
   const [year,setYear]=useState(NOW.getFullYear()),[month,setMonth]=useState(NOW.getMonth()+1),[people,setPeople]=useState([]),[rows,setRows]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState(""),[filter,setFilter]=useState("TUM"),[query,setQuery]=useState(""),[expanded,setExpanded]=useState(""),[progress,setProgress]=useState(0);
   const reportRequest=useRef(0);
 
@@ -18,7 +19,7 @@ export default function PdksReportCenter(){
     const request=++reportRequest.current;
     setBusy(true);setError("");setRows([]);setPeople([]);setProgress(0);
     try{
-      const list=safe(await getPdksPeople({year,month}));
+      const list=safe(await getPdksPeople({mainCompanyId:company,year,month}));
       if(request!==reportRequest.current)return;
       setPeople(list);
       const output=[];
@@ -26,7 +27,7 @@ export default function PdksReportCenter(){
       for(let i=0;i<list.length;i+=6){
         const batch=list.slice(i,i+6);
         const results=await Promise.all(batch.map(async person=>{
-          try{return {person,data:await getPdksAttendance(person.id,year,month),loadError:false}}
+          try{return {person,data:await getPdksAttendance(person.id,year,month,{mainCompanyId:company}),loadError:false}}
           catch{return {person,data:null,loadError:true}}
         }));
         if(request!==reportRequest.current)return;
@@ -48,7 +49,7 @@ export default function PdksReportCenter(){
       }
     }catch(cause){if(request===reportRequest.current)setError(cause?.message||"Puantaj raporu hazırlanamadı.")}
     finally{if(request===reportRequest.current)setBusy(false)}
-  },[month,year]);
+  },[company,month,year]);
   useEffect(()=>{void load();return()=>{reportRequest.current++}},[load]);
 
   const incompleteCount=rows.filter(row=>row.loadError).length;
