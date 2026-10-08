@@ -8,6 +8,7 @@ public sealed partial class MainShellForm : Form
     readonly WorkspaceDockHost workspace;
     readonly Dictionary<string, Form> moduleCache = new(StringComparer.OrdinalIgnoreCase);
     PersonelForm? personel;
+    PdksVisualPreviewWorkspace? unifiedPreviewWorkspace;
     CompanyBranding branding = CompanyBranding.Empty;
 
     public MainShellForm(LocalUser user)
