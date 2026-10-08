@@ -30,7 +30,7 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
   const company=activeMainCompany?.slug||activeMainCompany?.id||"mecit-hakan";
   const [year,setYear]=useState(NOW.getFullYear()),[month,setMonth]=useState(NOW.getMonth()+1);
   const [people,setPeople]=useState([]),[selectedId,setSelectedId]=useState(""),[attendance,setAttendance]=useState(null),[modern,setModern]=useState({leaveTypes:[]}),[leaveCenter,setLeaveCenter]=useState({plans:[]}),[entitlement,setEntitlement]=useState(null);
-  const [search,setSearch]=useState(""),[filter,setFilter]=useState("AKTIF"),[centerTab,setCenterTab]=useState(["giris-cikislar","puantaj","calisma-tarihi"].includes(activeTab)?"giris":activeTab==="izinler"?"izin":"bilgi");
+  const [search,setSearch]=useState(""),[filter,setFilter]=useState("AKTIF"),[centerTab,setCenterTab]=useState(activeTab==="puantaj"?"puantaj":["giris-cikislar","calisma-tarihi"].includes(activeTab)?"giris":activeTab==="izinler"?"izin":"bilgi");
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[error,setError]=useState(""),[modal,setModal]=useState("");
   const [punch,setPunch]=useState({date:iso(),time:"08:30",direction:"AUTO",note:"Manuel PDKS hareketi"});
   const [correction,setCorrection]=useState({date:iso(),status:"CALISTI",entry:"08:30",exit:"19:00",reason:"",note:""});
@@ -38,7 +38,7 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
 
   const selected=useMemo(()=>selectedPdksPerson(people,filter,selectedId),[people,filter,selectedId]);
   const personLeaves=useMemo(()=>(leaveCenter?.plans||[]).filter(row=>(row.employeeId||row.employee_id)===selected?.id),[leaveCenter?.plans,selected?.id]);
-  useEffect(()=>{if(["giris-cikislar","puantaj","calisma-tarihi"].includes(activeTab))setCenterTab("giris");else if(activeTab==="izinler")setCenterTab("izin");else if(activeTab==="personel-bilgileri")setCenterTab("bilgi")},[activeTab]);
+  useEffect(()=>{if(activeTab==="puantaj")setCenterTab("puantaj");else if(["giris-cikislar","calisma-tarihi"].includes(activeTab))setCenterTab("giris");else if(activeTab==="izinler")setCenterTab("izin");else if(activeTab==="personel-bilgileri")setCenterTab("bilgi")},[activeTab]);
 
   const loadCore=useCallback(async()=>{setBusy(true);setError("");try{const [personRows,config,leaves]=await Promise.all([getPdksPeople({mainCompanyId:company,year,month}),getPdksModernConfig({mainCompanyId:company}),getPdksLeaveCenter({mainCompanyId:company,from:String(year)+"-01-01",to:String(year)+"-12-31"})]);const list=Array.isArray(personRows)?personRows:[];setPeople(list);setModern(config||{leaveTypes:[]});setLeaveCenter(leaves||{plans:[]});setSelectedId(current=>list.some(p=>p.id===current)?current:(list[0]?.id||""))}catch(cause){setError(cause?.message||"PDKS personel merkezi yüklenemedi.")}finally{setBusy(false)}},[company,month,year]);
   const loadPerson=useCallback(async()=>{if(!selected?.id){setAttendance(null);setEntitlement(null);return}setBusy(true);setError("");try{const [att,ent]=await Promise.all([getPdksAttendance(selected.id,year,month),getPdksLeaveEntitlement(selected.id,{mainCompanyId:company})]);setAttendance(att||null);setEntitlement(ent||null)}catch(cause){setError(cause?.message||"Personel puantajı yüklenemedi.")}finally{setBusy(false)}},[company,month,selected?.id,year]);
@@ -118,6 +118,7 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
           <nav className="ppd-tabs" aria-label="Personel alt sayfaları">
             <button type="button" aria-current={centerTab==="bilgi"?"page":undefined} className={centerTab==="bilgi"?"active":""} onClick={()=>setCenterTab("bilgi")}>Personel Özeti</button>
             <button type="button" aria-current={centerTab==="giris"?"page":undefined} className={centerTab==="giris"?"active":""} onClick={()=>setCenterTab("giris")}>Giriş / Çıkış</button>
+            <button type="button" aria-current={centerTab==="puantaj"?"page":undefined} className={centerTab==="puantaj"?"active":""} onClick={()=>setCenterTab("puantaj")}>Puantaj</button>
             <button type="button" aria-current={centerTab==="izin"?"page":undefined} className={centerTab==="izin"?"active":""} onClick={()=>setCenterTab("izin")}>İzinler</button>
           </nav>
           <div className="ppd-center-body">
@@ -142,6 +143,34 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
                 {!attendanceRows.length?<div className="ppd-empty">Bu ay için kayıt bulunamadı. Son eşitleme ve terminal durumunu kontrol edin.</div>:null}
               </div>
               <div className="ppd-data-note">E işareti elle düzenlenmiş hareketi gösterir. Ham terminal kayıtları bu ekrandan değiştirilmez.</div>
+            </>:null}
+            {centerTab==="puantaj"?<>
+              <div className="ppd-sectionbar">
+                <div><h3>{MONTHS[month-1]} {year} · Puantaj</h3><p>Ayın çalışma, mesai ve istisnaları. Hesaplanan süreler onaylı aylık dönemden kontrol edilir.</p></div>
+                <button type="button" className="ppd-row-action" onClick={()=>openModule?.("pdks",{tabKey:"puantaj-sonuclari"})}>Toplu Sonuçlar</button>
+              </div>
+              <div className="ppd-payroll-summary">
+                <div><span>Normal hedef</span><b>{summary.profileConfigured?(num(summary.normalTargetMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:2})+" sa":"Profil bekliyor"}</b></div>
+                <div><span>Ödenecek normal</span><b>{(num(summary.payableNormalMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:2})} sa</b></div>
+                <div><span>Fiilî kart süresi</span><b>{(num(summary.actualWorkedMinutes??summary.workedMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:2})} sa</b></div>
+                <div><span>Normal kesinti</span><b>{(num(summary.normalDeductionMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:2})} sa</b></div>
+              </div>
+              <div className="ppd-table-scroll">
+                <table className="ppd-activity-table">
+                  <thead><tr><th>Tarih</th><th>Giriş</th><th>Çıkış</th><th>Normal</th><th>Mesai</th><th>Geç</th><th>Durum</th></tr></thead>
+                  <tbody>{attendanceRows.map(row=><tr key={row.date}>
+                    <td><strong>{dateTr(row.date)}</strong><small>{dayName(row.date)}</small></td>
+                    <td><span className="ppd-clock">{row.entry||"—"}</span>{row.manualEntry?<span className="ppd-edit-mark">E</span>:null}</td>
+                    <td><span className="ppd-clock">{row.exit||"—"}</span>{row.manualExit?<span className="ppd-edit-mark">E</span>:null}</td>
+                    <td>{(num(row.normalPayableMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:1})} sa</td>
+                    <td>{(num(row.overtimeMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:1})} sa</td>
+                    <td>{num(row.lateMinutes)||"—"}</td>
+                    <td><span className={"ppd-status "+statusTone(row.status)}>{statusLabel(row.status)}</span></td>
+                  </tr>)}</tbody>
+                </table>
+                {!attendanceRows.length?<div className="ppd-empty">Seçilen dönemde puantaj hareketi bulunamadı.</div>:null}
+              </div>
+              {num(summary.blockedDays)>0?<div className="ppd-data-note">{num(summary.blockedDays)} gün düzeltme bekliyor. Düzeltme için Giriş / Çıkış sekmesine geçin.</div>:null}
             </>:null}
             {centerTab==="izin"?<>
               <div className="ppd-sectionbar">
