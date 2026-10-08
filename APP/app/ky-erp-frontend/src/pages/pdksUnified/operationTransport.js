@@ -82,7 +82,8 @@ const ensureReadback=async(preview,accepted)=>{
         id==="overtime"?/MESAI/.test(String(row.adjustmentType).toLocaleUpperCase("tr-TR")):
         /KESINT/.test(String(row.adjustmentType).toLocaleUpperCase("tr-TR")))&&
       Number(row.amount)===p.amount&&
-      (id!=="overtime"||Number(row.hourOrDay)===p.hourOrDay));
+      (id!=="overtime"||(Number(row.hourOrDay)===p.hourOrDay &&
+        same(row.note,p.note))));
   }
   throw new Error("PDKS_READBACK_NOT_CONFIGURED");
 };
