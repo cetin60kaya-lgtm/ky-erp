@@ -76,7 +76,7 @@ test("validation rejects dates, unsafe code, negative advance and missing approv
   assert.throws(()=>makeOperationPreview("work-group",{
     ...form("work-group"),entryTime:"25:00"},ctx),/giriş saati/);
   assert.throws(()=>makeOperationPreview("work-group",{
-    ...form("work-group"),code:"/../"},{"company":"hakan-emp"}),/Kod/);
+    ...form("work-group"),code:"/../"},ctx),/Kod/);
   assert.throws(()=>makeOperationPreview("service",{
     ...form("service"),reason:"kısa"},ctx),/en az 8/);
 });
