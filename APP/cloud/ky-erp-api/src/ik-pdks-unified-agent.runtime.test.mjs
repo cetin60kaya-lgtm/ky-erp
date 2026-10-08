@@ -152,6 +152,20 @@ test("staging D1 mock: invalid ACK cannot bypass current claimed delivery",async
     assert.equal((await f.ack(delivery.outboxId,{...base,localReceipt:proof,
       localReceiptHmac:receiptSignature(f,delivery,proof)})).status,200);
     assert.equal(f.sqlite.prepare("SELECT state FROM ik_pdks_unified_outbox WHERE id='outbox-1'").get().state,"ACKED");
+    // The authenticated device may confirm an already durable ACK,
+    // but a different device, an old hash, or RETRY/FAILED may not.
+    const otherId="agent-B",otherSecret="another-isolated-secret";
+    f.sqlite.prepare("INSERT INTO ik_pdks_devices(id,main_company_id,secret_hash,active,created_at) VALUES(?,?,?,?,?)")
+      .run(otherId,f.company,sha(otherSecret),1,new Date().toISOString());
+    const other=await f.api("/api/auth/pdks-unified/outbox/"+delivery.outboxId+"/ack",{
+      method:"POST",headers:{"content-type":"application/json",
+        "X-KYERP-PDKS-Device":otherId,"X-KYERP-PDKS-Secret":otherSecret},
+      body:JSON.stringify({...base,localReceipt:proof}),
+    });
+    assert.equal(other.status,409);
+    assert.equal((await f.ack(delivery.outboxId,{...base,status:"RETRY"})).status,409);
+    assert.equal((await f.ack(delivery.outboxId,{...base,
+      deliveryHash:sha("wrong"),localReceipt:proof})).status,409);
     const repeated=await f.ack(delivery.outboxId,{...base,localReceipt:proof});
     assert.equal(repeated.status,200);
     assert.equal((await repeated.json()).data.replayed,true);
