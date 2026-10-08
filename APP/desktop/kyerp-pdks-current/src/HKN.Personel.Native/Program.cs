@@ -16,6 +16,32 @@ static class Program
                 PdksErrorPresenter.Show(null,ex,"KYERP PDKS",MessageBoxIcon.Error,"AppDomain.UnhandledException");
         };
         ApplicationConfiguration.Initialize();
+
+        if (PdksPreviewMode.Enabled)
+        {
+            // The preview must never load saved Firebird credentials, start
+            // terminal polling, run restore/backup/bootstrap, or touch production data.
+            var isolated = Path.Combine(Path.GetTempPath(), "KYERP-PDKS-VISUAL-PREVIEW");
+            Environment.SetEnvironmentVariable("KY_PDKS_RUNTIME_ROOT", isolated);
+            Environment.SetEnvironmentVariable("KY_PDKS_REPORT_ROOT", Path.Combine(isolated, "reports"));
+            Environment.SetEnvironmentVariable("KY_PDKS_DB_PATH", Path.Combine(isolated, "NO_DATABASE.GDB"));
+            Environment.SetEnvironmentVariable("KY_PDKS_DB_HOST", "127.0.0.1");
+            Environment.SetEnvironmentVariable("KY_PDKS_DB_PASSWORD", "PREVIEW_ONLY_NOT_A_REAL_SECRET");
+            Environment.SetEnvironmentVariable("KY_PDKS_UI_AUDIT", "1");
+
+            var previewUser = new LocalUser
+            {
+                UserName = "ÖNİZLEME",
+                IsActive = true,
+                IsAdmin = true,
+                Permissions = Enum.GetNames<PdksModule>().ToList()
+            };
+            using var preview = new MainShellForm(previewUser);
+            preview.Text = "KY PDKS 6.7 • GÖRSEL ÖNİZLEME • Canlı veri bağlantısı kapalı";
+            Application.Run(preview);
+            return;
+        }
+
         StartupConfiguration.LoadSavedSettingsIntoProcess();
         CompanyDataPaths.Ensure();
         CompanyDataPaths.PinEnvironment();
