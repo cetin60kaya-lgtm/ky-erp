@@ -33,8 +33,8 @@ export default function UnifiedOperationPanel({
   const [preview,setPreview]=useState(null);
   const [ack,setAck]=useState("");
   const [state,setState]=useState({status:"idle",message:""});
-  const available=Boolean(!previewOnly && profile?.scope==="FULL" && profile?.audit!==true &&
-    company && choices.length);
+  const available=Boolean(previewOnly || (profile?.scope==="FULL" && profile?.audit!==true &&
+    company && choices.length));
   const operation=operationById(selected);
   const inputKey=[tabId,company,year,month].join("|");
   const needsReference=Boolean(operation?.fields.some((f)=>
@@ -53,7 +53,7 @@ export default function UnifiedOperationPanel({
   },[inputKey]);
 
   useEffect(()=>{
-    if(!open || !needsReference || !company)return undefined;
+    if(previewOnly || !open || !needsReference || !company)return undefined;
     let cancelled=false;
     setReference("loading");
     import("./readService.js")
@@ -65,9 +65,9 @@ export default function UnifiedOperationPanel({
         if(!cancelled)setReference("error:"+String(error?.message||"Referans yüklenemedi."));
       });
     return ()=>{cancelled=true;};
-  },[open,company,year,month,needsReference]);
+  },[previewOnly,open,company,year,month,needsReference]);
 
-  if(!choices.length || previewOnly)return null;
+  if(!choices.length)return null;
   if(!available)return <div className="pdk-u-operation-guard">
     <LockKeyhole size={16}/> Bu işlemler için sunucu tarafından doğrulanmış FULL yetki gerekir.
   </div>;
@@ -110,11 +110,12 @@ export default function UnifiedOperationPanel({
       if(state.status==="pending")return;
       setOpen((v)=>!v);
     }}><ShieldCheck size={18}/><strong>İşlem Merkezi</strong>
-      <span>{choices.length} onaylı işlem türü · Cloud D1</span>
+      <span>{choices.length} işlem türü · {previewOnly?"İnceleme":"Cloud D1"}</span>
       <ChevronDown size={16}/></button>
     {open&&<div className="pdk-u-operation-body">
       <p className="pdk-u-operation-warning"><AlertTriangle size={16}/>
-        Bu bölüm yalnız D1 yönetim/özlük kayıtlarını değiştirir. Fiziksel terminal, Firebird ve yıllık TNF kayıtlarına dokunmaz.
+        {previewOnly ? "Yalnız görsel/form kontrolü. Sunucu bağlantısı ve kayıt düğmesi kapalıdır." :
+          "Yalnız Cloud D1 yönetim/özlük kayıtları; fiziksel terminal, Firebird ve yıllık TNF kayıtları değiştirilmez."}
       </p>
       <label className="pdk-u-operation-label">İşlem türü
         <select value={selected} disabled={state.status==="pending"||state.status==="success"||state.status==="uncertain"}
@@ -148,11 +149,15 @@ export default function UnifiedOperationPanel({
         {reference.startsWith("error:")&&<p role="alert">{reference}</p>}
         {reference==="loading"&&<p>Firma tanımları doğrulanıyor...</p>}
         {!preview&&state.status!=="success"&&state.status!=="uncertain"&&
-          <button className="pdk-u-btn" type="submit" disabled={state.status==="pending"||
+          <button className="pdk-u-btn" type="submit" disabled={previewOnly||state.status==="pending"||
             (needsReference&&reference!=="ready")}>
             <ShieldCheck size={15}/> Önizleme ve kontrol
           </button>}
       </form>}
+      {previewOnly&&operation&&<p className="pdk-u-operation-warning">
+        Form yerleşimi incelenebilir; test ortamında kişi ve cihaz kaydı üretilmez.
+        Onay ve kaydetme işlemleri devre dışıdır.
+      </p>}
       {preview&&<div className="pdk-u-operation-preview">
         <h3>Değişiklik önizlemesi · {preview.title}</h3>
         <dl>{Object.entries(preview.payload).map(([key,value])=><div key={key}>
