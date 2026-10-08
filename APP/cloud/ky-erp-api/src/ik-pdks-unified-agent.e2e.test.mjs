@@ -36,7 +36,7 @@ function d1(sqlite){
     }
   };
 }
-function insert(sqlite,company,commandId,outboxId,action,commandData){
+function insert(sqlite,company,commandId,outboxId,action,commandData,localCardNo=""){
   const now=new Date().toISOString();
   sqlite.prepare(
     "INSERT INTO ik_pdks_unified_commands(id,main_company_id,actor_user_id,request_id,action,payload_sha256,result_json,state,created_at) VALUES(?,?,?,?,?,?,?,?,?)"
@@ -44,7 +44,7 @@ function insert(sqlite,company,commandId,outboxId,action,commandData){
   sqlite.prepare(
     "INSERT INTO ik_pdks_unified_outbox(id,main_company_id,command_id,event_type,payload_json,state,created_at) VALUES(?,?,?,?,?,'PENDING',?)"
   ).run(outboxId,company,commandId,"PDKS_UNIFIED_APPLY",
-    JSON.stringify({commandId,action,company,localCardNo:"",commandData}),now);
+    JSON.stringify({commandId,action,company,localCardNo,commandData}),now);
 }
 async function executeDotnet(dll,env){
   return new Promise((accept,reject)=>{
@@ -66,9 +66,11 @@ async function executeDotnet(dll,env){
 test("Windows Agent end-to-end: Cloud HMAC -> staged Firebird -> local policy -> ACK and crash replay",{timeout:120000},async()=>{
   const dll=process.env.KY_PDKS_UNIFIED_DLL||"";
   const fdb=process.env.KY_PDKS_STAGE_FDB_PATH||"";
+  const stagedCard=process.env.KY_PDKS_STAGE_CARD_NO||"";
   assert.ok(dll.endsWith("KY.PDKS.Unified.dll"),"isolated Windows build DLL is required");
   assert.ok(fdb.toUpperCase().includes("\\_TEMP\\PDKS_COPY_STAGE_"),"only the isolated copied FDB may be used");
   assert.ok(fdb.toUpperCase().endsWith("\\KY_PDKS_STAGE.FDB"));
+  assert.match(stagedCard,/^[0-9]{5}$/,"read-only card from isolated copied FDB is required");
   const root=await mkdtemp(join(tmpdir(),"KY_PDKS_E2E_"));
   const sqlite=openMockDatabase();
   sqlite.exec(await readFile(migration,"utf8"));
@@ -135,6 +137,25 @@ test("Windows Agent end-to-end: Cloud HMAC -> staged Firebird -> local policy ->
     assert.match(group.stdout,/POLICY_MIRROR_AND_CLOUD_ACK_OK/);
     assert.equal(sqlite.prepare("SELECT state FROM ik_pdks_unified_outbox WHERE id=?").get(groupOutbox).state,"ACKED");
 
+    // Bind a real read-only KIMLIK card from the copied database to the
+    // previously mirrored Cloud group ID (which equals its command ID).
+    const assignmentCommand="pa-"+randomUUID(),assignmentOutbox="pao-"+randomUUID();
+    insert(sqlite,company,assignmentCommand,assignmentOutbox,"assign-personnel-group",{
+      employeeId:"stage-person-"+randomUUID(),personnelGroupId:groupCommand,
+      reason:"Approved group assignment with staged Firebird card proof"
+    },stagedCard);
+    const assigned=await executeDotnet(dll,winEnv);
+    assert.equal(assigned.code,0,"Assignment Agent failed: "+assigned.stderr+" "+assigned.stdout);
+    assert.match(assigned.stdout,/POLICY_MIRROR_AND_CLOUD_ACK_OK/);
+    assert.equal(sqlite.prepare("SELECT state FROM ik_pdks_unified_outbox WHERE id=?")
+      .get(assignmentOutbox).state,"ACKED");
+    const assignmentDirectory=join(root,"SISTEM","UnifiedPolicies","employee-personnel-groups");
+    const assignmentFiles=(await readdir(assignmentDirectory)).filter(x=>x.endsWith(".json"));
+    assert.equal(assignmentFiles.length,1);
+    const assignmentFact=JSON.parse(await readFile(join(assignmentDirectory,assignmentFiles[0]),"utf8"));
+    assert.equal(assignmentFact.localCardNo,stagedCard);
+    assert.equal(assignmentFact.commandData.personnelGroupId,groupCommand);
+
     const holidayCommand="h-"+randomUUID(),holidayOutbox="ho-"+randomUUID();
     insert(sqlite,company,holidayCommand,holidayOutbox,"holiday",{
       date:"2026-10-29",name:"Cumhuriyet Bayramı",halfDay:false,
@@ -167,13 +188,13 @@ test("Windows Agent end-to-end: Cloud HMAC -> staged Firebird -> local policy ->
 
     const groupDirectory=join(root,"SISTEM","UnifiedPolicies","personnel-groups");
     assert.equal((await readdir(groupDirectory)).filter(x=>x.endsWith(".json")).length,1);
-    assert.equal(acceptedAckCount,3);
+    assert.equal(acceptedAckCount,4);
     const final=await executeDotnet(dll,winEnv);
     assert.equal(final.code,0);
     assert.match(final.stdout,/NO_PENDING_COMMAND/);
     const journals=(await readdir(join(root,"SISTEM","SyncJournal"))).filter(x=>x.endsWith(".applied.json"));
-    assert.equal(journals.length,3);
-    assert.equal(sqlite.prepare("SELECT COUNT(*) AS total FROM ik_pdks_unified_commands").get().total,3);
+    assert.equal(journals.length,4);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS total FROM ik_pdks_unified_commands").get().total,4);
   } finally {
     await new Promise(resolve=>server.close(resolve));
     sqlite.close();
