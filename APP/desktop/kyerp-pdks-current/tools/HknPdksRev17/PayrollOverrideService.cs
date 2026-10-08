@@ -22,7 +22,7 @@ internal static class PayrollOverrideService
         "DEVS", "DEVG", "DEVU", "DEVCEZAS", "DEVCEZAU", "ERS", "ERG", "ERU", "ERCEZAS", "ERCEZAU",
         "GECS", "GECG", "GECU", "GECCEZAS", "GECCEZAU", "EKS", "EKG", "EKU", "EKCEZAS", "EKCEZAU",
         "AYS", "AYU", "TOPEKS", "YOLU", "YEMEKU", "DEVIR", "EX1", "EX2", "EX3", "EX4", "EX5", "EX6",
-        "EKKES", "EKKAZ", "NCMAAS", "NCKALAN", "SSKG", "BOLUM", "MESAIKESINTIS"
+        "EKKES", "EKKAZ", "SSKG", "BOLUM", "MESAIKESINTIS"
     ];
 
     internal static readonly string[] UiEditFields = EditableFields;
