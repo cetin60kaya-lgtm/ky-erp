@@ -39,6 +39,12 @@ test("separate staff/account approval and safe production retries",()=>{
   assert.match(staff,/kyerp-personnel-production-pending/);
   assert.match(staff,/requestId/);
 });
+test("admin can revoke delegated device approvers and assign listed machines",()=>{
+  assert.match(panel,/revokeApprover/);
+  assert.match(panel,/Yetkiyi Geri Al/);
+  assert.match(panel,/machines\.map/);
+  assert.match(staff,/plannedDays/);
+});
 test("company users are separated from employee access",()=>{
   assert.match(admin,/AdminCompanyPersonnelPanel/);
   assert.match(panel,/employeeId:selected/);

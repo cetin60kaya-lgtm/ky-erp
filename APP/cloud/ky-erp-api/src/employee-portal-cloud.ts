@@ -12,12 +12,15 @@ const nowIso = () => new Date().toISOString();
 const OCCUPATIONS = new Set(["PERSONEL", "MAKINACI", "NUMUNECI", "BOYACI"]);
 const DEVICE_KINDS = new Set(["MOBILE", "WORKPLACE"]);
 const limitLabel = (value: unknown) => text(value).slice(0, 100);
+const safeJson = (value: unknown) => {try {const result=JSON.parse(text(value)||"{}");return result&&typeof result==="object"&&!Array.isArray(result)?result:{};}catch{return {};}};
+const annualType = (value: unknown) => text(value).toLocaleUpperCase("tr-TR").replace(/İ/g,"I").includes("YILLIK");
+const isoYear = (year:number) => String(year)+"-01-01";
 const err = (c: any, status: number, code: string, message: string) => c.json({ ok:false, error:{code,message} },status);
 const ok = (c: any, data: unknown) => {c.header("Cache-Control","no-store");return c.json({ok:true,data});};
 async function bodyOf(c: any) {try {const x=await c.req.json();return x && typeof x==="object"&&!Array.isArray(x)?x:{};}catch{return {};}}
 async function ready(c:any) {
-  const results=await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('ky_employee_portal_accounts','ky_employee_portal_devices','ky_employee_portal_approvers')").all();
-  return (results.results||[]).length===3;
+  const results=await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('ky_employee_portal_accounts','ky_employee_portal_devices','ky_employee_portal_approvers','ky_employee_portal_nonces')").all();
+  return (results.results||[]).length===4;
 }
 async function ownAccount(c:any) {
   const user=await getAuthenticatedUser(c);
@@ -47,6 +50,9 @@ async function manager(c:any,companyRequested:unknown,needOwner=false) {
   const companyRow=await c.env.DB.prepare("SELECT slug FROM main_companies WHERE slug=? AND COALESCE(is_active,1)<>0 LIMIT 1").bind(company).first();
   if(!companyRow)return null;
   return {user,company,owner};
+}
+function auditStatement(c:any,actor:string,target:string,company:string,action:string,details:any={}) {
+  return c.env.DB.prepare("INSERT INTO auth_security_audit (id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at) VALUES (?,?,?,?,?,NULL,NULL,?,?)").bind(crypto.randomUUID(),actor||null,target||null,company,action,JSON.stringify(details),nowIso());
 }
 async function audit(c:any,actor:string,target:string,company:string,action:string,details:any={}) {
   try {await c.env.DB.prepare("INSERT INTO auth_security_audit (id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at) VALUES (?,?,?,?,?,NULL,NULL,?,?)").bind(crypto.randomUUID(),actor||null,target||null,company,action,JSON.stringify(details),nowIso()).run();}catch(e){console.error("KY_PERSONNEL_AUDIT",e);}
@@ -107,18 +113,24 @@ async function ownInfo(c:any,ctx:any) {
   const person=await c.env.DB.prepare("SELECT e.id,e.code,e.full_name,e.department,e.title,e.hire_date,e.annual_leave_entitlement,e.annual_leave_carryover,s.card_no FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.id=? AND e.main_company_id=? LIMIT 1").bind(employeeId,company).first();
   if(!person)return null;
   const today=dateInIstanbul(),year=Number(today.slice(0,4)),lastYear=year-1;
-  const since=String(lastYear)+"-01-01";
-  const [clockRows,leaveRows,profileRow,adjustRows]=await Promise.all([
+  const since=isoYear(lastYear),nextYear=isoYear(year+1);
+  const [clockRows,leaveRows,profileRow,adjustRows,plannedRows]=await Promise.all([
     c.env.DB.prepare("SELECT work_date,event_time FROM ik_time_clock_events WHERE main_company_id=? AND employee_id=? AND work_date>=? AND work_date<=? ORDER BY work_date DESC,event_time ASC LIMIT 250").bind(company,employeeId,String(year)+"-01-01",today).all(),
-    c.env.DB.prepare("SELECT start_date,end_date,day_count,record_type FROM hr_leave_records_v2 WHERE employee_id=? AND UPPER(record_type) LIKE '%YILLIK%' AND start_date>=? AND start_date<=? ORDER BY start_date DESC").bind(employeeId,since,today).all(),
+    // SQLite UPPER() does not convert Turkish dotless i. Filter record_type using the same Turkish normalization as IK.
+    c.env.DB.prepare("SELECT start_date,end_date,day_count,record_type,document_path FROM hr_leave_records_v2 WHERE employee_id=? AND start_date>=? AND start_date<? ORDER BY start_date DESC").bind(employeeId,since,nextYear).all(),
     c.env.DB.prepare("SELECT data FROM json_store WHERE scope='IK_LEAVE_PROFILE' AND main_company_slug=? AND file_name=? LIMIT 1").bind(company,company+":"+employeeId).first(),
     c.env.DB.prepare("SELECT data FROM json_store WHERE scope='IK_LEAVE_BALANCE_ADJUSTMENT' AND main_company_slug=? AND file_name LIKE ?").bind(company,company+":"+employeeId+":%").all(),
+    c.env.DB.prepare("SELECT start_date,end_date,counted_days FROM ik_leave_plans WHERE main_company_id=? AND employee_id=? AND status='PLANNED' AND start_date>=? AND start_date<?").bind(company,employeeId,isoYear(year),nextYear).all(),
   ]);
-  const profile=JSON.parse(text(profileRow?.data)||"{}");
+  const profile=safeJson(profileRow?.data);
   const adjustment=(Array.isArray(profile.adjustments)?profile.adjustments:[]).reduce((s:any,r:any)=>s+Number(r.days||0),0)
-    +(adjustRows.results||[]).reduce((s:any,r:any)=>{try{return s+Number(JSON.parse(r.data).days||0);}catch{return s;}},0);
-  const leaveItems=(leaveRows.results||[]).map((row:any)=>({startDate:text(row.start_date),endDate:text(row.end_date),days:Number(row.day_count||0)}));
+    +(adjustRows.results||[]).reduce((s:any,r:any)=>s+Number(safeJson(r.data).days||0),0);
+  // hr_leave_records_v2 already mirrors approved managed leave plans using document_path markers.
+  // Never add a second copy from ik_leave_plans to used days.
+  const leaveItems=(leaveRows.results||[]).filter((row:any)=>annualType(row.record_type)).map((row:any)=>({startDate:text(row.start_date),endDate:text(row.end_date),days:Number(row.day_count||0),managed:Boolean(text(row.document_path).startsWith("ik-leave-plan:"))}));
   const usedIn=(y:number)=>leaveItems.filter((x:any)=>x.startDate.startsWith(String(y))).reduce((s:number,x:any)=>s+x.days,0);
+  const approvedUpcomingDays=leaveItems.filter((x:any)=>x.startDate.startsWith(String(year))&&x.managed&&x.endDate>=today).reduce((s:number,x:any)=>s+x.days,0);
+  const plannedDays=(plannedRows.results||[]).reduce((s:number,x:any)=>s+Number(x.counted_days||0),0);
   const statutory=calculateStatutoryAnnualLeave(person.hire_date,profile.birthDate,today);
   const entitlement=Math.max(Number(person.annual_leave_entitlement||0),statutory.entitlementDays);
   const carryover=Number(person.annual_leave_carryover||0);
@@ -131,7 +143,7 @@ async function ownInfo(c:any,ctx:any) {
   return {
     person:{id:employeeId,code:text(person.code),fullName:text(person.full_name),department:text(person.department),occupation:text(ctx.account.occupation),machineId:text(ctx.account.machine_id),cardNo:text(person.card_no),hireDate:text(person.hire_date).slice(0,10)},
     attendance:Array.from(days,([date,stamps])=>({date,stamps,firstStamp:stamps[0]||"",lastStamp:stamps.length>1?stamps[stamps.length-1]:"",incomplete:stamps.length===1})),
-    annualLeave:{year,previousYear:lastYear,entitlement,carryover,adjustment,usedThisYear:used,usedPreviousYear:usedIn(lastYear),annualRight:balance.annualRight,remaining:balance.balance,nextEntitlementDate:statutory.nextEntitlementDate,history:leaveItems},
+    annualLeave:{year,previousYear:lastYear,entitlement,carryover,adjustment,usedThisYear:used,usedPreviousYear:usedIn(lastYear),approvedUpcomingDays,plannedDays,annualRight:balance.annualRight,remaining:balance.balance,nextEntitlementDate:statutory.nextEntitlementDate,history:leaveItems},
     capabilities:{selfInfo:true,workForm:text(ctx.account.occupation)==="MAKINACI"?"MACHINE_ENTRY":text(ctx.account.occupation)==="NUMUNECI"?"SAMPLE_FORM_PLANNED":text(ctx.account.occupation)==="BOYACI"?"DYE_FORM_PLANNED":"SELF_ONLY",deviceKind:ctx.device.kind},
   };
 }
@@ -171,7 +183,7 @@ export function registerEmployeePortalRoutes(app:any) {
     const ctx=await prove(c);if(ctx.response)return ctx.response;
     const occupation=roleOf(ctx.account.occupation);
     if(occupation!=="MAKINACI")return ok(c,{occupation,form:occupation==="BOYACI"?"DYE_FORM_PLANNED":occupation==="NUMUNECI"?"SAMPLE_FORM_PLANNED":"SELF_ONLY",models:[]});
-    const rows=await c.env.DB.prepare("SELECT id,model_name,model_code FROM model_records WHERE main_company_slug=? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 80").bind(ctx.account.main_company_slug).all();
+    const rows=await c.env.DB.prepare("SELECT id,model_name,model_code FROM model_records WHERE main_company_slug=? AND deleted_at IS NULL AND UPPER(COALESCE(status,'ACTIVE')) NOT IN ('COMPLETED','CLOSED','CANCELLED','TAMAMLANDI','KAPALI','IPTAL') ORDER BY updated_at DESC LIMIT 80").bind(ctx.account.main_company_slug).all();
     return ok(c,{occupation,form:"MACHINE_ENTRY",machineId:text(ctx.account.machine_id),models:(rows.results||[]).map((x:any)=>({id:x.id,name:text(x.model_name),code:text(x.model_code)}))});
   });
   app.post("/api/employee-portal/work/machine-production",async(c:any)=>{
@@ -198,6 +210,20 @@ export function registerEmployeePortalRoutes(app:any) {
     const approved=await c.env.DB.prepare("SELECT d.id,d.kind,d.label,d.created_at,d.approved_at,d.account_user_id,e.full_name FROM ky_employee_portal_devices d JOIN ky_employee_portal_accounts a ON a.auth_user_id=d.account_user_id JOIN hr_monthly_employees e ON e.id=a.employee_id AND e.main_company_id=a.main_company_slug WHERE d.main_company_slug=? AND d.status='APPROVED' ORDER BY d.approved_at DESC LIMIT 100").bind(actor.company).all();
     return ok(c,{companySlug:actor.company,employees:(rows.results||[]).map((x:any)=>({employeeId:x.id,code:x.code,fullName:x.full_name,department:x.department,title:x.title,status:x.status,accountUserId:x.auth_user_id||"",username:x.username_local||"",occupation:x.occupation||"",machineId:x.machine_id||"",mobileEnabled:Boolean(x.mobile_enabled),workplaceEnabled:Boolean(x.workplace_enabled),approved:Boolean(x.activated_at),active:Boolean(x.is_active)&&Boolean(x.login_active)})),pendingDevices:pending.results||[],approvedDevices:approved.results||[]});
   });
+  app.get("/api/employee-portal/admin/machines",async(c:any)=>{
+    if(!(await ready(c)))return err(c,503,"PERSONNEL_SCHEMA_NOT_READY","0060 semasi gerekli.");
+    const actor=await manager(c,c.req.query("companySlug"),true);
+    if(!actor)return err(c,403,"COMPANY_ADMIN_REQUIRED","Firma yoneticisi gerekli.");
+    const rows=await c.env.DB.prepare("SELECT id,machine_no,machine_name FROM machine_shift_defaults WHERE main_company_slug=? AND deleted_at IS NULL AND COALESCE(is_active,1)<>0 ORDER BY sort_order,machine_no").bind(actor.company).all();
+    return ok(c,(rows.results||[]).map((m:any)=>({id:text(m.id),machineNo:text(m.machine_no),name:text(m.machine_name||m.machine_no||m.id)})));
+  });
+  app.get("/api/employee-portal/admin/approvers",async(c:any)=>{
+    if(!(await ready(c)))return err(c,503,"PERSONNEL_SCHEMA_NOT_READY","0060 semasi gerekli.");
+    const actor=await manager(c,c.req.query("companySlug"),true);
+    if(!actor)return err(c,403,"COMPANY_ADMIN_REQUIRED","Firma yoneticisi gerekli.");
+    const rows=await c.env.DB.prepare("SELECT p.user_id,u.username,u.full_name,p.created_at FROM ky_employee_portal_approvers p JOIN auth_users u ON u.id=p.user_id WHERE p.main_company_slug=? AND u.is_active=1 ORDER BY p.created_at DESC").bind(actor.company).all();
+    return ok(c,(rows.results||[]).map((x:any)=>({userId:text(x.user_id),name:text(x.full_name||x.username),grantedAt:text(x.created_at)})));
+  });
   app.post("/api/employee-portal/admin/accounts",async(c:any)=>{
     if(!(await ready(c)))return err(c,503,"PERSONNEL_SCHEMA_NOT_READY","0060 semasi gerekli.");
     const body=await bodyOf(c),actor=await manager(c,body.companySlug,true);
@@ -206,7 +232,11 @@ export function registerEmployeePortalRoutes(app:any) {
     const occupation=roleOf(body.occupation||"PERSONEL"),machineId=text(body.machineId);
     const password=String(body.password||"");
     if(!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(local)||!OCCUPATIONS.has(occupation)||password.length<10||!employeeId)return err(c,400,"ACCOUNT_FIELDS_INVALID","Personel, 3-40 karakter kullanici adi, vasif ve en az 10 karakter parola gerekli.");
-    if(occupation==="MAKINACI"&&!machineId)return err(c,400,"MACHINE_REQUIRED","Makinaci icin makine atanmalidir.");
+    if(occupation==="MAKINACI"){
+      if(!machineId)return err(c,400,"MACHINE_REQUIRED","Makinaci icin makine atanmalidir.");
+      const validMachine=await c.env.DB.prepare("SELECT id FROM machine_shift_defaults WHERE main_company_slug=? AND deleted_at IS NULL AND COALESCE(is_active,1)<>0 AND (id=? OR machine_no=?) LIMIT 1").bind(actor.company,machineId,machineId).first();
+      if(!validMachine)return err(c,400,"MACHINE_ASSIGNMENT_INVALID","Yalniz firmaya ait aktif makine atanabilir.");
+    }
     const person=await c.env.DB.prepare("SELECT id,full_name,status FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1").bind(employeeId,actor.company).first();
     if(!person||roleOf(person.status)==="PASIF")return err(c,404,"PERSON_NOT_ACTIVE","Firmada aktif IK Aylik personeli bulunamadi.");
     const username=actor.company+"--"+local,uid=crypto.randomUUID(),id=crypto.randomUUID(),timestamp=nowIso();
@@ -231,8 +261,12 @@ export function registerEmployeePortalRoutes(app:any) {
     if(decision==="APPROVE"&&!Number(target.is_active))return err(c,409,"PERSONNEL_ACCOUNT_INACTIVE","Pasif personel hesabi onaylanamaz.");
     const timestamp=nowIso();
     if(decision==="APPROVE"){
-      const result=await c.env.DB.prepare("UPDATE ky_employee_portal_accounts SET activated_at=?,approved_by_user_id=?,updated_at=? WHERE id=? AND main_company_slug=? AND activated_at IS NULL").bind(timestamp,actor.user.id,timestamp,target.id,actor.company).run();
-      if(Number(result?.meta?.changes||0)!==1)return err(c,409,"ACCOUNT_STATE_CHANGED","Hesap zaten onayli veya durumu degismis.");
+      if(text(target.activated_at))return err(c,409,"ACCOUNT_STATE_CHANGED","Hesap zaten onayli veya durumu degismis.");
+      const result=await c.env.DB.batch([
+        c.env.DB.prepare("UPDATE ky_employee_portal_accounts SET activated_at=?,approved_by_user_id=?,updated_at=? WHERE id=? AND main_company_slug=? AND activated_at IS NULL").bind(timestamp,actor.user.id,timestamp,target.id,actor.company),
+        auditStatement(c,actor.user.id,target.auth_user_id,actor.company,"PERSONNEL_ACCOUNT_APPROVED"),
+      ]);
+      if(Number(result?.[0]?.meta?.changes||0)!==1)return err(c,409,"ACCOUNT_STATE_CHANGED","Hesap durumu degismis.");
     }else{
       // Hesap onayi geri alindiginda mevcut cihazlar da iptal edilir; tekrar onay atlanamaz.
       if(!text(target.activated_at))return err(c,409,"ACCOUNT_STATE_CHANGED","Hesap zaten onaysiz.");
@@ -240,9 +274,9 @@ export function registerEmployeePortalRoutes(app:any) {
         c.env.DB.prepare("UPDATE ky_employee_portal_accounts SET activated_at=NULL,approved_by_user_id=NULL,updated_at=? WHERE id=? AND main_company_slug=?").bind(timestamp,target.id,actor.company),
         c.env.DB.prepare("UPDATE ky_employee_portal_devices SET status='REVOKED',revoked_at=?,updated_at=? WHERE account_user_id=? AND main_company_slug=? AND status='APPROVED'").bind(timestamp,timestamp,target.auth_user_id,actor.company),
         c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=COALESCE(revoked_at,?) WHERE user_id=? AND revoked_at IS NULL").bind(timestamp,target.auth_user_id),
+        auditStatement(c,actor.user.id,target.auth_user_id,actor.company,"PERSONNEL_ACCOUNT_APPROVAL_REVOKED"),
       ]);
     }
-    await audit(c,actor.user.id,target.auth_user_id,actor.company,"PERSONNEL_ACCOUNT_"+(decision==="APPROVE"?"APPROVED":"APPROVAL_REVOKED"));
     return ok(c,{userId:target.auth_user_id,accountApproved:decision==="APPROVE"});
   });
   app.patch("/api/employee-portal/admin/accounts/:userId",async(c:any)=>{
@@ -252,6 +286,10 @@ export function registerEmployeePortalRoutes(app:any) {
     if(!target)return err(c,404,"PERSONNEL_NOT_FOUND","Personel erisimi bulunamadi.");
     const occupation=roleOf(body.occupation||target.occupation),machineId=body.machineId===undefined?text(target.machine_id):text(body.machineId);
     if(!OCCUPATIONS.has(occupation)||(occupation==="MAKINACI"&&!machineId))return err(c,400,"PERSONNEL_FORM_INVALID","Vasif veya makine gecersiz.");
+    if(occupation==="MAKINACI"){
+      const validMachine=await c.env.DB.prepare("SELECT id FROM machine_shift_defaults WHERE main_company_slug=? AND deleted_at IS NULL AND COALESCE(is_active,1)<>0 AND (id=? OR machine_no=?) LIMIT 1").bind(actor.company,machineId,machineId).first();
+      if(!validMachine)return err(c,400,"MACHINE_ASSIGNMENT_INVALID","Yalniz firmaya ait aktif makine atanabilir.");
+    }
     const mobile=body.mobileEnabled===undefined?Number(target.mobile_enabled):body.mobileEnabled===true?1:0;
     const workplace=body.workplaceEnabled===undefined?Number(target.workplace_enabled):body.workplaceEnabled===true?1:0;
     const active=body.isActive===undefined?Number(target.is_active):body.isActive===true?1:0;
@@ -259,7 +297,11 @@ export function registerEmployeePortalRoutes(app:any) {
     await c.env.DB.batch([
       c.env.DB.prepare("UPDATE ky_employee_portal_accounts SET occupation=?,machine_id=?,mobile_enabled=?,workplace_enabled=?,is_active=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(occupation,machineId,mobile,workplace,active,timestamp,target.id,actor.company),
       c.env.DB.prepare("UPDATE auth_users SET is_active=?,updated_at=? WHERE id=?").bind(active,timestamp,target.auth_user_id),
-      ...(active?[]:[c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=COALESCE(revoked_at,?) WHERE user_id=? AND revoked_at IS NULL").bind(timestamp,target.auth_user_id)]),
+      ...(active?[]:[
+        c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=COALESCE(revoked_at,?) WHERE user_id=? AND revoked_at IS NULL").bind(timestamp,target.auth_user_id),
+        c.env.DB.prepare("UPDATE ky_employee_portal_devices SET status='REVOKED',revoked_at=?,updated_at=? WHERE account_user_id=? AND main_company_slug=? AND status='APPROVED'").bind(timestamp,timestamp,target.auth_user_id,actor.company),
+        c.env.DB.prepare("UPDATE ky_employee_portal_accounts SET activated_at=NULL,approved_by_user_id=NULL,updated_at=? WHERE id=? AND main_company_slug=?").bind(timestamp,target.id,actor.company),
+      ]),
     ]);
     await audit(c,actor.user.id,target.auth_user_id,actor.company,"PERSONNEL_ACCESS_UPDATED",{occupation,machineId,mobile,workplace,active});
     return ok(c,{userId:target.auth_user_id,occupation,machineId,mobileEnabled:!!mobile,workplaceEnabled:!!workplace,isActive:!!active});
@@ -271,9 +313,10 @@ export function registerEmployeePortalRoutes(app:any) {
     const userId=text(body.userId),enabled=body.enabled===true;
     const user=await c.env.DB.prepare("SELECT u.id,u.role,s.main_company_slug,s.role_override FROM auth_users u JOIN auth_user_security s ON s.user_id=u.id WHERE u.id=? AND u.is_active=1 LIMIT 1").bind(userId).first();
     if(!user||user.main_company_slug!==actor.company||roleOf(user.role)==="PERSONNEL"||roleOf(user.role_override)==="SUPER_ADMIN")return err(c,403,"APPROVER_NOT_ELIGIBLE","Ayni firmadaki yetkili bir ERP kullanicisi secin.");
-    if(enabled)await c.env.DB.prepare("INSERT INTO ky_employee_portal_approvers(main_company_slug,user_id,granted_by_user_id,created_at) VALUES (?,?,?,?) ON CONFLICT(main_company_slug,user_id) DO UPDATE SET granted_by_user_id=excluded.granted_by_user_id").bind(actor.company,userId,actor.user.id,nowIso()).run();
-    else await c.env.DB.prepare("DELETE FROM ky_employee_portal_approvers WHERE main_company_slug=? AND user_id=?").bind(actor.company,userId).run();
-    await audit(c,actor.user.id,userId,actor.company,enabled?"PERSONNEL_APPROVER_GRANTED":"PERSONNEL_APPROVER_REVOKED");
+    const grant=enabled?
+      c.env.DB.prepare("INSERT INTO ky_employee_portal_approvers(main_company_slug,user_id,granted_by_user_id,created_at) VALUES (?,?,?,?) ON CONFLICT(main_company_slug,user_id) DO UPDATE SET granted_by_user_id=excluded.granted_by_user_id").bind(actor.company,userId,actor.user.id,nowIso()):
+      c.env.DB.prepare("DELETE FROM ky_employee_portal_approvers WHERE main_company_slug=? AND user_id=?").bind(actor.company,userId);
+    await c.env.DB.batch([grant,auditStatement(c,actor.user.id,userId,actor.company,enabled?"PERSONNEL_APPROVER_GRANTED":"PERSONNEL_APPROVER_REVOKED")]);
     return ok(c,{userId,enabled});
   });
   app.get("/api/employee-portal/admin/pending",async(c:any)=>{
@@ -292,10 +335,13 @@ export function registerEmployeePortalRoutes(app:any) {
     if(decision==="APPROVE"&&((device.kind==="MOBILE"&&!device.mobile_enabled)||(device.kind==="WORKPLACE"&&!device.workplace_enabled)))return err(c,409,"DEVICE_KIND_BLOCKED","Personel kartinda bu cihaz turu acik degil.");
     const wanted=decision==="APPROVE"?"APPROVED":decision==="DENY"?"DENIED":"REVOKED";
     const expected=decision==="REVOKE"?"APPROVED":"PENDING",timestamp=nowIso();
-    const result=await c.env.DB.prepare("UPDATE ky_employee_portal_devices SET status=?,approved_by_user_id=?,approved_at=CASE WHEN ?='APPROVED' THEN ? ELSE approved_at END,revoked_at=CASE WHEN ?='REVOKED' THEN ? ELSE revoked_at END,updated_at=? WHERE id=? AND main_company_slug=? AND status=?").bind(wanted,actor.user.id,wanted,timestamp,wanted,timestamp,timestamp,device.id,actor.company,expected).run();
-    if(Number(result?.meta?.changes||0)!==1)return err(c,409,"DEVICE_STATE_CHANGED","Cihaz karari daha once degistirilmis.");
+    if(text(device.status)!==expected)return err(c,409,"DEVICE_STATE_CHANGED","Cihaz karari daha once degistirilmis.");
+    const result=await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE ky_employee_portal_devices SET status=?,approved_by_user_id=?,approved_at=CASE WHEN ?='APPROVED' THEN ? ELSE approved_at END,revoked_at=CASE WHEN ?='REVOKED' THEN ? ELSE revoked_at END,updated_at=? WHERE id=? AND main_company_slug=? AND status=?").bind(wanted,actor.user.id,wanted,timestamp,wanted,timestamp,timestamp,device.id,actor.company,expected),
+      auditStatement(c,actor.user.id,device.account_user_id,actor.company,"PERSONNEL_DEVICE_"+wanted,{deviceId:device.id,kind:device.kind}),
+    ]);
+    if(Number(result?.[0]?.meta?.changes||0)!==1)return err(c,409,"DEVICE_STATE_CHANGED","Cihaz karari daha once degistirilmis.");
     // Cihaz karari hesap onayini DEGISTIRMEZ. Iki onay birbirinden bagimsizdir.
-    await audit(c,actor.user.id,device.account_user_id,actor.company,"PERSONNEL_DEVICE_"+wanted,{deviceId:device.id,kind:device.kind});
     return ok(c,{id:device.id,status:wanted,kind:device.kind});
   });
 }

@@ -830,7 +830,7 @@ async function saveEntry(c: Context<AppEnv>, body: Row, forcedId = "") {
       )
       .run();
   } else {
-    await c.env.DB.prepare(
+    const insertRecord=c.env.DB.prepare(
       `INSERT INTO production_records
         (id, main_company_slug, model_id, model_name, order_no, ground_color, machine_name, total_quantity,
          machinist, print_area, fabric_defect, print_defect, shift, production_date, note, raw, created_at, updated_at)
@@ -855,15 +855,14 @@ async function saveEntry(c: Context<AppEnv>, body: Row, forcedId = "") {
         JSON.stringify(raw),
         now,
         now,
-      )
-      .run();
-    await c.env.DB.prepare(
+      );
+    const insertLink=c.env.DB.prepare(
       `INSERT INTO model_production_links
         (id, main_company_slug, model_id, production_record_id, raw, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-      .bind(crypto.randomUUID(), slug, modelId, id, JSON.stringify({ source: "PRODUCTION_V2" }), now, now)
-      .run();
+      .bind(crypto.randomUUID(), slug, modelId, id, JSON.stringify({ source: "PRODUCTION_V2" }), now, now);
+    await c.env.DB.batch([insertRecord,insertLink]);
   }
   return { id, modelId, modelName: model.modelName, date, printArea, quantity, netQty: Math.max(0, quantity - printDefectQty - fabricDefectQty - testQty), machineId, machineName, shift, operatorName };
 }

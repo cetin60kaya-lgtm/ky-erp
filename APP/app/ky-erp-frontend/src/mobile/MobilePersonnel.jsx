@@ -108,8 +108,9 @@ export default function MobilePersonnel() {
         <section style={box}>
           <h3 style={{marginTop:0}}>Yıllık İzin Durumum</h3>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-            {[["Bu Yıl Hak Edişi",info.annualLeave.entitlement+" gun"],["Geçen Yıldan Devir",info.annualLeave.carryover+" gun"],["Bu Yıl Kullanılan",info.annualLeave.usedThisYear+" gun"],["Kalan İzin",info.annualLeave.remaining+" gun"],["Geçen Yıl Kullanılan",info.annualLeave.usedPreviousYear+" gun"],["Sonraki Hak Ediş",fmt(info.annualLeave.nextEntitlementDate)]].map(([name,value])=><div key={name} style={{background:"#f3f6f9",borderRadius:8,padding:10}}><div style={subtle}>{name}</div><strong>{value}</strong></div>)}
+            {[["Bu Yıl Hak Edişi",info.annualLeave.entitlement+" gun"],["Geçen Yıldan Devir",info.annualLeave.carryover+" gun"],["Bu Yıl Kullanılan / Onaylanan",info.annualLeave.usedThisYear+" gün"],["Kalan İzin",info.annualLeave.remaining+" gün"],["Geçen Yıl Kullanılan",info.annualLeave.usedPreviousYear+" gun"],["Sonraki Hak Ediş",fmt(info.annualLeave.nextEntitlementDate)]].map(([name,value])=><div key={name} style={{background:"#f3f6f9",borderRadius:8,padding:10}}><div style={subtle}>{name}</div><strong>{value}</strong></div>)}
           </div>
+          <p style={subtle}>Onaylanmış izinler bakiyeden düşülür. Henüz planlanan ({info.annualLeave.plannedDays||0} gün) düşülmez. Onaylı ileri tarihli: {info.annualLeave.approvedUpcomingDays||0} gün.</p>
           <h4>İzin Geçmişim</h4>
           {info.annualLeave.history.length?info.annualLeave.history.map((x,i)=><div key={i} style={{padding:"7px 0",borderBottom:"1px solid #e5e7eb"}}>{fmt(x.startDate)} – {fmt(x.endDate)} · {x.days} gun</div>):<p style={subtle}>Son iki yılda kayıtlı yıllık izin bulunmuyor.</p>}
         </section>

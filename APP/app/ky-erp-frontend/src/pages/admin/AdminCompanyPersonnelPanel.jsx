@@ -15,13 +15,22 @@ export default function AdminCompanyPersonnelPanel({companySlug}) {
   const [machineId,setMachineId]=useState("");
   const [workplace,setWorkplace]=useState(false);
   const [approverId,setApproverId]=useState("");
+  const [approvers,setApprovers]=useState([]);
+  const [machines,setMachines]=useState([]);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
   const refresh=useCallback(async()=>{
     if(!companySlug)return;
     setBusy(true);
     try {
-      const [result,allUsers]=await Promise.all([managerPersonnelRequest("employees",{companySlug}),listUsers()]);
+      const [result,allUsers,approvedList,machineList]=await Promise.all([
+        managerPersonnelRequest("employees",{companySlug}),
+        listUsers(),
+        managerPersonnelRequest("approvers",{companySlug}),
+        managerPersonnelRequest("machines",{companySlug}),
+      ]);
+      setApprovers(Array.isArray(approvedList)?approvedList:[]);
+      setMachines(Array.isArray(machineList)?machineList:[]);
       setEmployees(result.employees||[]);
       setPending(result.pendingDevices||[]);
       setApprovedDevices(result.approvedDevices||[]);
@@ -69,7 +78,15 @@ export default function AdminCompanyPersonnelPanel({companySlug}) {
     try {
       await managerPersonnelRequest("approvers",{method:"POST",body:{companySlug,userId:approverId,enabled:true}});
       setMessage("Cihaz onaylama yetkisi verildi (muhasebe/modul yetkisi eklenmedi).");
-      setApproverId("");
+      setApproverId("");await refresh();
+    }catch(e){setMessage("Hata: "+e.message);}finally{setBusy(false);}
+  }
+  async function revokeApprover(userId){
+    if(!window.confirm("Bu kullanıcının personel cihaz onay yetkisi kaldırılsın mı?"))return;
+    setBusy(true);
+    try{
+      await managerPersonnelRequest("approvers",{method:"POST",body:{companySlug,userId,enabled:false}});
+      setMessage("Cihaz onay yetkisi kaldırıldı.");await refresh();
     }catch(e){setMessage("Hata: "+e.message);}finally{setBusy(false);}
   }
   const active=employees.filter(e=>e.accountUserId);
@@ -84,7 +101,7 @@ export default function AdminCompanyPersonnelPanel({companySlug}) {
           <label>Vasıf<select value={occupation} onChange={e=>setOccupation(e.target.value)}>{ROLES.map(([v,n])=><option key={v} value={v}>{n}</option>)}</select></label>
           <label>Kullanıcı Adı<input value={username} onChange={e=>setUsername(e.target.value)} placeholder="or. cuma.ozkop" required /></label>
           <label>İlk Şifre<input type="password" minLength={10} value={password} onChange={e=>setPassword(e.target.value)} placeholder="En az 10 karakter" required /></label>
-          {occupation==="MAKINACI"?<label>Atanmış Makine ID<input value={machineId} onChange={e=>setMachineId(e.target.value)} required /></label>:null}
+          {occupation==="MAKINACI"?<label>Atanmış Makine<select value={machineId} onChange={e=>setMachineId(e.target.value)} required><option value="">Aktif makine seçiniz</option>{machines.map(m=><option key={m.id} value={m.id}>{m.machineNo} · {m.name}</option>)}</select></label>:null}
           <label className="admpro-check"><input type="checkbox" checked={workplace} onChange={e=>setWorkplace(e.target.checked)} /> İşyeri bilgisayarına da izin ver</label>
         </div>
         <div className="admpro-actions"><button type="submit" className="primary" disabled={busy}>Personel Hesabı Aç</button></div>
@@ -98,6 +115,8 @@ export default function AdminCompanyPersonnelPanel({companySlug}) {
         <h4>Cihaz Onaylamaya Yetkili Kullanıcı</h4>
         <label>Firma sahibi cihaz onay yetkisini devredebilir<select value={approverId} onChange={e=>setApproverId(e.target.value)}><option value="">Kullanıcı seçiniz</option>{users.map(u=><option key={u.id} value={u.id}>{u.fullName||u.username} · {u.role}</option>)}</select></label>
         <div className="admpro-actions"><button type="button" disabled={busy||!approverId} onClick={delegate}>Onay Yetkisi Ver</button></div>
+        <h4>Yetki Devredilenler ({approvers.length})</h4>
+        {!approvers.length?<p>Cihaz onayı devredilmiş kullanıcı yok.</p>:approvers.map(a=><div key={a.userId} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"6px 0",borderBottom:"1px solid #e1e7ec"}}><span>{a.name}</span><button type="button" disabled={busy} onClick={()=>revokeApprover(a.userId)}>Yetkiyi Geri Al</button></div>)}
       </div>
     </div>
     <h4>Personel Hesapları ({active.length})</h4>

@@ -59,6 +59,24 @@ test("production request validates model and machine, uses stable idempotency ke
   assert.match(runtime,/const recordId="personnel-"/);
   assert.match(runtime,/reused:true/);
 });
+test("management supports scoped machine assignment and reversible approver delegation",()=>{
+  assert.match(api,/admin\/machines/);
+  assert.match(api,/MACHINE_ASSIGNMENT_INVALID/);
+  assert.match(api,/admin\/approvers/);
+  assert.match(api,/PERSONNEL_APPROVER_REVOKED/);
+  assert.match(api,/auditStatement\(c,actor\.user\.id/);
+});
+test("annual leave uses Turkish record type normalization and excludes planned double counting",()=>{
+  assert.match(api,/toLocaleUpperCase\("tr-TR"\)/);
+  assert.match(api,/annualType\(row\.record_type\)/);
+  assert.match(api,/status='PLANNED'/);
+  assert.match(api,/approvedUpcomingDays/);
+  assert.match(api,/safeJson/);
+});
+test("production write atomically creates record and model link",()=>{
+  const runtime=read("src/production-runtime-v2.ts");
+  assert.match(runtime,/c\.env\.DB\.batch\(\[insertRecord,insertLink\]\)/);
+});
 test("disabled manager approval does not leak into old phone/session approvals",()=>{
   assert.match(security,/LOGIN_POLICY_NO_MANAGER_REVIEW/);
   assert.match(security,/phoneFactorAllowed/);
