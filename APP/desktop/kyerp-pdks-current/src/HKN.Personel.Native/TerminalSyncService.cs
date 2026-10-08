@@ -99,7 +99,31 @@ internal static class TerminalSyncService
 
             var records = punches.Select(ToRecord).ToArray();
             var operationalDb = new FirebirdDatabase(PdksOptions.FromEnvironment());
-            var detailedImport = new AttendanceImportService(operationalDb).ImportDetailed(records, deviceSettings.ToleranceMinutes);
+            AttendanceImportDetailedResult detailedImport;
+            try
+            {
+                // Reject the *whole* batch in the same Firebird transaction when even one
+                // record cannot be applied. Previously other rows could remain committed.
+                detailedImport = new AttendanceImportService(operationalDb)
+                    .ImportDetailed(records, deviceSettings.ToleranceMinutes, requireCompleteBatch: true);
+            }
+            catch (AttendanceImportRejectedException rejected)
+            {
+                var failed = rejected.Details.Summary;
+                var journalMessage = "";
+                try
+                {
+                    var journal = TerminalTransferJournalService.WriteBatch(punches, rejected.Details.Items);
+                    journalMessage = $" Ayrıntılı aktarım günlüğü yazıldı; ERR={journal.DuplicateCount}.";
+                }
+                catch (Exception journalError)
+                {
+                    journalMessage = " Aktarım günlüğü yazılamadı: " + journalError.Message;
+                }
+                return Save(new(DateTime.Now, punches.Length, 0, 0, failed.Duplicates, failed.Skipped, false,
+                    $"{source}: {failed.Skipped} kayıt atlandı; Firebird transaction GERİ ALINDI. "
+                    + "Ana FDB/TNF değiştirilmedi; cihaz ve ham arşiv korundu." + journalMessage, scheduleKey));
+            }
             var imported = detailedImport.Summary;
 
             var journalText = "";
@@ -129,23 +153,12 @@ internal static class TerminalSyncService
             await PdksCloudAgent.EnqueueTerminalSyncAsync(punches, imported, ct);
             _ = PdksCloudAgent.RunOnceAsync(ct);
 
+            // Do not silently erase physical terminal evidence during scheduled transfer.
+            // Even a successful DB/TNF check is not a user-approved one-time log deletion.
             var deviceCleared = false;
-            var cleanupMessage = "Cihaz kayıtları KORUNDU.";
-            if (deviceSettings.DeleteAfterValidatedTransfer)
-            {
-                var clear = await TerminalDeviceClient.ClearLogsAsync(ct);
-                if (!clear.Success)
-                {
-                    var warning = $"{source}: {punches.Length} kayıt CANLI TNF + TNF + FDB doğrulandı; ancak cihaz logları temizlenemedi: {clear.Message}";
-                    return Save(new(DateTime.Now, punches.Length, imported.Inserted, imported.Updated, imported.Duplicates, imported.Skipped, false, warning, scheduleKey));
-                }
-
-                var verify = await TerminalDeviceClient.ReadAsync(false, ct);
-                deviceCleared = verify.Connected;
-                cleanupMessage = deviceCleared
-                    ? "Doğrulama başarılı; cihaz logları temizlendi."
-                    : "Cihaz logları temizlendi; son bağlantı doğrulaması alınamadı.";
-            }
+            var cleanupMessage = deviceSettings.DeleteAfterValidatedTransfer
+                ? "Otomatik cihaz log temizleme devre dışı; Terminal > Bakım & Arşiv üzerinden bağımsız onay gerekir."
+                : "Cihaz kayıtları KORUNDU.";
 
             var autoAlign = TryAutoAlignYesterday();
             var finalMessage = $"{source}: {punches.Length} kayıt cihaz arşivi + CANLI + yıllık TNF + DATA/FDB üzerinde doğrulandı. {cleanupMessage} {autoAlign}{journalText}";
