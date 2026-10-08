@@ -4,7 +4,7 @@ namespace HKN.Personel.Native;
 /// The real WinForms navigation workspace in review mode. There are no dummy
 /// attendance rows, no connections and no writes; users review the actual layout.
 /// </summary>
-internal sealed class PdksVisualPreviewWorkspace : Form
+public sealed class PdksVisualPreviewWorkspace : Form
 {
     readonly PdksCommandDescriptor command;
     readonly Color canvas = PdksAppearance.Current.Canvas;
