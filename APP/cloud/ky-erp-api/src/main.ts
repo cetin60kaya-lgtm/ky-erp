@@ -51,6 +51,8 @@ import { registerIkAuditReadonlyRoutes } from "./ik-audit-readonly";
 import { registerIkPdksGuardRoutes } from "./ik-pdks-guard";
 import { registerIkPersonnelControlRoutes } from "./ik-personnel-control";
 import { registerIkPdksMasterRoutes } from "./ik-pdks-master";
+import { registerIkPdksOperationRoutes } from "./ik-pdks-operations";
+import { registerIkPdksAdjustmentRoutes } from "./ik-pdks-adjustments";
 import { registerGunlukOperasyonRoutes } from "./gunluk-operasyon-cloud";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
@@ -85,7 +87,10 @@ const OWNER_ROLLING_SESSION_SECONDS = 0;
 const LIVE_ORIGINS = new Set([
   "https://kyerp.net",
   "https://www.kyerp.net",
+  "https://app.kyerp.net",
   "https://security.kyerp.net",
+  "capacitor://localhost",
+  "https://localhost",
 ]);
 
 const LOCAL_DEV_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
@@ -217,6 +222,8 @@ registerIkAuditReadonlyRoutes(app);
 registerIkPdksGuardRoutes(app);
 registerIkPersonnelControlRoutes(app);
 registerIkPdksMasterRoutes(app);
+registerIkPdksOperationRoutes(app);
+registerIkPdksAdjustmentRoutes(app);
 registerGunlukOperasyonRoutes(app);
 registerIkRelationalCloudRoutes(app);
 registerAuthAdminHistoryRoutes(app);
