@@ -43,3 +43,20 @@ test("Incomplete monthly reports cannot be exported as correct payroll evidence"
   assert.match(page, /row\.loadError\?"—"/);
   assert.match(page, /setProgress\(output\.length\)/);
 });
+
+test("Web card import enforces tenant/write permission and counts only DB-confirmed inserts", () => {
+  const bridge = source("../../../../cloud/ky-erp-api/src/ik-pdks-card-bridge.ts");
+  assert.match(bridge, /PDKS_TENANT_FORBIDDEN/);
+  assert.match(bridge, /PDKS_PERMISSION_DENIED/);
+  assert.match(bridge, /if \(changes === 1\) accepted\.push\(row\)/);
+  assert.match(bridge, /duplicateCount: duplicates\.length/);
+});
+
+test("Web entry and correction never advertise an unconfirmed Firebird reconciliation", () => {
+  const page = source("../pages/pdks/PdksPersonnelDesk.jsx");
+  assert.match(page, /Firebird ve terminal mutabakatı henüz doğrulanmadı/);
+  assert.match(page, /Firebird\/TNF mutabakatı ayrıca doğrulanmalıdır/);
+  assert.doesNotMatch(page, /Agent ve web aynı kaydı görecek/);
+  assert.match(page, /time:"",direction:"AUTO",note:""/);
+  assert.match(page, /status:"CALISTI",entry:"",exit:""/);
+});
