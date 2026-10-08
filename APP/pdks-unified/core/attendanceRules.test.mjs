@@ -165,6 +165,9 @@ test("invalid evidence, duplicates and uncertified timezone fail closed",()=>{
     raw("same",day+"T08:30","IN"),raw("same",day+"T08:30","IN"),
   ]}),/DUPLICATE_EVIDENCE/);
   assert.throws(()=>evaluateAttendanceDay({...base(),events:[
+    raw("same",day+"T08:30","IN"),raw("same",day+"T19:00","OUT"),
+  ]}),/DUPLICATE_EVIDENCE/);
+  assert.throws(()=>evaluateAttendanceDay({...base(),events:[
     raw("bad","2026-02-30T08:30","IN"),
   ]}),/INVALID_ATTENDANCE_TIMESTAMP/);
 });
