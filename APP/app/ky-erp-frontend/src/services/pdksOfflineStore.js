@@ -1,9 +1,25 @@
-import { apiGet, apiPost } from "../utils/api";
+import { apiGet, apiPost, getApiActiveMainCompanySlug } from "../utils/api";
 
 const DB_NAME = "kyerp-pdks-offline-v1";
 const DB_VERSION = 1;
 const CACHE_STORE = "cache";
 const QUEUE_STORE = "queue";
+const CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+// Only non-personal configuration can be viewed as a short-lived offline fallback.
+// Attendance/rosters/dashboard always need a fresh authorized server response.
+const OFFLINE_READ_KEYS = /^(profile|masters:|modern-config:|holidays:)/;
+
+function authCacheScope() {
+  if (typeof window === "undefined") return "";
+  try {
+    const raw = window.sessionStorage?.getItem("kyerp_auth_user") || window.localStorage?.getItem("kyerp_auth_user");
+    const user = raw ? JSON.parse(raw) : null;
+    const userId = String(user?.id || user?.userId || "").trim();
+    const company = String(getApiActiveMainCompanySlug() || "").trim();
+    return userId && company ? `${userId}:${company}:` : "";
+  } catch { return ""; }
+}
+
 let flushing = null;
 
 function browserReady() {
@@ -44,7 +60,8 @@ async function cachePut(key, value) {
 
 async function cacheGet(key) {
   const row = await transact(CACHE_STORE, "readonly", (store) => store.get(key));
-  return row?.value;
+  if (!row?.savedAt || Date.now() - row.savedAt > CACHE_MAX_AGE_MS) return null;
+  return row.value;
 }
 
 async function queueAll() {
@@ -68,30 +85,41 @@ function notifyQueueChanged() {
 
 function networkFailure(error) {
   if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
+  if (["NETWORK_ERROR", "REQUEST_TIMEOUT"].includes(String(error?.code || "").toUpperCase())) return true;
+  if (Number(error?.status || 0) >= 400) return false;
   const message = String(error?.message || error || "").toLowerCase();
   return error instanceof TypeError || message.includes("network") || message.includes("fetch") || message.includes("internet") || message.includes("offline");
 }
 
 export async function pdksCachedGet(key, path, params = {}) {
+  // Never return cached personal or attendance data on authorization, HTTP or network failures.
+  const scope = authCacheScope();
   try {
     const value = await apiGet(path, params);
-    await cachePut(key, value);
+    if (scope && OFFLINE_READ_KEYS.test(key)) {
+      try { await cachePut(scope + key, value); } catch { /* IndexedDB is optional */ }
+    }
     return value;
   } catch (error) {
-    const cached = await cacheGet(key);
-    if (cached !== undefined && cached !== null) return cached;
+    if (!networkFailure(error) || !scope || !OFFLINE_READ_KEYS.test(key)) throw error;
+    let cached = null;
+    try { cached = await cacheGet(scope + key); } catch { /* storage unavailable */ }
+    if (cached !== null && cached !== undefined) return cached;
     throw error;
   }
 }
 
 export async function pdksQueuedPost(path, payload = {}) {
+  // A card correction, leave, period close or group edit cannot be silently queued:
+  // retries could create duplicates or change an already-closed period.
+  // Wait for an acknowledged server commit; never report an offline write as completed.
   try {
     return await apiPost(path, payload);
   } catch (error) {
     if (!networkFailure(error)) throw error;
-    const id = crypto.randomUUID();
-    await queuePut({ id, method: "POST", path, payload, createdAt: Date.now(), attempts: 0 });
-    return { ok: true, data: { offlineQueued: true, queueId: id, syncStatus: "PENDING" } };
+    const failure = new Error("Bağlantı yok: PDKS işlemi kaydedilmedi. Bağlantı düzelince yeniden önizleyip onaylayın.");
+    failure.code = "PDKS_ONLINE_CONFIRMATION_REQUIRED";
+    throw failure;
   }
 }
 
@@ -101,6 +129,11 @@ export async function getPdksOfflineQueueCount() {
 
 export async function flushPdksOfflineQueue() {
   if (flushing) return flushing;
+  // Old unverified queued POST records are preserved, never replayed blindly.
+  // A future admin review may migrate only server-idempotent operations with stable IDs.
+  const pending = await getPdksOfflineQueueCount();
+  return { sent: 0, pending, requiresReview: pending > 0, automaticReplayDisabled: true };
+  /* Legacy retry code intentionally disabled:
   flushing = (async () => {
     if (typeof navigator !== "undefined" && navigator.onLine === false) return { sent: 0, pending: await getPdksOfflineQueueCount() };
     let sent = 0;
@@ -119,6 +152,7 @@ export async function flushPdksOfflineQueue() {
     return { sent, pending: await getPdksOfflineQueueCount() };
   })();
   try { return await flushing; } finally { flushing = null; }
+  */
 }
 
 export function installPdksOfflineRuntime() {
