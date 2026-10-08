@@ -107,4 +107,5 @@ test("Windows Agent unified outbox uses signed lease + fail-closed local receipt
   const command=readFileSync(resolve(here,"ik-pdks-unified-commands.ts"),"utf8");
   assert.match(command,/commandData:p/);
   assert.match(command,/localCardNo/);
+  assert.doesNotMatch(command,/@ts-nocheck/);
 });
