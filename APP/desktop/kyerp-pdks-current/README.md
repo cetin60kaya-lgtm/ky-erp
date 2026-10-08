@@ -156,3 +156,13 @@ Doğrulama: `dotnet build -c Release -warnaserror`, `ContractTests`, `ShellSmoke
 - İzole DESEN yolu: `D:\KYERP\_TEMP\KY-PDKS-GORSEL-ONIZLEME-6.7-R2\KYERP.PDKS.exe`. Mevcut masaüstü önizleme kısayolu bu R2 EXE'ye yönlendirildi.
 - Kaynak kod testi: Release `dotnet build -warnaserror`, ContractTests ve ShellSmokeTest **exit 0**. WinForms penceresi DESEN'de açıldı. **Personel ve Giriş/Çıkış gerçek ekran görüntüleri** alındı ve ikinci çekimde seçim ile içeriklerin eşleştiği doğrulandı.
 - **Sınır:** R2 yalnız görsel önizleme. Canlı PDKS'nin Giriş/Çıkış işlemini ve Personel ekranını bu R2 düzenine geçirme/gerçek veriyle kabul daha yapılmamıştır. Canlı sürüm veya API production güncellendiği iddia edilmemelidir.
+
+
+### 08.10 — KY PDKS PRO Menü R5 (rekabetçi ürün navigasyonu)
+
+- Ürün tek adla **KY PDKS**. Rakip özellik araştırması: `DOCS/KY_PDKS_PRODUCT_STANDARD_20261008.md`.
+- Gerçek menüler iş akışı temelli gruplandırıldı: Günlük Operasyon; Personel & Planlama; Puantaj & Ödemeler; Cihaz & Analiz. Her menü `PdksCommandCatalog` içindeki bir çalışır komuta bağlı; kullanıcı izinleri filtrelenir.
+- Menüde yanlış sayfa kalmasını önleyen yönlendirme ve kontrollü hata yakalama eklendi; inceleme günlüğü `%TEMP%\KYERP-PDKS-VISUAL-PREVIEW\logs\navigation.log` üzerinde tutulur.
+- DESEN güvenli önizleme R5: `D:\KYERP\_TEMP\KY-PDKS-PRO-MENU-R5\KYERP.PDKS.exe --visual-preview`. Masaüstünde `KY PDKS PRO - GORSEL INCELEME` kısayolu oluşturuldu ve eski önizleme kısayolu bu sürüme güncellendi.
+- **Kaynak üzerinde Release build, ContractTests, ShellSmokeTest, PreviewNavigationStress geçti** (exit code 0). Stress sonucu: 95 gerçek sidebar tıklaması, 7.758 saniye, +28 Windows handle, 89 MB çalışma belleği. EXE yayımlandı, tek R5 süreci açıldığı teyit edildi.
+- Çalışan fiziksel cihaz, tam masaüstü ürün işlevleri, gerçek Firebird/TNF/D1 yazma mutabakatı ve mobil uygulama bu görsel sürümde doğrulanmış değildir. Bu sürüm önizlemedir, production değildir; veri, bordro ve terminal işlemine girmez.
