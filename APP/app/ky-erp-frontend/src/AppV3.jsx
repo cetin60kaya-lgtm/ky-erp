@@ -16,7 +16,7 @@ const AdminPage = lazyWithRetry(() => import("./pages/modules/AdminPage"), "admi
 const IkAuditPersonnelPage = lazyWithRetry(() => import("./pages/modules/ik/audit/IkAuditPersonnelPage"), "ik-audit-personnel-v1");
 const IkFinancePage = lazyWithRetry(() => import("./pages/modules/ik/monthly/IkFinancePage"), "ik-finance-v1");
 const DailyHrWorkspace = lazyWithRetry(() => import("./pages/modules/ik/DailyHrWorkspace"), "daily-hr-workspace-v1");
-const PdksPage = lazyWithRetry(() => import("./pages/modules/PdksPage"), "pdks-v1");
+const PdksPage = lazyWithRetry(() => import("./pages/pdksUnified/PdksUnifiedApp.jsx"), "pdks-unified-v1");
 const UretimPage = lazyWithRetry(() => import("./pages/modules/UretimPage"), "uretim-v3");
 const BoyahanePage = lazyWithRetry(() => import("./pages/modules/BoyahanePage"), "boyahane-v3");
 const DesenPage = lazyWithRetry(() => import("./pages/modules/DesenPage"), "desen-v3");
@@ -35,7 +35,7 @@ const MODULE_LOADERS = {
     import("./pages/modules/ik/audit/IkAuditPersonnelPage"),
   ]),
   "gunluk-operasyon": () => import("./pages/modules/ik/DailyHrWorkspace"),
-  pdks: () => import("./pages/modules/PdksPage"),
+  pdks: () => import("./pages/pdksUnified/PdksUnifiedApp.jsx"),
   desen: () => import("./pages/modules/DesenPage"),
   uretim: () => import("./pages/modules/UretimPage"),
   boyahane: () => import("./pages/modules/BoyahanePage"),
@@ -47,15 +47,7 @@ const MODULE_LOADERS = {
 };
 
 const IK_AUDIT_TABS = [["personel-kartlari", "Personel Kartları", "users"]];
-const PDKS_AUDIT_TABS = [
-  ["ana-ekran", "Ana Ekran", "dashboard"],
-  ["giris-cikislar", "Giriş / Çıkışlar", "takvim"],
-  ["puantaj", "Puantaj", "takvim"],
-  ["puantaj-sonuclari", "Puantaj Sonuçları", "raporlar"],
-  ["calisma-tarihi", "Çalışma Tarihi", "takvim"],
-  ["raporlar", "Raporlar", "raporlar"],
-  ["denetim-yillik-temp", "Yıllık TEMP / Denetim", "file-check"],
-];
+const PDKS_AUDIT_TABS = [["workspace", "KY PDKS", "dashboard"]];
 
 function preloadModule(moduleKey) {
   MODULE_LOADERS[moduleKey]?.().catch(() => {});
