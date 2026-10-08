@@ -516,3 +516,41 @@ Firebird **write** kabulü değildir. Bir sonraki faz, legacy Firebird
 anahtar/tablo eşlemelerini kopya FDB üzerinde doğrulayıp her action için
 frozen local plan + transaction + TNF atomic replace + journal recovery
 uygulamaktır.
+
+
+## 18. 08.10.2026 — WINDOWS AGENT / CLOUD OUTBOX / KOPYA-FDB FAZ-2
+
+**En güncel faz = bu bölüm; §16 ve §17 tarihsel durum kaydıdır.**
+Tam kanıt, risk ve sonraki basamak:
+[`docs/PHASE2_WINDOWS_AGENT_FIREBIRD_CLOUD_ACCEPTANCE_20261008.md`](docs/PHASE2_WINDOWS_AGENT_FIREBIRD_CLOUD_ACCEPTANCE_20261008.md).
+
+- Cloud cihaz kasası `ik_pdks_devices`, HMAC-SHA256 imzalı teslimat,
+  canlı lease/hash bağı ve kanıtlı ACK dahil edildi. Tekrar/yarış/tenant
+  davranışları Hono gerçek endpointi + in-memory SQLite üzerinde sınandı.
+- Windows Agent: `--agent-once`, `--agent-loop`, 5 dakikalık
+  varsayılan polling, tek örnek kilidi, health JSON, SHA256'e bağlı journal,
+  crash sonrası aynı uygulama fişini tekrar ACK mekanizması.
+- `personnel-group` ve `holiday` için atomik, idempotent yerel **politika
+  aynası** eklendi. Varsayılan apply bayrağı kapalı; FDB/TNF/RAW mutasyonu
+  YOK. Bu politikalar doğrudan canlı bordroyu değiştirmez.
+- 9 diğer idari action için gerçek Firebird yazma/anahtar semantiği ayrıca
+  doğrulanmadan hiçbir otomatik apply izni yok.
+- `TRYYYY.Tnf` atomik yenileme: önceki dosya SHA256 bekleme, yedek,
+  aynı dosyada kilit, tekrar hash kontrolü, çatışma halinde fail-closed.
+- 16 Firebird tablo, 8 trigger salt okunur okundu.
+  **AVTUR**: 1=AVANS, 2=BANKA, 3=İLAÇ KESİNTİSİ;
+  genel kesinti için kod tahmini kesinlikle YOK.
+- Firebird `gbak` üzerinden oluşturulan gerçek **ayrı kopya FDB** üzerinde
+  GRUP/SERVIS/KIMLIK/OZELIZIN/AVANS rollback smoke **PASS**,
+  canlı veritabanı değişmedi.
+- **V9 DESEN KY-CONTROL:** 56/56 otomatik test, Cloud TypeScript,
+  Windows Release (0 hata/uyarı), 5 yerel selftest,
+  kopya Firebird transaction rollback dahil `RESULT=PASS`,
+  `LIVE_DATA_WRITE=NONE`.
+- PR **DRAFT/UNMERGED**; canlı Cloudflare D1 migration, gerçek staging
+  Cloud↔Windows kabulü, Firebird 9 action prod-safe apply,
+  fiziksel terminal/SDK, bordro/puantaj, Android/iOS release henüz YOK.
+
+**Kalan sıra:** Gerçek staging D1 → idempotent local SQL ledger/action
+handler → FDB/TNF normal/E transaction recovery → cihaz SDK/terminal →
+puantaj/bordro → 49 sekme gerçek ekran → Android/iOS signing → final release.
