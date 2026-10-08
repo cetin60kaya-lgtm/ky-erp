@@ -452,9 +452,10 @@ DEVICE_CORE_SYNC=0 WINDOWS_BUILD=0 COMPLETE`. Tamamı yerel test;
    vardiya/yarım gün/E hesaplarında yetersizdir.
 5. Gerçek Windows EXE+Firebird+cihaz/terminal stress,
    Android APK, iOS IPA, Cloud prod dağıtım onayı **yok**.
-6. `ik-pdks-unified-commands.ts` dosyasında `// @ts-nocheck`
-   bulunmaktadır; bu çekirdeğin tipleri ve gerçek D1 worker
-   entegrasyon testleri tamamlanmalı.
+6. `ik-pdks-unified-commands.ts` üzerindeki `// @ts-nocheck`
+   kaldırıldı; gerçek sözleşme için `.d.mts` bildirimi eklendi ve Cloud
+   `tsc --noEmit` kapısı geçti. Buna rağmen gerçek D1 staging Worker
+   entegrasyon/race/rollback kabulü hâlâ tamamlanmalıdır.
 
 **Yeni sohbette:** Tek seferde proje devir MD'si
 `KY_PDKS_TEK_KAYNAK_TAM_DEVIR_VE_CALISMA_PLANI_2026-10-08.md`
@@ -503,7 +504,7 @@ Production/local yazma yine kapalıdır.
 `PDKS_UNIFIED_SYNC_VERIFY_20261008.log`:
 - CLOUD_CONTRACT_STORAGE: 13/13 PASS
 - CLOUD_ROUTES: 8/8 PASS
-- CLOUD_TYPECHECK: PASS
+- CLOUD_TYPECHECK: PASS (**unified command engine artık ts-nocheck kullanmıyor**)
 - DEVICE_CORE_SYNC: 27/27 PASS
 - WINDOWS_BUILD: PASS, 0 warning / 0 error
 - STATIC_SAFE_GATE=PASS
