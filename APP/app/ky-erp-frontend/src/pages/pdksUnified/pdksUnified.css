@@ -108,3 +108,10 @@ body:has(> #root > .pdk-unified),
 .pdk-u-operation-success{color:#28805c}
 .pdk-u-operation-pending{color:var(--pu-accent)}
 @media(max-width:680px){.pdk-u-operation-fields,.pdk-u-operation-preview dl{grid-template-columns:1fr}.pdk-u-operation-toggle{flex-wrap:wrap}.pdk-u-operation-toggle span{margin-left:0}}
+
+
+/* Durable D1 command receipt UX shared across all eleven workflows. */
+.pdk-u-operation-receipt{display:block;margin-top:7px;font-size:10px;overflow-wrap:anywhere}
+.pdk-u-operation-receipt code{font-size:10px;user-select:all}
+.pdk-u-operation-buttons{display:flex;flex-wrap:wrap;gap:9px}
+.pdk-u-operation-source-pending{color:var(--pu-warn)}
