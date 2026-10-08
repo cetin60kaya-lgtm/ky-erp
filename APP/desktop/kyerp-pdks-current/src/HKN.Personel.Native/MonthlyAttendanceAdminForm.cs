@@ -625,18 +625,31 @@ public sealed class MonthlyAttendanceAdminForm : Form
 
     static string TnfStatus(string card,DateTime day,DateTime? entry,string entryType,DateTime? exit,string exitType,HashSet<string> tnf)
     {
-        var expected=0;var matched=0;var e=0;
+        var expected=0;var matched=0;var e=0;var wrongE=0;
         if(entry.HasValue)
         {
-            if(IsE(entryType))e++;
-            else {expected++;if(tnf.Contains($"{card},{entry:HH:mm},{day:ddMMyy},1,001"))matched++;}
+            var line=$"{card},{entry:HH:mm},{day:ddMMyy},1,001";
+            if(IsE(entryType)){e++;if(tnf.Contains(line))wrongE++;}
+            else {expected++;if(tnf.Contains(line))matched++;}
         }
         if(exit.HasValue)
         {
-            if(IsE(exitType))e++;
-            else {expected++;if(tnf.Contains($"{card},{exit:HH:mm},{day:ddMMyy},1,001"))matched++;}
+            var line=$"{card},{exit:HH:mm},{day:ddMMyy},1,001";
+            if(IsE(exitType)){e++;if(tnf.Contains(line))wrongE++;}
+            else {expected++;if(tnf.Contains(line))matched++;}
         }
-        if(expected==0)return e>0?"✓ E • TNF boş":"—";
+        // An E mark does not prove the TNF is empty. The old badge could report
+        // "E • TNF boş" while stale normal evidence was still in the annual file.
+        if(wrongE>0)return $"⚠ E TNF'de var ({wrongE})";
+        if(expected==0&&e>0)
+        {
+            var daySuffix=$",{day:ddMMyy},1,001";
+            var cardPrefix=card+",";
+            return tnf.Any(line=>line.StartsWith(cardPrefix,StringComparison.Ordinal)
+                &&line.EndsWith(daySuffix,StringComparison.Ordinal))
+                ?"⚠ E günü TNF'de kayıt var":"✓ E • TNF boş";
+        }
+        if(expected==0)return "—";
         return matched==expected?(e>0?"✓ Uyumlu + E":"✓ Uyumlu"):$"⚠ Fark {matched}/{expected}";
     }
 
