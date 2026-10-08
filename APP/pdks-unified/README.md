@@ -464,3 +464,54 @@ kullanılarak kaynak+uygulama+test ilerletilir. GitHub PR
 koru. **Üretim verisi üzerinde test hareketi, bordro veya yıllık
 TNF düzenlemesi YAPMA**. Belge güncelliği için bu §16
 en yeni kaynak olarak alınır; eski devir tarihsel.
+
+
+## 17. 08.10.2026 — WINDOWS AGENT / FIREBIRD / TNF / CLOUD ACK FAZ-1
+
+Bu fazda Cloud outbox artık yalnız `PENDING` kayıt bırakmakla kalmaz; Windows
+Agent için **kiralama + imzalı teslim + kanıtlı ACK** protokolüne sahiptir.
+Production/local yazma yine kapalıdır.
+
+**Cloud:**
+- `ik-pdks-unified-agent.ts`: cihaz anahtarıyla
+  `GET /api/auth/pdks-unified/outbox/next` ve
+  `POST /api/auth/pdks-unified/outbox/:id/ack`.
+- Teslimat `HMAC-SHA256` ile imzalanır; `deliveryHash`, 5 dakikalık lease,
+  tekrar deneme sayısı ve teslim sahibi tutulur.
+- Outbox durumları `PENDING -> CLAIMED -> ACKED/FAILED`; geçici yerel hata
+  `RETRY` ile tekrar `PENDING` olur. Aynı command için ikinci business
+  kayıt oluşturulmaz.
+- ACK, `journalId`, `appliedAt`, kaynak/FDB doğrulaması ve TNF'ye
+  dokunulduysa TNF mutabakatı olmadan kabul edilmez.
+- Unified komut outbox'ı normalize `commandData` ve kartlı personelde
+  `localCardNo` taşır; receipt GET artık `localSync` durumunu da döndürür.
+
+**Windows:**
+- `UnifiedSyncAgent.cs`: imzalı teslimatı doğrular, atomik yerel journal
+  yazar ve yalnız doğrulanmış tenant/komut zarfını işler.
+- `FirebirdTnfReadOnlyVerifier.cs`: `KIMLIK/GIRCIK` şemasını, kart eşlemesini
+  ve tarih varsa yıllık `TRYYYY.Tnf` ile dakika bazlı normal kayıt
+  mutabakatını **salt okunur** yapar.
+- `GTUR=E` / `CTUR=E` yıllık TNF beklentisine alınmaz.
+- `--agent-once` tek tur ajan modu eklendi.
+- **Güvenlik kapısı:** `KY_PDKS_UNIFIED_APPLY_ENABLED=1` verilse dahi gerçek
+  action handler henüz yoksa ajan `LOCAL_ACTION_HANDLER_NOT_IMPLEMENTED`
+  ile RETRY döner. Legacy Firebird anahtar eşlemesi doğrulanmadan SQL tahmin
+  edilmez ve canlı FDB/TNF yazılmaz.
+
+**İzole DESEN kapısı (20:54 TRT):**
+`PDKS_UNIFIED_SYNC_VERIFY_20261008.log`:
+- CLOUD_CONTRACT_STORAGE: 13/13 PASS
+- CLOUD_ROUTES: 8/8 PASS
+- CLOUD_TYPECHECK: PASS
+- DEVICE_CORE_SYNC: 27/27 PASS
+- WINDOWS_BUILD: PASS, 0 warning / 0 error
+- STATIC_SAFE_GATE=PASS
+- LIVE_DATA_WRITE=NONE
+
+Bu kanıt source/build sözleşmesini doğrular; gerçek D1 staging migration,
+yetkili staging komutu, gerçek Windows cihaz credential'ı ve yerel
+Firebird **write** kabulü değildir. Bir sonraki faz, legacy Firebird
+anahtar/tablo eşlemelerini kopya FDB üzerinde doğrulayıp her action için
+frozen local plan + transaction + TNF atomic replace + journal recovery
+uygulamaktır.
