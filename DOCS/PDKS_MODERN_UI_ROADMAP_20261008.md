@@ -50,3 +50,20 @@ Base: `codex/model-uretim-kontrol-merkezi-final` @ `863fbef72e748cb9b0d7143366a4
 - Yetkisiz kullanıcı başka kişinin maaş veya ayrıntılı PDKS kaydını göremez.
 - Live D1 migration/reset, gerçek iş kayıtları, bordro ve terminal log silme bu UI dalının kapsamı dışıdır.
 - Güncel production HEAD her merge'den önce yeniden alınır; diğer KY ERP modülleri bozulmaz.
+
+
+## 08.10.2026 — Google Drive KY-CONTROL ajanıyla test kanıtı
+
+- GitHub Actions çağrısı: **0**. İşlemler DESEN üzerindeki KY-CONTROL v2 runner ile yapıldı.
+- Test çalışma alanı: `D:\KYERP\_TEMP\PDKS_UI_REVIEW_20261008_01`; üretim repo/servis, Firebird/TNF veya Cloudflare yayın yolu değiştirilmedi.
+- Çekilen commit: `2f8b4b568f76d6e355dc5ab79480a5c341a3a613`.
+- `npm ci --no-audit --no-fund`: başarılı; 206 paket.
+- `npm test`: **291 test / 276 geçti / 15 başarısız**. 4 yeni PDKS filtre/seçim/senkron testi geçti. Mevcut genel ERP test başarısızlıkları Günlük Operasyon/İK izin/güvenlik/e-Belge sözleşmelerinde görülüyor; bunlar çözülmeden bütün repo için yeşil test durumu iddia edilmeyecek.
+- `npm run lint`: logda ESLint hatası veya uyarısı görülmedi (ayrı çıkış durumunu ajan sonuç kaydıyla son teyit et).
+- `npm run build`: Vite 8.1.5, 2005 modül, dağıtım dosyaları üretildi; logda başarı `built in 1.52s`. AuthContext dynamic import için nonfatal bundle warning mevcut.
+- İzole Node test komutu `npm exec -- node ...` npm'in `node@26.11.1` indirme/onay istemesine takıldı; test tasarımında `node --test ...` doğrudan kullanılacak. Bütün mevcut test paketinde PDKS testlerinin geçmesi bunu telafi eden ayrı kanıttır.
+- Tam UI ekran fotoğrafları, e2e, desktop exe revizyonu, web/Cloud ortak veri garantisi, Android/iOS paketleri **henüz yapılmadı**. Kullanıcıya nihai dağıtım olarak sunma.
+- Önemli bütçe: Remote Desktop sınıra yakın olduğundan yeni test sonuçlarını Google Drive connector ile al; yalnız ajanı tetiklemek için Remote kullanmak gerekiyorsa minimuma indir.
+
+### Üretim kapısı
+Tek başına frontend build başarılı olmak production merge için yeterli değildir. 15 genel KY ERP sözleşme hatası ayrıştırılmalı; baseline ile karşılaştırılıp PDKS kaynaklı regresyon olmadığı gösterilmeli. Üretim D1/DB/TNF erişimi/senkron değişikliği için daha sıkı kabul uygulanmalı.
