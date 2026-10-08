@@ -30,8 +30,11 @@ public sealed partial class MainShellForm : Form
         Controls.Add(workspace); Controls.Add(MainMenuStrip!);
         ApplyCanonicalStartup();
         ShowHome();
-        InitializeTerminalAutoSync();
-        InitializeCloudSync();
+        if (!PdksPreviewMode.Enabled)
+        {
+            InitializeTerminalAutoSync();
+            InitializeCloudSync();
+        }
 
         // Personel ekranı ilk menü tıklamasında kurulup kullanıcıyı bekletmesin.
         // Ana ekran çizildikten sonra bir kez gizli olarak ısıtılır ve menüler arası
@@ -43,7 +46,7 @@ public sealed partial class MainShellForm : Form
             {
                 warmup.Stop();
                 warmup.Dispose();
-                if (IsDisposed || personel is not null) return;
+                if (IsDisposed || PdksPreviewMode.Enabled || personel is not null) return;
                 try { EnsurePersonel(); } catch { }
             };
             warmup.Start();
@@ -89,6 +92,13 @@ public sealed partial class MainShellForm : Form
 
     bool Ready(PdksModule module)
     {
+        if (PdksPreviewMode.Enabled)
+        {
+            MessageBox.Show("Bu sürüm gerçek KY PDKS arayüzünün güvenli görsel önizlemesidir. " +
+                "Personel, puantaj, bordro ve terminal verileri yalnız ayrı canlı bağlantı onayından sonra açılır.",
+                "KY PDKS • Görsel Önizleme", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return false;
+        }
         if (!currentUser.Can(module))
         {
             MessageBox.Show("Bu işlem için yetkiniz yok.", "KYERP PDKS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
