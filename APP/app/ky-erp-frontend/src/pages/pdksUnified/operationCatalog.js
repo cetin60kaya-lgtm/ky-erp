@@ -66,7 +66,11 @@ export const OPERATION_CATALOG=Object.freeze([
       {value:"Hafta Sonu Mesai",label:"Hafta sonu mesai"},
       {value:"Resmi Tatil Mesai",label:"Resmî tatil mesaisi"},
     ]),
-    field("hourOrDay","Mesai saati","number"),field("amount","Onaylı mesai tutarı (TL)","number"),
+    field("hourOrDay","Mesai saati","number"),
+    field("overtimeRate","Mesai zammı","select",true,[
+      {value:"50",label:"%50"},{value:"100",label:"%100"},
+    ]),
+    field("amount","Onaylı mesai tutarı (TL)","number"),
     field("paymentMethod","Ödeme yöntemi","select",true,[
       {value:"Bordro",label:"Bordro"},{value:"Elden",label:"Elden"},
     ]),field("note","Mesai oranı / onay gerekçesi"),
@@ -157,6 +161,10 @@ export function makeOperationPreview(id,values,{company,people=[],masters={},yea
     if(!Number.isFinite(hours)||hours<=0||hours>24)
       throw new Error("Mesai saati 0'dan büyük ve en fazla 24 olmalı.");
     payload.hourOrDay=hours;
+    // The present Cloud schema has no dedicated premium-rate field. Keep the
+    // explicitly approved rate in the durable note until a safe migration.
+    payload.note="Mesai oranı: %"+form.overtimeRate+" | "+form.note;
+    delete payload.overtimeRate;
   }
   if(id==="deduction")payload.adjustmentType="Kesinti";
   // Never submit extra implicit status=APPROVED/punch entries.
