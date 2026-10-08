@@ -89,8 +89,8 @@ internal static class AttendancePlanService
                      (r.ExitAt.HasValue && r.ExitAt.Value.Date == day.Date))).ToArray();
 
                 var effectiveRows = NormalizeWrongSides(result, employee, day, dayRows);
-                BuildNormalSide(result, employee, day, effectiveRows, AttendancePlanSide.Entry);
-                BuildNormalSide(result, employee, day, effectiveRows, AttendancePlanSide.Exit);
+                BuildNormalSide(result, warnings, employee, day, effectiveRows, AttendancePlanSide.Entry);
+                BuildNormalSide(result, warnings, employee, day, effectiveRows, AttendancePlanSide.Exit);
             }
         }
 
@@ -103,7 +103,7 @@ internal static class AttendancePlanService
             to,
             SortPlan(result),
             warnings,
-            true);
+            !warnings.Any(x => x.StartsWith("KANIT EKSİK", StringComparison.Ordinal)));
     }
 
     public static AttendancePlanPreview BuildEPlan(
@@ -301,9 +301,8 @@ internal static class AttendancePlanService
             if (wrong is not null && wrong.EntryAt.HasValue)
             {
                 var at = wrong.EntryAt.Value;
-                var target = InRange(at.TimeOfDay, AttendanceTolerancePolicy.ExitEarliest, AttendanceTolerancePolicy.ExitLatest)
-                    ? at
-                    : day.Date.AddMinutes(StableMinute(employee.Card, day, AttendancePlanSide.Exit, AttendanceTolerancePolicy.ExitEarliest, AttendanceTolerancePolicy.ExitLatest));
+                // Reverse-side correction keeps the actual captured minute, never fabricates a normal-time replacement.
+                var target = at;
                 plan.Add(new(employee.Card, employee.Name, day, AttendancePlanSide.Exit, "TERS TARAFI DÜZELT",
                     wrong.Sira, at, "MOVE_ENTRY_TO_EXIT", target, ""));
                 ReplaceRow(rows, wrong with { EntryAt = null, EntryType = "", ExitAt = target, ExitType = "" });
@@ -320,9 +319,8 @@ internal static class AttendancePlanService
             if (wrong is not null && wrong.ExitAt.HasValue)
             {
                 var at = wrong.ExitAt.Value;
-                var target = InRange(at.TimeOfDay, AttendanceTolerancePolicy.EntryEarliest, AttendanceTolerancePolicy.EntryLatest)
-                    ? at
-                    : day.Date.AddMinutes(StableMinute(employee.Card, day, AttendancePlanSide.Entry, AttendanceTolerancePolicy.EntryEarliest, AttendanceTolerancePolicy.EntryLatest));
+                // Reclassify the side only; preserve the physical time verbatim.
+                var target = at;
                 plan.Add(new(employee.Card, employee.Name, day, AttendancePlanSide.Entry, "TERS TARAFI DÜZELT",
                     wrong.Sira, at, "MOVE_EXIT_TO_ENTRY", target, ""));
                 ReplaceRow(rows, wrong with { EntryAt = target, EntryType = "", ExitAt = null, ExitType = "" });
@@ -342,6 +340,7 @@ internal static class AttendancePlanService
 
     static void BuildNormalSide(
         List<AttendancePlanItem> plan,
+        List<string> warnings,
         Employee employee,
         DateTime day,
         IReadOnlyList<MovementRow> rows,
@@ -361,7 +360,15 @@ internal static class AttendancePlanService
         foreach (var extra in normal.Where(x => primary is null || x.Sira != primary.Sira))
         {
             var at = SideAt(extra, side);
+            var primaryAt = primary is null ? null : SideAt(primary, side);
             if (!at.HasValue) continue;
+            // Two different minutes may be legitimate second-shift punches.
+            // Only exact-minute repetition is a safe automated duplicate candidate.
+            if (!primaryAt.HasValue || at.Value != primaryAt.Value)
+            {
+                warnings.Add($"ÇOKLU HAREKET: {employee.Card} {day:dd.MM.yyyy} {side} {at:HH:mm}; manuel inceleme gerekli.");
+                continue;
+            }
             plan.Add(new(
                 employee.Card,
                 employee.Name,
@@ -376,43 +383,20 @@ internal static class AttendancePlanService
                 true));
         }
 
-        var range = side == AttendancePlanSide.Entry
-            ? (AttendanceTolerancePolicy.EntryEarliest, AttendanceTolerancePolicy.EntryLatest)
-            : (AttendanceTolerancePolicy.ExitEarliest, AttendanceTolerancePolicy.ExitLatest);
-        var planned = day.Date.AddMinutes(StableMinute(employee.Card, day, side, range.Item1, range.Item2));
-
         if (primary is null)
         {
-            plan.Add(new(
-                employee.Card,
-                employee.Name,
-                day,
-                side,
-                side == AttendancePlanSide.Entry ? "GİRİŞ OLUŞTUR" : "ÇIKIŞ OLUŞTUR",
-                null,
-                null,
-                "",
-                planned,
-                ""));
+            warnings.Add($"KANIT EKSİK: {employee.Card} {day:dd.MM.yyyy} {side}; gerçek cihaz/imzalı onay kaydı olmadan saat oluşturulamaz.");
             return;
         }
 
         var current = SideAt(primary, side);
         if (!current.HasValue) return;
-        var tod = current.Value.TimeOfDay;
-        if (tod < range.Item1 || tod > range.Item2)
+        var range = side == AttendancePlanSide.Entry
+            ? (AttendanceTolerancePolicy.EntryEarliest, AttendanceTolerancePolicy.EntryLatest)
+            : (AttendanceTolerancePolicy.ExitEarliest, AttendanceTolerancePolicy.ExitLatest);
+        if (current.Value.TimeOfDay < range.Item1 || current.Value.TimeOfDay > range.Item2)
         {
-            plan.Add(new(
-                employee.Card,
-                employee.Name,
-                day,
-                side,
-                side == AttendancePlanSide.Entry ? "GİRİŞİ DOĞALLAŞTIR" : "ÇIKIŞI DOĞALLAŞTIR",
-                primary.Sira,
-                current,
-                SideType(primary, side),
-                planned,
-                ""));
+            warnings.Add($"TOLERANS DIŞI: {employee.Card} {day:dd.MM.yyyy} {side} {current.Value:HH:mm}; fiziksel saat korunur.");
         }
     }
 
