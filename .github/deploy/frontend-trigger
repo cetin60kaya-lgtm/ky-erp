@@ -1,4 +1,4 @@
-deploy: daily-manual-range-20261006
-canonical: 0088fefa3028a7dc7d2f52d008e1f50b50674695
-requested: 2026-10-06T14:47:00Z
-reason: restore-manual-start-end-date-range
+deploy: ik-monthly-canonical-leave-20261008
+canonical: 3d759edd0e5aa4ea96b606fb150a2c437724bb4d
+requested: 2026-10-08T19:30:00Z
+reason: HR Monthly safe permissions annual leave ledger and modern control workspace
