@@ -53,6 +53,7 @@ import { registerIkPersonnelControlRoutes } from "./ik-personnel-control";
 import { registerIkPdksMasterRoutes } from "./ik-pdks-master";
 import { registerGunlukOperasyonRoutes } from "./gunluk-operasyon-cloud";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
+import { registerEmployeePortalRoutes } from "./employee-portal-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
 import { registerIsnetBusinessSettingsCloudRoutes } from "./isnet-business-settings-cloud";
 import { registerIsnetFileRuntimeRoutes } from "./isnet-file-runtime";
@@ -219,6 +220,7 @@ registerIkPersonnelControlRoutes(app);
 registerIkPdksMasterRoutes(app);
 registerGunlukOperasyonRoutes(app);
 registerIkRelationalCloudRoutes(app);
+registerEmployeePortalRoutes(app);
 registerAuthAdminHistoryRoutes(app);
 registerAdminManagementRoutes(app);
 registerOwnerSecurityRoutes(app);
@@ -260,12 +262,28 @@ shell.use("/api/*", async (c, next) => {
   const url = new URL(c.req.url);
   const path = url.pathname;
   const isLocal = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
-  const isPublic = path === "/api/health" || path === "/api/system/status" || path.startsWith("/api/auth/") || path.startsWith("/api/build-agent/") || path.startsWith("/api/system-agent/") || path.startsWith("/api/compliance-public/");
+  const isPublic = path === "/api/health" || path === "/api/system/status" || path.startsWith("/api/auth/") || path.startsWith("/api/build-agent/") || path.startsWith("/api/system-agent/") || path.startsWith("/api/compliance-public/") || path === "/api/employee-portal/companies";
   if (isLocal || isPublic) return next();
 
   const authenticated = await getAuthenticatedUser(c);
   if (!authenticated) {
     return c.json({ ok: false, error: { code: "UNAUTHORIZED", message: "Oturum geçersiz, iptal edilmiş veya güvenlik politikasındaki süresi dolmuş. Yeniden giriş yapın." } }, 401);
+  }
+
+  // Firma personeli yetki listesi sonradan degisse de ERP muhasebe/IK/yonetim API'sine cikamaz.
+  // Kimlik PROFIL tablosundan da kilitlenir; sadece frontend menusu gizlemek yeterli degildir.
+  let portalAccount = false;
+  try {
+    const schema = await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ky_employee_portal_accounts' LIMIT 1").first();
+    if (schema?.name) portalAccount = Boolean(await c.env.DB.prepare("SELECT id FROM ky_employee_portal_accounts WHERE auth_user_id=? LIMIT 1").bind(authenticated.id).first());
+  } catch (error) {
+    if (String(authenticated.role || "").toUpperCase() === "PERSONNEL") return c.json({ok:false,error:{code:"PERSONNEL_SCOPE_CHECK_FAILED",message:"Personel erisim siniri dogrulanamadi."}},503);
+    console.error("PERSONNEL_SCOPE_CHECK",error);
+  }
+  if (String(authenticated.role || "").toUpperCase() === "PERSONNEL" || portalAccount) {
+    const selfRoutes = path.startsWith("/api/employee-portal/") && !path.startsWith("/api/employee-portal/admin/");
+    const authRoutes = ["/api/auth/me","/api/auth/logout","/api/auth/refresh","/api/auth/refresh/commit"].includes(path);
+    if (!selfRoutes && !authRoutes) return c.json({ok:false,error:{code:"PERSONNEL_SCOPE_ONLY",message:"Personel hesabi sadece kendi bilgileri ve gorev formlarina erisebilir."}},403);
   }
 
   if (auditRole(authenticated.role)) {
