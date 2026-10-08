@@ -12,23 +12,8 @@ import {operationById} from "./operationCatalog.js";
 const base="/ik/personnel-control";
 const canonical=(payload)=>payload&&payload.ok===true && Object.prototype.hasOwnProperty.call(payload,"data")
   ? payload.data:payload;
-const batches=new Set(); // process-local replay protection, not server idempotency
-const route=(preview)=>{
-  const personId=encodeURIComponent(preview.payload.employeeId||"");
-  switch(preview.id){
-    case "work-group":return base+"/work-groups";
-    case "personnel-group":return base+"/personnel-groups";
-    case "assign-work-group":return base+"/people/"+personId+"/work-group";
-    case "assign-personnel-group":return base+"/people/"+personId+"/personnel-group";
-    case "service":return base+"/services";
-    case "assign-service":return base+"/people/"+personId+"/service";
-    case "holiday":return base+"/operations/holidays";
-    case "leave":return base+"/operations/leave";
-    case "advance":return base+"/operations/advance";
-    case "overtime":case "deduction":return base+"/operations/adjustment";
-    default:throw new Error("Bilinmeyen işlem.");
-  }
-};
+const sent=new Map(); // fingerprint -> permanent UUID, never a new retry ID
+const unified="/ik/personnel-control/unified/commands";
 const fresh=(path,params)=>apiGet(path,params,{forceFresh:true,cache:false});
 const arr=(x)=>Array.isArray(x)?x:[];
 const same=(a,b)=>String(a??"")===String(b??"");
@@ -42,7 +27,7 @@ const ensureReadback=async(preview,accepted)=>{
   const created=new Set(["work-group","personnel-group","service","holiday","leave",
     "advance","overtime","deduction"]);
   if(created.has(id) && !accepted?.id)throw new Error("PDKS_WRITE_RECEIPT_ID_MISSING");
-  const savedId=String(accepted?.id||"");
+  const savedId=String(accepted?.businessId||accepted?.id||"");
   if(["work-group","personnel-group","assign-work-group","assign-personnel-group",
       "service","assign-service"].includes(id)){
     const masters=canonical(await fresh(base+"/pdks-masters",companyParams));
@@ -90,43 +75,82 @@ const ensureReadback=async(preview,accepted)=>{
   throw new Error("PDKS_READBACK_NOT_CONFIGURED");
 };
 
+export async function checkUnifiedReceipt(requestId){
+  if(!/^[a-zA-Z0-9_-]{16,100}$/.test(String(requestId)))
+    throw new Error("PDKS_REQUEST_ID_INVALID");
+  const response=await apiFetch(unified+"/"+encodeURIComponent(requestId),{
+    method:"GET",cache:"no-store",timeoutMs:10000,
+  });
+  const record=canonical(response);
+  if(!record || !record.receiptId || record.cloudState!=="COMMITTED")
+    throw new Error("PDKS_DURABLE_RECEIPT_INVALID");
+  return record;
+}
+const freezeOutcome=(status,record,requestId,verified)=>
+  Object.freeze({status,requestId,receiptId:record.receiptId,
+    confirmed:true,sourceReadback:verified,localFDB:false,
+    annualTNF:false,terminalRaw:false,detail:record});
+
 export async function submitAndVerify(preview){
   if(!preview || !Object.isFrozen(preview)||!Object.isFrozen(preview.payload)||
-    !operationById(preview.id))throw new Error("İşlem önizlemesi geçersiz veya değiştirildi.");
+    !operationById(preview.id))
+    throw new Error("İşlem önizlemesi geçersiz veya değiştirildi.");
   const fingerprint=JSON.stringify([preview.company,preview.id,preview.payload]);
-  if(batches.has(fingerprint))throw new Error("Bu işlem bu oturumda gönderildi. Önce kayıtları kontrol edin; tekrar göndermeyin.");
-  batches.add(fingerprint);
-  let accepted=null;
+  if(sent.has(fingerprint)){
+    const known=new Error("Aynı işlem zaten gönderildi; önce işlem kimliğiyle sonucu sorgulayın.");
+    known.requestId=sent.get(fingerprint);
+    known.code="PDKS_PREVIOUS_REQUEST_PENDING";
+    throw known;
+  }
+  const requestId=crypto.randomUUID();
+  sent.set(fingerprint,requestId);
+  const body={requestId,action:preview.id,payload:preview.payload};
+  let posted=null;
   try{
-    const response=await apiFetch(route(preview),{
-      method:"POST",body:preview.payload,timeoutMs:15000,
-    });
-    accepted=canonical(response);
+    const response=await apiFetch(unified,{method:"POST",body,timeoutMs:18000});
+    posted=canonical(response);
+    if(!posted?.receiptId||posted.cloudState!=="COMMITTED")
+      throw new Error("PDKS_COMMIT_RECEIPT_MISSING");
   }catch(error){
-    // A transport timeout may follow a successful D1 write. No retry.
-    const failure=new Error("Sonuç belirsiz. İşlem tekrar gönderilmeyecek; ilgili kaydı ve işlem günlüğünü kontrol edin.");
-    failure.code="PDKS_WRITE_OUTCOME_UNKNOWN";
-    failure.cause=error;
-    throw failure;
+    if(error?.status>=400 && error?.status<500 && error?.status!==408 &&
+       error?.status!==409 && error?.status!==429){
+      // Known validation/permission denial: no retry, but UI can correct.
+      sent.delete(fingerprint);
+      throw error;
+    }
+    try {
+      const recovered=await checkUnifiedReceipt(requestId);
+      if(recovered?.receiptId)posted=recovered;
+    }catch{ /* network or genuinely uncommitted; never send another POST */ }
+    if(!posted){
+      const uncertain=new Error("İşlem sonucu belirsiz. Yeniden kaydetmeyin; kimlikle sonucu sorgulayın: "+requestId);
+      uncertain.code="PDKS_OUTCOME_UNKNOWN";
+      uncertain.requestId=requestId;
+      uncertain.cause=error;
+      throw uncertain;
+    }
   }
-  if(!accepted || typeof accepted!=="object")
-    throw new Error("PDKS_WRITE_RESPONSE_INVALID");
-  let verified=false;
-  try{verified=await ensureReadback(preview,accepted);}
+  let durable;
+  try{durable=await checkUnifiedReceipt(requestId);}
   catch(error){
-    const failure=new Error("Sunucu cevap verdi fakat geri okuma doğrulanamadı. Tekrar kayıt yapmayın; önce kaydı denetleyin.");
-    failure.code="PDKS_READBACK_UNKNOWN";
-    failure.cause=error;
-    throw failure;
+    const uncertain=new Error("Sunucu yazmayı kabul etti, ancak kalıcı işlem fişi şu an okunamıyor. İşlem kimliği: "+requestId);
+    uncertain.code="PDKS_RECEIPT_READ_UNAVAILABLE";
+    uncertain.requestId=requestId;
+    uncertain.cause=error;
+    throw uncertain;
   }
-  if(!verified){
-    const failure=new Error("İşlem sunucuda bulunduğu kanıtlanamadı. Tekrar göndermeden önce kayıtları inceleyin.");
-    failure.code="PDKS_READBACK_MISMATCH";
-    throw failure;
+  if(durable.receiptId!==posted.receiptId || durable.action!==preview.id){
+    const uncertain=new Error("Yazma ve okuma fişleri farklı. Tekrar göndermeyin. İşlem: "+requestId);
+    uncertain.code="PDKS_RECEIPT_MISMATCH";
+    uncertain.requestId=requestId;
+    throw uncertain;
   }
-  return Object.freeze({
-    status:"CLOUD_D1_VERIFIED",
-    confirmed:true,localFDB:false,annualTNF:false,terminalRaw:false,
-    detail:accepted,
-  });
+  let sourceVerified=false;
+  try{sourceVerified=await ensureReadback(preview,durable);}
+  catch{
+    // The immutable D1 receipt and transaction are confirmed, but a view
+    // endpoint could be unavailable. Never lie that the write was rolled back.
+  }
+  return freezeOutcome(sourceVerified?"CLOUD_D1_VERIFIED":
+    "CLOUD_D1_COMMITTED_SOURCE_UNVERIFIED",durable,requestId,sourceVerified);
 }
