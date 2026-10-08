@@ -19,6 +19,10 @@ test("terminal, FDB/TNF and cloud not claimed connected without Windows Agent",(
   assert.equal(sourceForTab("payroll",{audit:true}),"forbidden");
   assert.equal(sourceForTab("salary",{audit:true}),"forbidden");
   assert.equal(sourceForTab("salary",{audit:false}),"payroll");
+  assert.equal(sourceForTab("holidays",{audit:true}),"forbidden");
+  assert.equal(sourceForTab("leave",{audit:true}),"forbidden");
+  assert.equal(sourceForTab("closing",{audit:true}),"forbidden");
+  assert.equal(sourceForTab("punches",{audit:true}),"attendance");
   assert.equal(sourceForTab("unknown"),"unconnected");
 });
 test("existing PDKS read endpoints map to relevant visible sections",()=>{
