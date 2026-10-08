@@ -1259,7 +1259,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     const totals = calcRow(desired);
     const sourceBankDeductions = movements.filter((item) => item.employeeId === modalDraft.id && String(item.date || item.adjustmentDate || "").startsWith(period) && !upper(item.payrollEffect).includes("SADECE") && upper(item.paymentMethod).includes("BANKA")).reduce((acc,item)=>{const type=normalizeFinanceType(item.type||item.adjustmentType);return ["Avans","Toplu avans","Ozel kesinti","Eksik gün","Eksik saat","Icra","Haciz"].includes(type)?acc+num(item.amount):acc;},0);
     const desiredBankDeductions = (upper(editor.advanceSource).includes("BANKA") ? desired.advance : 0) + (upper(editor.deductionSource).includes("BANKA") ? desired.deduction : 0) + (upper(editor.garnishmentSource).includes("BANKA") ? desired.garnishment : 0);
-    const bankBasis = num(editor.bank) + (desiredBankDeductions - sourceBankDeductions);
+    const bankBasis = num(editor.bank) + desiredBankDeductions;
     const split = paymentSplitByType(editor.paymentType || modalDraft.paymentType, totals.net, bankBasis, desiredBankDeductions);
     desired.bank = split.bank;
     desired.cash = split.cash;
