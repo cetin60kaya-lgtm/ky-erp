@@ -25,7 +25,11 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:5173",
   "https://kyerp.net",
   "https://www.kyerp.net",
+  "https://app.kyerp.net",
   "https://security.kyerp.net",
+  // Capacitor native origins; authenticated endpoint permission remains mandatory.
+  "capacitor://localhost",
+  "https://localhost",
 ]);
 
 const jsonError = (code: string, message: string, details?: unknown) => ({
