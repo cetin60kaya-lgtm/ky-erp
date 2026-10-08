@@ -59,6 +59,8 @@ internal static class FirebirdTnfReadOnlyVerifier
             }
 
             var normalizedCard = NormalizeCard(cardNo);
+            if (!string.IsNullOrWhiteSpace(cardNo) && string.IsNullOrWhiteSpace(normalizedCard))
+                return Failed("FDB_CARD_FORMAT_INVALID", "Kart numarası beş basamaklı sayısal olmalıdır.");
             if (!string.IsNullOrWhiteSpace(normalizedCard))
             {
                 await using var personCommand = new FbCommand(
@@ -77,20 +79,41 @@ internal static class FirebirdTnfReadOnlyVerifier
             }
 
             var day = workDate.Value.Date;
-            var expected = await ReadFdbNormalLinesAsync(connection, normalizedCard, day, cancellationToken);
+            var fdb = await ReadFdbNormalLinesAsync(connection, normalizedCard, day, cancellationToken);
+            var expected = fdb.Lines;
+            if (fdb.Duplicates > 0 || fdb.Invalid > 0)
+                return Failed("FDB_NORMAL_RECORDS_INVALID",
+                    $"FDB normal kayıtları mükerrer={fdb.Duplicates} geçersiz={fdb.Invalid}.");
             var tnfPath = ResolveTnfPath(day.Year);
             if (tnfPath is null || !File.Exists(tnfPath))
                 return Failed("TNF_FILE_NOT_READY", $"TR{day.Year}.Tnf bulunamadı.");
 
             var actual = new HashSet<string>(StringComparer.Ordinal);
+            var duplicateTnf = 0;
+            var malformedTnf = 0;
             foreach (var line in await File.ReadAllLinesAsync(tnfPath, cancellationToken))
             {
-                if (!TryParseTnf(line, out var parsed)) continue;
+                if (!TryParseTnf(line, out var parsed))
+                {
+                    // A malformed line that points to this same person/day is not
+                    // silently discarded: it makes the local proof inadmissible.
+                    var parts = line.Split(',');
+                    if (parts.Length >= 3 &&
+                        DateTime.TryParseExact(parts[2].Trim(), "ddMMyy", CultureInfo.InvariantCulture,
+                            DateTimeStyles.None, out var malformedDay) && malformedDay.Date == day &&
+                        (string.IsNullOrWhiteSpace(normalizedCard) ||
+                         NormalizeCard(parts[0]) == normalizedCard))
+                        malformedTnf++;
+                    continue;
+                }
                 if (parsed.Day != day) continue;
                 if (!string.IsNullOrWhiteSpace(normalizedCard) &&
                     !string.Equals(parsed.Card, normalizedCard, StringComparison.Ordinal)) continue;
-                actual.Add(parsed.Line);
+                if (!actual.Add(parsed.Line)) duplicateTnf++;
             }
+            if (duplicateTnf > 0 || malformedTnf > 0)
+                return Failed("TNF_NORMAL_RECORDS_INVALID",
+                    $"TNF mükerrer={duplicateTnf} geçersiz={malformedTnf}; eşitleme ACK için engellendi.");
 
             var missing = expected.Except(actual, StringComparer.Ordinal).Count();
             var extra = actual.Except(expected, StringComparer.Ordinal).Count();
@@ -108,13 +131,15 @@ internal static class FirebirdTnfReadOnlyVerifier
         }
     }
 
-    private static async Task<HashSet<string>> ReadFdbNormalLinesAsync(
+    private static async Task<(HashSet<string> Lines, int Duplicates, int Invalid)> ReadFdbNormalLinesAsync(
         FbConnection connection,
         string cardNo,
         DateTime day,
         CancellationToken cancellationToken)
     {
         var expected = new HashSet<string>(StringComparer.Ordinal);
+        var duplicates = 0;
+        var invalid = 0;
         var sql = @"select PKNO,GTARIH,GSAAT,GTUR,CTARIH,CSAAT,CTUR from GIRCIK
                     where (@PK='' or PKNO=@PK)
                       and ((GTARIH>=@D and GTARIH<@N) or (CTARIH>=@D and CTARIH<@N))
@@ -127,13 +152,14 @@ internal static class FirebirdTnfReadOnlyVerifier
         while (await reader.ReadAsync(cancellationToken))
         {
             var card = NormalizeCard(reader["PKNO"]?.ToString());
-            AddSide(expected, card, day, reader, "G");
-            AddSide(expected, card, day, reader, "C");
+            AddSide(expected, card, day, reader, "G", ref duplicates, ref invalid);
+            AddSide(expected, card, day, reader, "C", ref duplicates, ref invalid);
         }
-        return expected;
+        return (expected, duplicates, invalid);
     }
 
-    private static void AddSide(HashSet<string> expected, string card, DateTime day, FbDataReader row, string prefix)
+    private static void AddSide(HashSet<string> expected, string card, DateTime day, FbDataReader row, string prefix,
+        ref int duplicates, ref int invalid)
     {
         if (row[prefix + "TARIH"] is DBNull || row[prefix + "SAAT"] is DBNull) return;
         var date = Convert.ToDateTime(row[prefix + "TARIH"], CultureInfo.InvariantCulture).Date;
@@ -141,9 +167,16 @@ internal static class FirebirdTnfReadOnlyVerifier
         var type = Convert.ToString(row[prefix + "TUR"], CultureInfo.InvariantCulture)?.Trim() ?? string.Empty;
         if (string.Equals(type, "E", StringComparison.OrdinalIgnoreCase)) return;
         var raw = Convert.ToString(row[prefix + "SAAT"], CultureInfo.InvariantCulture)?.Trim() ?? string.Empty;
-        if (!TimeSpan.TryParse(raw, CultureInfo.InvariantCulture, out var time) &&
-            !TimeSpan.TryParse(raw, new CultureInfo("tr-TR"), out time)) return;
-        expected.Add($"{card},{time.Hours:00}:{time.Minutes:00},{day:ddMMyy},1,001");
+        if (string.IsNullOrWhiteSpace(card) ||
+            (!TimeSpan.TryParse(raw, CultureInfo.InvariantCulture, out var time) &&
+             !TimeSpan.TryParse(raw, new CultureInfo("tr-TR"), out time)) ||
+            time < TimeSpan.Zero || time >= TimeSpan.FromDays(1))
+        {
+            invalid++;
+            return;
+        }
+        if (!expected.Add($"{card},{time.Hours:00}:{time.Minutes:00},{day:ddMMyy},1,001"))
+            duplicates++;
     }
 
     private static bool TryParseTnf(string raw, out (string Card, DateTime Day, string Line) parsed)
@@ -164,7 +197,8 @@ internal static class FirebirdTnfReadOnlyVerifier
     private static string NormalizeCard(string? value)
     {
         var card = (value ?? string.Empty).Trim();
-        return card.Length == 0 || card.Any(ch => !char.IsDigit(ch)) ? string.Empty : card.PadLeft(5, '0');
+        return card.Length == 0 || card.Length > 5 || card.Any(ch => ch is < '0' or > '9')
+            ? string.Empty : card.PadLeft(5, '0');
     }
 
     private static string? ResolveDatabasePath()
