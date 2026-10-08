@@ -51,9 +51,34 @@ internal static class Program
             }
             return;
         }
+        if (args.Contains("--agent-loop", StringComparer.OrdinalIgnoreCase))
+        {
+            using var cancel = new CancellationTokenSource();
+            ConsoleCancelEventHandler handler = (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                cancel.Cancel();
+            };
+            Console.CancelKeyPress += handler;
+            try
+            {
+                var result = UnifiedAgentRunner.RunLoopAsync(cancel.Token).GetAwaiter().GetResult();
+                Console.WriteLine(result);
+                if (result != "AGENT_STOPPED") Environment.ExitCode = 2;
+            }
+            finally
+            {
+                Console.CancelKeyPress -= handler;
+            }
+            return;
+        }
         if (args.Contains("--agent-once", StringComparer.OrdinalIgnoreCase))
         {
-            _ = UnifiedSyncAgent.RunOnceAsync().GetAwaiter().GetResult();
+            var result = UnifiedSyncAgent.RunOnceAsync().GetAwaiter().GetResult();
+            Console.WriteLine(result);
+            if (result is not ("NO_PENDING_COMMAND" or "POLICY_MIRROR_AND_CLOUD_ACK_OK" or
+                "LOCAL_RECEIPT_ACK_REPLAYED"))
+                Environment.ExitCode = 2;
             return;
         }
         var preview = args.Contains("--dev-preview", StringComparer.OrdinalIgnoreCase);
