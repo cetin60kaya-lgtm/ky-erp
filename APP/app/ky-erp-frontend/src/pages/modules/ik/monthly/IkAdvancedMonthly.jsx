@@ -418,6 +418,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const [selectedDays, setSelectedDays] = useState([1]);
   const [leaveDeskTab, setLeaveDeskTab] = useState("overview");
   const [leaveDetailPlanId, setLeaveDetailPlanId] = useState("");
+  const [leaveCenterWarning, setLeaveCenterWarning] = useState("");
   const [leaveCenter, setLeaveCenter] = useState({ policy: { countedWeekdays: [1, 2, 3, 4, 5, 6], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 }, plans: [], conflicts: [], employees: [], cashRequests: [] });
   const [quickLeaveDraft, setQuickLeaveDraft] = useState(() => {
     const today = istanbulDateKey();
@@ -489,7 +490,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         const [resultState, auditState, centerState, periodState] = await Promise.allSettled([
           getIkAdvancedMonth(params({ mainCompanyId: companyId, year, month })),
           getIkAdvancedAuditLogs(params({ mainCompanyId: companyId, period, limit: 180 })),
-          getIkAdvancedLeaveCenter(params({ mainCompanyId: companyId, from: "2020-01-01", to: `${year + 1}-12-31` })),
+          getIkAdvancedLeaveCenter(params({ mainCompanyId: companyId, year, from: "2020-01-01", to: `${year + 1}-12-31` })),
           getIkAdvancedPeriodState(params({ mainCompanyId: companyId, year, month })),
         ]);
         if (resultState.status !== "fulfilled") throw resultState.reason;
@@ -571,7 +572,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
             return unchanged ? old : next;
           });
         }
-        setLeaveCenter(center || { plans: [], conflicts: [] });
+        setLeaveCenter(center || { policy: {}, plans: [], conflicts: [], employees: [], cashRequests: [] });
+        setLeaveCenterWarning(centerState.status === "rejected" ? "Yıllık İzin merkezi yüklenemedi. Bakiye doğrulanamadı; izin işlemleri geçici olarak durduruldu." : "");
         if (center?.policy) setPolicyDraft(center.policy);
         setSelectedId((old) => masterSelectionIds.has(old) ? old : nextEmployees[0]?.id || safeList(result?.masterEmployees)[0]?.id || "");
         setSelectedPayrollIds((old) => old.filter((id) => currentIds.has(id)));
@@ -761,10 +763,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     const own = masterLeaves.filter((item) => item.employeeId === employee.id);
     const canonical = leaveEmployeeMap.get(employee.id);
     if (canonical) return { own, annual: num(canonical.usedDays), right: num(canonical.annualRight), balance: num(canonical.balance), carryover: num(canonical.annualCarryover), adjustment: num(canonical.balanceAdjustment), source: "LEAVE_CENTER" };
-    const annual = own.filter((item) => upper(item.recordType || item.type).includes("YILLIK") && String(item.startDate || item.start || "").startsWith(String(year))).reduce((sum, item) => sum + num(item.dayCount ?? item.days ?? 0), 0);
-    const right = num(employee.annualLeaveEntitlement) + num(employee.annualLeaveCarryover);
-    return { own, annual, right, balance: right - annual, source: "FALLBACK" };
-  }, [masterLeaves, leaveEmployeeMap, year]);
+    return { own, annual: null, right: null, balance: null, source: "UNVERIFIED" };
+  }, [masterLeaves, leaveEmployeeMap]);
 
   const docsFor = useCallback((employee) => masterDocuments.filter((item) => item.employeeId === employee.id), [masterDocuments]);
 
@@ -1710,6 +1710,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   };
 
   const saveLeave = async () => {
+    if (leaveCenterWarning && modal === "yillik") return setNotice(leaveCenterWarning);
     if (!modalDraft.employeeId) return setNotice("Personel secilmeden kayit yapilamaz.");
     if (modal === "yillik" && (!modalDraft.startDate || !modalDraft.endDate)) return setNotice("Izin baslangic ve bitis tarihleri zorunludur.");
     if (modal === "gunluk" && !selectedDays.length) return setNotice("Gun secilmeden kayit yapilamaz.");
@@ -1813,6 +1814,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   };
 
   const runQuickLeavePreview = async () => {
+    if (leaveCenterWarning) return setNotice(leaveCenterWarning);
     if (!leaveSelected?.id) return setNotice("Önce personel seçin.");
     if (!quickLeaveDraft.startDate || !quickLeaveDraft.returnDate || quickLeaveDraft.returnDate <= quickLeaveDraft.startDate) {
       return setNotice("İzne çıkış ve işe dönüş tarihlerini kontrol edin.");
@@ -1840,6 +1842,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   };
 
   const saveQuickLeave = async () => {
+    if (leaveCenterWarning) return setNotice(leaveCenterWarning);
     if (!leaveSelected?.id) return setNotice("Önce personel seçin.");
     setBusy(true);
     try {
@@ -1884,6 +1887,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   };
 
   const saveLeaveProfile = async () => {
+    if (leaveCenterWarning) return setNotice(leaveCenterWarning);
     if (!leaveSelected?.id) return setNotice("Önce personel seçin.");
     setBusy(true);
     try {
@@ -1908,6 +1912,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   };
 
   const saveLeaveCashRequest = async () => {
+    if (leaveCenterWarning) return setNotice(leaveCenterWarning);
     if (!leaveSelected?.id) return setNotice("Önce personel seçin.");
     if (num(leaveCashDraft.requestedDays) <= 0) return setNotice("Talep edilen gün sıfırdan büyük olmalıdır.");
     setBusy(true);
@@ -2734,7 +2739,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       const leaveYear = String(item.startDate || item.endDate || "").slice(0, 4) || "Tarihsiz";
       if (!acc[leaveYear]) acc[leaveYear] = { year: leaveYear, used: 0, records: 0 };
       acc[leaveYear].records += 1;
-      if (upper(item.recordType).includes("YILLIK") && (item.legacy || ["APPROVED","TAKEN"].includes(upper(item.status)))) acc[leaveYear].used += num(item.countedDays);
+      if (financeKey(item.recordType).includes("YILLIK") && (item.legacy || ["APPROVED","TAKEN"].includes(upper(item.status)))) acc[leaveYear].used += num(item.countedDays);
       return acc;
     }, {})).sort((a, b) => String(b.year).localeCompare(String(a.year)));
     const initials = (employee) => String(employee?.fullName || "?").trim().split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toLocaleUpperCase("tr-TR");
@@ -2764,7 +2769,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                     </span>
                     <span className="ik-pro-roster-meta">
                       <i className={periodTone === "green" ? "success" : periodTone === "orange" ? "warning" : "danger"}>{periodLabel}</i>
-                      <small>{employee.sgkFollow === true ? "SGK" : "SGK dışı"} · {leave.balance} gün izin</small>
+                      <small>{employee.sgkFollow === true ? "SGK" : "SGK dışı"} · {leave.source === "LEAVE_CENTER" ? leave.balance + " gün izin" : "İzin kontrol gerekli"}</small>
                     </span>
                   </button>
                 );
@@ -2791,7 +2796,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                 <div><span>SGK</span><b>{sgkLabel(profile)}</b><small>{profile.sgkFollow === false ? "SGK dışı" : profile.sgkDays !== null && profile.sgkDays !== undefined ? `${num(profile.sgkDays)} gün · ${sgkDaySourceLabel(profile.sgkDaySource)}` : profile.suggestedSgkDays !== null && profile.suggestedSgkDays !== undefined ? `Öneri: ${profile.suggestedSgkDays} gün` : "Gün bilgisi bekleniyor"}</small></div>
                 <div><span>İşe Giriş</span><b>{employeeHireDate(profile) || "Eksik"}</b><small>{employeeExitDate(profile) ? `Çıkış: ${employeeExitDate(profile)}` : "Aktif çalışma"}</small></div>
                 <div><span>Ödeme Tipi</span><b>{paymentLabel(profile)}</b><small>Banka + elden planı</small></div>
-                <div><span>Yıllık İzin</span><b>{profileLeave.balance} gün</b><small>{profileLeave.annual} gün kullanılmış</small></div>
+                <div><span>Yıllık İzin</span><b>{profileLeave.source === "LEAVE_CENTER" ? profileLeave.balance + " gün" : "Kontrol gerekli"}</b><small>{profileLeave.source === "LEAVE_CENTER" ? profileLeave.annual + " gün kullanılmış" : "İzin merkezi bağlantısı bekleniyor"}</small></div>
                 <div><span>Evrak</span><b>{profileDocs.length} belge</b><small>{profileDocs.length ? "Bağlı evrak var" : "Evrak kontrolü gerekli"}</small></div>
                 <div><span>Kart No</span><b>{profile.cardNo || "—"}</b><small>{profile.phone || "Telefon yok"}</small></div>
               </div>
@@ -2817,8 +2822,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                   <div><span>Hakediş</span><b>{num(profile.annualLeaveEntitlement)} gün</b></div>
                   <div><span>Devreden</span><b>{num(profile.annualLeaveCarryover)} gün</b></div>
                   <div><span>Toplam Hak</span><b>{profileLeave.right} gün</b></div>
-                  <div><span>Kullanılan</span><b>{profileLeave.annual} gün</b></div>
-                  <div><span>Kalan</span><b>{profileLeave.balance} gün</b></div>
+                  <div><span>Kullanılan</span><b>{profileLeave.source === "LEAVE_CENTER" ? profileLeave.annual + " gün" : "—"}</b></div>
+                  <div><span>Kalan</span><b>{profileLeave.source === "LEAVE_CENTER" ? profileLeave.balance + " gün" : "Kontrol gerekli"}</b></div>
                 </div>
                 <div className="ik-pro-leave-years">
                   {profileLeaveYears.map((item) => <div key={item.year}><span>{item.year}</span><b>{item.used} gün yıllık izin</b><small>{item.records} izin kaydı</small></div>)}
@@ -2894,9 +2899,12 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     const personCashRequests = person
       ? safeList(leaveCenter.cashRequests).filter((item) => item.employeeId === person.id)
       : [];
+    const waitingApprovals = plans.filter((item) => item.status === "PLANNED");
+    const deficitPeople = safeList(leaveCenter.employees).filter((item) => num(item.balance) < 0);
+    const missingBirthDates = safeList(leaveCenter.employees).filter((item) => !item.birthDate);
     const selectedPlan = personPlans.find((item) => item.id === leaveDetailPlanId) || personPlans[0] || null;
     const personOtherLeaves = person
-      ? masterLeaves.filter((item) => item.employeeId === person.id && !upper(item.recordType || item.type).includes("YILLIK"))
+      ? masterLeaves.filter((item) => item.employeeId === person.id && !financeKey(item.recordType || item.type).includes("YILLIK"))
       : [];
     const departmentPlans = person
       ? plans.filter((item) => item.employeeId !== person.id && item.department && item.department === person.department && item.endDate >= today)
@@ -2926,11 +2934,14 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
             <p>Personel bazlı hakediş, bakiye, hızlı izin, sicil, takvim ve izin ücreti işlemleri.</p>
           </div>
           <div className="group">
+            <span className="badge blue">{waitingApprovals.length} onay bekleyen</span>
+            <span className={deficitPeople.length ? "badge orange" : "badge green"}>{deficitPeople.length} eksi bakiyeli</span>
             <span className="badge green">{currentPlans.length} bugün izinli</span>
             <span className={safeList(leaveCenter.conflicts).length ? "badge orange" : "badge green"}>{safeList(leaveCenter.conflicts).length} çakışma</span>
           </div>
         </div>
 
+        {leaveCenterWarning && <div className="warnline warn" role="alert"><b>İzin verisi doğrulanamadı.</b> {leaveCenterWarning}<button type="button" className="btn" onClick={() => load({ force: true })}>Yeniden Dene</button></div>}
         <div className="ik-leave-filterbar">
           {filters({ third: "Personel ara", fourth: "Durum", fifth: "SGK" })}
         </div>
@@ -2949,7 +2960,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                   <button type="button" key={employee.id} className={isActive ? "ik-leave-roster-row active" : "ik-leave-roster-row"} onClick={() => setSelectedId(employee.id)}>
                     <span className="ik-pro-avatar">{initials(employee.fullName)}</span>
                     <span className="copy"><b>{employee.fullName}</b><small>{employee.code || "-"} · {employee.department || "Bölüm yok"}</small></span>
-                    <span className={num(employee.balance) < 0 ? "balance danger" : "balance"}><b>{num(employee.balance)} gün</b><small>{activeLeave ? "Şu an izinde" : num(employee.projectedBalance) !== num(employee.balance) ? "Plan sonrası " + num(employee.projectedBalance) : "Kalan"}</small></span>
+                    <span className={num(employee.balance) < 0 ? "balance danger" : "balance"}><b>{leaveCenterWarning ? "Kontrol gerekli" : num(employee.balance) + " gün"}</b><small>{activeLeave ? "Şu an izinde" : num(employee.projectedBalance) !== num(employee.balance) ? "Plan sonrası " + num(employee.projectedBalance) : "Kalan"}</small></span>
                   </button>
                 );
               })}
@@ -2980,6 +2991,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                 <div><span>Kıdem / Yaş</span><b>{num(person.serviceYears)} yıl · {person.age ?? "Yaş eksik"}</b><small>{durationLabel(employeeHireDate(person), today)}</small></div>
               </div>
 
+              {person.carryoverReconciliationRequired && <div className="warnline warn"><b>Devreden izin mutabakatı gerekli:</b> Seçili {person.entitlementYear || year} yılı için doğrulanmış devir hesabı bulunmuyor veya önceki yıla ait. Kaydı değiştirmeden Hakediş & Ayarlar bölümünden kontrol edin.</div>}
               <div className="ik-leave-proof-strip">
                 <div><b>{person.entitlementYear || year} İzin Hesabı</b><span>{num(person.effectiveEntitlement)} hak + ({num(person.annualCarryover)} devir) + ({num(person.balanceAdjustment)} düzeltme) − {num(person.usedDays)} kullanılan/onaylı = <strong>{num(person.balance)} gün</strong></span></div>
                 <div><b>Sonraki hakediş</b><span>{person.nextEntitlementDate || "İşe giriş tarihi kontrol edilmeli"}</span></div>
@@ -2998,6 +3010,16 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               </nav>
 
               {leaveDeskTab === "overview" && <>
+                <details className="card" style={{ marginBottom: 12 }}>
+                  <summary style={{ cursor: "pointer", fontWeight: 700 }}>İK Kontrol Merkezi · {waitingApprovals.length} onay bekleyen · {deficitPeople.length} eksi bakiye · {missingBirthDates.length} eksik doğum tarihi</summary>
+                  <div className="ik-leave-fact-list" style={{ marginTop: 12 }}>
+                    <div><span>Seçili izin hesap dönemi</span><b>{person.entitlementYear || year}</b></div>
+                    <div><span>İzin onayı bekleyen kayıt</span><b>{waitingApprovals.length}</b></div>
+                    <div><span>Avans / eksi izinli personel</span><b>{deficitPeople.length}</b></div>
+                    <div><span>Doğum tarihi eksik personel</span><b>{missingBirthDates.length}</b></div>
+                  </div>
+                  {waitingApprovals.slice(0, 8).map((item) => <button type="button" className="ik-leave-mini-plan" key={item.id} onClick={() => { setSelectedId(item.employeeId); setLeaveDetailPlanId(item.id); setLeaveDeskTab("history"); }}><b>{item.fullName}</b><span>{item.startDate} → {item.returnDate} · {item.countedDays} gün · Onay bekliyor</span></button>)}
+                </details>
                 <div className="ik-leave-overview-grid">
                   <div className="card ik-leave-quick-card">
                     <div className="ch"><div><b>Hızlı Yıllık İzin Girişi</b><span>İzne çıkış ve işe dönüşü seçin; sistem hafta tatili/resmi tatili gün gün ayırsın.</span></div></div>
