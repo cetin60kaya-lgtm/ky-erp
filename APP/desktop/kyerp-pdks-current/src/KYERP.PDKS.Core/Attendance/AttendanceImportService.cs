@@ -92,10 +92,16 @@ public sealed class AttendanceImportService(FirebirdDatabase database)
                 new AttendanceImportResult(inserted,updated,duplicates,skipped),
                 items);
             // Throw *inside* InTransaction so that any inserted/updated rows are rolled back.
-            if (requireCompleteBatch && skipped > 0)
-                throw new AttendanceImportRejectedException(result);
-            return result;
+            return requireCompleteBatch ? EnsureCompleteBatch(result) : result;
         },rollbackOnly);
+
+    // Pure validation is also exercised by the contract test suite without a live database.
+    public static AttendanceImportDetailedResult EnsureCompleteBatch(AttendanceImportDetailedResult result)
+    {
+        if (result.Summary.Skipped > 0)
+            throw new AttendanceImportRejectedException(result);
+        return result;
+    }
 
     static bool EmployeeExists(FbConnection c,FbTransaction tx,string employeeCode,DateTime date)=>Convert.ToInt32(Scalar(c,tx,"select count(*) from KIMLIK where PKNO=@PK and (IGTARIH is null or IGTARIH<=@D) and (ICTARIH is null or ICTARIH>=@D)",new FbParameter("@PK",employeeCode),new FbParameter("@D",date)))>0;
     static bool HasOpenSameDay(FbConnection c,FbTransaction tx,string employeeCode,DateTime date)=>Convert.ToInt32(Scalar(c,tx,"select count(*) from GIRCIK where PKNO=@PK and GTARIH=@D and CTARIH is null",new FbParameter("@PK",employeeCode),new FbParameter("@D",date)))>0;
