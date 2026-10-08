@@ -24,10 +24,14 @@ const form=(id)=>({
   leave:{employeeId:"p1",recordType:"YILLIK",startDate:"2026-10-05",
     endDate:"2026-10-07",note:reason},
   advance:{employeeId:"p1",date:"2026-10-05",amount:"500.50",note:reason},
+  overtime:{employeeId:"p1",date:"2026-10-05",
+    adjustmentType:"Hafta İçi Mesai",hourOrDay:"2",amount:"500",
+    paymentMethod:"Bordro",note:reason},
+  deduction:{employeeId:"p1",date:"2026-10-05",amount:"150",note:reason},
 })[id];
 
-test("one operation catalog covers nine distinct verified Cloud D1 workflows",()=>{
-  assert.equal(OPERATION_CATALOG.length,9);
+test("one operation catalog covers eleven distinct verified Cloud D1 workflows",()=>{
+  assert.equal(OPERATION_CATALOG.length,11);
   assert.equal(new Set(OPERATION_CATALOG.map(x=>x.id)).size,9);
   assert.ok(OPERATION_CATALOG.every(x=>x.scope==="CLOUD_D1_ONLY"));
   assert.equal(operationsForTab("departments").length,4);
@@ -35,6 +39,8 @@ test("one operation catalog covers nine distinct verified Cloud D1 workflows",()
   assert.equal(operationsForTab("leave").length,1);
   assert.equal(operationsForTab("holidays").length,1);
   assert.equal(operationsForTab("advances").length,1);
+  assert.equal(operationsForTab("overtime").length,1);
+  assert.equal(operationsForTab("deductions").length,1);
   assert.equal(operationsForTab("punches").length,0);
   assert.equal(operationsForTab("closing").length,0);
 });
@@ -106,4 +112,22 @@ test("creating a matching master code cannot silently overwrite existing data",(
   assert.throws(()=>makeOperationPreview("personnel-group",form("personnel-group"),{
     ...ctx,masters:{...ctx.masters,personnelGroups:[{id:"old",code:"URETIM"}]},
   }),/zaten kayıtlı/);
+});
+
+test("overtime must have explicit approved hours and amount, never invented rates",()=>{
+  const entry=makeOperationPreview("overtime",form("overtime"),ctx);
+  assert.equal(entry.payload.hourOrDay,2);
+  assert.equal(entry.payload.amount,500);
+  assert.equal(entry.payload.adjustmentType,"Hafta İçi Mesai");
+  assert.equal(entry.payload.approvedRate,undefined);
+  assert.throws(()=>makeOperationPreview("overtime",{
+    ...form("overtime"),hourOrDay:"25"},ctx),/en fazla 24/);
+  assert.throws(()=>makeOperationPreview("overtime",{
+    ...form("overtime"),amount:"-1"},ctx),/Pozitif/);
+});
+test("deduction amount is positive and type fixed to Kesinti, not arbitrary data",()=>{
+  const p=makeOperationPreview("deduction",form("deduction"),ctx);
+  assert.equal(p.payload.adjustmentType,"Kesinti");
+  assert.equal(p.payload.amount,150);
+  assert.equal(p.payload.payrollEffect,undefined);
 });
