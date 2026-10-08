@@ -124,7 +124,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
     const needsPeople = ["gruplar-vardiyalar","servisler","bolumler","gorevler","durumlar","ana-ekran","personel-bilgileri","giris-cikislar","puantaj","calisma-tarihi","izinler"].includes(activeTab);
     const needsMasters = ["gruplar-vardiyalar","servisler","ana-ekran","puantaj-kurallari"].includes(activeTab);
     const [nextProfile, nextPeople, nextMasters] = await Promise.all([
-      getPdksProfile(),
+      getPdksProfile({mainCompanyId:companyId}),
       needsPeople ? getPdksPeople({ mainCompanyId: companyId, year, month }) : Promise.resolve([]),
       needsMasters ? getPdksMasters({ mainCompanyId: companyId, year, month }) : Promise.resolve({}),
     ]);
@@ -150,9 +150,9 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
 
   const loadSelectedAttendance = useCallback(async (personId = selected?.id) => {
     if (!personId) { setAttendance([]); return; }
-    const result = await getPdksAttendance(personId, year, month);
+    const result = await getPdksAttendance(personId, year, month, { mainCompanyId: companyId });
     setAttendance(safe(result?.days));
-  }, [month, selected?.id, year]);
+  }, [companyId, month, selected?.id, year]);
 
   const refresh = useCallback(() => run("KY ERP D1 verisi yenileniyor...", async () => {
     const isAudit = await loadCore();
@@ -181,7 +181,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
     const rows = [];
     for (let index = 0; index < people.length; index += 4) {
       const batch = people.slice(index, index + 4);
-      const results = await Promise.all(batch.map(async (person) => ({ person, data: await getPdksAttendance(person.id, year, month) })));
+      const results = await Promise.all(batch.map(async (person) => ({ person, data: await getPdksAttendance(person.id, year, month, { mainCompanyId: companyId }) })));
       results.forEach(({ person, data }) => rows.push({
         id: person.id,
         personnelCode: person.personnelCode || person.code || "",
@@ -313,7 +313,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
       const monthPeople = safe(await getPdksPeople({ mainCompanyId: companyId, year, month: m }));
       for (let index = 0; index < monthPeople.length; index += 4) {
         const batch = monthPeople.slice(index, index + 4);
-        const results = await Promise.all(batch.map(async (person) => ({ person, data: await getPdksAttendance(person.id, year, m) })));
+        const results = await Promise.all(batch.map(async (person) => ({ person, data: await getPdksAttendance(person.id, year, m, { mainCompanyId: companyId }) })));
         results.forEach(({ person, data }) => safe(data?.days).forEach((day) => rows.push([
           person.personnelCode || person.code || "", person.fullName, person.cardNo || "", person.department || "", day.date, day.status,
           day.entry || "", day.exit || "", day.lateMinutes || 0, day.earlyMinutes || 0, day.overtimeMinutes || 0, day.eventCount || 0, day.note || "",
