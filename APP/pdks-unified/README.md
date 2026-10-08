@@ -628,3 +628,41 @@ migration ve yetkili uzak HTTP kabulü; Firebird 9 idari action için
 idempotent SQL handler ve rollback; terminal/RAW/E, maaş-puantaj ve
 saha ekran kabulü. Bunlar tamamlanmadan PR #404 DRAFT kalır;
 otomatik canlı Agent apply veya üretim migration açılmaz.
+
+
+## 21. 09.10.2026 — PERSONEL GRUBU ATAMASI VE TAM İZOLE KABUL
+
+**En güncel yerel kabul bu bölümdür; eski faz kayıtları tarihsel kanıttır.**
+
+- Üçüncü yerel politika kanıtı: assign-personnel-group. Beş basamaklı
+  gerçek kart numarası kopya Firebird KIMLIK kaynağında salt okunur
+  doğrulanır; personelGroupId daha önce imzalı personnel-group kaydıyla
+  aynalanmış gerçek Cloud commandId olmalıdır. Eksik kart veya yerel grup
+  kanıtı reddedilir. Atamalar komut bazında değiştirilemez ek kayıt olarak
+  saklanır. Legacy GRUP/GIRCIK, TNF, bordro veya puantaj değişmez.
+- Cloud ACK replay artık ilk ACK veren cihazın ID'si, ACKED durumu ve
+  orijinal teslimat hash'i eşleşmeden başarı dönmez; farklı cihaz, durum
+  ya da teslim hash'i için 409 döner.
+- Windows Agent ↔ local Hono Cloud ↔ SQLite D1 taklidi ↔ gerçek
+  gbak-kopya Firebird uçtan uca testi 4 komut ve 4 kalıcı fiş içerir:
+  personel grubu, kartlı grup ataması, tatil, simüle ACK kesintisi ve
+  ikinci kez dosyaya yazmadan jurnal fişinden ACK kurtarma.
+- Tek komut kontrol betiği:
+  APP/pdks-unified/windows/tools/Test-UnifiedCopyAcceptance.ps1
+  Parametreler: -StageDbPath yalnız
+  D:\KYERP\_TEMP\PDKS_COPY_STAGE_*\KY_PDKS_STAGE.FDB
+  ve -StageCardNo kopyada bulunan beş haneli kart. PowerShell ExecutionPolicy
+  sistem genelinde değiştirilmeden, yalnız komut bazında çalıştırılabilir.
+- Son kabul HEAD 98ecb2e982f8dadf02c9c12195e61c15f3a78ba3:
+  Cloud 30/30 + cihaz/çalışma/protokol 27/27 + Agent E2E 1/1 =
+  **58/58 otomatik test**. Ek 5 Windows selftest, Firebird
+  GRUP/SERVIS/KIMLIK/OZELIZIN/AVANS rollback, Windows Release
+  0 hata/uyarı ve Cloud TypeScript PASS.
+  RESULT=PASS_WINDOWS_CLOUD_COPY_FDB_E2E_NO_LIVE_WRITES.
+- Canlı Firebird/TNF/terminal RAW veya Cloudflare üretim D1 yazması
+  YAPILMADI. PR #404 DRAFT/UNMERGED, gerçek Cloudflare staging yapılmadı.
+
+**Kalan üretim engelleri:** Sekiz Firebird işlemi için gerçek idempotent SQL
+ledger/commit/recovery; gerçek Cloudflare staging D1 migration ve tenant
+kabulü; terminal SDK/RAW/E, puantaj ve bordro, 49 sekme saha kontrolü,
+Windows dağıtımı ve Android/iOS imzalı paketler.
