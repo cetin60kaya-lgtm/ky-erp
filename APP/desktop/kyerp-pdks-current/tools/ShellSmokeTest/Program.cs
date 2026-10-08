@@ -94,6 +94,29 @@ using (var liveReadOnly = new LiveAttendanceForm())
     foreach (var forbidden in new[] { "Geç Girişi Düzenle", "Erken Çıkışı Düzenle", "Toplu E Giriş", "Toplu E Çıkış", "Günü Eşitle", "Ayı Eşitle" })
         if (buttons.Contains(forbidden)) throw new InvalidOperationException("Canlı Denetim salt okunur olmalı; admin düzeltme komutu sızdı: " + forbidden);
 }
+// Navigation visual-review acceptance: each sidebar destination owns the correct
+// native layout. No Firebird, web, terminal or fabricated personnel are involved.
+using (var peoplePreview = new PdksVisualPreviewWorkspace(PdksCommandCatalog.Get(PdksCommandId.Personnel)))
+{
+    if (!Descendants(peoplePreview).OfType<Label>().Any(x => x.Text == "Personel Listesi"))
+        throw new InvalidOperationException("Personel ekranı yerine eski Giriş/Çıkış menüsü açılıyor.");
+    var personGrid = Descendants(peoplePreview).OfType<DataGridView>().Single();
+    if (!personGrid.Columns.Cast<DataGridViewColumn>().Select(x => x.HeaderText)
+        .SequenceEqual(new[] { "Kart No", "Ad Soyad", "Grup" }))
+        throw new InvalidOperationException("Yeni Personel sol listesi eksik.");
+    if (!Descendants(peoplePreview).OfType<TabControl>().Any(x => x.TabPages.Count == 6))
+        throw new InvalidOperationException("Personel sağ detay sekmeleri eksik.");
+}
+using (var attendancePreview = new PdksVisualPreviewWorkspace(PdksCommandCatalog.Get(PdksCommandId.EntryExit)))
+{
+    var grid = Descendants(attendancePreview).OfType<DataGridView>().Single();
+    var headers = grid.Columns.Cast<DataGridViewColumn>().Select(x => x.HeaderText).ToArray();
+    foreach (var required in new[] { "Tarih", "Kart No", "Personel", "Giriş", "Çıkış", "Kaynak", "E", "Durum" })
+        if (!headers.Contains(required)) throw new InvalidOperationException("Giriş/Çıkış listesi eksik: " + required);
+    if (Descendants(attendancePreview).OfType<Label>().Any(x => x.Text.Contains("Giriş / Çıkış Merkezi")))
+        throw new InvalidOperationException("Eski kartlı Giriş/Çıkış merkezi hâlâ açılıyor.");
+}
+
 if (!PdksCommandCatalog.Get(PdksCommandId.MonthlyAttendanceAdmin).AdminOnly)
     throw new InvalidOperationException("Aylık Kart Düzeltme komutu ADMIN özel olmalı.");
 using (var adminMonth = new MonthlyAttendanceAdminForm(user))
