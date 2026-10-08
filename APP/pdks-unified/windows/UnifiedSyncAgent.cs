@@ -283,7 +283,15 @@ internal static class UnifiedSyncAgent
                     tnfValidated.ValueKind == JsonValueKind.True ? "1" : "0",
                 Text(item, "policySha256"), Text(item, "fdbEvidenceSha256"),
             };
-            var proofInput = JsonSerializer.Serialize(fields);
+            // The Cloud verifier signs JavaScript JSON.stringify([...]) bytes.
+            // System.Text.Json's default encoder escapes '+' as \\u002B
+            // (notably in ISO timestamps with +00:00), producing a different
+            // HMAC over an otherwise identical fixed-order receipt array.
+            // Match the unescaped JSON string bytes used by Cloud exactly.
+            var proofInput = JsonSerializer.Serialize(fields, new JsonSerializerOptions
+            {
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            });
             using var signer = new HMACSHA256(Encoding.UTF8.GetBytes(credential.SigningKey));
             localReceiptHmac = Convert.ToBase64String(signer.ComputeHash(
                 Encoding.UTF8.GetBytes(proofInput)));
