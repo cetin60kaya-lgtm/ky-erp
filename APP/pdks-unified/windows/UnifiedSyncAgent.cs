@@ -145,9 +145,52 @@ internal static class UnifiedSyncAgent
                 return "LOCAL_READONLY_VERIFIED_WAITING_APPLY";
             }
 
-            await PostResultAsync(http, credential, data, "RETRY",
-                "LOCAL_ACTION_HANDLER_NOT_IMPLEMENTED:" + action, null, cancellationToken);
-            return "LOCAL_ACTION_HANDLER_NOT_IMPLEMENTED";
+            if (!UnifiedLocalPolicyStore.Supports(action) || plan.TouchesFirebird ||
+                plan.TouchesAnnualTnf || plan.TouchesTerminalRaw)
+            {
+                await PostResultAsync(http, credential, data, "RETRY",
+                    "LOCAL_ACTION_HANDLER_NOT_IMPLEMENTED:" + action, null, cancellationToken);
+                return "LOCAL_ACTION_HANDLER_NOT_IMPLEMENTED";
+            }
+            var applied = await UnifiedLocalPolicyStore.ApplyAsync(
+                credential.CompanyRoot, action, commandData, journalId, commandId, outboxId,
+                commandHash, cancellationToken);
+            // The receipt is stored on disk BEFORE asking Cloud to ACK.
+            // Crash or network failure after this point can only replay the
+            // exact durable local receipt; it cannot write the policy twice.
+            var combinedEvidence = Convert.ToHexString(SHA256.HashData(
+                Encoding.UTF8.GetBytes(applied.PolicySha256 + "|" + evidence.EvidenceSha256)
+            )).ToLowerInvariant();
+            var localReceipt = JsonSerializer.SerializeToElement(new
+            {
+                journalId,
+                appliedAt = applied.AppliedAt,
+                outboxId,
+                commandId,
+                deviceId = credential.DeviceId,
+                commandPayloadSha256 = commandHash,
+                evidenceSha256 = combinedEvidence,
+                policySha256 = applied.PolicySha256,
+                fdbEvidenceSha256 = evidence.EvidenceSha256,
+                sourceValidated = true,
+                fdbValidated = evidence.FdbValidated,
+                tnfTouched = false,
+                tnfValidated = evidence.TnfValidated,
+            });
+            await UnifiedJournalStore.SaveAppliedReceiptAsync(journalPath, localReceipt, cancellationToken);
+            AppendJournalState(journalPath, new
+            {
+                journalId, state = "LOCAL_APPLIED_ACK_PENDING",
+                appliedAt = applied.AppliedAt, evidenceSha256 = combinedEvidence,
+            });
+            await PostResultAsync(http, credential, data, "ACKED", "",
+                localReceipt, cancellationToken);
+            AppendJournalState(journalPath, new
+            {
+                journalId, state = "CLOUD_ACK_CONFIRMED",
+                acknowledgedAt = DateTimeOffset.UtcNow, evidenceSha256 = combinedEvidence,
+            });
+            return "POLICY_MIRROR_AND_CLOUD_ACK_OK";
         }
         catch (Exception error)
         {
