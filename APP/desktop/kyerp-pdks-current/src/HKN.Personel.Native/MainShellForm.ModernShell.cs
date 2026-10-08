@@ -277,11 +277,12 @@ public sealed partial class MainShellForm
         var command = PdksCommandCatalog.Get(id);
         try
         {
+            var navigationTimer = System.Diagnostics.Stopwatch.StartNew();
             PdksPreviewDiagnostics.Record("navigate-start " + id);
             SetShellActivity("Açılıyor • " + command.Title);
             ExecuteCommand(id);
             SetShellActivity("Hazır", true);
-            PdksPreviewDiagnostics.Record("navigate-ok " + id);
+            PdksPreviewDiagnostics.Record("navigate-ok " + id + " elapsedMs=" + navigationTimer.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
@@ -647,6 +648,12 @@ public sealed partial class MainShellForm
     void RefreshModernDbState()
     {
         if (modernDbState is null) return;
+        if (PdksPreviewMode.Enabled)
+        {
+            modernDbState.Text = "● Görsel önizleme • Firebird/TNF kapalı";
+            modernDbState.ForeColor = PdksAppearance.Current.Warning;
+            return;
+        }
         var p=PdksAppearance.Current;
         var path = Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH", EnvironmentVariableTarget.User)
             ?? Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH");
