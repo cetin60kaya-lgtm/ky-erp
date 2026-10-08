@@ -98,6 +98,11 @@ function receipt(f,delivery){
   };
 }
 
+function receiptSignature(f,delivery,proof){
+  return createHmac("sha256",f.signingKey).update(
+    delivery.deliveryHash+"."+sha(JSON.stringify(proof))).digest("base64");
+}
+
 test("staging D1 mock: device must belong to tenant and have valid credential",async()=>{
   const f=fixture();try{
     f.addCommand();
@@ -126,12 +131,16 @@ test("staging D1 mock: invalid ACK cannot bypass current claimed delivery",async
     const base={status:"ACKED",deliveryHash:delivery.deliveryHash};
     assert.equal((await f.ack(delivery.outboxId,base)).status,409);
     const proof=receipt(f,delivery);
-    assert.equal((await f.ack(delivery.outboxId,{...base,localReceipt:{
-      ...proof,commandPayloadSha256:sha("changed")}})).status,409);
+    const corruptedProof={...proof,commandPayloadSha256:sha("changed")};
+    assert.equal((await f.ack(delivery.outboxId,{...base,localReceipt:corruptedProof,
+      localReceiptHmac:receiptSignature(f,delivery,corruptedProof)})).status,409);
     assert.equal((await f.ack(delivery.outboxId,{...base,
       deliveryHash:sha("wrong"),localReceipt:proof})).status,409);
     assert.equal(f.sqlite.prepare("SELECT state FROM ik_pdks_unified_outbox WHERE id='outbox-1'").get().state,"CLAIMED");
-    assert.equal((await f.ack(delivery.outboxId,{...base,localReceipt:proof})).status,200);
+    assert.equal((await f.ack(delivery.outboxId,{...base,localReceipt:proof,
+      localReceiptHmac:"bad-proof"})).status,409);
+    assert.equal((await f.ack(delivery.outboxId,{...base,localReceipt:proof,
+      localReceiptHmac:receiptSignature(f,delivery,proof)})).status,200);
     assert.equal(f.sqlite.prepare("SELECT state FROM ik_pdks_unified_outbox WHERE id='outbox-1'").get().state,"ACKED");
     const repeated=await f.ack(delivery.outboxId,{...base,localReceipt:proof});
     assert.equal(repeated.status,200);
