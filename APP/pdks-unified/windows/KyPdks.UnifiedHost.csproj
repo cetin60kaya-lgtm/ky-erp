@@ -11,4 +11,12 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3405.78" />
   </ItemGroup>
+  <!-- WebView2 NuGet imports the WPF assembly even for WinForms-only hosts.
+       Exclude it before resolving references to avoid WindowsBase v4/v5 conflicts. -->
+  <Target Name="ExcludeUnusedWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)"
+                 Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
 </Project>
