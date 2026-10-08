@@ -151,6 +151,7 @@ export function configuredProductSections(options = {}, {audit = false} = {}) {
     })
     .map((item) => ({
       ...item,
+      tabs: audit ? item.tabs.filter((tab) => !isSensitiveProductTab(tab.id)) : item.tabs,
       label: typeof captions[item.id] === "string" &&
         captions[item.id].trim().length > 0 &&
         captions[item.id].length <= 32
