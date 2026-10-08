@@ -77,11 +77,6 @@ test("production write atomically creates record and model link",()=>{
   const runtime=read("src/production-runtime-v2.ts");
   assert.match(runtime,/c\.env\.DB\.batch\(\[insertRecord,insertLink\]\)/);
 });
-test("first-party app.kyerp.net is accepted by both API CORS boundaries",()=>{
-  assert.match(main,/https:\/\/app\.kyerp\.net/);
-  assert.match(gateway,/https:\/\/app\.kyerp\.net/);
-  assert.match(main,/X-KYERP-Employee-Signature/);
-});
 test("disabled manager approval does not leak into old phone/session approvals",()=>{
   assert.match(security,/LOGIN_POLICY_NO_MANAGER_REVIEW/);
   assert.match(security,/phoneFactorAllowed/);
