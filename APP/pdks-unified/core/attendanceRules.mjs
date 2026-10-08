@@ -29,7 +29,7 @@ const localDate=(timestamp)=>String(timestamp??"").slice(0,10);
 const asBool=(value)=>value===true;
 const error=(code)=>{throw new Error(code)};
 const compare=(a,b)=>a.timestamp.localeCompare(b.timestamp);
-const evidenceKey=(event)=>[event.source,event.eventId,event.timestamp].join("|");
+const evidenceKey=(event)=>[event.source,event.eventId].join("|");
 
 function checkEvidence(events){
   if(!Array.isArray(events))error("ATTENDANCE_EVENTS_REQUIRED");
