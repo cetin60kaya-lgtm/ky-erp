@@ -6,12 +6,12 @@ const exitTimestamp = value => {
   const text = String(value ?? "").trim();
   if (!text) return null;
   if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
-    const date = new Date(text.slice(0, 10) + "T12:00:00");
+    const date = new Date(text.slice(0, 10) + "T23:59:59.999");
     return Number.isNaN(date.getTime()) ? null : date.getTime();
   }
   const match = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(text);
   if (!match) return null;
-  const date = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]), 12);
+  const date = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]), 23, 59, 59, 999);
   return date.getFullYear() === Number(match[3]) && date.getMonth() === Number(match[2]) - 1 && date.getDate() === Number(match[1])
     ? date.getTime() : null;
 };
