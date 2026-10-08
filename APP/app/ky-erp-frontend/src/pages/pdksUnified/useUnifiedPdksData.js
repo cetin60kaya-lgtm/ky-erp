@@ -28,7 +28,8 @@ export function useUnifiedPdksData({
   const profileReady=profileState.key===profileKey && profileState.status==="ready";
   const profile=profileReady ? profileState.payload : null;
   // The server's audit flag can only remove permission; never grant it.
-  const audit=Boolean(auditHint || profile?.audit===true);
+  const audit=Boolean(auditHint || profile?.audit===true ||
+    profile?.audit===1 || String(profile?.audit).toLowerCase()==="true");
   const peopleKey=keyOf(company,year,month,reloadToken);
   const peopleReady=peopleState.key===peopleKey && peopleState.status==="ready";
   const people=useMemo(()=>
