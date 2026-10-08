@@ -89,7 +89,7 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
           {filtered.map(person=><button type="button" key={person.id} aria-pressed={selected?.id===person.id} className={selected?.id===person.id?"active":""} onClick={()=>setSelectedId(person.id)}>
             <code>{person.cardNo||person.personnelCode||"—"}</code>
             <strong>{person.fullName||"İsimsiz personel"}</strong>
-            <span>{person.personnelGroupName||person.groupName||person.workGroupName||person.department||"—"}</span>
+            <span>{person.personnelGroupName||person.groupName||person.workGroupName||"Atanmamış"}</span>
           </button>)}
           {!filtered.length?<div className="ppd-empty">Bu filtrede personel bulunamadı.</div>:null}
         </div>
