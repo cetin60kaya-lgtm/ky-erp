@@ -109,3 +109,18 @@ test("Windows Agent unified outbox uses signed lease + fail-closed local receipt
   assert.match(command,/localCardNo/);
   assert.doesNotMatch(command,/@ts-nocheck/);
 });
+
+test("Windows local planner freezes all 11 admin actions without RAW/TNF mutation",()=>{
+  const planner=readFileSync(resolve(here,"../../../pdks-unified/windows/UnifiedLocalActionPlanner.cs"),"utf8");
+  const agent=readFileSync(resolve(here,"../../../pdks-unified/windows/UnifiedSyncAgent.cs"),"utf8");
+  for(const action of [
+    "work-group","personnel-group","assign-work-group","assign-personnel-group",
+    "service","assign-service","holiday","leave","advance","overtime","deduction"
+  ]) assert.equal(planner.includes(`"${action}"`),true,`missing local plan action ${action}`);
+  assert.match(planner,/TouchesAnnualTnf:\\s*false/);
+  assert.match(planner,/TouchesTerminalRaw:\\s*false/);
+  assert.match(planner,/ApplySupported:\\s*false/);
+  assert.match(agent,/LOCAL_PLAN_FROZEN/);
+  assert.match(agent,/LOCAL_PLAN_NOT_APPLY_READY/);
+  assert.doesNotMatch(agent,/DELETE\\s+FROM\\s+GIRCIK|UPDATE\\s+GIRCIK|INSERT\\s+INTO\\s+GIRCIK/i);
+});
