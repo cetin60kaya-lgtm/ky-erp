@@ -163,5 +163,13 @@ const renderFailure = (error) => {
   );
 };
 
-if (isPublicSite) renderCanonicalHost().catch(renderFailure);
+// Isolated local design review; never exposed in production and never reads staff data.
+if (import.meta.env.DEV &&
+    ["localhost", "127.0.0.1"].includes(hostname) &&
+    window.location.pathname === "/pdks-studio") {
+  import("./pages/pdksUnified/PdksUnifiedApp.jsx")
+    .then(({default: PdksUnifiedApp}) => {
+      ReactDOM.createRoot(rootElement).render(<PdksUnifiedApp previewOnly />);
+    }).catch(renderFailure);
+} else if (isPublicSite) renderCanonicalHost().catch(renderFailure);
 else renderErpApp().catch(renderFailure);
