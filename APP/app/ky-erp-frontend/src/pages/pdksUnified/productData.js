@@ -10,12 +10,26 @@ const rawValue = (raw, ...names) => {
   return null;
 };
 
-export function normalizePerson(raw = {}) {
+export function normalizePerson(raw = {}, period = null) {
   const id = rawValue(raw, "id", "employeeId", "employee_id");
   const card = rawValue(raw, "cardNo", "card_no", "cardNumber");
   const fullName = rawValue(raw, "fullName", "name", "personnelName", "adSoyad");
   const employment = rawValue(raw, "status", "activePassive", "active_passive");
   const exitDate = rawValue(raw, "exitDate", "exit_date");
+  const hireDate = rawValue(raw, "entryDate", "hireDate", "startDate", "entry_date");
+  const validIso=(value)=>typeof value==="string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const selectedYear=Number(period?.year),selectedMonth=Number(period?.month);
+  const validPeriod=Number.isInteger(selectedYear) && Number.isInteger(selectedMonth) &&
+    selectedYear>=2000 && selectedMonth>=1 && selectedMonth<=12;
+  let periodStatus = null;
+  if(validPeriod) {
+    const first=`${selectedYear}-${String(selectedMonth).padStart(2,"0")}-01`;
+    const last=new Date(Date.UTC(selectedYear,selectedMonth,0)).toISOString().slice(0,10);
+    if((validIso(hireDate) && hireDate>last) ||
+      (validIso(exitDate) && exitDate<first))periodStatus="Dönem Dışı";
+    else if(validIso(exitDate) && exitDate<=last)periodStatus="Çıkış Yapıldı";
+    else if(validIso(hireDate) || validIso(exitDate))periodStatus="Dönemde Çalıştı";
+  }
   return {
     id: id === null ? "" : String(id),
     cardNo: displayValue(card),
@@ -25,7 +39,7 @@ export function normalizePerson(raw = {}) {
     group: displayValue(rawValue(raw, "workGroup", "groupName", "group")),
     startDate: displayValue(rawValue(raw, "entryDate", "hireDate", "startDate", "entry_date")),
     exitDate: displayValue(exitDate),
-    status: exitDate ? "Pasif" : displayValue(employment),
+    status: periodStatus || displayValue(employment),
     cardState: card === null ? "Atanmamış" : "Atanmış",
   };
 }
