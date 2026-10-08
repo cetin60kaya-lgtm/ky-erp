@@ -367,3 +367,21 @@
     padding-left: 0;
   }
 }
+
+/* PDKS workspace navigation refresh: single-row, readable desktop + responsive mobile */
+.pdks-module-shell{--pdks-nav-ink:#1f334b;--pdks-nav-muted:#6c7e91;--pdks-nav-accent:#ea580c;min-width:0}
+.pdks-context-bar{position:relative;top:auto;z-index:10;grid-template-columns:minmax(235px,1fr) minmax(0,2.4fr) auto auto;gap:13px;align-items:center;margin:0 0 10px;padding:13px 16px;border:1px solid #e0e7ef;border-radius:13px;background:#fff;box-shadow:0 1px 7px #15304709;backdrop-filter:none}
+.pdks-context-title{padding:0;min-width:0}
+.pdks-context-title small{font-size:10px;color:#a05a25;letter-spacing:.08em;font-weight:850}
+.pdks-context-title strong{margin-top:3px;font-size:17px;color:var(--pdks-nav-ink);font-weight:850}
+.pdks-context-title span{margin-top:4px;font-size:11px;line-height:1.4;color:var(--pdks-nav-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pdks-context-tabs{align-items:center;gap:5px;min-width:0;overflow-x:auto;padding:3px 0}
+.pdks-context-tabs button{min-width:0;min-height:38px;flex:0 0 auto;padding:9px 13px;border:1px solid transparent;border-radius:9px;background:transparent;font-size:12px;font-weight:750;color:#536980;box-shadow:none;white-space:nowrap}
+.pdks-context-tabs button:hover{background:#f4f6fa;color:#273f5b}
+.pdks-context-tabs button.active{background:#fff1e8;border-color:#fed7aa;color:#af460d;box-shadow:none}
+.pdks-context-tabs button.active::before{display:none}
+.pdks-context-action{min-height:38px;padding:9px 13px;border:1px solid #d7dfea;border-radius:9px;background:#fff;color:#304d6b;font-size:12px;font-weight:750}
+.pdks-context-mode{padding:8px 11px;font-size:10px;font-weight:850;letter-spacing:0}
+.pdks-module-content{min-width:0}
+@media(max-width:1200px){.pdks-context-bar{grid-template-columns:minmax(0,1fr) auto auto}.pdks-context-tabs{grid-column:1/-1;grid-row:2}.pdks-context-title span{white-space:normal}}
+@media(max-width:700px){.pdks-context-bar{gap:10px;padding:12px;grid-template-columns:minmax(0,1fr) auto}.pdks-context-title strong{font-size:15px}.pdks-context-mode{display:none}.pdks-context-action{font-size:11px;padding:8px 10px}.pdks-context-tabs{gap:4px}.pdks-context-tabs button{font-size:11px;min-height:35px;padding:8px 10px}}
