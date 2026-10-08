@@ -99,8 +99,18 @@ function receipt(f,delivery){
 }
 
 function receiptSignature(f,delivery,proof){
-  return createHmac("sha256",f.signingKey).update(
-    delivery.deliveryHash+"."+sha(JSON.stringify(proof))).digest("base64");
+  const fields=[
+    "KY-PDKS-RECEIPT-V1",delivery.deliveryHash,
+    proof.journalId||"",proof.appliedAt||"",
+    proof.commandId||"",proof.outboxId||"",proof.deviceId||"",
+    proof.commandPayloadSha256||"",proof.evidenceSha256||"",
+    proof.sourceValidated===true?"1":"0",
+    proof.fdbValidated===true?"1":"0",
+    proof.tnfTouched===true?"1":"0",
+    proof.tnfValidated===true?"1":"0",
+    proof.policySha256||"",proof.fdbEvidenceSha256||"",
+  ];
+  return createHmac("sha256",f.signingKey).update(JSON.stringify(fields)).digest("base64");
 }
 
 test("staging D1 mock: device must belong to tenant and have valid credential",async()=>{
