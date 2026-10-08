@@ -96,6 +96,22 @@ internal static class TerminalTransferJournalService
                 errorFiles.Add(path);
             }
 
+            // Skipped rows are not duplicates; persist their reasons in a separate
+            // diagnostic ERR file so the terminal screen can explain failed batches.
+            var skippedItems = importItems
+                .Where(x => x.Status.Equals("Skipped", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(x => x.Record.OccurredAt)
+                .ToArray();
+            foreach (var yearGroup in skippedItems.GroupBy(x => x.Record.OccurredAt.Year))
+            {
+                var path = Path.Combine(CompanyDataPaths.Tnf, $"ER{yearGroup.Key:0000}_Skipped.Err");
+                AppendBlock(path, at, yearGroup.Select(x =>
+                    $"{ToTnfLine(x.Record)} | SKIPPED | {x.Reason}"));
+                errorFiles.Add(path);
+                foreach (var item in yearGroup)
+                    errorRows.Add(ToErrorRow(item, at, path));
+            }
+
             var previous = ReadStateUnsafe();
             var recent = previous.RecentErrors
                 .Concat(errorRows)
