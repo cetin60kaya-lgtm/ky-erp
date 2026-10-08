@@ -136,3 +136,14 @@ test("annual TNF store requires backup hash exact format and same-volume atomic 
   assert.match(store,/1,001/);
   assert.doesNotMatch(store,/GIRCIK|Firebird/i);
 });
+
+test("Windows replay journal and Cloud lease use strict source-proof contracts",()=>{
+  const schema=readFileSync(resolve(here,"../migrations/0060_pdks_unified_command_ledger.sql"),"utf8");
+  const agent=readFileSync(resolve(here,"ik-pdks-unified-agent.ts"),"utf8");
+  const windows=readFileSync(resolve(here,"../../../pdks-unified/windows/UnifiedSyncAgent.cs"),"utf8");
+  const journal=readFileSync(resolve(here,"../../../pdks-unified/windows/UnifiedJournalStore.cs"),"utf8");
+  for (const token of ["ik_pdks_devices","secret_hash","active INTEGER"]) assert.equal(schema.includes(token),true);
+  for (const token of ["PDKS_OUTBOX_LEASE_EXPIRED","PDKS_LOCAL_RECEIPT_PAYLOAD_MISMATCH","delivery_owner","lease_until"]) assert.equal(agent.includes(token),true);
+  for (const token of ["SIGNED_ENVELOPE_BINDING_MISMATCH","SIGNED_LEASE_EXPIRED_OR_INVALID","LOCAL_RECEIPT_ACK_REPLAYED"]) assert.equal(windows.includes(token),true);
+  for (const token of ["JOURNAL_REPLAY_CONFLICT","FileMode.CreateNew","JOURNAL_APPLIED_RECEIPT_CONFLICT"]) assert.equal(journal.includes(token),true);
+});
