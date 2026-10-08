@@ -348,7 +348,8 @@ test("IK canonical month survives auxiliary read failures and uses Istanbul busi
 
 test("PDKS report people query follows the selected historical year and month", () => {
   const report = frontend("pages/pdks/PdksReportCenter.jsx");
-  assert.match(report, /getPdksPeople\(\{year,month\}\)/);
+  // The historical period must also carry the active company scope.
+  assert.match(report, /getPdksPeople\(\{mainCompanyId:company,year,month\}\)/);
 });
 
 test("IK validates monthly SGK before card writes and source corrections stay editable", () => {
