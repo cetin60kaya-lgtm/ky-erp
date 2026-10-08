@@ -160,3 +160,12 @@ test("local sidecar policy is two-action allowlisted and receipt is durable befo
   assert.equal(agent.includes('"ACKED"'),true);
   assert.equal(agent.includes("POLICY_MIRROR_AND_CLOUD_ACK_OK"),true);
 });
+
+test("Windows Agent loop has a single-process lock, heartbeat and conservative poll interval",()=>{
+  const runner=readFileSync(resolve(here,"../../../pdks-unified/windows/UnifiedAgentRunner.cs"),"utf8");
+  const program=readFileSync(resolve(here,"../../../pdks-unified/windows/Program.cs"),"utf8");
+  for(const value of ["FileShare.None","unified-agent-health.json","AGENT_ALREADY_RUNNING","Math.Clamp(minutes,5,60)"])
+    assert.equal(runner.includes(value),true);
+  assert.equal(program.includes("--agent-loop"),true);
+  assert.equal(program.includes("--agent-loop-selftest"),true);
+});
