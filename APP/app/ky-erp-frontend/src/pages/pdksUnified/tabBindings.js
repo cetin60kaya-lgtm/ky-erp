@@ -60,6 +60,8 @@ const toRows=(raw,fields)=>{
   }),supported:true};
 };
 const attendanceTypes=new Set(["punches","exceptions","history","daily","violations","signatures","attendance"]);
+const fold=(value)=>String(value??"").normalize("NFD")
+  .replace(/[\u0300-\u036f]/g,"").replace(/ı/g,"I").toUpperCase();
 const statusIsIssue=(day)=>{
   const code=String(day?.status||"").toUpperCase();
   return ["EKSIK_BASIM","KART_YOK","GEC_GIRIS","ERKEN_CIKIS"].includes(code)||
@@ -167,7 +169,7 @@ export function rowsForTab(id,payload,{people=[],selectedPerson=null,year=null,m
     if(!source)return {rows:[],supported:false};
     const check=id==="advances"?/AVANS|EK_KAZANC|PRIM|YOL|YEMEK/ :
       id==="overtime"?/MESAI/ : /KESINTI|ICRA|HACIZ|BES/;
-    const relevant=source.filter((row)=>check.test(String(row.adjustmentType||"").toLocaleUpperCase("tr-TR")));
+    const relevant=source.filter((row)=>check.test(fold(row.adjustmentType)));
     const verified=relevant.map((row)=>{
       const rate=/Mesai oranı:\s*%(50|100)/i.exec(String(row.note||""));
       return {...row,approvedRate:rate?"%"+rate[1]:undefined};
