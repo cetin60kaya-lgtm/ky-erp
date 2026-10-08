@@ -167,8 +167,12 @@ export function rowsForTab(id,payload,{people=[],selectedPerson=null,year=null,m
     if(!source)return {rows:[],supported:false};
     const check=id==="advances"?/AVANS|EK_KAZANC|PRIM|YOL|YEMEK/ :
       id==="overtime"?/MESAI/ : /KESINTI|ICRA|HACIZ|BES/;
-    const relevant=source.filter((row)=>check.test(String(row.adjustmentType||"").toUpperCase()));
-    return toRows({rows:relevant},{
+    const relevant=source.filter((row)=>check.test(String(row.adjustmentType||"").toLocaleUpperCase("tr-TR")));
+    const verified=relevant.map((row)=>{
+      const rate=/Mesai oranı:\s*%(50|100)/i.exec(String(row.note||""));
+      return {...row,approvedRate:rate?"%"+rate[1]:undefined};
+    });
+    return toRows({rows:verified},{
       "Personel":["employeeName"],"Tarih":["date"],
       "Tür":["adjustmentType"],"Tutar":["amount"],
       "Saat":["hourOrDay"],"Oran":["approvedRate"],"Gerekçe":["note"],
