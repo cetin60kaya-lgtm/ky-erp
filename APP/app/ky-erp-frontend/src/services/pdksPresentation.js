@@ -23,11 +23,22 @@ export function isActivePdksPerson(person, now = Date.now()) {
   return exit === null || exit > now;
 }
 
-export function visiblePdksPeople(people, status = "AKTIF", search = "", now = Date.now()) {
+// Historic periods include staff who entered or left during that month.
+// Current active/passive labels alone cannot decide a past month's roster.
+export function isPdksPersonInPeriod(person, periodStart, periodEnd) {
+  const start = exitTimestamp(person?.entryDate ?? person?.hireDate ?? person?.startDate ?? person?.entry_date);
+  const exit = exitTimestamp(person?.exitDate ?? person?.exit_date);
+  if (start !== null && start > periodEnd) return false;
+  if (exit !== null && exit < periodStart) return false;
+  if (exit === null && !isActivePdksPerson(person, periodEnd)) return false;
+  return true;
+}
+
+export function visiblePdksPeople(people, status = "AKTIF", search = "", now = Date.now(), periodStart = null) {
   const query = upper(search);
   return (Array.isArray(people) ? people : [])
     .filter(person => {
-      const active = isActivePdksPerson(person, now);
+      const active = periodStart === null ? isActivePdksPerson(person, now) : isPdksPersonInPeriod(person, periodStart, now);
       if (status === "AKTIF" && !active) return false;
       if (status === "PASIF" && active) return false;
       return !query || upper([
@@ -40,8 +51,8 @@ export function visiblePdksPeople(people, status = "AKTIF", search = "", now = D
       .localeCompare(String(b.cardNo || b.personnelCode || b.code || ""), "tr", { numeric: true }));
 }
 
-export function selectedPdksPerson(people, status, selectedId, now = Date.now()) {
-  const scoped = visiblePdksPeople(people, status, "", now);
+export function selectedPdksPerson(people, status, selectedId, now = Date.now(), periodStart = null) {
+  const scoped = visiblePdksPeople(people, status, "", now, periodStart);
   return scoped.find(person => person.id === selectedId) || scoped[0] || null;
 }
 
