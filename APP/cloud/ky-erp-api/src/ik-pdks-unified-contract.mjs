@@ -2,11 +2,11 @@
  * One pure command validation contract shared by Cloud Worker and unit tests.
  * No IO, no implicit default punches, no side effects.
  */
-export const commandValue=(v:unknown)=>v==null?"":String(v).trim();
+export const commandValue=(v)=>v==null?"":String(v).trim();
 const val=commandValue;
-export const commandFold=(v:unknown)=>val(v).toLocaleUpperCase("tr-TR");
+export const commandFold=(v)=>val(v).toLocaleUpperCase("tr-TR");
 const fold=commandFold;
-const isoDate=(v:unknown)=>{
+const isoDate=(v)=>{
   const s=val(v);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(s))throw new Error("INVALID_DATE");
   const [y,m,d]=s.split("-").map(Number),dt=new Date(Date.UTC(y,m-1,d));
@@ -14,38 +14,38 @@ const isoDate=(v:unknown)=>{
     throw new Error("INVALID_DATE");
   return s;
 };
-const time=(v:unknown)=>{
+const time=(v)=>{
   const s=val(v);
   if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(s))throw new Error("INVALID_TIME");
   return s;
 };
-const note=(v:unknown)=>{
+const note=(v)=>{
   const s=val(v);
   if(s.length<8||s.length>900)throw new Error("PDKS_REASON_REQUIRED");
   return s;
 };
-const code=(v:unknown)=>{
+const code=(v)=>{
   const s=fold(v);
   if(!/^[A-Z0-9ÇĞİÖŞÜ_-]{2,40}$/.test(s))throw new Error("PDKS_CODE_INVALID");
   return s;
 };
-const name=(v:unknown)=>{
+const name=(v)=>{
   const s=val(v);
   if(s.length<2||s.length>150)throw new Error("PDKS_NAME_REQUIRED");
   return s;
 };
-const amount=(v:unknown)=>{
+const amount=(v)=>{
   const n=Number(v);
   if(!Number.isFinite(n)||n<=0||n>1e9||Math.abs(Math.round(n*100)-n*100)>1e-7)
     throw new Error("PDKS_AMOUNT_INVALID");
   return n;
 };
-const count=(v:unknown,max:number)=>{
+const count=(v,max)=>{
   const n=Number(v);
   if(!Number.isInteger(n)||n<0||n>max)throw new Error("PDKS_COUNT_INVALID");
   return n;
 };
-function normalized(action:string,p:Row){
+function normalized(action,p){
   const personId=()=>{const id=val(p.employeeId);if(!id||id.length>120)throw new Error("PERSON_REQUIRED");return id;};
   const reason=()=>note(p.reason||p.note);
   switch(action){
@@ -101,7 +101,7 @@ function normalized(action:string,p:Row){
     default:throw new Error("PDKS_ACTION_NOT_SUPPORTED");
   }
 }
-export function validateUnifiedCommand(action:string,payload:Row){
+export function validateUnifiedCommand(action,payload){
   if(!payload||typeof payload!=="object"||Array.isArray(payload))
     throw new Error("PDKS_PAYLOAD_INVALID");
   return Object.freeze(normalized(action,payload));
