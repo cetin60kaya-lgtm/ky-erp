@@ -90,3 +90,21 @@ test("D1 GET and POST never silently provision command or receipt tables",()=>{
   const worker=readFileSync(resolve(here,"main.ts"),"utf8");
   assert.match(worker,/registerIkPdksUnifiedCommandRoutes\(app\)/);
 });
+
+test("Windows Agent unified outbox uses signed lease + fail-closed local receipt ACK",()=>{
+  const main=readFileSync(resolve(here,"main.ts"),"utf8");
+  const agent=readFileSync(resolve(here,"ik-pdks-unified-agent.ts"),"utf8");
+  assert.match(main,/registerIkPdksUnifiedAgentRoutes\(app\)/);
+  assert.match(agent,/\/api\/auth\/pdks-unified\/outbox\/next/);
+  assert.match(agent,/\/api\/auth\/pdks-unified\/outbox\/:id\/ack/);
+  assert.match(agent,/HMAC-SHA256/);
+  assert.match(agent,/KY_PDKS_UNIFIED_SYNC_KEY/);
+  assert.match(agent,/state='CLAIMED'/);
+  assert.match(agent,/PDKS_LOCAL_RECEIPT_INVALID/);
+  assert.match(agent,/fdbValidated/);
+  assert.match(agent,/tnfTouched/);
+  assert.doesNotMatch(agent,/CREATE TABLE|DROP TABLE/);
+  const command=readFileSync(resolve(here,"ik-pdks-unified-commands.ts"),"utf8");
+  assert.match(command,/commandData:p/);
+  assert.match(command,/localCardNo/);
+});
