@@ -780,15 +780,14 @@ async function annualUsedForYear(c: Context<AppEnv>, companyId: string, employee
     all(c, `SELECT id,start_date,counted_days,calculation_json FROM ik_leave_plans
       WHERE main_company_id=? AND employee_id=? AND status IN ('APPROVED','TAKEN') AND id<>?`,
       [companyId,employeeId,excludingPlanId]),
-    all(c, `SELECT l.start_date,l.day_count FROM hr_leave_records_v2 l
+    all(c, `SELECT l.start_date,l.day_count,l.record_type FROM hr_leave_records_v2 l
       JOIN hr_monthly_employees e ON e.id=l.employee_id
       WHERE e.main_company_id=? AND l.employee_id=?
-      AND UPPER(l.record_type) LIKE '%YILLIK%'
       AND (l.document_path IS NULL OR l.document_path NOT LIKE 'ik-leave-plan:%')`,
       [companyId,employeeId]),
   ]);
   return Math.round((managed.reduce((total, row) => total + annualLeaveDaysForYear(row, year), 0)
-    + legacy.reduce((total, row) => total + annualLeaveDaysForYear(row, year), 0)) * 2) / 2;
+    + legacy.filter((row) => financeKey(row.record_type).includes("YILLIK")).reduce((total, row) => total + annualLeaveDaysForYear(row, year), 0)) * 2) / 2;
 }
 
 function parseLeaveAdjustment(row: Row | null | undefined): Row | null {
@@ -3262,10 +3261,10 @@ async function previewAdvancedLeaveV2(c: Context<AppEnv>, supplied?: Row) {
     all(c, `SELECT l.id,l.employee_id,l.start_date,l.end_date,'TAKEN' AS status,l.record_type
         FROM hr_leave_records_v2 l JOIN hr_monthly_employees e ON e.id=l.employee_id
         WHERE e.main_company_id=? AND (l.document_path IS NULL OR l.document_path NOT LIKE 'ik-leave-plan:%')
-        AND l.start_date<=? AND l.end_date>=? AND UPPER(l.record_type) LIKE '%YILLIK%'`,
+        AND l.start_date<=? AND l.end_date>=?`,
       [companyId, range.lastLeaveDate, startDate]),
   ]);
-  const overlaps = [...managedOverlaps, ...legacyOverlaps];
+  const overlaps = [...managedOverlaps, ...legacyOverlaps.filter((row) => financeKey(row.record_type).includes("YILLIK"))];
   const employeeMap = new Map(employees.map((row) => [text(row.id), row]));
   const sameDepartmentCount = overlaps.filter((row) => {
     const other = employeeMap.get(text(row.employee_id));
@@ -3324,7 +3323,7 @@ async function saveAdvancedLeaveRecordV2(c: Context<AppEnv>) {
   const companyId = writeAccess.companyId;
   const employeeId = text(body.employeeId || body.personId);
   const recordType = text(body.recordType || body.type) || "Yıllık izin";
-  const isAnnual = upper(recordType).includes("YILLIK");
+  const isAnnual = financeKey(recordType).includes("YILLIK");
   if (!isAnnual) {
     if (!(await employeeBelongsToCompany(c, employeeId, companyId))) return error(c, 400, "INVALID_EMPLOYEE", "Personel bulunamadı.");
     const employment = await first(c, `SELECT e.hire_date,s.exit_date FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.id=? AND e.main_company_id=? LIMIT 1`, [employeeId, companyId]);
@@ -3649,7 +3648,7 @@ async function leaveCenterV2(c: Context<AppEnv>) {
   });
   const legacyRows = await all(c, `SELECT l.* FROM hr_leave_records_v2 l JOIN hr_monthly_employees e ON e.id=l.employee_id
       WHERE e.main_company_id=? AND (l.document_path IS NULL OR l.document_path NOT LIKE 'ik-leave-plan:%') ORDER BY l.start_date ASC`, [companyId]);
-  const legacyPlans = legacyRows.filter((row) => upper(row.record_type).includes("YILLIK")).map((row) => {
+  const legacyPlans = legacyRows.filter((row) => financeKey(row.record_type).includes("YILLIK")).map((row) => {
     const employee = employeeMap.get(text(row.employee_id));
     const endDate = hrDateOnly(row.end_date);
     return { id: `legacy:${text(row.id)}`, employeeId: text(row.employee_id), fullName: text(employee?.fullName) || "-", code: text(employee?.code), department: text(employee?.department), title: text(employee?.title), recordType: text(row.record_type), effectType: text(row.effect_type) || "Ücretli", startDate: hrDateOnly(row.start_date), endDate, lastLeaveDate: endDate, returnDate: addIsoDays(endDate, 1), countedDays: number(row.day_count), excludedDates: [], countedDates: [], partialDates: [], dayDetails: [], policySnapshot: null, status: "TAKEN", documentNo: "", note: text(row.note), createdAt: row.created_at, updatedAt: row.created_at, legacy: true };
