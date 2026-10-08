@@ -593,3 +593,38 @@ Sonraki üretim engelleri: gerçek Cloudflare D1 staging/tenant oturum
 kabulü; 9 Firebird action için provably-idempotent local SQL ledger +
 transaction recovery; terminal RAW/E/TNF ve puantaj hesaplama; UI
 49 sekme saha kabulü; Android/iOS signing. PR #404 **DRAFT**.
+
+
+## 20. 08.10.2026 — ACK HMAC UYUMLULUK DÜZELTMESİ VE TOPLU AGENT TESTİ
+
+**§19 üstüne ek güncel izole kabul; üretime dağıtım izni değildir.**
+
+- Windows `--agent-safety-selftest`: plan, kalıcı journal, iki yerel politika
+  aynası, yıllık TNF atomik dosya kontratı ve tek örnek Agent loop
+  **5/5 PASS**. Tümü geçici dizinlerde çalışır; üretim FDB/TNF/RAW yazmaz.
+- Windows Release `KyPdks.UnifiedHost.csproj`: **0 hata / 0 uyarı**.
+- Cloud `npm run test:pdks-unified:cloud`: **30/30 PASS** (13 depolama
+  ve sözleşme + 17 endpoint/origin/güvenlik testleri).
+- Cloud `npm run typecheck`: **PASS**.
+- Gerçek `dotnet` Agent + local Hono Cloud + izole Firebird kopyası
+  uçtan uca testi, ilk çalışmada
+  `PDKS_LOCAL_RECEIPT_HMAC_INVALID` verdi. Nedeni .NET
+  `System.Text.Json` varsayılan JSON kaçışının ISO tarihindeki `+`
+  karakterini `\\u002B` biçimine çevirmesi ve JS
+  `JSON.stringify` ile HMAC baytlarının ayrışmasıydı.
+- `UnifiedSyncAgent.cs` imza alanı için `UnsafeRelaxedJsonEscaping`
+  kullanıldı; diğer JSON alanları/Cloud protokolü değişmedi.
+  Aynı kopya-FDB uçtan uca testi tekrarlandı: **1/1 PASS**.
+  Komut teslimatı, yerel aynalama, Cloud ACK, simüle HTTP 503,
+  journal'dan yeniden ACK ve ikinci kez yerel yazmama kanıtlandı.
+- İlgili commit'ler: `22bf2dbb` (toplu güvenlik testi) ve
+  `7fc276ea` (cross-runtime ACK kanıt HMAC uyumu).
+- Test ortamı `D:\\KYERP\\_TEMP\\PDKS_SAFE_VERIFY_20261008_02\\web`;
+  Firebird yalnız `D:\\KYERP\\_TEMP\\PDKS_COPY_STAGE_20261008_213329\\KY_PDKS_STAGE.FDB`.
+  **Canlı Firebird/TNF/Cloudflare D1 değişikliği yapılmadı.**
+
+**Kapalı kalan üretim kapıları:** Cloudflare staging D1 gerçek tenant
+migration ve yetkili uzak HTTP kabulü; Firebird 9 idari action için
+idempotent SQL handler ve rollback; terminal/RAW/E, maaş-puantaj ve
+saha ekran kabulü. Bunlar tamamlanmadan PR #404 DRAFT kalır;
+otomatik canlı Agent apply veya üretim migration açılmaz.
