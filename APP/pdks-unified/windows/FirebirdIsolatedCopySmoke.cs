@@ -56,7 +56,8 @@ internal static class FirebirdIsolatedCopySmoke
         var serviceId = await NextAsync(connection,"SERVIS",cancellationToken);
         var leaveId = await NextAsync(connection,"OZELIZIN",cancellationToken,"SIRA");
         var advanceId = await NextAsync(connection,"AVANS",cancellationToken);
-        var batch = "PDKS_COPY_SMOKE_" + Guid.NewGuid().ToString("N");
+        // Legacy GRUP.AD and SERVIS.AD are short Firebird text columns.
+        var batch = "KY" + Guid.NewGuid().ToString("N")[..8];
         var steps = new List<string>();
 
         using var transaction = connection.BeginTransaction();
@@ -65,13 +66,13 @@ internal static class FirebirdIsolatedCopySmoke
             await ExecAsync(connection,transaction,"INSERT INTO GRUP (KOD,AD) VALUES (@K,@A)",
                 cancellationToken,new FbParameter("@K",groupId),new FbParameter("@A",batch));
             await ExecAsync(connection,transaction,"UPDATE GRUP SET AD=@A WHERE KOD=@K",
-                cancellationToken,new FbParameter("@A",batch+"_UPDATED"),new FbParameter("@K",groupId));
+                cancellationToken,new FbParameter("@A",batch+"_U"),new FbParameter("@K",groupId));
             steps.Add("GRUP_INSERT_UPDATE");
 
             await ExecAsync(connection,transaction,"INSERT INTO SERVIS (KOD,AD) VALUES (@K,@A)",
                 cancellationToken,new FbParameter("@K",serviceId),new FbParameter("@A",batch));
             await ExecAsync(connection,transaction,"UPDATE SERVIS SET AD=@A WHERE KOD=@K",
-                cancellationToken,new FbParameter("@A",batch+"_UPDATED"),new FbParameter("@K",serviceId));
+                cancellationToken,new FbParameter("@A",batch+"_U"),new FbParameter("@K",serviceId));
             steps.Add("SERVIS_INSERT_UPDATE");
 
             await ExecAsync(connection,transaction,
