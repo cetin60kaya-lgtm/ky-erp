@@ -39,7 +39,8 @@ test("read-only personal view reads limited HR and clock fields; no payroll colu
   assert.match(self,/ik_time_clock_events/);
   assert.match(self,/hr_leave_records_v2/);
   assert.match(self,/calculateStatutoryAnnualLeave/);
-  assert.doesNotMatch(api,/app\.post\("\/api\/employee-portal\/work\/production"/);
+  assert.match(api,/app\.post\("\/api\/employee-portal\/work\/machine-production"/);
+  assert.match(api,/savePersonnelProductionEntry/);
 });
 test("disabled manager approval does not leak into old phone/session approvals",()=>{
   assert.match(security,/LOGIN_POLICY_NO_MANAGER_REVIEW/);
