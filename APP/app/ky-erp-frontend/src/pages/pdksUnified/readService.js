@@ -16,7 +16,9 @@ export const readDays=(personId,year,month,params)=>
   getPdksAttendance(personId,year,month,params);
 
 const period=(year,month)=>String(year)+"-"+String(month).padStart(2,"0");
-const safeNumber=(value)=>Number.isFinite(Number(value)) ? Number(value) : null;
+const safeNumber=(value)=>
+  value===null || value===undefined || value==="" ? null :
+    Number.isFinite(Number(value)) ? Number(value) : null;
 
 /**
  * True monthly card activity, never from /operations/month (that endpoint
