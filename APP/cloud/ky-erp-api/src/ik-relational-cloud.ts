@@ -3017,7 +3017,7 @@ function addIsoDays(value: string, amount: number) {
 export function calculateAnnualLeaveRange(
   startDate: string,
   returnDate: string,
-  countedWeekdays: number[] = [1, 2, 3, 4, 5],
+  countedWeekdays: number[] = [1, 2, 3, 4, 5, 6],
   excludeOfficialHolidays = true,
   officialHolidayRules: Array<string | Row> = [],
 ) {
