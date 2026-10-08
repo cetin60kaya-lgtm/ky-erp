@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { mobileApiPost, mobileApiGet } from "./mobileApi";
 import { API_BASE } from "../utils/api";
 
@@ -6,17 +6,35 @@ export default function MobileLogin({ onLogin }) {
   const [username, setUsername] = useState("");
   const [personnelMode, setPersonnelMode] = useState(false);
   const [companies, setCompanies] = useState([]);
+  const [turnstileConfig,setTurnstileConfig] = useState(null);
+  const [turnstileToken,setTurnstileToken] = useState("");
+  const turnstileRef=useRef(null);
   const [company, setCompany] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    mobileApiGet("auth/turnstile-config").then(res => setTurnstileConfig(res.data || null)).catch(() => setTurnstileConfig({required:true}));
     mobileApiGet("employee-portal/companies").then(res => {
       const items = res.data?.data || res.data;
       if (Array.isArray(items)) setCompanies(items);
     }).catch(() => {});
   }, []);
+
+  useEffect(()=>{
+    if(!turnstileConfig?.required || !turnstileConfig.siteKey || !turnstileRef.current)return;
+    let removed=false;
+    const render=()=>{
+      if(removed || !turnstileRef.current || !window.turnstile || turnstileRef.current.dataset.rendered)return;
+      turnstileRef.current.dataset.rendered="1";
+      window.turnstile.render(turnstileRef.current,{sitekey:turnstileConfig.siteKey,callback:setTurnstileToken,"expired-callback":()=>setTurnstileToken(""),"error-callback":()=>setTurnstileToken("")});
+    };
+    let script=document.querySelector('script[data-kyerp-mobile-turnstile]');
+    if(!script){script=document.createElement("script");script.src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";script.async=true;script.defer=true;script.setAttribute("data-kyerp-mobile-turnstile","1");document.head.appendChild(script);}
+    script.addEventListener("load",render);render();
+    return ()=>{removed=true;script.removeEventListener("load",render);};
+  },[turnstileConfig]);
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -24,21 +42,21 @@ export default function MobileLogin({ onLogin }) {
       setError("Kullanıcı adı ve şifre zorunludur.");
       return;
     }
+    if(turnstileConfig?.required && !turnstileToken){setError("Bot dogrulamasini tamamlayin.");return;}
     setLoading(true);
     setError("");
     try {
       const identity = personnelMode ? company + "--" + username.trim().toLowerCase() : username.trim();
-      const res = await mobileApiPost("auth/login", { username: identity, password });
+      const res = await mobileApiPost("auth/login", { username: identity, password, turnstileToken });
       if (!res.ok) throw new Error(res.data?.error?.message || res.message || "Giris reddedildi.");
       
       const payload = res.data || res;
       const token = payload?.token || payload?.access_token || payload?.accessToken || payload?.jwt || payload?.data.token;
       
       if (!token) throw new Error("Giris icin ilave dogrulama gerekli. Yonetici/muhasebe hesabiyla normal KY ERP MFA ekranindan devam edin.");
-      localStorage.setItem("kyerp_auth_token", token);
-      
       const userObj = payload?.user || payload?.data.user || { username: identity };
       if (personnelMode && String(userObj.role || "").toUpperCase() !== "PERSONNEL") throw new Error("Bu giris yalniz personel hesaplari icindir.");
+      localStorage.setItem("kyerp_auth_token", token);
       localStorage.setItem("kyerp_auth_user", JSON.stringify(userObj));
       localStorage.setItem("kyerp_mobile_user", JSON.stringify(userObj));
       onLogin();
@@ -146,6 +164,7 @@ export default function MobileLogin({ onLogin }) {
             />
           </div>
 
+          {turnstileConfig?.required?<div ref={turnstileRef} style={{minHeight:68}} aria-label="Bot dogrulama"/>:null}
           <button
             type="submit"
             disabled={loading}
