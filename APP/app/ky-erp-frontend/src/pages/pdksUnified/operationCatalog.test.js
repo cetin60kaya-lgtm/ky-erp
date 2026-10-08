@@ -25,7 +25,7 @@ const form=(id)=>({
     endDate:"2026-10-07",note:reason},
   advance:{employeeId:"p1",date:"2026-10-05",amount:"500.50",note:reason},
   overtime:{employeeId:"p1",date:"2026-10-05",
-    adjustmentType:"Hafta İçi Mesai",hourOrDay:"2",amount:"500",
+    adjustmentType:"Hafta İçi Mesai",hourOrDay:"2",overtimeRate:"50",amount:"500",
     paymentMethod:"Bordro",note:reason},
   deduction:{employeeId:"p1",date:"2026-10-05",amount:"150",note:reason},
 })[id];
@@ -120,6 +120,8 @@ test("overtime must have explicit approved hours and amount, never invented rate
   assert.equal(entry.payload.amount,500);
   assert.equal(entry.payload.adjustmentType,"Hafta İçi Mesai");
   assert.equal(entry.payload.approvedRate,undefined);
+  assert.equal(entry.payload.overtimeRate,undefined);
+  assert.match(entry.payload.note,/Mesai oranı: %50/);
   assert.throws(()=>makeOperationPreview("overtime",{
     ...form("overtime"),hourOrDay:"25"},ctx),/en fazla 24/);
   assert.throws(()=>makeOperationPreview("overtime",{
