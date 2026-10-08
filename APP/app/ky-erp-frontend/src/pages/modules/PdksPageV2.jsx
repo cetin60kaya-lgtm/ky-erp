@@ -119,11 +119,14 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
     finally { setBusy(false); }
   }, []);
 
+  // Legacy administrative tabs must not load every PDKS dataset on every menu transition.
   const loadCore = useCallback(async () => {
-    const nextProfile = await getPdksProfile();
-    const [nextPeople, nextMasters] = await Promise.all([
-      getPdksPeople({ mainCompanyId: companyId, year, month }),
-      getPdksMasters({ mainCompanyId: companyId, year, month }),
+    const needsPeople = ["gruplar-vardiyalar","servisler","bolumler","gorevler","durumlar","ana-ekran","personel-bilgileri","giris-cikislar","puantaj","calisma-tarihi","izinler"].includes(activeTab);
+    const needsMasters = ["gruplar-vardiyalar","servisler","ana-ekran","puantaj-kurallari"].includes(activeTab);
+    const [nextProfile, nextPeople, nextMasters] = await Promise.all([
+      getPdksProfile(),
+      needsPeople ? getPdksPeople({ mainCompanyId: companyId, year, month }) : Promise.resolve([]),
+      needsMasters ? getPdksMasters({ mainCompanyId: companyId, year, month }) : Promise.resolve({}),
     ]);
     const list = safe(nextPeople);
     setProfile(nextProfile || null);
@@ -131,18 +134,19 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
     setMasters(nextMasters || { groups: [], services: [], groupAssignments: [], serviceAssignments: [] });
     setSelectedId((old) => list.some((person) => person.id === old) ? old : list[0]?.id || "");
     return Boolean(nextProfile?.audit || nextMasters?.audit || isAuditAccount);
-  }, [companyId, isAuditAccount, month, year]);
+  }, [activeTab, companyId, isAuditAccount, month, year]);
 
   const loadFullMonth = useCallback(async () => {
+    // Load audit and holiday data only when the screen actually displays them.
     const [nextHolidays, nextLeaves, nextLogs] = await Promise.all([
-      getPdksHolidays({ year, mainCompanyId: companyId }),
-      getPdksLeaveCenter({ mainCompanyId: companyId, from: `${year}-01-01`, to: `${year}-12-31` }),
-      getPdksAuditLogs({ mainCompanyId: companyId, period: periodKey(year, month), limit: 200 }),
+      activeTab === "tatiller" ? getPdksHolidays({ year, mainCompanyId: companyId }) : Promise.resolve([]),
+      activeTab === "izinler" ? getPdksLeaveCenter({ mainCompanyId: companyId, from: `${year}-01-01`, to: `${year}-12-31` }) : Promise.resolve({ plans: [] }),
+      activeTab === "raporlar" ? getPdksAuditLogs({ mainCompanyId: companyId, period: periodKey(year, month), limit: 200 }) : Promise.resolve([]),
     ]);
     setHolidays(safe(nextHolidays));
     setLeaveCenter(nextLeaves || { plans: [] });
     setLogs(safe(nextLogs));
-  }, [companyId, month, year]);
+  }, [activeTab, companyId, month, year]);
 
   const loadSelectedAttendance = useCallback(async (personId = selected?.id) => {
     if (!personId) { setAttendance([]); return; }
@@ -161,7 +165,11 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
   }), [loadCore, loadFullMonth, run]);
 
   useEffect(() => { refresh(); }, [refresh]);
-  useEffect(() => { run("Kart puantajı yükleniyor...", async () => { await loadSelectedAttendance(); setNotice(""); }); }, [loadSelectedAttendance, run]);
+  useEffect(() => {
+    // Historical tab component may be mounted for administration only; avoid hidden attendance requests.
+    if (!["ana-ekran", "giris-cikislar", "puantaj", "calisma-tarihi"].includes(activeTab)) return;
+    run("Kart puantajı yükleniyor...", async () => { await loadSelectedAttendance(); setNotice(""); });
+  }, [activeTab, loadSelectedAttendance, run]);
 
   useEffect(() => {
     if (!selected?.id) return;
