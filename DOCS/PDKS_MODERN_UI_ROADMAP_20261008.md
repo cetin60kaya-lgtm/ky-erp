@@ -90,3 +90,37 @@ Son test HEAD: `80690d7ae4abe124bbc8be5b3ae22a837c25d8f0`.
 - Genel web tam testte 296 içinde 15 PDKS dışı sözleşme başarısızlığı devam ediyor (önceki baseline ile aynı sayı). Bu dal üzerinde bütün KY ERP temiz kabulü iddia edilmez.
 
 **Açık kabul kapıları:** Yaşayan Firebird/TNF verileriyle hiç yazmadan ekran/işlem ve gerçek cihaz E kanıtı doğrulaması, WinForms GUI üzerinden Active/Pasif hızlı geçiş ve aylık admin, .NET release publish + SDK paket doğrulama, web ERP production HEAD yeniden uzlaşması, rol yetki/kişisel bordro/PDF imza ve mobil Android/iOS gerçek cihaz testleri, desktop↔D1 tutarlılığı. Bu gerçekleşmeden "tamam" veya canlı deployment denmez. Remote/Desktop Commander sadece zorunlu işlemde; GitHub Actions bu etapta kullanılarak test yapılmadı.
+
+
+## 08.10.2026 — İzole bütünlük düzeltmeleri / kanıt ve açık kapılar
+
+### Güvenli geliştirme dalları
+- Masaüstü: `fix/pdks-desktop-integrity-20261008` (ayrı masaüstü feature dalından türetildi).
+- Web/API: `fix/pdks-web-integrity-20261008` (modern web feature dalından türetildi).
+- `main`, `pdks-desktop`, açık/kapalı PR ve production deployment değiştirilmedi; GitHub Actions çalıştırılmadı.
+- DESEN izole test dizini: `D:\KYERP\_TEMP\PDKS_SAFE_VERIFY_20261008_02`. Canlı FDB, yıllık TNF, cihaz kayıtları, bordro veya canlı EXE test amaçlı değiştirilmedi.
+
+### Kod düzeltmeleri
+- `AttendanceImportService.ImportDetailed(..., requireCompleteBatch:true)` en az bir Skipped sonucunda tüm Firebird batch'ini tek transaction içinde reddeder. Yüzeydeki terminal servisi ayrıntılı skipped/ERR kanıtı sunar.
+- Otomatik terminal aktarımı artık eski `DeleteAfterValidatedTransfer` ayarı olsa bile cihaz loglarını kendiliğinden temizlemez.
+- Web kart import köprüsünde tenant/PDKS yazma izni denetimi, fail-closed dönem kontrolü, gerçek D1 `meta.changes` ile kabul adedi, tarih doğrulaması ve birden çok personele bağlı kartların reddi eklendi.
+- Web kişide elle girişte varsayılan uydurma 08:30/19:00 kaldırıldı; kullanıcıya yalnızca web/D1 onayı verilir, Firebird/TNF eşitlendi denmez.
+- Geçmiş dönem personeli gösterimi, SGK/kart ayrımı düzeltildi.
+- Masaüstü normal plan artık saat uydurmaz veya fiziksel zamanı doğal toleransa çekmez; eksik kanıt durumunda uygulama kilitlenir. Fiziksel zamanın değişmediği ayrıca `RequireRealSourceMinutes` kontrolüyle korunur.
+- `PdksCloudInbox` desteklenmeyen/eşleşmeyen WEB değişikliğini sessizce uygulanmış kabul etmez. Kaynak/personel uyuşmazlığında cursor ilerlemez.
+- Eski `AttendanceBulkCorrectionService` çağrıları hâlâ kaynakta mevcuttur; ayrı write yollarının tek admin servisine indirilmesi tamamlanmamıştır.
+
+### Gerçek test sonuçları
+- Desktop son kaynak (evidence gate düzeltmeleri dahil, `6b0799c0`): Release build **0**, ContractTests **0**, ShellSmokeTest **0**. Kaynak: izole DESEN `desktop-verified-gate.txt`.
+- Web (kart tekrar kullanımı ve tarih ek kontrolü öncesi): PDKS dedicated node tests **0**, ESLint **0**, Vite build **0**.
+- Web tam testte 15 farklı başarısız test adı baseline web feature dalında da aynı; **0 yeni başarısız test adı**. Genelde Günlük Operasyon, İK/izin, belge ve güvenlik işlevlerinde; repo genel testi henüz yeşil değildir.
+- Cloud (en son kart çakışması/tarih ek kontrolü öncesi): TypeScript `tsc --noEmit` **0**, `node --experimental-strip-types --test src/*.test.ts` **0**.
+- Kart/tarih son ek commitlerinin toplu test çalıştırma çağrısı güvenlik kontrolü nedeniyle bloklandı; **bu son ekleme için test PASSED iddia edilmez**.
+- Gerçek Firebird transaction hata enjeksiyonu, fiziki cihaz, SDK, yayın EXE/GUI, uçtan uca Firebird↔D1 mutabakat, gerçek APK/iOS ve production kabulü **AÇIK**.
+
+### Sonraki korumalı kapılar
+1. Son web/API commitleri üzerinde yalnız izole `node --test`, `npm run lint/build`, `tsc --noEmit` ve Cloud unit testlerini tekrar çalıştır.
+2. `AttendanceBulkCorrectionService` ve `LiveAttendanceForm.Actions.cs` gibi paralel/dormant yazma yollarını tek önizleme-onay servisinde birleştir; fiziksel saat uydurma veya iş kanıtı üretme yok.
+3. Test FDB ve test yıllık TNF üzerinde kısmi aktarım/çökme/idempotency/rollback gerçek entegrasyon testlerini yap.
+4. Terminal MAC+SDK gerçek okuma; desktop 1366/1920 GUI, ay/yıl ve dönem; Cloud personel ID/source/cursor/outbox/ACK; rol+bordro testlerini tamamla.
+5. Web ve native mobil kabul, gerçek production HEAD uzlaştırması ve açık yayın onayı olmadan deploy/DB migrate/terminal silme yapma.
