@@ -37,8 +37,9 @@ export default function UnifiedOperationPanel({
     company && choices.length));
   const operation=operationById(selected);
   const inputKey=[tabId,company,year,month].join("|");
-  const needsReference=Boolean(operation?.fields.some((f)=>
-    ["group","personnelGroup","service"].includes(f.type)));
+  const needsReference=Boolean(
+    ["work-group","personnel-group","service"].includes(operation?.id) ||
+    operation?.fields.some((f)=>["group","personnelGroup","service"].includes(f.type)));
 
   useEffect(()=>{
     // Reset frozen preview whenever section/company/period context changes.
