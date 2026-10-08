@@ -27,6 +27,8 @@ test("Exit dates and status labels mark personnel inactive without guessing punc
   assert.equal(isActivePdksPerson({ status:"Aktif", exitDate:"2026-10-07" }, now), false);
   assert.equal(isActivePdksPerson({ status:"Aktif", exitDate:"2026-10-25" }, now), true);
   assert.equal(isActivePdksPerson({ activePassive:"İşten Ayrıldı" }, now), false);
+  assert.equal(isActivePdksPerson({ status:"Aktif", exitDate:"2026-10-08" }, now), true);
+  assert.equal(isActivePdksPerson({ status:"Aktif", exitDate:"08.10.2026" }, now), true);
 });
 
 test("PDKS dashboard does not certify attendance from offline or unsynced devices", () => {
