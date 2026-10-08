@@ -60,7 +60,7 @@ test("physical punches and guessed times never become operation types",()=>{
 });
 test("unknown person or shift is rejected before any API transport",()=>{
   assert.throws(()=>makeOperationPreview("assign-work-group",{
-    ...form("assign-work-group"),employeeId:"other-tenant"},ctx),/firma kapsamında/);
+    ...form("assign-work-group"),employeeId:"other-tenant"},ctx),/Personel seçili firma/);
   assert.throws(()=>makeOperationPreview("assign-work-group",{
     ...form("assign-work-group"),groupId:"other-tenant-group"},ctx),/mevcut değil/);
   assert.throws(()=>makeOperationPreview("assign-service",form("assign-service"),{
