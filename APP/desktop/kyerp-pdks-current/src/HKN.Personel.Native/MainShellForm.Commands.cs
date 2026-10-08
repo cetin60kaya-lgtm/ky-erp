@@ -283,7 +283,7 @@ public sealed partial class MainShellForm
     {
         using var palette = new CommandPaletteForm(PdksCommandCatalog.All.Where(CanExecute));
         if (palette.ShowDialog(this) == DialogResult.OK && palette.SelectedCommand is PdksCommandId id)
-            ExecuteCommand(id);
+            NavigateToCommand(id);
     }
 
     void NavigateBack()
@@ -291,7 +291,7 @@ public sealed partial class MainShellForm
         if (navigationHistory.Count==0) return;
         var target=navigationHistory.Pop();
         navigatingBack=true;
-        try { ExecuteCommand(target); }
+        try { NavigateToCommand(target); }
         finally
         {
             navigatingBack=false;
