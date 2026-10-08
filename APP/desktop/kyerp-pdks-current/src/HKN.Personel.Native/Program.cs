@@ -9,11 +9,18 @@ static class Program
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-        Application.ThreadException += (_,e) => PdksErrorPresenter.Show(null,e.Exception,"KYERP PDKS",MessageBoxIcon.Warning,"Application.ThreadException");
+        Application.ThreadException += (_,e) =>
+        {
+            PdksPreviewDiagnostics.Record("ui-thread-exception " + e.Exception);
+            PdksErrorPresenter.Show(null,e.Exception,"KYERP PDKS",MessageBoxIcon.Warning,"Application.ThreadException");
+        };
         AppDomain.CurrentDomain.UnhandledException += (_,e) =>
         {
             if(e.ExceptionObject is Exception ex)
+            {
+                PdksPreviewDiagnostics.Record("unhandled-exception " + ex);
                 PdksErrorPresenter.Show(null,ex,"KYERP PDKS",MessageBoxIcon.Error,"AppDomain.UnhandledException");
+            }
         };
         ApplicationConfiguration.Initialize();
 
@@ -36,9 +43,15 @@ static class Program
                 IsAdmin = true,
                 Permissions = Enum.GetNames<PdksModule>().ToList()
             };
+            PdksPreviewDiagnostics.Record("session-start KY PDKS preview");
+            using var heartbeat = new System.Threading.Timer(
+                _ => PdksPreviewDiagnostics.Snapshot("heartbeat"), null, 5000, 5000);
             using var preview = new MainShellForm(previewUser);
-            preview.Text = "KY PDKS 6.7 • GÖRSEL ÖNİZLEME • Canlı veri bağlantısı kapalı";
+            preview.Text = "KY PDKS • GÖRSEL İNCELEME • Canlı veri bağlantısı kapalı";
+            preview.FormClosed += (_, _) => PdksPreviewDiagnostics.Snapshot("window-closed");
+            PdksPreviewDiagnostics.Snapshot("window-created");
             Application.Run(preview);
+            PdksPreviewDiagnostics.Record("session-end");
             return;
         }
 
