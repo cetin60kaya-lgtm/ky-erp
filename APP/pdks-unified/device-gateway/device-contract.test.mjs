@@ -45,7 +45,9 @@ test("certified read-only adapter yields immutable evidence and no terminal dele
     getCapabilities:()=>({readRaw:true,deleteDeviceLogs:false}),
     readRawBatch:async()=>[sample()],
   };
-  const registry=createDeviceRegistry();
+  const blocked=createDeviceRegistry();
+  assert.throws(()=>blocked.register(adapter),/DEVICE_ADAPTER_NOT_APPROVED/);
+  const registry=createDeviceRegistry({approvedAdapterIds:["test-device"]});
   registry.register(adapter);
   const batch=await registry.readBatch("test-device");
   assert.equal(batch.length,1);
