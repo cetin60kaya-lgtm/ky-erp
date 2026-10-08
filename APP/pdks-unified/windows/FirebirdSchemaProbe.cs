@@ -61,28 +61,14 @@ internal static class FirebirdSchemaProbe
         {
             var columns = new List<object>();
             await using var command = new FbCommand(
-                @"select trim(rf.rdb$field_name) as column_name,
-                         f.rdb$field_type, f.rdb$field_sub_type, f.rdb$field_length,
-                         f.rdb$field_scale, rf.rdb$null_flag, rf.rdb$default_source
+                @"select trim(rf.rdb$field_name) as column_name
                   from rdb$relation_fields rf
-                  join rdb$fields f on f.rdb$field_name=rf.rdb$field_source
                   where trim(rf.rdb$relation_name)=@T
                   order by rf.rdb$field_position", connection);
             command.Parameters.AddWithValue("@T", table);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
-            {
-                columns.Add(new
-                {
-                    name = reader["COLUMN_NAME"]?.ToString()?.Trim(),
-                    fieldType = Number(reader["RDB$FIELD_TYPE"]),
-                    subType = Number(reader["RDB$FIELD_SUB_TYPE"]),
-                    length = Number(reader["RDB$FIELD_LENGTH"]),
-                    scale = Number(reader["RDB$FIELD_SCALE"]),
-                    notNull = reader["RDB$NULL_FLAG"] is not DBNull && Number(reader["RDB$NULL_FLAG"]) == 1,
-                    hasDefault = reader["RDB$DEFAULT_SOURCE"] is not DBNull,
-                });
-            }
+                columns.Add(new { name = reader[0]?.ToString()?.Trim() });
             tables.Add(new { name = table, columns });
         }
 
@@ -108,13 +94,38 @@ internal static class FirebirdSchemaProbe
             }
 
         var lookups = new Dictionary<string, List<Dictionary<string, object?>>>(StringComparer.OrdinalIgnoreCase);
+        var columnMap = tables
+            .Select(item => JsonSerializer.SerializeToElement(item))
+            .ToDictionary(
+                item => item.GetProperty("name").GetString() ?? "",
+                item => item.GetProperty("columns").EnumerateArray()
+                    .Select(column => column.GetProperty("name").GetString() ?? "")
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase),
+                StringComparer.OrdinalIgnoreCase);
         foreach (var table in new[] { "GRUP", "SERVIS", "AVTUR", "DONEM" })
         {
-            if (!allRelations.Contains(table, StringComparer.OrdinalIgnoreCase)) continue;
+            if (!columnMap.TryGetValue(table, out var cols)) continue;
+            string? sql = null;
+            if (table is "GRUP" or "SERVIS")
+            {
+                if (cols.Contains("KOD") && cols.Contains("AD"))
+                    sql = $"select first 100 KOD,AD from {table} order by KOD";
+            }
+            else if (table == "AVTUR")
+            {
+                if (cols.Contains("KOD") && cols.Contains("TUR") && cols.Contains("ISARET"))
+                    sql = "select first 100 KOD,TUR,ISARET from AVTUR order by KOD";
+                else if (cols.Contains("KOD") && cols.Contains("TUR"))
+                    sql = "select first 100 KOD,TUR from AVTUR order by KOD";
+            }
+            else if (table == "DONEM" &&
+                new[] { "KOD", "AD", "BASTAR", "BITTAR", "GRUP" }.All(cols.Contains))
+            {
+                sql = "select first 30 KOD,AD,BASTAR,BITTAR,GRUP from DONEM order by BASTAR desc,KOD";
+            }
+            if (sql is null) continue;
+
             var rows = new List<Dictionary<string, object?>>();
-            var sql = table == "DONEM"
-                ? "select first 30 KOD,AD,BASTAR,BITTAR,GRUP from DONEM order by BASTAR desc,KOD"
-                : $"select first 100 KOD,AD from {table} order by KOD";
             await using var command = new FbCommand(sql, connection);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
