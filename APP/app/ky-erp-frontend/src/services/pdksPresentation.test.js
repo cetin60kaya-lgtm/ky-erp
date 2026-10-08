@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isActivePdksPerson, visiblePdksPeople, selectedPdksPerson, pdksLiveHealth } from "./pdksPresentation.js";
+import { isActivePdksPerson, isPdksPersonInPeriod, visiblePdksPeople, selectedPdksPerson, pdksLiveHealth } from "./pdksPresentation.js";
 
 const now = new Date("2026-10-08T09:30:00Z").getTime();
 const people = [
@@ -47,4 +47,20 @@ test("PDKS dashboard does not certify attendance from offline or unsynced device
   assert.equal(disconnected.onlineCount,0);
   assert.equal(disconnected.freshness,"offline");
   assert.equal(pdksLiveHealth([],now).hasRecentSync,false);
+});
+
+
+test("PDKS historical month keeps employees who left inside or after the period", () => {
+  const start = new Date(2026, 7, 1).getTime();
+  const end = new Date(2026, 8, 0, 23, 59, 59, 999).getTime();
+  const history = [
+    { id:"aug", cardNo:"00039", status:"Pasif", entryDate:"2025-01-01", exitDate:"2026-08-24" },
+    { id:"old", cardNo:"00056", status:"Pasif", exitDate:"2026-07-15" },
+    { id:"new", cardNo:"00057", status:"Aktif", entryDate:"2026-09-01" },
+    { id:"continuing", cardNo:"00003", status:"Aktif", entryDate:"2026-02-01" }
+  ];
+  assert.equal(isPdksPersonInPeriod(history[0],start,end), true);
+  assert.deepEqual(visiblePdksPeople(history,"AKTIF","",end,start).map(p=>p.id), ["continuing","aug"]);
+  assert.equal(selectedPdksPerson(history,"AKTIF","aug",end,start)?.id, "aug");
+  assert.deepEqual(visiblePdksPeople(history,"PASIF","",end,start).map(p=>p.id), ["old","new"]);
 });
