@@ -72,6 +72,16 @@ public sealed partial class MainShellForm
 
         SelectNavForCommand(id);
 
+        // Visual preview is an isolated native UI review; never leave an old
+        // module visible under a newly selected sidebar item or touch Firebird.
+        if (PdksPreviewMode.Enabled && id != PdksCommandId.Home)
+        {
+            var review = new PdksVisualPreviewWorkspace(command);
+            ShowEmbedded(review, "visual-preview:" + id, command.Title);
+            SetModernPage(command.Title, command.Hint);
+            return;
+        }
+
         switch (id)
         {
             case PdksCommandId.Home:
