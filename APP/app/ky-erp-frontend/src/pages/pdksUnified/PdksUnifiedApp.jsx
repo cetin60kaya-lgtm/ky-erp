@@ -26,7 +26,6 @@ const ICONS = {
 const MONTHS = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran",
   "Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 
-const statusLabel = (error) => String(error?.message || "Veri alınamadı.");
 const isoMonth = (year,month) => String(year) + "-" + String(month).padStart(2,"0");
 
 function Icon({ name, size = 19, ...props }) {
@@ -209,7 +208,8 @@ export default function PdksUnifiedApp({
       String(value).toLocaleLowerCase("tr-TR").includes(q)));
   },[search,sourceRows]);
 
-  const dataConnected = !previewOnly && data.sourceReady && !data.audit;
+  const dataConnected = !previewOnly && data.sourceReady &&
+    (!data.audit || !isSensitiveProductTab(tab.id));
   const canExport = dataConnected && !tab.sensitive && !isSensitiveProductTab(tab.id) &&
     filteredRows.length > 0;
   const pageUnavailable = previewOnly || requirement==="unconnected" ||
@@ -336,11 +336,11 @@ export default function PdksUnifiedApp({
             requirement==="unconnected" ? <EmptyState title="Ekran hazır · İşlem sözleşmesi bağlanacak"
               description="Sekme ve tablo yerleşimi tamamlandı; gerçek kaynak/senkron yetkisi doğrulanmadan işlem açılmaz. Bu ekranda sahte veri üretilmez."
               IconComponent={LockKeyhole}/> :
+            (data.peopleLoading || data.resourceLoading || data.attendanceLoading) ? <EmptyState title="Doğrulanmış kayıtlar okunuyor"
+              description="Kaynak veritabanı sorgusu sürüyor." IconComponent={Clock3}/> :
             pageUnavailable ? <EmptyState title="Canlı veri bağlantısı kapalı"
               description="Bu ekranda yalnız onaylı veri görüntülenir. Cihazdan fiziksel kart kanıtı henüz doğrulanmadı."
               IconComponent={Database}/> :
-            (data.peopleLoading || data.resourceLoading || data.attendanceLoading) ? <EmptyState title="Doğrulanmış kayıtlar okunuyor"
-              description="Kaynak veritabanı sorgusu sürüyor." IconComponent={Clock3}/> :
             <UnifiedTable columns={tab.columns} rows={filteredRows}
               masked={isAuditAccount && isSensitiveProductTab(tab.id)}/>
           )}
