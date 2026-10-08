@@ -1,32 +1,46 @@
-import { useState } from "react";
-import { mobileApiPost } from "./mobileApi";
+import { useEffect, useState } from "react";
+import { mobileApiPost, mobileApiGet } from "./mobileApi";
 import { API_BASE } from "../utils/api";
 
 export default function MobileLogin({ onLogin }) {
   const [username, setUsername] = useState("");
+  const [personnelMode, setPersonnelMode] = useState(false);
+  const [companies, setCompanies] = useState([]);
+  const [company, setCompany] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    mobileApiGet("employee-portal/companies").then(res => {
+      const items = res.data?.data || res.data;
+      if (Array.isArray(items)) setCompanies(items);
+    }).catch(() => {});
+  }, []);
+
   async function handleLogin(e) {
     e.preventDefault();
-    if (!username.trim() || !password.trim()) {
+    if (!username.trim() || !password.trim() || (personnelMode && !company)) {
       setError("Kullanıcı adı ve şifre zorunludur.");
       return;
     }
     setLoading(true);
     setError("");
     try {
-      const res = await mobileApiPost("/auth/login", { username: username.trim(), password }, { skipCompany: true });
+      const identity = personnelMode ? company + "--" + username.trim().toLowerCase() : username.trim();
+      const res = await mobileApiPost("auth/login", { username: identity, password });
+      if (!res.ok) throw new Error(res.data?.error?.message || res.message || "Giris reddedildi.");
       
       const payload = res.data || res;
       const token = payload?.token || payload?.access_token || payload?.accessToken || payload?.jwt || payload?.data.token;
       
-      if (!token) throw new Error("Sunucudan token alınamadı. Yanıt: " + JSON.stringify(res).slice(0, 150));
+      if (!token) throw new Error("Giris icin ilave dogrulama gerekli. Yonetici/muhasebe hesabiyla normal KY ERP MFA ekranindan devam edin.");
       localStorage.setItem("kyerp_auth_token", token);
       
-      const userObj = payload?.user || payload?.data.user || { username: username.trim() };
+      const userObj = payload?.user || payload?.data.user || { username: identity };
+      if (personnelMode && String(userObj.role || "").toUpperCase() !== "PERSONNEL") throw new Error("Bu giris yalniz personel hesaplari icindir.");
       localStorage.setItem("kyerp_auth_user", JSON.stringify(userObj));
+      localStorage.setItem("kyerp_mobile_user", JSON.stringify(userObj));
       onLogin();
     } catch (err) {
       setError("Giriş başarısız: " + (err.message || String(err)));
@@ -63,7 +77,7 @@ export default function MobileLogin({ onLogin }) {
           KY ERP Mobil
         </h1>
         <p style={{ fontSize: 14, color: "#64748b", marginBottom: 8, textAlign: "center" }}>
-          Mecit Hakan — Canlı Sistem
+          {personnelMode ? "Personel Oz Servis" : "Firma Yonetimi"}
         </p>
         <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 28, textAlign: "center" }}>
           {API_BASE}
@@ -79,7 +93,17 @@ export default function MobileLogin({ onLogin }) {
           </div>
         )}
 
+        <div style={{display:"flex",gap:8,width:"100%",marginBottom:16}}>
+          <button type="button" onClick={()=>setPersonnelMode(false)} style={{flex:1,padding:10,borderRadius:8,background:!personnelMode?"#1453a3":"#e2e8f0",color:!personnelMode?"white":"#374151",border:0}}>Yonetim / Muhasebe</button>
+          <button type="button" onClick={()=>setPersonnelMode(true)} style={{flex:1,padding:10,borderRadius:8,background:personnelMode?"#1453a3":"#e2e8f0",color:personnelMode?"white":"#374151",border:0}}>Personel Girisi</button>
+        </div>
         <form onSubmit={handleLogin} style={{ width: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
+          {personnelMode ? <label style={{fontSize:13,fontWeight:600,color:"#374151"}}>Firma
+            <select value={company} onChange={e=>setCompany(e.target.value)} required style={{display:"block",width:"100%",padding:13,border:"2px solid #e5e7eb",borderRadius:12,marginTop:6}}>
+              <option value="">Firma seciniz</option>
+              {companies.map(item=><option key={item.slug} value={item.slug}>{item.name}</option>)}
+            </select>
+          </label> : null}
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <label style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Kullanıcı Adı</label>
             <input
