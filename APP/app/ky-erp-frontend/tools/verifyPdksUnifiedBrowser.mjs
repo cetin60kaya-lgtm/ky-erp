@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import { PRODUCT_SECTIONS } from "../src/pages/pdksUnified/productModel.js";
+import {operationsForTab} from "../src/pages/pdksUnified/operationCatalog.js";
 
 const url = "http://127.0.0.1:5186/pdks-studio";
 const executable = process.env.CHROME_PATH ||
@@ -100,6 +101,22 @@ try {
         : await evaluate('document.querySelector(".pdk-u-record-head h2")?.textContent==='+JSON.stringify(tab.label));
       assertBrowser(content,"Unrendered section "+section.id+"/"+tab.id);
       assertBrowser(await evaluate('!document.querySelector(".pdk-unified .module-error-card")'),"Unhandled error UI on "+tab.id);
+      const ops=operationsForTab(tab.id);
+      if(ops.length) {
+        assertBrowser(await evaluate('document.querySelectorAll(".pdk-u-operation-toggle").length===1'),
+          tab.id+" is missing its operation panel");
+        await evaluate('document.querySelector(".pdk-u-operation-toggle").click()');
+        await waitForEval('Boolean(document.querySelector(".pdk-u-operation-body"))');
+        const found=await evaluate('document.querySelector(".pdk-u-operation-body > label > select")?.options.length');
+        assertBrowser(found===ops.length+1,tab.id+" operation choices missing");
+        for(const op of ops) {
+          await evaluate('(function(){const s=document.querySelector(".pdk-u-operation-body > label > select");s.value='+
+            JSON.stringify(op.id)+';s.dispatchEvent(new Event("change",{bubbles:true}));return true})()');
+          await waitForEval('document.querySelectorAll(".pdk-u-operation-fields .pdk-u-operation-label").length==='+op.fields.length);
+          const canWrite=await evaluate('Boolean(document.querySelector(".pdk-u-operation-preview button, .pdk-u-operation-commit"))');
+          assertBrowser(!canWrite,"Studio preview must never expose a live commit for "+op.id);
+        }
+      }
       tabClicks++;
       slowest=Math.max(slowest,Date.now()-started);
     }
