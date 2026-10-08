@@ -164,10 +164,9 @@ public partial class PersonelForm
         filter.Controls.Add(scopePassive);
         filter.Controls.Add(scopeAll);
 
-        // Filtreler mevcut personel tablosunun DefaultView'i üzerinde çalışır.
-        // Aktif/Pasif geçişinde DB'yi yeniden okumak UI'yi donduruyor ve seçim yarışına yol açıyordu.
-        searchText.TextChanged += (_,_) => ApplyEmploymentScopeAndSearch();
-        searchField.SelectedIndexChanged += (_,_) => ApplyEmploymentScopeAndSearch();
+        // Filter events are wired only once in PersonelForm.ScopeFilterFix.
+        // A second handler here used to apply the filter twice per keystroke,
+        // triggering DataGridView selection races during Active/Passive transitions.
 
         box.Controls.Add(filter, 0, 1);
         return box;
