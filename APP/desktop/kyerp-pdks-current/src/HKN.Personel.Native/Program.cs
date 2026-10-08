@@ -49,8 +49,11 @@ static class Program
             using var preview = new MainShellForm(previewUser);
             preview.Text = "KY PDKS • GÖRSEL İNCELEME • Canlı veri bağlantısı kapalı";
             preview.FormClosed += (_, _) => PdksPreviewDiagnostics.Snapshot("window-closed");
+            PdksUiResponsivenessMonitor? responsiveness = null;
+            preview.Shown += (_, _) => responsiveness ??= new PdksUiResponsivenessMonitor(preview);
             PdksPreviewDiagnostics.Snapshot("window-created");
             Application.Run(preview);
+            responsiveness?.Dispose();
             PdksPreviewDiagnostics.Record("session-end");
             return;
         }
