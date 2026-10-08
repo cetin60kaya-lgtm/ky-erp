@@ -17,6 +17,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\KYERP.PDKS.Core\KYERP.PDKS.Core.csproj" />
+    <InternalsVisibleTo Include="ShellSmokeTest" />
   </ItemGroup>
   <Target Name="BuildTerminalDeviceBridge" AfterTargets="Build" Inputs="$(MSBuildProjectDirectory)\..\..\tools\TerminalDeviceBridge\Program.cs" Outputs="$(TargetDir)KYERP.TerminalBridge.exe" Condition="Exists('$(WINDIR)\Microsoft.NET\Framework\v4.0.30319\csc.exe')">
     <Exec Command="&quot;$(WINDIR)\Microsoft.NET\Framework\v4.0.30319\csc.exe&quot; /nologo /platform:x86 /target:exe /out:&quot;$(TargetDir)KYERP.TerminalBridge.exe&quot; /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:Microsoft.CSharp.dll &quot;$(MSBuildProjectDirectory)\..\..\tools\TerminalDeviceBridge\Program.cs&quot;" />
