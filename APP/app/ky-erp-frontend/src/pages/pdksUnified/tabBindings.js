@@ -5,7 +5,7 @@
  * A read endpoint NEVER grants a write or local FDB/TNF acknowledgement.
  */
 import {ALL_PRODUCT_TABS} from "./productModel.js";
-import {displayValue,normalizePerson,toPersonRows,toAttendanceRows} from "./productData.js";
+import {displayValue,toPersonRows,toAttendanceRows} from "./productData.js";
 
 const SOURCES = Object.freeze({
   // Read-only people/physical-card administration.
