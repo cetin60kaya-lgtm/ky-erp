@@ -92,3 +92,18 @@ test("personnel group is not SGK classification",()=>{
   assert.equal(p.payload.requirePunch,true);
   assert.equal(p.payload.sgkStatus,undefined);
 });
+
+
+test("creating a matching master code cannot silently overwrite existing data",()=>{
+  const context={...ctx,masters:{
+    ...ctx.masters,
+    groups:[...ctx.masters.groups,{id:"old",code:"VARDIYA_1",name:"Eski Vardiya"}],
+  }};
+  assert.throws(()=>makeOperationPreview("work-group",form("work-group"),context),/zaten kayıtlı/);
+  assert.throws(()=>makeOperationPreview("service",form("service"),{
+    ...ctx,masters:{...ctx.masters,services:[{id:"old",code:"SERVIS_1"}]},
+  }),/zaten kayıtlı/);
+  assert.throws(()=>makeOperationPreview("personnel-group",form("personnel-group"),{
+    ...ctx,masters:{...ctx.masters,personnelGroups:[{id:"old",code:"URETIM"}]},
+  }),/zaten kayıtlı/);
+});
