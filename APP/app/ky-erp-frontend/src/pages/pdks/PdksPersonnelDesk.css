@@ -99,3 +99,10 @@
 @media(max-width:1250px){.ppd-page .ppd-workspace{grid-template-columns:minmax(260px,305px) minmax(0,1fr)}.ppd-page .ppd-overview-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.ppd-page .ppd-center-body .ppd-info-grid{grid-template-columns:1fr}}
 @media(max-width:930px){.ppd-page .ppd-topline{flex-direction:column;align-items:flex-start}.ppd-page .ppd-workspace{grid-template-columns:1fr}.ppd-page .ppd-people-panel{min-height:0}.ppd-page .ppd-person-list{max-height:285px}.ppd-page .ppd-center-panel{min-height:450px}}
 @media(max-width:640px){.ppd-page{padding:10px}.ppd-page .ppd-topline{padding:17px;gap:15px}.ppd-heading h1{font-size:20px}.ppd-page .ppd-period{flex-wrap:wrap;width:100%}.ppd-page .ppd-period label{flex:1}.ppd-page .ppd-period :is(select,input){width:100%}.ppd-page .ppd-period>button{width:100%}.ppd-selected-hero{flex-wrap:wrap;padding:17px}.ppd-page .ppd-person-actions{width:100%;flex-wrap:wrap}.ppd-page .ppd-person-actions button{flex:1}.ppd-page .ppd-overview-stats{padding:13px;gap:8px}.ppd-overview-stats>div{padding:11px}.ppd-page .ppd-tabs{padding:0 14px;gap:15px}.ppd-page .ppd-tabs button{font-size:12px}.ppd-page .ppd-center-body{padding:15px}.ppd-page .ppd-entitlement{grid-template-columns:repeat(2,minmax(0,1fr))}.ppd-page .ppd-center-body .ppd-info-grid>div{grid-template-columns:90px minmax(0,1fr)}}
+
+.ppd-page .ppd-payroll-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.ppd-page .ppd-payroll-summary>div{display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid #e4eaf1;border-radius:10px;background:#fafcfe;min-width:0}
+.ppd-payroll-summary span{font-size:11px;color:#73859a}
+.ppd-payroll-summary b{font-size:15px;color:#263e56;font-variant-numeric:tabular-nums}
+@media(max-width:1050px){.ppd-page .ppd-payroll-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.ppd-page .ppd-payroll-summary{gap:7px}.ppd-page .ppd-payroll-summary>div{padding:11px}.ppd-page .ppd-tabs{gap:9px}.ppd-page .ppd-tabs button{padding:10px 1px;font-size:11px}}
