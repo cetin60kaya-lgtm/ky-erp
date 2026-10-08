@@ -20,6 +20,8 @@ export default function MobilePersonnel() {
   const [quantity,setQuantity]=useState("");
   const [fabric,setFabric]=useState("0");
   const [print,setPrint]=useState("0");
+  const [shift,setShift]=useState("Gündüz");
+  const [region,setRegion]=useState("Ön");
   const reload=useCallback(async()=>{
     setLoading(true);setMessage("");
     try {
@@ -44,6 +46,21 @@ export default function MobilePersonnel() {
       setMessage("Cihaz kaydedildi. Firma sahibi veya yetkili onayi bekleniyor. Cihaz kimligi: "+result.id.slice(0,8));
       await reload();
     }catch(e){setMessage(e.message||"Cihaz kaydedilemedi.");}
+    finally{setLoading(false);}
+  }
+  async function saveMachineProduction() {
+    const total=Number(quantity),fabricQty=Number(fabric),printQty=Number(print);
+    if(!model||!device||!Number.isInteger(total)||total<=0||![fabricQty,printQty].every(Number.isInteger)||fabricQty<0||printQty<0||fabricQty+printQty>total) {
+      setMessage("Model secin; adet ve sakat miktarlarini kontrol edin.");return;
+    }
+    if(!window.confirm("Bu modele "+total+" adet uretim kaydi islenecek. Onayliyor musunuz?"))return;
+    setLoading(true);setMessage("");
+    try {
+      const saved=await personnelRequest("employee-portal/work/machine-production",{method:"POST",device,body:{modelId:model,quantity:total,fabricDefectQty:fabricQty,printDefectQty:printQty,shift,printRegion:region}});
+      setQuantity("");setFabric("0");setPrint("0");setModel("");
+      await reload();
+      setMessage("Uretim kaydi tamamlandi: "+saved.modelName+" · "+saved.quantity+" adet. Kayit ortak modele islendi.");
+    }catch(e){setMessage("Hata: "+e.message);}
     finally{setLoading(false);}
   }
   const activeDevice=account?.devices?.find(d=>d.id===device?.deviceId);
@@ -101,8 +118,13 @@ export default function MobilePersonnel() {
             <p style={subtle}>Makinaci ve makine kartinizdan otomatik belirlenir. {work.machineId?"Makine: "+work.machineId:"Makine atamasi bekleniyor."}</p>
             <label>Model <select value={model} onChange={e=>setModel(e.target.value)} style={{display:"block",width:"100%",padding:11,margin:"5px 0 13px"}}><option value="">Model seciniz</option>{(work.models||[]).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
             {[["Toplam baski",quantity,setQuantity],["Kumas sakati",fabric,setFabric],["Baski sakati",print,setPrint]].map(([label,value,set])=><label key={label} style={{display:"block",marginBottom:12}}>{label}<input type="number" min="0" value={value} onChange={e=>set(e.target.value)} style={{display:"block",padding:11,width:"100%",marginTop:5,boxSizing:"border-box"}}/></label>)}
+            <div style={{display:"flex",gap:8}}>
+              <label style={{flex:1}}>Vardiya<select value={shift} onChange={e=>setShift(e.target.value)} style={{display:"block",width:"100%",padding:10}}><option>Gündüz</option><option>Gece</option></select></label>
+              <label style={{flex:1}}>Baski bolgesi<select value={region} onChange={e=>setRegion(e.target.value)} style={{display:"block",width:"100%",padding:10}}><option>Ön</option><option>Arka</option><option>Kol</option><option>Diğer</option></select></label>
+            </div>
             <p>Net saglam: <strong>{valid?gross-defects:"Kontrol edin"}</strong></p>
-            <div style={{...subtle,background:"#eaf1f8",padding:10,borderRadius:8}}>Uretim kaydi gonderimi entegrasyon asamasinda. Bu ekranda henuz canli kayit yapilmaz.</div>
+            <button type="button" style={button} disabled={loading||!valid||!model||!work.machineId} onClick={saveMachineProduction}>Uretimi Tamamla</button>
+            <p style={subtle}>Uretim ortak model kaydina eklenir; bu islem fatura kesmez.</p>
           </>:<p style={subtle}>{info.person.occupation==="BOYACI"?"Boyaciya ozel is formu firma tarafindan tanimlanacak.":info.person.occupation==="NUMUNECI"?"Numuneciye ozel is formu firma tarafindan tanimlanacak.":"Bu vasif icin ozel is formu henuz atanmis degil."}</p>}
         </section>
       </>}
