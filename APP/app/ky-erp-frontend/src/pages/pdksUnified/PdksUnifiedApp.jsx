@@ -13,7 +13,7 @@ import {
   configuredProductSections, isSensitiveProductTab,
 } from "./productModel";
 import {
-  toPersonRows, csvForTable, safeFileNameSegment,
+  csvForTable, safeFileNameSegment,
 } from "./productData";
 import {sourceForTab,rowsForTab} from "./tabBindings.js";
 import {useUnifiedPdksData} from "./useUnifiedPdksData.js";
@@ -197,15 +197,17 @@ export default function PdksUnifiedApp({
       data.people.some((person)=>person.id===previous) ? previous : data.people[0]?.id||"");
   },[data.people]);
 
-  const isPeopleTab = section.id === "people" && ["people","cards","employment"].includes(tab.id);
-  const allPeople=useMemo(()=>toPersonRows(data.people,tab.id),[data.people,tab.id]);
-  const remoteRows=useMemo(()=>data.resourceReady
-    ? rowsForTab(tab.id,data.resource,{people:data.people,selectedPerson}).rows : [],
-    [data.resourceReady,data.resource,tab.id,data.people,selectedPerson]);
-  const sourceRows=useMemo(()=>isPeopleTab ? allPeople :
-    requirement==="people" ? rowsForTab(tab.id,null,{people:data.people}).rows :
-    realAttendance ? rowsForTab(tab.id,{days:data.days},{selectedPerson}).rows : remoteRows,
-    [isPeopleTab,allPeople,requirement,tab.id,data.people,realAttendance,data.days,selectedPerson,remoteRows]);
+  const isPeopleTab=section.id==="people" && ["people","cards","employment"].includes(tab.id);
+  // One projection for every screen. API success is not record-schema success.
+  const projection=useMemo(()=>{
+    if(requirement==="people")return rowsForTab(tab.id,null,{people:data.people});
+    if(realAttendance)return rowsForTab(tab.id,{days:data.days},{selectedPerson});
+    if(data.resourceReady)return rowsForTab(tab.id,data.resource,{
+      people:data.people,selectedPerson,year:period.year,month:period.month});
+    return {rows:[],supported:false};
+  },[requirement,tab.id,data.people,realAttendance,data.days,selectedPerson,
+    data.resourceReady,data.resource,period.year,period.month]);
+  const sourceRows=projection.rows;
   const filteredRows = useMemo(()=> {
     const q=search.toLocaleLowerCase("tr-TR").trim();
     if (!q) return sourceRows;
@@ -213,7 +215,7 @@ export default function PdksUnifiedApp({
       String(value).toLocaleLowerCase("tr-TR").includes(q)));
   },[search,sourceRows]);
 
-  const dataConnected = !previewOnly && data.sourceReady &&
+  const dataConnected = !previewOnly && data.sourceReady && projection.supported &&
     (!data.audit || !isSensitiveProductTab(tab.id));
   const canExport = dataConnected && !tab.sensitive && !isSensitiveProductTab(tab.id) &&
     filteredRows.length > 0;
@@ -349,6 +351,10 @@ export default function PdksUnifiedApp({
               IconComponent={LockKeyhole}/> :
             (data.peopleLoading || data.resourceLoading || data.attendanceLoading) ? <EmptyState title="Doğrulanmış kayıtlar okunuyor"
               description="Kaynak veritabanı sorgusu sürüyor." IconComponent={Clock3}/> :
+            data.sourceReady && !projection.supported ? <EmptyState
+              title="Kaynak verinin biçimi doğrulanamadı"
+              description="API yanıtı bu ekranın veri sözleşmesiyle uyuşmuyor. Eksik alanları sıfır veya tamamlandı olarak göstermiyoruz."
+              IconComponent={AlertTriangle}/> :
             pageUnavailable ? <EmptyState
               title={requirement==="monthly-attendance" && !allowHeavy ?
                 "Ay raporu henüz hazırlanmadı":"Kaynak doğrulanamadı"}
