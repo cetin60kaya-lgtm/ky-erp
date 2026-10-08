@@ -20,7 +20,6 @@ function authCacheScope() {
   } catch { return ""; }
 }
 
-let flushing = null;
 
 function browserReady() {
   return typeof window !== "undefined" && typeof indexedDB !== "undefined";
@@ -69,20 +68,6 @@ async function queueAll() {
   return Array.isArray(rows) ? rows.sort((a, b) => a.createdAt - b.createdAt) : [];
 }
 
-async function queuePut(row) {
-  await transact(QUEUE_STORE, "readwrite", (store) => store.put(row));
-  notifyQueueChanged();
-}
-
-async function queueDelete(id) {
-  await transact(QUEUE_STORE, "readwrite", (store) => store.delete(id));
-  notifyQueueChanged();
-}
-
-function notifyQueueChanged() {
-  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("kyerp:pdks-offline-queue-changed"));
-}
-
 function networkFailure(error) {
   if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
   if (["NETWORK_ERROR", "REQUEST_TIMEOUT"].includes(String(error?.code || "").toUpperCase())) return true;
@@ -128,31 +113,10 @@ export async function getPdksOfflineQueueCount() {
 }
 
 export async function flushPdksOfflineQueue() {
-  if (flushing) return flushing;
-  // Old unverified queued POST records are preserved, never replayed blindly.
-  // A future admin review may migrate only server-idempotent operations with stable IDs.
+  // Keep pre-existing unverified rows for deliberate admin review.
+  // Do not silently mutate production months, punches or approvals on reconnection.
   const pending = await getPdksOfflineQueueCount();
   return { sent: 0, pending, requiresReview: pending > 0, automaticReplayDisabled: true };
-  /* Legacy retry code intentionally disabled:
-  flushing = (async () => {
-    if (typeof navigator !== "undefined" && navigator.onLine === false) return { sent: 0, pending: await getPdksOfflineQueueCount() };
-    let sent = 0;
-    for (const item of await queueAll()) {
-      try {
-        if (item.method === "POST") await apiPost(item.path, item.payload);
-        else throw new Error(`Desteklenmeyen offline PDKS metodu: ${item.method}`);
-        await queueDelete(item.id);
-        sent += 1;
-      } catch (error) {
-        if (networkFailure(error)) break;
-        await queuePut({ ...item, attempts: Number(item.attempts || 0) + 1, lastError: String(error?.message || error), lastAttemptAt: Date.now() });
-        break;
-      }
-    }
-    return { sent, pending: await getPdksOfflineQueueCount() };
-  })();
-  try { return await flushing; } finally { flushing = null; }
-  */
 }
 
 export function installPdksOfflineRuntime() {
