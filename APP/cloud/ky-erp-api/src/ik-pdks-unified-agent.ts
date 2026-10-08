@@ -187,6 +187,15 @@ export function registerIkPdksUnifiedAgentRoutes(app:Hono<AppEnv>){
     const receipt=body.localReceipt as Row;
     if(!localReceiptValid(receipt))
       return fail(c,409,"PDKS_LOCAL_RECEIPT_INVALID","FDB/TNF mutabakat kanıtı eksik; ACK verilmedi.");
+    // Device ID/secret alone must not forge a local-apply ACK. Require
+    // independent Agent HMAC bound to this exact lease hash and receipt.
+    const signingKey=syncSigningKey(c);
+    if(!signingKey)return fail(c,503,"PDKS_SYNC_SIGNING_KEY_REQUIRED","ACK imza doğrulama anahtarı eksik.");
+    const hmacProof=text(body.localReceiptHmac);
+    const expectedHmac=await hmacSha256Base64(signingKey,
+      text(body.deliveryHash)+"."+await sha256(JSON.stringify(receipt)));
+    if(!hmacProof||!safeEqual(hmacProof,expectedHmac))
+      return fail(c,409,"PDKS_LOCAL_RECEIPT_HMAC_INVALID","Yerel uygulama kanıt imzası geçersiz.");
     if(!safeEqual(text(receipt.commandPayloadSha256),text(row.payload_sha256)) ||
        !safeEqual(text(receipt.commandId),text(row.command_id)) ||
        !safeEqual(text(receipt.outboxId),id) ||
