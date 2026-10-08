@@ -95,8 +95,9 @@ internal static class UnifiedLocalActionPlanner
             TouchesAnnualTnf: false,
             TouchesTerminalRaw: false,
             UsesLegacyKeyMapping: usesLegacyMapping,
-            // Fail closed until each mapping is proven against an isolated copy.
-            ApplySupported: false,
+            // Two non-FDB policy mirrors are eligible only with explicit Agent
+            // opt-in and durable journal replay. All Firebird mappings stay locked.
+            ApplySupported: action is "personnel-group" or "holiday",
             RequiredProof: proof.Split(" + ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             Summary: "Frozen administrative plan only; no physical punch, RAW or annual TNF mutation.");
 
@@ -112,7 +113,8 @@ internal static class UnifiedLocalActionPlanner
                 throw new InvalidOperationException("ADMIN_COMMAND_MUST_NOT_TOUCH_TNF:" + action);
             if (plan.TouchesTerminalRaw)
                 throw new InvalidOperationException("ADMIN_COMMAND_MUST_NOT_TOUCH_RAW:" + action);
-            if (plan.ApplySupported)
+            if (plan.ApplySupported && (!UnifiedLocalPolicyStore.Supports(action) ||
+                plan.TouchesFirebird || plan.TouchesAnnualTnf || plan.TouchesTerminalRaw))
                 throw new InvalidOperationException("UNPROVEN_LOCAL_HANDLER_ENABLED:" + action);
         }
     }
