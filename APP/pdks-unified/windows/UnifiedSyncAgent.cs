@@ -154,7 +154,7 @@ internal static class UnifiedSyncAgent
             }
             var applied = await UnifiedLocalPolicyStore.ApplyAsync(
                 credential.CompanyRoot, action, commandData, journalId, commandId, outboxId,
-                commandHash, cancellationToken);
+                commandHash, cancellationToken, localCardNo);
             // The receipt is stored on disk BEFORE asking Cloud to ACK.
             // Crash or network failure after this point can only replay the
             // exact durable local receipt; it cannot write the policy twice.
