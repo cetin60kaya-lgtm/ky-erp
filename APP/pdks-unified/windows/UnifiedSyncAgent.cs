@@ -43,9 +43,9 @@ internal static class UnifiedSyncAgent
             var verified = VerifyDelivery(data, credential);
             if (!verified.Ok)
             {
-                await PostResultAsync(http, credential, data, "RETRY",
-                    "SIGNED_DELIVERY_INVALID:" + verified.Message, null, cancellationToken);
-                return "SIGNED_DELIVERY_INVALID";
+                // Never ACK/RETRY a forged or untrusted unsigned envelope. Let its
+                // server-side lease expire and keep the rejection in local diagnostics.
+                return "SIGNED_DELIVERY_INVALID:" + verified.Message;
             }
 
             using var payloadDocument = JsonDocument.Parse(verified.CanonicalJson);
@@ -166,6 +166,23 @@ internal static class UnifiedSyncAgent
             var hash = Convert.ToHexString(SHA256.HashData(canonicalBytes)).ToLowerInvariant();
             if (!string.Equals(hash, Text(data, "deliveryHash"), StringComparison.OrdinalIgnoreCase))
                 return (false, "DELIVERY_HASH_MISMATCH", "");
+            using var envelope = JsonDocument.Parse(canonical);
+            var signed = envelope.RootElement;
+            if (signed.ValueKind != JsonValueKind.Object ||
+                Text(signed, "version") != "1" ||
+                string.IsNullOrWhiteSpace(Text(signed, "outboxId")) ||
+                string.IsNullOrWhiteSpace(Text(signed, "commandId")) ||
+                string.IsNullOrWhiteSpace(Text(signed, "commandPayloadSha256")) ||
+                !string.Equals(Text(signed, "outboxId"), Text(data, "outboxId"), StringComparison.Ordinal) ||
+                !string.Equals(Text(signed, "commandId"), Text(data, "commandId"), StringComparison.Ordinal) ||
+                !string.Equals(Text(signed, "leaseUntil"), Text(data, "leaseUntil"), StringComparison.Ordinal) ||
+                !string.Equals(Text(signed, "deviceId"), credential.DeviceId, StringComparison.Ordinal) ||
+                !string.Equals(Text(signed, "company"), credential.Company, StringComparison.OrdinalIgnoreCase))
+                return (false, "SIGNED_ENVELOPE_BINDING_MISMATCH", "");
+            if (!DateTimeOffset.TryParse(Text(signed, "leaseUntil"), out var leaseUntil) ||
+                leaseUntil <= DateTimeOffset.UtcNow ||
+                leaseUntil > DateTimeOffset.UtcNow.AddMinutes(6))
+                return (false, "SIGNED_LEASE_EXPIRED_OR_INVALID", "");
             return (true, "OK", canonical);
         }
         catch (Exception error)
