@@ -1,3 +1,10 @@
+/* Only the standalone localhost studio owns the whole viewport. In KY ERP,
+   the product shell remains scoped to its existing authenticated workspace. */
+html:has(> body > #root > .pdk-unified),
+body:has(> #root > .pdk-unified),
+#root:has(> .pdk-unified){width:100%;height:100%;margin:0;overflow:hidden}
+#root > .pdk-unified{height:100dvh;min-height:0}
+
 /* KY PDKS Unified Design System — isolated namespaced tokens, no host ERP bleed. */
 .pdk-unified{--pu-bg:#f3f6fb;--pu-panel:#fff;--pu-text:#17253f;--pu-muted:#718097;--pu-border:#e1e7ef;--pu-soft:#f6f9fd;--pu-accent:#245fcb;--pu-accent-soft:#eaf1ff;--pu-sidebar:#12223e;--pu-sidebar-hover:#233857;--pu-warn:#ad661a;--pu-shadow:0 9px 26px rgba(19,43,82,.035);box-sizing:border-box;background:var(--pu-bg);color:var(--pu-text);display:grid;grid-template-columns:247px minmax(0,1fr);height:100%;min-height:640px;width:100%;font-family:Inter,"Segoe UI",system-ui,sans-serif;font-size:13px;letter-spacing:0;-webkit-font-smoothing:antialiased}
 .pdk-unified *{box-sizing:border-box}.pdk-unified button,.pdk-unified input,.pdk-unified select{font:inherit}.pdk-unified button{cursor:pointer}.pdk-unified button:disabled{opacity:.45;cursor:not-allowed}.pdk-unified button:focus-visible,.pdk-unified select:focus-visible,.pdk-unified input:focus-visible{outline:2px solid #5390ea;outline-offset:2px}
