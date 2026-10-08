@@ -63,30 +63,30 @@ internal static class FirebirdIsolatedCopySmoke
         try
         {
             await ExecAsync(connection,transaction,"INSERT INTO GRUP (KOD,AD) VALUES (@K,@A)",
-                cancellationToken,new("@K",groupId),new("@A",batch));
+                cancellationToken,new FbParameter("@K",groupId),new FbParameter("@A",batch));
             await ExecAsync(connection,transaction,"UPDATE GRUP SET AD=@A WHERE KOD=@K",
-                cancellationToken,new("@A",batch+"_UPDATED"),new("@K",groupId));
+                cancellationToken,new FbParameter("@A",batch+"_UPDATED"),new FbParameter("@K",groupId));
             steps.Add("GRUP_INSERT_UPDATE");
 
             await ExecAsync(connection,transaction,"INSERT INTO SERVIS (KOD,AD) VALUES (@K,@A)",
-                cancellationToken,new("@K",serviceId),new("@A",batch));
+                cancellationToken,new FbParameter("@K",serviceId),new FbParameter("@A",batch));
             await ExecAsync(connection,transaction,"UPDATE SERVIS SET AD=@A WHERE KOD=@K",
-                cancellationToken,new("@A",batch+"_UPDATED"),new("@K",serviceId));
+                cancellationToken,new FbParameter("@A",batch+"_UPDATED"),new FbParameter("@K",serviceId));
             steps.Add("SERVIS_INSERT_UPDATE");
 
             await ExecAsync(connection,transaction,
                 "UPDATE KIMLIK SET GRUP=@G,SERVIS=@S WHERE PKNO=@P",
-                cancellationToken,new("@G",groupId),new("@S",serviceId),new("@P",card));
+                cancellationToken,new FbParameter("@G",groupId),new FbParameter("@S",serviceId),new FbParameter("@P",card));
             var person = await ScalarAsync(connection,transaction,
-                "SELECT GRUP FROM KIMLIK WHERE PKNO=@P",cancellationToken,new("@P",card));
+                "SELECT GRUP FROM KIMLIK WHERE PKNO=@P",cancellationToken,new FbParameter("@P",card));
             if (Convert.ToInt32(person,CultureInfo.InvariantCulture)!=groupId)
                 throw new InvalidOperationException("COPY_SMOKE_PERSON_GROUP_MISMATCH");
             steps.Add("KIMLIK_GROUP_SERVICE_ASSIGN");
 
             await ExecAsync(connection,transaction,
                 "INSERT INTO OZELIZIN (PKNO,SURESAAT,SUREDAKIKA,EBALAN,TARIH,TIP,MAZERET,SIRA,OTOCIK) VALUES (@P,'07:30',450,4,@D,'YILLIK',@M,@S,'0')",
-                cancellationToken,new("@P",card),new("@D",new DateTime(2099,5,3)),
-                new("@M",batch),new("@S",leaveId));
+                cancellationToken,new FbParameter("@P",card),new FbParameter("@D",new DateTime(2099,5,3)),
+                new FbParameter("@M",batch),new FbParameter("@S",leaveId));
             steps.Add("OZELIZIN_LEAVE");
 
             var avtur = await ScalarAsync(connection,transaction,
@@ -97,11 +97,11 @@ internal static class FirebirdIsolatedCopySmoke
                 throw new InvalidOperationException("COPY_SMOKE_ADVANCE_TURKOD_NOT_PROVEN");
             await ExecAsync(connection,transaction,
                 "INSERT INTO AVANS (PKNO,TARIH,MIKTAR,VTARIH,TURKOD,KOD,TOPMIKTAR,TAKSITSAYISI,TAKSITNO,ACIKLAMA) VALUES (@P,@D,250,@D,1,@K,250,1,1,@M)",
-                cancellationToken,new("@P",card),new("@D",new DateTime(2099,5,4)),
-                new("@K",advanceId),new("@M",batch));
+                cancellationToken,new FbParameter("@P",card),new FbParameter("@D",new DateTime(2099,5,4)),
+                new FbParameter("@K",advanceId),new FbParameter("@M",batch));
             var advance = await ScalarAsync(connection,transaction,
                 "SELECT FIRST 1 MIKTAR FROM AVANS WHERE PKNO=@P AND ACIKLAMA=@M",
-                cancellationToken,new("@P",card),new("@M",batch));
+                cancellationToken,new FbParameter("@P",card),new FbParameter("@M",batch));
             if (advance is null || Convert.ToDecimal(advance,CultureInfo.InvariantCulture)!=250m)
                 throw new InvalidOperationException("COPY_SMOKE_ADVANCE_MISMATCH");
             steps.Add("AVANS_ADVANCE_CODE_1");
@@ -117,7 +117,7 @@ internal static class FirebirdIsolatedCopySmoke
         var postAdvance = await CountAsync(connection,null,"AVANS");
         var postLeave = await CountAsync(connection,null,"OZELIZIN");
         var residue = await ScalarAsync(connection,null,
-            "SELECT COUNT(*) FROM GRUP WHERE KOD=@K",cancellationToken,new("@K",groupId));
+            "SELECT COUNT(*) FROM GRUP WHERE KOD=@K",cancellationToken,new FbParameter("@K",groupId));
         if (preGroup!=postGroup || preService!=postService ||
             preAdvance!=postAdvance || preLeave!=postLeave ||
             Convert.ToInt32(residue,CultureInfo.InvariantCulture)!=0)
