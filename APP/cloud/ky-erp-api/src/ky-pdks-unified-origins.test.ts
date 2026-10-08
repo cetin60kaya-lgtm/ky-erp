@@ -120,7 +120,7 @@ test("Windows local planner freezes all 11 admin actions without RAW/TNF mutatio
   assert.match(planner,/TouchesAnnualTnf:\s*false/);
   assert.match(planner,/TouchesTerminalRaw:\s*false/);
   assert.match(planner,/ApplySupported:/);
-  assert.equal(planner.includes('action is "personnel-group" or "holiday"'),true);
+  assert.equal(planner.includes('action is "personnel-group" or "assign-personnel-group" or "holiday"'),true);
   assert.match(agent,/LOCAL_PLAN_FROZEN/);
   assert.match(agent,/LOCAL_PLAN_NOT_APPLY_READY/);
   assert.doesNotMatch(agent,/DELETE\s+FROM\s+GIRCIK|UPDATE\s+GIRCIK|INSERT\s+INTO\s+GIRCIK/i);
@@ -149,10 +149,10 @@ test("Windows replay journal and Cloud lease use strict source-proof contracts",
   for (const token of ["JOURNAL_REPLAY_CONFLICT","FileMode.CreateNew","JOURNAL_APPLIED_RECEIPT_CONFLICT"]) assert.equal(journal.includes(token),true);
 });
 
-test("local sidecar policy is two-action allowlisted and receipt is durable before Cloud ACK",()=>{
+test("local sidecar policy allows three proven non-FDB actions and durable Cloud ACK",()=>{
   const policy=readFileSync(resolve(here,"../../../pdks-unified/windows/UnifiedLocalPolicyStore.cs"),"utf8");
   const agent=readFileSync(resolve(here,"../../../pdks-unified/windows/UnifiedSyncAgent.cs"),"utf8");
-  for(const operation of ["personnel-group","holiday"])
+  for(const operation of ["personnel-group","assign-personnel-group","holiday"])
     assert.equal(policy.includes('"'+operation+'"'),true);
   assert.equal(policy.includes("LOCAL_POLICY_CONFLICT"),true);
   assert.equal(policy.includes("File.Move(temp,destination,false)"),true);
