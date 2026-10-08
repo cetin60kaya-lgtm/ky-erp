@@ -27,8 +27,15 @@ CREATE TABLE IF NOT EXISTS ik_pdks_unified_outbox (
   command_id TEXT NOT NULL,
   event_type TEXT NOT NULL,
   payload_json TEXT NOT NULL,
-  state TEXT NOT NULL DEFAULT 'PENDING' CHECK(state IN ('PENDING','ACKED','FAILED')),
+  state TEXT NOT NULL DEFAULT 'PENDING' CHECK(state IN ('PENDING','CLAIMED','ACKED','FAILED')),
   delivery_attempts INTEGER NOT NULL DEFAULT 0,
+  delivery_owner TEXT,
+  lease_until TEXT,
+  next_attempt_at TEXT,
+  delivery_hash TEXT,
+  ack_payload_json TEXT,
+  ack_sha256 TEXT,
+  last_error TEXT,
   created_at TEXT NOT NULL,
   acknowledged_at TEXT,
   UNIQUE(main_company_id,command_id),
@@ -36,6 +43,8 @@ CREATE TABLE IF NOT EXISTS ik_pdks_unified_outbox (
 );
 CREATE INDEX IF NOT EXISTS idx_pdks_unified_outbox_state
  ON ik_pdks_unified_outbox(main_company_id,state,created_at);
+CREATE INDEX IF NOT EXISTS idx_pdks_unified_outbox_delivery
+ ON ik_pdks_unified_outbox(main_company_id,state,next_attempt_at,lease_until,created_at);
 
 -- An audit-log entry is a REQUIRED member of every transactional batch,
 -- not an after-the-fact best-effort try/catch.
