@@ -82,3 +82,29 @@ body:has(> #root > .pdk-unified),
 @media(max-width:850px){.pdk-unified{grid-template-columns:1fr;min-height:0}.pdk-u-sidebar{position:fixed;inset:0 auto 0 0;width:264px;transform:translateX(-105%);transition:transform .15s;z-index:31}.pdk-u-sidebar.is-mobile-open{transform:translateX(0)}.pdk-u-hamburger,.pdk-u-brand .pdk-u-mobile-close{display:inline-grid}.pdk-u-mobile-backdrop{position:fixed;inset:0;z-index:30;display:block;background:#13243c9a;border:0}.pdk-unified.sidebar-collapsed{grid-template-columns:1fr}.pdk-u-topbar{padding:0 16px}.pdk-u-global-search{min-width:100px;width:150px}.pdk-u-global-search kbd,.pdk-u-breadcrumb{display:none}.pdk-u-body{padding:20px 16px}.pdk-u-page-head{align-items:flex-start;flex-direction:column}.pdk-u-person-layout{grid-template-columns:1fr}.pdk-u-list-side{border-right:0;border-bottom:1px solid var(--pu-border)}.pdk-u-statusbar{gap:10px}.pdk-u-statusbar>span:nth-child(3),.pdk-u-statusbar>span:nth-child(4){display:none}}
 @media(max-width:530px){.pdk-u-kpis{grid-template-columns:1fr 1fr;gap:9px}.pdk-u-kpi{padding:12px;grid-template-columns:1fr;grid-template-rows:auto auto auto;gap:4px}.pdk-u-kpi-symbol{grid-row:auto}.pdk-u-kpi strong{font-size:22px}.pdk-u-global-search{width:125px}.pdk-u-page-head h1{font-size:22px!important}.pdk-u-record-head{flex-wrap:wrap}.pdk-u-definition{grid-template-columns:1fr}.pdk-u-status-end{display:none!important}}
 @media(prefers-reduced-motion:reduce){.pdk-unified *, .pdk-unified *:before,.pdk-unified *:after{transition:none!important;animation:none!important}}
+
+
+/* Unified operation system: same styles for every module; no per-tab patches. */
+.pdk-u-operation-box{margin:18px 20px 24px;border:1px solid var(--pu-border);border-radius:10px;overflow:hidden;background:var(--pu-panel)}
+.pdk-u-operation-toggle{display:flex;align-items:center;width:100%;min-height:52px;gap:10px;text-align:left;padding:12px 16px;color:var(--pu-text);border:0;background:var(--pu-soft)}
+.pdk-u-operation-toggle>svg:first-child{color:var(--pu-accent)}
+.pdk-u-operation-toggle strong{font-size:12px}.pdk-u-operation-toggle span{color:var(--pu-muted);font-size:10px;margin-left:auto}.pdk-u-operation-toggle>svg:last-child{color:var(--pu-muted)}
+.pdk-u-operation-body{padding:18px;display:flex;flex-direction:column;gap:15px}
+.pdk-u-operation-warning{margin:0;display:flex;align-items:flex-start;gap:7px;color:var(--pu-warn);font-size:11px;line-height:1.55}
+.pdk-u-operation-guard{margin:18px 20px;padding:12px;border:1px solid var(--pu-border);display:flex;align-items:center;gap:9px;color:var(--pu-muted);font-size:11px;border-radius:7px}
+.pdk-u-operation-label{display:flex;flex-direction:column;gap:6px;color:var(--pu-muted);font-size:11px;font-weight:700}
+.pdk-u-operation-label input,.pdk-u-operation-label select{min-height:38px;padding:8px 10px;border:1px solid var(--pu-border);background:var(--pu-panel);border-radius:7px;color:var(--pu-text);min-width:0;width:100%;font-size:12px}
+.pdk-u-operation-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;margin:15px 0}
+.pdk-u-operation-preview{padding:16px;border-radius:9px;border:1px solid var(--pu-border);background:var(--pu-soft)}
+.pdk-u-operation-preview h3{margin:0 0 13px!important;font-size:14px!important;font-weight:760;color:var(--pu-text)}
+.pdk-u-operation-preview dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;margin:0 0 12px}
+.pdk-u-operation-preview dl>div{padding:9px;border-bottom:1px solid var(--pu-border);min-width:0}
+.pdk-u-operation-preview dt{font-size:10px;color:var(--pu-muted)}
+.pdk-u-operation-preview dd{margin:4px 0 0;font-size:11px;color:var(--pu-text);overflow-wrap:anywhere;font-weight:700}
+.pdk-u-operation-preview p{font-size:10px;color:var(--pu-warn)}
+.pdk-u-operation-commit{margin-top:12px;background:var(--pu-accent);color:#fff;border-color:var(--pu-accent)}
+.pdk-u-operation-state{margin:0;font-size:11px;padding:13px;border-radius:7px;border:1px solid var(--pu-border);line-height:1.5}
+.pdk-u-operation-error,.pdk-u-operation-uncertain{color:var(--pu-warn)}
+.pdk-u-operation-success{color:#28805c}
+.pdk-u-operation-pending{color:var(--pu-accent)}
+@media(max-width:680px){.pdk-u-operation-fields,.pdk-u-operation-preview dl{grid-template-columns:1fr}.pdk-u-operation-toggle{flex-wrap:wrap}.pdk-u-operation-toggle span{margin-left:0}}
