@@ -260,6 +260,13 @@ internal sealed class AttendancePlanDialog : Form
     {
         try
         {
+            // The preview must read eligibility for the exact selected period,
+            // not a previous month's list while the debounce timer is pending.
+            if (personRefreshDebounce.Enabled)
+            {
+                personRefreshDebounce.Stop();
+                LoadPeople();
+            }
             var a = from.Value.Date;
             var b = to.Value.Date;
             if (b < a) (a, b) = (b, a);
