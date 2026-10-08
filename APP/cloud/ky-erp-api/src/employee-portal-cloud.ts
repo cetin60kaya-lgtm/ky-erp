@@ -4,6 +4,7 @@
 import { hash } from "bcryptjs";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { calculateStatutoryAnnualLeave, calculateAnnualLeaveBalance } from "./ik-relational-cloud";
+import { savePersonnelProductionEntry } from "./production-runtime-v2";
 
 const text = (value: unknown) => value === null || value === undefined ? "" : String(value).trim();
 const roleOf = (value: unknown) => text(value).toUpperCase().replace(/İ/g, "I");
@@ -172,6 +173,22 @@ export function registerEmployeePortalRoutes(app:any) {
     if(occupation!=="MAKINACI")return ok(c,{occupation,form:occupation==="BOYACI"?"DYE_FORM_PLANNED":occupation==="NUMUNECI"?"SAMPLE_FORM_PLANNED":"SELF_ONLY",models:[]});
     const rows=await c.env.DB.prepare("SELECT id,model_name,model_code FROM model_records WHERE main_company_slug=? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 80").bind(ctx.account.main_company_slug).all();
     return ok(c,{occupation,form:"MACHINE_ENTRY",machineId:text(ctx.account.machine_id),models:(rows.results||[]).map((x:any)=>({id:x.id,name:text(x.model_name),code:text(x.model_code)}))});
+  });
+  app.post("/api/employee-portal/work/machine-production",async(c:any)=>{
+    const ctx=await prove(c);if(ctx.response)return ctx.response;
+    if(roleOf(ctx.account.occupation)!=="MAKINACI"||!text(ctx.account.machine_id))return err(c,403,"MACHINE_FORM_REQUIRED","Bu personelin makinaci formu veya makine atamasi yok.");
+    const body=await bodyOf(c);
+    const person=await c.env.DB.prepare("SELECT full_name,status FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1").bind(ctx.account.employee_id,ctx.account.main_company_slug).first();
+    if(!person||roleOf(person.status)==="PASIF")return err(c,403,"PERSONNEL_INACTIVE","Aktif IK personel kaydi gerekli.");
+    try {
+      const row=await savePersonnelProductionEntry(c,{
+        companySlug:ctx.account.main_company_slug,employeeId:ctx.account.employee_id,
+        machineId:ctx.account.machine_id,operatorName:text(person.full_name),
+        userId:ctx.user.id,deviceId:ctx.device.id,date:dateInIstanbul(),
+      },body);
+      await audit(c,ctx.user.id,ctx.user.id,ctx.account.main_company_slug,"PERSONNEL_MACHINE_PRODUCTION_RECORDED",{productionId:row.id,modelId:row.modelId,machineId:row.machineId,quantity:row.quantity});
+      return ok(c,row);
+    }catch(error){return err(c,409,"PRODUCTION_NOT_SAVED",error instanceof Error?error.message:"Uretim kaydi tamamlanamadi.");}
   });
   app.get("/api/employee-portal/admin/employees",async(c:any)=>{
     if(!(await ready(c)))return err(c,503,"PERSONNEL_SCHEMA_NOT_READY","0060 semasi gerekli.");
