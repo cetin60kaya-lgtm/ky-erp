@@ -165,8 +165,10 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function financeKey(value) { return upper(value).replace(/İ/g, "I").replace(/Ğ/g, "G").replace(/Ü/g, "U").replace(/Ş/g, "S").replace(/Ö/g, "O").replace(/Ç/g, "C"); }
+
 function normalizeFinanceType(value) {
-  const text = upper(value);
+  const text = financeKey(value);
   if (text.includes("TOPLU") && text.includes("AVANS")) return "Toplu avans";
   if (text.includes("AVANS")) return "Avans";
   if (text.includes("HACIZ") || text.includes("HACİZ")) return "Haciz";
@@ -923,7 +925,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
 
   const scopedLogs = useMemo(() => {
     const rows = logs.map((log) => {
-      const text = upper(`${log.actionType || ""} ${log.sourceScreen || ""} ${log.reason || ""}`);
+      const text = financeKey(`${log.actionType || ""} ${log.sourceScreen || ""} ${log.reason || ""}`);
       const employee = employees.find((item) => item.id === log.employeeId);
       return { ...log, text, personName: employee?.fullName || log.fullName || "-" };
     });
@@ -1072,19 +1074,22 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const prePayrollDraft = (employee, controlMode = "ENTRY_EDIT", payrollRow = null) => {
     const base = draftPerson(employee);
     const row = payrollRow || payrollRows.find((item) => item.employee.id === employee?.id) || null;
+    const sourceRows = movements.filter((item) => item.employeeId === employee?.id && String(item.date || item.adjustmentDate || "").startsWith(period) && !upper(item.payrollEffect).includes("SADECE"));
+    const sourceTotals = sourceRows.reduce((acc, item) => { const kind = normalizeFinanceType(item.type || item.adjustmentType); if (kind === "Mesai") acc.overtime += num(item.amount); else if (["Avans","Toplu avans"].includes(kind)) acc.advance += num(item.amount); else if (["Ozel kesinti","Eksik gün","Eksik saat"].includes(kind)) acc.deduction += num(item.amount); else if (["Icra","Haciz"].includes(kind)) acc.garnishment += num(item.amount); return acc; }, {overtime:0,advance:0,deduction:0,garnishment:0});
+    const entry = controlMode !== "FINAL";
     return {
       ...base,
       controlMode,
       finalEditor: {
-        salary: row ? num(row.salary) : num(base.salary),
-        road: row ? num(row.road) : num(base.roadAllowance),
-        extra: row ? num(row.extra) : num(base.extraPaymentAmount),
-        overtime: row ? num(row.overtime) : 0,
-        advance: row ? num(row.advance) : 0,
-        deduction: row ? num(row.deduction) : 0,
-        garnishment: row ? num(row.garnishment) : 0,
-        bank: row ? num(row.bank) : num(base.bankAmount),
-        cash: row ? num(row.cash) : num(base.cashAmount),
+        salary: row && !entry ? num(row.salary) : num(base.salary),
+        road: row && !entry ? num(row.road) : num(base.roadAllowance),
+        extra: row && !entry ? num(row.extra) : num(base.extraPaymentAmount),
+        overtime: entry ? round(sourceTotals.overtime) : (row ? num(row.overtime) : round(sourceTotals.overtime)),
+        advance: entry ? round(sourceTotals.advance) : (row ? num(row.advance) : round(sourceTotals.advance)),
+        deduction: entry ? round(sourceTotals.deduction) : (row ? num(row.deduction) : round(sourceTotals.deduction)),
+        garnishment: entry ? round(sourceTotals.garnishment) : (row ? num(row.garnishment) : round(sourceTotals.garnishment)),
+        bank: row && !entry ? num(row.bank) : num(base.bankAmount),
+        cash: row && !entry ? num(row.cash) : num(base.cashAmount),
         paymentType: base.paymentType || "BANKA_ELDEN",
         advanceSource: row?.advanceSource || "Elden",
         deductionSource: row?.deductionSource || "Elden",
@@ -1252,10 +1257,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       cash: Math.max(num(editor.cash), 0),
     };
     const totals = calcRow(desired);
-    if (Math.abs(totals.diff) > 0.01) {
-      return setModalDraft((old) => ({ ...old, formMessage: `Banka + Elden toplamı Net ile eşleşmeli. Fark: ${money(Math.abs(totals.diff))}` }));
-    }
-    const resolvedPaymentType = desired.bank > 0 && desired.cash > 0 ? "BANKA_ELDEN" : desired.bank > 0 ? "Banka" : "Elden";
+    const sourceBankDeductions = movements.filter((item) => item.employeeId === modalDraft.id && String(item.date || item.adjustmentDate || "").startsWith(period) && !upper(item.payrollEffect).includes("SADECE") && upper(item.paymentMethod).includes("BANKA")).reduce((acc,item)=>{const type=normalizeFinanceType(item.type||item.adjustmentType);return ["Avans","Toplu avans","Ozel kesinti","Eksik gün","Eksik saat","Icra","Haciz"].includes(type)?acc+num(item.amount):acc;},0);
+    const desiredBankDeductions = (upper(editor.advanceSource).includes("BANKA") ? desired.advance : 0) + (upper(editor.deductionSource).includes("BANKA") ? desired.deduction : 0) + (upper(editor.garnishmentSource).includes("BANKA") ? desired.garnishment : 0);
+    const bankBasis = num(editor.bank) + (desiredBankDeductions - sourceBankDeductions);
+    const split = paymentSplitByType(editor.paymentType || modalDraft.paymentType, totals.net, bankBasis, desiredBankDeductions);
+    desired.bank = split.bank;
+    desired.cash = split.cash;
+    const resolvedPaymentType = split.mode === "BANKA" ? "Banka" : split.mode === "ELDEN" ? "Elden" : "BANKA_ELDEN";
 
     setBusy(true);
     setModalDraft((old) => ({ ...old, formMessage: "Son kontrol tek işlemde kaynaklara kaydediliyor..." }));
@@ -1424,7 +1432,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
 
   const editFromLog = (log) => {
     if (log.forceDetail) { setModalDraft(log); setModal("logDetay"); return; }
-    const text = log.text || upper(`${log.actionType || ""} ${log.sourceScreen || ""} ${log.reason || ""}`);
+    const text = financeKey(log.text || `${log.actionType || ""} ${log.sourceScreen || ""} ${log.reason || ""}`);
     const employee = masterEmployees.find((item) => item.id === log.employeeId) || selected;
     if (employee?.id) setSelectedId(employee.id);
     if (text.includes("TOPLU") && text.includes("AVANS")) return openFinance("Toplu avans");
@@ -1435,7 +1443,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     if ((text.includes("EKSIK") || text.includes("EKSİK")) && text.includes("SAAT")) return openFinance("Eksik saat");
     if (text.includes("DEVAMSIZ") || text.includes("GELMEDI") || text.includes("GELMEDİ")) return openFinance("Eksik gün");
     if (text.includes("KESINT")) return openFinance("Ozel kesinti");
-    if (text.includes("MESAI")) return openFinance("Mesai");
+    if (financeKey(text).includes("MESAI")) return openFinance("Mesai");
     if (text.includes("BORDRO") || text.includes("ODEME")) return openPayroll();
     if (text.includes("YILLIK") || text.includes("IZIN") || text.includes("RAPOR") || text.includes("GUNLUK")) {
       return setNotice("Yıllık izin ve resmi izin sicili İK bölümünden yönetilir. Giriş/çıkış, vardiya ve kart hareketleri PDKS bölümündedir.");
@@ -3278,6 +3286,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       const personMovements = movements
         .filter((item) => item.employeeId === modalDraft.id && String(item.date || item.adjustmentDate || "").startsWith(period))
         .sort((a, b) => String(b.date || b.adjustmentDate || "").localeCompare(String(a.date || a.adjustmentDate || "")));
+      const personMonthLogs = logs.filter((log) => log.employeeId === modalDraft.id && String(log.period || period) === period).sort((a,b) => String(b.createdAt || b.date || "").localeCompare(String(a.createdAt || a.date || "")));
       const effectiveMovements = personMovements.filter((item) => !upper(item.payrollEffect).includes("SADECE"));
       const movementTotals = effectiveMovements.reduce((acc, item) => {
         const type = normalizeFinanceType(item.type || item.adjustmentType);
@@ -3410,7 +3419,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                     </div>
                     <div className="row-actions">
                       <button type="button" className="btn" disabled={busy} onClick={autoBalanceFinalPayment}>Banka / Elden Otomatik Dengele</button>
-                      <button type="button" className="btn primary" disabled={busy || Math.abs(finalTotals.diff) > 0.01} onClick={saveFinalPayrollControl}>{busy ? "Kaydediliyor" : finalMode ? "Son Kontrolü Kaydet" : "Değişiklikleri Kaydet"}</button>
+                      <button type="button" className="btn primary" disabled={busy} onClick={saveFinalPayrollControl}>{busy ? "Kaydediliyor" : finalMode ? "Son Kontrolü Kaydet" : "Değişiklikleri Kaydet"}</button>
                     </div>
                   </div>
 
@@ -3473,8 +3482,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               )}
 
               <div className="modal-section source-movement-section">
-                <div className="ch"><div><b>{finalMode ? "Kaynak Hareketleri / Log" : "Aylık Hareket Girişi"}</b><span>Buradaki kayıtlar Mesai / Avans / Kesinti ekranına doğrudan yazılır ve bordro aynı kaynaktan beslenir.</span></div></div>
-                <div className="ik-section-tabs">
+                <div className="ch"><div><b>Kişinin O Ayki Hareketleri</b><span>Buradaki kayıtlar Mesai / Avans / Kesinti ekranına doğrudan yazılır ve bordro aynı kaynaktan beslenir.</span></div></div>
+                <details className="prepayroll-quick-entry"><summary>Yeni hareket ekle / hızlı düzenleme</summary><div className="ik-section-tabs">
                   {["Mesai","Avans","Ozel kesinti","Icra","Haciz"].map((type) => <button type="button" key={type} className={editor.adjustmentType === type ? "active" : ""} onClick={() => editPrePayrollMovement(null, type)}>{type === "Ozel kesinti" ? "Kesinti" : type}</button>)}
                 </div>
                 <div className="form prepayroll-movement-editor">
@@ -3489,7 +3498,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                   </>}
                   <Field label="Açıklama" wide><input value={editor.note || ""} onChange={(event) => setModalDraft((old) => ({ ...old, movementEditor: { ...old.movementEditor, note: event.target.value } }))} placeholder="İsteğe bağlı açıklama" /></Field>
                 </div>
-                <div className="row-actions"><button type="button" className="btn primary" disabled={busy} onClick={savePrePayrollMovement}>{editor.id ? "Hareketi Güncelle" : "Hareketi Kaydet"}</button>{editor.id ? <button type="button" className="btn" disabled={busy} onClick={() => editPrePayrollMovement(null, editor.adjustmentType)}>Yeni Kayıt</button> : null}</div>
+                <div className="row-actions"><button type="button" className="btn primary" disabled={busy} onClick={savePrePayrollMovement}>{editor.id ? "Hareketi Güncelle" : "Hareketi Kaydet"}</button>{editor.id ? <button type="button" className="btn" disabled={busy} onClick={() => editPrePayrollMovement(null, editor.adjustmentType)}>Yeni Kayıt</button> : null}</div></details>
 
                 <div className="tw prepayroll-source-table"><table><thead><tr><th>Tarih</th><th>Tip</th><th>Saat/Gün</th><th>Tutar</th><th>Kaynak</th><th>Açıklama</th><th>İşlem</th></tr></thead><tbody>
                   {personMovements.map((item) => <tr key={item.id || `${item.employeeId}-${item.date}-${item.type}`}><td>{item.date || item.adjustmentDate || "-"}</td><td>{item.type || item.adjustmentType}</td><td>{item.hourOrDay || item.quantity || "-"}</td><td className="money">{money(item.amount)}</td><td>{item.paymentMethod || "-"}</td><td>{item.note || item.description || "-"}</td><td><button type="button" className="btn" disabled={busy} onClick={() => editPrePayrollMovement(item)}>Düzenle</button> <button type="button" className="btn red" disabled={busy} onClick={() => deletePrePayrollMovement(item)}>Sil</button></td></tr>)}
@@ -3497,6 +3506,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                 </tbody></table></div>
               </div>
 
+              <details className="modal-section payroll-person-summary"><summary><b>Özet · Ücret / Bordro / Personel Logu</b></summary><div className="import-summary payment-summary"><div><span>Maaş</span><b>{money(finalEditor.salary)}</b></div><div><span>Yol</span><b>{money(finalEditor.road)}</b></div><div><span>EK</span><b>{money(finalEditor.extra)}</b></div><div><span>Mesai</span><b>{money(movementTotals.overtime)}</b></div><div><span>Avans</span><b>{money(movementTotals.advance)}</b></div><div><span>Kesinti</span><b>{money(movementTotals.deduction)}</b></div><div><span>İcra/Haciz</span><b>{money(movementTotals.garnishment)}</b></div><div><span>Net</span><b>{money(finalTotals.net)}</b></div><div><span>Banka</span><b>{money(finalEditor.bank)}</b></div><div><span>Elden</span><b>{money(finalEditor.cash)}</b></div></div><div className="tw"><table><thead><tr><th>Tarih</th><th>İşlem</th><th>Açıklama</th></tr></thead><tbody>{personMonthLogs.map((log,i)=><tr key={log.id || i}><td>{log.createdAt || log.date || "-"}</td><td>{log.actionType || log.action || "-"}</td><td>{log.reason || log.description || log.summary || "-"}</td></tr>)}<EmptyRow show={!personMonthLogs.length} colSpan={3} text="Bu döneme ait personel logu bulunamadı."/></tbody></table></div></details>
               {modalDraft.formMessage ? <div className="person-save-message" role="alert">{modalDraft.formMessage}</div> : null}
             </div>
           </div>
