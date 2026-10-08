@@ -68,14 +68,22 @@ function normalizeTime(value: unknown) {
   return h >= 0 && h <= 23 && m >= 0 && m <= 59 ? `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` : "";
 }
 
+function checkedIsoDate(year: number, month: number, day: number) {
+  // Strict UTC round-trip rejects 31 February, 13th month and similar
+  // syntactically plausible but invalid card evidence dates.
+  if (year < 2000 || year > 2099 || month < 1 || month > 12 || day < 1 || day > 31) return "";
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() + 1 !== month || date.getUTCDate() !== day) return "";
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
 function normalizeDate(value: unknown) {
   const raw = text(value);
   let match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
-  if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+  if (match) return checkedIsoDate(Number(match[1]), Number(match[2]), Number(match[3]));
   match = /^(\d{2})[.\/-](\d{2})[.\/-](\d{4})$/.exec(raw);
-  if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+  if (match) return checkedIsoDate(Number(match[3]), Number(match[2]), Number(match[1]));
   match = /^(\d{2})(\d{2})(\d{2})$/.exec(raw);
-  if (match) return `20${match[3]}-${match[2]}-${match[1]}`;
+  if (match) return checkedIsoDate(2000 + Number(match[3]), Number(match[2]), Number(match[1]));
   return "";
 }
 
@@ -116,10 +124,23 @@ async function peopleByCard(c: Context<AppEnv>, company: string) {
   const result = await c.env.DB.prepare(`SELECT e.id,e.code,e.full_name,e.sgk_status,s.card_no
     FROM hr_monthly_employees e JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
     WHERE e.main_company_id=?
-      AND UPPER(TRIM(COALESCE(s.active_passive,e.status,'AKTIF'))) NOT LIKE '%PAS%'
       AND TRIM(COALESCE(s.card_no,''))<>''`)
     .bind(company).all<Row>();
-  return new Map((result.results || []).map((row) => [normalizeCard(row.card_no), row]));
+  const byCard = new Map<string, Row>();
+  const conflicting = new Set<string>();
+  for (const row of result.results || []) {
+    const card = normalizeCard(row.card_no);
+    if (!card || conflicting.has(card)) continue;
+    const existing = byCard.get(card);
+    if (existing && text(existing.id) !== text(row.id)) {
+      // A reused physical card cannot silently resolve to an arbitrary person.
+      byCard.delete(card);
+      conflicting.add(card);
+      continue;
+    }
+    byCard.set(card, row);
+  }
+  return byCard;
 }
 
 async function preview(c: Context<AppEnv>) {
