@@ -18,6 +18,7 @@ const SOURCES = Object.freeze({
   leave:"leaves",holidays:"holidays",
   monthly:"monthly-attendance",timesheets:"monthly-attendance",
   closing:"month",advances:"month-adjustments",deductions:"month-adjustments",
+  overtime:"month-adjustments",
   earnings:"payroll",salary:"payroll",payments:"payroll",payroll:"payroll",
   audit:"audit",corrections:"corrections",
 });
@@ -161,14 +162,16 @@ export function rowsForTab(id,payload,{people=[],selectedPerson=null,year=null,m
       "Durum":"D1 dönem kaydı (FDB/TNF kontrolü yok)",
     }],supported:true,scope:"cloud-period-only"};
   }
-  if(["advances","deductions"].includes(id)){
+  if(["advances","deductions","overtime"].includes(id)){
     const source=arr(payload,"adjustments");
     if(!source)return {rows:[],supported:false};
-    const check=id==="advances"?/AVANS|EK_KAZANC|PRIM|YOL|YEMEK/ : /KESINTI|ICRA|HACIZ|BES/;
+    const check=id==="advances"?/AVANS|EK_KAZANC|PRIM|YOL|YEMEK/ :
+      id==="overtime"?/MESAI/ : /KESINTI|ICRA|HACIZ|BES/;
     const relevant=source.filter((row)=>check.test(String(row.adjustmentType||"").toUpperCase()));
     return toRows({rows:relevant},{
       "Personel":["employeeName"],"Tarih":["date"],
       "Tür":["adjustmentType"],"Tutar":["amount"],
+      "Saat":["hourOrDay"],"Oran":["approvedRate"],"Gerekçe":["note"],
       "Onay":["status"],"Durum":["status"],"Açıklama":["note"],
     });
   }
