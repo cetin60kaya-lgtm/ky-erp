@@ -30,7 +30,7 @@ test("existing PDKS read endpoints map to relevant visible sections",()=>{
   assert.equal(tabBinding("live").source,"unconnected");
   assert.equal(tabBinding("holidays").source,"holidays");
   assert.equal(tabBinding("leave").source,"leaves");
-  assert.equal(tabBinding("departments").source,"people");
+  assert.equal(tabBinding("departments").source,"masters");
   assert.equal(tabBinding("monthly").source,"monthly-attendance");
   assert.equal(tabBinding("earnings").source,"payroll");
   assert.equal(tabBinding("audit").source,"audit");
@@ -90,4 +90,24 @@ test("unrelated or unknown response shapes are not silently shown as zero record
   assert.equal(rowsForTab("holidays",{}).supported,false);
   assert.equal(rowsForTab("leave",{plans:[]}).supported,true);
   assert.equal(rowsForTab("shift",{}).supported,false);
+});
+
+test("work groups, personnel groups and service assignments use verified actual counts",()=>{
+  const masters={
+    groups:[{id:"g1",name:"Gündüz",entryTime:"08:30",exitTime:"19:00",active:1}],
+    personnelGroups:[{id:"p1",name:"Üretim",defaultShiftId:"g1",active:1}],
+    groupAssignments:[{employeeId:"e1",groupId:"g1"},{employeeId:"e2",groupId:"g1"}],
+    personnelGroupAssignments:[{employeeId:"e1",personnelGroupId:"p1"}],
+    services:[{id:"s1",code:"A",routeNote:"Hat 1",active:1}],
+    serviceAssignments:[{employeeId:"e1",serviceId:"s1"}],
+  };
+  const groups=rowsForTab("departments",masters);
+  assert.equal(groups.supported,true);
+  assert.equal(groups.rows.length,2);
+  assert.equal(groups.rows[0]["Kişi"],"2");
+  assert.equal(groups.rows[1]["Kişi"],"1");
+  const services=rowsForTab("routes",masters);
+  assert.equal(services.supported,true);
+  assert.equal(services.rows[0]["Personel"],"1");
+  assert.equal(rowsForTab("departments",{groups:[]}).supported,false);
 });
