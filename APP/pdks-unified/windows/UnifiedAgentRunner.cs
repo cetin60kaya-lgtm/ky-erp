@@ -13,7 +13,36 @@ namespace KyPdks.Unified;
 /// </remarks>
 internal static class UnifiedAgentRunner
 {
-    internal static async Task<string> RunLoopAsync(CancellationToken cancellationToken)
+    internal static async Task SelfTestAsync()
+    {
+        var previous=Environment.GetEnvironmentVariable("KY_PDKS_COMPANY_ROOT");
+        var root=Path.Combine(Path.GetTempPath(),"ky-pdks-loop-"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            Environment.SetEnvironmentVariable("KY_PDKS_COMPANY_ROOT",root);
+            var called=0;
+            var exit=await RunLoopAsync(CancellationToken.None, _=>
+            {
+                called++;
+                return Task.FromResult("AGENT_CONFIG_REQUIRED");
+            });
+            var health=Path.Combine(root,"SISTEM","AgentState","unified-agent-health.json");
+            if(exit!="AGENT_CONFIG_REQUIRED"||called!=1||!File.Exists(health))
+                throw new InvalidOperationException("AGENT_LOOP_SELFTEST_FAILED");
+            using var parsed=JsonDocument.Parse(await File.ReadAllTextAsync(health));
+            if(parsed.RootElement.GetProperty("result").GetString()!="AGENT_CONFIG_REQUIRED")
+                throw new InvalidOperationException("AGENT_HEALTH_SELFTEST_FAILED");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("KY_PDKS_COMPANY_ROOT",previous);
+            try{Directory.Delete(root,true);}catch{}
+        }
+    }
+
+    internal static async Task<string> RunLoopAsync(CancellationToken cancellationToken,
+        Func<CancellationToken,Task<string>>? runOnce = null)
     {
         var companyRoot = Environment.GetEnvironmentVariable("KY_PDKS_COMPANY_ROOT") ??
             Environment.GetEnvironmentVariable("KY_PDKS_COMPANY_ROOT",EnvironmentVariableTarget.User);
@@ -36,13 +65,13 @@ internal static class UnifiedAgentRunner
         {
             var minuteValue=Environment.GetEnvironmentVariable("KY_PDKS_AGENT_POLL_MINUTES");
             var pollMinutes=int.TryParse(minuteValue,out var minutes)
-                ? Math.Clamp(minutes,1,60) : 5;
+                ? Math.Clamp(minutes,5,60) : 5;
             var runs=0;
             while(!cancellationToken.IsCancellationRequested)
             {
                 runs++;
                 var started=DateTimeOffset.UtcNow;
-                var result=await UnifiedSyncAgent.RunOnceAsync(cancellationToken);
+                var result=await (runOnce ?? UnifiedSyncAgent.RunOnceAsync)(cancellationToken);
                 var status=new
                 {
                     kind="KY_PDKS_UNIFIED_WINDOWS_AGENT",
