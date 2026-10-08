@@ -58,7 +58,8 @@ test("Ali Akkaya 2026 leave: 14 entitled, 18 taken, 4 advance days", () => {
 test("annual leave uses the same canonical ledger in Personnel and Annual Leave with no wage mutation", () => {
   const worker = readFileSync(new URL("./ik-relational-cloud.ts", import.meta.url), "utf8");
   const ui = readFileSync(new URL("../../../app/ky-erp-frontend/src/pages/modules/ik/monthly/IkAdvancedMonthly.jsx", import.meta.url), "utf8");
-  assert.match(worker, /SUBSTR\(l\.start_date,1,4\)=\?/);
+  assert.match(worker, /async function annualUsedForYear/);
+  assert.match(worker, /annualLeaveDaysForYear/);
   assert.match(worker, /const annualPersonPlans = personPlans\.filter/);
   assert.match(worker, /usedDaysAllTime: usedAllTimeDays/);
   assert.match(worker, /LEAVE_ADVANCE_APPROVAL_REQUIRED/);
