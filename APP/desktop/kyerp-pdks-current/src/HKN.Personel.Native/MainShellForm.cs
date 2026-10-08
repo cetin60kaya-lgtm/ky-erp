@@ -71,7 +71,7 @@ public sealed partial class MainShellForm : Form
         var command = PdksCommandCatalog.ForShortcut(keyData);
         if (command is not null && CanExecute(command))
         {
-            ExecuteCommand(command.Id);
+            NavigateToCommand(command.Id);
             return true;
         }
         return base.ProcessCmdKey(ref msg, keyData);
@@ -80,7 +80,7 @@ public sealed partial class MainShellForm : Form
     {
         workspace.ShowSingle(new ModernHomeDashboard(
             PdksCommandCatalog.All.Where(CanExecute),
-            ExecuteCommand,
+            NavigateToCommand,
             currentUser.UserName), "home", "Genel Bakış");
         SetModernPage("Genel Bakış", "Günün personel hareketleri ve hızlı işlemler");
     }
