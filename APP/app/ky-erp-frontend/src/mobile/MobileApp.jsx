@@ -28,6 +28,12 @@ import MobileBoyahane from "./MobileBoyahane";
 import MobileDesen from "./MobileDesen";
 import MobileAdmin from "./MobileAdmin";
 import MobileShell from "./MobileShell";
+import MobilePersonnel from "./MobilePersonnel";
+
+function isPersonnelSession() {
+  try { return String(JSON.parse(localStorage.getItem("kyerp_auth_user") || "{}").role || "").toUpperCase() === "PERSONNEL"; }
+  catch { return false; }
+}
 
 function getMobilePage(pathname) {
   const clean = pathname.replace(/\/+$/, ""); // remove trailing slash
@@ -63,11 +69,13 @@ function getMobilePage(pathname) {
 export default function MobileApp() {
   const [token, setToken] = useState(() => getMobileToken());
   const [page, setPage] = useState(() => getMobilePage(window.location.pathname));
+  const [personnel, setPersonnel] = useState(() => isPersonnelSession());
 
   useEffect(() => {
     function handlePop() {
       setPage(getMobilePage(window.location.pathname));
       setToken(getMobileToken());
+      setPersonnel(isPersonnelSession());
     }
     window.addEventListener("popstate", handlePop);
     return () => window.removeEventListener("popstate", handlePop);
@@ -75,7 +83,9 @@ export default function MobileApp() {
 
   const handleLoginSuccess = () => {
     setToken(getMobileToken());
-    window.history.pushState({}, "", "/mobile");
+    const employee = isPersonnelSession();
+    setPersonnel(employee);
+    window.history.pushState({}, "", employee ? "/mobile/personel" : "/mobile");
     setPage("home");
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
@@ -87,6 +97,9 @@ export default function MobileApp() {
     }
     return <MobileLogin onLogin={handleLoginSuccess} />;
   }
+
+  // PERSONNEL tek gorunume mahkumdur; API de ayrica kisitlanir.
+  if (personnel) return <MobilePersonnel />;
 
   const renderContent = () => {
     switch (page) {
