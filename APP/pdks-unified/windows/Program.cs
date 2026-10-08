@@ -10,6 +10,11 @@ internal static class Program
     private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        if (args.Contains("--agent-once", StringComparer.OrdinalIgnoreCase))
+        {
+            _ = UnifiedSyncAgent.RunOnceAsync().GetAwaiter().GetResult();
+            return;
+        }
         var preview = args.Contains("--dev-preview", StringComparer.OrdinalIgnoreCase);
         Application.Run(new KyPdksWindow(preview));
     }
