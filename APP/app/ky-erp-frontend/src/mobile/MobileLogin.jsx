@@ -42,7 +42,7 @@ export default function MobileLogin({ onLogin }) {
       setError("Kullanıcı adı ve şifre zorunludur.");
       return;
     }
-    if(turnstileConfig?.required && !turnstileToken){setError("Bot dogrulamasini tamamlayin.");return;}
+    if(turnstileConfig?.required && !turnstileToken){setError("Bot doğrulamasını tamamlayın.");return;}
     setLoading(true);
     setError("");
     try {
@@ -55,7 +55,7 @@ export default function MobileLogin({ onLogin }) {
       
       if (!token) throw new Error("Giris icin ilave dogrulama gerekli. Yonetici/muhasebe hesabiyla normal KY ERP MFA ekranindan devam edin.");
       const userObj = payload?.user || payload?.data.user || { username: identity };
-      if (personnelMode && String(userObj.role || "").toUpperCase() !== "PERSONNEL") throw new Error("Bu giris yalniz personel hesaplari icindir.");
+      if (personnelMode && String(userObj.role || "").toUpperCase() !== "PERSONNEL") throw new Error("Bu giriş yalnız personel hesapları içindir.");
       localStorage.setItem("kyerp_auth_token", token);
       localStorage.setItem("kyerp_auth_user", JSON.stringify(userObj));
       localStorage.setItem("kyerp_mobile_user", JSON.stringify(userObj));
@@ -95,7 +95,7 @@ export default function MobileLogin({ onLogin }) {
           KY ERP Mobil
         </h1>
         <p style={{ fontSize: 14, color: "#64748b", marginBottom: 8, textAlign: "center" }}>
-          {personnelMode ? "Personel Oz Servis" : "Firma Yonetimi"}
+          {personnelMode ? "Personel Öz Servis" : "Firma Yonetimi"}
         </p>
         <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 28, textAlign: "center" }}>
           {API_BASE}
@@ -112,13 +112,13 @@ export default function MobileLogin({ onLogin }) {
         )}
 
         <div style={{display:"flex",gap:8,width:"100%",marginBottom:16}}>
-          <button type="button" onClick={()=>setPersonnelMode(false)} style={{flex:1,padding:10,borderRadius:8,background:!personnelMode?"#1453a3":"#e2e8f0",color:!personnelMode?"white":"#374151",border:0}}>Yonetim / Muhasebe</button>
-          <button type="button" onClick={()=>setPersonnelMode(true)} style={{flex:1,padding:10,borderRadius:8,background:personnelMode?"#1453a3":"#e2e8f0",color:personnelMode?"white":"#374151",border:0}}>Personel Girisi</button>
+          <button type="button" onClick={()=>setPersonnelMode(false)} style={{flex:1,padding:10,borderRadius:8,background:!personnelMode?"#1453a3":"#e2e8f0",color:!personnelMode?"white":"#374151",border:0}}>Yönetim / Muhasebe</button>
+          <button type="button" onClick={()=>setPersonnelMode(true)} style={{flex:1,padding:10,borderRadius:8,background:personnelMode?"#1453a3":"#e2e8f0",color:personnelMode?"white":"#374151",border:0}}>Personel Girişi</button>
         </div>
         <form onSubmit={handleLogin} style={{ width: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
           {personnelMode ? <label style={{fontSize:13,fontWeight:600,color:"#374151"}}>Firma
             <select value={company} onChange={e=>setCompany(e.target.value)} required style={{display:"block",width:"100%",padding:13,border:"2px solid #e5e7eb",borderRadius:12,marginTop:6}}>
-              <option value="">Firma seciniz</option>
+              <option value="">Firma seçiniz</option>
               {companies.map(item=><option key={item.slug} value={item.slug}>{item.name}</option>)}
             </select>
           </label> : null}
@@ -164,7 +164,7 @@ export default function MobileLogin({ onLogin }) {
             />
           </div>
 
-          {turnstileConfig?.required?<div ref={turnstileRef} style={{minHeight:68}} aria-label="Bot dogrulama"/>:null}
+          {turnstileConfig?.required?<div ref={turnstileRef} style={{minHeight:68}} aria-label="Bot doğrulama"/>:null}
           <button
             type="submit"
             disabled={loading}
