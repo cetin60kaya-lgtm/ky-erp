@@ -190,7 +190,7 @@ internal static class UnifiedLocalPolicyStore
             var normal=await ApplyAsync(root,"holiday",holiday.RootElement,"j2","command-2","outbox-2",new string('b',64));
             if(normal.Replayed) throw new InvalidOperationException("POLICY_HOLIDAY_TEST_FAILED");
             using var assignment=JsonDocument.Parse(
-                "{\\"employeeId\\":\\"person-test-1\\",\\"personnelGroupId\\":\\"command-1\\",\\"reason\\":\\"Approved policy-group assignment\\"}");
+                "{\"employeeId\":\"person-test-1\",\"personnelGroupId\":\"command-1\",\"reason\":\"Approved policy-group assignment\"}");
             var assigned=await ApplyAsync(root,"assign-personnel-group",assignment.RootElement,
                 "j4","command-4","outbox-4",new string('d',64),localCardNo:"00003");
             var assignmentReplay=await ApplyAsync(root,"assign-personnel-group",assignment.RootElement,
@@ -199,7 +199,7 @@ internal static class UnifiedLocalPolicyStore
                 assigned.PolicySha256!=assignmentReplay.PolicySha256)
                 throw new InvalidOperationException("PERSONNEL_ASSIGNMENT_IDEMPOTENCY_FAILED");
             using var missing=JsonDocument.Parse(
-                "{\\"employeeId\\":\\"person-test-1\\",\\"personnelGroupId\\":\\"not-mirrored\\",\\"reason\\":\\"Approved group must exist locally\\"}");
+                "{\"employeeId\":\"person-test-1\",\"personnelGroupId\":\"not-mirrored\",\"reason\":\"Approved group must exist locally\"}");
             try
             {
                 await ApplyAsync(root,"assign-personnel-group",missing.RootElement,
