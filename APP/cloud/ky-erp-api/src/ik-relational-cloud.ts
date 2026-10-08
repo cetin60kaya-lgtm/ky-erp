@@ -3040,6 +3040,23 @@ const DEFAULT_TR_OFFICIAL_HOLIDAY_RULES_2026 = [
   { date: "2026-08-30", name: "Zafer Bayramı", fraction: 1 },
   { date: "2026-10-28", name: "Cumhuriyet Bayramı Arifesi", fraction: 0.5 },
   { date: "2026-10-29", name: "Cumhuriyet Bayramı", fraction: 1 },
+  // 2027 Diyanet dini günler listesi + 2429 sayılı Kanun sabit resmî tatilleri.
+  { date: "2027-01-01", name: "Yılbaşı", fraction: 1 },
+  { date: "2027-03-08", name: "Ramazan Bayramı Arefesi", fraction: 0.5 },
+  { date: "2027-03-09", name: "Ramazan Bayramı 1. Gün", fraction: 1 },
+  { date: "2027-03-10", name: "Ramazan Bayramı 2. Gün", fraction: 1 },
+  { date: "2027-03-11", name: "Ramazan Bayramı 3. Gün", fraction: 1 },
+  { date: "2027-04-23", name: "Ulusal Egemenlik ve Çocuk Bayramı", fraction: 1 },
+  { date: "2027-05-01", name: "Emek ve Dayanışma Günü", fraction: 1 },
+  { date: "2027-05-15", name: "Kurban Bayramı Arefesi", fraction: 0.5 },
+  { date: "2027-05-16", name: "Kurban Bayramı 1. Gün", fraction: 1 },
+  { date: "2027-05-17", name: "Kurban Bayramı 2. Gün", fraction: 1 },
+  { date: "2027-05-18", name: "Kurban Bayramı 3. Gün", fraction: 1 },
+  { date: "2027-05-19", name: "Kurban Bayramı 4. Gün / Atatürk'ü Anma", fraction: 1 },
+  { date: "2027-07-15", name: "Demokrasi ve Milli Birlik Günü", fraction: 1 },
+  { date: "2027-08-30", name: "Zafer Bayramı", fraction: 1 },
+  { date: "2027-10-28", name: "Cumhuriyet Bayramı Arifesi", fraction: 0.5 },
+  { date: "2027-10-29", name: "Cumhuriyet Bayramı", fraction: 1 },
 ];
 
 function addIsoDays(value: string, amount: number) {
@@ -3212,6 +3229,11 @@ async function previewAdvancedLeaveV2(c: Context<AppEnv>, supplied?: Row) {
   const policy = await leavePolicyV2(c, companyId);
   const officialHolidays = await officialHolidayDatesV2(c, companyId);
   const range = calculateAnnualLeaveRange(startDate, returnDate, policy.countedWeekdays, policy.excludeOfficialHolidays, officialHolidays);
+  const yearsInRange = [...new Set(range.calendarDates.map((date) => date.slice(0, 4)))];
+  const definedHolidayYears = new Set(officialHolidays.map((rule) => hrDateOnly(rule.date).slice(0, 4)));
+  const uncoveredHolidayYears = policy.excludeOfficialHolidays
+    ? yearsInRange.filter((year) => !definedHolidayYears.has(year))
+    : [];
   if (!range.calendarDays || range.calendarDays > 370) return supplied ? null : error(c, 400, "LEAVE_RANGE_INVALID", "İzin aralığı 1 ile 370 takvim günü arasında olmalıdır.");
   if (exitDate && range.lastLeaveDate > exitDate) return supplied ? null : error(c, 409, "LEAVE_AFTER_EXIT", "İzin günleri personelin işten çıkış tarihinden sonraya taşamaz.");
 
@@ -3261,7 +3283,7 @@ async function previewAdvancedLeaveV2(c: Context<AppEnv>, supplied?: Row) {
   const annualCoveredDays = Math.min(Math.max(0, balanceBefore), range.countedDays);
   const annualExcessDays = Math.max(0, Math.round((range.countedDays - annualCoveredDays) * 2) / 2);
   const data = {
-    ok: true, employee, policy, officialHolidays, ...range,
+    ok: true, employee, policy, officialHolidays, uncoveredHolidayYears, ...range,
     conflicts,
     hasCriticalConflict: conflicts.some((row) => row.severity === "CRITICAL"),
     hasDepartmentWarning: conflicts.some((row) => row.severity === "WARNING"),
@@ -3318,6 +3340,9 @@ async function saveAdvancedLeaveRecordV2(c: Context<AppEnv>) {
 
   const statusRaw = upper(body.status || (text(preview.startDate) > new Date().toISOString().slice(0, 10) ? "PLANNED" : "APPROVED"));
   const status = ["PLANNED", "APPROVED", "TAKEN"].includes(statusRaw) ? statusRaw : "PLANNED";
+  if (status !== "PLANNED" && Array.isArray(preview.uncoveredHolidayYears) && preview.uncoveredHolidayYears.length) {
+    return error(c, 409, "LEAVE_HOLIDAY_CALENDAR_MISSING", "Resmî tatil günleri doğrulanmamış yıl için izin yalnız planlanabilir. Önce ilgili yılın tatil takvimini tanımlayın.");
+  }
   const excessDays = number(preview.annualExcessDays);
   const advanceLeaveReason = text(body.advanceLeaveReason);
   if (status !== "PLANNED" && excessDays > 0) {
