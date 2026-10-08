@@ -316,7 +316,7 @@ test("payroll final control exposes every financial value and saves back to cano
   assert.match(cloud, /UPDATE hr_monthly_adjustments_v2 SET adjustment_type=\? WHERE id=\?/);
   assert.match(cloud, /const bankDeductionsAfter = Math\.max/);
   assert.match(cloud, /"FINAL_CONTROL"/);
-  assert.match(cloud, /mevcut gerçek hareket kaynaklarını ve bordro snapshotını atomik güncelledi/);
+  assert.match(cloud, /gerçek kaynaklar ve ödeme planı güncellendi/);
   assert.match(cloud, /await c\.env\.DB\.batch\(statements\)/);
   assert.match(cloud, /status=excluded\.status/);
   assert.match(cloud, /app\.post\("\/api\/ik\/advanced\/payroll\/final-control"/);
