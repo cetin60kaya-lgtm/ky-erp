@@ -37,8 +37,12 @@ test("PDKS masters GET never creates a shift, schema or a fabricated default rec
 
 test("production worker entrypoints register ALL live KY PDKS operations",()=>{
   const main=readFileSync(resolve(here,"main.ts"),"utf8");
-  assert.match(main,/registerIkPdksOperationRoutes\(app\)/);
-  assert.match(main,/registerIkPdksAdjustmentRoutes\(app\)/);
+  const guard=readFileSync(resolve(here,"ik-pdks-guard.ts"),"utf8");
+  assert.match(guard,/registerIkPdksOperationRoutes\(app\)/);
+  assert.match(guard,/registerIkPdksAdjustmentRoutes\(app\)/);
+  assert.doesNotMatch(main,/registerIkPdksOperationRoutes\(app\)/);
+  assert.doesNotMatch(main,/registerIkPdksAdjustmentRoutes\(app\)/);
+  assert.match(main,/registerIkPdksUnifiedCommandRoutes\(app\)/);
   const op=readFileSync(resolve(here,"ik-pdks-operations.ts"),"utf8");
   const extra=readFileSync(resolve(here,"ik-pdks-adjustments.ts"),"utf8");
   for(const path of [
@@ -58,4 +62,31 @@ test("every active worker security layer accepts EXACT KY web and Capacitor orig
     assert.match(source,/"https:\/\/localhost"/,file);
     assert.doesNotMatch(source,/Access-Control-Allow-Origin["']?\s*[:=]\s*["']\*["']/);
   }
+});
+
+
+test("new unified commands have an atomic four-record D1 write contract",()=>{
+  const gateway=readFileSync(resolve(here,"ik-pdks-unified-commands.ts"),"utf8");
+  assert.match(gateway,/registerIkPdksUnifiedCommandRoutes/);
+  assert.match(gateway,/await db\.batch\(statements\)/);
+  assert.match(gateway,/ik_pdks_unified_commands/);
+  assert.match(gateway,/ik_pdks_unified_outbox/);
+  assert.match(gateway,/ik_audit_logs/);
+  assert.match(gateway,/payload_sha256/);
+  assert.match(gateway,/PDKS_IDEMPOTENCY_CONFLICT/);
+  assert.match(gateway,/PDKS_BATCH_ROLLED_BACK/);
+  assert.match(gateway,/pdksCompany/);
+  const guard=readFileSync(resolve(here,"ik-pdks-guard.ts"),"utf8");
+  assert.match(guard,/enforcePdksTenantAndPermission/);
+  assert.match(guard,/c as any\)\.set\?\.\("pdksCompany"/);
+  const migration=readFileSync(resolve(here,"../migrations/0060_pdks_unified_command_ledger.sql"),"utf8");
+  assert.match(migration,/UNIQUE\(main_company_id,actor_user_id,request_id\)/);
+  assert.match(migration,/FOREIGN KEY\(command_id\)/);
+});
+test("D1 GET and POST never silently provision command or receipt tables",()=>{
+  const command=readFileSync(resolve(here,"ik-pdks-unified-commands.ts"),"utf8");
+  assert.doesNotMatch(command,/CREATE TABLE|DROP TABLE|DELETE FROM ik_pdks/);
+  assert.match(command,/PDKS_MIGRATION_0060_REQUIRED/);
+  const worker=readFileSync(resolve(here,"main.ts"),"utf8");
+  assert.match(worker,/registerIkPdksUnifiedCommandRoutes\(app\)/);
 });
