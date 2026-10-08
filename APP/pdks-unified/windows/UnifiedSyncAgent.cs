@@ -61,34 +61,45 @@ internal static class UnifiedSyncAgent
                 return "TENANT_MISMATCH";
             }
 
+            var localCardNo = "";
+            DateTime? workDate = null;
+            JsonElement commandData = default;
+            if (envelope.TryGetProperty("payload", out var operationPayload) &&
+                operationPayload.ValueKind == JsonValueKind.Object)
+            {
+                localCardNo = Text(operationPayload, "localCardNo");
+                if (operationPayload.TryGetProperty("commandData", out var foundCommandData) &&
+                    foundCommandData.ValueKind == JsonValueKind.Object)
+                {
+                    commandData = foundCommandData.Clone();
+                    var date = Text(commandData, "date");
+                    if (string.IsNullOrWhiteSpace(date)) date = Text(commandData, "startDate");
+                    if (DateTime.TryParse(date, out var parsed)) workDate = parsed.Date;
+                }
+            }
+            if (commandData.ValueKind != JsonValueKind.Object)
+            {
+                await PostResultAsync(http, credential, data, "RETRY",
+                    "LOCAL_COMMAND_DATA_REQUIRED:" + action, null, cancellationToken);
+                return "LOCAL_COMMAND_DATA_REQUIRED";
+            }
+
+            var plan = UnifiedLocalActionPlanner.Build(action, commandData);
             var journalId = Guid.NewGuid().ToString("N");
             var journalPath = WriteJournal(credential, journalId, new
             {
                 journalId,
-                state = "RECEIVED_VERIFIED",
+                state = "LOCAL_PLAN_FROZEN",
                 receivedAt = DateTimeOffset.UtcNow,
                 outboxId,
                 commandId,
                 action,
                 deliveryHash = Text(data, "deliveryHash"),
                 commandPayloadSha256 = commandHash,
-                envelope,
+                localCardNo,
+                plan = plan.ToJournal(),
+                commandData,
             });
-
-            var localCardNo = "";
-            DateTime? workDate = null;
-            if (envelope.TryGetProperty("payload", out var operationPayload) &&
-                operationPayload.ValueKind == JsonValueKind.Object)
-            {
-                localCardNo = Text(operationPayload, "localCardNo");
-                if (operationPayload.TryGetProperty("commandData", out var commandData) &&
-                    commandData.ValueKind == JsonValueKind.Object)
-                {
-                    var date = Text(commandData, "date");
-                    if (string.IsNullOrWhiteSpace(date)) date = Text(commandData, "startDate");
-                    if (DateTime.TryParse(date, out var parsed)) workDate = parsed.Date;
-                }
-            }
 
             var evidence = await FirebirdTnfReadOnlyVerifier.VerifyAsync(localCardNo, workDate, cancellationToken);
             AppendJournalState(journalPath, new
@@ -105,8 +116,15 @@ internal static class UnifiedSyncAgent
                 return evidence.Code;
             }
 
-            // Safe gate: PR #404 does not yet own a verified mapping from every D1 UUID/action
-            // to legacy Firebird keys. Never guess local SQL or claim a TNF/FDB write happened.
+            // Frozen plan is part of the journal. The plan itself controls whether an
+            // action is proven safe enough to enter an apply handler; the environment
+            // flag cannot override a plan that is not approved by source+copy-FDB tests.
+            if (!plan.ApplySupported)
+            {
+                await PostResultAsync(http, credential, data, "RETRY",
+                    "LOCAL_PLAN_NOT_APPLY_READY:" + action, null, cancellationToken);
+                return "LOCAL_PLAN_NOT_APPLY_READY";
+            }
             if (!string.Equals(Read("KY_PDKS_UNIFIED_APPLY_ENABLED"), "1", StringComparison.Ordinal))
             {
                 await PostResultAsync(http, credential, data, "RETRY",
@@ -114,7 +132,6 @@ internal static class UnifiedSyncAgent
                 return "LOCAL_READONLY_VERIFIED_WAITING_APPLY";
             }
 
-            // Even with the gate enabled, an explicit action handler must exist before write.
             await PostResultAsync(http, credential, data, "RETRY",
                 "LOCAL_ACTION_HANDLER_NOT_IMPLEMENTED:" + action, null, cancellationToken);
             return "LOCAL_ACTION_HANDLER_NOT_IMPLEMENTED";
