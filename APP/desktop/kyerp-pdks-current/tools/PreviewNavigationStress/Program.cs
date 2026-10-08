@@ -37,7 +37,8 @@ if (items.Length != PdksNavigationDesign.AllMenuCommands.Count)
 var watch = Stopwatch.StartNew();
 var baselineHandles = Process.GetCurrentProcess().HandleCount;
 var routes = 0;
-for (var pass = 0; pass < 5; pass++)
+var worstMenuMilliseconds = 0L;
+for (var pass = 0; pass < 12; pass++)
 {
     foreach (var id in items)
     {
@@ -45,8 +46,14 @@ for (var pass = 0; pass < 5; pass++)
         var control = Descendants(form).OfType<Button>()
             .FirstOrDefault(x => x.Tag is PdksCommandId nav && nav == id)
             ?? throw new InvalidOperationException("Missing actual sidebar button " + id);
+        var step = Stopwatch.StartNew();
         control.PerformClick();
         Application.DoEvents();
+        step.Stop();
+        worstMenuMilliseconds = Math.Max(worstMenuMilliseconds, step.ElapsedMilliseconds);
+        if (step.ElapsedMilliseconds > 2500)
+            throw new InvalidOperationException(
+                $"Slow real-UI menu navigation: {id} took {step.ElapsedMilliseconds}ms.");
         var heading = ((Label?)titleField.GetValue(form))?.Text;
         if (!string.Equals(heading, label.Title, StringComparison.Ordinal))
             throw new InvalidOperationException(
@@ -77,7 +84,7 @@ if (process.WorkingSet64 > 500L * 1024 * 1024)
     throw new InvalidOperationException("Navigation working set exceeds 500 MB.");
 
 Console.WriteLine($"PDKS_PREVIEW_STRESS PASS routes={routes} " +
-    $"durationMs={watch.ElapsedMilliseconds} handlesDelta={handleGrowth} " +
+    $"durationMs={watch.ElapsedMilliseconds} worstMenuMs={worstMenuMilliseconds} handlesDelta={handleGrowth} " +
     $"workingMB={process.WorkingSet64 / 1048576}");
 form.Close();
 Application.DoEvents();
