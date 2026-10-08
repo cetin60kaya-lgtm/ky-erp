@@ -354,3 +354,39 @@ bitmeden aylık rapora son puantaj statüsü verilmez.
 Canlıya kabul için normal/E kaynak ayrımı, gündüz/gece vardiyası,
 çift vardiya, saat aşımı, gerçek tatil yarım gün kararı, kişi bazlı
 giriş/çıkış tarihleri ve bağımsız kaynak mutabakatı testleri zorunlu.
+
+
+## 15. Yeni PDKS kanıt/puantaj çekirdeği (canlıdan izole)
+
+`APP/pdks-unified/core/attendanceRules.mjs` tek ve saf
+kanıt-evaluasyon çekirdeğidir. Sunucudaki eski
+`attendance-v2` sabit ilk/son okuma hesabı üretim
+bordrosu için yeterli olmadığından bu çekirdek ayrı yazıldı.
+
+Aşağıdaki iş kurallarını açıkça ele alır:
+- Gerçek fiziksel terminal RAW ile idari/onaylı E **ayrı** kaynak.
+- Eksik giriş/çıkışta beklenen saati kesinlikle üretme.
+- Belirsiz yönlü (iki ham zaman) basımı otomatik onaylama.
+- Gerçek vardiya başlangıç/bitişi ile geç/erken toleransları.
+- Aynı gün iki vardiya: iki ayrı atama ve olay kaynağı.
+- Gece yarısını geçen vardiya: gerçek tam tarih/saatli süre.
+- İstihdam başlangıcı/bitişi ve onaylı izin.
+- Cumartesi/pazarın varsayılan dinlenme olması.
+- Tam gün resmî tatil; açık çalışma onayı olmadan çalışma kaydı üretmeme.
+- Yarım gün tatilde işletmenin **çalışma kararı + kapanış saati** zorunluluğu.
+- Kart zorunlu olmayan personelin geçişsiz görünümü.
+- Tekrarlanan ham kanıt ID'si, iki vardiya çakışması, 24 saati
+  aşan vardiya veya belirsiz kaynak için fail-closed davranış.
+
+**Güvenlik sınırı:** `localReconciled=false`,
+`approvedForPayroll=false` her zaman korunur. Bu pure
+çekirdek, tek başına Firebird/TNF/Cloud bağlantısı
+veya resmî puantaj değildir. Her işyeri/saat dilimi politikası
+doğrulanmadan sistem otomatik çalışma süresi kredisi üretmez.
+İlk kabul politikası `Europe/Istanbul`; farklı ülke/DST için
+ayrı test gerekir.
+
+`node --test APP/pdks-unified/core/attendanceRules.test.mjs`
+ile 17 gerçek kaynaklı senaryo test edilir. Fiziksel cihaz
+bağlantısı, yetkili grup planı, gerçek personel verisi ve
+yıllık TNF mutabakatını sağlayan entegrasyon **açık iş**.
