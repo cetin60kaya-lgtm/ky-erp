@@ -52,13 +52,14 @@ export async function readCompleteMonth({mainCompanyId,year,month},options={}){
         annualLeaveDays:safeNumber(summary.annualLeaveDays),
         overtimeMinutes:safeNumber(summary.overtimeMinutes),
         missingPunchDays:safeNumber(summary.missingPunchDays),
-        period:period(year,month),report:"Gerçek D1 kart puantajı",
-        sourceStatus:"D1, yerel mutabakat bekliyor",
+        period:period(year,month),report:"D1 ön puantaj taslağı",
+        sourceStatus:"Vardiya/FDB/TNF mutabakatı yapılmadı",
       });
     }
   }
   return {complete:true,rows,scannedPeople:people.length,period:period(year,month),
-    localReconciled:false,source:"D1_ATTENDANCE_V2"};
+    localReconciled:false,approvedForPayroll:false,
+    source:"D1_ATTENDANCE_V2_UNRECONCILED"};
 }
 
 /**
