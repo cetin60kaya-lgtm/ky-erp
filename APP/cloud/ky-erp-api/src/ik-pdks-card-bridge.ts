@@ -22,18 +22,34 @@ function error(c: Context<AppEnv>, status: number, code: string, message: string
 async function auth(c: Context<AppEnv>, body: Row = {}) {
   const user = await getAuthenticatedUser(c);
   if (!user) return null;
-  const company = text(
+  // This /ik/advanced/card route is not under /ik/personnel-control/*:
+  // enforce tenant and write permission here rather than trusting the UI.
+  const requested = text(
     c.req.header("X-KYERP-Tenant-Slug") || body.mainCompanyId || body.mainCompanySlug ||
-    c.req.query("mainCompanyId") || c.req.query("mainCompanySlug") ||
-    user.mainCompanySlug || user.security?.main_company_slug || DEFAULT_COMPANY,
+    c.req.query("mainCompanyId") || c.req.query("mainCompanySlug"),
   ).toLocaleLowerCase("tr-TR");
+  const own = text(user.mainCompanySlug || user.security?.main_company_slug).toLocaleLowerCase("tr-TR");
+  const owner = ["SUPER_ADMIN", "ADMIN"].includes(upper(user.role));
+  if (!owner && (!own || (requested && requested !== own))) return { denial: 403, code: "PDKS_TENANT_FORBIDDEN" };
+  const company = owner ? requested || own || DEFAULT_COMPANY : own;
+  const permission = Array.isArray(user.permissions)
+    ? user.permissions.find((p: Row) => upper(p?.moduleKey || p?.module_key) === "PDKS") : null;
+  const canWrite = owner || upper(user.role) === "COMPANY_ADMIN" ||
+    Boolean(permission && (permission.canCreate ?? permission.can_create ?? permission.canUpdate ?? permission.can_update));
+  if (!canWrite) return { denial: 403, code: "PDKS_PERMISSION_DENIED" };
+  const companyRow = await c.env.DB.prepare("SELECT slug,is_active FROM main_companies WHERE slug=? LIMIT 1")
+    .bind(company).first<Row>();
+  if (!companyRow || Number(companyRow.is_active ?? 1) === 0) return { denial: 403, code: "PDKS_TENANT_INACTIVE" };
   let audit = upper(user.role) === "DENETIM" || text(user.username).toLocaleLowerCase("tr-TR") === "denetim";
   if (!audit) {
     try {
       const row = await c.env.DB.prepare("SELECT scope FROM ik_user_hr_scope WHERE user_id=? AND main_company_id=? LIMIT 1")
         .bind(user.id, company).first<Row>();
       audit = upper(row?.scope) === "AUDIT";
-    } catch {}
+    } catch {
+      // Fail closed if the HR scope cannot be established.
+      return { denial: 503, code: "PDKS_SCOPE_UNAVAILABLE" };
+    }
   }
   return { user, company, audit };
 }
@@ -90,7 +106,10 @@ async function locked(c: Context<AppEnv>, company: string, date: string) {
     const row = await c.env.DB.prepare("SELECT is_locked FROM ik_monthly_close WHERE main_company_id=? AND period_year=? AND period_month=? LIMIT 1")
       .bind(company, Number(match[1]), Number(match[2])).first<Row>();
     return Number(row?.is_locked || 0) !== 0;
-  } catch { return false; }
+  } catch {
+    // Unknown lock state must never permit an unverified financial/attendance write.
+    return true;
+  }
 }
 
 async function peopleByCard(c: Context<AppEnv>, company: string) {
@@ -106,6 +125,7 @@ async function peopleByCard(c: Context<AppEnv>, company: string) {
 async function preview(c: Context<AppEnv>) {
   const context = await auth(c);
   if (!context) return error(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
+  if ("denial" in context) return error(c, context.denial, context.code, "PDKS firma veya işlem yetkisi doğrulanamadı.");
   if (context.audit) return error(c, 403, "PDKS_AUDIT_READ_ONLY", "Denetim hesabı kart dosyası işleyemez.");
   const form = await c.req.parseBody({ all: true });
   const values = Object.values(form).flatMap((value) => Array.isArray(value) ? value : [value]);
@@ -143,12 +163,15 @@ async function confirm(c: Context<AppEnv>) {
   } catch {}
   const context = await auth(c, body);
   if (!context) return error(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
+  if ("denial" in context) return error(c, context.denial, context.code, "PDKS firma veya işlem yetkisi doğrulanamadı.");
   if (context.audit) return error(c, 403, "PDKS_AUDIT_READ_ONLY", "Denetim hesabı kart dosyası işleyemez.");
   const rows = Array.isArray(body.rows) ? body.rows : Array.isArray(body.items) ? body.items : [];
   if (!rows.length) return error(c, 400, "ROWS_REQUIRED", "Onaylanacak kart satırı yok.");
   const cards = await peopleByCard(c, context.company);
   const accepted: Row[] = [];
   const rejected: Row[] = [];
+  const duplicates: Row[] = [];
+  const pending: Row[] = [];
   const statements: any[] = [];
   const seen = new Set<string>();
   for (const source of rows) {
@@ -174,10 +197,19 @@ async function confirm(c: Context<AppEnv>) {
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
       .bind(id, context.company, text(person.id), cardNo, workDate, eventTime, upper(source.direction) || "AUTO",
         "KYERP_WEB_PDKS_FILE", `Kart dosyası: ${text(body.fileName || body.importId)}`, context.user.id, nowIso(), nowIso()));
-    accepted.push({ localId, id, employeeId: text(person.id), cardNo, workDate, eventTime });
+    pending.push({ localId, id, employeeId: text(person.id), cardNo, workDate, eventTime });
   }
-  if (statements.length) await c.env.DB.batch(statements);
-  return ok(c, { acceptedCount: accepted.length, rejectedCount: rejected.length, accepted, rejected });
+  if (statements.length) {
+    const results = await c.env.DB.batch(statements);
+    for (let i = 0; i < pending.length; i++) {
+      const row = pending[i];
+      const changes = Number(results?.[i]?.meta?.changes ?? 0);
+      if (changes === 1) accepted.push(row);
+      else duplicates.push({ ...row, reason: "Bu kart/tarih/saat daha önce kaydedilmiş veya ekleme doğrulanamamış." });
+    }
+  }
+  return ok(c, { acceptedCount: accepted.length, rejectedCount: rejected.length,
+    duplicateCount: duplicates.length, accepted, rejected, duplicates });
 }
 
 export function registerIkPdksCardBridgeRoutes(app: Hono<AppEnv>) {
