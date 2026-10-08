@@ -25,6 +25,7 @@ const route=(preview)=>{
     case "holiday":return base+"/operations/holidays";
     case "leave":return base+"/operations/leave";
     case "advance":return base+"/operations/advance";
+    case "overtime":case "deduction":return base+"/operations/adjustment";
     default:throw new Error("Bilinmeyen işlem.");
   }
 };
@@ -36,7 +37,8 @@ const ensureReadback=async(preview,accepted)=>{
   const companyParams={mainCompanyId:company};
   // A newly created record must be the exact row returned by the server,
   // not a different older row with matching employee/date/amount fields.
-  const created=new Set(["work-group","personnel-group","service","holiday","leave","advance"]);
+  const created=new Set(["work-group","personnel-group","service","holiday","leave",
+    "advance","overtime","deduction"]);
   if(created.has(id) && !accepted?.id)throw new Error("PDKS_WRITE_RECEIPT_ID_MISSING");
   const savedId=String(accepted?.id||"");
   if(["work-group","personnel-group","assign-work-group","assign-personnel-group",
@@ -70,13 +72,17 @@ const ensureReadback=async(preview,accepted)=>{
       same(row.startDate,p.startDate)&&same(row.endDate,p.endDate)&&
       String(row.recordType||"").toLocaleUpperCase("tr-TR").includes(p.recordType));
   }
-  if(id==="advance"){
+  if(["advance","overtime","deduction"].includes(id)){
     const [year,month]=p.date.split("-").map(Number);
     const rows=canonical(await fresh(base+"/operations/month",{...companyParams,year,month}));
     if(!Array.isArray(rows?.adjustments))throw new Error("PDKS_READBACK_SHAPE_INVALID");
     return rows.adjustments.some((row)=>same(row.id,savedId)&&same(row.employeeId,p.employeeId)&&
-      same(row.date,p.date)&&/AVANS/.test(String(row.adjustmentType).toLocaleUpperCase("tr-TR"))&&
-      Number(row.amount)===p.amount);
+      same(row.date,p.date)&&
+      (id==="advance"?/AVANS/.test(String(row.adjustmentType).toLocaleUpperCase("tr-TR")):
+        id==="overtime"?/MESAI/.test(String(row.adjustmentType).toLocaleUpperCase("tr-TR")):
+        /KESINT/.test(String(row.adjustmentType).toLocaleUpperCase("tr-TR")))&&
+      Number(row.amount)===p.amount&&
+      (id!=="overtime"||Number(row.hourOrDay)===p.hourOrDay));
   }
   throw new Error("PDKS_READBACK_NOT_CONFIGURED");
 };
