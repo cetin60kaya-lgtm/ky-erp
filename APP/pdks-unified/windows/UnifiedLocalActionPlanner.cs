@@ -62,8 +62,8 @@ internal static class UnifiedLocalActionPlanner
                 "sidecar policy schema + requirePunch compatibility proof"),
             "assign-work-group" => Plan(action, "PERSON_WORK_GROUP", true, true,
                 "employee card mapping + cloud group→GRUP.KOD mapping + copy-FDB rollback proof"),
-            "assign-personnel-group" => Plan(action, "PERSON_PUNCH_POLICY", false, true,
-                "employee card mapping + local sidecar personnel-group mapping"),
+            "assign-personnel-group" => Plan(action, "PERSON_PUNCH_POLICY", false, false,
+                "verified five-digit card + original signed personnel-group command mapping"),
             "service" => Plan(action, "LEGACY_SERVICE", true, true,
                 "cloud service→SERVIS.KOD mapping + copy-FDB definition proof"),
             "assign-service" => Plan(action, "PERSON_SERVICE", true, true,
@@ -97,7 +97,7 @@ internal static class UnifiedLocalActionPlanner
             UsesLegacyKeyMapping: usesLegacyMapping,
             // Two non-FDB policy mirrors are eligible only with explicit Agent
             // opt-in and durable journal replay. All Firebird mappings stay locked.
-            ApplySupported: action is "personnel-group" or "holiday",
+            ApplySupported: action is "personnel-group" or "assign-personnel-group" or "holiday",
             RequiredProof: proof.Split(" + ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             Summary: "Frozen administrative plan only; no physical punch, RAW or annual TNF mutation.");
 
