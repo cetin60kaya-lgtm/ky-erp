@@ -14,8 +14,12 @@ function validEmployeeId(value) {
   return id && id !== "0" ? id : "";
 }
 
-function isSgkPdksPerson(person) {
-  return String(person?.sgkStatus ?? "").trim().toLocaleUpperCase("tr-TR") === "VAR";
+function isPdksTrackedPerson(person) {
+  // SGK and punch-card eligibility are different dimensions. Do not hide an
+  // assigned physical card solely because its payroll/SGK status differs.
+  const card = String(person?.cardNo ?? person?.card_no ?? "").trim();
+  const sgk = String(person?.sgkStatus ?? "").trim().toLocaleUpperCase("tr-TR");
+  return Boolean(card) || sgk === "VAR";
 }
 
 const OPS = "/ik/personnel-control/operations";
@@ -27,7 +31,7 @@ export async function getPdksProfile(params = {}) {
 
 export async function getPdksPeople(params = {}) {
   const payload = unwrap(await pdksCachedGet(cacheKey("people", params), "/ik/personnel-control/pdks-people", params));
-  return Array.isArray(payload) ? payload.filter(isSgkPdksPerson) : payload;
+  return Array.isArray(payload) ? payload.filter(isPdksTrackedPerson) : payload;
 }
 
 // Modern attendance motoru: vardiya, hafta sonu, yarım gün tatil, izin günü,
