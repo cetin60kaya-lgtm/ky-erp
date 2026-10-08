@@ -99,11 +99,25 @@ internal static class TerminalSyncService
 
             var records = punches.Select(ToRecord).ToArray();
             var operationalDb = new FirebirdDatabase(PdksOptions.FromEnvironment());
-            var imported = new AttendanceImportService(operationalDb).Import(records, deviceSettings.ToleranceMinutes);
+            var detailedImport = new AttendanceImportService(operationalDb).ImportDetailed(records, deviceSettings.ToleranceMinutes);
+            var imported = detailedImport.Summary;
+
+            var journalText = "";
+            try
+            {
+                var journal = TerminalTransferJournalService.WriteBatch(punches, detailedImport.Items);
+                var transferNames = journal.TransferFiles.Length == 0 ? "—" : string.Join(", ", journal.TransferFiles.Select(Path.GetFileName));
+                journalText = $" PS-2000 V2 aktarım günlüğü: {transferNames}; ERR={journal.DuplicateCount}.";
+            }
+            catch (Exception ex)
+            {
+                journalText = " PS-2000 V2 aktarım günlüğü yazılamadı: " + ex.Message;
+            }
+
             var accounted = imported.Inserted + imported.Updated + imported.Duplicates;
             if (imported.Skipped != 0 || accounted != punches.Length)
             {
-                var validation = $"{source}: doğrulama başarısız; okunan={punches.Length}, işlenen={accounted}, atlanan={imported.Skipped}. Ana TNF değiştirilmedi; cihaz kayıtları KORUNDU.";
+                var validation = $"{source}: doğrulama başarısız; okunan={punches.Length}, işlenen={accounted}, atlanan={imported.Skipped}. Ana TNF değiştirilmedi; cihaz kayıtları KORUNDU.{journalText}";
                 return Save(new(DateTime.Now, punches.Length, imported.Inserted, imported.Updated, imported.Duplicates, imported.Skipped, false, validation, scheduleKey));
             }
 
@@ -134,7 +148,7 @@ internal static class TerminalSyncService
             }
 
             var autoAlign = TryAutoAlignYesterday();
-            var finalMessage = $"{source}: {punches.Length} kayıt cihaz arşivi + CANLI + yıllık TNF + DATA/FDB üzerinde doğrulandı. {cleanupMessage} {autoAlign}";
+            var finalMessage = $"{source}: {punches.Length} kayıt cihaz arşivi + CANLI + yıllık TNF + DATA/FDB üzerinde doğrulandı. {cleanupMessage} {autoAlign}{journalText}";
             return Save(new(DateTime.Now, punches.Length, imported.Inserted, imported.Updated, imported.Duplicates, imported.Skipped, deviceCleared, finalMessage, scheduleKey));
         }
         catch (Exception ex)
