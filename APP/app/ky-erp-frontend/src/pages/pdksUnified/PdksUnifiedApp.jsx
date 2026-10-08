@@ -146,6 +146,7 @@ export default function PdksUnifiedApp({
   const [selectedId, setSelectedId] = useState("");
   const [personTab, setPersonTab] = useState("identity");
   const [reloadToken, setReloadToken] = useState(0);
+  const [monthlyRequestKey,setMonthlyRequestKey]=useState("");
   const [notice, setNotice] = useState("");
   const searchInput = useRef(null);
 
@@ -158,10 +159,13 @@ export default function PdksUnifiedApp({
   const section=sections.find((item)=>item.id===navigation.section)||sections[0];
   const tab=section.tabs.find((item)=>item.id===navigation.tab)||section.tabs[0];
   const requirement=sourceForTab(tab.id,{audit:profileAudit});
-  const needsPeople=tab.id==="today" || requirement==="people" || requirement==="attendance";
+  const needsPeople=tab.id==="today" || requirement==="people" ||
+    requirement==="attendance" || requirement==="corrections";
+  const monthKey=[company,period.year,period.month,requirement].join("|");
+  const allowHeavy=requirement==="monthly-attendance" && monthlyRequestKey===monthKey;
   const data=useUnifiedPdksData({
     company,year:period.year,month:period.month,personId:selectedId,requirement,
-    previewOnly,auditHint:isAuditAccount,reloadToken,needsPeople,
+    previewOnly,auditHint:isAuditAccount,reloadToken,needsPeople,allowHeavy,
   });
   const selectedPerson=data.people.find((person)=>person.id===selectedId)||data.people[0]||null;
   const realAttendance=requirement==="attendance";
@@ -305,6 +309,12 @@ export default function PdksUnifiedApp({
             <span className="pdk-u-label"><ShieldCheck size={15}/> {previewOnly?"Görsel İnceleme":"Yazma kontrollü"}</span>
           </div>
           <div className="pdk-u-filters">
+            {requirement==="monthly-attendance" && !previewOnly &&
+              <button type="button" className="pdk-u-btn"
+                disabled={!company || !data.profileReady || data.resourceLoading}
+                onClick={()=>setMonthlyRequestKey(monthKey)}>
+                <TableProperties size={16}/> {allowHeavy?"Aylık puantaj yenileniyor":"Aylık puantajı hazırla"}
+              </button>}
             <label><CalendarDays size={15}/><span>Ay</span>
               <select aria-label="Ay" value={period.month}
                 onChange={(e)=>setPeriod((prev)=>({...prev,month:Number(e.target.value)}))}>
@@ -338,8 +348,12 @@ export default function PdksUnifiedApp({
               IconComponent={LockKeyhole}/> :
             (data.peopleLoading || data.resourceLoading || data.attendanceLoading) ? <EmptyState title="Doğrulanmış kayıtlar okunuyor"
               description="Kaynak veritabanı sorgusu sürüyor." IconComponent={Clock3}/> :
-            pageUnavailable ? <EmptyState title="Canlı veri bağlantısı kapalı"
-              description="Bu ekranda yalnız onaylı veri görüntülenir. Cihazdan fiziksel kart kanıtı henüz doğrulanmadı."
+            pageUnavailable ? <EmptyState
+              title={requirement==="monthly-attendance" && !allowHeavy ?
+                "Ay raporu henüz hazırlanmadı":"Kaynak doğrulanamadı"}
+              description={requirement==="monthly-attendance" && !allowHeavy ?
+                "Tam ay için tüm kartlı personel tek tek kontrol edilir. Aylık puantajı hazırla düğmesine basın. Eksik cevap varsa kısmi rapor oluşturulmaz." :
+                "Bu görünüm yalnız yetkili KY ERP kaynağından okunur. Firebird/TNF mutabakatı ayrıca doğrulanır."}
               IconComponent={Database}/> :
             <UnifiedTable columns={tab.columns} rows={filteredRows}
               masked={isAuditAccount && isSensitiveProductTab(tab.id)}/>
