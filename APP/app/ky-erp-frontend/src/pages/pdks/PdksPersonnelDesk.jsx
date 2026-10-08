@@ -175,10 +175,10 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
           </div>
           {detailBusy||loadedKey!==activeKey?<div className="ppd-loading-detail" role="status">Seçilen personelin güncel kayıtları yükleniyor…</div>:null}
           <div className="ppd-overview-stats" aria-label="Aylık personel özeti">
-            <div><span>Çalışılan gün</span><strong>{num(summary.workedDays)}</strong></div>
-            <div><span>Normal süre</span><strong>{(num(summary.payableNormalMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:1})} <small>sa</small></strong></div>
-            <div><span>Fazla mesai</span><strong>{(num(summary.overtimeMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:1})} <small>sa</small></strong></div>
-            <div><span>Eksik / kart yok</span><strong>{num(summary.missingPunchDays)+num(summary.noPunchDays)}</strong></div>
+            <div><span>Çalışılan gün</span><strong>{shownAttendance?num(summary.workedDays):"—"}</strong></div>
+            <div><span>Normal süre</span><strong>{shownAttendance?(num(summary.payableNormalMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:1}):"—"} <small>sa</small></strong></div>
+            <div><span>Fazla mesai</span><strong>{shownAttendance?(num(summary.overtimeMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:1}):"—"} <small>sa</small></strong></div>
+            <div><span>Eksik / kart yok</span><strong>{shownAttendance?num(summary.missingPunchDays)+num(summary.noPunchDays):"—"}</strong></div>
           </div>
           <nav className="ppd-tabs" aria-label="Personel alt sayfaları">
             <button type="button" aria-current={centerTab==="bilgi"?"page":undefined} className={centerTab==="bilgi"?"active":""} onClick={()=>setCenterTab("bilgi")}>Personel Özeti</button>
