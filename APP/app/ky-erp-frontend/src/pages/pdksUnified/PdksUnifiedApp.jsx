@@ -219,7 +219,8 @@ export default function PdksUnifiedApp({
   const isPeopleTab = section.id === "people" && ["people","cards","employment"].includes(tab.id);
   const allPeople = useMemo(()=>toPersonRows(data.people,tab.id),[data.people,tab.id]);
   const attendanceRows = useMemo(()=>toAttendanceRows(data.days,selectedPerson || {}),[data.days,selectedPerson]);
-  const sourceRows = isPeopleTab ? allPeople : realAttendance ? attendanceRows : [];
+  const sourceRows = useMemo(() => isPeopleTab ? allPeople : realAttendance ? attendanceRows : [],
+    [isPeopleTab,allPeople,realAttendance,attendanceRows]);
   const filteredRows = useMemo(()=> {
     const q=search.toLocaleLowerCase("tr-TR").trim();
     if (!q) return sourceRows;
