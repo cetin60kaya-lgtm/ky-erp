@@ -61,10 +61,14 @@ async function preflight(c:Context<AppEnv>,company:string,action:string,p:Row){
   if(action==="leave")needs.push("ik_leave_plans","ik_leave_counting_policy","json_store");
   if(["advance","deduction","overtime"].includes(action))needs.push("hr_monthly_adjustments_v2");
   if(!(await checkTables(c,needs)))throw new Error("PDKS_MIGRATION_0060_REQUIRED");
-  let old:Row={};
+  let old:Row={},localCardNo="";
   if(isPerson){
-    const employee=await first(c,checkEmployeeSql(),[company,p.employeeId]);
+    const employee=await first(c,`SELECT s.card_no AS card_no FROM hr_monthly_employees e
+      JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
+      WHERE e.main_company_id=? AND e.id=? AND UPPER(TRIM(COALESCE(e.sgk_status,'')))='VAR'
+      AND TRIM(COALESCE(s.card_no,''))<>'' LIMIT 1`,[company,p.employeeId]);
     if(!employee)throw new Error("PDKS_PERSON_NOT_IN_TENANT");
+    localCardNo=val(employee.card_no).padStart(5,"0");
   }
   const date=p.date||p.startDate||p.endDate||"";
   let lockedMonths:string[]=[];
@@ -162,7 +166,7 @@ async function preflight(c:Context<AppEnv>,company:string,action:string,p:Row){
     leaveExtra={days,excluded,returnDate:new Date(Date.parse(p.endDate+"T12:00:00Z")+86400000)
       .toISOString().slice(0,10)};
   }
-  return {old,lockedMonths,leaveExtra};
+  return {old,lockedMonths,leaveExtra,localCardNo};
 }
 function batchOperation(c:Context<AppEnv>,company:string,actor:string,action:string,p:Row,
   id:string,stamp:string,extra:any){
@@ -325,7 +329,8 @@ async function post(c:Context<AppEnv>){
       VALUES(?,?,?,?,?,'PENDING',?)`)
       .bind(crypto.randomUUID(),auth.company,id,"PDKS_CLOUD_ADMIN_CHANGE",
         JSON.stringify({commandId:id,action,company:auth.company,
-          localFDB:false,annualTNF:false,details:result}),stamp),
+          localFDB:false,annualTNF:false,localCardNo:extra.localCardNo||"",
+          commandData:p,details:result}),stamp),
   ];
   try{await db.batch(statements);}
   catch(e){
@@ -352,8 +357,15 @@ async function getReceipt(c:Context<AppEnv>){
   if(!(await checkTables(c,[])))return fail(c,"PDKS_MIGRATION_0060_REQUIRED","Veritabanı hazır değil.",503);
   const result=await receipt(c,auth.company,val(auth.user.id),requestId);
   if(!result)return fail(c,"PDKS_RECEIPT_NOT_FOUND","Bu işlem kimliği için onaylı kayıt bulunamadı.",404);
+  const sync=await first(c,`SELECT state,delivery_attempts,delivery_owner,lease_until,next_attempt_at,
+      ack_sha256,last_error,acknowledged_at FROM ik_pdks_unified_outbox
+      WHERE main_company_id=? AND command_id=? LIMIT 1`,[auth.company,result.id]);
   return c.json({ok:true,data:{...JSON.parse(result.result_json),
-    receiptId:result.id,replayed:true}});
+    receiptId:result.id,replayed:true,localSync:sync?{
+      state:sync.state,deliveryAttempts:Number(sync.delivery_attempts||0),
+      deliveryOwner:sync.delivery_owner||null,leaseUntil:sync.lease_until||null,
+      nextAttemptAt:sync.next_attempt_at||null,ackSha256:sync.ack_sha256||null,
+      lastError:sync.last_error||null,acknowledgedAt:sync.acknowledged_at||null}:null}});
 }
 export function registerIkPdksUnifiedCommandRoutes(app:Hono<AppEnv>){
   app.post(base,post);
