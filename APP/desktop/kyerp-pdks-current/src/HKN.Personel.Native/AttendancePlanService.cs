@@ -113,7 +113,7 @@ internal static class AttendancePlanService
         if (preview.Mode != AttendancePlanMode.FullRepair) return;
         foreach (var item in preview.Items)
         {
-            if (!item.CurrentAt.HasValue || item.PlannedAt != item.CurrentAt.Value)
+            if (!AttendanceEvidencePolicy.HasVerifiableSourceMinute(item.CurrentAt, item.PlannedAt))
                 throw new InvalidOperationException(
                     $"Kanıtsız normal kart hareketi engellendi: {item.Card} {item.Day:dd.MM.yyyy} {item.SideText}. " +
                     "Gerçek terminal/imzalı onay kaydıyla ayrı düzeltme gerekir.");
@@ -865,4 +865,13 @@ internal static class AttendancePlanService
     sealed record Employee(string Card, string Name, DateTime? Hire, DateTime? Exit, int GroupCode, string GroupName);
     sealed record MovementRow(int Sira, string Card, DateTime? EntryAt, string EntryType, DateTime? ExitAt, string ExitType);
     sealed record ECandidate(int Sira, AttendancePlanSide Side, DateTime At);
+}
+
+
+// Public pure contract used by smoke/contract tests without exposing the
+// internal AttendancePlanService or WinForms-generated implementation types.
+public static class AttendanceEvidencePolicy
+{
+    public static bool HasVerifiableSourceMinute(DateTime? recordedAt, DateTime proposedAt) =>
+        recordedAt.HasValue && recordedAt.Value == proposedAt;
 }
