@@ -21,6 +21,7 @@ public sealed class PdksVisualPreviewWorkspace : Form
     readonly Label headingTitle;
     readonly Label headingHint;
     const int MaxCachedPages = 5;
+    public int CachedPageCount => pages.Count;
 
     public PdksVisualPreviewWorkspace(PdksCommandDescriptor descriptor)
     {
