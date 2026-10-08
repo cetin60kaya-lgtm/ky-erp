@@ -144,3 +144,15 @@ DESEN'deki bağımsız derleme: `D:\KYERP\_TEMP\KY-PDKS-GORSEL-ONIZLEME-6.7\KYER
 DESEN masaüstü kısayolu: `KY PDKS 6.7 - GORSEL ONIZLEME`
 
 Doğrulama: `dotnet build -c Release -warnaserror`, `ContractTests`, `ShellSmokeTest` üçü de exit code 0. Görsel önizleme ayrı dizinde çalıştırıldı, gerçek Windows pencere başlığı ve yanıt verdiği doğrulandı, pencere görüntüsü test dizinine kaydedildi. Normal kurulu EXE, personel veritabanı ve terminal silinmedi/değiştirilmedi. Sonraki kapı: canlı/test FDB bağlantılı modül kabulü ve onaylı sürüm geçişi.
+
+
+### 08.10 — Görsel önizleme R2 (menü yönlendirme onarımı)
+
+Önceki görsel sürümde Personel'e geçildiğinde uygulama `Ready()` tarafından veri bağlanmadığı için durduruluyor ve **eski Giriş/Çıkış Merkezi** ekranda kalıyordu. R2 bu eski ekranın yanlış menü altında görünmesini çözer.
+
+- `MainShellForm.Commands.cs`: yalnız `--visual-preview` modunda menü komutunu uygun görsel çalışma alanına yönlendirir. Kullanıcının seçtiği menü ile ana içerik artık aynı menüyü gösterir; canlı operasyon yönleri değiştirilmemiştir.
+- `PdksVisualPreviewWorkspace.cs`: gerçek WinForms bileşenleriyle Personel sol **Kart No/Ad Soyad/Grup** ve sağ detay sekmeleri; Giriş/Çıkış doğrudan **Tarih/Kart No/Personel/Giriş/Çıkış/Kaynak/E/Durum** tablosu. Puantaj/Bordro/Raporlar ayrı ay/yıl seçicili görsel sayfalar.
+- Önizlemede gerçek personel/ücret/terminal satırı oluşturulmaz; veriler boş, düzenleme düğmeleri pasif. Canlı veri bağlantısı ve üretim EXE'si değiştirilmedi.
+- İzole DESEN yolu: `D:\KYERP\_TEMP\KY-PDKS-GORSEL-ONIZLEME-6.7-R2\KYERP.PDKS.exe`. Mevcut masaüstü önizleme kısayolu bu R2 EXE'ye yönlendirildi.
+- Kaynak kod testi: Release `dotnet build -warnaserror`, ContractTests ve ShellSmokeTest **exit 0**. WinForms penceresi DESEN'de açıldı. **Personel ve Giriş/Çıkış gerçek ekran görüntüleri** alındı ve ikinci çekimde seçim ile içeriklerin eşleştiği doğrulandı.
+- **Sınır:** R2 yalnız görsel önizleme. Canlı PDKS'nin Giriş/Çıkış işlemini ve Personel ekranını bu R2 düzenine geçirme/gerçek veriyle kabul daha yapılmamıştır. Canlı sürüm veya API production güncellendiği iddia edilmemelidir.
