@@ -50,3 +50,19 @@ test("Personel 360 remains single-source, scoped and denied to audit payroll",()
   assert.match(hook,/personId/);
   assert.match(hook,/profileReady/);
 });
+
+
+test("new PDKS operations use ONE durable command route, not eleven unsafe endpoints",()=>{
+  const transport=file("pages/pdksUnified/operationTransport.js");
+  assert.match(transport,/unified\/commands/);
+  assert.match(transport,/checkUnifiedReceipt/);
+  assert.match(transport,/requestId=crypto\.randomUUID\(\)/);
+  assert.match(transport,/sent\.has\(fingerprint\)/);
+  assert.match(transport,/CLOUD_D1_COMMITTED_SOURCE_UNVERIFIED/);
+  assert.doesNotMatch(transport,/case "advance":return base\+"\/operations\/advance"/);
+  assert.doesNotMatch(transport,/case "leave":return base\+"\/operations\/leave"/);
+  const panel=file("pages/pdksUnified/UnifiedOperationPanel.jsx");
+  assert.match(panel,/İşlem fişini sorgula/);
+  assert.match(panel,/source-pending/);
+  assert.match(panel,/receiptId|requestId/);
+});
