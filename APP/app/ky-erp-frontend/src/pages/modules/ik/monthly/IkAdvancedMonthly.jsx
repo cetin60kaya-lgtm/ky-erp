@@ -2739,7 +2739,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       const leaveYear = String(item.startDate || item.endDate || "").slice(0, 4) || "Tarihsiz";
       if (!acc[leaveYear]) acc[leaveYear] = { year: leaveYear, used: 0, records: 0 };
       acc[leaveYear].records += 1;
-      if (upper(item.recordType).includes("YILLIK") && (item.legacy || ["APPROVED","TAKEN"].includes(upper(item.status)))) acc[leaveYear].used += num(item.countedDays);
+      if (financeKey(item.recordType).includes("YILLIK") && (item.legacy || ["APPROVED","TAKEN"].includes(upper(item.status)))) acc[leaveYear].used += num(item.countedDays);
       return acc;
     }, {})).sort((a, b) => String(b.year).localeCompare(String(a.year)));
     const initials = (employee) => String(employee?.fullName || "?").trim().split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toLocaleUpperCase("tr-TR");
@@ -2904,7 +2904,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     const missingBirthDates = safeList(leaveCenter.employees).filter((item) => !item.birthDate);
     const selectedPlan = personPlans.find((item) => item.id === leaveDetailPlanId) || personPlans[0] || null;
     const personOtherLeaves = person
-      ? masterLeaves.filter((item) => item.employeeId === person.id && !upper(item.recordType || item.type).includes("YILLIK"))
+      ? masterLeaves.filter((item) => item.employeeId === person.id && !financeKey(item.recordType || item.type).includes("YILLIK"))
       : [];
     const departmentPlans = person
       ? plans.filter((item) => item.employeeId !== person.id && item.department && item.department === person.department && item.endDate >= today)
