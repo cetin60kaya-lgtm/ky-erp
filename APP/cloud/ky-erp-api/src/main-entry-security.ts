@@ -27,13 +27,33 @@ const commonCors = cors({
   credentials: true,
 });
 
+// main.ts disindan calisan AI / UI / Guvenlik rotalarinda da PERSONNEL kapsam kilidi.
+const denyPersonnelOutsidePortal = async (c: any, next: any) => {
+  if (c.req.method === "OPTIONS") return next();
+  const user = await getAuthenticatedUser(c);
+  if (!user) return next();
+  const direct = roleCode(user.role) === "PERSONNEL";
+  let linked = false;
+  try {
+    const schema = await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ky_employee_portal_accounts' LIMIT 1").first();
+    if (schema?.name) linked = Boolean(await c.env.DB.prepare("SELECT id FROM ky_employee_portal_accounts WHERE auth_user_id=? LIMIT 1").bind(user.id).first());
+  } catch (error) {
+    if (direct) return c.json({ok:false,error:{code:"PERSONNEL_SCOPE_CHECK_FAILED",message:"Personel erisim siniri dogrulanamadi."}},503);
+    console.error("PERSONNEL_ENTRY_GUARD",error);
+  }
+  if (direct || linked) return c.json({ok:false,error:{code:"PERSONNEL_SCOPE_ONLY",message:"Personel hesabi sadece oz servis ekranini kullanabilir."}},403);
+  return next();
+};
+
 const command = new Hono<Env>();
+command.use("/api/*", denyPersonnelOutsidePortal);
 command.use("/api/ai/*", commonCors);
 command.use("/api/admin/users/*", commonCors);
 registerErpCommandGatewayRoutes(command);
 registerAiPlatformAccessRoutes(command);
 
 const ui = new Hono<Env>();
+ui.use("/api/*", denyPersonnelOutsidePortal);
 ui.use("/api/ui/dialog-layouts/*", commonCors);
 registerUiDialogLayoutRoutes(ui);
 ui.onError((error, c) => {
@@ -43,6 +63,7 @@ ui.onError((error, c) => {
 });
 
 const security = new Hono<Env>();
+security.use("/api/*", denyPersonnelOutsidePortal);
 security.use("/api/security-center/*", cors({
   origin: allowedOrigin,
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
