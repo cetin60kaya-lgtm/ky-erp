@@ -737,6 +737,14 @@ function parseLeaveProfile(row: Row | null | undefined): LeaveProfile {
   }
 }
 
+export function calculateAnnualLeaveBalance(input: { entitlement: number; carryover: number; adjustment: number; used: number; planned?: number }) {
+  const annualRight = Math.round((input.entitlement + input.carryover + input.adjustment) * 2) / 2;
+  const usedDays = Math.round(input.used * 2) / 2;
+  const balance = Math.round((annualRight - usedDays) * 2) / 2;
+  const plannedDays = Math.round((input.planned || 0) * 2) / 2;
+  return { annualRight, usedDays, balance, projectedBalance: Math.round((balance - plannedDays) * 2) / 2, excessDays: Math.max(0, -balance) };
+}
+
 function leaveAdjustmentTotal(profile: LeaveProfile | null | undefined) {
   return (profile?.adjustments || []).reduce((sum, item) => sum + number(item.days), 0);
 }
@@ -3009,7 +3017,7 @@ function addIsoDays(value: string, amount: number) {
 export function calculateAnnualLeaveRange(
   startDate: string,
   returnDate: string,
-  countedWeekdays: number[] = [1, 2, 3, 4, 5],
+  countedWeekdays: number[] = [1, 2, 3, 4, 5, 6],
   excludeOfficialHolidays = true,
   officialHolidayRules: Array<string | Row> = [],
 ) {
@@ -3087,7 +3095,7 @@ export function calculateAnnualLeaveRange(
 
 async function leavePolicyV2(c: Context<AppEnv>, companyId = companyIdOf(c)) {
   const row = await first(c, "SELECT * FROM ik_leave_counting_policy WHERE main_company_id=? LIMIT 1", [companyId]);
-  let countedWeekdays = [1, 2, 3, 4, 5];
+  let countedWeekdays = [1, 2, 3, 4, 5, 6];
   try {
     const parsed = JSON.parse(text(row?.counted_weekdays_json) || "[]");
     if (Array.isArray(parsed) && parsed.length) countedWeekdays = parsed.map(Number).filter((day) => day >= 0 && day <= 6);
@@ -3126,8 +3134,10 @@ async function officialHolidayDatesV2(c: Context<AppEnv>, companyId: string) {
 
 async function saveAdvancedLeavePolicyV2(c: Context<AppEnv>) {
   const body = await bodyOf(c);
-  const companyId = companyIdOf(c, body);
-  const rawDays = Array.isArray(body.countedWeekdays) ? body.countedWeekdays : [1, 2, 3, 4, 5];
+  const writeAccess = await requireIkWriteAccess(c, body, "update");
+  if (writeAccess.response) return writeAccess.response;
+  const companyId = writeAccess.companyId;
+  const rawDays = Array.isArray(body.countedWeekdays) ? body.countedWeekdays : [1, 2, 3, 4, 5, 6];
   const countedWeekdays = [...new Set(rawDays.map(Number).filter((day) => day >= 0 && day <= 6))].sort();
   if (!countedWeekdays.length) return error(c, 400, "LEAVE_POLICY_EMPTY", "En az bir izin sayım günü seçilmelidir.");
   const excludeOfficialHolidays = body.excludeOfficialHolidays !== false;
@@ -3171,10 +3181,18 @@ async function previewAdvancedLeaveV2(c: Context<AppEnv>, supplied?: Row) {
   if (exitDate && range.lastLeaveDate > exitDate) return supplied ? null : error(c, 409, "LEAVE_AFTER_EXIT", "İzin günleri personelin işten çıkış tarihinden sonraya taşamaz.");
 
   const currentId = text(body.id);
-  const overlaps = await all(c, `SELECT id,employee_id,start_date,end_date,status,record_type
-      FROM ik_leave_plans
-      WHERE main_company_id=? AND status<>'CANCELLED' AND start_date<=? AND end_date>=? AND id<>?`,
-    [companyId, range.lastLeaveDate, startDate, currentId]);
+  const [managedOverlaps, legacyOverlaps] = await Promise.all([
+    all(c, `SELECT id,employee_id,start_date,end_date,status,record_type
+        FROM ik_leave_plans WHERE main_company_id=? AND status<>'CANCELLED'
+        AND start_date<=? AND end_date>=? AND id<>?`,
+      [companyId, range.lastLeaveDate, startDate, currentId]),
+    all(c, `SELECT l.id,l.employee_id,l.start_date,l.end_date,'TAKEN' AS status,l.record_type
+        FROM hr_leave_records_v2 l JOIN hr_monthly_employees e ON e.id=l.employee_id
+        WHERE e.main_company_id=? AND (l.document_path IS NULL OR l.document_path NOT LIKE 'ik-leave-plan:%')
+        AND l.start_date<=? AND l.end_date>=? AND UPPER(l.record_type) LIKE '%YILLIK%'`,
+      [companyId, range.lastLeaveDate, startDate]),
+  ]);
+  const overlaps = [...managedOverlaps, ...legacyOverlaps];
   const employeeMap = new Map(employees.map((row) => [text(row.id), row]));
   const sameDepartmentCount = overlaps.filter((row) => {
     const other = employeeMap.get(text(row.employee_id));
@@ -3193,20 +3211,27 @@ async function previewAdvancedLeaveV2(c: Context<AppEnv>, supplied?: Row) {
     };
   });
   const marker = currentId ? `ik-leave-plan:${currentId}` : "";
+  // Kullanım seçili hakediş yılından düşülür; önceki yılların kaydı geçmişte kalır.
+  // Onaylı yönetilen kayıtlar hr_leave_records_v2 üzerinde tek marker ile temsil edilir.
+  const entitlementYear = startDate.slice(0, 4);
   const usedRow = await first(c, `SELECT COALESCE(SUM(l.day_count),0) AS total
       FROM hr_leave_records_v2 l JOIN hr_monthly_employees e ON e.id=l.employee_id
       WHERE l.employee_id=? AND e.main_company_id=? AND UPPER(l.record_type) LIKE '%YILLIK%'
-        AND (?='' OR COALESCE(l.document_path,'')<>?)`, [employeeId, companyId, marker, marker]);
+        AND SUBSTR(l.start_date,1,4)=?
+        AND (?='' OR COALESCE(l.document_path,'')<>?)`, [employeeId, companyId, entitlementYear, marker, marker]);
   const profile = await leaveProfile(c, companyId, employeeId);
   const statutory = calculateStatutoryAnnualLeave(hireDate, profile.birthDate, startDate);
   const recordedEntitlement = number(employee.annualLeaveEntitlement);
   const effectiveEntitlement = Math.max(recordedEntitlement, statutory.entitlementDays);
   const carryover = number(employee.annualLeaveCarryover);
   const adjustmentDays = leaveAdjustmentTotal(profile);
-  const annualRight = effectiveEntitlement + carryover + adjustmentDays;
   const annualUsed = number(usedRow?.total);
-  const balanceBefore = annualRight - annualUsed;
-  const balanceAfter = balanceBefore - range.countedDays;
+  const balanceState = calculateAnnualLeaveBalance({ entitlement: effectiveEntitlement, carryover, adjustment: adjustmentDays, used: annualUsed });
+  const annualRight = balanceState.annualRight;
+  const balanceBefore = balanceState.balance;
+  const balanceAfter = Math.round((balanceBefore - range.countedDays) * 2) / 2;
+  const annualCoveredDays = Math.min(Math.max(0, balanceBefore), range.countedDays);
+  const annualExcessDays = Math.max(0, Math.round((range.countedDays - annualCoveredDays) * 2) / 2);
   const data = {
     ok: true, employee, policy, officialHolidays, ...range,
     conflicts,
@@ -3221,17 +3246,19 @@ async function previewAdvancedLeaveV2(c: Context<AppEnv>, supplied?: Row) {
     age: statutory.age,
     serviceYears: statutory.serviceYears,
     nextEntitlementDate: statutory.nextEntitlementDate,
-    annualRight, annualUsed, balanceBefore, balanceAfter,
+    entitlementYear, annualRight, annualUsed, balanceBefore, balanceAfter, annualCoveredDays, annualExcessDays,
   };
   return supplied ? data : okData(c, data);
 }
 
 async function saveAdvancedLeaveRecordV2(c: Context<AppEnv>) {
   const body = await bodyOf(c);
-  const companyId = companyIdOf(c, body);
+  const writeAccess = await requireIkWriteAccess(c, body, "update");
+  if (writeAccess.response) return writeAccess.response;
+  const companyId = writeAccess.companyId;
   const employeeId = text(body.employeeId || body.personId);
   const recordType = text(body.recordType || body.type) || "Yıllık izin";
-  const isAnnual = upper(recordType).includes("YILLIK") || Boolean(text(body.returnDate));
+  const isAnnual = upper(recordType).includes("YILLIK");
   if (!isAnnual) {
     if (!(await employeeBelongsToCompany(c, employeeId, companyId))) return error(c, 400, "INVALID_EMPLOYEE", "Personel bulunamadı.");
     const employment = await first(c, `SELECT e.hire_date,s.exit_date FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.id=? AND e.main_company_id=? LIMIT 1`, [employeeId, companyId]);
@@ -3263,6 +3290,14 @@ async function saveAdvancedLeaveRecordV2(c: Context<AppEnv>) {
 
   const statusRaw = upper(body.status || (text(preview.startDate) > new Date().toISOString().slice(0, 10) ? "PLANNED" : "APPROVED"));
   const status = ["PLANNED", "APPROVED", "TAKEN"].includes(statusRaw) ? statusRaw : "PLANNED";
+  const excessDays = number(preview.annualExcessDays);
+  const advanceLeaveReason = text(body.advanceLeaveReason);
+  if (status !== "PLANNED" && excessDays > 0) {
+    if (body.allowAdvanceLeave !== true) return error(c, 409, "LEAVE_ADVANCE_APPROVAL_REQUIRED", "Hak edilen izni aşan günler için gerekçeli avans izin onayı gereklidir; ücret kesintisi otomatik yapılmaz.");
+    if (!advanceLeaveReason) return error(c, 400, "LEAVE_ADVANCE_REASON_REQUIRED", "Eksi bakiye / avans izin için açıklama zorunludur.");
+    const advanceAccess = await requireIkWriteAccess(c, body, "approve");
+    if (advanceAccess.response) return advanceAccess.response;
+  }
   const planId = text(body.id) || crypto.randomUUID();
   const marker = `ik-leave-plan:${planId}`;
   const documentNo = text(body.documentNo || body.documentId);
@@ -3271,6 +3306,14 @@ async function saveAdvancedLeaveRecordV2(c: Context<AppEnv>) {
   const excludedDates = Array.isArray(preview.excludedDates) ? preview.excludedDates : [];
   const calculationSnapshot = {
     policy: preview.policy,
+    entitlementYear: preview.entitlementYear,
+    annualRight: preview.annualRight,
+    balanceBefore: preview.balanceBefore,
+    balanceAfter: preview.balanceAfter,
+    annualCoveredDays: preview.annualCoveredDays,
+    advanceLeaveDays: excessDays,
+    advanceLeaveReason: excessDays > 0 ? advanceLeaveReason : "",
+    advanceLeaveApproved: excessDays > 0 && status !== "PLANNED",
     countedDays: preview.countedDays,
     countedDates: preview.countedDates,
     excludedDates: preview.excludedDates,
@@ -3279,26 +3322,31 @@ async function saveAdvancedLeaveRecordV2(c: Context<AppEnv>) {
     officialHolidays: preview.officialHolidays,
     calculatedAt: nowIso(),
   };
-  await c.env.DB.prepare(`INSERT INTO ik_leave_plans
-    (id,main_company_id,employee_id,record_type,effect_type,start_date,end_date,return_date,counted_days,excluded_json,calculation_json,status,document_no,note,created_by,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET employee_id=excluded.employee_id,record_type=excluded.record_type,effect_type=excluded.effect_type,start_date=excluded.start_date,end_date=excluded.end_date,return_date=excluded.return_date,counted_days=excluded.counted_days,excluded_json=excluded.excluded_json,calculation_json=excluded.calculation_json,status=excluded.status,document_no=excluded.document_no,note=excluded.note,updated_at=excluded.updated_at`)
-    .bind(planId, companyId, employeeId, recordType, effectType, text(preview.startDate), text(preview.lastLeaveDate), text(preview.returnDate), number(preview.countedDays), JSON.stringify(excludedDates), JSON.stringify(calculationSnapshot), status, documentNo, note, text(body.userName) || "Sistem", nowIso(), nowIso()).run();
-  await c.env.DB.prepare("DELETE FROM hr_leave_records_v2 WHERE document_path=?").bind(marker).run();
+  const writeStatements: D1PreparedStatement[] = [
+    c.env.DB.prepare(`INSERT INTO ik_leave_plans
+      (id,main_company_id,employee_id,record_type,effect_type,start_date,end_date,return_date,counted_days,excluded_json,calculation_json,status,document_no,note,created_by,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(id) DO UPDATE SET employee_id=excluded.employee_id,record_type=excluded.record_type,effect_type=excluded.effect_type,start_date=excluded.start_date,end_date=excluded.end_date,return_date=excluded.return_date,counted_days=excluded.counted_days,excluded_json=excluded.excluded_json,calculation_json=excluded.calculation_json,status=excluded.status,document_no=excluded.document_no,note=excluded.note,updated_at=excluded.updated_at`)
+      .bind(planId, companyId, employeeId, recordType, effectType, text(preview.startDate), text(preview.lastLeaveDate), text(preview.returnDate), number(preview.countedDays), JSON.stringify(excludedDates), JSON.stringify(calculationSnapshot), status, documentNo, note, text(body.userName) || "Sistem", nowIso(), nowIso()),
+    c.env.DB.prepare("DELETE FROM hr_leave_records_v2 WHERE document_path=?").bind(marker),
+  ];
   let recordId = "";
   if (status !== "PLANNED") {
     recordId = crypto.randomUUID();
-    await c.env.DB.prepare(`INSERT INTO hr_leave_records_v2
+    writeStatements.push(c.env.DB.prepare(`INSERT INTO hr_leave_records_v2
       (id,employee_id,record_type,effect_type,start_date,end_date,day_count,document_path,note,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(recordId, employeeId, recordType, effectType, text(preview.startDate), text(preview.lastLeaveDate), number(preview.countedDays), marker, note, nowIso()).run();
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(recordId, employeeId, recordType, effectType, text(preview.startDate), text(preview.lastLeaveDate), number(preview.countedDays), marker, note, nowIso()));
   }
-  await audit(c, { mainCompanyId: companyId, period: text(preview.startDate).slice(0, 7), employeeId, entityType: "IZIN", action: status === "PLANNED" ? "PLAN" : "APPROVE", summary: `${recordType}: ${number(preview.countedDays)} gün`, details: { planId, recordId, startDate: preview.startDate, lastLeaveDate: preview.lastLeaveDate, returnDate: preview.returnDate, countedDays: preview.countedDays } });
+  await c.env.DB.batch(writeStatements);
+  await audit(c, { mainCompanyId: companyId, period: text(preview.startDate).slice(0, 7), employeeId, entityType: "IZIN", action: status === "PLANNED" ? "PLAN" : "APPROVE", summary: `${recordType}: ${number(preview.countedDays)} gün${excessDays > 0 ? ` · ${excessDays} gün avans/eksi bakiye` : ""}`, details: { planId, recordId, startDate: preview.startDate, lastLeaveDate: preview.lastLeaveDate, returnDate: preview.returnDate, countedDays: preview.countedDays, annualExcessDays: excessDays, advanceLeaveReason, salaryDeductionApplied: false } });
   return okData(c, { ...preview, planId, recordId, status, message: status === "PLANNED" ? "Yıllık izin planı kaydedildi." : "Yıllık izin resmi kaydı oluşturuldu." }, 201);
 }
 
 async function cancelAdvancedLeaveV2(c: Context<AppEnv>) {
   const body = await bodyOf(c);
-  const companyId = companyIdOf(c, body);
+  const writeAccess = await requireIkWriteAccess(c, body, "update");
+  if (writeAccess.response) return writeAccess.response;
+  const companyId = writeAccess.companyId;
   const id = text(body.id);
   if (!id) return error(c, 400, "ID_REQUIRED", "İzin kaydı seçilmelidir.");
   const plan = await first(c, "SELECT * FROM ik_leave_plans WHERE id=? AND main_company_id=? LIMIT 1", [id, companyId]);
@@ -3306,8 +3354,10 @@ async function cancelAdvancedLeaveV2(c: Context<AppEnv>) {
   const planStart = hrDateOnly(plan.start_date);
   const cancelLock = await rejectAdvancedPeriodLocked(c, companyId, number(planStart.slice(0, 4)), number(planStart.slice(5, 7)));
   if (cancelLock) return cancelLock;
-  await c.env.DB.prepare("UPDATE ik_leave_plans SET status='CANCELLED',note=?,updated_at=? WHERE id=?").bind(text(body.reason || plan.note || "İptal edildi"), nowIso(), id).run();
-  await c.env.DB.prepare("DELETE FROM hr_leave_records_v2 WHERE document_path=?").bind(`ik-leave-plan:${id}`).run();
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE ik_leave_plans SET status='CANCELLED',note=?,updated_at=? WHERE id=?").bind(text(body.reason || plan.note || "İptal edildi"), nowIso(), id),
+    c.env.DB.prepare("DELETE FROM hr_leave_records_v2 WHERE document_path=?").bind(`ik-leave-plan:${id}`),
+  ]);
   await audit(c, { mainCompanyId: companyId, period: hrDateOnly(plan.start_date).slice(0, 7), employeeId: text(plan.employee_id), entityType: "IZIN", action: "CANCEL", summary: "Yıllık izin kaydı iptal edildi.", details: { id, reason: text(body.reason) } });
   return okData(c, { id, cancelled: true, message: "İzin kaydı iptal edildi; izin bakiyesi etkisi geri alındı." });
 }
@@ -3330,7 +3380,7 @@ async function saveAdvancedLeaveProfileV2(c: Context<AppEnv>) {
   const carryoverProvided = body.annualLeaveCarryover !== undefined && body.annualLeaveCarryover !== null && body.annualLeaveCarryover !== "";
   const entitlement = entitlementProvided ? Math.max(0, number(body.annualLeaveEntitlement)) : number(employee.annual_leave_entitlement);
   const carryover = carryoverProvided ? number(body.annualLeaveCarryover) : number(employee.annual_leave_carryover);
-  if (carryover < 0) return error(c, 400, "LEAVE_CARRYOVER_INVALID", "Devreden izin negatif olamaz.");
+  if (!Number.isFinite(carryover)) return error(c, 400, "LEAVE_CARRYOVER_INVALID", "Devreden izin sayısal olmalıdır.");
 
   const statutory = calculateStatutoryAnnualLeave(employee.hire_date, birthDate, hrTodayIstanbul());
   if (entitlementProvided && statutory.eligible && entitlement < statutory.entitlementDays) {
@@ -3501,6 +3551,11 @@ async function leaveCenterV2(c: Context<AppEnv>) {
       partialDates: Array.isArray(calculation.partialDates) ? calculation.partialDates : [],
       dayDetails: Array.isArray(calculation.dayDetails) ? calculation.dayDetails : [],
       policySnapshot: calculation.policy || null,
+      entitlementYear: text(calculation.entitlementYear) || hrDateOnly(row.start_date).slice(0, 4),
+      annualCoveredDays: number(calculation.annualCoveredDays),
+      advanceLeaveDays: number(calculation.advanceLeaveDays),
+      advanceLeaveReason: text(calculation.advanceLeaveReason),
+      advanceLeaveApproved: flag(calculation.advanceLeaveApproved),
       status: text(row.status),
       documentNo: text(row.document_no),
       note: text(row.note),
@@ -3541,12 +3596,14 @@ async function leaveCenterV2(c: Context<AppEnv>) {
     const carryover = number(employee.annualLeaveCarryover);
     const balanceAdjustment = leaveAdjustmentTotal(profile);
     const personPlans = plans.filter((plan) => text(plan.employeeId) === employeeId && plan.status !== "CANCELLED");
-    const usedOrApprovedDays = personPlans.filter((plan) => plan.legacy || ["APPROVED", "TAKEN"].includes(upper(plan.status))).reduce((sum, plan) => sum + number(plan.countedDays), 0);
-    const takenDays = personPlans.filter((plan) => plan.legacy || upper(plan.status) === "TAKEN" || (upper(plan.status) === "APPROVED" && text(plan.endDate) < today)).reduce((sum, plan) => sum + number(plan.countedDays), 0);
-    const approvedUpcomingDays = personPlans.filter((plan) => upper(plan.status) === "APPROVED" && text(plan.endDate) >= today).reduce((sum, plan) => sum + number(plan.countedDays), 0);
-    const plannedDays = personPlans.filter((plan) => upper(plan.status) === "PLANNED").reduce((sum, plan) => sum + number(plan.countedDays), 0);
-    const annualRight = effectiveEntitlement + carryover + balanceAdjustment;
-    const balance = annualRight - usedOrApprovedDays;
+    const annualPersonPlans = personPlans.filter((plan) => text(plan.startDate).startsWith(currentYear));
+    const usedAllTimeDays = personPlans.filter((plan) => plan.legacy || ["APPROVED", "TAKEN"].includes(upper(plan.status))).reduce((sum, plan) => sum + number(plan.countedDays), 0);
+    const usedOrApprovedDays = annualPersonPlans.filter((plan) => plan.legacy || ["APPROVED", "TAKEN"].includes(upper(plan.status))).reduce((sum, plan) => sum + number(plan.countedDays), 0);
+    const takenDays = annualPersonPlans.filter((plan) => plan.legacy || upper(plan.status) === "TAKEN" || (upper(plan.status) === "APPROVED" && text(plan.endDate) < today)).reduce((sum, plan) => sum + number(plan.countedDays), 0);
+    const approvedUpcomingDays = annualPersonPlans.filter((plan) => upper(plan.status) === "APPROVED" && text(plan.endDate) >= today).reduce((sum, plan) => sum + number(plan.countedDays), 0);
+    const plannedDays = annualPersonPlans.filter((plan) => upper(plan.status) === "PLANNED").reduce((sum, plan) => sum + number(plan.countedDays), 0);
+    const balanceState = calculateAnnualLeaveBalance({ entitlement: effectiveEntitlement, carryover, adjustment: balanceAdjustment, used: usedOrApprovedDays, planned: plannedDays });
+    const { annualRight, balance } = balanceState;
     return {
       ...employee,
       birthDate: profile.birthDate,
@@ -3557,12 +3614,15 @@ async function leaveCenterV2(c: Context<AppEnv>) {
       annualCarryover: carryover,
       balanceAdjustment,
       annualRight,
+      entitlementYear: currentYear,
+      usedDaysAllTime: usedAllTimeDays,
+      advanceLeaveDays: balanceState.excessDays,
       usedDays: usedOrApprovedDays,
       takenDays,
       approvedUpcomingDays,
       plannedDays,
       balance,
-      projectedBalance: balance - plannedDays,
+      projectedBalance: balanceState.projectedBalance,
       age: statutory.age,
       serviceYears: statutory.serviceYears,
       nextEntitlementDate: statutory.nextEntitlementDate,
