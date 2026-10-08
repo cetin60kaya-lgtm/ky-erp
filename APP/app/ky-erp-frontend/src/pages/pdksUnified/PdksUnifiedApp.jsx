@@ -230,7 +230,15 @@ function UnifiedDashboard({ onOpen, peopleStatus, attendanceStatus, hasData }) {
   </div>;
 }
 
-const currentPeriod = () => ({ month: new Date().getMonth()+1, year:new Date().getFullYear() });
+const currentPeriod = () => {
+  const values=new Intl.DateTimeFormat("en-US",{
+    timeZone:"Europe/Istanbul",year:"numeric",month:"numeric",
+  }).formatToParts(new Date());
+  return {
+    year:Number(values.find((p)=>p.type==="year")?.value),
+    month:Number(values.find((p)=>p.type==="month")?.value),
+  };
+};
 
 export default function PdksUnifiedApp({
   activeMainCompany, isAuditAccount = false, previewOnly = false,
@@ -428,7 +436,7 @@ export default function PdksUnifiedApp({
               </select></label>
             <label><span>Yıl</span><select aria-label="Yıl" value={period.year}
               onChange={(e)=>setPeriod((prev)=>({...prev,year:Number(e.target.value)}))}>
-              {Array.from({length:10},(_,i)=>new Date().getFullYear()-6+i).map((year)=><option key={year} value={year}>{year}</option>)}
+              {Array.from({length:10},(_,i)=>currentPeriod().year-6+i).map((year)=><option key={year} value={year}>{year}</option>)}
             </select></label>
             {(realAttendance || requirement==="corrections") && data.people.length>0 && <label><span>Personel</span>
               <select aria-label="Hareket personeli" value={selectedPerson?.id||""}
