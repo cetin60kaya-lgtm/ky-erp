@@ -193,7 +193,7 @@ internal static class UnifiedSyncAgent
         if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(secret) ||
             string.IsNullOrWhiteSpace(company) || string.IsNullOrWhiteSpace(signingKey) ||
             string.IsNullOrWhiteSpace(root)) return null;
-        return new(id, secret, company.ToLocaleLowerInvariant(), signingKey, root);
+        return new(id, secret, company.ToLowerInvariant(), signingKey, root);
     }
 
     private static string WriteJournal(UnifiedAgentCredential credential, string journalId, object value)
