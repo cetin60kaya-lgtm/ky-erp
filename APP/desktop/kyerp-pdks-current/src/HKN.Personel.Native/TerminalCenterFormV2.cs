@@ -19,9 +19,11 @@ public sealed class TerminalCenterForm : Form
     readonly Label cardsValue = SummaryValue("—");
     readonly Label logsValue = SummaryValue("—");
     readonly Label syncValue = SummaryValue("—");
+    readonly Label transferErrorValue = SummaryValue("0");
 
     readonly DataGridView usersGrid = Grid();
     readonly DataGridView logsGrid = Grid();
+    readonly DataGridView transferErrorsGrid = Grid();
     readonly DataGridView integrationsGrid = Grid();
     readonly TabControl tabs = new() { Dock = DockStyle.Fill };
     bool busy;
@@ -42,6 +44,7 @@ public sealed class TerminalCenterForm : Form
             RefreshSdkStatus();
             await Task.Yield();
             await RefreshDeviceStatusAsync();
+            LoadTransferErrors(false);
         };
     }
 
@@ -161,6 +164,7 @@ public sealed class TerminalCenterForm : Form
         host.Controls.Add(SummaryCard("Kart / Kimlik", cardsValue));
         host.Controls.Add(SummaryCard("Yeni Log", logsValue));
         host.Controls.Add(SummaryCard("Son Aktarım", syncValue));
+        host.Controls.Add(SummaryCard("Tekrar / ERR", transferErrorValue));
         return host;
     }
 
@@ -191,6 +195,7 @@ public sealed class TerminalCenterForm : Form
         tabs.TabPages.Add(BuildDeviceTab());
         tabs.TabPages.Add(BuildUsersTab());
         tabs.TabPages.Add(BuildLogsTab());
+        tabs.TabPages.Add(BuildTransferErrorsTab());
         tabs.TabPages.Add(BuildIntegrationsTab());
         tabs.TabPages.Add(BuildServiceTab());
     }
@@ -293,7 +298,7 @@ public sealed class TerminalCenterForm : Form
         var bar = PdksUiKit.Card(10);
         var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, BackColor = p.Surface, Padding = new Padding(0, 5, 0, 0) };
         flow.Controls.Add(ActionButton("Logları Oku", 130, LoadLogsAsync, true));
-        flow.Controls.Add(ActionButton("TNF + FDB'ye Aktar", 170, SyncNowAsync, true));
+        flow.Controls.Add(ActionButton("PS-2000 Aktar • TNF + FDB", 205, SyncNowAsync, true));
         flow.Controls.Add(ActionButton("Aktarıp Logları Temizle", 195, SyncAndClearLogsAsync, false, PdksActionRole.Danger));
         flow.Controls.Add(ActionButton("Arşivle ve Logları Sıfırla", 205, ArchiveAndClearLogsAsync, false, PdksActionRole.Danger));
         flow.Controls.Add(ActionButton("CANLI • Son 7 Günü Koru", 195, ClearLiveExceptWeekAsync, false));
@@ -310,6 +315,49 @@ public sealed class TerminalCenterForm : Form
         var gridCard = PdksUiKit.Card(8);
         gridCard.Controls.Add(logsGrid);
         root.Controls.Add(gridCard, 0, 1);
+        page.Controls.Add(root);
+        return page;
+    }
+
+    TabPage BuildTransferErrorsTab()
+    {
+        var p = PdksAppearance.Current;
+        var page = Page("Aktarım / ERR");
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Padding = new Padding(12), BackColor = p.Canvas };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var note = PdksUiKit.Card(12);
+        note.Controls.Add(new Label
+        {
+            Dock = DockStyle.Fill,
+            Text = "PS-2000 Bilgi Aktar V2.0 uyumu: her terminal aktarımı aylık TRMMYYYY.Tnf dosyasına tarih/saat başlığıyla eklenir. " +
+                   "Aynı kart+tarih+saat yeniden gelirse DATA/FDB'ye ikinci kez yazılmaz; ERYYYY.Err ve ER<Ay>YYYY.Err oluşturulur ve burada 'Kart Tekrarı' olarak görünür. " +
+                   "Resmî yıllık TRYYYY.Tnf normal DATA kayıtlarının aynası olmaya devam eder; E kayıtları yıllık TNF'ye yazılmaz.",
+            ForeColor = p.Muted,
+            Padding = new Padding(4)
+        });
+        root.Controls.Add(note, 0, 0);
+
+        var bar = PdksUiKit.Card(8);
+        var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, BackColor = p.Surface, Padding = new Padding(0, 7, 0, 0) };
+        flow.Controls.Add(ActionButton("Hataları Yenile", 130, () => { LoadTransferErrors(true); return Task.CompletedTask; }, false));
+        flow.Controls.Add(ActionButton("TNF / ERR Klasörünü Aç", 180, () => { TerminalTransferJournalService.OpenFolder(); return Task.CompletedTask; }, false));
+        bar.Controls.Add(flow);
+        root.Controls.Add(bar, 0, 1);
+
+        transferErrorsGrid.Columns.Add("TransferAt", "Aktarım");
+        transferErrorsGrid.Columns.Add("Card", "Kart");
+        transferErrorsGrid.Columns.Add("Date", "Tarih");
+        transferErrorsGrid.Columns.Add("Time", "Saat");
+        transferErrorsGrid.Columns.Add("Reason", "Hatanın Sebebi");
+        transferErrorsGrid.Columns.Add("Line", "Hatalı Kayıt");
+        transferErrorsGrid.Columns.Add("File", "ERR Dosyası");
+        var gridCard = PdksUiKit.Card(8);
+        gridCard.Controls.Add(transferErrorsGrid);
+        root.Controls.Add(gridCard, 0, 2);
+
         page.Controls.Add(root);
         return page;
     }
@@ -451,7 +499,7 @@ public sealed class TerminalCenterForm : Form
 
     void ApplySnapshot(TerminalDeviceSnapshot snapshot)
     {
-        connectionValue.Text = snapshot.Connected ? "BAĞLI" : "KAPALI / ERİŞİLEMİYOR";
+        connectionValue.Text = snapshot.Connected ? "BAĞLI" : "AĞDA ERİŞİLEMİYOR";
         connectionValue.ForeColor = snapshot.Connected ? PdksAppearance.Current.Success : PdksAppearance.Current.Danger;
         clockValue.Text = snapshot.DeviceTime?.ToString("HH:mm:ss") ?? "—";
         usersValue.Text = snapshot.UserCount >= 0 ? snapshot.UserCount.ToString("N0") : "—";
@@ -459,9 +507,12 @@ public sealed class TerminalCenterForm : Form
         logsValue.Text = snapshot.NewLogCount >= 0 ? snapshot.NewLogCount.ToString("N0") : "—";
         var sync = TerminalSyncService.ReadState();
         syncValue.Text = sync?.LastAt?.ToString("dd.MM HH:mm") ?? "—";
+        var journal = TerminalTransferJournalService.ReadState();
+        transferErrorValue.Text = journal.DuplicateCount.ToString("N0");
+        transferErrorValue.ForeColor = journal.DuplicateCount == 0 ? PdksAppearance.Current.Success : PdksAppearance.Current.Warning;
         SetStatus(snapshot.Connected
             ? $"CİHAZ BAĞLI • {TerminalDeviceSettingsStore.Load().DeviceName} • {TerminalDeviceSettingsStore.Load().MacAddress} • {TerminalDeviceSettingsStore.Load().IpAddress}:{TerminalDeviceSettingsStore.Load().IpPort}"
-            : "Cihaz kapalı / erişilemiyor • " + snapshot.Message,
+            : "Cihaz ağına erişilemiyor • " + snapshot.Message,
             snapshot.Connected);
     }
 
@@ -582,6 +633,30 @@ public sealed class TerminalCenterForm : Form
         finally { busy = false; }
     }
 
+    void LoadTransferErrors(bool selectTab = true)
+    {
+        var state = TerminalTransferJournalService.ReadState();
+        transferErrorValue.Text = state.DuplicateCount.ToString("N0");
+        transferErrorValue.ForeColor = state.DuplicateCount == 0 ? PdksAppearance.Current.Success : PdksAppearance.Current.Warning;
+
+        transferErrorsGrid.Rows.Clear();
+        foreach (var row in state.RecentErrors.OrderByDescending(x => x.TransferAt).ThenByDescending(x => x.OccurredAt))
+            transferErrorsGrid.Rows.Add(
+                row.TransferAt.ToString("dd.MM HH:mm:ss"),
+                row.Card,
+                row.OccurredAt.ToString("dd.MM.yyyy"),
+                row.OccurredAt.ToString("HH:mm"),
+                row.Reason,
+                row.Line,
+                Path.GetFileName(row.ErrorFile));
+
+        if (selectTab)
+        {
+            var tab = tabs.TabPages.Cast<TabPage>().FirstOrDefault(x => x.Text == "Aktarım / ERR");
+            if (tab is not null) tabs.SelectedTab = tab;
+        }
+    }
+
     static string VerifyName(int value) => value switch
     {
         1 => "Parmak İzi",
@@ -602,9 +677,14 @@ public sealed class TerminalCenterForm : Form
                      !result.Message.Contains("başarısız", StringComparison.OrdinalIgnoreCase) &&
                      result.Skipped == 0;
             SetStatus(result.Message, ok);
+            var journal = TerminalTransferJournalService.ReadState();
+            var monthly = journal.TransferFiles.Length == 0 ? "—" : string.Join(", ", journal.TransferFiles.Select(Path.GetFileName));
+            var err = journal.ErrorFiles.Length == 0 ? "Yok" : string.Join(", ", journal.ErrorFiles.Select(Path.GetFileName));
             MessageBox.Show(result.Message +
-                            $"\n\nOkunan: {result.ReadCount}\nYeni: {result.Inserted}\nGüncellenen: {result.Updated}\nMükerrer: {result.Duplicates}\nAtlanan: {result.Skipped}\nCihaz kayıtları: KORUNDU",
-                "Terminal Aktarımı", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                            $"\n\nOkunan: {result.ReadCount}\nYeni: {result.Inserted}\nGüncellenen: {result.Updated}\nKart Tekrarı / ERR: {result.Duplicates}\nAtlanan: {result.Skipped}" +
+                            $"\nAylık Aktarım TNF: {monthly}\nERR: {err}\nCihaz kayıtları: KORUNDU",
+                "PS-2000 Terminal Aktarımı", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            LoadTransferErrors(result.Duplicates > 0);
             await RefreshDeviceStatusAsync();
         }
         finally { busy = false; }
