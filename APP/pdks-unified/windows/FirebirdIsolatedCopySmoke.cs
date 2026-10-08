@@ -59,7 +59,7 @@ internal static class FirebirdIsolatedCopySmoke
         var batch = "PDKS_COPY_SMOKE_" + Guid.NewGuid().ToString("N");
         var steps = new List<string>();
 
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        using var transaction = connection.BeginTransaction();
         try
         {
             await ExecAsync(connection,transaction,"INSERT INTO GRUP (KOD,AD) VALUES (@K,@A)",
@@ -109,7 +109,7 @@ internal static class FirebirdIsolatedCopySmoke
         finally
         {
             // Even successful staging mutations are NEVER committed.
-            await transaction.RollbackAsync(cancellationToken);
+            transaction.Rollback();
         }
 
         var postGroup = await CountAsync(connection,null,"GRUP");
