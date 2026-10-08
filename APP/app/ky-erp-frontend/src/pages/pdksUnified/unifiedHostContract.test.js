@@ -40,3 +40,13 @@ test("mobile API uses production canonical origin not localhost for production",
   assert.match(source,/const PRODUCTION_API_ORIGIN = "https:\/\/api\.kyerp\.net"/);
   assert.match(source,/if \(isProd\) return.*PRODUCTION_API_ORIGIN/);
 });
+
+test("Personel 360 remains single-source, scoped and denied to audit payroll",()=>{
+  const page=file("pages/pdksUnified/PdksUnifiedApp.jsx");
+  const hook=file("pages/pdksUnified/useUnifiedPdksData.js");
+  assert.match(page,/detailVisible\?personTab:"identity"/);
+  assert.match(page,/detail=\{data\.detail\}/);
+  assert.match(hook,/audit && !\["attendance"\]\.includes\(detailSource\)/);
+  assert.match(hook,/personId/);
+  assert.match(hook,/profileReady/);
+});
