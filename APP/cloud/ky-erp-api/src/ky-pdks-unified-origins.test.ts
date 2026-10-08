@@ -169,3 +169,12 @@ test("Windows Agent loop has a single-process lock, heartbeat and conservative p
   assert.equal(program.includes("--agent-loop"),true);
   assert.equal(program.includes("--agent-loop-selftest"),true);
 });
+
+test("Cloud requires independently HMAC-signed local receipt for successful ACK",()=>{
+  const cloud=readFileSync(resolve(here,"ik-pdks-unified-agent.ts"),"utf8");
+  const agent=readFileSync(resolve(here,"../../../pdks-unified/windows/UnifiedSyncAgent.cs"),"utf8");
+  assert.equal(cloud.includes("PDKS_LOCAL_RECEIPT_HMAC_INVALID"),true);
+  assert.equal(cloud.includes("localReceiptHmac"),true);
+  assert.equal(agent.includes("HMACSHA256(Encoding.UTF8.GetBytes(credential.SigningKey))"),true);
+  assert.equal(agent.includes("localReceiptHmac"),true);
+});
