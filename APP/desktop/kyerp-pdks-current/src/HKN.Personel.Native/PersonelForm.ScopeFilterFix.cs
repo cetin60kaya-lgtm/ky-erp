@@ -5,6 +5,7 @@ namespace HKN.Personel.Native;
 public partial class PersonelForm
 {
     bool employmentScopeFixWired;
+    bool employmentFilterApplying;
 
     protected override void OnVisibleChanged(EventArgs e)
     {
@@ -34,7 +35,7 @@ public partial class PersonelForm
 
     void ApplyEmploymentScopeAndSearch()
     {
-        if (IsDisposed || list.DataSource is not DataTable dt) return;
+        if (employmentFilterApplying || IsDisposed || !IsHandleCreated || list.DataSource is not DataTable dt) return;
 
         var filters = new List<string>();
         if (scopeActive.Checked) filters.Add("ICTARIH IS NULL");
@@ -54,6 +55,18 @@ public partial class PersonelForm
             filters.Add($"CONVERT({column}, 'System.String') LIKE '%{term}%'");
         }
 
+        var wanted = string.Join(" AND ", filters);
+        var view = dt.DefaultView;
+        // Opening an already filtered tab should never reset the current cell.
+        if (string.Equals(view.RowFilter, wanted, StringComparison.Ordinal))
+        {
+            UpdateClassicStats();
+            return;
+        }
+
+        employmentFilterApplying = true;
+        personLoadTimer.Stop();
+        pendingPersonPk = string.Empty;
         var selectedPk = list.CurrentRow?.DataBoundItem is DataRowView current
             ? Convert.ToString(current.Row["PKNO"])?.Trim()
             : currentPk;
@@ -61,47 +74,65 @@ public partial class PersonelForm
         list.SuspendLayout();
         try
         {
-            // Filtre değişirken CurrentCell eski/filtre dışı veya görünmez kolonda kalırsa
-            // WinForms "Geçerli hücre görünmez bir hücreye ayarlanamaz" hatası verebilir.
-            list.CurrentCell = null;
+            // Release the current cell before RowFilter changes binding visibility.
+            // The old code tried to select a cell that had just become invisible.
+            try { list.CurrentCell = null; }
+            catch (InvalidOperationException) { list.ClearSelection(); }
 
-            try
+            try { view.RowFilter = wanted; }
+            catch (EvaluateException)
             {
-                dt.DefaultView.RowFilter = string.Join(" AND ", filters);
+                view.RowFilter = scopeActive.Checked ? "ICTARIH IS NULL"
+                    : scopePassive.Checked ? "ICTARIH IS NOT NULL" : string.Empty;
             }
-            catch
+            catch (SyntaxErrorException)
             {
-                dt.DefaultView.RowFilter = scopeActive.Checked ? "ICTARIH IS NULL" : scopePassive.Checked ? "ICTARIH IS NOT NULL" : string.Empty;
+                view.RowFilter = scopeActive.Checked ? "ICTARIH IS NULL"
+                    : scopePassive.Checked ? "ICTARIH IS NOT NULL" : string.Empty;
             }
 
-            ConfigureListColumns();
             list.ClearSelection();
+            var visibleColumn = list.Columns.Cast<DataGridViewColumn>()
+                .Where(column => column.Visible)
+                .OrderBy(column => column.DisplayIndex)
+                .FirstOrDefault();
 
             DataGridViewRow? target = null;
             if (!string.IsNullOrWhiteSpace(selectedPk))
             {
-                target = list.Rows.Cast<DataGridViewRow>().FirstOrDefault(r =>
-                    r.DataBoundItem is DataRowView drv &&
-                    string.Equals(Convert.ToString(drv.Row["PKNO"])?.Trim(), selectedPk, StringComparison.OrdinalIgnoreCase));
+                target = list.Rows.Cast<DataGridViewRow>().FirstOrDefault(row =>
+                    row.Visible && !row.IsNewRow &&
+                    row.DataBoundItem is DataRowView bound &&
+                    string.Equals(Convert.ToString(bound.Row["PKNO"])?.Trim(), selectedPk, StringComparison.OrdinalIgnoreCase));
             }
-            target ??= list.Rows.Cast<DataGridViewRow>().FirstOrDefault(r => r.Visible && !r.IsNewRow);
-
-            var visibleColumn = list.Columns.Cast<DataGridViewColumn>()
-                .Where(col => col.Visible)
-                .OrderBy(col => col.DisplayIndex)
-                .FirstOrDefault();
+            target ??= list.Rows.Cast<DataGridViewRow>()
+                .FirstOrDefault(row => row.Visible && !row.IsNewRow);
 
             if (target is not null && visibleColumn is not null)
             {
-                target.Selected = true;
-                list.CurrentCell = target.Cells[visibleColumn.Index];
+                var cell = target.Cells[visibleColumn.Index];
+                if (target.Visible && visibleColumn.Visible && cell.Visible)
+                {
+                    try
+                    {
+                        list.CurrentCell = cell;
+                        target.Selected = true;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // A binding reset can invalidate the row between the visibility
+                        // check and assignment; keep the filter without crashing the UI.
+                        list.ClearSelection();
+                    }
+                }
             }
         }
         finally
         {
             list.ResumeLayout();
+            employmentFilterApplying = false;
         }
-
         UpdateClassicStats();
     }
+
 }
