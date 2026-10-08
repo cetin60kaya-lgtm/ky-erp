@@ -93,8 +93,8 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [eventForm, setEventForm] = useState({ date: isoToday(), time: "08:30", direction: "AUTO" });
-  const [override, setOverride] = useState({ date: isoToday(), status: "CALISTI", entry: "08:30", exit: "19:00", note: "PDKS düzeltme" });
+  const [eventForm, setEventForm] = useState({ date: isoToday(), time: "", direction: "AUTO", note: "" });
+  const [override, setOverride] = useState({ date: isoToday(), status: "CALISTI", entry: "", exit: "", note: "" });
   const [leave, setLeave] = useState({ startDate: isoToday(), endDate: isoToday(), type: "YILLIK_IZIN", note: "PDKS izin" });
   const [holiday, setHoliday] = useState({ date: "", name: "", halfDay: false });
   const [groupForm, setGroupForm] = useState({ code: "", name: "", entryTime: "08:30", exitTime: "19:00", lateTolerance: 5, earlyTolerance: 10, active: true });
@@ -198,14 +198,17 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
   const addEvent = () => run("Kart hareketi D1'e kaydediliyor...", async () => {
     if (!canWrite) throw new Error("Denetim hesabı kart hareketi yazamaz.");
     if (!selected) throw new Error("Personel seçin.");
-    await addPdksTimeEvent(selected.id, { cardNo: selected.cardNo, workDate: eventForm.date, eventTime: eventForm.time, direction: eventForm.direction, source: "KYERP_WEB_PDKS", note: "KY ERP Web PDKS" });
+    if (!eventForm.date || !eventForm.time || !eventForm.note.trim())
+      throw new Error("Web kart hareketinde gerçek tarih, saat ve gerekçe zorunludur.");
+    await addPdksTimeEvent(selected.id, { cardNo: selected.cardNo, workDate: eventForm.date, eventTime: eventForm.time, direction: eventForm.direction, source: "KYERP_WEB_PDKS", note: eventForm.note.trim() });
     await loadSelectedAttendance(selected.id);
-    setNotice("Kart hareketi tek D1 kaydına işlendi. Windows PDKS aynı kaydı görecek.");
+    setNotice("Kart hareketi web/D1 tarafından kabul edildi. Firebird/TNF mutabakatı ayrıca doğrulanmalıdır.");
   });
 
   const saveOverride = () => run("Puantaj düzeltmesi D1'e kaydediliyor...", async () => {
     if (!canWrite) throw new Error("Denetim hesabı puantaj değiştiremez.");
     if (!selected) throw new Error("Personel seçin.");
+    if (!override.date || !override.note.trim()) throw new Error("Puantaj düzeltmesinde tarih ve gerekçe zorunludur.");
     const inMinutes = override.entry ? Number(override.entry.slice(0, 2)) * 60 + Number(override.entry.slice(3, 5)) : null;
     const outMinutes = override.exit ? Number(override.exit.slice(0, 2)) * 60 + Number(override.exit.slice(3, 5)) : null;
     await savePdksDayOverride(selected.id, {
@@ -220,7 +223,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
       note: override.note,
     });
     await loadSelectedAttendance(selected.id);
-    setNotice("Puantaj düzeltmesi D1'e işlendi.");
+    setNotice("Puantaj düzeltmesi web/D1 tarafından kabul edildi. Firebird/TNF durumu ayrıca doğrulanmalıdır.");
   });
 
   const saveLeave = () => run("İzin D1'e kaydediliyor...", async () => {
@@ -353,7 +356,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
   function renderCore() {
     if (activeTab === "ana-ekran") return <>
       <div className="pdks-stats"><Card label={audit ? "SGK + Kart Personel" : "Personel"} value={people.length}/><Card label="Kartlı Gün" value={attendance.filter((day) => ["CALISTI", "EKSIK_BASIM"].includes(day.status)).length} tone="ok"/><Card label="Eksik / Kart Yok" value={attendance.filter((day) => ["EKSIK_BASIM", "KART_YOK"].includes(day.status)).length} tone="warn"/><Card label="Vardiya" value={groups.length}/><Card label="Servis" value={services.length}/></div>
-      <div className="pdks-grid two"><section className="pdks-panel"><h3>Hedef PDKS İş Akışı</h3><div className="pdks-flow"><button onClick={() => openModule?.("pdks", { tabKey: "bilgi-aktar" })}>1 Bilgi Aktar</button><button onClick={() => openModule?.("pdks", { tabKey: "giris-cikislar" })}>2 Giriş / Çıkış</button><button onClick={() => openModule?.("pdks", { tabKey: "puantaj" })}>3 Puantaj</button><button onClick={loadAllSummaries}>4 Sonuç</button><button onClick={closePeriod} disabled={!canWrite}>5 Dönem Kapat</button></div></section><section className="pdks-panel"><h3>Tek DATA</h3><p><b>Ana kaynak:</b> KY ERP D1</p><p><b>Windows SQLite:</b> yalnız ham kart, offline kuyruk, cache, log ve yedek</p><p><b>Denetim:</b> seçili ayın SGK kapsamındaki kartlı personeli, salt okunur</p></section></div>
+      <div className="pdks-grid two"><section className="pdks-panel"><h3>Hedef PDKS İş Akışı</h3><div className="pdks-flow"><button onClick={() => openModule?.("pdks", { tabKey: "bilgi-aktar" })}>1 Bilgi Aktar</button><button onClick={() => openModule?.("pdks", { tabKey: "giris-cikislar" })}>2 Giriş / Çıkış</button><button onClick={() => openModule?.("pdks", { tabKey: "puantaj" })}>3 Puantaj</button><button onClick={loadAllSummaries}>4 Sonuç</button><button onClick={closePeriod} disabled={!canWrite}>5 Dönem Kapat</button></div></section><section className="pdks-panel"><h3>Veri Kaynakları</h3><p><b>Fiziksel kart:</b> Terminal ham kanıtı → Firebird/FDB → yıllık normal TNF</p><p><b>Web:</b> Cloudflare D1 senkron görünümü; masaüstüne işlendiği ayrıca doğrulanır</p><p><b>Denetim:</b> seçili ayın SGK kapsamındaki kartlı personeli, salt okunur</p></section></div>
       <section className="pdks-panel"><h3>Seçili Personel · {selected?.fullName || "-"}</h3><PersonPicker/><DataTable columns={attendanceColumns} rows={attendance.slice(-14).reverse()} rowKey="date" /></section>
     </>;
 
@@ -361,7 +364,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
 
     if (["giris-cikislar", "puantaj", "calisma-tarihi"].includes(activeTab)) return <>
       <section className="pdks-panel"><h3>{activeTab === "puantaj" ? "Puantaj" : activeTab === "calisma-tarihi" ? "Çalışma Tarihi" : "Giriş / Çıkışlar"}</h3><PersonPicker/></section>
-      {activeTab === "giris-cikislar" && canWrite ? <section className="pdks-panel form-row"><input type="date" value={eventForm.date} onChange={(event) => setEventForm({ ...eventForm, date: event.target.value })}/><input type="time" value={eventForm.time} onChange={(event) => setEventForm({ ...eventForm, time: event.target.value })}/><select value={eventForm.direction} onChange={(event) => setEventForm({ ...eventForm, direction: event.target.value })}><option>AUTO</option><option>IN</option><option>OUT</option></select><button className="primary-btn" onClick={addEvent}>D1 Kart Hareketi Ekle</button></section> : null}
+      {activeTab === "giris-cikislar" && canWrite ? <section className="pdks-panel form-row"><input type="date" value={eventForm.date} onChange={(event) => setEventForm({ ...eventForm, date: event.target.value })}/><input type="time" value={eventForm.time} onChange={(event) => setEventForm({ ...eventForm, time: event.target.value })}/><input type="text" placeholder="Gerçek hareket gerekçesi *" value={eventForm.note} onChange={(event) => setEventForm({ ...eventForm, note: event.target.value })}/><select value={eventForm.direction} onChange={(event) => setEventForm({ ...eventForm, direction: event.target.value })}><option>AUTO</option><option>IN</option><option>OUT</option></select><button className="primary-btn" onClick={addEvent}>D1 Kart Hareketi Ekle</button></section> : null}
       {activeTab === "puantaj" && canWrite ? <section className="pdks-panel form-row wrap"><input type="date" value={override.date} onChange={(event) => setOverride({ ...override, date: event.target.value })}/><select value={override.status} onChange={(event) => setOverride({ ...override, status: event.target.value })}>{["CALISTI", "EKSIK_BASIM", "KART_YOK", "IZIN", "YILLIK_IZIN", "RESMI_TATIL", "HAFTA_SONU", "DONEM_DISI"].map((status) => <option key={status}>{status}</option>)}</select><input type="time" value={override.entry} onChange={(event) => setOverride({ ...override, entry: event.target.value })}/><input type="time" value={override.exit} onChange={(event) => setOverride({ ...override, exit: event.target.value })}/><input value={override.note} onChange={(event) => setOverride({ ...override, note: event.target.value })}/><button className="primary-btn" onClick={saveOverride}>D1'e Kaydet</button></section> : null}
       <section className="pdks-panel"><DataTable columns={attendanceColumns} rows={attendance} rowKey="date" onRowClick={(row) => setOverride({ date: row.date, status: row.status || "CALISTI", entry: row.entry || "", exit: row.exit || "", note: row.note || "PDKS düzeltme" })}/></section>
     </>;
@@ -379,7 +382,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
       </section>
     );
 
-    if (activeTab === "bilgi-aktar") return <><section className="pdks-panel"><h3>Bilgi Aktar / Kart Makinesi</h3><p><b>Canlı yol:</b> Kart makinesi → Windows Agent → offline kuyruk → KY ERP D1 → Web + Windows.</p><p><b>Hedef/TR500:</b> Windows Agent mevcut <code>F:\Ekin\bilgi.dat</code> akışını dosyayı silmeden okur. FILE, TCP Server, TCP Client ve SERIAL/COM alternatifleri de devam eder.</p></section>{canWrite ? <section className="pdks-panel"><h3>Web Dosya Önizleme / Onay</h3><input ref={cardFile} type="file" accept=".txt,.csv,.dat,.xlsx,.xls"/><button onClick={previewCardFile}>Önizle</button>{cardPreview ? <><pre className="pdks-preview">{JSON.stringify(cardPreview, null, 2).slice(0,8000)}</pre><button className="primary-btn" onClick={confirmCardFile}>D1'e Onayla</button></> : null}</section> : null}</>;
+    if (activeTab === "bilgi-aktar") return <><section className="pdks-panel"><h3>Bilgi Aktar / Kart Makinesi</h3><p><b>Canlı yol:</b> Kart makinesi → Windows Firebird/FDB ve yıllık TNF → Agent → D1 senkron → Web.</p><p><b>Hedef/TR500:</b> Windows Agent mevcut <code>F:\Ekin\bilgi.dat</code> akışını dosyayı silmeden okur. FILE, TCP Server, TCP Client ve SERIAL/COM alternatifleri de devam eder.</p></section>{canWrite ? <section className="pdks-panel"><h3>Web Dosya Önizleme / Onay</h3><input ref={cardFile} type="file" accept=".txt,.csv,.dat,.xlsx,.xls"/><button onClick={previewCardFile}>Önizle</button>{cardPreview ? <><pre className="pdks-preview">{JSON.stringify(cardPreview, null, 2).slice(0,8000)}</pre><button className="primary-btn" onClick={confirmCardFile}>D1'e Onayla</button></> : null}</section> : null}</>;
 
     if (activeTab === "gruplar-vardiyalar" || activeTab === "puantaj-kurallari") return <><section className="pdks-panel"><h3>{activeTab === "puantaj-kurallari" ? "Puantaj Kuralları" : "Gruplar / Vardiyalar"}</h3><DataTable rows={groups} columns={[{key:"code",label:"Kod"},{key:"name",label:"Ad"},{key:"entryTime",label:"Giriş"},{key:"exitTime",label:"Çıkış"},{key:"lateTolerance",label:"Geç Tol."},{key:"earlyTolerance",label:"Erken Tol."},{key:"active",label:"Aktif",render:(r)=>Number(r.active)!==0?"Evet":"Hayır"}]}/></section>{canWrite ? <section className="pdks-panel"><h3>Vardiya Tanımı</h3><div className="form-row"><input placeholder="Kod" value={groupForm.code} onChange={(e)=>setGroupForm({...groupForm,code:e.target.value})}/><input placeholder="Ad" value={groupForm.name} onChange={(e)=>setGroupForm({...groupForm,name:e.target.value})}/><input type="time" value={groupForm.entryTime} onChange={(e)=>setGroupForm({...groupForm,entryTime:e.target.value})}/><input type="time" value={groupForm.exitTime} onChange={(e)=>setGroupForm({...groupForm,exitTime:e.target.value})}/><input type="number" title="Geç toleransı" value={groupForm.lateTolerance} onChange={(e)=>setGroupForm({...groupForm,lateTolerance:Number(e.target.value)})}/><input type="number" title="Erken çıkış toleransı" value={groupForm.earlyTolerance} onChange={(e)=>setGroupForm({...groupForm,earlyTolerance:Number(e.target.value)})}/><button onClick={saveGroup}>D1'e Kaydet</button></div><div className="form-row"><PersonPicker/><select value={selectedGroupId} onChange={(e)=>setSelectedGroupId(e.target.value)}><option value="">Vardiya seç</option>{groups.filter((g)=>Number(g.active)!==0).map((g)=><option key={g.id} value={g.id}>{g.name} · {g.entryTime}-{g.exitTime}</option>)}</select><button onClick={assignGroup}>Personele Ata</button></div></section> : null}</>;
 
