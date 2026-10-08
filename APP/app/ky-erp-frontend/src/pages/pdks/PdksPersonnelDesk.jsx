@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addPdksTimeEvent,
   getPdksAttendance,
@@ -31,6 +31,8 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
   const [year,setYear]=useState(NOW.getFullYear()),[month,setMonth]=useState(NOW.getMonth()+1);
   const [people,setPeople]=useState([]),[selectedId,setSelectedId]=useState(""),[attendance,setAttendance]=useState(null),[modern,setModern]=useState({leaveTypes:[]}),[leaveCenter,setLeaveCenter]=useState({plans:[]}),[entitlement,setEntitlement]=useState(null);
   const [search,setSearch]=useState(""),[filter,setFilter]=useState("AKTIF"),[centerTab,setCenterTab]=useState(activeTab==="puantaj"?"puantaj":["giris-cikislar","calisma-tarihi"].includes(activeTab)?"giris":activeTab==="izinler"?"izin":"bilgi");
+  const [detailBusy,setDetailBusy]=useState(false),[loadedKey,setLoadedKey]=useState(""),[leaveBusy,setLeaveBusy]=useState(false);
+  const detailRequest=useRef(0),leaveRequest=useRef(0),coreRequest=useRef(0);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[error,setError]=useState(""),[modal,setModal]=useState("");
   const [punch,setPunch]=useState({date:iso(),time:"08:30",direction:"AUTO",note:"Manuel PDKS hareketi"});
   const [correction,setCorrection]=useState({date:iso(),status:"CALISTI",entry:"08:30",exit:"19:00",reason:"",note:""});
@@ -40,19 +42,76 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
   const personLeaves=useMemo(()=>(leaveCenter?.plans||[]).filter(row=>(row.employeeId||row.employee_id)===selected?.id),[leaveCenter?.plans,selected?.id]);
   useEffect(()=>{if(activeTab==="puantaj")setCenterTab("puantaj");else if(["giris-cikislar","calisma-tarihi"].includes(activeTab))setCenterTab("giris");else if(activeTab==="izinler")setCenterTab("izin");else if(activeTab==="personel-bilgileri")setCenterTab("bilgi")},[activeTab]);
 
-  const loadCore=useCallback(async()=>{setBusy(true);setError("");try{const [personRows,config,leaves]=await Promise.all([getPdksPeople({mainCompanyId:company,year,month}),getPdksModernConfig({mainCompanyId:company}),getPdksLeaveCenter({mainCompanyId:company,from:String(year)+"-01-01",to:String(year)+"-12-31"})]);const list=Array.isArray(personRows)?personRows:[];setPeople(list);setModern(config||{leaveTypes:[]});setLeaveCenter(leaves||{plans:[]});setSelectedId(current=>list.some(p=>p.id===current)?current:(list[0]?.id||""))}catch(cause){setError(cause?.message||"PDKS personel merkezi yüklenemedi.")}finally{setBusy(false)}},[company,month,year]);
-  const loadPerson=useCallback(async()=>{if(!selected?.id){setAttendance(null);setEntitlement(null);return}setBusy(true);setError("");try{const [att,ent]=await Promise.all([getPdksAttendance(selected.id,year,month),getPdksLeaveEntitlement(selected.id,{mainCompanyId:company})]);setAttendance(att||null);setEntitlement(ent||null)}catch(cause){setError(cause?.message||"Personel puantajı yüklenemedi.")}finally{setBusy(false)}},[company,month,selected?.id,year]);
-  useEffect(()=>{loadCore()},[loadCore]);useEffect(()=>{loadPerson()},[loadPerson]);
+  const loadCore=useCallback(async()=>{
+    const request=++coreRequest.current;
+    setBusy(true);setError("");
+    try{
+      const list=await getPdksPeople({mainCompanyId:company,year,month});
+      if(request!==coreRequest.current)return;
+      const rows=Array.isArray(list)?list:[];
+      setPeople(rows);
+      setSelectedId(current=>rows.some(p=>p.id===current)?current:rows[0]?.id||"");
+    }catch(cause){if(request===coreRequest.current)setError(cause?.message||"PDKS personel listesi yüklenemedi.")}
+    finally{if(request===coreRequest.current)setBusy(false)}
+  },[company,month,year]);
+
+  const loadPerson=useCallback(async()=>{
+    const request=++detailRequest.current;
+    const id=selected?.id;
+    if(!id){setAttendance(null);setLoadedKey("");setDetailBusy(false);return}
+    setDetailBusy(true);
+    try{
+      const att=await getPdksAttendance(id,year,month,{mainCompanyId:company});
+      if(request!==detailRequest.current)return;
+      setAttendance(att||null);
+      setLoadedKey(`${company}:${year}:${month}:${id}`);
+    }catch(cause){
+      if(request===detailRequest.current){setAttendance(null);setLoadedKey("");setError(cause?.message||"Personel puantajı yüklenemedi.")}
+    }finally{if(request===detailRequest.current)setDetailBusy(false)}
+  },[company,month,selected?.id,year]);
+
+  const loadLeaveContext=useCallback(async()=>{
+    const request=++leaveRequest.current;
+    setLeaveBusy(true);
+    try{
+      const [config,leaves]=await Promise.all([
+        getPdksModernConfig({mainCompanyId:company}),
+        getPdksLeaveCenter({mainCompanyId:company,from:String(year)+"-01-01",to:String(year)+"-12-31"})
+      ]);
+      if(request!==leaveRequest.current)return;
+      setModern(config||{leaveTypes:[]});
+      setLeaveCenter(leaves||{plans:[]});
+    }catch(cause){if(request===leaveRequest.current)setError(cause?.message||"İzin tanımları alınamadı.")}
+    finally{if(request===leaveRequest.current)setLeaveBusy(false)}
+  },[company,year]);
+
+  useEffect(()=>{void loadCore()},[loadCore]);
+  useEffect(()=>{void loadPerson();return()=>{detailRequest.current++}},[loadPerson]);
+  useEffect(()=>{
+    if(centerTab!=="izin"&&modal!=="leave")return;
+    void loadLeaveContext();
+  },[centerTab,modal,loadLeaveContext]);
+  useEffect(()=>{
+    if((centerTab!=="izin"&&modal!=="leave")||!selected?.id){setEntitlement(null);return}
+    let current=true;
+    setEntitlement(null);
+    getPdksLeaveEntitlement(selected.id,{mainCompanyId:company}).then(result=>{
+      if(current)setEntitlement(result||null);
+    }).catch(cause=>{if(current)setError(cause?.message||"İzin bakiyesi yüklenemedi.")});
+    return()=>{current=false};
+  },[centerTab,modal,selected?.id,company]);
 
   const filtered=useMemo(()=>visiblePdksPeople(people,filter,search),[people,filter,search]);
-  const attendanceRows=attendance?.days||[],summary=attendance?.summary||{},schedule=attendance?.schedule||{};
+  const activeKey=selected?.id?`${company}:${year}:${month}:${selected.id}`:"";
+  const shownAttendance=activeKey&&loadedKey===activeKey?attendance:null;
+  const attendanceRows=shownAttendance?.days||[],summary=shownAttendance?.summary||{},schedule=shownAttendance?.schedule||{};
   const selectedLeaveType=(modern?.leaveTypes||[]).find(row=>row.code===leave.leaveTypeCode);
   const openIk=()=>openModule?.("ik",{tabKey:"personel-kartlari",actionContext:{source:"pdks",employeeId:selected?.id}});
 
   const savePunch=async()=>{if(isAuditAccount||!selected)return;setBusy(true);setError("");try{await addPdksTimeEvent(selected.id,{cardNo:selected.cardNo,workDate:punch.date,eventTime:punch.time,direction:punch.direction,source:"KYERP_WEB_PDKS",note:punch.note});setNotice("Kart hareketi D1'e kaydedildi; Agent ve web aynı kaydı görecek.");setModal("");await loadPerson()}catch(cause){setError(cause?.message||"Kart hareketi kaydedilemedi.")}finally{setBusy(false)}};
   const saveCorrection=async()=>{if(isAuditAccount||!selected)return;if(!correction.reason.trim()){setError("Puantaj düzeltme nedeni zorunludur.");return}setBusy(true);setError("");try{await savePdksCorrection(selected.id,{workDate:correction.date,status:correction.status,entry:correction.entry||null,exit:correction.exit||null,note:correction.note||correction.reason,reason:correction.reason,missingPunch:correction.status==="EKSIK_BASIM"});setNotice("Puantaj düzeltildi; eski/yeni değer ve kullanıcı denetim loguna işlendi.");setModal("");await loadPerson()}catch(cause){setError(cause?.message||"Puantaj düzeltilemedi.")}finally{setBusy(false)}};
   const previewLeave=async()=>{if(!selected)return;setBusy(true);setError("");try{setLeavePreview(await previewPdksLeaveV2({mainCompanyId:company,employeeId:selected.id,...leave}))}catch(cause){setLeavePreview(null);setError(cause?.message||"İzin önizlenemedi.")}finally{setBusy(false)}};
-  const saveLeave=async()=>{if(isAuditAccount||!selected||!leavePreview)return;setBusy(true);setError("");try{await savePdksLeaveV2({mainCompanyId:company,employeeId:selected.id,...leave,status:"APPROVED"});setNotice(`${selected.fullName} için ${selectedLeaveType?.name||"izin"} İK ana kaynağına işlendi; puantaj otomatik yenilendi.`);setLeavePreview(null);setModal("");await Promise.all([loadCore(),loadPerson()])}catch(cause){setError(cause?.message||"İzin kaydedilemedi.")}finally{setBusy(false)}};
+  const saveLeave=async()=>{if(isAuditAccount||!selected||!leavePreview)return;setBusy(true);setError("");try{await savePdksLeaveV2({mainCompanyId:company,employeeId:selected.id,...leave,status:"APPROVED"});setNotice(`${selected.fullName} için ${selectedLeaveType?.name||"izin"} İK ana kaynağına işlendi; puantaj otomatik yenilendi.`);setLeavePreview(null);setModal("");await Promise.all([loadLeaveContext(),loadPerson()])}catch(cause){setError(cause?.message||"İzin kaydedilemedi.")}finally{setBusy(false)}};
   const openCorrection=(row)=>{setCorrection({date:row.date,status:row.status||"CALISTI",entry:row.entry||"",exit:row.exit||"",reason:"",note:row.note||""});setModal("correction")};
 
   return <div className="ppd-page">
@@ -109,6 +168,7 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
               {!isAuditAccount?<button type="button" onClick={()=>{setCenterTab("izin");setLeavePreview(null);setModal("leave")}}>İzin İşlemi</button>:null}
             </div>
           </div>
+          {detailBusy||loadedKey!==activeKey?<div className="ppd-loading-detail" role="status">Seçilen personelin güncel kayıtları yükleniyor…</div>:null}
           <div className="ppd-overview-stats" aria-label="Aylık personel özeti">
             <div><span>Çalışılan gün</span><strong>{num(summary.workedDays)}</strong></div>
             <div><span>Normal süre</span><strong>{(num(summary.payableNormalMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:1})} <small>sa</small></strong></div>
@@ -177,6 +237,7 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
                 <div><h3>İzin ve hakediş</h3><p>İK ana kaynağındaki izin kayıtları puantaja yansır.</p></div>
                 {!isAuditAccount?<button type="button" className="ppd-primary" onClick={()=>{setLeavePreview(null);setModal("leave")}}>İzin Ekle</button>:null}
               </div>
+              {leaveBusy?<p className="ppd-loading-detail" role="status">İzin kayıtları yükleniyor…</p>:null}
               <div className="ppd-entitlement">
                 <div><span>Hakediş</span><strong>{num(entitlement?.currentCardEntitlement)} gün</strong></div>
                 <div><span>Devreden</span><strong>{num(entitlement?.carryover)} gün</strong></div>
