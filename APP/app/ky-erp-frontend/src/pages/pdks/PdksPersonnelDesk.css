@@ -106,3 +106,7 @@
 .ppd-payroll-summary b{font-size:15px;color:#263e56;font-variant-numeric:tabular-nums}
 @media(max-width:1050px){.ppd-page .ppd-payroll-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.ppd-page .ppd-payroll-summary{gap:7px}.ppd-page .ppd-payroll-summary>div{padding:11px}.ppd-page .ppd-tabs{gap:9px}.ppd-page .ppd-tabs button{padding:10px 1px;font-size:11px}}
+
+/* Nonblocking detail fetch: filters and menu remain interactive. */
+.ppd-page .ppd-loading-detail{margin:12px 24px 0;padding:11px 13px;border:1px solid #d7e4f3;border-radius:9px;background:#f6faff;color:#426482;font-size:12px;font-weight:650}
+@media(max-width:640px){.ppd-page .ppd-loading-detail{margin:10px 15px 0}}
