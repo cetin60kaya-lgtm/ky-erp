@@ -8,7 +8,6 @@ import {
   Sun, Moon, Info, LockKeyhole, Menu, X, ArrowRight, Clock3,
   FileCheck2, Fingerprint, Cloud, Monitor, Smartphone, AlertTriangle,
 } from "lucide-react";
-import { getPdksAttendance, getPdksPeople, getPdksProfile } from "../../services/pdksApi";
 import {
   PRODUCT_NAME, PRODUCT_SECTIONS, PRODUCT_PERSON_TABS,
   resolveProductRoute, isSensitiveProductTab,
@@ -187,10 +186,10 @@ export default function PdksUnifiedApp({
     }
     const controller = new AbortController();
     setData((prev)=>({ ...prev, loading:true,status:"loading",error:"" }));
-    Promise.all([
-      getPdksPeople({mainCompanyId:company,year:period.year,month:period.month}),
-      getPdksProfile({mainCompanyId:company}),
-    ]).then(([rows,profile]) => {
+    import("./readService.js").then((service) => Promise.all([
+      service.readPeople({mainCompanyId:company,year:period.year,month:period.month}),
+      service.readProfile({mainCompanyId:company}),
+    ])).then(([rows,profile]) => {
       if (controller.signal.aborted) return;
       const people = (Array.isArray(rows)?rows:[]).map(normalizePerson);
       setData((prev)=>({ ...prev,people,profile,days:[],status:"ready",error:"",loading:false }));
@@ -208,7 +207,8 @@ export default function PdksUnifiedApp({
       return undefined;
     }
     const controller = new AbortController();
-    getPdksAttendance(selectedPerson.id,period.year,period.month,{mainCompanyId:company})
+    import("./readService.js")
+      .then((service) => service.readDays(selectedPerson.id,period.year,period.month,{mainCompanyId:company}))
       .then((response)=>{if (!controller.signal.aborted) setData((prev)=>({...prev,days:Array.isArray(response?.days)?response.days:[]}));})
       .catch((error)=>{if (!controller.signal.aborted) {
         setData((prev)=>({...prev,days:[],error:statusLabel(error)}));
