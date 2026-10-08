@@ -32,7 +32,7 @@ export default function UnifiedOperationPanel({
   const [reference,setReference]=useState("idle");
   const [preview,setPreview]=useState(null);
   const [ack,setAck]=useState("");
-  const [state,setState]=useState({status:"idle",message:""});
+  const [state,setState]=useState({status:"idle",message:"",requestId:""});
   const available=Boolean(previewOnly || (profile?.scope==="FULL" && profile?.audit!==true &&
     company && choices.length));
   const operation=operationById(selected);
@@ -50,7 +50,7 @@ export default function UnifiedOperationPanel({
     setReference("idle");
     setPreview(null);
     setAck("");
-    setState({status:"idle",message:""});
+    setState({status:"idle",message:"",requestId:""});
   },[inputKey]);
 
   useEffect(()=>{
@@ -74,7 +74,7 @@ export default function UnifiedOperationPanel({
   </div>;
 
   const resetDraft=()=>{
-    setPreview(null);setAck("");setState({status:"idle",message:""});
+    setPreview(null);setAck("");setState({status:"idle",message:"",requestId:""});
   };
   const choose=(id)=>{setSelected(id);setForm({});resetDraft();};
   const edit=(key,value)=>{setForm((v)=>({...v,[key]:value}));resetDraft();};
@@ -98,12 +98,41 @@ export default function UnifiedOperationPanel({
     try{
       const {submitAndVerify}=await import("./operationTransport.js");
       const reply=await submitAndVerify(preview);
-      if(reply.status!=="CLOUD_D1_VERIFIED")throw new Error("Kayıt doğrulanmadı.");
-      setState({status:"success",message:"D1 kaydı sunucudan tekrar okundu ve doğrulandı. FDB/TNF mutabakatı ayrıca gerekir."});
+      if(!["CLOUD_D1_VERIFIED","CLOUD_D1_COMMITTED_SOURCE_UNVERIFIED"].includes(reply.status))
+        throw new Error("Kalıcı işlem fişi doğrulanamadı.");
+      setState({status:reply.sourceReadback?"success":"source-pending",
+        message:reply.sourceReadback?
+          "D1 işlem fişi ve kaynak kaydı doğrulandı. FDB/TNF eşitlemesi hâlâ bekliyor.":
+          "D1 işlemi kalıcı olarak kaydedildi. Ekran kaynak okuması henüz doğrulanamadı. İkinci kez göndermeyin.",
+        requestId:reply.requestId});
       onChanged?.();
     }catch(error){
-      setState({status:"uncertain",message:String(error?.message||"Kayıt doğrulanamadı.")});
+      setState({status:error?.requestId?"uncertain":"error",
+        message:String(error?.message||"İşlem doğrulanamadı."),
+        requestId:String(error?.requestId||"")});
     }
+  };
+  const checkReceipt=async()=>{
+    if(!state.requestId||state.status==="pending")return;
+    setState((current)=>({...current,status:"pending",
+      message:"Kalıcı işlem kimliği sunucuda sorgulanıyor..."}));
+    try{
+      const {checkUnifiedReceipt}=await import("./operationTransport.js");
+      const row=await checkUnifiedReceipt(state.requestId);
+      if(row.action!==selected)throw new Error("İşlem kimliği başka işlem türüne ait.");
+      setState({status:"source-pending",requestId:state.requestId,
+        message:"D1 işlem fişi bulundu, kayıt ve audit tek işlemle tamamlandı. Kaynak görünümü veya FDB/TNF ayrıca denetlenmeli."});
+      onChanged?.();
+    }catch(error){
+      setState({status:"uncertain",requestId:state.requestId,
+        message:"İşlem fişi şu anda doğrulanamadı: "+String(error?.message||error)+
+          ". Yeni bir kayıt açmadan önce yönetici ve işlem günlüğü kontrol etmeli."});
+    }
+  };
+  const newOperation=()=>{
+    setSelected("");setForm({});setPreview(null);setAck("");
+    setMasters(null);setReference("idle");
+    setState({status:"idle",message:"",requestId:""});
   };
 
   return <section className="pdk-u-operation-box" aria-label="Onaylı PDKS işlemleri">
@@ -119,7 +148,7 @@ export default function UnifiedOperationPanel({
           "Yalnız Cloud D1 yönetim/özlük kayıtları; fiziksel terminal, Firebird ve yıllık TNF kayıtları değiştirilmez."}
       </p>
       <label className="pdk-u-operation-label">İşlem türü
-        <select value={selected} disabled={state.status==="pending"||state.status==="success"||state.status==="uncertain"}
+        <select value={selected} disabled={["pending","success","uncertain","source-pending"].includes(state.status)}
           onChange={(e)=>choose(e.target.value)}><option value="">İşlem seçiniz</option>
           {choices.map((item)=><option key={item.id} value={item.id}>{item.title}</option>)}
         </select>
@@ -130,7 +159,7 @@ export default function UnifiedOperationPanel({
           const isSelect=["person","group","personnelGroup","service","select"].includes(field.type);
           return <label key={field.id} className="pdk-u-operation-label">{field.label}
             {isSelect?<select required={field.required} value={text(form[field.id])}
-              disabled={state.status==="pending"||state.status==="success"||state.status==="uncertain"}
+              disabled={["pending","success","uncertain","source-pending"].includes(state.status)}
               onChange={(e)=>edit(field.id,e.target.value)}>
               <option value="">Seçiniz</option>{options.map((item)=><option key={item.value}
                 value={item.value}>{item.label}</option>)}
@@ -142,7 +171,7 @@ export default function UnifiedOperationPanel({
                 step={field.id==="amount"?"0.01":field.type==="number"?"1":undefined}
                 maxLength={field.id==="reason"||field.id==="note"?600:150}
                 value={text(form[field.id])}
-                disabled={state.status==="pending"||state.status==="success"||state.status==="uncertain"}
+                disabled={["pending","success","uncertain","source-pending"].includes(state.status)}
                 onChange={(e)=>edit(field.id,e.target.value)}/>}
           </label>;
         })}</div>
@@ -176,7 +205,18 @@ export default function UnifiedOperationPanel({
       </div>}
       {state.status!=="idle"&&<p role="status" className={"pdk-u-operation-state pdk-u-operation-"+state.status}>
         {state.status==="pending"&&<LoaderCircle size={15}/>} {state.message}
+        {state.requestId&&<span className="pdk-u-operation-receipt">
+          İşlem kimliği: <code>{state.requestId}</code>
+        </span>}
       </p>}
+      {["uncertain","source-pending","success"].includes(state.status)&&<div className="pdk-u-operation-buttons">
+        {state.requestId&&state.status!=="success"&&<button
+          type="button" className="pdk-u-btn" onClick={checkReceipt}>
+          İşlem fişini sorgula
+        </button>}
+        {state.status==="success"&&<button type="button" className="pdk-u-btn"
+          onClick={newOperation}>Yeni işlem başlat</button>}
+      </div>}
     </div>}
   </section>;
 }
