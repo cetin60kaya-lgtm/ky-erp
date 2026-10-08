@@ -148,6 +148,16 @@ export function registerIkPdksUnifiedAgentRoutes(app:Hono<AppEnv>){
       WHERE o.id=? AND o.main_company_id=? LIMIT 1`,[id,company]);
     if(!row)return fail(c,404,"PDKS_OUTBOX_NOT_FOUND","Unified outbox kaydı bulunamadı.");
     if(text(row.state)==="ACKED"){
+      // An already ACKed command may only be replay-confirmed by the same
+      // device holding the original receipt and the same delivery hash.
+      // Without this check any other device in the tenant could claim a
+      // successful operation it never performed (or RETRY an ACKed command).
+      let original:Row={};
+      try{original=JSON.parse(text(row.ack_payload_json)||"{}");}catch{}
+      if(status!=="ACKED"||!safeEqual(text(body.deliveryHash),text(row.delivery_hash))||
+         !safeEqual(text(original.deviceId),text(device.id)))
+        return fail(c,409,"PDKS_ACK_REPLAY_PROOF_MISMATCH",
+          "Önceden tamamlanan komut yalnız asıl cihaz ve teslimat özetiyle doğrulanabilir.");
       return ok(c,{id,state:"ACKED",replayed:true,acknowledgedAt:row.acknowledged_at});
     }
     if(text(row.state)!=="CLAIMED"||text(row.delivery_owner)!==text(device.id))
