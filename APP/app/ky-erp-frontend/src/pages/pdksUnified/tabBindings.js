@@ -30,8 +30,11 @@ export const tabBinding=(id)=>TAB_BINDINGS.find((t)=>t.id===id)||null;
 export const sourceForTab=(id,{audit=false}={})=>{
   const tab=byId.get(id);
   if(!tab)return "unconnected";
-  if(audit && (tab.section==="payroll"||tab.sensitive))return "forbidden";
-  return SOURCES[id]||"unconnected";
+  const source=SOURCES[id]||"unconnected";
+  if(audit && (tab.section==="payroll"||tab.sensitive ||
+    !["people","attendance","monthly-attendance","unconnected"].includes(source)))
+    return "forbidden";
+  return source;
 };
 const arr=(data,...keys)=>{
   if(Array.isArray(data))return data;
