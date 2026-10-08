@@ -588,6 +588,13 @@ async function updateMonthly(c: Context<AppEnv>) {
   if (!current) return error(c, 404, "NOT_FOUND", "Aylık personel bulunamadı.");
   const value = monthlyValues(body, current);
   if (!value.fullName) return error(c, 400, "FULL_NAME_REQUIRED", "Ad soyad zorunludur.");
+  if (body.annualLeaveEntitlement !== undefined && number(body.annualLeaveEntitlement) !== number(current.annual_leave_entitlement)) {
+    const profile = await leaveProfile(c, companyId, id);
+    const statutory = calculateStatutoryAnnualLeave(value.hireDate, profile.birthDate, hrTodayIstanbul());
+    if (statutory.eligible && value.annualLeaveEntitlement < statutory.entitlementDays) {
+      return error(c, 409, "LEAVE_ENTITLEMENT_BELOW_STATUTORY", "Personel kartındaki yıllık izin hakkı kanuni asgari hakkın altına indirilemez.");
+    }
+  }
   if (/^HKN-\d+$/i.test(text(current.code))) value.code = upper(current.code);
   const timestamp = nowIso();
   await c.env.DB.prepare(
@@ -1688,6 +1695,15 @@ async function savePersonCard(c: Context<AppEnv>) {
   const sgkDays = sgkCovered ? rawSgkDays : 0;
   const hireDate = hrDateOnly(body.hireDate || body.startDate || current.hire_date);
   if (!hireDate) return error(c, 400, "HIRE_DATE_REQUIRED", "İşe giriş tarihi zorunludur.");
+  const updatedLeaveRight = body.annualLeaveEntitlement !== undefined && body.annualLeaveEntitlement !== null && body.annualLeaveEntitlement !== ""
+    && number(body.annualLeaveEntitlement) !== number(current.annual_leave_entitlement);
+  if (updatedLeaveRight) {
+    const profile = await leaveProfile(c, companyId, employeeId);
+    const statutory = calculateStatutoryAnnualLeave(hireDate, profile.birthDate, hrTodayIstanbul());
+    if (statutory.eligible && number(body.annualLeaveEntitlement) < statutory.entitlementDays) {
+      return error(c, 409, "LEAVE_ENTITLEMENT_BELOW_STATUTORY", "Kanuni yıllık izin hakkı azaltılamaz. Hakediş & Ayarlar'dan personel hakkını kontrol edin.");
+    }
+  }
   const effectiveExitDate = hrDateOnly(body.exitDate);
   if (effectiveExitDate && effectiveExitDate < hireDate) {
     return error(c, 400, "EXIT_BEFORE_HIRE", "İşten çıkış tarihi işe giriş tarihinden önce olamaz.");
