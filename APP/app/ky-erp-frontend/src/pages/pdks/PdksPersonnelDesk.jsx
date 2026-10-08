@@ -35,7 +35,7 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
   const [correction,setCorrection]=useState({date:iso(),status:"CALISTI",entry:"08:30",exit:"19:00",reason:"",note:""});
   const [leave,setLeave]=useState({leaveTypeCode:"YILLIK_IZIN",startDate:iso(),endDate:iso(),dayPart:"FULL",documentNo:"",note:""}),[leavePreview,setLeavePreview]=useState(null);
 
-  const selected=useMemo(()=>people.find(p=>p.id===selectedId)||people[0]||null,[people,selectedId]);
+  const selected=useMemo(()=>{const scoped=people.filter(p=>{const active=!upper(p.status).includes("PAS")&&!upper(p.activePassive).includes("PAS");return filter==="TUM"||(filter==="AKTIF"?active:!active)});return scoped.find(p=>p.id===selectedId)||scoped[0]||null},[people,selectedId,filter]);
   const personLeaves=useMemo(()=>(leaveCenter?.plans||[]).filter(row=>(row.employeeId||row.employee_id)===selected?.id),[leaveCenter?.plans,selected?.id]);
   useEffect(()=>{if(["giris-cikislar","puantaj","calisma-tarihi"].includes(activeTab))setCenterTab("giris");else if(activeTab==="izinler")setCenterTab("izin");else if(activeTab==="personel-bilgileri")setCenterTab("bilgi")},[activeTab]);
 
@@ -43,7 +43,7 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
   const loadPerson=useCallback(async()=>{if(!selected?.id){setAttendance(null);setEntitlement(null);return}setBusy(true);setError("");try{const [att,ent]=await Promise.all([getPdksAttendance(selected.id,year,month),getPdksLeaveEntitlement(selected.id,{mainCompanyId:company})]);setAttendance(att||null);setEntitlement(ent||null)}catch(cause){setError(cause?.message||"Personel puantajı yüklenemedi.")}finally{setBusy(false)}},[company,month,selected?.id,year]);
   useEffect(()=>{loadCore()},[loadCore]);useEffect(()=>{loadPerson()},[loadPerson]);
 
-  const filtered=useMemo(()=>{const q=upper(search);return people.filter(p=>{const hit=!q||upper(`${p.personnelCode||p.code||""} ${p.fullName||""} ${p.cardNo||""} ${p.department||""} ${p.title||""}`).includes(q);const active=!upper(p.status).includes("PAS")&&!upper(p.activePassive).includes("PAS");return hit&&(filter==="TUM"||(filter==="AKTIF"?active:!active))})},[filter,people,search]);
+  const filtered=useMemo(()=>{const q=upper(search);return people.filter(p=>{const hit=!q||upper(`${p.personnelCode||p.code||""} ${p.fullName||""} ${p.cardNo||""} ${p.department||""} ${p.title||""}`).includes(q);const active=!upper(p.status).includes("PAS")&&!upper(p.activePassive).includes("PAS");return hit&&(filter==="TUM"||(filter==="AKTIF"?active:!active))}).sort((a,b)=>String(a.cardNo||a.personnelCode||a.code||"").localeCompare(String(b.cardNo||b.personnelCode||b.code||""),"tr",{numeric:true}))},[filter,people,search]);
   const attendanceRows=attendance?.days||[],summary=attendance?.summary||{},schedule=attendance?.schedule||{};
   const selectedLeaveType=(modern?.leaveTypes||[]).find(row=>row.code===leave.leaveTypeCode);
   const openIk=()=>openModule?.("ik",{tabKey:"personel-kartlari",actionContext:{source:"pdks",employeeId:selected?.id}});
@@ -55,12 +55,115 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
   const openCorrection=(row)=>{setCorrection({date:row.date,status:row.status||"CALISTI",entry:row.entry||"",exit:row.exit||"",reason:"",note:row.note||""});setModal("correction")};
 
   return <div className="ppd-page">
-    <header className="ppd-topline"><div><span>PERSONEL / PDKS REFERANSI</span><strong>{MONTHS[month-1]} {year}</strong><small>{selected?`${selected.fullName} · ${schedule.groupName||"Normal Mesai"}`:"Personel seçin"}</small></div><div className="ppd-period"><select value={month} onChange={e=>setMonth(Number(e.target.value))}>{MONTHS.map((label,i)=><option value={i+1} key={label}>{label}</option>)}</select><input type="number" value={year} min="2020" max="2100" onChange={e=>setYear(Number(e.target.value)||NOW.getFullYear())}/><button type="button" onClick={()=>Promise.all([loadCore(),loadPerson()])} disabled={busy}>↻ Yenile</button></div></header>
+    <header className="ppd-topline">
+      <div className="ppd-heading">
+        <span className="ppd-eyebrow">KY ERP / PDKS / PERSONEL</span>
+        <h1>Personel ve devam takibi</h1>
+        <p>Tek listeden personeli seçin; kart, çalışma ve izin bilgilerine ulaşın.</p>
+      </div>
+      <div className="ppd-period" aria-label="Dönem seçimi">
+        <label>Ay<select aria-label="Ay" value={month} onChange={e=>setMonth(Number(e.target.value))}>{MONTHS.map((label,i)=><option value={i+1} key={label}>{label}</option>)}</select></label>
+        <label>Yıl<input aria-label="Yıl" type="number" value={year} min="2020" max="2100" onChange={e=>setYear(Math.min(2100,Math.max(2020,Number(e.target.value)||NOW.getFullYear())))}/></label>
+        <button type="button" onClick={()=>Promise.all([loadCore(),loadPerson()])} disabled={busy}>{busy?"Yükleniyor...":"Yenile"}</button>
+      </div>
+    </header>
     {notice?<div className="ppd-notice">{notice}</div>:null}{error?<div className="ppd-error">{error}</div>:null}
     <div className="ppd-workspace">
-      <aside className="ppd-people-panel"><div className="ppd-panel-title"><strong>Personel</strong><span>{filtered.length}</span></div><div className="ppd-person-headrow"><span>Kart</span><span>Ad Soyad</span><span>Bölüm</span></div><div className="ppd-person-list">{filtered.map(person=><button type="button" key={person.id} className={selected?.id===person.id?"active":""} onClick={()=>setSelectedId(person.id)}><code>{person.cardNo||person.personnelCode||"—"}</code><span><strong>{person.fullName}</strong><small>{person.personnelCode||person.code||"Kod yok"} · {person.title||"Görev yok"}</small></span><em>{person.department||"—"}</em></button>)}{!filtered.length?<div className="ppd-empty">Personel bulunamadı.</div>:null}</div><div className="ppd-person-search"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Ad, kart, kod, bölüm ara..."/></div><div className="ppd-filter"><button className={filter==="TUM"?"active":""} onClick={()=>setFilter("TUM")}>Tüm</button><button className={filter==="AKTIF"?"active":""} onClick={()=>setFilter("AKTIF")}>Aktif</button><button className={filter==="PASIF"?"active":""} onClick={()=>setFilter("PASIF")}>Pasif</button></div>{!isAuditAccount?<div className="ppd-person-actions"><button type="button" className="primary" onClick={openIk} disabled={!selected}>İK Kartını Aç</button><button type="button" onClick={()=>openModule?.("pdks",{tabKey:"gruplar-vardiyalar",actionContext:{employeeId:selected?.id}})} disabled={!selected}>Vardiya</button><button type="button" onClick={()=>openModule?.("pdks",{tabKey:"servisler",actionContext:{employeeId:selected?.id}})} disabled={!selected}>Servis</button><button type="button" onClick={()=>{setCenterTab("izin");setLeavePreview(null);setModal("leave")}} disabled={!selected}>İzin</button></div>:null}{selected?<div className="ppd-mini-detail"><div><span>Grup</span><b>{schedule.groupName||"Normal Mesai"}</b></div><div><span>Mesai</span><b>{schedule.entryTime||"08:30"}–{schedule.exitTime||"19:00"}</b></div><div><span>Kart</span><b>{selected.cardNo||"Atanmadı"}</b></div><div><span>İşe Baş.</span><b>{selected.startDate||"-"}</b></div></div>:null}</aside>
-      <section className="ppd-center-panel"><nav className="ppd-tabs"><button className={centerTab==="bilgi"?"active":""} onClick={()=>setCenterTab("bilgi")}>Personel Bilgileri</button><button className={centerTab==="giris"?"active":""} onClick={()=>setCenterTab("giris")}>Giriş / Çıkış</button><button className={centerTab==="izin"?"active":""} onClick={()=>setCenterTab("izin")}>İzinler</button></nav><div className="ppd-center-body">{centerTab==="bilgi"?<PersonInfo person={selected} schedule={schedule} onOpenIk={openIk}/>:null}{centerTab==="giris"?<><div className="ppd-sectionbar"><div><strong>Giriş / Çıkış Hareketleri</strong><small>Ham kart silinmez; düzeltme puantaj katmanında audit ile yapılır. E = elle düzenlendi.</small></div>{!isAuditAccount?<button className="ppd-primary" onClick={()=>setModal("punch")}>+ Geçiş Ekle</button>:null}</div><div className="ppd-movement-table"><div className="head"><span>Tarih</span><span>Giriş</span><span>Çıkış</span><span>Basım</span><span>Kaynak</span><span>Durum</span></div>{attendanceRows.slice().reverse().map(row=><button type="button" key={row.date} onClick={()=>openCorrection(row)}><span>{dateTr(row.date)} <small>{dayName(row.date)}</small></span><b>{row.entry||"—"}{row.manualEntry?<sup className="ppd-edit-mark">E</sup>:null}</b><b>{row.exit||"—"}{row.manualExit?<sup className="ppd-edit-mark">E</sup>:null}</b><span>{row.eventCount||0}{row.duplicatePunches?` · ${row.duplicatePunches} tekrar`:""}</span><span>{row.source==="MANUAL_OVERRIDE"?"Düzeltme":"Kart/Agent"}</span><em className={statusTone(row.status)}>{statusLabel(row.status)}</em></button>)}</div></>:null}{centerTab==="izin"?<><div className="ppd-sectionbar"><div><strong>İzinler</strong><small>İzin tek kayıt olarak İK’ya yazılır ve PDKS puantajına otomatik yansır.</small></div>{!isAuditAccount?<button className="ppd-primary" onClick={()=>{setLeavePreview(null);setModal("leave")}}>+ İzin Ekle</button>:null}</div><div className="ppd-entitlement"><div><span>Kart Hakediş</span><strong>{num(entitlement?.currentCardEntitlement)} gün</strong></div><div><span>Devreden</span><strong>{num(entitlement?.carryover)} gün</strong></div><div><span>Kullanılan</span><strong>{num(entitlement?.used)} gün</strong></div><div className="net"><span>Kalan</span><strong>{num(entitlement?.remaining)} gün</strong></div></div><div className="ppd-movement-table leave"><div className="head"><span>Başlangıç</span><span>Bitiş</span><span>Tür</span><span>Gün</span><span>Durum</span><span>Not</span></div>{personLeaves.map(row=><div key={row.id}><span>{row.startDate||row.start_date}</span><span>{row.endDate||row.end_date}</span><b>{row.recordType||row.record_type}</b><span>{num(row.countedDays??row.counted_days??row.dayCount)}</span><em className="ok">{row.status||"-"}</em><span>{row.note||"-"}</span></div>)}{!personLeaves.length?<div className="ppd-empty">Bu personel için izin kaydı yok.</div>:null}</div></>:null}</div><footer className="ppd-center-footer">{!isAuditAccount?<><button onClick={()=>setModal("punch")}>+ Geçiş</button><button onClick={()=>setModal("leave")}>+ İzin</button><button onClick={()=>{const row=attendanceRows.find(r=>r.date===iso())||attendanceRows[attendanceRows.length-1];if(row)openCorrection(row)}}>Puantaj Düzelt</button></>:<span>Denetim hesabı · salt okunur</span>}</footer></section>
-      <aside className="ppd-att-panel"><div className="ppd-panel-title"><strong>Puantaj</strong><button onClick={()=>openModule?.("pdks",{tabKey:"puantaj-sonuclari"})}>Özet</button></div><div className="ppd-att-head"><span>Tarih</span><span>Giriş</span><span>Çıkış</span><span>NÇ</span><span>FM</span><span>Geç</span><span>Erk</span><span>Durum</span></div><div className="ppd-att-list">{attendanceRows.map(row=><button type="button" key={row.date} onClick={()=>openCorrection(row)} className={statusTone(row.status)}><span>{String(row.date).slice(8,10)}/{String(row.date).slice(5,7)} <small>{dayName(row.date)}</small></span><b>{row.entry||"—"}{row.manualEntry?<sup className="ppd-edit-mark">E</sup>:null}</b><b>{row.exit||"—"}{row.manualExit?<sup className="ppd-edit-mark">E</sup>:null}</b><span title={`Fiilî: ${(num(row.workedMinutes)/60).toFixed(2)} sa`}>{Math.round(num(row.normalPayableMinutes)/60*100)/100}</span><span>{Math.round(num(row.overtimeMinutes)/60*100)/100}</span><span>{num(row.lateMinutes)||""}</span><span>{num(row.earlyMinutes)||""}</span><em>{statusLabel(row.status)}</em></button>)}</div><div className="ppd-att-totals"><div><span>Normal Çalışma Hedefi</span><b>{summary.profileConfigured?`${(num(summary.normalTargetMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:2})} sa`:"Profil bekliyor"}</b><small>{schedule?.profileName||schedule?.personnelGroup?.name||"Firma PDKS profili"}</small></div><div><span>Ödenecek NÇ</span><b>{(num(summary.payableNormalMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:2})} sa</b></div><div><span>NÇ Kesinti</span><b>{(num(summary.normalDeductionMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:2})} sa</b><small>{num(summary.blockedDays)?`${num(summary.blockedDays)} gün düzeltme bekliyor`:"Hazır"}</small></div><div><span>Fiilî Kart Süresi</span><b>{(num(summary.actualWorkedMinutes??summary.workedMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:2})} sa</b></div><div><span>Fazla Mesai</span><b>{(num(summary.overtimeMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:2})} sa</b></div><div><span>Yıllık İzin</span><b>{num(summary.annualLeaveDays)} gün</b></div><div><span>Geç / Erken</span><b>{num(summary.lateMinutes)} / {num(summary.earlyMinutes)} dk</b></div><div><span>Eksik / Kart Yok</span><b>{num(summary.missingPunchDays)+num(summary.noPunchDays)} gün</b></div></div></aside>
+      <aside className="ppd-people-panel" aria-label="Personel listesi">
+        <div className="ppd-list-title">
+          <div><h2>Personeller</h2><p>{filtered.length} kayıt gösteriliyor</p></div>
+          <strong>{filtered.length}</strong>
+        </div>
+        <label className="ppd-person-search">
+          <span>Personel ara</span>
+          <input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Kart no veya ad soyad..." />
+        </label>
+        <div className="ppd-filter" role="group" aria-label="Personel durumu">
+          <button type="button" aria-pressed={filter==="AKTIF"} className={filter==="AKTIF"?"active":""} onClick={()=>setFilter("AKTIF")}>Aktif</button>
+          <button type="button" aria-pressed={filter==="PASIF"} className={filter==="PASIF"?"active":""} onClick={()=>setFilter("PASIF")}>Pasif</button>
+          <button type="button" aria-pressed={filter==="TUM"} className={filter==="TUM"?"active":""} onClick={()=>setFilter("TUM")}>Tümü</button>
+        </div>
+        <div className="ppd-person-headrow"><span>Kart No</span><span>Ad Soyad</span><span>Grup</span></div>
+        <div className="ppd-person-list" aria-live="polite">
+          {filtered.map(person=><button type="button" key={person.id} aria-pressed={selected?.id===person.id} className={selected?.id===person.id?"active":""} onClick={()=>setSelectedId(person.id)}>
+            <code>{person.cardNo||person.personnelCode||"—"}</code>
+            <strong>{person.fullName||"İsimsiz personel"}</strong>
+            <span>{person.personnelGroupName||person.groupName||person.workGroupName||person.department||"—"}</span>
+          </button>)}
+          {!filtered.length?<div className="ppd-empty">Bu filtrede personel bulunamadı.</div>:null}
+        </div>
+      </aside>
+
+      <section className="ppd-center-panel" aria-label="Personel detayları">
+        {selected ? <>
+          <div className="ppd-selected-hero">
+            <div className="ppd-big-avatar">{String(selected.fullName||"?").split(/\s+/).slice(0,2).map(v=>v[0]).join("")}</div>
+            <div className="ppd-selected-person">
+              <span>SEÇİLİ PERSONEL</span>
+              <h2>{selected.fullName}</h2>
+              <p>Kart {selected.cardNo||"Atanmamış"} · {schedule.groupName||selected.personnelGroupName||"Çalışma grubu yok"}</p>
+            </div>
+            <div className="ppd-person-actions">
+              <button type="button" className="ppd-primary" onClick={openIk}>İK Kartını Aç</button>
+              {!isAuditAccount?<button type="button" onClick={()=>{setCenterTab("izin");setLeavePreview(null);setModal("leave")}}>İzin İşlemi</button>:null}
+            </div>
+          </div>
+          <div className="ppd-overview-stats" aria-label="Aylık personel özeti">
+            <div><span>Çalışılan gün</span><strong>{num(summary.workedDays)}</strong></div>
+            <div><span>Normal süre</span><strong>{(num(summary.payableNormalMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:1})} <small>sa</small></strong></div>
+            <div><span>Fazla mesai</span><strong>{(num(summary.overtimeMinutes)/60).toLocaleString("tr-TR",{maximumFractionDigits:1})} <small>sa</small></strong></div>
+            <div><span>Eksik / kart yok</span><strong>{num(summary.missingPunchDays)+num(summary.noPunchDays)}</strong></div>
+          </div>
+          <nav className="ppd-tabs" aria-label="Personel alt sayfaları">
+            <button type="button" aria-current={centerTab==="bilgi"?"page":undefined} className={centerTab==="bilgi"?"active":""} onClick={()=>setCenterTab("bilgi")}>Personel Özeti</button>
+            <button type="button" aria-current={centerTab==="giris"?"page":undefined} className={centerTab==="giris"?"active":""} onClick={()=>setCenterTab("giris")}>Giriş / Çıkış</button>
+            <button type="button" aria-current={centerTab==="izin"?"page":undefined} className={centerTab==="izin"?"active":""} onClick={()=>setCenterTab("izin")}>İzinler</button>
+          </nav>
+          <div className="ppd-center-body">
+            {centerTab==="bilgi"?<PersonInfo person={selected} schedule={schedule} onOpenIk={openIk}/>:null}
+            {centerTab==="giris"?<>
+              <div className="ppd-sectionbar">
+                <div><h3>{MONTHS[month-1]} {year} · Giriş / Çıkış</h3><p>Gerçek kart hareketleri ve onaylı düzeltmeler ayrı gösterilir.</p></div>
+                <span className="ppd-record-count">{attendanceRows.length} gün</span>
+              </div>
+              <div className="ppd-table-scroll">
+                <table className="ppd-activity-table">
+                  <thead><tr><th scope="col">Tarih</th><th scope="col">Giriş</th><th scope="col">Çıkış</th><th scope="col">Kaynak</th><th scope="col">Durum</th><th scope="col">İşlem</th></tr></thead>
+                  <tbody>{attendanceRows.slice().reverse().map(row=><tr key={row.date}>
+                    <td><strong>{dateTr(row.date)}</strong><small>{dayName(row.date)}</small></td>
+                    <td><span className="ppd-clock">{row.entry||"—"}</span>{row.manualEntry?<span className="ppd-edit-mark" title="Elle düzenleme">E</span>:null}</td>
+                    <td><span className="ppd-clock">{row.exit||"—"}</span>{row.manualExit?<span className="ppd-edit-mark" title="Elle düzenleme">E</span>:null}</td>
+                    <td className="ppd-source">{row.source==="MANUAL_OVERRIDE"?"Onaylı düzeltme":"Kart / Agent"}{row.duplicatePunches?<small>{row.duplicatePunches} tekrar</small>:null}</td>
+                    <td><span className={"ppd-status "+statusTone(row.status)}>{statusLabel(row.status)}</span></td>
+                    <td>{!isAuditAccount?<button className="ppd-row-action" type="button" onClick={()=>openCorrection(row)}>İncele / Düzelt</button>:<span className="ppd-source">Salt okunur</span>}</td>
+                  </tr>)}</tbody>
+                </table>
+                {!attendanceRows.length?<div className="ppd-empty">Bu ay için kayıt bulunamadı. Son eşitleme ve terminal durumunu kontrol edin.</div>:null}
+              </div>
+              <div className="ppd-data-note">E işareti elle düzenlenmiş hareketi gösterir. Ham terminal kayıtları bu ekrandan değiştirilmez.</div>
+            </>:null}
+            {centerTab==="izin"?<>
+              <div className="ppd-sectionbar">
+                <div><h3>İzin ve hakediş</h3><p>İK ana kaynağındaki izin kayıtları puantaja yansır.</p></div>
+                {!isAuditAccount?<button type="button" className="ppd-primary" onClick={()=>{setLeavePreview(null);setModal("leave")}}>İzin Ekle</button>:null}
+              </div>
+              <div className="ppd-entitlement">
+                <div><span>Hakediş</span><strong>{num(entitlement?.currentCardEntitlement)} gün</strong></div>
+                <div><span>Devreden</span><strong>{num(entitlement?.carryover)} gün</strong></div>
+                <div><span>Kullanılan</span><strong>{num(entitlement?.used)} gün</strong></div>
+                <div className="net"><span>Kalan</span><strong>{num(entitlement?.remaining)} gün</strong></div>
+              </div>
+              <div className="ppd-table-scroll">
+                <table className="ppd-activity-table">
+                  <thead><tr><th>Başlangıç</th><th>Bitiş</th><th>İzin Türü</th><th>Gün</th><th>Durum</th></tr></thead>
+                  <tbody>{personLeaves.map(row=><tr key={row.id}><td>{row.startDate||row.start_date}</td><td>{row.endDate||row.end_date}</td><td>{row.recordType||row.record_type}</td><td>{num(row.countedDays??row.counted_days??row.dayCount)}</td><td>{row.status||"—"}</td></tr>)}</tbody>
+                </table>
+                {!personLeaves.length?<div className="ppd-empty">Bu personel için izin kaydı yok.</div>:null}
+              </div>
+            </>:null}
+          </div>
+        </> : <div className="ppd-empty ppd-full-empty">Personel seçmek için soldaki listeyi kullanın.</div>}
+      </section>
     </div>
 
     {modal==="punch"?<Modal title="Giriş / Çıkış Ekle" subtitle={`${selected?.fullName||"Personel"} · ham kart hareketi`} onClose={()=>setModal("")}><div className="ppd-form"><label>Tarih<input type="date" value={punch.date} onChange={e=>setPunch({...punch,date:e.target.value})}/></label><label>Saat<input type="time" value={punch.time} onChange={e=>setPunch({...punch,time:e.target.value})}/></label><label>Yön<select value={punch.direction} onChange={e=>setPunch({...punch,direction:e.target.value})}><option value="AUTO">Otomatik</option><option value="IN">Giriş</option><option value="OUT">Çıkış</option></select></label><label className="wide">Açıklama<input value={punch.note} onChange={e=>setPunch({...punch,note:e.target.value})}/></label></div><div className="ppd-modal-actions"><button onClick={()=>setModal("")}>Vazgeç</button><button className="ppd-primary" onClick={savePunch} disabled={busy}>Kaydet</button></div></Modal>:null}
