@@ -17,6 +17,7 @@ import {
 } from "./productData";
 import {sourceForTab,rowsForTab} from "./tabBindings.js";
 import {useUnifiedPdksData} from "./useUnifiedPdksData.js";
+import UnifiedOperationPanel from "./UnifiedOperationPanel.jsx";
 import "./pdksUnified.css";
 
 const ICONS = {
@@ -266,7 +267,8 @@ export default function PdksUnifiedApp({
   const tab=section.tabs.find((item)=>item.id===navigation.tab)||section.tabs[0];
   const requirement=sourceForTab(tab.id,{audit:profileAudit});
   const needsPeople=tab.id==="today" || requirement==="people" ||
-    requirement==="attendance" || requirement==="corrections";
+    requirement==="attendance" || requirement==="corrections" ||
+    ["departments","routes","leave","advances"].includes(tab.id);
   // Personnel 360 reads only while its own detail panel is actually visible.
   const detailVisible=section.id==="people" &&
     ["people","cards","employment"].includes(tab.id);
@@ -477,6 +479,11 @@ export default function PdksUnifiedApp({
             <UnifiedTable columns={tab.columns} rows={filteredRows}
               masked={isAuditAccount && isSensitiveProductTab(tab.id)}/>
           )}
+          <UnifiedOperationPanel key={[company,tab.id,period.year,period.month].join(":")}
+            tabId={tab.id} previewOnly={previewOnly}
+            profile={data.profile} people={data.people}
+            company={company} year={period.year} month={period.month}
+            onChanged={()=>setReloadToken((value)=>value+1)}/>
           {realAttendance && dataConnected && <p className="pdk-u-source-foot">
             <Info size={15}/> Listede yalnız seçili personelin {MONTHS[period.month-1]} {period.year} kayıtları gösterilir.
             Firebird/TNF ile gerçek mutabakat ayrıca doğrulanır.
