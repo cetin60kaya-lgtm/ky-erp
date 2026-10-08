@@ -104,7 +104,7 @@ internal static class UnifiedJournalStore
         var payload = JsonSerializer.Serialize(receipt, JsonOptions);
         if (existing is not null)
         {
-            if (!StringComparer.Ordinal.Equals(existing.Value.GetRawText(), receipt.GetRawText()))
+            if (!StringComparer.Ordinal.Equals(JsonSerializer.Serialize(existing.Value, JsonOptions), payload))
                 throw new InvalidOperationException("JOURNAL_APPLIED_RECEIPT_EXISTS");
             return;
         }
@@ -151,13 +151,13 @@ internal static class UnifiedJournalStore
             var replay = await ReadAppliedReceiptAsync(first.JournalPath,"command-1","outbox-1",a);
             if (replay is null || Property(replay.Value,"journalId")!="j")
                 throw new InvalidOperationException("JOURNAL_RECEIPT_REPLAY_FAILED");
-            if (await ReadAppliedReceiptAsync(first.JournalPath,"command-1","outbox-1",b)
-                is not null)
+            await SaveAppliedReceiptAsync(first.JournalPath, parsed.RootElement);
+            try
+            {
+                await ReadAppliedReceiptAsync(first.JournalPath,"command-1","outbox-1",b);
                 throw new InvalidOperationException("JOURNAL_REPLAY_SHA_NOT_ENFORCED");
-        }
-        catch (InvalidOperationException error) when (error.Message=="JOURNAL_APPLIED_RECEIPT_CONFLICT")
-        {
-            // The final negative test is required to reject a wrong command hash.
+            }
+            catch (InvalidOperationException error) when(error.Message=="JOURNAL_APPLIED_RECEIPT_CONFLICT") { }
         }
         finally {try{ Directory.Delete(root,true); }catch{}}
     }
