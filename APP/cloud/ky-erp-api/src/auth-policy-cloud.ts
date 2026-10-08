@@ -532,6 +532,22 @@ async function issueSession(c: any, user: AnyRow, source: AnyRow = {}) {
     } catch (error) { logAuthError(c, "PHONE_LOGIN_SESSION_TRUST_WRITE", error, { userId: user.id, sessionId: sid, phoneApprovalId: text(source.phoneApprovalId) }); }
   }
   if (!kySecurityCodeVerified && !text(source.phoneApprovalId)) {
+    // Girişte yönetici onayı kapali ise oturum sonradan tekrar onaya dusmez.
+    // Giris onayi verilmis bir oturum icin de ikinci bir onay kuyruğu acilmaz.
+    const managerReviewRequired = Boolean(security.approval_required) && !isSuper(role) && !isCompanyAdmin(role);
+    if (!managerReviewRequired || text(source.approvalRequestId || source.approval_request_id)) {
+      try {
+        await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, {
+          sessionId: sid, userId: text(user.id),
+          status: managerReviewRequired ? "TRUSTED" : "NOT_REQUIRED",
+          decidedAt: timestamp,
+          source: managerReviewRequired ? "LOGIN_ALREADY_APPROVED" : "LOGIN_POLICY_NO_MANAGER_REVIEW",
+        });
+      } catch (error) {
+        if (String(error instanceof Error ? error.message : error) !== "AUTH_SECURITY_STORAGE_UNAVAILABLE")
+          logAuthError(c, "SESSION_TRUST_POLICY_WRITE", error, { userId: user.id, sessionId: sid });
+      }
+    } else {
     let reviewReady = false;
     try {
       await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, { sessionId: sid, userId: text(user.id), status: "PENDING", createdAt: timestamp, source: "SESSION_REVIEW" });
@@ -542,6 +558,7 @@ async function issueSession(c: any, user: AnyRow, source: AnyRow = {}) {
     if (reviewReady) {
       const reviewDispatch=notifySessionApproval(c,{ id:sid, userId:text(user.id), mainCompanySlug:text(security.main_company_slug)||DEFAULT_COMPANY_SLUG, deviceLabel:text(source.deviceLabel || source.device_label || deviceLabel(c,source)), createdAt:timestamp, role, platform_role:security.platform_role, role_override:security.role_override }).catch((error)=>{ logAuthError(c, "SESSION_APPROVAL_PUSH", error, { userId:user.id, sessionId:sid }); return { sent:0, recipients:0 }; });
       if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(reviewDispatch); else await reviewDispatch;
+    }
     }
   }
   return { ok: true, stage: "AUTHENTICATED", token, expiresIn: ttl, expiresAt, user: await publicUser(c, security) };
@@ -660,7 +677,9 @@ async function beginPolicyLogin(c: any, user: AnyRow, source: AnyRow = {}, optio
   // Telefon onayı kayıtlı güvenilir cihaz varsa her normal girişte ilk denenir.
   // Böylece eski/taşınmış MFA kolonları kullanıcıyı istemeden Google'a göndermez.
   // BOTH_MFA özel politikası iki ayrı Authenticator kanalı istediği için korunur.
-  if (!options.skipPhone && policy !== "BOTH_MFA") {
+  const phoneFactorAllowed = isSuper(role) || isCompanyAdmin(role) || Boolean(refreshed?.approval_required);
+  // Personel ve onayi kapatilmis muhasebe kullanicisi her giriste KY Guvenlik telefonuna dusmez.
+  if (!options.skipPhone && phoneFactorAllowed && policy !== "BOTH_MFA") {
     const phoneApproval = await startPhoneApprovalChallenge(c, refreshed || user, source);
     if (phoneApproval) return phoneApproval;
   }
