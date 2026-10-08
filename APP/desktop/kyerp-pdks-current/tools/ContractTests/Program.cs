@@ -183,7 +183,14 @@ Run("terminal incomplete batch rejects every write", () =>
     var accepted = new AttendanceImportDetailedResult(new AttendanceImportResult(2, 1, 1, 0), []);
     Equal(accepted, AttendanceImportService.EnsureCompleteBatch(accepted));
     var partial = new AttendanceImportDetailedResult(new AttendanceImportResult(2, 1, 0, 1), []);
-    Throws(() => AttendanceImportService.EnsureCompleteBatch(partial));
+    var rejected = false;
+    try { AttendanceImportService.EnsureCompleteBatch(partial); }
+    catch (AttendanceImportRejectedException error)
+    {
+        rejected = true;
+        Equal(1, error.Details.Summary.Skipped);
+    }
+    Equal(true, rejected);
 });
 
 Run("organization definition reference whitelist", () =>
