@@ -10,6 +10,12 @@ internal static class Program
     private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        if (args.Contains("--isolated-firebird-copy-smoke", StringComparer.OrdinalIgnoreCase))
+        {
+            var report = FirebirdIsolatedCopySmoke.RunAsync().GetAwaiter().GetResult();
+            Console.WriteLine(report);
+            return;
+        }
         if (args.Contains("--agent-plan-selftest", StringComparer.OrdinalIgnoreCase))
         {
             UnifiedLocalActionPlanner.AssertContract();
