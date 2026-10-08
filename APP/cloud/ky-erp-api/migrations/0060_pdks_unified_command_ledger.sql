@@ -46,6 +46,21 @@ CREATE INDEX IF NOT EXISTS idx_pdks_unified_outbox_state
 CREATE INDEX IF NOT EXISTS idx_pdks_unified_outbox_delivery
  ON ik_pdks_unified_outbox(main_company_id,state,next_attempt_at,lease_until,created_at);
 
+-- Explicit device enrollment is an administrator-only migration/provisioning step.
+-- Never accept secrets, register a device or create a table from an Agent HTTP call.
+-- The secret_hash is lowercase SHA-256 of a high entropy per-device credential.
+CREATE TABLE IF NOT EXISTS ik_pdks_devices (
+  id TEXT PRIMARY KEY,
+  main_company_id TEXT NOT NULL,
+  secret_hash TEXT NOT NULL CHECK(length(secret_hash)=64),
+  active INTEGER NOT NULL DEFAULT 0 CHECK(active IN (0,1)),
+  created_at TEXT NOT NULL,
+  rotated_at TEXT,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pdks_unified_device_company
+ ON ik_pdks_devices(main_company_id,active);
+
 -- An audit-log entry is a REQUIRED member of every transactional batch,
 -- not an after-the-fact best-effort try/catch.
 CREATE INDEX IF NOT EXISTS idx_pdks_unified_audit_command
