@@ -119,7 +119,8 @@ test("Windows local planner freezes all 11 admin actions without RAW/TNF mutatio
   ]) assert.equal(planner.includes(`"${action}"`),true,`missing local plan action ${action}`);
   assert.match(planner,/TouchesAnnualTnf:\s*false/);
   assert.match(planner,/TouchesTerminalRaw:\s*false/);
-  assert.match(planner,/ApplySupported:\s*false/);
+  assert.match(planner,/ApplySupported:/);
+  assert.equal(planner.includes('action is "personnel-group" or "holiday"'),true);
   assert.match(agent,/LOCAL_PLAN_FROZEN/);
   assert.match(agent,/LOCAL_PLAN_NOT_APPLY_READY/);
   assert.doesNotMatch(agent,/DELETE\s+FROM\s+GIRCIK|UPDATE\s+GIRCIK|INSERT\s+INTO\s+GIRCIK/i);
@@ -146,4 +147,16 @@ test("Windows replay journal and Cloud lease use strict source-proof contracts",
   for (const token of ["PDKS_OUTBOX_LEASE_EXPIRED","PDKS_LOCAL_RECEIPT_PAYLOAD_MISMATCH","delivery_owner","lease_until"]) assert.equal(agent.includes(token),true);
   for (const token of ["SIGNED_ENVELOPE_BINDING_MISMATCH","SIGNED_LEASE_EXPIRED_OR_INVALID","LOCAL_RECEIPT_ACK_REPLAYED"]) assert.equal(windows.includes(token),true);
   for (const token of ["JOURNAL_REPLAY_CONFLICT","FileMode.CreateNew","JOURNAL_APPLIED_RECEIPT_CONFLICT"]) assert.equal(journal.includes(token),true);
+});
+
+test("local sidecar policy is two-action allowlisted and receipt is durable before Cloud ACK",()=>{
+  const policy=readFileSync(resolve(here,"../../../pdks-unified/windows/UnifiedLocalPolicyStore.cs"),"utf8");
+  const agent=readFileSync(resolve(here,"../../../pdks-unified/windows/UnifiedSyncAgent.cs"),"utf8");
+  for(const operation of ["personnel-group","holiday"])
+    assert.equal(policy.includes('"'+operation+'"'),true);
+  assert.equal(policy.includes("LOCAL_POLICY_CONFLICT"),true);
+  assert.equal(policy.includes("File.Move(temp,destination,false)"),true);
+  assert.equal(agent.includes("SaveAppliedReceiptAsync(journalPath, localReceipt"),true);
+  assert.equal(agent.includes('"ACKED"'),true);
+  assert.equal(agent.includes("POLICY_MIRROR_AND_CLOUD_ACK_OK"),true);
 });
