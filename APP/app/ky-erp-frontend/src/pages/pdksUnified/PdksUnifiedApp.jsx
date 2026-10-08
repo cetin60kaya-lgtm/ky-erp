@@ -11,7 +11,7 @@ import {
 import { getPdksAttendance, getPdksPeople, getPdksProfile } from "../../services/pdksApi";
 import {
   PRODUCT_NAME, PRODUCT_SECTIONS, PRODUCT_PERSON_TABS,
-  getSection, resolveProductRoute, isSensitiveProductTab,
+  resolveProductRoute, isSensitiveProductTab,
 } from "./productModel";
 import {
   normalizePerson, toPersonRows, toAttendanceRows,
