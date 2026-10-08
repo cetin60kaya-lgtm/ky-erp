@@ -32,6 +32,8 @@ const route=(preview)=>{
 const fresh=(path,params)=>apiGet(path,params,{forceFresh:true,cache:false});
 const arr=(x)=>Array.isArray(x)?x:[];
 const same=(a,b)=>String(a??"")===String(b??"");
+const fold=(value)=>String(value??"").normalize("NFD")
+  .replace(/[\u0300-\u036f]/g,"").replace(/ı/g,"I").toUpperCase();
 const ensureReadback=async(preview,accepted)=>{
   const {id,payload:p,company}=preview;
   const companyParams={mainCompanyId:company};
@@ -78,9 +80,9 @@ const ensureReadback=async(preview,accepted)=>{
     if(!Array.isArray(rows?.adjustments))throw new Error("PDKS_READBACK_SHAPE_INVALID");
     return rows.adjustments.some((row)=>same(row.id,savedId)&&same(row.employeeId,p.employeeId)&&
       same(row.date,p.date)&&
-      (id==="advance"?/AVANS/.test(String(row.adjustmentType).toLocaleUpperCase("tr-TR")):
-        id==="overtime"?/MESAI/.test(String(row.adjustmentType).toLocaleUpperCase("tr-TR")):
-        /KESINT/.test(String(row.adjustmentType).toLocaleUpperCase("tr-TR")))&&
+      (id==="advance"?/AVANS/.test(fold(row.adjustmentType)):
+        id==="overtime"?/MESAI/.test(fold(row.adjustmentType)):
+        /KESINT/.test(fold(row.adjustmentType)))&&
       Number(row.amount)===p.amount&&
       (id!=="overtime"||(Number(row.hourOrDay)===p.hourOrDay &&
         same(row.note,p.note))));
