@@ -21,7 +21,7 @@ test("staff only views own PDKS and leave; occupation form separated",()=>{
   assert.match(staff,/employee-portal\/me/);
   assert.match(staff,/employee-portal\/work/);
   assert.match(staff,/Kendi Bilgilerim/);
-  assert.match(staff,/Is Formum/);
+  assert.match(staff,/İş Formum/);
   assert.match(staff,/usedPreviousYear/);
   assert.doesNotMatch(staff,/mobileApiGet\(["']ik\/monthly/);
 });
