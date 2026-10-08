@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { executePdksAssistantCommand, PDKS_ASSISTANT_EXAMPLES } from "../../services/pdksAssistant";
-import PdksDeviceCenter from "../pdks/PdksDeviceCenter";
-import PdksLiveHome from "../pdks/PdksLiveHome";
-import PdksPersonnelDesk from "../pdks/PdksPersonnelDesk";
-import PdksReportCenter from "../pdks/PdksReportCenter";
-import PdksRulesCenter from "../pdks/PdksRulesCenter";
-import PdksPageV2 from "./PdksPageV2";
+
+// Load each screen only on its first visit. Returning to an opened tab reuses the module.
+const PdksDeviceCenter = lazy(() => import("../pdks/PdksDeviceCenter"));
+const PdksLiveHome = lazy(() => import("../pdks/PdksLiveHome"));
+const PdksPersonnelDesk = lazy(() => import("../pdks/PdksPersonnelDesk"));
+const PdksReportCenter = lazy(() => import("../pdks/PdksReportCenter"));
+const PdksRulesCenter = lazy(() => import("../pdks/PdksRulesCenter"));
+const PdksPageV2 = lazy(() => import("./PdksPageV2"));
 import "./pdks-shell.css";
 
 const NAV_GROUPS = [
@@ -118,6 +120,7 @@ export default function PdksPage(props) {
       </header>
 
       <main className="pdks-module-content">
+        <Suspense fallback={<div className="pdks-route-loading" role="status">PDKS ekranı hazırlanıyor…</div>}>
         {activeTab === "ana-ekran" ? (
           <PdksLiveHome activeMainCompany={activeMainCompany} openModule={openModule} />
         ) : deviceCenterTab ? (
@@ -131,6 +134,7 @@ export default function PdksPage(props) {
         ) : (
           <PdksPageV2 {...props} />
         )}
+        </Suspense>
       </main>
 
       {assistantOpen && assistantAvailable ? (
