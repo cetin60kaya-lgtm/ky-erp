@@ -59,6 +59,23 @@ export const OPERATION_CATALOG=Object.freeze([
     ]),field("startDate","İlk izin tarihi","date"),
     field("endDate","Son izin tarihi","date"),field("note","İzin ve onay gerekçesi"),
   ],"leave","plans","Mevcut Cloud API bu kaydı ONAYLI oluşturur. Önizleme ve açık yönetici onayı zorunludur; FDB/TNF mutabakatı ayrıca yapılır."),
+  operation("overtime","Mesai / fazla çalışma kaydı","overtime",[
+    field("employeeId","Personel","person"),field("date","Mesai tarihi","date"),
+    field("adjustmentType","Mesai türü","select",true,[
+      {value:"Hafta İçi Mesai",label:"Hafta içi mesai"},
+      {value:"Hafta Sonu Mesai",label:"Hafta sonu mesai"},
+      {value:"Resmi Tatil Mesai",label:"Resmî tatil mesaisi"},
+    ]),
+    field("hourOrDay","Mesai saati","number"),field("amount","Onaylı mesai tutarı (TL)","number"),
+    field("paymentMethod","Ödeme yöntemi","select",true,[
+      {value:"Bordro",label:"Bordro"},{value:"Elden",label:"Elden"},
+    ]),field("note","Mesai oranı / onay gerekçesi"),
+  ],"adjustment","adjustments","Bu kayıt bordroyu etkileyebilir. %50/%100 oranı burada otomatik hesaplanmaz; onaylı tutar açıkça girilir."),
+  operation("deduction","Personel kesintisi kaydet","deductions",[
+    field("employeeId","Personel","person"),field("date","Kesinti tarihi","date"),
+    field("amount","Onaylı kesinti tutarı (TL)","number"),
+    field("note","Kesinti hukuki/işlemsel dayanağı"),
+  ],"adjustment","adjustments","Kesinti doğrudan maddi sonuç doğurur. Yalnız belgeli onayla uygulanabilir."),
   operation("advance","Personele avans kaydet","advances",[
     field("employeeId","Personel","person"),field("date","Avans tarihi","date"),
     field("amount","Avans tutarı (TL)","number"),field("note","Avans onay gerekçesi"),
@@ -134,7 +151,14 @@ export function makeOperationPreview(id,values,{company,people=[],masters={},yea
   }
   if(id==="personnel-group")payload.requirePunch=form.requirePunch==="true";
   if(id==="holiday")payload.halfDay=form.halfDay==="true";
-  if(id==="advance")payload.amount=Number(form.amount.replace(",","."));
+  if(form.amount)payload.amount=Number(form.amount.replace(",","."));
+  if(id==="overtime"){
+    const hours=Number(form.hourOrDay);
+    if(!Number.isFinite(hours)||hours<=0||hours>24)
+      throw new Error("Mesai saati 0'dan büyük ve en fazla 24 olmalı.");
+    payload.hourOrDay=hours;
+  }
+  if(id==="deduction")payload.adjustmentType="Kesinti";
   // Never submit extra implicit status=APPROVED/punch entries.
   const immutable=Object.freeze({id,tabId:op.tabId,title:op.title,
     company,year,month,payload:Object.freeze(payload),
