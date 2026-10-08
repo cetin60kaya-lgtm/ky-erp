@@ -50,7 +50,7 @@ export default function PdksReportCenter({activeMainCompany}){
     }catch(cause){if(request===reportRequest.current)setError(cause?.message||"Puantaj raporu hazırlanamadı.")}
     finally{if(request===reportRequest.current)setBusy(false)}
   },[company,month,year]);
-  useEffect(()=>{void load();return()=>{reportRequest.current++}},[load]);
+  useEffect(()=>{const token=reportRequest;void load();return()=>{token.current++}},[load]);
 
   const incompleteCount=rows.filter(row=>row.loadError).length;
   const exportReady=!busy&&!error&&!incompleteCount&&rows.length===people.length&&rows.length>0;
