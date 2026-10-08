@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PRODUCT_SECTIONS, ALL_PRODUCT_TABS, PRODUCT_PERSON_TABS,
-  resolveProductRoute, inspectProductModel, isSensitiveProductTab } from "./productModel.js";
+  resolveProductRoute, inspectProductModel, isSensitiveProductTab,
+  configuredProductSections } from "./productModel.js";
 import {normalizePerson, normalizeAttendanceDay, csvForTable, getDataRequirement,
   toAttendanceRows } from "./productData.js";
 
@@ -67,4 +68,21 @@ test("CSV escapes formulas and dangerous contents", () => {
   assert.match(csv,/'=HYPERLINK/);
   assert.match(csv,/"'\+100"/);
   assert.doesNotMatch(csv,/^=HYPERLINK/m);
+});
+
+test("tenant menu customization only changes presentation and audit hides wage/admin",()=>{
+  const customized=configuredProductSections({
+    hiddenSections:["planning","fake"],sectionOrder:["devices","people"],
+    labels:{people:"Personel 360",devices:"Senkron Yönetimi"},
+  });
+  assert.equal(customized[0].id,"devices");
+  assert.equal(customized[1].id,"people");
+  assert.equal(customized[1].label,"Personel 360");
+  assert.equal(customized.some((s)=>s.id==="planning"),false);
+  assert.equal(customized.some((s)=>s.id==="overview"),true);
+  assert.equal(customized.flatMap((s)=>s.tabs).some((t)=>t.id==="salary"),true);
+  const audit=configuredProductSections({}, {audit:true});
+  assert.equal(audit.some((s)=>s.id==="payroll"),false);
+  assert.equal(audit.some((s)=>s.id==="admin"),false);
+  assert.equal(audit.flatMap((s)=>s.tabs).some((t)=>t.id==="payroll"),false);
 });
