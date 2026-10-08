@@ -113,8 +113,13 @@ internal static class TerminalSyncService
                 var journalMessage = "";
                 try
                 {
-                    var journal = TerminalTransferJournalService.WriteBatch(punches, rejected.Details.Items);
-                    journalMessage = $" Ayrıntılı aktarım günlüğü yazıldı; ERR={journal.DuplicateCount}.";
+                    // No row in a rejected batch was imported. Preserve the true
+                    // tentative status as a reason, but never label an uncommitted
+                    // movement as a successfully processed duplicate.
+                    var cancelled = rejected.Details.Items.Select(item => new AttendanceImportItemResult(
+                        item.Record, "Skipped", $"Tüm batch geri alındı ({item.Status}: {item.Reason})")).ToArray();
+                    var journal = TerminalTransferJournalService.WriteBatch(punches, cancelled);
+                    journalMessage = $" Reddedilen {cancelled.Length} satırın gerekçesi ayrı ERR günlüğüne yazıldı.";
                 }
                 catch (Exception journalError)
                 {
