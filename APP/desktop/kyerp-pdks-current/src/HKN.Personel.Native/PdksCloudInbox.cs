@@ -42,14 +42,17 @@ internal static class PdksCloudInbox
         using var payload=JsonDocument.Parse(string.IsNullOrWhiteSpace(change.PayloadJson)?"{}":change.PayloadJson);
         var root=payload.RootElement;
         var code=Text(root,"personnelCode");
-        if(string.IsNullOrWhiteSpace(code))return;
+        if(string.IsNullOrWhiteSpace(code))
+            throw new InvalidOperationException($"Cloud change {change.Id} has no canonical personnel code; cursor not advanced.");
         if(string.Equals(change.EntityType,"PERSONNEL",StringComparison.OrdinalIgnoreCase))ApplyPersonnel(code,root);
         else if(string.Equals(change.EntityType,"LEAVE",StringComparison.OrdinalIgnoreCase))ApplyLeave(code,root);
+        else throw new NotSupportedException($"Cloud PDKS change type {change.EntityType} is not supported; cursor not advanced.");
     }
 
     static void ApplyPersonnel(string code,JsonElement payload)
     {
-        if(!payload.TryGetProperty("body",out var body)||!body.TryGetProperty("changes",out var changes)||changes.ValueKind!=JsonValueKind.Object)return;
+        if(!payload.TryGetProperty("body",out var body)||!body.TryGetProperty("changes",out var changes)||changes.ValueKind!=JsonValueKind.Object)
+            throw new InvalidOperationException("Cloud personel güncellemesi değişiklik alanı içermiyor.");
         var database=new FirebirdDatabase(PdksOptions.FromEnvironment());
         database.InTransaction((connection,tx)=>{
             var sets=new List<string>();var pars=new List<FbParameter>();
@@ -57,17 +60,21 @@ internal static class PdksCloudInbox
             if(changes.TryGetProperty("salary",out var salary)&&salary.TryGetDecimal(out var amount)){sets.Add("MAAS=@MAAS");pars.Add(new("@MAAS",amount));}
             if(changes.TryGetProperty("startDate",out var start)&&DateTime.TryParse(start.GetString(),out var startDate)){sets.Add("IGTARIH=@IGTARIH");pars.Add(new("@IGTARIH",startDate.Date));}
             if(changes.TryGetProperty("exitDate",out var exit)&&DateTime.TryParse(exit.GetString(),out var exitDate)){sets.Add("ICTARIH=@ICTARIH");pars.Add(new("@ICTARIH",exitDate.Date));}
-            if(!sets.Any())return 0;
+            if(!sets.Any())throw new NotSupportedException("Cloud personel değişikliği masaüstünde desteklenen bir alan içermiyor.");
             pars.Add(new("@PK",code));
             using var command=FirebirdDatabase.CreateCommand(connection,tx,"update KIMLIK set "+string.Join(',',sets)+" where PKNO=@PK",pars.ToArray());
-            return command.ExecuteNonQuery();
+            var changed = command.ExecuteNonQuery();
+            if(changed == 0)throw new InvalidOperationException($"Cloud personel kartı Firebird'de bulunamadı: {code}");
+            return changed;
         });
     }
 
     static void ApplyLeave(string code,JsonElement payload)
     {
-        if(!payload.TryGetProperty("responseData",out var response)||response.ValueKind!=JsonValueKind.Object)return;
-        if(!response.TryGetProperty("days",out var days)||days.ValueKind!=JsonValueKind.Array)return;
+        if(!payload.TryGetProperty("responseData",out var response)||response.ValueKind!=JsonValueKind.Object)
+            throw new InvalidOperationException("Cloud izin yanıtında onaylı sonuç eksik.");
+        if(!response.TryGetProperty("days",out var days)||days.ValueKind!=JsonValueKind.Array)
+            throw new InvalidOperationException("Cloud izin yanıtında doğrulanmış gün listesi eksik.");
         string reason=Text(response,"leaveType");
         if(response.TryGetProperty("leaveType",out var leaveType)&&leaveType.ValueKind==JsonValueKind.Object)reason=Text(leaveType,"name");
         if(string.IsNullOrWhiteSpace(reason))reason="WEB İZİN";
@@ -83,7 +90,8 @@ internal static class PdksCloudInbox
             var paid=reason.Contains("YILLIK",StringComparison.OrdinalIgnoreCase)||reason.Contains("ÜCRETLİ",StringComparison.OrdinalIgnoreCase);
             records.Add(new(code,date.Date,start,end,minutes,paid?"ÜCRETLİ":"ÜCRETSİZ",reason,paid?LeavePayrollArea.Paid:LeavePayrollArea.Unpaid));
         }
-        if(records.Count>0)new LeaveRepository(new FirebirdDatabase(PdksOptions.FromEnvironment())).AddMany(records);
+        if(records.Count == 0)throw new InvalidOperationException("Cloud izin kaydında uygulanabilir gün yok.");
+        new LeaveRepository(new FirebirdDatabase(PdksOptions.FromEnvironment())).AddMany(records);
     }
 
     static bool AlreadyApplied(string id){try{return File.Exists(AppliedFile)&&File.ReadLines(AppliedFile).Any(x=>string.Equals(x,id,StringComparison.Ordinal));}catch{return false;}}
