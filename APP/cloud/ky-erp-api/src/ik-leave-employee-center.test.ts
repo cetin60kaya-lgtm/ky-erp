@@ -110,3 +110,10 @@ test("2027 holiday calendar contains Diyanet religious holidays and 19 May colli
   const src=readFileSync(new URL("./ik-relational-cloud.ts",import.meta.url),"utf8");
   for (const day of ["2027-03-08","2027-03-09","2027-03-10","2027-03-11","2027-05-15","2027-05-16","2027-05-17","2027-05-18","2027-05-19"]) assert.ok(src.includes(day));
 });
+
+test("legacy leave uses Turkish-safe annual classification instead of SQLite ASCII UPPER",()=>{
+  const worker=readFileSync(new URL("./ik-relational-cloud.ts",import.meta.url),"utf8");
+  assert.match(worker,/financeKey\(row\.record_type\)\.includes\("YILLIK"\)/);
+  assert.match(worker,/financeKey\(recordType\)\.includes\("YILLIK"\)/);
+  assert.doesNotMatch(worker,/UPPER\(l\.record_type\) LIKE '%YILLIK%'/);
+});
