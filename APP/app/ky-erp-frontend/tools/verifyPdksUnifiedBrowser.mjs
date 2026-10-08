@@ -104,7 +104,7 @@ try {
       slowest=Math.max(slowest,Date.now()-started);
     }
   }
-  await evaluate('document.querySelector("button[title=\"Görünümü değiştir\"]").click()');
+  await evaluate('document.querySelector(".pdk-u-top-right > button").click()');
   await waitForEval('document.querySelector(".pdk-unified")?.classList.contains("theme-dark")');
   const safePreview=await evaluate('document.querySelector(".pdk-u-statusbar")?.textContent?.includes("İnceleme")');
   assertBrowser(safePreview,"Studio must stay in read-only mode");
