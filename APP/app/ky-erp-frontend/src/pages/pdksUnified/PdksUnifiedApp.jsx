@@ -268,7 +268,7 @@ export default function PdksUnifiedApp({
   const requirement=sourceForTab(tab.id,{audit:profileAudit});
   const needsPeople=tab.id==="today" || requirement==="people" ||
     requirement==="attendance" || requirement==="corrections" ||
-    ["departments","routes","leave","advances"].includes(tab.id);
+    ["departments","routes","leave","advances","overtime","deductions"].includes(tab.id);
   // Personnel 360 reads only while its own detail panel is actually visible.
   const detailVisible=section.id==="people" &&
     ["people","cards","employment"].includes(tab.id);
