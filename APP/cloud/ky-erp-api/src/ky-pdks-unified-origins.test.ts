@@ -124,3 +124,15 @@ test("Windows local planner freezes all 11 admin actions without RAW/TNF mutatio
   assert.match(agent,/LOCAL_PLAN_NOT_APPLY_READY/);
   assert.doesNotMatch(agent,/DELETE\s+FROM\s+GIRCIK|UPDATE\s+GIRCIK|INSERT\s+INTO\s+GIRCIK/i);
 });
+
+test("annual TNF store requires backup hash exact format and same-volume atomic replace",()=>{
+  const store=readFileSync(resolve(here,"../../../pdks-unified/windows/AtomicTnfFileStore.cs"),"utf8");
+  assert.match(store,/TNF_DUPLICATE_LINE/);
+  assert.match(store,/TNF_LINE_FORMAT_INVALID/);
+  assert.match(store,/TNF_LINE_YEAR_MISMATCH/);
+  assert.match(store,/File\.Copy\(targetPath, backupPath/);
+  assert.match(store,/File\.Move\(temp, targetPath, true\)/);
+  assert.match(store,/SHA256\.HashDataAsync/);
+  assert.match(store,/1,001/);
+  assert.doesNotMatch(store,/GIRCIK|Firebird/i);
+});
