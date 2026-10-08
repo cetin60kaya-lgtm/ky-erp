@@ -92,6 +92,16 @@ export function makeOperationPreview(id,values,{company,people=[],masters={},yea
   const reason=form.reason||form.note;
   if(!required(reason)||reason.length<8)throw new Error("İşlem gerekçesi en az 8 karakter olmalı.");
   if(form.code&&!codeSafe(form.code))throw new Error("Kod 2–40 harf/rakam, kısa çizgi veya alt çizgi olmalı.");
+  // These forms CREATE new definitions. They must never silently overwrite an
+  // existing row through the legacy API's ON CONFLICT code UPSERT behavior.
+  const createCollections={"work-group":"groups","personnel-group":"personnelGroups",service:"services"};
+  if(createCollections[id]){
+    const records=masters?.[createCollections[id]];
+    if(!Array.isArray(records))throw new Error("Tanım listesi doğrulanmadan yeni kayıt açılamaz.");
+    if(records.some((record)=>String(record.code||"").toLocaleUpperCase("tr-TR")===
+      form.code.toLocaleUpperCase("tr-TR")))
+      throw new Error("Bu kod zaten kayıtlı. Mevcut tanım sessizce değiştirilemez.");
+  }
   if(form.name&&form.name.length>150)throw new Error("Ad 150 karakterden uzun olamaz.");
   if(form.entryTime&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(form.entryTime))throw new Error("Geçerli giriş saati zorunlu.");
   if(form.exitTime&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(form.exitTime))throw new Error("Geçerli çıkış saati zorunlu.");
