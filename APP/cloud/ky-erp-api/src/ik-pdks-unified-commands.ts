@@ -73,7 +73,7 @@ async function preflight(c:Context<AppEnv>,company:string,action:string,p:Row){
   let lockedMonths:string[]=[];
   if(date){
     const start=p.startDate||date,end=p.endDate||date;
-    const cursor=new Date(start+"T12:00:00Z"),max=new Date(end+"T12:00:00Z"),seen=new Set();
+    const cursor=new Date(start+"T12:00:00Z"),max=new Date(end+"T12:00:00Z"),seen=new Set<string>();
     while(cursor<=max){
       const d=cursor.toISOString().slice(0,7);seen.add(d);
       cursor.setUTCMonth(cursor.getUTCMonth()+1,1);
@@ -153,12 +153,13 @@ async function preflight(c:Context<AppEnv>,company:string,action:string,p:Row){
       FROM ik_leave_counting_policy WHERE main_company_id=? LIMIT 1`,[company]);
     const employee=await first(c,`SELECT department FROM hr_monthly_employees
       WHERE main_company_id=? AND id=? LIMIT 1`,[company,p.employeeId]);
-    if(val(employee?.department)){
+    const department=val(employee?.department);
+    if(department){
       const n=await first(c,`SELECT COUNT(*) AS total FROM ik_leave_plans lp
         JOIN hr_monthly_employees emp ON emp.id=lp.employee_id AND emp.main_company_id=lp.main_company_id
         WHERE lp.main_company_id=? AND lp.employee_id<>? AND lp.status<>'CANCELLED'
         AND emp.department=? AND lp.start_date<=? AND lp.end_date>=?`,
-        [company,p.employeeId,employee.department,p.endDate,p.startDate]);
+        [company,p.employeeId,department,p.endDate,p.startDate]);
       if(Number(n?.total||0)>=Math.max(1,Number(policy?.max_concurrent_department||1)))
         throw new Error("PDKS_LEAVE_DEPARTMENT_CONFLICT");
     }
