@@ -60,3 +60,11 @@ test("Web entry and correction never advertise an unconfirmed Firebird reconcili
   assert.match(page, /time:"",direction:"AUTO",note:""/);
   assert.match(page, /status:"CALISTI",entry:"",exit:""/);
 });
+
+test("PDKS imported card dates and reused physical cards must fail closed", () => {
+  const bridge = source("../../../../cloud/ky-erp-api/src/ik-pdks-card-bridge.ts");
+  assert.match(bridge, /date\.getUTCMonth\(\) \+ 1 !== month/);
+  assert.match(bridge, /date\.getUTCDate\(\) !== day/);
+  assert.match(bridge, /if \(existing && text\(existing\.id\) !== text\(row\.id\)\)/);
+  assert.match(bridge, /conflicting\.add\(card\)/);
+});
