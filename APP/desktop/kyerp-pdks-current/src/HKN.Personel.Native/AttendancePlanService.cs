@@ -106,6 +106,20 @@ internal static class AttendancePlanService
             !warnings.Any(x => x.StartsWith("KANIT EKSİK", StringComparison.Ordinal)));
     }
 
+    // A normal attendance repair may reclassify the side or remove an exact duplicate.
+    // It must never write a fabricated minute or create a punch without a source event.
+    internal static void RequireRealSourceMinutes(AttendancePlanPreview preview)
+    {
+        if (preview.Mode != AttendancePlanMode.FullRepair) return;
+        foreach (var item in preview.Items)
+        {
+            if (!item.CurrentAt.HasValue || item.PlannedAt != item.CurrentAt.Value)
+                throw new InvalidOperationException(
+                    $"Kanıtsız normal kart hareketi engellendi: {item.Card} {item.Day:dd.MM.yyyy} {item.SideText}. " +
+                    "Gerçek terminal/imzalı onay kaydıyla ayrı düzeltme gerekir.");
+        }
+    }
+
     public static AttendancePlanPreview BuildEPlan(
         FirebirdDatabase db,
         IReadOnlyDictionary<string, int> targetECounts,
@@ -171,6 +185,7 @@ internal static class AttendancePlanService
         AttendancePlanPreview preview)
     {
         if (!preview.CanApply) throw new InvalidOperationException("Önizleme uygulanabilir değil.");
+        RequireRealSourceMinutes(preview);
         using var connection = db.OpenConnection();
         using var transaction = connection.BeginTransaction();
         try
@@ -200,6 +215,7 @@ internal static class AttendancePlanService
     {
         if (!preview.CanApply)
             throw new InvalidOperationException("Önizlemede eksik/uygunsuz kayıt var. Uygulama yapılmadı.");
+        RequireRealSourceMinutes(preview);
         if (preview.Items.Count == 0)
             return new(0, 0, "Uygulanacak değişiklik yok.");
 
