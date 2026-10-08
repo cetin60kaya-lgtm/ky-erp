@@ -64,6 +64,9 @@ async function jsonBody(c:Context<AppEnv>){
 function localReceiptValid(receipt:Row){
   if(!receipt||typeof receipt!=="object"||Array.isArray(receipt))return false;
   if(!text(receipt.journalId)||!text(receipt.appliedAt))return false;
+  if(!/^[a-f0-9]{64}$/.test(text(receipt.commandPayloadSha256)))return false;
+  if(!text(receipt.commandId)||!text(receipt.outboxId)||!text(receipt.deviceId))return false;
+  if(!/^[a-f0-9]{64}$/.test(text(receipt.evidenceSha256)))return false;
   if(receipt.sourceValidated!==true||receipt.fdbValidated!==true)return false;
   if(typeof receipt.tnfTouched!=="boolean")return false;
   if(receipt.tnfTouched===true&&receipt.tnfValidated!==true)return false;
@@ -94,11 +97,11 @@ export function registerIkPdksUnifiedAgentRoutes(app:Hono<AppEnv>){
     const leaseUntil=addMinutes(stamp,5);
     const claimed=await c.env.DB.prepare(`UPDATE ik_pdks_unified_outbox
       SET state='CLAIMED',delivery_owner=?,lease_until=?,delivery_attempts=delivery_attempts+1,
-          last_error=NULL,next_attempt_at=NULL
+          last_error=NULL,next_attempt_at=NULL,delivery_hash=NULL
       WHERE id=? AND main_company_id=?
         AND (state='PENDING' OR (state='CLAIMED' AND (lease_until IS NULL OR lease_until<=?)))`)
       .bind(text(device.id),leaseUntil,text(row.id),company,stamp).run();
-    if(Number((claimed as any)?.meta?.changes||0)!==1)return ok(c,null,204);
+    if(Number((claimed as any)?.meta?.changes||0)!==1)return c.body(null,204);
 
     let payload:unknown={};
     try{payload=JSON.parse(text(row.payload_json)||"{}");}
@@ -118,8 +121,12 @@ export function registerIkPdksUnifiedAgentRoutes(app:Hono<AppEnv>){
     const canonical=JSON.stringify(signed);
     const deliveryHash=await sha256(canonical);
     const signature=await hmacSha256Base64(signingKey,canonical);
-    await c.env.DB.prepare("UPDATE ik_pdks_unified_outbox SET delivery_hash=? WHERE id=? AND main_company_id=? AND delivery_owner=?")
-      .bind(deliveryHash,text(row.id),company,text(device.id)).run();
+    const locked=await c.env.DB.prepare(`UPDATE ik_pdks_unified_outbox SET delivery_hash=?
+      WHERE id=? AND main_company_id=? AND delivery_owner=?
+      AND state='CLAIMED' AND lease_until=? AND delivery_hash IS NULL`)
+      .bind(deliveryHash,text(row.id),company,text(device.id),leaseUntil).run();
+    if(Number((locked as any)?.meta?.changes||0)!==1)
+      return fail(c,409,"PDKS_DELIVERY_CLAIM_CHANGED","Outbox lease değişti; eski teslim reddedildi.");
     return ok(c,{
       outboxId:text(row.id),commandId:text(row.command_id),deliveryHash,leaseUntil,
       signatureAlg:"HMAC-SHA256",signedPayload:bytesToBase64(new TextEncoder().encode(canonical)),signature,
@@ -149,29 +156,42 @@ export function registerIkPdksUnifiedAgentRoutes(app:Hono<AppEnv>){
       return fail(c,409,"PDKS_OUTBOX_HASH_MISMATCH","Teslim edilen outbox özeti eşleşmiyor.");
 
     const stamp=nowIso();
+    if(!text(row.lease_until)||text(row.lease_until)<stamp)
+      return fail(c,409,"PDKS_OUTBOX_LEASE_EXPIRED","Teslim süresi doldu; yeniden teslim alınmalı.");
     if(status==="RETRY"){
       const reason=text(body.reason)||"AGENT_RETRY_REQUESTED";
       const next=addMinutes(stamp,15);
       await c.env.DB.prepare(`UPDATE ik_pdks_unified_outbox
         SET state='PENDING',delivery_owner=NULL,lease_until=NULL,next_attempt_at=?,last_error=?
-        WHERE id=? AND main_company_id=? AND state='CLAIMED'`)
-        .bind(next,reason.slice(0,1000),id,company).run();
+        WHERE id=? AND main_company_id=? AND state='CLAIMED'
+          AND delivery_owner=? AND delivery_hash=? AND lease_until>=?`)
+        .bind(next,reason.slice(0,1000),id,company,text(device.id),text(body.deliveryHash),stamp).run();
+      const updated=await first(c,"SELECT state,next_attempt_at FROM ik_pdks_unified_outbox WHERE id=? AND main_company_id=?",[id,company]);
+      if(text(updated?.state)!=="PENDING"||text(updated?.next_attempt_at)!==next)
+        return fail(c,409,"PDKS_OUTBOX_RETRY_RACE","Outbox retry başka işlemle çakıştı.");
       return ok(c,{id,state:"PENDING",nextAttemptAt:next});
     }
     if(status==="FAILED"){
       const reason=text(body.reason)||"LOCAL_APPLY_FAILED";
       await c.env.DB.prepare(`UPDATE ik_pdks_unified_outbox
         SET state='FAILED',delivery_owner=NULL,lease_until=NULL,next_attempt_at=NULL,last_error=?
-        WHERE id=? AND main_company_id=? AND state='CLAIMED'`)
-        .bind(reason.slice(0,1000),id,company).run();
+        WHERE id=? AND main_company_id=? AND state='CLAIMED'
+          AND delivery_owner=? AND delivery_hash=? AND lease_until>=?`)
+        .bind(reason.slice(0,1000),id,company,text(device.id),text(body.deliveryHash),stamp).run();
+      const updated=await first(c,"SELECT state FROM ik_pdks_unified_outbox WHERE id=? AND main_company_id=?",[id,company]);
+      if(text(updated?.state)!=="FAILED")
+        return fail(c,409,"PDKS_OUTBOX_FAIL_RACE","Outbox fail başka işlemle çakıştı.");
       return ok(c,{id,state:"FAILED"});
     }
 
     const receipt=body.localReceipt as Row;
     if(!localReceiptValid(receipt))
       return fail(c,409,"PDKS_LOCAL_RECEIPT_INVALID","FDB/TNF mutabakat kanıtı eksik; ACK verilmedi.");
-    if(text(receipt.commandPayloadSha256)&&!safeEqual(text(receipt.commandPayloadSha256),text(row.payload_sha256)))
-      return fail(c,409,"PDKS_LOCAL_RECEIPT_PAYLOAD_MISMATCH","Yerel fiş Cloud komut özetiyle eşleşmiyor.");
+    if(!safeEqual(text(receipt.commandPayloadSha256),text(row.payload_sha256)) ||
+       !safeEqual(text(receipt.commandId),text(row.command_id)) ||
+       !safeEqual(text(receipt.outboxId),id) ||
+       !safeEqual(text(receipt.deviceId),text(device.id)))
+      return fail(c,409,"PDKS_LOCAL_RECEIPT_PAYLOAD_MISMATCH","Yerel fiş Cloud komut/cihaz özetiyle eşleşmiyor.");
     const ackJson=JSON.stringify({
       ...receipt,deviceId:text(device.id),outboxId:id,commandId:text(row.command_id),
       action:text(row.action),acknowledgedAt:stamp,
@@ -180,8 +200,9 @@ export function registerIkPdksUnifiedAgentRoutes(app:Hono<AppEnv>){
     const changed=await c.env.DB.prepare(`UPDATE ik_pdks_unified_outbox
       SET state='ACKED',delivery_owner=NULL,lease_until=NULL,next_attempt_at=NULL,last_error=NULL,
           ack_payload_json=?,ack_sha256=?,acknowledged_at=?
-      WHERE id=? AND main_company_id=? AND state='CLAIMED'`)
-      .bind(ackJson,ackSha,stamp,id,company).run();
+      WHERE id=? AND main_company_id=? AND state='CLAIMED'
+        AND delivery_owner=? AND delivery_hash=? AND lease_until>=?`)
+      .bind(ackJson,ackSha,stamp,id,company,text(device.id),text(body.deliveryHash),stamp).run();
     if(Number((changed as any)?.meta?.changes||0)!==1)
       return fail(c,409,"PDKS_OUTBOX_ACK_RACE","Outbox ACK başka işlemle çakıştı.");
     return ok(c,{id,state:"ACKED",ackSha256:ackSha,acknowledgedAt:stamp});
