@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getPdksLiveDashboard } from "../../services/pdksApi";
 import "./PdksLiveHome.css";
 
@@ -63,14 +63,14 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
   const freshness = hasRecentSync ? "fresh" : onlineCount ? "warning" : "offline";
   const stateLabel = hasRecentSync ? "Senkron güncel" : onlineCount ? "Ajan bağlı, aktarım doğrulanmadı" : "Veri güncelliği doğrulanmadı";
   const checkedValue = (value) => hasRecentSync ? Number(value || 0).toLocaleString("tr-TR") : "—";
-  const summary = useMemo(() => [
+  const summary = [
     {label:"Aktif personel",value:Number(metrics.activePersonnel || 0).toLocaleString("tr-TR"),hint:"İK ana kaynağı",to:"personel-bilgileri",key:"people"},
     {label:"İçeride",value:checkedValue(metrics.inside),hint:"Doğrulanmış geçiş",to:"giris-cikislar",key:"inside"},
     {label:"Geç gelen",value:checkedValue(metrics.late),hint:"Seçili gün",to:"giris-cikislar",key:"late"},
     {label:"Eksik kart",value:checkedValue(metrics.missingPunch),hint:"Düzeltme bekleyen",to:"puantaj",key:"missing"},
     {label:"İzinli",value:Number(metrics.permitted || 0).toLocaleString("tr-TR"),hint:"Onaylı izinler",to:"izinler",key:"leave"},
     {label:"Devamsızlık",value:checkedValue(metrics.absent),hint:"Senkron sonrası kesinleşir",to:"raporlar",key:"absent"},
-  ], [metrics, hasRecentSync]);
+  ];
   const go = tabKey => openModule?.("pdks", { tabKey });
   const liveCards = Array.isArray(data?.liveCards) ? data.liveCards : [];
 
