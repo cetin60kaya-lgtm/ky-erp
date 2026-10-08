@@ -20,15 +20,7 @@ public sealed partial class MainShellForm
     Panel? navigationCover;
     bool navigationBusy;
     readonly Dictionary<PdksCommandId,Button> modernNavButtons = [];
-    static readonly PdksCommandId[] SidebarOrder =
-    [
-        PdksCommandId.Home,
-        PdksCommandId.EntryExit,
-        PdksCommandId.Personnel,
-        PdksCommandId.TimesheetMonthly,
-        PdksCommandId.PayrollGeneral,
-        PdksCommandId.Reports
-    ];
+    // Menu order and categories are owned by PdksNavigationDesign.
     bool appearanceHooked;
 
     void BuildModernShell()
@@ -50,7 +42,7 @@ public sealed partial class MainShellForm
             Padding = Padding.Empty,
             BackColor = p.Canvas
         };
-        frame.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 224));
+        frame.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 248));
         frame.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         frame.Controls.Add(BuildModernSidebar(), 0, 0);
@@ -194,10 +186,13 @@ public sealed partial class MainShellForm
             Margin=Padding.Empty
         };
 
-        foreach(var id in SidebarOrder)
+        foreach (var section in PdksNavigationDesign.Sections)
         {
-            var command=PdksCommandCatalog.Get(id);
-            if(CanExecute(command))nav.Controls.Add(NavButton(command));
+            var visible = section.Commands.Select(PdksCommandCatalog.Get).Where(CanExecute).ToArray();
+            if (visible.Length == 0) continue;
+            nav.Controls.Add(SectionLabel(section.Title));
+            foreach (var command in visible)
+                nav.Controls.Add(NavButton(command));
         }
         layout.Controls.Add(nav,0,1);
 
@@ -230,8 +225,8 @@ public sealed partial class MainShellForm
         return new Label
         {
             Text=text,
-            Width=182,
-            Height=25,
+            Width=202,
+            Height=23,
             Margin=new Padding(0,7,0,2),
             Padding=new Padding(10,5,0,0),
             ForeColor=p.SidebarMuted,
@@ -250,48 +245,48 @@ public sealed partial class MainShellForm
             Image = PdksToolbarIcons.Create(command.Icon),
             ImageAlign = ContentAlignment.MiddleLeft,
             TextImageRelation = TextImageRelation.ImageBeforeText,
-            Height = 42,
-            Width = 182,
+            Height = 35,
+            Width = 202,
             FlatStyle = FlatStyle.Flat,
             BackColor = p.Sidebar,
             ForeColor = p.SidebarMuted,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft,
             Cursor = Cursors.Hand,
-            Margin = new Padding(0, 0, 0, 2),
+            Margin = new Padding(0, 0, 0, 1),
             Padding = new Padding(10, 0, 5, 0),
             Tag = command.Id
         };
         button.FlatAppearance.BorderSize = 0;
         button.FlatAppearance.MouseOverBackColor = p.SidebarHover;
         button.FlatAppearance.MouseDownBackColor = p.SidebarHover;
-        button.Click += async (_, _) => await NavigateWithTransitionAsync(command.Id);
+        button.Click += (_, _) => NavigateWithTransition(command.Id);
         modernNavButtons[command.Id]=button;
         return button;
     }
 
-    async Task NavigateWithTransitionAsync(PdksCommandId id)
+    void NavigateWithTransition(PdksCommandId id)
     {
-        if (navigationBusy || currentWorkspaceCommand == id) return;
+        // Navigation is synchronous on the UI thread: no abandoned async-void
+        // exception is allowed to terminate the shell mid-transition.
+        if (navigationBusy || IsDisposed || currentWorkspaceCommand == id) return;
         navigationBusy = true;
         var command = PdksCommandCatalog.Get(id);
         try
         {
-            SelectNavForCommand(id);
-            SetModernPage(command.Title, command.Hint);
+            PdksPreviewDiagnostics.Record("navigate-start " + id);
             SetShellActivity("Açılıyor • " + command.Title);
-            await Task.Yield();
-
-            // Eski sürümde tüm çalışma alanı "Ekran hazırlanıyor" perdesiyle kapatılıyor,
-            // ağır bir form hazırlanırken uygulama donmuş gibi görünüyordu. Mevcut ekran
-            // görünür kalır; yeni ekran hazır olduğunda tek seferde yer değiştirir.
             ExecuteCommand(id);
             SetShellActivity("Hazır", true);
+            PdksPreviewDiagnostics.Record("navigate-ok " + id);
         }
-        catch
+        catch (Exception ex)
         {
-            SetShellActivity("Ekran açılamadı", false);
-            throw;
+            PdksPreviewDiagnostics.Record("navigate-error " + id + " " + ex);
+            SetShellActivity("Menü açılamadı • " + command.Title, false);
+            // The previously shown screen remains usable; the error is logged
+            // rather than thrown through an event callback which can end the app.
+            PdksErrorPresenter.Show(this, ex, "KY PDKS", MessageBoxIcon.Warning, "Shell.Navigate." + id);
         }
         finally
         {
@@ -374,13 +369,13 @@ public sealed partial class MainShellForm
     {
         var p=PdksAppearance.Current;
         var descriptor=PdksCommandCatalog.Get(id);
-        if(descriptor.Placement==PdksCommandPlacement.Management ||
+        if(!modernNavButtons.ContainsKey(id) && (descriptor.Placement==PdksCommandPlacement.Management ||
            id is PdksCommandId.Definitions or PdksCommandId.Groups or PdksCommandId.ServiceRoutes or PdksCommandId.Periods or
                  PdksCommandId.Holidays or PdksCommandId.DailyWorkHours or PdksCommandId.AnnualWorkPlan or
                  PdksCommandId.PayrollFields or PdksCommandId.EarningsTypes or PdksCommandId.TerminalCenter or
                  PdksCommandId.TerminalSettings or PdksCommandId.TerminalProfiles or PdksCommandId.DataSources or
                  PdksCommandId.BackupRestore or PdksCommandId.Integrations or PdksCommandId.AuditHistory or
-                 PdksCommandId.UserManagement or PdksCommandId.License)
+                 PdksCommandId.UserManagement or PdksCommandId.License))
         {
             SelectManagementNav();
             return;
@@ -390,7 +385,7 @@ public sealed partial class MainShellForm
             modernManageButton.BackColor=p.Sidebar;
             modernManageButton.ForeColor=p.SidebarMuted;
         }
-        var primary=PrimaryParent(id);
+        var primary=modernNavButtons.ContainsKey(id) ? id : PrimaryParent(id);
         if(!modernNavButtons.TryGetValue(primary,out var button))return;
 
         if(activeNavButton is not null && !activeNavButton.IsDisposed)
@@ -547,13 +542,14 @@ public sealed partial class MainShellForm
             ForeColor = p.Muted,
             Font = new Font("Segoe UI", 8.8f, FontStyle.Bold)
         };
-        var testMode = string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_SKIP_LOGIN"),"1",StringComparison.OrdinalIgnoreCase);
+        var testMode = PdksPreviewMode.Enabled ||
+            string.Equals(Environment.GetEnvironmentVariable("KY_PDKS_SKIP_LOGIN"),"1",StringComparison.OrdinalIgnoreCase);
         var live = new Label
         {
             AutoSize = false,
             Width = testMode ? 118 : 108,
             Height = 34,
-            Text = testMode ? "● TEST MODU" : "● SİSTEM AKTİF",
+            Text = PdksPreviewMode.Enabled ? "● GÖRSEL MOD" : testMode ? "● TEST MODU" : "● SİSTEM AKTİF",
             TextAlign = ContentAlignment.MiddleCenter,
             ForeColor = testMode ? p.Warning : p.Success,
             Font = new Font("Segoe UI", 8.2f, FontStyle.Bold)
