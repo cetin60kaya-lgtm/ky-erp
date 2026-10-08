@@ -9,8 +9,8 @@ import {
   FileCheck2, Fingerprint, Cloud, Monitor, Smartphone, AlertTriangle,
 } from "lucide-react";
 import {
-  PRODUCT_NAME, PRODUCT_SECTIONS, PRODUCT_PERSON_TABS,
-  resolveProductRoute, isSensitiveProductTab,
+  PRODUCT_NAME, PRODUCT_PERSON_TABS,
+  configuredProductSections, isSensitiveProductTab,
 } from "./productModel";
 import {
   normalizePerson, toPersonRows, toAttendanceRows,
@@ -151,18 +151,24 @@ export default function PdksUnifiedApp({
   const searchInput = useRef(null);
 
   const company = activeMainCompany?.slug || activeMainCompany?.id || "";
-  const { section, tab } = useMemo(() => resolveProductRoute(navigation.section,navigation.tab),[navigation]);
+  const sections = useMemo(() => configuredProductSections(
+    activeMainCompany?.pdksUiPreferences || {},{audit:isAuditAccount}),
+    [activeMainCompany?.pdksUiPreferences,isAuditAccount]);
+  const section = sections.find((item)=>item.id===navigation.section) || sections[0];
+  const tab = section.tabs.find((item)=>item.id===navigation.tab) || section.tabs[0];
   const requirement = getDataRequirement({ ...tab, section:section.id });
   const peopleNeeded = PEOPLE_SECTIONS.has(section.id) || tab.view === "dashboard";
   const selectedPerson = data.people.find((p)=>p.id === selectedId) || data.people[0] || null;
   const realAttendance = requirement === "attendance";
 
   const go = useCallback((sectionId,tabId) => {
-    const resolved = resolveProductRoute(sectionId,tabId);
-    setNavigation({section:resolved.section.id,tab:resolved.tab.id});
+    const allowed = sections.find((item)=>item.id===sectionId);
+    if (!allowed) return; // A hidden section cannot be opened through a quick action.
+    const target = allowed.tabs.find((item)=>item.id===tabId) || allowed.tabs[0];
+    setNavigation({section:allowed.id,tab:target.id});
     setMobileMenuOpen(false);
     setNotice("");
-  },[]);
+  },[sections]);
 
   useEffect(() => {
     const listener = (event) => {
@@ -262,7 +268,7 @@ export default function PdksUnifiedApp({
       </div>
       <div className="pdk-u-brand-subtitle">{!sidebarCollapsed && <span>ÇALIŞMA ALANI</span>}</div>
       <nav aria-label="KY PDKS ana menü" className="pdk-u-primary-nav">
-        {PRODUCT_SECTIONS.map((item)=>{
+        {sections.map((item)=>{
           const chosen=section.id === item.id;
           return <button type="button" key={item.id} aria-current={chosen?"page":undefined}
             className={chosen?"active":""} title={item.label} onClick={()=>go(item.id,item.tabs[0].id)}>
