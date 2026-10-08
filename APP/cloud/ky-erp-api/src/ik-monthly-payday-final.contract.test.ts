@@ -182,3 +182,18 @@ test("legacy synthetic overtime corrections never count as real overtime", () =>
   assert.match(relational, /syncOvertimeSource/);
   assert.doesNotMatch(relational, /pushCorrection\("overtime"/);
 });
+
+
+test("payroll total edits preserve real overtime hours and normalize Turkish labels", () => {
+  const relational = api("ik-relational-cloud.ts");
+  const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(relational, /const financeKey =/);
+  assert.match(relational, /financeKey\(adjustmentType\)\.includes\("MESAI"\)/);
+  assert.match(relational, /UPDATE hr_monthly_adjustments_v2 SET amount=\? WHERE id=\?/);
+  assert.doesNotMatch(relational, /UPDATE hr_monthly_adjustments_v2 SET hour_or_day=\?,amount=\?/);
+  assert.match(relational, /OVERTIME_ZERO_REQUIRES_SOURCE/);
+  assert.match(relational, /changes: \[/);
+  assert.match(monthly, /function financeKey\(value\)/);
+  assert.match(monthly, /const sourceTotals = sourceRows.reduce/);
+  assert.match(monthly, /Kişinin O Ayki Hareketleri/);
+});
