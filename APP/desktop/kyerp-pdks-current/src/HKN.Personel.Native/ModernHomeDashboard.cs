@@ -251,6 +251,19 @@ internal sealed class ModernHomeDashboard : UserControl
     async Task RefreshDashboardAsync()
     {
         if (IsDisposed) return;
+        if (PdksPreviewMode.Enabled)
+        {
+            activeValue.Text = arrivedValue.Text = leaveValue.Text = pendingValue.Text = "—";
+            attentionState.Text = "●  Arayüz inceleme modu: puantaj verisi yüklenmedi";
+            attentionState.ForeColor = PdksAppearance.Current.Warning;
+            dbState.Text = "●  Veritabanı: güvenli önizlemede bağlantı kapalı";
+            dbState.ForeColor = PdksAppearance.Current.Warning;
+            terminalState.Text = "●  Terminal: otomatik aktarım devre dışı";
+            terminalState.ForeColor = PdksAppearance.Current.Muted;
+            syncState.Text = "Cloud: otomatik eşitleme devre dışı";
+            syncState.ForeColor = PdksAppearance.Current.Muted;
+            return;
+        }
         DashboardSnapshot snapshot;
         try
         {
