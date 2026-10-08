@@ -85,23 +85,36 @@ internal static class UnifiedSyncAgent
             }
 
             var plan = UnifiedLocalActionPlanner.Build(action, commandData);
-            var journalId = Guid.NewGuid().ToString("N");
-            var journalPath = WriteJournal(credential, journalId, new
+            var received = await UnifiedJournalStore.ReceiveAsync(
+                credential.CompanyRoot, company, commandId, outboxId, commandHash,
+                Text(data, "deliveryHash"), cancellationToken);
+            var journalId = received.Snapshot.JournalId;
+            var journalPath = received.JournalPath;
+            var appliedReceipt = await UnifiedJournalStore.ReadAppliedReceiptAsync(
+                journalPath, commandId, outboxId, commandHash, cancellationToken);
+            if (appliedReceipt is not null)
             {
-                journalId,
-                state = "LOCAL_PLAN_FROZEN",
-                receivedAt = DateTimeOffset.UtcNow,
-                outboxId,
-                commandId,
-                action,
-                deliveryHash = Text(data, "deliveryHash"),
-                commandPayloadSha256 = commandHash,
-                localCardNo,
-                plan = plan.ToJournal(),
-                commandData,
+                // Local transaction previously completed but HTTP ACK was lost.
+                // Replay the exact persisted receipt; never run the mutation twice.
+                await PostResultAsync(http, credential, data, "ACKED", "",
+                    appliedReceipt.Value, cancellationToken);
+                AppendJournalState(journalPath, new
+                {
+                    journalId, state = "CLOUD_ACK_REPLAYED", verifiedAt = DateTimeOffset.UtcNow,
+                });
+                return "LOCAL_RECEIPT_ACK_REPLAYED";
+            }
+            AppendJournalState(journalPath, new
+            {
+                journalId, state = "LOCAL_PLAN_FROZEN", receivedAt = DateTimeOffset.UtcNow,
+                plan = plan.ToJournal(), localCardNo, commandData,
             });
 
-            var evidence = await FirebirdTnfReadOnlyVerifier.VerifyAsync(localCardNo, workDate, cancellationToken);
+            // Administrative operations must not be blocked by an unrelated
+            // historical TNF mismatch. Verify the Firebird person/schema here;
+            // TNF becomes mandatory only for an approved punch-altering plan.
+            var verifyDate = plan.TouchesAnnualTnf ? workDate : null;
+            var evidence = await FirebirdTnfReadOnlyVerifier.VerifyAsync(localCardNo, verifyDate, cancellationToken);
             AppendJournalState(journalPath, new
             {
                 journalId,
