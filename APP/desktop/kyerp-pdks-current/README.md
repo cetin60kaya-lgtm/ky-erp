@@ -127,3 +127,20 @@ dotnet run --project .\tools\SmokeTest\SmokeTest.csproj -c Release
 ```
 
 Script branch'i günceller, private legacy referansı hazırlar, build/test yapar ve artifact'leri Drive runtime alanına taşır. Secret veya canlı veriyi Git'e kopyalamaz.
+
+
+## Görsel inceleme (08.10.2026)
+
+Gerçek Windows kabuğunu canlı veri kaynaklarını açmadan incelemek için yayımlanan `KYERP.PDKS.exe` şu parametreyle çalıştırılır:
+
+```powershell
+.\KYERP.PDKS.exe --visual-preview
+```
+
+Bu mod login, lisans, otomatik yedek/restore, Firebird bağlantısı, terminal otomatik senkronu ve Cloud agent işlemlerini **çalıştırmaz**. Ana ekran, menü, kurumsal görünüm ve gerçek uygulama kabuğu görüntülenir; veri kullanan modüllere giriş engellenir. Bu bir **görsel önizleme**, canlı uçtan uca işlev testi değildir.
+
+DESEN'deki bağımsız derleme: `D:\KYERP\_TEMP\KY-PDKS-GORSEL-ONIZLEME-6.7\KYERP.PDKS.exe`
+
+DESEN masaüstü kısayolu: `KY PDKS 6.7 - GORSEL ONIZLEME`
+
+Doğrulama: `dotnet build -c Release -warnaserror`, `ContractTests`, `ShellSmokeTest` üçü de exit code 0. Görsel önizleme ayrı dizinde çalıştırıldı, gerçek Windows pencere başlığı ve yanıt verdiği doğrulandı, pencere görüntüsü test dizinine kaydedildi. Normal kurulu EXE, personel veritabanı ve terminal silinmedi/değiştirilmedi. Sonraki kapı: canlı/test FDB bağlantılı modül kabulü ve onaylı sürüm geçişi.
