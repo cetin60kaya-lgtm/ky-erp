@@ -26,6 +26,11 @@ internal static class Program
             UnifiedJournalStore.SelfTestAsync().GetAwaiter().GetResult();
             return;
         }
+        if (args.Contains("--agent-policy-selftest", StringComparer.OrdinalIgnoreCase))
+        {
+            UnifiedLocalPolicyStore.SelfTestAsync().GetAwaiter().GetResult();
+            return;
+        }
         if (args.Contains("--tnf-store-selftest", StringComparer.OrdinalIgnoreCase))
         {
             AtomicTnfFileStore.AssertContractAsync().GetAwaiter().GetResult();
