@@ -22,6 +22,7 @@ const CANONICAL_COMPANY_ALIASES = new Set([
 const text = (value: unknown) =>
   value === undefined || value === null ? "" : String(value).trim();
 const upper = (value: unknown) => text(value).toLocaleUpperCase("tr-TR");
+const financeKey = (value: unknown) => upper(value).replace(/İ/g, "I").replace(/Ğ/g, "G").replace(/Ü/g, "U").replace(/Ş/g, "S").replace(/Ö/g, "O").replace(/Ç/g, "C");
 const number = (value: unknown) => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -269,7 +270,7 @@ function overtimeStoredNote(note: unknown, multiplierValue: unknown) {
 
 function mapAdjustment(row: Row): Row {
   const adjustmentType = text(row.adjustment_type);
-  const overtimeMeta = upper(adjustmentType).includes("MESAI")
+  const overtimeMeta = financeKey(adjustmentType).includes("MESAI")
     ? overtimeMetaFromNote(row.note)
     : { multiplier: 1, kind: "", note: text(row.note) };
   return {
@@ -293,7 +294,7 @@ function mapAdjustment(row: Row): Row {
 }
 
 function isLegacySyntheticOvertimeCorrection(row: Row) {
-  return upper(row.adjustmentType || row.type).includes("MESAI")
+  return financeKey(row.adjustmentType || row.type).includes("MESAI")
     && Math.abs(number(row.hourOrDay || row.hours)) <= 0.0001
     && upper(row.note).includes("BORDRO KAYNAK KONTROL");
 }
@@ -647,7 +648,7 @@ async function saveAdjustment(c: Context<AppEnv>) {
   const date = hrDateOnly(body.date ?? current?.date) || hrDateOnly(nowIso());
   const adjustmentType = text(body.adjustmentType ?? body.type ?? current?.adjustment_type) || "Mesai";
   const hourOrDay = number(body.hourOrDay ?? body.hours ?? current?.hour_or_day);
-  const isOvertime = upper(adjustmentType).includes("MESAI");
+  const isOvertime = financeKey(adjustmentType).includes("MESAI");
   const multiplier = overtimeMultiplierValue(body.overtimeMultiplier || overtimeMetaFromNote(current?.note).multiplier);
   const amount = isOvertime
     ? await overtimeAmountForEmployee(c, companyId, employeeId, hourOrDay, multiplier)
@@ -1556,7 +1557,7 @@ async function advancedPayroll(c: Context<AppEnv>) {
   const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
   const employees = rawEmployees.filter((employee) => advancedEmployeeVisible(employee, cardsByEmployee.get(text(employee.id)) || {}, period));
   const byEmployee = new Map(saved.filter((row) => number(row.year) === year && number(row.month) === month).map((row) => [text(row.employeeId), row]));
-  const normalizeType = (value: unknown) => { const valueUpper = upper(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
+  const normalizeType = (value: unknown) => { const valueUpper = financeKey(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
   const lines = employees.map((employee) => {
     const row = byEmployee.get(text(employee.id));
     const salary = number(employee.salary);
@@ -2076,7 +2077,7 @@ async function saveAdvancedPayrollOverride(c: Context<AppEnv>) {
   const salary = number(employee.salary);
   const premium = number(employee.extra_payment_amount);
   const allAdjustments = await adjustmentRows(c, companyId);
-  const normalizeType = (value: unknown) => { const valueUpper = upper(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
+  const normalizeType = (value: unknown) => { const valueUpper = financeKey(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
   const own = allAdjustments.filter((item) => text(item.employeeId) === employeeId && text(item.date).startsWith(period) && !upper(item.payrollEffect).includes("SADECE"));
   const overtime = own.filter((item) => normalizeType(item.adjustmentType) === "MESAI").reduce((sum, item) => sum + number(item.amount), 0);
   const advanceRows = own.filter((item) => ["AVANS", "TOPLU_AVANS"].includes(normalizeType(item.adjustmentType)));
@@ -2171,7 +2172,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
 
   const allAdjustments = await adjustmentRows(c, companyId);
   const normalizeType = (value: unknown) => {
-    const valueUpper = upper(value);
+    const valueUpper = financeKey(value);
     if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS";
     if (valueUpper.includes("AVANS")) return "AVANS";
     if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ";
@@ -2213,7 +2214,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   const advanceSource = normalizeSource(body.advanceSource);
   const deductionSource = normalizeSource(body.deductionSource);
   const garnishmentSource = normalizeSource(body.garnishmentSource);
-  const legalTypeCode = upper(body.legalType) === "HACIZ" ? "HACIZ" : "ICRA";
+  const legalTypeCode = financeKey(body.legalType) === "HACIZ" ? "HACIZ" : "ICRA";
   const legalType = legalTypeCode === "HACIZ" ? "Haciz" : "Icra";
 
   const reclassifySource = (rows: Row[], targetSource: string) => {
@@ -2250,7 +2251,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   ) * 100) / 100);
 
   const manualDeductionRows = deductionRows.filter((item) => {
-    const valueUpper = upper(item.adjustmentType);
+    const valueUpper = financeKey(item.adjustmentType);
     return (valueUpper.includes("KESINT") || valueUpper.includes("KESİNT")) &&
       !valueUpper.includes("EKSIK") &&
       !valueUpper.includes("EKSİK") &&
@@ -2275,8 +2276,9 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   if (!overtimeRows.length && toCents(desired.overtime) > 0) {
     return error(c, 409, "OVERTIME_SOURCE_REQUIRED", "Mesai toplamı için önce gerçek bir Mesai kaydı gerekir. Saat ve oranı Mesai / Avans / Kesinti ekranından girin.");
   }
-  if (overtimeRows.length === 1 && toCents(desired.overtime) !== toCents(current.overtime) && toCents(desired.overtime) > 0 && desired.salary <= 0) {
-    return error(c, 409, "OVERTIME_SOURCE_INVALID", "Mesai kaynağını güncellemek için geçerli maaş tutarı gereklidir.");
+
+  if (overtimeRows.length === 1 && toCents(desired.overtime) === 0 && toCents(current.overtime) !== 0) {
+    return error(c, 409, "OVERTIME_ZERO_REQUIRES_SOURCE", "Mesai sıfırlanacaksa gerçek hareketi alt listeden düzenleyin.");
   }
   const ambiguousAdvance = ensureUnambiguous("Avans", advanceRows, current.advance, desired.advance);
   if (ambiguousAdvance) return ambiguousAdvance;
@@ -2293,20 +2295,11 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     if (!existingRow) return;
     const id = text(existingRow.id);
     if (!id) return;
-    if (toCents(target) === 0) {
-      sourceDeletedIds.push(id);
-      statements.push(c.env.DB.prepare("DELETE FROM hr_monthly_adjustments_v2 WHERE id=?").bind(id));
-      return;
-    }
-    const multiplier = overtimeMultiplierValue(existingRow.overtimeMultiplier || 1.5);
-    const divisor = number(employee.overtime_hourly_base) || 225;
-    const salaryBasis = Math.max(desired.salary, 0);
-    const rawHours = (target * divisor) / (salaryBasis * multiplier);
-    const nextHours = Math.max(Math.round(rawHours * 1000000) / 1000000, 0);
+    
     sourceUpdateIds.push(id);
     statements.push(
-      c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET hour_or_day=?,amount=?,payment_method='Bordro',payroll_effect='Bordroya yansir' WHERE id=?")
-        .bind(nextHours, target, id),
+      c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET amount=? WHERE id=?")
+        .bind(target, id),
     );
   };
 
@@ -2433,6 +2426,10 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     bankPlan,
     cashPlan,
     bankDeductionsBefore: currentBankDeductions,
+    changes: [
+      ...financialChanges.map(([field, before, after]) => ({ field, before, after })),
+      ...(["overtime", "advance", "deduction", "garnishment"].filter((key) => toCents(current[key]) !== toCents(desired[key])).map((field) => ({field, before: current[field], after: desired[field]}))),
+    ],
     bankDeductionsAfter,
     sourceUpdateIds,
     legalTypeUpdateIds,
@@ -2442,7 +2439,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     c.env.DB.prepare(`INSERT INTO hr_monthly_audit_logs
       (id,main_company_id,period,employee_id,entity_type,action,summary,details_json,created_at)
       VALUES (?,?,?,?,?,?,?,?,?)`)
-      .bind(crypto.randomUUID(), companyId, period, employeeId, "BORDRO", "FINAL_CONTROL", "Son bordro kontrolü ücret planını, mevcut gerçek hareket kaynaklarını ve bordro snapshotını atomik güncelledi.", auditDetails, timestamp),
+      .bind(crypto.randomUUID(), companyId, period, employeeId, "BORDRO", "FINAL_CONTROL", "Bordro öncesi giriş kontrolü: gerçek kaynaklar ve ödeme planı güncellendi.", auditDetails, timestamp),
   );
 
   await c.env.DB.batch(statements);
