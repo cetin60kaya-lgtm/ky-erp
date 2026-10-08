@@ -47,3 +47,11 @@ CREATE TABLE IF NOT EXISTS ky_employee_portal_approvers (
   PRIMARY KEY (main_company_slug,user_id)
 );
 -- Ayrica mevcut auth_security_audit tablosuna islem kaydi yazilir.
+
+-- Imzali istegin ayni cihazdan tekrar yurutulmesini engeller.
+CREATE TABLE IF NOT EXISTS ky_employee_portal_nonces (
+  nonce TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ky_employee_portal_nonce_expiry ON ky_employee_portal_nonces(expires_at);
