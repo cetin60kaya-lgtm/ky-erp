@@ -68,7 +68,7 @@ function DataTable({ columns, rows, rowKey = "id", onRowClick }) {
       <table className="pdks-table">
         <thead><tr>{columns.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead>
         <tbody>{rows.map((row, index) => (
-          <tr key={row[rowKey] || `${rowKey}-${index}`} onClick={() => onRowClick?.(row)} className={onRowClick ? "clickable" : ""}>
+          <tr key={row[rowKey] || `${rowKey}-${index}`} onClick={() => onRowClick?.(row)} onKeyDown={onRowClick ? (event) => { if(event.key==="Enter"||event.key===" "){ event.preventDefault(); onRowClick(row); } } : undefined} tabIndex={onRowClick ? 0 : undefined} className={onRowClick ? "clickable" : ""}>
             {columns.map((column) => <td key={column.key}>{column.render ? column.render(row) : row[column.key]}</td>)}
           </tr>
         ))}</tbody>
@@ -404,7 +404,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
 
   return (
     <div className="pdks-page">
-      <div className="pdks-period-strip"><div><small>ÇALIŞMA DÖNEMİ</small><strong>{MONTHS[month-1]} {year}</strong></div><div className="pdks-period"><select value={month} onChange={(e)=>setMonth(Number(e.target.value))}>{MONTHS.map((name,index)=><option key={name} value={index+1}>{name}</option>)}</select><select value={year} onChange={(e)=>setYear(Number(e.target.value))}>{YEARS.map((item)=><option key={item}>{item}</option>)}</select><button onClick={refresh} disabled={busy}>Yenile</button><span className={audit?"audit":"full"}>{audit?"Salt Okunur":"D1 Canlı"}</span></div></div>
+      <div className="pdks-period-strip"><div><small>PDKS YÖNETİM / DÖNEM</small><strong>{MONTHS[month-1]} {year}</strong><p>Yıl ve ayı ayrı seçin; yalnız bu ekrandaki veriler yenilenir.</p></div><div className="pdks-period"><label>Ay<select aria-label="Ay" value={month} onChange={(e)=>setMonth(Number(e.target.value))}>{MONTHS.map((name,index)=><option key={name} value={index+1}>{name}</option>)}</select></label><label>Yıl<select aria-label="Yıl" value={year} onChange={(e)=>setYear(Number(e.target.value))}>{YEARS.map((item)=><option key={item}>{item}</option>)}</select></label><button type="button" onClick={refresh} disabled={busy}>Yenile</button><span className={audit?"audit":"full"}>{audit?"Salt Okunur":"Sunucu Verisi"}</span></div></div>
       {notice ? <div className="pdks-notice">{notice}</div> : null}
       {error ? <div className="pdks-error">{error}</div> : null}
       {busy ? <div className="pdks-busy">İşlem sürüyor...</div> : null}
