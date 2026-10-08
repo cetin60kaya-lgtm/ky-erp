@@ -117,10 +117,10 @@ test("Windows local planner freezes all 11 admin actions without RAW/TNF mutatio
     "work-group","personnel-group","assign-work-group","assign-personnel-group",
     "service","assign-service","holiday","leave","advance","overtime","deduction"
   ]) assert.equal(planner.includes(`"${action}"`),true,`missing local plan action ${action}`);
-  assert.match(planner,/TouchesAnnualTnf:\\s*false/);
-  assert.match(planner,/TouchesTerminalRaw:\\s*false/);
-  assert.match(planner,/ApplySupported:\\s*false/);
+  assert.match(planner,/TouchesAnnualTnf:\s*false/);
+  assert.match(planner,/TouchesTerminalRaw:\s*false/);
+  assert.match(planner,/ApplySupported:\s*false/);
   assert.match(agent,/LOCAL_PLAN_FROZEN/);
   assert.match(agent,/LOCAL_PLAN_NOT_APPLY_READY/);
-  assert.doesNotMatch(agent,/DELETE\\s+FROM\\s+GIRCIK|UPDATE\\s+GIRCIK|INSERT\\s+INTO\\s+GIRCIK/i);
+  assert.doesNotMatch(agent,/DELETE\s+FROM\s+GIRCIK|UPDATE\s+GIRCIK|INSERT\s+INTO\s+GIRCIK/i);
 });
