@@ -224,7 +224,8 @@ export default function PdksUnifiedApp({
   const sourceText = previewOnly ? "Tasarım incelemesi" :
     requirement==="forbidden" || data.audit && isSensitiveProductTab(tab.id) ? "Erişim kapalı" :
     requirement==="unconnected" ? "Entegrasyon bekliyor" :
-    data.sourceReady ? "KY ERP API / D1 • Yerel mutabakat bekliyor" :
+    data.sourceReady && !projection.supported ? "API veri sözleşmesi uyuşmuyor" :
+    dataConnected ? "KY ERP API / D1 • Yerel mutabakat bekliyor" :
     data.error ? "Bağlantı hatası" : "Kaynak doğrulanıyor";
 
   const exportTable = () => {
