@@ -10,6 +10,11 @@ internal static class Program
     private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        if (args.Contains("--agent-plan-selftest", StringComparer.OrdinalIgnoreCase))
+        {
+            UnifiedLocalActionPlanner.AssertContract();
+            return;
+        }
         if (args.Contains("--agent-once", StringComparer.OrdinalIgnoreCase))
         {
             _ = UnifiedSyncAgent.RunOnceAsync().GetAwaiter().GetResult();
