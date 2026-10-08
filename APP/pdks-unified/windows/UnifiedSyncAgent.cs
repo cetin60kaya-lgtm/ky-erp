@@ -263,12 +263,27 @@ internal static class UnifiedSyncAgent
         string? localReceiptHmac = null;
         if (status == "ACKED" && localReceipt is not null)
         {
-            // JsonElement from fresh apply or persisted journal is reserialized
-            // compactly so resumed receipts yield the same canonical SHA-256.
-            var canonicalReceipt = JsonSerializer.Serialize(localReceipt);
-            var receiptHash = Convert.ToHexString(
-                SHA256.HashData(Encoding.UTF8.GetBytes(canonicalReceipt))).ToLowerInvariant();
-            var proofInput = Text(delivery, "deliveryHash") + "." + receiptHash;
+            // Canonical fixed-order strings match Cloud JS exactly, regardless of
+            // the Newtonsoft/System.Text.Json/Node serialization of receipt objects.
+            var item = JsonSerializer.SerializeToElement(localReceipt);
+            var fields = new[]
+            {
+                "KY-PDKS-RECEIPT-V1", Text(delivery, "deliveryHash"),
+                Text(item, "journalId"), Text(item, "appliedAt"),
+                Text(item, "commandId"), Text(item, "outboxId"),
+                Text(item, "deviceId"), Text(item, "commandPayloadSha256"),
+                Text(item, "evidenceSha256"),
+                item.TryGetProperty("sourceValidated", out var source) &&
+                    source.ValueKind == JsonValueKind.True ? "1" : "0",
+                item.TryGetProperty("fdbValidated", out var fdb) &&
+                    fdb.ValueKind == JsonValueKind.True ? "1" : "0",
+                item.TryGetProperty("tnfTouched", out var tnfTouched) &&
+                    tnfTouched.ValueKind == JsonValueKind.True ? "1" : "0",
+                item.TryGetProperty("tnfValidated", out var tnfValidated) &&
+                    tnfValidated.ValueKind == JsonValueKind.True ? "1" : "0",
+                Text(item, "policySha256"), Text(item, "fdbEvidenceSha256"),
+            };
+            var proofInput = JsonSerializer.Serialize(fields);
             using var signer = new HMACSHA256(Encoding.UTF8.GetBytes(credential.SigningKey));
             localReceiptHmac = Convert.ToBase64String(signer.ComputeHash(
                 Encoding.UTF8.GetBytes(proofInput)));
