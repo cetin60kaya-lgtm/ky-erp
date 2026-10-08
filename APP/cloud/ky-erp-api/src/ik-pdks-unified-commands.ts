@@ -219,11 +219,11 @@ function batchOperation(c:Context<AppEnv>,company:string,actor:string,action:str
     const typ=action==="advance"?"Avans":action==="deduction"?"Kesinti":p.adjustmentType;
     statement=sql(`INSERT INTO hr_monthly_adjustments_v2
       (id,employee_id,date,adjustment_type,hour_or_day,amount,payment_method,
-       payroll_effect,note,status,created_at)
-      VALUES(?,?,?,?,?,?,?,?,?,'APPROVED',?)`,
+       payroll_effect,note,status)
+      VALUES(?,?,?,?,?,?,?,?,?,'APPROVED')`,
       id,p.employeeId,p.date,typ,action==="overtime"?p.hourOrDay:0,p.amount,
       action==="overtime"?p.paymentMethod:"Elden",
-      action==="overtime"?"Bordroya ekle":"Bordrodan düş",p.note,stamp);
+      action==="overtime"?"Bordroya ekle":"Bordrodan düş",p.note);
     result.date=p.date;result.amount=p.amount;
   }else throw new Error("ACTION_UNAVAILABLE");
   return {statement,result};
