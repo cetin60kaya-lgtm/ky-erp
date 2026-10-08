@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { calculateStatutoryAnnualLeave, calculateAnnualLeaveBalance, calculateAnnualLeaveRange } from "./ik-relational-cloud.ts";
+import { calculateStatutoryAnnualLeave, calculateAnnualLeaveBalance, calculateAnnualLeaveRange, annualLeaveDaysForYear, leaveAdjustmentTotal } from "./ik-relational-cloud.ts";
 
 test("annual leave statutory entitlement follows Turkish tenure thresholds", () => {
   assert.equal(calculateStatutoryAnnualLeave("2025-01-01", "1990-01-01", "2026-01-01").entitlementDays, 14);
@@ -77,4 +77,35 @@ test("the next annual year starts with its own entitlement and signed carried de
   const planned = calculateAnnualLeaveBalance({ entitlement: 14, carryover: 0, adjustment: 0, used: 4, planned: 6 });
   assert.equal(planned.balance, 10);
   assert.equal(planned.projectedBalance, 4);
+});
+
+test("cross-year approved leave debits counted dates in their calendar year, not the plan start year", () => {
+  const plan = {startDate:"2026-12-30", countedDays:4, dayDetails:[
+    {date:"2026-12-30",counted:1},{date:"2026-12-31",counted:1},
+    {date:"2027-01-01",counted:0},{date:"2027-01-02",counted:1},{date:"2027-01-04",counted:1}
+  ]};
+  assert.equal(annualLeaveDaysForYear(plan,"2026"),2);
+  assert.equal(annualLeaveDaysForYear(plan,"2027"),2);
+});
+test("prior year adjustments do not compound in subsequent year balances", () => {
+  const profile = {birthDate:"",adjustments:[
+    {date:"2026-07-15",days:-4},{date:"2027-01-03",days:2}
+  ]};
+  assert.equal(leaveAdjustmentTotal(profile,"2026"),-4);
+  assert.equal(leaveAdjustmentTotal(profile,"2027"),2);
+});
+test("relational IK is tenant-scoped and denies old direct-write routes",()=>{
+  const src=readFileSync(new URL("./ik-relational-cloud.ts",import.meta.url),"utf8");
+  assert.match(src,/async function ikRelationalAccess/);
+  assert.match(src,/getAuthenticatedUser\(c\)/);
+  assert.match(src,/TENANT_CONFLICT/);
+  assert.match(src,/IK_PERMISSION_REQUIRED/);
+  assert.match(src,/IK_APPROVAL_REQUIRED/);
+  assert.match(src,/IK_LEGACY_WRITE_RETIRED/);
+  assert.match(src,/LEAVE_PERSON_IMMUTABLE/);
+  assert.match(src,/LEAVE_HOLIDAY_CALENDAR_MISSING/);
+});
+test("2027 holiday calendar contains Diyanet religious holidays and 19 May collision",()=>{
+  const src=readFileSync(new URL("./ik-relational-cloud.ts",import.meta.url),"utf8");
+  for (const day of ["2027-03-08","2027-03-09","2027-03-10","2027-03-11","2027-05-15","2027-05-16","2027-05-17","2027-05-18","2027-05-19"]) assert.ok(src.includes(day));
 });
