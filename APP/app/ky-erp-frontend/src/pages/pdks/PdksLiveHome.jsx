@@ -1,14 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { getPdksLiveDashboard } from "../../services/pdksApi";
+import { pdksLiveHealth } from "../../services/pdksPresentation";
 import "./PdksLiveHome.css";
 
-const ONLINE_WINDOW_MS = 5 * 60 * 1000;
-const SYNC_WINDOW_MS = 10 * 60 * 1000;
-const recent = (value, windowMs) => {
-  if (!value) return false;
-  const timestamp = new Date(value).getTime();
-  return Number.isFinite(timestamp) && timestamp <= Date.now() + 60000 && Date.now() - timestamp < windowMs;
-};
 const fmt = value => {
   if (!value) return "Henüz yok";
   const date = new Date(value);
@@ -53,14 +47,7 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
 
   const metrics = data?.metrics || {};
   const devices = Array.isArray(data?.devices) ? data.devices : [];
-  const activeDevices = devices.filter(row => Number(row.active) !== 0);
-  const onlineCount = activeDevices.filter(row => recent(row.lastSeenAt, ONLINE_WINDOW_MS)).length;
-  const lastSyncedDevice = activeDevices
-    .filter(row => row.lastSyncAt)
-    .sort((a,b) => new Date(b.lastSyncAt).getTime() - new Date(a.lastSyncAt).getTime())[0];
-  const hasRecentSync = activeDevices.some(row =>
-    recent(row.lastSeenAt, ONLINE_WINDOW_MS) && recent(row.lastSyncAt, SYNC_WINDOW_MS));
-  const freshness = hasRecentSync ? "fresh" : onlineCount ? "warning" : "offline";
+  const { onlineCount, offlineCount, hasRecentSync, lastSyncedDevice, freshness } = pdksLiveHealth(devices);
   const stateLabel = hasRecentSync ? "Senkron güncel" : onlineCount ? "Ajan bağlı, aktarım doğrulanmadı" : "Veri güncelliği doğrulanmadı";
   const checkedValue = (value) => hasRecentSync ? Number(value || 0).toLocaleString("tr-TR") : "—";
   const summary = [
@@ -132,12 +119,12 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
             <header className="plh-title"><div><span>BAĞLANTI</span><h2>Terminal & Ajan</h2></div><button type="button" onClick={() => go("cihaz-baglantilari")}>Yönet</button></header>
             <div className="plh-device-summary">
               <div><strong>{onlineCount}</strong><span>Çevrimiçi</span></div>
-              <div><strong>{Math.max(0,activeDevices.length-onlineCount)}</strong><span>Çevrimdışı</span></div>
+              <div><strong>{offlineCount}</strong><span>Çevrimdışı</span></div>
               <div><strong>{devices.length}</strong><span>Tanımlı</span></div>
             </div>
             <div className="plh-device-list">
               {devices.slice(0,5).map(row => <div key={row.id}>
-                <i className={Number(row.active)===0?"passive":recent(row.lastSeenAt,ONLINE_WINDOW_MS)?"online":"offline"}/>
+                <i className={Number(row.active)===0?"passive":pdksLiveHealth([row]).onlineCount>0?"online":"offline"}/>
                 <span><strong>{row.deviceLabel || "Cihaz"}</strong><small>{row.machineName || "Bilgisayar adı yok"}</small></span>
                 <em>{row.lastSeenAt ? fmt(row.lastSeenAt) : "Bağlanmadı"}</em>
               </div>)}
