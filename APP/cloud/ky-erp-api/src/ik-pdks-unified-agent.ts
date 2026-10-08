@@ -192,8 +192,20 @@ export function registerIkPdksUnifiedAgentRoutes(app:Hono<AppEnv>){
     const signingKey=syncSigningKey(c);
     if(!signingKey)return fail(c,503,"PDKS_SYNC_SIGNING_KEY_REQUIRED","ACK imza doğrulama anahtarı eksik.");
     const hmacProof=text(body.localReceiptHmac);
-    const expectedHmac=await hmacSha256Base64(signingKey,
-      text(body.deliveryHash)+"."+await sha256(JSON.stringify(receipt)));
+    // Fixed-order string array avoids JSON serializer differences between
+    // .NET and JS while binding every security-significant receipt field.
+    const proofFields=[
+      "KY-PDKS-RECEIPT-V1",text(body.deliveryHash),
+      text(receipt.journalId),text(receipt.appliedAt),
+      text(receipt.commandId),text(receipt.outboxId),text(receipt.deviceId),
+      text(receipt.commandPayloadSha256),text(receipt.evidenceSha256),
+      receipt.sourceValidated===true?"1":"0",
+      receipt.fdbValidated===true?"1":"0",
+      receipt.tnfTouched===true?"1":"0",
+      receipt.tnfValidated===true?"1":"0",
+      text(receipt.policySha256),text(receipt.fdbEvidenceSha256),
+    ];
+    const expectedHmac=await hmacSha256Base64(signingKey,JSON.stringify(proofFields));
     if(!hmacProof||!safeEqual(hmacProof,expectedHmac))
       return fail(c,409,"PDKS_LOCAL_RECEIPT_HMAC_INVALID","Yerel uygulama kanıt imzası geçersiz.");
     if(!safeEqual(text(receipt.commandPayloadSha256),text(row.payload_sha256)) ||
