@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * KY PDKS Unified — ONE authenticated and durable D1 administrative write engine.
  *
@@ -87,7 +86,7 @@ async function preflight(c:Context<AppEnv>,company:string,action:string,p:Row){
       if(Number(row?.is_locked||0)!==0)throw new Error("PDKS_PERIOD_LOCKED");
     }
   }
-  const tableByAction={
+  const tableByAction:Record<string,[string,string,unknown]>={
     "work-group":["ik_pdks_work_groups","code",p.code],
     "personnel-group":["ik_pdks_personnel_groups","code",p.code],
     "service":["ik_pdks_services","code",p.code],
@@ -97,7 +96,7 @@ async function preflight(c:Context<AppEnv>,company:string,action:string,p:Row){
     if(await first(c,`SELECT id FROM ${table} WHERE main_company_id=? AND ${key}=? LIMIT 1`,
       [company,value]))throw new Error("PDKS_DEFINITION_ALREADY_EXISTS");
   }
-  const assignment={
+  const assignment:Record<string,[string,string,string,unknown]>={
     "assign-work-group":["ik_pdks_work_groups","ik_pdks_employee_groups","group_id",p.groupId],
     "assign-personnel-group":["ik_pdks_personnel_groups","ik_pdks_employee_personnel_groups",
       "personnel_group_id",p.personnelGroupId],
@@ -117,17 +116,17 @@ async function preflight(c:Context<AppEnv>,company:string,action:string,p:Row){
       ["pdks-holiday-"+p.date,company]))
       throw new Error("PDKS_HOLIDAY_ALREADY_EXISTS");
   }
-  let leaveExtra=null;
+  let leaveExtra:Row|null=null;
   if(action==="leave"){
     const conflict=await first(c,`SELECT id FROM ik_leave_plans
       WHERE main_company_id=? AND employee_id=? AND status<>'CANCELLED'
       AND start_date<=? AND end_date>=? LIMIT 1`,
       [company,p.employeeId,p.endDate,p.startDate]);
     if(conflict)throw new Error("PDKS_LEAVE_DATE_CONFLICT");
-    const days=[],excluded=[],holidayRows=await c.env.DB.prepare(`SELECT data FROM json_store
+    const days:string[]=[],excluded:string[]=[],holidayRows=await c.env.DB.prepare(`SELECT data FROM json_store
       WHERE scope='IK_OFFICIAL_HOLIDAY' AND (main_company_slug=? OR main_company_slug IS NULL)`)
       .bind(company).all<Row>();
-    const holidays=new Map();
+    const holidays=new Map<string,Row>();
     for(const item of holidayRows.results||[]){
       try{const row=JSON.parse(val(item.data));if(row.date)holidays.set(row.date,row);}
       catch{}
@@ -172,7 +171,7 @@ function batchOperation(c:Context<AppEnv>,company:string,actor:string,action:str
   id:string,stamp:string,extra:any){
   const db=c.env.DB;
   const sql=(text:string,...values:unknown[])=>db.prepare(text).bind(...values);
-  const result={id,action,employeeId:p.employeeId||"",date:p.date||p.startDate||"",
+  const result:Row={id,action,employeeId:p.employeeId||"",date:p.date||p.startDate||"",
     mainCompanyId:company,cloudState:"COMMITTED",localFDB:false,annualTNF:false};
   let statement:any;
   if(action==="work-group")
@@ -289,7 +288,7 @@ async function post(c:Context<AppEnv>){
   const auth=await context(c);
   if(!auth)return fail(c,"PDKS_FULL_AUTH_REQUIRED","Yetkili FULL oturum ve geçerli firma gerekli.",403);
   let body:Row;
-  try{body=await c.req.json();}catch{return fail(c,"PDKS_INVALID_BODY","JSON istek zorunlu.");}
+  try{body=(await c.req.json()) as Row;}catch{return fail(c,"PDKS_INVALID_BODY","JSON istek zorunlu.");}
   if(!body||typeof body!=="object"||Array.isArray(body))return fail(c,"PDKS_INVALID_BODY","JSON nesnesi zorunlu.");
   const requestId=val(body.requestId),action=val(body.action);
   if(!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))
@@ -308,7 +307,7 @@ async function post(c:Context<AppEnv>){
     return c.json({ok:true,data:{...JSON.parse(existing.result_json),
       replayed:true,receiptId:existing.id}});
   }
-  let extra;
+  let extra:Awaited<ReturnType<typeof preflight>>;
   try{extra=await preflight(c,auth.company,action,p);}
   catch(e){return fail(c,val((e as Error).message),"İşlem doğrulanamadı; kayıt yapılmadı.",409);}
   const stamp=new Date().toISOString(),id=crypto.randomUUID(),
