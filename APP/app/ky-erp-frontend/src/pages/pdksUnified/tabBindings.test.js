@@ -111,3 +111,23 @@ test("work groups, personnel groups and service assignments use verified actual 
   assert.equal(services.rows[0]["Personel"],"1");
   assert.equal(rowsForTab("departments",{groups:[]}).supported,false);
 });
+
+
+test("Turkish dotted İ in mesai and kesinti never hides an approved source row",()=>{
+  const month={adjustments:[
+    {id:"m1",employeeName:"Kişi",date:"2026-10-05",
+      adjustmentType:"Hafta İçi Mesai",hourOrDay:2,amount:500,
+      note:"Mesai oranı: %50 | Onaylı fazla çalışma"},
+    {id:"k1",employeeName:"Kişi",date:"2026-10-06",
+      adjustmentType:"Kesinti",hourOrDay:0,amount:100,
+      note:"Yazılı kesinti onayı"},
+  ]};
+  const overtime=rowsForTab("overtime",month);
+  assert.equal(overtime.supported,true);
+  assert.equal(overtime.rows.length,1);
+  assert.equal(overtime.rows[0]["Oran"],"%50");
+  assert.equal(overtime.rows[0]["Saat"],"2");
+  const deduction=rowsForTab("deductions",month);
+  assert.equal(deduction.rows.length,1);
+  assert.equal(deduction.rows[0]["Tutar"],"100");
+});
