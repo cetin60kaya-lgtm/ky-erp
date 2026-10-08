@@ -51,6 +51,11 @@ internal static class Program
             }
             return;
         }
+        if (args.Contains("--agent-loop-selftest", StringComparer.OrdinalIgnoreCase))
+        {
+            UnifiedAgentRunner.SelfTestAsync().GetAwaiter().GetResult();
+            return;
+        }
         if (args.Contains("--agent-loop", StringComparer.OrdinalIgnoreCase))
         {
             using var cancel = new CancellationTokenSource();
