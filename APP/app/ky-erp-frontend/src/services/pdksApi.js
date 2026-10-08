@@ -21,8 +21,8 @@ function isSgkPdksPerson(person) {
 const OPS = "/ik/personnel-control/operations";
 const cacheKey = (name, params = {}) => `${name}:${JSON.stringify(params, Object.keys(params).sort())}`;
 
-export async function getPdksProfile() {
-  return unwrap(await pdksCachedGet("profile", "/ik/personnel-control/profile"));
+export async function getPdksProfile(params = {}) {
+  return unwrap(await pdksCachedGet(cacheKey("profile", params), "/ik/personnel-control/profile", params));
 }
 
 export async function getPdksPeople(params = {}) {
