@@ -32,7 +32,7 @@ const form=(id)=>({
 
 test("one operation catalog covers eleven distinct verified Cloud D1 workflows",()=>{
   assert.equal(OPERATION_CATALOG.length,11);
-  assert.equal(new Set(OPERATION_CATALOG.map(x=>x.id)).size,9);
+  assert.equal(new Set(OPERATION_CATALOG.map(x=>x.id)).size,11);
   assert.ok(OPERATION_CATALOG.every(x=>x.scope==="CLOUD_D1_ONLY"));
   assert.equal(operationsForTab("departments").length,4);
   assert.equal(operationsForTab("routes").length,2);
