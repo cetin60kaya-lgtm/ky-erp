@@ -42,7 +42,7 @@ public sealed partial class MainShellForm
             Padding = Padding.Empty,
             BackColor = p.Canvas
         };
-        frame.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 258));
+        frame.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 282));
         frame.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         frame.Controls.Add(BuildModernSidebar(), 0, 0);
@@ -225,8 +225,9 @@ public sealed partial class MainShellForm
         return new Label
         {
             Text=text,
-            Width=190,
+            Width=212,
             Height=23,
+            UseMnemonic=false,
             Margin=new Padding(0,7,0,2),
             Padding=new Padding(10,5,0,0),
             ForeColor=p.SidebarMuted,
@@ -246,7 +247,7 @@ public sealed partial class MainShellForm
             ImageAlign = ContentAlignment.MiddleLeft,
             TextImageRelation = TextImageRelation.ImageBeforeText,
             Height = 35,
-            Width = 190,
+            Width = 212,
             FlatStyle = FlatStyle.Flat,
             BackColor = p.Sidebar,
             ForeColor = p.SidebarMuted,
