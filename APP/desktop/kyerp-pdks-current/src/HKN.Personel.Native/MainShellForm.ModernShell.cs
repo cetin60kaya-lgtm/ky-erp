@@ -442,7 +442,7 @@ public sealed partial class MainShellForm
     {
         var view=new OperationsCenterForm(
             PdksCommandCatalog.All.Where(CanExecute),
-            ExecuteCommand);
+            NavigateToCommand);
         ShowEmbedded(view,"attendance-center","Giriş / Çıkış");
         SetModernPage("Giriş / Çıkış","Bugünün durumu, kart kayıtları, eksikler ve devam analizi");
     }
@@ -456,7 +456,7 @@ public sealed partial class MainShellForm
 
         var view = new ManagementCenterForm(
             PdksCommandCatalog.Management.Where(CanExecute),
-            ExecuteCommand);
+            NavigateToCommand);
         ShowEmbedded(view, "management-center", "Yönetim Merkezi");
         SetModernPage("Yönetim Merkezi", "Personel, puantaj, bordro, tanımlar ve sistem işlemleri");
         SelectManagementNav();
