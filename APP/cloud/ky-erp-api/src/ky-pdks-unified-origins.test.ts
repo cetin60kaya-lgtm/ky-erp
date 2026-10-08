@@ -33,3 +33,29 @@ test("PDKS masters GET never creates a shift, schema or a fabricated default rec
   assert.match(block,/sqlite_master/);
   assert.match(block,/PDKS_SCHEMA_NOT_READY/);
 });
+
+
+test("production worker entrypoints register ALL live KY PDKS operations",()=>{
+  const main=readFileSync(resolve(here,"main.ts"),"utf8");
+  assert.match(main,/registerIkPdksOperationRoutes\(app\)/);
+  assert.match(main,/registerIkPdksAdjustmentRoutes\(app\)/);
+  const op=readFileSync(resolve(here,"ik-pdks-operations.ts"),"utf8");
+  const extra=readFileSync(resolve(here,"ik-pdks-adjustments.ts"),"utf8");
+  for(const path of [
+    "/operations/month","/operations/leaves","/operations/leave",
+    "/operations/advance","/operations/payroll","/operations/holidays",
+    "/operations/audit-logs","/operations/period-close"
+  ])assert.ok(op.includes(path),path+" API is not registered in handler");
+  assert.ok(extra.includes("/operations/adjustment"));
+  assert.match(op,/requireFull\(c/);
+  assert.match(extra,/PDKS_AUDIT_READ_ONLY/);
+});
+test("every active worker security layer accepts EXACT KY web and Capacitor origins",()=>{
+  for(const file of ["index.ts","main.ts","main-entry.ts","main-entry-security.ts"]){
+    const source=readFileSync(resolve(here,file),"utf8");
+    assert.match(source,/"https:\/\/app\.kyerp\.net"/,file);
+    assert.match(source,/"capacitor:\/\/localhost"/,file);
+    assert.match(source,/"https:\/\/localhost"/,file);
+    assert.doesNotMatch(source,/Access-Control-Allow-Origin["']?\s*[:=]\s*["']\*["']/);
+  }
+});
