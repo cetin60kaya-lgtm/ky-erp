@@ -121,3 +121,39 @@ export function inspectProductModel() {
     missingColumns: ALL_PRODUCT_TABS.filter((x) => x.view !== "dashboard" && !x.columns.length).map((x) => x.id),
   };
 }
+
+/**
+ * Presentation-only, tenant-customizable module menu.
+ * Permission checks remain mandatory in the API and cannot be granted here.
+ */
+export function configuredProductSections(options = {}, {audit = false} = {}) {
+  const known = new Set(PRODUCT_SECTIONS.map((item) => item.id));
+  const invisible = new Set(
+    (Array.isArray(options.hiddenSections) ? options.hiddenSections : [])
+      .filter((id) => known.has(id))
+  );
+  if (audit) {
+    invisible.add("payroll");
+    invisible.add("admin");
+  }
+  // Keep at least one working landing page even if the config is invalid.
+  invisible.delete("overview");
+  const order = Array.isArray(options.sectionOrder)
+    ? options.sectionOrder.filter((id) => known.has(id))
+    : [];
+  const captions = options.labels && typeof options.labels === "object"
+    ? options.labels : {};
+  return PRODUCT_SECTIONS
+    .filter((item) => !invisible.has(item.id))
+    .sort((a,b) => {
+      const ai=order.indexOf(a.id), bi=order.indexOf(b.id);
+      return (ai<0?999:ai)-(bi<0?999:bi);
+    })
+    .map((item) => ({
+      ...item,
+      label: typeof captions[item.id] === "string" &&
+        captions[item.id].trim().length > 0 &&
+        captions[item.id].length <= 32
+          ? captions[item.id].trim() : item.label,
+    }));
+}
