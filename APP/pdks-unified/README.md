@@ -159,3 +159,34 @@ Windows inceleme exe:
 
 Canlı backend veya production çalışma alanları bu test için
 değiştirilmemiştir.
+
+## 10. DESEN yerel çalışma ve final gate (08.10.2026)
+
+Son izole kaynak: `feature/ky-pdks-unified-product-shell-20261008`.
+Bu dal staging/proje kaynak dalıdır; `main`, production Pages/Workers,
+canlı PDKS EXE, personel FDB/TNF ve terminal RAW değiştirilmemiştir.
+
+**Son test kanıtı (DESEN):**
+- `node --test src/pages/pdksUnified/productModel.test.js`: PASS.
+- `npm run lint`: PASS.
+- `npm run build`: PASS.
+- Chrome gerçek navigasyon: **9/9 ana bölüm, 49/49 alt sekme**, koyu tema,
+  readonly moda bağlı kalma ve yatay taşma: PASS.
+- `APP/pdks-unified/device-gateway` ve `sync` toplam **10 sözleşme testi**: PASS.
+- Windows `dotnet build -warnaserror` ve `dotnet publish`: PASS.
+- DESEN Windows WebView2 son pencere: çalışıyor, yanıt veriyor.
+- Yerel script engeli kalıcı Windows ayarı değiştirilmeden kısayol
+  üzerinden giderildi; **tek tıklama testi**: `WINDOWS_APP_RUNNING=1`,
+  `LOCAL_STUDIO_HTTP=200`.
+
+**Masaüstü kısayolu:** `KY PDKS UNIFIED - KURUMSAL ONIZLEME`.
+Bu kısayol `Start-KyPdks-Unified-Preview.ps1` ile yalnız
+`127.0.0.1:5186` tasarım servisinin ayakta olup olmadığını kontrol eder,
+sonra WebView2 penceresini açar. PowerShell ilkesini sistem çapında
+kapatmaz/değiştirmez.
+
+**İşlev durumu:** Tek kurumsal görünüm ve test edilen ekran yönlendirmeleri
+çalışır. Yetkili personel API'si yalnız okuma yolunda entegredir.
+Terminal sürücülerinin tümü, canlı senkron consumer/ACK, bordro işlemleri,
+Android/iOS native build, production deploy ve gerçek uçtan uca kabul hâlâ AÇIK.
+Bu maddeler geçmeden uygulama bitmiş veya her markaya uyumlu ilan edilmeyecektir.
