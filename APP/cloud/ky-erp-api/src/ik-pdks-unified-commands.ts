@@ -50,7 +50,7 @@ const name=(v:unknown)=>{
 };
 const amount=(v:unknown)=>{
   const n=Number(v);
-  if(!Number.isFinite(n)||n<=0||n>1e9||Math.round(n*100)!==n*100)
+  if(!Number.isFinite(n)||n<=0||n>1e9||Math.abs(Math.round(n*100)-n*100)>1e-7)
     throw new Error("PDKS_AMOUNT_INVALID");
   return n;
 };
@@ -304,7 +304,7 @@ function batchOperation(c:Context<AppEnv>,company:string,actor:string,action:str
       (id,scope,main_company_slug,file_name,data,created_at,updated_at)
       VALUES(?,'IK_OFFICIAL_HOLIDAY',?,?,?,?,?)`,
       id,company,"pdks-holiday-"+p.date,JSON.stringify(data),stamp,stamp);
-    result.date=p.date;
+    result.date=p.date;result.businessId=data.id;
   }else if(action==="leave"){
     const x=extra.leaveExtra;
     statement=sql(`INSERT INTO ik_leave_plans
