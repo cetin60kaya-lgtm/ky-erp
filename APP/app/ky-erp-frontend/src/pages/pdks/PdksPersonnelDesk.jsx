@@ -10,6 +10,7 @@ import {
   savePdksCorrection,
   savePdksLeaveV2,
 } from "../../services/pdksApi";
+import { selectedPdksPerson, visiblePdksPeople } from "../../services/pdksPresentation";
 import "./PdksPersonnelDesk.css";
 
 const MONTHS=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -35,7 +36,7 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
   const [correction,setCorrection]=useState({date:iso(),status:"CALISTI",entry:"08:30",exit:"19:00",reason:"",note:""});
   const [leave,setLeave]=useState({leaveTypeCode:"YILLIK_IZIN",startDate:iso(),endDate:iso(),dayPart:"FULL",documentNo:"",note:""}),[leavePreview,setLeavePreview]=useState(null);
 
-  const selected=useMemo(()=>{const scoped=people.filter(p=>{const active=!upper(p.status).includes("PAS")&&!upper(p.activePassive).includes("PAS");return filter==="TUM"||(filter==="AKTIF"?active:!active)});return scoped.find(p=>p.id===selectedId)||scoped[0]||null},[people,selectedId,filter]);
+  const selected=useMemo(()=>selectedPdksPerson(people,filter,selectedId),[people,filter,selectedId]);
   const personLeaves=useMemo(()=>(leaveCenter?.plans||[]).filter(row=>(row.employeeId||row.employee_id)===selected?.id),[leaveCenter?.plans,selected?.id]);
   useEffect(()=>{if(["giris-cikislar","puantaj","calisma-tarihi"].includes(activeTab))setCenterTab("giris");else if(activeTab==="izinler")setCenterTab("izin");else if(activeTab==="personel-bilgileri")setCenterTab("bilgi")},[activeTab]);
 
@@ -43,7 +44,7 @@ export default function PdksPersonnelDesk({activeTab="personel-bilgileri",active
   const loadPerson=useCallback(async()=>{if(!selected?.id){setAttendance(null);setEntitlement(null);return}setBusy(true);setError("");try{const [att,ent]=await Promise.all([getPdksAttendance(selected.id,year,month),getPdksLeaveEntitlement(selected.id,{mainCompanyId:company})]);setAttendance(att||null);setEntitlement(ent||null)}catch(cause){setError(cause?.message||"Personel puantajı yüklenemedi.")}finally{setBusy(false)}},[company,month,selected?.id,year]);
   useEffect(()=>{loadCore()},[loadCore]);useEffect(()=>{loadPerson()},[loadPerson]);
 
-  const filtered=useMemo(()=>{const q=upper(search);return people.filter(p=>{const hit=!q||upper(`${p.personnelCode||p.code||""} ${p.fullName||""} ${p.cardNo||""} ${p.department||""} ${p.title||""}`).includes(q);const active=!upper(p.status).includes("PAS")&&!upper(p.activePassive).includes("PAS");return hit&&(filter==="TUM"||(filter==="AKTIF"?active:!active))}).sort((a,b)=>String(a.cardNo||a.personnelCode||a.code||"").localeCompare(String(b.cardNo||b.personnelCode||b.code||""),"tr",{numeric:true}))},[filter,people,search]);
+  const filtered=useMemo(()=>visiblePdksPeople(people,filter,search),[people,filter,search]);
   const attendanceRows=attendance?.days||[],summary=attendance?.summary||{},schedule=attendance?.schedule||{};
   const selectedLeaveType=(modern?.leaveTypes||[]).find(row=>row.code===leave.leaveTypeCode);
   const openIk=()=>openModule?.("ik",{tabKey:"personel-kartlari",actionContext:{source:"pdks",employeeId:selected?.id}});
