@@ -260,12 +260,26 @@ internal static class UnifiedSyncAgent
         using var request = new HttpRequestMessage(HttpMethod.Post,
             $"/api/auth/pdks-unified/outbox/{Uri.EscapeDataString(id)}/ack");
         AddDeviceHeaders(request, credential);
+        string? localReceiptHmac = null;
+        if (status == "ACKED" && localReceipt is not null)
+        {
+            // JsonElement from fresh apply or persisted journal is reserialized
+            // compactly so resumed receipts yield the same canonical SHA-256.
+            var canonicalReceipt = JsonSerializer.Serialize(localReceipt);
+            var receiptHash = Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(canonicalReceipt))).ToLowerInvariant();
+            var proofInput = Text(delivery, "deliveryHash") + "." + receiptHash;
+            using var signer = new HMACSHA256(Encoding.UTF8.GetBytes(credential.SigningKey));
+            localReceiptHmac = Convert.ToBase64String(signer.ComputeHash(
+                Encoding.UTF8.GetBytes(proofInput)));
+        }
         request.Content = JsonContent.Create(new
         {
             status,
             reason,
             deliveryHash = Text(delivery, "deliveryHash"),
             localReceipt,
+            localReceiptHmac,
         });
         using var response = await http.SendAsync(request, cancellationToken);
         var root = await ParseResponseAsync(response, cancellationToken);
