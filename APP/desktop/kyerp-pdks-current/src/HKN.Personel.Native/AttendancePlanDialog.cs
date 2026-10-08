@@ -34,6 +34,7 @@ internal sealed class AttendancePlanDialog : Form
     };
     readonly Label info = new() { Dock = DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
     readonly Button apply;
+    readonly System.Windows.Forms.Timer personRefreshDebounce = new() { Interval = 220 };
     readonly HashSet<string> initialCards;
     AttendancePlanPreview? frozenPlan;
 
@@ -65,6 +66,7 @@ internal sealed class AttendancePlanDialog : Form
         Build();
         Wire();
         Shown += (_, _) => LoadPeople();
+        FormClosed += (_, _) => personRefreshDebounce.Dispose();
     }
 
     AttendancePlanMode CurrentMode =>
@@ -172,14 +174,19 @@ internal sealed class AttendancePlanDialog : Form
 
     void Wire()
     {
+        personRefreshDebounce.Tick += (_, _) =>
+        {
+            personRefreshDebounce.Stop();
+            if (!IsDisposed && IsHandleCreated) LoadPeople();
+        };
         mode.SelectedIndexChanged += (_, _) =>
         {
             InvalidatePreview();
             RefreshModeUi();
-            LoadPeople();
+            QueuePeopleRefresh();
         };
-        from.ValueChanged += (_, _) => { InvalidatePreview(); LoadPeople(); };
-        to.ValueChanged += (_, _) => { InvalidatePreview(); LoadPeople(); };
+        from.ValueChanged += (_, _) => { InvalidatePreview(); QueuePeopleRefresh(); };
+        to.ValueChanged += (_, _) => { InvalidatePreview(); QueuePeopleRefresh(); };
         people.CellValueChanged += (_, _) => InvalidatePreview();
         people.CurrentCellDirtyStateChanged += (_, _) =>
         {
@@ -198,6 +205,15 @@ internal sealed class AttendancePlanDialog : Form
         info.Text = CurrentMode == AttendancePlanMode.FullRepair
             ? "TAM DÜZELT: E kayıtlarına dokunmaz; eksik normal giriş/çıkışı oluşturur, aralık dışı normal saati doğal aralığa çeker, mükerreri temizler. Normal kayıt = DATA + TNF."
             : "E İŞLEMLERİ: yeni saat üretmez. Mevcut gerçek normal hareketlerden seçer; DB'de E yapar ve yıllık TNF'den çıkarır.";
+    }
+
+    void QueuePeopleRefresh()
+    {
+        if (!IsHandleCreated || IsDisposed) return;
+        // Date-time picker spin and mode changes used to issue multiple blocking
+        // Firebird queries per click. Refresh once after the user stops changing it.
+        personRefreshDebounce.Stop();
+        personRefreshDebounce.Start();
     }
 
     void LoadPeople()
@@ -322,6 +338,7 @@ internal sealed class AttendancePlanDialog : Form
 
     void ApplyFrozenPlan()
     {
+        personRefreshDebounce.Stop();
         if (frozenPlan is null || !frozenPlan.CanApply || frozenPlan.Items.Count == 0) return;
         var detail = frozenPlan.Mode == AttendancePlanMode.ConvertToE
             ? "Seçilen gerçek normal hareketler E yapılacak ve TNF'den çıkarılacak. Saatler değişmeyecek."
