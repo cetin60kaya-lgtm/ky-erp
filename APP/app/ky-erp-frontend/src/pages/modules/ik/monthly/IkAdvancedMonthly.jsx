@@ -418,16 +418,16 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const [selectedDays, setSelectedDays] = useState([1]);
   const [leaveDeskTab, setLeaveDeskTab] = useState("overview");
   const [leaveDetailPlanId, setLeaveDetailPlanId] = useState("");
-  const [leaveCenter, setLeaveCenter] = useState({ policy: { countedWeekdays: [1, 2, 3, 4, 5], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 }, plans: [], conflicts: [], employees: [], cashRequests: [] });
+  const [leaveCenter, setLeaveCenter] = useState({ policy: { countedWeekdays: [1, 2, 3, 4, 5, 6], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 }, plans: [], conflicts: [], employees: [], cashRequests: [] });
   const [quickLeaveDraft, setQuickLeaveDraft] = useState(() => {
     const today = istanbulDateKey();
-    return { startDate: today, returnDate: addDateDays(today, 1), status: "APPROVED", note: "" };
+    return { startDate: today, returnDate: addDateDays(today, 1), status: "APPROVED", note: "", advanceLeaveApproved: false, advanceLeaveReason: "" };
   });
   const [quickLeavePreview, setQuickLeavePreview] = useState(null);
   const [leaveProfileDraft, setLeaveProfileDraft] = useState({ birthDate: "", annualLeaveEntitlement: "", annualLeaveCarryover: "", adjustmentDays: "", adjustmentReason: "" });
   const [leaveCashDraft, setLeaveCashDraft] = useState({ requestType: "ACTIVE_EMPLOYMENT_REQUEST", requestDate: istanbulDateKey(), requestedDays: "", note: "" });
   const [leavePreview, setLeavePreview] = useState(null);
-  const [policyDraft, setPolicyDraft] = useState({ countedWeekdays: [1, 2, 3, 4, 5], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 });
+  const [policyDraft, setPolicyDraft] = useState({ countedWeekdays: [1, 2, 3, 4, 5, 6], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 });
   const [leaveCalendarMonth, setLeaveCalendarMonth] = useState(`${initial.year}-${String(initial.month).padStart(2, "0")}`);
   const [leaveRangeStep, setLeaveRangeStep] = useState(0);
   const leaveAutoPreviewSeq = useRef(0);
@@ -729,7 +729,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       adjustmentDays: "",
       adjustmentReason: "",
     });
-    setQuickLeaveDraft({ startDate: today, returnDate: addDateDays(today, 1), status: "APPROVED", note: "" });
+    setQuickLeaveDraft({ startDate: today, returnDate: addDateDays(today, 1), status: "APPROVED", note: "", advanceLeaveApproved: false, advanceLeaveReason: "" });
     setQuickLeavePreview(null);
     setLeaveCashDraft({ requestType: "ACTIVE_EMPLOYMENT_REQUEST", requestDate: today, requestedDays: "", note: "" });
     setLeaveDetailPlanId("");
@@ -759,10 +759,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
 
   const employeeLeave = useCallback((employee) => {
     const own = masterLeaves.filter((item) => item.employeeId === employee.id);
-    const annual = own.filter((item) => upper(item.recordType || item.type).includes("YILLIK")).reduce((sum, item) => sum + num(item.dayCount || item.days || 1), 0);
+    const canonical = leaveEmployeeMap.get(employee.id);
+    if (canonical) return { own, annual: num(canonical.usedDays), right: num(canonical.annualRight), balance: num(canonical.balance), carryover: num(canonical.annualCarryover), adjustment: num(canonical.balanceAdjustment), source: "LEAVE_CENTER" };
+    const annual = own.filter((item) => upper(item.recordType || item.type).includes("YILLIK") && String(item.startDate || item.start || "").startsWith(String(year))).reduce((sum, item) => sum + num(item.dayCount ?? item.days ?? 0), 0);
     const right = num(employee.annualLeaveEntitlement) + num(employee.annualLeaveCarryover);
-    return { own, annual, right, balance: right - annual };
-  }, [masterLeaves]);
+    return { own, annual, right, balance: right - annual, source: "FALLBACK" };
+  }, [masterLeaves, leaveEmployeeMap, year]);
 
   const docsFor = useCallback((employee) => masterDocuments.filter((item) => item.employeeId === employee.id), [masterDocuments]);
 
@@ -1719,7 +1721,11 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       if (officialLeave) {
         const preview = modal === "yillik" ? (leavePreview || await previewIkAdvancedLeave({ mainCompanyId: companyId, ...modalDraft, returnDate: modalDraft.endDate, recordType })) : null;
         if (preview?.hasCriticalConflict) return setNotice("Bu personelin ayni tarihlerde baska izin kaydi var. Kayit engellendi.");
-        if (preview?.balanceAfter < 0 && !window.confirm(`Izin sonrasi bakiye ${preview.balanceAfter} gun olacak. Devam edilsin mi?`)) return;
+        let advanceLeaveReason = "";
+      if (modal === "yillik" && modalDraft.status !== "PLANNED" && num(preview?.annualExcessDays) > 0) {
+        advanceLeaveReason = window.prompt(`${preview.annualExcessDays} gün hak aşımı: Avans izin olarak kaydedilsin mi? (Maaş kesintisi yapılmaz.) Gerekçeyi yazın:`, "") || "";
+        if (!advanceLeaveReason.trim()) return setNotice("Eksi izin / avans izin için gerekçe zorunludur; yıllık izin kaydı yapılmadı.");
+      }
         const allowDepartmentConflict = preview?.hasDepartmentWarning ? window.confirm("Ayni bolumde izin cakismasi var. Yetkili onayiyla devam edilsin mi?") : false;
         if (preview?.hasDepartmentWarning && !allowDepartmentConflict) return;
         await saveIkAdvancedLeave({
@@ -1740,6 +1746,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
           documentNo: modalDraft.documentNo,
           note: modalDraft.note,
           allowDepartmentConflict,
+          allowAdvanceLeave: Boolean(advanceLeaveReason),
+          advanceLeaveReason,
         });
       } else {
         for (const day of selectedDays) await saveIkAdvancedException({
@@ -1798,7 +1806,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setBusy(true);
     try {
       const result = await saveIkAdvancedLeavePolicy({ mainCompanyId: companyId, ...policyDraft });
-      setPolicyDraft(result?.policy || { countedWeekdays: [1, 2, 3, 4, 5], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 });
+      setPolicyDraft(result?.policy || { countedWeekdays: [1, 2, 3, 4, 5, 6], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 });
       setNotice("Sirket izin gun sayim ayarlari kaydedildi.");
       await load({ force: true });
     } catch (error) { setNotice(error?.message || "Izin ayarlari kaydedilemedi."); } finally { setBusy(false); }
@@ -1844,7 +1852,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         recordType: "Yillik izin",
       });
       if (preview?.hasCriticalConflict) return setNotice("Bu personelin aynı tarihlerde başka izin kaydı var. Kayıt engellendi.");
-      if (preview?.balanceAfter < 0 && !window.confirm("İzin sonrası bakiye " + preview.balanceAfter + " gün olacak. Devam edilsin mi?")) return;
+      if (quickLeaveDraft.status !== "PLANNED" && num(preview?.annualExcessDays) > 0 && (!quickLeaveDraft.advanceLeaveApproved || !quickLeaveDraft.advanceLeaveReason.trim())) {
+        return setNotice("Hak aşımı " + num(preview.annualExcessDays) + " gün. Avans izin onayını ve gerekçesini doldurun; otomatik maaş kesilmez.");
+      }
       const allowDepartmentConflict = preview?.hasDepartmentWarning ? window.confirm("Aynı bölümde izin çakışması var. Yetkili onayıyla devam edilsin mi?") : false;
       if (preview?.hasDepartmentWarning && !allowDepartmentConflict) return;
       const saved = await saveIkAdvancedLeave({
@@ -1859,6 +1869,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         documentNo: "",
         note: quickLeaveDraft.note,
         allowDepartmentConflict,
+        allowAdvanceLeave: quickLeaveDraft.status !== "PLANNED" && quickLeaveDraft.advanceLeaveApproved === true,
+        advanceLeaveReason: quickLeaveDraft.advanceLeaveReason,
       });
       setQuickLeavePreview(null);
       setLeaveDetailPlanId(saved?.planId || "");
@@ -2892,7 +2904,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     const personConflicts = person
       ? safeList(leaveCenter.conflicts).filter((item) => safeList(item.people).includes(person.fullName))
       : [];
-    const annualHistory = personPlans.reduce((map, item) => {
+    const annualHistory = personPlans.filter((item) => item.legacy || ["APPROVED", "TAKEN"].includes(upper(item.status))).reduce((map, item) => {
       const historyYear = String(item.startDate || "").slice(0, 4) || "Tarihsiz";
       const current = map.get(historyYear) || { year: historyYear, records: 0, days: 0 };
       current.records += 1;
@@ -2960,16 +2972,16 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               </div>
 
               <div className="ik-leave-kpi-grid">
-                <div><span>Kanuni Hak</span><b>{num(person.statutoryEntitlement)} gün</b><small>{person.leaveEligible ? "Kıdeme/yaşa göre asgari" : "1 yıl dolmadı"}</small></div>
+                <div><span>Hak Ediş / Kanuni</span><b>{num(person.effectiveEntitlement)} / {num(person.statutoryEntitlement)} gün</b><small>{person.leaveEligible ? "Kayıtlı hak ve kıdeme/yaşa göre asgari" : "1 yıl dolmadı"}</small></div>
                 <div><span>Devreden</span><b>{num(person.annualCarryover)} gün</b><small>Önceki dönem</small></div>
-                <div><span>Kullanılan / Onaylı</span><b>{num(person.usedDays)} gün</b><small>Bakiyeden ayrılmış</small></div>
+                <div><span>Kullanılan / Onaylı</span><b>{num(person.usedDays)} gün</b><small>{person.entitlementYear || year} yılı · Tüm geçmiş: {num(person.usedDaysAllTime)}</small></div>
                 <div><span>Planlanan</span><b>{num(person.plannedDays)} gün</b><small>Henüz kesinleşmeyen</small></div>
-                <div className={num(person.balance) < 0 ? "danger" : "success"}><span>Kalan</span><b>{num(person.balance)} gün</b><small>Plan sonrası {num(person.projectedBalance)} gün</small></div>
+                <div className={num(person.balance) < 0 ? "danger" : "success"}><span>{num(person.balance) < 0 ? "Eksi Bakiye / Avans" : "Kalan"}</span><b>{num(person.balance)} gün</b><small>{num(person.balance) < 0 ? "Maaş kesintisi oluşturulmaz" : "Plan sonrası " + num(person.projectedBalance) + " gün"}</small></div>
                 <div><span>Kıdem / Yaş</span><b>{num(person.serviceYears)} yıl · {person.age ?? "Yaş eksik"}</b><small>{durationLabel(employeeHireDate(person), today)}</small></div>
               </div>
 
               <div className="ik-leave-proof-strip">
-                <div><b>Hesap</b><span>{num(person.effectiveEntitlement)} hak + {num(person.annualCarryover)} devir + {num(person.balanceAdjustment)} düzeltme − {num(person.usedDays)} kullanılan/onaylı = <strong>{num(person.balance)} gün</strong></span></div>
+                <div><b>{person.entitlementYear || year} İzin Hesabı</b><span>{num(person.effectiveEntitlement)} hak + ({num(person.annualCarryover)} devir) + ({num(person.balanceAdjustment)} düzeltme) − {num(person.usedDays)} kullanılan/onaylı = <strong>{num(person.balance)} gün</strong></span></div>
                 <div><b>Sonraki hakediş</b><span>{person.nextEntitlementDate || "İşe giriş tarihi kontrol edilmeli"}</span></div>
                 <div><b>PDKS kartlı gün</b><span>{year}: {num(person.pdksWorkedDaysYear)} · toplam kayıt: {num(person.pdksWorkedDaysTotal)}</span><small>PDKS günü bilgi amaçlıdır; kanuni kıdem hesabının yerine geçmez.</small></div>
               </div>
@@ -2994,6 +3006,11 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                       <label><span>İşe dönüş</span><input type="date" value={quickLeaveDraft.returnDate} onChange={(event) => { setQuickLeaveDraft((old) => ({ ...old, returnDate: event.target.value })); setQuickLeavePreview(null); }} /></label>
                       <label><span>Kayıt durumu</span><select value={quickLeaveDraft.status} onChange={(event) => setQuickLeaveDraft((old) => ({ ...old, status: event.target.value }))}><option value="APPROVED">Onaylandı / Kullanıma hazır</option><option value="PLANNED">Planlandı</option><option value="TAKEN">Kullanıldı</option></select></label>
                       <label className="wide"><span>Not</span><input value={quickLeaveDraft.note} onChange={(event) => setQuickLeaveDraft((old) => ({ ...old, note: event.target.value }))} placeholder="Opsiyonel açıklama" /></label>
+                      {quickLeavePreview && num(quickLeavePreview.annualExcessDays) > 0 && quickLeaveDraft.status !== "PLANNED" ? <>
+                        <div className="wide warnline warn"><b>{num(quickLeavePreview.annualExcessDays)} gün hak aşımı:</b> Avans izin olarak kaydedilebilir; ücret veya yol kesintisi oluşturulmaz. İleride hakedişten mahsup/ücretsiz izin kararı ayrıca kayıt altına alınmalıdır.</div>
+                        <label className="wide ik-check-row"><input type="checkbox" checked={quickLeaveDraft.advanceLeaveApproved === true} onChange={(event) => setQuickLeaveDraft((old) => ({ ...old, advanceLeaveApproved: event.target.checked }))} /> Hak aşımını avans izin olarak onaylıyorum</label>
+                        <label className="wide"><span>Avans izin gerekçesi</span><input value={quickLeaveDraft.advanceLeaveReason || ""} onChange={(event) => setQuickLeaveDraft((old) => ({ ...old, advanceLeaveReason: event.target.value }))} placeholder="Örn. 4 gün sonraki hakedişten avans" /></label>
+                      </> : null}
                     </div>
                     <div className="ik-leave-preset-row">
                       <button className="btn" onClick={() => { const start = today; setQuickLeaveDraft((old) => ({ ...old, startDate: start, returnDate: addDateDays(start, 1) })); setQuickLeavePreview(null); }}>Bugün · 1 gün</button>
@@ -3005,6 +3022,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                       <div><span>Bakiyeden düşen</span><b>{num(quickLeavePreview.countedDays)} gün</b></div>
                       <div><span>Hariç</span><b>{safeList(quickLeavePreview.excludedDates).length} gün</b></div>
                       <div><span>İzin sonrası</span><b>{num(quickLeavePreview.balanceAfter)} gün</b></div>
+                      <div><span>Haktan karşılanan</span><b>{num(quickLeavePreview.annualCoveredDays)} gün</b></div>
+                      <div><span>Avans / Eksi</span><b>{num(quickLeavePreview.annualExcessDays)} gün</b></div>
                     </div> : <div className="ik-leave-quick-placeholder">Önce “Günleri Hesapla” ile hafta tatili, resmi tatil ve bakiyeyi doğrulayın.</div>}
                     <div className="workbar">
                       <div className="group"><button className="btn" onClick={runQuickLeavePreview} disabled={busy}>Günleri Hesapla</button><button className="btn primary" onClick={saveQuickLeave} disabled={busy}>İzni Kaydet</button></div>
@@ -3031,7 +3050,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                     {!personPlans.length && <div className="empty-panel">Yıllık izin kaydı yok.</div>}
                   </div></div>
                   <div className="card"><div className="ch"><div><b>Kontrol Uyarıları</b><span>Çakışma ve bakiye riski.</span></div></div><div className="ik-leave-alert-list">
-                    {num(person.balance) < 0 && <div className="danger"><b>Bakiye eksi</b><span>{num(person.balance)} gün</span></div>}
+                    {num(person.balance) < 0 && <div className="danger"><b>İzin avansı / eksi bakiye</b><span>{num(person.advanceLeaveDays)} gün hak aşımı var. Ücret kesintisi otomatik yapılmadı; geçmiş onay ve sonraki hakediş mutabakatı kontrol edilmeli.</span></div>}
                     {!person.birthDate && <div className="warning"><b>Doğum tarihi eksik</b><span>Yaşa bağlı 20 günlük asgari hak doğrulanamıyor.</span></div>}
                     {personConflicts.map((item) => <div className="warning" key={item.id}><b>{item.startDate} - {item.endDate}</b><span>{item.message}</span></div>)}
                     {num(person.balance) >= 0 && person.birthDate && !personConflicts.length && <div className="success"><b>Kontrol temiz</b><span>Bakiye ve çakışma tarafında kritik uyarı yok.</span></div>}
@@ -3095,7 +3114,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                   <div className="card"><div className="ch"><div><b>Personel Hakediş & Bakiye Ayarı</b><span>Doğum tarihi yaş kuralını; hakediş ve devir ise resmi bakiye hesabını besler.</span></div></div><div className="ik-leave-settings-form">
                     <label><span>Doğum tarihi</span><input type="date" value={leaveProfileDraft.birthDate} onChange={(event) => setLeaveProfileDraft((old) => ({ ...old, birthDate: event.target.value }))} /></label>
                     <label><span>Kayıtlı yıllık hak</span><input type="number" step="0.5" min="0" value={leaveProfileDraft.annualLeaveEntitlement} onChange={(event) => setLeaveProfileDraft((old) => ({ ...old, annualLeaveEntitlement: event.target.value }))} /></label>
-                    <label><span>Devreden izin</span><input type="number" step="0.5" min="0" value={leaveProfileDraft.annualLeaveCarryover} onChange={(event) => setLeaveProfileDraft((old) => ({ ...old, annualLeaveCarryover: event.target.value }))} /></label>
+                    <label><span>Devreden izin (eksi olabilir)</span><input type="number" step="0.5" value={leaveProfileDraft.annualLeaveCarryover} onChange={(event) => setLeaveProfileDraft((old) => ({ ...old, annualLeaveCarryover: event.target.value }))} /></label>
                     <label><span>Bakiye düzeltme (+ / -)</span><input type="number" step="0.5" value={leaveProfileDraft.adjustmentDays} onChange={(event) => setLeaveProfileDraft((old) => ({ ...old, adjustmentDays: event.target.value }))} placeholder="Örn. 2 veya -1" /></label>
                     <label className="wide"><span>Düzeltme gerekçesi</span><textarea value={leaveProfileDraft.adjustmentReason} onChange={(event) => setLeaveProfileDraft((old) => ({ ...old, adjustmentReason: event.target.value }))} placeholder="Manuel düzeltme varsa gerekçe zorunlu" /></label>
                     <div className="wide ik-leave-law-summary"><b>Sistem önerisi: {num(person.statutoryEntitlement)} gün kanuni asgari</b><span>İşe giriş {employeeHireDate(person) || "-"} · yaş {person.age ?? "-"} · kıdem {num(person.serviceYears)} yıl. Sistem kayıtlı hakkı kanuni asgarinin altına kaydetmez.</span></div>
