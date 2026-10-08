@@ -124,3 +124,9 @@ Son test HEAD: `80690d7ae4abe124bbc8be5b3ae22a837c25d8f0`.
 3. Test FDB ve test yıllık TNF üzerinde kısmi aktarım/çökme/idempotency/rollback gerçek entegrasyon testlerini yap.
 4. Terminal MAC+SDK gerçek okuma; desktop 1366/1920 GUI, ay/yıl ve dönem; Cloud personel ID/source/cursor/outbox/ACK; rol+bordro testlerini tamamla.
 5. Web ve native mobil kabul, gerçek production HEAD uzlaştırması ve açık yayın onayı olmadan deploy/DB migrate/terminal silme yapma.
+
+### Son kaynak revizyonu (web legacy editor)
+- `PdksPageV2.jsx` eski/fallback web giriş ve puantaj düzenleyicisindeki otomatik 08:30/19:00 başlangıçları kaldırıldı, kart hareketinde gerçek tarih/saat/gerekçe ve puantajda gerekçe kontrolü eklendi. Firebird/TNF senkronu doğrulanmadığında sahte kesin başarı yazısı gösterilmez. PDKS eski “D1 tek otorite / Windows SQLite” açıklaması yerel Firebird + yıllık TNF kaynak akışını dürüst gösterecek şekilde düzeltildi.
+- `pdksScreenSafety.test.js` kaynak düzeyinde eski editor, kart tarihi ve tekrarlı personel kartı koruma denemelerini kapsayacak biçimde genişletildi.
+- Bu revizyondan sonraki GUI/frontend/API otomatik test çağrısı platform güvenlik kontrolünce engellenmiştir. **Kaynak commitleri GitHub'a kayıtlı, fakat bu son alt revizyonlar henüz doğrulanmamıştır.** Önceki test sonuçlarını bu en son commitler için geçerliymiş gibi yorumlama.
+- Canlı modül navigasyonu, Firebird↔D1 yazma/ACK ve gerçek Android/iOS paketleri tamamlanmadan “KY PDKS tamamen bitti” yazma.
