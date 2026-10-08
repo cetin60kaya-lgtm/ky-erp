@@ -92,3 +92,36 @@ test("two actors or tenants have distinct idempotency namespaces",()=>{
   assert.equal(n(db,"ik_pdks_services"),3);
   db.close();
 });
+
+test("outbox claim, retry and ack states preserve one durable command",()=>{
+  const db=dbForTest();
+  atomicCommand(db);
+  db.prepare(`UPDATE ik_pdks_unified_outbox
+    SET state='CLAIMED',delivery_owner='agent-1',lease_until='2026-10-08T21:00:00Z',
+        delivery_attempts=delivery_attempts+1,delivery_hash='delivery-hash'
+    WHERE id='o-c1' AND state='PENDING'`).run();
+  let row=db.prepare("SELECT * FROM ik_pdks_unified_outbox WHERE id='o-c1'").get();
+  assert.equal(row.state,"CLAIMED");
+  assert.equal(row.delivery_attempts,1);
+  assert.equal(row.delivery_owner,"agent-1");
+  db.prepare(`UPDATE ik_pdks_unified_outbox
+    SET state='PENDING',delivery_owner=NULL,lease_until=NULL,next_attempt_at='2026-10-08T21:15:00Z',
+        last_error='LOCAL_MAPPING_NOT_READY' WHERE id='o-c1' AND state='CLAIMED'`).run();
+  row=db.prepare("SELECT * FROM ik_pdks_unified_outbox WHERE id='o-c1'").get();
+  assert.equal(row.state,"PENDING");
+  assert.equal(row.next_attempt_at,"2026-10-08T21:15:00Z");
+  db.prepare(`UPDATE ik_pdks_unified_outbox
+    SET state='CLAIMED',delivery_owner='agent-1',lease_until='2026-10-08T21:30:00Z',
+        delivery_attempts=delivery_attempts+1,delivery_hash='delivery-hash-2' WHERE id='o-c1'`).run();
+  db.prepare(`UPDATE ik_pdks_unified_outbox
+    SET state='ACKED',delivery_owner=NULL,lease_until=NULL,ack_payload_json='{"journalId":"j1"}',
+        ack_sha256='ack-hash',acknowledged_at='2026-10-08T21:20:00Z'
+    WHERE id='o-c1' AND state='CLAIMED'`).run();
+  row=db.prepare("SELECT * FROM ik_pdks_unified_outbox WHERE id='o-c1'").get();
+  assert.equal(row.state,"ACKED");
+  assert.equal(row.delivery_attempts,2);
+  assert.equal(row.ack_sha256,"ack-hash");
+  assert.throws(()=>db.prepare("UPDATE ik_pdks_unified_outbox SET state='UNKNOWN' WHERE id='o-c1'").run(),/CHECK constraint failed/);
+  assert.equal(n(db,"ik_pdks_unified_commands"),1);
+  db.close();
+});
