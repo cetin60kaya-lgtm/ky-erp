@@ -105,6 +105,24 @@ using (var adminMonth = new MonthlyAttendanceAdminForm(user))
         throw new InvalidOperationException("ADMIN aylık düzeltmede Ay ve Yıl ayrı seçimler olmalı.");
 }
 
+// No synthetic or silently normalised physical attendance may pass the ADMIN apply gate.
+var testDay = new DateTime(2026, 10, 7);
+var invented = new AttendancePlanItem(
+    "00003", "TEST", testDay, AttendancePlanSide.Entry,
+    "GİRİŞ OLUŞTUR", null, null, "", testDay.AddHours(8).AddMinutes(30), "");
+var inventedPlan = new AttendancePlanPreview(
+    AttendancePlanMode.FullRepair, testDay, testDay, [invented], [], true);
+var evidenceRejected = false;
+try { AttendancePlanService.RequireRealSourceMinutes(inventedPlan); }
+catch (InvalidOperationException ex) when (ex.Message.Contains("Kanıtsız", StringComparison.Ordinal))
+{
+    evidenceRejected = true;
+}
+if (!evidenceRejected) throw new InvalidOperationException("Kaynağı olmayan kart saati uygulanabiliyor.");
+var verifiedMinute = testDay.AddHours(8).AddMinutes(29);
+var existing = invented with { RowSira = 1, CurrentAt = verifiedMinute, PlannedAt = verifiedMinute };
+AttendancePlanService.RequireRealSourceMinutes(inventedPlan with { Items = [existing] });
+
 using (var exceptions = new AttendanceExceptionCenterForm())
 {
     if (!Descendants(exceptions).OfType<DataGridView>().Any())
