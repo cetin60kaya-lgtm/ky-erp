@@ -1,181 +1,200 @@
 /**
- * One typed presentation contract for the whole KY PDKS menu.
- * Each tab is either backed by an existing authenticated read API, or
- * explicitly unavailable pending Windows Agent/Cloud implementation.
- * Never manufacture empty payroll/punch rows as if a query succeeded.
+ * KY PDKS Unified: one verified presentation contract for 49 tabs.
+ * Every binding below is derived from the actual Cloudflare API response.
+ * "unconnected" means no matching endpoint / no proven completeness.
+ * A read endpoint NEVER grants a write or local FDB/TNF acknowledgement.
  */
-import { ALL_PRODUCT_TABS } from "./productModel.js";
-import { displayValue, toPersonRows, toAttendanceRows } from "./productData.js";
+import {ALL_PRODUCT_TABS} from "./productModel.js";
+import {displayValue,normalizePerson,toPersonRows,toAttendanceRows} from "./productData.js";
 
-const map = Object.freeze({
-  // Existing personnel and authorized account sources.
-  people: "people", cards: "people", employment: "people",
-  departments: "masters", shift: "masters", routes: "masters",
-  rules: "config", holidays: "holidays", leave: "leaves",
-  // Selected physical-card employee attendance is exposed by the D1 API;
-  // the source cannot be labeled FDB/TNF verified until reconciled.
-  live: "attendance", punches: "attendance", exceptions: "attendance",
-  history: "attendance", daily: "attendance", violations: "attendance",
-  signatures: "attendance", attendance: "attendance",
-  // Existing D1 analytical endpoints.
-  monthly: "month", timesheets: "month", validation: "month",
-  earnings: "payroll", salary: "payroll", advances: "payroll",
-  deductions: "payroll", payments: "payroll", receipts: "payroll",
-  audit: "audit", system: "audit",
-  // Every other tab intentionally stays without a falsely claimed API.
+const SOURCES = Object.freeze({
+  // Read-only people/physical-card administration.
+  people:"people",cards:"people",employment:"people",departments:"people",
+  groups:"masters",routes:"masters",rules:"config",
+  // Only selected-person attendance. Real live aggregate not yet certified.
+  punches:"attendance",exceptions:"attendance",history:"attendance",daily:"attendance",
+  violations:"attendance",signatures:"attendance",attendance:"attendance",
+  // Independent verified API shapes.
+  leave:"leaves",holidays:"holidays",
+  monthly:"monthly-attendance",timesheets:"monthly-attendance",
+  closing:"month",advances:"month-adjustments",deductions:"month-adjustments",
+  earnings:"payroll",salary:"payroll",payments:"payroll",payroll:"payroll",
+  audit:"audit",corrections:"corrections",
 });
-export const TAB_BINDINGS = Object.freeze(ALL_PRODUCT_TABS.map((tab) =>
-  Object.freeze({ ...tab, source: map[tab.id] || "unconnected",
-    safeToWrite: false, requiresSourceReconciliation: tab.section !== "people" })
-));
-
-export const tabBinding = (id) =>
-  TAB_BINDINGS.find((x)=>x.id === id) || null;
-
-export const sourceForTab = (id, { audit = false } = {}) => {
-  const tab = tabBinding(id);
-  if (!tab) return "unconnected";
-  if (audit && (tab.section === "payroll" || tab.id === "payroll")) return "forbidden";
-  return tab.source;
+const byId = new Map(ALL_PRODUCT_TABS.map((t)=>[t.id,t]));
+export const TAB_BINDINGS=Object.freeze(ALL_PRODUCT_TABS.map((tab)=>Object.freeze({
+  ...tab,source:SOURCES[tab.id]||"unconnected",
+  safeToWrite:false,localReconciled:false,
+})));
+export const tabBinding=(id)=>TAB_BINDINGS.find((t)=>t.id===id)||null;
+export const sourceForTab=(id,{audit=false}={})=>{
+  const tab=byId.get(id);
+  if(!tab)return "unconnected";
+  if(audit && (tab.section==="payroll"||tab.sensitive))return "forbidden";
+  return SOURCES[id]||"unconnected";
 };
-
-const list = (value,...properties) => {
-  if(Array.isArray(value)) return value;
-  for(const property of properties) if(Array.isArray(value?.[property])) return value[property];
-  return [];
+const arr=(data,...keys)=>{
+  if(Array.isArray(data))return data;
+  for(const k of keys)if(Array.isArray(data?.[k]))return data[k];
+  return null; // unknown JSON layout is not an empty successful dataset
 };
-const first = (row,...keys) => {
-  for(const key of keys) {
-    const v=row?.[key];
-    if(v !== null && v !== undefined && String(v).trim() !== "") return v;
+const field=(row,...keys)=>{
+  for(const key of keys){
+    const value=row?.[key];
+    if(value!==null && value!==undefined && String(value).trim()!=="")return value;
   }
   return null;
 };
-const d = (...args) => displayValue(first(...args));
-const projected = (rows, fields) => rows.map((raw,index) => {
-  const result={_id:String(first(raw,"id","employeeId","code") ?? index)};
-  for(const [column,keys] of Object.entries(fields)) result[column]=d(raw,...keys);
-  return result;
-});
-
-const groupFields = {
-  "Bölüm":["name","department","departmentName"],
-  "Grup":["code","name","group"],
-  "Vardiya":["entryTime","startTime","shift"],
-  "Kişi":["peopleCount","employeeCount","count"],
-  "Yönetici":["manager","managerName"],
-  "Durum":["status","active"],
+const display=(row,...keys)=>displayValue(field(row,...keys));
+const toRows=(raw,fields)=>{
+  const mapped=arr(raw,"rows","items");
+  if(!mapped)return {rows:[],supported:false};
+  return {rows:mapped.map((record,i)=>{
+    const result={_id:String(field(record,"id","employeeId","employee_id")??i)};
+    for(const [heading,names] of Object.entries(fields))result[heading]=display(record,...names);
+    return result;
+  }),supported:true};
 };
-const routeFields = {
-  "Hat":["code","name"],"Güzergâh":["routeNote","description"],
-  "Personel":["employeeCount","personnelCount"],"Dönem":["period"],
-  "Durum":["status","active"],
-};
-const shiftFields = {
-  "Personel":["employeeName","fullName"],"Tarih":["workDate","date"],
-  "Vardiya":["name","shiftName"],"Başlangıç":["entryTime","startTime"],
-  "Bitiş":["exitTime","endTime"],"Onay":["approval","status"],
-};
-const leaveFields={
-  "Personel":["fullName","employeeName","employeeId"],
-  "İzin Türü":["recordType","record_type","leaveType"],
-  "Başlangıç":["startDate","start_date"],
-  "Bitiş":["endDate","end_date"],
-  "Gün":["days","durationDays"],"Onay":["approval","approvedBy"],
-  "Durum":["status","state"],
-};
-const holidayFields={
-  "Tarih":["date","holidayDate"],"Tatil Adı":["name","holidayName"],
-  "Süre":["duration","halfDay"],"Çalışma Kararı":["workDecision","workStatus"],
-  "Durum":["status","state"],
-};
-const auditFields={
-  "Tarih":["createdAt","created_at","date"],
-  "Kullanıcı":["userName","user_name","actorName"],
-  "İşlem":["actionType","action_type","operation"],
-  "Kaynak":["sourceScreen","source_screen","source"],
-  "Eski/Yeni":["changeSummary","details"],"Sonuç":["result","status"],
-};
-const monthlyFields={
-  "Kart No":["cardNo","card_no"],
-  "Personel":["fullName","employeeName","personName"],
-  "Çalışılan":["workedDays","workDays"],"İzin":["annualLeaveDays","leaveDays"],
-  "Mesai":["overtimeMinutes","overtimeHours"],"Eksik":["missingPunchDays","missingDays"],
-  "Durum":["status","state"],
-};
-const payrollFields={
-  "Kart No":["cardNo","card_no"],
-  "Personel":["fullName","employeeName","personName"],
-  "Maaş":["salary","baseSalary","netSalary"],
-  "Yol":["transport","roadAllowance","travel"],
-  "Yemek":["meal","mealAllowance"],"Mesai":["overtimeAmount","overtime"],
-  "Toplam":["total","netTotal","totalEarnings"],
-  "Brüt":["gross","grossSalary"],"Kesinti":["deductions","deductionTotal"],
-  "Net":["net","netSalary"],"Dönem":["period"],
-  "Durum":["status"],"Ödeme":["paymentStatus","paid"],
-  "Tarih":["date","workDate"],"Tür":["type","movementType"],
-  "Tutar":["amount"],"Onay":["approvedBy","approval"],
-  "Açıklama":["note","description"],"Banka":["bank","bankAmount"],
-  "Elden":["cash","cashAmount"],"Belge":["document","receipt"],
-  "İmza":["signature","signed"],"Kart":["cardNo"],
+const attendanceTypes=new Set(["punches","exceptions","history","daily","violations","signatures","attendance"]);
+const statusIsIssue=(day)=>{
+  const code=String(day?.status||"").toUpperCase();
+  return ["EKSIK_BASIM","KART_YOK","GEC_GIRIS","ERKEN_CIKIS"].includes(code)||
+    day?.missingPunch===true||Number(day?.missingPunch)===1;
 };
 
-/**
- * Returns {rows, supported}, never an invented success. Raw API containers
- * are only handled when they follow the project's existing response shape.
- */
-export function rowsForTab(tabId, payload, { people=[],selectedPerson=null }={}) {
-  if(["people","cards","employment"].includes(tabId))
-    return {rows:toPersonRows(people,tabId),supported:true};
-  if(["live","punches","history","daily","exceptions","violations","signatures","attendance"].includes(tabId)){
-    const days=list(payload,"days");
-    const base=toAttendanceRows(days,selectedPerson || {});
-    const isException=(raw) => ["EKSIK_BASIM","KART_YOK","GEC_GIRIS","ERKEN_CIKIS"].includes(String(raw?.status||"").toUpperCase())
-      || Number(raw?.missingPunch) === 1 || raw?.missingPunch === true;
-    if(["exceptions","violations","signatures"].includes(tabId)){
-      const rows=days.filter(isException).map((day,i)=>({
-        "Kart No":selectedPerson?.cardNo ?? "—","Personel":selectedPerson?.fullName ?? "—",
-        "Tarih":d(day,"date","workDate"),"İhlal":d(day,"status"),
-        "Kaynak":d(day,"source"),"İşlem":d(day,"note"),"Durum":d(day,"status"),
-        "Kanıt":d(day,"eventCount"),"Eksik Hareket":d(day,"status"),
-        "Saat":d(day,"entry","exit"),"İmza":"—",_id:"i"+i,
-      }));
-      return {rows,supported:true,scope:"selected-person"};
+const finance = {
+  "Personel":["fullName"],"Kart No":["cardNo"],"Maaş":["salary"],
+  "Mesai":["overtimeAmount"],"Toplam":["totalAmount"],
+  "Kesinti":["deductionAmount"],"Net":["totalAmount"],
+  "Dönem":["period"],"Durum":["status"],
+  "Tarih":["date"],"Tür":["adjustmentType"],"Tutar":["amount"],
+  "Açıklama":["note"],"Banka":["bankAmount"],"Elden":["cashAmount"],
+  "Ödeme":["status"],
+};
+
+export function rowsForTab(id,payload,{people=[],selectedPerson=null,year=null,month=null}={}){
+  if(["people","cards","employment"].includes(id))
+    return {rows:toPersonRows(people,id),supported:true,scope:"assigned-card-roster"};
+  if(id==="departments"){
+    const groups=new Map();
+    for(const raw of people) {
+      const p=normalizePerson(raw);
+      if(p.department==="—")continue;
+      groups.set(p.department,(groups.get(p.department)||0)+1);
     }
-    return {rows:base,supported:true,scope:"selected-person"};
+    return {rows:[...groups].map(([name,count])=>({
+      _id:name,"Bölüm":name,"Grup":"—","Vardiya":"—","Kişi":String(count),
+      "Yönetici":"—","Durum":"Kartlı personel kapsamı",
+    })),supported:true,scope:"assigned-card-roster"};
   }
-  if(tabId==="departments"){
-    const groups=list(payload,"groups","workGroups");
-    return {rows:projected(groups,groupFields),supported:true};
+  if(attendanceTypes.has(id)){
+    const days=arr(payload,"days");
+    if(!days)return {rows:[],supported:false};
+    if(["exceptions","violations","signatures"].includes(id)){
+      return {rows:days.filter(statusIsIssue).map((day,i)=>({
+        _id:"exception-"+i,
+        "Kart No":selectedPerson?.cardNo||"—",
+        "Personel":selectedPerson?.fullName||"—",
+        "Tarih":display(day,"date","workDate"),"İhlal":display(day,"status"),
+        "Kaynak":display(day,"source"),"İşlem":display(day,"note"),
+        "Durum":display(day,"status"),"Kanıt":display(day,"eventCount"),
+        "Eksik Hareket":display(day,"status"),
+        "Saat":display(day,"entry","exit"),"İmza":"—",
+      })),supported:true,scope:"selected-person"};
+    }
+    return {rows:toAttendanceRows(days,selectedPerson||{}),supported:true,scope:"selected-person"};
   }
-  if(tabId==="shift"){
-    const groups=list(payload,"groups","workGroups");
-    return {rows:projected(groups,shiftFields),supported:true,scope:"shift-definitions"};
+  if(id==="leave")return toRows({rows:arr(payload,"plans","leaves","rows")},{
+    "Personel":["fullName","employeeName"],
+    "İzin Türü":["recordType"],"Başlangıç":["startDate"],"Bitiş":["endDate"],
+    "Gün":["dayCount"],"Onay":["approvedBy"],"Durum":["status"],
+  });
+  if(id==="holidays")return toRows({rows:arr(payload,"rows","holidays")},{
+    "Tarih":["date"],"Tatil Adı":["name"],"Süre":["halfDay"],
+    "Çalışma Kararı":["workDecision"],"Durum":["status"],
+  });
+  if(id==="routes")return toRows({rows:arr(payload?.services)},{
+    "Hat":["code","name"],"Güzergâh":["routeNote"],
+    "Personel":["employeeCount"],"Dönem":["period"],"Durum":["active"],
+  });
+  if(id==="groups")return toRows({rows:arr(payload?.personnelGroups)},{
+    "Grup":["name"],"Vardiya":["defaultShiftId"],
+    "Kişi":["employeeCount"],"Bölüm":["department"],
+    "Yönetici":["manager"],"Durum":["active"],
+  });
+  if(id==="monthly"||id==="timesheets"){
+    const rows=arr(payload,"rows");
+    if(!rows || payload?.complete!==true)return {rows:[],supported:false};
+    return toRows({rows},{
+      "Kart No":["cardNo"],"Personel":["fullName"],
+      "Çalışılan":["workedDays"],"İzin":["annualLeaveDays"],
+      "Mesai":["overtimeMinutes"],"Eksik":["missingPunchDays"],
+      "Durum":["sourceStatus"],"Rapor":["report"],"Dönem":["period"],
+      "Gün":["workedDays"],
+    });
   }
-  if(tabId==="routes")
-    return {rows:projected(list(payload,"services","routes"),routeFields),supported:true};
-  if(tabId==="leave")
-    return {rows:projected(list(payload,"plans","leaves","rows"),leaveFields),supported:true};
-  if(tabId==="holidays")
-    return {rows:projected(list(payload,"holidays","rows"),holidayFields),supported:true};
-  if(["audit","system"].includes(tabId))
-    return {rows:projected(list(payload,"logs","rows","items"),auditFields),supported:true};
-  if(["monthly","timesheets","validation"].includes(tabId))
-    return {rows:projected(list(payload,"rows","people","items","summaryRows"),monthlyFields),supported:true};
-  if(["earnings","salary","advances","deductions","payments","receipts"].includes(tabId))
-    return {rows:projected(list(payload,"rows","people","items","payroll"),payrollFields),supported:true};
-  if(tabId==="rules")
-    return {rows:projected(list(payload,"rules","rows"),{
-      "Kural":["code","name"],"Grup":["groupName","workGroup"],
-      "Geçerlilik":["effectiveDate","effectiveFrom"],"Onay":["approvedBy"],
-      "Durum":["status","active"],
-    }),supported:true};
+  if(id==="closing"){
+    if(!payload?.close||typeof payload.close.isLocked!=="boolean")
+      return {rows:[],supported:false};
+    return {rows:[{
+      _id:"period","Dönem":`${year}-${String(month).padStart(2,"0")}`,
+      "Kontrol":"—","Eksik":"—","Onaylayan":"—",
+      "Kilit":payload.close.isLocked?"Kilitli":"Açık",
+      "Durum":"D1 dönem kaydı (FDB/TNF kontrolü yok)",
+    }],supported:true,scope:"cloud-period-only"};
+  }
+  if(["advances","deductions"].includes(id)){
+    const source=arr(payload,"adjustments");
+    if(!source)return {rows:[],supported:false};
+    const check=id==="advances"?/AVANS|EK_KAZANC|PRIM|YOL|YEMEK/ : /KESINTI|ICRA|HACIZ|BES/;
+    const relevant=source.filter((row)=>check.test(String(row.adjustmentType||"").toUpperCase()));
+    return toRows({rows:relevant},{
+      "Personel":["employeeName"],"Tarih":["date"],
+      "Tür":["adjustmentType"],"Tutar":["amount"],
+      "Onay":["status"],"Durum":["status"],"Açıklama":["note"],
+    });
+  }
+  if(["earnings","salary","payments"].includes(id)){
+    // Actual /operations/payroll payload: {year,month,lines}.
+    const source=arr(payload,"lines");
+    if(!source)return {rows:[],supported:false};
+    return toRows({rows:source},finance);
+  }
+  if(id==="payroll"){
+    const source=arr(payload,"lines");
+    if(!source)return {rows:[],supported:false};
+    return {rows:[{_id:"pdks-payroll-summary","Rapor":"Bordro özeti",
+      "Dönem":`${year}-${String(month).padStart(2,"0")}`,
+      "Yetki":"Yetkili oturum","Durum":"D1 görünümü, FDB/TNF mutabakat bekliyor"}],
+      supported:true,scope:"sensitive-summary"};
+  }
+  if(id==="corrections"){
+    const source=arr(payload,"rows","corrections");
+    if(!source)return {rows:[],supported:false};
+    return toRows({rows:source},{
+      "Personel":["fullName","employeeName"],"Tarih":["workDate","date"],
+      "Alan":["field","type"],"Eski":["oldValue","oldValueText"],
+      "Yeni":["newValue","newValueText"],
+      "Gerekçe":["reason","note"],"Onay":["status"],
+    });
+  }
+  if(id==="audit")return toRows({rows:arr(payload,"rows","logs")},{
+    "Tarih":["createdAt"],"Kullanıcı":["userName"],
+    "İşlem":["actionType"],"Kaynak":["sourceScreen"],
+    "Eski/Yeni":["reason"],"Sonuç":["result"],
+  });
+  if(id==="rules"){
+    const config=payload?.rules;
+    return Array.isArray(config)?toRows({rows:config},{
+      "Kural":["name","code"],"Grup":["groupName"],
+      "Geçerlilik":["effectiveDate"],"Onay":["approvedBy"],"Durum":["status"],
+    }):{rows:[],supported:false};
+  }
   return {rows:[],supported:false};
 }
-
-export const integrationCoverage = () => {
-  const summary=TAB_BINDINGS.reduce((memo,tab)=>{
-    memo[tab.source]=(memo[tab.source]||0)+1;return memo;
+export function integrationCoverage(){
+  const counts=TAB_BINDINGS.reduce((result,item)=>{
+    result[item.source]=(result[item.source]||0)+1;return result;
   },{});
-  return {total:TAB_BINDINGS.length,...summary};
-};
+  return {total:TAB_BINDINGS.length,...counts};
+}
