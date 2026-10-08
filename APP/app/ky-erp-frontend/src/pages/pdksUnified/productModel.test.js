@@ -86,3 +86,18 @@ test("tenant menu customization only changes presentation and audit hides wage/a
   assert.equal(audit.some((s)=>s.id==="admin"),false);
   assert.equal(audit.flatMap((s)=>s.tabs).some((t)=>t.id==="payroll"),false);
 });
+
+test("date-aware personnel status uses selected period without rewriting actual hire/exit",()=>{
+  const employee={id:"8",cardNo:"00056",fullName:"Historical Employee",
+    entryDate:"2018-03-01",exitDate:"2026-08-04",status:"PASIF"};
+  const august=normalizePerson(employee,{year:2026,month:8});
+  assert.equal(august.status,"Çıkış Yapıldı");
+  assert.equal(august.cardNo,"00056");
+  const july=normalizePerson(employee,{year:2026,month:7});
+  assert.equal(july.status,"Dönemde Çalıştı");
+  const september=normalizePerson(employee,{year:2026,month:9});
+  assert.equal(september.status,"Dönem Dışı");
+  assert.equal(employee.status,"PASIF");
+  const futureExit={...employee,exitDate:"2027-05-30",status:"AKTIF"};
+  assert.equal(normalizePerson(futureExit,{year:2026,month:10}).status,"Dönemde Çalıştı");
+});
