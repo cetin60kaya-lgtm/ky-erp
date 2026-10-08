@@ -105,23 +105,14 @@ using (var adminMonth = new MonthlyAttendanceAdminForm(user))
         throw new InvalidOperationException("ADMIN aylık düzeltmede Ay ve Yıl ayrı seçimler olmalı.");
 }
 
-// No synthetic or silently normalised physical attendance may pass the ADMIN apply gate.
-var testDay = new DateTime(2026, 10, 7);
-var invented = new AttendancePlanItem(
-    "00003", "TEST", testDay, AttendancePlanSide.Entry,
-    "GİRİŞ OLUŞTUR", null, null, "", testDay.AddHours(8).AddMinutes(30), "");
-var inventedPlan = new AttendancePlanPreview(
-    AttendancePlanMode.FullRepair, testDay, testDay, [invented], [], true);
-var evidenceRejected = false;
-try { AttendancePlanService.RequireRealSourceMinutes(inventedPlan); }
-catch (InvalidOperationException ex) when (ex.Message.Contains("Kanıtsız", StringComparison.Ordinal))
-{
-    evidenceRejected = true;
-}
-if (!evidenceRejected) throw new InvalidOperationException("Kaynağı olmayan kart saati uygulanabiliyor.");
-var verifiedMinute = testDay.AddHours(8).AddMinutes(29);
-var existing = invented with { RowSira = 1, CurrentAt = verifiedMinute, PlannedAt = verifiedMinute };
-AttendancePlanService.RequireRealSourceMinutes(inventedPlan with { Items = [existing] });
+// Guard contract: no made-up or normalised minute is accepted as a physical reading.
+var sourceMinute = new DateTime(2026, 10, 7, 8, 29, 0);
+if (AttendanceEvidencePolicy.HasVerifiableSourceMinute(null, sourceMinute))
+    throw new InvalidOperationException("Kaynağı olmayan kart saati uygulanabiliyor.");
+if (AttendanceEvidencePolicy.HasVerifiableSourceMinute(sourceMinute, sourceMinute.AddMinutes(1)))
+    throw new InvalidOperationException("Fiziksel saat sessizce değiştirilebiliyor.");
+if (!AttendanceEvidencePolicy.HasVerifiableSourceMinute(sourceMinute, sourceMinute))
+    throw new InvalidOperationException("Doğrulanmış fiziksel saat reddediliyor.");
 
 using (var exceptions = new AttendanceExceptionCenterForm())
 {
