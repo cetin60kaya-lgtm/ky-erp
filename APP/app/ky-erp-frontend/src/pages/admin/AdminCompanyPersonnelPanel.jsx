@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { listUsers } from "../../services/adminApi";
 import { managerPersonnelRequest } from "../../services/employeePortalApi";
-const ROLES=[["PERSONEL","Personel"],["MAKINACI","Makinaci"],["NUMUNECI","Numuneci"],["BOYACI","Boyaci"]];
+const ROLES=[["PERSONEL","Personel"],["MAKINACI","Makinacı"],["NUMUNECI","Numuneci"],["BOYACI","Boyacı"]];
 const rows=value=>Array.isArray(value)?value:Array.isArray(value?.items)?value.items:Array.isArray(value?.data)?value.data:[];
 export default function AdminCompanyPersonnelPanel({companySlug}) {
   const [employees,setEmployees]=useState([]);
@@ -65,35 +65,35 @@ export default function AdminCompanyPersonnelPanel({companySlug}) {
   }
   const active=employees.filter(e=>e.accountUserId);
   return <section className="admpro-card" style={{marginTop:18}}>
-    <div className="admpro-card-head"><div><h3>Firma Personeli · Telefon ve Isyeri Cihazlari</h3><p>Muhasebe ve yonetim kullanicilarindan ayridir. Tek kaynak: IK Aylik personel karti.</p></div><button type="button" disabled={busy} onClick={refresh}>Yenile</button></div>
+    <div className="admpro-card-head"><div><h3>Firma Personeli · Telefon ve İşyeri Cihazları</h3><p>Muhasebe ve yonetim kullanicilarindan ayridir. Tek kaynak: IK Aylik personel karti.</p></div><button type="button" disabled={busy} onClick={refresh}>Yenile</button></div>
     {message?<div className={"admpro-notice "+(message.startsWith("Hata")?"warn":"success")} role="status">{message}</div>:null}
     <div className="admpro-grid-2">
       <form onSubmit={create} className="admpro-card" style={{boxShadow:"none"}}>
-        <h4>Personel Girisi Tanimla</h4>
+        <h4>Personel Girişi Tanımla</h4>
         <div className="admpro-form-grid">
-          <label>IK Personel Kartı<select value={selected} onChange={e=>setSelected(e.target.value)} required><option value="">Personel seciniz</option>{employees.filter(e=>!e.accountUserId).map(e=><option key={e.employeeId} value={e.employeeId}>{e.fullName} · {e.code||e.department}</option>)}</select></label>
-          <label>Vasif<select value={occupation} onChange={e=>setOccupation(e.target.value)}>{ROLES.map(([v,n])=><option key={v} value={v}>{n}</option>)}</select></label>
-          <label>Kullanici Adi<input value={username} onChange={e=>setUsername(e.target.value)} placeholder="or. cuma.ozkop" required /></label>
-          <label>Ilk Sifre<input type="password" minLength={10} value={password} onChange={e=>setPassword(e.target.value)} placeholder="En az 10 karakter" required /></label>
-          {occupation==="MAKINACI"?<label>Atanmis makine ID<input value={machineId} onChange={e=>setMachineId(e.target.value)} required /></label>:null}
-          <label className="admpro-check"><input type="checkbox" checked={workplace} onChange={e=>setWorkplace(e.target.checked)} /> Isyeri bilgisayarina da izin ver</label>
+          <label>İK Personel Kartı<select value={selected} onChange={e=>setSelected(e.target.value)} required><option value="">Personel seçiniz</option>{employees.filter(e=>!e.accountUserId).map(e=><option key={e.employeeId} value={e.employeeId}>{e.fullName} · {e.code||e.department}</option>)}</select></label>
+          <label>Vasıf<select value={occupation} onChange={e=>setOccupation(e.target.value)}>{ROLES.map(([v,n])=><option key={v} value={v}>{n}</option>)}</select></label>
+          <label>Kullanıcı Adı<input value={username} onChange={e=>setUsername(e.target.value)} placeholder="or. cuma.ozkop" required /></label>
+          <label>İlk Şifre<input type="password" minLength={10} value={password} onChange={e=>setPassword(e.target.value)} placeholder="En az 10 karakter" required /></label>
+          {occupation==="MAKINACI"?<label>Atanmış Makine ID<input value={machineId} onChange={e=>setMachineId(e.target.value)} required /></label>:null}
+          <label className="admpro-check"><input type="checkbox" checked={workplace} onChange={e=>setWorkplace(e.target.checked)} /> İşyeri bilgisayarına da izin ver</label>
         </div>
-        <div className="admpro-actions"><button type="submit" className="primary" disabled={busy}>Personel Hesabi Ac</button></div>
-        <p style={{fontSize:12}}>Giris: firma secimi + kullanici adi + sifre; cihaz ilk kullanimda ayrica onaylanir. Kisisel e-posta zorunlu degildir.</p>
+        <div className="admpro-actions"><button type="submit" className="primary" disabled={busy}>Personel Hesabı Aç</button></div>
+        <p style={{fontSize:12}}>Giriş: firma seçimi + kullanıcı adı + şifre. Cihaz ilk kullanımda ayrıca onaylanır; kişisel e-posta zorunlu değildir.</p>
       </form>
       <div className="admpro-card" style={{boxShadow:"none"}}>
-        <h4>Yeni Cihaz Onaylari ({pending.length})</h4>
-        {!pending.length?<p>Bekleyen cihaz bulunmuyor.</p>:pending.map(d=><div key={d.id} style={{padding:"10px 0",borderBottom:"1px solid #e1e7ec"}}><strong>{d.full_name}</strong><div style={{fontSize:12}}>{d.label} · {d.kind==="WORKPLACE"?"Isyeri bilgisayari":"Telefon"} · {String(d.created_at).slice(0,16)}</div><div className="admpro-actions"><button className="primary" type="button" disabled={busy} onClick={()=>decide(d.id,"APPROVE")}>Personel + Cihazi Onayla</button><button type="button" disabled={busy} onClick={()=>decide(d.id,"DENY")}>Reddet</button></div></div>)}
-        <h4>Onayli Cihazlar ({approvedDevices.length})</h4>
-        {!approvedDevices.length?<p>Henuz onayli cihaz yok.</p>:approvedDevices.map(d=><div key={d.id} style={{padding:"8px 0",borderBottom:"1px solid #e1e7ec"}}><strong>{d.full_name}</strong><div style={{fontSize:12}}>{d.label} · {d.kind==="WORKPLACE"?"Isyeri PC":"Telefon"}</div><button type="button" disabled={busy} onClick={()=>{if(window.confirm("Bu cihazin erisimini iptal etmek istiyor musunuz?"))decide(d.id,"REVOKE");}}>Cihaz Yetkisini Iptal Et</button></div>)}
-        <h4>Cihaz Onaylamaya Yetkili Kullanici</h4>
-        <label>Firma sahibi bir kullaniciya cihaz onay hakkini devredebilir<select value={approverId} onChange={e=>setApproverId(e.target.value)}><option value="">Kullanici seciniz</option>{users.map(u=><option key={u.id} value={u.id}>{u.fullName||u.username} · {u.role}</option>)}</select></label>
+        <h4>Yeni Cihaz Onayları ({pending.length})</h4>
+        {!pending.length?<p>Bekleyen cihaz bulunmuyor.</p>:pending.map(d=><div key={d.id} style={{padding:"10px 0",borderBottom:"1px solid #e1e7ec"}}><strong>{d.full_name}</strong><div style={{fontSize:12}}>{d.label} · {d.kind==="WORKPLACE"?"İşyeri bilgisayarı":"Telefon"} · {String(d.created_at).slice(0,16)}</div><div className="admpro-actions"><button className="primary" type="button" disabled={busy} onClick={()=>decide(d.id,"APPROVE")}>Personel + Cihazı Onayla</button><button type="button" disabled={busy} onClick={()=>decide(d.id,"DENY")}>Reddet</button></div></div>)}
+        <h4>Onaylı Cihazlar ({approvedDevices.length})</h4>
+        {!approvedDevices.length?<p>Henüz onaylı cihaz yok.</p>:approvedDevices.map(d=><div key={d.id} style={{padding:"8px 0",borderBottom:"1px solid #e1e7ec"}}><strong>{d.full_name}</strong><div style={{fontSize:12}}>{d.label} · {d.kind==="WORKPLACE"?"İşyeri PC":"Telefon"}</div><button type="button" disabled={busy} onClick={()=>{if(window.confirm("Bu cihazın erişimini iptal etmek istiyor musunuz?"))decide(d.id,"REVOKE");}}>Cihaz Yetkisini İptal Et</button></div>)}
+        <h4>Cihaz Onaylamaya Yetkili Kullanıcı</h4>
+        <label>Firma sahibi cihaz onay yetkisini devredebilir<select value={approverId} onChange={e=>setApproverId(e.target.value)}><option value="">Kullanıcı seçiniz</option>{users.map(u=><option key={u.id} value={u.id}>{u.fullName||u.username} · {u.role}</option>)}</select></label>
         <div className="admpro-actions"><button type="button" disabled={busy||!approverId} onClick={delegate}>Onay Yetkisi Ver</button></div>
       </div>
     </div>
-    <h4>Personel Hesaplari ({active.length})</h4>
-    <div className="admpro-table"><table><thead><tr><th>Personel</th><th>Vasif</th><th>Giris</th><th>Telefon</th><th>Isyeri PC</th><th>Durum</th></tr></thead><tbody>
-      {active.map(row=><tr key={row.accountUserId}><td>{row.fullName}<br/><small>{row.code}</small></td><td>{row.occupation}{row.machineId?" · "+row.machineId:""}</td><td>{companySlug+"--"+row.username}</td><td><label><input type="checkbox" checked={row.mobileEnabled} disabled={busy} onChange={e=>toggle(row,"mobileEnabled",e.target.checked)}/> Acik</label></td><td><label><input type="checkbox" checked={row.workplaceEnabled} disabled={busy} onChange={e=>toggle(row,"workplaceEnabled",e.target.checked)}/> Acik</label></td><td>{row.approved?"Ilk onayli":"Cihaz bekliyor"} · {row.active?"Aktif":"Pasif"}<div><button type="button" disabled={busy} onClick={()=>toggle(row,"isActive",!row.active)}>{row.active?"Hesabi Kapat":"Hesabi Ac"}</button></div></td></tr>)}
+    <h4>Personel Hesapları ({active.length})</h4>
+    <div className="admpro-table"><table><thead><tr><th>Personel</th><th>Vasıf</th><th>Giris</th><th>Telefon</th><th>İşyeri PC</th><th>Durum</th></tr></thead><tbody>
+      {active.map(row=><tr key={row.accountUserId}><td>{row.fullName}<br/><small>{row.code}</small></td><td>{row.occupation}{row.machineId?" · "+row.machineId:""}</td><td>{companySlug+"--"+row.username}</td><td><label><input type="checkbox" checked={row.mobileEnabled} disabled={busy} onChange={e=>toggle(row,"mobileEnabled",e.target.checked)}/> Açık</label></td><td><label><input type="checkbox" checked={row.workplaceEnabled} disabled={busy} onChange={e=>toggle(row,"workplaceEnabled",e.target.checked)}/> Açık</label></td><td>{row.approved?"Ilk onayli":"Cihaz bekliyor"} · {row.active?"Aktif":"Pasif"}<div><button type="button" disabled={busy} onClick={()=>toggle(row,"isActive",!row.active)}>{row.active?"Hesabı Kapat":"Hesabı Aç"}</button></div></td></tr>)}
       {!active.length?<tr><td colSpan="6">Firma personeli icin henuz mobil hesap yok.</td></tr>:null}
     </tbody></table></div>
   </section>;
