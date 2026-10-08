@@ -332,3 +332,25 @@ olmadığı açıkça gösterilir.
 **Canlıya geçiş:** Backend idempotency, API işlem yetkisi, audit,
 lokal kayıt mutabakatı ve sahada onay testleri geçmeden
 bu branch production'a dağıtılmaz.
+
+
+## 14. Attendance-v2 iş kuralı incelemesi — önemli üretim engeli
+
+`APP/cloud/ky-erp-api/src/ik-personnel-control.ts` içindeki mevcut
+`attendanceMonth` fonksiyonunun gerçekten çalıştığı görüldü; fakat
+bu hesap, her iş gününde `08:30/19:00` sabit referans saatlerini
+ve ilk/son kart okutmasını kullanıyor. Sunucunun bu sürümü, iki vardiya,
+gece yarısını aşan mesai, yarım gün tatil, E giriş/çıkışın ayrı kaynak
+statüsü ve personel çalışma grubu kuralını tam işlemez.
+D1 özetini **resmî vardiya/puantaj veya fiziksel kart kanıtı**
+olarak kabul etmek yanlıştır.
+
+Unified `readCompleteMonth` bu nedenle bütün personel hesap
+cevaplarını tek tek toplasa bile yalnız **D1 ön taslağı** üretir;
+`approvedForPayroll=false`, `localReconciled=false` alanlarını
+korur. Gerçek ortak hesap motoru ve FDB/TNF karşılaştırma testleri
+bitmeden aylık rapora son puantaj statüsü verilmez.
+
+Canlıya kabul için normal/E kaynak ayrımı, gündüz/gece vardiyası,
+çift vardiya, saat aşımı, gerçek tatil yarım gün kararı, kişi bazlı
+giriş/çıkış tarihleri ve bağımsız kaynak mutabakatı testleri zorunlu.
