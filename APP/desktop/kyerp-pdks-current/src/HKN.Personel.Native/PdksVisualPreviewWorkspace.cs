@@ -6,22 +6,35 @@ namespace HKN.Personel.Native;
 /// </summary>
 public sealed class PdksVisualPreviewWorkspace : Form
 {
-    readonly PdksCommandDescriptor command;
+    PdksCommandDescriptor command;
     readonly Color canvas = PdksAppearance.Current.Canvas;
     readonly Color surface = PdksAppearance.Current.Surface;
     readonly Color ink = PdksAppearance.Current.Text;
     readonly Color muted = PdksAppearance.Current.Muted;
 
+    // One WinForms workspace for the entire preview lifetime. Individual pages
+    // are cached using a bounded LRU so neither form handles nor memory grow
+    // with repeated sidebar navigation.
+    readonly Dictionary<PdksCommandId, Control> pages = [];
+    readonly LinkedList<PdksCommandId> recentPages = new();
+    readonly Panel pageHost = new() { Dock = DockStyle.Fill };
+    readonly Label headingTitle;
+    readonly Label headingHint;
+    const int MaxCachedPages = 5;
+
     public PdksVisualPreviewWorkspace(PdksCommandDescriptor descriptor)
     {
         command = descriptor;
-        Text = descriptor.Title;
+        headingTitle = Label("", 17, true, ink);
+        headingHint = Label("", 9, false, muted);
+        Text = "KY PDKS Çalışma Alanı";
         TopLevel = false;
         FormBorderStyle = FormBorderStyle.None;
         Dock = DockStyle.Fill;
         BackColor = canvas;
         Font = new Font("Segoe UI", 9f);
         Build();
+        NavigateTo(descriptor);
     }
 
     void Build()
@@ -35,38 +48,101 @@ public sealed class PdksVisualPreviewWorkspace : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
 
-        var heading = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, BackColor = canvas };
+        var heading = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, RowCount = 2, BackColor = canvas
+        };
         heading.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
         heading.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        heading.Controls.Add(Label(command.Title, 17, true, ink), 0, 0);
-        var description = command.Id switch
-        {
-            PdksCommandId.Personnel => "Soldan personeli seçin; özlük, kart ve çalışma detaylarını sağda görün",
-            PdksCommandId.EntryExit => "Giriş ve çıkış hareketleri • kaynak • E durumu • tarih ve saat",
-            PdksCommandId.TimesheetMonthly => "Günlük ve aylık puantaj • ay ve yıl ayrı • doğrulanmış kayıtlardan hesaplama",
-            PdksCommandId.PayrollGeneral => "Bordro ve ödeme özeti • yetkili kullanıcı düzenlemeleri",
-            PdksCommandId.Reports => "Rapor kategorisi • rapor • ay • yıl • personel",
-            _ => command.Hint
-        };
-        heading.Controls.Add(Label(description, 9, false, muted), 0, 1);
+        heading.Controls.Add(headingTitle, 0, 0);
+        heading.Controls.Add(headingHint, 0, 1);
         root.Controls.Add(heading, 0, 0);
 
-        var body = command.Id switch
-        {
-            PdksCommandId.Personnel => BuildPersonnel(),
-            PdksCommandId.EntryExit => BuildAttendance(),
-            PdksCommandId.TimesheetMonthly => BuildPeriodTable("Puantaj kayıtları",
-                new[] { "Kart No", "Personel", "Çalışılan", "İzin", "Eksik", "Mesai", "Durum" }),
-            PdksCommandId.PayrollGeneral => BuildPeriodTable("Bordro / ödeme listesi",
-                new[] { "Kart No", "Personel", "Maaş", "Yol", "Mesai", "Avans", "Kesinti", "Ödenen" }),
-            PdksCommandId.Reports => BuildPeriodTable("Rapor sonuçları",
-                new[] { "Kart No", "Personel", "Tarih", "Rapor", "Açıklama", "Durum" }),
-            _ => BuildPeriodTable(command.Title, new[] { "Tarih", "İşlem", "Açıklama", "Durum" })
-        };
-        root.Controls.Add(body, 0, 1);
+        pageHost.BackColor = canvas;
+        root.Controls.Add(pageHost, 0, 1);
         root.Controls.Add(Label("GÖRSEL ÖNİZLEME  •  Canlı Firebird/TNF ve terminal bağlantısı kapalı  •  Gerçek kayıt gösterilmiyor",
             8.5f, false, PdksAppearance.Current.Warning), 0, 2);
         Controls.Add(root);
+    }
+
+    public void NavigateTo(PdksCommandDescriptor target)
+    {
+        if (IsDisposed) throw new ObjectDisposedException(nameof(PdksVisualPreviewWorkspace));
+        if (InvokeRequired) throw new InvalidOperationException("Workspace navigation must run on the UI thread.");
+
+        var at = System.Diagnostics.Stopwatch.StartNew();
+        SuspendLayout();
+        pageHost.SuspendLayout();
+        try
+        {
+            command = target;
+            headingTitle.Text = target.Title;
+            headingHint.Text = target.Id switch
+            {
+                PdksCommandId.Personnel => "Soldan personeli seçin; özlük, kart ve çalışma detaylarını sağda görün",
+                PdksCommandId.EntryExit => "Giriş ve çıkış hareketleri • kaynak • E durumu • tarih ve saat",
+                PdksCommandId.TimesheetMonthly => "Günlük ve aylık puantaj • ay ve yıl ayrı • doğrulanmış kayıtlardan hesaplama",
+                PdksCommandId.PayrollGeneral => "Bordro ve ödeme özeti • yetkili kullanıcı düzenlemeleri",
+                PdksCommandId.Reports => "Rapor kategorisi • rapor • ay • yıl • personel",
+                _ => target.Hint
+            };
+            if (!pages.TryGetValue(target.Id, out var view) || view.IsDisposed)
+            {
+                view = BuildPage(target.Id);
+                pages[target.Id] = view;
+            }
+            var currentlyVisible = pageHost.Controls.Cast<Control>().ToArray();
+            foreach (var old in currentlyVisible)
+            {
+                old.Visible = false;
+                pageHost.Controls.Remove(old);
+            }
+            pageHost.Controls.Add(view);
+            view.Dock = DockStyle.Fill;
+            view.Visible = true;
+            Touch(target.Id);
+            EvictInactivePages(target.Id);
+            PdksPreviewDiagnostics.Record("workspace " + target.Id + " cached=" + pages.Count);
+        }
+        finally
+        {
+            pageHost.ResumeLayout(true);
+            ResumeLayout(true);
+            at.Stop();
+            PdksPreviewDiagnostics.Record("workspace-draw " + target.Id + " elapsedMs=" + at.ElapsedMilliseconds);
+        }
+    }
+
+    Control BuildPage(PdksCommandId id) => id switch
+    {
+        PdksCommandId.Personnel => BuildPersonnel(),
+        PdksCommandId.EntryExit => BuildAttendance(),
+        PdksCommandId.TimesheetMonthly => BuildPeriodTable("Puantaj kayıtları",
+            new[] { "Kart No", "Personel", "Çalışılan", "İzin", "Eksik", "Mesai", "Durum" }),
+        PdksCommandId.PayrollGeneral => BuildPeriodTable("Bordro / ödeme listesi",
+            new[] { "Kart No", "Personel", "Maaş", "Yol", "Mesai", "Avans", "Kesinti", "Ödenen" }),
+        PdksCommandId.Reports => BuildPeriodTable("Rapor sonuçları",
+            new[] { "Kart No", "Personel", "Tarih", "Rapor", "Açıklama", "Durum" }),
+        _ => BuildPeriodTable(command.Title, new[] { "Tarih", "İşlem", "Açıklama", "Durum" })
+    };
+
+    void Touch(PdksCommandId id)
+    {
+        var found = recentPages.Find(id);
+        if (found is not null) recentPages.Remove(found);
+        recentPages.AddFirst(id);
+    }
+
+    void EvictInactivePages(PdksCommandId activeId)
+    {
+        while (pages.Count > MaxCachedPages)
+        {
+            var oldest = recentPages.Last;
+            if (oldest is null || oldest.Value == activeId) break;
+            recentPages.RemoveLast();
+            if (!pages.Remove(oldest.Value, out var stale)) continue;
+            stale.Dispose();
+        }
     }
 
     Control BuildPersonnel()
