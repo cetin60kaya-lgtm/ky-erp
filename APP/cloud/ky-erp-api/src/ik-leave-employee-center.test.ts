@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { calculateStatutoryAnnualLeave } from "./ik-relational-cloud.ts";
+import { calculateStatutoryAnnualLeave, calculateAnnualLeaveBalance, calculateAnnualLeaveRange } from "./ik-relational-cloud.ts";
 
 test("annual leave statutory entitlement follows Turkish tenure thresholds", () => {
   assert.equal(calculateStatutoryAnnualLeave("2025-01-01", "1990-01-01", "2026-01-01").entitlementDays, 14);
@@ -43,4 +43,38 @@ test("leave balance corrections are append-only records", () => {
   const profileEnd = source.indexOf("async function saveAdvancedLeaveCashRequestV2", profileStart);
   const profileBlock = source.slice(profileStart, profileEnd);
   assert.doesNotMatch(profileBlock, /const adjustments = \[\.\.\.current\.adjustments\]/);
+});
+
+
+test("Ali Akkaya 2026 leave: 14 entitled, 18 taken, 4 advance days", () => {
+  const range = calculateAnnualLeaveRange("2026-08-10", "2026-08-31");
+  assert.equal(range.calendarDays, 21);
+  assert.equal(range.countedDays, 18);
+  assert.deepEqual(range.excludedDates.map((item) => item.date), ["2026-08-16", "2026-08-23", "2026-08-30"]);
+  assert.deepEqual(calculateAnnualLeaveBalance({ entitlement: 14, carryover: 0, adjustment: 0, used: range.countedDays }),
+    { annualRight: 14, usedDays: 18, balance: -4, projectedBalance: -4, excessDays: 4 });
+});
+
+test("annual leave uses the same canonical ledger in Personnel and Annual Leave with no wage mutation", () => {
+  const worker = readFileSync(new URL("./ik-relational-cloud.ts", import.meta.url), "utf8");
+  const ui = readFileSync(new URL("../../../app/ky-erp-frontend/src/pages/modules/ik/monthly/IkAdvancedMonthly.jsx", import.meta.url), "utf8");
+  assert.match(worker, /SUBSTR\(l\.start_date,1,4\)=\?/);
+  assert.match(worker, /const annualPersonPlans = personPlans\.filter/);
+  assert.match(worker, /usedDaysAllTime: usedAllTimeDays/);
+  assert.match(worker, /LEAVE_ADVANCE_APPROVAL_REQUIRED/);
+  assert.match(worker, /LEAVE_ADVANCE_REASON_REQUIRED/);
+  assert.match(worker, /requireIkWriteAccess\(c, body, "approve"\)/);
+  assert.match(worker, /salaryDeductionApplied: false/);
+  assert.match(worker, /c\.env\.DB\.batch\(writeStatements\)/);
+  assert.match(ui, /const canonical = leaveEmployeeMap\.get\(employee\.id\)/);
+  assert.match(ui, /advanceLeaveApproved/);
+  assert.match(ui, /advanceLeaveReason/);
+});
+
+test("the next annual year starts with its own entitlement and signed carried deficit", () => {
+  const next = calculateAnnualLeaveBalance({ entitlement: 14, carryover: -4, adjustment: 0, used: 0 });
+  assert.equal(next.balance, 10);
+  const planned = calculateAnnualLeaveBalance({ entitlement: 14, carryover: 0, adjustment: 0, used: 4, planned: 6 });
+  assert.equal(planned.balance, 10);
+  assert.equal(planned.projectedBalance, 4);
 });
