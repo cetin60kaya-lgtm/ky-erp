@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { getPdksAttendance, getPdksPeople } from "../../services/pdksApi";
 import "./PdksReportCenter.css";
 
@@ -11,7 +11,7 @@ function downloadCsv(name,rows){const body=rows.map(row=>row.map(csvCell).join("
 const trStatus=(v)=>({CALISTI:"Çalıştı",EKSIK_BASIM:"Eksik Basım",KART_YOK:"Kart Yok",YILLIK_IZIN:"Yıllık İzin",YARIM_GUN_IZIN:"Yarım Gün İzin",IZIN:"İzin",RAPOR:"Rapor",UCRETSIZ:"Ücretsiz İzin",RESMI_TATIL:"Resmî Tatil",RESMI_TATIL_CALISMA:"Resmî Tatil Çalışma",YARIM_GUN_TATIL:"Yarım Gün Tatil",YARIM_GUN_TATIL_CALISMA:"Yarım Gün Tatil Çalışma",HAFTA_TATILI:"Hafta Tatili",HAFTA_TATILI_CALISMA:"Hafta Tatili Çalışma",DONEM_DISI:"Dönem Dışı"})[String(v||"").toUpperCase()]||String(v||"-");
 
 export default function PdksReportCenter(){
-  const [year,setYear]=useState(NOW.getFullYear()),[month,setMonth]=useState(NOW.getMonth()+1),[people,setPeople]=useState([]),[rows,setRows]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState(""),[filter,setFilter]=useState("TUM"),[query,setQuery]=useState("");
+  const [year,setYear]=useState(NOW.getFullYear()),[month,setMonth]=useState(NOW.getMonth()+1),[people,setPeople]=useState([]),[rows,setRows]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState(""),[filter,setFilter]=useState("TUM"),[query,setQuery]=useState(""),[expanded,setExpanded]=useState("");
 
   const load=useCallback(async()=>{setBusy(true);setError("");try{const personRows=await getPdksPeople({year,month});const list=safe(personRows);setPeople(list);const output=[];for(let i=0;i<list.length;i+=5){const batch=list.slice(i,i+5);const results=await Promise.all(batch.map(async person=>{try{return {person,data:await getPdksAttendance(person.id,year,month)}}catch{return {person,data:null}}}));results.forEach(({person,data})=>{const summary=data?.summary||{};output.push({id:person.id,personnelCode:person.personnelCode||person.code||"",fullName:person.fullName,department:person.department||"",cardNo:person.cardNo||"",schedule:data?.schedule?.groupName||"",workedDays:num(summary.workedDays),workedMinutes:num(summary.workedMinutes),annualLeaveDays:num(summary.annualLeaveDays),missingPunchDays:num(summary.missingPunchDays),noPunchDays:num(summary.noPunchDays),lateDays:num(summary.lateDays),lateMinutes:num(summary.lateMinutes),earlyMinutes:num(summary.earlyMinutes),overtimeMinutes:num(summary.overtimeMinutes),duplicatePunches:num(summary.duplicatePunches),days:safe(data?.days)})})}setRows(output)}catch(cause){setError(cause?.message||"Puantaj raporu hazırlanamadı.")}finally{setBusy(false)}},[month,year]);
   useEffect(()=>{load()},[load]);
@@ -29,10 +29,55 @@ export default function PdksReportCenter(){
     {error?<div className="prp-error">{error}</div>:null}
     <section className="prp-stats"><div><span>Personel</span><b>{people.length}</b><small>İK ana kaynak</small></div><div><span>Çalışılan Gün</span><b>{totals.worked}</b><small>Aylık toplam</small></div><div><span>Kontrol Gereken</span><b>{totals.missing}</b><small>Eksik + kart yok</small></div><div><span>Geç Kalma</span><b>{totals.late}</b><small>dakika</small></div><div><span>Fazla Mesai</span><b>{(totals.overtime/60).toLocaleString("tr-TR",{maximumFractionDigits:1})}</b><small>saat</small></div><div><span>Yıllık İzin</span><b>{totals.leave}</b><small>gün</small></div></section>
 
-    <section className="prp-card"><div className="prp-toolbar"><div className="prp-filters">{[["TUM","Tümü"],["EKSIK","Eksik/Kart Yok"],["GEC","Geç Kalan"],["MESAI","Fazla Mesai"],["IZIN","Yıllık İzin"],["TEKRAR","Tekrar Basım"]].map(([key,label])=><button key={key} className={filter===key?"active":""} onClick={()=>setFilter(key)}>{label}</button>)}</div><div><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Personel / bölüm / kart ara"/><button onClick={exportSummary}>Excel/CSV Özet</button></div></div>
-      <div className="prp-table"><div className="head"><span>Kod</span><span>Personel</span><span>Bölüm</span><span>Vardiya</span><span>Çalıştı</span><span>İzin</span><span>Eksik</span><span>Geç</span><span>Erken</span><span>Fazla Mesai</span></div>{filtered.map(row=><div key={row.id}><code>{row.personnelCode}</code><strong>{row.fullName}<small>{row.cardNo||"Kart yok"}</small></strong><span>{row.department||"-"}</span><span>{row.schedule||"-"}</span><b>{row.workedDays}</b><b>{row.annualLeaveDays}</b><em className={row.missingPunchDays+row.noPunchDays?"bad":""}>{row.missingPunchDays+row.noPunchDays}</em><em className={row.lateMinutes?"warn":""}>{row.lateMinutes} dk</em><span>{row.earlyMinutes} dk</span><span>{(row.overtimeMinutes/60).toLocaleString("tr-TR",{maximumFractionDigits:1})} sa</span></div>)}{!filtered.length?<div className="prp-empty">Filtreye uygun personel yok.</div>:null}</div>
+    <section className="prp-card">
+      <div className="prp-toolbar">
+        <div className="prp-filters" role="group" aria-label="Rapor filtresi">{[["TUM","Tümü"],["EKSIK","Eksik Kart"],["GEC","Geç Giriş"],["MESAI","Mesai"],["IZIN","İzin"],["TEKRAR","Mükerrer"]].map(([key,label])=><button type="button" key={key} aria-pressed={filter===key} className={filter===key?"active":""} onClick={()=>setFilter(key)}>{label}</button>)}</div>
+        <div className="prp-search-actions"><input type="search" aria-label="Personel ara" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Kart no veya ad soyad..."/><button type="button" onClick={exportSummary}>Excel / CSV</button></div>
+      </div>
+      <div className="prp-table-scroll">
+        <table className="prp-report-table">
+          <thead><tr><th>Kart</th><th>Personel</th><th>Çalışılan</th><th>İzin</th><th>Eksik Kart</th><th>Mesai</th><th>İşlem</th></tr></thead>
+          <tbody>{filtered.map(row=><React.Fragment key={row.id}>
+            <tr>
+              <td className="prp-mono">{row.cardNo||row.personnelCode||"—"}</td>
+              <td><strong>{row.fullName}</strong><small>{row.department||"Bölüm yok"}</small></td>
+              <td>{row.workedDays} gün</td>
+              <td>{row.annualLeaveDays} gün</td>
+              <td><span className={row.missingPunchDays+row.noPunchDays?"prp-pill alert":"prp-pill"}>{row.missingPunchDays+row.noPunchDays}</span></td>
+              <td>{(row.overtimeMinutes/60).toLocaleString("tr-TR",{maximumFractionDigits:1})} sa</td>
+              <td><button type="button" aria-expanded={expanded===row.id} className="prp-detail-toggle" onClick={()=>setExpanded(expanded===row.id?"":row.id)}>{expanded===row.id?"Kapat":"Detay"}</button></td>
+            </tr>
+            {expanded===row.id?<tr className="prp-expanded"><td colSpan={7}><div className="prp-detail-grid">
+              <div><span>Çalışma Grubu</span><strong>{row.schedule||"—"}</strong></div>
+              <div><span>Geç Giriş</span><strong>{row.lateMinutes} dk</strong></div>
+              <div><span>Erken Çıkış</span><strong>{row.earlyMinutes} dk</strong></div>
+              <div><span>Kart Tekrarı</span><strong>{row.duplicatePunches}</strong></div>
+              <div><span>Eksik Giriş / Çıkış</span><strong>{row.missingPunchDays}</strong></div>
+              <div><span>Kart Yok</span><strong>{row.noPunchDays}</strong></div>
+            </div></td></tr>:null}
+          </React.Fragment>)}</tbody>
+        </table>
+        {!filtered.length?<div className="prp-empty">Seçilen filtrede kayıt bulunamadı.</div>:null}
+      </div>
     </section>
 
-    <section className="prp-card"><div className="prp-card-title"><div><small>İSTİSNA TAKİBİ</small><h2>Kontrol Gerektiren Günler</h2></div><button onClick={exportDetail}>İstisna CSV</button></div><div className="prp-exceptions"><div className="head"><span>Tarih</span><span>Personel</span><span>Durum</span><span>Giriş</span><span>Çıkış</span><span>Geç</span><span>Erken</span><span>Mesai</span><span>Basım</span><span>Not</span></div>{exceptions.slice(0,300).map((row,index)=><div key={`${row.employeeId}-${row.date}-${index}`}><span>{row.date}</span><strong>{row.fullName}<small>{row.department}</small></strong><em>{trStatus(row.status)}</em><b>{row.entry||"-"}</b><b>{row.exit||"-"}</b><span>{row.lateMinutes||0}</span><span>{row.earlyMinutes||0}</span><span>{row.overtimeMinutes||0}</span><span>{row.eventCount||0}{row.duplicatePunches?` / ${row.duplicatePunches} tekrar`:""}</span><span>{row.note||row.warning||"-"}</span></div>)}{!exceptions.length?<div className="prp-empty">Bu dönem için kontrol gerektiren kayıt yok.</div>:null}</div></section>
+    <section className="prp-card">
+      <div className="prp-card-title"><div><small>GÜN GÜN KONTROL</small><h2>İstisna ve uyarılar</h2></div><button type="button" onClick={exportDetail}>İstisnaları CSV Aktar</button></div>
+      <div className="prp-table-scroll">
+        <table className="prp-report-table prp-exception-table">
+          <thead><tr><th>Tarih</th><th>Personel</th><th>Giriş</th><th>Çıkış</th><th>Durum</th><th>Süre / Uyarı</th><th>Not</th></tr></thead>
+          <tbody>{exceptions.slice(0,300).map((row,index)=><tr key={row.employeeId+"-"+row.date+"-"+index}>
+            <td className="prp-mono">{row.date}</td>
+            <td><strong>{row.fullName}</strong><small>{row.department||"—"}</small></td>
+            <td className="prp-mono">{row.entry||"—"}</td>
+            <td className="prp-mono">{row.exit||"—"}</td>
+            <td><span className="prp-pill alert">{trStatus(row.status)}</span></td>
+            <td>{row.lateMinutes?row.lateMinutes+" dk geç":row.earlyMinutes?row.earlyMinutes+" dk erken":row.duplicatePunches?row.duplicatePunches+" tekrar":"Kontrol"}</td>
+            <td className="prp-detail-note">{row.note||row.warning||"—"}</td>
+          </tr>)}</tbody>
+        </table>
+        {!exceptions.length?<div className="prp-empty">Bu dönem için kontrol gerektiren kayıt yok.</div>:null}
+      </div>
+    </section>
   </div>;
 }
