@@ -39,8 +39,10 @@ export function normalizeDeviceEvidence(raw) {
   const timezone=text(raw?.timezone);
   const rawSha256=text(raw?.rawSha256).toLowerCase();
   const companyId=text(raw?.companyId);
+  let trustedTimeZone = false;
+  try { new Intl.DateTimeFormat("en",{timeZone:timezone}); trustedTimeZone = true; } catch {}
   if (!companyId || !deviceId || !sourceRecordId || !/^[0-9]{1,16}$/.test(cardNo) ||
-    !/^\p{Script=Latin}*[A-Za-z]+\/[A-Za-z_]+$/u.test(timezone) ||
+    !trustedTimeZone || !timezone.includes("/") ||
     !/^[a-f0-9]{64}$/.test(rawSha256)) throw new Error("INVALID_DEVICE_EVIDENCE");
   const sourceKey=createHash("sha256")
     .update(JSON.stringify([companyId,deviceId,sourceRecordId,rawSha256]))
@@ -62,12 +64,16 @@ export function ensureCertifiedAdapter(adapter) {
   return adapter;
 }
 
-export function createDeviceRegistry() {
+// Approval comes from a trusted, versioned administrator-owned manifest.
+ // A vendor plugin cannot self-certify merely by setting certified=true.
+export function createDeviceRegistry({approvedAdapterIds=[]}={}) {
+  const approved=new Set(approvedAdapterIds.map(text));
   const providers=new Map();
   return Object.freeze({
     register(adapter) {
       ensureCertifiedAdapter(adapter);
       const key=text(adapter.id);
+      if(!approved.has(key)) throw new Error("DEVICE_ADAPTER_NOT_APPROVED");
       if (!key || providers.has(key)) throw new Error("DEVICE_ADAPTER_COLLISION");
       providers.set(key,adapter);
     },
