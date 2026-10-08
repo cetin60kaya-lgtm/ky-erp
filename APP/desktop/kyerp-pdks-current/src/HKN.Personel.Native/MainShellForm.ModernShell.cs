@@ -42,7 +42,7 @@ public sealed partial class MainShellForm
             Padding = Padding.Empty,
             BackColor = p.Canvas
         };
-        frame.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 248));
+        frame.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 258));
         frame.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         frame.Controls.Add(BuildModernSidebar(), 0, 0);
@@ -225,7 +225,7 @@ public sealed partial class MainShellForm
         return new Label
         {
             Text=text,
-            Width=202,
+            Width=190,
             Height=23,
             Margin=new Padding(0,7,0,2),
             Padding=new Padding(10,5,0,0),
@@ -246,7 +246,7 @@ public sealed partial class MainShellForm
             ImageAlign = ContentAlignment.MiddleLeft,
             TextImageRelation = TextImageRelation.ImageBeforeText,
             Height = 35,
-            Width = 202,
+            Width = 190,
             FlatStyle = FlatStyle.Flat,
             BackColor = p.Sidebar,
             ForeColor = p.SidebarMuted,
@@ -257,6 +257,8 @@ public sealed partial class MainShellForm
             Padding = new Padding(10, 0, 5, 0),
             Tag = command.Id
         };
+        button.AutoEllipsis = true;
+        button.AccessibleDescription = command.Hint;
         button.FlatAppearance.BorderSize = 0;
         button.FlatAppearance.MouseOverBackColor = p.SidebarHover;
         button.FlatAppearance.MouseDownBackColor = p.SidebarHover;
