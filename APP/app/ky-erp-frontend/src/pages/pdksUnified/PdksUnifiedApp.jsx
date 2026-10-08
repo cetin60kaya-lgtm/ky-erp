@@ -203,8 +203,9 @@ export default function PdksUnifiedApp({
     ? rowsForTab(tab.id,data.resource,{people:data.people,selectedPerson}).rows : [],
     [data.resourceReady,data.resource,tab.id,data.people,selectedPerson]);
   const sourceRows=useMemo(()=>isPeopleTab ? allPeople :
+    requirement==="people" ? rowsForTab(tab.id,null,{people:data.people}).rows :
     realAttendance ? rowsForTab(tab.id,{days:data.days},{selectedPerson}).rows : remoteRows,
-    [isPeopleTab,allPeople,realAttendance,tab.id,data.days,selectedPerson,remoteRows]);
+    [isPeopleTab,allPeople,requirement,tab.id,data.people,realAttendance,data.days,selectedPerson,remoteRows]);
   const filteredRows = useMemo(()=> {
     const q=search.toLocaleLowerCase("tr-TR").trim();
     if (!q) return sourceRows;
@@ -324,7 +325,7 @@ export default function PdksUnifiedApp({
               onChange={(e)=>setPeriod((prev)=>({...prev,year:Number(e.target.value)}))}>
               {Array.from({length:10},(_,i)=>new Date().getFullYear()-6+i).map((year)=><option key={year} value={year}>{year}</option>)}
             </select></label>
-            {realAttendance && data.people.length>0 && <label><span>Personel</span>
+            {(realAttendance || requirement==="corrections") && data.people.length>0 && <label><span>Personel</span>
               <select aria-label="Hareket personeli" value={selectedPerson?.id||""}
                 onChange={(e)=>setSelectedId(e.target.value)}>
                 {data.people.map((person)=><option key={person.id} value={person.id}>{person.cardNo} · {person.fullName}</option>)}
