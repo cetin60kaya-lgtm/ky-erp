@@ -13,9 +13,10 @@ import {
   configuredProductSections, isSensitiveProductTab,
 } from "./productModel";
 import {
-  normalizePerson, toPersonRows, toAttendanceRows,
-  getDataRequirement, csvForTable, safeFileNameSegment,
+  normalizePerson, toPersonRows,
+  csvForTable, safeFileNameSegment,
 } from "./productData";
+import {sourceForTab,rowsForTab} from "./tabBindings.js";
 import "./pdksUnified.css";
 
 const ICONS = {
@@ -147,6 +148,7 @@ export default function PdksUnifiedApp({
   const [personTab, setPersonTab] = useState("identity");
   const [data, setData] = useState({ people:[], days:[], profile:null, loading:false, status:"idle", error:"" });
   const [reloadToken, setReloadToken] = useState(0);
+  const [resource,setResource] = useState({key:"",status:"idle",payload:null,error:""});
   const [notice, setNotice] = useState("");
   const searchInput = useRef(null);
 
@@ -156,7 +158,8 @@ export default function PdksUnifiedApp({
     [activeMainCompany?.pdksUiPreferences,isAuditAccount]);
   const section = sections.find((item)=>item.id===navigation.section) || sections[0];
   const tab = section.tabs.find((item)=>item.id===navigation.tab) || section.tabs[0];
-  const requirement = getDataRequirement({ ...tab, section:section.id });
+  const requirement = sourceForTab(tab.id,{audit:isAuditAccount});
+  const resourceKey = [company,requirement,period.year,period.month,Number(isAuditAccount),reloadToken].join(":");
   const peopleNeeded = PEOPLE_SECTIONS.has(section.id) || tab.view === "dashboard";
   const selectedPerson = data.people.find((p)=>p.id === selectedId) || data.people[0] || null;
   const realAttendance = requirement === "attendance";
@@ -222,11 +225,44 @@ export default function PdksUnifiedApp({
     return ()=>controller.abort();
   },[company,data.status,period.year,period.month,previewOnly,realAttendance,selectedPerson?.id,reloadToken]);
 
+  // Every supported tab shares one authenticated read-only query lifecycle.
+  // No visual-preview network requests, no reads for unconnected/unapproved tabs.
+  useEffect(()=>{
+    const sources=new Set(["masters","holidays","leaves","month","payroll","audit","config"]);
+    if(previewOnly || !company || !sources.has(requirement)){
+      return undefined;
+    }
+    const controller=new AbortController();
+    setResource({key:resourceKey,status:"loading",payload:null,error:""});
+    import("./readService.js")
+      .then((service)=>service.readTabSource(requirement,{
+        mainCompanyId:company,year:period.year,month:period.month
+      },{audit:isAuditAccount}))
+      .then((payload)=>{
+        if(!controller.signal.aborted)
+          setResource({key:resourceKey,status:"ready",payload,error:""});
+      })
+      .catch((error)=>{
+        if(!controller.signal.aborted)
+          setResource({key:resourceKey,status:"error",payload:null,error:statusLabel(error)});
+      });
+    return ()=>controller.abort();
+  },[company,requirement,resourceKey,period.year,period.month,isAuditAccount,previewOnly]);
+
+  const resourceIsCurrent = resource.key===resourceKey;
+  const resourceLoading = resourceIsCurrent && resource.status==="loading";
+  const resourceReady = resourceIsCurrent && resource.status==="ready";
+  const resourceError = resourceIsCurrent && resource.status==="error" ? resource.error : "";
+
   const isPeopleTab = section.id === "people" && ["people","cards","employment"].includes(tab.id);
   const allPeople = useMemo(()=>toPersonRows(data.people,tab.id),[data.people,tab.id]);
-  const attendanceRows = useMemo(()=>toAttendanceRows(data.days,selectedPerson || {}),[data.days,selectedPerson]);
-  const sourceRows = useMemo(() => isPeopleTab ? allPeople : realAttendance ? attendanceRows : [],
-    [isPeopleTab,allPeople,realAttendance,attendanceRows]);
+  const remoteRows=useMemo(() => {
+    if(!resourceReady)return [];
+    return rowsForTab(tab.id,resource.payload,{people:data.people,selectedPerson}).rows;
+  },[resourceReady,tab.id,resource.payload,data.people,selectedPerson]);
+  const sourceRows=useMemo(() => isPeopleTab ? allPeople :
+    realAttendance ? rowsForTab(tab.id,data.days,{selectedPerson}).rows : remoteRows,
+    [isPeopleTab,allPeople,realAttendance,tab.id,data.days,selectedPerson,remoteRows]);
   const filteredRows = useMemo(()=> {
     const q=search.toLocaleLowerCase("tr-TR").trim();
     if (!q) return sourceRows;
@@ -234,14 +270,19 @@ export default function PdksUnifiedApp({
       String(value).toLocaleLowerCase("tr-TR").includes(q)));
   },[search,sourceRows]);
 
-  const dataConnected = !previewOnly && requirement !== "unconnected" && data.status === "ready";
+  const serverResource = !["people","attendance","unconnected","forbidden"].includes(requirement);
+  const dataConnected = !previewOnly && (serverResource ? resourceReady :
+    requirement !== "unconnected" && requirement !== "forbidden" && data.status==="ready");
   const canExport = dataConnected && !tab.sensitive && !isSensitiveProductTab(tab.id) && filteredRows.length > 0;
-  const pageUnavailable = previewOnly || requirement === "unconnected" || data.status === "offline" ||
-    data.status === "not-configured" || (!peopleNeeded && !realAttendance);
+  const pageUnavailable = previewOnly || requirement === "unconnected" ||
+    requirement === "forbidden" || (serverResource ? !resourceReady :
+      data.status==="offline" || data.status==="not-configured");
   const sourceText = previewOnly ? "Tasarım incelemesi" :
+    requirement === "forbidden" ? "Erişim kapalı" :
     requirement === "unconnected" ? "Entegrasyon bekliyor" :
-    data.status === "ready" ? (realAttendance ? "PDKS API · Kişi bazlı" : "PDKS API") :
-    data.status === "offline" ? "Bağlantı hatası" : "Kaynak doğrulanıyor";
+    dataConnected ? (realAttendance ? "D1 · Seçili personel (mutabakat bekliyor)" :
+      "KY ERP API · D1 (mutabakat bekliyor)") :
+    resourceError || data.status==="offline" ? "Bağlantı hatası" : "Kaynak doğrulanıyor";
 
   const exportTable = () => {
     if (!canExport) return;
@@ -312,8 +353,8 @@ export default function PdksUnifiedApp({
         </div>
         {notice && <div className="pdk-u-notice"><Info size={15}/>{notice}
           <button type="button" onClick={()=>setNotice("")} aria-label="Bildirimi kapat"><X size={13}/></button></div>}
-        {data.error && <div className="pdk-u-notice is-error"><AlertTriangle size={16}/>
-          Veri kaynağı okunamadı: {data.error}</div>}
+        {(data.error || resourceError) && <div className="pdk-u-notice is-error"><AlertTriangle size={16}/>
+          Veri kaynağı okunamadı: {resourceError || data.error}</div>}
         <div className="pdk-u-tabs" role="tablist" aria-label={section.label+" alt sekmeleri"}>
           {section.tabs.map((item)=><button type="button" role="tab" key={item.id}
             aria-selected={tab.id===item.id}
@@ -362,7 +403,7 @@ export default function PdksUnifiedApp({
             pageUnavailable ? <EmptyState title="Canlı veri bağlantısı kapalı"
               description="Bu ekranda yalnız onaylı veri görüntülenir. Cihazdan fiziksel kart kanıtı henüz doğrulanmadı."
               IconComponent={Database}/> :
-            data.loading ? <EmptyState title="Doğrulanmış kayıtlar okunuyor"
+            (data.loading || resourceLoading) ? <EmptyState title="Doğrulanmış kayıtlar okunuyor"
               description="Kaynak veritabanı sorgusu sürüyor." IconComponent={Clock3}/> :
             <UnifiedTable columns={tab.columns} rows={filteredRows}
               masked={isAuditAccount && isSensitiveProductTab(tab.id)}/>
