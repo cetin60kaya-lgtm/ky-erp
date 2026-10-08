@@ -76,9 +76,18 @@ public sealed partial class MainShellForm
         // module visible under a newly selected sidebar item or touch Firebird.
         if (PdksPreviewMode.Enabled && id != PdksCommandId.Home)
         {
-            var review = new PdksVisualPreviewWorkspace(command);
-            ShowEmbedded(review, "visual-preview:" + id, command.Title);
-            SetModernPage(command.Title, command.Hint);
+            if (unifiedPreviewWorkspace is null || unifiedPreviewWorkspace.IsDisposed)
+            {
+                unifiedPreviewWorkspace = new PdksVisualPreviewWorkspace(command)
+                {
+                    Tag = "KYERP_WORKSPACE_KEEP_ALIVE"
+                };
+            }
+            else
+            {
+                unifiedPreviewWorkspace.NavigateTo(command);
+            }
+            ShowEmbedded(unifiedPreviewWorkspace, "visual-preview:unified", command.Title);
             return;
         }
 
@@ -266,7 +275,7 @@ public sealed partial class MainShellForm
             .GroupBy(x=>x.Group)
             .OrderBy(x=>x.Min(c=>c.Order));
 
-    public void NavigateToCommand(PdksCommandId id) => ExecuteCommand(id);
+    public void NavigateToCommand(PdksCommandId id) => NavigateWithTransition(id);
 
     void OpenThemeSettings() => ExecuteCommand(PdksCommandId.Theme);
 
