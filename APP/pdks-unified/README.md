@@ -390,3 +390,77 @@ ayrı test gerekir.
 ile 17 gerçek kaynaklı senaryo test edilir. Fiziksel cihaz
 bağlantısı, yetkili grup planı, gerçek personel verisi ve
 yıllık TNF mutabakatını sağlayan entegrasyon **açık iş**.
+
+
+## 16. 08.10.2026 — KALICI TEK D1 İŞLEM MOTORU / DEVRİN EN YENİ DURUMU
+
+Bu bölüm önceki 11 ayrı Cloud POST planının yerini almıştır; proje
+artık yeni arayüzde **bir** merkezi işlem endpoint'i kullanır.
+Eski web modüllerinin legacy POST'ları kodda hâlâ vardır; bütün
+sistemde tek yazma motoru olduğu **henüz iddia edilmez**.
+
+**Yeni kaynaklar:**
+- `APP/cloud/ky-erp-api/src/ik-pdks-unified-commands.ts`: tenant/rol/ay kilidi,
+  kayıt/izin/mesai/avans güvenlik kontrolleri, SHA-256, aynı UUID'ye
+  yeniden dönen sunucu fişi, `DB.batch` atomik kayıt, zorunlu audit,
+  outbox `PENDING`.
+- `APP/cloud/ky-erp-api/src/ik-pdks-unified-contract.mjs`: 11 komut için
+  tek saf sunucu normalleştirme ve doğrulama şeması.
+- `APP/cloud/ky-erp-api/migrations/0060_pdks_unified_command_ledger.sql`:
+  firma+aktör+request ID unique; receipts ve outbox, FK ve indeksler.
+- `APP/cloud/ky-erp-api/src/ik-pdks-unified-{contract,storage}.test.mjs`:
+  11 işlem validasyonu, gerçek in-memory SQLite transaction/rollback,
+  unique tekrar, farklı tenant, foreign-key outbox testleri.
+- `APP/app/ky-erp-frontend/src/pages/pdksUnified/operationTransport.js`:
+  tek POST `/ik/personnel-control/unified/commands`, UUID ve ardından
+  `GET /.../:requestId` fiş sorgusu. Sonuç belirsizse ikinci
+  yeni UUID ile otomatik POST yapılmaz.
+- `UnifiedOperationPanel.jsx`: D1 kalıcı fişi, görünüm
+  doğrulandı/kaynak bekleniyor/sonuç belirsiz hallerini ayrı gösterir.
+- `main.ts`: yeni handler tek kez eklenmiştir. Eski PDKS operasyonları
+  `ik-pdks-guard.ts` içinde zaten kaydedildiği için `main.ts`
+  üzerindeki yanlış duplicate kayıtlar bu turda kaldırılmıştır.
+
+**Yetkili GET/POST komutları:**
+`POST /api/ik/personnel-control/unified/commands`:
+`{requestId,action,payload}`, action 11 sabit türden biridir.
+`GET /api/ik/personnel-control/unified/commands/:requestId`
+yalnız o tenant/aktör fişini okur. Her başarılı D1 `batch`:
+`ik_pdks_unified_commands` + gerçek D1 iş tablosu +
+`ik_audit_logs` + `ik_pdks_unified_outbox` yazar.
+Aynı UUID + farklı payload `409 PDKS_IDEMPOTENCY_CONFLICT`.
+Her fiş `localFDB=false` ve `annualTNF=false` taşır.
+
+**Son DESEN izole kapı:**
+`D:\KYERP\_TEMP\PDKS_SAFE_VERIFY_20261008_02\KY-PDKS-DURABLE-COMMANDS-FINAL-GATE.txt`.
+Çıktı `FETCH=0 CHECKOUT=0 SQLITE_CONTRACT=0 CLOUD_ROUTES=0
+CLOUD_TYPECHECK=0 UI_UNIT=0 UI_LINT=0 UI_BUILD=0 CHROME_49_11=0
+DEVICE_CORE_SYNC=0 WINDOWS_BUILD=0 COMPLETE`. Tamamı yerel test;
+**Cloud canlı staging/production yazma kanıtı değil**.
+
+**BÜYÜK KALAN ÜRETİM ENGELLERİ:**
+1. Migration `0060` production D1'e **uygulanmadı**. Önce yedekli
+   staging migration + authenticated POST/GET fiş + 11 işlemin
+   rollback/race/tenant/locked-month testleri yapılmalı.
+2. Sunucudaki eski legacy POST endpointleri de yeni engine
+   korumasına geçmeden tüm ERP için idempotency tamam sayılamaz.
+3. Outbox `PENDING` oluşuyor; Windows Agent tüketicisi,
+   FDB/normal TNF/E ayrımı, crash journal ve iki yönlü ACK **yok**.
+4. Yeni `attendanceRules.mjs` 17 teste sahip; canlı cihaz/DB olayına
+   henüz bağlı değil. Eski Cloud `attendance-v2` sabit
+   08:30/19:00 günlük ilk-son iş kuralı resmî çift/gece
+   vardiya/yarım gün/E hesaplarında yetersizdir.
+5. Gerçek Windows EXE+Firebird+cihaz/terminal stress,
+   Android APK, iOS IPA, Cloud prod dağıtım onayı **yok**.
+6. `ik-pdks-unified-commands.ts` dosyasında `// @ts-nocheck`
+   bulunmaktadır; bu çekirdeğin tipleri ve gerçek D1 worker
+   entegrasyon testleri tamamlanmalı.
+
+**Yeni sohbette:** Tek seferde proje devir MD'si
+`KY_PDKS_TEK_KAYNAK_TAM_DEVIR_VE_CALISMA_PLANI_2026-10-08.md`
+kullanılarak kaynak+uygulama+test ilerletilir. GitHub PR
+<https://github.com/cetin60kaya-lgtm/ky-erp/pull/404>
+**DRAFT/UNMERGED** tutulur. GitHub Actions ve Remote Desktop kotasını
+koru. **Üretim verisi üzerinde test hareketi, bordro veya yıllık
+TNF düzenlemesi YAPMA**. Belge güncelliği için bu §16
+en yeni kaynak olarak alınır; eski devir tarihsel.
