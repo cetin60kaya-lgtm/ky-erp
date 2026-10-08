@@ -3,18 +3,21 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "e16b8a49da2d19e655ce410eb1e41e30cfb03c74",
-  "requestedAt": "2026-10-07T17:46:00+03:00",
-  "attempt": 6,
+  "sourceCommit": "226c17861e6f219164fc479b9576827f5dd6a8ca",
+  "requestedAt": "2026-10-08T22:30:00+03:00",
+  "attempt": 7,
   "scope": [
-    "ik-finance-single-source",
-    "ik-overtime-no-synthetic-correction",
-    "ik-legacy-synthetic-overtime-filter",
-    "ik-overtime-source-mismatch-guard",
-    "worker-typecheck-test-build",
+    "ik-relational-tenancy-permissions",
+    "leave-legacy-write-retirement",
+    "leave-year-scoped-ledger",
+    "cross-year-leave-accounting",
+    "leave-approval-workflow",
+    "2027-official-holidays",
+    "monthly-personnel-salary-leave-sync",
+    "pdks-monthly-non-destructive-regression",
     "d1-full-predeploy-backup",
     "cloudflare-worker-production",
-    "live-api-health-check"
+    "live-api-health"
   ],
-  "note": "IK Mesai mukerrer kaynak duzeltmesi. 0 saatlik Bordro kaynak kontrolu Mesai satirlari canonical kaynaktan cikarilir; yeni sentetik Mesai correction uretilmez. PR #396 acceptance PASS."
+  "note": "KY ERP IK Aylik canonical security and annual leave release. PR #406 tests must pass; no D1 reset. Full database backup before Worker deploy."
 }
