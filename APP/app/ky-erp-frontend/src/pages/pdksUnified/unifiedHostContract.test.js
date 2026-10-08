@@ -66,3 +66,11 @@ test("new PDKS operations use ONE durable command route, not eleven unsafe endpo
   assert.match(panel,/source-pending/);
   assert.match(panel,/receiptId|requestId/);
 });
+
+
+test("definitive server 409 rollback is not misrepresented as network uncertainty",()=>{
+  const transport=file("pages/pdksUnified/operationTransport.js");
+  assert.match(transport,/error\?\.status!==408/);
+  assert.doesNotMatch(transport,/error\?\.status!==409/);
+  assert.match(transport,/PDKS_OUTCOME_UNKNOWN/);
+});
