@@ -66,7 +66,8 @@ export function useUnifiedPdksData({
       .then((rows)=>{
         if(cancelled)return;
         if(!Array.isArray(rows))throw new Error("PDKS_PERSONEL_YANIT_BICIMI_GECERSIZ");
-        setPeopleState({key:peopleKey,status:"ready",payload:rows.map(normalizePerson),error:""});
+        setPeopleState({key:peopleKey,status:"ready",payload:rows.map(
+          (person)=>normalizePerson(person,{year,month})),error:""});
       })
       .catch((e)=>{if(!cancelled)setPeopleState({key:peopleKey,status:"error",payload:null,error:errorMessage(e)});});
     return ()=>{cancelled=true;};
