@@ -46,13 +46,14 @@ internal static partial class AtomicTnfFileStore
         Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
         Directory.CreateDirectory(backupRoot);
 
-        var beforeHash = File.Exists(targetPath)
+        var targetExisted = File.Exists(targetPath);
+        var beforeHash = targetExisted
             ? await HashFileAsync(targetPath, cancellationToken)
             : Hash(Array.Empty<byte>());
         var backupPath = Path.Combine(
             backupRoot,
             $"{Path.GetFileNameWithoutExtension(fileName)}_{DateTime.Now:yyyyMMdd_HHmmssfff}_{batchId}.Tnf");
-        if (File.Exists(targetPath))
+        if (targetExisted)
             File.Copy(targetPath, backupPath, false);
         else
             await File.WriteAllBytesAsync(backupPath, Array.Empty<byte>(), cancellationToken);
@@ -81,17 +82,10 @@ internal static partial class AtomicTnfFileStore
             try
             {
                 if (File.Exists(temp)) File.Delete(temp);
-                if (File.Exists(backupPath))
-                {
-                    if (new FileInfo(backupPath).Length == 0 && !File.Exists(targetPath))
-                    {
-                        // Target did not exist before the failed first write.
-                    }
-                    else
-                    {
-                        File.Copy(backupPath, targetPath, true);
-                    }
-                }
+                if (targetExisted && File.Exists(backupPath))
+                    File.Copy(backupPath, targetPath, true);
+                else if (!targetExisted && File.Exists(targetPath))
+                    File.Delete(targetPath);
             }
             catch { }
             throw;
