@@ -13,7 +13,7 @@ import {
   configuredProductSections, isSensitiveProductTab,
 } from "./productModel";
 import {
-  csvForTable, safeFileNameSegment,
+  csvForTable, safeFileNameSegment, toAttendanceRows,
 } from "./productData";
 import {sourceForTab,rowsForTab} from "./tabBindings.js";
 import {useUnifiedPdksData} from "./useUnifiedPdksData.js";
@@ -61,38 +61,136 @@ function UnifiedTable({ columns, rows, onSelect, selectedId, masked = false }) {
   </div>;
 }
 
-function PersonDetails({ person, active, onChange, isAuditAccount }) {
+function PersonDetails({person,active,onChange,isAuditAccount,detail}) {
+  const rows=(value,keys=[])=>{
+    if(Array.isArray(value))return value;
+    for(const key of keys)if(Array.isArray(value?.[key]))return value[key];
+    return null;
+  };
+  const money=(value)=>value===null||value===undefined||value===""?"—":
+    Number.isFinite(Number(value))?new Intl.NumberFormat("tr-TR",{maximumFractionDigits:2}).format(Number(value)):"—";
+  const smallTable=(columns,records)=>
+    <UnifiedTable columns={columns} rows={records}/>;
+  const view=()=>{
+    if(!person)return <EmptyState title="Personel seçilmedi"
+      description="Önce doğrulanmış personel listesinden bir çalışan seçin."/>;
+    if(active==="identity")return <dl className="pdk-u-definition">
+      {[
+        ["Personel",person.fullName],["Kart numarası",person.cardNo],
+        ["Departman",person.department],["Görev",person.role],
+        ["Çalışma grubu",person.group],["İşe giriş",person.startDate],
+        ["İşten çıkış",person.exitDate],["Dönem durumu",person.status],
+      ].map(([key,value])=><div key={key}><dt>{key}</dt><dd>{value||"—"}</dd></div>)}
+    </dl>;
+    if(active==="card")return <dl className="pdk-u-definition">
+      <div><dt>Atanmış kart</dt><dd>{person.cardNo}</dd></div>
+      <div><dt>Kart durumu</dt><dd>{person.cardState}</dd></div>
+      <div><dt>Personel kaynağı</dt><dd>KY ERP PDKS</dd></div>
+      <div><dt>Son fiziksel geçiş</dt><dd>Doğrulanmadı</dd></div>
+    </dl>;
+    if(active==="documents")return <EmptyState title="Personel evrak servisi bağlı değil"
+      description="Yetkili doküman servisi olmadan kişisel belge veya imza görüntülenmez."
+      IconComponent={LockKeyhole}/>;
+    if(isAuditAccount && ["shift","leave","payroll","history"].includes(active))
+      return <EmptyState title="Bu ayrıntıya erişim kapalı"
+        description="Denetim hesabı PDKS FULL işlemlerine veya ücret alanlarına erişemez."
+        IconComponent={LockKeyhole}/>;
+    if(detail?.status==="loading")return <EmptyState title="Kaynak okunuyor"
+      description="Seçili personelin doğrulanmış kaydı bekleniyor." IconComponent={Clock3}/>;
+    if(detail?.status==="error")return <EmptyState title="Kaynak hatası"
+      description={detail.error||"Veri okunamadı."} IconComponent={AlertTriangle}/>;
+    if(detail?.status!=="ready")return <EmptyState title="Bu bilgi kaynağı henüz bağlı değil"
+      description="Veri veya izin doğrulanmadan ekran sahte personel hareketi oluşturmaz."
+      IconComponent={Database}/>;
+    const payload=detail.payload;
+    if(active==="attendance"){
+      const days=rows(payload,["days"]);
+      if(!days)return <EmptyState title="Devam kaynağı doğrulanamadı" description="Beklenen gün dizisi gelmedi."/>;
+      return smallTable(["Tarih","Giriş","Çıkış","Kaynak","E","Durum"],
+        toAttendanceRows(days,person));
+    }
+    if(active==="shift"){
+      const groups=rows(payload?.groups)||[];
+      const assignments=rows(payload?.groupAssignments)||[];
+      const assigned=assignments.find((record)=>String(record.employeeId)===String(person.id));
+      const group=groups.find((record)=>String(record.id)===String(assigned?.groupId));
+      if(!group)return <EmptyState title="Atanmış vardiya görünmüyor"
+        description="Kaynakta seçili personele ait aktif vardiya eşleşmesi bulunamadı."/>;
+      return <dl className="pdk-u-definition">
+        <div><dt>Vardiya adı</dt><dd>{group.name||"—"}</dd></div>
+        <div><dt>Giriş referansı</dt><dd>{group.entryTime||"—"}</dd></div>
+        <div><dt>Çıkış referansı</dt><dd>{group.exitTime||"—"}</dd></div>
+        <div><dt>Geç tolerans (dk)</dt><dd>{group.lateTolerance??"—"}</dd></div>
+        <div><dt>Erken tolerans (dk)</dt><dd>{group.earlyTolerance??"—"}</dd></div>
+        <div><dt>Atama kaynağı</dt><dd>PDKS D1 vardiya tanımı</dd></div>
+      </dl>;
+    }
+    if(active==="leave"){
+      const plans=rows(payload,["plans"]);
+      if(!plans)return <EmptyState title="İzin yanıt biçimi doğrulanamadı"
+        description="Sunucunun izin listesi bekleniyor."/>;
+      return smallTable(["Başlangıç","Bitiş","İzin Türü","Gün","Durum"],
+        plans.filter((p)=>String(p.employeeId)===String(person.id)).map((p,i)=>({
+          _id:String(p.id??i),"Başlangıç":p.startDate||"—",
+          "Bitiş":p.endDate||"—","İzin Türü":p.recordType||"—",
+          "Gün":p.dayCount??"—","Durum":p.status||"—",
+        })));
+    }
+    if(active==="timesheet"){
+      const summary=payload?.summary;
+      if(!summary)return <EmptyState title="Aylık puantaj özeti bulunamadı"
+        description="Eksik gün ve mesai değerleri tahmin edilmez."/>;
+      return <dl className="pdk-u-definition">
+        <div><dt>Çalışılan gün</dt><dd>{summary.workedDays??"—"}</dd></div>
+        <div><dt>Yıllık izin</dt><dd>{summary.annualLeaveDays??"—"}</dd></div>
+        <div><dt>Eksik basım</dt><dd>{summary.missingPunchDays??"—"}</dd></div>
+        <div><dt>Mesai (dk)</dt><dd>{summary.overtimeMinutes??"—"}</dd></div>
+      </dl>;
+    }
+    if(active==="payroll"){
+      const lines=rows(payload,["lines"]);
+      if(!lines)return <EmptyState title="Bordro yanıtı doğrulanamadı"
+        description="Yalnız yetkili bordro verisi görüntülenebilir."/>;
+      const line=lines.find((p)=>String(p.employeeId)===String(person.id));
+      if(!line)return <EmptyState title="Personel bordro satırı bulunamadı"
+        description="Seçili ayda bu personel için doğrulanmış D1 bordro satırı yok."/>;
+      return <dl className="pdk-u-definition">
+        {[
+          ["Maaş",line.salary],["Mesai",line.overtimeAmount],
+          ["Avans",line.advanceAmount],["Kesinti",line.deductionAmount],
+          ["Banka",line.bankAmount],["Elden",line.cashAmount],
+          ["Toplam",line.totalAmount],
+        ].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{money(value)}</dd></div>)}
+      </dl>;
+    }
+    if(active==="history"){
+      const changes=rows(payload,["rows","corrections"]);
+      if(!changes)return <EmptyState title="Düzeltme geçmişi biçimi doğrulanamadı"
+        description="Değişiklik geçmişi gelmeden işlem tamamlandı kabul edilmez."/>;
+      return smallTable(["Tarih","Alan","Gerekçe","Durum"],changes.map((p,i)=>({
+        _id:String(p.id??i),"Tarih":p.workDate||p.date||"—",
+        "Alan":p.field||p.type||"—","Gerekçe":p.reason||p.note||"—",
+        "Durum":p.status||"—",
+      })));
+    }
+    return <EmptyState title="Bu detay için bağlantı yok" description="Kaynak bekleniyor."/>;
+  };
   return <section className="pdk-u-person-detail" aria-label="Personel 360 derece">
     <div className="pdk-u-detail-head"><span className="pdk-u-detail-avatar"><UserRound size={25}/></span>
       <div><span className="pdk-u-eyebrow">PERSONEL 360°</span>
-        <h3>{person?.fullName || "Personel seçilmedi"}</h3>
-        <span className="pdk-u-dim">Kart: {person?.cardNo || "—"} · {person?.status || "Durum bilinmiyor"}</span>
-      </div><span className="pdk-u-chip">{person?.group || "Grup bekleniyor"}</span>
+        <h3>{person?.fullName||"Personel seçilmedi"}</h3>
+        <span className="pdk-u-dim">Kart: {person?.cardNo||"—"} · {person?.status||"Durum bilinmiyor"}</span>
+      </div><span className="pdk-u-chip">{person?.group||"Grup bekleniyor"}</span>
     </div>
     <div className="pdk-u-detail-tabs" role="tablist" aria-label="Personel detay sekmeleri">
-      {PRODUCT_PERSON_TABS.map(([id,label]) => <button type="button" role="tab" aria-selected={active === id}
-        className={active === id ? "active" : ""} key={id} onClick={() => onChange(id)}>{label}</button>)}
+      {PRODUCT_PERSON_TABS.map(([id,label])=><button type="button" role="tab"
+        aria-selected={active===id} className={active===id?"active":""} key={id}
+        onClick={()=>onChange(id)}>{label}</button>)}
     </div>
-    <div className="pdk-u-detail-body">
-      {active === "identity" && <dl className="pdk-u-definition">
-        <div><dt>Personel</dt><dd>{person?.fullName || "—"}</dd></div>
-        <div><dt>Kart numarası</dt><dd>{person?.cardNo || "—"}</dd></div>
-        <div><dt>Departman</dt><dd>{person?.department || "—"}</dd></div>
-        <div><dt>Görev</dt><dd>{person?.role || "—"}</dd></div>
-        <div><dt>Çalışma grubu</dt><dd>{person?.group || "—"}</dd></div>
-        <div><dt>İşe giriş</dt><dd>{person?.startDate || "—"}</dd></div>
-        <div><dt>İşten çıkış</dt><dd>{person?.exitDate || "—"}</dd></div>
-        <div><dt>Durum</dt><dd>{person?.status || "—"}</dd></div>
-      </dl>}
-      {active !== "identity" && <EmptyState
-        title={PRODUCT_PERSON_TABS.find(([id])=>id===active)?.[1] || "Personel"}
-        description={isAuditAccount || active === "payroll"
-          ? "Bu ayrıntı yetki ve kaynak doğrulaması yapıldıktan sonra açılır. Maaş bilgileri herkese gösterilmez."
-          : "Bu sekmenin gerçek işlem sözleşmesi ayrıca bağlanacaktır. Canlı veriye izinsiz işlem yapılmaz."}
-        IconComponent={active === "card" ? Fingerprint : FileCheck2}
-      />}
+    <div className="pdk-u-detail-body">{view()}</div>
+    <div className="pdk-u-detail-foot"><ShieldCheck size={15}/>
+      Gerçek kaynak · Yetkili erişim · Tüm düzeltmeler onay ve denetim gerektirir.
     </div>
-    <div className="pdk-u-detail-foot"><ShieldCheck size={15}/> Her değişiklik için gerekçe, onay ve işlem geçmişi gerekir.</div>
   </section>;
 }
 
@@ -165,7 +263,7 @@ export default function PdksUnifiedApp({
   const allowHeavy=requirement==="monthly-attendance" && monthlyRequestKey===monthKey;
   const data=useUnifiedPdksData({
     company,year:period.year,month:period.month,personId:selectedId,requirement,
-    previewOnly,auditHint:isAuditAccount,reloadToken,needsPeople,allowHeavy,
+    previewOnly,auditHint:isAuditAccount,reloadToken,needsPeople,allowHeavy,detailTab:personTab,
   });
   const selectedPerson=data.people.find((person)=>person.id===selectedId)||data.people[0]||null;
   const realAttendance=requirement==="attendance";
@@ -345,7 +443,8 @@ export default function PdksUnifiedApp({
                   onSelect={setSelectedId}/>:<EmptyState title="Personel kaynağı bağlı değil"
                   description={previewOnly?"Tasarım önizlemesinde gerçek personel verisi bulunmaz.":"Bu görünüm için yetkili KY ERP bağlantısını doğrulayın."}/>}
             </div><PersonDetails person={dataConnected?selectedPerson:null}
-              active={personTab} onChange={setPersonTab} isAuditAccount={isAuditAccount}/>
+              active={personTab} onChange={setPersonTab} isAuditAccount={data.audit}
+              detail={data.detail}/>
           </div> : (
             requirement==="unconnected" ? <EmptyState title="Ekran hazır · İşlem sözleşmesi bağlanacak"
               description="Sekme ve tablo yerleşimi tamamlandı; gerçek kaynak/senkron yetkisi doğrulanmadan işlem açılmaz. Bu ekranda sahte veri üretilmez."
