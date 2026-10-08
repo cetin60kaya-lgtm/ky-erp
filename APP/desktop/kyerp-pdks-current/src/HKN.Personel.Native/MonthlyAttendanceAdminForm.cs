@@ -322,13 +322,16 @@ public sealed class MonthlyAttendanceAdminForm : Form
         return rows;
     }
 
+    static bool NeedsReview(MonthRow row) => row.Workday &&
+        (row.Status != "Tamam" || row.TnfStatus.StartsWith("⚠", StringComparison.Ordinal));
+
     void BindGrid()
     {
         var source = allRows.AsEnumerable();
         var f = Convert.ToString(filter.SelectedItem) ?? "Sorunlular";
         source = f switch
         {
-            "Sorunlular" => source.Where(x => x.Workday && x.Status != "Tamam"),
+            "Sorunlular" => source.Where(NeedsReview),
             "Kart Basmadı" => source.Where(x => x.Status.Contains("Kart Basmadı",StringComparison.OrdinalIgnoreCase)),
             "Giriş Eksik" => source.Where(x => x.Status.Contains("Giriş Eksik",StringComparison.OrdinalIgnoreCase)),
             "Çıkış Eksik" => source.Where(x => x.Status.Contains("Çıkış Eksik",StringComparison.OrdinalIgnoreCase)),
@@ -337,7 +340,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
             "Erken Çıkış" => source.Where(x => x.Status.Contains("Erken Çıkış",StringComparison.OrdinalIgnoreCase)),
             "Geç Çıkış" => source.Where(x => x.Status.Contains("Geç Çıkış",StringComparison.OrdinalIgnoreCase)),
             "E Kayıtları" => source.Where(x => IsE(x.EntryType)||IsE(x.ExitType)),
-            "Tamam" => source.Where(x => x.Status=="Tamam"),
+            "Tamam" => source.Where(x => x.Status=="Tamam" && !x.TnfStatus.StartsWith("⚠", StringComparison.Ordinal)),
             _ => source
         };
 
@@ -367,7 +370,7 @@ public sealed class MonthlyAttendanceAdminForm : Form
             if(grid.Columns.Contains(n)) grid.Columns[n].AutoSizeMode=DataGridViewAutoSizeColumnMode.AllCells;
         if(grid.Columns.Contains("Ad Soyad")) grid.Columns["Ad Soyad"].Width=190;
         if(grid.Columns.Contains("Durum")) grid.Columns["Durum"].AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill;
-        var problemCount = allRows.Count(x => x.Workday && x.Status != "Tamam");
+        var problemCount = allRows.Count(NeedsReview);
         summary.Text=$"Gösterilen {table.Rows.Count:N0} • Sorunlu gün {problemCount:N0} • Toplam {allRows.Count:N0} kişi-gün";
     }
 
@@ -375,7 +378,10 @@ public sealed class MonthlyAttendanceAdminForm : Form
     {
         if(e.RowIndex<0||!grid.Columns.Contains("Durum"))return;
         var state=Convert.ToString(grid.Rows[e.RowIndex].Cells["Durum"].Value)??"";
-        if(state.Contains("E ",StringComparison.OrdinalIgnoreCase))
+        var tnf=Convert.ToString(grid.Rows[e.RowIndex].Cells["TNF"].Value)??"";
+        if(tnf.StartsWith("⚠", StringComparison.Ordinal))
+            grid.Rows[e.RowIndex].DefaultCellStyle.BackColor=PdksAppearance.Current.DangerSoft;
+        else if(state.Contains("E ",StringComparison.OrdinalIgnoreCase))
             grid.Rows[e.RowIndex].DefaultCellStyle.BackColor=PdksAppearance.Current.IsDark?Color.FromArgb(69,52,21):Color.FromArgb(255,248,220);
         else if(state is not "Tamam" and not "Hafta Sonu" and not "Tatil" and not "İzinli")
             grid.Rows[e.RowIndex].DefaultCellStyle.BackColor=PdksAppearance.Current.DangerSoft;
@@ -386,7 +392,9 @@ public sealed class MonthlyAttendanceAdminForm : Form
         foreach(DataGridViewRow row in grid.Rows)
         {
             var state=Convert.ToString(row.Cells["Durum"].Value)??"";
-            row.Cells["Seç"].Value=state is not "Tamam" and not "Hafta Sonu" and not "Tatil" and not "İzinli";
+            var tnf=Convert.ToString(row.Cells["TNF"].Value)??"";
+            row.Cells["Seç"].Value=state is not "Hafta Sonu" and not "Tatil" and not "İzinli"
+                && (state!="Tamam" || tnf.StartsWith("⚠", StringComparison.Ordinal));
         }
     }
 
