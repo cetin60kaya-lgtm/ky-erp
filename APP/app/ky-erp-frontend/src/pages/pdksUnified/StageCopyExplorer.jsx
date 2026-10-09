@@ -1,4 +1,4 @@
-import React,{useMemo,useState} from "react";
+import React,{useEffect,useMemo,useState} from "react";
 import {Database,FolderOpen,ShieldAlert} from "lucide-react";
 import {parseStageCopySnapshot} from "./stageCopyView.mjs";
 const stripTime=v=>String(v||"").slice(0,5);
@@ -6,6 +6,26 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
   const [error,setError]=useState("");
   const [filter,setFilter]=useState("all");
   const [day,setDay]=useState("");
+  const [autoInfo,setAutoInfo]=useState("");
+  useEffect(()=>{
+    if(snapshot||window.location.hostname!=="ky-pdks-test.local")return;
+    const controller=new AbortController();
+    fetch("/__local-copy/latest.json",{cache:"no-store",signal:controller.signal})
+      .then(response=>response.ok?response.text():null)
+      .then(raw=>{
+        if(!raw||controller.signal.aborted)return;
+        const parsed=parseStageCopySnapshot(raw);
+        onSnapshot(parsed);
+        setAutoInfo("Yerel kopya verisi otomatik açıldı. Canlı bağlantı değildir.");
+        setError("");
+      })
+      .catch(error=>{
+        if(!controller.signal.aborted)setAutoInfo(
+          "Otomatik kaynak doğrulanamadı: "+String(error?.message||"Bilinmeyen hata"));
+      });
+    return ()=>controller.abort();
+  },[onSnapshot]);
+
   const load=async file=>{
     if(!file)return;
     try{
@@ -41,6 +61,7 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
           onChange={event=>{const file=event.target.files?.[0];if(file)void load(file);}}/>
       </label>
       <span>Dosya yalnız bu uygulamanın belleğinde açılır. Sunucuya yüklenmez.</span>
+      {autoInfo&&<span role="status">{autoInfo}</span>}
       {snapshot&&<button className="pdk-u-btn" type="button"
         onClick={()=>{onSnapshot(null);setError("");setDay("");}}>Veriyi kapat</button>}
     </div>
