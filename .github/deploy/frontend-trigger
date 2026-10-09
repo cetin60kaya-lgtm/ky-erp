@@ -1,4 +1,6 @@
-deploy: personnel-mobile-login-route-fix-20261009
-merged: fa8c522cff1428136fa78c5cd25780687b74ca26
-ci: 37888992004
-reason: fix mobile login loop and use separate staff session without changing administrator login
+deploy: release-history-canonical-20261009
+pr: 408
+merge: 642932f4f014f7454cf7a7e432bad2fab9073818
+ci: 37890003645
+reason: production owner change history, trusted release evidence and native Chrome live read-only acceptance
+requested-at: 2026-10-09
