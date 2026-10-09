@@ -178,3 +178,17 @@ test("Cloud requires independently HMAC-signed local receipt for successful ACK"
   assert.equal(agent.includes("HMACSHA256(Encoding.UTF8.GetBytes(credential.SigningKey))"),true);
   assert.equal(agent.includes("localReceiptHmac"),true);
 });
+
+
+test("isolated Firebird durable ledger proves service/assignment/advance without production apply",()=>{
+  const smoke=readFileSync(resolve(here,"../../../pdks-unified/windows/FirebirdIsolatedLedgerSmoke.cs"),"utf8");
+  const agent=readFileSync(resolve(here,"../../../pdks-unified/windows/UnifiedSyncAgent.cs"),"utf8");
+  for(const token of [
+    "KY_PDKS_ISOLATED_COPY","KY_PDKS_STAGE_FDB_PATH",
+    "D:\\KYERP","STAGE_LEDGER_LIVE_FDB_REJECTED",
+    "KY_PDKS_AGENT_LEDGER","KY_PDKS_AGENT_MAP",
+    "SERVICE_TRANSACTION","ASSIGN_SERVICE_TRANSACTION","ADVANCE_CODE1_TRANSACTION",
+    "STAGE_LEDGER_COMMAND_CONFLICT","syntheticRowsCleaned",
+  ]) assert.equal(smoke.includes(token),true,"stage ledger proof missing "+token);
+  assert.equal(agent.includes("FirebirdIsolatedLedgerSmoke"),false);
+});
