@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { apiGet, setApiActiveMainCompany } from "../utils/api";
 import { canonicalCompanySlug, resolveCompanyIdentity } from "../utils/companyIdentity";
 import { maySwitchCompany, companyForRestrictedUser, permittedCompanySelection } from "../utils/companyAccessScope";
@@ -198,11 +198,11 @@ export function ActiveCompanyProvider({ children }) {
 
   const activeCompany = permitted.active;
   const visibleCompanies = permitted.companies;
-  const changeCompany = (slug) => {
+  const changeCompany = useCallback((slug) => {
     const requested = normalizeCompanySlug(slug);
     if (!globalNavigation && requested !== ownCompany?.slug) return;
     setActiveCompanySlug(requested);
-  };
+  }, [globalNavigation, ownCompany]);
 
   useEffect(() => {
     setApiActiveMainCompany(activeCompany);
@@ -215,7 +215,7 @@ export function ActiveCompanyProvider({ children }) {
       activeCompanySlug: permittedSlug,
       setActiveCompanySlug: changeCompany,
     }),
-    [visibleCompanies, activeCompany, permittedSlug, globalNavigation, ownCompany],
+    [visibleCompanies, activeCompany, permittedSlug, changeCompany],
   );
 
   return (
