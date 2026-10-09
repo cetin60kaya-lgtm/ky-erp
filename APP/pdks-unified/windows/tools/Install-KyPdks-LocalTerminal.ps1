@@ -4,7 +4,8 @@ param(
   [ValidateSet('Install','Start','Stop','Status','ShowOperatorKey')][string]$Action='Status',
   [Parameter(Mandatory=$true)][string]$TerminalId,
   [string]$CompanyId='',
-  [ValidateRange(5197,5205)][int]$Port=5197
+  [ValidateRange(5197,5205)][int]$Port=5197,
+  [switch]$NoBrowser
 )
 $ErrorActionPreference='Stop'
 if($TerminalId -cnotmatch '^[A-Za-z0-9._-]{3,64}$'){throw 'TERMINAL_ID_INVALID'}
@@ -106,7 +107,7 @@ switch($Action){
     $receipt=[ordered]@{pid=$process.Id;terminalId=$TerminalId;
       runtime=$cli;port=$Port;startedUtc=[DateTime]::UtcNow.ToString('o')}
     [IO.File]::WriteAllText($pidFile,($receipt|ConvertTo-Json -Depth 4))
-    Start-Process ('http://127.0.0.1:'+$Port+'/')
+    if(!$NoBrowser){Start-Process ('http://127.0.0.1:'+$Port+'/')}
     Write-Output ('RESULT=LOCAL_QR_KIOSK_READY http://127.0.0.1:'+$Port)
     Write-Output 'EVENT_STATUS=PENDING_RECONCILIATION'
   }
