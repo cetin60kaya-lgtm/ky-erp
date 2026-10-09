@@ -78,3 +78,15 @@ test("general users still have enforced MFA selection",()=>{
   assert.match(panel,/isQaTestAccount&&qaReadOnlyReady&&<option value="PASSWORD_ONLY"/);
   assert.match(panel,/loginPolicy:createForm.loginPolicy==="PASSWORD_ONLY"\?"ANY_MFA"/);
 });
+
+test("QA password-only selection survives controlled rerender and confirms persisted server policy",()=>{
+  const panel=readFileSync("src/pages/admin/AdminUsersPanelV2.jsx","utf8");
+  assert.match(panel,/policyDraft\?\?currentPolicy/);
+  assert.match(panel,/Sadece Parolayı Etkinleştir/);
+  assert.match(panel,/serverPolicies=rowsOf\(await listLoginSecurityPolicies\(\)\)/);
+  assert.match(panel,/verified\?\.loginPolicy\|\|verified\?\.login_policy/);
+  assert.match(panel,/policyFeedback&&<div role="status"/);
+  assert.match(panel,/if\(!isQaTestAccount\)throw Error/);
+  assert.match(panel,/persisted\.some\(row=>row\.canCreate/);
+  assert.match(panel,/role==="VIEWER"|selectedRole==="VIEWER"/);
+});
