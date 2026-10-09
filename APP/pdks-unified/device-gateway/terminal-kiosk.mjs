@@ -1,5 +1,5 @@
 import {createServer} from "node:http";
-import {open,mkdir,readFile,readdir} from "node:fs/promises";
+import {open,mkdir,readFile,readdir,stat} from "node:fs/promises";
 import {join,resolve,isAbsolute} from "node:path";
 import {timingSafeEqual} from "node:crypto";
 import {fileURLToPath} from "node:url";
@@ -66,13 +66,19 @@ export function createKioskHandler({terminal,secret,operatorKey,journalRoot,
     if(req.method==="GET"&&req.url==="/events"){
       const folder=join(root,"events");
       await mkdir(folder,{recursive:true,mode:0o700});
-      const names=(await readdir(folder)).filter(x=>/^[a-f0-9]{64}\.json$/.test(x))
-        .sort().slice(-100);
+      const names=(await readdir(folder)).filter(x=>/^[a-f0-9]{64}\.json$/.test(x));
+      if(names.length>30000)
+        return reply(res,503,{ok:false,error:"TERMINAL_JOURNAL_TOO_LARGE_USE_OFFLINE_EXPORT"});
+      const recent=await Promise.all(names.map(async name=>({
+        name,mtime:(await stat(join(folder,name))).mtimeMs,
+      })));
+      recent.sort((a,b)=>b.mtime-a.mtime||a.name.localeCompare(b.name));
       const records=[];
-      for(const name of names){
-        try{records.push(JSON.parse(await readFile(join(folder,name),"utf8")));}catch{}
+      for(const entry of recent.slice(0,100)){
+        try{records.push(JSON.parse(await readFile(join(folder,entry.name),"utf8")));}catch{}
       }
-      return reply(res,200,{ok:true,records,source:"LOCAL_UNSYNCED"});
+      return reply(res,200,{ok:true,records,total:names.length,
+        hasMore:names.length>records.length,source:"LOCAL_UNSYNCED"});
     }
     if(req.method!=="POST"||!["/scan","/scan-card"].includes(req.url))
       return reply(res,404,{ok:false,error:"TERMINAL_ENDPOINT_NOT_FOUND"});
