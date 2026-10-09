@@ -100,7 +100,7 @@ try {
         # End-to-end: issue a one-time QR only in disposable stage, verify
         # the local journal MAC and compare to a synthetic TNF created there.
         # No writes to the real annual TNF or production Firebird.
-        $stageSmoke=Join-Path $device 'device-gateway\terminal-stage-qr-smoke.mjs'
+        $stageSmoke=Join-Path $RepoRoot 'APP\pdks-unified\device-gateway\terminal-stage-qr-smoke.mjs'
         if(!(Test-Path -LiteralPath $stageSmoke)){throw 'STAGE_QR_SMOKE_MISSING'}
         $stageTnf=Join-Path $tempRoot 'stage-reference.tnf'
         $stageReport=Join-Path $tempRoot 'stage-diagnostic.json'
