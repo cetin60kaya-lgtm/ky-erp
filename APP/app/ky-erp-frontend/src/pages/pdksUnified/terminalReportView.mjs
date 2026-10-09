@@ -1,6 +1,14 @@
 /** Presentation-only validation of an offline, UNTRUSTED diagnostics file.
  * This is neither a signed acceptance receipt nor a physical punch source.
  */
+const validBatchDate=(date)=>{
+  if(typeof date!=="string")return false;
+  if(date==="BILINMIYOR")return true;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return false;
+  const parsed=new Date(date+"T12:00:00Z");
+  return !Number.isNaN(parsed.getTime())&&
+    parsed.toISOString().slice(0,10)===date;
+};
 export function parseTerminalDiagnosticReport(input,expectedTerminalId){
   const data=typeof input==="string"?JSON.parse(input):input;
   const keys=["inspected","acceptedPending","signedQrPending","unsignedUsbPending",
@@ -33,9 +41,7 @@ export function parseTerminalDiagnosticReport(input,expectedTerminalId){
   };
   const safeBatches=batches.map(batch=>{
     const date=batch?.date;
-    if(typeof date!=="string"||
-      !(date==="BILINMIYOR"||(/^\d{4}-\d{2}-\d{2}$/.test(date)&&
-        new Date(date+"T12:00:00Z").toISOString().slice(0,10)===date))||
+    if(!validBatchDate(date)||
       seen.has(date)||!Object.keys(totals).every(k=>
         Number.isSafeInteger(batch[k])&&batch[k]>=0)||
       batch.inspected!==batch.matched+batch.unmatched+
