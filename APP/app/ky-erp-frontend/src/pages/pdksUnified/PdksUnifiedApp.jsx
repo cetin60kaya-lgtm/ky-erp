@@ -247,7 +247,7 @@ const currentPeriod = () => {
 };
 
 export default function PdksUnifiedApp({
-  activeMainCompany, isAuditAccount = false, previewOnly = false,
+  activeMainCompany, isAuditAccount = false, previewOnly = false, testMode = false,
 }) {
   const [navigation, setNavigation] = useState({ section:"overview", tab:"today" });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -341,7 +341,8 @@ export default function PdksUnifiedApp({
     filteredRows.length > 0;
   const pageUnavailable = previewOnly || requirement==="unconnected" ||
     requirement==="forbidden" || !data.sourceReady;
-  const sourceText = previewOnly ? "Tasarım incelemesi" :
+  const sourceText = testMode ? "Yerel menü testi • canlı veri kapalı" :
+    previewOnly ? "Tasarım incelemesi" :
     requirement==="forbidden" || data.audit && isSensitiveProductTab(tab.id) ? "Erişim kapalı" :
     requirement==="unconnected" ? "Entegrasyon bekliyor" :
     requirement==="card-events" ? "D1 kart hareketleri · FDB/TNF doğrulanmadı" :
@@ -401,10 +402,13 @@ export default function PdksUnifiedApp({
           <button type="button" className="pdk-u-icon-btn" title="Görünümü değiştir"
             onClick={()=>setTheme((old)=>old==="light"?"dark":"light")}>{theme==="light"?<Moon size={18}/>:<Sun size={18}/>}</button>
           <button type="button" className="pdk-u-icon-btn" title="Bildirimler (canlı kaynak bağlanmadı)" disabled><Bell size={18}/></button>
-          <span className="pdk-u-user"><UserRound size={19}/><span>{previewOnly?"Tasarım":isAuditAccount?"Denetim":"Oturum"}</span></span>
+          <span className="pdk-u-user"><UserRound size={19}/><span>{testMode?"YEREL TEST":previewOnly?"Tasarım":isAuditAccount?"Denetim":"Oturum"}</span></span>
         </div>
       </header>
       <div className="pdk-u-body">
+        {testMode&&<div className="pdk-u-test-banner" role="status"><ShieldCheck size={16}/>
+          <span><b>KY PDKS — TAŞINABİLİR MENÜ TESTİ</b> · 9 bölüm / 49 sekme. Canlı firma, cihaz, Firebird, Cloud ve TNF erişimi kapalıdır. Yerel tanı dosyalarını güvenli şekilde inceleyebilirsin; yazma işlemleri etkin değildir.</span>
+        </div>}
         <div className="pdk-u-page-head">
           <div><span className="pdk-u-eyebrow">KY PDKS / {section.label.toLocaleUpperCase("tr-TR")}</span>
             <h1>{section.label}</h1><p>{section.description}</p></div>
@@ -465,10 +469,10 @@ export default function PdksUnifiedApp({
               <Download size={16}/> CSV</button>
           </div>}
           {tab.id==="terminals" ? <TerminalSetupPanel
-            key={company||"preview"} company={company} previewOnly={previewOnly}
-            onReportLoaded={setTerminalReport}/> :
+            key={company||"preview"} company={company||(testMode?"stage-company-01":"")}
+            previewOnly={previewOnly&&!testMode} onReportLoaded={setTerminalReport}/> :
           transferTabs.has(tab.id) ? <TransferCenterPanel
-            tabId={tab.id} previewOnly={previewOnly}
+            tabId={tab.id} previewOnly={previewOnly&&!testMode}
             report={terminalReport} onReportLoaded={setTerminalReport}
             search={search}/> :
           tab.id==="cloud" ? <CloudSyncPanel
