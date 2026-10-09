@@ -3,21 +3,18 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "226c17861e6f219164fc479b9576827f5dd6a8ca",
-  "requestedAt": "2026-10-08T22:30:00+03:00",
-  "attempt": 7,
+  "sourceCommit": "c4c48ac7afe0a8333aef333272b29097f25f6ddc",
+  "requestedAt": "2026-10-09T07:44:00+03:00",
+  "attempt": 8,
   "scope": [
-    "ik-relational-tenancy-permissions",
-    "leave-legacy-write-retirement",
-    "leave-year-scoped-ledger",
-    "cross-year-leave-accounting",
-    "leave-approval-workflow",
-    "2027-official-holidays",
-    "monthly-personnel-salary-leave-sync",
-    "pdks-monthly-non-destructive-regression",
+    "employee-portal-company-personnel",
+    "personnel-account-and-device-independent-approval",
+    "personnel-tenant-boundary-and-access-revocation",
+    "ik-annual-leave-self-readonly",
+    "machine-model-production-idempotency",
+    "additive-d1-0060",
     "d1-full-predeploy-backup",
-    "cloudflare-worker-production",
-    "live-api-health"
+    "worker-health-smoke"
   ],
-  "note": "KY ERP IK Aylik canonical security and annual leave release. PR #406 tests must pass; no D1 reset. Full database backup before Worker deploy."
+  "note": "Owner requested production pilot. Existing production data retained. PR 405 merged, green tests. Release pipeline must stop on backup/schema failure; frontend deployment follows only confirmed API success."
 }
