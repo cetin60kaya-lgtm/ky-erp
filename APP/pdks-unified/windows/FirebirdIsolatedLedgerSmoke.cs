@@ -114,7 +114,10 @@ internal static class FirebirdIsolatedLedgerSmoke
                 new FbParameter("@P", stageCard), new FbParameter("@M", advanceNote));
             if (amount is null or DBNull ||
                 Convert.ToDecimal(amount, CultureInfo.InvariantCulture) != 250m)
-                throw new InvalidOperationException("STAGE_ADVANCE_AMOUNT_MISMATCH");
+                throw new InvalidOperationException("STAGE_ADVANCE_AMOUNT_MISMATCH:" +
+                    (amount is null or DBNull ? "ROW_NOT_FOUND" :
+                        Convert.ToString(amount, CultureInfo.InvariantCulture) +
+                        ":" + amount.GetType().Name));
             var ledgerCount = Convert.ToInt32(await ScalarAsync(connection, null,
                 "SELECT COUNT(*) FROM KY_PDKS_AGENT_LEDGER WHERE COMPANY_ID=@C",
                 cancellationToken, new FbParameter("@C", tenant)), CultureInfo.InvariantCulture);
