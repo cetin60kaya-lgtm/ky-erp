@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { buildLiveSnapshot } from "./ik-pdks-unified-live.mjs";
+import { parseCardEventQuery, cardEventCursorSql, cardEventParams } from "./ik-pdks-card-events-query.mjs";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { ensurePdksPolicySchema, readCompanyPdksPolicy, resolveEmployeePdksPolicy, saveCompanyPdksPolicy } from "./ik-pdks-policy";
 
@@ -440,41 +441,24 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
   app.get("/api/ik/personnel-control/card-events", async (c) => {
     const auth=await authContext(c);
     if(!auth)return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı.");
-    const validDate=(v:string)=>{
-      if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;
-      const d=new Date(v+"T12:00:00Z");
-      return !Number.isNaN(d.getTime())&&d.toISOString().slice(0,10)===v;
-    };
-    const from=text(c.req.query("from"))||text(c.req.query("date"))||todayTr();
-    const to=text(c.req.query("to"))||from;
-    const days=(new Date(to+"T12:00:00Z").getTime()-
-      new Date(from+"T12:00:00Z").getTime())/86400000;
-    if(!validDate(from)||!validDate(to)||days<0||days>30)
-      return fail(c,400,"PDKS_CARD_EVENT_DATE_RANGE_INVALID",
-        "Kart hareketleri için en fazla 31 günlük geçerli aralık seçin.");
-    const rawLimit=c.req.query("limit");
-    if(rawLimit&&!/^\d{1,3}$/.test(rawLimit))
-      return fail(c,400,"PDKS_CARD_EVENT_LIMIT_INVALID","Sayfa sınırı geçersiz.");
-    const limit=rawLimit?Number(rawLimit):100;
-    if(limit<1||limit>250)
-      return fail(c,400,"PDKS_CARD_EVENT_LIMIT_INVALID","Sayfa sınırı 1–250 olmalıdır.");
-    const cursorDate=text(c.req.query("cursorDate"));
-    const cursorTime=text(c.req.query("cursorTime"));
-    const cursorId=text(c.req.query("cursorId"));
-    const hasCursor=Boolean(cursorDate||cursorTime||cursorId);
-    if(hasCursor&&(!validDate(cursorDate)||cursorDate<from||cursorDate>to||
-       !/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(cursorTime)||
-       !/^[A-Za-z0-9._:-]{1,128}$/.test(cursorId)))
-      return fail(c,400,"PDKS_CARD_EVENT_CURSOR_INVALID","Hareket sayfalama anahtarı geçersiz.");
-    // Audit users may see only employees with a physical card and SGK
-    // coverage in the event month, including historical employment rows.
+    let page;
+    try {
+      page=parseCardEventQuery({
+        from:c.req.query("from"),to:c.req.query("to"),date:c.req.query("date"),
+        limit:c.req.query("limit"),cursorDate:c.req.query("cursorDate"),
+        cursorTime:c.req.query("cursorTime"),cursorId:c.req.query("cursorId"),
+      },todayTr());
+    } catch(cause) {
+      const code=text((cause as Error)?.message)||"PDKS_CARD_EVENT_QUERY_INVALID";
+      return fail(c,400,code,"En fazla 31 günlük geçerli kart hareketi sorgusu gerekir.");
+    }
+    const {from,to,limit}=page;
     const auditWhere=auth.audit?
       " AND TRIM(COALESCE(s.card_no,''))<>'' AND ((mc.employee_id IS NOT NULL AND mc.sgk_covered=1) OR (mc.employee_id IS NULL AND UPPER(TRIM(COALESCE(e.sgk_status,'VAR'))) <> 'YOK'))":"";
-    const cursorWhere=hasCursor?
-      " AND (t.work_date<? OR (t.work_date=? AND t.event_time<?) OR (t.work_date=? AND t.event_time=? AND t.id<?))":"";
-    const params:any[]=[auth.company,from,to];
-    if(hasCursor)params.push(cursorDate,cursorDate,cursorTime,cursorDate,cursorTime,cursorId);
-    params.push(limit+1);
+    const auditJoin=auth.audit?
+      " LEFT JOIN ik_person_monthly_compliance mc ON mc.employee_id=e.id AND mc.main_company_id=e.main_company_id AND mc.period=SUBSTR(t.work_date,1,7) ":"";
+    const cursorWhere=cardEventCursorSql(page);
+    const params=cardEventParams(auth.company,page);
     const rows=await all(c,
       "SELECT t.id,t.employee_id AS employeeId,t.card_no AS cardNo,"+
       "t.work_date AS workDate,t.event_time AS eventTime,t.direction,t.source,"+
@@ -483,9 +467,7 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
       "ON e.id=t.employee_id AND e.main_company_id=t.main_company_id "+
       "LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id "+
       "AND s.main_company_id=e.main_company_id "+
-      "LEFT JOIN ik_person_monthly_compliance mc ON mc.employee_id=e.id "+
-      "AND mc.main_company_id=e.main_company_id "+
-      "AND mc.period=SUBSTR(t.work_date,1,7) "+
+      auditJoin+
       "WHERE t.main_company_id=? AND t.work_date BETWEEN ? AND ? "+
       "AND TRIM(COALESCE(t.card_no,''))<>''"+
       auditWhere+cursorWhere+
