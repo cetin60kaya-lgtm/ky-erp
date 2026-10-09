@@ -44,7 +44,7 @@ test("vendor self-certification cannot bypass model-specific signed test gate",(
     approved:true,readRawTestPassed:true,duplicateTestPassed:true,
     timezoneTestPassed:true,rollbackTestPassed:true,testArtifactSha256:"a".repeat(64)};
   const ok=approvalForTerminal({definition,driverProof});
-  assert.equal(ok.canReadPunches,true);
+  assert.equal(ok.canReadPunches,false);
   assert.equal(ok.canWriteTerminal,false);
-  assert.equal(ok.certification,"MODEL_READONLY_CERTIFIED");
+  assert.equal(ok.certification,"READY_FOR_PHYSICAL_ACCEPTANCE");
 });
