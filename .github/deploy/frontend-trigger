@@ -1,6 +1,6 @@
-deploy: qa-existing-account-safe-pilot-20261009
-pr: 410
-merge: e073f5dbddce433534169f63bd94e0f2c3a9d5d4
-ci: 37896418791
-scope: existing KY ERP TEST user only, least privilege, existing server-supported password login
-reason: one-click supervised QA account setup on canonical production site
+deploy: qa-password-only-choice-persist-fix-20261009
+pr: 411
+merge: 2916644d9be87f14d3a8386d2659d60a995d969d
+ci: 37899946440
+reason: fix QA PASSWORD_ONLY controlled select snapback and show verified server result inline
+scope: existing kyerp-test test VIEWER only; no backend/security migration
