@@ -22,6 +22,14 @@ internal static class Program
             Console.WriteLine(report);
             return;
         }
+        if (args.Contains("--stage-snapshot", StringComparer.OrdinalIgnoreCase))
+        {
+            // Real personnel/punch evidence may be read ONLY from the
+            // allowlisted gbak-restored Firebird copy, never the live FDB.
+            var proof = FirebirdStageAttendanceSnapshot.RunAsync().GetAwaiter().GetResult();
+            Console.WriteLine(proof);
+            return;
+        }
         if (args.Contains("--agent-safety-selftest", StringComparer.OrdinalIgnoreCase))
         {
             // All tests use isolated temporary directories; no production FDB,
