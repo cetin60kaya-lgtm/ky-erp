@@ -7,8 +7,10 @@ import {issueQrCredential,verifyQrCredential,normalizedKioskEvent,
   normalizedWedgeCardEvent} from "./qr-terminal-core.mjs";
 import {inspectLocalTerminalFact,reconcileLocalEvents,
   readLocalTerminalJournal} from "./terminal-reconciliation.mjs";
+import {sealTerminalJournalFact} from "./terminal-journal-proof.mjs";
 const now=Date.parse("2026-10-09T08:00:00Z");
 const secret="only-for-disposable-QR-unit-tests-2026-123456789";
+const operatorKey="only-for-disposable-journal-unit-tests-1234567890";
 const terminal={terminalId:"term-001",companyId:"firm-1",
   connectorId:"KY_QR_LOCAL",timezone:"Europe/Istanbul",
   directionMode:"EXPLICIT_IN_OUT",inputMethods:["QR_SIGNED","BARCODE_WEDGE"]};
@@ -16,11 +18,11 @@ const signed=(nonce="disposable-nonce-1")=>{
   const token=issueQrCredential({companyId:"firm-1",employeeId:"emp-1",
     cardNo:"00003",issuer:"KY-ERP",secret,now,nonce});
   const credential=verifyQrCredential(token,{secret,companyId:"firm-1",now});
-  return normalizedKioskEvent({terminal,credential,direction:"IN",now});
+  return sealTerminalJournalFact(normalizedKioskEvent({terminal,credential,direction:"IN",now}),operatorKey);
 };
-const wedge=()=>normalizedWedgeCardEvent({terminal,cardNo:"00027",direction:"OUT",now});
+const wedge=()=>sealTerminalJournalFact(normalizedWedgeCardEvent({terminal,cardNo:"00027",direction:"OUT",now}),operatorKey);
 const reconcile=(events,tnfText="00003,11:00,091026,1,001\n")=>
-  reconcileLocalEvents({companyId:"firm-1",terminalId:"term-001",
+  reconcileLocalEvents({companyId:"firm-1",terminalId:"term-001",journalKey:operatorKey,
     events,tnfText,yearHint:2026});
 test("one signed QR matches TNF reference by card+date+minute but never certifies a device",()=>{
   const result=reconcile([signed()]);
@@ -52,6 +54,8 @@ test("modified card, fraudulent identity, crossed tenant or fake FDB flags fail 
     {...fact,firebirdReconciled:true},
     {...fact,localTime:"11:05:00"},
     {...fact,sourceKey:"0".repeat(64)},
+    {...fact,journalMac:"0".repeat(64)},
+    {...fact,employeeId:"edited-person"},
   ];
   for(const invalid of events){
     const result=reconcile([invalid]);
@@ -59,7 +63,7 @@ test("modified card, fraudulent identity, crossed tenant or fake FDB flags fail 
     assert.equal(result.matchedReference,0);
   }
   assert.equal(inspectLocalTerminalFact(fact,{companyId:"firm-1",
-    terminalId:"term-001"}).valid,true);
+    terminalId:"term-001",journalKey:operatorKey}).valid,true);
 });
 test("TNF invalid source line cannot silently match or become a physical punch",()=>{
   const result=reconcile([signed()],"00003,11:00,321326,1,001\n");
