@@ -108,16 +108,25 @@ internal static class FirebirdIsolatedLedgerSmoke
                 advanceHash, stageCard, advanceNote, cancellationToken);
             if (advanceKey != advanceReplay)
                 throw new InvalidOperationException("STAGE_ADVANCE_NOT_IDEMPOTENT");
-            var amount = await ScalarAsync(connection, null,
-                "SELECT MIKTAR FROM AVANS WHERE KOD=@K AND PKNO=@P AND ACIKLAMA=@M",
-                cancellationToken, new FbParameter("@K", advanceKey),
-                new FbParameter("@P", stageCard), new FbParameter("@M", advanceNote));
-            if (amount is null or DBNull ||
-                Convert.ToDecimal(amount, CultureInfo.InvariantCulture) != 250m)
-                throw new InvalidOperationException("STAGE_ADVANCE_AMOUNT_MISMATCH:" +
-                    (amount is null or DBNull ? "ROW_NOT_FOUND" :
-                        Convert.ToString(amount, CultureInfo.InvariantCulture) +
-                        ":" + amount.GetType().Name));
+            // Some legacy Firebird triggers may allocate/normalize AVANS.KOD.
+            // Re-read the committed row by its unique test note, not a guessed key.
+            var advanceCount = Convert.ToInt32(await ScalarAsync(connection, null,
+                "SELECT COUNT(*) FROM AVANS WHERE PKNO=@P AND ACIKLAMA=@M",
+                cancellationToken, new FbParameter("@P", stageCard),
+                new FbParameter("@M", advanceNote)), CultureInfo.InvariantCulture);
+            var resolvedKey = await ScalarAsync(connection, null,
+                "SELECT FIRST 1 KOD FROM AVANS WHERE PKNO=@P AND ACIKLAMA=@M",
+                cancellationToken, new FbParameter("@P", stageCard),
+                new FbParameter("@M", advanceNote));
+            var storedAmount = await ScalarAsync(connection, null,
+                "SELECT FIRST 1 MIKTAR FROM AVANS WHERE PKNO=@P AND ACIKLAMA=@M",
+                cancellationToken, new FbParameter("@P", stageCard),
+                new FbParameter("@M", advanceNote));
+            if (advanceCount != 1 || resolvedKey is null or DBNull ||
+                storedAmount is null or DBNull ||
+                Convert.ToInt32(resolvedKey, CultureInfo.InvariantCulture) != advanceKey ||
+                Convert.ToDecimal(storedAmount, CultureInfo.InvariantCulture) != 250m)
+                throw new InvalidOperationException("STAGE_ADVANCE_COMMITTED_ROW_MISMATCH");
             var ledgerCount = Convert.ToInt32(await ScalarAsync(connection, null,
                 "SELECT COUNT(*) FROM KY_PDKS_AGENT_LEDGER WHERE COMPANY_ID=@C",
                 cancellationToken, new FbParameter("@C", tenant)), CultureInfo.InvariantCulture);
@@ -135,11 +144,12 @@ internal static class FirebirdIsolatedLedgerSmoke
                     await ExecAsync(connection, transaction,
                         "UPDATE KIMLIK SET SERVIS=@S WHERE PKNO=@P", cancellationToken,
                         new FbParameter("@S", oldValue), new FbParameter("@P", stageCard));
-                if (advanceKey >= 0)
-                    await ExecAsync(connection, transaction,
-                        "DELETE FROM AVANS WHERE KOD=@K AND PKNO=@P AND ACIKLAMA=@M",
-                        cancellationToken,new FbParameter("@K",advanceKey),
-                        new FbParameter("@P",stageCard),new FbParameter("@M",advanceNote));
+                // The unique test note is the cleanup identity; a legacy
+                // trigger may have changed KOD after the INSERT statement.
+                await ExecAsync(connection, transaction,
+                    "DELETE FROM AVANS WHERE PKNO=@P AND ACIKLAMA=@M",
+                    cancellationToken,new FbParameter("@P",stageCard),
+                    new FbParameter("@M",advanceNote));
                 await ExecAsync(connection, transaction,
                     "DELETE FROM KY_PDKS_AGENT_LEDGER WHERE COMPANY_ID=@C",
                     cancellationToken, new FbParameter("@C", tenant));
@@ -167,9 +177,9 @@ internal static class FirebirdIsolatedLedgerSmoke
             cancellationToken, new FbParameter("@K", serviceKey),
             new FbParameter("@N", serviceName)), CultureInfo.InvariantCulture);
         var advanceResidue = Convert.ToInt32(await ScalarAsync(connection, null,
-            "SELECT COUNT(*) FROM AVANS WHERE KOD=@K AND PKNO=@P AND ACIKLAMA=@M",
-            cancellationToken, new FbParameter("@K", advanceKey),
-            new FbParameter("@P", stageCard), new FbParameter("@M", advanceNote)),
+            "SELECT COUNT(*) FROM AVANS WHERE PKNO=@P AND ACIKLAMA=@M",
+            cancellationToken, new FbParameter("@P", stageCard),
+            new FbParameter("@M", advanceNote)),
             CultureInfo.InvariantCulture);
         var restored = await ScalarAsync(connection, null,
             "SELECT SERVIS FROM KIMLIK WHERE PKNO=@P",
@@ -265,9 +275,33 @@ internal static class FirebirdIsolatedLedgerSmoke
             new FbParameter("@K", next), new FbParameter("@TOTAL", 250m),
             new FbParameter("@M", note));
         if (count != 1) throw new InvalidOperationException("STAGE_AVANS_INSERT_NOT_UNIQUE");
-        await InsertLedgerAsync(c, tx, company, command, "advance", hash, next, token);
+        // Source-of-truth is the inserted row, not MAX(KOD)+1. A BEFORE INSERT
+        // trigger may replace KOD. Validate exactly one matching source record
+        // inside the same transaction before the command ledger is committed.
+        var matches = Convert.ToInt32(await ScalarAsync(c, tx,
+            "SELECT COUNT(*) FROM AVANS WHERE PKNO=@P AND ACIKLAMA=@M", token,
+            new FbParameter("@P", card), new FbParameter("@M", note)),
+            CultureInfo.InvariantCulture);
+        if (matches != 1)
+            throw new InvalidOperationException("STAGE_AVANS_SOURCE_IDENTITY_NOT_UNIQUE");
+        var persistedKey = await ScalarAsync(c, tx,
+            "SELECT FIRST 1 KOD FROM AVANS WHERE PKNO=@P AND ACIKLAMA=@M", token,
+            new FbParameter("@P", card), new FbParameter("@M", note));
+        var persistedAmount = await ScalarAsync(c, tx,
+            "SELECT FIRST 1 MIKTAR FROM AVANS WHERE PKNO=@P AND ACIKLAMA=@M", token,
+            new FbParameter("@P", card), new FbParameter("@M", note));
+        var persistedType = await ScalarAsync(c, tx,
+            "SELECT FIRST 1 TURKOD FROM AVANS WHERE PKNO=@P AND ACIKLAMA=@M", token,
+            new FbParameter("@P", card), new FbParameter("@M", note));
+        if (persistedKey is null or DBNull || persistedAmount is null or DBNull ||
+            persistedType is null or DBNull ||
+            Convert.ToDecimal(persistedAmount, CultureInfo.InvariantCulture) != 250m ||
+            Convert.ToInt32(persistedType, CultureInfo.InvariantCulture) != 1)
+            throw new InvalidOperationException("STAGE_AVANS_PERSISTED_SOURCE_NOT_PROVEN");
+        var actualKey = Convert.ToInt32(persistedKey, CultureInfo.InvariantCulture);
+        await InsertLedgerAsync(c, tx, company, command, "advance", hash, actualKey, token);
         tx.Commit();
-        return next;
+        return actualKey;
     }
 
     private static async Task<int?> GetReceiptAsync(FbConnection c, FbTransaction tx,
