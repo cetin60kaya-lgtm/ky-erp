@@ -148,7 +148,9 @@ export default function AdminUsersPanelV2(){
       await loadAll();
       setMessage("KY ERP TEST hazır: yalnız Gör açık, yönetim kapalı, sadece bu hesap için parola girişi etkin. Eski oturumlar güvenlik gereği kapatıldı.");
     }catch(error){
-      setMessage("Hata: Test hesabı hazırlığı tamamlanamadı. Yetkileri ve Giriş & MFA durumunu Yenile ile kontrol edin: "+String(error?.message||error));
+      const failure="Hata: Test hesabı hazırlığı tamamlanamadı. Yetkileri ve Giriş & MFA durumunu Yenile ile kontrol edin: "+String(error?.message||error);
+      setPolicyFeedback(failure);
+      setMessage(failure);
     }finally{setBusy(false);}
   }
   async function savePolicy(policyValue,approvalRequired){
