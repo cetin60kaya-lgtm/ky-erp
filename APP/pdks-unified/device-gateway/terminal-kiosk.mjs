@@ -5,6 +5,7 @@ import {timingSafeEqual} from "node:crypto";
 import {fileURLToPath} from "node:url";
 import {validateTerminalDefinition} from "./terminal-profiles.mjs";
 import {verifyQrCredential,normalizedKioskEvent,normalizedWedgeCardEvent} from "./qr-terminal-core.mjs";
+import {sealTerminalJournalFact} from "./terminal-journal-proof.mjs";
 
 const same=(a,b)=>{
   if(typeof a!=="string"||typeof b!=="string")return false;
@@ -86,12 +87,12 @@ export function createKioskHandler({terminal,secret,operatorKey,journalRoot,
       if(req.headers["content-type"]?.split(";")[0].toLowerCase()!=="application/json")
         return reply(res,415,{ok:false,error:"TERMINAL_JSON_REQUIRED"});
       const body=await bodyJson(req);
-      const event=req.url==="/scan-card"
+      const event=sealTerminalJournalFact(req.url==="/scan-card"
         ? normalizedWedgeCardEvent({terminal:profile,cardNo:body.cardNo,
             direction:body.direction,now:now()})
         : normalizedKioskEvent({terminal:profile,
             credential:verifyQrCredential(body.token,{secret,companyId:profile.companyId,
-              now:now()}),direction:body.direction,now:now()});
+              now:now()}),direction:body.direction,now:now()}),operatorKey);
       const folder=join(root,"events");
       await mkdir(folder,{recursive:true,mode:0o700});
       const path=join(folder,event.sourceKey+".json");
