@@ -14,7 +14,7 @@ const SOURCES = Object.freeze({
   people:"people",cards:"people",employment:"people",departments:"masters",
   groups:"masters",routes:"masters",rules:"config",
   // Only selected-person attendance. Real live aggregate not yet certified.
-  punches:"attendance",history:"attendance",daily:"attendance",
+  punches:"card-events",history:"card-events",daily:"attendance",
   violations:"attendance",signatures:"attendance",attendance:"attendance",
   // Independent verified API shapes.
   leave:"leaves",holidays:"holidays",
