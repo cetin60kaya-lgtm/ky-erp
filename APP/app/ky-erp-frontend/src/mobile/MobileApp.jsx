@@ -21,6 +21,7 @@ import MobileFaturaIrsaliye from "./MobileFaturaIrsaliye";
 import MobileUrunler from "./MobileUrunler";
 import MobileIK from "./MobileIK";
 import MobileIKAylik from "./MobileIKAylik";
+import MobilePDKS from "./MobilePDKS";
 import MobileImalat from "./MobileImalat";
 import MobileImalatGunluk from "./MobileImalatGunluk";
 import MobileImalatRapor from "./MobileImalatRapor";
@@ -48,6 +49,7 @@ function getMobilePage(pathname) {
   if (clean === "/mobile/muhasebe") return "muhasebe";
   if (clean === "/mobile/ik/aylik") return "ik_aylik";
   if (clean === "/mobile/ik") return "ik";
+  if (clean === "/mobile/pdks") return "pdks";
   if (clean === "/mobile/imalat/gunluk") return "imalat_gunluk";
   if (clean === "/mobile/imalat/rapor") return "imalat_rapor";
   if (clean === "/mobile/imalat") return "imalat";
@@ -59,6 +61,7 @@ function getMobilePage(pathname) {
   if (clean.startsWith("/mobile/yonetim")) return "yonetim";
   if (clean.startsWith("/mobile/muhasebe")) return "muhasebe";
   if (clean.startsWith("/mobile/ik")) return "ik";
+  if (clean.startsWith("/mobile/pdks")) return "pdks";
   if (clean.startsWith("/mobile/imalat")) return "imalat";
   if (clean.startsWith("/mobile/desen")) return "desen";
   
@@ -116,6 +119,7 @@ export default function MobileApp() {
       case "muhasebe": return <MobileMuhasebe />;
       case "ik_aylik": return <MobileIKAylik />;
       case "ik": return <MobileIK />;
+      case "pdks": return <MobilePDKS />;
       case "imalat_gunluk": return <MobileImalatGunluk />;
       case "imalat_rapor": return <MobileImalatRapor />;
       case "imalat": return <MobileImalat />;

@@ -46,6 +46,10 @@ export async function getPdksLiveDashboard(params = {}) {
   return unwrap(await pdksCachedGet(cacheKey("dashboard", params), "/ik/personnel-control/dashboard-live", params));
 }
 
+export async function getPdksDirectTerminalStatus() {
+  return unwrap(await apiGet("/ik/personnel-control/direct-terminal/status"));
+}
+
 export async function getPdksModernConfig(params = {}) {
   return unwrap(await pdksCachedGet(cacheKey("modern-config", params), "/ik/personnel-control/modern/config", params));
 }

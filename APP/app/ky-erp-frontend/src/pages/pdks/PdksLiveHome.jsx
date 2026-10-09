@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getPdksLiveDashboard } from "../../services/pdksApi";
+import { getPdksDirectTerminalStatus, getPdksLiveDashboard } from "../../services/pdksApi";
 import "./PdksLiveHome.css";
 
 const fmtDate = (value) => {
@@ -21,6 +21,7 @@ const QUICK = [
 export default function PdksLiveHome({ activeMainCompany, openModule }) {
   const company = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
   const [data, setData] = useState({ metrics: {}, events: [], liveCards: [], devices: [] });
+  const [direct, setDirect] = useState({ configured: false, reachable: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [lastRefresh, setLastRefresh] = useState(null);
@@ -29,8 +30,15 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
     setBusy(true);
     setError("");
     try {
-      const result = await getPdksLiveDashboard({ mainCompanyId: company });
-      setData(result || { metrics: {}, events: [], liveCards: [], devices: [] });
+      const [dashboardResult, directResult] = await Promise.allSettled([
+        getPdksLiveDashboard({ mainCompanyId: company }),
+        getPdksDirectTerminalStatus(),
+      ]);
+      if (dashboardResult.status === "rejected") throw dashboardResult.reason;
+      setData(dashboardResult.value || { metrics: {}, events: [], liveCards: [], devices: [] });
+      setDirect(directResult.status === "fulfilled"
+        ? (directResult.value || { configured: false, reachable: false })
+        : { configured: true, reachable: false, error: directResult.reason?.message || "Doğrudan terminal okunamadı." });
       setLastRefresh(new Date());
     } catch (cause) {
       setError(cause?.message || "Canlı PDKS verisi alınamadı.");
@@ -63,7 +71,7 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
         <div>
           <span className="plh-kicker">KY ERP · PDKS CANLI MERKEZ</span>
           <h1>Canlı Geçişler</h1>
-          <p>Kart cihazı, Windows Agent, D1 ve İK tek veri akışında. Sayfa açıkken her dakika otomatik yenilenir.</p>
+          <p>Kart cihazı doğrudan Ethernet üzerinden, D1 ve İK ile tek veri akışında. PC kapalı olsa da cihaz sağlığı okunabilir; sayfa açıkken her dakika yenilenir.</p>
         </div>
         <div className="plh-livebox">
           <i className={busy ? "pulse" : ""} />
@@ -113,9 +121,16 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
         <section className="plh-section plh-device-section">
           <div className="plh-title"><div><span>AGENT / TERMİNAL</span><h2>Cihaz Sağlığı</h2></div><button type="button" onClick={() => go("cihaz-baglantilari")}>Cihaz Merkezi</button></div>
           <div className="plh-device-summary">
-            <div><strong>{metrics.onlineDevices || 0}</strong><span>Çevrimiçi</span></div>
-            <div><strong>{Math.max(0, (metrics.deviceCount || 0) - (metrics.onlineDevices || 0))}</strong><span>Çevrimdışı</span></div>
-            <div><strong>{metrics.deviceCount || 0}</strong><span>Toplam</span></div>
+            <div><strong>{direct.reachable ? "CANLI" : "—"}</strong><span>Doğrudan A3</span></div>
+            <div><strong>{direct.reachable ? (direct.pendingLogs ?? 0) : metrics.onlineDevices || 0}</strong><span>{direct.reachable ? "Cihazda Bekleyen" : "Agent Çevrimiçi"}</span></div>
+            <div><strong>{direct.reachable ? (direct.cards ?? 0) : metrics.deviceCount || 0}</strong><span>{direct.reachable ? "Kart" : "Toplam"}</span></div>
+          </div>
+          <div className={`plh-empty ${direct.reachable ? "" : "warn"}`}>
+            {direct.reachable
+              ? `PC bağımsız Ethernet bağlantısı açık · ${direct.model || "A3"} · ${direct.serial || "seri okunuyor"} · ${direct.latencyMs || 0} ms`
+              : direct.configured === false
+                ? "PC bağımsız terminal bağlantısı yapılandırılmadı."
+                : `Doğrudan terminal şu an erişilemiyor${direct.error ? `: ${direct.error}` : "."}`}
           </div>
           <div className="plh-device-list">
             {(data.devices || []).slice(0, 8).map((row) => (
