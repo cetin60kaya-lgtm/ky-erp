@@ -97,3 +97,35 @@ yetkileri; model bazında saha kabul testleri.
 
 PR #404 DRAFT/UNMERGED. Canlı FDB, TNF, terminal RAW ve Cloudflare D1
 değiştirilmedi. Evrensel cihaz uyumluluğu bu belgeyle iddia edilmez.
+
+
+## 09.10.2026 güncel KY QR/USB test kabulü
+
+Önceki 115-test kaydı tarihsel kalmıştır; **son test sonucu 132/132**.
+
+- Güncel yazılım kanıtı: `a2a07bc04cc9753575a2933d9177dd4ccf45e7bb`.
+- QR/USB kiosk bağlantı tanısı: `Install-KyPdks-LocalTerminal.ps1 -Action Test`;
+  localhost `/health` / doğru terminal ID / sertifikasız statü
+  doğrulaması yapar; cihaza veri yazmaz.
+- QR/USB olay günlüğü yeni HMAC dosya kanıtı ile kaplıdır;
+  eski HMAC'siz veya sonradan değiştirilmiş kart, firma,
+  kaynak yönü/saat bilgileri otomatik kabul edilmez.
+- `Test-KyPdks-TerminalEvidence.ps1` ile operatörün
+  yetkili yıllık TNF dosyası yalnız okunarak, firma/kart/tarih/saat
+  kaynak özeti oluşturulur. HMAC anahtarı kullanıcı DPAPI
+  üzerinden geçici süreç belleğinde doğrulanır. Aynı dakikada
+  birden çok olay, yön eksikliği veya imza uyuşmazlığı
+  sahada çözülmesi gereken ayrı istisnalardır.
+- Tam izole Windows testi gerçek localhost QR `POST /scan`,
+  gerçek DPAPI HMAC doğrulaması, **sadece test için oluşturulmuş
+  TNF referansı** ve tek eşleşen anonim rapor üretiminden geçmiştir;
+  ayrıca 45 Cloud + 1 Windows-Cloud/kopya-FDB E2E +
+  48 cihaz/kural + 38 PDKS UI = **132/132 PASS**.
+- Kanıt logu:
+  `D:\KYERP\_TEMP\PDKS_SAFE_VERIFY_20261008_02\PDKS_TERMINAL_COMPLETE_RETEST_20261009.log`.
+
+Piyasadaki bütün üretici modelleri hâlâ sertifikalı değildir:
+ZKTeco/Suprema/Hikvision/Anviz/Dahua ve kontrol panellerinde
+fiziksel model+SDK+lisans, gerçek RAW yön/saat karşılaştırması ve
+ayrı sahada kabul mecburidir. Tanı ekranı ve TNF dosyasında
+eşleşme üretim Firebird/TNF/Cloud mutasyonu veya bordro onayı değildir.
