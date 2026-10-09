@@ -48,7 +48,11 @@ try {
     $eslint=Join-Path $frontend 'node_modules\.bin\eslint.cmd'
     if(!(Test-Path -LiteralPath $eslint)){Fail 'ESLINT_LOCAL_BINARY_REQUIRED'}
     Gate 'PDKS_UI_LINT' {& $eslint 'src/pages/pdksUnified' '--max-warnings=0'}
-    Gate 'ERP_FRONTEND_BUILD' {& npm.cmd run build}
+    # Some bundlers emit nonfatal chunk/dynamic-import warnings on STDERR.
+    # PowerShell 5 with ErrorActionPreference=Stop otherwise treats them as
+    # NativeCommandError even when npm exits 0. CMD merges its own streams;
+    # Gate still checks the actual process exit code strictly.
+    Gate 'ERP_FRONTEND_BUILD' {& cmd.exe /d /c 'npm.cmd run build 2>&1'}
     Write-Output 'STEP=UI_LOCAL_BROWSER_START'
     $server=Start-Process -FilePath $node -WorkingDirectory $frontend -PassThru -ArgumentList @($vite,'--host','127.0.0.1','--port',[string]$port,'--strictPort') -RedirectStandardOutput (Join-Path $logRoot 'vite.out.log') -RedirectStandardError (Join-Path $logRoot 'vite.err.log')
     $ready=$false
