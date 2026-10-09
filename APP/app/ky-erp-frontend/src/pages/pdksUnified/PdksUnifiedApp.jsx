@@ -481,7 +481,7 @@ export default function PdksUnifiedApp({
           snapshot={!previewOnly&&data.resourceReady?data.resource:null}
           loading={data.resourceLoading} previewOnly={previewOnly} search={search}
           compact onRefresh={()=>setReloadToken(value=>value+1)}/>}
-        {tab.view!=="dashboard"&&!stageInspectTab&&<section className="pdk-u-panel pdk-u-record-panel">
+        {tab.view!=="dashboard"&&!stageInspectTab&&tab.id!=="system"&&<section className="pdk-u-panel pdk-u-record-panel">
           <div className="pdk-u-record-head">
             <div><h2>{tab.label}</h2><p>{tab.description}</p></div>
             <span className="pdk-u-label"><ShieldCheck size={15}/> {previewOnly?"Görsel İnceleme":"Yazma kontrollü"}</span>
