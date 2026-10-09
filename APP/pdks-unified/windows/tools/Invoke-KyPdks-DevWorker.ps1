@@ -152,8 +152,15 @@ try {
     $remote=RefreshHead
     $cli=Get-Command codex.cmd,codex.exe -ErrorAction SilentlyContinue|Select-Object -First 1
     if(!$cli){Receipt 'BLOCKED' 'CODEX_NOT_INSTALLED' $remote;return}
-    & $cli.Source login status *> $null
-    if($LASTEXITCODE -ne 0){Receipt 'BLOCKED' 'CODEX_CHATGPT_LOGIN_REQUIRED' $remote;return}
+    $previousPreference=$ErrorActionPreference
+    try {
+      $ErrorActionPreference='Continue'
+      & $cli.Source login status *> $null
+      $loginExit=$LASTEXITCODE
+    } finally {
+      $ErrorActionPreference=$previousPreference
+    }
+    if($loginExit -ne 0){Receipt 'BLOCKED' 'CODEX_CHATGPT_LOGIN_REQUIRED' $remote;return}
     $mission=Join-Path $RepoRoot 'APP\pdks-unified\PDKS_CODING_AGENT_MISSION.md'
     if(!(Test-Path -LiteralPath $mission)){Gate 'PDKS_AGENT_MISSION_MISSING'}
     $answer=Join-Path $work ('codex-result-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.txt')
@@ -169,8 +176,15 @@ try {
         $secrets[$_.Name]=$_.Value
         [Environment]::SetEnvironmentVariable($_.Name,$null,'Process')
       }
-      $prompt | & $cli.Source exec --sandbox workspace-write --ask-for-approval never -C $RepoRoot --output-last-message $answer - *> $trace
-      if($LASTEXITCODE -ne 0){Receipt 'BLOCKED' 'CODEX_EXEC_FAILED' $remote;return}
+      $previousPreference=$ErrorActionPreference
+      try {
+        $ErrorActionPreference='Continue'
+        $prompt | & $cli.Source exec --sandbox workspace-write --ask-for-approval never -C $RepoRoot --output-last-message $answer - *> $trace
+        $execExit=$LASTEXITCODE
+      } finally {
+        $ErrorActionPreference=$previousPreference
+      }
+      if($execExit -ne 0){Receipt 'BLOCKED' 'CODEX_EXEC_FAILED' $remote;return}
     } finally {
       foreach($key in $secrets.Keys){[Environment]::SetEnvironmentVariable($key,$secrets[$key],'Process')}
     }
