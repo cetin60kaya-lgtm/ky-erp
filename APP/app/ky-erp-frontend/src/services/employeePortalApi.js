@@ -1,9 +1,10 @@
 // KY ERP personel oz servis: firma-personel-cihaz anahtari IndexedDB'de tutulur.
 // Ozel anahtar disariya aktarilmaz; personel portal istegi sunucuda imza ve nonce ile dogrulanir.
 import { API_BASE } from "../utils/api";
+import {getStaffSession} from "../mobile/personnelSession";
 
 const API = String(API_BASE).replace(/\/+$/, "");
-function token() { return localStorage.getItem("kyerp_auth_token") || ""; }
+function token() { return getStaffSession()?.token || ""; }
 function bytes64url(bytes) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -50,7 +51,7 @@ export async function personnelRequest(path,{method="GET",body,device}={}) {
   if(device) {
     const timestamp=String(Date.now()),nonce=bytes64url(crypto.getRandomValues(new Uint8Array(24)));
     const bodyHash=await sha256Hex(raw);
-    const user=JSON.parse(localStorage.getItem("kyerp_auth_user")||"{}");
+    const user=getStaffSession()?.user || {};
     const signed=["KYERP-EMP-DEVICE-V1",device.deviceId,method.toUpperCase(),pathname,timestamp,nonce,user.id,bodyHash].join("|");
     const signature=new Uint8Array(await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},device.privateKey,new TextEncoder().encode(signed)));
     Object.assign(headers,{"X-KYERP-Employee-Device":device.deviceId,"X-KYERP-Employee-Timestamp":timestamp,"X-KYERP-Employee-Nonce":nonce,"X-KYERP-Employee-Signature":bytes64url(signature)});

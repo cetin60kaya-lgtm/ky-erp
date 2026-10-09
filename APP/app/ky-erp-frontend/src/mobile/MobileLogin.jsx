@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { mobileApiPost, mobileApiGet } from "./mobileApi";
 import { API_BASE } from "../utils/api";
+import {saveStaffSession} from "./personnelSession";
 
-export default function MobileLogin({ onLogin }) {
+export default function MobileLogin({ onLogin, personnelOnly = false }) {
   const [username, setUsername] = useState("");
-  const [personnelMode, setPersonnelMode] = useState(false);
+  const [personnelMode, setPersonnelMode] = useState(personnelOnly);
   const [companies, setCompanies] = useState([]);
   const [turnstileConfig,setTurnstileConfig] = useState(null);
   const [turnstileToken,setTurnstileToken] = useState("");
@@ -51,15 +52,18 @@ export default function MobileLogin({ onLogin }) {
       if (!res.ok) throw new Error(res.data?.error?.message || res.message || "Giris reddedildi.");
       
       const payload = res.data || res;
-      const token = payload?.token || payload?.access_token || payload?.accessToken || payload?.jwt || payload?.data.token;
+      const token = payload?.token || payload?.access_token || payload?.accessToken || payload?.jwt || payload?.data?.token;
       
       if (!token) throw new Error("Giris icin ilave dogrulama gerekli. Yonetici/muhasebe hesabiyla normal KY ERP MFA ekranindan devam edin.");
-      const userObj = payload?.user || payload?.data.user || { username: identity };
+      const userObj = payload?.user || payload?.data?.user || { username: identity };
       if (personnelMode && String(userObj.role || "").toUpperCase() !== "PERSONNEL") throw new Error("Bu giriş yalnız personel hesapları içindir.");
-      localStorage.setItem("kyerp_auth_token", token);
-      localStorage.setItem("kyerp_auth_user", JSON.stringify(userObj));
-      localStorage.setItem("kyerp_mobile_user", JSON.stringify(userObj));
-      onLogin();
+      if(personnelMode) saveStaffSession(token,userObj);
+      else {
+        localStorage.setItem("kyerp_auth_token", token);
+        localStorage.setItem("kyerp_auth_user", JSON.stringify(userObj));
+        localStorage.setItem("kyerp_mobile_user", JSON.stringify(userObj));
+      }
+      onLogin({personnel:personnelMode});
     } catch (err) {
       setError("Giriş başarısız: " + (err.message || String(err)));
     } finally {
@@ -111,10 +115,10 @@ export default function MobileLogin({ onLogin }) {
           </div>
         )}
 
-        <div style={{display:"flex",gap:8,width:"100%",marginBottom:16}}>
+        {!personnelOnly ? <div style={{display:"flex",gap:8,width:"100%",marginBottom:16}}>
           <button type="button" onClick={()=>setPersonnelMode(false)} style={{flex:1,padding:10,borderRadius:8,background:!personnelMode?"#1453a3":"#e2e8f0",color:!personnelMode?"white":"#374151",border:0}}>Yönetim / Muhasebe</button>
           <button type="button" onClick={()=>setPersonnelMode(true)} style={{flex:1,padding:10,borderRadius:8,background:personnelMode?"#1453a3":"#e2e8f0",color:personnelMode?"white":"#374151",border:0}}>Personel Girişi</button>
-        </div>
+        </div> : <p style={{fontSize:12,color:"#64748b",marginBottom:12}}>Bu personel girişi yöneticinin açık oturumunu değiştirmez.</p>}
         <form onSubmit={handleLogin} style={{ width: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
           {personnelMode ? <label style={{fontSize:13,fontWeight:600,color:"#374151"}}>Firma
             <select value={company} onChange={e=>setCompany(e.target.value)} required style={{display:"block",width:"100%",padding:13,border:"2px solid #e5e7eb",borderRadius:12,marginTop:6}}>

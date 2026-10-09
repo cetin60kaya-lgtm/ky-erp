@@ -51,3 +51,22 @@ test("company users are separated from employee access",()=>{
   assert.match(panel,/workplaceEnabled/);
   assert.match(panel,/devices\/.*\/decision/);
 });
+
+const entry=read("src/main.jsx");
+const staffSessions=read("src/mobile/personnelSession.js");
+test("mobile path routes to real MobileApp instead of canonical desktop login",()=>{
+  assert.ok(entry.includes("if (isMobileRoute) renderMobileHost().catch(renderFailure)"));
+  assert.ok(entry.includes('import("./mobile/MobileApp.jsx")'));
+  assert.ok(mobile.includes('clean === "/mobile/personel"'));
+  assert.ok(mobile.includes("personnelOnly"));
+});
+test("personnel session stays separate from a logged-in administrator browser",()=>{
+  assert.ok(login.includes("saveStaffSession(token,userObj)"));
+  assert.ok(login.includes("personnelOnly"));
+  assert.ok(api.includes("getStaffSession()?.token"));
+  assert.ok(api.includes("getStaffSession()?.user"));
+  assert.ok(staffSessions.includes("kyerp_personnel_auth_token"));
+  assert.ok(staffSessions.includes("kyerp_personnel_auth_user"));
+  assert.ok(staff.includes("clearStaffSession()"));
+  assert.ok(login.includes("payload?.data?.token"));
+});

@@ -29,15 +29,14 @@ import MobileDesen from "./MobileDesen";
 import MobileAdmin from "./MobileAdmin";
 import MobileShell from "./MobileShell";
 import MobilePersonnel from "./MobilePersonnel";
+import {getStaffSession} from "./personnelSession";
 
-function isPersonnelSession() {
-  try { return String(JSON.parse(localStorage.getItem("kyerp_auth_user") || "{}").role || "").toUpperCase() === "PERSONNEL"; }
-  catch { return false; }
-}
+function isPersonnelSession() {return Boolean(getStaffSession());}
 
 function getMobilePage(pathname) {
   const clean = pathname.replace(/\/+$/, ""); // remove trailing slash
   if (clean === "/mobile" || clean === "") return "home";
+  if (clean === "/mobile/personel") return "personnel";
   if (clean.includes("/mobile/login")) return "login";
   if (clean === "/mobile/yonetim") return "yonetim";
   if (clean === "/mobile/muhasebe/cari") return "muhasebe_cari";
@@ -81,14 +80,17 @@ export default function MobileApp() {
     return () => window.removeEventListener("popstate", handlePop);
   }, []);
 
-  const handleLoginSuccess = () => {
+  const handleLoginSuccess = ({personnel:employee=false}={}) => {
     setToken(getMobileToken());
-    const employee = isPersonnelSession();
-    setPersonnel(employee);
-    window.history.pushState({}, "", employee ? "/mobile/personel" : "/mobile");
-    setPage("home");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    setPersonnel(isPersonnelSession());
+    window.history.replaceState({}, "", employee ? "/mobile/personel" : "/mobile");
+    setPage(employee ? "personnel" : "home");
   };
+
+  // Separate staff route works with or without an existing manager session.
+  if (page === "personnel") {
+    return personnel ? <MobilePersonnel /> : <MobileLogin onLogin={handleLoginSuccess} personnelOnly />;
+  }
 
   if (!token) {
     // URL login değilse History API ile logine çek, ama full refresh atma
@@ -99,7 +101,7 @@ export default function MobileApp() {
   }
 
   // PERSONNEL tek gorunume mahkumdur; API de ayrica kisitlanir.
-  if (personnel) return <MobilePersonnel />;
+  if (personnel && page !== "login") return <MobilePersonnel />;
 
   const renderContent = () => {
     switch (page) {
