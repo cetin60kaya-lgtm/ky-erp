@@ -113,6 +113,8 @@ internal static class Program
         // A published QA directory contains a deliberate marker. A plain
         // double-click must open bundled test UI, NEVER production URL.
         var offlineTest = args.Contains("--offline-test", StringComparer.OrdinalIgnoreCase)
+            || Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "").Equals(
+                "KY-PDKS-MENU-TEST", StringComparison.OrdinalIgnoreCase)
             || File.Exists(Path.Combine(AppContext.BaseDirectory, "KY-PDKS-MENU-TEST.marker"));
         Application.Run(new KyPdksWindow(preview && !offlineTest, offlineTest));
     }
@@ -169,7 +171,8 @@ public sealed class KyPdksWindow : Form
         {
             var profile = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "KYERP", "KY-PDKS", localPreview ? "PreviewWebView" : "WebViewProfile");
+                "KYERP", "KY-PDKS", offlineTest ? "PortableQaWebView"
+                    : localPreview ? "PreviewWebView" : "WebViewProfile");
             Directory.CreateDirectory(profile);
             var env = await CoreWebView2Environment.CreateAsync(userDataFolder: profile);
             await browser.EnsureCoreWebView2Async(env);
@@ -201,7 +204,7 @@ public sealed class KyPdksWindow : Form
                 args.Handled = true;
                 if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out var uri)) return;
                 if (IsTrustedOrigin(uri)) core.Navigate(uri.ToString());
-                else if (uri.Scheme == Uri.UriSchemeHttps)
+                else if (!offlineTest && uri.Scheme == Uri.UriSchemeHttps)
                     Process.Start(new ProcessStartInfo(uri.ToString()) { UseShellExecute = true });
             };
             core.NavigationCompleted += (_, args) =>
