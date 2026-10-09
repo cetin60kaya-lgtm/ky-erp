@@ -15,7 +15,7 @@ import {
 import {
   csvForTable, safeFileNameSegment, toAttendanceRows,
 } from "./productData";
-import {sourceForTab,rowsForTab} from "./tabBindings.js";
+import {sourceForTab,rowsForTab,inspectReleaseReadiness} from "./tabBindings.js";
 import {useUnifiedPdksData} from "./useUnifiedPdksData.js";
 import UnifiedOperationPanel from "./UnifiedOperationPanel.jsx";
 import LiveAttendancePanel from "./LiveAttendancePanel.jsx";
@@ -42,6 +42,42 @@ function Icon({ name, size = 19, ...props }) {
 
 function Cell({ children, detail }) {
   return <div className="pdk-u-metric"><span>{children}</span><strong>{detail ?? "—"}</strong></div>;
+}
+
+function ProductReadinessAudit({onOpen}) {
+  // All statuses stay blocked without independent deployment / physical proof.
+  const report=useMemo(()=>inspectReleaseReadiness(),[]);
+  const [onlyBlocked,setOnlyBlocked]=useState(true);
+  const tabs=report.tabs.filter(tab=>!onlyBlocked||!tab.ready);
+  const names={SOURCE_NOT_IMPLEMENTED:"Kaynak/işlem bağlantısı yok",
+    SOURCE_NOT_ACCEPTED:"Canlı kaynak kabulü yok",
+    TERMINAL_NOT_CERTIFIED:"Gerçek terminal kabulü yok",
+    FDB_TNF_NOT_RECONCILED:"FDB / TNF mutabakatı yok",
+    PAYROLL_NOT_APPROVED:"Bordro kabulü yok"};
+  return <section className="pdk-u-panel" aria-label="49 sekme işlev ve üretim kabul denetimi">
+    <div className="pdk-u-record-head"><div>
+      <h2>49 Sekme · İşlev ve Üretim Kabul Kontrolü</h2>
+      <p>Bir sekmenin açılması, bağlantısının veya işleminin tamamlandığı anlamına gelmez.
+        Bu tablo yalnız doğrulanmış kabul kanıtına göre yayın kararı verir.</p>
+    </div></div>
+    <p role="status">{report.total} sekme · {report.readyCount} üretim kabulü ·
+      {report.blockedCount} kanıt veya geliştirme bekliyor</p>
+    <label><input type="checkbox" checked={onlyBlocked}
+      onChange={event=>setOnlyBlocked(event.target.checked)}/>
+      Yalnız kabul edilmeyen sekmeler</label>
+    <div className="pdk-u-table-scroll" role="region" tabIndex={0} aria-label="Sekmelerin üretim kabul gereksinimleri">
+      <table className="pdk-u-table"><thead><tr>
+        <th>Bölüm</th><th>Sekme</th><th>Durum</th><th>Eksik kanıt / geliştirme</th><th>İşlem</th>
+      </tr></thead><tbody>
+        {tabs.map(tab=><tr key={tab.id}><td>{tab.section}</td><td>{tab.label}</td>
+          <td>{tab.ready?"Kabul":"Bekliyor"}</td>
+          <td>{tab.blockers.map(code=>names[code]||code).join("; ")||"—"}</td>
+          <td><button type="button" className="pdk-u-btn"
+            onClick={()=>onOpen(tab.section,tab.id)}>Sekmeyi aç</button></td>
+        </tr>)}
+      </tbody></table>
+    </div>
+  </section>;
 }
 
 function EmptyState({ title, description, IconComponent = Database }) {
@@ -433,6 +469,7 @@ export default function PdksUnifiedApp({
             aria-selected={tab.id===item.id}
             className={tab.id===item.id?"active":""} onClick={()=>go(section.id,item.id)}>{item.label}</button>)}
         </div>
+        {tab.id==="system"&&<ProductReadinessAudit onOpen={go}/>}
         {stageInspectTab&&<StageCopyExplorer tabId={tab.id} snapshot={stageSnapshot}
           onSnapshot={setStageSnapshot} search={search}
           selectedCard={stageSelectedCard} onSelectedCard={setStageSelectedCard}/>}
