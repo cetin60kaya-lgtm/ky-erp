@@ -70,6 +70,9 @@ function localReceiptValid(receipt:Row){
   if(receipt.sourceValidated!==true||receipt.fdbValidated!==true)return false;
   if(typeof receipt.tnfTouched!=="boolean")return false;
   if(receipt.tnfTouched===true&&receipt.tnfValidated!==true)return false;
+  if(receipt.tnfTouched===false &&
+     (!/^[a-f0-9]{64}$/.test(text(receipt.policySha256)) ||
+      !/^[a-f0-9]{64}$/.test(text(receipt.fdbEvidenceSha256))))return false;
   return true;
 }
 
@@ -197,6 +200,14 @@ export function registerIkPdksUnifiedAgentRoutes(app:Hono<AppEnv>){
     const receipt=body.localReceipt as Row;
     if(!localReceiptValid(receipt))
       return fail(c,409,"PDKS_LOCAL_RECEIPT_INVALID","FDB/TNF mutabakat kanıtı eksik; ACK verilmedi.");
+    // For the three non-TNF policy actions, the local evidence must bind
+    // the on-disk policy SHA and read-only Firebird proof exactly. Do not
+    // accept a syntactically correct but internally contradictory receipt.
+    if(receipt.tnfTouched===false && !safeEqual(
+      await sha256(text(receipt.policySha256)+"|"+text(receipt.fdbEvidenceSha256)),
+      text(receipt.evidenceSha256)))
+      return fail(c,409,"PDKS_LOCAL_EVIDENCE_HASH_MISMATCH",
+        "Yerel politika kanıtı ile Firebird kaynak özeti uyuşmuyor.");
     // Device ID/secret alone must not forge a local-apply ACK. Require
     // independent Agent HMAC bound to this exact lease hash and receipt.
     const signingKey=syncSigningKey(c);
