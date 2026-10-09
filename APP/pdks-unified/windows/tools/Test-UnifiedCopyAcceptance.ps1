@@ -96,6 +96,50 @@ try {
         if($LASTEXITCODE -ne 0){throw 'QR_STAGE_SERVER_STATUS_FAILED'}
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Action Test -TerminalId 'stage-terminal-01'
         if($LASTEXITCODE -ne 0){throw 'QR_STAGE_NETWORK_PROBE_FAILED'}
+
+        # End-to-end: issue a one-time QR only in disposable stage, verify
+        # the local journal MAC and compare to a synthetic TNF created there.
+        # No writes to the real annual TNF or production Firebird.
+        $stageSmoke=Join-Path $device 'device-gateway\terminal-stage-qr-smoke.mjs'
+        if(!(Test-Path -LiteralPath $stageSmoke)){throw 'STAGE_QR_SMOKE_MISSING'}
+        $stageTnf=Join-Path $tempRoot 'stage-reference.tnf'
+        $stageReport=Join-Path $tempRoot 'stage-diagnostic.json'
+        $previousSign=$env:KY_PDKS_QR_HMAC_SECRET
+        $previousOperator=$env:KY_PDKS_TERMINAL_OPERATOR_KEY
+        try{
+          foreach($item in @(
+            @{path=(Join-Path $app 'qr-sign.dpapi');envName='KY_PDKS_QR_HMAC_SECRET'},
+            @{path=(Join-Path $app 'qr-operator.dpapi');envName='KY_PDKS_TERMINAL_OPERATOR_KEY'}
+          )){
+            $secure=Get-Content -LiteralPath $item.path -Raw|ConvertTo-SecureString
+            $ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+            try{
+              [Environment]::SetEnvironmentVariable($item.envName,
+                [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr),'Process')
+            }finally{
+              [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+            }
+          }
+          & node.exe $stageSmoke ([string]$stagePort) $stageTnf $StageCardNo
+          if($LASTEXITCODE -ne 0){throw 'STAGE_SIGNED_QR_SCAN_FAILED'}
+        }finally{
+          $env:KY_PDKS_QR_HMAC_SECRET=$previousSign
+          $env:KY_PDKS_TERMINAL_OPERATOR_KEY=$previousOperator
+        }
+        $tnfLine=(Get-Content -LiteralPath $stageTnf -TotalCount 1)
+        $stageYear=2000+[int]($tnfLine.Split(',')[2].Substring(4,2))
+        $compare=Join-Path $win 'tools\Test-KyPdks-TerminalEvidence.ps1'
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $compare -TerminalId 'stage-terminal-01' -TnfPath $stageTnf -Year $stageYear -ReportPath $stageReport
+        if($LASTEXITCODE -ne 0){throw 'STAGE_QR_TNF_DIAGNOSTIC_FAILED'}
+        $proof=Get-Content -LiteralPath $stageReport -Raw | ConvertFrom-Json
+        if($proof.matchedReference -ne 1 -or $proof.signedQrPending -ne 1 -or
+          $proof.terminalRawCertified -ne $false -or
+          $proof.firebirdVerified -ne $false -or
+          $proof.safeToApply -ne $false){
+          throw 'STAGE_QR_TNF_RECONCILIATION_NOT_SAFE'
+        }
+        Write-Output 'RESULT=PASS_SIGNED_QR_LOCAL_JOURNAL_HMAC_TNF_REFERENCE_E2E'
+
       }finally{
         if(Test-Path -LiteralPath $receiptPath){
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Action Stop -TerminalId 'stage-terminal-01'
