@@ -158,15 +158,18 @@ try {
     if(!(Test-Path -LiteralPath $mission)){Gate 'PDKS_AGENT_MISSION_MISSING'}
     $answer=Join-Path $work ('codex-result-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.txt')
     $trace=Join-Path $work ('codex-private-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.log')
+    $backlog=Join-Path $RepoRoot 'APP\pdks-unified\PDKS_AGENT_BACKLOG.md'
+    if(!(Test-Path -LiteralPath $backlog)){Gate 'PDKS_AGENT_BACKLOG_REQUIRED'}
     $prompt=(Get-Content -LiteralPath $mission -Raw -Encoding UTF8)+[Environment]::NewLine+
-      'SADECE BIR ONCELIKLI PDKS GOREVI KODLA. Yalniz mevcut izole checkoutu degistir. Commit push merge deploy yapma. Uretim verisini okumaya calisma. Sonra yalniz kod ve test kaniti ozeti ver.'
+      (Get-Content -LiteralPath $backlog -Raw -Encoding UTF8)+[Environment]::NewLine+
+      'Backlog sirasi 1 numarali en kucuk acik PDKS alt gorevini sec ve SADECE o adimi kodla. Yalniz mevcut izole checkoutu degistir. Commit push merge deploy yapma. Uretim verisini okumaya calisma. Sonunda kod ve test kaniti ozeti ver.'
     $secrets=@{}
     try {
       Get-ChildItem Env:|Where-Object {$_.Name -match '^(KY_|CLOUDFLARE_|CF_|FIREBIRD_|ISC_|AWS_|GOOGLE_|OPENAI_API_KEY$)'}|ForEach-Object {
         $secrets[$_.Name]=$_.Value
         [Environment]::SetEnvironmentVariable($_.Name,$null,'Process')
       }
-      $prompt | & $cli.Source exec --sandbox workspace-write -C $RepoRoot --output-last-message $answer - *> $trace
+      $prompt | & $cli.Source exec --sandbox workspace-write --ask-for-approval never -C $RepoRoot --output-last-message $answer - *> $trace
       if($LASTEXITCODE -ne 0){Receipt 'BLOCKED' 'CODEX_EXEC_FAILED' $remote;return}
     } finally {
       foreach($key in $secrets.Keys){[Environment]::SetEnvironmentVariable($key,$secrets[$key],'Process')}
