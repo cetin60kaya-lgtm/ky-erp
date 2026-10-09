@@ -991,3 +991,90 @@ device-gateway/TERMINAL_HUB_COMPATIBILITY_20261009.md
 
 Canlı FDB/TNF/terminal RAW/Cloudflare üretim D1 değişmedi.
 PR #404 DRAFT ve birleştirilmemiş olarak kalır.
+
+
+## 28. 09.10.2026 — TERMINALLER: BAĞLANTI TESTİ, İMZALI HAM GÜNLÜK VE TNF TANISI
+
+Bu bölüm, 27. bölümdeki terminal kataloğunun üzerine eklenen **son
+izole kabul kanıtını** kapsar. Görünür Terminal Hub tasarımı değiştirilmedi.
+
+**Tam kabul HEAD:** `a2a07bc04cc9753575a2933d9177dd4ccf45e7bb`
+
+### Operatör iş akışı
+
+1. `Cihaz & Senkron → Terminaller` içinde firma/terminal kodu,
+   üretici, **gerçek model**, protokol, IP/HTTPS, saat dilimi ve
+   okutma yöntemi tanımı yapılır. Kurulum planı henüz üretim
+   sertifikası değildir.
+2. KY QR/USB referans terminali Windows'ta
+   `windows/tools/Install-KyPdks-LocalTerminal.ps1`
+   `-Action Install`, `Start`, `Status`, **`Test`**, `Stop`
+   işlemleriyle kurulur; `Test` yalnız localhost /health ve
+   terminal kimliği eşleşmesini okur. Açık portun bulunması terminal
+   RAW/Firebird/TNF onayı anlamına gelmez.
+3. Yerel QR/USB kiosk kaydı `terminal-kiosk.mjs` içinde
+   tek kullanımlık QR kaynak anahtarıyla tekrarlardan korunur.
+   **Bütün olay alanları** (firma, kart, yön, saat, bekleyen statü vb.)
+   `terminal-journal-proof.mjs` tarafından operator DPAPI anahtarından
+   üretilen HMAC ile imzalanır. Kaynak dosyası yalnız yeni dosya
+   oluşturma + disk flush yöntemiyle saklanır. Kayıt silinmez.
+4. `windows/tools/Test-KyPdks-TerminalEvidence.ps1` komutu;
+   terminal kimliği, **salt okunur yıllık TNF kaynak dosyası** ve yıl
+   ile çalışır. Operatör anahtarı kullanıcı DPAPI dosyasından yalnız
+   çalışma sürecine alınır; komut satırına veya rapora **yazılmaz**.
+   `terminal-reconciliation.mjs` dosyalar üzerinde HMAC,
+   firma, terminal, kart, gerçek yerel saat, kaynak ve dosya adını
+   kontrol eder. Geçersiz veya HMAC'siz eski kayıtlar reddedilir.
+   Aynı kart/gün/dakikada iki olay varsa **belirsiz** sayılır.
+   TNF'de giriş/çıkış yönü yoktur: hiç bir kayıt sıraya göre
+   IN veya OUT olarak tahmin edilmez.
+5. Anonim, **imzasız tanı amaçlı** JSON rapor üretilebilir. Canlı
+   yetkili Terminal Hub sayfasında kullanıcı kendi raporunu seçerek
+   eşleşen, eşleşmeyen, aynı dakikada çakışan, reddedilen kayıtları
+   görebilir. Rapor dosyası gerçek cihaz sertifikası değildir;
+   `previewOnly` tasarım modunda dosya yükleme kapalıdır.
+
+Örnek, yalnız operator tarafından gerçek firma/terminal kimlikleri
+belirlendikten sonra:
+
+```powershell
+cd "D:\KYERP\_TEMP\PDKS_SAFE_VERIFY_20261008_02\web\APP\pdks-unified\windows\tools"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\Install-KyPdks-LocalTerminal.ps1" -Action Test -TerminalId "GERCEK-TERMINAL-ID"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\Test-KyPdks-TerminalEvidence.ps1" -TerminalId "GERCEK-TERMINAL-ID" -TnfPath "YILLIK_TNF_DOSYASININ_YOLU" -Year 2026 -ReportPath "$env:TEMP\KY-PDKS-TANI-YENI.json"
+```
+
+Dosya yolu, terminal adı, firma ve yıl teyit edilmeden bu komutlar
+canlı cihaz kurulumuna veya kaynak mutasyonuna dönüştürülmez.
+
+### Gerçek izole uçtan uca kanıt
+
+DESEN bilgisayarında tek-komut `Test-UnifiedProductAcceptance.ps1`:
+- Cloud 27+18 = **45** güvenlik/sözleşme testi,
+- gerçek Windows Agent ↔ yerel Cloud ↔ **gbak kopya Firebird** E2E **1**,
+- cihaz/QR/USB/HMAC/TNF/puantaj saf testleri **48**,
+- PDKS UI testleri **38**: **toplam 132/132 PASS**.
+- Windows Release, Agent 5 selftest, Firebird copy rollback, 3/3
+  service/assign-service/advance SQL ledger tekrarı, Cloud typecheck,
+  PDKS ESLint, frontend build ve Chrome **9 bölüm / 49 sekme** PASS.
+- **Yeni gerçek Windows test zinciri**:
+  izolasyonlu LOCALAPPDATA → DPAPI Install → localhost QR Start →
+  Health / Test → yalnız izole firma/kart adına imzalı QR taraması →
+  MAC korumalı journal → **yapay test TNF** → Windows DPAPI
+  doğrulaması → karşılaştırma raporunda 1/1 eşleşme →
+  Stop → geçici test dosyalarının temizliği **PASS**.
+- Kanıt logu:
+  `D:\KYERP\_TEMP\PDKS_SAFE_VERIFY_20261008_02\PDKS_TERMINAL_COMPLETE_RETEST_20261009.log`
+- Marker:
+  `RESULT=PASS_SIGNED_QR_LOCAL_JOURNAL_HMAC_TNF_REFERENCE_E2E`
+  ve
+  `RESULT=PASS_COMPLETE_ISOLATED_PDKS_PREVIEW_AND_SYNC_ACCEPTANCE`.
+
+**Sınırlar:** Test referansındaki QR/TNF sentetiktir;
+gerçek terminale/personelin devamına veya üretim TNF'ye işlem
+yapılmadı. HMAC, kiosk günlüğünün bütünlüğünü denetler;
+operatörün veya fiziksel cihazın bağımsız sertifikası değildir.
+Diğer marka cihazlar için gerçek model SDK/lisans, salt RAW
+okuma ve sahada zaman/yön testi gerekmektedir. FDB ve
+yıllık TNF `tnfApplied=false`, Cloud `cloudApplied=false`.
+Ayrı staging D1 eksik olduğu için PR #404 DRAFT/UNMERGED;
+üretime dağıtım veya canlı kaynaklara yazma yapılmadı.
