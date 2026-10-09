@@ -27,7 +27,9 @@ test("terminal, FDB/TNF and cloud not claimed connected without Windows Agent",(
 });
 test("existing PDKS read endpoints map to relevant visible sections",()=>{
   assert.equal(tabBinding("people").source,"people");
-  assert.equal(tabBinding("live").source,"unconnected");
+  assert.equal(tabBinding("live").source,"live-attendance");
+  assert.equal(tabBinding("today").source,"live-attendance");
+  assert.equal(sourceForTab("exceptions",{audit:true}),"live-attendance");
   assert.equal(tabBinding("holidays").source,"holidays");
   assert.equal(tabBinding("leave").source,"leaves");
   assert.equal(tabBinding("departments").source,"masters");
@@ -130,4 +132,21 @@ test("Turkish dotted İ in mesai and kesinti never hides an approved source row"
   const deduction=rowsForTab("deductions",month);
   assert.equal(deduction.rows.length,1);
   assert.equal(deduction.rows[0]["Tutar"],"100");
+});
+
+
+test("live roster maps person-by-person evidence without inventing absence or late",()=>{
+  const payload={date:"2026-10-09",complete:true,roster:[
+    {employeeId:"a",cardNo:"00003",fullName:"Ahmet",entry:"08:24",exit:"",
+      status:"GIRIS_KAYDI",eventCount:1},
+    {employeeId:"b",cardNo:"00009",fullName:"Mehmet",entry:"",exit:"",
+      status:"KART_KAYDI_YOK",eventCount:0},
+  ]};
+  const overview=rowsForTab("today",payload);
+  assert.equal(overview.supported,true);
+  assert.equal(overview.rows.length,2);
+  assert.equal(overview.rows[0]["Giriş"],"08:24");
+  assert.equal(overview.rows[1]["Giriş"],"—");
+  assert.equal(rowsForTab("exceptions",payload).rows.length,1);
+  assert.equal(rowsForTab("live",{}).supported,false);
 });
