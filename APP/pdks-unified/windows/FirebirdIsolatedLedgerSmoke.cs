@@ -20,11 +20,12 @@ internal static class FirebirdIsolatedLedgerSmoke
         var path = Environment.GetEnvironmentVariable("KY_PDKS_STAGE_FDB_PATH") ?? "";
         var stageCard = Environment.GetEnvironmentVariable("KY_PDKS_STAGE_CARD_NO") ?? "";
         var full = Path.GetFullPath(path);
-        var separator = Path.DirectorySeparatorChar;
-        if (!full.Contains(separator + "_TEMP" + separator + "PDKS_COPY_STAGE_",
-                StringComparison.OrdinalIgnoreCase) ||
-            !Path.GetFileName(full).Equals("KY_PDKS_STAGE.FDB", StringComparison.OrdinalIgnoreCase) ||
-            !File.Exists(full))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(full,
+                @"^D:\\KYERP\\_TEMP\\PDKS_COPY_STAGE_[^\\]+\\KY_PDKS_STAGE\.FDB$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase |
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant) ||
+            !File.Exists(full) ||
+            (File.GetAttributes(full) & FileAttributes.ReparsePoint) != 0)
             throw new InvalidOperationException("STAGE_LEDGER_PATH_NOT_ISOLATED");
         if (stageCard.Length != 5 || stageCard.Any(ch => ch is < '0' or > '9'))
             throw new InvalidOperationException("STAGE_LEDGER_CARD_REQUIRED");
