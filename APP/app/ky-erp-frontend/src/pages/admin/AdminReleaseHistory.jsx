@@ -1,11 +1,11 @@
 import {useCallback,useEffect,useMemo,useState} from "react";
 import {
   GITHUB_API,GITHUB_SITE,KY_BRANCH,releaseKind,verifiedRelease,
-  firstVerifiedRun,changeStatus,moduleOf,localStamp,shortSha
+  firstVerifiedRun,changeStatus,moduleOf,localStamp,shortSha,QA_MODULES
 } from "../../services/releaseHistory";
 import "./AdminReleaseHistory.css";
 
-const FILTERS=["Tümü","İK","PDKS","Muhasebe","İmalat","Boyahane","Desen","Güvenlik","Bulut","Genel"];
+const FILTERS=["Tümü","Platform","İK","PDKS","Muhasebe","e-Belge","İmalat","Boyahane","Desen","Günlük Operasyon","Mail & Dosyalar","Denetim","Bağlantılar","Sistem Merkezi","Güvenlik","Bulut","Genel"];
 const STORE_KEY="kyerp-release-history-cache-v1";
 const TTL=120000;
 async function github(path) {
@@ -82,7 +82,7 @@ export default function AdminReleaseHistory(){
     const q=query.trim().toLocaleLowerCase("tr-TR");
     return (data?.pulls||[]).filter(pr=>{
       const txt=(pr.title||"")+" "+(pr.body||"")+" "+String(pr.number)+" "+(pr.head?.ref||"");
-      return (module==="Tümü"||moduleOf(txt)===module)&&(!q||txt.toLocaleLowerCase("tr-TR").includes(q));
+      return (module==="Tümü"||moduleOf(pr.title)===module)&&(!q||txt.toLocaleLowerCase("tr-TR").includes(q));
     });
   },[data,query,module]);
   const counts=useMemo(()=>({
@@ -111,8 +111,24 @@ export default function AdminReleaseHistory(){
       <button className={view==="changes"?"active":""} onClick={()=>setView("changes")} type="button">Değişiklikler / PR</button>
       <button className={view==="releases"?"active":""} onClick={()=>setView("releases")} type="button">Canlı Yayınlar / Hatalar</button>
       <button className={view==="commits"?"active":""} onClick={()=>setView("commits")} type="button">Commit Geçmişi</button>
+      <button className={view==="qa"?"active":""} onClick={()=>setView("qa")} type="button">Modül Kontrolleri</button>
     </nav>
-    {view==="changes"?<>
+    {view==="qa"?<>
+      <div className="krh-alert krh-qa-note"><strong>Gerçek test durumu:</strong> Son canlı Chrome kontrolü yalnız giriş ekranı ve anonim API sınırını doğruladı. Aşağıdaki 14 modülün yetkili hesapla kayıt/rapor/izin akışlarının uçtan uca testi henüz kanıtlanmadı. Otomatik lint/test/build başarılı olsa da modül fonksiyonunu doğrulanmış saymayız.</div>
+      <div className="krh-qa-summary"><span><b>{QA_MODULES.length}</b> ana modül</span><span><b>{QA_MODULES.length}</b> gerçek kullanıcı kabulü bekliyor</span><a target="_blank" rel="noopener noreferrer" href={GITHUB_SITE+"/actions/runs/37890106512"}>6/6 canlı anonim Chrome kontrolü ↗</a></div>
+      <div className="krh-qa-grid">
+      {QA_MODULES.map(item=>{
+        const recent=(data?.pulls||[]).find(pr=>moduleOf(pr.title)===item.name);
+        const recentStatus=recent?statusFor(recent,data):null;
+        return <article key={item.name} className="krh-qa-item">
+          <div><strong>{item.name}</strong><span className="krh-status krh-open">Yetkili uçtan uca test bekliyor</span></div>
+          <p>{item.check}</p>
+          <div className="krh-details">Son ilgili GitHub işi: {recent?<Href url={recent.html_url}>#{recent.number} · {recentStatus.label} ↗</Href>:<span>Bulunamadı</span>}</div>
+          <div className="krh-qa-links"><a href={item.route}>Uygulama ekranını aç ↗</a></div>
+        </article>;
+      })}
+      </div>
+    </>:view==="changes"?<>
       <div className="krh-filters">
         <input aria-label="İş, hata veya PR numarası ara" placeholder="İş, hata veya PR numarası ara..." value={query} onChange={e=>setQuery(e.target.value)}/>
         <select aria-label="Modül filtrele" value={module} onChange={e=>setModule(e.target.value)}>{FILTERS.map(v=><option key={v} value={v}>{v}</option>)}</select>
