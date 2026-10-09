@@ -17,6 +17,7 @@ const txTables=["ik_pdks_unified_commands","ik_pdks_unified_outbox","ik_audit_lo
 const maxPayloadSize=16000;
 import {validateUnifiedCommand,commandValue as val,commandFold as fold}
   from "./ik-pdks-unified-contract.mjs";
+import {projectUnifiedSyncStatus} from "./ik-pdks-unified-sync-view.mjs";
 const fail=(c:Context<AppEnv>,code:string,message:string,status=400)=>
   c.json({ok:false,error:{code,message}},status as any);
 async function digest(value:string){
@@ -42,6 +43,41 @@ async function context(c:Context<AppEnv>){
     [user.id,company]).catch(()=>null);
   if(fold(scope?.scope)==="AUDIT")return null;
   return {user,company};
+}
+async function readSyncStatus(c:Context<AppEnv>){
+  const auth=await context(c);
+  if(!auth)return fail(c,"PDKS_FULL_PERMISSION_REQUIRED",
+    "Senkron durumunu yalnız yetkili PDKS hesabı okuyabilir.",403);
+  try{
+    if(!await checkTables(c,["ik_pdks_devices"]))
+      return fail(c,"PDKS_MIGRATION_0060_REQUIRED",
+        "Cloud komut günlüğü henüz kurulmadı; canlı durum gösterilemiyor.",503);
+    const db=c.env.DB;
+    const params=[auth.company];
+    const [aggregate,recent,devices]=await Promise.all([
+      db.prepare("SELECT state,COUNT(*) AS total FROM ik_pdks_unified_outbox "+
+        "WHERE main_company_id=? GROUP BY state").bind(...params).all<Row>(),
+      db.prepare(`SELECT o.main_company_id,o.id,o.event_type,c.action,
+        o.state,o.delivery_attempts,o.created_at,o.next_attempt_at,
+        o.lease_until,o.acknowledged_at,o.last_error
+        FROM ik_pdks_unified_outbox o
+        JOIN ik_pdks_unified_commands c ON c.id=o.command_id
+          AND c.main_company_id=o.main_company_id
+        WHERE o.main_company_id=?
+        ORDER BY o.created_at DESC,o.id DESC LIMIT 75`).bind(...params).all<Row>(),
+      db.prepare("SELECT main_company_id,active FROM ik_pdks_devices "+
+        "WHERE main_company_id=? LIMIT 1001").bind(...params).all<Row>(),
+    ]);
+    const view=projectUnifiedSyncStatus({
+      company:auth.company,counts:aggregate.results??[],
+      rows:recent.results??[],devices:devices.results??[],
+      asOf:new Date().toISOString(),
+    });
+    return c.json({ok:true,data:view});
+  }catch{
+    return fail(c,"PDKS_SYNC_STATUS_UNAVAILABLE",
+      "Senkron kaynağı okunamadı; bilinmeyen durumu başarılı saymıyoruz.",503);
+  }
 }
 function checkEmployeeSql(){
   return `SELECT 1 FROM hr_monthly_employees e
@@ -369,5 +405,6 @@ async function getReceipt(c:Context<AppEnv>){
 }
 export function registerIkPdksUnifiedCommandRoutes(app:Hono<AppEnv>){
   app.post(base,post);
+  app.get(base+"/sync/status",readSyncStatus);
   app.get(base+"/:requestId",getReceipt);
 }
