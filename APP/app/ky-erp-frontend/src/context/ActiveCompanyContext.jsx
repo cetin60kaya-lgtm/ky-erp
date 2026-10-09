@@ -196,16 +196,13 @@ export function ActiveCompanyProvider({ children }) {
     };
   }, [activeCompanySlug, isAuthenticated, globalNavigation, ownCompany]);
 
-  const activeCompany = useMemo(() => {
-    const target = normalizeCompanySlug(activeCompanySlug);
-    return (
-      companies.find(
-        (x) => normalizeCompanySlug(x.slug) === target,
-      ) ||
-      companies[0] ||
-      null
-    );
-  }, [companies, activeCompanySlug]);
+  const activeCompany = permitted.active;
+  const visibleCompanies = permitted.companies;
+  const changeCompany = (slug) => {
+    const requested = normalizeCompanySlug(slug);
+    if (!globalNavigation && requested !== ownCompany?.slug) return;
+    setActiveCompanySlug(requested);
+  };
 
   useEffect(() => {
     setApiActiveMainCompany(activeCompany);
@@ -213,12 +210,12 @@ export function ActiveCompanyProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      companies,
+      companies: visibleCompanies,
       activeCompany,
-      activeCompanySlug,
-      setActiveCompanySlug,
+      activeCompanySlug: permittedSlug,
+      setActiveCompanySlug: changeCompany,
     }),
-    [companies, activeCompany, activeCompanySlug],
+    [visibleCompanies, activeCompany, permittedSlug, globalNavigation, ownCompany],
   );
 
   return (
