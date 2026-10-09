@@ -136,7 +136,9 @@ function canonicalCompanyList(rows) {
 }
 
 export function ActiveCompanyProvider({ children }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const globalNavigation = maySwitchCompany(user?.role);
+  const ownCompany = useMemo(() => companyForRestrictedUser(user), [user]);
   const [companies, setCompanies] = useState(DEFAULT_COMPANIES);
   const [activeCompanySlug, setActiveCompanySlug] = useState(() => {
     try {
@@ -169,6 +171,11 @@ export function ActiveCompanyProvider({ children }) {
       return;
     }
 
+    if (!globalNavigation) {
+      setCompanies(ownCompany ? [ownCompany] : []);
+      setActiveCompanySlug(ownCompany?.slug || "");
+      return;
+    }
     let alive = true;
     apiGet("/admin/main-companies")
       .then((rows) => {
@@ -191,7 +198,7 @@ export function ActiveCompanyProvider({ children }) {
     return () => {
       alive = false;
     };
-  }, [activeCompanySlug, isAuthenticated]);
+  }, [activeCompanySlug, isAuthenticated, globalNavigation, ownCompany]);
 
   const activeCompany = useMemo(() => {
     const target = normalizeCompanySlug(activeCompanySlug);
