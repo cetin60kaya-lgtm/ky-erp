@@ -120,6 +120,14 @@ try {
         assertBrowser(await evaluate('document.querySelector(".pdk-u-transfer")?.textContent?.includes("Üretim aktarımı kapalı")'),
           tab.id+" must never claim active production synchronization");
       }
+      if(tab.id==="cloud"){
+        assertBrowser(await evaluate('Boolean(document.querySelector(".pdk-u-cloud-sync"))'),
+          "Cloud sync status panel missing");
+        assertBrowser(await evaluate('document.querySelector(".pdk-u-cloud-sync button")?.disabled===true'),
+          "Studio must not contact authenticated Cloud outbox");
+        assertBrowser(await evaluate('document.querySelector(".pdk-u-cloud-sync")?.textContent?.includes("Tasarım önizlemesinde canlı Cloud")'),
+          "Cloud preview must not invent connected Agent status");
+      }
       if(tab.id==="terminals"){
         await waitForEval('document.querySelectorAll(".pdk-u-terminal-modalities input[type=checkbox]").length===10',16000);
         const controls=await evaluate('document.querySelectorAll(".pdk-u-terminal-modalities input[type=checkbox]").length');
