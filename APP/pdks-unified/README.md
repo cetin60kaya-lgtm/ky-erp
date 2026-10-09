@@ -813,3 +813,61 @@ değildir. Fiziksel cihaz/terminal SDK, canlı Firebird 8 işlem,
 yıllık TNF normal/E entegrasyonu, tam bordro ve Android/iOS paketleri
 hâlâ eksik olduğundan PR #404 **DRAFT/UNMERGED** tutulur.
 Canlı FDB/TNF/terminal RAW/Cloudflare D1 **değiştirilmedi**.
+
+
+## 25. 09.10.2026 — CANLI GÜNLÜK DEVAM KONTROLÜ: KOD VE İZOLE TEST KABULÜ
+
+**Kapsam:** Onaylı 9 bölüm / 49 sekmelik görsel düzen korunarak
+`Genel Bakış`, `Canlı Devam`, `Uyarılar`, `Eksikler ve İstisnalar`
+menüleri için günlük kart hareketi okuma/filtreleme kodlandı.
+
+- Kaynak mevcut korumalı GET
+  `/api/ik/personnel-control/dashboard-live`. Bu endpoint artık
+  **salt okunur**; GET içinde tablo/seed oluşturmaz. Tenant ve PDKS okuma
+  yetkisi zorunludur, denetim hesabında kartlı SGK personel kapsamı
+  sınırlanır. Personel işe giriş/çıkış tarihi, aktiflik, kart numarası,
+  onaylı tam gün izin ve bugün kaydedilen gerçek D1 olayları dikkate alınır.
+  Hiçbir personele yapay saat, otomatik fiziksel giriş veya çıkış üretilmez.
+- Saf kanıt motoru: `src/ik-pdks-unified-live.mjs`.
+  Yalnız açık `IN`/`OUT` yönleri giriş/çıkış kanıtıdır;
+  `AUTO` yönü hiçbir şekilde sıraya veya tek/çift kayıt sayısına göre
+  `IN`/`OUT` sayılmaz. Geç giriş, yalnız atanmış **aktif** vardiya
+  ve kayıtlı tolerans mevcutsa hesaplanır. Vardiyası belli olmayanın
+  geç kalması tahmin edilmez. Çıkış eksikliği vardiya bitişinden önce
+  ilan edilmez. İzinler yalnız onaylıysa geçerlidir.
+- `KART_KAYDI_YOK` durumu kesin devamsızlık değil, D1'de
+  **doğrulanamayan kart kaydı** anlamındadır. Gerçek PDKS terminal,
+  yıllık TNF ve Firebird kanıtı bulunmadıkça `terminalVerified`,
+  `fdbVerified` ve `tnfVerified` alanları `false`.
+- `LiveAttendancePanel.jsx`: gelen, kart kaydı olmayan, geç gelen,
+  çıkış yapan, eksik/belirsiz, izinli filtreleri; personel listesi,
+  giriş/çıkış, geç dakika, D1 kaynak kanıtı ve son sorgu saati.
+  Genel Bakış ve Canlı Devam panellerine bağlandı.
+  `useUnifiedPdksData.js` ve `readService.js` taze GET ile
+  45 saniyede bir görünür sayfayı yeniler; previewOnly ağ çağrısı
+  veya gerçek veriyi **asla** açmaz.
+- Birbirini ezen eski `exceptions` sekme bağı kaldırıldı;
+  denetim kullanıcısına yalnız salt okunur günlük kart görünümü
+  açıldı, bordro ve yönetim erişimleri kapalı kaldı.
+
+**Kabul HEAD:** `092da6f80c02ea4716094174e80fe032a548fa83`
+
+**Gerçek DESEN izole çalıştırma sonucu:**
+Cloud sözleşme 20/20 + rota/güvenlik 18/18,
+Windows-Cloud E2E 1/1, cihaz/puantaj saf test 27/27,
+PDKS UI 35/35 = **101/101 otomatik test PASS**;
+Windows Release, 5 öz güvenlik testi, kopya Firebird rollback,
+3/3 service/assign-service/advance kalıcı SQL günlük testi,
+Cloud TypeScript, PDKS ESLint, frontend build,
+Chrome 9 bölüm / 49 sekme **PASS**.
+`RESULT=PASS_FULL_LIVE_DAILY_PDKS_TEST`.
+
+Log:
+`D:\KYERP\_TEMP\PDKS_SAFE_VERIFY_20261008_02\PDKS_LIVE_ATTENDANCE_FINAL_20261009.log`
+
+**Üretime geçiş sınırı:** Bu test gerçek personel devamını Cloudflare
+production'da gösterildiği anlamına GELMEZ. D1 kaynak veri girişinin
+güncelliği, fiziksel cihaz RAW, Firebird/TNF mutabakatı ve güvenli
+staging dağıtımı ayrıca doğrulanmalıdır.
+PR #404 DRAFT/UNMERGED ve canlı FDB/TNF/terminal/D1
+yazma/dağıtım kapalı kalır.
