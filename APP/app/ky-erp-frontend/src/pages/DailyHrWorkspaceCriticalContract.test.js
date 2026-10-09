@@ -117,3 +117,19 @@ test("manual daily range keeps arbitrary ranges instead of forcing Monday-Sunday
   assert.match(workspace, /rangeSpanDays\(resolved\.start, resolved\.end\) > 31/);
   assert.doesNotMatch(workspace, /kyop-range-summary/);
 });
+
+test("weekly summary fits on one A4 landscape sheet and includes grand totals", () => {
+  assert.match(workspace, /const pages = \[source\]/);
+  assert.doesNotMatch(workspace, /index \+= 26/);
+  assert.match(workspace, /\.week-page\{width:100%;min-height:0;display:block;page-break-after:auto/);
+  assert.match(workspace, /@page\{size:A4 landscape;margin:4mm/);
+  assert.match(workspace, /GENEL TOPLAM/);
+});
+
+test("daily Excel export is generated locally and does not hit missing cloud route", () => {
+  assert.match(workspace, /exportRowsToExcelFile/);
+  assert.match(workspace, /KYERP_Gunluk_/);
+  assert.match(workspace, /Gündüz Toplam/);
+  assert.match(workspace, /Gece Toplam/);
+  assert.doesNotMatch(workspace, /downloadDailyExcel\(/);
+});
