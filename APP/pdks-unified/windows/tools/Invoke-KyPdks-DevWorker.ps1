@@ -175,7 +175,7 @@ try {
       $previousPreference=$ErrorActionPreference
       try {
         $ErrorActionPreference='Continue'
-        $prompt | & $cli.Source exec --sandbox workspace-write --ask-for-approval never -C $RepoRoot --output-last-message $answer - *> $trace
+        $prompt | & $cli.Source exec --sandbox workspace-write -C $RepoRoot --output-last-message $answer - *> $trace
         $execExit=$LASTEXITCODE
       } finally {
         $ErrorActionPreference=$previousPreference
