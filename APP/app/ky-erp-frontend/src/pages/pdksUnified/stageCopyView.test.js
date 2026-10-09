@@ -48,3 +48,34 @@ test("unknown card must be explicit instead of creating a made-up person",()=>{
  assert.equal(out.unknownCards,1);
  assert.equal(out.events[0].person,"Kart eşleşmedi");
 });
+
+test("multiple entry sides without matching exit sides remain unresolved",()=>{
+ const x=example();
+ x.punches.push({
+  eventId:"p2:IN",cardNo:"00003",workDate:"2026-09-01",
+  time:"13:00:00",direction:"IN",legacyType:"",source:"GIRCIK_STAGE",
+ });
+ const result=parseStageCopySnapshot(x);
+ assert.equal(result.days.length,1);
+ assert.equal(result.days[0].sideCountMatched,false);
+ assert.equal(result.days[0].missingSideCount,1);
+ assert.equal(result.unmatchedDayCount,1);
+ assert.equal(result.missingSideCount,1);
+ assert.equal(result.days[0].lateVerified,false);
+});
+test("matching double-shift source sides are retained without claiming payroll approval",()=>{
+ const x=example();
+ x.punches.push({
+  eventId:"p2:IN",cardNo:"00003",workDate:"2026-09-01",
+  time:"20:00:00",direction:"IN",legacyType:"E",source:"GIRCIK_STAGE",
+ },{
+  eventId:"p2:OUT",cardNo:"00003",workDate:"2026-09-01",
+  time:"22:00:00",direction:"OUT",legacyType:"E",source:"GIRCIK_STAGE",
+ });
+ const result=parseStageCopySnapshot(x);
+ assert.equal(result.days[0].sideCountMatched,true);
+ assert.equal(result.days[0].entry.length,2);
+ assert.equal(result.days[0].exit.length,2);
+ assert.equal(result.unmatchedDayCount,0);
+ assert.equal(result.productionWritten,false);
+});
