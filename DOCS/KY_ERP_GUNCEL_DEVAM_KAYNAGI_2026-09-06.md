@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 09.10.2026 — Modül kabul kontrolü ve son açık kanıt
+- PR #409 merge `2d0e33a24d4ce319baff4ae6f9cc57b670a6552d` → frontend publish `844a4337523e24d9f5f944cef5b57a5f1506051f`, Actions #37891886962 (PR CI PASS) + #37892077343 (Pages + real Chrome PASS).
+- Yönetim > Sistem > Güncelleme Geçmişi > **Modül Kontrolleri** canlı; 14 ana modül, son PR ve durum görünür. Yanlış "Muhasebe" kategorisi giderildi; gerçek kullanıcı test edilmediyse "bekliyor" gösterilir.
+- ChatGPT KY ERP Canlı Nöbet altı saatte bir salt okunur public API/site + GitHub yayın regresyonu izlemesi için etkinleştirildi.
+- **Öncelikli eksik:** KY ERP TEST firmasında onaylı, düşük yetkili test hesap/cihazı üzerinden kimlikli işlevsel E2E: hesap+cihaz ayrı onay, PDKS, izin, makinacı üretim idempotency, yetki reddi; diğer 14 modülün yetkili ekran/işlem akışları. Test kanıtı yokken yapılan işler tamam sayılmaz. Hiçbir MFA, Turnstile veya üretim D1 kayıt güvenliği bypass edilmez.
+
+
 ## 09.10.2026 — Ortak güncelleme/yayın geçmişi ve yarım kalan işler
 - Tüm KY ERP sohbetlerinin ortak sözleşmesi: `DOCS/KY_ERP_GUNCELLEME_YAYIN_KAYIT_SOZLESMESI_2026-10-09.md`. Değişiklik PR/commit açıklamasında; test/merge/Pages/Worker canlı kanıtları ayrı kaydedilir.
 - Yönetim > Sistem > Güncelleme Geçmişi, public GitHub PR/commit/Actions verilerini salt-okunur gösterir. Yayın kanıtı olmayan iş canlı sayılmaz.
