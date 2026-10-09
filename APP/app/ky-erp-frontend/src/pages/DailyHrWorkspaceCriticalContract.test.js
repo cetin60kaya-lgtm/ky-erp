@@ -40,9 +40,8 @@ test("weekly control and summary prints use the same readable landscape personne
   assert.match(workspace, /function printWeeklyControlList/);
   assert.match(workspace, /function printWeeklySummary/);
   assert.match(workspace, /@page\{size:A4 landscape/);
-  assert.match(workspace, /SAYFA TOPLAMI/);
+  assert.doesNotMatch(workspace, /SAYFA TOPLAMI/);
   assert.match(workspace, /GENEL TOPLAM · \$\{totals\.people\} PERSONEL/);
-  assert.match(workspace, /pageDayTotals/);
   assert.match(workspace, /dayTotals/);
   assert.match(workspace, /Toplam<br\/>Gün/);
   assert.match(workspace, /Toplam Tutar/);
