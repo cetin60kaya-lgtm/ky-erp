@@ -938,3 +938,56 @@ TNF, terminal RAW ve Cloudflare üretim D1'e yazma/dağıtım yapılmadı.
 Terminal sürücüsü ve gerçek izleme verisiyle saha mutabakatı,
 ayrı Cloudflare staging, bordro/izin/cihaz kaynak bağlantıları ve
 diğer üretim komutları hâlâ tamamlanmalıdır.
+
+
+## 27. 09.10.2026 — TERMINAL HUB / QR + USB / WINDOWS KURULUM KABULÜ
+
+Terminal Hub ürün ekranına 12 bağlantı protokol profili ve 10 giriş/okutma
+seçeneği eklendi. Marka/model, özel ağ IP/portu veya HTTPS sunucusu,
+saat dilimi, yön, okuyucu ve şifre içermeyen JSON kurulum taslağı.
+Tasarım önizlemesinde bu alanlar tıklanabilir fakat cihaz bağlantısı
+ve gerçek terminal kayıt/deploy işlevi kesin kapalı. Sertifikasyon
+özelliği JSON alanıyla açılamaz.
+
+Yeni gerçek referans: APP/pdks-unified/device-gateway içinde
+terminal-profiles.mjs, qr-terminal-core.mjs, terminal-kiosk.mjs,
+terminal-kiosk.html ve terminal-cli.mjs. KYQR1 HMAC-SHA256 imzası,
+kısa geçerlilik süresi, firma/personel/kart bağlama ve tekrar
+günlük kaydı engeli; USB HID beş haneli kart yalnız kimliği henüz
+doğrulanmamış, mutabakat bekleyen olay olarak yerel diske alınır.
+Yerel operatör son kayıtları görüp JSON dışarı aktarabilir; FDB,
+TNF, bordro, cihaz logları veya Cloud D1'e yazma yapamaz.
+
+Windows per-user DPAPI anahtarlarla kurulum:
+windows/tools/Install-KyPdks-LocalTerminal.ps1.
+Install / Start / Status / Stop / ShowOperatorKey seçenekleri,
+127.0.0.1:5197–5205 dışına dinlememe, şifreleri yalnız DPAPI
+kullanıcı profiline kaydetme. Gerçek CompanyId ve TerminalId
+verilmeden production kurulum yapılmaz.
+
+**Kabul HEAD:** 94ecbdedd686b5a3686d26fc6b1a8316823ce6cd
+üzerinde tam birleşik gate:
+Cloud 45/45 + Windows/local Cloud/Firebird-copy E2E 1/1 +
+device/TNF/QR/USB 33/33 + frontend PDKS 36/36 =
+**115/115 otomatik test PASS**.
+Ek Agent 5 güvenlik öz testi, kopya Firebird rollback,
+3× service/assign-service/advance SQL ledger, Windows Release,
+Cloud TypeScript, PDKS lint ve frontend build PASS.
+Windows QR kurulum testinde izole LOCALAPPDATA altında:
+DPAPI Install -> Status(STOPPED) -> gerçek localhost
+Start (127.0.0.1:5201) -> Health -> Status(REACHABLE)
+-> Stop PASS, ardından geçici dosyalar temizlendi.
+Chrome 9 bölüm/49 sekme ve Terminal Hub 12 connector/10 okutma
+seçeneği PASS. Marker:
+RESULT=PASS_PDKS_TERMINAL_HUB_FULL_GATE
+
+**Önemli sınırlama:** 12 profil, 12 sahada doğrulanmış üretici
+sürücüsü anlamına GELMEZ. Yalnız KY QR/USB referans çalışır ve
+gerçek Firebird/TNF/Cloud mutabakatı henüz sertifikalı değildir.
+ZKTeco, Suprema, Hikvision, Anviz, Dahua, OSDP/Wiegand vb.
+SDK/API/lisans ve cihaz modeli bazında saha testini bekler.
+Tam model/durum matrisi:
+device-gateway/TERMINAL_HUB_COMPATIBILITY_20261009.md
+
+Canlı FDB/TNF/terminal RAW/Cloudflare üretim D1 değişmedi.
+PR #404 DRAFT ve birleştirilmemiş olarak kalır.
