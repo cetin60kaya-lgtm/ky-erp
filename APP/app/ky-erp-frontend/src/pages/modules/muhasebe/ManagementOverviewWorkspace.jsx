@@ -14,7 +14,7 @@ function Metric({ label, value }) {
 }
 
 export default function ManagementOverviewWorkspace({ activeMainCompany, refreshKey }) {
-  const [state, setState] = useState({ loading: true, error: "", data: {} });
+  const [state, setState] = useState({ loading: true, error: "", data: {}, denied: false });
 
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: "" }));
@@ -24,12 +24,13 @@ export default function ManagementOverviewWorkspace({ activeMainCompany, refresh
         mainCompanyId: activeMainCompany?.id,
         _ts: Date.now(),
       });
-      setState({ loading: false, error: "", data: unwrap(payload) });
+      setState({ loading: false, error: "", data: unwrap(payload), denied: false });
     } catch (error) {
       setState({
         loading: false,
         error: error?.message || "Yönetim özeti şu anda alınamadı.",
         data: {},
+        denied: [401, 403].includes(Number(error?.status || error?.statusCode || 0)),
       });
     }
   }, [activeMainCompany?.id, activeMainCompany?.slug]);
@@ -47,9 +48,9 @@ export default function ManagementOverviewWorkspace({ activeMainCompany, refresh
   if (state.error) {
     return (
       <section className="management-controlled-state">
-        <strong>Yönetim özeti yüklenemedi.</strong>
-        <span>{state.error}</span>
-        <button type="button" onClick={load}>Tekrar dene</button>
+        <strong>{state.denied ? "Bu hesabın finansal yönetim özetine erişim yetkisi bulunmuyor." : "Yönetim özeti yüklenemedi."}</strong>
+        <span>{state.denied ? "Salt okunur KY ERP TEST hesabı giriş yaptı. Bu özetin sunucu yetki kuralı daha kapsamlı erişim gerektiriyor; gerçek firma yetkileri açılmayacak." : state.error}</span>
+        {!state.denied && <button type="button" onClick={load}>Tekrar dene</button>}
       </section>
     );
   }

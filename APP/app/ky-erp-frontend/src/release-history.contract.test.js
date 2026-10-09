@@ -84,3 +84,33 @@ test("all normal login settings use enforced second factor, never bypass MFA",()
   assert.match(panel,/Canlı D1 güvenlik kuralı yalnız parolalı girişi yasaklıyor/);
   assert.match(panel,/KY Güvenlik \/ Google \/ Microsoft doğrulaması korunur/);
 });
+
+test("KY ERP TEST signed-in company never falls back to Hakan Emprime", async () => {
+  const {maySwitchCompany,companyForRestrictedUser,permittedCompanySelection}=await import("./utils/companyAccessScope.js");
+  const viewer={id:"qa",username:"test",role:"VIEWER",mainCompanySlug:"kyerp-test"};
+  assert.equal(maySwitchCompany("SUPER_ADMIN"),true);
+  assert.equal(maySwitchCompany("ADMIN"),true);
+  assert.equal(maySwitchCompany("VIEWER"),false);
+  assert.equal(maySwitchCompany("COMPANY_ADMIN"),false);
+  const restricted=permittedCompanySelection(viewer,[{slug:"mecit-hakan",name:"Hakan Emprime"}],"mecit-hakan");
+  assert.equal(restricted.companies.length,1);
+  assert.equal(restricted.active.slug,"kyerp-test");
+  assert.equal(restricted.active.name,"KY ERP TEST");
+  assert.equal(restricted.locked,true);
+  assert.equal(companyForRestrictedUser({role:"VIEWER",mainCompanySlug:""}),null);
+  assert.equal(permittedCompanySelection({role:"VIEWER",mainCompanySlug:""},[{slug:"mecit-hakan"}],"mecit-hakan").active,null);
+  assert.equal(permittedCompanySelection({role:"SUPER_ADMIN"},[{slug:"mecit-hakan"}],"mecit-hakan").active.slug,"mecit-hakan");
+  const context=readFileSync("src/context/ActiveCompanyContext.jsx","utf8");
+  assert.match(context,/permittedCompanySelection\(user, companies, activeCompanySlug\)/);
+  assert.match(context,/if \(!globalNavigation\)/);
+  assert.match(context,/if \(!globalNavigation && requested !== ownCompany\?\.slug\) return/);
+  assert.match(context,/setApiActiveMainCompany\(activeCompany\)/);
+});
+test("accounting access-denied is not retried as a production fault for read-only QA",()=>{
+  const screen=readFileSync("src/pages/modules/muhasebe/ManagementOverviewWorkspace.jsx","utf8");
+  const parent=readFileSync("src/pages/modules/MuhasebePage.jsx","utf8");
+  assert.match(screen,/Bu hesabın finansal yönetim özetine erişim yetkisi bulunmuyor/);
+  assert.match(screen,/!state.denied && <button/);
+  assert.match(parent,/auth_error: restrictedUser \? "Kısıtlı erişim"/);
+  assert.match(parent,/!restrictedUser && <div className="accounting-quick-wrap"/);
+});

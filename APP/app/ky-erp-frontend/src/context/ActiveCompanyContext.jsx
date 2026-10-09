@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { apiGet, setApiActiveMainCompany } from "../utils/api";
 import { canonicalCompanySlug, resolveCompanyIdentity } from "../utils/companyIdentity";
+import { maySwitchCompany, companyForRestrictedUser, permittedCompanySelection } from "../utils/companyAccessScope";
 import { useAuth } from "./AuthContext";
 
 const STORAGE_KEY = "kyerp.activeCompany";
@@ -135,7 +136,9 @@ function canonicalCompanyList(rows) {
 }
 
 export function ActiveCompanyProvider({ children }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const globalNavigation = maySwitchCompany(user?.role);
+  const ownCompany = useMemo(() => companyForRestrictedUser(user), [user]);
   const [companies, setCompanies] = useState(DEFAULT_COMPANIES);
   const [activeCompanySlug, setActiveCompanySlug] = useState(() => {
     try {
@@ -150,16 +153,12 @@ export function ActiveCompanyProvider({ children }) {
     }
   });
 
+  const permitted = useMemo(() => permittedCompanySelection(user, companies, activeCompanySlug), [user, companies, activeCompanySlug]);
+  const permittedSlug = permitted.active?.slug || "";
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        normalizeCompanySlug(activeCompanySlug),
-      );
-    } catch {
-      // Depolama kullanılamıyorsa context state'i kaynak olarak kalır.
-    }
-  }, [activeCompanySlug]);
+    if (!isAuthenticated || !permittedSlug) return;
+    try { localStorage.setItem(STORAGE_KEY, permittedSlug); } catch { /* optional */ }
+  }, [isAuthenticated, permittedSlug]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -168,6 +167,11 @@ export function ActiveCompanyProvider({ children }) {
       return;
     }
 
+    if (!globalNavigation) {
+      setCompanies(ownCompany ? [ownCompany] : []);
+      setActiveCompanySlug(ownCompany?.slug || "");
+      return;
+    }
     let alive = true;
     apiGet("/admin/main-companies")
       .then((rows) => {
@@ -190,18 +194,15 @@ export function ActiveCompanyProvider({ children }) {
     return () => {
       alive = false;
     };
-  }, [activeCompanySlug, isAuthenticated]);
+  }, [activeCompanySlug, isAuthenticated, globalNavigation, ownCompany]);
 
-  const activeCompany = useMemo(() => {
-    const target = normalizeCompanySlug(activeCompanySlug);
-    return (
-      companies.find(
-        (x) => normalizeCompanySlug(x.slug) === target,
-      ) ||
-      companies[0] ||
-      null
-    );
-  }, [companies, activeCompanySlug]);
+  const activeCompany = permitted.active;
+  const visibleCompanies = permitted.companies;
+  const changeCompany = useCallback((slug) => {
+    const requested = normalizeCompanySlug(slug);
+    if (!globalNavigation && requested !== ownCompany?.slug) return;
+    setActiveCompanySlug(requested);
+  }, [globalNavigation, ownCompany]);
 
   useEffect(() => {
     setApiActiveMainCompany(activeCompany);
@@ -209,12 +210,12 @@ export function ActiveCompanyProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      companies,
+      companies: visibleCompanies,
       activeCompany,
-      activeCompanySlug,
-      setActiveCompanySlug,
+      activeCompanySlug: permittedSlug,
+      setActiveCompanySlug: changeCompany,
     }),
-    [companies, activeCompany, activeCompanySlug],
+    [visibleCompanies, activeCompany, permittedSlug, changeCompany],
   );
 
   return (
