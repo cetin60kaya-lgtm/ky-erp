@@ -1,7 +1,7 @@
 # KY PDKS: per-user local QR/USB terminal setup; no service or production writes.
 [CmdletBinding()]
 param(
-  [ValidateSet('Install','Start','Stop','Status','ShowOperatorKey')][string]$Action='Status',
+  [ValidateSet('Install','Start','Stop','Status','Test','ShowOperatorKey')][string]$Action='Status',
   [Parameter(Mandatory=$true)][string]$TerminalId,
   [string]$CompanyId='',
   [ValidateRange(5197,5205)][int]$Port=5197,
@@ -118,6 +118,21 @@ switch($Action){
     if(Ready ([int]$receipt.port)){Write-Output 'STATUS=LOCAL_SERVICE_REACHABLE'}
     else{Write-Output 'STATUS=NOT_REACHABLE'}
     Write-Output ('TERMINAL_ID='+$profile.terminalId)
+    Write-Output 'PHYSICAL_VENDOR_CERTIFIED=false'
+  }
+  Test {
+    $null=ValidProfile
+    $probe=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\device-gateway\terminal-network-probe-cli.mjs'))
+    if(!(Test-Path -LiteralPath $probe -PathType Leaf)){throw 'QR_NETWORK_PROBE_MISSING'}
+    $chosenPort=$Port
+    if(Test-Path -LiteralPath $pidFile){
+      $receipt=Get-Content -LiteralPath $pidFile -Raw|ConvertFrom-Json
+      if($receipt.terminalId -cne $TerminalId){throw 'LOCAL_QR_RECEIPT_ID_MISMATCH'}
+      $chosenPort=[int]$receipt.port
+    }
+    $node=(Get-Command node.exe -ErrorAction Stop).Source
+    & $node $probe --profile $config --qr-port ([string]$chosenPort)
+    if($LASTEXITCODE -ne 0){throw 'LOCAL_QR_NETWORK_DIAGNOSTIC_FAILED'}
     Write-Output 'PHYSICAL_VENDOR_CERTIFIED=false'
   }
   Stop {
