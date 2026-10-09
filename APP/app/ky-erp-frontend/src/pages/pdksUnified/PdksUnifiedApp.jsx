@@ -19,6 +19,7 @@ import {sourceForTab,rowsForTab} from "./tabBindings.js";
 import {useUnifiedPdksData} from "./useUnifiedPdksData.js";
 import UnifiedOperationPanel from "./UnifiedOperationPanel.jsx";
 import LiveAttendancePanel from "./LiveAttendancePanel.jsx";
+import CardEventsPanel from "./CardEventsPanel.jsx";
 import "./pdksUnified.css";
 
 const ICONS = {
