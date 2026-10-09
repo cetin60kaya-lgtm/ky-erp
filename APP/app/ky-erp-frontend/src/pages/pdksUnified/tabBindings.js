@@ -9,6 +9,8 @@ import {displayValue,toPersonRows,toAttendanceRows} from "./productData.js";
 
 const SOURCES = Object.freeze({
   // Read-only people/physical-card administration.
+  today:"live-attendance",attention:"live-attendance",live:"live-attendance",
+  exceptions:"live-attendance",
   people:"people",cards:"people",employment:"people",departments:"masters",
   groups:"masters",routes:"masters",rules:"config",
   // Only selected-person attendance. Real live aggregate not yet certified.
@@ -79,6 +81,24 @@ const finance = {
 };
 
 export function rowsForTab(id,payload,{people=[],selectedPerson=null,year=null,month=null}={}){
+  if(["today","live","attention","exceptions"].includes(id)){
+    if(payload?.complete!==true||!Array.isArray(payload.roster))
+      return {rows:[],supported:false};
+    const issue=new Set(["GEC_GIRIS","GEC_GIRIS_CIKTI","CIKIS_KAYDI_YOK",
+      "KART_KAYDI_YOK","YON_BELIRSIZ"]);
+    const rows=(["attention","exceptions"].includes(id)?
+      payload.roster.filter((person)=>issue.has(person.status)):payload.roster).map((p)=>({
+      _id:String(p.employeeId),
+      "Tarih":payload.date,"Kart No":p.cardNo||"—",
+      "Personel":p.fullName||"—","Giriş":p.entry||"—",
+      "Çıkış":p.exit||"—","Kaynak":p.source||"D1 kayıt yok",
+      "E":"—","Durum":p.status||"—",
+      "Öncelik":issue.has(p.status)?"Kontrol":"Bilgi",
+      "Olay":p.status||"—","İhlal":p.status||"—",
+      "İşlem":"Kanıt kontrolü","Kanıt":String(p.eventCount??0),
+    }));
+    return {rows,supported:true,scope:"unreconciled-d1-snapshot"};
+  }
   if(["people","cards","employment"].includes(id))
     return {rows:toPersonRows(people,id),supported:true,scope:"assigned-card-roster"};
   if(id==="departments"){
