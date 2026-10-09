@@ -28,6 +28,8 @@ small{color:#607184}video{max-width:100%;border-radius:10px;display:none;margin-
 <button id="submit" type="button">Doğrula ve yerel kanıta kaydet</button>
 <video id="video" playsinline muted></video>
 <div id="result" role="status" aria-live="polite">İşlem bekleniyor.</div>
+<div class="grid"><button type="button" id="events">Son yerel kanıtları görüntüle</button><button type="button" id="export" disabled>Kanıtları JSON indir</button></div>
+<div id="eventList" aria-live="polite"></div>
 <small>HMAC imzası, firma, süre ve tek kullanım kontrolü uygulanır. Kayıtlar cihazdan veya personel veritabanından silinmez.</small>
 </main><script>
 const $=id=>document.getElementById(id);
@@ -47,6 +49,37 @@ async function submit(){
  }catch{$("result").textContent="Yerel terminal bağlantısı kurulamadı."}
  finally{$("submit").disabled=false}
 }
+let loaded=[];
+$("events").onclick=async()=>{
+ const key=$("operator").value;
+ if(key.length<32){$("result").textContent="Yetkili terminal anahtarı gerekli.";return}
+ try{
+  const response=await fetch("/events",{headers:{"x-ky-pdks-terminal-key":key}});
+  const payload=await response.json();
+  if(!response.ok||!Array.isArray(payload.records)){
+   $("result").textContent="Kanıt listesine erişim reddedildi.";return
+  }
+  loaded=payload.records;
+  const box=$("eventList");box.replaceChildren();
+  const heading=document.createElement("h2");heading.textContent="Son yerel kanıtlar";box.appendChild(heading);
+  for(const entry of loaded){
+   const line=document.createElement("p");
+   line.textContent=[entry.receivedAt,entry.cardNo,entry.direction,entry.status].join(" · ");
+   box.appendChild(line)
+  }
+  if(!loaded.length){
+   const empty=document.createElement("p");empty.textContent="Henüz kayıt yok.";box.appendChild(empty)
+  }
+  $("export").disabled=loaded.length===0;
+ }catch{$("result").textContent="Kanıt günlüğü okunamadı."}
+};
+$("export").onclick=()=>{
+ if(!loaded.length)return;
+ const blob=new Blob([JSON.stringify({source:"LOCAL_PENDING_ONLY",events:loaded},null,2)],{type:"application/json"});
+ const url=URL.createObjectURL(blob),a=document.createElement("a");
+ a.href=url;a.download="KY-PDKS-LOCAL-PENDING-EVIDENCE.json";a.click();
+ URL.revokeObjectURL(url);
+};
 $("submit").onclick=submit;
 $("code").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();submit()}});
 $("camera").onclick=async()=>{
