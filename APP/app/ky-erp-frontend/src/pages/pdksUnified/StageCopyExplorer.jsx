@@ -36,7 +36,6 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
     }catch(e){onSnapshot(null);setError(String(e?.message||"Dosya doğrulanamadı"));}
   };
   const peopleTab=["people","cards","employment"].includes(tabId);
-  const reportTab=["violations","signatures","validation","timesheets","attendance"].includes(tabId);
   const reviewTab=["exceptions","attention","violations","signatures","validation"].includes(tabId);
   const monthlyTab=tabId==="monthly"||tabId==="timesheets";
   const eventTab=["punches","history"].includes(tabId);
