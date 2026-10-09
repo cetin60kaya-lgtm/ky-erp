@@ -10,6 +10,12 @@ internal static class Program
     private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        if (args.Contains("--isolated-ledger-smoke", StringComparer.OrdinalIgnoreCase))
+        {
+            var proof = FirebirdIsolatedLedgerSmoke.RunAsync().GetAwaiter().GetResult();
+            Console.WriteLine(proof);
+            return;
+        }
         if (args.Contains("--isolated-firebird-copy-smoke", StringComparer.OrdinalIgnoreCase))
         {
             var report = FirebirdIsolatedCopySmoke.RunAsync().GetAwaiter().GetResult();
