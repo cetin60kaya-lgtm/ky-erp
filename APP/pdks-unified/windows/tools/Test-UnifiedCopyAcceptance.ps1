@@ -46,8 +46,13 @@ try {
   Invoke-Gate 'FIREBIRD_COPY_TRANSACTION_ROLLBACK' {
     & dotnet.exe $dll --isolated-firebird-copy-smoke
   }
-  Invoke-Gate 'FIREBIRD_SERVICE_LEDGER_COMMIT_REPLAY_AND_CLEANUP' {
-    & dotnet.exe $dll --isolated-ledger-smoke
+  # Repeat against the SAME isolated copy to catch legacy trigger/key
+  # allocation drift across independent agent processes.
+  for($iteration=1;$iteration -le 3;$iteration++){
+    Write-Output ('COPY_LEDGER_ITERATION='+$iteration)
+    Invoke-Gate 'FIREBIRD_SVC_ASSIGN_ADVANCE_COMMIT_REPLAY_CLEANUP' {
+      & dotnet.exe $dll --isolated-ledger-smoke
+    }
   }
   Push-Location $cloud
   try {
