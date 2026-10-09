@@ -35,7 +35,7 @@ export const sourceForTab=(id,{audit=false}={})=>{
   if(!tab)return "unconnected";
   const source=SOURCES[id]||"unconnected";
   if(audit && (tab.section==="payroll"||tab.sensitive ||
-    !["people","attendance","live-attendance","monthly-attendance","unconnected"].includes(source)))
+    !["people","attendance","live-attendance","card-events","monthly-attendance","unconnected"].includes(source)))
     return "forbidden";
   return source;
 };
