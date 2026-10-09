@@ -113,6 +113,7 @@ try {
       }
 
       if(tab.id==="terminals"){
+        await waitForEval('document.querySelectorAll(".pdk-u-terminal-modalities input[type=checkbox]").length===10',16000);
         const controls=await evaluate('document.querySelectorAll(".pdk-u-terminal-modalities input[type=checkbox]").length');
         assertBrowser(controls===10,"Terminal Hub must expose 10 real badge modalities");
         const connectors=await evaluate('document.querySelector(".pdk-u-terminal select[aria-label=\'Terminal protokolü\']")?.options.length');
