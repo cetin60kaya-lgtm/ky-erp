@@ -153,16 +153,12 @@ export function ActiveCompanyProvider({ children }) {
     }
   });
 
+  const permitted = useMemo(() => permittedCompanySelection(user, companies, activeCompanySlug), [user, companies, activeCompanySlug]);
+  const permittedSlug = permitted.active?.slug || "";
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        normalizeCompanySlug(activeCompanySlug),
-      );
-    } catch {
-      // Depolama kullanılamıyorsa context state'i kaynak olarak kalır.
-    }
-  }, [activeCompanySlug]);
+    if (!isAuthenticated || !permittedSlug) return;
+    try { localStorage.setItem(STORAGE_KEY, permittedSlug); } catch { /* optional */ }
+  }, [isAuthenticated, permittedSlug]);
 
   useEffect(() => {
     if (!isAuthenticated) {
