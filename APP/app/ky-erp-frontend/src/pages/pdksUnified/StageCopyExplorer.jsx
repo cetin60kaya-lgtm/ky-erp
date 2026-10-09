@@ -77,7 +77,7 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
             eventTab?["Tarih","Kart No","Personel","Saat","Yön","Legacy Tür","Kanıt"]:
             ["Tarih","Kart No","Personel","Giriş","Çıkış","Legacy E","Durum"])
             .map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>
-          {rows.slice(0,500).map((r,i)=><tr key={peopleTab?r.cardNo:eventTab?r.eventId:r.cardNo+"|"+r.date}>
+          {rows.slice(0,500).map((r)=><tr key={peopleTab?r.cardNo:eventTab?r.eventId:r.cardNo+"|"+r.date}>
             {(peopleTab?[r.cardNo,r.fullName,r.group,r.employmentStart,r.employmentEnd,"KIMLIK · KOPYA"]:
               eventTab?[r.date,r.cardNo,r.person,stripTime(r.time),r.direction,r.legacyType,
                 "GIRCIK · KOPYA"]:
