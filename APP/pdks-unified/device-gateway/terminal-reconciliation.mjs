@@ -87,13 +87,35 @@ export function reconcileLocalEvents({companyId,terminalId,journalKey,events,tnf
   });
   let matched=0,unmatched=0,ambiguous=0,rejected=0;
   let qr=0,usb=0;
+  // Aggregated day batches expose no individual person, card, or QR token.
+  // This is a local diagnostics view, not a producer of approved transfers.
+  const batches=new Map();
+  const bucket=(day)=>{
+    const date=dateOk(day)?day:"BILINMIYOR";
+    if(!batches.has(date))batches.set(date,{
+      date,inspected:0,matched:0,unmatched:0,ambiguous:0,
+      rejected:0,signedQr:0,unsignedUsb:0,
+    });
+    return batches.get(date);
+  };
   const reasons={};
   inspected.forEach((result,index)=>{
-    if(!result.valid){rejected++;reasons[result.reason]=(reasons[result.reason]||0)+1;return;}
-    if(events[index].source==="KY_LOCAL_SIGNED_QR_KIOSK")qr++;else usb++;
-    if(eventsPerMinute.get(result.key)!==1||indexed.get(result.key)>1){ambiguous++;return;}
-    if(indexed.get(result.key)===1)matched++;else unmatched++;
+    const d=bucket(events[index]?.workDate);
+    d.inspected++;
+    if(!result.valid){
+      rejected++;d.rejected++;reasons[result.reason]=(reasons[result.reason]||0)+1;
+      return;
+    }
+    if(events[index].source==="KY_LOCAL_SIGNED_QR_KIOSK"){qr++;d.signedQr++;}
+    else{usb++;d.unsignedUsb++;}
+    if(eventsPerMinute.get(result.key)!==1||indexed.get(result.key)>1){
+      ambiguous++;d.ambiguous++;return;
+    }
+    if(indexed.get(result.key)===1){matched++;d.matched++;}
+    else{unmatched++;d.unmatched++;}
   });
+  const dailyBatches=[...batches.values()].sort((a,b)=>b.date.localeCompare(a.date))
+    .map(batch=>Object.freeze(batch));
   return Object.freeze({
     mode:"READ_ONLY_TNF_REFERENCE_PREVIEW",
     terminalId,yearHint,inspected:events.length,acceptedPending:qr+usb,
@@ -102,6 +124,8 @@ export function reconcileLocalEvents({companyId,terminalId,journalKey,events,tnf
     rejectedFacts:rejected,rejectionReasons:Object.freeze(reasons),
     referenceRows:reference.accepted.length,
     rejectedReferenceRows:reference.rejected.length,
+    dailyBatches:Object.freeze(dailyBatches),
+    batchState:"REVIEW_ONLY_NO_APPROVED_TRANSFER",
     // A file-level match is never equivalent to physical terminal or FDB proof.
     tnFReferenceCompared:true,terminalRawCertified:false,firebirdVerified:false,
     tnfApplied:false,cloudApplied:false,annualTnfWritten:false,
