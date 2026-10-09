@@ -2,7 +2,7 @@ import React,{useEffect,useMemo,useState} from "react";
 import {Database,FolderOpen,ShieldAlert,Download} from "lucide-react";
 import {parseStageCopySnapshot} from "./stageCopyView.mjs";
 const stripTime=v=>String(v||"").slice(0,5);
-export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",search=""}){
+export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",search="",selectedCard="",onSelectedCard=()=>{}}){
   const [error,setError]=useState("");
   const [filter,setFilter]=useState("all");
   const [day,setDay]=useState("");
@@ -60,18 +60,20 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
     return [...groups.values()].sort((a,b)=>a.cardNo.localeCompare(b.cardNo));
   },[snapshot]);
   const q=String(search).toLocaleLowerCase("tr-TR").trim();
+  const chosen=snapshot?.people.find(person=>person.cardNo===selectedCard)||null;
+  const chosenEvents=snapshot?.events.filter(event=>event.cardNo===selectedCard)||[];
   const rows=useMemo(()=>{
     if(!snapshot)return[];
     if(peopleTab)return snapshot.people.filter(p=>!q||[p.fullName,p.cardNo,p.group]
       .some(v=>String(v||"").toLocaleLowerCase("tr-TR").includes(q)));
     const data=monthlyTab?monthlyRows:eventTab?snapshot.events:snapshot.days;
-    return data.filter(r=>(monthlyTab||!day||r.date===day)&&
+    return data.filter(r=>(!selectedCard||r.cardNo===selectedCard)&&(monthlyTab||!day||r.date===day)&&
       (!filteredPairReview||monthlyTab||!r.sideCountMatched)&&(!q||
       [r.person,r.name,r.cardNo,r.date,r.direction]
         .some(v=>String(v||"").toLocaleLowerCase("tr-TR").includes(q)))&&
       (filter==="all"||(!eventTab?filter==="unpaired"&&
         !r.sideCountMatched:r.direction===filter)));
-  },[snapshot,peopleTab,eventTab,monthlyTab,monthlyRows,filteredPairReview,q,day,filter]);
+  },[snapshot,peopleTab,eventTab,monthlyTab,monthlyRows,filteredPairReview,q,day,filter,selectedCard]);
   const columns=peopleTab?["Kart No","Personel","Grup","İşe Giriş","İşten Çıkış","Kaynak"]:
     monthlyTab?["Kart No","Personel","Kayıtlı Gün","Çift Taraflı Gün","Eksik Taraflı Gün","E Tarafı","Bordro Onayı"]:
     eventTab?["Tarih","Kart No","Personel","Saat","Yön","Legacy Tür","Kanıt"]:
@@ -136,6 +138,7 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
             <option value="OUT">Sadece çıkış</option></>:
             <option value="unpaired">Tek tarafı bulunan günler</option>}
         </select></label>}
+        {selectedCard&&<button type="button" className="pdk-u-btn" onClick={()=>onSelectedCard("")}>Kart filtresini kaldır ({selectedCard})</button>}
         <span>{rows.length} kayıt gösteriliyor</span>
         <button type="button" className="pdk-u-btn" onClick={exportCsv} disabled={!rows.length}>
           <Download size={15}/> CSV
@@ -145,11 +148,32 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
         aria-label="Kopya Firebird gerçek kayıt tablosu">
         <table className="pdk-u-table"><thead><tr>
           {columns.map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>
-          {rows.slice(0,500).map((r)=><tr key={peopleTab||monthlyTab?r.cardNo:eventTab?r.eventId:r.cardNo+"|"+r.date}>
+          {rows.slice(0,500).map((r)=><tr key={peopleTab||monthlyTab?r.cardNo:eventTab?r.eventId:r.cardNo+"|"+r.date}
+            onClick={()=>onSelectedCard(r.cardNo)}
+            onKeyDown={event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();onSelectedCard(r.cardNo);}}}
+            tabIndex={0} aria-selected={selectedCard===r.cardNo}
+            className={selectedCard===r.cardNo?"is-selected":""}>
             {values(r).map((v,index)=>
               <td key={index}>{v??"—"}</td>)}
           </tr>)}</tbody></table>
       </div>
+      {chosen&&<div className="pdk-u-stage-person-detail" aria-label="Seçilen personelin kopya kayıtları">
+        <strong>Seçili kart: {chosen.cardNo} · {chosen.fullName}</strong>
+        <p>Grup: {chosen.group||"—"} · İşe giriş: {chosen.employmentStart||"—"} · İşten çıkış: {chosen.employmentEnd||"—"}</p>
+        <p>Seçili kartta {chosenEvents.length} kaynak hareket tarafı bulundu.
+          Kaynak yalnızca Firebird kopyasıdır; gerçek terminal ve maaş onayı değildir.</p>
+        <div className="pdk-u-table-scroll" role="region" tabIndex={0}
+          aria-label="Seçili kartın gerçek kaynak hareketleri">
+          <table className="pdk-u-table"><thead><tr>
+            <th>Tarih</th><th>Saat</th><th>Yön</th><th>Tür</th>
+          </tr></thead><tbody>
+            {chosenEvents.slice(0,150).map(event=><tr key={event.eventId}>
+              <td>{event.date}</td><td>{stripTime(event.time)}</td>
+              <td>{event.direction}</td><td>{event.legacyType||"—"}</td>
+            </tr>)}
+          </tbody></table>
+        </div>
+      </div>}
       {rows.length>500&&<p className="pdk-u-live-note">
         İlk 500 kayıt gösteriliyor. Tarih ve arama filtrelerini daraltın.</p>}
       {sourceOnlyNote&&<p className="pdk-u-live-note">
