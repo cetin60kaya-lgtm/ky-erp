@@ -239,6 +239,39 @@ export function rowsForTab(id,payload,{people=[],selectedPerson=null,year=null,m
   }
   return {rows:[],supported:false};
 }
+/**
+ * Production release gate: a route existing in the 49-tab navigation is NOT
+ * evidence that its data reader, write action or physical source is usable.
+ * Fail closed until every route has an explicit source and source verification.
+ */
+export function inspectReleaseReadiness({
+  verifiedSources=[],
+  certifiedTerminal=false,
+  firebirdTnfReconciled=false,
+  approvedPayroll=false,
+}={}){
+  const sources=new Set(verifiedSources);
+  const tabs=TAB_BINDINGS.map(tab=>{
+    const blockers=[];
+    if(tab.source==="unconnected")blockers.push("SOURCE_NOT_IMPLEMENTED");
+    else if(!sources.has(tab.source))blockers.push("SOURCE_NOT_ACCEPTED");
+    if(["live","punches","history","exceptions","daily","monthly","timesheets",
+         "violations","signatures","attendance","validation"].includes(tab.id)){
+      if(!certifiedTerminal)blockers.push("TERMINAL_NOT_CERTIFIED");
+      if(!firebirdTnfReconciled)blockers.push("FDB_TNF_NOT_RECONCILED");
+    }
+    if(tab.section==="payroll"&&!approvedPayroll)blockers.push("PAYROLL_NOT_APPROVED");
+    return {id:tab.id,label:tab.label,section:tab.section,
+      ready:blockers.length===0,blockers};
+  });
+  return Object.freeze({
+    ready:tabs.every(tab=>tab.ready),
+    total:tabs.length,
+    readyCount:tabs.filter(tab=>tab.ready).length,
+    blockedCount:tabs.filter(tab=>!tab.ready).length,
+    tabs,
+  });
+}
 export function integrationCoverage(){
   const counts=TAB_BINDINGS.reduce((result,item)=>{
     result[item.source]=(result[item.source]||0)+1;return result;
