@@ -1078,3 +1078,95 @@ okuma ve sahada zaman/yön testi gerekmektedir. FDB ve
 yıllık TNF `tnfApplied=false`, Cloud `cloudApplied=false`.
 Ayrı staging D1 eksik olduğu için PR #404 DRAFT/UNMERGED;
 üretime dağıtım veya canlı kaynaklara yazma yapılmadı.
+
+
+## 29. 09.10.2026 — AKTARIM MERKEZİ, TNF/MUTABAKAT VE CLOUD SENKRON
+
+Bu bölüm **son başarılı test edilmiş ürün kodu**
+`fc977cb4cb7934153ef28b832ebec08b591ce4a0` üzerine eklenen
+kanıt kaydıdır. PR #404 DRAFT; yerel önizleme için hazırdır, üretim
+dağıtımı ve fiziksel kaynak onayı değildir.
+
+### Günlük aktarım ve inceleme akışı
+
+- Yerel QR/USB HMAC korumalı günlük satırlarının TNF referans dosyasıyla
+  **yalnız okunarak** karşılaştırılması, her gün için `dailyBatches`
+  toplamları oluşturur: okunan, TNF eşleşen, TNF'de olmayan,
+  aynı dakikada çakışan, reddedilen, imzalı QR ve belirsiz USB.
+  Hiçbir personel/kart/QR token özete veya CSV'ye eklenmez.
+- Güvenlik: `terminalReportView.mjs`, operatörün verdiği **imzasız**
+  JSON'da tarih, negatif olmayan tam sayı, gün bazında tekillik ve
+  her sayacın genel toplamla matematiksel uyumunu doğrular.
+  Tutarsız raporu **reddeder**; `safeToApply=false`,
+  `physicalAttendanceConfirmed=false` zorunludur.
+  Yerel rapor, gerçek fiziksel kaynak sertifikası değildir.
+- `TransferCenterPanel.jsx` mevcut tasarımı bozmadan
+  `Günlük Aktarımlar`, `Aktarım Merkezi`, `TNF Arşivi`,
+  `Veri Mutabakatı`, `Hata Merkezi` menülerini işlevsel
+  gün/olay incelemesine bağlar. Sorunlu gün filtresi, anonim CSV
+  ve hafıza içi rapor paylaşımı vardır; firma değişince rapor temizlenir.
+  Tasarım önizlemesinde rapor yükleme ve gerçek veri erişimi kapalıdır.
+- `TerminalSetupPanel.jsx` içinden doğrulanan yerel tanı raporu
+  aynı oturumdaki inceleme ekranlarıyla paylaşılır. Sunucuya yüklenmez,
+  kalıcı tarayıcı depolamasına yazılmaz. Gerçek PDKS aktarımı,
+  çalışan cihaz RAW okuma, yerel FDB/TNF yazma ve Cloud ACK
+  yetkisi bu önizleme tarafından **asla açılmaz**.
+
+### Cloud / Windows Agent teslimat izleme
+
+- Yeni salt okunur yetkili GET:
+  `/api/ik/personnel-control/unified/commands/sync/status`.
+  `ik_pdks_unified_outbox` ve `ik_pdks_devices` kullanır;
+  firma bağlamı, oturum ve PDKS FULL yetkisi gerekir.
+  `migration/0060` eksikse 503 döner; GET hiçbir tablo oluşturmaz.
+- `ik-pdks-unified-sync-view.mjs` gizli cihaz anahtarı, komut
+  payload'u, kişi ID, serbest hata açıklaması veya ACK gövdesi
+  döndürmez. Yalnız gerçek `PENDING/CLAIMED/ACKED/FAILED`
+  sayıları, son 75 komut, deneme/ACK tarihleri ve kayıtlı/aktif
+  cihaz tanım sayıları verilir. Özgür hata metni maskeleme,
+  cross-tenant kayıt reddi ve tip kontrolleri test edilir.
+- `CloudSyncPanel.jsx` ekranda görünürken ve firma yetkisi
+  doğrulandığında 45 saniyede bir taze okuma yapar.
+  `ACKED` cihaz çevrimiçi, fiziksel RAW, Firebird veya
+  yıllık TNF doğrulaması sayılmaz. `localAgentOnline=false`,
+  `productionApproved=false` korunur; önizlemede istek yapılmaz.
+
+### Son birleşik izole kabul kanıtı
+
+`Test-UnifiedProductAcceptance.ps1` aynı izole checkout içinde:
+
+- Cloud kontrat/depolama/senkron-gizlilik **32 + 18 = 50** test,
+- Windows Agent ↔ localhost Cloud ↔ gbak Firebird kopya E2E **1**,
+- cihaz/kart/QR/HMAC/TNF/puantaj **49** test,
+- PDKS arayüz **40** test,
+- **TOPLAM 140/140 PASS**.
+- Windows Release (0 hata), Cloud TypeScript, PDKS ESLint,
+  frontend build, Agent 5 selftest, Firebird kopya transaction
+  rollback ve **3 adet** servis/atama/avans durable ledger tekrar
+  testi **PASS**.
+- İzole DPAPI Install → local KY QR scan → kaynak günlük HMAC →
+  sentetik TNF karşılaştırma → Stop **PASS**.
+- Headless Chrome mevcut düzenin **9 bölümü/49 sekmesi**,
+  tasarım modunda gerçek bilgi sorgulamama ve
+  transfer + Cloud ekranları **PASS**.
+- Test edilen HEAD:
+  `fc977cb4cb7934153ef28b832ebec08b591ce4a0`.
+- Son log:
+  `D:\KYERP\_TEMP\PDKS_SAFE_VERIFY_20261008_02\PDKS_CLOUD_SYNC_FINAL_20261009.log`
+  ve marker
+  `RESULT=PASS_COMPLETE_ISOLATED_PDKS_PREVIEW_AND_SYNC_ACCEPTANCE`.
+
+### Açık üretim kabul kapıları
+
+1. Cloudflare'da ayrı staging D1, gözden geçirilmiş migration 0060,
+   yetkili erişim ve gerçek ortam testleri.
+2. KY QR/USB için gerçek personel kartı eşlemesi, fiziksel okuyucu
+   ve operatör onayı; diğer üretici modellerde gerçek SDK/lisans,
+   terminal saat/yön RAW doğrulaması.
+3. Firebird işlem günlüğünün ve kalan sekiz legacy idari işlemin
+   **üretim yazma yolu** için geri alma/çökme kurtarma doğrulaması.
+4. Günlük RAW/E/TNF/FDB ve bordro mutabakatı + yetkili saha kabulü.
+5. Kurulum paketi/imzalı dağıtım ve rol bazlı erişim kabulü.
+
+**Üretim Firebird, gerçek TNF, terminal hafızası ve Cloudflare D1
+değiştirilmedi. PR #404 DRAFT/UNMERGED.**
