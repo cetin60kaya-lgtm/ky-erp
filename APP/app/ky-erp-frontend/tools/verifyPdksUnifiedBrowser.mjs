@@ -118,7 +118,7 @@ try {
         assertBrowser(controls===10,"Terminal Hub must expose 10 real badge modalities");
         const connectors=await evaluate('document.querySelector(".pdk-u-terminal select[aria-label=\'Terminal protokolü\']")?.options.length');
         assertBrowser(connectors===12,"Terminal Hub must show 12 protocol profiles");
-        assertBrowser(await evaluate('document.querySelector(".pdk-u-terminal input[aria-label=\\'Terminal tanı raporu\\']")?.disabled===true'),
+        assertBrowser(await evaluate('document.querySelector(".pdk-u-terminal input[type=file]")?.disabled===true'),
           "Studio must not open real terminal diagnostic reports in preview");
         assertBrowser(await evaluate('document.querySelector(".pdk-u-terminal")?.textContent?.includes("Bağlantı testi ve TNF tanı raporu")'),
           "Terminal Hub must show offline diagnostics and network instructions");
