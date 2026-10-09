@@ -180,3 +180,20 @@ body:has(> #root > .pdk-unified),
 .pdk-u-terminal-muted{display:flex;align-items:flex-start;gap:7px}
 @media(max-width:1250px){.pdk-u-terminal-layout{grid-template-columns:1fr}.pdk-u-terminal-summary{border-left:0;border-top:1px solid var(--pu-border)}}
 @media(max-width:750px){.pdk-u-terminal-head{flex-direction:column;align-items:stretch}.pdk-u-terminal-fields,.pdk-u-terminal-modalities{grid-template-columns:1fr}.pdk-u-terminal-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* Terminal Hub: local offline diagnostics; never imply production certification. */
+.pdk-u-terminal-report-upload{display:flex;flex-direction:column;align-items:flex-start;gap:8px;
+  margin:13px 0;padding:11px 13px;border:1px dashed var(--pu-border);border-radius:8px;
+  background:var(--pu-soft);font-size:11px;color:var(--pu-text);font-weight:680}
+.pdk-u-terminal-report-upload input{display:block;width:100%;font-size:11px;max-width:100%;
+  color:var(--pu-muted);font-weight:400}
+.pdk-u-terminal-report-upload input:disabled{opacity:.5;cursor:not-allowed}
+.pdk-u-terminal-diagnostic{border:1px solid var(--pu-border);background:var(--pu-soft);
+  border-radius:8px;padding:14px;margin:12px 0;font-size:11px}
+.pdk-u-terminal-diagnostic>strong{display:block;margin-bottom:10px}
+.pdk-u-terminal-diagnostic-counts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.pdk-u-terminal-diagnostic-counts span{background:var(--pu-panel);border:1px solid var(--pu-border);
+  padding:9px;border-radius:5px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.pdk-u-terminal-diagnostic-counts b{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums}
+.pdk-u-terminal-diagnostic p{font-weight:400;font-size:10px;color:var(--pu-muted);line-height:1.5}
+@media(max-width:700px){.pdk-u-terminal-diagnostic-counts{grid-template-columns:1fr}}
