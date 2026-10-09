@@ -54,6 +54,34 @@ try {
       & dotnet.exe $dll --isolated-ledger-smoke
     }
   }
+  Invoke-Gate 'LOCAL_QR_WINDOWS_DPAPI_INSTALL_TEST' {
+    $installer=Join-Path $win 'tools\Install-KyPdks-LocalTerminal.ps1'
+    if(!(Test-Path -LiteralPath $installer)){throw 'QR_INSTALLER_MISSING'}
+    $tokens=$null;$parserErrors=$null
+    $null=[System.Management.Automation.Language.Parser]::ParseFile(
+      $installer,[ref]$tokens,[ref]$parserErrors)
+    if(@($parserErrors).Count -gt 0){throw 'QR_INSTALLER_POWERSHELL_SYNTAX_INVALID'}
+    $tempRoot=Join-Path $env:TEMP ('KY-PDKS-INSTALL-GATE-'+[guid]::NewGuid().ToString('N'))
+    $previousLocal=$env:LOCALAPPDATA
+    try {
+      New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
+      $env:LOCALAPPDATA=$tempRoot
+      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Action Install -TerminalId 'stage-terminal-01' -CompanyId 'stage-company-01'
+      if($LASTEXITCODE -ne 0){throw 'QR_TEST_INSTALL_FAILED'}
+      $app=Join-Path $tempRoot 'KYERP\KY-PDKS\LocalTerminals\stage-terminal-01'
+      $draft=Get-Content -LiteralPath (Join-Path $app 'terminal.json') -Raw|ConvertFrom-Json
+      if($draft.terminalId -ne 'stage-terminal-01' -or
+         $draft.approvalState -ne 'DRAFT' -or
+         (Get-ChildItem -LiteralPath $app -Filter '*.dpapi').Count -ne 2){
+        throw 'QR_TEST_DPAPI_OR_DRAFT_INVALID'
+      }
+      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Action Status -TerminalId 'stage-terminal-01'
+      if($LASTEXITCODE -ne 0){throw 'QR_TEST_STATUS_FAILED'}
+    }finally {
+      $env:LOCALAPPDATA=$previousLocal
+      Remove-Item -LiteralPath $tempRoot -Force -Recurse -ErrorAction SilentlyContinue
+    }
+  }
   Push-Location $cloud
   try {
     Invoke-Gate 'CLOUD_CONTRACT_AND_SECURITY' {& npm.cmd run test:pdks-unified:cloud}
