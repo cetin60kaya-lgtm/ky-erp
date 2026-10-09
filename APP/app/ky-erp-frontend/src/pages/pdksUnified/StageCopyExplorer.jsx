@@ -24,7 +24,7 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
           "Otomatik kaynak doğrulanamadı: "+String(error?.message||"Bilinmeyen hata"));
       });
     return ()=>controller.abort();
-  },[onSnapshot]);
+  },[onSnapshot,snapshot]);
 
   const load=async file=>{
     if(!file)return;
