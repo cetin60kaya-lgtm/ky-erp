@@ -5,7 +5,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {CONNECTORS,INPUT_METHODS,validateTerminalDefinition,installationPlan}
   from "./terminal-profiles.mjs";
-import {issueQrCredential,verifyQrCredential,normalizedKioskEvent}
+import {issueQrCredential,verifyQrCredential,normalizedKioskEvent,normalizedWedgeCardEvent}
   from "./qr-terminal-core.mjs";
 import {startQrKiosk} from "./terminal-kiosk.mjs";
 const now=Date.parse("2026-10-09T08:00:00Z");
@@ -92,9 +92,19 @@ test("real localhost HTTP kiosk records exactly once, survives restart and rejec
     assert.equal((await first.json()).status,"PENDING_RECONCILIATION");
     const again=await request(operatorKey);assert.equal(again.status,409);
     assert.equal((await request(operatorKey,credential(),"AUTO")).status,422);
+    const cardScan=()=>fetch(base+"/scan-card",{method:"POST",headers:{
+      "content-type":"application/json","x-ky-pdks-terminal-key":operatorKey,origin:base,
+    },body:JSON.stringify({cardNo:"00027",direction:"IN"})});
+    const cardFirst=await cardScan();assert.equal(cardFirst.status,202);
+    const cardPayload=await cardFirst.json();
+    assert.equal(cardPayload.status,"PENDING_IDENTITY_AND_RECONCILIATION");
+    assert.equal(cardPayload.identityVerified,false);
+    assert.equal((await cardScan()).status,409);
     const files=(await readdir(join(root,"events"))).filter(x=>x.endsWith(".json"));
-    assert.equal(files.length,1);
-    const stored=JSON.parse(await readFile(join(root,"events",files[0]),"utf8"));
+    assert.equal(files.length,2);
+    const evidence=await Promise.all(files.map(async file=>
+      JSON.parse(await readFile(join(root,"events",file),"utf8"))));
+    const stored=evidence.find(e=>e.source==="KY_LOCAL_SIGNED_QR_KIOSK");
     assert.equal(stored.cardNo,"00003");
     assert.equal(stored.status,"PENDING_RECONCILIATION");
     assert.equal(stored.cloudAcked,false);
@@ -109,4 +119,15 @@ test("real localhost HTTP kiosk records exactly once, survives restart and rejec
     if(server?.listening)await new Promise(resolve=>server.close(resolve));
     await rm(root,{recursive:true,force:true});
   }
+});
+
+test("USB HID 5-digit RFID card is pending identity, never certified physical device",()=>{
+  const e=normalizedWedgeCardEvent({terminal:validateTerminalDefinition(sample()),
+    cardNo:"00003",direction:"IN",now});
+  assert.equal(e.cardNo,"00003");
+  assert.equal(e.identityVerified,false);
+  assert.equal(e.physicalHardwareProven,false);
+  assert.equal(e.status,"PENDING_IDENTITY_AND_RECONCILIATION");
+  assert.throws(()=>normalizedWedgeCardEvent({terminal:validateTerminalDefinition(sample()),
+    cardNo:"CUSTOM-ID",direction:"IN",now}),/INPUT_INVALID/);
 });
