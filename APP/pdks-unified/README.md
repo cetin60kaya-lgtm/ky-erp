@@ -666,3 +666,55 @@ otomatik canlı Agent apply veya üretim migration açılmaz.
 ledger/commit/recovery; gerçek Cloudflare staging D1 migration ve tenant
 kabulü; terminal SDK/RAW/E, puantaj ve bordro, 49 sekme saha kontrolü,
 Windows dağıtımı ve Android/iOS imzalı paketler.
+
+
+## 22. 09.10.2026 — FIREBIRD KOPYA SQL GÜNLÜĞÜ VE CLOUD ACK KANIT SIKIŞTIRMASI
+
+**Bu bölüm son kodlamanın durumunu belirler; her test sürümü ayrıca doğrulanmalıdır.**
+
+- Firebird'de üretim yazma yolu açılmadan, yalnız `--isolated-ledger-smoke`
+  ile ve `KY_PDKS_ISOLATED_COPY=1` + katı
+  `D:\KYERP\_TEMP\PDKS_COPY_STAGE_*\KY_PDKS_STAGE.FDB` eşlemesi üzerinden
+  çalışabilen **deneysel, kopya veritabanına özgü** SQL-ledger oluşturuldu.
+  `KY_PDKS_AGENT_LEDGER` ve `KY_PDKS_AGENT_MAP` tabloları **sadece**
+  gbak ile oluşturulmuş ayrı test kopyasına yazılır. Agent `--agent-once`
+  bu sınıfa hiçbir şekilde yönlenmez; üretim Firebird yazmaları hâlâ kilitli.
+- Test edilen işlem sınıfları: `service` (SERVIS tanımı), `assign-service`
+  (KIMLIK.SERVIS) ve `advance` (AVTUR kodu 1 doğrulanmış avans).
+  Her biri gerçek Firebird transaction + `company/commandId` ledger +
+  payload hash çakışma reddi + tekrarda tek yazma mantığını kullanır.
+  Test sonunda sentetik servis/avans/journal satırları silinir ve kopya
+  personelin önceki servis değeri geri yüklenir. **Gerçek avans ödemesi
+  veya personel verisi değişikliği yapılmadı.**
+- İlk avans testinde Firebird'de aynı parametre adlarının tekrar kullanımı
+  nedeniyle tutar doğrulama hatası oluştu; ayrı parametre isimleriyle tekil
+  test geçti. Ancak sonraki tekrar testinde `AVANS.KOD` üzerinden aranan
+  kayıt bazı denemelerde bulunamadı (`ROW_NOT_FOUND`). Bu yüzden
+  aşama **henüz production-safe kabul edilmedi**.
+- Yeni düzeltme: INSERT transaction'ı içinde gerçek kaydı benzersiz test
+  açıklamasına göre geri oku; tekil satır, gerçek KOD, 250,00 tutar ve
+  AVTUR/TURKOD=1 bilgisi doğrulanmadan ledger commit etme.
+  Cleanup da tahmini KOD yerine eşsiz açıklamayla yapılır; üç defa
+  arka arkaya test koşulu `Test-UnifiedCopyAcceptance.ps1` içine eklendi.
+- Cloud ACK artık `tnfTouched=false` yerel işlemlerde
+  `policySha256`, `fdbEvidenceSha256` ve
+  `evidenceSha256=SHA256(policySha256 + "|" + fdbEvidenceSha256)`
+  tutarlılığını da bağımsız doğrular. İmzalı olsa bile çelişkili fiş
+  reddedilir. Negatif test eklendi.
+- Cloudflare için yalnız okuma: Wrangler oturumu mevcut, görünen
+  **1 D1 veritabanı** ve ayrı `stage/test/dev/local` adlı D1 yok.
+  Tek veritabanını staging gibi kullanmak, migration veya üretim
+  Cloudflare yazması yapmak **yasaktır**.
+
+**Kabul sınırı:** HEAD `a75dda76` üzerindeki servis + atama kopya-ledger
+ve önceki HEAD'lerdeki **58/58 otomatik test** başarılıdır. Avansın ilk
+tekil testinde başarılı çıktı alınmasına rağmen tekrarlarda hata görüldü.
+Yeni `AVANS.KOD` kaynak okuma, üçlü tekrar testi, ve yeni Cloud ACK hash
+doğrulama commit'lerinden sonra **tam 59-test + üçlü Firebird kabulü henüz
+yeniden çalıştırılmadı**. Bu nedenle bunları PASS olarak raporlamak yasaktır.
+Remote Desktop kotası %96 olduğu için kalan kota korunuyor.
+
+**Kalan engeller:** Gerçek Cloudflare staging tenant+D1, üretim için
+kanıtlı Firebird SQL ledger/transaction/crash recovery (8 eylem),
+cihaz SDK/RAW/E, puantaj/bordro, 49 ekran saha testi ve mobil signing.
+PR #404 **DRAFT / unmerged** tutuluyor.
