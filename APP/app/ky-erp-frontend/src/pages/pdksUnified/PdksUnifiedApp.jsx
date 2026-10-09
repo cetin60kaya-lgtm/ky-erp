@@ -338,6 +338,7 @@ export default function PdksUnifiedApp({
   const sourceText = previewOnly ? "Tasarım incelemesi" :
     requirement==="forbidden" || data.audit && isSensitiveProductTab(tab.id) ? "Erişim kapalı" :
     requirement==="unconnected" ? "Entegrasyon bekliyor" :
+    requirement==="card-events" ? "D1 kart hareketleri · FDB/TNF doğrulanmadı" :
     data.sourceReady && !projection.supported ? "API veri sözleşmesi uyuşmuyor" :
     dataConnected ? "KY ERP API / D1 • Yerel mutabakat bekliyor" :
     data.error ? "Bağlantı hatası" : "Kaynak doğrulanıyor";
@@ -431,7 +432,7 @@ export default function PdksUnifiedApp({
             <div><h2>{tab.label}</h2><p>{tab.description}</p></div>
             <span className="pdk-u-label"><ShieldCheck size={15}/> {previewOnly?"Görsel İnceleme":"Yazma kontrollü"}</span>
           </div>
-          <div className="pdk-u-filters">
+          {requirement!=="card-events"&&<div className="pdk-u-filters">
             {requirement==="monthly-attendance" && !previewOnly &&
               <button type="button" className="pdk-u-btn"
                 disabled={!company || !data.profileReady || data.resourceLoading}
@@ -456,8 +457,12 @@ export default function PdksUnifiedApp({
             <span className="pdk-u-counter"><Filter size={15}/> {filteredRows.length} kayıt</span>
             <button type="button" className="pdk-u-btn" disabled={!canExport} onClick={exportTable}>
               <Download size={16}/> CSV</button>
-          </div>
-          {["live","exceptions","attention"].includes(tab.id) ?
+          </div>}
+          {requirement==="card-events" ? <CardEventsPanel
+            key={[company,tab.id].join(":")}
+            company={company} profileReady={data.profileReady}
+            previewOnly={previewOnly} history={tab.id==="history"} search={search}/> :
+          ["live","exceptions","attention"].includes(tab.id) ?
             <LiveAttendancePanel snapshot={!previewOnly&&data.resourceReady?data.resource:null}
               loading={data.resourceLoading} previewOnly={previewOnly} search={search}
               onRefresh={()=>setReloadToken(value=>value+1)}/> :
