@@ -3,18 +3,15 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "c4c48ac7afe0a8333aef333272b29097f25f6ddc",
-  "requestedAt": "2026-10-09T07:44:00+03:00",
-  "attempt": 8,
+  "sourceCommit": "bcba9e93165a98873bd976d7661fbf56d6ac9f11",
+  "requestedAt": "2026-10-09",
+  "attempt": 9,
   "scope": [
-    "employee-portal-company-personnel",
-    "personnel-account-and-device-independent-approval",
-    "personnel-tenant-boundary-and-access-revocation",
-    "ik-annual-leave-self-readonly",
-    "machine-model-production-idempotency",
-    "additive-d1-0060",
-    "d1-full-predeploy-backup",
-    "worker-health-smoke"
+    "qa-login-policy-schema-0029-mfa-guard",
+    "explicit-409-invalid-password-only",
+    "worker-contract-tests",
+    "d1-full-backup-before-worker-release",
+    "post-release-api-health"
   ],
-  "note": "Owner requested production pilot. Existing production data retained. PR 405 merged, green tests. Release pipeline must stop on backup/schema failure; frontend deployment follows only confirmed API success."
+  "note": "Correct previously contradictory QA-only password login promise: migration 0029 forbids PASSWORD_ONLY. Server rejects it explicitly; no auth trigger changes, no DB data reset. PR412 passed frontend+Worker CI. Publish Worker first, then frontend."
 }
