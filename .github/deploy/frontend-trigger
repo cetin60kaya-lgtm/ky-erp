@@ -1,4 +1,6 @@
-deploy: ik-monthly-canonical-leave-20261008
-canonical: 3d759edd0e5aa4ea96b606fb150a2c437724bb4d
-requested: 2026-10-08T19:30:00Z
-reason: HR Monthly safe permissions annual leave ledger and modern control workspace
+deploy: personnel-portal-pilot-20261009
+canonical-pr: 405
+merged: c4c48ac7afe0a8333aef333272b29097f25f6ddc
+worker-release: 37885380200
+requested: 2026-10-09T07:48:00+03:00
+reason: production employee portal pilot after D1 backup, 0060 schema and Worker health verified
