@@ -1,6 +1,6 @@
-deploy: qa-module-status-20261009
-pr: 409
-merge: 2d0e33a24d4ce319baff4ae6f9cc57b670a6552d
-ci: 37891886962
-reason: correct Turkish release category and ship 14-module truthful pending E2E matrix
-requested-at: 2026-10-09
+deploy: qa-existing-account-safe-pilot-20261009
+pr: 410
+merge: e073f5dbddce433534169f63bd94e0f2c3a9d5d4
+ci: 37896418791
+scope: existing KY ERP TEST user only, least privilege, existing server-supported password login
+reason: one-click supervised QA account setup on canonical production site
