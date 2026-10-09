@@ -34,7 +34,19 @@ if($ReportPath){
   if(Test-Path -LiteralPath $out){throw 'REPORT_ALREADY_EXISTS_NO_OVERWRITE'}
   $arguments+=@('--report',$out)
 }
-& $node @arguments
-if($LASTEXITCODE -ne 0){throw ('TERMINAL_EVIDENCE_DIAGNOSTIC_FAILED EXIT='+$LASTEXITCODE)}
+$operatorFile=Join-Path $root 'qr-operator.dpapi'
+if(!(Test-Path -LiteralPath $operatorFile -PathType Leaf)){throw 'LOCAL_OPERATOR_DPAPI_KEY_REQUIRED'}
+# Decrypt only for the child process, restore the caller environment at exit.
+$previousKey=$env:KY_PDKS_TERMINAL_JOURNAL_KEY
+try {
+  $secure=Get-Content -LiteralPath $operatorFile -Raw|ConvertTo-SecureString
+  $ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+  try{$env:KY_PDKS_TERMINAL_JOURNAL_KEY=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)}
+  finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)}
+  & $node @arguments
+  if($LASTEXITCODE -ne 0){throw ('TERMINAL_EVIDENCE_DIAGNOSTIC_FAILED EXIT='+$LASTEXITCODE)}
+} finally {
+  $env:KY_PDKS_TERMINAL_JOURNAL_KEY=$previousKey
+}
 Write-Output 'RESULT=PASS_LOCAL_TERMINAL_TNF_REFERENCE_PREVIEW_ONLY'
 Write-Output 'LIVE_FDB_OR_TERMINAL_OR_TNF_WRITTEN=false'
