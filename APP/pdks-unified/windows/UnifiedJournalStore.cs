@@ -221,7 +221,7 @@ internal static class UnifiedJournalStore
                 throw new InvalidOperationException("JOURNAL_REPLAY_SHA_NOT_ENFORCED");
             }
             catch (InvalidOperationException error) when(error.Message=="JOURNAL_APPLIED_RECEIPT_CONFLICT") { }
-            await File.WriteAllTextAsync(policyPath,"{\\\"tampered\\\":true}");
+            await File.WriteAllTextAsync(policyPath,"TAMPERED_POLICY_BYTES");
             try
             {
                 await ReadAppliedReceiptAsync(first.JournalPath,"command-1","outbox-1",a);
