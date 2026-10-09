@@ -21,7 +21,9 @@ small{color:#607184}video{max-width:100%;border-radius:10px;display:none;margin-
 <div class="grid"><div><label for="direction">İşlem yönü</label><select id="direction">
 <option value="IN">Giriş</option><option value="OUT">Çıkış</option></select></div>
 <div><label>QR kamera (desteklenen tarayıcılarda)</label><button id="camera" type="button">Kamerayı aç</button></div></div>
-<label for="code">İmzalı KYQR1 kart / QR içeriği</label>
+<label for="scanType">Okutma tipi</label>
+<select id="scanType"><option value="qr">İmzalı KYQR1 QR</option><option value="card">USB HID 5 haneli kart (kimlik doğrulaması bekliyor)</option></select>
+<label for="code">QR içeriği veya kart numarası</label>
 <input id="code" spellcheck="false" autocomplete="off" placeholder="USB okuyucu ile okutun veya QR'ı kamerayla tarayın" />
 <button id="submit" type="button">Doğrula ve yerel kanıta kaydet</button>
 <video id="video" playsinline muted></video>
@@ -32,13 +34,14 @@ const $=id=>document.getElementById(id);
 let media=null,scanning=false;
 async function submit(){
  const token=$("code").value.trim(),key=$("operator").value;
- if(!token||!key){$("result").textContent="QR ve yetkili anahtarı gerekli.";return}
+ const cardMode=$("scanType").value==="card";
+ if(!token||!key){$("result").textContent="Okutma bilgisi ve yetkili anahtarı gerekli.";return}
  $("submit").disabled=true;
  try{
-  const resp=await fetch("/scan",{method:"POST",headers:{"content-type":"application/json","x-ky-pdks-terminal-key":key},
-    body:JSON.stringify({token,direction:$("direction").value})});
+  const resp=await fetch(cardMode?"/scan-card":"/scan",{method:"POST",headers:{"content-type":"application/json","x-ky-pdks-terminal-key":key},
+    body:JSON.stringify(cardMode?{cardNo:token,direction:$("direction").value}:{token,direction:$("direction").value})});
   const body=await resp.json();
-  $("result").textContent=body.ok?("Kayıt alındı: "+body.status+" · "+body.receivedAt):
+  $("result").textContent=body.ok?("Kanıt alındı: "+body.status+" · "+body.receivedAt):
     ("İşlem reddedildi: "+body.error);
   if(body.ok){$("code").value="";$("code").focus()}
  }catch{$("result").textContent="Yerel terminal bağlantısı kurulamadı."}
@@ -57,7 +60,7 @@ $("camera").onclick=async()=>{
   const detector=new BarcodeDetector({formats:["qr_code"]});
   const step=async()=>{if(!scanning||!media)return;
    try{const found=await detector.detect($("video"));if(found.length){
-    $("code").value=found[0].rawValue;media.getTracks().forEach(t=>t.stop());
+    $("scanType").value="qr";$("code").value=found[0].rawValue;media.getTracks().forEach(t=>t.stop());
     media=null;scanning=false;$("video").style.display="none";$("camera").textContent="Kamerayı aç";await submit();return
    }}catch{}requestAnimationFrame(step)};step();
  }catch{$("result").textContent="Kamera izni alınamadı."}
