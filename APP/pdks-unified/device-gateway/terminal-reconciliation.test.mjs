@@ -87,3 +87,17 @@ test("read-only journal rejects filename mismatch and leaves input untouched",as
     await assert.rejects(()=>readLocalTerminalJournal(root,{limit:1}),/LIMIT_EXCEEDED/);
   }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test("daily review batches reconcile exactly to overall counts without personal data",()=>{
+  const res=reconcile([signed(),wedge(),{...signed("changed-nonce"),cardNo:"00006"}]);
+  assert.equal(res.dailyBatches.length,1);
+  assert.equal(res.dailyBatches[0].date,"2026-10-09");
+  assert.equal(res.dailyBatches[0].inspected,3);
+  assert.equal(res.dailyBatches[0].matched,1);
+  assert.equal(res.dailyBatches[0].unmatched,1);
+  assert.equal(res.dailyBatches[0].rejected,1);
+  assert.equal(res.dailyBatches[0].signedQr,1);
+  assert.equal(res.dailyBatches[0].unsignedUsb,1);
+  assert.equal(res.batchState,"REVIEW_ONLY_NO_APPROVED_TRANSFER");
+  assert.equal(JSON.stringify(res.dailyBatches).includes("00003"),false);
+});
