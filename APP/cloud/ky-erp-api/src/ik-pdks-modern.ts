@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
+import { buildLiveSnapshot } from "./ik-pdks-unified-live.mjs";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { ensurePdksPolicySchema, readCompanyPdksPolicy, resolveEmployeePdksPolicy, saveCompanyPdksPolicy } from "./ik-pdks-policy";
 
@@ -435,32 +436,51 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
   app.get("/api/ik/personnel-control/people/:employeeId/corrections",async(c)=>{const auth=await authContext(c);if(!auth)return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı.");await seedCompany(c,auth.company);const rows=await all(c,`SELECT id,work_date AS workDate,old_json AS oldJson,new_json AS newJson,reason,actor_user_id AS actorUserId,actor_name AS actorName,created_at AS createdAt FROM ik_pdks_correction_logs WHERE main_company_id=? AND employee_id=? ORDER BY created_at DESC LIMIT 300`,[auth.company,text(c.req.param("employeeId"))]);return ok(c,rows);});
 
   app.get("/api/ik/personnel-control/dashboard-live", async (c) => {
-    const auth=await authContext(c);if(!auth)return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı.");await seedCompany(c,auth.company);const date=dateOnly(c.req.query("date"))||todayTr();
-    const period=`${date.slice(0,7)}`;
+    const auth=await authContext(c);
+    if(!auth)return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı.");
+    const date=text(c.req.query("date"))||todayTr();
+    const parsed=new Date(date+"T12:00:00Z");
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(parsed.getTime())||
+       parsed.toISOString().slice(0,10)!==date)
+      return fail(c,400,"PDKS_LIVE_DATE_INVALID","Geçersiz günlük kontrol tarihi.");
+    const period=date.slice(0,7);
+    // Strictly read-only: this endpoint NEVER seeds D1, invents card punches
+    // or writes production Firebird/terminal/annual TNF data.
+    const baseSelect="SELECT e.id,e.full_name AS fullName,e.department,e.hire_date AS hireDate,s.exit_date AS exitDate,s.card_no AS cardNo FROM hr_monthly_employees e JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id ";
+    const activeWhere=" AND TRIM(COALESCE(s.card_no,''))<>'' AND UPPER(COALESCE(s.active_passive,'AKTIF')) NOT LIKE '%PAS%' AND UPPER(COALESCE(e.status,'AKTIF')) NOT LIKE '%PAS%'";
     const people=auth.audit
-      ? await all(c,`SELECT e.id,e.code,e.full_name,e.department,e.title,s.card_no
-          FROM hr_monthly_employees e
-          LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
-          LEFT JOIN ik_person_monthly_compliance mc ON mc.main_company_id=e.main_company_id AND mc.employee_id=e.id AND mc.period=?
-          WHERE e.main_company_id=?
-            AND UPPER(COALESCE(s.active_passive,'AKTIF')) NOT LIKE '%PAS%'
-            AND UPPER(COALESCE(e.status,'AKTIF')) NOT LIKE '%PAS%'
-            AND TRIM(COALESCE(s.card_no,''))<>''
-            AND ((mc.employee_id IS NOT NULL AND mc.sgk_covered=1)
-              OR (mc.employee_id IS NULL AND UPPER(COALESCE(e.sgk_status,'VAR'))<>'YOK'))`,[period,auth.company])
-      : await all(c,`SELECT e.id,e.code,e.full_name,e.department,e.title,s.card_no
-          FROM hr_monthly_employees e
-          LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
-          WHERE e.main_company_id=?
-            AND UPPER(COALESCE(s.active_passive,'AKTIF')) NOT LIKE '%PAS%'
-            AND UPPER(COALESCE(e.status,'AKTIF')) NOT LIKE '%PAS%'`,[auth.company]);
-    const events=await all(c,`SELECT t.id,t.employee_id AS employeeId,t.card_no AS cardNo,t.work_date AS workDate,t.event_time AS eventTime,t.direction,t.source,t.created_at AS createdAt,e.full_name AS fullName,e.department FROM ik_time_clock_events t LEFT JOIN hr_monthly_employees e ON e.id=t.employee_id WHERE t.main_company_id=? AND t.work_date=? ORDER BY t.event_time DESC`,[auth.company,date]);
-    const leaveMap=new Map<string,Row>();try{const leaveRows=await all(c,`SELECT d.employee_id AS employeeId,d.leave_type_code AS leaveTypeCode,d.leave_fraction AS leaveFraction,p.record_type AS recordType FROM ik_leave_plan_days d JOIN ik_leave_plans p ON p.id=d.leave_plan_id WHERE d.main_company_id=? AND d.work_date=? AND UPPER(COALESCE(p.status,''))<>'CANCELLED'`,[auth.company,date]);leaveRows.forEach((r)=>leaveMap.set(text(r.employeeId),r));}catch{}
-    const eventMap=new Map<string,Row[]>();events.forEach((e)=>{const list=eventMap.get(text(e.employeeId))||[];list.push(e);eventMap.set(text(e.employeeId),list);});
-    let late=0,inside=0,absent=0,permitted=0,missing=0;const cards:Row[]=[];
-    for(const person of people){const rows=(eventMap.get(text(person.id))||[]).slice().sort((a,b)=>text(a.eventTime).localeCompare(text(b.eventTime))),leave=leaveMap.get(text(person.id));if(leave){permitted+=1;continue;}if(!rows.length){absent+=1;continue;}if(rows.length===1)missing+=1;const schedule=await resolveSchedule(c,auth.company,person);const firstMin=minutesOf(rows[0].eventTime),expected=minutesOf(schedule.entryTime);if(firstMin!==null&&expected!==null&&firstMin>expected+schedule.lateTolerance)late+=1;const last=rows[rows.length-1];const dir=upper(last.direction);const isInside=dir==="IN"||(dir==="AUTO"&&rows.length%2===1);if(isInside)inside+=1;cards.push({employeeId:person.id,fullName:person.full_name,department:person.department,cardNo:person.card_no,lastTime:last.eventTime,direction:dir||"AUTO",inside:isInside});}
-    let devices:Row[]=[];try{devices=await all(c,`SELECT id,device_label AS deviceLabel,machine_name AS machineName,active,last_seen_at AS lastSeenAt,last_sync_at AS lastSyncAt,last_sync_count AS lastSyncCount FROM ik_pdks_devices WHERE main_company_id=? ORDER BY active DESC,device_label`,[auth.company]);}catch{}
-    const onlineDevices=devices.filter((d)=>Number(d.active)!==0&&d.lastSeenAt&&Date.now()-new Date(d.lastSeenAt).getTime()<300000).length;
-    return ok(c,{date,metrics:{activePersonnel:people.length,inside,absent,late,permitted,missingPunch:missing,deviceCount:devices.length,onlineDevices},liveCards:cards.slice(-30).reverse(),events:events.slice(0,50),devices});
+      ? await all(c,baseSelect+
+          "LEFT JOIN ik_person_monthly_compliance mc ON mc.main_company_id=e.main_company_id AND mc.employee_id=e.id AND mc.period=? "+
+          "WHERE e.main_company_id=?"+activeWhere+
+          " AND ((mc.employee_id IS NOT NULL AND mc.sgk_covered=1) OR (mc.employee_id IS NULL AND UPPER(COALESCE(e.sgk_status,'VAR'))<>'YOK'))",
+          [period,auth.company])
+      : await all(c,baseSelect+"WHERE e.main_company_id=?"+activeWhere,[auth.company]);
+    if(people.length>1000)return fail(c,409,"PDKS_LIVE_ROSTER_LIMIT","Personel kapsamı üst sınırı aşıyor.");
+    const allowed=new Set(people.map(p=>text(p.id)));
+    const rawEvents=await all(c,
+      "SELECT employee_id AS employeeId,card_no AS cardNo,work_date AS workDate,event_time AS eventTime,direction,source,created_at AS createdAt FROM ik_time_clock_events WHERE main_company_id=? AND work_date=? ORDER BY event_time ASC",
+      [auth.company,date]);
+    const events=rawEvents.filter(e=>allowed.has(text(e.employeeId)));
+    let leaves:Row[]=[];
+    try{
+      leaves=await all(c,
+        "SELECT d.employee_id AS employeeId,d.leave_type_code AS leaveTypeCode,d.leave_fraction AS leaveFraction,p.record_type AS recordType FROM ik_leave_plan_days d JOIN ik_leave_plans p ON p.id=d.leave_plan_id WHERE d.main_company_id=? AND d.work_date=? AND UPPER(COALESCE(p.status,'')) NOT IN ('CANCELLED','REJECTED')",
+        [auth.company,date]);
+    }catch{/* Missing leave schema does not prove a person was absent. */}
+    let shifts:Row[]=[];
+    try{
+      shifts=await all(c,
+        "SELECT a.employee_id AS employeeId,g.entry_time AS entryTime,g.exit_time AS exitTime,g.late_tolerance AS lateTolerance,g.early_tolerance AS earlyTolerance,g.active FROM ik_pdks_employee_groups a JOIN ik_pdks_work_groups g ON g.id=a.group_id AND g.main_company_id=a.main_company_id WHERE a.main_company_id=? AND g.active=1",
+        [auth.company]);
+    }catch{/* No confirmed shift -> late is unknown, never guessed. */}
+    const iso=new Date(Date.now()+3*60*60*1000).toISOString().replace("Z","+03:00");
+    const snapshot=buildLiveSnapshot({date,asOf:iso,people,events,leaves,
+      shifts:shifts.map(group=>({...group,active:Number(group.active)===1}))});
+    const metrics={...snapshot.metrics,activePersonnel:snapshot.metrics.total,
+      absent:snapshot.metrics.noRecord,permitted:snapshot.metrics.leave,
+      missingPunch:snapshot.metrics.missingExit};
+    return ok(c,{...snapshot,metrics,
+      liveCards:snapshot.roster.filter(p=>p.eventCount>0).slice(-30),
+      events:events.slice(-50).reverse()});
   });
 }
