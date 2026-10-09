@@ -19,11 +19,14 @@ internal static class FirebirdIsolatedCopySmoke
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             throw new InvalidOperationException("COPY_SMOKE_FDB_NOT_FOUND");
         var full = Path.GetFullPath(path);
-        var separator = Path.DirectorySeparatorChar;
-        if (!full.Contains(separator + "_TEMP" + separator + "PDKS_COPY_STAGE_",StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(Path.GetFileName(full),"KY_PDKS_STAGE.FDB",StringComparison.OrdinalIgnoreCase))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(full,
+                @"^D:\\KYERP\\_TEMP\\PDKS_COPY_STAGE_[^\\]+\\KY_PDKS_STAGE\.FDB$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase |
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant))
             throw new InvalidOperationException("COPY_SMOKE_PATH_NOT_ISOLATED");
         var live = Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH") ?? "";
+        if ((File.GetAttributes(full) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException("COPY_SMOKE_REPARSE_POINT_REJECTED");
         if (!string.IsNullOrWhiteSpace(live) && string.Equals(
             full,Path.GetFullPath(live),StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("COPY_SMOKE_LIVE_DB_REJECTED");
