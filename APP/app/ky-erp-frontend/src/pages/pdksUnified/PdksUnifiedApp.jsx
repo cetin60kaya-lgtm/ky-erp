@@ -320,7 +320,7 @@ export default function PdksUnifiedApp({
   },[data.people]);
 
   const isPeopleTab=section.id==="people" && ["people","cards","employment"].includes(tab.id);
-  const stageInspectTab=testMode&&["today","live","exceptions","attention","people","cards","employment","punches","history"].includes(tab.id);
+  const stageInspectTab=testMode&&["today","live","exceptions","attention","people","cards","employment","punches","history","daily","monthly","validation","attendance","violations","signatures","timesheets"].includes(tab.id);
   // One projection for every screen. API success is not record-schema success.
   const projection=useMemo(()=>{
     if(requirement==="people")return rowsForTab(tab.id,null,{people:data.people});
