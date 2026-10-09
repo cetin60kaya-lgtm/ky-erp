@@ -136,3 +136,13 @@ body:has(> #root > .pdk-unified),
 .pdk-u-live .pdk-u-table-scroll{min-height:0}
 @media(max-width:1150px){.pdk-u-live-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:650px){.pdk-u-live-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.pdk-u-live-head{flex-wrap:wrap}.pdk-u-live-filters>span:last-child{margin-left:0}}
+
+/* Card movements: bounded time window and verifiable D1 event list. */
+.pdk-u-card-events{width:100%;background:var(--pu-panel);border-top:1px solid var(--pu-border);color:var(--pu-text)}
+.pdk-u-event-filters{padding:12px 18px;display:flex;align-items:center;flex-wrap:wrap;gap:13px;background:var(--pu-soft);border-top:1px solid var(--pu-border);border-bottom:1px solid var(--pu-border)}
+.pdk-u-event-filters label{font-size:10.5px;font-weight:690;color:var(--pu-muted);display:inline-flex;align-items:center;gap:8px}
+.pdk-u-event-filters input,.pdk-u-event-filters select{height:34px;min-width:118px;max-width:195px;border:1px solid var(--pu-border);border-radius:6px;padding:6px 10px;color:var(--pu-text);background:var(--pu-panel)}
+.pdk-u-card-events .pdk-u-table-scroll{min-height:180px}
+.pdk-u-event-more{display:flex;justify-content:center;padding:15px;border-top:1px solid var(--pu-border)}
+.pdk-u-live-note.is-alert{color:var(--pu-warn)}
+@media(max-width:680px){.pdk-u-event-filters label{flex-wrap:wrap}.pdk-u-event-filters>button{flex-grow:1}}
