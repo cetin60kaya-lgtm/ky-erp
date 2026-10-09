@@ -68,6 +68,7 @@ export default function AdminUsersPanelV2(){
   const [createOpen,setCreateOpen]=useState(false),[createForm,setCreateForm]=useState(()=>newUserForm("")),[createPermissions,setCreatePermissions]=useState(()=>permissionPreset("VIEWER")),[createKey,setCreateKey]=useState(0);
   const [profileEditing,setProfileEditing]=useState(false),[profileForm,setProfileForm]=useState(()=>profileFromUser(null,""));
   const [password,setPassword]=useState(""),[emailChallenge,setEmailChallenge]=useState(null),[emailOtp,setEmailOtp]=useState("");
+  const [policyDraft,setPolicyDraft]=useState(null),[policyFeedback,setPolicyFeedback]=useState("");
   const searchRef=useRef(null);
 
   const companyMap=useMemo(()=>new Map(companies.map(row=>[companySlugOf(row),companyNameOf(row)])),[companies]);
@@ -119,7 +120,7 @@ export default function AdminUsersPanelV2(){
   useEffect(()=>{if(!selectedUserId)return;let cancelled=false;getUserPermissions(selectedUserId).then(rows=>{if(!cancelled)setPermissions(selectedRole==="DENETIM"?normalizePermissions(rows).map(row=>({...row,canView:row.moduleKey==="PDKS"&&row.canView,canCreate:false,canUpdate:false,canDelete:false,canApprove:false})):normalizePermissions(rows))}).catch(()=>{if(!cancelled)setPermissions(permissionPreset(selectedRole))});return()=>{cancelled=true}},[selectedUserId,selectedRole]);
 
   function defaultCompany(){const current=String(currentUser?.mainCompanySlug||"");if(companies.some(row=>companySlugOf(row)===current))return current;return companySlugOf(companies.find(row=>row.isActive!==false)||companies[0])}
-  function selectUser(id){setSelectedUserId(id);setTab("OVERVIEW");setProfileEditing(false);setPassword("");setEmailChallenge(null);setEmailOtp("");setCreateOpen(false)}
+  function selectUser(id){setSelectedUserId(id);setTab("OVERVIEW");setProfileEditing(false);setPassword("");setEmailChallenge(null);setEmailOtp("");setCreateOpen(false);setPolicyDraft(null);setPolicyFeedback("")}
   function handleSearchChange(event){if(document.activeElement!==event.currentTarget)return;setSearch(event.currentTarget.value)}
   function startCreate(){const company=defaultCompany();setCreateForm(newUserForm(company));setCreatePermissions(permissionPreset("VIEWER"));setCreateKey(value=>value+1);setCreateOpen(true);setMessage("Yeni kullanıcı tek ekranda firma, rol, yetki ve zorunlu MFA ile birlikte oluşturulur.")}
   function changeCreateRole(role){setCreateForm(form=>({...form,role,approvalRequired:["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(roleOf(role))?false:form.approvalRequired}));setCreatePermissions(permissionPreset(role))}
@@ -141,13 +142,50 @@ export default function AdminUsersPanelV2(){
       await updateUserPermissions(selectedUser.id,readOnly);
       setPermissions(readOnly);
       await updateLoginSecurityPolicy(selectedUser.id,{loginPolicy:"PASSWORD_ONLY",approvalRequired:false,sessionSeconds:28800});
+      const verified=rowsOf(await listLoginSecurityPolicies()).find(row=>String(row.userId||row.user_id)===String(selectedUser.id));
+      if((verified?.loginPolicy||verified?.login_policy)!=="PASSWORD_ONLY")throw Error("Sunucudan tekrar okununca yalnız parola politikası doğrulanamadı.");
+      setPolicyFeedback("Başarılı: KY ERP TEST hesabı için 'Sadece parola' sunucuda doğrulandı.");
       await loadAll();
       setMessage("KY ERP TEST hazır: yalnız Gör açık, yönetim kapalı, sadece bu hesap için parola girişi etkin. Eski oturumlar güvenlik gereği kapatıldı.");
     }catch(error){
-      setMessage("Hata: Test hesabı hazırlığı tamamlanamadı. Yetkileri ve Giriş & MFA durumunu Yenile ile kontrol edin: "+String(error?.message||error));
+      const failure="Hata: Test hesabı hazırlığı tamamlanamadı. Yetkileri ve Giriş & MFA durumunu Yenile ile kontrol edin: "+String(error?.message||error);
+      setPolicyFeedback(failure);
+      setMessage(failure);
     }finally{setBusy(false);}
   }
-  async function savePolicy(policyValue,approvalRequired){if(!selectedUser||!isOwner||selectedIsOwner)return;setBusy(true);try{let securePolicy=policyValue;if(policyValue==="PASSWORD_ONLY"){if(!isQaTestAccount)throw Error("Parola girişi yalnız KY ERP TEST kullanıcı hesabında kullanılabilir.");const persisted=normalizePermissions(await getUserPermissions(selectedUser.id));if(persisted.some(row=>row.canCreate||row.canUpdate||row.canDelete||row.canApprove||row.moduleKey==="ADMIN"&&row.canView))throw Error("Önce güvenli salt okunur yetkileri kaydedin.");}await updateLoginSecurityPolicy(selectedUser.id,{loginPolicy:securePolicy,sessionSeconds:36000,approvalRequired});setMessage("Giriş politikası kaydedildi. KY Güvenlik / Google / Microsoft aynı 6 haneli doğrulama katmanında çalışır.");await loadAll()}catch(error){setMessage(`Hata: ${error?.message||"Giriş politikası kaydedilemedi."}`)}finally{setBusy(false)}}
+  async function savePolicy(policyValue,approvalRequired){
+    if(!selectedUser||!isOwner||selectedIsOwner||busy)return;
+    setPolicyDraft(policyValue);
+    setPolicyFeedback("Giriş yöntemi sunucuda kaydediliyor...");
+    setBusy(true);
+    try{
+      if(policyValue==="PASSWORD_ONLY"){
+        if(!isQaTestAccount)throw Error("Sadece parola, yalnız mevcut KY ERP TEST hesabı için açıktır.");
+        const persisted=normalizePermissions(await getUserPermissions(selectedUser.id));
+        if(persisted.some(row=>row.canCreate||row.canUpdate||row.canDelete||row.canApprove||(row.moduleKey==="ADMIN"&&row.canView)))
+          throw Error("Kayıtlı yetkiler henüz salt okunur değil. Yetkiler > Güvenli Testi Hazırla işlemini tamamlayın.");
+      }
+      await updateLoginSecurityPolicy(selectedUser.id,{loginPolicy:policyValue,sessionSeconds:policyValue==="PASSWORD_ONLY"?28800:36000,approvalRequired});
+      const serverPolicies=rowsOf(await listLoginSecurityPolicies());
+      const verified=serverPolicies.find(row=>String(row.userId||row.user_id)===String(selectedUser.id));
+      if((verified?.loginPolicy||verified?.login_policy)!==policyValue)
+        throw Error("Sunucudan okunan giriş yöntemi seçtiğiniz değerle eşleşmedi. Yenile ile tekrar kontrol edin.");
+      setPolicies(serverPolicies);
+      await loadAll();
+      const success=policyValue==="PASSWORD_ONLY"
+        ?"Başarılı: KY ERP TEST için sadece parola sunucuda kaydedildi ve doğrulandı."
+        :"Giriş yöntemi sunucuda kaydedildi ve doğrulandı.";
+      setPolicyFeedback(success);
+      setMessage(success);
+    }catch(error){
+      const msg="Hata: "+String(error?.message||"Giriş yöntemi kaydedilemedi.");
+      setPolicyFeedback(msg);
+      setMessage(msg);
+    }finally{
+      setPolicyDraft(null);
+      setBusy(false);
+    }
+  }
   async function startEmailVerification(){if(!selectedUser)return;if(!delivery?.email)return setMessage("Hata: Gerçek e-posta doğrulama servisi bağlı değil; kod gönderildi mesajı gösterilmeyecek.");setBusy(true);try{const result=await startUserEmailVerification(selectedUser.id);if(result?.alreadyVerified){setMessage("E-posta zaten doğrulanmış.");return}if(result?.deliveryStatus!=="PROVIDER_ACCEPTED"||!result?.providerMessageId)throw new Error("E-posta sağlayıcısından kabul kimliği alınamadı.");setEmailChallenge(result);setEmailOtp("");setMessage(`${result.masked||selectedUser.email} için ${result.provider} gönderim isteğini kabul etti. Sağlayıcı ID: ${result.providerMessageId}. Gelen kutusu/spam kontrol edin; teslimat henüz ayrıca doğrulanmış değildir.`)}catch(error){setEmailChallenge(null);setMessage(`Hata: ${error?.message||"E-posta doğrulama isteği kabul edilmedi."}`)}finally{setBusy(false)}}
   async function finishEmailVerification(){if(!selectedUser||!emailChallenge)return;if(!/^\d{6}$/.test(emailOtp.replace(/\D/g,"")))return setMessage("Hata: 6 haneli doğrulama kodunu girin.");setBusy(true);try{await verifyUserEmail(selectedUser.id,{verificationId:emailChallenge.verificationId,verificationToken:emailChallenge.verificationToken,otp:emailOtp});setEmailChallenge(null);setEmailOtp("");setMessage("E-posta doğrulandı.");await loadAll()}catch(error){setMessage(`Hata: ${error?.message||"Kod doğrulanamadı."}`)}finally{setBusy(false)}}
   async function resetPassword(){if(!selectedUser)return;if(password.length<6)return setMessage("Hata: Yeni şifre en az 6 karakter olmalı.");setBusy(true);try{await resetUserPassword(selectedUser.id,password);setPassword("");setMessage("Şifre değiştirildi ve mevcut oturumlar sonlandırıldı. Sonraki giriş MFA ister.");await loadAll()}catch(error){setMessage(`Hata: ${error?.message||"Şifre değiştirilemedi."}`)}finally{setBusy(false)}}
@@ -197,7 +235,7 @@ export default function AdminUsersPanelV2(){
 
         {tab==="PERMISSIONS"&&<section className="auc2-panel"><div className="auc2-section-title"><div><h3>Modül Yetkileri</h3>{isQaTestAccount&&<p style={{marginTop:7,color:"#1863a8"}}>KY ERP TEST hesabı: tek işlemle tüm yazma yetkilerini kapatıp parola girişini açabilirsiniz. Gerçek firma hesaplarına uygulanmaz.</p>}<p>{selectedRole==="DENETIM"?"DENETİM salt okunur; yalnız PDKS / Gör yetkisi firma sahibi tarafından açılır.":selectedIsOwner?"Süper Yönetici tüm platform modüllerine sahiptir.":"Görme, ekleme, düzenleme, silme ve onay haklarını yönetin."}</p></div><div className="auc2-actions">{isQaTestAccount&&<button className="auc2-secondary" type="button" disabled={busy} onClick={prepareQaAccount}>KY ERP TEST · Güvenli Testi Hazırla</button>}{!selectedIsOwner&&<button className="auc2-primary" disabled={busy} onClick={savePermissions}>Yetkileri Kaydet</button>}</div></div><PermissionMatrix rows={selectedIsOwner?permissionPreset("COMPANY_ADMIN").map(row=>({...row,canView:true,canCreate:true,canUpdate:true,canDelete:true,canApprove:true})):permissions} onChange={editPermission} disabled={selectedIsOwner} viewOnly={selectedRole==="DENETIM"} viewOnlyKeys={selectedRole==="DENETIM"?["PDKS"]:null}/><AiPlatformAccessCard userId={selectedUser.id} email={selectedUser.email} emailVerified={selectedUser.emailVerified===true} disabled={busy||!isOwner} onMessage={setMessage}/></section>}
 
-        {tab==="SECURITY"&&<section className="auc2-panel"><div className="auc2-security-grid"><div className="auc2-card"><h3>Giriş Politikası & MFA</h3><p>Parola sonrası ikinci doğrulama tek katmandan yönetilir.</p><div className="auc2-lock-note">KY Güvenlik, Google Authenticator ve Microsoft Authenticator aynı 6 haneli doğrulama alanında çalışır. Doğrulanmış Süper Yönetici Sistem Kodu tüm hesaplarda yedek doğrulama olarak kabul edilir.</div><label>Giriş Yöntemi<select value={selectedIsOwner?"ANY_MFA":currentPolicy} disabled={selectedIsOwner||!isOwner} onChange={e=>savePolicy(e.target.value,currentApproval)}>{LOGIN_POLICIES.map(([key,label])=><option key={key} value={key}>{label}</option>)}{isQaTestAccount&&qaReadOnlyReady&&<option value="PASSWORD_ONLY">Sadece parola · KY ERP TEST (salt okunur)</option>}</select></label>{selectedApprovalExempt?<div className="auc2-lock-note">Firma Sahibi / İşveren ve Süper Yönetici giriş onayından muaftır; kendi girişleri onay kuyruğuna düşmez.</div>:<label className="auc2-inline-check"><input type="checkbox" checked={currentApproval} onChange={e=>savePolicy(currentPolicy,e.target.checked)}/> Yeni cihaz girişinde Firma Sahibi / Süper Yönetici onayı</label>}<div className="auc2-lock-note">Authenticator anahtarı doğrudan sıfırlanamaz. Güvenli QR yenileme yalnız Süper Yönetici & Güvenlik ekranındaki yeniden kimlik doğrulama akışıyla yapılır.</div></div>
+        {tab==="SECURITY"&&<section className="auc2-panel"><div className="auc2-security-grid"><div className="auc2-card"><h3>Giriş Politikası & MFA</h3><p>Parola sonrası ikinci doğrulama tek katmandan yönetilir.</p><div className="auc2-lock-note">KY Güvenlik, Google Authenticator ve Microsoft Authenticator aynı 6 haneli doğrulama alanında çalışır. Doğrulanmış Süper Yönetici Sistem Kodu tüm hesaplarda yedek doğrulama olarak kabul edilir.</div><label>Giriş Yöntemi<select value={selectedIsOwner?"ANY_MFA":policyDraft??currentPolicy} disabled={selectedIsOwner||!isOwner||busy} onChange={e=>{setPolicyDraft(e.target.value);void savePolicy(e.target.value,currentApproval)}}>{LOGIN_POLICIES.map(([key,label])=><option key={key} value={key}>{label}</option>)}{isQaTestAccount&&qaReadOnlyReady&&<option value="PASSWORD_ONLY">Sadece parola · KY ERP TEST (salt okunur)</option>}</select></label>{isQaTestAccount&&<div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",margin:"8px 0 12px"}}><button type="button" className="auc2-secondary" disabled={busy||!qaReadOnlyReady||currentPolicy==="PASSWORD_ONLY"} onClick={()=>void savePolicy("PASSWORD_ONLY",false)}>Sadece Parolayı Etkinleştir</button><small>{currentPolicy==="PASSWORD_ONLY"?"Sunucuda kayıtlı yöntem: Sadece parola":qaReadOnlyReady?"Özel test hesabı: yalnız okuma yetkisiyle giriş":"Önce Yetkiler sekmesinden güvenli testi hazırlayın."}</small></div>}{policyFeedback&&<div role="status" aria-live="polite" className="auc2-lock-note" style={{margin:"8px 0",background:policyFeedback.startsWith("Hata")?"#fff1f2":"#ecfdf5",color:policyFeedback.startsWith("Hata")?"#9f1239":"#166534"}}>{policyFeedback}</div>}{selectedApprovalExempt?<div className="auc2-lock-note">Firma Sahibi / İşveren ve Süper Yönetici giriş onayından muaftır; kendi girişleri onay kuyruğuna düşmez.</div>:<label className="auc2-inline-check"><input type="checkbox" checked={currentApproval} onChange={e=>savePolicy(currentPolicy,e.target.checked)}/> Yeni cihaz girişinde Firma Sahibi / Süper Yönetici onayı</label>}<div className="auc2-lock-note">Authenticator anahtarı doğrudan sıfırlanamaz. Güvenli QR yenileme yalnız Süper Yönetici & Güvenlik ekranındaki yeniden kimlik doğrulama akışıyla yapılır.</div></div>
           <div className="auc2-card"><h3>E-posta Doğrulama</h3><p>Başarı mesajı yalnız gerçek sağlayıcı isteği kabul ettiğinde gösterilir.</p><div className="auc2-email-line"><span>{selectedUser.email||"E-posta kayıtlı değil"}</span><span className={selectedUser.emailVerified?"good":"warn"}>{selectedUser.emailVerified?"Doğrulandı":"Doğrulanmadı"}</span></div>{!selectedUser.emailVerified&&<button className="auc2-primary" disabled={busy||!selectedUser.email||!delivery?.email} onClick={startEmailVerification}>Doğrulama Kodu Gönder</button>}{!delivery?.email&&<small className="auc2-error-text">Gerçek e-posta servisi bağlı değil; sahte başarı mesajı gösterilmez.</small>}{emailChallenge&&<div className="auc2-otp"><input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={emailOtp} onChange={e=>setEmailOtp(e.target.value.replace(/\D/g,"").slice(0,6))} placeholder="000000"/><button className="auc2-primary" onClick={finishEmailVerification}>Kodu Doğrula</button><button onClick={()=>{setEmailChallenge(null);setEmailOtp("")}}>Vazgeç</button></div>}</div>
           <div className="auc2-card"><h3>Şifre & Oturum Güvenliği</h3><p>Şifre değişikliği mevcut oturumları kapatır; sonraki giriş MFA ister.</p><div className="auc2-password-row"><input key={`reset-${selectedUser.id}`} type="password" name={`kyerp-reset-password-${selectedUser.id}`} autoComplete="new-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Yeni şifre"/><button onClick={resetPassword}>Şifreyi Değiştir</button><button className="auc2-danger" disabled={busy} onClick={revokeAllSelected}>{String(selectedUser.id)===String(currentUser?.id)?"Tüm Oturumlarımı Güvenli Kapat":"Kullanıcının Tüm Oturumlarını Sonlandır"}</button></div></div></div></section>}
 
