@@ -36,9 +36,19 @@ $previousPort=$env:KY_PDKS_BROWSER_PORT
 try {
   Push-Location $frontend
   try {
-    Gate 'UI_UNIT' {& npm.cmd test}
-    Gate 'UI_LINT' {& npm.cmd run lint}
-    Gate 'UI_BUILD' {& npm.cmd run build}
+    # Only this PDKS product's tests belong to its acceptance gate.
+    # Whole-ERP tests are tracked separately: unrelated security PWA
+    # assertions can fail without the PDKS preview being defective.
+    $unitRoot=Join-Path $frontend 'src\pages\pdksUnified'
+    $specs=@(Get-ChildItem -LiteralPath $unitRoot -Filter '*.test.js' -File |
+      Sort-Object FullName | ForEach-Object {$_.FullName})
+    if(!$specs.Count){Fail 'PDKS_UI_TEST_FILES_MISSING'}
+    Write-Output ('PDKS_UI_SPEC_FILES='+$specs.Count)
+    Gate 'PDKS_UI_UNIT' {& node.exe --test @specs}
+    $eslint=Join-Path $frontend 'node_modules\.bin\eslint.cmd'
+    if(!(Test-Path -LiteralPath $eslint)){Fail 'ESLINT_LOCAL_BINARY_REQUIRED'}
+    Gate 'PDKS_UI_LINT' {& $eslint 'src/pages/pdksUnified' '--max-warnings=0'}
+    Gate 'ERP_FRONTEND_BUILD' {& npm.cmd run build}
     Write-Output 'STEP=UI_LOCAL_BROWSER_START'
     $server=Start-Process -FilePath $node -WorkingDirectory $frontend -PassThru -ArgumentList @($vite,'--host','127.0.0.1','--port',[string]$port,'--strictPort') -RedirectStandardOutput (Join-Path $logRoot 'vite.out.log') -RedirectStandardError (Join-Path $logRoot 'vite.err.log')
     $ready=$false
