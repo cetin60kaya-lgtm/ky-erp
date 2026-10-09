@@ -1,5 +1,12 @@
 # KY ERP — GitHub / AI maliyet koruma talimatı
 
+## Bütün KY ERP ajanları için ortak Güncelleme Geçmişi
+- Önce `AGENTS.md` ve `DOCS/KY_ERP_GUNCELLEME_YAYIN_KAYIT_SOZLESMESI_2026-10-09.md` dosyalarını oku.
+- Her iş commit/PR açıklamasına modül, hata/çözüm, CI kanıtı, merge/live/eksik durumunu yaz. Canlı durum sadece gerçek production Actions ve commit kanıtıyla belirlenir; sohbetin "yaptım" sözü yeterli değildir.
+- KY ERP Platform Yönetimi > Sistem > Güncelleme Geçmişi tüm ajan ve sohbetlerin repo üzerinden yaptığı işlerin ortak salt-okunur defteridir.
+- Hiçbir koşulda sırf kayıt oluşturmak için ayrı workflow, ikinci test ERP, D1 migration, ücretli servis, kalıcı GitHub token veya gizli bilgi ekleme.
+
+
 Bu repo üzerinde çalışan AI ajanı veya Copilot önce kökteki `AGENTS.md` dosyasını okumalıdır.
 
 Zorunlu kurallar:
