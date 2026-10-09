@@ -113,7 +113,7 @@ try {
   } finally {Pop-Location}
   $device=Join-Path $RepoRoot 'APP\pdks-unified'
   Invoke-Gate 'PHYSICAL_RULES_AND_PROTOCOL' {
-    & node.exe --test (Join-Path $device 'core\attendanceRules.test.mjs') (Join-Path $device 'device-gateway\device-contract.test.mjs') (Join-Path $device 'device-gateway\tnf-reference-import.test.mjs') (Join-Path $device 'device-gateway\terminal-profiles.test.mjs') (Join-Path $device 'sync\eventProtocol.test.mjs')
+    & node.exe --test (Join-Path $device 'core\attendanceRules.test.mjs') (Join-Path $device 'device-gateway\device-contract.test.mjs') (Join-Path $device 'device-gateway\tnf-reference-import.test.mjs') (Join-Path $device 'device-gateway\terminal-profiles.test.mjs') (Join-Path $device 'device-gateway\terminal-onboarding.test.mjs') (Join-Path $device 'sync\eventProtocol.test.mjs')
   }
   Write-Output 'RESULT=PASS_WINDOWS_CLOUD_COPY_FDB_E2E_NO_LIVE_WRITES'
 } catch {
