@@ -65,7 +65,7 @@ function RunFullTests([string]$head){
   $log=Join-Path $work ('acceptance-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.log')
   Write-Output ('PRIVATE_TEST_LOG='+$log)
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script -RepoRoot $RepoRoot -StageDbPath $f -StageCardNo $StageCardNo *> $log
-  if($LASTEXITCODE -ne 0){Receipt 'BLOCKED' 'FULL_TEST_GATE_FAILED' $head;return}
+  if($LASTEXITCODE -ne 0){Gate 'FULL_TEST_GATE_FAILED'}
   if(!(Select-String -LiteralPath $log -Pattern '^RESULT=PASS_COMPLETE_ISOLATED_PDKS_PREVIEW_AND_SYNC_ACCEPTANCE$' -Quiet)){
     Gate 'TEST_PROOF_MARKER_MISSING'
   }
@@ -127,11 +127,14 @@ try {
   if($Mode -eq 'TestsCandidate'){
     ValidateCodeCandidate
     $before=GetHead
-    RunFullTests $before
-    # A code candidate is not published and must be reviewed; prevent its
-    # clean HEAD from being treated as a published fully tested release.
     $last=Join-Path $work 'last-pass.txt'
-    if(Test-Path -LiteralPath $last){Remove-Item -LiteralPath $last -Force}
+    $prior=if(Test-Path -LiteralPath $last){[IO.File]::ReadAllText($last)}else{$null}
+    RunFullTests $before
+    # A candidate's PASS cannot prove the clean published HEAD. Keep prior
+    # accepted head, if any, without erasing or falsely accepting this one.
+    if($null -ne $prior){
+      [IO.File]::WriteAllText($last,$prior,[Text.UTF8Encoding]::new($false))
+    }elseif(Test-Path -LiteralPath $last){Remove-Item -LiteralPath $last -Force}
     Receipt 'REVIEW' 'CODEX_WORKTREE_ACCEPTANCE_NOT_PUBLISHED' $before
     return
   }
