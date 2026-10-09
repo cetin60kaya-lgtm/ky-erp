@@ -5,7 +5,7 @@
 - Canonical sözleşme: `DOCS/KY_ERP_GUNCELLEME_YAYIN_KAYIT_SOZLESMESI_2026-10-09.md`. Teknik üst kural `AGENTS.md`.
 - GitHub public API salt okunur; ikinci veri kaynağı veya test sunucusu oluşturulmaz. Canlıya alındı demek için başarılı deploy ve release SHA ancestry gerekir.
 - 09.10.2026 gerçekleşen personel işleri: PR #405 canonical merge, Worker Action 37885380200 başarılı (D1 0060 + yedek + API), frontend Action 37885546558 başarılı. PR #407 mobil login yönlendirme düzeltmesi merge, frontend Action 37889109158 başarılı. **Gerçek personel/Android/PDKS/üretim uçtan uca kabulü henüz kanıtlanmadı**.
-- Güncelleme ekranı ve canlı Chrome kabul kapısı için güncel PR/CI/merge/deploy kayıtları ayrıca doğrulanacak; commit edildiği için kendiliğinden canlı denemez.
+- **SONUÇ:** PR #408 merged (642932f4), frontend production yayın GitHub Actions #37890106512 SUCCESS. Pages bundle doğrulaması + gerçek Chrome 6/6 public/live API smoke PASS. Artifact 11597916502. Uygulamada Platform Yönetimi → Sistem → Güncelleme Geçmişi artık canlı. Yetkili test hesabıyla bütün modüllerin CRUD/cihaz onay testi henüz yapılmadı; gerçek E2E tamamlandı denemez.
 
 
 ## ZORUNLU TEK YEREL KÖK — 01.10.2026
