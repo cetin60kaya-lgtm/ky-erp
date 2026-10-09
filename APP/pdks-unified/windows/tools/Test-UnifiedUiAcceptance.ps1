@@ -72,9 +72,13 @@ try {
     if($Screenshot){
       $shot=[IO.Path]::GetFullPath($Screenshot)
       if(!(Test-Path -LiteralPath (Split-Path -Parent $shot))){Fail 'SCREENSHOT_PARENT_NOT_FOUND'}
-      Gate 'CHROME_49_TABS_OPERATIONS_DARK_MODE' {& node.exe $browserSmoke $shot}
+      Gate 'CHROME_49_TABS_OPERATIONS_DARK_MODE' {
+        & cmd.exe /d /c ('node.exe "' + $browserSmoke + '" "' + $shot + '" 2>&1')
+      }
     } else {
-      Gate 'CHROME_49_TABS_OPERATIONS_DARK_MODE' {& node.exe $browserSmoke}
+      Gate 'CHROME_49_TABS_OPERATIONS_DARK_MODE' {
+        & cmd.exe /d /c ('node.exe "' + $browserSmoke + '" 2>&1')
+      }
     }
     Write-Output 'RESULT=PASS_49_TAB_STUDIO_PREVIEW_NO_LIVE_WRITE'
   } finally {Pop-Location}
