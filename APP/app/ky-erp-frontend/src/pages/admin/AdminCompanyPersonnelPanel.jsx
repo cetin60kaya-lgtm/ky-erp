@@ -96,6 +96,7 @@ export default function AdminCompanyPersonnelPanel({companySlug}) {
     <div className="admpro-grid-2">
       <form onSubmit={create} className="admpro-card" style={{boxShadow:"none"}}>
         <h4>Personel Girişi Tanımla</h4>
+        <p style={{fontSize:12}}><a href="/mobile/personel" target="_blank" rel="noopener noreferrer">Personel test ekranını yeni sekmede aç</a> · Yönetici oturumu korunur.</p>
         <div className="admpro-form-grid">
           <label>İK Personel Kartı<select value={selected} onChange={e=>setSelected(e.target.value)} required><option value="">Personel seçiniz</option>{employees.filter(e=>!e.accountUserId).map(e=><option key={e.employeeId} value={e.employeeId}>{e.fullName} · {e.code||e.department}</option>)}</select></label>
           <label>Vasıf<select value={occupation} onChange={e=>setOccupation(e.target.value)}>{ROLES.map(([v,n])=><option key={v} value={v}>{n}</option>)}</select></label>
