@@ -61,32 +61,26 @@ test("entire canonical module inventory is in management QA dashboard without fa
   assert.match(screen,/moduleOf\(pr.title\)===module/);
 });
 
-test("existing KY ERP TEST account has an explicitly scoped owner-only safe test control",()=>{
+
+test("KY ERP TEST preparation only removes privileges and preserves canonical MFA",()=>{
   const panel=readFileSync("src/pages/admin/AdminUsersPanelV2.jsx","utf8");
   assert.match(panel,/selectedRole==="VIEWER"/);
   assert.match(panel,/selectedUser\?\.mainCompanySlug\|\|""\)==="kyerp-test"/);
   assert.match(panel,/selectedUser\?\.username\|\|""\)/);
   assert.match(panel,/isOwner \|\| !isQaTestAccount/);
-  assert.match(panel,/moduleKey!==["']ADMIN["']/);
+  assert.match(panel,/moduleKey!=="ADMIN"/);
   assert.match(panel,/canCreate:false,canUpdate:false,canDelete:false,canApprove:false/);
   assert.match(panel,/updateUserPermissions\(selectedUser.id,readOnly\)/);
-  assert.match(panel,/updateLoginSecurityPolicy\(selectedUser.id,\{loginPolicy:"PASSWORD_ONLY"/);
-  assert.match(panel,/KY ERP TEST · Güvenli Testi Hazırla/);
+  assert.match(panel,/persisted=normalizePermissions\(await getUserPermissions\(selectedUser.id\)\)/);
+  assert.match(panel,/revokeAllUserSessions\(selectedUser.id\)/);
+  assert.match(panel,/MFA tüm hesaplarda korunur/);
+  assert.doesNotMatch(panel,/Sadece Parolayı Etkinleştir/);
+  assert.doesNotMatch(panel,/<option value="PASSWORD_ONLY"/);
 });
-test("general users still have enforced MFA selection",()=>{
+test("all normal login settings use enforced second factor, never bypass MFA",()=>{
   const panel=readFileSync("src/pages/admin/AdminUsersPanelV2.jsx","utf8");
-  assert.match(panel,/isQaTestAccount&&qaReadOnlyReady&&<option value="PASSWORD_ONLY"/);
   assert.match(panel,/loginPolicy:createForm.loginPolicy==="PASSWORD_ONLY"\?"ANY_MFA"/);
-});
-
-test("QA password-only selection survives controlled rerender and confirms persisted server policy",()=>{
-  const panel=readFileSync("src/pages/admin/AdminUsersPanelV2.jsx","utf8");
-  assert.match(panel,/policyDraft\?\?currentPolicy/);
-  assert.match(panel,/Sadece Parolayı Etkinleştir/);
-  assert.match(panel,/serverPolicies=rowsOf\(await listLoginSecurityPolicies\(\)\)/);
-  assert.match(panel,/verified\?\.loginPolicy\|\|verified\?\.login_policy/);
-  assert.match(panel,/policyFeedback&&<div role="status"/);
-  assert.match(panel,/if\(!isQaTestAccount\)throw Error/);
-  assert.match(panel,/persisted\.some\(row=>row\.canCreate/);
-  assert.match(panel,/role==="VIEWER"|selectedRole==="VIEWER"/);
+  assert.match(panel,/sessionSeconds:36000,approvalRequired/);
+  assert.match(panel,/Canlı D1 güvenlik kuralı yalnız parolalı girişi yasaklıyor/);
+  assert.match(panel,/KY Güvenlik \/ Google \/ Microsoft doğrulaması korunur/);
 });
