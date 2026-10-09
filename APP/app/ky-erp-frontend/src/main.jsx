@@ -163,8 +163,20 @@ const renderFailure = (error) => {
   );
 };
 
+// Windows portable QA package. Compiled only when explicitly opted in;
+// an ordinary ERP production build cannot expose this route. The virtual
+// hostname is mapped to bundled static files and no Cloud API is called.
+const isolatedWindowsQa = import.meta.env.VITE_KY_PDKS_QA_BUILD === "1" &&
+  hostname === "ky-pdks-test.local" &&
+  window.location.pathname === "/pdks-test";
+
 // Isolated local design review; never exposed in production and never reads staff data.
-if (import.meta.env.DEV &&
+if (isolatedWindowsQa) {
+  import("./pages/pdksUnified/PdksUnifiedApp.jsx")
+    .then(({default: PdksUnifiedApp}) => {
+      ReactDOM.createRoot(rootElement).render(<PdksUnifiedApp previewOnly testMode />);
+    }).catch(renderFailure);
+} else if (import.meta.env.DEV &&
     ["localhost", "127.0.0.1"].includes(hostname) &&
     window.location.pathname === "/pdks-studio") {
   import("./pages/pdksUnified/PdksUnifiedApp.jsx")
