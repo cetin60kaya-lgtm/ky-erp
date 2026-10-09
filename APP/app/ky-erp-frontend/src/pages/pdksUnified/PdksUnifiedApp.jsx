@@ -20,6 +20,7 @@ import {useUnifiedPdksData} from "./useUnifiedPdksData.js";
 import UnifiedOperationPanel from "./UnifiedOperationPanel.jsx";
 import LiveAttendancePanel from "./LiveAttendancePanel.jsx";
 import CardEventsPanel from "./CardEventsPanel.jsx";
+import TerminalSetupPanel from "./TerminalSetupPanel.jsx";
 import "./pdksUnified.css";
 
 const ICONS = {
@@ -458,7 +459,9 @@ export default function PdksUnifiedApp({
             <button type="button" className="pdk-u-btn" disabled={!canExport} onClick={exportTable}>
               <Download size={16}/> CSV</button>
           </div>}
-          {requirement==="card-events" ? <CardEventsPanel
+          {tab.id==="terminals" ? <TerminalSetupPanel
+            company={company} previewOnly={previewOnly}/> :
+          requirement==="card-events" ? <CardEventsPanel
             key={[company,tab.id].join(":")}
             company={company} profileReady={data.profileReady}
             previewOnly={previewOnly} history={tab.id==="history"} search={search}/> :
