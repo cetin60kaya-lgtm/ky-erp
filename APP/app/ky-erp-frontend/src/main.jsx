@@ -163,5 +163,12 @@ const renderFailure = (error) => {
   );
 };
 
-if (isPublicSite) renderCanonicalHost().catch(renderFailure);
+// The /mobile route must not enter the public desktop login modal.
+const isMobileRoute = /^\/mobile(?:\/|$)/i.test(window.location.pathname);
+async function renderMobileHost() {
+  const { default: MobileApp } = await import("./mobile/MobileApp.jsx");
+  ReactDOM.createRoot(rootElement).render(<React.StrictMode><MobileApp /></React.StrictMode>);
+}
+if (isMobileRoute) renderMobileHost().catch(renderFailure);
+else if (isPublicSite) renderCanonicalHost().catch(renderFailure);
 else renderErpApp().catch(renderFailure);
