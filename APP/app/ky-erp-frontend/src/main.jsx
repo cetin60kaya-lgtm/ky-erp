@@ -167,7 +167,7 @@ const renderFailure = (error) => {
 // an ordinary ERP production build cannot expose this route. The virtual
 // hostname is mapped to bundled static files and no Cloud API is called.
 const isolatedWindowsQa = import.meta.env.VITE_KY_PDKS_QA_BUILD === "1" &&
-  hostname === "ky-pdks-test.local" &&
+  ["ky-pdks-test.local","127.0.0.1","localhost"].includes(hostname) &&
   window.location.pathname === "/pdks-test";
 
 // Isolated local design review; never exposed in production and never reads staff data.
