@@ -64,8 +64,8 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
   const chosenEvents=snapshot?.events.filter(event=>event.cardNo===selectedCard)||[];
   const rows=useMemo(()=>{
     if(!snapshot)return[];
-    if(peopleTab)return snapshot.people.filter(p=>!q||[p.fullName,p.cardNo,p.group]
-      .some(v=>String(v||"").toLocaleLowerCase("tr-TR").includes(q)));
+    if(peopleTab)return snapshot.people.filter(p=>(!selectedCard||p.cardNo===selectedCard)&&(!q||[p.fullName,p.cardNo,p.group]
+      .some(v=>String(v||"").toLocaleLowerCase("tr-TR").includes(q))));
     const data=monthlyTab?monthlyRows:eventTab?snapshot.events:snapshot.days;
     return data.filter(r=>(!selectedCard||r.cardNo===selectedCard)&&(monthlyTab||!day||r.date===day)&&
       (!filteredPairReview||monthlyTab||!r.sideCountMatched)&&(!q||
