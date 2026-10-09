@@ -1,5 +1,4 @@
-deploy: company-scope-qa-20261009
-pr: 413
-merge: 41fad4282c6f10ebbdb3c209cd675029c9079840
-ci: 37906312439
-reason: correct KY ERP TEST company selector in live frontend
+deploy: weekly-print-single-page-excel-404
+canonical: 13fdc7506da135713f8a61e27e05a4f4da161497
+requested: 2026-10-09T08:47:00Z
+reason: weekly-landscape-single-page-and-excel-export
