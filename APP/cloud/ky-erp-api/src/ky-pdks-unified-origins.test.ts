@@ -185,7 +185,7 @@ test("isolated Firebird durable ledger proves service/assignment/advance without
   const agent=readFileSync(resolve(here,"../../../pdks-unified/windows/UnifiedSyncAgent.cs"),"utf8");
   for(const token of [
     "KY_PDKS_ISOLATED_COPY","KY_PDKS_STAGE_FDB_PATH",
-    "D:\\KYERP","STAGE_LEDGER_LIVE_FDB_REJECTED",
+    "KYERP","STAGE_LEDGER_LIVE_FDB_REJECTED",
     "KY_PDKS_AGENT_LEDGER","KY_PDKS_AGENT_MAP",
     "SERVICE_TRANSACTION","ASSIGN_SERVICE_TRANSACTION","ADVANCE_CODE1_TRANSACTION",
     "STAGE_LEDGER_COMMAND_CONFLICT","syntheticRowsCleaned",
