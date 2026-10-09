@@ -1,6 +1,4 @@
-deploy: personnel-portal-pilot-20261009
-canonical-pr: 405
-merged: c4c48ac7afe0a8333aef333272b29097f25f6ddc
-worker-release: 37885380200
-requested: 2026-10-09T07:48:00+03:00
-reason: production employee portal pilot after D1 backup, 0060 schema and Worker health verified
+deploy: personnel-mobile-login-route-fix-20261009
+merged: fa8c522cff1428136fa78c5cd25780687b74ca26
+ci: 37888992004
+reason: fix mobile login loop and use separate staff session without changing administrator login
