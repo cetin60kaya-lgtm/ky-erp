@@ -84,6 +84,8 @@ async function claim(f){
 }
 function receipt(f,delivery){
   const data=JSON.parse(Buffer.from(delivery.signedPayload,"base64").toString("utf8"));
+  const policySha256=sha("durable-staged-policy-1");
+  const fdbEvidenceSha256=sha("verified-readonly-firebird-1");
   return {
     journalId:"journal-1",
     appliedAt:new Date().toISOString(),
@@ -91,7 +93,8 @@ function receipt(f,delivery){
     outboxId:data.outboxId,
     deviceId:f.device,
     commandPayloadSha256:data.commandPayloadSha256,
-    evidenceSha256:sha("fdb-and-local-evidence-1"),
+    evidenceSha256:sha(policySha256+"|"+fdbEvidenceSha256),
+    policySha256,fdbEvidenceSha256,
     sourceValidated:true,
     fdbValidated:true,
     tnfTouched:false,
@@ -149,6 +152,12 @@ test("staging D1 mock: invalid ACK cannot bypass current claimed delivery",async
     assert.equal(f.sqlite.prepare("SELECT state FROM ik_pdks_unified_outbox WHERE id='outbox-1'").get().state,"CLAIMED");
     assert.equal((await f.ack(delivery.outboxId,{...base,localReceipt:proof,
       localReceiptHmac:"bad-proof"})).status,409);
+    const incompatibleEvidence={...proof,evidenceSha256:sha("bad-source-pair")};
+    const incompatible=await f.ack(delivery.outboxId,{...base,
+      localReceipt:incompatibleEvidence,
+      localReceiptHmac:receiptSignature(f,delivery,incompatibleEvidence)});
+    assert.equal(incompatible.status,409);
+    assert.equal((await incompatible.json()).error.code,"PDKS_LOCAL_EVIDENCE_HASH_MISMATCH");
     assert.equal((await f.ack(delivery.outboxId,{...base,localReceipt:proof,
       localReceiptHmac:receiptSignature(f,delivery,proof)})).status,200);
     assert.equal(f.sqlite.prepare("SELECT state FROM ik_pdks_unified_outbox WHERE id='outbox-1'").get().state,"ACKED");
