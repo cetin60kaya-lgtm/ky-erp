@@ -110,7 +110,11 @@ internal static class Program
             return;
         }
         var preview = args.Contains("--dev-preview", StringComparer.OrdinalIgnoreCase);
-        Application.Run(new KyPdksWindow(preview));
+        // A published QA directory contains a deliberate marker. A plain
+        // double-click must open bundled test UI, NEVER production URL.
+        var offlineTest = args.Contains("--offline-test", StringComparer.OrdinalIgnoreCase)
+            || File.Exists(Path.Combine(AppContext.BaseDirectory, "KY-PDKS-MENU-TEST.marker"));
+        Application.Run(new KyPdksWindow(preview && !offlineTest, offlineTest));
     }
 }
 
@@ -125,18 +129,24 @@ public sealed class KyPdksWindow : Form
         Text = "KY PDKS • Güvenli bağlantı hazırlanıyor..."
     };
     private readonly bool localPreview;
+    private readonly bool offlineTest;
     private readonly Uri allowedOrigin;
     private readonly Uri initialUrl;
 
-    public KyPdksWindow(bool localPreview)
+    public KyPdksWindow(bool localPreview, bool offlineTest = false)
     {
         this.localPreview = localPreview;
-        allowedOrigin = localPreview
-            ? new Uri("http://127.0.0.1:5186/")
-            : new Uri("https://app.kyerp.net/");
-        initialUrl = new Uri(allowedOrigin, localPreview ? "/pdks-studio" : "/pdks/workspace");
+        this.offlineTest = offlineTest;
+        allowedOrigin = offlineTest
+            ? new Uri("https://ky-pdks-test.local/")
+            : localPreview
+                ? new Uri("http://127.0.0.1:5186/")
+                : new Uri("https://app.kyerp.net/");
+        initialUrl = new Uri(allowedOrigin,
+            offlineTest ? "/pdks-test" : localPreview ? "/pdks-studio" : "/pdks/workspace");
 
-        Text = localPreview ? "KY PDKS — Yerel Tasarım İncelemesi" : "KY PDKS — Kurumsal";
+        Text = offlineTest ? "KY PDKS — MENÜ TEST SÜRÜMÜ (CANLI VERİ KAPALI)"
+            : localPreview ? "KY PDKS — Yerel Tasarım İncelemesi" : "KY PDKS — Kurumsal";
         Width = 1500; Height = 900;
         MinimumSize = new Size(940, 620);
         StartPosition = FormStartPosition.CenterScreen;
@@ -164,7 +174,17 @@ public sealed class KyPdksWindow : Form
             var env = await CoreWebView2Environment.CreateAsync(userDataFolder: profile);
             await browser.EnsureCoreWebView2Async(env);
             var core = browser.CoreWebView2;
-            core.Settings.AreDevToolsEnabled = localPreview;
+            if (offlineTest)
+            {
+                // Static Vite output is bundled beside the executable. WebView2
+                // treats it as HTTPS origin without launching a local HTTP server.
+                var localWeb = Path.Combine(AppContext.BaseDirectory, "web");
+                if (!File.Exists(Path.Combine(localWeb, "index.html")))
+                    throw new FileNotFoundException("Menü test arayüz dosyaları bulunamadı.", localWeb);
+                core.SetVirtualHostNameToFolderMapping("ky-pdks-test.local", localWeb,
+                    CoreWebView2HostResourceAccessKind.DenyCors);
+            }
+            core.Settings.AreDevToolsEnabled = localPreview || offlineTest;
             core.Settings.IsStatusBarEnabled = false;
             core.Settings.AreDefaultContextMenusEnabled = false;
             core.Settings.IsWebMessageEnabled = false; // No privileged desktop bridge.
@@ -186,7 +206,8 @@ public sealed class KyPdksWindow : Form
             };
             core.NavigationCompleted += (_, args) =>
                 connection.Text = args.IsSuccess
-                    ? "KY PDKS • " + (localPreview ? "Yalnız tasarım incelemesi" : "Oturum ve sunucu verisi üzerinden güvenli bağlantı")
+                    ? "KY PDKS • " + (offlineTest ? "İZOLE MENÜ TESTİ — canlı veri bağlantısı kapalı"
+                        : localPreview ? "Yalnız tasarım incelemesi" : "Oturum ve sunucu verisi üzerinden güvenli bağlantı")
                     : "Bağlantı açılamadı. Yerel ağınızı veya app.kyerp.net oturumunu kontrol edin.";
             core.Navigate(initialUrl.ToString());
         }
