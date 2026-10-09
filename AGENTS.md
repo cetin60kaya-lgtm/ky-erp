@@ -1,5 +1,14 @@
 # KY ERP — AI Agent Ana Kuralları
 
+## ZORUNLU — Her Sohbetin Güncelleme/Yayın Defteri Kuralı (09.10.2026)
+
+- **Bütün KY ERP sohbetleri, Copilot ve ajanlar** kod işine başlamadan önce `DOCS/KY_ERP_GUNCELLEME_YAYIN_KAYIT_SOZLESMESI_2026-10-09.md` dosyasını okur ve uygular. Bu yükümlülük önceki sohbetlere dair tahmini kanıttan üstün değildir.
+- Her uygulama işi anlaşılır Türkçe commit/PR adı, modül, değişen iş, test sonucu, merge SHA ve gerçek yayın sonucu ile **GitHub üzerinde iz bırakır**. Önemli açık karar/yarım kalan iş ayrıca Proje Kontrol Merkezi ve devam kaynağında tarihli tutulur.
+- **Dalda/testte olmak = canlıda olmak değildir.** Canlı sadece başarılı Pages / Worker deploy + gerçekten yayımlanan commit ancestry kanıtı ile gösterilir. Kanıt yoksa "yayın kanıtı yok" yazılır. Hatalar ve açık işler gizlenmez.
+- Kullanıcı takip etmek için tekrar sormaz: canlı uygulamada Platform Yönetimi → Sistem → **Güncelleme Geçmişi** ekranı, GitHub PR/commit/yayın durumlarının salt okunur görünümüdür. Gösterim hiçbir D1 iş kaydını değiştirmez.
+- Yalnız GitHub üzerinden yapılan somut değişiklikler otomatik kayda yansır. Sohbet metinleri izinsiz aktarılmaz. MFA/cihaz onayı bypass, sahte CI/deploy kanıtı, yeni paralel sistem, ücretli yeni izleme aracı ve gereksiz Actions tekrarı yasaktır.
+
+
 ## KY ERP tek yerel kök — 01.10.2026
 
 - DESEN PC ve Google Drive üzerindeki **tek aktif yerel KY ERP kökü**: `D:\Googledrive\KYERP`.
