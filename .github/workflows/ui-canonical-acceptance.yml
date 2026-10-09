@@ -35,6 +35,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      - name: Isolated personnel D1 migration and integrity smoke
+        run: python3 scripts/employee-portal-sandbox-smoke.py
       - run: npm run build
 
   worker:
