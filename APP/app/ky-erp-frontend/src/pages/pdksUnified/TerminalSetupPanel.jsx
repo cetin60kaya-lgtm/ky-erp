@@ -3,6 +3,7 @@ import {Cable,CheckCircle2,Download,ExternalLink,HardDrive,Info,LockKeyhole,
   Network,Radio,ScanLine,ShieldAlert,ShieldCheck} from "lucide-react";
 import {CONNECTORS,INPUT_METHODS,installationPlan,validateTerminalDefinition}
   from "../../../../../pdks-unified/device-gateway/terminal-profiles.mjs";
+import {parseTerminalDiagnosticReport} from "./terminalReportView.mjs";
 
 const vendors=Object.freeze([
   ["KY QR","KY QR / Barkod"],
@@ -42,12 +43,13 @@ export default function TerminalSetupPanel({company="",previewOnly=true}){
   const [config,setConfig]=useState(defaults);
   const [result,setResult]=useState(null);
   const [notice,setNotice]=useState("");
+  const [diagnostic,setDiagnostic]=useState(null);
   const connector=CONNECTORS.find(c=>c.id===config.connectorId);
   const counts=useMemo(()=>({
     connectors:CONNECTORS.length,inputMethods:INPUT_METHODS.length,
     ready:CONNECTORS.filter(x=>x.status==="REFERENCE_IMPLEMENTED").length,
   }),[]);
-  const change=(name,v)=>{setConfig(before=>({...before,[name]:v}));setResult(null);setNotice("")};
+  const change=(name,v)=>{setConfig(before=>({...before,[name]:v}));setResult(null);setNotice("");setDiagnostic(null)};
   const toggle=(value,on)=>change("inputMethods",on?
     [...new Set([...config.inputMethods,value])]:
     config.inputMethods.filter(x=>x!==value));
@@ -69,6 +71,15 @@ export default function TerminalSetupPanel({company="",previewOnly=true}){
       setResult(plan);setNotice(previewOnly?
         "Yalnız tasarım doğrulaması. Gerçek cihaz kaydı oluşturulmadı.":"");
     }catch(error){setResult(null);setNotice(String(error?.message||"Cihaz tanımı doğrulanamadı."))}
+  };
+  const readDiagnostic=async(file)=>{
+    if(!file||!result||previewOnly)return;
+    try{
+      if(file.size>65536||file.size<40)throw new Error("TERMINAL_REPORT_SIZE_INVALID");
+      const data=parseTerminalDiagnosticReport(await file.text(),result.device.terminalId);
+      setDiagnostic(data);setNotice("Yerel tanı dosyası görüntülendi. Bu dosya imzasızdır; saha sertifikası değildir.");
+    }catch(error){setDiagnostic(null);
+      setNotice("Tanı raporu reddedildi: "+String(error?.message||"Geçersiz JSON"));}
   };
   const download=()=>{
     if(!result||previewOnly)return;
@@ -173,6 +184,30 @@ export default function TerminalSetupPanel({company="",previewOnly=true}){
           <strong>Tanım geçerli, fakat cihaz henüz sertifikalı değil.</strong>
           <span>Sonraki adım: {result.nextStep}</span>
         </p>}
+        <div className="pdk-u-terminal-sub"><HardDrive size={16}/> Bağlantı testi ve TNF tanı raporu</div>
+        <p>Kurulmuş KY QR terminalini Windows'ta <code>Install-KyPdks-LocalTerminal.ps1 -Action Test -TerminalId KOD</code>
+          komutuyla yalnız okuyarak sınayın. Diğer markalar için gerçek model sürücüsü ve yetkili SDK testi gereklidir.</p>
+        <p>Kaynak karşılaştırması için <code>Test-KyPdks-TerminalEvidence.ps1</code> aracında terminal kodu,
+          TNF dosyası ve yıl belirtilerek anonim JSON rapor oluşturulur. Bu işlem verileri değiştirmez.</p>
+        <label className="pdk-u-terminal-report-upload">
+          Yerel Tanı Raporunu Aç (JSON)
+          <input aria-label="Terminal tanı raporu" type="file" accept=".json,application/json"
+            disabled={previewOnly||!result}
+            onChange={event=>{const file=event.target.files?.[0];if(file)void readDiagnostic(file);}}/>
+        </label>
+        {diagnostic&&<div className="pdk-u-terminal-diagnostic" role="status">
+          <strong>TNF referans karşılaştırması · {diagnostic.terminalId}</strong>
+          <div className="pdk-u-terminal-diagnostic-counts">
+            <span>Yerel kayıt <b>{diagnostic.inspected}</b></span>
+            <span>TNF ile eşleşen <b>{diagnostic.matched}</b></span>
+            <span>TNF'de bulunmayan <b>{diagnostic.unmatched}</b></span>
+            <span>Aynı dakika/çakışma <b>{diagnostic.ambiguous}</b></span>
+            <span>Reddedilen kanıt <b>{diagnostic.invalid}</b></span>
+            <span>Kimliği belirsiz USB <b>{diagnostic.unsigned}</b></span>
+          </div>
+          <p>Dosya imzasız bir operatör tanısıdır. Fiziksel cihaz RAW, Firebird, bordro ve yıllık TNF
+            otomatik doğrulanmış veya değiştirilmiş sayılmaz.</p>
+        </div>}
         <div className="pdk-u-terminal-sub"><Cable size={16}/> KY imzalı QR / USB okuyucu</div>
         <p>Yerel QR terminali <code>127.0.0.1:5197</code> adresinden, yalnız
           açık izinli Windows Agent komutuyla başlatılır. QR kamera ve USB HID
