@@ -249,17 +249,6 @@ function printWeeklyMatrix(title, range, days, rows = []) {
   }).join("");
 
   const html = pages.map((pageRows, pageIndex) => {
-    const pageDayTotals = safeDays.map((date) => pageRows.reduce((sum, row) => {
-      const cell = row.days?.[date] || {};
-      if (cell.day) sum.day += 1;
-      if (cell.night) sum.night += 1;
-      return sum;
-    }, { day: 0, night: 0 }));
-    const pageTotals = pageRows.reduce((sum, row) => ({
-      day: sum.day + number(row.dayCount),
-      night: sum.night + number(row.nightCount),
-      amount: sum.amount + number(row.totalAmount ?? row.total),
-    }), { day: 0, night: 0, amount: 0 });
     const body = pageRows.map((row, index) => {
       const dayCells = safeDays.map((date) => {
         const cell = row.days?.[date] || {};
@@ -273,7 +262,6 @@ function printWeeklyMatrix(title, range, days, rows = []) {
       const totalAmount = number(row.totalAmount ?? row.total);
       return `<tr><td class="no">${pageIndex * 26 + index + 1}</td><td class="person"><strong>${escapeHtml(row.name || row.fullName || "-")}</strong></td><td class="role">${escapeHtml(row.qualification || row.role || "-")}</td>${dayCells}<td class="count"><strong>${dayCount}</strong></td><td class="count"><strong>${nightCount}</strong></td><td class="total-days"><strong>${totalDays}</strong></td><td class="total-money"><strong>${escapeHtml(money(totalAmount))}</strong></td></tr>`;
     }).join("");
-    const pageDayCells = pageDayTotals.map((item) => `<td class="day-total"><span>G ${item.day}</span><span>N ${item.night}</span></td>`).join("");
     const generalDayCells = dayTotals.map((item) => `<td class="day-total general"><span>G ${item.day}</span><span>N ${item.night}</span></td>`).join("");
     const lastPage = pageIndex === pages.length - 1;
     return `<section class="week-page">
