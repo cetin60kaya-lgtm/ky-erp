@@ -8,6 +8,7 @@ import {CONNECTORS,INPUT_METHODS,validateTerminalDefinition,installationPlan}
 import {issueQrCredential,verifyQrCredential,normalizedKioskEvent,normalizedWedgeCardEvent}
   from "./qr-terminal-core.mjs";
 import {startQrKiosk} from "./terminal-kiosk.mjs";
+import {verifyTerminalJournalFact} from "./terminal-journal-proof.mjs";
 const now=Date.parse("2026-10-09T08:00:00Z");
 const secret="ky-pdks-signing-key-example-do-not-use-production-123";
 const operatorKey="ky-pdks-local-operator-secret-example-only-456";
@@ -109,6 +110,8 @@ test("real localhost HTTP kiosk records exactly once, survives restart and rejec
     const stored=evidence.find(e=>e.source==="KY_LOCAL_SIGNED_QR_KIOSK");
     assert.equal(stored.cardNo,"00003");
     assert.equal(stored.status,"PENDING_RECONCILIATION");
+    assert.equal(verifyTerminalJournalFact(stored,operatorKey),true);
+    assert.equal(verifyTerminalJournalFact({...stored,cardNo:"00004"},operatorKey),false);
     assert.equal(stored.cloudAcked,false);
     assert.equal((await fetch(base+"/events",{headers:{
       "x-ky-pdks-terminal-key":operatorKey,connection:"close"}})).status,200);
