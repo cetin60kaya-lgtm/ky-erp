@@ -20,9 +20,10 @@ function fromStorage(){
   catch{return null;}
 }
 async function readLive(){
-  const [workflow,prs]=await Promise.all([
+  const [workflow,prs,branchCommits]=await Promise.all([
     github("/actions/runs?branch="+encodeURIComponent(KY_BRANCH)+"&per_page=100"),
-    github("/pulls?state=all&sort=updated&direction=desc&per_page=100")
+    github("/pulls?state=all&sort=updated&direction=desc&per_page=100"),
+    github("/commits?sha="+encodeURIComponent(KY_BRANCH)+"&per_page=100")
   ]);
   const runs=(workflow.workflow_runs||[]).filter(r=>releaseKind(r)!=="OTHER");
   const latestWeb=firstVerifiedRun(runs,"FRONTEND");
@@ -35,7 +36,7 @@ async function readLive(){
   const ancestry=await Promise.allSettled([commitsAt(latestWeb),commitsAt(latestWorker)]);
   const proofs=ancestry.map(x=>x.status==="fulfilled"?x.value:{ready:false,shas:[],error:String(x.reason)});
   return {
-    pulls:prs,runs,frontRun:latestWeb,workerRun:latestWorker,
+    pulls:prs,commits:branchCommits,runs,frontRun:latestWeb,workerRun:latestWorker,
     frontProof:proofs[0],workerProof:proofs[1],
     capturedAt:new Date().toISOString(),hasMore:prs.length===100
   };
@@ -109,6 +110,7 @@ export default function AdminReleaseHistory(){
     <nav className="krh-switch" aria-label="Güncelleme kayıt türü">
       <button className={view==="changes"?"active":""} onClick={()=>setView("changes")} type="button">Değişiklikler / PR</button>
       <button className={view==="releases"?"active":""} onClick={()=>setView("releases")} type="button">Canlı Yayınlar / Hatalar</button>
+      <button className={view==="commits"?"active":""} onClick={()=>setView("commits")} type="button">Commit Geçmişi</button>
     </nav>
     {view==="changes"?<>
       <div className="krh-filters">
@@ -132,7 +134,7 @@ export default function AdminReleaseHistory(){
       </div>
       {data?.hasMore?<button type="button" className="krh-more" disabled={moreBusy} onClick={more}>{moreBusy?"Yükleniyor...":"Daha eski GitHub işlerini yükle"}</button>:null}
       {moreError?<div role="alert" className="krh-alert">{moreError}</div>:null}
-    </>:<div className="krh-rows">
+    </>:view==="releases"?<div className="krh-rows">
       {(data?.runs||[]).map(run=>{
         const kind=releaseKind(run);
         const passed=verifiedRelease(run);
@@ -145,6 +147,23 @@ export default function AdminReleaseHistory(){
         </article>;
       })}
       {!data?.runs?.length?<div className="krh-empty">Yayın kaydı bulunamadı.</div>:null}
+    </div>:<div className="krh-rows">
+      {(data?.commits||[]).filter(row=>{
+        const q=query.trim().toLocaleLowerCase("tr-TR");
+        const msg=String(row.commit?.message||"");
+        return (!q||msg.toLocaleLowerCase("tr-TR").includes(q))&&(module==="Tümü"||moduleOf(msg)===module);
+      }).map(row=>{
+        const web=Boolean(data?.frontProof?.ready&&data.frontProof.shas.includes(row.sha));
+        const api=Boolean(data?.workerProof?.ready&&data.workerProof.shas.includes(row.sha));
+        const status=web&&api?{level:"live",label:"Arayüz + API canlı kanıtlı"}:web?{level:"partial",label:"Arayüz canlı kanıtlı"}:api?{level:"partial",label:"API canlı kanıtlı"}:{level:"merged",label:"Kaynak dalda — yayın kanıtı yok"};
+        return <article key={row.sha} className="krh-record">
+          <div className="krh-record-main">
+            <div className="krh-title"><span className="krh-module">{moduleOf(row.commit?.message)}</span><strong>{String(row.commit?.message||"İşlem").split("\n")[0]}</strong></div>
+            <div className="krh-details"><span>{localStamp(row.commit?.committer?.date)}</span><span>Dal <code>{KY_BRANCH}</code></span><span>Commit <code>{shortSha(row.sha)}</code></span></div>
+          </div><div className="krh-right"><Status value={status}/><Href url={row.html_url}>GitHub commit ↗</Href></div>
+        </article>;
+      })}
+      {!data?.commits?.length?<div className="krh-empty">Commit kaydı bulunamadı.</div>:null}
     </div>}
     <p className="krh-foot">Canlı durumu yalnız başarılı production yayın işlemi ve ilgili commitin o sürümde bulunduğu kanıtlanırsa gösterilir. Son 100 commit dışında kalan eski işler için canlılık bilinmiyor denir. Bu ekran canlı iş verisini değiştirmez.</p>
   </section>;
