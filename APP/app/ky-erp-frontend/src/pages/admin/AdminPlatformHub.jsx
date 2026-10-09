@@ -11,6 +11,7 @@ import AdminStorageCenter from "./AdminStorageCenter";
 import AdminMappings from "./AdminMappings";
 import AdminBackupLogs from "./AdminBackupLogs";
 import AdminBuildCenter from "./AdminBuildCenter";
+import AdminReleaseHistory from "./AdminReleaseHistory";
 import "./AdminPlatformHub.css";
 
 const GROUPS = {
@@ -42,6 +43,7 @@ const GROUPS = {
       ["mappings", "Eşleştirmeler"],
       ["backup", "Yedek / Log"],
       ["build", "Sürüm / Build"],
+      ["history", "Güncelleme Geçmişi"],
     ],
   },
 };
@@ -60,6 +62,7 @@ const ROUTE_TARGETS = {
   "eslestirmeler": ["system", "mappings"],
   "yedekleme-loglar": ["system", "backup"],
   "surum-merkezi": ["system", "build"],
+  "guncelleme-gecmisi": ["system", "history"],
 };
 
 function routeTarget(activeTab) {
@@ -93,6 +96,7 @@ export default function AdminPlatformHub({ activeTab, activeMainCompany }) {
     if (panel === "mappings") return <AdminMappings activeMainCompany={activeMainCompany} />;
     if (panel === "backup") return <AdminBackupLogs activeMainCompany={activeMainCompany} />;
     if (panel === "build") return <AdminBuildCenter />;
+    if (panel === "history") return <AdminReleaseHistory />;
     return <AdminSystemOverview activeMainCompany={activeMainCompany} />;
   }, [panel, activeMainCompany]);
 
