@@ -64,7 +64,7 @@ function RefreshHead {
   if((GetHead) -ne $remote){[void](Git @('checkout','--quiet','--detach',$remote))}
   return $remote
 }
-function RunFullTests([string]$head){
+function RunFullTests([string]$head,[switch]$Candidate){
   $f=[IO.Path]::GetFullPath($StageDbPath)
   if($f -notmatch '(?i)^D:\\KYERP\\_TEMP\\PDKS_COPY_STAGE_[^\\]+\\KY_PDKS_STAGE\.FDB$' -or
      !(Test-Path -LiteralPath $f -PathType Leaf)){Gate 'ISOLATED_STAGE_FDB_REQUIRED'}
@@ -78,6 +78,10 @@ function RunFullTests([string]$head){
   if($LASTEXITCODE -ne 0){Gate 'FULL_TEST_GATE_FAILED'}
   if(!(Select-String -LiteralPath $log -Pattern '^RESULT=PASS_COMPLETE_ISOLATED_PDKS_PREVIEW_AND_SYNC_ACCEPTANCE$' -Quiet)){
     Gate 'TEST_PROOF_MARKER_MISSING'
+  }
+  if($Candidate){
+    Receipt 'REVIEW' 'CODEX_CANDIDATE_FULL_QA_PASS_NOT_PUBLISHED' $head
+    return
   }
   [IO.File]::WriteAllText((Join-Path $work 'last-pass.txt'),$head,[Text.UTF8Encoding]::new($false))
   Receipt 'PASS' 'CLOUD_WINDOWS_FIREBIRD_49_TAB' $head
@@ -137,15 +141,7 @@ try {
   if($Mode -eq 'TestsCandidate'){
     ValidateCodeCandidate
     $before=GetHead
-    $last=Join-Path $work 'last-pass.txt'
-    $prior=if(Test-Path -LiteralPath $last){[IO.File]::ReadAllText($last)}else{$null}
-    RunFullTests $before
-    # A candidate's PASS cannot prove the clean published HEAD. Keep prior
-    # accepted head, if any, without erasing or falsely accepting this one.
-    if($null -ne $prior){
-      [IO.File]::WriteAllText($last,$prior,[Text.UTF8Encoding]::new($false))
-    }elseif(Test-Path -LiteralPath $last){Remove-Item -LiteralPath $last -Force}
-    Receipt 'REVIEW' 'CODEX_WORKTREE_ACCEPTANCE_NOT_PUBLISHED' $before
+    RunFullTests $before -Candidate
     return
   }
   if($Mode -eq 'Code'){
@@ -192,8 +188,11 @@ try {
     $changed=@(ChangedOutsideGenerated)
     $outside=@($changed|Where-Object {$_ -notmatch '^.. (APP/pdks-unified/|APP/app/ky-erp-frontend/src/pages/pdksUnified/|APP/cloud/ky-erp-api/src/ik-pdks-)'})
     if($outside.Count){Receipt 'BLOCKED' 'CODEX_CHANGED_OUTSIDE_PDKS' $remote;return}
-    Receipt 'REVIEW' 'CODEX_CHANGESET_READY_UNCOMMITTED' $remote
-    Write-Output ('MODIFIED_FILES='+$changed.Count);return
+    if(!$changed.Count){Receipt 'INFO' 'CODEX_NO_CODE_CHANGES' $remote;return}
+    Write-Output ('MODIFIED_FILES='+$changed.Count)
+    Write-Output 'STEP=RUN_FULL_QA_AGAINST_UNCOMMITTED_CODE'
+    RunFullTests $remote -Candidate
+    return
   }
 } catch {
   Write-Output 'ERROR=SAFE_COORDINATOR_BLOCKED'
