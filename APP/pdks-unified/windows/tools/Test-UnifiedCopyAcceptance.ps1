@@ -94,6 +94,8 @@ try {
         }
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Action Status -TerminalId 'stage-terminal-01'
         if($LASTEXITCODE -ne 0){throw 'QR_STAGE_SERVER_STATUS_FAILED'}
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Action Test -TerminalId 'stage-terminal-01'
+        if($LASTEXITCODE -ne 0){throw 'QR_STAGE_NETWORK_PROBE_FAILED'}
       }finally{
         if(Test-Path -LiteralPath $receiptPath){
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Action Stop -TerminalId 'stage-terminal-01'
@@ -113,7 +115,7 @@ try {
   } finally {Pop-Location}
   $device=Join-Path $RepoRoot 'APP\pdks-unified'
   Invoke-Gate 'PHYSICAL_RULES_AND_PROTOCOL' {
-    & node.exe --test (Join-Path $device 'core\attendanceRules.test.mjs') (Join-Path $device 'device-gateway\device-contract.test.mjs') (Join-Path $device 'device-gateway\tnf-reference-import.test.mjs') (Join-Path $device 'device-gateway\terminal-profiles.test.mjs') (Join-Path $device 'device-gateway\terminal-onboarding.test.mjs') (Join-Path $device 'sync\eventProtocol.test.mjs')
+    & node.exe --test (Join-Path $device 'core\attendanceRules.test.mjs') (Join-Path $device 'device-gateway\device-contract.test.mjs') (Join-Path $device 'device-gateway\tnf-reference-import.test.mjs') (Join-Path $device 'device-gateway\terminal-profiles.test.mjs') (Join-Path $device 'device-gateway\terminal-onboarding.test.mjs') (Join-Path $device 'device-gateway\terminal-reconciliation.test.mjs') (Join-Path $device 'device-gateway\terminal-network-probe.test.mjs') (Join-Path $device 'sync\eventProtocol.test.mjs')
   }
   Write-Output 'RESULT=PASS_WINDOWS_CLOUD_COPY_FDB_E2E_NO_LIVE_WRITES'
 } catch {
