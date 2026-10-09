@@ -90,7 +90,7 @@ switch($Action){
       $env:KY_PDKS_TERMINAL_PORT=[string]$Port
       $env:KY_PDKS_QR_HMAC_SECRET=UnprotectSecret $signFile
       $env:KY_PDKS_TERMINAL_OPERATOR_KEY=UnprotectSecret $operatorFile
-      $process=Start-Process -FilePath $node -PassThru -WorkingDirectory (Split-Path $cli -Parent) -ArgumentList @('"'+$cli+'"','--serve') -RedirectStandardOutput (Join-Path $root 'kiosk.out.log') -RedirectStandardError (Join-Path $root 'kiosk.err.log')
+      $process=Start-Process -FilePath $node -PassThru -WindowStyle Hidden -WorkingDirectory (Split-Path $cli -Parent) -ArgumentList @('"'+$cli+'"','--serve') -RedirectStandardOutput (Join-Path $root 'kiosk.out.log') -RedirectStandardError (Join-Path $root 'kiosk.err.log')
     }finally{
       foreach($k in $variables){[Environment]::SetEnvironmentVariable($k,$original[$k],'Process')}
     }
