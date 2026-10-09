@@ -24,8 +24,9 @@ if(!source.isFile()||source.size>30_000_000)
   throw Error("TERMINAL_TNF_REFERENCE_SIZE_INVALID");
 const events=await readLocalTerminalJournal(args.journal);
 const tnfText=await readFile(args.tnf,"utf8");
+const journalKey=process.env.KY_PDKS_TERMINAL_JOURNAL_KEY??"";
 const result=reconcileLocalEvents({companyId:args.company,
-  terminalId:args.terminal,events,tnfText,yearHint});
+  terminalId:args.terminal,journalKey,events,tnfText,yearHint});
 const report={schemaVersion:1,generatedAt:new Date().toISOString(),
   ...result,physicalAttendanceConfirmed:false,
   status:"REQUIRES_APPROVED_SOURCE_RECONCILIATION"};
