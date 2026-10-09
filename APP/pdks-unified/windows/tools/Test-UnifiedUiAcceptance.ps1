@@ -21,13 +21,18 @@ if(!(Test-Path -LiteralPath $browserSmoke)){Fail 'BROWSER_TEST_REQUIRED'}
 $chrome=$env:CHROME_PATH
 if(!$chrome){$chrome='C:\Program Files\Google\Chrome\Application\chrome.exe'}
 if(!(Test-Path -LiteralPath $chrome)){Fail 'CHROME_HEADLESS_REQUIRED'}
-$listener=[System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback,5186)
-try {$listener.Start();$listener.Stop()}catch{Fail 'PORT_5186_IN_USE_STOP_PREVIOUS_PREVIEW_MANUALLY'}
+$port=0
+foreach($candidate in 5186..5196){
+  $listener=[System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback,$candidate)
+  try{$listener.Start();$listener.Stop();$port=$candidate;break}catch{}
+}
+if(!$port){Fail 'NO_FREE_LOOPBACK_TEST_PORT_5186_TO_5196'}
 $node=(Get-Command node.exe -ErrorAction Stop).Source
 $logRoot=Join-Path $env:TEMP ('KY_PDKS_UI_ACCEPT_'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
 $server=$null
 $previousChrome=$env:CHROME_PATH
+$previousPort=$env:KY_PDKS_BROWSER_PORT
 try {
   Push-Location $frontend
   try {
@@ -35,19 +40,21 @@ try {
     Gate 'UI_LINT' {& npm.cmd run lint}
     Gate 'UI_BUILD' {& npm.cmd run build}
     Write-Output 'STEP=UI_LOCAL_BROWSER_START'
-    $server=Start-Process -FilePath $node -WorkingDirectory $frontend -PassThru -ArgumentList @($vite,'--host','127.0.0.1','--port','5186','--strictPort') -RedirectStandardOutput (Join-Path $logRoot 'vite.out.log') -RedirectStandardError (Join-Path $logRoot 'vite.err.log')
+    $server=Start-Process -FilePath $node -WorkingDirectory $frontend -PassThru -ArgumentList @($vite,'--host','127.0.0.1','--port',[string]$port,'--strictPort') -RedirectStandardOutput (Join-Path $logRoot 'vite.out.log') -RedirectStandardError (Join-Path $logRoot 'vite.err.log')
     $ready=$false
     $deadline=(Get-Date).AddSeconds(30)
     while((Get-Date) -lt $deadline){
       if($server.HasExited){Fail 'VITE_PREVIEW_EXITED'}
       try{
-        $req=Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:5186/pdks-studio' -TimeoutSec 2
+        $req=Invoke-WebRequest -UseBasicParsing ('http://127.0.0.1:'+ $port +'/pdks-studio') -TimeoutSec 2
         if($req.StatusCode -eq 200 -and $req.Content -match 'id="root"'){$ready=$true;break}
       }catch{}
       Start-Sleep -Milliseconds 350
     }
     if(!$ready){Fail 'VITE_LOCAL_PREVIEW_NOT_READY'}
     $env:CHROME_PATH=$chrome
+    $env:KY_PDKS_BROWSER_PORT=[string]$port
+    Write-Output ('UI_TEST_LOOPBACK_PORT='+$port)
     if($Screenshot){
       $shot=[IO.Path]::GetFullPath($Screenshot)
       if(!(Test-Path -LiteralPath (Split-Path -Parent $shot))){Fail 'SCREENSHOT_PARENT_NOT_FOUND'}
@@ -65,5 +72,6 @@ try {
     try{Stop-Process -Id $server.Id -Force -ErrorAction Stop}catch{}
   }
   $env:CHROME_PATH=$previousChrome
+  $env:KY_PDKS_BROWSER_PORT=$previousPort
   try{Remove-Item -LiteralPath $logRoot -Recurse -Force -ErrorAction SilentlyContinue}catch{}
 }
