@@ -8,7 +8,9 @@ import { setTimeout as wait } from "node:timers/promises";
 import { PRODUCT_SECTIONS } from "../src/pages/pdksUnified/productModel.js";
 import {operationsForTab} from "../src/pages/pdksUnified/operationCatalog.js";
 
-const url = "http://127.0.0.1:5186/pdks-studio";
+const port=Number(process.env.KY_PDKS_BROWSER_PORT||"5186");
+if(!Number.isInteger(port)||port<5186||port>5196)throw new Error("LOCAL_BROWSER_PORT_OUTSIDE_ALLOWLIST");
+const url = "http://127.0.0.1:"+port+"/pdks-studio";
 const executable = process.env.CHROME_PATH ||
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const profile = await mkdtemp(join(tmpdir(),"ky-pdks-browser-test-"));
