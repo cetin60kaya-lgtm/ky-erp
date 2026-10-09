@@ -37,10 +37,22 @@ $stamp=Get-Date -Format 'yyyyMMdd-HHmmss'
 $log=Join-Path $logroot ('QA_GATE_'+$stamp+'.log')
 $gate=Join-Path $RepoRoot 'APP\pdks-unified\windows\tools\Test-UnifiedProductAcceptance.ps1'
 Write-Output 'STEP=FULL_49_MENU_WINDOWS_CLOUD_FDB_COPY_GATE'
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $gate -RepoRoot $RepoRoot -StageDbPath $StageDbPath -StageCardNo '00003' *> $log
-if($LASTEXITCODE -ne 0){
+# Child PowerShell writes some failure diagnostics to STDERR. PowerShell 5
+# would treat that as NativeCommandError with Stop and hide the real reason.
+# Isolate both streams; use the child's real exit code, never ignore failure.
+$gateErr=Join-Path $logroot ('QA_GATE_'+$stamp+'.stderr.log')
+$gateArgs='-NoProfile -ExecutionPolicy Bypass -File "'+$gate+'" -RepoRoot "'+$RepoRoot+'" -StageDbPath "'+$StageDbPath+'" -StageCardNo "00003"'
+$gateProcess=Start-Process -FilePath 'powershell.exe' -ArgumentList $gateArgs -Wait -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError $gateErr
+if($gateProcess.ExitCode -ne 0){
+ Write-Output ('FAILED_GATE_EXIT='+$gateProcess.ExitCode)
  Write-Output ('FAILED_GATE_LOG='+$log)
- Get-Content -LiteralPath $log -Tail 45
+ Write-Output ('FAILED_GATE_STDERR='+$gateErr)
+ Write-Output 'LAST_STDOUT_LINES:'
+ Get-Content -LiteralPath $log -Tail 60
+ if((Get-Item -LiteralPath $gateErr).Length -gt 0){
+   Write-Output 'LAST_STDERR_LINES:'
+   Get-Content -LiteralPath $gateErr -Tail 20
+ }
  throw 'AUTOMATED_TEST_FAILED_NO_NEW_QA_RELEASE_CREATED'
 }
 Write-Output 'PASS=FULL_49_MENU_WINDOWS_CLOUD_FDB_COPY_GATE'
