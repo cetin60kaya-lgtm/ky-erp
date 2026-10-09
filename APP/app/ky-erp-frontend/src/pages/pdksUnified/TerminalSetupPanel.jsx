@@ -39,7 +39,7 @@ const statusLabel=(id)=>({
 })[id]||"Sürücü doğrulaması bekleniyor";
 const row=(name,done)=> <li key={name} className={done?"is-checked":""}>
   {done?<CheckCircle2 size={15}/>:<ShieldAlert size={15}/>} {name}</li>;
-export default function TerminalSetupPanel({company="",previewOnly=true}){
+export default function TerminalSetupPanel({company="",previewOnly=true,onReportLoaded=()=>{}}){
   const [config,setConfig]=useState(defaults);
   const [result,setResult]=useState(null);
   const [notice,setNotice]=useState("");
@@ -49,7 +49,7 @@ export default function TerminalSetupPanel({company="",previewOnly=true}){
     connectors:CONNECTORS.length,inputMethods:INPUT_METHODS.length,
     ready:CONNECTORS.filter(x=>x.status==="REFERENCE_IMPLEMENTED").length,
   }),[]);
-  const change=(name,v)=>{setConfig(before=>({...before,[name]:v}));setResult(null);setNotice("");setDiagnostic(null)};
+  const change=(name,v)=>{setConfig(before=>({...before,[name]:v}));setResult(null);setNotice("");setDiagnostic(null);onReportLoaded(null)};
   const toggle=(value,on)=>change("inputMethods",on?
     [...new Set([...config.inputMethods,value])]:
     config.inputMethods.filter(x=>x!==value));
@@ -77,8 +77,8 @@ export default function TerminalSetupPanel({company="",previewOnly=true}){
     try{
       if(file.size>65536||file.size<40)throw new Error("TERMINAL_REPORT_SIZE_INVALID");
       const data=parseTerminalDiagnosticReport(await file.text(),result.device.terminalId);
-      setDiagnostic(data);setNotice("Yerel tanı dosyası görüntülendi. Bu dosya imzasızdır; saha sertifikası değildir.");
-    }catch(error){setDiagnostic(null);
+      setDiagnostic(data);onReportLoaded(data);setNotice("Yerel tanı dosyası görüntülendi. Bu dosya imzasızdır; saha sertifikası değildir.");
+    }catch(error){setDiagnostic(null);onReportLoaded(null);
       setNotice("Tanı raporu reddedildi: "+String(error?.message||"Geçersiz JSON"));}
   };
   const download=()=>{
