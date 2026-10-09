@@ -87,3 +87,38 @@ export function normalizedKioskEvent({terminal,credential,direction,
     evidence.credentialHash,evidence.nonce]));
   return Object.freeze({...evidence,sourceKey});
 }
+
+
+/**
+ * Unsigned USB HID RFID/barkod reader: stores an unverified card scan only.
+ * This CANNOT be used as a verified employee punch until an approved person
+ * mapping and physical-reader provenance is reconciled separately.
+ */
+export function normalizedWedgeCardEvent({terminal,cardNo,direction,now=Date.now()}={}){
+  if(!terminal||terminal.connectorId!=="KY_QR_LOCAL"||
+    !Array.isArray(terminal.inputMethods)||!terminal.inputMethods.includes("BARCODE_WEDGE")||
+    !/^\d{5}$/.test(cardNo)||!["IN","OUT"].includes(direction)||
+    terminal.directionMode==="EXPLICIT_IN"&&direction!=="IN"||
+    terminal.directionMode==="EXPLICIT_OUT"&&direction!=="OUT"||
+    terminal.directionMode==="UNKNOWN")
+    throw new Error("WEDGE_CARD_INPUT_INVALID");
+  if(!Number.isSafeInteger(now))throw new Error("WEDGE_CARD_TIME_INVALID");
+  const stamp=new Date(now);
+  const workDate=new Intl.DateTimeFormat("en-CA",{
+    timeZone:terminal.timezone,year:"numeric",month:"2-digit",day:"2-digit",
+  }).format(stamp);
+  const localTime=new Intl.DateTimeFormat("en-GB",{
+    timeZone:terminal.timezone,hour:"2-digit",minute:"2-digit",
+    second:"2-digit",hourCycle:"h23",
+  }).format(stamp);
+  const sourceKey=hash(JSON.stringify(["UNVERIFIED_WEDGE",terminal.companyId,
+    terminal.terminalId,cardNo,direction,Math.floor(now/10000)]));
+  return Object.freeze({
+    schemaVersion:1,companyId:terminal.companyId,terminalId:terminal.terminalId,
+    cardNo,direction,workDate,localTime,timezone:terminal.timezone,
+    receivedAt:stamp.toISOString(),source:"USB_HID_CARD_WEDGE_UNVERIFIED",
+    identityVerified:false,physicalHardwareProven:false,
+    firebirdReconciled:false,tnfReconciled:false,cloudAcked:false,
+    status:"PENDING_IDENTITY_AND_RECONCILIATION",sourceKey,
+  });
+}
