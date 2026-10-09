@@ -8,6 +8,7 @@ import ManagementOverviewWorkspace from "./muhasebe/ManagementOverviewWorkspace"
 import QuickCompanyCreateDialog from "./muhasebe/QuickCompanyCreateDialog";
 import SupplierDocumentsWorkspace from "./muhasebe/SupplierDocumentsWorkspace";
 import { useAccountingLiveSync } from "../../services/accountingLiveSync";
+import { useAuth } from "../../context/AuthContext";
 import "./muhasebe/muhasebeModule.css";
 import "./muhasebe/supplierInventoryWorkspace.css";
 import "./muhasebe/accountingWorkspaceCore.css";
@@ -42,7 +43,9 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule,
   const quickWrapRef = useRef(null);
   const reloadAll = () => setRefreshKey((value) => value + 1);
   const live = useAccountingLiveSync(activeMainCompany);
-  const liveLabel = { live: "Canlı", connecting: "Bağlanıyor…", offline: "Çevrimdışı", auth_error: "Yetki hatası", api_error: "API hatası" }[live.status] || "Bağlantı durumu";
+  const {user} = useAuth();
+  const restrictedUser = !["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(String(user?.role || "").toUpperCase());
+  const liveLabel = { live: "Canlı", connecting: "Bağlanıyor…", offline: "Çevrimdışı", auth_error: restrictedUser ? "Kısıtlı erişim" : "Yetki hatası", api_error: "API hatası" }[live.status] || "Bağlantı durumu";
   const companyName = activeMainCompany?.name || activeMainCompany?.title || activeMainCompany?.slug || "Firma seçilmedi";
 
   useEffect(() => {
@@ -114,7 +117,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule,
           <div className="accounting-header-actions">
             <span className={`accounting-live-state ${live.status || "connecting"}`} title={live.error || undefined}>{liveLabel}</span>
             <button type="button" className="accounting-refresh" onClick={openEBelgeOverview}>e‑Belge Merkezi</button>
-            <div className="accounting-quick-wrap" ref={quickWrapRef}>
+            {!restrictedUser && <div className="accounting-quick-wrap" ref={quickWrapRef}>
               <button type="button" className="accounting-primary" aria-expanded={quickOpen} onClick={() => setQuickOpen((value) => !value)}>+ Hızlı İşlem</button>
               {quickOpen ? (
                 <div className="accounting-quick-menu" role="menu">
@@ -127,7 +130,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule,
                   <button type="button" onClick={() => goFinance({ financeView: "ledger" })}>Banka / Kasa / Defter</button>
                 </div>
               ) : null}
-            </div>
+            </div>}
             <button type="button" className="accounting-refresh" onClick={reloadAll}>Güncelle</button>
           </div>
         </header>
