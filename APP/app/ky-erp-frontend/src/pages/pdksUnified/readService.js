@@ -13,6 +13,7 @@ const fresh=(path,params)=>apiGet(path,params,{forceFresh:true,cache:false})
   .then((response)=>response?.ok===true && Object.hasOwn(response,"data")?response.data:response);
 
 export const readLiveDashboard=(params)=>fresh("/ik/personnel-control/dashboard-live",params);
+export const readCardEvents=(params)=>fresh("/ik/personnel-control/card-events",params);
 export const readPeople=(params)=>getPdksPeople(params);
 export const readProfile=(params)=>getPdksProfile(params);
 export const readDays=(personId,year,month,params)=>
