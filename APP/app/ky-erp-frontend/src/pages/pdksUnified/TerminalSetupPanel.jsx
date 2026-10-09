@@ -60,10 +60,14 @@ export default function TerminalSetupPanel({company="",previewOnly=true}){
   };
   const validate=()=>{
     try{
-      if(previewOnly){setNotice("Tasarım incelemesinde cihaz kaydı yapılmaz. Kurulum düzenini görüntüleyebilirsiniz.");return}
-      if(!company)throw new Error("Önce aktif firma seçilmelidir.");
-      const plan=installationPlan(deviceDraft());
-      setResult(plan);setNotice("");
+      if(!previewOnly&&!company)throw new Error("Önce aktif firma seçilmelidir.");
+      const draft=deviceDraft();
+      // A preview-only placeholder exists in memory for client-side validation.
+      // Never submit, download, persist or certify this pseudo-tenant.
+      if(previewOnly)draft.companyId="preview-only";
+      const plan=installationPlan(draft);
+      setResult(plan);setNotice(previewOnly?
+        "Yalnız tasarım doğrulaması. Gerçek cihaz kaydı oluşturulmadı.":"");
     }catch(error){setResult(null);setNotice(String(error?.message||"Cihaz tanımı doğrulanamadı."))}
   };
   const download=()=>{
@@ -95,38 +99,38 @@ export default function TerminalSetupPanel({company="",previewOnly=true}){
           <label>Terminal kodu
             <input aria-label="Terminal kodu" value={config.terminalId}
               onChange={e=>change("terminalId",e.target.value)}
-              placeholder="Örn. DESEN-TERMINAL-01" disabled={previewOnly}/></label>
+              placeholder="Örn. DESEN-TERMINAL-01"/></label>
           <label>Firma / üretici
             <select aria-label="Terminal markası" value={config.vendor}
-              onChange={e=>change("vendor",e.target.value)} disabled={previewOnly}>
+              onChange={e=>change("vendor",e.target.value)}>
               <option value="">Marka seçin</option>
               {vendors.map(([id,name])=><option key={id} value={id}>{name}</option>)}
             </select></label>
           <label>Gerçek model
             <input aria-label="Terminal modeli" value={config.model}
               onChange={e=>change("model",e.target.value)}
-              placeholder="Cihazın etiketteki tam modeli" disabled={previewOnly}/></label>
+              placeholder="Cihazın etiketteki tam modeli"/></label>
           <label>Protokol / sürücü
             <select aria-label="Terminal protokolü" value={config.connectorId}
-              onChange={e=>change("connectorId",e.target.value)} disabled={previewOnly}>
+              onChange={e=>change("connectorId",e.target.value)}>
               {CONNECTORS.map(x=><option key={x.id} value={x.id}>{x.label}</option>)}
             </select></label>
           {needsHost(connector)&&<><label>Yerel IP (yalnız özel ağ)
             <input aria-label="Terminal IPv4" value={config.host} placeholder="192.168.1.25"
-              onChange={e=>change("host",e.target.value)} disabled={previewOnly}/></label>
+              onChange={e=>change("host",e.target.value)}/></label>
             <label>Bağlantı portu
             <input aria-label="Terminal portu" inputMode="numeric" value={config.port}
-              onChange={e=>change("port",e.target.value)} disabled={previewOnly}/></label></>}
+              onChange={e=>change("port",e.target.value)}/></label></>}
           {needsUrl(connector)&&<label className="pdk-u-terminal-span">Üretici HTTPS sunucusu
             <input aria-label="Terminal HTTPS adresi" value={config.baseUrl}
               onChange={e=>change("baseUrl",e.target.value)}
-              placeholder="https://device-management.example" disabled={previewOnly}/></label>}
+              placeholder="https://device-management.example"/></label>}
           <label>Zaman dilimi
             <input aria-label="Terminal saat dilimi" value={config.timezone}
-              onChange={e=>change("timezone",e.target.value)} disabled={previewOnly}/></label>
+              onChange={e=>change("timezone",e.target.value)}/></label>
           <label>Giriş / çıkış yönü
             <select aria-label="Terminal yönü" value={config.directionMode}
-              onChange={e=>change("directionMode",e.target.value)} disabled={previewOnly}>
+              onChange={e=>change("directionMode",e.target.value)}>
               <option value="EXPLICIT_IN_OUT">Giriş ve çıkış seçilebiliyor</option>
               <option value="EXPLICIT_IN">Yalnız giriş okuyucusu</option>
               <option value="EXPLICIT_OUT">Yalnız çıkış okuyucusu</option>
@@ -141,7 +145,7 @@ export default function TerminalSetupPanel({company="",previewOnly=true}){
             <span>{m.label}</span></label>)}
         </div>
         <div className="pdk-u-terminal-actions">
-          <button type="button" className="pdk-u-btn" disabled={previewOnly}
+          <button type="button" className="pdk-u-btn"
             onClick={validate}><ShieldCheck size={16}/> Kurulum planını doğrula</button>
           <button type="button" className="pdk-u-btn" disabled={!result||previewOnly}
             onClick={download}><Download size={16}/> Güvenli JSON taslak indir</button>
