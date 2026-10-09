@@ -36,6 +36,9 @@ export function parseStageCopySnapshot(raw){
       group:person.groupCode||"",employmentStart:person.employmentStart||null,
       employmentEnd:person.employmentEnd||null,status:person.legacyStatus||""});
   });
+  // Resolve person/card identity once, rather than scanning the full roster
+  // for every real card event in large imported PDKS periods.
+  const byCard=new Map(people.map(person=>[person.cardNo,person.fullName]));
   const ids=new Set();
   const events=value.punches.map(punch=>{
     if(!card(punch?.cardNo)||!day(punch.workDate)||!time(punch.time)||
@@ -49,7 +52,7 @@ export function parseStageCopySnapshot(raw){
       eventId:punch.eventId,cardNo:punch.cardNo,date:punch.workDate,
       time:punch.time,direction:punch.direction,legacyType:punch.legacyType||"",
       source:"GIRCIK_STAGE",
-      person:people.find(p=>p.cardNo===punch.cardNo)?.fullName||"Kart eşleşmedi",
+      person:byCard.get(punch.cardNo)||"Kart eşleşmedi",
     });
   }).sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time)||
     a.eventId.localeCompare(b.eventId));
