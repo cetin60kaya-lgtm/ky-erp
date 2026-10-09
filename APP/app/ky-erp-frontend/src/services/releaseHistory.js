@@ -53,10 +53,10 @@ export const QA_MODULES = [
 export function moduleOf(text) {
   const s=String(text||"").toLocaleLowerCase("tr-TR");
   if(/güncelleme geçmişi|guncelleme-gecmisi|platform yönetimi|sürüm merkez|release history/.test(s))return "Platform";
+  if(/günlük operasyon|gunluk-operasyon|daily-dashboard/.test(s))return "Günlük Operasyon";
   if(/pdks|puantaj|kart okut|terminal/.test(s))return "PDKS";
   if(/e-belge|ubl-tr|işnet/.test(s))return "e-Belge";
   if(/muhasebe|fatura|irsaliye|(?<![\p{L}])çek(?![\p{L}])|cari|kdv/u.test(s))return "Muhasebe";
-  if(/günlük operasyon|gunluk-operasyon|daily-dashboard/.test(s))return "Günlük Operasyon";
   if(/mail & dosyalar|mail merkezi|gelen kutusu|drive/.test(s))return "Mail & Dosyalar";
   if(/denetim|capa|disney|sedex/.test(s))return "Denetim";
   if(/bağlantılar|depolama|dosya servisi/.test(s))return "Bağlantılar";
