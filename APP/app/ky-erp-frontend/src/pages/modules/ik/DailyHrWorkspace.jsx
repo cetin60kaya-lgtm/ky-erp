@@ -25,7 +25,6 @@ import {
   applyDailyExcel,
   createDailyEmployee,
   deleteDailyEmployee,
-  downloadDailyExcel,
   getDailyAttendance,
   getDailyAudit,
   getDailyEmployees,
@@ -46,6 +45,7 @@ import {
   updateDailyEmployee,
 } from "../../../services/dailyOpsApi";
 import { printHtmlDocument } from "../../../services/printService";
+import { exportRowsToExcelFile } from "../../../utils/excelExport";
 import "./daily-hr-workspace.css";
 import "./daily-hr-workspace-final.css";
 
@@ -241,8 +241,8 @@ function printWeeklyMatrix(title, range, days, rows = []) {
     amount: sum.amount + number(row.totalAmount ?? row.total),
   }), { people: 0, day: 0, night: 0, amount: 0 });
 
-  const pages = [];
-  for (let index = 0; index < source.length; index += 26) pages.push(source.slice(index, index + 26));
+  // Haftalık rapor personel sayısından bağımsız tek A4 yatay sayfada basılır.
+  const pages = [source];
   const headers = safeDays.map((date) => {
     const weekday = new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`)).replace(".", "").toLocaleUpperCase("tr-TR");
     return `<th class="date-col"><span>${escapeHtml(weekday)}</span><b>${escapeHtml(dateText(date, true))}</b><small>G / N</small></th>`;
@@ -292,7 +292,7 @@ function printWeeklyMatrix(title, range, days, rows = []) {
   return printHtmlDocument({
     title,
     html: `<main class="week-print">${html || '<p>Kayıt yok.</p>'}</main>`,
-    css: `@page{size:A4 landscape;margin:5mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#101828;background:#fff}.week-print{width:287mm}.week-page{width:287mm;min-height:198mm;display:flex;flex-direction:column;page-break-after:always;break-after:page}.week-page:last-child{page-break-after:auto;break-after:auto}.week-page>header{min-height:11mm;border:1.5px solid #111827;display:flex;align-items:center;justify-content:space-between;padding:1.6mm 2.4mm;margin-bottom:1.8mm;background:#f8fafc}.week-page>header div{display:flex;align-items:baseline;gap:4mm}.week-page>header strong{font-size:12pt;letter-spacing:.01em}.week-page>header span,.week-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.week-page table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:8pt}.week-page th,.week-page td{border:1px solid #667085;padding:.65mm .75mm;line-height:1.05;vertical-align:middle}.week-page th{font-weight:900;text-align:center;height:10mm;background:#eef2f7}.week-page td{height:6mm}.week-page .no{width:6mm;text-align:center}.week-page .person{width:41mm;text-align:left}.week-page .person strong{display:block;font-size:8.4pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .person small{display:block;margin-top:.4mm;font-size:6.2pt;color:#475467}.week-page .role{width:23mm;text-align:left;font-size:7.4pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .date-col{width:18mm}.week-page .date-col span,.week-page .date-col b,.week-page .date-col small{display:block}.week-page .date-col span{font-size:7pt}.week-page .date-col b{font-size:7.8pt;margin-top:.4mm}.week-page .date-col small{font-size:5.5pt;margin-top:.35mm;color:#667085}.work-cell{padding:.2mm!important;text-align:center}.work-cell>span{display:inline-flex;align-items:center;justify-content:center;gap:.45mm;width:50%;font-size:7.6pt;font-weight:900;white-space:nowrap}.work-cell>span+span{border-left:1px solid #98a2b3}.work-cell b{font-size:7pt}.work-cell i{font-style:normal;font-size:9pt;font-weight:900}.work-cell .day.on{color:#c2410c}.work-cell .night.on{color:#3730a3}.work-cell .off{color:#98a2b3}.week-page .count{width:10mm;text-align:center}.week-page .total-days{width:14mm;text-align:center}.week-page .total-money{width:29mm;text-align:right}.week-page th.total-money{text-align:center}.week-page td.total-money strong{font-size:8.6pt;white-space:nowrap}.week-page tfoot td{height:8mm;font-weight:900;background:#f8fafc}.week-page tfoot .day-total{text-align:center;padding:.3mm!important}.week-page tfoot .day-total span{display:block;font-size:6.6pt;line-height:1.15}.week-page tfoot .page-total td{border-top:1.5px solid #111827}.week-page tfoot .grand-total td{border-top:2px solid #111827;border-bottom:2px solid #111827;background:#eaf2ff;font-size:8.4pt}.week-page tfoot .grand-total .total-money strong{font-size:10pt}.week-page tfoot .general span{font-weight:900}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`,
+    css: `@page{size:A4 landscape;margin:4mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#101828;background:#fff}.week-print{width:100%}.week-page{width:100%;min-height:0;display:block;page-break-after:auto;break-after:auto;break-inside:avoid}.week-page>header{min-height:11mm;border:1.5px solid #111827;display:flex;align-items:center;justify-content:space-between;padding:1.6mm 2.4mm;margin-bottom:1.8mm;background:#f8fafc}.week-page>header div{display:flex;align-items:baseline;gap:4mm}.week-page>header strong{font-size:12pt;letter-spacing:.01em}.week-page>header span,.week-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.week-page table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:7.4pt}.week-page th,.week-page td{border:1px solid #667085;padding:.35mm .65mm;line-height:1.05;vertical-align:middle}.week-page th{font-weight:900;text-align:center;height:8mm;background:#eef2f7}.week-page td{height:4.8mm}.week-page .no{width:6mm;text-align:center}.week-page .person{width:41mm;text-align:left}.week-page .person strong{display:block;font-size:7.8pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .person small{display:block;margin-top:.4mm;font-size:6.2pt;color:#475467}.week-page .role{width:23mm;text-align:left;font-size:7.4pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .date-col{width:18mm}.week-page .date-col span,.week-page .date-col b,.week-page .date-col small{display:block}.week-page .date-col span{font-size:7pt}.week-page .date-col b{font-size:7.8pt;margin-top:.4mm}.week-page .date-col small{font-size:5.5pt;margin-top:.35mm;color:#667085}.work-cell{padding:.2mm!important;text-align:center}.work-cell>span{display:inline-flex;align-items:center;justify-content:center;gap:.45mm;width:50%;font-size:7.6pt;font-weight:900;white-space:nowrap}.work-cell>span+span{border-left:1px solid #98a2b3}.work-cell b{font-size:7pt}.work-cell i{font-style:normal;font-size:9pt;font-weight:900}.work-cell .day.on{color:#c2410c}.work-cell .night.on{color:#3730a3}.work-cell .off{color:#98a2b3}.week-page .count{width:10mm;text-align:center}.week-page .total-days{width:14mm;text-align:center}.week-page .total-money{width:29mm;text-align:right}.week-page th.total-money{text-align:center}.week-page td.total-money strong{font-size:8.6pt;white-space:nowrap}.week-page tfoot td{height:6mm;font-weight:900;background:#f8fafc}.week-page tfoot .day-total{text-align:center;padding:.3mm!important}.week-page tfoot .day-total span{display:block;font-size:6.6pt;line-height:1.15}.week-page tfoot .page-total td{border-top:1.5px solid #111827}.week-page tfoot .grand-total td{border-top:2px solid #111827;border-bottom:2px solid #111827;background:#eaf2ff;font-size:8.4pt}.week-page tfoot .grand-total .total-money strong{font-size:10pt}.week-page tfoot .general span{font-weight:900}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`,
   });
 }
 function printWeeklyControlList(range, days, rows = []) {
@@ -1144,7 +1144,36 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const shiftPaymentRange = (weeks) => setSafePaymentRange(paymentTab === "history" ? "history" : "pool", { start: addDays(activePaymentRange.start, weeks * 7), end: addDays(activePaymentRange.end, weeks * 7) });
   const paymentRangeControls = <div className="gop-range-controls payment-range-controls"><button type="button" onClick={() => shiftPaymentRange(-1)}>‹ Önceki hafta</button><label>Başlangıç<input type="date" value={activePaymentRange.start} onChange={(e) => setSafePaymentRange(paymentTab === "history" ? "history" : "pool", { ...activePaymentRange, start: e.target.value })}/></label><label>Bitiş<input type="date" value={activePaymentRange.end} onChange={(e) => setSafePaymentRange(paymentTab === "history" ? "history" : "pool", { ...activePaymentRange, end: e.target.value })}/></label><button type="button" onClick={() => shiftPaymentRange(1)}>Sonraki hafta ›</button></div>;
 
-  const exportExcel = async () => { setBusy(true); try { await downloadDailyExcel({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }); } catch (e) { setError(e?.message || "Excel indirilemedi."); } finally { setBusy(false); } };
+  const exportExcel = async () => {
+    setBusy(true);
+    try {
+      // Bulut API'sinde GET /gunluk-operasyon/excel yok; hazır personel matrisinden yerel Excel üret.
+      const excelRows = weeklyControlRows.map((person, index) => {
+        const row = { "No": index + 1, "Personel": person.name || person.fullName || "", "Personel No": person.personnelNo || "", "Vasıf": person.qualification || person.role || "" };
+        days.forEach((date) => {
+          const day = person.days?.[date] || {};
+          row[`${dateText(date)} Gündüz`] = day.day ? 1 : "";
+          row[`${dateText(date)} Gece`] = day.night ? 1 : "";
+        });
+        row["Gündüz Toplam"] = number(person.dayCount);
+        row["Gece Toplam"] = number(person.nightCount);
+        row["Toplam Gün"] = number(person.dayCount) + number(person.nightCount);
+        row["Toplam Tutar"] = number(person.totalAmount ?? person.total);
+        return row;
+      });
+      if (!excelRows.length) throw new Error("Seçilen tarihlerde aktarılacak personel kaydı yok.");
+      const total = { "No": "", "Personel": "GENEL TOPLAM", "Personel No": "", "Vasıf": "" };
+      days.forEach((date) => {
+        total[`${dateText(date)} Gündüz`] = weeklyControlRows.filter((p) => p.days?.[date]?.day).length;
+        total[`${dateText(date)} Gece`] = weeklyControlRows.filter((p) => p.days?.[date]?.night).length;
+      });
+      total["Gündüz Toplam"] = weeklyControlRows.reduce((sum, p) => sum + number(p.dayCount), 0);
+      total["Gece Toplam"] = weeklyControlRows.reduce((sum, p) => sum + number(p.nightCount), 0);
+      total["Toplam Gün"] = total["Gündüz Toplam"] + total["Gece Toplam"];
+      total["Toplam Tutar"] = weeklyControlRows.reduce((sum, p) => sum + number(p.totalAmount ?? p.total), 0);
+      exportRowsToExcelFile(`KYERP_Gunluk_${range.start}_${range.end}.xls`, "Günlük Personel Özeti", [...excelRows, total]);
+    } catch (e) { setError(e?.message || "Excel indirilemedi."); } finally { setBusy(false); }
+  };
   const importExcel = () => {
     const input = document.createElement("input"); input.type = "file"; input.accept = ".xlsx";
     input.onchange = async (event) => { const file = event.target.files?.[0]; if (!file) return; setBusy(true); try { const preview = await previewDailyExcel(file, { mainCompanyId: companyId, startDate: range.start, endDate: range.end }); setExcelPreview(preview); setNotice("Excel okundu. Kontrol edip uygula."); } catch (e) { setError(e?.message || "Excel okunamadı."); } finally { setBusy(false); } };
