@@ -115,3 +115,24 @@ body:has(> #root > .pdk-unified),
 .pdk-u-operation-receipt code{font-size:10px;user-select:all}
 .pdk-u-operation-buttons{display:flex;flex-wrap:wrap;gap:9px}
 .pdk-u-operation-source-pending{color:var(--pu-warn)}
+
+/* Real D1 daily-card preview, no device/FDB/TNF claims. */
+.pdk-u-live{margin:16px 0 0;background:var(--pu-panel);border:1px solid var(--pu-border);border-radius:10px;overflow:hidden;color:var(--pu-text)}
+.pdk-u-live-head{padding:17px 18px 13px;display:flex;align-items:center;justify-content:space-between;gap:18px}
+.pdk-u-live-head strong{font-size:13px;font-weight:780}
+.pdk-u-live-head p{font-size:10.5px;color:var(--pu-muted);margin:6px 0 0;line-height:1.5}
+.pdk-u-live-metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:6px 18px 16px}
+.pdk-u-live-metrics button{border:1px solid var(--pu-border);background:var(--pu-soft);color:var(--pu-text);border-radius:8px;display:flex;flex-direction:column;text-align:left;gap:7px;padding:12px;min-width:0}
+.pdk-u-live-metrics button.is-active{border-color:var(--pu-accent);background:var(--pu-accent-soft)}
+.pdk-u-live-metrics span{font-size:10px;color:var(--pu-muted)}
+.pdk-u-live-metrics strong{font-size:22px;font-weight:800}
+.pdk-u-live-filters{border-top:1px solid var(--pu-border);background:var(--pu-soft);display:flex;align-items:center;flex-wrap:wrap;gap:13px;padding:12px 18px;color:var(--pu-muted);font-size:10px}
+.pdk-u-live-filters label{display:inline-flex;align-items:center;gap:8px}
+.pdk-u-live-filters select{padding:7px 10px;border:1px solid var(--pu-border);color:var(--pu-text);background:var(--pu-panel);border-radius:6px;max-width:225px}
+.pdk-u-live-filters>span:last-child{margin-left:auto}
+.pdk-u-live-empty{padding:34px 20px;min-height:105px;display:flex;align-items:center;justify-content:center;text-align:center;gap:9px;color:var(--pu-muted);font-size:11px}
+.pdk-u-live-note{display:flex;align-items:center;gap:7px;line-height:1.5;margin:0;padding:12px 18px;border-top:1px solid var(--pu-border);font-size:10.5px;color:var(--pu-muted)}
+.pdk-u-record-panel>.pdk-u-live{margin:0;border:0;border-radius:0}
+.pdk-u-live .pdk-u-table-scroll{min-height:0}
+@media(max-width:1150px){.pdk-u-live-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.pdk-u-live-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.pdk-u-live-head{flex-wrap:wrap}.pdk-u-live-filters>span:last-child{margin-left:0}}
