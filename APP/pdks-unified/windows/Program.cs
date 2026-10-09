@@ -143,7 +143,7 @@ public sealed class KyPdksWindow : Form
                 ? new Uri("http://127.0.0.1:5186/")
                 : new Uri("https://app.kyerp.net/");
         initialUrl = new Uri(allowedOrigin,
-            offlineTest ? "/pdks-test" : localPreview ? "/pdks-studio" : "/pdks/workspace");
+            offlineTest ? "/index.html?pdks-test=1" : localPreview ? "/pdks-studio" : "/pdks/workspace");
 
         Text = offlineTest ? "KY PDKS — MENÜ TEST SÜRÜMÜ (CANLI VERİ KAPALI)"
             : localPreview ? "KY PDKS — Yerel Tasarım İncelemesi" : "KY PDKS — Kurumsal";
