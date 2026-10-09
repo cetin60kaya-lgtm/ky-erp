@@ -93,8 +93,15 @@ internal static class UnifiedJournalStore
             !receipt.TryGetProperty("sourceValidated", out var sourceProof) ||
             sourceProof.ValueKind != JsonValueKind.True ||
             !receipt.TryGetProperty("fdbValidated", out var firebirdProof) ||
-            firebirdProof.ValueKind != JsonValueKind.True)
+            firebirdProof.ValueKind != JsonValueKind.True ||
+            !receipt.TryGetProperty("tnfTouched", out var tnfProof) ||
+            tnfProof.ValueKind != JsonValueKind.False)
             throw new InvalidOperationException("JOURNAL_APPLIED_RECEIPT_CONFLICT");
+        var digest=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            Property(receipt, "policySha256") + "|" + Property(receipt, "fdbEvidenceSha256")
+        ))).ToLowerInvariant();
+        if(!StringComparer.OrdinalIgnoreCase.Equals(digest,Property(receipt,"evidenceSha256")))
+            throw new InvalidOperationException("JOURNAL_COMBINED_EVIDENCE_HASH_INVALID");
         await VerifyLocalPolicyProofAsync(journalPath, receipt, cancellationToken);
         return receipt.Clone();
     }
@@ -191,6 +198,8 @@ internal static class UnifiedJournalStore
                 commandId="command-1", outboxId="outbox-1", commandPayloadSha256=a,
             });
             var policyHash=Convert.ToHexString(SHA256.HashData(fact)).ToLowerInvariant();
+            var combined=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+                policyHash+"|"+b))).ToLowerInvariant();
             var policyPath=Path.Combine(policyDir,"fixture.json");
             await File.WriteAllBytesAsync(policyPath,fact);
             using var parsed = JsonSerializer.SerializeToDocument(new
@@ -198,7 +207,7 @@ internal static class UnifiedJournalStore
                 journalId=first.Snapshot.JournalId,
                 commandId="command-1",outboxId="outbox-1",commandPayloadSha256=a,
                 appliedAt="2026-10-08T00:00:00Z",policySha256=policyHash,
-                fdbEvidenceSha256=b,evidenceSha256=b,
+                fdbEvidenceSha256=b,evidenceSha256=combined,
                 sourceValidated=true,fdbValidated=true,tnfTouched=false,
             });
             await SaveAppliedReceiptAsync(first.JournalPath, parsed.RootElement);
@@ -212,6 +221,13 @@ internal static class UnifiedJournalStore
                 throw new InvalidOperationException("JOURNAL_REPLAY_SHA_NOT_ENFORCED");
             }
             catch (InvalidOperationException error) when(error.Message=="JOURNAL_APPLIED_RECEIPT_CONFLICT") { }
+            await File.WriteAllTextAsync(policyPath,"{\\\"tampered\\\":true}");
+            try
+            {
+                await ReadAppliedReceiptAsync(first.JournalPath,"command-1","outbox-1",a);
+                throw new InvalidOperationException("JOURNAL_MODIFIED_POLICY_NOT_REJECTED");
+            }
+            catch (InvalidOperationException error) when(error.Message=="JOURNAL_POLICY_EVIDENCE_MISSING") { }
             File.Delete(policyPath);
             try
             {
