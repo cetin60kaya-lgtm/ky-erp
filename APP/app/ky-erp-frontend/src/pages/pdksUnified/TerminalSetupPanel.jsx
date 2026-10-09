@@ -20,7 +20,6 @@ const defaults=()=>({
   inputMethods:["QR_SIGNED"],directionMode:"EXPLICIT_IN_OUT",
   approvalState:"DRAFT",
 });
-const methods=new Map(INPUT_METHODS.map(m=>[m.id,m]));
 const needsHost=(connector)=>["LAN_VENDOR","HTTPS_VENDOR",
   "RS485_CONTROLLER","READER_CONTROLLER"].includes(connector?.transport);
 const needsUrl=(connector)=>["HTTPS_SERVER","VENDOR_CLOUD","HTTPS_API"]
