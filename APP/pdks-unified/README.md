@@ -718,3 +718,49 @@ Remote Desktop kotası %96 olduğu için kalan kota korunuyor.
 kanıtlı Firebird SQL ledger/transaction/crash recovery (8 eylem),
 cihaz SDK/RAW/E, puantaj/bordro, 49 ekran saha testi ve mobil signing.
 PR #404 **DRAFT / unmerged** tutuluyor.
+
+
+## 23. 09.10.2026 — TEST EDİLEBİLİR PDKS STUDIO / TEKRARLANABİLİR KABUL
+
+**Bu bölüm geliştirme dalının güncel kullanıcı test kapısıdır.** Önizleme
+operasyonel PDKS dağıtımı veya üretim FDB/Cloudflare migration değildir.
+
+- Tek tıklama: `APP/pdks-unified/windows/tools/PDKS-STUDIO-TEST-AC.cmd`.
+  CMD aynı klasördeki `Open-UnifiedStudioPreview.ps1` dosyasını çağırır,
+  izole Git çalışma ağacı içindeki Vite'ı yalnız localhost'ta başlatır,
+  `5186–5196` aralığında boş port seçer ve
+  `http://127.0.0.1:<port>/pdks-studio` adresini tarayıcıda açar.
+  Halihazırda kullanılan 5186 sunucusu durdurulmaz.
+  İlgili `node_modules` kurulu değilse açıkça hata verir.
+  **Önizlemede gerçek personel kartı, giriş/çıkış, maaş veya onaylı
+  tatil kaydı üretilmez; üretim POST işlemleri açılamaz.**
+- Arayüz kabulü: `Test-UnifiedUiAcceptance.ps1` PDKS'ye ait dört birim
+  test dosyasında **34/34 PASS**, PDKS ESLint PASS, tüm frontend Vite
+  derlemesi PASS ve gerçek headless Chrome üzerinde **9 bölüm / 49 sekme
+  / işlem panelleri / koyu tema / yalnız inceleme modu PASS**.
+  DESEN testi aynı zamanda 5186 doluyken boş 5187 portunda başarılıdır:
+  `RESULT=PASS_49_TAB_STUDIO_PREVIEW_NO_LIVE_WRITE`.
+- Backend+Cloud+Firebird kopya kabulü:
+  `Test-UnifiedCopyAcceptance.ps1`, Windows Release, 5 Agent güvenlik
+  öz testi, gerçek `gbak` kopya FDB rollback, üç ardışık servis/atama/
+  avans idempotent transaction denemesi, Cloud sözleşme/ACK ve Cloud
+  ↔ Windows localhost E2E ile cihaz/puantaj salt kural testlerini
+  fail-closed çalıştırır.
+- Hepsini tek seferde başlatmak için
+  `Test-UnifiedProductAcceptance.ps1 -StageDbPath <izinli-kopya-FDB>
+  -StageCardNo <kopyada-doğrulanmış-5-haneli-kart>`.
+  Betik, `D:\KYERP\_TEMP\PDKS_COPY_STAGE_*` haricindeki FDB'yi kabul
+  etmez; üretim Cloudflare, cihaz, gerçek TNF değişikliği yapmaz.
+- Tam frontend `npm test` komutu yalnız PDKS'ye ait olmayan
+  `security-root-host.contract.test.js` dosyasında `fresh-v3`
+  beklentisine karşı `fresh-v4` kaynak başlığı nedeniyle başarısız
+  görüldü. **Bu farklı modül sorunu düzeltilmiş gibi gösterilmez.**
+  PDKS'nin kendi kabul komutu bağımsızdır ve bu testi örtbas etmez.
+- Yeni Cloud ACK birleşik kanıt hash'i ve legacy AVANS gerçek-kod
+  okuma düzeltmesi, güvenli izole acceptance kapısı ile kontrol edilir.
+  Canlıya geçme/üretim D1 migration/gerçek bordro mutasyonu hâlâ kapalı.
+
+**Kalan üretim işi:** Ayrı Cloudflare staging D1, üretim-safe Firebird
+8 idari işlem ve recovery, terminal cihaz SDK'sı, ham RAW/E/TNF
+mutabakatı, SGK/puantaj/bordro kabulü, gerçek saha ekran yetkileri ve
+mobil imzalı dağıtım. Kullanıcı onayından önce PR #404 DRAFT kalır.
