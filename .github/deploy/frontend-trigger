@@ -1,4 +1,5 @@
-deploy: weekly-print-single-page-excel-404
-canonical: 13fdc7506da135713f8a61e27e05a4f4da161497
-requested: 2026-10-09T08:47:00Z
-reason: weekly-landscape-single-page-and-excel-export
+deploy: pdks-live-trust-20261009
+pr: 416
+merge: 360b704fc35800ca3ae40455c18cb66a37d98a87
+ci: 37919059923
+reason: prevent stale live cache and false verified absence when terminal offline
