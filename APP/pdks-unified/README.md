@@ -871,3 +871,70 @@ güncelliği, fiziksel cihaz RAW, Firebird/TNF mutabakatı ve güvenli
 staging dağıtımı ayrıca doğrulanmalıdır.
 PR #404 DRAFT/UNMERGED ve canlı FDB/TNF/terminal/D1
 yazma/dağıtım kapalı kalır.
+
+
+## 26. 09.10.2026 — KART HAREKETLERİ VE DEVAM GEÇMİŞİ İŞLEVSEL KODLAMASI
+
+**Mevcut onaylı 9 bölüm / 49 sekme görsel düzeni korunur.**
+Devam Kontrol > Kart Hareketleri ve Devam Geçmişi artık yalnız tek
+personelin seçilmiş ayını tekrar kullanan eski ekrana bağımlı değildir.
+
+### İşlevsel okuma ve veri güvenliği
+
+- Yeni **salt okunur**, firma ve PDKS yetkisiyle korunan endpoint:
+  `GET /api/ik/personnel-control/card-events`.
+  Tarih aralığı **en fazla 31 takvim günü**, sayfa boyu 1–250
+  (UI varsayılan 150), tarih+saat+ID sıralı **parametre bağlı
+  anahtarlı sayfalama**. Orijinal kart numarası, tarih, saat,
+  `IN`/`OUT`/`AUTO` yön, personel adı, bölüm, kaynak ve
+  event ID alanları korunur. Aynı tarih ve saatteki olaylar event
+  kimliğiyle deterministik sıralanır.
+- Bozuk, kısmi, tarih dışı, geleceğe yönelik kusurlu veya SQL metni
+  içerebilecek sayfalama anahtarları **400/fail-closed**. Bu kurallar
+  `ik-pdks-card-events-query.mjs` içinde saf ve test edilebilir
+  şekilde bulunur.
+- Tenant filtresi hem sorguda hem global PDKS middleware'de vardır.
+  Denetim hesabı yalnız fiziksel kartı olan ve ilgili olay döneminde
+  SGK görünürlüğü doğrulanan kişilerin kart olaylarını görür;
+  ücret/bordro/yönetim alanları bu endpointte yer almaz.
+- `CardEventsPanel.jsx` içinde başlangıç/bitiş tarih seçimi,
+  **giriş/çıkış/yön belirsiz** filtresi, isim-kart-bölüm-arama,
+  daha fazla 150 kayıt yükleme ve Excel'de güvenli CSV çıktı vardır.
+  CSV yalnız gerçekten indirilmiş ve filtreye giren satırları içerir;
+  sistem tüm tarihin indirildiğini iddia etmez.
+- `readService.js`, `tabBindings.js` ve `PdksUnifiedApp.jsx`
+  yeni iki sekmeye bağlandı. PDKS Studio preview ekranında
+  veri sorguları kapalıdır, örnek personel veya kart saati üretilmez.
+  `verifyPdksUnifiedBrowser.mjs` bu iki ekranın tarih girişleri,
+  yetkisiz sorgu engeli ve preview açıklamasını ayrıca denetler.
+- Kayıtların Cloud D1'de görünmesi, fiziksel terminal RAW/Firebird/TNF
+  mutabakatından geçtiğini **kanıtlamaz**; bu kaynakların durumu
+  `PENDING_FDB_TNF_TERMINAL` olarak dönmeye devam eder.
+
+### Son izole kabul
+
+Kod HEAD `de31eff3cfa8562dfa464b4c4d10e9e6a6966c4f` üzerinde:
+
+- Cloud sözleşme / güvenlik / tarih / cursor: **45/45 PASS**.
+- Windows Agent ↔ localhost Cloud ↔ kopya FDB E2E: **1/1 PASS**.
+- Fiziksel kart/TNF kural motoru: **27/27 PASS**.
+- PDKS frontend: **36/36 PASS**.
+- **Toplam 109/109 otomatik test PASS.**
+- Windows Release, Agent 5 güvenlik öz testi, Firebird rollback,
+  servis/atama/avans kopya-ledger **3/3**, Cloud TypeScript,
+  PDKS ESLint, frontend build, Chrome 9 bölüm / 49 sekme PASS.
+- Tek komut: `Test-UnifiedProductAcceptance.ps1` (yalnız izole
+  `KY_PDKS_STAGE.FDB` kopyasıyla). Son marker:
+  `RESULT=PASS_COMPLETE_ISOLATED_PDKS_PREVIEW_AND_SYNC_ACCEPTANCE`.
+  Log:
+  `D:\KYERP\_TEMP\PDKS_SAFE_VERIFY_20261008_02\PDKS_HISTORY_ACCEPTED_20261009.log`.
+- Vite'ın fatal olmayan uyarılarının PowerShell 5 tarafından yanlış
+  hata sayılmaması için `Test-UnifiedUiAcceptance.ps1` yalnızca
+  frontend build aşamasının stderr/stdout akışını birleştirir; gerçek
+  `npm.cmd` çıkış kodu yine katı şekilde kontrol edilir.
+
+**Üretim sınırı değişmedi:** PR #404 DRAFT/UNMERGED, canlı FDB,
+TNF, terminal RAW ve Cloudflare üretim D1'e yazma/dağıtım yapılmadı.
+Terminal sürücüsü ve gerçek izleme verisiyle saha mutabakatı,
+ayrı Cloudflare staging, bordro/izin/cihaz kaynak bağlantıları ve
+diğer üretim komutları hâlâ tamamlanmalıdır.
