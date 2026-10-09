@@ -4,7 +4,7 @@ import {join,resolve,isAbsolute} from "node:path";
 import {timingSafeEqual} from "node:crypto";
 import {fileURLToPath} from "node:url";
 import {validateTerminalDefinition} from "./terminal-profiles.mjs";
-import {verifyQrCredential,normalizedKioskEvent} from "./qr-terminal-core.mjs";
+import {verifyQrCredential,normalizedKioskEvent,normalizedWedgeCardEvent} from "./qr-terminal-core.mjs";
 
 const same=(a,b)=>{
   if(typeof a!=="string"||typeof b!=="string")return false;
@@ -74,16 +74,18 @@ export function createKioskHandler({terminal,secret,operatorKey,journalRoot,
       }
       return reply(res,200,{ok:true,records,source:"LOCAL_UNSYNCED"});
     }
-    if(req.method!=="POST"||req.url!=="/scan")
+    if(req.method!=="POST"||!["/scan","/scan-card"].includes(req.url))
       return reply(res,404,{ok:false,error:"TERMINAL_ENDPOINT_NOT_FOUND"});
     try{
       if(req.headers["content-type"]?.split(";")[0].toLowerCase()!=="application/json")
         return reply(res,415,{ok:false,error:"TERMINAL_JSON_REQUIRED"});
       const body=await bodyJson(req);
-      const credential=verifyQrCredential(body.token,{secret,companyId:profile.companyId,
-        now:now()});
-      const event=normalizedKioskEvent({terminal:profile,credential,
-        direction:body.direction,now:now()});
+      const event=req.url==="/scan-card"
+        ? normalizedWedgeCardEvent({terminal:profile,cardNo:body.cardNo,
+            direction:body.direction,now:now()})
+        : normalizedKioskEvent({terminal:profile,
+            credential:verifyQrCredential(body.token,{secret,companyId:profile.companyId,
+              now:now()}),direction:body.direction,now:now()});
       const folder=join(root,"events");
       await mkdir(folder,{recursive:true,mode:0o700});
       const path=join(folder,event.sourceKey+".json");
@@ -97,8 +99,9 @@ export function createKioskHandler({terminal,secret,operatorKey,journalRoot,
           return reply(res,409,{ok:false,error:"QR_REPLAY_BLOCKED"});
         throw error;
       }finally{if(handle){try{await handle.close()}catch{}}}
-      return reply(res,202,{ok:true,status:"PENDING_RECONCILIATION",
+      return reply(res,202,{ok:true,status:event.status,
         receivedAt:event.receivedAt,sourceKey:event.sourceKey,
+        identityVerified:req.url==="/scan",
         fdbReconciled:false,tnfReconciled:false});
     }catch(error){
       const known=/^(QR_|TERMINAL_|INVALID_)/.test(error?.message||"");
