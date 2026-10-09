@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 09.10.2026 — Canlı KY ERP 14 modül QA ve nöbet sonucu
+- PR #409 gerçek canonical merge `2d0e33a24d4ce319baff4ae6f9cc57b670a6552d`; CI Action #37891886962 SUCCESS.
+- Production Pages deploy Action #37892077343 SUCCESS; commit `844a4337523e24d9f5f944cef5b57a5f1506051f`. Gerçek Chrome public route + anonim API auth sınırı ve live bundle kontrolleri başarılı.
+- Platform Yönetimi > Sistem > Güncelleme Geçmişi > **Modül Kontrolleri**: 14 ana modül için son PR ve ilgili ekran; yetkili gerçek E2E kanıtı bulunmayan her modül **test bekliyor** gösterilir.
+- Canlı geçmiş yanlış sınıflandırma (örneğin "gerçek" -> "çek" -> Muhasebe) düzeltildi; PR başlığıyla modül kategorisi belirlenir.
+- Kullanıcının ek onayını gerektirmeden canlı site/API/yayın hatası için ChatGPT **KY ERP Canlı Nöbet** altı saatte bir read-only izleme yapar; hata doğrulanırsa bildirir, normalde sessizdir. Bu otomasyon onaylı test kullanıcısı yerine geçmez.
+- Açık blocker: admin onaylı, yalnız KY ERP TEST firması kapsamında, düşük yetkili QA kullanıcısı/cihazı ile 14 modülün gerçek iş akışı, PDKS, yıllık izin, imalat/üretim ve erişim deny testleri uygulanamadı. Tam sistem E2E başarısı **iddia edilmez**; MFA bypass/gerçek canlı ücret işlemine dokunulmaz.
+
+
 ## 09.10.2026 — Zorunlu GitHub güncelleme ve canlı yayın geçmişi
 - Kullanıcı kesin kararı: bütün sohbetler/ajanlar somut işlerini GitHub commit/PR ve production yayın kanıtı üzerinden ortak izleyebilmeli; uygulama sahibi Platform Yönetimi > Sistem > Güncelleme Geçmişi bölümünde neyin dalda, testte, birleştirilmiş, arayüzde ve API'de canlı olduğunu görmeli.
 - Canonical sözleşme: `DOCS/KY_ERP_GUNCELLEME_YAYIN_KAYIT_SOZLESMESI_2026-10-09.md`. Teknik üst kural `AGENTS.md`.
