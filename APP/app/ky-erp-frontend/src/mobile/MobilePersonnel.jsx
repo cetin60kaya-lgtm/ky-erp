@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { personnelRequest, trustedPersonnelDevice, registerPersonnelDevice } from "../services/employeePortalApi";
-import { mobileLogout } from "./mobileApi";
+import {clearStaffSession} from "./personnelSession";
+function staffLogout(){clearStaffSession();window.location.assign("/mobile/personel");}
 
 const box={background:"#fff",border:"1px solid #dce5ed",borderRadius:16,padding:16,marginBottom:12};
 const button={border:0,borderRadius:10,background:"#1453a3",color:"#fff",padding:"12px 16px",fontWeight:700,cursor:"pointer"};
@@ -76,7 +77,7 @@ export default function MobilePersonnel() {
   return <div style={{minHeight:"100dvh",background:"#f1f5f9",color:"#1b2a3c",fontFamily:"system-ui,sans-serif",padding:14,paddingBottom:40}}>
     <header style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
       <div><div style={{fontSize:11,color:"#60758c",fontWeight:700}}>KY ERP / PERSONEL</div><h2 style={{margin:"3px 0"}}>Personel Panelim</h2><span style={subtle}>Firma ve cihaz bazlı erişim</span></div>
-      <button type="button" style={{...button,background:"#64748b",padding:"9px 12px"}} onClick={mobileLogout}>Çıkış</button>
+      <button type="button" style={{...button,background:"#64748b",padding:"9px 12px"}} onClick={staffLogout}>Çıkış</button>
     </header>
     {message?<div style={{...box,color:"#a14419"}} role="status">{message}</div>:null}
     {!account?<div style={box}>{loading?"Yukleniyor...":"Hesap acilamadi. Firma personel yetkilisine basvurun."}<p><button type="button" onClick={reload}>Yenile</button></p></div>:null}
