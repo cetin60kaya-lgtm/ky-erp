@@ -56,7 +56,12 @@ export function moduleOf(text) {
   if(/pdks|puantaj|kart okut|terminal/.test(s))return "PDKS";
   if(/e-belge|ubl-tr|işnet/.test(s))return "e-Belge";
   if(/muhasebe|fatura|irsaliye|(?<![\p{L}])çek(?![\p{L}])|cari|kdv/u.test(s))return "Muhasebe";
-  if(/ik\\b|personel|bordro|maaş|izin|mesai|avans/.test(s))return "İK";
+  if(/günlük operasyon|gunluk-operasyon|daily-dashboard/.test(s))return "Günlük Operasyon";
+  if(/mail & dosyalar|mail merkezi|gelen kutusu|drive/.test(s))return "Mail & Dosyalar";
+  if(/denetim|capa|disney|sedex/.test(s))return "Denetim";
+  if(/bağlantılar|depolama|dosya servisi/.test(s))return "Bağlantılar";
+  if(/sistem merkezi|sistem nöbetçisi/.test(s))return "Sistem Merkezi";
+  if(/(?:^|[^\p{L}])ik(?:$|[^\p{L}])|personel|bordro|maaş|izin|mesai|avans/u.test(s))return "İK";
   if(/imalat|üretim|makina|makine|model/.test(s))return "İmalat";
   if(/boyahane|lot|reçete/.test(s))return "Boyahane";
   if(/desen|dtf|photoshop/.test(s))return "Desen";
