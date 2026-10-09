@@ -1163,6 +1163,14 @@ export function registerAuthPolicyRoutes(app: any) {
     const target = await userById(c, text(c.req.param("id")));
     if (!target) return c.json(jsonError("USER_NOT_FOUND", "Kullanıcı bulunamadı."), 404);
     const body = await bodyOf(c);
+    // Migration 0029 intentionally forbids PASSWORD_ONLY and requires MFA sessions.
+    // Reject clearly before touching D1; never report a silent successful policy update.
+    if (upper(body.loginPolicy) === "PASSWORD_ONLY") {
+      return c.json(jsonError(
+        "AUTH_MFA_POLICY_REQUIRED",
+        "Canlı KY ERP güvenlik politikası yalnız parola girişini yasaklıyor. KY ERP TEST dahil mevcut KY Güvenlik / Authenticator doğrulamasını kullanın.",
+      ), 409);
+    }
     const targetRole = roleOf(target);
     let policy = normalizePolicy(body.loginPolicy, effectivePolicy(target, targetRole));
     let sessionSeconds = policy === "PASSWORD_ONLY" ? 28800 : 36000;
