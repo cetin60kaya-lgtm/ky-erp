@@ -4,6 +4,7 @@ import {resolve,isAbsolute} from "node:path";
 import {startQrKiosk} from "./terminal-kiosk.mjs";
 import {validateTerminalDefinition} from "./terminal-profiles.mjs";
 import {issueQrCredential} from "./qr-terminal-core.mjs";
+import {inspectTerminalCsv} from "./terminal-csv-import.mjs";
 const command=process.argv[2];
 const readConfig=async()=>{
   const path=process.env.KY_PDKS_TERMINAL_CONFIG||"";
@@ -24,6 +25,16 @@ try{
     console.log("DEVICE="+terminal.terminalId+" SOURCE=LOCAL_QR_PENDING_RECONCILIATION");
     const stop=()=>server.close(()=>process.exit(0));
     process.on("SIGINT",stop);process.on("SIGTERM",stop);
+  }else if(command==="--inspect-csv"){
+    const filePath=process.env.KY_PDKS_CSV_PATH||"";
+    if(!isAbsolute(filePath)||!filePath.toLowerCase().endsWith(".csv"))
+      throw new Error("CSV_ABSOLUTE_PATH_REQUIRED");
+    const terminal=await readConfig();
+    const result=inspectTerminalCsv(await readFile(resolve(filePath),"utf8"),{
+      terminalId:terminal.terminalId,companyId:terminal.companyId,
+    });
+    // Console output is anonymous; no card/person/event identifiers escape.
+    console.log(JSON.stringify(result,null,2));
   }else if(command==="--issue-qr"){
     if(process.env.KY_PDKS_QR_ISSUANCE_APPROVED!=="1"||
        process.env.KY_PDKS_CARD_MAPPING_VERIFIED!=="1")
@@ -39,7 +50,7 @@ try{
     // Credential is secret-bearing. Do not copy this to logs/Cloud.
     process.stdout.write(token+"\n");
   }else{
-    console.error("Usage: node terminal-cli.mjs --serve | --issue-qr");
+    console.error("Usage: node terminal-cli.mjs --serve | --issue-qr | --inspect-csv");
     process.exitCode=2;
   }
 }catch(error){
