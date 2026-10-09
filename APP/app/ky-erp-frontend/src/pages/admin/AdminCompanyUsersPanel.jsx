@@ -11,6 +11,7 @@ import {
   updateUser,
 } from "../../services/adminApi";
 import AdminApprovalCenter from "./AdminApprovalCenter";
+import AdminCompanyPersonnelPanel from "./AdminCompanyPersonnelPanel";
 import "./AdminManagement.css";
 
 const ROLES = [
@@ -51,12 +52,12 @@ export default function AdminCompanyUsersPanel({ activeMainCompany }) {
   const load = useCallback(async () => {
     setBusy(true);
     const jobs = await Promise.allSettled([listUsers(), listActiveSessions()]);
-    if (jobs[0].status === "fulfilled") setUsers(rowsOf(jobs[0].value));
+    if (jobs[0].status === "fulfilled") setUsers(rowsOf(jobs[0].value).filter(row => String(row.mainCompanySlug || "") === String(companySlug || "") && String(row.role || "").toUpperCase() !== "PERSONNEL"));
     if (jobs[1].status === "fulfilled") setSessions(rowsOf(jobs[1].value));
     const failed = jobs.filter((job) => job.status === "rejected").length;
     setMessage(failed ? `${failed} firma kullanıcı kontrolü alınamadı.` : "Firma kullanıcıları ve oturumları güncel.");
     setBusy(false);
-  }, []);
+  }, [companySlug]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setForm((old) => ({ ...old, mainCompanySlug: companySlug })); }, [companySlug]);
@@ -209,6 +210,7 @@ export default function AdminCompanyUsersPanel({ activeMainCompany }) {
           {!users.length ? <tr><td colSpan="7">Firma kullanıcısı bulunamadı.</td></tr> : null}
         </tbody></table></div>
       </section>
+      <AdminCompanyPersonnelPanel companySlug={companySlug} />
     </div>
   );
 }

@@ -191,7 +191,7 @@ async function userRow(c: any, userId: string) {
   return c.env.DB.prepare(
     `SELECT u.id,u.username,u.full_name,u.password_hash,u.role,u.is_active,
             s.email,s.email_verified,s.main_company_slug,s.role_override,
-            s.google_mfa_secret,s.google_mfa_enabled,s.microsoft_mfa_secret,s.microsoft_mfa_enabled
+            s.google_mfa_secret,s.google_mfa_enabled,s.microsoft_mfa_secret,s.microsoft_mfa_enabled,s.approval_required
        FROM auth_users u
        LEFT JOIN auth_user_security s ON s.user_id=u.id
       WHERE u.id=? LIMIT 1`,
@@ -284,8 +284,8 @@ async function companyApprovalSettings(c: any, companySlug: string) {
   return {
     mainCompanySlug: slug,
     // Firma giriş ve oturum onayları güvenlik politikası gereği iki yönetim katmanına da gider.
-    notifyCompanyOwner: true,
-    notifyApplicationOwner: true,
+    notifyCompanyOwner: row?.notifyCompanyOwner !== false,
+    notifyApplicationOwner: row?.notifyApplicationOwner !== false,
     createdAt: row?.createdAt || null,
     updatedAt: row?.updatedAt || null,
     updatedBy: row?.updatedBy || null,
@@ -314,8 +314,17 @@ function canApproveSessionTarget(actor: AnyRow, session: AnyRow) {
 }
 async function sessionNeedsManagerReview(c: any, session: AnyRow) {
   let trust=await storeGet(c, SESSION_TRUST_SCOPE, text(session.id));
-  if (!trust && text(session.id)) trust=await storePut(c, SESSION_TRUST_SCOPE, text(session.id), text(session.mainCompanySlug || session.main_company_slug), { sessionId:text(session.id), userId:text(session.userId || session.user_id), status:"PENDING", requestedAt:text(session.createdAt || session.created_at || nowIso()), source:"MANAGER_REVIEW" });
-  if (["TRUSTED","VERIFIED","REJECTED","SUSPICIOUS"].includes(upper(trust?.status))) return false;
+  if (["TRUSTED","VERIFIED","NOT_REQUIRED","REJECTED","SUSPICIOUS"].includes(upper(trust?.status))) return false;
+  const userId=text(session.userId || session.user_id);
+  const policy=await c.env.DB.prepare("SELECT u.role,s.role_override,s.approval_required FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.id=? LIMIT 1").bind(userId).first<AnyRow>();
+  const effective=roleOf(policy||{});
+  const required=Boolean(policy?.approval_required)&&!isSuper(effective)&&!isCompanyAdmin(effective);
+  if(!required || text(session.approval_request_id || session.approvalRequestId)) {
+    if(upper(trust?.status)==="PENDING") await atomicSecurityStatusUpdate(c,SESSION_TRUST_SCOPE,trust,"PENDING",{status:"NOT_REQUIRED",decidedAt:nowIso(),source:"CURRENT_POLICY"});
+    else if(!trust && text(session.id)) await storePut(c, SESSION_TRUST_SCOPE, text(session.id), text(session.mainCompanySlug || session.main_company_slug), {sessionId:text(session.id),userId,status:"NOT_REQUIRED",decidedAt:nowIso(),source:"CURRENT_POLICY"});
+    return false;
+  }
+  if (!trust && text(session.id)) trust=await storePut(c, SESSION_TRUST_SCOPE, text(session.id), text(session.mainCompanySlug || session.main_company_slug), { sessionId:text(session.id), userId,status:"PENDING", requestedAt:text(session.createdAt || session.created_at || nowIso()), source:"MANAGER_REVIEW" });
   const deviceId=browserDeviceId(session.deviceLabel || session.device_label);
   if(deviceId){ const trusted=await storeGet(c,TRUSTED_LOGIN_DEVICE_SCOPE,trustedLoginDeviceKey(session.userId || session.user_id,deviceId)); if(trusted && trusted.isTrusted!==false && !text(trusted.revokedAt)) return false; }
   return true;
@@ -876,6 +885,12 @@ async function pendingItems(c: any, actor: AnyRow) {
     }
 
     const targetUser = await userRow(c, text(current.userId));
+    const targetRole=roleOf(targetUser || {});
+    // Onayi sonradan kapatilmis normal kullanicinin eski push talebi kuyrukta kalmaz.
+    if(targetUser && !Boolean(targetUser.approval_required) && !isSuper(targetRole) && !isCompanyAdmin(targetRole)) {
+      await atomicPhoneUpdate(c,current,"PENDING",{status:"SUPERSEDED",decidedAt:timestamp,consumedAt:timestamp});
+      continue;
+    }
     if (!canApprovePhoneChallenge(actor, current, targetUser)) continue;
 
     latestSelfPendingByUser.set(targetUserId, text(current.id));
