@@ -63,10 +63,14 @@ internal static class FirebirdIsolatedLedgerSmoke
         var tenant = "COPY-" + unique[..12];
         var serviceCmd = "svc-" + unique;
         var assignCmd = "asg-" + unique;
+        var advanceCmd = "adv-" + unique;
+        var advanceNote = "KY" + unique[..8].ToUpperInvariant();
         var serviceName = "KY" + unique[..8].ToUpperInvariant();
         var serviceHash = Hash("service|" + serviceCmd + "|" + serviceName);
         var assignHash = Hash("assign-service|" + assignCmd + "|" + stageCard + "|" + serviceCmd);
+        var advanceHash = Hash("advance|" + advanceCmd + "|" + stageCard + "|250.00|2099-05-04");
         var serviceKey = -1;
+        var advanceKey = -1;
         var assignmentCommitted = false;
         try
         {
@@ -97,10 +101,23 @@ internal static class FirebirdIsolatedLedgerSmoke
                 new FbParameter("@P", stageCard));
             if (Convert.ToInt32(assigned, CultureInfo.InvariantCulture) != serviceKey)
                 throw new InvalidOperationException("STAGE_SERVICE_ASSIGNMENT_NOT_COMMITTED");
+            advanceKey = await ApplyAdvanceAsync(connection, tenant, advanceCmd,
+                advanceHash, stageCard, advanceNote, cancellationToken);
+            var advanceReplay = await ApplyAdvanceAsync(connection, tenant, advanceCmd,
+                advanceHash, stageCard, advanceNote, cancellationToken);
+            if (advanceKey != advanceReplay)
+                throw new InvalidOperationException("STAGE_ADVANCE_NOT_IDEMPOTENT");
+            var amount = await ScalarAsync(connection, null,
+                "SELECT MIKTAR FROM AVANS WHERE KOD=@K AND PKNO=@P AND ACIKLAMA=@M",
+                cancellationToken, new FbParameter("@K", advanceKey),
+                new FbParameter("@P", stageCard), new FbParameter("@M", advanceNote));
+            if (amount is null or DBNull ||
+                Convert.ToDecimal(amount, CultureInfo.InvariantCulture) != 250m)
+                throw new InvalidOperationException("STAGE_ADVANCE_AMOUNT_MISMATCH");
             var ledgerCount = Convert.ToInt32(await ScalarAsync(connection, null,
                 "SELECT COUNT(*) FROM KY_PDKS_AGENT_LEDGER WHERE COMPANY_ID=@C",
                 cancellationToken, new FbParameter("@C", tenant)), CultureInfo.InvariantCulture);
-            if (ledgerCount != 2)
+            if (ledgerCount != 3)
                 throw new InvalidOperationException("STAGE_LEDGER_DUPLICATE_COMMIT");
         }
         finally
@@ -114,6 +131,11 @@ internal static class FirebirdIsolatedLedgerSmoke
                     await ExecAsync(connection, transaction,
                         "UPDATE KIMLIK SET SERVIS=@S WHERE PKNO=@P", cancellationToken,
                         new FbParameter("@S", oldValue), new FbParameter("@P", stageCard));
+                if (advanceKey >= 0)
+                    await ExecAsync(connection, transaction,
+                        "DELETE FROM AVANS WHERE KOD=@K AND PKNO=@P AND ACIKLAMA=@M",
+                        cancellationToken,new FbParameter("@K",advanceKey),
+                        new FbParameter("@P",stageCard),new FbParameter("@M",advanceNote));
                 await ExecAsync(connection, transaction,
                     "DELETE FROM KY_PDKS_AGENT_LEDGER WHERE COMPANY_ID=@C",
                     cancellationToken, new FbParameter("@C", tenant));
@@ -140,16 +162,22 @@ internal static class FirebirdIsolatedLedgerSmoke
             "SELECT COUNT(*) FROM SERVIS WHERE KOD=@K AND AD=@N",
             cancellationToken, new FbParameter("@K", serviceKey),
             new FbParameter("@N", serviceName)), CultureInfo.InvariantCulture);
+        var advanceResidue = Convert.ToInt32(await ScalarAsync(connection, null,
+            "SELECT COUNT(*) FROM AVANS WHERE KOD=@K AND PKNO=@P AND ACIKLAMA=@M",
+            cancellationToken, new FbParameter("@K", advanceKey),
+            new FbParameter("@P", stageCard), new FbParameter("@M", advanceNote)),
+            CultureInfo.InvariantCulture);
         var restored = await ScalarAsync(connection, null,
             "SELECT SERVIS FROM KIMLIK WHERE PKNO=@P",
             cancellationToken, new FbParameter("@P", stageCard));
-        if (leftover != 0 || serviceResidue != 0 ||
+        if (leftover != 0 || serviceResidue != 0 || advanceResidue != 0 ||
             !Equals(restored is null or DBNull ? DBNull.Value : restored, oldValue))
             throw new InvalidOperationException("STAGE_LEDGER_RESIDUE_DETECTED");
         return JsonSerializer.Serialize(new
         {
-            source = "ISOLATED_COPY_SERVICE_LEDGER",
-            operations = new[] { "SERVICE_TRANSACTION", "ASSIGN_SERVICE_TRANSACTION" },
+            source = "ISOLATED_COPY_DURABLE_LEDGER",
+            operations = new[] { "SERVICE_TRANSACTION", "ASSIGN_SERVICE_TRANSACTION",
+                "ADVANCE_CODE1_TRANSACTION" },
             durableCommitReplayVerified = true,
             payloadHashConflictRejected = true,
             syntheticRowsCleaned = true,
@@ -203,6 +231,38 @@ internal static class FirebirdIsolatedLedgerSmoke
         await InsertLedgerAsync(c, tx, company, command, "assign-service", hash, key, token);
         tx.Commit();
         return key;
+    }
+
+    private static async Task<int> ApplyAdvanceAsync(
+        FbConnection c, string company, string command, string hash,
+        string card, string note, CancellationToken token)
+    {
+        using var tx = c.BeginTransaction();
+        var existing = await GetReceiptAsync(c, tx, company, command, "advance", hash, token);
+        if (existing.HasValue) { tx.Commit(); return existing.Value; }
+        // Legacy code 1 alone is proved as an actual AVANS deduction.
+        // Do not infer a generic Cloud deduction code from any other AVTUR.
+        var type = await ScalarAsync(c, tx,
+            "SELECT TUR FROM AVTUR WHERE KOD=1 AND ISARET='-'", token);
+        if (type is null or DBNull ||
+            !Convert.ToString(type, CultureInfo.InvariantCulture)!
+                .Contains("AVANS", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("STAGE_AVANS_CODE_NOT_PROVEN");
+        var next = Convert.ToInt32(await ScalarAsync(c, tx,
+            "SELECT COALESCE(MAX(KOD),0)+1 FROM AVANS", token),
+            CultureInfo.InvariantCulture);
+        var date = new DateTime(2099, 5, 4);
+        var count = await ExecAsync(c, tx,
+            "INSERT INTO AVANS (PKNO,TARIH,MIKTAR,VTARIH,TURKOD,KOD," +
+            "TOPMIKTAR,TAKSITSAYISI,TAKSITNO,ACIKLAMA) " +
+            "VALUES (@P,@D,@AM,@D,1,@K,@AM,1,1,@M)", token,
+            new FbParameter("@P", card), new FbParameter("@D", date),
+            new FbParameter("@AM", 250m), new FbParameter("@K", next),
+            new FbParameter("@M", note));
+        if (count != 1) throw new InvalidOperationException("STAGE_AVANS_INSERT_NOT_UNIQUE");
+        await InsertLedgerAsync(c, tx, company, command, "advance", hash, next, token);
+        tx.Commit();
+        return next;
     }
 
     private static async Task<int?> GetReceiptAsync(FbConnection c, FbTransaction tx,
