@@ -50,7 +50,7 @@ export default function ManagementOverviewWorkspace({ activeMainCompany, refresh
       <section className="management-controlled-state">
         <strong>{state.denied ? "Bu hesabın finansal yönetim özetine erişim yetkisi bulunmuyor." : "Yönetim özeti yüklenemedi."}</strong>
         <span>{state.denied ? "Salt okunur KY ERP TEST hesabı giriş yaptı. Bu özetin sunucu yetki kuralı daha kapsamlı erişim gerektiriyor; gerçek firma yetkileri açılmayacak." : state.error}</span>
-        {!state.denied && <button type="button" onClick={load}>Tekrar dene</button>
+        {!state.denied && <button type="button" onClick={load}>Tekrar dene</button>}
       </section>
     );
   }
