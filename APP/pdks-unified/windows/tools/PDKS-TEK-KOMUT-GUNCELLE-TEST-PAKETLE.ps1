@@ -41,13 +41,20 @@ Write-Output 'STEP=FULL_49_MENU_WINDOWS_CLOUD_FDB_COPY_GATE'
 # would treat that as NativeCommandError with Stop and hide the real reason.
 # Isolate both streams; use the child's real exit code, never ignore failure.
 $gateErr=Join-Path $logroot ('QA_GATE_'+$stamp+'.stderr.log')
-$gateArgs='-NoProfile -ExecutionPolicy Bypass -File "'+$gate+'" -RepoRoot "'+$RepoRoot+'" -StageDbPath "'+$StageDbPath+'" -StageCardNo "00003"'
-# -Wait can wait on orphaned Chrome descendants after the acceptance
-# subprocess has already exited. Wait for the actual child PID only.
-$gateProcess=Start-Process -FilePath 'powershell.exe' -ArgumentList $gateArgs -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError $gateErr
-$gateProcess.WaitForExit()
-if($gateProcess.ExitCode -ne 0){
- Write-Output ('FAILED_GATE_EXIT='+$gateProcess.ExitCode)
+# Invoke the child directly so LASTEXITCODE is reliable on Windows PowerShell 5.1.
+# Start-Process -PassThru may expose an empty ExitCode after WaitForExit().
+# Keep STDOUT/STDERR separate and do not turn native STDERR into a terminating error.
+$oldErrorPreference=$ErrorActionPreference
+try {
+ $ErrorActionPreference='Continue'
+ & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $gate -RepoRoot $RepoRoot -StageDbPath $StageDbPath -StageCardNo '00003' 1> $log 2> $gateErr
+ $gateExit=$LASTEXITCODE
+} finally {
+ $ErrorActionPreference=$oldErrorPreference
+}
+Write-Output ('GATE_EXIT='+$gateExit)
+if($null -eq $gateExit -or $gateExit -ne 0){
+ Write-Output ('FAILED_GATE_EXIT='+$gateExit)
  Write-Output ('FAILED_GATE_LOG='+$log)
  Write-Output ('FAILED_GATE_STDERR='+$gateErr)
  Write-Output 'LAST_STDOUT_LINES:'
