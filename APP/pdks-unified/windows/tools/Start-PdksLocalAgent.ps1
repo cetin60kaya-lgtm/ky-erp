@@ -42,7 +42,7 @@ Push-Location $RepoRoot
 try{
   # Explicitly disable approval prompts: workspace-only filesystem scope.
   # This does not authorize writes to external/live directories.
-  & $codex.Source exec --sandbox workspace-write --skip-git-repo-check -C $RepoRoot -o $report $prompt
+  $prompt | & $codex.Source exec --sandbox workspace-write --skip-git-repo-check -C $RepoRoot -o $report -
   if($LASTEXITCODE -ne 0){throw ('CODEX_EXEC_FAILED='+$LASTEXITCODE)}
 }finally{Pop-Location}
 Write-Output 'RESULT=CODEX_WORKSPACE_WORK_FINISHED_REVIEW_REQUIRED'
