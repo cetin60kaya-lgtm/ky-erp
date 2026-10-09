@@ -23,6 +23,7 @@ import CardEventsPanel from "./CardEventsPanel.jsx";
 import TerminalSetupPanel from "./TerminalSetupPanel.jsx";
 import TransferCenterPanel from "./TransferCenterPanel.jsx";
 import CloudSyncPanel from "./CloudSyncPanel.jsx";
+import StageCopyExplorer from "./StageCopyExplorer.jsx";
 import "./pdksUnified.css";
 
 const ICONS = {
@@ -261,11 +262,12 @@ export default function PdksUnifiedApp({
   const [monthlyRequestKey,setMonthlyRequestKey]=useState("");
   const [notice, setNotice] = useState("");
   const [terminalReport,setTerminalReport]=useState(null);
+  const [stageSnapshot,setStageSnapshot]=useState(null);
   const transferTabs=new Set(["transfers","transfer","tnf","reconciliation","incidents"]);
   const searchInput = useRef(null);
 
   const company = activeMainCompany?.slug || activeMainCompany?.id || "";
-  useEffect(()=>{setTerminalReport(null);},[company,previewOnly]);
+  useEffect(()=>{setTerminalReport(null);setStageSnapshot(null);},[company,previewOnly]);
   // UI visibility is never a substitute for the API's own payroll authorization.
   const [profileAudit,setProfileAudit] = useState(Boolean(isAuditAccount));
   const sections = useMemo(() => configuredProductSections(
@@ -318,6 +320,7 @@ export default function PdksUnifiedApp({
   },[data.people]);
 
   const isPeopleTab=section.id==="people" && ["people","cards","employment"].includes(tab.id);
+  const stageInspectTab=testMode&&["today","live","exceptions","attention","people","cards","employment","punches","history"].includes(tab.id);
   // One projection for every screen. API success is not record-schema success.
   const projection=useMemo(()=>{
     if(requirement==="people")return rowsForTab(tab.id,null,{people:data.people});
@@ -429,15 +432,17 @@ export default function PdksUnifiedApp({
             aria-selected={tab.id===item.id}
             className={tab.id===item.id?"active":""} onClick={()=>go(section.id,item.id)}>{item.label}</button>)}
         </div>
-        {tab.view==="dashboard" && <UnifiedDashboard onOpen={go}
+        {stageInspectTab&&<StageCopyExplorer tabId={tab.id} snapshot={stageSnapshot}
+          onSnapshot={setStageSnapshot} search={search}/>}
+        {tab.view==="dashboard" && !stageInspectTab && <UnifiedDashboard onOpen={go}
           peopleStatus={data.profileReady && data.peopleStatus==="ready" ? {count:data.people.length}:null}
           attendanceStatus={data.peopleStatus} hasData={data.sourceReady}
           live={!previewOnly&&data.resourceReady?data.resource:null}/>}
-        {tab.id==="today"&&<LiveAttendancePanel
+        {tab.id==="today"&&!stageInspectTab&&<LiveAttendancePanel
           snapshot={!previewOnly&&data.resourceReady?data.resource:null}
           loading={data.resourceLoading} previewOnly={previewOnly} search={search}
           compact onRefresh={()=>setReloadToken(value=>value+1)}/>}
-        {tab.view!=="dashboard"&&<section className="pdk-u-panel pdk-u-record-panel">
+        {tab.view!=="dashboard"&&!stageInspectTab&&<section className="pdk-u-panel pdk-u-record-panel">
           <div className="pdk-u-record-head">
             <div><h2>{tab.label}</h2><p>{tab.description}</p></div>
             <span className="pdk-u-label"><ShieldCheck size={15}/> {previewOnly?"Görsel İnceleme":"Yazma kontrollü"}</span>
