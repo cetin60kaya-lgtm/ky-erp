@@ -23,7 +23,7 @@
     "db:hr:check": "node scripts/hr-relational-sync.mjs --remote",
     "db:hr:apply": "node scripts/hr-relational-sync.mjs --apply --remote",
     "db:tenant:audit": "node scripts/tenant-scope-audit.mjs",
-    "test:pdks-unified:cloud": "node --test src/ik-pdks-unified-contract.test.mjs src/ik-pdks-unified-storage.test.mjs src/ik-pdks-unified-live.test.mjs src/ik-pdks-card-events-query.test.mjs && node --experimental-strip-types --test src/ky-pdks-unified-origins.test.ts src/ik-pdks-unified-agent.runtime.test.mjs",
+    "test:pdks-unified:cloud": "node --test src/ik-pdks-unified-contract.test.mjs src/ik-pdks-unified-storage.test.mjs src/ik-pdks-unified-live.test.mjs src/ik-pdks-card-events-query.test.mjs src/ik-pdks-unified-sync-view.test.mjs && node --experimental-strip-types --test src/ky-pdks-unified-origins.test.ts src/ik-pdks-unified-agent.runtime.test.mjs",
     "test:pdks-unified:e2e": "node --experimental-strip-types --test src/ik-pdks-unified-agent.e2e.test.mjs"
   },
   "dependencies": {
