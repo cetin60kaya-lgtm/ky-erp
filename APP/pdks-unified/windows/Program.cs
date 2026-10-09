@@ -195,6 +195,39 @@ public sealed class KyPdksWindow : Form
                 core.SetVirtualHostNameToFolderMapping("ky-pdks-test.local", localWeb,
                     CoreWebView2HostResourceAccessKind.DenyCors);
             }
+            if (offlineTest)
+            {
+                // The only privileged local read route. No directory listing, arbitrary
+                // paths, file writes, remote server access or person-data packaging.
+                core.AddWebResourceRequestedFilter(
+                    "https://ky-pdks-test.local/__local-copy/latest.json",
+                    CoreWebView2WebResourceContext.All);
+                core.WebResourceRequested += (_, args) =>
+                {
+                    if (!Uri.TryCreate(args.Request.Uri, UriKind.Absolute, out var requestUri) ||
+                        requestUri.AbsolutePath != "/__local-copy/latest.json" ||
+                        !IsTrustedOrigin(requestUri) || args.Request.Method != "GET") return;
+                    var folder = @"D:\\KYERP\\_TEMP\\PDKS_PRIVATE_SNAPSHOTS";
+                    var latest = Directory.Exists(folder)
+                        ? new DirectoryInfo(folder).GetFiles("KY_REAL_COPY_*.json")
+                            .Where(f => !f.Attributes.HasFlag(FileAttributes.ReparsePoint) &&
+                                        f.Length is >= 100 and <= 12000000)
+                            .OrderByDescending(f => f.LastWriteTimeUtc).FirstOrDefault()
+                        : null;
+                    if (latest is null)
+                    {
+                        args.Response = core.Environment.CreateWebResourceResponse(
+                            new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{}")),
+                            404, "Not Found", "Content-Type: application/json; charset=utf-8");
+                        return;
+                    }
+                    // Read only the allowlisted local file. It remains on this machine.
+                    var bytes = File.ReadAllBytes(latest.FullName);
+                    args.Response = core.Environment.CreateWebResourceResponse(
+                        new MemoryStream(bytes), 200, "OK",
+                        "Content-Type: application/json; charset=utf-8\\r\\nCache-Control: no-store");
+                };
+            }
             core.Settings.AreDevToolsEnabled = localPreview || offlineTest;
             core.Settings.IsStatusBarEnabled = false;
             core.Settings.AreDefaultContextMenusEnabled = false;
