@@ -4,6 +4,7 @@ import {Cable,CheckCircle2,Download,ExternalLink,HardDrive,Info,LockKeyhole,
 import {CONNECTORS,INPUT_METHODS,installationPlan,validateTerminalDefinition}
   from "../../../../../pdks-unified/device-gateway/terminal-profiles.mjs";
 import {parseTerminalDiagnosticReport} from "./terminalReportView.mjs";
+import {projectTerminalCsv} from "./terminalCsvView.mjs";
 
 const vendors=Object.freeze([
   ["KY QR","KY QR / Barkod"],
@@ -44,12 +45,13 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
   const [result,setResult]=useState(null);
   const [notice,setNotice]=useState("");
   const [diagnostic,setDiagnostic]=useState(null);
+  const [csvDiagnostic,setCsvDiagnostic]=useState(null);
   const connector=CONNECTORS.find(c=>c.id===config.connectorId);
   const counts=useMemo(()=>({
     connectors:CONNECTORS.length,inputMethods:INPUT_METHODS.length,
     ready:CONNECTORS.filter(x=>x.status==="REFERENCE_IMPLEMENTED").length,
   }),[]);
-  const change=(name,v)=>{setConfig(before=>({...before,[name]:v}));setResult(null);setNotice("");setDiagnostic(null);onReportLoaded(null)};
+  const change=(name,v)=>{setConfig(before=>({...before,[name]:v}));setResult(null);setNotice("");setDiagnostic(null);setCsvDiagnostic(null);onReportLoaded(null)};
   const toggle=(value,on)=>change("inputMethods",on?
     [...new Set([...config.inputMethods,value])]:
     config.inputMethods.filter(x=>x!==value));
@@ -80,6 +82,18 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
       setDiagnostic(data);onReportLoaded(data);setNotice("Yerel tanı dosyası görüntülendi. Bu dosya imzasızdır; saha sertifikası değildir.");
     }catch(error){setDiagnostic(null);onReportLoaded(null);
       setNotice("Tanı raporu reddedildi: "+String(error?.message||"Geçersiz JSON"));}
+  };
+  const readCsv=async(file)=>{
+    if(!file||previewOnly)return;
+    try{
+      if(file.size>8_000_000||file.size<40)throw Error("TERMINAL_CSV_SIZE_INVALID");
+      const summary=projectTerminalCsv(await file.text());
+      setCsvDiagnostic(summary);
+      setNotice("CSV yalnız yerel bellekte incelendi. Gerçek cihaz/kimlik sertifikası değildir.");
+    }catch(error){
+      setCsvDiagnostic(null);
+      setNotice("CSV kaynağı reddedildi: "+String(error?.message||"Bilinmeyen hata"));
+    }
   };
   const download=()=>{
     if(!result||previewOnly)return;
@@ -184,6 +198,32 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
           <strong>Tanım geçerli, fakat cihaz henüz sertifikalı değil.</strong>
           <span>Sonraki adım: {result.nextStep}</span>
         </p>}
+        <div className="pdk-u-terminal-sub"><HardDrive size={16}/> Terminal CSV hareket incelemesi</div>
+        <p>Yön kodları açıkça belirtilmiş yerel terminal CSV çıktısı yalnız okunur.
+          Dosya sunucuya gönderilmez; cihazın fiziksel kimliği onaylanmaz.</p>
+        <label className="pdk-u-terminal-report-upload">
+          Terminal CSV kaydını aç
+          <input aria-label="Terminal CSV tanı dosyası" type="file" accept=".csv,text/csv"
+            disabled={previewOnly}
+            onChange={e=>{const file=e.target.files?.[0];if(file)void readCsv(file);}}/>
+        </label>
+        {csvDiagnostic&&<div className="pdk-u-terminal-diagnostic" role="status">
+          <strong>CSV kaynak inceleme · onaysız</strong>
+          <div className="pdk-u-terminal-diagnostic-counts">
+            <span>Okunan <b>{csvDiagnostic.inspected}</b></span>
+            <span>Geçerli biçim <b>{csvDiagnostic.accepted}</b></span>
+            <span>Reddedilen <b>{csvDiagnostic.rejected}</b></span>
+            <span>Mükerrer <b>{csvDiagnostic.duplicates}</b></span>
+          </div>
+          <table className="pdk-u-table"><thead><tr>
+            <th>Tarih</th><th>Giriş tarafı</th><th>Çıkış tarafı</th><th>Durum</th>
+          </tr></thead><tbody>
+            {csvDiagnostic.dailyBatches.slice(0,31).map(row=><tr key={row.date}>
+              <td>{row.date}</td><td>{row.entries}</td><td>{row.exits}</td>
+              <td>{row.entries===row.exits?"Sayılar eşit · onaysız":"Farklı sayıda taraf"}</td>
+            </tr>)}
+          </tbody></table>
+        </div>}
         <div className="pdk-u-terminal-sub"><HardDrive size={16}/> Bağlantı testi ve TNF tanı raporu</div>
         <p>Kurulmuş KY QR terminalini Windows'ta <code>Install-KyPdks-LocalTerminal.ps1 -Action Test -TerminalId KOD</code>
           komutuyla yalnız okuyarak sınayın. Diğer markalar için gerçek model sürücüsü ve yetkili SDK testi gereklidir.</p>
