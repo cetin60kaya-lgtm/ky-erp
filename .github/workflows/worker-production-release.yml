@@ -109,6 +109,35 @@ jobs:
             grep -q "\"$required\"" /tmp/kyerp-schema-proof.json || { echo "Eksik production tablosu: $required" >&2; exit 1; }
           done
 
+      - name: Personel 0060 icin canli D1 on kosul dogrulamasi
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Bu adimdan once tam D1 yedegi Actions artifact olarak saklanmis olmalidir.
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command \
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('auth_users','auth_user_security','auth_sessions','auth_security_audit','main_companies','hr_monthly_employees','ik_person_card_settings','ik_time_clock_events','hr_leave_records_v2','ik_leave_plans','json_store','machine_shift_defaults','model_records','production_records','model_production_links') ORDER BY name;" \
+            --json > /tmp/kyerp-0060-prerequisite.json
+          for required in auth_users auth_user_security auth_sessions auth_security_audit main_companies hr_monthly_employees ik_person_card_settings ik_time_clock_events hr_leave_records_v2 ik_leave_plans json_store machine_shift_defaults model_records production_records model_production_links; do
+            grep -q "\"$required\"" /tmp/kyerp-0060-prerequisite.json || { echo "0060 ON KOSUL EKSIGI: $required" >&2; exit 1; }
+          done
+
+      - name: Personel 0060 hedefli eklemeli D1 migration
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          migration=migrations/0060_employee_portal_access.sql
+          test -f "$migration"
+          ! grep -Eiq '(^|[[:space:]])(DROP[[:space:]]+TABLE|DELETE[[:space:]]+FROM|TRUNCATE[[:space:]]+TABLE|ALTER[[:space:]]+TABLE)' "$migration"
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file "$migration" --yes
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command \
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('ky_employee_portal_accounts','ky_employee_portal_devices','ky_employee_portal_approvers','ky_employee_portal_nonces') ORDER BY name;" \
+            --json > /tmp/kyerp-0060-proof.json
+          for required in ky_employee_portal_accounts ky_employee_portal_devices ky_employee_portal_approvers ky_employee_portal_nonces; do
+            grep -q "\"$required\"" /tmp/kyerp-0060-proof.json || { echo "0060 TABLO KANITI EKSIGI: $required" >&2; exit 1; }
+          done
+
       - name: Worker'i api.kyerp.net adresine dagit
         working-directory: APP/cloud/ky-erp-api
         shell: bash
