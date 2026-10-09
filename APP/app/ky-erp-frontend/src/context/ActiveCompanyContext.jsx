@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { apiGet, setApiActiveMainCompany } from "../utils/api";
 import { canonicalCompanySlug, resolveCompanyIdentity } from "../utils/companyIdentity";
+import { maySwitchCompany, companyForRestrictedUser, permittedCompanySelection } from "../utils/companyAccessScope";
 import { useAuth } from "./AuthContext";
 
 const STORAGE_KEY = "kyerp.activeCompany";
