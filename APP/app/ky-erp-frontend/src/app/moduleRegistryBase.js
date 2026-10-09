@@ -118,6 +118,7 @@ export const MODULES = [
       ["eslestirmeler", "Eşleştirmeler", "file-check"],
       ["yedekleme-loglar", "Yedekleme / Loglar", "raporlar"],
       ["surum-merkezi", "Sürüm Merkezi", "ayarlar"],
+      ["guncelleme-gecmisi", "Güncelleme Geçmişi", "raporlar"],
       ["uygulama-ayarlari", "Uygulama Ayarları", "ayarlar"],
       ["giris-onaylari", "Giriş Onayları", "file-check"],
     ],
