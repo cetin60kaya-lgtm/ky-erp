@@ -22,6 +22,7 @@ import LiveAttendancePanel from "./LiveAttendancePanel.jsx";
 import CardEventsPanel from "./CardEventsPanel.jsx";
 import TerminalSetupPanel from "./TerminalSetupPanel.jsx";
 import TransferCenterPanel from "./TransferCenterPanel.jsx";
+import CloudSyncPanel from "./CloudSyncPanel.jsx";
 import "./pdksUnified.css";
 
 const ICONS = {
@@ -437,7 +438,7 @@ export default function PdksUnifiedApp({
             <div><h2>{tab.label}</h2><p>{tab.description}</p></div>
             <span className="pdk-u-label"><ShieldCheck size={15}/> {previewOnly?"Görsel İnceleme":"Yazma kontrollü"}</span>
           </div>
-          {requirement!=="card-events"&&!transferTabs.has(tab.id)&&<div className="pdk-u-filters">
+          {requirement!=="card-events"&&!transferTabs.has(tab.id)&&tab.id!=="cloud"&&<div className="pdk-u-filters">
             {requirement==="monthly-attendance" && !previewOnly &&
               <button type="button" className="pdk-u-btn"
                 disabled={!company || !data.profileReady || data.resourceLoading}
@@ -470,6 +471,10 @@ export default function PdksUnifiedApp({
             tabId={tab.id} previewOnly={previewOnly}
             report={terminalReport} onReportLoaded={setTerminalReport}
             search={search}/> :
+          tab.id==="cloud" ? <CloudSyncPanel
+            key={company||"preview"} company={company}
+            previewOnly={previewOnly} audit={profileAudit}
+            profileReady={data.profileReady}/> :
           requirement==="card-events" ? <CardEventsPanel
             key={[company,tab.id].join(":")}
             company={company} profileReady={data.profileReady}
@@ -507,7 +512,7 @@ export default function PdksUnifiedApp({
             <UnifiedTable columns={tab.columns} rows={filteredRows}
               masked={isAuditAccount && isSensitiveProductTab(tab.id)}/>
           )}
-          {!transferTabs.has(tab.id)&&<UnifiedOperationPanel key={[company,tab.id,period.year,period.month].join(":")}
+          {!transferTabs.has(tab.id)&&tab.id!=="cloud"&&<UnifiedOperationPanel key={[company,tab.id,period.year,period.month].join(":")}
             tabId={tab.id} previewOnly={previewOnly}
             profile={data.profile} people={data.people}
             company={company} year={period.year} month={period.month}
