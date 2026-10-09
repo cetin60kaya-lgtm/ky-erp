@@ -146,3 +146,37 @@ body:has(> #root > .pdk-unified),
 .pdk-u-event-more{display:flex;justify-content:center;padding:15px;border-top:1px solid var(--pu-border)}
 .pdk-u-live-note.is-alert{color:var(--pu-warn)}
 @media(max-width:680px){.pdk-u-event-filters label{flex-wrap:wrap}.pdk-u-event-filters>button{flex-grow:1}}
+
+/* Vendor-neutral KY Terminal Hub: no phantom device "connected" indicators. */
+.pdk-u-terminal{border-top:1px solid var(--pu-border);background:var(--pu-panel);color:var(--pu-text)}
+.pdk-u-terminal-head{display:flex;align-items:center;justify-content:space-between;padding:24px 24px 18px;gap:20px;border-bottom:1px solid var(--pu-border)}
+.pdk-u-terminal-kicker{display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--pu-accent);font-weight:800}
+.pdk-u-terminal-head h3{font-size:20px!important;color:var(--pu-text)!important;margin:7px 0!important;font-weight:800}
+.pdk-u-terminal-head p,.pdk-u-terminal-summary>p{font-size:11px;color:var(--pu-muted);line-height:1.6;margin:6px 0;max-width:540px}
+.pdk-u-terminal-stats{display:grid;grid-template-columns:repeat(3,minmax(100px,1fr));gap:7px}
+.pdk-u-terminal-stats>span{background:var(--pu-soft);border:1px solid var(--pu-border);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:6px;font-size:10px;color:var(--pu-muted);white-space:nowrap}
+.pdk-u-terminal-stats strong{font-size:21px;font-weight:800;color:var(--pu-text)}
+.pdk-u-terminal-layout{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(315px,1fr);gap:0}
+.pdk-u-terminal-form,.pdk-u-terminal-summary{padding:22px 24px}
+.pdk-u-terminal-summary{border-left:1px solid var(--pu-border);background:var(--pu-soft)}
+.pdk-u-terminal-sub{display:flex;gap:9px;align-items:center;font-size:13px;color:var(--pu-text);font-weight:800;margin-bottom:16px}
+.pdk-u-terminal-sub:not(:first-child){margin-top:24px}
+.pdk-u-terminal-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.pdk-u-terminal-fields label{display:flex;flex-direction:column;gap:6px;font-weight:650;font-size:10.5px;color:var(--pu-muted)}
+.pdk-u-terminal-fields input,.pdk-u-terminal-fields select{width:100%;min-width:0;min-height:37px;color:var(--pu-text);background:var(--pu-panel);border:1px solid var(--pu-border);border-radius:7px;padding:8px 10px;font-size:11px}
+.pdk-u-terminal-fields input:disabled,.pdk-u-terminal-fields select:disabled{opacity:.65}
+.pdk-u-terminal-span{grid-column:1/-1}
+.pdk-u-terminal-modalities{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.pdk-u-terminal-modalities label{display:flex;gap:7px;align-items:center;border:1px solid var(--pu-border);border-radius:6px;padding:10px;color:var(--pu-text);font-size:11px}
+.pdk-u-terminal-modalities input{accent-color:var(--pu-accent)}
+.pdk-u-terminal-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:20px}
+.pdk-u-terminal-driver{border-radius:9px;padding:14px;background:var(--pu-panel);border:1px solid var(--pu-border);display:flex;flex-direction:column;gap:7px}
+.pdk-u-terminal-driver strong{font-size:12px}.pdk-u-terminal-driver span{font-size:11px;color:var(--pu-muted)}
+.pdk-u-terminal-flag{display:flex;align-items:flex-start;gap:9px;padding:12px 14px;background:var(--pu-panel);border:1px solid var(--pu-border);border-radius:8px;font-size:11px;color:var(--pu-muted);line-height:1.6}
+.pdk-u-terminal-checks{margin:14px 0 20px;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.pdk-u-terminal-checks li{display:flex;align-items:center;gap:8px;color:var(--pu-muted);font-size:11px}
+.pdk-u-terminal-checks li.is-checked{color:#267759}
+.pdk-u-terminal-link{display:inline-flex;align-items:center;gap:6px;margin:12px 0;color:var(--pu-accent);font-size:12px;font-weight:740}
+.pdk-u-terminal-muted{display:flex;align-items:flex-start;gap:7px}
+@media(max-width:1250px){.pdk-u-terminal-layout{grid-template-columns:1fr}.pdk-u-terminal-summary{border-left:0;border-top:1px solid var(--pu-border)}}
+@media(max-width:750px){.pdk-u-terminal-head{flex-direction:column;align-items:stretch}.pdk-u-terminal-fields,.pdk-u-terminal-modalities{grid-template-columns:1fr}.pdk-u-terminal-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
