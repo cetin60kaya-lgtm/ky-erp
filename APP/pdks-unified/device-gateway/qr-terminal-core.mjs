@@ -32,6 +32,9 @@ export function verifyQrCredential(token,{secret,companyId,now=Date.now(),
     throw new Error("QR_FORMAT_INVALID");
   const parts=token.split(".");
   const supplied=Buffer.from(parts[2],"base64url");
+  // Reject alternate Base64URL spellings of the same signature bytes.
+  // Ignored trailing pad bits must never be used for credential malleability.
+  if(b64(supplied)!==parts[2])throw new Error("QR_SIGNATURE_INVALID");
   const actual=digest(secret,parts.slice(0,2).join("."));
   if(supplied.length!==actual.length||!timingSafeEqual(actual,supplied))
     throw new Error("QR_SIGNATURE_INVALID");
