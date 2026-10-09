@@ -51,14 +51,14 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
   const metrics = useMemo(() => data?.metrics || {}, [data]);
   const display = pdksLivePresentation(metrics, error, lastRefresh);
   const count = (value) => display.fresh ? Number(value || 0) : "—";
-  const cards = useMemo(() => [
+  const cards = [
     [display.absenceLabel, display.absenceValue, "bad", "⊘", "raporlar"],
     ["Geç Kalan", count(metrics.late), "warn", "◷", "raporlar"],
     ["Aktif Personel", count(metrics.activePersonnel), "ok", "♟", "personel-bilgileri"],
     ["İzinli Personel", count(metrics.permitted), "accent", "⌛", "izinler"],
     ["İçerideki Personel", count(metrics.inside), "teal", "↪", "giris-cikislar"],
     ["Eksik Basım", count(metrics.missingPunch), "violet", "!", "puantaj"],
-  ], [metrics, display.absenceLabel, display.absenceValue, display.fresh]);
+  ];
 
   const go = (tabKey) => openModule?.("pdks", { tabKey });
 
