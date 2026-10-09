@@ -83,7 +83,7 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
   const exportCsv=()=>{
     if(!rows.length)return;
     const cell=v=>{
-      const text=String(v??"").replace(/^[=+@\-\t\r]/,"'  return <section className=");
+      const text=String(v??"").replace(/^[=+@\-\t\r]/,match=>"'"+match);
       return '"'+text.replace(/"/g,'""')+'"';
     };
     const csv="\uFEFF"+[columns,...rows.map(values)]
