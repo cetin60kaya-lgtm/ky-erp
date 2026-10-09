@@ -37,6 +37,7 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
   };
   const peopleTab=["people","cards","employment"].includes(tabId);
   const reviewTab=["exceptions","attention","violations","signatures","validation"].includes(tabId);
+  const filteredPairReview=reviewTab && !["signatures"].includes(tabId);
   const monthlyTab=tabId==="monthly"||tabId==="timesheets";
   const eventTab=["punches","history"].includes(tabId);
   const sourceOnlyNote=["today","live","daily","monthly","attendance","timesheets"].includes(tabId);
@@ -63,12 +64,12 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
       .some(v=>String(v||"").toLocaleLowerCase("tr-TR").includes(q)));
     const data=monthlyTab?monthlyRows:eventTab?snapshot.events:snapshot.days;
     return data.filter(r=>(monthlyTab||!day||r.date===day)&&
-      (!reviewTab||monthlyTab||(r.entry.length===0||r.exit.length===0))&&(!q||
+      (!filteredPairReview||monthlyTab||(r.entry.length===0||r.exit.length===0))&&(!q||
       [r.person,r.name,r.cardNo,r.date,r.direction]
         .some(v=>String(v||"").toLocaleLowerCase("tr-TR").includes(q)))&&
       (filter==="all"||(!eventTab?filter==="unpaired"&&
         (r.entry.length===0||r.exit.length===0):r.direction===filter)));
-  },[snapshot,peopleTab,eventTab,monthlyTab,monthlyRows,reviewTab,q,day,filter]);
+  },[snapshot,peopleTab,eventTab,monthlyTab,monthlyRows,filteredPairReview,q,day,filter]);
   const columns=peopleTab?["Kart No","Personel","Grup","İşe Giriş","İşten Çıkış","Kaynak"]:
     monthlyTab?["Kart No","Personel","Kayıtlı Gün","Çift Taraflı Gün","Eksik Taraflı Gün","E Tarafı","Bordro Onayı"]:
     eventTab?["Tarih","Kart No","Personel","Saat","Yön","Legacy Tür","Kanıt"]:
