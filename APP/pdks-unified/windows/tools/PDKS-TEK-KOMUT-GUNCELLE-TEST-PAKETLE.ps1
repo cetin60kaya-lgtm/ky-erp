@@ -42,7 +42,10 @@ Write-Output 'STEP=FULL_49_MENU_WINDOWS_CLOUD_FDB_COPY_GATE'
 # Isolate both streams; use the child's real exit code, never ignore failure.
 $gateErr=Join-Path $logroot ('QA_GATE_'+$stamp+'.stderr.log')
 $gateArgs='-NoProfile -ExecutionPolicy Bypass -File "'+$gate+'" -RepoRoot "'+$RepoRoot+'" -StageDbPath "'+$StageDbPath+'" -StageCardNo "00003"'
-$gateProcess=Start-Process -FilePath 'powershell.exe' -ArgumentList $gateArgs -Wait -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError $gateErr
+# -Wait can wait on orphaned Chrome descendants after the acceptance
+# subprocess has already exited. Wait for the actual child PID only.
+$gateProcess=Start-Process -FilePath 'powershell.exe' -ArgumentList $gateArgs -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError $gateErr
+$gateProcess.WaitForExit()
 if($gateProcess.ExitCode -ne 0){
  Write-Output ('FAILED_GATE_EXIT='+$gateProcess.ExitCode)
  Write-Output ('FAILED_GATE_LOG='+$log)
