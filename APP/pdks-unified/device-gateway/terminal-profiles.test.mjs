@@ -83,9 +83,10 @@ test("real localhost HTTP kiosk records exactly once, survives restart and rejec
   const request=(key,token=credential(),direction="IN",origin=base)=>
     fetch(base+"/scan",{method:"POST",headers:{
       "content-type":"application/json","x-ky-pdks-terminal-key":key,origin,
+      "connection":"close",
     },body:JSON.stringify({token,direction})});
   try{
-    assert.equal((await fetch(base+"/health")).status,200);
+    assert.equal((await fetch(base+"/health",{headers:{connection:"close"}})).status,200);
     assert.equal((await request("invalid")).status,401);
     assert.equal((await request(operatorKey,credential(),"IN","https://evil.example")).status,403);
     const first=await request(operatorKey);assert.equal(first.status,202);
@@ -94,6 +95,7 @@ test("real localhost HTTP kiosk records exactly once, survives restart and rejec
     assert.equal((await request(operatorKey,credential(),"AUTO")).status,422);
     const cardScan=()=>fetch(base+"/scan-card",{method:"POST",headers:{
       "content-type":"application/json","x-ky-pdks-terminal-key":operatorKey,origin:base,
+      connection:"close",
     },body:JSON.stringify({cardNo:"00027",direction:"IN"})});
     const cardFirst=await cardScan();assert.equal(cardFirst.status,202);
     const cardPayload=await cardFirst.json();
@@ -109,7 +111,7 @@ test("real localhost HTTP kiosk records exactly once, survives restart and rejec
     assert.equal(stored.status,"PENDING_RECONCILIATION");
     assert.equal(stored.cloudAcked,false);
     assert.equal((await fetch(base+"/events",{headers:{
-      "x-ky-pdks-terminal-key":operatorKey}})).status,200);
+      "x-ky-pdks-terminal-key":operatorKey,connection:"close"}})).status,200);
     await new Promise((resolve,reject)=>server.close(e=>e?reject(e):resolve()));
     server=await startQrKiosk({terminal:sample(),secret,operatorKey,
       journalRoot:root,now:()=>now,bindPort:port});
