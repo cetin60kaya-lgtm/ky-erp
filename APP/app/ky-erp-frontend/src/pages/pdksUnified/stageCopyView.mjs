@@ -69,6 +69,10 @@ export function parseStageCopySnapshot(raw){
       // Absence/late never inferred without a certified working calendar,
       // shift assignment, holidays and physical device proof.
       arrivalVerified:false,lateVerified:false,
+      // More than one side is possible on double-shift days. It is not
+      // evidence of a complete pair unless both side counts agree.
+      sideCountMatched:v.entry.length===v.exit.length && v.entry.length>0,
+      missingSideCount:Math.abs(v.entry.length-v.exit.length),
     }));
   return Object.freeze({
     source:"LOCAL_FIREBIRD_COPY_ONLY",start:value.start,end:value.end,
@@ -77,6 +81,8 @@ export function parseStageCopySnapshot(raw){
     people:Object.freeze(people),events:Object.freeze(events),
     days:Object.freeze(days),
     unknownCards:events.filter(e=>!cards.has(e.cardNo)).length,
+    unmatchedDayCount:days.filter(d=>!d.sideCountMatched).length,
+    missingSideCount:days.reduce((sum,d)=>sum+d.missingSideCount,0),
     invalidSourcePunchCount:value.invalidSourcePunchCount,
     terminalOnline:false,lateCalculable:false,
     productionWritten:false,physicalTerminalVerified:false,
