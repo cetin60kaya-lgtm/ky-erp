@@ -85,10 +85,50 @@ internal static class UnifiedJournalStore
             Property(receipt, "commandId") != commandId ||
             Property(receipt, "outboxId") != outboxId ||
             !StringComparer.OrdinalIgnoreCase.Equals(Property(receipt, "commandPayloadSha256"),commandPayloadSha256) ||
-            string.IsNullOrWhiteSpace(Property(receipt, "journalId")) ||
-            string.IsNullOrWhiteSpace(Property(receipt, "appliedAt")))
+            Property(receipt, "journalId") != Path.GetFileName(journalPath).Split('.')[0] ||
+            string.IsNullOrWhiteSpace(Property(receipt, "appliedAt")) ||
+            !IsSha256(Property(receipt, "policySha256")) ||
+            !IsSha256(Property(receipt, "fdbEvidenceSha256")) ||
+            !IsSha256(Property(receipt, "evidenceSha256")) ||
+            !receipt.TryGetProperty("sourceValidated", out var sourceProof) ||
+            sourceProof.ValueKind != JsonValueKind.True ||
+            !receipt.TryGetProperty("fdbValidated", out var firebirdProof) ||
+            firebirdProof.ValueKind != JsonValueKind.True)
             throw new InvalidOperationException("JOURNAL_APPLIED_RECEIPT_CONFLICT");
+        await VerifyLocalPolicyProofAsync(journalPath, receipt, cancellationToken);
         return receipt.Clone();
+    }
+
+    private static async Task VerifyLocalPolicyProofAsync(
+        string journalPath, JsonElement receipt, CancellationToken cancellationToken)
+    {
+        // Receipt replay is admissible only while the actual immutable
+        // locally-applied policy bytes still exist and match its SHA-256.
+        var root = Path.GetFullPath(Path.Combine(
+            Path.GetDirectoryName(journalPath)!, "..", ".."));
+        var policyRoot = Path.Combine(root, "SISTEM", "UnifiedPolicies");
+        var hash = Property(receipt, "policySha256");
+        foreach (var scope in new[] { "personnel-groups", "employee-personnel-groups", "holidays" })
+        {
+            var dir = Path.Combine(policyRoot, scope);
+            if (!Directory.Exists(dir)) continue;
+            foreach (var file in Directory.EnumerateFiles(dir, "*.json", SearchOption.TopDirectoryOnly))
+            {
+                var bytes = await File.ReadAllBytesAsync(file, cancellationToken);
+                var actual = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+                if (!StringComparer.OrdinalIgnoreCase.Equals(hash, actual)) continue;
+                using var source = JsonDocument.Parse(bytes);
+                var value = source.RootElement;
+                if (Property(value, "commandId") != Property(receipt, "commandId") ||
+                    Property(value, "outboxId") != Property(receipt, "outboxId") ||
+                    !StringComparer.OrdinalIgnoreCase.Equals(
+                        Property(value, "commandPayloadSha256"),
+                        Property(receipt, "commandPayloadSha256")))
+                    throw new InvalidOperationException("JOURNAL_POLICY_PROOF_IDENTITY_MISMATCH");
+                return;
+            }
+        }
+        throw new InvalidOperationException("JOURNAL_POLICY_EVIDENCE_MISSING");
     }
 
     internal static async Task SaveAppliedReceiptAsync(
@@ -144,12 +184,26 @@ internal static class UnifiedJournalStore
             }
             catch (InvalidOperationException error) when(error.Message=="JOURNAL_REPLAY_CONFLICT") { }
 
-            using var parsed = JsonDocument.Parse(
-                "{\"journalId\":\"j\",\"commandId\":\"command-1\",\"outboxId\":\"outbox-1\",\"commandPayloadSha256\":\"" + a +
-                "\",\"appliedAt\":\"2026-10-08T00:00:00Z\",\"sourceValidated\":true,\"fdbValidated\":true,\"tnfTouched\":false}");
+            var policyDir=Path.Combine(root,"SISTEM","UnifiedPolicies","holidays");
+            Directory.CreateDirectory(policyDir);
+            var fact=JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                commandId="command-1", outboxId="outbox-1", commandPayloadSha256=a,
+            });
+            var policyHash=Convert.ToHexString(SHA256.HashData(fact)).ToLowerInvariant();
+            var policyPath=Path.Combine(policyDir,"fixture.json");
+            await File.WriteAllBytesAsync(policyPath,fact);
+            using var parsed = JsonSerializer.SerializeToDocument(new
+            {
+                journalId=first.Snapshot.JournalId,
+                commandId="command-1",outboxId="outbox-1",commandPayloadSha256=a,
+                appliedAt="2026-10-08T00:00:00Z",policySha256=policyHash,
+                fdbEvidenceSha256=b,evidenceSha256=b,
+                sourceValidated=true,fdbValidated=true,tnfTouched=false,
+            });
             await SaveAppliedReceiptAsync(first.JournalPath, parsed.RootElement);
             var replay = await ReadAppliedReceiptAsync(first.JournalPath,"command-1","outbox-1",a);
-            if (replay is null || Property(replay.Value,"journalId")!="j")
+            if (replay is null || Property(replay.Value,"journalId")!=first.Snapshot.JournalId)
                 throw new InvalidOperationException("JOURNAL_RECEIPT_REPLAY_FAILED");
             await SaveAppliedReceiptAsync(first.JournalPath, parsed.RootElement);
             try
@@ -158,6 +212,13 @@ internal static class UnifiedJournalStore
                 throw new InvalidOperationException("JOURNAL_REPLAY_SHA_NOT_ENFORCED");
             }
             catch (InvalidOperationException error) when(error.Message=="JOURNAL_APPLIED_RECEIPT_CONFLICT") { }
+            File.Delete(policyPath);
+            try
+            {
+                await ReadAppliedReceiptAsync(first.JournalPath,"command-1","outbox-1",a);
+                throw new InvalidOperationException("JOURNAL_MISSING_POLICY_NOT_REJECTED");
+            }
+            catch (InvalidOperationException error) when(error.Message=="JOURNAL_POLICY_EVIDENCE_MISSING") { }
         }
         finally {try{ Directory.Delete(root,true); }catch{}}
     }
