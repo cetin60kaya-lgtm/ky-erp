@@ -22,7 +22,8 @@ test("terminal, FDB/TNF and cloud not claimed connected without Windows Agent",(
   assert.equal(sourceForTab("holidays",{audit:true}),"forbidden");
   assert.equal(sourceForTab("leave",{audit:true}),"forbidden");
   assert.equal(sourceForTab("closing",{audit:true}),"forbidden");
-  assert.equal(sourceForTab("punches",{audit:true}),"attendance");
+  assert.equal(sourceForTab("punches",{audit:true}),"card-events");
+  assert.equal(sourceForTab("history",{audit:true}),"card-events");
   assert.equal(sourceForTab("unknown"),"unconnected");
 });
 test("existing PDKS read endpoints map to relevant visible sections",()=>{
@@ -149,4 +150,12 @@ test("live roster maps person-by-person evidence without inventing absence or la
   assert.equal(overview.rows[1]["Giriş"],"—");
   assert.equal(rowsForTab("exceptions",payload).rows.length,1);
   assert.equal(rowsForTab("live",{}).supported,false);
+});
+
+test("both source-backed card movement tabs remain explicitly read-only",()=>{
+  assert.equal(tabBinding("punches").source,"card-events");
+  assert.equal(tabBinding("history").source,"card-events");
+  assert.equal(tabBinding("punches").safeToWrite,false);
+  assert.equal(tabBinding("history").localReconciled,false);
+  assert.equal(sourceForTab("payments",{audit:true}),"forbidden");
 });
