@@ -2,6 +2,7 @@ import {createHash} from "node:crypto";
 import {readdir,readFile,lstat} from "node:fs/promises";
 import {join} from "node:path";
 import {parseTnfReferenceFile} from "./tnf-reference-import.mjs";
+import {verifyTerminalJournalFact} from "./terminal-journal-proof.mjs";
 
 const sha=(value)=>createHash("sha256").update(value).digest("hex");
 const dateOk=(value)=>typeof value==="string"&&/^\d{4}-\d\d-\d\d$/.test(value)&&
@@ -15,7 +16,9 @@ const key=(card,date,hour)=>card+"|"+date+"|"+hour.slice(0,5);
 /** Local QR journal fact shape check: no signature is reconstructed here.
  * An earlier kiosk HMAC check is not physical terminal/employee certification.
  */
-export function inspectLocalTerminalFact(row,{companyId,terminalId}){
+export function inspectLocalTerminalFact(row,{companyId,terminalId,journalKey}){
+  if(!verifyTerminalJournalFact(row,journalKey))
+    return {valid:false,reason:"TERMINAL_JOURNAL_HMAC_INVALID"};
   if(!row||typeof row!=="object"||row.companyId!==companyId||
     row.terminalId!==terminalId||!sources.has(row.source)||
     !/^\d{5}$/.test(row.cardNo??"")||!dateOk(row.workDate)||
@@ -62,8 +65,9 @@ export function inspectLocalTerminalFact(row,{companyId,terminalId}){
 /** Strict preview: compare exact card + Istanbul day + minute to a reference
  * TNF file. TNF rows have NO IN/OUT direction; do not infer one.
  */
-export function reconcileLocalEvents({companyId,terminalId,events,tnfText,yearHint=null}){
-  if(!/^[A-Za-z0-9._:-]{3,100}$/.test(companyId??"")||
+export function reconcileLocalEvents({companyId,terminalId,journalKey,events,tnfText,yearHint=null}){
+  if(typeof journalKey!=="string"||Buffer.byteLength(journalKey,"utf8")<32||
+     !/^[A-Za-z0-9._:-]{3,100}$/.test(companyId??"")||
      !/^[A-Za-z0-9._-]{3,64}$/.test(terminalId??"")||
      !Array.isArray(events)||events.length>30000||
      typeof tnfText!=="string"||tnfText.length>30_000_000)
@@ -76,7 +80,7 @@ export function reconcileLocalEvents({companyId,terminalId,events,tnfText,yearHi
     const k=key(row.cardNo,row.workDate,row.time);
     indexed.set(k,(indexed.get(k)||0)+1);
   }
-  const inspected=events.map(row=>inspectLocalTerminalFact(row,{companyId,terminalId}));
+  const inspected=events.map(row=>inspectLocalTerminalFact(row,{companyId,terminalId,journalKey}));
   const eventsPerMinute=new Map();
   inspected.forEach((result)=>{if(result.valid)
     eventsPerMinute.set(result.key,(eventsPerMinute.get(result.key)||0)+1);
