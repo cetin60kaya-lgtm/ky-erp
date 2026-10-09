@@ -84,6 +84,10 @@ export function approvalForTerminal({definition,driverProof}){
     driverProof.rollbackTestPassed!==true||
     !/^[a-f0-9]{64}$/.test(safe(driverProof.testArtifactSha256)))
     throw Error("TERMINAL_DRIVER_UNVERIFIED");
-  return Object.freeze({...definition,certification:"MODEL_READONLY_CERTIFIED",
-    canReadPunches:true,requiresDriverCertification:false});
+  // A JSON proof object is operator-controlled and cannot certify a
+  // physical device or grant readRaw. Only a separately trusted, signed
+  // administrator manifest and a running approved adapter may do so.
+  return Object.freeze({...definition,
+    certification:"READY_FOR_PHYSICAL_ACCEPTANCE",
+    canReadPunches:false,requiresDriverCertification:true});
 }
