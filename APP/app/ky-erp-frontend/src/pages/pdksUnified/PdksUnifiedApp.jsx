@@ -263,11 +263,12 @@ export default function PdksUnifiedApp({
   const [notice, setNotice] = useState("");
   const [terminalReport,setTerminalReport]=useState(null);
   const [stageSnapshot,setStageSnapshot]=useState(null);
+  const [stageSelectedCard,setStageSelectedCard]=useState("");
   const transferTabs=new Set(["transfers","transfer","tnf","reconciliation","incidents"]);
   const searchInput = useRef(null);
 
   const company = activeMainCompany?.slug || activeMainCompany?.id || "";
-  useEffect(()=>{setTerminalReport(null);setStageSnapshot(null);},[company,previewOnly]);
+  useEffect(()=>{setTerminalReport(null);setStageSnapshot(null);setStageSelectedCard("");},[company,previewOnly]);
   // UI visibility is never a substitute for the API's own payroll authorization.
   const [profileAudit,setProfileAudit] = useState(Boolean(isAuditAccount));
   const sections = useMemo(() => configuredProductSections(
@@ -433,7 +434,8 @@ export default function PdksUnifiedApp({
             className={tab.id===item.id?"active":""} onClick={()=>go(section.id,item.id)}>{item.label}</button>)}
         </div>
         {stageInspectTab&&<StageCopyExplorer tabId={tab.id} snapshot={stageSnapshot}
-          onSnapshot={setStageSnapshot} search={search}/>}
+          onSnapshot={setStageSnapshot} search={search}
+          selectedCard={stageSelectedCard} onSelectedCard={setStageSelectedCard}/>}
         {tab.view==="dashboard" && !stageInspectTab && <UnifiedDashboard onOpen={go}
           peopleStatus={data.profileReady && data.peopleStatus==="ready" ? {count:data.people.length}:null}
           attendanceStatus={data.peopleStatus} hasData={data.sourceReady}
