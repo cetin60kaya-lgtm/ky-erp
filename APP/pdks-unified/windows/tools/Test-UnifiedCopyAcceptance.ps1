@@ -77,6 +77,29 @@ try {
       }
       & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Action Status -TerminalId 'stage-terminal-01'
       if($LASTEXITCODE -ne 0){throw 'QR_TEST_STATUS_FAILED'}
+      $stagePort=0
+      foreach($candidate in 5201..5205){
+        $listener=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,$candidate)
+        try{$listener.Start();$listener.Stop();$stagePort=$candidate;break}catch{}
+      }
+      if(!$stagePort){throw 'NO_ISOLATED_QR_TEST_LOOPBACK_PORT'}
+      $receiptPath=Join-Path $app 'terminal-process.json'
+      try{
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Action Start -TerminalId 'stage-terminal-01' -Port $stagePort -NoBrowser
+        if($LASTEXITCODE -ne 0){throw 'QR_STAGE_SERVER_START_FAILED'}
+        $health=Invoke-RestMethod -Method Get -Uri ('http://127.0.0.1:'+$stagePort+'/health') -TimeoutSec 2
+        if($health.ok -ne $true -or $health.terminalId -ne 'stage-terminal-01' -or
+          $health.productionSourceCertified -ne $false){
+          throw 'QR_STAGE_SERVER_HEALTH_INCORRECT'
+        }
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Action Status -TerminalId 'stage-terminal-01'
+        if($LASTEXITCODE -ne 0){throw 'QR_STAGE_SERVER_STATUS_FAILED'}
+      }finally{
+        if(Test-Path -LiteralPath $receiptPath){
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Action Stop -TerminalId 'stage-terminal-01'
+          if($LASTEXITCODE -ne 0){throw 'QR_STAGE_SERVER_CLEAN_STOP_FAILED'}
+        }
+      }
     }finally {
       $env:LOCALAPPDATA=$previousLocal
       Remove-Item -LiteralPath $tempRoot -Force -Recurse -ErrorAction SilentlyContinue
