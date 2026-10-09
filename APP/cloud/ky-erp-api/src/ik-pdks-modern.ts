@@ -464,7 +464,7 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
     let leaves:Row[]=[];
     try{
       leaves=await all(c,
-        "SELECT d.employee_id AS employeeId,d.leave_type_code AS leaveTypeCode,d.leave_fraction AS leaveFraction,p.record_type AS recordType FROM ik_leave_plan_days d JOIN ik_leave_plans p ON p.id=d.leave_plan_id WHERE d.main_company_id=? AND d.work_date=? AND UPPER(COALESCE(p.status,'')) NOT IN ('CANCELLED','REJECTED')",
+        "SELECT d.employee_id AS employeeId,d.leave_type_code AS leaveTypeCode,d.leave_fraction AS leaveFraction,p.record_type AS recordType FROM ik_leave_plan_days d JOIN ik_leave_plans p ON p.id=d.leave_plan_id WHERE d.main_company_id=? AND d.work_date=? AND UPPER(COALESCE(p.status,'')) IN ('APPROVED','ONAYLI')",
         [auth.company,date]);
     }catch{/* Missing leave schema does not prove a person was absent. */}
     let shifts:Row[]=[];
