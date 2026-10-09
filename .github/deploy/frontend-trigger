@@ -1,6 +1,6 @@
-deploy: qa-password-only-choice-persist-fix-20261009
-pr: 411
-merge: 2916644d9be87f14d3a8386d2659d60a995d969d
-ci: 37899946440
-reason: fix QA PASSWORD_ONLY controlled select snapback and show verified server result inline
-scope: existing kyerp-test test VIEWER only; no backend/security migration
+deploy: qa-mfa-guard-consistency-20261009
+pr: 412
+merge: bcba9e93165a98873bd976d7661fbf56d6ac9f11
+worker_release: 37903812761
+reason: remove invalid password-only option and safely prepare QA account with MFA intact
+frontend_ci: 37903588404
