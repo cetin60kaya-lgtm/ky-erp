@@ -12,7 +12,7 @@ const errorMessage = (e) => String(e?.message || "Sunucuya ulaşılamadı.");
 const keyOf = (...fields) => JSON.stringify(fields);
 const ADDITIONAL = new Set([
   "masters","holidays","leaves","month","month-adjustments",
-  "monthly-attendance","payroll","audit","config","corrections",
+  "monthly-attendance","payroll","audit","config","corrections","live-attendance",
 ]);
 
 export function useUnifiedPdksData({
@@ -24,6 +24,7 @@ export function useUnifiedPdksData({
   const [attendanceState,setAttendanceState] = useState(empty());
   const [resourceState,setResourceState] = useState(empty());
   const [detailState,setDetailState] = useState(empty());
+  const [liveRefresh,setLiveRefresh] = useState(0);
 
   const profileKey=keyOf(company,reloadToken);
   const profileReady=profileState.key===profileKey && profileState.status==="ready";
@@ -42,7 +43,8 @@ export function useUnifiedPdksData({
     attendanceReady && Array.isArray(attendanceState.payload) ? attendanceState.payload : [],
     [attendanceReady,attendanceState.payload]);
   const resourceKey=keyOf(company,year,month,requirement,
-    requirement==="corrections"?personId:null,reloadToken,audit);
+    requirement==="corrections"?personId:null,reloadToken,audit,
+    requirement==="live-attendance"?liveRefresh:null);
   const resourceReady=resourceState.key===resourceKey && resourceState.status==="ready";
   const resourceLoading=resourceState.key===resourceKey && resourceState.status==="loading";
   const resourceError=resourceState.key===resourceKey && resourceState.status==="error" ? resourceState.error : "";
@@ -92,6 +94,14 @@ export function useUnifiedPdksData({
     return ()=>{cancelled=true;};
   },[previewOnly,company,requirement,personId,year,month,peopleReady,profileReady,attendanceKey]);
 
+  // Live D1 snapshot is read-only, fresh and scoped to the current Turkish day.
+  // Poll only while a live page is visible. Do not issue network calls in Studio.
+  useEffect(()=>{
+    if(previewOnly||!company||!profileReady||requirement!=="live-attendance")return undefined;
+    const timer=setInterval(()=>setLiveRefresh((value)=>value+1),45000);
+    return ()=>clearInterval(timer);
+  },[previewOnly,company,profileReady,requirement]);
+
   useEffect(()=>{
     if(previewOnly || !company || !ADDITIONAL.has(requirement) || !profileReady ||
        (requirement==="payroll" && audit) ||
@@ -100,9 +110,11 @@ export function useUnifiedPdksData({
     let cancelled=false;
     setResourceState({key:resourceKey,status:"loading",payload:null,error:""});
     import("./readService.js")
-      .then((api)=>api.readTabSource(requirement,
-        {mainCompanyId:company,year,month,personId},
-        {audit,isCancelled:()=>cancelled}))
+      .then((api)=>requirement==="live-attendance"
+        ? api.readLiveDashboard({mainCompanyId:company})
+        : api.readTabSource(requirement,
+            {mainCompanyId:company,year,month,personId},
+            {audit,isCancelled:()=>cancelled}))
       .then((payload)=>{
         if(!cancelled)setResourceState({key:resourceKey,status:"ready",payload,error:""});
       })
