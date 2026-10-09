@@ -34,7 +34,7 @@ export function parseTerminalDiagnosticReport(input,expectedTerminalId){
   const safeBatches=batches.map(batch=>{
     const date=batch?.date;
     if(typeof date!=="string"||
-      !(date==="BILINMIYOR"||(/^\\d{4}-\\d{2}-\\d{2}$/.test(date)&&
+      !(date==="BILINMIYOR"||(/^\d{4}-\d{2}-\d{2}$/.test(date)&&
         new Date(date+"T12:00:00Z").toISOString().slice(0,10)===date))||
       seen.has(date)||!Object.keys(totals).every(k=>
         Number.isSafeInteger(batch[k])&&batch[k]>=0)||
