@@ -78,6 +78,9 @@ export async function pdksCachedGet(key, path, params = {}) {
     await cachePut(key, value);
     return value;
   } catch (error) {
+    // 401/403 and validation failures are never connectivity failures.
+    // Do not serve a previous user's cached PDKS rows after access is denied.
+    if (!networkFailure(error)) throw error;
     const cached = await cacheGet(key);
     if (cached !== undefined && cached !== null) return cached;
     throw error;
