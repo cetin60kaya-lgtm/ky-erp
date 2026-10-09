@@ -77,7 +77,10 @@ export function validateTerminalDefinition(definition){
   if(!["DRAFT","READY_FOR_DRIVER_TEST","CERTIFIED"].includes(approval))
     throw new Error("TERMINAL_APPROVAL_INVALID");
   // Nothing in a JSON definition constitutes actual vendor certification.
-  if(approval==="CERTIFIED" && connector.status!=="REFERENCE_IMPLEMENTED")
+  // Even the KY QR implementation is not automatically production-approved.
+  // Certification must come from a separately signed physical acceptance,
+  // never from an operator-edited JSON field.
+  if(approval==="CERTIFIED")
     throw new Error("TERMINAL_DRIVER_PROOF_REQUIRED");
   for(const key of ["password","apiKey","accessToken","secret","biometricTemplate","faceTemplate"]){
     if(Object.prototype.hasOwnProperty.call(definition,key))
