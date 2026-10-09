@@ -255,9 +255,10 @@ internal static class FirebirdIsolatedLedgerSmoke
         var count = await ExecAsync(c, tx,
             "INSERT INTO AVANS (PKNO,TARIH,MIKTAR,VTARIH,TURKOD,KOD," +
             "TOPMIKTAR,TAKSITSAYISI,TAKSITNO,ACIKLAMA) " +
-            "VALUES (@P,@D,@AM,@D,1,@K,@AM,1,1,@M)", token,
+            "VALUES (@P,@D,@AM,@V,1,@K,@TOTAL,1,1,@M)", token,
             new FbParameter("@P", card), new FbParameter("@D", date),
-            new FbParameter("@AM", 250m), new FbParameter("@K", next),
+            new FbParameter("@AM", 250m), new FbParameter("@V", date),
+            new FbParameter("@K", next), new FbParameter("@TOTAL", 250m),
             new FbParameter("@M", note));
         if (count != 1) throw new InvalidOperationException("STAGE_AVANS_INSERT_NOT_UNIQUE");
         await InsertLedgerAsync(c, tx, company, command, "advance", hash, next, token);
