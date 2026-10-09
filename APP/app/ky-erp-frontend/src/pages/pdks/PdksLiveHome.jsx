@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getPdksLiveDashboard } from "../../services/pdksApi";
+import { pdksLivePresentation } from "../../services/pdksLivePresentation";
 import "./PdksLiveHome.css";
 
 const fmtDate = (value) => {
@@ -30,9 +31,11 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
     setError("");
     try {
       const result = await getPdksLiveDashboard({ mainCompanyId: company });
-      setData(result || { metrics: {}, events: [], liveCards: [], devices: [] });
+      if (!result || !result.metrics || !Array.isArray(result.devices)) throw new Error("PDKS canlı API eksik yanıt döndürdü.");
+      setData(result);
       setLastRefresh(new Date());
     } catch (cause) {
+      setData({ metrics: {}, events: [], liveCards: [], devices: [] });
       setError(cause?.message || "Canlı PDKS verisi alınamadı.");
     } finally {
       setBusy(false);
@@ -46,14 +49,16 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
   }, [load]);
 
   const metrics = useMemo(() => data?.metrics || {}, [data]);
+  const display = pdksLivePresentation(metrics, error, lastRefresh);
+  const count = (value) => display.fresh ? Number(value || 0) : "—";
   const cards = useMemo(() => [
-    ["Bugün Devamsız", metrics.absent || 0, "bad", "⊘", "raporlar"],
-    ["Geç Kalan", metrics.late || 0, "warn", "◷", "raporlar"],
-    ["Aktif Personel", metrics.activePersonnel || 0, "ok", "♟", "personel-bilgileri"],
-    ["İzinli Personel", metrics.permitted || 0, "accent", "⌛", "izinler"],
-    ["İçerideki Personel", metrics.inside || 0, "teal", "↪", "giris-cikislar"],
-    ["Eksik Basım", metrics.missingPunch || 0, "violet", "!", "puantaj"],
-  ], [metrics]);
+    [display.absenceLabel, display.absenceValue, "bad", "⊘", "raporlar"],
+    ["Geç Kalan", count(metrics.late), "warn", "◷", "raporlar"],
+    ["Aktif Personel", count(metrics.activePersonnel), "ok", "♟", "personel-bilgileri"],
+    ["İzinli Personel", count(metrics.permitted), "accent", "⌛", "izinler"],
+    ["İçerideki Personel", count(metrics.inside), "teal", "↪", "giris-cikislar"],
+    ["Eksik Basım", count(metrics.missingPunch), "violet", "!", "puantaj"],
+  ], [metrics, display.absenceLabel, display.absenceValue, display.fresh]);
 
   const go = (tabKey) => openModule?.("pdks", { tabKey });
 
@@ -67,19 +72,20 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
         </div>
         <div className="plh-livebox">
           <i className={busy ? "pulse" : ""} />
-          <span>{busy ? "Yenileniyor" : "Canlı"}</span>
+          <span>{busy ? "Yenileniyor" : display.badge}</span>
           <small>{lastRefresh ? `Son: ${lastRefresh.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}` : "Bağlanıyor"}</small>
           <button type="button" onClick={load} disabled={busy}>Yenile</button>
         </div>
       </header>
 
-      {error ? <div className="plh-error">{error}</div> : null}
+      {error ? <div className="plh-error" role="alert">API güncel PDKS verisi alınamadı: {error}. Eski kart kayıtları canlı veri olarak gösterilmiyor.</div> : null}
+      {display.terminalsOffline ? <div className="plh-error" role="status">PDKS terminali çevrimdışı. API yanıt veriyor fakat kart hareketleri güncel olmayabilir. {display.absenceDetail || "Devamsızlık hesabını terminal kayıtlarıyla teyit edin."}</div> : null}
 
       <section className="plh-metrics">
         {cards.map(([label, value, tone, icon, tab]) => (
           <button type="button" key={label} className={`plh-metric ${tone}`} onClick={() => go(tab)}>
             <b className="plh-metric-icon">{icon}</b>
-            <span><strong>{Number(value).toLocaleString("tr-TR")}</strong><small>{label}</small></span>
+            <span><strong>{typeof value === "number" ? value.toLocaleString("tr-TR") : value}</strong><small>{label}</small></span>
             <em>›</em>
           </button>
         ))}
@@ -113,9 +119,9 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
         <section className="plh-section plh-device-section">
           <div className="plh-title"><div><span>AGENT / TERMİNAL</span><h2>Cihaz Sağlığı</h2></div><button type="button" onClick={() => go("cihaz-baglantilari")}>Cihaz Merkezi</button></div>
           <div className="plh-device-summary">
-            <div><strong>{metrics.onlineDevices || 0}</strong><span>Çevrimiçi</span></div>
-            <div><strong>{Math.max(0, (metrics.deviceCount || 0) - (metrics.onlineDevices || 0))}</strong><span>Çevrimdışı</span></div>
-            <div><strong>{metrics.deviceCount || 0}</strong><span>Toplam</span></div>
+            <div><strong>{count(metrics.onlineDevices)}</strong><span>Çevrimiçi</span></div>
+            <div><strong>{count(Math.max(0, (metrics.deviceCount || 0) - (metrics.onlineDevices || 0)))}</strong><span>Çevrimdışı</span></div>
+            <div><strong>{count(metrics.deviceCount)}</strong><span>Toplam</span></div>
           </div>
           <div className="plh-device-list">
             {(data.devices || []).slice(0, 8).map((row) => (
