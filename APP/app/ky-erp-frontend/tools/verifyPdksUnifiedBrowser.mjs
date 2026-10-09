@@ -118,8 +118,10 @@ try {
         assertBrowser(controls===10,"Terminal Hub must expose 10 real badge modalities");
         const connectors=await evaluate('document.querySelector(".pdk-u-terminal select[aria-label=\'Terminal protokolü\']")?.options.length');
         assertBrowser(connectors===12,"Terminal Hub must show 12 protocol profiles");
-        assertBrowser(await evaluate('Array.from(document.querySelectorAll(".pdk-u-terminal input,.pdk-u-terminal select")).every(x=>x.disabled)'),
-          "Standalone Studio preview must not register a real device");
+        assertBrowser(await evaluate('document.querySelector(".pdk-u-terminal select[aria-label=\\'Terminal protokolü\\']")?.disabled===false'),
+          "Terminal Hub draft protocol browser must be usable in preview");
+        assertBrowser(await evaluate('document.querySelector(".pdk-u-terminal-actions button:nth-child(2)")?.disabled===true'),
+          "Studio preview must never export a real tenant device registration");
         assertBrowser(await evaluate('document.querySelector(".pdk-u-terminal")?.textContent?.includes("Canlı cihaza bağlanılmadı")'),
           "Terminal Hub must not claim unsupported physical connection");
       }
