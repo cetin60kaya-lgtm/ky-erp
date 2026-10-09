@@ -103,6 +103,15 @@ try {
         : await evaluate('document.querySelector(".pdk-u-record-head h2")?.textContent==='+JSON.stringify(tab.label));
       assertBrowser(content,"Unrendered section "+section.id+"/"+tab.id);
       assertBrowser(await evaluate('!document.querySelector(".pdk-unified .module-error-card")'),"Unhandled error UI on "+tab.id);
+      if(tab.id==="punches"||tab.id==="history") {
+        const pickerCount=await evaluate('document.querySelectorAll(".pdk-u-card-events input[type=date]").length');
+        assertBrowser(pickerCount===2,tab.id+" date-range picker missing");
+        assertBrowser(await evaluate('Array.from(document.querySelectorAll(".pdk-u-card-events input[type=date]")).every(x=>x.disabled)'),
+          tab.id+" preview unexpectedly allows querying protected personnel data");
+        assertBrowser(await evaluate('document.querySelector(".pdk-u-card-events")?.textContent?.includes("Tasarım önizlemesinde gerçek kart hareketleri gösterilmez.")'),
+          tab.id+" must not fabricate real historical card events in Studio");
+      }
+
       const ops=operationsForTab(tab.id);
       if(ops.length) {
         assertBrowser(await evaluate('document.querySelectorAll(".pdk-u-operation-toggle").length===1'),
