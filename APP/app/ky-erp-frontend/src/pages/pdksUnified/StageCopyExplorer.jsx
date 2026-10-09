@@ -7,8 +7,9 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
   const [filter,setFilter]=useState("all");
   const [day,setDay]=useState("");
   const [autoInfo,setAutoInfo]=useState("");
+  const [autoDisabled,setAutoDisabled]=useState(false);
   useEffect(()=>{
-    if(snapshot||window.location.hostname!=="ky-pdks-test.local")return;
+    if(snapshot||autoDisabled||window.location.hostname!=="ky-pdks-test.local")return;
     const controller=new AbortController();
     fetch("/__local-copy/latest.json",{cache:"no-store",signal:controller.signal})
       .then(response=>response.ok?response.text():null)
@@ -24,7 +25,7 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
           "Otomatik kaynak doğrulanamadı: "+String(error?.message||"Bilinmeyen hata"));
       });
     return ()=>controller.abort();
-  },[onSnapshot,snapshot]);
+  },[onSnapshot,snapshot,autoDisabled]);
 
   const load=async file=>{
     if(!file)return;
@@ -32,6 +33,7 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
       if(file.size>12_000_000||file.size<100)throw Error("COPY_FILE_SIZE_INVALID");
       const data=parseStageCopySnapshot(await file.text());
       onSnapshot(data);setError("");
+      setAutoDisabled(false);
       setDay("");
     }catch(e){onSnapshot(null);setError(String(e?.message||"Dosya doğrulanamadı"));}
   };
@@ -107,7 +109,7 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
       <span>Dosya yalnız bu uygulamanın belleğinde açılır. Sunucuya yüklenmez.</span>
       {autoInfo&&<span role="status">{autoInfo}</span>}
       {snapshot&&<button className="pdk-u-btn" type="button"
-        onClick={()=>{onSnapshot(null);setError("");setDay("");}}>Veriyi kapat</button>}
+        onClick={()=>{setAutoDisabled(true);onSnapshot(null);setError("");setDay("");setAutoInfo("Yerel veri kullanıcı tarafından kapatıldı.");}}>Veriyi kapat</button>}
     </div>
     {error&&<p className="pdk-u-live-note is-alert" role="alert"><ShieldAlert size={16}/>
       Kaynak dosyası reddedildi: {error}</p>}
