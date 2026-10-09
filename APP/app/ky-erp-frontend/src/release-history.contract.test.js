@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {changeStatus,releaseEvidence,releaseKind,verifiedRelease,firstVerifiedRun,moduleOf} from "./services/releaseHistory.js";
+import {changeStatus,releaseEvidence,releaseKind,verifiedRelease,firstVerifiedRun,moduleOf,QA_MODULES} from "./services/releaseHistory.js";
 
 const front={ready:true,shas:new Set(["merged-both","merged-web"])};
 const worker={ready:true,shas:new Set(["merged-both","merged-worker"])};
@@ -41,4 +41,22 @@ test("module classification and real owner menu present",()=>{
   assert.match(screen,/\/actions\/runs/);
   assert.match(screen,/\/commits\?sha=/);
   assert.match(registry,/guncelleme-gecmisi/);
+});
+
+test("common Turkish words do not falsely turn platform release into accounting",()=>{
+  assert.equal(moduleOf("feat: Güncelleme Geçmişi — gerçek GitHub PR ve canlı yayın"),"Platform");
+  assert.notEqual(moduleOf("gerçek site kontrolü"),"Muhasebe");
+  assert.equal(moduleOf("İK yıllık izin sicili"),"İK");
+  assert.equal(moduleOf("çek ödemesi cari mahsup"),"Muhasebe");
+  assert.equal(moduleOf("Günlük Operasyon PDKS dışı çalışma kaydı"),"Günlük Operasyon");
+});
+test("entire canonical module inventory is in management QA dashboard without false E2E pass",()=>{
+  assert.equal(QA_MODULES.length,14);
+  assert.equal(new Set(QA_MODULES.map(row=>row.name)).size,14);
+  assert.ok(QA_MODULES.every(row=>row.route.startsWith("/")&&row.check));
+  const screen=readFileSync("src/pages/admin/AdminReleaseHistory.jsx","utf8");
+  assert.match(screen,/QA_MODULES.map/);
+  assert.match(screen,/Modül Kontrolleri/);
+  assert.match(screen,/Yetkili uçtan uca test bekliyor/);
+  assert.match(screen,/moduleOf\(pr.title\)===module/);
 });
