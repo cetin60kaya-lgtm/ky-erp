@@ -17,7 +17,8 @@ test("offline diagnostic summary renders only whitelisted nonpersonal counts",()
     cardNo:"00003",secret:"never output me"},"term-001");
   assert.deepEqual(Object.keys(data),[
     "terminalId","inspected","matched","unmatched","ambiguous","invalid",
-    "unsigned","rejectedReference","terminalRawCertified","source",
+    "unsigned","rejectedReference","referenceRows","dailyBatches",
+    "terminalRawCertified","source",
   ]);
   assert.equal(JSON.stringify(data).includes("00003"),false);
   assert.equal(data.terminalRawCertified,false);
@@ -33,4 +34,35 @@ test("an arbitrary JSON file cannot certify hardware or claim completed apply",(
     {...example(),mode:"PHYSICAL_DEVICE_CERTIFIED"},
     {},
   ])assert.throws(()=>parseTerminalDiagnosticReport(data,"term-001"),/NOT_VERIFIABLE/);
+});
+
+test("daily transfer rows display only verified anonymous totals",()=>{
+  const batches=[
+    {date:"2026-10-09",inspected:2,matched:1,unmatched:1,
+      ambiguous:0,rejected:0,signedQr:1,unsignedUsb:1,cardNo:"00003"},
+    {date:"BILINMIYOR",inspected:1,matched:0,unmatched:0,
+      ambiguous:0,rejected:1,signedQr:0,unsignedUsb:0},
+  ];
+  const data=parseTerminalDiagnosticReport({...example(),dailyBatches:batches,
+    batchState:"REVIEW_ONLY_NO_APPROVED_TRANSFER"},"term-001");
+  assert.equal(data.dailyBatches.length,2);
+  assert.deepEqual(Object.keys(data.dailyBatches[0]),[
+    "date","inspected","matched","unmatched","ambiguous",
+    "rejected","signedQr","unsignedUsb",
+  ]);
+  assert.equal(JSON.stringify(data).includes("00003"),false);
+});
+test("daily transfer totals or dates cannot be fabricated by imported JSON",()=>{
+  const correct={date:"2026-10-09",inspected:3,matched:1,unmatched:1,
+    ambiguous:0,rejected:1,signedQr:1,unsignedUsb:1};
+  for(const dailyBatches of [
+    [{...correct,matched:2}],
+    [{...correct,date:"2026-02-30"}],
+    [correct,correct],
+    [{...correct,signedQr:3}],
+    [{...correct,inspected:4}],
+  ]){
+    assert.throws(()=>parseTerminalDiagnosticReport({...example(),dailyBatches,
+      batchState:"REVIEW_ONLY_NO_APPROVED_TRANSFER"},"term-001"),/BATCH/);
+  }
 });
