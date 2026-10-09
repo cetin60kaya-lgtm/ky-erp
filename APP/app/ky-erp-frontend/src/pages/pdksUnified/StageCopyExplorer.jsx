@@ -1,5 +1,5 @@
 import React,{useEffect,useMemo,useState} from "react";
-import {Database,FolderOpen,ShieldAlert} from "lucide-react";
+import {Database,FolderOpen,ShieldAlert,Download} from "lucide-react";
 import {parseStageCopySnapshot} from "./stageCopyView.mjs";
 const stripTime=v=>String(v||"").slice(0,5);
 export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",search=""}){
@@ -36,19 +36,63 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
     }catch(e){onSnapshot(null);setError(String(e?.message||"Dosya doğrulanamadı"));}
   };
   const peopleTab=["people","cards","employment"].includes(tabId);
-  const eventTab=["punches","history","live","exceptions","attention"].includes(tabId);
+  const reportTab=["violations","signatures","validation","timesheets","attendance"].includes(tabId);
+  const reviewTab=["exceptions","attention","violations","signatures","validation"].includes(tabId);
+  const monthlyTab=tabId==="monthly"||tabId==="timesheets";
+  const eventTab=["punches","history"].includes(tabId);
+  const sourceOnlyNote=["today","live","daily","monthly","attendance","timesheets"].includes(tabId);
+  const monthlyRows=useMemo(()=>{
+    if(!snapshot)return[];
+    const groups=new Map();
+    for(const person of snapshot.people)groups.set(person.cardNo,{
+      cardNo:person.cardNo,name:person.fullName,days:0,paired:0,unpaired:0,e:0});
+    for(const day of snapshot.days){
+      if(!groups.has(day.cardNo))groups.set(day.cardNo,{
+        cardNo:day.cardNo,name:day.name,days:0,paired:0,unpaired:0,e:0});
+      const row=groups.get(day.cardNo);
+      row.days++;
+      const paired=day.entry.length>0&&day.exit.length>0;
+      if(paired)row.paired++;else row.unpaired++;
+      row.e+=day.legacyE;
+    }
+    return [...groups.values()].sort((a,b)=>a.cardNo.localeCompare(b.cardNo));
+  },[snapshot]);
   const q=String(search).toLocaleLowerCase("tr-TR").trim();
   const rows=useMemo(()=>{
     if(!snapshot)return[];
     if(peopleTab)return snapshot.people.filter(p=>!q||[p.fullName,p.cardNo,p.group]
       .some(v=>String(v||"").toLocaleLowerCase("tr-TR").includes(q)));
-    const data=eventTab?snapshot.events:snapshot.days;
-    return data.filter(r=>(!day||r.date===day)&&(!q||
+    const data=monthlyTab?monthlyRows:eventTab?snapshot.events:snapshot.days;
+    return data.filter(r=>(monthlyTab||!day||r.date===day)&&
+      (!reviewTab||monthlyTab||(r.entry.length===0||r.exit.length===0))&&(!q||
       [r.person,r.name,r.cardNo,r.date,r.direction]
         .some(v=>String(v||"").toLocaleLowerCase("tr-TR").includes(q)))&&
       (filter==="all"||(!eventTab?filter==="unpaired"&&
         (r.entry.length===0||r.exit.length===0):r.direction===filter)));
-  },[snapshot,peopleTab,eventTab,q,day,filter]);
+  },[snapshot,peopleTab,eventTab,monthlyTab,monthlyRows,reviewTab,q,day,filter]);
+  const columns=peopleTab?["Kart No","Personel","Grup","İşe Giriş","İşten Çıkış","Kaynak"]:
+    monthlyTab?["Kart No","Personel","Kayıtlı Gün","Çift Taraflı Gün","Eksik Taraflı Gün","E Tarafı","Bordro Onayı"]:
+    eventTab?["Tarih","Kart No","Personel","Saat","Yön","Legacy Tür","Kanıt"]:
+    ["Tarih","Kart No","Personel","Giriş","Çıkış","Legacy E","Durum"];
+  const values=r=>peopleTab?[r.cardNo,r.fullName,r.group,r.employmentStart,r.employmentEnd,"KIMLIK · KOPYA"]:
+    monthlyTab?[r.cardNo,r.name,r.days,r.paired,r.unpaired,r.e,"Hesaplanmadı"]:
+    eventTab?[r.date,r.cardNo,r.person,stripTime(r.time),r.direction,r.legacyType,"GIRCIK · KOPYA"]:
+    [r.date,r.cardNo,r.name,r.entry.map(stripTime).join(", ")||"—",
+      r.exit.map(stripTime).join(", ")||"—",r.legacyE,
+      r.entry.length===0||r.exit.length===0?"Eksik taraf — inceleme":"FDB çift taraf mevcut"];
+  const exportCsv=()=>{
+    if(!rows.length)return;
+    const cell=v=>{
+      const text=String(v??"").replace(/^[=+@\-\t\r]/,"'  return <section className=");
+      return '"'+text.replace(/"/g,'""')+'"';
+    };
+    const csv="\uFEFF"+[columns,...rows.map(values)]
+      .map(line=>line.map(cell).join(";")).join("\r\n");
+    const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+    const a=document.createElement("a");
+    a.href=url;a.download="KY_PDKS_KOPYA_"+tabId+".csv";a.click();
+    URL.revokeObjectURL(url);
+  };
   return <section className="pdk-u-stage-explorer" aria-label="Gerçek kopya Firebird personel ve kart inceleme">
     <div className="pdk-u-live-head"><div>
       <strong><Database size={17}/> Yerel Firebird Kopyası · Gerçek Kayıt İncelemesi</strong>
@@ -79,10 +123,10 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
       </div>
       <div className="pdk-u-stage-controls">
         <span>Kaynak aralığı: {snapshot.start} – {snapshot.end}</span>
-        {!peopleTab&&<label>Tarih <input aria-label="Kaynak günü filtrele"
+        {!peopleTab&&!monthlyTab&&<label>Tarih <input aria-label="Kaynak günü filtrele"
           type="date" value={day} min={snapshot.start} max={snapshot.end}
           onChange={event=>setDay(event.target.value)}/></label>}
-        {!peopleTab&&<label>Görünüm <select value={filter}
+        {!peopleTab&&!monthlyTab&&!reviewTab&&<label>Görünüm <select value={filter}
           onChange={event=>setFilter(event.target.value)}>
           <option value="all">Tüm kaynak kayıtları</option>
           {eventTab?<><option value="IN">Sadece giriş</option>
@@ -90,26 +134,29 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
             <option value="unpaired">Tek tarafı bulunan günler</option>}
         </select></label>}
         <span>{rows.length} kayıt gösteriliyor</span>
+        <button type="button" className="pdk-u-btn" onClick={exportCsv} disabled={!rows.length}>
+          <Download size={15}/> CSV
+        </button>
       </div>
       <div className="pdk-u-table-scroll" role="region" tabIndex={0}
         aria-label="Kopya Firebird gerçek kayıt tablosu">
         <table className="pdk-u-table"><thead><tr>
-          {(peopleTab?["Kart No","Personel","Grup","İşe Giriş","İşten Çıkış","Kaynak"]:
-            eventTab?["Tarih","Kart No","Personel","Saat","Yön","Legacy Tür","Kanıt"]:
-            ["Tarih","Kart No","Personel","Giriş","Çıkış","Legacy E","Durum"])
-            .map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>
-          {rows.slice(0,500).map((r)=><tr key={peopleTab?r.cardNo:eventTab?r.eventId:r.cardNo+"|"+r.date}>
-            {(peopleTab?[r.cardNo,r.fullName,r.group,r.employmentStart,r.employmentEnd,"KIMLIK · KOPYA"]:
-              eventTab?[r.date,r.cardNo,r.person,stripTime(r.time),r.direction,r.legacyType,
-                "GIRCIK · KOPYA"]:
-              [r.date,r.cardNo,r.name,r.entry.map(stripTime).join(", ")||"—",
-                r.exit.map(stripTime).join(", ")||"—",r.legacyE,
-                "Fiziksel terminal doğrulanmadı"]).map((v,index)=>
+          {columns.map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>
+          {rows.slice(0,500).map((r)=><tr key={peopleTab||monthlyTab?r.cardNo:eventTab?r.eventId:r.cardNo+"|"+r.date}>
+            {values(r).map((v,index)=>
               <td key={index}>{v??"—"}</td>)}
           </tr>)}</tbody></table>
       </div>
       {rows.length>500&&<p className="pdk-u-live-note">
         İlk 500 kayıt gösteriliyor. Tarih ve arama filtrelerini daraltın.</p>}
+      {sourceOnlyNote&&<p className="pdk-u-live-note">
+        Bu ekran yalnız seçilen kopya FDB döneminin ham taraf sayılarını gösterir.
+        Çalışılan gün, mesai, ücret, devamsızlık veya geç kalma hesaplanmadı.
+      </p>}
+      {reviewTab&&<p className="pdk-u-live-note">
+        Eksik taraf yalnızca inceleme işaretidir; gerçek kart ihlali veya imzalı düzeltme kararı değildir.
+        İmza alanı ve personel onayı, yetkili kanıt olmadan oluşturulmaz.
+      </p>}
       <p className="pdk-u-live-note"><ShieldAlert size={16}/>
         Kopya FDB'de kayıt görünmesi, personelin bugün işyerine geldiği veya geç kaldığına tek başına kanıt değildir.
         İzin, vardiya, gerçek terminal RAW ve yıllık TNF ayrıca doğrulanmalıdır.</p>
