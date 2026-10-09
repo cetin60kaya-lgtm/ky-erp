@@ -4,7 +4,7 @@
 - Tüm KY ERP sohbetlerinin ortak sözleşmesi: `DOCS/KY_ERP_GUNCELLEME_YAYIN_KAYIT_SOZLESMESI_2026-10-09.md`. Değişiklik PR/commit açıklamasında; test/merge/Pages/Worker canlı kanıtları ayrı kaydedilir.
 - Yönetim > Sistem > Güncelleme Geçmişi, public GitHub PR/commit/Actions verilerini salt-okunur gösterir. Yayın kanıtı olmayan iş canlı sayılmaz.
 - Personel portalı PR #405 Worker + Pages canlı yayını: Action 37885380200 ve 37885546558 SUCCESS, D1 0060 migration ve backup kanıtlı. Mobil rota/hatalı giriş döngüsü PR #407 için frontend Action 37889109158 SUCCESS.
-- Açık: Gerçek onaylı personel cihazıyla şirket, İK/PDKS, yıllık izin, makinacı üretim ve yetki regresyonunun uçtan uca kabul kanıtı yok; test/ortam kimliği olmadan başarı iddia edilmez. Önceki yarım kalan canlı Chrome smoke testini canonical frontend yayın akışına katıp sonucunu doğrula.
+- **YENİ SONUÇ:** PR #408 merged, canlı frontend Action #37890106512 SUCCESS; yeni Güncelleme Geçmişi yönetim ekranı yayında. Önceki yarım kalan gerçek Chrome testini Pages workflow'una bağlama işi tamamlandı: canlı test 6/6 PASS, kanıt artifact 11597916502. Kalan: onaylı ayrı test personeliyle yönetici/cihaz onayı, İK/PDKS, yıllık izin, makinacı üretim ve diğer yetkili modüllerin gerçek CRUD kabulü; henüz bu işlevler E2E başarılı diye işaretlenmez.
 - Modüllerde gerçek yeni mutasyon için yedek, tenant izolasyonu, rol yetkisi ve idempotency korunur. İkinci ERP/test sitesi ve MFA bypass yapılmaz.
 
 
