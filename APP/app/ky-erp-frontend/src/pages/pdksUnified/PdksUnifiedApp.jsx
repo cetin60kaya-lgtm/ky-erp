@@ -18,6 +18,7 @@ import {
 import {sourceForTab,rowsForTab} from "./tabBindings.js";
 import {useUnifiedPdksData} from "./useUnifiedPdksData.js";
 import UnifiedOperationPanel from "./UnifiedOperationPanel.jsx";
+import LiveAttendancePanel from "./LiveAttendancePanel.jsx";
 import "./pdksUnified.css";
 
 const ICONS = {
@@ -195,12 +196,12 @@ function PersonDetails({person,active,onChange,isAuditAccount,detail}) {
   </section>;
 }
 
-function UnifiedDashboard({ onOpen, peopleStatus, attendanceStatus, hasData }) {
+function UnifiedDashboard({ onOpen, peopleStatus, attendanceStatus, hasData, live }) {
   const items = [
-    { label:"Toplam Personel", value: peopleStatus?.count, icon:UsersRound, target:["people","people"] },
-    { label:"Bugün Doğrulanan", value:null, icon:CheckCircle2, target:["attendance","live"] },
-    { label:"Eksik / Geç", value:null, icon:CircleAlert, target:["attendance","exceptions"] },
-    { label:"Bekleyen Onay", value:null, icon:Clock3, target:["overview","approvals"] },
+    { label:"Kartlı Personel", value: live?.metrics?.total??peopleStatus?.count, icon:UsersRound, target:["people","people"] },
+    { label:"Giriş Kaydı Var", value:live?.metrics?.arrived??null, icon:CheckCircle2, target:["attendance","live"] },
+    { label:"Kart Kaydı Yok", value:live?.metrics?.noRecord??null, icon:CircleAlert, target:["attendance","live"] },
+    { label:"Geç Giriş", value:live?.metrics?.late??null, icon:Clock3, target:["attendance","exceptions"] },
   ];
   return <div className="pdk-u-dashboard">
     <div className="pdk-u-kpis">{items.map(({ label,value,icon:Symbol,target }) => <button className="pdk-u-kpi"
@@ -418,7 +419,12 @@ export default function PdksUnifiedApp({
         </div>
         {tab.view==="dashboard" && <UnifiedDashboard onOpen={go}
           peopleStatus={data.profileReady && data.peopleStatus==="ready" ? {count:data.people.length}:null}
-          attendanceStatus={data.peopleStatus} hasData={data.sourceReady}/>}
+          attendanceStatus={data.peopleStatus} hasData={data.sourceReady}
+          live={!previewOnly&&data.resourceReady?data.resource:null}/>}
+        {tab.id==="today"&&<LiveAttendancePanel
+          snapshot={!previewOnly&&data.resourceReady?data.resource:null}
+          loading={data.resourceLoading} previewOnly={previewOnly} search={search}
+          compact onRefresh={()=>setReloadToken(value=>value+1)}/>}
         {tab.view!=="dashboard"&&<section className="pdk-u-panel pdk-u-record-panel">
           <div className="pdk-u-record-head">
             <div><h2>{tab.label}</h2><p>{tab.description}</p></div>
@@ -450,7 +456,11 @@ export default function PdksUnifiedApp({
             <button type="button" className="pdk-u-btn" disabled={!canExport} onClick={exportTable}>
               <Download size={16}/> CSV</button>
           </div>
-          {isPeopleTab ? <div className="pdk-u-person-layout">
+          {["live","exceptions","attention"].includes(tab.id) ?
+            <LiveAttendancePanel snapshot={!previewOnly&&data.resourceReady?data.resource:null}
+              loading={data.resourceLoading} previewOnly={previewOnly} search={search}
+              onRefresh={()=>setReloadToken(value=>value+1)}/> :
+          isPeopleTab ? <div className="pdk-u-person-layout">
             <div className="pdk-u-list-side">
               {data.peopleLoading?<EmptyState title="Veri yükleniyor" description="Yetkili sunucu yanıtı bekleniyor."/>:
                 dataConnected?<UnifiedTable columns={tab.columns} rows={filteredRows} selectedId={selectedPerson?.id}
