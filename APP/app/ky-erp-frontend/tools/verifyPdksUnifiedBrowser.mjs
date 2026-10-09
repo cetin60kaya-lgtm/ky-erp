@@ -112,6 +112,16 @@ try {
           tab.id+" must not fabricate real historical card events in Studio");
       }
 
+      if(tab.id==="terminals"){
+        const controls=await evaluate('document.querySelectorAll(".pdk-u-terminal-modalities input[type=checkbox]").length');
+        assertBrowser(controls===10,"Terminal Hub must expose 10 real badge modalities");
+        const connectors=await evaluate('document.querySelector(".pdk-u-terminal select[aria-label=\'Terminal protokolü\']")?.options.length');
+        assertBrowser(connectors===12,"Terminal Hub must show 12 protocol profiles");
+        assertBrowser(await evaluate('Array.from(document.querySelectorAll(".pdk-u-terminal input,.pdk-u-terminal select")).every(x=>x.disabled)'),
+          "Standalone Studio preview must not register a real device");
+        assertBrowser(await evaluate('document.querySelector(".pdk-u-terminal")?.textContent?.includes("Canlı cihaza bağlanılmadı")'),
+          "Terminal Hub must not claim unsupported physical connection");
+      }
       const ops=operationsForTab(tab.id);
       if(ops.length) {
         assertBrowser(await evaluate('document.querySelectorAll(".pdk-u-operation-toggle").length===1'),
