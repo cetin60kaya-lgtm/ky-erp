@@ -21,6 +21,7 @@ import UnifiedOperationPanel from "./UnifiedOperationPanel.jsx";
 import LiveAttendancePanel from "./LiveAttendancePanel.jsx";
 import CardEventsPanel from "./CardEventsPanel.jsx";
 import TerminalSetupPanel from "./TerminalSetupPanel.jsx";
+import TransferCenterPanel from "./TransferCenterPanel.jsx";
 import "./pdksUnified.css";
 
 const ICONS = {
@@ -258,9 +259,12 @@ export default function PdksUnifiedApp({
   const [reloadToken, setReloadToken] = useState(0);
   const [monthlyRequestKey,setMonthlyRequestKey]=useState("");
   const [notice, setNotice] = useState("");
+  const [terminalReport,setTerminalReport]=useState(null);
+  const transferTabs=new Set(["transfers","transfer","tnf","reconciliation","incidents"]);
   const searchInput = useRef(null);
 
   const company = activeMainCompany?.slug || activeMainCompany?.id || "";
+  useEffect(()=>{setTerminalReport(null);},[company,previewOnly]);
   // UI visibility is never a substitute for the API's own payroll authorization.
   const [profileAudit,setProfileAudit] = useState(Boolean(isAuditAccount));
   const sections = useMemo(() => configuredProductSections(
@@ -433,7 +437,7 @@ export default function PdksUnifiedApp({
             <div><h2>{tab.label}</h2><p>{tab.description}</p></div>
             <span className="pdk-u-label"><ShieldCheck size={15}/> {previewOnly?"Görsel İnceleme":"Yazma kontrollü"}</span>
           </div>
-          {requirement!=="card-events"&&<div className="pdk-u-filters">
+          {requirement!=="card-events"&&!transferTabs.has(tab.id)&&<div className="pdk-u-filters">
             {requirement==="monthly-attendance" && !previewOnly &&
               <button type="button" className="pdk-u-btn"
                 disabled={!company || !data.profileReady || data.resourceLoading}
@@ -460,7 +464,12 @@ export default function PdksUnifiedApp({
               <Download size={16}/> CSV</button>
           </div>}
           {tab.id==="terminals" ? <TerminalSetupPanel
-            company={company} previewOnly={previewOnly}/> :
+            key={company||"preview"} company={company} previewOnly={previewOnly}
+            onReportLoaded={setTerminalReport}/> :
+          transferTabs.has(tab.id) ? <TransferCenterPanel
+            tabId={tab.id} previewOnly={previewOnly}
+            report={terminalReport} onReportLoaded={setTerminalReport}
+            search={search}/> :
           requirement==="card-events" ? <CardEventsPanel
             key={[company,tab.id].join(":")}
             company={company} profileReady={data.profileReady}
@@ -498,11 +507,11 @@ export default function PdksUnifiedApp({
             <UnifiedTable columns={tab.columns} rows={filteredRows}
               masked={isAuditAccount && isSensitiveProductTab(tab.id)}/>
           )}
-          <UnifiedOperationPanel key={[company,tab.id,period.year,period.month].join(":")}
+          {!transferTabs.has(tab.id)&&<UnifiedOperationPanel key={[company,tab.id,period.year,period.month].join(":")}
             tabId={tab.id} previewOnly={previewOnly}
             profile={data.profile} people={data.people}
             company={company} year={period.year} month={period.month}
-            onChanged={()=>setReloadToken((value)=>value+1)}/>
+            onChanged={()=>setReloadToken((value)=>value+1)}/>}
           {realAttendance && dataConnected && <p className="pdk-u-source-foot">
             <Info size={15}/> Listede yalnız seçili personelin {MONTHS[period.month-1]} {period.year} kayıtları gösterilir.
             Firebird/TNF ile gerçek mutabakat ayrıca doğrulanır.
