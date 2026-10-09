@@ -60,3 +60,21 @@ test("entire canonical module inventory is in management QA dashboard without fa
   assert.match(screen,/Yetkili uçtan uca test bekliyor/);
   assert.match(screen,/moduleOf\(pr.title\)===module/);
 });
+
+test("existing KY ERP TEST account has an explicitly scoped owner-only safe test control",()=>{
+  const panel=readFileSync("src/pages/admin/AdminUsersPanelV2.jsx","utf8");
+  assert.match(panel,/selectedRole==="VIEWER"/);
+  assert.match(panel,/selectedUser\?\.mainCompanySlug\|\|""\)==="kyerp-test"/);
+  assert.match(panel,/selectedUser\?\.username\|\|""\)/);
+  assert.match(panel,/isOwner \|\| !isQaTestAccount/);
+  assert.match(panel,/moduleKey!==["']ADMIN["']/);
+  assert.match(panel,/canCreate:false,canUpdate:false,canDelete:false,canApprove:false/);
+  assert.match(panel,/updateUserPermissions\(selectedUser.id,readOnly\)/);
+  assert.match(panel,/updateLoginSecurityPolicy\(selectedUser.id,\{loginPolicy:"PASSWORD_ONLY"/);
+  assert.match(panel,/KY ERP TEST · Güvenli Testi Hazırla/);
+});
+test("general users still have enforced MFA selection",()=>{
+  const panel=readFileSync("src/pages/admin/AdminUsersPanelV2.jsx","utf8");
+  assert.match(panel,/isQaTestAccount&&qaReadOnlyReady&&<option value="PASSWORD_ONLY"/);
+  assert.match(panel,/loginPolicy:createForm.loginPolicy==="PASSWORD_ONLY"\?"ANY_MFA"/);
+});
