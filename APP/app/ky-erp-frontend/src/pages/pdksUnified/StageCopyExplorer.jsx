@@ -51,7 +51,7 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
         cardNo:day.cardNo,name:day.name,days:0,paired:0,unpaired:0,e:0});
       const row=groups.get(day.cardNo);
       row.days++;
-      const paired=day.entry.length>0&&day.exit.length>0;
+      const paired=day.sideCountMatched;
       if(paired)row.paired++;else row.unpaired++;
       row.e+=day.legacyE;
     }
@@ -64,11 +64,11 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
       .some(v=>String(v||"").toLocaleLowerCase("tr-TR").includes(q)));
     const data=monthlyTab?monthlyRows:eventTab?snapshot.events:snapshot.days;
     return data.filter(r=>(monthlyTab||!day||r.date===day)&&
-      (!filteredPairReview||monthlyTab||(r.entry.length===0||r.exit.length===0))&&(!q||
+      (!filteredPairReview||monthlyTab||!r.sideCountMatched)&&(!q||
       [r.person,r.name,r.cardNo,r.date,r.direction]
         .some(v=>String(v||"").toLocaleLowerCase("tr-TR").includes(q)))&&
       (filter==="all"||(!eventTab?filter==="unpaired"&&
-        (r.entry.length===0||r.exit.length===0):r.direction===filter)));
+        !r.sideCountMatched:r.direction===filter)));
   },[snapshot,peopleTab,eventTab,monthlyTab,monthlyRows,filteredPairReview,q,day,filter]);
   const columns=peopleTab?["Kart No","Personel","Grup","İşe Giriş","İşten Çıkış","Kaynak"]:
     monthlyTab?["Kart No","Personel","Kayıtlı Gün","Çift Taraflı Gün","Eksik Taraflı Gün","E Tarafı","Bordro Onayı"]:
@@ -79,7 +79,7 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
     eventTab?[r.date,r.cardNo,r.person,stripTime(r.time),r.direction,r.legacyType,"GIRCIK · KOPYA"]:
     [r.date,r.cardNo,r.name,r.entry.map(stripTime).join(", ")||"—",
       r.exit.map(stripTime).join(", ")||"—",r.legacyE,
-      r.entry.length===0||r.exit.length===0?"Eksik taraf — inceleme":"FDB çift taraf mevcut"];
+      !r.sideCountMatched?"Taraf sayısı eşleşmiyor — inceleme":"FDB taraf sayısı eşit"];
   const exportCsv=()=>{
     if(!rows.length)return;
     const cell=v=>{
@@ -120,6 +120,7 @@ export default function StageCopyExplorer({snapshot,onSnapshot,tabId="today",sea
         <span><b>{snapshot.days.length}</b> kişi × gün</span>
         <span><b>{snapshot.unknownCards}</b> eşleşmeyen kart tarafı</span>
         <span><b>{snapshot.invalidSourcePunchCount}</b> bozuk kaynak saati</span>
+        <span><b>{snapshot.unmatchedDayCount}</b> taraf adedi uyuşmayan kişi-gün</span>
       </div>
       <div className="pdk-u-stage-controls">
         <span>Kaynak aralığı: {snapshot.start} – {snapshot.end}</span>
