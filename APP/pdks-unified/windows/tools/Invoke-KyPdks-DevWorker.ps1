@@ -40,11 +40,21 @@ function Receipt([string]$status,[string]$code,[string]$head=''){
   if($head){Write-Output ('HEAD='+$head)}
 }
 function ChangedOutsideGenerated {
-  # The native .NET acceptance build creates ordinary untracked bin/obj
-  # outputs in this pre-existing safe checkout. Preserve them, never clean.
+  # Native acceptance compiles into untracked bin/obj. Keep those unchanged.
   $state=@(Git @('status','--porcelain'))
-  return @($state|Where-Object {
-    $_ -notmatch '^\?\? APP/pdks-unified/windows/(bin|obj)/
+  return @($state | Where-Object {
+    $_ -notmatch '^\?\? APP/pdks-unified/windows/(bin|obj)/$'
+  })
+}
+function CleanCheckout {
+  if((ChangedOutsideGenerated).Count -gt 0){Gate 'DIRTY_SOURCE_CHECKOUT_PRESERVED'}
+}
+function ValidateCodeCandidate {
+  $outside=@((ChangedOutsideGenerated) | Where-Object {
+    $_ -notmatch '^.. (APP/pdks-unified/|APP/app/ky-erp-frontend/src/pages/pdksUnified/|APP/cloud/ky-erp-api/src/ik-pdks-)'
+  })
+  if($outside.Count -gt 0){Gate 'CANDIDATE_OUTSIDE_PDKS_SCOPE'}
+}
 function GetHead {return ([string](Git @('rev-parse','HEAD'))).Trim()}
 function RefreshHead {
   CleanCheckout
