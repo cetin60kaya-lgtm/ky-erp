@@ -764,3 +764,52 @@ operasyonel PDKS dağıtımı veya üretim FDB/Cloudflare migration değildir.
 8 idari işlem ve recovery, terminal cihaz SDK'sı, ham RAW/E/TNF
 mutabakatı, SGK/puantaj/bordro kabulü, gerçek saha ekran yetkileri ve
 mobil imzalı dağıtım. Kullanıcı onayından önce PR #404 DRAFT kalır.
+
+
+## 24. 09.10.2026 — TAM BİRLEŞİK TEST KAPISI KESİN KABUL
+
+Bu test, üretim dağıtımı değil **izole test edilebilir sürüm** kabulüdür.
+
+**Doğrulanmış HEAD:**
+`14785925d11f2259c5589d7ac92d1945697d04d7`
+
+**Tam test komutu:**
+`APP/pdks-unified/windows/tools/Test-UnifiedProductAcceptance.ps1`.
+İzole `-StageDbPath` ve kopyada bulunan beş haneli `-StageCardNo`
+zorunludur. Windows Release, 5 Agent öz testi, kopya FDB rollback ve
+3 ardışık servis/atama/avans ledger denemesi, Cloud sözleşme+TypeScript,
+gerçek Windows↔yerel Hono/SQLite kopya-FDB E2E, cihaz/TNF salt kaynak
+kuralları, PDKS unit/lint/frontend build ve headless Chrome 49 sekme
+tek komutla yürütüldü.
+
+**Sonuç (DESEN izole checkout):**
+- Cloud 13 sözleşme/depolama + 18 endpoint/güvenlik = **31/31 PASS**.
+- Cihaz, attendance/TNF ve protokol = **27/27 PASS**.
+- Windows Agent ↔ local HTTP Cloud ↔ kopya Firebird E2E = **1/1 PASS**.
+- PDKS UI = **34/34 PASS** (4 PDKS test dosyası).
+- Toplam **93/93 otomatik test PASS**; PDKS lint, Cloud typecheck,
+  Windows Release (0 hata/uyarı), frontend build **PASS**.
+- Kopya Firebird ledger **3/3 PASS**: service, assign-service,
+  advance (AVTUR=1); SQL commit/replay/idempotency ve sentetik
+  kayıt temizliği; kayıt sonrası gerçek AVANS.KOD geri okuma kullanıldı.
+- Chrome **9 bölüm / 49 sekme PASS**; işlem paneli, koyu tema ve salt
+  okunur mod. Port 5186 doluyken test 5188 üzerinden çalıştı.
+- Nihai log:
+  `D:\KYERP\_TEMP\PDKS_SAFE_VERIFY_20261008_02\PDKS_FULL_ACCEPTANCE_FINAL_20261009.log`
+- Nihai marker:
+  `RESULT=PASS_COMPLETE_ISOLATED_PDKS_PREVIEW_AND_SYNC_ACCEPTANCE`.
+- Önizleme kullanıcı incelemesi için DESEN bilgisayarında
+  `http://127.0.0.1:5187/pdks-studio` adresinde açıldı.
+  Önizlemeyi daha sonra tekrar başlatmak için
+  `APP/pdks-unified/windows/tools/PDKS-STUDIO-TEST-AC.cmd`
+  çift tıklanabilir; boş yerel 5186–5196 portunu seçer.
+
+**Kanıtın sınırı:** Yalnız PDKS testleri başarılı sayıldı.
+Tüm frontend'in bağımsız Güvenlik PWA testindeki
+`fresh-v3`/`fresh-v4` uyuşmazlığı çözülmüş değildir;
+bütün ERP testlerinin geçtiği söylenemez.
+Bu test, gerçek Cloudflare staging D1 veya production yazma kanıtı
+değildir. Fiziksel cihaz/terminal SDK, canlı Firebird 8 işlem,
+yıllık TNF normal/E entegrasyonu, tam bordro ve Android/iOS paketleri
+hâlâ eksik olduğundan PR #404 **DRAFT/UNMERGED** tutulur.
+Canlı FDB/TNF/terminal RAW/Cloudflare D1 **değiştirilmedi**.
