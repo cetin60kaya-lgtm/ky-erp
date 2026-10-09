@@ -112,6 +112,14 @@ try {
           tab.id+" must not fabricate real historical card events in Studio");
       }
 
+      if(["transfers","transfer","tnf","reconciliation","incidents"].includes(tab.id)){
+        assertBrowser(await evaluate('Boolean(document.querySelector(".pdk-u-transfer"))'),
+          tab.id+" local transfer review panel missing");
+        assertBrowser(await evaluate('document.querySelector(".pdk-u-transfer input[type=file]")?.disabled===true'),
+          tab.id+" preview must reject local personnel report import");
+        assertBrowser(await evaluate('document.querySelector(".pdk-u-transfer")?.textContent?.includes("Üretim aktarımı kapalı")'),
+          tab.id+" must never claim active production synchronization");
+      }
       if(tab.id==="terminals"){
         await waitForEval('document.querySelectorAll(".pdk-u-terminal-modalities input[type=checkbox]").length===10',16000);
         const controls=await evaluate('document.querySelectorAll(".pdk-u-terminal-modalities input[type=checkbox]").length');
