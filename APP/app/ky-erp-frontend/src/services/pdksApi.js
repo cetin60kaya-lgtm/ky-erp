@@ -42,8 +42,10 @@ export async function getPdksLegacyAttendance(employeeId, year, month) {
   return unwrap(await pdksCachedGet(cacheKey(`legacy-attendance:${employeeId}`, request), `/ik/personnel-control/people/${encodeURIComponent(employeeId)}/attendance`, request));
 }
 
+// "Canlı" ekranı asla eski IndexedDB/cache yanıtıyla güncel kart hareketi göstermez.
+// Geçmiş raporlarda çevrimdışı önbellek korunur; canlı ekran her zaman gerçek API'yi okur.
 export async function getPdksLiveDashboard(params = {}) {
-  return unwrap(await pdksCachedGet(cacheKey("dashboard", params), "/ik/personnel-control/dashboard-live", params));
+  return unwrap(await apiGet("/ik/personnel-control/dashboard-live", { ...params, _ts: Date.now() }, { forceFresh: true }));
 }
 
 export async function getPdksModernConfig(params = {}) {
