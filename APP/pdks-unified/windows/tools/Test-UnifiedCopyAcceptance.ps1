@@ -46,6 +46,9 @@ try {
   Invoke-Gate 'FIREBIRD_COPY_TRANSACTION_ROLLBACK' {
     & dotnet.exe $dll --isolated-firebird-copy-smoke
   }
+  Invoke-Gate 'FIREBIRD_SERVICE_LEDGER_COMMIT_REPLAY_AND_CLEANUP' {
+    & dotnet.exe $dll --isolated-ledger-smoke
+  }
   Push-Location $cloud
   try {
     Invoke-Gate 'CLOUD_CONTRACT_AND_SECURITY' {& npm.cmd run test:pdks-unified:cloud}
