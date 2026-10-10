@@ -112,3 +112,30 @@ test("invalid tenant, date, duplicate person-day and fabricated evidence all fai
   const bad=sample();bad.days[0].tnf[0].source="DEVICE_RAW";
   assert.throws(()=>evaluateAttendanceEvidenceBundle(bad),/SOURCE_ID_INVALID/);
 });
+
+
+test("physical punches on approved leave require review even when sources match",()=>{
+  const doc=sample();
+  doc.days[0].leave={approved:true,approvalId:"leave-1",approvedBy:"manager"};
+  const result=evaluateAttendanceEvidenceBundle(doc);
+  assert.equal(result.days[0].status,"APPROVED_LEAVE");
+  assert.ok(result.days[0].warnings.includes("EVENT_DURING_APPROVED_LEAVE"));
+  assert.equal(result.monthly[0].reviewDays,1);
+  assert.equal(result.monthly[0].sourceComparisonComplete,false);
+});
+test("full clean source-file coverage can be complete without payroll certification",()=>{
+  const doc=sample();doc.days=[];
+  for(let n=1;n<=31;n++){
+    const date="2026-10-"+String(n).padStart(2,"0");
+    const weekday=new Date(date+"T12:00:00Z").getUTCDay();
+    doc.days.push({cardNo:"00001",date,shifts:[],raw:[],firebird:[],tnf:[],adminE:[],
+      holiday:{kind:"NONE"},leave:[0,6].includes(weekday)?null:
+        {approved:true,approvalId:"leave-"+n,approvedBy:"manager"}});
+  }
+  const result=evaluateAttendanceEvidenceBundle(doc);
+  assert.equal(result.days.length,31);
+  assert.equal(result.monthly[0].missingCalendarDays,0);
+  assert.equal(result.sourceComparisonComplete,true);
+  assert.equal(result.approvedForPayroll,false);
+  assert.equal(result.independentlyCertified,false);
+});
