@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { summarizePayrollAdjustments } from "./ik-pdks-payroll-adjustments.mjs";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -352,13 +353,8 @@ async function payroll(c: Context<AppEnv>) {
   }
   const lines = employees.map((person) => {
     const rows = byEmployee.get(text(person.id)) || [];
-    const overtimeAmount = rows.filter((row) => upper(row.adjustmentType).includes("MESAI")).reduce((sum, row) => sum + number(row.amount), 0);
-    const advanceAmount = rows.filter((row) => upper(row.adjustmentType).includes("AVANS")).reduce((sum, row) => sum + number(row.amount), 0);
-    const deductionAmount = rows.filter((row) => upper(row.adjustmentType).includes("KESINTI")).reduce((sum, row) => sum + number(row.amount), 0);
-    const garnishmentAmount = rows.filter((row) => /ICRA|HACIZ/.test(upper(row.adjustmentType))).reduce((sum, row) => sum + number(row.amount), 0);
-    const besAmount = rows.filter((row) => upper(row.adjustmentType).includes("BES")).reduce((sum, row) => sum + number(row.amount), 0);
-    const roadAdjustmentAmount = rows.filter((row) => upper(row.adjustmentType).includes("YOL")).reduce((sum, row) => sum + number(row.amount), 0);
-    const mealAmount = rows.filter((row) => upper(row.adjustmentType).includes("YEMEK")).reduce((sum, row) => sum + number(row.amount), 0);
+    const { overtimeAmount,advanceAmount,deductionAmount,garnishmentAmount,
+      besAmount,roadAdjustmentAmount,mealAmount } = summarizePayrollAdjustments(rows);
     const current = saved.get(text(person.id));
     const salary = current ? number(current.salary) : number(person.salary);
     const roadAllowance = current ? number(current.road_allowance) : number(person.road_allowance);
