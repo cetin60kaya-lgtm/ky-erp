@@ -81,7 +81,7 @@ test("Cloudflare payroll lines use exact backend fields and never infer gross/me
   }]};
   const earnings=rowsForTab("earnings",data);
   assert.equal(earnings.rows[0]["Maaş"],"40000");
-  assert.equal(earnings.rows[0]["Yol"],undefined);
+  assert.equal(earnings.rows[0]["Yol"],"—");
   const payroll=rowsForTab("payments",data);
   assert.equal(payroll.rows[0]["Banka"],"35000");
   assert.equal(payroll.rows[0]["Elden"],"4000");
@@ -158,4 +158,6 @@ test("both source-backed card movement tabs remain explicitly read-only",()=>{
   assert.equal(tabBinding("punches").safeToWrite,false);
   assert.equal(tabBinding("history").localReconciled,false);
   assert.equal(sourceForTab("payments",{audit:true}),"forbidden");
+  assert.equal(sourceForTab("signatures",{audit:true}),"signature-month");
+  assert.equal(tabBinding("receipts").source,"payroll");
 });

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { summarizePayrollAdjustments } from "./ik-pdks-payroll-adjustments.mjs";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -300,8 +301,8 @@ async function adjustmentRows(c: Context<AppEnv>, company: string, year: number,
     ORDER BY a.date DESC,a.id DESC`, [company, start, end]);
   return rows.map((row) => ({
     id: text(row.id), employeeId: text(row.employee_id), employeeName: text(row.full_name), personnelCode: text(row.code), date: dateOnly(row.date),
-    adjustmentType: text(row.adjustment_type), hourOrDay: number(row.hour_or_day), amount: number(row.amount), paymentMethod: "Elden",
-    payrollEffect: text(row.payroll_effect), note: text(row.note), status: text(row.status || "APPROVED"),
+    adjustmentType: text(row.adjustment_type), hourOrDay: number(row.hour_or_day), amount: row.amount===null?null:number(row.amount), paymentMethod: text(row.payment_method),
+    payrollEffect: text(row.payroll_effect), note: text(row.note), status: text(row.status),
   }));
 }
 
@@ -334,6 +335,11 @@ async function payroll(c: Context<AppEnv>) {
   const { auth } = result;
   const year = Math.trunc(number(c.req.query("year"))) || new Date().getFullYear();
   const month = Math.trunc(number(c.req.query("month"))) || new Date().getMonth() + 1;
+  if (year < 2020 || year > 2100 || month < 1 || month > 12)
+    return error(c, 400, "PDKS_PAYROLL_PERIOD_INVALID", "Bordro dönemini kontrol edin.");
+  const period = `${year}-${String(month).padStart(2,"0")}`;
+  const periodClosed = await tableExists(c,"ik_monthly_close") ?
+    await first(c,"SELECT is_locked FROM ik_monthly_close WHERE main_company_id=? AND period_year=? AND period_month=? LIMIT 1",[auth.company,year,month]) : null;
   const employees = await all(c, `SELECT e.id,e.code,e.full_name,e.salary,e.road_allowance,e.bank_amount,e.cash_amount,s.card_no
     FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
     WHERE e.main_company_id=? AND UPPER(TRIM(COALESCE(e.sgk_status,'')))='VAR' AND TRIM(COALESCE(s.card_no,''))<>''
@@ -350,31 +356,54 @@ async function payroll(c: Context<AppEnv>) {
     const rows = await all(c, "SELECT * FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=?", [auth.company, year, month]);
     saved = new Map(rows.map((row) => [text(row.employee_id), row]));
   }
+  const rawChanges = await tableExists(c,"ik_audit_logs") ?
+    await all(c,`SELECT employee_id,action_type,created_at,user_name,source_screen
+      FROM ik_audit_logs WHERE main_company_id=? AND period=?
+      ORDER BY created_at DESC LIMIT 500`,[auth.company,period]) : [];
+  const byChange=new Map<string,Row>();
+  for(const row of rawChanges){
+    const id=text(row.employee_id);
+    if(id && !byChange.has(id) && /BORDRO|PAYROLL|ODEME|MAAS|MESAI|AVANS|KESINT/i.test(text(row.action_type)))
+      byChange.set(id,row);
+  }
   const lines = employees.map((person) => {
     const rows = byEmployee.get(text(person.id)) || [];
-    const overtimeAmount = rows.filter((row) => upper(row.adjustmentType).includes("MESAI")).reduce((sum, row) => sum + number(row.amount), 0);
-    const advanceAmount = rows.filter((row) => upper(row.adjustmentType).includes("AVANS")).reduce((sum, row) => sum + number(row.amount), 0);
-    const deductionAmount = rows.filter((row) => upper(row.adjustmentType).includes("KESINTI")).reduce((sum, row) => sum + number(row.amount), 0);
-    const garnishmentAmount = rows.filter((row) => /ICRA|HACIZ/.test(upper(row.adjustmentType))).reduce((sum, row) => sum + number(row.amount), 0);
-    const besAmount = rows.filter((row) => upper(row.adjustmentType).includes("BES")).reduce((sum, row) => sum + number(row.amount), 0);
-    const roadAdjustmentAmount = rows.filter((row) => upper(row.adjustmentType).includes("YOL")).reduce((sum, row) => sum + number(row.amount), 0);
-    const mealAmount = rows.filter((row) => upper(row.adjustmentType).includes("YEMEK")).reduce((sum, row) => sum + number(row.amount), 0);
+    const { overtimeAmount,advanceAmount,deductionAmount,garnishmentAmount,
+      besAmount,roadAdjustmentAmount,mealAmount,overtimeHours50,overtimeHours100,
+      overtimeAmount50,overtimeAmount100,overtimeEntries,pendingEntries,sourceComplete } = summarizePayrollAdjustments(rows);
     const current = saved.get(text(person.id));
+    const change = byChange.get(text(person.id));
+    const savedOvertimeAmount = current && current.overtime_amount!==null ? number(current.overtime_amount) : null;
+    const overtimeConflict = savedOvertimeAmount!==null && Math.abs(savedOvertimeAmount-overtimeAmount)>0.005;
     const salary = current ? number(current.salary) : number(person.salary);
     const roadAllowance = current ? number(current.road_allowance) : number(person.road_allowance);
     const bank = current ? number(current.bank_amount) : number(person.bank_amount);
     const cash = current ? number(current.cash_amount) : number(person.cash_amount);
-    const net = current ? number(current.total_amount) : (bank + cash || Math.max(0, salary + overtimeAmount - advanceAmount - deductionAmount));
+    // Only an existing saved payroll amount can be reported as a payable total.
+    // Bank/cash account settings and adjustments are not a settled payment or
+    // confirmed monthly puantaj; do not derive a fictitious net from them.
+    const net = current && current.total_amount !== null && current.total_amount !== undefined && current.total_amount !== ""
+      ? number(current.total_amount) : null;
     return {
-      employeeId: text(person.id), personnelCode: text(person.code), fullName: text(person.full_name), salary,
-      overtimeAmount: current ? number(current.overtime_amount) : overtimeAmount,
+      employeeId: text(person.id), personnelCode: text(person.code), fullName: text(person.full_name),
+      cardNo: text(person.card_no), salary, roadAllowance,
+      roadAdjustmentAmount, mealAmount, garnishmentAmount, besAmount,
+      overtimeHours50, overtimeHours100, overtimeAmount50, overtimeAmount100,
+      overtimeEntries, pendingEntries, sourceComplete, savedOvertimeAmount, overtimeConflict,
+      period, periodClosed: periodClosed===null?null:number(periodClosed.is_locked)===1,
+      payrollRecordPresent:Boolean(current),
+      reportState:!current?"KAYIT_BEKLIYOR":pendingEntries.length||overtimeConflict ? "KANIT_KONTROL_BEKLIYOR" : "D1_ON_RAPOR",
+      latestChange:change ? {actionType:text(change.action_type),createdAt:text(change.created_at),
+        userName:text(change.user_name),sourceScreen:text(change.source_screen)} : null,
+      grossAmount: null, payrollReconciled: false, paymentConfirmed: false,
+      overtimeAmount,
       advanceAmount: current ? number(current.advance_amount) : advanceAmount,
       deductionAmount: current ? number(current.deduction_amount) : deductionAmount,
       bankAmount: bank, cashAmount: cash, totalAmount: net,
       status: text(current?.status || "D1_VIEW"),
     };
   });
-  return ok(c, { year, month, lines });
+  return ok(c, {year,month,period,periodClosed:periodClosed===null?null:number(periodClosed.is_locked)===1,lines});
 }
 
 async function auditLogs(c: Context<AppEnv>) {
