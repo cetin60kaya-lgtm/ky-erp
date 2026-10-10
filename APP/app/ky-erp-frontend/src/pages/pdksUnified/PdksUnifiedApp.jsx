@@ -322,7 +322,7 @@ export default function PdksUnifiedApp({
     ["departments","routes","leave","advances","overtime","deductions"].includes(tab.id);
   // Personnel 360 reads only while its own detail panel is actually visible.
   const detailVisible=section.id==="people" &&
-    ["people","cards","employment"].includes(tab.id);
+    ["people","cards","employment","documents"].includes(tab.id);
   const monthKey=[company,period.year,period.month,requirement].join("|");
   const allowHeavy=requirement==="monthly-attendance" && monthlyRequestKey===monthKey;
   const data=useUnifiedPdksData({
@@ -337,6 +337,9 @@ export default function PdksUnifiedApp({
     if (!allowed) return; // A hidden section cannot be opened through a quick action.
     const target = allowed.tabs.find((item)=>item.id===tabId) || allowed.tabs[0];
     setNavigation({section:allowed.id,tab:target.id});
+    if(target.id==="documents")setPersonTab("documents");
+    else if(target.id==="cards")setPersonTab("card");
+    else if(target.id==="employment")setPersonTab("identity");
     setMobileMenuOpen(false);
     setNotice("");
   },[sections]);
@@ -360,7 +363,7 @@ export default function PdksUnifiedApp({
       data.people.some((person)=>person.id===previous) ? previous : data.people[0]?.id||"");
   },[data.people]);
 
-  const isPeopleTab=section.id==="people" && ["people","cards","employment"].includes(tab.id);
+  const isPeopleTab=section.id==="people" && ["people","cards","employment","documents"].includes(tab.id);
   const stageInspectTab=testMode&&["today","live","exceptions","attention","people","cards","employment","punches","history","daily","monthly","validation","attendance","violations","signatures","timesheets"].includes(tab.id);
   // One projection for every screen. API success is not record-schema success.
   const projection=useMemo(()=>{
