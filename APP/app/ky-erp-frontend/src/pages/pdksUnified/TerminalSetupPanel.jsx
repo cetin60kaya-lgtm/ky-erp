@@ -53,6 +53,8 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
   const [legacyProfiles,setLegacyProfiles]=useState([CONFIRMED_LEGACY_TERMINAL]);
   const [fleetState,setFleetState]=useState({status:"NOT_CONNECTED",devices:[]});
   const [printerState,setPrinterState]=useState({status:"NOT_CONNECTED",printers:[]});
+  const [oldAgent,setOldAgent]=useState({status:"NOT_CONNECTED",sources:[]});
+  const [qrHealth,setQrHealth]=useState({status:"NOT_CONNECTED"});
   useEffect(()=>{
     if(previewOnly)return;
     let cancelled=false;
@@ -77,6 +79,18 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
           printers:Array.isArray(data.printers)?data.printers.slice(0,100):[],
         });
       }catch{if(!cancelled)setPrinterState({status:"PRINTER_AGENT_OFFLINE",printers:[]});}
+      for(const [endpoint,setter,offline] of [
+        ["legacy-agent",setOldAgent,{status:"AGENT_READ_OFFLINE",sources:[]}],
+        ["qr-health",setQrHealth,{status:"QR_HEALTH_OFFLINE"}],
+      ]){
+        try{
+          const response=await fetch("http://127.0.0.1:5206/"+endpoint,
+            {cache:"no-store",signal:AbortSignal.timeout(2500)});
+          if(!response.ok)throw Error("LOCAL_SERVICE_UNAVAILABLE");
+          const value=await response.json();
+          if(!cancelled)setter(value);
+        }catch{if(!cancelled)setter(offline);}
+      }
     };
     void refresh();
     const interval=setInterval(()=>{void refresh();},5000);
@@ -352,6 +366,19 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
               {error.at} · {error.code}</li>)}</ul>
           </details>)}
         </div>}
+<div className="pdk-u-terminal-sub"><HardDrive size={16}/> Mevcut Windows Agent / TCP / Seri / Dosya</div>
+        <p>KYERP.PDKS.Agent durumu: <strong>{oldAgent.status}</strong>.
+          Kaynak türü, terminalin marka/model kimliğini tek başına doğrulamaz.</p>
+        {oldAgent.terminalState&&<p>{oldAgent.captureMode} · {oldAgent.terminalState}</p>}
+        {!!oldAgent.sources?.length&&<table className="pdk-u-table">
+          <thead><tr><th>Kaynak</th><th>Yerel kayıt</th><th>Son saat</th><th>Kabul</th></tr></thead>
+          <tbody>{oldAgent.sources.map(record=><tr key={record.source}>
+            <td>{record.source}</td><td>{record.acceptedTotal}</td>
+            <td>{record.lastPunchAt||"—"}</td><td>FDB/TNF mutabakatı bekliyor</td>
+          </tr>)}</tbody>
+        </table>}
+        <p>Yerel QR/USB kiosk: <strong>{qrHealth.status}</strong>.
+          Bu durum fiziksel cihaz kimliği veya personel eşleşmesi kanıtı değildir.</p>
         <div className="pdk-u-terminal-sub"><Network size={16}/> Çoklu Hedef cihaz izleme</div>
         <p>İki eski cihazın gerçek profilini ayrı ayrı alın. Windows yerel gözlemci
           bağlantı kesilince yeniden dener; TCP yanıtı gerçek FP_CLOCK kart okuması değildir.
