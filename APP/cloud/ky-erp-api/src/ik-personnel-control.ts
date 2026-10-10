@@ -622,7 +622,9 @@ async function saveChanges(c: Context<AppEnv>) {
   const currentRaw = await first(c, `${personSelect(false)} AND e.id=? LIMIT 1`, [auth.company, employeeId]);
   if (!currentRaw) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
   const body = await bodyOf(c);
-  const changes = body.changes && typeof body.changes === "object" ? body.changes : {};
+  const changes = body.changes && typeof body.changes === "object" && !Array.isArray(body.changes) ? body.changes : {};
+  if (Object.prototype.hasOwnProperty.call(changes, "cardNo"))
+    return error(c, 409, "USE_CARD_ASSIGNMENT", "Kart ataması Personel 360 kart işlemi üzerinden, önceki numara doğrulanarak yapılmalıdır.");
   const effectiveDate = dateOnly(body.effectiveDate) || todayIstanbul();
   const note = text(body.note);
   const employeeFields: Record<string, string> = {
