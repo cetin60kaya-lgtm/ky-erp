@@ -13,7 +13,14 @@ const editable=[
   ["startDate","İşe Giriş","date"],["exitDate","İşten Çıkış","date"],
   ["status","İstihdam Durumu","select"],
 ];
-const fromPerson=(p={})=>Object.fromEntries(editable.map(([key])=>[key,clean(p[key])==="—"?"":clean(p[key])]));
+const fromPerson=(p={})=>Object.fromEntries(editable.map(([key])=>{
+  const raw=clean(p[key])==="—"?"":clean(p[key]);
+  if(key!=="status")return [key,raw];
+  const normalized=raw.toLocaleUpperCase("tr-TR");
+  // Normalize only known real states; unknown data cannot be silently marked active.
+  return [key,/PAS|ÇIKIŞ|CIKIS/.test(normalized)?"Pasif":
+    /AKT/.test(normalized)?"Aktif":""];
+}));
 const endpoint=(id,suffix="")=>`/ik/personnel-control/people/${encodeURIComponent(id)}${suffix}`;
 function Field({label,children}){return <label className="pdk-person-field"><span>{label}</span>{children}</label>;}
 function State({children,kind="note"}){return <p role={kind==="error"?"alert":"status"} className={`pdk-person-message ${kind}`}>{children}</p>;}
