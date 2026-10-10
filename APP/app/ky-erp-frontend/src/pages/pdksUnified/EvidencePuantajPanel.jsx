@@ -38,6 +38,8 @@ export default function EvidencePuantajPanel({
   const selectedPeriod=String(year)+"-"+two(month);
   const canLoad=(!previewOnly||testMode)&&!audit&&
     (testMode||Boolean(company&&profileReady));
+  // Hide already-open sensitive evidence immediately if the session loses access.
+  const visibleResult=canLoad?result:null;
   const load=async file=>{
     if(!file||!canLoad)return;
     setLoading(true);setError("");
@@ -51,11 +53,11 @@ export default function EvidencePuantajPanel({
     finally{setLoading(false);}
   };
   const monthly=tabId==="monthly"||tabId==="timesheets";
-  const days=useMemo(()=>result?.days.filter(row=>
+  const days=useMemo(()=>visibleResult?.days.filter(row=>
     (!selectedDate||row.date===selectedDate)&&
-    (!cardFilter||row.cardNo===cardFilter))||[],[result,selectedDate,cardFilter]);
-  const months=useMemo(()=>result?.monthly.filter(row=>
-    !cardFilter||row.cardNo===cardFilter)||[],[result,cardFilter]);
+    (!cardFilter||row.cardNo===cardFilter))||[],[visibleResult,selectedDate,cardFilter]);
+  const months=useMemo(()=>visibleResult?.monthly.filter(row=>
+    !cardFilter||row.cardNo===cardFilter)||[],[visibleResult,cardFilter]);
   const columns=monthly?
     ["Kart No","Personel","Kapsanan Gün","Eksik Takvim Günü","Eşleşen Gün",
       "İnceleme Günü","İzin","Tatil","Çift Vardiya","Eşleşen Süre (dk)","Bordro"]:
@@ -94,25 +96,25 @@ export default function EvidencePuantajPanel({
             event.target.value="";}}/>
       </label>
       <span>Dönem: {selectedPeriod} · Firma: {company||"Yerel test"} · Bellekte açılır</span>
-      {result&&<button type="button" className="pdk-u-btn" onClick={()=>{
+      {visibleResult&&<button type="button" className="pdk-u-btn" onClick={()=>{
         setResult(null);setError("");setCardFilter("");setSelectedDate("");
       }}>Kanıtları kapat</button>}
     </div>
     {!canLoad&&<p role="status">Firma oturumu veya yetki doğrulanmadan kanıt dosyası açılamaz.</p>}
     {error&&<p role="alert" className="pdk-u-live-note is-alert">
       Kaynak paketi reddedildi: {error}</p>}
-    {result&&<>
+    {visibleResult&&<>
       <div className="pdk-u-stage-facts">
-        <span><b>{result.days.length}</b> kişi × gün</span>
-        <span><b>{result.days.filter(d=>d.paired).length}</b> eşleşen çift günü</span>
-        <span><b>{result.days.filter(d=>!d.matchedSources).length}</b> kaynak çelişkisi</span>
-        <span><b>{result.monthly.reduce((sum,r)=>sum+r.missingCalendarDays,0)}</b> kapsanmayan takvim günü</span>
+        <span><b>{visibleResult.days.length}</b> kişi × gün</span>
+        <span><b>{visibleResult.days.filter(d=>d.paired).length}</b> eşleşen çift günü</span>
+        <span><b>{visibleResult.days.filter(d=>!d.matchedSources).length}</b> kaynak çelişkisi</span>
+        <span><b>{visibleResult.monthly.reduce((sum,r)=>sum+r.missingCalendarDays,0)}</b> kapsanmayan takvim günü</span>
       </div>
       <div className="pdk-u-stage-controls">
         <label>Kart <select aria-label="Puantaj kart filtresi" value={cardFilter}
           onChange={e=>setCardFilter(e.target.value)}>
           <option value="">Tümü</option>
-          {result.monthly.map(row=><option key={row.cardNo} value={row.cardNo}>
+          {visibleResult.monthly.map(row=><option key={row.cardNo} value={row.cardNo}>
             {row.cardNo} · {row.fullName}</option>)}
         </select></label>
         {!monthly&&<label>Gün <input type="date" aria-label="Puantaj gün filtresi"
@@ -136,7 +138,7 @@ export default function EvidencePuantajPanel({
       </div>
       {viewRows.length>500&&<p className="pdk-u-live-note">İlk 500 satır gösteriliyor; filtre kullanın.</p>}
       <p role="status" className="pdk-u-live-note">
-        {result.sourceComparisonComplete?
+        {visibleResult.sourceComparisonComplete?
           "Takvim kapsamı ve dosya içi eşleşmeler tam görünüyor; bağımsız terminal/izin/onay doğrulaması halen eksik.":
           "Eksik gün, karar veya kaynak çelişkisi var. Aylık puantaj kapatılamaz."}
         {" "}Bordro/SGK aktarımı kapalıdır.
