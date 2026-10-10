@@ -367,7 +367,8 @@ async function payroll(c: Context<AppEnv>) {
     // Only an existing saved payroll amount can be reported as a payable total.
     // Bank/cash account settings and adjustments are not a settled payment or
     // confirmed monthly puantaj; do not derive a fictitious net from them.
-    const net = current ? number(current.total_amount) : null;
+    const net = current && current.total_amount !== null && current.total_amount !== undefined && current.total_amount !== ""
+      ? number(current.total_amount) : null;
     return {
       employeeId: text(person.id), personnelCode: text(person.code), fullName: text(person.full_name),
       cardNo: text(person.card_no), salary, roadAllowance,
