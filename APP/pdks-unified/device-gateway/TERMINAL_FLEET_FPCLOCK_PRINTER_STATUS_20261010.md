@@ -39,6 +39,17 @@ node "APP\pdks-unified\device-gateway\terminal-fleet-cli.mjs" --profiles "C:\YOL
 
 `--watch` açıkken yerel tarayıcıdan `http://127.0.0.1:5206/` adresi ziyaret edilir. Yalnız TCP bağlantı durumu gösterilir. FP_CLOCK gerçek adapter sertifikasyonu olmadan kart kaydı gösterilmez. Kapatmak için Ctrl+C.
 
+### x86 COM metotlarının salt okunur keşfi
+
+`Read-FpClockTypeLibrary.ps1`, gerçek `FP_CLOCK.ocx` dosyasının tip kütüphanesini `REGKIND.NONE` ile okur. Metot adları, parametre sayıları ve COM arayüz adlarını çıkarır; **hiçbir COM metodunu çalıştırmaz, OCX kaydetmez veya cihaza bağlanmaz**. Yetkili cihaz bilgisayarındaki **32-bit PowerShell** ile:
+
+```powershell
+cd "D:\Googledrive\KYERP\00_CANONICAL\GITHUB\ky-erp"
+& "$env:WINDIR\SysWOW64\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -File "APP\pdks-unified\windows\tools\Read-FpClockTypeLibrary.ps1" -OcxPath "C:\Hedef500\GERCEK_KLASOR\FP_CLOCK.ocx"
+```
+
+`GERCEK_KLASOR` gerçek keşif sonucuyla değiştirilir. COM Type Library başarıyla açılsa bile metotların doğru anlamı, çağrı sırası ve gerçek kart okuması için eski çalışan Hedef uygulamasının protokol/SDK bilgisi gerekir; fiziksel kabul yapılmış sayılmaz.
+
 ## Test ve açık engeller
 
 - Yeni test dosyaları: `terminal-fleet.test.mjs` ve `card-printer.test.mjs`.
