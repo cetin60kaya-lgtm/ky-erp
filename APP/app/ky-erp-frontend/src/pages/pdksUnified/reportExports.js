@@ -54,7 +54,7 @@ const numericColumns=new Set(["Maaş","Yol","Ek Yol","Yemek","%50 Saat","%50 Tut
  "Banka","Elden","Tutar","Süre","Kanıt","Gün","İzin","Çalışılan","Eksik"]);
 const sheetCell=(address,value,heading)=>{
  const string=String(value??"");
- if(numericColumns.has(heading) && /^-?\\d+(?:\\.\\d+)?$/.test(string) &&
+ if(numericColumns.has(heading) && /^-?\d+(?:\.\d+)?$/.test(string) &&
     Number.isFinite(Number(string)))
    return `<c r="${address}" t="n"><v>${string}</v></c>`;
  // Formula-like values must be stored as inline strings; never executable Excel formulas.
