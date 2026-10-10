@@ -28,8 +28,11 @@ export function paymentBalance(row) {
 }
 
 export function payrollRowsForTab(id,payload,{year,month}={}) {
+  year ??= payload?.year;
+  month ??= payload?.month;
   if (!Array.isArray(payload?.lines) ||
       !Number.isInteger(Number(year)) || !Number.isInteger(Number(month)) ||
+      Number(year)<2020 || Number(month)<1 || Number(month)>12 ||
       Number(payload?.year)!==Number(year) || Number(payload?.month)!==Number(month))
     return {rows:[],supported:false};
   const seen=new Set(),period=periodOf(year,month),rows=[];
