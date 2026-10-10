@@ -27,6 +27,8 @@ test("card change uses expected previous card, collision rejection and durable h
   assert.match(module,/SELECT \?,\?,\?,\?,\?,\?,\?,\?,\?,\?,\? WHERE changes\(\)=1/);
   assert.match(module,/terminalWritten: false/);
   assert.match(load("ik-personnel-control.ts"),/USE_CARD_ASSIGNMENT/);
+  const roster=load("ik-personnel-control.ts").match(/async function personRows\([\s\S]*?async function accessiblePerson/)[0];
+  assert.doesNotMatch(roster,/await ensurePersonnelCodes/); // GET never writes person codes
 });
 
 test("documents link only confirmed tenant File Hub assets, unlink does not delete binary",()=>{
