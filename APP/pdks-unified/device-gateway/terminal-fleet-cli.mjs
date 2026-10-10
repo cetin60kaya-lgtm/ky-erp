@@ -12,6 +12,7 @@ import {inspectImportedLegacyProfiles} from "./legacy-hedef-terminal-profile.mjs
 import {legacyTerminalDefinition,createTerminalFleet} from "./terminal-fleet.mjs";
 import {createFpClockAdapter} from "./fp-clock-adapter.mjs";
 import {listWindowsCardPrinters} from "./printer-health.mjs";
+import {readLegacyAgentSnapshot} from "./legacy-agent-snapshot.mjs";
 const args=process.argv.slice(2);
 const fail=message=>{throw Error(message)};
 if(args.length!==3||args[0]!=="--profiles"||
@@ -99,6 +100,31 @@ refresh();setInterval(refresh,3000);
       response.writeHead(200,{"content-type":"application/json; charset=utf-8",
         "cache-control":"no-store","x-content-type-options":"nosniff",...cors});
       return response.end(JSON.stringify(fleet.status()));
+    }
+    if(request.url==="/legacy-agent"){
+      const dbPath=process.env.KY_PDKS_LEGACY_AGENT_DB_PATH||
+        (process.platform==="win32"?"C:\\ProgramData\\KY ERP\\PDKS\\Data\\pdks.db":"");
+      response.writeHead(200,{"content-type":"application/json; charset=utf-8",
+        "cache-control":"no-store","x-content-type-options":"nosniff",...cors});
+      return response.end(JSON.stringify(readLegacyAgentSnapshot(dbPath)));
+    }
+    if(request.url==="/qr-health"){
+      void fetch("http://127.0.0.1:5197/health",{
+        signal:AbortSignal.timeout(1000),redirect:"error"
+      }).then(async r=>r.ok?await r.json():null).then(info=>{
+        const alive=info?.ok===true&&info?.productionSourceCertified===false;
+        response.writeHead(200,{"content-type":"application/json; charset=utf-8",
+          "cache-control":"no-store","x-content-type-options":"nosniff",...cors});
+        response.end(JSON.stringify({status:alive?"QR_KIOSK_HEALTH_RESPONDS_UNCERTIFIED":
+          "QR_KIOSK_OFFLINE",terminalId:alive?String(info.terminalId).slice(0,64):null,
+          physicalDeviceCertified:false,firebirdReconciled:false,tnfReconciled:false}));
+      }).catch(()=>{
+        response.writeHead(200,{"content-type":"application/json; charset=utf-8",
+          "cache-control":"no-store","x-content-type-options":"nosniff",...cors});
+        response.end(JSON.stringify({status:"QR_KIOSK_OFFLINE",terminalId:null,
+          physicalDeviceCertified:false,firebirdReconciled:false,tnfReconciled:false}));
+      });
+      return;
     }
     if(request.url==="/printers"){
       const send=result=>{
