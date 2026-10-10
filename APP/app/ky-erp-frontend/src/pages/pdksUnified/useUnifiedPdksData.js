@@ -65,7 +65,7 @@ export function useUnifiedPdksData({
     let cancelled=false;
     setPeopleState({key:peopleKey,status:"loading",payload:null,error:""});
     import("./readService.js")
-      .then((api)=>api.readPeople({mainCompanyId:company,year,month}))
+      .then((api)=> (requirement==="people" ? api.readAllPersonnel : api.readPeople)({mainCompanyId:company,year,month}))
       .then((rows)=>{
         if(cancelled)return;
         if(!Array.isArray(rows))throw new Error("PDKS_PERSONEL_YANIT_BICIMI_GECERSIZ");
@@ -74,7 +74,7 @@ export function useUnifiedPdksData({
       })
       .catch((e)=>{if(!cancelled)setPeopleState({key:peopleKey,status:"error",payload:null,error:errorMessage(e)});});
     return ()=>{cancelled=true;};
-  },[previewOnly,company,year,month,needsPeople,profileReady,peopleKey]);
+  },[previewOnly,company,year,month,needsPeople,profileReady,peopleKey,requirement]);
 
   useEffect(()=>{
     if(previewOnly || !company || requirement!=="attendance" || !personId || !peopleReady || !profileReady)
