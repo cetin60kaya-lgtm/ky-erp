@@ -24,6 +24,7 @@ import TerminalSetupPanel from "./TerminalSetupPanel.jsx";
 import TransferCenterPanel from "./TransferCenterPanel.jsx";
 import CloudSyncPanel from "./CloudSyncPanel.jsx";
 import StageCopyExplorer from "./StageCopyExplorer.jsx";
+import Personnel360Manage from "./Personnel360Manage.jsx";
 import "./pdksUnified.css";
 
 const ICONS = {
@@ -104,7 +105,7 @@ function UnifiedTable({ columns, rows, onSelect, selectedId, masked = false }) {
   </div>;
 }
 
-function PersonDetails({person,active,onChange,isAuditAccount,detail}) {
+function PersonDetails({person,active,onChange,isAuditAccount,detail,company,profile,previewOnly,onSaved}) {
   const rows=(value,keys=[])=>{
     if(Array.isArray(value))return value;
     for(const key of keys)if(Array.isArray(value?.[key]))return value[key];
@@ -117,6 +118,9 @@ function PersonDetails({person,active,onChange,isAuditAccount,detail}) {
   const view=()=>{
     if(!person)return <EmptyState title="Personel seçilmedi"
       description="Önce doğrulanmış personel listesinden bir çalışan seçin."/>;
+    if(["identity","card","documents","history"].includes(active))
+      return <Personnel360Manage person={person} active={active} company={company}
+        profile={profile} previewOnly={previewOnly} isAuditAccount={isAuditAccount} onSaved={onSaved}/>;
     if(active==="identity")return <dl className="pdk-u-definition">
       {[
         ["Personel",person.fullName],["Kart numarası",person.cardNo],
@@ -539,7 +543,8 @@ export default function PdksUnifiedApp({
                   description={previewOnly?"Tasarım önizlemesinde gerçek personel verisi bulunmaz.":"Bu görünüm için yetkili KY ERP bağlantısını doğrulayın."}/>}
             </div><PersonDetails person={dataConnected?selectedPerson:null}
               active={personTab} onChange={setPersonTab} isAuditAccount={data.audit}
-              detail={data.detail}/>
+              detail={data.detail} company={company} profile={data.profile}
+              previewOnly={previewOnly} onSaved={()=>setReloadToken(value=>value+1)}/>
           </div> : (
             requirement==="unconnected" ? <EmptyState title="Ekran hazır · İşlem sözleşmesi bağlanacak"
               description="Sekme ve tablo yerleşimi tamamlandı; gerçek kaynak/senkron yetkisi doğrulanmadan işlem açılmaz. Bu ekranda sahte veri üretilmez."
