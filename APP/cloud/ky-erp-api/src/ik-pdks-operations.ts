@@ -364,9 +364,15 @@ async function payroll(c: Context<AppEnv>) {
     const roadAllowance = current ? number(current.road_allowance) : number(person.road_allowance);
     const bank = current ? number(current.bank_amount) : number(person.bank_amount);
     const cash = current ? number(current.cash_amount) : number(person.cash_amount);
-    const net = current ? number(current.total_amount) : (bank + cash || Math.max(0, salary + overtimeAmount - advanceAmount - deductionAmount));
+    // Only an existing saved payroll amount can be reported as a payable total.
+    // Bank/cash account settings and adjustments are not a settled payment or
+    // confirmed monthly puantaj; do not derive a fictitious net from them.
+    const net = current ? number(current.total_amount) : null;
     return {
-      employeeId: text(person.id), personnelCode: text(person.code), fullName: text(person.full_name), salary,
+      employeeId: text(person.id), personnelCode: text(person.code), fullName: text(person.full_name),
+      cardNo: text(person.card_no), salary, roadAllowance,
+      roadAdjustmentAmount, mealAmount, garnishmentAmount, besAmount,
+      grossAmount: null, payrollReconciled: false, paymentConfirmed: false,
       overtimeAmount: current ? number(current.overtime_amount) : overtimeAmount,
       advanceAmount: current ? number(current.advance_amount) : advanceAmount,
       deductionAmount: current ? number(current.deduction_amount) : deductionAmount,
