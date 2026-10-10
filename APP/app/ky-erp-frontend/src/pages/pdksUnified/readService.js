@@ -16,6 +16,29 @@ export const readLiveDashboard=(params)=>fresh("/ik/personnel-control/dashboard-
 export const readCardEvents=(params)=>fresh("/ik/personnel-control/card-events",params);
 export const readCloudSyncStatus=(params)=>fresh("/ik/personnel-control/unified/commands/sync/status",params);
 export const readPeople=(params)=>getPdksPeople(params);
+// Cardless and non-SGK staff must remain visible to authorized Personnel 360 operators.
+export const readAllPersonnel=async (params)=>{
+  const list=await fresh("/ik/personnel-control/people",params);
+  if(!Array.isArray(list))throw new Error("PDKS_PERSONNEL_ROSTER_INVALID");
+  // Masters can be unavailable before a reviewed migration. Never invent a group.
+  const masters=await fresh("/ik/personnel-control/pdks-masters",params).catch(()=>null);
+  if(!Array.isArray(masters?.groups)||!Array.isArray(masters?.groupAssignments))return list;
+  const byGroup=new Map(masters.groups.map(group=>[String(group.id),group]));
+  const byAssignment=new Map(masters.groupAssignments.map(link=>[
+    String(link.employeeId),byGroup.get(String(link.groupId))?.name||null,
+  ]));
+  const personnelGroups=new Map((masters.personnelGroups||[]).map(group=>[String(group.id),group]));
+  const personnelAssignments=new Map((masters.personnelGroupAssignments||[]).map(link=>[
+    String(link.employeeId),String(link.personnelGroupId),
+  ]));
+  return list.map(person=>{
+    const personId=String(person.id),personnelGroupId=personnelAssignments.get(personId)||null;
+    return {...person,
+      workGroup:byAssignment.get(personId)||person.workGroup||null,
+      personnelGroupId,
+      personnelGroup:personnelGroups.get(personnelGroupId)?.name||null};
+  });
+};
 export const readProfile=(params)=>getPdksProfile(params);
 export const readDays=(personId,year,month,params)=>
   getPdksAttendance(personId,year,month,params);

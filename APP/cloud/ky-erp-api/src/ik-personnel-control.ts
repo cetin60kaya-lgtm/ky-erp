@@ -327,7 +327,8 @@ async function auditVisibleForPeriod(c: Context<AppEnv>, company: string, row: R
 }
 
 async function personRows(c: Context<AppEnv>, auth: Row) {
-  if (!auth.audit) await ensurePersonnelCodes(c, auth.company);
+  // A personnel roster GET must not auto-assign codes or mutate production D1.
+  // Missing historical codes remain visible for explicit reviewed correction.
   const rows = await all(c, `${personSelect(auth.audit)} ORDER BY CASE WHEN UPPER(e.code) LIKE 'HKN-%' THEN CAST(SUBSTR(e.code,5) AS INTEGER) ELSE 999999 END,e.code COLLATE NOCASE,e.full_name COLLATE NOCASE`, [auth.company]);
   const period = requestedPeriod(c);
   const result: Row[] = [];
@@ -516,10 +517,8 @@ async function createPerson(c: Context<AppEnv>) {
   const codeDuplicate = await first(c, "SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND UPPER(TRIM(COALESCE(code,'')))=UPPER(?) LIMIT 1", [auth.company, code]);
   if (codeDuplicate) return error(c, 409, "PERSONNEL_CODE_DUPLICATE", `Bu personel kodu zaten kullanılıyor: ${code}.`);
   const cardNo = text(body.cardNo);
-  if (cardNo) {
-    const cardDuplicate = await first(c, "SELECT employee_id FROM ik_person_card_settings WHERE main_company_id=? AND TRIM(COALESCE(card_no,''))=? LIMIT 1", [auth.company, cardNo]);
-    if (cardDuplicate) return error(c, 409, "PERSONNEL_CARD_DUPLICATE", `Bu kart numarası başka personelde kayıtlı: ${cardNo}.`);
-  }
+  if (cardNo)
+    return error(c, 409, "USE_CARD_ASSIGNMENT", "Yeni personele kart ataması yalnız Personel 360 kart işlemiyle yapılabilir.");
   const startDate = dateOnly(body.startDate || body.hireDate);
   const duplicate = await first(c, `SELECT id FROM hr_monthly_employees
     WHERE main_company_id=? AND LOWER(TRIM(full_name))=LOWER(TRIM(?))
@@ -622,7 +621,9 @@ async function saveChanges(c: Context<AppEnv>) {
   const currentRaw = await first(c, `${personSelect(false)} AND e.id=? LIMIT 1`, [auth.company, employeeId]);
   if (!currentRaw) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
   const body = await bodyOf(c);
-  const changes = body.changes && typeof body.changes === "object" ? body.changes : {};
+  const changes = body.changes && typeof body.changes === "object" && !Array.isArray(body.changes) ? body.changes : {};
+  if (Object.prototype.hasOwnProperty.call(changes, "cardNo"))
+    return error(c, 409, "USE_CARD_ASSIGNMENT", "Kart ataması Personel 360 kart işlemi üzerinden, önceki numara doğrulanarak yapılmalıdır.");
   const effectiveDate = dateOnly(body.effectiveDate) || todayIstanbul();
   const note = text(body.note);
   const employeeFields: Record<string, string> = {
@@ -641,6 +642,15 @@ async function saveChanges(c: Context<AppEnv>) {
   const requestedStatus = Object.prototype.hasOwnProperty.call(changes, "status") ? text(changes.status) : text(currentRaw.status);
   const requestedExitDate = Object.prototype.hasOwnProperty.call(changes, "exitDate") ? dateOnly(changes.exitDate) : dateOnly(currentRaw.exit_date);
   const requestedStartDate = Object.prototype.hasOwnProperty.call(changes, "startDate") ? dateOnly(changes.startDate) : dateOnly(currentRaw.hire_date);
+  const validDate = (date: string) => !date || /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)) &&
+    new Date(date + "T00:00:00Z").toISOString().slice(0, 10) === date;
+  if (!validDate(requestedStartDate) || !validDate(requestedExitDate))
+    return error(c, 400, "PERSONNEL_DATE_INVALID", "Geçerli işe giriş/çıkış tarihi girin.");
+  if (Object.prototype.hasOwnProperty.call(changes, "fullName") && text(changes.fullName).length < 2)
+    return error(c, 400, "PERSONNEL_NAME_REQUIRED", "Personel adı en az iki karakter olmalıdır.");
+  if (Object.prototype.hasOwnProperty.call(changes, "status") &&
+    !["AKTİF", "AKTIF", "PASİF", "PASIF"].includes(upper(changes.status)))
+    return error(c, 400, "PERSONNEL_STATUS_INVALID", "Aktif veya Pasif seçin.");
   if (requestedExitDate && requestedStartDate && requestedExitDate < requestedStartDate) {
     return error(c, 400, "EXIT_BEFORE_HIRE", "İşten çıkış tarihi işe giriş tarihinden önce olamaz.");
   }

@@ -24,6 +24,7 @@ import TerminalSetupPanel from "./TerminalSetupPanel.jsx";
 import TransferCenterPanel from "./TransferCenterPanel.jsx";
 import CloudSyncPanel from "./CloudSyncPanel.jsx";
 import StageCopyExplorer from "./StageCopyExplorer.jsx";
+import Personnel360Manage from "./Personnel360Manage.jsx";
 import "./pdksUnified.css";
 
 const ICONS = {
@@ -104,7 +105,7 @@ function UnifiedTable({ columns, rows, onSelect, selectedId, masked = false }) {
   </div>;
 }
 
-function PersonDetails({person,active,onChange,isAuditAccount,detail}) {
+function PersonDetails({person,active,onChange,isAuditAccount,detail,company,profile,previewOnly,onSaved}) {
   const rows=(value,keys=[])=>{
     if(Array.isArray(value))return value;
     for(const key of keys)if(Array.isArray(value?.[key]))return value[key];
@@ -117,23 +118,13 @@ function PersonDetails({person,active,onChange,isAuditAccount,detail}) {
   const view=()=>{
     if(!person)return <EmptyState title="Personel seçilmedi"
       description="Önce doğrulanmış personel listesinden bir çalışan seçin."/>;
-    if(active==="identity")return <dl className="pdk-u-definition">
-      {[
-        ["Personel",person.fullName],["Kart numarası",person.cardNo],
-        ["Departman",person.department],["Görev",person.role],
-        ["Çalışma grubu",person.group],["İşe giriş",person.startDate],
-        ["İşten çıkış",person.exitDate],["Dönem durumu",person.status],
-      ].map(([key,value])=><div key={key}><dt>{key}</dt><dd>{value||"—"}</dd></div>)}
-    </dl>;
-    if(active==="card")return <dl className="pdk-u-definition">
-      <div><dt>Atanmış kart</dt><dd>{person.cardNo}</dd></div>
-      <div><dt>Kart durumu</dt><dd>{person.cardState}</dd></div>
-      <div><dt>Personel kaynağı</dt><dd>KY ERP PDKS</dd></div>
-      <div><dt>Son fiziksel geçiş</dt><dd>Doğrulanmadı</dd></div>
-    </dl>;
-    if(active==="documents")return <EmptyState title="Personel evrak servisi bağlı değil"
-      description="Yetkili doküman servisi olmadan kişisel belge veya imza görüntülenmez."
-      IconComponent={LockKeyhole}/>;
+    if(["identity","card","documents","history"].includes(active))
+      return <Personnel360Manage person={person} active={active} company={company}
+        profile={profile} previewOnly={previewOnly} isAuditAccount={isAuditAccount} onSaved={onSaved}/>;
+    if(["attendance","timesheet"].includes(active) && (!person.cardNo || person.cardNo==="—"))
+      return <EmptyState title="Kart ataması bulunmuyor"
+        description="SGK veya özlük kaydı fiziksel okutma kanıtı değildir. Kart atanmamış personele otomatik giriş/çıkış ve puantaj üretilmez."
+        IconComponent={LockKeyhole}/>;
     if(isAuditAccount && ["shift","leave","payroll","history"].includes(active))
       return <EmptyState title="Bu ayrıntıya erişim kapalı"
         description="Denetim hesabı PDKS FULL işlemlerine veya ücret alanlarına erişemez."
@@ -205,16 +196,6 @@ function PersonDetails({person,active,onChange,isAuditAccount,detail}) {
           ["Toplam",line.totalAmount],
         ].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{money(value)}</dd></div>)}
       </dl>;
-    }
-    if(active==="history"){
-      const changes=rows(payload,["rows","corrections"]);
-      if(!changes)return <EmptyState title="Düzeltme geçmişi biçimi doğrulanamadı"
-        description="Değişiklik geçmişi gelmeden işlem tamamlandı kabul edilmez."/>;
-      return smallTable(["Tarih","Alan","Gerekçe","Durum"],changes.map((p,i)=>({
-        _id:String(p.id??i),"Tarih":p.workDate||p.date||"—",
-        "Alan":p.field||p.type||"—","Gerekçe":p.reason||p.note||"—",
-        "Durum":p.status||"—",
-      })));
     }
     return <EmptyState title="Bu detay için bağlantı yok" description="Kaynak bekleniyor."/>;
   };
@@ -318,7 +299,7 @@ export default function PdksUnifiedApp({
     ["departments","routes","leave","advances","overtime","deductions"].includes(tab.id);
   // Personnel 360 reads only while its own detail panel is actually visible.
   const detailVisible=section.id==="people" &&
-    ["people","cards","employment"].includes(tab.id);
+    ["people","cards","employment","documents"].includes(tab.id);
   const monthKey=[company,period.year,period.month,requirement].join("|");
   const allowHeavy=requirement==="monthly-attendance" && monthlyRequestKey===monthKey;
   const data=useUnifiedPdksData({
@@ -333,6 +314,9 @@ export default function PdksUnifiedApp({
     if (!allowed) return; // A hidden section cannot be opened through a quick action.
     const target = allowed.tabs.find((item)=>item.id===tabId) || allowed.tabs[0];
     setNavigation({section:allowed.id,tab:target.id});
+    if(target.id==="documents")setPersonTab("documents");
+    else if(target.id==="cards")setPersonTab("card");
+    else if(target.id==="employment")setPersonTab("identity");
     setMobileMenuOpen(false);
     setNotice("");
   },[sections]);
@@ -356,7 +340,7 @@ export default function PdksUnifiedApp({
       data.people.some((person)=>person.id===previous) ? previous : data.people[0]?.id||"");
   },[data.people]);
 
-  const isPeopleTab=section.id==="people" && ["people","cards","employment"].includes(tab.id);
+  const isPeopleTab=section.id==="people" && ["people","cards","employment","documents"].includes(tab.id);
   const stageInspectTab=testMode&&["today","live","exceptions","attention","people","cards","employment","punches","history","daily","monthly","validation","attendance","violations","signatures","timesheets"].includes(tab.id);
   // One projection for every screen. API success is not record-schema success.
   const projection=useMemo(()=>{
@@ -539,7 +523,8 @@ export default function PdksUnifiedApp({
                   description={previewOnly?"Tasarım önizlemesinde gerçek personel verisi bulunmaz.":"Bu görünüm için yetkili KY ERP bağlantısını doğrulayın."}/>}
             </div><PersonDetails person={dataConnected?selectedPerson:null}
               active={personTab} onChange={setPersonTab} isAuditAccount={data.audit}
-              detail={data.detail}/>
+              detail={data.detail} company={company} profile={data.profile}
+              previewOnly={previewOnly} onSaved={()=>setReloadToken(value=>value+1)}/>
           </div> : (
             requirement==="unconnected" ? <EmptyState title="Ekran hazır · İşlem sözleşmesi bağlanacak"
               description="Sekme ve tablo yerleşimi tamamlandı; gerçek kaynak/senkron yetkisi doğrulanmadan işlem açılmaz. Bu ekranda sahte veri üretilmez."

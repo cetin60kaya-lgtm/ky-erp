@@ -32,7 +32,7 @@ export function useUnifiedPdksData({
   // The server's audit flag can only remove permission; never grant it.
   const audit=Boolean(auditHint || profile?.audit===true ||
     profile?.audit===1 || String(profile?.audit).toLowerCase()==="true");
-  const peopleKey=keyOf(company,year,month,reloadToken);
+  const peopleKey=keyOf(company,year,month,reloadToken,requirement==="people"?"all-personnel":"pdks-tracked");
   const peopleReady=peopleState.key===peopleKey && peopleState.status==="ready";
   const people=useMemo(()=>
     peopleReady && Array.isArray(peopleState.payload) ? peopleState.payload : [],
@@ -65,7 +65,7 @@ export function useUnifiedPdksData({
     let cancelled=false;
     setPeopleState({key:peopleKey,status:"loading",payload:null,error:""});
     import("./readService.js")
-      .then((api)=>api.readPeople({mainCompanyId:company,year,month}))
+      .then((api)=> (requirement==="people" ? api.readAllPersonnel : api.readPeople)({mainCompanyId:company,year,month}))
       .then((rows)=>{
         if(cancelled)return;
         if(!Array.isArray(rows))throw new Error("PDKS_PERSONEL_YANIT_BICIMI_GECERSIZ");
@@ -74,7 +74,7 @@ export function useUnifiedPdksData({
       })
       .catch((e)=>{if(!cancelled)setPeopleState({key:peopleKey,status:"error",payload:null,error:errorMessage(e)});});
     return ()=>{cancelled=true;};
-  },[previewOnly,company,year,month,needsPeople,profileReady,peopleKey]);
+  },[previewOnly,company,year,month,needsPeople,profileReady,peopleKey,requirement]);
 
   useEffect(()=>{
     if(previewOnly || !company || requirement!=="attendance" || !personId || !peopleReady || !profileReady)
@@ -127,7 +127,7 @@ export function useUnifiedPdksData({
 
   const detailSources={
     attendance:"attendance",timesheet:"attendance",shift:"masters",
-    leave:"leaves",payroll:"payroll",history:"corrections",
+    leave:"leaves",payroll:"payroll",
   };
   const detailSource=detailSources[detailTab]||"unconnected";
   const detailKey=keyOf(company,year,month,personId,detailSource,detailTab,reloadToken,audit);

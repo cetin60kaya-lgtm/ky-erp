@@ -15,11 +15,10 @@ function validEmployeeId(value) {
 }
 
 function isPdksTrackedPerson(person) {
-  // SGK and punch-card eligibility are different dimensions. Do not hide an
-  // assigned physical card solely because its payroll/SGK status differs.
+  // SGK coverage NEVER creates a physical card or proves attendance.
+  // The full Personnel 360 list uses a separate authorized roster read.
   const card = String(person?.cardNo ?? person?.card_no ?? "").trim();
-  const sgk = String(person?.sgkStatus ?? "").trim().toLocaleUpperCase("tr-TR");
-  return Boolean(card) || sgk === "VAR";
+  return Boolean(card);
 }
 
 const OPS = "/ik/personnel-control/operations";
