@@ -43,7 +43,7 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
     setLoaded(null);setError("");setMessage("");setForm(fromPerson(person));
     setCard(clean(person?.cardNo)==="—"?"":clean(person?.cardNo));
     setReason("");setAssetId("");setDocNote("");setUnlinkReason("");
-    setGroupId("");setPreviewAsset("");
+    setGroupId("");setPreviewAsset("");setPreviewUrl("");
   },[employeeId,company]);
 
   const refresh=useCallback(()=>setRevision(x=>x+1),[]);
