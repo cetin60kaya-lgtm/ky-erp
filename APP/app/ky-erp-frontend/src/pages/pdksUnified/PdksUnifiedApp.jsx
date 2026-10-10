@@ -479,7 +479,7 @@ export default function PdksUnifiedApp({
           key={[company,period.year,period.month].join(":")}
           company={company} year={period.year} month={period.month}
           tabId={tab.id} previewOnly={previewOnly} testMode={testMode}
-          audit={profileAudit}/>}
+          audit={profileAudit} profileReady={data.profileReady}/>}
         {tab.view==="dashboard" && !stageInspectTab && <UnifiedDashboard onOpen={go}
           peopleStatus={data.profileReady && data.peopleStatus==="ready" ? {count:data.people.length}:null}
           attendanceStatus={data.peopleStatus} hasData={data.sourceReady}
