@@ -131,8 +131,8 @@ export function evaluateAttendanceEvidenceBundle(input,{companyId=null,period=nu
     const rows=days.filter(d=>d.cardNo===person.cardNo);
     const paired=rows.filter(d=>d.paired);
     const unresolved=rows.filter(d=>!d.paired&&
-      !["APPROVED_LEAVE","OFFICIAL_HOLIDAY","WEEKLY_REST","HALF_DAY_OFF",
-        "OUTSIDE_EMPLOYMENT","PUNCH_EXEMPT"].includes(d.status)&&d.warnings.length===0);
+      !(["APPROVED_LEAVE","OFFICIAL_HOLIDAY","WEEKLY_REST","HALF_DAY_OFF",
+        "OUTSIDE_EMPLOYMENT","PUNCH_EXEMPT"].includes(d.status)&&d.warnings.length===0));
     return Object.freeze({cardNo:person.cardNo,fullName:person.fullName,
       coveredDays:rows.length,missingCalendarDays:calendarDays-rows.length,
       pairedDays:paired.length,reviewDays:unresolved.length,
