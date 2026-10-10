@@ -93,7 +93,7 @@ internal static class Program
             var allowed = new[] {
                 "FP_CLOCK_OCX_UNAVAILABLE","FP_CLOCK_ENDPOINT_REJECTED",
                 "FP_CLOCK_OFFLINE","FP_CLOCK_READ_PREPARE_FAILED",
-                "FP_CLOCK_READ_GETTER_FAILED"
+                "FP_CLOCK_READ_GETTER_FAILED","FP_CLOCK_READ_MARK_GUARD_FAILED"
             };
             Console.Error.WriteLine("ERROR|"+(allowed.Contains(code) ? code : "FP_CLOCK_DRIVER_ERROR"));
             return 3;
@@ -112,6 +112,11 @@ internal static class Program
 
     private static void ReadLogs(dynamic clock,int machine)
     {
+        // The working Hedef bridge explicitly suppressed SDK read-marking.
+        // Refuse collection if this property cannot be set, rather than risk
+        // acknowledging/depleting unread records inside the physical device.
+        try { clock.ReadMark = false; }
+        catch { throw new InvalidOperationException("FP_CLOCK_READ_MARK_GUARD_FAILED"); }
         bool ready;
         try { ready=(bool)clock.ReadGeneralLogData(machine); }
         catch { throw new InvalidOperationException("FP_CLOCK_READ_PREPARE_FAILED"); }
