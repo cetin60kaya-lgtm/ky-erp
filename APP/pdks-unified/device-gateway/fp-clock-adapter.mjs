@@ -6,6 +6,7 @@
 import {createHash} from "node:crypto";
 import {readFile,stat} from "node:fs/promises";
 import {spawn} from "node:child_process";
+import {isIP} from "node:net";
 import {isAbsolute,basename} from "node:path";
 import {normalizeDeviceEvidence} from "./device-contract.mjs";
 
@@ -13,6 +14,12 @@ const str=v=>String(v??"").trim();
 const forbidden=/[\x00-\x1f]/;
 const cap=(n,min,max)=>Number.isInteger(n)&&n>=min&&n<=max;
 const hash=s=>createHash("sha256").update(s).digest("hex");
+const isPrivateIp=ip=>{
+ if(isIP(ip)!==4)return false;
+ const p=ip.split(".").map(Number);
+ return p[0]===10||(p[0]===172&&p[1]>=16&&p[1]<=31)||
+   (p[0]===192&&p[1]===168);
+};
 
 export function parseFpClockReadout(output,{companyId,terminalId,timezone="Europe/Istanbul"}){
   if(typeof output!=="string"||Buffer.byteLength(output)>1_500_000)
@@ -52,6 +59,8 @@ export function parseFpClockReadout(output,{companyId,terminalId,timezone="Europ
     }
   }
   if(!status)throw Error("FP_CLOCK_STATUS_MISSING");
+  if(status.deviceTime&&!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(status.deviceTime))
+    throw Error("FP_CLOCK_CLOCK_INVALID");
   if(events.length&& !ended)throw Error("FP_CLOCK_END_MISSING");
   return Object.freeze({status:Object.freeze(status),events:Object.freeze(events)});
 }
@@ -63,7 +72,7 @@ export async function runFpClockProcess(executable,mode,profile,{
     throw Error("FP_CLOCK_WINDOWS_ONLY");
   if(!isAbsolute(executable)||basename(executable).toLowerCase()!=="kypdks.fpclock.reader.exe")
     throw Error("FP_CLOCK_READER_PATH_INVALID");
-  if(!["--status","--read"].includes(mode)||!/^(10|192\.168|172\.)/.test(profile.ip)||
+  if(!["--status","--read"].includes(mode)||!isPrivateIp(profile.ip)||
      !cap(Number(profile.port),1,65535)||!cap(Number(profile.machineId),1,255))
     throw Error("FP_CLOCK_EXEC_ARGS_INVALID");
   if(!cap(timeoutMs,1000,60000))throw Error("FP_CLOCK_TIMEOUT_INVALID");
