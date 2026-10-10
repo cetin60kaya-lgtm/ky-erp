@@ -44,7 +44,8 @@ export function payrollRowsForTab(id,payload,{year,month}={}) {
     const common={
       _id:key,"Personel":get(line,"fullName"),"Kart No":get(line,"cardNo"),
       "Dönem":period,"Maaş":get(line,"salary"),
-      "Yol":get(line,"roadAllowance"),"Yemek":get(line,"mealAmount"),
+      "Yol":get(line,"roadAllowance"),"Ek Yol":get(line,"roadAdjustmentAmount"),
+      "Yemek":get(line,"mealAmount"),
       "Mesai":get(line,"overtimeAmount"),"Avans":get(line,"advanceAmount"),
       "Kesinti":get(line,"deductionAmount"),"İcra/Haciz":get(line,"garnishmentAmount"),
       "BES":get(line,"besAmount"),"Banka":get(line,"bankAmount"),
@@ -79,10 +80,11 @@ export function signatureRowsFromDays(person,days,{year,month}={}) {
     if (!["KART_YOK","EKSIK_BASIM"].includes(status) && day?.missingPunch!==true)
       continue;
     const entry=clock(day?.entry),exit=clock(day?.exit);
-    const observed=[entry?`Okunan giriş: ${entry}`:"",exit?`Okunan çıkış: ${exit}`:""].filter(Boolean).join(" / ")||"—";
+    const observed=[entry?`Kaynakta giriş: ${entry}`:"",exit?`Kaynakta çıkış: ${exit}`:""].filter(Boolean).join(" / ")||"—";
+    const source=day?.source==="MANUAL_OVERRIDE"?" (manuel düzeltme · fiziksel geçiş değil)":"";
     const base={
       "Tarih":date,"Personel":shown(person.fullName),"Kart No":shown(person.cardNo),
-      "Saat":observed,"İmza":"","Durum":"İmza bekliyor · kaynak D1, FDB/TNF kontrolü yok",
+      "Saat":observed+source,"İmza":"","Durum":"İmza bekliyor · kaynak D1, FDB/TNF kontrolü yok",
     };
     const sides= !entry&&!exit?["Sabah giriş","Akşam çıkış"]:
       !entry?["Sabah giriş"]:!exit?["Akşam çıkış"]:["Eksik hareket (yön belirsiz)"];
