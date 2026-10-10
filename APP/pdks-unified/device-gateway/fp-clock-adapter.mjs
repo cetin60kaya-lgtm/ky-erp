@@ -61,7 +61,9 @@ export function parseFpClockReadout(output,{companyId,terminalId,timezone="Europ
   if(!status)throw Error("FP_CLOCK_STATUS_MISSING");
   if(status.deviceTime&&!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(status.deviceTime))
     throw Error("FP_CLOCK_CLOCK_INVALID");
-  if(events.length&& !ended)throw Error("FP_CLOCK_END_MISSING");
+  // Even a zero-event read must carry END|0. A truncated helper output
+  // cannot be accepted as a successful device read.
+  if(!ended)throw Error("FP_CLOCK_END_MISSING");
   return Object.freeze({status:Object.freeze(status),events:Object.freeze(events)});
 }
 
@@ -128,6 +130,9 @@ export async function createFpClockAdapter(profile,{
       writeDevice:false,writeFirebird:false,writeAnnualTnf:false}),
     getDeviceReport:()=>deviceStatus,
     async healthCheck(){
+      // Drain the previous bounded reader response before touching the
+      // terminal again; otherwise a >maxRecords backlog starves forever.
+      if(buffer?.length)return true;
       const output=await run(executable,"--read",profile);
       const parsed=parseFpClockReadout(output,{companyId,terminalId});
       buffer=parsed.events;deviceStatus=parsed.status;
@@ -136,8 +141,10 @@ export async function createFpClockAdapter(profile,{
     async readRawBatch({maxRecords=200,deleteAfterRead=false}={}){
       if(deleteAfterRead)throw Error("FP_CLOCK_DELETE_FORBIDDEN");
       if(!buffer)throw Error("FP_CLOCK_READ_FIRST_REQUIRED");
-      const batch=buffer;buffer=null;
-      if(batch.length>maxRecords)throw Error("FP_CLOCK_BATCH_LIMIT_EXCEEDED");
+      if(!Number.isInteger(maxRecords)||maxRecords<1||maxRecords>1000)
+        throw Error("FP_CLOCK_BATCH_LIMIT_INVALID");
+      const batch=buffer.slice(0,maxRecords);
+      buffer=buffer.length>maxRecords?buffer.slice(maxRecords):null;
       return batch;
     },
     async close(){buffer=null;},
