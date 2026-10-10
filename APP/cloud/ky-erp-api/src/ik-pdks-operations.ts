@@ -392,7 +392,7 @@ async function payroll(c: Context<AppEnv>) {
       overtimeEntries, pendingEntries, sourceComplete, savedOvertimeAmount, overtimeConflict,
       period, periodClosed: periodClosed===null?null:number(periodClosed.is_locked)===1,
       payrollRecordPresent:Boolean(current),
-      reportState:pendingEntries.length||overtimeConflict ? "KANIT_KONTROL_BEKLIYOR" : "D1_ON_RAPOR",
+      reportState:!current?"KAYIT_BEKLIYOR":pendingEntries.length||overtimeConflict ? "KANIT_KONTROL_BEKLIYOR" : "D1_ON_RAPOR",
       latestChange:change ? {actionType:text(change.action_type),createdAt:text(change.created_at),
         userName:text(change.user_name),sourceScreen:text(change.source_screen)} : null,
       grossAmount: null, payrollReconciled: false, paymentConfirmed: false,
