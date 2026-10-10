@@ -36,6 +36,7 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
   const [docNote,setDocNote]=useState("");
   const [unlinkReason,setUnlinkReason]=useState("");
   const [groupId,setGroupId]=useState("");
+  const [personnelGroupId,setPersonnelGroupId]=useState("");
   const [previewUrl,setPreviewUrl]=useState("");
   const [previewAsset,setPreviewAsset]=useState("");
 
@@ -43,7 +44,7 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
     setLoaded(null);setError("");setMessage("");setForm(fromPerson(person));
     setCard(clean(person?.cardNo)==="—"?"":clean(person?.cardNo));
     setReason("");setAssetId("");setDocNote("");setUnlinkReason("");
-    setGroupId("");setPreviewAsset("");setPreviewUrl("");
+    setGroupId("");setPersonnelGroupId("");setPreviewAsset("");setPreviewUrl("");
   },[employeeId,company]);
 
   const refresh=useCallback(()=>setRevision(x=>x+1),[]);
@@ -88,6 +89,8 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
         setForm(fromPerson(result?.person||person));
         const assignment=result?.masters?.groupAssignments?.find(g=>String(g.employeeId)===employeeId);
         setGroupId(clean(assignment?.groupId));
+        const policyGroup=result?.masters?.personnelGroupAssignments?.find(g=>String(g.employeeId)===employeeId);
+        setPersonnelGroupId(clean(policyGroup?.personnelGroupId));
       }
       if(active==="card")setCard(clean(result?.cardNo));
     }).catch(e=>{if(!cancelled)setError(e?.message||"Personel kaynağı okunamadı.");})
@@ -133,6 +136,21 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
         {(loaded?.masters?.groups||[]).filter(g=>Number(g.active)!==0).map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
       </select>
     </Field>
+    <Field label="Personel çalışma grubu (kart/puantaj kuralı)">
+      <select disabled={!canEdit||loading||busy||!loaded?.masters?.personnelGroups?.length}
+        value={personnelGroupId} onChange={e=>setPersonnelGroupId(e.target.value)}>
+        <option value="">Atama yok / kaynak doğrulanmadı</option>
+        {(loaded?.masters?.personnelGroups||[]).filter(g=>Number(g.active)!==0).map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
+      </select>
+    </Field>
+    {loaded?.masters?.personnelGroups?.length>0&&canEdit&&<button type="button" className="pdk-person-secondary"
+      disabled={busy||loading||!personnelGroupId||reason.trim().length<5||
+        personnelGroupId===clean(loaded.masters.personnelGroupAssignments?.find(g=>String(g.employeeId)===employeeId)?.personnelGroupId)}
+      onClick={()=>submit(endpoint(employeeId,"/personnel-group"),{
+        personnelGroupId,
+        expectedPersonnelGroupId:clean(loaded.masters.personnelGroupAssignments?.find(g=>String(g.employeeId)===employeeId)?.personnelGroupId),
+        reason:reason.trim()},
+        "Personel çalışma grubu D1 tanımına bağlandı.")}>Personel grubunu kaydet</button>}
     {loaded?.masters?.groups?.length>0&&canEdit&&<button type="button" className="pdk-person-secondary"
       disabled={busy||loading||!groupId||reason.trim().length<5||
         groupId===clean(loaded.masters.groupAssignments?.find(g=>String(g.employeeId)===employeeId)?.groupId)}
@@ -218,7 +236,7 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
   </div>;
   if(active==="history"){
     const changes=(loaded?.changeHistory||[]).filter(h=>
-      ["cardNo","department","title","status","startDate","exitDate","phone","fullName","fileHubAsset","groupId"].includes(clean(h.field_name)));
+      ["cardNo","department","title","status","startDate","exitDate","phone","fullName","fileHubAsset","groupId","personnelGroupId"].includes(clean(h.field_name)));
     return <div className="pdk-person-manage">{header}<h4>Özlük ve kart işlem geçmişi</h4>
       {loaded&&<table className="pdk-person-table"><thead><tr><th>Tarih</th><th>İşlem</th><th>Eski</th><th>Yeni</th><th>Gerekçe</th></tr></thead>
         <tbody>{changes.map((h,i)=><tr key={h.id||i}><td>{h.effective_date||"—"}</td>
