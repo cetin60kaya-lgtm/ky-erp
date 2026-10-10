@@ -6,6 +6,7 @@
  */
 import {ALL_PRODUCT_TABS} from "./productModel.js";
 import {displayValue,toPersonRows,toAttendanceRows} from "./productData.js";
+import {payrollRowsForTab} from "./payrollEvidence.js";
 
 const SOURCES = Object.freeze({
   // Read-only people/physical-card administration.
@@ -15,13 +16,13 @@ const SOURCES = Object.freeze({
   groups:"masters",routes:"masters",rules:"config",
   // Only selected-person attendance. Real live aggregate not yet certified.
   punches:"card-events",history:"card-events",daily:"attendance",
-  violations:"attendance",signatures:"attendance",attendance:"attendance",
+  violations:"attendance",signatures:"signature-month",attendance:"attendance",
   // Independent verified API shapes.
   leave:"leaves",holidays:"holidays",
   monthly:"monthly-attendance",timesheets:"monthly-attendance",
   closing:"month",advances:"month-adjustments",deductions:"month-adjustments",
   overtime:"month-adjustments",
-  earnings:"payroll",salary:"payroll",payments:"payroll",payroll:"payroll",
+  earnings:"payroll",salary:"payroll",payments:"payroll",receipts:"payroll",payroll:"payroll",
   audit:"audit",corrections:"corrections",
 });
 const byId = new Map(ALL_PRODUCT_TABS.map((t)=>[t.id,t]));
@@ -35,7 +36,7 @@ export const sourceForTab=(id,{audit=false}={})=>{
   if(!tab)return "unconnected";
   const source=SOURCES[id]||"unconnected";
   if(audit && (tab.section==="payroll"||tab.sensitive ||
-    !["people","attendance","live-attendance","card-events","monthly-attendance","unconnected"].includes(source)))
+    !["people","attendance","live-attendance","card-events","monthly-attendance","signature-month","unconnected"].includes(source)))
     return "forbidden";
   return source;
 };
@@ -61,23 +62,13 @@ const toRows=(raw,fields)=>{
     return result;
   }),supported:true};
 };
-const attendanceTypes=new Set(["punches","exceptions","history","daily","violations","signatures","attendance"]);
+const attendanceTypes=new Set(["punches","exceptions","history","daily","violations","attendance"]);
 const fold=(value)=>String(value??"").normalize("NFD")
   .replace(/[\u0300-\u036f]/g,"").replace(/ı/g,"I").toUpperCase();
 const statusIsIssue=(day)=>{
   const code=String(day?.status||"").toUpperCase();
   return ["EKSIK_BASIM","KART_YOK","GEC_GIRIS","ERKEN_CIKIS"].includes(code)||
     day?.missingPunch===true||Number(day?.missingPunch)===1;
-};
-
-const finance = {
-  "Personel":["fullName"],"Kart No":["cardNo"],"Maaş":["salary"],
-  "Mesai":["overtimeAmount"],"Toplam":["totalAmount"],
-  "Kesinti":["deductionAmount"],"Net":["totalAmount"],
-  "Dönem":["period"],"Durum":["status"],
-  "Tarih":["date"],"Tür":["adjustmentType"],"Tutar":["amount"],
-  "Açıklama":["note"],"Banka":["bankAmount"],"Elden":["cashAmount"],
-  "Ödeme":["status"],
 };
 
 export function rowsForTab(id,payload,{people=[],selectedPerson=null,year=null,month=null}={}){
@@ -201,20 +192,13 @@ export function rowsForTab(id,payload,{people=[],selectedPerson=null,year=null,m
       "Onay":["status"],"Durum":["status"],"Açıklama":["note"],
     });
   }
-  if(["earnings","salary","payments"].includes(id)){
-    // Actual /operations/payroll payload: {year,month,lines}.
-    const source=arr(payload,"lines");
-    if(!source)return {rows:[],supported:false};
-    return toRows({rows:source},finance);
+  if(id==="signatures"){
+    if(payload?.complete!==true||!Array.isArray(payload.signatureRows))
+      return {rows:[],supported:false};
+    return {rows:payload.signatureRows,supported:true,scope:"d1-signature-draft-unreconciled"};
   }
-  if(id==="payroll"){
-    const source=arr(payload,"lines");
-    if(!source)return {rows:[],supported:false};
-    return {rows:[{_id:"pdks-payroll-summary","Rapor":"Bordro özeti",
-      "Dönem":`${year}-${String(month).padStart(2,"0")}`,
-      "Yetki":"Yetkili oturum","Durum":"D1 görünümü, FDB/TNF mutabakat bekliyor"}],
-      supported:true,scope:"sensitive-summary"};
-  }
+  if(["earnings","salary","payments","receipts","payroll"].includes(id))
+    return payrollRowsForTab(id,payload,{year,month});
   if(id==="corrections"){
     const source=arr(payload,"rows","corrections");
     if(!source)return {rows:[],supported:false};
