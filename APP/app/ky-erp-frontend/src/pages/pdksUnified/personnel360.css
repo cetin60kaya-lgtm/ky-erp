@@ -1,0 +1,20 @@
+/* KY PDKS isolated Personnel 360 controls. Never style ERP screens globally. */
+.pdk-unified .pdk-person-manage{display:flex;flex-direction:column;gap:12px;min-width:0;color:var(--pu-text)}
+.pdk-unified .pdk-person-manage h4{font-size:13px;font-weight:750;margin:8px 0 0;color:var(--pu-text)}
+.pdk-unified .pdk-person-manage p{font-size:11.5px;line-height:1.55;margin:0;color:var(--pu-muted)}
+.pdk-unified .pdk-person-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.pdk-unified .pdk-person-field{display:flex;flex-direction:column;gap:5px;min-width:0;font-size:11px;font-weight:650;color:var(--pu-muted)}
+.pdk-unified .pdk-person-field input,.pdk-unified .pdk-person-field select{width:100%;min-width:0;background:var(--pu-panel);border:1px solid var(--pu-border);border-radius:7px;padding:9px;color:var(--pu-text)}
+.pdk-unified .pdk-person-field input:disabled{opacity:.65}
+.pdk-unified .pdk-person-actions{display:grid;gap:10px;border-top:1px solid var(--pu-border);padding-top:12px}
+.pdk-unified .pdk-person-actions button{border:0;border-radius:7px;background:var(--pu-accent);color:#fff;padding:9px 13px;font-weight:700}
+.pdk-unified .pdk-person-summary{display:flex;flex-wrap:wrap;gap:7px;font-size:11px;color:var(--pu-muted)}
+.pdk-unified .pdk-person-summary span{background:var(--pu-soft);border:1px solid var(--pu-border);border-radius:7px;padding:7px 8px}
+.pdk-unified .pdk-person-message{border-left:3px solid var(--pu-accent);padding:8px 10px;background:var(--pu-soft);border-radius:4px;font-size:11px!important}
+.pdk-unified .pdk-person-message.error{border-left-color:#c24136;color:#b02d22;background:rgba(194,65,54,.06)}
+.pdk-unified .pdk-person-message.success{border-left-color:#238357;color:var(--pu-text)}
+.pdk-unified .pdk-person-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px}
+.pdk-unified .pdk-person-table th,.pdk-unified .pdk-person-table td{padding:8px 5px;border-bottom:1px solid var(--pu-border);text-align:left;word-break:break-word;vertical-align:top}
+.pdk-unified .pdk-person-table th{font-size:10px;color:var(--pu-muted);font-weight:700}
+.pdk-unified .pdk-person-secondary{background:transparent;border:1px solid var(--pu-border);color:var(--pu-text);border-radius:6px;padding:5px;font-size:10px}
+@media(max-width:850px){.pdk-unified .pdk-person-fields{grid-template-columns:1fr}.pdk-unified .pdk-person-table{font-size:10px}}
