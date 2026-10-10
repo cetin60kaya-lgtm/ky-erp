@@ -10,6 +10,7 @@ import {
 } from "../../services/pdksApi";
 import {apiGet} from "../../utils/api";
 import {signatureRowsFromDays} from "./payrollEvidence.js";
+import {dailyReportRows} from "./reportProjection.js";
 const fresh=(path,params)=>apiGet(path,params,{forceFresh:true,cache:false})
   .then((response)=>response?.ok===true && Object.hasOwn(response,"data")?response.data:response);
 
@@ -42,6 +43,7 @@ export async function readCompleteMonth({mainCompanyId,year,month},options={}){
   for(let i=0;i<people.length;i+=4)batches.push(people.slice(i,i+4));
   const rows=[];
   const signatureRows=[];
+  const dailyRows=[];
   for(const batch of batches){
     if(options.isCancelled?.())throw new Error("PDKS_AYLIK_ISTEK_IPTAL");
     const results=await Promise.all(batch.map((person)=>
@@ -51,6 +53,7 @@ export async function readCompleteMonth({mainCompanyId,year,month},options={}){
         throw new Error("PDKS_AYLIK_EKSIK_OZET_VEYA_GUN");
       const summary=response.summary;
       if(options.includeSignatures)signatureRows.push(...signatureRowsFromDays(person,response.days,{year,month}));
+      if(options.includeDaily)dailyRows.push(...dailyReportRows(person,response.days,{year,month}));
       rows.push({
         _id:String(person.id),cardNo:person.cardNo||null,
         fullName:person.fullName||null,
@@ -64,6 +67,7 @@ export async function readCompleteMonth({mainCompanyId,year,month},options={}){
     }
   }
   return {complete:true,rows,signatureRows:options.includeSignatures?signatureRows:undefined,
+    dailyRows:options.includeDaily?dailyRows:undefined,
     scannedPeople:people.length,period:period(year,month),
     localReconciled:false,approvedForPayroll:false,
     source:"D1_ATTENDANCE_V2_UNRECONCILED"};
@@ -86,6 +90,7 @@ export async function readTabSource(source,{mainCompanyId,year,month,personId}={
       return fresh("/ik/personnel-control/operations/month",p);
     case "monthly-attendance":return readCompleteMonth(p,options);
     case "signature-month":return readCompleteMonth(p,{...options,includeSignatures:true});
+    case "daily-report":return readCompleteMonth(p,{...options,includeDaily:true});
     case "audit":return getPdksAuditLogs({mainCompanyId,
       period:period(year,month),limit:200});
     case "config":return getPdksModernConfig({mainCompanyId});
