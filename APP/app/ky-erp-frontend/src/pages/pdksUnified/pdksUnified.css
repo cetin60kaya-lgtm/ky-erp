@@ -269,3 +269,36 @@ body:has(> #root > .pdk-unified),
 .pdk-u-stage-controls input,.pdk-u-stage-controls select{background:var(--pu-panel);
   color:var(--pu-text);padding:7px;border-radius:6px;border:1px solid var(--pu-border)}
 .pdk-u-stage-explorer .pdk-u-table-scroll{min-height:180px}
+
+/* KY PDKS read-only payroll and missing-card print forms. */
+.pdk-u-signature-line{display:inline-block;vertical-align:bottom;width:120px;height:22px;
+  max-width:100%;border-bottom:1px solid currentColor}
+@media print {
+  @page{size:A4 landscape;margin:10mm}
+  body:has(.pdk-u-print-sheet) *{visibility:hidden!important}
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet,
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet *{visibility:visible!important}
+  body:has(.pdk-u-print-sheet) .pdk-unified,
+  body:has(.pdk-u-print-sheet) .pdk-u-main,
+  body:has(.pdk-u-print-sheet) .pdk-u-body{position:static!important;overflow:visible!important;
+    height:auto!important;min-height:0!important;max-height:none!important}
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet{position:absolute!important;left:0!important;
+    top:0!important;margin:0!important;padding:0!important;border:0!important;
+    box-shadow:none!important;width:100%!important;height:auto!important;overflow:visible!important;
+    background:white!important;color:black!important}
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-filters,
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet button,
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-label,
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-operation-panel{display:none!important}
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-table-scroll{
+    width:100%!important;max-height:none!important;overflow:visible!important}
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-table{width:100%!important;
+    color:black!important;background:white!important;border-collapse:collapse!important;
+    font-size:9pt!important}
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-table th,
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-table td{
+    color:black!important;background:white!important;border:1px solid #b5b5b5!important;
+    white-space:normal!important;padding:6px 5px!important;break-inside:avoid}
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-table tr{break-inside:avoid}
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-signature-line{height:28px}
+}
