@@ -327,7 +327,8 @@ async function auditVisibleForPeriod(c: Context<AppEnv>, company: string, row: R
 }
 
 async function personRows(c: Context<AppEnv>, auth: Row) {
-  if (!auth.audit) await ensurePersonnelCodes(c, auth.company);
+  // A personnel roster GET must not auto-assign codes or mutate production D1.
+  // Missing historical codes remain visible for explicit reviewed correction.
   const rows = await all(c, `${personSelect(auth.audit)} ORDER BY CASE WHEN UPPER(e.code) LIKE 'HKN-%' THEN CAST(SUBSTR(e.code,5) AS INTEGER) ELSE 999999 END,e.code COLLATE NOCASE,e.full_name COLLATE NOCASE`, [auth.company]);
   const period = requestedPeriod(c);
   const result: Row[] = [];
