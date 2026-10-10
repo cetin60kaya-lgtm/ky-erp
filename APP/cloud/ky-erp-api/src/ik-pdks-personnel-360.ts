@@ -157,7 +157,9 @@ export function registerIkPdksPersonnel360Routes(app: Hono<AppEnv>) {
       return fail(c, 409, "PERSONNEL_DOCUMENT_PREVIEW_PENDING", "Evrak web önizlemesi henüz hazır değil.");
     const obj = await c.env.FILES.get(key);
     if (!obj) return fail(c, 404, "PERSONNEL_DOCUMENT_PREVIEW_MISSING", "Evrak önizleme dosyası bulunamadı.");
-    const type = value(record.mime_type).toLowerCase();
+    const metadata = new Headers();
+    obj.writeHttpMetadata?.(metadata);
+    const type = value(metadata.get("content-type") || record.mime_type).toLowerCase();
     if (!["application/pdf","image/png","image/jpeg","image/webp"].includes(type))
       return fail(c, 415, "PERSONNEL_DOCUMENT_PREVIEW_UNSUPPORTED", "Evrak türünün güvenli web önizlemesi desteklenmiyor.");
     const headers = new Headers({
