@@ -155,6 +155,19 @@ export default function ManagementIntegrationPanel({
             ...["canView","canCreate","canUpdate","canDelete","canApprove"].map(k=>x[k]?"Evet":"Hayır")])}/>}
       </div>}
       {tabId==="backup"&&<div className="pdk-u-mgmt-sub">
+        <strong>Kaynaklara göre yedek kabul durumu</strong>
+        <Table headers={["Kaynak","Sağlık / Kanıt","Geri dönüş"]}
+          rows={[
+            ["KY ERP Cloud D1 / R2",rows.length
+              ? backupHealth(rows[0]):"Yedek kaydı doğrulanmadı",
+              "Mevcut KY ERP admin korumalı restore akışı"],
+            ["Eski WPF PDKS SQLite / WAL","Bu Unified kaynakta doğrulanmadı",
+              "Ayrı WPF DB quick_check ve izole geri yükleme testi gerekli"],
+            ["Firebird personel FDB","İzole geri yükleme kanıtı bu ekrana bağlı değil",
+              "Canlı FDB üzerine izinsiz geri dönüş yok"],
+            ["Yıllık TNF / terminal RAW","Doğrulanmış arşiv geri dönüş kanıtı yok",
+              "Fiziksel dosya/hafıza üzerinde izinsiz işlem yok"],
+          ]}/>
         <strong>Yedek / geri dönüş hazırlığı</strong>
         <p>Kaynak: KY ERP Cloud D1 + R2. Bu liste yerel SQLite/WAL, Firebird ve TNF yedeğini doğrulamaz.
           Geri yükleme burada kapalı; şifre ve güvenlik yedeği kontrolü bulunan mevcut KY ERP Yönetim akışından yapılır.</p>
