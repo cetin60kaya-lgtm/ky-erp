@@ -81,6 +81,7 @@ export function createTerminalFleet({
   const processDevice=async(s)=>{
     if(stopped||s.busy||now()<s.nextAttemptAt)return;
     s.busy=true;
+    let phase="NETWORK";
     try{
       const connectivity=await probe(s.definition);
       if(!connectivity?.connectionReachable){
@@ -89,6 +90,7 @@ export function createTerminalFleet({
         throw Object.assign(Error("TERMINAL_NOT_REACHABLE"),{code:"TERMINAL_NOT_REACHABLE"});
       }
       s.lastContactAt=new Date(now()).toISOString();
+      phase="DRIVER";
       if(!adapterFactory||!approved.has(s.definition.terminalId)){
         s.status="NETWORK_REACHABLE_DRIVER_NOT_APPROVED";
         s.failures=0;s.nextAttemptAt=0;s.lastError=null;
@@ -145,7 +147,7 @@ export function createTerminalFleet({
       s.lastError=message(error); // no SDK exception text, token or person data
       s.errorHistory.push(Object.freeze({at:new Date(now()).toISOString(),code:s.lastError}));
       if(s.errorHistory.length>20)s.errorHistory.shift();
-      s.status="OFFLINE_RETRY_SCHEDULED";
+      s.status=phase==="NETWORK"?"OFFLINE_RETRY_SCHEDULED":"DRIVER_ERROR_RETRY_SCHEDULED";
     }finally{s.busy=false;}
   };
   const pollOnce=async()=>{
