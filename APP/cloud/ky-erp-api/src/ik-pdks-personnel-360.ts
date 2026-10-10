@@ -181,14 +181,14 @@ export function registerIkPdksPersonnel360Routes(app: Hono<AppEnv>) {
     const auth = await access(c, employeeId, true);
     if ("deny" in auth) return auth.deny;
     try {
-      const result = await c.env.DB.prepare(`SELECT DISTINCT a.id,a.file_name AS fileName,a.status,a.updated_at AS updatedAt
+      const result = await c.env.DB.prepare(`SELECT DISTINCT a.id,a.file_name AS fileName,a.status,a.updated_at AS updatedAt,b.purpose_code AS documentType
         FROM file_hub_assets a
         JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug
         JOIN file_hub_bindings b ON b.storage_connection_id=l.storage_connection_id
           AND b.main_company_slug=a.main_company_slug
         WHERE a.main_company_slug=? AND b.module_code='IK'
           AND b.purpose_code IN ('PERSONNEL_DOCUMENT','CONTRACT')
-          AND b.read_enabled=1 AND l.is_available=1 AND a.status='AVAILABLE'
+          AND b.read_enabled=1 AND b.write_enabled=1 AND l.is_available=1 AND a.status='AVAILABLE'
         ORDER BY a.updated_at DESC LIMIT 50`).bind(auth.company).all<Row>();
       return ok(c, result.results || []);
     } catch {
