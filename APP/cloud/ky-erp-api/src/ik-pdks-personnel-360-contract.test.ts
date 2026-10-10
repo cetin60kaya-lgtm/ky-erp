@@ -26,6 +26,8 @@ test("card change uses expected previous card, collision rejection and durable h
   assert.match(module,/employee_id<>\?/);
   assert.match(module,/SELECT \?,\?,\?,\?,\?,\?,\?,\?,\?,\?,\? WHERE changes\(\)=1/);
   assert.match(module,/terminalWritten: false/);
+  assert.match(module,/CARD_EMPLOYEE_INACTIVE/);
+  assert.match(module,/CARD_HISTORY_UNVERIFIED/);
   assert.match(load("ik-personnel-control.ts"),/USE_CARD_ASSIGNMENT/);
   const roster=load("ik-personnel-control.ts").match(/async function personRows\([\s\S]*?async function accessiblePerson/)[0];
   assert.doesNotMatch(roster,/await ensurePersonnelCodes/); // GET never writes person codes
@@ -36,6 +38,10 @@ test("documents link only confirmed tenant File Hub assets, unlink does not dele
   assert.match(module,/DOCUMENT_TYPES = new Set\(\["PERSONNEL_DOCUMENT", "CONTRACT"\]\)/);
   assert.match(module,/a\.main_company_slug=\?/);
   assert.match(module,/b\.module_code='IK'/);
+  assert.match(module,/b\.purpose_code=\?/);
+  assert.match(module,/b\.write_enabled=1/);
+  assert.match(module,/PERSONNEL_DOCUMENT_PREVIEW_PENDING/);
+  assert.match(module,/cache-control": "no-store/);
   assert.match(module,/INSERT OR IGNORE INTO file_hub_relations/);
   assert.match(module,/DELETE FROM file_hub_relations/);
   assert.doesNotMatch(module,/FILES\.delete|DROP TABLE|DELETE FROM file_hub_assets|DELETE FROM ik_time_clock_events/);
