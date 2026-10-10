@@ -57,6 +57,32 @@ test("reader executable SHA and operator consent required, never uses legacy com
   await adapter.close();
  }finally{await rm(root,{recursive:true,force:true});}
 });
+test("zero-event read requires END marker and backlog is drained without loss",async()=>{
+ assert.throws(()=>parseFpClockReadout(
+   "STATUS|OK|2026-10-10T09:20:00|0|39|39",scope),/END_MISSING/);
+ const root=await mkdtemp(join(tmpdir(),"pdks-backlog-"));
+ const exe=join(root,"KyPdks.FpClock.Reader.exe");
+ try{
+  await writeFile(exe,"backlog-fixture");
+  const sha=createHash("sha256").update("backlog-fixture").digest("hex");
+  const samples=Array.from({length:205},(_,i)=>
+    "LOG|"+String(i).padStart(5,"0")+"|2026-10-10T09:18:02|0|1|1|1");
+  const output="STATUS|OK|2026-10-10T09:20:00|205|39|39\n"+
+    samples.join("\n")+"\nEND|205";
+  let calls=0;
+  const adapter=await createFpClockAdapter({
+    ip:"192.168.1.224",port:5005,machineId:1,
+  },{...scope,enabled:true,executable:exe,approvedSha256:sha,
+    run:async()=>{calls++;return output;},
+  });
+  await adapter.healthCheck();
+  assert.equal((await adapter.readRawBatch({maxRecords:200})).length,200);
+  await adapter.healthCheck();
+  assert.equal((await adapter.readRawBatch({maxRecords:200})).length,5);
+  assert.equal(calls,1);
+  await adapter.close();
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 test("only dedicated reader path and explicit safe modes accepted",async()=>{
  await assert.rejects(()=>runFpClockProcess("/tmp/Hedef.exe","clearlogs",{
    ip:"192.168.1.224",port:5005,machineId:1,
