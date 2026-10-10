@@ -134,9 +134,10 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
     <h4>Özlük kartı</h4>
     <p>Kaynak: KY ERP personel ana kaydı. Değişiklikler geçmişe kaydedilir; fiziksel cihaz değiştirilmez.</p>
     <div className="pdk-person-fields">{editable.map(([key,label,type])=>
-      <Field key={key} label={label}>{type==="select"?<select value={form.status||"Aktif"}
+      <Field key={key} label={label}>{type==="select"?<select value={form.status||""}
         disabled={!canEdit||loading||busy||!loaded} onChange={e=>setForm(x=>({...x,status:e.target.value,
           exitDate:e.target.value==="Aktif"?"":x.exitDate}))}>
+          <option value="" disabled>Durum doğrulanmadı, seçim gerekli</option>
           <option value="Aktif">Aktif</option><option value="Pasif">Pasif / Çıkış Yapıldı</option>
         </select>:<input type={type} value={form[key]||""}
         disabled={!canEdit||loading||busy||!loaded} onChange={e=>setForm(x=>({...x,[key]:e.target.value}))}/>}</Field>)}</div>
@@ -177,7 +178,7 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
     {note}
     {canEdit&&<div className="pdk-person-actions">
       <Field label="Değişiklik gerekçesi"><input value={reason} onChange={e=>setReason(e.target.value)} maxLength={240}/></Field>
-      <button type="button" disabled={busy||loading||!loaded||reason.trim().length<5}
+      <button type="button" disabled={busy||loading||!loaded||!form.status||reason.trim().length<5}
         onClick={()=>submit(endpoint(employeeId,"/change"),{
           changes:form,effectiveDate:initialDate(),note:reason.trim()
         },"Özlük kartı D1 kaydı güncellendi; güncel durum yeniden okunuyor.")}>Özlük değişikliğini kaydet</button>
