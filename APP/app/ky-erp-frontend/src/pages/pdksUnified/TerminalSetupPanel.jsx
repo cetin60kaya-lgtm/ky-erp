@@ -1,4 +1,4 @@
-import React,{useMemo,useState} from "react";
+import React,{useEffect,useMemo,useState} from "react";
 import {Cable,CheckCircle2,Download,ExternalLink,HardDrive,Info,LockKeyhole,
   Network,Radio,ScanLine,ShieldAlert,ShieldCheck} from "lucide-react";
 import {CONNECTORS,INPUT_METHODS,installationPlan,validateTerminalDefinition}
@@ -7,6 +7,7 @@ import {parseTerminalDiagnosticReport} from "./terminalReportView.mjs";
 import {CONFIRMED_LEGACY_TERMINAL,inspectImportedLegacyProfiles}
   from "../../../../../pdks-unified/device-gateway/legacy-hedef-terminal-profile.mjs";
 import {projectTerminalCsv} from "./terminalCsvView.mjs";
+import {buildCardPrintHtml} from "../../../../../pdks-unified/device-gateway/card-printer.mjs";
 
 const vendors=Object.freeze([
   ["KY QR","KY QR / Barkod"],
@@ -50,6 +51,51 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
   const [diagnostic,setDiagnostic]=useState(null);
   const [csvDiagnostic,setCsvDiagnostic]=useState(null);
   const [legacyProfiles,setLegacyProfiles]=useState([CONFIRMED_LEGACY_TERMINAL]);
+  const [fleetState,setFleetState]=useState({status:"NOT_CONNECTED",devices:[]});
+  const [printerState,setPrinterState]=useState({status:"NOT_CONNECTED",printers:[]});
+  const [oldAgent,setOldAgent]=useState({status:"NOT_CONNECTED",sources:[]});
+  const [qrHealth,setQrHealth]=useState({status:"NOT_CONNECTED"});
+  useEffect(()=>{
+    if(previewOnly)return;
+    let cancelled=false;
+    const refresh=async()=>{
+      try{
+        const response=await fetch("http://127.0.0.1:5206/status",
+          {cache:"no-store",signal:AbortSignal.timeout(2500)});
+        if(!response.ok)throw Error("STATUS_UNAVAILABLE");
+        const devices=await response.json();
+        if(!Array.isArray(devices)||devices.length>32)throw Error("INVALID_RESPONSE");
+        if(!cancelled)setFleetState({status:"LOCAL_AGENT_REACHABLE",devices});
+      }catch{
+        if(!cancelled)setFleetState({status:"LOCAL_AGENT_OFFLINE",devices:[]});
+      }
+      try{
+        const response=await fetch("http://127.0.0.1:5206/printers",
+          {cache:"no-store",signal:AbortSignal.timeout(2500)});
+        if(!response.ok)throw Error("PRINTER_QUERY_FAILED");
+        const data=await response.json();
+        if(!cancelled)setPrinterState({
+          status:data.status||"PRINTER_UNKNOWN",
+          printers:Array.isArray(data.printers)?data.printers.slice(0,100):[],
+        });
+      }catch{if(!cancelled)setPrinterState({status:"PRINTER_AGENT_OFFLINE",printers:[]});}
+      for(const [endpoint,setter,offline] of [
+        ["legacy-agent",setOldAgent,{status:"AGENT_READ_OFFLINE",sources:[]}],
+        ["qr-health",setQrHealth,{status:"QR_HEALTH_OFFLINE"}],
+      ]){
+        try{
+          const response=await fetch("http://127.0.0.1:5206/"+endpoint,
+            {cache:"no-store",signal:AbortSignal.timeout(2500)});
+          if(!response.ok)throw Error("LOCAL_SERVICE_UNAVAILABLE");
+          const value=await response.json();
+          if(!cancelled)setter(value);
+        }catch{if(!cancelled)setter(offline);}
+      }
+    };
+    void refresh();
+    const interval=setInterval(()=>{void refresh();},5000);
+    return ()=>{cancelled=true;clearInterval(interval);};
+  },[previewOnly]);
   const connector=CONNECTORS.find(c=>c.id===config.connectorId);
   const counts=useMemo(()=>({
     connectors:CONNECTORS.length,inputMethods:INPUT_METHODS.length,
@@ -130,6 +176,13 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
     const a=document.createElement("a");a.href=url;
     a.download="KY-PDKS-TERMINAL-"+config.terminalId+".json";a.click();
     URL.revokeObjectURL(url);
+  };
+  const printerTest=()=>{
+    const preview=window.open("","_blank");
+    if(!preview){setNotice("Kart önizlemesi için açılır pencere izni gerekir.");return;}
+    preview.document.open();
+    preview.document.write(buildCardPrintHtml({type:"test"}));
+    preview.document.close();
   };
   return <section className="pdk-u-terminal" aria-label="Çok markalı terminal kurulum merkezi">
     <div className="pdk-u-terminal-head">
@@ -289,6 +342,68 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
           <p>Dosya imzasız bir operatör tanısıdır. Fiziksel cihaz RAW, Firebird, bordro ve yıllık TNF
             otomatik doğrulanmış veya değiştirilmiş sayılmaz.</p>
         </div>}
+<div className="pdk-u-terminal-sub"><Network size={16}/> Yerel canlı cihaz ve hata merkezi</div>
+        <p role="status">Windows yerel ajanı: <strong>{fleetState.status==="LOCAL_AGENT_REACHABLE"?"ERİŞİLİYOR":
+          fleetState.status==="LOCAL_AGENT_OFFLINE"?"OFFLINE":"BAĞLI DEĞİL"}</strong>.
+          {fleetState.status==="LOCAL_AGENT_OFFLINE"?" Cihazların açık/kapalı olduğu doğrulanamadı.":""}</p>
+        {fleetState.devices.length>0&&<div className="pdk-u-table-scroll" role="region"
+          tabIndex={0} aria-label="Çoklu cihaz canlı durum tablosu">
+          <table className="pdk-u-table"><thead><tr>
+            <th>Terminal</th><th>Bağlantı</th><th>Okunan</th><th>Tekrar</th>
+            <th>Cihaz kaydı</th><th>Son okutma</th><th>Son hata</th>
+          </tr></thead><tbody>
+            {fleetState.devices.map(device=><tr key={device.terminalId}>
+              <td>{device.terminalId}</td><td>{device.status}</td>
+              <td>{device.accepted??0}</td><td>{device.duplicates??0}</td>
+              <td>{device.deviceLogCount??"Bilinmiyor"}</td>
+              <td>{device.lastPunchAt||"Henüz doğrulanmadı"}</td>
+              <td>{device.lastError||"—"}</td>
+            </tr>)}
+          </tbody></table>
+          {fleetState.devices.map(device=><details key={device.terminalId}>
+            <summary>{device.terminalId} · Hata geçmişi ({device.errorHistory?.length||0})</summary>
+            <ul>{(device.errorHistory||[]).map((error,i)=><li key={i}>
+              {error.at} · {error.code}</li>)}</ul>
+          </details>)}
+        </div>}
+<div className="pdk-u-terminal-sub"><HardDrive size={16}/> Mevcut Windows Agent / TCP / Seri / Dosya</div>
+        <p>KYERP.PDKS.Agent durumu: <strong>{oldAgent.status}</strong>.
+          Kaynak türü, terminalin marka/model kimliğini tek başına doğrulamaz.</p>
+        {oldAgent.terminalState&&<p>{oldAgent.captureMode} · {oldAgent.terminalState}</p>}
+        {!!oldAgent.sources?.length&&<table className="pdk-u-table">
+          <thead><tr><th>Kaynak</th><th>Yerel kayıt</th><th>Son saat</th><th>Kabul</th></tr></thead>
+          <tbody>{oldAgent.sources.map(record=><tr key={record.source}>
+            <td>{record.source}</td><td>{record.acceptedTotal}</td>
+            <td>{record.lastPunchAt||"—"}</td><td>FDB/TNF mutabakatı bekliyor</td>
+          </tr>)}</tbody>
+        </table>}
+        <p>Yerel QR/USB kiosk: <strong>{qrHealth.status}</strong>.
+          Bu durum fiziksel cihaz kimliği veya personel eşleşmesi kanıtı değildir.</p>
+        <div className="pdk-u-terminal-sub"><Network size={16}/> Çoklu Hedef cihaz izleme</div>
+        <p>İki eski cihazın gerçek profilini ayrı ayrı alın. Windows yerel gözlemci
+          bağlantı kesilince yeniden dener; TCP yanıtı gerçek FP_CLOCK kart okuması değildir.
+          İkinci profil, OCX metotları ve gerçek ham olay kanıtı doğrulanmadı.</p>
+        <p><code>node APP/pdks-unified/device-gateway/terminal-fleet-cli.mjs --profiles C:\\YOL\\hedef-cihazlar.json --watch</code>
+          komutunu yalnız yerel Windows bilgisayarında ve <code>KY_PDKS_COMPANY_ID</code>
+          tanımlandıktan sonra çalıştırın.</p>
+        <a href="http://127.0.0.1:5206/" target="_blank" rel="noopener noreferrer"
+          className="pdk-u-terminal-link"
+          onClick={event=>{if(previewOnly)event.preventDefault();}}>
+          Çoklu cihaz canlı ağ durumunu aç <ExternalLink size={14}/>
+        </a>
+<div className="pdk-u-terminal-sub"><HardDrive size={16}/> Kart yazıcıları</div>
+        <p>Windows yazıcı keşfi: <strong>{printerState.status}</strong>.
+          Sürücü görünmesi fiziksel kart basıldığını kanıtlamaz.</p>
+        {!!printerState.printers.length&&<ul>
+          {printerState.printers.map((p,i)=><li key={p.name+":"+i}>
+            {p.name} — {p.driver} — {p.status}
+          </li>)}
+        </ul>}
+        <p>Mevcut Windows kart yazıcısı sürücüsünü kullanın. Test kartı ve
+          Personel 360° &gt; Kart ekranındaki doğrulanmış kart önizlemesi 86 × 54 mm'dir.
+          Fiziksel baskı yalnız operatörün yazdırma penceresinden başlatılır.</p>
+        <button type="button" className="pdk-u-btn" disabled={previewOnly}
+          onClick={printerTest}><Download size={15}/> Test kartı baskı önizlemesi</button>
         <div className="pdk-u-terminal-sub"><Cable size={16}/> KY imzalı QR / USB okuyucu</div>
         <p>Yerel QR terminali <code>127.0.0.1:5197</code> adresinden, yalnız
           açık izinli Windows Agent komutuyla başlatılır. QR kamera ve USB HID

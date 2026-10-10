@@ -21,6 +21,7 @@ import UnifiedOperationPanel from "./UnifiedOperationPanel.jsx";
 import LiveAttendancePanel from "./LiveAttendancePanel.jsx";
 import CardEventsPanel from "./CardEventsPanel.jsx";
 import TerminalSetupPanel from "./TerminalSetupPanel.jsx";
+import {buildCardPrintHtml} from "../../../../../pdks-unified/device-gateway/card-printer.mjs";
 import TransferCenterPanel from "./TransferCenterPanel.jsx";
 import CloudSyncPanel from "./CloudSyncPanel.jsx";
 import StageCopyExplorer from "./StageCopyExplorer.jsx";
@@ -114,6 +115,21 @@ function PersonDetails({person,active,onChange,isAuditAccount,detail}) {
     Number.isFinite(Number(value))?new Intl.NumberFormat("tr-TR",{maximumFractionDigits:2}).format(Number(value)):"—";
   const smallTable=(columns,records)=>
     <UnifiedTable columns={columns} rows={records}/>;
+  const printPersonnelCard=()=>{
+    if(!person?.id||isAuditAccount)return;
+    if(!window.confirm("Seçili personelin kart numarası ve isim eşleşmesini yetkili kaynakla doğruladım. Kart yazdırma önizlemesi açılsın mı?"))return;
+    const preview=window.open("","_blank");
+    if(!preview){window.alert("Tarayıcı yeni pencereyi engelledi. Açılır pencere izni gerekir.");return;}
+    try{
+      const html=buildCardPrintHtml({type:"personnel",companyName:"KY PDKS",
+        personnelName:person.fullName,employeeId:person.id,
+        cardNo:String(person.cardNo??""),mappingVerified:true,operatorApproved:true});
+      preview.document.open();preview.document.write(html);preview.document.close();
+    }catch(error){
+      preview.close();
+      window.alert("Kart önizlemesi reddedildi: "+String(error?.message||"Bilinmeyen hata"));
+    }
+  };
   const view=()=>{
     if(!person)return <EmptyState title="Personel seçilmedi"
       description="Önce doğrulanmış personel listesinden bir çalışan seçin."/>;
@@ -125,12 +141,21 @@ function PersonDetails({person,active,onChange,isAuditAccount,detail}) {
         ["İşten çıkış",person.exitDate],["Dönem durumu",person.status],
       ].map(([key,value])=><div key={key}><dt>{key}</dt><dd>{value||"—"}</dd></div>)}
     </dl>;
-    if(active==="card")return <dl className="pdk-u-definition">
-      <div><dt>Atanmış kart</dt><dd>{person.cardNo}</dd></div>
-      <div><dt>Kart durumu</dt><dd>{person.cardState}</dd></div>
-      <div><dt>Personel kaynağı</dt><dd>KY ERP PDKS</dd></div>
-      <div><dt>Son fiziksel geçiş</dt><dd>Doğrulanmadı</dd></div>
-    </dl>;
+    if(active==="card")return <>
+      <dl className="pdk-u-definition">
+        <div><dt>Atanmış kart</dt><dd>{person.cardNo}</dd></div>
+        <div><dt>Kart durumu</dt><dd>{person.cardState}</dd></div>
+        <div><dt>Personel kaynağı</dt><dd>KY ERP PDKS</dd></div>
+        <div><dt>Son fiziksel geçiş</dt><dd>Doğrulanmadı</dd></div>
+      </dl>
+      {!isAuditAccount&&<div className="pdk-u-terminal-actions">
+        <button type="button" className="pdk-u-btn" onClick={printPersonnelCard}
+          disabled={!person.id||!/^\d{5}$/.test(String(person.cardNo||""))}>
+          Kart yazıcıda önizle (86 × 54 mm)
+        </button>
+        <p>Windows'taki kart yazıcısı baskı penceresinden seçilir. Fiziksel baskı için ayrıca Yazdır'a basılır; RFID çipine yazılmaz.</p>
+      </div>}
+    </>;
     if(active==="documents")return <EmptyState title="Personel evrak servisi bağlı değil"
       description="Yetkili doküman servisi olmadan kişisel belge veya imza görüntülenmez."
       IconComponent={LockKeyhole}/>;

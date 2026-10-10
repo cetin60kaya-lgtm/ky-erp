@@ -1,0 +1,61 @@
+name: KY PDKS Terminal PR Isolated Verify
+
+on:
+  push:
+    branches:
+      - feature/ky-pdks-terminal-multidevice-fpclock-20261010
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ky-pdks-terminal-418-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  device_gateway:
+    name: Node terminal gateway tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Offline/mock device unit tests
+        run: node --test APP/pdks-unified/device-gateway/*.test.mjs
+
+  frontend:
+    name: Unified React tests and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+
+  windows:
+    name: Windows x86 FP_CLOCK reader and Unified host
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build read-only x86 bridge
+        shell: pwsh
+        run: ./APP/pdks-unified/windows/tools/Build-FpClockReadOnly.ps1
+      - name: Build existing Unified desktop host
+        shell: pwsh
+        run: dotnet build APP/pdks-unified/windows/KyPdks.UnifiedHost.csproj -c Release
+
+# This feature-only CI does not install OCXs or contact hardware, D1, FDB/TNF.
+# Do not promote this result to physical-device certification.
