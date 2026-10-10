@@ -62,3 +62,60 @@ cd "D:\Googledrive\KYERP\00_CANONICAL\GITHUB\ky-erp"
 ## Saha kabul kapısı
 
 Eski Hedef'in iki cihaz ayarını ve ilgili FP_CLOCK.ocx + TMPCCOMM.dll dosya konumlarını doğrula; onaylı x86 adapterin ham hareketleri **salt okunur** okuduğunu gerçek iki okutmayla kanıtla; zaman/saat farkı/yön/tekrar kodu ve 5 haneli kart eşlemesini karşılaştır; Firebird ve yıl TNF'sini salt okunur referans olarak kullan; bağlantı koparma/geri gelme ve kart yazıcısı gerçek baskı denemelerini yetkili operatörle test et. Bunlardan sonra production kabulü ayrıca değerlendirilir.
+
+
+## 10.10.2026 — FP_CLOCK gerçek köprü kaynak entegrasyonu (PR #418)
+
+### Eski kod kanıtı
+
+Google Drive arşivindeki eski `TerminalDeviceBridge/Program.cs` kaynak dosyası incelendi. Doğrulanan **FP_CLOCK** metot dizisi:
+
+1. `SetIPAddress(ref endpoint, port, password)`
+2. `OpenCommPort(machine)`
+3. `GetDeviceTime`, `GetDeviceStatus(machine, 2/6/7)`
+4. `ReadMark=false` (SDK okundu işaretini önleme; kurulamazsa yeni köprü okumaz)
+5. `ReadGeneralLogData(machine)`
+6. `GetGeneralLogDataWithSecond(...)`
+7. `CloseCommPort()`
+
+Eski köprüde `deleteuser`, `clearusers`, `movecard`, `clearlogs`, `settime`, `EnableDevice` yolları da bulunuyordu. **Yeni okuyucuya bunların hiçbiri taşınmadı.** Yeni x86 okuyucuda yalnız `--status` ve `--read` bulunuyor. Geçerli COM CLSID kaynakta `{87733EE1-D095-442B-A200-6DE90C5C8318}`.
+
+Drive'daki `TERMINAL_GERCEK_KANIT.md` belgesine göre eski uygulama Cihaz1'den daha önce saat + 39 kullanıcı + 39 kart okumuş ve gerçek Hedef aktarımı 84 TNF satırı yedeklemişti. Bu **geçmiş cihaz kanıtıdır**, yeni x86 okuyucunun bugünkü saha testi değildir.
+
+Eski Hedef arşivindeki `Settings.ini`, `Options.ini`, `system.ini`, `system2.ini` incelendi; ikinci fiziksel cihazın gerçek adresi/yönü bulunamadı. Arşiv `DATABASE.GDB` yalnız geçici kopyada denenmiş, Firebird ODS 11.2'nin mevcut araç tarafından desteklenmemesi sebebiyle SQL sorgusu açılamamıştır; kaynak GDB değiştirilmedi. Cihaz2 gerçek profili **KANIT BEKLİYOR**.
+
+### Çalışan kod yolları / nasıl kullanılacak
+
+- `APP/pdks-unified/windows/FpClock.Reader`: eski çağrıları takip eden izole **x86 salt okunur COM** okuyucu. COM/OCX otomatik register edilmez; gerçek PC'de mevcut lisans ve kayıtlı sürücü kullanılmalıdır.
+- `device-gateway/fp-clock-adapter.mjs`: sadece onaylı `KyPdks.FpClock.Reader.exe` SHA-256 + operatör etkinleştirmesi + allowlist ile açılır; eski potansiyel silme metotları içeren TerminalDeviceBridge çalıştırılamaz.
+- `terminal-fleet.mjs`: iki veya daha fazla gerçek terminal profili, bağlantı, son fiziksel okutma, aktarım sayısı, duplicate, hata geçmişi ve backoff; ağ erişimi ile sürücü/RAW hatası birbirinden ayrıdır.
+- `legacy-agent-snapshot.mjs`: **mevcut** `KYERP.PDKS.Agent` TCP_CLIENT / TCP_SERVER / SERIAL / HEDEF_TR500 / FILE hizmetinin yerel SQLite WAL'ını `readOnly:true` ile **anonim kaynak toplamları** şeklinde gösterir. Bu yeni bir agent veya ikinci puantaj kaynağı değildir.
+- `terminal-kiosk.mjs` önceki KY QR/USB kanıt ve anti-replay yoludur; yeni localhost `/qr-health` yalnız bağlantıyı ve sertifikasız durumunu okur.
+- `printer-health.mjs`: Windows kurulu yazıcı/driver/status keşfi, fiziksel baskı yok. Personel 360 Kart yazdırma ve Terminal Hub test kartı, kullanıcının Yazdır seçiminden sonra Windows spooler'a devredilir; RFID çip yazma yok.
+- `TerminalSetupPanel.jsx`: `127.0.0.1:5206/status`, `/legacy-agent`, `/qr-health`, `/printers` sonuçları; agent gerçekten çalışmıyorsa OFFLINE/UNAVAILABLE.
+- `windows/tools/Start-KyPdks-TerminalFleet.ps1`: operatörün açıkça verdiği profil JSON ve firma kimliğiyle başlatır. Varsayılan yalnız ağ izleme; gerçek okuma `-ReadEnabled -ApprovedTerminalIds -ReaderExe -ReaderSha256` ile açıkça etkinleşir.
+
+Yerel Windows PC üzerinde yalnız build/doğrulama:
+
+```powershell
+cd "D:\Googledrive\KYERP\00_CANONICAL\GITHUB\ky-erp"
+powershell -NoProfile -File "APP\pdks-unified\windows\tools\Build-FpClockReadOnly.ps1"
+```
+
+Örnek **ağ izleme** (profil JSON gerçek Hedef kaydından olmalı):
+
+```powershell
+cd "D:\Googledrive\KYERP\00_CANONICAL\GITHUB\ky-erp"
+powershell -NoProfile -File "APP\pdks-unified\windows\tools\Start-KyPdks-TerminalFleet.ps1" -ProfilesFile "C:\YOL\gercek-cihazlar.json" -CompanyId "GERCEK-FIRMA-KODU"
+```
+
+Gerçek RAW okuma önce x86 reader hash ve gerçek kart kaynağı/cihaz kabulü yapıldıktan sonra `ReadEnabled` ile açılır. Okuma sonuçları **doğrudan üretim FDB/TNF/D1'e yazılmaz**; yalnız kontrollü yerel bellekte/yerel agent sayımında gösterilir.
+
+### Kabul durumu
+
+- Node gateway testleri: GitHub izole CI ile çalıştırılır.
+- Frontend: GitHub izole CI ile test ve build.
+- Windows x86 okuyucu: CI ile source/publish; fiziksel ActiveX sertifikası değildir.
+- Unified Windows host: iç içe projelerin source glob çakışması `KyPdks.UnifiedHost.csproj` içindeki `Compile Remove` ile ayrıldı.
+- **Fiziksel FP_CLOCK cihaz read/seri port/TCP/QR/USB/sürücü ile gerçek uygulama kabulü: YAPILMADI**; ikinci cihaz profili: BULUNMADI.
+- Canlı terminal belleği, cihaz saati, üretim Firebird/annual TNF/Cloudflare D1'de değişiklik YOK; merge veya deploy YOK.
