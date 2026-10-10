@@ -117,7 +117,8 @@ export function registerIkPdksPersonnel360Routes(app: Hono<AppEnv>) {
     try {
       const result = await c.env.DB.prepare(`SELECT r.id,r.file_asset_id AS assetId,
         r.relation_type AS documentType,r.metadata,r.created_at AS createdAt,
-        a.file_name AS fileName,a.status,a.size_bytes AS sizeBytes
+        a.file_name AS fileName,a.status,a.size_bytes AS sizeBytes,
+        a.preview_status AS previewStatus
         FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id
            AND a.main_company_slug=r.main_company_slug
         WHERE r.main_company_slug=? AND r.entity_type='IK_PERSONNEL'
@@ -128,11 +129,43 @@ export function registerIkPdksPersonnel360Routes(app: Hono<AppEnv>) {
         try { metadata = JSON.parse(value(row.metadata) || "{}"); } catch {}
         return { id: row.id, assetId: row.assetId, documentType: row.documentType,
           note: value(metadata.note), fileName: row.fileName, status: row.status,
-          sizeBytes: row.sizeBytes, createdAt: row.createdAt, physicalFileDeleted: false };
+          sizeBytes: row.sizeBytes, createdAt: row.createdAt,
+          previewReady: value(row.previewStatus).toUpperCase() === "READY",
+          physicalFileDeleted: false };
       }));
     } catch {
       return fail(c, 503, "PERSONNEL_FILE_HUB_NOT_READY", "File Hub şeması/bağlantısı henüz kullanılamıyor.");
     }
+  });
+
+  // Preview is the existing File Hub derivative, never a direct provider credential or unrestricted path.
+  // A private personnel file cannot be opened through generic, unscoped file browsing.
+  app.get("/api/ik/personnel-control/people/:employeeId/documents/:relationId/preview", async (c) => {
+    const employeeId = value(c.req.param("employeeId"));
+    const auth = await access(c, employeeId, true);
+    if ("deny" in auth) return auth.deny;
+    const id = value(c.req.param("relationId"));
+    const record = await c.env.DB.prepare(`SELECT a.preview_status,a.preview_storage_key,a.mime_type
+      FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id
+       AND a.main_company_slug=r.main_company_slug
+      WHERE r.id=? AND r.main_company_slug=? AND r.entity_type='IK_PERSONNEL'
+        AND r.entity_id=? AND r.relation_type IN ('PERSONNEL_DOCUMENT','CONTRACT') LIMIT 1`)
+      .bind(id, auth.company, employeeId).first<Row>();
+    if (!record) return fail(c, 404, "PERSONNEL_DOCUMENT_NOT_FOUND", "Yetkili personel evrakı bulunamadı.");
+    const key = value(record.preview_storage_key);
+    if (value(record.preview_status).toUpperCase() !== "READY" || !key)
+      return fail(c, 409, "PERSONNEL_DOCUMENT_PREVIEW_PENDING", "Evrak web önizlemesi henüz hazır değil.");
+    const obj = await c.env.FILES.get(key);
+    if (!obj) return fail(c, 404, "PERSONNEL_DOCUMENT_PREVIEW_MISSING", "Evrak önizleme dosyası bulunamadı.");
+    const type = value(record.mime_type).toLowerCase();
+    if (!["application/pdf","image/png","image/jpeg","image/webp"].includes(type))
+      return fail(c, 415, "PERSONNEL_DOCUMENT_PREVIEW_UNSUPPORTED", "Evrak türünün güvenli web önizlemesi desteklenmiyor.");
+    const headers = new Headers({
+      "content-type": type, "content-disposition": "inline",
+      "cache-control": "no-store", "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    });
+    return new Response(obj.body, { headers });
   });
 
   app.get("/api/ik/personnel-control/people/:employeeId/document-candidates", async (c) => {
