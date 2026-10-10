@@ -42,16 +42,26 @@ export function payrollRowsForTab(id,payload,{year,month}={}) {
       return {rows:[],supported:false};
     seen.add(key);
     const common={
-      _id:key,"Personel":get(line,"fullName"),"Kart No":get(line,"cardNo"),
+      _id:key,personId:key,"Personel":get(line,"fullName"),"Kart No":get(line,"cardNo"),
       "Dönem":period,"Maaş":get(line,"salary"),
       "Yol":get(line,"roadAllowance"),"Ek Yol":get(line,"roadAdjustmentAmount"),
       "Yemek":get(line,"mealAmount"),
-      "Mesai":get(line,"overtimeAmount"),"Avans":get(line,"advanceAmount"),
+      "Mesai":get(line,"overtimeAmount"),
+      "%50 Saat":get(line,"overtimeHours50"),"%50 Tutar":get(line,"overtimeAmount50"),
+      "%100 Saat":get(line,"overtimeHours100"),"%100 Tutar":get(line,"overtimeAmount100"),
+      "Avans":get(line,"advanceAmount"),
       "Kesinti":get(line,"deductionAmount"),"İcra/Haciz":get(line,"garnishmentAmount"),
       "BES":get(line,"besAmount"),"Banka":get(line,"bankAmount"),
       "Elden":get(line,"cashAmount"),"Toplam":get(line,"totalAmount"),
       "Net":get(line,"totalAmount"),"Brüt":get(line,"grossAmount"),
-      "Durum":sourceStatus,"Ödeme":paymentBalance(line),
+      "Durum":get(line,"reportState")==="—"?sourceStatus:get(line,"reportState")+" · "+sourceStatus,
+      "Dönem Kilidi":line.periodClosed===true?"Kilitli":line.periodClosed===false?"Açık":"—",
+      "Kanıt Durumu":Array.isArray(line.pendingEntries)?
+        (line.pendingEntries.length?line.pendingEntries.map(p=>p.reason).join("; "):
+          line.overtimeConflict?"Mesai toplam farkı":"D1 ön kontrol"):"Kanıt kontrolü bekliyor",
+      "Son İşlem":line.latestChange?.createdAt?
+        (String(line.latestChange.createdAt)+" · "+String(line.latestChange.actionType||"")):"—",
+      "Ödeme":paymentBalance(line),
       "Tutar":get(line,"totalAmount"),"Belge":"Taslak · ödeme fişi kanıtı yok",
       "İmza":"", "Rapor":"Bordro ön kontrolü",
     };
@@ -83,7 +93,7 @@ export function signatureRowsFromDays(person,days,{year,month}={}) {
     const observed=[entry?`Kaynakta giriş: ${entry}`:"",exit?`Kaynakta çıkış: ${exit}`:""].filter(Boolean).join(" / ")||"—";
     const source=day?.source==="MANUAL_OVERRIDE"?" (manuel düzeltme · fiziksel geçiş değil)":"";
     const base={
-      "Tarih":date,"Personel":shown(person.fullName),"Kart No":shown(person.cardNo),
+      "Tarih":date,personId:String(person.id),"Personel":shown(person.fullName),"Kart No":shown(person.cardNo),
       "Saat":observed+source,"İmza":"","Durum":"İmza bekliyor · kaynak D1, FDB/TNF kontrolü yok",
     };
     const sides= !entry&&!exit?["Sabah giriş","Akşam çıkış"]:
