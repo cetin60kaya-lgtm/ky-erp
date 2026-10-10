@@ -25,7 +25,7 @@ test("existing Hedef profile maps into safe draft; second is imported, not guess
   ]);
   assert.equal(legacyTerminalDefinition(rows[0],"stage-firm-1").terminalId,"HEDEF-Cihaz1");
   assert.equal(legacyTerminalDefinition(rows[1],"stage-firm-1").host,"192.168.1.222");
-  assert.equal(legacyTerminalDefinition(rows[1],"stage-firm-1").directionMode,"UNKNOWN");
+  assert.equal(legacyTerminalDefinition(rows[1],"stage-firm-1").directionMode,"EXPLICIT_OUT");
   assert.throws(()=>legacyTerminalDefinition({profileName:"Cihaz2",machineId:2,ip:"8.8.8.8",port:5005},"stage-firm-1"),/PRIVATE_IP/);
 });
 test("unapproved driver cannot read cards even when TCP is reachable",async()=>{
