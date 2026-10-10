@@ -289,7 +289,9 @@ body:has(> #root > .pdk-unified),
   body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-filters,
   body:has(.pdk-u-print-sheet) .pdk-u-print-sheet button,
   body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-label,
-  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-operation-panel{display:none!important}
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-operation-panel,
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-operation-box,
+  body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-operation-guard{display:none!important}
   body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-table-scroll{
     width:100%!important;max-height:none!important;overflow:visible!important}
   body:has(.pdk-u-print-sheet) .pdk-u-print-sheet .pdk-u-table{width:100%!important;
