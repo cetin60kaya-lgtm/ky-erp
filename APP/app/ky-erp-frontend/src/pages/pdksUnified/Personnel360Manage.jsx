@@ -1,4 +1,4 @@
-import React, {useCallback,useEffect,useState} from "react";
+import React, {useCallback,useEffect,useRef,useState} from "react";
 import {apiGet,apiPost,apiFetch} from "../../utils/api";
 import "./personnel360.css";
 
@@ -39,9 +39,11 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
   const [personnelGroupId,setPersonnelGroupId]=useState("");
   const [previewUrl,setPreviewUrl]=useState("");
   const [previewAsset,setPreviewAsset]=useState("");
+  const previewRequest=useRef(0);
 
   useEffect(()=>{
-    setLoaded(null);setError("");setMessage("");setForm(fromPerson(person));
+    previewRequest.current+=1;
+    setBusy(false);setLoaded(null);setError("");setMessage("");setForm(fromPerson(person));
     setCard(clean(person?.cardNo)==="—"?"":clean(person?.cardNo));
     setReason("");setAssetId("");setDocNote("");setUnlinkReason("");
     setGroupId("");setPersonnelGroupId("");setPreviewAsset("");setPreviewUrl("");
@@ -50,16 +52,18 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
   const refresh=useCallback(()=>setRevision(x=>x+1),[]);
   useEffect(()=>()=>{if(previewUrl)URL.revokeObjectURL(previewUrl);},[previewUrl]);
   const openPreview=async(id)=>{
+    const generation=++previewRequest.current;
     setError("");setPreviewAsset("");setPreviewUrl("");
     setBusy(true);
     try{
       const blob=await apiFetch(endpoint(employeeId,`/documents/${encodeURIComponent(id)}/preview`),{responseType:"blob"});
+      if(generation!==previewRequest.current)return; // employee or document changed while downloading
       if(!(blob instanceof Blob)||blob.size===0)throw new Error("Önizleme içeriği boş veya doğrulanamadı.");
       if(!["application/pdf","image/jpeg","image/png","image/webp"].includes(blob.type))
         throw new Error("Güvenli web önizleme biçimi desteklenmiyor.");
       setPreviewUrl(URL.createObjectURL(blob));setPreviewAsset(id);
-    }catch(e){setError(e?.message||"Dosya önizlemesi açılamadı.");}
-    finally{setBusy(false);}
+    }catch(e){if(generation===previewRequest.current)setError(e?.message||"Dosya önizlemesi açılamadı.");}
+    finally{if(generation===previewRequest.current)setBusy(false);}
   };
   useEffect(()=>{
     if(!employeeId||!company||previewOnly||isAuditAccount)return;
