@@ -29,7 +29,10 @@ async function access(c: Context<AppEnv>, employeeId: string, write = false) {
   const [scope, person] = await Promise.all([
     c.env.DB.prepare("SELECT scope FROM ik_user_hr_scope WHERE main_company_id=? AND user_id=? LIMIT 1")
       .bind(company, user.id).first<Row>().catch(() => null),
-    c.env.DB.prepare("SELECT id,full_name FROM hr_monthly_employees WHERE main_company_id=? AND id=? LIMIT 1")
+    c.env.DB.prepare(`SELECT e.id,e.full_name,e.status,s.active_passive,s.exit_date
+      FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s
+      ON s.main_company_id=e.main_company_id AND s.employee_id=e.id
+      WHERE e.main_company_id=? AND e.id=? LIMIT 1`)
       .bind(company, employeeId).first<Row>(),
   ]);
   const role = value(user.role).toUpperCase();
@@ -80,6 +83,9 @@ export function registerIkPdksPersonnel360Routes(app: Hono<AppEnv>) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) ||
         Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== effectiveDate)
       return fail(c, 400, "CARD_DATE_INVALID", "Geçerli işlem tarihi zorunludur.");
+    if (next && (/PAS|ÇIKIŞ|CIKIS/i.test(value(auth.person.status)) ||
+      /PAS/i.test(value(auth.person.active_passive)) || value(auth.person.exit_date)))
+      return fail(c, 409, "CARD_EMPLOYEE_INACTIVE", "İşten çıkmış veya pasif personele yeni kart atanamaz.");
     const current = await c.env.DB.prepare("SELECT card_no AS cardNo FROM ik_person_card_settings WHERE main_company_id=? AND employee_id=?")
       .bind(auth.company, employeeId).first<Row>();
     if (!current) return fail(c, 503, "PDKS_CARD_ROW_NOT_READY", "Personel kart ayar kaydı eksik; otomatik kayıt oluşturulmadı.");
@@ -204,8 +210,8 @@ export function registerIkPdksPersonnel360Routes(app: Hono<AppEnv>) {
       JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug
       JOIN file_hub_bindings b ON b.storage_connection_id=l.storage_connection_id AND b.main_company_slug=a.main_company_slug
       WHERE a.id=? AND a.main_company_slug=? AND a.status='AVAILABLE' AND l.is_available=1
-        AND b.module_code='IK' AND b.purpose_code IN ('PERSONNEL_DOCUMENT','CONTRACT') AND b.read_enabled=1 LIMIT 1`)
-      .bind(assetId, auth.company).first<Row>().catch(() => null);
+        AND b.module_code='IK' AND b.purpose_code=? AND b.read_enabled=1 AND b.write_enabled=1 LIMIT 1`)
+      .bind(assetId, auth.company, documentType).first<Row>().catch(() => null);
     if (!file) return fail(c, 409, "PERSONNEL_DOCUMENT_ASSET_NOT_READY", "Seçili dosya yetkili İK File Hub alanında bulunamadı.");
     const relationId = crypto.randomUUID(), timestamp = now();
     const results = await c.env.DB.batch([
