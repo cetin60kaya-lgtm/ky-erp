@@ -27,7 +27,17 @@ export const readAllPersonnel=async (params)=>{
   const byAssignment=new Map(masters.groupAssignments.map(link=>[
     String(link.employeeId),byGroup.get(String(link.groupId))?.name||null,
   ]));
-  return list.map(person=>({...person,workGroup:byAssignment.get(String(person.id))||person.workGroup||null}));
+  const personnelGroups=new Map((masters.personnelGroups||[]).map(group=>[String(group.id),group]));
+  const personnelAssignments=new Map((masters.personnelGroupAssignments||[]).map(link=>[
+    String(link.employeeId),String(link.personnelGroupId),
+  ]));
+  return list.map(person=>{
+    const personId=String(person.id),personnelGroupId=personnelAssignments.get(personId)||null;
+    return {...person,
+      workGroup:byAssignment.get(personId)||person.workGroup||null,
+      personnelGroupId,
+      personnelGroup:personnelGroups.get(personnelGroupId)?.name||null};
+  });
 };
 export const readProfile=(params)=>getPdksProfile(params);
 export const readDays=(personId,year,month,params)=>
