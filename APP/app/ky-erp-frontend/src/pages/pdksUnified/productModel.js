@@ -59,7 +59,7 @@ export const PRODUCT_SECTIONS = Object.freeze([
     tab("violations", "İhlal Raporları", "report", ["Personel","Tarih","İhlal","Kanıt","Durum"], "Geç giriş, eksik kart, erken çıkış"),
     tab("signatures", "İmza Formları", "report", ["Tarih","Personel","Kart No","Eksik Hareket","Saat","İmza"], "Eksik kart ve giriş/çıkış imza listeleri"),
     tab("timesheets", "Puantaj Raporları", "report", ["Rapor","Dönem","Gün","Mesai","İzin","Durum"], "Puantaj dönem analizleri"),
-    tab("payroll", "Bordro Raporları", "report", ["Rapor","Dönem","Yetki","Durum"], "Ödeme ve bordro raporları", { sensitive: true }),
+    tab("payroll", "Bordro Raporları", "report", ["Personel","Dönem","Maaş","Yol","Yemek","Mesai","Avans","Kesinti","İcra/Haciz","BES","Banka","Elden","Toplam","Durum"], "Ödeme ve bordro raporları", { sensitive: true }),
     tab("audit", "İşlem Geçmişi", "audit", ["Tarih","Kullanıcı","İşlem","Kaynak","Eski/Yeni","Sonuç"], "Değişiklik yapan kullanıcı ve değişiklik izi"),
   ], "Çıktı, analiz, imza belgeleri ve kayıt izi"),
   section("devices", "Cihaz & Senkron", "ServerCog", [
