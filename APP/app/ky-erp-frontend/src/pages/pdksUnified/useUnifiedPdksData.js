@@ -12,7 +12,7 @@ const errorMessage = (e) => String(e?.message || "Sunucuya ulaşılamadı.");
 const keyOf = (...fields) => JSON.stringify(fields);
 const ADDITIONAL = new Set([
   "masters","holidays","leaves","month","month-adjustments",
-  "monthly-attendance","signature-month","payroll","audit","config","corrections","live-attendance",
+  "monthly-attendance","signature-month","daily-report","payroll","audit","config","corrections","live-attendance",
 ]);
 
 export function useUnifiedPdksData({
@@ -105,7 +105,7 @@ export function useUnifiedPdksData({
   useEffect(()=>{
     if(previewOnly || !company || !ADDITIONAL.has(requirement) || !profileReady ||
        (requirement==="payroll" && audit) ||
-       (["monthly-attendance","signature-month"].includes(requirement) && !allowHeavy) ||
+       (["monthly-attendance","signature-month","daily-report"].includes(requirement) && !allowHeavy) ||
        (requirement==="corrections" && (!personId || !peopleReady)))return undefined;
     let cancelled=false;
     setResourceState({key:resourceKey,status:"loading",payload:null,error:""});
