@@ -384,6 +384,7 @@ export default function PdksUnifiedApp({
   const pageUnavailable = previewOnly || requirement==="unconnected" ||
     requirement==="forbidden" || !data.sourceReady;
   const sourceText = testMode ? "Yerel menü testi • canlı veri kapalı" :
+    managementTabs.has(tab.id) ? "KY ERP yönetim / tanılama durumu panelde doğrulanır" :
     previewOnly ? "Tasarım incelemesi" :
     requirement==="forbidden" || data.audit && isSensitiveProductTab(tab.id) ? "Erişim kapalı" :
     requirement==="unconnected" ? "Entegrasyon bekliyor" :
@@ -517,6 +518,7 @@ export default function PdksUnifiedApp({
           {managementTabs.has(tab.id) ? <ManagementIntegrationPanel
             key={[company,tab.id].join(":")} tabId={tab.id}
             company={company} companyId={activeMainCompany?.id||""}
+            terminalReport={terminalReport}
             profileReady={data.profileReady} audit={profileAudit}
             previewOnly={previewOnly} /> :
           tab.id==="terminals" ? <TerminalSetupPanel

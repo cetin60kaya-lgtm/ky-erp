@@ -3,7 +3,7 @@ import {useAuth} from "../../context/AuthContext";
 import {
   getMainCompanies,listUsers,getUserPermissions,listBackups,getLogs,
 } from "../../services/adminApi";
-import {readCloudSyncStatus} from "./readService.js";
+import {readCloudSyncStatus,readLiveDashboard} from "./readService.js";
 import {
   isManager,isOwner,scopeCompanies,scopeUsers,normalizePermissions,
   backupHealth,projectCloudEvents,projectLocalHealth,rowsOf,
@@ -37,7 +37,7 @@ function Table({headers,rows,select,onSelect}){
   </tbody></table>{!rows.length&&<p className="pdk-u-live-note">Doğrulanmış kayıt yok.</p>}</div>;
 }
 export default function ManagementIntegrationPanel({
-  tabId,company="",companyId="",previewOnly=false,profileReady=false,audit=false,
+  tabId,company="",companyId="",terminalReport=null,previewOnly=false,profileReady=false,audit=false,
 }){
   const {user}=useAuth();
   const role=String(user?.role||"").toUpperCase();
@@ -47,6 +47,7 @@ export default function ManagementIntegrationPanel({
   const [selectedUser,setSelectedUser]=useState("");
   const [userPermissions,setUserPermissions]=useState(null);
   const [permissionStatus,setPermissionStatus]=useState("idle");
+  const [attendanceSource,setAttendanceSource]=useState({status:"idle"});
   const activeCompany=company;
   const doRead=useCallback(async()=>{
     if(!permitted){setSources({});return;}
@@ -81,6 +82,26 @@ export default function ManagementIntegrationPanel({
     }).catch(()=>{if(current)setPermissionStatus("error");});
     return()=>{current=false;};
   },[permitted,tabId,selectedUser]);
+  useEffect(()=>{
+    if(!permitted||tabId!=="incidents"){setAttendanceSource({status:"idle"});return undefined;}
+    let current=true;
+    setAttendanceSource({status:"loading"});
+    readLiveDashboard({mainCompanyId:company}).then(payload=>{
+      if(!current)return;
+      if(payload?.complete!==true||!payload?.metrics||typeof payload.metrics!=="object")
+        throw Error("ATTENDANCE_SOURCE_NOT_VERIFIED");
+      const count=(key)=>{
+        const number=payload.metrics[key];
+        return Number.isSafeInteger(number)&&number>=0?number:null;
+      };
+      setAttendanceSource({status:"ready",data:{
+        noRecord:count("noRecord"),missingExit:count("missingExit"),
+        unknownDirection:count("unknownDirection"),late:count("late"),
+        asOf:String(payload.asOf||"").slice(0,35),
+      }});
+    }).catch(()=>{if(current)setAttendanceSource({status:"error"});});
+    return()=>{current=false;};
+  },[permitted,tabId,company,refresh]);
   const state=sources[tabId];
   const rows=state?.status==="ready"?state.data:[];
   const roleLabel=role||"Oturum bilinmiyor";
@@ -137,6 +158,21 @@ export default function ManagementIntegrationPanel({
         <strong>Yedek / geri dönüş hazırlığı</strong>
         <p>Kaynak: KY ERP Cloud D1 + R2. Bu liste yerel SQLite/WAL, Firebird ve TNF yedeğini doğrulamaz.
           Geri yükleme burada kapalı; şifre ve güvenlik yedeği kontrolü bulunan mevcut KY ERP Yönetim akışından yapılır.</p>
+      </div>}
+      {tabId==="incidents"&&<div className="pdk-u-mgmt-sub">
+        <strong>Terminal ve Puantaj · kanıt kaynakları</strong>
+        {terminalReport?.source==="UNSIGNED_LOCAL_DIAGNOSTICS" ?
+          <p role="status">Yalnız operatörün seçtiği tanı dosyası: reddedilen {terminalReport.invalid??"—"},
+          çakışan {terminalReport.ambiguous??"—"}, TNF karşılığı bulunamayan {terminalReport.unmatched??"—"}.
+          Gerçek terminal/FDB/TNF kanıtı ayrıca onaylanmalıdır.</p>:
+          <p>Terminal tanı özeti henüz yüklenmedi. Aktarım Merkezi içinden rapor seçin; sahte hata sayısı üretilmez.</p>}
+        <Source name="D1 günlük puantaj kontrolü" state={attendanceSource}/>
+        {attendanceSource.status==="ready"&&
+          <p role="status">Kart kaydı yok: {attendanceSource.data.noRecord??"Doğrulanmadı"} ·
+          Çıkış kaydı eksik: {attendanceSource.data.missingExit??"Doğrulanmadı"} ·
+          Yön belirsiz: {attendanceSource.data.unknownDirection??"Doğrulanmadı"} ·
+          Geç gelen: {attendanceSource.data.late??"Doğrulanmadı"}.
+          Bu sayaçlar D1 ön kontrolüdür; fiziksel cihazın kesin işlenmiş olduğu anlamına gelmez.</p>}
       </div>}
       {(tabId==="integrations"||tabId==="incidents")&&<LocalAgentStatus disabled={previewOnly}/>}
       {tabId==="integrations"&&<p className="pdk-u-live-note">Cloud ACK yalnız D1 outbox sonucudur.
