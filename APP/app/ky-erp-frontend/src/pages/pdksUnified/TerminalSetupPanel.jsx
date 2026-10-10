@@ -30,6 +30,7 @@ const needsUrl=(connector)=>["HTTPS_SERVER","VENDOR_CLOUD","HTTPS_API"]
   .includes(connector?.transport);
 const statusLabel=(id)=>({
   REFERENCE_IMPLEMENTED:"Yerel örnek sürücü kodlandı",
+  LEGACY_X86_BRIDGE_REQUIRED:"Eski FP_CLOCK x86 köprüsüyle doğrulama gerekli",
   SDK_REQUIRED:"Üretici SDK ve model testi gerekli",
   MODEL_PROTOCOL_REQUIRED:"Model protokol kanıtı gerekli",
   LICENSE_AND_SERVER_REQUIRED:"BioStar sunucu / lisans gerekli",
@@ -63,7 +64,7 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
     setConfig(before=>({...before,
       terminalId:profile.profileName==="Cihaz1"?"HEDEF-CIHAZ-1":profile.profileName,
       vendor:"Generic",model:"HEDEF FP_CLOCK x86",
-      connectorId:"ZK_PULL",host:profile.ip,port:String(profile.port),
+      connectorId:"HEDEF_FP_CLOCK",host:profile.ip,port:String(profile.port),
       directionMode:profile.direction==="IN"?"EXPLICIT_IN":"UNKNOWN",
       inputMethods:["RFID_125KHZ"],timezone:"Europe/Istanbul",
       approvalState:"DRAFT",
