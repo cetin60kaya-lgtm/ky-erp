@@ -15,7 +15,8 @@ test("Personnel 360 uses the existing PDKS shell with a real personnel service",
   assert.match(page,/\["people","cards","employment","documents"\]/);
   assert.match(page,/onSaved=\{\(\)=>setReloadToken/);
   assert.match(page,/detailVisible\?personTab:"identity"/);
-  assert.match(file("readService.js"),/readAllPersonnel=.*\/ik\/personnel-control\/people/);
+  assert.match(file("readService.js"),/export const readAllPersonnel=async/);
+  assert.match(file("readService.js"),/fresh\("\/ik\/personnel-control\/people"/);
   assert.match(file("useUnifiedPdksData.js"),/requirement==="people" \? api\.readAllPersonnel : api\.readPeople/);
 });
 
@@ -46,4 +47,9 @@ test("personnel mutations are explicit; no demo or automatic terminal writes",()
   assert.match(code,/FP_CLOCK, FDB ve TNF'ye yazmaz/);
   assert.match(code,/if\(previewOnly\)/);
   assert.match(code,/if\(isAuditAccount\)/);
+  assert.match(code,/İstihdam Durumu/);
+  assert.match(code,/expectedGroupId:/);
+  assert.match(code,/\/documents\/\$\{encodeURIComponent\(id\)\}\/preview/);
+  assert.match(code,/URL\.revokeObjectURL/);
+  assert.match(file("PdksUnifiedApp.jsx"),/Kart atanmamış personele otomatik giriş\/çıkış ve puantaj üretilmez/);
 });
