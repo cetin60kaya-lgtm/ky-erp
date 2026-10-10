@@ -14,7 +14,7 @@ export const CONFIRMED_LEGACY_TERMINAL=Object.freeze({
 export function inspectImportedLegacyProfiles(profiles){
  if(!Array.isArray(profiles)||profiles.length>32)
   throw Error("LEGACY_PROFILES_INVALID");
- const seen=new Set();
+ const seen=new Set(),machineIds=new Set(),endpoints=new Set();
  return Object.freeze(profiles.map((p,index)=>{
   const host=String(p?.ip??"").trim();
   const port=Number(p?.port);
@@ -24,11 +24,15 @@ export function inspectImportedLegacyProfiles(profiles){
     host.split(".").some(x=>Number(x)>255)||
     !Number.isInteger(port)||port<1||port>65535||
     !Number.isInteger(machineId)||machineId<1||machineId>255||
-    !name||name.length>80||seen.has(name+"|"+machineId))
+    !name||name.length>80||seen.has(name+"|"+machineId)||
+    machineIds.has(machineId)||endpoints.has(host+":"+port)||
+    !(/^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[01])\./).test(host))
    throw Error("LEGACY_PROFILE_INVALID_AT_"+index);
-  seen.add(name+"|"+machineId);
+  seen.add(name+"|"+machineId);machineIds.add(machineId);endpoints.add(host+":"+port);
   // Imported second device remains read-only and unverified until bridge test.
   return Object.freeze({profileName:name,machineId,ip:host,port,
+   direction:["IN","OUT"].includes(String(p?.direction||"").toUpperCase())?
+     String(p.direction).toUpperCase():"UNKNOWN",
    adapter:"FP_CLOCK_ACTIVE_X86",readOnly:true,certified:false});
  }));
 }
