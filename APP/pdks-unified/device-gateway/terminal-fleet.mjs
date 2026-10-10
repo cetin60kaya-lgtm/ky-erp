@@ -54,7 +54,9 @@ export function createTerminalFleet({
     if(d.port)locations.add(d.host+":"+d.port);
     states.push({definition:d,adapter:null,status:"NOT_TESTED",
       failures:0,nextAttemptAt:0,lastReadAt:null,lastContactAt:null,
-      accepted:0,duplicates:0,rejected:0,lastError:null,busy:false});
+      accepted:0,duplicates:0,rejected:0,lastError:null,busy:false,
+      lastPunchAt:null,deviceLogCount:null,registeredUsers:null,registeredCards:null,
+      errorHistory:[],recoveredAt:null});
   }
   const events=[],seen=new Set();
   let timer=null,stopped=false;
@@ -70,6 +72,9 @@ export function createTerminalFleet({
     lastContactAt:s.lastContactAt,lastReadAt:s.lastReadAt,
     nextAttemptAt:s.nextAttemptAt,failures:s.failures,
     accepted:s.accepted,duplicates:s.duplicates,rejected:s.rejected,
+    lastPunchAt:s.lastPunchAt,deviceLogCount:s.deviceLogCount,
+    registeredUsers:s.registeredUsers,registeredCards:s.registeredCards,
+    recoveredAt:s.recoveredAt,errorHistory:Object.freeze(s.errorHistory.map(e=>Object.freeze({...e}))),
     lastError:s.lastError,canWriteTerminal:false,
     firebirdReconciled:false,tnfReconciled:false,cloudAcked:false,
   })));
@@ -98,6 +103,15 @@ export function createTerminalFleet({
       }
       if(await s.adapter.healthCheck()!==true)
         throw Object.assign(Error("TERMINAL_ADAPTER_HEALTH_FAILED"),{code:"TERMINAL_ADAPTER_HEALTH_FAILED"});
+      const hardware=s.adapter.getDeviceReport?.();
+      if(hardware){
+        for(const key of ["deviceLogCount","registeredUsers","registeredCards"]){
+          const value=hardware[key];
+          if(!Number.isInteger(value)||value< -1||value>10_000_000)
+            throw Object.assign(Error("TERMINAL_DEVICE_REPORT_INVALID"),{code:"TERMINAL_DEVICE_REPORT_INVALID"});
+          s[key]=value;
+        }
+      }
       const batch=await s.adapter.readRawBatch({maxRecords:maxBatch,deleteAfterRead:false});
       if(!Array.isArray(batch)||batch.length>maxBatch)
         throw Object.assign(Error("TERMINAL_BATCH_INVALID"),{code:"TERMINAL_BATCH_INVALID"});
@@ -115,11 +129,13 @@ export function createTerminalFleet({
           s.rejected++;continue; // retry this event at next read
         }
         events.push(e);seen.add(e.sourceKey);s.accepted++;
-        if(events.length>maxEvents){
-          const old=events.shift();seen.delete(old.sourceKey);
-        }
+        if(!s.lastPunchAt||e.localTimestamp>s.lastPunchAt)s.lastPunchAt=e.localTimestamp;
+        if(events.length>maxEvents)events.shift();
+        // A bounded dedup window is independent of the UI event buffer.
+        if(seen.size>50000)seen.delete(seen.values().next().value);
       }
       s.lastReadAt=new Date(now()).toISOString();
+      if(s.failures>0)s.recoveredAt=new Date(now()).toISOString();
       s.status="LIVE_RAW_READ_UNRECONCILED";
       s.failures=0;s.nextAttemptAt=0;s.lastError=null;
     }catch(error){
@@ -127,6 +143,8 @@ export function createTerminalFleet({
       s.failures++;
       s.nextAttemptAt=now()+Math.min(60000,1000*2**Math.min(s.failures-1,6));
       s.lastError=message(error); // no SDK exception text, token or person data
+      s.errorHistory.push(Object.freeze({at:new Date(now()).toISOString(),code:s.lastError}));
+      if(s.errorHistory.length>20)s.errorHistory.shift();
       s.status="OFFLINE_RETRY_SCHEDULED";
     }finally{s.busy=false;}
   };
