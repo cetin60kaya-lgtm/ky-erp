@@ -98,9 +98,11 @@ try {
       const tab=section.tabs[i];
       await evaluate('document.querySelectorAll(".pdk-u-tabs button")['+i+'].click()');
       await waitForEval('document.querySelector(".pdk-u-tabs button[aria-selected=true]")?.textContent==='+JSON.stringify(tab.label));
-      const content=tab.view==="dashboard"
-        ? await evaluate('Boolean(document.querySelector(".pdk-u-dashboard"))')
-        : await evaluate('document.querySelector(".pdk-u-record-head h2")?.textContent==='+JSON.stringify(tab.label));
+      const content=tab.id==="system"
+        ? await evaluate('document.querySelector("section[aria-label=\"49 sekme işlev ve üretim kabul denetimi\"]")?.querySelectorAll("tbody tr").length===49')
+        : tab.view==="dashboard"
+          ? await evaluate('Boolean(document.querySelector(".pdk-u-dashboard"))')
+          : await evaluate('document.querySelector(".pdk-u-record-head h2")?.textContent==='+JSON.stringify(tab.label));
       assertBrowser(content,"Unrendered section "+section.id+"/"+tab.id);
       assertBrowser(await evaluate('!document.querySelector(".pdk-unified .module-error-card")'),"Unhandled error UI on "+tab.id);
       if(tab.id==="punches"||tab.id==="history") {
