@@ -32,7 +32,7 @@ export function useUnifiedPdksData({
   // The server's audit flag can only remove permission; never grant it.
   const audit=Boolean(auditHint || profile?.audit===true ||
     profile?.audit===1 || String(profile?.audit).toLowerCase()==="true");
-  const peopleKey=keyOf(company,year,month,reloadToken);
+  const peopleKey=keyOf(company,year,month,reloadToken,requirement==="people"?"all-personnel":"pdks-tracked");
   const peopleReady=peopleState.key===peopleKey && peopleState.status==="ready";
   const people=useMemo(()=>
     peopleReady && Array.isArray(peopleState.payload) ? peopleState.payload : [],
