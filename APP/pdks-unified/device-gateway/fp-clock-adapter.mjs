@@ -116,7 +116,7 @@ export async function createFpClockAdapter(profile,{
      !/^[0-9a-f]{64}$/i.test(str(approvedSha256)))
     throw Error("FP_CLOCK_READER_TRUST_CONFIG_REQUIRED");
   const fileInfo=await stat(executable);
-  if(!fileInfo.isFile()||fileInfo.size>32_000_000)
+  if(!fileInfo.isFile()||fileInfo.size>160_000_000)
     throw Error("FP_CLOCK_READER_INVALID_BINARY");
   const digest=hash(await readFile(executable));
   if(digest!==approvedSha256.toLowerCase())
