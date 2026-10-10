@@ -138,6 +138,10 @@ function PersonDetails({person,active,onChange,isAuditAccount,detail,company,pro
     if(active==="documents")return <EmptyState title="Personel evrak servisi bağlı değil"
       description="Yetkili doküman servisi olmadan kişisel belge veya imza görüntülenmez."
       IconComponent={LockKeyhole}/>;
+    if(["attendance","timesheet"].includes(active) && (!person.cardNo || person.cardNo==="—"))
+      return <EmptyState title="Kart ataması bulunmuyor"
+        description="SGK veya özlük kaydı fiziksel okutma kanıtı değildir. Kart atanmamış personele otomatik giriş/çıkış ve puantaj üretilmez."
+        IconComponent={LockKeyhole}/>;
     if(isAuditAccount && ["shift","leave","payroll","history"].includes(active))
       return <EmptyState title="Bu ayrıntıya erişim kapalı"
         description="Denetim hesabı PDKS FULL işlemlerine veya ücret alanlarına erişemez."
