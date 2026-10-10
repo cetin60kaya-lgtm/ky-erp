@@ -644,6 +644,15 @@ async function saveChanges(c: Context<AppEnv>) {
   const requestedStatus = Object.prototype.hasOwnProperty.call(changes, "status") ? text(changes.status) : text(currentRaw.status);
   const requestedExitDate = Object.prototype.hasOwnProperty.call(changes, "exitDate") ? dateOnly(changes.exitDate) : dateOnly(currentRaw.exit_date);
   const requestedStartDate = Object.prototype.hasOwnProperty.call(changes, "startDate") ? dateOnly(changes.startDate) : dateOnly(currentRaw.hire_date);
+  const validDate = (date: string) => !date || /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)) &&
+    new Date(date + "T00:00:00Z").toISOString().slice(0, 10) === date;
+  if (!validDate(requestedStartDate) || !validDate(requestedExitDate))
+    return error(c, 400, "PERSONNEL_DATE_INVALID", "Geçerli işe giriş/çıkış tarihi girin.");
+  if (Object.prototype.hasOwnProperty.call(changes, "fullName") && text(changes.fullName).length < 2)
+    return error(c, 400, "PERSONNEL_NAME_REQUIRED", "Personel adı en az iki karakter olmalıdır.");
+  if (Object.prototype.hasOwnProperty.call(changes, "status") &&
+    !["AKTİF", "AKTIF", "PASİF", "PASIF"].includes(upper(changes.status)))
+    return error(c, 400, "PERSONNEL_STATUS_INVALID", "Aktif veya Pasif seçin.");
   if (requestedExitDate && requestedStartDate && requestedExitDate < requestedStartDate) {
     return error(c, 400, "EXIT_BEFORE_HIRE", "İşten çıkış tarihi işe giriş tarihinden önce olamaz.");
   }
