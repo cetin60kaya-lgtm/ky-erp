@@ -202,10 +202,13 @@ function PersonDetails({person,active,onChange,isAuditAccount,detail}) {
         description="Seçili ayda bu personel için doğrulanmış D1 bordro satırı yok."/>;
       return <dl className="pdk-u-definition">
         {[
-          ["Maaş",line.salary],["Yol",line.roadAllowance],["Yemek",line.mealAmount],["Mesai",line.overtimeAmount],
+          ["Maaş",line.salary],["Yol",line.roadAllowance],["Ek Yol",line.roadAdjustmentAmount],
+          ["Yemek",line.mealAmount],["Mesai %50 saat",line.overtimeHours50],["Mesai %50 TL",line.overtimeAmount50],
+          ["Mesai %100 saat",line.overtimeHours100],["Mesai %100 TL",line.overtimeAmount100],["Mesai",line.overtimeAmount],
           ["Avans",line.advanceAmount],["Kesinti",line.deductionAmount],
           ["Banka",line.bankAmount],["Elden",line.cashAmount],
           ["Toplam",line.totalAmount],
+          ["Bordro durumu",line.reportState],["Kaynak kontrol",line.payrollReconciled?"Onaylandı":"FDB/TNF bekliyor"],
         ].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{money(value)}</dd></div>)}
       </dl>;
     }
