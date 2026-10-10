@@ -47,7 +47,7 @@ export const PRODUCT_SECTIONS = Object.freeze([
     tab("closing", "Ay Kapatma", "approval", ["Dönem","Kontrol","Eksik","Onaylayan","Kilit","Durum"], "Kilit, açma gerekçesi ve denetim"),
   ], "Tek hesap motoru, kontrol ve güvenli dönem kapatma"),
   section("payroll", "Bordro & Ödeme", "WalletCards", [
-    tab("earnings", "Hakediş Özeti", "payroll", ["Kart No","Personel","Maaş","Yol","Yemek","Mesai","Toplam"], "Puantajdan bordroya hakediş"),
+    tab("earnings", "Hakediş Özeti", "payroll", ["Kart No","Personel","Maaş","Yol","Ek Yol","Yemek","Mesai","Toplam"], "Puantajdan bordroya hakediş"),
     tab("salary", "Maaş Bordrosu", "payroll", ["Personel","Brüt","Kesinti","Net","Dönem","Durum"], "Yetkili bordro hesapları"),
     tab("advances", "Avans & Ek Kazanç", "payroll", ["Personel","Tarih","Tür","Tutar","Onay","Durum"], "Toplu avans ve ek kazanç"),
     tab("deductions", "Kesintiler", "payroll", ["Personel","Tarih","Tür","Tutar","Açıklama","Durum"], "Kesinti kayıtları"),
@@ -59,7 +59,7 @@ export const PRODUCT_SECTIONS = Object.freeze([
     tab("violations", "İhlal Raporları", "report", ["Personel","Tarih","İhlal","Kanıt","Durum"], "Geç giriş, eksik kart, erken çıkış"),
     tab("signatures", "İmza Formları", "report", ["Tarih","Personel","Kart No","Eksik Hareket","Saat","İmza"], "Eksik kart ve giriş/çıkış imza listeleri"),
     tab("timesheets", "Puantaj Raporları", "report", ["Rapor","Dönem","Gün","Mesai","İzin","Durum"], "Puantaj dönem analizleri"),
-    tab("payroll", "Bordro Raporları", "report", ["Personel","Dönem","Maaş","Yol","Yemek","Mesai","Avans","Kesinti","İcra/Haciz","BES","Banka","Elden","Toplam","Durum"], "Ödeme ve bordro raporları", { sensitive: true }),
+    tab("payroll", "Bordro Raporları", "report", ["Personel","Dönem","Maaş","Yol","Ek Yol","Yemek","Mesai","Avans","Kesinti","İcra/Haciz","BES","Banka","Elden","Toplam","Durum"], "Ödeme ve bordro raporları", { sensitive: true }),
     tab("audit", "İşlem Geçmişi", "audit", ["Tarih","Kullanıcı","İşlem","Kaynak","Eski/Yeni","Sonuç"], "Değişiklik yapan kullanıcı ve değişiklik izi"),
   ], "Çıktı, analiz, imza belgeleri ve kayıt izi"),
   section("devices", "Cihaz & Senkron", "ServerCog", [
