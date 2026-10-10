@@ -150,7 +150,7 @@ function PersonDetails({person,active,onChange,isAuditAccount,detail}) {
       </dl>
       {!isAuditAccount&&<div className="pdk-u-terminal-actions">
         <button type="button" className="pdk-u-btn" onClick={printPersonnelCard}
-          disabled={!person.id||!/^\\d{5}$/.test(String(person.cardNo||""))}>
+          disabled={!person.id||!/^\d{5}$/.test(String(person.cardNo||""))}>
           Kart yazıcıda önizle (86 × 54 mm)
         </button>
         <p>Windows'taki kart yazıcısı baskı penceresinden seçilir. Fiziksel baskı için ayrıca Yazdır'a basılır; RFID çipine yazılmaz.</p>
