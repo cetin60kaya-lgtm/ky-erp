@@ -7,6 +7,7 @@
 import {ALL_PRODUCT_TABS} from "./productModel.js";
 import {displayValue,toPersonRows,toAttendanceRows} from "./productData.js";
 import {payrollRowsForTab} from "./payrollEvidence.js";
+import {projectMonthlyReport} from "./reportProjection.js";
 
 const SOURCES = Object.freeze({
   // Read-only people/physical-card administration.
@@ -16,7 +17,7 @@ const SOURCES = Object.freeze({
   groups:"masters",routes:"masters",rules:"config",
   // Only selected-person attendance. Real live aggregate not yet certified.
   punches:"card-events",history:"card-events",daily:"attendance",
-  violations:"attendance",signatures:"signature-month",attendance:"attendance",
+  violations:"daily-report",signatures:"signature-month",attendance:"daily-report",
   // Independent verified API shapes.
   leave:"leaves",holidays:"holidays",
   monthly:"monthly-attendance",timesheets:"monthly-attendance",
@@ -36,7 +37,7 @@ export const sourceForTab=(id,{audit=false}={})=>{
   if(!tab)return "unconnected";
   const source=SOURCES[id]||"unconnected";
   if(audit && (tab.section==="payroll"||tab.sensitive ||
-    !["people","attendance","live-attendance","card-events","monthly-attendance","signature-month","unconnected"].includes(source)))
+    !["people","attendance","live-attendance","card-events","monthly-attendance","signature-month","daily-report","unconnected"].includes(source)))
     return "forbidden";
   return source;
 };
@@ -192,6 +193,8 @@ export function rowsForTab(id,payload,{people=[],selectedPerson=null,year=null,m
       "Onay":["status"],"Durum":["status"],"Açıklama":["note"],
     });
   }
+  if(["attendance","violations","timesheets"].includes(id))
+    return projectMonthlyReport(id,payload);
   if(id==="signatures"){
     if(payload?.complete!==true||!Array.isArray(payload.signatureRows))
       return {rows:[],supported:false};
