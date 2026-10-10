@@ -99,7 +99,7 @@ try {
       await evaluate('document.querySelectorAll(".pdk-u-tabs button")['+i+'].click()');
       await waitForEval('document.querySelector(".pdk-u-tabs button[aria-selected=true]")?.textContent==='+JSON.stringify(tab.label));
       const content=tab.id==="system"
-        ? await evaluate('document.querySelector("section[aria-label=\"49 sekme işlev ve üretim kabul denetimi\"]")?.querySelectorAll("tbody tr").length===49')
+        ? await evaluate('document.querySelectorAll(".pdk-u-panel tbody tr").length===49')
         : tab.view==="dashboard"
           ? await evaluate('Boolean(document.querySelector(".pdk-u-dashboard"))')
           : await evaluate('document.querySelector(".pdk-u-record-head h2")?.textContent==='+JSON.stringify(tab.label));
