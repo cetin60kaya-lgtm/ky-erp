@@ -184,9 +184,9 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
       <Field label="File Hub'dan gerçek dosya seç">
         <select value={assetId} onChange={e=>setAssetId(e.target.value)} disabled={busy||loading||!loaded}>
           <option value="">Dosya seçin</option>
-          {(loaded?.candidates||[]).map(f=><option key={f.id} value={f.id}>{f.fileName}</option>)}
+          {(loaded?.candidates||[]).filter(f=>f.documentType===docType).map(f=><option key={f.id} value={f.id}>{f.fileName}</option>)}
         </select></Field>
-      <Field label="Belge türü"><select value={docType} onChange={e=>setDocType(e.target.value)}>
+      <Field label="Belge türü"><select value={docType} onChange={e=>{setDocType(e.target.value);setAssetId("");}}>
         <option value="PERSONNEL_DOCUMENT">Özlük evrakı</option><option value="CONTRACT">Sözleşme</option>
       </select></Field>
       <Field label="Açıklama"><input value={docNote} maxLength={240} onChange={e=>setDocNote(e.target.value)}/></Field>
@@ -205,8 +205,8 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
       <tbody>{(loaded.docs||[]).map(d=><tr key={d.id}><td>{d.fileName||"—"}</td>
         <td>{d.documentType==="CONTRACT"?"Sözleşme":"Özlük"}</td>
         <td>{d.status||"—"}</td><td><div className="pdk-person-doc-actions">
-          {d.previewReady?<button type="button" className="pdk-person-secondary" disabled={busy}
-            onClick={()=>openPreview(d.id)}>Görüntüle</button>:<span>Önizleme hazır değil</span>}
+          {d.previewReady&&canEdit?<button type="button" className="pdk-person-secondary" disabled={busy}
+            onClick={()=>openPreview(d.id)}>Görüntüle</button>:<span>{d.previewReady?"Yönetici yetkisi gerekli":"Önizleme hazır değil"}</span>}
           {canEdit?<button type="button" className="pdk-person-secondary"
           disabled={busy||unlinkReason.trim().length<5}
           onClick={()=>submit(endpoint(employeeId,`/documents/${encodeURIComponent(d.id)}/unlink`),
