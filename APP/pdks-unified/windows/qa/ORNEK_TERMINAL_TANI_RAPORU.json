@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-09T08:00:00Z",
+  "mode": "READ_ONLY_TNF_REFERENCE_PREVIEW",
+  "terminalId": "test-terminal-01",
+  "yearHint": 2026,
+  "inspected": 9,
+  "acceptedPending": 8,
+  "signedQrPending": 6,
+  "unsignedUsbPending": 2,
+  "matchedReference": 5,
+  "notInReference": 2,
+  "ambiguousDuplicateMinute": 1,
+  "rejectedFacts": 1,
+  "rejectionReasons": {
+    "TERMINAL_JOURNAL_HMAC_INVALID": 1
+  },
+  "referenceRows": 8,
+  "rejectedReferenceRows": 0,
+  "dailyBatches": [
+    {
+      "date": "2026-10-07",
+      "inspected": 3,
+      "matched": 2,
+      "unmatched": 1,
+      "ambiguous": 0,
+      "rejected": 0,
+      "signedQr": 2,
+      "unsignedUsb": 1
+    },
+    {
+      "date": "2026-10-08",
+      "inspected": 4,
+      "matched": 2,
+      "unmatched": 1,
+      "ambiguous": 1,
+      "rejected": 0,
+      "signedQr": 3,
+      "unsignedUsb": 1
+    },
+    {
+      "date": "2026-10-09",
+      "inspected": 2,
+      "matched": 1,
+      "unmatched": 0,
+      "ambiguous": 0,
+      "rejected": 1,
+      "signedQr": 1,
+      "unsignedUsb": 0
+    }
+  ],
+  "batchState": "REVIEW_ONLY_NO_APPROVED_TRANSFER",
+  "tnFReferenceCompared": true,
+  "terminalRawCertified": false,
+  "firebirdVerified": false,
+  "tnfApplied": false,
+  "cloudApplied": false,
+  "annualTnfWritten": false,
+  "safeToApply": false,
+  "requiresHumanReview": true,
+  "physicalAttendanceConfirmed": false,
+  "status": "REQUIRES_APPROVED_SOURCE_RECONCILIATION"
+}

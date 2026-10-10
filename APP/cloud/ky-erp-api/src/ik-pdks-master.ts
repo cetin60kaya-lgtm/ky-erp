@@ -100,13 +100,6 @@ async function ensureSchema(c: Context<AppEnv>) {
   ]);
 }
 
-async function ensureDefaultGroup(c: Context<AppEnv>, company: string) {
-  await c.env.DB.prepare(`INSERT OR IGNORE INTO ik_pdks_work_groups
-    (id,main_company_id,code,name,entry_time,exit_time,late_tolerance,early_tolerance,active,updated_by,updated_at)
-    VALUES(?,?,?,?,?,?,?,?,1,'SYSTEM',?)`)
-    .bind(`NORMAL:${company}`, company, "NORMAL", "Normal Mesai", "08:30", "19:00", 5, 10, nowIso()).run();
-}
-
 function normalizeTime(value: unknown, fallback: string) {
   const input = text(value);
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(input) ? input : fallback;
@@ -116,9 +109,19 @@ export function registerIkPdksMasterRoutes(app: Hono<AppEnv>) {
   app.get("/api/ik/personnel-control/pdks-masters", async (c) => {
     const auth = await authContext(c);
     if (!auth) return fail(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
-    await ensureSchema(c);
-    await ensurePdksPolicySchema(c);
-    await ensureDefaultGroup(c, auth.company);
+    // GET must never create tables or a default shift. Provisioning happens
+    // through reviewed migrations / authorized configuration actions only.
+    const requiredTables = [
+      "ik_pdks_work_groups","ik_pdks_employee_groups","ik_pdks_services",
+      "ik_pdks_employee_services","ik_pdks_personnel_groups",
+      "ik_pdks_employee_personnel_groups",
+    ];
+    const existing=await Promise.all(requiredTables.map((name)=>
+      c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1")
+        .bind(name).first<Row>()));
+    if(existing.some((item)=>!item))
+      return fail(c,503,"PDKS_SCHEMA_NOT_READY",
+        "PDKS yapılandırması henüz hazırlanmadı. Canlı veri değiştirilmedi.");
     const [groupsResult, servicesResult, groupAssignResult, serviceAssignResult, personnelGroupsResult, personnelGroupAssignResult] = await Promise.all([
       c.env.DB.prepare(`SELECT id,code,name,entry_time AS entryTime,exit_time AS exitTime,
         late_tolerance AS lateTolerance,early_tolerance AS earlyTolerance,active,updated_at AS updatedAt

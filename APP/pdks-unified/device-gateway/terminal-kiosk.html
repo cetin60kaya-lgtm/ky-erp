@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KY PDKS — QR Terminal</title>
+<style>
+:root{font-family:system-ui,"Segoe UI",sans-serif;color:#172c4b;background:#eff3f9}
+*{box-sizing:border-box}main{max-width:760px;margin:35px auto;background:white;padding:30px;border-radius:16px;border:1px solid #d7dfea;box-shadow:0 12px 30px #12244413}
+h1{margin:0 0 7px;font-size:25px}p{line-height:1.55;color:#52657c}
+label{display:block;font-size:14px;font-weight:650;margin:15px 0 6px}
+input,select,button{font:inherit;border:1px solid #aab9cc;border-radius:9px;padding:11px;width:100%}
+button{background:#1d4a8c;color:white;border:0;font-weight:700;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:15px 0}
+#result{padding:15px;margin-top:15px;border:1px solid #c9d4e3;border-radius:9px;min-height:60px}
+small{color:#607184}video{max-width:100%;border-radius:10px;display:none;margin-top:12px}
+@media(max-width:620px){main{margin:0;border-radius:0;min-height:100vh;padding:18px}.grid{grid-template-columns:1fr}}
+</style></head><body><main>
+<h1>KY PDKS · QR Terminal</h1>
+<p>Yerel ve kontrollü okutma. Fiziksel terminal, Firebird ve TNF mutabakatı tamamlanana kadar kayıt <b>beklemede</b> kalır.</p>
+<label for="operator">Yetkili terminal anahtarı (bu sekmede saklanmaz)</label>
+<input id="operator" type="password" autocomplete="off" placeholder="En az 32 karakter" />
+<div class="grid"><div><label for="direction">İşlem yönü</label><select id="direction">
+<option value="IN">Giriş</option><option value="OUT">Çıkış</option></select></div>
+<div><label>QR kamera (desteklenen tarayıcılarda)</label><button id="camera" type="button">Kamerayı aç</button></div></div>
+<label for="scanType">Okutma tipi</label>
+<select id="scanType"><option value="qr">İmzalı KYQR1 QR</option><option value="card">USB HID 5 haneli kart (kimlik doğrulaması bekliyor)</option></select>
+<label for="code">QR içeriği veya kart numarası</label>
+<input id="code" spellcheck="false" autocomplete="off" placeholder="USB okuyucu ile okutun veya QR'ı kamerayla tarayın" />
+<button id="submit" type="button">Doğrula ve yerel kanıta kaydet</button>
+<video id="video" playsinline muted></video>
+<div id="result" role="status" aria-live="polite">İşlem bekleniyor.</div>
+<div class="grid"><button type="button" id="events">Son yerel kanıtları görüntüle</button><button type="button" id="export" disabled>Kanıtları JSON indir</button></div>
+<div id="eventList" aria-live="polite"></div>
+<small>HMAC imzası, firma, süre ve tek kullanım kontrolü uygulanır. Kayıtlar cihazdan veya personel veritabanından silinmez.</small>
+</main><script>
+const $=id=>document.getElementById(id);
+let media=null,scanning=false;
+async function submit(){
+ const token=$("code").value.trim(),key=$("operator").value;
+ const cardMode=$("scanType").value==="card";
+ if(!token||!key){$("result").textContent="Okutma bilgisi ve yetkili anahtarı gerekli.";return}
+ $("submit").disabled=true;
+ try{
+  const resp=await fetch(cardMode?"/scan-card":"/scan",{method:"POST",headers:{"content-type":"application/json","x-ky-pdks-terminal-key":key},
+    body:JSON.stringify(cardMode?{cardNo:token,direction:$("direction").value}:{token,direction:$("direction").value})});
+  const body=await resp.json();
+  $("result").textContent=body.ok?("Kanıt alındı: "+body.status+" · "+body.receivedAt):
+    ("İşlem reddedildi: "+body.error);
+  if(body.ok){$("code").value="";$("code").focus()}
+ }catch{$("result").textContent="Yerel terminal bağlantısı kurulamadı."}
+ finally{$("submit").disabled=false}
+}
+let loaded=[];
+$("events").onclick=async()=>{
+ const key=$("operator").value;
+ if(key.length<32){$("result").textContent="Yetkili terminal anahtarı gerekli.";return}
+ try{
+  const response=await fetch("/events",{headers:{"x-ky-pdks-terminal-key":key}});
+  const payload=await response.json();
+  if(!response.ok||!Array.isArray(payload.records)){
+   $("result").textContent="Kanıt listesine erişim reddedildi.";return
+  }
+  loaded=payload.records;
+  const box=$("eventList");box.replaceChildren();
+  const heading=document.createElement("h2");heading.textContent="Son yerel kanıtlar";box.appendChild(heading);
+  for(const entry of loaded){
+   const line=document.createElement("p");
+   line.textContent=[entry.receivedAt,entry.cardNo,entry.direction,entry.status].join(" · ");
+   box.appendChild(line)
+  }
+  if(!loaded.length){
+   const empty=document.createElement("p");empty.textContent="Henüz kayıt yok.";box.appendChild(empty)
+  }
+  $("export").disabled=loaded.length===0;
+ }catch{$("result").textContent="Kanıt günlüğü okunamadı."}
+};
+$("export").onclick=()=>{
+ if(!loaded.length)return;
+ const blob=new Blob([JSON.stringify({source:"LOCAL_PENDING_ONLY",events:loaded},null,2)],{type:"application/json"});
+ const url=URL.createObjectURL(blob),a=document.createElement("a");
+ a.href=url;a.download="KY-PDKS-LOCAL-PENDING-EVIDENCE.json";a.click();
+ URL.revokeObjectURL(url);
+};
+$("submit").onclick=submit;
+$("code").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();submit()}});
+$("camera").onclick=async()=>{
+ if(media){media.getTracks().forEach(t=>t.stop());media=null;scanning=false;
+  $("camera").textContent="Kamerayı aç";$("video").style.display="none";return}
+ if(!("BarcodeDetector" in window)||!navigator.mediaDevices?.getUserMedia){
+  $("result").textContent="Bu tarayıcı kameradan QR okumuyor. USB okuyucu veya metin girişini kullanın.";return}
+ try{media=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false});
+  $("video").srcObject=media;$("video").style.display="block";await $("video").play();
+  $("camera").textContent="Kamerayı kapat";scanning=true;
+  const detector=new BarcodeDetector({formats:["qr_code"]});
+  const step=async()=>{if(!scanning||!media)return;
+   try{const found=await detector.detect($("video"));if(found.length){
+    $("scanType").value="qr";$("code").value=found[0].rawValue;media.getTracks().forEach(t=>t.stop());
+    media=null;scanning=false;$("video").style.display="none";$("camera").textContent="Kamerayı aç";await submit();return
+   }}catch{}requestAnimationFrame(step)};step();
+ }catch{$("result").textContent="Kamera izni alınamadı."}
+};
+</script></body></html>
