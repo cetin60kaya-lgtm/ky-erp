@@ -507,7 +507,7 @@ export default function PdksUnifiedApp({
           loading={data.resourceLoading} previewOnly={previewOnly} search={search}
           compact onRefresh={()=>setReloadToken(value=>value+1)}/>}
         {tab.view!=="dashboard"&&!stageInspectTab&&tab.id!=="system"&&<section
-          className={"pdk-u-panel pdk-u-record-panel"+(["reports","payroll","timesheet"].includes(section.id)&&dataConnected?" pdk-u-print-sheet":"")}>
+          className={"pdk-u-panel pdk-u-record-panel"+(["reports","payroll","timesheet","people"].includes(section.id)&&dataConnected?" pdk-u-print-sheet":"")}>
           <div className="pdk-u-record-head">
             <div><h2>{tab.label}</h2><p>{tab.description} · {MONTHS[period.month-1]} {period.year}</p></div>
             <span className="pdk-u-label"><ShieldCheck size={15}/> {previewOnly?"Görsel İnceleme":"Yazma kontrollü"}</span>
@@ -547,13 +547,13 @@ export default function PdksUnifiedApp({
             <span className="pdk-u-counter"><Filter size={15}/> {filteredRows.length} kayıt</span>
             <button type="button" className="pdk-u-btn" disabled={!canExport||exportBusy}
               onClick={()=>exportReport("csv")}><Download size={16}/> CSV</button>
-            {["reports","payroll","timesheet"].includes(section.id)&&<>
+            {["reports","payroll","timesheet","people"].includes(section.id)&&<>
               <button type="button" className="pdk-u-btn" disabled={!canExport||exportBusy}
                 onClick={()=>exportReport("xlsx")}><Download size={16}/> Excel</button>
               <button type="button" className="pdk-u-btn" disabled={!canExport||exportBusy}
                 onClick={()=>exportReport("pdf")}><FileCheck2 size={16}/> PDF</button>
             </>}
-            {["reports","payroll","timesheet"].includes(section.id)&&<button type="button"
+            {["reports","payroll","timesheet","people"].includes(section.id)&&<button type="button"
               className="pdk-u-btn" disabled={!canExport} onClick={()=>window.print()}>
               <FileCheck2 size={16}/> Yazdır</button>}
           </div>}
