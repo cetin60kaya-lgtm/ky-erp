@@ -13,9 +13,10 @@ import {
   configuredProductSections, isSensitiveProductTab,
 } from "./productModel";
 import {
-  csvForTable, safeFileNameSegment, toAttendanceRows,
+  toAttendanceRows,
 } from "./productData";
 import {sourceForTab,rowsForTab,inspectReleaseReadiness} from "./tabBindings.js";
+import {reportFileName,reportCsv,xlsxReportBytes,triggerFileDownload,downloadReportPdf} from "./reportExports.js";
 import {useUnifiedPdksData} from "./useUnifiedPdksData.js";
 import UnifiedOperationPanel from "./UnifiedOperationPanel.jsx";
 import LiveAttendancePanel from "./LiveAttendancePanel.jsx";
@@ -294,6 +295,8 @@ export default function PdksUnifiedApp({
   const [theme, setTheme] = useState("light");
   const [period, setPeriod] = useState(currentPeriod);
   const [search, setSearch] = useState("");
+  const [reportPerson,setReportPerson] = useState("");
+  const [exportBusy,setExportBusy] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [personTab, setPersonTab] = useState("identity");
   const [reloadToken, setReloadToken] = useState(0);
@@ -322,7 +325,7 @@ export default function PdksUnifiedApp({
   const detailVisible=section.id==="people" &&
     ["people","cards","employment"].includes(tab.id);
   const monthKey=[company,period.year,period.month,requirement].join("|");
-  const allowHeavy=["monthly-attendance","signature-month"].includes(requirement) && monthlyRequestKey===monthKey;
+  const allowHeavy=["monthly-attendance","signature-month","daily-report"].includes(requirement) && monthlyRequestKey===monthKey;
   const data=useUnifiedPdksData({
     company,year:period.year,month:period.month,personId:selectedId,requirement,
     previewOnly,auditHint:isAuditAccount,reloadToken,needsPeople,allowHeavy,
@@ -370,12 +373,23 @@ export default function PdksUnifiedApp({
   },[requirement,tab.id,data.people,realAttendance,data.days,selectedPerson,
     data.resourceReady,data.resource,period.year,period.month]);
   const sourceRows=projection.rows;
-  const filteredRows = useMemo(()=> {
+  const reportPeople=useMemo(()=>{
+    if(!["reports","payroll"].includes(section.id))return [];
+    const distinct=new Map();
+    for(const row of sourceRows){
+      const id=String(row.personId||row._id||"");
+      const name=String(row["Personel"]||"");
+      if(id&&name&&name!=="—"&&!distinct.has(id))distinct.set(id,name);
+    }
+    return [...distinct].map(([id,name])=>({id,name}));
+  },[section.id,sourceRows]);
+  const filteredRows=useMemo(()=>{
     const q=search.toLocaleLowerCase("tr-TR").trim();
-    if (!q) return sourceRows;
-    return sourceRows.filter((row)=>Object.values(row).some((value)=>
-      String(value).toLocaleLowerCase("tr-TR").includes(q)));
-  },[search,sourceRows]);
+    return sourceRows.filter(row=>(!["reports","payroll"].includes(section.id)||
+      !reportPerson||String(row.personId||row._id)===reportPerson) &&
+      (!q||Object.values(row).some(value=>String(value)
+        .toLocaleLowerCase("tr-TR").includes(q))));
+  },[section.id,reportPerson,search,sourceRows]);
 
   const dataConnected = !previewOnly && data.sourceReady && projection.supported &&
     (!data.audit || !isSensitiveProductTab(tab.id));
@@ -392,16 +406,24 @@ export default function PdksUnifiedApp({
     dataConnected ? "KY ERP API / D1 • Yerel mutabakat bekliyor" :
     data.error ? "Bağlantı hatası" : "Kaynak doğrulanıyor";
 
-  const exportTable = () => {
-    if (!canExport) return;
-    const csv=csvForTable(tab.columns,filteredRows);
-    const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
-    const url=URL.createObjectURL(blob);
-    const link=document.createElement("a");
-    link.href=url;
-    link.download="KY_PDKS_"+safeFileNameSegment(tab.id)+"_"+isoMonth(period.year,period.month)+".csv";
-    link.click();
-    URL.revokeObjectURL(url);
+  const exportReport=(format)=>{
+    if(!canExport||exportBusy)return;
+    const name=reportFileName(tab.id,period.year,period.month,format);
+    if(format==="csv"){
+      triggerFileDownload(reportCsv(tab.columns,filteredRows),
+        "text/csv;charset=utf-8",name);return;
+    }
+    if(format==="xlsx"){
+      triggerFileDownload(xlsxReportBytes(tab.columns,filteredRows,{sheetName:"KY PDKS"}),
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",name);return;
+    }
+    if(format==="pdf"){
+      setExportBusy(true);
+      downloadReportPdf(tab.columns,filteredRows,{title:tab.label,
+        period:isoMonth(period.year,period.month),fileName:name})
+        .catch(error=>setNotice("PDF oluşturulamadı: "+String(error?.message||error)))
+        .finally(()=>setExportBusy(false));
+    }
   };
 
   return <div className={["pdk-unified",theme==="dark"?"theme-dark":"",
@@ -484,19 +506,19 @@ export default function PdksUnifiedApp({
           loading={data.resourceLoading} previewOnly={previewOnly} search={search}
           compact onRefresh={()=>setReloadToken(value=>value+1)}/>}
         {tab.view!=="dashboard"&&!stageInspectTab&&tab.id!=="system"&&<section
-          className={"pdk-u-panel pdk-u-record-panel"+(["signatures","receipts","payroll"].includes(tab.id)&&dataConnected?" pdk-u-print-sheet":"")}>
+          className={"pdk-u-panel pdk-u-record-panel"+(["reports","payroll","timesheet"].includes(section.id)&&dataConnected?" pdk-u-print-sheet":"")}>
           <div className="pdk-u-record-head">
-            <div><h2>{tab.label}</h2><p>{tab.description}</p></div>
+            <div><h2>{tab.label}</h2><p>{tab.description} · {MONTHS[period.month-1]} {period.year}</p></div>
             <span className="pdk-u-label"><ShieldCheck size={15}/> {previewOnly?"Görsel İnceleme":"Yazma kontrollü"}</span>
           </div>
           {requirement!=="card-events"&&!transferTabs.has(tab.id)&&tab.id!=="cloud"&&<div className="pdk-u-filters">
-            {["monthly-attendance","signature-month"].includes(requirement) && !previewOnly &&
+            {["monthly-attendance","signature-month","daily-report"].includes(requirement) && !previewOnly &&
               <button type="button" className="pdk-u-btn"
                 disabled={!company || !data.profileReady || data.resourceLoading}
                 onClick={()=>setMonthlyRequestKey(monthKey)}>
                 <TableProperties size={16}/> {requirement==="signature-month" ?
                    (allowHeavy?"İmza listesi yenileniyor":"Aylık imza listesini hazırla") :
-                   (allowHeavy?"Aylık puantaj yenileniyor":"Aylık puantajı hazırla")}
+                   (allowHeavy?"Aylık rapor yenileniyor":"Aylık raporu hazırla")}
               </button>}
             <label><CalendarDays size={15}/><span>Ay</span>
               <select aria-label="Ay" value={period.month}
@@ -512,11 +534,25 @@ export default function PdksUnifiedApp({
                 onChange={(e)=>setSelectedId(e.target.value)}>
                 {data.people.map((person)=><option key={person.id} value={person.id}>{person.cardNo} · {person.fullName}</option>)}
               </select></label>}
+            {["reports","payroll"].includes(section.id)&&reportPeople.length>0&&
+              <label><UsersRound size={14}/><span>Personel</span>
+                <select aria-label="Rapor personeli" value={reportPerson}
+                  onChange={event=>setReportPerson(event.target.value)}>
+                  <option value="">Tüm personel</option>
+                  {reportPeople.map(person=><option key={person.id} value={person.id}>
+                    {person.name}</option>)}
+                </select></label>}
             <span className="pdk-u-spacer"/>
             <span className="pdk-u-counter"><Filter size={15}/> {filteredRows.length} kayıt</span>
-            <button type="button" className="pdk-u-btn" disabled={!canExport} onClick={exportTable}>
-              <Download size={16}/> CSV</button>
-            {["signatures","receipts","payroll"].includes(tab.id)&&<button type="button"
+            <button type="button" className="pdk-u-btn" disabled={!canExport||exportBusy}
+              onClick={()=>exportReport("csv")}><Download size={16}/> CSV</button>
+            {["reports","payroll","timesheet"].includes(section.id)&&<>
+              <button type="button" className="pdk-u-btn" disabled={!canExport||exportBusy}
+                onClick={()=>exportReport("xlsx")}><Download size={16}/> Excel</button>
+              <button type="button" className="pdk-u-btn" disabled={!canExport||exportBusy}
+                onClick={()=>exportReport("pdf")}><FileCheck2 size={16}/> PDF</button>
+            </>}
+            {["reports","payroll","timesheet"].includes(section.id)&&<button type="button"
               className="pdk-u-btn" disabled={!canExport} onClick={()=>window.print()}>
               <FileCheck2 size={16}/> Yazdır</button>}
           </div>}
@@ -559,9 +595,9 @@ export default function PdksUnifiedApp({
               description="API yanıtı bu ekranın veri sözleşmesiyle uyuşmuyor. Eksik alanları sıfır veya tamamlandı olarak göstermiyoruz."
               IconComponent={AlertTriangle}/> :
             pageUnavailable ? <EmptyState
-              title={["monthly-attendance","signature-month"].includes(requirement) && !allowHeavy ?
+              title={["monthly-attendance","signature-month","daily-report"].includes(requirement) && !allowHeavy ?
                 "Ay raporu henüz hazırlanmadı":"Kaynak doğrulanamadı"}
-              description={["monthly-attendance","signature-month"].includes(requirement) && !allowHeavy ?
+              description={["monthly-attendance","signature-month","daily-report"].includes(requirement) && !allowHeavy ?
                 "Tam ay için tüm kartlı personel tek tek kontrol edilir. Hazırla düğmesine basın. Eksik cevap varsa kısmi rapor veya imza formu üretilmez." :
                 "Bu görünüm yalnız yetkili KY ERP kaynağından okunur. Firebird/TNF mutabakatı ayrıca doğrulanır."}
               IconComponent={Database}/> :
