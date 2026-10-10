@@ -7,6 +7,7 @@ import {parseTerminalDiagnosticReport} from "./terminalReportView.mjs";
 import {CONFIRMED_LEGACY_TERMINAL,inspectImportedLegacyProfiles}
   from "../../../../../pdks-unified/device-gateway/legacy-hedef-terminal-profile.mjs";
 import {projectTerminalCsv} from "./terminalCsvView.mjs";
+import {buildCardPrintHtml} from "../../../../../pdks-unified/device-gateway/card-printer.mjs";
 
 const vendors=Object.freeze([
   ["KY QR","KY QR / Barkod"],
@@ -130,6 +131,13 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
     const a=document.createElement("a");a.href=url;
     a.download="KY-PDKS-TERMINAL-"+config.terminalId+".json";a.click();
     URL.revokeObjectURL(url);
+  };
+  const printerTest=()=>{
+    const preview=window.open("","_blank");
+    if(!preview){setNotice("Kart önizlemesi için açılır pencere izni gerekir.");return;}
+    preview.document.open();
+    preview.document.write(buildCardPrintHtml({type:"test"}));
+    preview.document.close();
   };
   return <section className="pdk-u-terminal" aria-label="Çok markalı terminal kurulum merkezi">
     <div className="pdk-u-terminal-head">
@@ -289,6 +297,24 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
           <p>Dosya imzasız bir operatör tanısıdır. Fiziksel cihaz RAW, Firebird, bordro ve yıllık TNF
             otomatik doğrulanmış veya değiştirilmiş sayılmaz.</p>
         </div>}
+        <div className="pdk-u-terminal-sub"><Network size={16}/> Çoklu Hedef cihaz izleme</div>
+        <p>İki eski cihazın gerçek profilini ayrı ayrı alın. Windows yerel gözlemci
+          bağlantı kesilince yeniden dener; TCP yanıtı gerçek FP_CLOCK kart okuması değildir.
+          İkinci profil, OCX metotları ve gerçek ham olay kanıtı doğrulanmadı.</p>
+        <p><code>node APP/pdks-unified/device-gateway/terminal-fleet-cli.mjs --profiles C:\\YOL\\hedef-cihazlar.json --watch</code>
+          komutunu yalnız yerel Windows bilgisayarında ve <code>KY_PDKS_COMPANY_ID</code>
+          tanımlandıktan sonra çalıştırın.</p>
+        <a href="http://127.0.0.1:5206/" target="_blank" rel="noopener noreferrer"
+          className="pdk-u-terminal-link"
+          onClick={event=>{if(previewOnly)event.preventDefault();}}>
+          Çoklu cihaz canlı ağ durumunu aç <ExternalLink size={14}/>
+        </a>
+        <div className="pdk-u-terminal-sub"><HardDrive size={16}/> Kart yazıcıları</div>
+        <p>Mevcut Windows kart yazıcısı sürücüsünü kullanın. Test kartı ve
+          Personel 360° &gt; Kart ekranındaki doğrulanmış kart önizlemesi 86 × 54 mm'dir.
+          Fiziksel baskı yalnız operatörün yazdırma penceresinden başlatılır.</p>
+        <button type="button" className="pdk-u-btn" disabled={previewOnly}
+          onClick={printerTest}><Download size={15}/> Test kartı baskı önizlemesi</button>
         <div className="pdk-u-terminal-sub"><Cable size={16}/> KY imzalı QR / USB okuyucu</div>
         <p>Yerel QR terminali <code>127.0.0.1:5197</code> adresinden, yalnız
           açık izinli Windows Agent komutuyla başlatılır. QR kamera ve USB HID
