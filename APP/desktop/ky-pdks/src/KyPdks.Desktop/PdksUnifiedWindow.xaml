@@ -79,6 +79,7 @@
                                 <StackPanel Margin="8,4,0,6">
                                     <Button Content="Agent / D1 Senkron" Tag="SYSTEM" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
                                     <Button Content="Yıllık TEMP / Denetim" Tag="SYSTEM" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
+                                    <Button Content="Yönetim / Hata Merkezi" Tag="SYSTEM" Click="NavButton_Click" HorizontalContentAlignment="Left" Margin="0,2"/>
                                 </StackPanel>
                             </Expander>
                         </StackPanel>
@@ -188,6 +189,20 @@
                                 <TextBlock x:Name="AgentDetailText" Text="Agent durumu yükleniyor..." TextWrapping="Wrap"/>
                                 <TextBlock x:Name="SyncDetailText" Text="D1 sync durumu yükleniyor..." TextWrapping="Wrap" Margin="0,8,0,0"/>
                                 <TextBlock Text="KY PDKS.exe kapalı olsa da Windows Agent kart toplamaya ve D1 kuyruğunu göndermeye devam eder." FontWeight="SemiBold" Foreground="#267048" Margin="0,14,0,0"/>
+                                <Separator Margin="0,18,0,12"/>
+                                <TextBlock Text="Yönetim ve Entegrasyon" FontSize="19" FontWeight="Bold"/>
+                                <TextBlock x:Name="ManagementRoleText" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                <TextBlock Text="Kullanıcı oluşturma ve yetki değiştirme KY ERP Yönetim modülünde sunucu tarafından korunur. Bu ekran mevcut oturumu gösterir." Foreground="#64788F" TextWrapping="Wrap" Margin="0,5,0,12"/>
+                                <TextBlock x:Name="CloudHealthText" Text="Cloud: D1 durum bilgisi yükleniyor..." FontWeight="SemiBold"/>
+                                <TextBlock x:Name="BackupInfoText" Text="Son yerel yedek: kontrol ediliyor..." Margin="0,10,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="VerifiedBackupButton" Content="Yerel SQLite Yedeği Al ve Doğrula" Click="VerifiedBackupButton_Click" Padding="12,7" Margin="0,0,8,0"/>
+                                    <Button Content="Teknik Özeti Kopyala" Click="CopyDiagnosticsButton_Click" Padding="12,7" Margin="0,0,8,0"/>
+                                    <Button Content="Log Klasörünü Aç" Click="OpenLogsButton_Click" Padding="12,7"/>
+                                </StackPanel>
+                                <TextBlock Text="Yedek yalnız yerel kart tampon DB'sidir; D1/Cloud personel ve bordro yedeği değildir. EXE kurulum doğrulaması ayrıca gerekir." Foreground="#9A5A18" TextWrapping="Wrap" Margin="0,9,0,14"/>
+                                <TextBlock Text="Hata Merkezi · Son yerel senkron hataları" FontWeight="Bold"/>
+                                <ListBox x:Name="ErrorCenterList" MinHeight="80" MaxHeight="180" Margin="0,7,0,0"/>
                             </StackPanel>
                         </Border>
                     </Grid>

@@ -16,7 +16,7 @@ public partial class PdksWorkbenchWindow
             || string.Equals(_userName, "denetim", StringComparison.OrdinalIgnoreCase)
             || string.Equals(_role, "DENETIM", StringComparison.OrdinalIgnoreCase);
 
-        var window = new PdksUnifiedWindow(_token, _people, _paths, CanWrite && !audit)
+        var window = new PdksUnifiedWindow(_token, _people, _paths, CanWrite && !audit, _role)
         {
             Owner = this,
         };

@@ -15,6 +15,8 @@ public partial class PdksUnifiedWindow : Window
     private readonly IReadOnlyList<CachedPerson> _people;
     private readonly PdksPaths _paths;
     private readonly bool _canWrite;
+    private readonly string _role;
+    private PdksDiagnostics? _diagnostics;
     private readonly ErpApiClient _erp = new();
     private readonly PdksMasterApiClient _mastersApi = new();
     private readonly PdksMachineApiClient _machineApi = new();
@@ -25,13 +27,14 @@ public partial class PdksUnifiedWindow : Window
     private CachedPerson? _selected;
     private bool _busy;
 
-    public PdksUnifiedWindow(string token, IReadOnlyList<CachedPerson> people, PdksPaths paths, bool canWrite)
+    public PdksUnifiedWindow(string token, IReadOnlyList<CachedPerson> people, PdksPaths paths, bool canWrite, string role = "")
     {
         InitializeComponent();
         _token = token ?? "";
         _people = people ?? Array.Empty<CachedPerson>();
         _paths = paths;
         _canWrite = canWrite;
+        _role = role ?? "";
         _store = new LocalPdksStore(paths);
     }
 
@@ -65,6 +68,7 @@ public partial class PdksUnifiedWindow : Window
             D1StateText.Text = "D1: Yükleniyor";
             _masters = await _mastersApi.GetAsync(_token, _lifetime.Token);
             D1StateText.Text = _masters.Audit ? "D1: DENETİM / Salt okunur" : "D1: Bağlı";
+            CloudHealthText.Text = _masters.Audit ? "Cloud / D1: Bağlı · denetim" : "Cloud / D1: Bağlı";
             DefinitionSummaryText.Text = $"{_masters.Groups.Count} vardiya · {_masters.Services.Count} servis · {_people.Count} SGK=VAR + kartlı personel. Vardiya ve servis atamaları Web ile aynıdır.";
             await RefreshAgentStateAsync();
             await LoadSelectedAsync();
@@ -74,6 +78,7 @@ public partial class PdksUnifiedWindow : Window
         catch (Exception error)
         {
             D1StateText.Text = "D1: Hata";
+            CloudHealthText.Text = "Cloud / D1: Erişim doğrulanamadı";
             StatusText.Text = error.Message;
         }
         finally { _busy = false; }
@@ -212,6 +217,59 @@ public partial class PdksUnifiedWindow : Window
         SyncDetailText.Text = string.IsNullOrWhiteSpace(snapshot.LastAgentMessage)
             ? "D1 otomatik senkron durumu Agent tarafından güncellenecek."
             : snapshot.LastAgentMessage;
+        ManagementRoleText.Text = "ERP oturum rolü: " +
+            (string.IsNullOrWhiteSpace(_role) ? "Bilinmiyor" : _role) +
+            " · yazma: " + (_canWrite && !_masters.Audit ? "Sunucu yetki denetimine tabi" : "Kapalı");
+        VerifiedBackupButton.IsEnabled = _canWrite && !_masters.Audit &&
+            PdksManagementCenter.CanCreateBackup(_role);
+        try
+        {
+            _diagnostics = await new PdksManagementCenter(_paths).ReadAsync(_lifetime.Token);
+            BackupInfoText.Text = "Son yerel yedek: " + _diagnostics.LastBackup +
+                " · reddedilen dosya: " + _diagnostics.RejectedFiles;
+            ErrorCenterList.ItemsSource = _diagnostics.Incidents.Count == 0
+                ? new[] { "Yerel senkron hatası bulunamadı." }
+                : _diagnostics.Incidents.Select(i => i.At + " · " + i.Summary).ToArray();
+        }
+        catch (Exception)
+        {
+            _diagnostics = null;
+            BackupInfoText.Text = "Yerel tanılama okunamadı.";
+            ErrorCenterList.ItemsSource = new[] { "Tanılama kaydı okunamadı. Yerel DB'ye dokunulmadı." };
+        }
+    }
+
+    private async void VerifiedBackupButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_canWrite || _masters.Audit || !PdksManagementCenter.CanCreateBackup(_role))
+        {
+            StatusText.Text = "Yerel yedek yalnız yönetici rolüyle oluşturulabilir.";
+            return;
+        }
+        await RunAsync("Yerel SQLite yedeği bütünlük testiyle oluşturuluyor...", async () =>
+        {
+            var target = await _store.BackupAsync(_lifetime.Token);
+            await RefreshAgentStateAsync();
+            StatusText.Text = "Doğrulanan yerel DB yedeği: " + Path.GetFileName(target) +
+                " · D1/Cloud yedeği değildir.";
+        });
+    }
+
+    private void CopyDiagnosticsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_diagnostics is null)
+        {
+            StatusText.Text = "Kopyalanacak tanılama henüz yüklenmedi.";
+            return;
+        }
+        Clipboard.SetText(PdksManagementCenter.ToSafeText(_diagnostics, _role));
+        StatusText.Text = "Kişisel veri ve token içermeyen teknik özet kopyalandı.";
+    }
+
+    private void OpenLogsButton_Click(object sender, RoutedEventArgs e)
+    {
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+            "explorer.exe", "\"" + _paths.Logs + "\"") { UseShellExecute = true });
     }
 
     private void NavButton_Click(object sender, RoutedEventArgs e)

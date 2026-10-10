@@ -314,14 +314,45 @@ public sealed class LocalPdksStore(PdksPaths paths)
     public async Task<string> BackupAsync(CancellationToken ct = default)
     {
         await InitializeAsync(ct);
-        var target = Path.Combine(paths.Backup, $"KY-PDKS-{DateTime.Now:yyyyMMdd-HHmmss}.db");
-        await using var source = new SqliteConnection(ConnectionString);
-        await source.OpenAsync(ct);
-        await using var destination = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = target, Mode = SqliteOpenMode.ReadWriteCreate }.ToString());
-        await destination.OpenAsync(ct);
-        source.BackupDatabase(destination);
-        await TouchStateAsync("last_backup", target, ct);
-        return target;
+        // Online SQLite backup respects live WAL writers. Never overwrite backups.
+        var target = Path.Combine(paths.Backup,
+            $"KY-PDKS-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.db");
+        var partial = target + ".partial";
+        try
+        {
+            await using (var source = new SqliteConnection(ConnectionString))
+            {
+                await source.OpenAsync(ct);
+                await using var destination = new SqliteConnection(
+                    new SqliteConnectionStringBuilder
+                    {
+                        DataSource = partial, Mode = SqliteOpenMode.ReadWriteCreate,
+                        Pooling = false,
+                    }.ToString());
+                await destination.OpenAsync(ct);
+                source.BackupDatabase(destination);
+            }
+            ct.ThrowIfCancellationRequested();
+            await using (var checkConnection = new SqliteConnection(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = partial, Mode = SqliteOpenMode.ReadOnly,
+                    Pooling = false,
+                }.ToString()))
+            {
+                await checkConnection.OpenAsync(ct);
+                await using var check = checkConnection.CreateCommand();
+                check.CommandText = "PRAGMA quick_check";
+                var result = Convert.ToString(await check.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+                if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Yedek SQLite bütünlük denetiminden geçemedi.");
+            }
+            ct.ThrowIfCancellationRequested();
+            File.Move(partial, target);
+            await TouchStateAsync("last_backup", target, ct);
+            return target;
+        }
+        finally { if (File.Exists(partial)) File.Delete(partial); }
     }
 
     public async Task<string> StartSyncHistoryAsync(int sent, CancellationToken ct = default)
