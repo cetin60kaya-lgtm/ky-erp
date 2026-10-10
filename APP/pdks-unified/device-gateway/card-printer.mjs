@@ -31,7 +31,7 @@ export function buildCardPrintHtml({
       throw Error("CARD_PRINT_FIVE_DIGIT_NUMBER_REQUIRED");
     caption="KY PDKS · PERSONEL KARTI";
   }
-  return \`<!doctype html><html lang="tr"><head><meta charset="UTF-8">
+  return `<!doctype html><html lang="tr"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>KY PDKS Kart Baskı Önizleme</title><style>
 @page{size:86mm 54mm;margin:0}
@@ -47,8 +47,8 @@ button{font:16px Arial;padding:10px 18px;cursor:pointer}
 </style></head><body><div class="controls"><button type="button"
 onclick="window.print()">Yazdırma penceresini aç</button>
 <p>Windows'ta kurulu kart yazıcısını seçin. Baskı otomatik başlatılmaz.</p></div>
-<div class="card"><div class="company">\${escapeHtml(company)}</div>
-<div class="person">\${escapeHtml(label)}</div>
-<div class="number">\${escapeHtml(number)}</div>
-<div class="note">\${escapeHtml(caption)}</div></div></body></html>\`;
+<div class="card"><div class="company">${escapeHtml(company)}</div>
+<div class="person">${escapeHtml(label)}</div>
+<div class="number">${escapeHtml(number)}</div>
+<div class="note">${escapeHtml(caption)}</div></div></body></html>`;
 }
