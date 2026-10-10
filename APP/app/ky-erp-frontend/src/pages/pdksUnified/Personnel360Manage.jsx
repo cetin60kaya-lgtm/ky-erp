@@ -1,5 +1,5 @@
 import React, {useCallback,useEffect,useState} from "react";
-import {apiGet,apiPost} from "../../utils/api";
+import {apiGet,apiPost,apiFetch} from "../../utils/api";
 import "./personnel360.css";
 
 const unpack=(response)=>response?.ok===true&&Object.prototype.hasOwnProperty.call(response,"data")
@@ -11,6 +11,7 @@ const editable=[
   ["fullName","Ad Soyad","text"],["department","Departman","text"],
   ["title","Görev","text"],["phone","Telefon","tel"],
   ["startDate","İşe Giriş","date"],["exitDate","İşten Çıkış","date"],
+  ["status","İstihdam Durumu","select"],
 ];
 const fromPerson=(p={})=>Object.fromEntries(editable.map(([key])=>[key,clean(p[key])==="—"?"":clean(p[key])]));
 const endpoint=(id,suffix="")=>`/ik/personnel-control/people/${encodeURIComponent(id)}${suffix}`;
@@ -34,21 +35,42 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
   const [docType,setDocType]=useState("PERSONNEL_DOCUMENT");
   const [docNote,setDocNote]=useState("");
   const [unlinkReason,setUnlinkReason]=useState("");
+  const [groupId,setGroupId]=useState("");
+  const [previewUrl,setPreviewUrl]=useState("");
+  const [previewAsset,setPreviewAsset]=useState("");
 
   useEffect(()=>{
     setLoaded(null);setError("");setMessage("");setForm(fromPerson(person));
     setCard(clean(person?.cardNo)==="—"?"":clean(person?.cardNo));
     setReason("");setAssetId("");setDocNote("");setUnlinkReason("");
+    setGroupId("");setPreviewAsset("");
   },[employeeId,company]);
 
   const refresh=useCallback(()=>setRevision(x=>x+1),[]);
+  useEffect(()=>()=>{if(previewUrl)URL.revokeObjectURL(previewUrl);},[previewUrl]);
+  const openPreview=async(id)=>{
+    setError("");setPreviewAsset("");setPreviewUrl("");
+    setBusy(true);
+    try{
+      const blob=await apiFetch(endpoint(employeeId,`/documents/${encodeURIComponent(id)}/preview`),{responseType:"blob"});
+      if(!(blob instanceof Blob)||blob.size===0)throw new Error("Önizleme içeriği boş veya doğrulanamadı.");
+      if(!["application/pdf","image/jpeg","image/png","image/webp"].includes(blob.type))
+        throw new Error("Güvenli web önizleme biçimi desteklenmiyor.");
+      setPreviewUrl(URL.createObjectURL(blob));setPreviewAsset(id);
+    }catch(e){setError(e?.message||"Dosya önizlemesi açılamadı.");}
+    finally{setBusy(false);}
+  };
   useEffect(()=>{
     if(!employeeId||!company||previewOnly||isAuditAccount)return;
     let cancelled=false;
     setLoading(true);setError("");setLoaded(null);
     const run=async()=>{
       if(active==="identity"||active==="history"){
-        return unpack(await apiGet(endpoint(employeeId),{mainCompanyId:company},{forceFresh:true,cache:false}));
+        const profileData=unpack(await apiGet(endpoint(employeeId),{mainCompanyId:company},{forceFresh:true,cache:false}));
+        if(active==="history")return profileData;
+        const masters=await apiGet("/ik/personnel-control/pdks-masters",{mainCompanyId:company},{forceFresh:true,cache:false})
+          .then(unpack).catch(()=>null);
+        return {...profileData,masters};
       }
       if(active==="card")return unpack(await apiGet(endpoint(employeeId,"/card-assignment"),{mainCompanyId:company},{forceFresh:true,cache:false}));
       if(active==="documents"){
@@ -62,7 +84,11 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
     run().then(result=>{
       if(cancelled)return;
       setLoaded(result);
-      if(active==="identity")setForm(fromPerson(result?.person||person));
+      if(active==="identity"){
+        setForm(fromPerson(result?.person||person));
+        const assignment=result?.masters?.groupAssignments?.find(g=>String(g.employeeId)===employeeId);
+        setGroupId(clean(assignment?.groupId));
+      }
       if(active==="card")setCard(clean(result?.cardNo));
     }).catch(e=>{if(!cancelled)setError(e?.message||"Personel kaynağı okunamadı.");})
       .finally(()=>{if(!cancelled)setLoading(false);});
@@ -93,8 +119,23 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
     <h4>Özlük kartı</h4>
     <p>Kaynak: KY ERP personel ana kaydı. Değişiklikler geçmişe kaydedilir; fiziksel cihaz değiştirilmez.</p>
     <div className="pdk-person-fields">{editable.map(([key,label,type])=>
-      <Field key={key} label={label}><input type={type} value={form[key]||""}
-        disabled={!canEdit||loading||busy||!loaded} onChange={e=>setForm(x=>({...x,[key]:e.target.value}))}/></Field>)}</div>
+      <Field key={key} label={label}>{type==="select"?<select value={form.status||"Aktif"}
+        disabled={!canEdit||loading||busy||!loaded} onChange={e=>setForm(x=>({...x,status:e.target.value,
+          exitDate:e.target.value==="Aktif"?"":x.exitDate}))}>
+          <option value="Aktif">Aktif</option><option value="Pasif">Pasif / Çıkış Yapıldı</option>
+        </select>:<input type={type} value={form[key]||""}
+        disabled={!canEdit||loading||busy||!loaded} onChange={e=>setForm(x=>({...x,[key]:e.target.value}))}/>}</Field>)}</div>
+    <Field label="Çalışma grubu (D1 PDKS tanımı)">
+      <select disabled={!canEdit||loading||busy||!loaded?.masters?.groups?.length}
+        value={groupId} onChange={e=>setGroupId(e.target.value)}>
+        <option value="">Atama yok / kaynak doğrulanmadı</option>
+        {(loaded?.masters?.groups||[]).filter(g=>Number(g.active)!==0).map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
+      </select>
+    </Field>
+    {loaded?.masters?.groups?.length>0&&canEdit&&<button type="button" className="pdk-person-secondary"
+      disabled={busy||loading||!groupId||groupId===clean(loaded.masters.groupAssignments?.find(g=>String(g.employeeId)===employeeId)?.groupId)}
+      onClick={()=>submit(endpoint(employeeId,"/work-group"),{groupId},
+        "Vardiya grubu mevcut D1 personel tanımına bağlandı.")}>Çalışma grubunu kaydet</button>}
     <div className="pdk-person-summary">
       <span>Kod: {loaded?.person?.personnelCode||person.personnelCode||"—"}</span>
       <span>SGK: {loaded?.person?.sgkStatus||person.sgkStatus||"—"}</span>
@@ -152,13 +193,20 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
     </div>}
     {note}
     <h4>Bağlı evraklar</h4>
+    {previewUrl&&<section className="pdk-person-preview" aria-label="Personel evrak önizlemesi">
+      <button type="button" className="pdk-person-secondary" onClick={()=>{setPreviewUrl("");setPreviewAsset("");}}>Önizlemeyi kapat</button>
+      <iframe title={`Personel evrakı ${previewAsset}`} src={previewUrl} sandbox="allow-same-origin"/>
+    </section>}
     {loaded&&<table className="pdk-person-table"><thead><tr><th>Dosya</th><th>Tür</th><th>Durum</th><th>Bağlantı</th></tr></thead>
       <tbody>{(loaded.docs||[]).map(d=><tr key={d.id}><td>{d.fileName||"—"}</td>
         <td>{d.documentType==="CONTRACT"?"Sözleşme":"Özlük"}</td>
-        <td>{d.status||"—"}</td><td>{canEdit?<button type="button" className="pdk-person-secondary"
+        <td>{d.status||"—"}</td><td><div className="pdk-person-doc-actions">
+          {d.previewReady?<button type="button" className="pdk-person-secondary" disabled={busy}
+            onClick={()=>openPreview(d.id)}>Görüntüle</button>:<span>Önizleme hazır değil</span>}
+          {canEdit?<button type="button" className="pdk-person-secondary"
           disabled={busy||unlinkReason.trim().length<5}
           onClick={()=>submit(endpoint(employeeId,`/documents/${encodeURIComponent(d.id)}/unlink`),
-            {reason:unlinkReason.trim()},"Personel bağlantısı kaldırıldı, dosya silinmedi.")}>Bağlantıyı kaldır</button>:"Salt okunur"}</td></tr>)}</tbody>
+            {reason:unlinkReason.trim()},"Personel bağlantısı kaldırıldı, dosya silinmedi.")}>Bağlantıyı kaldır</button>:null}</div></td></tr>)}</tbody>
     </table>}
     {canEdit&&!!loaded?.docs?.length&&<Field label="Bağlantıyı kaldırma gerekçesi (min. 5 karakter)">
       <input value={unlinkReason} onChange={e=>setUnlinkReason(e.target.value)} maxLength={240}/></Field>}
