@@ -24,6 +24,7 @@ import TerminalSetupPanel from "./TerminalSetupPanel.jsx";
 import TransferCenterPanel from "./TransferCenterPanel.jsx";
 import CloudSyncPanel from "./CloudSyncPanel.jsx";
 import StageCopyExplorer from "./StageCopyExplorer.jsx";
+import EvidencePuantajPanel from "./EvidencePuantajPanel.jsx";
 import "./pdksUnified.css";
 
 const ICONS = {
@@ -358,6 +359,7 @@ export default function PdksUnifiedApp({
 
   const isPeopleTab=section.id==="people" && ["people","cards","employment"].includes(tab.id);
   const stageInspectTab=testMode&&["today","live","exceptions","attention","people","cards","employment","punches","history","daily","monthly","validation","attendance","violations","signatures","timesheets"].includes(tab.id);
+  const evidencePuantajTab=["daily","monthly","timesheets","validation","attendance"].includes(tab.id);
   // One projection for every screen. API success is not record-schema success.
   const projection=useMemo(()=>{
     if(requirement==="people")return rowsForTab(tab.id,null,{people:data.people});
@@ -473,6 +475,11 @@ export default function PdksUnifiedApp({
         {stageInspectTab&&<StageCopyExplorer tabId={tab.id} snapshot={stageSnapshot}
           onSnapshot={setStageSnapshot} search={search}
           selectedCard={stageSelectedCard} onSelectedCard={setStageSelectedCard}/>}
+        {evidencePuantajTab&&<EvidencePuantajPanel
+          key={[company,period.year,period.month].join(":")}
+          company={company} year={period.year} month={period.month}
+          tabId={tab.id} previewOnly={previewOnly} testMode={testMode}
+          audit={profileAudit} profileReady={data.profileReady}/>}
         {tab.view==="dashboard" && !stageInspectTab && <UnifiedDashboard onOpen={go}
           peopleStatus={data.profileReady && data.peopleStatus==="ready" ? {count:data.people.length}:null}
           attendanceStatus={data.peopleStatus} hasData={data.sourceReady}
