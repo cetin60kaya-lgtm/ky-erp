@@ -18,3 +18,8 @@
 .pdk-unified .pdk-person-table th{font-size:10px;color:var(--pu-muted);font-weight:700}
 .pdk-unified .pdk-person-secondary{background:transparent;border:1px solid var(--pu-border);color:var(--pu-text);border-radius:6px;padding:5px;font-size:10px}
 @media(max-width:850px){.pdk-unified .pdk-person-fields{grid-template-columns:1fr}.pdk-unified .pdk-person-table{font-size:10px}}
+
+.pdk-unified .pdk-person-preview{display:grid;gap:8px;min-width:0}
+.pdk-unified .pdk-person-preview iframe{width:100%;height:410px;max-height:55vh;background:var(--pu-panel);border:1px solid var(--pu-border);border-radius:8px}
+.pdk-unified .pdk-person-doc-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pdk-unified .pdk-person-doc-actions span{font-size:10px;color:var(--pu-muted)}
