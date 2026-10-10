@@ -71,7 +71,7 @@ test("bad tenant in a batch rejects all; no partial event acceptance",async()=>{
     ]),
   });
   const snapshot=(await fleet.pollOnce())[0];
-  assert.equal(snapshot.status,"OFFLINE_RETRY_SCHEDULED");
+  assert.equal(snapshot.status,"DRIVER_ERROR_RETRY_SCHEDULED");
   assert.equal(snapshot.lastError,"TERMINAL_TENANT_OR_DEVICE_MISMATCH");
   assert.equal(snapshot.accepted,0);
   await fleet.stop();
