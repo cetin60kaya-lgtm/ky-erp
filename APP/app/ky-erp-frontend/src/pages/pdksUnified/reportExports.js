@@ -2,7 +2,8 @@
 import {csvForTable,safeFileNameSegment} from "./productData.js";
 
 const encode=new TextEncoder();
-const escapeXml=value=>String(value??"").replace(/&/g,"&amp;")
+const escapeXml=value=>String(value??"").slice(0,32767)
+ .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,"").replace(/&/g,"&amp;")
  .replace(/</g,"&lt;").replace(/>/g,"&gt;")
  .replace(/"/g,"&quot;").replace(/'/g,"&apos;");
 const uint16=(array,value)=>array.push(value&255,(value>>>8)&255);
@@ -48,8 +49,14 @@ const columnName=index=>{
   result=String.fromCharCode(65+(num-1)%26)+result;
  return result;
 };
-const sheetCell=(address,value)=>{
+const numericColumns=new Set(["Maaş","Yol","Ek Yol","Yemek","%50 Saat","%50 Tutar",
+ "%100 Saat","%100 Tutar","Mesai","Avans","Kesinti","Net","Brüt","Toplam",
+ "Banka","Elden","Tutar","Süre","Kanıt","Gün","İzin","Çalışılan","Eksik"]);
+const sheetCell=(address,value,heading)=>{
  const string=String(value??"");
+ if(numericColumns.has(heading) && /^-?\\d+(?:\\.\\d+)?$/.test(string) &&
+    Number.isFinite(Number(string)))
+   return `<c r="${address}" t="n"><v>${string}</v></c>`;
  // Formula-like values must be stored as inline strings; never executable Excel formulas.
  return `<c r="${address}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(string)}</t></is></c>`;
 };
@@ -58,7 +65,7 @@ export function xlsxReportBytes(columns,rows,{sheetName="KY PDKS"}={}){
     rows.length>50000)throw Error("PDKS_EXPORT_KAPSAM_GECERSIZ");
  const values=[columns,...rows.map(row=>columns.map(key=>row?.[key]??""))];
  const body=values.map((cells,index)=>`<row r="${index+1}">${cells.map(
-  (v,i)=>sheetCell(columnName(i)+(index+1),v)).join("")}</row>`).join("");
+  (v,i)=>sheetCell(columnName(i)+(index+1),v,columns[i])).join("")}</row>`).join("");
  const sheet=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetData>${body}</sheetData></worksheet>`;
  const book=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escapeXml(String(sheetName).slice(0,31))}" sheetId="1" r:id="rId1"/></sheets></workbook>`;
  return zipStored({
