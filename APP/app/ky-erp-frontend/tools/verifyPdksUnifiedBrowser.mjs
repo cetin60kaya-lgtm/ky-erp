@@ -135,7 +135,7 @@ try {
         const controls=await evaluate('document.querySelectorAll(".pdk-u-terminal-modalities input[type=checkbox]").length');
         assertBrowser(controls===10,"Terminal Hub must expose 10 real badge modalities");
         const connectors=await evaluate('document.querySelector(".pdk-u-terminal select[aria-label=\'Terminal protokolü\']")?.options.length');
-        assertBrowser(connectors===12,"Terminal Hub must show 12 protocol profiles");
+        assertBrowser(connectors===13,"Terminal Hub must show 13 protocol profiles including original Hedef x86 bridge");
         assertBrowser(await evaluate('document.querySelector(".pdk-u-terminal input[type=file]")?.disabled===true'),
           "Studio must not open real terminal diagnostic reports in preview");
         assertBrowser(await evaluate('document.querySelector(".pdk-u-terminal")?.textContent?.includes("Bağlantı testi ve TNF tanı raporu")'),
