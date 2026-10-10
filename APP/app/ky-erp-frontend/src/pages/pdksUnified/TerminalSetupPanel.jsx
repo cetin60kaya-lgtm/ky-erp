@@ -1,4 +1,4 @@
-import React,{useMemo,useState} from "react";
+import React,{useEffect,useMemo,useState} from "react";
 import {Cable,CheckCircle2,Download,ExternalLink,HardDrive,Info,LockKeyhole,
   Network,Radio,ScanLine,ShieldAlert,ShieldCheck} from "lucide-react";
 import {CONNECTORS,INPUT_METHODS,installationPlan,validateTerminalDefinition}
@@ -51,6 +51,37 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
   const [diagnostic,setDiagnostic]=useState(null);
   const [csvDiagnostic,setCsvDiagnostic]=useState(null);
   const [legacyProfiles,setLegacyProfiles]=useState([CONFIRMED_LEGACY_TERMINAL]);
+  const [fleetState,setFleetState]=useState({status:"NOT_CONNECTED",devices:[]});
+  const [printerState,setPrinterState]=useState({status:"NOT_CONNECTED",printers:[]});
+  useEffect(()=>{
+    if(previewOnly)return;
+    let cancelled=false;
+    const refresh=async()=>{
+      try{
+        const response=await fetch("http://127.0.0.1:5206/status",
+          {cache:"no-store",signal:AbortSignal.timeout(2500)});
+        if(!response.ok)throw Error("STATUS_UNAVAILABLE");
+        const devices=await response.json();
+        if(!Array.isArray(devices)||devices.length>32)throw Error("INVALID_RESPONSE");
+        if(!cancelled)setFleetState({status:"LOCAL_AGENT_REACHABLE",devices});
+      }catch{
+        if(!cancelled)setFleetState({status:"LOCAL_AGENT_OFFLINE",devices:[]});
+      }
+      try{
+        const response=await fetch("http://127.0.0.1:5206/printers",
+          {cache:"no-store",signal:AbortSignal.timeout(2500)});
+        if(!response.ok)throw Error("PRINTER_QUERY_FAILED");
+        const data=await response.json();
+        if(!cancelled)setPrinterState({
+          status:data.status||"PRINTER_UNKNOWN",
+          printers:Array.isArray(data.printers)?data.printers.slice(0,100):[],
+        });
+      }catch{if(!cancelled)setPrinterState({status:"PRINTER_AGENT_OFFLINE",printers:[]});}
+    };
+    void refresh();
+    const interval=setInterval(()=>{void refresh();},5000);
+    return ()=>{cancelled=true;clearInterval(interval);};
+  },[previewOnly]);
   const connector=CONNECTORS.find(c=>c.id===config.connectorId);
   const counts=useMemo(()=>({
     connectors:CONNECTORS.length,inputMethods:INPUT_METHODS.length,
@@ -297,6 +328,30 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
           <p>Dosya imzasız bir operatör tanısıdır. Fiziksel cihaz RAW, Firebird, bordro ve yıllık TNF
             otomatik doğrulanmış veya değiştirilmiş sayılmaz.</p>
         </div>}
+<div className="pdk-u-terminal-sub"><Network size={16}/> Yerel canlı cihaz ve hata merkezi</div>
+        <p role="status">Windows yerel ajanı: <strong>{fleetState.status==="LOCAL_AGENT_REACHABLE"?"ERİŞİLİYOR":
+          fleetState.status==="LOCAL_AGENT_OFFLINE"?"OFFLINE":"BAĞLI DEĞİL"}</strong>.
+          {fleetState.status==="LOCAL_AGENT_OFFLINE"?" Cihazların açık/kapalı olduğu doğrulanamadı.":""}</p>
+        {fleetState.devices.length>0&&<div className="pdk-u-table-scroll" role="region"
+          tabIndex={0} aria-label="Çoklu cihaz canlı durum tablosu">
+          <table className="pdk-u-table"><thead><tr>
+            <th>Terminal</th><th>Bağlantı</th><th>Okunan</th><th>Tekrar</th>
+            <th>Cihaz kaydı</th><th>Son okutma</th><th>Son hata</th>
+          </tr></thead><tbody>
+            {fleetState.devices.map(device=><tr key={device.terminalId}>
+              <td>{device.terminalId}</td><td>{device.status}</td>
+              <td>{device.accepted??0}</td><td>{device.duplicates??0}</td>
+              <td>{device.deviceLogCount??"Bilinmiyor"}</td>
+              <td>{device.lastPunchAt||"Henüz doğrulanmadı"}</td>
+              <td>{device.lastError||"—"}</td>
+            </tr>)}
+          </tbody></table>
+          {fleetState.devices.map(device=><details key={device.terminalId}>
+            <summary>{device.terminalId} · Hata geçmişi ({device.errorHistory?.length||0})</summary>
+            <ul>{(device.errorHistory||[]).map((error,i)=><li key={i}>
+              {error.at} · {error.code}</li>)}</ul>
+          </details>)}
+        </div>}
         <div className="pdk-u-terminal-sub"><Network size={16}/> Çoklu Hedef cihaz izleme</div>
         <p>İki eski cihazın gerçek profilini ayrı ayrı alın. Windows yerel gözlemci
           bağlantı kesilince yeniden dener; TCP yanıtı gerçek FP_CLOCK kart okuması değildir.
@@ -309,7 +364,14 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
           onClick={event=>{if(previewOnly)event.preventDefault();}}>
           Çoklu cihaz canlı ağ durumunu aç <ExternalLink size={14}/>
         </a>
-        <div className="pdk-u-terminal-sub"><HardDrive size={16}/> Kart yazıcıları</div>
+<div className="pdk-u-terminal-sub"><HardDrive size={16}/> Kart yazıcıları</div>
+        <p>Windows yazıcı keşfi: <strong>{printerState.status}</strong>.
+          Sürücü görünmesi fiziksel kart basıldığını kanıtlamaz.</p>
+        {!!printerState.printers.length&&<ul>
+          {printerState.printers.map((p,i)=><li key={p.name+":"+i}>
+            {p.name} — {p.driver} — {p.status}
+          </li>)}
+        </ul>}
         <p>Mevcut Windows kart yazıcısı sürücüsünü kullanın. Test kartı ve
           Personel 360° &gt; Kart ekranındaki doğrulanmış kart önizlemesi 86 × 54 mm'dir.
           Fiziksel baskı yalnız operatörün yazdırma penceresinden başlatılır.</p>
