@@ -44,6 +44,7 @@ export function normalizePerson(raw = {}, period = null) {
     startDate: displayValue(rawValue(raw, "entryDate", "hireDate", "startDate", "entry_date")),
     exitDate: displayValue(exitDate),
     status: periodStatus || displayValue(employment),
+    employmentStatus: displayValue(employment),
     cardState: card === null ? "Atanmamış" : "Atanmış",
   };
 }
@@ -63,6 +64,9 @@ export function normalizeAttendanceDay(raw = {}, person = {}) {
 }
 
 export function toPersonRows(people = [], view = "people") {
+  const state=(person)=>person.employmentStatus && person.employmentStatus!=="—" &&
+    person.employmentStatus!==person.status
+    ? `${person.employmentStatus} · ${person.status}` : person.status;
   return people.map((person) => {
     if (view === "documents") return {
       "Personel": person.fullName, "Belge": "Kişi seçilerek görüntülenir",
@@ -75,12 +79,12 @@ export function toPersonRows(people = [], view = "people") {
     };
     if (view === "employment") return {
       "Personel": person.fullName, "Giriş Tarihi": person.startDate, "Çıkış Tarihi": person.exitDate,
-      "Departman": person.department, "Görev": person.role, "Durum": person.status, _id: person.id,
+      "Departman": person.department, "Görev": person.role, "Durum": state(person), _id: person.id,
     };
     return {
       "Kart No": person.cardNo, "Ad Soyad": person.fullName, "Departman": person.department,
       "Görev": person.role, "Grup": person.group, "Giriş": person.startDate,
-      "Durum": person.status, _id: person.id,
+      "Durum": state(person), _id: person.id,
     };
   });
 }
