@@ -4,6 +4,8 @@ import {Cable,CheckCircle2,Download,ExternalLink,HardDrive,Info,LockKeyhole,
 import {CONNECTORS,INPUT_METHODS,installationPlan,validateTerminalDefinition}
   from "../../../../../pdks-unified/device-gateway/terminal-profiles.mjs";
 import {parseTerminalDiagnosticReport} from "./terminalReportView.mjs";
+import {CONFIRMED_LEGACY_TERMINAL,inspectImportedLegacyProfiles}
+  from "../../../../../pdks-unified/device-gateway/legacy-hedef-terminal-profile.mjs";
 import {projectTerminalCsv} from "./terminalCsvView.mjs";
 
 const vendors=Object.freeze([
@@ -46,6 +48,7 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
   const [notice,setNotice]=useState("");
   const [diagnostic,setDiagnostic]=useState(null);
   const [csvDiagnostic,setCsvDiagnostic]=useState(null);
+  const [legacyProfiles,setLegacyProfiles]=useState([CONFIRMED_LEGACY_TERMINAL]);
   const connector=CONNECTORS.find(c=>c.id===config.connectorId);
   const counts=useMemo(()=>({
     connectors:CONNECTORS.length,inputMethods:INPUT_METHODS.length,
@@ -55,6 +58,29 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
   const toggle=(value,on)=>change("inputMethods",on?
     [...new Set([...config.inputMethods,value])]:
     config.inputMethods.filter(x=>x!==value));
+  const loadLegacyProfile=(profile)=>{
+    // A saved profile is connection metadata, not a physical success claim.
+    setConfig(before=>({...before,
+      terminalId:profile.profileName==="Cihaz1"?"HEDEF-CIHAZ-1":profile.profileName,
+      vendor:"Generic",model:"HEDEF FP_CLOCK x86",
+      connectorId:"ZK_PULL",host:profile.ip,port:String(profile.port),
+      directionMode:profile.direction==="IN"?"EXPLICIT_IN":"UNKNOWN",
+      inputMethods:["RFID_125KHZ"],timezone:"Europe/Istanbul",
+      approvalState:"DRAFT",
+    }));
+    setResult(null);setDiagnostic(null);setCsvDiagnostic(null);
+    setNotice("Eski cihazın bağlantı ayarları alındı. FP_CLOCK sürücüsüyle saha testi gerekir.");
+  };
+  const importLegacyProfiles=async(file)=>{
+    if(!file)return;
+    try{
+      if(file.size>16384)throw Error("LEGACY_PROFILES_FILE_TOO_LARGE");
+      const parsed=JSON.parse(await file.text());
+      const rows=inspectImportedLegacyProfiles(Array.isArray(parsed)?parsed:parsed.profiles);
+      setLegacyProfiles(rows);
+      setNotice(rows.length+" yerel cihaz profili yüklendi. Canlı cihaza bağlanılmadı.");
+    }catch(error){setNotice("Eski cihaz profilleri reddedildi: "+String(error?.message||"Hata"));}
+  };
   const deviceDraft=()=>{
     const obj={...config,companyId:company};
     delete obj.host;delete obj.port;delete obj.baseUrl;
@@ -119,6 +145,20 @@ export default function TerminalSetupPanel({company="",previewOnly=true,onReport
     </div>
     <div className="pdk-u-terminal-layout">
       <div className="pdk-u-terminal-form">
+        <div className="pdk-u-terminal-sub"><Cable size={17}/> Eski KY PDKS / Hedef cihaz profilleri</div>
+        <p>Önceki uygulamada kullanılan 192.168.1.224:5005 bağlantısı kayıtlıdır.
+          FP_CLOCK.ocx (32-bit) gerçek cihaz köprüsü ayrıca doğrulanır.</p>
+        <div className="pdk-u-terminal-actions">
+          {legacyProfiles.map(p=><button key={p.profileName+":"+p.machineId}
+            type="button" className="pdk-u-btn" onClick={()=>loadLegacyProfile(p)}>
+            {p.profileName} · {p.ip}:{p.port}
+          </button>)}
+        </div>
+        <label className="pdk-u-terminal-report-upload">Eski uygulamadan iki profil JSON dosyasını içe aktar
+          <input aria-label="İki eski terminal profilini içe aktar" type="file"
+            accept=".json,application/json" disabled={previewOnly}
+            onChange={e=>{const file=e.target.files?.[0];if(file)void importLegacyProfiles(file);}}/>
+        </label>
         <div className="pdk-u-terminal-sub"><HardDrive size={17}/> Yeni terminal tanımı</div>
         <div className="pdk-u-terminal-fields">
           <label>Terminal kodu
