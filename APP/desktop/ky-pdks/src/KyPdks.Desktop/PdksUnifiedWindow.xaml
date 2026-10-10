@@ -183,7 +183,8 @@
 
                     <Grid x:Name="SystemPanel" Visibility="Collapsed">
                         <Border Background="White" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="10" Padding="20">
-                            <StackPanel>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel>
                                 <TextBlock Text="Agent / D1 Senkron" FontSize="21" FontWeight="Bold"/>
                                 <TextBlock Text="Kart cihazı → işyeri LAN → KY PDKS Agent → HTTPS → KY ERP D1" Foreground="#64788F" Margin="0,5,0,14"/>
                                 <TextBlock x:Name="AgentDetailText" Text="Agent durumu yükleniyor..." TextWrapping="Wrap"/>
@@ -203,7 +204,8 @@
                                 <TextBlock Text="Yedek yalnız yerel kart tampon DB'sidir; D1/Cloud personel ve bordro yedeği değildir. EXE kurulum doğrulaması ayrıca gerekir." Foreground="#9A5A18" TextWrapping="Wrap" Margin="0,9,0,14"/>
                                 <TextBlock Text="Hata Merkezi · Son yerel senkron hataları" FontWeight="Bold"/>
                                 <ListBox x:Name="ErrorCenterList" MinHeight="80" MaxHeight="180" Margin="0,7,0,0"/>
-                            </StackPanel>
+                                </StackPanel>
+                            </ScrollViewer>
                         </Border>
                     </Grid>
                 </Grid>
