@@ -10,6 +10,8 @@ test("genuine ZIP-based Excel starts with PK and contains sheet XML",()=>{
  assert.match(decoded,/\[Content_Types\]\.xml/);
  assert.match(decoded,/xl\/worksheets\/sheet1\.xml/);
  assert.match(decoded,/İrem &amp; Çetin/);
+ assert.match(decoded,/t="n"><v>55000<\/v>/);
+ assert.match(decoded,/t="inlineStr"><is><t xml:space="preserve">İrem &amp; Çetin/);
 });
 test("Excel injection stays inline text and CSV is hardened",()=>{
  const cells=[{"Personel":"=HYPERLINK(\"evil\")","Yemek":"+400"}];
