@@ -121,27 +121,6 @@ function PersonDetails({person,active,onChange,isAuditAccount,detail,company,pro
     if(["identity","card","documents","history"].includes(active))
       return <Personnel360Manage person={person} active={active} company={company}
         profile={profile} previewOnly={previewOnly} isAuditAccount={isAuditAccount} onSaved={onSaved}/>;
-    if(active==="identity")return <dl className="pdk-u-definition">
-      {[
-        ["Personel",person.fullName],["Kart numarası",person.cardNo],
-        ["Departman",person.department],["Görev",person.role],
-        ["Çalışma grubu",person.group],["İşe giriş",person.startDate],
-        ["İşten çıkış",person.exitDate],["Dönem durumu",person.status],
-      ].map(([key,value])=><div key={key}><dt>{key}</dt><dd>{value||"—"}</dd></div>)}
-    </dl>;
-    if(active==="card")return <dl className="pdk-u-definition">
-      <div><dt>Atanmış kart</dt><dd>{person.cardNo}</dd></div>
-      <div><dt>Kart durumu</dt><dd>{person.cardState}</dd></div>
-      <div><dt>Personel kaynağı</dt><dd>KY ERP PDKS</dd></div>
-      <div><dt>Son fiziksel geçiş</dt><dd>Doğrulanmadı</dd></div>
-    </dl>;
-    if(active==="documents")return <EmptyState title="Personel evrak servisi bağlı değil"
-      description="Yetkili doküman servisi olmadan kişisel belge veya imza görüntülenmez."
-      IconComponent={LockKeyhole}/>;
-    if(["attendance","timesheet"].includes(active) && (!person.cardNo || person.cardNo==="—"))
-      return <EmptyState title="Kart ataması bulunmuyor"
-        description="SGK veya özlük kaydı fiziksel okutma kanıtı değildir. Kart atanmamış personele otomatik giriş/çıkış ve puantaj üretilmez."
-        IconComponent={LockKeyhole}/>;
     if(isAuditAccount && ["shift","leave","payroll","history"].includes(active))
       return <EmptyState title="Bu ayrıntıya erişim kapalı"
         description="Denetim hesabı PDKS FULL işlemlerine veya ücret alanlarına erişemez."
@@ -213,16 +192,6 @@ function PersonDetails({person,active,onChange,isAuditAccount,detail,company,pro
           ["Toplam",line.totalAmount],
         ].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{money(value)}</dd></div>)}
       </dl>;
-    }
-    if(active==="history"){
-      const changes=rows(payload,["rows","corrections"]);
-      if(!changes)return <EmptyState title="Düzeltme geçmişi biçimi doğrulanamadı"
-        description="Değişiklik geçmişi gelmeden işlem tamamlandı kabul edilmez."/>;
-      return smallTable(["Tarih","Alan","Gerekçe","Durum"],changes.map((p,i)=>({
-        _id:String(p.id??i),"Tarih":p.workDate||p.date||"—",
-        "Alan":p.field||p.type||"—","Gerekçe":p.reason||p.note||"—",
-        "Durum":p.status||"—",
-      })));
     }
     return <EmptyState title="Bu detay için bağlantı yok" description="Kaynak bekleniyor."/>;
   };
