@@ -103,7 +103,8 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
       setMessage(success);
       refresh();
       onSaved?.();
-    }catch(cause){setError(cause?.message||"İşlem doğrulanamadı; tekrar basmadan önce kayıtları kontrol edin.");}
+    }catch(cause){setError((cause?.message||"İşlem sonucu doğrulanamadı.")+
+      " Tekrar göndermeden önce kaydı ve işlem geçmişini yenileyerek kontrol edin.");refresh();}
     finally{setBusy(false);}
   };
   if(!employeeId)return <State>Önce personel seçin.</State>;
@@ -133,8 +134,11 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
       </select>
     </Field>
     {loaded?.masters?.groups?.length>0&&canEdit&&<button type="button" className="pdk-person-secondary"
-      disabled={busy||loading||!groupId||groupId===clean(loaded.masters.groupAssignments?.find(g=>String(g.employeeId)===employeeId)?.groupId)}
-      onClick={()=>submit(endpoint(employeeId,"/work-group"),{groupId},
+      disabled={busy||loading||!groupId||reason.trim().length<5||
+        groupId===clean(loaded.masters.groupAssignments?.find(g=>String(g.employeeId)===employeeId)?.groupId)}
+      onClick={()=>submit(endpoint(employeeId,"/work-group"),{groupId,
+        expectedGroupId:clean(loaded.masters.groupAssignments?.find(g=>String(g.employeeId)===employeeId)?.groupId),
+        reason:reason.trim()},
         "Vardiya grubu mevcut D1 personel tanımına bağlandı.")}>Çalışma grubunu kaydet</button>}
     <div className="pdk-person-summary">
       <span>Kod: {loaded?.person?.personnelCode||person.personnelCode||"—"}</span>
@@ -214,7 +218,7 @@ export default function Personnel360Manage({person,active,company,isAuditAccount
   </div>;
   if(active==="history"){
     const changes=(loaded?.changeHistory||[]).filter(h=>
-      ["cardNo","department","title","status","startDate","exitDate","phone","fullName","fileHubAsset"].includes(clean(h.field_name)));
+      ["cardNo","department","title","status","startDate","exitDate","phone","fullName","fileHubAsset","groupId"].includes(clean(h.field_name)));
     return <div className="pdk-person-manage">{header}<h4>Özlük ve kart işlem geçmişi</h4>
       {loaded&&<table className="pdk-person-table"><thead><tr><th>Tarih</th><th>İşlem</th><th>Eski</th><th>Yeni</th><th>Gerekçe</th></tr></thead>
         <tbody>{changes.map((h,i)=><tr key={h.id||i}><td>{h.effective_date||"—"}</td>
