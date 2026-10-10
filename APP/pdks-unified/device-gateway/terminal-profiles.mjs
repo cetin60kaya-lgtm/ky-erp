@@ -16,6 +16,7 @@ export const INPUT_METHODS=Object.freeze([
 ]);
 export const CONNECTORS=Object.freeze([
   {id:"KY_QR_LOCAL",label:"KY QR / USB okuyucu kiosk",transport:"LOCALHOST",status:"REFERENCE_IMPLEMENTED",requiresSdk:false},
+  {id:"HEDEF_FP_CLOCK",label:"Eski Hedef FP_CLOCK x86 (Ethernet/5005)",transport:"LAN_VENDOR",status:"LEGACY_X86_BRIDGE_REQUIRED",requiresSdk:true},
   {id:"ZK_PULL",label:"ZKTeco Standalone / ZK SDK",transport:"LAN_VENDOR",status:"SDK_REQUIRED",requiresSdk:true},
   {id:"ZK_PUSH",label:"ZKTeco Push / ADMS",transport:"LAN_VENDOR",status:"MODEL_PROTOCOL_REQUIRED",requiresSdk:true},
   {id:"BIOSTAR_2",label:"Suprema BioStar 2 API",transport:"HTTPS_SERVER",status:"LICENSE_AND_SERVER_REQUIRED",requiresSdk:false},
