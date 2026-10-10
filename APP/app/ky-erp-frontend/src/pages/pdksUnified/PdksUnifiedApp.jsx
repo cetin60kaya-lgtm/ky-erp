@@ -297,6 +297,7 @@ export default function PdksUnifiedApp({
   const [search, setSearch] = useState("");
   const [reportPerson,setReportPerson] = useState("");
   const [exportBusy,setExportBusy] = useState(false);
+  useEffect(()=>setReportPerson(""),[period.year,period.month]);
   const [selectedId, setSelectedId] = useState("");
   const [personTab, setPersonTab] = useState("identity");
   const [reloadToken, setReloadToken] = useState(0);
@@ -374,7 +375,7 @@ export default function PdksUnifiedApp({
     data.resourceReady,data.resource,period.year,period.month]);
   const sourceRows=projection.rows;
   const reportPeople=useMemo(()=>{
-    if(!["reports","payroll"].includes(section.id))return [];
+    if(!["reports","payroll","timesheet"].includes(section.id))return [];
     const distinct=new Map();
     for(const row of sourceRows){
       const id=String(row.personId||row._id||"");
@@ -385,7 +386,7 @@ export default function PdksUnifiedApp({
   },[section.id,sourceRows]);
   const filteredRows=useMemo(()=>{
     const q=search.toLocaleLowerCase("tr-TR").trim();
-    return sourceRows.filter(row=>(!["reports","payroll"].includes(section.id)||
+    return sourceRows.filter(row=>(!["reports","payroll","timesheet"].includes(section.id)||
       !reportPerson||String(row.personId||row._id)===reportPerson) &&
       (!q||Object.values(row).some(value=>String(value)
         .toLocaleLowerCase("tr-TR").includes(q))));
@@ -534,7 +535,7 @@ export default function PdksUnifiedApp({
                 onChange={(e)=>setSelectedId(e.target.value)}>
                 {data.people.map((person)=><option key={person.id} value={person.id}>{person.cardNo} · {person.fullName}</option>)}
               </select></label>}
-            {["reports","payroll"].includes(section.id)&&reportPeople.length>0&&
+            {["reports","payroll","timesheet"].includes(section.id)&&reportPeople.length>0&&
               <label><UsersRound size={14}/><span>Personel</span>
                 <select aria-label="Rapor personeli" value={reportPerson}
                   onChange={event=>setReportPerson(event.target.value)}>
