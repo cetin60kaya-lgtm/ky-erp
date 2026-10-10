@@ -99,7 +99,9 @@ function UnifiedTable({ columns, rows, onSelect, selectedId, masked = false }) {
         tabIndex={onSelect ? 0 : undefined}
         onClick={onSelect ? () => onSelect(row._id) : undefined}
         onKeyDown={onSelect ? (e) => { if (e.key === "Enter") onSelect(row._id); } : undefined}>
-        {columns.map((column) => <td key={column}>{masked ? "Gizli" : row[column] ?? "—"}</td>)}
+        {columns.map((column) => <td key={column}>{masked ? "Gizli" :
+          column==="İmza" && row[column]==="" ? <span className="pdk-u-signature-line" aria-label="Boş imza alanı"/> :
+          row[column] ?? "—"}</td>)}
       </tr>)}</tbody></table>
   </div>;
 }
@@ -481,7 +483,8 @@ export default function PdksUnifiedApp({
           snapshot={!previewOnly&&data.resourceReady?data.resource:null}
           loading={data.resourceLoading} previewOnly={previewOnly} search={search}
           compact onRefresh={()=>setReloadToken(value=>value+1)}/>}
-        {tab.view!=="dashboard"&&!stageInspectTab&&tab.id!=="system"&&<section className="pdk-u-panel pdk-u-record-panel">
+        {tab.view!=="dashboard"&&!stageInspectTab&&tab.id!=="system"&&<section
+          className={"pdk-u-panel pdk-u-record-panel"+(["signatures","receipts","payroll"].includes(tab.id)&&dataConnected?" pdk-u-print-sheet":"")}>
           <div className="pdk-u-record-head">
             <div><h2>{tab.label}</h2><p>{tab.description}</p></div>
             <span className="pdk-u-label"><ShieldCheck size={15}/> {previewOnly?"Görsel İnceleme":"Yazma kontrollü"}</span>
@@ -513,6 +516,9 @@ export default function PdksUnifiedApp({
             <span className="pdk-u-counter"><Filter size={15}/> {filteredRows.length} kayıt</span>
             <button type="button" className="pdk-u-btn" disabled={!canExport} onClick={exportTable}>
               <Download size={16}/> CSV</button>
+            {["signatures","receipts","payroll"].includes(tab.id)&&<button type="button"
+              className="pdk-u-btn" disabled={!canExport} onClick={()=>window.print()}>
+              <FileCheck2 size={16}/> Yazdır</button>}
           </div>}
           {tab.id==="terminals" ? <TerminalSetupPanel
             key={company||"preview"} company={company||(testMode?"stage-company-01":"")}
