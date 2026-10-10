@@ -127,7 +127,7 @@ export function useUnifiedPdksData({
 
   const detailSources={
     attendance:"attendance",timesheet:"attendance",shift:"masters",
-    leave:"leaves",payroll:"payroll",history:"corrections",
+    leave:"leaves",payroll:"payroll",
   };
   const detailSource=detailSources[detailTab]||"unconnected";
   const detailKey=keyOf(company,year,month,personId,detailSource,detailTab,reloadToken,audit);
