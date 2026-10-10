@@ -1,31 +1,34 @@
-# KY PDKS — Bordro & Rapor — 10.10.2026
+# KY PDKS — 4. Bordro & Rapor, geliştirme ve kabul durumu
 
-**Kaynak branch:** `feature/ky-pdks-unified-product-shell-20261008`  
-**Bu işin feature branch'i:** `feature/ky-pdks-bordro-rapor-20261010`  
-**Kapsam:** Mevcut `PdksUnifiedApp.jsx` ve mevcut PDKS D1 okuma yolları; ikinci bir ürün/menü veya canlı veriye müdahale yok.
+Tarih: 10.10.2026. Repo: `cetin60kaya-lgtm/ky-erp`. Branch:
+`feature/ky-pdks-bordro-rapor-20261010`, PR #420 **DRAFT**, mevcut 49 sekmeli ürün üzerinde.
 
-## Kaynağa bağlanan ön raporlar
+## Değiştirilen / eklenen gerçek yollar
+- `APP/cloud/ky-erp-api/src/ik-pdks-operations.ts`: mevcut yetkili PDKS operasyon-bordro GET yanıtı. Kayıtlı ücret sözleşmesinden maaş, yol, banka, elden; ilgili dönem D1 hareketlerinden ek yol, yemek, mesai, avans, kesinti, icra/haciz ve BES ayrı kaynaklı alanlar. Dönem kilidi, son audit kaydı, kayıt varlığı, tutar uyuşmazlığı, doğrulanmamış ödeme ve kaynak/puantaj onayı açık durumları.
+- `APP/cloud/ky-erp-api/src/ik-pdks-payroll-adjustments.mjs`: `APPROVED`/onaylı statü + açık `Mesai oranı: %50` veya `%100` + pozitif onaylı saat + pozitif tutar **birlikte** yoksa mesai parasını onaylı toplama katmaz. Eksik oran/saat/tutar/statü sebebi ve kaynak satır ID'si ayrıca dönülür. `Mesai`/`Kesinti`/`İcra` Türkçe İ harfi sorunu test edildi. Bunun dışındaki ödeme hareketleri de yalnız onaylı kaynak tutarlarına eklenir. Bu statü gerçek ayrı imzalı onay belgesi anlamına gelmez.
+- `APP/app/ky-erp-frontend/src/pages/pdksUnified/payrollEvidence.js`: D1 ön bordro/hakediş satırları, %50/%100 onaylı saat ve tutar ayrımı, banka+elden=net plan kontrolü, son işlem/dönem kontrolü, kanıtı eksik fiş taslağı. Resmî brüt ücret ya da ödeme dekontu uydurulmaz; kayıtlı toplam yoksa boş kalır.
+- `APP/app/ky-erp-frontend/src/pages/pdksUnified/readService.js`, `reportProjection.js`: tüm ay için gerçek kimliği olan kartlı personelin yetkili D1 attendance-v2 yanıtları tek tek 4'lü gruplar hâlinde toplanır. Herhangi bir kişide hata, tekrar gün, yanlış ay veya eksik cevap → rapor hiç üretilmez. Günlük devam, aylık özet, ihlal, imza taslakları; kaydı olmayan saat/direction üretimi yok, manuel E fiziki kart sayılmaz.
+- `reportExports.js`: CSV formül enjeksiyonu korumalı, yerinde üretilen gerçek XLSX (ZIP/SpreadsheetML), kurulu pdfmake ile A4 PDF, ayrı A4 tarayıcı yazdırma. İmzalar boş çizgilerdir.
+- `PdksUnifiedApp.jsx`, `tabBindings.js`, `productModel.js`, `useUnifiedPdksData.js`, `pdksUnified.css`: 49 sekme sayısını koruyan entegrasyon, kişi/ay/yıl filtresi, düğmeler; masaüstüyle aynı React ürünü. Bordro verisi mevcut FULL sunucu izniyle okunur; DENETİM hesabına verilmez.
 
-- Mevcut yetkili `/operations/payroll` okumasından maaş, yol, ek yol, yemek, mesai, avans, kesinti, icra/haciz, BES, banka, elden ve **yalnız kaynakta kayıtlı ise** net toplam gösterimi.
-- `payrollEvidence.js` tek saf projeksiyon: yanlış dönem, tekrar personel veya geçersiz cevap reddedilir. Brüt kaynağı bulunmayan alan `—`; banka/elden ayarları ödenmiş para sayılmaz.
-- Banka + elden = kayıtlı toplam tutar kontrolü hesaplanır. Bu yalnız **plan aritmetik kontrolüdür**, dekont/fiş/elden teslim kanıtı değildir.
-- Ödeme fişi sekmesi salt okunur taslak satır gösterir; imza ve ödeme kanıtı olmadığında bunlar boş/bekliyor durumundadır.
-- İmza formları tüm seçili ay çalışanlarının `attendance-v2` gün kaynaklarını **isteğe bağlı, tam ay, 4'lü gruplar hâlinde** okur. Başarısız tek bir cevap bile kısmi aylık belgeye izin vermez.
-- `KART_YOK` gününde sabah/akşam ayrı imza alanları; tek taraflı `EKSIK_BASIM` gününde yalnız eksik hareketin imzası. Bilinen saat korunur, boş saati otomatik doldurmaz. `MANUAL_OVERRIDE` fiziksel kartmış gibi gösterilmez.
-- CSV, A4 yatay yazdırma ve boş imza çizgileri; mevcut 49 sekmeli tek uygulamaya bağlandı.
-- Bordro okuma yetkisi mevcut backend FULL kontrolünden geçer; DENETIM hesabı maaş/ödemeyi okuyamaz. İmza taslağı finans tutarı içermez.
+## Yapılan testler — gerçek durum
+- Committed frontend kaynak dosyalarından çağrılan 5 özgün birim test dosyası (productModel, tabBindings, payrollEvidence, reportProjection, reportExports): **36/36 PASS**. Çalıştırıcı: ağsız V8, Node core test arayüzü taklidi. XLSX UTF-8 testinde TextDecoder eşdeğeri kullanıldı; Node paket derlemesi değildir.
+- Cloud saf mesai hesap fonksiyonuna ait committed test dosyası: **4/4 PASS**, aynı V8 koşum.
+- Mevcut `readService.js` kaynağına güvenli yapay kimlik/saat yanıtları enjekte edilerek tam/eksik ay, imza ve günlük rapor sevki, iptal, hata, personel sınırı: **7/7 PASS**, ağsız V8.
+- Toplam **47/47 PASS**; gerçek personel adı, maaş, cihaz ve üretim FDB/TNF içermeyen sentetik koşum.
 
-## Şu anda **tamamlandı denemeyecek** üretim kabul maddeleri
+**NOT RUN:** Tam frontend `npm test`, `npm run lint`, `npm run build`; Cloud `npm test`, `npm run typecheck`, `npm run build`; Windows EXE/.NET ve cihaz/kopya FDB uçtan uca testleri. Bu çalışma oturumunda GitHub deposu konteynerde indirilemiyor (ağ/DNS kapalı), Remote Desktop bağlı bilgisayar kotası dolu ve PR üzerinde otomatik CI sonucu yok. Böyle bir PASS iddiası yoktur.
 
-1. D1 puantajı ile gerçek cihaz RAW, legacy Firebird/FDB, yıllık TNF normal/E ve çift vardiyanın bağımsız mutabakatı **yok**. D1 `attendance-v2` satırı, onaylı üretim puantajı değildir.
-2. Bordro için dönem/SGK, ücret sözleşmesi, tatil/izin/yemek/yol politikası ve fazla mesai oranlarının ortak hesap motorunda kanıtlanmış üretim mutabakatı **yok**. Bu branch mevcut D1 finans kayıtlarını **hesaplamayıp okur**.
-3. Gerçek banka ödeme dekontları, imzalı fişler, ödeme durumu, resmî brüt-net hesap ve nihai bordro onayı bağlanmadı. Gösterilen `plan tutarlı` **ödeme yapılmış** anlamına gelmez.
-4. Gerçek Windows/FDB/TNF ve Cloudflare staging uçtan uca testi tamamlanmadı. Bağlı PC için Remote Desktop kullanım kotası dolmuş; bu kaynaklarda test veya canlı yazma yapılmadı.
-5. Tüm uygulama frontend/Cloud build ve cihaz saha kabulü olmadan tam üretim/hazır statüsü işaretlenmez. Ana branch'e merge ve production deploy yapılmaz.
+## Üretim devrine engel
+1. RAW/FDB/TNF/E ve aynı gün çift vardiya, izin/tatil mutabakatlı onaylı puantajın bordro beslemesi **henüz yok**. Okunan attendance-v2 D1 özetleri ön kaynak.
+2. Resmî brüt/net ve SGK kesintileri, gerçek muhasebe ücret sözleşmesi hesaplama kuralı, onaylayan kişi ve kayıt bazlı imzalı fazla mesai onayı **henüz yok**. Bu dal mevcut D1 finans kayıtlarını okur, bordro hesabını kesinleştirmez.
+3. Banka dekontu, elden ödeme teslim fişi, imza kabulü, gerçek ödeme geçmişi fiili gerçekleşme kaynağı **yok**. Plan tutarlılığı ödeme yapıldığı anlamına gelmez.
+4. Üretim D1, FDB, TNF, RAW ve Windows terminal kayıtlarına **hiçbir yazma/deploy** yok. PR draft ve canlıya merge yok.
+5. Güncel ortak dal ve Personel/Puantaj dallarıyla seçici birleştirme, tam frontend/Cloud lint/build/test, Windows kopya FDB + fiziksel saha kabulü entegrasyon merkezi sorumluluğundadır. **Bu koşullar tamamlanmadıkça üretime hazır veya iş tamamen bitti denmez.**
 
-## Geliştirici kontrolü
-
-- Yeni bordro/rapor kaynak test dosyası: `APP/app/ky-erp-frontend/src/pages/pdksUnified/payrollEvidence.test.js`.
-- Mevcut `tabBindings.test.js` kaynak beklentileri güncellendi.
-- 10 Ekim 2026: GitHub'dan okunan gerçek kaynak metinleri V8 bellek içi test çalıştırıcısında birleştirilerek 3 gerçek test dosyasının toplam **30 testi** çalıştırıldı: **30 PASS / 0 FAIL**. Bu, Node.js proje bağımlılıklarıyla `npm test`, ESLint, Vite/Cloud typecheck veya gerçek cihaz testi çalıştırıldığı anlamına gelmez.
-- Canlı D1/FDB/TNF/cihaz/terminal kayıtlarına hiçbir test yazısı gönderilmedi.
+## Dosya çakışma notu
+`PdksUnifiedApp.jsx`, `tabBindings.js`, `productModel.js`, `readService.js`,
+`useUnifiedPdksData.js`, `pdksUnified.css` ortak entegrasyon noktalarıdır.
+İş mantığının ana kısmı ayrı `payrollEvidence.js`, `reportProjection.js`,
+`reportExports.js` ve `ik-pdks-payroll-adjustments.mjs` dosyalarındadır.
+Personel ve Puantaj branch'lerinin kodu bu branch'e zorla çekilmedi ve sıfırlanmadı.
