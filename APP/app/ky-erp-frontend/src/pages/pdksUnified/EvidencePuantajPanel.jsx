@@ -28,6 +28,7 @@ function localCsv(columns,rows,name){
 }
 export default function EvidencePuantajPanel({
   company,year,month,tabId,previewOnly=false,testMode=false,audit=false,
+  profileReady=false,
 }){
   const [result,setResult]=useState(null);
   const [error,setError]=useState("");
@@ -35,7 +36,8 @@ export default function EvidencePuantajPanel({
   const [cardFilter,setCardFilter]=useState("");
   const [loading,setLoading]=useState(false);
   const selectedPeriod=String(year)+"-"+two(month);
-  const canLoad=(!previewOnly||testMode)&&!audit&&Boolean(company||testMode);
+  const canLoad=(!previewOnly||testMode)&&!audit&&
+    (testMode||Boolean(company&&profileReady));
   const load=async file=>{
     if(!file||!canLoad)return;
     setLoading(true);setError("");
