@@ -64,6 +64,10 @@ export function normalizeAttendanceDay(raw = {}, person = {}) {
 
 export function toPersonRows(people = [], view = "people") {
   return people.map((person) => {
+    if (view === "documents") return {
+      "Personel": person.fullName, "Belge": "Kişi seçilerek görüntülenir",
+      "Dönem": "—", "Eklenme": "—", "Yetki": "—", "Durum": "—", _id: person.id,
+    };
     if (view === "cards") return {
       "Kart No": person.cardNo, "Ad Soyad": person.fullName, "Kart Durumu": person.cardState,
       "Başlangıç": person.startDate, "Bitiş": person.exitDate, "Son Geçiş": "—",
