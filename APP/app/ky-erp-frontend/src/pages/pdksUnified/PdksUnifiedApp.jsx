@@ -199,7 +199,7 @@ function PersonDetails({person,active,onChange,isAuditAccount,detail}) {
         description="Seçili ayda bu personel için doğrulanmış D1 bordro satırı yok."/>;
       return <dl className="pdk-u-definition">
         {[
-          ["Maaş",line.salary],["Mesai",line.overtimeAmount],
+          ["Maaş",line.salary],["Yol",line.roadAllowance],["Yemek",line.mealAmount],["Mesai",line.overtimeAmount],
           ["Avans",line.advanceAmount],["Kesinti",line.deductionAmount],
           ["Banka",line.bankAmount],["Elden",line.cashAmount],
           ["Toplam",line.totalAmount],
@@ -320,7 +320,7 @@ export default function PdksUnifiedApp({
   const detailVisible=section.id==="people" &&
     ["people","cards","employment"].includes(tab.id);
   const monthKey=[company,period.year,period.month,requirement].join("|");
-  const allowHeavy=requirement==="monthly-attendance" && monthlyRequestKey===monthKey;
+  const allowHeavy=["monthly-attendance","signature-month"].includes(requirement) && monthlyRequestKey===monthKey;
   const data=useUnifiedPdksData({
     company,year:period.year,month:period.month,personId:selectedId,requirement,
     previewOnly,auditHint:isAuditAccount,reloadToken,needsPeople,allowHeavy,
@@ -377,8 +377,8 @@ export default function PdksUnifiedApp({
 
   const dataConnected = !previewOnly && data.sourceReady && projection.supported &&
     (!data.audit || !isSensitiveProductTab(tab.id));
-  const canExport = dataConnected && !tab.sensitive && !isSensitiveProductTab(tab.id) &&
-    filteredRows.length > 0;
+  const canExport = dataConnected && filteredRows.length > 0 &&
+    (!isSensitiveProductTab(tab.id) || !data.audit);
   const pageUnavailable = previewOnly || requirement==="unconnected" ||
     requirement==="forbidden" || !data.sourceReady;
   const sourceText = testMode ? "Yerel menü testi • canlı veri kapalı" :
@@ -487,11 +487,13 @@ export default function PdksUnifiedApp({
             <span className="pdk-u-label"><ShieldCheck size={15}/> {previewOnly?"Görsel İnceleme":"Yazma kontrollü"}</span>
           </div>
           {requirement!=="card-events"&&!transferTabs.has(tab.id)&&tab.id!=="cloud"&&<div className="pdk-u-filters">
-            {requirement==="monthly-attendance" && !previewOnly &&
+            {["monthly-attendance","signature-month"].includes(requirement) && !previewOnly &&
               <button type="button" className="pdk-u-btn"
                 disabled={!company || !data.profileReady || data.resourceLoading}
                 onClick={()=>setMonthlyRequestKey(monthKey)}>
-                <TableProperties size={16}/> {allowHeavy?"Aylık puantaj yenileniyor":"Aylık puantajı hazırla"}
+                <TableProperties size={16}/> {requirement==="signature-month" ?
+                   (allowHeavy?"İmza listesi yenileniyor":"Aylık imza listesini hazırla") :
+                   (allowHeavy?"Aylık puantaj yenileniyor":"Aylık puantajı hazırla")}
               </button>}
             <label><CalendarDays size={15}/><span>Ay</span>
               <select aria-label="Ay" value={period.month}
@@ -551,10 +553,10 @@ export default function PdksUnifiedApp({
               description="API yanıtı bu ekranın veri sözleşmesiyle uyuşmuyor. Eksik alanları sıfır veya tamamlandı olarak göstermiyoruz."
               IconComponent={AlertTriangle}/> :
             pageUnavailable ? <EmptyState
-              title={requirement==="monthly-attendance" && !allowHeavy ?
+              title={["monthly-attendance","signature-month"].includes(requirement) && !allowHeavy ?
                 "Ay raporu henüz hazırlanmadı":"Kaynak doğrulanamadı"}
-              description={requirement==="monthly-attendance" && !allowHeavy ?
-                "Tam ay için tüm kartlı personel tek tek kontrol edilir. Aylık puantajı hazırla düğmesine basın. Eksik cevap varsa kısmi rapor oluşturulmaz." :
+              description={["monthly-attendance","signature-month"].includes(requirement) && !allowHeavy ?
+                "Tam ay için tüm kartlı personel tek tek kontrol edilir. Hazırla düğmesine basın. Eksik cevap varsa kısmi rapor veya imza formu üretilmez." :
                 "Bu görünüm yalnız yetkili KY ERP kaynağından okunur. Firebird/TNF mutabakatı ayrıca doğrulanır."}
               IconComponent={Database}/> :
             <UnifiedTable columns={tab.columns} rows={filteredRows}
