@@ -44,7 +44,15 @@ internal static class Program
             Console.WriteLine("PASS TNF_ATOMIC_STORE");
             UnifiedAgentRunner.SelfTestAsync().GetAwaiter().GetResult();
             Console.WriteLine("PASS AGENT_LOOP");
+            UnifiedLocalDiagnostics.SelfTest();
+            Console.WriteLine("PASS LOCAL_DIAGNOSTICS");
             Console.WriteLine("RESULT=PASS AGENT_SAFETY_SELFTEST");
+            return;
+        }
+        if (args.Contains("--management-health-selftest", StringComparer.OrdinalIgnoreCase))
+        {
+            UnifiedLocalDiagnostics.SelfTest();
+            Console.WriteLine("PASS LOCAL_DIAGNOSTICS");
             return;
         }
         if (args.Contains("--agent-plan-selftest", StringComparer.OrdinalIgnoreCase))
@@ -226,6 +234,27 @@ public sealed class KyPdksWindow : Form
                     args.Response = core.Environment.CreateWebResourceResponse(
                         new MemoryStream(bytes), 200, "OK",
                         "Content-Type: application/json; charset=utf-8\\r\\nCache-Control: no-store");
+                };
+            }
+            if (!offlineTest && !localPreview)
+            {
+                // Existing production WebView2, not a second management host.
+                // Exact same-origin route and GET only; browser cannot request
+                // arbitrary local paths or mutate the Agent journal.
+                const string localHealthUrl = "https://app.kyerp.net/__pdks_local__/health.json";
+                core.AddWebResourceRequestedFilter(localHealthUrl, CoreWebView2WebResourceContext.All);
+                core.WebResourceRequested += (_, args) =>
+                {
+                    if (!string.Equals(args.Request.Uri, localHealthUrl, StringComparison.Ordinal) ||
+                        !string.Equals(args.Request.Method, "GET", StringComparison.Ordinal)) return;
+                    var root = Environment.GetEnvironmentVariable("KY_PDKS_COMPANY_ROOT") ??
+                        Environment.GetEnvironmentVariable("KY_PDKS_COMPANY_ROOT",
+                            EnvironmentVariableTarget.User);
+                    var body = UnifiedLocalDiagnostics.ReadJson(root);
+                    var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(body));
+                    args.Response = core.Environment.CreateWebResourceResponse(stream,
+                        200, "OK", "Content-Type: application/json; charset=utf-8\r\n" +
+                        "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff");
                 };
             }
             core.Settings.AreDevToolsEnabled = localPreview || offlineTest;

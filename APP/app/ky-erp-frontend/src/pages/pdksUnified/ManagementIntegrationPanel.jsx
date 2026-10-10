@@ -2,7 +2,6 @@ import React,{useCallback,useEffect,useMemo,useState} from "react";
 import {useAuth} from "../../context/AuthContext";
 import {
   getMainCompanies,listUsers,getUserPermissions,listBackups,getLogs,
-  getBuildCenterStatus,
 } from "../../services/adminApi";
 import {readCloudSyncStatus} from "./readService.js";
 import {
@@ -10,7 +9,6 @@ import {
   backupHealth,projectCloudEvents,projectLocalHealth,rowsOf,
 } from "./managementReadModel.mjs";
 
-const ADMIN_TABS=new Set(["companies","users","permissions","backup","integrations","system"]);
 const route={companies:"/admin/ana-firma-ayarlar",users:"/admin/kullanicilar",
   permissions:"/admin/kullanicilar",backup:"/admin/yedekleme-loglar",
   integrations:"/admin/surum-merkezi",system:"/admin/yedekleme-loglar"};
