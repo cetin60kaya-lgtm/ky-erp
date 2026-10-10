@@ -517,10 +517,8 @@ async function createPerson(c: Context<AppEnv>) {
   const codeDuplicate = await first(c, "SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND UPPER(TRIM(COALESCE(code,'')))=UPPER(?) LIMIT 1", [auth.company, code]);
   if (codeDuplicate) return error(c, 409, "PERSONNEL_CODE_DUPLICATE", `Bu personel kodu zaten kullanılıyor: ${code}.`);
   const cardNo = text(body.cardNo);
-  if (cardNo) {
-    const cardDuplicate = await first(c, "SELECT employee_id FROM ik_person_card_settings WHERE main_company_id=? AND TRIM(COALESCE(card_no,''))=? LIMIT 1", [auth.company, cardNo]);
-    if (cardDuplicate) return error(c, 409, "PERSONNEL_CARD_DUPLICATE", `Bu kart numarası başka personelde kayıtlı: ${cardNo}.`);
-  }
+  if (cardNo)
+    return error(c, 409, "USE_CARD_ASSIGNMENT", "Yeni personele kart ataması yalnız Personel 360 kart işlemiyle yapılabilir.");
   const startDate = dateOnly(body.startDate || body.hireDate);
   const duplicate = await first(c, `SELECT id FROM hr_monthly_employees
     WHERE main_company_id=? AND LOWER(TRIM(full_name))=LOWER(TRIM(?))
