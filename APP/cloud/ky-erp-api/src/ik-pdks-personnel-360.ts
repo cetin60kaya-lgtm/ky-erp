@@ -76,8 +76,9 @@ export function registerIkPdksPersonnel360Routes(app: Hono<AppEnv>) {
       return fail(c, 400, "INVALID_CARD_NO", "Kart numarası 1–32 karakter, harf/rakam/tire olmalıdır.");
     if (reason.length < 5 || reason.length > 240)
       return fail(c, 400, "CARD_REASON_REQUIRED", "Kart değişim gerekçesi 5–240 karakter olmalıdır.");
+    const parsedDate = new Date(effectiveDate + "T00:00:00Z");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) ||
-        new Date(effectiveDate + "T00:00:00Z").toISOString().slice(0, 10) !== effectiveDate)
+        Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== effectiveDate)
       return fail(c, 400, "CARD_DATE_INVALID", "Geçerli işlem tarihi zorunludur.");
     const current = await c.env.DB.prepare("SELECT card_no AS cardNo FROM ik_person_card_settings WHERE main_company_id=? AND employee_id=?")
       .bind(auth.company, employeeId).first<Row>();
