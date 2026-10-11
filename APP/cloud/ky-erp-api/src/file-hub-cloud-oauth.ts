@@ -443,6 +443,68 @@ export async function readFileHubAssetForMail(c:any,slug:string,assetId:string,m
   return{fileAssetId:assetId,fileName,mimeType:text(response.headers.get("Content-Type"))||mimeType,sizeBytes:buffer.byteLength,bytes:new Uint8Array(buffer),source:provider};
 }
 
+
+export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
+  const c = { env } as Context<AppEnv>;
+  const result = await env.DB.prepare(
+    `SELECT DISTINCT c.id,c.main_company_slug
+       FROM file_hub_connections c
+       JOIN file_hub_bindings b
+         ON b.main_company_slug=c.main_company_slug
+        AND b.storage_connection_id=c.id
+      WHERE c.is_active=1
+        AND c.sync_mode='CLOUD_API'
+        AND b.sync_enabled=1
+      ORDER BY c.updated_at DESC
+      LIMIT 12`,
+  ).all<Row>();
+
+  for (const row of result.results || []) {
+    const slug=text(row.main_company_slug), connectionId=text(row.id);
+    if(!slug || !connectionId) continue;
+    try {
+      const { link, accessToken } = await connectionAccount(c, slug, connectionId);
+      const provider=upper(link.provider_type), driveId=text(link.provider_drive_id);
+      const rootId=text(link.remote_root_id)||"root", rootName=text(link.remote_root_name)||"Ana Klasör", seenAt=now();
+      const queue:Row[]=[{id:rootId,path:""}];
+      let files=0,folders=0,truncated=false,changedFiles=0,modelSyncs=0;
+      const limit=1200;
+      while(queue.length && files+folders<limit){
+        const current=queue.shift()!;
+        const children=provider==="GOOGLE_DRIVE"
+          ? await listGoogleChildren(accessToken,current.id,true)
+          : await listMicrosoftChildren(accessToken,current.id,driveId,true);
+        for(const child of children){
+          const relativePath=current.path?`${current.path}/${child.name}`:child.name;
+          if(child.isFolder){
+            folders+=1;
+            if(files+folders<limit) queue.push({id:child.id,path:relativePath});
+            else truncated=true;
+          } else {
+            const indexed=await upsertCloudFile(c,slug,connectionId,provider,child,relativePath,seenAt);
+            if(indexed.changed) changedFiles+=1;
+            if(indexed.needsModelSync){
+              const synced=await syncCloudDesignBinding(c,slug,connectionId,indexed.assetId,child,relativePath,provider);
+              if(synced) modelSyncs+=1;
+            }
+            files+=1;
+          }
+          if(files+folders>=limit){truncated=true;break;}
+        }
+      }
+      await env.DB.prepare(`UPDATE file_hub_connections
+        SET connection_status='CONNECTED',last_sync_at=?,last_error=NULL,metadata=?,updated_at=?
+        WHERE id=? AND main_company_slug=?`)
+        .bind(seenAt,JSON.stringify({...json(link.connection_metadata),cloudDirect:true,driveId:driveId||null,lastSyncFiles:files,lastSyncFolders:folders,lastChangedFiles:changedFiles,lastModelSyncs:modelSyncs,syncTruncated:truncated,rootName}),seenAt,connectionId,slug).run();
+    } catch(error:any) {
+      await env.DB.prepare(`UPDATE file_hub_connections
+        SET connection_status='ERROR',last_error=?,updated_at=?
+        WHERE id=? AND main_company_slug=?`)
+        .bind(text(error?.message)||"Bulut senkronizasyonu başarısız.",now(),connectionId,slug).run().catch(()=>{});
+    }
+  }
+}
+
 export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/cloud/providers", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
