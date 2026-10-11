@@ -97,6 +97,13 @@ jobs:
           SELECT COUNT(*) value
             FROM file_hub_cloud_connection_accounts
            WHERE main_company_slug='mecit-hakan';
+          SELECT customer_id, customer_name, COUNT(*) value
+            FROM model_records
+           WHERE main_company_slug='mecit-hakan'
+             AND UPPER(COALESCE(customer_name,'')) LIKE 'TAHA%'
+             AND COALESCE(TRIM(deleted_at),'')=''
+           GROUP BY customer_id, customer_name
+           ORDER BY value DESC;
           "
           npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$sql" --json > /tmp/desen-audit.json
           node -e '
