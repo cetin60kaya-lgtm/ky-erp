@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import PublicLandingPage from "./pages/PublicLandingPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { installPersistedAuthBootstrap } from "./context/authBootstrap";
 import { installAndroidRuntimeBridge } from "./utils/installAndroidRuntimeBridge";
 
 const PUBLIC_SITE_HOSTS = new Set(["kyerp.net", "www.kyerp.net"]);
@@ -33,14 +35,12 @@ async function loadErpRuntime() {
   installAndroidRuntimeBridge();
   void retireLegacyPhoneApprovalWorker();
 
-  const { installPersistedAuthBootstrap } = await import("./context/authBootstrap");
   installPersistedAuthBootstrap();
   await import("./app/pdksModuleRegistryPatch");
 
   const [
     { default: AppV3 },
     { ActiveCompanyProvider },
-    { AuthProvider, useAuth },
     { default: GlobalLeftClickMenu },
     { syncApplicationSettingsTabForUser },
     { installAuthenticatedAssetBridge },
@@ -48,7 +48,6 @@ async function loadErpRuntime() {
   ] = await Promise.all([
     import("./AppV3.jsx"),
     import("./context/ActiveCompanyContext"),
-    import("./context/AuthContext"),
     import("./components/shell/GlobalLeftClickMenu"),
     import("./app/applicationSettingsModulePatch"),
     import("./utils/installAuthenticatedAssetBridge"),
@@ -76,19 +75,66 @@ async function loadErpRuntime() {
 }
 
 async function renderCanonicalHost() {
-  const {
-    AppV3,
-    ActiveCompanyProvider,
-    AuthProvider,
-    useAuth,
-    GlobalLeftClickMenu,
-    syncApplicationSettingsTabForUser,
-  } = await loadErpRuntime();
-  const RootWrapper = import.meta.env.DEV ? React.Fragment : React.StrictMode;
+  // Public landing/login must stay available even when a heavy ERP chunk fails.
+  // Only the authenticated workspace loads AppV3 and module bundles.
+  installAndroidRuntimeBridge();
+  void retireLegacyPhoneApprovalWorker();
+  installPersistedAuthBootstrap();
+
+  function AuthenticatedWorkspace({ user }) {
+    const [runtime, setRuntime] = useState(null);
+    const [runtimeError, setRuntimeError] = useState("");
+
+    useEffect(() => {
+      let active = true;
+      loadErpRuntime()
+        .then((loaded) => {
+          if (active) setRuntime(loaded);
+        })
+        .catch((error) => {
+          console.error("KY ERP authenticated workspace yuklenemedi", error);
+          if (active) setRuntimeError("Çalışma alanı yüklenemedi. Giriş oturumunuz korunuyor; yeniden deneyebilirsiniz.");
+        });
+      return () => { active = false; };
+    }, []);
+
+    if (runtimeError) {
+      return (
+        <main style={{ maxWidth: 620, margin: "64px auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
+          <h1 style={{ fontSize: 24 }}>KY ERP çalışma alanı açılamadı</h1>
+          <p>{runtimeError}</p>
+          <button type="button" onClick={() => window.location.reload()}>Yeniden Dene</button>
+        </main>
+      );
+    }
+
+    if (!runtime) {
+      return (
+        <main style={{ maxWidth: 620, margin: "64px auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
+          <h1 style={{ fontSize: 22 }}>KY ERP yükleniyor</h1>
+          <p>Yetkili çalışma alanı hazırlanıyor...</p>
+        </main>
+      );
+    }
+
+    const {
+      AppV3,
+      ActiveCompanyProvider,
+      GlobalLeftClickMenu,
+      syncApplicationSettingsTabForUser,
+    } = runtime;
+    syncApplicationSettingsTabForUser(user);
+
+    return (
+      <ActiveCompanyProvider>
+        <AppV3 />
+        <GlobalLeftClickMenu />
+      </ActiveCompanyProvider>
+    );
+  }
 
   function CanonicalHostApp() {
     const { isAuthenticated, user } = useAuth();
-    syncApplicationSettingsTabForUser(user);
     const [loginOpen, setLoginOpen] = useState(() => {
       const initialPath = String(window.location.pathname || "/").toLowerCase();
       return directLoginPaths.has(initialPath) || initialPath !== "/";
@@ -103,14 +149,7 @@ async function renderCanonicalHost() {
       return () => window.removeEventListener("kyerp:open-login", openLogin);
     }, []);
 
-    if (isAuthenticated) {
-      return (
-        <ActiveCompanyProvider>
-          <AppV3 />
-          <GlobalLeftClickMenu />
-        </ActiveCompanyProvider>
-      );
-    }
+    if (isAuthenticated) return <AuthenticatedWorkspace user={user} />;
 
     return (
       <>
@@ -120,6 +159,7 @@ async function renderCanonicalHost() {
     );
   }
 
+  const RootWrapper = import.meta.env.DEV ? React.Fragment : React.StrictMode;
   ReactDOM.createRoot(rootElement).render(
     <RootWrapper><AuthProvider><CanonicalHostApp /></AuthProvider></RootWrapper>,
   );
