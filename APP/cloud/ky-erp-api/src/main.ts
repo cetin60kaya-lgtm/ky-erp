@@ -26,6 +26,7 @@ import { registerCanonicalDispatchControlRoutes } from "./accounting-dispatch-co
 import { registerEBelgeCenterRoutes } from "./e-belge-center-cloud";
 import { registerEBelgeLineToolRoutes } from "./e-belge-line-tools";
 import { enforceAccountingTenant } from "./accounting-tenant-guard";
+import { enforceFileHubTenant } from "./file-hub-tenant-guard";
 import { registerAiCloudRoutes } from "./ai-cloud";
 import { registerComplianceCenterRoutes } from "./compliance-center-cloud";
 import { registerComplianceConfigRoutes } from "./compliance-config-cloud";
