@@ -35,11 +35,19 @@ export function normalizePerson(raw = {}, period = null) {
     cardNo: displayValue(card),
     fullName: displayValue(fullName),
     department: displayValue(rawValue(raw, "department", "departmentName", "bolum")),
-    role: displayValue(rawValue(raw, "jobTitle", "task", "position", "gorev")),
-    group: displayValue(rawValue(raw, "workGroup", "groupName", "group")),
+    role: displayValue(rawValue(raw, "jobTitle", "title", "task", "position", "gorev")),
+    title: displayValue(rawValue(raw, "title", "jobTitle")),
+    personnelCode: displayValue(rawValue(raw, "personnelCode", "code")),
+    sgkStatus: displayValue(rawValue(raw, "sgkStatus", "sgk_status")),
+    phone: displayValue(rawValue(raw, "phone")),
+    group: displayValue(rawValue(raw, "personnelGroup", "workGroup", "groupName", "group")),
+    workGroup: displayValue(rawValue(raw, "workGroup")),
+    personnelGroup: displayValue(rawValue(raw, "personnelGroup")),
+    personnelGroupId: rawValue(raw, "personnelGroupId"),
     startDate: displayValue(rawValue(raw, "entryDate", "hireDate", "startDate", "entry_date")),
     exitDate: displayValue(exitDate),
     status: periodStatus || displayValue(employment),
+    employmentStatus: displayValue(employment),
     cardState: card === null ? "Atanmamış" : "Atanmış",
   };
 }
@@ -59,7 +67,14 @@ export function normalizeAttendanceDay(raw = {}, person = {}) {
 }
 
 export function toPersonRows(people = [], view = "people") {
+  const state=(person)=>person.employmentStatus && person.employmentStatus!=="—" &&
+    person.employmentStatus!==person.status
+    ? `${person.employmentStatus} · ${person.status}` : person.status;
   return people.map((person) => {
+    if (view === "documents") return {
+      "Personel": person.fullName, "Belge": "Kişi seçilerek görüntülenir",
+      "Dönem": "—", "Eklenme": "—", "Yetki": "—", "Durum": "—", _id: person.id,
+    };
     if (view === "cards") return {
       "Kart No": person.cardNo, "Ad Soyad": person.fullName, "Kart Durumu": person.cardState,
       "Başlangıç": person.startDate, "Bitiş": person.exitDate, "Son Geçiş": "—",
@@ -67,12 +82,12 @@ export function toPersonRows(people = [], view = "people") {
     };
     if (view === "employment") return {
       "Personel": person.fullName, "Giriş Tarihi": person.startDate, "Çıkış Tarihi": person.exitDate,
-      "Departman": person.department, "Görev": person.role, "Durum": person.status, _id: person.id,
+      "Departman": person.department, "Görev": person.role, "Durum": state(person), _id: person.id,
     };
     return {
       "Kart No": person.cardNo, "Ad Soyad": person.fullName, "Departman": person.department,
       "Görev": person.role, "Grup": person.group, "Giriş": person.startDate,
-      "Durum": person.status, _id: person.id,
+      "Durum": state(person), _id: person.id,
     };
   });
 }
