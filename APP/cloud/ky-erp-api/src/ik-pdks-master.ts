@@ -183,11 +183,32 @@ export function registerIkPdksMasterRoutes(app: Hono<AppEnv>) {
     const group = await c.env.DB.prepare("SELECT id FROM ik_pdks_work_groups WHERE id=? AND main_company_id=? AND active=1 LIMIT 1")
       .bind(groupId, auth.company).first<Row>();
     if (!group) return fail(c, 404, "GROUP_NOT_FOUND", "Vardiya bulunamadı.");
-    await c.env.DB.prepare(`INSERT INTO ik_pdks_employee_groups(main_company_id,employee_id,group_id,updated_by,updated_at)
-      VALUES(?,?,?,?,?) ON CONFLICT(main_company_id,employee_id) DO UPDATE SET group_id=excluded.group_id,
-      updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
-      .bind(auth.company, employeeId, groupId, text(auth.user.username), nowIso()).run();
-    return c.json({ ok: true, data: { employeeId, groupId } });
+    const person = await c.env.DB.prepare("SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND id=? LIMIT 1")
+      .bind(auth.company, employeeId).first<Row>();
+    if (!person) return fail(c, 404, "PERSON_NOT_FOUND", "Bu firmada personel bulunamadı.");
+    const previous = await c.env.DB.prepare("SELECT group_id AS groupId FROM ik_pdks_employee_groups WHERE main_company_id=? AND employee_id=?")
+      .bind(auth.company, employeeId).first<Row>();
+    const before = text(previous?.groupId);
+    if (Object.prototype.hasOwnProperty.call(body, "expectedGroupId") && text(body.expectedGroupId) !== before)
+      return fail(c, 409, "GROUP_STALE", "Personel vardiyası değişmiş. Önce güncel veriyi okuyun.");
+    if (before === groupId) return c.json({ ok:true, data:{ employeeId,groupId,changed:false } });
+    const timestamp = nowIso();
+    const results = await c.env.DB.batch([
+      c.env.DB.prepare(`INSERT INTO ik_pdks_employee_groups(main_company_id,employee_id,group_id,updated_by,updated_at)
+        VALUES(?,?,?,?,?) ON CONFLICT(main_company_id,employee_id) DO UPDATE SET group_id=excluded.group_id,
+        updated_by=excluded.updated_by,updated_at=excluded.updated_at
+        WHERE COALESCE(ik_pdks_employee_groups.group_id,'')=?`)
+        .bind(auth.company, employeeId, groupId, text(auth.user.username), timestamp, before),
+      c.env.DB.prepare(`INSERT INTO ik_employee_change_history
+        (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
+        SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE changes()=1`)
+        .bind(crypto.randomUUID(), auth.company, employeeId, "WORK_GROUP", "groupId",
+          before, groupId, timestamp.slice(0,10), text(body.reason)||"PDKS çalışma grubu ataması",
+          auth.user.id, timestamp),
+    ]);
+    if (Number(results[0]?.meta?.changes||0)!==1 || Number(results[1]?.meta?.changes||0)!==1)
+      return fail(c,409,"GROUP_ASSIGNMENT_CONFLICT","Çalışma grubu eşzamanlı değiştirildi veya geçmiş kaydı doğrulanamadı.");
+    return c.json({ ok: true, data: { employeeId, groupId, changed:true } });
   });
 
   app.post("/api/ik/personnel-control/personnel-groups", async (c) => {
@@ -222,8 +243,31 @@ export function registerIkPdksMasterRoutes(app: Hono<AppEnv>) {
     if(!employeeId||!personnelGroupId)return fail(c,400,"ASSIGNMENT_REQUIRED","Personel ve personel grubu zorunludur.");
     const group=await c.env.DB.prepare("SELECT id FROM ik_pdks_personnel_groups WHERE id=? AND main_company_id=? AND active=1 LIMIT 1").bind(personnelGroupId,auth.company).first<Row>();
     if(!group)return fail(c,404,"PERSONNEL_GROUP_NOT_FOUND","Personel grubu bulunamadı.");
-    await c.env.DB.prepare(`INSERT INTO ik_pdks_employee_personnel_groups(main_company_id,employee_id,personnel_group_id,updated_by,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(main_company_id,employee_id) DO UPDATE SET personnel_group_id=excluded.personnel_group_id,updated_by=excluded.updated_by,updated_at=excluded.updated_at`).bind(auth.company,employeeId,personnelGroupId,text(auth.user.username),nowIso()).run();
-    return c.json({ok:true,data:{employeeId,personnelGroupId}});
+    const person=await c.env.DB.prepare("SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND id=? LIMIT 1")
+      .bind(auth.company,employeeId).first<Row>();
+    if(!person)return fail(c,404,"PERSON_NOT_FOUND","Bu firma kapsamında personel bulunamadı.");
+    const current=await c.env.DB.prepare("SELECT personnel_group_id AS personnelGroupId FROM ik_pdks_employee_personnel_groups WHERE main_company_id=? AND employee_id=? LIMIT 1")
+      .bind(auth.company,employeeId).first<Row>();
+    const previous=text(current?.personnelGroupId);
+    if(Object.prototype.hasOwnProperty.call(body,"expectedPersonnelGroupId") && text(body.expectedPersonnelGroupId)!==previous)
+      return fail(c,409,"PERSONNEL_GROUP_STALE","Personel çalışma grubu değişmiş; önce güncel veriyi okuyun.");
+    if(previous===personnelGroupId)return c.json({ok:true,data:{employeeId,personnelGroupId,changed:false}});
+    const timestamp=nowIso();
+    const results=await c.env.DB.batch([
+      c.env.DB.prepare(`INSERT INTO ik_pdks_employee_personnel_groups(main_company_id,employee_id,personnel_group_id,updated_by,updated_at)
+        VALUES(?,?,?,?,?) ON CONFLICT(main_company_id,employee_id) DO UPDATE SET
+        personnel_group_id=excluded.personnel_group_id,updated_by=excluded.updated_by,updated_at=excluded.updated_at
+        WHERE COALESCE(ik_pdks_employee_personnel_groups.personnel_group_id,'')=?`)
+        .bind(auth.company,employeeId,personnelGroupId,text(auth.user.username),timestamp,previous),
+      c.env.DB.prepare(`INSERT INTO ik_employee_change_history
+        (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
+        SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE changes()=1`)
+        .bind(crypto.randomUUID(),auth.company,employeeId,"PERSONNEL_GROUP","personnelGroupId",
+          previous,personnelGroupId,timestamp.slice(0,10),text(body.reason)||"Personel çalışma grubu ataması",auth.user.id,timestamp),
+    ]);
+    if(Number(results[0]?.meta?.changes||0)!==1 || Number(results[1]?.meta?.changes||0)!==1)
+      return fail(c,409,"PERSONNEL_GROUP_CONFLICT","Personel çalışma grubu eşzamanlı değişti veya işlem geçmişi doğrulanamadı.");
+    return c.json({ok:true,data:{employeeId,personnelGroupId,changed:true}});
   });
 
   app.post("/api/ik/personnel-control/services", async (c) => {
