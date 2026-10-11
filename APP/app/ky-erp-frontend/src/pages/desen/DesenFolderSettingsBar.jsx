@@ -36,8 +36,19 @@ function storageView(payload, purposeCode, label) {
     rootPath: row.root_path || "",
     localRootPath: row.local_root_path || "",
     remoteRootName: row.remote_root_name || "",
+    remoteRootId: row.remote_root_id || "",
+    syncMode: row.sync_mode || "",
+    connectionStatus: row.connection_status || "",
+    lastSyncAt: row.last_sync_at || "",
+    lastError: row.last_error || "",
     exact: Boolean(row.module_code && row.purpose_code),
   };
+}
+
+function formatSync(value) {
+  if (!value) return "henüz senkron yok";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("tr-TR");
 }
 
 export default function DesenFolderSettingsBar() {
@@ -58,9 +69,17 @@ export default function DesenFolderSettingsBar() {
         : { purposeCode, label, ok: false, error: result.reason?.message || "Depolama hedefi bulunamadı." };
     });
     setTargets(next);
+
     const missing = next.filter((row) => !row.ok);
+    const cloudPending = next.filter((row) =>
+      row.ok
+      && ["GOOGLE_DRIVE", "ONEDRIVE", "SHAREPOINT"].includes(row.provider)
+      && (row.syncMode !== "CLOUD_API" || row.connectionStatus !== "CONNECTED" || !row.remoteRootId),
+    );
     if (missing.length) {
       setMessage("Desen için eksik depolama ataması var. Depolama > Bölüm / Dosya Atamaları ekranından hedefi tanımlayın.");
+    } else if (cloudPending.length) {
+      setMessage("Bulut depolama kaydı var ancak doğrudan bulut senkronu henüz hazır değil. OAuth hesabı, uzak klasör ve CLOUD_API bağlantısını Depolama ekranından tamamlayın.");
     }
     setBusy(false);
   }, []);
@@ -69,8 +88,10 @@ export default function DesenFolderSettingsBar() {
 
   const connected = useMemo(() => targets.filter((row) => row.ok), [targets]);
   const primaryProvider = connected[0]?.provider || "";
-  const hasGoogle = connected.some((row) => row.provider === "GOOGLE_DRIVE");
-  const hasMicrosoft = connected.some((row) => ["ONEDRIVE", "SHAREPOINT"].includes(row.provider));
+  const cloudRows = connected.filter((row) => ["GOOGLE_DRIVE", "ONEDRIVE", "SHAREPOINT"].includes(row.provider));
+  const directReady = cloudRows.some((row) => row.syncMode === "CLOUD_API" && row.connectionStatus === "CONNECTED" && row.remoteRootId);
+  const agentOnly = cloudRows.some((row) => row.syncMode === "AGENT");
+  const cloudPending = cloudRows.some((row) => row.syncMode !== "CLOUD_API" || row.connectionStatus !== "CONNECTED" || !row.remoteRootId);
 
   return (
     <>
@@ -80,8 +101,9 @@ export default function DesenFolderSettingsBar() {
             {busy ? <LoaderCircle className="spin" size={16} /> : connected.length ? <ShieldCheck size={16} /> : <Cloud size={16} />}
             {connected.length ? `File Hub bağlı · ${providerLabel(primaryProvider)}` : "Desen depolaması bekliyor"}
           </span>
-          {hasGoogle ? <span className="dsg-btn active"><Cloud size={16} />Google Drive aktif</span> : null}
-          {hasMicrosoft ? <span className="dsg-btn active"><Cloud size={16} />Microsoft depolama aktif</span> : null}
+          {directReady ? <span className="dsg-btn active"><Cloud size={16} />Doğrudan bulut senkronu aktif</span> : null}
+          {agentOnly ? <span className="dsg-btn"><Cloud size={16} />Bulut kaydı Agent modunda</span> : null}
+          {cloudPending && !directReady ? <span className="dsg-btn"><TriangleAlert size={16} />Doğrudan bulut bağlantısı tamamlanmadı</span> : null}
           <button className="dsg-btn" type="button" disabled={busy} onClick={load}>
             {busy ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}
             Depolamayı Yenile
@@ -93,9 +115,17 @@ export default function DesenFolderSettingsBar() {
             <span key={row.purposeCode}>
               {row.ok ? <CheckCircle2 size={14} /> : <TriangleAlert size={14} />}
               <strong>{row.label}:</strong>{" "}
-              {row.ok ? `${row.connectionName || providerLabel(row.provider)} · ${row.rootPath || row.localRootPath || row.remoteRootName || "/"}${row.exact ? "" : " · firma varsayılanı"}` : "Atama yok"}
+              {row.ok
+                ? `${row.connectionName || providerLabel(row.provider)} · ${row.rootPath || row.localRootPath || row.remoteRootName || "/"} · ${row.syncMode || "mod bilinmiyor"} · ${row.connectionStatus || "durum bilinmiyor"}${row.exact ? "" : " · firma varsayılanı"}`
+                : "Atama yok"}
             </span>
           ))}
+          {connected.map((row) => row.ok ? (
+            <span key={`sync-${row.purposeCode}`}>
+              <RefreshCw size={14} /><strong>{row.label} son senkron:</strong> {formatSync(row.lastSyncAt)}
+              {row.lastError ? ` · Hata: ${row.lastError}` : ""}
+            </span>
+          ) : null)}
           <span><FolderOpen size={14} /><strong>Orijinal dosya:</strong> seçilen Google / Microsoft / Yerel / NAS kaynağında kalır.</span>
           <span><Cloud size={14} /><strong>R2:</strong> yalnız web önizleme / cache; Desen ana arşivi değildir.</span>
         </div>
