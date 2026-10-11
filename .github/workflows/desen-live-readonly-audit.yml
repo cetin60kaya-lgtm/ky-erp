@@ -39,7 +39,8 @@ jobs:
           SELECT 'workflow_models' metric, COUNT(*) value
             FROM json_store
            WHERE scope='DESEN_WORKFLOW_MODEL'
-             AND main_company_slug='mecit-hakan';
+             AND main_company_slug='mecit-hakan'
+             AND json_valid(data)=1;
           SELECT 'inbox_rows' metric, COUNT(*) value
             FROM json_store
            WHERE scope='DESEN_INBOX_FILE'
@@ -114,21 +115,23 @@ jobs:
             FROM json_store
            WHERE scope='DESEN_WORKFLOW_MODEL'
              AND main_company_slug='mecit-hakan'
+             AND json_valid(data)=1
            GROUP BY COALESCE(NULLIF(json_extract(data,'$.status'),''),'EMPTY')
            ORDER BY value DESC;
           SELECT 'workflow_missing_main_image' metric, COUNT(*) value
             FROM json_store
            WHERE scope='DESEN_WORKFLOW_MODEL'
              AND main_company_slug='mecit-hakan'
+             AND json_valid(data)=1
              AND COALESCE(NULLIF(json_extract(data,'$.mainImage.storageKey'),''),NULLIF(json_extract(data,'$.mainImage.previewUrl'),''),NULLIF(json_extract(data,'$.imageUrl'),''),'')='';
           SELECT 'workflow_operation_count' metric, COUNT(*) value
-            FROM json_store j, json_each(COALESCE(json_extract(j.data,'$.operations'),'[]'))
+            FROM json_store j, json_each(CASE WHEN json_valid(j.data)=1 THEN COALESCE(json_extract(j.data,'$.operations'),'[]') ELSE '[]' END)
            WHERE j.scope='DESEN_WORKFLOW_MODEL'
              AND j.main_company_slug='mecit-hakan';
           SELECT 'placement_status' metric,
                  COALESCE(NULLIF(json_extract(op.value,'$.placementStatus'),''),'EMPTY') code,
                  COUNT(*) value
-            FROM json_store j, json_each(COALESCE(json_extract(j.data,'$.operations'),'[]')) op
+            FROM json_store j, json_each(CASE WHEN json_valid(j.data)=1 THEN COALESCE(json_extract(j.data,'$.operations'),'[]') ELSE '[]' END) op
            WHERE j.scope='DESEN_WORKFLOW_MODEL'
              AND j.main_company_slug='mecit-hakan'
            GROUP BY COALESCE(NULLIF(json_extract(op.value,'$.placementStatus'),''),'EMPTY')
@@ -136,7 +139,7 @@ jobs:
           SELECT 'dyehouse_status' metric,
                  COALESCE(NULLIF(json_extract(op.value,'$.dyehouseStatus'),''),'EMPTY') code,
                  COUNT(*) value
-            FROM json_store j, json_each(COALESCE(json_extract(j.data,'$.operations'),'[]')) op
+            FROM json_store j, json_each(CASE WHEN json_valid(j.data)=1 THEN COALESCE(json_extract(j.data,'$.operations'),'[]') ELSE '[]' END) op
            WHERE j.scope='DESEN_WORKFLOW_MODEL'
              AND j.main_company_slug='mecit-hakan'
            GROUP BY COALESCE(NULLIF(json_extract(op.value,'$.dyehouseStatus'),''),'EMPTY')
@@ -145,6 +148,7 @@ jobs:
             FROM json_store
            WHERE scope='DESEN_INBOX_FILE'
              AND main_company_slug='mecit-hakan'
+             AND json_valid(data)=1
            GROUP BY COALESCE(NULLIF(json_extract(data,'$.status'),''),'EMPTY')
            ORDER BY value DESC;
           SELECT 'filehub_asset_extension' metric, COALESCE(NULLIF(extension,''),'NONE') code, COUNT(*) value
