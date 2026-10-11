@@ -25,6 +25,7 @@ import TerminalSetupPanel from "./TerminalSetupPanel.jsx";
 import {buildCardPrintHtml} from "../../../../../pdks-unified/device-gateway/card-printer.mjs";
 import TransferCenterPanel from "./TransferCenterPanel.jsx";
 import CloudSyncPanel from "./CloudSyncPanel.jsx";
+import ManagementIntegrationPanel from "./ManagementIntegrationPanel.jsx";
 import StageCopyExplorer from "./StageCopyExplorer.jsx";
 import EvidencePuantajPanel from "./EvidencePuantajPanel.jsx";
 import Personnel360Manage from "./Personnel360Manage.jsx";
@@ -315,7 +316,8 @@ export default function PdksUnifiedApp({
   const [terminalReport,setTerminalReport]=useState(null);
   const [stageSnapshot,setStageSnapshot]=useState(null);
   const [stageSelectedCard,setStageSelectedCard]=useState("");
-  const transferTabs=new Set(["transfers","transfer","tnf","reconciliation","incidents"]);
+  const transferTabs=new Set(["transfers","transfer","tnf","reconciliation"]);
+  const managementTabs=new Set(["companies","users","permissions","backup","integrations","system","incidents"]);
   const searchInput = useRef(null);
 
   const company = activeMainCompany?.slug || activeMainCompany?.id || "";
@@ -412,6 +414,7 @@ export default function PdksUnifiedApp({
   const pageUnavailable = previewOnly || requirement==="unconnected" ||
     requirement==="forbidden" || !data.sourceReady;
   const sourceText = testMode ? "Yerel menü testi • canlı veri kapalı" :
+    managementTabs.has(tab.id) ? "KY ERP yönetim / tanılama durumu panelde doğrulanır" :
     previewOnly ? "Tasarım incelemesi" :
     requirement==="forbidden" || data.audit && isSensitiveProductTab(tab.id) ? "Erişim kapalı" :
     requirement==="unconnected" ? "Entegrasyon bekliyor" :
@@ -507,7 +510,7 @@ export default function PdksUnifiedApp({
             aria-selected={tab.id===item.id}
             className={tab.id===item.id?"active":""} onClick={()=>go(section.id,item.id)}>{item.label}</button>)}
         </div>
-        {tab.id==="system"&&<ProductReadinessAudit onOpen={go}/>}
+        {tab.id==="system"&&testMode&&<ProductReadinessAudit onOpen={go}/>}
         {stageInspectTab&&<StageCopyExplorer tabId={tab.id} snapshot={stageSnapshot}
           onSnapshot={setStageSnapshot} search={search}
           selectedCard={stageSelectedCard} onSelectedCard={setStageSelectedCard}/>}
@@ -524,13 +527,13 @@ export default function PdksUnifiedApp({
           snapshot={!previewOnly&&data.resourceReady?data.resource:null}
           loading={data.resourceLoading} previewOnly={previewOnly} search={search}
           compact onRefresh={()=>setReloadToken(value=>value+1)}/>}
-        {tab.view!=="dashboard"&&!stageInspectTab&&tab.id!=="system"&&<section
+        {tab.view!=="dashboard"&&!stageInspectTab&&<section
           className={"pdk-u-panel pdk-u-record-panel"+(["reports","payroll","timesheet","people"].includes(section.id)&&dataConnected?" pdk-u-print-sheet":"")}>
           <div className="pdk-u-record-head">
             <div><h2>{tab.label}</h2><p>{tab.description} · {MONTHS[period.month-1]} {period.year}</p></div>
             <span className="pdk-u-label"><ShieldCheck size={15}/> {previewOnly?"Görsel İnceleme":"Yazma kontrollü"}</span>
           </div>
-          {requirement!=="card-events"&&!transferTabs.has(tab.id)&&tab.id!=="cloud"&&<div className="pdk-u-filters">
+          {requirement!=="card-events"&&!transferTabs.has(tab.id)&&!managementTabs.has(tab.id)&&tab.id!=="cloud"&&<div className="pdk-u-filters">
             {["monthly-attendance","signature-month","daily-report"].includes(requirement) && !previewOnly &&
               <button type="button" className="pdk-u-btn"
                 disabled={!company || !data.profileReady || data.resourceLoading}
@@ -575,7 +578,13 @@ export default function PdksUnifiedApp({
               className="pdk-u-btn" disabled={!canExport} onClick={()=>window.print()}>
               <FileCheck2 size={16}/> Yazdır</button>}
           </div>}
-          {tab.id==="terminals" ? <TerminalSetupPanel
+          {managementTabs.has(tab.id) ? <ManagementIntegrationPanel
+            key={[company,tab.id].join(":")} tabId={tab.id}
+            company={company} companyId={activeMainCompany?.id||""}
+            terminalReport={terminalReport}
+            profileReady={data.profileReady} audit={profileAudit}
+            previewOnly={previewOnly} /> :
+          tab.id==="terminals" ? <TerminalSetupPanel
             key={company||"preview"} company={company||(testMode?"stage-company-01":"")}
             previewOnly={previewOnly&&!testMode} onReportLoaded={setTerminalReport}/> :
           transferTabs.has(tab.id) ? <TransferCenterPanel
@@ -624,7 +633,7 @@ export default function PdksUnifiedApp({
             <UnifiedTable columns={tab.columns} rows={filteredRows}
               masked={isAuditAccount && isSensitiveProductTab(tab.id)}/>
           )}
-          {!transferTabs.has(tab.id)&&tab.id!=="cloud"&&<UnifiedOperationPanel key={[company,tab.id,period.year,period.month].join(":")}
+          {!transferTabs.has(tab.id)&&!managementTabs.has(tab.id)&&tab.id!=="cloud"&&<UnifiedOperationPanel key={[company,tab.id,period.year,period.month].join(":")}
             tabId={tab.id} previewOnly={previewOnly}
             profile={data.profile} people={data.people}
             company={company} year={period.year} month={period.month}
