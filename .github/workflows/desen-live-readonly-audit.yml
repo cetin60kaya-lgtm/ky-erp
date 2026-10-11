@@ -1,0 +1,80 @@
+name: KY ERP Desen Live Readonly Audit
+
+on:
+  push:
+    branches:
+      - audit-desen-live-20261011
+    paths:
+      - '.github/workflows/desen-live-readonly-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Worker dependencies
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+      - name: Read-only Desen production aggregate audit
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          sql="
+          SELECT 'model_records' metric, COUNT(*) value
+            FROM model_records
+           WHERE main_company_slug='mecit-hakan'
+             AND COALESCE(TRIM(deleted_at),'')='';
+          SELECT 'workflow_models' metric, COUNT(*) value
+            FROM json_store
+           WHERE scope='DESEN_WORKFLOW_MODEL'
+             AND main_company_slug='mecit-hakan';
+          SELECT 'inbox_rows' metric, COUNT(*) value
+            FROM json_store
+           WHERE scope='DESEN_INBOX_FILE'
+             AND main_company_slug='mecit-hakan';
+          SELECT 'filehub_active_connections' metric, COUNT(*) value
+            FROM file_hub_connections
+           WHERE main_company_slug='mecit-hakan' AND is_active=1;
+          SELECT 'filehub_desen_bindings' metric, COUNT(*) value
+            FROM file_hub_bindings
+           WHERE main_company_slug='mecit-hakan' AND module_code='DESEN';
+          SELECT 'filehub_assets' metric, COUNT(*) value
+            FROM file_hub_assets
+           WHERE main_company_slug='mecit-hakan';
+          SELECT 'filehub_model_relations' metric, COUNT(*) value
+            FROM file_hub_relations
+           WHERE main_company_slug='mecit-hakan' AND entity_type='MODEL';
+          SELECT provider_type, COUNT(*) value
+            FROM file_hub_connections
+           WHERE main_company_slug='mecit-hakan' AND is_active=1
+           GROUP BY provider_type
+           ORDER BY provider_type;
+          SELECT purpose_code, COUNT(*) value
+            FROM file_hub_bindings
+           WHERE main_company_slug='mecit-hakan' AND module_code='DESEN'
+           GROUP BY purpose_code
+           ORDER BY purpose_code;
+          SELECT MAX(last_sync_at) last_sync_at
+            FROM file_hub_connections
+           WHERE main_company_slug='mecit-hakan' AND is_active=1;
+          "
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$sql" --json > /tmp/desen-audit.json
+          node -e '
+            const fs=require("fs");
+            const data=JSON.parse(fs.readFileSync("/tmp/desen-audit.json","utf8"));
+            for(const block of data){
+              for(const row of block.results||[]) console.log(JSON.stringify(row));
+            }
+          '
