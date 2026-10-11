@@ -317,6 +317,9 @@ shell.use("/api/mail/*", async (c, next) => {
 // Desen API tenant ve modül yetkisi dışında erişilemez.
 shell.use("/api/desen/*", enforceDesenTenant);
 
+// File Hub authenticated routes cannot cross tenant boundaries.
+shell.use("/api/file-hub/*", enforceFileHubTenant);
+
 shell.use("/api/isnet/*", enforceIsnetTenant);
 
 // e-Belge Merkezi, Muhasebe yetkisi ve oturumun tenant bağlamı dışında erişilemez.
