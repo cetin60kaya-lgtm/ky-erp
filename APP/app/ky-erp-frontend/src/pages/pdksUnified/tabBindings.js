@@ -11,7 +11,7 @@ const SOURCES = Object.freeze({
   // Read-only people/physical-card administration.
   today:"live-attendance",attention:"live-attendance",live:"live-attendance",
   exceptions:"live-attendance",
-  people:"people",cards:"people",employment:"people",departments:"masters",
+  people:"people",cards:"people",employment:"people",documents:"people",departments:"masters",
   groups:"masters",routes:"masters",rules:"config",
   // Only selected-person attendance. Real live aggregate not yet certified.
   punches:"card-events",history:"card-events",daily:"attendance",
@@ -99,8 +99,8 @@ export function rowsForTab(id,payload,{people=[],selectedPerson=null,year=null,m
     }));
     return {rows,supported:true,scope:"unreconciled-d1-snapshot"};
   }
-  if(["people","cards","employment"].includes(id))
-    return {rows:toPersonRows(people,id),supported:true,scope:"assigned-card-roster"};
+  if(["people","cards","employment","documents"].includes(id))
+    return {rows:toPersonRows(people,id),supported:true,scope:"tenant-personnel-roster"};
   if(id==="departments"){
     if(!Array.isArray(payload?.groups)||!Array.isArray(payload?.personnelGroups)||
        !Array.isArray(payload?.groupAssignments)||
