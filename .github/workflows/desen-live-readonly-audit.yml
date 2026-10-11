@@ -88,6 +88,15 @@ jobs:
             FROM file_hub_bindings
            WHERE main_company_slug='mecit-hakan' AND module_code='DESEN'
            ORDER BY purpose_code;
+          SELECT provider_type, COUNT(*) value,
+                 SUM(CASE WHEN TRIM(COALESCE(refresh_token_cipher,''))<>'' THEN 1 ELSE 0 END) refresh_ready
+            FROM file_hub_oauth_accounts
+           WHERE main_company_slug='mecit-hakan'
+           GROUP BY provider_type
+           ORDER BY provider_type;
+          SELECT COUNT(*) value
+            FROM file_hub_cloud_connection_accounts
+           WHERE main_company_slug='mecit-hakan';
           "
           npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$sql" --json > /tmp/desen-audit.json
           node -e '
