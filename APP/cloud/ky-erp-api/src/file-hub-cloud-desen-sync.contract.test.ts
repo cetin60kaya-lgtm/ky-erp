@@ -17,10 +17,14 @@ test("direct cloud sync routes files through Desen binding logic", () => {
   assert.match(cloud, /source.*CLOUD_RULE/s);
 });
 
-test("direct cloud file scan invokes model sync after indexing each file", () => {
+test("direct cloud file scan invokes model sync for new changed or unlinked files", () => {
   assert.match(
     cloud,
-    /const fileAssetId = await upsertCloudFile[\s\S]*await syncCloudDesignBinding[\s\S]*files \+= 1/,
+    /const indexed=await upsertCloudFile[\s\S]*if\(indexed\.needsModelSync\)[\s\S]*syncCloudDesignBinding[\s\S]*files\+=1/,
+  );
+  assert.match(
+    cloud,
+    /needsModelSync:changed \|\| Number\(location\.model_relation_count\|\|0\)===0/,
   );
 });
 
