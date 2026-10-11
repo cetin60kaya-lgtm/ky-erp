@@ -3,15 +3,16 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "bcba9e93165a98873bd976d7661fbf56d6ac9f11",
-  "requestedAt": "2026-10-09",
-  "attempt": 9,
+  "sourceCommit": "9a17ffdbab7b02c42653b530534a49bdec86d434",
+  "requestedAt": "2026-10-11",
+  "attempt": 10,
   "scope": [
-    "qa-login-policy-schema-0029-mfa-guard",
-    "explicit-409-invalid-password-only",
-    "worker-contract-tests",
+    "desen-tenant-permission-guard",
+    "desen-filehub-workflow-contract",
+    "desen-folder-open-feedback",
+    "worker-typecheck-test-build",
     "d1-full-backup-before-worker-release",
     "post-release-api-health"
   ],
-  "note": "Correct previously contradictory QA-only password login promise: migration 0029 forbids PASSWORD_ONLY. Server rejects it explicitly; no auth trigger changes, no DB data reset. PR412 passed frontend+Worker CI. Publish Worker first, then frontend."
+  "note": "Desen API tenant ve modül yetki sınırı fail-closed hale getirildi; File Hub -> Desen workflow wiring contract ile sabitlendi; R2 fiziksel klasör açılamadığında UI artık kullanıcıya gerçek mesajı gösteriyor."
 }
