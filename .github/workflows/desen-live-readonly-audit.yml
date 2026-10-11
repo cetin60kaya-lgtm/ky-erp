@@ -104,6 +104,61 @@ jobs:
              AND COALESCE(TRIM(deleted_at),'')=''
            GROUP BY customer_id, customer_name
            ORDER BY value DESC;
+          SELECT 'model_status' metric, COALESCE(NULLIF(TRIM(status),''),'EMPTY') code, COUNT(*) value
+            FROM model_records
+           WHERE main_company_slug='mecit-hakan'
+             AND COALESCE(TRIM(deleted_at),'')=''
+           GROUP BY COALESCE(NULLIF(TRIM(status),''),'EMPTY')
+           ORDER BY value DESC;
+          SELECT 'workflow_status' metric, COALESCE(NULLIF(json_extract(data,'$.status'),''),'EMPTY') code, COUNT(*) value
+            FROM json_store
+           WHERE scope='DESEN_WORKFLOW_MODEL'
+             AND main_company_slug='mecit-hakan'
+           GROUP BY COALESCE(NULLIF(json_extract(data,'$.status'),''),'EMPTY')
+           ORDER BY value DESC;
+          SELECT 'workflow_missing_main_image' metric, COUNT(*) value
+            FROM json_store
+           WHERE scope='DESEN_WORKFLOW_MODEL'
+             AND main_company_slug='mecit-hakan'
+             AND COALESCE(NULLIF(json_extract(data,'$.mainImage.storageKey'),''),NULLIF(json_extract(data,'$.mainImage.previewUrl'),''),NULLIF(json_extract(data,'$.imageUrl'),''),'')='';
+          SELECT 'workflow_operation_count' metric, COUNT(*) value
+            FROM json_store j, json_each(COALESCE(json_extract(j.data,'$.operations'),'[]'))
+           WHERE j.scope='DESEN_WORKFLOW_MODEL'
+             AND j.main_company_slug='mecit-hakan';
+          SELECT 'placement_status' metric,
+                 COALESCE(NULLIF(json_extract(op.value,'$.placementStatus'),''),'EMPTY') code,
+                 COUNT(*) value
+            FROM json_store j, json_each(COALESCE(json_extract(j.data,'$.operations'),'[]')) op
+           WHERE j.scope='DESEN_WORKFLOW_MODEL'
+             AND j.main_company_slug='mecit-hakan'
+           GROUP BY COALESCE(NULLIF(json_extract(op.value,'$.placementStatus'),''),'EMPTY')
+           ORDER BY value DESC;
+          SELECT 'dyehouse_status' metric,
+                 COALESCE(NULLIF(json_extract(op.value,'$.dyehouseStatus'),''),'EMPTY') code,
+                 COUNT(*) value
+            FROM json_store j, json_each(COALESCE(json_extract(j.data,'$.operations'),'[]')) op
+           WHERE j.scope='DESEN_WORKFLOW_MODEL'
+             AND j.main_company_slug='mecit-hakan'
+           GROUP BY COALESCE(NULLIF(json_extract(op.value,'$.dyehouseStatus'),''),'EMPTY')
+           ORDER BY value DESC;
+          SELECT 'inbox_status' metric, COALESCE(NULLIF(json_extract(data,'$.status'),''),'EMPTY') code, COUNT(*) value
+            FROM json_store
+           WHERE scope='DESEN_INBOX_FILE'
+             AND main_company_slug='mecit-hakan'
+           GROUP BY COALESCE(NULLIF(json_extract(data,'$.status'),''),'EMPTY')
+           ORDER BY value DESC;
+          SELECT 'filehub_asset_extension' metric, COALESCE(NULLIF(extension,''),'NONE') code, COUNT(*) value
+            FROM file_hub_assets
+           WHERE main_company_slug='mecit-hakan'
+           GROUP BY COALESCE(NULLIF(extension,''),'NONE')
+           ORDER BY value DESC
+           LIMIT 20;
+          SELECT 'recent_model' metric, model_name, customer_name, status, created_at, updated_at
+            FROM model_records
+           WHERE main_company_slug='mecit-hakan'
+             AND COALESCE(TRIM(deleted_at),'')=''
+           ORDER BY COALESCE(updated_at,created_at) DESC
+           LIMIT 12;
           "
           npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$sql" --json > /tmp/desen-audit.json
           node -e '
