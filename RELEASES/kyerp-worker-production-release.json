@@ -3,17 +3,19 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "627afef6d274ad639bd82463b1eea5cbc7867524",
+  "sourceCommit": "19b54f032d7a8318448701a91666946731bef6e3",
   "requestedAt": "2026-10-11",
-  "attempt": 12,
+  "attempt": 13,
   "scope": [
     "desen-cloud-direct-sync",
     "filehub-model-relation",
     "canonical-model-record-sync",
     "taha-default-company-resolution",
+    "filehub-cloud-scheduled-sync-5min",
+    "incremental-cloud-scan-no-rewrite",
     "worker-typecheck-test-build",
     "d1-full-backup-before-worker-release",
     "post-release-api-health"
   ],
-  "note": "Doğrudan Google Drive/OneDrive/SharePoint File Hub senkronu aktif Desen bindinglerini işleyerek model ilişkisi, workflow modeli ve canonical model_records kaydını birlikte günceller. MODEL_IMAGE yalnız JPG/JPEG/PNG/WEBP kabul eder; yeni File Hub modelleri canlı Taha kimliğini dinamik çözer. OAuth hesabı/binding oluşturulmaz."
+  "note": "Desen direct-cloud senkronunun ikinci aşaması: aktif CLOUD_API + sync_enabled File Hub bağlantıları mevcut 5 dakikalık Worker cronunda otomatik taranır. Değişmeyen dosyalar D1'e yeniden yazılmaz; yeni/değişen veya MODEL ilişkisi eksik asset'ler Desen model senkronuna alınır. OAuth hesabı/binding kullanıcı yetkilendirmesi olmadan oluşturulmaz."
 }
