@@ -1,100 +1,78 @@
 name: KY ERP Uygulama Canlı Son Denetim
 
 on:
-  # Automatic GitHub Actions disabled. Manual diagnostic/fallback only.
   workflow_dispatch:
+
 permissions:
   contents: read
-  issues: write
+
+concurrency:
+  group: kyerp-production-readonly-audit
+  cancel-in-progress: true
 
 jobs:
   audit:
-    name: kyerp.net canonical Boyahane, Desen ve bundle son denetimi
+    name: kyerp.net read-only canlı kabul
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Production sonucunu doğrula
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Production workflow sonucu: ${{ github.event.workflow_run.conclusion }}"
-          test "${{ github.event.workflow_run.conclusion }}" = "success"
+      - uses: actions/checkout@v4
 
-      - name: Ana alan adı yönlendirmesiz kökte açılıyor mu doğrula
+      - name: Canonical alan adlarını ve API sağlığını doğrula
         shell: bash
         run: |
           set -euo pipefail
-          ready=0
-          for attempt in $(seq 1 30); do
-            status="$(curl --silent --show-error --output /tmp/kyerp-root.html --write-out '%{http_code}' https://kyerp.net/ || true)"
-            if [ "$status" = "200" ] && [ -s /tmp/kyerp-root.html ]; then
-              ready=1
-              break
-            fi
-            echo "kyerp.net henüz doğrudan 200 değil: HTTP ${status:-0}"
-            sleep 2
+
+          check_200() {
+            local name="$1"
+            local url="$2"
+            local output="$3"
+            local code
+            code="$(curl --location --silent --show-error --output "$output" --write-out '%{http_code}' --max-time 20 "$url" || true)"
+            echo "$name HTTP $code"
+            test "$code" = "200"
+            test -s "$output"
+          }
+
+          check_200 "root" "https://kyerp.net/" /tmp/root.html
+          check_200 "login" "https://kyerp.net/giris" /tmp/login.html
+          check_200 "mobile-login" "https://kyerp.net/mobile/login" /tmp/mobile-login.html
+          check_200 "security" "https://security.kyerp.net/guvenlik/" /tmp/security.html
+
+          api_code="$(curl --silent --show-error --output /tmp/health.json --write-out '%{http_code}' --max-time 20 https://api.kyerp.net/api/health || true)"
+          test "$api_code" = "200"
+          jq -e '.ok == true and .service == "ky-erp-api" and .database == "d1"' /tmp/health.json >/dev/null
+
+          companies_code="$(curl --silent --show-error --output /tmp/companies.json --write-out '%{http_code}' --max-time 20 https://api.kyerp.net/api/employee-portal/companies || true)"
+          test "$companies_code" = "200"
+          jq -e '.ok == true and (.data | any(.slug == "kyerp-test"))' /tmp/companies.json >/dev/null
+
+          grep -q '<title>KY ERP</title>' /tmp/root.html
+          grep -q '<title>KY ERP Güvenlik</title>' /tmp/security.html
+          grep -q '/guvenlik/app.js' /tmp/security.html
+
+      - name: Eski KY Güvenlik yollarının kapalı kaldığını doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          for legacy in security ky-guvenlik ky-guvenlik-recover; do
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 15 "https://security.kyerp.net/${legacy}/" || true)"
+            echo "$legacy HTTP $status"
+            test "$status" = "410"
           done
-          test "$ready" -eq 1
-          echo "kyerp.net doğrudan 200 ve yönlendirmesiz açılıyor."
 
-      - name: Gerçek uygulama alan adlarını doğrula
+      - name: Gerçek Chrome ile public uygulama ve auth sınırını doğrula
+        working-directory: APP/app/ky-erp-frontend
         shell: bash
         run: |
           set -euo pipefail
-          for url in \
-            "https://kyerp.net/" \
-            "https://kyerp.net/desen/desen-modeller" \
-            "https://kyerp.net/boyahane/uretim-gecmisi"; do
-            ready=0
-            for attempt in $(seq 1 30); do
-              if curl --location --fail --silent --show-error "$url" > /tmp/kyerp-app.html; then
-                ready=1
-                break
-              fi
-              sleep 2
-            done
-            test "$ready" -eq 1
-            test -s /tmp/kyerp-app.html
-          done
-          curl --fail --silent --show-error https://api.kyerp.net/api/health \
-            | tee /tmp/kyerp-health.json \
-            | jq -e '.ok == true' >/dev/null
+          node scripts/live-browser-acceptance.mjs
 
-      - name: Canlı JS paketinde yeni güvenli, giriş ve Boyahane kodunu doğrula
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --location --fail --silent --show-error \
-            "https://kyerp.net/" > /tmp/kyerp-home.html
-          script="$(grep -oE '<script[^>]+src="[^"]+"' /tmp/kyerp-home.html | head -1 | sed -n 's/.*src="\([^"]*\)"/\1/p')"
-          test -n "$script"
-          case "$script" in
-            http://*|https://*) script_url="$script" ;;
-            /*) script_url="https://kyerp.net${script}" ;;
-            *) script_url="https://kyerp.net/${script#./}" ;;
-          esac
-          curl --location --fail --silent --show-error "$script_url" > /tmp/kyerp-live.js
-          grep -q "kyerp_auth_token" /tmp/kyerp-live.js
-          grep -q "kyerpSecureOriginal" /tmp/kyerp-live.js
-          grep -q "KY ERP | Kurumsal Giriş" /tmp/kyerp-live.js
-          grep -q "Akıllı Renk & Pantone Merkezi" /tmp/kyerp-live.js
-          grep -q "Tüm Kayıtlı Renkleri Tara" /tmp/kyerp-live.js
-          grep -q "KY ERP AI ile Yorumla" /tmp/kyerp-live.js
-          echo "Canlı bundle doğrulandı: $script_url"
-
-      - name: Başarılı sonucu PR kaydına yaz
-        if: success()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" \
-            -f body="## KY ERP ana alan adı ve uygulama son denetim\n\n- Production run: ${{ github.event.workflow_run.id }}\n- Commit: ${{ github.event.workflow_run.head_sha }}\n- kyerp.net kök ve yönlendirmesiz: ✅\n- kyerp.net: ✅\n- Temiz kurumsal giriş bundle: ✅\n- Desen rotası: ✅\n- Boyahane İmalat Boyaları rotası: ✅\n- Authenticated asset bridge canlı bundle: ✅\n- Akıllı Renk & Pantone Merkezi canlı bundle: ✅\n- KY ERP AI renk entegrasyonu frontend: ✅\n- API health: ✅\n- Sonuç: **success**"
-
-      - name: Başarısız sonucu PR kaydına yaz
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" \
-            -f body="## KY ERP ana alan adı ve uygulama son denetim\n\n- Production run: ${{ github.event.workflow_run.id }}\n- Commit: ${{ github.event.workflow_run.head_sha }}\n- Production sonucu: ${{ github.event.workflow_run.conclusion }}\n- Sonuç: **failure**\n- Kontrol: kyerp.net kök yönlendirme / kyerp.net / giriş bundle / Desen / Boyahane / authenticated asset bridge / AI renk merkezi"
+      - name: Denetim kanıtını sakla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kyerp-production-readonly-audit-${{ github.run_id }}
+          path: APP/app/ky-erp-frontend/live-acceptance-evidence/
+          if-no-files-found: warn
+          retention-days: 7
