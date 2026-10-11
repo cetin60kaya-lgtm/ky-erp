@@ -3,15 +3,17 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "b5217d33eb03b4b9e21b6c9a48da4e67786ab6e6",
+  "sourceCommit": "627afef6d274ad639bd82463b1eea5cbc7867524",
   "requestedAt": "2026-10-11",
-  "attempt": 11,
+  "attempt": 12,
   "scope": [
-    "file-hub-tenant-guard",
-    "desen-filehub-tenant-boundary",
+    "desen-cloud-direct-sync",
+    "filehub-model-relation",
+    "canonical-model-record-sync",
+    "taha-default-company-resolution",
     "worker-typecheck-test-build",
     "d1-full-backup-before-worker-release",
     "post-release-api-health"
   ],
-  "note": "Desen denetimi devamında File Hub authenticated rotaları tenant sınırıyla fail-closed hale getirildi; public file-hub agent taşıma yolu korunuyor."
+  "note": "Doğrudan Google Drive/OneDrive/SharePoint File Hub senkronu aktif Desen bindinglerini işleyerek model ilişkisi, workflow modeli ve canonical model_records kaydını birlikte günceller. MODEL_IMAGE yalnız JPG/JPEG/PNG/WEBP kabul eder; yeni File Hub modelleri canlı Taha kimliğini dinamik çözer. OAuth hesabı/binding oluşturulmaz."
 }
