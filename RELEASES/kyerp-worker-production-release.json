@@ -3,19 +3,15 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "19b54f032d7a8318448701a91666946731bef6e3",
+  "sourceCommit": "9ba3bf4ae42f3b042c5a4491a5f5d65525fe10ea",
   "requestedAt": "2026-10-11",
-  "attempt": 13,
+  "attempt": 14,
   "scope": [
-    "desen-cloud-direct-sync",
-    "filehub-model-relation",
-    "canonical-model-record-sync",
-    "taha-default-company-resolution",
-    "filehub-cloud-scheduled-sync-5min",
-    "incremental-cloud-scan-no-rewrite",
+    "desen-storage-readiness",
+    "filehub-resolve-storage-sync-state",
     "worker-typecheck-test-build",
     "d1-full-backup-before-worker-release",
     "post-release-api-health"
   ],
-  "note": "Desen direct-cloud senkronunun ikinci aşaması: aktif CLOUD_API + sync_enabled File Hub bağlantıları mevcut 5 dakikalık Worker cronunda otomatik taranır. Değişmeyen dosyalar D1'e yeniden yazılmaz; yeni/değişen veya MODEL ilişkisi eksik asset'ler Desen model senkronuna alınır. OAuth hesabı/binding kullanıcı yetkilendirmesi olmadan oluşturulmaz."
+  "note": "Desen/File Hub durum göstergesi için resolve-storage artık sync_mode, connection_status, last_sync_at, last_error ve remote root bilgilerini döndürür. Yetki/tenant ve D1 veri içeriği değişmez."
 }
