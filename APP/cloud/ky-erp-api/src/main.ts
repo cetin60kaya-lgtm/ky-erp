@@ -26,6 +26,7 @@ import { registerCanonicalDispatchControlRoutes } from "./accounting-dispatch-co
 import { registerEBelgeCenterRoutes } from "./e-belge-center-cloud";
 import { registerEBelgeLineToolRoutes } from "./e-belge-line-tools";
 import { enforceAccountingTenant } from "./accounting-tenant-guard";
+import { enforceFileHubTenant } from "./file-hub-tenant-guard";
 import { registerAiCloudRoutes } from "./ai-cloud";
 import { registerComplianceCenterRoutes } from "./compliance-center-cloud";
 import { registerComplianceConfigRoutes } from "./compliance-config-cloud";
@@ -316,6 +317,9 @@ shell.use("/api/mail/*", async (c, next) => {
 // Her İşNet isteği açık ana firma bağlamı taşır; non-owner kullanıcı başka tenant'a geçemez.
 // Desen API tenant ve modül yetkisi dışında erişilemez.
 shell.use("/api/desen/*", enforceDesenTenant);
+
+// File Hub authenticated routes cannot cross tenant boundaries.
+shell.use("/api/file-hub/*", enforceFileHubTenant);
 
 shell.use("/api/isnet/*", enforceIsnetTenant);
 
