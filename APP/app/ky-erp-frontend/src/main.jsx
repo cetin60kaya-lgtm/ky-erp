@@ -206,6 +206,44 @@ const renderFailure = (error) => {
 // The /mobile route must not enter the public desktop login modal.
 const isMobileRoute = /^\/mobile(?:\/|$)/i.test(window.location.pathname);
 async function renderMobileHost() {
+  const path = String(window.location.pathname || "").toLowerCase();
+
+  // Keep the two public mobile entry routes independent from the full mobile ERP bundle.
+  // A failure in Muhasebe/İmalat/Boyahane/Admin must not take down login or personnel self-service.
+  if (/^\/mobile\/login(?:\/|$)/.test(path)) {
+    await import("./mobile/mobile.css");
+    const { default: MobileLogin } = await import("./mobile/MobileLogin.jsx");
+    const handleLogin = ({ personnel = false } = {}) => {
+      window.location.replace(personnel ? "/mobile/personel" : "/mobile");
+    };
+    ReactDOM.createRoot(rootElement).render(
+      <React.StrictMode><MobileLogin onLogin={handleLogin} /></React.StrictMode>,
+    );
+    return;
+  }
+
+  if (/^\/mobile\/personel(?:\/|$)/.test(path)) {
+    await import("./mobile/mobile.css");
+    const [{ default: MobileLogin }, { getStaffSession }] = await Promise.all([
+      import("./mobile/MobileLogin.jsx"),
+      import("./mobile/personnelSession.js"),
+    ]);
+
+    if (!getStaffSession()) {
+      const handlePersonnelLogin = () => window.location.replace("/mobile/personel");
+      ReactDOM.createRoot(rootElement).render(
+        <React.StrictMode><MobileLogin onLogin={handlePersonnelLogin} personnelOnly /></React.StrictMode>,
+      );
+      return;
+    }
+
+    const { default: MobilePersonnel } = await import("./mobile/MobilePersonnel.jsx");
+    ReactDOM.createRoot(rootElement).render(
+      <React.StrictMode><MobilePersonnel /></React.StrictMode>,
+    );
+    return;
+  }
+
   const { default: MobileApp } = await import("./mobile/MobileApp.jsx");
   ReactDOM.createRoot(rootElement).render(<React.StrictMode><MobileApp /></React.StrictMode>);
 }
