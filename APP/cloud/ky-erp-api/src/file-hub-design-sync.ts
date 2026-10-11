@@ -17,6 +17,74 @@ const objectOf = (v: unknown): Row => {
 };
 const normalize = (v: unknown) => upper(v).replace(/İ/g, "I").replace(/[^A-Z0-9ÇĞÖŞÜ]+/g, " ").replace(/\s+/g, " ").trim();
 
+async function defaultDesignCompany(c: Context<AppEnv>, slug: string) {
+  try {
+    const row = await c.env.DB.prepare(
+      `SELECT customer_id,customer_name,COUNT(*) n
+         FROM model_records
+        WHERE main_company_slug=?
+          AND COALESCE(TRIM(deleted_at),'')=''
+          AND customer_name LIKE 'TAHA%' COLLATE NOCASE
+        GROUP BY customer_id,customer_name
+        ORDER BY n DESC
+        LIMIT 1`,
+    ).bind(slug).first<Row>();
+    return {
+      companyId:text(row?.customer_id),
+      companyName:text(row?.customer_name) || "TAHA GİYİM SAN. VE TİC.",
+    };
+  } catch {
+    return { companyId:"", companyName:"TAHA GİYİM SAN. VE TİC." };
+  }
+}
+
+async function upsertCanonicalModelRecord(c: Context<AppEnv>, slug: string, model: Row) {
+  const info = await c.env.DB.prepare('PRAGMA table_info("model_records")').all<Row>();
+  const columns = new Set((info.results || []).map((row: Row) => text(row.name)).filter(Boolean));
+  if (!columns.has("id") || !columns.has("model_name")) return;
+
+  const mainImage = (Array.isArray(model.files) ? model.files : []).find((row: Row) => row.role === "MODEL_IMAGE");
+  const raw = {
+    ...objectOf(model.raw),
+    workflowModelId:text(model.id),
+    modelName:text(model.modelName),
+    modelCode:text(model.modelCode || model.modelName),
+    companyId:text(model.companyId),
+    companyName:text(model.companyName),
+    imageUrl:text(mainImage?.thumbnailUrl || mainImage?.previewUrl),
+    sourceType:text(model.sourceType || "FILE_HUB"),
+    workflowStatus:text(model.status || "NEW_ARRIVAL"),
+    updatedAt:now(),
+  };
+  const payload: Row = {
+    id:text(model.id),
+    main_company_slug:slug,
+    model_name:text(model.modelName),
+    model_code:text(model.modelCode || model.modelName),
+    company_id:text(model.companyId) || null,
+    customer_id:text(model.companyId) || null,
+    customer_name:text(model.companyName) || null,
+    image_url:text(mainImage?.thumbnailUrl || mainImage?.previewUrl) || null,
+    status:text(model.status || "NEW_ARRIVAL"),
+    raw:JSON.stringify(raw),
+    created_at:text(model.createdAt || now()),
+    updated_at:now(),
+  };
+  const entries = Object.entries(payload).filter(([key]) => columns.has(key));
+  const existing = await c.env.DB.prepare("SELECT id FROM model_records WHERE id=? AND (main_company_slug=? OR main_company_slug IS NULL) LIMIT 1")
+    .bind(payload.id, slug).first<Row>();
+  if (existing?.id) {
+    const update = entries.filter(([key]) => !["id","created_at"].includes(key));
+    if (update.length) {
+      await c.env.DB.prepare(`UPDATE model_records SET ${update.map(([key]) => `"${key}"=?`).join(",")} WHERE id=? AND (main_company_slug=? OR main_company_slug IS NULL)`)
+        .bind(...update.map(([,value]) => value), payload.id, slug).run();
+    }
+  } else {
+    await c.env.DB.prepare(`INSERT INTO model_records(${entries.map(([key]) => `"${key}"`).join(",")}) VALUES(${entries.map(() => "?").join(",")})`)
+      .bind(...entries.map(([,value]) => value)).run();
+  }
+}
+
 async function modelRows(c: Context<AppEnv>, slug: string) {
   const result = await c.env.DB.prepare(
     `SELECT id,file_name,data,created_at,updated_at
@@ -61,12 +129,13 @@ export async function syncFileHubDesignModel(c: Context<AppEnv>, input: Row) {
   let current = rows.find((row: Row) => normalize(row.modelName || row.modelCode) === normalize(modelName) && upper(row.status) !== "ARCHIVE");
   const created = !current;
   if (!current) {
+    const defaultCompany = await defaultDesignCompany(c, slug);
     current = {
       id: crypto.randomUUID(),
       modelName,
       modelCode:modelName,
-      companyId:"",
-      companyName:"",
+      companyId:defaultCompany.companyId,
+      companyName:defaultCompany.companyName,
       status: purposeCode === "MODEL_IMAGE" ? "NEW_ARRIVAL" : "MODEL_INFO_MISSING",
       sourceType:"FILE_HUB",
       operations:[{
@@ -130,5 +199,6 @@ export async function syncFileHubDesignModel(c: Context<AppEnv>, input: Row) {
       },
     },
   });
+  await upsertCanonicalModelRecord(c, slug, saved);
   return { created, modelId:saved.id, modelName:saved.modelName, role };
 }
