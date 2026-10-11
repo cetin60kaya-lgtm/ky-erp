@@ -241,18 +241,30 @@ async function upsertCloudFile(c: Context<AppEnv>, slug: string, connectionId: s
   const fileName = text(item.name) || "dosya";
   const extension = fileName.includes(".") ? fileName.split(".").pop()!.toUpperCase() : "";
   if (location) {
-    await c.env.DB.prepare(`UPDATE file_hub_assets SET file_name=?,extension=?,mime_type=?,size_bytes=?,status='AVAILABLE',source_type='CLOUD_API',last_seen_at=?,updated_at=?,metadata=? WHERE id=? AND main_company_slug=?`)
-      .bind(fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), seenAt, seenAt, JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), location.asset_id, slug).run();
-    await c.env.DB.prepare(`UPDATE file_hub_locations SET provider_file_id=?,relative_path=?,is_available=1,provider_modified_at=?,last_seen_at=?,updated_at=? WHERE id=?`)
-      .bind(text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, location.id).run();
-    return text(location.asset_id);
+    const oldMeta=json(location.asset_metadata);
+    const changed =
+      text(location.asset_file_name)!==fileName ||
+      text(location.asset_mime_type)!==text(item.mimeType) ||
+      Number(location.asset_size_bytes||0)!==Number(item.size||0) ||
+      text(location.provider_modified_at)!==text(item.modifiedAt) ||
+      text(oldMeta.checksum)!==text(item.checksum) ||
+      text(location.relative_path)!==relativePath ||
+      upper(location.asset_status)!=="AVAILABLE" ||
+      Number(location.is_available||0)!==1;
+    if (changed) {
+      await c.env.DB.prepare(`UPDATE file_hub_assets SET file_name=?,extension=?,mime_type=?,size_bytes=?,status='AVAILABLE',source_type='CLOUD_API',last_seen_at=?,updated_at=?,metadata=? WHERE id=? AND main_company_slug=?`)
+        .bind(fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), seenAt, seenAt, JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), location.asset_id, slug).run();
+      await c.env.DB.prepare(`UPDATE file_hub_locations SET provider_file_id=?,relative_path=?,is_available=1,provider_modified_at=?,last_seen_at=?,updated_at=? WHERE id=?`)
+        .bind(text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, seenAt, location.id).run();
+    }
+    return { assetId:text(location.asset_id), changed, needsModelSync:changed || Number(location.model_relation_count||0)===0 };
   }
   const assetId = crypto.randomUUID(), locationId = crypto.randomUUID();
   await c.env.DB.prepare(`INSERT INTO file_hub_assets(id,main_company_slug,logical_key,file_name,extension,mime_type,size_bytes,status,source_type,preview_status,metadata,first_seen_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'AVAILABLE','CLOUD_API','NONE',?,?,?,?,?)`)
     .bind(assetId, slug, `${provider}:${connectionId}:${text(item.id)}`, fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), seenAt, seenAt, seenAt, seenAt).run();
   await c.env.DB.prepare(`INSERT INTO file_hub_locations(id,main_company_slug,file_asset_id,storage_connection_id,provider_file_id,relative_path,location_role,is_available,provider_modified_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,'PRIMARY',1,?,?,?,?)`)
     .bind(locationId, slug, assetId, connectionId, text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, seenAt).run();
-  return assetId;
+  return { assetId, changed:true, needsModelSync:true };
 }
 
 
@@ -575,8 +587,10 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
           const relativePath = current.path ? `${current.path}/${child.name}` : child.name;
           if (child.isFolder) { folders += 1; if (files + folders < limit) queue.push({ id: child.id, path: relativePath }); else truncated = true; }
           else {
-            const fileAssetId = await upsertCloudFile(c, gate.slug, connectionId, provider, child, relativePath, seenAt);
-            await syncCloudDesignBinding(c, gate.slug, connectionId, fileAssetId, child, relativePath, provider);
+            const indexed = await upsertCloudFile(c, gate.slug, connectionId, provider, child, relativePath, seenAt);
+            if (indexed.needsModelSync) {
+              await syncCloudDesignBinding(c, gate.slug, connectionId, indexed.assetId, child, relativePath, provider);
+            }
             files += 1;
           }
           if (files + folders >= limit) { truncated = true; break; }
