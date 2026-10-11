@@ -23,3 +23,22 @@ test("authenticated workspace reports chunk-load failure without replacing publi
   assert.match(source, /KY ERP authenticated workspace yuklenemedi/);
   assert.match(source, /Giriş oturumunuz korunuyor/);
 });
+
+
+test("mobile login and personnel entry do not preload the full MobileApp bundle", () => {
+  const start = source.indexOf("async function renderMobileHost()");
+  const end = source.indexOf("if (isMobileRoute)", start);
+  assert.ok(start >= 0 && end > start, "mobile host block must exist");
+  const block = source.slice(start, end);
+  assert.match(block, /import\("\.\/mobile\/MobileLogin\.jsx"\)/);
+  assert.match(block, /import\("\.\/mobile\/MobilePersonnel\.jsx"\)/);
+  assert.match(block, /import\("\.\/mobile\/MobileApp\.jsx"\)/);
+  assert.ok(
+    block.indexOf('import("./mobile/MobileLogin.jsx")') < block.lastIndexOf('import("./mobile/MobileApp.jsx")'),
+    "public mobile login must be resolved before the full mobile application bundle",
+  );
+  assert.ok(
+    block.indexOf('import("./mobile/MobilePersonnel.jsx")') < block.lastIndexOf('import("./mobile/MobileApp.jsx")'),
+    "personnel self-service must be resolved before the full mobile application bundle",
+  );
+});
