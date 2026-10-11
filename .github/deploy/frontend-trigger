@@ -1,5 +1,5 @@
-deploy: pdks-live-trust-20261009
-pr: 416
-merge: 360b704fc35800ca3ae40455c18cb66a37d98a87
-ci: 37919059923
-reason: prevent stale live cache and false verified absence when terminal offline
+deploy: live-bootstrap-isolation-20261011
+pr: 422
+merge: 35887e0e4edb4197eebaf0c4e798004b8fa33e5a
+ci: 38100969475
+reason: keep public login available when heavy ERP chunks fail; repair read-only production audit
