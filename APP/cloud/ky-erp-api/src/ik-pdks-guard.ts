@@ -7,6 +7,7 @@ import { registerIkPdksAssistantRoutes } from "./ik-pdks-assistant";
 import { registerIkPdksDeviceRoutes } from "./ik-pdks-device";
 import { registerIkPdksModernRoutes } from "./ik-pdks-modern";
 import { registerIkPersonnelMediaRoutes } from "./ik-personnel-media";
+import { registerIkPdksPersonnel360Routes } from "./ik-pdks-personnel-360";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -392,4 +393,5 @@ export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
   registerIkPdksDeviceRoutes(app);
   registerIkPersonnelMediaRoutes(app);
   registerIkPdksModernRoutes(app);
+  registerIkPdksPersonnel360Routes(app);
 }
