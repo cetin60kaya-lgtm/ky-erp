@@ -103,8 +103,16 @@ export default function DesenModelMasasi({ activeMainCompany }) {
 
   const openGroup = (group) => { setActiveGroup(group); setScanOpen(true); };
   const openFolder = async () => {
-    try { await openDesenImportFolder(activeMainCompany); }
-    catch (error) { setMessage(error?.message || "Klasör açılamadı."); }
+    try {
+      const result = await openDesenImportFolder(activeMainCompany);
+      if (result?.opened === false) {
+        setMessage(result?.message || `Canlı sistemde fiziksel klasör açılamaz. Kaynak: ${result?.path || "R2 desen gelen alanı"}.`);
+        return;
+      }
+      setMessage(result?.message || "Desen gelen klasörü açıldı.");
+    } catch (error) {
+      setMessage(error?.message || "Klasör açılamadı.");
+    }
   };
 
   const summaryCards = [
