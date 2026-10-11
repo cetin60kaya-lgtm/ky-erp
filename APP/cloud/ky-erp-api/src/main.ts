@@ -46,6 +46,7 @@ import { registerDesenBridgeRoutes } from "./desen-bridge";
 import { registerDesenOperationRoutes } from "./desen-operations";
 import { registerDesenStorageRoutes } from "./desen-storage";
 import { registerDesenWorkflowRoutes } from "./desen-workflow";
+import { enforceDesenTenant } from "./desen-tenant-guard";
 import { registerDesenVisualSearchRoutes } from "./desen-visual-search";
 import { registerIkAuditReadonlyRoutes } from "./ik-audit-readonly";
 import { registerIkPdksGuardRoutes } from "./ik-pdks-guard";
@@ -313,6 +314,9 @@ shell.use("/api/mail/*", async (c, next) => {
 
 // İşNet tek bir sağlayıcı modülü olabilir ancak tenant verisi global değildir.
 // Her İşNet isteği açık ana firma bağlamı taşır; non-owner kullanıcı başka tenant'a geçemez.
+// Desen API tenant ve modül yetkisi dışında erişilemez.
+shell.use("/api/desen/*", enforceDesenTenant);
+
 shell.use("/api/isnet/*", enforceIsnetTenant);
 
 // e-Belge Merkezi, Muhasebe yetkisi ve oturumun tenant bağlamı dışında erişilemez.
