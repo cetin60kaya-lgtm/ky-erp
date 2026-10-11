@@ -1,5 +1,5 @@
-deploy: live-bootstrap-isolation-20261011
-pr: 422
-merge: 35887e0e4edb4197eebaf0c4e798004b8fa33e5a
-ci: 38100969475
-reason: keep public login available when heavy ERP chunks fail; repair read-only production audit
+deploy: mobile-entry-isolation-20261011
+pr: 423
+merge: a2934ec2f64f10b28c9637ce8c061e7ea348ee1b
+ci: 38101146207
+reason: keep mobile login and personnel self-service independent from heavy MobileApp modules
