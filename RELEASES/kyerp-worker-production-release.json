@@ -3,16 +3,15 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "9a17ffdbab7b02c42653b530534a49bdec86d434",
+  "sourceCommit": "b5217d33eb03b4b9e21b6c9a48da4e67786ab6e6",
   "requestedAt": "2026-10-11",
-  "attempt": 10,
+  "attempt": 11,
   "scope": [
-    "desen-tenant-permission-guard",
-    "desen-filehub-workflow-contract",
-    "desen-folder-open-feedback",
+    "file-hub-tenant-guard",
+    "desen-filehub-tenant-boundary",
     "worker-typecheck-test-build",
     "d1-full-backup-before-worker-release",
     "post-release-api-health"
   ],
-  "note": "Desen API tenant ve modül yetki sınırı fail-closed hale getirildi; File Hub -> Desen workflow wiring contract ile sabitlendi; R2 fiziksel klasör açılamadığında UI artık kullanıcıya gerçek mesajı gösteriyor."
+  "note": "Desen denetimi devamında File Hub authenticated rotaları tenant sınırıyla fail-closed hale getirildi; public file-hub agent taşıma yolu korunuyor."
 }
