@@ -10,6 +10,7 @@ import { registerErpCommandGatewayRoutes } from "./erp-command-gateway";
 import { registerAiPlatformAccessRoutes } from "./ai-platform-access";
 import { registerUiDialogLayoutRoutes } from "./ui-dialog-layout-cloud";
 import { runSecurityWorkspaceReminderSweep } from "./auth-security-mobile-control";
+import { runFileHubCloudScheduledSync } from "./file-hub-cloud-oauth";
 
 type Env = { Bindings: Cloudflare.Env };
 
@@ -108,7 +109,7 @@ security.onError((error, c) => {
 
 export default {
   async scheduled(_controller: ScheduledController, env: Cloudflare.Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runSecurityWorkspaceReminderSweep(env));
+    ctx.waitUntil(Promise.all([runSecurityWorkspaceReminderSweep(env), runFileHubCloudScheduledSync(env)]));
   },
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext) {
     const path = new URL(request.url).pathname;

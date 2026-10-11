@@ -236,23 +236,35 @@ async function connectionAccount(c: Context<AppEnv>, slug: string, connectionId:
   return { link: { ...link, ...account }, accessToken };
 }
 async function upsertCloudFile(c: Context<AppEnv>, slug: string, connectionId: string, provider: string, item: Row, relativePath: string, seenAt: string) {
-  let location = await c.env.DB.prepare(`SELECT l.*,a.id asset_id FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.provider_file_id=? LIMIT 1`).bind(slug, connectionId, text(item.id)).first<Row>();
-  if (!location) location = await c.env.DB.prepare(`SELECT l.*,a.id asset_id FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.relative_path=? LIMIT 1`).bind(slug, connectionId, relativePath).first<Row>();
+  let location = await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,(SELECT COUNT(*) FROM file_hub_relations r WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.provider_file_id=? LIMIT 1`).bind(slug, connectionId, text(item.id)).first<Row>();
+  if (!location) location = await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,(SELECT COUNT(*) FROM file_hub_relations r WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.relative_path=? LIMIT 1`).bind(slug, connectionId, relativePath).first<Row>();
   const fileName = text(item.name) || "dosya";
   const extension = fileName.includes(".") ? fileName.split(".").pop()!.toUpperCase() : "";
   if (location) {
-    await c.env.DB.prepare(`UPDATE file_hub_assets SET file_name=?,extension=?,mime_type=?,size_bytes=?,status='AVAILABLE',source_type='CLOUD_API',last_seen_at=?,updated_at=?,metadata=? WHERE id=? AND main_company_slug=?`)
-      .bind(fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), seenAt, seenAt, JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), location.asset_id, slug).run();
-    await c.env.DB.prepare(`UPDATE file_hub_locations SET provider_file_id=?,relative_path=?,is_available=1,provider_modified_at=?,last_seen_at=?,updated_at=? WHERE id=?`)
-      .bind(text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, location.id).run();
-    return text(location.asset_id);
+    const oldMeta=json(location.asset_metadata);
+    const changed =
+      text(location.asset_file_name)!==fileName ||
+      text(location.asset_mime_type)!==text(item.mimeType) ||
+      Number(location.asset_size_bytes||0)!==Number(item.size||0) ||
+      text(location.provider_modified_at)!==text(item.modifiedAt) ||
+      text(oldMeta.checksum)!==text(item.checksum) ||
+      text(location.relative_path)!==relativePath ||
+      upper(location.asset_status)!=="AVAILABLE" ||
+      Number(location.is_available||0)!==1;
+    if (changed) {
+      await c.env.DB.prepare(`UPDATE file_hub_assets SET file_name=?,extension=?,mime_type=?,size_bytes=?,status='AVAILABLE',source_type='CLOUD_API',last_seen_at=?,updated_at=?,metadata=? WHERE id=? AND main_company_slug=?`)
+        .bind(fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), seenAt, seenAt, JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), location.asset_id, slug).run();
+      await c.env.DB.prepare(`UPDATE file_hub_locations SET provider_file_id=?,relative_path=?,is_available=1,provider_modified_at=?,last_seen_at=?,updated_at=? WHERE id=?`)
+        .bind(text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, seenAt, location.id).run();
+    }
+    return { assetId:text(location.asset_id), changed, needsModelSync:changed || Number(location.model_relation_count||0)===0 };
   }
   const assetId = crypto.randomUUID(), locationId = crypto.randomUUID();
   await c.env.DB.prepare(`INSERT INTO file_hub_assets(id,main_company_slug,logical_key,file_name,extension,mime_type,size_bytes,status,source_type,preview_status,metadata,first_seen_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'AVAILABLE','CLOUD_API','NONE',?,?,?,?,?)`)
     .bind(assetId, slug, `${provider}:${connectionId}:${text(item.id)}`, fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), seenAt, seenAt, seenAt, seenAt).run();
   await c.env.DB.prepare(`INSERT INTO file_hub_locations(id,main_company_slug,file_asset_id,storage_connection_id,provider_file_id,relative_path,location_role,is_available,provider_modified_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,'PRIMARY',1,?,?,?,?)`)
     .bind(locationId, slug, assetId, connectionId, text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, seenAt).run();
-  return assetId;
+  return { assetId, changed:true, needsModelSync:true };
 }
 
 
@@ -431,6 +443,68 @@ export async function readFileHubAssetForMail(c:any,slug:string,assetId:string,m
   return{fileAssetId:assetId,fileName,mimeType:text(response.headers.get("Content-Type"))||mimeType,sizeBytes:buffer.byteLength,bytes:new Uint8Array(buffer),source:provider};
 }
 
+
+export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
+  const c = { env } as Context<AppEnv>;
+  const result = await env.DB.prepare(
+    `SELECT DISTINCT c.id,c.main_company_slug
+       FROM file_hub_connections c
+       JOIN file_hub_bindings b
+         ON b.main_company_slug=c.main_company_slug
+        AND b.storage_connection_id=c.id
+      WHERE c.is_active=1
+        AND c.sync_mode='CLOUD_API'
+        AND b.sync_enabled=1
+      ORDER BY c.updated_at DESC
+      LIMIT 12`,
+  ).all<Row>();
+
+  for (const row of result.results || []) {
+    const slug=text(row.main_company_slug), connectionId=text(row.id);
+    if(!slug || !connectionId) continue;
+    try {
+      const { link, accessToken } = await connectionAccount(c, slug, connectionId);
+      const provider=upper(link.provider_type), driveId=text(link.provider_drive_id);
+      const rootId=text(link.remote_root_id)||"root", rootName=text(link.remote_root_name)||"Ana Klasör", seenAt=now();
+      const queue:Row[]=[{id:rootId,path:""}];
+      let files=0,folders=0,truncated=false,changedFiles=0,modelSyncs=0;
+      const limit=1200;
+      while(queue.length && files+folders<limit){
+        const current=queue.shift()!;
+        const children=provider==="GOOGLE_DRIVE"
+          ? await listGoogleChildren(accessToken,current.id,true)
+          : await listMicrosoftChildren(accessToken,current.id,driveId,true);
+        for(const child of children){
+          const relativePath=current.path?`${current.path}/${child.name}`:child.name;
+          if(child.isFolder){
+            folders+=1;
+            if(files+folders<limit) queue.push({id:child.id,path:relativePath});
+            else truncated=true;
+          } else {
+            const indexed=await upsertCloudFile(c,slug,connectionId,provider,child,relativePath,seenAt);
+            if(indexed.changed) changedFiles+=1;
+            if(indexed.needsModelSync){
+              const synced=await syncCloudDesignBinding(c,slug,connectionId,indexed.assetId,child,relativePath,provider);
+              if(synced) modelSyncs+=1;
+            }
+            files+=1;
+          }
+          if(files+folders>=limit){truncated=true;break;}
+        }
+      }
+      await env.DB.prepare(`UPDATE file_hub_connections
+        SET connection_status='CONNECTED',last_sync_at=?,last_error=NULL,metadata=?,updated_at=?
+        WHERE id=? AND main_company_slug=?`)
+        .bind(seenAt,JSON.stringify({...json(link.connection_metadata),cloudDirect:true,driveId:driveId||null,lastSyncFiles:files,lastSyncFolders:folders,lastChangedFiles:changedFiles,lastModelSyncs:modelSyncs,syncTruncated:truncated,rootName}),seenAt,connectionId,slug).run();
+    } catch(error:any) {
+      await env.DB.prepare(`UPDATE file_hub_connections
+        SET connection_status='ERROR',last_error=?,updated_at=?
+        WHERE id=? AND main_company_slug=?`)
+        .bind(text(error?.message)||"Bulut senkronizasyonu başarısız.",now(),connectionId,slug).run().catch(()=>{});
+    }
+  }
+}
+
 export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/cloud/providers", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
@@ -575,8 +649,10 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
           const relativePath = current.path ? `${current.path}/${child.name}` : child.name;
           if (child.isFolder) { folders += 1; if (files + folders < limit) queue.push({ id: child.id, path: relativePath }); else truncated = true; }
           else {
-            const fileAssetId = await upsertCloudFile(c, gate.slug, connectionId, provider, child, relativePath, seenAt);
-            await syncCloudDesignBinding(c, gate.slug, connectionId, fileAssetId, child, relativePath, provider);
+            const indexed = await upsertCloudFile(c, gate.slug, connectionId, provider, child, relativePath, seenAt);
+            if (indexed.needsModelSync) {
+              await syncCloudDesignBinding(c, gate.slug, connectionId, indexed.assetId, child, relativePath, provider);
+            }
             files += 1;
           }
           if (files + folders >= limit) { truncated = true; break; }
