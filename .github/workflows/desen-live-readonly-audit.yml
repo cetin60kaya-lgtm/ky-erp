@@ -163,6 +163,11 @@ jobs:
              AND COALESCE(TRIM(deleted_at),'')=''
            ORDER BY COALESCE(updated_at,created_at) DESC
            LIMIT 12;
+          SELECT 'all_model_name' metric, model_name
+            FROM model_records
+           WHERE main_company_slug='mecit-hakan'
+             AND COALESCE(TRIM(deleted_at),'')=''
+           ORDER BY model_name;
           "
           npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$sql" --json > /tmp/desen-audit.json
           node -e '
