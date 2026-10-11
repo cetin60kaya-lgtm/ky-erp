@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { syncFileHubDesignModel } from "./file-hub-design-sync";
 
 type Bindings = Cloudflare.Env & {
   GOOGLE_DRIVE_CLIENT_ID?: string;
@@ -252,6 +253,46 @@ async function upsertCloudFile(c: Context<AppEnv>, slug: string, connectionId: s
   await c.env.DB.prepare(`INSERT INTO file_hub_locations(id,main_company_slug,file_asset_id,storage_connection_id,provider_file_id,relative_path,location_role,is_available,provider_modified_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,'PRIMARY',1,?,?,?,?)`)
     .bind(locationId, slug, assetId, connectionId, text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, seenAt).run();
   return assetId;
+}
+
+
+const normDesignPath = (value: unknown) => text(value).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"").toLocaleLowerCase("tr-TR");
+function bindingMatches(rootPath: unknown, relativePath: unknown) {
+  const root=normDesignPath(rootPath), rel=normDesignPath(relativePath);
+  if(!root) return true;
+  return rel===root || rel.startsWith(root+"/");
+}
+function designModelIdentity(value: unknown) {
+  return upper(value)
+    .replace(/\.[A-Z0-9]+$/i,"")
+    .replace(/\b(YERLEŞİM|YERLESIM|KALIP|PLACEMENT|GÖRSEL|GORSEL|RIP|SOURCE|KAYNAK|FINAL|SON)\b.*$/i,"")
+    .replace(/\s+/g," ")
+    .trim();
+}
+async function insertCloudDesignRelation(c:Context<AppEnv>,slug:string,fileAssetId:string,entityId:string,relationType:string,metadata:Row={}){
+  if(!entityId) return;
+  const ts=now();
+  await c.env.DB.prepare(`INSERT OR IGNORE INTO file_hub_relations(id,main_company_slug,file_asset_id,entity_type,entity_id,relation_type,is_primary,confidence,source,metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,0,1,'CLOUD_RULE',?,?,?)`)
+    .bind(crypto.randomUUID(),slug,fileAssetId,"MODEL",entityId,relationType,JSON.stringify(metadata),ts,ts).run();
+}
+async function syncCloudDesignBinding(c:Context<AppEnv>,slug:string,connectionId:string,fileAssetId:string,item:Row,relativePath:string,provider:string){
+  const result=await c.env.DB.prepare(`SELECT module_code,purpose_code,root_path
+      FROM file_hub_bindings
+     WHERE main_company_slug=? AND storage_connection_id=? AND sync_enabled=1
+       AND module_code IN ('DESEN','DTF','IMALAT')
+     ORDER BY LENGTH(root_path) DESC`).bind(slug,connectionId).all<Row>();
+  const binding=(result.results||[]).find((row:Row)=>bindingMatches(row.root_path,relativePath));
+  if(!binding) return null;
+  const purposeCode=upper(binding.purpose_code), extension=upper(text(item.name).split(".").pop());
+  if(purposeCode==="MODEL_IMAGE" && !["JPG","JPEG","PNG","WEBP"].includes(extension)) return null;
+  const modelName=designModelIdentity(item.name);
+  if(!modelName) return null;
+  await insertCloudDesignRelation(c,slug,fileAssetId,modelName,purposeCode,{moduleCode:upper(binding.module_code),purposeCode,relativePath,provider});
+  return syncFileHubDesignModel(c,{
+    slug,fileAssetId,modelName,purposeCode,
+    fileName:text(item.name),extension,mimeType:text(item.mimeType),sizeBytes:Number(item.size||0),
+    sha256:text(item.checksum),relativePath,providerType:provider,storageConnectionId:connectionId,
+  });
 }
 
 
@@ -533,7 +574,11 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
         for (const child of children) {
           const relativePath = current.path ? `${current.path}/${child.name}` : child.name;
           if (child.isFolder) { folders += 1; if (files + folders < limit) queue.push({ id: child.id, path: relativePath }); else truncated = true; }
-          else { await upsertCloudFile(c, gate.slug, connectionId, provider, child, relativePath, seenAt); files += 1; }
+          else {
+            const fileAssetId = await upsertCloudFile(c, gate.slug, connectionId, provider, child, relativePath, seenAt);
+            await syncCloudDesignBinding(c, gate.slug, connectionId, fileAssetId, child, relativePath, provider);
+            files += 1;
+          }
           if (files + folders >= limit) { truncated = true; break; }
         }
       }
