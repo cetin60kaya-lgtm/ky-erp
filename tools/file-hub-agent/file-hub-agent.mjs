@@ -107,7 +107,7 @@ function previewEligible(extension, size) {
   if (extension === "PDF") return size <= PDF_PREVIEW_MAX;
   return false;
 }
-async function ingestFile(connection, absolute) {
+async function ingestFile(connection, absolute, sourceEvent = "SCAN") {
   const rel = normalizeRel(connection.rootPath, absolute);
   if (!rel || !allowedByRules(connection, rel)) return true;
   let stat;
@@ -125,7 +125,8 @@ async function ingestFile(connection, absolute) {
     sha256: digest,
     modifiedAt: new Date(stat.mtimeMs).toISOString(),
     logicalKey: logicalKeyOf(fileName),
-    metadata: { agentVersion:VERSION, providerType:connection.providerType, rootName:connection.name },
+    sourceEvent,
+    metadata: { agentVersion:VERSION, providerType:connection.providerType, rootName:connection.name, sourceEvent },
   });
   const fileAssetId = String(result?.data?.fileAssetId || "");
   if (fileAssetId && result?.data?.previewRequired === true && previewEligible(extension, stat.size) && previewDigestCache.get(fileAssetId) !== digest) {
@@ -189,7 +190,7 @@ function watchConnection(connection) {
       if (IGNORE.test(absolute)) return;
       try {
         const stat = await fsp.stat(absolute);
-        if (stat.isFile()) await ingestFile(connection, absolute);
+        if (stat.isFile()) await ingestFile(connection, absolute, "WATCH");
       } catch {
         if (eventType === "rename") await markMissing(connection, absolute);
       }
