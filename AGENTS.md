@@ -110,3 +110,13 @@ Remote Desktop yalnız aşağıdaki işler için kullanılır:
 4. **Yalnız yerel zorunluluk varsa Remote Desktop Commander**
 
 Bu kural maliyet/kota koruma kuralıdır ve performans/kolaylık gerekçesiyle atlanamaz.
+
+## KY Control Hub / DESEN — ChatGPT kalıcı erişim kuralı (15.10.2026)
+
+- Kullanıcı, mevcut DESEN uzaktan kontrol köprüsünün **tüm KY ERP / PC PDKS sohbetlerinde** yeniden kurulum yapılmadan değerlendirilmesini istiyor.
+- Önce `DOCS/KY_CHATGPT_DESEN_ERISIM_KURALI.md` dosyasını oku; özel komut/sonuç protokolü `cetin60kaya-lgtm/kyerp` **özel** deposunun `CONTROL/KY_CHAT_BRIDGE_AGENT_RULES.md` dosyasındadır.
+- Yalnız kullanıcı açıkça DESEN üzerinde işlem isterse, o sohbette GitHub bağlayıcısının özel depo erişimini doğrula ve en az yetkiyle hareket et. Komut/sonuç için eşleşen kimlik ve gerçek Windows yanıtı olmadan başarı iddia etme. Güvenlik araçlarının engellerini aşma.
+- 15 Ekim saha kanıtları: DESEN durum, fare hareketi, 840×472 gerçek ekran görüntüsü, yerel Hub açma **PASS**. Fare tıklama ve klavye kontrolünün canlı kabulü henüz yapılmadı. Yerelde düzeltilen ekran boyutlandırma kodunu kurulumla geri alma.
+- GitHub PAT/DPAPI anahtarını, kişisel/maaş/banka verisini veya ekran görüntüsü içeriğini açık repoya koyma. Özel GitHub issue bile kalıcı kayıt olduğundan yalnız hassas olmayan işlem/ekran için kullanılır.
+- Remote Desktop Commander'ın kullanım kotası sıfır olduğunda mevcut köprü varken ücretli araca yönlendirme veya sahte yerel fare testi isteme. GitHub erişimi yoksa bunu açıkça söyle.
+- Bu bir depo/ajan kuralıdır; ChatGPT platformunun global sistem kurallarını kendi başına güncellemez.
