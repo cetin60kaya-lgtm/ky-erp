@@ -60,3 +60,11 @@ test("daily batch revision lookup is bounded to requested dates", () => {
     /attendance_id IN \(\$\{attendanceIds\.map/,
   );
 });
+
+
+test("check-only focused save avoids rewriting unchanged attendance", () => {
+  assert.match(dailySource, /const shiftChanges = rows\.filter/);
+  assert.match(dailySource, /if \(shiftChanges\.length\) \{/);
+  assert.match(dailySource, /writeRows\(c, body, shiftChanges, "KYERP_DAILY_ENTRY_V3"\)/);
+  assert.match(dailySource, /checkOnly: true/);
+});
