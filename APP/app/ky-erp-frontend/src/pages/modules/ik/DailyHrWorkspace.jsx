@@ -213,7 +213,7 @@ function printDailyPaymentSlips(range, rows = []) {
         <div class="sum"><span>ÜCRET TOPLAMI</span><b>${escapeHtml(money(total))}</b></div>
       </div>
     </article>`;
-  }).join("")}</div><footer class="page-grand"><span>GENEL TOPLAM</span><strong>${escapeHtml(money(grandTotal))}</strong></footer></section>`).join("");
+  }).join("")}</div>${pageIndex === pages.length - 1 ? `<footer class="page-grand"><span>GENEL TOPLAM</span><strong>${escapeHtml(money(grandTotal))}</strong></footer>` : ""}</section>`).join("");
   return printHtmlDocument({
     title: "KY ERP Günlük Personel Ödeme Fişleri",
     html: `<main class="pay-print">${html || '<p>Kayıt yok.</p>'}</main>`,
