@@ -3,14 +3,15 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "b92a766c94b1e6e156fff1f552210bb5c9cd3ab6",
+  "sourceCommit": "fe4b39ffa31b4a1ae9ada6ab40c7fc09685d2c6a",
   "requestedAt": "2026-10-16",
-  "attempt": 16,
+  "attempt": 17,
   "scope": [
-    "daily-operation-reviewed-check-sql-upsert",
-    "worker-typecheck-test-build",
-    "d1-full-backup-before-worker-release",
+    "daily-wage-card-open-record-calculation",
+    "weekly-summary",
+    "payment-pool",
+    "d1-backup-before-worker-release",
     "post-release-api-health"
   ],
-  "note": "Kontrol Edildi: mevcut check satırını id ile UPDATE veya yeni satırı zorunlu alanlarla INSERT; hata için aşama tanısı. Ödeme ve personel verilerine toplu değişiklik yok."
+  "note": "Tüm personellerde açık vardiya hesapları kart ücretinden üretilir; PAID kayıtlar korunur, toplu veritabanı tutar güncellemesi yapılmaz."
 }
