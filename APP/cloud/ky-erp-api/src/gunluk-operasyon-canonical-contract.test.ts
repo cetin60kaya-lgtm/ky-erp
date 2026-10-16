@@ -68,3 +68,10 @@ test("check-only focused save avoids rewriting unchanged attendance", () => {
   assert.match(dailySource, /writeRows\(c, body, shiftChanges, "KYERP_DAILY_ENTRY_V3"\)/);
   assert.match(dailySource, /checkOnly: true/);
 });
+
+test("reviewed status updates persisted check by id or inserts minimal safe columns", () => {
+  assert.match(dailySource, /SELECT id,employee_id,checked/);
+  assert.match(dailySource, /UPDATE hr_daily_attendance_check/);
+  assert.match(dailySource, /INSERT INTO hr_daily_attendance_check/);
+  assert.match(dailySource, /GUNLUK_CHECK_WRITE_FAILED/);
+});

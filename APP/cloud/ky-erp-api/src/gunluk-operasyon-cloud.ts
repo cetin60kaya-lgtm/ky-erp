@@ -846,7 +846,7 @@ async function saveFocused(c: Context<AppEnv>) {
         .all<Row>()
     : { results: [] as Row[] };
   const checksResult = employeeIds.length
-    ? await c.env.DB.prepare(`SELECT employee_id,checked
+    ? await c.env.DB.prepare(`SELECT id,employee_id,checked
         FROM hr_daily_attendance_check
         WHERE main_company_id=? AND work_date=? AND shift=?
           AND employee_id IN (${employeeIds.map(() => "?").join(",")})`)
@@ -858,6 +858,9 @@ async function saveFocused(c: Context<AppEnv>) {
   );
   const checkedByEmployee = new Map(
     (checksResult.results || []).map((row) => [text(row.employee_id), flag(row.checked)]),
+  );
+  const checkIdByEmployee = new Map(
+    (checksResult.results || []).map((row) => [text(row.employee_id), text(row.id)]),
   );
 
   for (const entry of entries) {
@@ -902,22 +905,16 @@ async function saveFocused(c: Context<AppEnv>) {
     const checkAfter = selected && (entry.checked === undefined ? checkBefore : flag(entry.checked));
     if (checkBefore !== checkAfter) {
       const timestamp = nowIso();
+      const existingCheckId = checkIdByEmployee.get(employeeId);
       statements.push(
-        c.env.DB.prepare(`INSERT INTO hr_daily_attendance_check
-          (id,main_company_id,employee_id,work_date,shift,checked,checked_by_user_id,checked_by_label,updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?)
-          ON CONFLICT(main_company_id,employee_id,work_date,shift)
-          DO UPDATE SET checked=excluded.checked,checked_by_user_id=excluded.checked_by_user_id,checked_by_label=excluded.checked_by_label,updated_at=excluded.updated_at`).bind(
-          crypto.randomUUID(),
-          companyId,
-          employeeId,
-          date,
-          shift,
-          checkAfter ? 1 : 0,
-          actor.id || null,
-          actor.label,
-          timestamp,
-        ),
+        existingCheckId
+          ? c.env.DB.prepare(`UPDATE hr_daily_attendance_check
+              SET checked=?,updated_at=? WHERE id=? AND main_company_id=?`)
+              .bind(checkAfter ? 1 : 0, timestamp, existingCheckId, companyId)
+          : c.env.DB.prepare(`INSERT INTO hr_daily_attendance_check
+              (id,main_company_id,employee_id,work_date,shift,checked,updated_at)
+              VALUES (?,?,?,?,?,?,?)`)
+              .bind(crypto.randomUUID(), companyId, employeeId, date, shift, checkAfter ? 1 : 0, timestamp),
       );
       statements.push(
         auditStmt(c, {
@@ -935,7 +932,14 @@ async function saveFocused(c: Context<AppEnv>) {
     }
   }
 
-  if (statements.length) await c.env.DB.batch(statements);
+  if (statements.length) {
+    try {
+      await c.env.DB.batch(statements);
+    } catch (error) {
+      console.error(JSON.stringify({ code: "GUNLUK_CHECK_WRITE_FAILED", stage: "check_or_audit_batch", message: error instanceof Error ? error.message : String(error) }));
+      return fail(c, 500, "GUNLUK_CHECK_WRITE_FAILED", "Kontrol işareti sunucu veritabanına yazılamadı. İşlem kaydedilmedi; destek kaydı GUNLUK_CHECK_WRITE_FAILED.");
+    }
+  }
   return response;
 }
 
