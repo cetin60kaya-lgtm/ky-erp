@@ -672,10 +672,11 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
   }
 
   const liveIds=(currentResult.results || []).map((row)=>text(row.id)).filter(Boolean);
-  const paidItems=liveIds.length ? await c.env.DB.prepare(`SELECT attendance_id,shift FROM hr_daily_payment_items
+  const paidItems=liveIds.length ? await c.env.DB.prepare(`SELECT attendance_id,shift,amount_cents FROM hr_daily_payment_items
     WHERE main_company_id=? AND active=1 AND attendance_id IN (${liveIds.map(()=>"?").join(",")})`)
     .bind(companyId,...liveIds).all<Row>() : {results:[] as Row[]};
-  const paidSet=new Set((paidItems.results || []).map((row)=>`${text(row.attendance_id)}|${text(row.shift)}`));
+  const paidAmountMap=new Map((paidItems.results || []).map((row)=>[`${text(row.attendance_id)}|${text(row.shift)}`,Number(row.amount_cents)/100]));
+  const paidSet=new Set(paidAmountMap.keys());
   for(const row of rows) {
     const current=currentByKey.get(`${row.employeeId}|${row.workDate}`);
     if(!current)continue;
@@ -708,8 +709,8 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
       { dayWage: money(person.day_wage), nightWage: money(person.night_wage) },
       row.workDate, effectiveWageHistory.get(row.employeeId) || [],
     );
-    const dayWage = isPaid ? money(current?.day_wage) : active.dayWage;
-    const nightWage = isPaid ? money(current?.night_wage) : active.nightWage;
+    const dayWage = isPaid ? money(current?.day_wage) : paidAmountMap.has(`${text(current?.id)}|day`) ? money(paidAmountMap.get(`${text(current?.id)}|day`)) : active.dayWage;
+    const nightWage = isPaid ? money(current?.night_wage) : paidAmountMap.has(`${text(current?.id)}|night`) ? money(paidAmountMap.get(`${text(current?.id)}|night`)) : active.nightWage;
     const totalAmount = money((day ? dayWage : 0) + (night ? nightWage : 0));
     const paymentStatus = text(row.paymentStatus || current?.payment_status) || "WAITING";
     const timestamp = nowIso();
@@ -1443,7 +1444,11 @@ async function listEmployees(c: Context<AppEnv>) {
       ORDER BY e.full_name COLLATE NOCASE ASC,e.id ASC`)
     .bind(companyId)
     .all<Row>();
-  const rows = (result.results || []).map(employeeDto);
+  const history = await wageHistory(c, companyId);
+  const rows = (result.results || []).map((row) => ({
+    ...employeeDto(row),
+    wageHistory: history.get(text(row.id)) || [],
+  }));
   return okItems(c, rows, rows);
 }
 
