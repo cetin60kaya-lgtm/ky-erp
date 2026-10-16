@@ -1563,7 +1563,7 @@ async function weeklySummary(c: Context<AppEnv>) {
     }
     map.set(id,item);
   }
-  const rows=[...map.values()].map((row)=>({...row,total:row.totalAmount})).sort((a,b)=>String(a.name).localeCompare(String(b.name),"tr"));
+  const rows: Row[]=[...map.values()].map((row): Row=>({...row,total:row.totalAmount})).sort((a,b)=>String(a.name).localeCompare(String(b.name),"tr"));
   return okItems(c,rows,rows);
 }
 
