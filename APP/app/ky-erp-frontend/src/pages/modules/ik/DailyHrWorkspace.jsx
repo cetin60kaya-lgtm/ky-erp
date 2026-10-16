@@ -947,7 +947,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     const hasPending = !sameSet(quick.ids, quick.baseline) || !sameSet(quick.checked, quick.checkedBaseline || new Set());
     if (hasPending) { setError("Kaydedilmemiş değişiklikler var. Gün veya vardiya değiştirmeden önce kaydedin."); return; }
     setBusy(true); setError("");
-    try { await loadQuickFocus(date, mode, quick.query); setQuickDayPickerOpen(false); }
+    try { await loadQuickFocus(date, mode, quick.query); setSelectedDate(date); setShift(mode); setQuickDayPickerOpen(false); }
     catch (e) { setError(e?.message || "Hızlı giriş günü yüklenemedi."); }
     finally { setBusy(false); }
   };
