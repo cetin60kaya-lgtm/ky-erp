@@ -410,7 +410,7 @@ async function listAttendance(c: Context<AppEnv>) {
   const start = dateOnly(c.req.query("startDate") || c.req.query("start") || singleDate);
   const end = dateOnly(c.req.query("endDate") || c.req.query("end") || singleDate);
 
-  const result = await c.env.DB.prepare(`SELECT a.*
+  const result = await c.env.DB.prepare(`SELECT a.*, e.day_wage AS card_day_wage, e.night_wage AS card_night_wage
       FROM hr_daily_attendance a
       JOIN hr_daily_employees e ON e.id=a.employee_id
       WHERE e.main_company_id=?
@@ -421,7 +421,7 @@ async function listAttendance(c: Context<AppEnv>) {
     .bind(companyId, start, start, end, end)
     .all<Row>();
 
-  const rows = (result.results || []).map(attendanceDto);
+  const rows = (result.results || []).map((row) => { const paid = text(row.payment_status).toUpperCase() === 'PAID'; const dw = paid ? money(row.day_wage) : money(row.card_day_wage); const nw = paid ? money(row.night_wage) : money(row.card_night_wage); return attendanceDto({ ...row, day_wage: dw, night_wage: nw, total_amount: money((flag(row.day_shift) ? dw : 0) + (flag(row.night_shift) ? nw : 0)) }); });
   return okItems(c, rows, rows);
 }
 
@@ -1443,7 +1443,7 @@ async function weeklySummary(c: Context<AppEnv>) {
   const result=await c.env.DB.prepare(`SELECT e.id AS employee_id,e.full_name,e.qualification,e.day_wage,e.night_wage,
       SUM(CASE WHEN a.day_shift=1 THEN 1 ELSE 0 END) AS day_count,
       SUM(CASE WHEN a.night_shift=1 THEN 1 ELSE 0 END) AS night_count,
-      SUM(COALESCE(a.total_amount,0)) AS total_amount,
+      SUM(CASE WHEN a.payment_status='PAID' THEN COALESCE(a.total_amount,0) ELSE (CASE WHEN a.day_shift=1 THEN e.day_wage ELSE 0 END)+(CASE WHEN a.night_shift=1 THEN e.night_wage ELSE 0 END) END) AS total_amount,
       SUM(CASE WHEN a.payment_status='PAID' THEN COALESCE(a.total_amount,0) ELSE 0 END) AS paid_amount
     FROM hr_daily_employees e
     LEFT JOIN hr_daily_attendance a ON a.employee_id=e.id AND (?='' OR a.work_date>=?) AND (?='' OR a.work_date<=?)
@@ -1466,7 +1466,7 @@ function paymentDateKey(value: unknown) {
 
 async function paymentSourceRows(c: Context<AppEnv>, companyId: string, start: string, end: string, employeeId = "") {
   const result = await c.env.DB.prepare(`SELECT
-      a.id AS attendance_id,a.employee_id,a.work_date,a.day_shift,a.night_shift,a.day_wage,a.night_wage,a.payment_status,
+      a.id AS attendance_id,a.employee_id,a.work_date,a.day_shift,a.night_shift, CASE WHEN a.payment_status='PAID' THEN a.day_wage ELSE e.day_wage END AS day_wage, CASE WHEN a.payment_status='PAID' THEN a.night_wage ELSE e.night_wage END AS night_wage,a.payment_status,
       m.personnel_no,e.full_name,e.qualification,
       COALESCE(cd.checked,0) AS day_checked,COALESCE(cn.checked,0) AS night_checked,
       EXISTS(SELECT 1 FROM hr_daily_payment_items p WHERE p.main_company_id=? AND p.attendance_id=a.id AND p.shift='day' AND p.active=1) AS day_paid_item,
