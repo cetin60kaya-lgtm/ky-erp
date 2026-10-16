@@ -1,5 +1,5 @@
-deploy: desen-storage-readiness-20261011
-pr: 428
-merge: 9ba3bf4ae42f3b042c5a4491a5f5d65525fe10ea
-ci: 38106455509
-reason: show truthful File Hub cloud sync mode status last sync and errors in Desen
+deploy: daily-check-save-20261016
+pr: 430
+merge: 628e6ce3cd8ea41a0a4d88a143d7bd32b947eaee
+ci: 38878016565
+reason: persist and verify quick attendance checked state
