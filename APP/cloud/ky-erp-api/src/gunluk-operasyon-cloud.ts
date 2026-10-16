@@ -1466,7 +1466,15 @@ function paymentDateKey(value: unknown) {
 
 async function paymentSourceRows(c: Context<AppEnv>, companyId: string, start: string, end: string, employeeId = "") {
   const result = await c.env.DB.prepare(`SELECT
-      a.id AS attendance_id,a.employee_id,a.work_date,a.day_shift,a.night_shift, CASE WHEN a.payment_status='PAID' THEN a.day_wage ELSE e.day_wage END AS day_wage, CASE WHEN a.payment_status='PAID' THEN a.night_wage ELSE e.night_wage END AS night_wage,a.payment_status,
+      a.id AS attendance_id,a.employee_id,a.work_date,a.day_shift,a.night_shift,
+      CASE WHEN a.payment_status='PAID' AND NOT EXISTS(SELECT 1 FROM hr_daily_payment_items px WHERE px.main_company_id=e.main_company_id AND px.attendance_id=a.id)
+        THEN a.day_wage
+        WHEN EXISTS(SELECT 1 FROM hr_daily_payment_items pd WHERE pd.main_company_id=e.main_company_id AND pd.attendance_id=a.id AND pd.shift='day' AND pd.active=1)
+        THEN a.day_wage ELSE e.day_wage END AS day_wage,
+      CASE WHEN a.payment_status='PAID' AND NOT EXISTS(SELECT 1 FROM hr_daily_payment_items px WHERE px.main_company_id=e.main_company_id AND px.attendance_id=a.id)
+        THEN a.night_wage
+        WHEN EXISTS(SELECT 1 FROM hr_daily_payment_items pn WHERE pn.main_company_id=e.main_company_id AND pn.attendance_id=a.id AND pn.shift='night' AND pn.active=1)
+        THEN a.night_wage ELSE e.night_wage END AS night_wage,a.payment_status,
       m.personnel_no,e.full_name,e.qualification,
       COALESCE(cd.checked,0) AS day_checked,COALESCE(cn.checked,0) AS night_checked,
       EXISTS(SELECT 1 FROM hr_daily_payment_items p WHERE p.main_company_id=? AND p.attendance_id=a.id AND p.shift='day' AND p.active=1) AS day_paid_item,
