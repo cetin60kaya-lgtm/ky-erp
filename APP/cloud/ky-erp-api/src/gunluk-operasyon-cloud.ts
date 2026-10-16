@@ -1495,6 +1495,8 @@ async function updateEmployee(c: Context<AppEnv>) {
   const wageChanged = dayWage !== money(current.day_wage) || nightWage !== money(current.night_wage);
   const effectiveDate = dateOnly(body.wageEffectiveDate || currentWageWeekStart());
   if (wageChanged && !validDate(effectiveDate)) return fail(c,400,"WAGE_DATE_INVALID","Ücretin geçerli olacağı tarih zorunludur.");
+  if (wageChanged && effectiveDate < currentWageWeekStart() && body.confirmRetroactiveWage !== true)
+    return fail(c,409,"RETROACTIVE_WAGE_CONFIRM_REQUIRED","Geçmiş haftaya ücret düzeltmesi için açık onay gerekir.");
   if (wageChanged && (dayWage < 0 || nightWage < 0)) return fail(c,400,"WAGE_INVALID","Ücret negatif olamaz.");
   const broker=text(body.broker ?? current.broker) || null;
   const status=text(body.status ?? current.status) || "ACTIVE";
