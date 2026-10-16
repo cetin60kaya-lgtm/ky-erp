@@ -3,14 +3,14 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "a8e3cc0531109b1f0a75d1d5f64742204cc07c21",
+  "sourceCommit": "b92a766c94b1e6e156fff1f552210bb5c9cd3ab6",
   "requestedAt": "2026-10-16",
-  "attempt": 15,
+  "attempt": 16,
   "scope": [
-    "daily-operation-check-only-save",
+    "daily-operation-reviewed-check-sql-upsert",
     "worker-typecheck-test-build",
     "d1-full-backup-before-worker-release",
     "post-release-api-health"
   ],
-  "note": "Günlük Operasyon Kontrol Edildi kaydı: değişmeyen vardiya attendance revizyonuna girmeden kontrol işaretini kaydeder. Personel ve ödeme verilerine toplu müdahale yok."
+  "note": "Kontrol Edildi: mevcut check satırını id ile UPDATE veya yeni satırı zorunlu alanlarla INSERT; hata için aşama tanısı. Ödeme ve personel verilerine toplu değişiklik yok."
 }
