@@ -1592,7 +1592,7 @@ async function paymentSourceRows(c: Context<AppEnv>, companyId: string, start: s
     const legacy=text(row.payment_status).toUpperCase()==="PAID" && num(row.ledger_item_count)===0;
     const dw=row.settled_day_cents!=null ? Number(row.settled_day_cents)/100 : legacy ? money(row.day_wage) : active.dayWage;
     const nw=row.settled_night_cents!=null ? Number(row.settled_night_cents)/100 : legacy ? money(row.night_wage) : active.nightWage;
-    return {...row,day_wage:dw,night_wage:nw};
+    return {...row,day_wage:dw,night_wage:nw} as Row;
   });
 }
 
