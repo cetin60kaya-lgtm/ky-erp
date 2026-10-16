@@ -75,3 +75,17 @@ test("reviewed status updates persisted check by id or inserts minimal safe colu
   assert.match(dailySource, /INSERT INTO hr_daily_attendance_check/);
   assert.match(dailySource, /GUNLUK_CHECK_WRITE_FAILED/);
 });
+
+test("effective-dated wages are written to append-only audit and reused across reports/payments", () => {
+  assert.match(dailySource, /action: "EMPLOYEE_WAGE_CHANGE"/);
+  assert.match(dailySource, /wageEffectiveDate/);
+  assert.match(dailySource, /RETROACTIVE_WAGE_CONFIRM_REQUIRED/);
+  assert.match(dailySource, /dailyWageAtDate/);
+  assert.match(dailySource, /datedWages\(row,history\)/);
+  assert.match(dailySource, /async function weeklySummary[\s\S]*paymentSourceRows\(c,companyId,start,end\)/);
+  assert.match(dailySource, /async function paymentSourceRows[\s\S]*const history=await wageHistory/);
+  assert.match(dailySource, /settled_day_cents/);
+  assert.match(dailySource, /settled_night_cents/);
+  assert.match(dailySource, /PAID_SHIFT_LOCKED/);
+  assert.doesNotMatch(dailySource, /ALTER TABLE hr_daily_employees/);
+});
