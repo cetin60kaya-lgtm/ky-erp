@@ -49,10 +49,16 @@ async function wageHistory(c: Context<AppEnv>, companyId: string) {
 }
 
 function datedWages(row: Row, history: Map<string, DailyWageChange[]>) {
+  const events = history.get(text(row.employee_id)) || [];
+  // Geçiş öncesi kayıtlarda eski haftanın günlük ücret anlık görüntüsünü koru.
+  // Henüz çalışma satırı açılmamış bir gün için tarihi ücret uydurma.
+  if (!events.length && dateOnly(row.work_date) < currentWageWeekStart()
+    && row.day_wage != null && row.night_wage != null) {
+    return { dayWage: money(row.day_wage), nightWage: money(row.night_wage) };
+  }
   return dailyWageAtDate(
     { dayWage: money(row.card_day_wage ?? row.day_wage), nightWage: money(row.card_night_wage ?? row.night_wage) },
-    dateOnly(row.work_date),
-    history.get(text(row.employee_id)) || [],
+    dateOnly(row.work_date), events,
   );
 }
 
@@ -705,10 +711,11 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
     if (!current && !day && !night) continue;
 
     const isPaid = text(current?.payment_status).toUpperCase() === "PAID";
-    const active = dailyWageAtDate(
-      { dayWage: money(person.day_wage), nightWage: money(person.night_wage) },
-      row.workDate, effectiveWageHistory.get(row.employeeId) || [],
-    );
+    const active = datedWages({
+      employee_id: row.employeeId, work_date: row.workDate,
+      card_day_wage: person.day_wage, card_night_wage: person.night_wage,
+      day_wage: current?.day_wage, night_wage: current?.night_wage,
+    }, effectiveWageHistory);
     const dayWage = isPaid ? money(current?.day_wage) : paidAmountMap.has(`${text(current?.id)}|day`) ? money(paidAmountMap.get(`${text(current?.id)}|day`)) : active.dayWage;
     const nightWage = isPaid ? money(current?.night_wage) : paidAmountMap.has(`${text(current?.id)}|night`) ? money(paidAmountMap.get(`${text(current?.id)}|night`)) : active.nightWage;
     const totalAmount = money((day ? dayWage : 0) + (night ? nightWage : 0));
