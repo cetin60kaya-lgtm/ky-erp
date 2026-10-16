@@ -818,8 +818,22 @@ async function saveFocused(c: Context<AppEnv>) {
     };
   });
 
-  const response = await writeRows(c, body, rows, "KYERP_DAILY_ENTRY_V3");
-  if (response.status >= 400) return response;
+  // Kontrollü işaretleme salt onay işlemidir; mevcut vardiyayı gereksiz
+  // şekilde yeniden yazmak revizyon/audit zincirinde 500 hatası yaratabilir.
+  // Vardiya gerçekten değişmiyorsa yalnız check/note tabloları güncellenir.
+  const shiftChanges = rows.filter((row) => {
+    const current = currentByEmployee.get(row.employeeId);
+    return shift === "day"
+      ? flag(current?.day_shift) !== flag(row.dayShift)
+      : flag(current?.night_shift) !== flag(row.nightShift);
+  });
+  let response: Response;
+  if (shiftChanges.length) {
+    response = await writeRows(c, body, shiftChanges, "KYERP_DAILY_ENTRY_V3");
+    if (response.status >= 400) return response;
+  } else {
+    response = ok(c, { updated: 0, checkOnly: true });
+  }
 
   const actor = await actorOf(c);
   const statements: D1PreparedStatement[] = [];
