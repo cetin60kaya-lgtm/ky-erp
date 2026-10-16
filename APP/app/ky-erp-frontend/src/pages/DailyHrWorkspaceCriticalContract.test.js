@@ -132,3 +132,12 @@ test("daily Excel export is generated locally and does not hit missing cloud rou
   assert.match(workspace, /Gece Toplam/);
   assert.doesNotMatch(workspace, /downloadDailyExcel\(/);
 });
+
+test("quick entry saves only changed staff and verifies persisted check state", () => {
+  assert.match(workspace, /const changedPeople = activeRosterPeople\.filter/);
+  assert.match(workspace, /snapshot\.checkedBaseline\.has/);
+  assert.match(workspace, /personnelEntries: changedPeople\.map/);
+  assert.match(workspace, /const verified = await getDailyFocusedRecords/);
+  assert.match(workspace, /const confirmedChecks = focusedCheckedIds\(verified\)/);
+  assert.match(workspace, /Kontrol seçimleri sunucuda doğrulanamadı/);
+});
