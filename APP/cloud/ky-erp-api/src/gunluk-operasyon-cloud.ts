@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { dailyMoneyCents, dailyRevisionConflict } from "./gunluk-operasyon-core";
+import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, type DailyWageChange } from "./gunluk-operasyon-core";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -15,6 +15,46 @@ const money = (value: unknown) => Math.round(num(value) * 100) / 100;
 const dateOnly = (value: unknown) => text(value).slice(0, 10);
 const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 const nowIso = () => new Date().toISOString();
+
+// İstanbul yerel haftasının pazartesisi; tarayıcı saatine/UTC gece kaymasına bağlı değil.
+function currentWageWeekStart() {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const part = (key: string) => parts.find((item) => item.type === key)?.value || "";
+  const today = `${part("year")}-${part("month")}-${part("day")}`;
+  const date = new Date(`${today}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+  return date.toISOString().slice(0, 10);
+}
+
+async function wageHistory(c: Context<AppEnv>, companyId: string) {
+  const result = await c.env.DB.prepare(`SELECT id,employee_id,work_date,before_json,after_json,created_at
+    FROM hr_daily_operation_audit WHERE main_company_id=? AND action='EMPLOYEE_WAGE_CHANGE'
+    ORDER BY created_at ASC,id ASC`).bind(companyId).all<Row>();
+  const history = new Map<string, DailyWageChange[]>();
+  for (const row of result.results || []) {
+    let before: Row = {}, after: Row = {};
+    try { before = JSON.parse(text(row.before_json) || "{}"); after = JSON.parse(text(row.after_json) || "{}"); } catch { continue; }
+    const id = text(row.employee_id);
+    const effectiveDate = dateOnly(after.effectiveDate || row.work_date);
+    if (!id || !validDate(effectiveDate)) continue;
+    const rows = history.get(id) || [];
+    rows.push({
+      id: text(row.id), createdAt: text(row.created_at), effectiveDate,
+      beforeDayWage: money(before.dayWage), beforeNightWage: money(before.nightWage),
+      dayWage: money(after.dayWage), nightWage: money(after.nightWage),
+    });
+    history.set(id, rows);
+  }
+  return history;
+}
+
+function datedWages(row: Row, history: Map<string, DailyWageChange[]>) {
+  return dailyWageAtDate(
+    { dayWage: money(row.card_day_wage ?? row.day_wage), nightWage: money(row.card_night_wage ?? row.night_wage) },
+    dateOnly(row.work_date),
+    history.get(text(row.employee_id)) || [],
+  );
+}
 
 const aliases = new Set([
   "",
@@ -421,7 +461,16 @@ async function listAttendance(c: Context<AppEnv>) {
     .bind(companyId, start, start, end, end)
     .all<Row>();
 
-  const rows = (result.results || []).map((row) => { const paid = text(row.payment_status).toUpperCase() === 'PAID'; const dw = paid ? money(row.day_wage) : money(row.card_day_wage); const nw = paid ? money(row.night_wage) : money(row.card_night_wage); return attendanceDto({ ...row, day_wage: dw, night_wage: nw, total_amount: money((flag(row.day_shift) ? dw : 0) + (flag(row.night_shift) ? nw : 0)) }); });
+  const history = await wageHistory(c, companyId);
+  const rows = (result.results || []).map((row) => {
+    const active = datedWages(row, history);
+    const paid = text(row.payment_status).toUpperCase() === "PAID";
+    // Eski ödeme fişlerinin anlık görüntüsü mutlak surette korunur.
+    const dw = paid ? money(row.day_wage) : active.dayWage;
+    const nw = paid ? money(row.night_wage) : active.nightWage;
+    return attendanceDto({ ...row, day_wage: dw, night_wage: nw,
+      total_amount: money((flag(row.day_shift) ? dw : 0) + (flag(row.night_shift) ? nw : 0)) });
+  });
   return okItems(c, rows, rows);
 }
 
@@ -564,6 +613,7 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
     return fail(c, 400, "INVALID_EMPLOYEE", "Başka firmaya ait veya geçersiz personel var.");
   }
   const peopleById = new Map(people.map((row) => [text(row.id), row]));
+  const effectiveWageHistory = await wageHistory(c, companyId);
 
   const currentResult = await c.env.DB.prepare(`SELECT a.*,
         COALESCE((
@@ -634,10 +684,13 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
 
     if (!current && !day && !night) continue;
 
-    const dayWage = text(current?.payment_status).toUpperCase() === 'PAID' ? money(current?.day_wage) : money(person.day_wage);
-    const nightWage = current
-      ? money(current.night_wage)
-      : money(person.night_wage);
+    const isPaid = text(current?.payment_status).toUpperCase() === "PAID";
+    const active = dailyWageAtDate(
+      { dayWage: money(person.day_wage), nightWage: money(person.night_wage) },
+      row.workDate, effectiveWageHistory.get(row.employeeId) || [],
+    );
+    const dayWage = isPaid ? money(current?.day_wage) : active.dayWage;
+    const nightWage = isPaid ? money(current?.night_wage) : active.nightWage;
     const totalAmount = money((day ? dayWage : 0) + (night ? nightWage : 0));
     const paymentStatus = text(row.paymentStatus || current?.payment_status) || "WAITING";
     const timestamp = nowIso();
@@ -1414,14 +1467,28 @@ async function updateEmployee(c: Context<AppEnv>) {
   const qualification=text(body.qualification ?? body.role ?? current.qualification) || null;
   const dayWage=money(body.dayWage ?? body.dayRate ?? current.day_wage);
   const nightWage=money(body.nightWage ?? body.nightRate ?? current.night_wage);
+  const wageChanged = dayWage !== money(current.day_wage) || nightWage !== money(current.night_wage);
+  const effectiveDate = dateOnly(body.wageEffectiveDate || currentWageWeekStart());
+  if (wageChanged && !validDate(effectiveDate)) return fail(c,400,"WAGE_DATE_INVALID","Ücretin geçerli olacağı tarih zorunludur.");
+  if (wageChanged && (dayWage < 0 || nightWage < 0)) return fail(c,400,"WAGE_INVALID","Ücret negatif olamaz.");
   const broker=text(body.broker ?? current.broker) || null;
   const status=text(body.status ?? current.status) || "ACTIVE";
-  await c.env.DB.batch([
+  const statements: D1PreparedStatement[] = [
     c.env.DB.prepare("UPDATE hr_daily_employees SET full_name=?,qualification=?,day_wage=?,night_wage=?,broker=?,status=?,updated_at=? WHERE id=? AND main_company_id=?")
       .bind(fullName,qualification,dayWage,nightWage,broker,status,timestamp,id,companyId),
     c.env.DB.prepare("INSERT INTO hr_daily_employee_meta (employee_id,personnel_no,note,updated_at) VALUES (?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET personnel_no=excluded.personnel_no,note=excluded.note,updated_at=excluded.updated_at")
       .bind(id,text(body.personnelNo ?? body.personelNo ?? current.personnel_no),text(body.note ?? current.meta_note),timestamp),
-  ]);
+  ];
+  if (wageChanged) {
+    const actor = await actorOf(c);
+    statements.push(auditStmt(c, {
+      companyId, employeeId: id, workDate: effectiveDate, action: "EMPLOYEE_WAGE_CHANGE",
+      before: { dayWage: money(current.day_wage), nightWage: money(current.night_wage) },
+      after: { dayWage, nightWage, effectiveDate },
+      actor, source: "KYERP_DAILY_WAGE_EFFECTIVE_V1",
+    }));
+  }
+  await c.env.DB.batch(statements);
   const row=await c.env.DB.prepare("SELECT e.*,m.personnel_no,m.note AS meta_note FROM hr_daily_employees e LEFT JOIN hr_daily_employee_meta m ON m.employee_id=e.id WHERE e.id=?").bind(id).first<Row>();
   return ok(c,employeeDto(row || current));
 }
