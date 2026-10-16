@@ -3,15 +3,14 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "9ba3bf4ae42f3b042c5a4491a5f5d65525fe10ea",
-  "requestedAt": "2026-10-11",
-  "attempt": 14,
+  "sourceCommit": "a8e3cc0531109b1f0a75d1d5f64742204cc07c21",
+  "requestedAt": "2026-10-16",
+  "attempt": 15,
   "scope": [
-    "desen-storage-readiness",
-    "filehub-resolve-storage-sync-state",
+    "daily-operation-check-only-save",
     "worker-typecheck-test-build",
     "d1-full-backup-before-worker-release",
     "post-release-api-health"
   ],
-  "note": "Desen/File Hub durum göstergesi için resolve-storage artık sync_mode, connection_status, last_sync_at, last_error ve remote root bilgilerini döndürür. Yetki/tenant ve D1 veri içeriği değişmez."
+  "note": "Günlük Operasyon Kontrol Edildi kaydı: değişmeyen vardiya attendance revizyonuna girmeden kontrol işaretini kaydeder. Personel ve ödeme verilerine toplu müdahale yok."
 }
