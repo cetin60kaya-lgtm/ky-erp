@@ -75,3 +75,11 @@ test("reviewed status updates persisted check by id or inserts minimal safe colu
   assert.match(dailySource, /INSERT INTO hr_daily_attendance_check/);
   assert.match(dailySource, /GUNLUK_CHECK_WRITE_FAILED/);
 });
+
+
+test("open shift wage comes from employee card, paid shift retains evidence", () => {
+  assert.match(dailySource, /pd\.shift='day' AND pd\.active=1/);
+  assert.match(dailySource, /pn\.shift='night' AND pn\.active=1/);
+  assert.match(dailySource, /THEN a\.day_wage ELSE e\.day_wage END AS day_wage/);
+  assert.match(dailySource, /THEN a\.night_wage ELSE e\.night_wage END AS night_wage/);
+});
