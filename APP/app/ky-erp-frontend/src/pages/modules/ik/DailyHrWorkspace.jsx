@@ -940,8 +940,22 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       if (!rosterSaved) { await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...effectiveRosterIds] }); setRosterIds(new Set(effectiveRosterIds)); setRosterSaved(true); }
       const rows = await getDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift });
       const currentMap = new Map((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), row]));
-      await saveDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift, personnelEntries: activeRosterPeople.map((person) => ({ personelId: person.id, status: snapshot.ids.has(person.id) ? "ACTIVE" : "REMOVE", checked: snapshot.ids.has(person.id) && snapshot.checked.has(person.id), expectedUpdatedAt: currentMap.get(person.id)?.updatedAt || currentMap.get(person.id)?.attendanceUpdatedAt || "", note: currentMap.get(person.id)?.note || "" })) });
-      setSelectedDate(snapshot.date); setShift(snapshot.shift); setNotice(`${dateText(snapshot.date)} hızlı giriş kaydedildi.`);
+      const changedPeople = activeRosterPeople.filter((person) => {
+        const id = person.id;
+        return snapshot.ids.has(id) !== snapshot.baseline.has(id) ||
+          (snapshot.ids.has(id) && snapshot.checked.has(id)) !==
+          (snapshot.baseline.has(id) && snapshot.checkedBaseline.has(id));
+      });
+      if (changedPeople.length) {
+        await saveDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift, personnelEntries: changedPeople.map((person) => ({ personelId: person.id, status: snapshot.ids.has(person.id) ? "ACTIVE" : "REMOVE", checked: snapshot.ids.has(person.id) && snapshot.checked.has(person.id), expectedUpdatedAt: currentMap.get(person.id)?.updatedAt || currentMap.get(person.id)?.attendanceUpdatedAt || "", note: currentMap.get(person.id)?.note || "" })) });
+        const verified = await getDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift });
+        const confirmedIds = focusedIds(verified);
+        const confirmedChecks = focusedCheckedIds(verified);
+        const notSaved = changedPeople.some((person) => confirmedIds.has(person.id) !== snapshot.ids.has(person.id) ||
+          confirmedChecks.has(person.id) !== (snapshot.ids.has(person.id) && snapshot.checked.has(person.id)));
+        if (notSaved) throw new Error("Kontrol seçimleri sunucuda doğrulanamadı. Veriler tekrar okunmalı; ödeme kaydı oluşturulmadı.");
+      }
+      setSelectedDate(snapshot.date); setShift(snapshot.shift); setNotice(`${dateText(snapshot.date)} hızlı giriş sunucuda doğrulanarak kaydedildi.`);
       await Promise.all([loadFocused(), loadRangeData()]);
       const nextDate = addDays(snapshot.date, 1);
       if (goNext && nextDate && nextDate <= range.end) await loadQuickFocus(nextDate, snapshot.shift, snapshot.query);
