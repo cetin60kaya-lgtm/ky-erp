@@ -217,13 +217,18 @@ function printDailyPaymentSlips(range, rows = []) {
     const nightTotal = number(row.nightTotal) || nightItemTotal;
     const dayRate = dayCount ? dayTotal / dayCount : number(row.dayRate ?? row.dayWage);
     const nightRate = nightCount ? nightTotal / nightCount : number(row.nightRate ?? row.nightWage);
+    const rateLabel = (shiftName, fallback) => {
+      const rates = [...new Set(items.filter((item) => String(item.shift).toLowerCase() === shiftName && item.active !== false).map((item) => number(item.amount)))].sort((x, y) => x - y);
+      if (!rates.length) return money(fallback);
+      return rates.length === 1 ? money(rates[0]) : `${money(rates[0])} – ${money(rates.at(-1))}`;
+    };
     const total = number(row.totalAmount ?? row.total) || dayTotal + nightTotal;
     const no = pageIndex * 10 + index + 1;
     return `<article class="pay-card">
       <div class="pay-name"><b>${no}. ${escapeHtml(row.name || row.fullName || "-")}</b><span>${escapeHtml(row.qualification || row.role || "-")}</span></div>
       <div class="pay-lines">
-        <div><span>GÜNLÜK ÜCRETİ</span><b>${escapeHtml(money(dayRate))}</b><small>${dayCount} gün</small></div>
-        <div><span>GECE ÜCRETİ</span><b>${escapeHtml(money(nightRate))}</b><small>${nightCount} gece</small></div>
+        <div><span>GÜNDÜZ ÜCRETİ</span><b>${escapeHtml(rateLabel("day", dayRate))}</b><small>${dayCount} gün</small></div>
+        <div><span>GECE ÜCRETİ</span><b>${escapeHtml(rateLabel("night", nightRate))}</b><small>${nightCount} gece</small></div>
         <div class="sum"><span>ÜCRET TOPLAMI</span><b>${escapeHtml(money(total))}</b></div>
       </div>
     </article>`;
