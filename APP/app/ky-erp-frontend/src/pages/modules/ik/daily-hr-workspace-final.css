@@ -1199,3 +1199,12 @@
   .gop-quick-dialog .quick-density-controls label>b{display:none!important}
   .gop-quick-dialog .quick-density-controls input[type="range"]{width:52px!important;min-width:52px!important}
 }
+
+
+/* DAILY_EFFECTIVE_WAGE_AND_NAV_2026_10_16 */
+.gop-quick-dialog .quick-direct-navigation{display:flex;gap:6px;justify-content:flex-end;padding:4px 10px 6px}
+.gop-quick-dialog .quick-direct-navigation button{min-height:30px;padding:4px 11px;border:1px solid #cad7eb;border-radius:7px;background:#f8fbff;color:#214466;font-size:11px;font-weight:800;cursor:pointer}
+.gop-quick-dialog .quick-direct-navigation button:hover:not(:disabled){background:#eaf2ff;border-color:#83addd}
+.gop-quick-dialog .quick-direct-navigation button:disabled{opacity:.45;cursor:not-allowed}
+.gop-wage-rule-hint{grid-column:1/-1;padding:7px 10px;border:1px solid #cbdcf0;border-radius:7px;background:#f4f8fe;color:#325376;font-size:11px;line-height:1.4}
+@media(max-width:700px){.gop-quick-dialog .quick-direct-navigation button{min-height:40px;flex:1;font-size:12px}.gop-quick-dialog .quick-direct-navigation{justify-content:stretch}}
