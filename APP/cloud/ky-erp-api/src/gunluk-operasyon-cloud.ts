@@ -634,7 +634,7 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
 
     if (!current && !day && !night) continue;
 
-    const dayWage = text(current?.payment_status).toUpperCase() === 'PAID' ? money(current.day_wage) : money(person.day_wage);
+    const dayWage = text(current?.payment_status).toUpperCase() === 'PAID' ? money(current?.day_wage) : money(person.day_wage);
     const nightWage = current
       ? money(current.night_wage)
       : money(person.night_wage);
