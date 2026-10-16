@@ -634,10 +634,10 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
 
     if (!current && !day && !night) continue;
 
-    const dayWage = current ? money(current.day_wage) : money(row.dayWage ?? person.day_wage);
+    const dayWage = text(current?.payment_status).toUpperCase() === 'PAID' ? money(current.day_wage) : money(person.day_wage);
     const nightWage = current
       ? money(current.night_wage)
-      : money(row.nightWage ?? person.night_wage);
+      : money(person.night_wage);
     const totalAmount = money((day ? dayWage : 0) + (night ? nightWage : 0));
     const paymentStatus = text(row.paymentStatus || current?.payment_status) || "WAITING";
     const timestamp = nowIso();
