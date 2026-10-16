@@ -141,3 +141,28 @@ test("quick entry saves only changed staff and verifies persisted check state", 
   assert.match(workspace, /const confirmedChecks = focusedCheckedIds\(verified\)/);
   assert.match(workspace, /Kontrol seçimleri sunucuda doğrulanamadı/);
 });
+
+test("same employee keeps last week's wage while current week uses updated card rate", () => {
+  assert.match(workspace, /function personWageAtDate/);
+  assert.match(workspace, /function confirmBackdatedWage/);
+  assert.match(workspace, /wageEffectiveDate/);
+  assert.match(workspace, /confirmRetroactiveWage/);
+  assert.match(workspace, /personWageAtDate\(person, quick\.date\)/);
+  assert.match(workspace, /personWageAtDate\(person, selectedDate\)/);
+  assert.match(workspace, /Yeni Ücret Geçerlilik Tarihi/);
+  assert.match(workspace, /toplu değiştirilecek/);
+});
+test("quick entry can navigate dates without changing other daily records", () => {
+  assert.match(workspace, /className="quick-direct-navigation"/);
+  assert.match(workspace, /Önceki Gün/);
+  assert.match(workspace, /Sonraki Gün/);
+  assert.match(workspace, /changeQuickFocus\(addDays\(quick.date, -1\), quick.shift\)/);
+  assert.match(workspace, /changeQuickFocus\(addDays\(quick.date, 1\), quick.shift\)/);
+  assert.match(workspace, /hasPending/);
+  assert.match(css, /DAILY_EFFECTIVE_WAGE_AND_NAV_2026_10_16/);
+});
+test("long custom weekly ranges never silently omit days from printed report", () => {
+  assert.match(workspace, /Haftalık PDF çıktısı en fazla 7 gün içindir/);
+  assert.match(workspace, /days\.map\(\(date\)/);
+  assert.doesNotMatch(workspace, /days\.slice\(0, 7\)\.map/);
+});
