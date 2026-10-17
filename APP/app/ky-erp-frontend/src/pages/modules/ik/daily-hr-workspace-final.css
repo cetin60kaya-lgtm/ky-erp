@@ -1208,3 +1208,55 @@
 .gop-quick-dialog .quick-direct-navigation button:disabled{opacity:.45;cursor:not-allowed}
 .gop-wage-rule-hint{grid-column:1/-1;padding:7px 10px;border:1px solid #cbdcf0;border-radius:7px;background:#f4f8fe;color:#325376;font-size:11px;line-height:1.4}
 @media(max-width:700px){.gop-quick-dialog .quick-direct-navigation button{min-height:40px;flex:1;font-size:12px}.gop-quick-dialog .quick-direct-navigation{justify-content:stretch}}
+
+
+/* 17.10.2026 · Günlük Operasyon: tek ücret kartı, okunaklı formlar ve değişiklik geçmişi */
+.gop-card-manager { grid-template-columns:minmax(320px,.9fr) minmax(490px,1.1fr); align-items:stretch; }
+.gop-card-manager-head { padding:13px 15px; background:linear-gradient(115deg,#f8fbff 0%,#eef5fb 100%); }
+.gop-card-manager-head strong { font-size:15px; letter-spacing:-.01em; }
+.gop-card-manager-head span { font-size:12px; margin-top:4px; }
+.gop-card-person-list>div>button { min-height:52px; align-items:center; padding:10px 8px; flex:1; }
+.gop-card-person-list span strong { font-size:13px; }
+.gop-card-person-list span small { font-size:11px; }
+.gop-card-person-list span b { font-size:11px; }
+.gop-card-filters select,.gop-bulk-editor select,.gop-bulk-editor input { min-height:40px; height:40px; font-size:12px; }
+.gop-card-selectbar { min-height:40px; }
+.gop-card-selectbar b { font-size:12px; }
+.gop-inline-person-form { gap:13px; padding:16px; }
+.gop-inline-person-form label { font-size:12px; font-weight:700; gap:6px; }
+.gop-inline-person-form input,.gop-inline-person-form textarea,.gop-inline-person-form select { min-height:40px; font-size:14px; }
+.gop-inline-person-actions { position:sticky; bottom:0; padding:10px 0; background:#fff; z-index:2; flex-wrap:wrap; }
+.gop-inline-person-actions button,.gop-bulk-editor button { min-height:40px; font-size:12px; }
+.gop-role-field button { min-height:40px; }
+.gop-bulk-editor { display:grid; grid-template-columns:minmax(140px,.85fr) minmax(150px,1fr) minmax(130px,.9fr) minmax(140px,.9fr) auto; align-items:end; gap:9px; padding:12px; }
+.gop-bulk-editor>div strong { font-size:13px; }
+.gop-bulk-editor>div span { font-size:11px; }
+.gop-bulk-effective { display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:700; color:#405b76; }
+.gop-bulk-effective input { width:100%; }
+.gop-wage-history { margin:0 15px 14px; border:1px solid #cddfed; border-radius:11px; overflow:hidden; background:#fff; }
+.gop-wage-history>summary { display:flex; align-items:center; justify-content:space-between; cursor:pointer; padding:13px 15px; color:#163955; font-weight:800; font-size:13px; background:#f4f8fc; }
+.gop-wage-history>summary b { color:#2563eb; font-size:12px; }
+.gop-wage-history-list { max-height:310px; overflow:auto; }
+.gop-wage-history-row { display:grid; grid-template-columns:minmax(120px,.8fr) minmax(210px,1.2fr); gap:12px; align-items:center; padding:12px 15px; border-top:1px solid #e5edf4; }
+.gop-wage-history-row>div { display:grid; gap:5px; }
+.gop-wage-history-row strong { font-size:13px; color:#243c53; }
+.gop-wage-history-row small { font-size:11px; color:#64748b; }
+.gop-wage-history-row span { font-size:12px; color:#405169; }
+.gop-wage-history-row b { color:#0f5f9d; }
+.gop-wage-history-empty { padding:16px; font-size:12px; color:#61758b; }
+.gop-wage-sync-alert { border:1px solid #e6c47b; background:#fff9eb; color:#84570e; border-radius:9px; padding:12px 14px; margin-bottom:10px; font-size:13px; }
+@media(max-width:1200px) {
+  .gop-card-manager { grid-template-columns:1fr; }
+  .gop-bulk-editor { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .gop-bulk-editor>div:first-child { grid-column:1/-1; }
+}
+@media(max-width:700px) {
+  .gop-inline-person-form { grid-template-columns:1fr; }
+  .gop-card-person-list>div>button { min-height:58px; }
+  .gop-card-person-list span strong { font-size:14px; }
+  .gop-inline-person-form input,.gop-inline-person-form select { font-size:16px; }
+  .gop-inline-person-actions button { min-height:44px; }
+  .gop-bulk-editor { grid-template-columns:1fr; }
+  .gop-bulk-editor>div:first-child { grid-column:auto; }
+  .gop-wage-history-row { grid-template-columns:1fr; }
+}
