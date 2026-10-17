@@ -5,17 +5,16 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-10-17",
   "scope": [
-    "gunluk-ortak-tarih-araligi",
-    "gunluk-haftalik-tek-cikti",
-    "gunluk-hizli-giris-sec-kontrol-ayri",
-    "gunluk-kontrol-yesil-tam-kart",
-    "gunluk-d1-append-only-islem-gecmisi",
-    "gunluk-iki-pc-senkron-cakisma-uyarisi",
+    "gunluk-hizli-personel-girisi-v2-kart",
+    "gunluk-eski-css-cakismasi-ayristirma",
+    "gunluk-sec-ve-kontrol-ayri-dugme",
+    "gunluk-kontrol-edildi-tam-yesil-kart",
+    "gunluk-hizli-giris-v2-gorunur-yayin-isareti",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "PR #437 (ve önceki #436) kabul testleri başarıyla geçti. Dönemlerin tek aralıktan yönetimi, ayrı seç/kontrol butonları, tarihli işlem geçmişi ve iki bilgisayarlı çalışma için 17 Ekim 2026 canlı arayüz yayını.",
-  "sourceCommit": "bfd9d452c4308f88e212709ecc06907e2a7b145e",
+  "note": "PR #438, CI #39050680228 PASS. Kullanıcının 17.10.2026 gerçek ekranında kalan eski sıkıştırılmış hızlı giriş kartı tasarımının bağımsız V2 ile değiştirilmesi. Worker/API/D1 değişikliği yok. Kullanıcı oturumlu gerçek ekran görsel kabulü ayrıca gereklidir.",
+  "sourceCommit": "2039e4c2f8b097fbd78ad8c748eff7fee146ee71",
   "requestedAt": "2026-10-17"
 }
