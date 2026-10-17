@@ -121,7 +121,9 @@ test("open past periods remain visible and printing never marks payment complete
   assert.ok(printBlock);
   assert.doesNotMatch(printBlock, /createDailyPayment/);
   assert.match(workspace, /const payRow = async/);
-  assert.match(workspace, /TOPLAM ÖDEME/);
+  assert.match(workspace, /NET ÖDEME/);
+  assert.match(workspace, /EK ÖDEME/);
+  assert.match(workspace, /EK KESİNTİ/);
   assert.doesNotMatch(workspace, /<footer><span>ÖDENDİ<\/span>/);
 });
 

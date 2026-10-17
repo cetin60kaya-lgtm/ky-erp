@@ -1,6 +1,7 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, type DailyWageChange } from "./gunluk-operasyon-core";
+import { dailyAdjustmentNetCents } from "./gunluk-adjustment-core";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -1606,6 +1607,104 @@ function paymentDateKey(value: unknown) {
   return validDate(direct) ? direct : dateOnly(nowIso());
 }
 
+
+/** Hakediş dışı ek tutarlar yalnız D1'den gelir. Çalışma gününe veya personel ücretine yazılmaz. */
+function adjustmentDto(row: Row) {
+  return {
+    id: text(row.id), employeeId: text(row.employee_id),
+    periodStart: dateOnly(row.period_start), periodEnd: dateOnly(row.period_end),
+    kind: text(row.kind), reason: text(row.reason),
+    amount: Number(row.amount_cents || 0) / 100,
+    status: text(row.status), paymentId: text(row.settled_payment_id),
+    actorLabel: text(row.actor_label) || "KY ERP", createdAt: text(row.created_at),
+    voidedAt: text(row.voided_at), voidedByLabel: text(row.voided_by_label),
+    voidReason: text(row.void_reason),
+  };
+}
+async function periodAdjustments(c: Context<AppEnv>, companyId: string, start: string, end: string, employeeId = "", includeVoided = false) {
+  const result = await c.env.DB.prepare(`SELECT * FROM hr_daily_payment_adjustments
+   WHERE main_company_id=? AND period_start=? AND period_end=?
+    AND (?='' OR employee_id=?) AND (?=1 OR status='ACTIVE')
+   ORDER BY created_at DESC,id DESC`)
+    .bind(companyId,start,end,employeeId,employeeId,includeVoided ? 1 : 0).all<Row>();
+  return result.results || [];
+}
+function adjustmentTotals(rows: Row[]) {
+  return rows.reduce((sum, row) => {
+    if (text(row.status) !== "ACTIVE") return sum;
+    const amount = Number(row.amount_cents || 0) / 100;
+    if (text(row.kind) === "ADD") sum.additions = money(sum.additions + amount);
+    if (text(row.kind) === "DEDUCT") sum.deductions = money(sum.deductions + amount);
+    return sum;
+  }, { additions: 0, deductions: 0 });
+}
+async function adjustmentList(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const companyId = companyIdOf(c);
+  const start = dateOnly(c.req.query("startDate"));
+  const end = dateOnly(c.req.query("endDate"));
+  const employeeId = text(c.req.query("employeeId"));
+  if (!validDate(start) || !validDate(end) || end < start)
+    return fail(c,400,"ADJUSTMENT_PERIOD_REQUIRED","Geçerli hakediş dönemi zorunludur.");
+  const rows = (await periodAdjustments(c,companyId,start,end,employeeId,true)).map(adjustmentDto);
+  return okItems(c,rows,rows);
+}
+async function adjustmentAdd(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const body = await bodyOf(c), companyId = companyIdOf(c,body);
+  const employeeId = text(body.employeeId), start = dateOnly(body.startDate), end = dateOnly(body.endDate);
+  const kind = text(body.kind).toUpperCase(), reason = text(body.reason).trim();
+  const amount = Number(body.amount);
+  if (!employeeId || !validDate(start) || !validDate(end) || end < start)
+    return fail(c,400,"ADJUSTMENT_PERIOD_REQUIRED","Personel ve hakediş dönemi zorunludur.");
+  if (!["ADD","DEDUCT"].includes(kind) || reason.length < 3 || reason.length > 300 ||
+      !Number.isFinite(amount) || amount <= 0 || amount > 1000000 ||
+      Math.abs(amount*100-Math.round(amount*100))>0.00001)
+    return fail(c,400,"ADJUSTMENT_INVALID","Tür (+/-), 3-300 karakter açıklama ve iki ondalıklı pozitif tutar girin.");
+  const person = await c.env.DB.prepare("SELECT id FROM hr_daily_employees WHERE id=? AND main_company_id=?")
+    .bind(employeeId,companyId).first<Row>();
+  if (!person) return fail(c,404,"EMPLOYEE_NOT_FOUND","Personel bu firmada bulunamadı.");
+  const paid = await c.env.DB.prepare(`SELECT id FROM hr_daily_payments WHERE main_company_id=? AND employee_id=?
+    AND period_start=? AND period_end=? AND status='PAID' LIMIT 1`)
+    .bind(companyId,employeeId,start,end).first<Row>();
+  if (paid) return fail(c,409,"ADJUSTMENT_PERIOD_PAID","Bu dönemde ödeme var. Önce açıklamalı ödeme iptali yapılmalıdır.");
+  const id = crypto.randomUUID(), actor = await actorOf(c), stamp = nowIso(), amountCents = dailyMoneyCents(amount);
+  await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO hr_daily_payment_adjustments
+      (id,main_company_id,employee_id,period_start,period_end,kind,reason,amount_cents,status,
+       actor_user_id,actor_label,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?, 'ACTIVE',?,?,?,?)`)
+      .bind(id,companyId,employeeId,start,end,kind,reason,amountCents,actor.id||null,actor.label,stamp,stamp),
+    auditStmt(c,{companyId,employeeId,workDate:start,action:"PAYMENT_ADJUSTMENT_ADD",
+      before:null,after:{id,start,end,kind,reason,amount},actor,source:"KYERP_DAILY_ADJUSTMENT_V1"}),
+  ]);
+  return ok(c,{id,employeeId,kind,reason,amount,status:"ACTIVE",periodStart:start,periodEnd:end,actorLabel:actor.label,createdAt:stamp});
+}
+async function adjustmentVoid(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const body = await bodyOf(c), companyId = companyIdOf(c,body);
+  const adjustmentId = text(c.req.param("id")), reason = text(body.reason).trim();
+  if (reason.length < 3 || reason.length > 300)
+    return fail(c,400,"VOID_REASON_REQUIRED","İptal gerekçesi en az 3 karakter olmalıdır.");
+  const entry = await c.env.DB.prepare(`SELECT * FROM hr_daily_payment_adjustments
+    WHERE main_company_id=? AND id=? LIMIT 1`).bind(companyId,adjustmentId).first<Row>();
+  if (!entry) return fail(c,404,"ADJUSTMENT_NOT_FOUND","Ek işlem bulunamadı.");
+  if (text(entry.status)!=="ACTIVE" || text(entry.settled_payment_id))
+    return fail(c,409,"ADJUSTMENT_LOCKED","Bu işlem iptal edilmiş veya ödeme fişine bağlanmış.");
+  const actor=await actorOf(c),stamp=nowIso();
+  const statements = [
+    c.env.DB.prepare(`UPDATE hr_daily_payment_adjustments
+      SET status='VOID',voided_at=?,voided_by_user_id=?,voided_by_label=?,void_reason=?,updated_at=?
+      WHERE id=? AND main_company_id=? AND status='ACTIVE' AND settled_payment_id IS NULL`)
+      .bind(stamp,actor.id||null,actor.label,reason,stamp,adjustmentId,companyId),
+    auditStmt(c,{companyId,employeeId:text(entry.employee_id),workDate:dateOnly(entry.period_start),
+      action:"PAYMENT_ADJUSTMENT_VOID",before:adjustmentDto(entry),after:{status:"VOID",reason},
+      note:reason,actor,source:"KYERP_DAILY_ADJUSTMENT_V1"}),
+  ];
+  await c.env.DB.batch(statements);
+  return ok(c,{id:adjustmentId,status:"VOID",voidedAt:stamp,voidedByLabel:actor.label,voidReason:reason});
+}
+
 async function paymentSourceRows(c: Context<AppEnv>, companyId: string, start: string, end: string, employeeId = "") {
   const result = await c.env.DB.prepare(`SELECT
       a.id AS attendance_id,a.employee_id,a.work_date,a.day_shift,a.night_shift,a.day_wage,a.night_wage,a.payment_status,
@@ -1652,6 +1751,12 @@ async function paymentPool(c: Context<AppEnv>) {
   const end=dateOnly(c.req.query('endDate') || c.req.query('end') || start);
   if(!validDate(start) || !validDate(end) || end<start) return fail(c,400,'DATE_RANGE_REQUIRED','Geçerli hakediş tarih aralığı zorunludur.');
   const rows=await paymentSourceRows(c,companyId,start,end);
+  const adjustmentRows = (await periodAdjustments(c,companyId,start,end)).filter((row) => !text(row.settled_payment_id));
+  const adjustmentsByEmployee = new Map<string,Row[]>();
+  for (const extra of adjustmentRows) {
+    const key = text(extra.employee_id), list = adjustmentsByEmployee.get(key) || [];
+    list.push(extra); adjustmentsByEmployee.set(key,list);
+  }
   const map=new Map<string,Row>();
   for(const row of rows){
     const shifts=payableShifts(row);
@@ -1666,6 +1771,14 @@ async function paymentPool(c: Context<AppEnv>) {
     }
     current.ready=current.pendingCheckCount===0;
     map.set(employeeId,current);
+  }
+  for (const [employeeId, current] of map) {
+    const extras = adjustmentTotals(adjustmentsByEmployee.get(employeeId) || []);
+    current.baseAmount = money(current.totalAmount);
+    current.additions = extras.additions;
+    current.deductions = extras.deductions;
+    current.totalAmount = money(current.baseAmount + extras.additions - extras.deductions);
+    current.adjustmentCount = (adjustmentsByEmployee.get(employeeId) || []).length;
   }
   return okItems(c,[...map.values()],[...map.values()]);
 }
@@ -1697,6 +1810,15 @@ async function paymentPeriodStatus(c: Context<AppEnv>) {
     }
     byEmployee.set(employeeId, item);
   }
+  // Ek kalemler vardiyadan ayrı tutulur; ödenmişse ödeme tutarına, açıksa borca dahildir.
+  for (const extra of await periodAdjustments(c,companyId,start,end)) {
+    const entry=byEmployee.get(text(extra.employee_id));
+    if (!entry) continue;
+    const signed=(text(extra.kind)==="ADD"?1:-1)*Number(extra.amount_cents||0)/100;
+    const target=text(extra.settled_payment_id)?"paidAmount":"openAmount";
+    entry[target]=money(num(entry[target])+signed);
+    byEmployee.set(text(extra.employee_id),entry);
+  }
   const results = [...byEmployee.values()].map((row) => ({
     ...row,
     status: row.openCount === 0 ? "PAID" : row.paidCount > 0 ? "PARTIAL" : row.pendingCheckCount > 0 ? "CONTROL_PENDING" : "OPEN",
@@ -1719,7 +1841,19 @@ async function paymentHistory(c: Context<AppEnv>) {
   const itemsResult=await c.env.DB.prepare(`SELECT * FROM hr_daily_payment_items WHERE main_company_id=? AND payment_id IN (${ids.map(()=>'?').join(',')}) ORDER BY work_date,shift`).bind(companyId,...ids).all<Row>();
   const byPayment=new Map<string,Row[]>();
   for(const item of itemsResult.results || []){ const key=text(item.payment_id); const list=byPayment.get(key)||[]; list.push({id:text(item.id),attendanceId:text(item.attendance_id),workDate:dateOnly(item.work_date),shift:text(item.shift),amount:Number(item.amount_cents||0)/100,active:flag(item.active)}); byPayment.set(key,list); }
-  const rows=payments.map((row)=>({id:text(row.id),paymentId:text(row.id),paymentNo:text(row.payment_no),employeeId:text(row.employee_id),personnelNo:text(row.personnel_no),name:text(row.full_name),fullName:text(row.full_name),qualification:text(row.qualification),periodStart:dateOnly(row.period_start),periodEnd:dateOnly(row.period_end),dayCount:num(row.day_count),nightCount:num(row.night_count),totalDays:num(row.total_days),totalAmount:Number(row.total_amount_cents||0)/100,status:text(row.status),paidDate:dateOnly(row.paid_date),paidAt:text(row.paid_at),paidByUserId:text(row.paid_by_user_id),paidByLabel:text(row.paid_by_label)||'KY ERP Kullanıcısı',cancelledAt:text(row.cancelled_at),cancelledByLabel:text(row.cancelled_by_label),cancelReason:text(row.cancel_reason),items:byPayment.get(text(row.id))||[]}));
+  const snapshotResults = await c.env.DB.prepare(`SELECT * FROM hr_daily_payment_adjustment_snapshots WHERE main_company_id=? AND payment_id IN (${ids.map(()=>'?').join(',')}) ORDER BY created_at,id`).bind(companyId,...ids).all<Row>();
+  const byAdjustmentPayment = new Map<string,Row[]>();
+  for (const a of snapshotResults.results || []) {
+    const id=text(a.payment_id), list=byAdjustmentPayment.get(id)||[];
+    list.push({id:text(a.adjustment_id),kind:text(a.kind),reason:text(a.reason),amount:Number(a.amount_cents||0)/100});
+    byAdjustmentPayment.set(id,list);
+  }
+  const rows=payments.map((row)=>{
+    const adjustments=byAdjustmentPayment.get(text(row.id)) || [];
+    const sums=adjustmentTotals(adjustments.map((a)=>({kind:a.kind,amount_cents:dailyMoneyCents(a.amount),status:"ACTIVE"})));
+    const baseAmount=(byPayment.get(text(row.id))||[]).reduce((sum,item)=>sum+num(item.amount),0);
+    return {id:text(row.id),paymentId:text(row.id),paymentNo:text(row.payment_no),employeeId:text(row.employee_id),personnelNo:text(row.personnel_no),name:text(row.full_name),fullName:text(row.full_name),qualification:text(row.qualification),periodStart:dateOnly(row.period_start),periodEnd:dateOnly(row.period_end),dayCount:num(row.day_count),nightCount:num(row.night_count),totalDays:num(row.total_days),baseAmount:money(baseAmount),additions:sums.additions,deductions:sums.deductions,adjustments,totalAmount:Number(row.total_amount_cents||0)/100,status:text(row.status),paidDate:dateOnly(row.paid_date),paidAt:text(row.paid_at),paidByUserId:text(row.paid_by_user_id),paidByLabel:text(row.paid_by_label)||'KY ERP Kullanıcısı',cancelledAt:text(row.cancelled_at),cancelledByLabel:text(row.cancelled_by_label),cancelReason:text(row.cancel_reason),items:byPayment.get(text(row.id))||[]};
+  });
   return okItems(c,rows,rows);
 }
 
@@ -1751,14 +1885,26 @@ async function createPayment(c: Context<AppEnv>) {
   const paymentId=crypto.randomUUID();
   const dayCount=items.filter((item)=>item.shift==='day').length;
   const nightCount=items.filter((item)=>item.shift==='night').length;
-  const totalCents=items.reduce((sum,item)=>sum+dailyMoneyCents(item.amount),0);
+  const adjustmentRows=(await periodAdjustments(c,companyId,start,end,employeeId))
+    .filter((row)=>!text(row.settled_payment_id));
+  const adjustmentSummary=adjustmentTotals(adjustmentRows);
+  const baseCents=items.reduce((sum,item)=>sum+dailyMoneyCents(item.amount),0);
+  const totalCents=dailyAdjustmentNetCents(baseCents,adjustmentRows.map((row)=>({kind:text(row.kind) as "ADD" | "DEDUCT",amount_cents:Number(row.amount_cents)})));
+  if(totalCents<0) return fail(c,409,"ADJUSTMENT_EXCEEDS_WAGES","Kesintiler bu dönem hakedişini aşıyor. Ödemeyi tamamlamadan önce tutarları düzeltin.");
   const statements:D1PreparedStatement[]=[c.env.DB.prepare(`INSERT INTO hr_daily_payments (id,payment_no,main_company_id,employee_id,personnel_no,full_name,qualification,period_start,period_end,day_count,night_count,total_days,total_amount_cents,status,paid_date,paid_at,paid_by_user_id,paid_by_label,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'PAID',?,?,?,?,?,?)`).bind(paymentId,paymentNo,companyId,employeeId,text(person?.personnel_no)||null,text(person?.full_name)||'Personel',text(person?.qualification)||null,start,end,dayCount,nightCount,items.length,totalCents,paidDate,paidAt,actor.id||null,actor.label,paidAt,paidAt)];
   for(const item of items){ statements.push(c.env.DB.prepare(`INSERT INTO hr_daily_payment_items (id,payment_id,main_company_id,attendance_id,employee_id,work_date,shift,amount_cents,active,created_at) VALUES (?,?,?,?,?,?,?,?,1,?)`).bind(crypto.randomUUID(),paymentId,companyId,item.attendanceId,employeeId,item.workDate,item.shift,dailyMoneyCents(item.amount),paidAt)); }
+  for (const extra of adjustmentRows) {
+    statements.push(c.env.DB.prepare(`UPDATE hr_daily_payment_adjustments SET settled_payment_id=?,updated_at=? WHERE id=? AND main_company_id=? AND status='ACTIVE' AND settled_payment_id IS NULL`)
+      .bind(paymentId,paidAt,text(extra.id),companyId));
+    statements.push(c.env.DB.prepare(`INSERT INTO hr_daily_payment_adjustment_snapshots
+      (id,main_company_id,payment_id,adjustment_id,employee_id,kind,reason,amount_cents,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`).bind(crypto.randomUUID(),companyId,paymentId,text(extra.id),employeeId,text(extra.kind),text(extra.reason),Number(extra.amount_cents),paidAt));
+  }
   const attendanceIds=[...new Set(items.map((item)=>item.attendanceId))];
   for(const attendanceId of attendanceIds) statements.push(c.env.DB.prepare("UPDATE hr_daily_attendance SET payment_status='PAID',updated_at=? WHERE id=?").bind(paidAt,attendanceId));
-  statements.push(auditStmt(c,{companyId,employeeId,workDate:start,action:'PAYMENT_CREATE',before:null,after:{paymentId,paymentNo,startDate:start,endDate:end,dayCount,nightCount,totalAmount:totalCents/100},actor,source:'KYERP_DAILY_PAYMENT_V1'}));
+  statements.push(auditStmt(c,{companyId,employeeId,workDate:start,action:'PAYMENT_CREATE',before:null,after:{paymentId,paymentNo,startDate:start,endDate:end,dayCount,nightCount,baseAmount:baseCents/100,additions:adjustmentSummary.additions,deductions:adjustmentSummary.deductions,totalAmount:totalCents/100,adjustmentIds:adjustmentRows.map((a)=>text(a.id))},actor,source:'KYERP_DAILY_PAYMENT_V1'}));
   try { await c.env.DB.batch(statements); } catch(error){ const msg=error instanceof Error?error.message:String(error); if(msg.includes('UNIQUE')||msg.includes('constraint')) return fail(c,409,'PAYMENT_CONFLICT','Bu vardiyalardan biri başka bir işlemde ödendi. Ödeme havuzunu yenileyin.'); throw error; }
-  return ok(c,{id:paymentId,paymentId,paymentNo,employeeId,name:text(person?.full_name),periodStart:start,periodEnd:end,dayCount,nightCount,totalDays:items.length,totalAmount:totalCents/100,status:'PAID',paidDate,paidAt,paidByLabel:actor.label,items});
+  return ok(c,{id:paymentId,paymentId,paymentNo,employeeId,name:text(person?.full_name),periodStart:start,periodEnd:end,dayCount,nightCount,totalDays:items.length,baseAmount:baseCents/100,additions:adjustmentSummary.additions,deductions:adjustmentSummary.deductions,adjustments:adjustmentRows.map(adjustmentDto),totalAmount:totalCents/100,status:'PAID',paidDate,paidAt,paidByLabel:actor.label,items});
 }
 
 async function cancelPayment(c: Context<AppEnv>) {
@@ -1777,6 +1923,7 @@ async function cancelPayment(c: Context<AppEnv>) {
   const actor=await actorOf(c); const timestamp=nowIso(); const statements:D1PreparedStatement[]=[];
   statements.push(c.env.DB.prepare(`UPDATE hr_daily_payments SET status='CANCELLED',cancelled_at=?,cancelled_by_user_id=?,cancelled_by_label=?,cancel_reason=?,updated_at=? WHERE id=? AND main_company_id=?`).bind(timestamp,actor.id||null,actor.label,reason,timestamp,paymentId,companyId));
   statements.push(c.env.DB.prepare("UPDATE hr_daily_payment_items SET active=0 WHERE payment_id=? AND main_company_id=?").bind(paymentId,companyId));
+  statements.push(c.env.DB.prepare(`UPDATE hr_daily_payment_adjustments SET settled_payment_id=NULL,updated_at=? WHERE main_company_id=? AND settled_payment_id=? AND status='ACTIVE'`).bind(timestamp,companyId,paymentId));
   for(const attendanceId of [...new Set(items.map((item)=>text(item.attendance_id)).filter(Boolean))]) statements.push(c.env.DB.prepare("UPDATE hr_daily_attendance SET payment_status='WAITING',updated_at=? WHERE id=?").bind(timestamp,attendanceId));
   statements.push(auditStmt(c,{companyId,employeeId:text(payment.employee_id),workDate:dateOnly(payment.period_start),action:'PAYMENT_CANCEL',before:{paymentId,paymentNo:text(payment.payment_no),status:'PAID'},after:{status:'CANCELLED',reason},actor,note:reason,source:'KYERP_DAILY_PAYMENT_V1'}));
   await c.env.DB.batch(statements);
@@ -1847,6 +1994,9 @@ export function registerGunlukOperasyonRoutes(app: Hono<AppEnv>) {
   app.get("/api/gunluk-operasyon/attendance/payment-slips", protect(weeklySummary));
   app.post("/api/gunluk-operasyon/attendance/mark-paid", protect(markPaid));
 
+  app.get("/api/gunluk-operasyon/payments/adjustments", protect(adjustmentList));
+  app.post("/api/gunluk-operasyon/payments/adjustments", protect(adjustmentAdd));
+  app.post("/api/gunluk-operasyon/payments/adjustments/:id/void", protect(adjustmentVoid));
   app.get("/api/gunluk-operasyon/payments/pool", protect(paymentPool));
   app.get("/api/gunluk-operasyon/payments/period-status", protect(paymentPeriodStatus));
   app.get("/api/gunluk-operasyon/payments/history", protect(paymentHistory));

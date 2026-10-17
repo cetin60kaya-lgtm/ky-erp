@@ -31,6 +31,9 @@ import {
   getDailyFocusedRecords,
   getDailyPaymentHistory,
   getDailyPaymentPool,
+  getDailyPaymentAdjustments,
+  addDailyPaymentAdjustment,
+  voidDailyPaymentAdjustment,
   getDailyPeriodPaymentStatus,
   getDailyPeriodLock,
   getDailyRoster,
@@ -224,21 +227,25 @@ function printDailyPaymentSlips(range, rows = []) {
       if (!rates.length) return money(fallback);
       return rates.length === 1 ? money(rates[0]) : `${money(rates[0])} – ${money(rates.at(-1))}`;
     };
-    const total = row.totalAmount == null && row.total == null ? dayTotal + nightTotal : number(row.totalAmount ?? row.total);
+    const additions = number(row.additions);
+    const deductions = number(row.deductions);
+    const total = row.totalAmount == null && row.total == null ? dayTotal + nightTotal + additions - deductions : number(row.totalAmount ?? row.total);
     const no = pageIndex * 10 + index + 1;
     return `<article class="pay-card">
       <div class="pay-name"><b>${no}. ${escapeHtml(row.name || row.fullName || "-")}</b><span>${escapeHtml(row.qualification || row.role || "-")}</span></div>
       <div class="pay-lines">
         <div><span>GÜNDÜZ ÜCRETİ</span><b>${escapeHtml(rateLabel("day", dayRate))}</b><small>${dayCount} gün</small></div>
         <div><span>GECE ÜCRETİ</span><b>${escapeHtml(rateLabel("night", nightRate))}</b><small>${nightCount} gece</small></div>
-        <div class="sum"><span>ÜCRET TOPLAMI</span><b>${escapeHtml(money(total))}</b></div>
+        <div><span>EK ÖDEME (+)</span><b>${escapeHtml(money(additions))}</b></div>
+        <div><span>EK KESİNTİ (-)</span><b>${escapeHtml(money(deductions))}</b></div>
+        <div class="sum"><span>NET ÖDENECEK</span><b>${escapeHtml(money(total))}</b></div>
       </div>
     </article>`;
   }).join("")}</div><footer class="page-grand"><span>GENEL TOPLAM</span><strong>${escapeHtml(money(grandTotal))}</strong></footer></section>`).join("");
   return printHtmlDocument({
     title: "KY ERP Günlük Personel Hakediş Fişleri",
     html: `<main class="pay-print"><p style="margin:0 0 2mm;font-size:8pt;font-weight:bold">HAKEDİŞ DÖKÜMÜ · ÖDEME YAPILDIĞI ANLAMINA GELMEZ</p>${html || '<p>Kayıt yok.</p>'}</main>`,
-    css: `@page{size:A4 portrait;margin:5mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#000;background:#fff}.pay-print{width:200mm}.pay-page{width:200mm;height:287mm;display:flex;flex-direction:column;page-break-after:always;break-after:page;overflow:hidden}.pay-page:last-child{page-break-after:auto;break-after:auto}.pay-page>header{height:11mm;border:1px solid #000;display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:5mm;padding:1.5mm 3mm;margin-bottom:2.5mm}.pay-page>header strong{font-size:11.5pt}.pay-page>header span,.pay-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.pay-grid{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(5,47mm);gap:2.5mm 4mm}.pay-card{height:47mm;border:1px solid #000;padding:2.2mm 2.6mm;display:grid;grid-template-rows:auto 1fr;gap:1.5mm;break-inside:avoid;page-break-inside:avoid}.pay-name{display:flex;align-items:baseline;justify-content:space-between;gap:3mm;border-bottom:1px solid #000;padding-bottom:1mm}.pay-name b{font-size:10pt;text-transform:uppercase;line-height:1}.pay-name span{font-size:7.2pt;white-space:nowrap}.pay-lines{display:grid;gap:0;border:1px solid #000}.pay-lines>div{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:3mm;padding:1.4mm 2mm;min-height:8.5mm}.pay-lines>div+div{border-top:1px solid #000}.pay-lines span{font-size:8pt;font-weight:900}.pay-lines b{font-size:11pt;text-align:right}.pay-lines small{min-width:23mm;text-align:right;font-size:7pt;font-weight:700}.pay-lines .sum{grid-template-columns:1fr auto;background:#f7f7f7}.pay-lines .sum b{font-size:14pt}.page-grand{margin-top:auto;border:2px solid #000;min-height:15mm;padding:2.5mm 4mm;display:flex;align-items:center;justify-content:space-between}.page-grand span{font-size:11pt;font-weight:900}.page-grand strong{font-size:20pt;line-height:1;font-weight:900}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`
+    css: `@page{size:A4 portrait;margin:5mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#000;background:#fff}.pay-print{width:200mm}.pay-page{width:200mm;height:287mm;display:flex;flex-direction:column;page-break-after:always;break-after:page;overflow:hidden}.pay-page:last-child{page-break-after:auto;break-after:auto}.pay-page>header{height:11mm;border:1px solid #000;display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:5mm;padding:1.5mm 3mm;margin-bottom:2.5mm}.pay-page>header strong{font-size:11.5pt}.pay-page>header span,.pay-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.pay-grid{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(5,47mm);gap:2.5mm 4mm}.pay-card{height:47mm;border:1px solid #000;padding:2.2mm 2.6mm;display:grid;grid-template-rows:auto 1fr;gap:1.5mm;break-inside:avoid;page-break-inside:avoid}.pay-name{display:flex;align-items:baseline;justify-content:space-between;gap:3mm;border-bottom:1px solid #000;padding-bottom:1mm}.pay-name b{font-size:10pt;text-transform:uppercase;line-height:1}.pay-name span{font-size:7.2pt;white-space:nowrap}.pay-lines{display:grid;gap:0;border:1px solid #000}.pay-lines>div{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:2mm;padding:0.75mm 2mm;min-height:6.25mm}.pay-lines>div+div{border-top:1px solid #000}.pay-lines span{font-size:8pt;font-weight:900}.pay-lines b{font-size:11pt;text-align:right}.pay-lines small{min-width:23mm;text-align:right;font-size:7pt;font-weight:700}.pay-lines .sum{grid-template-columns:1fr auto;background:#f7f7f7}.pay-lines .sum b{font-size:14pt}.page-grand{margin-top:auto;border:2px solid #000;min-height:15mm;padding:2.5mm 4mm;display:flex;align-items:center;justify-content:space-between}.page-grand span{font-size:11pt;font-weight:900}.page-grand strong{font-size:20pt;line-height:1;font-weight:900}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`
   });
 }
 function wageRangeLabel(row, shift, dates) {
@@ -321,7 +328,8 @@ function printWeeklySummary(range, days, rows = []) {
 function printPaidPaymentReceipt(row = {}) {
   const items = Array.isArray(row.items) ? row.items : [];
   const details = items.length ? items.map((item) => `<tr><td>${escapeHtml(dateText(item.workDate))}</td><td>${item.shift === "night" ? "Gece" : "Gündüz"}</td><td>${escapeHtml(money(item.amount))}</td></tr>`).join("") : `<tr><td colspan="3">Gündüz ${number(row.dayCount)} · Gece ${number(row.nightCount)}</td></tr>`;
-  return printHtmlDocument({ title: `Ödeme Fişi ${row.paymentNo || ""}`, html: `<main class="paid-receipt"><header><h1>KY ERP PERSONEL ÖDEME FİŞİ</h1><b>${escapeHtml(row.paymentNo || "")}</b></header><section><div><span>Personel</span><strong>${escapeHtml(row.name || row.fullName || "-")}</strong></div><div><span>Hakediş Dönemi</span><strong>${escapeHtml(dateText(row.periodStart || row.startDate))} — ${escapeHtml(dateText(row.periodEnd || row.endDate))}</strong></div><div><span>Ödeme Tarihi</span><strong>${escapeHtml(dateText(row.paidDate || String(row.paidAt || "").slice(0,10)))}</strong></div><div><span>Ödeyen</span><strong>${escapeHtml(row.paidByLabel || "KY ERP Kullanıcısı")}</strong></div></section><table><thead><tr><th>Tarih</th><th>Vardiya</th><th>Tutar</th></tr></thead><tbody>${details}</tbody></table><footer><span>TOPLAM ÖDEME</span><strong>${escapeHtml(money(row.totalAmount))}</strong></footer></main>`, css: `@page{size:A4 portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#111}.paid-receipt{max-width:180mm;margin:auto}.paid-receipt header{display:flex;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:8px}.paid-receipt h1{font-size:16px;margin:0}.paid-receipt section{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}.paid-receipt section div{border:1px solid #bbb;padding:8px}.paid-receipt span{display:block;font-size:11px}.paid-receipt strong{font-size:14px}.paid-receipt table{width:100%;border-collapse:collapse}.paid-receipt th,.paid-receipt td{border:1px solid #777;padding:6px;text-align:left}.paid-receipt footer{margin-top:14px;border:2px solid #111;padding:12px;display:flex;justify-content:space-between;align-items:center}.paid-receipt footer span{font-size:18px;font-weight:900}.paid-receipt footer strong{font-size:24px}` });
+  const extraDetails = (Array.isArray(row.adjustments) ? row.adjustments : []).map((item) => `<tr><td>Ek işlem</td><td>${item.kind === "ADD" ? "Ek ödeme" : "Kesinti"} · ${escapeHtml(item.reason)}</td><td>${item.kind === "ADD" ? "+" : "−"}${escapeHtml(money(item.amount))}</td></tr>`).join("");
+  return printHtmlDocument({ title: `Ödeme Fişi ${row.paymentNo || ""}`, html: `<main class="paid-receipt"><header><h1>KY ERP PERSONEL ÖDEME FİŞİ</h1><b>${escapeHtml(row.paymentNo || "")}</b></header><section><div><span>Personel</span><strong>${escapeHtml(row.name || row.fullName || "-")}</strong></div><div><span>Hakediş Dönemi</span><strong>${escapeHtml(dateText(row.periodStart || row.startDate))} — ${escapeHtml(dateText(row.periodEnd || row.endDate))}</strong></div><div><span>Ödeme Tarihi</span><strong>${escapeHtml(dateText(row.paidDate || String(row.paidAt || "").slice(0,10)))}</strong></div><div><span>Ödeyen</span><strong>${escapeHtml(row.paidByLabel || "KY ERP Kullanıcısı")}</strong></div></section><table><thead><tr><th>Tarih</th><th>Vardiya</th><th>Tutar</th></tr></thead><tbody>${details}${extraDetails}</tbody></table><section><div><span>Çalışma Hakedişi</span><strong>${escapeHtml(money(row.baseAmount ?? number(row.totalAmount)-number(row.additions)+number(row.deductions)))}</strong></div><div><span>Ek Ödeme (+)</span><strong>${escapeHtml(money(row.additions))}</strong></div><div><span>Ek Kesinti (-)</span><strong>${escapeHtml(money(row.deductions))}</strong></div></section><footer><span>NET ÖDEME</span><strong>${escapeHtml(money(row.totalAmount))}</strong></footer></main>`, css: `@page{size:A4 portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#111}.paid-receipt{max-width:180mm;margin:auto}.paid-receipt header{display:flex;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:8px}.paid-receipt h1{font-size:16px;margin:0}.paid-receipt section{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}.paid-receipt section div{border:1px solid #bbb;padding:8px}.paid-receipt span{display:block;font-size:11px}.paid-receipt strong{font-size:14px}.paid-receipt table{width:100%;border-collapse:collapse}.paid-receipt th,.paid-receipt td{border:1px solid #777;padding:6px;text-align:left}.paid-receipt footer{margin-top:14px;border:2px solid #111;padding:12px;display:flex;justify-content:space-between;align-items:center}.paid-receipt footer span{font-size:18px;font-weight:900}.paid-receipt footer strong{font-size:24px}` });
 }
 
 function actionLabel(row = {}) {
@@ -354,6 +362,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [periodStatusRows, setPeriodStatusRows] = useState([]);
   const [periodStatusError, setPeriodStatusError] = useState("");
   const [paymentPeriodRows, setPaymentPeriodRows] = useState([]);
+  const [periodAdjustmentRows, setPeriodAdjustmentRows] = useState([]);
+  const [adjustmentEditor, setAdjustmentEditor] = useState(null);
+  const [adjustmentKind, setAdjustmentKind] = useState("ADD");
+  const [adjustmentReason, setAdjustmentReason] = useState("");
+  const [adjustmentAmount, setAdjustmentAmount] = useState("");
   const [paymentLoadError, setPaymentLoadError] = useState("");
   const [paymentHistoryRows, setPaymentHistoryRows] = useState([]);
   const [paymentPoolRange, setPaymentPoolRange] = useState(() => readNamedRange(PAYMENT_POOL_RANGE_KEY));
@@ -513,13 +526,16 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (view === "daily-payments") setError("");
     try {
       const sourceRange = view === "daily-dashboard" ? range : paymentPoolRange;
-      const [poolResult, attendanceResult, statusResult] = await Promise.all([
+      const [poolResult, attendanceResult, statusResult, adjustmentsResult] = await Promise.all([
         getDailyPaymentPool({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }),
         getDailyAttendance({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }, { forceFresh: true }),
         getDailyPeriodPaymentStatus({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }).catch(() => null),
+        getDailyPaymentAdjustments({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }, { forceFresh: true }),
       ]);
       const poolRows = Array.isArray(poolResult) ? poolResult : [];
       const attendanceRows = Array.isArray(attendanceResult) ? attendanceResult : [];
+      const allAdjustmentRows = Array.isArray(adjustmentsResult) ? adjustmentsResult : [];
+      setPeriodAdjustmentRows(allAdjustmentRows);
       setPaymentRows(poolRows);
       setPeriodStatusRows(Array.isArray(statusResult) ? statusResult : []);
       setPeriodStatusError(Array.isArray(statusResult) ? "" : "Ödeme durumu doğrulanamadı; tamamlandı kabul edilmeyecek.");
@@ -566,11 +582,23 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         }
         map.set(employeeId, current);
       });
-      setPaymentPeriodRows([...map.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), "tr")));
+      const groupedExtras=new Map();
+      for(const adjustment of allAdjustmentRows.filter((entry)=>entry.status==="ACTIVE")){
+        const key=String(adjustment.employeeId), current=groupedExtras.get(key)||{additions:0,deductions:0,items:[]};
+        if(adjustment.kind==="ADD") current.additions+=number(adjustment.amount);
+        else if(adjustment.kind==="DEDUCT") current.deductions+=number(adjustment.amount);
+        current.items.push(adjustment);groupedExtras.set(key,current);
+      }
+      setPaymentPeriodRows([...map.values()].map((row)=>{
+        const extra=groupedExtras.get(String(row.employeeId))||{additions:0,deductions:0,items:[]};
+        return {...row,baseAmount:row.totalAmount,additions:extra.additions,deductions:extra.deductions,
+          adjustments:extra.items,totalAmount:row.totalAmount+extra.additions-extra.deductions};
+      }).sort((a,b)=>String(a.name).localeCompare(String(b.name),"tr")));
     } catch (e) {
       const message = e?.message || "Dönem ödeme verileri alınamadı.";
       setPaymentRows([]);
       setPaymentPeriodRows([]);
+      setPeriodAdjustmentRows([]);
       setPeriodStatusRows([]);
       setPeriodStatusError(message);
       setPaymentLoadError(message);
@@ -1163,6 +1191,46 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     } catch (e) { setError(e?.message || "Toplu personel güncellemesi tamamlanamadı."); }
     finally { setBusy(false); }
   };
+  const adjustmentForEditor = adjustmentEditor
+    ? periodAdjustmentRows.filter((item) => String(item.employeeId) === String(adjustmentEditor.employeeId))
+    : [];
+  const saveExtraAdjustment = async () => {
+    if (!adjustmentEditor || busy) return;
+    if (adjustmentEditor.periodStart !== paymentPoolRange.start || adjustmentEditor.periodEnd !== paymentPoolRange.end) {
+      setError("Hakediş dönemi değişti. Düzenleme penceresini yeniden açın."); return;
+    }
+    const amount = Number(adjustmentAmount);
+    const reason = adjustmentReason.trim();
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000 || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001 || reason.length < 3) {
+      setError("Pozitif tutar (iki ondalık) ve en az 3 karakter açıklama girin."); return;
+    }
+    if (paymentStatusByEmployee.get(String(adjustmentEditor.employeeId))?.status === "PAID") {
+      setError("Ödenmiş dönem düzenlenemez. Önce açıklamalı ödeme iptali gerekir."); return;
+    }
+    setBusy(true); setError("");
+    try {
+      await addDailyPaymentAdjustment({ mainCompanyId: companyId, employeeId: adjustmentEditor.employeeId,
+        startDate: adjustmentEditor.periodStart, endDate: adjustmentEditor.periodEnd,
+        kind: adjustmentKind, amount, reason });
+      setAdjustmentAmount(""); setAdjustmentReason("");
+      await Promise.all([loadPayments(),loadPaymentHistory()]);
+      setNotice("Ek ödeme/kesinti D1'e kaydedildi; işlem geçmişinde tutuluyor.");
+    } catch(e) { setError(e?.message || "Ek işlem kaydedilemedi."); }
+    finally { setBusy(false); }
+  };
+  const voidExtraAdjustment = async (item) => {
+    if (busy || item.status !== "ACTIVE" || item.paymentId) return;
+    const reason = window.prompt("İptal gerekçesi (geçmiş kayıt silinmeyecek):");
+    if (!reason || reason.trim().length < 3) return;
+    if (!window.confirm("Bu ek işlem gerekçeli iptal edilsin mi? Geçmişte görünmeye devam edecek.")) return;
+    setBusy(true); setError("");
+    try {
+      await voidDailyPaymentAdjustment(item.id,{mainCompanyId: companyId, reason: reason.trim()});
+      await Promise.all([loadPayments(),loadPaymentHistory()]);
+      setNotice("Ek işlem iptal edildi; işlem geçmişi korundu.");
+    } catch(e) { setError(e?.message || "İşlem iptal edilemedi."); }
+    finally { setBusy(false); }
+  };
   const payRow = async (row, printAfter = false) => {
     if (busy || number(row.pendingCheckCount) > 0) return;
     setBusy(true); setError("");
@@ -1467,7 +1535,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         {paymentTab === "period" ? <>
           {periodStatusError ? <div className="gop-wage-sync-alert" role="alert">{periodStatusError}</div> : null}<div className="gop-payment-stats period-stats"><Stat label="Personel" value={paymentMetrics.people} hint={`${paymentMetrics.totalDays} vardiya`}/><Stat label="Gündüz" value={paymentMetrics.dayCount} hint={money(paymentMetrics.dayTotal)}/><Stat label="Gece" value={paymentMetrics.nightCount} hint={money(paymentMetrics.nightTotal)}/><Stat label="Tamamlanan" value={periodPaymentStatus.paid} hint={money(periodPaymentStatus.paidAmount)}/><Stat label="Açık" value={periodPaymentStatus.waiting} hint={money(periodPaymentStatus.waitingAmount)}/><Stat label="GENEL TOPLAM" value={money(paymentMetrics.totalAmount)}/></div>
           <div className="gop-card"><div className="gop-card-head payment-head"><div><h2>Dönem Hakedişleri ve Çıktı</h2><span>Çıktı almak ödeme kaydı oluşturmaz. Ödemeler yalnız Ödeme Bekleyenler bölümünde açıkça Tamamla denildiğinde kaydedilir.</span></div><div className="gop-print-actions"><span className="print-payment-note">Çıktı = yalnız hakediş belgesi</span><button type="button" disabled={!selectedPaymentPeriodRows.length} onClick={() => printPaymentPeriodSlips({ selectedOnly: true })}><Printer size={15}/> Seçili Fişleri Yazdır</button><button type="button" disabled={!paymentPeriodRows.length} onClick={() => printPaymentPeriodSlips()}><Printer size={15}/> Tüm Fişleri Yazdır</button><button type="button" onClick={() => setPaymentSelectedIds(new Set(paymentPeriodRows.map((row) => String(row.employeeId))))}>Tümünü Seç</button><button type="button" disabled={!paymentSelectedIds.size} onClick={() => setPaymentSelectedIds(new Set())}>Seçimi Kaldır</button></div></div>
-            <div className="gop-payment-ledger-table period-ledger"><table><thead><tr><th>Seç</th><th>Personel</th><th>Hakediş Dönemi</th><th>Gündüz Adet</th><th>Gündüz Toplam</th><th>Gece Adet</th><th>Gece Toplam</th><th>Ücret Toplamı</th><th>Durum</th><th>Fiş</th></tr></thead><tbody>{paymentPeriodRows.length ? paymentPeriodRows.map((row) => { const key=String(row.employeeId); const picked=paymentSelectedIds.has(key); const state=paymentStatusByEmployee.get(key); const controlPending=state ? number(state.pendingCheckCount)>0 : false; const paymentLabel=!state ? "DOĞRULANAMADI" : state.status === "PAID" ? "ÖDENDİ" : state.status === "PARTIAL" ? "KISMEN ÖDENDİ" : controlPending ? "KONTROL BEKLİYOR" : "AÇIK"; return <tr key={key}><td><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next=new Set(current); if(next.has(key)) next.delete(key); else next.add(key); return next; })}/></td><td><strong>{row.name || row.fullName}</strong><small>{row.personnelNo || ""} · {row.qualification || "-"}</small></td><td>{dateText(paymentPoolRange.start)} — {dateText(paymentPoolRange.end)}</td><td><b>{number(row.dayCount)}</b></td><td className="money">{money(row.dayTotal)}</td><td><b>{number(row.nightCount)}</b></td><td className="money">{money(row.nightTotal)}</td><td className="money grand"><strong>{money(row.totalAmount)}</strong></td><td><span className={`payment-state ${state?.status === "PAID" ? "paid" : controlPending ? "control" : "waiting"}`}>{paymentLabel}</span></td><td><button type="button" disabled={busy || controlPending} onClick={() => printPeriodRows([row])}><Printer size={14}/> Çıktı Al</button></td></tr>; }) : <tr><td colSpan="10"><Empty>Seçili tarih aralığında çalışma kaydı yok.</Empty></td></tr>}</tbody><tfoot><tr><td colSpan="3"><strong>GENEL TOPLAM</strong></td><td><strong>{paymentMetrics.dayCount}</strong></td><td className="money"><strong>{money(paymentMetrics.dayTotal)}</strong></td><td><strong>{paymentMetrics.nightCount}</strong></td><td className="money"><strong>{money(paymentMetrics.nightTotal)}</strong></td><td className="money grand"><strong>{money(paymentMetrics.totalAmount)}</strong></td><td><strong>{periodPaymentStatus.paid} tamamlandı / {periodPaymentStatus.waiting} açık</strong></td><td></td></tr></tfoot></table></div>
+            <div className="gop-payment-ledger-table period-ledger"><table><thead><tr><th>Seç</th><th>Personel</th><th>Hakediş Dönemi</th><th>Gündüz Adet</th><th>Gündüz Toplam</th><th>Gece Adet</th><th>Gece Toplam</th><th>Ek (+/−)</th><th>Net Ödenecek</th><th>Durum</th><th>Fiş / Düzenle</th></tr></thead><tbody>{paymentPeriodRows.length ? paymentPeriodRows.map((row) => { const key=String(row.employeeId); const picked=paymentSelectedIds.has(key); const state=paymentStatusByEmployee.get(key); const controlPending=state ? number(state.pendingCheckCount)>0 : false; const paymentLabel=!state ? "DOĞRULANAMADI" : state.status === "PAID" ? "ÖDENDİ" : state.status === "PARTIAL" ? "KISMEN ÖDENDİ" : controlPending ? "KONTROL BEKLİYOR" : "AÇIK"; return <tr key={key}><td><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next=new Set(current); if(next.has(key)) next.delete(key); else next.add(key); return next; })}/></td><td><strong>{row.name || row.fullName}</strong><small>{row.personnelNo || ""} · {row.qualification || "-"}</small></td><td>{dateText(paymentPoolRange.start)} — {dateText(paymentPoolRange.end)}</td><td><b>{number(row.dayCount)}</b></td><td className="money">{money(row.dayTotal)}</td><td><b>{number(row.nightCount)}</b></td><td className="money">{money(row.nightTotal)}</td><td className="money"><small className="gop-adjust-plus">+{money(row.additions)}</small><small className="gop-adjust-minus">−{money(row.deductions)}</small></td><td className="money grand"><strong>{money(row.totalAmount)}</strong></td><td><span className={`payment-state ${state?.status === "PAID" ? "paid" : controlPending ? "control" : "waiting"}`}>{paymentLabel}</span></td><td><div className="ledger-actions"><button type="button" disabled={busy || controlPending} onClick={() => printPeriodRows([row])}><Printer size={14}/> Çıktı</button><button type="button" disabled={busy} onClick={() => { setAdjustmentEditor(row); setAdjustmentKind("ADD"); setAdjustmentReason(""); setAdjustmentAmount(""); setError(""); }}><Pencil size={14}/> Ek / Kesinti</button></div></td></tr>; }) : <tr><td colSpan="11"><Empty>Seçili tarih aralığında çalışma kaydı yok.</Empty></td></tr>}</tbody><tfoot><tr><td colSpan="3"><strong>GENEL TOPLAM</strong></td><td><strong>{paymentMetrics.dayCount}</strong></td><td className="money"><strong>{money(paymentMetrics.dayTotal)}</strong></td><td><strong>{paymentMetrics.nightCount}</strong></td><td className="money"><strong>{money(paymentMetrics.nightTotal)}</strong></td><td className="money"><strong>+{money(paymentPeriodRows.reduce((n,r)=>n+number(r.additions),0))} / −{money(paymentPeriodRows.reduce((n,r)=>n+number(r.deductions),0))}</strong></td><td className="money grand"><strong>{money(paymentMetrics.totalAmount)}</strong></td><td><strong>{periodPaymentStatus.paid} tamamlandı / {periodPaymentStatus.waiting} açık</strong></td><td></td></tr></tfoot></table></div>
           </div>
         </> : paymentTab === "pool" ? <>
           <div className="gop-payment-stats pool-stats"><Stat label="Ödeme Bekleyen" value={paymentPageOpenMetrics.people} hint={`${paymentPageOpenMetrics.days} vardiya`}/><Stat label="Bekleyen Tutar" value={money(paymentPageOpenMetrics.amount)}/><Stat label="Kontrol Bekleyen" value={paymentPageOpenMetrics.controlPending}/><Stat label="Hakediş Dönemi" value={`${dateText(paymentPoolRange.start)} — ${dateText(paymentPoolRange.end)}`}/></div>
@@ -1490,7 +1558,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
                     <div className="gop-payment-record-person"><div><strong>{row.name || row.fullName || "Personel"}</strong><small>{row.personnelNo || "Kod yok"} · {row.qualification || "Vasıf yok"}</small></div><span>{cancelled ? "İptal edilmiş ödeme" : "Tamamlanmış ödeme"}</span></div>
                     <div className="gop-payment-record-meta"><div><span>Hakediş Dönemi</span><strong>{dateText(row.periodStart)} — {dateText(row.periodEnd)}</strong></div><div><span>Vardiya</span><strong>G {number(row.dayCount)} · N {number(row.nightCount)} · Toplam {number(row.totalDays)}</strong></div><div><span>Ödeme Tarihi</span><strong>{dateText(row.paidDate || String(row.paidAt || "").slice(0,10))}</strong></div><div><span>İşlemi Yapan</span><strong>{row.paidByLabel || "KY ERP Kullanıcısı"}</strong></div></div>
                     {cancelled ? <div className="gop-payment-cancel-note"><strong>Ödeme İptal Edildi</strong><span>{row.cancelReason || "İptal açıklaması girilmedi."}</span><small>{row.cancelledByLabel || "-"} · {dateTimeText(row.cancelledAt)}</small></div> : null}
-                    <details className="gop-payment-record-details"><summary>İşlem Detayı <span>{items.length || number(row.totalDays)} vardiya</span></summary><div className="gop-payment-item-list">{items.length ? items.map((item, index) => <div key={item.id || `${item.workDate}-${item.shift}-${index}`}><span><strong>{dateText(item.workDate)}</strong><small>{item.shift === "night" ? "Gece vardiyası" : "Gündüz vardiyası"}</small></span><b>{money(item.amount)}</b></div>) : <Empty>Vardiya detay kaydı bulunamadı.</Empty>}</div></details>
+                    <details className="gop-payment-record-details"><summary>İşlem Detayı <span>{items.length || number(row.totalDays)} vardiya</span></summary><div className="gop-payment-item-list">{items.length ? items.map((item, index) => <div key={item.id || `${item.workDate}-${item.shift}-${index}`}><span><strong>{dateText(item.workDate)}</strong><small>{item.shift === "night" ? "Gece vardiyası" : "Gündüz vardiyası"}</small></span><b>{money(item.amount)}</b></div>) : <Empty>Vardiya detay kaydı bulunamadı.</Empty>}{Array.isArray(row.adjustments) ? row.adjustments.map((extra,index)=><div key={extra.id || `extra-${index}`}><span><strong>{extra.kind === "ADD" ? "Ek Ödeme (+)" : "Ek Kesinti (−)"}</strong><small>{extra.reason}</small></span><b>{extra.kind === "ADD" ? "+" : "−"}{money(extra.amount)}</b></div>) : null}<div className="gop-adjustment-item-net"><span><strong>NET ÖDEME</strong><small>Çalışma + ek ödemeler − kesintiler</small></span><b>{money(row.totalAmount)}</b></div></div></details>
                     <footer className="gop-payment-record-actions"><button type="button" onClick={() => printPaidPaymentReceipt(row)}><Printer size={14}/> Ödeme Fişi</button>{!cancelled ? <button type="button" disabled={busy} onClick={() => cancelPaymentRow(row)}><Trash2 size={14}/> Ödemeyi İptal Et</button> : <span>Geçmiş kayıt korunuyor</span>}</footer>
                   </article>;
                 })}</div>
@@ -1501,6 +1569,35 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       </div> : null}
 
 
+
+      {adjustmentEditor ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true" aria-label="Personel ek ödeme ve kesinti">
+        <section className="gop-dialog gop-adjustment-dialog">
+          <header><div><span>HAKEDİŞ & ÖDEME · EK İŞLEM / GEÇMİŞ</span><h2>{adjustmentEditor.name} · Ek Ödeme / Kesinti</h2>
+            <p>{dateText(adjustmentEditor.periodStart)} — {dateText(adjustmentEditor.periodEnd)} · Kayıtlar bütün bilgisayarlarda ortaktır</p></div>
+            <button type="button" disabled={busy} onClick={()=>setAdjustmentEditor(null)}><X size={19}/></button></header>
+          <div className="gop-adjustment-content">
+            <div className="gop-adjustment-stats">
+              <div><span>Çalışma Hakedişi</span><strong>{money(adjustmentEditor.baseAmount)}</strong></div>
+              <div><span>Ek Ödeme</span><strong className="gop-adjust-plus">{money(adjustmentForEditor.filter((a)=>a.status==="ACTIVE" && a.kind==="ADD").reduce((n,a)=>n+number(a.amount),0))}</strong></div>
+              <div><span>Ek Kesinti</span><strong className="gop-adjust-minus">{money(adjustmentForEditor.filter((a)=>a.status==="ACTIVE" && a.kind==="DEDUCT").reduce((n,a)=>n+number(a.amount),0))}</strong></div>
+              <div><span>Net Ödenecek</span><strong>{money(number(adjustmentEditor.baseAmount)+adjustmentForEditor.filter((a)=>a.status==="ACTIVE").reduce((n,a)=>n+(a.kind==="ADD"?1:-1)*number(a.amount),0))}</strong></div>
+            </div>
+            <div className="gop-adjustment-inputs">
+              <label>İşlem Türü<select disabled={busy} value={adjustmentKind} onChange={(e)=>setAdjustmentKind(e.target.value)}><option value="ADD">+ Ek Ödeme / Prim</option><option value="DEDUCT">− Kesinti / Avans</option></select></label>
+              <label>Tutar (TL)<input type="number" min="0.01" max="1000000" step="0.01" placeholder="0,00" disabled={busy} value={adjustmentAmount} onChange={(e)=>setAdjustmentAmount(e.target.value)}/></label>
+              <label className="wide">Açıklama (zorunlu)<input maxLength={300} placeholder="Örn. ek işçilik, prim, avans veya kesinti nedeni" disabled={busy} value={adjustmentReason} onChange={(e)=>setAdjustmentReason(e.target.value)}/></label>
+              <button type="button" className="primary" disabled={busy || periodStatusError || paymentStatusByEmployee.get(String(adjustmentEditor.employeeId))?.status === "PAID"} onClick={saveExtraAdjustment}><Save size={15}/> Ek İşlemi Kaydet</button>
+            </div>
+            <div className="gop-adjustment-log"><div className="gop-adjustment-log-title"><strong>İşlem Geçmişi / LOG</strong><span>{adjustmentForEditor.length} kayıt · Silinmez, iptal izi korunur</span></div>
+              {adjustmentForEditor.length ? adjustmentForEditor.map((item)=><div key={item.id} className={`gop-adjustment-event ${item.status==="VOID"?"is-void":""}`}>
+                <div><b>{item.kind==="ADD"?"Ek Ödeme":"Kesinti"} · {money(item.amount)}</b><span>{item.reason}</span><small>{dateTimeText(item.createdAt)} · {item.actorLabel}</small></div>
+                <div><strong>{item.status==="VOID"?"İPTAL":item.paymentId?"ÖDEMEYE BAĞLI":"AKTİF"}</strong>
+                {item.status==="VOID" ? <small>İptal: {item.voidReason} · {item.voidedByLabel} · {dateTimeText(item.voidedAt)}</small> : null}
+                {item.status==="ACTIVE" && !item.paymentId ? <button type="button" disabled={busy} onClick={()=>void voidExtraAdjustment(item)}>Gerekçeli İptal</button>:null}</div>
+              </div>) : <p className="gop-adjustment-empty">Bu dönem için henüz ek ödeme veya kesinti kaydı yok.</p>}</div>
+          </div>
+          <footer><span>Günlük girişler ve kart ücretleri değiştirilmez.</span><button type="button" onClick={()=>setAdjustmentEditor(null)} disabled={busy}>Kapat</button></footer>
+        </section></div> : null}
       {quick ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section data-ky-dialog-key="gunluk-operasyon.hizli-personel-girisi" className={`gop-dialog gop-quick-dialog shift-${quick.shift}`} style={{ "--quick-row-h": `${quickRowHeight}px`, "--quick-card-w": `${quickCardWidth}px` }}><header><div><span>HIZLI PERSONEL GİRİŞİ · KOMPAKT KONTROL KARTLARI V3</span><div className="quick-title-line"><h2>{longDateText(quick.date)} · {quick.shift === "day" ? "Gündüz" : "Gece"}</h2><span className={`quick-shift-badge ${quick.shift}`}>{quick.shift === "day" ? "GÜNDÜZ" : "GECE"}</span></div><p>Yalnız seçili gün ve vardiya değiştirilir; diğer günlerin kayıtları korunur.</p></div><div className="quick-header-actions"><div className="gop-shift-switch quick-header-shifts"><button type="button" className={quick.shift === "day" ? "active day" : ""} disabled={quickDirty || busy} onClick={() => changeQuickFocus(quick.date, "day")}><Sun size={15}/> Gündüz</button><button type="button" className={quick.shift === "night" ? "active night" : ""} disabled={quickDirty || busy} onClick={() => changeQuickFocus(quick.date, "night")}><Moon size={15}/> Gece</button></div><button type="button" onClick={closeQuickDialog}><X size={19}/></button></div></header>
         <div className="quick-day-picker-wrap">
           <button type="button" className={`quick-active-day-card ${quick.shift}`} aria-expanded={quickDayPickerOpen} onClick={() => setQuickDayPickerOpen((open) => !open)}>

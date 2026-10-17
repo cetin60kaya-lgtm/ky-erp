@@ -73,6 +73,20 @@ export async function markDailyPaid(payload = {}) {
   return result;
 }
 
+export async function getDailyPaymentAdjustments(params = {}, options = {}) {
+  return unwrap(await apiGet(`${ROOT}/payments/adjustments`, params, freshOptions(options)));
+}
+export async function addDailyPaymentAdjustment(payload = {}) {
+  const result = unwrap(await apiPost(`${ROOT}/payments/adjustments`, payload));
+  publishDailyMutation("addDailyPaymentAdjustment");
+  return result;
+}
+export async function voidDailyPaymentAdjustment(id, payload = {}) {
+  const result = unwrap(await apiPost(`${ROOT}/payments/adjustments/${encodeURIComponent(id)}/void`, payload));
+  publishDailyMutation("voidDailyPaymentAdjustment");
+  return result;
+}
+
 export async function getDailyPaymentPool(params = {}, options = {}) {
   return unwrap(await apiGet(`${ROOT}/payments/pool`, params, freshOptions(options)));
 }
