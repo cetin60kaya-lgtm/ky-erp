@@ -3,15 +3,16 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "fe4b39ffa31b4a1ae9ada6ab40c7fc09685d2c6a",
-  "requestedAt": "2026-10-16",
-  "attempt": 17,
+  "sourceCommit": "bfd9d452c4308f88e212709ecc06907e2a7b145e",
+  "requestedAt": "2026-10-17",
+  "attempt": 18,
   "scope": [
-    "daily-wage-card-open-record-calculation",
-    "weekly-summary",
-    "payment-pool",
+    "daily-operations-concurrency-safe-check",
+    "multi-computer-d1-sync-state",
+    "roster-merge-targeted-removal",
+    "append-only-daily-audit",
     "d1-backup-before-worker-release",
     "post-release-api-health"
   ],
-  "note": "Tüm personellerde açık vardiya hesapları kart ücretinden üretilir; PAID kayıtlar korunur, toplu veritabanı tutar güncellemesi yapılmaz."
+  "note": "PR #437 ve #436 test edildi. Günlük Operasyon çoklu PC kontrol sürümü, birleştirilen personel havuzu ve log görüntüleme API ile uyumlu. Üretim D1 silme veya personel ödeme kaydı oluşturma yok; yayın sürecinin D1 yedeği zorunludur."
 }
