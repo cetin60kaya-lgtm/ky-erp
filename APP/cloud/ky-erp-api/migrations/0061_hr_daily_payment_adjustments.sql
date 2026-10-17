@@ -57,3 +57,19 @@ CREATE TRIGGER IF NOT EXISTS trg_daily_adjustment_sync_snapshot
  AFTER INSERT ON hr_daily_payment_adjustment_snapshots
  BEGIN INSERT OR REPLACE INTO hr_daily_sync_state(main_company_id,version,updated_at)
  VALUES(NEW.main_company_id,lower(hex(randomblob(16))),CURRENT_TIMESTAMP); END;
+
+-- Eşzamanlı iki PC işlemi: ön okuma sonrasında ödeme/iptal durumu değişse bile işlem durdur.
+CREATE TRIGGER IF NOT EXISTS trg_daily_adjustment_prevent_after_paid
+BEFORE INSERT ON hr_daily_payment_adjustments
+WHEN EXISTS (SELECT 1 FROM hr_daily_payments p
+  WHERE p.main_company_id=NEW.main_company_id AND p.employee_id=NEW.employee_id
+    AND p.period_start=NEW.period_start AND p.period_end=NEW.period_end AND p.status='PAID')
+BEGIN SELECT RAISE(ABORT,'adjustment period already paid'); END;
+CREATE TRIGGER IF NOT EXISTS trg_daily_adjustment_prevent_void_settled
+BEFORE UPDATE OF status ON hr_daily_payment_adjustments
+WHEN NEW.status='VOID' AND (OLD.status!='ACTIVE' OR OLD.settled_payment_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'adjustment already void or settled'); END;
+CREATE TRIGGER IF NOT EXISTS trg_daily_adjustment_prevent_double_settlement
+BEFORE UPDATE OF settled_payment_id ON hr_daily_payment_adjustments
+WHEN NEW.settled_payment_id IS NOT NULL AND OLD.settled_payment_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'adjustment already settled'); END;
