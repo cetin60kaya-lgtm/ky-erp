@@ -3,21 +3,19 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-10-06",
+  "releaseDate": "2026-10-17",
   "scope": [
-    "ik-monthly-single-source",
-    "ik-explicit-extra-payment",
-    "ik-payment-source-aware-bank-cash",
-    "ik-atomic-final-payroll-control-ui",
-    "ik-real-salary-overtime-source",
-    "ik-reference-person-informational-only",
-    "ik-tablet-touch-targets-44px",
+    "gunluk-ortak-tarih-araligi",
+    "gunluk-haftalik-tek-cikti",
+    "gunluk-hizli-giris-sec-kontrol-ayri",
+    "gunluk-kontrol-yesil-tam-kart",
+    "gunluk-d1-append-only-islem-gecmisi",
+    "gunluk-iki-pc-senkron-cakisma-uyarisi",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
-    "live-entry-verification",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "IK Aylik 06.10.2026 frontend release. PR #388 acceptance PASS; Worker release sirasi korunarak Pages production yayini ve derin canli bundle dogrulamasi.",
-  "sourceCommit": "834387df6844b85da9995991baa04b9b864773ba",
-  "requestedAt": "2026-10-06T01:34:00+03:00"
+  "note": "PR #437 (ve önceki #436) kabul testleri başarıyla geçti. Dönemlerin tek aralıktan yönetimi, ayrı seç/kontrol butonları, tarihli işlem geçmişi ve iki bilgisayarlı çalışma için 17 Ekim 2026 canlı arayüz yayını.",
+  "sourceCommit": "bfd9d452c4308f88e212709ecc06907e2a7b145e",
+  "requestedAt": "2026-10-17"
 }
