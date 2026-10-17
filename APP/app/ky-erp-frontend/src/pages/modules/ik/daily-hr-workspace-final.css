@@ -1260,3 +1260,10 @@
   .gop-bulk-editor>div:first-child { grid-column:auto; }
   .gop-wage-history-row { grid-template-columns:1fr; }
 }
+
+.gop-bulk-section { margin:12px; border:1px solid #dce7f1; border-radius:10px; background:#f8fafc; }
+.gop-bulk-section>summary { padding:13px 15px; cursor:pointer; font-size:13px; font-weight:800; color:#1c4968; }
+.gop-bulk-section>summary small { margin-left:10px; color:#64748b; font-size:11px; font-weight:500; }
+.gop-bulk-section .gop-bulk-editor { margin:0; border:0; border-top:1px solid #e1e8ef; border-radius:0; }
+.gop-week-rate { display:block; font-weight:700; color:#325876; font-size:10px; white-space:normal; }
+@media(max-width:700px) { .gop-bulk-section>summary small { display:block; margin:4px 0 0; } }
