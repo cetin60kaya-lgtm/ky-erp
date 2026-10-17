@@ -1153,7 +1153,15 @@ async function saveRoster(c: Context<AppEnv>) {
 
   const existing = existingResult.results || [];
   const existingIds = new Set(existing.map((row) => text(row.employee_id)));
-  const finalIds = [...new Set(requested)];
+  // DİĞER PC verisini silme: ekleme yalnız birleşim; çıkarma yalnız hedef kişinin kaldırılmasıdır.
+  const mode = text(body.mode).toLowerCase();
+  const removalId = text(body.removeEmployeeId);
+  if (mode === "remove" && !removalId) return fail(c, 400, "REMOVE_EMPLOYEE_REQUIRED", "Çıkarılacak personel belirtilmedi.");
+  const finalIds = mode === "merge"
+    ? [...new Set([...existingIds, ...requested])]
+    : mode === "remove"
+      ? [...existingIds].filter((id) => id !== removalId)
+      : [...new Set(requested)];
   const finalSet = new Set(finalIds);
   const actor = await actorOf(c);
   const statements: D1PreparedStatement[] = [];
