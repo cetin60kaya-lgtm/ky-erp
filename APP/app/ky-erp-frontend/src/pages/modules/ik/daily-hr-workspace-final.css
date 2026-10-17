@@ -1267,3 +1267,104 @@
 .gop-bulk-section .gop-bulk-editor { margin:0; border:0; border-top:1px solid #e1e8ef; border-radius:0; }
 .gop-week-rate { display:block; font-weight:700; color:#325876; font-size:10px; white-space:normal; }
 @media(max-width:700px) { .gop-bulk-section>summary small { display:block; margin:4px 0 0; } }
+
+/* GUNLUK_SYNC_CHECK_20261017 — seçim ve kontrol fiziksel ayrı satırlar; tam kart yeşil. */
+.gop-quick-dialog .quick-person{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  grid-template-rows:var(--quick-row-h) 26px!important;
+  gap:5px!important;
+  padding:4px!important;
+  min-width:0!important;
+  min-height:calc(var(--quick-row-h) + 39px)!important;
+  height:auto!important;
+  border:2px solid #d6e3ee!important;
+  border-radius:9px!important;
+}
+.gop-quick-dialog .quick-person.selected:not(.checked){
+  background:#fff4e8!important;border-color:#f59e0b!important;
+  box-shadow:inset 4px 0 0 #ea580c!important;
+}
+.gop-quick-dialog .quick-person.checked{
+  background:#c6f6d5!important;
+  border-color:#15803d!important;
+  box-shadow:inset 0 0 0 1px #15803d!important;
+}
+.gop-quick-dialog .quick-person.checked .quick-person-text strong{color:#14532d!important}
+.gop-quick-dialog .quick-person.checked .quick-main-toggle{background:#ecfdf3!important}
+.gop-quick-dialog .quick-person .quick-main-toggle{
+  display:grid!important;
+  grid-column:1!important;
+  grid-row:1!important;
+  max-width:100%!important;
+  width:100%!important;
+  min-height:var(--quick-row-h)!important;
+  height:var(--quick-row-h)!important;
+  border:1px solid #d8e3ee!important;
+  border-radius:6px!important;
+  padding:2px 5px!important;
+}
+.gop-quick-dialog .quick-person .quick-check-button{
+  display:flex!important;
+  grid-column:1!important;
+  grid-row:2!important;
+  justify-content:center!important;
+  align-items:center!important;
+  gap:7px!important;
+  flex:none!important;
+  width:100%!important;
+  min-width:100%!important;
+  max-width:100%!important;
+  height:26px!important;
+  min-height:26px!important;
+  margin:0!important;
+  padding:0 8px!important;
+  border:1px solid #9caec0!important;
+  border-radius:6px!important;
+  background:#f8fafc!important;
+  color:#334155!important;
+  cursor:pointer!important;
+}
+.gop-quick-dialog .quick-person .quick-check-button.is-checked{
+  color:#fff!important;
+  background:#15803d!important;
+  border-color:#14532d!important;
+}
+.gop-quick-dialog .quick-check-label{font-size:10px!important;font-weight:900!important;letter-spacing:.03em;white-space:nowrap}
+.gop-quick-dialog .quick-person .quick-check-button:disabled{opacity:.45!important;cursor:not-allowed!important}
+.gop-quick-dialog .quick-person .quick-check-button.is-checked .quick-check-mark{
+  color:#166534!important;background:#fff!important;border-color:#fff!important;
+}
+.kyop-table-wrap tr.checked:not(.group)>td{background:#dcfce7!important;border-bottom-color:#86efac!important}
+.kyop-table-wrap tr.checked:not(.group)>td:first-child{border-left:5px solid #15803d!important}
+.kyop-table-wrap tr.checked .kyop-person-cell strong{color:#14532d!important}
+.kyop-row-actions{gap:10px!important}
+.kyop-row-actions button{min-width:68px!important;min-height:32px!important;padding:4px 7px!important;font-size:10px!important;font-weight:800!important}
+.kyop-row-actions button.verified{border:1px solid #0f766e!important}
+.kyop-row-actions button.verified.selected{background:#15803d!important;border-color:#14532d!important;color:#fff!important}
+.gop-daily-audit{margin:13px 0 20px;background:#fff;border:1px solid #c8d9e8;border-radius:11px;overflow:hidden}
+.gop-daily-audit-title{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;background:#f0f6fd;border-bottom:1px solid #dbe8f3}
+.gop-daily-audit-title>div{display:flex;align-items:center;gap:9px}
+.gop-daily-audit-title>div>span{display:grid;gap:3px}
+.gop-daily-audit-title strong{font-size:14px;color:#193956}
+.gop-daily-audit-title small{font-size:11px;color:#526a82}
+.gop-daily-audit-title button,.gop-audit-more{border:1px solid #c5d6e7;background:#fff;border-radius:7px;padding:8px 12px;cursor:pointer;color:#195181;font-size:12px;font-weight:700}
+.gop-daily-audit-list{max-height:260px;overflow:auto}
+.gop-daily-audit-event{display:grid;grid-template-columns:135px 180px minmax(120px,1fr) minmax(150px,1.5fr);align-items:center;gap:10px;padding:10px 15px;border-bottom:1px solid #edf2f8}
+.gop-daily-audit-event b{font-size:12px;color:#12623c}
+.gop-daily-audit-event span{font-size:12px;font-weight:700;color:#1f3650}
+.gop-daily-audit-event small{font-size:11px;color:#64748b}
+.gop-audit-time{font-variant-numeric:tabular-nums}
+.gop-daily-audit-empty,.gop-daily-audit-error{padding:14px 16px;color:#66758b;font-size:12px}
+.gop-daily-audit-error{background:#fff6e3;color:#884b12}
+.gop-audit-more{margin:10px 14px}
+@media(max-width:900px){
+  .gop-daily-audit-event{grid-template-columns:1fr 1fr;gap:5px}
+  .gop-daily-audit-title{align-items:flex-start}
+  .gop-daily-audit-title small{line-height:1.4}
+}
+@media(max-width:540px){
+  .gop-daily-audit-event{grid-template-columns:1fr}
+  .gop-daily-audit-title{flex-direction:column;align-items:stretch}
+  .kyop-row-actions{flex-wrap:wrap!important}
+}
