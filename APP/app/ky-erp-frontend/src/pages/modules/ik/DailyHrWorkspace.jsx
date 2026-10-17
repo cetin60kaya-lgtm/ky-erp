@@ -31,6 +31,7 @@ import {
   getDailyFocusedRecords,
   getDailyPaymentHistory,
   getDailyPaymentPool,
+  getDailyPeriodPaymentStatus,
   getDailyPeriodLock,
   getDailyRoster,
   getDailyRevisions,
@@ -345,6 +346,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [rosterSaved, setRosterSaved] = useState(false);
   const [, setSummaryRows] = useState([]);
   const [paymentRows, setPaymentRows] = useState([]);
+  const [periodStatusRows, setPeriodStatusRows] = useState([]);
+  const [periodStatusError, setPeriodStatusError] = useState("");
   const [paymentPeriodRows, setPaymentPeriodRows] = useState([]);
   const [paymentLoadError, setPaymentLoadError] = useState("");
   const [paymentHistoryRows, setPaymentHistoryRows] = useState([]);
@@ -482,13 +485,16 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (view === "daily-payments") setError("");
     try {
       const sourceRange = view === "daily-dashboard" ? range : paymentPoolRange;
-      const [poolResult, attendanceResult] = await Promise.all([
+      const [poolResult, attendanceResult, statusResult] = await Promise.all([
         getDailyPaymentPool({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }),
         getDailyAttendance({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }, { forceFresh: true }),
+        getDailyPeriodPaymentStatus({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }).catch(() => null),
       ]);
       const poolRows = Array.isArray(poolResult) ? poolResult : [];
       const attendanceRows = Array.isArray(attendanceResult) ? attendanceResult : [];
       setPaymentRows(poolRows);
+      setPeriodStatusRows(Array.isArray(statusResult) ? statusResult : []);
+      setPeriodStatusError(Array.isArray(statusResult) ? "" : "Ödeme durumu doğrulanamadı; tamamlandı kabul edilmeyecek.");
 
       const employeeLookup = new Map(employees.map((person) => [String(person.id), person]));
       const map = new Map();
@@ -537,6 +543,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       const message = e?.message || "Dönem ödeme verileri alınamadı.";
       setPaymentRows([]);
       setPaymentPeriodRows([]);
+      setPeriodStatusRows([]);
+      setPeriodStatusError(message);
       setPaymentLoadError(message);
       if (view === "daily-payments") setError(message);
     } finally { setLoading(false); }
@@ -626,8 +634,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     });
     return [...map.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), "tr"));
   }, [attendance, employeeMap, range.end, range.start]);
-  const paymentPeriodIsHistorical = view === "daily-payments" && isPastCompletedWeek(paymentPoolRange);
-  const visiblePaymentRows = useMemo(() => paymentPeriodIsHistorical ? [] : paymentRows, [paymentPeriodIsHistorical, paymentRows]);
+  // Geçmiş haftalarda da açık hakediş olabilir; tarih nedeniyle havuzu gizleme.
+  const visiblePaymentRows = paymentRows;
   const selectedPaymentRows = useMemo(() => visiblePaymentRows.filter((row) => paymentSelectedIds.has(String(row.employeeId))), [visiblePaymentRows, paymentSelectedIds]);
   const selectedPaymentPeriodRows = useMemo(() => paymentPeriodRows.filter((row) => paymentSelectedIds.has(String(row.employeeId))), [paymentPeriodRows, paymentSelectedIds]);
   const cardRoles = useMemo(() => [...new Set(employees.map((person) => person.role || "Vasıfsız").filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr")), [employees]);
@@ -675,21 +683,15 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     sum.controlPending += number(row.pendingCheckCount) > 0 ? 1 : 0;
     return sum;
   }, { people: 0, days: 0, amount: 0, controlPending: 0 }), [visiblePaymentRows]);
-  const periodPaymentStatus = useMemo(() => {
-    const openMap = new Map((paymentPeriodIsHistorical ? [] : paymentRows).map((row) => [String(row.employeeId), row]));
-    return paymentPeriodRows.reduce((sum, row) => {
-      const open = openMap.get(String(row.employeeId));
-      if (open) {
-        sum.waiting += 1;
-        sum.waitingAmount += number(open.totalAmount);
-        if (number(open.pendingCheckCount) > 0) sum.controlPending += 1;
-      } else {
-        sum.paid += 1;
-        sum.paidAmount += number(row.totalAmount);
-      }
-      return sum;
-    }, { paid: 0, paidAmount: 0, waiting: 0, waitingAmount: 0, controlPending: 0 });
-  }, [paymentPeriodIsHistorical, paymentPeriodRows, paymentRows]);
+  const paymentStatusByEmployee = useMemo(() => new Map(periodStatusRows.map((row) => [String(row.employeeId), row])), [periodStatusRows]);
+  const periodPaymentStatus = useMemo(() => periodStatusRows.reduce((sum, row) => {
+    if (number(row.openCount) > 0) sum.waiting += 1;
+    else sum.paid += 1;
+    sum.waitingAmount += number(row.openAmount);
+    sum.paidAmount += number(row.paidAmount);
+    if (number(row.pendingCheckCount) > 0) sum.controlPending++;
+    return sum;
+  }, { paid: 0, paidAmount: 0, waiting: 0, waitingAmount: 0, controlPending: 0 }), [periodStatusRows]);
   const paymentHistoryMetrics = useMemo(() => paymentHistoryRows.reduce((sum, row) => {
     if (String(row.status).toUpperCase() !== "PAID") return sum;
     sum.amount += number(row.totalAmount); sum.count += 1; sum.days += number(row.totalDays); sum.people.add(String(row.employeeId)); return sum;
@@ -720,7 +722,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     });
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
   }, [attendance, employees]);
-  const dashboardPaidAmount = Math.max(0, number(rangeTotals.total) - number(openPaymentMetrics.amount));
+  const dashboardPaidAmount = periodStatusError ? null : number(periodPaymentStatus.paidAmount);
   const dashboardDays = daySummaries.length > 7 ? daySummaries.slice(-7) : daySummaries;
   const dashboardPeople = useMemo(() => new Set(attendance.filter((row) => rowDay(row) || rowNight(row)).map(rowEmployeeId).filter(Boolean)).size, [attendance]);
   const dashboardZeroWage = useMemo(() => employees.filter((person) => person.active !== false && person.dayRate <= 0).length, [employees]);
@@ -729,6 +731,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (weeklyPending) rows.push(`${weeklyPending} vardiya kontrol bekliyor.`);
     if (openPaymentMetrics.people) rows.push(`${openPaymentMetrics.people} personelin ödemesi bekliyor.`);
     if (paymentLoadError) rows.push("Ödeme verisi şu anda alınamadı; diğer günlük operasyon verileri etkilenmedi.");
+    if (periodStatusError) rows.push(periodStatusError);
     if (dashboardZeroWage) rows.push(`${dashboardZeroWage} aktif personelin gündüz ücreti 0.`);
     if (periodLocked) rows.push("Seçili dönem kapalı; günlük kayıt değişikliği kilitli.");
     if (!attendance.length) rows.push("Seçili tarih aralığında çalışma kaydı yok.");
@@ -1211,9 +1214,9 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       } else if (view === "daily-cards") {
         await loadEmployees();
       } else if (view === "daily-weekly") {
-        await loadWeekly();
+        await Promise.all([loadEmployees(), loadRangeData(), loadWeekly()]);
       } else if (view === "daily-payments") {
-        await Promise.all([loadPayments(), loadPaymentHistory()]);
+        await Promise.all([loadEmployees(), loadRangeData(), loadPayments(), loadPaymentHistory()]);
       } else if (view === "daily-dashboard") {
         await Promise.all([loadEmployees(), loadRangeData(), loadWeekly(), loadPayments()]);
       }
@@ -1390,14 +1393,14 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         <div className="gop-toolbar-card payment-toolbar"><div className="gop-payment-filter-context"><strong>{paymentTab === "history" ? "Ödeme Tarihi Filtresi" : "Hakediş Filtresi"}</strong><span>{dateText(activePaymentRange.start)} — {dateText(activePaymentRange.end)}</span></div><div className="gop-preset-buttons"><button type="button" className={paymentPresetActive("today") ? "active" : ""} onClick={() => paymentPreset("today")}>Bugün</button><button type="button" className={paymentPresetActive("week") ? "active" : ""} onClick={() => paymentPreset("week")}>Bu Hafta</button><button type="button" className={paymentPresetActive("lastWeek") ? "active" : ""} onClick={() => paymentPreset("lastWeek")}>Geçen Hafta</button><button type="button" className={paymentPresetActive("month") ? "active" : ""} onClick={() => paymentPreset("month")}>Bu Ay</button><button type="button" className={paymentPresetActive("lastMonth") ? "active" : ""} onClick={() => paymentPreset("lastMonth")}>Geçen Ay</button><button type="button" className={paymentPresetActive("year") ? "active" : ""} onClick={() => paymentPreset("year")}>Bu Yıl</button></div>{paymentRangeControls}</div>
 
         {paymentTab === "period" ? <>
-          <div className="gop-payment-stats period-stats"><Stat label="Personel" value={paymentMetrics.people} hint={`${paymentMetrics.totalDays} vardiya`}/><Stat label="Gündüz" value={paymentMetrics.dayCount} hint={money(paymentMetrics.dayTotal)}/><Stat label="Gece" value={paymentMetrics.nightCount} hint={money(paymentMetrics.nightTotal)}/><Stat label="Tamamlanan" value={periodPaymentStatus.paid} hint={money(periodPaymentStatus.paidAmount)}/><Stat label="Açık" value={periodPaymentStatus.waiting} hint={money(periodPaymentStatus.waitingAmount)}/><Stat label="GENEL TOPLAM" value={money(paymentMetrics.totalAmount)}/></div>
+          {periodStatusError ? <div className="gop-wage-sync-alert" role="alert">{periodStatusError}</div> : null}<div className="gop-payment-stats period-stats"><Stat label="Personel" value={paymentMetrics.people} hint={`${paymentMetrics.totalDays} vardiya`}/><Stat label="Gündüz" value={paymentMetrics.dayCount} hint={money(paymentMetrics.dayTotal)}/><Stat label="Gece" value={paymentMetrics.nightCount} hint={money(paymentMetrics.nightTotal)}/><Stat label="Tamamlanan" value={periodPaymentStatus.paid} hint={money(periodPaymentStatus.paidAmount)}/><Stat label="Açık" value={periodPaymentStatus.waiting} hint={money(periodPaymentStatus.waitingAmount)}/><Stat label="GENEL TOPLAM" value={money(paymentMetrics.totalAmount)}/></div>
           <div className="gop-card"><div className="gop-card-head payment-head"><div><h2>Dönem Hakedişleri ve Çıktı</h2><span>Çıktı almak ödeme kaydı oluşturmaz. Ödemeler yalnız Ödeme Bekleyenler bölümünde açıkça Tamamla denildiğinde kaydedilir.</span></div><div className="gop-print-actions"><span className="print-payment-note">Çıktı = yalnız hakediş belgesi</span><button type="button" disabled={!selectedPaymentPeriodRows.length} onClick={() => printPaymentPeriodSlips({ selectedOnly: true })}><Printer size={15}/> Seçili Fişleri Yazdır</button><button type="button" disabled={!paymentPeriodRows.length} onClick={() => printPaymentPeriodSlips()}><Printer size={15}/> Tüm Fişleri Yazdır</button><button type="button" onClick={() => setPaymentSelectedIds(new Set(paymentPeriodRows.map((row) => String(row.employeeId))))}>Tümünü Seç</button><button type="button" disabled={!paymentSelectedIds.size} onClick={() => setPaymentSelectedIds(new Set())}>Seçimi Kaldır</button></div></div>
-            <div className="gop-payment-ledger-table period-ledger"><table><thead><tr><th>Seç</th><th>Personel</th><th>Hakediş Dönemi</th><th>Gündüz Adet</th><th>Gündüz Toplam</th><th>Gece Adet</th><th>Gece Toplam</th><th>Ücret Toplamı</th><th>Durum</th><th>Fiş</th></tr></thead><tbody>{paymentPeriodRows.length ? paymentPeriodRows.map((row) => { const key=String(row.employeeId); const picked=paymentSelectedIds.has(key); const open=paymentPeriodIsHistorical ? null : paymentRows.find((item) => String(item.employeeId)===key); const controlPending=open ? number(open.pendingCheckCount)>0 : false; return <tr key={key}><td><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next=new Set(current); if(next.has(key)) next.delete(key); else next.add(key); return next; })}/></td><td><strong>{row.name || row.fullName}</strong><small>{row.personnelNo || ""} · {row.qualification || "-"}</small></td><td>{dateText(paymentPoolRange.start)} — {dateText(paymentPoolRange.end)}</td><td><b>{number(row.dayCount)}</b></td><td className="money">{money(row.dayTotal)}</td><td><b>{number(row.nightCount)}</b></td><td className="money">{money(row.nightTotal)}</td><td className="money grand"><strong>{money(row.totalAmount)}</strong></td><td><span className={`payment-state ${open ? (controlPending ? "control" : "waiting") : "paid"}`}>{open ? (controlPending ? "KONTROL BEKLİYOR" : "AÇIK") : "TAMAMLANDI"}</span></td><td><button type="button" disabled={busy || controlPending} onClick={() => printPeriodRows([row])}><Printer size={14}/> Çıktı Al</button></td></tr>; }) : <tr><td colSpan="10"><Empty>Seçili tarih aralığında çalışma kaydı yok.</Empty></td></tr>}</tbody><tfoot><tr><td colSpan="3"><strong>GENEL TOPLAM</strong></td><td><strong>{paymentMetrics.dayCount}</strong></td><td className="money"><strong>{money(paymentMetrics.dayTotal)}</strong></td><td><strong>{paymentMetrics.nightCount}</strong></td><td className="money"><strong>{money(paymentMetrics.nightTotal)}</strong></td><td className="money grand"><strong>{money(paymentMetrics.totalAmount)}</strong></td><td><strong>{periodPaymentStatus.paid} tamamlandı / {periodPaymentStatus.waiting} açık</strong></td><td></td></tr></tfoot></table></div>
+            <div className="gop-payment-ledger-table period-ledger"><table><thead><tr><th>Seç</th><th>Personel</th><th>Hakediş Dönemi</th><th>Gündüz Adet</th><th>Gündüz Toplam</th><th>Gece Adet</th><th>Gece Toplam</th><th>Ücret Toplamı</th><th>Durum</th><th>Fiş</th></tr></thead><tbody>{paymentPeriodRows.length ? paymentPeriodRows.map((row) => { const key=String(row.employeeId); const picked=paymentSelectedIds.has(key); const open=paymentRows.find((item) => String(item.employeeId)===key); const state=paymentStatusByEmployee.get(key); const controlPending=state ? number(state.pendingCheckCount)>0 : false; const paymentLabel=!state ? "DOĞRULANAMADI" : state.status === "PAID" ? "ÖDENDİ" : state.status === "PARTIAL" ? "KISMEN ÖDENDİ" : controlPending ? "KONTROL BEKLİYOR" : "AÇIK"; return <tr key={key}><td><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next=new Set(current); if(next.has(key)) next.delete(key); else next.add(key); return next; })}/></td><td><strong>{row.name || row.fullName}</strong><small>{row.personnelNo || ""} · {row.qualification || "-"}</small></td><td>{dateText(paymentPoolRange.start)} — {dateText(paymentPoolRange.end)}</td><td><b>{number(row.dayCount)}</b></td><td className="money">{money(row.dayTotal)}</td><td><b>{number(row.nightCount)}</b></td><td className="money">{money(row.nightTotal)}</td><td className="money grand"><strong>{money(row.totalAmount)}</strong></td><td><span className={`payment-state ${state?.status === "PAID" ? "paid" : controlPending ? "control" : "waiting"}`}>{paymentLabel}</span></td><td><button type="button" disabled={busy || controlPending} onClick={() => printPeriodRows([row])}><Printer size={14}/> Çıktı Al</button></td></tr>; }) : <tr><td colSpan="10"><Empty>Seçili tarih aralığında çalışma kaydı yok.</Empty></td></tr>}</tbody><tfoot><tr><td colSpan="3"><strong>GENEL TOPLAM</strong></td><td><strong>{paymentMetrics.dayCount}</strong></td><td className="money"><strong>{money(paymentMetrics.dayTotal)}</strong></td><td><strong>{paymentMetrics.nightCount}</strong></td><td className="money"><strong>{money(paymentMetrics.nightTotal)}</strong></td><td className="money grand"><strong>{money(paymentMetrics.totalAmount)}</strong></td><td><strong>{periodPaymentStatus.paid} tamamlandı / {periodPaymentStatus.waiting} açık</strong></td><td></td></tr></tfoot></table></div>
           </div>
         </> : paymentTab === "pool" ? <>
           <div className="gop-payment-stats pool-stats"><Stat label="Ödeme Bekleyen" value={paymentPageOpenMetrics.people} hint={`${paymentPageOpenMetrics.days} vardiya`}/><Stat label="Bekleyen Tutar" value={money(paymentPageOpenMetrics.amount)}/><Stat label="Kontrol Bekleyen" value={paymentPageOpenMetrics.controlPending}/><Stat label="Hakediş Dönemi" value={`${dateText(paymentPoolRange.start)} — ${dateText(paymentPoolRange.end)}`}/></div>
           <div className="gop-card"><div className="gop-card-head payment-head"><div><h2>Ödeme Bekleyenler</h2><span>Bu alan yalnız ödenmemiş hakedişleri gösterir. Ödeme sonrası kayıt Dönem / Çıktı ve Yapılan Ödemeler tarafında kalır.</span></div><div className="gop-print-actions"><button type="button" onClick={() => setPaymentTab("period")}><Printer size={15}/> Dönem Çıktısına Git</button><button type="button" onClick={() => setPaymentSelectedIds(new Set(visiblePaymentRows.map((row) => String(row.employeeId))))}>Tümünü Seç</button><button type="button" className="primary" disabled={busy || !selectedPaymentRows.length || selectedPaymentRows.some((row) => number(row.pendingCheckCount) > 0)} onClick={paySelectedRows}><WalletCards size={15}/> Seçili Tamamla</button></div></div>
-            <div className="gop-payment-ledger-table"><table><thead><tr><th>Seç</th><th>Personel</th><th>Dönem</th><th>Gündüz</th><th>Gece</th><th>Vardiya</th><th>Ödenecek</th><th>Kontrol</th><th>İşlem</th></tr></thead><tbody>{visiblePaymentRows.length ? visiblePaymentRows.map((row) => { const key=String(row.employeeId); const picked=paymentSelectedIds.has(key); const ready=number(row.pendingCheckCount)===0; return <tr key={key} className={!ready ? "needs-control" : ""}><td><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next=new Set(current); if(next.has(key)) next.delete(key); else next.add(key); return next; })}/></td><td><strong>{row.name || row.fullName}</strong><small>{row.personnelNo || ""} · {row.qualification || "-"}</small></td><td>{dateText(row.periodStart)} — {dateText(row.periodEnd)}</td><td>{number(row.dayCount)}</td><td>{number(row.nightCount)}</td><td><b>{number(row.totalDays)}</b></td><td className="money"><strong>{money(row.totalAmount)}</strong></td><td><span className={`gop-badge ${ready ? "ok" : "waiting"}`}>{ready ? "✓ Tam" : `${number(row.pendingCheckCount)} eksik`}</span></td><td><div className="ledger-actions"><button type="button" className="primary" disabled={busy || !ready} onClick={() => payRow(row,false)}><WalletCards size={14}/> Tamamla</button><button type="button" className="primary soft" disabled={busy || !ready} onClick={() => payRow(row,true)}><Printer size={14}/> Tamamla + Fiş</button></div></td></tr>; }) : <tr><td colSpan="9"><Empty>{paymentPeriodIsHistorical ? "Geçmiş hafta tamamlandı. Çıktılar Dönem / Çıktı sekmesinden tekrar alınabilir." : "Bu dönemde bekleyen ödeme yok. Çıktılar Dönem / Çıktı sekmesinden alınabilir."}</Empty></td></tr>}</tbody></table></div>
+            <div className="gop-payment-ledger-table"><table><thead><tr><th>Seç</th><th>Personel</th><th>Dönem</th><th>Gündüz</th><th>Gece</th><th>Vardiya</th><th>Ödenecek</th><th>Kontrol</th><th>İşlem</th></tr></thead><tbody>{visiblePaymentRows.length ? visiblePaymentRows.map((row) => { const key=String(row.employeeId); const picked=paymentSelectedIds.has(key); const ready=number(row.pendingCheckCount)===0; return <tr key={key} className={!ready ? "needs-control" : ""}><td><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next=new Set(current); if(next.has(key)) next.delete(key); else next.add(key); return next; })}/></td><td><strong>{row.name || row.fullName}</strong><small>{row.personnelNo || ""} · {row.qualification || "-"}</small></td><td>{dateText(row.periodStart)} — {dateText(row.periodEnd)}</td><td>{number(row.dayCount)}</td><td>{number(row.nightCount)}</td><td><b>{number(row.totalDays)}</b></td><td className="money"><strong>{money(row.totalAmount)}</strong></td><td><span className={`gop-badge ${ready ? "ok" : "waiting"}`}>{ready ? "✓ Tam" : `${number(row.pendingCheckCount)} eksik`}</span></td><td><div className="ledger-actions"><button type="button" className="primary" disabled={busy || !ready} onClick={() => payRow(row,false)}><WalletCards size={14}/> Tamamla</button><button type="button" className="primary soft" disabled={busy || !ready} onClick={() => payRow(row,true)}><Printer size={14}/> Tamamla + Fiş</button></div></td></tr>; }) : <tr><td colSpan="9"><Empty>{"Bu dönemde bekleyen ödeme yok; ödeme geçmişi ve hakedişleri kontrol edin."}</Empty></td></tr>}</tbody></table></div>
           </div>
         </> : <>
           <div className="gop-payment-stats"><Stat label="Yapılan Ödeme" value={money(paymentHistoryMetrics.amount)}/><Stat label="Ödeme Adedi" value={paymentHistoryMetrics.count}/><Stat label="Personel" value={paymentHistoryMetrics.people.size}/><Stat label="Toplam Gün/Vardiya" value={paymentHistoryMetrics.days}/></div>
