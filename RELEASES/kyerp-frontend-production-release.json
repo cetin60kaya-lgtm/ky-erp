@@ -5,16 +5,17 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-10-17",
   "scope": [
-    "gunluk-hizli-personel-girisi-v2-kart",
-    "gunluk-eski-css-cakismasi-ayristirma",
-    "gunluk-sec-ve-kontrol-ayri-dugme",
-    "gunluk-kontrol-edildi-tam-yesil-kart",
-    "gunluk-hizli-giris-v2-gorunur-yayin-isareti",
+    "gunluk-hizli-giris-kompakt-v3",
+    "gunluk-kart-en-220px-beşli-responsive",
+    "gunluk-tek-yatay-satir-sec-kontrol",
+    "gunluk-tam-yesil-onay-karti",
+    "gunluk-dokunma-hedefleri-ayri",
+    "gunluk-eski-genislik-tercihi-v5",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "PR #438, CI #39050680228 PASS. Kullanıcının 17.10.2026 gerçek ekranında kalan eski sıkıştırılmış hızlı giriş kartı tasarımının bağımsız V2 ile değiştirilmesi. Worker/API/D1 değişikliği yok. Kullanıcı oturumlu gerçek ekran görsel kabulü ayrıca gereklidir.",
-  "sourceCommit": "2039e4c2f8b097fbd78ad8c748eff7fee146ee71",
+  "note": "17.10.2026 kullanıcı onayı: son görsel hedef 5 yatay kart ve daha dar dikey/yatay yoğunluk. PR #439, merge 45ff7d5c, CI 39056136105 PASS. Yalnız frontend; D1/Worker/personel/ödeme kaydı değişmedi. Canlı kullanıcı oturumunda görsel kabul beklenir.",
+  "sourceCommit": "45ff7d5c33e89b4f3488975bc9d096a5565506a3",
   "requestedAt": "2026-10-17"
 }
