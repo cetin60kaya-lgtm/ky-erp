@@ -3,16 +3,18 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "bfd9d452c4308f88e212709ecc06907e2a7b145e",
+  "sourceCommit": "91bf79ba2378bc5fd47def8fd6fd2d51d5990c97",
   "requestedAt": "2026-10-17",
-  "attempt": 18,
+  "attempt": 19,
   "scope": [
-    "daily-operations-concurrency-safe-check",
-    "multi-computer-d1-sync-state",
-    "roster-merge-targeted-removal",
-    "append-only-daily-audit",
-    "d1-backup-before-worker-release",
-    "post-release-api-health"
+    "gunluk-ek-odeme-kesinti-0061",
+    "gunluk-eklemeli-d1-shema-ve-bagimsiz-fi̇s-snapshot",
+    "gunluk-audit-log-aciklamali-iptal",
+    "gunluk-net-kurus-bazli-odeme-hesaplama",
+    "gunluk-pc-senkron-ve-cakisma-korumasi",
+    "D1-tam-yedek-artifact-oncesi",
+    "migration-0061-schema-proof",
+    "api-saglik-kontrolu"
   ],
-  "note": "PR #437 ve #436 test edildi. Günlük Operasyon çoklu PC kontrol sürümü, birleştirilen personel havuzu ve log görüntüleme API ile uyumlu. Üretim D1 silme veya personel ödeme kaydı oluşturma yok; yayın sürecinin D1 yedeği zorunludur."
+  "note": "PR #440 CI #39065684356 PASS. Worker + D1 0061 migration: çalışan/günlük ücret kayıtlarına dokunmadan sadece yeni ek ödeme/kesinti kalemleri ekleniyor. Yalnız D1 tam yedeğinden sonra 0061 uygulanacak, tablolar ve trigger'lar kanıtlanacak; gerçek ödeme kaydı otomatik oluşturulmaz."
 }
