@@ -52,8 +52,9 @@ import "./daily-hr-workspace-final.css";
 
 const VALID_VIEWS = new Set(["daily-dashboard", "daily-entry", "daily-cards", "daily-weekly", "daily-payments"]);
 const RANGE_KEY = "kyerp.dailyOperations.range.v5";
-const PAYMENT_POOL_RANGE_KEY = "kyerp.dailyOperations.paymentPoolRange.v1";
-const PAYMENT_HISTORY_RANGE_KEY = "kyerp.dailyOperations.paymentHistoryRange.v1";
+// Tek tarih aralığı, bütün Günlük Operasyon alt ekranlarında ortak.
+const PAYMENT_POOL_RANGE_KEY = RANGE_KEY;
+const PAYMENT_HISTORY_RANGE_KEY = RANGE_KEY;
 const LIVE_SYNC_INTERVAL_MS = 1500;
 const DAILY_SYNC_CHANNEL = "kyerp.dailyOperations.live.v1";
 const QUICK_ROW_HEIGHT_KEY = "kyerp.dailyOperations.quickRowHeight.v4";
@@ -313,9 +314,6 @@ function printWeeklyMatrix(title, range, days, rows = []) {
     css: `@page{size:A4 landscape;margin:3mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#101828;background:#fff}.week-print{width:100%}.week-page{width:100%;height:auto;max-height:198mm;display:block;page-break-after:auto;break-after:auto;break-inside:avoid}.week-page>header{min-height:5mm;border:1px solid #111827;display:flex;align-items:center;justify-content:space-between;padding:.4mm 1mm;margin-bottom:.3mm;background:#f8fafc}.week-page>header div{display:flex;align-items:baseline;gap:2mm}.week-page>header strong{font-size:9pt;letter-spacing:.01em}.week-page>header span,.week-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.week-page table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:7pt}.week-page th,.week-page td{border:1px solid #667085;padding:.14mm .5mm;line-height:1.05;vertical-align:middle}.week-page th{font-weight:900;text-align:center;height:6mm;background:#eef2f7}.week-page td{height:4mm}.week-page .no{width:6mm;text-align:center}.week-page .person{width:41mm;text-align:left}.week-page .person strong{display:block;font-size:7.2pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .person small{display:block;margin-top:0;font-size:6.2pt;color:#475467}.week-page .role{width:23mm;text-align:left;font-size:7pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .date-col{width:18mm}.week-page .date-col span,.week-page .date-col b,.week-page .date-col small{display:block}.week-page .date-col span{font-size:7pt}.week-page .date-col b{font-size:7.2pt;margin-top:.4mm}.week-page .date-col small{font-size:5.5pt;margin-top:.35mm;color:#667085}.work-cell{padding:.2mm!important;text-align:center}.work-cell>span{display:inline-flex;align-items:center;justify-content:center;gap:.45mm;width:50%;font-size:7.6pt;font-weight:900;white-space:nowrap}.work-cell>span+span{border-left:1px solid #98a2b3}.work-cell b{font-size:7pt}.work-cell i{font-style:normal;font-size:7.5pt;font-weight:900}.work-cell .day.on{color:#c2410c}.work-cell .night.on{color:#3730a3}.work-cell .off{color:#98a2b3}.week-page .count{width:10mm;text-align:center}.week-page .total-days{width:14mm;text-align:center}.week-page .total-money{width:29mm;text-align:right}.week-page th.total-money{text-align:center}.week-page td.total-money strong{font-size:8.6pt;white-space:nowrap}.week-page tfoot td{height:4.5mm;font-weight:900;background:#f8fafc}.week-page tfoot .day-total{text-align:center;padding:.3mm!important}.week-page tfoot .day-total span{display:block;font-size:6.6pt;line-height:1.15}.week-page tfoot .page-total td{border-top:1.5px solid #111827}.week-page tfoot .grand-total td{border-top:2px solid #111827;border-bottom:2px solid #111827;background:#eaf2ff;font-size:8.4pt}.week-page tfoot .grand-total .total-money strong{font-size:10pt}.week-page tfoot .general span{font-weight:900}@media print{html,body,.week-print,.week-page{height:auto!important;overflow:visible!important}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`,
   });
 }
-function printWeeklyControlList(range, days, rows = []) {
-  return printWeeklyMatrix("KY ERP GÜNLÜK PERSONEL HAFTALIK KONTROL LİSTESİ", range, days, rows);
-}
 function printWeeklySummary(range, days, rows = []) {
   return printWeeklyMatrix("KY ERP GÜNLÜK OPERASYON HAFTALIK ÖZET", range, days, rows);
 }
@@ -385,6 +383,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [logOpen, setLogOpen] = useState(false);
   const [logTab, setLogTab] = useState("summary");
   const [logRows, setLogRows] = useState([]);
+  const [inlineAuditRows, setInlineAuditRows] = useState([]);
+  const [inlineAuditError, setInlineAuditError] = useState("");
   const [logRevisions, setLogRevisions] = useState([]);
   const [logAttendance, setLogAttendance] = useState([]);
   const [logRange, setLogRange] = useState(readRange);
@@ -400,6 +400,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const liveVersionRef = useRef("");
+  const dailyRangeRef = useRef(range);
   const livePollBusyRef = useRef(false);
 
   const days = useMemo(() => rangeDays(range.start, range.end), [range.end, range.start]);
@@ -419,16 +420,35 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     const resolved = typeof next === "function" ? next(range) : next;
     if (!resolved?.start || !resolved?.end || resolved.end < resolved.start) return;
     if (rangeSpanDays(resolved.start, resolved.end) > 31) { setError("Günlük Operasyon tek seferde en fazla 31 günlük aralıkla çalışır."); return; }
-    setRange(resolved); writeRange(resolved); setError("");
-  }, [range]);
-  const setSafePaymentRange = useCallback((target, next) => {
-    const current = target === "history" ? paymentHistoryRange : paymentPoolRange;
-    const resolved = typeof next === "function" ? next(current) : next;
-    if (!resolved?.start || !resolved?.end || resolved.end < resolved.start) return;
-    if (target === "history") { setPaymentHistoryRange(resolved); writeNamedRange(PAYMENT_HISTORY_RANGE_KEY, resolved); }
-    else { setPaymentPoolRange(resolved); writeNamedRange(PAYMENT_POOL_RANGE_KEY, resolved); }
-    setError("");
-  }, [paymentHistoryRange, paymentPoolRange]);
+    dailyRangeRef.current = resolved;
+    setRange(resolved); setPaymentPoolRange(resolved); setPaymentHistoryRange(resolved);
+    writeRange(resolved); setError("");
+    try {
+      const channel = new window.BroadcastChannel(DAILY_SYNC_CHANNEL);
+      channel.postMessage({ type: "date-range", range: resolved, companyId });
+      channel.close();
+    } catch { /* localStorage event remains a fallback */ }
+  }, [companyId, range]);
+  const setSafePaymentRange = useCallback((_target, next) => {
+    const resolved = typeof next === "function" ? next(dailyRangeRef.current) : next;
+    setSafeRange(resolved);
+  }, [setSafeRange]);
+
+  useEffect(() => {
+    const accept = (next) => {
+      if (!next?.start || !next?.end || rangeSpanDays(next.start, next.end) > 31 || next.end < next.start) return;
+      if (sameRange(next, dailyRangeRef.current)) return;
+      dailyRangeRef.current = next;
+      setRange(next); setPaymentPoolRange(next); setPaymentHistoryRange(next);
+      setNotice("Tarih aralığı diğer KY ERP sekmesinden güncellendi.");
+    };
+    const onStorage = (event) => { if (event.key === RANGE_KEY && event.newValue) { try { accept(JSON.parse(event.newValue)); } catch { /* geçersiz eski tercih */ } } };
+    const channel = typeof window.BroadcastChannel === "function" ? new window.BroadcastChannel(DAILY_SYNC_CHANNEL) : null;
+    const onMessage = (event) => { if (event.data?.type === "date-range" && event.data?.companyId === companyId) accept(event.data.range); };
+    window.addEventListener("storage", onStorage);
+    channel?.addEventListener("message", onMessage);
+    return () => { window.removeEventListener("storage", onStorage); channel?.removeEventListener("message", onMessage); channel?.close(); };
+  }, [companyId]);
 
   useEffect(() => { if (selectedDate < range.start || selectedDate > range.end) setSelectedDate(range.start); }, [range.end, range.start, selectedDate]);
 
@@ -757,7 +777,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (busy) return; setBusy(true); setError(""); setNotice("");
     try {
       const requestedIds = [...effectiveRosterIds];
-      const saved = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: requestedIds });
+      const saved = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: requestedIds, mode: "merge" });
       setRosterIds(new Set(Array.isArray(saved?.employeeIds) ? saved.employeeIds.map(String) : requestedIds));
       setRosterSaved(true);
       setNotice("Tarih aralığı personel listesi kaydedildi.");
@@ -794,6 +814,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         startDate: range.start,
         endDate: range.end,
         employeeIds: [...nextRosterIds],
+        mode: "merge",
       });
       const finalRosterIds = new Set(
         Array.isArray(savedRoster?.employeeIds)
@@ -824,10 +845,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           status: nextSelected ? "ACTIVE" : "REMOVE",
           checked: nextSelected ? false : false,
           expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
+          expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
           note: nextSelected ? (notes[person.id] || "") : "",
         }],
       });
-      await Promise.all([loadFocused(), loadRangeData()]);
+      await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
       setNotice(
         nextSelected
           ? `${person.name} ${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} vardiyasına kaydedildi.`
@@ -876,6 +898,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         startDate: range.start,
         endDate: range.end,
         employeeIds: requestedRosterIds,
+        mode: "remove", removeEmployeeId: person.id,
       });
       const finalRosterIds = new Set(
         Array.isArray(savedRoster?.employeeIds)
@@ -911,10 +934,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           status: "ACTIVE",
           checked: Boolean(nextChecked),
           expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
+          expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
           note: notes[person.id] || "",
         }],
       });
-      await Promise.all([loadFocused(), loadRangeData()]);
+      await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
       setNotice(`${person.name} kontrol durumu ${nextChecked ? "onaylandı" : "kaldırıldı"}.`);
     } catch (e) {
       setError(e?.message || "Kontrol durumu güncellenemedi. Ekranı yenileyip tekrar deneyin.");
@@ -930,9 +954,26 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     try {
       const missingSelectedPeople = [...selectedIds].filter((id) => !employeeMap.has(id));
       if (missingSelectedPeople.length) throw new Error("Personel listesi eksik yüklendi. Kayıt korunması için ekranı yenileyip tekrar deneyin.");
-      if (!rosterSaved) { await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...effectiveRosterIds] }); setRosterIds(new Set(effectiveRosterIds)); setRosterSaved(true); }
-      await saveDailyFocusedRecords({ mainCompanyId: companyId, date: selectedDate, shift, personnelEntries: activeRosterPeople.map((person) => { const current = recordByEmployee.get(person.id) || {}; return { personelId: person.id, status: selectedIds.has(person.id) ? "ACTIVE" : "REMOVE", checked: selectedIds.has(person.id) && checkedIds.has(person.id), expectedUpdatedAt: current.updatedAt || current.attendanceUpdatedAt || "", note: notes[person.id] || "" }; }) });
-      setNotice(`${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} kayıtları kaydedildi.`); await Promise.all([loadFocused(), loadRangeData()]);
+      if (!rosterSaved) { const savedRoster = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...effectiveRosterIds], mode: "merge" }); setRosterIds(new Set(Array.isArray(savedRoster?.employeeIds) ? savedRoster.employeeIds.map(String) : effectiveRosterIds)); setRosterSaved(true); }
+      // Delta write: başka cihazdaki değişmemiş satırları tekrar yazma.
+      const changedPeople = activeRosterPeople.filter((person) => {
+        const record = recordByEmployee.get(person.id) || {};
+        return selectedIds.has(person.id) !== Boolean(record.selected) ||
+          (selectedIds.has(person.id) && checkedIds.has(person.id)) !== Boolean(record.checked) ||
+          String(notes[person.id] || "") !== String(record.note || "");
+      });
+      if (!changedPeople.length) { setNotice("Yeni kayıt gerektiren değişiklik bulunmadı."); return; }
+      await saveDailyFocusedRecords({ mainCompanyId: companyId, date: selectedDate, shift, personnelEntries: changedPeople.map((person) => {
+        const current = recordByEmployee.get(person.id) || {};
+        return {
+          personelId: person.id, status: selectedIds.has(person.id) ? "ACTIVE" : "REMOVE",
+          checked: selectedIds.has(person.id) && checkedIds.has(person.id),
+          expectedUpdatedAt: current.updatedAt || current.attendanceUpdatedAt || "",
+          expectedCheckedUpdatedAt: current.checkedUpdatedAt || "",
+          note: notes[person.id] || "",
+        };
+      }) });
+      setNotice(`${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} kayıtları kaydedildi.`); await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
     } catch (e) { setError(e?.message || "Günlük giriş kaydedilemedi. Başka cihazda değişiklik olduysa Yenile'ye basın."); } finally { setBusy(false); }
   };
   const selectAll = () => setSelectedIds(new Set(activeRosterPeople.filter((p) => shift === "day" || personWageAtDate(p, selectedDate).night > 0).map((p) => p.id)));
@@ -943,7 +984,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     const rows = await getDailyFocusedRecords({ mainCompanyId: companyId, date, shift: mode });
     const ids = focusedIds(rows);
     const checked = focusedCheckedIds(rows);
-    setQuick({ date, shift: mode, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), query: preserveQuery });
+    setQuick({ date, shift: mode, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), baselineRecords: Object.fromEntries((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), { updatedAt: row.updatedAt || "", checkedUpdatedAt: row.checkedUpdatedAt || "" }])), query: preserveQuery });
   };
   const openQuick = async (date = selectedDate, mode = shift) => {
     if (!date || busy) return;
@@ -972,7 +1013,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     try {
       const missingQuickPeople = [...snapshot.ids].filter((id) => !employeeMap.has(id));
       if (missingQuickPeople.length) throw new Error("Hızlı giriş personel listesi eksik yüklendi. Kayıtlar korunması için Yenile yapıp tekrar deneyin.");
-      if (!rosterSaved) { await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...effectiveRosterIds] }); setRosterIds(new Set(effectiveRosterIds)); setRosterSaved(true); }
+      if (!rosterSaved) { const savedRoster = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...effectiveRosterIds], mode: "merge" }); setRosterIds(new Set(Array.isArray(savedRoster?.employeeIds) ? savedRoster.employeeIds.map(String) : effectiveRosterIds)); setRosterSaved(true); }
       const rows = await getDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift });
       const currentMap = new Map((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), row]));
       const changedPeople = activeRosterPeople.filter((person) => {
@@ -982,7 +1023,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           (snapshot.baseline.has(id) && snapshot.checkedBaseline.has(id));
       });
       if (changedPeople.length) {
-        await saveDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift, personnelEntries: changedPeople.map((person) => ({ personelId: person.id, status: snapshot.ids.has(person.id) ? "ACTIVE" : "REMOVE", checked: snapshot.ids.has(person.id) && snapshot.checked.has(person.id), expectedUpdatedAt: currentMap.get(person.id)?.updatedAt || currentMap.get(person.id)?.attendanceUpdatedAt || "", note: currentMap.get(person.id)?.note || "" })) });
+        await saveDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift, personnelEntries: changedPeople.map((person) => ({ personelId: person.id, status: snapshot.ids.has(person.id) ? "ACTIVE" : "REMOVE", checked: snapshot.ids.has(person.id) && snapshot.checked.has(person.id), expectedUpdatedAt: snapshot.baselineRecords?.[person.id]?.updatedAt || "", expectedCheckedUpdatedAt: snapshot.baselineRecords?.[person.id]?.checkedUpdatedAt || "", note: currentMap.get(person.id)?.note || "" })) });
         const verified = await getDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift });
         const confirmedIds = focusedIds(verified);
         const confirmedChecks = focusedCheckedIds(verified);
@@ -991,13 +1032,23 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         if (notSaved) throw new Error("Kontrol seçimleri sunucuda doğrulanamadı. Veriler tekrar okunmalı; ödeme kaydı oluşturulmadı.");
       }
       setSelectedDate(snapshot.date); setShift(snapshot.shift); setNotice(`${dateText(snapshot.date)} hızlı giriş sunucuda doğrulanarak kaydedildi.`);
-      await Promise.all([loadFocused(), loadRangeData()]);
+      await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
       const nextDate = addDays(snapshot.date, 1);
       if (goNext && nextDate && nextDate <= range.end) await loadQuickFocus(nextDate, snapshot.shift, snapshot.query);
       else await loadQuickFocus(snapshot.date, snapshot.shift, snapshot.query);
     } catch (e) { setError(e?.message || "Hızlı giriş kaydedilemedi."); }
     finally { setBusy(false); }
   };
+
+  const loadInlineAudit = useCallback(async () => {
+    if (!companyId || view !== "daily-entry") return;
+    try {
+      const rows = await getDailyAudit({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, limit: 80 }, { forceFresh: true });
+      setInlineAuditRows(Array.isArray(rows) ? rows : []);
+      setInlineAuditError("");
+    } catch (e) { setInlineAuditError(e?.message || "İşlem geçmişi alınamadı."); }
+  }, [companyId, range.end, range.start, view]);
+  useEffect(() => { void loadInlineAudit(); }, [loadInlineAudit]);
 
   const loadLog = async (targetRange = logRange, shouldOpen = true) => {
     if (busy) return;
@@ -1216,13 +1267,13 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       if (cancelled) return;
       setQuick((current) => {
         if (!current || current.date !== snapshot.date || current.shift !== snapshot.shift) return current;
-        return { ...current, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked) };
+        return { ...current, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), baselineRecords: Object.fromEntries((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), { updatedAt: row.updatedAt || "", checkedUpdatedAt: row.checkedUpdatedAt || "" }])) };
       });
     };
 
     const refreshVisibleView = async () => {
       if (view === "daily-entry") {
-        await Promise.all([loadEmployees(), loadRangeData(), loadFocused(), refreshQuick()]);
+        await Promise.all([loadEmployees(), loadRangeData(), loadFocused(), refreshQuick(), loadInlineAudit()]);
       } else if (view === "daily-cards") {
         await loadEmployees();
       } else if (view === "daily-weekly") {
@@ -1285,7 +1336,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [activeRosterPeople, busy, checkedIds, companyId, loadEmployees, loadFocused, loadPaymentHistory, loadPayments, loadRangeData, loadWeekly, notes, quick, recordByEmployee, records, rosterSaved, selectedIds, view]);
+  }, [activeRosterPeople, busy, checkedIds, companyId, loadEmployees, loadFocused, loadInlineAudit, loadPaymentHistory, loadPayments, loadRangeData, loadWeekly, notes, quick, recordByEmployee, records, rosterSaved, selectedIds, view]);
 
   if (!companyId) return <div className="content-card module-error-card"><h3>Günlük Operasyon için firma seçin</h3><p>Günlük personel ve ödeme kayıtları firma bazında tutulur.</p></div>;
 
@@ -1325,6 +1376,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   }).sort((a, b) => String(b.createdAt || b.timestamp || rowDate(b)).localeCompare(String(a.createdAt || a.timestamp || rowDate(a))));
   const logPeople = new Set(logAttendance.map(rowEmployeeId).filter(Boolean)).size;
   const logTotals = logAttendance.reduce((sum, row) => ({ day: sum.day + (rowDay(row) ? 1 : 0), night: sum.night + (rowNight(row) ? 1 : 0), total: sum.total + (rowDay(row) ? number(row.dayWage ?? employeeMap.get(rowEmployeeId(row))?.dayRate) : 0) + (rowNight(row) ? number(row.nightWage ?? employeeMap.get(rowEmployeeId(row))?.nightRate) : 0) }), { day: 0, night: 0, total: 0 });
+  const recentDailyAudit = inlineAuditRows.slice(0, 16);
   const quickDirty = quick ? !sameSet(quick.ids, quick.baseline) || !sameSet(quick.checked, quick.checkedBaseline || new Set()) : false;
   const closeQuickDialog = () => {
     if (quickDirty && !window.confirm("Kaydedilmemiş hızlı giriş değişiklikleri var. Kaydetmeden kapatılsın mı?")) return;
@@ -1360,7 +1412,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           <aside className="kyop-panel kyop-pool"><div className="kyop-panel-head"><Users size={16}/> Dönem Personel Listesi <b>{rosterIds.size} / {employees.filter((person) => person.active !== false).length}</b></div><div className="kyop-pool-top"><label className="kyop-search"><Search size={14}/><input value={poolAddQuery} onChange={(e) => setPoolAddQuery(e.target.value)} placeholder="Personel ara"/></label><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><Plus size={14}/> Personel</button></div><div className="kyop-pool-list">{poolPeople.length ? poolPeople.map((person) => { const inRoster = rosterIds.has(person.id); return <label key={person.id} className={inRoster ? "included" : ""}><input type="checkbox" checked={inRoster} disabled={busy || periodLocked} title={inRoster ? "Havuzdan çıkarmak için orta tablodaki çöp butonunu kullanın." : "Tarih aralığı havuzuna ekle"} onChange={() => { if (!inRoster) void addPersonToRoster(person); }}/><span><strong>{person.personnelNo ? `${person.personnelNo} · ` : ""}{person.name}</strong><small>{person.role || "Vasıfsız"}</small><em>{inRoster ? "Havuzda" : "Havuza ekle"}</em><em>G: {money(personWageAtDate(person, selectedDate).day)} · N: {money(personWageAtDate(person, selectedDate).night)}</em></span></label>; }) : <Empty>Personel bulunamadı.</Empty>}</div><button type="button" className="primary full" disabled={busy || rosterSaved} onClick={saveRoster}><Save size={15}/> {rosterSaved ? `Dönem Listesi Kayıtlı (${rosterIds.size})` : `Dönem Listesini Kaydet (${rosterIds.size})`}</button></aside>
 
           <main className="kyop-panel kyop-entry"><div className="kyop-entry-head"><div><span>SEÇİLİ GÜNÜN PERSONEL GİRİŞİ</span><h2>{dateText(selectedDate)} · {shift === "day" ? "Gündüz" : "Gece"}</h2><p>Bu tablo yalnız {currentWeekday} günü için gösterilir. Üstte gün seçince liste ve toplamlar aynı güne yenilenir.</p></div><div className="kyop-head-actions"><button type="button" onClick={loadLog}>Log</button><button type="button" className={periodLocked ? "locked" : ""} onClick={togglePeriodLock}>{periodLocked ? "Dönemi Aç" : "Dönemi Kapat"}</button><b>{dateText(selectedDate, true)} · {shift === "day" ? "G" : "N"}</b></div></div>
-            <div className="kyop-table-wrap"><table><thead><tr><th>Personel / Giriş / Durum</th><th>Vasıf</th><th>Aktif Gün</th><th>Gündüz Ücret</th><th>Gece Ücret</th><th>Not</th><th>İşlem</th></tr></thead><tbody>{groupedEntryPeople.length ? groupedEntryPeople.flatMap(([role, people]) => [<tr className="group" key={`g-${role}`}><td colSpan="7">{role} <b>{people.length} personel</b></td></tr>, ...people.map((person) => { const selected = selectedIds.has(person.id); const reviewed = checkedIds.has(person.id); const historicalWage = personWageAtDate(person, selectedDate); const blocked = shift === "night" && historicalWage.night <= 0; return <tr key={person.id} className={`${selected ? "selected" : ""} ${reviewed ? "checked" : ""}`}><td><div className="kyop-person-cell"><div><strong>{person.name}</strong><small>{person.personnelNo || "Kod yok"}</small><em>{!rosterIds.has(person.id) ? (reviewed ? "Dönem listesi dışı kayıt · ✓ Kontrol Edildi" : "Dönem listesi dışı kayıt · Bu Gün Seçildi") : reviewed ? "✓ Kontrol Edildi" : selected ? "Bu Gün Seçildi" : "Bu Gün Yok"}</em></div><span className={`kyop-row-shift ${shift}`}>{shift === "day" ? "GÜNDÜZ" : "GECE"}</span></div></td><td>{person.role || "-"}</td><td>{dateText(selectedDate, true)}</td><td>{money(historicalWage.day)}</td><td>{historicalWage.night > 0 ? money(historicalWage.night) : "-"}</td><td><input value={notes[person.id] || ""} onChange={(e) => setNotes((current) => ({ ...current, [person.id]: e.target.value }))} placeholder="Not"/></td><td><div className="kyop-row-actions"><button type="button" title={selected ? "Gün seçimini kaldır" : "Seçili güne/vardiyaya kaydet"} disabled={blocked || periodLocked || busy} className={selected ? "selected" : ""} onClick={() => setPersonSelectedForShift(person, !selected)}><CheckCircle2 size={14}/></button><button type="button" title={reviewed ? "Kontrol işaretini kaldır" : "Kontrol edildi"} disabled={!selected || blocked || periodLocked || busy} className={reviewed ? "selected" : ""} onClick={() => setPersonReviewed(person, !reviewed)}>✓</button><button type="button" title="Personel kartını düzenle" onClick={() => setCardDialog({ ...person })}><Pencil size={14}/></button><button type="button" title={rosterIds.has(person.id) ? "Personeli tarih aralığı havuzundan çıkar" : "Dönem listesi dışı kayıt"} disabled={!rosterIds.has(person.id) || periodLocked || busy} onClick={() => removePersonFromRoster(person)}><Trash2 size={14}/></button></div></td></tr>; })]) : <tr><td colSpan="7"><Empty>Seçili dönemin personel listesinde veya aktif günde kayıt yok. Soldaki listeden personel ekleyin.</Empty></td></tr>}</tbody></table></div>
+            <div className="kyop-table-wrap"><table><thead><tr><th>Personel / Giriş / Durum</th><th>Vasıf</th><th>Aktif Gün</th><th>Gündüz Ücret</th><th>Gece Ücret</th><th>Not</th><th>İşlem</th></tr></thead><tbody>{groupedEntryPeople.length ? groupedEntryPeople.flatMap(([role, people]) => [<tr className="group" key={`g-${role}`}><td colSpan="7">{role} <b>{people.length} personel</b></td></tr>, ...people.map((person) => { const selected = selectedIds.has(person.id); const reviewed = checkedIds.has(person.id); const historicalWage = personWageAtDate(person, selectedDate); const blocked = shift === "night" && historicalWage.night <= 0; return <tr key={person.id} className={`${selected ? "selected" : ""} ${reviewed ? "checked" : ""}`}><td><div className="kyop-person-cell"><div><strong>{person.name}</strong><small>{person.personnelNo || "Kod yok"}</small><em>{!rosterIds.has(person.id) ? (reviewed ? "Dönem listesi dışı kayıt · ✓ Kontrol Edildi" : "Dönem listesi dışı kayıt · Bu Gün Seçildi") : reviewed ? "✓ Kontrol Edildi" : selected ? "Bu Gün Seçildi" : "Bu Gün Yok"}</em></div><span className={`kyop-row-shift ${shift}`}>{shift === "day" ? "GÜNDÜZ" : "GECE"}</span></div></td><td>{person.role || "-"}</td><td>{dateText(selectedDate, true)}</td><td>{money(historicalWage.day)}</td><td>{historicalWage.night > 0 ? money(historicalWage.night) : "-"}</td><td><input value={notes[person.id] || ""} onChange={(e) => setNotes((current) => ({ ...current, [person.id]: e.target.value }))} placeholder="Not"/></td><td><div className="kyop-row-actions"><button type="button" title={selected ? "Gün seçimini kaldır" : "Seçili güne/vardiyaya kaydet"} disabled={blocked || periodLocked || busy} className={selected ? "selected" : ""} onClick={() => setPersonSelectedForShift(person, !selected)}><CheckCircle2 size={14}/> {selected ? "Seçildi" : "Seç"}</button><button type="button" title={reviewed ? "Kontrol onayını kaldır" : "Kontrol edildi"} disabled={!selected || blocked || periodLocked || busy} className={reviewed ? "selected verified" : "verified"} onClick={() => setPersonReviewed(person, !reviewed)}>✓ {reviewed ? "Onaylandı" : "Kontrol"}</button><button type="button" title="Personel kartını düzenle" onClick={() => setCardDialog({ ...person })}><Pencil size={14}/></button><button type="button" title={rosterIds.has(person.id) ? "Personeli tarih aralığı havuzundan çıkar" : "Dönem listesi dışı kayıt"} disabled={!rosterIds.has(person.id) || periodLocked || busy} onClick={() => removePersonFromRoster(person)}><Trash2 size={14}/></button></div></td></tr>; })]) : <tr><td colSpan="7"><Empty>Seçili dönemin personel listesinde veya aktif günde kayıt yok. Soldaki listeden personel ekleyin.</Empty></td></tr>}</tbody></table></div>
           </main>
 
           <aside className="kyop-panel kyop-control"><div className="kyop-panel-head"><ClipboardList size={16}/> Günlük Kontrol</div><div className="kyop-control-body"><div className="kyop-active-day"><span>Aktif Gün</span><strong>{dateText(selectedDate)}</strong><small>{shift === "day" ? "Gündüz" : "Gece"}</small></div><div className="kyop-control-highlight"><span>Bu Gün Seçili / Seçilmedi</span><strong>{selectedIds.size} / {Math.max(visibleEntryPeople.length - selectedIds.size, 0)}</strong><small>{visibleEntryPeople.length} havuz/gün personeli</small></div><div className="kyop-control-highlight cyan"><span>Kontrol Edilen / Toplam</span><strong>{checkedSelectedCount} / {selectedIds.size}</strong><small>{Math.max(selectedIds.size - checkedSelectedCount, 0)} kayıt kontrol bekliyor</small></div><div className="kyop-control-highlight blue"><span>Günlük Toplam</span><strong>{money(selectedDaySummary.total)}</strong><small>G {money(employees.reduce((sum, p) => sum + (selectedIds.has(p.id) ? personWageAtDate(p, selectedDate).day : 0), 0))} · N {money(employees.reduce((sum, p) => sum + (selectedIds.has(p.id) ? personWageAtDate(p, selectedDate).night : 0), 0))}</small></div><div className="kyop-control-highlight violet"><span>Tarih Aralığı Toplamı</span><strong>{money(rangeTotals.total)}</strong><small>{dateText(range.start)} - {dateText(range.end)} · G {rangeTotals.day} · N {rangeTotals.night}</small></div><div className="kyop-role-counts"><div><span>Gündüz çalışan</span><b>{selectedDaySummary.dayCount}</b></div><div><span>Gece çalışan</span><b>{selectedDaySummary.nightCount}</b></div>{selectedRoleCounts.map((row) => <div key={row.role}><span>{row.role}</span><b>{row.count}</b></div>)}</div><div className={`kyop-control-alert ${selectedIds.size ? "ok" : "warn"}`}>{selectedIds.size ? `${shift === "day" ? "Gündüz" : "Gece"} seçili · ${selectedIds.size} personel seçildi.` : `${shift === "day" ? "Gündüz" : "Gece"} seçili · henüz personel seçilmedi.`}</div><button type="button" className="primary full" disabled={busy || periodLocked} onClick={saveFocused}><Save size={15}/> Günü Kaydet</button></div></aside>
@@ -1387,6 +1439,13 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         </div>
       </div> : null}
 
+      {view === "daily-entry" ? <section className="gop-daily-audit" aria-label="Günlük operasyon işlem geçmişi">
+        <div className="gop-daily-audit-title"><div><ClipboardList size={17}/><span><strong>İşlem Geçmişi</strong><small>{dateText(range.start)} — {dateText(range.end)} · Sunucu kayıtları · Diğer bilgisayarlarda da görünür</small></span></div><button type="button" onClick={() => void loadInlineAudit()} disabled={busy}><RefreshCw size={14}/> Güncelle</button></div>
+        {inlineAuditError ? <p className="gop-daily-audit-error" role="alert">{inlineAuditError}</p> : null}
+        <div className="gop-daily-audit-list">{recentDailyAudit.length ? recentDailyAudit.map((event,index) => <div key={event.id || index} className="gop-daily-audit-event"><span className="gop-audit-time">{dateTimeText(event.createdAt)}</span><b>{actionLabel(event)}{event.action === "ATTENDANCE_CHECK_UPDATE" ? (event.after?.checked ? " · ✓ Onaylandı" : " · Onay kaldırıldı") : ""}</b><span>{event.personName || employeeMap.get(String(event.employeeId))?.name || "Sistem"}</span><small>{dateText(event.workDate)} · {event.shift === "night" ? "Gece" : event.shift === "day" ? "Gündüz" : "Genel"} · {event.actorLabel || "KY ERP"}</small></div>) : <div className="gop-daily-audit-empty">Bu aralıkta kayıtlı işlem geçmişi yok.</div>}</div>
+        <button type="button" className="gop-audit-more" onClick={() => { setLogRange(range); void loadLog(range, true); }}>Tüm Geçmiş ve Ayrıntılar</button>
+      </section> : null}
+
       {view === "daily-cards" ? <div className="gop-card-manager">
         <section className="gop-card-pool"><div className="gop-card-manager-head"><div><strong>Personel Havuzu</strong><span>{managedEmployees.length} / {employees.length} kayıt</span></div><button type="button" className="primary" onClick={() => setCardDialog({ ...EMPTY_PERSON })}><Plus size={15}/> Yeni Personel</button></div><label className="gop-search standalone"><Search size={15}/><input value={cardQuery} onChange={(e) => setCardQuery(e.target.value)} placeholder="Ad, kod, vasıf veya aracı ara"/></label><div className="gop-card-filters"><select value={cardStatusFilter} onChange={(e) => setCardStatusFilter(e.target.value)}><option value="active">Aktif</option><option value="passive">Pasif</option><option value="all">Tümü</option></select><select value={cardRoleFilter} onChange={(e) => setCardRoleFilter(e.target.value)}><option value="all">Tüm vasıflar</option>{cardRoles.map((role) => <option key={role} value={role}>{role}</option>)}</select><select value={cardBrokerFilter} onChange={(e) => setCardBrokerFilter(e.target.value)}><option value="all">Tüm aracılar</option>{cardBrokers.map((broker) => <option key={broker} value={broker}>{broker}</option>)}</select></div><div className="gop-card-selectbar"><button type="button" onClick={() => setCardSelectedIds(new Set(managedEmployees.map((person) => person.id)))}>Görünenleri Seç</button><button type="button" onClick={() => setCardSelectedIds(new Set())}>Seçimi Kaldır</button><b>{cardSelectedIds.size} seçili</b></div><div className="gop-card-person-list">{managedEmployees.length ? managedEmployees.map((person) => { const picked = cardSelectedIds.has(person.id); const active = cardEditor?.id === person.id; return <div key={person.id} className={`${active ? "active" : ""} ${person.active === false ? "passive" : ""}`}><label><input type="checkbox" checked={picked} onChange={() => setCardSelectedIds((current) => { const next = new Set(current); if (next.has(person.id)) next.delete(person.id); else next.add(person.id); return next; })}/></label><button type="button" onClick={() => setCardEditor({ ...person })}><span><strong>{person.name}</strong><small>{person.personnelNo || "Kod yok"} · {person.role || "Vasıfsız"}</small></span><span><b>G {money(person.dayRate)}</b><b>N {money(person.nightRate)}</b></span></button></div>; }) : <Empty>Filtreye uygun personel yok.</Empty>}</div></section>
         <section className="gop-card-detail"><div className="gop-card-manager-head"><div><strong>{cardEditor ? "Personel Bilgileri" : "Personel Yönetimi"}</strong><span>{cardEditor ? `${cardEditor.personnelNo || "Kod yok"} · ${cardEditor.role || "Vasıfsız"}` : "Düzenlemek için soldan personel seçin"}</span></div></div>{cardEditor ? <><div className="gop-inline-person-form"><label>Ad Soyad<input value={cardEditor.name} onChange={(e) => setCardEditor({ ...cardEditor, name: e.target.value })}/></label><label>Personel No<input value={cardEditor.personnelNo} onChange={(e) => setCardEditor({ ...cardEditor, personnelNo: e.target.value })}/></label><div className="gop-role-field"><label>Vasıf<select value={cardEditor.role} onChange={(e) => setCardEditor({ ...cardEditor, role: e.target.value })}><option value="">Vasıf seçin</option>{roleOptions.map((role) => <option key={role} value={role}>{role}</option>)}</select></label><button type="button" onClick={() => { const role = askNewRole(); if (role) setCardEditor({ ...cardEditor, role }); }}><Plus size={13}/> Vasıf Ekle</button></div><label>Aracı<input value={cardEditor.broker} onChange={(e) => setCardEditor({ ...cardEditor, broker: e.target.value })}/></label><label>Gündüz Ücret<input type="number" min="0" value={cardEditor.dayRate} onChange={(e) => setCardEditor({ ...cardEditor, dayRate: number(e.target.value) })}/></label><label>Gece Ücret<input type="number" min="0" value={cardEditor.nightRate} onChange={(e) => setCardEditor({ ...cardEditor, nightRate: number(e.target.value) })}/></label><label>Yeni Ücret Geçerlilik Tarihi<input type="date" value={cardEditor.wageEffectiveDate || startOfWeek()} onChange={(e) => setCardEditor({ ...cardEditor, wageEffectiveDate: e.target.value })}/></label><div className="gop-wage-rule-hint">Önceki haftanın ücreti değişmez. Yeni tutar yalnız seçilen tarihten itibaren açık hakedişe yansır; ödenmiş fiş sabittir.</div><label className="wide">Not<textarea rows="3" value={cardEditor.note || ""} onChange={(e) => setCardEditor({ ...cardEditor, note: e.target.value })}/></label><label className="check"><input type="checkbox" checked={cardEditor.active !== false} onChange={(e) => setCardEditor({ ...cardEditor, active: e.target.checked })}/> Aktif personel</label><div className="gop-inline-person-actions"><button type="button" onClick={() => setCardEditor(null)}>Kapat</button>{cardEditor.active !== false ? <button type="button" onClick={() => deactivateCard(cardEditor)}><Trash2 size={14}/> Pasife Al</button> : null}<button type="button" className="primary" disabled={busy} onClick={saveCardEditor}><Save size={15}/> Kaydet</button></div></div><details className="gop-wage-history"><summary><span>Ücret Değişiklik Geçmişi</span><b>{Array.isArray(cardEditor.wageHistory) ? cardEditor.wageHistory.length : 0} kayıt</b></summary><div className="gop-wage-history-list">{Array.isArray(cardEditor.wageHistory) && cardEditor.wageHistory.length ? [...cardEditor.wageHistory].sort((a,b) => String(b.effectiveDate).localeCompare(String(a.effectiveDate)) || String(b.createdAt).localeCompare(String(a.createdAt))).map((change) => <div key={change.id || `${change.effectiveDate}-${change.createdAt}`} className="gop-wage-history-row"><div><strong>{dateText(change.effectiveDate)}</strong><small>İşlem: {dateTimeText(change.createdAt)}</small></div><div><span>Gündüz: {money(change.beforeDayWage)} → <b>{money(change.dayWage)}</b></span><span>Gece: {money(change.beforeNightWage)} → <b>{money(change.nightWage)}</b></span></div></div>) : <div className="gop-wage-history-empty">Henüz ücret değişikliği kaydı bulunmuyor.</div>}</div></details></> : <div className="gop-card-empty-detail"><Users size={30}/><strong>Personel seçin</strong><span>Kart bilgileri sağ tarafta açılır; modal açmadan düzenleyebilirsiniz.</span></div>}
@@ -1394,7 +1453,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         </section>
       </div> : null}
 
-      {view === "daily-weekly" ? <><div className="gop-toolbar-card">{rangeControls}<div className="gop-print-actions"><button type="button" disabled={!weeklyControlRows.length} onClick={() => printWeeklyControlList(range, days, weeklyControlRows)}><Printer size={16}/> Kontrol Listesi</button><button type="button" disabled={!weeklyControlRows.length} onClick={() => printWeeklySummary(range, days, weeklyControlRows)}><Printer size={16}/> Özet Yazdır</button><button type="button" onClick={exportExcel}><FileSpreadsheet size={16}/> Excel</button></div></div><div className="gop-week-stats"><Stat label="Çalışan" value={weeklyTotals.people}/><Stat label="Toplam Gün" value={weeklyTotals.day + weeklyTotals.night}/><Stat label="Gündüz" value={weeklyTotals.day}/><Stat label="Gece" value={weeklyTotals.night}/><Stat label="Kontrol Bekleyen" value={weeklyPending}/><Stat label="Toplam Tutar" value={money(weeklyTotals.total)}/></div><div className="gop-card gop-week-card"><div className="gop-card-head"><div><h2>Dönem Kontrol Matrisi</h2><span>{dateText(range.start)} — {dateText(range.end)} · Gün gün çalışma ve hakediş kontrolü.</span></div></div><div className="gop-week-matrix"><table><thead><tr><th className="person">Personel</th><th className="role">Vasıf</th>{days.map((date) => <th key={date}><span>{new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`))}</span><b>{dateText(date, true)}</b></th>)}<th>Toplam Gün</th><th>Toplam</th></tr></thead><tbody>{weeklyControlRows.length ? weeklyControlRows.map((row) => <tr key={row.employeeId}><td className="person"><strong>{row.name}</strong><small>{row.personnelNo || ""}</small><small className="gop-week-rate">G: {wageRangeLabel(row, "day", days)} · N: {wageRangeLabel(row, "night", days)}</small></td><td className="role">{row.role || "-"}</td>{days.map((date) => { const cell = row.days?.[date] || {}; return <td key={date} className="shift-cell"><span className={cell.day ? "on day" : ""}>G{cell.day ? "✓" : "–"}</span><span className={cell.night ? "on night" : ""}>N{cell.night ? "✓" : "–"}</span></td>; })}<td className="total-day"><strong>{number(row.dayCount) + number(row.nightCount)}</strong></td><td className="money"><strong>{money(row.totalAmount)}</strong></td></tr>) : <tr><td colSpan={days.length + 4}><Empty>Seçili dönemde çalışma kaydı yok.</Empty></td></tr>}</tbody></table></div><details className="gop-week-detail"><summary>Vasıf Dağılımı <span>{roleOverview.length} grup</span></summary><div className="gop-role-overview">{roleOverview.map(([role, count]) => <div key={role}><span>{role}</span><b>{count}</b></div>)}</div></details></div></> : null}
+      {view === "daily-weekly" ? <><div className="gop-toolbar-card">{rangeControls}<div className="gop-print-actions"><button type="button" disabled={!weeklyControlRows.length} onClick={() => printWeeklySummary(range, days, weeklyControlRows)}><Printer size={16}/> Özet Yazdır</button><button type="button" onClick={exportExcel}><FileSpreadsheet size={16}/> Excel</button></div></div><div className="gop-week-stats"><Stat label="Çalışan" value={weeklyTotals.people}/><Stat label="Toplam Gün" value={weeklyTotals.day + weeklyTotals.night}/><Stat label="Gündüz" value={weeklyTotals.day}/><Stat label="Gece" value={weeklyTotals.night}/><Stat label="Kontrol Bekleyen" value={weeklyPending}/><Stat label="Toplam Tutar" value={money(weeklyTotals.total)}/></div><div className="gop-card gop-week-card"><div className="gop-card-head"><div><h2>Dönem Kontrol Matrisi</h2><span>{dateText(range.start)} — {dateText(range.end)} · Gün gün çalışma ve hakediş kontrolü.</span></div></div><div className="gop-week-matrix"><table><thead><tr><th className="person">Personel</th><th className="role">Vasıf</th>{days.map((date) => <th key={date}><span>{new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`))}</span><b>{dateText(date, true)}</b></th>)}<th>Toplam Gün</th><th>Toplam</th></tr></thead><tbody>{weeklyControlRows.length ? weeklyControlRows.map((row) => <tr key={row.employeeId}><td className="person"><strong>{row.name}</strong><small>{row.personnelNo || ""}</small><small className="gop-week-rate">G: {wageRangeLabel(row, "day", days)} · N: {wageRangeLabel(row, "night", days)}</small></td><td className="role">{row.role || "-"}</td>{days.map((date) => { const cell = row.days?.[date] || {}; return <td key={date} className="shift-cell"><span className={cell.day ? "on day" : ""}>G{cell.day ? "✓" : "–"}</span><span className={cell.night ? "on night" : ""}>N{cell.night ? "✓" : "–"}</span></td>; })}<td className="total-day"><strong>{number(row.dayCount) + number(row.nightCount)}</strong></td><td className="money"><strong>{money(row.totalAmount)}</strong></td></tr>) : <tr><td colSpan={days.length + 4}><Empty>Seçili dönemde çalışma kaydı yok.</Empty></td></tr>}</tbody></table></div><details className="gop-week-detail"><summary>Vasıf Dağılımı <span>{roleOverview.length} grup</span></summary><div className="gop-role-overview">{roleOverview.map(([role, count]) => <div key={role}><span>{role}</span><b>{count}</b></div>)}</div></details></div></> : null}
 
       {view === "daily-payments" ? <div className="gop-payments-v2">
         <div className="gop-payment-tabs three">
@@ -1453,7 +1512,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         </div>
         <div className="quick-status-strip"><span className="selected"><i/><b>Seçilen</b><strong>{quick.ids.size}</strong></span><span className="checked"><i/><b>Kontrol</b><strong>{quickChecked}/{quick.ids.size}</strong></span><span className="pending"><i/><b>Bekleyen</b><strong>{quickPending}</strong></span><span className="pool"><i/><b>Toplam Personel</b><strong>{activeRosterPeople.length}</strong></span></div>
         <div className="quick-controls"><label className="gop-search"><Search size={14}/><input value={quick.query} onChange={(e) => setQuick({ ...quick, query: e.target.value })} placeholder="Personel, kod veya vasıf ara"/></label><div className="quick-add-bar"><label className="gop-search"><Search size={14}/><input list="quick-roster-candidates" value={quickAddQuery} onChange={(e) => setQuickAddQuery(e.target.value)} placeholder="Listeye eklenecek personeli ara..."/></label><datalist id="quick-roster-candidates">{availableRosterPeople.map((person) => <option key={person.id} value={person.personnelNo || person.name}>{person.name} · {person.role || "Vasıfsız"}</option>)}</datalist><button type="button" disabled={!quickAddQuery.trim()} onClick={addFromQuickPool}><Plus size={13}/> Listeye Ekle</button><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><UserPlus size={13}/> Yeni Personel</button></div><div className="quick-legend"><span className="sel-dot"/> Seçildi <span className="ok-dot"/> Kontrol edildi <span className="save-dot"/> Kayıtlı</div></div>
-        <div className="quick-groups">{quickGroups.length ? quickGroups.map(([role, people]) => { const selectable = people.filter((person) => quick.shift === "day" || personWageAtDate(person, quick.date).night > 0); const selectedCount = selectable.filter((person) => quick.ids.has(person.id)).length; const allSelected = selectable.length > 0 && selectedCount === selectable.length; return <section className="quick-group" key={role}><div className="quick-group-head"><strong>{role}</strong><span>{selectedCount} / {selectable.length} seçildi</span><button type="button" onClick={() => setQuick((current) => { const ids = new Set(current.ids); const checked = new Set(current.checked); selectable.forEach((person) => { if (allSelected) { ids.delete(person.id); checked.delete(person.id); } else ids.add(person.id); }); return { ...current, ids, checked }; })}>{allSelected ? "Vasıf Seçimini Kaldır" : "Vasıfın Tümünü Seç"}</button></div><div className="quick-person-grid">{people.map((person) => { const selected = quick.ids.has(person.id); const checked = quick.checked.has(person.id); const historicalWage = personWageAtDate(person, quick.date); const blocked = quick.shift === "night" && historicalWage.night <= 0; return <article key={person.id} className={`quick-person ${selected ? "selected" : ""} ${checked ? "checked" : ""} ${blocked ? "blocked" : ""}`}><button type="button" className="quick-main-toggle" disabled={blocked} onClick={() => setQuick((current) => { const ids = new Set(current.ids); const checkedSet = new Set(current.checked); if (ids.has(person.id)) { ids.delete(person.id); checkedSet.delete(person.id); } else ids.add(person.id); return { ...current, ids, checked: checkedSet }; })}><span className="quick-avatar">{quick.shift === "day" ? "G" : "N"}</span><span className="quick-person-text"><strong>{person.name}</strong><small>{person.personnelNo || "Kod yok"} · {person.role || "Vasıfsız"}</small></span><span className="quick-inline-divider" aria-hidden="true"/><b>{money(quick.shift === "night" ? historicalWage.night : historicalWage.day)}</b><em>{selected ? "Seçildi" : "Seç"}</em></button><button type="button" className={`quick-check-button ${checked ? "is-checked" : ""}`} aria-label={checked ? "Kontrol edildi" : "Kontrol et"} aria-pressed={checked} title={checked ? "Kontrol edildi" : "Kontrol et"} disabled={!selected || blocked} onClick={() => setQuick((current) => { const next = new Set(current.checked); if (next.has(person.id)) next.delete(person.id); else next.add(person.id); return { ...current, checked: next }; })}><span className="quick-check-mark">{checked ? "✓" : ""}</span></button></article>; })}</div></section>; }) : <Empty>Bu filtrede personel bulunamadı.</Empty>}</div>
+        <div className="quick-groups">{quickGroups.length ? quickGroups.map(([role, people]) => { const selectable = people.filter((person) => quick.shift === "day" || personWageAtDate(person, quick.date).night > 0); const selectedCount = selectable.filter((person) => quick.ids.has(person.id)).length; const allSelected = selectable.length > 0 && selectedCount === selectable.length; return <section className="quick-group" key={role}><div className="quick-group-head"><strong>{role}</strong><span>{selectedCount} / {selectable.length} seçildi</span><button type="button" onClick={() => setQuick((current) => { const ids = new Set(current.ids); const checked = new Set(current.checked); selectable.forEach((person) => { if (allSelected) { ids.delete(person.id); checked.delete(person.id); } else ids.add(person.id); }); return { ...current, ids, checked }; })}>{allSelected ? "Vasıf Seçimini Kaldır" : "Vasıfın Tümünü Seç"}</button></div><div className="quick-person-grid">{people.map((person) => { const selected = quick.ids.has(person.id); const checked = quick.checked.has(person.id); const historicalWage = personWageAtDate(person, quick.date); const blocked = quick.shift === "night" && historicalWage.night <= 0; return <article key={person.id} className={`quick-person ${selected ? "selected" : ""} ${checked ? "checked" : ""} ${blocked ? "blocked" : ""}`}><button type="button" className="quick-main-toggle" disabled={blocked || busy || periodLocked} aria-label={`${person.name}: ${selected ? "Seçimi kaldır" : "Vardiyaya seç"}`} onClick={() => setQuick((current) => { const ids = new Set(current.ids); const checkedSet = new Set(current.checked); if (ids.has(person.id)) { ids.delete(person.id); checkedSet.delete(person.id); } else ids.add(person.id); return { ...current, ids, checked: checkedSet }; })}><span className="quick-avatar">{quick.shift === "day" ? "G" : "N"}</span><span className="quick-person-text"><strong>{person.name}</strong><small>{person.personnelNo || "Kod yok"} · {person.role || "Vasıfsız"}</small></span><span className="quick-inline-divider" aria-hidden="true"/><b>{money(quick.shift === "night" ? historicalWage.night : historicalWage.day)}</b><em>{selected ? "Seçildi" : "Seç"}</em></button><button type="button" className={`quick-check-button ${checked ? "is-checked" : ""}`} aria-label={`${person.name}: ${checked ? "Kontrol onayını kaldır" : "Kontrol edildi olarak işaretle"}`} aria-pressed={checked} title={checked ? "Kontrol onayını kaldır" : "Kontrol edildi olarak işaretle"} disabled={!selected || blocked || busy || periodLocked} onClick={() => setQuick((current) => { const next = new Set(current.checked); if (next.has(person.id)) next.delete(person.id); else next.add(person.id); return { ...current, checked: next }; })}><span className="quick-check-mark">{checked ? "✓" : "○"}</span><span className="quick-check-label">{checked ? "KONTROL EDİLDİ" : "KONTROL ET"}</span></button></article>; })}</div></section>; }) : <Empty>Bu filtrede personel bulunamadı.</Empty>}</div>
         <footer className="quick-footer"><div className="quick-density-controls" aria-label="Hızlı giriş görünüm ayarları"><label title="Personel satır yüksekliği"><span>Satır</span><input type="range" min="30" max="60" step="2" value={quickRowHeight} onChange={(e) => { const value = Number(e.target.value); setQuickRowHeight(value); writeQuickRowHeight(value); }}/><b>{quickRowHeight}px</b></label><label title="Kişi kartı genişliği"><span>En</span><input type="range" min="220" max="380" step="10" value={quickCardWidth} onChange={(e) => { const value = Number(e.target.value); setQuickCardWidth(value); writeQuickCardWidth(value); }}/><b>{quickCardWidth}px</b></label></div><div className={`quick-save-state ${quickDirty ? "dirty" : "saved"}`}><strong>{quickDirty ? "Kaydedilmemiş değişiklik var" : "Kayıtlı seçimler yüklendi"}</strong><small>{quickDirty ? "Gün veya vardiya değiştirmeden önce kaydedin." : "Seçim yapınca Kaydet aktif olur."}</small></div><button type="button" onClick={closeQuickDialog}><X size={14}/> Kapat</button><button type="button" className="primary" disabled={busy || periodLocked || !quickDirty} onClick={() => saveQuick(false)}><Save size={15}/> {quick.shift === "day" ? "Gündüz" : "Gece"} Kaydet</button><button type="button" className="primary soft" disabled={busy || periodLocked || !quickDirty || quick.date >= range.end} onClick={() => saveQuick(true)}><Save size={15}/> Kaydet ve Sonraki Gün</button></footer>
       </section></div> : null}
 

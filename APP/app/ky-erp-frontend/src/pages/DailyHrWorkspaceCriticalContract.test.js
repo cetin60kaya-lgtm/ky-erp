@@ -37,7 +37,7 @@ test("daily operation popups use independent canonical shared dialog keys", () =
 
 test("weekly control and summary prints use the same readable landscape personnel matrix", () => {
   assert.match(workspace, /function printWeeklyMatrix/);
-  assert.match(workspace, /function printWeeklyControlList/);
+  assert.doesNotMatch(workspace, /function printWeeklyControlList/);
   assert.match(workspace, /function printWeeklySummary/);
   assert.match(workspace, /@page\{size:A4 landscape/);
   assert.doesNotMatch(workspace, /SAYFA TOPLAMI/);
@@ -170,4 +170,38 @@ test("long custom weekly ranges never silently omit days from printed report", (
   assert.match(workspace, /Haftalık PDF çıktısı en fazla 7 gün içindir/);
   assert.match(workspace, /days\.map\(\(date\)/);
   assert.doesNotMatch(workspace, /days\.slice\(0, 7\)\.map/);
+});
+
+test("selected date range is shared across operation tabs without overwriting other PCs navigation", () => {
+  assert.match(workspace, /const PAYMENT_POOL_RANGE_KEY = RANGE_KEY/);
+  assert.match(workspace, /const PAYMENT_HISTORY_RANGE_KEY = RANGE_KEY/);
+  assert.match(workspace, /setPaymentPoolRange\(resolved\); setPaymentHistoryRange\(resolved\)/);
+  assert.match(workspace, /window\.addEventListener\("storage", onStorage\)/);
+  assert.match(workspace, /event\.data\?\.type === "date-range"/);
+});
+
+test("main and quick attendance save only changed people and retain original server revisions", () => {
+  assert.match(workspace, /const changedPeople = activeRosterPeople\.filter/);
+  assert.match(workspace, /snapshot\.baselineRecords\?\.\[person\.id\]\?\.updatedAt/);
+  assert.match(workspace, /snapshot\.baselineRecords\?\.\[person\.id\]\?\.checkedUpdatedAt/);
+  assert.match(workspace, /expectedCheckedUpdatedAt: current\.checkedUpdatedAt/);
+  assert.match(workspace, /mode: "merge"/);
+  assert.match(workspace, /mode: "remove", removeEmployeeId: person\.id/);
+});
+
+test("selection and control approval are separate clearly-labelled actions and green whole-card state", () => {
+  assert.match(workspace, /quick-check-label/);
+  assert.match(workspace, /KONTROL EDİLDİ/);
+  assert.match(workspace, /Onaylandı/);
+  assert.match(css, /GUNLUK_SYNC_CHECK_20261017/);
+  assert.match(css, /\.gop-quick-dialog \.quick-person\.checked/);
+  assert.match(css, /background:#c6f6d5!important/);
+});
+
+test("daily view has real D1 audit log under work area and no duplicated weekly print buttons", () => {
+  assert.match(workspace, /const loadInlineAudit = useCallback/);
+  assert.match(workspace, /gop-daily-audit-list/);
+  assert.match(workspace, /Tüm Geçmiş ve Ayrıntılar/);
+  assert.doesNotMatch(workspace, /onClick=\{\(\) => printWeeklyControlList\(range, days, weeklyControlRows\)\}/);
+  assert.match(workspace, /onClick=\{\(\) => printWeeklySummary\(range, days, weeklyControlRows\)\}/);
 });

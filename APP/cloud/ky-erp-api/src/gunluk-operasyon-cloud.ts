@@ -883,6 +883,32 @@ async function saveFocused(c: Context<AppEnv>) {
     (currentResult.results || []).map((row) => [text(row.employee_id), row]),
   );
 
+  // İki PC aynı kişinin kontrol onayına dokunduğunda eski ekran yeni onayı ezemez.
+  // Vardiya ve kontrol sürümleri değişiklik yazılmadan ÖNCE doğrulanır.
+  const guardResult = employeeIds.length
+    ? await c.env.DB.prepare(`SELECT employee_id,checked,updated_at
+        FROM hr_daily_attendance_check
+        WHERE main_company_id=? AND work_date=? AND shift=?
+          AND employee_id IN (${employeeIds.map(() => "?").join(",")})`)
+      .bind(companyId, date, shift, ...employeeIds).all<Row>()
+    : { results: [] as Row[] };
+  const guardByEmployee = new Map(
+    (guardResult.results || []).map((row) => [text(row.employee_id), row]),
+  );
+  for (const entry of entries) {
+    const employeeId = text(entry.personelId || entry.employeeId);
+    if (!employeeId) return fail(c, 400, "INVALID_EMPLOYEE", "Personel numarası eksik.");
+    const actualAttendance = text(currentByEmployee.get(employeeId)?.updated_at);
+    if (Object.prototype.hasOwnProperty.call(entry, "expectedUpdatedAt") &&
+        actualAttendance !== text(entry.expectedUpdatedAt)) {
+      return fail(c, 409, "DAILY_RECORD_CHANGED", "Bu kişinin vardiyası başka bilgisayarda değişmiş. Kaydetmeden önce güncel kayıtları yükleyin.");
+    }
+    if (Object.prototype.hasOwnProperty.call(entry, "expectedCheckedUpdatedAt") &&
+        text(guardByEmployee.get(employeeId)?.updated_at) !== text(entry.expectedCheckedUpdatedAt)) {
+      return fail(c, 409, "DAILY_CHECK_CHANGED", "Kontrol onayı başka bilgisayarda değişmiş. Yeni kaydı yükleyip tekrar kontrol edin.");
+    }
+  }
+
   const rows = entries.map((entry) => {
     const employeeId = text(entry.personelId || entry.employeeId);
     const current = currentByEmployee.get(employeeId);
@@ -1127,7 +1153,15 @@ async function saveRoster(c: Context<AppEnv>) {
 
   const existing = existingResult.results || [];
   const existingIds = new Set(existing.map((row) => text(row.employee_id)));
-  const finalIds = [...new Set(requested)];
+  // DİĞER PC verisini silme: ekleme yalnız birleşim; çıkarma yalnız hedef kişinin kaldırılmasıdır.
+  const mode = text(body.mode).toLowerCase();
+  const removalId = text(body.removeEmployeeId);
+  if (mode === "remove" && !removalId) return fail(c, 400, "REMOVE_EMPLOYEE_REQUIRED", "Çıkarılacak personel belirtilmedi.");
+  const finalIds = mode === "merge"
+    ? [...new Set([...existingIds, ...requested])]
+    : mode === "remove"
+      ? [...existingIds].filter((id) => id !== removalId)
+      : [...new Set(requested)];
   const finalSet = new Set(finalIds);
   const actor = await actorOf(c);
   const statements: D1PreparedStatement[] = [];
