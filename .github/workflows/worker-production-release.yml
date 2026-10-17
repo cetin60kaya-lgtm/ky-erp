@@ -138,6 +138,29 @@ jobs:
             grep -q "\"$required\"" /tmp/kyerp-0060-proof.json || { echo "0060 TABLO KANITI EKSIGI: $required" >&2; exit 1; }
           done
 
+      - name: Gunluk Operasyon 0061 ek odeme kesinti D1 migration ve kanit
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          migration=migrations/0061_hr_daily_payment_adjustments.sql
+          test -f "$migration"
+          ! grep -Eiq '(^|[[:space:]])(DROP[[:space:]]+TABLE|DELETE[[:space:]]+FROM|TRUNCATE[[:space:]]+TABLE|ALTER[[:space:]]+TABLE)' "$migration"
+          # Mevcut personel, ödeme ledger'ı ve senkron şeması zorunludur.
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command \
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('hr_daily_employees','hr_daily_payments','hr_daily_payment_items','hr_daily_sync_state','hr_daily_operation_audit') ORDER BY name;" \
+            --json > /tmp/kyerp-0061-prereq.json
+          for required in hr_daily_employees hr_daily_payments hr_daily_payment_items hr_daily_sync_state hr_daily_operation_audit; do
+            grep -q "\"$required\"" /tmp/kyerp-0061-prereq.json || { echo "0061 ON KOSUL EKSIGI: $required" >&2; exit 1; }
+          done
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file "$migration" --yes
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command \
+            "SELECT name FROM sqlite_master WHERE type IN ('table','trigger') AND name IN ('hr_daily_payment_adjustments','hr_daily_payment_adjustment_snapshots','trg_daily_adjustment_prevent_after_paid','trg_daily_adjustment_snapshot_no_update','trg_daily_adjustment_sync_insert') ORDER BY name;" \
+            --json > /tmp/kyerp-0061-proof.json
+          for required in hr_daily_payment_adjustments hr_daily_payment_adjustment_snapshots trg_daily_adjustment_prevent_after_paid trg_daily_adjustment_snapshot_no_update trg_daily_adjustment_sync_insert; do
+            grep -q "\"$required\"" /tmp/kyerp-0061-proof.json || { echo "0061 CANLI SEMASI EKSIK: $required" >&2; exit 1; }
+          done
+
       - name: Worker'i api.kyerp.net adresine dagit
         working-directory: APP/cloud/ky-erp-api
         shell: bash
