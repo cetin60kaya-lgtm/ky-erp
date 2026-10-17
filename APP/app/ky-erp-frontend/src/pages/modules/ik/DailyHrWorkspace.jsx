@@ -31,6 +31,9 @@ import {
   getDailyFocusedRecords,
   getDailyPaymentHistory,
   getDailyPaymentPool,
+  getDailyPaymentAdjustments,
+  addDailyPaymentAdjustment,
+  voidDailyPaymentAdjustment,
   getDailyPeriodPaymentStatus,
   getDailyPeriodLock,
   getDailyRoster,
@@ -354,6 +357,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [periodStatusRows, setPeriodStatusRows] = useState([]);
   const [periodStatusError, setPeriodStatusError] = useState("");
   const [paymentPeriodRows, setPaymentPeriodRows] = useState([]);
+  const [periodAdjustmentRows, setPeriodAdjustmentRows] = useState([]);
+  const [adjustmentEditor, setAdjustmentEditor] = useState(null);
+  const [adjustmentKind, setAdjustmentKind] = useState("ADD");
+  const [adjustmentReason, setAdjustmentReason] = useState("");
+  const [adjustmentAmount, setAdjustmentAmount] = useState("");
   const [paymentLoadError, setPaymentLoadError] = useState("");
   const [paymentHistoryRows, setPaymentHistoryRows] = useState([]);
   const [paymentPoolRange, setPaymentPoolRange] = useState(() => readNamedRange(PAYMENT_POOL_RANGE_KEY));
@@ -513,13 +521,16 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (view === "daily-payments") setError("");
     try {
       const sourceRange = view === "daily-dashboard" ? range : paymentPoolRange;
-      const [poolResult, attendanceResult, statusResult] = await Promise.all([
+      const [poolResult, attendanceResult, statusResult, adjustmentsResult] = await Promise.all([
         getDailyPaymentPool({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }),
         getDailyAttendance({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }, { forceFresh: true }),
         getDailyPeriodPaymentStatus({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }).catch(() => null),
+        getDailyPaymentAdjustments({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }, { forceFresh: true }),
       ]);
       const poolRows = Array.isArray(poolResult) ? poolResult : [];
       const attendanceRows = Array.isArray(attendanceResult) ? attendanceResult : [];
+      const allAdjustmentRows = Array.isArray(adjustmentsResult) ? adjustmentsResult : [];
+      setPeriodAdjustmentRows(allAdjustmentRows);
       setPaymentRows(poolRows);
       setPeriodStatusRows(Array.isArray(statusResult) ? statusResult : []);
       setPeriodStatusError(Array.isArray(statusResult) ? "" : "Ödeme durumu doğrulanamadı; tamamlandı kabul edilmeyecek.");
@@ -566,11 +577,23 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         }
         map.set(employeeId, current);
       });
-      setPaymentPeriodRows([...map.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), "tr")));
+      const groupedExtras=new Map();
+      for(const adjustment of allAdjustmentRows.filter((entry)=>entry.status==="ACTIVE")){
+        const key=String(adjustment.employeeId), current=groupedExtras.get(key)||{additions:0,deductions:0,items:[]};
+        if(adjustment.kind==="ADD") current.additions+=number(adjustment.amount);
+        else if(adjustment.kind==="DEDUCT") current.deductions+=number(adjustment.amount);
+        current.items.push(adjustment);groupedExtras.set(key,current);
+      }
+      setPaymentPeriodRows([...map.values()].map((row)=>{
+        const extra=groupedExtras.get(String(row.employeeId))||{additions:0,deductions:0,items:[]};
+        return {...row,baseAmount:row.totalAmount,additions:extra.additions,deductions:extra.deductions,
+          adjustments:extra.items,totalAmount:row.totalAmount+extra.additions-extra.deductions};
+      }).sort((a,b)=>String(a.name).localeCompare(String(b.name),"tr")));
     } catch (e) {
       const message = e?.message || "Dönem ödeme verileri alınamadı.";
       setPaymentRows([]);
       setPaymentPeriodRows([]);
+      setPeriodAdjustmentRows([]);
       setPeriodStatusRows([]);
       setPeriodStatusError(message);
       setPaymentLoadError(message);
