@@ -1636,6 +1636,40 @@ async function paymentPool(c: Context<AppEnv>) {
   return okItems(c,[...map.values()],[...map.values()]);
 }
 
+// Hakediş dönemi ödeme durumu yalnız gerçek vardiya bazlı ledger kanıtından türetilir.
+async function paymentPeriodStatus(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const companyId = companyIdOf(c);
+  const start = dateOnly(c.req.query("startDate") || c.req.query("start"));
+  const end = dateOnly(c.req.query("endDate") || c.req.query("end") || start);
+  if (!validDate(start) || !validDate(end) || end < start) return fail(c, 400, "DATE_RANGE_REQUIRED", "Geçerli hakediş tarih aralığı zorunludur.");
+  const rows = await paymentSourceRows(c, companyId, start, end);
+  const byEmployee = new Map<string, Row>();
+  for (const row of rows) {
+    const employeeId = text(row.employee_id);
+    const item = byEmployee.get(employeeId) || { employeeId, totalCount: 0, paidCount: 0, openCount: 0, pendingCheckCount: 0, paidAmount: 0, openAmount: 0 };
+    const legacyPaid = text(row.payment_status).toUpperCase() === "PAID" && num(row.ledger_item_count) === 0;
+    for (const shift of ["day", "night"] as const) {
+      if (!flag(row[shift === "day" ? "day_shift" : "night_shift"])) continue;
+      const paid = legacyPaid || flag(row[shift === "day" ? "day_paid_item" : "night_paid_item"]);
+      const amount = money(row[shift === "day" ? "day_wage" : "night_wage"]);
+      item.totalCount++;
+      if (paid) { item.paidCount++; item.paidAmount = money(item.paidAmount + amount); }
+      else {
+        item.openCount++;
+        item.openAmount = money(item.openAmount + amount);
+        if (!flag(row[shift === "day" ? "day_checked" : "night_checked"])) item.pendingCheckCount++;
+      }
+    }
+    byEmployee.set(employeeId, item);
+  }
+  const results = [...byEmployee.values()].map((row) => ({
+    ...row,
+    status: row.openCount === 0 ? "PAID" : row.paidCount > 0 ? "PARTIAL" : row.pendingCheckCount > 0 ? "CONTROL_PENDING" : "OPEN",
+  }));
+  return okItems(c, results, results);
+}
+
 async function paymentHistory(c: Context<AppEnv>) {
   await ensureSchema(c);
   const companyId=companyIdOf(c);
@@ -1780,6 +1814,7 @@ export function registerGunlukOperasyonRoutes(app: Hono<AppEnv>) {
   app.post("/api/gunluk-operasyon/attendance/mark-paid", protect(markPaid));
 
   app.get("/api/gunluk-operasyon/payments/pool", protect(paymentPool));
+  app.get("/api/gunluk-operasyon/payments/period-status", protect(paymentPeriodStatus));
   app.get("/api/gunluk-operasyon/payments/history", protect(paymentHistory));
   app.post("/api/gunluk-operasyon/payments", protect(createPayment));
   app.post("/api/gunluk-operasyon/payments/:id/cancel", protect(cancelPayment));

@@ -1,5 +1,12 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 17.10.2026 — Günlük Operasyon ücret kartı / çıktılar kontrolü
+- Kullanıcı kararı: personelin gündüz/gece ücretleri ve geçerlilik tarihi **Personel & Ücret Kartları** üzerinden tek kaynaktan yönetilir. Tarih etkili ücret geçmişi ve ödenmiş vardiya anlık görüntüsü korunur.
+- Çalışma dalı: `fix/gunluk-operasyon-ucret-kart-cikti-20261017`; değişiklikler: ücret değişiklik geçmişi görünümü, toplu ücret güncellemede tarih, tarihli ücretlerin haftalık PDF/Excel'e eklenmesi, kullanıcı arayüzünün okunaklı/responsive düzeni.
+- Güvenlik düzeltmesi: **hakediş fişi yazdırmak ödeme oluşturmaz**; gerçek ödeme ancak ayrı kullanıcı `Tamamla` eyleminde oluşur. Geçmiş haftada açık borç saklanmaz. Dönem ödeme durumu `/payments/period-status` üzerinden gerçek vardiya/ledger kayıtlarından belirlenir, veri okunamazsa `DOĞRULANAMADI` gösterilir.
+- Kod + regresyon testleri feature dalına yazıldı. **CI, PR merge, Worker/Pages yayın ve gerçek D1/oturumlu kabul sonucu ayrı doğrulanmadıkça canlı veya tam test başarılı sayılmaz.** Production D1 migration ve gerçek personel ödeme kaydı yapılmadı.
+
+
 ## 09.10.2026 — Canlı KY ERP 14 modül QA ve nöbet sonucu
 - PR #409 gerçek canonical merge `2d0e33a24d4ce319baff4ae6f9cc57b670a6552d`; CI Action #37891886962 SUCCESS.
 - Production Pages deploy Action #37892077343 SUCCESS; commit `844a4337523e24d9f5f944cef5b57a5f1506051f`. Gerçek Chrome public route + anonim API auth sınırı ve live bundle kontrolleri başarılı.

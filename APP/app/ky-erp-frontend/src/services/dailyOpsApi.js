@@ -77,6 +77,10 @@ export async function getDailyPaymentPool(params = {}, options = {}) {
   return unwrap(await apiGet(`${ROOT}/payments/pool`, params, freshOptions(options)));
 }
 
+export async function getDailyPeriodPaymentStatus(params = {}, options = {}) {
+  return unwrap(await apiGet(`${ROOT}/payments/period-status`, params, freshOptions(options)));
+}
+
 export async function getDailyPaymentHistory(params = {}, options = {}) {
   return unwrap(await apiGet(`${ROOT}/payments/history`, params, freshOptions(options)));
 }

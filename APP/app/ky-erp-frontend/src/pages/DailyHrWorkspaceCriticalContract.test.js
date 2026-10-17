@@ -97,14 +97,19 @@ test("quick card density keeps the two manual row and width controls", () => {
 });
 
 
-test("completed past weeks do not stay in payment waiting UI and print completes open payment", () => {
-  assert.match(workspace, /function isPastCompletedWeek/);
-  assert.match(workspace, /paymentPeriodIsHistorical/);
-  assert.match(workspace, /visiblePaymentRows/);
-  assert.match(workspace, /paymentPageOpenMetrics/);
-  assert.match(workspace, /Geçmiş hafta tamamlandı/);
-  assert.match(workspace, /Çıktı = ödeme tamamlandı/);
-  assert.match(workspace, /createDailyPayment/);
+test("open past periods remain visible and printing never marks payment completed", () => {
+  assert.doesNotMatch(workspace, /function isPastCompletedWeek/);
+  assert.doesNotMatch(workspace, /paymentPeriodIsHistorical/);
+  assert.match(workspace, /const visiblePaymentRows = paymentRows/);
+  assert.match(workspace, /getDailyPeriodPaymentStatus/);
+  assert.match(workspace, /paymentStatusByEmployee/);
+  assert.match(workspace, /DOĞRULANAMADI/);
+  assert.match(workspace, /Çıktı = yalnız hakediş belgesi/);
+  assert.match(workspace, /HAKEDİŞ DÖKÜMÜ/);
+  const printBlock = workspace.split("const printPeriodRows = useCallback")[1]?.split("const activePaymentRange =")[0];
+  assert.ok(printBlock);
+  assert.doesNotMatch(printBlock, /createDailyPayment/);
+  assert.match(workspace, /const payRow = async/);
   assert.match(workspace, /TOPLAM ÖDEME/);
   assert.doesNotMatch(workspace, /<footer><span>ÖDENDİ<\/span>/);
 });
