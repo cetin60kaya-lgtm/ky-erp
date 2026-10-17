@@ -76,8 +76,8 @@ test("quick personnel groups stay tightly packed on small monitors", () => {
 });
 
 
-test("quick person cards V2 show distinct full-width selection and checked buttons", () => {
-  assert.match(workspace, /data-ky-quick-card-v2="20261017"/);
+test("quick person cards V3 remain distinct and compact on one horizontal action row", () => {
+  assert.match(workspace, /data-ky-quick-layout="compact-v3"/);
   assert.match(workspace, /className={`kyq2-card/);
   assert.match(workspace, /className="kyq2-action-stack"/);
   assert.match(workspace, /VARDİYAYA SEÇ/);
@@ -86,7 +86,10 @@ test("quick person cards V2 show distinct full-width selection and checked butto
   assert.match(workspace, /daily-quick-entry-card-v2\.css/);
   assert.doesNotMatch(workspace, /className={`quick-person /);
   assert.match(quickV2Css, /grid-auto-rows: auto !important/);
-  assert.match(quickV2Css, /flex-direction: column/);
+  assert.match(quickV2Css, /flex-direction: row/);
+  assert.match(quickV2Css, /--quick-card-w, 220px/);
+  assert.match(quickV2Css, /min-height: max\(66px/);
+  assert.match(quickV2Css, /grid-auto-rows: auto !important/);
   assert.match(quickV2Css, /\.kyq2-action-stack button/);
 });
 
@@ -95,9 +98,11 @@ test("quick card density keeps the two manual row and width controls", () => {
   assert.match(workspace, /QUICK_CARD_WIDTH_KEY/);
   assert.match(workspace, /className="quick-density-controls"/);
   assert.match(workspace, /min="30" max="60" step="2"/);
-  assert.match(workspace, /min="220" max="380" step="10"/);
+  assert.match(workspace, /min="205" max="320" step="5"/);
   assert.match(workspace, /"--quick-row-h": `\$\{quickRowHeight\}px`/);
   assert.match(workspace, /"--quick-card-w": `\$\{quickCardWidth\}px`/);
+  assert.match(workspace, /quickCardWidth\.v5/);
+  assert.match(workspace, /KOMPAKT KONTROL KARTLARI V3/);
   assert.match(css, /QUICK-DENSITY-CONTROLS-RESTORED-2026-10-03/);
   assert.match(css, /grid-template-columns:repeat\(auto-fit,minmax\(var\(--quick-card-w\),1fr\)\)!important/);
 });
