@@ -89,3 +89,21 @@ test("effective-dated wages are written to append-only audit and reused across r
   assert.match(dailySource, /PAID_SHIFT_LOCKED/);
   assert.doesNotMatch(dailySource, /ALTER TABLE hr_daily_employees/);
 });
+
+test("two PCs cannot silently replace a different device's approval state", () => {
+  assert.match(dailySource, /expectedCheckedUpdatedAt/);
+  assert.match(dailySource, /DAILY_CHECK_CHANGED/);
+  assert.match(dailySource, /DAILY_RECORD_CHANGED/);
+  assert.match(dailySource, /guardByEmployee/);
+  assert.match(dailySource, /hr_daily_attendance_check/);
+  assert.match(dailySource, /trg_daily_sync_check_update/);
+  assert.match(dailySource, /trg_daily_sync_check_insert/);
+  assert.match(dailySource, /async function syncState/);
+});
+
+test("roster changes are merge-only or targeted removals across PCs", () => {
+  assert.match(dailySource, /const mode = text\(body\.mode\)\.toLowerCase\(\)/);
+  assert.match(dailySource, /mode === "merge"/);
+  assert.match(dailySource, /mode === "remove"/);
+  assert.match(dailySource, /REMOVE_EMPLOYEE_REQUIRED/);
+});
