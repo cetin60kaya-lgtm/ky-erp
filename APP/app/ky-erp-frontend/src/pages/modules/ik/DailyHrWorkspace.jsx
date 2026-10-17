@@ -777,7 +777,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (busy) return; setBusy(true); setError(""); setNotice("");
     try {
       const requestedIds = [...effectiveRosterIds];
-      const saved = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: requestedIds });
+      const saved = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: requestedIds, mode: "merge" });
       setRosterIds(new Set(Array.isArray(saved?.employeeIds) ? saved.employeeIds.map(String) : requestedIds));
       setRosterSaved(true);
       setNotice("Tarih aralığı personel listesi kaydedildi.");
@@ -814,6 +814,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         startDate: range.start,
         endDate: range.end,
         employeeIds: [...nextRosterIds],
+        mode: "merge",
       });
       const finalRosterIds = new Set(
         Array.isArray(savedRoster?.employeeIds)
@@ -897,6 +898,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         startDate: range.start,
         endDate: range.end,
         employeeIds: requestedRosterIds,
+        mode: "remove", removeEmployeeId: person.id,
       });
       const finalRosterIds = new Set(
         Array.isArray(savedRoster?.employeeIds)
@@ -952,7 +954,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     try {
       const missingSelectedPeople = [...selectedIds].filter((id) => !employeeMap.has(id));
       if (missingSelectedPeople.length) throw new Error("Personel listesi eksik yüklendi. Kayıt korunması için ekranı yenileyip tekrar deneyin.");
-      if (!rosterSaved) { await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...effectiveRosterIds] }); setRosterIds(new Set(effectiveRosterIds)); setRosterSaved(true); }
+      if (!rosterSaved) { const savedRoster = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...effectiveRosterIds], mode: "merge" }); setRosterIds(new Set(Array.isArray(savedRoster?.employeeIds) ? savedRoster.employeeIds.map(String) : effectiveRosterIds)); setRosterSaved(true); }
       // Delta write: başka cihazdaki değişmemiş satırları tekrar yazma.
       const changedPeople = activeRosterPeople.filter((person) => {
         const record = recordByEmployee.get(person.id) || {};
@@ -1011,7 +1013,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     try {
       const missingQuickPeople = [...snapshot.ids].filter((id) => !employeeMap.has(id));
       if (missingQuickPeople.length) throw new Error("Hızlı giriş personel listesi eksik yüklendi. Kayıtlar korunması için Yenile yapıp tekrar deneyin.");
-      if (!rosterSaved) { await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...effectiveRosterIds] }); setRosterIds(new Set(effectiveRosterIds)); setRosterSaved(true); }
+      if (!rosterSaved) { const savedRoster = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...effectiveRosterIds], mode: "merge" }); setRosterIds(new Set(Array.isArray(savedRoster?.employeeIds) ? savedRoster.employeeIds.map(String) : effectiveRosterIds)); setRosterSaved(true); }
       const rows = await getDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift });
       const currentMap = new Map((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), row]));
       const changedPeople = activeRosterPeople.filter((person) => {
