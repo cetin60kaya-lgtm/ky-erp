@@ -1809,6 +1809,15 @@ async function paymentPeriodStatus(c: Context<AppEnv>) {
     }
     byEmployee.set(employeeId, item);
   }
+  // Ek kalemler vardiyadan ayrı tutulur; ödenmişse ödeme tutarına, açıksa borca dahildir.
+  for (const extra of await periodAdjustments(c,companyId,start,end)) {
+    const entry=byEmployee.get(text(extra.employee_id));
+    if (!entry) continue;
+    const signed=(text(extra.kind)==="ADD"?1:-1)*Number(extra.amount_cents||0)/100;
+    const target=text(extra.settled_payment_id)?"paidAmount":"openAmount";
+    entry[target]=money(num(entry[target])+signed);
+    byEmployee.set(text(extra.employee_id),entry);
+  }
   const results = [...byEmployee.values()].map((row) => ({
     ...row,
     status: row.openCount === 0 ? "PAID" : row.paidCount > 0 ? "PARTIAL" : row.pendingCheckCount > 0 ? "CONTROL_PENDING" : "OPEN",
