@@ -52,8 +52,9 @@ import "./daily-hr-workspace-final.css";
 
 const VALID_VIEWS = new Set(["daily-dashboard", "daily-entry", "daily-cards", "daily-weekly", "daily-payments"]);
 const RANGE_KEY = "kyerp.dailyOperations.range.v5";
-const PAYMENT_POOL_RANGE_KEY = "kyerp.dailyOperations.paymentPoolRange.v1";
-const PAYMENT_HISTORY_RANGE_KEY = "kyerp.dailyOperations.paymentHistoryRange.v1";
+// Tek tarih aralığı, bütün Günlük Operasyon alt ekranlarında ortak.
+const PAYMENT_POOL_RANGE_KEY = RANGE_KEY;
+const PAYMENT_HISTORY_RANGE_KEY = RANGE_KEY;
 const LIVE_SYNC_INTERVAL_MS = 1500;
 const DAILY_SYNC_CHANNEL = "kyerp.dailyOperations.live.v1";
 const QUICK_ROW_HEIGHT_KEY = "kyerp.dailyOperations.quickRowHeight.v4";
@@ -385,6 +386,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [logOpen, setLogOpen] = useState(false);
   const [logTab, setLogTab] = useState("summary");
   const [logRows, setLogRows] = useState([]);
+  const [inlineAuditRows, setInlineAuditRows] = useState([]);
+  const [inlineAuditError, setInlineAuditError] = useState("");
   const [logRevisions, setLogRevisions] = useState([]);
   const [logAttendance, setLogAttendance] = useState([]);
   const [logRange, setLogRange] = useState(readRange);
@@ -400,6 +403,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const liveVersionRef = useRef("");
+  const dailyRangeRef = useRef(range);
   const livePollBusyRef = useRef(false);
 
   const days = useMemo(() => rangeDays(range.start, range.end), [range.end, range.start]);
@@ -419,16 +423,35 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     const resolved = typeof next === "function" ? next(range) : next;
     if (!resolved?.start || !resolved?.end || resolved.end < resolved.start) return;
     if (rangeSpanDays(resolved.start, resolved.end) > 31) { setError("Günlük Operasyon tek seferde en fazla 31 günlük aralıkla çalışır."); return; }
-    setRange(resolved); writeRange(resolved); setError("");
-  }, [range]);
-  const setSafePaymentRange = useCallback((target, next) => {
-    const current = target === "history" ? paymentHistoryRange : paymentPoolRange;
-    const resolved = typeof next === "function" ? next(current) : next;
-    if (!resolved?.start || !resolved?.end || resolved.end < resolved.start) return;
-    if (target === "history") { setPaymentHistoryRange(resolved); writeNamedRange(PAYMENT_HISTORY_RANGE_KEY, resolved); }
-    else { setPaymentPoolRange(resolved); writeNamedRange(PAYMENT_POOL_RANGE_KEY, resolved); }
-    setError("");
-  }, [paymentHistoryRange, paymentPoolRange]);
+    dailyRangeRef.current = resolved;
+    setRange(resolved); setPaymentPoolRange(resolved); setPaymentHistoryRange(resolved);
+    writeRange(resolved); setError("");
+    try {
+      const channel = new window.BroadcastChannel(DAILY_SYNC_CHANNEL);
+      channel.postMessage({ type: "date-range", range: resolved, companyId });
+      channel.close();
+    } catch { /* localStorage event remains a fallback */ }
+  }, [companyId, range]);
+  const setSafePaymentRange = useCallback((_target, next) => {
+    const resolved = typeof next === "function" ? next(dailyRangeRef.current) : next;
+    setSafeRange(resolved);
+  }, [setSafeRange]);
+
+  useEffect(() => {
+    const accept = (next) => {
+      if (!next?.start || !next?.end || rangeSpanDays(next.start, next.end) > 31 || next.end < next.start) return;
+      if (sameRange(next, dailyRangeRef.current)) return;
+      dailyRangeRef.current = next;
+      setRange(next); setPaymentPoolRange(next); setPaymentHistoryRange(next);
+      setNotice("Tarih aralığı diğer KY ERP sekmesinden güncellendi.");
+    };
+    const onStorage = (event) => { if (event.key === RANGE_KEY && event.newValue) { try { accept(JSON.parse(event.newValue)); } catch { /* geçersiz eski tercih */ } } };
+    const channel = typeof window.BroadcastChannel === "function" ? new window.BroadcastChannel(DAILY_SYNC_CHANNEL) : null;
+    const onMessage = (event) => { if (event.data?.type === "date-range" && event.data?.companyId === companyId) accept(event.data.range); };
+    window.addEventListener("storage", onStorage);
+    channel?.addEventListener("message", onMessage);
+    return () => { window.removeEventListener("storage", onStorage); channel?.removeEventListener("message", onMessage); channel?.close(); };
+  }, [companyId]);
 
   useEffect(() => { if (selectedDate < range.start || selectedDate > range.end) setSelectedDate(range.start); }, [range.end, range.start, selectedDate]);
 
@@ -999,6 +1022,16 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     finally { setBusy(false); }
   };
 
+  const loadInlineAudit = useCallback(async () => {
+    if (!companyId || view !== "daily-entry") return;
+    try {
+      const rows = await getDailyAudit({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, limit: 80 }, { forceFresh: true });
+      setInlineAuditRows(Array.isArray(rows) ? rows : []);
+      setInlineAuditError("");
+    } catch (e) { setInlineAuditError(e?.message || "İşlem geçmişi alınamadı."); }
+  }, [companyId, range.end, range.start, view]);
+  useEffect(() => { void loadInlineAudit(); }, [loadInlineAudit]);
+
   const loadLog = async (targetRange = logRange, shouldOpen = true) => {
     if (busy) return;
     const safe = targetRange?.start && targetRange?.end && targetRange.end >= targetRange.start ? targetRange : range;
@@ -1222,7 +1255,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
     const refreshVisibleView = async () => {
       if (view === "daily-entry") {
-        await Promise.all([loadEmployees(), loadRangeData(), loadFocused(), refreshQuick()]);
+        await Promise.all([loadEmployees(), loadRangeData(), loadFocused(), refreshQuick(), loadInlineAudit()]);
       } else if (view === "daily-cards") {
         await loadEmployees();
       } else if (view === "daily-weekly") {
@@ -1285,7 +1318,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [activeRosterPeople, busy, checkedIds, companyId, loadEmployees, loadFocused, loadPaymentHistory, loadPayments, loadRangeData, loadWeekly, notes, quick, recordByEmployee, records, rosterSaved, selectedIds, view]);
+  }, [activeRosterPeople, busy, checkedIds, companyId, loadEmployees, loadFocused, loadInlineAudit, loadPaymentHistory, loadPayments, loadRangeData, loadWeekly, notes, quick, recordByEmployee, records, rosterSaved, selectedIds, view]);
 
   if (!companyId) return <div className="content-card module-error-card"><h3>Günlük Operasyon için firma seçin</h3><p>Günlük personel ve ödeme kayıtları firma bazında tutulur.</p></div>;
 
@@ -1325,6 +1358,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   }).sort((a, b) => String(b.createdAt || b.timestamp || rowDate(b)).localeCompare(String(a.createdAt || a.timestamp || rowDate(a))));
   const logPeople = new Set(logAttendance.map(rowEmployeeId).filter(Boolean)).size;
   const logTotals = logAttendance.reduce((sum, row) => ({ day: sum.day + (rowDay(row) ? 1 : 0), night: sum.night + (rowNight(row) ? 1 : 0), total: sum.total + (rowDay(row) ? number(row.dayWage ?? employeeMap.get(rowEmployeeId(row))?.dayRate) : 0) + (rowNight(row) ? number(row.nightWage ?? employeeMap.get(rowEmployeeId(row))?.nightRate) : 0) }), { day: 0, night: 0, total: 0 });
+  const recentDailyAudit = inlineAuditRows.slice(0, 16);
   const quickDirty = quick ? !sameSet(quick.ids, quick.baseline) || !sameSet(quick.checked, quick.checkedBaseline || new Set()) : false;
   const closeQuickDialog = () => {
     if (quickDirty && !window.confirm("Kaydedilmemiş hızlı giriş değişiklikleri var. Kaydetmeden kapatılsın mı?")) return;
@@ -1386,6 +1420,13 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           <details open={dashboardOpen === "recent"} onToggle={(e) => setDashboardOpen(e.currentTarget.open ? "recent" : "")}><summary>Son Kayıtlar <span>{recentOperations.length}</span></summary><div className="gop-recent-list">{recentOperations.length ? recentOperations.map((row, index) => { const person = employeeMap.get(rowEmployeeId(row)); return <div key={`${rowEmployeeId(row)}-${rowDate(row)}-${index}`}><span><strong>{person?.name || row.name || row.fullName || "Personel"}</strong><small>{dateText(rowDate(row))}</small></span><b>{rowDay(row) ? "G" : ""}{rowDay(row) && rowNight(row) ? " + " : ""}{rowNight(row) ? "N" : ""}</b><em>{dateTimeText(row.updatedAt || row.createdAt)}</em></div>; }) : <Empty>Kayıt yok.</Empty>}</div></details>
         </div>
       </div> : null}
+
+      {view === "daily-entry" ? <section className="gop-daily-audit" aria-label="Günlük operasyon işlem geçmişi">
+        <div className="gop-daily-audit-title"><div><ClipboardList size={17}/><span><strong>İşlem Geçmişi</strong><small>{dateText(range.start)} — {dateText(range.end)} · Sunucu kayıtları · Diğer bilgisayarlarda da görünür</small></span></div><button type="button" onClick={() => void loadInlineAudit()} disabled={busy}><RefreshCw size={14}/> Güncelle</button></div>
+        {inlineAuditError ? <p className="gop-daily-audit-error" role="alert">{inlineAuditError}</p> : null}
+        <div className="gop-daily-audit-list">{recentDailyAudit.length ? recentDailyAudit.map((event,index) => <div key={event.id || index} className="gop-daily-audit-event"><span className="gop-audit-time">{dateTimeText(event.createdAt)}</span><b>{actionLabel(event)}{event.action === "ATTENDANCE_CHECK_UPDATE" ? (event.after?.checked ? " · ✓ Onaylandı" : " · Onay kaldırıldı") : ""}</b><span>{event.personName || employeeMap.get(String(event.employeeId))?.name || "Sistem"}</span><small>{dateText(event.workDate)} · {event.shift === "night" ? "Gece" : event.shift === "day" ? "Gündüz" : "Genel"} · {event.actorLabel || "KY ERP"}</small></div>) : <div className="gop-daily-audit-empty">Bu aralıkta kayıtlı işlem geçmişi yok.</div>}</div>
+        <button type="button" className="gop-audit-more" onClick={() => { setLogRange(range); void loadLog(range, true); }}>Tüm Geçmiş ve Ayrıntılar</button>
+      </section> : null}
 
       {view === "daily-cards" ? <div className="gop-card-manager">
         <section className="gop-card-pool"><div className="gop-card-manager-head"><div><strong>Personel Havuzu</strong><span>{managedEmployees.length} / {employees.length} kayıt</span></div><button type="button" className="primary" onClick={() => setCardDialog({ ...EMPTY_PERSON })}><Plus size={15}/> Yeni Personel</button></div><label className="gop-search standalone"><Search size={15}/><input value={cardQuery} onChange={(e) => setCardQuery(e.target.value)} placeholder="Ad, kod, vasıf veya aracı ara"/></label><div className="gop-card-filters"><select value={cardStatusFilter} onChange={(e) => setCardStatusFilter(e.target.value)}><option value="active">Aktif</option><option value="passive">Pasif</option><option value="all">Tümü</option></select><select value={cardRoleFilter} onChange={(e) => setCardRoleFilter(e.target.value)}><option value="all">Tüm vasıflar</option>{cardRoles.map((role) => <option key={role} value={role}>{role}</option>)}</select><select value={cardBrokerFilter} onChange={(e) => setCardBrokerFilter(e.target.value)}><option value="all">Tüm aracılar</option>{cardBrokers.map((broker) => <option key={broker} value={broker}>{broker}</option>)}</select></div><div className="gop-card-selectbar"><button type="button" onClick={() => setCardSelectedIds(new Set(managedEmployees.map((person) => person.id)))}>Görünenleri Seç</button><button type="button" onClick={() => setCardSelectedIds(new Set())}>Seçimi Kaldır</button><b>{cardSelectedIds.size} seçili</b></div><div className="gop-card-person-list">{managedEmployees.length ? managedEmployees.map((person) => { const picked = cardSelectedIds.has(person.id); const active = cardEditor?.id === person.id; return <div key={person.id} className={`${active ? "active" : ""} ${person.active === false ? "passive" : ""}`}><label><input type="checkbox" checked={picked} onChange={() => setCardSelectedIds((current) => { const next = new Set(current); if (next.has(person.id)) next.delete(person.id); else next.add(person.id); return next; })}/></label><button type="button" onClick={() => setCardEditor({ ...person })}><span><strong>{person.name}</strong><small>{person.personnelNo || "Kod yok"} · {person.role || "Vasıfsız"}</small></span><span><b>G {money(person.dayRate)}</b><b>N {money(person.nightRate)}</b></span></button></div>; }) : <Empty>Filtreye uygun personel yok.</Empty>}</div></section>
