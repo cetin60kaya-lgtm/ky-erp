@@ -1191,6 +1191,46 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     } catch (e) { setError(e?.message || "Toplu personel güncellemesi tamamlanamadı."); }
     finally { setBusy(false); }
   };
+  const adjustmentForEditor = adjustmentEditor
+    ? periodAdjustmentRows.filter((item) => String(item.employeeId) === String(adjustmentEditor.employeeId))
+    : [];
+  const saveExtraAdjustment = async () => {
+    if (!adjustmentEditor || busy) return;
+    if (adjustmentEditor.periodStart !== paymentPoolRange.start || adjustmentEditor.periodEnd !== paymentPoolRange.end) {
+      setError("Hakediş dönemi değişti. Düzenleme penceresini yeniden açın."); return;
+    }
+    const amount = Number(adjustmentAmount);
+    const reason = adjustmentReason.trim();
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000 || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001 || reason.length < 3) {
+      setError("Pozitif tutar (iki ondalık) ve en az 3 karakter açıklama girin."); return;
+    }
+    if (paymentStatusByEmployee.get(String(adjustmentEditor.employeeId))?.status === "PAID") {
+      setError("Ödenmiş dönem düzenlenemez. Önce açıklamalı ödeme iptali gerekir."); return;
+    }
+    setBusy(true); setError("");
+    try {
+      await addDailyPaymentAdjustment({ mainCompanyId: companyId, employeeId: adjustmentEditor.employeeId,
+        startDate: adjustmentEditor.periodStart, endDate: adjustmentEditor.periodEnd,
+        kind: adjustmentKind, amount, reason });
+      setAdjustmentAmount(""); setAdjustmentReason("");
+      await Promise.all([loadPayments(),loadPaymentHistory()]);
+      setNotice("Ek ödeme/kesinti D1'e kaydedildi; işlem geçmişinde tutuluyor.");
+    } catch(e) { setError(e?.message || "Ek işlem kaydedilemedi."); }
+    finally { setBusy(false); }
+  };
+  const voidExtraAdjustment = async (item) => {
+    if (busy || item.status !== "ACTIVE" || item.paymentId) return;
+    const reason = window.prompt("İptal gerekçesi (geçmiş kayıt silinmeyecek):");
+    if (!reason || reason.trim().length < 3) return;
+    if (!window.confirm("Bu ek işlem gerekçeli iptal edilsin mi? Geçmişte görünmeye devam edecek.")) return;
+    setBusy(true); setError("");
+    try {
+      await voidDailyPaymentAdjustment(item.id,{mainCompanyId: companyId, reason: reason.trim()});
+      await Promise.all([loadPayments(),loadPaymentHistory()]);
+      setNotice("Ek işlem iptal edildi; işlem geçmişi korundu.");
+    } catch(e) { setError(e?.message || "İşlem iptal edilemedi."); }
+    finally { setBusy(false); }
+  };
   const payRow = async (row, printAfter = false) => {
     if (busy || number(row.pendingCheckCount) > 0) return;
     setBusy(true); setError("");
@@ -1495,7 +1535,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         {paymentTab === "period" ? <>
           {periodStatusError ? <div className="gop-wage-sync-alert" role="alert">{periodStatusError}</div> : null}<div className="gop-payment-stats period-stats"><Stat label="Personel" value={paymentMetrics.people} hint={`${paymentMetrics.totalDays} vardiya`}/><Stat label="Gündüz" value={paymentMetrics.dayCount} hint={money(paymentMetrics.dayTotal)}/><Stat label="Gece" value={paymentMetrics.nightCount} hint={money(paymentMetrics.nightTotal)}/><Stat label="Tamamlanan" value={periodPaymentStatus.paid} hint={money(periodPaymentStatus.paidAmount)}/><Stat label="Açık" value={periodPaymentStatus.waiting} hint={money(periodPaymentStatus.waitingAmount)}/><Stat label="GENEL TOPLAM" value={money(paymentMetrics.totalAmount)}/></div>
           <div className="gop-card"><div className="gop-card-head payment-head"><div><h2>Dönem Hakedişleri ve Çıktı</h2><span>Çıktı almak ödeme kaydı oluşturmaz. Ödemeler yalnız Ödeme Bekleyenler bölümünde açıkça Tamamla denildiğinde kaydedilir.</span></div><div className="gop-print-actions"><span className="print-payment-note">Çıktı = yalnız hakediş belgesi</span><button type="button" disabled={!selectedPaymentPeriodRows.length} onClick={() => printPaymentPeriodSlips({ selectedOnly: true })}><Printer size={15}/> Seçili Fişleri Yazdır</button><button type="button" disabled={!paymentPeriodRows.length} onClick={() => printPaymentPeriodSlips()}><Printer size={15}/> Tüm Fişleri Yazdır</button><button type="button" onClick={() => setPaymentSelectedIds(new Set(paymentPeriodRows.map((row) => String(row.employeeId))))}>Tümünü Seç</button><button type="button" disabled={!paymentSelectedIds.size} onClick={() => setPaymentSelectedIds(new Set())}>Seçimi Kaldır</button></div></div>
-            <div className="gop-payment-ledger-table period-ledger"><table><thead><tr><th>Seç</th><th>Personel</th><th>Hakediş Dönemi</th><th>Gündüz Adet</th><th>Gündüz Toplam</th><th>Gece Adet</th><th>Gece Toplam</th><th>Ücret Toplamı</th><th>Durum</th><th>Fiş</th></tr></thead><tbody>{paymentPeriodRows.length ? paymentPeriodRows.map((row) => { const key=String(row.employeeId); const picked=paymentSelectedIds.has(key); const state=paymentStatusByEmployee.get(key); const controlPending=state ? number(state.pendingCheckCount)>0 : false; const paymentLabel=!state ? "DOĞRULANAMADI" : state.status === "PAID" ? "ÖDENDİ" : state.status === "PARTIAL" ? "KISMEN ÖDENDİ" : controlPending ? "KONTROL BEKLİYOR" : "AÇIK"; return <tr key={key}><td><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next=new Set(current); if(next.has(key)) next.delete(key); else next.add(key); return next; })}/></td><td><strong>{row.name || row.fullName}</strong><small>{row.personnelNo || ""} · {row.qualification || "-"}</small></td><td>{dateText(paymentPoolRange.start)} — {dateText(paymentPoolRange.end)}</td><td><b>{number(row.dayCount)}</b></td><td className="money">{money(row.dayTotal)}</td><td><b>{number(row.nightCount)}</b></td><td className="money">{money(row.nightTotal)}</td><td className="money grand"><strong>{money(row.totalAmount)}</strong></td><td><span className={`payment-state ${state?.status === "PAID" ? "paid" : controlPending ? "control" : "waiting"}`}>{paymentLabel}</span></td><td><button type="button" disabled={busy || controlPending} onClick={() => printPeriodRows([row])}><Printer size={14}/> Çıktı Al</button></td></tr>; }) : <tr><td colSpan="10"><Empty>Seçili tarih aralığında çalışma kaydı yok.</Empty></td></tr>}</tbody><tfoot><tr><td colSpan="3"><strong>GENEL TOPLAM</strong></td><td><strong>{paymentMetrics.dayCount}</strong></td><td className="money"><strong>{money(paymentMetrics.dayTotal)}</strong></td><td><strong>{paymentMetrics.nightCount}</strong></td><td className="money"><strong>{money(paymentMetrics.nightTotal)}</strong></td><td className="money grand"><strong>{money(paymentMetrics.totalAmount)}</strong></td><td><strong>{periodPaymentStatus.paid} tamamlandı / {periodPaymentStatus.waiting} açık</strong></td><td></td></tr></tfoot></table></div>
+            <div className="gop-payment-ledger-table period-ledger"><table><thead><tr><th>Seç</th><th>Personel</th><th>Hakediş Dönemi</th><th>Gündüz Adet</th><th>Gündüz Toplam</th><th>Gece Adet</th><th>Gece Toplam</th><th>Ek (+/−)</th><th>Net Ödenecek</th><th>Durum</th><th>Fiş / Düzenle</th></tr></thead><tbody>{paymentPeriodRows.length ? paymentPeriodRows.map((row) => { const key=String(row.employeeId); const picked=paymentSelectedIds.has(key); const state=paymentStatusByEmployee.get(key); const controlPending=state ? number(state.pendingCheckCount)>0 : false; const paymentLabel=!state ? "DOĞRULANAMADI" : state.status === "PAID" ? "ÖDENDİ" : state.status === "PARTIAL" ? "KISMEN ÖDENDİ" : controlPending ? "KONTROL BEKLİYOR" : "AÇIK"; return <tr key={key}><td><input type="checkbox" checked={picked} onChange={() => setPaymentSelectedIds((current) => { const next=new Set(current); if(next.has(key)) next.delete(key); else next.add(key); return next; })}/></td><td><strong>{row.name || row.fullName}</strong><small>{row.personnelNo || ""} · {row.qualification || "-"}</small></td><td>{dateText(paymentPoolRange.start)} — {dateText(paymentPoolRange.end)}</td><td><b>{number(row.dayCount)}</b></td><td className="money">{money(row.dayTotal)}</td><td><b>{number(row.nightCount)}</b></td><td className="money">{money(row.nightTotal)}</td><td className="money"><small className="gop-adjust-plus">+{money(row.additions)}</small><small className="gop-adjust-minus">−{money(row.deductions)}</small></td><td className="money grand"><strong>{money(row.totalAmount)}</strong></td><td><span className={`payment-state ${state?.status === "PAID" ? "paid" : controlPending ? "control" : "waiting"}`}>{paymentLabel}</span></td><td><div className="ledger-actions"><button type="button" disabled={busy || controlPending} onClick={() => printPeriodRows([row])}><Printer size={14}/> Çıktı</button><button type="button" disabled={busy} onClick={() => { setAdjustmentEditor(row); setAdjustmentKind("ADD"); setAdjustmentReason(""); setAdjustmentAmount(""); setError(""); }}><Pencil size={14}/> Ek / Kesinti</button></div></td></tr>; }) : <tr><td colSpan="11"><Empty>Seçili tarih aralığında çalışma kaydı yok.</Empty></td></tr>}</tbody><tfoot><tr><td colSpan="3"><strong>GENEL TOPLAM</strong></td><td><strong>{paymentMetrics.dayCount}</strong></td><td className="money"><strong>{money(paymentMetrics.dayTotal)}</strong></td><td><strong>{paymentMetrics.nightCount}</strong></td><td className="money"><strong>{money(paymentMetrics.nightTotal)}</strong></td><td className="money"><strong>+{money(paymentPeriodRows.reduce((n,r)=>n+number(r.additions),0))} / −{money(paymentPeriodRows.reduce((n,r)=>n+number(r.deductions),0))}</strong></td><td className="money grand"><strong>{money(paymentMetrics.totalAmount)}</strong></td><td><strong>{periodPaymentStatus.paid} tamamlandı / {periodPaymentStatus.waiting} açık</strong></td><td></td></tr></tfoot></table></div>
           </div>
         </> : paymentTab === "pool" ? <>
           <div className="gop-payment-stats pool-stats"><Stat label="Ödeme Bekleyen" value={paymentPageOpenMetrics.people} hint={`${paymentPageOpenMetrics.days} vardiya`}/><Stat label="Bekleyen Tutar" value={money(paymentPageOpenMetrics.amount)}/><Stat label="Kontrol Bekleyen" value={paymentPageOpenMetrics.controlPending}/><Stat label="Hakediş Dönemi" value={`${dateText(paymentPoolRange.start)} — ${dateText(paymentPoolRange.end)}`}/></div>
@@ -1529,6 +1569,35 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       </div> : null}
 
 
+
+      {adjustmentEditor ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true" aria-label="Personel ek ödeme ve kesinti">
+        <section className="gop-dialog gop-adjustment-dialog">
+          <header><div><span>HAKEDİŞ & ÖDEME · EK İŞLEM / GEÇMİŞ</span><h2>{adjustmentEditor.name} · Ek Ödeme / Kesinti</h2>
+            <p>{dateText(adjustmentEditor.periodStart)} — {dateText(adjustmentEditor.periodEnd)} · Kayıtlar bütün bilgisayarlarda ortaktır</p></div>
+            <button type="button" disabled={busy} onClick={()=>setAdjustmentEditor(null)}><X size={19}/></button></header>
+          <div className="gop-adjustment-content">
+            <div className="gop-adjustment-stats">
+              <div><span>Çalışma Hakedişi</span><strong>{money(adjustmentEditor.baseAmount)}</strong></div>
+              <div><span>Ek Ödeme</span><strong className="gop-adjust-plus">{money(adjustmentForEditor.filter((a)=>a.status==="ACTIVE" && a.kind==="ADD").reduce((n,a)=>n+number(a.amount),0))}</strong></div>
+              <div><span>Ek Kesinti</span><strong className="gop-adjust-minus">{money(adjustmentForEditor.filter((a)=>a.status==="ACTIVE" && a.kind==="DEDUCT").reduce((n,a)=>n+number(a.amount),0))}</strong></div>
+              <div><span>Net Ödenecek</span><strong>{money(number(adjustmentEditor.baseAmount)+adjustmentForEditor.filter((a)=>a.status==="ACTIVE").reduce((n,a)=>n+(a.kind==="ADD"?1:-1)*number(a.amount),0))}</strong></div>
+            </div>
+            <div className="gop-adjustment-inputs">
+              <label>İşlem Türü<select disabled={busy} value={adjustmentKind} onChange={(e)=>setAdjustmentKind(e.target.value)}><option value="ADD">+ Ek Ödeme / Prim</option><option value="DEDUCT">− Kesinti / Avans</option></select></label>
+              <label>Tutar (TL)<input type="number" min="0.01" max="1000000" step="0.01" placeholder="0,00" disabled={busy} value={adjustmentAmount} onChange={(e)=>setAdjustmentAmount(e.target.value)}/></label>
+              <label className="wide">Açıklama (zorunlu)<input maxLength={300} placeholder="Örn. ek işçilik, prim, avans veya kesinti nedeni" disabled={busy} value={adjustmentReason} onChange={(e)=>setAdjustmentReason(e.target.value)}/></label>
+              <button type="button" className="primary" disabled={busy || periodStatusError || paymentStatusByEmployee.get(String(adjustmentEditor.employeeId))?.status === "PAID"} onClick={saveExtraAdjustment}><Save size={15}/> Ek İşlemi Kaydet</button>
+            </div>
+            <div className="gop-adjustment-log"><div className="gop-adjustment-log-title"><strong>İşlem Geçmişi / LOG</strong><span>{adjustmentForEditor.length} kayıt · Silinmez, iptal izi korunur</span></div>
+              {adjustmentForEditor.length ? adjustmentForEditor.map((item)=><div key={item.id} className={`gop-adjustment-event ${item.status==="VOID"?"is-void":""}`}>
+                <div><b>{item.kind==="ADD"?"Ek Ödeme":"Kesinti"} · {money(item.amount)}</b><span>{item.reason}</span><small>{dateTimeText(item.createdAt)} · {item.actorLabel}</small></div>
+                <div><strong>{item.status==="VOID"?"İPTAL":item.paymentId?"ÖDEMEYE BAĞLI":"AKTİF"}</strong>
+                {item.status==="VOID" ? <small>İptal: {item.voidReason} · {item.voidedByLabel} · {dateTimeText(item.voidedAt)}</small> : null}
+                {item.status==="ACTIVE" && !item.paymentId ? <button type="button" disabled={busy} onClick={()=>void voidExtraAdjustment(item)}>Gerekçeli İptal</button>:null}</div>
+              </div>) : <p className="gop-adjustment-empty">Bu dönem için henüz ek ödeme veya kesinti kaydı yok.</p>}</div>
+          </div>
+          <footer><span>Günlük girişler ve kart ücretleri değiştirilmez.</span><button type="button" onClick={()=>setAdjustmentEditor(null)} disabled={busy}>Kapat</button></footer>
+        </section></div> : null}
       {quick ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section data-ky-dialog-key="gunluk-operasyon.hizli-personel-girisi" className={`gop-dialog gop-quick-dialog shift-${quick.shift}`} style={{ "--quick-row-h": `${quickRowHeight}px`, "--quick-card-w": `${quickCardWidth}px` }}><header><div><span>HIZLI PERSONEL GİRİŞİ · KOMPAKT KONTROL KARTLARI V3</span><div className="quick-title-line"><h2>{longDateText(quick.date)} · {quick.shift === "day" ? "Gündüz" : "Gece"}</h2><span className={`quick-shift-badge ${quick.shift}`}>{quick.shift === "day" ? "GÜNDÜZ" : "GECE"}</span></div><p>Yalnız seçili gün ve vardiya değiştirilir; diğer günlerin kayıtları korunur.</p></div><div className="quick-header-actions"><div className="gop-shift-switch quick-header-shifts"><button type="button" className={quick.shift === "day" ? "active day" : ""} disabled={quickDirty || busy} onClick={() => changeQuickFocus(quick.date, "day")}><Sun size={15}/> Gündüz</button><button type="button" className={quick.shift === "night" ? "active night" : ""} disabled={quickDirty || busy} onClick={() => changeQuickFocus(quick.date, "night")}><Moon size={15}/> Gece</button></div><button type="button" onClick={closeQuickDialog}><X size={19}/></button></div></header>
         <div className="quick-day-picker-wrap">
           <button type="button" className={`quick-active-day-card ${quick.shift}`} aria-expanded={quickDayPickerOpen} onClick={() => setQuickDayPickerOpen((open) => !open)}>
