@@ -1,6 +1,7 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, type DailyWageChange } from "./gunluk-operasyon-core";
+import { dailyAdjustmentNetCents } from "./gunluk-adjustment-core";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -1888,7 +1889,7 @@ async function createPayment(c: Context<AppEnv>) {
     .filter((row)=>!text(row.settled_payment_id));
   const adjustmentSummary=adjustmentTotals(adjustmentRows);
   const baseCents=items.reduce((sum,item)=>sum+dailyMoneyCents(item.amount),0);
-  const totalCents=baseCents+dailyMoneyCents(adjustmentSummary.additions)-dailyMoneyCents(adjustmentSummary.deductions);
+  const totalCents=dailyAdjustmentNetCents(baseCents,adjustmentRows.map((row)=>({kind:text(row.kind) as "ADD" | "DEDUCT",amount_cents:Number(row.amount_cents)})));
   if(totalCents<0) return fail(c,409,"ADJUSTMENT_EXCEEDS_WAGES","Kesintiler bu dönem hakedişini aşıyor. Ödemeyi tamamlamadan önce tutarları düzeltin.");
   const statements:D1PreparedStatement[]=[c.env.DB.prepare(`INSERT INTO hr_daily_payments (id,payment_no,main_company_id,employee_id,personnel_no,full_name,qualification,period_start,period_end,day_count,night_count,total_days,total_amount_cents,status,paid_date,paid_at,paid_by_user_id,paid_by_label,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'PAID',?,?,?,?,?,?)`).bind(paymentId,paymentNo,companyId,employeeId,text(person?.personnel_no)||null,text(person?.full_name)||'Personel',text(person?.qualification)||null,start,end,dayCount,nightCount,items.length,totalCents,paidDate,paidAt,actor.id||null,actor.label,paidAt,paidAt)];
   for(const item of items){ statements.push(c.env.DB.prepare(`INSERT INTO hr_daily_payment_items (id,payment_id,main_company_id,attendance_id,employee_id,work_date,shift,amount_cents,active,created_at) VALUES (?,?,?,?,?,?,?,?,1,?)`).bind(crypto.randomUUID(),paymentId,companyId,item.attendanceId,employeeId,item.workDate,item.shift,dailyMoneyCents(item.amount),paidAt)); }
