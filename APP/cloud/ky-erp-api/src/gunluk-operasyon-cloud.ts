@@ -1606,6 +1606,104 @@ function paymentDateKey(value: unknown) {
   return validDate(direct) ? direct : dateOnly(nowIso());
 }
 
+
+/** Hakediş dışı ek tutarlar yalnız D1'den gelir. Çalışma gününe veya personel ücretine yazılmaz. */
+function adjustmentDto(row: Row) {
+  return {
+    id: text(row.id), employeeId: text(row.employee_id),
+    periodStart: dateOnly(row.period_start), periodEnd: dateOnly(row.period_end),
+    kind: text(row.kind), reason: text(row.reason),
+    amount: Number(row.amount_cents || 0) / 100,
+    status: text(row.status), paymentId: text(row.settled_payment_id),
+    actorLabel: text(row.actor_label) || "KY ERP", createdAt: text(row.created_at),
+    voidedAt: text(row.voided_at), voidedByLabel: text(row.voided_by_label),
+    voidReason: text(row.void_reason),
+  };
+}
+async function periodAdjustments(c: Context<AppEnv>, companyId: string, start: string, end: string, employeeId = "", includeVoided = false) {
+  const result = await c.env.DB.prepare(`SELECT * FROM hr_daily_payment_adjustments
+   WHERE main_company_id=? AND period_start=? AND period_end=?
+    AND (?='' OR employee_id=?) AND (?=1 OR status='ACTIVE')
+   ORDER BY created_at DESC,id DESC`)
+    .bind(companyId,start,end,employeeId,employeeId,includeVoided ? 1 : 0).all<Row>();
+  return result.results || [];
+}
+function adjustmentTotals(rows: Row[]) {
+  return rows.reduce((sum, row) => {
+    if (text(row.status) !== "ACTIVE") return sum;
+    const amount = Number(row.amount_cents || 0) / 100;
+    if (text(row.kind) === "ADD") sum.additions = money(sum.additions + amount);
+    if (text(row.kind) === "DEDUCT") sum.deductions = money(sum.deductions + amount);
+    return sum;
+  }, { additions: 0, deductions: 0 });
+}
+async function adjustmentList(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const companyId = companyIdOf(c);
+  const start = dateOnly(c.req.query("startDate"));
+  const end = dateOnly(c.req.query("endDate"));
+  const employeeId = text(c.req.query("employeeId"));
+  if (!validDate(start) || !validDate(end) || end < start || !employeeId)
+    return fail(c,400,"ADJUSTMENT_PERIOD_REQUIRED","Personel ve geçerli hakediş dönemi zorunludur.");
+  const rows = (await periodAdjustments(c,companyId,start,end,employeeId,true)).map(adjustmentDto);
+  return okItems(c,rows,rows);
+}
+async function adjustmentAdd(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const body = await bodyOf(c), companyId = companyIdOf(c,body);
+  const employeeId = text(body.employeeId), start = dateOnly(body.startDate), end = dateOnly(body.endDate);
+  const kind = text(body.kind).toUpperCase(), reason = text(body.reason).trim();
+  const amount = Number(body.amount);
+  if (!employeeId || !validDate(start) || !validDate(end) || end < start)
+    return fail(c,400,"ADJUSTMENT_PERIOD_REQUIRED","Personel ve hakediş dönemi zorunludur.");
+  if (!["ADD","DEDUCT"].includes(kind) || reason.length < 3 || reason.length > 300 ||
+      !Number.isFinite(amount) || amount <= 0 || amount > 1000000 ||
+      Math.abs(amount*100-Math.round(amount*100))>0.00001)
+    return fail(c,400,"ADJUSTMENT_INVALID","Tür (+/-), 3-300 karakter açıklama ve iki ondalıklı pozitif tutar girin.");
+  const person = await c.env.DB.prepare("SELECT id FROM hr_daily_employees WHERE id=? AND main_company_id=?")
+    .bind(employeeId,companyId).first<Row>();
+  if (!person) return fail(c,404,"EMPLOYEE_NOT_FOUND","Personel bu firmada bulunamadı.");
+  const paid = await c.env.DB.prepare(`SELECT id FROM hr_daily_payments WHERE main_company_id=? AND employee_id=?
+    AND period_start=? AND period_end=? AND status='PAID' LIMIT 1`)
+    .bind(companyId,employeeId,start,end).first<Row>();
+  if (paid) return fail(c,409,"ADJUSTMENT_PERIOD_PAID","Bu dönemde ödeme var. Önce açıklamalı ödeme iptali yapılmalıdır.");
+  const id = crypto.randomUUID(), actor = await actorOf(c), stamp = nowIso(), amountCents = dailyMoneyCents(amount);
+  await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO hr_daily_payment_adjustments
+      (id,main_company_id,employee_id,period_start,period_end,kind,reason,amount_cents,status,
+       actor_user_id,actor_label,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?, 'ACTIVE',?,?,?,?)`)
+      .bind(id,companyId,employeeId,start,end,kind,reason,amountCents,actor.id||null,actor.label,stamp,stamp),
+    auditStmt(c,{companyId,employeeId,workDate:start,action:"PAYMENT_ADJUSTMENT_ADD",
+      before:null,after:{id,start,end,kind,reason,amount},actor,source:"KYERP_DAILY_ADJUSTMENT_V1"}),
+  ]);
+  return ok(c,{id,employeeId,kind,reason,amount,status:"ACTIVE",periodStart:start,periodEnd:end,actorLabel:actor.label,createdAt:stamp});
+}
+async function adjustmentVoid(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const body = await bodyOf(c), companyId = companyIdOf(c,body);
+  const adjustmentId = text(c.req.param("id")), reason = text(body.reason).trim();
+  if (reason.length < 3 || reason.length > 300)
+    return fail(c,400,"VOID_REASON_REQUIRED","İptal gerekçesi en az 3 karakter olmalıdır.");
+  const entry = await c.env.DB.prepare(`SELECT * FROM hr_daily_payment_adjustments
+    WHERE main_company_id=? AND id=? LIMIT 1`).bind(companyId,adjustmentId).first<Row>();
+  if (!entry) return fail(c,404,"ADJUSTMENT_NOT_FOUND","Ek işlem bulunamadı.");
+  if (text(entry.status)!=="ACTIVE" || text(entry.settled_payment_id))
+    return fail(c,409,"ADJUSTMENT_LOCKED","Bu işlem iptal edilmiş veya ödeme fişine bağlanmış.");
+  const actor=await actorOf(c),stamp=nowIso();
+  const statements = [
+    c.env.DB.prepare(`UPDATE hr_daily_payment_adjustments
+      SET status='VOID',voided_at=?,voided_by_user_id=?,voided_by_label=?,void_reason=?,updated_at=?
+      WHERE id=? AND main_company_id=? AND status='ACTIVE' AND settled_payment_id IS NULL`)
+      .bind(stamp,actor.id||null,actor.label,reason,stamp,adjustmentId,companyId),
+    auditStmt(c,{companyId,employeeId:text(entry.employee_id),workDate:dateOnly(entry.period_start),
+      action:"PAYMENT_ADJUSTMENT_VOID",before:adjustmentDto(entry),after:{status:"VOID",reason},
+      note:reason,actor,source:"KYERP_DAILY_ADJUSTMENT_V1"}),
+  ];
+  await c.env.DB.batch(statements);
+  return ok(c,{id:adjustmentId,status:"VOID",voidedAt:stamp,voidedByLabel:actor.label,voidReason:reason});
+}
+
 async function paymentSourceRows(c: Context<AppEnv>, companyId: string, start: string, end: string, employeeId = "") {
   const result = await c.env.DB.prepare(`SELECT
       a.id AS attendance_id,a.employee_id,a.work_date,a.day_shift,a.night_shift,a.day_wage,a.night_wage,a.payment_status,
@@ -1847,6 +1945,9 @@ export function registerGunlukOperasyonRoutes(app: Hono<AppEnv>) {
   app.get("/api/gunluk-operasyon/attendance/payment-slips", protect(weeklySummary));
   app.post("/api/gunluk-operasyon/attendance/mark-paid", protect(markPaid));
 
+  app.get("/api/gunluk-operasyon/payments/adjustments", protect(adjustmentList));
+  app.post("/api/gunluk-operasyon/payments/adjustments", protect(adjustmentAdd));
+  app.post("/api/gunluk-operasyon/payments/adjustments/:id/void", protect(adjustmentVoid));
   app.get("/api/gunluk-operasyon/payments/pool", protect(paymentPool));
   app.get("/api/gunluk-operasyon/payments/period-status", protect(paymentPeriodStatus));
   app.get("/api/gunluk-operasyon/payments/history", protect(paymentHistory));
