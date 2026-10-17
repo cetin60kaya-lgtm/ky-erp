@@ -5,17 +5,15 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-10-17",
   "scope": [
-    "gunluk-hizli-giris-kompakt-v3",
-    "gunluk-kart-en-220px-beşli-responsive",
-    "gunluk-tek-yatay-satir-sec-kontrol",
-    "gunluk-tam-yesil-onay-karti",
-    "gunluk-dokunma-hedefleri-ayri",
-    "gunluk-eski-genislik-tercihi-v5",
+    "gunluk-hakedis-ek-odeme-kesinti-penceresi",
+    "gunluk-kalici-log-ve-gecmis",
+    "gunluk-ek-odeme-kesinti-net-hakedis",
+    "gunluk-ek-kalemler-a4-fis-ve-odeme-gecmisi",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "17.10.2026 kullanıcı onayı: son görsel hedef 5 yatay kart ve daha dar dikey/yatay yoğunluk. PR #439, merge 45ff7d5c, CI 39056136105 PASS. Yalnız frontend; D1/Worker/personel/ödeme kaydı değişmedi. Canlı kullanıcı oturumunda görsel kabul beklenir.",
-  "sourceCommit": "45ff7d5c33e89b4f3488975bc9d096a5565506a3",
+  "note": "PR #440 CI #39065684356 PASS, Worker live Actions #39065800668 success ve D1 tam yedek+0061 schema proof tamam. Yalnız Hakediş & Ödeme → Dönem/Çıktı ekranında ek +/− ve gerekçeli iptal/log açılır pencere. Gerçek personel ödeme kaydı veya sahte test işlemi yapılmadı. Oturumlu canlı görsel test beklenir.",
+  "sourceCommit": "91bf79ba2378bc5fd47def8fd6fd2d51d5990c97",
   "requestedAt": "2026-10-17"
 }
