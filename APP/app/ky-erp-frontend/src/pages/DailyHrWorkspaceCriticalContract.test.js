@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const workspace = readFileSync(new URL("./modules/ik/DailyHrWorkspace.jsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("./modules/ik/daily-hr-workspace-final.css", import.meta.url), "utf8");
+const quickV2Css = readFileSync(new URL("./modules/ik/daily-quick-entry-card-v2.css", import.meta.url), "utf8");
 
 test("daily operations quick entry keeps existing personnel visible and protects saves", () => {
   assert.match(workspace, /const attendanceRosterIds = useMemo/);
@@ -75,13 +76,18 @@ test("quick personnel groups stay tightly packed on small monitors", () => {
 });
 
 
-test("final quick cards use aligned grid columns with full-name room", () => {
-  assert.match(workspace, /quick-person-text[\s\S]*quick-inline-divider[\s\S]*money\(quick\.shift[\s\S]*Seçildi/);
-  assert.match(css, /QUICK-CARD-GRID-FINAL-2026-10-03/);
-  assert.match(css, /grid-template-columns:20px minmax\(0,1fr\) 1px 64px 38px!important/);
-  assert.match(css, /grid-template-columns:minmax\(0,1fr\) 24px!important/);
-  assert.match(css, /white-space:normal!important/);
-  assert.match(css, /\.gop-quick-dialog \.quick-inline-divider\{/);
+test("quick person cards V2 show distinct full-width selection and checked buttons", () => {
+  assert.match(workspace, /data-ky-quick-card-v2="20261017"/);
+  assert.match(workspace, /className={`kyq2-card/);
+  assert.match(workspace, /className="kyq2-action-stack"/);
+  assert.match(workspace, /VARDİYAYA SEÇ/);
+  assert.match(workspace, /KONTROL ET/);
+  assert.match(workspace, /KONTROL EDİLDİ/);
+  assert.match(workspace, /daily-quick-entry-card-v2\.css/);
+  assert.doesNotMatch(workspace, /className={`quick-person /);
+  assert.match(quickV2Css, /grid-auto-rows: auto !important/);
+  assert.match(quickV2Css, /flex-direction: column/);
+  assert.match(quickV2Css, /\.kyq2-action-stack button/);
 });
 
 test("quick card density keeps the two manual row and width controls", () => {
@@ -189,13 +195,15 @@ test("main and quick attendance save only changed people and retain original ser
   assert.match(workspace, /mode: "remove", removeEmployeeId: person\.id/);
 });
 
-test("selection and control approval are separate clearly-labelled actions and green whole-card state", () => {
-  assert.match(workspace, /quick-check-label/);
-  assert.match(workspace, /KONTROL EDİLDİ/);
-  assert.match(workspace, /Onaylandı/);
-  assert.match(css, /GUNLUK_SYNC_CHECK_20261017/);
-  assert.match(css, /\.gop-quick-dialog \.quick-person\.checked/);
-  assert.match(css, /background:#c6f6d5!important/);
+test("control approval turns entire V2 card green and preserves server-side save", () => {
+  assert.match(workspace, /kyq2-card/);
+  assert.match(workspace, /kyq2-verify/);
+  assert.match(workspace, /is-checked/);
+  assert.match(workspace, /disabled={!selected \|\| blocked \|\| busy \|\| periodLocked}/);
+  assert.match(quickV2Css, /\.kyq2-card\.is-checked/);
+  assert.match(quickV2Css, /background: #bbf7d0/);
+  assert.match(quickV2Css, /\.kyq2-verify\.is-active/);
+  assert.match(workspace, /await saveDailyFocusedRecords/);
 });
 
 test("daily view has real D1 audit log under work area and no duplicated weekly print buttons", () => {

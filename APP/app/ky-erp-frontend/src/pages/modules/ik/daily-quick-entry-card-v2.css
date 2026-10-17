@@ -1,0 +1,165 @@
+/* Günlük Operasyon — Hızlı Personel Girişi V2 · 17.10.2026
+ * Yalnız kyq2 sınıfları: eski quick-person/quick-main-toggle kurallarından bağımsızdır.
+ * Seçim ve kontrol iki fiziksel ayrı satırdır. Başarı yeşili bütün kartı kaplar.
+ */
+.gop-quick-dialog .quick-person-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(255px, var(--quick-card-w, 270px))), 1fr)) !important;
+  grid-auto-rows: auto !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  padding: 7px !important;
+}
+.gop-quick-dialog .kyq2-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 118px;
+  height: auto;
+  padding: 9px;
+  border: 2px solid #cbd5e1;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #17324c;
+  box-shadow: 0 1px 3px rgba(12,32,56,.07);
+  transition: border-color .12s ease, background-color .12s ease;
+}
+.gop-quick-dialog .kyq2-card.is-selected:not(.is-checked) {
+  background: #fff4e5;
+  border-color: #f59e0b;
+  box-shadow: inset 4px 0 0 #c2410c;
+}
+.gop-quick-dialog .kyq2-card.is-checked {
+  background: #bbf7d0;
+  border-color: #15803d;
+  box-shadow: inset 0 0 0 1px #15803d, 0 1px 4px rgba(21,128,61,.16);
+}
+.gop-quick-dialog .kyq2-card.is-blocked {
+  opacity: .63;
+}
+.gop-quick-dialog .kyq2-identity-row {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+.gop-quick-dialog .kyq2-avatar {
+  display: flex;
+  flex: 0 0 27px;
+  align-items: center;
+  justify-content: center;
+  height: 27px;
+  border-radius: 7px;
+  color: #fff;
+  background: #f97316;
+  font-size: 12px;
+  font-weight: 900;
+}
+.gop-quick-dialog.shift-night .kyq2-avatar { background: #4f46e5; }
+.gop-quick-dialog .kyq2-person {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.28;
+}
+.gop-quick-dialog .kyq2-person strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 850;
+  color: #123152;
+}
+.gop-quick-dialog .kyq2-person small {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  color: #526980;
+}
+.gop-quick-dialog .kyq2-wage {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 850;
+  color: #123152;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.gop-quick-dialog .kyq2-card.is-checked .kyq2-person strong,
+.gop-quick-dialog .kyq2-card.is-checked .kyq2-wage {
+  color: #14532d;
+}
+.gop-quick-dialog .kyq2-action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+}
+.gop-quick-dialog .kyq2-action-stack button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 32px;
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid #c3d1e0;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #214465;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.15;
+  cursor: pointer;
+  touch-action: manipulation;
+  white-space: nowrap;
+  gap: 8px;
+}
+.gop-quick-dialog .kyq2-action-stack button span { font-size: 15px; font-weight: 900; }
+.gop-quick-dialog .kyq2-select.is-active {
+  background: #f97316;
+  border-color: #c2410c;
+  color: #fff;
+}
+.gop-quick-dialog .kyq2-verify:not(:disabled) {
+  border-color: #15803d;
+  background: #ecfdf5;
+  color: #166534;
+}
+.gop-quick-dialog .kyq2-verify.is-active {
+  background: #15803d;
+  border-color: #14532d;
+  color: #fff;
+}
+.gop-quick-dialog .kyq2-card.is-checked .kyq2-verify.is-active {
+  background: #166534;
+  color: #fff;
+}
+.gop-quick-dialog .kyq2-action-stack button:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+.gop-quick-dialog .kyq2-action-stack button:focus-visible {
+  outline: 3px solid #1d4ed8;
+  outline-offset: 2px;
+}
+.gop-quick-dialog .kyq2-card.is-checked .kyq2-action-stack .kyq2-select {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #14532d;
+}
+@media (max-width: 760px) {
+  .gop-quick-dialog .quick-person-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 255px), 1fr)) !important;
+    gap: 9px !important;
+  }
+  .gop-quick-dialog .kyq2-card { min-height: 122px; padding: 9px; }
+  .gop-quick-dialog .kyq2-person strong { font-size: 13px; }
+  .gop-quick-dialog .kyq2-action-stack button { min-height: 36px; height: 36px; font-size: 12px; }
+}
