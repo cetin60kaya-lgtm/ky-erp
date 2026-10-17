@@ -847,10 +847,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           status: nextSelected ? "ACTIVE" : "REMOVE",
           checked: nextSelected ? false : false,
           expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
+          expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
           note: nextSelected ? (notes[person.id] || "") : "",
         }],
       });
-      await Promise.all([loadFocused(), loadRangeData()]);
+      await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
       setNotice(
         nextSelected
           ? `${person.name} ${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} vardiyasına kaydedildi.`
@@ -934,10 +935,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           status: "ACTIVE",
           checked: Boolean(nextChecked),
           expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
+          expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
           note: notes[person.id] || "",
         }],
       });
-      await Promise.all([loadFocused(), loadRangeData()]);
+      await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
       setNotice(`${person.name} kontrol durumu ${nextChecked ? "onaylandı" : "kaldırıldı"}.`);
     } catch (e) {
       setError(e?.message || "Kontrol durumu güncellenemedi. Ekranı yenileyip tekrar deneyin.");
@@ -966,7 +968,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     const rows = await getDailyFocusedRecords({ mainCompanyId: companyId, date, shift: mode });
     const ids = focusedIds(rows);
     const checked = focusedCheckedIds(rows);
-    setQuick({ date, shift: mode, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), query: preserveQuery });
+    setQuick({ date, shift: mode, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), baselineRecords: Object.fromEntries((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), { updatedAt: row.updatedAt || "", checkedUpdatedAt: row.checkedUpdatedAt || "" }])), query: preserveQuery });
   };
   const openQuick = async (date = selectedDate, mode = shift) => {
     if (!date || busy) return;
@@ -1005,7 +1007,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           (snapshot.baseline.has(id) && snapshot.checkedBaseline.has(id));
       });
       if (changedPeople.length) {
-        await saveDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift, personnelEntries: changedPeople.map((person) => ({ personelId: person.id, status: snapshot.ids.has(person.id) ? "ACTIVE" : "REMOVE", checked: snapshot.ids.has(person.id) && snapshot.checked.has(person.id), expectedUpdatedAt: currentMap.get(person.id)?.updatedAt || currentMap.get(person.id)?.attendanceUpdatedAt || "", note: currentMap.get(person.id)?.note || "" })) });
+        await saveDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift, personnelEntries: changedPeople.map((person) => ({ personelId: person.id, status: snapshot.ids.has(person.id) ? "ACTIVE" : "REMOVE", checked: snapshot.ids.has(person.id) && snapshot.checked.has(person.id), expectedUpdatedAt: snapshot.baselineRecords?.[person.id]?.updatedAt || "", expectedCheckedUpdatedAt: snapshot.baselineRecords?.[person.id]?.checkedUpdatedAt || "", note: currentMap.get(person.id)?.note || "" })) });
         const verified = await getDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift });
         const confirmedIds = focusedIds(verified);
         const confirmedChecks = focusedCheckedIds(verified);
@@ -1014,7 +1016,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         if (notSaved) throw new Error("Kontrol seçimleri sunucuda doğrulanamadı. Veriler tekrar okunmalı; ödeme kaydı oluşturulmadı.");
       }
       setSelectedDate(snapshot.date); setShift(snapshot.shift); setNotice(`${dateText(snapshot.date)} hızlı giriş sunucuda doğrulanarak kaydedildi.`);
-      await Promise.all([loadFocused(), loadRangeData()]);
+      await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
       const nextDate = addDays(snapshot.date, 1);
       if (goNext && nextDate && nextDate <= range.end) await loadQuickFocus(nextDate, snapshot.shift, snapshot.query);
       else await loadQuickFocus(snapshot.date, snapshot.shift, snapshot.query);
@@ -1249,7 +1251,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       if (cancelled) return;
       setQuick((current) => {
         if (!current || current.date !== snapshot.date || current.shift !== snapshot.shift) return current;
-        return { ...current, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked) };
+        return { ...current, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), baselineRecords: Object.fromEntries((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), { updatedAt: row.updatedAt || "", checkedUpdatedAt: row.checkedUpdatedAt || "" }])) };
       });
     };
 
