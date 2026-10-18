@@ -1574,6 +1574,7 @@ async function listEmployees(c: Context<AppEnv>) {
 }
 
 async function createEmployee(c: Context<AppEnv>) {
+  await ensureSchema(c);
   const body = await bodyOf(c);
   const companyId = companyIdOf(c, body);
   const fullName = text(body.fullName || body.name).replace(/\s+/g, " ");
@@ -1588,7 +1589,9 @@ async function createEmployee(c: Context<AppEnv>) {
   const nightWage = money(body.nightWage ?? body.nightRate);
   const broker = text(body.broker) || null;
   const status = text(body.status) || "ACTIVE";
+  const actor = await actorOf(c);
   await c.env.DB.batch([
+    auditStmt(c,{companyId,employeeId:id,action:"EMPLOYEE_CARD_CREATE",before:null,after:{fullName,qualification,dayWage,nightWage,broker,status,personnelNo:text(body.personnelNo || body.personelNo)},actor,source:"KYERP_DAILY_EMPLOYEE_V2"}),
     c.env.DB.prepare("INSERT INTO hr_daily_employees (id,main_company_id,full_name,qualification,day_wage,night_wage,broker,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
       .bind(id,companyId,fullName,qualification,dayWage,nightWage,broker,status,timestamp,timestamp),
     c.env.DB.prepare("INSERT INTO hr_daily_employee_meta (employee_id,personnel_no,note,updated_at) VALUES (?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET personnel_no=excluded.personnel_no,note=excluded.note,updated_at=excluded.updated_at")
@@ -1627,6 +1630,10 @@ async function updateEmployee(c: Context<AppEnv>) {
     c.env.DB.prepare("INSERT INTO hr_daily_employee_meta (employee_id,personnel_no,note,updated_at) VALUES (?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET personnel_no=excluded.personnel_no,note=excluded.note,updated_at=excluded.updated_at")
       .bind(id,text(body.personnelNo ?? body.personelNo ?? current.personnel_no),text(body.note ?? current.meta_note),timestamp),
   ];
+  const cardBefore = {fullName:text(current.full_name),qualification:text(current.qualification),broker:text(current.broker),status:text(current.status),personnelNo:text(current.personnel_no),note:text(current.meta_note)};
+  const cardAfter = {fullName,qualification:text(qualification),broker:text(broker),status,personnelNo:text(body.personnelNo ?? body.personelNo ?? current.personnel_no),note:text(body.note ?? current.meta_note)};
+  const cardChanged = Object.keys(cardBefore).some((key)=>cardBefore[key as keyof typeof cardBefore]!==cardAfter[key as keyof typeof cardAfter]);
+  if (cardChanged) statements.push(auditStmt(c,{companyId,employeeId:id,action:"EMPLOYEE_CARD_UPDATE",before:cardBefore,after:cardAfter,actor:await actorOf(c),source:"KYERP_DAILY_EMPLOYEE_V2"}));
   if (wageChanged) {
     const actor = await actorOf(c);
     statements.push(auditStmt(c, {
@@ -1642,12 +1649,16 @@ async function updateEmployee(c: Context<AppEnv>) {
 }
 
 async function deleteEmployee(c: Context<AppEnv>) {
+  await ensureSchema(c);
   const companyId=companyIdOf(c);
   const id=text(c.req.param("id"));
   const current=await c.env.DB.prepare("SELECT * FROM hr_daily_employees WHERE id=? AND main_company_id=?").bind(id,companyId).first<Row>();
   if(!current) return fail(c,404,"NOT_FOUND","Günlük personel bulunamadı.");
   const timestamp=nowIso();
-  await c.env.DB.prepare("UPDATE hr_daily_employees SET status='PASSIVE',updated_at=? WHERE id=? AND main_company_id=?").bind(timestamp,id,companyId).run();
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE hr_daily_employees SET status='PASSIVE',updated_at=? WHERE id=? AND main_company_id=?").bind(timestamp,id,companyId),
+    auditStmt(c,{companyId,employeeId:id,action:"EMPLOYEE_CARD_DEACTIVATE",before:{status:text(current.status)},after:{status:"PASSIVE"},actor:await actorOf(c),source:"KYERP_DAILY_EMPLOYEE_V2"}),
+  ]);
   return ok(c,employeeDto({...current,status:"PASSIVE",updated_at:timestamp}));
 }
 
