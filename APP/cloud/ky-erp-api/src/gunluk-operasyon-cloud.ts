@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, type DailyWageChange } from "./gunluk-operasyon-core";
 import { dailyAdjustmentNetCents } from "./gunluk-adjustment-core";
+import { parseDailyExcelRows } from "./gunluk-excel-import";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -392,11 +393,17 @@ function attendanceDto(row: Row) {
   };
 }
 
+// Stable CAS audit key: two PCs writing from one old control revision cannot both commit.
+async function revisionAuditId(kind: string, companyId: string, employeeId: string, workDate: string, shift: string, priorVersion: string) {
+  const source = new TextEncoder().encode(["DAILY_CAS_V1",kind,companyId,employeeId,workDate,shift,priorVersion].join("|"));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256",source));
+  return "cas-" + Array.from(digest, byte => byte.toString(16).padStart(2,"0")).join("");
+}
 function auditStmt(c: Context<AppEnv>, input: Row) {
   return c.env.DB.prepare(`INSERT INTO hr_daily_operation_audit
     (id,main_company_id,employee_id,attendance_id,work_date,shift,action,before_json,after_json,note,actor_user_id,actor_label,source,request_id,created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
-    crypto.randomUUID(),
+    text(input.id) || crypto.randomUUID(),
     canonicalCompany(input.companyId),
     text(input.employeeId) || null,
     text(input.attendanceId) || null,
@@ -450,6 +457,12 @@ async function lockedPeriod(c: Context<AppEnv>, companyId: string, workDate: str
     .first<Row>();
 }
 
+async function lockedRange(c: Context<AppEnv>, companyId: string, start: string, end: string) {
+  return c.env.DB.prepare(`SELECT id,start_date,end_date,reason FROM hr_daily_period_lock
+    WHERE main_company_id=? AND status='LOCKED' AND start_date<=? AND end_date>=?
+    ORDER BY updated_at DESC LIMIT 1`).bind(companyId,end,start).first<Row>();
+}
+
 async function listAttendance(c: Context<AppEnv>) {
   await ensureSchema(c);
   const companyId = companyIdOf(c);
@@ -458,11 +471,14 @@ async function listAttendance(c: Context<AppEnv>) {
   const end = dateOnly(c.req.query("endDate") || c.req.query("end") || singleDate);
 
   const result = await c.env.DB.prepare(`SELECT a.*, e.day_wage AS card_day_wage, e.night_wage AS card_night_wage,
+      COALESCE(cd.checked,0) AS day_checked, COALESCE(cn.checked,0) AS night_checked,
       (SELECT p.amount_cents FROM hr_daily_payment_items p WHERE p.main_company_id=e.main_company_id AND p.attendance_id=a.id AND p.shift='day' AND p.active=1 LIMIT 1) AS settled_day_cents,
       (SELECT p.amount_cents FROM hr_daily_payment_items p WHERE p.main_company_id=e.main_company_id AND p.attendance_id=a.id AND p.shift='night' AND p.active=1 LIMIT 1) AS settled_night_cents,
       (SELECT COUNT(*) FROM hr_daily_payment_items p WHERE p.main_company_id=e.main_company_id AND p.attendance_id=a.id) AS ledger_item_count
       FROM hr_daily_attendance a
       JOIN hr_daily_employees e ON e.id=a.employee_id
+      LEFT JOIN hr_daily_attendance_check cd ON cd.main_company_id=e.main_company_id AND cd.employee_id=a.employee_id AND cd.work_date=a.work_date AND cd.shift='day'
+      LEFT JOIN hr_daily_attendance_check cn ON cn.main_company_id=e.main_company_id AND cn.employee_id=a.employee_id AND cn.work_date=a.work_date AND cn.shift='night'
       WHERE e.main_company_id=?
         AND (?='' OR a.work_date>=?)
         AND (?='' OR a.work_date<=?)
@@ -477,8 +493,13 @@ async function listAttendance(c: Context<AppEnv>) {
     const legacyPaid = text(row.payment_status).toUpperCase() === "PAID" && num(row.ledger_item_count) === 0;
     const dw = row.settled_day_cents != null ? Number(row.settled_day_cents) / 100 : legacyPaid ? money(row.day_wage) : active.dayWage;
     const nw = row.settled_night_cents != null ? Number(row.settled_night_cents) / 100 : legacyPaid ? money(row.night_wage) : active.nightWage;
-    return attendanceDto({ ...row, day_wage: dw, night_wage: nw,
-      total_amount: money((flag(row.day_shift) ? dw : 0) + (flag(row.night_shift) ? nw : 0)) });
+    return {
+      ...attendanceDto({ ...row, day_wage: dw, night_wage: nw,
+        total_amount: money((flag(row.day_shift) ? dw : 0) + (flag(row.night_shift) ? nw : 0)) }),
+      dayChecked: flag(row.day_shift) && flag(row.day_checked),
+      nightChecked: flag(row.night_shift) && flag(row.night_checked),
+      checked: (!flag(row.day_shift) || flag(row.day_checked)) && (!flag(row.night_shift) || flag(row.night_checked)),
+    };
   });
   return okItems(c, rows, rows);
 }
@@ -868,6 +889,9 @@ async function saveFocused(c: Context<AppEnv>) {
   if (!entries.length) return fail(c, 400, "ROWS_REQUIRED", "Kaydedilecek personel seçilmedi.");
 
   const companyId = companyIdOf(c, body);
+  // Check-only writes must respect a locked period as well as shift changes.
+  if (await lockedPeriod(c, companyId, date))
+    return fail(c, 409, "DAILY_PERIOD_LOCKED", "Bu tarih kapalı dönemdedir. Vardiya, kontrol ve not değiştirilemez.");
   const employeeIds = [
     ...new Set(entries.map((entry) => text(entry.personelId || entry.employeeId)).filter(Boolean)),
   ];
@@ -896,6 +920,14 @@ async function saveFocused(c: Context<AppEnv>) {
   const guardByEmployee = new Map(
     (guardResult.results || []).map((row) => [text(row.employee_id), row]),
   );
+  // Read note revisions before either the shift or check is changed.
+  const noteGuardResult = employeeIds.length
+    ? await c.env.DB.prepare(`SELECT employee_id,note,updated_at FROM hr_daily_attendance_notes
+       WHERE main_company_id=? AND work_date=? AND shift=?
+         AND employee_id IN (${employeeIds.map(() => "?").join(",")})`)
+        .bind(companyId,date,shift,...employeeIds).all<Row>()
+    : {results:[] as Row[]};
+  const noteGuardByEmployee = new Map((noteGuardResult.results || []).map((row)=>[text(row.employee_id),row]));
   for (const entry of entries) {
     const employeeId = text(entry.personelId || entry.employeeId);
     if (!employeeId) return fail(c, 400, "INVALID_EMPLOYEE", "Personel numarası eksik.");
@@ -903,6 +935,10 @@ async function saveFocused(c: Context<AppEnv>) {
     if (Object.prototype.hasOwnProperty.call(entry, "expectedUpdatedAt") &&
         actualAttendance !== text(entry.expectedUpdatedAt)) {
       return fail(c, 409, "DAILY_RECORD_CHANGED", "Bu kişinin vardiyası başka bilgisayarda değişmiş. Kaydetmeden önce güncel kayıtları yükleyin.");
+    }
+    if (Object.prototype.hasOwnProperty.call(entry, "expectedNoteUpdatedAt") &&
+        text(noteGuardByEmployee.get(employeeId)?.updated_at) !== text(entry.expectedNoteUpdatedAt)) {
+      return fail(c,409,"DAILY_NOTE_CHANGED","Not başka bilgisayarda değişmiş. Ekranı yenileyip tekrar kontrol edin.");
     }
     if (Object.prototype.hasOwnProperty.call(entry, "expectedCheckedUpdatedAt") &&
         text(guardByEmployee.get(employeeId)?.updated_at) !== text(entry.expectedCheckedUpdatedAt)) {
@@ -944,14 +980,7 @@ async function saveFocused(c: Context<AppEnv>) {
 
   const actor = await actorOf(c);
   const statements: D1PreparedStatement[] = [];
-  const notesResult = employeeIds.length
-    ? await c.env.DB.prepare(`SELECT employee_id,note
-        FROM hr_daily_attendance_notes
-        WHERE main_company_id=? AND work_date=? AND shift=?
-          AND employee_id IN (${employeeIds.map(() => "?").join(",")})`)
-        .bind(companyId, date, shift, ...employeeIds)
-        .all<Row>()
-    : { results: [] as Row[] };
+
   const checksResult = employeeIds.length
     ? await c.env.DB.prepare(`SELECT id,employee_id,checked
         FROM hr_daily_attendance_check
@@ -961,7 +990,7 @@ async function saveFocused(c: Context<AppEnv>) {
         .all<Row>()
     : { results: [] as Row[] };
   const noteByEmployee = new Map(
-    (notesResult.results || []).map((row) => [text(row.employee_id), text(row.note)]),
+    (noteGuardResult.results || []).map((row) => [text(row.employee_id), text(row.note)]),
   );
   const checkedByEmployee = new Map(
     (checksResult.results || []).map((row) => [text(row.employee_id), flag(row.checked)]),
@@ -973,7 +1002,7 @@ async function saveFocused(c: Context<AppEnv>) {
   for (const entry of entries) {
     const employeeId = text(entry.personelId || entry.employeeId);
     const noteBefore = noteByEmployee.get(employeeId) || "";
-    const noteAfter = text(entry.note);
+    const noteAfter = entry.note === undefined ? noteBefore : text(entry.note);
     if (noteBefore !== noteAfter) {
       statements.push(
         c.env.DB.prepare(`INSERT INTO hr_daily_attendance_notes
@@ -992,6 +1021,7 @@ async function saveFocused(c: Context<AppEnv>) {
       );
       statements.push(
         auditStmt(c, {
+          id: await revisionAuditId("NOTE",companyId,employeeId,date,shift,text(noteGuardByEmployee.get(employeeId)?.updated_at)),
           companyId,
           employeeId,
           workDate: date,
@@ -1025,6 +1055,7 @@ async function saveFocused(c: Context<AppEnv>) {
       );
       statements.push(
         auditStmt(c, {
+          id: await revisionAuditId("CHECK",companyId,employeeId,date,shift,text(guardByEmployee.get(employeeId)?.updated_at)),
           companyId,
           employeeId,
           workDate: date,
@@ -1043,11 +1074,71 @@ async function saveFocused(c: Context<AppEnv>) {
     try {
       await c.env.DB.batch(statements);
     } catch (error) {
+      if (/UNIQUE constraint|constraint failed|D1_ERROR.*UNIQUE/i.test(error instanceof Error ? error.message : String(error)))
+        return fail(c,409,"DAILY_CONCURRENT_UPDATE","Bu not veya kontrol onayı başka bilgisayarda değişti. Veriyi yenileyin; eski seçimle üzerine yazılmadı.");
       console.error(JSON.stringify({ code: "GUNLUK_CHECK_WRITE_FAILED", stage: "check_or_audit_batch", message: error instanceof Error ? error.message : String(error) }));
-      return fail(c, 500, "GUNLUK_CHECK_WRITE_FAILED", "Kontrol işareti sunucu veritabanına yazılamadı. İşlem kaydedilmedi; destek kaydı GUNLUK_CHECK_WRITE_FAILED.");
+      return fail(c, 500, "GUNLUK_CHECK_WRITE_FAILED", "Kontrol işareti veya not kaydedilemedi. Vardiya değişikliği kaydedilmiş olabilir; Yenile ile sunucudaki durumu doğrulayın. Destek kodu GUNLUK_CHECK_WRITE_FAILED.");
     }
   }
   return response;
+}
+
+async function excelUploadPreview(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const form = await c.req.formData();
+  const file = form.get("file");
+  if (!file || typeof (file as File).arrayBuffer !== "function")
+    return fail(c,400,"EXCEL_FILE_REQUIRED","Yüklemek için geçerli XLSX/XLS dosyası seçin.");
+  const filename = text((file as File).name).toLowerCase();
+  if (!/\.(xlsx|xls)$/.test(filename))
+    return fail(c,400,"EXCEL_TYPE_INVALID","Yalnız XLSX veya XLS kabul edilir.");
+  if ((file as File).size > 3_000_000)
+    return fail(c,400,"EXCEL_TOO_LARGE","Excel dosyası 3 MB sınırını aşıyor.");
+  const companyId = companyIdOf(c,{
+    mainCompanyId: form.get("mainCompanyId"),
+    mainCompanySlug: form.get("mainCompanySlug"),
+  });
+  const start = dateOnly(form.get("startDate"));
+  const end = dateOnly(form.get("endDate"));
+  if (!validDate(start)||!validDate(end)||end<start)
+    return fail(c,400,"DATE_RANGE_REQUIRED","Geçerli bir tarih aralığı seçin.");
+  let imported;
+  try { imported = parseDailyExcelRows(new Uint8Array(await (file as File).arrayBuffer()),start,end); }
+  catch (error) { return fail(c,400,"EXCEL_PREVIEW_INVALID",error instanceof Error?error.message:"Excel okunamadı."); }
+  const [peopleResult,existingResult] = await Promise.all([
+    c.env.DB.prepare(`SELECT e.id,e.full_name,m.personnel_no FROM hr_daily_employees e
+      LEFT JOIN hr_daily_employee_meta m ON m.employee_id=e.id
+      WHERE e.main_company_id=?`).bind(companyId).all<Row>(),
+    c.env.DB.prepare(`SELECT a.employee_id,a.work_date,a.day_shift,a.night_shift,a.updated_at
+      FROM hr_daily_attendance a JOIN hr_daily_employees e ON e.id=a.employee_id
+      WHERE e.main_company_id=? AND a.work_date>=? AND a.work_date<=?`)
+      .bind(companyId,start,end).all<Row>(),
+  ]);
+  const personKeys = new Map<string,Row>();
+  for (const person of peopleResult.results || []) {
+    for(const key of [text(person.personnel_no).toLocaleUpperCase("tr-TR"),text(person.full_name).toLocaleUpperCase("tr-TR")]){
+      if(!key)continue;
+      if(personKeys.has(key)) personKeys.set(key,{ambiguous:true});
+      else personKeys.set(key,person);
+    }
+  }
+  const existing = new Map((existingResult.results||[]).map((row)=>[`${text(row.employee_id)}|${dateOnly(row.work_date)}`,row]));
+  const preview: Row[] = [];
+  const missing: string[] = [];
+  for(const row of imported){
+    const key = text(row.personnelNo||row.name).toLocaleUpperCase("tr-TR");
+    const person = personKeys.get(key);
+    if(!person?.id) { missing.push(row.personnelNo||row.name);continue; }
+    const saved=existing.get(`${text(person.id)}|${row.workDate}`);
+    // Import adds marked shifts; blank cells never silently delete an existing shift.
+    const nextDay=row.dayShift||flag(saved?.day_shift), nextNight=row.nightShift||flag(saved?.night_shift);
+    if(nextDay===flag(saved?.day_shift)&&nextNight===flag(saved?.night_shift))continue;
+    preview.push({employeeId:text(person.id),personName:text(person.full_name),workDate:row.workDate,
+      dayShift:nextDay,nightShift:nextNight,expectedUpdatedAt:text(saved?.updated_at),enabled:true});
+  }
+  if(missing.length) return fail(c,400,"EXCEL_PERSON_NOT_FOUND",`Excel içinde eşleşmeyen veya belirsiz ${missing.length} personel var. Personel No/Ad eşleştirmesini düzeltin.`,{count:missing.length});
+  return ok(c,{startDate:start,endDate:end,rows:preview,count:preview.length,
+    message:preview.length?"Yalnız yeni vardiyalar önizlendi; mevcut vardiyalar silinmeyecek.":"Yeni vardiya bulunamadı; mevcut kayıtlar korunacak."});
 }
 
 async function excelApply(c: Context<AppEnv>) {
@@ -1134,6 +1225,9 @@ async function saveRoster(c: Context<AppEnv>) {
   if (!validDate(start) || !validDate(end) || end < start) {
     return fail(c, 400, "DATE_RANGE_REQUIRED", "Geçerli tarih aralığı seçilmedi.");
   }
+
+  if (await lockedRange(c, companyId, start, end))
+    return fail(c,409,"DAILY_PERIOD_LOCKED","Bu aralık kilitli bir dönemle çakışıyor. Personel listesi düzenlenemez.");
 
   if (requested.length) {
     const allowedResult = await c.env.DB.prepare(`SELECT id
@@ -1495,6 +1589,7 @@ async function listEmployees(c: Context<AppEnv>) {
 }
 
 async function createEmployee(c: Context<AppEnv>) {
+  await ensureSchema(c);
   const body = await bodyOf(c);
   const companyId = companyIdOf(c, body);
   const fullName = text(body.fullName || body.name).replace(/\s+/g, " ");
@@ -1509,7 +1604,9 @@ async function createEmployee(c: Context<AppEnv>) {
   const nightWage = money(body.nightWage ?? body.nightRate);
   const broker = text(body.broker) || null;
   const status = text(body.status) || "ACTIVE";
+  const actor = await actorOf(c);
   await c.env.DB.batch([
+    auditStmt(c,{companyId,employeeId:id,action:"EMPLOYEE_CARD_CREATE",before:null,after:{fullName,qualification,dayWage,nightWage,broker,status,personnelNo:text(body.personnelNo || body.personelNo)},actor,source:"KYERP_DAILY_EMPLOYEE_V2"}),
     c.env.DB.prepare("INSERT INTO hr_daily_employees (id,main_company_id,full_name,qualification,day_wage,night_wage,broker,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
       .bind(id,companyId,fullName,qualification,dayWage,nightWage,broker,status,timestamp,timestamp),
     c.env.DB.prepare("INSERT INTO hr_daily_employee_meta (employee_id,personnel_no,note,updated_at) VALUES (?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET personnel_no=excluded.personnel_no,note=excluded.note,updated_at=excluded.updated_at")
@@ -1548,6 +1645,10 @@ async function updateEmployee(c: Context<AppEnv>) {
     c.env.DB.prepare("INSERT INTO hr_daily_employee_meta (employee_id,personnel_no,note,updated_at) VALUES (?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET personnel_no=excluded.personnel_no,note=excluded.note,updated_at=excluded.updated_at")
       .bind(id,text(body.personnelNo ?? body.personelNo ?? current.personnel_no),text(body.note ?? current.meta_note),timestamp),
   ];
+  const cardBefore = {fullName:text(current.full_name),qualification:text(current.qualification),broker:text(current.broker),status:text(current.status),personnelNo:text(current.personnel_no),note:text(current.meta_note)};
+  const cardAfter = {fullName,qualification:text(qualification),broker:text(broker),status,personnelNo:text(body.personnelNo ?? body.personelNo ?? current.personnel_no),note:text(body.note ?? current.meta_note)};
+  const cardChanged = Object.keys(cardBefore).some((key)=>cardBefore[key as keyof typeof cardBefore]!==cardAfter[key as keyof typeof cardAfter]);
+  if (cardChanged) statements.push(auditStmt(c,{companyId,employeeId:id,action:"EMPLOYEE_CARD_UPDATE",before:cardBefore,after:cardAfter,actor:await actorOf(c),source:"KYERP_DAILY_EMPLOYEE_V2"}));
   if (wageChanged) {
     const actor = await actorOf(c);
     statements.push(auditStmt(c, {
@@ -1563,12 +1664,16 @@ async function updateEmployee(c: Context<AppEnv>) {
 }
 
 async function deleteEmployee(c: Context<AppEnv>) {
+  await ensureSchema(c);
   const companyId=companyIdOf(c);
   const id=text(c.req.param("id"));
   const current=await c.env.DB.prepare("SELECT * FROM hr_daily_employees WHERE id=? AND main_company_id=?").bind(id,companyId).first<Row>();
   if(!current) return fail(c,404,"NOT_FOUND","Günlük personel bulunamadı.");
   const timestamp=nowIso();
-  await c.env.DB.prepare("UPDATE hr_daily_employees SET status='PASSIVE',updated_at=? WHERE id=? AND main_company_id=?").bind(timestamp,id,companyId).run();
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE hr_daily_employees SET status='PASSIVE',updated_at=? WHERE id=? AND main_company_id=?").bind(timestamp,id,companyId),
+    auditStmt(c,{companyId,employeeId:id,action:"EMPLOYEE_CARD_DEACTIVATE",before:{status:text(current.status)},after:{status:"PASSIVE"},actor:await actorOf(c),source:"KYERP_DAILY_EMPLOYEE_V2"}),
+  ]);
   return ok(c,employeeDto({...current,status:"PASSIVE",updated_at:timestamp}));
 }
 
@@ -1664,6 +1769,8 @@ async function adjustmentAdd(c: Context<AppEnv>) {
   const person = await c.env.DB.prepare("SELECT id FROM hr_daily_employees WHERE id=? AND main_company_id=?")
     .bind(employeeId,companyId).first<Row>();
   if (!person) return fail(c,404,"EMPLOYEE_NOT_FOUND","Personel bu firmada bulunamadı.");
+  if (await lockedRange(c, companyId, start, end))
+    return fail(c,409,"DAILY_PERIOD_LOCKED","Kapalı döneme ek ödeme veya kesinti girilemez. Yetkili kullanıcı önce dönemi açmalıdır.");
   const paid = await c.env.DB.prepare(`SELECT id FROM hr_daily_payments WHERE main_company_id=? AND employee_id=?
     AND period_start=? AND period_end=? AND status='PAID' LIMIT 1`)
     .bind(companyId,employeeId,start,end).first<Row>();
@@ -1689,6 +1796,8 @@ async function adjustmentVoid(c: Context<AppEnv>) {
   const entry = await c.env.DB.prepare(`SELECT * FROM hr_daily_payment_adjustments
     WHERE main_company_id=? AND id=? LIMIT 1`).bind(companyId,adjustmentId).first<Row>();
   if (!entry) return fail(c,404,"ADJUSTMENT_NOT_FOUND","Ek işlem bulunamadı.");
+  if (await lockedRange(c,companyId,dateOnly(entry.period_start),dateOnly(entry.period_end)))
+    return fail(c,409,"DAILY_PERIOD_LOCKED","Kapalı dönemin ek işlemi değiştirilemez.");
   if (text(entry.status)!=="ACTIVE" || text(entry.settled_payment_id))
     return fail(c,409,"ADJUSTMENT_LOCKED","Bu işlem iptal edilmiş veya ödeme fişine bağlanmış.");
   const actor=await actorOf(c),stamp=nowIso();
@@ -2007,6 +2116,7 @@ export function registerGunlukOperasyonRoutes(app: Hono<AppEnv>) {
   app.post("/api/gunluk-operasyon/records", protect(saveFocused));
   app.get("/api/gunluk-operasyon/roster", protect(listRoster));
   app.post("/api/gunluk-operasyon/roster", protect(saveRoster));
+  app.post("/api/gunluk-operasyon/excel-upload", protect(excelUploadPreview));
   app.post("/api/gunluk-operasyon/excel-apply", protect(excelApply));
 
   app.get("/api/gunluk-operasyon/audit", protect(auditGet));

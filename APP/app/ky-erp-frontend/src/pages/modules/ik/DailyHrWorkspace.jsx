@@ -466,13 +466,15 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [logAction, setLogAction] = useState("");
   const [logShift, setLogShift] = useState("all");
   const [controlQuery, setControlQuery] = useState("");
-  const [periodLocked, setPeriodLocked] = useState(false);
-  const [, setPeriodLockKnown] = useState(false);
+  const [periodLocked, setPeriodLocked] = useState(true);
+  const [periodLockKnown, setPeriodLockKnown] = useState(false);
+  const [periodLockInfo, setPeriodLockInfo] = useState(null);
   const [excelPreview, setExcelPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [syncError, setSyncError] = useState("");
   const liveVersionRef = useRef("");
   const dailyRangeRef = useRef(range);
   const livePollBusyRef = useRef(false);
@@ -535,11 +537,12 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
   const loadRangeData = useCallback(async () => {
     if (!companyId) return;
+    setPeriodLockKnown(false);
     try {
       const [rows, roster, lock] = await Promise.all([
         getDailyAttendance({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }),
         getDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }),
-        getDailyPeriodLock({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }).catch(() => null),
+        getDailyPeriodLock({ mainCompanyId: companyId, date: selectedDate }),
       ]);
       const attendanceRows = Array.isArray(rows) ? rows : [];
       setAttendance(attendanceRows);
@@ -548,16 +551,20 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       const recordedIds = new Set(attendanceRows.filter((row) => rowDay(row) || rowNight(row)).map(rowEmployeeId).filter(Boolean));
       setRosterIds(savedSet);
       setRosterSaved(![...recordedIds].some((id) => !savedSet.has(id)));
-      if (lock !== null) { setPeriodLocked(Boolean(lock?.locked ?? lock?.isLocked ?? lock?.active)); setPeriodLockKnown(true); }
-    } catch (loadError) { setError(loadError?.message || "Dönem kayıtları alınamadı."); }
-  }, [companyId, range.end, range.start]);
+      const locked = (Array.isArray(lock) ? lock : []).find((entry) => String(entry.status || "").toUpperCase() === "LOCKED"
+        && entry.start_date <= selectedDate && entry.end_date >= selectedDate) || null;
+      setPeriodLockInfo(locked);
+      setPeriodLocked(Boolean(locked));
+      setPeriodLockKnown(true);
+    } catch (loadError) { setPeriodLockKnown(false); setPeriodLocked(true); setError(loadError?.message || "Dönem kilidi doğrulanamadı; işlemler güvenlik için engellendi."); }
+  }, [companyId, range.end, range.start, selectedDate]);
 
   useEffect(() => {
     if (!companyId) return;
     setLoading(true); setError("");
     loadEmployees().catch((e) => setError(e?.message || "Günlük personel listesi alınamadı.")).finally(() => setLoading(false));
   }, [companyId, loadEmployees]);
-  useEffect(() => { if (companyId && employees.length) void loadRangeData(); }, [companyId, employees.length, loadRangeData]);
+  useEffect(() => { if (companyId) void loadRangeData(); }, [companyId, loadRangeData]);
 
   const loadFocused = useCallback(async () => {
     if (!companyId || view !== "daily-entry" || !selectedDate) return;
@@ -743,7 +750,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       const current = map.get(employeeId) || { employeeId, name: person.name || row.name || row.fullName || "Personel", personnelNo: person.personnelNo || row.personnelNo || "", role: person.role || row.qualification || row.role || "-", days: {}, dayCount: 0, nightCount: 0, dayTotal: 0, nightTotal: 0, totalAmount: 0 };
       const day = rowDay(row);
       const night = rowNight(row);
-      current.days[date] = { day, night, dayRate: day ? number(row.dayWage ?? row.dayRate ?? person.dayRate) : null, nightRate: night ? number(row.nightWage ?? row.nightRate ?? person.nightRate) : null };
+      current.days[date] = { day, night, dayChecked: Boolean(row.dayChecked), nightChecked: Boolean(row.nightChecked), dayRate: day ? number(row.dayWage ?? row.dayRate ?? person.dayRate) : null, nightRate: night ? number(row.nightWage ?? row.nightRate ?? person.nightRate) : null };
       if (day) { const amount = number(row.dayWage ?? row.dayRate ?? person.dayRate); current.dayCount += 1; current.dayTotal += amount; current.totalAmount += amount; }
       if (night) { const amount = number(row.nightWage ?? row.nightRate ?? person.nightRate); current.nightCount += 1; current.nightTotal += amount; current.totalAmount += amount; }
       map.set(employeeId, current);
@@ -828,7 +835,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     night: sum.night + number(row.nightCount),
     total: sum.total + number(row.totalAmount ?? row.total),
   }), { people: 0, day: 0, night: 0, total: 0 }), [weeklyControlRows]);
-  const weeklyPending = useMemo(() => attendance.filter((row) => (rowDay(row) || rowNight(row)) && !(row.checked === true || row.checked === 1 || row.checked === "1")).length, [attendance]);
+  const weeklyPending = useMemo(() => attendance.reduce((sum, row) =>
+    sum + (rowDay(row) && !row.dayChecked ? 1 : 0) + (rowNight(row) && !row.nightChecked ? 1 : 0), 0), [attendance]);
   const roleOverview = useMemo(() => {
     const ids = new Set(attendance.filter((row) => rowDay(row) || rowNight(row)).map(rowEmployeeId).filter(Boolean));
     const counts = new Map();
@@ -935,6 +943,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           checked: nextSelected ? false : false,
           expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
           expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
+          expectedNoteUpdatedAt: currentRecord.noteUpdatedAt || "",
           note: nextSelected ? (notes[person.id] || "") : "",
         }],
       });
@@ -1024,6 +1033,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           checked: Boolean(nextChecked),
           expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
           expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
+          expectedNoteUpdatedAt: currentRecord.noteUpdatedAt || "",
           note: notes[person.id] || "",
         }],
       });
@@ -1059,6 +1069,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           checked: selectedIds.has(person.id) && checkedIds.has(person.id),
           expectedUpdatedAt: current.updatedAt || current.attendanceUpdatedAt || "",
           expectedCheckedUpdatedAt: current.checkedUpdatedAt || "",
+          expectedNoteUpdatedAt: current.noteUpdatedAt || "",
           note: notes[person.id] || "",
         };
       }) });
@@ -1073,7 +1084,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     const rows = await getDailyFocusedRecords({ mainCompanyId: companyId, date, shift: mode });
     const ids = focusedIds(rows);
     const checked = focusedCheckedIds(rows);
-    setQuick({ date, shift: mode, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), baselineRecords: Object.fromEntries((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), { updatedAt: row.updatedAt || "", checkedUpdatedAt: row.checkedUpdatedAt || "" }])), query: preserveQuery });
+    setQuick({ date, shift: mode, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), baselineRecords: Object.fromEntries((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), { updatedAt: row.updatedAt || "", checkedUpdatedAt: row.checkedUpdatedAt || "", noteUpdatedAt: row.noteUpdatedAt || "" }])), query: preserveQuery });
   };
   const openQuick = async (date = selectedDate, mode = shift) => {
     if (!date || busy) return;
@@ -1112,7 +1123,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           (snapshot.baseline.has(id) && snapshot.checkedBaseline.has(id));
       });
       if (changedPeople.length) {
-        await saveDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift, personnelEntries: changedPeople.map((person) => ({ personelId: person.id, status: snapshot.ids.has(person.id) ? "ACTIVE" : "REMOVE", checked: snapshot.ids.has(person.id) && snapshot.checked.has(person.id), expectedUpdatedAt: snapshot.baselineRecords?.[person.id]?.updatedAt || "", expectedCheckedUpdatedAt: snapshot.baselineRecords?.[person.id]?.checkedUpdatedAt || "", note: currentMap.get(person.id)?.note || "" })) });
+        await saveDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift, personnelEntries: changedPeople.map((person) => ({ personelId: person.id, status: snapshot.ids.has(person.id) ? "ACTIVE" : "REMOVE", checked: snapshot.ids.has(person.id) && snapshot.checked.has(person.id), expectedUpdatedAt: snapshot.baselineRecords?.[person.id]?.updatedAt || "", expectedCheckedUpdatedAt: snapshot.baselineRecords?.[person.id]?.checkedUpdatedAt || "", expectedNoteUpdatedAt: currentMap.get(person.id)?.noteUpdatedAt || "", note: currentMap.get(person.id)?.note || "" })) });
         const verified = await getDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift });
         const confirmedIds = focusedIds(verified);
         const confirmedChecks = focusedCheckedIds(verified);
@@ -1170,9 +1181,19 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     void loadLog(next, true);
   };
   const togglePeriodLock = async () => {
-    if (busy) return; setBusy(true); setError("");
-    try { const next = !periodLocked; await setDailyPeriodLock({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, locked: next }); setPeriodLocked(next); setPeriodLockKnown(true); setNotice(next ? "Dönem kapatıldı. Günlük kayıt değişikliği kilitlendi." : "Dönem yeniden açıldı."); }
-    catch (e) { setError(e?.message || "Dönem kilidi değiştirilemedi."); }
+    if (busy || !periodLockKnown) { setError("Dönem kilidi sunucudan henüz doğrulanmadı."); return; }
+    const next = !periodLocked;
+    const reason = window.prompt(next ? "Dönem kapatma gerekçesi (zorunlu):" : "Dönemi yeniden açma gerekçesi (zorunlu):");
+    if (!reason?.trim()) return;
+    const target = periodLocked && periodLockInfo
+      ? { startDate: periodLockInfo.start_date, endDate: periodLockInfo.end_date }
+      : { startDate: range.start, endDate: range.end };
+    setBusy(true); setError("");
+    try {
+      await setDailyPeriodLock({ mainCompanyId: companyId, ...target, action: next ? "LOCK" : "UNLOCK", reason: reason.trim() });
+      await loadRangeData();
+      setNotice(next ? "Dönem kapatıldı; kilit D1 üzerinden doğrulandı." : "Dönem yeniden açıldı; kilit D1 üzerinden doğrulandı.");
+    } catch (e) { setError(e?.message || "Dönem kilidi değiştirilemedi."); }
     finally { setBusy(false); }
   };
 
@@ -1242,12 +1263,19 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         }
         return next;
       });
+      let completed=0;
+      const failures=[];
       for (let index = 0; index < updatedPeople.length; index += 8) {
         const chunk = updatedPeople.slice(index, index + 8);
-        await Promise.all(chunk.map((person) => updateDailyEmployee(person.id, employeePayload(person, companyId))));
+        const outcomes = await Promise.allSettled(chunk.map((person) => updateDailyEmployee(person.id, employeePayload(person, companyId))));
+        outcomes.forEach((result, i) => {
+          if (result.status === "fulfilled") completed += 1;
+          else failures.push(chunk[i].name || chunk[i].personnelNo || "Personel");
+        });
       }
       await loadEmployees();
-      setNotice(`${updatedPeople.length} personel toplu güncellendi.`);
+      setNotice(`${completed} / ${updatedPeople.length} personel güncellendi.`);
+      if (failures.length) setError(`${failures.length} personel güncellenemedi: ${failures.slice(0,8).join(", ")}. Başarılı kişiler yeniden kaydedilmedi; listeyi kontrol edip yalnız eksikleri seçin.`);
     } catch (e) { setError(e?.message || "Toplu personel güncellemesi tamamlanamadı."); }
     finally { setBusy(false); }
   };
@@ -1293,6 +1321,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   };
   const payRow = async (row, printAfter = false) => {
     if (busy || number(row.pendingCheckCount) > 0) return;
+    if (!window.confirm(`${row.name || row.fullName} için ${money(row.totalAmount)} fiilen ödendi mi? Onaylarsanız D1'de ÖDENDİ olarak kalıcı kayıt oluşturulur.`)) return;
     setBusy(true); setError("");
     try {
       const payment = await createDailyPayment({ mainCompanyId: companyId, employeeId: row.employeeId, startDate: paymentPoolRange.start, endDate: paymentPoolRange.end, paymentDate: localDateKey() });
@@ -1304,11 +1333,18 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const paySelectedRows = async () => {
     const rows = selectedPaymentRows.filter((row) => number(row.pendingCheckCount) === 0);
     if (busy || !rows.length) return;
+    const total = rows.reduce((sum, row) => sum + number(row.totalAmount), 0);
+    if (!window.confirm(`${rows.length} personel için toplam ${money(total)} tutarın fiilen ödendiğini onaylıyor musunuz? Bu işlem gerçek ödeme kayıtları oluşturacaktır.`)) return;
     setBusy(true); setError("");
     try {
       let completed = 0;
-      for (const row of rows) { await createDailyPayment({ mainCompanyId: companyId, employeeId: row.employeeId, startDate: paymentPoolRange.start, endDate: paymentPoolRange.end, paymentDate: localDateKey() }); completed += 1; }
-      setPaymentSelectedIds(new Set()); setNotice(`${completed} personelin ödemesi tamamlandı.`);
+      const failed = [];
+      for (const row of rows) {
+        try { await createDailyPayment({ mainCompanyId: companyId, employeeId: row.employeeId, startDate: paymentPoolRange.start, endDate: paymentPoolRange.end, paymentDate: localDateKey() }); completed += 1; }
+        catch(e) { failed.push(`${row.name}: ${e?.message || "Kayıt yapılamadı"}`); }
+      }
+      setPaymentSelectedIds(new Set()); setNotice(`${completed} / ${rows.length} personelin ödeme kaydı oluşturuldu.`);
+      if (failed.length) setError(`${failed.length} ödeme kaydedilemedi: ${failed.slice(0,4).join(" · ")}. Önce durumu yenileyin; başarılı ödemeleri tekrar yapmayın.`);
       await Promise.all([loadPayments(), loadPaymentHistory(), loadRangeData()]);
     } catch (e) { setError(e?.message || "Seçili ödemeler tamamlanamadı."); } finally { setBusy(false); }
   };
@@ -1370,11 +1406,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     } catch (e) { setError(e?.message || "Excel indirilemedi."); } finally { setBusy(false); }
   };
   const importExcel = () => {
-    const input = document.createElement("input"); input.type = "file"; input.accept = ".xlsx";
-    input.onchange = async (event) => { const file = event.target.files?.[0]; if (!file) return; setBusy(true); try { const preview = await previewDailyExcel(file, { mainCompanyId: companyId, startDate: range.start, endDate: range.end }); setExcelPreview(preview); setNotice("Excel okundu. Kontrol edip uygula."); } catch (e) { setError(e?.message || "Excel okunamadı."); } finally { setBusy(false); } };
+    const input = document.createElement("input"); input.type = "file"; input.accept = ".xlsx,.xls";
+    input.onchange = async (event) => { const file = event.target.files?.[0]; if (!file) return; setBusy(true); try { const preview = await previewDailyExcel(file, { mainCompanyId: companyId, startDate: range.start, endDate: range.end }); setExcelPreview(preview); setNotice(preview?.message || "Excel önizlemesi hazır. Yalnız onaylarsanız kayıt yapılacak."); } catch (e) { setError(e?.message || "Excel okunamadı."); } finally { setBusy(false); } };
     input.click();
   };
-  const applyExcel = async () => { if (!excelPreview || busy) return; setBusy(true); try { const result = await applyDailyExcel({ mainCompanyId: companyId, startDate: excelPreview.startDate || range.start, endDate: excelPreview.endDate || range.end, rows: excelPreview.rows || [] }); setExcelPreview(null); setNotice(`${result?.count || 0} Excel satırı uygulandı.`); await Promise.all([loadEmployees(), loadRangeData(), loadFocused()]); } catch (e) { setError(e?.message || "Excel uygulanamadı."); } finally { setBusy(false); } };
+  const applyExcel = async () => { if (!excelPreview?.rows?.length || busy) return; setBusy(true); try { const result = await applyDailyExcel({ mainCompanyId: companyId, startDate: excelPreview.startDate || range.start, endDate: excelPreview.endDate || range.end, rows: excelPreview.rows || [] }); setExcelPreview(null); setNotice(`${result?.count || 0} Excel satırı uygulandı.`); await Promise.all([loadEmployees(), loadRangeData(), loadFocused()]); } catch (e) { setError(e?.message || "Excel uygulanamadı."); } finally { setBusy(false); } };
 
   useEffect(() => {
     liveVersionRef.current = "";
@@ -1396,7 +1432,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       if (cancelled) return;
       setQuick((current) => {
         if (!current || current.date !== snapshot.date || current.shift !== snapshot.shift) return current;
-        return { ...current, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), baselineRecords: Object.fromEntries((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), { updatedAt: row.updatedAt || "", checkedUpdatedAt: row.checkedUpdatedAt || "" }])) };
+        return { ...current, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), baselineRecords: Object.fromEntries((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), { updatedAt: row.updatedAt || "", checkedUpdatedAt: row.checkedUpdatedAt || "", noteUpdatedAt: row.noteUpdatedAt || "" }])) };
       });
     };
 
@@ -1421,7 +1457,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       try {
         const state = await getDailySyncState({ mainCompanyId: companyId }, { forceFresh: true, timeoutMs: 5000 });
         const version = String(state?.version || "");
-        if (!version) return;
+        if (!version) { setSyncError("Sunucu senkron sürümü okunamadı."); return; }
+        setSyncError("");
         if (!liveVersionRef.current) { liveVersionRef.current = version; return; }
         if (version === liveVersionRef.current) return;
 
@@ -1441,7 +1478,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           setNotice("Canlı senkron: başka bilgisayardaki değişiklikler alındı.");
         }
       } catch {
-        // Canlı senkron yardımcı katmandır; geçici bağlantı hatası ana günlük işlemi durdurmaz.
+        setSyncError("Diğer bilgisayarla senkron bağlantısı geçici olarak doğrulanamıyor. Kaydetmeden önce Yenile ile kontrol edin.");
       } finally {
         livePollBusyRef.current = false;
       }
@@ -1523,7 +1560,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   return (
     <section className="gop-workspace notranslate" translate="no">
       {view !== "daily-entry" ? <header className="gop-header"><div><span>GÜNLÜK OPERASYON</span><h1>{view === "daily-dashboard" ? "Yönetim Özeti" : view === "daily-cards" ? "Personel & Ücret Kartları" : view === "daily-weekly" ? "Dönem Kontrolü" : "Hakediş & Ödeme"}</h1><p>{view === "daily-dashboard" ? "Personel, vardiya, kontrol ve hakediş durumunu canlı olarak izleyin." : view === "daily-cards" ? "Personel kartlarını, vasıfları ve günlük ücretleri tek merkezden yönetin." : view === "daily-weekly" ? "Seçili dönemi gün gün doğrulayın, kontrol edin ve raporlayın." : "Hakediş, ödeme, fiş ve kalıcı ödeme geçmişini yönetin."}</p></div><button className="gop-refresh" type="button" disabled={loading || busy} onClick={() => view === "daily-dashboard" ? Promise.all([loadEmployees(), loadRangeData(), loadWeekly(), loadPayments()]) : view === "daily-weekly" ? loadWeekly() : view === "daily-payments" ? Promise.all([loadPayments(), loadPaymentHistory()]) : loadEmployees()}><RefreshCw size={16}/> Yenile</button></header> : null}
-      {notice ? <div className="gop-notice">{notice}</div> : null}{error ? <div className="gop-error">{error}</div> : null}
+      {notice ? <div className="gop-notice" role="status">{notice}</div> : null}{error ? <div className="gop-error" role="alert">{error}</div> : null}{syncError ? <div className="gop-sync-warning" role="status"><RefreshCw size={14}/> {syncError}</div> : null}
+      {!periodLockKnown && ["daily-dashboard","daily-entry","daily-weekly"].includes(view) ? <div className="gop-lock-uncertain" role="status"><LockKeyhole size={15}/> Dönem kilidi doğrulanıyor. Kontrol tamamlanana kadar değişiklik yapılamaz.</div> : null}
 
       {view === "daily-entry" ? <div className={`kyop-daily ${shift}`}>
         <div className="kyop-titlebar"><div><span>KY ERP / GÜNLÜK OPERASYON / GÜVENLİ GİRİŞ</span><h1>Günlük Personel Girişi</h1><p>Detaylı kontrolde tek gün aktiftir; hızlı giriş de tek gün ve tek vardiya üzerinden çalışır.</p></div><div className="kyop-mode"><button className={shift === "day" ? "active day" : ""} type="button" onClick={() => setShift("day")}><Sun size={17}/> GÜNDÜZ GİRİŞİ</button><button className={shift === "night" ? "active night" : ""} type="button" onClick={() => setShift("night")}><Moon size={17}/> GECE GİRİŞİ</button></div></div>
@@ -1582,7 +1620,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         </section>
       </div> : null}
 
-      {view === "daily-weekly" ? <><div className="gop-toolbar-card">{rangeControls}<div className="gop-print-actions"><button type="button" disabled={!weeklyControlRows.length} onClick={() => printWeeklySummary(range, days, weeklyControlRows)}><Printer size={16}/> Özet Yazdır</button><button type="button" onClick={exportExcel}><FileSpreadsheet size={16}/> Excel</button></div></div><div className="gop-week-stats"><Stat label="Çalışan" value={weeklyTotals.people}/><Stat label="Toplam Gün" value={weeklyTotals.day + weeklyTotals.night}/><Stat label="Gündüz" value={weeklyTotals.day}/><Stat label="Gece" value={weeklyTotals.night}/><Stat label="Kontrol Bekleyen" value={weeklyPending}/><Stat label="Toplam Tutar" value={money(weeklyTotals.total)}/></div><div className="gop-card gop-week-card"><div className="gop-card-head"><div><h2>Dönem Kontrol Matrisi</h2><span>{dateText(range.start)} — {dateText(range.end)} · Gün gün çalışma ve hakediş kontrolü.</span></div></div><div className="gop-week-matrix"><table><thead><tr><th className="person">Personel</th><th className="role">Vasıf</th>{days.map((date) => <th key={date}><span>{new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`))}</span><b>{dateText(date, true)}</b></th>)}<th>Toplam Gün</th><th>Toplam</th></tr></thead><tbody>{weeklyControlRows.length ? weeklyControlRows.map((row) => <tr key={row.employeeId}><td className="person"><strong>{row.name}</strong><small>{row.personnelNo || ""}</small><small className="gop-week-rate">G: {wageRangeLabel(row, "day", days)} · N: {wageRangeLabel(row, "night", days)}</small></td><td className="role">{row.role || "-"}</td>{days.map((date) => { const cell = row.days?.[date] || {}; return <td key={date} className="shift-cell"><span className={cell.day ? "on day" : ""}>G{cell.day ? "✓" : "–"}</span><span className={cell.night ? "on night" : ""}>N{cell.night ? "✓" : "–"}</span></td>; })}<td className="total-day"><strong>{number(row.dayCount) + number(row.nightCount)}</strong></td><td className="money"><strong>{money(row.totalAmount)}</strong></td></tr>) : <tr><td colSpan={days.length + 4}><Empty>Seçili dönemde çalışma kaydı yok.</Empty></td></tr>}</tbody></table></div><details className="gop-week-detail"><summary>Vasıf Dağılımı <span>{roleOverview.length} grup</span></summary><div className="gop-role-overview">{roleOverview.map(([role, count]) => <div key={role}><span>{role}</span><b>{count}</b></div>)}</div></details></div></> : null}
+      {view === "daily-weekly" ? <><div className="gop-toolbar-card">{rangeControls}<div className="gop-print-actions"><button type="button" disabled={!weeklyControlRows.length} onClick={() => printWeeklySummary(range, days, weeklyControlRows)}><Printer size={16}/> Özet Yazdır</button><button type="button" onClick={exportExcel}><FileSpreadsheet size={16}/> Excel</button></div></div><div className="gop-week-stats"><Stat label="Çalışan" value={weeklyTotals.people}/><Stat label="Toplam Gün" value={weeklyTotals.day + weeklyTotals.night}/><Stat label="Gündüz" value={weeklyTotals.day}/><Stat label="Gece" value={weeklyTotals.night}/><Stat label="Kontrol Bekleyen" value={weeklyPending}/><Stat label="Toplam Tutar" value={money(weeklyTotals.total)}/></div><div className="gop-card gop-week-card"><div className="gop-card-head"><div><h2>Dönem Kontrol Matrisi</h2><span>{dateText(range.start)} — {dateText(range.end)} · Gün gün çalışma ve hakediş kontrolü · ✓ Onaylandı · • Kontrol bekliyor · – Kayıt yok.</span></div></div><div className="gop-week-matrix"><table><thead><tr><th className="person">Personel</th><th className="role">Vasıf</th>{days.map((date) => <th key={date}><span>{new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`))}</span><b>{dateText(date, true)}</b></th>)}<th>Toplam Gün</th><th>Toplam</th></tr></thead><tbody>{weeklyControlRows.length ? weeklyControlRows.map((row) => <tr key={row.employeeId}><td className="person"><strong>{row.name}</strong><small>{row.personnelNo || ""}</small><small className="gop-week-rate">G: {wageRangeLabel(row, "day", days)} · N: {wageRangeLabel(row, "night", days)}</small></td><td className="role">{row.role || "-"}</td>{days.map((date) => { const cell = row.days?.[date] || {}; return <td key={date} className="shift-cell"><span className={cell.day ? (cell.dayChecked ? "on day is-reviewed" : "on day is-pending") : ""} title={cell.day ? (cell.dayChecked ? "Gündüz kontrol edildi" : "Gündüz kontrol bekliyor") : "Gündüz kayıt yok"}>G{cell.day ? (cell.dayChecked ? "✓" : "•") : "–"}</span><span className={cell.night ? (cell.nightChecked ? "on night is-reviewed" : "on night is-pending") : ""} title={cell.night ? (cell.nightChecked ? "Gece kontrol edildi" : "Gece kontrol bekliyor") : "Gece kayıt yok"}>N{cell.night ? (cell.nightChecked ? "✓" : "•") : "–"}</span></td>; })}<td className="total-day"><strong>{number(row.dayCount) + number(row.nightCount)}</strong></td><td className="money"><strong>{money(row.totalAmount)}</strong></td></tr>) : <tr><td colSpan={days.length + 4}><Empty>Seçili dönemde çalışma kaydı yok.</Empty></td></tr>}</tbody></table></div><details className="gop-week-detail"><summary>Vasıf Dağılımı <span>{roleOverview.length} grup</span></summary><div className="gop-role-overview">{roleOverview.map(([role, count]) => <div key={role}><span>{role}</span><b>{count}</b></div>)}</div></details></div></> : null}
 
       {view === "daily-payments" ? <div className="gop-payments-v2">
         <div className="gop-payment-tabs three">
@@ -1688,7 +1726,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
       {cardDialog ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section data-ky-dialog-key="gunluk-operasyon.personel-karti" className="gop-dialog gop-person-dialog"><header><div><span>GÜNLÜK OPERASYON</span><h2>{cardDialog.id ? "Personel Kartını Düzenle" : "Yeni Personel"}</h2></div><button type="button" onClick={() => { setCardDialog(null); setCardAddToRoster(false); }}><X size={19}/></button></header><div className="gop-form-grid"><label>Ad soyad<input value={cardDialog.name} onChange={(e) => setCardDialog({ ...cardDialog, name: e.target.value })}/></label><label>Personel no<input value={cardDialog.personnelNo} onChange={(e) => setCardDialog({ ...cardDialog, personnelNo: e.target.value })}/></label><div className="gop-role-field"><label>Vasıf<select value={cardDialog.role} onChange={(e) => setCardDialog({ ...cardDialog, role: e.target.value })}><option value="">Vasıf seçin</option>{roleOptions.map((role) => <option key={role} value={role}>{role}</option>)}</select></label><button type="button" onClick={() => { const role = askNewRole(); if (role) setCardDialog({ ...cardDialog, role }); }}><Plus size={13}/> Vasıf Ekle</button></div><label>Aracı<input value={cardDialog.broker} onChange={(e) => setCardDialog({ ...cardDialog, broker: e.target.value })}/></label><label>Gündüz ücret<input type="number" min="0" value={cardDialog.dayRate} onChange={(e) => setCardDialog({ ...cardDialog, dayRate: number(e.target.value) })}/></label><label>Gece ücret<input type="number" min="0" value={cardDialog.nightRate} onChange={(e) => setCardDialog({ ...cardDialog, nightRate: number(e.target.value) })}/></label>{cardDialog.id ? <label>Yeni Ücret Geçerlilik Tarihi<input type="date" value={cardDialog.wageEffectiveDate || startOfWeek()} onChange={(e) => setCardDialog({ ...cardDialog, wageEffectiveDate: e.target.value })}/></label> : null}<div className="gop-wage-rule-hint">Ücret değişikliği önceki haftanın hakedişini değiştirmez; ödeme fişleri korunur.</div><label className="wide">Not<textarea rows="3" value={cardDialog.note} onChange={(e) => setCardDialog({ ...cardDialog, note: e.target.value })}/></label><label className="check"><input type="checkbox" checked={cardDialog.active !== false} onChange={(e) => setCardDialog({ ...cardDialog, active: e.target.checked })}/> Aktif personel</label></div><footer><button type="button" onClick={() => { setCardDialog(null); setCardAddToRoster(false); }}>Vazgeç</button><button type="button" className="primary" disabled={busy} onClick={saveCard}><Save size={16}/> Kaydet</button></footer></section></div> : null}
 
-      {excelPreview ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section data-ky-dialog-key="gunluk-operasyon.excel-onizleme" className="gop-dialog gop-dialog-wide"><header><div><span>EXCEL KONTROL</span><h2>İçe Aktarım Önizleme</h2></div><button type="button" onClick={() => setExcelPreview(null)}><X size={19}/></button></header><div className="excel-preview"><p>{Array.isArray(excelPreview.rows) ? excelPreview.rows.length : 0} satır bulundu. Uygulamadan önce tarih ve personel eşleşmelerini kontrol edin.</p><div className="gop-table-wrap"><table><thead><tr><th>Personel</th><th>Tarih</th><th>Gündüz</th><th>Gece</th><th>Uyarı</th></tr></thead><tbody>{(excelPreview.rows || []).slice(0, 250).map((row, index) => <tr key={row.key || index}><td>{row.personName || row.excelName || row.personnelNo || "-"}</td><td>{dateText(row.workDate)}</td><td>{row.dayShift ? "✓" : ""}</td><td>{row.nightShift ? "✓" : ""}</td><td>{Array.isArray(row.warnings) ? row.warnings.join(", ") : row.warning || ""}</td></tr>)}</tbody></table></div></div><footer><button type="button" onClick={() => setExcelPreview(null)}>Vazgeç</button><button type="button" className="primary" disabled={busy} onClick={applyExcel}><Save size={15}/> Excel'i Uygula</button></footer></section></div> : null}
+      {excelPreview ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section data-ky-dialog-key="gunluk-operasyon.excel-onizleme" className="gop-dialog gop-dialog-wide"><header><div><span>EXCEL KONTROL</span><h2>İçe Aktarım Önizleme</h2></div><button type="button" onClick={() => setExcelPreview(null)}><X size={19}/></button></header><div className="excel-preview"><p>{Array.isArray(excelPreview.rows) ? excelPreview.rows.length : 0} satır bulundu. Uygulamadan önce tarih ve personel eşleşmelerini kontrol edin. Boş hücreler mevcut vardiyaları silmez; yalnız yeni işaretli vardiyalar aktarılır.</p><div className="gop-table-wrap"><table><thead><tr><th>Personel</th><th>Tarih</th><th>Gündüz</th><th>Gece</th><th>Uyarı</th></tr></thead><tbody>{(excelPreview.rows || []).slice(0, 250).map((row, index) => <tr key={row.key || index}><td>{row.personName || row.excelName || row.personnelNo || "-"}</td><td>{dateText(row.workDate)}</td><td>{row.dayShift ? "✓" : ""}</td><td>{row.nightShift ? "✓" : ""}</td><td>{Array.isArray(row.warnings) ? row.warnings.join(", ") : row.warning || ""}</td></tr>)}</tbody></table></div></div><footer><button type="button" onClick={() => setExcelPreview(null)}>Vazgeç</button><button type="button" className="primary" disabled={busy || !excelPreview?.rows?.length} onClick={applyExcel}><Save size={15}/> Excel'i Uygula</button></footer></section></div> : null}
     </section>
   );
 }
