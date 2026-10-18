@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { dailyTenant, dailyAuthorized } from "./gunluk-operasyon-access.ts";
+import { dailyTenant, dailyAuthorized } from "./gunluk-operasyon-access-policy.ts";
 const user={role:"USER",permissions:[{moduleKey:"IK",canView:true,canCreate:true,canUpdate:true,canApprove:false,canDelete:false}]};
 test("daily tenants match existing aliases; empty is not an authorized company",()=>{
   assert.equal(dailyTenant("main-hakan-baski"),"mecit-hakan");
