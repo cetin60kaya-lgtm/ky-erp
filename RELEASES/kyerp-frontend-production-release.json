@@ -5,17 +5,19 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-10-18",
   "scope": [
-    "gunluk-a4-on-fiș-iki-sutun-bes-satir",
-    "gunluk-gece-gunduz-ucret-adet-toplam-yan-yana",
-    "gunluk-genel-toplam-yalniz-son-sayfa",
-    "gunluk-fiș-sabit-45mm-ve-baski-tasma-koruma",
-    "gunluk-coklu-tarife-gercek-toplam",
-    "gunluk-ek-odeme-kesinti-koruma",
+    "gunluk-bes-sekme-kritik-tam-denetim-ui",
+    "gunluk-donem-kilit-d1-gercek-acma-kapatma",
+    "gunluk-gercek-gunduz-gece-kontrol-ve-matris-renkleri",
+    "gunluk-xlsx-xls-guvenli-onizleme",
+    "gunluk-personel-kart-log-ve-toplu-islem-kismi-basari",
+    "gunluk-iki-pc-cas-not-kontrol",
+    "gunluk-senkron-hata-durumu",
+    "gunluk-odeme-fiili-onay",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "18.10.2026 gerçek Chrome fiş yazdırma ekranı kayma ve toplam taşma hatası; PR #441 merge 0ba50a90, CI #39111619324 PASS. 10 A4 fiş/sayfa; 2×5 sabit; ücret/adet/toplam yatay; yalnız son sayfa genel toplam. Yalnız frontend baskı şablonu: D1/Worker/personel/ödeme kayıtlarına dokunulmadı. Gerçek kullanıcı Chrome önizleme kabulü ayrıca beklenir.",
-  "sourceCommit": "0ba50a90c696bf87bf173c552f730e7725aa78b1",
+  "note": "PR #442 merge 9ff13b114174a7e4f0e25990dd7cb4ae44495e94; CI #39128442185 PASS. Worker/D1 backup/API release #39128578543 success. Beş sekme kritik/sade arayüz, gerçek iki PC etkileşim kabulü kullanıcı testinde ayrıca doğrulanır. Gerçek veriye otomatik test yazılmadı.",
+  "sourceCommit": "9ff13b114174a7e4f0e25990dd7cb4ae44495e94",
   "requestedAt": "2026-10-18"
 }
