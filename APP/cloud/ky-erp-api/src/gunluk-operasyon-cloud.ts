@@ -450,6 +450,12 @@ async function lockedPeriod(c: Context<AppEnv>, companyId: string, workDate: str
     .first<Row>();
 }
 
+async function lockedRange(c: Context<AppEnv>, companyId: string, start: string, end: string) {
+  return c.env.DB.prepare(`SELECT id,start_date,end_date,reason FROM hr_daily_period_lock
+    WHERE main_company_id=? AND status='LOCKED' AND start_date<=? AND end_date>=?
+    ORDER BY updated_at DESC LIMIT 1`).bind(companyId,end,start).first<Row>();
+}
+
 async function listAttendance(c: Context<AppEnv>) {
   await ensureSchema(c);
   const companyId = companyIdOf(c);
@@ -868,6 +874,9 @@ async function saveFocused(c: Context<AppEnv>) {
   if (!entries.length) return fail(c, 400, "ROWS_REQUIRED", "Kaydedilecek personel seçilmedi.");
 
   const companyId = companyIdOf(c, body);
+  // Check-only writes must respect a locked period as well as shift changes.
+  if (await lockedPeriod(c, companyId, date))
+    return fail(c, 409, "DAILY_PERIOD_LOCKED", "Bu tarih kapalı dönemdedir. Vardiya, kontrol ve not değiştirilemez.");
   const employeeIds = [
     ...new Set(entries.map((entry) => text(entry.personelId || entry.employeeId)).filter(Boolean)),
   ];
@@ -1044,7 +1053,7 @@ async function saveFocused(c: Context<AppEnv>) {
       await c.env.DB.batch(statements);
     } catch (error) {
       console.error(JSON.stringify({ code: "GUNLUK_CHECK_WRITE_FAILED", stage: "check_or_audit_batch", message: error instanceof Error ? error.message : String(error) }));
-      return fail(c, 500, "GUNLUK_CHECK_WRITE_FAILED", "Kontrol işareti sunucu veritabanına yazılamadı. İşlem kaydedilmedi; destek kaydı GUNLUK_CHECK_WRITE_FAILED.");
+      return fail(c, 500, "GUNLUK_CHECK_WRITE_FAILED", "Kontrol işareti veya not kaydedilemedi. Vardiya değişikliği kaydedilmiş olabilir; Yenile ile sunucudaki durumu doğrulayın. Destek kodu GUNLUK_CHECK_WRITE_FAILED.");
     }
   }
   return response;
@@ -1134,6 +1143,9 @@ async function saveRoster(c: Context<AppEnv>) {
   if (!validDate(start) || !validDate(end) || end < start) {
     return fail(c, 400, "DATE_RANGE_REQUIRED", "Geçerli tarih aralığı seçilmedi.");
   }
+
+  if (await lockedRange(c, companyId, start, end))
+    return fail(c,409,"DAILY_PERIOD_LOCKED","Bu aralık kilitli bir dönemle çakışıyor. Personel listesi düzenlenemez.");
 
   if (requested.length) {
     const allowedResult = await c.env.DB.prepare(`SELECT id
@@ -1664,6 +1676,8 @@ async function adjustmentAdd(c: Context<AppEnv>) {
   const person = await c.env.DB.prepare("SELECT id FROM hr_daily_employees WHERE id=? AND main_company_id=?")
     .bind(employeeId,companyId).first<Row>();
   if (!person) return fail(c,404,"EMPLOYEE_NOT_FOUND","Personel bu firmada bulunamadı.");
+  if (await lockedRange(c, companyId, start, end))
+    return fail(c,409,"DAILY_PERIOD_LOCKED","Kapalı döneme ek ödeme veya kesinti girilemez. Yetkili kullanıcı önce dönemi açmalıdır.");
   const paid = await c.env.DB.prepare(`SELECT id FROM hr_daily_payments WHERE main_company_id=? AND employee_id=?
     AND period_start=? AND period_end=? AND status='PAID' LIMIT 1`)
     .bind(companyId,employeeId,start,end).first<Row>();
@@ -1689,6 +1703,8 @@ async function adjustmentVoid(c: Context<AppEnv>) {
   const entry = await c.env.DB.prepare(`SELECT * FROM hr_daily_payment_adjustments
     WHERE main_company_id=? AND id=? LIMIT 1`).bind(companyId,adjustmentId).first<Row>();
   if (!entry) return fail(c,404,"ADJUSTMENT_NOT_FOUND","Ek işlem bulunamadı.");
+  if (await lockedRange(c,companyId,dateOnly(entry.period_start),dateOnly(entry.period_end)))
+    return fail(c,409,"DAILY_PERIOD_LOCKED","Kapalı dönemin ek işlemi değiştirilemez.");
   if (text(entry.status)!=="ACTIVE" || text(entry.settled_payment_id))
     return fail(c,409,"ADJUSTMENT_LOCKED","Bu işlem iptal edilmiş veya ödeme fişine bağlanmış.");
   const actor=await actorOf(c),stamp=nowIso();
