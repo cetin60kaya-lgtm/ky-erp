@@ -3,18 +3,19 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "91bf79ba2378bc5fd47def8fd6fd2d51d5990c97",
-  "requestedAt": "2026-10-17",
-  "attempt": 19,
+  "sourceCommit": "9ff13b114174a7e4f0e25990dd7cb4ae44495e94",
+  "requestedAt": "2026-10-18",
+  "attempt": 20,
   "scope": [
-    "gunluk-ek-odeme-kesinti-0061",
-    "gunluk-eklemeli-d1-shema-ve-bagimsiz-fi̇s-snapshot",
-    "gunluk-audit-log-aciklamali-iptal",
-    "gunluk-net-kurus-bazli-odeme-hesaplama",
-    "gunluk-pc-senkron-ve-cakisma-korumasi",
-    "D1-tam-yedek-artifact-oncesi",
-    "migration-0061-schema-proof",
-    "api-saglik-kontrolu"
+    "gunluk-tum-api-ik-tenant-yetki-koruma",
+    "gunluk-donem-kilit-gercek-d1-ve-yazma-engel",
+    "gunluk-gunduz-gece-kontrol-tablolari",
+    "gunluk-excel-upload-xlsx-xls-onizleme",
+    "gunluk-kart-guncelleme-audit-log",
+    "gunluk-iki-pc-cas-note-check",
+    "worker-typecheck-test-build",
+    "d1-tam-yedek-artifact",
+    "worker-production-api-health"
   ],
-  "note": "PR #440 CI #39065684356 PASS. Worker + D1 0061 migration: çalışan/günlük ücret kayıtlarına dokunmadan sadece yeni ek ödeme/kesinti kalemleri ekleniyor. Yalnız D1 tam yedeğinden sonra 0061 uygulanacak, tablolar ve trigger'lar kanıtlanacak; gerçek ödeme kaydı otomatik oluşturulmaz."
+  "note": "PR #442 merge 9ff13b114174a7e4f0e25990dd7cb4ae44495e94, CI #39128442185 PASS. D1 schema migration YOK. Çalışan/maaş/ödeme üretim verisine otomatik test yazılmaz. Önce canlı tam D1 yedeği artifact ve API deploy kanıtı, sonra Pages."
 }
