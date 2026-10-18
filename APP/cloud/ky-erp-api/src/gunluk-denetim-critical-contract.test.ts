@@ -28,7 +28,7 @@ test("two-PC note/check mutations have immutable optimistic concurrency keys and
   assert.match(worker,/id: await revisionAuditId\("CHECK"/);
   assert.match(worker,/DAILY_CONCURRENT_UPDATE/);
   assert.match(frontend,/expectedNoteUpdatedAt: currentRecord\.noteUpdatedAt/);
-  assert.match(frontend,/expectedNoteUpdatedAt: snapshot\.baselineRecords/);
+  assert.match(frontend,/expectedNoteUpdatedAt: currentMap\.get\(person\.id\)\?\.noteUpdatedAt/);
 });
 test("weekly checked state comes from exact per-shift D1 check rows",()=>{
   assert.match(worker,/AS day_checked, COALESCE\(cn.checked,0\) AS night_checked/);
