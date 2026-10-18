@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, type DailyWageChange } from "./gunluk-operasyon-core";
 import { dailyAdjustmentNetCents } from "./gunluk-adjustment-core";
+import { parseDailyExcelRows } from "./gunluk-excel-import";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -1067,6 +1068,64 @@ async function saveFocused(c: Context<AppEnv>) {
   return response;
 }
 
+async function excelUploadPreview(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const form = await c.req.formData();
+  const file = form.get("file");
+  if (!file || typeof (file as File).arrayBuffer !== "function")
+    return fail(c,400,"EXCEL_FILE_REQUIRED","Yüklemek için geçerli XLSX/XLS dosyası seçin.");
+  const filename = text((file as File).name).toLowerCase();
+  if (!/\.(xlsx|xls)$/.test(filename))
+    return fail(c,400,"EXCEL_TYPE_INVALID","Yalnız XLSX veya XLS kabul edilir.");
+  if ((file as File).size > 3_000_000)
+    return fail(c,400,"EXCEL_TOO_LARGE","Excel dosyası 3 MB sınırını aşıyor.");
+  const companyId = companyIdOf(c,{
+    mainCompanyId: form.get("mainCompanyId"),
+    mainCompanySlug: form.get("mainCompanySlug"),
+  });
+  const start = dateOnly(form.get("startDate"));
+  const end = dateOnly(form.get("endDate"));
+  if (!validDate(start)||!validDate(end)||end<start)
+    return fail(c,400,"DATE_RANGE_REQUIRED","Geçerli bir tarih aralığı seçin.");
+  let imported;
+  try { imported = parseDailyExcelRows(new Uint8Array(await (file as File).arrayBuffer()),start,end); }
+  catch (error) { return fail(c,400,"EXCEL_PREVIEW_INVALID",error instanceof Error?error.message:"Excel okunamadı."); }
+  const [peopleResult,existingResult] = await Promise.all([
+    c.env.DB.prepare(`SELECT e.id,e.full_name,m.personnel_no FROM hr_daily_employees e
+      LEFT JOIN hr_daily_employee_meta m ON m.employee_id=e.id
+      WHERE e.main_company_id=?`).bind(companyId).all<Row>(),
+    c.env.DB.prepare(`SELECT a.employee_id,a.work_date,a.day_shift,a.night_shift,a.updated_at
+      FROM hr_daily_attendance a JOIN hr_daily_employees e ON e.id=a.employee_id
+      WHERE e.main_company_id=? AND a.work_date>=? AND a.work_date<=?`)
+      .bind(companyId,start,end).all<Row>(),
+  ]);
+  const personKeys = new Map<string,Row>();
+  for (const person of peopleResult.results || []) {
+    for(const key of [text(person.personnel_no).toLocaleUpperCase("tr-TR"),text(person.full_name).toLocaleUpperCase("tr-TR")]){
+      if(!key)continue;
+      if(personKeys.has(key)) personKeys.set(key,{ambiguous:true});
+      else personKeys.set(key,person);
+    }
+  }
+  const existing = new Map((existingResult.results||[]).map((row)=>[`${text(row.employee_id)}|${dateOnly(row.work_date)}`,row]));
+  const preview: Row[] = [];
+  const missing: string[] = [];
+  for(const row of imported){
+    const key = text(row.personnelNo||row.name).toLocaleUpperCase("tr-TR");
+    const person = personKeys.get(key);
+    if(!person?.id) { missing.push(row.personnelNo||row.name);continue; }
+    const saved=existing.get(`${text(person.id)}|${row.workDate}`);
+    // Import adds marked shifts; blank cells never silently delete an existing shift.
+    const nextDay=row.dayShift||flag(saved?.day_shift), nextNight=row.nightShift||flag(saved?.night_shift);
+    if(nextDay===flag(saved?.day_shift)&&nextNight===flag(saved?.night_shift))continue;
+    preview.push({employeeId:text(person.id),personName:text(person.full_name),workDate:row.workDate,
+      dayShift:nextDay,nightShift:nextNight,expectedUpdatedAt:text(saved?.updated_at),enabled:true});
+  }
+  if(missing.length) return fail(c,400,"EXCEL_PERSON_NOT_FOUND",`Excel içinde eşleşmeyen veya belirsiz ${missing.length} personel var. Personel No/Ad eşleştirmesini düzeltin.`,{count:missing.length});
+  return ok(c,{startDate:start,endDate:end,rows:preview,count:preview.length,
+    message:preview.length?"Yalnız yeni vardiyalar önizlendi; mevcut vardiyalar silinmeyecek.":"Yeni vardiya bulunamadı; mevcut kayıtlar korunacak."});
+}
+
 async function excelApply(c: Context<AppEnv>) {
   await ensureSchema(c);
   const body = await bodyOf(c);
@@ -2031,6 +2090,7 @@ export function registerGunlukOperasyonRoutes(app: Hono<AppEnv>) {
   app.post("/api/gunluk-operasyon/records", protect(saveFocused));
   app.get("/api/gunluk-operasyon/roster", protect(listRoster));
   app.post("/api/gunluk-operasyon/roster", protect(saveRoster));
+  app.post("/api/gunluk-operasyon/excel-upload", protect(excelUploadPreview));
   app.post("/api/gunluk-operasyon/excel-apply", protect(excelApply));
 
   app.get("/api/gunluk-operasyon/audit", protect(auditGet));
