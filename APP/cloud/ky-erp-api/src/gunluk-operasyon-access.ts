@@ -17,6 +17,7 @@ function permission(user: Row) {
   return list.find((item: Row) => ["IK","GUNLUK-OPERASYON","GUNLUK_OPERASYON"].includes(upper(item.moduleKey || item.module_key))) || null;
 }
 export function dailyAuthorized(user: Row, method: string, path: string) {
+  if (["DENETIM","PERSONNEL"].includes(upper(user?.role))) return false;
   if (isOwner(user?.role)) return true;
   const p = permission(user);
   if (!p) return false;
