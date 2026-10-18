@@ -232,7 +232,7 @@ function printDailyPaymentSlips(range, rows = []) {
         const rates = [...new Set(items.filter((item) => String(item.shift).toLowerCase() === shiftName && item.active !== false).map((item) => number(item.amount)))].sort((a, b) => a - b);
         if (!rates.length) return money(fallback);
         // Historical wage changes: show the actual rate range, not a fabricated single rate.
-        return rates.length === 1 ? money(rates[0]) : `\${money(rates[0])} – \${money(rates.at(-1))}`;
+        return rates.length === 1 ? money(rates[0]) : `${money(rates[0])} – ${money(rates.at(-1))}`;
       };
       const additions = number(row.additions);
       const deductions = number(row.deductions);
@@ -242,14 +242,14 @@ function printDailyPaymentSlips(range, rows = []) {
       const cardNumber = pageIndex * cardsPerPage + index + 1;
 
       return `<article class="pay-card">
-        <div class="pay-name"><b>\${cardNumber}. \${escapeHtml(row.name || row.fullName || "-")}</b><span>\${escapeHtml(row.qualification || row.role || "-")}</span></div>
+        <div class="pay-name"><b>${cardNumber}. ${escapeHtml(row.name || row.fullName || "-")}</b><span>${escapeHtml(row.qualification || row.role || "-")}</span></div>
         <div class="pay-lines">
           <div class="pay-column-head"><span>VARDİYA</span><span>ÜCRET</span><span>ADET</span><span>TOPLAM</span></div>
-          <div class="pay-row"><span>GÜNDÜZ</span><b>\${escapeHtml(rateLabel("day", dayRate))}</b><small>\${dayCount}</small><strong>\${escapeHtml(money(dayTotal))}</strong></div>
-          <div class="pay-row"><span>GECE</span><b>\${escapeHtml(rateLabel("night", nightRate))}</b><small>\${nightCount}</small><strong>\${escapeHtml(money(nightTotal))}</strong></div>
-          <div class="pay-extra"><span>EK ÖDEME (+)</span><strong>\${escapeHtml(money(additions))}</strong></div>
-          <div class="pay-extra"><span>EK KESİNTİ (-)</span><strong>\${escapeHtml(money(deductions))}</strong></div>
-          <div class="pay-net"><span>NET HAKEDİŞ</span><strong>\${escapeHtml(money(total))}</strong></div>
+          <div class="pay-row"><span>GÜNDÜZ</span><b>${escapeHtml(rateLabel("day", dayRate))}</b><small>${dayCount}</small><strong>${escapeHtml(money(dayTotal))}</strong></div>
+          <div class="pay-row"><span>GECE</span><b>${escapeHtml(rateLabel("night", nightRate))}</b><small>${nightCount}</small><strong>${escapeHtml(money(nightTotal))}</strong></div>
+          <div class="pay-extra"><span>EK ÖDEME (+)</span><strong>${escapeHtml(money(additions))}</strong></div>
+          <div class="pay-extra"><span>EK KESİNTİ (-)</span><strong>${escapeHtml(money(deductions))}</strong></div>
+          <div class="pay-net"><span>NET HAKEDİŞ</span><strong>${escapeHtml(money(total))}</strong></div>
         </div>
       </article>`;
     }).join("");
@@ -257,17 +257,17 @@ function printDailyPaymentSlips(range, rows = []) {
     return `<section class="pay-page">
       <header class="pay-header">
         <div class="pay-heading"><strong>GÜNLÜK PERSONEL HAKEDİŞ FİŞLERİ</strong><small>HAKEDİŞ BELGESİ · ÖDEME YAPILDIĞI ANLAMINA GELMEZ</small></div>
-        <span>\${escapeHtml(dateText(range.start))} — \${escapeHtml(dateText(range.end))}</span>
-        <em>Sayfa \${pageIndex + 1} / \${pages.length}</em>
+        <span>${escapeHtml(dateText(range.start))} — ${escapeHtml(dateText(range.end))}</span>
+        <em>Sayfa ${pageIndex + 1} / ${pages.length}</em>
       </header>
-      <div class="pay-grid">\${cards}</div>
-      \${isLastPage ? `<footer class="page-grand"><span>GENEL TOPLAM · \${source.length} PERSONEL</span><strong>\${escapeHtml(money(grandTotal))}</strong></footer>` : ""}
+      <div class="pay-grid">${cards}</div>
+      ${isLastPage ? `<footer class="page-grand"><span>GENEL TOPLAM · ${source.length} PERSONEL</span><strong>${escapeHtml(money(grandTotal))}</strong></footer>` : ""}
     </section>`;
   }).join("");
 
   return printHtmlDocument({
     title: "KY ERP Günlük Personel Hakediş Fişleri",
-    html: `<main class="pay-print">\${html || '<p>Kayıt yok.</p>'}</main>`,
+    html: `<main class="pay-print">${html || '<p>Kayıt yok.</p>'}</main>`,
     css: `@page{size:A4 portrait;margin:5mm}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#000;background:#fff}
