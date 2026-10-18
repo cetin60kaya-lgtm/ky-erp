@@ -467,7 +467,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [logShift, setLogShift] = useState("all");
   const [controlQuery, setControlQuery] = useState("");
   const [periodLocked, setPeriodLocked] = useState(false);
-  const [, setPeriodLockKnown] = useState(false);
+  const [periodLockKnown, setPeriodLockKnown] = useState(false);
+  const [periodLockInfo, setPeriodLockInfo] = useState(null);
   const [excelPreview, setExcelPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -535,11 +536,12 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
   const loadRangeData = useCallback(async () => {
     if (!companyId) return;
+    setPeriodLockKnown(false);
     try {
       const [rows, roster, lock] = await Promise.all([
         getDailyAttendance({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }),
         getDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }),
-        getDailyPeriodLock({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }).catch(() => null),
+        getDailyPeriodLock({ mainCompanyId: companyId, date: selectedDate }),
       ]);
       const attendanceRows = Array.isArray(rows) ? rows : [];
       setAttendance(attendanceRows);
@@ -548,16 +550,20 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       const recordedIds = new Set(attendanceRows.filter((row) => rowDay(row) || rowNight(row)).map(rowEmployeeId).filter(Boolean));
       setRosterIds(savedSet);
       setRosterSaved(![...recordedIds].some((id) => !savedSet.has(id)));
-      if (lock !== null) { setPeriodLocked(Boolean(lock?.locked ?? lock?.isLocked ?? lock?.active)); setPeriodLockKnown(true); }
-    } catch (loadError) { setError(loadError?.message || "Dönem kayıtları alınamadı."); }
-  }, [companyId, range.end, range.start]);
+      const locked = (Array.isArray(lock) ? lock : []).find((entry) => String(entry.status || "").toUpperCase() === "LOCKED"
+        && entry.start_date <= selectedDate && entry.end_date >= selectedDate) || null;
+      setPeriodLockInfo(locked);
+      setPeriodLocked(Boolean(locked));
+      setPeriodLockKnown(true);
+    } catch (loadError) { setPeriodLockKnown(false); setPeriodLocked(true); setError(loadError?.message || "Dönem kilidi doğrulanamadı; işlemler güvenlik için engellendi."); }
+  }, [companyId, range.end, range.start, selectedDate]);
 
   useEffect(() => {
     if (!companyId) return;
     setLoading(true); setError("");
     loadEmployees().catch((e) => setError(e?.message || "Günlük personel listesi alınamadı.")).finally(() => setLoading(false));
   }, [companyId, loadEmployees]);
-  useEffect(() => { if (companyId && employees.length) void loadRangeData(); }, [companyId, employees.length, loadRangeData]);
+  useEffect(() => { if (companyId) void loadRangeData(); }, [companyId, loadRangeData]);
 
   const loadFocused = useCallback(async () => {
     if (!companyId || view !== "daily-entry" || !selectedDate) return;
@@ -1170,9 +1176,19 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     void loadLog(next, true);
   };
   const togglePeriodLock = async () => {
-    if (busy) return; setBusy(true); setError("");
-    try { const next = !periodLocked; await setDailyPeriodLock({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, locked: next }); setPeriodLocked(next); setPeriodLockKnown(true); setNotice(next ? "Dönem kapatıldı. Günlük kayıt değişikliği kilitlendi." : "Dönem yeniden açıldı."); }
-    catch (e) { setError(e?.message || "Dönem kilidi değiştirilemedi."); }
+    if (busy || !periodLockKnown) { setError("Dönem kilidi sunucudan henüz doğrulanmadı."); return; }
+    const next = !periodLocked;
+    const reason = window.prompt(next ? "Dönem kapatma gerekçesi (zorunlu):" : "Dönemi yeniden açma gerekçesi (zorunlu):");
+    if (!reason?.trim()) return;
+    const target = periodLocked && periodLockInfo
+      ? { startDate: periodLockInfo.start_date, endDate: periodLockInfo.end_date }
+      : { startDate: range.start, endDate: range.end };
+    setBusy(true); setError("");
+    try {
+      await setDailyPeriodLock({ mainCompanyId: companyId, ...target, action: next ? "LOCK" : "UNLOCK", reason: reason.trim() });
+      await loadRangeData();
+      setNotice(next ? "Dönem kapatıldı; kilit D1 üzerinden doğrulandı." : "Dönem yeniden açıldı; kilit D1 üzerinden doğrulandı.");
+    } catch (e) { setError(e?.message || "Dönem kilidi değiştirilemedi."); }
     finally { setBusy(false); }
   };
 
