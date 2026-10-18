@@ -1259,12 +1259,19 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         }
         return next;
       });
+      let completed=0;
+      const failures=[];
       for (let index = 0; index < updatedPeople.length; index += 8) {
         const chunk = updatedPeople.slice(index, index + 8);
-        await Promise.all(chunk.map((person) => updateDailyEmployee(person.id, employeePayload(person, companyId))));
+        const outcomes = await Promise.allSettled(chunk.map((person) => updateDailyEmployee(person.id, employeePayload(person, companyId))));
+        outcomes.forEach((result, i) => {
+          if (result.status === "fulfilled") completed += 1;
+          else failures.push(chunk[i].name || chunk[i].personnelNo || "Personel");
+        });
       }
       await loadEmployees();
-      setNotice(`${updatedPeople.length} personel toplu güncellendi.`);
+      setNotice(`${completed} / ${updatedPeople.length} personel güncellendi.`);
+      if (failures.length) setError(`${failures.length} personel güncellenemedi: ${failures.slice(0,8).join(", ")}. Başarılı kişiler yeniden kaydedilmedi; listeyi kontrol edip yalnız eksikleri seçin.`);
     } catch (e) { setError(e?.message || "Toplu personel güncellemesi tamamlanamadı."); }
     finally { setBusy(false); }
   };
@@ -1310,6 +1317,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   };
   const payRow = async (row, printAfter = false) => {
     if (busy || number(row.pendingCheckCount) > 0) return;
+    if (!window.confirm(`${row.name || row.fullName} için ${money(row.totalAmount)} fiilen ödendi mi? Onaylarsanız D1'de ÖDENDİ olarak kalıcı kayıt oluşturulur.`)) return;
     setBusy(true); setError("");
     try {
       const payment = await createDailyPayment({ mainCompanyId: companyId, employeeId: row.employeeId, startDate: paymentPoolRange.start, endDate: paymentPoolRange.end, paymentDate: localDateKey() });
@@ -1321,11 +1329,18 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const paySelectedRows = async () => {
     const rows = selectedPaymentRows.filter((row) => number(row.pendingCheckCount) === 0);
     if (busy || !rows.length) return;
+    const total = rows.reduce((sum, row) => sum + number(row.totalAmount), 0);
+    if (!window.confirm(`${rows.length} personel için toplam ${money(total)} tutarın fiilen ödendiğini onaylıyor musunuz? Bu işlem gerçek ödeme kayıtları oluşturacaktır.`)) return;
     setBusy(true); setError("");
     try {
       let completed = 0;
-      for (const row of rows) { await createDailyPayment({ mainCompanyId: companyId, employeeId: row.employeeId, startDate: paymentPoolRange.start, endDate: paymentPoolRange.end, paymentDate: localDateKey() }); completed += 1; }
-      setPaymentSelectedIds(new Set()); setNotice(`${completed} personelin ödemesi tamamlandı.`);
+      const failed = [];
+      for (const row of rows) {
+        try { await createDailyPayment({ mainCompanyId: companyId, employeeId: row.employeeId, startDate: paymentPoolRange.start, endDate: paymentPoolRange.end, paymentDate: localDateKey() }); completed += 1; }
+        catch(e) { failed.push(`${row.name}: ${e?.message || "Kayıt yapılamadı"}`); }
+      }
+      setPaymentSelectedIds(new Set()); setNotice(`${completed} / ${rows.length} personelin ödeme kaydı oluşturuldu.`);
+      if (failed.length) setError(`${failed.length} ödeme kaydedilemedi: ${failed.slice(0,4).join(" · ")}. Önce durumu yenileyin; başarılı ödemeleri tekrar yapmayın.`);
       await Promise.all([loadPayments(), loadPaymentHistory(), loadRangeData()]);
     } catch (e) { setError(e?.message || "Seçili ödemeler tamamlanamadı."); } finally { setBusy(false); }
   };
@@ -1387,11 +1402,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     } catch (e) { setError(e?.message || "Excel indirilemedi."); } finally { setBusy(false); }
   };
   const importExcel = () => {
-    const input = document.createElement("input"); input.type = "file"; input.accept = ".xlsx";
-    input.onchange = async (event) => { const file = event.target.files?.[0]; if (!file) return; setBusy(true); try { const preview = await previewDailyExcel(file, { mainCompanyId: companyId, startDate: range.start, endDate: range.end }); setExcelPreview(preview); setNotice("Excel okundu. Kontrol edip uygula."); } catch (e) { setError(e?.message || "Excel okunamadı."); } finally { setBusy(false); } };
+    const input = document.createElement("input"); input.type = "file"; input.accept = ".xlsx,.xls";
+    input.onchange = async (event) => { const file = event.target.files?.[0]; if (!file) return; setBusy(true); try { const preview = await previewDailyExcel(file, { mainCompanyId: companyId, startDate: range.start, endDate: range.end }); setExcelPreview(preview); setNotice(preview?.message || "Excel önizlemesi hazır. Yalnız onaylarsanız kayıt yapılacak."); } catch (e) { setError(e?.message || "Excel okunamadı."); } finally { setBusy(false); } };
     input.click();
   };
-  const applyExcel = async () => { if (!excelPreview || busy) return; setBusy(true); try { const result = await applyDailyExcel({ mainCompanyId: companyId, startDate: excelPreview.startDate || range.start, endDate: excelPreview.endDate || range.end, rows: excelPreview.rows || [] }); setExcelPreview(null); setNotice(`${result?.count || 0} Excel satırı uygulandı.`); await Promise.all([loadEmployees(), loadRangeData(), loadFocused()]); } catch (e) { setError(e?.message || "Excel uygulanamadı."); } finally { setBusy(false); } };
+  const applyExcel = async () => { if (!excelPreview?.rows?.length || busy) return; setBusy(true); try { const result = await applyDailyExcel({ mainCompanyId: companyId, startDate: excelPreview.startDate || range.start, endDate: excelPreview.endDate || range.end, rows: excelPreview.rows || [] }); setExcelPreview(null); setNotice(`${result?.count || 0} Excel satırı uygulandı.`); await Promise.all([loadEmployees(), loadRangeData(), loadFocused()]); } catch (e) { setError(e?.message || "Excel uygulanamadı."); } finally { setBusy(false); } };
 
   useEffect(() => {
     liveVersionRef.current = "";
