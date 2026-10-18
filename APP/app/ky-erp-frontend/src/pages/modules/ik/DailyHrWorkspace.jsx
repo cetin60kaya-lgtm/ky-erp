@@ -474,6 +474,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [syncError, setSyncError] = useState("");
   const liveVersionRef = useRef("");
   const dailyRangeRef = useRef(range);
   const livePollBusyRef = useRef(false);
@@ -1453,7 +1454,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       try {
         const state = await getDailySyncState({ mainCompanyId: companyId }, { forceFresh: true, timeoutMs: 5000 });
         const version = String(state?.version || "");
-        if (!version) return;
+        if (!version) { setSyncError("Sunucu senkron sürümü okunamadı."); return; }
+        setSyncError("");
         if (!liveVersionRef.current) { liveVersionRef.current = version; return; }
         if (version === liveVersionRef.current) return;
 
@@ -1473,7 +1475,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           setNotice("Canlı senkron: başka bilgisayardaki değişiklikler alındı.");
         }
       } catch {
-        // Canlı senkron yardımcı katmandır; geçici bağlantı hatası ana günlük işlemi durdurmaz.
+        setSyncError("Diğer bilgisayarla senkron bağlantısı geçici olarak doğrulanamıyor. Kaydetmeden önce Yenile ile kontrol edin.");
       } finally {
         livePollBusyRef.current = false;
       }
@@ -1555,7 +1557,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   return (
     <section className="gop-workspace notranslate" translate="no">
       {view !== "daily-entry" ? <header className="gop-header"><div><span>GÜNLÜK OPERASYON</span><h1>{view === "daily-dashboard" ? "Yönetim Özeti" : view === "daily-cards" ? "Personel & Ücret Kartları" : view === "daily-weekly" ? "Dönem Kontrolü" : "Hakediş & Ödeme"}</h1><p>{view === "daily-dashboard" ? "Personel, vardiya, kontrol ve hakediş durumunu canlı olarak izleyin." : view === "daily-cards" ? "Personel kartlarını, vasıfları ve günlük ücretleri tek merkezden yönetin." : view === "daily-weekly" ? "Seçili dönemi gün gün doğrulayın, kontrol edin ve raporlayın." : "Hakediş, ödeme, fiş ve kalıcı ödeme geçmişini yönetin."}</p></div><button className="gop-refresh" type="button" disabled={loading || busy} onClick={() => view === "daily-dashboard" ? Promise.all([loadEmployees(), loadRangeData(), loadWeekly(), loadPayments()]) : view === "daily-weekly" ? loadWeekly() : view === "daily-payments" ? Promise.all([loadPayments(), loadPaymentHistory()]) : loadEmployees()}><RefreshCw size={16}/> Yenile</button></header> : null}
-      {notice ? <div className="gop-notice" role="status">{notice}</div> : null}{error ? <div className="gop-error" role="alert">{error}</div> : null}
+      {notice ? <div className="gop-notice" role="status">{notice}</div> : null}{error ? <div className="gop-error" role="alert">{error}</div> : null}{syncError ? <div className="gop-sync-warning" role="status"><RefreshCw size={14}/> {syncError}</div> : null}
       {!periodLockKnown && ["daily-dashboard","daily-entry","daily-weekly"].includes(view) ? <div className="gop-lock-uncertain" role="status"><LockKeyhole size={15}/> Dönem kilidi doğrulanıyor. Kontrol tamamlanana kadar değişiklik yapılamaz.</div> : null}
 
       {view === "daily-entry" ? <div className={`kyop-daily ${shift}`}>
@@ -1721,7 +1723,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
       {cardDialog ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section data-ky-dialog-key="gunluk-operasyon.personel-karti" className="gop-dialog gop-person-dialog"><header><div><span>GÜNLÜK OPERASYON</span><h2>{cardDialog.id ? "Personel Kartını Düzenle" : "Yeni Personel"}</h2></div><button type="button" onClick={() => { setCardDialog(null); setCardAddToRoster(false); }}><X size={19}/></button></header><div className="gop-form-grid"><label>Ad soyad<input value={cardDialog.name} onChange={(e) => setCardDialog({ ...cardDialog, name: e.target.value })}/></label><label>Personel no<input value={cardDialog.personnelNo} onChange={(e) => setCardDialog({ ...cardDialog, personnelNo: e.target.value })}/></label><div className="gop-role-field"><label>Vasıf<select value={cardDialog.role} onChange={(e) => setCardDialog({ ...cardDialog, role: e.target.value })}><option value="">Vasıf seçin</option>{roleOptions.map((role) => <option key={role} value={role}>{role}</option>)}</select></label><button type="button" onClick={() => { const role = askNewRole(); if (role) setCardDialog({ ...cardDialog, role }); }}><Plus size={13}/> Vasıf Ekle</button></div><label>Aracı<input value={cardDialog.broker} onChange={(e) => setCardDialog({ ...cardDialog, broker: e.target.value })}/></label><label>Gündüz ücret<input type="number" min="0" value={cardDialog.dayRate} onChange={(e) => setCardDialog({ ...cardDialog, dayRate: number(e.target.value) })}/></label><label>Gece ücret<input type="number" min="0" value={cardDialog.nightRate} onChange={(e) => setCardDialog({ ...cardDialog, nightRate: number(e.target.value) })}/></label>{cardDialog.id ? <label>Yeni Ücret Geçerlilik Tarihi<input type="date" value={cardDialog.wageEffectiveDate || startOfWeek()} onChange={(e) => setCardDialog({ ...cardDialog, wageEffectiveDate: e.target.value })}/></label> : null}<div className="gop-wage-rule-hint">Ücret değişikliği önceki haftanın hakedişini değiştirmez; ödeme fişleri korunur.</div><label className="wide">Not<textarea rows="3" value={cardDialog.note} onChange={(e) => setCardDialog({ ...cardDialog, note: e.target.value })}/></label><label className="check"><input type="checkbox" checked={cardDialog.active !== false} onChange={(e) => setCardDialog({ ...cardDialog, active: e.target.checked })}/> Aktif personel</label></div><footer><button type="button" onClick={() => { setCardDialog(null); setCardAddToRoster(false); }}>Vazgeç</button><button type="button" className="primary" disabled={busy} onClick={saveCard}><Save size={16}/> Kaydet</button></footer></section></div> : null}
 
-      {excelPreview ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section data-ky-dialog-key="gunluk-operasyon.excel-onizleme" className="gop-dialog gop-dialog-wide"><header><div><span>EXCEL KONTROL</span><h2>İçe Aktarım Önizleme</h2></div><button type="button" onClick={() => setExcelPreview(null)}><X size={19}/></button></header><div className="excel-preview"><p>{Array.isArray(excelPreview.rows) ? excelPreview.rows.length : 0} satır bulundu. Uygulamadan önce tarih ve personel eşleşmelerini kontrol edin.</p><div className="gop-table-wrap"><table><thead><tr><th>Personel</th><th>Tarih</th><th>Gündüz</th><th>Gece</th><th>Uyarı</th></tr></thead><tbody>{(excelPreview.rows || []).slice(0, 250).map((row, index) => <tr key={row.key || index}><td>{row.personName || row.excelName || row.personnelNo || "-"}</td><td>{dateText(row.workDate)}</td><td>{row.dayShift ? "✓" : ""}</td><td>{row.nightShift ? "✓" : ""}</td><td>{Array.isArray(row.warnings) ? row.warnings.join(", ") : row.warning || ""}</td></tr>)}</tbody></table></div></div><footer><button type="button" onClick={() => setExcelPreview(null)}>Vazgeç</button><button type="button" className="primary" disabled={busy} onClick={applyExcel}><Save size={15}/> Excel'i Uygula</button></footer></section></div> : null}
+      {excelPreview ? <div className="gop-dialog-backdrop" role="dialog" aria-modal="true"><section data-ky-dialog-key="gunluk-operasyon.excel-onizleme" className="gop-dialog gop-dialog-wide"><header><div><span>EXCEL KONTROL</span><h2>İçe Aktarım Önizleme</h2></div><button type="button" onClick={() => setExcelPreview(null)}><X size={19}/></button></header><div className="excel-preview"><p>{Array.isArray(excelPreview.rows) ? excelPreview.rows.length : 0} satır bulundu. Uygulamadan önce tarih ve personel eşleşmelerini kontrol edin. Boş hücreler mevcut vardiyaları silmez; yalnız yeni işaretli vardiyalar aktarılır.</p><div className="gop-table-wrap"><table><thead><tr><th>Personel</th><th>Tarih</th><th>Gündüz</th><th>Gece</th><th>Uyarı</th></tr></thead><tbody>{(excelPreview.rows || []).slice(0, 250).map((row, index) => <tr key={row.key || index}><td>{row.personName || row.excelName || row.personnelNo || "-"}</td><td>{dateText(row.workDate)}</td><td>{row.dayShift ? "✓" : ""}</td><td>{row.nightShift ? "✓" : ""}</td><td>{Array.isArray(row.warnings) ? row.warnings.join(", ") : row.warning || ""}</td></tr>)}</tbody></table></div></div><footer><button type="button" onClick={() => setExcelPreview(null)}>Vazgeç</button><button type="button" className="primary" disabled={busy || !excelPreview?.rows?.length} onClick={applyExcel}><Save size={15}/> Excel'i Uygula</button></footer></section></div> : null}
     </section>
   );
 }
