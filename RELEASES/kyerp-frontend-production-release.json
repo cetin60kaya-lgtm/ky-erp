@@ -3,17 +3,19 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-10-17",
+  "releaseDate": "2026-10-18",
   "scope": [
-    "gunluk-hakedis-ek-odeme-kesinti-penceresi",
-    "gunluk-kalici-log-ve-gecmis",
-    "gunluk-ek-odeme-kesinti-net-hakedis",
-    "gunluk-ek-kalemler-a4-fis-ve-odeme-gecmisi",
+    "gunluk-a4-on-fiș-iki-sutun-bes-satir",
+    "gunluk-gece-gunduz-ucret-adet-toplam-yan-yana",
+    "gunluk-genel-toplam-yalniz-son-sayfa",
+    "gunluk-fiș-sabit-45mm-ve-baski-tasma-koruma",
+    "gunluk-coklu-tarife-gercek-toplam",
+    "gunluk-ek-odeme-kesinti-koruma",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
     "live-daily-operations-chunk-sha256-verification"
   ],
-  "note": "PR #440 CI #39065684356 PASS, Worker live Actions #39065800668 success ve D1 tam yedek+0061 schema proof tamam. Yalnız Hakediş & Ödeme → Dönem/Çıktı ekranında ek +/− ve gerekçeli iptal/log açılır pencere. Gerçek personel ödeme kaydı veya sahte test işlemi yapılmadı. Oturumlu canlı görsel test beklenir.",
-  "sourceCommit": "91bf79ba2378bc5fd47def8fd6fd2d51d5990c97",
-  "requestedAt": "2026-10-17"
+  "note": "18.10.2026 gerçek Chrome fiş yazdırma ekranı kayma ve toplam taşma hatası; PR #441 merge 0ba50a90, CI #39111619324 PASS. 10 A4 fiş/sayfa; 2×5 sabit; ücret/adet/toplam yatay; yalnız son sayfa genel toplam. Yalnız frontend baskı şablonu: D1/Worker/personel/ödeme kayıtlarına dokunulmadı. Gerçek kullanıcı Chrome önizleme kabulü ayrıca beklenir.",
+  "sourceCommit": "0ba50a90c696bf87bf173c552f730e7725aa78b1",
+  "requestedAt": "2026-10-18"
 }
