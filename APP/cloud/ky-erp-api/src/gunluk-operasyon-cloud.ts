@@ -464,11 +464,14 @@ async function listAttendance(c: Context<AppEnv>) {
   const end = dateOnly(c.req.query("endDate") || c.req.query("end") || singleDate);
 
   const result = await c.env.DB.prepare(`SELECT a.*, e.day_wage AS card_day_wage, e.night_wage AS card_night_wage,
+      COALESCE(cd.checked,0) AS day_checked, COALESCE(cn.checked,0) AS night_checked,
       (SELECT p.amount_cents FROM hr_daily_payment_items p WHERE p.main_company_id=e.main_company_id AND p.attendance_id=a.id AND p.shift='day' AND p.active=1 LIMIT 1) AS settled_day_cents,
       (SELECT p.amount_cents FROM hr_daily_payment_items p WHERE p.main_company_id=e.main_company_id AND p.attendance_id=a.id AND p.shift='night' AND p.active=1 LIMIT 1) AS settled_night_cents,
       (SELECT COUNT(*) FROM hr_daily_payment_items p WHERE p.main_company_id=e.main_company_id AND p.attendance_id=a.id) AS ledger_item_count
       FROM hr_daily_attendance a
       JOIN hr_daily_employees e ON e.id=a.employee_id
+      LEFT JOIN hr_daily_attendance_check cd ON cd.main_company_id=e.main_company_id AND cd.employee_id=a.employee_id AND cd.work_date=a.work_date AND cd.shift='day'
+      LEFT JOIN hr_daily_attendance_check cn ON cn.main_company_id=e.main_company_id AND cn.employee_id=a.employee_id AND cn.work_date=a.work_date AND cn.shift='night'
       WHERE e.main_company_id=?
         AND (?='' OR a.work_date>=?)
         AND (?='' OR a.work_date<=?)
@@ -483,8 +486,13 @@ async function listAttendance(c: Context<AppEnv>) {
     const legacyPaid = text(row.payment_status).toUpperCase() === "PAID" && num(row.ledger_item_count) === 0;
     const dw = row.settled_day_cents != null ? Number(row.settled_day_cents) / 100 : legacyPaid ? money(row.day_wage) : active.dayWage;
     const nw = row.settled_night_cents != null ? Number(row.settled_night_cents) / 100 : legacyPaid ? money(row.night_wage) : active.nightWage;
-    return attendanceDto({ ...row, day_wage: dw, night_wage: nw,
-      total_amount: money((flag(row.day_shift) ? dw : 0) + (flag(row.night_shift) ? nw : 0)) });
+    return {
+      ...attendanceDto({ ...row, day_wage: dw, night_wage: nw,
+        total_amount: money((flag(row.day_shift) ? dw : 0) + (flag(row.night_shift) ? nw : 0)) }),
+      dayChecked: flag(row.day_shift) && flag(row.day_checked),
+      nightChecked: flag(row.night_shift) && flag(row.night_checked),
+      checked: (!flag(row.day_shift) || flag(row.day_checked)) && (!flag(row.night_shift) || flag(row.night_checked)),
+    };
   });
   return okItems(c, rows, rows);
 }
