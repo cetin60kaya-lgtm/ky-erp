@@ -943,6 +943,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           checked: nextSelected ? false : false,
           expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
           expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
+          expectedNoteUpdatedAt: currentRecord.noteUpdatedAt || "",
           note: nextSelected ? (notes[person.id] || "") : "",
         }],
       });
@@ -1032,6 +1033,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           checked: Boolean(nextChecked),
           expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
           expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
+          expectedNoteUpdatedAt: currentRecord.noteUpdatedAt || "",
           note: notes[person.id] || "",
         }],
       });
@@ -1067,6 +1069,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           checked: selectedIds.has(person.id) && checkedIds.has(person.id),
           expectedUpdatedAt: current.updatedAt || current.attendanceUpdatedAt || "",
           expectedCheckedUpdatedAt: current.checkedUpdatedAt || "",
+          expectedNoteUpdatedAt: current.noteUpdatedAt || "",
           note: notes[person.id] || "",
         };
       }) });
@@ -1081,7 +1084,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     const rows = await getDailyFocusedRecords({ mainCompanyId: companyId, date, shift: mode });
     const ids = focusedIds(rows);
     const checked = focusedCheckedIds(rows);
-    setQuick({ date, shift: mode, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), baselineRecords: Object.fromEntries((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), { updatedAt: row.updatedAt || "", checkedUpdatedAt: row.checkedUpdatedAt || "" }])), query: preserveQuery });
+    setQuick({ date, shift: mode, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), baselineRecords: Object.fromEntries((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), { updatedAt: row.updatedAt || "", checkedUpdatedAt: row.checkedUpdatedAt || "", noteUpdatedAt: row.noteUpdatedAt || "" }])), query: preserveQuery });
   };
   const openQuick = async (date = selectedDate, mode = shift) => {
     if (!date || busy) return;
@@ -1120,7 +1123,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           (snapshot.baseline.has(id) && snapshot.checkedBaseline.has(id));
       });
       if (changedPeople.length) {
-        await saveDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift, personnelEntries: changedPeople.map((person) => ({ personelId: person.id, status: snapshot.ids.has(person.id) ? "ACTIVE" : "REMOVE", checked: snapshot.ids.has(person.id) && snapshot.checked.has(person.id), expectedUpdatedAt: snapshot.baselineRecords?.[person.id]?.updatedAt || "", expectedCheckedUpdatedAt: snapshot.baselineRecords?.[person.id]?.checkedUpdatedAt || "", note: currentMap.get(person.id)?.note || "" })) });
+        await saveDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift, personnelEntries: changedPeople.map((person) => ({ personelId: person.id, status: snapshot.ids.has(person.id) ? "ACTIVE" : "REMOVE", checked: snapshot.ids.has(person.id) && snapshot.checked.has(person.id), expectedUpdatedAt: snapshot.baselineRecords?.[person.id]?.updatedAt || "", expectedCheckedUpdatedAt: snapshot.baselineRecords?.[person.id]?.checkedUpdatedAt || "", expectedNoteUpdatedAt: currentMap.get(person.id)?.noteUpdatedAt || "", note: currentMap.get(person.id)?.note || "" })) });
         const verified = await getDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift });
         const confirmedIds = focusedIds(verified);
         const confirmedChecks = focusedCheckedIds(verified);
@@ -1429,7 +1432,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       if (cancelled) return;
       setQuick((current) => {
         if (!current || current.date !== snapshot.date || current.shift !== snapshot.shift) return current;
-        return { ...current, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), baselineRecords: Object.fromEntries((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), { updatedAt: row.updatedAt || "", checkedUpdatedAt: row.checkedUpdatedAt || "" }])) };
+        return { ...current, ids, baseline: new Set(ids), checked, checkedBaseline: new Set(checked), baselineRecords: Object.fromEntries((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), { updatedAt: row.updatedAt || "", checkedUpdatedAt: row.checkedUpdatedAt || "", noteUpdatedAt: row.noteUpdatedAt || "" }])) };
       });
     };
 
