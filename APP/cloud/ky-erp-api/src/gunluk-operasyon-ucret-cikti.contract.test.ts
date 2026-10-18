@@ -25,7 +25,7 @@ test("printing earnings slips never creates a payment; explicit user payment sti
   assert.doesNotMatch(scope, /createDailyPayment/);
   assert.match(frontend, /const payRow = async/);
   assert.match(frontend, /await createDailyPayment/);
-  assert.match(frontend, /HAKEDİŞ DÖKÜMÜ/);
+  assert.match(frontend, /HAKEDİŞ BELGESİ/);
 });
 
 test("historical wages are visible in card, weekly print, and exported spreadsheet", () => {
