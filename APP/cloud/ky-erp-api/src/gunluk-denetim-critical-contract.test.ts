@@ -21,6 +21,15 @@ test("period lock fails closed across check-only, roster, adjustments, and front
   assert.match(frontend,/getDailyPeriodLock\(\{ mainCompanyId: companyId, date: selectedDate \}\)/);
   assert.match(frontend,/setPeriodLockKnown\(false\)/);
 });
+test("two-PC note/check mutations have immutable optimistic concurrency keys and reject stale writes",()=>{
+  assert.match(worker,/async function revisionAuditId\(/);
+  assert.match(worker,/crypto\.subtle\.digest\("SHA-256"/);
+  assert.match(worker,/id: await revisionAuditId\("NOTE"/);
+  assert.match(worker,/id: await revisionAuditId\("CHECK"/);
+  assert.match(worker,/DAILY_CONCURRENT_UPDATE/);
+  assert.match(frontend,/expectedNoteUpdatedAt: currentRecord\.noteUpdatedAt/);
+  assert.match(frontend,/expectedNoteUpdatedAt: snapshot\.baselineRecords/);
+});
 test("weekly checked state comes from exact per-shift D1 check rows",()=>{
   assert.match(worker,/AS day_checked, COALESCE\(cn.checked,0\) AS night_checked/);
   assert.match(worker,/dayChecked: flag\(row.day_shift\) && flag\(row.day_checked\)/);
