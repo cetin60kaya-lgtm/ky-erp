@@ -54,6 +54,7 @@ import { registerIkPdksGuardRoutes } from "./ik-pdks-guard";
 import { registerIkPersonnelControlRoutes } from "./ik-personnel-control";
 import { registerIkPdksMasterRoutes } from "./ik-pdks-master";
 import { registerGunlukOperasyonRoutes } from "./gunluk-operasyon-cloud";
+import { enforceDailyOperationsTenant } from "./gunluk-operasyon-access";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerEmployeePortalRoutes } from "./employee-portal-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
@@ -316,6 +317,9 @@ shell.use("/api/mail/*", async (c, next) => {
 // İşNet tek bir sağlayıcı modülü olabilir ancak tenant verisi global değildir.
 // Her İşNet isteği açık ana firma bağlamı taşır; non-owner kullanıcı başka tenant'a geçemez.
 // Desen API tenant ve modül yetkisi dışında erişilemez.
+// Günlük Operasyon reads and writes require canonical tenant + IK action permission.
+shell.use("/api/gunluk-operasyon/*", enforceDailyOperationsTenant);
+
 shell.use("/api/desen/*", enforceDesenTenant);
 
 // File Hub authenticated routes cannot cross tenant boundaries.
