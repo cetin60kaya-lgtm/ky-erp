@@ -393,11 +393,17 @@ function attendanceDto(row: Row) {
   };
 }
 
+// Stable CAS audit key: two PCs writing from one old control revision cannot both commit.
+async function revisionAuditId(kind: string, companyId: string, employeeId: string, workDate: string, shift: string, priorVersion: string) {
+  const source = new TextEncoder().encode(["DAILY_CAS_V1",kind,companyId,employeeId,workDate,shift,priorVersion].join("|"));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256",source));
+  return "cas-" + Array.from(digest, byte => byte.toString(16).padStart(2,"0")).join("");
+}
 function auditStmt(c: Context<AppEnv>, input: Row) {
   return c.env.DB.prepare(`INSERT INTO hr_daily_operation_audit
     (id,main_company_id,employee_id,attendance_id,work_date,shift,action,before_json,after_json,note,actor_user_id,actor_label,source,request_id,created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
-    crypto.randomUUID(),
+    text(input.id) || crypto.randomUUID(),
     canonicalCompany(input.companyId),
     text(input.employeeId) || null,
     text(input.attendanceId) || null,
@@ -914,6 +920,14 @@ async function saveFocused(c: Context<AppEnv>) {
   const guardByEmployee = new Map(
     (guardResult.results || []).map((row) => [text(row.employee_id), row]),
   );
+  // Read note revisions before either the shift or check is changed.
+  const noteGuardResult = employeeIds.length
+    ? await c.env.DB.prepare(`SELECT employee_id,note,updated_at FROM hr_daily_attendance_notes
+       WHERE main_company_id=? AND work_date=? AND shift=?
+         AND employee_id IN (${employeeIds.map(() => "?").join(",")})`)
+        .bind(companyId,date,shift,...employeeIds).all<Row>()
+    : {results:[] as Row[]};
+  const noteGuardByEmployee = new Map((noteGuardResult.results || []).map((row)=>[text(row.employee_id),row]));
   for (const entry of entries) {
     const employeeId = text(entry.personelId || entry.employeeId);
     if (!employeeId) return fail(c, 400, "INVALID_EMPLOYEE", "Personel numarası eksik.");
@@ -921,6 +935,10 @@ async function saveFocused(c: Context<AppEnv>) {
     if (Object.prototype.hasOwnProperty.call(entry, "expectedUpdatedAt") &&
         actualAttendance !== text(entry.expectedUpdatedAt)) {
       return fail(c, 409, "DAILY_RECORD_CHANGED", "Bu kişinin vardiyası başka bilgisayarda değişmiş. Kaydetmeden önce güncel kayıtları yükleyin.");
+    }
+    if (Object.prototype.hasOwnProperty.call(entry, "expectedNoteUpdatedAt") &&
+        text(noteGuardByEmployee.get(employeeId)?.updated_at) !== text(entry.expectedNoteUpdatedAt)) {
+      return fail(c,409,"DAILY_NOTE_CHANGED","Not başka bilgisayarda değişmiş. Ekranı yenileyip tekrar kontrol edin.");
     }
     if (Object.prototype.hasOwnProperty.call(entry, "expectedCheckedUpdatedAt") &&
         text(guardByEmployee.get(employeeId)?.updated_at) !== text(entry.expectedCheckedUpdatedAt)) {
@@ -962,14 +980,7 @@ async function saveFocused(c: Context<AppEnv>) {
 
   const actor = await actorOf(c);
   const statements: D1PreparedStatement[] = [];
-  const notesResult = employeeIds.length
-    ? await c.env.DB.prepare(`SELECT employee_id,note
-        FROM hr_daily_attendance_notes
-        WHERE main_company_id=? AND work_date=? AND shift=?
-          AND employee_id IN (${employeeIds.map(() => "?").join(",")})`)
-        .bind(companyId, date, shift, ...employeeIds)
-        .all<Row>()
-    : { results: [] as Row[] };
+
   const checksResult = employeeIds.length
     ? await c.env.DB.prepare(`SELECT id,employee_id,checked
         FROM hr_daily_attendance_check
@@ -979,7 +990,7 @@ async function saveFocused(c: Context<AppEnv>) {
         .all<Row>()
     : { results: [] as Row[] };
   const noteByEmployee = new Map(
-    (notesResult.results || []).map((row) => [text(row.employee_id), text(row.note)]),
+    (noteGuardResult.results || []).map((row) => [text(row.employee_id), text(row.note)]),
   );
   const checkedByEmployee = new Map(
     (checksResult.results || []).map((row) => [text(row.employee_id), flag(row.checked)]),
@@ -991,7 +1002,7 @@ async function saveFocused(c: Context<AppEnv>) {
   for (const entry of entries) {
     const employeeId = text(entry.personelId || entry.employeeId);
     const noteBefore = noteByEmployee.get(employeeId) || "";
-    const noteAfter = text(entry.note);
+    const noteAfter = entry.note === undefined ? noteBefore : text(entry.note);
     if (noteBefore !== noteAfter) {
       statements.push(
         c.env.DB.prepare(`INSERT INTO hr_daily_attendance_notes
@@ -1010,6 +1021,7 @@ async function saveFocused(c: Context<AppEnv>) {
       );
       statements.push(
         auditStmt(c, {
+          id: await revisionAuditId("NOTE",companyId,employeeId,date,shift,text(noteGuardByEmployee.get(employeeId)?.updated_at)),
           companyId,
           employeeId,
           workDate: date,
@@ -1043,6 +1055,7 @@ async function saveFocused(c: Context<AppEnv>) {
       );
       statements.push(
         auditStmt(c, {
+          id: await revisionAuditId("CHECK",companyId,employeeId,date,shift,text(guardByEmployee.get(employeeId)?.updated_at)),
           companyId,
           employeeId,
           workDate: date,
@@ -1061,6 +1074,8 @@ async function saveFocused(c: Context<AppEnv>) {
     try {
       await c.env.DB.batch(statements);
     } catch (error) {
+      if (/UNIQUE constraint|constraint failed|D1_ERROR.*UNIQUE/i.test(error instanceof Error ? error.message : String(error)))
+        return fail(c,409,"DAILY_CONCURRENT_UPDATE","Bu not veya kontrol onayı başka bilgisayarda değişti. Veriyi yenileyin; eski seçimle üzerine yazılmadı.");
       console.error(JSON.stringify({ code: "GUNLUK_CHECK_WRITE_FAILED", stage: "check_or_audit_batch", message: error instanceof Error ? error.message : String(error) }));
       return fail(c, 500, "GUNLUK_CHECK_WRITE_FAILED", "Kontrol işareti veya not kaydedilemedi. Vardiya değişikliği kaydedilmiş olabilir; Yenile ile sunucudaki durumu doğrulayın. Destek kodu GUNLUK_CHECK_WRITE_FAILED.");
     }
