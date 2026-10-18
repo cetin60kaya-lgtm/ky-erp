@@ -12,7 +12,7 @@ test("daily read and entry need explicit IK grants",()=>{
   assert.equal(dailyAuthorized(user,"GET","/api/gunluk-operasyon/employees"),true);
   assert.equal(dailyAuthorized(user,"POST","/api/gunluk-operasyon/records"),true);
   assert.equal(dailyAuthorized({...user,permissions:[]},"GET","/api/gunluk-operasyon/employees"),false);
-  assert.equal(dailyAuthorized({...user,role:"DENETIM"},"POST","/api/gunluk-operasyon/records"),true);
+  assert.equal(dailyAuthorized({...user,role:"DENETIM"},"POST","/api/gunluk-operasyon/records"),false);
 });
 test("payment or period approval needs approve or update; deletion needs delete",()=>{
   assert.equal(dailyAuthorized({role:"USER",permissions:[{moduleKey:"IK",canView:true,canCreate:true}]},"POST","/api/gunluk-operasyon/payments"),false);
