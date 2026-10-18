@@ -116,7 +116,7 @@ test("open past periods remain visible and printing never marks payment complete
   assert.match(workspace, /paymentStatusByEmployee/);
   assert.match(workspace, /DOĞRULANAMADI/);
   assert.match(workspace, /Çıktı = yalnız hakediş belgesi/);
-  assert.match(workspace, /HAKEDİŞ DÖKÜMÜ/);
+  assert.match(workspace, /HAKEDİŞ BELGESİ/);
   const printBlock = workspace.split("const printPeriodRows = useCallback")[1]?.split("const activePaymentRange =")[0];
   assert.ok(printBlock);
   assert.doesNotMatch(printBlock, /createDailyPayment/);

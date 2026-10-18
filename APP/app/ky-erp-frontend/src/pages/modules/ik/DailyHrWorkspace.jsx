@@ -209,43 +209,103 @@ function roleSort(a, b) {
 function escapeHtml(value) { return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 function printDailyPaymentSlips(range, rows = []) {
   const source = Array.isArray(rows) ? rows : [];
+  const cardsPerPage = 10; // A4 portrait: 2 columns × 5 fixed rows.
   const grandTotal = source.reduce((sum, row) => sum + number(row.totalAmount ?? row.total), 0);
   const pages = [];
-  for (let index = 0; index < source.length; index += 10) pages.push(source.slice(index, index + 10));
-  const html = pages.map((pageRows, pageIndex) => `<section class="pay-page"><header><strong>GÜNLÜK PERSONEL HAKEDİŞ FİŞLERİ</strong><span>${escapeHtml(dateText(range.start))} — ${escapeHtml(dateText(range.end))}</span><em>Sayfa ${pageIndex + 1} / ${pages.length}</em></header><div class="pay-grid">${pageRows.map((row, index) => {
-    const items = Array.isArray(row.items) ? row.items : [];
-    const dayCount = number(row.dayCount);
-    const nightCount = number(row.nightCount);
-    const dayItemTotal = items.filter((item) => String(item.shift || "").toLowerCase() === "day" && item.active !== false).reduce((sum, item) => sum + number(item.amount), 0);
-    const nightItemTotal = items.filter((item) => String(item.shift || "").toLowerCase() === "night" && item.active !== false).reduce((sum, item) => sum + number(item.amount), 0);
-    const dayTotal = row.dayTotal == null ? dayItemTotal : number(row.dayTotal);
-    const nightTotal = row.nightTotal == null ? nightItemTotal : number(row.nightTotal);
-    const dayRate = dayCount ? dayTotal / dayCount : number(row.dayRate ?? row.dayWage);
-    const nightRate = nightCount ? nightTotal / nightCount : number(row.nightRate ?? row.nightWage);
-    const rateLabel = (shiftName, fallback) => {
-      const rates = [...new Set(items.filter((item) => String(item.shift).toLowerCase() === shiftName && item.active !== false).map((item) => number(item.amount)))].sort((x, y) => x - y);
-      if (!rates.length) return money(fallback);
-      return rates.length === 1 ? money(rates[0]) : `${money(rates[0])} – ${money(rates.at(-1))}`;
-    };
-    const additions = number(row.additions);
-    const deductions = number(row.deductions);
-    const total = row.totalAmount == null && row.total == null ? dayTotal + nightTotal + additions - deductions : number(row.totalAmount ?? row.total);
-    const no = pageIndex * 10 + index + 1;
-    return `<article class="pay-card">
-      <div class="pay-name"><b>${no}. ${escapeHtml(row.name || row.fullName || "-")}</b><span>${escapeHtml(row.qualification || row.role || "-")}</span></div>
-      <div class="pay-lines">
-        <div><span>GÜNDÜZ ÜCRETİ</span><b>${escapeHtml(rateLabel("day", dayRate))}</b><small>${dayCount} gün</small></div>
-        <div><span>GECE ÜCRETİ</span><b>${escapeHtml(rateLabel("night", nightRate))}</b><small>${nightCount} gece</small></div>
-        <div><span>EK ÖDEME (+)</span><b>${escapeHtml(money(additions))}</b></div>
-        <div><span>EK KESİNTİ (-)</span><b>${escapeHtml(money(deductions))}</b></div>
-        <div class="sum"><span>NET ÖDENECEK</span><b>${escapeHtml(money(total))}</b></div>
-      </div>
-    </article>`;
-  }).join("")}</div><footer class="page-grand"><span>GENEL TOPLAM</span><strong>${escapeHtml(money(grandTotal))}</strong></footer></section>`).join("");
+  for (let index = 0; index < source.length; index += cardsPerPage) {
+    pages.push(source.slice(index, index + cardsPerPage));
+  }
+
+  const html = pages.map((pageRows, pageIndex) => {
+    const isLastPage = pageIndex === pages.length - 1;
+    const cards = pageRows.map((row, index) => {
+      const items = Array.isArray(row.items) ? row.items : [];
+      const dayCount = number(row.dayCount);
+      const nightCount = number(row.nightCount);
+      const dayItemTotal = items.filter((item) => String(item.shift || "").toLowerCase() === "day" && item.active !== false).reduce((sum, item) => sum + number(item.amount), 0);
+      const nightItemTotal = items.filter((item) => String(item.shift || "").toLowerCase() === "night" && item.active !== false).reduce((sum, item) => sum + number(item.amount), 0);
+      const dayTotal = row.dayTotal == null ? dayItemTotal : number(row.dayTotal);
+      const nightTotal = row.nightTotal == null ? nightItemTotal : number(row.nightTotal);
+      const dayRate = dayCount ? dayTotal / dayCount : number(row.dayRate ?? row.dayWage);
+      const nightRate = nightCount ? nightTotal / nightCount : number(row.nightRate ?? row.nightWage);
+      const rateLabel = (shiftName, fallback) => {
+        const rates = [...new Set(items.filter((item) => String(item.shift).toLowerCase() === shiftName && item.active !== false).map((item) => number(item.amount)))].sort((a, b) => a - b);
+        if (!rates.length) return money(fallback);
+        // Historical wage changes: show the actual rate range, not a fabricated single rate.
+        return rates.length === 1 ? money(rates[0]) : `${money(rates[0])} – ${money(rates.at(-1))}`;
+      };
+      const additions = number(row.additions);
+      const deductions = number(row.deductions);
+      const total = row.totalAmount == null && row.total == null
+        ? dayTotal + nightTotal + additions - deductions
+        : number(row.totalAmount ?? row.total);
+      const cardNumber = pageIndex * cardsPerPage + index + 1;
+
+      return `<article class="pay-card">
+        <div class="pay-name"><b>${cardNumber}. ${escapeHtml(row.name || row.fullName || "-")}</b><span>${escapeHtml(row.qualification || row.role || "-")}</span></div>
+        <div class="pay-lines">
+          <div class="pay-column-head"><span>VARDİYA</span><span>ÜCRET</span><span>ADET</span><span>TOPLAM</span></div>
+          <div class="pay-row"><span>GÜNDÜZ</span><b>${escapeHtml(rateLabel("day", dayRate))}</b><small>${dayCount}</small><strong>${escapeHtml(money(dayTotal))}</strong></div>
+          <div class="pay-row"><span>GECE</span><b>${escapeHtml(rateLabel("night", nightRate))}</b><small>${nightCount}</small><strong>${escapeHtml(money(nightTotal))}</strong></div>
+          <div class="pay-extra"><span>EK ÖDEME (+)</span><strong>${escapeHtml(money(additions))}</strong></div>
+          <div class="pay-extra"><span>EK KESİNTİ (-)</span><strong>${escapeHtml(money(deductions))}</strong></div>
+          <div class="pay-net"><span>NET HAKEDİŞ</span><strong>${escapeHtml(money(total))}</strong></div>
+        </div>
+      </article>`;
+    }).join("");
+
+    return `<section class="pay-page">
+      <header class="pay-header">
+        <div class="pay-heading"><strong>GÜNLÜK PERSONEL HAKEDİŞ FİŞLERİ</strong><small>HAKEDİŞ BELGESİ · ÖDEME YAPILDIĞI ANLAMINA GELMEZ</small></div>
+        <span>${escapeHtml(dateText(range.start))} — ${escapeHtml(dateText(range.end))}</span>
+        <em>Sayfa ${pageIndex + 1} / ${pages.length}</em>
+      </header>
+      <div class="pay-grid">${cards}</div>
+      ${isLastPage ? `<footer class="page-grand"><span>GENEL TOPLAM · ${source.length} PERSONEL</span><strong>${escapeHtml(money(grandTotal))}</strong></footer>` : ""}
+    </section>`;
+  }).join("");
+
   return printHtmlDocument({
     title: "KY ERP Günlük Personel Hakediş Fişleri",
-    html: `<main class="pay-print"><p style="margin:0 0 2mm;font-size:8pt;font-weight:bold">HAKEDİŞ DÖKÜMÜ · ÖDEME YAPILDIĞI ANLAMINA GELMEZ</p>${html || '<p>Kayıt yok.</p>'}</main>`,
-    css: `@page{size:A4 portrait;margin:5mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#000;background:#fff}.pay-print{width:200mm}.pay-page{width:200mm;height:287mm;display:flex;flex-direction:column;page-break-after:always;break-after:page;overflow:hidden}.pay-page:last-child{page-break-after:auto;break-after:auto}.pay-page>header{height:11mm;border:1px solid #000;display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:5mm;padding:1.5mm 3mm;margin-bottom:2.5mm}.pay-page>header strong{font-size:11.5pt}.pay-page>header span,.pay-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.pay-grid{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(5,47mm);gap:2.5mm 4mm}.pay-card{height:47mm;border:1px solid #000;padding:2.2mm 2.6mm;display:grid;grid-template-rows:auto 1fr;gap:1.5mm;break-inside:avoid;page-break-inside:avoid}.pay-name{display:flex;align-items:baseline;justify-content:space-between;gap:3mm;border-bottom:1px solid #000;padding-bottom:1mm}.pay-name b{font-size:10pt;text-transform:uppercase;line-height:1}.pay-name span{font-size:7.2pt;white-space:nowrap}.pay-lines{display:grid;gap:0;border:1px solid #000}.pay-lines>div{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:2mm;padding:0.75mm 2mm;min-height:6.25mm}.pay-lines>div+div{border-top:1px solid #000}.pay-lines span{font-size:8pt;font-weight:900}.pay-lines b{font-size:11pt;text-align:right}.pay-lines small{min-width:23mm;text-align:right;font-size:7pt;font-weight:700}.pay-lines .sum{grid-template-columns:1fr auto;background:#f7f7f7}.pay-lines .sum b{font-size:14pt}.page-grand{margin-top:auto;border:2px solid #000;min-height:15mm;padding:2.5mm 4mm;display:flex;align-items:center;justify-content:space-between}.page-grand span{font-size:11pt;font-weight:900}.page-grand strong{font-size:20pt;line-height:1;font-weight:900}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`
+    html: `<main class="pay-print">${html || '<p>Kayıt yok.</p>'}</main>`,
+    css: `@page{size:A4 portrait;margin:5mm}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#000;background:#fff}
+.pay-print{width:200mm;margin:0;padding:0}
+.pay-page{width:200mm;height:286mm;display:flex;flex-direction:column;margin:0;padding:0;break-after:page;page-break-after:always;overflow:visible}
+.pay-page:last-child{break-after:auto;page-break-after:auto}
+.pay-header{height:13mm;min-height:13mm;display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:3mm;padding:1mm 2.3mm;border:1px solid #000;margin:0 0 2mm}
+.pay-heading{display:flex;flex-direction:column;min-width:0;gap:.7mm}
+.pay-heading strong{font-size:10pt;line-height:1.05;white-space:nowrap}
+.pay-heading small{font-size:6pt;font-weight:700;line-height:1;white-space:nowrap}
+.pay-header>span,.pay-header>em{font-size:7pt;white-space:nowrap;font-style:normal}
+.pay-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(5,45mm);gap:2.5mm 3mm;align-content:start;flex:none}
+.pay-card{height:45mm;min-height:45mm;border:1px solid #000;display:flex;flex-direction:column;gap:1mm;padding:1.5mm 1.8mm;break-inside:avoid;page-break-inside:avoid;overflow:hidden}
+.pay-name{height:6mm;min-height:6mm;display:flex;align-items:center;justify-content:space-between;gap:2mm;border-bottom:1px solid #000;padding-bottom:.7mm}
+.pay-name b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8.5pt;font-weight:900;line-height:1.1}
+.pay-name span{flex:none;font-size:6.7pt;white-space:nowrap}
+.pay-lines{border:1px solid #000;display:flex;flex-direction:column;min-height:0;flex:1}
+.pay-lines>div+div{border-top:1px solid #000}
+.pay-column-head,.pay-row{display:grid;grid-template-columns:minmax(0,.72fr) minmax(0,1.15fr) 8mm minmax(0,1fr);align-items:center;gap:1mm;padding:0 1.4mm}
+.pay-column-head{height:4.1mm;min-height:4.1mm;background:#f2f2f2;font-size:6pt;font-weight:900;text-align:center}
+.pay-column-head span:first-child{text-align:left}
+.pay-column-head span:last-child{text-align:right}
+.pay-row{min-height:7mm;height:7mm}
+.pay-row span{font-size:7.2pt;font-weight:900}
+.pay-row b{font-size:7.8pt;font-weight:800;text-align:center;white-space:nowrap;letter-spacing:-.15px}
+.pay-row small{font-size:8pt;font-weight:800;text-align:center}
+.pay-row strong{font-size:9pt;text-align:right;white-space:nowrap;font-weight:900}
+.pay-extra,.pay-net{display:flex;align-items:center;justify-content:space-between;gap:2mm;padding:.2mm 1.6mm}
+.pay-extra{height:5.5mm;min-height:5.5mm}
+.pay-extra span{font-size:7pt;font-weight:800}
+.pay-extra strong{font-size:8pt;white-space:nowrap}
+.pay-net{min-height:6.3mm;flex:1;background:#f3f3f3}
+.pay-net span{font-size:7.7pt;font-weight:900}
+.pay-net strong{font-size:10.5pt;font-weight:900;white-space:nowrap}
+.page-grand{margin-top:auto;min-height:12mm;height:12mm;display:flex;align-items:center;justify-content:space-between;border:2px solid #000;padding:1.6mm 4mm;break-inside:avoid}
+.page-grand span{font-size:10pt;font-weight:900}
+.page-grand strong{font-size:16pt;font-weight:900;white-space:nowrap}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.pay-page{break-inside:avoid;page-break-inside:avoid}.pay-card{break-inside:avoid;page-break-inside:avoid}}`,
   });
 }
 function wageRangeLabel(row, shift, dates) {
