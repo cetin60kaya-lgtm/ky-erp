@@ -9,7 +9,9 @@
     "start": "electron .",
     "dist": "electron-builder --win portable",
     "check": "node --check app/server.js && node --check app/public/app.js && node --check main.cjs",
-    "test": "node test/smoke.cjs"
+    "test": "node test/smoke.cjs && node test/import-history.cjs",
+    "test:import": "node test/import-history.cjs",
+    "import:history": "node tools/import-history.cjs"
   },
   "devDependencies": {
     "electron": "44.5.1",
