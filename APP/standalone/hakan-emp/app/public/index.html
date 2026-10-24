@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>HAKAN EMP</title>
 <meta name="theme-color" content="#2f2d43">
-<link rel="stylesheet" href="/app.css?v=final12">
+<link rel="stylesheet" href="/app.css?v=archive12">
 </head>
 <body>
 <div class="app-shell">
@@ -51,7 +51,7 @@
 
       <div class="panel flush pool-panel">
         <div class="module-toolbar">
-          <div class="tabs"><button class="tab active" data-prod-view="OPEN">İmalat Havuzu</button><button class="tab" data-prod-view="DONE">Tamamlananlar</button></div>
+          <div class="tabs"><button class="tab active" data-prod-view="OPEN">İmalat Havuzu</button><button class="tab" data-prod-view="DONE">Tamamlananlar</button><button class="tab" data-prod-view="REGISTER">Tüm İmalat İşleri</button><button class="tab" data-prod-view="MODELS">Model Kataloğu</button></div>
           <div class="filters"><div class="search"><span>⌕</span><input id="prodSearch" placeholder="Model ara"></div><select id="prodStatus"><option value="">Tüm durumlar</option><option value="NEED_DISPATCH">İrsaliye iste</option><option value="DISPATCH_SHORT">İrsaliye eksik</option><option value="INVOICE">Fatura kesilecek</option><option value="PRODUCTION">Üretim devam</option></select></div>
         </div>
         <div class="pool-note">Açık model haftalar boyunca havuzda kalır. Seçili hafta yalnız üretim fişlerini ayırır. İrsaliye + fatura tamamlanınca model otomatik Tamamlananlar'a geçer.</div>
@@ -73,6 +73,24 @@
         </div>
         <div class="archive-scroll"><table class="archive-table"><thead><tr><th>Model / Firma</th><th>Üretim dönemi</th><th>Gelen</th><th>Üretilen</th><th>İrsaliye</th><th>Fatura</th><th>Durum</th></tr></thead><tbody id="archiveRows"></tbody></table></div>
         <div class="archive-footer"><span id="archiveRange">—</span><div><button id="archivePrev" type="button">← Önceki</button><span id="archivePageLabel">1 / 1</span><button id="archiveNext" type="button">Sonraki →</button></div></div>
+      </div>
+
+      <div class="panel register-panel hidden" id="manufacturingRegister">
+        <div class="register-head"><div><h2 id="registerTitle">Tüm İmalat İşleri</h2>
+          <p>Yıllara göre tüm işler; haftalık üretim görünümünden bağımsız.</p></div>
+          <strong id="registerTotal">0 kayıt</strong></div>
+        <div class="register-filters">
+          <label>İş Yılı<select id="registerYear" aria-label="İmalat iş yılı"><option value="">Tüm yıllar</option></select></label>
+          <label>Durum<select id="registerStatus" aria-label="İmalat durumu">
+            <option value="ALL">Tümü</option><option value="OPEN">Açık / Bekleyen</option>
+            <option value="TAMAM">Tamamlanan</option></select></label>
+          <label>Firma<select id="registerCompany" aria-label="İmalat firması"><option value="">Tüm firmalar</option></select></label>
+          <label class="register-search">Ara<input id="registerSearch" aria-label="Arşivde model ara" placeholder="Model, firma veya sipariş..." autocomplete="off"></label>
+        </div>
+        <div id="registerSummary" class="register-summary"></div>
+        <div id="registerColumns" class="register-columns"></div>
+        <div id="registerRows"></div>
+        <div class="register-pagination" id="registerPagination"></div>
       </div>
     </section>
 
@@ -240,5 +258,5 @@
 
 <div class="modal" id="modal"></div>
 <div id="toast"></div>
-<script src="/app.js?v=final12"></script>
+<script src="/app.js?v=archive12"></script>
 </body></html>
