@@ -251,3 +251,34 @@
 /* Prevent browser-native datalist from occupying the whole screen with 1800+ historical options. */
 .modal-card{max-height:min(90vh,860px)}
 .field input,.field select,.field textarea{font-size:13px}
+
+
+/* İmalat havuzu: weekly operating view remains, year/status archive is separate. */
+.register-panel{margin-top:12px;overflow-x:auto}
+.register-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 15px;border-bottom:1px solid var(--line)}
+.register-head h2{margin:0;font-size:14px}.register-head p{margin:4px 0 0;color:var(--muted);font-size:9px}
+.register-head strong{font-size:11px;color:var(--blue)}
+.register-filters{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding:11px 14px;background:#f9fafc}
+.register-filters label{display:grid;gap:4px;font-size:9px;color:#697789;font-weight:800}
+.register-filters select,.register-filters input{height:34px;border:1px solid #d5dce5;border-radius:7px;background:#fff;padding:6px 9px;color:var(--ink);font-size:11px;min-width:120px}
+.register-search{min-width:200px;flex:1}.register-search input{width:100%}
+.register-summary{display:flex;gap:15px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line)}
+.register-summary span{font-size:10px;color:var(--muted)}.register-summary b{font-size:11px;color:var(--ink)}
+.register-columns,.register-row{display:grid;gap:10px;align-items:center;min-width:920px}
+.job-register-grid{grid-template-columns:minmax(195px,1.8fr) minmax(115px,1fr) 50px repeat(4,75px) minmax(150px,1fr)}
+.model-register-grid{grid-template-columns:minmax(220px,2fr) minmax(150px,1.15fr) repeat(3,80px) 110px}
+.register-columns{padding:9px 12px;background:#f5f7fa;font-size:9px;font-weight:900;color:#697789}
+.register-row{width:100%;min-height:48px;padding:9px 12px;border:0;border-bottom:1px solid var(--line2);background:#fff;text-align:left;font-size:10px;color:var(--ink);cursor:pointer}
+.register-row:hover,.register-row:focus-visible{background:#eef2ff;outline-color:var(--blue)}
+.register-row .cell-main small{white-space:normal;line-height:1.3}
+.register-pagination{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:10px 14px;font-size:10px}
+.register-pagination button{padding:7px 12px;background:#fff;border:1px solid var(--line);border-radius:7px}
+.register-pagination button:disabled{opacity:.4;cursor:default}
+.register-detail{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;padding:14px}
+.register-detail>div:not(.form-actions){display:grid;gap:5px;border:1px solid var(--line);border-radius:8px;padding:10px}
+.register-detail strong{font-size:11px;overflow-wrap:anywhere}.register-detail small{font-size:9px;color:var(--muted)}
+.model-picker{position:relative}.model-picker>small{font-size:9px;color:var(--muted);font-weight:500}
+.model-picker-options{max-height:190px;overflow-y:auto;border:1px solid #cbd5e7;border-radius:8px;box-shadow:0 6px 16px #0001}
+.model-picker-options button{display:block;width:100%;background:#fff;color:var(--ink);padding:8px 10px;border:0;border-bottom:1px solid var(--line2);text-align:left;font-size:11px}
+.model-picker-options button:hover,.model-picker-options button:focus-visible{background:#edf2ff}
+@media(max-width:860px){.register-filters label{flex:1}.register-detail{grid-template-columns:repeat(2,minmax(0,1fr))}.pool-panel .tabs{max-width:calc(100vw - 32px);overflow-x:auto}}
