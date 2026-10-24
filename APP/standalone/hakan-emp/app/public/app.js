@@ -102,7 +102,8 @@ function renderRegister(){
  $('#registerTitle').textContent=models?'Model Kataloğu':'Tüm İmalat İşleri';
  $('#registerTotal').textContent=fmt(r.total)+' kayıt';
  $('#registerSummary').innerHTML='<span>Açık işler <b>'+fmt(sum.open)+'</b></span>'+
-  '<span>Tamamlanan <b>'+fmt(sum.completed)+'</b></span><span>Toplam <b>'+fmt(sum.all)+'</b></span>';
+  '<span>Tamamlanan <b>'+fmt(sum.completed)+'</b></span><span>Toplam <b>'+fmt(sum.all)+'</b></span>'+
+  (models?'<small>Yıl ve durum yalnız gösterilen modelleri filtreler; iş adetleri modelin bütün geçmişidir.</small>':'');
  const y=$('#registerYear'),oldYear=y.value;
  y.innerHTML='<option value="">Tüm yıllar</option>'+r.years.map(yr=>'<option value="'+esc(yr)+'">'+esc(yr)+'</option>').join('');
  y.value=oldYear;
@@ -112,7 +113,7 @@ function renderRegister(){
  const grid=models?'model-register-grid':'job-register-grid';
  $('#registerColumns').className='register-columns '+grid;
  $('#registerColumns').innerHTML=models?
- '<span>MODEL</span><span>FİRMA</span><span>AÇIK</span><span>TAMAMLANAN</span><span>TOPLAM İŞ</span><span>SON İŞLEM</span>':
+ '<span>MODEL</span><span>FİRMA</span><span>GENEL AÇIK</span><span>GENEL TAMAM</span><span>TOPLAM İŞ</span><span>SON İŞLEM</span>':
  '<span>MODEL / İŞ</span><span>FİRMA</span><span>YIL</span><span>GELEN</span><span>ÜRETİLEN</span><span>İRSALİYE</span><span>FATURA</span><span>DURUM</span>';
  $('#registerRows').innerHTML=r.rows.length?r.rows.map(x=>{
   if(models)return '<button type="button" class="register-row '+grid+'" data-register-model="'+x.model_id+'">'+
