@@ -77,8 +77,98 @@ $('#archiveSearch').onkeydown=e=>{if(e.key==='Enter'){archivePage=1;loadArchive(
 $('#archivePrev').onclick=()=>{archivePage=Math.max(1,archivePage-1);loadArchive()};
 $('#archiveNext').onclick=()=>{archivePage++;loadArchive()};
 
+
+let registerData={rows:[],total:0,page:1,size:30,summary:{},years:[],companies:[]};
+let registerRequest=0,registerSearchTimer;
+const isRegisterView=()=>prodView==='REGISTER'||prodView==='MODELS';
+async function loadRegister(page=1){
+ if(!isRegisterView())return;
+ const request=++registerRequest;
+ const query=new URLSearchParams({
+  kind:prodView==='MODELS'?'models':'jobs',
+  year:$('#registerYear').value,status:$('#registerStatus').value,
+  companyId:$('#registerCompany').value,search:$('#registerSearch').value.trim(),
+  page:String(page)
+ });
+ $('#registerRows').innerHTML='<div class="empty">Kayıtlar okunuyor...</div>';
+ try{
+  const data=await api('/api/manufacturing-register?'+query.toString());
+  if(request!==registerRequest)return;
+  registerData=data;renderRegister();
+ }catch(err){if(request===registerRequest)$('#registerRows').innerHTML='<div class="empty">'+esc(err.message)+'</div>'}
+}
+function renderRegister(){
+ const models=prodView==='MODELS',r=registerData,sum=r.summary||{};
+ $('#registerTitle').textContent=models?'Model Kataloğu':'Tüm İmalat İşleri';
+ $('#registerTotal').textContent=fmt(r.total)+' kayıt';
+ $('#registerSummary').innerHTML='<span>Açık işler <b>'+fmt(sum.open)+'</b></span>'+
+  '<span>Tamamlanan <b>'+fmt(sum.completed)+'</b></span><span>Toplam <b>'+fmt(sum.all)+'</b></span>';
+ const y=$('#registerYear'),oldYear=y.value;
+ y.innerHTML='<option value="">Tüm yıllar</option>'+r.years.map(yr=>'<option value="'+esc(yr)+'">'+esc(yr)+'</option>').join('');
+ y.value=oldYear;
+ const c=$('#registerCompany'),oldCompany=c.value;
+ c.innerHTML='<option value="">Tüm firmalar</option>'+r.companies.map(x=>'<option value="'+x.id+'">'+esc(x.name)+'</option>').join('');
+ c.value=oldCompany;
+ const grid=models?'model-register-grid':'job-register-grid';
+ $('#registerColumns').className='register-columns '+grid;
+ $('#registerColumns').innerHTML=models?
+ '<span>MODEL</span><span>FİRMA</span><span>AÇIK</span><span>TAMAMLANAN</span><span>TOPLAM İŞ</span><span>SON İŞLEM</span>':
+ '<span>MODEL / İŞ</span><span>FİRMA</span><span>YIL</span><span>GELEN</span><span>ÜRETİLEN</span><span>İRSALİYE</span><span>FATURA</span><span>DURUM</span>';
+ $('#registerRows').innerHTML=r.rows.length?r.rows.map(x=>{
+  if(models)return '<button type="button" class="register-row '+grid+'" data-register-model="'+x.model_id+'">'+
+   '<span class="cell-main"><b>'+esc(x.model_name)+'</b></span><span>'+esc(x.company_name||'Firma belirtilmedi')+'</span>'+
+   '<b>'+fmt(x.open_jobs)+'</b><b>'+fmt(x.completed_jobs)+'</b><b>'+fmt(x.total_jobs)+'</b>'+
+   '<span>'+dateTR(x.last_date)+'</span></button>';
+  return '<button type="button" class="register-row '+grid+'" data-register-batch="'+x.batch_id+'">'+
+   '<span class="cell-main"><b>'+esc(x.model_name)+'</b><small>İş #'+x.batch_id+' · '+esc(x.batch_no||'')+
+    (x.order_no?' · '+esc(x.order_no):'')+'</small></span>'+
+   '<span>'+esc(x.company_name||'Firma belirtilmedi')+'</span><span>'+esc((x.first_date||x.last_date||'').slice(0,4)||'—')+'</span>'+
+   '<b>'+fmt(x.incoming_qty)+'</b><b>'+fmt(x.produced_qty)+'</b><b>'+fmt(x.dispatch_qty)+'</b>'+
+   '<b>'+fmt(x.invoice_qty)+'</b><span class="status '+(x.status==='TAMAM'?'green':x.color||'orange')+'">'+
+   (x.status==='TAMAM'?'Tamamlandı':esc(x.action||'Bekliyor'))+'</span></button>';
+ }).join(''):'<div class="empty">Bu filtreye ait kayıt bulunamadı.</div>';
+ $$('#registerRows [data-register-model]').forEach(b=>b.onclick=()=>{
+  const x=r.rows.find(x=>Number(x.model_id)===Number(b.dataset.registerModel));
+  if(x&&x.total_jobs===0)return toast('Bu modelin henüz imalat işi yok');
+  openModel(Number(b.dataset.registerModel));
+ });
+ $$('#registerRows [data-register-batch]').forEach(b=>b.onclick=()=>openRegisterBatch(Number(b.dataset.registerBatch)));
+ const pages=Math.max(1,Math.ceil(r.total/r.size));
+ $('#registerPagination').innerHTML='<button id="registerPrev" '+(r.page===1?'disabled':'')+'>← Önceki</button>'+
+  '<span>Sayfa '+fmt(r.page)+' / '+fmt(pages)+'</span><button id="registerNext" '+(r.page>=pages?'disabled':'')+'>Sonraki →</button>';
+ $('#registerPrev').onclick=()=>loadRegister(Math.max(1,r.page-1));
+ $('#registerNext').onclick=()=>loadRegister(Math.min(pages,r.page+1));
+}
+function openRegisterBatch(id){
+ const x=(registerData.rows||[]).find(x=>Number(x.batch_id)===id);
+ if(!x)return toast('İş bulunamadı');
+ const fields=[
+  ['Model',x.model_name],['İş / Tekrar','#'+x.batch_id+' · '+(x.batch_no||'')],
+  ['Firma',x.company_name||'—'],['Başlangıç',dateTR(x.first_date)],
+  ['Tamamlanma',x.status==='TAMAM'?dateTR(x.completed_at):'Açık'],
+  ['Gelen',fmt(x.incoming_qty)],['Üretilen',fmt(x.produced_qty)],
+  ['İrsaliye',fmt(x.dispatch_qty)],['Fatura',fmt(x.invoice_qty)],
+  ['Durum',x.status==='TAMAM'?'Tamamlandı':x.action||'Bekliyor']
+ ];
+ const fieldsHtml=fields.map(v=>'<div><small>'+esc(v[0])+'</small><strong>'+esc(v[1])+'</strong></div>').join('');
+ modal('İmalat İş Kartı','Seçili işi incele. Model kartı bütün tekrar işlerinin tarihçesini gösterir.',
+  '<div class="register-detail">'+fieldsHtml+
+  '<div class="form-actions"><button type="button" onclick="closeModal()">Kapat</button>'+
+  '<button type="button" class="primary" id="registerOpenModel">Model Kartını Aç</button></div></div>');
+ $('#registerOpenModel').onclick=()=>{closeModal();openModel(x.model_id)};
+}
+window.openRegisterBatch=openRegisterBatch;
+['registerYear','registerStatus','registerCompany'].forEach(id=>$('#'+id).onchange=()=>loadRegister(1));
+$('#registerSearch').oninput=()=>{clearTimeout(registerSearchTimer);registerSearchTimer=setTimeout(()=>loadRegister(1),220)};
 function renderProduction(){
  const sm=core.summary||{};updateWeekUi();
+ const registry=isRegisterView();
+ $('#manufacturingRegister').classList.toggle('hidden',!registry);
+ $('#prodRows').classList.toggle('hidden',registry);
+ $('.pool-panel .table-head').classList.toggle('hidden',registry);
+ $('.pool-panel .pool-note').classList.toggle('hidden',registry);
+ $('.pool-panel .filters').classList.toggle('hidden',registry);
+ if(registry)return;
  $('#sOpen').textContent=fmt(sm.open);
  $('#sWeekModels').textContent=fmt(sm.weekModels);
  $('#sWeekProduced').textContent=fmt(sm.weekProduced);
@@ -99,20 +189,36 @@ function renderProduction(){
    <div><span class="status ${r.color||'green'}">${prodView==='DONE'?'TAMAM':esc(r.action)}</span></div>
   </div>`).join(''):'<div class="empty">'+(prodView==='OPEN'?'Havuzda açık iş yok.':'Tamamlanan iş yok.')+'</div>'
 }
-$$('[data-prod-view]').forEach(b=>b.onclick=()=>{$$('[data-prod-view]').forEach(x=>x.classList.remove('active'));b.classList.add('active');prodView=b.dataset.prodView;$('#prodStatus').disabled=prodView==='DONE';renderProduction()});
+$$('[data-prod-view]').forEach(b=>b.onclick=()=>{$$('[data-prod-view]').forEach(x=>x.classList.remove('active'));b.classList.add('active');prodView=b.dataset.prodView;$('#prodStatus').disabled=prodView==='DONE';renderProduction();if(isRegisterView())loadRegister(1)});
 $('#prodSearch').oninput=renderProduction;$('#prodStatus').onchange=renderProduction;
 
 function openJob(){
  modal('Yeni İmalat İşi','Gelen toplam adedi yaz; bundan sonra bütün takip bu modelde yürür.',`
  <form class="form" id="jobForm">
   <label class="field">Firma<select name="companyId">${companyOptions(defaultCompanyId())}</select></label>
-  <label class="field full">Model<input name="modelName" list="models" required autofocus placeholder="Model adını yaz veya ilk 120 öneriden seç" autocomplete="off"><datalist id="models">${(core.models||[]).slice(0,120).map(m=>`<option value="${esc(m.name)}"></option>`).join('')}</datalist></label>
+  <label class="field full model-picker">Model
+  <input name="modelName" id="jobModelSearch" required autofocus autocomplete="off" placeholder="Model yaz veya seç">
+  <small>En fazla 8 öneri gösterilir. Tam liste: İmalat → Model Kataloğu.</small>
+  <div id="jobModelChoices" class="model-picker-options hidden"></div></label>
   <label class="field">Gelen İmalat Adedi<input name="expectedQty" type="number" min="1" required></label>
   <label class="field">Zemin Rengi<input name="ground" required placeholder="Siyah / Ekru / Lacivert"></label>
   <label class="field">Başlangıç Tarihi<input name="date" type="date" value="${today()}" required></label>
   <label class="field full">Sipariş No (opsiyonel)<input name="orderNo"></label>
   <div class="form-actions"><button type="button" onclick="closeModal()">Vazgeç</button><button class="primary">İşi Aç</button></div>
  </form>`);
+ const modelInput=$('#jobModelSearch'),choices=$('#jobModelChoices'),firm=$('#jobForm [name="companyId"]');
+ const updateModelChoices=()=>{
+  const q=norm(modelInput.value),matches=(core.models||[])
+   .filter(m=>!firm.value||Number(m.company_id)===Number(firm.value))
+   .filter(m=>!q||norm(m.name).includes(q)).slice(0,8);
+  choices.innerHTML=matches.map(m=>'<button type="button" data-model-choice="'+esc(m.name)+'">'+esc(m.name)+'</button>').join('');
+  choices.classList.toggle('hidden',!matches.length);
+  choices.querySelectorAll('button').forEach(b=>{b.onmousedown=e=>e.preventDefault();b.onclick=()=>{modelInput.value=b.dataset.modelChoice;choices.classList.add('hidden');modelInput.focus()}});
+ };
+ modelInput.onfocus=updateModelChoices;modelInput.oninput=updateModelChoices;
+ modelInput.onkeydown=e=>{if(e.key==='Escape')choices.classList.add('hidden')};
+ modelInput.onblur=()=>setTimeout(()=>choices.classList.add('hidden'),120);
+ firm.onchange=updateModelChoices;
  $('#jobForm').onsubmit=async e=>{e.preventDefault();try{await post('/api/job',Object.fromEntries(new FormData(e.target)));closeModal();toast('İmalat işi açıldı');await loadAll()}catch(err){toast(err.message)}}
 }
 window.openJob=openJob;
@@ -490,6 +596,6 @@ function renderSync(){const ok=!!sync.enabled;$('#sideSyncDot').classList.toggle
 $('#syncNow').onclick=async()=>{try{await post('/api/sync/now',{});toast('Senkron tamamlandı');await loadAll()}catch(e){toast(e.message)}};
 $('#backupNow').onclick=async()=>{await post('/api/backup',{});toast('Tam yedek alındı')};
 
-async function loadAll(){try{[core,done,cari,allCompanies,machinesAll,notes,reminders,checks,invoicePool,sync,settings]=await Promise.all([api('/api/dashboard?week='+encodeURIComponent(weekCursor)),api('/api/completed?week='+encodeURIComponent(weekCursor)),api('/api/companies'),api('/api/companies-all'),api('/api/machines-all'),api('/api/notes'),api('/api/reminders'),api('/api/checks'),api('/api/invoice-pool'),api('/api/sync/status'),api('/api/settings')]);if(!selectedCompanyId&&cari.rows?.[0])selectedCompanyId=n(cari.rows[0].id);renderProduction();renderCari();renderInvoicePool();renderChecks();renderSettingsCompanies();renderOperators();renderMachines();renderNotes();renderReminders();renderSync();renderSettingForms()}catch(e){toast(e.message)}}
+async function loadAll(){try{[core,done,cari,allCompanies,machinesAll,notes,reminders,checks,invoicePool,sync,settings]=await Promise.all([api('/api/dashboard?week='+encodeURIComponent(weekCursor)),api('/api/completed?week='+encodeURIComponent(weekCursor)),api('/api/companies'),api('/api/companies-all'),api('/api/machines-all'),api('/api/notes'),api('/api/reminders'),api('/api/checks'),api('/api/invoice-pool'),api('/api/sync/status'),api('/api/settings')]);if(!selectedCompanyId&&cari.rows?.[0])selectedCompanyId=n(cari.rows[0].id);renderProduction();renderCari();renderInvoicePool();renderChecks();renderSettingsCompanies();renderOperators();renderMachines();renderNotes();renderReminders();renderSync();renderSettingForms();if(isRegisterView())await loadRegister(1)}catch(e){toast(e.message)}}
 $('#refreshBtn').onclick=async()=>{await loadAll();toast('Güncellendi')};
 loadAll();
