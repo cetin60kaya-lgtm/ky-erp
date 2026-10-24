@@ -106,7 +106,7 @@ function openJob(){
  modal('Yeni İmalat İşi','Gelen toplam adedi yaz; bundan sonra bütün takip bu modelde yürür.',`
  <form class="form" id="jobForm">
   <label class="field">Firma<select name="companyId">${companyOptions(defaultCompanyId())}</select></label>
-  <label class="field full">Model<input name="modelName" list="models" required autofocus placeholder="A MODELİ"><datalist id="models">${(core.models||[]).map(m=>`<option value="${esc(m.name)}"></option>`).join('')}</datalist></label>
+  <label class="field full">Model<input name="modelName" list="models" required autofocus placeholder="Model adını yaz veya ilk 120 öneriden seç" autocomplete="off"><datalist id="models">${(core.models||[]).slice(0,120).map(m=>`<option value="${esc(m.name)}"></option>`).join('')}</datalist></label>
   <label class="field">Gelen İmalat Adedi<input name="expectedQty" type="number" min="1" required></label>
   <label class="field">Zemin Rengi<input name="ground" required placeholder="Siyah / Ekru / Lacivert"></label>
   <label class="field">Başlangıç Tarihi<input name="date" type="date" value="${today()}" required></label>
