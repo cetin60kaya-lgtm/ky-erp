@@ -255,7 +255,7 @@ function productionArchive(query){
  const size=Math.max(10,Math.min(100,num(query.get('size'))||50));
  const where=[],params=[];
  if(year){if(!/^(19|20)\d{2}$/.test(year))throw Error('Yıl geçersiz');where.push("EXISTS(SELECT 1 FROM entries ey WHERE ey.batch_id=b.id AND ey.date>=? AND ey.date<?)");params.push(year+'-01-01',String(Number(year)+1)+'-01-01')}
- if(status&&status!=='ALL'){if(!['OPEN','TAMAM'].includes(status))throw Error('Durum geçersiz');where.push('b.status=?');params.push(status)}
+ if(status&&status!=='ALL'){if(!['OPEN','TAMAM','HISTORICAL'].includes(status))throw Error('Durum geçersiz');if(status==='HISTORICAL')where.push("b.order_no LIKE 'XLSM-%'");else if(status==='TAMAM')where.push("b.status='TAMAM' AND COALESCE(b.order_no,'') NOT LIKE 'XLSM-%'");else{where.push('b.status=?');params.push(status)}}
  if(companyId){where.push('m.company_id=?');params.push(companyId)}
  if(search){where.push('(m.name LIKE ? OR b.ground LIKE ? OR b.order_no LIKE ?)');const q='%'+search.slice(0,100).replace(/[\\%_]/g,'\\function companyRows(activeOnly=true)')+'%';params.push(q,q,q)}
  const filter=where.length?' WHERE '+where.join(' AND '):'';
