@@ -66,6 +66,24 @@ function ok(v,m){if(!v)throw new Error('ASSERT '+m)}
   ok(!openAfter.rows.some(x=>x.model_id===job.modelId),'completed model leaves active pool');
   ok(doneAfter.rows.some(x=>x.model_id===job.modelId&&x.status==='TAMAM'),'completed model enters completed pool');
 
+  // Historical model and every repeat batch must remain browsable across years.
+  const y26=await api('/api/manufacturing-register?kind=jobs&year=2026&status=TAMAM');
+  ok(y26.rows.some(x=>x.batch_id===job.batchId),'completed batch in 2026 archive');
+  const open26=await api('/api/manufacturing-register?kind=jobs&year=2026&status=OPEN');
+  ok(!open26.rows.some(x=>x.batch_id===job.batchId),'completed batch excluded from open queue');
+  const y25=await api('/api/manufacturing-register?kind=jobs&year=2025');
+  ok(!y25.rows.some(x=>x.batch_id===job.batchId),'year filter isolates batches');
+  const filteredFirm=await api('/api/manufacturing-register?kind=jobs&companyId='+c.id);
+  ok(filteredFirm.rows.some(x=>x.batch_id===job.batchId),'company filter finds job');
+  const wrongFirm=await api('/api/manufacturing-register?kind=jobs&companyId=999999');
+  ok(!wrongFirm.rows.some(x=>x.batch_id===job.batchId),'other company excluded');
+  const models=await api('/api/manufacturing-register?kind=models&search=SMOKE');
+  ok(models.rows.some(x=>x.model_name==='SMOKE MODEL'&&x.completed_jobs>=1),'model catalog');
+  const repeat=await api('/api/job','POST',{companyId:c.id,modelName:'SMOKE MODEL',expectedQty:90,ground:'SİYAH',date:'2025-11-03'});
+  const allYear=await api('/api/manufacturing-register?kind=jobs&search=SMOKE%20MODEL');
+  ok(allYear.rows.some(x=>x.batch_id===job.batchId)&&allYear.rows.some(x=>x.batch_id===repeat.batchId),'repeat jobs keep distinct IDs');
+  const repeatYear=await api('/api/manufacturing-register?kind=jobs&year=2025&status=OPEN');
+  ok(repeatYear.rows.some(x=>x.batch_id===repeat.batchId),'repeat year is searchable');
   const ip=await api('/api/invoice-pool');
   ok(ip&&ip.folders&&ip.folders.invoiceInboxDir,'invoice pool folders');
   ok(Array.isArray(ip.rows),'invoice pool rows');
@@ -97,3 +115,8 @@ if(!uiHtml.includes('id="invoicePool"')||!uiHtml.includes('data-setting="files"'
 if(!uiJs.includes('İŞLENDİ ✓')||!uiJs.includes('renderInvoicePool'))throw new Error('invoice pool status guard');
 const serverJs=fs.readFileSync(path.join(root,'app','server.js'),'utf8');
 if(!serverJs.includes('setInterval(()=>scanInvoicePool(false)')||!serverJs.includes("require('pdf-parse')"))throw new Error('invoice watcher guard');
+
+if(!uiHtml.includes('data-prod-view="REGISTER"')||!uiHtml.includes('data-prod-view="MODELS"'))throw Error('yearly register tabs missing');
+if(!uiJs.includes('function renderRegister()')||!uiJs.includes('id="jobModelChoices"'))throw Error('model archive and bounded selector missing');
+if(uiJs.includes('list="models"'))throw Error('unbounded model dropdown still exists');
+if(!serverJs.includes("'/api/manufacturing-register'"))throw Error('archive API missing');
