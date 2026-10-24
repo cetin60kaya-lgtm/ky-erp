@@ -12,8 +12,8 @@ async function api(url,opt){const r=await fetch(url,opt);let j={};try{j=await r.
 const post=(u,x)=>api(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(x)});
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(window.__t);window.__t=setTimeout(()=>e.classList.remove('show'),1800)}
 
-const meta={production:['HAKAN EMP / İMALAT','İmalat Havuzu','Haftalık üretim fişleri + açık iş havuzu + irsaliye/fatura dengesi.'],cari:['HAKAN EMP / CARİ','Cari Takip','Firma seç, bakiye ve bütün hareketleri tek ekranda gör.'],invoicePool:['HAKAN EMP / FATURA','Fatura Havuzu','PDF klasörünü otomatik oku, modeli eşleştir ve faturayı havuza işle.'],checks:['HAKAN EMP / ÇEK','Çek Takip','Ay ay ayrılmış çekler, toplamlar, makbuz ve çıktı.'],settings:['HAKAN EMP / AYARLAR','Ayarlar','Firma, imalat, makine, cari, çek, dosya ve senkron ayarları.'],notes:['HAKAN EMP / NOTLAR','Notlarım','Patron ile muhasebe arasındaki aktif not ve görev panosu.'],reminders:['HAKAN EMP / ÖDEME','Ödeme Hatırlatma','Yaklaşan, geciken ve ödenen ödemeleri takip et.']};
-function navigate(p){$$('.page').forEach(x=>x.classList.remove('active'));$$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===p));$('#'+p).classList.add('active');$('#crumb').textContent=meta[p][0];$('#pageTitle').textContent=meta[p][1];$('#pageSub').textContent=meta[p][2];if(p==='production')renderProduction();if(p==='cari')renderCari();if(p==='invoicePool')renderInvoicePool();if(p==='checks')renderChecks();if(p==='settings')renderSettings();if(p==='notes')renderNotes();if(p==='reminders')renderReminders()}
+const meta={archive:['HAKAN EMP / ARŞİV','İmalat Arşivi','Tüm yıllar · tüm partiler · bekleyen ve tamamlanan işler.'],production:['HAKAN EMP / İMALAT','İmalat Havuzu','Haftalık üretim fişleri + açık iş havuzu + irsaliye/fatura dengesi.'],cari:['HAKAN EMP / CARİ','Cari Takip','Firma seç, bakiye ve bütün hareketleri tek ekranda gör.'],invoicePool:['HAKAN EMP / FATURA','Fatura Havuzu','PDF klasörünü otomatik oku, modeli eşleştir ve faturayı havuza işle.'],checks:['HAKAN EMP / ÇEK','Çek Takip','Ay ay ayrılmış çekler, toplamlar, makbuz ve çıktı.'],settings:['HAKAN EMP / AYARLAR','Ayarlar','Firma, imalat, makine, cari, çek, dosya ve senkron ayarları.'],notes:['HAKAN EMP / NOTLAR','Notlarım','Patron ile muhasebe arasındaki aktif not ve görev panosu.'],reminders:['HAKAN EMP / ÖDEME','Ödeme Hatırlatma','Yaklaşan, geciken ve ödenen ödemeleri takip et.']};
+function navigate(p){$$('.page').forEach(x=>x.classList.remove('active'));$$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===p));$('#'+p).classList.add('active');$('#crumb').textContent=meta[p][0];$('#pageTitle').textContent=meta[p][1];$('#pageSub').textContent=meta[p][2];if(p==='production')renderProduction();if(p==='archive')loadArchive();if(p==='cari')renderCari();if(p==='invoicePool')renderInvoicePool();if(p==='checks')renderChecks();if(p==='settings')renderSettings();if(p==='notes')renderNotes();if(p==='reminders')renderReminders()}
 $$('.nav-item').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
 
 function syncModalLayers(){
@@ -48,6 +48,34 @@ async function loadProductionPeriod(){
 }
 async function moveWeek(days){weekCursor=weekStartIso(addDaysIso(weekCursor,days));await loadProductionPeriod()} window.moveWeek=moveWeek;
 async function goCurrentWeek(){weekCursor=weekStartIso(today());await loadProductionPeriod()} window.goCurrentWeek=goCurrentWeek;
+
+let archivePage=1,archiveYearsLoaded=false,archiveBusy=false;
+async function loadArchive(){
+ if(archiveBusy)return;archiveBusy=true;
+ try{
+ const params=new URLSearchParams({page:String(archivePage),size:'50'});
+ const year=$('#archiveYear').value,status=$('#archiveStatus').value,company=$('#archiveCompany').value,search=$('#archiveSearch').value.trim();
+ if(year)params.set('year',year);if(status)params.set('status',status);if(company)params.set('companyId',company);if(search)params.set('search',search);
+ const data=await api('/api/production-archive?'+params.toString());
+ if(!archiveYearsLoaded){
+  $('#archiveYear').innerHTML='<option value="">Tüm yıllar</option>'+data.years.map(y=>'<option value="'+esc(y.year)+'">'+esc(y.year)+' ('+fmt(y.entries)+' fiş)</option>').join('');
+  $('#archiveCompany').innerHTML='<option value="">Tüm firmalar</option>'+(allCompanies.rows||[]).map(x=>'<option value="'+n(x.id)+'">'+esc(x.name)+'</option>').join('');
+  archiveYearsLoaded=true;
+ }
+ $('#archiveYears').innerHTML=data.years.map(y=>'<span>'+esc(y.year)+' · '+fmt(y.entries)+' fiş · '+fmt(y.qty)+' adet</span>').join('');
+ $('#archiveRows').innerHTML=data.rows.length?data.rows.map(r=>'<tr tabindex="0" role="button" onclick="openModel('+n(r.model_id)+')" onkeydown="if(event.key===\'Enter\')openModel('+n(r.model_id)+')"><td><b>'+esc(r.model_name)+'</b><small>'+esc(r.company_name||'Firma yok')+' · '+esc(r.ground||'—')+'</small></td><td>'+dateTR(r.production_first_date||r.first_date)+' – '+dateTR(r.production_last_date||r.last_date)+'</td><td>'+fmt(r.expected_qty)+'</td><td>'+fmt(r.produced_qty)+' <small>'+fmt(r.entry_count)+' fiş</small></td><td>'+fmt(r.dispatch_qty)+'</td><td>'+fmt(r.invoice_qty)+'</td><td><span class="status '+(r.status==='OPEN'?'orange':'green')+'">'+(r.status==='OPEN'?'BEKLEYEN':'TAMAMLANAN')+'</span></td></tr>').join(''):'<tr><td colspan="7" class="empty">Bu filtreye uygun kayıt yok.</td></tr>';
+ $('#archiveCount').textContent=fmt(data.total)+' parti';
+ $('#archiveRange').textContent=data.total?fmt((data.page-1)*data.size+1)+'–'+fmt(Math.min(data.page*data.size,data.total))+' / '+fmt(data.total):'0 kayıt';
+ $('#archivePageLabel').textContent=fmt(data.page)+' / '+fmt(data.pages);
+ $('#archivePrev').disabled=data.page<=1;$('#archiveNext').disabled=data.page>=data.pages;
+ }catch(err){toast(err.message)}finally{archiveBusy=false}
+}
+window.loadArchive=loadArchive;
+for(const id of ['archiveYear','archiveStatus','archiveCompany'])$('#'+id).onchange=()=>{archivePage=1;loadArchive()};
+$('#archiveRefresh').onclick=()=>{archivePage=1;loadArchive()};
+$('#archiveSearch').onkeydown=e=>{if(e.key==='Enter'){archivePage=1;loadArchive()}};
+$('#archivePrev').onclick=()=>{archivePage=Math.max(1,archivePage-1);loadArchive()};
+$('#archiveNext').onclick=()=>{archivePage++;loadArchive()};
 
 function renderProduction(){
  const sm=core.summary||{};updateWeekUi();
