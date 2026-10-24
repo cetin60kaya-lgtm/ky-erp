@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>HAKAN EMP</title>
 <meta name="theme-color" content="#2f2d43">
-<link rel="stylesheet" href="/app.css?v=final11">
+<link rel="stylesheet" href="/app.css?v=final12">
 </head>
 <body>
 <div class="app-shell">
@@ -13,6 +13,7 @@
     <div class="brand"><div class="brand-mark">H</div><div><b>HAKAN EMP</b><span>İmalat & Finans</span></div></div>
     <nav class="nav">
       <button class="nav-item active" data-page="production"><i>İ</i><span>İmalat</span></button>
+      <button class="nav-item" data-page="archive"><i>Y</i><span>İmalat Arşivi</span></button>
       <button class="nav-item" data-page="cari"><i>C</i><span>Cari</span></button>
       <button class="nav-item" data-page="invoicePool"><i>F</i><span>Fatura Havuzu</span></button>
       <button class="nav-item" data-page="checks"><i>Ç</i><span>Çek</span></button>
@@ -56,6 +57,22 @@
         <div class="pool-note">Açık model haftalar boyunca havuzda kalır. Seçili hafta yalnız üretim fişlerini ayırır. İrsaliye + fatura tamamlanınca model otomatik Tamamlananlar'a geçer.</div>
         <div class="table-head prod-grid"><span>MODEL</span><span>GELEN</span><span>BU HAFTA</span><span>TOPLAM ÜRETİM</span><span>İRSALİYE</span><span>FATURA</span><span>KALAN</span><span>DURUM</span></div>
         <div id="prodRows"></div>
+      </div>
+    </section>
+
+    <section class="page" id="archive">
+      <div class="panel flush pool-panel archive-panel">
+        <div class="archive-header"><div><h2>İmalat Arşivi</h2><p>Geçmiş ve güncel bütün partiler, üretim fişleri ve takip durumları. Haftalık havuzdan bağımsızdır.</p></div><span id="archiveCount">0 kayıt</span></div>
+        <div class="archive-years" id="archiveYears"></div>
+        <div class="archive-filters">
+          <label>Yıl<select id="archiveYear"><option value="">Tüm yıllar</option></select></label>
+          <label>Durum<select id="archiveStatus"><option value="">Tüm durumlar</option><option value="OPEN">Açık / Bekleyen</option><option value="TAMAM">Tamamlanan</option></select></label>
+          <label>Firma<select id="archiveCompany"><option value="">Tüm firmalar</option></select></label>
+          <label class="archive-search">Model / sipariş ara<input id="archiveSearch" placeholder="Model adı, zemin veya sipariş"></label>
+          <button id="archiveRefresh" type="button">Ara / Yenile</button>
+        </div>
+        <div class="archive-scroll"><table class="archive-table"><thead><tr><th>Model / Firma</th><th>Üretim dönemi</th><th>Gelen</th><th>Üretilen</th><th>İrsaliye</th><th>Fatura</th><th>Durum</th></tr></thead><tbody id="archiveRows"></tbody></table></div>
+        <div class="archive-footer"><span id="archiveRange">—</span><div><button id="archivePrev" type="button">← Önceki</button><span id="archivePageLabel">1 / 1</span><button id="archiveNext" type="button">Sonraki →</button></div></div>
       </div>
     </section>
 
@@ -223,5 +240,5 @@
 
 <div class="modal" id="modal"></div>
 <div id="toast"></div>
-<script src="/app.js?v=final11"></script>
+<script src="/app.js?v=final12"></script>
 </body></html>
