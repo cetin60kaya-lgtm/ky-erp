@@ -248,6 +248,27 @@ function weeklyBatch(batchId,date=today()){const w=weekInfo(date),r=db.prepare(`
 function withWeek(r,date=today()){const base=calc(r);return base?{...base,...weeklyBatch(base.batch_id||base.id,date)}:base}
 function evaluate(id){const r=calc(totals(id));if(!r)return;if(r.action_code==='DONE')db.prepare("UPDATE batches SET status='TAMAM',production_done=1,completed_at=COALESCE(completed_at,?) WHERE id=?").run(nowIso(),id);else db.prepare("UPDATE batches SET status='OPEN',completed_at=NULL,production_done=CASE WHEN ?>=? AND ?>0 THEN 1 ELSE production_done END WHERE id=?").run(r.produced_qty,r.incoming_qty,r.incoming_qty,id)}
 function rows(status='OPEN',week=today()){return db.prepare(`SELECT b.id batch_id,b.model_id,b.expected_qty,b.order_no,b.ground,b.region,b.first_date,b.last_date,b.status,b.production_done,b.completed_at,m.name model_name,m.company_id,c.name company_name,COALESCE((SELECT SUM(qty) FROM entries e WHERE e.batch_id=b.id),0) produced_qty,COALESCE((SELECT SUM(fabric_defect) FROM entries e WHERE e.batch_id=b.id),0) fabric_defect,COALESCE((SELECT SUM(print_defect) FROM entries e WHERE e.batch_id=b.id),0) print_defect,b.dispatch_qty,b.invoice_qty FROM batches b JOIN models m ON m.id=b.model_id LEFT JOIN companies c ON c.id=m.company_id WHERE b.status=? ORDER BY COALESCE(b.completed_at,b.last_date) DESC,b.id DESC LIMIT 500`).all(status).map(r=>withWeek(r,week))}
+function productionArchive(query){
+ const year=txt(query.get('year')),status=txt(query.get('status')).toUpperCase(),companyId=num(query.get('companyId'));
+ const search=txt(query.get('search'));const page=Math.max(1,Math.min(999999,num(query.get('page'))||1));
+ const size=Math.max(10,Math.min(100,num(query.get('size'))||50));
+ const where=[],params=[];
+ if(year){if(!/^(19|20)\d{2}$/.test(year))throw Error('Yıl geçersiz');where.push("EXISTS(SELECT 1 FROM entries ey WHERE ey.batch_id=b.id AND ey.date>=? AND ey.date<?)");params.push(year+'-01-01',String(Number(year)+1)+'-01-01')}
+ if(status&&status!=='ALL'){if(!['OPEN','TAMAM'].includes(status))throw Error('Durum geçersiz');where.push('b.status=?');params.push(status)}
+ if(companyId){where.push('m.company_id=?');params.push(companyId)}
+ if(search){where.push('(m.name LIKE ? OR b.ground LIKE ? OR b.order_no LIKE ?)');const q='%'+search.slice(0,100).replace(/[\\%_]/g,'\\function companyRows(activeOnly=true)')+'%';params.push(q,q,q)}
+ const filter=where.length?' WHERE '+where.join(' AND '):'';
+ const from=' FROM batches b JOIN models m ON m.id=b.model_id LEFT JOIN companies c ON c.id=m.company_id';
+ const total=db.prepare('SELECT COUNT(*) n'+from+filter).get(...params).n;
+ const rows=db.prepare(`SELECT b.id batch_id,b.model_id,b.status,b.first_date,b.last_date,b.expected_qty,b.ground,b.region,b.order_no,m.name model_name,c.name company_name,m.company_id,b.dispatch_qty,b.invoice_qty,
+  (SELECT COUNT(*) FROM entries e WHERE e.batch_id=b.id) entry_count,
+  (SELECT COALESCE(SUM(e.qty),0) FROM entries e WHERE e.batch_id=b.id) produced_qty,
+  (SELECT MIN(e.date) FROM entries e WHERE e.batch_id=b.id) production_first_date,
+  (SELECT MAX(e.date) FROM entries e WHERE e.batch_id=b.id) production_last_date
+  ${from}${filter} ORDER BY COALESCE(b.last_date,b.first_date) DESC,b.id DESC LIMIT ? OFFSET ?`).all(...params,size,(page-1)*size);
+ const years=db.prepare("SELECT substr(date,1,4) year,COUNT(*) entries,COALESCE(SUM(qty),0) qty FROM entries WHERE date GLOB '[12][0-9][0-9][0-9]-*' GROUP BY substr(date,1,4) ORDER BY year DESC").all();
+ return{rows,total,page,size,pages:Math.max(1,Math.ceil(total/size)),years};
+}
 function companyRows(activeOnly=true){const where=activeOnly?'WHERE c.active=1':'';return db.prepare(`SELECT c.*,COALESCE((SELECT SUM(CASE WHEN type='INVOICE' THEN amount ELSE 0 END) FROM company_movements m WHERE m.company_id=c.id),0) invoice_total,COALESCE((SELECT SUM(CASE WHEN type='PAYMENT' THEN amount ELSE 0 END) FROM company_movements m WHERE m.company_id=c.id),0) payment_total,(SELECT COUNT(*) FROM company_movements m WHERE m.company_id=c.id) movement_count FROM companies c ${where} ORDER BY CASE WHEN c.norm=? THEN 0 ELSE 1 END,c.active DESC,c.name`).all(norm('TAHA GİYİM')).map(r=>({...r,balance:num(r.opening_balance)+num(r.invoice_total)-num(r.payment_total)}))}
 function companies(){const rows=companyRows(true),movements=db.prepare(`SELECT m.*,c.name company_name,mo.name model_name FROM company_movements m JOIN companies c ON c.id=m.company_id LEFT JOIN models mo ON mo.id=m.model_id ORDER BY m.date DESC,m.id DESC LIMIT 500`).all();return{rows,movements}}
 function allCompanies(){return{rows:companyRows(false)}}
@@ -333,6 +354,7 @@ function mime(f){const e=path.extname(f).toLowerCase();return e==='.css'?'text/c
 
 async function api(req,res,u){
  if(req.method==='GET'&&u.pathname==='/api/dashboard')return send(res,200,dashboard(u.searchParams.get('week')||today()));
+ if(req.method==='GET'&&u.pathname==='/api/production-archive')return send(res,200,productionArchive(u.searchParams));
  if(req.method==='GET'&&u.pathname==='/api/completed')return send(res,200,{week:weekInfo(u.searchParams.get('week')||today()),rows:rows('TAMAM',u.searchParams.get('week')||today())});
  if(req.method==='GET'&&u.pathname==='/api/model-detail'){const x=detail(num(u.searchParams.get('modelId')),u.searchParams.get('week')||today());return x?send(res,200,x):send(res,404,{error:'Model bulunamadı'})}
  if(req.method==='GET'&&u.pathname==='/api/production-lookup')return send(res,200,productionLookup(u.searchParams.get('model')||''));
