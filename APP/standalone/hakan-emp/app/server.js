@@ -270,6 +270,56 @@ function productionArchive(query){
  const years=db.prepare("SELECT substr(date,1,4) year,COUNT(*) entries,COALESCE(SUM(qty),0) qty FROM entries WHERE date GLOB '[12][0-9][0-9][0-9]-*' GROUP BY substr(date,1,4) ORDER BY year DESC").all();
  return{rows,total,page,size,pages:Math.max(1,Math.ceil(total/size)),years};
 }
+
+function manufacturingRegister(q){
+ const kind=q.get('kind')==='models'?'models':'jobs';
+ const year=txt(q.get('year')||''),status=txt(q.get('status')||'ALL').toUpperCase();
+ if(year&&!/^(19|20)\d{2}$/.test(year))throw Error('Geçersiz yıl');
+ if(!['ALL','OPEN','TAMAM'].includes(status))throw Error('Geçersiz durum');
+ const companyId=num(q.get('companyId')),search=txt(q.get('search')||'').slice(0,100);
+ const page=Math.max(1,Math.min(100000,Math.trunc(num(q.get('page'))||1))),size=30;
+ const yr="substr(COALESCE(NULLIF(b.first_date,''),NULLIF(b.last_date,''),substr(b.created_at,1,10)),1,4)";
+ const years=db.prepare("SELECT DISTINCT "+yr+" y FROM batches b WHERE "+yr+" GLOB '[12][0-9][0-9][0-9]' ORDER BY y DESC").all().map(x=>x.y);
+ const companies=db.prepare("SELECT c.id,c.name FROM companies c JOIN models m ON m.company_id=c.id GROUP BY c.id ORDER BY c.name").all();
+ const clauses=[],args=[];
+ if(year){clauses.push(yr+"=?");args.push(year)}
+ if(companyId){clauses.push("m.company_id=?");args.push(companyId)}
+ if(search){clauses.push("(m.name LIKE ? OR c.name LIKE ? OR COALESCE(b.order_no,'') LIKE ?)");args.push('%'+search+'%','%'+search+'%','%'+search+'%')}
+ const baseWhere=clauses.length?' WHERE '+clauses.join(' AND '):'';
+ const from=" FROM batches b JOIN models m ON m.id=b.model_id LEFT JOIN companies c ON c.id=m.company_id";
+ const counts=db.prepare("SELECT b.status,COUNT(*) c"+from+baseWhere+" GROUP BY b.status").all(...args);
+ const summary={all:0,open:0,completed:0};
+ for(const item of counts){summary.all+=num(item.c);if(item.status==='OPEN')summary.open+=num(item.c);if(item.status==='TAMAM')summary.completed+=num(item.c)}
+ if(kind==='models'){
+  const filters=[],values=[];
+  if(companyId){filters.push("m.company_id=?");values.push(companyId)}
+  if(search){filters.push("(m.name LIKE ? OR c.name LIKE ?)");values.push('%'+search+'%','%'+search+'%')}
+  if(year||status!=='ALL'){
+   const exists=["b.model_id=m.id"];
+   if(year){exists.push(yr+"=?");values.push(year)}
+   if(status!=='ALL'){exists.push("b.status=?");values.push(status)}
+   filters.push("EXISTS (SELECT 1 FROM batches b WHERE "+exists.join(' AND ')+")");
+  }
+  const mw=filters.length?' WHERE '+filters.join(' AND '):'',mf=" FROM models m LEFT JOIN companies c ON c.id=m.company_id";
+  const total=db.prepare("SELECT COUNT(*) c"+mf+mw).get(...values).c;
+  const rows=db.prepare("SELECT m.id model_id,m.name model_name,m.company_id,c.name company_name,"+
+   "(SELECT COUNT(*) FROM batches b WHERE b.model_id=m.id AND b.status='OPEN') open_jobs,"+
+   "(SELECT COUNT(*) FROM batches b WHERE b.model_id=m.id AND b.status='TAMAM') completed_jobs,"+
+   "(SELECT COUNT(*) FROM batches b WHERE b.model_id=m.id) total_jobs,"+
+   "(SELECT MAX(COALESCE(NULLIF(b.last_date,''),b.first_date)) FROM batches b WHERE b.model_id=m.id) last_date"+
+   mf+mw+" ORDER BY m.name COLLATE NOCASE,m.id LIMIT ? OFFSET ?").all(...values,size,(page-1)*size);
+  return{kind,rows,total,page,size,summary,years,companies};
+ }
+ const where=baseWhere+(status==='ALL'?'':(clauses.length?' AND ':' WHERE ')+"b.status=?");
+ const values=status==='ALL'?args:[...args,status];
+ const total=db.prepare("SELECT COUNT(*) c"+from+where).get(...values).c;
+ const ids=db.prepare("SELECT b.id,b.model_id,b.batch_no,b.order_no,b.first_date,b.last_date,b.completed_at,b.status,m.name model_name,c.name company_name"+
+   from+where+" ORDER BY COALESCE(NULLIF(b.completed_at,''),NULLIF(b.last_date,''),b.first_date) DESC,b.id DESC LIMIT ? OFFSET ?")
+   .all(...values,size,(page-1)*size);
+ const rows=ids.map(x=>({batch_id:x.id,...x,...calc(totals(x.id))}));
+ return{kind,rows,total,page,size,summary,years,companies};
+}
+
 function companyRows(activeOnly=true){const where=activeOnly?'WHERE c.active=1':'';return db.prepare(`SELECT c.*,COALESCE((SELECT SUM(CASE WHEN type='INVOICE' THEN amount ELSE 0 END) FROM company_movements m WHERE m.company_id=c.id),0) invoice_total,COALESCE((SELECT SUM(CASE WHEN type='PAYMENT' THEN amount ELSE 0 END) FROM company_movements m WHERE m.company_id=c.id),0) payment_total,(SELECT COUNT(*) FROM company_movements m WHERE m.company_id=c.id) movement_count FROM companies c ${where} ORDER BY CASE WHEN c.norm=? THEN 0 ELSE 1 END,c.active DESC,c.name`).all(norm('TAHA GİYİM')).map(r=>({...r,balance:num(r.opening_balance)+num(r.invoice_total)-num(r.payment_total)}))}
 function companies(){const rows=companyRows(true),movements=db.prepare(`SELECT m.*,c.name company_name,mo.name model_name FROM company_movements m JOIN companies c ON c.id=m.company_id LEFT JOIN models mo ON mo.id=m.model_id ORDER BY m.date DESC,m.id DESC LIMIT 500`).all();return{rows,movements}}
 function allCompanies(){return{rows:companyRows(false)}}
@@ -357,6 +407,7 @@ async function api(req,res,u){
  if(req.method==='GET'&&u.pathname==='/api/dashboard')return send(res,200,dashboard(u.searchParams.get('week')||today()));
  if(req.method==='GET'&&u.pathname==='/api/production-archive')return send(res,200,productionArchive(u.searchParams));
  if(req.method==='GET'&&u.pathname==='/api/completed')return send(res,200,{week:weekInfo(u.searchParams.get('week')||today()),rows:rows('TAMAM',u.searchParams.get('week')||today())});
+ if(req.method==='GET'&&u.pathname==='/api/manufacturing-register'){try{return send(res,200,manufacturingRegister(u.searchParams))}catch(e){return send(res,400,{error:e.message})}}
  if(req.method==='GET'&&u.pathname==='/api/model-detail'){const x=detail(num(u.searchParams.get('modelId')),u.searchParams.get('week')||today());return x?send(res,200,x):send(res,404,{error:'Model bulunamadı'})}
  if(req.method==='GET'&&u.pathname==='/api/production-lookup')return send(res,200,productionLookup(u.searchParams.get('model')||''));
  if(req.method==='GET'&&u.pathname==='/api/companies')return send(res,200,companies());
