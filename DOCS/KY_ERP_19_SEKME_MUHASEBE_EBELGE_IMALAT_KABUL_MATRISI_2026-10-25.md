@@ -1,5 +1,11 @@
 # KY ERP — Muhasebe / e-Belge / İmalat 19 sekme gerçek kabul matrisi
 
+## Son kod ve yayın: 25.10.2026
+- e-Belge #447 ve İmalat #443 Pages #40206928454 SUCCESS, kaynak SHA `19fe5de0ee8639853006e7c7af157cd084f3f46f`, iki merge atası behind=0. Worker #40206650866 zaten SUCCESS, migrations SKIPPED.
+- e-Belge kesin muhasebe kaydı #449: PR merged `719fd60fa97309230944833f95a7398b06630d88`; CI #40207296821 Frontend+Worker SUCCESS. Kayıttan önce belge/cari/tutar/KDV/kalem/LOT önizleme ve açık checkbox zorunlu, çift istek kilidi; ayrı Pages yayını ve gerçek oturumlu onay kabulü bekliyor.
+- 19 sekme hâlâ **KISMİ**; otomatik CI, bundle smoke ve API health kanıtı canlı muhasebe/İşNet/imalat fişi saha kabulü yerine geçmez.
+
+
 ## 25.10.2026 — Güncel kod / CI / release kanıtı
 - PR #446 Muhasebe: CI #40205322671 ve frontend Pages #40205714344 SUCCESS, yayın `ea8f1bf327d38a290cca54c814214da052e80f3d`; merge ancestry behind=0.
 - PR #447 e-Belge: CI #40206047817 SUCCESS, merge `e15d1bcc0f1c30149720a72dc26853e0f27761b5`; Worker #40206650866 SUCCESS yayın SHA `17245ea35ceed2077f193756176dc510da7a8c1f`; Pages frontend yayını ayrı bekliyor.
