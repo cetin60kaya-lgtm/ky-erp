@@ -108,13 +108,13 @@ async function saveReconciliation(c: Context<AppEnv>) {
   if (!["WAITING", "MATCHED", "DIFFERENCE"].includes(statusRaw)) {
     return fail(c, 400, "RECONCILIATION_STATUS_INVALID", "Mutabakat durumu geçersiz.");
   }
-  if (body.period && !/^\\d{4}-(0[1-9]|1[0-2])$/.test(text(body.period))) {
+  if (body.period && !/^\d{4}-(0[1-9]|1[0-2])$/.test(text(body.period))) {
     return fail(c, 400, "RECONCILIATION_PERIOD_INVALID", "Mutabakat dönemi geçersiz.");
   }
   const status = statusRaw;
   const erpBalance = num(company.current_balance), hasCounterparty = body.counterpartyBalance !== "" && body.counterpartyBalance != null;
   const rawCounterparty = text(body.counterpartyBalance);
-  if (hasCounterparty && (!/^-?\\d+(\\.\\d{1,2})?$/.test(rawCounterparty) || !Number.isFinite(Number(rawCounterparty)))) {
+  if (hasCounterparty && (!/^-?\d+(\.\d{1,2})?$/.test(rawCounterparty) || !Number.isFinite(Number(rawCounterparty)))) {
     return fail(c, 400, "RECONCILIATION_BALANCE_INVALID", "Karşı bakiye geçerli bir tutar olmalıdır.");
   }
   if (status !== "WAITING" && !hasCounterparty) {
