@@ -627,7 +627,6 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         <div className="eb-module-grid">
           {providers.map((provider) => {
             const key = String(provider.key || provider.label || "").toUpperCase();
-            const status = String(provider.status || "UNKNOWN").toUpperCase();
             const health = providerDisplayStatus(provider);
             const active = health.active;
             return <article key={key || provider.label} className={`eb-module-card ${active ? "active" : ""}`}><div><strong>{provider.label || key}</strong><span className={`eb-module-status ${active ? "active" : "idle"}`}>{health.label}</span></div><p>{key === "ISNET" ? "İşNet bağlantısı, firma seçimi ve iş kuralları aşağıdaki entegrasyon ayarlarından yönetilir." : "Bu kaynak aynı canonical e-Belge havuzuna belge üretir."}</p><small>Sistem durumu: {provider.status || "-"}</small></article>;
