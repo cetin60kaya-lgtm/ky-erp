@@ -265,7 +265,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
     setBusy("final");
     setError("");
     try {
-      await finalizeEBelge(id);
+      await finalizeEBelge(id, { confirmed: true, expectedUpdatedAt: detail.updated_at || detail.updatedAt || "" });
       setFinalConfirmOpen(false);
       setFinalAcknowledged(false);
       window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", documentId: id } }));
