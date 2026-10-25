@@ -91,5 +91,5 @@ test("link yazma hatasında D1 rollback: yetim production kayıt yok; retry güv
 test("model link tablosu yoksa json_store'a sessiz yazılmaz",async()=>{
   const d=new LocalD1();d.sql.exec("DROP TABLE model_production_links");
   await assert.rejects(()=>commit(d),(e:any)=>e.code==="PRODUCTION_SCHEMA_NOT_READY"||e.code==="PRODUCTION_ATOMIC_WRITE_FAILED");
-  assert.equal(d.snapshot().rows.length,0);
+  assert.equal(d.sql.prepare("SELECT COUNT(*) AS n FROM production_records").get().n,0);
 });
