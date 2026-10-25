@@ -31,6 +31,7 @@ let lastStableRefreshAt=0;
 let accountHydrated=false;
 let trailingRefreshTimer=null;
 let pendingPollTimer=null;
+let pendingRefreshSequence=0;
 let pushSyncAt=0;
 let manualTabSelection=false;
 let lastPendingSignature="";
@@ -286,8 +287,11 @@ function approvalCard(item){
 function escapeHtml(value){return String(value||"").replace(/[&<>"']/g,(ch)=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[ch]))}
 async function decide(item,decision,matchNumber=""){if(busy)return;busy=true;try{const device=await readDevice();if(decision==="APPROVE"){toast("Telefon kilidi doğrulanıyor...");await confirmLocalUnlock(device)}const signature=await signDecision(device,item.kind,item.id,decision,matchNumber);await deviceFetch("/auth/push/device/decision",{method:"POST",body:{kind:item.kind,id:item.id,decision,matchNumber,signature}});await finalizeApprovalNotification(decision);const kind=String(item.kind||"");const critical=kind==="SECURITY_ACTION",session=kind==="SESSION_APPROVAL";toast(decision==="APPROVE"?(critical?"Güvenlik işlemi onaylandı.":session?"Oturum onaylandı.":"Giriş onaylandı. Bilgisayarda KY ERP açılıyor."):(critical?"Güvenlik işlemi reddedildi.":session?"Oturum reddedildi ve kapatıldı.":"Giriş isteği reddedildi."));await refreshPending()}catch(error){toast(error?.message||"Karar gönderilemedi.")}finally{busy=false}}
 async function refreshPending(preloadedItems=null){
+  const requestSequence=++pendingRefreshSequence;
   let items=preloadedItems;
   if(!Array.isArray(items)){const payload=await deviceFetch("/auth/push/device/pending");items=Array.isArray(payload?.data?.items)?payload.data.items:[]}
+  // A delayed foreground poll must not replace a newer push or health result.
+  if(requestSequence!==pendingRefreshSequence)return items;
   const pendingSignature=items.map((item)=>String(item?.kind||"")+":"+String(item?.id||"")).sort().join("|");
   const hasNewPending=Boolean(pendingSignature&&pendingSignature!==lastPendingSignature);
   const firstPendingLoad=!pendingStateHydrated;
@@ -469,7 +473,7 @@ async function refreshState(options={}){
     if(canAutoRepair){
       lastAutoRepairAt=Date.now();
       const repaired=await repairConnection({automatic:true});
-      if(repaired)return refreshState({skipAutoRepair:true});
+      if(repaired){queueTrailingRefresh(300);return;}
     }
 
     const mustRelink=["PUSH_DEVICE_UNAUTHORIZED","PUSH_DEVICE_RECOVERY_UNAUTHORIZED","DEVICE_NOT_READY"].includes(code);
