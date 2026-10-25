@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 
 const source=readFileSync(new URL("./e-belge-center-cloud.ts",import.meta.url),"utf8");
 
-test("e-Belge dashboard bugun sayacini sisteme alinma zamanindan uretir",()=>{
-  assert.match(source,/date\(created_at\)=\?/);
+test("e-Belge dashboard bugun sayacini Istanbul takvim gununden uretir",()=>{
+  assert.match(source,/date\(created_at,'\+3 hours'\)=\?/);
   assert.match(source,/date\(COALESCE\(issue_date,created_at\)\) BETWEEN \? AND \?/);
 });
 
