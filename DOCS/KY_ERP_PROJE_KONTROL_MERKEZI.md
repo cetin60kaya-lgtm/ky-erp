@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 25.10.2026 — Onaylı 104-sekme HTML tasarım + işlev ilk paketi (canlı)
+- **Kullanıcı kararı:** 14 ana bölüm / 104 görünür+bağlamsal sekme için hazırlanan `KY_ERP_104_SEKME_TEK_HTML_TASARIM_ONAY_2026-10-25.html` tasarım yönü onaylandı; tasarım ve gerçek işlemler aynı sözleşme üzerinden ilerler. Görsel sistemin koordinasyonu tek sohbet/ortak kod sahibindedir, modül kodları ayrı sohbetlerde yürür. Tasarım dosyası sohbet eki/prototip; tamamı production'a geçirildi şeklinde raporlanmaz.
+- **Ortak/ikincil teknik sözleşme:** [KY_ERP_104_SEKME_ONAYLI_HTML_UYGULAMA_SOZLESMESI_2026-10-25.md](KY_ERP_104_SEKME_ONAYLI_HTML_UYGULAMA_SOZLESMESI_2026-10-25.md). Bu belgenin üzerinde canonical proje kontrol otoritesi yine bu dosyadır.
+- [PR #445](https://github.com/cetin60kaya-lgtm/ky-erp/pull/445) **merged** `1589f8488d2adf94600d2d6232b54205e4c9dd33`. [CI #40200690982](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40200690982) Frontend lint/test/build ve Worker typecheck/test/build **SUCCESS**.
+- [Pages production #40200843799](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40200843799) **SUCCESS**, release SHA `3d0fe3a2487e1c81da350dc4ddbec84f5c0e0c43`. PR merge → Pages release compare `ahead=1 / behind=0` ve bundle+Günlük Operasyon chunk smoke başarılı. Worker/API değiştirilmedi; Worker yayını gerekli değildi.
+- İlk gerçek değişiklikler: `approved-html-shell.css` onaylı HTML menü/başlık/açık sekmeler/alt görünüm ve responsive; PDKS sahte sabit firma hızlı işlem fallback kaldırıldı; İletişim Şablonlar düğmesi `muhasebe/mail-ekstre` gerçek sekme + tek kullanımlık şablon paneli açılışı; KY Güvenlik kurulum URL'si `/ky-guvenlik/`; helper/regression testleri. Günlük Operasyon/İK Aylık canlı işlemleri, Worker ve D1 kayıtları değiştirilmedi.
+- **Açık gerçek kabul:** tüm 104 ekranın yetkili oturumda screenshot karşılaştırması ve işlemleri, 1366x768/1920x1080/mobil gerçek tarayıcı denemesi, gerçek PDKS kart/cihaz, Mail ve Muhasebe gönderim/ödeme işlemleri otomatik testle onaylanmadı. Tüm modüller tamamlandı denmez. İmalat [PR #443](https://github.com/cetin60kaya-lgtm/ky-erp/pull/443) ayrı iş olarak korundu.
+
+
 ## 18.10.2026 — Günlük Operasyon kritik beş sekme PR #442 canlı yayın kanıtı
 - `fix/gunluk-tam-denetim-kritik-guvenlik-senkron-20261018` branch PR [#442](https://github.com/cetin60kaya-lgtm/ky-erp/pull/442), **merge SHA** `9ff13b114174a7e4f0e25990dd7cb4ae44495e94`.
 - [CI #39128442185](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/39128442185) Frontend **success** (lint/test/build), Worker **success** (typecheck/unit/integration/build). Unit includes XLSX real örnek parse, güvenlik policy, kilit, vardiya kontrol ve iki-PC CAS contract.
