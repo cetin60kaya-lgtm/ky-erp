@@ -37,10 +37,13 @@ export default function PdksDesktopNavigation({activeTab,onNavigate,isAuditAccou
   const [selectedSectionId,setSelectedSectionId] = useState("overview");
   const selected = permittedSections.find((group) => group.id === selectedSectionId) || permittedSections[0];
   useEffect(() => {
-    if (selected?.tabs?.some((tab)=>DESKTOP_WEB_ROUTES[selected.id+"/"+tab.id]===activeTab)) return;
     const current = permittedSections.find((group)=>group.tabs.some((tab)=>
       DESKTOP_WEB_ROUTES[group.id+"/"+tab.id]===activeTab));
-    if (current) setSelectedSectionId(current.id);
+    if (current) setSelectedSectionId((previous) => {
+      const previousGroup = permittedSections.find((group) => group.id === previous);
+      return previousGroup?.tabs?.some((tab)=>
+        DESKTOP_WEB_ROUTES[previous+"/"+tab.id]===activeTab) ? previous : current.id;
+    });
   },[activeTab,permittedSections]);
   return (
     <section className="pdks-desktop-nav" aria-label="PC PDKS masaüstüyle uyumlu menü">
