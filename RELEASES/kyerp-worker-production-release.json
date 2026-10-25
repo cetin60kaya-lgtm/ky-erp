@@ -3,9 +3,9 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "9ff13b114174a7e4f0e25990dd7cb4ae44495e94",
-  "requestedAt": "2026-10-18",
-  "attempt": 20,
+  "sourceCommit": "9afadbf5d2a0a6ce6d7f0eb6012fcb977205c40a",
+  "requestedAt": "2026-10-25",
+  "attempt": 21,
   "scope": [
     "gunluk-tum-api-ik-tenant-yetki-koruma",
     "gunluk-donem-kilit-gercek-d1-ve-yazma-engel",
@@ -15,7 +15,13 @@
     "gunluk-iki-pc-cas-note-check",
     "worker-typecheck-test-build",
     "d1-tam-yedek-artifact",
-    "worker-production-api-health"
+    "worker-production-api-health",
+    "e-belge-pool-gelen-giden-tenant-safe-direction-filter",
+    "e-belge-havuz-50-rows-page-api-readonly",
+    "worker-release-migration-explicit-gate",
+    "worker-ci-build-production-healthy"
   ],
-  "note": "PR #442 merge 9ff13b114174a7e4f0e25990dd7cb4ae44495e94, CI #39128442185 PASS. D1 schema migration YOK. Çalışan/maaş/ödeme üretim verisine otomatik test yazılmaz. Önce canlı tam D1 yedeği artifact ve API deploy kanıtı, sonra Pages."
+  "note": "25.10.2026: e-Belge yön filtreli GET /api/e-belge/pool ve 50 sayfa UI sözleşmesi PR #447 merged; CI #40206047817 PASS. Worker migration güvenlik kapısı PR #448 merged 9afadbf5d2a0a6ce6d7f0eb6012fcb977205c40a, CI #40206496193 PASS. Bu sürüm D1 migration GEREKTİRMEZ ve ayrıca migration izni VERİLMEDİ (applyMigrations=false, migrationApprovedByUser=false). Tam D1 export/backup+schema salt-okunur doğrula, sonra Worker deploy ve /api/health smoke. Personel, gerçek ödeme, belge gönderimi ve D1 veri yazma testi yasak.",
+  "applyMigrations": false,
+  "migrationApprovedByUser": false
 }
