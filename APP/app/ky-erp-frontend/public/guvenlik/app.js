@@ -233,9 +233,10 @@ async function connectDevice(){
     const worker=bundle.worker,subscription=bundle.subscription;
     const keys=await createSigningKey();
     let localUnlockCredentialId="";
-    await writeDevice({pendingEnrollment:true,signingPrivateKey:keys.privateKey,localUnlockCredentialId,savedAt:new Date().toISOString()});
+    // Keep the last trusted phone record active until the server confirms new enrollment.
+    // A failed request, browser crash or interrupted relink must never replace it.
     let response;
-    try{
+    {
       const body={
         enrollmentId:enrollmentQuery.id,enrollmentToken:enrollmentQuery.token,enrollmentCode:code,password,
         replaceDeviceId:previousDevice?.deviceId||"",
@@ -243,10 +244,6 @@ async function connectDevice(){
         subscription:subscription.toJSON(),decisionPublicKeyJwk:keys.publicJwk
       };
       response=await jsonFetch("/auth/push/security-enrollment/complete",{method:"POST",body});
-    }catch(error){
-      await clearDevice().catch(()=>{});
-      if(previousDevice)await writeDevice(previousDevice).catch(()=>{});
-      throw error;
     }
     const data=response.data;
     const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,pushEndpoint:String(subscription.endpoint||""),securityAppVersion:data.securityAppVersion||"security-v3.0",canonicalRevision:CANONICAL_DEVICE_REVISION,savedAt:new Date().toISOString()};
@@ -316,10 +313,14 @@ function startLoginCodeCountdown(expiresAt){
     const seconds=Math.max(0,Math.ceil((Date.parse(expiresAt)-Date.now())/1000));
     els.loginCodeCountdown.textContent=seconds ? seconds+" sn geçerli" : "Süresi doldu";
     els.loginCodeBox.classList.toggle("expired",!seconds);
-    if(!seconds) clearInterval(loginCodeTimer);
+    if(!seconds){
+      els.loginCodeValue.textContent="— — — — — —";
+      clearInterval(loginCodeTimer);
+      loginCodeTimer=null;
+    }
   };
   tick();
-  loginCodeTimer=setInterval(tick,1000);
+  if(Date.parse(expiresAt)>Date.now())loginCodeTimer=setInterval(tick,1000);
 }
 async function generateLoginCode(){
   if(busy)return;
@@ -335,7 +336,9 @@ async function generateLoginCode(){
     const codeScope=String(data.scopeType||"").toUpperCase();const systemCode=codeScope==="SYSTEM",companyCode=codeScope==="COMPANY";
     toast(systemCode?"60 saniyelik KY Güvenlik Sistem Kodu üretildi. Tüm hesaplarda kullanılabilir.":companyCode?"60 saniyelik Firma Kodu üretildi. Yalnız bu firmadaki hesaplarda geçerlidir.":"60 saniyelik KY Güvenlik giriş kodu üretildi. Yalnız bu hesapta geçerlidir.");
   }catch(error){
+    clearInterval(loginCodeTimer);loginCodeTimer=null;
     els.loginCodeValue.textContent="— — — — — —";
+    els.loginCodeBox.classList.add("expired");
     els.loginCodeCountdown.textContent="Kod üretilemedi";
     toast(error?.message||"Giriş kodu üretilemedi.");
   }finally{busy=false;els.generateCodeButton.disabled=false}
@@ -372,7 +375,8 @@ async function repairConnection(options={}){
   busy=true;
   if(els.repairButton){els.repairButton.disabled=true;els.repairButton.textContent=automatic?"Otomatik onarılıyor...":"Bağlantı yenileniyor...";}
   try{
-    const bundle=await ensurePushSubscription(true);
+    // Preserve the existing push subscription until the signed server refresh succeeds.
+    const bundle=await ensurePushSubscription(false);
     const response=await deviceFetch("/auth/push/device/refresh",{method:"POST",body:{deviceLabel:device.deviceLabel||defaultDeviceLabel(),subscription:bundle.subscription.toJSON()}});
     const data=response?.data||{};
     await writeDevice({...device,deviceId:data.deviceId||device.deviceId,deviceToken:data.deviceToken||device.deviceToken,deviceLabel:data.deviceLabel||device.deviceLabel,pushEndpoint:String(bundle.subscription?.endpoint||device.pushEndpoint||""),securityAppVersion:data.securityAppVersion||device.securityAppVersion||"security-v3.0",refreshedAt:data.refreshedAt||new Date().toISOString()});
@@ -434,8 +438,12 @@ async function refreshState(options={}){
     if(!health?.account?.userId)throw Object.assign(new Error("KY ERP hesabı doğrulanamadı. Mevcut KY ERP şifrenle bağlantıyı bir kez yenile."),{code:"ACCOUNT_PROFILE_MISSING"});
     if(enrollmentQuery.id&&enrollmentQuery.token){cleanEnrollmentQuery();enrollmentQuery={id:"",token:""};relinkMode=false;}
     const versionCheckedAt=new Date().toISOString();
-    const versionRecord={...device,securityAppVersion:CLIENT_VERSION,clientVersion:CLIENT_VERSION,lastKnownServerVersion:health.serverVersion||"",versionCheckedAt};
-    await writeDevice(versionRecord).catch(()=>{});
+    // A push sync may have written a fresher endpoint while health was loading.
+    // Never replace that record with the snapshot taken at refresh start.
+    const latestDevice=await readDevice().catch(()=>null);
+    if(latestDevice?.deviceId===device.deviceId){
+      await writeDevice({...latestDevice,securityAppVersion:CLIENT_VERSION,clientVersion:CLIENT_VERSION,lastKnownServerVersion:health.serverVersion||"",versionCheckedAt}).catch(()=>{});
+    }
     renderVersion(health.serverVersion||"");
     renderAccount(health.account,{...(health.device||device),lastKnownServerVersion:health.serverVersion||""});
     accountHydrated=true;
@@ -445,7 +453,7 @@ async function refreshState(options={}){
     setHealth(els.apiHealth,"Bağlı","ok");
     const pushNeedsRepair=health?.device?.pushReachable===false||Boolean(health?.device?.lastError);
     setHealth(els.pushHealth,pushNeedsRepair?"Sessizce yenileniyor":"Hazır",pushNeedsRepair?"warn":"ok");
-    if(pushNeedsRepair&&!options?.skipAutoRepair&&Date.now()-lastAutoRepairAt>120000){lastAutoRepairAt=Date.now();const repaired=await repairConnection({automatic:true});if(repaired)return refreshState({skipAutoRepair:true})}
+    if(pushNeedsRepair&&!options?.skipAutoRepair&&Date.now()-lastAutoRepairAt>120000){lastAutoRepairAt=Date.now();const repaired=await repairConnection({automatic:true});if(repaired){queueTrailingRefresh(300);return;}}
     els.lastSync.textContent="Son kontrol: "+new Date(health.checkedAt||Date.now()).toLocaleString("tr-TR");
     await refreshPending(health.items);
   }catch(error){
