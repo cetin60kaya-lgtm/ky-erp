@@ -1,5 +1,11 @@
 # KY ERP — Muhasebe / e-Belge / İmalat 19 sekme gerçek kabul matrisi
 
+## 25.10.2026 — Toplu eşleştirme son işlev ve üretim yayın kanıtı
+- e-Belge Eşleştirmeler/Belge Havuzu: [PR #451](https://github.com/cetin60kaya-lgtm/ky-erp/pull/451) merged `e2b7654daa207f209f08e713e7861ee0532898ba`; CI [#40215686365](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215686365) frontend+Worker **SUCCESS**. Toplu POST açık kapsam+onay, aynı anda iki kez POST kilidi, 500 sınırının görünürlüğü, kısmi hata sayımı, yerel tarih.
+- Pages [#40215803908](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215803908) **SUCCESS** SHA `0d421463de6def6d02f90a0516a21d547db39db0`; PR merge SHA atası (behind=0), gerçek Pages deploy ve canlı bundle smoke PASS.
+- Bu işlemde canlı `reconcile-all` çağrısı veya gerçek firma belge mutasyonu yapılmadı; **19/19 oturumlu saha testi hâlâ KISMİ**. Test edilecekler: firma/rol sınırı, 500 sınırı, toplu kısmi hata, resmî belge gönderiminin ayrı kullanıcı onayı, gerçek Muhasebe/İmalat kayıt kabulü.
+
+
 ## 25.10.2026 — PR #450 yeni işlev + canlı yayın durumu
 - **Kod:** Muhasebe/Mutabakat karşı bakiye–ERP fark doğrulaması (client + Worker API), kesin onay ve çift-POST kilidi; Muhasebe/Gelir-Gider gerçek gider veya yalnız şablon açık önizleme + tutar/KDV kontrolü; İmalat/Makine Vardiya ayarları kısmi başarı, firma seçimi, geri al; İmalat/Rapor Excel uyumlu güvenli UTF-8 TSV ve uygulanmış filtre denetimi.
 - **CI:** [#40214924202](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40214924202) frontend+Worker SUCCESS. **Merged:** [PR #450](https://github.com/cetin60kaya-lgtm/ky-erp/pull/450) SHA `84e93e53f94550e00a189838b1db4abab3c6c64e`.
