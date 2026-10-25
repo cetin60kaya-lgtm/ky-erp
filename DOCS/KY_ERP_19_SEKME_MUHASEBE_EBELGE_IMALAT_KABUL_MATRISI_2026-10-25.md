@@ -1,5 +1,13 @@
 # KY ERP — Muhasebe / e-Belge / İmalat 19 sekme gerçek kabul matrisi
 
+## 25.10.2026 — PR #450 yeni işlev + canlı yayın durumu
+- **Kod:** Muhasebe/Mutabakat karşı bakiye–ERP fark doğrulaması (client + Worker API), kesin onay ve çift-POST kilidi; Muhasebe/Gelir-Gider gerçek gider veya yalnız şablon açık önizleme + tutar/KDV kontrolü; İmalat/Makine Vardiya ayarları kısmi başarı, firma seçimi, geri al; İmalat/Rapor Excel uyumlu güvenli UTF-8 TSV ve uygulanmış filtre denetimi.
+- **CI:** [#40214924202](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40214924202) frontend+Worker SUCCESS. **Merged:** [PR #450](https://github.com/cetin60kaya-lgtm/ky-erp/pull/450) SHA `84e93e53f94550e00a189838b1db4abab3c6c64e`.
+- **Canlı Worker:** [#40215087584](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215087584) SUCCESS SHA `b4ed1440ef8b86a94cb4d9f1813d86adac2ff360` (D1 yedek+artifact, schema, sağlık PASS; migration SKIPPED). **Canlı Pages:** [#40215265216](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215265216) SUCCESS SHA `deee4744bbbaa90620f645441864927f597ce125` (bundle/deploy smoke PASS). Her iki release SHA #450 merge atası, compare behind=0.
+- **Yeni kapatılan kaynak kusurları:** yanlış MATCHED onayı ve server API geçişi, onaysız manuel gider POST'u, makine toplu kayıtta kısmi başarının saklanması, sahte XLS uzantısı/formül riski ve güncel olmayan filtreyle rapor indirme.
+- **Saha kabulünde açık:** gerçek kullanıcı/rol/multi-tenant, resmî İşNet gönderimi, gerçek banka/gelir gider mutasyonu, kısmi model–irsaliye–fatura–LOT örnekleri, Windows Excel ile TSV açma, makine/üretim gerçek cihaz işlemleri ve 1366x768/mobil browser. Test verisi üretime yazılmadı; 19/19 **KISMİ** durum sürer.
+
+
 ## Final doğrulanmış Pages yayın — 25.10.2026
 - [PR #449](https://github.com/cetin60kaya-lgtm/ky-erp/pull/449) son onay özet/checkbox/çift-submit koruması, CI #40207296821 PASS, merged `719fd60fa97309230944833f95a7398b06630d88`.
 - [Pages #40207488400](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40207488400) SUCCESS, yayın SHA `9bf4e6cdff36634b17b439ef59a6323c4ce27f57`, #449, #447, #443 merged kaynaklarının hepsi atası (behind=0); canlı bundle+Günlük Operasyon chunk smoke PASS. Worker #40206650866 SUCCESS, migrations SKIPPED.
