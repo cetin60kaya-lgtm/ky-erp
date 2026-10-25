@@ -1,5 +1,13 @@
 # KY ERP — Muhasebe / e-Belge / İmalat 19 sekme gerçek kabul matrisi
 
+## 25.10.2026 — Güncel kod / CI / release kanıtı
+- PR #446 Muhasebe: CI #40205322671 ve frontend Pages #40205714344 SUCCESS, yayın `ea8f1bf327d38a290cca54c814214da052e80f3d`; merge ancestry behind=0.
+- PR #447 e-Belge: CI #40206047817 SUCCESS, merge `e15d1bcc0f1c30149720a72dc26853e0f27761b5`; Worker #40206650866 SUCCESS yayın SHA `17245ea35ceed2077f193756176dc510da7a8c1f`; Pages frontend yayını ayrı bekliyor.
+- PR #443 İmalat: CI #40192931624 SUCCESS, merge `35405ffbbd172f929ad0865d0ef24e6b350e80a4`; frontend Pages ayrı bekliyor.
+- PR #448 Worker güvenli release: CI #40206496193 SUCCESS; Worker #40206650866 D1 backup+read-only schema+API health SUCCESS, migration adımları SKIPPED.
+- **Gerçek oturumlu tüm ekran / İşNet / üretim fişi / ödeme / D1 yazma kabulü yok.** Bütün 19 sekme KISMİ.
+
+
 **Tarih:** 25.10.2026 · **Kaynak:** `codex/model-uretim-kontrol-merkezi-final` · **Referans:** Kullanıcının `KY_ERP_MUHASEBE_EBELGE_IMALAT_19_SEKME_ONAYLI_TASARIM.html` ekindeki 19 sekme ve iş akışı. Bu matris `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` yerine geçmez.
 
 ## Kabul standardı
