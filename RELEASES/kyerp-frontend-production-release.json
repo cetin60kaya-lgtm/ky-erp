@@ -42,9 +42,13 @@
     "e-belge-bulk-match-explicit-scope-confirm",
     "e-belge-bulk-match-double-post-guard",
     "e-belge-bulk-match-partial-error-reporting",
-    "e-belge-today-local-date-not-utc"
+    "e-belge-today-local-date-not-utc",
+    "muhasebe-period-company-alias-payment-guard-pr453",
+    "ebelge-tenant-provider-page-posted-protection-pr455",
+    "imalat-tenant-batch-dup-request-id-pr456",
+    "19-screen-jsx-route-source-regression-pr457"
   ],
-  "note": "25.10.2026: e-Belge toplu eşleştirme önce kapsam (tüm uygun açık belgeler; max 500), kullanıcı checkbox ve ayrı onay, ref double-submit kilidi, hatalı sonuç sayısı; dashboard yerel gün tarihi. PR #451 merged e2b7654daa207f209f08e713e7861ee0532898ba; CI #40215686365 Frontend+Worker PASS. Sadece frontend Pages yayını; Worker/D1 resmî belge veya gerçek toplu kayıt testi yok; yetkili oturumlu kabul bekliyor.",
-  "sourceCommit": "e2b7654daa207f209f08e713e7861ee0532898ba",
+  "note": "25.10.2026 19 sekme final kod yayını: PR #453 merge f3e0d9ea32ef91982a5b98ab61fca22c285d7962 CI #40220091676 PASS; PR #455 merge 43d0c0822a6961474c2436c55bcaa2544ef8f35f CI #40220688716 PASS; PR #456 merge 8d7c355a93483d27536676d235e18a1e30a1513e CI #40221156414 PASS; 19 sekme ekran+source kontrat PR #457 merge 705307a000f689b911e7ec1c9273007ac73dfc4f CI #40221600062 PASS. Worker #40221347939 SUCCESS ve D1 migrations SKIPPED. Production Pages build+deploy+public bundle smoke; 19 gerçek kullanıcı/İşNet/fon transferi/makine saha kabulü olmadığı için 19/19 işlemsel E2E PASSED denmez.",
+  "sourceCommit": "705307a000f689b911e7ec1c9273007ac73dfc4f",
   "requestedAt": "2026-10-25"
 }
