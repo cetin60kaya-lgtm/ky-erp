@@ -1,7 +1,7 @@
 ﻿// @ts-nocheck
 import type { Context, Hono } from "hono";
 import { analyzeAccountingDocument, accountingDocumentIntelligenceStatus } from "./accounting-document-intelligence";
-import { postAccountingDocument } from "./accounting-document-posting";
+import { postAccountingDocumentAtomic } from "./accounting-document-posting-atomic";
 import { claimEBelgeFinalization, markEBelgeFinalization } from "./e-belge-finalize-guard";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { verifyIsnetReadOnlySession } from "./isnet-runtime-v2";
@@ -363,12 +363,17 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     let phase="VALIDATING";
     try {
       const {doc,lines}=await validateForFinal(c,slug,id);
-      phase="STOCK";
-      const inventory=await routeStockAndLots(c,slug,doc,lines);
-      // The guard remains active until all physical routing completes.
+      // Stok/Boyahane fiziksel girişleri farklı tablolara ve json_store'a yazılıyor.
+      // Aynı atomik D1 planına alınmadıkları sürece asla "POSTED" gösterme.
+      const physical=lines.some((line:Row)=>
+        ["STOCK","BOYAHANE","CONSUMABLE"].includes(upper(safeJson(line.raw_metadata).routingType)));
+      if(physical)throw Object.assign(new Error(
+        "Fiziksel stok/LOT girişli belgede bütünlük işlemi hazır değil. Finans ve fiziksel kayıt oluşturulmadı; inceleme gerekli."
+      ),{code:"PHYSICAL_RECEIPT_ATOMICITY_REQUIRED"});
+      const inventory={stockMovements:0,lots:0,pendingPhysicalReceipts:0};
       await markEBelgeFinalization(c.env.DB,slug,id,"APPROVED");
       phase="FINANCE";
-      const posting=await postAccountingDocument(c,slug,id,String(user.id));
+      const posting=await postAccountingDocumentAtomic(c.env.DB,slug,id,String(user.id));
       const archiveTask=processCloudArchiveJobs(c,slug,{documentId:id,limit:10}).catch(()=>({processed:0,total:0,results:[]}));
       try{c.executionCtx.waitUntil(archiveTask)}catch{await archiveTask}
       return c.json({ok:true,data:{...posting,inventory,cloudArchiveQueued:true}});
