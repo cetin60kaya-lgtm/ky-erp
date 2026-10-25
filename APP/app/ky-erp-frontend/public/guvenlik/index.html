@@ -82,6 +82,53 @@
     </section>
 
     <section id="appPanel" class="hidden">
+      <section id="homeTab" class="security-tab-panel">
+        <div class="home-hero">
+          <div class="home-hero-head"><span class="home-eyebrow">KY ERP · MOBİL KONTROL</span><span class="home-hero-mark" aria-hidden="true">KY</span></div>
+          <h1>Kontrol sizde.</h1>
+          <p id="homeAccountLabel">Güvenli cihaz hesabınız doğrulanıyor.</p>
+          <div class="home-live-line"><span class="live-dot" aria-hidden="true"></span><span id="homeConnectionText">Bağlantı kontrol ediliyor</span><button type="button" id="homeRefreshButton" aria-label="Durumu yenile">↻ Yenile</button></div>
+        </div>
+        <div class="home-section-head"><div><span class="eyebrow">HIZLI İŞLEMLER</span><h2>Ne yapmak istersiniz?</h2></div></div>
+        <div class="home-quick-grid">
+          <button class="home-quick-button" type="button" data-tab="approvals"><span class="quick-icon quick-green" aria-hidden="true">✓</span><span><b>Giriş Onayları</b><small>İstekleri kontrol et</small></span><span aria-hidden="true">›</span></button>
+          <button class="home-quick-button" type="button" data-tab="code"><span class="quick-icon quick-blue" aria-hidden="true">#</span><span><b>Giriş Kodu</b><small>Tek kullanımlık kod</small></span><span aria-hidden="true">›</span></button>
+          <button class="home-quick-button" type="button" data-tab="sessions" data-control-only><span class="quick-icon quick-violet" aria-hidden="true">▣</span><span><b>Oturumlar</b><small>Açık erişimleri izle</small></span><span aria-hidden="true">›</span></button>
+          <button class="home-quick-button" type="button" data-tab="device"><span class="quick-icon quick-slate" aria-hidden="true">◈</span><span><b>Cihaz Sağlığı</b><small>Bağlantıyı denetle</small></span><span aria-hidden="true">›</span></button>
+        </div>
+              <section id="superAdminConsole" class="security-card super-admin-console hidden">
+        <div class="super-admin-console-head"><div><span class="eyebrow">UYGULAMA YÖNETİMİ</span><h2>KY Güvenlik · Sistem Yönetimi</h2><p class="muted">Tek KY Güvenlik uygulaması · v4.1.1. Mevcut telefon uygulamanız aynı adres ve cihaz kimliğiyle güncellenir.</p><p class="muted">KY ERP genelindeki girişler, aktif oturumlar, bağlı cihazlar ve güvenlik olayları bu Süper Yönetici telefonundan yönetilir.</p></div><span class="super-admin-crown">SA</span></div>
+        <div class="owner-summary-grid" aria-label="Sistem güvenlik analizleri"><div><small>Aktif Oturum</small><strong id="ownerSummarySessions">—</strong></div><div><small>Güvenilir Cihaz</small><strong id="ownerSummaryDevices">—</strong></div><div><small>Günlük Giriş</small><strong id="ownerSummaryLogins">—</strong></div><div><small>Son Olaylar</small><strong id="ownerSummaryEvents">—</strong></div></div>
+        <details class="system-more"><summary>Sistem işlemlerinin tümünü aç <span aria-hidden="true">⌄</span></summary>
+        <div class="super-admin-actions"><button type="button" data-owner-open="approvals"><b>Sistem Onayları</b><span>Giriş, oturum ve kritik işlemler</span></button><button type="button" data-owner-open="activity"><b>Giriş Hareketleri</b><span>Firma firma giriş, çıkış ve denemeler</span></button><button type="button" data-owner-open="sessions"><b>Aktif Oturumlar</b><span>Tüm firmalar ve kullanıcılar</span></button><button type="button" data-owner-open="computers"><b>Sistem Cihazları</b><span>Bilgisayar ve güvenilir cihazlar</span></button><button type="button" data-owner-open="logs"><b>Denetim Logları</b><span>Güvenlik hareketleri ve geçmiş</span></button></div>
+        </details>
+      </section>
+              <section id="companyAdminConsole" class="security-card super-admin-console company-admin-console hidden">
+        <div class="super-admin-console-head"><div><span class="eyebrow">FİRMA GÜVENLİĞİ</span><h2>Firma Güvenlik Merkezi</h2><p><a href="/ky-firma/" target="_blank" rel="noopener">KY Firma işletme uygulamasını aç</a></p><p class="muted">Yalnız kendi firmanızın girişleri, aktif oturumları, güvenilir cihazları ve güvenlik hareketleri burada yönetilir.</p></div><span class="super-admin-crown">F</span></div>
+        <div class="super-admin-actions"><button type="button" data-company-open="approvals"><b>Firma Onayları</b><span>Giriş ve oturum istekleri</span></button><button type="button" data-company-open="activity"><b>Giriş Hareketleri</b><span>Firmanızdaki giriş ve çıkışlar</span></button><button type="button" data-company-open="sessions"><b>Aktif Oturumlar</b><span>Firmanızdaki kullanıcı oturumları</span></button><button type="button" data-company-open="logs"><b>Güvenlik Geçmişi</b><span>Firma kapsamındaki olaylar</span></button></div>
+      </section>
+        <div class="home-support"><span aria-hidden="true">●</span> Güvenlik olayları ve veriler hesabınızın yetkisine göre görüntülenir.</div>
+      </section>
+
+
+
+
+
+
+
+      <nav class="security-tabs" aria-label="Alt gezinme">
+        <button class="nav-action active" type="button" data-tab="home" aria-label="Ana Sayfa"><span class="nav-icon" aria-hidden="true">⌂</span><span>Ana Sayfa</span></button>
+        <button class="nav-action" type="button" data-tab="approvals" aria-label="Bekleyen Onaylar"><span class="nav-icon" aria-hidden="true">✓</span><span>Onaylar <span id="tabCount" class="nav-count">0</span></span></button>
+        <button class="nav-action" type="button" data-tab="sessions" data-control-only aria-label="Aktif Oturumlar"><span class="nav-icon" aria-hidden="true">▣</span><span>Oturumlar <span id="sessionTabCount" class="nav-count">0</span></span></button>
+        <button class="nav-action" type="button" data-tab="code" aria-label="Giriş Kodu"><span class="nav-icon" aria-hidden="true">⊞</span><span>Giriş Kodu</span></button>
+        <button class="nav-action" type="button" id="securityMenuOpen" aria-haspopup="dialog" aria-controls="securityMenuSheet"><span class="nav-icon" aria-hidden="true">☰</span><span>Menü</span></button>
+      </nav>      <section id="controlToolbar" class="security-control-toolbar hidden">
+        <label>Firma / Kapsam<select id="controlCompanyFilter"><option value="">Tüm firmalar</option></select></label>
+        <button id="controlRefreshButton" type="button">Yenile</button>
+        <small id="controlCheckedAt">Son kontrol: -</small>
+      </section>
+
+      <section id="accountTab" class="security-tab-panel hidden">
       <section id="accountPanel" class="security-card account-card">
         <div class="account-card-head">
           <div>
@@ -108,39 +155,6 @@
         </div>
         <small id="accountNote" class="account-note">Onaylar yalnız bu hesabın yetkileriyle verilir.</small>
       </section>
-
-      <section id="superAdminConsole" class="security-card super-admin-console hidden">
-        <div class="super-admin-console-head"><div><span class="eyebrow">UYGULAMA YÖNETİMİ</span><h2>KY Güvenlik · Sistem Yönetimi</h2><p class="muted">Tek KY Güvenlik uygulaması · v4.1.1. Mevcut telefon uygulamanız aynı adres ve cihaz kimliğiyle güncellenir.</p><p class="muted">KY ERP genelindeki girişler, aktif oturumlar, bağlı cihazlar ve güvenlik olayları bu Süper Yönetici telefonundan yönetilir.</p></div><span class="super-admin-crown">SA</span></div>
-        <div class="owner-summary-grid" aria-label="Sistem güvenlik analizleri"><div><small>Aktif Oturum</small><strong id="ownerSummarySessions">—</strong></div><div><small>Güvenilir Cihaz</small><strong id="ownerSummaryDevices">—</strong></div><div><small>Günlük Giriş</small><strong id="ownerSummaryLogins">—</strong></div><div><small>Son Olaylar</small><strong id="ownerSummaryEvents">—</strong></div></div>
-        <div class="super-admin-actions"><button type="button" data-owner-open="approvals"><b>Sistem Onayları</b><span>Giriş, oturum ve kritik işlemler</span></button><button type="button" data-owner-open="activity"><b>Giriş Hareketleri</b><span>Firma firma giriş, çıkış ve denemeler</span></button><button type="button" data-owner-open="sessions"><b>Aktif Oturumlar</b><span>Tüm firmalar ve kullanıcılar</span></button><button type="button" data-owner-open="computers"><b>Sistem Cihazları</b><span>Bilgisayar ve güvenilir cihazlar</span></button><button type="button" data-owner-open="logs"><b>Denetim Logları</b><span>Güvenlik hareketleri ve geçmiş</span></button></div>
-      </section>
-
-      <section id="companyAdminConsole" class="security-card super-admin-console company-admin-console hidden">
-        <div class="super-admin-console-head"><div><span class="eyebrow">FİRMA GÜVENLİĞİ</span><h2>Firma Güvenlik Merkezi</h2><p><a href="/ky-firma/" target="_blank" rel="noopener">KY Firma işletme uygulamasını aç</a></p><p class="muted">Yalnız kendi firmanızın girişleri, aktif oturumları, güvenilir cihazları ve güvenlik hareketleri burada yönetilir.</p></div><span class="super-admin-crown">F</span></div>
-        <div class="super-admin-actions"><button type="button" data-company-open="approvals"><b>Firma Onayları</b><span>Giriş ve oturum istekleri</span></button><button type="button" data-company-open="activity"><b>Giriş Hareketleri</b><span>Firmanızdaki giriş ve çıkışlar</span></button><button type="button" data-company-open="sessions"><b>Aktif Oturumlar</b><span>Firmanızdaki kullanıcı oturumları</span></button><button type="button" data-company-open="logs"><b>Güvenlik Geçmişi</b><span>Firma kapsamındaki olaylar</span></button></div>
-      </section>
-
-      <nav class="security-tabs" aria-label="KY Güvenlik ana bölümleri">
-        <button type="button" data-tab="approvals" class="active">Onaylar <span id="tabCount">0</span></button>
-        <button type="button" data-tab="sessions" data-control-only>Oturumlar <span id="sessionTabCount">0</span></button>
-        <button type="button" data-tab="code">Giriş Kodu</button>
-        <details class="security-more-tabs" id="securityMoreTabs">
-          <summary aria-label="Diğer güvenlik bölümlerini aç">Diğer</summary>
-          <div class="security-more-actions">
-            <button type="button" data-tab="activity" data-control-only>Hareketler</button>
-            <button type="button" data-tab="computers" data-control-only>Bilgisayarlar <span id="computerTabCount">0</span></button>
-            <button type="button" data-tab="logs" data-control-only>Loglar</button>
-            <button type="button" data-tab="notes">Notlarım <span id="noteDueCount">0</span></button>
-            <button type="button" data-tab="chat">Chat <span id="chatUnreadCount">0</span></button>
-            <button type="button" data-tab="device">Bu Telefon</button>
-          </div>
-        </details>
-      </nav>
-
-      <section id="controlToolbar" class="security-control-toolbar hidden">
-        <label>Firma / Kapsam<select id="controlCompanyFilter"><option value="">Tüm firmalar</option></select></label>
-        <button id="controlRefreshButton" type="button">Yenile</button>
-        <small id="controlCheckedAt">Son kontrol: -</small>
       </section>
 
       <section id="activityTab" class="security-tab-panel hidden" data-control-only>
@@ -267,6 +281,20 @@
         </section>
       </section>
     </section>
+
+      <dialog id="securityMenuSheet" class="security-menu-sheet" aria-labelledby="securityMenuTitle">
+        <div class="menu-sheet-head"><div><span class="eyebrow">KY GÜVENLİK</span><h2 id="securityMenuTitle">Bölümler</h2><p>Hesap, sistem ve kişisel araçlar</p></div><button id="securityMenuClose" type="button" aria-label="Menüyü kapat">×</button></div>
+        <div class="menu-sheet-grid">
+          <button type="button" data-tab="activity" data-control-only><span class="menu-icon">↗</span><span>Hareketler<small>Giriş ve çıkışlar</small></span></button>
+          <button type="button" data-tab="computers" data-control-only><span class="menu-icon">▤</span><span>Bilgisayarlar <small id="computerTabCount">0 bağlı cihaz</small></span></button>
+          <button type="button" data-tab="logs" data-control-only><span class="menu-icon">≡</span><span>Denetim Logları<small>Güvenlik geçmişi</small></span></button>
+          <button type="button" data-tab="notes"><span class="menu-icon">✎</span><span>Notlarım <small><span id="noteDueCount">0</span> hatırlatma</small></span></button>
+          <button type="button" data-tab="chat"><span class="menu-icon">◇</span><span>Mesajlar <small><span id="chatUnreadCount">0</span> okunmamış</small></span></button>
+          <button type="button" data-tab="account"><span class="menu-icon">♙</span><span>Hesabım<small>Rol ve yetkiler</small></span></button>
+          <button type="button" data-tab="device"><span class="menu-icon">◈</span><span>Bu Telefon<small>Bağlantı ve bildirim</small></span></button>
+        </div>
+        <div class="menu-sheet-foot">KY Güvenlik <strong>v4.1.1</strong> · Güvenli cihaz</div>
+      </dialog>
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
     <footer class="security-footer">
