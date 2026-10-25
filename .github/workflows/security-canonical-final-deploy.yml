@@ -98,6 +98,21 @@ jobs:
           set -euo pipefail
           npx --yes wrangler@4.118.0 deploy --config wrangler.jsonc
 
+      - name: Diagnose public Security host routes (no credentials logged)
+        shell: bash
+        run: |
+          set -u
+          for path in /security/ /guvenlik/ /guvenlik/manifest.webmanifest /guvenlik/sw.js /guvenlik/app.js /ky-firma/ /ky-firma/manifest.webmanifest /ky-sistem/ /ky-sistem/sw.js; do
+            result="$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' -H 'Accept: text/html' --max-time 20 "https://security.kyerp.net${path}" 2>&1 || true)"
+            echo "Security host ${path}: ${result}"
+          done
+          title="$(curl -sS --max-time 20 https://security.kyerp.net/guvenlik/ 2>/dev/null | grep -oE '<title>[^<]*</title>' | head -1 || true)"
+          echo "Canonical title: ${title:-missing}"
+          for endpoint in /api/auth/push/security-enrollment/complete /api/auth/push/security-relink/by-subscription; do
+            code="$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' --data '{}' "https://api.kyerp.net${endpoint}" | jq -r '.error.code // "missing"' 2>/dev/null || true)"
+            echo "API guard ${endpoint}: ${code:-unreachable}"
+          done
+
       - name: Verify canonical Security PWA
         shell: bash
         run: |
