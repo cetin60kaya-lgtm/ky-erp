@@ -72,6 +72,7 @@ test("Son Onay Muhasebelestir tek tikla finans kaydi yazmaz; ozet ve checkbox ge
   assert.match(page, /finalInFlight\.current/);
   assert.match(page, /await finalizeEBelge\(id\)/);
   assert.match(page, /Onayla ve Muhasebeleştir/);
+  assert.match(page, /<DetailDrawer key=\{selectedId \|\| "empty-document"\}/);
   assert.doesNotMatch(page, /onClick=\{\(\) => action\("final"/);
   assert.match(css, /\.eb-final-confirm-modal/);
 });
