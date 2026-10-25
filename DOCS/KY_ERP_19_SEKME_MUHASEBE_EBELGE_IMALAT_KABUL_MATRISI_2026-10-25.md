@@ -1,5 +1,13 @@
 # KY ERP — 19 sekme güncel kaynak, otomatik test ve saha kabul matrisi
 
+## 26.10.2026 — Son kesin kayıt / İşNet sertleştirme PR #468 (Worker canlı)
+- [PR #468](https://github.com/cetin60kaya-lgtm/ky-erp/pull/468) merged `fc1a5fbb5bc05d64ff8b51baa6f89d436d498285`. [CI #40243561868](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40243561868): Frontend ve Worker SUCCESS.
+- Kesin kayıt sırasında `FINALIZING/APPROVED/FINALIZE_RETRY` belgeye dış PATCH, tekil/toplu eşleştirme kilidi eklendi; PATCH transaction sonrası etkilenen satır denetimli. Finalizasyon içi yetkili eşleştirme korunur. İşNet HTTP 200 ancak boş veya doğrulama yapısı olmayan cevap artık BAĞLI değil `UNVERIFIED`.
+- [Son Worker production #40243691172](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40243691172) SUCCESS SHA `1eb82c38f259a48f666edc6c74715c3b951cb2f7`: tam D1 yedeği, artifact, migrations SKIPPED, salt-okunur schema, Worker deploy ve canlı API health PASS. PR #468 merge SHA atası: `behind=0`.
+- Son frontend runtime değişikliği önceki [Pages #40242893537](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40242893537) SUCCESS SHA `6c0e011e23fa2f4ec6cbadc9db6149696eb21098`; PR #468 yalnız Worker + test değiştirdiğinden yeniden Pages dağıtımı gerekmedi.
+- Kalan P0 engel: fiziksel STOCK/BOYAHANE/LOT kesin kaydında dayanıklı atomik outbox/recovery hâlâ eksik; fail-closed koruması devam ediyor. Rol/tenant oturumlu E2E, gerçek İşNet/banka/makine testleri yapılmadı; production migration izni verilmedi. **19/19 tam saha kabul PASS değil.**
+
+
 ## 26.10.2026 — GÜNCEL KARAR: P0 19 SEKME KOD, OTOMATİK TEST VE CANLI KANITI
 
 Bu bölüm günceldir; aşağıdaki 25.10.2026 kayıtları önceki sürümün tarihsel kanıtıdır. **19/19 işletme E2E PASS DEĞİL.** Stok/LOT kesin kayıt zinciri tek atomik/outbox işlem haline gelene kadar bu belgelerde muhasebeleştirme bilinçli biçimde fail-closed kalır; günlük fiziksel stok akışı tamamen onaylanmış sayılmaz. Onaylı HTML, Shell, güvenlik, İK ve Günlük Operasyon ortak koduna dokunulmadı.
