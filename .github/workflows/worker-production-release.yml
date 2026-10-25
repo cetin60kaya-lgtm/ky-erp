@@ -88,7 +88,23 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # Normal kod sürümü production D1 migration izni sayılmaz.
+      # Eski release markerlar dahil varsayilan olarak tum mutasyonlu migration adimlari kapali.
+      - name: Production migration icin ayri izin kapisi
+        id: migration_gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if jq -e '.applyMigrations == true and .migrationApprovedByUser == true' RELEASES/kyerp-worker-production-release.json >/dev/null; then
+            echo "apply=true" >> "$GITHUB_OUTPUT"
+            echo "Production migration icin ek izin kaydi mevcut."
+          else
+            echo "apply=false" >> "$GITHUB_OUTPUT"
+            echo "Migration uygulanmayacak: salt kod release / sadece D1 yedegi ve schema okuma."
+          fi
+
       - name: Mail ve muhasebe canonical schema migrationlarini uygula
+        if: steps.migration_gate.outputs.apply == 'true'
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
@@ -123,6 +139,7 @@ jobs:
           done
 
       - name: Personel 0060 hedefli eklemeli D1 migration
+        if: steps.migration_gate.outputs.apply == 'true'
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
@@ -139,6 +156,7 @@ jobs:
           done
 
       - name: Gunluk Operasyon 0061 ek odeme kesinti D1 migration ve kanit
+        if: steps.migration_gate.outputs.apply == 'true'
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
@@ -159,6 +177,17 @@ jobs:
             --json > /tmp/kyerp-0061-proof.json
           for required in hr_daily_payment_adjustments hr_daily_payment_adjustment_snapshots trg_daily_adjustment_prevent_after_paid trg_daily_adjustment_snapshot_no_update trg_daily_adjustment_sync_insert; do
             grep -q "\"$required\"" /tmp/kyerp-0061-proof.json || { echo "0061 CANLI SEMASI EKSIK: $required" >&2; exit 1; }
+          done
+
+      - name: Canli D1 hedefli salt okunur schema dogrulamasi
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command \
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('main_companies','accounting_documents','accounting_document_lines','accounting_document_issues') ORDER BY name;" --json > /tmp/kyerp-ebelge-schema-proof.json
+          for required in main_companies accounting_documents accounting_document_lines accounting_document_issues; do
+            grep -q "\"$required\"" /tmp/kyerp-ebelge-schema-proof.json || { echo "E-BELGE SCHEMA BLOKER: $required" >&2; exit 1; }
           done
 
       - name: Worker'i api.kyerp.net adresine dagit
