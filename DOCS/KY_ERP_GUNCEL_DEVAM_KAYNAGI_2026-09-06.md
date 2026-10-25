@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 25.10.2026 — Muhasebe ödeme planı ilk canlı revizyonu + GitHub tek kaynak envanteri
+- **Canonical:** `codex/model-uretim-kontrol-merkezi-final`, `AppV3/moduleRegistry` + Worker/D1; detaylı envanter `DOCS/KY_ERP_TEK_KAYNAK_MODUL_KONTROL_2026-10-25.md` (ana proje kontrol belgesinin yerine geçmez).
+- [PR #444](https://github.com/cetin60kaya-lgtm/ky-erp/pull/444) **merged** SHA `4807b2845d16b848fc9e3abd164443b30badec48`; [CI #40193864397](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40193864397) frontend lint/test/build ve Worker typecheck/test/build **SUCCESS**.
+- [Pages production #40194066735](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40194066735) **SUCCESS** release SHA `2f0122716173fc86ca91105a5e60b44c5e6b1e29`; merge→release **behind=0 / ahead=1**. Pages deploy + canlı entry/Günlük Operasyon chunk doğrulaması PASS; oturumlu Muhasebe ekran/gerçek ödeme kabulü ayrıca bekliyor.
+- Muhasebe → Finans İşlemleri → Ödeme Planı: `Gecikenler`, `Tüm Planlar`, vade öncelikli filtre, gerçek ödeme öncesi teyit, çift tıklama kilidi, otomatik yenileme, sözleşme testi. **Gerçek D1 ödeme/cari/veri değişimi veya migration yapılmadı.**
+- GitHub kaynak karışıklığı için `DOCS/docs`, `TOOLS/tools`, `DEPLOY`, migration ve workflow envanteri çıkarıldı. Referans taraması olmadan fiziksel silme/taşıma yok. İmalat PR #443 ayrı ve açık.
+
 ## 18.10.2026 — Günlük Operasyon kritik beş sekme PR #442 canlı yayın kanıtı
 - `fix/gunluk-tam-denetim-kritik-guvenlik-senkron-20261018` branch PR [#442](https://github.com/cetin60kaya-lgtm/ky-erp/pull/442), **merge SHA** `9ff13b114174a7e4f0e25990dd7cb4ae44495e94`.
 - [CI #39128442185](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/39128442185) Frontend **success** (lint/test/build), Worker **success** (typecheck/unit/integration/build). Unit includes XLSX real örnek parse, güvenlik policy, kilit, vardiya kontrol ve iki-PC CAS contract.
