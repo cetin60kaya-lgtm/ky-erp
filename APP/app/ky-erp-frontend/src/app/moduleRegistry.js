@@ -243,7 +243,15 @@ modulesByKey.set(COMPLIANCE_MODULE.key, COMPLIANCE_MODULE);
 modulesByKey.set(DEPOLAMA_MODULE.key, DEPOLAMA_MODULE);
 modulesByKey.set(SYSTEM_SENTINEL_MODULE.key, SYSTEM_SENTINEL_MODULE);
 
+modulesByKey.set("ana-sayfa", {
+  key: "ana-sayfa",
+  label: "Ana Sayfa",
+  icon: "dashboard",
+  groups: [{ label: "Başlangıç", tabs: [["genel-bakis", "Ana Sayfa", "dashboard"]] }],
+});
+
 const CANONICAL_MODULE_ORDER = [
+  "ana-sayfa",
   "muhasebe",
   "e-belge",
   "ik",

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Bell, CheckCheck, ChevronDown, Command, Download, LogOut, Menu, Monitor, RefreshCw, Search, Settings2, ShieldCheck, Smartphone, Trash2, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
+import { KY_NAV_GROUPS, navigationGroupFor } from "../app/navigationGroups";
 import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
 
 import DisplaySettingsPanel from "./DisplaySettingsPanel";
@@ -13,6 +14,7 @@ import "../styles/security-notification-actions.css";
 import "../styles/shell-v3-modern.css";
 import "../styles/workspace-flow-final.css";
 import "../styles/approved-html-shell.css";
+import "../styles/ky-pro-shell.css";
 
 const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme", "eslestirmeler", "surum-merkezi"]);
 
@@ -178,6 +180,7 @@ export default function AppShellV3({
   const [quickSearch, setQuickSearch] = useState("");
   const [collapsedModuleKey, setCollapsedModuleKey] = useState("");
   const [expandedGroupKey, setExpandedGroupKey] = useState("");
+  const [expandedNavigationGroup, setExpandedNavigationGroup] = useState("daily");
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [phoneApprovalOpen, setPhoneApprovalOpen] = useState(false);
@@ -389,6 +392,10 @@ export default function AppShellV3({
   }, [activeModule?.key]);
 
   useEffect(() => { setExpandedGroupKey(""); }, [activeTab]);
+  useEffect(() => {
+    const key = navigationGroupFor(activeModule?.key);
+    if (key) setExpandedNavigationGroup(key);
+  }, [activeModule?.key]);
 
   function runQuickAction(action) {
     onOpenTab(action.moduleKey, action.tabKey);
@@ -526,14 +533,29 @@ export default function AppShellV3({
 
       <aside className="shell-v3-sidebar">
         <header className="shell-v3-sidebar-brand">
-          <button type="button" className="shell-v3-brand-button" onClick={() => onToggleModuleMenu("muhasebe")}>
+          <button type="button" className="shell-v3-brand-button" onClick={() => onToggleModuleMenu("ana-sayfa")}>
             <b>KY</b><span><strong>KY ERP</strong><small>{activeModule?.label || "Yönetim Sistemi"}</small></span>
           </button>
           <button type="button" className="shell-v3-sidebar-close" aria-label="Menüyü kapat" onClick={onCloseMobileMenu}><X size={18} /></button>
         </header>
 
         <nav className="shell-v3-sidebar-nav" aria-label="Ana modüller">
-          {modules.map((module) => {
+          {modules.some((module) => module.key === "ana-sayfa") ? (
+            <button type="button" className={activeModule?.key === "ana-sayfa" ? "ky-pro-home-link active" : "ky-pro-home-link"} onClick={() => onToggleModuleMenu("ana-sayfa")}>
+              <ErpIcon name="dashboard" size={18} /><span>Ana Sayfa</span>
+            </button>
+          ) : null}
+          {KY_NAV_GROUPS.map((navGroup) => {
+            const groupModules = modules.filter((module) => navGroup.keys.includes(module.key));
+            if (!groupModules.length) return null;
+            const groupOpen = expandedNavigationGroup === navGroup.key;
+            return (
+              <div className="ky-pro-nav-group" key={navGroup.key}>
+                <button type="button" className={groupOpen ? "ky-pro-nav-group-trigger open" : "ky-pro-nav-group-trigger"} aria-expanded={groupOpen} onClick={() => setExpandedNavigationGroup((current) => current === navGroup.key ? "" : navGroup.key)}>
+                  <span>{navGroup.title}</span><ChevronDown size={16} aria-hidden="true" />
+                </button>
+                {groupOpen ? <div className="ky-pro-nav-group-list">
+          {groupModules.map((module) => {
             const isActiveModule = activeModule?.key === module.key;
             const hasPrimarySidebarGroups = Array.isArray(module.sidebarGroups) && module.sidebarGroups.length > 0;
             const primarySidebarExpanded = isActiveModule && (hasPrimarySidebarGroups || mobileMenuOpen);
@@ -598,6 +620,10 @@ export default function AppShellV3({
                   </div>
                 ) : null}
               </section>
+            );
+          })}
+                </div> : null}
+              </div>
             );
           })}
         </nav>
@@ -805,7 +831,7 @@ export default function AppShellV3({
 
         <div className="shell-v3-crumb"><span className="shell-v3-crumb-icon"><ErpIcon name={tabVisualIcon(activeTab, activeModuleVisual.icon)} size={15} /></span><span className="shell-v3-crumb-module">{activeModule?.label}</span><span>/</span>{activeTabLabel ? <strong>{activeTabLabel}</strong> : <strong>Genel Bakış</strong>}</div>
         <section className="shell-v3-workspace">{children}</section>
-        <footer className="shell-v3-status"><span>KY ERP</span><span>{ownerUser ? "Kapsam: Uygulama Sahibi · Tüm Sistem" : `Firma: ${activeCompanyName}`}</span><span className="ok">Sistem hazır</span></footer>
+        <footer className="shell-v3-status"><span>KY ERP</span><span>{ownerUser ? "Kapsam: Uygulama Sahibi · Tüm Sistem" : `Firma: ${activeCompanyName}`}</span><span className="ok">Güvenli çalışma alanı</span></footer>
       </main>
 
       {displaySettingsOpen && displayPreferences

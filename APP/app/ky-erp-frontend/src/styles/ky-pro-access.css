@@ -1,0 +1,21 @@
+/* Giriş ekranı: gerçek oturum ve MFA bileşenlerini koruyan yeni yerleşim. */
+.auth-page{position:fixed!important;inset:0!important;display:grid!important;place-items:center!important;z-index:9999!important;width:100vw!important;height:100dvh!important;overflow:auto!important;padding:24px!important;background:linear-gradient(125deg,#eaf0f9,#f5f8fc 60%,#e9f0fa)!important}
+.auth-site-backdrop,.auth-site-dimmer{display:none!important}
+.auth-page .auth-shell{position:relative!important;width:min(1080px,calc(100vw - 48px))!important;max-width:none!important;height:min(780px,calc(100dvh - 48px))!important;max-height:calc(100dvh - 48px)!important;min-height:0!important;display:grid!important;grid-template-columns:minmax(330px,.87fr) minmax(420px,1.13fr)!important;overflow:hidden!important;border-radius:22px!important;border:1px solid #d7e2ee!important;box-shadow:0 30px 85px rgba(23,40,63,.16)!important;background:#fff!important}
+.auth-page .auth-brand-panel{display:flex!important;flex-direction:column!important;min-height:0!important;padding:36px 34px!important;background:linear-gradient(150deg,#17283f,#1b3557)!important;color:#fff!important}
+.auth-page .auth-brand-copy{margin-top:40px!important}
+.auth-page .auth-brand-copy h1{font-size:clamp(29px,2.8vw,43px)!important;line-height:1.12!important}
+.auth-page .auth-card-panel{display:flex!important;align-items:center!important;justify-content:center!important;min-height:0!important;height:100%!important;overflow:auto!important;padding:24px!important;background:#fff!important}
+.auth-page .auth-card{width:100%!important;max-width:570px!important;min-height:0!important;height:auto!important;max-height:100%!important;overflow:auto!important;padding:20px clamp(17px,2vw,30px)!important;border-radius:16px!important;border:1px solid #e3eaf3!important;background:#fff!important;box-shadow:none!important}
+.auth-page .auth-stage-viewport{min-height:0!important;max-height:none!important;overflow:visible!important;padding:0!important}
+.auth-page .auth-mobile-brand{margin-bottom:10px!important}
+.auth-page .auth-card-head h2{font-size:25px!important;letter-spacing:-.025em!important}
+.auth-page .auth-card-head p{font-size:12px!important;line-height:1.5!important}
+.auth-page .auth-steps{margin:13px 0 17px!important}
+.auth-page .auth-form label{font-size:12px!important}
+.auth-page .auth-form input,.auth-page .auth-password-field input{min-height:44px!important;font-size:14px!important}
+.auth-page .auth-primary,.auth-page .auth-secondary{min-height:43px!important;font-size:12px!important}
+.auth-page .auth-inline-note,.auth-page .auth-card-footer{font-size:10px!important;line-height:1.5!important}
+.auth-page .auth-phone-status-head p,.auth-page .auth-notice span{font-size:11px!important;line-height:1.5!important}
+@media(max-width:960px){.auth-page .auth-shell{display:block!important;width:min(600px,calc(100vw - 32px))!important;height:auto!important;max-height:calc(100dvh - 24px)!important;overflow:auto!important}.auth-page .auth-brand-panel{display:none!important}.auth-page .auth-card-panel{height:auto!important;padding:15px!important}.auth-page .auth-card{height:auto!important;max-height:none!important}}
+@media(max-width:560px){.auth-page{padding:0!important}.auth-page .auth-shell{width:100vw!important;height:100dvh!important;max-height:100dvh!important;border:0!important;border-radius:0!important}.auth-page .auth-card-panel{padding:8px!important}.auth-page .auth-card{border:0!important;padding:15px!important}.auth-page .auth-stage-viewport{overflow-y:auto!important;max-height:calc(100dvh - 205px)!important}}

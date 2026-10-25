@@ -1,0 +1,16 @@
+/* KY ERP web tanıtımı: tek çağrı ve dengeli yüksekliği olan ana alan. */
+.ky-public{background:#f7f9fc;color:#17283f}
+.ky-public-header{height:72px!important;background:rgba(255,255,255,.97)!important;border-bottom:1px solid #e1e8f0!important;box-shadow:none!important}
+.ky-public-logo>span{border-radius:10px!important;background:#2563eb!important;color:white!important;box-shadow:none!important}
+.ky-public-login,.ky-public-primary{background:#2563eb!important;border-radius:10px!important;box-shadow:0 8px 18px rgba(37,99,235,.14)!important}
+.ky-public-hero{width:min(1280px,calc(100% - 36px))!important;min-height:510px!important;margin:24px auto 0!important;padding:47px clamp(24px,4vw,60px)!important;gap:32px!important;border-radius:24px!important;background:linear-gradient(115deg,#fff 47%,#edf4ff 100%)!important;border:1px solid #e0e7f1!important;box-shadow:0 18px 42px rgba(23,40,63,.06)!important}
+.ky-public-hero:before,.ky-public-hero:after{opacity:.15!important}
+.ky-public-hero h1{font-size:clamp(37px,4.4vw,63px)!important;line-height:1.05!important;letter-spacing:-.04em!important}
+.ky-public-hero__copy>p{font-size:16px!important;line-height:1.65!important;color:#64748b!important}
+.ky-public-preview{box-shadow:0 21px 42px rgba(27,48,78,.13)!important;border-radius:16px!important}
+.ky-public-strip{margin-top:16px!important;border-radius:14px!important;box-shadow:0 9px 25px rgba(23,40,63,.045)!important}
+.ky-public-section{max-width:1280px!important}
+.ky-public-module{border-radius:14px!important;box-shadow:0 6px 14px rgba(23,40,63,.02)!important}
+.ky-public-header nav a{color:#4f627b!important}
+@media(max-width:1020px){.ky-public-hero{grid-template-columns:1fr!important;min-height:0!important;padding:38px 30px!important}}
+@media(max-width:760px){.ky-public-header{height:64px!important}.ky-public-hero{width:calc(100% - 20px)!important;margin-top:10px!important;padding:30px 20px!important}.ky-public-hero h1{font-size:clamp(32px,8vw,44px)!important}.ky-public-hero__copy>p{font-size:14px!important}}

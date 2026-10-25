@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import "./LoginPage.css";
 import "./LoginPageV2.css";
+import "../styles/ky-pro-access.css";
 
 const PROVIDER_LABELS = {
   GOOGLE: "Google Authenticator",
@@ -562,7 +563,7 @@ export default function LoginPage({ onClose }) {
     <main className="auth-page">
       <div className="auth-site-backdrop" aria-hidden="true">
         <header className="auth-site-topbar">
-          <div className="auth-site-brand"><span>KY</span><div><strong>KY ERP</strong><small>Kurumsal Yönetim Sistemi</small></div></div>
+          <div className="auth-site-brand"><span>KY</span><div><strong>KY ERP</strong><small>İşletme Yönetimi</small></div></div>
           <nav><b>Ana Sayfa</b><span>Muhasebe</span><span>Üretim</span><span>PDKS</span><span>İK</span><span>Stok</span><span>Raporlar</span><span>Ayarlar</span></nav>
           <div className="auth-site-entry">Sisteme Giriş →</div>
         </header>
@@ -577,7 +578,7 @@ export default function LoginPage({ onClose }) {
         <aside className="auth-brand-panel">
           <div className="auth-brand-lockup">
             <span className="auth-logo">KY</span>
-            <div><strong>KY ERP</strong><small>Kurumsal Yönetim Sistemi</small></div>
+            <div><strong>KY ERP</strong><small>İşletme Yönetimi</small></div>
           </div>
           <div className="auth-brand-copy">
             <span className="auth-eyebrow">KURUMSAL VE GÜVENLİ ERİŞİM</span>
@@ -596,13 +597,13 @@ export default function LoginPage({ onClose }) {
           <div className="auth-card">
             <div className="auth-mobile-brand">
               <span className="auth-mobile-logo" aria-hidden="true">KY</span>
-              <div><strong>KY ERP</strong><small>Kurumsal Yönetim Sistemi</small></div>
+              <div><strong>KY ERP</strong><small>İşletme Yönetimi</small></div>
               <button type="button" className="auth-modal-close" onClick={() => onClose?.()} aria-label="Giris penceresini kapat">&times;</button>
             </div>
             <div className="auth-card-head">
               <div>
                 <span className="auth-section-label">KY ERP / GİRİŞ</span>
-                <h2>{stage === "CREDENTIALS" ? "Kurumsal Giriş" : "Güvenlik Doğrulaması"}</h2>
+                <h2>{stage === "CREDENTIALS" ? "Giriş Yap" : "Güvenlik Doğrulaması"}</h2>
                 <p>{stage === "CREDENTIALS" ? "Hesabınızla giriş yaparak KY ERP’ye güvenli şekilde erişin." : "Hesabınız için tanımlı güvenlik adımını tamamlayın."}</p>
               </div>
               <span className="auth-secure-badge">Güvenli</span>
@@ -611,7 +612,7 @@ export default function LoginPage({ onClose }) {
             <StepRail stage={stage} />
 
             <div className="auth-stage-viewport">
-            {stage === "CREDENTIALS" ? <div className="auth-login-intro"><span>KY</span><div><strong>Kurumsal hesabınızla devam edin</strong><small>Telefon onayı, güvenilir cihaz ve oturum kontrolleri hesabınıza göre otomatik uygulanır.</small></div></div> : null}
+            {stage === "CREDENTIALS" ? <div className="auth-login-intro"><span>KY</span><div><strong>Hesabınızla devam edin</strong><small>Telefon onayı, güvenilir cihaz ve oturum kontrolleri hesabınıza göre otomatik uygulanır.</small></div></div> : null}
 
             {stage === "CREDENTIALS" ? (
               <form className="auth-form" onSubmit={handleLogin}>
@@ -754,7 +755,7 @@ export default function LoginPage({ onClose }) {
                 </div>
                 {securityMethod === "RECOVERY" && flow.ownerRecoveryAvailable ? (
                   <div className="auth-recovery-compact">
-                    <span className="auth-section-label">KURUMSAL HESAP KURTARMA</span>
+                    <span className="auth-section-label">HESAP KURTARMA</span>
                     <h3>Kimliğinizi güvenli şekilde kurtarın</h3>
                     <p>Doğrulanmış iletişim kanalınıza 6 haneli kod gönderilir. Ardından kayıtlı üç güvenlik sorunuzdan rastgele iki tanesi sorulur.</p>
                     <div className="auth-recovery-actions auth-recovery-actions-compact">

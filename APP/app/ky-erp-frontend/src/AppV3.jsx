@@ -2,6 +2,7 @@ import React, { Suspense, useCallback, useEffect, useMemo, useState } from "reac
 import { useActiveCompany } from "./context/ActiveCompanyContext";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
+import HomeDashboard from "./pages/HomeDashboard";
 import "./styles/secure-launch.css";
 import MuhasebePage from "./pages/modules/MuhasebePage";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
@@ -151,9 +152,11 @@ export default function AppV3() {
   }, [isAuthenticated, user?.id]);
 
   const visibleModules = useMemo(() => {
-    let allowed = MODULES.filter((item) => item.key === "sistem-merkezi"
+    let allowed = MODULES.filter((item) => item.key === "ana-sayfa" ? false : item.key === "sistem-merkezi"
       ? Boolean(sentinelOwner || sentinelAccess?.hasAccess)
       : hasModule(item.permissionKey));
+    // Ana sayfa yalnız en az bir gerçek modül yetkisi olan kullanıcıya gösterilir.
+    if (allowed.length) allowed = [MODULES.find((item) => item.key === "ana-sayfa"), ...allowed].filter(Boolean);
     if (!isAuditAccount) return allowed;
     allowed = allowed.filter((item) => !["admin", "asistan"].includes(item.key));
     return allowed.map((item) => {
@@ -282,6 +285,7 @@ export default function AppV3() {
       moduleActionContext,
       openModule: (moduleKey, options = {}) => openTab(moduleKey, options.tabKey, options),
     };
+    if (activeModule?.key === "ana-sayfa") return <HomeDashboard modules={visibleModules} user={user} {...sharedProps} />;
     if (activeModule?.key === "muhasebe") return <MuhasebePage activeTab={activeTab} {...sharedProps} />;
 
     const eBelgeView = {
