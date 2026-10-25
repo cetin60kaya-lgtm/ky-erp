@@ -17,10 +17,11 @@ test("İmalat 101+ kayıt için güvenli sunucu sayfa ve boyut parametreleri", (
   assert.match(source, /pagination: \{ page, pageSize, total: filtered\.length \}/);
   assert.match(source, /filtered\.slice\(start, start \+ pageSize\)/);
 });
-test("İmalat aynı tek toplu istekte yinelenen fişi ikinci kez yazmaz", () => {
-  assert.match(source, /seenThisBatch = new Set/);
-  assert.match(source, /seenThisBatch\.has\(fingerprint\)/);
-  assert.match(source, /Aynı toplu istekte mükerrer üretim fişi/);
-  assert.match(source, /seenThisBatch\.add\(fingerprint\)/);
+test("İmalat D1 PK idempotency; tek batch içinde aynı clientId tekrarına izin verilmez", () => {
+  assert.match(source, /seenThisBatch/);
+  assert.match(source, /seenThisBatch\.has\(clientId\)/);
+  assert.match(source, /seenThisBatch\.add\(clientId\)/);
+  assert.match(source, /writeProductionEntryAtomic/);
   assert.match(source, /PRODUCTION_CENTER_REQUEST/);
+  assert.doesNotMatch(source, /storage = "json_store"/);
 });
