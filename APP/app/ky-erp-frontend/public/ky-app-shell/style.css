@@ -27,3 +27,6 @@ body[data-kind="COMPANY"] .tabs{background:#f0f8f5ed}.tabs button{flex:none;back
 @media(min-width:640px){.metrics{grid-template-columns:repeat(4,minmax(0,1fr))}.hero h1{font-size:32px}.metric strong{font-size:29px}}
 @media(max-width:370px){.code{font-size:28px}.hero h1{font-size:22px}}
 @media(prefers-reduced-motion:no-preference){.metric,.item{animation:rise .22s ease-out}@keyframes rise{from{opacity:.65;transform:translateY(4px)}to{opacity:1;transform:none}}}
+
+/* v4.1.0: mobilde eski güvenlik PWA ile yeni uygulamayı ayırt et */
+.release-pill{display:inline-flex;align-items:center;margin-top:5px;padding:3px 8px;border-radius:999px;background:#ffffff2b;border:1px solid #ffffff6b;color:#fff;font-weight:800;font-size:10px;letter-spacing:.05em;line-height:1.5}

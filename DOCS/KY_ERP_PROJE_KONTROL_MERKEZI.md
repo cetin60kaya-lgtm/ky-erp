@@ -1,5 +1,12 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 26.10.2026 — KY Güvenlik v4.1.0 tek kalıcı telefon uygulaması
+- **Yeni kullanıcı kararı:** Birden fazla sistem sahibi uygulaması yok. Tek canonical ve aynı PWA kimliği **`/guvenlik/`** (`security.kyerp.net`). Ayrı `/ky-sistem/` ve `/owner-security/` sistem sahibi paketleri kaldırıldı; eski `/ky-sistem/` navigasyonu mevcut güvenlik uygulamasına taşınır, eski service worker emekli edilir. **Firma sahipleri** için ayrı `/ky-firma/` korunur. Çalışanlar mevcut yetkili KY ERP'yi kullanır.
+- Tek güvenlik uygulamasında **v4.1.0** arayüz etiketi, mevcut Süper Yönetici kontrol ekranında özet sayaçlar, ayrı kurulum çağrısının kaldırılması; güvenli cihaz veritabanı `kyerp-security-fresh-v3`, manifest id `/guvenlik/` ve API güvenlik protokolü `security-v4.0` korunur. İki bağımsız sahip PWA paketinden 12 dosya silindi. Muhasebe/İK/İmalat ayrıntılı iş analizi ayrı geliştirme maddesi olarak açıktır.
+- Kod ve yayın kabul değişiklikleri: [PR #466](https://github.com/cetin60kaya-lgtm/ky-erp/pull/466), `fix/security-dual-app-release-verification-20261026` dalında; CI/merge/Cloudflare Worker-Pages yayın SHA'sı ve gerçek Android telefon kabulü doğrulanmadan **canlı/tamamlandı denmez**. Cihaz bağlantıları doğrulanmadan mevcut telefon uygulaması silinmez. Bu çalışma canlı D1 verisine dokunmaz.
+
+
+
 ## 26.10.2026 — Muhasebe + e-Belge/İşNet + İmalat P0 final risk release kanıtı
 - [#463](https://github.com/cetin60kaya-lgtm/ky-erp/pull/463) ödeme defteri conditional D1.batch (20/100 SQLite, rollback) CI [#40225228760](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40225228760) PASS; [#464](https://github.com/cetin60kaya-lgtm/ky-erp/pull/464) üretim requestId DB-PK + fiş/link tek transaction (20/100 SQLite, link rollback) CI [#40225824087](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40225824087) PASS.
 - [#465](https://github.com/cetin60kaya-lgtm/ky-erp/pull/465) kesin kayıt CAS + gerçek user.id/sürüm/checkbox ve İşNet salt-okunur provider sağlık kontrolü, CI [#40226730180](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40226730180) PASS; [#467](https://github.com/cetin60kaya-lgtm/ky-erp/pull/467) fiziksel stok etkisi olmayan faturanın cari+bakiye+defter+KDV+POSTED kaydı tek D1 batch (20/100 SQLite, hata enjeksiyonu), CI [#40242596733](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40242596733) PASS.

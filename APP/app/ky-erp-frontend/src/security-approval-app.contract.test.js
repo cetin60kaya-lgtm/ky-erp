@@ -169,9 +169,9 @@ test("security app shows the verified bound ERP account identity and access scop
 });
 
 test("security app exposes one visible canonical version and persists it on the device record",()=>{
-  assert.match(html,/id="appVersionBadge">v3\.0/);
-  assert.match(html,/id="accountVersion">v3\.0/);
-  assert.match(app,/CLIENT_VERSION="security-v3\.0"/);
+  assert.match(html,/id="appVersionBadge">v4\.1\.0/);
+  assert.match(html,/id="accountVersion">v4\.1\.0/);
+  assert.match(app,/APP_DISPLAY_VERSION="v4\.1\.0"/);
   assert.match(app,/X-KYERP-Security-App-Version/);
   assert.match(app,/lastKnownServerVersion/);
   assert.match(app,/versionCheckedAt/);

@@ -41,14 +41,15 @@ test("fresh worker is push-only and leaves the app shell to the network",()=>{
   assert.match(sw,/self\.addEventListener\("notificationclick"/);
 });
 
-test("security host preserves original security PWA and serves two separately scoped owner and company apps",()=>{
+test("security host serves one canonical owner PWA and separate company PWA",()=>{
   assert.match(host,/const APP_PREFIX="\/guvenlik"/);
   assert.match(host,/const APP_URL="\/guvenlik\/"/);
   assert.match(host,/const LEGACY_PREFIXES=\["\/security","\/ky-guvenlik","\/ky-guvenlik-recover"\]/);
   assert.match(host,/Service-Worker-Allowed/);
   assert.match(host,/env\.ASSETS/);
   assert.match(host,/ADDITIONAL_APPS/);
-  assert.match(host,/ky-sistem/);
+  assert.match(host,/const ADDITIONAL_APPS=\["\/ky-firma"\]/);
+  assert.match(host,/ky-sistem/); // Eski adrese guvenli tasima destegi.
   assert.match(host,/ky-firma/);
   assert.match(host,/SHARED_ASSET_PREFIX/);
   assert.match(host,/function assetPath/);

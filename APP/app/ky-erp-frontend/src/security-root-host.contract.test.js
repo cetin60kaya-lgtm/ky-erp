@@ -11,7 +11,7 @@ const host=readFileSync(resolve(root,"APP/cloud/ky-erp-security-host/worker.js")
 test("security host serves only the fresh /guvenlik PWA",()=>{
   assert.match(host,/const APP_PREFIX="\/guvenlik"/);
   assert.match(host,/const APP_URL="\/guvenlik\/"/);
-  assert.match(host,/X-KYERP-Security-App","fresh-v3"/);
+  assert.match(host,/X-KYERP-Security-App","fresh-v4"/);
   assert.match(host,/url\.pathname===APP_URL/);
 });
 
