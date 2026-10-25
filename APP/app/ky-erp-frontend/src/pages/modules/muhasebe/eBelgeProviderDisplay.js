@@ -3,7 +3,17 @@ export function providerDisplayStatus(provider = {}) {
   const status = String(provider.status || "UNKNOWN").toUpperCase();
   if (key === "ISNET") {
     const connected = provider.connected === true && status === "CONNECTED";
-    return { active: connected, label: connected ? "BAĞLI" : status === "CONFIGURED" ? "AYARLI · BAĞLI DEĞİL" : "BAĞLI DEĞİL" };
+    const descriptions = {
+      CONFIGURED: "AYARLI · DOĞRULANMADI",
+      UNVERIFIED: "DOĞRULANAMADI",
+      SESSION_INVALID: "OTURUM GEÇERSİZ",
+      SESSION_EXPIRED: "OTURUM SÜRESİ DOLMUŞ",
+      TIMEOUT: "DOĞRULAMA ZAMAN AŞIMI",
+      VERIFYING: "DOĞRULANIYOR",
+      ERROR: "BAĞLANTI HATASI",
+      NOT_CONFIGURED: "BAĞLI DEĞİL",
+    };
+    return { active: connected, label: connected ? "BAĞLI" : descriptions[status] || "DOĞRULANAMADI" };
   }
   if (key === "MANUAL") {
     const active = ["XML_ACTIVE_OCR_NOT_CONFIGURED", "OCR_ACTIVE"].includes(status);

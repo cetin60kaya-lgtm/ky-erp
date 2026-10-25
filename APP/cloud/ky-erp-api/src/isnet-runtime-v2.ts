@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
+import { probeIsnetSessionHealth } from "./isnet-session-health";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -413,6 +414,20 @@ async function isnetApiRequest(c: Context<AppEnv>, slug: string, endpoint: strin
     throw new Error(payloadMessage(payload));
   }
   return payload;
+}
+
+// Salt-okunur alıcı sorgusu: resmî belge/fatura gönderimi YAPMAZ.
+// Dış sağlayıcıdan alınan alıcı listesi yanıt gövdesi/log/api yanıtına taşınmaz.
+export async function verifyIsnetReadOnlySession(c: Context<AppEnv>,slug: string) {
+  const settings=await settingsRaw(c,slug),companyId=text(settings.companyId),token=text(settings.accessToken);
+  const base={status:"UNVERIFIED",connected:false,lastVerifiedAt:null,source:"ISNET_RECIPIENT_READ_ONLY"};
+  if(!companyId)return {...base,status:"NOT_CONFIGURED"};
+  if(!token||text(settings.connectionMode)==="portal")return base;
+  const expires=text(settings.tokenExpiresOn);
+  if(expires&&!Number.isNaN(Date.parse(expires))&&Date.parse(expires)<=Date.now())
+    return {...base,status:"SESSION_EXPIRED"};
+  const result=await probeIsnetSessionHealth(fetch,API_BASE+"/api/Company/GetRecipientList",token,companyId,6000);
+  return {...result,source:"ISNET_RECIPIENT_READ_ONLY"};
 }
 
 function extractRows(payload: any) {

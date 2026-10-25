@@ -7,8 +7,10 @@ import { documentPageMeta } from "./documentPageMeta.js";
 test("İşNet yalnız gerçek CONNECTED+connected=true durumunda bağlı görünür", () => {
   assert.deepEqual(providerDisplayStatus({ key: "ISNET", status: "CONNECTED", connected: true }), { active: true, label: "BAĞLI" });
   assert.equal(providerDisplayStatus({ key: "ISNET", status: "CONNECTED", connected: false }).active, false);
-  assert.equal(providerDisplayStatus({ key: "ISNET", status: "CONFIGURED", connected: false }).label, "AYARLI · BAĞLI DEĞİL");
+  assert.equal(providerDisplayStatus({ key: "ISNET", status: "CONFIGURED", connected: false }).label, "AYARLI · DOĞRULANMADI");
   assert.equal(providerDisplayStatus({ key: "ISNET", status: "READY_FOR_ADAPTER" }).active, false);
+  assert.equal(providerDisplayStatus({ key: "ISNET", status: "SESSION_EXPIRED" }).label, "OTURUM SÜRESİ DOLMUŞ");
+  assert.equal(providerDisplayStatus({ key: "ISNET", status: "UNVERIFIED" }).label, "DOĞRULANAMADI");
 });
 test("XML hazır ancak OCR yoksa OCR aktif gibi görünmez; taslak adaptör asla bağlı değildir", () => {
   assert.deepEqual(providerDisplayStatus({ key: "MANUAL", status: "XML_ACTIVE_OCR_NOT_CONFIGURED" }), { active: true, label: "YALNIZ XML HAZIR" });
