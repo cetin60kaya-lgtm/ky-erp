@@ -162,9 +162,9 @@ export default function PhoneApprovalSetup({ onClose }) {
     }
   }
 
-  function securityAppUrl(extra = {}, sourceEnrollment = enrollment) {
-    const raw = sourceEnrollment?.appUrl || "https://security.kyerp.net/guvenlik/";
-    const url = new URL(raw, window.location.origin);
+  function securityAppUrl(extra = {}) {
+    // Tek canonical PWA: sunucu yanıtındaki eski/yanlış appUrl ikinci kurulum yaratmasın.
+    const url = new URL("https://security.kyerp.net/guvenlik/");
     Object.entries(extra).forEach(([key, value]) => {
       if (value !== undefined && value !== null && String(value) !== "") url.searchParams.set(key, String(value));
     });
@@ -172,7 +172,7 @@ export default function PhoneApprovalSetup({ onClose }) {
   }
 
   async function openSecurityApp() {
-    const target = securityAppUrl({}, null);
+    const target = securityAppUrl();
     if (clientPlatform === "android") {
       const url = new URL(target);
       window.location.href = `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url=${encodeURIComponent(target)};end`;
@@ -185,7 +185,7 @@ export default function PhoneApprovalSetup({ onClose }) {
   async function openSecurityInstaller(platform) {
     const data = await issueEnrollment({ exposeCode: true });
     if (!data) return;
-    const target = securityAppUrl({ install: 1, platform, chrome: platform === "android" ? 1 : undefined }, data);
+    const target = securityAppUrl({ install: 1, platform, chrome: platform === "android" ? 1 : undefined });
     if (platform === "android" && clientPlatform === "android") {
       const url = new URL(target);
       window.location.href = `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(target)};end`;
@@ -239,8 +239,8 @@ export default function PhoneApprovalSetup({ onClose }) {
             <span><ShieldCheck size={22} /></span>
             <div>
               <small>KY ERP GÜVENLİ GİRİŞ</small>
-              <h2>KY ERP Güvenlik</h2>
-              <p>Microsoft Authenticator mantığında ayrı telefon/tablet onay uygulaması. Güvenilir cihaz bağlantısı 8 karakter kod + ADMIN / KY ERP şifresiyle kurulur.</p>
+              <h2>KY ERP Güvenlik v4.1.1</h2>
+              <p>Telefonunuzdaki tek KY Güvenlik v4.1.1 uygulamasını kullanın. Mevcut uygulamayı silmeyin veya tekrar yüklemeyin. Yeni telefon bağlantısı için 8 karakter kod + KY ERP şifresi gereklidir.</p>
             </div>
           </div>
           <button type="button" className="phone-approval-close" onClick={onClose} aria-label="Kapat"><X size={18}/></button>
