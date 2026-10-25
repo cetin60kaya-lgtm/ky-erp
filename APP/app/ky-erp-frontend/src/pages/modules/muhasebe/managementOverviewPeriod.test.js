@@ -23,6 +23,6 @@ test("ana firma, dönemsellik ve eski yanıt koruması yönetim görünümüne b
   assert.match(ui,/month: Number\(period\.slice\(5, 7\)\)/);
   assert.match(ui,/ticket !== seq\.current/);
   assert.match(ui,/invoicePeriod !== period/);
-  assert.match(ui,/Güncel toplam alacak/);
+  assert.match(ui,/Toplam alacak \\(güncel\\)/);
   assert.match(ui,/Seçili dönem gelen KDV/);
 });
