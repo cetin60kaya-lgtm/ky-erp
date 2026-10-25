@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 25.10.2026 — En güncel 19 sekme Muhasebe / e-Belge / İmalat devam durumu
+- PR #446: Muhasebe alış irsaliye+satış faturası 50'lik sunucu sayfalaması, search ve yarış durumu düzeltildi; CI #40205322671 PASS; Pages release #40205714344 SUCCESS, SHA `ea8f1bf327d38a290cca54c814214da052e80f3d`.
+- PR #447: e-Belge havuz 100+ page ve gelen/giden tenant korumalı yön filtresi; merged `e15d1bcc0f1c30149720a72dc26853e0f27761b5`, CI #40206047817 PASS.
+- PR #443: İmalat 100+ page ayrı mevcut PR korunarak merged `35405ffbbd172f929ad0865d0ef24e6b350e80a4`, CI #40192931624 PASS.
+- PR #448: mevcut Worker production workflow migration'ları ayrıca açık izne bağlandı; merged `9afadbf5d2a0a6ce6d7f0eb6012fcb977205c40a`, CI #40206496193 PASS. Worker release #40206650866 **SUCCESS**, SHA `17245ea35ceed2077f193756176dc510da7a8c1f`; tam D1 yedek+artifact, salt okunur schema ve canlı /api/health PASS; migration adımları **SKIPPED**, D1 mutasyonu yok.
+- **Açık kapı:** PR #447 / #443 frontend Pages release, sonra yetkili kullanıcıyla 19/19 belge, firma, API, İşNet, LOT, model ve ödeme onay saha testi; [satır bazlı matris](KY_ERP_19_SEKME_MUHASEBE_EBELGE_IMALAT_KABUL_MATRISI_2026-10-25.md). Gerçek oturumlu smoke olmadan 19 sekmenin tamamı KISMİ.
+
+
 
 ## 25.10.2026 — Muhasebe 19-sekme faz 1: belge liste sayfalaması
 - [PR #446](https://github.com/cetin60kaya-lgtm/ky-erp/pull/446) merged SHA `3db5852b499a02e7b62d81d2fcdc9b5ed8fe3f56`; CI [#40205322671](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40205322671) frontend/Worker **SUCCESS**. Alış irsaliyeleri ve satış faturalarında ilk 100 kayıt sınırı yerine server pagination, arama/yenileme ve stale request koruması eklendi.
