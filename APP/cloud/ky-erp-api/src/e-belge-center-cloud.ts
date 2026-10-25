@@ -155,10 +155,13 @@ async function uploadOne(c:Context<AppEnv>,slug:string,file:File,requestedDirect
 function lineLotNo(line:Row){const raw=safeJson(line.raw_metadata);return text(raw.dispatchLotNo||raw.invoiceLotNo||raw.lotNo)}
 function rowDocument(row:Row,lines:Row[]){return{id:text(row.id),documentNo:text(row.document_no),partyCompanyId:text(row.party_company_id),partyTaxNo:cleanTax(row.party_tax_no),direction:text(row.direction),issueDate:row.issue_date,lines:lines.map(l=>({id:text(l.id),productId:text(l.product_id),productCode:text(l.product_code),supplierProductCode:text(l.supplier_product_code),description:text(l.description),quantity:numberValue(l.quantity),unitCode:text(l.unit_code),lotNo:lineLotNo(l)}))}}
 
-async function reconcileOne(c:Context<AppEnv>,slug:string,id:string){
+async function reconcileOne(c:Context<AppEnv>,slug:string,id:string,internalFinalize=false){
   const invoice=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(id,slug).first<Row>();
   if(!invoice)throw Object.assign(new Error("Belge bulunamadı."),{code:"NOT_FOUND"});
   if(invoice.posted_at||upper(invoice.status)==="POSTED")throw Object.assign(new Error("Muhasebeleştirilmiş belge yeniden eşleştirilemez; gerekirse yetkili düzeltme fişi kullanın."),{code:"DOCUMENT_ALREADY_POSTED"});
+  if(["FINALIZING","APPROVED","FINALIZE_RETRY"].includes(upper(invoice.status)) &&
+     !(internalFinalize&&upper(invoice.status)==="FINALIZING"))
+    throw Object.assign(new Error("Kesin kayıt başlamış belge doğrudan eşleştirilemez."),{code:"DOCUMENT_FINALIZATION_LOCKED"});
   if(text(invoice.party_company_id))await rerouteDocumentLines(c,slug,id,text(invoice.party_company_id));
   if(!isInvoice(invoice.document_type))return{documentId:id,status:"NOT_INVOICE",confidence:0,notes:["İrsaliye eşleştirmesi yalnız faturalarda çalışır."]};
   if(!["INCOMING","OUTGOING"].includes(upper(invoice.direction))){await addIssue(c,slug,id,"DIRECTION_UNRESOLVED","Fatura/irsaliye eşleştirmesi için belge yönü netleşmelidir.","ERROR","direction");return{documentId:id,status:"DIRECTION_UNRESOLVED",confidence:0,notes:["Belge yönü otomatik doğrulanamadı."]}}
@@ -191,7 +194,7 @@ async function reconcileOne(c:Context<AppEnv>,slug:string,id:string){
 async function validateForFinal(c:Context<AppEnv>,slug:string,id:string){
   const doc=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(id,slug).first<Row>();
   if(!doc)throw Object.assign(new Error("Belge bulunamadı."),{code:"NOT_FOUND"});
-  if(isInvoice(doc.document_type))await reconcileOne(c,slug,id);
+  if(isInvoice(doc.document_type))await reconcileOne(c,slug,id,true);
   const lines=(await c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no`).bind(slug,id).all<Row>()).results||[];
   for(const l of lines){
     const raw=safeJson(l.raw_metadata),product=text(l.product_id)?await getEBelgeProduct(c,slug,text(l.product_id)):null,lotPolicy=resolveProductLotPolicy(product,raw.routingType),lotAllocations=safeArray(raw.lotAllocations||raw.reconciliation?.allocations);
@@ -329,7 +332,8 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
   app.patch("/api/e-belge/documents/:id",async c=>{
     const slug=slugOf(c),id=c.req.param("id"),b=await c.req.json<Row>().catch(()=>({})),doc=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL`).bind(id,slug).first<Row>();
     if(!doc)return c.json(error("NOT_FOUND","Belge bulunamadı."),404);
-    if(doc.posted_at||upper(doc.status)==="POSTED")return c.json(error("DOCUMENT_ALREADY_POSTED","Muhasebeleştirilmiş belge doğrudan düzenlenemez; düzeltme/iptal sürecini kullanın."),409);
+    if(doc.posted_at||["POSTED","FINALIZING","APPROVED","FINALIZE_RETRY"].includes(upper(doc.status)))
+      return c.json(error("DOCUMENT_FINALIZATION_LOCKED","Kesin kayıt/inceleme aşamasındaki belge doğrudan değiştirilemez."),409);
     let companyId=text(doc.party_company_id),partyName=text(doc.party_name),partyTaxNo=cleanTax(doc.party_tax_no);
     if(Object.prototype.hasOwnProperty.call(b,"partyCompanyId")&&text(b.partyCompanyId)){
       const company=await c.env.DB.prepare(`SELECT id,name,tax_no FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(text(b.partyCompanyId),slug).first<Row>();
@@ -341,13 +345,14 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     if(targetDirection==="AUTO")return c.json(error("DIRECTION_REQUIRED","Belge yönü GELEN veya GİDEN olmalıdır."),400);
     const requestedType=text(b.documentType||b.documentKind),kind=requestedType||text(doc.document_type),targetType=documentTypeOf(kind,targetDirection);
     const documentNo=Object.prototype.hasOwnProperty.call(b,"documentNo")?text(b.documentNo):text(doc.document_no),issueDate=Object.prototype.hasOwnProperty.call(b,"issueDate")?text(b.issueDate):text(doc.issue_date),dueDate=Object.prototype.hasOwnProperty.call(b,"dueDate")?text(b.dueDate):text(doc.due_date),currency=Object.prototype.hasOwnProperty.call(b,"currency")?upper(b.currency):upper(doc.currency)||"TRY",note=Object.prototype.hasOwnProperty.call(b,"note")?text(b.note):text(doc.note);
-    await c.env.DB.prepare(`UPDATE accounting_documents SET direction=?,document_type=?,document_no=?,issue_date=?,due_date=?,currency=?,party_company_id=?,party_name=?,party_tax_no=?,note=?,status='REVIEW_REQUIRED',updated_at=? WHERE id=? AND main_company_slug=?`).bind(targetDirection,targetType,documentNo||null,issueDate||null,dueDate||null,currency||"TRY",companyId||null,partyName||null,partyTaxNo||null,note||null,now(),id,slug).run();
+    const updated=await c.env.DB.prepare(`UPDATE accounting_documents SET direction=?,document_type=?,document_no=?,issue_date=?,due_date=?,currency=?,party_company_id=?,party_name=?,party_tax_no=?,note=?,status='REVIEW_REQUIRED',updated_at=? WHERE id=? AND main_company_slug=? AND posted_at IS NULL AND status NOT IN ('POSTED','FINALIZING','FINALIZE_RETRY','APPROVED')`).bind(targetDirection,targetType,documentNo||null,issueDate||null,dueDate||null,currency||"TRY",companyId||null,partyName||null,partyTaxNo||null,note||null,now(),id,slug).run();
+    if(Number(updated.meta?.changes)!==1)return c.json(error("DOCUMENT_FINALIZATION_LOCKED","Belge bu sırada kesin kayda geçti; tekrar açıp kontrol edin."),409);
     if(companyId)await rerouteDocumentLines(c,slug,id,companyId);
     await resolveIssues(c,slug,id,["DIRECTION_UNRESOLVED"]);
     return c.json({ok:true,data:{id,direction:targetDirection,documentType:targetType}});
   });
   app.post("/api/e-belge/documents/:id/reconcile",async c=>{try{return c.json({ok:true,data:await reconcileOne(c,slugOf(c),c.req.param("id"))})}catch(e:any){return c.json(error(text(e.code)||"RECONCILE_FAILED",text(e.message)||"Eşleştirme tamamlanamadı."),text(e.code)==="NOT_FOUND"?404:409)}});
-  app.post("/api/e-belge/reconcile-all",async c=>{const slug=slugOf(c),rows=(await c.env.DB.prepare(`SELECT id FROM accounting_documents WHERE main_company_slug=? AND document_type LIKE '%FATURA%' AND deleted_at IS NULL AND status<>'POSTED' ORDER BY COALESCE(issue_date,created_at) DESC LIMIT 500`).bind(slug).all<Row>()).results||[],results=[];for(const row of rows){try{results.push(await reconcileOne(c,slug,text(row.id)))}catch(e:any){results.push({documentId:row.id,status:"ERROR",message:text(e.message)})}}return c.json({ok:true,data:{total:results.length,results}})});
+  app.post("/api/e-belge/reconcile-all",async c=>{const slug=slugOf(c),rows=(await c.env.DB.prepare(`SELECT id FROM accounting_documents WHERE main_company_slug=? AND document_type LIKE '%FATURA%' AND deleted_at IS NULL AND status NOT IN ('POSTED','FINALIZING','FINALIZE_RETRY','APPROVED') ORDER BY COALESCE(issue_date,created_at) DESC LIMIT 500`).bind(slug).all<Row>()).results||[],results=[];for(const row of rows){try{results.push(await reconcileOne(c,slug,text(row.id)))}catch(e:any){results.push({documentId:row.id,status:"ERROR",message:text(e.message)})}}return c.json({ok:true,data:{total:results.length,results}})});
   app.post("/api/e-belge/documents/:id/issues/:issueId/resolve",async c=>{const slug=slugOf(c),id=c.req.param("id"),issueId=c.req.param("issueId");await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE id=? AND main_company_slug=? AND document_id=?`).bind(now(),issueId,slug,id).run();return c.json({ok:true,data:{issueId,resolved:true}})});
   app.post("/api/e-belge/documents/:id/finalize",async c=>{
     const slug=slugOf(c),id=c.req.param("id"),b=await c.req.json<Row>().catch(()=>({}));
