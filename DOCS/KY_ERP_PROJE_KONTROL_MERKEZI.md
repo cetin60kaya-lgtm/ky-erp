@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 25.10.2026 — 19 sekme uygulama: CI, kaynak birleştirmeleri ve güvenli Worker canlı kanıtı (güncel)
+- Muhasebe PR [#446](https://github.com/cetin60kaya-lgtm/ky-erp/pull/446) merged `3db5852b499a02e7b62d81d2fcdc9b5ed8fe3f56`, CI #40205322671 **SUCCESS**; [Pages #40205714344](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40205714344) **SUCCESS** release `ea8f1bf327d38a290cca54c814214da052e80f3d`, ancestry behind=0; public bundle ve Günlük Operasyon chunk canlı smoke başarılı.
+- e-Belge [PR #447](https://github.com/cetin60kaya-lgtm/ky-erp/pull/447) merged `e15d1bcc0f1c30149720a72dc26853e0f27761b5`; CI #40206047817 **SUCCESS**: havuz/gelen/giden kontrol listelerinde 100+ server pagination, tenant korumalı direction GET filtresi. 
+- İmalat [PR #443](https://github.com/cetin60kaya-lgtm/ky-erp/pull/443) merged `35405ffbbd172f929ad0865d0ef24e6b350e80a4`; CI #40192931624 **SUCCESS**: mevcut üretim merkezi sayfalaması korundu.
+- Güvenli Worker yayın [PR #448](https://github.com/cetin60kaya-lgtm/ky-erp/pull/448) merged `9afadbf5d2a0a6ce6d7f0eb6012fcb977205c40a`; CI #40206496193 **SUCCESS**. [Worker production #40206650866](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40206650866) **SUCCESS**, SHA `17245ea35ceed2077f193756176dc510da7a8c1f`, ilgili #447 ve #448 merge ancestry behind=0. Tam canlı D1 export/artifact, salt-okunur schema, deploy ve /api/health adımları PASS; 0050/0051/0055/0060/0061 migration adımları **SKIPPED**. İzin bayrakları açıkça FALSE; production D1 migration veya gerçek finans/belge kaydı yapılmadı.
+- **Kalan:** e-Belge ve İmalat frontend PR #447/#443 Pages release + bundle smoke; tüm 19 sekmede gerçek yetkili tarayıcı, firma/rol, ödeme/fiş/muhasebe mutabakat ve İşNet saha testleri. Bu testler olmadan 19 sekme tamamlandı denmez. [19 sekme kabul matrisi](KY_ERP_19_SEKME_MUHASEBE_EBELGE_IMALAT_KABUL_MATRISI_2026-10-25.md).
+
+
 
 ## 25.10.2026 — Muhasebe belge listeleri PR #446 / 19 sekme kabul takibi
 - [PR #446](https://github.com/cetin60kaya-lgtm/ky-erp/pull/446) **merged** `3db5852b499a02e7b62d81d2fcdc9b5ed8fe3f56`; CI [#40205322671](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40205322671) **Frontend lint/test/build + Worker typecheck/test/build SUCCESS**.
