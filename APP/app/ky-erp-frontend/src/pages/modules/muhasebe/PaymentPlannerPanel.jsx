@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BellRing, CalendarDays, CheckCircle2, Plus, WalletCards } from "lucide-react";
 import { apiGet, apiPost } from "../../../utils/api";
+import { isOpenPaymentPlan, overduePaymentPlans } from "./paymentPlanView";
 import "./paymentPlannerPanel.css";
 
 const money = (value, currency = "TRY") => new Intl.NumberFormat("tr-TR", { style: "currency", currency: currency || "TRY", maximumFractionDigits: 2 }).format(Number(value || 0));
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; };
 const emptyForm = () => ({ counterpartyName: "", amount: "", plannedDate: today(), dueDate: "", priority: "NORMAL", paymentMethod: "BANKA", bankAccountId: "", description: "", reminderEnabled: true, reminderAt: "" });
 
-export default function PaymentPlannerPanel({ activeMainCompany }) {
+export default function PaymentPlannerPanel({ activeMainCompany, refreshKey = 0 }) {
   const [mode, setMode] = useState("week");
   const [rows, setRows] = useState([]);
   const [range, setRange] = useState({});
@@ -17,6 +18,8 @@ export default function PaymentPlannerPanel({ activeMainCompany }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [accounts, setAccounts] = useState([]);
+  const [confirmPayment, setConfirmPayment] = useState(null);
+  const [paying, setPaying] = useState(false);
 
   const params = useMemo(() => ({ mainCompanySlug: activeMainCompany?.slug, mainCompanyId: activeMainCompany?.id }), [activeMainCompany?.id, activeMainCompany?.slug]);
 
@@ -24,16 +27,22 @@ export default function PaymentPlannerPanel({ activeMainCompany }) {
     if (!activeMainCompany?.slug) return;
     setLoading(true); setError("");
     try {
-      const path = mode === "weekend" ? "/muhasebe/odeme-plani/hafta-sonu" : "/muhasebe/odeme-plani/hafta";
+      const path = mode === "weekend" ? "/muhasebe/odeme-plani/hafta-sonu" : mode === "week" ? "/muhasebe/odeme-plani/hafta" : "/muhasebe/odeme-plani";
       const [result, accountResult] = await Promise.all([apiGet(path, params), apiGet("/muhasebe/workspace/financial-accounts", { ...params, _ts: Date.now() })]);
       setAccounts(Array.isArray(accountResult?.data) ? accountResult.data.filter((row) => row.is_active !== 0) : []);
-      setRange({ from: result?.data?.from, to: result?.data?.to });
-      setRows(Array.isArray(result?.data?.rows) ? result.data.rows : []);
+      const data = result?.data;
+      const allRows = Array.isArray(data) ? data : Array.isArray(data?.rows) ? data.rows : [];
+      const openRows = mode === "overdue"
+        ? overduePaymentPlans(allRows, today())
+        : allRows;
+      setRange({ from: data?.from, to: data?.to });
+      setRows(openRows);
     } catch (e) { setError(e?.message || "Ödeme planı alınamadı."); }
     finally { setLoading(false); }
   }, [activeMainCompany?.slug, mode, params]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, refreshKey]);
+  useEffect(() => { setConfirmPayment(null); }, [activeMainCompany?.slug, mode]);
 
   const save = async (event) => {
     event.preventDefault(); setError(""); setMessage("");
@@ -44,23 +53,30 @@ export default function PaymentPlannerPanel({ activeMainCompany }) {
     } catch (e) { setError(e?.message || "Ödeme planı kaydedilemedi."); }
   };
 
-  const markPaid = async (row) => {
-    setError(""); setMessage("");
+  const markPaid = async () => {
+    const row = confirmPayment;
+    if (!row || paying) return;
+    setError(""); setMessage(""); setPaying(true);
     try {
       await apiPost(`/muhasebe/odeme-plani/${row.id}/paid`, { ...params, paidAmount: Number(row.amount || 0), paymentDate: today(), paymentMethod: row.payment_method, bankAccountId: row.bank_account_id || "" });
-      setMessage(`${row.counterparty_name} ödemesi işlendi ve deftere yazıldı.`); await load();
+      setMessage(`${row.counterparty_name} ödemesi işlendi ve deftere yazıldı.`);
+      setConfirmPayment(null);
+      await load();
     } catch (e) { setError(e?.message || "Ödeme işlenemedi."); }
+    finally { setPaying(false); }
   };
 
   return (
     <section className="payment-planner-card">
       <header>
-        <div><WalletCards size={20} /><span><strong>Ödeme Planı</strong><small>Kime, ne zaman ve ne kadar ödeme yapılacağını haftalık yönetin.</small></span></div>
+        <div><WalletCards size={20} /><span><strong>Ödeme Planı</strong><small>Planlanan, geciken ve tamamlanan ödemeleri tek kaynaktan takip edin.</small></span></div>
         <button type="button" onClick={() => setShowForm((v) => !v)}><Plus size={15} /> Yeni ödeme</button>
       </header>
       <div className="payment-planner-tabs">
         <button type="button" className={mode === "week" ? "active" : ""} onClick={() => setMode("week")}><CalendarDays size={14} /> Bu Hafta</button>
         <button type="button" className={mode === "weekend" ? "active" : ""} onClick={() => setMode("weekend")}><BellRing size={14} /> Hafta Sonu</button>
+        <button type="button" className={mode === "overdue" ? "active" : ""} onClick={() => setMode("overdue")}>Gecikenler</button>
+        <button type="button" className={mode === "all" ? "active" : ""} onClick={() => setMode("all")}>Tüm Planlar</button>
         <span>{range.from && range.to ? `${range.from} → ${range.to}` : ""}</span>
       </div>
       {showForm ? <form className="payment-planner-form" onSubmit={save}>
@@ -74,9 +90,19 @@ export default function PaymentPlannerPanel({ activeMainCompany }) {
         <label>Hatırlatma<input type="datetime-local" value={form.reminderAt} onChange={(e) => setForm({ ...form, reminderAt: e.target.value })} /></label>
         <button type="submit">Kaydet</button>
       </form> : null}
-      {message ? <div className="payment-message ok">{message}</div> : null}{error ? <div className="payment-message error">{error}</div> : null}
+      {message ? <div className="payment-message ok" role="status">{message}</div> : null}{error ? <div className="payment-message error" role="alert">{error}</div> : null}
+      {confirmPayment ? (
+        <div className="payment-message" role="group" aria-label="Ödeme onayı">
+          <strong>Ödeme kaydı onayı</strong>
+          <p>{confirmPayment.counterparty_name} için {money(confirmPayment.amount, confirmPayment.currency)} tutarındaki ödemeyi {today()} tarihiyle deftere işlemek üzeresiniz. Bu işlem gerçek finansal hareket oluşturur.</p>
+          <div className="payment-confirm-actions">
+            <button type="button" disabled={paying} onClick={() => setConfirmPayment(null)}>Vazgeç</button>
+            <button type="button" className="paid-btn" disabled={paying} onClick={markPaid}>{paying ? "Kaydediliyor…" : "Ödemeyi Onayla"}</button>
+          </div>
+        </div>
+      ) : null}
       <div className="payment-table-wrap"><table><thead><tr><th>Tarih</th><th>Kişi / Firma</th><th>Tutar</th><th>Öncelik</th><th>Ödeme Şekli</th><th>Hesap</th><th>Durum</th><th></th></tr></thead><tbody>
-        {loading ? <tr><td colSpan="8">Yükleniyor…</td></tr> : rows.length ? rows.map((row) => <tr key={row.id}><td>{row.planned_date || row.due_date || "-"}</td><td><strong>{row.counterparty_name}</strong><small>{row.description || ""}</small></td><td>{money(row.amount, row.currency)}</td><td>{row.priority}</td><td>{row.payment_method || "-"}</td><td>{accounts.find((account)=>String(account.id)===String(row.bank_account_id||""))?.name||"-"}</td><td>{row.status}</td><td><button type="button" className="paid-btn" onClick={() => markPaid(row)}><CheckCircle2 size={14} /> Ödendi</button></td></tr>) : <tr><td colSpan="8">Bu dönem için planlanmış ödeme yok.</td></tr>}
+        {loading ? <tr><td colSpan="8">Yükleniyor…</td></tr> : rows.length ? rows.map((row) => <tr key={row.id}><td>{row.planned_date || row.due_date || "-"}</td><td><strong>{row.counterparty_name}</strong><small>{row.description || ""}</small></td><td>{money(row.amount, row.currency)}</td><td>{row.priority}</td><td>{row.payment_method || "-"}</td><td>{accounts.find((account)=>String(account.id)===String(row.bank_account_id||""))?.name||"-"}</td><td>{row.status}</td><td>{isOpenPaymentPlan(row) ? <button type="button" className="paid-btn" disabled={paying} onClick={() => setConfirmPayment(row)}><CheckCircle2 size={14} /> Ödendi</button> : null}</td></tr>) : <tr><td colSpan="8">Bu dönem için planlanmış ödeme yok.</td></tr>}
       </tbody></table></div>
     </section>
   );

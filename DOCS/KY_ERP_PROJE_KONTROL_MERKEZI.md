@@ -629,3 +629,12 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Kaynak nedeni: D1 migration `0029_auth_security_policy_guard.sql` trigger'ı `PASSWORD_ONLY` değerini ve 36000 saniyeden farklı session süresini reddediyor; `/api/auth/status` da `passwordOnlyEnabled:false` bildiriyor. Önceki PR #410/#411 UI bileşenlerinin sunduğu salt parola seçeneği gerçek canlı güvenlik politikası ile uyumsuzdu. Kullanıcıda doğrulanamayan giriş politikası hatasına yol açtı.
 - Düzen: `auth-policy-cloud.ts` PATCH isteklerinde yasak politikayı açık `AUTH_MFA_POLICY_REQUIRED` (409) hatasıyla önceden reddeder. Yönetim ekranından sahte 'Sadece parola' seçimi kaldırılır; KY ERP TEST güvenli hazırlama düğmesi sadece Gör yetkilerini bırakır, sunucudan tekrar doğrular ve yalnız test hesabının eski oturumlarını kapatır. KY Güvenlik / Authenticator MFA zorunluluğu korunur.
 - Kullanıcı testini bir kez gerçek onaylı oturumla başlatabilir; bütün 14 modülün kimlik doğrulanmış uçtan uca testi henüz tamamlandı sayılmaz. Yeni D1 migration veya ikinci test sistemi oluşturulmaz. Yayın gerçek Actions kanıtına göre ayrıca kaydedilir.
+
+## 25.10.2026 — Tek kaynak kontrolü ve muhasebe ödeme planı ilk düzeltmesi
+
+- **Tek ve üstün proje kontrol belgesi yine bu dosyadır.** Detaylı (ikincil) teknik modül/klasör envanteri: [KY_ERP_TEK_KAYNAK_MODUL_KONTROL_2026-10-25.md](KY_ERP_TEK_KAYNAK_MODUL_KONTROL_2026-10-25.md). Bu belge yeni alternatif canonical kaynak ilan edilmez.
+- Kod kaynağı: `codex/model-uretim-kontrol-merkezi-final`; `main` üretim değil. UI: `AppV3`, `moduleRegistry`; Worker: `APP/cloud/ky-erp-api`. Yerel tek kök kuralı ve D1 veri sahipliği değişmedi.
+- Muhasebe 7 ana sekme, e-Belge 9, Günlük Operasyon 5 sekme kaynak üzerinden incelendi. Kod/mevcut bileşen **saha kabulü** anlamına gelmez.
+- İlk feature: `fix/muhasebe-odeme-plan-tek-kaynak-20261025`. Gecikenler / Tüm Planlar + mevcut ödeme endpointinden okuma, gerçek ödeme defter yazımı için teyit kartı ve yinelenen tıklama kilidi, güncelleme ve vade yardımcı testi. PR/CI/merge/Pages/live kanıtları raporlanana kadar **dalda** sayılır.
+- Kaynak temizliği için `DOCS/docs`, `TOOLS/tools`, sürümlü `DEPLOY`, legacy Nest ve çoklu workflows **doğrudan silinmeyecek**. Önce import/CI/runtime referans taraması, sonra test ve manifestli karantina. Yeni paralel repo/ana klasör oluşturulmaz.
+- İmalat 100 kayıt/sayfalama [PR #443](https://github.com/cetin60kaya-lgtm/ky-erp/pull/443) açık; bu muhasebe dalının kapsamı dışında tutulur.
