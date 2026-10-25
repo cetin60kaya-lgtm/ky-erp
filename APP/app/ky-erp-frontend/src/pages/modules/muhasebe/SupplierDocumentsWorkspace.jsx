@@ -4,6 +4,7 @@ import { getEBelgePool } from "../../../services/eBelgeApi";
 import CanonicalSupplierInventoryWorkspace from "./CanonicalSupplierInventoryWorkspace";
 import { DOCUMENT_PAGE_SIZE, documentPageMeta } from "./documentPageMeta";
 import "./supplierDocumentsWorkspace.css";
+import "./documentPagination.css";
 
 const VIEWS = new Set(["dispatches", "invoices"]);
 
@@ -110,7 +111,7 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
               ))}
             </tbody></table></div>
           ) : <div className="sdw-empty"><FileText size={24} /><strong>Tedarikçi irsaliyesi yok</strong><span>Gelen irsaliyeler e‑Belge havuzuna ulaştığında burada otomatik görünür.</span></div>}
-          {!error && !loading && pageMeta.total > 0 ? <nav className="sdw-pagination" aria-label="Gelen irsaliye sayfaları">
+          {!error && !loading && pageMeta.total > 0 ? <nav className="accounting-document-pagination" aria-label="Gelen irsaliye sayfaları">
             <span>{pageMeta.start}–{pageMeta.end} / {pageMeta.total} kayıt · Sayfa {pageMeta.page}/{pageMeta.pageCount}</span>
             <div>
               <button type="button" aria-label="Önceki sayfa" disabled={!pageMeta.hasPrevious} onClick={() => setPage((current) => Math.max(1, current - 1))}>Önceki</button>
