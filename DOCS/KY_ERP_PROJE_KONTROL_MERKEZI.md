@@ -1,5 +1,10 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 25.10.2026 — Uygulama üst şerit profil/sekme çakışması düzeltmesi
+- Kullanıcının canlı 1649×929 ekran görüntülerinde SY / Sistem Yöneticisi profil alanı açık sekmelerin üzerine taşıyordu. Kök neden `responsive-core.css` içindeki PC profil düğmesine verilen genel `display:block !important` kuralı ve PC grid satırı 58px / onaylı üst şerit 64px uyuşmazlığı.
+- PC profil düğmesi flex olarak sabitlendi; üst çubuk, sekmeler ve breadcrumb grid satırları eşitlendi. Uzun sekmeler yatay kayar ve kontrollü ellipsis kullanır; 3 kaynak regresyon testi eklendi. Veri, giriş güvenliği, MFA, İK veya PDKS iş kuralları değiştirilmedi.
+- Kaynak PR/CI/Cloudflare Pages sonucu ayrı kanıt olarak doğrulanacaktır; kodun birleştirilmesi tek başına canlı kabulü değildir.
+
 ## 25.10.2026 — e-Belge toplu eşleştirme açık onay PR #451 CANLI
 - [PR #451](https://github.com/cetin60kaya-lgtm/ky-erp/pull/451) merged `e2b7654daa207f209f08e713e7861ee0532898ba`, canonical CI [#40215686365](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215686365) frontend+Worker **SUCCESS**.
 - e-Belge Havuz/Eşleşmeler toplu kontrolü öncesinde etkisinin mevcut filtreli sayfa değil seçili ana firmadaki uygun açık faturalar (bir seferde max 500) olduğu açıklanır; checkbox + ayrı onaydan önce `reconcile-all` POST gönderilmez. Ref tabanlı çift istek kilidi ve kısmi hata sayısı görünür. e-Belge bugün tarihi tarayıcının yerel takviminden alınır (UTC kayması düzeltilir). Bu PR Worker/D1 migration/resmî İşNet gönderimi yapmadı.
