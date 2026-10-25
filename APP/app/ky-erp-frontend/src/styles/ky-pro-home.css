@@ -1,17 +1,27 @@
-.ky-pro-home{max-width:1460px;margin:auto;display:grid;gap:28px;color:#17283f}
-.ky-pro-home-hero{display:flex;align-items:center;justify-content:space-between;gap:34px;padding:34px clamp(22px,3vw,48px);border-radius:20px;border:1px solid #dfe7f2;background:linear-gradient(115deg,#fff 45%,#eaf1fc 100%);box-shadow:0 14px 38px rgba(23,40,63,.045)}
-.ky-pro-home-welcome{min-width:0}.ky-pro-home-eyebrow{display:inline-flex;gap:7px;align-items:center;font-size:11px;font-weight:800;letter-spacing:.08em;color:#2563eb}
-.ky-pro-home h1{font-size:clamp(26px,2.5vw,38px);line-height:1.14;letter-spacing:-.035em;margin:14px 0 12px;color:#17283f}
-.ky-pro-home-welcome>p{margin:0;max-width:620px;color:#627187;font-size:14px;line-height:1.6}
-.ky-pro-home-company{display:inline-flex;margin-top:20px;padding:7px 12px;border-radius:9px;background:#e8effb;color:#274668;font-size:12px;font-weight:750}
-.ky-pro-home-security{display:flex;gap:14px;align-items:start;padding:19px;max-width:310px;border:1px solid #dbe6f3;border-radius:14px;background:#fff;color:#2563eb}
-.ky-pro-home-security div{display:grid;gap:5px}.ky-pro-home-security strong{color:#233750;font-size:13px}.ky-pro-home-security small{color:#728097;font-size:11px;line-height:1.6}
-.ky-pro-home-section{display:grid;gap:17px}.ky-pro-home-heading{display:flex;align-items:end;justify-content:space-between;gap:15px}.ky-pro-home-heading span{font-size:10px;font-weight:850;color:#2563eb;letter-spacing:.1em}
-.ky-pro-home-heading h2{font-size:23px;letter-spacing:-.02em;margin:7px 0 0}.ky-pro-home-heading p{font-size:12px;color:#718197;margin:0}
-.ky-pro-home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,315px),1fr));gap:16px}
-.ky-pro-home-card{background:#fff;border:1px solid #e1e8f1;border-radius:16px;padding:20px;min-width:0;box-shadow:0 8px 22px rgba(22,43,78,.035)}
-.ky-pro-home-card-header{display:flex;gap:13px;align-items:center;margin-bottom:15px}.ky-pro-home-icon{display:grid;place-items:center;flex:0 0 43px;height:43px;color:#2563eb;border-radius:12px;background:#edf3ff}
-.ky-pro-home-card h3{font-size:15px;margin:0 0 4px;color:#1d304a}.ky-pro-home-card p{font-size:11px;color:#7b8799;margin:0;line-height:1.45}
-.ky-pro-home-card-actions{display:grid;gap:5px}.ky-pro-home-card-actions button{min-height:41px;display:flex;align-items:center;justify-content:space-between;width:100%;cursor:pointer;border:1px solid transparent;border-radius:9px;padding:8px 10px;background:#f7f9fd;color:#354864;font:inherit;font-size:13px;font-weight:650;text-align:left}
-.ky-pro-home-card-actions button:hover,.ky-pro-home-card-actions button:focus-visible{border-color:#bad0fd;background:#ecf2ff;color:#1d55c6}
-@media(max-width:850px){.ky-pro-home-hero{flex-direction:column;align-items:stretch;padding:24px}.ky-pro-home-security{max-width:none}.ky-pro-home-heading{display:block}.ky-pro-home-heading p{margin-top:8px}}
+/* KY ERP ana sayfa: gerçek erişim modülleri; sahte KPI yok. */
+.ky-pro-home{max-width:1440px;margin:0 auto;display:grid;gap:23px;color:#17283f}
+.ky-pro-home-hero{display:flex;align-items:center;justify-content:space-between;gap:26px;padding:23px clamp(20px,2.5vw,34px);border-radius:17px;border:1px solid #dde7f4;background:linear-gradient(108deg,#fff 40%,#eff5fe 100%);box-shadow:0 8px 20px rgba(23,40,63,.04)}
+.ky-pro-home-welcome{min-width:0}.ky-pro-home-eyebrow{display:inline-flex;align-items:center;gap:7px;color:#245ed2;font-size:11px;font-weight:850;letter-spacing:.06em}
+.ky-pro-home h1{font-size:clamp(25px,2.4vw,34px);line-height:1.15;letter-spacing:-.03em;margin:9px 0}
+.ky-pro-home-welcome>p{margin:0;color:#52667f;font-size:13px;line-height:1.55}
+.ky-pro-home-context{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-top:16px}
+.ky-pro-home-company{padding:7px 11px;border-radius:9px;background:#eaf1fc;color:#274b7a;font-size:12px;font-weight:750}
+.ky-pro-home-date{display:flex;align-items:center;gap:6px;color:#64758d;font-size:12px;text-transform:capitalize}
+.ky-pro-home-security{max-width:315px;display:flex;align-items:start;gap:12px;padding:14px;border:1px solid #d8e5f5;border-radius:13px;background:#fff;color:#2b63cb}
+.ky-pro-home-security div{display:grid;gap:4px}.ky-pro-home-security strong{color:#203751;font-size:13px}.ky-pro-home-security small{font-size:11px;color:#65768d;line-height:1.5}
+.ky-pro-home-section{display:grid;gap:13px}.ky-pro-home-heading{display:flex;align-items:end;justify-content:space-between;gap:18px}
+.ky-pro-home-heading span{color:#2563eb;font-size:10px;font-weight:850;letter-spacing:.08em}
+.ky-pro-home-heading h2{font-size:20px;letter-spacing:-.015em;margin:5px 0 0}.ky-pro-home-heading p{margin:0;color:#687b90;font-size:12px}
+.ky-pro-home-shortcuts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.ky-pro-home-shortcuts>button{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;min-height:77px;text-align:left;background:#fff;border:1px solid #dbe5f2;border-radius:13px;padding:14px;cursor:pointer;color:#2d61b8;font:inherit}
+.ky-pro-home-shortcuts>button>span{display:grid;gap:5px;min-width:0}.ky-pro-home-shortcuts strong{color:#1c324e;font-size:13px}.ky-pro-home-shortcuts small{font-size:11px;color:#687b91;line-height:1.35}
+.ky-pro-home-shortcuts>button:hover,.ky-pro-home-shortcuts>button:focus-visible{border-color:#9fbef6;background:#f6f9ff}
+.ky-pro-home-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.ky-pro-home-card{min-width:0;padding:17px 18px;border-radius:15px;background:#fff;border:1px solid #dfe7f2;box-shadow:0 5px 15px rgba(23,40,63,.025)}
+.ky-pro-home-card-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}.ky-pro-home-icon{flex:0 0 42px;height:42px;display:grid;place-items:center;color:#2664d5;background:#edf3ff;border-radius:11px}
+.ky-pro-home-card h3{font-size:14px;margin:0 0 3px;color:#1b304a}.ky-pro-home-card p{font-size:11px;color:#728095;margin:0;line-height:1.4}
+.ky-pro-home-card-actions{display:grid;gap:4px}.ky-pro-home-card-actions button{width:100%;min-height:39px;padding:8px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;font:inherit;font-size:12px;font-weight:650;color:#314862;background:#f5f8fc;border:1px solid transparent;border-radius:8px;cursor:pointer}
+.ky-pro-home-card-actions button:hover,.ky-pro-home-card-actions button:focus-visible{background:#edf4ff;color:#235bc0;border-color:#c7dafb}
+@media(max-width:1200px){.ky-pro-home-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))}.ky-pro-home-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.ky-pro-home{gap:18px}.ky-pro-home-hero{flex-direction:column;align-items:stretch;padding:20px}.ky-pro-home-security{max-width:none}.ky-pro-home-heading{display:block}.ky-pro-home-heading p{margin-top:5px}.ky-pro-home-grid{grid-template-columns:1fr}}
+@media(max-width:430px){.ky-pro-home-shortcuts{grid-template-columns:1fr}.ky-pro-home-hero{padding:16px}}
