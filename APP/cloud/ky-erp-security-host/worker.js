@@ -1,5 +1,7 @@
 const APP_PREFIX="/guvenlik";
 const APP_URL="/guvenlik/";
+const ADDITIONAL_APPS=["/ky-sistem","/ky-firma"];
+const SHARED_ASSET_PREFIX="/ky-app-shell";
 const LEGACY_PREFIXES=["/security","/ky-guvenlik","/ky-guvenlik-recover"];
 const LEGACY_SW_PATHS=["/sw.js","/security/sw.js","/ky-guvenlik/sw.js","/ky-guvenlik-recover/sw.js"];
 const RETIRE_SW=`self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("activate",e=>e.waitUntil((async()=>{try{for(const k of await caches.keys())await caches.delete(k)}catch{}try{for(const n of await self.registration.getNotifications())n.close()}catch{}try{await self.registration.unregister()}catch{}try{for(const c of await self.clients.matchAll({type:"window",includeUncontrolled:true}))await c.navigate("/guvenlik/")}catch{}})()));`;
@@ -13,7 +15,7 @@ function headers(base=new Headers()){
   return h;
 }
 function isNav(req){return req.mode==="navigate"||String(req.headers.get("accept")||"").includes("text/html")}
-function isAppPath(pathname){return pathname===APP_PREFIX||pathname.startsWith(`${APP_PREFIX}/`)}
+function isAppPath(pathname){return pathname===APP_PREFIX||pathname.startsWith(`${APP_PREFIX}/`)||ADDITIONAL_APPS.some((p)=>pathname===p||pathname.startsWith(`${p}/`))||pathname.startsWith(`${SHARED_ASSET_PREFIX}/`)}
 function isLegacyPath(pathname){return LEGACY_PREFIXES.some((prefix)=>pathname===prefix||pathname.startsWith(`${prefix}/`))}
 function canonicalRedirect(url){
   const target=new URL(url);
@@ -21,7 +23,11 @@ function canonicalRedirect(url){
   target.hash="";
   return new Response(null,{status:308,headers:headers(new Headers({Location:target.toString()}))});
 }
-function assetPath(pathname){const suffix=pathname.slice(APP_PREFIX.length);return suffix&&suffix!=="/"?suffix:"/"}
+function assetPath(pathname){
+  if(pathname===APP_PREFIX||pathname===APP_URL)return "/guvenlik/index.html";
+  for(const p of ADDITIONAL_APPS)if(pathname===p||pathname===`${p}/`)return `${p}/index.html`;
+  return pathname;
+}
 async function serveAsset(request,url,env){
   if(!env?.ASSETS)return new Response("Security assets unavailable",{status:503,headers:headers()});
   const method=String(request.method||"GET").toUpperCase();
@@ -34,7 +40,7 @@ async function serveAsset(request,url,env){
   const assetRequest=new Request(assetUrl.toString(),{method,headers:requestHeaders,redirect:"manual"});
   const response=await env.ASSETS.fetch(assetRequest);
   const out=headers(response.headers);
-  if(url.pathname===`${APP_PREFIX}/sw.js`)out.set("Service-Worker-Allowed",APP_URL);
+  for(const p of [APP_PREFIX,...ADDITIONAL_APPS])if(url.pathname===`${p}/sw.js`)out.set("Service-Worker-Allowed",`${p}/`);
   if(method==="HEAD")return new Response(null,{status:response.status,statusText:response.statusText,headers:out});
   return new Response(response.body,{status:response.status,statusText:response.statusText,headers:out});
 }
@@ -50,6 +56,10 @@ export default{
     }
     if(isLegacyPath(url.pathname))return new Response("Gone",{status:410,headers:headers()});
     if(url.pathname===APP_PREFIX&&navigation)return canonicalRedirect(url);
+    if(navigation&&ADDITIONAL_APPS.includes(url.pathname)){
+      const target=new URL(url);target.pathname=url.pathname+"/";target.hash="";
+      return new Response(null,{status:308,headers:headers(new Headers({Location:target.toString()}))});
+    }
     if(url.pathname===APP_URL)return serveAsset(request,url,env);
     if(isAppPath(url.pathname))return serveAsset(request,url,env);
     if(navigation)return canonicalRedirect(url);
