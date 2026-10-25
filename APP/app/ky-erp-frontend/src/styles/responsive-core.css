@@ -503,7 +503,8 @@ body,
 
 .shell-v3[data-layout-mode="pc"] .shell-v3-main {
   grid-column: 2 !important;
-  grid-template-rows: 58px 38px 26px minmax(0, 1fr) 28px !important;
+  /* Üst çubuk ile sekmeler aynı yükseklik sözleşmesini kullanır. */
+  grid-template-rows: 64px 42px 34px minmax(0, 1fr) 27px !important;
 }
 
 .shell-v3[data-layout-mode="pc"] .shell-v3-search {
@@ -515,9 +516,34 @@ body,
   display: flex !important;
 }
 
-.shell-v3[data-layout-mode="pc"] .shell-v3-user div,
-.shell-v3[data-layout-mode="pc"] .shell-v3-user > button {
+/* Profil yalnız masaüstünde de bir flex düğmesidir. Daha önceki
+   display:block kuralı kullanıcı adını sekme satırının üzerine taşırıyordu. */
+.shell-v3[data-layout-mode="pc"] .shell-v3-user {
+  display: flex !important;
+  align-items: center;
+  margin-left: auto;
+  min-width: 0;
+}
+.shell-v3[data-layout-mode="pc"] .shell-v3-user > .shell-v3-user-trigger {
+  display: inline-flex !important;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  height: 38px !important;
+  min-height: 38px;
+  max-height: 38px;
+  box-sizing: border-box;
+}
+.shell-v3[data-layout-mode="pc"] .shell-v3-user .shell-v3-user-meta {
   display: block !important;
+  min-width: 0;
+}
+.shell-v3[data-layout-mode="pc"] .shell-v3-user .shell-v3-user-meta strong,
+.shell-v3[data-layout-mode="pc"] .shell-v3-user .shell-v3-user-meta small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shell-v3[data-layout-mode="pc"] .shell-v3-workspace {
