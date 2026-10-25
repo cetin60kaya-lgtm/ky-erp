@@ -19,9 +19,14 @@
     "muhasebe-odeme-plani-gecikenler-ve-tum-planlar",
     "muhasebe-odeme-defter-kaydi-acik-onay",
     "muhasebe-finans-refresh-ve-regresyon-testleri",
-    "github-tek-canonical-kaynak-envanteri"
+    "github-tek-canonical-kaynak-envanteri",
+    "onayli-html-104-sekme-ortak-shell",
+    "pdks-hizli-islem-aktif-firma-zorunlulugu",
+    "mail-sablonlar-dogrudan-gercek-muhasebe-paneli",
+    "ky-guvenlik-canonical-kurulum-linki",
+    "approved-html-ui-regresyon-testleri"
   ],
-  "note": "PR #444 merge 4807b2845d16b848fc9e3abd164443b30badec48; CI #40193864397 Frontend + Worker PASS. Muhasebe ödeme planı geciken/tümü, fiili defter kaydı öncesi kullanıcı onayı ve tek kaynak envanteri. CANLI kabulü Pages production workflow + published SHA/chunk smoke sonrası ayrıca doğrulanır. Gerçek muhasebe/D1 ödemesi testte yazılmadı.",
-  "sourceCommit": "4807b2845d16b848fc9e3abd164443b30badec48",
+  "note": "25.10.2026: Onaylı HTML tasarım kabuğu ve PDKS firma, Mail Şablonları gerçek rota, KY Güvenlik kurulum bağlantısı ilk paketi. PR #445 merge SHA 1589f8488d2adf94600d2d6232b54205e4c9dd33, CI #40200690982 Frontend+Worker PASS. Gerçek oturumlu 104 sekme/browser ve ödeme/PDKS fiili işlem kabulleri ayrıca bekliyor; canlı Pages release tamamlanmadan PASS değildir.",
+  "sourceCommit": "1589f8488d2adf94600d2d6232b54205e4c9dd33",
   "requestedAt": "2026-10-25"
 }
