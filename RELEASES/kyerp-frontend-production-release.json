@@ -3,7 +3,7 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-10-18",
+  "releaseDate": "2026-10-25",
   "scope": [
     "gunluk-bes-sekme-kritik-tam-denetim-ui",
     "gunluk-donem-kilit-d1-gercek-acma-kapatma",
@@ -15,9 +15,13 @@
     "gunluk-odeme-fiili-onay",
     "frontend-lint-test-build",
     "cloudflare-pages-production",
-    "live-daily-operations-chunk-sha256-verification"
+    "live-daily-operations-chunk-sha256-verification",
+    "muhasebe-odeme-plani-gecikenler-ve-tum-planlar",
+    "muhasebe-odeme-defter-kaydi-acik-onay",
+    "muhasebe-finans-refresh-ve-regresyon-testleri",
+    "github-tek-canonical-kaynak-envanteri"
   ],
-  "note": "PR #442 merge 9ff13b114174a7e4f0e25990dd7cb4ae44495e94; CI #39128442185 PASS. Worker/D1 backup/API release #39128578543 success. Beş sekme kritik/sade arayüz, gerçek iki PC etkileşim kabulü kullanıcı testinde ayrıca doğrulanır. Gerçek veriye otomatik test yazılmadı.",
-  "sourceCommit": "9ff13b114174a7e4f0e25990dd7cb4ae44495e94",
-  "requestedAt": "2026-10-18"
+  "note": "PR #444 merge 4807b2845d16b848fc9e3abd164443b30badec48; CI #40193864397 Frontend + Worker PASS. Muhasebe ödeme planı geciken/tümü, fiili defter kaydı öncesi kullanıcı onayı ve tek kaynak envanteri. CANLI kabulü Pages production workflow + published SHA/chunk smoke sonrası ayrıca doğrulanır. Gerçek muhasebe/D1 ödemesi testte yazılmadı.",
+  "sourceCommit": "4807b2845d16b848fc9e3abd164443b30badec48",
+  "requestedAt": "2026-10-25"
 }
