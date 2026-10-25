@@ -1,5 +1,16 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 25.10.2026 — Muhasebe + İmalat aktif kullanım güvenlik/fonksiyon paketi PR #450 CANLI
+- **[PR #450](https://github.com/cetin60kaya-lgtm/ky-erp/pull/450)** merged `84e93e53f94550e00a189838b1db4abab3c6c64e`. Canonical UI CI [#40214924202](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40214924202) frontend lint/test/build ve Worker typecheck/test/build **SUCCESS**.
+- **Muhasebe/Ekstre:** `ReconciliationPanel` cari dönemi ve iki bakiyeyi açık teyitle kaydeder; farklı bakiyeler `MATCHED` olamaz, eşit bakiyeler `DIFFERENCE` olamaz. `accounting-workspace-core.ts` mevcut tenant güvenliğiyle aynı fark denetimini API düzeyinde 400/409 ile uygular; D1 migration yok, resmî/haricî gönderim yok.
+- **Muhasebe/Mali Kontrol:** `ProfitLossWorkspace` manuel gider/sabit şablon ayrımını, tutar-KDV-valid tarih kontrolünü ve gerçek POST öncesi önizleme/teyidi uygular; çift gönderim kilidi var.
+- **İmalat/Makine ve Vardiya:** firma yokken kaydetme engeli, kısmi çoklu kayıtta başarılı/kalan sayısı, kaydedilmemiş düzenlemeleri geri alma, eşzamanlı istek kilidi. Gerçek makine/operatör kaydı otomatik oluşturulmadı.
+- **İmalat/Raporlar:** sahte `.xls` metin yerine Excel ile açılabilen BOM'lu UTF-8 `.tsv`, hücre formül/satır enjeksiyonu önleme, güncel uygulanmış filtre olmadan dışa aktarımı engelleme.
+- **[Worker production #40215087584](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215087584)** SUCCESS, SHA `b4ed1440ef8b86a94cb4d9f1813d86adac2ff360`: tam D1 backup + artifact, salt-okunur schema, API health PASS; 0050/0051/0055, 0060, 0061 migration adımları **SKIPPED**.
+- **[Frontend Pages #40215265216](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215265216)** SUCCESS, SHA `deee4744bbbaa90620f645441864927f597ce125`: deploy + public bundle/Günlük Operasyon chunk smoke PASS. PR #450 merged commit'i hem Worker hem Pages release atası (GitHub compare behind=0).
+- **Açık gerçek kabul:** 19 ekranın yetkili gerçek kullanıcıyla çok-firma, belge/LOT, banka fişi, İşNet gönderim, XLSX/TSV Excel açılışı ve İmalat gerçek makine/üretim fişi E2E denemeleri yapılmadı. **19 ekran tam saha PASS değildir**. Canlı iş verisine test finans/üretim mutasyonu yapılmadı. Detay: [19 sekme matrisi](KY_ERP_19_SEKME_MUHASEBE_EBELGE_IMALAT_KABUL_MATRISI_2026-10-25.md).
+
+
 ## 25.10.2026 — Muhasebe/e-Belge/İmalat son yayın kanıtı
 - e-Belge finans son onay [PR #449](https://github.com/cetin60kaya-lgtm/ky-erp/pull/449) merged `719fd60fa97309230944833f95a7398b06630d88`, CI [#40207296821](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40207296821) **SUCCESS**, Pages [#40207488400](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40207488400) **SUCCESS**, yayın SHA `9bf4e6cdff36634b17b439ef59a6323c4ce27f57`. PR merge → release ancestry behind=0. Canlı Cloudflare Pages deploy, public bundle ve Günlük Operasyon chunk smoke başarılı.
 - Frontend release SHA aynı zamanda e-Belge sayfalama #447 ve İmalat #443 merged SHA'larını içeriyor (iki compare da behind=0). Worker #40206650866 SUCCESS, migration atlandı.
