@@ -7,7 +7,8 @@
   "assets": {
     "directory": "./.security-assets",
     "binding": "ASSETS",
-    "run_worker_first": true
+    "run_worker_first": true,
+    "html_handling": "none"
   },
   "routes": [
     { "pattern": "security.kyerp.net", "custom_domain": true }
