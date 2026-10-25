@@ -1,5 +1,10 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 25.10.2026 — Uygulama üst şerit profil/sekme çakışması düzeltmesi
+- Kullanıcının canlı 1649×929 ekran görüntülerinde SY / Sistem Yöneticisi profil alanı açık sekmelerin üzerine taşıyordu. Kök neden `responsive-core.css` içindeki PC profil düğmesine verilen genel `display:block !important` kuralı ve PC grid satırı 58px / onaylı üst şerit 64px uyuşmazlığı.
+- PC profil düğmesi flex olarak sabitlendi; üst çubuk, sekmeler ve breadcrumb grid satırları eşitlendi. Uzun sekmeler yatay kayar ve kontrollü ellipsis kullanır; 3 kaynak regresyon testi eklendi. Veri, giriş güvenliği, MFA, İK veya PDKS iş kuralları değiştirilmedi.
+- Kaynak PR/CI/Cloudflare Pages sonucu ayrı kanıt olarak doğrulanacaktır; kodun birleştirilmesi tek başına canlı kabulü değildir.
+
 ## 25.10.2026 — e-Belge toplu eşleştirme kesin onay PR #451 live
 - PR [#451](https://github.com/cetin60kaya-lgtm/ky-erp/pull/451) merged `e2b7654daa207f209f08e713e7861ee0532898ba`; CI [#40215686365](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215686365) PASS. Toplu `reconcile-all` POST yalnız etkilediği tüm uygun açık belgeler (max 500) ve kullanıcı checkbox onayından sonra çalışır. Kısmi hata sayısı sunulur, çift tıklama engellenir, e-Belge günü yerel tarihtir.
 - Cloudflare Pages [#40215803908](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215803908) **SUCCESS** SHA `0d421463de6def6d02f90a0516a21d547db39db0`, release ancestry behind=0 + canlı public bundle/chunk smoke PASS. Worker/D1/schema değişimi yok.
