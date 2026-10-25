@@ -60,3 +60,18 @@ test("Gelen ve giden belgeler backend yon parametresi ve server pagination kulla
   assert.doesNotMatch(page, /page: 1, pageSize: 100/);
   assert.match(css, /\.eb-pool-pagination/);
 });
+
+
+test("Son Onay Muhasebelestir tek tikla finans kaydi yazmaz; ozet ve checkbox gerektirir", () => {
+  const page = read("./EBelgeCenterPage.jsx");
+  const css = read("./eBelgeCenter.css");
+  assert.match(page, /onClick=\{\(\) => \{ setFinalAcknowledged\(false\); setFinalConfirmOpen\(true\); \}\}/);
+  assert.match(page, /aria-labelledby="eb-final-confirm-title"/);
+  assert.match(page, /Belgenin cari, kalem, LOT ve tutar bilgilerini inceledim/);
+  assert.match(page, /!finalAcknowledged/);
+  assert.match(page, /finalInFlight\.current/);
+  assert.match(page, /await finalizeEBelge\(id\)/);
+  assert.match(page, /Onayla ve Muhasebeleştir/);
+  assert.doesNotMatch(page, /onClick=\{\(\) => action\("final"/);
+  assert.match(css, /\.eb-final-confirm-modal/);
+});
