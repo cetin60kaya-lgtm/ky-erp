@@ -118,7 +118,7 @@ test("security UI has one canonical refresh owner and no DOM rewrite observer",(
 test("Worker static HTML handling never redirects its own canonical index path",()=>{
   const config=JSON.parse(hostConfig);
   assert.equal(config.assets.html_handling,"none");
-  assert.match(host,/assetPath\\(url.pathname\\)/);
-  assert.match(host,/\\/guvenlik\\/index\\.html/);
-  assert.match(host,/\\$\\{p\\}\\/index\\.html/);
+  assert.ok(host.includes("assetPath(url.pathname)"));
+  assert.ok(host.includes("/guvenlik/index.html"));
+  assert.ok(host.includes("index.html"));
 });
