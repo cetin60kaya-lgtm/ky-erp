@@ -34,7 +34,10 @@ import EBelgeIntegrationsWorkspace from "./EBelgeIntegrationsWorkspace";
 import InvoiceDispatchControlWorkspace from "./InvoiceDispatchControlWorkspace";
 import "./eBelgeCenter.css";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
 const monthStart = () => `${today().slice(0, 8)}01`;
 const FILTERS = [
   ["ALL", "Tüm Belgeler"],
@@ -399,6 +402,9 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);
   const [matching, setMatching] = useState(false);
+  const matchingLock = useRef(false);
+  const [matchingConfirmOpen, setMatchingConfirmOpen] = useState(false);
+  const [matchingApproved, setMatchingApproved] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [selectedId, setSelectedId] = useState("");
@@ -445,21 +451,34 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     }
   }, [loadDashboard, loadIntegrations, loadPool, poolViews, view]);
 
-  useEffect(() => { setPage(1); }, [view, activeMainCompany?.slug, activeMainCompany?.id]);
+  useEffect(() => {
+    setPage(1);
+    setMatchingConfirmOpen(false);
+    setMatchingApproved(false);
+  }, [view, activeMainCompany?.slug, activeMainCompany?.id]);
   useEffect(() => { void refreshCurrent(); return () => { poolRequestSeq.current += 1; }; }, [refreshCurrent, activeMainCompany?.slug, activeMainCompany?.id]);
 
   const runMatching = async () => {
-    if (matching) return;
+    if (!matchingConfirmOpen || !matchingApproved || matching || matchingLock.current) return;
+    matchingLock.current = true;
     setMatching(true);
     setError("");
     setNotice("");
     try {
-      await reconcileAllEBelge();
-      setNotice("Açık belgeler yeniden kontrol edildi. Uygun fatura–irsaliye bağlantıları güncellendi; yalnız gerçek kontrol gerektiren kayıtlar açık bırakıldı.");
+      const result = await reconcileAllEBelge();
+      const checked = Number(result?.total || 0);
+      const responses = Array.isArray(result?.results) ? result.results : [];
+      const failed = responses.filter((row) => row?.status === "ERROR" || row?.ok === false || Boolean(row?.error)).length;
+      setNotice(`${checked} uygun belge eşleştirme kontrolünden geçirildi.${failed ? ` ${failed} belgede hata oluştu; Onay & Sorunlar ekranından kontrol edin.` : " Sonuçlar belge havuzunda görülebilir."}`);
+      setMatchingConfirmOpen(false);
+      setMatchingApproved(false);
       await loadPool();
     } catch (e) {
-      setError(e?.message || "Eşleştirme kontrolü tamamlanamadı.");
+      setMatchingConfirmOpen(false);
+      setMatchingApproved(false);
+      setError(e?.message || "Toplu eşleştirme sonucu belirsiz olabilir; tekrarlamadan önce kayıtları kontrol edin.");
     } finally {
+      matchingLock.current = false;
       setMatching(false);
     }
   };
@@ -510,7 +529,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         </>}
         {showPool && <>
           <button type="button" onClick={loadPool} disabled={busy}><RefreshCw size={17} /> Güncelle</button>
-          {(view === "matching" || view === "pool") && <button type="button" className="eb-primary" onClick={runMatching} disabled={matching || busy}>{matching ? <LoaderCircle className="eb-spin" size={17} /> : <Link2 size={17} />} Eşleşmeleri Kontrol Et</button>}
+          {(view === "matching" || view === "pool") && <button type="button" className="eb-primary" onClick={() => { setMatchingApproved(false); setMatchingConfirmOpen(true); }} disabled={matching || busy}>{matching ? <LoaderCircle className="eb-spin" size={17} /> : <Link2 size={17} />} Eşleşmeleri Kontrol Et</button>}
         </>}
         {view === "integrations" && <button type="button" onClick={loadIntegrations} disabled={busy}><RefreshCw size={17} /> Durumu Yenile</button>}
       </div>
@@ -596,6 +615,20 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       <EBelgeIntegrationsWorkspace activeMainCompany={activeMainCompany} openModule={openModule} />
     </>}
 
+    {matchingConfirmOpen ? <div className="eb-submodal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !matching) setMatchingConfirmOpen(false); }}>
+      <section className="eb-submodal eb-bulk-confirm" role="dialog" aria-modal="true" aria-labelledby="eb-bulk-confirm-title">
+        <header>
+          <div><small>TOPLU BELGE KONTROLÜ</small><h3 id="eb-bulk-confirm-title">Tüm Açık Belgeleri Eşleştir</h3></div>
+          <button type="button" aria-label="Kapat" disabled={matching} onClick={() => setMatchingConfirmOpen(false)}><X size={18}/></button>
+        </header>
+        <div className="eb-bulk-confirm-body">
+          <p>Bu işlem <strong>yalnız ekranda görünen belge sayfasını değil</strong>, seçili ana firmaya ait henüz muhasebeleşmemiş uygun faturaları yeniden kontrol eder ve belge/irsaliye eşleşmelerini güncelleyebilir.</p>
+          <p>Mevcut sunucu akışı her çalışmada en fazla <strong>500 uygun belgeyi</strong> işler. Resmî fatura gönderimi veya yeni banka ödemesi değildir. İşlemi tekrarlamadan önce önceki sonuçları inceleyin.</p>
+          <label><input type="checkbox" disabled={matching} checked={matchingApproved} onChange={(event) => setMatchingApproved(event.target.checked)} /> Açık belgelerin eşleştirmelerinin güncellenmesini onaylıyorum.</label>
+        </div>
+        <footer><button type="button" disabled={matching} onClick={() => setMatchingConfirmOpen(false)}>Vazgeç</button><button type="button" className="eb-primary" disabled={matching || !matchingApproved} onClick={runMatching}>{matching ? "Kontrol Ediliyor..." : "Onayla ve Kontrol Et"}</button></footer>
+      </section>
+    </div> : null}
     <DetailDrawer key={selectedId || "empty-document"} id={selectedId} onClose={() => setSelectedId("")} onChanged={showPool ? loadPool : loadDashboard} />
   </section>;
 }

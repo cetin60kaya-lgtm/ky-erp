@@ -51,3 +51,14 @@
 .eb-page .eb-final-confirm-modal footer button{min-height:44px}
 .eb-final-confirm-modal footer button:focus-visible{outline:2px solid #1b8477;outline-offset:2px}
 @media(max-width:520px){.eb-final-confirm-modal{max-height:92dvh}.eb-final-confirm-body dl>div{grid-template-columns:1fr;gap:2px}.eb-final-confirm-modal footer{flex-direction:column-reverse}.eb-final-confirm-modal footer button{width:100%;font-size:14px}}
+
+
+/* Toplu belge eşleştirme: yalnız açık kullanıcı teyidi ile çoklu mutation. */
+.eb-bulk-confirm{width:min(650px,96vw)}
+.eb-bulk-confirm-body{padding:18px;display:grid;gap:13px;overflow:auto;min-height:0}
+.eb-bulk-confirm-body p{margin:0;color:#344d67;font-size:13px;line-height:1.55}
+.eb-bulk-confirm-body label{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid #dbe5ef;border-radius:9px;background:#f4f7fb;color:#243b56;font-size:13px;font-weight:700}
+.eb-bulk-confirm-body label input{width:20px;height:20px;min-width:20px;accent-color:#197d80}
+.eb-page .eb-bulk-confirm footer button{min-height:44px}
+.eb-bulk-confirm button:focus-visible{outline:2px solid #197d80;outline-offset:2px}
+@media(max-width:520px){.eb-bulk-confirm{max-height:92dvh}.eb-bulk-confirm footer{flex-direction:column-reverse}.eb-bulk-confirm footer button{width:100%}}
