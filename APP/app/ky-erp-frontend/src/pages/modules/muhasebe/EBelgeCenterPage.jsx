@@ -33,6 +33,7 @@ import EBelgeLineReview from "./EBelgeLineReview";
 import EBelgeIntegrationsWorkspace from "./EBelgeIntegrationsWorkspace";
 import InvoiceDispatchControlWorkspace from "./InvoiceDispatchControlWorkspace";
 import "./eBelgeCenter.css";
+import { providerDisplayStatus } from "./eBelgeProviderDisplay";
 
 const today = () => {
   const date = new Date();
@@ -437,6 +438,17 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   }, []);
 
   const refreshCurrent = useCallback(async () => {
+    if (!activeMainCompany?.slug && !activeMainCompany?.id) {
+      setPool({ items: [], stats: {}, total: 0 });
+      setDashboard({ summary: {}, recent: [] });
+      setIntegrations({ providers: [], archive: [], fileHub: [] });
+      setError("e-Belge için ana firma seçin.");
+      return;
+    }
+    if (from && to && from > to) {
+      setError("Bitiş tarihi başlangıç tarihinden önce olamaz.");
+      return;
+    }
     if (view === "workflow") return;
     setBusy(true);
     setError("");
@@ -449,13 +461,22 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     } finally {
       setBusy(false);
     }
-  }, [loadDashboard, loadIntegrations, loadPool, poolViews, view]);
+  }, [activeMainCompany?.slug, activeMainCompany?.id, from, to, loadDashboard, loadIntegrations, loadPool, poolViews, view]);
 
   useEffect(() => {
     setPage(1);
     setMatchingConfirmOpen(false);
     setMatchingApproved(false);
   }, [view, activeMainCompany?.slug, activeMainCompany?.id]);
+  useEffect(() => {
+    poolRequestSeq.current += 1;
+    setPool({ items: [], stats: {}, total: 0 });
+    setDashboard({ summary: {}, recent: [] });
+    setIntegrations({ providers: [], archive: [], fileHub: [] });
+    setSelectedId("");
+    setLastUpload(null);
+    setQuery("");
+  }, [activeMainCompany?.slug, activeMainCompany?.id]);
   useEffect(() => { void refreshCurrent(); return () => { poolRequestSeq.current += 1; }; }, [refreshCurrent, activeMainCompany?.slug, activeMainCompany?.id]);
 
   const runMatching = async () => {
@@ -606,9 +627,10 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         <div className="eb-module-grid">
           {providers.map((provider) => {
             const key = String(provider.key || provider.label || "").toUpperCase();
-            const status = String(provider.status || "READY").toUpperCase();
-            const active = /ACTIVE|CONNECTED|READY|OK/.test(status);
-            return <article key={key || provider.label} className={`eb-module-card ${active ? "active" : ""}`}><div><strong>{provider.label || key}</strong><span className={`eb-module-status ${active ? "active" : "idle"}`}>{active ? "HAZIR" : status}</span></div><p>{key === "ISNET" ? "İşNet bağlantısı, firma seçimi ve iş kuralları aşağıdaki entegrasyon ayarlarından yönetilir." : "Bu kaynak aynı canonical e-Belge havuzuna belge üretir."}</p><small>Sistem durumu: {provider.status || "-"}</small></article>;
+            const status = String(provider.status || "UNKNOWN").toUpperCase();
+            const health = providerDisplayStatus(provider);
+            const active = health.active;
+            return <article key={key || provider.label} className={`eb-module-card ${active ? "active" : ""}`}><div><strong>{provider.label || key}</strong><span className={`eb-module-status ${active ? "active" : "idle"}`}>{health.label}</span></div><p>{key === "ISNET" ? "İşNet bağlantısı, firma seçimi ve iş kuralları aşağıdaki entegrasyon ayarlarından yönetilir." : "Bu kaynak aynı canonical e-Belge havuzuna belge üretir."}</p><small>Sistem durumu: {provider.status || "-"}</small></article>;
           })}
         </div>
       </section>
