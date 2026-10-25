@@ -3,9 +3,9 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "9afadbf5d2a0a6ce6d7f0eb6012fcb977205c40a",
+  "sourceCommit": "84e93e53f94550e00a189838b1db4abab3c6c64e",
   "requestedAt": "2026-10-25",
-  "attempt": 21,
+  "attempt": 22,
   "scope": [
     "gunluk-tum-api-ik-tenant-yetki-koruma",
     "gunluk-donem-kilit-gercek-d1-ve-yazma-engel",
@@ -19,9 +19,13 @@
     "e-belge-pool-gelen-giden-tenant-safe-direction-filter",
     "e-belge-havuz-50-rows-page-api-readonly",
     "worker-release-migration-explicit-gate",
-    "worker-ci-build-production-healthy"
+    "worker-ci-build-production-healthy",
+    "muhasebe-cari-mutabakat-api-fark-validator",
+    "muhasebe-reconciliation-server-strict-confirm",
+    "production-no-d1-migration",
+    "worker-health-and-backup-readiness"
   ],
-  "note": "25.10.2026: e-Belge yön filtreli GET /api/e-belge/pool ve 50 sayfa UI sözleşmesi PR #447 merged; CI #40206047817 PASS. Worker migration güvenlik kapısı PR #448 merged 9afadbf5d2a0a6ce6d7f0eb6012fcb977205c40a, CI #40206496193 PASS. Bu sürüm D1 migration GEREKTİRMEZ ve ayrıca migration izni VERİLMEDİ (applyMigrations=false, migrationApprovedByUser=false). Tam D1 export/backup+schema salt-okunur doğrula, sonra Worker deploy ve /api/health smoke. Personel, gerçek ödeme, belge gönderimi ve D1 veri yazma testi yasak.",
+  "note": "25.10.2026: PR #450 merged 84e93e53f94550e00a189838b1db4abab3c6c64e; CI #40214924202 Frontend ve Worker SUCCESS. Mutabakat status MATCHED/DIFFERENCE doğrulaması backend tenant guard içinde. Bu sürüm D1 migration gerektirmez; applyMigrations=false, migrationApprovedByUser=false. Tam D1 yedeği artifact, salt-okunur schema, Worker deploy ve API health kontrolü zorunlu; gerçek finansal iş kaydı, resmî fatura gönderimi veya canlı veri testi yapılmaz.",
   "applyMigrations": false,
   "migrationApprovedByUser": false
 }
