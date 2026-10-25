@@ -208,6 +208,9 @@ function DetailDrawer({ id, onClose, onChanged }) {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
   const [companyOpen, setCompanyOpen] = useState(false);
+  const [finalConfirmOpen, setFinalConfirmOpen] = useState(false);
+  const [finalAcknowledged, setFinalAcknowledged] = useState(false);
+  const finalInFlight = useRef(false);
   const [editForm, setEditForm] = useState({ documentNo: "", issueDate: "", dueDate: "", currency: "TRY", direction: "INCOMING", documentType: "FATURA", note: "" });
   const [companyQuery, setCompanyQuery] = useState("");
   const [companies, setCompanies] = useState([]);
@@ -231,6 +234,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
       setError(e?.message || "Belge detayı alınamadı.");
     }
   }, [id]);
+  useEffect(() => { setFinalConfirmOpen(false); setFinalAcknowledged(false); }, [id]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     if (!companyOpen || companyQuery.trim().length < 2) { setCompanies([]); return undefined; }
@@ -251,6 +255,25 @@ function DetailDrawer({ id, onClose, onChanged }) {
     return action(`file-${file.id}`, async () => openEBelgeBlob(await getEBelgeFilePreview(file.id), reservedWindow));
   };
   const saveDocument = async () => action("edit", async () => { await updateEBelge(id, editForm); setEditing(false); });
+  const confirmFinancialPosting = async () => {
+    if (finalInFlight.current || busy || !finalConfirmOpen || !finalAcknowledged || !detail || detail.status === "POSTED") return;
+    finalInFlight.current = true;
+    setBusy("final");
+    setError("");
+    try {
+      await finalizeEBelge(id);
+      setFinalConfirmOpen(false);
+      setFinalAcknowledged(false);
+      window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", documentId: id } }));
+      await load();
+      await onChanged?.();
+    } catch (e) {
+      setError(e?.message || "Belge muhasebeleştirmesi tamamlanamadı; kayıt durumunu kontrol edin.");
+    } finally {
+      finalInFlight.current = false;
+      setBusy("");
+    }
+  };
 
   if (!id) return null;
   const openIssues = detail?.issues?.filter((item) => !item.is_resolved) || [];
@@ -275,7 +298,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
           <button type="button" onClick={() => setEditing(true)}><Pencil size={16} /> Belge Düzenle</button>
           {!detail.party_company_id && <button type="button" onClick={() => setCompanyOpen(true)}>Cari Eşleştir</button>}
           <button type="button" disabled={Boolean(busy)} onClick={() => action("match", () => reconcileEBelge(id))}>{busy === "match" ? <LoaderCircle className="eb-spin" size={16} /> : <Link2 size={16} />} Yeniden Kontrol</button>
-          <button type="button" className="eb-primary" disabled={Boolean(busy) || detail.status === "POSTED"} onClick={() => action("final", async () => { const result = await finalizeEBelge(id); window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", documentId: id } })); return result; })}>{busy === "final" ? <LoaderCircle className="eb-spin" size={16} /> : <FileCheck2 size={16} />} Son Onay / Muhasebeleştir</button>
+          <button type="button" className="eb-primary" disabled={Boolean(busy) || detail.status === "POSTED"} onClick={() => { setFinalAcknowledged(false); setFinalConfirmOpen(true); }}>{busy === "final" ? <LoaderCircle className="eb-spin" size={16} /> : <FileCheck2 size={16} />} Son Onay / Muhasebeleştir</button>
         </section>
         <div className="eb-document-body">
           <section className="eb-document-lines-section">
@@ -309,6 +332,30 @@ function DetailDrawer({ id, onClose, onChanged }) {
         </div>
       </>}
     </section>
+    {finalConfirmOpen && detail && <div className="eb-submodal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setFinalConfirmOpen(false); }}>
+      <section className="eb-submodal eb-final-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="eb-final-confirm-title">
+        <header>
+          <div><small>MUHASEBEYE KAYIT ÖNCESİ</small><h3 id="eb-final-confirm-title">Son Onay / İşlem Özeti</h3></div>
+          <button type="button" disabled={Boolean(busy)} onClick={() => setFinalConfirmOpen(false)} aria-label="Kapat"><X size={18} /></button>
+        </header>
+        <div className="eb-final-confirm-body">
+          <p>Bu işlem belgeyi muhasebeleştirir ve uygun stok/LOT hareketlerini oluşturabilir. Resmî e-Belge gönderimi değildir. Hatalı kayıt oluşmaması için bilgileri kontrol edin.</p>
+          <dl>
+            <div><dt>Belge / Tür</dt><dd>{detail.document_no || "Belge No Yok"} · {typeLabel(detail.document_type)}</dd></div>
+            <div><dt>Firma / Cari</dt><dd>{detail.party_name || "Eşleşmedi"}</dd></div>
+            <div><dt>Yön</dt><dd>{detail.direction === "OUTGOING" ? "Giden" : "Gelen"}</dd></div>
+            <div><dt>Tutar / KDV</dt><dd>{money(detail.payable_total, detail.currency)} · KDV {money(detail.tax_total, detail.currency)}</dd></div>
+            <div><dt>Kalem / Açık kontrol</dt><dd>{detail.lines?.length || 0} kalem · {openIssues.length} açık kontrol</dd></div>
+          </dl>
+          <label className="eb-final-acknowledge"><input type="checkbox" checked={finalAcknowledged} onChange={(event) => setFinalAcknowledged(event.target.checked)} disabled={Boolean(busy)} /> Belgenin cari, kalem, LOT ve tutar bilgilerini inceledim; muhasebeleştirmeyi açıkça onaylıyorum.</label>
+          {error && <p role="alert" className="eb-final-error">{error}</p>}
+        </div>
+        <footer>
+          <button type="button" disabled={Boolean(busy)} onClick={() => setFinalConfirmOpen(false)}>Vazgeç</button>
+          <button type="button" className="eb-primary" disabled={Boolean(busy) || !finalAcknowledged} onClick={confirmFinancialPosting}>{busy === "final" ? "Kaydediliyor..." : "Onayla ve Muhasebeleştir"}</button>
+        </footer>
+      </section>
+    </div>}
     {editing && <div className="eb-submodal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(false); }}>
       <section className="eb-submodal eb-doc-edit-modal">
         <header><div><small>BELGE İŞLEMİ</small><h3>Belge Bilgilerini Düzenle</h3></div><button type="button" onClick={() => setEditing(false)}><X size={18} /></button></header>
