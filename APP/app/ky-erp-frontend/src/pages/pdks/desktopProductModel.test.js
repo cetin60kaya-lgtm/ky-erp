@@ -32,7 +32,7 @@ test("Web PDKS mevcut işlemleri korur; özel günlük seri giriş bileşenine d
 test("İK tüm personelin ana kaynağı, PDKS cihazı yalnız SGK ve kart eşleşmesi",()=>{
   const pdksApi=read("../../services/pdksApi.js");
   assert.match(pdksApi,/payload\.filter\(isSgkPdksPerson\)/);
-  const cloud=read("../../../../cloud/ky-erp-api/src/ik-pdks-device.ts");
+  const cloud=read("../../../../../cloud/ky-erp-api/src/ik-pdks-device.ts");
   assert.match(cloud,/AND UPPER\(TRIM\(COALESCE\(e\.sgk_status,'YOK'\)\)\)='VAR'/);
   assert.match(cloud,/AND COALESCE\(s\.sgk_follow,0\)<>0/);
 });
