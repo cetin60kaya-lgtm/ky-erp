@@ -76,3 +76,25 @@ test("Son Onay Muhasebelestir tek tikla finans kaydi yazmaz; ozet ve checkbox ge
   assert.doesNotMatch(page, /onClick=\{\(\) => action\("final"/);
   assert.match(css, /\.eb-final-confirm-modal/);
 });
+
+
+test("Toplu e-Belge eşleştirme otomatik POST yapmaz; kapsam ve açık onay ister", () => {
+  const page = read("./EBelgeCenterPage.jsx");
+  const css = read("./eBelgeCenter.css");
+  assert.match(page, /matchingConfirmOpen/);
+  assert.match(page, /matchingApproved/);
+  assert.match(page, /matchingLock\.current = true/);
+  assert.match(page, /!matchingConfirmOpen \|\| !matchingApproved/);
+  assert.match(page, /Onayla ve Kontrol Et/);
+  assert.match(page, /en fazla <strong>500 uygun belgeyi<\/strong>/);
+  assert.match(page, /row\?\.status === "ERROR"/);
+  assert.match(page, /onClick=\{\(\) => \{ setMatchingApproved\(false\); setMatchingConfirmOpen\(true\); \}\}/);
+  assert.doesNotMatch(page, /onClick=\{runMatching\} disabled=\{matching \|\| busy\}/);
+  assert.match(css, /\.eb-bulk-confirm-body/);
+});
+test("e-Belge bugunun tarihini UTC kaydirma yerine yerel takvimden alir", () => {
+  const page = read("./EBelgeCenterPage.jsx");
+  assert.match(page, /date\.getFullYear\(\)/);
+  assert.match(page, /date\.getMonth\(\) \+ 1/);
+  assert.match(page, /date\.getDate\(\)/);
+});
