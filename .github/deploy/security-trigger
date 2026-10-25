@@ -1,5 +1,5 @@
-deploy: ky-security-v4-separate-owner-company-host-release
-canonical: 438971b6fca160b43639569b98a02a4ab2caf498
+deploy: ky-security-v4-owner-company-isolated-assets-final
+canonical: e22643163f6836b809a170e905008b44abefb958
 requested: 2026-10-25
-source_prs: 458,460,461
-reason: repaired verified legacy security PWA test; use canonical checked deploy
+source_prs: 458,460,461,462
+reason: security host isolated asset package avoids Cloudflare _redirects error 100324
