@@ -6,6 +6,7 @@ import path from "node:path";
 const root=process.cwd();
 const index=fs.readFileSync(path.join(root,"src/index.ts"),"utf8");
 const operations=fs.readFileSync(path.join(root,"src/accounting-operations.ts"),"utf8");
+const payment=fs.readFileSync(path.join(root,"src/accounting-payment-atomic.ts"),"utf8");
 const firms=fs.readFileSync(path.join(root,"src/accounting-company-directory.ts"),"utf8");
 const profile=fs.readFileSync(path.join(root,"src/accounting-company-profile.ts"),"utf8");
 
@@ -21,14 +22,17 @@ test("yönetim özeti seçili ay ve gerçek tenant filtrelerini uygular",()=>{
   assert.match(source,/vatPeriod:/);
 });
 
-test("plan ödemesinde kümülatif para geri yazılamaz; NaN ve küsurat reddedilir",()=>{
-  assert.match(operations,/PAID_AMOUNT_ROLLBACK_FORBIDDEN/);
-  assert.match(operations,/Number\.isFinite\(paid\)/);
-  assert.match(operations,/Math\.round\(paid\*100\)/);
-  assert.match(operations,/source_payment_plan_id=\?/);
-  assert.match(operations,/INSERT OR IGNORE INTO accounting_ledger_entries/);
+test("plan ödemesinde doğrulanmış D1 batch, açık onay ve geriye yazmama korunur",()=>{
+  assert.match(operations,/postAccountingPaymentAtomic/);
+  assert.match(operations,/getAuthenticatedUser/);
+  assert.match(payment,/PAID_AMOUNT_ROLLBACK_FORBIDDEN/);
+  assert.match(payment,/Number\.isFinite\(paid\)/);
+  assert.match(payment,/cents\(paid\)/);
+  assert.match(payment,/source_payment_plan_id/);
+  assert.match(payment,/await db\.batch\(/);
+  assert.doesNotMatch(payment,/INSERT OR IGNORE/);
+  assert.match(payment,/PAYMENT_CONFIRMATION_REQUIRED/);
 });
-
 test("firma VKN normalize edilir, tarihçeli cari fiziksel DELETE yapmaz",()=>{
   assert.match(firms,/REPLACE\(REPLACE\(REPLACE\(COALESCE\(tax_no/);
   const deletion=firms.slice(firms.indexOf('app.delete("/api/muhasebe/firmalar/:id"'));
