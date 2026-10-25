@@ -12,6 +12,7 @@ import "../styles/responsive-core.css";
 import "../styles/security-notification-actions.css";
 import "../styles/shell-v3-modern.css";
 import "../styles/workspace-flow-final.css";
+import "../styles/approved-html-shell.css";
 
 const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme", "eslestirmeler", "surum-merkezi"]);
 

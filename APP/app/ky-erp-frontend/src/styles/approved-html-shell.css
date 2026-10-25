@@ -1,0 +1,202 @@
+/*
+ * KY ERP / 104 sekmeli onaylı HTML tasarımının ortak kabuk uyarlaması.
+ * Referans: KY_ERP_104_SEKME_TEK_HTML_TASARIM_ONAY_2026-10-25.html
+ * Bu dosya AppShellV3'te en son yüklenir. Muhasebe/PDKS/Desen vb. iş mantığına
+ * dokunmaz; Günlük Operasyon ve İK Aylık içerik kartları mevcut kaldığı gibidir.
+ * V1: tek menü, net sayfa sınırı, sabit eylem ölçüsü, kırık beyaz arka plan.
+ */
+
+.shell-v3 {
+  --approved-ink: #192437;
+  --approved-muted: #768398;
+  --approved-bg: #f3f6fa;
+  --approved-line: #e3e9f0;
+  --approved-elevation: 0 7px 28px rgba(19, 32, 56, .035);
+  grid-template-columns: 258px minmax(0, 1fr);
+  height: 100dvh;
+  min-height: 0;
+  background: var(--approved-bg);
+  color: var(--approved-ink);
+}
+
+.shell-v3-sidebar {
+  min-height: 0;
+  background: #ffffff;
+  border-right: 1px solid var(--approved-line);
+  box-shadow: none;
+}
+
+.shell-v3-sidebar-brand {
+  min-height: 70px;
+  padding-inline: 4px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--approved-line);
+}
+
+.shell-v3-brand-button > b {
+  width: 43px;
+  height: 43px;
+  border: 0;
+  border-radius: 13px;
+  background: #172a45;
+  font-size: 17px;
+  box-shadow: none;
+}
+
+.shell-v3-brand-button strong {
+  font-size: 14px;
+  letter-spacing: -.02em;
+}
+.shell-v3-brand-button small { font-size: 10px; color: var(--approved-muted); }
+.shell-v3-sidebar-nav {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 9px 18px;
+  scrollbar-width: thin;
+}
+.shell-v3-module { margin: 3px 0; }
+.shell-v3-module-button {
+  min-height: 43px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #42516a;
+}
+.shell-v3-module-copy > span {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 750;
+}
+.shell-v3-module-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+.shell-v3-module.active > .shell-v3-module-button {
+  border-color: var(--mod-line);
+  background: color-mix(in srgb, var(--mod-soft) 92%, #ffffff);
+  box-shadow: none;
+}
+.shell-v3-module.active .shell-v3-module-copy > span { color: var(--mod); }
+.shell-v3-submenu {
+  margin: 5px 0 9px 15px;
+  padding: 3px 0 4px 12px;
+  border: 0;
+  border-left: 1px solid #e8edf3;
+  border-radius: 0;
+  background: transparent;
+}
+.shell-v3-submenu button {
+  min-height: 35px;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  border-radius: 7px;
+  box-shadow: none;
+}
+.shell-v3-submenu button.active { box-shadow: none; }
+
+.shell-v3-main {
+  min-height: 0;
+  grid-template-rows: 64px 42px 34px minmax(0, 1fr) 27px;
+  background: var(--approved-bg);
+}
+.shell-v3-topbar {
+  min-height: 64px;
+  gap: 12px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--approved-line);
+  background: #fff;
+  box-shadow: none;
+}
+.shell-v3-search input,
+.shell-v3-topbar select,
+.shell-v3-quick-button {
+  height: 36px;
+  border-radius: 9px;
+}
+.shell-v3-search input { background: #f6f8fb; font-size: 12px; }
+.shell-v3-quick-button {
+  border-color: var(--module-line);
+  background: color-mix(in srgb, var(--module-soft) 65%, #fff);
+}
+.shell-v3-user-trigger { height: 36px; border-radius: 9px; }
+.shell-v3-tabs-bar {
+  min-height: 0;
+  border-bottom: 1px solid var(--approved-line);
+  background: #fff;
+}
+.shell-v3-tabs { gap: 4px; padding: 4px 8px 0; }
+.shell-v3-tabs > button {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 11px;
+  border-radius: 8px 8px 0 0;
+  background: #fff;
+  border-color: transparent;
+  color: #65768e;
+}
+.shell-v3-tabs > button.active {
+  background: var(--tab-soft);
+  border-color: var(--tab-line);
+  color: var(--tab-accent);
+  box-shadow: inset 0 2px 0 var(--tab-accent);
+}
+.shell-v3-crumb {
+  min-height: 34px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--approved-line);
+  background: #fff;
+  font-size: 10px;
+}
+.shell-v3-workspace {
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 16px clamp(14px, 1.6vw, 26px) 32px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--module-soft) 28%, #f7f9fc) 0%, #f3f6fa 220px);
+  box-shadow: none;
+  scrollbar-width: thin;
+}
+.shell-v3-status {
+  min-height: 27px;
+  padding-inline: 16px;
+  border-top: 1px solid var(--approved-line);
+  background: #fff;
+  font-size: 10px;
+}
+
+/* Örnek HTML'deki kart çizgisini mevcut semantik bileşenlerde birleştir.
+ * Kullanıcı onaylı İK Aylık ve Günlük Operasyon içerik düzeni hariç tutulur. */
+.shell-v3:not([data-active-module="gunluk-operasyon"]):not([data-active-module="ik"])
+  .shell-v3-workspace :where(.content-card, .accounting-list-card, .management-list-card, .bh-card, .dsg-card, .admpro-card) {
+  border-color: var(--approved-line);
+  border-radius: 12px;
+  box-shadow: var(--approved-elevation);
+}
+
+.shell-v3 :where(button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--module-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1180px) and (min-width: 1025px) {
+  .shell-v3 { grid-template-columns: 236px minmax(0, 1fr); }
+  .shell-v3-topbar { gap: 7px; padding-inline: 11px; }
+}
+@media (max-width: 1024px) {
+  .shell-v3 { grid-template-columns: minmax(0, 1fr); }
+  .shell-v3-sidebar { width: min(86vw, 300px); }
+  .shell-v3-topbar { padding-inline: 10px; }
+  .shell-v3-main { grid-template-rows: 60px 42px 34px minmax(0, 1fr) 0; }
+  .shell-v3-status { display: none; }
+  .shell-v3-workspace { padding: 12px 10px max(18px, env(safe-area-inset-bottom)); }
+}
+@media (max-width: 760px) {
+  .shell-v3-main { grid-template-rows: 56px 42px minmax(0, 1fr) !important; }
+  .shell-v3-crumb, .shell-v3-status { display: none !important; }
+  .shell-v3-workspace { padding: 7px 7px max(14px, env(safe-area-inset-bottom)) !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shell-v3-module-button,
+  .shell-v3-tabs > button { transition: none; }
+}

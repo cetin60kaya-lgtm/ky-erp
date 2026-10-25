@@ -23,6 +23,7 @@ import {
   syncMailFolder,
 } from "../../services/mailApi";
 import "./CommunicationHubPage.css";
+import { queueMailTemplatesOpen } from "../../utils/approvedUiHandoffs";
 
 const MAIL_TABS = new Set(["mail-gelen", "mail-sabitlenen", "mail-gonderilen", "mail-taslaklar", "mail-yanit-bekleyen", "mail-sablonlar"]);
 
@@ -1276,7 +1277,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
           <main className="comm-message-list">
             <div className="comm-pane-title comm-list-toolbar"><b>{mailViewTitle}</b><div><input className="comm-message-search" type="search" value={messageSearch} onChange={(e) => setMessageSearch(e.target.value)} placeholder="Mail ara"/><small>{messageRows.length} kayıt</small></div></div>
             {activeTab === "mail-sablonlar" && !selectedFolderId ? (
-              <div className="comm-empty large"><b>Kurumsal Mail Şablonları</b><span>Mevcut muhasebe şablonları bu merkeze taşınırken tek canonical şablon kaynağı korunacak.</span><button type="button" onClick={() => openModule?.("muhasebe", { tabKey: "mail-sablonlari" })}>Mevcut Şablonları Aç</button></div>
+              <div className="comm-empty large"><b>Kurumsal Mail Şablonları</b><span>Mevcut muhasebe şablonları bu merkeze taşınırken tek canonical şablon kaynağı korunacak.</span><button type="button" onClick={() => { queueMailTemplatesOpen(typeof window !== "undefined" ? window.sessionStorage : null); openModule?.("muhasebe", { tabKey: "mail-ekstre" }); }}>Mevcut Şablonları Aç</button></div>
             ) : messageRows.length ? messageRows.map((row) => (
               <button type="button" key={row.id} className={`${selectedMessage?.id === row.id ? "active " : ""}${!selectedFolderIsTrash && !selectedFolderIsJunk && Number(row.is_read ?? row.isRead ?? 1) === 0 ? "unread " : ""}${Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "pinned" : ""}`} aria-label={`${Number(row.is_read ?? row.isRead ?? 1) === 0 ? "Okunmamış mail" : "Okunmuş mail"}: ${row.subject || "(Konu yok)"}`} onClick={() => selectMessage(row)} onContextMenu={(event) => openMessageContextMenu(event, row)}>
                 <div><b>{Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "📌 " : ""}{row.sender_name || row.sender_email || row.subject || "Taslak"}</b><span>{dateText(row.received_at || row.sent_at || row.updated_at)}</span></div>

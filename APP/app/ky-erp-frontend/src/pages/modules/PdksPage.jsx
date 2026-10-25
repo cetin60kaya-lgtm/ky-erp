@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { executePdksAssistantCommand, PDKS_ASSISTANT_EXAMPLES } from "../../services/pdksAssistant";
+import { getPdksCompanyId } from "../../utils/approvedUiHandoffs";
 import PdksDeviceCenter from "../pdks/PdksDeviceCenter";
 import PdksLiveHome from "../pdks/PdksLiveHome";
 import PdksPersonnelDesk from "../pdks/PdksPersonnelDesk";
@@ -42,7 +43,7 @@ function QuickAssistant({ disabled, mainCompanyId, onClose }) {
   const [error, setError] = useState("");
 
   const execute = async () => {
-    if (disabled || busy || !command.trim()) return;
+    if (disabled || busy || !mainCompanyId || !command.trim()) return;
     setBusy(true); setError(""); setMessage("");
     try {
       const result = await executePdksAssistantCommand(command, { mainCompanyId });
@@ -92,13 +93,13 @@ export default function PdksPage(props) {
   const currentGroup = groupForTab(activeTab, groups);
   const currentItem = currentGroup?.items.find(([key]) => key === activeTab) || currentGroup?.items[0] || ["ana-ekran", "Genel Bakış"];
   const go = (tabKey) => { setAssistantOpen(false); openModule?.("pdks", { tabKey }); };
-  const mainCompanyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
+  const mainCompanyId = getPdksCompanyId(activeMainCompany);
 
   const deviceCenterTab = !isAuditAccount && DEVICE_CENTER_TABS.includes(activeTab);
   const personnelDeskTab = PERSONNEL_DESK_TABS.has(activeTab);
   const rulesCenterTab = !isAuditAccount && activeTab === "puantaj-kurallari";
   const reportCenterTab = ["puantaj-sonuclari", "raporlar"].includes(activeTab);
-  const assistantAvailable = !isAuditAccount && ASSISTANT_TABS.has(activeTab);
+  const assistantAvailable = !isAuditAccount && Boolean(mainCompanyId) && ASSISTANT_TABS.has(activeTab);
 
   return (
     <div className="pdks-module-shell">
@@ -114,6 +115,7 @@ export default function PdksPage(props) {
           ))}
         </nav>
         {assistantAvailable ? <button type="button" className="pdks-context-action" onClick={() => setAssistantOpen(true)}>Hızlı İşlem</button> : null}
+        {!isAuditAccount && !mainCompanyId && ASSISTANT_TABS.has(activeTab) ? <span className="pdks-context-mode">Hızlı işlem için firma seçin</span> : null}
         <span className={"pdks-context-mode " + (isAuditAccount ? "audit" : "full")}>{isAuditAccount ? "DENETİM" : "PDKS 6.0"}</span>
       </header>
 
@@ -134,7 +136,7 @@ export default function PdksPage(props) {
       </main>
 
       {assistantOpen && assistantAvailable ? (
-        <QuickAssistant disabled={false} mainCompanyId={mainCompanyId} onClose={() => setAssistantOpen(false)} />
+        <QuickAssistant disabled={!mainCompanyId} mainCompanyId={mainCompanyId} onClose={() => setAssistantOpen(false)} />
       ) : null}
     </div>
   );

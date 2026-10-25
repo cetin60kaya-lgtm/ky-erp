@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { consumeMailTemplatesOpen } from "../../../utils/approvedUiHandoffs";
 import { BadgeCheck, FileText, X } from "lucide-react";
 import MailTemplatesWorkspace from "./MailTemplatesWorkspace";
 import MailTrackingWorkspace from "./MailTrackingWorkspace";
 import ReconciliationPanel from "./ReconciliationPanel";
 
 export default function MailAccountingWorkspace(props) {
-  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(() => consumeMailTemplatesOpen(typeof window !== "undefined" ? window.sessionStorage : null));
   const [reconciliationOpen, setReconciliationOpen] = useState(false);
 
   return (
