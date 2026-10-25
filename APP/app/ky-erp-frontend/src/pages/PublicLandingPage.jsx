@@ -23,6 +23,7 @@ import PublicPresentationStories from "../components/public/PublicPresentationSt
 import PublicDeviceExperience from "../components/public/PublicDeviceExperience";
 import "../styles/public-landing.css";
 import "../styles/public-landing-v2.css";
+import "../styles/ky-pro-public.css";
 
 const MODULES = [
   {
@@ -151,7 +152,7 @@ export default function PublicLandingPage({ onOpenLogin }) {
       <header className="ky-public-header">
         <a className="ky-public-logo" href="#top" aria-label="KY ERP ana sayfa">
           <span>KY</span>
-          <div><strong>KY ERP</strong><small>Enterprise Resource Planning</small></div>
+          <div><strong>KY ERP</strong><small>İşletme Yönetimi</small></div>
         </a>
 
         <nav className={menuOpen ? "is-open" : ""} aria-label="Ana menü">
@@ -187,7 +188,7 @@ export default function PublicLandingPage({ onOpenLogin }) {
               tekstil işletmesinin günlük operasyonlarını aynı sistemde birleştirir.
             </p>
             <div className="ky-public-hero__actions">
-              <a className="ky-public-primary" href="#giris" onClick={openLogin}>Doğrudan Sisteme Gir <ArrowRight size={18} /></a>
+              <a className="ky-public-primary" href="#giris" onClick={openLogin}>Sisteme Gir <ArrowRight size={18} /></a>
               <a className="ky-public-secondary" href="#canli-demo">Sistemi İncele</a>
             </div>
             <div className="ky-public-trust">
