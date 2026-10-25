@@ -17,6 +17,7 @@ const control=read("public/guvenlik/security-control-center.js");
 const actions=read("public/guvenlik/security-actions.js");
 const setup=read("src/components/shell/PhoneApprovalDeviceSetup.jsx");
 const host=readFileSync(resolve(repo,"APP/cloud/ky-erp-security-host/worker.js"),"utf8");
+const hostConfig=readFileSync(resolve(repo,"APP/cloud/ky-erp-security-host/wrangler.jsonc"),"utf8");
 const mobileControl=readFileSync(resolve(repo,"APP/cloud/ky-erp-api/src/auth-security-mobile-control.ts"),"utf8");
 
 test("fresh security app has a new immutable identity",()=>{
@@ -113,4 +114,11 @@ test("security UI has one canonical refresh owner and no DOM rewrite observer",(
   assert.doesNotMatch(control,/MutationObserver/);
   assert.doesNotMatch(control,/stableSystemAccountSnapshot/);
   assert.doesNotMatch(control,/installSecurityUiStability/);
+});
+test("Worker static HTML handling never redirects its own canonical index path",()=>{
+  const config=JSON.parse(hostConfig);
+  assert.equal(config.assets.html_handling,"none");
+  assert.ok(host.includes("assetPath(url.pathname)"));
+  assert.ok(host.includes("/guvenlik/index.html"));
+  assert.ok(host.includes("index.html"));
 });
