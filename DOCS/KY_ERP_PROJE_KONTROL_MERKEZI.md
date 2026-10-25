@@ -1,5 +1,15 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 25.10.2026 — 19 sekme kod/CI/production yayın kanıtı (en güncel)
+- **Muhasebe [#453](https://github.com/cetin60kaya-lgtm/ky-erp/pull/453)** merged `f3e0d9ea32ef91982a5b98ab61fca22c285d7962`, CI #40220091676 SUCCESS: yönetim seçili dönem/KDV; cari VKN-duplicate/alias; DELETE fail-closed; kümülatif ödeme geriye kayıt 409.
+- **e-Belge [#455](https://github.com/cetin60kaya-lgtm/ky-erp/pull/455)** merged `43d0c0822a6961474c2436c55bcaa2544ef8f35f`, CI #40220688716 SUCCESS: kaynaklı İşNet ve adaptör durumu, 0/1/50/100/101+ sayfalama, tenant geçişi, hatalı tarih ve POSTED yeniden düzenleme koruması.
+- **İmalat [#456](https://github.com/cetin60kaya-lgtm/ky-erp/pull/456)** merged `8d7c355a93483d27536676d235e18a1e30a1513e`, CI #40221156414 SUCCESS: varsayılan firma yok, çift fiş aynı bulk engeli, stabil requestId, stale GET ve 101+.
+- **19 ekran kaynak kontratı [#457](https://github.com/cetin60kaya-lgtm/ky-erp/pull/457)** merged `705307a000f689b911e7ec1c9273007ac73dfc4f`, CI #40221600062 SUCCESS: mevcut onaylı 7+9+3 rota/JSX/servis bağlantıları 19 ayrı otomatik test. **Gerçek kullanıcı E2E değildir**.
+- **[Worker canlı #40221347939](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40221347939)** SUCCESS SHA `cc06539f270db75a6baef39aaa950d759aaa6e8d`: tam D1 backup+artifact, schema, canlı API sağlık PASSED; migration **SKIPPED**.
+- **[Pages canlı #40221736227](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40221736227)** SUCCESS SHA `fccc143b66477da6ffdea1c57c6ece7d013fc9f6`: Pages dağıtımı, public bundle ve Günlük Operasyon chunk smoke PASSED. #453/#455/#456 her iki release atası, #457 Pages atası (compare behind=0).
+- 19 sekme HTML düzeni değişmedi. **İş/rol/İşNet/fiilî ödeme/gerçek üretim fişi, 1366×768/1920×1080/mobil browser ve Windows Excel TSV E2E onayı yok**; üretim D1'de test mutasyonu yapılmadı. Bu nedenle **19/19 tam kullanım kabulü KISMİ**. Güncel tek karar ve 8 sütunlu [19 sekme kabul matrisi](KY_ERP_19_SEKME_MUHASEBE_EBELGE_IMALAT_KABUL_MATRISI_2026-10-25.md). Alt kısımlardaki eski PR bekliyor ifadeleri tarihsel olup bu kayıt üstündür.
+
+
 ## 25.10.2026 — Uygulama üst şerit profil/sekme çakışması düzeltmesi
 - Kullanıcının canlı 1649×929 ekran görüntülerinde SY / Sistem Yöneticisi profil alanı açık sekmelerin üzerine taşıyordu. Kök neden `responsive-core.css` içindeki PC profil düğmesine verilen genel `display:block !important` kuralı ve PC grid satırı 58px / onaylı üst şerit 64px uyuşmazlığı.
 - PC profil düğmesi flex olarak sabitlendi; üst çubuk, sekmeler ve breadcrumb grid satırları eşitlendi. Uzun sekmeler yatay kayar ve kontrollü ellipsis kullanır; 3 kaynak regresyon testi eklendi. Veri, giriş güvenliği, MFA, İK veya PDKS iş kuralları değiştirilmedi.
