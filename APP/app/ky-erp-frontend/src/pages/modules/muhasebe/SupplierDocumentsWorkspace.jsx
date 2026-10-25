@@ -72,7 +72,7 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
   useEffect(() => {
     if (view !== "dispatches") return undefined;
     const timer = window.setTimeout(() => void loadDispatches(), 180);
-    return () => window.clearTimeout(timer);
+    return () => { window.clearTimeout(timer); requestSeq.current += 1; };
   }, [loadDispatches, refreshKey, view]);
 
   const openEBelge = () => openModule?.("e-belge", { tabKey: "belge-havuzu" });
