@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BellRing, CalendarDays, CheckCircle2, Plus, WalletCards } from "lucide-react";
 import { apiGet, apiPost } from "../../../utils/api";
+import { isOpenPaymentPlan, overduePaymentPlans } from "./paymentPlanView";
 import "./paymentPlannerPanel.css";
 
 const money = (value, currency = "TRY") => new Intl.NumberFormat("tr-TR", { style: "currency", currency: currency || "TRY", maximumFractionDigits: 2 }).format(Number(value || 0));
@@ -32,7 +33,7 @@ export default function PaymentPlannerPanel({ activeMainCompany, refreshKey = 0 
       const data = result?.data;
       const allRows = Array.isArray(data) ? data : Array.isArray(data?.rows) ? data.rows : [];
       const openRows = mode === "overdue"
-        ? allRows.filter((row) => !["PAID", "CANCELLED"].includes(String(row.status || "").toUpperCase()) && String(row.planned_date || row.due_date || "") < today())
+        ? overduePaymentPlans(allRows, today())
         : allRows;
       setRange({ from: data?.from, to: data?.to });
       setRows(openRows);
@@ -68,7 +69,7 @@ export default function PaymentPlannerPanel({ activeMainCompany, refreshKey = 0 
   return (
     <section className="payment-planner-card">
       <header>
-        <div><WalletCards size={20} /><span><strong>Ödeme Planı</strong><small>Kime, ne zaman ve ne kadar ödeme yapılacağını haftalık yönetin.</small></span></div>
+        <div><WalletCards size={20} /><span><strong>Ödeme Planı</strong><small>Planlanan, geciken ve tamamlanan ödemeleri tek kaynaktan takip edin.</small></span></div>
         <button type="button" onClick={() => setShowForm((v) => !v)}><Plus size={15} /> Yeni ödeme</button>
       </header>
       <div className="payment-planner-tabs">
@@ -101,7 +102,7 @@ export default function PaymentPlannerPanel({ activeMainCompany, refreshKey = 0 
         </div>
       ) : null}
       <div className="payment-table-wrap"><table><thead><tr><th>Tarih</th><th>Kişi / Firma</th><th>Tutar</th><th>Öncelik</th><th>Ödeme Şekli</th><th>Hesap</th><th>Durum</th><th></th></tr></thead><tbody>
-        {loading ? <tr><td colSpan="8">Yükleniyor…</td></tr> : rows.length ? rows.map((row) => <tr key={row.id}><td>{row.planned_date || row.due_date || "-"}</td><td><strong>{row.counterparty_name}</strong><small>{row.description || ""}</small></td><td>{money(row.amount, row.currency)}</td><td>{row.priority}</td><td>{row.payment_method || "-"}</td><td>{accounts.find((account)=>String(account.id)===String(row.bank_account_id||""))?.name||"-"}</td><td>{row.status}</td><td>{!["PAID", "CANCELLED"].includes(String(row.status || "").toUpperCase()) ? <button type="button" className="paid-btn" disabled={paying} onClick={() => setConfirmPayment(row)}><CheckCircle2 size={14} /> Ödendi</button> : null}</td></tr>) : <tr><td colSpan="8">Bu dönem için planlanmış ödeme yok.</td></tr>}
+        {loading ? <tr><td colSpan="8">Yükleniyor…</td></tr> : rows.length ? rows.map((row) => <tr key={row.id}><td>{row.planned_date || row.due_date || "-"}</td><td><strong>{row.counterparty_name}</strong><small>{row.description || ""}</small></td><td>{money(row.amount, row.currency)}</td><td>{row.priority}</td><td>{row.payment_method || "-"}</td><td>{accounts.find((account)=>String(account.id)===String(row.bank_account_id||""))?.name||"-"}</td><td>{row.status}</td><td>{isOpenPaymentPlan(row) ? <button type="button" className="paid-btn" disabled={paying} onClick={() => setConfirmPayment(row)}><CheckCircle2 size={14} /> Ödendi</button> : null}</td></tr>) : <tr><td colSpan="8">Bu dönem için planlanmış ödeme yok.</td></tr>}
       </tbody></table></div>
     </section>
   );
