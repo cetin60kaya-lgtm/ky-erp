@@ -21,6 +21,7 @@ test("KY ERP Security is a separate installable phone tablet PWA",()=>{
   assert.match(manifest,/"start_url": "\/guvenlik\/"/);
   assert.match(setup,/Microsoft Authenticator mantığında ayrı telefon\/tablet onay uygulaması/);
   assert.match(setup,/Sorun olursa yedek bağlantı kodu oluştur/);
+  assert.match(setup,/new URL\("https:\/\/security\.kyerp\.net\/guvenlik\/"\)/);
 });
 
 test("security app uses one consolidated notification and opens app for decision",()=>{
@@ -169,9 +170,9 @@ test("security app shows the verified bound ERP account identity and access scop
 });
 
 test("security app exposes one visible canonical version and persists it on the device record",()=>{
-  assert.match(html,/id="appVersionBadge">v4\.1\.0/);
-  assert.match(html,/id="accountVersion">v4\.1\.0/);
-  assert.match(app,/APP_DISPLAY_VERSION="v4\.1\.0"/);
+  assert.match(html,/id="appVersionBadge">v4\.1\.1/);
+  assert.match(html,/id="accountVersion">v4\.1\.1/);
+  assert.match(app,/APP_DISPLAY_VERSION="v4\.1\.1"/);
   assert.match(app,/X-KYERP-Security-App-Version/);
   assert.match(app,/lastKnownServerVersion/);
   assert.match(app,/versionCheckedAt/);
