@@ -219,7 +219,7 @@ function showTab(name,options={}){
   document.querySelectorAll(".security-tabs button").forEach((button)=>button.classList.toggle("active",button.dataset.tab===name));
   ["activity","approvals","sessions","computers","logs","code","notes","chat","device"].forEach((tab)=>document.querySelector("#"+tab+"Tab")?.classList.toggle("hidden",tab!==name));
   const extra=document.querySelector("#securityMoreTabs");
-  if(extra){const active=extra.querySelector("button.active");const summary=extra.querySelector("summary");if(summary)summary.textContent=active?active.textContent.trim().replace(/\\s+\\d+$/,""):"Diğer";extra.open=false;}
+  if(extra){const active=extra.querySelector("button.active");const summary=extra.querySelector("summary");if(summary)summary.textContent=active?active.textContent.trim().replace(/\s+\d+$/,""):"Diğer";extra.open=false;}
   window.dispatchEvent(new CustomEvent("kysecurity:tab",{detail:{tab:name}}));
 }
 async function connectDevice(){
