@@ -3,10 +3,10 @@
 const API="https://api.kyerp.net/api",DB="kyerp-security-fresh-v3",MODE=document.body.dataset.kind,HOME=location.pathname.split("/").filter(Boolean)[0];
 const $=(x)=>document.getElementById(x);let device=null,account=null,control=null,busy=false,installPrompt=null,codeUntil=0;
 const strip=(v)=>String(v??"").trim(),hasOwner=()=>MODE==="OWNER",eligible=(a)=>a&&((hasOwner()&&a.scopeType==="SYSTEM"&&a.ownerControlAuthorized===true)||(!hasOwner()&&a.scopeType==="COMPANY"&&a.companyApprover===true));
-function feedback(m,bad=false){$("message").textContent=m;$("message").className=bad?"note bad":"note"}
+function feedback(m,bad=false){for(const id of ["message","actionMessage"]){const el=$(id);if(el){el.hidden=false;el.textContent=m;el.className=bad?"note bad":"note"}}}
 function encode(bytes){let s="";for(const b of new Uint8Array(bytes))s+=String.fromCharCode(b);return btoa(s).replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_")}
 function decode(v){const t=strip(v).replace(/-/g,"+").replace(/_/g,"/");return Uint8Array.from(atob(t+"=".repeat((4-t.length%4)%4)),x=>x.charCodeAt(0))}
-async function savedDevice(){const db=await new Promise((yes,no)=>{const r=indexedDB.open(DB,1);r.onsuccess=()=>yes(r.result);r.onerror=()=>no(r.error)});return new Promise((yes,no)=>{const tx=db.transaction("device","readonly");const r=tx.objectStore("device").get("active");r.onsuccess=()=>yes(r.result||null);r.onerror=()=>no(r.error)})}
+async function savedDevice(){const db=await new Promise((yes,no)=>{const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains("device"))r.result.createObjectStore("device")};r.onsuccess=()=>yes(r.result);r.onerror=()=>no(r.error)});return new Promise((yes,no)=>{const tx=db.transaction("device","readonly");const r=tx.objectStore("device").get("active");r.onsuccess=()=>yes(r.result||null);r.onerror=()=>no(r.error)})}
 async function sign(raw){return encode(await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},device.signingPrivateKey,new TextEncoder().encode(raw)))}
 async function request(path,opts={}){const method=opts.method||"GET",time=String(Date.now());if(!device?.signingPrivateKey||!device.deviceId||!device.deviceToken)throw Error("Kayıtlı KY Güvenlik cihazı eksik.");
 const signature=await sign(["KYERP-DEVICE-AUTH-V1",device.deviceId,method,"/api"+path,time].join("|"));const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),15000);
