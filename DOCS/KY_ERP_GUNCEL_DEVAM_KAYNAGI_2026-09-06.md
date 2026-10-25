@@ -1,5 +1,10 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 25.10.2026 — Son kesin release ve 19 sekme kabul sınırı
+- PR #449 muhasebeleştirme öncesi ayrıntılı açık onay kartı; CI #40207296821, Pages yayın #40207488400 **SUCCESS**, SHA `9bf4e6cdff36634b17b439ef59a6323c4ce27f57`; #449/#447/#443 ancestry behind=0. Pages deploy, canlı public bundle / Günlük Operasyon chunk smoke PASS. Worker #40206650866 SUCCESS, D1 migrationlar SKIPPED.
+- 19/19 sekmenin gerçek oturumlu CRUD/muhasebe mutabakat/İşNet/gerçek üretim model kabulü yapılmadı; hepsi **KISMİ**. [19 sekme kabul matrisi](KY_ERP_19_SEKME_MUHASEBE_EBELGE_IMALAT_KABUL_MATRISI_2026-10-25.md). D1 business kayıtlarına test mutasyonu yapılmadı.
+
+
 ## 25.10.2026 — e-Belge/İmalat Pages canlı ve finans açık ön onay PR #449
 - Pages release [#40206928454](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40206928454) **SUCCESS**, SHA `19fe5de0ee8639853006e7c7af157cd084f3f46f`; e-Belge #447 ve İmalat #443 bunun atası; frontend deploy/bundle smoke PASS. 100+ belge ve model listesi gerçek kullanıcı E2E henüz PASS değil.
 - PR #449 e-Belge belge detayı **Son Onay / Muhasebeleştir** tek tık finans yazım riski kaldırıldı: cari/kalem/LOT/KDV özet modal, açık checkbox teyidi, çift-submit guard. PR merged `719fd60fa97309230944833f95a7398b06630d88`; CI #40207296821 **SUCCESS**. Yeni Pages release + canlı smoke ve 19 sekme oturumlu saha kabulü açık.
