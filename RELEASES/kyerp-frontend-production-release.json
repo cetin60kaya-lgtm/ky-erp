@@ -34,9 +34,13 @@
     "muhasebe-belge-e-belge-server-contract-mobil-parite",
     "e-belge-finalize-financial-approval-preview",
     "e-belge-finalize-explicit-checkbox-confirmation",
-    "e-belge-finalize-double-submit-idempotency-ui-guard"
+    "e-belge-finalize-double-submit-idempotency-ui-guard",
+    "muhasebe-reconciliation-client-period-balance-confirm",
+    "muhasebe-manual-expense-preview-before-post",
+    "imalat-machines-save-partial-outcome-and-discard",
+    "imalat-report-excel-tsv-injection-safe"
   ],
-  "note": "25.10.2026: e-Belge son muhasebeleştirme öncesi cari, belge, tutar, KDV, kalem/LOT önizleme ve açık kullanıcı teyidi PR #449 merged 719fd60fa97309230944833f95a7398b06630d88; CI #40207296821 Frontend+Worker SUCCESS. Aynı canonical Pages hattı ile frontend release. D1 migration/fiilî ödeme/resmî gönderim yok. Gerçek loginli 19/19 ekran testi ve muhasebe kullanıcı kabulü ayrıca bekliyor.",
-  "sourceCommit": "70112cc2c3e8a7c69b26ca34de9edeb673e7ef7e",
+  "note": "25.10.2026: PR #450 merged 84e93e53f94550e00a189838b1db4abab3c6c64e; CI #40214924202 frontend+Worker SUCCESS. Muhasebe cari mutabakat fark kontrolü/teyit, manuel gider tutar-KDV açık onay; İmalat makine toplu kayıtta kısmi başarı/geri al ve Excel için güvenli TSV. Worker canlı #40215087584 SUCCESS, yedek+artifact ve /api/health, migrations SKIPPED. Bu frontend yayın sonrası gerçek oturumlu 19 sekme, fiilî finans ve gerçek üretim kaydı kabulü hâlâ ayrı; test için canlı D1'de veri mutasyonu yapılmadı.",
+  "sourceCommit": "b4ed1440ef8b86a94cb4d9f1813d86adac2ff360",
   "requestedAt": "2026-10-25"
 }
