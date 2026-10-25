@@ -24,7 +24,7 @@ export async function postAccountingPaymentAtomic(
   if (!plan) return fail(404, "NOT_FOUND", "Ödeme planı bulunamadı.");
   const total = amount(plan.amount), paid = amount(body.paidAmount ?? body.amount ?? total);
   const isoCurrency = str(plan.currency || "TRY").toUpperCase();
-  if (!Number.isFinite(total) || total <= 0 || cents(total) !== total * 100 ||
+  if (!Number.isFinite(total) || total <= 0 || Math.abs(cents(total)-total*100)>0.00001 ||
       !Number.isFinite(paid) || paid <= 0 || paid > total || Math.abs(cents(paid) - paid * 100) > 0.00001)
     return fail(400, "PAID_AMOUNT_INVALID", "Ödeme miktarı pozitif, geçerli ve kuruş hassasiyetinde olmalıdır.");
   if (!/^[A-Z]{3}$/.test(isoCurrency) || (body.currency && str(body.currency).toUpperCase() !== isoCurrency))
@@ -59,9 +59,9 @@ export async function postAccountingPaymentAtomic(
     "(id,main_company_slug,entry_date,entry_type,record_scope,company_id,company_name,description,",
     "debit,credit,currency,payment_method,bank_account_id,source_document_id,source_payment_plan_id,file_asset_id,note,created_by,created_at,updated_at)",
     "SELECT ?,p.main_company_slug,?,'ODEME','OFFICIAL',p.counterparty_id,p.counterparty_name,?,",
-    "ROUND(? - " + sumSql + ",2),0,p.currency,?,?,p.source_document_id,p.id,?,?,?,?,",
-    "FROM accounting_payment_plans p", // the trailing separator is handled below
-  ].join(" ").replace("?,?,?,?, FROM", "?,?,?,?,? FROM");
+    "ROUND(? - " + sumSql + ",2),0,p.currency,?,?,p.source_document_id,p.id,?,?,?,?,?",
+    "FROM accounting_payment_plans p",
+  ].join(" ");
   const preconditions = [
     "WHERE p.id=? AND p.main_company_slug=? AND p.status IN ('PLANNED','PARTIAL')",
     "AND p.paid_amount < ? AND p.amount >= ?",
