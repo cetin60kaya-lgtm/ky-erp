@@ -58,7 +58,7 @@ export default function PaymentPlannerPanel({ activeMainCompany, refreshKey = 0 
     if (!row || paying) return;
     setError(""); setMessage(""); setPaying(true);
     try {
-      await apiPost(`/muhasebe/odeme-plani/${row.id}/paid`, { ...params, paidAmount: Number(row.amount || 0), paymentDate: today(), paymentMethod: row.payment_method, bankAccountId: row.bank_account_id || "" });
+      await apiPost(`/muhasebe/odeme-plani/${row.id}/paid`, { ...params, paidAmount: Number(row.amount || 0), confirmed: true, currency: row.currency || "TRY", paymentDate: today(), paymentMethod: row.payment_method, bankAccountId: row.bank_account_id || "" });
       setMessage(`${row.counterparty_name} ödemesi işlendi ve deftere yazıldı.`);
       setConfirmPayment(null);
       await load();
