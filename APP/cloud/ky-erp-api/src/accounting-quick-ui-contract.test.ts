@@ -51,9 +51,9 @@ test("e-Belge final approval refreshes accounting while management overview stay
   assert.match(ebelge, /CustomEvent\("kyerp:accounting-refresh"/);
   assert.match(overview, /Toplam alacak/);
   assert.match(overview, /Toplam borç/);
-  assert.match(overview, /Bu ay gelen fatura/);
-  assert.match(overview, /Bu ay kesilen fatura/);
-  assert.match(overview, /Yaklaşan çek/);
+  assert.match(overview, /Seçili ay gelen fatura/);
+  assert.match(overview, /Seçili ay kesilen fatura/);
+  assert.match(overview, /Güncel yaklaşan çek/);
   assert.doesNotMatch(overview, /e-Belge → Muhasebe Entegrasyonu/);
   assert.doesNotMatch(overview, /Bu ay en yüksek tedarikçiler|Bu ay en yüksek müşteriler|Son cari hareketler/);
   assert.match(center, /idempotent:true/);
