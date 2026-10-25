@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
+import { probeIsnetSessionHealth } from "./isnet-session-health";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -417,34 +418,16 @@ async function isnetApiRequest(c: Context<AppEnv>, slug: string, endpoint: strin
 
 // Salt-okunur alıcı sorgusu: resmî belge/fatura gönderimi YAPMAZ.
 // Dış sağlayıcıdan alınan alıcı listesi yanıt gövdesi/log/api yanıtına taşınmaz.
-export async function verifyIsnetReadOnlySession(c: Context<AppEnv>, slug: string) {
-  const settings=await settingsRaw(c,slug);
-  const companyId=text(settings.companyId),token=text(settings.accessToken);
-  const base={ lastVerifiedAt:null as string|null, source:"ISNET_RECIPIENT_READ_ONLY",connected:false };
+export async function verifyIsnetReadOnlySession(c: Context<AppEnv>,slug: string) {
+  const settings=await settingsRaw(c,slug),companyId=text(settings.companyId),token=text(settings.accessToken);
+  const base={status:"UNVERIFIED",connected:false,lastVerifiedAt:null,source:"ISNET_RECIPIENT_READ_ONLY"};
   if(!companyId)return {...base,status:"NOT_CONFIGURED"};
-  if(!token || text(settings.connectionMode)==="portal")return {...base,status:"UNVERIFIED"};
-  const expiration=text(settings.tokenExpiresOn);
-  if(expiration && !Number.isNaN(Date.parse(expiration)) && Date.parse(expiration)<=Date.now())
+  if(!token||text(settings.connectionMode)==="portal")return base;
+  const expires=text(settings.tokenExpiresOn);
+  if(expires&&!Number.isNaN(Date.parse(expires))&&Date.parse(expires)<=Date.now())
     return {...base,status:"SESSION_EXPIRED"};
-  const controller=new AbortController(),watch=setTimeout(()=>controller.abort(),6000);
-  try{
-    const response=await fetch(`${API_BASE}/api/Company/GetRecipientList`,{
-      method:"POST",signal:controller.signal,
-      headers:{Accept:"application/json","Content-Type":"application/json",Authorization:`Bearer ${token}`,Token:token},
-      body:JSON.stringify({CompanyId:Number(companyId)}),
-    });
-    if(response.status===401||response.status===403)return {...base,status:"SESSION_INVALID",sourceError:"HTTP "+response.status};
-    if(!response.ok)return {...base,status:"ERROR",sourceError:"HTTP "+response.status};
-    let payload: any;
-    try{payload=await response.json()}catch{return {...base,status:"ERROR",sourceError:"INVALID_RESPONSE"}}
-    const result=payload?.Result??payload?.result;
-    if(result!==undefined&&result!==null&&![0,"0","success","Success",true].includes(result))
-      return {...base,status:"ERROR",sourceError:"PROVIDER_REJECTED"};
-    return {...base,status:"CONNECTED",connected:true,lastVerifiedAt:new Date().toISOString()};
-  }catch(e:any){
-    return {...base,status:e?.name==="AbortError"?"TIMEOUT":"ERROR",
-      sourceError:e?.name==="AbortError"?"TIMEOUT":"NETWORK_ERROR"};
-  }finally{clearTimeout(watch)}
+  const result=await probeIsnetSessionHealth(fetch,API_BASE+"/api/Company/GetRecipientList",token,companyId,6000);
+  return {...result,source:"ISNET_RECIPIENT_READ_ONLY"};
 }
 
 function extractRows(payload: any) {
