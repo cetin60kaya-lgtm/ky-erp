@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 26.10.2026 — KY Güvenlik v4.1.0 tek PWA TAM CANLI WEB KANITI
+- [PR #466](https://github.com/cetin60kaya-lgtm/ky-erp/pull/466) merged `8abdb7d99078e37aa0b810c538a2621de4fcfcf2`; [CI #40243582440](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40243582440) SUCCESS. [Cloudflare Pages #40243835815](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40243835815) SUCCESS, SHA `920c138a8fad043c3c651aeff4c61c2556fe03e0`, PR #466 atası (compare behind=0).
+- [PR #469](https://github.com/cetin60kaya-lgtm/ky-erp/pull/469) merged `569198eb926a19fdba4987c9ad8ddb5d1fa409f7`; [CI #40244411439](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40244411439) SUCCESS. Cloudflare Worker static assets `html_handling: none` 307 self-redirect loop kök çözümü. [Security Worker #40244530715](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40244530715) SUCCESS SHA `882b809339b34130a13ed00bbd42e5f32603da8f`, PR #469 atası (behind=0).
+- **Gerçek canlı HTTP**: `/guvenlik/` 200 ve `<title>KY ERP Güvenlik v4.1.0</title>`; `/guvenlik/manifest.webmanifest` 200; `/guvenlik/sw.js` 200; `/guvenlik/app.js` 200; `/ky-firma/` 200; `/ky-firma/manifest.webmanifest` 200; eski `/ky-sistem/` 308 -> `/guvenlik/`, eski `/security/` 410. API kodsuz enrollment ve relink koruması doğru `SECURITY_ENROLLMENT_CODE_REQUIRED`.
+- **Kalıcı tek uygulama kuralı**: telefondaki mevcut `/guvenlik/` PWA aynı manifest id ve cihaz DB ile güncellenir; ikinci owner PWA kurulumu veya telefonu hemen silme yoktur. Firma sahibi ayrı `/ky-firma/` PWA. Canlı D1 iş verisine dokunulmadı.
+- **Henüz kabul edilmeyenler**: kullanıcının fizikî Android telefonunda kurulu ikon açma, biyometri, push-onay, arka plan bildirimi ve gerçek oturum E2E testi. Finans/İK/İmalat ayrıntılı mobil owner iş analizi tamamlanmış değildir. Bu başlıklarda **tam telefon kabulü YOK**, web deploy SUCCESS.
+
+
 ## 26.10.2026 — Son kesin kayıt / İşNet sertleştirme PR #468 (Worker canlı)
 - [PR #468](https://github.com/cetin60kaya-lgtm/ky-erp/pull/468) merged `fc1a5fbb5bc05d64ff8b51baa6f89d436d498285`. [CI #40243561868](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40243561868): Frontend ve Worker SUCCESS.
 - Kesin kayıt sırasında `FINALIZING/APPROVED/FINALIZE_RETRY` belgeye dış PATCH, tekil/toplu eşleştirme kilidi eklendi; PATCH transaction sonrası etkilenen satır denetimli. Finalizasyon içi yetkili eşleştirme korunur. İşNet HTTP 200 ancak boş veya doğrulama yapısı olmayan cevap artık BAĞLI değil `UNVERIFIED`.
