@@ -45,3 +45,18 @@ test("belge penceresi konum ve boyutunu hatırlar, LOT ikinci belgeyi bekler", (
   assert.match(line, /İrsaliye \/ LOT bekleniyor/);
   assert.match(line, /hasCounterDocument/);
 });
+
+
+test("Gelen ve giden belgeler backend yon parametresi ve server pagination kullanir", () => {
+  const page = read("./EBelgeCenterPage.jsx");
+  const css = read("./eBelgeCenter.css");
+  assert.match(page, /direction = view === "incoming" \? "INCOMING"/);
+  assert.match(page, /view === "outgoing" \? "OUTGOING"/);
+  assert.match(page, /pageSize: 50/);
+  assert.match(page, /pageCount = Math\.max/);
+  assert.match(page, /pool\.total/);
+  assert.match(page, /aria-label="e-Belge sayfaları"/);
+  assert.match(page, /aria-label="Sonraki sayfa"/);
+  assert.doesNotMatch(page, /page: 1, pageSize: 100/);
+  assert.match(css, /\.eb-pool-pagination/);
+});
