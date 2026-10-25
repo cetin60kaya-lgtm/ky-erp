@@ -104,7 +104,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule,
   else if (current.key === "yonetim-ozeti") content = <ManagementOverviewWorkspace {...pageProps} />;
   else if (current.key === "firma-kartlari") content = <CompaniesCurrentWorkspace {...pageProps} />;
   else if (current.key === "tedarikci-faturalar") content = <SupplierDocumentsWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} openModule={openModule} />;
-  else if (current.key === "musteri-belgeleri") content = <CustomerDocumentsWorkspace activeMainCompany={activeMainCompany} openModule={openModule} />;
+  else if (current.key === "musteri-belgeleri") content = <CustomerDocumentsWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} openModule={openModule} />;
   else if (current.key === "finans-islemleri") content = <FinanceOperationsWorkspace {...pageProps} />;
   else if (current.key === "mail-ekstre") content = <MailAccountingWorkspace {...pageProps} />;
   else if (current.key === "mali-kontrol") content = <FinancialControlWorkspace {...pageProps} />;
