@@ -1,5 +1,5 @@
-deploy: ky-security-v4-owner-company-isolated-assets-final
-canonical: e22643163f6836b809a170e905008b44abefb958
-requested: 2026-10-25
-source_prs: 458,460,461,462
-reason: security host isolated asset package avoids Cloudflare _redirects error 100324
+deploy: ky-security-v4.1.0-single-canonical-owner-pwa
+canonical: 8abdb7d99078e37aa0b810c538a2621de4fcfcf2
+requested: 2026-10-26
+source_prs: 466
+reason: owner PWA only /guvenlik, company /ky-firma, old duplicate owner packages retired, device identity and existing phone preserved
