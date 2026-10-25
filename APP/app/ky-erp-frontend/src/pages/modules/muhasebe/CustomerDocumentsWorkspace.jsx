@@ -51,7 +51,7 @@ function OutgoingInvoicesPanel({ activeMainCompany, openModule, refreshKey = 0 }
   }, [page, params]);
 
   useEffect(() => { setPage(1); }, [activeMainCompany?.id, activeMainCompany?.slug]);
-  useEffect(() => { const timer = window.setTimeout(() => void load(), 180); return () => window.clearTimeout(timer); }, [load, refreshKey]);
+  useEffect(() => { const timer = window.setTimeout(() => void load(), 180); return () => { window.clearTimeout(timer); requestSeq.current += 1; }; }, [load, refreshKey]);
 
   return <section className="accounting-composite-body">
     <div className="accounting-inline-actions">
