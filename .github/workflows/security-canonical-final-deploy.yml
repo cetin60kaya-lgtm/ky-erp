@@ -122,9 +122,9 @@ jobs:
 
           primary_status="$(curl --silent --show-error --max-time 20 -o /tmp/security-primary.html -w '%{http_code}' https://security.kyerp.net/guvenlik/)"
           test "$primary_status" = "200"
-          grep -q '<title>KY ERP Güvenlik v4.1.0</title>' /tmp/security-primary.html
+          grep -q '<title>KY ERP Güvenlik v4.1.1</title>' /tmp/security-primary.html
           grep -q '/guvenlik/app.js' /tmp/security-primary.html
-          grep -q 'v4.1.0' /tmp/security-primary.html
+          grep -q 'v4.1.1' /tmp/security-primary.html
 
           curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/manifest.webmanifest -o /tmp/manifest-primary.json
           jq -e '.id == "/guvenlik/" and .start_url == "/guvenlik/" and .scope == "/guvenlik/"' /tmp/manifest-primary.json >/dev/null
@@ -137,7 +137,7 @@ jobs:
           grep -q 'Yedek Kod + Admin Şifresiyle Bağla' /tmp/security-app.js
           grep -q 'approve.disabled=true' /tmp/security-app.js
           grep -q 'createLocalUnlock' /tmp/security-app.js
-          grep -q 'APP_DISPLAY_VERSION="v4.1.0"' /tmp/security-app.js
+          grep -q 'APP_DISPLAY_VERSION="v4.1.1"' /tmp/security-app.js
           grep -q 'id="bootPanel"' /tmp/security-primary.html
 
           enrollment_guard="$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' --data '{}' https://api.kyerp.net/api/auth/push/security-enrollment/complete)"
