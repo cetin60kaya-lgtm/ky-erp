@@ -262,6 +262,8 @@ export function registerIkPdksDeviceRoutes(app: Hono<AppEnv>) {
       JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
       WHERE e.main_company_id=?
         AND UPPER(TRIM(COALESCE(s.active_passive,e.status,'AKTIF'))) NOT LIKE '%PAS%'
+        AND UPPER(TRIM(COALESCE(e.sgk_status,'YOK')))='VAR'
+        AND COALESCE(s.sgk_follow,0)<>0
         AND TRIM(COALESCE(s.card_no,''))<>''`)
       .bind(company).all<Row>();
     const people = new Map((peopleResult.results || []).map((row) => [normalizeCard(row.card_no), row]));
