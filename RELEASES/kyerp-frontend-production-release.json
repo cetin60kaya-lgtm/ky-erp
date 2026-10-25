@@ -31,9 +31,12 @@
     "e-belge-gelen-giden-server-direction-filter-50-pagination",
     "e-belge-havuz-100plus-kayit-gorunurlugu",
     "imalat-production-center-100plus-pagination",
-    "muhasebe-belge-e-belge-server-contract-mobil-parite"
+    "muhasebe-belge-e-belge-server-contract-mobil-parite",
+    "e-belge-finalize-financial-approval-preview",
+    "e-belge-finalize-explicit-checkbox-confirmation",
+    "e-belge-finalize-double-submit-idempotency-ui-guard"
   ],
-  "note": "25.10.2026: PR #447 e-Belge gerçek GET yön filtresi / 50'lik server paging, CI #40206047817 PASS, merge e15d1bcc0f1c30149720a72dc26853e0f27761b5; İmalat mevcut PR #443 100+ model pagination, CI #40192931624 PASS, merge 35405ffbbd172f929ad0865d0ef24e6b350e80a4. Worker API release #40206650866 SUCCESS, migrations SKIPPED. Tek canonical Pages yayın hattı kullanılır. Gerçek oturumlu 19/19 sekme, fiili ödeme/İşNet fatura/üretim fişi acceptance ayrı bekliyor.",
-  "sourceCommit": "efdee968b3bae826c984723de668fe8759ae884e",
+  "note": "25.10.2026: e-Belge son muhasebeleştirme öncesi cari, belge, tutar, KDV, kalem/LOT önizleme ve açık kullanıcı teyidi PR #449 merged 719fd60fa97309230944833f95a7398b06630d88; CI #40207296821 Frontend+Worker SUCCESS. Aynı canonical Pages hattı ile frontend release. D1 migration/fiilî ödeme/resmî gönderim yok. Gerçek loginli 19/19 ekran testi ve muhasebe kullanıcı kabulü ayrıca bekliyor.",
+  "sourceCommit": "70112cc2c3e8a7c69b26ca34de9edeb673e7ef7e",
   "requestedAt": "2026-10-25"
 }
