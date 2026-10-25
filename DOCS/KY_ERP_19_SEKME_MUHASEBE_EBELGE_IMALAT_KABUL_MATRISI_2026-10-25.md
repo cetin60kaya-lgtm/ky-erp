@@ -1,5 +1,11 @@
 # KY ERP — Muhasebe / e-Belge / İmalat 19 sekme gerçek kabul matrisi
 
+## Final doğrulanmış Pages yayın — 25.10.2026
+- [PR #449](https://github.com/cetin60kaya-lgtm/ky-erp/pull/449) son onay özet/checkbox/çift-submit koruması, CI #40207296821 PASS, merged `719fd60fa97309230944833f95a7398b06630d88`.
+- [Pages #40207488400](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40207488400) SUCCESS, yayın SHA `9bf4e6cdff36634b17b439ef59a6323c4ce27f57`, #449, #447, #443 merged kaynaklarının hepsi atası (behind=0); canlı bundle+Günlük Operasyon chunk smoke PASS. Worker #40206650866 SUCCESS, migrations SKIPPED.
+- Canlı kaynak dağıtıldı ancak 19 sekmenin gerçek yetkili login, finans fiilî kayıt, İşNet ve imalat gerçek fiş işlemleri test edilmedi. **Tam işlev kabulü PASS değil; 19 KISMİ.**
+
+
 ## Son kod ve yayın: 25.10.2026
 - e-Belge #447 ve İmalat #443 Pages #40206928454 SUCCESS, kaynak SHA `19fe5de0ee8639853006e7c7af157cd084f3f46f`, iki merge atası behind=0. Worker #40206650866 zaten SUCCESS, migrations SKIPPED.
 - e-Belge kesin muhasebe kaydı #449: PR merged `719fd60fa97309230944833f95a7398b06630d88`; CI #40207296821 Frontend+Worker SUCCESS. Kayıttan önce belge/cari/tutar/KDV/kalem/LOT önizleme ve açık checkbox zorunlu, çift istek kilidi; ayrı Pages yayını ve gerçek oturumlu onay kabulü bekliyor.
