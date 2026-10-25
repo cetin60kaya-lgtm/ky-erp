@@ -1,0 +1,35 @@
+{
+  "name": "ky-erp-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^39.2.3",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "net.kyerp.desktop",
+    "productName": "KY ERP Desktop",
+    "asar": true,
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "web/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "artifactName": "KY-ERP-Desktop-${version}-Setup.${ext}"
+    }
+  }
+}
