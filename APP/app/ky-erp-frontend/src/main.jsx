@@ -141,20 +141,34 @@ async function renderCanonicalHost() {
     });
 
     useEffect(() => {
-      if (directLoginPaths.has(String(window.location.pathname || "").toLowerCase())) {
-        window.history.replaceState({}, "", "/" + window.location.search + window.location.hash);
-      }
-      const openLogin = () => setLoginOpen(true);
+      const openLogin = () => {
+        if (window.location.pathname === "/") window.history.pushState({}, "", "/giris");
+        setLoginOpen(true);
+      };
+      const syncLoginRoute = () => setLoginOpen(window.location.pathname !== "/");
       window.addEventListener("kyerp:open-login", openLogin);
-      return () => window.removeEventListener("kyerp:open-login", openLogin);
+      window.addEventListener("popstate", syncLoginRoute);
+      return () => {
+        window.removeEventListener("kyerp:open-login", openLogin);
+        window.removeEventListener("popstate", syncLoginRoute);
+      };
     }, []);
+
+    const showLogin = () => {
+      if (window.location.pathname === "/") window.history.pushState({}, "", "/giris");
+      setLoginOpen(true);
+    };
+    const closeLogin = () => {
+      setLoginOpen(false);
+      if (window.location.pathname !== "/") window.history.replaceState({}, "", "/");
+    };
 
     if (isAuthenticated) return <AuthenticatedWorkspace user={user} />;
 
     return (
       <>
-        <PublicLandingPage onOpenLogin={() => setLoginOpen(true)} />
-        {loginOpen ? <LoginPage onClose={() => setLoginOpen(false)} /> : null}
+        <PublicLandingPage onOpenLogin={showLogin} />
+        {loginOpen ? <LoginPage onClose={closeLogin} /> : null}
       </>
     );
   }
