@@ -3,9 +3,9 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "84e93e53f94550e00a189838b1db4abab3c6c64e",
+  "sourceCommit": "8d7c355a93483d27536676d235e18a1e30a1513e",
   "requestedAt": "2026-10-25",
-  "attempt": 22,
+  "attempt": 23,
   "scope": [
     "gunluk-tum-api-ik-tenant-yetki-koruma",
     "gunluk-donem-kilit-gercek-d1-ve-yazma-engel",
@@ -23,9 +23,13 @@
     "muhasebe-cari-mutabakat-api-fark-validator",
     "muhasebe-reconciliation-server-strict-confirm",
     "production-no-d1-migration",
-    "worker-health-and-backup-readiness"
+    "worker-health-and-backup-readiness",
+    "muhasebe-period-vkn-alias-payment-cumulative-guards-pr453",
+    "ebelge-posted-immutability-provider-tenant-pagination-pr455",
+    "imalat-tenant-bulk-duplicate-stable-request-pr456",
+    "worker-backup-no-migration-schema-health"
   ],
-  "note": "25.10.2026: PR #450 merged 84e93e53f94550e00a189838b1db4abab3c6c64e; CI #40214924202 Frontend ve Worker SUCCESS. Mutabakat status MATCHED/DIFFERENCE doğrulaması backend tenant guard içinde. Bu sürüm D1 migration gerektirmez; applyMigrations=false, migrationApprovedByUser=false. Tam D1 yedeği artifact, salt-okunur schema, Worker deploy ve API health kontrolü zorunlu; gerçek finansal iş kaydı, resmî fatura gönderimi veya canlı veri testi yapılmaz.",
+  "note": "25.10.2026 19 sekme kabul çalışması: Muhasebe #453 merge f3e0d9ea32ef91982a5b98ab61fca22c285d7962 CI #40220091676 SUCCESS, e-Belge #455 merge 43d0c0822a6961474c2436c55bcaa2544ef8f35f CI #40220688716 SUCCESS, İmalat #456 merge 8d7c355a93483d27536676d235e18a1e30a1513e CI #40221156414 SUCCESS. Sadece kod sürümü: applyMigrations=false ve migrationApprovedByUser=false. Tam canlı D1 export artifact, salt okunur schema ve canlı API health zorunludur. Gerçek fatura, para, firma, üretim, İşNet gönderimi veya D1 data testi yapılmaz. Yetkili browser/role E2E ayrıca bekliyor.",
   "applyMigrations": false,
   "migrationApprovedByUser": false
 }
