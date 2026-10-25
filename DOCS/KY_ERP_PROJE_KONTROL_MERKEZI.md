@@ -1,5 +1,12 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 25.10.2026 — e-Belge toplu eşleştirme açık onay PR #451 CANLI
+- [PR #451](https://github.com/cetin60kaya-lgtm/ky-erp/pull/451) merged `e2b7654daa207f209f08e713e7861ee0532898ba`, canonical CI [#40215686365](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215686365) frontend+Worker **SUCCESS**.
+- e-Belge Havuz/Eşleşmeler toplu kontrolü öncesinde etkisinin mevcut filtreli sayfa değil seçili ana firmadaki uygun açık faturalar (bir seferde max 500) olduğu açıklanır; checkbox + ayrı onaydan önce `reconcile-all` POST gönderilmez. Ref tabanlı çift istek kilidi ve kısmi hata sayısı görünür. e-Belge bugün tarihi tarayıcının yerel takviminden alınır (UTC kayması düzeltilir). Bu PR Worker/D1 migration/resmî İşNet gönderimi yapmadı.
+- [Cloudflare Pages production #40215803908](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215803908) **SUCCESS** SHA `0d421463de6def6d02f90a0516a21d547db39db0`; PR merge yayın SHA atası (behind=0); gerçek Pages deploy ve public bundle/Günlük Operasyon chunk smoke PASS.
+- **Gerçek veri ile toplu eşleştirme / İşNet gönderim / mobil yetkili browser kullanıcı kabulü ayrı bekliyor.** 19/19 sekme saha E2E PASS iddiası yok. [19 sekme kabul matrisi](KY_ERP_19_SEKME_MUHASEBE_EBELGE_IMALAT_KABUL_MATRISI_2026-10-25.md).
+
+
 ## 25.10.2026 — Muhasebe + İmalat aktif kullanım güvenlik/fonksiyon paketi PR #450 CANLI
 - **[PR #450](https://github.com/cetin60kaya-lgtm/ky-erp/pull/450)** merged `84e93e53f94550e00a189838b1db4abab3c6c64e`. Canonical UI CI [#40214924202](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40214924202) frontend lint/test/build ve Worker typecheck/test/build **SUCCESS**.
 - **Muhasebe/Ekstre:** `ReconciliationPanel` cari dönemi ve iki bakiyeyi açık teyitle kaydeder; farklı bakiyeler `MATCHED` olamaz, eşit bakiyeler `DIFFERENCE` olamaz. `accounting-workspace-core.ts` mevcut tenant güvenliğiyle aynı fark denetimini API düzeyinde 400/409 ile uygular; D1 migration yok, resmî/haricî gönderim yok.
