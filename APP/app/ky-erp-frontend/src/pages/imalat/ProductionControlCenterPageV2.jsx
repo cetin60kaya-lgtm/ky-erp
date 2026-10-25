@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Boxes,
   CheckCircle2,
@@ -34,7 +34,10 @@ import ProductionSmartEntryDrawer from "./ProductionSmartEntryDrawer";
 import "./productionControlCenterV2.css";
 
 const PAGE_SIZE = 100;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+};
 const asNumber = (value) => {
   const parsed = Number(value || 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -163,6 +166,7 @@ function defaultEntry(model, dictionaries, source = null, preferences = {}) {
     : dictionaries?.machines?.find((item) => machineId(item) === preferredMachineId) || firstMachine;
   return {
     id: source?.id || "",
+    requestId: source?.requestId || crypto.randomUUID(),
     modelId: model?.id || source?.modelId || "",
     date: source?.date || today(),
     printRegion: region,
@@ -199,13 +203,22 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
   const [entryOpen, setEntryOpen] = useState(false);
   const [entry, setEntry] = useState(defaultEntry(null, {}));
   const [saving, setSaving] = useState(false);
+  const requestSeq = useRef(0);
+  const saveLock = useRef(false);
   const entryModel = dictionaries.models.find((row) => String(row.id || row.modelId) === String(entry.modelId)) || null;
   const entryPrintRegions = (entryModel?.printRegions || [])
     .map((region) => typeof region === "string" ? region : region?.regionName || region?.name || region?.printAreaName || "")
     .filter(Boolean);
 
   const load = useCallback(async () => {
-    if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
+    const ticket = ++requestSeq.current;
+    if (!activeMainCompany?.slug && !activeMainCompany?.id) {
+      setCenter({ rows: [], summary: {}, pagination: {} });
+      setDictionaries({ models: [], machines: [], operators: [], companies: [] });
+      setLoading(false);
+      setMessage("İmalat merkezi için ana firma seçin.");
+      return;
+    }
     setLoading(true);
     try {
       const tenant = activeMainCompany?.slug || activeMainCompany?.id;
@@ -225,8 +238,16 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
           dictionaries: { fallback: {}, load: () => getProductionCenterDictionaries(activeMainCompany) },
         },
       });
+      if (ticket !== requestSeq.current) return;
       if (loadResult.states.center.status !== "error") {
-        setCenter(loadResult.data.center || { rows: [], summary: {}, pagination: {} });
+        const next = loadResult.data.center || { rows: [], summary: {}, pagination: {} };
+        const total = Number(next.pagination?.total || 0);
+        const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+        if (page > lastPage) {
+          setPage(lastPage);
+          return;
+        }
+        setCenter(next);
       }
       if (loadResult.states.dictionaries.status !== "error") {
         const dict = loadResult.data.dictionaries;
@@ -243,15 +264,22 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
         "Makine veya sözlük bilgileri geçici olarak yenilenemedi; imalat listesi kullanılabilir.",
       ));
     } catch (error) {
-      setMessage(error?.message || "İmalat merkezi yüklenemedi.");
+      if (ticket === requestSeq.current) setMessage(error?.message || "İmalat merkezi yüklenemedi.");
     } finally {
-      setLoading(false);
+      if (ticket === requestSeq.current) setLoading(false);
     }
   }, [activeMainCompany, search, status, page]);
 
   useEffect(() => {
+    setPage(1);
+    setDetail(null);
+    setEntryOpen(false);
+    setCenter({ rows: [], summary: {}, pagination: {} });
+    setDictionaries({ models: [], machines: [], operators: [], companies: [] });
+  }, [activeMainCompany?.slug, activeMainCompany?.id]);
+  useEffect(() => {
     const timer = window.setTimeout(load, 150);
-    return () => window.clearTimeout(timer);
+    return () => { window.clearTimeout(timer); requestSeq.current += 1; };
   }, [load]);
 
   const summary = center.summary || {};
@@ -277,6 +305,11 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
   }
 
   async function saveEntry() {
+    if (saveLock.current || saving) return;
+    if (!(activeMainCompany?.slug || activeMainCompany?.id)) {
+      setMessage("Üretim fişi için ana firma seçin.");
+      return;
+    }
     if (!entry.modelId || asNumber(entry.quantity) <= 0) {
       setMessage("Model ve sıfırdan büyük üretim adedi zorunludur.");
       return;
@@ -290,6 +323,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       setMessage("Sakat ve test toplamı üretim adedini aşamaz.");
       return;
     }
+    saveLock.current = true;
     setSaving(true);
     try {
       if (entry.id) await updateProductionCenterEntry(activeMainCompany, entry.id, entry);
@@ -304,6 +338,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     } catch (error) {
       setMessage(error?.message || "Üretim kaydı tamamlanamadı.");
     } finally {
+      saveLock.current = false;
       setSaving(false);
     }
   }
