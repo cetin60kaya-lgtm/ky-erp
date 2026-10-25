@@ -38,9 +38,13 @@
     "muhasebe-reconciliation-client-period-balance-confirm",
     "muhasebe-manual-expense-preview-before-post",
     "imalat-machines-save-partial-outcome-and-discard",
-    "imalat-report-excel-tsv-injection-safe"
+    "imalat-report-excel-tsv-injection-safe",
+    "e-belge-bulk-match-explicit-scope-confirm",
+    "e-belge-bulk-match-double-post-guard",
+    "e-belge-bulk-match-partial-error-reporting",
+    "e-belge-today-local-date-not-utc"
   ],
-  "note": "25.10.2026: PR #450 merged 84e93e53f94550e00a189838b1db4abab3c6c64e; CI #40214924202 frontend+Worker SUCCESS. Muhasebe cari mutabakat fark kontrolü/teyit, manuel gider tutar-KDV açık onay; İmalat makine toplu kayıtta kısmi başarı/geri al ve Excel için güvenli TSV. Worker canlı #40215087584 SUCCESS, yedek+artifact ve /api/health, migrations SKIPPED. Bu frontend yayın sonrası gerçek oturumlu 19 sekme, fiilî finans ve gerçek üretim kaydı kabulü hâlâ ayrı; test için canlı D1'de veri mutasyonu yapılmadı.",
-  "sourceCommit": "b4ed1440ef8b86a94cb4d9f1813d86adac2ff360",
+  "note": "25.10.2026: e-Belge toplu eşleştirme önce kapsam (tüm uygun açık belgeler; max 500), kullanıcı checkbox ve ayrı onay, ref double-submit kilidi, hatalı sonuç sayısı; dashboard yerel gün tarihi. PR #451 merged e2b7654daa207f209f08e713e7861ee0532898ba; CI #40215686365 Frontend+Worker PASS. Sadece frontend Pages yayını; Worker/D1 resmî belge veya gerçek toplu kayıt testi yok; yetkili oturumlu kabul bekliyor.",
+  "sourceCommit": "e2b7654daa207f209f08e713e7861ee0532898ba",
   "requestedAt": "2026-10-25"
 }
