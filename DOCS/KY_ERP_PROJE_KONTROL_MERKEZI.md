@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+
+## 25.10.2026 — Muhasebe belge listeleri PR #446 / 19 sekme kabul takibi
+- [PR #446](https://github.com/cetin60kaya-lgtm/ky-erp/pull/446) **merged** `3db5852b499a02e7b62d81d2fcdc9b5ed8fe3f56`; CI [#40205322671](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40205322671) **Frontend lint/test/build + Worker typecheck/test/build SUCCESS**.
+- Alış irsaliyeleri ve satış faturalarının `/e-belge/pool` gerçek total/page/pageSize üzerinden sayfalama, arama/firma geçişi ve eski async yanıt koruması tamamlandı. Günlük Operasyon, İK Aylık, ortak shell, Worker ve D1 iş kayıtları değiştirilmedi.
+- 19 sekmenin satır bazlı kod kaynağı, gerçek kabul durumları ve açık işleri: [19 sekme kabul matrisi](KY_ERP_19_SEKME_MUHASEBE_EBELGE_IMALAT_KABUL_MATRISI_2026-10-25.md). Ekranların tümü **KISMİ**; canlı yetkili browser/finans/İşNet gerçek işlem PASS iddiası yok. e-Belge havuzu 100 kayıt sınırı açık; İmalat #443 ayrı PR ve hâlâ açık.
+- **Canlı Pages yayın kanıtı bu kayıt anında bekliyor**; merge ve CI tek başına canlı değil.
+
+
 ## 25.10.2026 — Onaylı 104-sekme HTML tasarım + işlev ilk paketi (canlı)
 - **Kullanıcı kararı:** 14 ana bölüm / 104 görünür+bağlamsal sekme için hazırlanan `KY_ERP_104_SEKME_TEK_HTML_TASARIM_ONAY_2026-10-25.html` tasarım yönü onaylandı; tasarım ve gerçek işlemler aynı sözleşme üzerinden ilerler. Görsel sistemin koordinasyonu tek sohbet/ortak kod sahibindedir, modül kodları ayrı sohbetlerde yürür. Tasarım dosyası sohbet eki/prototip; tamamı production'a geçirildi şeklinde raporlanmaz.
 - **Ortak/ikincil teknik sözleşme:** [KY_ERP_104_SEKME_ONAYLI_HTML_UYGULAMA_SOZLESMESI_2026-10-25.md](KY_ERP_104_SEKME_ONAYLI_HTML_UYGULAMA_SOZLESMESI_2026-10-25.md). Bu belgenin üzerinde canonical proje kontrol otoritesi yine bu dosyadır.
