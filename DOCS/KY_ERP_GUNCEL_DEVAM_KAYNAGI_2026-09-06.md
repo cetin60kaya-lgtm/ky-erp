@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 25.10.2026 — 104 sekme HTML onayı; tasarım ve işlem ilk canlı paketi
+- Prototip referansı: `KY_ERP_104_SEKME_TEK_HTML_TASARIM_ONAY_2026-10-25.html`; 14 ana modül, 88 görünür + 16 bağlamsal sekme. Ayrı modül sohbetlerinde ortak tasarım dosyası çakıştırılmadan işlem kodlanacak. [Tasarım/iş koordinasyon sözleşmesi](KY_ERP_104_SEKME_ONAYLI_HTML_UYGULAMA_SOZLESMESI_2026-10-25.md).
+- [PR #445](https://github.com/cetin60kaya-lgtm/ky-erp/pull/445) **MERGED** SHA `1589f8488d2adf94600d2d6232b54205e4c9dd33`; [canonical CI #40200690982](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40200690982) frontend+Worker **SUCCESS**.
+- [Pages #40200843799](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40200843799) **SUCCESS**, release `3d0fe3a2487e1c81da350dc4ddbec84f5c0e0c43`, merge→release `ahead=1, behind=0`. Gerçek frontend Pages/bundle/Günlük chunk kontrolü PASS; oturumlu 104 sekme görsel/işlem kabulü ayrıca bekliyor.
+- İlk paket ortak Shell HTML görsel katman, PDKS aktif firma olmadan hızlı işlem yasağı, Mail Şablonları gerçek paneline yönlendirme, Güvenlik PWA canonical linki. İK/Günlük işlem kodu, canlı D1 ve Worker değiştirilmedi. Diğer modüllerin sekme bazlı işlev geliştirmesi açık.
+
+
 ## 25.10.2026 — Muhasebe ödeme planı ilk canlı revizyonu + GitHub tek kaynak envanteri
 - **Canonical:** `codex/model-uretim-kontrol-merkezi-final`, `AppV3/moduleRegistry` + Worker/D1; detaylı envanter `DOCS/KY_ERP_TEK_KAYNAK_MODUL_KONTROL_2026-10-25.md` (ana proje kontrol belgesinin yerine geçmez).
 - [PR #444](https://github.com/cetin60kaya-lgtm/ky-erp/pull/444) **merged** SHA `4807b2845d16b848fc9e3abd164443b30badec48`; [CI #40193864397](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40193864397) frontend lint/test/build ve Worker typecheck/test/build **SUCCESS**.
