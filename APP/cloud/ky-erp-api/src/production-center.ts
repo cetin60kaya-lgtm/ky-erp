@@ -129,7 +129,7 @@ function companySlug(c: Context<AppEnv>, body: Row = {}): string {
       body.main_company_slug ||
       c.req.query("mainCompanySlug") ||
       c.req.query("mainCompanyId") ||
-      "mecit-hakan",
+      c.req.header("X-KYERP-Tenant-Slug"),
   );
 }
 
@@ -1033,6 +1033,7 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
   const sourceEntries = Array.isArray(body.entries) ? body.entries : [body];
   const success: Row[] = [];
   const failed: Row[] = [];
+  const seenThisBatch = new Set<string>();
 
   for (const source of sourceEntries) {
     const entry = objectValue(source);
@@ -1045,7 +1046,11 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
     const testQty = numberValue(first(entry.testQty, entry.testAdedi));
     const printArea = text(first(entry.printRegion, entry.printArea, entry.baskiBolgesi));
     const date = isoDate(first(entry.date, entry.tarih)) || new Date().toISOString().slice(0, 10);
+    const fingerprint = [modelId, date, normalized(printArea), grossQty,
+      normalized(entry.machineId || entry.machineName || entry.makineNo),
+      normalized(entry.operatorName || entry.operatorId || entry.makinaci)].join("|");
     const errors: string[] = [];
+    if (seenThisBatch.has(fingerprint)) errors.push("Aynı toplu istekte mükerrer üretim fişi bulunuyor.");
     if (!card || card.isVirtual) errors.push("Kayıtlı tek merkez model seçilmelidir.");
     if (!(grossQty > 0)) errors.push("Brüt üretim adedi sıfırdan büyük olmalıdır.");
     if (printDefectQty + fabricDefectQty + testQty > grossQty) {
@@ -1079,6 +1084,7 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
       continue;
     }
 
+    seenThisBatch.add(fingerprint);
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const raw = {
@@ -1282,6 +1288,16 @@ async function saveMachine(c: Context<AppEnv>, body: Row, forcedId = "") {
 }
 
 export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
+  // API başlığındaki seçili şirket yoksa tarihi varsayılan firmaya düşme.
+  // İzin kontrolü upstream'de ayrıca uygulanır; bu yalnız eksik tenant bağlamında fail-closed kapısıdır.
+  const requireProductionTenant = async (c: Context<AppEnv>, next: () => Promise<void>) => {
+    if (!companySlug(c)) return c.json(jsonError("MAIN_COMPANY_REQUIRED", "İmalat işlemi için ana firma seçilmelidir."), 400);
+    await next();
+  };
+  for (const pattern of ["/api/production-center", "/api/production-center/*", "/api/model-flow/*",
+    "/api/production/*", "/api/imalat/kayitlar", "/api/uretim/seri/*"]) {
+    app.use(pattern, requireProductionTenant);
+  }
   app.get("/api/production-center", async (c) => {
     const center = await buildCenter(c);
     const filtered = filterCards(center.cards, {
@@ -1289,8 +1305,10 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
       status: c.req.query("status"),
       companyId: c.req.query("companyId"),
     });
-    const page = Math.max(1, numberValue(c.req.query("page")) || 1);
-    const pageSize = Math.max(10, Math.min(500, numberValue(c.req.query("pageSize")) || 100));
+    const rawPage = Number(c.req.query("page") || 1);
+    const rawSize = Number(c.req.query("pageSize") || 100);
+    const page = Number.isSafeInteger(rawPage) && rawPage >= 1 && rawPage <= 1000000 ? rawPage : 1;
+    const pageSize = Number.isSafeInteger(rawSize) && rawSize >= 1 && rawSize <= 500 ? rawSize : 100;
     const start = (page - 1) * pageSize;
     return c.json({
       ok: true,
