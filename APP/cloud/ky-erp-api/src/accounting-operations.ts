@@ -29,10 +29,12 @@ export function registerAccountingOperationRoutes(app:Hono<AppEnv>){
    const b=await bodyOf(c),slug=slugOf(c,b),id=c.req.param("id"),ts=now();
    const plan=await c.env.DB.prepare(`SELECT * FROM accounting_payment_plans WHERE id=? AND main_company_slug=? LIMIT 1`).bind(id,slug).first<Row>();
    if(!plan)return c.json(err("NOT_FOUND","Ödeme planı bulunamadı."),404);
-   const planAmount=num(plan.amount),paid=num(b.paidAmount||b.amount||planAmount);
-   if(paid<=0||paid>planAmount)return c.json(err("PAID_AMOUNT_INVALID","Ödenen tutar sıfırdan büyük ve plan tutarını aşmayacak şekilde olmalıdır."),400);
+   const planAmount=num(plan.amount),rawPaid=b.paidAmount??b.amount??planAmount,paid=Number(rawPaid);
+   if(!Number.isFinite(paid)||paid<=0||paid>planAmount||Math.abs(Math.round(paid*100)-paid*100)>0.00001)return c.json(err("PAID_AMOUNT_INVALID","Ödenen kümülatif tutar sıfırdan büyük, kuruş hassasiyetinde ve plan tutarını aşmayacak şekilde olmalıdır."),400);
    const posted=await c.env.DB.prepare(`SELECT COALESCE(SUM(debit),0) total FROM accounting_ledger_entries WHERE main_company_slug=? AND source_payment_plan_id=? AND deleted_at IS NULL`).bind(slug,id).first<Row>();
    const alreadyPosted=num(posted?.total),status=paid>=planAmount?"PAID":"PARTIAL";
+   // Birikimli ödeme geri alınamaz: aşağı revizyon defterdeki gerçek para çıkışını geri çevirmez.
+   if(alreadyPosted-paid>0.005)return c.json(err("PAID_AMOUNT_ROLLBACK_FORBIDDEN","Defterde kayıtlı ödemeden düşük toplam bildirilemez; ters kayıt ve onaylı iptal akışını kullanın."),409);
    if(alreadyPosted>=paid){
      if(num(plan.paid_amount)!==paid||text(plan.status)!==status)await c.env.DB.prepare(`UPDATE accounting_payment_plans SET paid_amount=?,status=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(paid,status,ts,id,slug).run();
      return c.json({ok:true,data:{id,status,paidAmount:paid,idempotent:true}});
