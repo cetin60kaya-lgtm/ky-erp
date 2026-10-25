@@ -67,6 +67,16 @@ jobs:
         shell: bash
         run: npx wrangler@4.118.0 deploy --config wrangler.jsonc --dry-run --outdir /tmp/kyerp-api-dry
 
+      - name: Prepare isolated Security Worker assets (never include Pages _redirects)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node APP/cloud/ky-erp-security-host/prepare-assets.mjs
+          test -f APP/cloud/ky-erp-security-host/.security-assets/guvenlik/index.html
+          test -f APP/cloud/ky-erp-security-host/.security-assets/ky-sistem/index.html
+          test -f APP/cloud/ky-erp-security-host/.security-assets/ky-firma/index.html
+          test ! -e APP/cloud/ky-erp-security-host/.security-assets/_redirects
+
       - name: Dry-run security host bundle with embedded assets
         working-directory: APP/cloud/ky-erp-security-host
         shell: bash
