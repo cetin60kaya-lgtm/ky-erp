@@ -111,12 +111,20 @@ export default function PdksPage(props) {
           <span>{currentGroup?.hint}</span>
         </div>
 
+        <nav className="pdks-context-tabs" aria-label={(currentGroup?.label || "PDKS") + " işlemleri"}>
+          {(currentGroup?.items || []).map(([key, label]) => (
+            <button type="button" key={key} className={activeTab === key ? "active" : ""} onClick={() => go(key)}>{label}</button>
+          ))}
+        </nav>
         {assistantAvailable ? <button type="button" className="pdks-context-action" onClick={() => setAssistantOpen(true)}>Hızlı İşlem</button> : null}
         {!isAuditAccount && !mainCompanyId && ASSISTANT_TABS.has(activeTab) ? <span className="pdks-context-mode">Hızlı işlem için firma seçin</span> : null}
         <span className={"pdks-context-mode " + (isAuditAccount ? "audit" : "full")}>{isAuditAccount ? "DENETİM" : "PDKS 6.0"}</span>
       </header>
 
-      <PdksDesktopNavigation activeTab={activeTab} onNavigate={go} isAuditAccount={isAuditAccount} />
+      <details className="pdks-desktop-menu-expander">
+        <summary>Masaüstü PDKS bölümleri <span>9 bölüm · 49 sekme</span></summary>
+        <PdksDesktopNavigation activeTab={activeTab} onNavigate={go} isAuditAccount={isAuditAccount} />
+      </details>
       <main className="pdks-module-content">
         {activeTab === "ana-ekran" ? (
           <PdksLiveHome activeMainCompany={activeMainCompany} openModule={openModule} />
