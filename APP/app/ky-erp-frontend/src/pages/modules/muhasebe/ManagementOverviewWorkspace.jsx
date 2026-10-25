@@ -79,8 +79,8 @@ export default function ManagementOverviewWorkspace({ activeMainCompany, refresh
             {(() => {
               const values = managementOverviewValues(state.data);
               return <>
-                <Metric label="Güncel toplam alacak" value={money(values.receivable)} />
-                <Metric label="Güncel toplam borç" value={money(values.payable)} />
+                <Metric label="Toplam alacak (güncel)" value={money(values.receivable)} />
+                <Metric label="Toplam borç (güncel)" value={money(values.payable)} />
                 <Metric label="Seçili ay gelen fatura" value={money(values.incoming)} />
                 <Metric label="Seçili ay kesilen fatura" value={money(values.outgoing)} />
                 <Metric label="Güncel yaklaşan çek" value={money(values.upcomingChecks)} />
