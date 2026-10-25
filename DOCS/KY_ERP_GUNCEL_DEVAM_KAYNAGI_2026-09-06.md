@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+
+## 25.10.2026 — Muhasebe 19-sekme faz 1: belge liste sayfalaması
+- [PR #446](https://github.com/cetin60kaya-lgtm/ky-erp/pull/446) merged SHA `3db5852b499a02e7b62d81d2fcdc9b5ed8fe3f56`; CI [#40205322671](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40205322671) frontend/Worker **SUCCESS**. Alış irsaliyeleri ve satış faturalarında ilk 100 kayıt sınırı yerine server pagination, arama/yenileme ve stale request koruması eklendi.
+- [19 sekme kabul matrisi](KY_ERP_19_SEKME_MUHASEBE_EBELGE_IMALAT_KABUL_MATRISI_2026-10-25.md) kaynak ve eksikleri per-tab kaydeder. Henüz tüm 19 ekran gerçek E2E PASS değil. e-Belge havuzu/gelen/giden `page:1`, İşNet kontrolü, tüm Muhasebe gerçek finans zinciri ve İmalat #443 kalan işlerdir.
+- Merge+CI kanıtlı; **Pages release ve gerçek oturumlu browser kabulü ayrıca doğrulanmadan canlı kabul iddiası yok.**
+
+
 ## 25.10.2026 — 104 sekme HTML onayı; tasarım ve işlem ilk canlı paketi
 - Prototip referansı: `KY_ERP_104_SEKME_TEK_HTML_TASARIM_ONAY_2026-10-25.html`; 14 ana modül, 88 görünür + 16 bağlamsal sekme. Ayrı modül sohbetlerinde ortak tasarım dosyası çakıştırılmadan işlem kodlanacak. [Tasarım/iş koordinasyon sözleşmesi](KY_ERP_104_SEKME_ONAYLI_HTML_UYGULAMA_SOZLESMESI_2026-10-25.md).
 - [PR #445](https://github.com/cetin60kaya-lgtm/ky-erp/pull/445) **MERGED** SHA `1589f8488d2adf94600d2d6232b54205e4c9dd33`; [canonical CI #40200690982](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40200690982) frontend+Worker **SUCCESS**.
