@@ -629,7 +629,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
             const key = String(provider.key || provider.label || "").toUpperCase();
             const health = providerDisplayStatus(provider);
             const active = health.active;
-            return <article key={key || provider.label} className={`eb-module-card ${active ? "active" : ""}`}><div><strong>{provider.label || key}</strong><span className={`eb-module-status ${active ? "active" : "idle"}`}>{health.label}</span></div><p>{key === "ISNET" ? "İşNet bağlantısı, firma seçimi ve iş kuralları aşağıdaki entegrasyon ayarlarından yönetilir." : "Bu kaynak aynı canonical e-Belge havuzuna belge üretir."}</p><small>Sistem durumu: {provider.status || "-"}</small></article>;
+            return <article key={key || provider.label} className={`eb-module-card ${active ? "active" : ""}`}><div><strong>{provider.label || key}</strong><span className={`eb-module-status ${active ? "active" : "idle"}`}>{health.label}</span></div><p>{key === "ISNET" ? "İşNet bağlantısı, firma seçimi ve iş kuralları aşağıdaki entegrasyon ayarlarından yönetilir." : "Bu kaynak aynı canonical e-Belge havuzuna belge üretir."}</p><small>Sistem durumu: {provider.status || "-"}{provider.lastVerifiedAt ? ` · Son sağlık kontrolü: ${new Date(provider.lastVerifiedAt).toLocaleString("tr-TR")}` : ""}{provider.sourceError ? ` · Hata: ${provider.sourceError}` : ""}</small></article>;
           })}
         </div>
       </section>
