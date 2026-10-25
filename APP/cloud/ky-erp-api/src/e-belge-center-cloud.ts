@@ -29,7 +29,7 @@ const isInvoice=(v:unknown)=>/FATURA|INVOICE|ARSIV|IADE/.test(upper(v));
 const isDispatch=(v:unknown)=>/IRSALIYE|DISPATCH|DESPATCH/.test(upper(v));
 const allowedExt=new Set(["XML","PDF","JPG","JPEG","PNG","WEBP","BMP","TIFF","TIF"]);
 const safePageInt=(value:unknown,fallback:number,max:number)=>{const n=Number(value);return Number.isSafeInteger(n)&&n>=1&&n<=max?n:fallback};
-const validDate=(value:string)=>/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(value);
+const validDate=(value:string)=>/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(value)&&!Number.isNaN(Date.parse(`${value}T00:00:00Z`))&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value;
 const MAX_FILES=20,MAX_FILE_BYTES=20*1024*1024,MAX_REQUEST_BYTES=80*1024*1024;
 
 const columnsCache=new Map<string,Set<string>>();
