@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { displayModeLabel } from "../utils/displayPreferences";
+import { buildSecurityInstallUrl } from "../utils/approvedUiHandoffs";
 import "./DisplaySettingsPanel.css";
 
 const MODE_OPTIONS = [
@@ -72,10 +73,7 @@ export default function DisplaySettingsPanel({
   const standalone = isStandaloneApp();
 
   function openSecurityInstaller(target) {
-    const url = new URL("https://security.kyerp.net/guvenlik/");
-    url.searchParams.set("install", "1");
-    url.searchParams.set("platform", target);
-    window.open(url.toString(), "_blank", "noopener,noreferrer");
+    window.open(buildSecurityInstallUrl(target), "_blank", "noopener,noreferrer");
   }
 
   const mainInstallLabel = standalone
