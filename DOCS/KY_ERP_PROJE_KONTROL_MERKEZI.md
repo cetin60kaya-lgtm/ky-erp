@@ -1,5 +1,11 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 25.10.2026 — Muhasebe/e-Belge/İmalat son yayın kanıtı
+- e-Belge finans son onay [PR #449](https://github.com/cetin60kaya-lgtm/ky-erp/pull/449) merged `719fd60fa97309230944833f95a7398b06630d88`, CI [#40207296821](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40207296821) **SUCCESS**, Pages [#40207488400](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40207488400) **SUCCESS**, yayın SHA `9bf4e6cdff36634b17b439ef59a6323c4ce27f57`. PR merge → release ancestry behind=0. Canlı Cloudflare Pages deploy, public bundle ve Günlük Operasyon chunk smoke başarılı.
+- Frontend release SHA aynı zamanda e-Belge sayfalama #447 ve İmalat #443 merged SHA'larını içeriyor (iki compare da behind=0). Worker #40206650866 SUCCESS, migration atlandı.
+- **Gerçek kullanıcı kabul sınırı:** bu kanıtlar kod + Pages + API release içindir; canlı yetkili kullanıcıyla 19 ekranın tümünün CRUD/İşNet/ödeme/model yazma testleri yapılmadı, 19 ekran **KISMİ**.
+
+
 ## 25.10.2026 — e-Belge/İmalat Pages yayını ve finans kesin onay koruması
 - [Pages #40206928454](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40206928454) **SUCCESS**, SHA `19fe5de0ee8639853006e7c7af157cd084f3f46f`; e-Belge [PR #447](https://github.com/cetin60kaya-lgtm/ky-erp/pull/447) ve İmalat [PR #443](https://github.com/cetin60kaya-lgtm/ky-erp/pull/443) merge ancestry **behind=0**, Pages deploy ve public bundle/Günlük Operasyon chunk smoke başarılı. Oturumlu gerçek e-Belge/model/fiş kabulü yine bekliyor.
 - Kritik ön onay kontrolü: [PR #449](https://github.com/cetin60kaya-lgtm/ky-erp/pull/449) merged `719fd60fa97309230944833f95a7398b06630d88`, CI [#40207296821](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40207296821) frontend+Worker **SUCCESS**. e-Belge kesin muhasebe kaydı artık özet ve cari/KDV/kalem/LOT kontrol teyidi olmadan tetiklenmez; çift istek kilidi, belge değişiminde modal yalıtımı. Worker/D1/resmî gönderim değişmedi.
