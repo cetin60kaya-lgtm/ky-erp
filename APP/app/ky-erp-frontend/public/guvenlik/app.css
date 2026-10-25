@@ -117,6 +117,9 @@ a{color:#185ca2}
   min-width:0;min-height:57px;padding:5px 1px;background:transparent;color:#7b8b9d;border:0;border-radius:13px;
   font-size:10px;font-weight:750;white-space:nowrap}
 .security-tabs .nav-action.active{color:#1b5caa;background:#edf4fe}
+ .nav-icon svg{display:block;width:23px;height:23px}
+.quick-icon svg{display:block;width:21px;height:21px}
+.menu-icon svg{display:block;width:20px;height:20px}
 .nav-icon{display:grid;place-items:center;min-height:24px;font-family:"Segoe UI Symbol",system-ui,sans-serif;font-size:22px;line-height:1}
 .nav-count{display:inline-block;min-width:15px;text-align:center;font-size:9px;color:#2471bc}
 body:not(.super-admin-security):not(.company-admin-security) .security-tabs{grid-template-columns:repeat(4,minmax(0,1fr))}
