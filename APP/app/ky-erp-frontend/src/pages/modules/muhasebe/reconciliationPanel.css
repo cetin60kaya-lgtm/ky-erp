@@ -1,0 +1,16 @@
+.reconciliation-confirm-layer{position:fixed;inset:0;z-index:190;display:grid;place-items:center;padding:16px;background:rgba(15,25,40,.5)}
+.reconciliation-confirm{width:min(550px,100%);max-height:94dvh;overflow:auto;border:1px solid #dce5ed;border-radius:15px;background:#fff;color:#243850;box-shadow:0 18px 60px #15283b45;padding:20px;display:grid;gap:15px}
+.reconciliation-confirm>header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.reconciliation-confirm h3{margin:0;font-size:18px}
+.reconciliation-confirm>header button{border:0;background:transparent;padding:9px}
+.reconciliation-confirm p{margin:0;line-height:1.5;font-size:13px}
+.reconciliation-confirm dl{display:grid;gap:10px;margin:0;padding:14px;border-radius:10px;background:#f3f6fa}
+.reconciliation-confirm dl>div{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.reconciliation-confirm dt{color:#68798e;font-size:12px}.reconciliation-confirm dd{margin:0;font-weight:700;text-align:right}
+.reconciliation-confirm footer{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap}
+.reconciliation-confirm footer button{min-height:44px;min-width:100px;padding:9px 12px;border-radius:8px;border:1px solid #d2dce6;background:#fff;color:#263f5d;font-weight:700;cursor:pointer}
+.reconciliation-confirm footer .accounting-primary{background:#1c354f;color:#fff}
+.reconciliation-confirm button:focus-visible{outline:2px solid #147c85;outline-offset:2px}
+.reconciliation-confirm button:disabled{opacity:.5;cursor:not-allowed}
+.reconciliation-panel table td input,.reconciliation-panel table td select{min-width:100px}
+@media(max-width:620px){.reconciliation-confirm{padding:14px}.reconciliation-confirm footer{flex-direction:column-reverse}.reconciliation-confirm footer button{width:100%}.reconciliation-table-wrap{overflow-x:auto}}

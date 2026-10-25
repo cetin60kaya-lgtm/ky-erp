@@ -50,3 +50,16 @@ test("mobile company widget reads canonical documents ledger and current balance
   assert.match(core, /entry_type='TAHSILAT'/);
   assert.match(core, /current_balance/);
 });
+
+
+test("mutabakat API MATCHED/fark kararini arayuz olmadan da sunucuda dogrular", () => {
+  assert.match(core, /RECONCILIATION_BALANCE_REQUIRED/);
+  assert.match(core, /RECONCILIATION_BALANCE_INVALID/);
+  assert.match(core, /RECONCILIATION_PERIOD_INVALID/);
+  assert.match(core, /RECONCILIATION_MISMATCH/);
+  assert.match(core, /RECONCILIATION_NO_DIFFERENCE/);
+  assert.match(core, /status === "MATCHED" && Math\.abs/);
+  assert.match(core, /status === "DIFFERENCE" && Math\.abs/);
+  assert.match(core, /Number\.isFinite\(Number\(rawCounterparty\)\)/);
+  assert.match(core, /WHERE id=\? AND main_company_slug=\? AND deleted_at IS NULL/);
+});

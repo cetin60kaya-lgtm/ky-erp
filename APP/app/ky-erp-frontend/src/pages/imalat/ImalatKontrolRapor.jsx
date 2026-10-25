@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChartColumn,
   CircleAlert,
@@ -11,6 +11,7 @@ import { getImalatDenetim, getImalatOperasyonRaporu } from "../../services/imala
 import { Field, Status } from "./ImalatShared";
 import { formatQty, toneForStatus } from "./imalatData";
 import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
+import { imalatReportTsv } from "./imalatReportExport";
 import "../modules/cleanWorkflow.css";
 import "./imalatWorkflow.css";
 
@@ -28,17 +29,13 @@ const initialFilters = {
 };
 
 function exportRows(fileName, headers, rows) {
-  const lines = rows.map((row) => headers.map((header) => row[header.key] ?? "").join("\t"));
-  const blob = new Blob(
-    [[headers.map((header) => header.label).join("\t"), ...lines].join("\n")],
-    { type: "application/vnd.ms-excel;charset=utf-8" },
-  );
+  const blob = new Blob([imalatReportTsv(headers, rows)], { type: "text/tab-separated-values;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = fileName;
   link.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 export default function ImalatKontrolRapor({ activeMainCompany, initialView = "audit" }) {
@@ -48,8 +45,15 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
   const [report, setReport] = useState({ summary: {}, machineRows: [], operatorRows: [], modelRows: [], rows: [] });
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
+  const requestSeq = useRef(0);
 
   const loadData = useCallback(async (nextFilters) => {
+    if (nextFilters.baslangic && nextFilters.bitis && nextFilters.baslangic > nextFilters.bitis) {
+      setMessage("Bitiş tarihi başlangıç tarihinden önce olamaz.");
+      return;
+    }
+    const requestId = ++requestSeq.current;
     setLoading(true);
     try {
       const tenant = activeMainCompany?.slug || activeMainCompany?.id || "main";
@@ -60,6 +64,7 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
           report: { critical: true, load: () => getImalatOperasyonRaporu(activeMainCompany, nextFilters) },
         },
       });
+      if (requestId !== requestSeq.current) return;
       if (result.states.audit.status !== "error") {
         const auditResult = result.data.audit;
         setAudit({ summary: auditResult?.summary || {}, rows: Array.isArray(auditResult?.rows) ? auditResult.rows : [] });
@@ -74,17 +79,18 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
           rows: Array.isArray(reportResult?.rows) ? reportResult.rows : [],
         });
       }
+      if (result.states.audit.status !== "error" && result.states.report.status !== "error") setAppliedFilters({ ...nextFilters });
       setMessage(moduleLoadMessage(result, "İmalat denetim veya rapor ana kaynağı okunamadı; diğer başarılı sonuç korunuyor.", ""));
     } catch (error) {
-      setMessage(error?.message || "İmalat denetim ve rapor verileri okunamadı.");
+      if (requestId === requestSeq.current) setMessage(error?.message || "İmalat denetim ve rapor verileri okunamadı.");
     } finally {
-      setLoading(false);
+      if (requestId === requestSeq.current) setLoading(false);
     }
   }, [activeMainCompany]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => loadData(initialFilters), 0);
-    return () => window.clearTimeout(timer);
+    return () => { window.clearTimeout(timer); requestSeq.current += 1; };
   }, [loadData]);
 
   const metrics = useMemo(() => [
@@ -105,13 +111,16 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
     loadData(initialFilters);
   }
 
+  const filtersDirty = JSON.stringify(filters) !== JSON.stringify(appliedFilters);
+  const exportedRows = view === "audit" ? audit.rows : report.rows;
   function exportCurrentView() {
+    if (loading || filtersDirty || !exportedRows.length) return;
     const date = new Date().toISOString().slice(0, 10);
     if (view === "audit") {
-      exportRows(`imalat-denetim-${date}.xls`, auditHeaders(), audit.rows);
+      exportRows(`imalat-denetim-${date}.tsv`, auditHeaders(), audit.rows);
       return;
     }
-    exportRows(`uretim-raporu-${date}.xls`, reportHeaders(), report.rows);
+    exportRows(`uretim-raporu-${date}.tsv`, reportHeaders(), report.rows);
   }
 
   return (
@@ -130,7 +139,7 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
                 <option value="report">Üretim raporu ve analiz</option>
               </select>
             </label>
-            <button className="iw-btn" type="button" onClick={exportCurrentView}><FileSpreadsheet size={16} /> Excel</button>
+            <button className="iw-btn" type="button" disabled={loading || filtersDirty || !exportedRows.length} title="Excel ile açılabilir güvenli TSV dosyası" onClick={exportCurrentView}><FileSpreadsheet size={16} /> Excel (TSV)</button>
           </div>
         </div>
 
@@ -157,6 +166,7 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
         </div>
       </section>
 
+      {filtersDirty ? <div className="iw-notice"><CircleAlert size={16} /> Filtreler değişti. Raporu ve Excel çıktısını güncellemek için "Uygula" seçin.</div> : null}
       {message ? <div className="iw-notice red"><CircleAlert size={16} /> {message}</div> : null}
 
       {view === "audit" ? <AuditTable rows={audit.rows} loading={loading} /> : <ReportAnalysis report={report} loading={loading} />}

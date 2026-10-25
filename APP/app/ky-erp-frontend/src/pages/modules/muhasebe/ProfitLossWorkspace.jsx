@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CirclePlus, RefreshCcw, Search, X } from "lucide-react";
 import { apiGet, apiPost } from "../../../utils/api";
 import "./profitLossWorkspace.css";
+import { reviewExpense } from "./expenseReview";
 
 const CATEGORIES = [
   "Boya",
@@ -71,6 +72,8 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [pendingExpense, setPendingExpense] = useState(null);
+  const savingLock = useRef(false);
   const [notice, setNotice] = useState("");
 
   const params = useMemo(
@@ -132,38 +135,40 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
   const summary = state.data?.summary || {};
   const templates = Array.isArray(state.data?.fixedExpenseTemplates) ? state.data.fixedExpenseTemplates : [];
 
-  const saveExpense = async () => {
-    if (!form.date || !form.category || Number(form.amount || 0) <= 0) {
-      setNotice("Tarih, kategori ve sıfırdan büyük tutar zorunludur.");
-      return;
-    }
+  const requestExpenseSave = () => {
+    if (saving || savingLock.current) return;
+    const review = reviewExpense(form, params);
+    if (review.error) { setNotice(review.error); return; }
+    setNotice("");
+    setPendingExpense(review);
+  };
+
+  const confirmExpenseSave = async () => {
+    if (!pendingExpense || savingLock.current) return;
+    savingLock.current = true;
     setSaving(true);
     setNotice("");
+    const review = pendingExpense;
     try {
-      const payload = {
-        ...params,
-        ...form,
-        amount: Number(form.amount || 0),
-        vatAmount: Number(form.vatAmount || 0),
-        type: "EXPENSE",
-      };
-      if (form.recurring) {
+      if (review.templateOnly) {
         await apiPost("/muhasebe/accounting/fixed-expenses", {
-          ...payload,
-          name: form.description || form.category,
+          ...review.payload,
+          name: review.payload.description || review.payload.category,
           active: true,
         });
         setNotice("Sabit gider şablonu kaydedildi. Şablon tek başına muhasebe toplamına yazılmaz.");
       } else {
-        await apiPost("/muhasebe/accounting/manual-expenses", payload);
+        await apiPost("/muhasebe/accounting/manual-expenses", review.payload);
         setNotice("Gider kaydı döneme işlendi.");
       }
+      setPendingExpense(null);
       setDrawerOpen(false);
       setForm(emptyForm());
       await load();
     } catch (error) {
-      setNotice(error?.message || "Gider kaydı oluşturulamadı.");
+      setNotice(error?.message || "Gider işlemi tamamlanamadı; yeniden göndermeden önce kayıt listesini kontrol edin.");
     } finally {
+      savingLock.current = false;
       setSaving(false);
     }
   };
@@ -188,7 +193,7 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
         <label>Başlangıç<input type="date" value={period.startDate} onChange={(event) => setPeriod((current) => ({ ...current, startDate: event.target.value }))} /></label>
         <label>Bitiş<input type="date" value={period.endDate} onChange={(event) => setPeriod((current) => ({ ...current, endDate: event.target.value }))} /></label>
         <button type="button" onClick={load}><RefreshCcw size={16} /> Güncelle</button>
-        <button type="button" className="primary" onClick={() => setDrawerOpen(true)}><CirclePlus size={16} /> Gider kaydı</button>
+        <button type="button" className="primary" onClick={() => { setNotice(""); setPendingExpense(null); setDrawerOpen(true); }}><CirclePlus size={16} /> Gider kaydı</button>
       </header>
 
       {notice ? <div className="plw-notice" role="status">{notice}</div> : null}
@@ -267,13 +272,13 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
       </details>
 
       {drawerOpen ? (
-        <div className="plw-drawer-layer" role="presentation" onMouseDown={() => setDrawerOpen(false)}>
+        <div className="plw-drawer-layer" role="presentation" onMouseDown={() => { if (!saving) { setPendingExpense(null); setDrawerOpen(false); } }}>
           <aside className="plw-drawer" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
             <header>
               <div><h2>Gider kaydı</h2><p>Faturasız veya genel giderleri döneme kaydedin.</p></div>
-              <button type="button" onClick={() => setDrawerOpen(false)} aria-label="Kapat"><X size={20} /></button>
+              <button type="button" disabled={saving} onClick={() => { setPendingExpense(null); setDrawerOpen(false); }} aria-label="Kapat"><X size={20} /></button>
             </header>
-            <div className="plw-form">
+            <fieldset className="plw-form" disabled={Boolean(pendingExpense) || saving}>
               <label>Tarih<input type="date" value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} /></label>
               <label>Firma / Açıklama<input value={form.companyName} onChange={(event) => setForm((current) => ({ ...current, companyName: event.target.value }))} placeholder="Firma veya ödeme yeri" /></label>
               <label>Kategori<select value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}>{CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></label>
@@ -283,10 +288,20 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
               <label className="wide">Not<textarea rows="4" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
               <label className="plw-checkbox wide"><input type="checkbox" checked={form.recurring} onChange={(event) => setForm((current) => ({ ...current, recurring: event.target.checked }))} /> Bunu sabit gider şablonu olarak kaydet</label>
               <div className="plw-form-note wide">Sabit gider şablonu yalnız tanım oluşturur; gerçek döneme yazılması için ayrıca gider kaydı gerekir.</div>
-            </div>
+            </fieldset>
+            {pendingExpense ? <section className="plw-expense-confirm" aria-label="Gider kayıt önizlemesi" role="status">
+              <h3>Kaydı Onayla</h3>
+              <p><strong>{pendingExpense.templateOnly ? "Yalnız sabit gider şablonu" : "Gerçek gider kaydı"}</strong> oluşturulacak. {pendingExpense.templateOnly ? "Bu işlem henüz muhasebe giderine yazılmaz." : "Bu işlem muhasebe dönemine kayıt oluşturur."}</p>
+              <dl>
+                <div><dt>Firma / Açıklama</dt><dd>{pendingExpense.name}</dd></div>
+                <div><dt>Tarih / Kategori</dt><dd>{pendingExpense.payload.date} · {pendingExpense.payload.category}</dd></div>
+                <div><dt>Tutar / KDV</dt><dd>{money(pendingExpense.payload.amount)} · {money(pendingExpense.payload.vatAmount)}</dd></div>
+                <div><dt>Kayıt türü</dt><dd>{pendingExpense.payload.recordType === "RESMI" ? "Resmî" : "Gayri resmî"}</dd></div>
+              </dl>
+            </section> : null}
             <footer>
-              <button type="button" onClick={() => setDrawerOpen(false)}>Vazgeç</button>
-              <button type="button" className="primary" disabled={saving} onClick={saveExpense}>Kaydet</button>
+              <button type="button" disabled={saving} onClick={() => { if (pendingExpense) setPendingExpense(null); else setDrawerOpen(false); }}>{pendingExpense ? "Düzenlemeye Dön" : "Vazgeç"}</button>
+              <button type="button" className="primary" disabled={saving} onClick={pendingExpense ? confirmExpenseSave : requestExpenseSave}>{saving ? "Kaydediliyor..." : pendingExpense ? "Onayla ve Kaydet" : "Kaydı Kontrol Et"}</button>
             </footer>
           </aside>
         </div>
