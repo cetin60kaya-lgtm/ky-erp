@@ -27,9 +27,13 @@
     "approved-html-ui-regresyon-testleri",
     "muhasebe-gelen-irsaliye-server-pagination",
     "muhasebe-satis-faturasi-server-pagination",
-    "muhasebe-belge-async-race-regression-testleri"
+    "muhasebe-belge-async-race-regression-testleri",
+    "e-belge-gelen-giden-server-direction-filter-50-pagination",
+    "e-belge-havuz-100plus-kayit-gorunurlugu",
+    "imalat-production-center-100plus-pagination",
+    "muhasebe-belge-e-belge-server-contract-mobil-parite"
   ],
-  "note": "25.10.2026: Muhasebe alış irsaliyeleri ve satış fatura listelerinde gerçek API sayfalama, firma/arama geçişi, üst Güncelle bağlantısı, stale async güvenliği ve mobil erişim; PR #446 merge 3db5852b499a02e7b62d81d2fcdc9b5ed8fe3f56; CI #40205322671 Frontend+Worker PASS. Worker/D1 migration/ödeme/resmî gönderim yok. 19 sekmenin tam oturumlu gerçek kullanıcı kabulü yapılmadı; Pages yayın sonucu ayrıca doğrulanmalıdır.",
-  "sourceCommit": "3db5852b499a02e7b62d81d2fcdc9b5ed8fe3f56",
+  "note": "25.10.2026: PR #447 e-Belge gerçek GET yön filtresi / 50'lik server paging, CI #40206047817 PASS, merge e15d1bcc0f1c30149720a72dc26853e0f27761b5; İmalat mevcut PR #443 100+ model pagination, CI #40192931624 PASS, merge 35405ffbbd172f929ad0865d0ef24e6b350e80a4. Worker API release #40206650866 SUCCESS, migrations SKIPPED. Tek canonical Pages yayın hattı kullanılır. Gerçek oturumlu 19/19 sekme, fiili ödeme/İşNet fatura/üretim fişi acceptance ayrı bekliyor.",
+  "sourceCommit": "efdee968b3bae826c984723de668fe8759ae884e",
   "requestedAt": "2026-10-25"
 }
