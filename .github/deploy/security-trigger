@@ -1,4 +1,5 @@
-deploy: ky-security-owner-company-separated-pwa-v4
-canonical: a326e84f2ec0b6aa4b725ef183738e80ef0aa6d5
+deploy: ky-security-v4-separate-owner-company-host-release
+canonical: 438971b6fca160b43639569b98a02a4ab2caf498
 requested: 2026-10-25
-source_prs: 458,460
+source_prs: 458,460,461
+reason: repaired verified legacy security PWA test; use canonical checked deploy
