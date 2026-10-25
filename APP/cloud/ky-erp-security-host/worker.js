@@ -1,9 +1,9 @@
 const APP_PREFIX="/guvenlik";
 const APP_URL="/guvenlik/";
-const ADDITIONAL_APPS=["/ky-sistem","/ky-firma"];
+const ADDITIONAL_APPS=["/ky-firma"];
 const SHARED_ASSET_PREFIX="/ky-app-shell";
-const LEGACY_PREFIXES=["/security","/ky-guvenlik","/ky-guvenlik-recover"];
-const LEGACY_SW_PATHS=["/sw.js","/security/sw.js","/ky-guvenlik/sw.js","/ky-guvenlik-recover/sw.js"];
+const LEGACY_PREFIXES=["/security","/ky-guvenlik","/ky-guvenlik-recover","/ky-sistem","/owner-security"];
+const LEGACY_SW_PATHS=["/sw.js","/security/sw.js","/ky-guvenlik/sw.js","/ky-guvenlik-recover/sw.js","/ky-sistem/sw.js","/owner-security/sw.js"];
 const RETIRE_SW=`self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("activate",e=>e.waitUntil((async()=>{try{for(const k of await caches.keys())await caches.delete(k)}catch{}try{for(const n of await self.registration.getNotifications())n.close()}catch{}try{await self.registration.unregister()}catch{}try{for(const c of await self.clients.matchAll({type:"window",includeUncontrolled:true}))await c.navigate("/guvenlik/")}catch{}})()));`;
 
 function headers(base=new Headers()){
@@ -54,6 +54,7 @@ export default{
     if(readable&&LEGACY_SW_PATHS.includes(url.pathname)){
       return new Response(method==="HEAD"?null:RETIRE_SW,{status:200,headers:headers(new Headers({"Content-Type":"application/javascript; charset=UTF-8","Service-Worker-Allowed":"/"}))});
     }
+    if(navigation&&["/ky-sistem","/ky-sistem/","/owner-security","/owner-security/"].includes(url.pathname))return canonicalRedirect(url);
     if(isLegacyPath(url.pathname))return new Response("Gone",{status:410,headers:headers()});
     if(url.pathname===APP_PREFIX&&navigation)return canonicalRedirect(url);
     if(navigation&&ADDITIONAL_APPS.includes(url.pathname)){

@@ -72,3 +72,13 @@ button{cursor:pointer}
 .manual-link-details{display:grid;gap:8px;padding:12px;border:1px solid #d7e3f0;border-radius:12px;background:#f8fbff}.manual-link-details small{color:#6f8398;font-size:10px;line-height:1.4}.manual-link-details input{text-transform:uppercase;letter-spacing:.08em;font-weight:900}
 .approval-number-options button.selected{border-color:#2563eb!important;background:#eaf2ff!important;color:#153d68!important;box-shadow:0 0 0 3px rgba(37,99,235,.10)}.approval-actions .approve:disabled{opacity:.45;cursor:not-allowed}.approval-actions .approve:not(:disabled){box-shadow:0 8px 18px rgba(22,129,77,.14)}
 @media(max-width:520px){.boot-card{min-height:260px}.security-header{background:rgba(247,251,255,.97)!important}.security-brand b{color:#142b45}.security-brand small{color:var(--muted)}}
+
+/* Tek KY Güvenlik v4.1.0: sistem sahibi gösterge paneli */
+.owner-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+.owner-summary-grid>div{min-width:0;padding:13px 12px;border:1px solid #d7e5f2;border-radius:15px;background:linear-gradient(135deg,#ffffff,#edf5ff)}
+.owner-summary-grid small{display:block;font-size:11px;font-weight:650;color:#536d86;line-height:1.4}
+.owner-summary-grid strong{display:block;padding-top:6px;color:#122f55;font-size:25px;font-weight:850;font-variant-numeric:tabular-nums}
+.super-admin-security #superAdminConsole{background:linear-gradient(165deg,#f6faff,#e9f2fd);border-color:#bcd5ef}
+.super-admin-security .security-tabs button{min-height:44px}
+@media(min-width:610px){.owner-summary-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.owner-summary-grid>div{animation:none;transition:none}}

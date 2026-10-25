@@ -19,14 +19,14 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/guvenlik/kyerp-security-apple-touch.png" />
   <link rel="stylesheet" href="/guvenlik/app.css" />
   <link rel="stylesheet" href="/guvenlik/security-workspace.css" />
-  <title>KY ERP Güvenlik</title>
+  <title>KY ERP Güvenlik v4.1.0</title>
 </head>
 <body>
   <main class="security-shell">
     <header class="security-header">
       <div class="security-brand">
         <span class="security-logo">KY</span>
-        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v4.0</span></small></div>
+        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v4.1.0</span></small></div>
       </div>
       <span id="connectionBadge" class="security-badge">Kontrol</span>
     </header>
@@ -96,7 +96,7 @@
           <div><span>Kullanıcı adı</span><b id="accountUsername">-</b></div>
           <div><span>Firma / Kapsam</span><b id="accountScope">-</b></div>
           <div><span>Bağlı cihaz</span><b id="accountDevice">-</b></div>
-          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v4.0</b></div>
+          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v4.1.0</b></div>
         </div>
         <div class="account-access-block">
           <span>ERP erişimi</span>
@@ -110,12 +110,13 @@
       </section>
 
       <section id="superAdminConsole" class="security-card super-admin-console hidden">
-        <div class="super-admin-console-head"><div><span class="eyebrow">UYGULAMA YÖNETİMİ</span><h2>Sistem Güvenlik Merkezi</h2><p><a href="/ky-sistem/" target="_blank" rel="noopener">Yeni KY Güvenlik · Sistem Sahibi uygulamasını aç / yükle</a></p><p class="muted">KY ERP genelindeki girişler, aktif oturumlar, bağlı cihazlar ve güvenlik olayları bu Süper Yönetici telefonundan yönetilir.</p></div><span class="super-admin-crown">SA</span></div>
+        <div class="super-admin-console-head"><div><span class="eyebrow">UYGULAMA YÖNETİMİ</span><h2>KY Güvenlik · Sistem Yönetimi</h2><p class="muted">Tek KY Güvenlik uygulaması · v4.1.0. Mevcut telefon uygulamanız aynı adres ve cihaz kimliğiyle güncellenir.</p><p class="muted">KY ERP genelindeki girişler, aktif oturumlar, bağlı cihazlar ve güvenlik olayları bu Süper Yönetici telefonundan yönetilir.</p></div><span class="super-admin-crown">SA</span></div>
+        <div class="owner-summary-grid" aria-label="Sistem güvenlik analizleri"><div><small>Aktif Oturum</small><strong id="ownerSummarySessions">—</strong></div><div><small>Güvenilir Cihaz</small><strong id="ownerSummaryDevices">—</strong></div><div><small>Günlük Giriş</small><strong id="ownerSummaryLogins">—</strong></div><div><small>Son Olaylar</small><strong id="ownerSummaryEvents">—</strong></div></div>
         <div class="super-admin-actions"><button type="button" data-owner-open="approvals"><b>Sistem Onayları</b><span>Giriş, oturum ve kritik işlemler</span></button><button type="button" data-owner-open="activity"><b>Giriş Hareketleri</b><span>Firma firma giriş, çıkış ve denemeler</span></button><button type="button" data-owner-open="sessions"><b>Aktif Oturumlar</b><span>Tüm firmalar ve kullanıcılar</span></button><button type="button" data-owner-open="computers"><b>Sistem Cihazları</b><span>Bilgisayar ve güvenilir cihazlar</span></button><button type="button" data-owner-open="logs"><b>Denetim Logları</b><span>Güvenlik hareketleri ve geçmiş</span></button></div>
       </section>
 
       <section id="companyAdminConsole" class="security-card super-admin-console company-admin-console hidden">
-        <div class="super-admin-console-head"><div><span class="eyebrow">FİRMA GÜVENLİĞİ</span><h2>Firma Güvenlik Merkezi</h2><p><a href="/ky-firma/" target="_blank" rel="noopener">Yeni KY Firma uygulamasını aç / yükle</a></p><p class="muted">Yalnız kendi firmanızın girişleri, aktif oturumları, güvenilir cihazları ve güvenlik hareketleri burada yönetilir.</p></div><span class="super-admin-crown">F</span></div>
+        <div class="super-admin-console-head"><div><span class="eyebrow">FİRMA GÜVENLİĞİ</span><h2>Firma Güvenlik Merkezi</h2><p><a href="/ky-firma/" target="_blank" rel="noopener">KY Firma işletme uygulamasını aç</a></p><p class="muted">Yalnız kendi firmanızın girişleri, aktif oturumları, güvenilir cihazları ve güvenlik hareketleri burada yönetilir.</p></div><span class="super-admin-crown">F</span></div>
         <div class="super-admin-actions"><button type="button" data-company-open="approvals"><b>Firma Onayları</b><span>Giriş ve oturum istekleri</span></button><button type="button" data-company-open="activity"><b>Giriş Hareketleri</b><span>Firmanızdaki giriş ve çıkışlar</span></button><button type="button" data-company-open="sessions"><b>Aktif Oturumlar</b><span>Firmanızdaki kullanıcı oturumları</span></button><button type="button" data-company-open="logs"><b>Güvenlik Geçmişi</b><span>Firma kapsamındaki olaylar</span></button></div>
       </section>
 

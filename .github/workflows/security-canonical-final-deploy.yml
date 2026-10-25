@@ -50,6 +50,7 @@ jobs:
           node --check APP/app/ky-erp-frontend/public/guvenlik/security-control-center.js
           node --check APP/app/ky-erp-frontend/public/guvenlik/security-workspace.js
           node --test APP/app/ky-erp-frontend/src/security-pwa-install-enrollment-final.test.js
+          node --test APP/app/ky-erp-frontend/src/ky-mobile-install-version.contract.test.js
           grep -q 'const APP_PREFIX="/guvenlik"' APP/cloud/ky-erp-security-host/worker.js
           grep -q 'const APP_URL="/guvenlik/"' APP/cloud/ky-erp-security-host/worker.js
           grep -q 'LEGACY_PREFIXES' APP/cloud/ky-erp-security-host/worker.js
@@ -73,8 +74,9 @@ jobs:
           set -euo pipefail
           node APP/cloud/ky-erp-security-host/prepare-assets.mjs
           test -f APP/cloud/ky-erp-security-host/.security-assets/guvenlik/index.html
-          test -f APP/cloud/ky-erp-security-host/.security-assets/ky-sistem/index.html
+          test ! -e APP/cloud/ky-erp-security-host/.security-assets/ky-sistem
           test -f APP/cloud/ky-erp-security-host/.security-assets/ky-firma/index.html
+          test ! -e APP/cloud/ky-erp-security-host/.security-assets/owner-security
           test ! -e APP/cloud/ky-erp-security-host/.security-assets/_redirects
 
       - name: Dry-run security host bundle with embedded assets
@@ -105,9 +107,9 @@ jobs:
 
           primary_status="$(curl --silent --show-error --max-time 20 -o /tmp/security-primary.html -w '%{http_code}' https://security.kyerp.net/guvenlik/)"
           test "$primary_status" = "200"
-          grep -q '<title>KY ERP Güvenlik</title>' /tmp/security-primary.html
+          grep -q '<title>KY ERP Güvenlik v4.1.0</title>' /tmp/security-primary.html
           grep -q '/guvenlik/app.js' /tmp/security-primary.html
-          grep -q 'v4.0' /tmp/security-primary.html
+          grep -q 'v4.1.0' /tmp/security-primary.html
 
           curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/manifest.webmanifest -o /tmp/manifest-primary.json
           jq -e '.id == "/guvenlik/" and .start_url == "/guvenlik/" and .scope == "/guvenlik/"' /tmp/manifest-primary.json >/dev/null
@@ -120,6 +122,7 @@ jobs:
           grep -q 'Yedek Kod + Admin Şifresiyle Bağla' /tmp/security-app.js
           grep -q 'approve.disabled=true' /tmp/security-app.js
           grep -q 'createLocalUnlock' /tmp/security-app.js
+          grep -q 'APP_DISPLAY_VERSION="v4.1.0"' /tmp/security-app.js
           grep -q 'id="bootPanel"' /tmp/security-primary.html
 
           enrollment_guard="$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' --data '{}' https://api.kyerp.net/api/auth/push/security-enrollment/complete)"
@@ -130,4 +133,24 @@ jobs:
           legacy_asset_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -H 'Accept: application/javascript' https://security.kyerp.net/security/obsolete.js)"
           test "$legacy_asset_status" = "410"
 
-          echo "KY Security canonical PWA deployment verification passed."
+          # Verify separately installed KY Firma. The owner app remains /guvenlik/.
+          for app in ky-firma; do
+            app_url="https://security.kyerp.net/${app}/"
+            status="$(curl --silent --show-error --location --max-redirs 0 --max-time 20 -o "/tmp/${app}.html" -w '%{http_code}' "$app_url")"
+            echo "${app} page HTTP: ${status}"
+            test "$status" = "200" || { echo "::error::${app} must respond HTTP 200 without redirects"; exit 1; }
+            grep -q "/${app}/manifest.webmanifest" "/tmp/${app}.html" || { echo "::error::${app} page has incorrect manifest"; exit 1; }
+            curl --fail --silent --show-error --max-time 20 "https://security.kyerp.net/${app}/manifest.webmanifest" -o "/tmp/${app}-manifest.json"
+            jq -e --arg scope "/${app}/" '.id == $scope and .start_url == $scope and .scope == $scope' "/tmp/${app}-manifest.json" >/dev/null || { echo "::error::${app} manifest scope/id mismatch"; exit 1; }
+            curl --fail --silent --show-error --max-time 20 "https://security.kyerp.net/${app}/sw.js" -o "/tmp/${app}-sw.js"
+            grep -q "/${app}/" "/tmp/${app}-sw.js" || { echo "::error::${app} push worker scope mismatch"; exit 1; }
+          done
+
+          # Old owner app URL is a migration link, never a second active installation.
+          old_owner_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -H 'Accept: text/html' https://security.kyerp.net/ky-sistem/)"
+          echo "Old owner migration status: ${old_owner_status}"
+          test "$old_owner_status" = "308" || { echo "::error::Old owner address must migrate to canonical /guvenlik/"; exit 1; }
+          old_owner_sw="$(curl -sS --max-time 20 https://security.kyerp.net/ky-sistem/sw.js)"
+          printf "%s" "$old_owner_sw" | grep -q 'registration.unregister' || { echo "::error::Old owner push SW must retire"; exit 1; }
+
+          echo "KY Security single-owner PWA deployment verification passed."
