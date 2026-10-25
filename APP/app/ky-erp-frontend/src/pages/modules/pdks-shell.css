@@ -367,3 +367,14 @@
     padding-left: 0;
   }
 }
+
+
+/* Masaüstü 9/49 menüsü üst kabuk altında kendi satırında kalır. */
+.pdks-context-bar{grid-template-columns:minmax(0,1fr) auto auto;align-items:center;position:static;border-radius:12px;padding:10px 12px;gap:9px}
+.pdks-context-title small{font-size:10px}
+.pdks-context-title strong{font-size:17px}
+.pdks-context-title span{font-size:11px}
+.pdks-context-action{font-size:11px;min-height:36px}
+.pdks-context-mode{font-size:10px}
+.pdks-module-content{min-width:0}
+@media(max-width:700px){.pdks-context-bar{grid-template-columns:minmax(0,1fr) auto}.pdks-context-mode{grid-column:1/-1;justify-self:start}}
