@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 26.10.2026 — Son kesin kayıt / İşNet sertleştirme PR #468 (Worker canlı)
+- [PR #468](https://github.com/cetin60kaya-lgtm/ky-erp/pull/468) merged `fc1a5fbb5bc05d64ff8b51baa6f89d436d498285`. [CI #40243561868](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40243561868): Frontend ve Worker SUCCESS.
+- Kesin kayıt sırasında `FINALIZING/APPROVED/FINALIZE_RETRY` belgeye dış PATCH, tekil/toplu eşleştirme kilidi eklendi; PATCH transaction sonrası etkilenen satır denetimli. Finalizasyon içi yetkili eşleştirme korunur. İşNet HTTP 200 ancak boş veya doğrulama yapısı olmayan cevap artık BAĞLI değil `UNVERIFIED`.
+- [Son Worker production #40243691172](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40243691172) SUCCESS SHA `1eb82c38f259a48f666edc6c74715c3b951cb2f7`: tam D1 yedeği, artifact, migrations SKIPPED, salt-okunur schema, Worker deploy ve canlı API health PASS. PR #468 merge SHA atası: `behind=0`.
+- Son frontend runtime değişikliği önceki [Pages #40242893537](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40242893537) SUCCESS SHA `6c0e011e23fa2f4ec6cbadc9db6149696eb21098`; PR #468 yalnız Worker + test değiştirdiğinden yeniden Pages dağıtımı gerekmedi.
+- Kalan P0 engel: fiziksel STOCK/BOYAHANE/LOT kesin kaydında dayanıklı atomik outbox/recovery hâlâ eksik; fail-closed koruması devam ediyor. Rol/tenant oturumlu E2E, gerçek İşNet/banka/makine testleri yapılmadı; production migration izni verilmedi. **19/19 tam saha kabul PASS değil.**
+
+
 ## 26.10.2026 — KY Güvenlik v4.1.0 tek kalıcı telefon uygulaması
 - **Yeni kullanıcı kararı:** Birden fazla sistem sahibi uygulaması yok. Tek canonical ve aynı PWA kimliği **`/guvenlik/`** (`security.kyerp.net`). Ayrı `/ky-sistem/` ve `/owner-security/` sistem sahibi paketleri kaldırıldı; eski `/ky-sistem/` navigasyonu mevcut güvenlik uygulamasına taşınır, eski service worker emekli edilir. **Firma sahipleri** için ayrı `/ky-firma/` korunur. Çalışanlar mevcut yetkili KY ERP'yi kullanır.
 - Tek güvenlik uygulamasında **v4.1.0** arayüz etiketi, mevcut Süper Yönetici kontrol ekranında özet sayaçlar, ayrı kurulum çağrısının kaldırılması; güvenli cihaz veritabanı `kyerp-security-fresh-v3`, manifest id `/guvenlik/` ve API güvenlik protokolü `security-v4.0` korunur. İki bağımsız sahip PWA paketinden 12 dosya silindi. Muhasebe/İK/İmalat ayrıntılı iş analizi ayrı geliştirme maddesi olarak açıktır.
