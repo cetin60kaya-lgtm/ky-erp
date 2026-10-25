@@ -105,10 +105,29 @@ async function saveReconciliation(c: Context<AppEnv>) {
   const company = await c.env.DB.prepare(`SELECT id,name,COALESCE(current_balance,0) current_balance FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(companyId, slug).first<Row>();
   if (!company) return fail(c, 404, "COMPANY_NOT_FOUND", "Firma bulunamadı.");
   const statusRaw = String(body.status || "WAITING").toUpperCase();
-  const status = ["MATCHED", "DIFFERENCE"].includes(statusRaw) ? statusRaw : "WAITING";
+  if (!["WAITING", "MATCHED", "DIFFERENCE"].includes(statusRaw)) {
+    return fail(c, 400, "RECONCILIATION_STATUS_INVALID", "Mutabakat durumu geçersiz.");
+  }
+  if (body.period && !/^\\d{4}-(0[1-9]|1[0-2])$/.test(text(body.period))) {
+    return fail(c, 400, "RECONCILIATION_PERIOD_INVALID", "Mutabakat dönemi geçersiz.");
+  }
+  const status = statusRaw;
   const erpBalance = num(company.current_balance), hasCounterparty = body.counterpartyBalance !== "" && body.counterpartyBalance != null;
-  const counterpartyBalance = hasCounterparty ? num(body.counterpartyBalance) : null;
-  const difference = counterpartyBalance == null ? null : counterpartyBalance - erpBalance;
+  const rawCounterparty = text(body.counterpartyBalance);
+  if (hasCounterparty && (!/^-?\\d+(\\.\\d{1,2})?$/.test(rawCounterparty) || !Number.isFinite(Number(rawCounterparty)))) {
+    return fail(c, 400, "RECONCILIATION_BALANCE_INVALID", "Karşı bakiye geçerli bir tutar olmalıdır.");
+  }
+  if (status !== "WAITING" && !hasCounterparty) {
+    return fail(c, 400, "RECONCILIATION_BALANCE_REQUIRED", "Mutabık veya fark var için karşı bakiye zorunludur.");
+  }
+  const counterpartyBalance = hasCounterparty ? Number(rawCounterparty) : null;
+  const difference = counterpartyBalance == null ? null : Math.round((counterpartyBalance - erpBalance) * 100) / 100;
+  if (status === "MATCHED" && Math.abs(difference ?? 0) > 0.005) {
+    return fail(c, 409, "RECONCILIATION_MISMATCH", "ERP ve karşı bakiye farklıyken Mutabık kaydedilemez.");
+  }
+  if (status === "DIFFERENCE" && Math.abs(difference ?? 0) < 0.005) {
+    return fail(c, 409, "RECONCILIATION_NO_DIFFERENCE", "Bakiyeler eşitken Fark Var kaydedilemez.");
+  }
   const ts = now(), id = text(body.id) || crypto.randomUUID();
   await c.env.DB.batch([
     c.env.DB.prepare(`INSERT INTO accounting_reconciliations
