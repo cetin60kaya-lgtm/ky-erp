@@ -24,9 +24,12 @@
     "pdks-hizli-islem-aktif-firma-zorunlulugu",
     "mail-sablonlar-dogrudan-gercek-muhasebe-paneli",
     "ky-guvenlik-canonical-kurulum-linki",
-    "approved-html-ui-regresyon-testleri"
+    "approved-html-ui-regresyon-testleri",
+    "muhasebe-gelen-irsaliye-server-pagination",
+    "muhasebe-satis-faturasi-server-pagination",
+    "muhasebe-belge-async-race-regression-testleri"
   ],
-  "note": "25.10.2026: Onaylı HTML tasarım kabuğu ve PDKS firma, Mail Şablonları gerçek rota, KY Güvenlik kurulum bağlantısı ilk paketi. PR #445 merge SHA 1589f8488d2adf94600d2d6232b54205e4c9dd33, CI #40200690982 Frontend+Worker PASS. Gerçek oturumlu 104 sekme/browser ve ödeme/PDKS fiili işlem kabulleri ayrıca bekliyor; canlı Pages release tamamlanmadan PASS değildir.",
-  "sourceCommit": "1589f8488d2adf94600d2d6232b54205e4c9dd33",
+  "note": "25.10.2026: Muhasebe alış irsaliyeleri ve satış fatura listelerinde gerçek API sayfalama, firma/arama geçişi, üst Güncelle bağlantısı, stale async güvenliği ve mobil erişim; PR #446 merge 3db5852b499a02e7b62d81d2fcdc9b5ed8fe3f56; CI #40205322671 Frontend+Worker PASS. Worker/D1 migration/ödeme/resmî gönderim yok. 19 sekmenin tam oturumlu gerçek kullanıcı kabulü yapılmadı; Pages yayın sonucu ayrıca doğrulanmalıdır.",
+  "sourceCommit": "3db5852b499a02e7b62d81d2fcdc9b5ed8fe3f56",
   "requestedAt": "2026-10-25"
 }
