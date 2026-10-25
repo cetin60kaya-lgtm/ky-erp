@@ -1,3 +1,4 @@
-deploy: security-push-live-sync-hotfix
-canonical: ae39b30a3ec885994c2e1bdee9339b294f52534e
-requested: 2026-10-05T07:30:00Z
+deploy: ky-security-owner-company-separated-pwa-v4
+canonical: a326e84f2ec0b6aa4b725ef183738e80ef0aa6d5
+requested: 2026-10-25
+source_prs: 458,460

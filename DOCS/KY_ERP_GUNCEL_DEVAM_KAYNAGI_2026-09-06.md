@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 25.10.2026 — KY Güvenlik / KY Firma ayrı mobil uygulama production release talebi
+- Kullanıcının onayladığı mimari: **Sistem Sahibi** ayrı `/ky-sistem/` PWA (SYSTEM + ownerControlAuthorized), **Firma Sahibi** ayrı `/ky-firma/` PWA (COMPANY + companyApprover), çalışanlar mevcut `kyerp.net` yetkili ERP.
+- [PR #458](https://github.com/cetin60kaya-lgtm/ky-erp/pull/458) merged `302cad6cf7c3fce19d0fdf489d451445ff003451` (CI #40223334141 SUCCESS). [PR #460](https://github.com/cetin60kaya-lgtm/ky-erp/pull/460) merged `a326e84f2ec0b6aa4b725ef183738e80ef0aa6d5` (CI #40223947320 SUCCESS). Ayrı manifest, PNG ikon, SW/push scope, telefonla onay, imzalı oturum kapatma, tek kullanımlık kod; kritik işlemlerde PIN yoksa fail-closed.
+- Security host /guvenlik eski cihazları korur; yeni allowlist /ky-sistem, /ky-firma ve /ky-app-shell, legacy 410 kuralı bozulmaz. D1 migration yok, kişisel veri/şifre yazılmadı.
+- **Release bildirimi**: mevcut tek frontend release kayıt dosyası ve security-trigger üzerinden açıldı. Cloudflare Pages / Security Worker canlı kanıtları ve Android Chrome telefon kabulü ayrı doğrulanacak. Canlı E2E hazır ilan edilmez. Finans/İK/İmalat detay analizi için ayrı yetkili ERP oturumu gerekir; yeni mobil panelin doğrudan iş veri analizi sonraki iştir.
+
+
 ## 25.10.2026 — 19 sekme kod/CI/production yayın kanıtı (en güncel)
 - **Muhasebe [#453](https://github.com/cetin60kaya-lgtm/ky-erp/pull/453)** merged `f3e0d9ea32ef91982a5b98ab61fca22c285d7962`, CI #40220091676 SUCCESS: yönetim seçili dönem/KDV; cari VKN-duplicate/alias; DELETE fail-closed; kümülatif ödeme geriye kayıt 409.
 - **e-Belge [#455](https://github.com/cetin60kaya-lgtm/ky-erp/pull/455)** merged `43d0c0822a6961474c2436c55bcaa2544ef8f35f`, CI #40220688716 SUCCESS: kaynaklı İşNet ve adaptör durumu, 0/1/50/100/101+ sayfalama, tenant geçişi, hatalı tarih ve POSTED yeniden düzenleme koruması.

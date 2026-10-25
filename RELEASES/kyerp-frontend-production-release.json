@@ -46,9 +46,14 @@
     "muhasebe-period-company-alias-payment-guard-pr453",
     "ebelge-tenant-provider-page-posted-protection-pr455",
     "imalat-tenant-batch-dup-request-id-pr456",
-    "19-screen-jsx-route-source-regression-pr457"
+    "19-screen-jsx-route-source-regression-pr457",
+    "ky-security-v4-owner-independent-pwa",
+    "ky-company-owner-independent-pwa",
+    "ky-security-host-allowlisted-routing",
+    "ky-security-local-unlock-fail-closed",
+    "ky-security-frontend-security-host-live"
   ],
-  "note": "25.10.2026 19 sekme final kod yayını: PR #453 merge f3e0d9ea32ef91982a5b98ab61fca22c285d7962 CI #40220091676 PASS; PR #455 merge 43d0c0822a6961474c2436c55bcaa2544ef8f35f CI #40220688716 PASS; PR #456 merge 8d7c355a93483d27536676d235e18a1e30a1513e CI #40221156414 PASS; 19 sekme ekran+source kontrat PR #457 merge 705307a000f689b911e7ec1c9273007ac73dfc4f CI #40221600062 PASS. Worker #40221347939 SUCCESS ve D1 migrations SKIPPED. Production Pages build+deploy+public bundle smoke; 19 gerçek kullanıcı/İşNet/fon transferi/makine saha kabulü olmadığı için 19/19 işlemsel E2E PASSED denmez.",
-  "sourceCommit": "705307a000f689b911e7ec1c9273007ac73dfc4f",
+  "note": "KY Güvenlik Sistem Sahibi / KY Firma ayrı PWA release: PR #458 merged 302cad6cf7c3fce19d0fdf489d451445ff003451, CI #40223334141 SUCCESS; Security Host PR #460 merged a326e84f2ec0b6aa4b725ef183738e80ef0aa6d5, CI #40223947320 SUCCESS. Eski v4.0 güvenilir cihaz korunur, owner SYSTEM ve COMPANY kapsamları sunucudan doğrulanır. Canlı Pages, Security Worker ve Android/PWA kabul sonucu ayrıca kanıtlanır. Önceki Muhasebe/İK/İmalat release geçmişi korunur.",
+  "sourceCommit": "a326e84f2ec0b6aa4b725ef183738e80ef0aa6d5",
   "requestedAt": "2026-10-25"
 }
