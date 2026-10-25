@@ -24,18 +24,18 @@ test("Tek KY Guvenlik PWA kimligi sabit, KY Firma ayri kurulur", () => {
   assert.match(host, /const ADDITIONAL_APPS=\["\/ky-firma"\]/);
 });
 
-test("Guncel tek owner telefon uygulamasi v4.1.0 ve kapsamli guvenlik ozeti sunar", () => {
+test("Guncel tek owner telefon uygulamasi v4.1.1 ve kapsamli guvenlik ozeti sunar", () => {
   const html = read("guvenlik/index.html");
   const control = read("guvenlik/security-control-center.js");
-  assert.match(html, /id="appVersionBadge">v4\.1\.0/);
-  assert.match(html, /id="accountVersion">v4\.1\.0/);
-  assert.match(app, /APP_DISPLAY_VERSION="v4\.1\.0"/);
+  assert.match(html, /id="appVersionBadge">v4\.1\.1/);
+  assert.match(html, /id="accountVersion">v4\.1\.1/);
+  assert.match(app, /APP_DISPLAY_VERSION="v4\.1\.1"/);
   for(const id of ["ownerSummarySessions","ownerSummaryDevices","ownerSummaryLogins","ownerSummaryEvents"]) {
     assert.ok(html.includes('id="' + id + '"'));
     assert.ok(control.includes(id));
   }
   assert.doesNotMatch(html, /href="\/ky-sistem\//);
-  assert.match(shell, /APP_VERSION="v4\.1\.0"/);
+  assert.match(shell, /APP_VERSION="v4\.1\.1"/);
 });
 
 test("Surum degisikligi mevcut telefon cihaz kaydini ve kilidini korur", () => {
