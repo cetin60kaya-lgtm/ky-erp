@@ -1,0 +1,20 @@
+{
+  "name": "KY Güvenlik | Sistem Sahibi",
+  "short_name": "KY Güvenlik",
+  "id": "/ky-sistem/",
+  "start_url": "/ky-sistem/",
+  "scope": "/ky-sistem/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "lang": "tr",
+  "theme_color": "#10284d",
+  "background_color": "#eef4fc",
+  "icons": [
+    {
+      "src": "/ky-sistem/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

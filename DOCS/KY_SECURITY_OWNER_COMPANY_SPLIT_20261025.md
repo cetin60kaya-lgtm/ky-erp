@@ -1,0 +1,8 @@
+# KY Güvenlik / KY Firma / KY ERP — Ayrı Mobil Uygulama Kaynağı (25.10.2026)
+- **Sistem Sahibi**: /ky-sistem/ — ayrı PWA kimliği; yalnız sunucunun onayladığı SYSTEM + ownerControlAuthorized güvenilir telefon ile açılır. Güvenlik genel analiz, firma filtreleri, telefon giriş onayı, imzalı oturum kapatma, 60 sn sistem kodu.
+- **Firma Sahibi**: /ky-firma/ — ayrı PWA kimliği; yalnız COMPANY + companyApprover kapsamı; sistem oturumlarını göremez, diğer firmaların onayını yapamaz.
+- **Çalışan**: mevcut https://kyerp.net/ KY ERP; Muhasebe/İK/İmalat gibi rol/modül izinleri aynı server policy ile kalır. Çalışana yeni güvenlik rolü verilmedi.
+- Kaynak API: /auth/push/device/health, /control-center, /decision, /login-code. Yeni D1 tablo, yetki baypası, native APK ya da ikinci API yok. İş analizleri finans/İK için ERP'ye ayrı yetkili giriş gerekir: mobil güvenlik cihazı ile finans API'si doğrudan okunmaz.
+- **Geçiş**: mevcut /guvenlik/ v4.0 ve indexedDB cihazı korunur, yeni uygulamalar aynı origin'de cihazı okur. Bildirim aboneliği kendi uygulama Service Worker'ına isteğe bağlı yeniden bağlanır; bu, eski uygulamadaki push adresinin yönünü değiştirir. Eski uygulama canlı telefon kabulü olmadan kaldırılmaz.
+- **Kritik koruma**: kayıtlı PIN/biyometri yokken kritik onay verilmez. Kullanıcı v4.0 Bu Telefon sekmesinden etkinleştirir. Tek kullanımlık sistem kodu şifreyi kaldırmaz.
+- **Gerçek kabul açık**: Chrome Android PWA kurulum/kapalı ekran push teslimi, cihaz yeniden açılışı, owner SYSTEM ve firma COMPANY canlı oturum, güvenli doğrulama, ekran boyutları, Cloudflare Pages yayın + asset ve yetkili canlı test. Test olmadan kesin canlı kabul iddiası yok.

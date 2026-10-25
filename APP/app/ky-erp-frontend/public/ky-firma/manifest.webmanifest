@@ -1,0 +1,20 @@
+{
+  "name": "KY Firma | Firma Sahibi",
+  "short_name": "KY Firma",
+  "id": "/ky-firma/",
+  "start_url": "/ky-firma/",
+  "scope": "/ky-firma/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "lang": "tr",
+  "theme_color": "#0c6454",
+  "background_color": "#f0f8f5",
+  "icons": [
+    {
+      "src": "/ky-firma/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
