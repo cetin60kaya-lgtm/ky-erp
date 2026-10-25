@@ -1,0 +1,20 @@
+// Tek kaynak: uygulama menüsü ve ana sayfa kartları aynı modül gruplarını kullanır.
+export const KY_NAV_GROUPS = [
+  { key: "daily", title: "Günlük İşler", homeTitle: "Günlük çalışmalar", description: "Personel, vardiya ve devam işlemleri", keys: ["gunluk-operasyon", "ik", "pdks"] },
+  { key: "production", title: "Üretim", homeTitle: "Üretim akışı", description: "Modelden üretime tek süreç", keys: ["desen", "boyahane", "uretim"] },
+  { key: "finance", title: "Finans", homeTitle: "Finans ve belgeler", description: "Cari, ödeme ve belge yönetimi", keys: ["muhasebe", "e-belge"] },
+  { key: "communication", title: "İletişim", homeTitle: "İletişim ve dosyalar", description: "Evrak ve iletişim süreçleri", keys: ["iletisim", "asistan"] },
+  { key: "management", title: "Yönetim ve Sistem", homeTitle: "Yönetim ve sistem", description: "Denetim, yedek ve cihazlar", keys: ["compliance", "depolama", "sistem-merkezi", "admin"] },
+];
+
+export function visibleNavigationGroups(modules = []) {
+  const access = new Map(modules.filter((module) => module?.key && module.key !== "ana-sayfa").map((module) => [module.key, module]));
+  return KY_NAV_GROUPS.map((group) => ({
+    ...group,
+    modules: group.keys.map((key) => access.get(key)).filter(Boolean),
+  })).filter((group) => group.modules.length);
+}
+
+export function navigationGroupFor(moduleKey) {
+  return KY_NAV_GROUPS.find((group) => group.keys.includes(moduleKey))?.key || "";
+}
