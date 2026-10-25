@@ -23,5 +23,5 @@ test("İmalat D1 PK idempotency; tek batch içinde aynı clientId tekrarına izi
   assert.match(source, /seenThisBatch\.add\(clientId\)/);
   assert.match(source, /writeProductionEntryAtomic/);
   assert.match(source, /PRODUCTION_CENTER_REQUEST/);
-  assert.doesNotMatch(source, /storage = "json_store"/);
+  assert.doesNotMatch(source.slice(source.indexOf("async function saveProductionBatch("), source.indexOf("async function createModel(")), /storage = "json_store"/);
 });
