@@ -596,6 +596,6 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       <EBelgeIntegrationsWorkspace activeMainCompany={activeMainCompany} openModule={openModule} />
     </>}
 
-    <DetailDrawer id={selectedId} onClose={() => setSelectedId("")} onChanged={showPool ? loadPool : loadDashboard} />
+    <DetailDrawer key={selectedId || "empty-document"} id={selectedId} onClose={() => setSelectedId("")} onChanged={showPool ? loadPool : loadDashboard} />
   </section>;
 }
