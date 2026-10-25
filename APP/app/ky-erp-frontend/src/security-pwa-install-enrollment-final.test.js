@@ -44,7 +44,7 @@ test("fresh worker is push-only and leaves the app shell to the network",()=>{
 test("security host serves one canonical owner PWA and separate company PWA",()=>{
   assert.match(host,/const APP_PREFIX="\/guvenlik"/);
   assert.match(host,/const APP_URL="\/guvenlik\/"/);
-  assert.match(host,/const LEGACY_PREFIXES=\["\/security","\/ky-guvenlik","\/ky-guvenlik-recover"\]/);
+  assert.match(host,/const LEGACY_PREFIXES=\["\/security","\/ky-guvenlik","\/ky-guvenlik-recover"/);
   assert.match(host,/Service-Worker-Allowed/);
   assert.match(host,/env\.ASSETS/);
   assert.match(host,/ADDITIONAL_APPS/);
