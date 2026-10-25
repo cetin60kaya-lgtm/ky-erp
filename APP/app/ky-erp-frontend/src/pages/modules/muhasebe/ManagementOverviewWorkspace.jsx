@@ -1,31 +1,46 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiGet } from "../../../utils/api";
+import { currentAccountingMonth, managementOverviewValues, validAccountingMonth } from "./managementOverviewPeriod";
 
-const money = (value) => Number(value || 0).toLocaleString("tr-TR", { style: "currency", currency: "TRY" });
+const money = (value) => value === null ? "Kaynak yok" : Number(value).toLocaleString("tr-TR", { style: "currency", currency: "TRY" });
 const unwrap = (payload) => payload?.data?.data || payload?.data || payload || {};
 
 function Metric({ label, value }) {
-  return (
-    <div className="management-metric emphasis">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
+  return <div className="management-metric emphasis"><span>{label}</span><strong>{value}</strong></div>;
 }
 
 export default function ManagementOverviewWorkspace({ activeMainCompany, refreshKey }) {
+  const [period, setPeriod] = useState(currentAccountingMonth);
   const [state, setState] = useState({ loading: true, error: "", data: {}, denied: false });
+  const seq = useRef(0);
 
   const load = useCallback(async () => {
+    const ticket = ++seq.current;
+    if (!activeMainCompany?.slug && !activeMainCompany?.id) {
+      setState({ loading: false, error: "Yönetim özetini görmek için ana firma seçin.", data: {}, denied: false });
+      return;
+    }
+    if (!validAccountingMonth(period)) {
+      setState({ loading: false, error: "Geçerli bir dönem seçin.", data: {}, denied: false });
+      return;
+    }
     setState((current) => ({ ...current, loading: true, error: "" }));
     try {
       const payload = await apiGet("/muhasebe/yonetim-ozeti", {
         mainCompanySlug: activeMainCompany?.slug,
         mainCompanyId: activeMainCompany?.id,
+        period,
+        year: Number(period.slice(0, 4)),
+        month: Number(period.slice(5, 7)),
         _ts: Date.now(),
       });
-      setState({ loading: false, error: "", data: unwrap(payload), denied: false });
+      if (ticket !== seq.current) return;
+      const data = unwrap(payload);
+      if (data.invoicePeriod && data.invoicePeriod !== period) throw new Error("Sunucunun döndürdüğü dönem seçilen dönemle eşleşmiyor.");
+      if (data.vatPeriod && data.vatPeriod !== period) throw new Error("KDV dönemi seçili dönemle eşleşmiyor.");
+      setState({ loading: false, error: "", data, denied: false });
     } catch (error) {
+      if (ticket !== seq.current) return;
       setState({
         loading: false,
         error: error?.message || "Yönetim özeti şu anda alınamadı.",
@@ -33,45 +48,49 @@ export default function ManagementOverviewWorkspace({ activeMainCompany, refresh
         denied: [401, 403].includes(Number(error?.status || error?.statusCode || 0)),
       });
     }
-  }, [activeMainCompany?.id, activeMainCompany?.slug]);
+  }, [activeMainCompany?.id, activeMainCompany?.slug, period]);
 
-  useEffect(() => { load(); }, [load, refreshKey]);
+  useEffect(() => {
+    void load();
+    return () => { seq.current += 1; };
+  }, [load, refreshKey]);
 
   if (state.loading) {
-    return (
-      <div className="management-skeleton">
-        {Array.from({ length: 5 }, (_, index) => <span key={index} />)}
-      </div>
-    );
+    return <div className="management-skeleton" aria-busy="true">{Array.from({ length: 5 }, (_, index) => <span key={index} />)}</div>;
   }
-
-  if (state.error) {
-    return (
-      <section className="management-controlled-state">
-        <strong>{state.denied ? "Bu hesabın finansal yönetim özetine erişim yetkisi bulunmuyor." : "Yönetim özeti yüklenemedi."}</strong>
-        <span>{state.denied ? "Salt okunur KY ERP TEST hesabı giriş yaptı. Bu özetin sunucu yetki kuralı daha kapsamlı erişim gerektiriyor; gerçek firma yetkileri açılmayacak." : state.error}</span>
-        {!state.denied && <button type="button" onClick={load}>Tekrar dene</button>}
-      </section>
-    );
-  }
-
-  const data = state.data || {};
-  const totals = data.totals || {};
-  const receivable = Number(data.toplamAlacak ?? data.tahsilatBekleyen ?? totals.receivable ?? 0);
-  const payable = Number(data.toplamBorc ?? data.odemeBekleyen ?? totals.payable ?? 0);
-  const incomingMonth = Number(data.buAyGelenFatura ?? data.buAyAlisGider ?? 0);
-  const outgoingMonth = Number(data.buAyKesilenFatura ?? data.buAySatis ?? 0);
-  const upcomingChecks = Number(data.yaklasanCekToplami ?? data.cekOzet?.yaklasanCekTutari ?? 0);
 
   return (
     <div className="management-overview">
-      <section className="management-primary-metrics">
-        <Metric label="Toplam alacak" value={money(receivable)} />
-        <Metric label="Toplam borç" value={money(payable)} />
-        <Metric label="Bu ay gelen fatura" value={money(incomingMonth)} />
-        <Metric label="Bu ay kesilen fatura" value={money(outgoingMonth)} />
-        <Metric label="Yaklaşan çek" value={money(upcomingChecks)} />
-      </section>
+      <div className="management-overview-period">
+        <label>Dönem <input type="month" aria-label="Yönetim özeti dönemi" value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
+        <button type="button" disabled={state.loading} onClick={() => void load()}>Yenile</button>
+        {state.data?.generatedAt ? <small>Son veri: {new Date(state.data.generatedAt).toLocaleString("tr-TR")}</small> : null}
+      </div>
+      {state.error ? (
+        <section className="management-controlled-state" role="alert">
+          <strong>{state.denied ? "Bu hesabın finansal yönetim özetine erişim yetkisi bulunmuyor." : "Yönetim özeti yüklenemedi."}</strong>
+          <span>{state.denied ? "Sunucu bu firmaya ilişkin yönetim özetine erişimi reddetti." : state.error}</span>
+          {!state.denied ? <button type="button" onClick={() => void load()}>Tekrar dene</button> : null}
+        </section>
+      ) : (
+        <>
+          <p className="management-period-note">{period} belge ve KDV dönemi. Cari ve yaklaşan çek toplamları güncel bakiyelerdir, dönemsel toplam değildir.</p>
+          <section className="management-primary-metrics">
+            {(() => {
+              const values = managementOverviewValues(state.data);
+              return <>
+                <Metric label="Toplam alacak (güncel)" value={money(values.receivable)} />
+                <Metric label="Toplam borç (güncel)" value={money(values.payable)} />
+                <Metric label="Seçili ay gelen fatura" value={money(values.incoming)} />
+                <Metric label="Seçili ay kesilen fatura" value={money(values.outgoing)} />
+                <Metric label="Güncel yaklaşan çek" value={money(values.upcomingChecks)} />
+                <Metric label="Seçili dönem gelen KDV" value={money(values.incomingVat)} />
+                <Metric label="Seçili dönem giden KDV" value={money(values.outgoingVat)} />
+              </>;
+            })()}
+          </section>
+        </>
+      )}
     </div>
   );
 }

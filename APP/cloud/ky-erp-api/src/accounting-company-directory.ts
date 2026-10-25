@@ -68,7 +68,7 @@ export function registerAccountingCompanyDirectoryRoutes(app: Hono<AppEnv>) {
     }
 
     const normalizedName = normalize(companyName);
-    const taxNo = text(body.taxNo || body.tax_no).replace(/\s+/g, "");
+    const taxNo = text(body.taxNo || body.tax_no).replace(/[\s.\-]/g, "");
     const existing = await c.env.DB.prepare(
       `SELECT id, name
          FROM companies
@@ -77,7 +77,7 @@ export function registerAccountingCompanyDirectoryRoutes(app: Hono<AppEnv>) {
           AND (
             normalized_name = ?
             OR UPPER(name) = UPPER(?)
-            OR (? <> '' AND COALESCE(tax_no, '') = ?)
+            OR (? <> '' AND REPLACE(REPLACE(REPLACE(COALESCE(tax_no,''),' ',''),'-',''),'.','') = ?)
           )
         LIMIT 1`,
     )
@@ -262,28 +262,14 @@ export function registerAccountingCompanyDirectoryRoutes(app: Hono<AppEnv>) {
       return c.json(errorBody("COMPANY_NOT_FOUND", "Firma kartı bulunamadı."), 404);
     }
 
-    await c.env.DB.prepare(
-      `DELETE FROM company_aliases
-        WHERE company_id = ? AND main_company_slug = ?`,
-    )
-      .bind(companyId, slug)
-      .run();
-    await c.env.DB.prepare(
-      `DELETE FROM companies
-        WHERE id = ? AND main_company_slug = ?`,
-    )
-      .bind(companyId, slug)
-      .run();
-
-    return c.json({
-      ok: true,
-      success: true,
-      data: {
-        id: companyId,
-        companyName: text(company.name),
-        deletedPermanently: true,
-        deletedAt: nowIso(),
-      },
-    });
+    // Cari, belge ve LOT zincirinde fiziksel DELETE işlemi veri kaybı oluşturabilir.
+    // Kayıt sadece ayrı status endpoint'i üzerinden pasife alınır; DELETE fail-closed.
+    return c.json(
+      errorBody(
+        "COMPANY_PERMANENT_DELETE_DISABLED",
+        "Firma ve cari kayıtları kalıcı silinemez. Firma kartını Pasif durumuna alarak tarihçeyi koruyun.",
+      ),
+      409,
+    );
   });
 }

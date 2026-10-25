@@ -687,6 +687,10 @@ async function chemicalAliases(
 }
 
 async function accountingSummary(c: Context<AppEnv>) {
+  const requestedPeriod = databaseText(c.req.query("period"));
+  if (requestedPeriod && !/^\d{4}-(0[1-9]|1[0-2])$/.test(requestedPeriod)) {
+    return c.json({ ok: false, error: { code: "PERIOD_INVALID", message: "Geçerli bir YYYY-AA dönemi seçin." } }, 400);
+  }
   const slug = slugOf(c);
   const [companies, documents, movements, vatSummary, cheques] = await Promise.all([
     scopedRows(c, "companies", {
@@ -712,7 +716,7 @@ async function accountingSummary(c: Context<AppEnv>) {
   const payable = companies
     .filter((item) => databaseNumber(item.current_balance) < 0)
     .reduce((sum, item) => sum + Math.abs(databaseNumber(item.current_balance)), 0);
-  const monthKey = new Date().toISOString().slice(0, 7);
+  const monthKey = requestedPeriod || new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" }).slice(0, 7);
   const monthDocuments = documents.filter((item) =>
     databaseText(item.issueDate || item.createdAt).startsWith(monthKey),
   );
@@ -756,6 +760,10 @@ async function accountingSummary(c: Context<AppEnv>) {
 
   const data = {
     generatedAt: new Date().toISOString(),
+    invoicePeriod: monthKey,
+    invoicePeriodScope: "ISSUE_DATE",
+    vatPeriod: Number(c.req.query("year") || 0) && Number(c.req.query("month") || 0) ? monthKey : "ALL",
+    balanceScope: "CURRENT_TOTAL",
     companyCount: companies.length,
     documentCount: documents.length,
     movementCount: await scopedCount(c, "current_account_movements", { slug }),
