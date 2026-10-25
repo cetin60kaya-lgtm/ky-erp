@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { productionIdentity, writeProductionEntryAtomic } from "./production-idempotency";
 
 type AppEnv = {
   Bindings: Cloudflare.Env;
@@ -1026,8 +1027,6 @@ function filterCards(cards: Row[], query: Row): Row[] {
 async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
   const slug = companySlug(c, body);
   const requestId = text(body.requestId) || crypto.randomUUID();
-  const existingRequest = await jsonStoreGet(c, "PRODUCTION_CENTER_REQUEST", requestId, slug).catch(() => null);
-  if (existingRequest?.result) return { ...existingRequest.result, idempotent: true };
   const center = await buildCenter(c, slug);
   const cardsById = new Map(center.cards.map((card) => [text(card.id), card]));
   const sourceEntries = Array.isArray(body.entries) ? body.entries : [body];
@@ -1035,9 +1034,9 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
   const failed: Row[] = [];
   const seenThisBatch = new Set<string>();
 
-  for (const source of sourceEntries) {
+  for (const [sourceIndex, source] of sourceEntries.entries()) {
     const entry = objectValue(source);
-    const clientId = text(entry.clientId || entry.id) || crypto.randomUUID();
+    const clientId = sourceEntries.length === 1 ? "0" : text(entry.clientId || entry.id) || String(sourceIndex);
     const modelId = text(entry.modelId || entry.modelKaydiId);
     const card = cardsById.get(modelId);
     const grossQty = numberValue(first(entry.quantity, entry.adet, entry.uretimAdedi));
@@ -1050,7 +1049,7 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
       normalized(entry.machineId || entry.machineName || entry.makineNo),
       normalized(entry.operatorName || entry.operatorId || entry.makinaci)].join("|");
     const errors: string[] = [];
-    if (seenThisBatch.has(fingerprint)) errors.push("Aynı toplu istekte mükerrer üretim fişi bulunuyor.");
+    if (seenThisBatch.has(clientId)) errors.push("Aynı toplu istekte aynı clientId ikinci kez kullanılamaz.");
     if (!card || card.isVirtual) errors.push("Kayıtlı tek merkez model seçilmelidir.");
     if (!(grossQty > 0)) errors.push("Brüt üretim adedi sıfırdan büyük olmalıdır.");
     if (printDefectQty + fabricDefectQty + testQty > grossQty) {
@@ -1067,26 +1066,10 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
         errors.push("Bu kayıt baskı bölgesi üretimini gelen irsaliye adedinin üzerine çıkarır.");
       }
     }
-    if (card) {
-      const duplicate = (card.productionEntries || []).some(
-        (row: Row) =>
-          isoDate(row.date) === date &&
-          normalized(row.printArea) === normalized(printArea) &&
-          numberValue(row.grossQty) === grossQty &&
-          normalized(row.machineId || row.machineName) ===
-            normalized(entry.machineId || entry.machineName || entry.makineNo) &&
-          normalized(row.operatorName) === normalized(entry.operatorName || entry.operatorId || entry.makinaci),
-      );
-      if (duplicate) errors.push("Aynı üretim kaydı daha önce girilmiş görünüyor.");
-    }
-    if (errors.length) {
-      failed.push({ clientId, error: errors.join(" ") });
-      continue;
-    }
-
-    seenThisBatch.add(fingerprint);
-    const id = crypto.randomUUID();
+    // Replay is checked against persistent DB identity before any capacity validation.
+    seenThisBatch.add(clientId);
     const now = new Date().toISOString();
+
     const raw = {
       requestId,
       clientId,
@@ -1111,45 +1094,43 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
       source: "PRODUCTION_CENTER",
       createdAt: now,
     };
-    let storage = "production_records";
-    try {
-      if (!(await tableExists(c, "production_records"))) throw new Error("production_records yok");
-      await insertDynamic(c, "production_records", {
-        id,
-        main_company_slug: slug,
-        model_id: modelId,
-        model_name: card?.modelName,
-        order_no: raw.orderNo,
-        ground_color: raw.ground,
-        machine_name: raw.machineName || raw.machineId,
-        total_quantity: grossQty,
-        machinist: raw.operatorName,
-        print_area: printArea,
-        fabric_defect: String(fabricDefectQty),
-        print_defect: String(printDefectQty),
-        shift: raw.shift,
-        production_date: `${date}T12:00:00.000Z`,
-        note: raw.note,
-        raw,
-        created_at: now,
-        updated_at: now,
-      });
-      if (await tableExists(c, "model_production_links")) {
-        await insertDynamic(c, "model_production_links", {
-          id: crypto.randomUUID(),
-          main_company_slug: slug,
-          model_id: modelId,
-          production_record_id: id,
-          raw: { source: "PRODUCTION_CENTER", requestId, clientId },
-          created_at: now,
-          updated_at: now,
-        }).catch(() => undefined);
+    const rawPayload = {
+      modelId, date, grossQty, printDefectQty, fabricDefectQty, testQty,
+      printArea, machineId: raw.machineId, machineName: raw.machineName,
+      operatorName: raw.operatorName, shift: raw.shift, batchNo: raw.batchNo,
+      dispatchNo: raw.dispatchNo, orderNo: raw.orderNo, note: raw.note,
+    };
+    const identity = await productionIdentity(slug, requestId, clientId, rawPayload);
+    const existingRow = await c.env.DB.prepare(
+      "SELECT id FROM production_records WHERE id=? AND main_company_slug=? LIMIT 1",
+    ).bind(identity.id, slug).first<Row>().catch(() => null);
+    if (existingRow) {
+      try {
+        success.push(await writeProductionEntryAtomic(c.env.DB,slug,requestId,clientId,rawPayload,{},{}));
+      } catch (error: any) {
+        failed.push({ clientId, code: text(error?.code) || "PRODUCTION_REQUEST_PAYLOAD_CONFLICT", error: text(error?.message) });
       }
-    } catch {
-      storage = "json_store";
-      await jsonStorePut(c, "PRODUCTION_CENTER_ENTRY", id, { id, ...raw, date, grossQty, printArea }, slug);
+      continue;
     }
-    success.push({ clientId, id, storage });
+    if (errors.length) {
+      failed.push({ clientId, code: "PRODUCTION_VALIDATION_FAILED", error: errors.join(" ") });
+      continue;
+    }
+    const record = {
+      main_company_slug: slug, model_id: modelId, model_name: card?.modelName,
+      order_no: raw.orderNo, ground_color: raw.ground, machine_name: raw.machineName || raw.machineId,
+      total_quantity: grossQty, machinist: raw.operatorName, print_area: printArea,
+      fabric_defect: String(fabricDefectQty), print_defect: String(printDefectQty), shift: raw.shift,
+      production_date: date + "T12:00:00.000Z", note: raw.note, raw, created_at: now, updated_at: now,
+    };
+    try {
+      success.push(await writeProductionEntryAtomic(
+        c.env.DB,slug,requestId,clientId,rawPayload,record,{model_id:modelId},
+      ));
+    } catch (error: any) {
+      failed.push({clientId,code:text(error?.code)||"PRODUCTION_ATOMIC_WRITE_FAILED",
+        error:text(error?.message)||"Üretim kaydı ve model bağlantısı birlikte kaydedilemedi."});
+    }
   }
 
   const result = { requestId, success, failed, successCount: success.length, failedCount: failed.length };
@@ -1384,7 +1365,7 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
   app.post("/api/production-center/entries/bulk", async (c) => {
     const body = await requestBody(c);
     const result = await saveProductionBatch(c, body);
-    return c.json({ ok: true, success: true, data: result }, 201);
+    return c.json({ ok: result.failedCount===0, success: result.failedCount===0, data: result }, result.failedCount?207:201);
   });
 
   app.post("/api/production-center/entries", async (c) => {
@@ -1395,7 +1376,7 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
       requestId: text(body.requestId) || crypto.randomUUID(),
     });
     return result.failedCount
-      ? c.json(jsonError("PRODUCTION_ENTRY_REJECTED", text(result.failed[0]?.error), result), 409)
+      ? c.json(jsonError(text(result.failed[0]?.code)||"PRODUCTION_ENTRY_REJECTED", text(result.failed[0]?.error), result), 409)
       : c.json({ ok: true, success: true, data: result.success[0] }, 201);
   });
 
