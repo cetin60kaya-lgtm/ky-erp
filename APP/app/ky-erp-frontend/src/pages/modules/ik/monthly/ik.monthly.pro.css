@@ -2559,3 +2559,25 @@
     min-height:44px;
   }
 }
+
+
+/* İK Aylık: personel kapsamını değiştirmeden daha az başlık, okunaklı kontroller. */
+.ik-monthly-pro .ik-pro-command{padding:15px 19px;gap:15px;border-radius:14px;margin-bottom:10px}
+.ik-monthly-pro .ik-pro-identity h1{font-size:clamp(22px,2vw,27px)}
+.ik-monthly-pro .ik-pro-identity p{font-size:13px;line-height:1.45}
+.ik-monthly-pro .ik-pro-period-panel{padding:9px 11px}
+.ik-monthly-pro .ik-pro-nav{overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;flex-wrap:nowrap;max-width:100%}
+.ik-monthly-pro .ik-pro-nav button{flex:0 0 auto;min-height:41px;white-space:nowrap;font-size:12px;padding:9px 13px}
+.ik-monthly-pro .ik-pro-overview-strip{gap:10px}
+.ik-monthly-pro .ik-pro-content{min-width:0}
+.ik-monthly-pro .ik-pro-content .page-head{gap:12px}
+.ik-monthly-pro .ik-pro-content .page-head h1{font-size:clamp(19px,1.8vw,24px)}
+.ik-monthly-pro .ik-pro-content .page-head p{font-size:12px;line-height:1.5}
+.ik-monthly-pro .ik-pro-content :is(input,select,textarea,button){font-size:max(11px,1em)}
+.ik-monthly-pro .tw{max-width:100%;overflow-x:auto}
+.ik-monthly-pro .ik-pro-personnel-layout{min-width:0}
+@media(max-width:980px){
+ .ik-monthly-pro .ik-pro-command{grid-template-columns:minmax(0,1fr);gap:10px}
+ .ik-monthly-pro .ik-pro-period-panel{min-width:0;max-width:430px}
+}
+@media(max-width:640px){.ik-monthly-pro .ik-pro-nav button{min-height:40px;font-size:12px}.ik-monthly-pro .ik-pro-command{padding:14px}}

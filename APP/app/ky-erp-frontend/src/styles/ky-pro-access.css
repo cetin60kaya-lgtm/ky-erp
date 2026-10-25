@@ -19,3 +19,25 @@
 .auth-page .auth-phone-status-head p,.auth-page .auth-notice span{font-size:11px!important;line-height:1.5!important}
 @media(max-width:960px){.auth-page .auth-shell{display:block!important;width:min(600px,calc(100vw - 32px))!important;height:auto!important;max-height:calc(100dvh - 24px)!important;overflow:auto!important}.auth-page .auth-brand-panel{display:none!important}.auth-page .auth-card-panel{height:auto!important;padding:15px!important}.auth-page .auth-card{height:auto!important;max-height:none!important}}
 @media(max-width:560px){.auth-page{padding:0!important}.auth-page .auth-shell{width:100vw!important;height:100dvh!important;max-height:100dvh!important;border:0!important;border-radius:0!important}.auth-page .auth-card-panel{padding:8px!important}.auth-page .auth-card{border:0!important;padding:15px!important}.auth-page .auth-stage-viewport{overflow-y:auto!important;max-height:calc(100dvh - 205px)!important}}
+
+
+/* Tek kaydırma noktası: MFA adımları dahil giriş içeriği taşmadan görünür. */
+@media(min-width:961px){
+  .auth-page{overflow:hidden!important;padding:16px!important}
+  .auth-page .auth-shell{width:min(1160px,calc(100vw - 32px))!important;height:min(820px,calc(100dvh - 32px))!important;max-height:calc(100dvh - 32px)!important;grid-template-columns:minmax(330px,.83fr) minmax(450px,1.17fr)!important}
+  .auth-page .auth-brand-panel{padding:31px!important;overflow:hidden!important}
+  .auth-page .auth-brand-copy{margin-top:40px!important}
+  .auth-page .auth-security-points{margin-top:24px!important;gap:10px!important}
+  .auth-page .auth-card-panel{min-height:0!important;overflow:hidden!important;padding:18px 22px!important}
+  .auth-page .auth-card{max-width:600px!important;min-height:0!important;max-height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain;scrollbar-width:thin}
+  .auth-page .auth-stage-viewport{overflow:visible!important;max-height:none!important}
+}
+@media(max-width:960px){
+  .auth-page .auth-shell{overflow-y:auto!important;overscroll-behavior:contain}
+  .auth-page .auth-card-panel,.auth-page .auth-card{overflow:visible!important}
+}
+.auth-page .auth-form label{font-size:13px!important}
+.auth-page .auth-card-head p{font-size:13px!important}
+.auth-page .auth-primary,.auth-page .auth-secondary{font-size:13px!important}
+.auth-page .auth-inline-note,.auth-page .auth-card-footer{font-size:11px!important}
+.auth-page button:focus-visible,.auth-page input:focus-visible{outline:2px solid #3478df!important;outline-offset:2px}

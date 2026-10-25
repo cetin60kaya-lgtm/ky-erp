@@ -5,6 +5,7 @@ import PdksDeviceCenter from "../pdks/PdksDeviceCenter";
 import PdksLiveHome from "../pdks/PdksLiveHome";
 import PdksPersonnelDesk from "../pdks/PdksPersonnelDesk";
 import PdksReportCenter from "../pdks/PdksReportCenter";
+import PdksDesktopNavigation from "../pdks/PdksDesktopNavigation";
 import PdksRulesCenter from "../pdks/PdksRulesCenter";
 import PdksPageV2 from "./PdksPageV2";
 import "./pdks-shell.css";
@@ -109,6 +110,7 @@ export default function PdksPage(props) {
           <strong>{currentItem[1]}</strong>
           <span>{currentGroup?.hint}</span>
         </div>
+
         <nav className="pdks-context-tabs" aria-label={(currentGroup?.label || "PDKS") + " işlemleri"}>
           {(currentGroup?.items || []).map(([key, label]) => (
             <button type="button" key={key} className={activeTab === key ? "active" : ""} onClick={() => go(key)}>{label}</button>
@@ -119,6 +121,10 @@ export default function PdksPage(props) {
         <span className={"pdks-context-mode " + (isAuditAccount ? "audit" : "full")}>{isAuditAccount ? "DENETİM" : "PDKS 6.0"}</span>
       </header>
 
+      <details className="pdks-desktop-menu-expander">
+        <summary>Masaüstü PDKS bölümleri <span>9 bölüm · 49 sekme</span></summary>
+        <PdksDesktopNavigation activeTab={activeTab} onNavigate={go} isAuditAccount={isAuditAccount} />
+      </details>
       <main className="pdks-module-content">
         {activeTab === "ana-ekran" ? (
           <PdksLiveHome activeMainCompany={activeMainCompany} openModule={openModule} />
