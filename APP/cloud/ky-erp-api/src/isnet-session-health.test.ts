@@ -42,3 +42,12 @@ test("no token: no network request at all",async()=>{
   const bad=await probeIsnetSessionHealth((async()=>{throw Error("must not call")}) as any,URL,"","123");
   assert.equal(bad.connected,false);
 });
+
+test("HTTP 200 ama kimlik kanıtı içermeyen boş cevap BAĞLI sayılmaz",async()=>{
+  const unverified=await probeIsnetSessionHealth(mock(200,{}) as any,URL,"TEST_DUMMY_TOKEN","123");
+  assert.equal(unverified.connected,false);
+  assert.equal(unverified.status,"UNVERIFIED");
+  assert.equal(unverified.sourceError,"PROVIDER_RESPONSE_UNVERIFIED");
+  const list=await probeIsnetSessionHealth(mock(200,{Recipients:[]}) as any,URL,"TEST_DUMMY_TOKEN","123");
+  assert.equal(list.connected,true);
+});

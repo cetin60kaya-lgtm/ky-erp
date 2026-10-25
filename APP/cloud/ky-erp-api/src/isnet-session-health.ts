@@ -20,6 +20,13 @@ export async function probeIsnetSessionHealth(
     const result=payload?.Result??payload?.result;
     if(result!==undefined&&result!==null&&![0,"0","success","Success",true].includes(result))
       return {...base,status:"ERROR",sourceError:"PROVIDER_REJECTED"};
+    // HTTP 200 with HTML login page / an empty object is NOT authentication proof.
+    // An authenticated read must carry an explicit provider success code or expected list.
+    const knownList=Array.isArray(payload)||["Recipients","recipients","Data","data","Items","items","Value","value","List","list"].some(
+      (name)=>Array.isArray(payload?.[name]));
+    const explicitSuccess=[0,"0","success","Success",true].includes(result);
+    if(!knownList&&!explicitSuccess)
+      return {...base,status:"UNVERIFIED",sourceError:"PROVIDER_RESPONSE_UNVERIFIED"};
     return {...base,status:"CONNECTED",connected:true,lastVerifiedAt:new Date().toISOString()};
   }catch(e:any){
     return {...base,status:e?.name==="AbortError"?"TIMEOUT":"ERROR",

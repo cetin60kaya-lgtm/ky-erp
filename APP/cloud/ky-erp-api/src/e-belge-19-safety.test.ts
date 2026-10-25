@@ -22,7 +22,7 @@ test("dashboard yerel gün hesaplar ve tarih uyumu doğrular",()=>{
 test("muhasebeleşmiş e-Belge sonradan düzenlenemez veya tekrar eşleştirilemez",()=>{
   assert.match(center,/DOCUMENT_ALREADY_POSTED/);
   assert.match(center,/invoice\.posted_at\|\|upper\(invoice\.status\)==="POSTED"/);
-  assert.match(center,/doc\.posted_at\|\|upper\(doc\.status\)==="POSTED"/);
+  assert.match(center,/doc\.posted_at\|\|\["POSTED","FINALIZING","APPROVED","FINALIZE_RETRY"\]\.includes\(upper\(doc\.status\)\)/);
   assert.match(center,/main_company_slug=\? AND deleted_at IS NULL/);
   assert.match(center,/main_company_slug=\? AND document_id=\?/);
 });
