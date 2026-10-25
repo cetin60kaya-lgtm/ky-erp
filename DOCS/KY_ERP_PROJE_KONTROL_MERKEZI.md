@@ -1,5 +1,11 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 25.10.2026 — e-Belge/İmalat Pages yayını ve finans kesin onay koruması
+- [Pages #40206928454](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40206928454) **SUCCESS**, SHA `19fe5de0ee8639853006e7c7af157cd084f3f46f`; e-Belge [PR #447](https://github.com/cetin60kaya-lgtm/ky-erp/pull/447) ve İmalat [PR #443](https://github.com/cetin60kaya-lgtm/ky-erp/pull/443) merge ancestry **behind=0**, Pages deploy ve public bundle/Günlük Operasyon chunk smoke başarılı. Oturumlu gerçek e-Belge/model/fiş kabulü yine bekliyor.
+- Kritik ön onay kontrolü: [PR #449](https://github.com/cetin60kaya-lgtm/ky-erp/pull/449) merged `719fd60fa97309230944833f95a7398b06630d88`, CI [#40207296821](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40207296821) frontend+Worker **SUCCESS**. e-Belge kesin muhasebe kaydı artık özet ve cari/KDV/kalem/LOT kontrol teyidi olmadan tetiklenmez; çift istek kilidi, belge değişiminde modal yalıtımı. Worker/D1/resmî gönderim değişmedi.
+- **Ön onay ekranının Pages yayını ve oturumlu gerçek kullanıcı acceptance'ı ayrı kapıdır.** Güvenlik nedeniyle otomatik gerçek muhasebe kaydı oluşturulmadı.
+
+
 ## 25.10.2026 — 19 sekme uygulama: CI, kaynak birleştirmeleri ve güvenli Worker canlı kanıtı (güncel)
 - Muhasebe PR [#446](https://github.com/cetin60kaya-lgtm/ky-erp/pull/446) merged `3db5852b499a02e7b62d81d2fcdc9b5ed8fe3f56`, CI #40205322671 **SUCCESS**; [Pages #40205714344](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40205714344) **SUCCESS** release `ea8f1bf327d38a290cca54c814214da052e80f3d`, ancestry behind=0; public bundle ve Günlük Operasyon chunk canlı smoke başarılı.
 - e-Belge [PR #447](https://github.com/cetin60kaya-lgtm/ky-erp/pull/447) merged `e15d1bcc0f1c30149720a72dc26853e0f27761b5`; CI #40206047817 **SUCCESS**: havuz/gelen/giden kontrol listelerinde 100+ server pagination, tenant korumalı direction GET filtresi. 
