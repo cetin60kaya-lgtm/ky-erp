@@ -1,5 +1,5 @@
-deploy: ky-security-v4.1.0-single-owner-live-diagnostic
-canonical: 607c551a03377ca7e0373d3daed46a53f86f7d2d
+deploy: ky-security-v4.1.0-one-owner-canonical-html-none
+canonical: 569198eb926a19fdba4987c9ad8ddb5d1fa409f7
 requested: 2026-10-26
-source_prs: 466
-reason: verify actual security.kyerp.net route HTTP and API guard codes after successful Worker asset upload
+source_prs: 466,469
+reason: Cloudflare Workers static assets HTML handling none fixes 307 loop, owner /guvenlik and company /ky-firma, device PWA id preserved
