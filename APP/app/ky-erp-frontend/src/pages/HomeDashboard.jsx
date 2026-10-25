@@ -1,21 +1,15 @@
 import { ArrowRight, BellRing, Factory, FileText, LayoutDashboard, ShieldCheck, Wallet, Wrench } from "lucide-react";
+import { visibleNavigationGroups } from "../app/navigationGroups";
 import "../styles/ky-pro-home.css";
 
-const GROUPS = [
-  { title: "Günlük çalışmalar", description: "Personel, vardiya ve devam işlemleri", items: ["gunluk-operasyon", "ik", "pdks"], Icon: BellRing },
-  { title: "Üretim akışı", description: "Modelden üretime tek süreç", items: ["desen", "boyahane", "uretim"], Icon: Factory },
-  { title: "Finans ve belgeler", description: "Cari, ödeme ve belge yönetimi", items: ["muhasebe", "e-belge"], Icon: Wallet },
-  { title: "İletişim ve dosyalar", description: "Evrak ve iletişim süreçleri", items: ["iletisim", "asistan"], Icon: FileText },
-  { title: "Yönetim ve sistem", description: "Denetim, yedek ve cihazlar", items: ["compliance", "depolama", "sistem-merkezi", "admin"], Icon: Wrench },
-];
+const ICONS = { daily: BellRing, production: Factory, finance: Wallet, communication: FileText, management: Wrench };
 
 export default function HomeDashboard({ modules = [], activeMainCompany, user, openModule }) {
-  const accessible = new Map(modules.filter((module) => module.key !== "ana-sayfa").map((module) => [module.key, module]));
   const firstName = String(user?.fullName || user?.username || "").trim().split(/\s+/)[0];
   const company = activeMainCompany?.name || activeMainCompany?.title || "Çalışma alanınız";
-  const allowedGroups = GROUPS.map((group) => ({
-    ...group, modules: group.items.map((key) => accessible.get(key)).filter(Boolean),
-  })).filter((group) => group.modules.length);
+  const allowedGroups = visibleNavigationGroups(modules).map((group) => ({
+    ...group, title: group.homeTitle, Icon: ICONS[group.key],
+  }));
 
   const navigate = (module) => {
     const firstTab = module?.groups?.[0]?.tabs?.[0]?.[0] || module?.tabs?.[0]?.[0] || "";
