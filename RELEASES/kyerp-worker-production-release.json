@@ -3,9 +3,9 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "8d7c355a93483d27536676d235e18a1e30a1513e",
-  "requestedAt": "2026-10-25",
-  "attempt": 23,
+  "sourceCommit": "0b265476d905ef2f8b86c2d9bd551512393a7f32",
+  "requestedAt": "2026-10-26",
+  "attempt": 24,
   "scope": [
     "gunluk-tum-api-ik-tenant-yetki-koruma",
     "gunluk-donem-kilit-gercek-d1-ve-yazma-engel",
@@ -27,9 +27,14 @@
     "muhasebe-period-vkn-alias-payment-cumulative-guards-pr453",
     "ebelge-posted-immutability-provider-tenant-pagination-pr455",
     "imalat-tenant-bulk-duplicate-stable-request-pr456",
-    "worker-backup-no-migration-schema-health"
+    "worker-backup-no-migration-schema-health",
+    "atomic-payment-ledger-PR463",
+    "persistent-production-idempotency-PR464",
+    "isnet-readonly-health-finalize-cas-PR465",
+    "financial-posting-d1-atomic-batch-PR467",
+    "no-physical-stock-posting-until-safe-outbox"
   ],
-  "note": "25.10.2026 19 sekme kabul çalışması: Muhasebe #453 merge f3e0d9ea32ef91982a5b98ab61fca22c285d7962 CI #40220091676 SUCCESS, e-Belge #455 merge 43d0c0822a6961474c2436c55bcaa2544ef8f35f CI #40220688716 SUCCESS, İmalat #456 merge 8d7c355a93483d27536676d235e18a1e30a1513e CI #40221156414 SUCCESS. Sadece kod sürümü: applyMigrations=false ve migrationApprovedByUser=false. Tam canlı D1 export artifact, salt okunur schema ve canlı API health zorunludur. Gerçek fatura, para, firma, üretim, İşNet gönderimi veya D1 data testi yapılmaz. Yetkili browser/role E2E ayrıca bekliyor.",
+  "note": "26.10.2026 Muhasebe e-Belge İmalat P0 güvenli release: PR #463 #464 #465 #467 canonical merge ve tüm son PR CI SUCCESS. Ödeme defter koşullu transaction; imalat requestId anahtarı ve fiş/model link atomik; e-Belge CAS ve gerçek provider salt-okunur sağlık; fiziksel stok etkisi olmayan e-Belge finans/car/KDV/POSTED tek D1 batch. Fiziksel LOT/BOYAHANE kesin kaydı güvenli tam outbox tamamlanana kadar PHYSICAL_RECEIPT_ATOMICITY_REQUIRED ile bloke. Migrations kesinlikle kapalı, önce tam D1 backup; canlı iş kaydı, ödeme, resmî İşNet gönderimi test edilmedi. 19/19 oturumlu E2E açık.",
   "applyMigrations": false,
   "migrationApprovedByUser": false
 }
