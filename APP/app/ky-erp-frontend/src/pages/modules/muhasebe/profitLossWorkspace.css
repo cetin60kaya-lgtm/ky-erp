@@ -490,3 +490,15 @@
     flex: 1;
   }
 }
+
+
+/* Manuel giderin kesin kayıt öncesi kontrollü özeti. */
+fieldset.plw-form{border:0;min-width:0;margin:0;padding:0}
+fieldset.plw-form:disabled{opacity:.65}
+.plw-expense-confirm{display:grid;gap:12px;padding:14px 18px;background:#f3f7fa;border-top:1px solid #dce5ef;color:#263b56}
+.plw-expense-confirm h3{margin:0;font-size:17px}.plw-expense-confirm p{font-size:12px;line-height:1.5;margin:0}
+.plw-expense-confirm dl{margin:0;display:grid;gap:8px}
+.plw-expense-confirm dl>div{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:space-between}
+.plw-expense-confirm dt{font-size:12px;color:#687c91}.plw-expense-confirm dd{margin:0;font-size:12px;font-weight:750;text-align:right}
+.plw-drawer footer button{min-height:44px}
+.plw-drawer footer button:focus-visible{outline:2px solid #147c85;outline-offset:2px}
