@@ -1,5 +1,5 @@
-deploy: ky-security-v4.1.0-single-canonical-owner-pwa
-canonical: 8abdb7d99078e37aa0b810c538a2621de4fcfcf2
+deploy: ky-security-v4.1.0-single-owner-pwa-final
+canonical: 2ee2c58a0c592e09ae5132f15fe0a5530ce96e38
 requested: 2026-10-26
 source_prs: 466
-reason: owner PWA only /guvenlik, company /ky-firma, old duplicate owner packages retired, device identity and existing phone preserved
+reason: security host smoke compatibility regex corrected, single /guvenlik owner app, /ky-firma company, original device id stays
