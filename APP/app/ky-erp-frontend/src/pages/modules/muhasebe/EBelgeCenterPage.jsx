@@ -341,6 +341,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const view = allowedViews.includes(initialView) ? initialView : "overview";
   const poolViews = useMemo(() => ["incoming", "outgoing", "pool", "matching", "issues", "archive"], []);
   const [pool, setPool] = useState({ items: [], stats: {}, total: 0 });
+  const [page, setPage] = useState(1);
+  const poolRequestSeq = useRef(0);
   const [dashboard, setDashboard] = useState({ summary: {}, recent: [] });
   const [integrations, setIntegrations] = useState({ providers: [], archive: [], fileHub: [] });
   const [lastUpload, setLastUpload] = useState(null);
@@ -355,13 +357,21 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [selectedId, setSelectedId] = useState("");
 
   const effectiveFilter = view === "matching" ? "MATCHING_WAIT" : view === "issues" ? "ISSUE" : view === "archive" ? "HISTORY" : view === "pool" ? filter : "ALL";
-  const params = useMemo(() => ({ filter: effectiveFilter, q: query, from, to, page: 1, pageSize: 100 }), [effectiveFilter, from, query, to]);
+  const direction = view === "incoming" ? "INCOMING" : view === "outgoing" ? "OUTGOING" : undefined;
+  const params = useMemo(() => ({ filter: effectiveFilter, direction, q: query, from, to, page, pageSize: 50 }), [direction, effectiveFilter, from, page, query, to]);
   const openEBelgeTab = useCallback((tabKey) => openModule?.("e-belge", { tabKey }), [openModule]);
 
   const loadPool = useCallback(async () => {
+    const requestId = ++poolRequestSeq.current;
     const data = await getEBelgePool(params);
+    if (requestId !== poolRequestSeq.current) return;
+    const maxPage = Math.max(1, Math.ceil(Number(data?.total || 0) / Math.max(1, Number(data?.pageSize || 50))));
+    if (page > maxPage) {
+      setPage(maxPage);
+      return;
+    }
     setPool(data || { items: [], stats: {}, total: 0 });
-  }, [params]);
+  }, [page, params]);
 
   const loadDashboard = useCallback(async () => {
     const data = await getEBelgeDashboard({ today: today(), monthStart: monthStart() });
@@ -388,7 +398,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     }
   }, [loadDashboard, loadIntegrations, loadPool, poolViews, view]);
 
-  useEffect(() => { void refreshCurrent(); }, [refreshCurrent, activeMainCompany?.slug, activeMainCompany?.id]);
+  useEffect(() => { setPage(1); }, [view, activeMainCompany?.slug, activeMainCompany?.id]);
+  useEffect(() => { void refreshCurrent(); return () => { poolRequestSeq.current += 1; }; }, [refreshCurrent, activeMainCompany?.slug, activeMainCompany?.id]);
 
   const runMatching = async () => {
     if (matching) return;
@@ -434,6 +445,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const poolTitle = viewMeta[0];
   const poolHint = viewMeta[1];
   const showPool = poolViews.includes(view);
+  const pageCount = Math.max(1, Math.ceil(Number(pool.total || 0) / Math.max(1, Number(pool.pageSize || 50))));
 
   return <section className="eb-page">
     <div className="eb-company-context"><span>Belge Sahibi</span><strong>{companyName}</strong></div>
@@ -495,12 +507,12 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         <StatCard label="Muhasebeleşti" value={pool.stats?.posted} hint="Son onayı tamamlanan" />
       </div>
       <section className="eb-pool">
-        <div className="eb-section-title"><div><strong>{poolTitle}</strong><span>{poolHint}</span></div><span>{rows.length} kayıt</span></div>
+        <div className="eb-section-title"><div><strong>{poolTitle}</strong><span>{poolHint}</span></div><span>{Number(pool.total || 0)} kayıt · Sayfa {page}/{pageCount}</span></div>
         <div className="eb-pool-toolbar">
-          <div className="eb-search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Belge no, firma veya VKN ara" /></div>
-          {view === "pool" && <label>Göster<select value={filter} onChange={(event) => setFilter(event.target.value)}>{FILTERS.map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>}
-          <label>Başlangıç<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
-          <label>Bitiş<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label>
+          <div className="eb-search"><Search size={17} /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Belge no, firma veya VKN ara" /></div>
+          {view === "pool" && <label>Göster<select value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1); }}>{FILTERS.map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>}
+          <label>Başlangıç<input type="date" value={from} onChange={(event) => { setFrom(event.target.value); setPage(1); }} /></label>
+          <label>Bitiş<input type="date" value={to} onChange={(event) => { setTo(event.target.value); setPage(1); }} /></label>
         </div>
         {busy && !rows.length ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Belgeler yükleniyor</div> : rows.length ? <div className="eb-pool-table-scroll"><div className="eb-table">
           <div className="eb-tr eb-th"><span>Belge</span><span>Firma / Cari</span><span>Tarih</span><span>Kaynak</span><span>Toplam</span><span>Kontrol</span></div>
@@ -510,6 +522,13 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
             return <button type="button" className="eb-tr" key={row.id} onClick={() => setSelectedId(row.id)}><span><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span><span><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.party_tax_no || ""}</small></span><span>{dateText(row.issue_date)}</span><span><small>{sourceLabel(row.source_type)}</small><em>{row.archive_status || "-"}</em></span><span><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span><span className={`eb-chip ${hasIssue ? "review_required" : posted ? "posted" : "ready"}`}>{hasIssue ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span></button>;
           })}
         </div></div> : <Empty title="Bu görünümde belge yok" text="Tarih aralığını değiştirin veya yeni belge yükleyin." />}
+        {Number(pool.total || 0) > 0 ? <nav className="eb-pool-pagination" aria-label="e-Belge sayfaları">
+          <span>{(page - 1) * (pool.pageSize || 50) + 1}–{Math.min(Number(pool.total || 0), page * (pool.pageSize || 50))} / {pool.total} kayıt</span>
+          <div>
+            <button type="button" aria-label="Önceki sayfa" disabled={busy || page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Önceki</button>
+            <button type="button" aria-label="Sonraki sayfa" disabled={busy || page >= pageCount} onClick={() => setPage((current) => current + 1)}>Sonraki</button>
+          </div>
+        </nav> : null}
       </section>
     </>}
 

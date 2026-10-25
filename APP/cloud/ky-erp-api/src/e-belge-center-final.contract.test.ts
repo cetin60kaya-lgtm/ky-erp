@@ -16,3 +16,11 @@ test("e-Belge günlük akışta fiziksel hard-delete açmaz ve posted belgeyi ca
   assert.match(source,/posted_at/);
   assert.match(source,/idempotent:true/);
 });
+
+test("e-Belge havuzu gelen ve giden belgeleri server tarafinda yon + tenant kosuluyla sayfalar", () => {
+  assert.match(source, /direction=upper\(c\.req\.query\("direction"\)\)/);
+  assert.match(source, /if\(direction==="INCOMING"\|\|direction==="OUTGOING"\)/);
+  assert.match(source, /where\.push\("d\.direction=\?"\);args\.push\(direction\)/);
+  assert.match(source, /"d\.main_company_slug=\?"/);
+  assert.match(source, /OFFSET \?/);
+});
