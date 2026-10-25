@@ -37,7 +37,7 @@ test("single KY Guvenlik owner app retains guarded control center", () => {
   assert.equal(existsSync(resolve(publicRoot, "ky-sistem")), false);
   assert.match(app, /kyerp-security-fresh-v3/);
   assert.match(app, /ownerControlAuthorized/);
-  assert.match(app, /APP_DISPLAY_VERSION="v4\.1\.0"/);
+  assert.match(app, /APP_DISPLAY_VERSION="v4\.1\.1"/);
   for(const label of ["Sistem Onayları","Aktif Oturumlar","Sistem Cihazları","Denetim Logları"])assert.ok(html.includes(label));
   assert.match(control, /control-center\/session\/close/);
 });
