@@ -1,5 +1,11 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 25.10.2026 — e-Belge toplu eşleştirme kesin onay PR #451 live
+- PR [#451](https://github.com/cetin60kaya-lgtm/ky-erp/pull/451) merged `e2b7654daa207f209f08e713e7861ee0532898ba`; CI [#40215686365](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215686365) PASS. Toplu `reconcile-all` POST yalnız etkilediği tüm uygun açık belgeler (max 500) ve kullanıcı checkbox onayından sonra çalışır. Kısmi hata sayısı sunulur, çift tıklama engellenir, e-Belge günü yerel tarihtir.
+- Cloudflare Pages [#40215803908](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215803908) **SUCCESS** SHA `0d421463de6def6d02f90a0516a21d547db39db0`, release ancestry behind=0 + canlı public bundle/chunk smoke PASS. Worker/D1/schema değişimi yok.
+- Açık test: yetkili canlı oturum, gerçek İşNet XML/PDF/LOT eşleştirme, resmî gönderim, İmalat gerçek fiş/makine ve Muhasebe gerçek ödeme saha kabulü; test için üretim verisi değiştirilmedi.
+
+
 ## 25.10.2026 — PR #450 Muhasebe mutabakat / gider + İmalat ayarlar / rapor canlı
 - PR [#450](https://github.com/cetin60kaya-lgtm/ky-erp/pull/450) merged `84e93e53f94550e00a189838b1db4abab3c6c64e`, CI #40214924202 frontend+Worker **SUCCESS**.
 - Mutabakat yanlış bakiye ile `MATCHED` olamaz (frontend + Worker API); kayıt öncesi fark/dönem/kart gösterilir. Gider kaydı/şablon ayrı, POST öncesi tutar-KDV-özeti/onay/tek gönderim. Makine ayarları kısmi kaydı açık raporlar ve geri al düğmesi sunar. İmalat filtreli raporu gerçek TSV ve güvenli formül escape ile dışa verir.
