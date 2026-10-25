@@ -3,9 +3,9 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "0b265476d905ef2f8b86c2d9bd551512393a7f32",
+  "sourceCommit": "fc1a5fbb5bc05d64ff8b51baa6f89d436d498285",
   "requestedAt": "2026-10-26",
-  "attempt": 24,
+  "attempt": 25,
   "scope": [
     "gunluk-tum-api-ik-tenant-yetki-koruma",
     "gunluk-donem-kilit-gercek-d1-ve-yazma-engel",
@@ -32,9 +32,10 @@
     "persistent-production-idempotency-PR464",
     "isnet-readonly-health-finalize-cas-PR465",
     "financial-posting-d1-atomic-batch-PR467",
-    "no-physical-stock-posting-until-safe-outbox"
+    "no-physical-stock-posting-until-safe-outbox",
+    "ebelge-finalize-mutation-lock-isnet-health-truth-pr468"
   ],
-  "note": "26.10.2026 Muhasebe e-Belge İmalat P0 güvenli release: PR #463 #464 #465 #467 canonical merge ve tüm son PR CI SUCCESS. Ödeme defter koşullu transaction; imalat requestId anahtarı ve fiş/model link atomik; e-Belge CAS ve gerçek provider salt-okunur sağlık; fiziksel stok etkisi olmayan e-Belge finans/car/KDV/POSTED tek D1 batch. Fiziksel LOT/BOYAHANE kesin kaydı güvenli tam outbox tamamlanana kadar PHYSICAL_RECEIPT_ATOMICITY_REQUIRED ile bloke. Migrations kesinlikle kapalı, önce tam D1 backup; canlı iş kaydı, ödeme, resmî İşNet gönderimi test edilmedi. 19/19 oturumlu E2E açık.",
+  "note": "26.10.2026 güvenli Worker-only release: PR #468 merged fc1a5fbb5bc05d64ff8b51baa6f89d436d498285; CI #40243561868 frontend+Worker SUCCESS. Yeni e-Belge kesin kayıt sırasında dış PATCH/tekil-toplu eşleştirme kilidi, koşullu UPDATE; İşNet sahte 200 boş yanıtı UNVERIFIED. Önceki #463/#464/#465/#467 ve Pages #40242893537 aynen korunur, bu PR frontend runtime değiştirmedi. D1 migrations kapalı; D1 backup ve API health, source SHA ancestry; gerçek mali/resmî/üretim işlemi yok. Stok/LOT outbox engeli halen açık.",
   "applyMigrations": false,
   "migrationApprovedByUser": false
 }
