@@ -2,6 +2,8 @@
 import type { Context, Hono } from "hono";
 import { registerAccountingWorkspaceCoreRoutes } from "./accounting-workspace-core";
 import { registerAccountingFinanceCoreRoutes } from "./accounting-finance-core";
+import { postAccountingPaymentAtomic } from "./accounting-payment-atomic";
+import { getAuthenticatedUser } from "./auth-cloud";
 
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -26,25 +28,10 @@ export function registerAccountingOperationRoutes(app:Hono<AppEnv>){
  app.get("/api/muhasebe/odeme-plani/hafta",async c=>{const slug=slugOf(c),range=mondayRange(Number(c.req.query("offset")||0)),r=await c.env.DB.prepare(`SELECT * FROM accounting_payment_plans WHERE main_company_slug=? AND status NOT IN ('PAID','CANCELLED') AND COALESCE(planned_date,due_date) BETWEEN ? AND ? ORDER BY COALESCE(planned_date,due_date),CASE priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 ELSE 2 END,amount DESC`).bind(slug,range.from,range.to).all<Row>();return c.json({ok:true,data:{...range,rows:r.results||[]}})});
  app.get("/api/muhasebe/odeme-plani/hafta-sonu",async c=>{const slug=slugOf(c),range=weekendRange(Number(c.req.query("offset")||0)),r=await c.env.DB.prepare(`SELECT * FROM accounting_payment_plans WHERE main_company_slug=? AND status NOT IN ('PAID','CANCELLED') AND COALESCE(planned_date,due_date) BETWEEN ? AND ? ORDER BY COALESCE(planned_date,due_date),amount DESC`).bind(slug,range.from,range.to).all<Row>();return c.json({ok:true,data:{...range,rows:r.results||[]}})});
  app.post("/api/muhasebe/odeme-plani/:id/paid",async c=>{
-   const b=await bodyOf(c),slug=slugOf(c,b),id=c.req.param("id"),ts=now();
-   const plan=await c.env.DB.prepare(`SELECT * FROM accounting_payment_plans WHERE id=? AND main_company_slug=? LIMIT 1`).bind(id,slug).first<Row>();
-   if(!plan)return c.json(err("NOT_FOUND","Ödeme planı bulunamadı."),404);
-   const planAmount=num(plan.amount),rawPaid=b.paidAmount??b.amount??planAmount,paid=Number(rawPaid);
-   if(!Number.isFinite(paid)||paid<=0||paid>planAmount||Math.abs(Math.round(paid*100)-paid*100)>0.00001)return c.json(err("PAID_AMOUNT_INVALID","Ödenen kümülatif tutar sıfırdan büyük, kuruş hassasiyetinde ve plan tutarını aşmayacak şekilde olmalıdır."),400);
-   const posted=await c.env.DB.prepare(`SELECT COALESCE(SUM(debit),0) total FROM accounting_ledger_entries WHERE main_company_slug=? AND source_payment_plan_id=? AND deleted_at IS NULL`).bind(slug,id).first<Row>();
-   const alreadyPosted=num(posted?.total),status=paid>=planAmount?"PAID":"PARTIAL";
-   // Birikimli ödeme geri alınamaz: aşağı revizyon defterdeki gerçek para çıkışını geri çevirmez.
-   if(alreadyPosted-paid>0.005)return c.json(err("PAID_AMOUNT_ROLLBACK_FORBIDDEN","Defterde kayıtlı ödemeden düşük toplam bildirilemez; ters kayıt ve onaylı iptal akışını kullanın."),409);
-   if(alreadyPosted>=paid){
-     if(num(plan.paid_amount)!==paid||text(plan.status)!==status)await c.env.DB.prepare(`UPDATE accounting_payment_plans SET paid_amount=?,status=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(paid,status,ts,id,slug).run();
-     return c.json({ok:true,data:{id,status,paidAmount:paid,idempotent:true}});
-   }
-   const delta=paid-alreadyPosted,ledgerId=`PAYPLAN:${id}:${paid.toFixed(2)}`;
-   await c.env.DB.batch([
-     c.env.DB.prepare(`UPDATE accounting_payment_plans SET paid_amount=?,status=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(paid,status,ts,id,slug),
-     c.env.DB.prepare(`INSERT OR IGNORE INTO accounting_ledger_entries(id,main_company_slug,entry_date,entry_type,record_scope,company_id,company_name,description,debit,credit,currency,payment_method,bank_account_id,source_document_id,source_payment_plan_id,file_asset_id,note,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(ledgerId,slug,text(b.paymentDate)||ts.slice(0,10),"ODEME","OFFICIAL",text(plan.counterparty_id)||null,text(plan.counterparty_name),text(b.description)||text(plan.description)||"Planlanan ödeme",delta,0,text(plan.currency)||"TRY",text(b.paymentMethod||plan.payment_method)||null,text(b.bankAccountId||plan.bank_account_id)||null,text(plan.source_document_id)||null,id,text(b.fileAssetId)||null,text(b.note)||null,text(b.createdBy)||null,ts,ts)
-   ]);
-   return c.json({ok:true,data:{id,status,paidAmount:paid,postedAmount:delta,ledgerEntryId:ledgerId,idempotent:false}});
+   const body=await bodyOf(c),slug=slugOf(c,body),user=await getAuthenticatedUser(c);
+   if(!user?.id)return c.json(err("UNAUTHORIZED","Ödeme kaydı için gerçek kullanıcı oturumu zorunludur."),401);
+   const result=await postAccountingPaymentAtomic(c.env.DB,slug,c.req.param("id"),body,String(user.id));
+   return c.json(result.body,result.status as any);
  });
  app.get("/api/muhasebe/hatirlatmalar",async c=>{const slug=slugOf(c),until=text(c.req.query("until"))||new Date(Date.now()+7*86400000).toISOString(),r=await c.env.DB.prepare(`SELECT * FROM accounting_payment_plans WHERE main_company_slug=? AND reminder_enabled=1 AND status NOT IN ('PAID','CANCELLED') AND reminder_at IS NOT NULL AND reminder_at<=? ORDER BY reminder_at`).bind(slug,until).all<Row>();return c.json({ok:true,data:r.results||[]})});
  app.get("/api/muhasebe/belge-okuma-profilleri",async c=>{const slug=slugOf(c),r=await c.env.DB.prepare(`SELECT * FROM accounting_extraction_profiles WHERE main_company_slug=? ORDER BY is_active DESC,party_tax_no,document_type`).bind(slug).all<Row>();return c.json({ok:true,data:r.results||[]})});
