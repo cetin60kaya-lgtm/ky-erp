@@ -43,7 +43,7 @@ export default function FinanceOperationsWorkspace({ activeMainCompany, refreshK
             selectedCompanyId={selectedCompanyId}
           />
         ) : null}
-        {view === "planner" ? <PaymentPlannerPanel activeMainCompany={activeMainCompany} /> : null}
+        {view === "planner" ? <PaymentPlannerPanel activeMainCompany={activeMainCompany} refreshKey={refreshKey} /> : null}
         {view === "ledger" ? (
           <>
             <FinancialAccountsPanel activeMainCompany={activeMainCompany} refreshKey={refreshKey} />
