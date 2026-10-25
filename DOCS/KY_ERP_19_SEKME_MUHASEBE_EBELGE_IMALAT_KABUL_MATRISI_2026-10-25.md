@@ -1,5 +1,43 @@
 # KY ERP — 19 sekme güncel kaynak, otomatik test ve saha kabul matrisi
 
+## 26.10.2026 — GÜNCEL KARAR: P0 19 SEKME KOD, OTOMATİK TEST VE CANLI KANITI
+
+Bu bölüm günceldir; aşağıdaki 25.10.2026 kayıtları önceki sürümün tarihsel kanıtıdır. **19/19 işletme E2E PASS DEĞİL.** Stok/LOT kesin kayıt zinciri tek atomik/outbox işlem haline gelene kadar bu belgelerde muhasebeleştirme bilinçli biçimde fail-closed kalır; günlük fiziksel stok akışı tamamen onaylanmış sayılmaz. Onaylı HTML, Shell, güvenlik, İK ve Günlük Operasyon ortak koduna dokunulmadı.
+
+**Son P0 PR / CI:**
+- [#463 Ödeme planı](https://github.com/cetin60kaya-lgtm/ky-erp/pull/463) merged `45bfc33866810f672988f8bd94d87787fe590b13`, [CI #40225228760](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40225228760) SUCCESS. İzole SQLite 20/100 eşzamanlı plan, kuruş, geri yazma, batch rollback.
+- [#464 İmalat fişi](https://github.com/cetin60kaya-lgtm/ky-erp/pull/464) merged `65e410abe1452f066fd6220591f64274237f3b73`, [CI #40225824087](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40225824087) SUCCESS. İzole SQLite 20/100 tek kayıt/link, payload çakışması ve link hata rollback.
+- [#465 e-Belge CAS ve İşNet](https://github.com/cetin60kaya-lgtm/ky-erp/pull/465) merged `0140c5f6ae204ebe23616dd1fd5057807c438098`, [CI #40226730180](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40226730180) SUCCESS. CAS 20/100, user.id/onay/sürüm, sağlayıcı salt-okunur sağlık 401/403/timeout.
+- [#467 Finansal kesin kayıt](https://github.com/cetin60kaya-lgtm/ky-erp/pull/467) merged `0b265476d905ef2f8b86c2d9bd551512393a7f32`, [CI #40242596733](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40242596733) SUCCESS. Cari+bakiye+defter+KDV+POSTED tek D1 batch, 20/100 paralel gerçek SQLite ve hata enjeksiyonu; **yalnız fiziksel stok etkisiz belge**.
+- **[Worker üretim #40242759411](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40242759411)** SUCCESS SHA `39b4558b48e22dc49a3dd8e556e0f975acf2a27b`: tam D1 backup artifact, schema salt okunur, canlı API health; **tüm migration adımları SKIPPED**.
+- **[Pages üretim #40242893537](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40242893537)** SUCCESS SHA `6c0e011e23fa2f4ec6cbadc9db6149696eb21098`: gerçek deploy ve public bundle/Günlük Operasyon chunk smoke.
+- PR #463/#464/#465/#467 merge SHA'larının Worker ve Pages sürümleriyle karşılaştırmasında **behind=0** (tümü canlı yayımlanan kaynakların atası). Eşzamanlı kayıt sonuçları **Node node:sqlite yerel D1-benzeri fixture**, üretim D1 üzerinde gerçek para/stok mutasyonu değildir.
+
+| No | Sekme | KOD | TEST | PAGES | WORKER | CANLI_OTURUMLU_E2E | AÇIK ENGEL |
+|---|---|---|---|---|---|---|---|
+| 01 | Yönetim Özeti | Dönem/KDV/kaynak korundu | Kaynak + CI | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Gerçek KPI ve firma yetkisi |
+| 02 | Firmalar & Cari | VKN/alias/DELETE korundu | Kaynak + CI | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Gerçek cari/rol/kapanış |
+| 03 | Alış & Tedarikçi | Finans atomik; fiziki LOT bekliyor | Hizmet 20/100 SQLite; XML kaynak | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Fiziki stok/LOT güvenli outbox ve gerçek irsaliye |
+| 04 | Satış & Müşteri | Satış sayfalama; finans atomik | Hizmet 20/100 SQLite; kaynak | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Çoklu irsaliye, kısmi fatura, gerçek rol |
+| 05 | Finans İşlemleri | Koşullu D1 defter-plan | 20/100 SQLite ve rollback PASS | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Gerçek ödeme/banka/çek-kasa ve aktör rolü |
+| 06 | Ekstre & Mail | Fark/mutabakat önceki kod | Kaynak + CI | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Cari karşı bakiye, mail izinli saha |
+| 07 | Mali Kontrol | Defter-KDV hizmet atomik, raporlar | Hata enjeksiyonu + kaynak | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Gerçek KDV/defter ve XLSX/PDF mutabakatı |
+| 08 | e-Belge Genel Bakış | Yerel gün + İşNet gerçek health | Health mock 401/403/timeout + kaynak | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Canlı sağlayıcı oturum sonucu ve dashboard |
+| 09 | Gelen Belgeler | Tenant, yön, 101+ sayfa | Kaynak + CI | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Gerçek XML/PDF/UUID/mime |
+| 10 | Giden Belgeler | POSTED koruması, izinler | Kaynak + CI | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Resmî İşNet gönderimi kullanıcı onayıyla |
+| 11 | Belge Havuzu | Tenant, upload ve 101+ | Kaynak + CI | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Bozuk/mükerrer XML, arşiv R2 ve firma sınırı |
+| 12 | Eşleştirmeler | Açık onay, POSTED kilidi | Kaynak + CI | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | LOT/irsaliye/kısmi eşleştirme |
+| 13 | Onay & Sorunlar | CAS+oturum+sürüm; fiziksel bloke | CAS 20/100; finans 20/100 | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Fiziksel kesin kayıt atomik outbox ve hata sonrası recovery |
+| 14 | İş Akışları | Fiziksel muhasebe fail-closed | Kaynak ve fiziksel koruma | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Stok/Boyahane/LOT/defter dağıtık outbox |
+| 15 | Arşiv & Çıktı | Orijinal dosya bağı korunuyor | Kaynak + CI | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | R2/File Hub hata+restart ve Windows çıktı |
+| 16 | Entegrasyonlar | İşNet read-only health, token gizli | 401/403/timeout fixture PASS | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Gerçek İşNet salt okunur oturum sağlığı |
+| 17 | Üretim Merkezi | Kalıcı requestId, fiş-link atomik | 20/100 SQLite + link rollback | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Gerçek makine/irsaliye ve mevcut legacy fiş kontrolü |
+| 18 | Üretim Raporları | TSV/filtre kodu korunuyor | Kaynak + CI | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Canlı üretim sayısı + Windows Excel |
+| 19 | Makine & Vardiya | Kısmi kaydetme, tenant koruma | Kaynak + CI | ✅ #40242893537 | ✅ #40242759411 | **BEKLİYOR** | Gerçek gece/gündüz/operatör/rol |
+
+**Son açık ayrım:** Ödeme ve İmalat D1 transaction/idempotency kod/testi tamam; İşNet'in gerçek salt-okunur sağlık çağrısı mevcut fakat sağlayıcı oturum kanıtı yok. Stok-LOT-Boyahane finans kesin kayıt outbox/recovery ve olası schema migration (production izni ayrı), firma/rol gerçek kullanıcı E2E, fiziksel makine/PDKS ve resmî belge gönderimi **tamamlanmadı**. Stok/LOT onayında yanlış POSTED iddiası yerine açık bloke vardır. İzole CI ve release başarıları 19/19 işlemsel kabul değildir.
+
+
 **25.10.2026 — canonical kaynak** `codex/model-uretim-kontrol-merkezi-final`. **Ortak onaylı HTML değişmedi**; canlı görsel 1366×768, 1920×1080 ve mobil yetkili browser kabulü halen bekliyor. Bu belgeye göre **19/19 gerçek kullanıcı E2E PASS değildir**. Kaynak bağlantısı testi, fiili finans/cihaz/İşNet işlemi anlamına gelmez.
 
 ## Güncel tek release zinciri
