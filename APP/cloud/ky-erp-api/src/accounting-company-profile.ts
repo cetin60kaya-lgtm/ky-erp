@@ -419,6 +419,12 @@ export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
     const rawName = text(body.rawName || body.alias);
     if (!rawName) return c.json(errorBody("ALIAS_REQUIRED", "Alias/firma eşleşme adı zorunludur."), 400);
     const normalizedName = normalize(rawName);
+    const claimed = await c.env.DB.prepare(
+      "SELECT company_id FROM company_aliases WHERE main_company_slug=? AND normalized_name=? LIMIT 1",
+    ).bind(slug, normalizedName).first<Row>();
+    if (claimed && text(claimed.company_id) !== text(company.id)) {
+      return c.json(errorBody("ALIAS_ALREADY_ASSIGNED", "Bu eşleştirme adı başka bir cari karta ait; otomatik taşıma yapılmaz."), 409);
+    }
     const id = text(body.id || crypto.randomUUID());
     const timestamp = nowIso();
     await c.env.DB.prepare(
@@ -426,12 +432,12 @@ export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
         (id, main_company_slug, company_id, raw_name, normalized_name, is_active, source, tax_no, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, 1, 'MANUAL', ?, ?, ?)
        ON CONFLICT(main_company_slug, normalized_name)
-       DO UPDATE SET company_id = excluded.company_id,
-                     raw_name = excluded.raw_name,
+       DO UPDATE SET raw_name = excluded.raw_name,
                      is_active = 1,
                      tax_no = COALESCE(excluded.tax_no, company_aliases.tax_no),
                      deleted_at = NULL,
-                     updated_at = excluded.updated_at`,
+                     updated_at = excluded.updated_at
+       WHERE company_aliases.company_id = excluded.company_id`,
     )
       .bind(id, slug, company.id, rawName, normalizedName, text(body.taxNo) || null, timestamp, timestamp)
       .run();
