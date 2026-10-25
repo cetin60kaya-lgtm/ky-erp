@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Bell, CheckCheck, ChevronDown, Command, Download, LogOut, Menu, Monitor, RefreshCw, Search, Settings2, ShieldCheck, Smartphone, Trash2, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
+import { KY_NAV_GROUPS, navigationGroupFor } from "../app/navigationGroups";
 import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
 
 import DisplaySettingsPanel from "./DisplaySettingsPanel";
@@ -63,14 +64,6 @@ const MODULE_VISUALS = {
 function moduleVisual(module) {
   return MODULE_VISUALS[module?.key] || { icon: module?.icon || "dashboard", hint: module?.label || "Modül" };
 }
-
-const KY_NAV_GROUPS = [
-  { key: "daily", title: "Günlük İşler", keys: ["gunluk-operasyon", "ik", "pdks"] },
-  { key: "production", title: "Üretim", keys: ["desen", "boyahane", "uretim"] },
-  { key: "finance", title: "Finans", keys: ["muhasebe", "e-belge"] },
-  { key: "communication", title: "İletişim", keys: ["iletisim", "asistan"] },
-  { key: "management", title: "Yönetim ve Sistem", keys: ["compliance", "depolama", "sistem-merkezi", "admin"] },
-];
 
 const TAB_PALETTES = [
   { accent: "#3158b7", soft: "#edf3ff", line: "#cbd9ff" },
@@ -400,8 +393,8 @@ export default function AppShellV3({
 
   useEffect(() => { setExpandedGroupKey(""); }, [activeTab]);
   useEffect(() => {
-    const activeGroup = KY_NAV_GROUPS.find((group) => group.keys.includes(activeModule?.key));
-    if (activeGroup) setExpandedNavigationGroup(activeGroup.key);
+    const key = navigationGroupFor(activeModule?.key);
+    if (key) setExpandedNavigationGroup(key);
   }, [activeModule?.key]);
 
   function runQuickAction(action) {
