@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 25.10.2026 — PR #450 Muhasebe mutabakat / gider + İmalat ayarlar / rapor canlı
+- PR [#450](https://github.com/cetin60kaya-lgtm/ky-erp/pull/450) merged `84e93e53f94550e00a189838b1db4abab3c6c64e`, CI #40214924202 frontend+Worker **SUCCESS**.
+- Mutabakat yanlış bakiye ile `MATCHED` olamaz (frontend + Worker API); kayıt öncesi fark/dönem/kart gösterilir. Gider kaydı/şablon ayrı, POST öncesi tutar-KDV-özeti/onay/tek gönderim. Makine ayarları kısmi kaydı açık raporlar ve geri al düğmesi sunar. İmalat filtreli raporu gerçek TSV ve güvenli formül escape ile dışa verir.
+- Worker [#40215087584](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215087584) SUCCESS `b4ed1440ef8b86a94cb4d9f1813d86adac2ff360`, tam D1 yedeği+artifact, schema/API health; migrations SKIPPED. Pages [#40215265216](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40215265216) SUCCESS `deee4744bbbaa90620f645441864927f597ce125`, canlı bundle smoke. İkisi de #450 merge atası behind=0.
+- Kalan kritik: [19 sekme gerçek kabul matrisi](KY_ERP_19_SEKME_MUHASEBE_EBELGE_IMALAT_KABUL_MATRISI_2026-10-25.md). Yetkili girişle gerçek finans/İşNet, XML-PDF duplicate ve LOT, Excel'de gerçek TSV açılma, üretim fişi, mobil/PC gerçek uçtan uca kontrolü henüz yapılmadı; **tam kullanım kabulü değil**. Canlı D1 test kaydı yapılmadı.
+
+
 ## 25.10.2026 — Son kesin release ve 19 sekme kabul sınırı
 - PR #449 muhasebeleştirme öncesi ayrıntılı açık onay kartı; CI #40207296821, Pages yayın #40207488400 **SUCCESS**, SHA `9bf4e6cdff36634b17b439ef59a6323c4ce27f57`; #449/#447/#443 ancestry behind=0. Pages deploy, canlı public bundle / Günlük Operasyon chunk smoke PASS. Worker #40206650866 SUCCESS, D1 migrationlar SKIPPED.
 - 19/19 sekmenin gerçek oturumlu CRUD/muhasebe mutabakat/İşNet/gerçek üretim model kabulü yapılmadı; hepsi **KISMİ**. [19 sekme kabul matrisi](KY_ERP_19_SEKME_MUHASEBE_EBELGE_IMALAT_KABUL_MATRISI_2026-10-25.md). D1 business kayıtlarına test mutasyonu yapılmadı.
