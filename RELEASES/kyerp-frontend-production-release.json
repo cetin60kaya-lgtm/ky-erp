@@ -3,7 +3,7 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-10-25",
+  "releaseDate": "2026-10-26",
   "scope": [
     "gunluk-bes-sekme-kritik-tam-denetim-ui",
     "gunluk-donem-kilit-d1-gercek-acma-kapatma",
@@ -51,9 +51,14 @@
     "ky-company-owner-independent-pwa",
     "ky-security-host-allowlisted-routing",
     "ky-security-local-unlock-fail-closed",
-    "ky-security-frontend-security-host-live"
+    "ky-security-frontend-security-host-live",
+    "atomic-payment-confirmation-PR463",
+    "production-requestid-idempotency-PR464",
+    "ebelge-finalize-cas-isnet-health-PR465",
+    "atomic-accounting-document-posting-PR467",
+    "physical-stock-financial-posting-safety-hold"
   ],
-  "note": "KY Güvenlik Sistem Sahibi / KY Firma ayrı PWA release: PR #458 merged 302cad6cf7c3fce19d0fdf489d451445ff003451, CI #40223334141 SUCCESS; Security Host PR #460 merged a326e84f2ec0b6aa4b725ef183738e80ef0aa6d5, CI #40223947320 SUCCESS. Eski v4.0 güvenilir cihaz korunur, owner SYSTEM ve COMPANY kapsamları sunucudan doğrulanır. Canlı Pages, Security Worker ve Android/PWA kabul sonucu ayrıca kanıtlanır. Önceki Muhasebe/İK/İmalat release geçmişi korunur.",
-  "sourceCommit": "a326e84f2ec0b6aa4b725ef183738e80ef0aa6d5",
-  "requestedAt": "2026-10-25"
+  "note": "26.10.2026: Worker release #40242759411 SUCCESS with full D1 backup, schema, deploy and health; migration skipped. PR #463, #464, #465, #467 CI SUCCESS + merged, onaylı HTML ve KY Güvenlik/İK Shell korunmuştur. e-Belge hizmet faturası atomik, fiziksel stock LOT geçişi fail-closed. Bu Pages release son kaynakla UI + güvenli İşNet durum paneli + onay bağlamını yayımlar. Yetkili oturumlu 19 sekme gerçek E2E yok.",
+  "sourceCommit": "39b4558b48e22dc49a3dd8e556e0f975acf2a27b",
+  "requestedAt": "2026-10-26"
 }
