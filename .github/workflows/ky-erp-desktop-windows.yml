@@ -1,0 +1,62 @@
+name: KY ERP Desktop Windows EXE
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install frontend dependencies
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+      - name: Frontend lint
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run lint
+      - name: Frontend test
+        working-directory: APP/app/ky-erp-frontend
+        shell: pwsh
+        run: |
+          $p = Get-Content package.json -Raw | ConvertFrom-Json
+          if ($p.scripts.PSObject.Properties.Name -contains 'test') {
+            npm test
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Frontend build
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run build
+      - name: Copy frontend into desktop shell
+        shell: pwsh
+        run: |
+          $dest = 'APP/desktop/ky-erp-desktop/web'
+          New-Item -ItemType Directory -Force $dest | Out-Null
+          Copy-Item 'APP/app/ky-erp-frontend/dist/*' $dest -Recurse -Force
+          if (!(Test-Path "$dest/index.html")) { throw 'Frontend index.html missing' }
+      - name: Install desktop dependencies
+        working-directory: APP/desktop/ky-erp-desktop
+        run: npm install --no-audit --no-fund
+      - name: Build Windows installer
+        working-directory: APP/desktop/ky-erp-desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist
+      - name: Verify setup and checksum
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem APP/desktop/ky-erp-desktop/dist -Filter '*Setup.exe' -File | Select-Object -First 1
+          if (!$exe) { throw 'Windows EXE not built' }
+          Get-FileHash $exe.FullName -Algorithm SHA256 | Format-Table
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KY-ERP-Desktop-Windows-Setup
+          path: APP/desktop/ky-erp-desktop/dist/*Setup.exe
+          if-no-files-found: error
+          retention-days: 14
