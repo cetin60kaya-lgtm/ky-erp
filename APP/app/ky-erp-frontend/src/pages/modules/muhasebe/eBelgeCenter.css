@@ -36,3 +36,18 @@
 .eb-page .eb-pool-pagination button{min-height:44px;min-width:88px;padding:8px 12px;border:1px solid #d1d9e5;border-radius:8px;background:#fff;color:#29466d;font-weight:750}
 .eb-page .eb-pool-pagination button:focus-visible{outline:2px solid #1b8477;outline-offset:2px}
 @media(max-width:520px){.eb-pool-pagination>div{width:100%}.eb-page .eb-pool-pagination button{flex:1}}
+
+
+.eb-final-confirm-modal{width:min(640px,96vw)}
+.eb-final-confirm-body{padding:17px;display:grid;gap:12px;overflow:auto;min-height:0;font-size:13px;color:#4a6078}
+.eb-final-confirm-body>p{margin:0;line-height:1.55}
+.eb-final-confirm-body dl{display:grid;gap:8px;margin:0;padding:13px;border:1px solid #e2e8ef;border-radius:11px;background:#f7f9fc}
+.eb-final-confirm-body dl>div{display:grid;grid-template-columns:minmax(100px,1fr) minmax(0,2fr);gap:12px}
+.eb-final-confirm-body dt{font-size:11px;font-weight:700;color:#728196}
+.eb-final-confirm-body dd{margin:0;font-size:12px;font-weight:750;color:#243852;overflow-wrap:anywhere}
+.eb-final-acknowledge{display:flex;align-items:flex-start;gap:10px;cursor:pointer;color:#263d56;font-weight:650}
+.eb-final-acknowledge input{width:21px;height:21px;flex:0 0 21px;accent-color:#1b8477;cursor:pointer}
+.eb-final-error{padding:9px 12px;border-radius:8px;background:#fff2f1;color:#a73429}
+.eb-page .eb-final-confirm-modal footer button{min-height:44px}
+.eb-final-confirm-modal footer button:focus-visible{outline:2px solid #1b8477;outline-offset:2px}
+@media(max-width:520px){.eb-final-confirm-modal{max-height:92dvh}.eb-final-confirm-body dl>div{grid-template-columns:1fr;gap:2px}.eb-final-confirm-modal footer{flex-direction:column-reverse}.eb-final-confirm-modal footer button{width:100%;font-size:14px}}
