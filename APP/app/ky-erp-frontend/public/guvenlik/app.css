@@ -82,3 +82,17 @@ button{cursor:pointer}
 .super-admin-security .security-tabs button{min-height:44px}
 @media(min-width:610px){.owner-summary-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){.owner-summary-grid>div{animation:none;transition:none}}
+
+/* v4.1.1: kalici, 44px dokunmatik hedefli tek guvenlik menusu */
+.security-tabs{overflow:visible;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:stretch;gap:5px}
+.security-tabs>button{flex:none;min-width:0;min-height:46px;white-space:normal;line-height:1.25;padding:5px 3px}
+.security-more-tabs{position:relative;min-width:0}
+.security-more-tabs>summary{display:grid;place-items:center;min-height:46px;border-radius:10px;color:#385d84;cursor:pointer;font-size:11px;font-weight:900;list-style:none;user-select:none}
+.security-more-tabs>summary::-webkit-details-marker{display:none}
+.security-more-tabs>summary::after{content:"⌄";margin-left:3px;font-size:13px}
+.security-more-tabs[open]>summary,.security-more-tabs>summary:focus-visible{background:#fff;color:#1d4f84;outline:2px solid #b6d4f1;outline-offset:-2px}
+.security-more-actions{position:absolute;z-index:12;top:calc(100% + 8px);right:0;width:min(290px,90vw);padding:9px;border:1px solid #d6e4f0;background:#fff;border-radius:15px;box-shadow:0 14px 35px #142b4533;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.security-tabs .security-more-actions button{min-width:0;min-height:46px;white-space:normal;line-height:1.25;padding:7px 4px;border-radius:10px;background:#f2f6fb;color:#325574}
+.security-tabs .security-more-actions button.active{background:#dcecff;color:#143b65}
+.security-tabs button:focus-visible{outline:2px solid #225e9b;outline-offset:2px}
+@media(max-width:390px){.security-tabs>button,.security-more-tabs>summary{font-size:10px}}
