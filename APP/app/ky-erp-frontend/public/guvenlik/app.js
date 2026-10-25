@@ -3,7 +3,7 @@ const DB_NAME="kyerp-security-fresh-v3";
 const STORE="device";
 const KEY="active";
 const CLIENT_VERSION="security-v4.0";
-const APP_DISPLAY_VERSION="v4.1.0"; // Cihaz imza protokolü ve DB kimliği geriye uyumlu kalır.
+const APP_DISPLAY_VERSION="v4.1.1"; // Cihaz imza protokolü ve DB kimliği geriye uyumlu kalır.
 const PENDING_ENROLL_KEY="kyerp-security-fresh-enrollment-v3";
 const CANONICAL_DEVICE_REVISION="fresh-v3-20260922";
 
@@ -218,6 +218,8 @@ function showTab(name,options={}){
   if(options?.user===true)manualTabSelection=true;
   document.querySelectorAll(".security-tabs button").forEach((button)=>button.classList.toggle("active",button.dataset.tab===name));
   ["activity","approvals","sessions","computers","logs","code","notes","chat","device"].forEach((tab)=>document.querySelector("#"+tab+"Tab")?.classList.toggle("hidden",tab!==name));
+  const extra=document.querySelector("#securityMoreTabs");
+  if(extra){const active=extra.querySelector("button.active");const summary=extra.querySelector("summary");if(summary)summary.textContent=active?active.textContent.trim().replace(/\\s+\\d+$/,""):"Diğer";extra.open=false;}
   window.dispatchEvent(new CustomEvent("kysecurity:tab",{detail:{tab:name}}));
 }
 async function connectDevice(){
