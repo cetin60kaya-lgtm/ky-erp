@@ -190,6 +190,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
+  const [page, setPage] = useState(1);
   const [designOpen, setDesignOpen] = useState(false);
   const [smartOpen, setSmartOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
@@ -209,14 +210,14 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     try {
       const tenant = activeMainCompany?.slug || activeMainCompany?.id;
       const loadResult = await loadModuleData({
-        scope: `imalat:${tenant}:merkez:${search}:${status}`,
+        scope: `imalat:${tenant}:merkez:${search}:${status}:${page}`,
         sources: {
           center: {
             critical: true,
             load: () => getProductionCenter(activeMainCompany, {
               search,
               status,
-              page: 1,
+              page,
               pageSize: PAGE_SIZE,
               _ts: Date.now(),
             }),
@@ -246,7 +247,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     } finally {
       setLoading(false);
     }
-  }, [activeMainCompany, search, status]);
+  }, [activeMainCompany, search, status, page]);
 
   useEffect(() => {
     const timer = window.setTimeout(load, 150);
@@ -424,8 +425,8 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       </section>
 
       <section className="pc2-toolbar">
-        <label className="pc2-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Model, firma, sipariş veya irsaliye ara" /></label>
-        <select value={status} onChange={(event) => setStatus(event.target.value)}>
+        <label className="pc2-search"><Search size={16} /><input value={search} onChange={(event) => { setPage(1); setSearch(event.target.value); }} placeholder="Model, firma, sipariş veya irsaliye ara" /></label>
+        <select value={status} onChange={(event) => { setPage(1); setStatus(event.target.value); }}>
           <option value="ALL">Tüm durumlar</option>
           <option value="NEW_MODEL">Yeni model</option>
           <option value="DISPATCH_WAITING">İrsaliye bekliyor</option>
@@ -437,6 +438,12 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
         <span>{center.pagination?.total || center.rows?.length || 0} kayıt</span>
         <button type="button" onClick={load} disabled={loading}><RefreshCcw size={15} /> Yenile</button>
       </section>
+
+      <nav aria-label="İmalat kayıt sayfaları" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, padding: "10px 0" }}>
+        <button type="button" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>← Önceki</button>
+        <span>Sayfa {page} · {center.pagination?.total ?? center.rows?.length ?? 0} toplam kayıt</span>
+        <button type="button" disabled={loading || (center.rows || []).length < PAGE_SIZE || (Number(center.pagination?.total || 0) > 0 && page * PAGE_SIZE >= Number(center.pagination.total))} onClick={() => setPage((value) => value + 1)}>Sonraki →</button>
+      </nav>
 
       <section className="pc2-table-card">
         <div className="pc2-table-wrap">
