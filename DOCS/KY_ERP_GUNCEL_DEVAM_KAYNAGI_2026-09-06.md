@@ -1,5 +1,11 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 25.10.2026 — e-Belge/İmalat Pages canlı ve finans açık ön onay PR #449
+- Pages release [#40206928454](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40206928454) **SUCCESS**, SHA `19fe5de0ee8639853006e7c7af157cd084f3f46f`; e-Belge #447 ve İmalat #443 bunun atası; frontend deploy/bundle smoke PASS. 100+ belge ve model listesi gerçek kullanıcı E2E henüz PASS değil.
+- PR #449 e-Belge belge detayı **Son Onay / Muhasebeleştir** tek tık finans yazım riski kaldırıldı: cari/kalem/LOT/KDV özet modal, açık checkbox teyidi, çift-submit guard. PR merged `719fd60fa97309230944833f95a7398b06630d88`; CI #40207296821 **SUCCESS**. Yeni Pages release + canlı smoke ve 19 sekme oturumlu saha kabulü açık.
+- Gerçek D1 kayıtları, İşNet resmî belge ve fiilî ödeme testinde mutasyon uygulanmadı; [kabul matrisi](KY_ERP_19_SEKME_MUHASEBE_EBELGE_IMALAT_KABUL_MATRISI_2026-10-25.md).
+
+
 ## 25.10.2026 — En güncel 19 sekme Muhasebe / e-Belge / İmalat devam durumu
 - PR #446: Muhasebe alış irsaliye+satış faturası 50'lik sunucu sayfalaması, search ve yarış durumu düzeltildi; CI #40205322671 PASS; Pages release #40205714344 SUCCESS, SHA `ea8f1bf327d38a290cca54c814214da052e80f3d`.
 - PR #447: e-Belge havuz 100+ page ve gelen/giden tenant korumalı yön filtresi; merged `e15d1bcc0f1c30149720a72dc26853e0f27761b5`, CI #40206047817 PASS.
