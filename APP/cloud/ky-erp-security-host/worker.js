@@ -2,6 +2,7 @@ const APP_PREFIX="/guvenlik";
 const APP_URL="/guvenlik/";
 const ADDITIONAL_APPS=["/ky-firma"];
 const SHARED_ASSET_PREFIX="/ky-app-shell";
+const PRO_PREFIX="/guvenlik/pro";
 const LEGACY_PREFIXES=["/security","/ky-guvenlik","/ky-guvenlik-recover","/ky-sistem","/owner-security"];
 const LEGACY_SW_PATHS=["/sw.js","/security/sw.js","/ky-guvenlik/sw.js","/ky-guvenlik-recover/sw.js","/ky-sistem/sw.js","/owner-security/sw.js"];
 const RETIRE_SW=`self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("activate",e=>e.waitUntil((async()=>{try{for(const k of await caches.keys())await caches.delete(k)}catch{}try{for(const n of await self.registration.getNotifications())n.close()}catch{}try{await self.registration.unregister()}catch{}try{for(const c of await self.clients.matchAll({type:"window",includeUncontrolled:true}))await c.navigate("/guvenlik/")}catch{}})()));`;
@@ -24,6 +25,11 @@ function canonicalRedirect(url){
   return new Response(null,{status:308,headers:headers(new Headers({Location:target.toString()}))});
 }
 function assetPath(pathname){
+  // Serve the real, built canonical ERP inside the unchanged /guvenlik/ PWA scope.
+  // Hashed Vite files are served literally; deep ERP module routes get one SPA document.
+  if(pathname===PRO_PREFIX||pathname===PRO_PREFIX+"/"||
+     (pathname.startsWith(PRO_PREFIX+"/")&&!pathname.startsWith(PRO_PREFIX+"/assets/")&&pathname!==PRO_PREFIX+"/index.html"))
+    return PRO_PREFIX+"/index.html";
   if(pathname===APP_PREFIX||pathname===APP_URL)return "/guvenlik/index.html";
   for(const p of ADDITIONAL_APPS)if(pathname===p||pathname===`${p}/`)return `${p}/index.html`;
   return pathname;
@@ -40,6 +46,7 @@ async function serveAsset(request,url,env){
   const assetRequest=new Request(assetUrl.toString(),{method,headers:requestHeaders,redirect:"manual"});
   const response=await env.ASSETS.fetch(assetRequest);
   const out=headers(response.headers);
+  if(url.pathname.startsWith(PRO_PREFIX+"/assets/")&&/\\.[a-f0-9]{8,}\\./i.test(url.pathname))out.set("Cache-Control","public,max-age=31536000,immutable");
   for(const p of [APP_PREFIX,...ADDITIONAL_APPS])if(url.pathname===`${p}/sw.js`)out.set("Service-Worker-Allowed",`${p}/`);
   if(method==="HEAD")return new Response(null,{status:response.status,statusText:response.statusText,headers:out});
   return new Response(response.body,{status:response.status,statusText:response.statusText,headers:out});
