@@ -62,3 +62,18 @@
 .eb-page .eb-bulk-confirm footer button{min-height:44px}
 .eb-bulk-confirm button:focus-visible{outline:2px solid #197d80;outline-offset:2px}
 @media(max-width:520px){.eb-bulk-confirm{max-height:92dvh}.eb-bulk-confirm footer{flex-direction:column-reverse}.eb-bulk-confirm footer button{width:100%}}
+
+
+/* KY ERP tek tasarım: e-Belge firma bağlamı ve erişilebilir özet geçişleri. */
+.eb-page .eb-company-context{display:flex;flex-wrap:wrap;align-items:center;gap:7px;min-width:0;color:#41536d;font-size:12px;line-height:1.4}
+.eb-page .eb-company-context>span{flex:0 0 auto;color:#6a7c93;font-weight:650}
+.eb-page .eb-company-context>strong{min-width:0;max-width:100%;font-weight:800;color:#1e3554;overflow-wrap:anywhere}
+.eb-page .eb-dashboard-stats .eb-dashboard-stat-action{display:block;min-width:0;padding:0;border:0;border-radius:14px;background:transparent;text-align:left;cursor:pointer}
+.eb-page .eb-dashboard-stats .eb-dashboard-stat-action .eb-stat{height:100%;border-color:#d1dfef;background:#fff;transition:border-color .15s,box-shadow .15s}
+.eb-page .eb-dashboard-stats .eb-dashboard-stat-action:hover .eb-stat{border-color:#7fa7da;box-shadow:0 2px 12px #2859a41a}
+.eb-page .eb-dashboard-stats .eb-dashboard-stat-action:focus-visible{outline:2px solid #2859a4;outline-offset:3px}
+.eb-page .eb-dashboard-stats .eb-dashboard-stat-action small{color:#2859a4}
+.eb-page .eb-hero{border-color:#dbe5f0;border-radius:14px}
+.eb-page .eb-hero h2{color:#203a59;font-size:clamp(20px,2vw,24px)}
+.eb-page .eb-primary{background:#203d66;border-color:#203d66}
+@media(max-width:720px){.eb-page .eb-company-context{padding:0 2px}.eb-page .eb-dashboard-stats .eb-dashboard-stat-action{width:100%}}

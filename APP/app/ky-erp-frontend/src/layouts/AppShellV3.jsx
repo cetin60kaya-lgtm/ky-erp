@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Bell, CheckCheck, ChevronDown, Command, Download, LogOut, Menu, Monitor, RefreshCw, Search, Settings2, ShieldCheck, Smartphone, Trash2, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
 import { KY_NAV_GROUPS, navigationGroupFor } from "../app/navigationGroups";
+import { partitionWorkspaceTabs } from "../app/workspaceTabs";
 import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
 
 import DisplaySettingsPanel from "./DisplaySettingsPanel";
@@ -210,6 +211,7 @@ export default function AppShellV3({
     generatedAt: "",
   });
   const activeTabLabel = getTabs(activeModule, user).find(([key]) => key === activeTab)?.[1] || "";
+  const { visible: visibleWorkspaceTabs, overflow: overflowWorkspaceTabs } = partitionWorkspaceTabs(tabs, activeTabId);
   const activeCompanyName = companies.find((item) => item.slug === activeCompanySlug)?.name || "Firma seçilmedi";
   const profileImageUrl = String(
     user?.avatarUrl || user?.profileImageUrl || user?.photoUrl || user?.pictureUrl || user?.picture || "",
@@ -812,7 +814,7 @@ export default function AppShellV3({
 
         <div className="shell-v3-tabs-bar">
           <div className="shell-v3-tabs">
-            {tabs.map((tab) => (
+            {visibleWorkspaceTabs.map((tab) => (
               <button type="button" key={tab.id} data-module={tab.moduleKey} style={tabStyle(tab.tabKey)} className={activeTabId === tab.id ? "active" : ""} onClick={() => onActivateWorkspaceTab(tab)}>
                 <ErpIcon name={tabVisualIcon(tab.tabKey, moduleVisual(modules.find((item) => item.key === tab.moduleKey)).icon)} size={14} />
                 <span>{tab.label}</span>
@@ -824,6 +826,24 @@ export default function AppShellV3({
               </button>
             ))}
           </div>
+          {overflowWorkspaceTabs.length > 0 ? (
+            <details className="shell-v3-tabs-overflow">
+              <summary title={`${overflowWorkspaceTabs.length} diğer açık sekme`} aria-label={`Diğer açık sekmeler: ${overflowWorkspaceTabs.length}`}>
+                Diğer sekmeler <span>{overflowWorkspaceTabs.length}</span><ChevronDown size={14} />
+              </summary>
+              <div className="shell-v3-tabs-overflow-list" role="group" aria-label="Gizlenmiş açık sekmeler">
+                {overflowWorkspaceTabs.map((tab) => (
+                  <div className="shell-v3-tabs-overflow-item" key={tab.id}>
+                    <button type="button" className={activeTabId === tab.id ? "active" : ""} onClick={(event) => { onActivateWorkspaceTab(tab); event.currentTarget.closest("details").open = false; }}>
+                      <ErpIcon name={tabVisualIcon(tab.tabKey, moduleVisual(modules.find((item) => item.key === tab.moduleKey)).icon)} size={14} />
+                      <span>{tab.label}</span>
+                    </button>
+                    <button type="button" className="shell-v3-tabs-overflow-close" title="Sekmeyi kapat" aria-label={`${tab.label} sekmesini kapat`} onClick={() => onCloseWorkspaceTab(tab.id)}><X size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
           <button type="button" className="shell-v3-close-all" onClick={onCloseAllWorkspaceTabs} disabled={tabs.length <= 1} title="Diğer açık sekmelerin tamamını kapat">
             <X size={14} /><span>Tümünü Kapat</span>
           </button>

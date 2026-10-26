@@ -554,7 +554,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const pageCount = Math.max(1, Math.ceil(Number(pool.total || 0) / Math.max(1, Number(pool.pageSize || 50))));
 
   return <section className="eb-page">
-    <div className="eb-company-context"><span>Belge Sahibi</span><strong>{companyName}</strong></div>
+    <div className="eb-company-context" aria-label={`Belge sahibi: ${companyName}`}><span>Belge sahibi</span><strong>{companyName}</strong></div>
 
     <div className="eb-hero">
       <div>
@@ -583,8 +583,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         <StatCard label="Bugün Toplam" value={summary.todayTotal} hint="Bugün sisteme alınan" />
         <StatCard label="Bugün Gelen" value={summary.todayIncoming} hint="Alıcı olduğumuz belgeler" />
         <StatCard label="Bugün Giden" value={summary.todayOutgoing} hint="Düzenlediğimiz belgeler" />
-        <StatCard label="Kontrol Bekleyen" value={summary.attention} hint="Gerçek uyarı / hata" />
-        <StatCard label="Eşleşme Bekleyen" value={summary.matchingWait} hint="Fatura – irsaliye" />
+        <button type="button" className="eb-dashboard-stat-action" onClick={() => openEBelgeTab("onay-sorunlar")} title="Kontrol bekleyen belgeleri aç"><StatCard label="Kontrol Bekleyen" value={summary.attention} hint="Listeyi aç · uyarı / hata" /></button>
+        <button type="button" className="eb-dashboard-stat-action" onClick={() => openEBelgeTab("eslestirmeler")} title="Eşleşme bekleyen belgeleri aç"><StatCard label="Eşleşme Bekleyen" value={summary.matchingWait} hint="Listeyi aç · fatura – irsaliye" /></button>
       </div>
       <section className="eb-dashboard-periods">
         <article className="eb-period-card current"><header><div><span>DÖNEM ÖZETİ</span><strong>Bu Ay</strong></div><b>{Number(summary.monthTotal || 0).toLocaleString("tr-TR")} belge</b></header><div className="eb-period-flow"><div><span>Gelen</span><strong>{Number(summary.monthIncoming || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthIncomingAmount)}</small></div><div><span>Giden</span><strong>{Number(summary.monthOutgoing || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthOutgoingAmount)}</small></div></div><footer>{dateText(dashboard.monthStart || monthStart())} – Bugün</footer></article>

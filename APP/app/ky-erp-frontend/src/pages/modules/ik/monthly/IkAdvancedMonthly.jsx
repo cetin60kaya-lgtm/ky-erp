@@ -2678,7 +2678,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     return (
       <section>
         <div className="page-head">
-          <div><h1>İK İşlem Merkezi</h1><p>Personel özlük, ücret, bordro, ödeme ve SGK/evrak işlemlerini tek merkezden yönetin. Giriş/çıkış, puantaj, vardiya, terminal ve izin hareketleri PDKS bölümündedir. Yıllık izin hakediş ve resmi izin sicili İK bölümünde yönetilir.</p></div>
+          <div><h2>Dönem Özeti</h2><p>Personel özlük, ücret, bordro, ödeme ve SGK/evrak işlemlerini tek merkezden yönetin. Giriş/çıkış, puantaj, vardiya, terminal ve izin hareketleri PDKS bölümündedir. Yıllık izin hakediş ve resmi izin sicili İK bölümünde yönetilir.</p></div>
           <div className="group"><span className={`badge ${periodPrepared ? "green" : "orange"}`}>{MONTHS[month - 1]} {year} · {payrollReadyText}</span><span className={`badge ${smartIssues.length ? "orange" : "green"}`}>{smartIssues.length ? `${smartIssues.length} kontrol` : "Kontroller temiz"}</span></div>
         </div>
         {filters({ third: "Personel / uyarı ara", fourth: "Durum", fifth: "SGK" })}
@@ -2700,16 +2700,16 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           {summaryBox("Eksik evrak", summary.docsMissing, summary.docsMissing ? "orange" : "green")}
         </div>
 
-        <div className="card">
-          <div className="ch"><div><b>Hızlı Finans İşlemleri</b><span>PDKS işlemi içermez; yalnız İK finans ve bordro aksiyonları. İzin, rapor ve günlük devam hareketleri PDKS bölümünden yönetilir.</span></div></div>
+        <details className="card ik-pro-quick-actions">
+          <summary><strong>Hızlı Finans İşlemleri</strong><span>PDKS işlemi içermez; yalnız İK finans ve bordro aksiyonları. İzin, rapor ve günlük devam hareketleri PDKS bölümünden yönetilir. · aç / kapat</span></summary>
           <div className="workbar"><div className="group">
             <button className="btn" onClick={() => openFinance("Mesai")}>Mesai Ekle</button>
-            <button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button>
-            <button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button>
-            <button className="btn green" onClick={() => go("bordro")}>Son Bordro Kontrolü</button>
+            <button className="btn" onClick={() => openFinance("Avans")}>Avans Ekle</button>
+            <button className="btn" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button>
+            <button className="btn primary" onClick={() => go("bordro")}>Son Bordro Kontrolü</button>
             <button className="btn" disabled={!periodPrepared} onClick={() => setModal("fis")}>Tek Kişi Fişi</button>
           </div></div>
-        </div>
+        </details>
 
         <div className="card">
           <div className="ch"><div><b>Akıllı İK Kontrol Merkezi</b><span>Bordro, ödeme ve evrak tarafında dikkat isteyen maddeler.</span></div></div>

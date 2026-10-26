@@ -1,38 +1,38 @@
 /* KY ERP birleşik arayüz katmanı */
-.shell-v3{--shell-bg:#f2f5f9;--shell-primary:#2563eb;--module-accent:#2563eb;--module-soft:#eef4ff;--module-line:#cfe0ff;background:#f2f5f9}
+.shell-v3{--shell-bg:#f2f5f9;--shell-primary:#2859a4;--module-accent:#2859a4;--module-soft:#edf3fc;--module-line:#cbdcf1;background:#f2f5f9}
 @media(min-width:1025px){.shell-v3{grid-template-columns:252px minmax(0,1fr)}}
 .shell-v3-sidebar{background:#17283f!important;border-right:1px solid #112137!important;color:#e0eafb!important}
 .shell-v3-sidebar-brand{background:#17283f!important;border-bottom:1px solid #33445d!important}
 .shell-v3-brand-button{color:white!important}
-.shell-v3-brand-button>b{background:#2563eb!important;color:white!important}
+.shell-v3-brand-button>b{background:#2859a4!important;color:white!important}
 .shell-v3-brand-button strong{color:#fff!important;font-size:15px!important}
 .shell-v3-brand-button small{color:#a9bbd3!important;font-size:10px!important}
 .shell-v3-sidebar-nav{padding:13px 10px 24px!important}
 .ky-pro-home-link,.ky-pro-nav-group-trigger{width:100%;display:flex;align-items:center;border:0;text-align:left;cursor:pointer;font:inherit}
 .ky-pro-home-link{gap:12px;min-height:44px;margin-bottom:12px;padding:10px 13px;border-radius:11px;background:transparent;color:#d8e6f8;font-size:13px;font-weight:750}
-.ky-pro-home-link.active,.ky-pro-home-link:hover{background:#2563eb;color:#fff}
+.ky-pro-home-link.active,.ky-pro-home-link:hover{background:#2859a4;color:#fff}
 .ky-pro-nav-group{margin-bottom:7px}
-.ky-pro-nav-group-trigger{justify-content:space-between;min-height:36px;border-radius:8px;padding:8px 10px;background:transparent;color:#a9bbd3;font-size:11px;font-weight:800}
+.ky-pro-nav-group-trigger{justify-content:space-between;min-height:36px;border-radius:8px;padding:8px 10px;background:transparent;color:#b9c9dc;font-size:12px;font-weight:750}
 .ky-pro-nav-group-trigger.open,.ky-pro-nav-group-trigger:hover{background:#263951;color:#fff}
 .ky-pro-nav-group-trigger.open svg{transform:rotate(180deg)}
 .ky-pro-nav-group-list{display:grid;gap:2px;padding-bottom:8px}
 .shell-v3-module{background:transparent!important;border:0!important;margin:1px 0!important}
 .shell-v3-module-button{min-height:42px!important;border:0!important;border-radius:10px!important;background:transparent!important;color:#d1e0f1!important}
 .shell-v3-module-button:hover{background:#273d59!important;color:#fff!important}
-.shell-v3-module.active>.shell-v3-module-button{background:#245dc0!important;color:#fff!important}
+.shell-v3-module.active>.shell-v3-module-button{background:#2859a4!important;color:#fff!important}
 .shell-v3-module-copy>span{color:inherit!important;font-size:12px!important}
 .shell-v3-module-icon{background:#30435e!important;color:#e6f1ff!important;border-radius:8px!important}
-.shell-v3-module.active .shell-v3-module-icon{background:#3d74d8!important}
+.shell-v3-module.active .shell-v3-module-icon{background:#3e6eb1!important}
 .shell-v3-submenu{background:transparent!important;border-left:1px solid #3d536e!important;margin-left:15px!important}
 .shell-v3-submenu button{color:#d0e1f5!important;background:transparent!important;font-size:12px!important}
-.shell-v3-submenu button:hover,.shell-v3-submenu button.active{background:#304b76!important;color:#fff!important}
+.shell-v3-submenu button:hover,.shell-v3-submenu button.active{background:#304b76!important;color:#fff!important;box-shadow:inset 2px 0 0 #8ab4f5!important}
 .shell-v3-main{background:#f2f5f9!important}
 .shell-v3-topbar,.shell-v3-tabs-bar,.shell-v3-crumb,.shell-v3-status{background:#fff!important;border-color:#e0e7f0!important}
 .shell-v3-search input{background:#f5f7fb!important;font-size:13px!important}
 .shell-v3-quick-button{background:#eef4ff!important;color:#2458be!important}
 .shell-v3-tabs>button{font-size:12px!important}
-.shell-v3-tabs>button.active{background:#eef4ff!important;color:#2458be!important;border-color:#cfdefa!important}
-.shell-v3-workspace{background:linear-gradient(180deg,#edf3fb,#f2f5f9 300px)!important;padding:22px clamp(14px,2vw,30px) 40px!important}
+.shell-v3-tabs>button.active{background:#edf3fc!important;color:#2859a4!important;border-color:#cbdcf1!important}
+.shell-v3-workspace{background:linear-gradient(180deg,#edf3fb,#f2f5f9 300px)!important;padding:16px clamp(12px,1.4vw,24px) 40px!important;min-width:0!important}
 .shell-v3-status .ok{color:#4d7b65!important}
 @media(max-width:1024px){.shell-v3-workspace{padding:12px 10px 26px!important}}
 @media(max-width:700px){.shell-v3-workspace{padding:9px 8px 25px!important}}
@@ -45,8 +45,26 @@
   align-items:center;
 }
 .shell-v3[data-layout-mode="pc"] .shell-v3-search{min-width:100px;flex:1 1 auto}
-.shell-v3-tabs-bar{min-width:0;overflow:hidden}
-.shell-v3-tabs{flex:1 1 auto;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden}
+.shell-v3-tabs-bar{min-width:0;overflow:visible;position:relative;z-index:20}
+.shell-v3-tabs{flex:1 1 auto;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
 .shell-v3-tabs > button{flex:0 0 auto;max-width:220px;white-space:nowrap}
 .shell-v3-tabs > button > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .shell-v3-close-all{flex:0 0 auto}
+
+/* Tek kanonik açık-sekme yöneticisi: altı görünür sekme + erişilebilir açılır liste. */
+.shell-v3-tabs-overflow{position:relative;flex:0 0 auto;align-self:stretch;display:flex;align-items:center;margin:0 5px}
+.shell-v3-tabs-overflow>summary{display:flex;align-items:center;gap:6px;list-style:none;min-height:32px;padding:6px 10px;border:1px solid #cbdcf1;border-radius:9px;background:#edf3fc;color:#2859a4;font-size:12px;font-weight:750;cursor:pointer;white-space:nowrap}
+.shell-v3-tabs-overflow>summary::-webkit-details-marker{display:none}
+.shell-v3-tabs-overflow>summary>span{border-radius:6px;background:#d9e6fa;padding:2px 6px}
+.shell-v3-tabs-overflow[open]>summary svg{transform:rotate(180deg)}
+.shell-v3-tabs-overflow-list{position:absolute;right:0;top:calc(100% + 3px);display:grid;gap:2px;min-width:270px;max-width:min(380px,calc(100vw - 32px));max-height:min(400px,65vh);overflow:auto;padding:7px;border:1px solid #dbe5f2;border-radius:12px;background:#fff;box-shadow:0 16px 40px #142b4933;z-index:90}
+.shell-v3-tabs-overflow-item{display:flex;align-items:center;min-width:0;border-radius:8px}
+.shell-v3-tabs-overflow-item:hover,.shell-v3-tabs-overflow-item:focus-within{background:#edf3fc}
+.shell-v3-tabs-overflow-item>button{display:flex;align-items:center;gap:8px;min-width:0;border:0;background:transparent;color:#253a57;font-size:12px;cursor:pointer}
+.shell-v3-tabs-overflow-item>button:first-child{flex:1 1 auto;min-height:35px;padding:7px 9px;text-align:left}
+.shell-v3-tabs-overflow-item>button:first-child>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell-v3-tabs-overflow-item>button.active{color:#2859a4;font-weight:800}
+.shell-v3-tabs-overflow-item>.shell-v3-tabs-overflow-close{flex:0 0 auto;padding:9px;color:#6b7d93}
+.shell-v3-tabs-overflow-item>.shell-v3-tabs-overflow-close:hover{color:#b42318}
+.ky-pro-home-link:focus-visible,.ky-pro-nav-group-trigger:focus-visible,.shell-v3-module-button:focus-visible,.shell-v3-tabs-overflow button:focus-visible,.shell-v3-tabs-overflow>summary:focus-visible{outline:2px solid #8ab4f5;outline-offset:2px}
+@media(max-width:700px){.shell-v3-tabs>button{max-width:150px}.shell-v3-tabs-overflow>summary{padding:6px 8px;font-size:11px}.shell-v3-tabs-overflow-list{right:-8px}.shell-v3-workspace{padding:10px 9px 30px!important}}

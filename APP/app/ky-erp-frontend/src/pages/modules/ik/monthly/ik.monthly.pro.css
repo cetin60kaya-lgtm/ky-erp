@@ -2581,3 +2581,20 @@
  .ik-monthly-pro .ik-pro-period-panel{min-width:0;max-width:430px}
 }
 @media(max-width:640px){.ik-monthly-pro .ik-pro-nav button{min-height:40px;font-size:12px}.ik-monthly-pro .ik-pro-command{padding:14px}}
+
+
+/* KY ERP tek tasarım: aylık İK özet ve katlanır işlem alanı. */
+.ik-monthly-pro .ik-pro-content .page-head h2{margin:0;font-size:clamp(18px,1.65vw,22px);line-height:1.3;color:#1b3552}
+.ik-monthly-pro .ik-pro-quick-actions{padding:0!important;overflow:hidden;border-color:#dbe5f2}
+.ik-monthly-pro .ik-pro-quick-actions>summary{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:9px;min-height:46px;padding:12px 14px;background:#fff;color:#233b59;cursor:pointer;list-style:none}
+.ik-monthly-pro .ik-pro-quick-actions>summary::-webkit-details-marker{display:none}
+.ik-monthly-pro .ik-pro-quick-actions>summary:after{content:"⌄";color:#2859a4;font-size:19px;font-weight:700}
+.ik-monthly-pro .ik-pro-quick-actions[open]>summary:after{content:"⌃"}
+.ik-monthly-pro .ik-pro-quick-actions>summary strong{font-size:13px}
+.ik-monthly-pro .ik-pro-quick-actions>summary span{font-size:11px;color:#6a7c93}
+.ik-monthly-pro .ik-pro-quick-actions .workbar{border-top:1px solid #e4eaf2;margin:0;padding:12px 14px;background:#f8fafc}
+.ik-monthly-pro .ik-pro-quick-actions .workbar .group{display:flex;flex-wrap:wrap;gap:8px}
+.ik-monthly-pro .ik-pro-quick-actions .btn:not(.primary){background:#fff;color:#285079;border-color:#cbd8e9}
+.ik-monthly-pro .ik-pro-quick-actions .btn.primary{background:#2859a4;border-color:#2859a4;color:#fff}
+.ik-monthly-pro .ik-pro-quick-actions>summary:focus-visible{outline:2px solid #8ab4f5;outline-offset:-2px}
+@media(max-width:640px){.ik-monthly-pro .ik-pro-quick-actions>summary{align-items:flex-start;flex-direction:column}.ik-monthly-pro .ik-pro-quick-actions .workbar .btn{flex:1 1 145px}}

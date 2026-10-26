@@ -16,7 +16,9 @@ test("Masaüstü profil düğmesi flex kalır ve metin sekme satırına taşmaz"
   assert.match(responsive, /\.shell-v3\[data-layout-mode="pc"\] \.shell-v3-user\s*\{[^}]*margin-left:\s*auto;/);
 });
 
-test("Çoklu sekmeler profil alanının altına değil yatay kaydırmaya gider", () => {
-  assert.match(shell, /\.shell-v3-tabs-bar\s*\{[^}]*overflow:hidden/);
+test("Sekmeler yatay kayar; diğer açık sekmelerin menüsü kırpılmaz", () => {
+  assert.match(shell, /\.shell-v3-tabs-bar\s*\{[^}]*overflow:visible/);
   assert.match(shell, /\.shell-v3-tabs\s*\{[^}]*overflow-x:auto/);
+  assert.match(shell, /\.shell-v3-tabs-overflow-list\s*\{[^}]*position:absolute/);
+  assert.match(shell, /\.shell-v3-tabs-overflow-list\s*\{[^}]*z-index:90/);
 });
