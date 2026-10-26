@@ -1,5 +1,5 @@
-deploy: ky-erp-pro-v4.2.0-unified-mobile-verified-title
-canonical: ca87cca03a640b67977c140b93090cfcf199f231
+deploy: ky-erp-pro-v4.2.1-one-screen-inline-approval
+canonical: de0988a3a09a6f87bd5b74e2dbd57083cfea7847
 requested: 2026-10-26
-source_prs: 471
-reason: canonical KY ERP PRO 4.2 product title verified; Android single installed PWA identity and all ERP module routes preserved
+source_prs: 471,473
+reason: single installed PWA, inline signed phone approval without navigation, background device approval without ERP login, persistent ERP form state and unified security center
