@@ -67,9 +67,16 @@
     "security-device-approvals-without-erp-session",
     "android-pwa-notification-focus-without-login-reset",
     "physical-finalization-onay-sorunlar-journal-visibility-pr472",
-    "physical-queue-status-existing-ui-no-redesign-pr472"
+    "physical-queue-status-existing-ui-no-redesign-pr472",
+    "canonical-personel-yonetimi-sidebar-pr475",
+    "workspace-six-active-tabs-overflow-dropdown-pr475",
+    "monthly-ik-overview-folding-quick-actions-pr475",
+    "daily-personnel-date-entry-export-groups-pr475",
+    "ebelge-company-context-clickable-kpis-pr475",
+    "canonical-single-palette-responsive-ui-pr475",
+    "visual-no-d1-or-worker-mutation"
   ],
-  "note": "26.10.2026 PR #472 merged 3faa926730c6525c913603ca2f5a409d45fb6c90, CI #40251063644 SUCCESS. Existing e-Belge Onay & Sorunlar physical journal state/retry/audit indication; no new HTML/Shell designs. Worker source deployed separately, migrations disabled; D1 0062 production schema separately requires user consent; without schema physical finalization fail-closed. All existing KY Güvenlik/PDKS/Günlük modules retained. User session and live physical transaction E2E pending. 26.10.2026 PR #473 merge de0988a3a09a6f87bd5b74e2dbd57083cfea7847; mobile in-screen WebAuthn biometric signed approval and preserved AuthContext, no /guvenlik navigation, PC owner security approvals possible without current ERP session, canonical PWA same id. 2026-10-26 PR #471 merge 11e98747a5aa5cff9ae6d6e9ed2efb5db78d064d: Existing /guvenlik/ PWA remains single installed Android app, full canonical ERP code packaged on same origin under /guvenl",
-  "sourceCommit": "1ef3348135db1395bad86c51735fa1b191c84f0e",
+  "note": "26.10.2026 PR #475 merged 56743bd5bc2cfc88f5cb1c88bbe462e353a774fa. Tek canonical arayuz kaynagi: Gunluk Isler yerine Personel Yonetimi, IK Aylik/Gunluk Operasyon/PDKS sirasiyla gruplanir; butun moduller tek lacivert acik renk sistemiyle; 6 gorunen + aktif sekme ve diger acik sekmeler listesi, IK aylik yinelenen baslik/katlanir hizli islemler, Gunluk Personel Girisi tarih/komut/Excel duzeni ve bos liste, e-Belge firma etiketi + tiklanabilir uyarilar. PR CI 40290927030 Frontend+Worker SUCCESS. Yalniz Pages production deploy; Worker/D1 migration ve islem verisi degisikligi YOK. Production D1 0062 onceden izole kullanici izniyle uygulanmistir; bu arayuz release'in D1 yetkisi yoktur. Canli gercek oturumda masaustu ve mobil gorunum kabul testi ayrica yapilacak.",
+  "sourceCommit": "56743bd5bc2cfc88f5cb1c88bbe462e353a774fa",
   "requestedAt": "2026-10-26"
 }
