@@ -1,5 +1,5 @@
-deploy: ky-security-v4.1.0-one-owner-canonical-html-none
-canonical: 569198eb926a19fdba4987c9ad8ddb5d1fa409f7
+deploy: ky-erp-pro-v4.2.0-unified-mobile
+canonical: 11e98747a5aa5cff9ae6d6e9ed2efb5db78d064d
 requested: 2026-10-26
-source_prs: 466,469
-reason: Cloudflare Workers static assets HTML handling none fixes 307 loop, owner /guvenlik and company /ky-firma, device PWA id preserved
+source_prs: 466,469,471
+reason: one trusted Android PWA ID /guvenlik, complete canonical ERP under /guvenlik/pro, preserved push device, proper native mobile navigation and comprehensive CI
