@@ -1,5 +1,8 @@
 # KY ERP — AI Agent Ana Kuralları
 
+> **KY CONTROL — TEK KAYNAK:** DESEN/yerel Windows işleri için özel `cetin60kaya-lgtm/kyerp` deposundaki `CONTROL/KY_CONTROL_MERKEZ.md` ana giriş noktasıdır. Mevcut `kyerp/CONTROL/KY_CHAT_BRIDGE_AGENT_RULES.md` güvenlik sözleşmesi ayrıca zorunludur. ChatGPT yeni komut için eşleşen gerçek Windows yanıtı almadan PASS demez; Remote Desktop Commander veya yeni ZIP/token ilk tercih değildir. Bu yalnız kaynak yönlendirmesidir, production onayı değildir.
+
+
 ## ZORUNLU — Her Sohbetin Güncelleme/Yayın Defteri Kuralı (09.10.2026)
 
 - **Bütün KY ERP sohbetleri, Copilot ve ajanlar** kod işine başlamadan önce `DOCS/KY_ERP_GUNCELLEME_YAYIN_KAYIT_SOZLESMESI_2026-10-09.md` dosyasını okur ve uygular. Bu yükümlülük önceki sohbetlere dair tahmini kanıttan üstün değildir.
