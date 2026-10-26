@@ -48,8 +48,8 @@ test("build gets a second ENTRY, not a second installable APP",()=>{
  assert.match(vite,/\/guvenlik\/pro\//);
  assert.match(vite,/dist-security-pro/);
  assert.match(vite,/publicDir: unifiedProBuild\?false/);
- assert.match(read("pro.html"),/KY ERP PRO v4\.2\.0/);
- assert.match(read("public/guvenlik/index.html"),/KY ERP PRO v4\.2\.0/);
+ assert.match(read("pro.html"),/KY ERP PRO v4\.2\.1/);
+ assert.match(read("public/guvenlik/index.html"),/KY ERP PRO v4\.2\.1/);
 });
 
 test("owner and restricted company roles use canonical module RBAC and no client-only elevation",()=>{
