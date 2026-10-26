@@ -1,5 +1,15 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 26.10.2026 — UI tek kanonik düzen canlı yayın (#475)
+
+- **Kaynak:** [PR #475](https://github.com/cetin60kaya-lgtm/ky-erp/pull/475) MERGED, SHA `56743bd5bc2cfc88f5cb1c88bbe462e353a774fa`. [CI #40290927030](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40290927030) **SUCCESS** (Frontend lint/test/build + Worker typecheck/test/build).
+- **Pages production:** [#40291172237](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40291172237) **SUCCESS**, deploy SHA `ec13ee38d70fed3fbf59f4651f7e6d4189639bed`. Build, Cloudflare Pages production deploy, live entry JS ve Gunluk Operasyon chunk SHA smoke PASS. PR merge SHA, deployed Pages commitinin atasi (`behind=0`).
+- **Tek kanonik menu:** Gunluk Isler → Personel Yonetimi; IK Aylik, Gunluk Operasyon, PDKS; ayni tasarim renk/aktif menu/ikon. Ortak shell'de altı gorunen sekme, aktif sekme ve Diger Sekmeler listesinden kapatmadan geri ulasim.
+- **Ekranlar:** IK Aylik tekrar basligi azaltildi ve finans islemleri katlanir; Gunluk Personel Girisi tarih/personel/Excel gruplandi ve bos secim yonlendirildi; e-Belge firma etiketi ve kontrol/eslesme KPI gecisleri duzeltildi. Yeni hotfix CSS katmani olusturulmadi, mevcut kaynaklar duzenlendi.
+- **Sinir:** Bu sadece Frontend UI yayini; Worker/D1, stok, finansal/PDKS/IK bordro hesaplari degistirilmedi. Kimlik dogrulanmis masaustu 1366×768/1920×1080 ve mobil gercek kullanici görsel kabul testi henuz yapilmadi.
+
+
+
 ## 26.10.2026 — CANLI D1 0062 MIGRATION TAMAMLANDI (GUNCEL KARAR)
 
 - **Schema canli:** Yalniz `0062_accounting_physical_receipt_journal.sql` production `ky-erp-db` D1'e kontrollu uygulandi. [Worker migration/yayin #40279707049](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40279707049) SUCCESS; oncesinde tam D1 yedegi (20.8 MB Actions artifact), salt-okunur on kosul ve sonrasinda **2 tablo + 4 index + 1 trigger + 7 alan** PASS, baslangic journal kaydi sifir. Worker deploy/API health PASS.
