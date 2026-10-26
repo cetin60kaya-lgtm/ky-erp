@@ -12,6 +12,7 @@ import "../styles/canonical-workspace-ui.css";
 import "../styles/module-action-popups.css";
 import "../styles/canonical-dialog-resize.css";
 import "./pro.css";
+import "./pro-mobile-workspace.css";
 
 const PRO_PREFIX="/guvenlik/pro";
 const OWNER_ROLES=new Set(["SUPER_ADMIN","ADMIN"]);
@@ -99,6 +100,38 @@ function ProHome({onSecurity}){
  </main>;
 }
 
+
+function ProWorkspaceToolbar(){
+ const {user,hasModule}=useAuth();
+ const [currentPath,setCurrentPath]=useState(location.pathname);
+ const selectRef=useRef(null);
+ const isOwner=OWNER_ROLES.has(String(user?.role||"").toUpperCase());
+ const allowed=useMemo(()=>MODULES.filter(m=>isOwner||Boolean(hasModule(m.permissionKey||m.key.toUpperCase()))),[hasModule,isOwner]);
+ useEffect(()=>{
+   const sync=()=>{setCurrentPath(location.pathname);if(selectRef.current)selectRef.current.open=false};
+   window.addEventListener("popstate",sync);
+   window.addEventListener("kyerp:route-change",sync);
+   return()=>{window.removeEventListener("popstate",sync);window.removeEventListener("kyerp:route-change",sync)};
+ },[]);
+ const relativePath=currentPath.startsWith(PRO_PREFIX+"/")?currentPath.slice(PRO_PREFIX.length+1):"";
+ const [rawModule,rawTab]=relativePath.split("/");
+ const moduleKey=rawModule?decodeURIComponent(rawModule):"";
+ const tabKey=rawTab?decodeURIComponent(rawTab):"";
+ const module=allowed.find(item=>item.key===moduleKey);
+ const tabs=module?getModuleTabs(module).filter(tab=>Array.isArray(tab)&&tab[0]):[];
+ const currentTab=tabs.find(tab=>tab[0]===tabKey)||tabs[0];
+ if(!module||!currentTab)return null;
+ return <nav className="ky-pro-module-context" data-module={module.key} aria-label="Mobil modül sekmeleri">
+   <div><small>ÇALIŞMA ALANI</small><strong>{module.label}</strong></div>
+   <details className="ky-pro-module-select" ref={selectRef}>
+     <summary><span>{currentTab[1]}</span><ChevronRight size={18}/></summary>
+     <div className="ky-pro-module-options" role="group" aria-label={module.label+" sekmeleri"}>
+       {tabs.map(tab=><button type="button" key={tab[0]} aria-current={tab[0]===currentTab[0]?"page":undefined} onClick={()=>{if(selectRef.current)selectRef.current.open=false;goModule(module.key,tab[0])}}>{tab[1]}<ChevronRight size={16}/></button>)}
+     </div>
+   </details>
+ </nav>;
+}
+
 function ProDock({onSecurity,securityActive,onHomeSelected}){
  const {user,hasModule}=useAuth();
  const [menuOpen,setMenuOpen]=useState(false);
@@ -108,7 +141,8 @@ function ProDock({onSecurity,securityActive,onHomeSelected}){
  useEffect(()=>{
    const sync=()=>setCurrentPath(location.pathname);
    window.addEventListener("popstate",sync);
-   return()=>window.removeEventListener("popstate",sync);
+   window.addEventListener("kyerp:route-change",sync);
+   return()=>{window.removeEventListener("popstate",sync);window.removeEventListener("kyerp:route-change",sync)};
  },[]);
  const onHome=useCallback(()=>{
    onHomeSelected?.();
@@ -172,7 +206,7 @@ function ProApplication(){
     <button type="button" className={loginRequested?"is-active":""} onClick={()=>setLoginRequested(true)}><House size={24}/><span>ERP'ye Giriş</span></button>
    </nav>
   </div>;
- return <div className="ky-pro-app" data-role={String(user?.role||"")}><div className="ky-pro-content" hidden={!securityOpen}>{securityOpen?<SecurityCenter/>:null}</div><div className="ky-pro-content" hidden={securityOpen||!home}><ProHome onSecurity={()=>setSecurityOpen(true)}/></div>{workspaceMounted?<div className="ky-pro-workspace-content" hidden={securityOpen||home}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense></div>:null}<ProDock onSecurity={()=>setSecurityOpen(true)} securityActive={securityOpen} onHomeSelected={()=>setSecurityOpen(false)}/></div>;
+ return <div className="ky-pro-app" data-role={String(user?.role||"")}><div className="ky-pro-content" hidden={!securityOpen}>{securityOpen?<SecurityCenter/>:null}</div><div className="ky-pro-content" hidden={securityOpen||!home}><ProHome onSecurity={()=>setSecurityOpen(true)}/></div>{workspaceMounted?<div className="ky-pro-workspace-toolbar" hidden={securityOpen||home}><ProWorkspaceToolbar/></div>:null}{workspaceMounted?<div className="ky-pro-workspace-content" hidden={securityOpen||home}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense></div>:null}<ProDock onSecurity={()=>setSecurityOpen(true)} securityActive={securityOpen} onHomeSelected={()=>setSecurityOpen(false)}/></div>;
 }
 installAndroidRuntimeBridge();
 installPersistedAuthBootstrap();
