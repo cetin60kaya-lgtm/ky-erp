@@ -35,3 +35,48 @@ CREATE INDEX IF NOT EXISTS ix_accounting_physical_operations_document
   ON accounting_physical_operations(main_company_slug,document_id,state);
 CREATE INDEX IF NOT EXISTS ix_accounting_physical_operations_source
   ON accounting_physical_operations(main_company_slug,physical_document_id,physical_line_id);
+
+-- Atomic allocation cap: one physical quantity cannot be costed twice
+-- by two different invoices, even when both Workers race before the read.
+CREATE TRIGGER IF NOT EXISTS trg_accounting_physical_cost_capacity
+BEFORE INSERT ON accounting_physical_operations
+WHEN NEW.operation_type='COST_LINK'
+BEGIN
+  SELECT CASE
+    WHEN NOT EXISTS (
+      SELECT 1 FROM accounting_physical_operations receipt
+      WHERE receipt.main_company_slug=NEW.main_company_slug
+        AND receipt.physical_document_id=NEW.physical_document_id
+        AND receipt.physical_line_id=NEW.physical_line_id
+        AND receipt.product_id=NEW.product_id
+        AND receipt.supplier_company_id=NEW.supplier_company_id
+        AND receipt.lot_normalized=NEW.lot_normalized
+        AND receipt.operation_type='RECEIPT' AND receipt.state='DONE'
+    ) THEN RAISE(ABORT,'PHYSICAL_RECEIPT_PENDING')
+    WHEN (
+      COALESCE((
+        SELECT SUM(link.quantity)
+        FROM accounting_physical_operations link
+        WHERE link.main_company_slug=NEW.main_company_slug
+          AND link.physical_document_id=NEW.physical_document_id
+          AND link.physical_line_id=NEW.physical_line_id
+          AND link.product_id=NEW.product_id
+          AND link.supplier_company_id=NEW.supplier_company_id
+          AND link.lot_normalized=NEW.lot_normalized
+          AND link.operation_type='COST_LINK'
+          AND link.state<>'NEEDS_REVIEW'
+      ),0)+NEW.quantity
+    ) > COALESCE((
+      SELECT receipt.quantity FROM accounting_physical_operations receipt
+      WHERE receipt.main_company_slug=NEW.main_company_slug
+        AND receipt.physical_document_id=NEW.physical_document_id
+        AND receipt.physical_line_id=NEW.physical_line_id
+        AND receipt.product_id=NEW.product_id
+        AND receipt.supplier_company_id=NEW.supplier_company_id
+        AND receipt.lot_normalized=NEW.lot_normalized
+        AND receipt.operation_type='RECEIPT' AND receipt.state='DONE'
+      LIMIT 1
+    ),0)+0.000001
+    THEN RAISE(ABORT,'COST_QUANTITY_OVER_ALLOCATED')
+  END;
+END;
