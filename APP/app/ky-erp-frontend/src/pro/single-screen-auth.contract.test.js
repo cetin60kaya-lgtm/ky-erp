@@ -10,7 +10,7 @@ test("Pro login never rewrites installed /guvenlik/pro/ into desktop root",()=>{
   assert.match(login,/!window\.location\.pathname\.startsWith\("\/guvenlik\/pro"\)/);
   assert.match(login,/<InlineSecurityApproval challengeId=\{flow\.phoneApprovalId\}/);
   assert.match(login,/window\.setTimeout\(refreshPhoneApproval,350\)/);
-  assert.match(login,/window\.setInterval\(refreshPhoneApproval,2200\)/);
+  assert.match(login,/window\.setInterval\(refreshPhoneApproval,\s*2200\)/);
   assert.match(login,/checkPhoneApproval\(/);
 });
 test("Security and ERP stay mounted inside one shared AuthProvider and Android bottom dock",()=>{
