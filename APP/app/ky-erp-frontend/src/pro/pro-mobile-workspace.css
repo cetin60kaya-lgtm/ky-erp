@@ -137,6 +137,7 @@
  .ky-pro-app .dsg-filter-disclosure>summary::-webkit-details-marker{display:none}
  .ky-pro-app .dsg-filter-disclosure>summary span{font-size:11px;color:#697f96}
  .ky-pro-app .dsg-filter-extra{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;padding:10px 0 0;min-width:0}
+ .ky-pro-app .dsg-filter-disclosure:not([open]) .dsg-filter-extra{display:none!important}
  .ky-pro-app .dsg-filter-extra>select,
  .ky-pro-app .dsg-filter-extra>input{width:100%!important;min-width:0!important;max-width:100%;min-height:44px}
  .ky-pro-app .dsg-filter-grid>.dsg-view-switch{grid-column:1/-1;justify-content:flex-start}
