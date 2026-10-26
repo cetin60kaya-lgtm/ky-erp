@@ -199,3 +199,108 @@ export async function readPhysicalDocumentStatus(db:any,tenant:string,documentId
     ORDER BY created_at ASC LIMIT 250`).bind(tenant,documentId).all();
   return result.results||[];
 }
+
+export async function postPhysicalCostLink(db:any,data:Row) {
+  const f=receiptFields(data),tenant=f.tenant,
+    invoiceId=txt(data.invoiceId),invoiceLineId=txt(data.invoiceLineId);
+  const qty=num(data.allocatedQuantity),total=num(data.allocatedTotal);
+  if(!invoiceId||!invoiceLineId||!Number.isFinite(qty)||qty<=0||qty>f.quantity+0.00001||
+     !Number.isFinite(total)||total<0)
+    throw err("COST_ALLOCATION_INVALID","Fatura–irsaliye miktarı ve maliyeti uyumsuz.");
+  await requireSchema(db);
+  const rows=await db.prepare(`SELECT id,state FROM accounting_physical_operations
+   WHERE main_company_slug=? AND physical_document_id=? AND physical_line_id=?
+    AND operation_type='RECEIPT' AND product_id=? AND supplier_company_id=?
+    AND lot_normalized=? LIMIT 2`).bind(tenant,f.physicalDocumentId,f.physicalLineId,
+    f.productId,f.supplierCompanyId,f.normalizedLot).all();
+  if((rows.results||[]).length!==1||rows.results[0].state!=="DONE")
+    throw err("PHYSICAL_RECEIPT_PENDING","Bağlı gerçek irsaliyenin fiziksel kaydı tamamlanmadı.");
+  const receiptId=txt(rows.results[0].id);
+  const costKey="COST:"+await sha256(JSON.stringify([tenant,f.physicalDocumentId,f.physicalLineId,
+    f.productId,f.supplierCompanyId,f.normalizedLot,invoiceId,invoiceLineId]));
+  const payloadHash=await sha256(stable({tenant,physicalReceiptId:receiptId,invoiceId,invoiceLineId,
+    allocatedQuantity:qty,allocatedTotal:total,currency:txt(data.currency)}));
+  const cached=await getJournal(db,costKey,tenant);
+  if(cached){
+    if(cached.payload_hash!==payloadHash)
+      throw err("COST_PAYLOAD_CONFLICT","Aynı fatura–irsaliye maliyet tahsisi farklı tutarda; inceleme gerekli.");
+    if(cached.state==="DONE")return{id:costKey,status:"DONE",idempotent:true};
+    if(cached.state==="PROCESSING"&&txt(cached.lease_until)>now())
+      throw err("COST_IN_PROGRESS","Maliyet tahsisi başka Worker tarafından işleniyor.");
+    if(cached.state==="NEEDS_REVIEW")throw err("COST_NEEDS_REVIEW","Maliyet tahsisi elle inceleme gerektiriyor.");
+  }
+  let target:Row|null=null,sourceColumn="";
+  if(f.route==="BOYAHANE"){
+    target=await lotMatch(db,f);
+    if(!target)throw err("PHYSICAL_LOT_NOT_FOUND","Mevcut Boyahane LOT'u bulunamadı.");
+    sourceColumn="data";
+  }else{
+    target=await db.prepare("SELECT id,raw FROM stock_movements WHERE id=? AND main_company_slug=? LIMIT 1")
+      .bind("SM:"+receiptId,tenant).first();
+    if(!target)throw err("PHYSICAL_STOCK_NOT_FOUND","Mevcut stok hareketi bulunamadı.");
+    sourceColumn="raw";
+  }
+  const key=invoiceId+":"+invoiceLineId+":"+f.physicalLineId+":"+f.normalizedLot;
+  const existing=parsed(target[sourceColumn]);
+  if(!cached && Array.isArray(existing.financialDocuments)&&
+    existing.financialDocuments.some((x:Row)=>txt(x.key)===key))
+    throw err("LEGACY_COST_REVIEW","Bu maliyet daha önce kayıtlı olabilir; ikinci kez eklenmeyecek.");
+  const ts=now(),lease=crypto.randomUUID();
+  if(!cached){
+    await db.prepare(`INSERT OR IGNORE INTO accounting_physical_operations
+      (id,main_company_slug,document_id,document_line_id,physical_document_id,physical_line_id,
+       operation_type,product_id,supplier_company_id,lot_normalized,payload_hash,quantity,state,
+       attempts,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,'COST_LINK',?,?,?,?,?,'PENDING',0,?,?)`)
+      .bind(costKey,tenant,invoiceId,invoiceLineId,f.physicalDocumentId,f.physicalLineId,
+        f.productId,f.supplierCompanyId,f.normalizedLot,payloadHash,qty,ts,ts).run();
+  }
+  const current=await getJournal(db,costKey,tenant);
+  if(current?.payload_hash!==payloadHash)throw err("COST_PAYLOAD_CONFLICT","Maliyet kimliği çakıştı.");
+  if(current?.state==="DONE")return{id:costKey,status:"DONE",idempotent:true};
+  const claim=await db.prepare(`UPDATE accounting_physical_operations
+    SET state='PROCESSING',attempts=attempts+1,lease_token=?,lease_until=?,updated_at=?
+    WHERE id=? AND main_company_slug=? AND payload_hash=? AND attempts<6
+      AND (state IN ('PENDING','RETRY') OR (state='PROCESSING' AND lease_until<?))`)
+    .bind(lease,new Date(Date.now()+90000).toISOString(),ts,costKey,tenant,payloadHash,ts).run();
+  if(Number(claim.meta?.changes)!==1)throw err("COST_LEASE_CONFLICT","Maliyet tahsisi başka işlemde.");
+  const allocation={key,documentId:invoiceId,documentLineId:invoiceLineId,
+    quantity:qty,totalAmount:total,unitPrice:total/qty,currency:txt(data.currency)||"TRY",
+    physicalDocumentId:f.physicalDocumentId,physicalLineId:f.physicalLineId,lotNo:f.lotNo};
+  try{
+    // json_insert appends instead of replacing an array read before another invoice;
+    // the physical operation journal prevents duplicate append for the same allocation.
+    const src=f.route==="BOYAHANE"?"data":"raw",scope=f.route==="BOYAHANE"?"json_store":"stock_movements";
+    const quantityExpr=`COALESCE(CAST(json_extract(${src},'$.costedQuantity') AS REAL),0)`;
+    const totalExpr=`COALESCE(CAST(json_extract(${src},'$.totalCost') AS REAL),0)`;
+    const updatedJson=`json_set(COALESCE(${src},'{}'),
+      '$.financialDocuments',json_insert(COALESCE(json_extract(${src},'$.financialDocuments'),'[]'),'$[#]',json(?)),
+      '$.costedQuantity',${quantityExpr}+?,
+      '$.totalCost',${totalExpr}+?,
+      '$.unitCost',(${totalExpr}+?)/NULLIF((${quantityExpr}+?),0),
+      '$.invoiceNo',?)`;
+    const step=f.route==="BOYAHANE"
+      ?db.prepare(`UPDATE json_store SET data=${updatedJson},updated_at=? WHERE id=?
+        AND main_company_slug=? AND scope='BOYAHANE_LOT'`)
+        .bind(JSON.stringify(allocation),qty,total,total,qty,txt(data.invoiceNo),ts,target.id,tenant)
+      :db.prepare(`UPDATE stock_movements SET raw=${updatedJson},
+         total_amount=COALESCE(total_amount,0)+?,
+         unit_price=(COALESCE(total_amount,0)+?)/NULLIF((COALESCE(quantity,0)),0),
+         updated_at=? WHERE id=? AND main_company_slug=?`)
+        .bind(JSON.stringify(allocation),qty,total,total,qty,txt(data.invoiceNo),total,total,ts,target.id,tenant);
+    const done=db.prepare(`UPDATE accounting_physical_operations SET state='DONE',
+      completed_at=?,updated_at=?,lease_token=NULL,lease_until=NULL,last_error_code=NULL
+      WHERE id=? AND main_company_slug=? AND state='PROCESSING' AND lease_token=?`)
+      .bind(ts,ts,costKey,tenant,lease);
+    const results=await db.batch([step,done]);
+    if(results.some((x:Row)=>Number(x.meta?.changes)!==1))
+      throw err("COST_TRANSACTION_CONFLICT","Maliyet kaydı çakıştı.");
+    return{id:costKey,status:"DONE",idempotent:false,amount:total,quantity:qty};
+  }catch(e:any){
+    await db.prepare(`UPDATE accounting_physical_operations SET state='RETRY',
+       last_error_code=?,last_error_at=?,lease_token=NULL,lease_until=NULL,
+       next_attempt_at=?,updated_at=? WHERE id=? AND main_company_slug=? AND lease_token=?`)
+      .bind(txt(e?.code)||"COST_DB_RETRY",now(),new Date(Date.now()+5000).toISOString(),now(),costKey,tenant,lease).run();
+    throw err(txt(e?.code)||"COST_DB_RETRY","Maliyet bağlantısı tamamlanamadı; güvenli tekrar bekleniyor.");
+  }
+}
