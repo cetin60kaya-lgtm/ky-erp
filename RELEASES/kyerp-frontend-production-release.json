@@ -57,9 +57,13 @@
     "physical-stock-financial-posting-safety-hold",
     "ky-security-v4.1.0-single-canonical-owner-pwa-pr466",
     "ky-company-separate-company-scope-pwa",
-    "ky-security-old-duplicate-owner-apps-retired"
+    "ky-security-old-duplicate-owner-apps-retired",
+    "ky-erp-pro-v4.2-single-android-pwa",
+    "security-origin-full-canonical-erp-bundle",
+    "all-authorized-modules-mobile-native-navigation",
+    "same-device-id-sw-credentials-no-second-install"
   ],
-  "note": "26.10.2026: PR #466 merge 8abdb7d99078e37aa0b810c538a2621de4fcfcf2 — KY Güvenlik v4.1.0 artık tek /guvenlik/ kimliği, eski /ky-sistem/ ve /owner-security/ paketleri kaldırıldı, /ky-firma/ firma için ayrıdır; güvenilir telefon PWA id ve cihaz DB korunur. Android gerçek cihaz kabulü ve Security Worker canlı sonucu ayrıca kanıtlanır. 26.10.2026: Worker release #40242759411 SUCCESS with full D1 backup, schema, deploy and health; migration skipped. PR #463, #464, #465, #467 CI SUCCESS + merged, onaylı HTML ve KY Güvenlik/İK Shell korunmuştur. e-Belge hizmet faturası atomik, fiziksel stock LOT geçişi fail-closed. Bu Pages release son kaynakla UI + güvenli İşNet durum paneli + onay bağlamını yayımlar. Yetkili oturumlu 19 sekme gerçek E2E yok.",
-  "sourceCommit": "95b2ae9c61b4ddae72562cc02e2a91b1f995401d",
+  "note": "2026-10-26 PR #471 merge 11e98747a5aa5cff9ae6d6e9ed2efb5db78d064d: Existing /guvenlik/ PWA remains single installed Android app, full canonical ERP code packaged on same origin under /guvenlik/pro/, user sees KY ERP PRO 4.2.0; all module tabs through canonical AppV3, original backend RBAC and owner device keys preserved. Real Android E2E separately required. 26.10.2026: PR #466 merge 8abdb7d99078e37aa0b810c538a2621de4fcfcf2 — KY Güvenlik v4.1.0 artık tek /guvenlik/ kimliği, eski /ky-sistem/ ve /owner-security/ paketleri kaldırıldı, /ky-firma/ firma için ayrıdır; güvenilir telefon PWA id ve cihaz DB korunur. Android gerçek cihaz kabulü ve Security Worker canlı sonucu ayrıca kanıtlanır. 26.10.2026: Worker release #40242759411 SUCCESS with full D1 backup, schema, deploy and health; migration skipped. PR #463, #464, #465, #467 CI SUCCESS + merged, onaylı HTML ve KY Güvenlik/İK Shell korunmuştur. e-Belge hizmet faturası atomik, fiziksel stock LOT geçişi fail-closed. Bu Pages release son kaynakla UI + güvenli İşNet durum paneli + onay bağlamını yayımlar. Yetkili oturumlu 19 sekme gerçek E2E yok.",
+  "sourceCommit": "e08633a2915d667d9234018a0672c4e080b7fb26",
   "requestedAt": "2026-10-26"
 }
