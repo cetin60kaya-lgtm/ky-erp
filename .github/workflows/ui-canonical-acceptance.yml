@@ -44,7 +44,7 @@ jobs:
           test -d dist-security-pro/assets
           grep -q '/guvenlik/pro/assets/' dist-security-pro/pro.html
       - name: Assemble the single-PWA Security Worker assets without deploying
-        working-directory: ../../
+        working-directory: ../../..
         run: |
           node APP/cloud/ky-erp-security-host/prepare-assets.mjs
           test -f APP/cloud/ky-erp-security-host/.security-assets/guvenlik/pro/index.html
