@@ -1,5 +1,7 @@
-deploy: ky-erp-pro-v4.2.1-one-screen-inline-approval
-canonical: de0988a3a09a6f87bd5b74e2dbd57083cfea7847
+deploy: ky-erp-pro-android-responsive-navigation-20261026
+canonical: bb7fb42ffb433a7bd6030703dbe5990f7dc2f5e4
 requested: 2026-10-26
-source_prs: 471,473
-reason: single installed PWA, inline signed phone approval without navigation, background device approval without ERP login, persistent ERP form state and unified security center
+source_prs: 476
+reason: mobile one-PWA module selector, daily operation mobile viewport, personnel dialog and Desen collapsible filters, same canonical AppV3 and D1
+ci: 40305765435 SUCCESS
+migration: NONE
