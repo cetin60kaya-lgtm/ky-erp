@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { physicalIdentity, postPhysicalReceipt, readPhysicalDocumentStatus } from "./accounting-physical-journal.ts";
+import { physicalIdentity, postPhysicalReceipt, postPhysicalCostLink, readPhysicalDocumentStatus } from "./accounting-physical-journal.ts";
 
 class D1Fixture {
   sql: DatabaseSync;
@@ -135,4 +135,62 @@ test("0062 şeması olmayan DB'de canlı stok sessizce yazılmaz",async()=>{
   const db=new D1Fixture();db.sql.exec("DROP TABLE accounting_physical_operations");
   await assert.rejects(()=>postPhysicalReceipt(db,sample()),(e:any)=>e.code==="PHYSICAL_SCHEMA_APPROVAL_REQUIRED");
   assert.equal(db.count("json_store"),0);
+});
+
+test("fatura sonrası Boyahane maliyet bağlar, ikinci stok girişi yok",async()=>{
+  const db=new D1Fixture();
+  await postPhysicalReceipt(db,sample({quantity:100}));
+  const cost={...sample({quantity:100}),invoiceId:"fatura1",invoiceLineId:"fatura-line1",
+    invoiceNo:"F2026001",allocatedQuantity:100,allocatedTotal:240,currency:"TRY"};
+  const first=await postPhysicalCostLink(db,cost);
+  assert.equal(first.idempotent,false);
+  assert.equal((await postPhysicalCostLink(db,cost)).idempotent,true);
+  assert.equal(db.count("json_store","WHERE scope='BOYAHANE_STOCK_MOVEMENT'"),1);
+  const lot=JSON.parse((db.sql.prepare("SELECT data FROM json_store WHERE scope='BOYAHANE_LOT'").get() as any).data);
+  assert.equal(lot.entryKg,100);
+  assert.equal(lot.remainingKg,100);
+  assert.equal(lot.totalCost,240);
+  assert.equal(lot.costedQuantity,100);
+  assert.equal(lot.financialDocuments.length,1);
+});
+test("fatura maliyeti 60 LOT A + 40 LOT B, çift fiyat yok",async()=>{
+  const db=new D1Fixture();
+  await postPhysicalReceipt(db,sample({lotNo:"LOT-A",quantity:60}));
+  await postPhysicalReceipt(db,sample({lotNo:"LOT-B",quantity:40}));
+  for(const [lot,qty] of [["LOT-A",60],["LOT-B",40]] as const){
+    const x=sample({lotNo:lot,quantity:qty});
+    await postPhysicalCostLink(db,{...x,invoiceId:"inv",invoiceLineId:"invline",
+      allocatedQuantity:qty,allocatedTotal:qty*5,currency:"TRY"});
+  }
+  const rows=db.sql.prepare("SELECT data FROM json_store WHERE scope='BOYAHANE_LOT'").all() as any[];
+  assert.equal(rows.reduce((sum,x)=>sum+JSON.parse(x.data).totalCost,0),500);
+  assert.equal(rows.reduce((sum,x)=>sum+JSON.parse(x.data).entryKg,0),100);
+  assert.equal(db.count("json_store","WHERE scope='BOYAHANE_STOCK_MOVEMENT'"),2);
+});
+test("fatura bağlı irsaliye yoksa maliyet yazmaz, LOT fiziksel miktar aşımı bloke",async()=>{
+  const db=new D1Fixture(),data={...sample(),invoiceId:"inv",invoiceLineId:"lineX",allocatedQuantity:50,allocatedTotal:25};
+  await assert.rejects(()=>postPhysicalCostLink(db,data),(e:any)=>e.code==="PHYSICAL_RECEIPT_PENDING");
+  assert.equal(db.count("accounting_physical_operations"),0);
+  await postPhysicalReceipt(db,sample({quantity:40}));
+  await assert.rejects(()=>postPhysicalCostLink(db,{...data,quantity:40,allocatedQuantity:45}),(e:any)=>e.code==="COST_ALLOCATION_INVALID"||e.code==="COST_QUANTITY_OVER_ALLOCATED");
+});
+test("100 paralel maliyet retry: aynı fatura satırı LOT'a yalnız bir kez fiyat bağlar",async()=>{
+  const db=new D1Fixture();await postPhysicalReceipt(db,sample());
+  const data={...sample(),invoiceId:"fatura1",invoiceLineId:"line1",allocatedQuantity:100,allocatedTotal:450};
+  const results=await Promise.allSettled(Array.from({length:100},()=>postPhysicalCostLink(db,data)));
+  assert.ok(results.some(x=>x.status==="fulfilled"));
+  const lot=JSON.parse((db.sql.prepare("SELECT data FROM json_store WHERE scope='BOYAHANE_LOT'").get() as any).data);
+  assert.equal(lot.totalCost,450);
+  assert.equal(lot.financialDocuments.length,1);
+});
+test("Stok 100 adet kayıt bir kez, fatura maliyeti eklenir ama miktar değişmez",async()=>{
+  const db=new D1Fixture(),data=sample({route:"STOCK",quantity:100});
+  await postPhysicalReceipt(db,data);
+  await postPhysicalCostLink(db,{...data,invoiceId:"fatura1",invoiceLineId:"line1",
+    allocatedQuantity:100,allocatedTotal:300});
+  await postPhysicalCostLink(db,{...data,invoiceId:"fatura1",invoiceLineId:"line1",
+    allocatedQuantity:100,allocatedTotal:300});
+  const s=db.sql.prepare("SELECT * FROM stock_movements").get() as any;
+  assert.equal(s.quantity,100);assert.equal(s.total_amount,300);
+  assert.equal(JSON.parse(s.raw).financialDocuments.length,1);
 });
