@@ -82,3 +82,14 @@ button{cursor:pointer}
 .super-admin-security .security-tabs button{min-height:44px}
 @media(min-width:610px){.owner-summary-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){.owner-summary-grid>div{animation:none;transition:none}}
+
+/* KY ERP PRO 4.2 — Full ERP inside the same installed trusted app */
+.ky-pro-portal{overflow:hidden;border-color:#bad4ee;background:linear-gradient(160deg,#fff,#edf5ff)}
+.ky-pro-portal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.ky-pro-portal-head>div{display:grid;gap:7px;min-width:0}
+.ky-pro-portal-head h2{font-size:20px;color:#193f67}
+.ky-pro-portal-head p{font-size:12px;color:#607890;line-height:1.55}
+.ky-pro-portal .ky-pro-mark{display:grid;place-items:center;flex:none;width:44px;height:44px;border-radius:14px;background:#12385d;color:#fff;font-weight:900}
+.ky-pro-portal-button{display:flex;align-items:center;justify-content:space-between;min-height:54px;padding:13px 17px;border-radius:14px;background:#245fa5;color:#fff;text-decoration:none;font-weight:850;font-size:14px}
+.ky-pro-portal-button span{font-size:24px;line-height:1}
+.ky-pro-portal>small{font-size:10px;color:#718ba4}
