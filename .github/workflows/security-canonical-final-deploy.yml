@@ -134,7 +134,7 @@ jobs:
 
           primary_status="$(curl --silent --show-error --max-time 20 -o /tmp/security-primary.html -w '%{http_code}' https://security.kyerp.net/guvenlik/)"
           test "$primary_status" = "200"
-          grep -q '<title>KY ERP Güvenlik v4.2.0</title>' /tmp/security-primary.html
+          grep -q '<title>KY ERP PRO v4.2.0</title>' /tmp/security-primary.html
           grep -q '/guvenlik/app.js' /tmp/security-primary.html
           grep -q 'v4.2.0' /tmp/security-primary.html
 
