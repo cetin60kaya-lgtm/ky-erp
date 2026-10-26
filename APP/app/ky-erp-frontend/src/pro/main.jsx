@@ -1,6 +1,6 @@
 import React,{useCallback,useEffect,useMemo,useRef,useState,Suspense} from "react";
 import{createRoot}from"react-dom/client";
-import{House,ShieldCheck,LayoutGrid,ChartNoAxesCombined,UserRound,Search,X,ChevronRight,RefreshCw,LogOut}from"lucide-react";
+import{House,ShieldCheck,LayoutGrid,ChartNoAxesCombined,UserRound,Search,X,ChevronRight}from"lucide-react";
 import{AuthProvider,useAuth}from"../context/AuthContext";
 import{installPersistedAuthBootstrap}from"../context/authBootstrap";
 import{installAndroidRuntimeBridge}from"../utils/installAndroidRuntimeBridge";
@@ -69,7 +69,7 @@ function ModuleChooser({opened,onClose,allowed}){
 }
 
 function ProDock(){
- const {user,hasModule,logout}=useAuth();
+ const {user,hasModule}=useAuth();
  const [menuOpen,setMenuOpen]=useState(false);
  const [currentPath,setCurrentPath]=useState(location.pathname);
  const owner=OWNER_ROLES.has(String(user?.role||"").toUpperCase());
@@ -106,7 +106,7 @@ function ProDock(){
  </>;
 }
 function ProApplication(){
- const {user,isAuthenticated,loading,logout}=useAuth();
+ const {user,isAuthenticated,loading}=useAuth();
  if(loading)return <div className="ky-pro-loading"><span className="ky-pro-loading-icon">KY</span><strong>KY ERP PRO</strong><p>Güvenli oturum ve yetkiler kontrol ediliyor...</p></div>;
  if(!isAuthenticated)return <div className="ky-pro-login"><div className="ky-pro-login-bar"><a href="/guvenlik/"><ShieldCheck size={18}/> KY Güvenlik</a><strong>KY ERP PRO v4.2.0</strong></div><LoginPage onClose={()=>{}}/></div>;
  return <div className="ky-pro-app" data-role={String(user?.role||"")}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense><ProDock/></div>;
