@@ -1,5 +1,8 @@
 # KY ERP / PC PDKS — ChatGPT DESEN Erişimi ve Yeni Sohbet Kuralı
 
+> **Güncel ve sabit giriş noktası:** Özel `cetin60kaya-lgtm/kyerp/CONTROL/KY_CONTROL_MERKEZ.md`. Bu dosya ve tarihli kayıtlar geçmiş kabul ve güvenlik kılavuzudur; güncel tek merkezde işaretlenir.
+
+
 **Kayıt:** 15.10.2026 · Kullanıcının kalıcı tercihi: DESEN üzerinde KY Control Hub ile kurulan gerçek ChatGPT erişimini yeni sohbetlerde sıfırdan kurmaya çalışma; mevcut bağlantı ve test kanıtlarını kontrol ederek işe devam et.
 
 ## Nereden başlanır?
