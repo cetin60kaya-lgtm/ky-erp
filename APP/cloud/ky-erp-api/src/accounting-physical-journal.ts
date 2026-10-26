@@ -1,7 +1,7 @@
 // @ts-nocheck
 // Durable physical receipt in the existing canonical stock_movements / Boyahane json_store.
 // One operation identity, one SQL transaction per physical effect. No R2/provider writes.
-import { normalizeLotNo } from "./accounting-lot-reconciliation-core";
+import { normalizeLotNo } from "./accounting-lot-reconciliation-core.ts";
 type Row=Record<string,any>;
 const txt=(v:any)=>v==null?"":String(v).trim();
 const num=(v:any)=>Number(v);
