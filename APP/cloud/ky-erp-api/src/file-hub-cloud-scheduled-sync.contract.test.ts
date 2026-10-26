@@ -20,7 +20,7 @@ test("scheduled sync avoids rewriting unchanged cloud files", () => {
 
 test("existing five minute Worker cron also runs File Hub cloud sync", () => {
   assert.match(entry, /runFileHubCloudScheduledSync/);
-  assert.match(entry, /runSecurityWorkspaceReminderSweep\\(env\\)/);
-  assert.match(entry, /runFileHubCloudScheduledSync\\(env\\)/);
-  assert.match(entry, /retryPhysicalOperations\\(env\\)/);
+  assert.ok(entry.includes("runSecurityWorkspaceReminderSweep(env)"));
+  assert.ok(entry.includes("runFileHubCloudScheduledSync(env)"));
+  assert.ok(entry.includes("retryPhysicalOperations(env)"));
 });
