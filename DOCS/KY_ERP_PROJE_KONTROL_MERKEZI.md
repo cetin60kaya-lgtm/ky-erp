@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 26.10.2026 — CANLI D1 0062 MIGRATION TAMAMLANDI (GUNCEL KARAR)
+
+- **Schema canli:** Yalniz `0062_accounting_physical_receipt_journal.sql` production `ky-erp-db` D1'e kontrollu uygulandi. [Worker migration/yayin #40279707049](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40279707049) SUCCESS; oncesinde tam D1 yedegi (20.8 MB Actions artifact), salt-okunur on kosul ve sonrasinda **2 tablo + 4 index + 1 trigger + 7 alan** PASS, baslangic journal kaydi sifir. Worker deploy/API health PASS.
+- **Onay tuketildi:** [PR #474](https://github.com/cetin60kaya-lgtm/ky-erp/pull/474) migration gate merged, [CI #40279521273](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40279521273) SUCCESS. Ardindan `applyMigrations=false`, `applyPhysical0062=false`, `migrationApprovedByUser=false` sabitlendi; [Worker izni kapali tekrar yayin #40279954615](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40279954615) SUCCESS ve butun migration adimlari SKIPPED.
+- **KAPSAM:** Basarili olan is D1 0062 schema ve production Worker/API yayinidir. Gercek banka, cari, e-Belge kesin kayit, fiziki LOT, Boyahane, ISNET resmi gonderim ve 19 sekmenin oturumlu saha E2E yapilmadi; yeni real data deneme kaydi olusturulmadi. Bu nedenle 19/19 saha kabul PASS degildir.
+- Asagidaki eski 0062 "onay bekliyor" satirlari tarihsel release durumlarini gosterir; en guncel karar bu bolumdur.
+
+
+
 ## 26.10.2026 — PR #472 yayın kanıtı (production 0062 migration SKIPPED)
 
 - **Worker [#40277506081](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40277506081)** SUCCESS, deploy SHA `1ef3348135db1395bad86c51735fa1b191c84f0e`, canlı D1 tam export+artifact, read-only schema, Worker deploy ve API health başarılı; migration adımları **SKIPPED**.
