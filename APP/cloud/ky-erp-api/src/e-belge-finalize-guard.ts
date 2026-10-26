@@ -20,3 +20,15 @@ export async function markEBelgeFinalization(db:any,slug:string,id:string,state:
   if(!["APPROVED","REVIEW_REQUIRED","FINALIZE_RETRY"].includes(state))throw Error("Invalid document finalization state");
   return db.prepare("UPDATE accounting_documents SET status=?,updated_at=? WHERE id=? AND main_company_slug=? AND deleted_at IS NULL AND posted_at IS NULL AND status IN ('FINALIZING','APPROVED')").bind(state,new Date().toISOString(),id,slug).run();
 }
+
+export async function reclaimEBelgeFinalization(db:any,slug:string,id:string,expectedUpdatedAt:string,actorId:string) {
+  if(!slug||!id||!expectedUpdatedAt||!actorId)return {ok:false,code:"FINALIZE_CONTEXT_REQUIRED"};
+  const ts=new Date().toISOString();
+  const q=await db.prepare(`UPDATE accounting_documents SET status='FINALIZING',
+    approved_by=?,approved_at=?,updated_at=? WHERE id=? AND main_company_slug=?
+    AND deleted_at IS NULL AND posted_at IS NULL AND status='FINALIZE_RETRY'
+    AND updated_at=? AND approved_by IS NOT NULL`)
+    .bind(actorId,ts,ts,id,slug,expectedUpdatedAt).run();
+  if(Number(q.meta?.changes||0)===1)return{ok:true,claimedAt:ts,recovery:true};
+  return{ok:false,code:"FINALIZE_RECOVERY_CONFLICT"};
+}

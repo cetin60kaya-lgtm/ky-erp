@@ -2,12 +2,13 @@
 import type { Context, Hono } from "hono";
 import { analyzeAccountingDocument, accountingDocumentIntelligenceStatus } from "./accounting-document-intelligence";
 import { postAccountingDocumentAtomic } from "./accounting-document-posting-atomic";
-import { claimEBelgeFinalization, markEBelgeFinalization } from "./e-belge-finalize-guard";
+import { postPhysicalReceipt, postPhysicalCostLink, reconcileProvisionalReceipt, readPhysicalDocumentStatus } from "./accounting-physical-journal";
+import { claimEBelgeFinalization, reclaimEBelgeFinalization, markEBelgeFinalization } from "./e-belge-finalize-guard";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { verifyIsnetReadOnlySession } from "./isnet-runtime-v2";
 import { processCloudArchiveJobs } from "./accounting-document-archive";
 import { requiredLotCoverageComplete, resolveAllocatedLotEvidence } from "./accounting-lot-allocation";
-import { resolveProductLotPolicy } from "./accounting-lot-reconciliation-core";
+import { resolveProductLotPolicy, normalizeLotNo } from "./accounting-lot-reconciliation-core";
 import { recordBoyahanePhysicalReceipt, recordGenericPhysicalReceipt } from "./accounting-physical-receipt";
 import { reconcileEBelgeInvoice } from "./e-belge-match-engine";
 import { parseCanonicalEBelgeUbl } from "./e-belge-ubl";
@@ -267,6 +268,106 @@ async function routeStockAndLots(c:Context<AppEnv>,slug:string,doc:Row,lines:Row
   return{stockMovements,lots,pendingPhysicalReceipts};
 }
 
+// Canonical physical journal: actual dispatch is the source of quantity, invoice only allocates cost.
+async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:Row[],actor:Row={}) {
+  const incoming=upper(doc.direction)==="INCOMING",dispatch=isDispatch(doc.document_type),invoice=isInvoice(doc.document_type);
+  const result={stockMovements:0,lots:0,costLinks:0,pendingPhysicalReceipts:0,idempotent:0};
+  if(!incoming||(!dispatch&&!invoice))return result;
+  for(const line of lines){
+    const raw=safeJson(line.raw_metadata),route=upper(raw.routingType);
+    if(!["STOCK","BOYAHANE","CONSUMABLE"].includes(route))continue;
+    const productId=text(line.product_id),product=productId?await getEBelgeProduct(c,slug,productId):null;
+    if(!product)throw Object.assign(new Error("Fiziksel satırın ürünü yok."),{code:"PRODUCT_NOT_FOUND"});
+    const policy=resolveProductLotPolicy(product,route),qty=numberValue(line.quantity);
+    if(qty<=0)throw Object.assign(new Error("Fiziksel miktar pozitif olmalıdır."),{code:"PHYSICAL_QUANTITY_INVALID"});
+    const sourceLot=text(raw.dispatchLotNo||raw.lotNo||raw.invoiceLotNo),supplier=text(doc.party_company_id);
+    if(!supplier)throw Object.assign(new Error("Fiziksel tedarikçi cari kartı zorunludur."),{code:"PHYSICAL_SUPPLIER_REQUIRED"});
+    if(dispatch){
+      const list=safeArray(raw.lotAllocations).filter((a:Row)=>numberValue(a.quantity)>0);
+      const grouped=new Map<string,Row>();
+      if(list.length){
+        for(const alloc of list){
+          const lot=text(alloc.lotNo||sourceLot),key=normalizeLotNo(lot);
+          const current=grouped.get(key)||{lotNo:lot,quantity:0};
+          current.quantity+=numberValue(alloc.quantity);
+          grouped.set(key,current);
+        }
+        if(Math.abs([...grouped.values()].reduce((sum,a)=>sum+numberValue(a.quantity),0)-qty)>0.00001)
+          throw Object.assign(new Error("Çoklu LOT toplamı fiziksel irsaliye miktarıyla eşleşmiyor."),{code:"LOT_QUANTITY_MISMATCH"});
+      }else grouped.set(normalizeLotNo(sourceLot),{lotNo:sourceLot,quantity:qty});
+      for(const allocation of grouped.values()){
+        const args={tenant:slug,documentId:text(doc.id),documentLineId:text(line.id),
+          physicalDocumentId:text(doc.id),physicalLineId:text(line.id),
+          productId,supplierCompanyId:supplier,route,lotNo:text(allocation.lotNo),
+          lotPolicy:policy,quantity:numberValue(allocation.quantity),
+          unit:line.unit_code,sourceType:"E_BELGE_DISPATCH"};
+        const matched=await reconcileProvisionalReceipt(c.env.DB,args);
+        const receipt=matched || await postPhysicalReceipt(c.env.DB,args);
+        result.idempotent+=receipt.idempotent?1:0;
+        if(!receipt.idempotent){result.stockMovements++;if(route==="BOYAHANE")result.lots++}
+      }
+      continue;
+    }
+    const rawAllocations=safeArray(raw.lotAllocations||raw.reconciliation?.allocations)
+      .filter((a:Row)=>text(a.dispatchId)&&text(a.dispatchLineId)&&numberValue(a.quantity)>0);
+    if(rawAllocations.length){
+      const grouped=new Map<string,Row>();
+      for(const allocation of rawAllocations){
+        const lot=text(allocation.lotNo||sourceLot),
+          key=[text(allocation.dispatchId),text(allocation.dispatchLineId),normalizeLotNo(lot)].join(":");
+        const current=grouped.get(key)||{...allocation,lotNo:lot,quantity:0};
+        current.quantity+=numberValue(allocation.quantity);grouped.set(key,current);
+      }
+      if(Math.abs([...grouped.values()].reduce((sum,a)=>sum+numberValue(a.quantity),0)-qty)>0.00001)
+        throw Object.assign(new Error("Faturadaki çoklu irsaliye/LOT tahsis miktarı tutarsız."),{code:"INVOICE_ALLOCATION_QUANTITY_MISMATCH"});
+      for(const allocation of grouped.values()){
+        const source=await dispatchSource(c,slug,allocation);
+        if(!source||!isDispatch(source.document.document_type)||upper(source.document.direction)!=="INCOMING"||
+           upper(source.document.status)!=="POSTED"||text(source.line.product_id)!==productId)
+          throw Object.assign(new Error("Bağlı fiziksel irsaliye tamamlanmamış veya ürün farklı."),{code:"PHYSICAL_DISPATCH_REQUIRED"});
+        const sourceRaw=safeJson(source.line.raw_metadata),lot=text(allocation.lotNo||sourceRaw.dispatchLotNo||sourceRaw.lotNo||sourceLot);
+        const cost=numberValue(line.line_total)*(numberValue(allocation.quantity)/qty);
+        const linked=await postPhysicalCostLink(c.env.DB,{
+          tenant:slug,documentId:text(doc.id),documentLineId:text(line.id),invoiceId:text(doc.id),
+          invoiceLineId:text(line.id),invoiceNo:text(doc.document_no),currency:text(doc.currency),
+          physicalDocumentId:text(source.document.id),physicalLineId:text(source.line.id),
+          productId,supplierCompanyId:text(source.document.party_company_id),route,lotNo:lot,
+          lotPolicy:policy,quantity:numberValue(source.line.quantity),
+          allocatedQuantity:numberValue(allocation.quantity),allocatedTotal:cost,
+        });
+        result.costLinks++;result.idempotent+=linked.idempotent?1:0;
+      }
+      continue;
+    }
+    // Invoice-first physical stock is opt-in only. The approved provisional record is
+    // the only physical effect; the actual dispatch later reconciles it without adding quantity.
+    const provisionalApproved=raw.allowInvoicePhysicalReceipt===true ||
+      raw.provisionalPhysicalReceiptApproved===true;
+    if(provisionalApproved){
+      const role=upper(actor.role);
+      if(!["OWNER","SUPER_ADMIN","COMPANY_OWNER","ADMIN","MUHASEBE","ACCOUNTING","FINANCE"].includes(role))
+        throw Object.assign(new Error("Geçici fiziksel kabul yetkili mali kullanıcı onayı gerektirir."),
+          {code:"PROVISIONAL_RECEIPT_FORBIDDEN"});
+      const receiptArgs={tenant:slug,documentId:text(doc.id),documentLineId:text(line.id),
+        physicalDocumentId:text(doc.id),physicalLineId:text(line.id),
+        productId,supplierCompanyId:supplier,route,lotNo:sourceLot,
+        lotPolicy:policy,quantity:qty,unit:line.unit_code,
+        provisional:true,sourceType:"E_BELGE_INVOICE_PROVISIONAL"};
+      const receipt=await postPhysicalReceipt(c.env.DB,receiptArgs);
+      if(!receipt.idempotent){result.stockMovements++;if(route==="BOYAHANE")result.lots++}
+      const cost=await postPhysicalCostLink(c.env.DB,{...receiptArgs,
+        invoiceId:text(doc.id),invoiceLineId:text(line.id),invoiceNo:text(doc.document_no),
+        currency:text(doc.currency),allocatedQuantity:qty,allocatedTotal:numberValue(line.line_total)});
+      result.costLinks++;result.idempotent+=(receipt.idempotent?1:0)+(cost.idempotent?1:0);
+      continue;
+    }
+    result.pendingPhysicalReceipts++;
+    throw Object.assign(new Error("Fatura önce geldi. İrsaliye veya yetkili açık geçici fiziksel kabul onayı bekleniyor."),
+      {code:"PHYSICAL_DISPATCH_REQUIRED"});
+  }
+  return result;
+}
+
 function poolFilter(filter:string){const f=upper(filter);if(f==="INCOMING_INVOICE")return{sql:"d.direction='INCOMING' AND d.document_type LIKE '%FATURA%'"};if(f==="OUTGOING_INVOICE")return{sql:"d.direction='OUTGOING' AND d.document_type LIKE '%FATURA%'"};if(f==="INCOMING_DISPATCH")return{sql:"d.direction='INCOMING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="OUTGOING_DISPATCH")return{sql:"d.direction='OUTGOING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="MATCHING_WAIT")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND i.issue_code LIKE 'DISPATCH_%')"};if(f==="ISSUE")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR'))"};if(f==="REVIEW")return{sql:"d.status IN ('INGESTED','REVIEW_REQUIRED','READY_FOR_APPROVAL','APPROVED')"};if(f==="HISTORY")return{sql:"d.status='POSTED'"};return{sql:"1=1"}}
 
 export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
@@ -300,7 +401,27 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     return c.json({ok:true,data:{today:todayValue,monthStart,previousMonthStart,previousMonthEnd,summary:{...summary,attention:numberValue(attention?.n),matchingWait:numberValue(matching?.n)},recent:recent.results||[]}});
   });
   app.get("/api/e-belge/pool",async c=>{const slug=slugOf(c),page=safePageInt(c.req.query("page"),1,1000000),pageSize=safePageInt(c.req.query("pageSize"),50,100),q=text(c.req.query("q")),from=text(c.req.query("from")),to=text(c.req.query("to")),status=upper(c.req.query("status")),direction=upper(c.req.query("direction")),filter=poolFilter(text(c.req.query("filter"))),where=["d.main_company_slug=?","d.deleted_at IS NULL",filter.sql],args:any[]=[slug];if((from&&!validDate(from))||(to&&!validDate(to))||(from&&to&&from>to))return c.json(error("INVALID_DATE_RANGE","Geçerli bir başlangıç ve bitiş tarihi seçin; bitiş başlangıçtan önce olamaz."),400);if(direction==="INCOMING"||direction==="OUTGOING"){where.push("d.direction=?");args.push(direction)}if(status&&status!=="ALL"){where.push("UPPER(COALESCE(d.status,''))=?");args.push(status)}if(q){where.push("(UPPER(COALESCE(d.document_no,'')) LIKE UPPER(?) OR UPPER(COALESCE(d.party_name,'')) LIKE UPPER(?) OR COALESCE(d.party_tax_no,'') LIKE ?)");args.push(`%${q}%`,`%${q}%`,`%${q}%`)}if(from){where.push("COALESCE(d.issue_date,d.created_at)>=?");args.push(from)}if(to){where.push("COALESCE(d.issue_date,d.created_at)<=?");args.push(`${to}T23:59:59`)}const base=`FROM accounting_documents d WHERE ${where.join(" AND ")}`,count=await c.env.DB.prepare(`SELECT COUNT(*) n ${base}`).bind(...args).first<Row>(),rows=await c.env.DB.prepare(`SELECT d.*,(SELECT COUNT(*) FROM accounting_document_lines l WHERE l.main_company_slug=d.main_company_slug AND l.document_id=d.id) line_count,(SELECT COUNT(*) FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR')) issue_count,(SELECT status FROM accounting_document_archive_jobs a WHERE a.main_company_slug=d.main_company_slug AND a.document_id=d.id ORDER BY a.created_at DESC LIMIT 1) archive_status ${base} ORDER BY COALESCE(d.issue_date,d.created_at) DESC LIMIT ? OFFSET ?`).bind(...args,pageSize,(page-1)*pageSize).all<Row>();const stats=await c.env.DB.prepare(`SELECT COUNT(*) total,SUM(CASE WHEN direction='INCOMING' AND document_type LIKE '%FATURA%' THEN 1 ELSE 0 END) incomingInvoices,SUM(CASE WHEN direction='OUTGOING' AND document_type LIKE '%FATURA%' THEN 1 ELSE 0 END) outgoingInvoices,SUM(CASE WHEN document_type LIKE '%IRSALIYE%' THEN 1 ELSE 0 END) dispatches,SUM(CASE WHEN status='POSTED' THEN 1 ELSE 0 END) posted FROM accounting_documents WHERE main_company_slug=? AND deleted_at IS NULL`).bind(slug).first<Row>();return c.json({ok:true,data:{items:rows.results||[],page,pageSize,total:numberValue(count?.n),stats}})});
-  app.get("/api/e-belge/documents/:id",async c=>{const slug=slugOf(c),id=c.req.param("id"),doc=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(id,slug).first<Row>();if(!doc)return c.json(error("NOT_FOUND","Belge bulunamadı."),404);const [lines,issues,relations,files,archive]=await Promise.all([c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT * FROM accounting_document_issues WHERE main_company_slug=? AND document_id=? ORDER BY is_resolved,severity DESC,created_at DESC`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT r.*,d.document_no related_document_no,d.document_type related_document_type FROM accounting_document_relations r LEFT JOIN accounting_documents d ON d.id=r.related_document_id AND d.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.document_id=? ORDER BY r.created_at`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,a.preview_status,a.source_type FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id AND a.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.entity_type='DOCUMENT' AND r.entity_id=? ORDER BY a.created_at`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT * FROM accounting_document_archive_jobs WHERE main_company_slug=? AND document_id=? ORDER BY created_at DESC`).bind(slug,id).all<Row>()]);return c.json({ok:true,data:{...doc,raw_metadata:safeJson(doc.raw_metadata),lines:(lines.results||[]).map(x=>({...x,raw_metadata:safeJson(x.raw_metadata)})),issues:issues.results||[],relations:relations.results||[],files:files.results||[],archiveJobs:archive.results||[]}})});
+  app.get("/api/e-belge/documents/:id",async c=>{const slug=slugOf(c),id=c.req.param("id"),doc=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(id,slug).first<Row>();if(!doc)return c.json(error("NOT_FOUND","Belge bulunamadı."),404);const [lines,issues,relations,files,archive]=await Promise.all([c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT * FROM accounting_document_issues WHERE main_company_slug=? AND document_id=? ORDER BY is_resolved,severity DESC,created_at DESC`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT r.*,d.document_no related_document_no,d.document_type related_document_type FROM accounting_document_relations r LEFT JOIN accounting_documents d ON d.id=r.related_document_id AND d.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.document_id=? ORDER BY r.created_at`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,a.preview_status,a.source_type FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id AND a.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.entity_type='DOCUMENT' AND r.entity_id=? ORDER BY a.created_at`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT * FROM accounting_document_archive_jobs WHERE main_company_slug=? AND document_id=? ORDER BY created_at DESC`).bind(slug,id).all<Row>()]);let physicalOperations:Row[]=[];let physicalStatus="READY";
+    try{physicalOperations=await readPhysicalDocumentStatus(c.env.DB,slug,id)}
+    catch(e:any){if(text(e?.code)==="PHYSICAL_SCHEMA_APPROVAL_REQUIRED")physicalStatus="SCHEMA_APPROVAL_REQUIRED";
+      else throw e}
+    return c.json({ok:true,data:{...doc,raw_metadata:safeJson(doc.raw_metadata),
+      physicalOperations,physicalStatus,
+      lines:(lines.results||[]).map(x=>({...x,raw_metadata:safeJson(x.raw_metadata)})),
+      issues:issues.results||[],relations:relations.results||[],files:files.results||[],
+      archiveJobs:archive.results||[]}})});
+  app.get("/api/e-belge/documents/:id/physical-operations",async c=>{
+    const slug=slugOf(c),id=c.req.param("id"),user=await getAuthenticatedUser(c);
+    if(!user?.id)return c.json(error("UNAUTHORIZED","Yetkili oturum gereklidir."),401);
+    const row=await c.env.DB.prepare("SELECT id FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL").bind(id,slug).first<Row>();
+    if(!row)return c.json(error("NOT_FOUND","Belge bulunamadı."),404);
+    try{const records=await readPhysicalDocumentStatus(c.env.DB,slug,id);
+      return c.json({ok:true,data:{status:"READY",items:records}})
+    }catch(e:any){
+      return c.json(error(text(e?.code)||"PHYSICAL_STATUS_FAILED",text(e?.message)||"Fiziksel durum alınamadı."),
+        text(e?.code)==="PHYSICAL_SCHEMA_APPROVAL_REQUIRED"?503:500);
+    }
+  });
   app.get("/api/e-belge/company-suggestions",async c=>{const slug=slugOf(c),q=text(c.req.query("q")),term=`%${q}%`;const rows=await c.env.DB.prepare(`SELECT id,name,tax_no,company_type,current_balance FROM companies WHERE main_company_slug=? AND deleted_at IS NULL AND is_active=1 AND (?='' OR UPPER(name) LIKE UPPER(?) OR COALESCE(tax_no,'') LIKE ?) ORDER BY name COLLATE NOCASE LIMIT 30`).bind(slug,q,term,term).all<Row>();return c.json({ok:true,data:rows.results||[]})});
   app.post("/api/e-belge/upload",async c=>{
     const slug=slugOf(c),body=await c.req.parseBody({all:true}),direction=explicitEBelgeDirection(body.direction),kind=upper(body.documentKind||"AUTO");
@@ -363,19 +484,17 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     if(!expected)return c.json(error("FINALIZE_VERSION_REQUIRED","Belge sürümünü yeniden okuyup onaylayın."),412);
     const existing=await c.env.DB.prepare("SELECT status,posted_at FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1").bind(id,slug).first<Row>();
     if(existing?.posted_at)return c.json({ok:true,data:{documentId:id,status:"POSTED",postedAt:existing.posted_at,idempotent:true}});
-    const claim=await claimEBelgeFinalization(c.env.DB,slug,id,expected,String(user.id));
+    const claim=existing?.status==="FINALIZE_RETRY"&&b.retryPhysical===true
+      ?await reclaimEBelgeFinalization(c.env.DB,slug,id,expected,String(user.id))
+      :await claimEBelgeFinalization(c.env.DB,slug,id,expected,String(user.id));
     if(!claim.ok)return c.json(error(claim.code,"Belge başka işlemde olabilir veya sürümü değişmiş; güncel belgeyi açıp yeniden kontrol edin.",claim),claim.code==="NOT_FOUND"?404:409);
     let phase="VALIDATING";
     try {
       const {doc,lines}=await validateForFinal(c,slug,id);
       // Stok/Boyahane fiziksel girişleri farklı tablolara ve json_store'a yazılıyor.
       // Aynı atomik D1 planına alınmadıkları sürece asla "POSTED" gösterme.
-      const physical=lines.some((line:Row)=>
-        ["STOCK","BOYAHANE","CONSUMABLE"].includes(upper(safeJson(line.raw_metadata).routingType)));
-      if(physical)throw Object.assign(new Error(
-        "Fiziksel stok/LOT girişli belgede bütünlük işlemi hazır değil. Finans ve fiziksel kayıt oluşturulmadı; inceleme gerekli."
-      ),{code:"PHYSICAL_RECEIPT_ATOMICITY_REQUIRED"});
-      const inventory={stockMovements:0,lots:0,pendingPhysicalReceipts:0};
+      phase="PHYSICAL";
+      const inventory=await routePhysicalJournal(c,slug,doc,lines,user);
       await markEBelgeFinalization(c.env.DB,slug,id,"APPROVED");
       phase="FINANCE";
       const posting=await postAccountingDocumentAtomic(c.env.DB,slug,id,String(user.id));
