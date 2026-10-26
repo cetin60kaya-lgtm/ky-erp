@@ -65,9 +65,11 @@
     "ky-erp-pro-v4.2.1-single-screen-push-inline-approval",
     "kyerp-login-preserves-installed-pwa-route",
     "security-device-approvals-without-erp-session",
-    "android-pwa-notification-focus-without-login-reset"
+    "android-pwa-notification-focus-without-login-reset",
+    "physical-finalization-onay-sorunlar-journal-visibility-pr472",
+    "physical-queue-status-existing-ui-no-redesign-pr472"
   ],
-  "note": "26.10.2026 PR #473 merge de0988a3a09a6f87bd5b74e2dbd57083cfea7847; mobile in-screen WebAuthn biometric signed approval and preserved AuthContext, no /guvenlik navigation, PC owner security approvals possible without current ERP session, canonical PWA same id. 2026-10-26 PR #471 merge 11e98747a5aa5cff9ae6d6e9ed2efb5db78d064d: Existing /guvenlik/ PWA remains single installed Android app, full canonical ERP code packaged on same origin under /guvenlik/pro/, user sees KY ERP PRO 4.2.0; all module tabs through canonical AppV3, original backend RBAC and owner device keys preserved. Real Android E2E separately required. 26.10.2026: PR #466 merge 8abdb7d99078e37aa0b810c538a2621de4fcfcf2 — KY Güvenlik v4.1.0 artık tek /guvenlik/ kimliği, eski /ky-sistem/ ve /owner-security/ paketleri kaldırıldı, /ky-firma/ firma için ayrıdır; güvenilir telefon PWA id ve cihaz DB korunur. Android gerçek cihaz kabulü ve Security Worker canlı sonucu ayrıca kanıtlanır. 26.10.2026: Worker release #40242759411 SUCCESS with full D1 backup, schema, deploy and health; migration skipped. PR #463, #464, #465, #467 CI SUCCESS + merged, onaylı HTML ve KY Güvenlik/İK Shell korunmuştur. e-Belge hizmet faturası atomik, fiziksel stock LOT geçişi fail-closed. Bu Pages release son kaynakla UI + güvenli İşNet durum paneli + onay bağlamını yayımlar. Yetkili oturumlu 19 sekme gerçek E2E yok.",
-  "sourceCommit": "c3183cabac66992a6c5de90d96a9786190716b8f",
+  "note": "26.10.2026 PR #472 merged 3faa926730c6525c913603ca2f5a409d45fb6c90, CI #40251063644 SUCCESS. Existing e-Belge Onay & Sorunlar physical journal state/retry/audit indication; no new HTML/Shell designs. Worker source deployed separately, migrations disabled; D1 0062 production schema separately requires user consent; without schema physical finalization fail-closed. All existing KY Güvenlik/PDKS/Günlük modules retained. User session and live physical transaction E2E pending. 26.10.2026 PR #473 merge de0988a3a09a6f87bd5b74e2dbd57083cfea7847; mobile in-screen WebAuthn biometric signed approval and preserved AuthContext, no /guvenlik navigation, PC owner security approvals possible without current ERP session, canonical PWA same id. 2026-10-26 PR #471 merge 11e98747a5aa5cff9ae6d6e9ed2efb5db78d064d: Existing /guvenlik/ PWA remains single installed Android app, full canonical ERP code packaged on same origin under /guvenl",
+  "sourceCommit": "1ef3348135db1395bad86c51735fa1b191c84f0e",
   "requestedAt": "2026-10-26"
 }
