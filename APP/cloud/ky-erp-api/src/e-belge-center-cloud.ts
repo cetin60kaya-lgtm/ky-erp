@@ -8,7 +8,7 @@ import { getAuthenticatedUser } from "./auth-cloud";
 import { verifyIsnetReadOnlySession } from "./isnet-runtime-v2";
 import { processCloudArchiveJobs } from "./accounting-document-archive";
 import { requiredLotCoverageComplete, resolveAllocatedLotEvidence } from "./accounting-lot-allocation";
-import { resolveProductLotPolicy } from "./accounting-lot-reconciliation-core";
+import { resolveProductLotPolicy, normalizeLotNo } from "./accounting-lot-reconciliation-core";
 import { recordBoyahanePhysicalReceipt, recordGenericPhysicalReceipt } from "./accounting-physical-receipt";
 import { reconcileEBelgeInvoice } from "./e-belge-match-engine";
 import { parseCanonicalEBelgeUbl } from "./e-belge-ubl";
