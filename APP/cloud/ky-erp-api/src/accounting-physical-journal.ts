@@ -252,13 +252,22 @@ export async function postPhysicalCostLink(db:any,data:Row) {
     throw err("LEGACY_COST_REVIEW","Bu maliyet daha önce kayıtlı olabilir; ikinci kez eklenmeyecek.");
   const ts=now(),lease=crypto.randomUUID();
   if(!cached){
-    await db.prepare(`INSERT OR IGNORE INTO accounting_physical_operations
-      (id,main_company_slug,document_id,document_line_id,physical_document_id,physical_line_id,
-       operation_type,product_id,supplier_company_id,lot_normalized,payload_hash,payload_json,quantity,state,
-       attempts,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,'COST_LINK',?,?,?,?,?,?,'PENDING',0,?,?)`)
-      .bind(costKey,tenant,invoiceId,invoiceLineId,f.physicalDocumentId,f.physicalLineId,
-        f.productId,f.supplierCompanyId,f.normalizedLot,payloadHash,JSON.stringify(data),qty,ts,ts).run();
+    try{
+      await db.prepare(`INSERT OR IGNORE INTO accounting_physical_operations
+        (id,main_company_slug,document_id,document_line_id,physical_document_id,physical_line_id,
+         operation_type,product_id,supplier_company_id,lot_normalized,payload_hash,payload_json,quantity,state,
+         attempts,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,'COST_LINK',?,?,?,?,?,?,'PENDING',0,?,?)`)
+        .bind(costKey,tenant,invoiceId,invoiceLineId,f.physicalDocumentId,f.physicalLineId,
+          f.productId,f.supplierCompanyId,f.normalizedLot,payloadHash,JSON.stringify(data),qty,ts,ts).run();
+    }catch(e:any){
+      const message=txt(e?.message);
+      if(message.includes("COST_QUANTITY_OVER_ALLOCATED"))
+        throw err("COST_QUANTITY_OVER_ALLOCATED","Fatura tahsisi fiziksel LOT miktarını aşar.");
+      if(message.includes("PHYSICAL_RECEIPT_PENDING"))
+        throw err("PHYSICAL_RECEIPT_PENDING","Bağlı fiziksel mal kabulü tamamlanmadı.");
+      throw err("PHYSICAL_JOURNAL_WRITE_FAILED","Maliyet journal rezervasyonu kaydedilemedi.");
+    }
   }
   const current=await getJournal(db,costKey,tenant);
   if(current?.payload_hash!==payloadHash)throw err("COST_PAYLOAD_CONFLICT","Maliyet kimliği çakıştı.");
