@@ -16,6 +16,13 @@ const destination=join(out,"guvenlik","pro");
 await mkdir(destination,{recursive:true});
 await cp(join(compiled,"assets"),join(destination,"assets"),{recursive:true,errorOnExist:true});
 await cp(join(compiled,"pro.html"),join(destination,"index.html"),{errorOnExist:true});
+await mkdir(join(destination,"vendor"),{recursive:true});
+for(const file of ["auth-emergency-email.js","auth-external-recovery.js"]){
+  await access(join(source,file));
+  await cp(join(source,file),join(destination,file),{errorOnExist:true});
+}
+await access(join(source,"vendor","qrcode.min.js"));
+await cp(join(source,"vendor","qrcode.min.js"),join(destination,"vendor","qrcode.min.js"),{errorOnExist:true});
 for(const [name,filename] of [["guvenlik","index.html"],["ky-firma","manifest.webmanifest"],["ky-app-shell","app.js"]])await access(join(out,name,filename));
 await access(join(destination,"index.html"));
 console.log("KY Security assets ready: "+allowed.join(", ")+". Public _redirects excluded.");
