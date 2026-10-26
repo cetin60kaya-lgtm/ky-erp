@@ -120,3 +120,8 @@ Bu kural maliyet/kota koruma kuralıdır ve performans/kolaylık gerekçesiyle a
 - GitHub PAT/DPAPI anahtarını, kişisel/maaş/banka verisini veya ekran görüntüsü içeriğini açık repoya koyma. Özel GitHub issue bile kalıcı kayıt olduğundan yalnız hassas olmayan işlem/ekran için kullanılır.
 - Remote Desktop Commander'ın kullanım kotası sıfır olduğunda mevcut köprü varken ücretli araca yönlendirme veya sahte yerel fare testi isteme. GitHub erişimi yoksa bunu açıkça söyle.
 - Bu bir depo/ajan kuralıdır; ChatGPT platformunun global sistem kurallarını kendi başına güncellemez.
+
+## KY Control Hub — 26.10.2026 canlı bağlantı güncellemesi
+
+DESEN'de mevcut üç KY Control zamanlanmış görevi kullanıcı kontrolünde `Running` ve 8840/8443 portları `Listen` görüldü. ChatGPT üzerinden **yeni ve eşleşen** özel GitHub Bridge `status` ve `open_hub` yanıtları aynı gün gerçek DESEN Windows tarafından `ok=true` döndü: canlı mesaj köprüsü PASS. Ayrıntı ve tüm yeni sohbetlerin tek başlangıç kuralı: `DOCS/KY_CHATGPT_DESEN_ERISIM_KURALI.md` ile özel `cetin60kaya-lgtm/kyerp/CONTROL/KY_DESEN_TUM_SOHBETLER_CANLI_KABUL_20261026.md`. Yeni sohbet, kullanıcı somut işlem istemedikçe komut göndermez; her seferinde canlı sonuç doğrular. Remote Desktop Commander yerine önce mevcut köprüyü değerlendir; ZIP/token isteme. Tıklama/klavye, EXE/PDKS, Drive heartbeat ve restart sonrası otomatik açılış kabul edilmiş sayılmaz.
+
