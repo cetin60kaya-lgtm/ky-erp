@@ -5,7 +5,7 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "sourceCommit": "c9a226b779c5b9992840cc316bc784fa4c23a70e",
   "requestedAt": "2026-10-26",
-  "attempt": 27,
+  "attempt": 28,
   "scope": [
     "gunluk-tum-api-ik-tenant-yetki-koruma",
     "gunluk-donem-kilit-gercek-d1-ve-yazma-engel",
@@ -37,13 +37,12 @@
     "physical-0062-durable-journal-code-only-pr472",
     "physical-normal-stock-boyahane-lot-atomic-batch-tests",
     "physical-cost-link-provisional-reconciliation-recovery",
-    "physical-0062-d1-user-approved-additive-migration-only",
-    "physical-0062-new-backup-before-apply",
-    "physical-0062-post-schema-readonly-verification"
+    "physical-0062-production-applied-and-verified-run-40279707049",
+    "migration-0062-approval-consumed-no-other-migrations"
   ],
-  "note": "26.10.2026 kullanici onayi: yalniz 0062_accounting_physical_receipt_journal.sql production D1 ky-erp-db icin onayli. Genis applyMigrations FALSE; 0050 0051 0055 0060 0061 uygulanmayacak. Worker workflow PR #474 ile gelen 0062 ozel gate: once tam D1 export/artifact, sonra hedef schema read-only kontrol, yalniz 0062 additive migration, iki tablo dort indeks bir trigger yedi sutun dogrulamasi ve API health. Gercek finans/belge/stock test verisi yazma yetkisi verilmedi. Tamamlandiktan sonra applyPhysical0062 ve migrationApprovedByUser tekrar false yapilacak.",
+  "note": "26.10.2026 0062_accounting_physical_receipt_journal.sql production ky-erp-db migration basariyla uygulandi. Kanit: Worker workflow 40279707049 SUCCESS, tam D1 export/artifact, 0062 hedefine ozel schema gate PASS (2 tablo, 4 index, 1 trigger, 7 required column, 0 journal satiri), Worker deploy ve api.kyerp.net health PASS. Diger 0050 0051 0055 0060 0061 migrationlar SKIPPED. Tek seferlik kullanici izni TUKETILDI: applyPhysical0062=false, migrationApprovedByUser=false, applyMigrations=false. IsNet resmi gonderim, gercek mali/stok E2E ve 19 sekme saha kabulü ayrica gereklidir.",
   "applyMigrations": false,
-  "migrationApprovedByUser": true,
-  "applyPhysical0062": true,
-  "approvedMigrationId": "0062"
+  "migrationApprovedByUser": false,
+  "applyPhysical0062": false,
+  "approvedMigrationId": null
 }
