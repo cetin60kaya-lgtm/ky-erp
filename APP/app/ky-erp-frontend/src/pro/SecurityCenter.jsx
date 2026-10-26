@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useState} from "react";
-import {ShieldCheck,RefreshCw,LockKeyhole,KeyRound,MonitorSmartphone,Activity,History} from "lucide-react";
-import {decideTrustedApproval,getSignedSecurityResponse,getTrustedDevice,unlockTrustedDevice} from "./securityDevice";
+import {ShieldCheck,RefreshCw,LockKeyhole,KeyRound,MonitorSmartphone,Activity,History,NotebookPen,MessageCircle} from "lucide-react";
+import {decideTrustedApproval,getSignedSecurityResponse,getTrustedDevice,unlockTrustedDevice,closeTrustedSession} from "./securityDevice";
 
 // Same mounted React tree as ERP. The section never redirects to /guvenlik/ or reloads AuthProvider.
 export default function SecurityCenter(){
@@ -8,6 +8,9 @@ export default function SecurityCenter(){
  const [pending,setPending]=useState([]),[control,setControl]=useState(null),[device,setDevice]=useState(null);
  const [status,setStatus]=useState(""),[busy,setBusy]=useState(false);
  const [matchById,setMatchById]=useState({}),[code,setCode]=useState(null);
+ const [notes,setNotes]=useState([]),[noteText,setNoteText]=useState("");
+ const [peers,setPeers]=useState([]),[selectedPeer,setSelectedPeer]=useState(null);
+ const [messages,setMessages]=useState([]),[messageText,setMessageText]=useState("");
  const refresh=useCallback(async()=>{
    try{
      const stored=await getTrustedDevice();
@@ -16,6 +19,8 @@ export default function SecurityCenter(){
      const items=await getSignedSecurityResponse("/auth/push/device/pending");
      setPending(Array.isArray(items.items)?items.items:[]);
      try{setControl(await getSignedSecurityResponse("/auth/push/device/control-center"))}catch{setControl(null)}
+     try{const data=await getSignedSecurityResponse("/auth/push/device/workspace/notes");setNotes(Array.isArray(data.items)?data.items:[])}catch{setNotes([])}
+     try{const data=await getSignedSecurityResponse("/auth/push/device/workspace/chat/users");setPeers(Array.isArray(data.items)?data.items:[])}catch{setPeers([])}
      setStatus("");
    }catch(error){setStatus(error?.message||"Güvenlik bilgisi alınamadı.")}
  },[]);
@@ -45,8 +50,36 @@ export default function SecurityCenter(){
    catch(error){setStatus(error?.message||"Giriş kodu üretilemedi.")}
    finally{setBusy(false)}
  };
- const sections=[["approvals","Onaylar",ShieldCheck],["code","Giriş Kodu",KeyRound],["sessions","Oturumlar",MonitorSmartphone],["devices","Cihazlar",MonitorSmartphone],["activity","Hareketler",Activity],["logs","Loglar",History]];
- const rows=section==="sessions"?control?.sessions:section==="devices"?control?.devices:section==="activity"?control?.activity:control?.logs;
+ const closeSession=async row=>{
+   setBusy(true);setStatus("Güvenli oturum kapatma doğrulanıyor...");
+   try{await closeTrustedSession(row);await refresh();setStatus("Oturum kapatıldı.")}
+   catch(e){setStatus(e?.message||"Oturum kapatılamadı.")}
+   finally{setBusy(false)}
+ };
+ const saveNote=async event=>{
+   event.preventDefault();if(!noteText.trim())return;
+   setBusy(true);
+   try{await getSignedSecurityResponse("/auth/push/device/workspace/notes",{method:"POST",body:{title:noteText.trim(),body:"",remindAt:""}});setNoteText("");await refresh()}
+   catch(e){setStatus(e?.message||"Not kaydedilemedi.")}
+   finally{setBusy(false)}
+ };
+ const removeNote=async id=>{
+   if(!window.confirm("Bu not silinsin mi?"))return;
+   setBusy(true);try{await getSignedSecurityResponse("/auth/push/device/workspace/notes/"+encodeURIComponent(id),{method:"DELETE"});await refresh()}
+   catch(e){setStatus(e?.message||"Not silinemedi.")}finally{setBusy(false)}
+ };
+ const openMessages=async user=>{
+   setSelectedPeer(user);
+   try{const data=await getSignedSecurityResponse("/auth/push/device/workspace/chat/messages?with="+encodeURIComponent(user.id)+"&limit=100");setMessages(Array.isArray(data.items)?data.items:[])}
+   catch(e){setStatus(e?.message||"Mesajlar alınamadı.")}
+ };
+ const sendMessage=async event=>{
+   event.preventDefault();if(!selectedPeer||!messageText.trim())return;
+   setBusy(true);try{await getSignedSecurityResponse("/auth/push/device/workspace/chat/messages",{method:"POST",body:{toUserId:selectedPeer.id,message:messageText.trim()}});setMessageText("");await openMessages(selectedPeer)}
+   catch(e){setStatus(e?.message||"Mesaj gönderilemedi.")}finally{setBusy(false)}
+ };
+ const sections=[["approvals","Onaylar",ShieldCheck],["code","Giriş Kodu",KeyRound],["sessions","Oturumlar",MonitorSmartphone],["devices","Cihazlar",MonitorSmartphone],["activity","Hareketler",Activity],["logs","Loglar",History],["notes","Notlar",NotebookPen],["chat","Mesajlar",MessageCircle]];
+ const rows=section==="sessions"?control?.sessions:section==="devices"?control?.devices:section==="activity"?control?.activity:control?.audit;
  return <main className="ky-pro-security" aria-label="Tek uygulama güvenlik kontrol merkezi">
   <header className="ky-pro-security-hero"><span>KY ERP PRO · GÜVENLİK MERKEZİ</span><h1>Güvenlik & Onaylar</h1>
    <p>ERP'yi kapatmadan girişleri, cihazları ve oturumları kontrol edin.</p>
@@ -80,8 +113,20 @@ export default function SecurityCenter(){
        <span><b>{control.summary.recentEvents??0}</b>Son olaylar</span></div>:null}
      {Array.isArray(rows)&&rows.length?rows.map((row,i)=><div className="ky-pro-security-row" key={row.id||i}>
        <strong>{row.fullName||row.username||row.title||row.action||row.type||"Güvenlik İşlemi"}</strong>
-       <small>{row.deviceLabel||row.status||row.companySlug||row.description||"-"}</small>
+       <small>{row.deviceLabel||row.status||row.mainCompanySlug||row.description||"-"}</small>
+       {section==="sessions"&&row.canClose===true?<button type="button" disabled={busy} onClick={()=>closeSession(row)}>Oturumu Kapat</button>:null}
      </div>):<p>Bu kapsamda görüntülenebilen kayıt bulunmuyor.</p>}
+   </section>:null}
+  {section==="notes"?<section className="ky-pro-security-card">
+    <h2>Kişisel Notlar</h2>
+    <form onSubmit={saveNote} className="ky-pro-security-note-form"><input value={noteText} onChange={e=>setNoteText(e.target.value)} placeholder="Yeni not..." aria-label="Yeni not"/><button type="submit" disabled={busy}>Not Ekle</button></form>
+    {notes.length?notes.map(note=><div className="ky-pro-security-row" key={note.id}><strong>{note.title||"Not"}</strong><small>{note.body||""}</small><button type="button" onClick={()=>removeNote(note.id)} disabled={busy}>Sil</button></div>):<p>Henüz kişisel not bulunmuyor.</p>}
+   </section>:null}
+   {section==="chat"?<section className="ky-pro-security-card">
+    <h2>KY ERP Mesajlar</h2>
+    <div className="ky-pro-security-peers">{peers.map(user=><button type="button" key={user.id} className={selectedPeer?.id===user.id?"active":""} onClick={()=>openMessages(user)}>{user.fullName||user.username}</button>)}</div>
+    {selectedPeer?<><h3>{selectedPeer.fullName||selectedPeer.username}</h3><div className="ky-pro-security-messages">{messages.map((msg,index)=><div className="ky-pro-security-row" key={msg.id||index}><span>{msg.message}</span><small>{new Date(msg.createdAt).toLocaleString("tr-TR")}</small></div>)}</div>
+       <form className="ky-pro-security-note-form" onSubmit={sendMessage}><input value={messageText} onChange={e=>setMessageText(e.target.value)} placeholder="Mesaj yaz..." aria-label="Mesaj yaz"/><button type="submit" disabled={busy}>Gönder</button></form></>:<p>Mesajlaşmak için bir kullanıcı seçin.</p>}
    </section>:null}
  </main>;
 }
