@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS accounting_physical_operations (
   supplier_company_id TEXT NOT NULL DEFAULT '',
   lot_normalized TEXT NOT NULL DEFAULT '',
   payload_hash TEXT NOT NULL,
+  payload_json TEXT,
   quantity REAL NOT NULL DEFAULT 0,
   state TEXT NOT NULL DEFAULT 'PENDING'
     CHECK(state IN ('PENDING','PROCESSING','DONE','RETRY','NEEDS_REVIEW')),
