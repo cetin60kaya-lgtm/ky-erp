@@ -35,7 +35,7 @@ test("Guncel tek owner telefon uygulamasi v4.2.0 ve kapsamli guvenlik ozeti suna
     assert.ok(control.includes(id));
   }
   assert.doesNotMatch(html, /href="\/ky-sistem\//);
-  assert.match(shell, /APP_VERSION="v4\.2\.0"/);
+  assert.match(shell, /APP_VERSION="v4\.1\.0"/); // KY Firma ayrı ürün sürümüdür; KY ERP PRO 4.2 ile karıştırılmaz.
 });
 
 test("Surum degisikligi mevcut telefon cihaz kaydini ve kilidini korur", () => {
