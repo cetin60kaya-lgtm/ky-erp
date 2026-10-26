@@ -138,12 +138,32 @@ function ProDock({onSecurity,securityActive,onHomeSelected}){
 function ProApplication(){
  const {user,isAuthenticated,loading}=useAuth();
  const [home,setHome]=useState(()=>location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");
- const [securityOpen,setSecurityOpen]=useState(false);
+ const [securityOpen,setSecurityOpen]=useState(()=>new URLSearchParams(location.search).get("security")==="1");
+ const [loginRequested,setLoginRequested]=useState(false);
+ const [loginEverOpened,setLoginEverOpened]=useState(false);
+ useEffect(()=>{if(loginRequested)setLoginEverOpened(true)},[loginRequested]);
  const [workspaceMounted,setWorkspaceMounted]=useState(!home);
  useEffect(()=>{if(!home)setWorkspaceMounted(true)},[home]);
  useEffect(()=>{const update=()=>{setHome(location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");setSecurityOpen(false)};window.addEventListener("popstate",update);return()=>window.removeEventListener("popstate",update)},[]);
+ useEffect(()=>{
+   const onPush=(event)=>{if(event.data?.type==="KYERP_SECURITY_PUSH_WAKE")setSecurityOpen(true)};
+   navigator.serviceWorker?.addEventListener?.("message",onPush);
+   if(location.search.includes("security=1"))history.replaceState(history.state,"",location.pathname);
+   return()=>navigator.serviceWorker?.removeEventListener?.("message",onPush);
+ },[]);
  if(loading)return <div className="ky-pro-loading"><span className="ky-pro-loading-icon">KY</span><strong>KY ERP PRO</strong><p>Güvenli oturum ve yetkiler kontrol ediliyor...</p></div>;
- if(!isAuthenticated)return <div className="ky-pro-login"><div className="ky-pro-login-bar"><span><ShieldCheck size={18}/> Tek Uygulamada Güvenli Giriş</span><strong>KY ERP PRO v4.2.1</strong></div><LoginPage onClose={()=>{}}/></div>;
+ if(!isAuthenticated)return <div className="ky-pro-app ky-pro-device-mode">
+   <header className="ky-pro-header"><div className="ky-pro-brand"><span className="ky-pro-mark">KY</span><div><strong>KY ERP <em>PRO</em></strong><small>Tek Telefon · Güvenli Onay</small></div></div>
+    <button className="ky-pro-header-action" type="button" onClick={()=>setLoginRequested(v=>!v)}>{loginRequested?"Onaylara Dön":"ERP Girişi"}</button></header>
+   <div className="ky-pro-content" hidden={loginRequested}><SecurityCenter/></div>
+   {loginEverOpened?<div className="ky-pro-content ky-pro-login" hidden={!loginRequested}>
+      <LoginPage onClose={()=>setLoginRequested(false)}/>
+    </div>:null}
+   <nav className="ky-pro-dock" aria-label="KY ERP PRO tek telefon gezinmesi">
+    <button type="button" className={!loginRequested?"is-active":""} onClick={()=>setLoginRequested(false)}><ShieldCheck size={24}/><span>Onaylar</span></button>
+    <button type="button" className={loginRequested?"is-active":""} onClick={()=>setLoginRequested(true)}><House size={24}/><span>ERP'ye Giriş</span></button>
+   </nav>
+  </div>;
  return <div className="ky-pro-app" data-role={String(user?.role||"")}><div className="ky-pro-content" hidden={!securityOpen}>{securityOpen?<SecurityCenter/>:null}</div><div className="ky-pro-content" hidden={securityOpen||!home}><ProHome onSecurity={()=>setSecurityOpen(true)}/></div>{workspaceMounted?<div className="ky-pro-workspace-content" hidden={securityOpen||home}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense></div>:null}<ProDock onSecurity={()=>setSecurityOpen(true)} securityActive={securityOpen} onHomeSelected={()=>setSecurityOpen(false)}/></div>;
 }
 installAndroidRuntimeBridge();
