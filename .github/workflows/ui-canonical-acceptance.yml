@@ -35,6 +35,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      - name: Verify one-screen KY ERP PRO approval flow
+        run: node --test src/pro/single-screen-auth.contract.test.js
       - run: npm run build
       - name: Build complete KY ERP PRO inside canonical security PWA scope
         run: KYERP_SECURITY_PRO_BUILD=1 npm run build

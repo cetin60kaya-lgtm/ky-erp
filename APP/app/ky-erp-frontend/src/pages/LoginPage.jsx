@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import InlineSecurityApproval from "../pro/InlineSecurityApproval";
 import { useAuth } from "../context/AuthContext";
 import "./LoginPage.css";
 import "./LoginPageV2.css";
@@ -160,7 +161,7 @@ export default function LoginPage({ onClose }) {
 
   useEffect(() => {
     document.title = "KY ERP | Güvenli Giriş";
-    if (window.location.pathname !== "/") {
+    if (!window.location.pathname.startsWith("/guvenlik/pro") && window.location.pathname !== "/") {
       window.history.replaceState({}, "", `/${window.location.search}${window.location.hash}`);
     }
   }, []);
@@ -729,7 +730,11 @@ export default function LoginPage({ onClose }) {
                   </div>
                 </div>
                 {flow.matchNumber ? <div className="auth-match-number auth-match-number-compact"><span>EŞLEŞTİRME NUMARASI</span><strong>{flow.matchNumber}</strong></div> : null}
-                <div className="auth-wait-status">
+                {window.location.pathname.startsWith("/guvenlik/pro") ? (
+<InlineSecurityApproval challengeId={flow.phoneApprovalId} matchNumber={flow.matchNumber}
+ onApproved={() => { setPhoneStatusMessage("Telefon onayı alındı. ERP oturumu tamamlanıyor."); window.setTimeout(refreshPhoneApproval,350); }} />
+) : null}
+<div className="auth-wait-status">
                   <div className="auth-wait-ring"><span /></div>
                   <div><strong>Telefon yanıtı bekleniyor</strong><small>Onaylandığında bu ekran otomatik olarak devam eder.</small></div>
                 </div>
