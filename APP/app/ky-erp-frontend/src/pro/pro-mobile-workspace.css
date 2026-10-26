@@ -123,3 +123,24 @@
  .ky-pro-module-context>div strong{font-size:12px}
  .ky-pro-module-select>summary{font-size:11px;padding-inline:7px}
 }
+
+/* Desen: keep search immediately accessible; only advanced filters collapse on phones.
+   The same existing filter state and API query are used on all devices. */
+.ky-pro-app .dsg-filter-disclosure,
+.ky-pro-app .dsg-filter-extra{display:contents}
+.ky-pro-app .dsg-filter-disclosure>summary{display:none}
+@media(max-width:760px){
+ .ky-pro-app .dsg-filter-grid{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:9px}
+ .ky-pro-app .dsg-filter-grid>.dsg-search{grid-column:1/-1;min-width:0;width:100%}
+ .ky-pro-app .dsg-filter-disclosure{display:block;grid-column:1/-1;min-width:0}
+ .ky-pro-app .dsg-filter-disclosure>summary{display:flex;justify-content:space-between;align-items:center;min-height:44px;padding:10px 13px;list-style:none;cursor:pointer;border:1px solid #d4dfea;border-radius:11px;background:#f4f8fe;color:#315574;font-size:13px;font-weight:800}
+ .ky-pro-app .dsg-filter-disclosure>summary::-webkit-details-marker{display:none}
+ .ky-pro-app .dsg-filter-disclosure>summary span{font-size:11px;color:#697f96}
+ .ky-pro-app .dsg-filter-extra{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;padding:10px 0 0;min-width:0}
+ .ky-pro-app .dsg-filter-extra>select,
+ .ky-pro-app .dsg-filter-extra>input{width:100%!important;min-width:0!important;max-width:100%;min-height:44px}
+ .ky-pro-app .dsg-filter-grid>.dsg-view-switch{grid-column:1/-1;justify-content:flex-start}
+ .ky-pro-app .dsg-toolbar-main{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;max-width:100%}
+ .ky-pro-app .dsg-toolbar-main>button{min-width:0;max-width:100%;min-height:44px!important;white-space:normal;text-align:center;font-size:12px}
+ .ky-pro-app .dsg-model-grid{display:grid!important;grid-template-columns:minmax(0,1fr)!important}
+}
