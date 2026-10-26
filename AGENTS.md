@@ -1,5 +1,8 @@
 # KY ERP — ANA YÖNLENDİRME
 
+> **KY Control tek güncel kaynak:** Özel `cetin60kaya-lgtm/kyerp` deposunda [CONTROL/KY_CONTROL_MERKEZ.md](https://github.com/cetin60kaya-lgtm/kyerp/blob/main/CONTROL/KY_CONTROL_MERKEZ.md). KY ERP / DESEN yerel işlerinde ilk adım bu merkezi ve mevcut güvenlik protokolünü okumaktır. Yeni ZIP/token/Remote Desktop Commander varsayılan değildir; yeni işlemde gerçek Windows yanıtı gerekir.
+
+
 > **Önemli:** GitHub default branch'i `main` tarihsel/yardımcı branch'tir. Güncel KY ERP production kaynak kodu ve çalışma kuralları için `main` canonical kabul edilmez.
 
 ## Yeni sohbet / yeni ajan zorunlu başlangıç
