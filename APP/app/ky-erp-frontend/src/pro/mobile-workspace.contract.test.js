@@ -50,3 +50,14 @@ test("One-PWA release still has a separate Security Worker build and must be gat
  assert.match(vite,/dist-security-pro/);
  assert.match(pro,/import "\.\/pro-mobile-workspace\.css"/);
 });
+
+test("Desen search remains visible and detailed filters keep canonical query fields",()=>{
+ const design=read("../pages/desen/DesenModeller.jsx");
+ const css=read("./pro-mobile-workspace.css");
+ assert.match(design,/className="dsg-filter-disclosure"/);
+ assert.match(design,/className="dsg-filter-extra"/);
+ assert.match(design,/className="dsg-search"/);
+ assert.match(design,/setAdvancedFiltersOpen/);
+ assert.match(css,/\.dsg-filter-disclosure:not\(\[open\]\) \.dsg-filter-extra\{display:none!important\}/);
+ assert.match(css,/\.ky-pro-app \.dsg-model-grid/);
+});
