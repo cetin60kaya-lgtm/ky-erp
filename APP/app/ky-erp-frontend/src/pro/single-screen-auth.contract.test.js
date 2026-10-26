@@ -44,5 +44,15 @@ test("root phone install migrates in-place and push focus does not reload ongoin
   assert.match(app,/location\.replace\("\/guvenlik\/pro\/"\)/);
   assert.match(worker,/existing\.postMessage\(\{type:"KYERP_SECURITY_PUSH_WAKE"\}\)/);
   assert.doesNotMatch(worker,/existing\.navigate\(APP_URL\)/);
-  assert.match(worker,/clients\.openWindow\("\/guvenlik\/pro\/"\)/);
+  assert.match(worker,/clients\.openWindow\("\/guvenlik\/pro\/\?security=1"\)/);
+});
+
+test("trusted phone can approve a PC login without needing an ERP session first",()=>{
+  const app=src("main.jsx");
+  assert.match(app,/if\(!isAuthenticated\)return <div className="ky-pro-app ky-pro-device-mode"/);
+  assert.match(app,/<SecurityCenter\/>/);
+  assert.match(app,/loginEverOpened/);
+  assert.match(app,/hidden=\{!loginRequested\}/);
+  assert.match(app,/KYERP_SECURITY_PUSH_WAKE/);
+  assert.doesNotMatch(app,/!isAuthenticated\)return <div className="ky-pro-login"/);
 });
