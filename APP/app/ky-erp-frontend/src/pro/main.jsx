@@ -138,10 +138,12 @@ function ProApplication(){
  const {user,isAuthenticated,loading}=useAuth();
  const [home,setHome]=useState(()=>location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");
  const [securityOpen,setSecurityOpen]=useState(false);
+ const [workspaceMounted,setWorkspaceMounted]=useState(!home);
+ useEffect(()=>{if(!home)setWorkspaceMounted(true)},[home]);
  useEffect(()=>{const update=()=>{setHome(location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");setSecurityOpen(false)};window.addEventListener("popstate",update);return()=>window.removeEventListener("popstate",update)},[]);
  if(loading)return <div className="ky-pro-loading"><span className="ky-pro-loading-icon">KY</span><strong>KY ERP PRO</strong><p>Güvenli oturum ve yetkiler kontrol ediliyor...</p></div>;
  if(!isAuthenticated)return <div className="ky-pro-login"><div className="ky-pro-login-bar"><span><ShieldCheck size={18}/> Tek Uygulamada Güvenli Giriş</span><strong>KY ERP PRO v4.2.1</strong></div><LoginPage onClose={()=>{}}/></div>;
- return <div className="ky-pro-app" data-role={String(user?.role||"")}>{securityOpen?<SecurityCenter/>:home?<ProHome onSecurity={()=>setSecurityOpen(true)}/>:<Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense>}<ProDock onSecurity={()=>setSecurityOpen(true)} securityActive={securityOpen}/></div>;
+ return <div className="ky-pro-app" data-role={String(user?.role||"")}><div className="ky-pro-content" hidden={!securityOpen}>{securityOpen?<SecurityCenter/>:null}</div><div className="ky-pro-content" hidden={securityOpen||!home}><ProHome onSecurity={()=>setSecurityOpen(true)}/></div>{workspaceMounted?<div className="ky-pro-workspace-content" hidden={securityOpen||home}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense></div>:null}<ProDock onSecurity={()=>setSecurityOpen(true)} securityActive={securityOpen}/></div>;
 }
 installAndroidRuntimeBridge();
 installPersistedAuthBootstrap();
