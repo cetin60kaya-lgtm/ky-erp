@@ -6,6 +6,7 @@ import{installPersistedAuthBootstrap}from"../context/authBootstrap";
 import{installAndroidRuntimeBridge}from"../utils/installAndroidRuntimeBridge";
 import{MODULES,getModuleTabs}from"../app/moduleRegistry";
 import LoginPage from"../pages/LoginPage";
+import SecurityCenter from"./SecurityCenter";
 import "../App.css";
 import "../styles/canonical-workspace-ui.css";
 import "../styles/module-action-popups.css";
@@ -68,7 +69,7 @@ function ModuleChooser({opened,onClose,allowed}){
  </dialog>;
 }
 
-function ProHome(){
+function ProHome({onSecurity}){
  const {user,hasModule}=useAuth();
  const [search,setSearch]=useState("");
  const owner=OWNER_ROLES.has(String(user?.role||"").toUpperCase());
@@ -83,7 +84,7 @@ function ProHome(){
     <div className="ky-pro-home-stats"><strong>{allowed.length} modül</strong><span>·</span><strong>{fullCount} işlem</strong><span>·</span><span>Tek telefon uygulaması</span></div>
    </section>
    <div className="ky-pro-home-tools">
-    <button type="button" onClick={()=>location.assign("/guvenlik/")}><ShieldCheck size={22}/><span><b>Güvenlik Onayları</b><small>Giriş, cihaz, oturum ve kod</small></span><ChevronRight size={17}/></button>
+    <button type="button" onClick={onSecurity}><ShieldCheck size={22}/><span><b>Güvenlik Onayları</b><small>Giriş, cihaz, oturum ve kod</small></span><ChevronRight size={17}/></button>
     <button type="button" onClick={()=>{const m=allowed.find(x=>x.key==="muhasebe");const t=m&&getModuleTabs(m)[0];if(m&&t)goModule(m.key,t[0])}}><ChartNoAxesCombined size={22}/><span><b>Genel Yönetim</b><small>Muhasebe ve operasyon</small></span><ChevronRight size={17}/></button>
    </div>
    <div className="ky-pro-home-title"><div><span>TÜM ERİŞİLEBİLİR MODÜLLER</span><h2>Çalışma Alanları</h2></div><LayoutGrid size={20}/></div>
@@ -98,7 +99,7 @@ function ProHome(){
  </main>;
 }
 
-function ProDock(){
+function ProDock({onSecurity,securityActive}){
  const {user,hasModule}=useAuth();
  const [menuOpen,setMenuOpen]=useState(false);
  const [currentPath,setCurrentPath]=useState(location.pathname);
@@ -117,14 +118,14 @@ function ProDock(){
    const first=module&&getModuleTabs(module).find(tab=>/ozet|analiz|rapor|dashboard/i.test(tab[0]))||module&&getModuleTabs(module)[0];
    if(module&&first)goModule(module.key,first[0]);
  },[allowed]);
- const security=()=>location.assign("/guvenlik/");
+ const security=onSecurity;
  const isAnalytic=/ozet|dashboard|rapor|analiz/i.test(currentPath);
  return <>
-   <header className="ky-pro-header"><div className="ky-pro-brand"><span className="ky-pro-mark">KY</span><div><strong>KY ERP <em>PRO</em></strong><small>{owner?"Sistem Sahibi · Tam Yönetim":"Yetkili ERP Kullanıcısı"} · v4.2.0</small></div></div>
+   <header className="ky-pro-header"><div className="ky-pro-brand"><span className="ky-pro-mark">KY</span><div><strong>KY ERP <em>PRO</em></strong><small>{owner?"Sistem Sahibi · Tam Yönetim":"Yetkili ERP Kullanıcısı"} · v4.2.1</small></div></div>
     <button type="button" className="ky-pro-header-action" onClick={security}><ShieldCheck size={18}/>Güvenlik</button></header>
    <nav className="ky-pro-dock" aria-label="KY ERP PRO telefon gezinmesi">
      <button type="button" onClick={onHome}><House size={23}/><span>Ana Sayfa</span></button>
-     <button type="button" onClick={security}><ShieldCheck size={23}/><span>Güvenlik</span></button>
+     <button type="button" className={securityActive?"is-active":""} onClick={security}><ShieldCheck size={23}/><span>Güvenlik</span></button>
      <button type="button" className="ky-pro-dock-main" onClick={()=>setMenuOpen(true)} aria-haspopup="dialog"><LayoutGrid size={24}/><span>Modüller</span></button>
      <button type="button" className={isAnalytic?"is-active":""} onClick={onAnalysis}><ChartNoAxesCombined size={23}/><span>Analiz</span></button>
      <button type="button" onClick={()=>setMenuOpen(true)}><UserRound size={23}/><span>Menü</span></button>
@@ -136,10 +137,11 @@ function ProDock(){
 function ProApplication(){
  const {user,isAuthenticated,loading}=useAuth();
  const [home,setHome]=useState(()=>location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");
- useEffect(()=>{const update=()=>setHome(location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");window.addEventListener("popstate",update);return()=>window.removeEventListener("popstate",update)},[]);
+ const [securityOpen,setSecurityOpen]=useState(false);
+ useEffect(()=>{const update=()=>{setHome(location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");setSecurityOpen(false)};window.addEventListener("popstate",update);return()=>window.removeEventListener("popstate",update)},[]);
  if(loading)return <div className="ky-pro-loading"><span className="ky-pro-loading-icon">KY</span><strong>KY ERP PRO</strong><p>Güvenli oturum ve yetkiler kontrol ediliyor...</p></div>;
- if(!isAuthenticated)return <div className="ky-pro-login"><div className="ky-pro-login-bar"><a href="/guvenlik/"><ShieldCheck size={18}/> KY Güvenlik</a><strong>KY ERP PRO v4.2.0</strong></div><LoginPage onClose={()=>{}}/></div>;
- return <div className="ky-pro-app" data-role={String(user?.role||"")}>{home?<ProHome/>:<Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense>}<ProDock/></div>;
+ if(!isAuthenticated)return <div className="ky-pro-login"><div className="ky-pro-login-bar"><span><ShieldCheck size={18}/> Tek Uygulamada Güvenli Giriş</span><strong>KY ERP PRO v4.2.1</strong></div><LoginPage onClose={()=>{}}/></div>;
+ return <div className="ky-pro-app" data-role={String(user?.role||"")}>{securityOpen?<SecurityCenter/>:home?<ProHome onSecurity={()=>setSecurityOpen(true)}/>:<Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense>}<ProDock onSecurity={()=>setSecurityOpen(true)} securityActive={securityOpen}/></div>;
 }
 installAndroidRuntimeBridge();
 installPersistedAuthBootstrap();
