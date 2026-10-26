@@ -3,7 +3,7 @@ const DB_NAME="kyerp-security-fresh-v3";
 const STORE="device";
 const KEY="active";
 const CLIENT_VERSION="security-v4.0";
-const APP_DISPLAY_VERSION="v4.2.0"; // Cihaz imza protokolü ve DB kimliği geriye uyumlu kalır.
+const APP_DISPLAY_VERSION="v4.2.1"; // Cihaz imza protokolü ve DB kimliği geriye uyumlu kalır.
 const PENDING_ENROLL_KEY="kyerp-security-fresh-enrollment-v3";
 const CANONICAL_DEVICE_REVISION="fresh-v3-20260922";
 
@@ -578,6 +578,9 @@ window.dispatchEvent(new CustomEvent("kysecurity:runtime-ready"));
     const url=new URL(location.href);const direct={id:String(url.searchParams.get("enrollmentId")||""),token:String(url.searchParams.get("enrollmentToken")||"")};
     if(direct.id&&direct.token){persistEnrollmentLink(direct);enrollmentQuery=direct}else enrollmentQuery=restoreEnrollmentLink();
     const localDevice=await readDevice().catch(()=>null);
+    // Existing Android installation is one product: go to its unified React shell
+    // only after the trusted device has been located. Unregistered phones keep enrollment.
+    if(isStandalone()&&localDevice?.deviceId&&localDevice?.signingPrivateKey){location.replace("/guvenlik/pro/");return;}
     renderInstall();showTab("approvals");
     if(enrollmentQuery.id&&enrollmentQuery.token&&!localDevice?.deviceId){showRelink();toast("KY ERP bağlantısı hazır. 8 karakter Yedek Bağlantı Kodunu ve Admin şifresini gir.")}
     else if(!localDevice?.deviceId){showSetupStart();setBadge("Bağlantı gerekli");}
