@@ -120,7 +120,9 @@ test("authenticated shell creates one-time security-app enrollment while passwor
 });
 
 test("dedicated iPhone and Android security app opens the app for approval instead of relying on notification action buttons", () => {
-  assert.match(securityManifest, /"name": "KY ERP Güvenlik"/);
+  assert.match(securityManifest, /"name": "KY ERP PRO/);
+  assert.match(securityManifest, /"id": "\/guvenlik\/"/);
+  assert.match(securityManifest, /"start_url": "\/guvenlik\/"/);
   assert.match(securityManifest, /"scope": "\/guvenlik\/"/);
   assert.match(securityWorker, /notificationclick/);
   assert.match(securityWorker, /focusOrOpen/);
