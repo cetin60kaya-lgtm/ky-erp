@@ -2,6 +2,7 @@
 import type { Context, Hono } from "hono";
 import { analyzeAccountingDocument, accountingDocumentIntelligenceStatus } from "./accounting-document-intelligence";
 import { postAccountingDocumentAtomic } from "./accounting-document-posting-atomic";
+import { postPhysicalReceipt, postPhysicalCostLink, readPhysicalDocumentStatus } from "./accounting-physical-journal";
 import { claimEBelgeFinalization, markEBelgeFinalization } from "./e-belge-finalize-guard";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { verifyIsnetReadOnlySession } from "./isnet-runtime-v2";
@@ -267,6 +268,89 @@ async function routeStockAndLots(c:Context<AppEnv>,slug:string,doc:Row,lines:Row
   return{stockMovements,lots,pendingPhysicalReceipts};
 }
 
+// Canonical physical journal: actual dispatch is the source of quantity, invoice only allocates cost.
+async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:Row[]) {
+  const incoming=upper(doc.direction)==="INCOMING",dispatch=isDispatch(doc.document_type),invoice=isInvoice(doc.document_type);
+  const result={stockMovements:0,lots:0,costLinks:0,pendingPhysicalReceipts:0,idempotent:0};
+  if(!incoming||(!dispatch&&!invoice))return result;
+  for(const line of lines){
+    const raw=safeJson(line.raw_metadata),route=upper(raw.routingType);
+    if(!["STOCK","BOYAHANE","CONSUMABLE"].includes(route))continue;
+    const productId=text(line.product_id),product=productId?await getEBelgeProduct(c,slug,productId):null;
+    if(!product)throw Object.assign(new Error("Fiziksel satırın ürünü yok."),{code:"PRODUCT_NOT_FOUND"});
+    const policy=resolveProductLotPolicy(product,route),qty=numberValue(line.quantity);
+    if(qty<=0)throw Object.assign(new Error("Fiziksel miktar pozitif olmalıdır."),{code:"PHYSICAL_QUANTITY_INVALID"});
+    const sourceLot=text(raw.dispatchLotNo||raw.lotNo||raw.invoiceLotNo),supplier=text(doc.party_company_id);
+    if(!supplier)throw Object.assign(new Error("Fiziksel tedarikçi cari kartı zorunludur."),{code:"PHYSICAL_SUPPLIER_REQUIRED"});
+    if(dispatch){
+      const list=safeArray(raw.lotAllocations).filter((a:Row)=>numberValue(a.quantity)>0);
+      const grouped=new Map<string,Row>();
+      if(list.length){
+        for(const alloc of list){
+          const lot=text(alloc.lotNo||sourceLot),key=normalizeLotNo(lot);
+          const current=grouped.get(key)||{lotNo:lot,quantity:0};
+          current.quantity+=numberValue(alloc.quantity);
+          grouped.set(key,current);
+        }
+        if(Math.abs([...grouped.values()].reduce((sum,a)=>sum+numberValue(a.quantity),0)-qty)>0.00001)
+          throw Object.assign(new Error("Çoklu LOT toplamı fiziksel irsaliye miktarıyla eşleşmiyor."),{code:"LOT_QUANTITY_MISMATCH"});
+      }else grouped.set(normalizeLotNo(sourceLot),{lotNo:sourceLot,quantity:qty});
+      for(const allocation of grouped.values()){
+        const receipt=await postPhysicalReceipt(c.env.DB,{
+          tenant:slug,documentId:text(doc.id),documentLineId:text(line.id),
+          physicalDocumentId:text(doc.id),physicalLineId:text(line.id),
+          productId,supplierCompanyId:supplier,route,lotNo:text(allocation.lotNo),
+          lotPolicy:policy,quantity:numberValue(allocation.quantity),
+          unit:line.unit_code,sourceType:"E_BELGE_DISPATCH",
+        });
+        result.idempotent+=receipt.idempotent?1:0;
+        if(!receipt.idempotent){result.stockMovements++;if(route==="BOYAHANE")result.lots++}
+      }
+      continue;
+    }
+    const rawAllocations=safeArray(raw.lotAllocations||raw.reconciliation?.allocations)
+      .filter((a:Row)=>text(a.dispatchId)&&text(a.dispatchLineId)&&numberValue(a.quantity)>0);
+    if(rawAllocations.length){
+      const grouped=new Map<string,Row>();
+      for(const allocation of rawAllocations){
+        const lot=text(allocation.lotNo||sourceLot),
+          key=[text(allocation.dispatchId),text(allocation.dispatchLineId),normalizeLotNo(lot)].join(":");
+        const current=grouped.get(key)||{...allocation,lotNo:lot,quantity:0};
+        current.quantity+=numberValue(allocation.quantity);grouped.set(key,current);
+      }
+      if(Math.abs([...grouped.values()].reduce((sum,a)=>sum+numberValue(a.quantity),0)-qty)>0.00001)
+        throw Object.assign(new Error("Faturadaki çoklu irsaliye/LOT tahsis miktarı tutarsız."),{code:"INVOICE_ALLOCATION_QUANTITY_MISMATCH"});
+      for(const allocation of grouped.values()){
+        const source=await dispatchSource(c,slug,allocation);
+        if(!source||!isDispatch(source.document.document_type)||upper(source.document.direction)!=="INCOMING"||
+           upper(source.document.status)!=="POSTED"||text(source.line.product_id)!==productId)
+          throw Object.assign(new Error("Bağlı fiziksel irsaliye tamamlanmamış veya ürün farklı."),{code:"PHYSICAL_DISPATCH_REQUIRED"});
+        const sourceRaw=safeJson(source.line.raw_metadata),lot=text(allocation.lotNo||sourceRaw.dispatchLotNo||sourceRaw.lotNo||sourceLot);
+        const cost=numberValue(line.line_total)*(numberValue(allocation.quantity)/qty);
+        const linked=await postPhysicalCostLink(c.env.DB,{
+          tenant:slug,documentId:text(doc.id),documentLineId:text(line.id),invoiceId:text(doc.id),
+          invoiceLineId:text(line.id),invoiceNo:text(doc.document_no),currency:text(doc.currency),
+          physicalDocumentId:text(source.document.id),physicalLineId:text(source.line.id),
+          productId,supplierCompanyId:text(source.document.party_company_id),route,lotNo:lot,
+          lotPolicy:policy,quantity:numberValue(source.line.quantity),
+          allocatedQuantity:numberValue(allocation.quantity),allocatedTotal:cost,
+        });
+        result.costLinks++;result.idempotent+=linked.idempotent?1:0;
+      }
+      continue;
+    }
+    // Do not silently receive an invoice into stock. A provisional acceptance must
+    // be explicitly approved and linked to its eventual actual dispatch, otherwise hold.
+    result.pendingPhysicalReceipts++;
+    throw Object.assign(new Error(
+      raw.allowInvoicePhysicalReceipt===true
+       ?"Onaylı geçici kabul için gerçek irsaliye uzlaştırma kilidi hazır değil; inceleme gerekli."
+       :"Fatura önce geldi. İrsaliye ve LOT tahsisi bekleniyor; stok artırılmadı."
+    ),{code:raw.allowInvoicePhysicalReceipt===true?"PROVISIONAL_RECONCILIATION_REQUIRED":"PHYSICAL_DISPATCH_REQUIRED"});
+  }
+  return result;
+}
+
 function poolFilter(filter:string){const f=upper(filter);if(f==="INCOMING_INVOICE")return{sql:"d.direction='INCOMING' AND d.document_type LIKE '%FATURA%'"};if(f==="OUTGOING_INVOICE")return{sql:"d.direction='OUTGOING' AND d.document_type LIKE '%FATURA%'"};if(f==="INCOMING_DISPATCH")return{sql:"d.direction='INCOMING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="OUTGOING_DISPATCH")return{sql:"d.direction='OUTGOING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="MATCHING_WAIT")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND i.issue_code LIKE 'DISPATCH_%')"};if(f==="ISSUE")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR'))"};if(f==="REVIEW")return{sql:"d.status IN ('INGESTED','REVIEW_REQUIRED','READY_FOR_APPROVAL','APPROVED')"};if(f==="HISTORY")return{sql:"d.status='POSTED'"};return{sql:"1=1"}}
 
 export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
@@ -370,12 +454,8 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
       const {doc,lines}=await validateForFinal(c,slug,id);
       // Stok/Boyahane fiziksel girişleri farklı tablolara ve json_store'a yazılıyor.
       // Aynı atomik D1 planına alınmadıkları sürece asla "POSTED" gösterme.
-      const physical=lines.some((line:Row)=>
-        ["STOCK","BOYAHANE","CONSUMABLE"].includes(upper(safeJson(line.raw_metadata).routingType)));
-      if(physical)throw Object.assign(new Error(
-        "Fiziksel stok/LOT girişli belgede bütünlük işlemi hazır değil. Finans ve fiziksel kayıt oluşturulmadı; inceleme gerekli."
-      ),{code:"PHYSICAL_RECEIPT_ATOMICITY_REQUIRED"});
-      const inventory={stockMovements:0,lots:0,pendingPhysicalReceipts:0};
+      phase="PHYSICAL";
+      const inventory=await routePhysicalJournal(c,slug,doc,lines);
       await markEBelgeFinalization(c.env.DB,slug,id,"APPROVED");
       phase="FINANCE";
       const posting=await postAccountingDocumentAtomic(c.env.DB,slug,id,String(user.id));
