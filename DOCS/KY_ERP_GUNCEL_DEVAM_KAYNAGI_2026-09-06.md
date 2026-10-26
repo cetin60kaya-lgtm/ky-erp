@@ -1,5 +1,14 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 26.10.2026 — KY ERP PRO v4.2.1 tek ekran / kesintisiz telefon onayı
+- Kullanıcı hata bildirimi: onay sonrası ERP tekrar giriş istiyordu; ayrı Güvenlik sayfası React giriş akışını sonlandırıyordu.
+- Çözüm PR #473, merge de0988a3a09a6f87bd5b74e2dbd57083cfea7847: aynı mobil React ekranında SELF_LOGIN challenge, 2 haneli eşleştirme, WebAuthn PIN/biyometri, sunucu doğrulamalı ECDSA V2 kararı; AuthContext yeni ERP oturumunu aynı ağaçta açar.
+- Kurulu tek PWA ID/scope /guvenlik/ ve cihaz DB kyerp-security-fresh-v3 korunur; bağlı telefon /guvenlik/pro/ tek uygulama merkezine yönlendirilir. Bildirime dokununca çalışan ERP ekranı yeniden yüklenmez; ERP auth süresi dolsa bile cihaz imzalı güvenlik onayı yapılır. Açık ERP formu güvenlik bölümüne geçerken unmount edilmez.
+- Güvenlikte onay, kod, oturum, cihaz, log, not ve mesajlar tek React çalışma alanında. Pages ve API iş mantığı ile aynı canonical kaynak.
+- CI SUCCESS https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40252895682; Security Worker canlı SUCCESS https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40253054313; Pages canlı SUCCESS https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40253081393.
+- Fiziksel Android kendi giriş + PIN + gerçek push + açık ERP işlem geri dönüşü kullanıcı cihazında henüz doğrulanmadı. Uygulama silinmeyecek; canlı veritabanı migration yok.
+
+
 ## 26.10.2026 — KY ERP PRO v4.2.0 TEK ANDROID PWA / CANLI WEB KABUL
 - **Kullanıcının nihai kararı:** Kendi telefonunda **tek KY ERP PRO**. Canonical install ID/start_url/scope `/guvenlik/` ve güvenilir cihaz IndexedDB `kyerp-security-fresh-v3` ile mevcut P-256 imza anahtarı ve push SW korunur. Ayrı ikinci ERP veya güvenlik ikonu oluşturulmaz. Firma müşterilerinin KY Firma v4.1.0 uygulaması ayrı ürün olarak korunur.
 - [PR #471](https://github.com/cetin60kaya-lgtm/ky-erp/pull/471) birleştirildi; merge `11e98747a5aa5cff9ae6d6e9ed2efb5db78d064d`. Yeni ERP çalışma alanı **`https://security.kyerp.net/guvenlik/pro/`**; aynı origin ve tek PWA kapsamı. Tam mevcut `AppV3`, `MODULES/getModuleTabs`, mevcut AuthProvider MFA/telefon onayı ve gerçek modül kodu Security Worker statik varlıklarına **ayrı Vite entry build** ile derlenir. Android alt çubuk, hızlı güvenlik erişimi, gerçek modül kartları, arama ve tüm sekmelerin açılır listesi var. Eksik modüle göstermelik ekran oluşturulmaz; yetkiler backend ve mevcut UI RBAC kapsamındadır.
