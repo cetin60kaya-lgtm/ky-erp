@@ -371,3 +371,9 @@
   .dsg-detail-general .dsg-image-preview { height: 340px; }
   .dsg-log-list > div { grid-template-columns: 1fr; }
 }
+
+/* Desktop and regular ERP retain their original Desen grid after introducing
+   the PRO-only mobile filter disclosure. PRO phone overrides this with its own sheet. */
+.dsg-filter-grid > .dsg-filter-disclosure,
+.dsg-filter-grid > .dsg-filter-disclosure > .dsg-filter-extra{display:contents}
+.dsg-filter-grid > .dsg-filter-disclosure > summary{display:none}
