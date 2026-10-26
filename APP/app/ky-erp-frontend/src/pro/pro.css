@@ -96,3 +96,47 @@ html.kyerp-pro-mode,html.kyerp-pro-mode body{width:100%;height:100%;overflow:hid
 .ky-pro-home-modules>button>svg{flex:none;color:#9aaec0}
 .ky-pro-home-note{font-size:10px;line-height:1.6;color:#8b9cae;text-align:center;margin:22px 8px}
 @media(max-width:360px){.ky-pro-home-modules{grid-template-columns:1fr}.ky-pro-home-tools button{gap:6px;padding:10px 6px}.ky-pro-home-tools b{font-size:11px}}
+
+/* KY ERP PRO 4.2.1 — single screen; hide sections without remounting ERP working state. */
+.ky-pro-content,.ky-pro-workspace-content{flex:1;min-height:0;min-width:0;max-width:100%;overflow:auto;overscroll-behavior:contain}
+.ky-pro-content[hidden],.ky-pro-workspace-content[hidden]{display:none!important}
+.ky-pro-workspace-content>.shell-v3{max-height:100%;overflow:auto}
+.ky-pro-security{display:grid;align-content:start;gap:13px;padding:15px 14px calc(110px + env(safe-area-inset-bottom));overflow-y:auto}
+.ky-pro-security-hero{display:grid;gap:8px;padding:20px 18px;border-radius:22px;background:#102d50;color:#fff}
+.ky-pro-security-hero>span{font-size:10px;letter-spacing:.1em;color:#bfd5ec;font-weight:800}
+.ky-pro-security-hero h1{margin:0;font-size:25px;letter-spacing:-.04em}
+.ky-pro-security-hero p{margin:0;color:#d1e1f1;font-size:12px;line-height:1.5}
+.ky-pro-security-hero button{display:flex;align-items:center;justify-content:center;gap:7px;min-height:43px;border:1px solid #ffffff39;border-radius:12px;background:#ffffff18;color:#fff;font-weight:750}
+.ky-pro-security-tabs{display:flex;gap:7px;overflow-x:auto;padding-bottom:3px;scroll-snap-type:x proximity}
+.ky-pro-security-tabs button{display:flex;align-items:center;justify-content:center;gap:6px;flex:none;min-height:45px;padding:8px 11px;background:#fff;border:1px solid #dbe6f1;border-radius:12px;color:#416382;font-size:11px;font-weight:800;scroll-snap-align:start}
+.ky-pro-security-tabs button.active{background:#e6f0fc;border-color:#7daedc;color:#155c9f}
+.ky-pro-security-tabs button b{border-radius:999px;padding:1px 6px;background:#1478bf;color:#fff}
+.ky-pro-security-list{display:grid;gap:10px}
+.ky-pro-security-card{display:grid;gap:10px;margin:0;padding:16px;background:white;border:1px solid #dfe8f2;border-radius:17px;box-shadow:0 5px 18px #0a20400b}
+.ky-pro-security-card h2{margin:0;color:#1d3855;font-size:17px}
+.ky-pro-security-card p{margin:0;color:#687f97;font-size:12px;line-height:1.5}
+.ky-pro-security-card label{display:grid;gap:6px;font-size:12px;font-weight:800;color:#44627d}
+.ky-pro-security-card input{width:100%;max-width:95px;min-height:48px;border:1px solid #bfd2e8;border-radius:12px;font-size:22px;text-align:center;letter-spacing:.2em}
+.ky-pro-security-actions{display:grid;grid-template-columns:1.5fr 1fr;gap:9px}
+.ky-pro-security-actions button,.ky-pro-security-card>button{min-height:48px;border:0;border-radius:12px;background:#2163ae;color:#fff;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;gap:8px}
+.ky-pro-security-actions button:last-child{border:1px solid #f0cdd3;background:#fff2f4;color:#a33a4a}
+.ky-pro-security-message{border:1px solid #d8e4ef;background:#fff;border-radius:12px;padding:12px;color:#516d89;font-size:12px}
+.ky-pro-generated-code{padding:20px 5px;border:1px dashed #a6c1df;border-radius:14px;text-align:center;background:#f5f9ff;font-size:clamp(25px,8vw,38px);font-weight:900;letter-spacing:.12em;font-variant-numeric:tabular-nums}
+.ky-pro-security-counters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.ky-pro-security-counters span{display:grid;gap:5px;padding:9px;border-radius:11px;background:#edf4fc;color:#60809f;font-size:9px;text-align:center}
+.ky-pro-security-counters b{font-size:21px;color:#1c5d9f}
+.ky-pro-security-row{display:grid;gap:6px;padding:11px;border:1px solid #e5edf5;border-radius:12px;background:#f9fbfd}
+.ky-pro-security-row strong{font-size:12px;color:#304d6a}
+.ky-pro-security-row small{font-size:11px;color:#8093a6}
+.ky-inline-approval{display:grid;gap:12px;padding:15px;margin:13px 0;border:1px solid #b9d9ed;border-radius:16px;background:#f2f9ff}
+.ky-inline-head,.ky-inline-step{display:flex;align-items:center;gap:10px;color:#1c5f93}
+.ky-inline-head>div,.ky-inline-step>div{display:grid;gap:4px;flex:1}
+.ky-inline-head strong{font-size:14px}.ky-inline-head small,.ky-inline-step small,.ky-inline-hint{font-size:11px;color:#607b95;line-height:1.5}
+.ky-inline-step{border-top:1px solid #dce9f4;padding-top:12px}
+.ky-inline-step strong{font-size:12px}.ky-inline-step button{display:grid;place-items:center;min-width:44px;min-height:44px;background:white;border:1px solid #bcd3e6;border-radius:12px;color:#215f9c}
+.ky-inline-match{display:grid;gap:6px;font-size:12px;font-weight:800;color:#3f5c79}
+.ky-inline-match input{font-size:20px;text-align:center;letter-spacing:.2em;min-height:49px;max-width:130px;border:1px solid #b5cbe0;border-radius:13px;background:#fff}
+.ky-inline-approve{display:flex;align-items:center;justify-content:center;gap:8px;min-height:53px;border:0;border-radius:13px;background:#147849;color:white;font-size:13px;font-weight:850}
+.ky-inline-approve:disabled{opacity:.52}
+.ky-inline-approval p{margin:0;font-size:12px;color:#3d6e87;line-height:1.5}
+.ky-pro-login-bar span{display:flex;align-items:center;gap:6px;color:#20598b;font-size:12px;font-weight:800}
