@@ -1,0 +1,98 @@
+/* KY ERP PRO 4.2.0 — unified mobile shell; no duplicate PWA or copied business logic. */
+html.kyerp-pro-mode,html.kyerp-pro-mode body{width:100%;height:100%;overflow:hidden;background:#f4f7fb;color:#142942}
+.ky-pro-app{height:100dvh;max-height:100dvh;overflow:hidden;display:flex;flex-direction:column;position:relative;background:#f4f7fb}
+.ky-pro-header{flex:none;z-index:102;min-height:calc(63px + env(safe-area-inset-top));padding:calc(8px + env(safe-area-inset-top)) 13px 10px;
+ display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff;border-bottom:1px solid #e0e8f1}
+.ky-pro-brand{display:flex;align-items:center;gap:10px;min-width:0}.ky-pro-brand>div{display:grid;gap:3px;min-width:0}
+.ky-pro-brand strong{font-size:16px;font-weight:900;color:#142c4a;white-space:nowrap;letter-spacing:-.04em}
+.ky-pro-brand em{font-style:normal;color:#2670ba}.ky-pro-brand small{font-size:10px;font-weight:700;color:#8598a9;white-space:nowrap}
+.ky-pro-mark{display:grid;place-items:center;width:41px;height:41px;flex:none;border-radius:14px;background:#112d50;color:white;font-size:12px;font-weight:900}
+.ky-pro-header-action{display:flex;align-items:center;gap:6px;min-height:39px;padding:6px 10px;border:1px solid #d4e3f3;border-radius:13px;
+ background:#eff6ff;color:#20598f;font-size:11px;font-weight:800}
+.ky-pro-dock{flex:none;z-index:110;position:absolute;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+ padding:7px 6px calc(6px + env(safe-area-inset-bottom));gap:3px;background:rgba(255,255,255,.98);border-top:1px solid #dce7f2;
+ box-shadow:0 -8px 24px #15345312;backdrop-filter:blur(12px)}
+.ky-pro-dock>button{display:grid;place-items:center;align-content:center;gap:4px;min-width:0;min-height:61px;padding:5px 2px;border:0;border-radius:13px;
+ background:transparent;color:#75869a;font-size:10px;font-weight:800;touch-action:manipulation}
+.ky-pro-dock>button:active{background:#edf5ff}.ky-pro-dock>button.is-active{color:#1e69b1}
+.ky-pro-dock .ky-pro-dock-main{color:#fff;background:#245fa5;box-shadow:0 5px 15px #215b9f35}
+.ky-pro-app>.shell-v3,.ky-pro-app>.shell-v3-app,.ky-pro-app>.app-shell-v3{min-height:0!important;max-height:calc(100dvh - 137px - env(safe-area-inset-top) - env(safe-area-inset-bottom))!important}
+.ky-pro-app .shell-v3-workspace{padding-bottom:120px!important;overscroll-behavior:contain}
+.ky-pro-app .shell-v3-status{padding-bottom:85px}
+.ky-pro-app .shell-v3-main{min-height:0!important}
+.ky-pro-app .shell-v3-header,.ky-pro-app .shell-v3-topbar{z-index:8}
+/* Native Android-like module explorer: all canonical tabs, filtered by the real server permissions. */
+.ky-pro-dialog{position:fixed;inset:auto 0 0;max-width:720px;width:100%;max-height:88dvh;margin:0 auto;padding:0;overflow:auto;overscroll-behavior:contain;
+ border:0;border-radius:26px 26px 0 0;background:#f4f7fb;color:#17314f;box-shadow:0 -25px 70px #09213b55}
+.ky-pro-dialog::backdrop{background:#0c233c91;backdrop-filter:blur(3px)}
+.ky-pro-sheet-header{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:flex-start;
+ padding:25px 19px 15px;gap:12px;background:#fff;border-bottom:1px solid #e2e9f3}
+.ky-pro-sheet-header:before{position:absolute;top:8px;left:calc(50% - 20px);content:"";width:40px;height:4px;background:#dbe4ee;border-radius:4px}
+.ky-pro-sheet-header>div{display:grid;gap:5px}.ky-pro-sheet-header span{font-size:10px;letter-spacing:.08em;font-weight:900;color:#2770ae}
+.ky-pro-sheet-header h2{font-size:22px;line-height:1.15;margin:0;letter-spacing:-.04em}.ky-pro-sheet-header p{font-size:12px;margin:0;color:#7b8fa1}
+.ky-pro-icon-button{display:grid;place-items:center;width:44px;height:44px;flex:none;border:0;border-radius:14px;background:#edf2f7;color:#25496e}
+.ky-pro-search{display:flex;gap:10px;align-items:center;margin:14px 15px;padding:12px;background:white;border:1px solid #d9e4ef;border-radius:15px;color:#6080a1}
+.ky-pro-search input{width:100%;border:0;outline:none;font:inherit;font-size:15px;color:#182f4c;background:transparent}
+.ky-pro-module-list{display:grid;gap:10px;padding:0 15px 14px}
+.ky-pro-module{overflow:hidden;background:#fff;border:1px solid #e0e8f1;border-radius:17px}
+.ky-pro-module>summary{display:flex;align-items:center;gap:10px;min-height:58px;cursor:pointer;list-style:none;padding:13px 15px}
+.ky-pro-module>summary::-webkit-details-marker{display:none}
+.ky-pro-module>summary strong{flex:1;font-size:14px}.ky-pro-module>summary small{font-size:10px;color:#7490ab;font-weight:700}
+.ky-pro-module[open]>summary svg{transform:rotate(90deg)}
+.ky-pro-module-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:0 10px 12px}
+.ky-pro-module-tabs button{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;min-height:48px;padding:10px 9px;
+ border:1px solid #e6edf5;border-radius:12px;background:#f8faff;color:#254c72;font-weight:750;font-size:11px}
+.ky-pro-module-tabs button svg{flex:none;color:#84a1ba}
+.ky-pro-no-results{text-align:center;padding:22px;font-size:13px;color:#72879b}
+.ky-pro-sheet-foot{text-align:center;padding:10px 15px 20px;font-size:10px;color:#7b91a6}
+.ky-pro-sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ky-pro-loading{display:grid;gap:14px;place-items:center;align-content:center;min-height:70dvh;text-align:center;padding:25px;color:#1d3e63}
+.ky-pro-loading-icon{display:grid;place-items:center;background:#123454;color:#fff;width:66px;height:66px;border-radius:19px;font-weight:900}
+.ky-pro-loading p{font-size:13px;color:#73889b}
+.ky-pro-login{min-height:100dvh;background:#f5f8fc}.ky-pro-login-bar{display:flex;align-items:center;justify-content:space-between;
+ padding:calc(16px + env(safe-area-inset-top)) 17px 15px;background:#fff;border-bottom:1px solid #e1eaf2}
+.ky-pro-login-bar a{display:flex;align-items:center;gap:6px;color:#20598b;font-size:12px;font-weight:800;text-decoration:none}
+.ky-pro-login-bar strong{font-size:12px;color:#18385a}
+/* No horizontal clipping: existing real ERP tabs stay reachable by scroll and disclosure. */
+@media(max-width:680px){
+ .ky-pro-app .shell-v3{height:calc(100dvh - 129px - env(safe-area-inset-top) - env(safe-area-inset-bottom))!important}
+ .ky-pro-app .shell-v3-workspace{overflow:auto!important;max-width:100vw!important;padding:10px 11px 110px!important}
+ .ky-pro-app .shell-v3-tabs-bar{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+ .ky-pro-app .shell-v3-main{min-width:0!important;max-width:100vw}
+ .ky-pro-app .content-card,.ky-pro-app .module-container{max-width:100%!important}
+ .ky-pro-app input,.ky-pro-app select,.ky-pro-app textarea{font-size:16px}
+ .ky-pro-app button{touch-action:manipulation}
+}
+@media(max-width:360px){.ky-pro-dock>button{font-size:9px}.ky-pro-module-tabs{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.ky-pro-app *, .ky-pro-dialog *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+
+/* Unified native-style home: no fake financial metrics, only real available modules. */
+.ky-pro-home{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:16px 14px calc(125px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+.ky-pro-home-hero{display:grid;gap:10px;background:#112f53;color:#fff;border-radius:24px;padding:22px 20px;box-shadow:0 12px 31px #102c4e21}
+.ky-pro-home-top{display:flex;align-items:center;justify-content:space-between;color:#b7d2eb;font-size:10px;font-weight:900;letter-spacing:.11em}
+.ky-pro-home-hero h1{margin:5px 0 0;font-size:29px;letter-spacing:-.05em;line-height:1.15}
+.ky-pro-home-hero p{color:#d1e2f1;font-size:12px;line-height:1.6;margin:0}
+.ky-pro-home-stats{display:flex;flex-wrap:wrap;gap:9px;align-items:center;border-top:1px solid #ffffff24;padding-top:14px;color:#bfd4e9;font-size:10px}
+.ky-pro-home-stats strong{font-size:11px;color:#fff}
+.ky-pro-home-tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+.ky-pro-home-tools button{display:flex;align-items:center;gap:9px;text-align:left;min-width:0;min-height:93px;padding:12px 10px;border:1px solid #dde8f3;border-radius:17px;background:#fff;color:#2c679e}
+.ky-pro-home-tools button>span{display:grid;min-width:0;flex:1;gap:5px}
+.ky-pro-home-tools b{font-size:12px;color:#213e5c;line-height:1.25}
+.ky-pro-home-tools small{font-size:10px;line-height:1.3;color:#7e91a3}
+.ky-pro-home-title{display:flex;align-items:center;justify-content:space-between;margin:21px 2px 11px;color:#547899}
+.ky-pro-home-title span{font-size:9px;letter-spacing:.1em;font-weight:900}
+.ky-pro-home-title h2{font-size:20px;letter-spacing:-.04em;color:#1c3754;margin:4px 0 0}
+.ky-pro-home-search{margin:0 0 11px}
+.ky-pro-home-modules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ky-pro-home-modules>button{display:flex;align-items:center;gap:9px;min-height:87px;text-align:left;padding:12px 10px;border:1px solid #e0e8f2;border-radius:17px;background:#fff;color:#263f57;box-shadow:0 6px 14px #12293c08}
+.ky-pro-home-modules>button>span:nth-child(2){display:grid;gap:5px;flex:1;min-width:0}
+.ky-pro-home-modules b{font-size:12px;line-height:1.3;overflow-wrap:anywhere}
+.ky-pro-home-modules small{font-size:9px;color:#8093a5}
+.ky-pro-home-module-icon{display:grid;place-items:center;flex:none;width:36px;height:38px;border-radius:12px;background:#e8f2ff;color:#286bb1}
+.ky-pro-home-modules>button:nth-child(5n + 2) .ky-pro-home-module-icon{background:#e8f8ef;color:#24814f}
+.ky-pro-home-modules>button:nth-child(5n + 3) .ky-pro-home-module-icon{background:#f0ecfe;color:#6b55ad}
+.ky-pro-home-modules>button:nth-child(5n + 4) .ky-pro-home-module-icon{background:#fff1e5;color:#a86d2a}
+.ky-pro-home-modules>button:nth-child(5n + 5) .ky-pro-home-module-icon{background:#fcecf0;color:#a54f6d}
+.ky-pro-home-modules>button>svg{flex:none;color:#9aaec0}
+.ky-pro-home-note{font-size:10px;line-height:1.6;color:#8b9cae;text-align:center;margin:22px 8px}
+@media(max-width:360px){.ky-pro-home-modules{grid-template-columns:1fr}.ky-pro-home-tools button{gap:6px;padding:10px 6px}.ky-pro-home-tools b{font-size:11px}}

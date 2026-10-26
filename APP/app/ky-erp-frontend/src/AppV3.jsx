@@ -75,8 +75,15 @@ function normalizeRoute(route, visibleModules) {
   return { moduleKey: permittedModule.key, tabKey: permittedTab?.[0] || "" };
 }
 
+const PRO_MOBILE_PREFIX="/guvenlik/pro";
+function pathForCanonicalModule(pathname){
+  if(pathname===PRO_MOBILE_PREFIX)return "/";
+  if(pathname.startsWith(PRO_MOBILE_PREFIX+"/"))return pathname.slice(PRO_MOBILE_PREFIX.length)||"/";
+  return pathname;
+}
 function updateBrowserPath(route, replace = false) {
-  const nextPath = `/${route.moduleKey}/${route.tabKey}`;
+  const prefix=window.location.pathname===PRO_MOBILE_PREFIX||window.location.pathname.startsWith(PRO_MOBILE_PREFIX+"/")?PRO_MOBILE_PREFIX:"";
+  const nextPath = `${prefix}/${route.moduleKey}/${route.tabKey}`;
   if (window.location.pathname === nextPath) return;
   window.history[replace ? "replaceState" : "pushState"]({}, "", nextPath);
 }
@@ -167,7 +174,7 @@ export default function AppV3() {
   }, [hasModule, isAuditAccount, sentinelAccess?.hasAccess, sentinelOwner]);
 
   const initialRoute = useMemo(() => {
-    const requested = getInitialRoute(window.location.pathname);
+    const requested = getInitialRoute(pathForCanonicalModule(window.location.pathname));
     return normalizeRoute(requested, visibleModules) || requested;
   }, [visibleModules]);
 
@@ -216,7 +223,7 @@ export default function AppV3() {
 
   useEffect(() => {
     const onPopState = () => {
-      const requested = getInitialRoute(window.location.pathname);
+      const requested = getInitialRoute(pathForCanonicalModule(window.location.pathname));
       const normalized = normalizeRoute(requested, visibleModules);
       if (normalized) replaceActiveRoute(normalized.moduleKey, normalized.tabKey);
       setModuleMenuOpen(keepModuleMenuExpanded);

@@ -1,22 +1,44 @@
 {
-  "name": "KY ERP Güvenlik",
-  "short_name": "KY Güvenlik",
+  "name": "KY ERP PRO · Güvenlik ve Yönetim",
+  "short_name": "KY ERP PRO",
   "id": "/guvenlik/",
-  "description": "KY Güvenlik v4.1.0 - tek kalıcı telefon uygulaması, güvenlik ve sistem sahibi yönetimi",
+  "description": "Tek mobil uygulama: güvenli telefon onayları, yetkili ERP modülleri ve sistem sahibi yönetimi",
   "lang": "tr",
   "dir": "ltr",
   "start_url": "/guvenlik/",
   "scope": "/guvenlik/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "portrait-primary",
   "background_color": "#eef4fb",
   "theme_color": "#10284d",
-  "categories": ["business", "security", "productivity"],
+  "categories": [
+    "business",
+    "security",
+    "productivity"
+  ],
   "prefer_related_applications": false,
   "icons": [
-    {"src": "/guvenlik/kyerp-security-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-    {"src": "/guvenlik/kyerp-security-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
-    {"src": "/guvenlik/kyerp-security-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+    {
+      "src": "/guvenlik/kyerp-security-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/guvenlik/kyerp-security-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/guvenlik/kyerp-security-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
   ]
 }

@@ -36,6 +36,16 @@ jobs:
         working-directory: APP/cloud/ky-erp-api
         run: npm ci --ignore-scripts
 
+      - name: Compile full canonical ERP for one KY ERP PRO PWA
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          KYERP_SECURITY_PRO_BUILD=1 npm run build
+          test -f dist-security-pro/pro.html
+          test -d dist-security-pro/assets
+
       - name: Validate security source
         shell: bash
         run: |
@@ -74,6 +84,8 @@ jobs:
           set -euo pipefail
           node APP/cloud/ky-erp-security-host/prepare-assets.mjs
           test -f APP/cloud/ky-erp-security-host/.security-assets/guvenlik/index.html
+          test -f APP/cloud/ky-erp-security-host/.security-assets/guvenlik/pro/index.html
+          test -d APP/cloud/ky-erp-security-host/.security-assets/guvenlik/pro/assets
           test ! -e APP/cloud/ky-erp-security-host/.security-assets/ky-sistem
           test -f APP/cloud/ky-erp-security-host/.security-assets/ky-firma/index.html
           test ! -e APP/cloud/ky-erp-security-host/.security-assets/owner-security
@@ -122,9 +134,9 @@ jobs:
 
           primary_status="$(curl --silent --show-error --max-time 20 -o /tmp/security-primary.html -w '%{http_code}' https://security.kyerp.net/guvenlik/)"
           test "$primary_status" = "200"
-          grep -q '<title>KY ERP Güvenlik v4.1.0</title>' /tmp/security-primary.html
+          grep -q '<title>KY ERP Güvenlik v4.2.0</title>' /tmp/security-primary.html
           grep -q '/guvenlik/app.js' /tmp/security-primary.html
-          grep -q 'v4.1.0' /tmp/security-primary.html
+          grep -q 'v4.2.0' /tmp/security-primary.html
 
           curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/manifest.webmanifest -o /tmp/manifest-primary.json
           jq -e '.id == "/guvenlik/" and .start_url == "/guvenlik/" and .scope == "/guvenlik/"' /tmp/manifest-primary.json >/dev/null
@@ -137,8 +149,17 @@ jobs:
           grep -q 'Yedek Kod + Admin Şifresiyle Bağla' /tmp/security-app.js
           grep -q 'approve.disabled=true' /tmp/security-app.js
           grep -q 'createLocalUnlock' /tmp/security-app.js
-          grep -q 'APP_DISPLAY_VERSION="v4.1.0"' /tmp/security-app.js
+          grep -q 'APP_DISPLAY_VERSION="v4.2.0"' /tmp/security-app.js
           grep -q 'id="bootPanel"' /tmp/security-primary.html
+          # The full ERP application must open inside the existing /guvenlik/ PWA scope.
+          pro_status="$(curl --silent --show-error --max-time 25 -o /tmp/ky-erp-pro.html -w '%{http_code}' https://security.kyerp.net/guvenlik/pro/)"
+          test "$pro_status" = "200"
+          grep -q 'KY ERP PRO v4.2.0' /tmp/ky-erp-pro.html
+          grep -q '/guvenlik/pro/assets/' /tmp/ky-erp-pro.html
+          pro_deep_status="$(curl --silent --show-error --max-time 25 -o /tmp/ky-erp-pro-deep.html -w '%{http_code}' https://security.kyerp.net/guvenlik/pro/ik/personel-kartlari)"
+          test "$pro_deep_status" = "200"
+          grep -q 'KY ERP PRO v4.2.0' /tmp/ky-erp-pro-deep.html
+
 
           enrollment_guard="$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' --data '{}' https://api.kyerp.net/api/auth/push/security-enrollment/complete)"
           printf '%s' "$enrollment_guard" | jq -e '.error.code == "SECURITY_ENROLLMENT_CODE_REQUIRED"' >/dev/null

@@ -1,12 +1,15 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+const unifiedProBuild=process.env.KYERP_SECURITY_PRO_BUILD==="1";
 const proxyTarget =
   process.env.VITE_API_PROXY_TARGET || "http://localhost:3101";
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: "/",
+  base: unifiedProBuild?"/guvenlik/pro/":"/",
+  publicDir: unifiedProBuild?false:"public",
   plugins: [react()],
   resolve: { preserveSymlinks: true },
   server: {
@@ -22,7 +25,9 @@ export default defineConfig({
     },
   },
   build: {
+    ...(unifiedProBuild?{outDir:"dist-security-pro",emptyOutDir:true}:{}),
     rollupOptions: {
+      ...(unifiedProBuild?{input:fileURLToPath(new URL("./pro.html",import.meta.url))}:{}),
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) {
