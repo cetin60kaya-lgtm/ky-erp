@@ -254,7 +254,8 @@ async function connectDevice(){
     cleanEnrollmentQuery();enrollmentQuery={id:"",token:""};els.password.value="";els.enrollmentCode.value="";relinkMode=false;
     toast("Cihaz kaydedildi. KY ERP hesabi dogrulaniyor...");
     worker.active?.postMessage({type:"KYERP_SECURITY_REFRESH"});
-    await refreshState({afterConnect:true});
+    // Device enrolment is complete: continue to the only mobile ERP shell.
+    location.replace("/guvenlik/pro/");
   }catch(error){
     toast(error?.message||"Güvenlik uygulaması bağlanamadı.");setBadge("Kurulum hatası","bad");
   }finally{busy=false;els.connectButton.disabled=false;els.connectButton.textContent="Yedek Kod + Admin Şifresiyle Bağla"}
