@@ -64,7 +64,6 @@ BEGIN
           AND link.supplier_company_id=NEW.supplier_company_id
           AND link.lot_normalized=NEW.lot_normalized
           AND link.operation_type='COST_LINK'
-          AND link.state<>'NEEDS_REVIEW'
       ),0)+NEW.quantity
     ) > COALESCE((
       SELECT receipt.quantity FROM accounting_physical_operations receipt
