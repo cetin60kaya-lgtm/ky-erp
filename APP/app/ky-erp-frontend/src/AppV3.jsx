@@ -86,6 +86,8 @@ function updateBrowserPath(route, replace = false) {
   const nextPath = `${prefix}/${route.moduleKey}/${route.tabKey}`;
   if (window.location.pathname === nextPath) return;
   window.history[replace ? "replaceState" : "pushState"]({}, "", nextPath);
+  // pushState/replaceState do not emit popstate: keep the PRO mobile tab selector in sync.
+  if (prefix) window.dispatchEvent(new CustomEvent("kyerp:route-change", { detail: route }));
 }
 
 function LoadingCard({ title = "Ekran yükleniyor" }) {
