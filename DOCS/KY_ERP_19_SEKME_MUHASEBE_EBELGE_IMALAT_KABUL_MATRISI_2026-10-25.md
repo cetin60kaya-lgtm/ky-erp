@@ -1,5 +1,15 @@
 # KY ERP — 19 sekme güncel kaynak, otomatik test ve saha kabul matrisi
 
+## 26.10.2026 — CANLI D1 0062 UYGULANDI, TEK-SEFERLIK IZIN KAPATILDI (EN GUNCEL)
+
+- **PR #474**: Yalniz 0062 icin yedekli ve ayri onayli GitHub Worker migration kapisi merged `c9a226b779c5b9992840cc316bc784fa4c23a70e`; [CI #40279521273](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40279521273) Worker+Frontend SUCCESS.
+- **Canli migration [#40279707049](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40279707049)** SUCCESS, SHA `180c1f993e2ebd17e5ad93854b643e7776222582`. `ky-erp-db` D1 tam export backup ve 20.8 MB GitHub artifact saklandi; **yalniz** `0062_accounting_physical_receipt_journal.sql` uygulama/dogrulama adimi SUCCESS. 2 tablo, 4 index, 1 trigger, 7 zorunlu alan, ilk anda 0 yeni journal/reconciliation satiri dogrulandi. Worker deploy ve API health PASS.
+- **Tek-seferlik yetki kapandi**: release commit `3fd2873ec4428f0b58ec6592be54acf1666881a6`; `applyMigrations=false`, `applyPhysical0062=false`, `migrationApprovedByUser=false`. [Izin kapali tekrar Worker yayini #40279954615](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40279954615) SUCCESS, 0062 ve diger migration adimlari SKIPPED, Worker deploy/API health PASS.
+- **GUNCEL DUZELTME:** Asagidaki "#472 migration onayi bekliyor" kaydi TARiHSELDIR, artik gecerli DEGIL. 0062 schema canlida mevcuttur. Ancak canli/gercek LOT–irsaliye–Boyahane/fatura yetkili E2E, gercek ISNET/banka ve 19 sekmenin saha kabul testleri HALA YAPILMADI; 19/19 PASS ilan edilmez.
+- Canli D1'de test amacli cari, banka, fatura veya stok hareketi uretilmedi. Bu islem yalniz onayli additive 0062 schema degisikligi ve Worker deployudur.
+
+
+
 ## 26.10.2026 — PR #472 yayın kanıtı (production 0062 migration SKIPPED)
 
 - **Worker [#40277506081](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40277506081)** SUCCESS, deploy SHA `1ef3348135db1395bad86c51735fa1b191c84f0e`, canlı D1 tam export+artifact, read-only schema, Worker deploy ve API health başarılı; migration adımları **SKIPPED**.
