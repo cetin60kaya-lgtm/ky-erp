@@ -54,5 +54,7 @@ test("trusted phone can approve a PC login without needing an ERP session first"
   assert.match(app,/loginEverOpened/);
   assert.match(app,/hidden=\{!loginRequested\}/);
   assert.match(app,/KYERP_SECURITY_PUSH_WAKE/);
+  assert.match(app,/if\(isAuthenticated&&!wasAuthenticated\.current\)/);
+  assert.match(app,/setSecurityOpen\(false\);setLoginRequested\(false\)/);
   assert.doesNotMatch(app,/!isAuthenticated\)return <div className="ky-pro-login"/);
 });
