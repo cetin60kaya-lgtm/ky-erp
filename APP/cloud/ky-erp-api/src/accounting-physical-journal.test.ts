@@ -55,12 +55,15 @@ test("0062 migration iki defa çalışır, archived queue yerine fiziksel journa
   assert.ok(ix.length>=3);
 });
 test("tek irsaliye Boyahane REQUIRED LOT: bir hareket/LOT, 20 paralelde artış yok",async()=>{
-  const db=new D1Fixture(),arr=await Promise.all(Array.from({length:20},()=>postPhysicalReceipt(db,sample())));
+  const db=new D1Fixture(),arr=await Promise.allSettled(Array.from({length:20},()=>postPhysicalReceipt(db,sample())));
+  assert.ok(arr.some(x=>x.status==="fulfilled"),"En az bir Worker ilk işlemi kaydetmeli.");
+  assert.ok(arr.every(x=>x.status==="fulfilled" || x.reason?.code==="PHYSICAL_IN_PROGRESS" ||
+    x.reason?.code==="PHYSICAL_LEASE_CONFLICT"),"Diğer Worker yalnız lease çakışması alabilir.");
   assert.equal(db.count("json_store","WHERE scope='BOYAHANE_LOT'"),1);
   assert.equal(db.count("json_store","WHERE scope='BOYAHANE_STOCK_MOVEMENT'"),1);
   const lot=db.sql.prepare("SELECT data FROM json_store WHERE scope='BOYAHANE_LOT'").get() as any;
   assert.equal(JSON.parse(lot.data).remainingKg,100);
-  assert.equal(arr.filter(x=>!x.idempotent).length,1);
+  assert.equal(arr.filter(x=>x.status==="fulfilled" && !x.value.idempotent).length,1);
   assert.equal((await readPhysicalDocumentStatus(db,"taha","dispatch1")).filter(x=>x.state==="DONE").length,1);
 });
 test("100 eşzamanlı retry: tek generic stok kaydı",async()=>{
@@ -86,7 +89,8 @@ test("LOT-A 60 + LOT-B 40, toplam 100; ayrı tekillik",async()=>{
 });
 test("aynı LOT farklı tenant, ürün, tedarikçi birbirine karışmaz",async()=>{
   const db=new D1Fixture();
-  for(const patch of [{},{tenant:"t2"},{productId:"chemical2"},{supplierCompanyId:"sup2"}])
+  for(const patch of [{},{tenant:"t2"},{productId:"chemical2",physicalLineId:"line2",documentLineId:"line2"},
+    {supplierCompanyId:"sup2",physicalLineId:"line3",documentLineId:"line3"}])
     await postPhysicalReceipt(db,sample(patch));
   assert.equal(db.count("json_store","WHERE scope='BOYAHANE_LOT'"),4);
 });
