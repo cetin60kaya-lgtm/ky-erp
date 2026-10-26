@@ -3,7 +3,7 @@ import type { Context, Hono } from "hono";
 import { analyzeAccountingDocument, accountingDocumentIntelligenceStatus } from "./accounting-document-intelligence";
 import { postAccountingDocumentAtomic } from "./accounting-document-posting-atomic";
 import { postPhysicalReceipt, postPhysicalCostLink, readPhysicalDocumentStatus } from "./accounting-physical-journal";
-import { claimEBelgeFinalization, markEBelgeFinalization } from "./e-belge-finalize-guard";
+import { claimEBelgeFinalization, reclaimEBelgeFinalization, markEBelgeFinalization } from "./e-belge-finalize-guard";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { verifyIsnetReadOnlySession } from "./isnet-runtime-v2";
 import { processCloudArchiveJobs } from "./accounting-document-archive";
@@ -467,7 +467,9 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     if(!expected)return c.json(error("FINALIZE_VERSION_REQUIRED","Belge sürümünü yeniden okuyup onaylayın."),412);
     const existing=await c.env.DB.prepare("SELECT status,posted_at FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1").bind(id,slug).first<Row>();
     if(existing?.posted_at)return c.json({ok:true,data:{documentId:id,status:"POSTED",postedAt:existing.posted_at,idempotent:true}});
-    const claim=await claimEBelgeFinalization(c.env.DB,slug,id,expected,String(user.id));
+    const claim=existing?.status==="FINALIZE_RETRY"&&b.retryPhysical===true
+      ?await reclaimEBelgeFinalization(c.env.DB,slug,id,expected,String(user.id))
+      :await claimEBelgeFinalization(c.env.DB,slug,id,expected,String(user.id));
     if(!claim.ok)return c.json(error(claim.code,"Belge başka işlemde olabilir veya sürümü değişmiş; güncel belgeyi açıp yeniden kontrol edin.",claim),claim.code==="NOT_FOUND"?404:409);
     let phase="VALIDATING";
     try {
