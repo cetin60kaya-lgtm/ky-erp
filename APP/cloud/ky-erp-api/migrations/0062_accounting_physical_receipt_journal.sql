@@ -79,3 +79,17 @@ BEGIN
     THEN RAISE(ABORT,'COST_QUANTITY_OVER_ALLOCATED')
   END;
 END;
+
+-- One provisional invoice receipt can be reconciled with only one actual
+-- dispatch, regardless of two Workers processing different dispatch numbers.
+CREATE TABLE IF NOT EXISTS accounting_provisional_reconciliations (
+  provisional_receipt_id TEXT PRIMARY KEY,
+  main_company_slug TEXT NOT NULL,
+  physical_document_id TEXT NOT NULL,
+  physical_line_id TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  reconciled_at TEXT NOT NULL,
+  UNIQUE(main_company_slug,physical_document_id,physical_line_id,provisional_receipt_id)
+);
+CREATE INDEX IF NOT EXISTS ix_accounting_provisional_reconciliations_dispatch
+  ON accounting_provisional_reconciliations(main_company_slug,physical_document_id,physical_line_id);
