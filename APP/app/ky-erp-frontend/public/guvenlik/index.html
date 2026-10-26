@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="KY Güvenlik" />
+  <meta name="apple-mobile-web-app-title" content="KY ERP PRO" />
   <meta name="format-detection" content="telephone=no" />
   <script>(()=>{try{const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(!standalone&&location.hostname!=="security.kyerp.net"){const u=new URL(location.href);u.protocol="https:";u.host="security.kyerp.net";u.pathname="/guvenlik/";location.replace(u.href)}}catch{}})();</script>
   <script>/* KYERP_SECURITY_PENDING_CAPTURE_V3 */(()=>{try{const u=new URL(location.href);const id=String(u.searchParams.get("enrollmentId")||"");const token=String(u.searchParams.get("enrollmentToken")||"");const mode=String(u.searchParams.get("mode")||"");if(id&&token)localStorage.setItem("kyerp-security-fresh-enrollment-v3",JSON.stringify({id,token,mode,savedAt:Date.now()}))}catch{}})();</script>
@@ -19,14 +19,14 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/guvenlik/kyerp-security-apple-touch.png" />
   <link rel="stylesheet" href="/guvenlik/app.css" />
   <link rel="stylesheet" href="/guvenlik/security-workspace.css" />
-  <title>KY ERP Güvenlik v4.1.0</title>
+  <title>KY ERP PRO v4.2.0</title>
 </head>
 <body>
   <main class="security-shell">
     <header class="security-header">
       <div class="security-brand">
         <span class="security-logo">KY</span>
-        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v4.1.0</span></small></div>
+        <div><b>KY ERP PRO</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v4.2.0</span></small></div>
       </div>
       <span id="connectionBadge" class="security-badge">Kontrol</span>
     </header>
@@ -82,6 +82,11 @@
     </section>
 
     <section id="appPanel" class="hidden">
+      <section class="security-card ky-pro-portal">
+        <div class="ky-pro-portal-head"><div><span class="eyebrow">TEK MOBİL UYGULAMA · KY ERP PRO 4.2</span><h2>Tüm ERP İşlemleri</h2><p>Muhasebe, İK, PDKS, İmalat, Desen, Boyahane, yönetim, denetim ve diğer tüm yetkili sekmeler burada.</p></div><span class="ky-pro-mark" aria-hidden="true">KY</span></div>
+        <a class="ky-pro-portal-button" href="/guvenlik/pro/" aria-label="KY ERP PRO tüm modüller çalışma alanını aç">ERP PRO'yu Aç <span aria-hidden="true">›</span></a>
+        <small>İkinci uygulama kurulmaz. Aynı güvenilir cihaz ve bildirimler korunur.</small>
+      </section>
       <section id="accountPanel" class="security-card account-card">
         <div class="account-card-head">
           <div>
@@ -96,7 +101,7 @@
           <div><span>Kullanıcı adı</span><b id="accountUsername">-</b></div>
           <div><span>Firma / Kapsam</span><b id="accountScope">-</b></div>
           <div><span>Bağlı cihaz</span><b id="accountDevice">-</b></div>
-          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v4.1.0</b></div>
+          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v4.2.0</b></div>
         </div>
         <div class="account-access-block">
           <span>ERP erişimi</span>
