@@ -149,11 +149,11 @@ export async function postPhysicalReceipt(db:any,data:Row) {
   if(!old) {
     await db.prepare(`INSERT OR IGNORE INTO accounting_physical_operations
        (id,main_company_slug,document_id,document_line_id,physical_document_id,physical_line_id,
-        operation_type,product_id,supplier_company_id,lot_normalized,payload_hash,quantity,state,
-        attempts,created_at,updated_at) VALUES(?,?,?,?,?,?,'RECEIPT',?,?,?,?,?,'PENDING',0,?,?)`)
+        operation_type,product_id,supplier_company_id,lot_normalized,payload_hash,payload_json,quantity,state,
+        attempts,created_at,updated_at) VALUES(?,?,?,?,?,?,'RECEIPT',?,?,?,?,?,?,'PENDING',0,?,?)`)
       .bind(i.id,f.tenant,txt(data.documentId||f.physicalDocumentId),txt(data.documentLineId||f.physicalLineId),
         f.physicalDocumentId,f.physicalLineId,f.productId,f.supplierCompanyId,f.normalizedLot,
-        i.payloadHash,f.quantity,ts,ts).run();
+        i.payloadHash,JSON.stringify(data),f.quantity,ts,ts).run();
     old=await getJournal(db,i.id,f.tenant);
     if(old?.payload_hash!==i.payloadHash)throw err("PHYSICAL_PAYLOAD_CONFLICT","Aynı fiziksel kayıt farklı yükle çakıştı.");
     if(old?.state==="DONE")return{id:i.id,status:"DONE",idempotent:true};
@@ -254,11 +254,11 @@ export async function postPhysicalCostLink(db:any,data:Row) {
   if(!cached){
     await db.prepare(`INSERT OR IGNORE INTO accounting_physical_operations
       (id,main_company_slug,document_id,document_line_id,physical_document_id,physical_line_id,
-       operation_type,product_id,supplier_company_id,lot_normalized,payload_hash,quantity,state,
+       operation_type,product_id,supplier_company_id,lot_normalized,payload_hash,payload_json,quantity,state,
        attempts,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,'COST_LINK',?,?,?,?,?,'PENDING',0,?,?)`)
+      VALUES(?,?,?,?,?,?,'COST_LINK',?,?,?,?,?,?,'PENDING',0,?,?)`)
       .bind(costKey,tenant,invoiceId,invoiceLineId,f.physicalDocumentId,f.physicalLineId,
-        f.productId,f.supplierCompanyId,f.normalizedLot,payloadHash,qty,ts,ts).run();
+        f.productId,f.supplierCompanyId,f.normalizedLot,payloadHash,JSON.stringify(data),qty,ts,ts).run();
   }
   const current=await getJournal(db,costKey,tenant);
   if(current?.payload_hash!==payloadHash)throw err("COST_PAYLOAD_CONFLICT","Maliyet kimliği çakıştı.");
@@ -308,4 +308,46 @@ export async function postPhysicalCostLink(db:any,data:Row) {
       .bind(txt(e?.code)||"COST_DB_RETRY",now(),new Date(Date.now()+5000).toISOString(),now(),costKey,tenant,lease).run();
     throw err(txt(e?.code)||"COST_DB_RETRY","Maliyet bağlantısı tamamlanamadı; güvenli tekrar bekleniyor.");
   }
+}
+
+export async function retryPhysicalOperations(env:any,maxJobs=12) {
+  const db=env?.DB,started=now();
+  if(!db)return{status:"DB_UNAVAILABLE",processed:0};
+  try{await requireSchema(db)}catch(e:any){
+    if(e?.code==="PHYSICAL_SCHEMA_APPROVAL_REQUIRED")return{status:"SCHEMA_APPROVAL_REQUIRED",processed:0};
+    throw e;
+  }
+  // Worker scheduled (existing cron): only journal intents already authorized by
+  // a previous confirmed finalization; no new invoices, messages or stock intents.
+  const tasks=(await db.prepare(`SELECT p.id,p.main_company_slug,p.operation_type,p.payload_json
+    FROM accounting_physical_operations p JOIN accounting_documents d
+     ON d.id=p.document_id AND d.main_company_slug=p.main_company_slug
+    WHERE p.state IN ('PENDING','RETRY','PROCESSING') AND p.attempts<6
+      AND d.deleted_at IS NULL AND d.approved_by IS NOT NULL
+      AND d.status IN ('FINALIZING','FINALIZE_RETRY','APPROVED')
+      AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=?)
+      AND (p.state<>'PROCESSING' OR p.lease_until IS NULL OR p.lease_until<=?)
+    ORDER BY p.updated_at ASC LIMIT ?`).bind(started,started,Math.min(20,Math.max(1,maxJobs))).all()).results||[];
+  const result={status:"OK",processed:0,recovered:0,review:0,errors:0};
+  for(const item of tasks){
+    let input:Row={};try{input=JSON.parse(txt(item.payload_json)||"{}")}catch{}
+    if(!input.tenant||input.tenant!==item.main_company_slug){
+      result.review++;
+      await db.prepare(`UPDATE accounting_physical_operations SET state='NEEDS_REVIEW',
+        last_error_code='RECOVERY_PAYLOAD_INVALID',lease_token=NULL,lease_until=NULL,
+        updated_at=? WHERE id=? AND main_company_slug=? AND state<>'DONE'`)
+        .bind(now(),item.id,item.main_company_slug).run();
+      continue;
+    }
+    try{
+      if(item.operation_type==="RECEIPT")await postPhysicalReceipt(db,input);
+      else if(item.operation_type==="COST_LINK")await postPhysicalCostLink(db,input);
+      else throw err("PHYSICAL_RECOVERY_TYPE_UNKNOWN","Bilinmeyen işlem tipi.");
+      result.recovered++;
+    }catch(e:any){
+      result.errors++;
+      // Never report success or write sensitive payloads into logs.
+    }finally{result.processed++;}
+  }
+  return result;
 }
