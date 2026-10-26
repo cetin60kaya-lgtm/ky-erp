@@ -88,6 +88,61 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # 0062, diger production migrationlardan tamamen ayridir.
+      # Onayli 0062 release bayragi disinda migration calistirilamaz.
+      - name: 0062 fiziksel journal icin tek-hedef user onay kapisi
+        id: physical_0062_gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if jq -e '.applyPhysical0062 == true' RELEASES/kyerp-worker-production-release.json >/dev/null; then
+            jq -e '.approved == true and .target == "production" and .component == "worker"
+              and .sourceBranch == "codex/model-uretim-kontrol-merkezi-final"
+              and .migrationApprovedByUser == true and .approvedMigrationId == "0062"
+              and .applyMigrations == false' RELEASES/kyerp-worker-production-release.json >/dev/null || {
+                echo "0062 hedefli migration onayi eksik veya baska migration da acik." >&2; exit 1;
+              }
+            echo "apply=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "apply=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sadece 0062 D1 fiziksel journal migration ve salt-okunur kanit
+        if: steps.physical_0062_gate.outputs.apply == 'true'
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          migration=migrations/0062_accounting_physical_receipt_journal.sql
+          test -f "$migration"
+          test -n "${D1_BACKUP:-}" && test -s "$D1_BACKUP" || {
+            echo "Canli D1 export yedegi bulunamadi; 0062 kesinlikle uygulanmayacak." >&2; exit 1;
+          }
+          # Yalniz CREATE TABLE/INDEX/TRIGGER; mevcut tablo veya satirlar degistirilemez.
+          ! grep -Eiq '^[[:space:]]*(DROP|DELETE|UPDATE|INSERT|ALTER|REPLACE|TRUNCATE)[[:space:]]' "$migration"
+          before="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command             "SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('accounting_physical_operations','accounting_provisional_reconciliations')) AS journal_tables, (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('json_store','stock_movements','accounting_documents','accounting_document_lines')) AS prerequisites;" --json)"
+          jq -e '.[0].results[0].prerequisites == 4' <<<"$before" >/dev/null || {
+            echo "0062 on kosul tablolari eksik; migration yapilmadi." >&2; exit 1;
+          }
+          existing="$(jq -r '.[0].results[0].journal_tables' <<<"$before")"
+          case "$existing" in
+            0)
+              echo "0062 uygulanacak; yedek artifact kaydedildi, onceki journal tablosu yok."
+              npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file "$migration" --yes
+              ;;
+            2)
+              echo "0062 tabloları zaten mevcut; yazma yapilmadan salt-okunur dogrulanacak."
+              ;;
+            *)
+              echo "0062 kismi sema goruldu ($existing/2); otomatik degisiklik YASAK." >&2; exit 1
+              ;;
+          esac
+          after="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command             "SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('accounting_physical_operations','accounting_provisional_reconciliations')) AS journal_tables, (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN ('ix_accounting_physical_operations_recovery','ix_accounting_physical_operations_document','ix_accounting_physical_operations_source','ix_accounting_provisional_reconciliations_dispatch')) AS journal_indexes, (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name='trg_accounting_physical_cost_capacity') AS capacity_trigger, (SELECT COUNT(*) FROM pragma_table_info('accounting_physical_operations') WHERE name IN ('id','main_company_slug','payload_hash','lease_token','lease_until','state','attempts')) AS required_columns, (SELECT COUNT(*) FROM accounting_physical_operations) AS journal_rows, (SELECT COUNT(*) FROM accounting_provisional_reconciliations) AS reconciliation_rows;" --json)"
+          jq -e '.[0].results[0] | .journal_tables == 2 and .journal_indexes == 4 and .capacity_trigger == 1 and .required_columns == 7 and .journal_rows == 0 and .reconciliation_rows == 0' <<<"$after" >/dev/null || {
+            echo "0062 sema kaniti eksik veya journal tablolarinda beklenmeyen satirlar var. Otomatik devam YASAK." >&2; exit 1;
+          }
+          echo "0062 tek hedef production D1 schema kabul: 2 tablo, 4 index, 1 trigger, 7 alan, yeni kayit yok."
+
       # Normal kod sürümü production D1 migration izni sayılmaz.
       # Eski release markerlar dahil varsayilan olarak tum mutasyonlu migration adimlari kapali.
       - name: Production migration icin ayri izin kapisi
