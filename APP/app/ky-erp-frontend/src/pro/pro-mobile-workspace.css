@@ -1,0 +1,125 @@
+/* KY ERP PRO / Android mobile workspace.
+ * Presentation-only: the canonical AppV3, module services, Auth and D1 remain shared.
+ * Scoped to the single /guvenlik/pro PWA; desktop and other PWA shells are untouched. */
+.ky-pro-workspace-toolbar[hidden]{display:none!important}
+.ky-pro-workspace-toolbar{display:none}
+.ky-pro-module-context{--ky-mobile-accent:#2868a7}
+.ky-pro-module-context[data-module="gunluk-operasyon"]{--ky-mobile-accent:#f97316}
+.ky-pro-module-context[data-module="ik"]{--ky-mobile-accent:#0d9488}
+.ky-pro-module-context[data-module="muhasebe"],
+.ky-pro-module-context[data-module="e-belge"]{--ky-mobile-accent:#2563eb}
+.ky-pro-module-context[data-module="pdks"]{--ky-mobile-accent:#4f46e5}
+.ky-pro-module-context[data-module="desen"]{--ky-mobile-accent:#a855f7}
+.ky-pro-module-context[data-module="boyahane"]{--ky-mobile-accent:#d97706}
+.ky-pro-module-context[data-module="uretim"]{--ky-mobile-accent:#16a34a}
+.ky-pro-module-context[data-module="compliance"]{--ky-mobile-accent:#0e7490}
+.ky-pro-module-context[data-module="admin"]{--ky-mobile-accent:#334155}
+@media(max-width:760px){
+ html.kyerp-pro-mode,html.kyerp-pro-mode body,html.kyerp-pro-mode #root{width:100%;max-width:100%;overflow:hidden}
+ .ky-pro-app{width:100%;min-width:0;max-width:100vw;height:100dvh}
+ .ky-pro-header{min-height:52px;padding:8px 12px}
+ .ky-pro-mark{width:34px;height:34px;border-radius:10px}
+ .ky-pro-workspace-toolbar{display:block;flex:none;position:relative;z-index:104;min-width:0}
+ .ky-pro-module-context{display:grid;grid-template-columns:minmax(0,1fr) minmax(138px,1.05fr);align-items:center;gap:9px;padding:8px 11px;min-height:58px;border-bottom:1px solid #dce7f1;background:#fff;box-shadow:0 2px 6px #1234520a}
+ .ky-pro-module-context>div{display:grid;min-width:0;gap:3px}
+ .ky-pro-module-context>div small{font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--ky-mobile-accent)}
+ .ky-pro-module-context>div strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;line-height:1.2;color:#153451}
+ .ky-pro-module-select{position:relative;min-width:0}
+ .ky-pro-module-select>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:5px;min-height:43px;padding:9px 10px;border:1px solid #ccdbea;border-radius:11px;color:#1a3b61;background:#f8fbff;font-size:12px;font-weight:800;cursor:pointer}
+ .ky-pro-module-select>summary::-webkit-details-marker{display:none}
+ .ky-pro-module-select>summary span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
+ .ky-pro-module-select[open]>summary{border-color:var(--ky-mobile-accent);box-shadow:0 0 0 1px var(--ky-mobile-accent)}
+ .ky-pro-module-select[open]>summary svg{transform:rotate(90deg)}
+ .ky-pro-module-options{position:absolute;top:calc(100% + 6px);right:0;z-index:200;width:min(88vw,360px);max-height:min(58dvh,490px);overflow-y:auto;overscroll-behavior:contain;padding:7px;background:#fff;border:1px solid #ccdbea;border-radius:13px;box-shadow:0 16px 35px #09223e35}
+ .ky-pro-module-options button{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:45px;padding:10px 12px;text-align:left;border:0;border-radius:9px;background:#fff;color:#34536f;font-size:13px;font-weight:700}
+ .ky-pro-module-options button[aria-current="page"]{background:#eef5fc;color:var(--ky-mobile-accent)}
+ .ky-pro-module-options button+button{border-top:1px solid #f0f3f7}
+ .ky-pro-workspace-content{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;min-width:0;width:100%;max-width:100%;overflow:hidden!important}
+ .ky-pro-app .ky-pro-workspace-content>.shell-v3{
+   flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1fr)!important;
+   width:100%!important;max-width:100%!important;height:100%!important;
+   min-height:0!important;max-height:100%!important;min-width:0!important;
+   overflow:hidden!important;zoom:1!important;transform:none!important;
+ }
+ .ky-pro-workspace-content>.shell-v3 .shell-v3-main{
+   min-width:0!important;min-height:0!important;width:100%!important;max-width:100%!important;
+   height:100%!important;grid-template-rows:51px minmax(0,1fr)!important;overflow:hidden!important;
+ }
+ .ky-pro-workspace-content>.shell-v3 .shell-v3-topbar{min-width:0;height:51px!important;min-height:51px!important;padding-inline:10px;gap:7px}
+ .ky-pro-workspace-content>.shell-v3 .shell-v3-owner-scope{min-width:0;max-width:145px}
+ .ky-pro-workspace-content>.shell-v3 .shell-v3-tabs-bar,
+ .ky-pro-workspace-content>.shell-v3 .shell-v3-crumb,
+ .ky-pro-workspace-content>.shell-v3 .shell-v3-status{display:none!important}
+ .ky-pro-app .shell-v3-workspace{
+   min-width:0!important;width:100%!important;max-width:100%!important;
+   overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior-y:contain;
+   padding:9px 10px calc(100px + env(safe-area-inset-bottom))!important;
+ }
+ .ky-pro-app .shell-v3-workspace :is(main,section,article,form,fieldset){min-width:0;max-width:100%}
+ .ky-pro-app .shell-v3-workspace :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea){
+   min-width:0;max-width:100%;font-size:16px;
+ }
+ .ky-pro-app .shell-v3-workspace :is(.table-wrap,.kyerp-table-wrap,.kyop-table-wrap,.gop-payment-ledger-table,.bh-table-wrap,.production-table-wrap){
+   width:100%;min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain
+ }
+ /* Daily Operation: mobile-native controls. Business rules and save handlers are unchanged. */
+ .ky-pro-app .gop-workspace{width:100%;max-width:100%;padding:0 0 18px!important;overflow-x:clip}
+ .ky-pro-app .kyop-titlebar{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:10px!important;padding:14px!important}
+ .ky-pro-app .kyop-titlebar h1{font-size:20px!important;line-height:1.24}
+ .ky-pro-app .kyop-titlebar p{font-size:12px!important;line-height:1.45}
+ .ky-pro-app .kyop-mode{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%;gap:7px}
+ .ky-pro-app .kyop-mode button{min-width:0!important;width:100%;min-height:45px!important;white-space:normal!important;padding:7px!important}
+ .ky-pro-app .kyop-actions{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:9px;padding:10px!important;overflow:visible}
+ .ky-pro-app .kyop-action-group{min-width:0!important;max-width:100%;gap:7px}
+ .ky-pro-app .kyop-date-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
+ .ky-pro-app .kyop-date-actions>button{min-width:0!important;min-height:43px!important;width:100%;font-size:12px!important;padding:6px}
+ .ky-pro-app .kyop-manual-range{grid-column:1/-1;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%;gap:8px;min-width:0}
+ .ky-pro-app .kyop-manual-range>i{display:none}
+ .ky-pro-app .kyop-manual-range label{display:grid!important;min-width:0;gap:4px}
+ .ky-pro-app .kyop-manual-range label>span{display:block!important;font-size:11px}
+ .ky-pro-app .kyop-manual-range input[type="date"]{min-width:0!important;width:100%!important;max-width:100%;height:44px!important;font-size:14px!important}
+ .ky-pro-app .kyop-entry-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+ .ky-pro-app .kyop-entry-actions>button{min-width:0!important;width:100%;min-height:44px!important;white-space:normal!important;line-height:1.3;font-size:12px!important;padding:8px}
+ .ky-pro-app .kyop-extra-tools{width:100%}
+ .ky-pro-app .kyop-banner{display:flex;flex-wrap:wrap;gap:6px;padding:10px}
+ .ky-pro-app .kyop-days{display:flex!important;grid-template-columns:none!important;gap:8px!important;max-width:100%;width:100%;overflow-x:auto!important;scroll-snap-type:x proximity;padding:5px 2px 10px}
+ .ky-pro-app .kyop-days>button{flex:0 0 118px;min-width:118px!important;max-width:118px;scroll-snap-align:start}
+ .ky-pro-app .kyop-grid{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:10px}
+ .ky-pro-app .kyop-panel{min-width:0!important;width:100%;max-width:100%;overflow:hidden}
+ .ky-pro-app .kyop-pool-top{display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:7px}
+ .ky-pro-app .kyop-entry-head{flex-wrap:wrap}
+ .ky-pro-app .gop-quick-dialog{width:100vw!important;max-width:100vw!important;max-height:100dvh!important;height:100dvh!important;margin:0!important;border-radius:0!important;min-width:0!important;overflow:hidden}
+ .ky-pro-app .gop-dialog-backdrop{inset:0!important;padding:0!important;align-items:stretch!important;justify-content:stretch!important}
+ .ky-pro-app .gop-quick-dialog .quick-controls{min-width:0;max-width:100%;overflow-x:hidden}
+ .ky-pro-app .gop-quick-dialog .quick-status-strip{overflow-x:auto;max-width:100%}
+ .ky-pro-app .gop-quick-dialog .quick-person-grid{grid-template-columns:minmax(0,1fr)!important}
+ .ky-pro-app .gop-quick-dialog .quick-density-controls{display:none!important}
+ .ky-pro-app .gop-quick-dialog .quick-groups{overflow-y:auto;min-height:0}
+ .ky-pro-app .gop-quick-dialog footer{padding-bottom:max(14px,env(safe-area-inset-bottom))!important}
+ /* Shared employee, receipt and editor modals: viewport-bound, no side cropping. */
+ .ky-pro-app :is(.hr-modal-overlay,.ik-fast-modal-shell,.modal-bg,.invoice-review-backdrop,.eb-line-modal-backdrop){
+   max-width:100vw!important;overflow-x:hidden!important;padding:0!important
+ }
+ .ky-pro-app :is(.hr-modal,.hr-modal--primary,.hr-modal--secondary,.ik-fast-modal-panel,.modal-bg>.modal,.invoice-review-modal,.eb-line-modal){
+   width:100vw!important;min-width:0!important;max-width:100vw!important;
+   height:100dvh!important;max-height:100dvh!important;border-radius:0!important;
+   margin:0!important;overflow-x:hidden!important
+ }
+ .ky-pro-app :is(.hr-modal__body,.hr-modal .ik-fast-editor,.modal-bg .mb,.ik-fast-modal-panel){
+   max-width:100%;min-width:0;overflow-x:hidden;overflow-y:auto
+ }
+ .ky-pro-app :is(.hr-modal__footer,.modal-bg .mf,.ik-fast-modal-panel>footer){
+   position:sticky;bottom:0;z-index:10;background:#fff;padding-bottom:max(14px,env(safe-area-inset-bottom))!important
+ }
+ .ky-pro-app :is(.hr-modal input,.hr-modal select,.hr-modal textarea,.modal-bg input,.modal-bg select,.modal-bg textarea){
+   width:100%;min-width:0!important;max-width:100%!important
+ }
+ .ky-pro-app .shell-v3-workspace :is(.bh-form-grid,.dsg-form-grid,.production-create-grid,.production-entry-grid,.admpro-form-grid){
+   grid-template-columns:minmax(0,1fr)!important
+ }
+}
+@media(max-width:380px){
+ .ky-pro-module-context{grid-template-columns:minmax(0,.8fr) minmax(0,1fr);gap:6px;padding-inline:7px}
+ .ky-pro-module-context>div strong{font-size:12px}
+ .ky-pro-module-select>summary{font-size:11px;padding-inline:7px}
+}
