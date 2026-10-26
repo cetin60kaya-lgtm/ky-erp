@@ -31,7 +31,7 @@ async function saveTrustedDevice(record){
   })}finally{db.close()}
 }
 export async function getSignedSecurityResponse(path,{method="GET",body}={}){
-  if(!/^\/auth\/push\/device\/[a-z0-9/-]+$/.test(path))throw new Error("Güvenlik API yolu geçersiz.");
+  if(!/^\/auth\/push\/device\/[a-z0-9/%-]+(?:\?[a-z0-9&=%._-]+)?$/.test(path))throw new Error("Güvenlik API yolu geçersiz.");
   const device=await getTrustedDevice();
   if(!device?.deviceId||!device?.deviceToken||!device?.signingPrivateKey)throw new Error("Bu telefonda güvenilir KY Güvenlik cihaz kaydı bulunamadı.");
   const verb=method.toUpperCase(),now=String(Date.now());
@@ -90,4 +90,14 @@ export async function decideTrustedApproval(item,decision,matchNumber=""){
   const signature=toB64Url(await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},
     device.signingPrivateKey,new TextEncoder().encode(payload)));
   return getSignedSecurityResponse("/auth/push/device/decision",{method:"POST",body:{kind,id,decision:choice,matchNumber:match,signature}});
+}
+
+export async function closeTrustedSession(session){
+  if(!session?.id||session.canClose!==true)throw new Error("Bu oturum için kapatma yetkiniz yok.");
+  const device=await unlockTrustedDevice();
+  const timestamp=Date.now();
+  const message=new TextEncoder().encode(`KYERP-MOBILE-CONTROL-V1|${device.deviceId}|SESSION_CLOSE|${session.id}|${timestamp}`);
+  const signature=toB64Url(await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},device.signingPrivateKey,message));
+  return getSignedSecurityResponse("/auth/push/device/control-center/session/close",
+    {method:"POST",body:{sessionId:session.id,timestamp,signature}});
 }
