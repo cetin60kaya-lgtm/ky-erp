@@ -36,6 +36,13 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      - name: Build complete KY ERP PRO inside canonical security PWA scope
+        run: KYERP_SECURITY_PRO_BUILD=1 npm run build
+      - name: Verify bundled unified ERP entry and code splitting
+        run: |
+          test -f dist-security-pro/pro.html
+          test -d dist-security-pro/assets
+          grep -q '/guvenlik/pro/assets/' dist-security-pro/pro.html
 
   worker:
     name: Worker typecheck test build
