@@ -35,3 +35,10 @@
 ## ChatGPT global talimatı konusunda sınır
 
 Bu dosya ve `AGENTS.md` **depo/ajan kurallarıdır**, ChatGPT'nin sistem talimatını veya tüm hesap sohbetlerinin otomatik belleğini değiştirmez. Tüm yeni sohbetlerde görünür olması için kullanıcı ayrıca ChatGPT Kişiselleştirme / Özel Talimatlar alanına kısa yönlendirme koyabilir.
+
+## 26.10.2026 — Canlı test sonucu ve tüm sohbetler için ortak kaynak
+
+Kullanıcı gerçek DESEN PowerShell çıktısında mevcut `KY-Control-Hub-8840`, `KY-Control-Hub-MeshCentral-8443` ve `KY-Control-Hub-ChatBridge` görevlerini `Running` ve iki yerel portu `Listen` olarak doğruladı. Ardından aynı gün özel GitHub bridge issue #2 üzerinden gönderilen yeni `status` talebine DESEN'den `ok=true`, `desktop=true`, `hub8840=true`, `mesh8443=true` yanıtı alındı; ayrı `open_hub` talebi `ok=true`, `opened=KY_CONTROL_HUB_LOCAL` döndü. **ChatGPT → GitHub → gerçek DESEN → ChatGPT roundtrip PASS (26 Ekim 2026).** Güncel teknik kanıt ve her sohbetin adım adım protokolü **özel** `cetin60kaya-lgtm/kyerp/CONTROL/KY_DESEN_TUM_SOHBETLER_CANLI_KABUL_20261026.md` dosyasındadır; erişim için bağlı GitHub'ın özel depo yetkisi gerekir.
+
+Tüm yeni KY ERP, DESEN, HKN, RIP/DTF ve PDKS sohbetleri yerel Windows işi öncesinde önce mevcut köprüyü kontrol eder, somut kullanıcı talebi kapsamında yeni kimlikle canlı yanıt doğrular. Remote Desktop Commander varsayılan değildir; ZIP/PAT/servis yeniden kurulmaz. 26 Ekim testi ekran görüntüsü, fare tıklama, klavye, Drive ajanı canlı heartbeat, PDKS/EXE ve yeniden başlatma sonrası otomatik çalışma kabulü değildir. Repo belgeleri ChatGPT sistem talimatlarını veya mevcut tüm sohbetleri kendiliğinden değiştirmez.
+
