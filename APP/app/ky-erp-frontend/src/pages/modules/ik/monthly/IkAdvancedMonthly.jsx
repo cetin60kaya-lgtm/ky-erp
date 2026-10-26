@@ -2678,7 +2678,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     return (
       <section>
         <div className="page-head">
-          <div><h2>Dönem Özeti</h2><p>Ücret, bordro, ödeme ve SGK kontrolleri bu aya aittir. Giriş/çıkış ve puantaj PDKS bölümündedir; yıllık izin işlemleri İK içindedir.</p></div>
+          <div><h2>Dönem Özeti</h2><p>Personel özlük, ücret, bordro, ödeme ve SGK/evrak işlemlerini tek merkezden yönetin. Giriş/çıkış, puantaj, vardiya, terminal ve izin hareketleri PDKS bölümündedir. Yıllık izin hakediş ve resmi izin sicili İK bölümünde yönetilir.</p></div>
           <div className="group"><span className={`badge ${periodPrepared ? "green" : "orange"}`}>{MONTHS[month - 1]} {year} · {payrollReadyText}</span><span className={`badge ${smartIssues.length ? "orange" : "green"}`}>{smartIssues.length ? `${smartIssues.length} kontrol` : "Kontroller temiz"}</span></div>
         </div>
         {filters({ third: "Personel / uyarı ara", fourth: "Durum", fifth: "SGK" })}
@@ -2701,7 +2701,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         </div>
 
         <details className="card ik-pro-quick-actions">
-          <summary><strong>Hızlı Finans İşlemleri</strong><span>Mesai, avans, kesinti ve bordro kontrolleri · aç / kapat</span></summary>
+          <summary><strong>Hızlı Finans İşlemleri</strong><span>PDKS işlemi içermez; yalnız İK finans ve bordro aksiyonları · aç / kapat</span></summary>
           <div className="workbar"><div className="group">
             <button className="btn" onClick={() => openFinance("Mesai")}>Mesai Ekle</button>
             <button className="btn" onClick={() => openFinance("Avans")}>Avans Ekle</button>
