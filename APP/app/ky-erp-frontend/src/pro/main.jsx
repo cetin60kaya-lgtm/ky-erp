@@ -78,7 +78,7 @@ function ProHome({onSecurity}){
  const fullCount=allowed.reduce((sum,m)=>sum+getModuleTabs(m).length,0);
  return <main className="ky-pro-home" aria-label="KY ERP PRO ana sayfa">
    <section className="ky-pro-home-hero">
-    <div className="ky-pro-home-top"><span>KY ERP PRO 4.2</span><ShieldCheck size={21}/></div>
+    <div className="ky-pro-home-top"><span>KY ERP PRO 4.2.1</span><ShieldCheck size={21}/></div>
     <h1>İşletmeniz elinizde.</h1>
     <p>{owner?"Bütün firmaların yetkili yönetim ve operasyon ekranları.":"Hesabınıza tanımlı ERP modülleri ve günlük işlemler."}</p>
     <div className="ky-pro-home-stats"><strong>{allowed.length} modül</strong><span>·</span><strong>{fullCount} işlem</strong><span>·</span><span>Tek telefon uygulaması</span></div>
@@ -99,7 +99,7 @@ function ProHome({onSecurity}){
  </main>;
 }
 
-function ProDock({onSecurity,securityActive}){
+function ProDock({onSecurity,securityActive,onHomeSelected}){
  const {user,hasModule}=useAuth();
  const [menuOpen,setMenuOpen]=useState(false);
  const [currentPath,setCurrentPath]=useState(location.pathname);
@@ -111,8 +111,9 @@ function ProDock({onSecurity,securityActive}){
    return()=>window.removeEventListener("popstate",sync);
  },[]);
  const onHome=useCallback(()=>{
+   onHomeSelected?.();
    if(location.pathname!==PRO_PREFIX+"/"){history.pushState({},"",PRO_PREFIX+"/");window.dispatchEvent(new PopStateEvent("popstate"));}
- },[]);
+ },[onHomeSelected]);
  const onAnalysis=useCallback(()=>{
    const module=allowed.find(m=>m.key==="muhasebe")||allowed[0];
    const first=module&&getModuleTabs(module).find(tab=>/ozet|analiz|rapor|dashboard/i.test(tab[0]))||module&&getModuleTabs(module)[0];
@@ -143,7 +144,7 @@ function ProApplication(){
  useEffect(()=>{const update=()=>{setHome(location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");setSecurityOpen(false)};window.addEventListener("popstate",update);return()=>window.removeEventListener("popstate",update)},[]);
  if(loading)return <div className="ky-pro-loading"><span className="ky-pro-loading-icon">KY</span><strong>KY ERP PRO</strong><p>Güvenli oturum ve yetkiler kontrol ediliyor...</p></div>;
  if(!isAuthenticated)return <div className="ky-pro-login"><div className="ky-pro-login-bar"><span><ShieldCheck size={18}/> Tek Uygulamada Güvenli Giriş</span><strong>KY ERP PRO v4.2.1</strong></div><LoginPage onClose={()=>{}}/></div>;
- return <div className="ky-pro-app" data-role={String(user?.role||"")}><div className="ky-pro-content" hidden={!securityOpen}>{securityOpen?<SecurityCenter/>:null}</div><div className="ky-pro-content" hidden={securityOpen||!home}><ProHome onSecurity={()=>setSecurityOpen(true)}/></div>{workspaceMounted?<div className="ky-pro-workspace-content" hidden={securityOpen||home}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense></div>:null}<ProDock onSecurity={()=>setSecurityOpen(true)} securityActive={securityOpen}/></div>;
+ return <div className="ky-pro-app" data-role={String(user?.role||"")}><div className="ky-pro-content" hidden={!securityOpen}>{securityOpen?<SecurityCenter/>:null}</div><div className="ky-pro-content" hidden={securityOpen||!home}><ProHome onSecurity={()=>setSecurityOpen(true)}/></div>{workspaceMounted?<div className="ky-pro-workspace-content" hidden={securityOpen||home}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense></div>:null}<ProDock onSecurity={()=>setSecurityOpen(true)} securityActive={securityOpen} onHomeSelected={()=>setSecurityOpen(false)}/></div>;
 }
 installAndroidRuntimeBridge();
 installPersistedAuthBootstrap();
