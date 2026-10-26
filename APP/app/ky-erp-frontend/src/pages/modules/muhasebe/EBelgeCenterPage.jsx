@@ -82,6 +82,8 @@ const statusLabel = (value) => ({
   REVIEW_REQUIRED: "Kontrol Bekliyor",
   READY_FOR_APPROVAL: "Onaya Hazır",
   APPROVED: "Onaylandı",
+  FINALIZING: "İşleniyor",
+  FINALIZE_RETRY: "Yeniden deneme / inceleme",
   POSTED: "Muhasebeleşti",
   REJECTED: "Reddedildi",
   ERROR: "Hata",
@@ -265,7 +267,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
     setBusy("final");
     setError("");
     try {
-      await finalizeEBelge(id, { confirmed: true, expectedUpdatedAt: detail.updated_at || detail.updatedAt || "" });
+      await finalizeEBelge(id, { confirmed: true, expectedUpdatedAt: detail.updated_at || detail.updatedAt || "", retryPhysical: detail.status === "FINALIZE_RETRY" });
       setFinalConfirmOpen(false);
       setFinalAcknowledged(false);
       window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", documentId: id } }));
@@ -299,10 +301,10 @@ function DetailDrawer({ id, onClose, onChanged }) {
           <div><span>Durum</span><strong>{statusLabel(detail.status)}</strong><small>{detail.direction === "OUTGOING" ? "Giden" : "Gelen"}</small></div>
         </section>
         <section className="eb-document-toolbar">
-          <button type="button" onClick={() => setEditing(true)}><Pencil size={16} /> Belge Düzenle</button>
+          <button type="button" disabled={["FINALIZING","FINALIZE_RETRY","APPROVED","POSTED"].includes(detail.status)} onClick={() => setEditing(true)}><Pencil size={16} /> Belge Düzenle</button>
           {!detail.party_company_id && <button type="button" onClick={() => setCompanyOpen(true)}>Cari Eşleştir</button>}
-          <button type="button" disabled={Boolean(busy)} onClick={() => action("match", () => reconcileEBelge(id))}>{busy === "match" ? <LoaderCircle className="eb-spin" size={16} /> : <Link2 size={16} />} Yeniden Kontrol</button>
-          <button type="button" className="eb-primary" disabled={Boolean(busy) || detail.status === "POSTED"} onClick={() => { setFinalAcknowledged(false); setFinalConfirmOpen(true); }}>{busy === "final" ? <LoaderCircle className="eb-spin" size={16} /> : <FileCheck2 size={16} />} Son Onay / Muhasebeleştir</button>
+          <button type="button" disabled={Boolean(busy) || ["FINALIZING","FINALIZE_RETRY","APPROVED","POSTED"].includes(detail.status)} onClick={() => action("match", () => reconcileEBelge(id))}>{busy === "match" ? <LoaderCircle className="eb-spin" size={16} /> : <Link2 size={16} />} Yeniden Kontrol</button>
+          <button type="button" className="eb-primary" disabled={Boolean(busy) || ["FINALIZING","APPROVED","POSTED"].includes(detail.status)} onClick={() => { setFinalAcknowledged(false); setFinalConfirmOpen(true); }}>{busy === "final" ? <LoaderCircle className="eb-spin" size={16} /> : <FileCheck2 size={16} />} {detail.status === "FINALIZE_RETRY" ? "Kontrollü Yeniden Dene" : "Son Onay / Muhasebeleştir"}</button>
         </section>
         <div className="eb-document-body">
           <section className="eb-document-lines-section">
@@ -320,6 +322,23 @@ function DetailDrawer({ id, onClose, onChanged }) {
           </section>
 
           <div className="eb-document-folds">
+            <details className="eb-fold" open={detail.physicalStatus === "SCHEMA_APPROVAL_REQUIRED" || detail.status === "FINALIZE_RETRY"}>
+              <summary><strong>Fiziksel Stok / LOT İşlem Durumu</strong><span>{detail.physicalOperations?.length || 0} kayıt</span></summary>
+              <div className="eb-fold-body">
+                {detail.physicalStatus === "SCHEMA_APPROVAL_REQUIRED" && <p role="alert">Fiziksel işlem şeması için üretim D1 onayı bekleniyor. Stok/LOT kaydı güvenli olarak kapalı.</p>}
+                {(detail.physicalOperations || []).map((op) => <div key={op.id} className="eb-issues">
+                  <span><strong>{op.operation_type === "COST_LINK" ? "Maliyet Bağı" : "Fiziksel Giriş"} · {{
+                    PENDING:"Kuyrukta",PROCESSING:"İşleniyor",DONE:"Tamamlandı",
+                    RETRY:"Tekrar denenecek",NEEDS_REVIEW:"İnceleme gerekiyor"
+                  }[op.state] || op.state}</strong>
+                    <small>Satır: {op.physical_line_id} · LOT: {op.lot_normalized || "LOT yok"} · Miktar: {Number(op.quantity||0).toLocaleString("tr-TR")} · Deneme: {op.attempts}</small>
+                    {op.last_error_code && <small role="alert">Hata: {op.last_error_code} · Son deneme: {op.updated_at || "-"}</small>}
+                    {op.next_attempt_at && op.state === "RETRY" && <small>Tekrar deneme: {new Date(op.next_attempt_at).toLocaleString("tr-TR")}</small>}
+                  </span>
+                </div>)}
+                {!detail.physicalOperations?.length && detail.physicalStatus !== "SCHEMA_APPROVAL_REQUIRED" && <span className="eb-muted">Henüz fiziksel işlem kaydı yok.</span>}
+              </div>
+            </details>
             <details className="eb-fold" open={openIssues.length > 0}>
               <summary><strong>Kontroller</strong><span>{openIssues.length} açık</span></summary>
               <div className="eb-fold-body">{openIssues.length ? <div className="eb-issues">{openIssues.map((issue) => <div key={issue.id}><AlertTriangle size={17} /><span><strong>{issue.issue_code}</strong><small>{issue.message}</small></span>{issue.severity !== "ERROR" && <button type="button" onClick={() => action(`issue-${issue.id}`, () => resolveEBelgeIssue(id, issue.id))}>Çözüldü</button>}</div>)}</div> : <div className="eb-good"><CheckCircle2 size={17} /> Açık sorun yok.</div>}</div>
@@ -356,7 +375,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
         </div>
         <footer>
           <button type="button" disabled={Boolean(busy)} onClick={() => setFinalConfirmOpen(false)}>Vazgeç</button>
-          <button type="button" className="eb-primary" disabled={Boolean(busy) || !finalAcknowledged} onClick={confirmFinancialPosting}>{busy === "final" ? "Kaydediliyor..." : "Onayla ve Muhasebeleştir"}</button>
+          <button type="button" className="eb-primary" disabled={Boolean(busy) || !finalAcknowledged} onClick={confirmFinancialPosting}>{busy === "final" ? "Kaydediliyor..." : detail.status === "FINALIZE_RETRY" ? "Onayla ve Yeniden Dene" : "Onayla ve Muhasebeleştir"}</button>
         </footer>
       </section>
     </div>}
