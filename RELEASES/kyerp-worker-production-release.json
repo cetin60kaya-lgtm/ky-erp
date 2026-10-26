@@ -3,9 +3,9 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "3faa926730c6525c913603ca2f5a409d45fb6c90",
+  "sourceCommit": "c9a226b779c5b9992840cc316bc784fa4c23a70e",
   "requestedAt": "2026-10-26",
-  "attempt": 26,
+  "attempt": 27,
   "scope": [
     "gunluk-tum-api-ik-tenant-yetki-koruma",
     "gunluk-donem-kilit-gercek-d1-ve-yazma-engel",
@@ -37,9 +37,13 @@
     "physical-0062-durable-journal-code-only-pr472",
     "physical-normal-stock-boyahane-lot-atomic-batch-tests",
     "physical-cost-link-provisional-reconciliation-recovery",
-    "physical-production-schema-migration-not-approved"
+    "physical-0062-d1-user-approved-additive-migration-only",
+    "physical-0062-new-backup-before-apply",
+    "physical-0062-post-schema-readonly-verification"
   ],
-  "note": "26.10.2026 #472 merged 3faa926730c6525c913603ca2f5a409d45fb6c90, CI #40251063644 SUCCESS. Physical receipt journal 0062 ADDITIVE source code, Boyahane json_store and stock_movements atomic idempotent effects, cost-link and provisional reconciliation with incomplete scenarios kept fail-closed, 20/100 SQLite fixture, Worker recovery and e-Belge status. Migration expressly NOT authorized for production: applyMigrations false. Full remote D1 backup, salt-okunur schema and API health required. 0062 absent => PHYSICAL_SCHEMA_APPROVAL_REQUIRED, no real physical writes, no payment/provider dispatch. Current authorized session and actual material receipt E2E pending.",
+  "note": "26.10.2026 kullanici onayi: yalniz 0062_accounting_physical_receipt_journal.sql production D1 ky-erp-db icin onayli. Genis applyMigrations FALSE; 0050 0051 0055 0060 0061 uygulanmayacak. Worker workflow PR #474 ile gelen 0062 ozel gate: once tam D1 export/artifact, sonra hedef schema read-only kontrol, yalniz 0062 additive migration, iki tablo dort indeks bir trigger yedi sutun dogrulamasi ve API health. Gercek finans/belge/stock test verisi yazma yetkisi verilmedi. Tamamlandiktan sonra applyPhysical0062 ve migrationApprovedByUser tekrar false yapilacak.",
   "applyMigrations": false,
-  "migrationApprovedByUser": false
+  "migrationApprovedByUser": true,
+  "applyPhysical0062": true,
+  "approvedMigrationId": "0062"
 }
