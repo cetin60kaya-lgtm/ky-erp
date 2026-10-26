@@ -15,7 +15,7 @@ const installer=readFileSync(resolve(root,"public/guvenlik/install-helper.js"),"
 const setup=readFileSync(resolve(here,"components/shell/PhoneApprovalDeviceSetup.jsx"),"utf8");
 
 test("KY ERP Security is a separate installable phone tablet PWA",()=>{
-  assert.match(manifest,/"name": "KY ERP Güvenlik"/);
+  assert.match(manifest,/"name": "KY ERP PRO/);
   assert.match(manifest,/"id": "\/guvenlik\/"/);
   assert.match(manifest,/"scope": "\/guvenlik\/"/);
   assert.match(manifest,/"start_url": "\/guvenlik\/"/);
@@ -169,9 +169,9 @@ test("security app shows the verified bound ERP account identity and access scop
 });
 
 test("security app exposes one visible canonical version and persists it on the device record",()=>{
-  assert.match(html,/id="appVersionBadge">v4\.1\.0/);
-  assert.match(html,/id="accountVersion">v4\.1\.0/);
-  assert.match(app,/APP_DISPLAY_VERSION="v4\.1\.0"/);
+  assert.match(html,/id="appVersionBadge">v4\.2\.0/);
+  assert.match(html,/id="accountVersion">v4\.2\.0/);
+  assert.match(app,/APP_DISPLAY_VERSION="v4\.2\.0"/);
   assert.match(app,/X-KYERP-Security-App-Version/);
   assert.match(app,/lastKnownServerVersion/);
   assert.match(app,/versionCheckedAt/);
