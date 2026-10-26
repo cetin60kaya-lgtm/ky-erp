@@ -1,6 +1,6 @@
 // Tek kaynak: uygulama menüsü ve ana sayfa kartları aynı modül gruplarını kullanır.
 export const KY_NAV_GROUPS = [
-  { key: "daily", title: "Günlük İşler", homeTitle: "Günlük çalışmalar", description: "Personel, vardiya ve devam işlemleri", keys: ["gunluk-operasyon", "ik", "pdks"] },
+  { key: "daily", title: "Personel Yönetimi", homeTitle: "Personel yönetimi", description: "İK aylık, günlük personel ve PDKS işlemleri", keys: ["ik", "gunluk-operasyon", "pdks"] },
   { key: "production", title: "Üretim", homeTitle: "Üretim akışı", description: "Modelden üretime tek süreç", keys: ["desen", "boyahane", "uretim"] },
   { key: "finance", title: "Finans", homeTitle: "Finans ve belgeler", description: "Cari, ödeme ve belge yönetimi", keys: ["muhasebe", "e-belge"] },
   { key: "communication", title: "İletişim", homeTitle: "İletişim ve dosyalar", description: "Evrak ve iletişim süreçleri", keys: ["iletisim", "asistan"] },
