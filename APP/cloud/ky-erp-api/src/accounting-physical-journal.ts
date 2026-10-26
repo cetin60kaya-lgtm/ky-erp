@@ -360,3 +360,98 @@ export async function retryPhysicalOperations(env:any,maxJobs=12) {
   }
   return result;
 }
+
+export async function reconcileProvisionalReceipt(db:any,data:Row) {
+  const f=receiptFields(data);await requireSchema(db);
+  if(f.provisional)return null; // only an actual dispatch can claim an invoice provisional
+  const key="PRECON:"+await sha256(JSON.stringify([f.tenant,f.physicalDocumentId,
+    f.physicalLineId,f.productId,f.supplierCompanyId,f.normalizedLot]));
+  const previous=await getJournal(db,key,f.tenant);
+  if(previous?.state==="DONE") {
+    const reconciled=await db.prepare(`SELECT provisional_receipt_id FROM accounting_provisional_reconciliations
+      WHERE main_company_slug=? AND physical_document_id=? AND physical_line_id=? LIMIT 1`)
+      .bind(f.tenant,f.physicalDocumentId,f.physicalLineId).first();
+    if(!reconciled)throw err("PROVISIONAL_RECONCILE_INTEGRITY","Geçici irsaliye hak kaydı bulunamadı.");
+    return{id:key,status:"DONE",reconciled:true,idempotent:true};
+  }
+  const matches=(await db.prepare(`SELECT r.id,r.quantity FROM accounting_physical_operations r
+    WHERE r.main_company_slug=? AND r.operation_type='RECEIPT' AND r.state='DONE'
+      AND r.product_id=? AND r.supplier_company_id=? AND r.lot_normalized=?
+      AND json_extract(r.payload_json,'$.provisional')=1
+      AND r.id NOT IN (SELECT provisional_receipt_id FROM accounting_provisional_reconciliations)
+    LIMIT 3`).bind(f.tenant,f.productId,f.supplierCompanyId,f.normalizedLot).all()).results||[];
+  if(matches.length>1)throw err("PROVISIONAL_RECEIPT_AMBIGUOUS",
+    "Birden çok geçici fatura kabulü var; hangi irsaliyeye ait olduğu elle eşleştirilmeli.");
+  if(!matches.length){
+    // Legacy (pre-0062) provisional stock may be present and cannot be auto-duplicated.
+    const legacy=f.route==="BOYAHANE"
+      ?await db.prepare(`SELECT id FROM json_store WHERE scope='BOYAHANE_STOCK_MOVEMENT'
+           AND main_company_slug=? AND json_extract(data,'$.provisionalPhysicalReceipt')=1
+           AND json_extract(data,'$.productId')=? AND json_extract(data,'$.lotNo')=?
+           LIMIT 1`).bind(f.tenant,f.productId,f.lotNo).first()
+      :await db.prepare(`SELECT id FROM stock_movements WHERE main_company_slug=? AND product_id=?
+           AND COALESCE(lot_no,'')=? AND json_extract(raw,'$.provisional')=1
+           LIMIT 1`).bind(f.tenant,f.productId,f.lotNo).first();
+    if(legacy)throw err("LEGACY_PROVISIONAL_REVIEW",
+      "Önceki geçici fiziksel giriş bulundu; ikinci giriş için yetkili uzlaştırma gerekli.");
+    return null;
+  }
+  const source=matches[0];
+  if(Math.abs(num(source.quantity)-f.quantity)>0.00001)
+    throw err("PROVISIONAL_QUANTITY_CONFLICT","Fatura geçici miktarı ile gerçek irsaliye miktarı farklı.");
+  const token=crypto.randomUUID(),ts=now();
+  const payloadHash=await sha256(stable({actual:f,sourceId:source.id}));
+  if(previous && txt(previous.payload_hash)!==payloadHash)
+    throw err("PROVISIONAL_PAYLOAD_CONFLICT","Aynı irsaliye farklı geçici kabule bağlanamaz.");
+  if(!previous)await db.prepare(`INSERT OR IGNORE INTO accounting_physical_operations
+    (id,main_company_slug,document_id,document_line_id,physical_document_id,physical_line_id,
+      operation_type,product_id,supplier_company_id,lot_normalized,payload_hash,payload_json,
+      quantity,state,attempts,created_at,updated_at)
+    VALUES(?,?,?,?,?,?,'PROVISIONAL_RECONCILE',?,?,?,?,?,?,'PENDING',0,?,?)`)
+    .bind(key,f.tenant,txt(data.documentId||f.physicalDocumentId),txt(data.documentLineId||f.physicalLineId),
+      f.physicalDocumentId,f.physicalLineId,f.productId,f.supplierCompanyId,
+      f.normalizedLot,payloadHash,JSON.stringify(data),f.quantity,ts,ts).run();
+  const claim=await db.prepare(`UPDATE accounting_physical_operations SET state='PROCESSING',
+    attempts=attempts+1,lease_token=?,lease_until=?,updated_at=?
+    WHERE id=? AND main_company_slug=? AND payload_hash=? AND attempts<6
+      AND (state IN ('PENDING','RETRY')
+        OR (state='PROCESSING' AND lease_until<?))`)
+    .bind(token,new Date(Date.now()+90000).toISOString(),ts,key,f.tenant,payloadHash,ts).run();
+  if(Number(claim.meta?.changes)!==1)throw err("PROVISIONAL_LEASE_CONFLICT","Geçici uzlaştırma başka oturumda.");
+  try{
+    const guard=db.prepare(`INSERT INTO accounting_provisional_reconciliations
+      (provisional_receipt_id,main_company_slug,physical_document_id,physical_line_id,payload_hash,reconciled_at)
+      VALUES(?,?,?,?,?,?)`).bind(source.id,f.tenant,f.physicalDocumentId,f.physicalLineId,payloadHash,ts);
+    const update=f.route==="BOYAHANE"
+      ?db.prepare(`UPDATE json_store SET data=json_set(data,
+        '$.physicalDocumentId',?,'$.physicalDocumentLineId',?,
+        '$.linkedDispatchDocumentId',?,'$.linkedDispatchLineId',?,
+        '$.provisionalPhysicalReceipt',json('false'),'$.reconciledAt',?),
+        updated_at=? WHERE id=? AND main_company_slug=? AND scope='BOYAHANE_STOCK_MOVEMENT'
+        AND json_extract(data,'$.provisionalPhysicalReceipt')=1`)
+        .bind(f.physicalDocumentId,f.physicalLineId,f.physicalDocumentId,f.physicalLineId,
+          ts,ts,"BM:"+source.id,f.tenant)
+      :db.prepare(`UPDATE stock_movements SET document_id=?,document_line_id=?,
+        raw=json_set(COALESCE(raw,'{}'),'$.physicalDocumentId',?,
+          '$.physicalDocumentLineId',?,'$.linkedDispatchDocumentId',?,
+          '$.linkedDispatchLineId',?,'$.provisional',json('false'),'$.reconciledAt',?),
+        updated_at=? WHERE id=? AND main_company_slug=? AND json_extract(raw,'$.provisional')=1`)
+        .bind(f.physicalDocumentId,f.physicalLineId,f.physicalDocumentId,f.physicalLineId,
+          f.physicalDocumentId,f.physicalLineId,ts,ts,"SM:"+source.id,f.tenant);
+    const done=db.prepare(`UPDATE accounting_physical_operations SET state='DONE',
+      completed_at=?,updated_at=?,lease_token=NULL,lease_until=NULL
+      WHERE id=? AND main_company_slug=? AND state='PROCESSING' AND lease_token=?`)
+      .bind(ts,ts,key,f.tenant,token);
+    const results=await db.batch([guard,update,done]);
+    if(results.some((x:Row)=>Number(x.meta?.changes)!==1))
+      throw err("PROVISIONAL_RECONCILE_INTEGRITY","Geçici kabul uzlaştırma doğrulaması başarısız.");
+    return{id:key,status:"DONE",reconciled:true,idempotent:false,physicalReceiptId:source.id};
+  }catch(e:any){
+    await db.prepare(`UPDATE accounting_physical_operations SET state='NEEDS_REVIEW',
+      last_error_code='PROVISIONAL_RECONCILE_FAILED',lease_token=NULL,lease_until=NULL,updated_at=?
+      WHERE id=? AND main_company_slug=? AND lease_token=?`)
+      .bind(now(),key,f.tenant,token).run();
+    throw err("PROVISIONAL_RECONCILE_FAILED",
+      "Geçici kabul stok artırılmadan uzlaştırılamadı; kayıt incelemeye alındı.");
+  }
+}
