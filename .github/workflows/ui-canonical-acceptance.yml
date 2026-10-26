@@ -44,7 +44,7 @@ jobs:
           test -d dist-security-pro/assets
           grep -q '/guvenlik/pro/assets/' dist-security-pro/pro.html
       - name: Assemble the single-PWA Security Worker assets without deploying
-        working-directory: ../../..
+        working-directory: .
         run: |
           node APP/cloud/ky-erp-security-host/prepare-assets.mjs
           test -f APP/cloud/ky-erp-security-host/.security-assets/guvenlik/pro/index.html
@@ -54,7 +54,7 @@ jobs:
           test -f APP/cloud/ky-erp-security-host/.security-assets/guvenlik/pro/vendor/qrcode.min.js
           test ! -e APP/cloud/ky-erp-security-host/.security-assets/_redirects
       - name: Dry-run complete unified Security Worker bundle
-        working-directory: ../../cloud/ky-erp-security-host
+        working-directory: APP/cloud/ky-erp-security-host
         run: npx --yes wrangler@4.118.0 deploy --config wrangler.jsonc --dry-run --outdir /tmp/kyerp-pro-single-pwa-dry
 
   worker:
