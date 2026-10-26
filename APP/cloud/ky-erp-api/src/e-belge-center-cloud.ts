@@ -2,7 +2,7 @@
 import type { Context, Hono } from "hono";
 import { analyzeAccountingDocument, accountingDocumentIntelligenceStatus } from "./accounting-document-intelligence";
 import { postAccountingDocumentAtomic } from "./accounting-document-posting-atomic";
-import { postPhysicalReceipt, postPhysicalCostLink, readPhysicalDocumentStatus } from "./accounting-physical-journal";
+import { postPhysicalReceipt, postPhysicalCostLink, reconcileProvisionalReceipt, readPhysicalDocumentStatus } from "./accounting-physical-journal";
 import { claimEBelgeFinalization, reclaimEBelgeFinalization, markEBelgeFinalization } from "./e-belge-finalize-guard";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { verifyIsnetReadOnlySession } from "./isnet-runtime-v2";
@@ -269,7 +269,7 @@ async function routeStockAndLots(c:Context<AppEnv>,slug:string,doc:Row,lines:Row
 }
 
 // Canonical physical journal: actual dispatch is the source of quantity, invoice only allocates cost.
-async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:Row[]) {
+async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:Row[],actor:Row={}) {
   const incoming=upper(doc.direction)==="INCOMING",dispatch=isDispatch(doc.document_type),invoice=isInvoice(doc.document_type);
   const result={stockMovements:0,lots:0,costLinks:0,pendingPhysicalReceipts:0,idempotent:0};
   if(!incoming||(!dispatch&&!invoice))return result;
@@ -296,13 +296,13 @@ async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:
           throw Object.assign(new Error("Çoklu LOT toplamı fiziksel irsaliye miktarıyla eşleşmiyor."),{code:"LOT_QUANTITY_MISMATCH"});
       }else grouped.set(normalizeLotNo(sourceLot),{lotNo:sourceLot,quantity:qty});
       for(const allocation of grouped.values()){
-        const receipt=await postPhysicalReceipt(c.env.DB,{
-          tenant:slug,documentId:text(doc.id),documentLineId:text(line.id),
+        const args={tenant:slug,documentId:text(doc.id),documentLineId:text(line.id),
           physicalDocumentId:text(doc.id),physicalLineId:text(line.id),
           productId,supplierCompanyId:supplier,route,lotNo:text(allocation.lotNo),
           lotPolicy:policy,quantity:numberValue(allocation.quantity),
-          unit:line.unit_code,sourceType:"E_BELGE_DISPATCH",
-        });
+          unit:line.unit_code,sourceType:"E_BELGE_DISPATCH"};
+        const matched=await reconcileProvisionalReceipt(c.env.DB,args);
+        const receipt=matched || await postPhysicalReceipt(c.env.DB,args);
         result.idempotent+=receipt.idempotent?1:0;
         if(!receipt.idempotent){result.stockMovements++;if(route==="BOYAHANE")result.lots++}
       }
@@ -339,14 +339,31 @@ async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:
       }
       continue;
     }
-    // Do not silently receive an invoice into stock. A provisional acceptance must
-    // be explicitly approved and linked to its eventual actual dispatch, otherwise hold.
+    // Invoice-first physical stock is opt-in only. The approved provisional record is
+    // the only physical effect; the actual dispatch later reconciles it without adding quantity.
+    const provisionalApproved=raw.allowInvoicePhysicalReceipt===true ||
+      raw.provisionalPhysicalReceiptApproved===true;
+    if(provisionalApproved){
+      const role=upper(actor.role);
+      if(!["OWNER","SUPER_ADMIN","COMPANY_OWNER","ADMIN","MUHASEBE","ACCOUNTING","FINANCE"].includes(role))
+        throw Object.assign(new Error("Geçici fiziksel kabul yetkili mali kullanıcı onayı gerektirir."),
+          {code:"PROVISIONAL_RECEIPT_FORBIDDEN"});
+      const receiptArgs={tenant:slug,documentId:text(doc.id),documentLineId:text(line.id),
+        physicalDocumentId:text(doc.id),physicalLineId:text(line.id),
+        productId,supplierCompanyId:supplier,route,lotNo:sourceLot,
+        lotPolicy:policy,quantity:qty,unit:line.unit_code,
+        provisional:true,sourceType:"E_BELGE_INVOICE_PROVISIONAL"};
+      const receipt=await postPhysicalReceipt(c.env.DB,receiptArgs);
+      if(!receipt.idempotent){result.stockMovements++;if(route==="BOYAHANE")result.lots++}
+      const cost=await postPhysicalCostLink(c.env.DB,{...receiptArgs,
+        invoiceId:text(doc.id),invoiceLineId:text(line.id),invoiceNo:text(doc.document_no),
+        currency:text(doc.currency),allocatedQuantity:qty,allocatedTotal:numberValue(line.line_total)});
+      result.costLinks++;result.idempotent+=(receipt.idempotent?1:0)+(cost.idempotent?1:0);
+      continue;
+    }
     result.pendingPhysicalReceipts++;
-    throw Object.assign(new Error(
-      raw.allowInvoicePhysicalReceipt===true
-       ?"Onaylı geçici kabul için gerçek irsaliye uzlaştırma kilidi hazır değil; inceleme gerekli."
-       :"Fatura önce geldi. İrsaliye ve LOT tahsisi bekleniyor; stok artırılmadı."
-    ),{code:raw.allowInvoicePhysicalReceipt===true?"PROVISIONAL_RECONCILIATION_REQUIRED":"PHYSICAL_DISPATCH_REQUIRED"});
+    throw Object.assign(new Error("Fatura önce geldi. İrsaliye veya yetkili açık geçici fiziksel kabul onayı bekleniyor."),
+      {code:"PHYSICAL_DISPATCH_REQUIRED"});
   }
   return result;
 }
@@ -477,7 +494,7 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
       // Stok/Boyahane fiziksel girişleri farklı tablolara ve json_store'a yazılıyor.
       // Aynı atomik D1 planına alınmadıkları sürece asla "POSTED" gösterme.
       phase="PHYSICAL";
-      const inventory=await routePhysicalJournal(c,slug,doc,lines);
+      const inventory=await routePhysicalJournal(c,slug,doc,lines,user);
       await markEBelgeFinalization(c.env.DB,slug,id,"APPROVED");
       phase="FINANCE";
       const posting=await postAccountingDocumentAtomic(c.env.DB,slug,id,String(user.id));
