@@ -68,6 +68,36 @@ function ModuleChooser({opened,onClose,allowed}){
  </dialog>;
 }
 
+function ProHome(){
+ const {user,hasModule}=useAuth();
+ const [search,setSearch]=useState("");
+ const owner=OWNER_ROLES.has(String(user?.role||"").toUpperCase());
+ const allowed=MODULES.filter(m=>owner||Boolean(hasModule(m.permissionKey||m.key.toUpperCase())));
+ const visible=allowed.filter(m=>String(m.label||"").toLocaleLowerCase("tr-TR").includes(search.toLocaleLowerCase("tr-TR")));
+ const fullCount=allowed.reduce((sum,m)=>sum+getModuleTabs(m).length,0);
+ return <main className="ky-pro-home" aria-label="KY ERP PRO ana sayfa">
+   <section className="ky-pro-home-hero">
+    <div className="ky-pro-home-top"><span>KY ERP PRO 4.2</span><ShieldCheck size={21}/></div>
+    <h1>İşletmeniz elinizde.</h1>
+    <p>{owner?"Bütün firmaların yetkili yönetim ve operasyon ekranları.":"Hesabınıza tanımlı ERP modülleri ve günlük işlemler."}</p>
+    <div className="ky-pro-home-stats"><strong>{allowed.length} modül</strong><span>·</span><strong>{fullCount} işlem</strong><span>·</span><span>Tek telefon uygulaması</span></div>
+   </section>
+   <div className="ky-pro-home-tools">
+    <button type="button" onClick={()=>location.assign("/guvenlik/")}><ShieldCheck size={22}/><span><b>Güvenlik Onayları</b><small>Giriş, cihaz, oturum ve kod</small></span><ChevronRight size={17}/></button>
+    <button type="button" onClick={()=>{const m=allowed.find(x=>x.key==="muhasebe");const t=m&&getModuleTabs(m)[0];if(m&&t)goModule(m.key,t[0])}}><ChartNoAxesCombined size={22}/><span><b>Genel Yönetim</b><small>Muhasebe ve operasyon</small></span><ChevronRight size={17}/></button>
+   </div>
+   <div className="ky-pro-home-title"><div><span>TÜM ERİŞİLEBİLİR MODÜLLER</span><h2>Çalışma Alanları</h2></div><LayoutGrid size={20}/></div>
+   <label className="ky-pro-search ky-pro-home-search"><Search size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Modül ara..." aria-label="Modüllerde ara"/></label>
+   <div className="ky-pro-home-modules">{visible.map((m,index)=>{
+     const tabs=getModuleTabs(m),first=tabs[0];return <button key={m.key} type="button" style={{"--pro-card-shade":index%5}} onClick={()=>first&&goModule(m.key,first[0])}>
+       <span className="ky-pro-home-module-icon"><LayoutGrid size={22}/></span><span><b>{m.label}</b><small>{tabs.length} gerçek ERP işlemi</small></span><ChevronRight size={18}/>
+     </button>;
+   })}</div>
+   {!visible.length?<p className="ky-pro-no-results">Aramanıza uygun modül bulunamadı.</p>:null}
+   <footer className="ky-pro-home-note">Tüm işlemler sunucudaki mevcut kullanıcı ve firma yetkileriyle açılır. Kullanıcı yetkisi olmayan işlem gösterilmez.</footer>
+ </main>;
+}
+
 function ProDock(){
  const {user,hasModule}=useAuth();
  const [menuOpen,setMenuOpen]=useState(false);
@@ -80,10 +110,8 @@ function ProDock(){
    return()=>window.removeEventListener("popstate",sync);
  },[]);
  const onHome=useCallback(()=>{
-   const dashboard=allowed.find(m=>m.key==="dashboard"||m.key==="ana-sayfa")||allowed[0];
-   const first=dashboard&&getModuleTabs(dashboard)[0];
-   if(first)goModule(dashboard.key,first[0]);else location.assign(PRO_PREFIX+"/");
- },[allowed]);
+   if(location.pathname!==PRO_PREFIX+"/"){history.pushState({},"",PRO_PREFIX+"/");window.dispatchEvent(new PopStateEvent("popstate"));}
+ },[]);
  const onAnalysis=useCallback(()=>{
    const module=allowed.find(m=>m.key==="muhasebe")||allowed[0];
    const first=module&&getModuleTabs(module).find(tab=>/ozet|analiz|rapor|dashboard/i.test(tab[0]))||module&&getModuleTabs(module)[0];
@@ -107,9 +135,11 @@ function ProDock(){
 }
 function ProApplication(){
  const {user,isAuthenticated,loading}=useAuth();
+ const [home,setHome]=useState(()=>location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");
+ useEffect(()=>{const update=()=>setHome(location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");window.addEventListener("popstate",update);return()=>window.removeEventListener("popstate",update)},[]);
  if(loading)return <div className="ky-pro-loading"><span className="ky-pro-loading-icon">KY</span><strong>KY ERP PRO</strong><p>Güvenli oturum ve yetkiler kontrol ediliyor...</p></div>;
  if(!isAuthenticated)return <div className="ky-pro-login"><div className="ky-pro-login-bar"><a href="/guvenlik/"><ShieldCheck size={18}/> KY Güvenlik</a><strong>KY ERP PRO v4.2.0</strong></div><LoginPage onClose={()=>{}}/></div>;
- return <div className="ky-pro-app" data-role={String(user?.role||"")}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense><ProDock/></div>;
+ return <div className="ky-pro-app" data-role={String(user?.role||"")}>{home?<ProHome/>:<Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense>}<ProDock/></div>;
 }
 installAndroidRuntimeBridge();
 installPersistedAuthBootstrap();
