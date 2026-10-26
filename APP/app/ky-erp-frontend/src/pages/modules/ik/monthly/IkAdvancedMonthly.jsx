@@ -2701,7 +2701,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         </div>
 
         <details className="card ik-pro-quick-actions">
-          <summary><strong>Hızlı Finans İşlemleri</strong><span>PDKS işlemi içermez; yalnız İK finans ve bordro aksiyonları · aç / kapat</span></summary>
+          <summary><strong>Hızlı Finans İşlemleri</strong><span>PDKS işlemi içermez; yalnız İK finans ve bordro aksiyonları. İzin, rapor ve günlük devam hareketleri PDKS bölümünden yönetilir. · aç / kapat</span></summary>
           <div className="workbar"><div className="group">
             <button className="btn" onClick={() => openFinance("Mesai")}>Mesai Ekle</button>
             <button className="btn" onClick={() => openFinance("Avans")}>Avans Ekle</button>
