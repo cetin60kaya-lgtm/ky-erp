@@ -145,3 +145,11 @@
  .ky-pro-app .dsg-toolbar-main>button{min-width:0;max-width:100%;min-height:44px!important;white-space:normal;text-align:center;font-size:12px}
  .ky-pro-app .dsg-model-grid{display:grid!important;grid-template-columns:minmax(0,1fr)!important}
 }
+
+/* Preserve PRO phone accordion if the lazy Desen module stylesheet loads later. */
+@media(max-width:760px){
+ .ky-pro-app .dsg-filter-grid > .dsg-filter-disclosure{display:block!important}
+ .ky-pro-app .dsg-filter-grid > .dsg-filter-disclosure > summary{display:flex!important}
+ .ky-pro-app .dsg-filter-grid > .dsg-filter-disclosure > .dsg-filter-extra{display:grid!important}
+ .ky-pro-app .dsg-filter-grid > .dsg-filter-disclosure:not([open]) > .dsg-filter-extra{display:none!important}
+}
