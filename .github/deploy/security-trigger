@@ -1,5 +1,5 @@
-deploy: ky-erp-pro-v4.2.0-unified-mobile
-canonical: 11e98747a5aa5cff9ae6d6e9ed2efb5db78d064d
+deploy: ky-erp-pro-v4.2.0-unified-mobile-final
+canonical: 4c07a1591501766adc76f35a1aff42efc63a460f
 requested: 2026-10-26
 source_prs: 466,469,471
-reason: one trusted Android PWA ID /guvenlik, complete canonical ERP under /guvenlik/pro, preserved push device, proper native mobile navigation and comprehensive CI
+reason: standalone KY ERP PRO 4.2 in existing /guvenlik identity with all canonical ERP tabs; separate KY Firma 4.1 version asserted independently; complete UI CI and Worker dry-run passed
