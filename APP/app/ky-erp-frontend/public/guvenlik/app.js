@@ -3,7 +3,7 @@ const DB_NAME="kyerp-security-fresh-v3";
 const STORE="device";
 const KEY="active";
 const CLIENT_VERSION="security-v4.0";
-const APP_DISPLAY_VERSION="v4.1.0"; // Cihaz imza protokolü ve DB kimliği geriye uyumlu kalır.
+const APP_DISPLAY_VERSION="v4.2.0"; // Cihaz imza protokolü ve DB kimliği geriye uyumlu kalır.
 const PENDING_ENROLL_KEY="kyerp-security-fresh-enrollment-v3";
 const CANONICAL_DEVICE_REVISION="fresh-v3-20260922";
 
