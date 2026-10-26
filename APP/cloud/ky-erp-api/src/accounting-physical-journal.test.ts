@@ -198,3 +198,25 @@ test("Stok 100 adet kayıt bir kez, fatura maliyeti eklenir ama miktar değişme
   assert.equal(s.quantity,100);assert.equal(s.total_amount,300);
   assert.equal(JSON.parse(s.raw).financialDocuments.length,1);
 });
+
+test("iki fatura aynı fiziksel LOT'u toplamda 100 üstüne maliyetlendiremez; trigger 409",async()=>{
+  const db=new D1Fixture();await postPhysicalReceipt(db,sample({quantity:100}));
+  await postPhysicalCostLink(db,{...sample(),invoiceId:"inv1",invoiceLineId:"a",allocatedQuantity:60,allocatedTotal:120});
+  await assert.rejects(()=>postPhysicalCostLink(db,{...sample(),invoiceId:"inv2",invoiceLineId:"b",allocatedQuantity:41,allocatedTotal:82}),
+    (e:any)=>e.code==="COST_QUANTITY_OVER_ALLOCATED");
+  const lot=JSON.parse((db.sql.prepare("SELECT data FROM json_store WHERE scope='BOYAHANE_LOT'").get() as any).data);
+  assert.equal(lot.costedQuantity,60);
+  assert.equal(lot.totalCost,120);
+  assert.equal(db.count("accounting_physical_operations","WHERE operation_type='COST_LINK'"),1);
+});
+test("iki ayrı fatura toplam 60+40=100 sınırında doğru, ikinci stok girişi yok",async()=>{
+  const db=new D1Fixture();await postPhysicalReceipt(db,sample());
+  await Promise.all([
+    postPhysicalCostLink(db,{...sample(),invoiceId:"invA",invoiceLineId:"a",allocatedQuantity:60,allocatedTotal:240}),
+    postPhysicalCostLink(db,{...sample(),invoiceId:"invB",invoiceLineId:"b",allocatedQuantity:40,allocatedTotal:160}),
+  ]);
+  const lot=JSON.parse((db.sql.prepare("SELECT data FROM json_store WHERE scope='BOYAHANE_LOT'").get() as any).data);
+  assert.equal(lot.costedQuantity,100);assert.equal(lot.totalCost,400);
+  assert.equal(lot.financialDocuments.length,2);
+  assert.equal(db.count("json_store","WHERE scope='BOYAHANE_STOCK_MOVEMENT'"),1);
+});
