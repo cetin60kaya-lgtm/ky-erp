@@ -28,7 +28,7 @@ function assetPath(pathname){
   // Serve the real, built canonical ERP inside the unchanged /guvenlik/ PWA scope.
   // Hashed Vite files are served literally; deep ERP module routes get one SPA document.
   if(pathname===PRO_PREFIX||pathname===PRO_PREFIX+"/"||
-     (pathname.startsWith(PRO_PREFIX+"/")&&!pathname.startsWith(PRO_PREFIX+"/assets/")&&pathname!==PRO_PREFIX+"/index.html"))
+     (pathname.startsWith(PRO_PREFIX+"/")&&!pathname.startsWith(PRO_PREFIX+"/assets/")&&pathname!==PRO_PREFIX+"/index.html"&&!/\.(?:js|css|svg|png|jpe?g|webp|woff2?|json|txt|map)$/i.test(pathname)))
     return PRO_PREFIX+"/index.html";
   if(pathname===APP_PREFIX||pathname===APP_URL)return "/guvenlik/index.html";
   for(const p of ADDITIONAL_APPS)if(pathname===p||pathname===`${p}/`)return `${p}/index.html`;
