@@ -66,9 +66,10 @@ async function legacyConflict(db:any,f:Row){
   if(f.route==="BOYAHANE") {
     const row=await db.prepare(`SELECT id FROM json_store
       WHERE main_company_slug=? AND scope='BOYAHANE_STOCK_MOVEMENT'
-       AND (json_extract(data,'$.physicalDocumentLineId')=?
-        OR (json_extract(data,'$.physicalDocumentId')=? AND json_extract(data,'$.lotNo')=?))
-      LIMIT 1`).bind(f.tenant,f.physicalLineId,f.physicalDocumentId,f.lotNo).first();
+       AND json_extract(data,'$.physicalDocumentLineId')=?
+       AND json_extract(data,'$.physicalDocumentId')=?
+       AND UPPER(TRIM(COALESCE(json_extract(data,'$.lotNo'),'')))=?
+      LIMIT 1`).bind(f.tenant,f.physicalLineId,f.physicalDocumentId,f.normalizedLot).first();
     return Boolean(row);
   }
   const row=await db.prepare(`SELECT id FROM stock_movements WHERE main_company_slug=?
@@ -215,6 +216,10 @@ export async function postPhysicalCostLink(db:any,data:Row) {
     f.productId,f.supplierCompanyId,f.normalizedLot).all();
   if((rows.results||[]).length!==1||rows.results[0].state!=="DONE")
     throw err("PHYSICAL_RECEIPT_PENDING","Bağlı gerçek irsaliyenin fiziksel kaydı tamamlanmadı.");
+  const received=await db.prepare("SELECT quantity FROM accounting_physical_operations WHERE id=? AND main_company_slug=?")
+    .bind(rows.results[0].id,tenant).first();
+  if(qty>Number(received?.quantity||0)+0.00001)
+    throw err("COST_QUANTITY_OVER_ALLOCATED","LOT tahsisi fiziksel miktarı aşıyor.");
   const receiptId=txt(rows.results[0].id);
   const costKey="COST:"+await sha256(JSON.stringify([tenant,f.physicalDocumentId,f.physicalLineId,
     f.productId,f.supplierCompanyId,f.normalizedLot,invoiceId,invoiceLineId]));
