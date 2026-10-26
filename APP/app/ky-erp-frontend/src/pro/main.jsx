@@ -141,6 +141,14 @@ function ProApplication(){
  const [securityOpen,setSecurityOpen]=useState(()=>new URLSearchParams(location.search).get("security")==="1");
  const [loginRequested,setLoginRequested]=useState(false);
  const [loginEverOpened,setLoginEverOpened]=useState(false);
+ const wasAuthenticated=useRef(isAuthenticated);
+ useEffect(()=>{
+   if(isAuthenticated&&!wasAuthenticated.current){
+     // A just-approved phone login must enter ERP immediately, not reopen approvals.
+     setSecurityOpen(false);setLoginRequested(false);
+   }
+   wasAuthenticated.current=isAuthenticated;
+ },[isAuthenticated]);
  useEffect(()=>{if(loginRequested)setLoginEverOpened(true)},[loginRequested]);
  const [workspaceMounted,setWorkspaceMounted]=useState(!home);
  useEffect(()=>{if(!home)setWorkspaceMounted(true)},[home]);
