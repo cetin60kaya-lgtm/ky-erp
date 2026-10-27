@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Bell, CheckCheck, ChevronDown, Command, Download, LogOut, Menu, Monitor, RefreshCw, Search, Settings2, ShieldCheck, Smartphone, Trash2, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
 import { KY_NAV_GROUPS, navigationGroupFor } from "../app/navigationGroups";
+import { buildShellMenuSections, isShellMenuSectionOpen, toggleShellMenuSection } from "../app/shellMenuModel";
 import { partitionWorkspaceTabs } from "../app/workspaceTabs";
 import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
 
@@ -559,11 +560,8 @@ export default function AppShellV3({
                 {groupOpen ? <div className="ky-pro-nav-group-list">
           {groupModules.map((module) => {
             const isActiveModule = activeModule?.key === module.key;
-            const hasPrimarySidebarGroups = Array.isArray(module.sidebarGroups) && module.sidebarGroups.length > 0;
-            const primarySidebarExpanded = isActiveModule && (hasPrimarySidebarGroups || mobileMenuOpen);
-            const isExpanded = (primarySidebarExpanded || (isActiveModule && !hasPrimarySidebarGroups)) && collapsedModuleKey !== module.key;
-            const groups = visibleGroups(module, user);
-            const flatModuleTabs = !hasPrimarySidebarGroups && groups.length > 0;
+            const sections = buildShellMenuSections(module, visibleGroups(module, user));
+            const isExpanded = isActiveModule && collapsedModuleKey !== module.key;
             return (
               <section key={module.key} data-module={module.key} className={`shell-v3-module ${isActiveModule ? "active" : ""}`}>
                 <button type="button" className="shell-v3-module-button" onClick={() => {
@@ -578,44 +576,39 @@ export default function AppShellV3({
                 </button>
                 {isExpanded ? (
                   <div className="shell-v3-submenu">
-                    {hasPrimarySidebarGroups ? (
-                      <div className="shell-v3-submenu-primary">
-                        {module.sidebarGroups.map(([key, label, icon]) => {
-                          const owningGroup = groups.find((group) => (group.tabs || []).some(([tabKey]) => tabKey === key));
-                          const groupActive = owningGroup?.tabs?.some(([tabKey]) => tabKey === activeTab) || activeTab === key;
-                          return (
-                            <button type="button" key={key} style={tabStyle(key)} className={groupActive ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
-                              <ErpIcon name={tabVisualIcon(key, icon)} size={16} />
-                              <span><strong>{label}</strong></span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : flatModuleTabs ? (
-                      <div className="shell-v3-submenu-flat">
-                        {getTabs(module, user).map(([key, label, icon]) => (
-                          <button type="button" key={key} style={tabStyle(key)} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
-                            <ErpIcon name={tabVisualIcon(key, icon)} size={15} /><span>{label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : module.groups ? groups.map((group) => {
-                      const groupId = module.key + ":" + group.label;
-                      const groupActive = group.tabs.some(([key]) => key === activeTab);
-                      const groupOpen = groupActive || expandedGroupKey === groupId;
-                      const firstTab = group.tabs[0] || [];
+                    {sections.length > 1 ? sections.map((section) => {
+                      const sectionActive = section.tabs.some(([key]) => key === activeTab);
+                      const sectionOpen = isShellMenuSectionOpen(expandedGroupKey, section.id, sectionActive);
                       return (
-                        <div key={group.label} className={`shell-v3-submenu-group ${groupOpen ? "open" : ""} ${groupActive ? "active" : ""}`}>
-                          <button type="button" style={tabStyle(firstTab[0])} className="shell-v3-submenu-group-toggle" onClick={() => setExpandedGroupKey((current) => current === groupId && !groupActive ? "" : groupId)} aria-expanded={groupOpen}>
-                            <ErpIcon name={tabVisualIcon(firstTab[0], firstTab[2])} size={15} /><span><strong>{group.label}</strong></span><ChevronDown size={14} />
+                        <div key={section.id} className={`shell-v3-submenu-group ${sectionOpen ? "open" : ""} ${sectionActive ? "active" : ""}`}>
+                          <button type="button" className="shell-v3-submenu-group-toggle"
+                            style={tabStyle(section.tabs[0]?.[0])}
+                            aria-expanded={sectionOpen}
+                            aria-controls={`ky-menu-${section.id}`}
+                            onClick={() => setExpandedGroupKey((current) => toggleShellMenuSection(current, section.id, sectionActive))}>
+                            <ErpIcon name={tabVisualIcon(section.tabs[0]?.[0], section.icon)} size={15} />
+                            <span><strong>{section.label}</strong></span>
+                            <ChevronDown size={14} aria-hidden="true" />
                           </button>
-                          {groupOpen ? <div className="shell-v3-submenu-group-items">{group.tabs.map(([key, label, icon]) => (
-                            <button type="button" key={key} style={tabStyle(key)} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}><ErpIcon name={tabVisualIcon(key, icon)} size={15} /><span>{label}</span></button>
-                          ))}</div> : null}
+                          {sectionOpen ? (
+                            <div id={`ky-menu-${section.id}`} className="shell-v3-submenu-group-items">
+                              {section.tabs.map(([key, label, icon]) => (
+                                <button type="button" key={key} style={tabStyle(key)}
+                                  className={activeTab === key ? "active" : ""}
+                                  aria-current={activeTab === key ? "page" : undefined}
+                                  onClick={() => onOpenTab(module.key, key)}>
+                                  <ErpIcon name={tabVisualIcon(key, icon)} size={15} /><span>{label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                       );
-                    }) : getTabs(module, user).map(([key, label, icon]) => (
-                      <button type="button" key={key} style={tabStyle(key)} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
+                    }) : (sections[0]?.tabs || getTabs(module, user)).map(([key, label, icon]) => (
+                      <button type="button" key={key} style={tabStyle(key)}
+                        className={activeTab === key ? "active" : ""}
+                        aria-current={activeTab === key ? "page" : undefined}
+                        onClick={() => onOpenTab(module.key, key)}>
                         <ErpIcon name={tabVisualIcon(key, icon)} size={15} /><span>{label}</span>
                       </button>
                     ))}
