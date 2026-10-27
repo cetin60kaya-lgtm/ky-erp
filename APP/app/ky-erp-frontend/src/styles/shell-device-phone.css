@@ -1,0 +1,59 @@
+/* KY ERP Android + iPhone Safari: aynı React menüsü, güvenli alanlar ve dokunma. */
+.shell-v3[data-layout-mode="phone"] .shell-v3-sidebar {
+  height: 100dvh;
+  max-height: 100dvh;
+  box-sizing: border-box;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+}
+.shell-v3[data-layout-mode="phone"] .shell-v3-sidebar-nav {
+  height: 100%;
+}
+.shell-v3[data-layout-mode="phone"] .shell-v3-sidebar-nav :is(
+  .ky-pro-home-link,
+  .ky-pro-nav-group-trigger,
+  .shell-v3-module-button,
+  .shell-v3-submenu button
+) {
+  min-height: 44px !important;
+}
+.shell-v3[data-layout-mode="phone"] .shell-v3-user {
+  display: flex !important;
+  position: relative;
+  min-width: 0;
+}
+.shell-v3[data-layout-mode="phone"] .shell-v3-user > .shell-v3-user-trigger {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px;
+}
+.shell-v3[data-layout-mode="phone"] .shell-v3-user-meta,
+.shell-v3[data-layout-mode="phone"] .shell-v3-user-chevron {
+  display: none !important;
+}
+.shell-v3[data-layout-mode="phone"] .shell-v3-user-menu {
+  position: fixed;
+  top: calc(56px + env(safe-area-inset-top, 0px));
+  right: max(8px, env(safe-area-inset-right, 0px));
+  left: auto;
+  width: min(360px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 72px - env(safe-area-inset-top, 0px));
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+.shell-v3[data-layout-mode="phone"] .shell-v3-tabs-overflow > summary,
+.shell-v3[data-layout-mode="phone"] .shell-v3-tabs-overflow-item > button {
+  min-height: 44px;
+}
+.shell-v3[data-layout-mode="phone"] .shell-v3-tabs-overflow-list {
+  max-width: calc(100vw - 16px);
+  max-height: min(65dvh, 400px);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+.shell-v3[data-layout-mode="phone"] .shell-v3-quick-palette {
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+}
