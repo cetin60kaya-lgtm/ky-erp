@@ -534,7 +534,7 @@ export default function AppShellV3({
     >
       <button type="button" className="shell-v3-overlay" aria-label="Menüyü kapat" onClick={onCloseMobileMenu} />
 
-      <aside className="shell-v3-sidebar">
+      <aside id="ky-shell-main-menu" className="shell-v3-sidebar" inert={effectiveMode !== "pc" && !mobileMenuOpen}>
         <header className="shell-v3-sidebar-brand">
           <button type="button" className="shell-v3-brand-button" onClick={() => onToggleModuleMenu("ana-sayfa")}>
             <b>KY</b><span><strong>KY ERP</strong><small>{activeModule?.label || "Yönetim Sistemi"}</small></span>
@@ -626,7 +626,7 @@ export default function AppShellV3({
 
       <main className="shell-v3-main">
         <header className="shell-v3-topbar">
-          <button type="button" className="shell-v3-icon mobile" onClick={onOpenMobileMenu} aria-label="Menüyü aç"><Menu size={19} /></button>
+          <button type="button" className="shell-v3-icon mobile" onClick={onOpenMobileMenu} aria-label="Menüyü aç" aria-controls="ky-shell-main-menu" aria-expanded={mobileMenuOpen}><Menu size={19} /></button>
           <label className="shell-v3-search"><Search size={17} /><input value={quickSearch} onFocus={() => setQuickOpen(true)} onChange={(event) => { setQuickSearch(event.target.value); setQuickOpen(true); }} placeholder="Ekran, işlem, firma, belge veya model ara" aria-label="KY ERP genel işlem araması" /></label>
           <button type="button" className="shell-v3-quick-button" onClick={() => setQuickOpen(true)}><ErpIcon name="hizli" size={16} /><span>Hızlı İşlem</span><kbd>Ctrl K</kbd></button>
           {ownerUser ? (
