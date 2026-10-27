@@ -1,7 +1,7 @@
 import {
   MODULES as BASE_MODULES,
   MODULE_ROUTE_ALIASES as BASE_ROUTE_ALIASES,
-} from "./moduleRegistryBase";
+} from "./moduleRegistryBase.js";
 
 const PDKS_MODULE = {
   key: "pdks",
