@@ -17,6 +17,10 @@ import "../styles/shell-v3-modern.css";
 import "../styles/workspace-flow-final.css";
 import "../styles/approved-html-shell.css";
 import "../styles/ky-pro-shell.css";
+import "../styles/shell-menu-core.css";
+import "../styles/shell-device-pc.css";
+import "../styles/shell-device-tablet.css";
+import "../styles/shell-device-phone.css";
 
 const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme", "eslestirmeler", "surum-merkezi"]);
 
