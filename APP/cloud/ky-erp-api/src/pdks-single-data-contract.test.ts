@@ -173,11 +173,12 @@ test("PDKS primary sidebar exposes exactly five operation groups without dumping
   assert.match(registry, /\["saat-terminal", "Terminal & Sistem"/);
   assert.match(registry, /\["raporlar", "Rapor & Denetim"/);
 
-  assert.match(shell, /hasPrimarySidebarGroups/);
-  assert.match(shell, /isActiveModule && \(hasPrimarySidebarGroups \|\| mobileMenuOpen\)/);
-  assert.match(shell, /module\.sidebarGroups\.map/);
-  assert.match(shell, /owningGroup\?\.tabs\?\.some/);
-  assert.match(shell, /shell-v3-submenu-primary/);
+  // Beş PDKS grubu korunur; kayıtlı 18 sekme yeni ortak model üzerinden erişilir.
+  assert.match(shell, /buildShellMenuSections\(module, visibleGroups\(module, user\)\)/);
+  assert.match(shell, /sections\.length > 1 \? sections\.map/);
+  assert.match(shell, /section\.tabs\.map/);
+  assert.match(shell, /shell-v3-submenu-group-items/);
+  assert.doesNotMatch(shell, /flatModuleTabs|hasPrimarySidebarGroups/);
 });
 
 

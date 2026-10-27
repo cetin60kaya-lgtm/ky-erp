@@ -1,0 +1,28 @@
+/* KY ERP Tablet: tek çekmece, yatay/dikey düzen, dokunmatik tam menü. */
+.shell-v3[data-layout-mode="tablet"] .shell-v3-sidebar {
+  height: 100dvh;
+  max-height: 100dvh;
+  box-sizing: border-box;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+}
+.shell-v3[data-layout-mode="tablet"] .shell-v3-sidebar-nav {
+  height: 100%;
+}
+.shell-v3[data-layout-mode="tablet"] .shell-v3-sidebar-nav :is(
+  .ky-pro-home-link,
+  .ky-pro-nav-group-trigger,
+  .shell-v3-module-button,
+  .shell-v3-submenu button
+) {
+  min-height: 44px !important;
+}
+.shell-v3[data-layout-mode="tablet"] .shell-v3-user-trigger,
+.shell-v3[data-layout-mode="tablet"] .shell-v3-tabs-overflow > summary,
+.shell-v3[data-layout-mode="tablet"] .shell-v3-tabs-overflow-item > button {
+  min-height: 44px;
+}
+.shell-v3[data-layout-mode="tablet"] .shell-v3-tabs-overflow-list {
+  max-width: calc(100vw - 24px);
+  max-height: min(65dvh, 440px);
+  overflow-y: auto;
+}

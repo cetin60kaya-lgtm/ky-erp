@@ -16,9 +16,11 @@ test("workspace tek dikey akis sahibidir ve eski viewport kilitlerini ezer", () 
   assert.match(flowCss, /safe-area-inset-bottom/);
 });
 
-test("ana menu gereksiz grup siniflandirmasi yerine direkt sekmeleri gosterir", () => {
-  assert.match(shell, /const flatModuleTabs = !hasPrimarySidebarGroups && groups\.length > 0;/);
-  assert.doesNotMatch(shell, /flatModuleTabs[^\n]*<= 6/);
+test("tek menü modeli modüllerin sekmelerini gruplar; eski düz liste kalkmıştır", () => {
+  assert.match(shell, /buildShellMenuSections\(module, visibleGroups\(module, user\)\)/);
+  assert.match(shell, /sections\.length > 1 \? sections\.map/);
+  assert.match(shell, /aria-current=\{activeTab === key \? "page" : undefined\}/);
+  assert.doesNotMatch(shell, /flatModuleTabs|hasPrimarySidebarGroups/);
 });
 
 test("gunluk operasyon ana menu agacinda ikinci bir modul olarak gosterilmez", () => {

@@ -485,8 +485,8 @@
     display: grid;
   }
 
-  .shell-v3-user div,
-  .shell-v3-user > button {
+  /* Profil düğmesi mobilde erişilebilir kalır; yalnız isim dar ekranda gizlenir. */
+  .shell-v3-user-meta {
     display: none;
   }
 }

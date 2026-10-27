@@ -34,3 +34,18 @@ test("manuel mod ve manuel olcek otomatik algilamayi ezer", () => {
   assert.equal(state.effectiveMode, "phone");
   assert.equal(state.effectiveScale, 90);
 });
+
+test("cihaz profilleri: PC iki çözünürlük, tablet yatay/dikey ve Android/iPhone telefon", () => {
+  const cases = [
+    ["PC 1366", { width: 1366, height: 768, coarsePointer: false, maxTouchPoints: 0 }, "pc"],
+    ["PC 1920", { width: 1920, height: 1080, coarsePointer: false, maxTouchPoints: 0 }, "pc"],
+    ["tablet yatay", { width: 1280, height: 800, coarsePointer: true, maxTouchPoints: 10 }, "tablet"],
+    ["tablet dikey", { width: 800, height: 1280, coarsePointer: true, maxTouchPoints: 10 }, "tablet"],
+    ["Android", { width: 412, height: 915, coarsePointer: true, maxTouchPoints: 5, mobileHint: true }, "phone"],
+    ["iPhone", { width: 390, height: 844, coarsePointer: true, maxTouchPoints: 5, mobileHint: true }, "phone"],
+    ["iPhone yatay", { width: 844, height: 390, coarsePointer: true, maxTouchPoints: 5, mobileHint: true }, "phone"],
+  ];
+  for (const [name, viewport, expected] of cases) {
+    assert.equal(detectRecommendedMode(viewport), expected, name);
+  }
+});

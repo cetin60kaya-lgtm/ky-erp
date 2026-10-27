@@ -1,0 +1,39 @@
+/* KY ERP tek navigasyon çekirdeği: tüm cihazlar aynı modül/sekme modelini kullanır. */
+.shell-v3 .shell-v3-sidebar-nav {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.shell-v3 .shell-v3-submenu-group,
+.shell-v3 .shell-v3-submenu-group-items {
+  min-width: 0;
+}
+.shell-v3 .shell-v3-submenu-group-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  text-align: left;
+  cursor: pointer;
+}
+.shell-v3 .shell-v3-submenu-group-toggle > span,
+.shell-v3 .shell-v3-submenu-group-items > button > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.shell-v3 .shell-v3-submenu-group-items {
+  display: grid;
+}
+.shell-v3 .shell-v3-sidebar-nav :is(button, [role="button"]) {
+  touch-action: manipulation;
+}
+.shell-v3 .shell-v3-sidebar-nav :is(button, [role="button"]):focus-visible {
+  outline: 2px solid #8ab4f5;
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shell-v3 .shell-v3-sidebar,
+  .shell-v3 .shell-v3-submenu-group-toggle > svg:last-child {
+    transition: none !important;
+  }
+}
