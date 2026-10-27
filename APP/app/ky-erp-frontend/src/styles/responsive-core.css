@@ -151,8 +151,8 @@ body,
     padding-right: max(10px, var(--ky-safe-right));
   }
 
-  .shell-v3-user div,
-  .shell-v3-user > button {
+  .shell-v3-user-meta,
+  .shell-v3-user-chevron {
     display: none;
   }
 
