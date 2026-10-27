@@ -1,0 +1,13 @@
+/* KY ERP PC/Windows EXE: sabit menü, fare/klavye, çoklu açık sekmeler. */
+.shell-v3[data-layout-mode="pc"] .shell-v3-sidebar-nav {
+  padding-bottom: 20px;
+}
+.shell-v3[data-layout-mode="pc"] .shell-v3-submenu-group-toggle {
+  min-height: 38px;
+}
+.shell-v3[data-layout-mode="pc"] .shell-v3-submenu-group-items > button {
+  min-height: 38px;
+}
+.shell-v3[data-layout-mode="pc"] .shell-v3-tabs-overflow > summary {
+  min-height: 36px;
+}
