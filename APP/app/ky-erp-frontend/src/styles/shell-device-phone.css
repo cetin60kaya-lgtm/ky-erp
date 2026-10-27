@@ -44,6 +44,14 @@
   overflow-y: auto;
   overscroll-behavior-y: contain;
 }
+.shell-v3[data-layout-mode="phone"] .shell-v3-tabs i[role="button"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 44px;
+}
 .shell-v3[data-layout-mode="phone"] .shell-v3-tabs-overflow > summary,
 .shell-v3[data-layout-mode="phone"] .shell-v3-tabs-overflow-item > button {
   min-height: 44px;
