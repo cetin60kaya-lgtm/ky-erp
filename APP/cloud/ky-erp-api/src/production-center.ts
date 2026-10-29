@@ -526,19 +526,29 @@ function resolveModel(
   models: CenterModel[],
   explicitLinks: Map<string, string>,
 ): { model?: CenterModel; status: "EXACT" | "AMBIGUOUS" | "UNMATCHED" } {
+  const companyId = text(seed.companyId);
+  const companyName = normalized(seed.companyName);
   const explicitId = text(seed.modelId || explicitLinks.get(text(seed.sourceId)));
   if (explicitId) {
     const direct = models.find((model) => model.id === explicitId);
-    if (direct) return { model: direct, status: "EXACT" };
+    // Tenant üst sınırı ayrıca var; burada farklı müşteri carilerine yanlış fatura bağlama.
+    if (direct && (!companyId || !direct.companyId || direct.companyId === companyId)) {
+      return { model: direct, status: "EXACT" };
+    }
+    if (direct) return { status: "UNMATCHED" };
   }
   const wantedName = normalized(seed.modelName);
   if (!wantedName) return { status: "UNMATCHED" };
   let candidates = models.filter((model) => normalized(model.modelName) === wantedName);
-  const companyId = text(seed.companyId);
   if (companyId) {
-    const scoped = candidates.filter((model) => model.companyId === companyId);
-    if (scoped.length) candidates = scoped;
+    candidates = candidates.filter((model) => model.companyId === companyId);
+  } else if (companyName) {
+    candidates = candidates.filter((model) => normalized(model.companyName) === companyName);
+  } else {
+    // Kaynak firmanın kimliği yoksa bilinen başka firmanın modeline isimle bağlama.
+    candidates = candidates.filter((model) => !model.companyId);
   }
+  if (!candidates.length) return { status: "UNMATCHED" };
   const orderNo = normalized(seed.orderNo || seed.dispatchNo);
   if (orderNo) {
     const scoped = candidates.filter(
@@ -546,6 +556,9 @@ function resolveModel(
         normalized(model.orderNo) === orderNo || normalized(model.defaultDispatchNo) === orderNo,
     );
     if (scoped.length) candidates = scoped;
+    else if (candidates.some((model) => model.orderNo || model.defaultDispatchNo)) {
+      return { status: "UNMATCHED" };
+    }
   }
   if (candidates.length === 1) return { model: candidates[0], status: "EXACT" };
   if (candidates.length > 1) return { status: "AMBIGUOUS" };
