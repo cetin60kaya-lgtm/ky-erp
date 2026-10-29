@@ -1,5 +1,14 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 29.10.2026 — İmalat seri giriş accordion ilk açılışta KAPALI, canlı #487
+
+- **Gerçek saha görselinde sorun:** PR #485 formunun başlığında "Daralt" görünüyordu, ancak `open=true` olduğundan 10 alanlı form ilk açılışta tüm ekranı kaplıyordu. Üst `Üretim Girişi` düğmesi yalnız scroll yapıyordu.
+- **Çözüm:** `ProductionDirectEntryPanel.jsx` accordion varsayılan `false`, üretim başlığının tamamı erişilebilir tıklanabilir buton (`aria-expanded`), kapalı durumda yalnız model/tarih/hazır satır/adet özeti. Form, seri kuyruk, son fişler birlikte açılıp kapanır; taslak satırlar gizlenirken silinmez. Ana sayfa Üretim Girişi ve model Üretim Gir düğmesi `openRequestToken` ile paneli her seferinde açar.
+- **PR [#487](https://github.com/cetin60kaya-lgtm/ky-erp/pull/487)** MERGED SHA `af2d799c1ece8c0f964cb64efddd9d6dd9c51883`; [CI #40935425166](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40935425166) frontend lint/test/build ve Worker typecheck/test/build SUCCESS. İlk ara test #40935240967 JSX parantezinden FAILED; düzeltildi; son test yeşil.
+- **Frontend production** [Pages #40935651810](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40935651810) SUCCESS; Cloudflare Pages deploy ve canlı bundle smoke başarılı. Release SHA `446d8fbd860bbc7addf5441b331378bdc77571ee`, PR merge karşılaştırmasında `behind_by=0`.
+- **Sınır:** Worker/D1 iş kayıtları değişmedi, yeni migration veya üretim satırı eklenmedi. Gerçek tarayıcıda başlığın açılıp kapanması ve taslak satır korunması kullanıcıyla kabul edilmeli. 2022/Excel veri aktarımı YOK.
+
+
 ## 29.10.2026 — PR #486 Tek menü, başlık, sekme ve Ana Sayfa hatası CANLI
 
 - **PR [#486](https://github.com/cetin60kaya-lgtm/ky-erp/pull/486) MERGED:** SHA `3ecf63e34aec02561ab1ac19ede890a23194d884`. Son CI [#40930522828](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40930522828) **SUCCESS**: frontend lint/test/build ve Worker typecheck/test/build.
