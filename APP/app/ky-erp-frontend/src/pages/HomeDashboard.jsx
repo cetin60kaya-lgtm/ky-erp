@@ -1,8 +1,8 @@
-import { ArrowRight, BellRing, CalendarDays, Factory, FileText, LayoutDashboard, ShieldCheck, Wallet, Wrench } from "lucide-react";
+import { ArrowRight, BellRing, Building2, CalendarDays, Factory, FileText, LayoutDashboard, ShieldCheck, Wallet, Wrench } from "lucide-react";
 import { visibleNavigationGroups } from "../app/navigationGroups";
 import "../styles/ky-pro-home.css";
 
-const ICONS = { daily: BellRing, production: Factory, finance: Wallet, communication: FileText, management: Wrench };
+const ICONS = { daily: BellRing, production: Factory, finance: Wallet, company: Building2, communication: FileText, management: Wrench };
 const SHORTCUTS = [
   { key: "gunluk-operasyon", title: "Günlük Operasyon", detail: "Mevcut seri giriş ekranına git" },
   { key: "ik", title: "İK Aylık", detail: "Personel, bordro ve izin" },
@@ -17,8 +17,8 @@ function firstTabFor(module) {
 export default function HomeDashboard({ modules = [], activeMainCompany, openModule }) {
   const allowedGroups = visibleNavigationGroups(modules).map((group) => ({
     ...group,
-    title: group.homeTitle,
-    Icon: ICONS[group.key],
+    title: group.title,
+    Icon: ICONS[group.key] || LayoutDashboard,
   }));
   const accessible = new Map(modules.filter((module) => module.key !== "ana-sayfa").map((module) => [module.key, module]));
   const shortcuts = SHORTCUTS.filter((entry) => accessible.has(entry.key));

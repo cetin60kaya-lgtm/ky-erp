@@ -92,8 +92,9 @@ export function useWorkspaceTabs(initialRoute, resolveLabel) {
     [activeRoute.moduleKey, activeRoute.tabKey, resolveLabel],
   );
 
+  const displayedTabs = useMemo(() => tabs.map((item) => ({...item,label:resolveLabel(item.moduleKey,item.tabKey)})), [tabs,resolveLabel]);
   return {
-    tabs,
+    tabs: displayedTabs,
     activeRoute,
     activeId,
     openTab,

@@ -126,7 +126,7 @@ const ILETISIM_MODULE = {
 const COMPLIANCE_MODULE = {
   key: "compliance",
   permissionKey: "COMPLIANCE",
-  label: "Denetim & Evrak Takibi",
+  label: "Denetim Merkezi",
   icon: "file-check",
   groups: [
     {

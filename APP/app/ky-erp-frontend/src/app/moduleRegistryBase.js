@@ -1,3 +1,4 @@
+import { getAdminPrimaryTabs, getAdminHiddenTabs } from "./adminNavigation.js";
 export const MODULES = [
   {
     key: "muhasebe",
@@ -99,29 +100,8 @@ export const MODULES = [
     permissionKey: "ADMIN",
     label: "Platform Yönetimi",
     icon: "guvenlik",
-    groups: [
-      {
-        label: "Platform Yönetimi",
-        tabs: [
-          ["admin-yonetim-ozeti", "Yönetim", "dashboard"],
-          ["admin-guvenlik", "Güvenlik", "guvenlik"],
-          ["admin-sistem", "Sistem", "ayarlar"],
-        ],
-      },
-    ],
-    hiddenTabs: [
-      ["uygulama-sahibi", "Süper Yönetici & Güvenlik", "ayarlar"],
-      ["kullanicilar", "Kullanıcı & Yetkiler", "users"],
-      ["ana-firma-ayarlar", "Firmalar & Organizasyon", "ayarlar"],
-      ["firma-ucretlendirme", "Firma Paket / Kullanım", "odemeler"],
-      ["dosya-klasor-yonetimi", "Dosya ve Klasör Yönetimi", "dosya"],
-      ["eslestirmeler", "Eşleştirmeler", "file-check"],
-      ["yedekleme-loglar", "Yedekleme / Loglar", "raporlar"],
-      ["surum-merkezi", "Sürüm Merkezi", "ayarlar"],
-      ["guncelleme-gecmisi", "Güncelleme Geçmişi", "raporlar"],
-      ["uygulama-ayarlari", "Uygulama Ayarları", "ayarlar"],
-      ["giris-onaylari", "Giriş Onayları", "file-check"],
-    ],
+    groups: [{label:"Yönetim İşlemleri",tabs:getAdminPrimaryTabs()}],
+    hiddenTabs: getAdminHiddenTabs(),
   },
   {
     key: "asistan",

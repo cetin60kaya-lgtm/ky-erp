@@ -12,7 +12,7 @@
   --approved-bg: #f3f6fa;
   --approved-line: #e3e9f0;
   --approved-elevation: 0 7px 28px rgba(19, 32, 56, .035);
-  grid-template-columns: 258px minmax(0, 1fr);
+  grid-template-columns: 270px minmax(0, 1fr);
   height: 100dvh;
   min-height: 0;
   background: var(--approved-bg);

@@ -8,6 +8,7 @@ import MuhasebePage from "./pages/modules/MuhasebePage";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
 import { MODULES, findModule, findTab, getInitialRoute, getModuleTabs } from "./app/moduleRegistry";
 import { useWorkspaceTabs } from "./hooks/useWorkspaceTabs";
+import { roleModules } from "./app/roleModuleNavigation";
 import { useDisplayPreferences } from "./hooks/useDisplayPreferences";
 import { getSystemSentinelAccess } from "./services/systemSentinelApi";
 import AppShellV3 from "./layouts/AppShellV3";
@@ -166,6 +167,7 @@ export default function AppV3() {
       : hasModule(item.permissionKey));
     // Ana sayfa yalnız en az bir gerçek modül yetkisi olan kullanıcıya gösterilir.
     if (allowed.length) allowed = [MODULES.find((item) => item.key === "ana-sayfa"), ...allowed].filter(Boolean);
+    allowed = roleModules(allowed, user?.role);
     if (!isAuditAccount) return allowed;
     allowed = allowed.filter((item) => !["admin", "asistan"].includes(item.key));
     return allowed.map((item) => {
@@ -173,12 +175,17 @@ export default function AppV3() {
       if (item.key === "pdks") return { ...item, groups: [{ label: "PDKS Denetim", tabs: PDKS_AUDIT_TABS }], tabs: undefined, hiddenTabs: [] };
       return item;
     });
-  }, [hasModule, isAuditAccount, sentinelAccess?.hasAccess, sentinelOwner]);
+  }, [hasModule, isAuditAccount, sentinelAccess?.hasAccess, sentinelOwner, user?.role]);
 
   const initialRoute = useMemo(() => {
     const requested = getInitialRoute(pathForCanonicalModule(window.location.pathname));
     return normalizeRoute(requested, visibleModules) || requested;
   }, [visibleModules]);
+
+  const resolveWorkspaceLabel = useCallback((moduleKey,tabKey)=>{
+    const module=visibleModules.find((item)=>item.key===moduleKey);
+    return findTab(module,tabKey)?.[1] || resolveLabel(moduleKey,tabKey);
+  },[visibleModules]);
 
   const {
     tabs: workspaceTabs,
@@ -189,7 +196,7 @@ export default function AppV3() {
     closeTab: closeWorkspaceTab,
     closeAllTabs: closeAllWorkspaceTabs,
     replaceActiveRoute,
-  } = useWorkspaceTabs(initialRoute, resolveLabel);
+  } = useWorkspaceTabs(initialRoute, resolveWorkspaceLabel);
 
   const activeModule = visibleModules.find((item) => item.key === activeRoute.moduleKey) || visibleModules[0];
   const activeTab = findTab(activeModule, activeRoute.tabKey)?.[0] || getModuleTabs(activeModule)[0]?.[0] || "";

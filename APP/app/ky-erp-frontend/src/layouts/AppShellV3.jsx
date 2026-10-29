@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Bell, CheckCheck, ChevronDown, Command, Download, LogOut, Menu, Monitor, RefreshCw, Search, Settings2, ShieldCheck, Smartphone, Trash2, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
 import { KY_NAV_GROUPS, navigationGroupFor } from "../app/navigationGroups";
+import { breadcrumbTitles, workspaceTabTitle } from "../app/navigationTitles";
 import { buildShellMenuSections, isShellMenuSectionOpen, toggleShellMenuSection } from "../app/shellMenuModel";
 import { partitionWorkspaceTabs } from "../app/workspaceTabs";
 import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
@@ -216,6 +217,8 @@ export default function AppShellV3({
     generatedAt: "",
   });
   const activeTabLabel = getTabs(activeModule, user).find(([key]) => key === activeTab)?.[1] || "";
+  const activeGroupLabel = KY_NAV_GROUPS.find((entry) => entry.keys.includes(activeModule?.key))?.title || "";
+  const breadcrumbs = activeModule?.key === "ana-sayfa" ? ["Ana Sayfa"] : breadcrumbTitles(activeGroupLabel, activeModule?.label, activeTabLabel);
   const { visible: visibleWorkspaceTabs, overflow: overflowWorkspaceTabs } = partitionWorkspaceTabs(tabs, activeTabId);
   const activeCompanyName = companies.find((item) => item.slug === activeCompanySlug)?.name || "Firma seçilmedi";
   const profileImageUrl = String(
@@ -814,7 +817,7 @@ export default function AppShellV3({
             {visibleWorkspaceTabs.map((tab) => (
               <button type="button" key={tab.id} data-module={tab.moduleKey} style={tabStyle(tab.tabKey)} className={activeTabId === tab.id ? "active" : ""} onClick={() => onActivateWorkspaceTab(tab)}>
                 <ErpIcon name={tabVisualIcon(tab.tabKey, moduleVisual(modules.find((item) => item.key === tab.moduleKey)).icon)} size={14} />
-                <span>{tab.label}</span>
+                <span title={workspaceTabTitle(modules.find((item) => item.key === tab.moduleKey)?.label, tab.label)}>{workspaceTabTitle(modules.find((item) => item.key === tab.moduleKey)?.label, tab.label)}</span>
                 {tabs.length > 1 ? (
                   <i role="button" tabIndex={0} aria-label="Sekmeyi kapat" onClick={(event) => { event.stopPropagation(); onCloseWorkspaceTab(tab.id); }} onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onCloseWorkspaceTab(tab.id); }
@@ -833,7 +836,7 @@ export default function AppShellV3({
                   <div className="shell-v3-tabs-overflow-item" key={tab.id}>
                     <button type="button" className={activeTabId === tab.id ? "active" : ""} onClick={(event) => { onActivateWorkspaceTab(tab); event.currentTarget.closest("details").open = false; }}>
                       <ErpIcon name={tabVisualIcon(tab.tabKey, moduleVisual(modules.find((item) => item.key === tab.moduleKey)).icon)} size={14} />
-                      <span>{tab.label}</span>
+                      <span title={workspaceTabTitle(modules.find((item) => item.key === tab.moduleKey)?.label, tab.label)}>{workspaceTabTitle(modules.find((item) => item.key === tab.moduleKey)?.label, tab.label)}</span>
                     </button>
                     <button type="button" className="shell-v3-tabs-overflow-close" title="Sekmeyi kapat" aria-label={`${tab.label} sekmesini kapat`} onClick={() => onCloseWorkspaceTab(tab.id)}><X size={14} /></button>
                   </div>
@@ -846,7 +849,7 @@ export default function AppShellV3({
           </button>
         </div>
 
-        <div className="shell-v3-crumb"><span className="shell-v3-crumb-icon"><ErpIcon name={tabVisualIcon(activeTab, activeModuleVisual.icon)} size={15} /></span><span className="shell-v3-crumb-module">{activeModule?.label}</span><span>/</span>{activeTabLabel ? <strong>{activeTabLabel}</strong> : <strong>Genel Bakış</strong>}</div>
+        <div className="shell-v3-crumb"><span className="shell-v3-crumb-icon"><ErpIcon name={tabVisualIcon(activeTab, activeModuleVisual.icon)} size={15} /></span>{breadcrumbs.map((label,index)=><span key={index} className={index===breadcrumbs.length-1?"shell-v3-crumb-current":"shell-v3-crumb-module"}>{index>0 ? <span className="shell-v3-crumb-separator"> / </span> : null}{label}</span>)}</div>
         <section className="shell-v3-workspace">{children}</section>
         <footer className="shell-v3-status"><span>KY ERP</span><span>{ownerUser ? "Kapsam: Uygulama Sahibi · Tüm Sistem" : `Firma: ${activeCompanyName}`}</span><span className="ok">Güvenli çalışma alanı</span></footer>
       </main>
