@@ -1384,6 +1384,17 @@ async function createModel(c: Context<AppEnv>, body: Row) {
   const center = await buildCenter(c, slug);
   const companyId = text(first(body.companyId, body.firmaId));
   const orderNo = text(first(body.orderNo, body.siparisNo));
+  const designModelId = text(body.designModelId);
+  const requestedId = text(first(body.designModelId, body.modelId, body.id));
+  // Desen kanonik model ID'si her zaman isim benzerliğinden üstündür.
+  const sameId = requestedId && center.cards.find((card) => !card.isVirtual && card.id === requestedId);
+  if (sameId) {
+    if (designModelId && ((sameId.companyId && companyId && sameId.companyId !== companyId) ||
+      normalized(sameId.modelName) !== normalized(modelName))) {
+      throw Object.assign(new Error("Desen modeli ID'si ile kayıtlı üretim kartının adı/firma bağı farklı; önce Desen'de eşleştirin."), { code: "CANONICAL_MODEL_CONFLICT" });
+    }
+    return { ...sameId, duplicate: true };
+  }
   const duplicate = center.cards.find(
     (card) =>
       !card.isVirtual &&
@@ -1391,8 +1402,11 @@ async function createModel(c: Context<AppEnv>, body: Row) {
       card.companyId === companyId &&
       (!orderNo || normalized(card.orderNo) === normalized(orderNo)),
   );
+  if (duplicate && designModelId && duplicate.id !== designModelId) {
+    throw Object.assign(new Error("Aynı isimde başka bir model kimliği var. Yanlış Desen→İmalat bağlantısı oluşturulmadı."), { code: "CANONICAL_MODEL_CONFLICT" });
+  }
   if (duplicate) return { ...duplicate, duplicate: true };
-  const id = text(first(body.designModelId, body.modelId, body.id)) || crypto.randomUUID();
+  const id = requestedId || crypto.randomUUID();
   const now = new Date().toISOString();
   const company: Row = center.companies.find((row: Row) => row.id === companyId) || {};
   const regions = String(first(body.printRegions, body.printArea, body.baskiBolgesi, "Ön"))
