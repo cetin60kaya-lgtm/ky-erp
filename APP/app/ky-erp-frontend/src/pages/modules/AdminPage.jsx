@@ -25,7 +25,7 @@ function isOwnerRole(role) {
   return ["SUPER_ADMIN", "ADMIN"].includes(canonicalRole(role));
 }
 
-export default function AdminPage({ activeTab, activeMainCompany }) {
+export default function AdminPage({ activeTab, activeMainCompany, openModule }) {
   const { user } = useAuth();
   const owner = isOwnerRole(user?.role);
   const companyAdmin = canonicalRole(user?.role) === "COMPANY_ADMIN";
@@ -37,7 +37,7 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
     }
     return <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
-  if (owner) return <AdminPlatformHub activeTab={activeTab} activeMainCompany={activeMainCompany} />;
+  if (owner) return <AdminPlatformHub activeTab={activeTab} activeMainCompany={activeMainCompany} openModule={openModule} />;
 
   if (activeTab === "admin-yonetim-ozeti") {
     return <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
