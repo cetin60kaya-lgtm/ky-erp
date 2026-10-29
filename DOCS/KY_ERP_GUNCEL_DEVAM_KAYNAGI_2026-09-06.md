@@ -1,5 +1,14 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 29.10.2026 — PR #486 Tek menü, başlık, sekme ve Ana Sayfa hatası CANLI
+
+- **PR [#486](https://github.com/cetin60kaya-lgtm/ky-erp/pull/486) MERGED:** SHA `3ecf63e34aec02561ab1ac19ede890a23194d884`. Son CI [#40930522828](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40930522828) **SUCCESS**: frontend lint/test/build ve Worker typecheck/test/build.
+- **Cloudflare Pages production [#40930814034](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40930814034) SUCCESS:** deploy, canlı bundle ve Günlük Operasyon chunk smoke. Frontend yayın commit `74b1dd1d4d5a6122bf7412595b763d29e81e2849`; merge SHA atası doğrulandı (`behind_by=0`).
+- **Etkiler:** `company` eksik ikon ve fallback ile Ana Sayfa crash kökü kapandı. 6 üst grup ve 15 modül tek menü kaynağından; 13 platform yönetim işlemi gerçek URL/üst sekme ile; Firma Sahibi rolleri için ayrı doğru başlık ve menü; sekme/breadcrumb adları eşit. Sol menü 270px ve uzun adlar satır kaydırır; eski izinler, formlar ve işlemler korunur.
+- **Yalnız frontend:** Worker API, D1, migration, yedek/geri yükleme, canlı kullanıcı/şifre veya personel/veri kaydı değiştirilmedi.
+- **Saha sınırı:** CI + Pages smoke başarılı; gerçek Süper Yönetici/Firma Sahibi oturumu, PC/tablet/telefon görünümü, bütün düğmelere tıklama ve sayfa yenileme testleri bu sohbetten ayrı kanıt gerektirir.
+
+
 ## 29.10.2026 — PR #486 tek menü/başlık düzeni MERGED, Pages yayın bekleniyor
 
 - PR [#486](https://github.com/cetin60kaya-lgtm/ky-erp/pull/486) **MERGED**, SHA `3ecf63e34aec02561ab1ac19ede890a23194d884`. CI [#40930522828](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40930522828) **SUCCESS**: Frontend lint/test/build + Worker typecheck/test/build.
