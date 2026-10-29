@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CircleAlert, Factory, Plus, Save, Settings, Trash2 } from "lucide-react";
-import { getImalatMakineler, saveImalatMakine } from "../../services/imalatApi";
+import { getProductionCenterMachines, saveProductionCenterMachine } from "../../services/productionCenterApi";
 import "../modules/cleanWorkflow.css";
 import "./imalatWorkflow.css";
 import "./productionCenter.css";
@@ -20,7 +20,7 @@ function emptyMachine(index = 0) {
 function normalize(row, index) {
   return {
     id: row?.id || row?.makineNo || "",
-    makineNo: row?.makineNo || row?.no || row?.id || "",
+    makineNo: row?.machineNo || row?.makineNo || row?.no || row?.id || "",
     makineAdi: row?.makineAdi || row?.machineName || row?.ad || row?.name || "",
     gunduzMakinaci: row?.gunduzMakinaci || row?.dayOperator || row?.operator || row?.makinaci || "",
     geceMakinaci: row?.geceMakinaci || row?.nightOperator || row?.operator || row?.makinaci || "",
@@ -46,7 +46,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
     }
     setLoading(true);
     try {
-      const result = await getImalatMakineler(activeMainCompany);
+      const result = await getProductionCenterMachines(activeMainCompany);
       const next = Array.isArray(result) ? result.map(normalize) : [];
       const prepared = next.length ? next : [emptyMachine()];
       setRows(prepared);
@@ -73,6 +73,15 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
   }
 
   function removeRow(index) {
+    const row = rows[index];
+    if (!row) return;
+    if (row.id) {
+      if (!window.confirm((row.makineNo || "Makine") + " pasifleştirilsin mi? Eski üretim fişleri korunur.")) return;
+      setRows((current) => current.map((item, rowIndex) =>
+        rowIndex === index ? { ...item, isActive: false } : item));
+      setMessage("Makine pasif olarak işaretlendi. Kalıcı olması için Değişiklikleri Kaydet'e basın.");
+      return;
+    }
     setRows((current) => current.length === 1 ? [emptyMachine()] : current.filter((_, rowIndex) => rowIndex !== index));
   }
 
@@ -86,7 +95,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
       geceMakinaci: String(row.geceMakinaci || row.gunduzMakinaci || "").trim(),
       sortOrder: index + 1,
     }));
-    const incomplete = prepared.find((row) => !row.makineNo || !row.makineAdi || !row.gunduzMakinaci);
+    const incomplete = prepared.find((row) => !row.makineNo || (row.isActive !== false && (!row.makineAdi || !row.gunduzMakinaci)));
     if (incomplete) {
       setMessage("Makine no, makine adı ve gündüz makinacısı zorunludur.");
       return;
@@ -100,7 +109,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
     setSaving(true);
     const saved = [];
     try {
-      for (const row of prepared) saved.push(await saveImalatMakine(activeMainCompany, row));
+      for (const row of prepared) saved.push(await saveProductionCenterMachine(activeMainCompany, { id: row.id, machineNo: row.makineNo, machineName: row.makineAdi, dayOperator: row.gunduzMakinaci, nightOperator: row.geceMakinaci, isActive: row.isActive, sortOrder: row.sortOrder }));
       const confirmedRows = saved.map((row, index) => normalize(row?.data || row, index));
       setRows(confirmedRows);
       savedSnapshot.current = confirmedRows.map((row) => ({ ...row }));
@@ -142,7 +151,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
               <label><span>Gündüz Makinacısı *</span><input disabled={saving} value={row.gunduzMakinaci} onChange={(event) => update(index, "gunduzMakinaci", event.target.value)} placeholder="Ad soyad" /></label>
               <label><span>Gece Makinacısı</span><input disabled={saving} value={row.geceMakinaci} onChange={(event) => update(index, "geceMakinaci", event.target.value)} placeholder="Boşsa gündüz kullanılır" /></label>
               <label><span>Durum</span><select disabled={saving} value={row.isActive === false ? "passive" : "active"} onChange={(event) => update(index, "isActive", event.target.value === "active")}><option value="active">Aktif</option><option value="passive">Pasif</option></select></label>
-              <button className="iw-btn danger" type="button" onClick={() => removeRow(index)} disabled={saving || Boolean(row.id)} title={row.id ? "Kayıtlı makine silinmez; pasife alınır." : "Satırı kaldır"}><Trash2 size={15} /> Kaldır</button>
+              <button className="iw-btn danger" type="button" onClick={() => removeRow(index)} disabled={saving || (Boolean(row.id) && row.isActive === false)} title={row.id ? "Kayıtlı makine pasife alınır; eski fişler korunur." : "Yeni satırı kaldır"}><Trash2 size={15} /> {row.id ? "Pasifleştir" : "Kaldır"}</button>
             </article>
           ))}
           <div className="production-settings-footer"><span>Değişiklikler toplu kaydedilir. Gece makinacısı boşsa gündüz makinacısı kullanılır.</span><button className="iw-btn primary" type="button" onClick={saveAll} disabled={saving || loading || !rows.length || !(activeMainCompany?.slug || activeMainCompany?.id)}><Save size={16} /> {saving ? "Kaydediliyor..." : "Tüm Ayarları Kaydet"}</button></div>

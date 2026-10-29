@@ -51,7 +51,8 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule,
   useEffect(() => {
     const refreshFromCanonicalDocument = () => setRefreshKey((value) => value + 1);
     window.addEventListener("kyerp:accounting-refresh", refreshFromCanonicalDocument);
-    return () => window.removeEventListener("kyerp:accounting-refresh", refreshFromCanonicalDocument);
+    window.addEventListener("kyerp:production-refresh", refreshFromCanonicalDocument);
+    return () => { window.removeEventListener("kyerp:accounting-refresh", refreshFromCanonicalDocument); window.removeEventListener("kyerp:production-refresh", refreshFromCanonicalDocument); };
   }, []);
 
   useEffect(() => {

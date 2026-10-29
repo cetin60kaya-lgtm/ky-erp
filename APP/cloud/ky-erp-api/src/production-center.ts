@@ -413,6 +413,7 @@ function mapProductionRow(row: Row): Row {
     requestId: text(first(raw.requestId, row.request_id)),
     clientId: text(first(raw.clientId, row.client_id)),
     createdAt: isoDateTime(first(row.created_at, raw.createdAt, row.production_date)),
+    updatedAt: isoDateTime(first(row.updated_at, raw.updatedAt, row.created_at)),
     raw,
   };
 }
@@ -525,19 +526,29 @@ function resolveModel(
   models: CenterModel[],
   explicitLinks: Map<string, string>,
 ): { model?: CenterModel; status: "EXACT" | "AMBIGUOUS" | "UNMATCHED" } {
+  const companyId = text(seed.companyId);
+  const companyName = normalized(seed.companyName);
   const explicitId = text(seed.modelId || explicitLinks.get(text(seed.sourceId)));
   if (explicitId) {
     const direct = models.find((model) => model.id === explicitId);
-    if (direct) return { model: direct, status: "EXACT" };
+    // Tenant üst sınırı ayrıca var; burada farklı müşteri carilerine yanlış fatura bağlama.
+    if (direct && (!companyId || !direct.companyId || direct.companyId === companyId)) {
+      return { model: direct, status: "EXACT" };
+    }
+    if (direct) return { status: "UNMATCHED" };
   }
   const wantedName = normalized(seed.modelName);
   if (!wantedName) return { status: "UNMATCHED" };
   let candidates = models.filter((model) => normalized(model.modelName) === wantedName);
-  const companyId = text(seed.companyId);
   if (companyId) {
-    const scoped = candidates.filter((model) => model.companyId === companyId);
-    if (scoped.length) candidates = scoped;
+    candidates = candidates.filter((model) => model.companyId === companyId);
+  } else if (companyName) {
+    candidates = candidates.filter((model) => normalized(model.companyName) === companyName);
+  } else {
+    // Kaynak firmanın kimliği yoksa bilinen başka firmanın modeline isimle bağlama.
+    candidates = candidates.filter((model) => !model.companyId);
   }
+  if (!candidates.length) return { status: "UNMATCHED" };
   const orderNo = normalized(seed.orderNo || seed.dispatchNo);
   if (orderNo) {
     const scoped = candidates.filter(
@@ -545,6 +556,9 @@ function resolveModel(
         normalized(model.orderNo) === orderNo || normalized(model.defaultDispatchNo) === orderNo,
     );
     if (scoped.length) candidates = scoped;
+    else if (candidates.some((model) => model.orderNo || model.defaultDispatchNo)) {
+      return { status: "UNMATCHED" };
+    }
   }
   if (candidates.length === 1) return { model: candidates[0], status: "EXACT" };
   if (candidates.length > 1) return { status: "AMBIGUOUS" };
@@ -791,12 +805,14 @@ async function loadDocuments(c: Context<AppEnv>, slug: string, companyById: Map<
 }
 
 async function loadProductionRows(c: Context<AppEnv>, slug: string): Promise<Row[]> {
-  const rows = (await tableRows(c, "production_records", slug)).map(mapProductionRow);
+  const rows = (await tableRows(c, "production_records", slug))
+    .filter((row) => !objectValue(row.raw).deletedAt)
+    .map(mapProductionRow);
   const jsonRows: Row[] = [];
   for (const scope of ["PRODUCTION_CENTER_ENTRY", "uretim.kayitlar", "URETIM_ENTRY"]) {
     jsonRows.push(...(await jsonStoreList(c, scope, slug)).map(mapProductionRow));
   }
-  return uniqueById([...rows, ...jsonRows]);
+  return uniqueById([...rows, ...jsonRows].filter((row) => !objectValue(row.raw).deletedAt));
 }
 
 async function loadMachines(c: Context<AppEnv>, slug: string): Promise<Row[]> {
@@ -1055,9 +1071,7 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
     if (printDefectQty + fabricDefectQty + testQty > grossQty) {
       errors.push("Sakat ve test toplamı brüt üretimi aşamaz.");
     }
-    if (!printArea) errors.push("Baskı bölgesi zorunludur.");
-    if (!text(entry.machineId || entry.machineName || entry.makineNo)) errors.push("Makine zorunludur.");
-    if (!text(entry.operatorName || entry.operatorId || entry.makinaci)) errors.push("Makinacı zorunludur.");
+    if (!printArea && body.historicalImport !== true) errors.push("Baskı bölgesi zorunludur.");
     if (card && card.incomingQty > 0 && !body.allowOverProduction) {
       const operation = (card.operationRows || []).find(
         (row: Row) => normalized(row.region) === normalized(printArea),
@@ -1077,9 +1091,9 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
       modelName: card?.modelName,
       companyId: card?.companyId,
       companyName: card?.companyName,
-      dispatchNo: text(first(entry.dispatchNo, entry.irsaliyeNo, card?.defaultDispatchNo)),
-      orderNo: text(first(entry.orderNo, entry.siparisNo, card?.orderNo)),
-      batchNo: text(first(entry.batchNo, entry.partiNo, entry.dispatchNo, card?.defaultDispatchNo)) || "GENEL",
+      dispatchNo: body.historicalImport === true ? "" : text(first(entry.dispatchNo, entry.irsaliyeNo, card?.defaultDispatchNo)),
+      orderNo: body.historicalImport === true ? "" : text(first(entry.orderNo, entry.siparisNo, card?.orderNo)),
+      batchNo: body.historicalImport === true ? "GENEL" : (text(first(entry.batchNo, entry.partiNo, entry.dispatchNo, card?.defaultDispatchNo)) || "GENEL"),
       printRegion: printArea,
       quantity: grossQty,
       printDefectQty,
@@ -1091,7 +1105,7 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
       shift: text(first(entry.shift, entry.vardiya)),
       operatorName: text(first(entry.operatorName, entry.operatorId, entry.makinaci)),
       note: text(first(entry.note, entry.not)),
-      source: "PRODUCTION_CENTER",
+      source: body.historicalImport === true ? "HISTORICAL_EXCEL" : "PRODUCTION_CENTER",
       createdAt: now,
     };
     const rawPayload = {
@@ -1138,6 +1152,231 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
   return result;
 }
 
+
+function productionPatchNumber(value: unknown, fallback: number): number {
+  if (value === undefined || value === null || value === "") return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+// Düzenleme/silme fiziksel SQL DELETE değildir: geçmişin aslı ve model bağı korunur.
+// Üretim değişikliği kendiliğinden fatura, cari, KDV veya irsaliye kaydı oluşturmaz.
+async function maintainProductionEntry(
+  c: Context<AppEnv>, entryId: string, body: Row, action: "UPDATE" | "ARCHIVE",
+) {
+  const slug = companySlug(c, body);
+  const current = await c.env.DB.prepare(
+    "SELECT * FROM production_records WHERE id=? AND main_company_slug=? LIMIT 1",
+  ).bind(entryId, slug).first<Row>();
+  if (!current || objectValue(current.raw).deletedAt) {
+    return { status: 404, code: "PRODUCTION_ENTRY_NOT_FOUND", message: "Üretim fişi bulunamadı veya daha önce arşivlendi." };
+  }
+  const old = mapProductionRow(current);
+  const previousRaw = objectValue(current.raw);
+  const expectedAt = text(body.expectedUpdatedAt || body.updatedAt);
+  if (expectedAt && expectedAt !== text(current.updated_at)) {
+    return { status: 409, code: "PRODUCTION_STALE_EDIT", message: "Fiş başka bir işlemde değişmiş. Yenileyip tekrar deneyin." };
+  }
+  if (body.modelId != null && text(body.modelId) !== text(old.modelId)) {
+    return { status: 409, code: "PRODUCTION_MODEL_CHANGE_REQUIRES_RELINK", message: "Model bağlantısını fiş düzenlemede sessizce değiştiremezsiniz." };
+  }
+  const now = new Date().toISOString();
+  const changes = Array.isArray(previousRaw.revisions) ? previousRaw.revisions : [];
+  const history = [...changes.slice(-49), {
+    action, at: now,
+    before: {
+      date: old.date, quantity: old.grossQty, printRegion: old.printArea,
+      printDefectQty: old.printDefectQty, fabricDefectQty: old.fabricDefectQty,
+      testQty: old.testQty, machineId: old.machineId, machineName: old.machineName,
+      operatorName: old.operatorName, shift: old.shift, dispatchNo: old.dispatchNo,
+      batchNo: old.batchNo, orderNo: old.orderNo, note: old.note,
+    },
+  }];
+  if (action === "ARCHIVE") {
+    const raw = { ...previousRaw, deletedAt: now, revisions: history };
+    const result = await c.env.DB.prepare(
+      "UPDATE production_records SET raw=?,updated_at=? WHERE id=? AND main_company_slug=? AND updated_at IS ?",
+    ).bind(JSON.stringify(raw), now, entryId, slug, current.updated_at ?? null).run();
+    if (!result.meta?.changes) return { status: 409, code: "PRODUCTION_STALE_EDIT", message: "Fiş değişti. Yenileyip tekrar deneyin." };
+    return { status: 200, data: { id: entryId, archived: true, updatedAt: now } };
+  }
+  const gross = productionPatchNumber(first(body.quantity, body.adet, body.uretimAdedi), old.grossQty);
+  const printDefect = productionPatchNumber(first(body.printDefectQty, body.baskiHatasiAdet), old.printDefectQty);
+  const fabricDefect = productionPatchNumber(first(body.fabricDefectQty, body.kumasHatasiAdet), old.fabricDefectQty);
+  const testQty = productionPatchNumber(first(body.testQty, body.testAdedi), old.testQty);
+  if (![gross, printDefect, fabricDefect, testQty].every(Number.isFinite) ||
+      gross <= 0 || [printDefect, fabricDefect, testQty].some((n) => n < 0) ||
+      printDefect + fabricDefect + testQty > gross) {
+    return { status: 400, code: "PRODUCTION_QUANTITY_INVALID", message: "Adetler geçersiz: sakat ve test toplamı brüt adedi aşamaz." };
+  }
+  const date = isoDate(first(body.date, body.tarih, old.date));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date))) {
+    return { status: 400, code: "PRODUCTION_DATE_INVALID", message: "Geçerli üretim tarihi girin." };
+  }
+  const printArea = text(first(body.printRegion, body.printArea, body.baskiBolgesi, old.printArea));
+  if (!printArea) {
+    return { status: 400, code: "PRODUCTION_AREA_REQUIRED", message: "Baskı bölgesi zorunludur." };
+  }
+  const optionalText = (keys: string[], fallback: string) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) return text(body[key]);
+    }
+    return fallback;
+  };
+  const machineId = optionalText(["machineId", "makineNo"], old.machineId);
+  const machineName = optionalText(["machineName", "makineAdi"], old.machineName);
+  const operatorName = optionalText(["operatorName", "makinaci"], old.operatorName);
+  const shift = optionalText(["shift", "vardiya"], old.shift);
+  const dispatchNo = optionalText(["dispatchNo", "irsaliyeNo"], old.dispatchNo);
+  const batchNo = optionalText(["batchNo", "partiNo"], old.batchNo) || "GENEL";
+  const orderNo = optionalText(["orderNo", "siparisNo"], old.orderNo);
+  const note = optionalText(["note", "not"], old.note);
+  const raw = {
+    ...previousRaw, modelId: old.modelId, date, quantity: gross,
+    printDefectQty: printDefect, fabricDefectQty: fabricDefect, testQty,
+    printRegion: printArea, printArea, machineId, machineName, operatorName,
+    shift, dispatchNo, batchNo, orderNo, note, revisions: history, updatedAt: now,
+  };
+  const result = await c.env.DB.prepare(
+    "UPDATE production_records SET total_quantity=?,print_defect=?,fabric_defect=?,production_date=?,print_area=?,machine_name=?,machinist=?,shift=?,order_no=?,note=?,raw=?,updated_at=? WHERE id=? AND main_company_slug=? AND updated_at IS ?",
+  ).bind(gross, String(printDefect), String(fabricDefect), date + "T12:00:00.000Z",
+    printArea, machineName || machineId, operatorName, shift, orderNo, note,
+    JSON.stringify(raw), now, entryId, slug, current.updated_at ?? null).run();
+  if (!result.meta?.changes) {
+    return { status: 409, code: "PRODUCTION_STALE_EDIT", message: "Fiş değişti. Yenileyip tekrar deneyin." };
+  }
+  return { status: 200, data: mapProductionRow({
+    ...current, total_quantity: gross, print_defect: String(printDefect),
+    fabric_defect: String(fabricDefect), production_date: date + "T12:00:00.000Z",
+    print_area: printArea, machine_name: machineName || machineId, machinist: operatorName,
+    shift, order_no: orderNo, note, raw, updated_at: now,
+  }) };
+}
+
+
+function historicalEntryKey(row: Row): string {
+  const raw = objectValue(row.raw);
+  return [
+    normalized(row.modelName), text(row.date).slice(0, 10),
+    numberValue(row.quantity ?? row.grossQty),
+    normalized(row.printRegion ?? row.printArea),
+    normalized(row.machineNo ?? row.machineId),
+    normalized(row.shift), normalized(row.ground ?? raw.ground),
+    numberValue(row.printDefectQty), numberValue(row.fabricDefectQty),
+    normalized(row.operatorName),
+  ].join("|");
+}
+
+async function historicModelId(slug: string, name: string, year: string): Promise<string> {
+  const input = new TextEncoder().encode([slug, year, normalized(name)].join("|"));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", input));
+  return "KYHIST:" + [...digest].map((n) => n.toString(16).padStart(2, "0")).join("");
+}
+
+async function importProductionHistory(c: Context<AppEnv>, body: Row) {
+  // Upload only user-approved ten production columns, never assistant/total/invoice/cari fields.
+  const slug = companySlug(c);
+  const sourceRows = Array.isArray(body.rows) ? body.rows : [];
+  const preview = body.preview === true;
+  const requestId = text(body.requestId);
+  if (!requestId || requestId.length > 160 || sourceRows.length < 1 || sourceRows.length > (preview ? 1000 : 60)) {
+    return { status: 400, code: "PRODUCTION_HISTORY_REQUEST_INVALID", message: "İstek kimliği veya satır sayısı geçersiz (önizleme en fazla 1000, aktarım en fazla 60)." };
+  }
+  const center = await buildCenter(c, slug);
+  const byName = new Map<string, Row[]>();
+  const existingFingerprints = new Set<string>();
+  for (const card of center.cards) {
+    if (card.isVirtual) continue;
+    const key = normalized(card.modelName);
+    if (!key) continue;
+    const list = byName.get(key) || [];
+    list.push(card);
+    byName.set(key, list);
+    for (const entry of card.productionEntries || []) {
+      existingFingerprints.add(historicalEntryKey({ ...entry, modelName: card.modelName }));
+    }
+  }
+  const seenInRequest = new Set<string>();
+  const eligible: Row[] = [];
+  const skipped: Row[] = [];
+  const newModels = new Map<string, Row>();
+  for (const [index, source] of sourceRows.entries()) {
+    const row = objectValue(source);
+    const modelName = text(row.modelName);
+    const date = text(row.date);
+    const quantity = Number(row.quantity);
+    const printDefectQty = Number(row.printDefectQty ?? 0);
+    const fabricDefectQty = Number(row.fabricDefectQty ?? 0);
+    const clientId = text(row.clientId) || String(index + 1);
+    if (!modelName || modelName.length > 240 || !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      !Number.isFinite(Date.parse(date)) || !Number.isFinite(quantity) || quantity <= 0 ||
+      ![printDefectQty, fabricDefectQty].every((n) => Number.isFinite(n) && n >= 0) ||
+      printDefectQty + fabricDefectQty > quantity) {
+      skipped.push({ clientId, reason: "INVALID_FIELDS" }); continue;
+    }
+    const fields: Row = {
+      clientId, modelName, date, quantity,
+      shift: text(row.shift), machineNo: text(row.machineNo), ground: text(row.ground),
+      printRegion: text(row.printRegion), printDefectQty, fabricDefectQty,
+      operatorName: text(row.operatorName),
+    };
+    const fingerprint = historicalEntryKey(fields);
+    if (seenInRequest.has(fingerprint) || existingFingerprints.has(fingerprint)) {
+      skipped.push({ clientId, reason: "EXACT_DUPLICATE" }); continue;
+    }
+    seenInRequest.add(fingerprint);
+    const matches = byName.get(normalized(modelName)) || [];
+    if (matches.length > 1) {
+      skipped.push({ clientId, reason: "AMBIGUOUS_MODEL" }); continue;
+    }
+    if (matches.length === 1) {
+      fields.modelId = matches[0].id;
+    } else {
+      const year = date.slice(0, 4);
+      const id = await historicModelId(slug, modelName, year);
+      fields.modelId = id;
+      if (!newModels.has(id)) newModels.set(id, { id, modelName, year });
+    }
+    eligible.push(fields);
+  }
+  if (preview) return {
+    status: 200, data: {
+      preview: true, inputCount: sourceRows.length, eligibleCount: eligible.length,
+      skippedCount: skipped.length, skipped, newModelCount: newModels.size,
+      matchedCount: eligible.length - [...eligible].filter((v) => newModels.has(text(v.modelId))).length,
+    },
+  };
+  // D1 is the only write destination. Never transfer the spreadsheet to GitHub.
+  if (newModels.size) {
+    if (!(await tableExists(c, "model_records"))) {
+      return { status: 409, code: "PRODUCTION_MODEL_SCHEMA_REQUIRED", message: "Model tablosu hazır değil. Geçmiş veri güvenli biçimde aktarılmadı." };
+    }
+    const now = new Date().toISOString();
+    const statements = [...newModels.values()].map((model) => c.env.DB.prepare(
+      "INSERT OR IGNORE INTO model_records (id, main_company_slug, model_name, status, raw, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+    ).bind(model.id, slug, model.modelName, "ACTIVE",
+      JSON.stringify({ modelName: model.modelName, source: "HISTORICAL_EXCEL", importYear: model.year, companyId: "", expectedQty: 0, printRegions: [] }),
+      now, now));
+    await c.env.DB.batch(statements);
+  }
+  const entries = eligible.map((row) => ({
+    clientId: row.clientId, modelId: row.modelId, date: row.date,
+    quantity: row.quantity, shift: row.shift, machineId: row.machineNo,
+    machineName: row.machineNo, ground: row.ground, printRegion: row.printRegion,
+    printDefectQty: row.printDefectQty, fabricDefectQty: row.fabricDefectQty,
+    operatorName: row.operatorName, note: "",
+  }));
+  const posted = entries.length ? await saveProductionBatch(c, {
+    mainCompanySlug: slug, entries, requestId, historicalImport: true,
+    allowOverProduction: true,
+  }) : { successCount: 0, failedCount: 0, success: [], failed: [] };
+  return { status: posted.failedCount ? 207 : 200, data: {
+    preview: false, inputCount: sourceRows.length, eligibleCount: eligible.length,
+    skippedCount: skipped.length, skipped, newModelCount: newModels.size,
+    successCount: posted.successCount, failedCount: posted.failedCount, failed: posted.failed,
+  } };
+}
+
 async function createModel(c: Context<AppEnv>, body: Row) {
   const slug = companySlug(c, body);
   const modelName = text(first(body.modelName, body.modelAdi));
@@ -1145,15 +1384,29 @@ async function createModel(c: Context<AppEnv>, body: Row) {
   const center = await buildCenter(c, slug);
   const companyId = text(first(body.companyId, body.firmaId));
   const orderNo = text(first(body.orderNo, body.siparisNo));
+  const designModelId = text(body.designModelId);
+  const requestedId = text(first(body.designModelId, body.modelId, body.id));
+  // Desen kanonik model ID'si her zaman isim benzerliğinden üstündür.
+  const sameId = requestedId && center.cards.find((card) => !card.isVirtual && card.id === requestedId);
+  if (sameId) {
+    if (designModelId && ((sameId.companyId && companyId && sameId.companyId !== companyId) ||
+      normalized(sameId.modelName) !== normalized(modelName))) {
+      throw Object.assign(new Error("Desen modeli ID'si ile kayıtlı üretim kartının adı/firma bağı farklı; önce Desen'de eşleştirin."), { code: "CANONICAL_MODEL_CONFLICT" });
+    }
+    return { ...sameId, duplicate: true };
+  }
   const duplicate = center.cards.find(
     (card) =>
       !card.isVirtual &&
       normalized(card.modelName) === normalized(modelName) &&
-      (!companyId || card.companyId === companyId) &&
+      card.companyId === companyId &&
       (!orderNo || normalized(card.orderNo) === normalized(orderNo)),
   );
+  if (duplicate && designModelId && duplicate.id !== designModelId) {
+    throw Object.assign(new Error("Aynı isimde başka bir model kimliği var. Yanlış Desen→İmalat bağlantısı oluşturulmadı."), { code: "CANONICAL_MODEL_CONFLICT" });
+  }
   if (duplicate) return { ...duplicate, duplicate: true };
-  const id = text(first(body.designModelId, body.modelId, body.id)) || crypto.randomUUID();
+  const id = requestedId || crypto.randomUUID();
   const now = new Date().toISOString();
   const company: Row = center.companies.find((row: Row) => row.id === companyId) || {};
   const regions = String(first(body.printRegions, body.printArea, body.baskiBolgesi, "Ön"))
@@ -1173,8 +1426,10 @@ async function createModel(c: Context<AppEnv>, body: Row) {
     createdAt: now,
   };
   let storage = "model_records";
-  try {
-    if (!(await tableExists(c, "model_records"))) throw new Error("model_records yok");
+  // Var olan D1 tablosundaki yazma/unique hatasını JSON yedek veriye gizlice aktarma.
+  // Yalnız tablo bulunmuyorsa tarihsel uyumluluk kaynağı kullanılabilir.
+  const hasModelRecords = await tableExists(c, "model_records");
+  if (hasModelRecords) {
     await insertDynamic(c, "model_records", {
       id,
       main_company_slug: slug,
@@ -1194,7 +1449,7 @@ async function createModel(c: Context<AppEnv>, body: Row) {
       created_at: now,
       updated_at: now,
     });
-  } catch {
+  } else {
     storage = "json_store";
     await jsonStorePut(c, "PRODUCTION_CENTER_MODEL", id, { id, ...raw }, slug);
   }
@@ -1218,6 +1473,65 @@ async function createModel(c: Context<AppEnv>, body: Row) {
   return { id, modelId: id, storage, ...raw };
 }
 
+// İmalat planı değişebilir; Desen'deki kanonik model kimliği, resmî irsaliye,
+// KDV, cari ve kesinleşmiş fatura bu işlemde ASLA yeniden yazılmaz.
+async function updateProductionModelPlan(c: Context<AppEnv>, modelId: string, body: Row) {
+  const slug = companySlug(c);
+  const existing = await c.env.DB.prepare(
+    "SELECT * FROM model_records WHERE id=? AND main_company_slug=? LIMIT 1",
+  ).bind(modelId, slug).first<Row>();
+  if (!existing) return { status: 404, code: "MODEL_PLAN_NOT_FOUND", message: "Yalnız kalıcı model kartının imalat planı düzenlenebilir." };
+  const expectedAt = text(body.expectedUpdatedAt);
+  if (!expectedAt) return { status: 428, code: "MODEL_PLAN_VERSION_REQUIRED", message: "Model kartını yenileyip tekrar deneyin." };
+  if (expectedAt !== text(existing.updated_at)) {
+    return { status: 409, code: "MODEL_PLAN_STALE", message: "Model başka oturumda değişti. Önce ekranı yenileyin." };
+  }
+  // Model adı, modelId, firma, tasarım, baskı bölgeleri ve belge ilişkileri kanonik kaynaktan yönetilir.
+  const disallowed = ["modelName", "modelId", "designModelId", "companyId", "companyName", "printRegions", "dispatchNo"];
+  if (disallowed.some((field) => Object.prototype.hasOwnProperty.call(body, field))) {
+    return { status: 400, code: "MODEL_CANONICAL_FIELDS_LOCKED", message: "Model kimliği, firma ve baskı bölgesi Desen Havuzu / belge bağlantısından yönetilir." };
+  }
+  const raw = objectValue(existing.raw);
+  const incomingQty = body.expectedQty === undefined ? numberValue(first(existing.incoming_qty, raw.expectedQty)) : Number(body.expectedQty);
+  const orderNo = body.orderNo === undefined ? text(existing.order_no) : text(body.orderNo);
+  const groundColor = body.groundColor === undefined ? text(first(existing.ground_color, raw.groundColor)) : text(body.groundColor);
+  if (!Number.isFinite(incomingQty) || incomingQty < 0 || incomingQty > 100000000 ||
+      orderNo.length > 120 || groundColor.length > 100) {
+    return { status: 400, code: "MODEL_PLAN_INVALID", message: "Hedef adet, sipariş no veya zemin rengi geçersiz." };
+  }
+  if (orderNo !== text(existing.order_no)) {
+    const center = await buildCenter(c, slug);
+    const card = center.cards.find((item) => text(item.id) === modelId);
+    if (card && ((card.dispatches || []).length || (card.invoices || []).length)) {
+      return { status: 409, code: "MODEL_ORDER_DOCUMENT_LOCKED", message: "İrsaliye veya fatura bağlı modele sipariş no değişikliği yapılamaz." };
+    }
+  }
+  const now = new Date().toISOString();
+  const nextRaw = {
+    ...raw, expectedQty: incomingQty, incomingQty,
+    orderNo, groundColor, updatedAt: now,
+    productionPlanHistory: [...(Array.isArray(raw.productionPlanHistory) ? raw.productionPlanHistory.slice(-49) : []),
+      { at: now, expectedQty: numberValue(first(existing.incoming_qty, raw.expectedQty)),
+        orderNo: text(existing.order_no), groundColor: text(first(existing.ground_color, raw.groundColor)) }],
+  };
+  const columns = await tableColumns(c, "model_records");
+  const updates: Row = { raw: JSON.stringify(nextRaw), order_no: orderNo, updated_at: now };
+  if (columns.has("incoming_qty")) updates.incoming_qty = incomingQty;
+  if (columns.has("incoming_quantity")) updates.incoming_quantity = incomingQty;
+  if (columns.has("ground_color")) updates.ground_color = groundColor;
+  const values = Object.entries(updates).filter(([key]) => columns.has(key));
+  const result = await c.env.DB.prepare(
+    "UPDATE model_records SET " + values.map(([key]) => quote(key) + "=?").join(",") +
+      " WHERE id=? AND main_company_slug=? AND updated_at IS ?",
+  ).bind(...values.map(([, value]) => sqlValue(value)), modelId, slug, existing.updated_at ?? null).run();
+  if (!result.meta?.changes) {
+    return { status: 409, code: "MODEL_PLAN_STALE", message: "Kayıt eşzamanlı değişti, tekrar yükleyin." };
+  }
+  return { status: 200, data: {
+    id: modelId, modelId, expectedQty: incomingQty, orderNo, groundColor, updatedAt: now,
+  } };
+}
+
 async function saveMachine(c: Context<AppEnv>, body: Row, forcedId = "") {
   const slug = companySlug(c, body);
   const machineNo = text(first(body.machineNo, body.makineNo, body.no, forcedId));
@@ -1233,36 +1547,31 @@ async function saveMachine(c: Context<AppEnv>, body: Row, forcedId = "") {
     isActive: body.isActive !== false,
     sortOrder: numberValue(body.sortOrder) || 1,
   };
-  try {
-    if (!(await tableExists(c, "machine_shift_defaults"))) throw new Error("machine_shift_defaults yok");
+  // Var olan D1 tablosunda sürümler arası alan farklılıkları olabilir.
+  // raw JSON, makine no/makinacı/vardiya/durum için kanonik saklama alanıdır.
+  // SQL hatasını sessizce paralel json_store kaydına çevirme.
+  if (await tableExists(c, "machine_shift_defaults")) {
     const existing = (await tableRows(c, "machine_shift_defaults", slug)).find(
-      (row) => text(row.id) === id || text(row.machine_no) === machineNo,
+      (row) => text(row.id) === id ||
+        text(first(row.machine_no, objectValue(row.raw).machineNo)) === machineNo,
     );
     if (existing) {
       await updateDynamic(c, "machine_shift_defaults", text(existing.id), {
-        machine_no: machineNo,
-        machine_name: data.machineName,
-        day_operator: data.dayOperator,
-        night_operator: data.nightOperator,
-        is_active: data.isActive,
-        sort_order: data.sortOrder,
-        updated_at: now,
+        machine_id: machineNo, machine_no: machineNo, machine_name: data.machineName,
+        day_operator: data.dayOperator, night_operator: data.nightOperator,
+        is_active: data.isActive, sort_order: data.sortOrder,
+        raw: data, updated_at: now,
       }, slug);
     } else {
       await insertDynamic(c, "machine_shift_defaults", {
-        id,
-        main_company_slug: slug,
-        machine_no: machineNo,
-        machine_name: data.machineName,
-        day_operator: data.dayOperator,
-        night_operator: data.nightOperator,
-        is_active: data.isActive,
-        sort_order: data.sortOrder,
-        created_at: now,
-        updated_at: now,
+        id, main_company_slug: slug, machine_id: machineNo,
+        machine_no: machineNo, machine_name: data.machineName,
+        day_operator: data.dayOperator, night_operator: data.nightOperator,
+        is_active: data.isActive, sort_order: data.sortOrder,
+        raw: data, created_at: now, updated_at: now,
       });
     }
-  } catch {
+  } else {
     await jsonStorePut(c, "PRODUCTION_MACHINE", id, data, slug);
   }
   return data;
@@ -1331,7 +1640,7 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
           modelImageUrl: card.imageUrl,
           isVirtual: card.isVirtual,
         })),
-        machines: center.machines,
+        machines: center.machines.filter((machine: Row) => machine.isActive !== false),
         operators: [...new Set(center.machines.flatMap((machine: Row) => [machine.dayOperator, machine.nightOperator]).filter(Boolean))].map((name) => ({ id: name, name })),
         companies: center.companies,
       },
@@ -1362,6 +1671,19 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
     return c.json({ ok: true, success: true, data: rows });
   });
 
+  app.post("/api/production-center/history-import", async (c) => {
+    const body = await requestBody(c);
+    try {
+      const result = await importProductionHistory(c, body);
+      return "code" in result
+        ? c.json(jsonError(String(result.code), String(result.message)), result.status as 400 | 409)
+        : c.json({ ok: true, success: true, data: result.data }, result.status as 200 | 207);
+    } catch (error) {
+      return c.json(jsonError("PRODUCTION_HISTORY_IMPORT_FAILED",
+        error instanceof Error ? error.message : String(error)), 500);
+    }
+  });
+
   app.post("/api/production-center/entries/bulk", async (c) => {
     const body = await requestBody(c);
     const result = await saveProductionBatch(c, body);
@@ -1380,6 +1702,30 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
       : c.json({ ok: true, success: true, data: result.success[0] }, 201);
   });
 
+  app.patch("/api/production-center/entries/:id", async (c) => {
+    const body = await requestBody(c);
+    try {
+      const result = await maintainProductionEntry(c, c.req.param("id"), body, "UPDATE");
+      return "code" in result
+        ? c.json(jsonError(String(result.code || "PRODUCTION_MAINTENANCE_REJECTED"), String(result.message || "İşlem reddedildi.")), result.status as 400 | 404 | 409)
+        : c.json({ ok: true, success: true, data: result.data }, 200);
+    } catch (error) {
+      return c.json(jsonError("PRODUCTION_EDIT_FAILED", error instanceof Error ? error.message : String(error)), 500);
+    }
+  });
+
+  app.delete("/api/production-center/entries/:id", async (c) => {
+    const body = await requestBody(c);
+    try {
+      const result = await maintainProductionEntry(c, c.req.param("id"), body, "ARCHIVE");
+      return "code" in result
+        ? c.json(jsonError(String(result.code || "PRODUCTION_MAINTENANCE_REJECTED"), String(result.message || "İşlem reddedildi.")), result.status as 400 | 404 | 409)
+        : c.json({ ok: true, success: true, data: result.data }, 200);
+    } catch (error) {
+      return c.json(jsonError("PRODUCTION_ARCHIVE_FAILED", error instanceof Error ? error.message : String(error)), 500);
+    }
+  });
+
   app.post("/api/production-center/models", async (c) => {
     const body = await requestBody(c);
     try {
@@ -1390,6 +1736,19 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
         jsonError("MODEL_CREATE_FAILED", error instanceof Error ? error.message : String(error)),
         400,
       );
+    }
+  });
+
+  app.put("/api/production-center/models/:id", async (c) => {
+    const body = await requestBody(c);
+    try {
+      const result = await updateProductionModelPlan(c, c.req.param("id"), body);
+      return "code" in result
+        ? c.json(jsonError(String(result.code), String(result.message)), result.status as 400 | 404 | 409 | 428)
+        : c.json({ ok: true, success: true, data: result.data }, 200);
+    } catch (error) {
+      return c.json(jsonError("MODEL_PLAN_UPDATE_FAILED",
+        error instanceof Error ? error.message : String(error)), 500);
     }
   });
 

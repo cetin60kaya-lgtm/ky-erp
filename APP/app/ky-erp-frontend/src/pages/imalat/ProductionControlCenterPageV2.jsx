@@ -5,6 +5,7 @@ import {
   CircleAlert,
   CirclePlus,
   FileCheck2,
+  FileSpreadsheet,
   FileText,
   History,
   ImageIcon,
@@ -26,11 +27,13 @@ import {
   getProductionCenterDictionaries,
   getProductionCenterModel,
   updateProductionCenterEntry,
+  updateProductionCenterModel,
 } from "../../services/productionCenterApi";
 import { getDesignModels } from "../../services/desenWorkflowApi";
 import { assetUrl } from "../desen/DesenWorkflowShared";
 import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import ProductionSmartEntryDrawer from "./ProductionSmartEntryDrawer";
+import ProductionHistoryImportDrawer from "./ProductionHistoryImportDrawer";
 import "./productionControlCenterV2.css";
 
 const PAGE_SIZE = 100;
@@ -166,6 +169,7 @@ function defaultEntry(model, dictionaries, source = null, preferences = {}) {
     : dictionaries?.machines?.find((item) => machineId(item) === preferredMachineId) || firstMachine;
   return {
     id: source?.id || "",
+    updatedAt: source?.updatedAt || "",
     requestId: source?.requestId || crypto.randomUUID(),
     modelId: model?.id || source?.modelId || "",
     date: source?.date || today(),
@@ -197,7 +201,10 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
   const [page, setPage] = useState(1);
   const [designOpen, setDesignOpen] = useState(false);
   const [smartOpen, setSmartOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
+  const [planDraft, setPlanDraft] = useState({ modelId: "", modelName: "", expectedQty: "", orderNo: "", groundColor: "", expectedUpdatedAt: "" });
   const [modelDraft, setModelDraft] = useState(defaultModelDraft());
   const [detail, setDetail] = useState(null);
   const [entryOpen, setEntryOpen] = useState(false);
@@ -284,6 +291,13 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
 
   const summary = center.summary || {};
 
+  // e-Belge'de irsaliye veya fatura değişirse üretim / kalan / faturalanan miktar güncel kalır.
+  useEffect(() => {
+    const refresh = () => { void load(); };
+    window.addEventListener("kyerp:accounting-refresh", refresh);
+    return () => window.removeEventListener("kyerp:accounting-refresh", refresh);
+  }, [load]);
+
   async function openDetail(row) {
     setMessage("");
     try {
@@ -296,10 +310,6 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
 
   function openEntry(model, source = null) {
     if (!model) return;
-    if (!dictionaries.machines.length) {
-      setMessage("Önce Makine ve Vardiya Ayarları ekranından en az bir aktif makine tanımlayın.");
-      return;
-    }
     setEntry(defaultEntry(model, dictionaries, source, readProductionEntryPreferences(activeMainCompany)));
     setEntryOpen(true);
   }
@@ -314,8 +324,8 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       setMessage("Model ve sıfırdan büyük üretim adedi zorunludur.");
       return;
     }
-    if (!entry.machineId || !entry.operatorName || !entry.printRegion) {
-      setMessage("Baskı bölgesi, makine ve makinacı zorunludur.");
+    if (!entry.printRegion) {
+      setMessage("Baskı bölgesi zorunludur.");
       return;
     }
     const defects = asNumber(entry.printDefectQty) + asNumber(entry.fabricDefectQty) + asNumber(entry.testQty);
@@ -330,6 +340,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       else await createProductionCenterEntry(activeMainCompany, entry);
       setEntryOpen(false);
       setMessage(`${entry.id ? "Üretim kaydı güncellendi" : "Üretim kaydedildi"}: ${qty(entry.quantity)} adet.`);
+      window.dispatchEvent(new CustomEvent("kyerp:production-refresh", { detail: { source: "imalat", modelId: entry.modelId } }));
       await load();
       if (detail?.id === entry.modelId) {
         const full = await getProductionCenterModel(activeMainCompany, entry.modelId);
@@ -347,12 +358,53 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     if (!window.confirm(`${qty(row.grossQty)} adet ${row.printArea || "üretim"} kaydı silinsin mi?`)) return;
     try {
       await deleteProductionCenterEntry(activeMainCompany, row.id);
-      setMessage("Üretim kaydı silindi.");
+      setMessage("Üretim kaydı arşivlendi.");
+      window.dispatchEvent(new CustomEvent("kyerp:production-refresh", { detail: { source: "imalat", modelId: detail?.id || "" } }));
       await load();
       if (detail?.id) setDetail(await getProductionCenterModel(activeMainCompany, detail.id));
     } catch (error) {
       setMessage(error?.message || "Üretim kaydı silinemedi.");
     }
+  }
+
+  function openModelPlan(model) {
+    if (!model || model.isVirtual) {
+      setMessage("İşlem için kalıcı model kartı gerekiyor.");
+      return;
+    }
+    setPlanDraft({
+      modelId: model.id,
+      modelName: model.modelName || "",
+      expectedQty: String(model.expectedQty ?? model.incomingQty ?? 0),
+      orderNo: model.orderNo || "",
+      groundColor: model.groundColor || "",
+      expectedUpdatedAt: model.updatedAt || "",
+    });
+    setPlanOpen(true);
+  }
+
+  async function saveModelPlan() {
+    if (saving || !planDraft.modelId) return;
+    const expectedQty = Number(planDraft.expectedQty);
+    if (!Number.isFinite(expectedQty) || expectedQty < 0) {
+      setMessage("Hedef üretim adedi geçersiz.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateProductionCenterModel(activeMainCompany, planDraft.modelId, {
+        expectedQty, orderNo: planDraft.orderNo, groundColor: planDraft.groundColor,
+        expectedUpdatedAt: planDraft.expectedUpdatedAt,
+      });
+      setPlanOpen(false);
+      await load();
+      const full = await getProductionCenterModel(activeMainCompany, planDraft.modelId);
+      setDetail(full);
+      setMessage("Modelin imalat planı güncellendi. Desen, irsaliye ve fatura kayıtları değiştirilmedi.");
+      window.dispatchEvent(new CustomEvent("kyerp:production-refresh", { detail: { source: "imalat", modelId: planDraft.modelId } }));
+    } catch (error) {
+      setMessage(error?.message || "İmalat planı düzenlenemedi.");
+    } finally { setSaving(false); }
   }
 
   async function saveManualModel() {
@@ -375,6 +427,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       const full = await getProductionCenterModel(activeMainCompany, saved.id || saved.modelId);
       setDetail(full);
       setMessage(saved?.duplicate ? "Model zaten üretimdeydi; mevcut kayıt açıldı." : "Yeni model üretime açıldı.");
+      window.dispatchEvent(new CustomEvent("kyerp:production-refresh", { detail: { source: "imalat", modelId: saved.id || saved.modelId } }));
     } catch (error) {
       setMessage(error?.message || "Model üretime açılamadı.");
     } finally {
@@ -445,6 +498,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
           <button className="primary" type="button" onClick={() => setDesignOpen(true)}><ImageIcon size={16} /> Desenlerden Model Al</button>
           <button type="button" onClick={() => setModelOpen(true)}><CirclePlus size={16} /> Yeni Model</button>
           <button type="button" onClick={() => setSmartOpen(true)}><Zap size={16} /> Akıllı Seri Giriş</button>
+          <button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16} /> Geçmiş CSV Al</button>
         </div>
       </section>
 
@@ -505,6 +559,13 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
         </div>
       </section>
 
+      <ProductionHistoryImportDrawer
+        open={historyOpen}
+        activeMainCompany={activeMainCompany}
+        onClose={() => setHistoryOpen(false)}
+        onImported={load}
+      />
+
       <ProductionSmartEntryDrawer
         open={smartOpen}
         activeMainCompany={activeMainCompany}
@@ -538,6 +599,21 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       </Drawer>
 
       <Drawer
+        open={planOpen}
+        title="İmalat Planını Düzenle"
+        subtitle={planDraft.modelName}
+        onClose={() => setPlanOpen(false)}
+        footer={<><button type="button" onClick={() => setPlanOpen(false)}>Vazgeç</button><button className="primary" type="button" disabled={saving} onClick={saveModelPlan}><Save size={15} /> {saving ? "Kaydediliyor" : "Planı Kaydet"}</button></>}
+      >
+        <div className="pc2-form-grid two">
+          <label>Hedef üretim adedi<input type="number" min="0" value={planDraft.expectedQty} onChange={(event) => setPlanDraft((current) => ({ ...current, expectedQty: event.target.value }))} /></label>
+          <label>Sipariş no<input value={planDraft.orderNo} onChange={(event) => setPlanDraft((current) => ({ ...current, orderNo: event.target.value }))} /></label>
+          <label>Zemin rengi<input value={planDraft.groundColor} onChange={(event) => setPlanDraft((current) => ({ ...current, groundColor: event.target.value }))} /></label>
+        </div>
+        <div className="pc2-notice"><CircleAlert size={16} /> Model adı, firma ve baskı bölgeleri Desen Havuzu'ndan; belge adetleri e-Belge'den gelir. Bağlı irsaliye/faturası olan modelde sipariş numarası kilitlidir.</div>
+      </Drawer>
+
+      <Drawer
         open={entryOpen}
         title={entry.id ? "Üretim Kaydını Düzenle" : "Üretim Girişi"}
         subtitle={dictionaries.models.find((row) => row.id === entry.modelId)?.modelName || detail?.modelName || "Seçili model"}
@@ -551,8 +627,8 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
           <label>Üretim adedi *<input type="number" min="0" value={entry.quantity} onChange={(event) => setEntry((current) => ({ ...current, quantity: event.target.value }))} autoFocus /></label>
           <label>Makine<select value={entry.machineId} onChange={(event) => changeEntryMachine(event.target.value)}><option value="">Makine seçin</option>{dictionaries.machines.map((machine) => <option key={machineId(machine)} value={machineId(machine)}>{machine.machineNo || machine.no} - {machineName(machine)}</option>)}</select></label>
           <label>Vardiya<select value={entry.shift} onChange={(event) => changeShift(event.target.value)}><option>Gündüz</option><option>Gece</option></select></label>
-          <label>Makinacı<input value={entry.operatorName} readOnly title="Makine ve vardiya ayarından otomatik gelir" /></label>
-          <label>Parti / irsaliye<input value={entry.batchNo} readOnly={Boolean(entry.dispatchNo)} onChange={(event) => setEntry((current) => ({ ...current, batchNo: event.target.value }))} title={entry.dispatchNo ? "Eşleşen irsaliyeden otomatik gelir" : "İrsaliye yoksa parti bilgisini girebilirsiniz"} /></label>
+          <label>Makinacı<input value={entry.operatorName} onChange={(event) => setEntry((current) => ({ ...current, operatorName: event.target.value }))} placeholder="Bilinmiyorsa boş bırak, sonra tamamla" /></label>
+          <label>Parti / irsaliye<input value={entry.batchNo} onChange={(event) => setEntry((current) => ({ ...current, batchNo: event.target.value }))} title="Bu fişin parti etiketi; asıl irsaliye belgesi değişmez" /></label>
           <label>Baskı sakatı<input type="number" min="0" value={entry.printDefectQty} onChange={(event) => setEntry((current) => ({ ...current, printDefectQty: event.target.value }))} /></label>
           <label>Kumaş sakatı<input type="number" min="0" value={entry.fabricDefectQty} onChange={(event) => setEntry((current) => ({ ...current, fabricDefectQty: event.target.value }))} /></label>
           <label>Test<input type="number" min="0" value={entry.testQty} onChange={(event) => setEntry((current) => ({ ...current, testQty: event.target.value }))} /></label>
@@ -568,7 +644,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
         subtitle={`${detail?.companyName || "Firma bekliyor"} · ${statusLabel(detail?.status)}`}
         onClose={() => setDetail(null)}
         wide
-        footer={<><button type="button" onClick={() => setDetail(null)}>Kapat</button><button className="primary" type="button" onClick={() => openEntry(detail)}><Layers3 size={15} /> Üretim Gir</button></>}
+        footer={<><button type="button" onClick={() => setDetail(null)}>Kapat</button><button type="button" onClick={() => openModelPlan(detail)}><Pencil size={15} /> İmalat Planı</button><button className="primary" type="button" onClick={() => openEntry(detail)}><Layers3 size={15} /> Üretim Gir</button></>}
       >
         {detail ? <ModelDetail detail={detail} onEdit={(row) => openEntry(detail, row)} onDelete={removeEntry} /> : null}
       </Drawer>

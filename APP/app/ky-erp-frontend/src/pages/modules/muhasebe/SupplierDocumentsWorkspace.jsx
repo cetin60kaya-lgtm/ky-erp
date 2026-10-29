@@ -98,7 +98,7 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
           </label>
           {error ? <div className="sdw-message error">{error}</div> : null}
           {error ? null : loading ? <div className="sdw-empty">Tedarikçi irsaliyeleri yükleniyor…</div> : dispatches.length ? (
-            <div className="sdw-table-wrap"><table><thead><tr><th>Tarih</th><th>Tedarikçi</th><th>İrsaliye No</th><th>Kaynak</th><th>Kalem</th><th>Kontrol</th></tr></thead><tbody>
+            <div className="sdw-table-wrap"><table><thead><tr><th>Tarih</th><th>Tedarikçi</th><th>İrsaliye No</th><th>Kaynak</th><th>Kalem</th><th>Kontrol</th><th>İşlem</th></tr></thead><tbody>
               {dispatches.map((row) => (
                 <tr key={row.id}>
                   <td>{dateText(row.issue_date || row.created_at)}</td>
@@ -106,7 +106,7 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
                   <td>{row.document_no || "-"}</td>
                   <td>{sourceText(row)}</td>
                   <td>{Number(row.line_count || 0)}</td>
-                  <td>{Number(row.issue_count || 0) ? `${row.issue_count} sorun` : (row.status || "Kontrol bekliyor")}</td>
+                  <td>{Number(row.issue_count || 0) ? `${row.issue_count} sorun` : (row.status || "Kontrol bekliyor")}</td><td><button type="button" onClick={() => openModule?.("e-belge", { tabKey: "gelen-belgeler", actionContext: { documentId: row.id } })}>Belgeyi Aç</button></td>
                 </tr>
               ))}
             </tbody></table></div>
