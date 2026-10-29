@@ -166,6 +166,7 @@ function defaultEntry(model, dictionaries, source = null, preferences = {}) {
     : dictionaries?.machines?.find((item) => machineId(item) === preferredMachineId) || firstMachine;
   return {
     id: source?.id || "",
+    updatedAt: source?.updatedAt || "",
     requestId: source?.requestId || crypto.randomUUID(),
     modelId: model?.id || source?.modelId || "",
     date: source?.date || today(),
@@ -296,10 +297,6 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
 
   function openEntry(model, source = null) {
     if (!model) return;
-    if (!dictionaries.machines.length) {
-      setMessage("Önce Makine ve Vardiya Ayarları ekranından en az bir aktif makine tanımlayın.");
-      return;
-    }
     setEntry(defaultEntry(model, dictionaries, source, readProductionEntryPreferences(activeMainCompany)));
     setEntryOpen(true);
   }
@@ -314,8 +311,8 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       setMessage("Model ve sıfırdan büyük üretim adedi zorunludur.");
       return;
     }
-    if (!entry.machineId || !entry.operatorName || !entry.printRegion) {
-      setMessage("Baskı bölgesi, makine ve makinacı zorunludur.");
+    if (!entry.printRegion) {
+      setMessage("Baskı bölgesi zorunludur.");
       return;
     }
     const defects = asNumber(entry.printDefectQty) + asNumber(entry.fabricDefectQty) + asNumber(entry.testQty);
@@ -551,8 +548,8 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
           <label>Üretim adedi *<input type="number" min="0" value={entry.quantity} onChange={(event) => setEntry((current) => ({ ...current, quantity: event.target.value }))} autoFocus /></label>
           <label>Makine<select value={entry.machineId} onChange={(event) => changeEntryMachine(event.target.value)}><option value="">Makine seçin</option>{dictionaries.machines.map((machine) => <option key={machineId(machine)} value={machineId(machine)}>{machine.machineNo || machine.no} - {machineName(machine)}</option>)}</select></label>
           <label>Vardiya<select value={entry.shift} onChange={(event) => changeShift(event.target.value)}><option>Gündüz</option><option>Gece</option></select></label>
-          <label>Makinacı<input value={entry.operatorName} readOnly title="Makine ve vardiya ayarından otomatik gelir" /></label>
-          <label>Parti / irsaliye<input value={entry.batchNo} readOnly={Boolean(entry.dispatchNo)} onChange={(event) => setEntry((current) => ({ ...current, batchNo: event.target.value }))} title={entry.dispatchNo ? "Eşleşen irsaliyeden otomatik gelir" : "İrsaliye yoksa parti bilgisini girebilirsiniz"} /></label>
+          <label>Makinacı<input value={entry.operatorName} onChange={(event) => setEntry((current) => ({ ...current, operatorName: event.target.value }))} placeholder="Bilinmiyorsa boş bırak, sonra tamamla" /></label>
+          <label>Parti / irsaliye<input value={entry.batchNo} onChange={(event) => setEntry((current) => ({ ...current, batchNo: event.target.value }))} title="Bu fişin parti etiketi; asıl irsaliye belgesi değişmez" /></label>
           <label>Baskı sakatı<input type="number" min="0" value={entry.printDefectQty} onChange={(event) => setEntry((current) => ({ ...current, printDefectQty: event.target.value }))} /></label>
           <label>Kumaş sakatı<input type="number" min="0" value={entry.fabricDefectQty} onChange={(event) => setEntry((current) => ({ ...current, fabricDefectQty: event.target.value }))} /></label>
           <label>Test<input type="number" min="0" value={entry.testQty} onChange={(event) => setEntry((current) => ({ ...current, testQty: event.target.value }))} /></label>
