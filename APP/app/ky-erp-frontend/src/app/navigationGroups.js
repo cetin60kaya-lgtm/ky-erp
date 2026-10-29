@@ -3,8 +3,9 @@ export const KY_NAV_GROUPS = [
   { key: "daily", title: "Personel Yönetimi", homeTitle: "Personel yönetimi", description: "İK aylık, günlük personel ve PDKS işlemleri", keys: ["ik", "gunluk-operasyon", "pdks"] },
   { key: "production", title: "Üretim", homeTitle: "Üretim akışı", description: "Modelden üretime tek süreç", keys: ["desen", "boyahane", "uretim"] },
   { key: "finance", title: "Finans", homeTitle: "Finans ve belgeler", description: "Cari, ödeme ve belge yönetimi", keys: ["muhasebe", "e-belge"] },
+  { key: "company", title: "Firma İşlemleri", homeTitle: "Firma işlemleri", description: "Firma denetimi, uygunluk ve evrak süre takibi", keys: ["compliance"] },
   { key: "communication", title: "İletişim", homeTitle: "İletişim ve dosyalar", description: "Evrak ve iletişim süreçleri", keys: ["iletisim", "asistan"] },
-  { key: "management", title: "Yönetim ve Sistem", homeTitle: "Yönetim ve sistem", description: "Denetim, yedek ve cihazlar", keys: ["compliance", "depolama", "sistem-merkezi", "admin"] },
+  { key: "management", title: "Yönetim ve Sistem", homeTitle: "Yönetim ve sistem", description: "Bağlantılar, cihazlar ve platform yönetimi", keys: ["depolama", "sistem-merkezi", "admin"] },
 ];
 
 export function visibleNavigationGroups(modules = []) {

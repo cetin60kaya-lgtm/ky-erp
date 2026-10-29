@@ -8,6 +8,8 @@ test("ana sayfa ve menü grupları tüm canonical operasyon modüllerini tekrars
   assert.equal(new Set(keys).size, 14);
   assert.equal(navigationGroupFor("muhasebe"), "finance");
   assert.equal(navigationGroupFor("pdks"), "daily");
+  assert.equal(navigationGroupFor("compliance"), "company");
+  assert.equal(navigationGroupFor("depolama"), "management");
   assert.equal(navigationGroupFor("ana-sayfa"), "");
 });
 
@@ -16,8 +18,9 @@ test("görünür gruplar sadece erişilebilen modülleri içerir", () => {
     { key: "ana-sayfa" },
     { key: "muhasebe", label: "Muhasebe" },
     { key: "pdks", label: "PDKS" },
+    { key: "compliance", label: "Denetim & Evrak Takibi" },
   ]);
-  assert.deepEqual(groups.map((group) => group.key), ["daily", "finance"]);
-  assert.deepEqual(groups.flatMap((group) => group.modules.map((module) => module.key)), ["pdks", "muhasebe"]);
+  assert.deepEqual(groups.map((group) => group.key), ["daily", "finance", "company"]);
+  assert.deepEqual(groups.flatMap((group) => group.modules.map((module) => module.key)), ["pdks", "muhasebe", "compliance"]);
   assert.deepEqual(visibleNavigationGroups([]), []);
 });
