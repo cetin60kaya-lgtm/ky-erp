@@ -162,22 +162,8 @@ export async function createProductionCenterModel(
   activeMainCompany,
   payload = {},
 ) {
-  let nextPayload = { ...payload };
-  if (!nextPayload.companyId && !nextPayload.companyName) {
-    try {
-      const dictionaries = await getProductionCenterDictionaries(activeMainCompany);
-      const company = dictionaries?.defaultCompany || dictionaries?.companies?.[0];
-      if (company?.id) {
-        nextPayload = {
-          ...nextPayload,
-          companyId: company.id,
-          companyName: company.name || company.firmaAdi || "TAHA GİYİM",
-        };
-      }
-    } catch {
-      // Backend D1 varsayılan müşteri kuralı ikinci güvenlik katmanıdır.
-    }
-  }
+  // Müşteri bilinmiyorsa listedeki ilk firmaya sessizce atama yapma.
+  const nextPayload = { ...payload };
   return unwrap(
     await apiPost(
       "/production-center/models",
