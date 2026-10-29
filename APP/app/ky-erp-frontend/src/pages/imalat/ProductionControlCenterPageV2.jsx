@@ -514,7 +514,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
 
       {message ? <div className="pc2-notice"><CircleAlert size={17} /> {message}</div> : null}
 
-      <ProductionDirectEntryPanel activeMainCompany={activeMainCompany} models={dictionaries.models} machines={dictionaries.machines} preselectModelId={quickSelectedModel} onSaved={load} />
+      <ProductionDirectEntryPanel activeMainCompany={activeMainCompany} models={dictionaries.models} machines={dictionaries.machines} companies={dictionaries.companies} preselectModelId={quickSelectedModel} onSaved={load} onModelCreated={load} />
 
       <section className="pc2-metrics">
         <Metric label="Üretimde model" value={summary.modelCount || 0} helper="Yalnız gerçekten açılan modeller" />
