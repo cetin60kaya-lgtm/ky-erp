@@ -12,6 +12,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Factory,
   ScanLine,
   Search,
   Square,
@@ -25,6 +26,7 @@ import {
   syncDesignDyehouse,
   updateDesignModel,
 } from "../../services/desenWorkflowApi";
+import { createProductionCenterModel } from "../../services/productionCenterApi";
 import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import {
   assetUrl,
@@ -45,7 +47,7 @@ function runTouchRowAction(event, action) {
   action?.();
 }
 
-export default function DesenModeller({ activeMainCompany }) {
+export default function DesenModeller({ activeMainCompany, openModule }) {
   const [models, setModels] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +59,7 @@ export default function DesenModeller({ activeMainCompany }) {
   const [newModel, setNewModel] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [sendingModelId, setSendingModelId] = useState("");
   const [page, setPage] = useState(0);
   const [filters, setFilters] = useState({ q: new URLSearchParams(window.location.search).get("q") || "", companyId: "", status: "", printAreaCode: "", placementStatus: "", dateField: "createdAt", dateFrom: "", dateTo: "", sort: "created_desc" });
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(() => !window.matchMedia("(max-width: 760px)").matches);
@@ -110,6 +113,26 @@ export default function DesenModeller({ activeMainCompany }) {
     try { await syncDesignDyehouse(activeMainCompany, model.id); setMessage(`${model.modelName} Boyahane verisi güncellendi.`); setDetail(null); await load(); }
     catch (error) { setMessage(error?.message || "Boyahane senkronu tamamlanamadı."); }
   };
+  const sendToProduction = async (model) => {
+    if (!model?.id || sendingModelId) return;
+    setSendingModelId(model.id);
+    setMessage("");
+    try {
+      const printRegions = (model.operations || []).map((region) => region.printAreaName).filter(Boolean);
+      const result = await createProductionCenterModel(activeMainCompany, {
+        designModelId: model.id, modelName: model.modelName, modelCode: model.modelCode || "",
+        companyId: model.companyId || "", companyName: model.companyName || "",
+        printRegions: printRegions.join(", ") || "Ön",
+        imageUrl: model.mainImage?.previewUrl || model.mainImage?.thumbnailUrl || "",
+        expectedQty: 0, sourceModule: "DESEN_HAVUZU",
+      });
+      setMessage(result?.duplicate ? "Model zaten İmalatta mevcut; kartı açılıyor." : "Desen modeli İmalata açıldı.");
+      openModule?.("uretim", { tabKey: "uretim-merkezi" });
+    } catch (error) {
+      setMessage(error?.message || "Desen modeli İmalata aktarılamadı.");
+    } finally { setSendingModelId(""); }
+  };
+
   const analyzeVisible = async () => {
     const ids = selectedIds.length ? selectedIds : visibleModels.map((model) => model.id);
     if (!ids.length) return;
@@ -137,14 +160,14 @@ export default function DesenModeller({ activeMainCompany }) {
     </section>
     {message && <div className="dsg-page-message">{message}</div>}
     <section className="dsg-results-head"><div><strong>{models.length}</strong><span>model bulundu</span></div><span>Gerçek Desen kayıtları · ERP eklenme, dosya ve güncelleme tarihleriyle</span></section>
-    {loading ? <div className="dsg-loading"><LoaderCircle className="spin" /> Desen modelleri yükleniyor…</div> : !models.length ? <EmptyState icon={FileImage} title="Filtreye uygun model yok" text="Gelen klasörü tarayarak veya Yeni Model düğmesiyle ilk kaydı oluşturabilirsiniz." action={<button className="dsg-btn primary" onClick={() => setNewModel(true)}><Plus size={16} /> Yeni Model</button>} /> : <>{view === "cards" ? <div className="dsg-model-grid">{visibleModels.map((model) => <ModelCard key={model.id} model={model} selected={selectedIds.includes(model.id)} onSelect={() => toggleSelection(model.id)} onDetail={() => openDetail(model)} onEdit={() => openEditor(model)} onDyehouse={() => syncDyehouse(model)} />)}</div> : <ModelTable models={visibleModels} selectedIds={selectedIds} onSelect={toggleSelection} onDetail={openDetail} onEdit={openEditor} />}<Pager index={page} count={pageCount} onPrevious={() => setPage((value) => Math.max(0, value - 1))} onNext={() => setPage((value) => Math.min(pageCount - 1, value + 1))} /></>}
+    {loading ? <div className="dsg-loading"><LoaderCircle className="spin" /> Desen modelleri yükleniyor…</div> : !models.length ? <EmptyState icon={FileImage} title="Filtreye uygun model yok" text="Gelen klasörü tarayarak veya Yeni Model düğmesiyle ilk kaydı oluşturabilirsiniz." action={<button className="dsg-btn primary" onClick={() => setNewModel(true)}><Plus size={16} /> Yeni Model</button>} /> : <>{view === "cards" ? <div className="dsg-model-grid">{visibleModels.map((model) => <ModelCard key={model.id} model={model} selected={selectedIds.includes(model.id)} onSelect={() => toggleSelection(model.id)} onDetail={() => openDetail(model)} onEdit={() => openEditor(model)} onDyehouse={() => syncDyehouse(model)} onProduction={() => sendToProduction(model)} productionBusy={Boolean(sendingModelId)} />)}</div> : <ModelTable models={visibleModels} selectedIds={selectedIds} onSelect={toggleSelection} onDetail={openDetail} onEdit={openEditor} onProduction={sendToProduction} productionBusy={Boolean(sendingModelId)} />}<Pager index={page} count={pageCount} onPrevious={() => setPage((value) => Math.max(0, value - 1))} onNext={() => setPage((value) => Math.min(pageCount - 1, value + 1))} /></>}
     {(newModel || editor) && <ModelEditorModal activeMainCompany={activeMainCompany} companies={companies} model={editor} onClose={() => { setNewModel(false); setEditor(null); }} onSaved={async () => { setNewModel(false); setEditor(null); await load(); }} />}
     {detail && <ModelDetailModal model={detail} onClose={() => setDetail(null)} onEdit={() => openEditor(detail)} onArchive={() => archive(detail)} onDyehouse={() => syncDyehouse(detail)} />}
     {bulkOpen && <BulkEditModal activeMainCompany={activeMainCompany} models={models.filter((model) => selectedIds.includes(model.id))} onClose={() => setBulkOpen(false)} onSaved={async () => { setBulkOpen(false); setSelectedIds([]); await load(); }} />}
   </>;
 }
 
-function ModelCard({ model, selected, onSelect, onDetail, onEdit, onDyehouse }) {
+function ModelCard({ model, selected, onSelect, onDetail, onEdit, onDyehouse, onProduction, productionBusy }) {
   const [menu, setMenu] = useState(false);
   const analysis = model.metadata?.analysis || {};
   const analysisTags = [...(analysis.pantoneCodes || []), ...(analysis.characters || []), ...(analysis.themes || []), ...(analysis.shapes || [])].filter(Boolean).slice(0, 4);
@@ -152,12 +175,12 @@ function ModelCard({ model, selected, onSelect, onDetail, onEdit, onDyehouse }) 
     <button className="dsg-select-btn" onClick={onSelect}>{selected ? <CheckSquare size={18} /> : <Square size={18} />}</button>
     <button className="dsg-model-image" onClick={onDetail}>{model.mainImage ? <img src={assetUrl(model.mainImage.thumbnailUrl || model.mainImage.previewUrl)} alt={model.modelName} /> : <FileImage size={38} />}<span>Zoom</span></button>
     <div className="dsg-model-card-body"><div className="dsg-card-title"><div><h3>{model.modelName}</h3><p>{model.companyName}</p></div><StatusBadge value={model.status} /></div><div className="dsg-area-tags">{model.operations.map((operation) => <span key={operation.id}>{operation.printAreaName}</span>)}</div>{analysisTags.length > 0 && <div className="dsg-analysis-tags">{analysisTags.map((tag) => <span key={tag}>{tag}</span>)}</div>}<div className="dsg-metrics"><span>Kanal<strong>{model.totals.activeChannelCount}</strong></span><span>Kalıp<strong>{model.totals.totalMoldCount}</strong></span><span>Benzersiz boya<strong>{model.totals.uniqueColorCount}</strong></span><span>Eksik renk<strong>{model.totals.unresolvedColorCount}</strong></span></div><div className="dsg-progress-lines"><span>Yerleşim <strong>{model.operations.every((operation) => operation.placementStatus === "READY") ? "Hazır" : "Bekliyor"}</strong></span><span>Boyahane <strong>{model.operations.every((operation) => operation.dyehouseStatus === "READY") ? "Hazır" : "Bekliyor"}</strong></span></div><div className="dsg-date-meta"><small>ERP eklenme: {formatDate(model.createdAt)}</small><small>Dosya tarihi: {formatDate(model.sourceModifiedAt)}</small><small>{analysis.analyzedAt ? `Akıllı tarama: ${formatDate(analysis.analyzedAt)}` : `Güncelleme: ${formatDate(model.updatedAt)}`}</small></div></div>
-    <footer><button className="dsg-btn" onClick={onDetail}>Detay</button><button className="dsg-btn" onClick={onEdit}><Pencil size={15} /> Düzenle</button><div className="dsg-more"><button className="dsg-icon-btn" onClick={() => setMenu((value) => !value)}><MoreHorizontal /></button>{menu && <div className="dsg-more-menu"><button onClick={onDyehouse}><Palette size={15} /> Boyahaneye Hazırla</button><button onClick={onDetail}><Archive size={15} /> Diğer işlemler</button></div>}</div></footer>
+    <footer><button className="dsg-btn" onClick={onDetail}>Detay</button><button className="dsg-btn" onClick={onEdit}><Pencil size={15} /> Düzenle</button><div className="dsg-more"><button className="dsg-icon-btn" onClick={() => setMenu((value) => !value)}><MoreHorizontal /></button>{menu && <div className="dsg-more-menu"><button onClick={onDyehouse}><Palette size={15} /> Boyahaneye Hazırla</button><button disabled={productionBusy} onClick={() => { setMenu(false); onProduction(); }}><Factory size={15} /> İmalata Al</button><button onClick={onDetail}><Archive size={15} /> Diğer işlemler</button></div>}</div></footer>
   </article>;
 }
 
-function ModelTable({ models, selectedIds, onSelect, onDetail, onEdit }) {
-  return <div className="dsg-card dsg-table-wrap"><table className="dsg-table model-list"><thead><tr><th /><th>Görsel</th><th>Model</th><th>Firma</th><th>Baskı Bölgeleri</th><th>Bölge</th><th>Kanal</th><th>Kalıp</th><th>Benzersiz Boya</th><th>Kayıtlı / Eksik</th><th>Yerleşim</th><th>Boyahane</th><th>Durum</th><th>ERP Eklenme</th><th>Dosya Tarihi</th><th>Son Güncelleme</th><th /></tr></thead><tbody>{models.map((model) => <tr key={model.id} onClick={(event) => runTouchRowAction(event, () => onDetail(model))} onDoubleClick={() => onDetail(model)}><td><button className="dsg-icon-btn" onClick={() => onSelect(model.id)}>{selectedIds.includes(model.id) ? <CheckSquare size={17} /> : <Square size={17} />}</button></td><td><button className="dsg-table-thumb" onClick={() => onDetail(model)}>{model.mainImage ? <img src={assetUrl(model.mainImage.thumbnailUrl || model.mainImage.previewUrl)} alt="" /> : <FileImage />}</button></td><td><strong>{model.modelName}</strong></td><td>{model.companyName}</td><td>{model.operations.map((operation) => operation.printAreaName).join(", ")}</td><td>{model.operations.length}</td><td>{model.totals.activeChannelCount}</td><td>{model.totals.totalMoldCount}</td><td>{model.totals.uniqueColorCount}</td><td>{model.totals.registeredColorCount} / {model.totals.unresolvedColorCount}</td><td>{model.operations.every((operation) => operation.placementStatus === "READY") ? "Hazır" : "Bekliyor"}</td><td>{model.operations.every((operation) => operation.dyehouseStatus === "READY") ? "Hazır" : "Bekliyor"}</td><td><StatusBadge value={model.status} /></td><td>{formatDate(model.createdAt)}</td><td>{formatDate(model.sourceModifiedAt)}</td><td>{formatDate(model.updatedAt)}</td><td><button className="dsg-icon-btn" onClick={() => onEdit(model)}><Pencil size={16} /></button></td></tr>)}</tbody></table></div>;
+function ModelTable({ models, selectedIds, onSelect, onDetail, onEdit, onProduction, productionBusy }) {
+  return <div className="dsg-card dsg-table-wrap"><table className="dsg-table model-list"><thead><tr><th /><th>Görsel</th><th>Model</th><th>Firma</th><th>Baskı Bölgeleri</th><th>Bölge</th><th>Kanal</th><th>Kalıp</th><th>Benzersiz Boya</th><th>Kayıtlı / Eksik</th><th>Yerleşim</th><th>Boyahane</th><th>Durum</th><th>ERP Eklenme</th><th>Dosya Tarihi</th><th>Son Güncelleme</th><th /></tr></thead><tbody>{models.map((model) => <tr key={model.id} onClick={(event) => runTouchRowAction(event, () => onDetail(model))} onDoubleClick={() => onDetail(model)}><td><button className="dsg-icon-btn" onClick={() => onSelect(model.id)}>{selectedIds.includes(model.id) ? <CheckSquare size={17} /> : <Square size={17} />}</button></td><td><button className="dsg-table-thumb" onClick={() => onDetail(model)}>{model.mainImage ? <img src={assetUrl(model.mainImage.thumbnailUrl || model.mainImage.previewUrl)} alt="" /> : <FileImage />}</button></td><td><strong>{model.modelName}</strong></td><td>{model.companyName}</td><td>{model.operations.map((operation) => operation.printAreaName).join(", ")}</td><td>{model.operations.length}</td><td>{model.totals.activeChannelCount}</td><td>{model.totals.totalMoldCount}</td><td>{model.totals.uniqueColorCount}</td><td>{model.totals.registeredColorCount} / {model.totals.unresolvedColorCount}</td><td>{model.operations.every((operation) => operation.placementStatus === "READY") ? "Hazır" : "Bekliyor"}</td><td>{model.operations.every((operation) => operation.dyehouseStatus === "READY") ? "Hazır" : "Bekliyor"}</td><td><StatusBadge value={model.status} /></td><td>{formatDate(model.createdAt)}</td><td>{formatDate(model.sourceModifiedAt)}</td><td>{formatDate(model.updatedAt)}</td><td><button className="dsg-icon-btn" onClick={() => onEdit(model)} title="Deseni düzenle"><Pencil size={16} /></button><button className="dsg-icon-btn" onClick={() => onProduction(model)} title="İmalata al" disabled={productionBusy}><Factory size={16} /></button></td></tr>)}</tbody></table></div>;
 }
 
 function BulkEditModal({ activeMainCompany, models, onClose, onSaved }) {
