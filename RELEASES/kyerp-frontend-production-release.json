@@ -5,13 +5,17 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-10-29",
   "scope": [
-    "PR482-production-shift-night-operator-separate",
-    "PR482-production-manual-operator-input",
-    "PR482-zero-target-no-missing-production",
-    "CI-40918033763-frontend-worker-pass",
-    "pages-production-bundle-smoke"
+    "PR484-direct-production-entry-workspace",
+    "excel-10-fields-no-auto-import",
+    "responsive-direct-production-form",
+    "canonical-model-id-machine-shift-operator",
+    "gross-defect-net-preview-and-validation",
+    "production-recent-list",
+    "new-model-to-quick-production-entry",
+    "frontend-lint-test-build-CI-40921768293",
+    "Cloudflare-Pages-production-smoke"
   ],
-  "note": "29 Oct 2026 site screenshot fixes: night operator manual and independent, no automatic copying from day, zero-target new model excluded from missing-operation KPIs. No business data mutation. Backend related Worker release is separately backup-gated.",
-  "sourceCommit": "31c0639dc24dcc71a9b32413ae52077bc58b8603",
+  "note": "29.10.2026 sahadan istek: Model ve Uretim Merkezi ana ekraninda Excel'in 10 üretim alanıyla direk satir kaydi. Akilli metin kutusu ikincil menuye alindi. Frontend+Worker CI run 40921768293 SUCCESS. Worker degismedi, D1 migration ve eski Excel veri importu yok. Gercek kullanici fiş yazma saha testine ihtiyaç var.",
+  "sourceCommit": "98440423bc7f988ea491a6c221155c3fb787ab07",
   "requestedAt": "2026-10-29"
 }
