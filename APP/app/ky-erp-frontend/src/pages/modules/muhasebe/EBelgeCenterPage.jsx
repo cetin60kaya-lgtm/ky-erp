@@ -406,7 +406,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
   </div>;
 }
 
-export default function EBelgeCenterPage({ activeMainCompany, initialView = "overview", openModule }) {
+export default function EBelgeCenterPage({ activeMainCompany, initialView = "overview", openModule, moduleActionContext }) {
   const allowedViews = ["overview", "incoming", "outgoing", "pool", "matching", "issues", "workflow", "archive", "integrations"];
   const view = allowedViews.includes(initialView) ? initialView : "overview";
   const poolViews = useMemo(() => ["incoming", "outgoing", "pool", "matching", "issues", "archive"], []);
@@ -497,6 +497,10 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     setQuery("");
   }, [activeMainCompany?.slug, activeMainCompany?.id]);
   useEffect(() => { void refreshCurrent(); return () => { poolRequestSeq.current += 1; }; }, [refreshCurrent, activeMainCompany?.slug, activeMainCompany?.id]);
+  useEffect(() => {
+    if (moduleActionContext?.targetModule !== "e-belge" || !moduleActionContext?.documentId) return;
+    setSelectedId(String(moduleActionContext.documentId));
+  }, [moduleActionContext?.nonce, moduleActionContext?.documentId, moduleActionContext?.targetModule]);
 
   const runMatching = async () => {
     if (!matchingConfirmOpen || !matchingApproved || matching || matchingLock.current) return;
