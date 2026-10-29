@@ -1197,21 +1197,27 @@ async function maintainProductionEntry(
     return { status: 400, code: "PRODUCTION_QUANTITY_INVALID", message: "Adetler geçersiz: sakat ve test toplamı brüt adedi aşamaz." };
   }
   const date = isoDate(first(body.date, body.tarih, old.date));
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date))) {
     return { status: 400, code: "PRODUCTION_DATE_INVALID", message: "Geçerli üretim tarihi girin." };
   }
   const printArea = text(first(body.printRegion, body.printArea, body.baskiBolgesi, old.printArea));
   if (!printArea) {
     return { status: 400, code: "PRODUCTION_AREA_REQUIRED", message: "Baskı bölgesi zorunludur." };
   }
-  const machineId = text(first(body.machineId, body.makineNo, old.machineId));
-  const machineName = text(first(body.machineName, body.makineAdi, old.machineName));
-  const operatorName = text(first(body.operatorName, body.makinaci, old.operatorName));
-  const shift = text(first(body.shift, body.vardiya, old.shift));
-  const dispatchNo = text(first(body.dispatchNo, body.irsaliyeNo, old.dispatchNo));
-  const batchNo = text(first(body.batchNo, body.partiNo, old.batchNo)) || "GENEL";
-  const orderNo = text(first(body.orderNo, body.siparisNo, old.orderNo));
-  const note = text(first(body.note, body.not, old.note));
+  const optionalText = (keys: string[], fallback: string) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) return text(body[key]);
+    }
+    return fallback;
+  };
+  const machineId = optionalText(["machineId", "makineNo"], old.machineId);
+  const machineName = optionalText(["machineName", "makineAdi"], old.machineName);
+  const operatorName = optionalText(["operatorName", "makinaci"], old.operatorName);
+  const shift = optionalText(["shift", "vardiya"], old.shift);
+  const dispatchNo = optionalText(["dispatchNo", "irsaliyeNo"], old.dispatchNo);
+  const batchNo = optionalText(["batchNo", "partiNo"], old.batchNo) || "GENEL";
+  const orderNo = optionalText(["orderNo", "siparisNo"], old.orderNo);
+  const note = optionalText(["note", "not"], old.note);
   const raw = {
     ...previousRaw, modelId: old.modelId, date, quantity: gross,
     printDefectQty: printDefect, fabricDefectQty: fabricDefect, testQty,
