@@ -1058,7 +1058,7 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
     if (printDefectQty + fabricDefectQty + testQty > grossQty) {
       errors.push("Sakat ve test toplamı brüt üretimi aşamaz.");
     }
-    if (!printArea) errors.push("Baskı bölgesi zorunludur.");
+    if (!printArea && body.historicalImport !== true) errors.push("Baskı bölgesi zorunludur.");
     if (card && card.incomingQty > 0 && !body.allowOverProduction) {
       const operation = (card.operationRows || []).find(
         (row: Row) => normalized(row.region) === normalized(printArea),
@@ -1092,7 +1092,7 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
       shift: text(first(entry.shift, entry.vardiya)),
       operatorName: text(first(entry.operatorName, entry.operatorId, entry.makinaci)),
       note: text(first(entry.note, entry.not)),
-      source: "PRODUCTION_CENTER",
+      source: body.historicalImport === true ? "HISTORICAL_EXCEL" : "PRODUCTION_CENTER",
       createdAt: now,
     };
     const rawPayload = {
@@ -1238,6 +1238,130 @@ async function maintainProductionEntry(
     print_area: printArea, machine_name: machineName || machineId, machinist: operatorName,
     shift, order_no: orderNo, note, raw, updated_at: now,
   }) };
+}
+
+
+function historicalEntryKey(row: Row): string {
+  const raw = objectValue(row.raw);
+  return [
+    normalized(row.modelName), text(row.date).slice(0, 10),
+    numberValue(row.quantity ?? row.grossQty),
+    normalized(row.printRegion ?? row.printArea),
+    normalized(row.machineNo ?? row.machineId),
+    normalized(row.shift), normalized(row.ground ?? raw.ground),
+    numberValue(row.printDefectQty), numberValue(row.fabricDefectQty),
+    normalized(row.operatorName),
+  ].join("|");
+}
+
+async function historicModelId(slug: string, name: string, year: string): Promise<string> {
+  const input = new TextEncoder().encode([slug, year, normalized(name)].join("|"));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", input));
+  return "KYHIST:" + [...digest].map((n) => n.toString(16).padStart(2, "0")).join("");
+}
+
+async function importProductionHistory(c: Context<AppEnv>, body: Row) {
+  // Upload only user-approved ten production columns, never assistant/total/invoice/cari fields.
+  const slug = companySlug(c);
+  const sourceRows = Array.isArray(body.rows) ? body.rows : [];
+  const preview = body.preview === true;
+  const requestId = text(body.requestId);
+  if (!requestId || requestId.length > 160 || sourceRows.length < 1 || sourceRows.length > (preview ? 1000 : 60)) {
+    return { status: 400, code: "PRODUCTION_HISTORY_REQUEST_INVALID", message: "İstek kimliği veya satır sayısı geçersiz (önizleme en fazla 1000, aktarım en fazla 60)." };
+  }
+  const center = await buildCenter(c, slug);
+  const byName = new Map<string, Row[]>();
+  const existingFingerprints = new Set<string>();
+  for (const card of center.cards) {
+    if (card.isVirtual) continue;
+    const key = normalized(card.modelName);
+    if (!key) continue;
+    const list = byName.get(key) || [];
+    list.push(card);
+    byName.set(key, list);
+    for (const entry of card.productionEntries || []) {
+      existingFingerprints.add(historicalEntryKey({ ...entry, modelName: card.modelName }));
+    }
+  }
+  const seenInRequest = new Set<string>();
+  const eligible: Row[] = [];
+  const skipped: Row[] = [];
+  const newModels = new Map<string, Row>();
+  for (const [index, source] of sourceRows.entries()) {
+    const row = objectValue(source);
+    const modelName = text(row.modelName);
+    const date = text(row.date);
+    const quantity = Number(row.quantity);
+    const printDefectQty = Number(row.printDefectQty ?? 0);
+    const fabricDefectQty = Number(row.fabricDefectQty ?? 0);
+    const clientId = text(row.clientId) || String(index + 1);
+    if (!modelName || modelName.length > 240 || !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      !Number.isFinite(Date.parse(date)) || !Number.isFinite(quantity) || quantity <= 0 ||
+      ![printDefectQty, fabricDefectQty].every((n) => Number.isFinite(n) && n >= 0) ||
+      printDefectQty + fabricDefectQty > quantity) {
+      skipped.push({ clientId, reason: "INVALID_FIELDS" }); continue;
+    }
+    const fields: Row = {
+      clientId, modelName, date, quantity,
+      shift: text(row.shift), machineNo: text(row.machineNo), ground: text(row.ground),
+      printRegion: text(row.printRegion), printDefectQty, fabricDefectQty,
+      operatorName: text(row.operatorName),
+    };
+    const fingerprint = historicalEntryKey(fields);
+    if (seenInRequest.has(fingerprint) || existingFingerprints.has(fingerprint)) {
+      skipped.push({ clientId, reason: "EXACT_DUPLICATE" }); continue;
+    }
+    seenInRequest.add(fingerprint);
+    const matches = byName.get(normalized(modelName)) || [];
+    if (matches.length > 1) {
+      skipped.push({ clientId, reason: "AMBIGUOUS_MODEL" }); continue;
+    }
+    if (matches.length === 1) {
+      fields.modelId = matches[0].id;
+    } else {
+      const year = date.slice(0, 4);
+      const id = await historicModelId(slug, modelName, year);
+      fields.modelId = id;
+      if (!newModels.has(id)) newModels.set(id, { id, modelName, year });
+    }
+    eligible.push(fields);
+  }
+  if (preview) return {
+    status: 200, data: {
+      preview: true, inputCount: sourceRows.length, eligibleCount: eligible.length,
+      skippedCount: skipped.length, skipped, newModelCount: newModels.size,
+      matchedCount: eligible.length - [...eligible].filter((v) => newModels.has(text(v.modelId))).length,
+    },
+  };
+  // D1 is the only write destination. Never transfer the spreadsheet to GitHub.
+  if (newModels.size) {
+    if (!(await tableExists(c, "model_records"))) {
+      return { status: 409, code: "PRODUCTION_MODEL_SCHEMA_REQUIRED", message: "Model tablosu hazır değil. Geçmiş veri güvenli biçimde aktarılmadı." };
+    }
+    const now = new Date().toISOString();
+    const statements = [...newModels.values()].map((model) => c.env.DB.prepare(
+      "INSERT OR IGNORE INTO model_records (id, main_company_slug, model_name, status, raw, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+    ).bind(model.id, slug, model.modelName, "ACTIVE",
+      JSON.stringify({ modelName: model.modelName, source: "HISTORICAL_EXCEL", importYear: model.year, companyId: "", expectedQty: 0, printRegions: [] }),
+      now, now));
+    await c.env.DB.batch(statements);
+  }
+  const entries = eligible.map((row) => ({
+    clientId: row.clientId, modelId: row.modelId, date: row.date,
+    quantity: row.quantity, shift: row.shift, machineId: row.machineNo,
+    machineName: row.machineNo, ground: row.ground, printRegion: row.printRegion,
+    printDefectQty: row.printDefectQty, fabricDefectQty: row.fabricDefectQty,
+    operatorName: row.operatorName, note: "",
+  }));
+  const posted = entries.length ? await saveProductionBatch(c, {
+    mainCompanySlug: slug, entries, requestId, historicalImport: true,
+    allowOverProduction: true,
+  }) : { successCount: 0, failedCount: 0, success: [], failed: [] };
+  return { status: posted.failedCount ? 207 : 200, data: {
+    preview: false, inputCount: sourceRows.length, eligibleCount: eligible.length,
+    skippedCount: skipped.length, skipped, newModelCount: newModels.size,
+    successCount: posted.successCount, failedCount: posted.failedCount, failed: posted.failed,
+  } };
 }
 
 async function createModel(c: Context<AppEnv>, body: Row) {
@@ -1464,6 +1588,19 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
       .sort((left, right) => text(right.date || right.createdAt).localeCompare(text(left.date || left.createdAt)))
       .slice(0, limit);
     return c.json({ ok: true, success: true, data: rows });
+  });
+
+  app.post("/api/production-center/history-import", async (c) => {
+    const body = await requestBody(c);
+    try {
+      const result = await importProductionHistory(c, body);
+      return "code" in result
+        ? c.json(jsonError(String(result.code), String(result.message)), result.status as 400 | 409)
+        : c.json({ ok: true, success: true, data: result.data }, result.status as 200 | 207);
+    } catch (error) {
+      return c.json(jsonError("PRODUCTION_HISTORY_IMPORT_FAILED",
+        error instanceof Error ? error.message : String(error)), 500);
+    }
   });
 
   app.post("/api/production-center/entries/bulk", async (c) => {
