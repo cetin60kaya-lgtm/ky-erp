@@ -498,7 +498,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
           <button className="primary" type="button" onClick={() => setDesignOpen(true)}><ImageIcon size={16} /> Desenlerden Model Al</button>
           <button type="button" onClick={() => setModelOpen(true)}><CirclePlus size={16} /> Yeni Model</button>
           <button type="button" onClick={() => setSmartOpen(true)}><Zap size={16} /> Akıllı Seri Giriş</button>
-          <button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16} /> Geçmiş CSV Al</button>
+          <details className="pc2-more-actions"><summary>Diğer işlemler</summary><button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16} /> Geçmiş CSV Al</button></details>
         </div>
       </section>
 
