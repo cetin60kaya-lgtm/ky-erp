@@ -434,8 +434,9 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       setModelDraft(defaultModelDraft());
       await load();
       const full = await getProductionCenterModel(activeMainCompany, saved.id || saved.modelId);
-      setDetail(full);
-      setMessage(saved?.duplicate ? "Model zaten üretimdeydi; mevcut kayıt açıldı." : "Yeni model üretime açıldı.");
+      setDetail(null);
+      focusQuick(full);
+      setMessage(saved?.duplicate ? "Model zaten üretimdeydi; giriş alanı açıldı." : "Yeni model açıldı; üretim satırını girin.");
       window.dispatchEvent(new CustomEvent("kyerp:production-refresh", { detail: { source: "imalat", modelId: saved.id || saved.modelId } }));
     } catch (error) {
       setMessage(error?.message || "Model üretime açılamadı.");
@@ -656,7 +657,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
         subtitle={`${detail?.companyName || "Firma bekliyor"} · ${statusLabel(detail?.status)}`}
         onClose={() => setDetail(null)}
         wide
-        footer={<><button type="button" onClick={() => setDetail(null)}>Kapat</button><button type="button" onClick={() => openModelPlan(detail)}><Pencil size={15} /> İmalat Planı</button><button className="primary" type="button" onClick={() => openEntry(detail)}><Layers3 size={15} /> Üretim Gir</button></>}
+        footer={<><button type="button" onClick={() => setDetail(null)}>Kapat</button><button type="button" onClick={() => openModelPlan(detail)}><Pencil size={15} /> İmalat Planı</button><button className="primary" type="button" onClick={() => { focusQuick(detail); setDetail(null); }}><Layers3 size={15} /> Üretim Gir</button></>}
       >
         {detail ? <ModelDetail detail={detail} onEdit={(row) => openEntry(detail, row)} onDelete={removeEntry} /> : null}
       </Drawer>
