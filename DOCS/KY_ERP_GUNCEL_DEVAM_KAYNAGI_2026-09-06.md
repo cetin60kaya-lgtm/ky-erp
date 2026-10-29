@@ -1,5 +1,15 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 29.10.2026 — Yönetim ve Sistem işlemleri / açılır paneller (#483)
+
+- Kullanıcı talebi: işlem kaldırmadan, anlaşılır ana menü ve açılır detaylar. `Platform Yönetimi` için Yönetim/Güvenlik/Sistem kartları ve açıklamalı alt işlem menüleri; firma kartı 6, paket 4 açılır panel. Kullanıcı listesi, rol matrisi, MFA/oturum, yedek, PDKS ve paket işlevleri korunur.
+- Firma Denetim & Evrak Takibi, Yönetim ve Sistem'den Firma İşlemleri grubuna taşındı; COMPLIANCE yetkisi ve eski rotalar korunur. `DENETIM` PDKS okuma rolü firma evrak yetkisiyle karıştırılmaz.
+- Firma Sahibi rolünde Süper Yönetici ekranları menüde gösterilmez. Firma sahibi ataması yalnız aynı firmadan yapılır ve onay gerekir. Güvenlikte başarısız kaynak boş liste gibi sunulmaz, kullanıcı sayacı normal kullanıcıları açıkça belirtir.
+- Yönetim API: `/api/system/status` sayısal D1 verileri artık giriş gerektirir (anonim `/api/health` kalır). Paket profil+hareket güncellemeleri D1 batch üzerinden atomik. Firma açıklaması var olan `json_store` üzerinde atomik kaydedilir; migration yoktur.
+- Build Merkezi eski PDKS 1.9.0/20260907 otomatik kaynağından çıkarıldı; ürün, sürüm ve kaynak dalı açık seçilir, sunucu da otomatik eski varsayım yapmaz. Windows Agent ve build script eşleşmesi gerçek EXE kabulünde ayrıca kontrol edilir.
+- **Kabul sınırı:** PR testleri, canlı Pages ve Worker yayın SHA'sı ayrıca doğrulanır. D1 migration, gerçek kullanıcı/şifre/cihaz değişikliği, işlem yedeği geri yükleme ve EXE üretimi bu düzenlemede yapılmaz. Oturumlu rol/işlem E2E hâlâ ayrıca gereklidir.
+
+
 ## 29.10.2026 — İmalat rol/firma koruması #481, Worker yayın ENGELLENDİ
 
 - **PR #481** (merge `20bada4b25870b5ab3656e8d4696df363edbd9a9`) `production-tenant-guard.ts` ve `main.ts` üzerinden `/api/production-center`, `/api/model-flow/*`, `/api/production/*`, `/api/imalat/kayitlar`, `/api/uretim/seri/*` yollarını oturum + `IMALAT` görüntüleme/ekleme/düzenleme/silme yetkisi + tek firma sınırıyla korur. Çapraz/eksik tenant ve izinsiz işlem reddedilir. Bu düzeltme önceki 24 görünüm auditinde fark edilmeyen kritik eksiktir. Gerçek istismar gözlenmedi.
