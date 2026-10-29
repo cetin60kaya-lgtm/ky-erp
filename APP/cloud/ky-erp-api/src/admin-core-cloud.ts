@@ -7,6 +7,7 @@ type Row = Record<string, any>;
 
 const SETTINGS_SCOPE = "ADMIN_SETTINGS";
 const BACKUP_SCOPE = "ADMIN_BACKUP";
+const COMPANY_NOTE_SCOPE = "ADMIN_COMPANY_NOTE";
 
 function text(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
@@ -203,6 +204,24 @@ async function writeSetting(c: any, fileName: string, data: Row) {
   return { ...data, updatedAt: timestamp };
 }
 
+async function companyNote(c: any, id: string) {
+  const row = await c.env.DB.prepare("SELECT data FROM json_store WHERE scope=? AND file_name=? LIMIT 1")
+    .bind(COMPANY_NOTE_SCOPE, "company:"+id).first<Row>();
+  try { return text(JSON.parse(text(row?.data) || "{}")?.note); } catch { return ""; }
+}
+async function noteWriteStatement(c: any, id: string, note: unknown) {
+  const fileName="company:"+id, timestamp=nowIso();
+  const payload=JSON.stringify({ note: text(note) });
+  const existing=await c.env.DB.prepare("SELECT id FROM json_store WHERE scope=? AND file_name=? LIMIT 1").bind(COMPANY_NOTE_SCOPE,fileName).first<Row>();
+  return existing?.id
+    ? c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=?").bind(payload,timestamp,existing.id)
+    : c.env.DB.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?)")
+      .bind(crypto.randomUUID(),COMPANY_NOTE_SCOPE,null,fileName,payload,timestamp,timestamp);
+}
+async function companyWithNote(c: any,row: Row) {
+  return { ...companyView(row), note: await companyNote(c,text(row.id)) };
+}
+
 export function registerAdminCoreRoutes(app: any) {
   app.get("/api/admin/main-companies", async (c: any) => {
     const current = await ownerCurrent(c);
@@ -210,7 +229,7 @@ export function registerAdminCoreRoutes(app: any) {
     const result = await c.env.DB.prepare(
       "SELECT id,slug,name,is_active,created_at,updated_at FROM main_companies ORDER BY is_active DESC,name COLLATE NOCASE ASC",
     ).all<Row>();
-    return c.json({ ok: true, data: (result.results || []).map(companyView) });
+    return c.json({ ok: true, data: await Promise.all((result.results || []).map((row: Row)=>companyWithNote(c,row))) });
   });
 
   app.post("/api/admin/main-companies", async (c: any) => {
@@ -224,12 +243,12 @@ export function registerAdminCoreRoutes(app: any) {
     if (conflict?.id) return c.json(errorBody("COMPANY_SLUG_EXISTS", "Bu firma kısa kodu zaten kullanılıyor."), 409);
     const id = text(body.id) || crypto.randomUUID();
     const timestamp = nowIso();
-    await c.env.DB.prepare(
-      `INSERT INTO main_companies(id,slug,name,is_active,created_at,updated_at)
-       VALUES (?,?,?,?,?,?)`,
-    ).bind(id, slug, name, boolValue(body.isActive, true) ? 1 : 0, timestamp, timestamp).run();
+    await atomicBatch(c,[
+      c.env.DB.prepare(`INSERT INTO main_companies(id,slug,name,is_active,created_at,updated_at) VALUES (?,?,?,?,?,?)`).bind(id,slug,name,boolValue(body.isActive,true)?1:0,timestamp,timestamp),
+      await noteWriteStatement(c,id,body.note),
+    ]);
     await audit(c, "MAIN_COMPANY_CREATED", current.id, id, { mainCompanySlug: slug, name });
-    return c.json({ ok: true, data: companyView(await companyById(c, id) || { id, slug, name, title: text(body.note), is_active: 1, created_at: timestamp, updated_at: timestamp }) }, 201);
+    return c.json({ ok: true, data: await companyWithNote(c,await companyById(c,id)||{id,slug,name,is_active:1,created_at:timestamp,updated_at:timestamp}) }, 201);
   });
 
   app.patch("/api/admin/main-companies/:id", async (c: any) => {
@@ -253,17 +272,19 @@ export function registerAdminCoreRoutes(app: any) {
             `UPDATE main_companies SET slug=?,name=?,is_active=?,updated_at=? WHERE id=?`,
           ).bind(nextSlug, name, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id),
         );
-        await atomicBatch(c, plan.statements);
+        if (body.note !== undefined) plan.statements.push(await noteWriteStatement(c,id,body.note));
+        await atomicBatch(c,plan.statements);
       } else {
-        await c.env.DB.prepare(
-          `UPDATE main_companies SET name=?,is_active=?,updated_at=? WHERE id=?`,
-        ).bind(name, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id).run();
+        const statements=[c.env.DB.prepare(`UPDATE main_companies SET name=?,is_active=?,updated_at=? WHERE id=?`)
+          .bind(name,boolValue(body.isActive,Number(row.is_active??1)!==0)?1:0,timestamp,id)];
+        if(body.note!==undefined)statements.push(await noteWriteStatement(c,id,body.note));
+        await atomicBatch(c,statements);
       }
     } catch (error) {
       return c.json(errorBody("COMPANY_SLUG_MOVE_FAILED", "Firma değişikliği atomik olarak uygulanamadı; hiçbir tablo yarım taşınmadı.", { message: error instanceof Error ? error.message : String(error) }), 409);
     }
     await audit(c, "MAIN_COMPANY_UPDATED", current.id, id, { mainCompanySlug: nextSlug, previousSlug: text(row.slug), name });
-    return c.json({ ok: true, data: companyView(await companyById(c, id) || row) });
+    return c.json({ ok: true, data: await companyWithNote(c,await companyById(c,id)||row) });
   });
 
   app.get("/api/admin/main-companies/:id/pdks-profile", async (c: any) => {
@@ -327,7 +348,10 @@ export function registerAdminCoreRoutes(app: any) {
     if (counts.length) return c.json(errorBody("COMPANY_HAS_DATA", "Bu ana firmada veri var. Önce verileri başka ana firmaya aktarın; veri varken doğrudan silme yapılmaz.", { tables: counts }), 409);
     const active = await c.env.DB.prepare("SELECT COUNT(*) AS total FROM main_companies WHERE is_active=1 AND id<>?").bind(row.id).first<Row>();
     if (Number(active?.total || 0) < 1) return c.json(errorBody("LAST_ACTIVE_COMPANY", "Sistemde en az bir aktif ana firma kalmalıdır."), 409);
-    await c.env.DB.prepare("DELETE FROM main_companies WHERE id=?").bind(row.id).run();
+    await atomicBatch(c,[
+      c.env.DB.prepare("DELETE FROM main_companies WHERE id=?").bind(row.id),
+      c.env.DB.prepare("DELETE FROM json_store WHERE scope=? AND file_name=?").bind(COMPANY_NOTE_SCOPE,"company:"+row.id),
+    ]);
     await audit(c, "MAIN_COMPANY_DELETED", current.id, row.id, { mainCompanySlug: text(row.slug), name: text(row.name) });
     return c.json({ ok: true, data: { id: row.id, deleted: true, deletedAt: nowIso() } });
   });
