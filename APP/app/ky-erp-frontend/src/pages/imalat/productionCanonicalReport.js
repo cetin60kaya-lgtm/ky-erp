@@ -83,7 +83,7 @@ export function buildProductionCanonicalReport(payload = {}, filters = {}) {
         baskiBolgesi: region, planlanan: planned, basilan: produced,
         eksik: Math.max(0, planned - produced), makineNo: value(latest.machineId),
         makineAdi: value(latest.machineName), makinaci: value(latest.operatorName),
-        vardiya: value(latest.shift), zemin: value(card.groundColor), durum,
+        vardiya: value(latest.shift), zemin: value(latest.ground || latest.raw?.ground || card.groundColor), durum,
       };
       if (!filters.durum || search(durum, filters.durum)) {
         auditRows.push(row);
@@ -98,8 +98,7 @@ export function buildProductionCanonicalReport(payload = {}, filters = {}) {
       id: items[0].makineNo || items[0].makineAdi || "unknown",
       makineNo: items[0].makineNo, makineAdi: items[0].makineAdi,
       operasyonAdedi: items.length,
-      tamamlananModelAdedi: new Set(items.filter((v) => auditRows.some((r) =>
-        r.model === v.model && r.baskiBolgesi === v.baskiBolgesi && r.durum === "Tamam")).map((v) => v.modelId)).size,
+      tamamlananModelAdedi: new Set(items.filter((v) => completedModelIds.has(v.modelId)).map((v) => v.modelId)).size,
       eksik: auditRows.filter((r) => items.some((v) => v.model === r.model && v.baskiBolgesi === r.baskiBolgesi))
         .reduce((sum, r) => sum + r.eksik, 0),
     }));
@@ -107,9 +106,8 @@ export function buildProductionCanonicalReport(payload = {}, filters = {}) {
     .map(([, items]) => ({
       id: [items[0].makinaci, items[0].vardiya].join("|"),
       makinaci: items[0].makinaci, vardiya: items[0].vardiya,
-      operasyonAdedi: items.length, basilanBolgeAdedi: items.reduce((s, e) => s + e.basilan, 0),
-      tamamlananModelAdedi: new Set(items.filter((v) => auditRows.some((r) =>
-        r.model === v.model && r.baskiBolgesi === v.baskiBolgesi && r.durum === "Tamam")).map((v) => v.modelId)).size,
+      operasyonAdedi: items.length, basilanBolgeAdedi: new Set(items.map((e) => e.modelId + "|" + e.baskiBolgesi)).size,
+      tamamlananModelAdedi: new Set(items.filter((v) => completedModelIds.has(v.modelId)).map((v) => v.modelId)).size,
     }));
   const activeMachines = machines.filter((m) => m.isActive !== false).length;
   const todayTotal = records.filter((r) => r.tarih === now).reduce((sum, r) => sum + r.basilan, 0);
