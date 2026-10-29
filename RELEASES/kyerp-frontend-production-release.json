@@ -5,17 +5,16 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-10-29",
   "scope": [
-    "PR484-direct-production-entry-workspace",
-    "excel-10-fields-no-auto-import",
-    "responsive-direct-production-form",
-    "canonical-model-id-machine-shift-operator",
-    "gross-defect-net-preview-and-validation",
-    "production-recent-list",
-    "new-model-to-quick-production-entry",
-    "frontend-lint-test-build-CI-40921768293",
-    "Cloudflare-Pages-production-smoke"
+    "PR483-admin-accordion-full-functions",
+    "PR483-company-compliance-menu-separation",
+    "PR483-owner-company-role-aware-views",
+    "PR483-user-company-security-overview",
+    "PR483-package-forms-and-history",
+    "PR483-build-branch-selection",
+    "CI-40923106664-frontend-worker-pass",
+    "Cloudflare-Pages-prod-smoke-required"
   ],
-  "note": "29.10.2026 sahadan istek: Model ve Uretim Merkezi ana ekraninda Excel'in 10 üretim alanıyla direk satir kaydi. Akilli metin kutusu ikincil menuye alindi. Frontend+Worker CI run 40921768293 SUCCESS. Worker degismedi, D1 migration ve eski Excel veri importu yok. Gercek kullanici fiş yazma saha testine ihtiyaç var.",
-  "sourceCommit": "98440423bc7f988ea491a6c221155c3fb787ab07",
+  "note": "29.10.2026: Kullanım kolay yönetim menüleri, 6 firma/4 paket açılır işlem paneli, yetki ve sağlık durumları. Existing functionality retained. No production sample data, migrations, passwords or security token changes. Live Pages result must be verified separately.",
+  "sourceCommit": "1148e8785514fd3705dd243999d31ebcfc8cfe6b",
   "requestedAt": "2026-10-29"
 }
