@@ -413,6 +413,7 @@ function mapProductionRow(row: Row): Row {
     requestId: text(first(raw.requestId, row.request_id)),
     clientId: text(first(raw.clientId, row.client_id)),
     createdAt: isoDateTime(first(row.created_at, raw.createdAt, row.production_date)),
+    updatedAt: isoDateTime(first(row.updated_at, raw.updatedAt, row.created_at)),
     raw,
   };
 }
@@ -791,12 +792,14 @@ async function loadDocuments(c: Context<AppEnv>, slug: string, companyById: Map<
 }
 
 async function loadProductionRows(c: Context<AppEnv>, slug: string): Promise<Row[]> {
-  const rows = (await tableRows(c, "production_records", slug)).map(mapProductionRow);
+  const rows = (await tableRows(c, "production_records", slug))
+    .filter((row) => !objectValue(row.raw).deletedAt)
+    .map(mapProductionRow);
   const jsonRows: Row[] = [];
   for (const scope of ["PRODUCTION_CENTER_ENTRY", "uretim.kayitlar", "URETIM_ENTRY"]) {
     jsonRows.push(...(await jsonStoreList(c, scope, slug)).map(mapProductionRow));
   }
-  return uniqueById([...rows, ...jsonRows]);
+  return uniqueById([...rows, ...jsonRows].filter((row) => !objectValue(row.raw).deletedAt));
 }
 
 async function loadMachines(c: Context<AppEnv>, slug: string): Promise<Row[]> {
@@ -1138,6 +1141,101 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
   return result;
 }
 
+
+function productionPatchNumber(value: unknown, fallback: number): number {
+  if (value === undefined || value === null || value === "") return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+// Düzenleme/silme fiziksel SQL DELETE değildir: geçmişin aslı ve model bağı korunur.
+// Üretim değişikliği kendiliğinden fatura, cari, KDV veya irsaliye kaydı oluşturmaz.
+async function maintainProductionEntry(
+  c: Context<AppEnv>, entryId: string, body: Row, action: "UPDATE" | "ARCHIVE",
+) {
+  const slug = companySlug(c, body);
+  const current = await c.env.DB.prepare(
+    "SELECT * FROM production_records WHERE id=? AND main_company_slug=? LIMIT 1",
+  ).bind(entryId, slug).first<Row>();
+  if (!current || objectValue(current.raw).deletedAt) {
+    return { status: 404, code: "PRODUCTION_ENTRY_NOT_FOUND", message: "Üretim fişi bulunamadı veya daha önce arşivlendi." };
+  }
+  const old = mapProductionRow(current);
+  const previousRaw = objectValue(current.raw);
+  const expectedAt = text(body.expectedUpdatedAt || body.updatedAt);
+  if (expectedAt && expectedAt !== text(current.updated_at)) {
+    return { status: 409, code: "PRODUCTION_STALE_EDIT", message: "Fiş başka bir işlemde değişmiş. Yenileyip tekrar deneyin." };
+  }
+  if (body.modelId != null && text(body.modelId) !== text(old.modelId)) {
+    return { status: 409, code: "PRODUCTION_MODEL_CHANGE_REQUIRES_RELINK", message: "Model bağlantısını fiş düzenlemede sessizce değiştiremezsiniz." };
+  }
+  const now = new Date().toISOString();
+  const changes = Array.isArray(previousRaw.revisions) ? previousRaw.revisions : [];
+  const history = [...changes.slice(-49), {
+    action, at: now,
+    before: {
+      date: old.date, quantity: old.grossQty, printRegion: old.printArea,
+      printDefectQty: old.printDefectQty, fabricDefectQty: old.fabricDefectQty,
+      testQty: old.testQty, machineId: old.machineId, machineName: old.machineName,
+      operatorName: old.operatorName, shift: old.shift, dispatchNo: old.dispatchNo,
+      batchNo: old.batchNo, orderNo: old.orderNo, note: old.note,
+    },
+  }];
+  if (action === "ARCHIVE") {
+    const raw = { ...previousRaw, deletedAt: now, revisions: history };
+    const result = await c.env.DB.prepare(
+      "UPDATE production_records SET raw=?,updated_at=? WHERE id=? AND main_company_slug=? AND updated_at IS ?",
+    ).bind(JSON.stringify(raw), now, entryId, slug, current.updated_at ?? null).run();
+    if (!result.meta?.changes) return { status: 409, code: "PRODUCTION_STALE_EDIT", message: "Fiş değişti. Yenileyip tekrar deneyin." };
+    return { status: 200, data: { id: entryId, archived: true, updatedAt: now } };
+  }
+  const gross = productionPatchNumber(first(body.quantity, body.adet, body.uretimAdedi), old.grossQty);
+  const printDefect = productionPatchNumber(first(body.printDefectQty, body.baskiHatasiAdet), old.printDefectQty);
+  const fabricDefect = productionPatchNumber(first(body.fabricDefectQty, body.kumasHatasiAdet), old.fabricDefectQty);
+  const testQty = productionPatchNumber(first(body.testQty, body.testAdedi), old.testQty);
+  if (![gross, printDefect, fabricDefect, testQty].every(Number.isFinite) ||
+      gross <= 0 || [printDefect, fabricDefect, testQty].some((n) => n < 0) ||
+      printDefect + fabricDefect + testQty > gross) {
+    return { status: 400, code: "PRODUCTION_QUANTITY_INVALID", message: "Adetler geçersiz: sakat ve test toplamı brüt adedi aşamaz." };
+  }
+  const date = isoDate(first(body.date, body.tarih, old.date));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return { status: 400, code: "PRODUCTION_DATE_INVALID", message: "Geçerli üretim tarihi girin." };
+  }
+  const printArea = text(first(body.printRegion, body.printArea, body.baskiBolgesi, old.printArea));
+  if (!printArea) {
+    return { status: 400, code: "PRODUCTION_AREA_REQUIRED", message: "Baskı bölgesi zorunludur." };
+  }
+  const machineId = text(first(body.machineId, body.makineNo, old.machineId));
+  const machineName = text(first(body.machineName, body.makineAdi, old.machineName));
+  const operatorName = text(first(body.operatorName, body.makinaci, old.operatorName));
+  const shift = text(first(body.shift, body.vardiya, old.shift));
+  const dispatchNo = text(first(body.dispatchNo, body.irsaliyeNo, old.dispatchNo));
+  const batchNo = text(first(body.batchNo, body.partiNo, old.batchNo)) || "GENEL";
+  const orderNo = text(first(body.orderNo, body.siparisNo, old.orderNo));
+  const note = text(first(body.note, body.not, old.note));
+  const raw = {
+    ...previousRaw, modelId: old.modelId, date, quantity: gross,
+    printDefectQty: printDefect, fabricDefectQty: fabricDefect, testQty,
+    printRegion: printArea, printArea, machineId, machineName, operatorName,
+    shift, dispatchNo, batchNo, orderNo, note, revisions: history, updatedAt: now,
+  };
+  const result = await c.env.DB.prepare(
+    "UPDATE production_records SET total_quantity=?,print_defect=?,fabric_defect=?,production_date=?,print_area=?,machine_name=?,machinist=?,shift=?,order_no=?,note=?,raw=?,updated_at=? WHERE id=? AND main_company_slug=? AND updated_at IS ?",
+  ).bind(gross, String(printDefect), String(fabricDefect), date + "T12:00:00.000Z",
+    printArea, machineName || machineId, operatorName, shift, orderNo, note,
+    JSON.stringify(raw), now, entryId, slug, current.updated_at ?? null).run();
+  if (!result.meta?.changes) {
+    return { status: 409, code: "PRODUCTION_STALE_EDIT", message: "Fiş değişti. Yenileyip tekrar deneyin." };
+  }
+  return { status: 200, data: mapProductionRow({
+    ...current, total_quantity: gross, print_defect: String(printDefect),
+    fabric_defect: String(fabricDefect), production_date: date + "T12:00:00.000Z",
+    print_area: printArea, machine_name: machineName || machineId, machinist: operatorName,
+    shift, order_no: orderNo, note, raw, updated_at: now,
+  }) };
+}
+
 async function createModel(c: Context<AppEnv>, body: Row) {
   const slug = companySlug(c, body);
   const modelName = text(first(body.modelName, body.modelAdi));
@@ -1378,6 +1476,30 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
     return result.failedCount
       ? c.json(jsonError(text(result.failed[0]?.code)||"PRODUCTION_ENTRY_REJECTED", text(result.failed[0]?.error), result), 409)
       : c.json({ ok: true, success: true, data: result.success[0] }, 201);
+  });
+
+  app.patch("/api/production-center/entries/:id", async (c) => {
+    const body = await requestBody(c);
+    try {
+      const result = await maintainProductionEntry(c, c.req.param("id"), body, "UPDATE");
+      return "code" in result
+        ? c.json(jsonError(result.code, result.message), result.status as 400 | 404 | 409)
+        : c.json({ ok: true, success: true, data: result.data }, 200);
+    } catch (error) {
+      return c.json(jsonError("PRODUCTION_EDIT_FAILED", error instanceof Error ? error.message : String(error)), 500);
+    }
+  });
+
+  app.delete("/api/production-center/entries/:id", async (c) => {
+    const body = await requestBody(c);
+    try {
+      const result = await maintainProductionEntry(c, c.req.param("id"), body, "ARCHIVE");
+      return "code" in result
+        ? c.json(jsonError(result.code, result.message), result.status as 400 | 404 | 409)
+        : c.json({ ok: true, success: true, data: result.data }, 200);
+    } catch (error) {
+      return c.json(jsonError("PRODUCTION_ARCHIVE_FAILED", error instanceof Error ? error.message : String(error)), 500);
+    }
   });
 
   app.post("/api/production-center/models", async (c) => {
