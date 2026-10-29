@@ -95,9 +95,10 @@ test("IK payment outputs keep EK visible and A4 outputs readable", () => {
   assert.match(monthly, /@page\{size:A4 landscape/);
   assert.match(monthly, /<h1>İK Ödeme Listesi<\/h1>/);
   assert.match(monthly, /Personel \/ HKN/);
-  assert.match(monthly, /row\.extra > 0 \? `<div class="extra-coupon"/);
-  assert.match(monthly, /row\.extra > 0 \? `<div class="compact-extra"/);
-  assert.match(monthly, /✂ EK ÖDEME/);
+  assert.match(monthly, /slip\.extraCoupon > 0 \? `<div class="extra-coupon"/);
+  assert.match(monthly, /slip\.extraCoupon > 0 \? `<div class="compact-extra"/);
+  assert.match(monthly, /✂ EK/);
+  assert.match(monthly, /const mainNet = round\(fullNet - extraCoupon\)/);
   assert.match(monthly, /index \+= 10/);
   assert.match(monthly, /A4 başına 10 adet kesimli toplu ödeme fişi/);
 });
