@@ -11,6 +11,8 @@ test("ana sayfa ve menü grupları tüm canonical operasyon modüllerini tekrars
   assert.equal(navigationGroupFor("compliance"), "company");
   assert.equal(navigationGroupFor("depolama"), "management");
   assert.equal(navigationGroupFor("ana-sayfa"), "");
+  assert.deepEqual(KY_NAV_GROUPS.map((item)=>item.title),["Personel & İK","Üretim","Muhasebe & Finans","Denetim & Uygunluk","İletişim & Dosyalar","Yönetim & Sistem"]);
+  assert.deepEqual(KY_NAV_GROUPS.find((item)=>item.key==="production").keys,["desen","uretim","boyahane"]);
 });
 
 test("görünür gruplar sadece erişilebilen modülleri içerir", () => {

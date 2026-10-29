@@ -1,6 +1,6 @@
 /* KY ERP birleşik arayüz katmanı */
 .shell-v3{--shell-bg:#f2f5f9;--shell-primary:#2859a4;--module-accent:#2859a4;--module-soft:#edf3fc;--module-line:#cbdcf1;background:#f2f5f9}
-@media(min-width:1025px){.shell-v3{grid-template-columns:252px minmax(0,1fr)}}
+@media(min-width:1025px){.shell-v3{grid-template-columns:270px minmax(0,1fr)}}
 .shell-v3-sidebar{background:#17283f!important;border-right:1px solid #112137!important;color:#e0eafb!important}
 .shell-v3-sidebar-brand{background:#17283f!important;border-bottom:1px solid #33445d!important}
 .shell-v3-brand-button{color:white!important}

@@ -5,6 +5,9 @@
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
 }
+.shell-v3 .shell-v3-module-copy > span { white-space:normal; overflow:visible; text-overflow:clip; line-height:1.35; overflow-wrap:anywhere; }
+.shell-v3 .shell-v3-module-button { height:auto; min-height:42px; }
+.shell-v3 .ky-pro-nav-group-trigger > span { min-width:0; overflow-wrap:anywhere; }
 .shell-v3 .shell-v3-submenu-group,
 .shell-v3 .shell-v3-submenu-group-items {
   min-width: 0;
