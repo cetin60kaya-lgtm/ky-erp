@@ -425,7 +425,6 @@ export default function ProductionDirectEntryPanel({
           {message && <div className="pde-success" role="status"><CheckCircle2 size={15}/>{message}</div>}
           {saving && <p className="pde-progress" role="status">Kayıtlar sırayla ve güvenli biçimde işleniyor. İşlem sırasında sayfayı kapatmayın.</p>}
         </div>
-      </div>
       <section className="pde-recent" aria-label="Son kaydedilen üretimler">
         <div className="pde-recent-head"><strong>Son Kaydedilen Üretimler</strong>
           <button type="button" onClick={loadRecent} title="Son üretimleri yenile"><RotateCcw size={14}/> Yenile</button></div>
