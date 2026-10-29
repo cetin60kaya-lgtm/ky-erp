@@ -26,6 +26,8 @@ test("canonical report groups regional production without double-counting the in
   assert.equal(data.report.rows.length, 2);
   assert.equal(data.report.summary.aktifMakine, 1);
   assert.equal(data.report.machineRows[0].operasyonAdedi, 2);
+  assert.equal(data.report.summary.tamamlananModelAdedi, 0, "Ön tamam, arka eksikken model tamamlanmış sayılamaz");
+  assert.equal(data.report.operatorRows[0].basilanBolgeAdedi, 1);
   assert.equal(data.report.operatorRows.length, 2);
 });
 test("canonical report respects day/shift/region/model filters and does not invent old data", () => {
