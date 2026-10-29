@@ -1,5 +1,15 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 29.10.2026 — PR #483 Yönetim ve Sistem iki parça canlı yayın kanıtı
+
+- **PR #483 MERGED:** SHA `1148e8785514fd3705dd243999d31ebcfc8cfe6b`. CI [#40923106664](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40923106664) **SUCCESS**: Frontend lint/test/build ve Worker typecheck/test/build.
+- **Frontend/Pages production:** [#40923576411](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40923576411) **SUCCESS**: CI, Pages deploy, canlı bundle ve Günlük Operasyon chunk smoke.
+- **Worker/API production:** [#40923576318](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40923576318) **SUCCESS**: Worker typecheck/test/build, canlı D1 tam export + GitHub backup artifact, D1 salt-okunur schema kontrolü, Worker deploy, canlı API health.
+- **Kaynak ve kapsam:** Tek kontrollü release kaydı `500da9fb6aae1b8ad8c106ef8879b40154697f8b`, PR #483 kod SHA'sının atasıdır. Firma Denetim ana menü ayrımı; Yönetim/Güvenlik/Sistem açıklamalı ve rol bazlı bölümler; firma ve paket açılır panelleri; yetki/giriş kontrolleri; D1 atomik paket kaydı; açıklama kaydı; eski build kaynak varsayımının kaldırılması canlı yayınlandı.
+- **Migration yok:** 0060/0061/0062 uygulama adımları atlandı; canlı kullanıcı, firma, ödeme veya üretim verisine test yazımı yapılmadı. KY Güvenlik telefon onayı ve oturumlu owner/firma saha kabulü ile gerçek backup restore ve EXE testi henüz ayrı kanıt gerektirir.
+- **Yayın notu:** GitHub Actions canlı sağlık/bundle sonucunu kanıtlar; ayrı gerçek kullanıcı senaryolarını kanıtlamaz. Bağımsız URL kodu doğrulaması bu sohbette DNS erişim kısıtı nedeniyle yapılamadı.
+
+
 ## 29.10.2026 — Yönetim ve Sistem son düzenleme (#483)
 - Menü, üç ana yönetim alanı ve rol bazlı alt işlem kartlarına ayrıldı. Firma kartındaki 6 işlem, paket/fiyat ekranındaki 4 işlem açılır panel olarak düzenlendi; mevcut kayıt ve butonlar korunur.
 - Denetim & Evrak Takibi firma işlemlerine taşındı, COMPLIANCE izni ve eski rotalar korundu. DENETIM/PDSK okuma hesabı firma belge denetimiyle karıştırılmadı.
