@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 29.10.2026 — PR #486 tek menü/başlık düzeni MERGED, Pages yayın bekleniyor
+
+- PR [#486](https://github.com/cetin60kaya-lgtm/ky-erp/pull/486) **MERGED**, SHA `3ecf63e34aec02561ab1ac19ede890a23194d884`. CI [#40930522828](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40930522828) **SUCCESS**: Frontend lint/test/build + Worker typecheck/test/build.
+- Ana Sayfa `company` simgesi ve fallback; 6 grup tek `navigationGroups` kaynağı; `AdminNavigation` ile 13 Yönetim işleminde gerçek sekme/URL; Firma Sahibi için doğru başlık/izinli görünüm; çalışma tabları ve breadcrumb eşit; okunabilir menü etiketleri.
+- **Yayın yolu:** yalnız `RELEASES/kyerp-frontend-production-release.json` ile mevcut Cloudflare Pages hattı. Worker/D1/migration/veri kayıtları yok. Gerçek kullanıcı rol/etkileşim ve responsive saha testi CI'den farklıdır.
+- **Canlı ölçütü:** Pages workflow, bundle smoke ve yayınlanan kaynağın #486 merge SHA atası olma kontrolü. Yayın kanıtı çıkmadan canlı denmez.
+
+
 ## 29.10.2026 — Tek menü, başlık ve çalışma sekmesi düzeni (hazırlık)
 
 - Kullanıcı talebi: Ana Sayfa render hatasını gider; tüm modüllerin ana menüleri, başlıkları, açılır grupları ve üst sekmeleri tek anlaşılır düzene al; mevcut işlemleri ve izinleri koru.

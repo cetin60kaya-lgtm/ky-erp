@@ -5,17 +5,16 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-10-29",
   "scope": [
-    "PR485-imalat-collapsible-direct-entry",
-    "PR485-model-autocomplete-and-inline-new-model",
-    "PR485-machine-shift-operator-region-dropdown",
-    "PR485-multi-row-staging-edit-selection-delete-clear",
-    "PR485-sequential-idempotent-bulk-save",
-    "PR485-responsive-design",
-    "PR485-validation-and-regression-tests",
-    "frontend-lint-test-build-CI-40926471806",
-    "pages-production-bundle-smoke"
+    "PR486-home-dashboard-missing-company-icon-and-fallback",
+    "PR486-single-six-section-navigation-source-and-sequence",
+    "PR486-canonical-heading-open-tab-breadcrumb-sync",
+    "PR486-admin-13-real-routes-history-refresh-workspace-tabs",
+    "PR486-company-admin-role-correct-headings",
+    "PR486-readable-desktop-sidebar-and-collapsible-groups",
+    "PR486-node-navigation-tests-frontend-worker-CI-40930522828",
+    "Pages-production-bundle-and-live-smoke-required"
   ],
-  "note": "29.10.2026 PR #485 merge 4c738d22...: Günlük Üretim Girişi açılır-kapanır; kayıtlı model yazdıkça bulunur, yeni model aynı ekranda açılır; hazır baskı bölgeleri; makine ve bağımsız vardiya makinacısı; 100 satıra kadar seri taslak, düzenle/sil, Toplu Kaydet her satırda sabit requestId. Kullanıcı Toplu Kaydet demedikçe D1 kayıt oluşturulmaz. CI #40926471806 frontend + Worker SUCCESS. Worker kodu ve D1 migration yok, geçmiş Excel importu yok. Gerçek yetkili saha E2E ayrıca bekliyor.",
-  "sourceCommit": "4c738d22ec761c27ab5097a108e0636916048dda",
+  "note": "29.10.2026 PR #486 (merge 3ecf63e...): Ana Sayfa company ikon render hatası ve default fallback; başlık/sekme/rota birlikte; Yönetim 13 gerçek işlem tek kaynak; firma sahibi rolüne uygun etiket; menü genişliği. Frontend + Worker CI #40930522828 başarılı. Yalnız Pages UI; Worker/D1/migration/gerçek kayıt işlemi yapılmaz. Gerçek yetkili kullanıcıyla PC/tablet/telefon saha kabulü ayrıca gerektirir.",
+  "sourceCommit": "3ecf63e34aec02561ab1ac19ede890a23194d884",
   "requestedAt": "2026-10-29"
 }
