@@ -11,7 +11,19 @@ import {
   applyHistoricalEmployeeValues,
   calculateOvertimeAmount,
   calculatePayrollAmounts,
+  resolveReferencePay,
 } from "./ik-relational-cloud.ts";
+
+test("reference EK is calculated once for any employee, preserving real salary", () => {
+  assert.deepEqual(resolveReferencePay(48100, 45500, 2600, true), { actualSalary: 48100, salary: 45500, extra: 2600 });
+  assert.deepEqual(resolveReferencePay(48000, 45500, 0, true), { actualSalary: 48000, salary: 45500, extra: 2500 });
+  assert.deepEqual(resolveReferencePay(45500, 45500, 0, true), { actualSalary: 45500, salary: 45500, extra: 0 });
+  assert.deepEqual(resolveReferencePay(48100, undefined, 2600, true), { actualSalary: 48100, salary: 45500, extra: 2600 });
+  assert.deepEqual(resolveReferencePay(48100, 50000, 2600, true), { actualSalary: 48100, salary: 48100, extra: 0 });
+  assert.deepEqual(resolveReferencePay(45500, undefined, 0, false), { actualSalary: 45500, salary: 45500, extra: 0 });
+  const split = resolveReferencePay(48100, 45500, 2600, true);
+  assert.equal(calculatePayrollAmounts({ salary: split.salary, extra: split.extra, road: 1680 }).net, 49780);
+});
 
 test("mecit-hakan tenant aliases normalize to one canonical id", () => {
   for (const alias of [

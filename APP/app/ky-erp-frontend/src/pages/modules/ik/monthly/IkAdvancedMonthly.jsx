@@ -309,6 +309,22 @@ function calcRow({ salary = 0, road = 0, overtime = 0, extra = 0, advance = 0, d
   return { hakedis, net, total: net, paymentTotal, diff: round(paymentTotal - net) };
 }
 
+// The stored person salary is the real salary. For a linked reference person,
+// the salary shown on a payroll/receipt is the reference salary and EK is
+// exactly the difference; it must never be added to the real salary again.
+function payrollCompensation(employee = {}, employees = []) {
+  const actualSalary = Math.max(round(num(employee.salary)), 0);
+  const storedExtra = Math.max(round(num(employee.extraPaymentAmount)), 0);
+  if (!employee.baseEmployeeId) return { actualSalary, salary: actualSalary, extra: storedExtra };
+  const reference = employees.find((item) => item.id === employee.baseEmployeeId);
+  if (!reference) {
+    const extra = Math.min(actualSalary, storedExtra);
+    return { actualSalary, salary: round(actualSalary - extra), extra, missingReference: true };
+  }
+  const salary = Math.min(actualSalary, Math.max(round(num(reference.salary)), 0));
+  return { actualSalary, salary, extra: round(actualSalary - salary), reference };
+}
+
 function reconcilePaymentSplit(netValue, bankValue, cashValue, preferred = "cash") {
   const net = Math.max(round(netValue), 0);
   const bank = Math.max(round(bankValue), 0);
@@ -794,10 +810,11 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const garnishmentSource = legalBank > 0 && legalCash > 0 ? "KARMA" : legalCash > 0 ? "ELDEN" : "BANKA";
   const actualSalary = num(employee.salary);
   const baseEmployee = employee.baseEmployeeId ? rawEmployees.find((item) => item.id === employee.baseEmployeeId) : null;
-  const salary = actualSalary;
+  const compensation = payrollCompensation(employee, rawEmployees);
+  const salary = compensation.salary;
   const road = num(employee.roadAllowance);
   const extraLabel = employee.extraPaymentLabel || "EK";
-  const extra = num(employee.extraPaymentAmount);
+  const extra = compensation.extra;
   const pre = calcRow({ salary, road, overtime, extra, advance, deduction, garnishment });
   const saved = payrollLines.find((line) => line.employeeId === employee.id);
   const payment = paymentSplitByType(employee.paymentType, pre.net, employee.bankAmount, bankDeductions);
@@ -1076,6 +1093,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const prePayrollDraft = (employee, controlMode = "ENTRY_EDIT", payrollRow = null) => {
     const base = draftPerson(employee);
     const row = payrollRow || payrollRows.find((item) => item.employee.id === employee?.id) || null;
+    const compensation = payrollCompensation(employee, rawEmployees);
     const sourceRows = movements.filter((item) => item.employeeId === employee?.id && String(item.date || item.adjustmentDate || "").startsWith(period) && !upper(item.payrollEffect).includes("SADECE"));
     const sourceTotals = sourceRows.reduce((acc, item) => { const kind = normalizeFinanceType(item.type || item.adjustmentType); if (kind === "Mesai") acc.overtime += num(item.amount); else if (["Avans","Toplu avans"].includes(kind)) acc.advance += num(item.amount); else if (["Ozel kesinti","Eksik gün","Eksik saat"].includes(kind)) acc.deduction += num(item.amount); else if (["Icra","Haciz"].includes(kind)) acc.garnishment += num(item.amount); return acc; }, {overtime:0,advance:0,deduction:0,garnishment:0});
     const entry = controlMode !== "FINAL";
@@ -1083,9 +1101,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       ...base,
       controlMode,
       finalEditor: {
-        salary: row && !entry ? num(row.salary) : num(base.salary),
+        salary: row ? num(row.salary) : compensation.salary,
         road: row && !entry ? num(row.road) : num(base.roadAllowance),
-        extra: row && !entry ? num(row.extra) : num(base.extraPaymentAmount),
+        extra: row ? num(row.extra) : compensation.extra,
         overtime: entry ? round(sourceTotals.overtime) : (row ? num(row.overtime) : round(sourceTotals.overtime)),
         advance: entry ? round(sourceTotals.advance) : (row ? num(row.advance) : round(sourceTotals.advance)),
         deduction: entry ? round(sourceTotals.deduction) : (row ? num(row.deduction) : round(sourceTotals.deduction)),
@@ -1485,9 +1503,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     if (modalDraft.baseEmployeeId === modalDraft.id) return failPersonSave("Personel kendisini baz personel olarak seçemez.");
     if (modalDraft.baseEmployeeId && !baseEmployee) return failPersonSave("Baz personel bulunamadı.");
 
-    const sourceExtra = Math.max(num(modalDraft.extraPaymentAmount), 0);
+    const realSalary = Math.max(round(num(modalDraft.salary)), 0);
+    if (baseEmployee && realSalary < round(num(baseEmployee.salary))) return failPersonSave("Gerçek maaş referans maaştan düşük olamaz. Referansı veya gerçek maaşı kontrol edin.");
+    const sourceExtra = baseEmployee
+      ? round(realSalary - num(baseEmployee.salary))
+      : Math.max(round(num(modalDraft.extraPaymentAmount)), 0);
     const sourcePlanEarnings = calcRow({
-      salary: modalDraft.salary,
+      salary: baseEmployee ? num(baseEmployee.salary) : realSalary,
       road: modalDraft.roadAllowance,
       extra: sourceExtra,
     }).hakedis;
@@ -2374,16 +2396,25 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const legalLabel = (row) => row.legalType === "KARMA" ? "İcra/Haciz" : row.legalType === "HACIZ" ? "Haciz" : row.legalType === "ICRA" ? "İcra" : "";
   const legalSourceLabel = (row) => row.garnishmentSource === "KARMA" ? "Banka + Elden" : row.garnishmentSource === "ELDEN" ? "Elden" : "Bankadan";
 
+  const slipPayment = (row) => {
+    // EK is a separate detachable receipt, never part of the visible main slip.
+    // The backend/ERP grand total remains unchanged and includes EK only once.
+    const fullNet = Math.max(round(num(row.net)), 0);
+    const extraCoupon = Math.min(Math.max(round(num(row.extra)), 0), fullNet);
+    const mainNet = round(fullNet - extraCoupon);
+    const balancedSplit = reconcilePaymentSplit(fullNet, row.bank, row.cash);
+    const mainBank = Math.min(balancedSplit.bank, mainNet);
+    return { mainNet, mainBank, mainCash: round(mainNet - mainBank), extraCoupon };
+  };
+
   const slipCardHtml = (row) => {
-    const rowTotals = calcRow({ salary: row.salary, road: row.road, extra: row.extra, overtime: row.overtime, advance: row.advance, deduction: row.deduction, garnishment: row.garnishment });
-    const balancedSplit = reconcilePaymentSplit(rowTotals.net, row.bank, row.cash);
+    const slip = slipPayment(row);
     const legalTitle = row.garnishment
       ? `${legalLabel(row) || "İcra/Haciz"} (${legalSourceLabel(row)})`
       : "İcra/Haciz";
     const lines = [
       ["Maaş", money(row.salary)],
       ["Yol", money(row.road)],
-      ["EK", money(row.extra)],
       ["Mesai", money(row.overtime)],
       ["Avans", row.advance ? `-${money(row.advance)}` : money(0)],
       ["Kesinti", row.deduction ? `-${money(row.deduction)}` : money(0)],
@@ -2393,14 +2424,15 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       <header><div class="brand">KY ERP</div><div class="period">${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)}<br><b>PERSONEL ÖDEME FİŞİ</b></div></header>
       <div class="person-block"><strong>${escapeHtml(row.employee.fullName)}</strong><span>${escapeHtml(row.employee.code || "-")} · ${escapeHtml(row.employee.department || "Bölüm yok")}</span></div>
       <div class="slip-lines">${lines.map(([label,value])=>`<div><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`).join("")}</div>
-      <div class="pay-channels"><div><span>BANKA</span><b>${money(balancedSplit.bank)}</b></div><div class="cash-pay"><span>ELDEN</span><b>${money(balancedSplit.cash)}</b></div></div>
-      <div class="net"><span>TOPLAM ÖDEME</span><b>${money(rowTotals.net)}</b></div>
+      <div class="pay-channels"><div><span>BANKA</span><b>${money(slip.mainBank)}</b></div><div class="cash-pay"><span>ELDEN</span><b>${money(slip.mainCash)}</b></div></div>
+      <div class="net"><span>TOPLAM ÖDEME</span><b>${money(slip.mainNet)}</b></div>
       <footer><div><span>Personel İmza</span><i></i></div><div><span>Ödeme Yapan</span><i></i></div></footer>
-      ${row.extra > 0 ? `<div class="extra-coupon"><span>✂ EK ÖDEME</span><b>${money(row.extra)}</b><small>Personel: ${escapeHtml(row.employee.fullName)} · İmza: __________________</small></div>` : ""}
+      ${slip.extraCoupon > 0 ? `<div class="extra-coupon"><span>✂ EK</span><b>${money(slip.extraCoupon)}</b><small>İmza: __________________</small></div>` : ""}
     </article>`;
   };
 
   const compactSlipCardHtml = (row) => {
+    const slip = slipPayment(row);
     const totalDeductions = round(num(row.advance) + num(row.deduction) + num(row.garnishment));
     return `<div class="cut-slot"><article class="compact-slip">
       <header><b>KY ERP</b><span>${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)}</span></header>
@@ -2408,12 +2440,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       <div class="compact-grid">
         <div><span>MESAI</span><b>${money(row.overtime)}</b></div>
         <div><span>AVANS/KESİNTİ</span><b>${money(totalDeductions)}</b></div>
-        <div><span>BANKA</span><b>${money(row.bank)}</b></div>
-        <div class="cash"><span>ELDEN</span><b>${money(row.cash)}</b></div>
-        <div class="total"><span>TOPLAM ÖDEME</span><b>${money(row.net)}</b></div>
+        <div><span>BANKA</span><b>${money(slip.mainBank)}</b></div>
+        <div class="cash"><span>ELDEN</span><b>${money(slip.mainCash)}</b></div>
+        <div class="total"><span>TOPLAM ÖDEME</span><b>${money(slip.mainNet)}</b></div>
       </div>
       <footer><span>Personel İmza</span><i></i><span>Ödeme Yapan</span><i></i></footer>
-      ${row.extra > 0 ? `<div class="compact-extra"><span>✂ EK ÖDEME</span><b>${money(row.extra)}</b><small>İmza __________</small></div>` : ""}
+      ${slip.extraCoupon > 0 ? `<div class="compact-extra"><span>✂ EK</span><b>${money(slip.extraCoupon)}</b><small>İmza __________</small></div>` : ""}
     </article></div>`;
   };
 
@@ -3292,7 +3324,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
             {modalDraft.sgkFollow==="SGKLI" && modalDraft.sgkDays!=="" && num(modalDraft.sgkDays)!==num(modalDraft.pdksCardDays) ? <div className="wide warnline warn">Kontrol farkı: SGK günü {num(modalDraft.sgkDays)}, PDKS kartlı gün {num(modalDraft.pdksCardDays)}. PDKS kartlı gün yalnız kontrol verisidir; izin/hafta tatili ve diğer yasal nedenlerle SGK günüyle bire bir aynı olmak zorunda değildir.</div> : null}
             {modalDraft.personnelStatus==="RETIRED" ? <div className="wide warnline">Emekli personel aktif çalışan olarak devam edebilir. Emekli statüsü SGK durumundan bağımsızdır.</div> : null}
           </div></div>
-          <div className="modal-section"><h3>Ücret ve Ödeme Planı</h3><div className="form"><Field label="Gerçek Maaş"><input type="number" value={modalDraft.salary||""} onChange={(event)=>setModalDraft((old)=>({...old,salary:event.target.value}))}/></Field><Field label="Referans Personel"><select value={modalDraft.baseEmployeeId||""} onChange={(event)=>setModalDraft((old)=>({...old,baseEmployeeId:event.target.value}))}><option value="">Referans yok</option>{rawEmployees.filter((item)=>item.id!==modalDraft.id).map((item)=><option key={item.id} value={item.id}>{item.fullName} - {money(item.salary)}{upper(item.status).includes("PAS") ? " · Pasif referans" : ""}</option>)}</select></Field><Field label="Referans Maaş"><input value={modalDraft.baseEmployeeId?money(rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary):"-"} readOnly/></Field><Field label="EK Ödeme"><input type="number" min="0" value={modalDraft.extraPaymentAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,extraPaymentAmount:event.target.value}))}/></Field><Field label="Yol Yardımı"><input type="number" value={modalDraft.roadAllowance||""} onChange={(event)=>setModalDraft((old)=>({...old,roadAllowance:event.target.value}))}/></Field><Field label="Mesai Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.overtimeHourlyBase||225} onChange={(event)=>setModalDraft((old)=>({...old,overtimeHourlyBase:event.target.value}))}/></Field><Field label="Kesinti Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.deductionHourlyBase||300} onChange={(event)=>setModalDraft((old)=>({...old,deductionHourlyBase:event.target.value}))}/></Field><Field label="Ödeme Tipi"><select value={modalDraft.paymentType||"BANKA_ELDEN"} onChange={(event)=>setModalDraft((old)=>({...old,paymentType:event.target.value}))}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field><Field label="Banka Planı"><input type="number" value={modalDraft.bankAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,bankAmount:event.target.value}))}/></Field><Field label="Elden Planı"><input type="number" value={modalDraft.cashAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,cashAmount:event.target.value}))}/></Field><Field label="Resmi Bordro Net"><input value={money(selected?.sgkNet)} readOnly/></Field><Field label="Geçerlilik Tarihi"><input type="date" value={modalDraft.effectiveDate||""} onChange={(event)=>setModalDraft((old)=>({...old,effectiveDate:event.target.value}))}/></Field><Field label="Değişiklik Açıklaması" wide><input value={modalDraft.changeNote||""} onChange={(event)=>setModalDraft((old)=>({...old,changeNote:event.target.value}))} placeholder="Örn. Ekim 2026 maaş/yol revizyonu"/></Field><Field label="Not" wide><textarea value={modalDraft.note||""} onChange={(event)=>setModalDraft((old)=>({...old,note:event.target.value}))}/></Field></div></div>
+          <div className="modal-section"><h3>Ücret ve Ödeme Planı</h3><div className="form"><Field label="Gerçek Maaş"><input type="number" value={modalDraft.salary||""} onChange={(event)=>setModalDraft((old)=>({...old,salary:event.target.value}))}/></Field><Field label="Referans Personel"><select value={modalDraft.baseEmployeeId||""} onChange={(event)=>setModalDraft((old)=>({...old,baseEmployeeId:event.target.value}))}><option value="">Referans yok</option>{rawEmployees.filter((item)=>item.id!==modalDraft.id).map((item)=><option key={item.id} value={item.id}>{item.fullName} - {money(item.salary)}{upper(item.status).includes("PAS") ? " · Pasif referans" : ""}</option>)}</select></Field><Field label="Referans Maaş"><input value={modalDraft.baseEmployeeId?money(rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary):"-"} readOnly/></Field><Field label="EK Ödeme"><input type="number" min="0" readOnly={Boolean(modalDraft.baseEmployeeId)} value={modalDraft.baseEmployeeId ? Math.max(round(num(modalDraft.salary) - num(rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary)),0) : (modalDraft.extraPaymentAmount||"")} onChange={(event)=>setModalDraft((old)=>({...old,extraPaymentAmount:event.target.value}))}/></Field><Field label="Yol Yardımı"><input type="number" value={modalDraft.roadAllowance||""} onChange={(event)=>setModalDraft((old)=>({...old,roadAllowance:event.target.value}))}/></Field><Field label="Mesai Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.overtimeHourlyBase||225} onChange={(event)=>setModalDraft((old)=>({...old,overtimeHourlyBase:event.target.value}))}/></Field><Field label="Kesinti Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.deductionHourlyBase||300} onChange={(event)=>setModalDraft((old)=>({...old,deductionHourlyBase:event.target.value}))}/></Field><Field label="Ödeme Tipi"><select value={modalDraft.paymentType||"BANKA_ELDEN"} onChange={(event)=>setModalDraft((old)=>({...old,paymentType:event.target.value}))}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field><Field label="Banka Planı"><input type="number" value={modalDraft.bankAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,bankAmount:event.target.value}))}/></Field><Field label="Elden Planı"><input type="number" value={modalDraft.cashAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,cashAmount:event.target.value}))}/></Field><Field label="Resmi Bordro Net"><input value={money(selected?.sgkNet)} readOnly/></Field><Field label="Geçerlilik Tarihi"><input type="date" value={modalDraft.effectiveDate||""} onChange={(event)=>setModalDraft((old)=>({...old,effectiveDate:event.target.value}))}/></Field><Field label="Değişiklik Açıklaması" wide><input value={modalDraft.changeNote||""} onChange={(event)=>setModalDraft((old)=>({...old,changeNote:event.target.value}))} placeholder="Örn. Ekim 2026 maaş/yol revizyonu"/></Field><Field label="Not" wide><textarea value={modalDraft.note||""} onChange={(event)=>setModalDraft((old)=>({...old,note:event.target.value}))}/></Field></div></div>
           {modalDraft.id && canAdminMaintainPersonnel ? <div className="admin-personnel-box">
             <div className="admin-personnel-head"><div><b>Yönetici İşlemleri</b><span>Yanlış veya mükerrer kayıtları doğrudan düzeltin. Yazılı onay kodu yok; butona basınca tek onay sorulur ve işlem loglanır.</span></div><span className="badge red">Yönetici</span></div>
             <div className="admin-personnel-grid">
@@ -3344,9 +3376,11 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         .filter((item) => upper(item.paymentMethod).includes("BANKA"))
         .reduce((sum, item) => sum + num(item.amount), 0);
 
-      const planExtra = num(modalDraft.extraPaymentAmount);
+      const planReference = modalDraft.baseEmployeeId ? rawEmployees.find((item) => item.id === modalDraft.baseEmployeeId) : null;
+      const planExtra = planReference ? Math.max(round(num(modalDraft.salary) - num(planReference.salary)), 0) : num(modalDraft.extraPaymentAmount);
+      const planSalary = planReference ? Math.min(num(modalDraft.salary), num(planReference.salary)) : num(modalDraft.salary);
       const preBaseTotals = calcRow({
-        salary: modalDraft.salary,
+        salary: planSalary,
         road: modalDraft.roadAllowance,
         extra: planExtra,
         overtime: movementTotals.overtime,
@@ -3356,7 +3390,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       });
       const modalPayment = paymentSplitByType(modalDraft.paymentType, preBaseTotals.net, modalDraft.bankAmount, movementBankDeductions);
       const preTotals = calcRow({
-        salary: modalDraft.salary,
+        salary: planSalary,
         road: modalDraft.roadAllowance,
         extra: planExtra,
         overtime: movementTotals.overtime,

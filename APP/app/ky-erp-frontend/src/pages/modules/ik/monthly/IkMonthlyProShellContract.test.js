@@ -8,6 +8,20 @@ const financePage = readFileSync(new URL("./IkFinancePage.jsx", import.meta.url)
 const shell = readFileSync(new URL("./IkMonthlyProShell.jsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("./ik.monthly.pro.css", import.meta.url), "utf8");
 
+test("reference salary is printed in main payslip while detachable EK is paid once", () => {
+  assert.match(monthly, /function payrollCompensation\(/);
+  assert.match(monthly, /const compensation = payrollCompensation\(employee, rawEmployees\)/);
+  assert.match(monthly, /const salary = compensation\.salary/);
+  assert.match(monthly, /const extra = compensation\.extra/);
+  assert.match(monthly, /const slip = slipPayment\(row\)/);
+  assert.match(monthly, /const mainNet = round\(fullNet - extraCoupon\)/);
+  assert.match(monthly, /money\(slip\.mainNet\)/);
+  assert.match(monthly, /money\(slip\.extraCoupon\)/);
+  assert.doesNotMatch(monthly, /\["EK", money\(row\.extra\)\]/);
+  assert.doesNotMatch(monthly, /Personel: \$\{escapeHtml\(row\.employee\.fullName\)\} · İmza/);
+  assert.match(monthly, /readOnly=\{Boolean\(modalDraft\.baseEmployeeId\)\}/);
+});
+
 test("monthly HR uses the professional command shell without replacing payroll rules", () => {
   assert.match(monthly, /IkMonthlyProShell/);
   assert.match(monthly, /periodPrepared=\{periodPrepared\}/);

@@ -237,6 +237,21 @@ export function calculatePayrollAmounts(input: {
   return { earnings, net };
 }
 
+// Canonical real salary stays in hr_monthly_employees.salary. With a linked
+// reference, the base payslip salary is the reference and EK is the difference.
+// This prevents realSalary + EK double counting for every linked employee.
+export function resolveReferencePay(actualInput: unknown, referenceInput: unknown, storedExtraInput: unknown, hasReference = false) {
+  const actualSalary = Math.max(Math.round(number(actualInput) * 100) / 100, 0);
+  const storedExtra = Math.max(Math.round(number(storedExtraInput) * 100) / 100, 0);
+  if (!hasReference) return { actualSalary, salary: actualSalary, extra: storedExtra };
+  if (referenceInput === undefined || referenceInput === null) {
+    const extra = Math.min(storedExtra, actualSalary);
+    return { actualSalary, salary: Math.round((actualSalary - extra) * 100) / 100, extra };
+  }
+  const salary = Math.min(actualSalary, Math.max(Math.round(number(referenceInput) * 100) / 100, 0));
+  return { actualSalary, salary, extra: Math.round((actualSalary - salary) * 100) / 100 };
+}
+
 function paymentSplitByTypeAndSource(paymentTypeValue: unknown, netValue: unknown, bankPlanValue: unknown, bankDeductionsValue: unknown = 0) {
   const net = Math.max(Math.round(number(netValue) * 100) / 100, 0);
   const type = upper(paymentTypeValue);
@@ -1609,8 +1624,10 @@ async function advancedPayroll(c: Context<AppEnv>) {
   const normalizeType = (value: unknown) => { const valueUpper = financeKey(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
   const lines = employees.map((employee) => {
     const row = byEmployee.get(text(employee.id));
-    const salary = number(employee.salary);
-    const extra = number(employee.extraPaymentAmount);
+    const reference = employee.baseEmployeeId ? rawEmployees.find((item) => text(item.id) === text(employee.baseEmployeeId)) : null;
+    const split = resolveReferencePay(employee.salary, reference?.salary, employee.extraPaymentAmount, Boolean(employee.baseEmployeeId));
+    const salary = split.salary;
+    const extra = split.extra;
     const own = adjustments.filter((item) => text(item.employeeId) === text(employee.id) && text(item.date).startsWith(period) && !upper(item.payrollEffect).includes("SADECE"));
     const overtime = own.filter((item) => normalizeType(item.adjustmentType) === "MESAI").reduce((sum, item) => sum + number(item.amount), 0);
     const advanceRows = own.filter((item) => ["AVANS", "TOPLU_AVANS"].includes(normalizeType(item.adjustmentType)));
@@ -1663,8 +1680,12 @@ async function savePersonCard(c: Context<AppEnv>) {
   const baseEmployee = baseEmployeeId ? await first(c, "SELECT id,salary FROM hr_monthly_employees WHERE id=? AND main_company_id=?", [baseEmployeeId, companyId]) : null;
   if (baseEmployeeId && !baseEmployee) return error(c, 400, "INVALID_BASE_EMPLOYEE", "Baz personel bulunamadı.");
   const actualSalary = number(body.salary ?? current.salary);
-  const extraPaymentAmount = number(body.extraPaymentAmount ?? currentCard?.extra_payment_amount);
-  if (extraPaymentAmount < 0) return error(c, 400, "EXTRA_PAYMENT_INVALID", "EK ödeme negatif olamaz.");
+  if (baseEmployee && actualSalary < number(baseEmployee.salary)) return error(c, 409, "REFERENCE_SALARY_EXCEEDS_REAL", "Gerçek maaş referans maaştan düşük olamaz. Referans maaşı veya gerçek maaşı düzeltin.");
+  const enteredExtra = number(body.extraPaymentAmount ?? currentCard?.extra_payment_amount);
+  if (enteredExtra < 0) return error(c, 400, "EXTRA_PAYMENT_INVALID", "EK ödeme negatif olamaz.");
+  const extraPaymentAmount = baseEmployee
+    ? resolveReferencePay(actualSalary, baseEmployee.salary, enteredExtra, true).extra
+    : enteredExtra;
   const legalTypeRaw = upper(body.legalDeductionType);
   const legalType = legalTypeRaw === "HACIZ" ? "HACIZ" : legalTypeRaw === "ICRA" ? "ICRA" : "YOK";
   const legalAmount = legalType === "YOK" ? 0 : number(body.garnishmentAmount);
@@ -2209,6 +2230,15 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     bank: Math.max(0, number(body.bank)),
     cash: Math.max(0, number(body.cash)),
   };
+  const referenceId = text(currentCard?.base_employee_id);
+  const referenceEmployee = referenceId
+    ? await first(c, "SELECT id,salary FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [referenceId, companyId])
+    : null;
+  if (referenceId && !referenceEmployee) return error(c, 409, "REFERENCE_EMPLOYEE_MISSING", "Bağlı referans personel bulunamadı; bordro ana maaşı güvenle kaydedilemez.");
+  if (referenceEmployee && Math.abs(desired.salary - number(referenceEmployee.salary)) > 0.01) {
+    return error(c, 409, "REFERENCE_BASE_MISMATCH", "Ana maaş referans maaşla eşleşmiyor. Personel referansını ve EK farkını kontrol edin.");
+  }
+  const realSalaryForMaster = referenceEmployee ? Math.round((desired.salary + desired.extra) * 100) / 100 : desired.salary;
   const { earnings, net } = calculatePayrollAmounts(desired);
   const paymentDiff = Math.round((desired.bank + desired.cash - net) * 100) / 100;
   if (Math.abs(paymentDiff) > 0.01) {
@@ -2411,7 +2441,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     c.env.DB.prepare(`UPDATE hr_monthly_employees
       SET salary=?,road_allowance=?,bank_payment_type=?,bank_amount=?,cash_amount=?,updated_at=?
       WHERE id=? AND main_company_id=?`)
-      .bind(desired.salary, desired.road, resolvedPaymentType, bankPlan, cashPlan, timestamp, employeeId, companyId),
+      .bind(realSalaryForMaster, desired.road, resolvedPaymentType, bankPlan, cashPlan, timestamp, employeeId, companyId),
   );
   statements.push(
     c.env.DB.prepare(`INSERT INTO ik_person_card_settings
@@ -2425,7 +2455,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   );
 
   const financialChanges = [
-    ["salary", number(employee.salary), desired.salary],
+    ["salary", number(employee.salary), realSalaryForMaster],
     ["roadAllowance", number(employee.road_allowance), desired.road],
     ["bankPaymentType", text(employee.bank_payment_type), resolvedPaymentType],
     ["bankAmount", number(employee.bank_amount), bankPlan],
@@ -2511,7 +2541,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     employeeId,
     period,
     current,
-    final: { ...desired, total: net },
+    final: { ...desired, actualSalary: realSalaryForMaster, total: net },
     paymentType: resolvedPaymentType,
     bankPlan,
     cashPlan,
