@@ -126,11 +126,11 @@ const ILETISIM_MODULE = {
 const COMPLIANCE_MODULE = {
   key: "compliance",
   permissionKey: "COMPLIANCE",
-  label: "Denetim",
+  label: "Denetim & Evrak Takibi",
   icon: "file-check",
   groups: [
     {
-      label: "Kontrol Merkezi",
+      label: "Evrak ve Denetim",
       tabs: [
         ["denetim-genel", "Genel Bakış", "dashboard"],
         ["denetim-evraklar", "Evrak & Kanıt", "dosya"],
@@ -140,7 +140,7 @@ const COMPLIANCE_MODULE = {
       ],
     },
     {
-      label: "Yönetim",
+      label: "Denetim Yönetimi",
       tabs: [
         ["denetim-denetci-odasi", "Denetçi Odası", "users"],
         ["denetim-standartlar", "Standartlar & Kriterler", "file-check"],
