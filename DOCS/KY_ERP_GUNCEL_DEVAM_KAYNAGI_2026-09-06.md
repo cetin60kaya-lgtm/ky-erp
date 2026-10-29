@@ -1,5 +1,15 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 29.10.2026 — DÖRT MODÜL 24 GÖRÜNÜM SON RÖTUŞ (#480)
+
+- Kullanıcı kararı: tüm bölümleri ve sekmeleri ayrı ayrı kontrol et, tasarım/işlem/ortak ilişkiler kullanımda bitir; 2022 ve eski Excel aktarımına odaklanma.
+- **PR #480 MERGED** squash SHA `da208e3619331a3a3d5e85d25b5a4f9f6dfce97e`; [CI #40891809902](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40891809902) Frontend lint/test/build ve Worker typecheck/test/build SUCCESS. [24 ekran saha kaynak/kabul matrisi](KY_ERP_24_EKRAN_DORT_MODUL_SAHA_KABUL_2026-10-29.md).
+- **İmalat:** pasif makineler ayarlarda görünür/yeniden aktif olabilir, yeni fiş sözlüğünde pasifler yok; eski `/imalat/rapor` ve `/imalat/denetim` yerine kanonik model-flow + makine verisinden rapor ve filtre; modelin tüm baskı bölgeleri bitmeden tamamlanmış saymama; fişe zemin ekleme ve düzenleme, makine/vardiya/makinacı raporu; geçmiş CSV günlük ana menüde ikincil.
+- **Muhasebe/e-Belge:** Müşteri irsaliyesi/fatura kontrol çekmecesinden irsaliye/fatura kanonik belge ID'sine doğrudan geçiş, boş ana firma etiketinde varsayılan sahte şirket adı yok.
+- **Güvenlik/veri:** 0062 D1 migration 26.10.2026 uygulanmıştı. Bu PR herhangi D1 migration, gerçek fatura/ödeme/LOT/İşNet kaydı veya tarihsel üretim aktarmadı; yalnız kod ve test.
+- **Açık gerçek saha kabulü:** 7 Muhasebe+9 e-Belge+3 İmalat+5 Desen kullanıcı oturumu/rol, finans, İşNet, LOT, cihaz ve görsel E2E **BEKLİYOR**. CI ve Pages/Worker sağlık kanıtı bu işletme işlemlerini kanıtlamaz. Yayın durumu yalnız gerçek Actions sonucuyla kaydedilir.
+
+
 ## 29.10.2026 — PR #479 DÖRT MODÜL CANLI YAYIN KANITI
 
 - **PR #479** birleştirildi; squash SHA `1c40638517a07de9aa053206fd1f64bb889832be`. [Canonical CI #40888419009](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40888419009) SUCCESS (Frontend lint/test/build, Worker typecheck/test/build).
