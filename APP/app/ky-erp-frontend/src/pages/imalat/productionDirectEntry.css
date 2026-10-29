@@ -86,3 +86,15 @@
 @media(max-width:1280px){.pde-main-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.pde-main-grid>.pde-model-search{grid-column:span 2}.pde-main-grid>.pde-operator{grid-column:span 2}}
 @media(max-width:850px){.pde-main-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pde-main-grid>.pde-model-search{grid-column:span 2}.pde-main-grid>.pde-operator{grid-column:span 2}.pde-new-fields{grid-template-columns:1fr}.pde-queue-head>div:first-child{flex-wrap:wrap}}
 @media(max-width:570px){.pde-head-actions{gap:5px}.pde-count{font-size:10px;padding:5px}.pde-toggle{padding:8px;font-size:10px}.pde-main-grid>.pde-model-search{grid-column:span 2}.pde-model-search .pde-combobox-menu{max-height:220px}.pde-queue{padding:0 10px 12px}.pde-queue-actions{width:100%}.pde-queue-actions button{flex:1;justify-content:center}.pde-queue-actions .pde-bulk-save{flex-basis:100%}.pde-head p{font-size:11px}}
+
+/* Kapalı varsayılan kart: tam başlığa tıklanabilir erişilebilir accordion. */
+.pde-head{padding:0}
+.pde-head-trigger{appearance:none;border:0;background:transparent;width:100%;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 19px;text-align:left;color:inherit;cursor:pointer}
+.pde-head-trigger:hover{background:#eaf4ff}
+.pde-head-trigger:focus-visible{outline:3px solid #3384d1;outline-offset:-3px;border-radius:13px}
+.pde-head-trigger:disabled{cursor:wait;opacity:.7}
+.pde-head-title{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0;flex:1}
+.pde-heading{display:block;font-size:18px;font-weight:850;line-height:1.25;color:#183b65}
+.pde-head-subtitle{display:block;color:#617b95;font-size:11px;line-height:1.45}
+.pde-head-trigger .pde-toggle{pointer-events:none}
+@media(max-width:570px){.pde-head-trigger{padding:12px;gap:8px}.pde-heading{font-size:16px}.pde-head-subtitle{font-size:10px}.pde-head-trigger .pde-count{display:none}}
