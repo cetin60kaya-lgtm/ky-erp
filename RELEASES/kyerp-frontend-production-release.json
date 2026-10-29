@@ -5,18 +5,15 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-10-29",
   "scope": [
-    "PR479-designer-to-production-one-click-model",
-    "PR479-accounting-invoice-dispatch-ebelge-detail-link",
-    "PR479-ebelge-accounting-production-refresh",
-    "PR479-production-model-plan-update-form",
-    "PR479-machine-settings-canonical-worker-api",
-    "PR479-production-entry-edit-archive",
-    "PR479-production-report-year-filter",
-    "frontend-lint-test-build",
-    "cloudflare-pages-production",
-    "no-d1-migration-no-historical-import"
+    "four-module-final-ui-pr480",
+    "canonical-production-reports",
+    "machine-settings",
+    "accounting-ebelge-document-links",
+    "24-view-source-audit",
+    "frontend-build",
+    "production-pages"
   ],
-  "note": "29.10.2026 PR #479 dört modül günlük işlem ekranı ve bağlantıları, merge 1c406385..., canonical CI #40888419009 SUCCESS, Worker live #40888953951 SUCCESS ve D1 backup/migration SKIPPED. Yalnız Pages statik web frontend yayın; canlı finans, D1 migration veya Excel kayıt aktarımı yok. Gerçek oturum/rol saha testi ayrıca gereklidir.",
-  "sourceCommit": "1c40638517a07de9aa053206fd1f64bb889832be",
+  "note": "29.10.2026 PR480 final frontend release; CI 40891809902 success. No D1 migration or business data import. Real signed-in E2E still pending.",
+  "sourceCommit": "da208e3619331a3a3d5e85d25b5a4f9f6dfce97e",
   "requestedAt": "2026-10-29"
 }
