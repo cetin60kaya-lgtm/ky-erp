@@ -1059,8 +1059,6 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
       errors.push("Sakat ve test toplamı brüt üretimi aşamaz.");
     }
     if (!printArea) errors.push("Baskı bölgesi zorunludur.");
-    if (!text(entry.machineId || entry.machineName || entry.makineNo)) errors.push("Makine zorunludur.");
-    if (!text(entry.operatorName || entry.operatorId || entry.makinaci)) errors.push("Makinacı zorunludur.");
     if (card && card.incomingQty > 0 && !body.allowOverProduction) {
       const operation = (card.operationRows || []).find(
         (row: Row) => normalized(row.region) === normalized(printArea),
@@ -1247,7 +1245,7 @@ async function createModel(c: Context<AppEnv>, body: Row) {
     (card) =>
       !card.isVirtual &&
       normalized(card.modelName) === normalized(modelName) &&
-      (!companyId || card.companyId === companyId) &&
+      card.companyId === companyId &&
       (!orderNo || normalized(card.orderNo) === normalized(orderNo)),
   );
   if (duplicate) return { ...duplicate, duplicate: true };
