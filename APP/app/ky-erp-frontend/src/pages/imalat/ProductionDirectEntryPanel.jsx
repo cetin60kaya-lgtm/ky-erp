@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, ClipboardList, RotateCcw, Save, Search, ShieldAlert } from "lucide-react";
 import { createProductionCenterEntry, getProductionCenterRecent } from "../../services/productionCenterApi";
 import "./productionDirectEntry.css";
+import { validateDirectProduction, validCount } from "./productionDirectEntryValidation";
 
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
 const asText = (value) => String(value ?? "").trim();
@@ -23,30 +24,6 @@ function blankEntry() {
   return { modelId: "", date: today(), quantity: "", shift: "Gündüz", machineId: "",
     ground: "", printRegion: "", printDefectQty: "0", fabricDefectQty: "0", operatorName: "" };
 }
-function validCount(value, required = false) {
-  const raw = asText(value);
-  if (!raw && !required) return 0;
-  if (!/^\d+$/.test(raw)) return null;
-  const number = Number(raw);
-  return Number.isSafeInteger(number) && (!required || number > 0) ? number : null;
-}
-export function validateDirectProduction(values) {
-  if (!values.modelId) return "Önce kayıtlı modeli seçin.";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(values.date || "") ||
-      Number.isNaN(new Date(values.date + "T12:00:00").getTime())) return "Geçerli üretim tarihi seçin.";
-  const quantity = validCount(values.quantity, true);
-  const printDefect = validCount(values.printDefectQty);
-  const fabricDefect = validCount(values.fabricDefectQty);
-  if (quantity === null) return "Üretim adedi sıfırdan büyük, tam sayı olmalıdır.";
-  if (printDefect === null || fabricDefect === null) return "Sakat adetleri negatif olmayan tam sayı olmalıdır.";
-  if (printDefect + fabricDefect > quantity) return "Baskı ve kumaş sakatı toplamı üretim adedini aşamaz.";
-  if (!values.machineId) return "Makine seçin.";
-  if (!values.shift || !["Gündüz", "Gece"].includes(values.shift)) return "Gündüz veya Gece vardiyasını seçin.";
-  if (!asText(values.printRegion)) return "Baskı bölgesi seçin.";
-  if (!asText(values.operatorName)) return "Bu vardiya için makinacıyı seçin veya elle yazın.";
-  return "";
-}
-
 export default function ProductionDirectEntryPanel({ activeMainCompany, models = [], machines = [], onSaved, preselectModelId = "" }) {
   const [entry, setEntry] = useState(blankEntry);
   const [modelSearch, setModelSearch] = useState("");
