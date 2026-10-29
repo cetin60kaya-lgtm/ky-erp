@@ -1489,7 +1489,7 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
     try {
       const result = await maintainProductionEntry(c, c.req.param("id"), body, "UPDATE");
       return "code" in result
-        ? c.json(jsonError(result.code, result.message), result.status as 400 | 404 | 409)
+        ? c.json(jsonError(String(result.code || "PRODUCTION_MAINTENANCE_REJECTED"), String(result.message || "İşlem reddedildi.")), result.status as 400 | 404 | 409)
         : c.json({ ok: true, success: true, data: result.data }, 200);
     } catch (error) {
       return c.json(jsonError("PRODUCTION_EDIT_FAILED", error instanceof Error ? error.message : String(error)), 500);
@@ -1501,7 +1501,7 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
     try {
       const result = await maintainProductionEntry(c, c.req.param("id"), body, "ARCHIVE");
       return "code" in result
-        ? c.json(jsonError(result.code, result.message), result.status as 400 | 404 | 409)
+        ? c.json(jsonError(String(result.code || "PRODUCTION_MAINTENANCE_REJECTED"), String(result.message || "İşlem reddedildi.")), result.status as 400 | 404 | 409)
         : c.json({ ok: true, success: true, data: result.data }, 200);
     } catch (error) {
       return c.json(jsonError("PRODUCTION_ARCHIVE_FAILED", error instanceof Error ? error.message : String(error)), 500);
