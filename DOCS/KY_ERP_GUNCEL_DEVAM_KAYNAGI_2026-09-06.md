@@ -1,5 +1,15 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 29.10.2026 — PR #479 DÖRT MODÜL CANLI YAYIN KANITI
+
+- **PR #479** birleştirildi; squash SHA `1c40638517a07de9aa053206fd1f64bb889832be`. [Canonical CI #40888419009](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40888419009) SUCCESS (Frontend lint/test/build, Worker typecheck/test/build).
+- **Worker production** [#40888953951](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40888953951) SUCCESS; deploy kaynak SHA `079c3fb1e2835757306aad4ea7e26b9a260a8c39`; canlı D1 tam backup/artifact, migration adımları SKIPPED, read-only schema, api.kyerp.net health PASS.
+- **Pages production** [#40889288736](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40889288736) SUCCESS; deploy kaynak SHA `631eafa5fd0e67c0741d27107e8096ca86094c50`; canlı Pages deploy, public uygulama bundle ve Günlük Operasyon chunk smoke PASS.
+- **Ancestry teyidi:** birleşim SHA'nın hem Worker hem Pages deploy SHA'sına karşı compare sonucu `behind_by=0`. Modül değişiklikleri canlı yayınlanan kaynaklarda mevcuttur.
+- **İş kapsamı:** Muhasebe satış/alış belge listelerinden e-Belge detayına geçiş; e-Belge değişikliklerinden sonra Muhasebe/İmalat yenileme; Desen modelini kanonik kimlikle İmalat'a açma; İmalat fişi düzenleme/arşiv, üretim planı, kanonik makine/vardiya API ve pasifleştirme; yanlış model/firma eşleşmesini engelleme.
+- **Kullanıcı kararı:** 2022 ve eski Excel veri aktarımı öncelik dışı; hiç gerçek tarihsel kayıt import edilmedi. **Ek D1 migration yok, gerçek fatura/İşNet gönderimi yok.** 26.10.2026 0062 migration zaten uygulanmıştı. Gerçek yetkili firma kullanıcı oturumu, bankacılık/LOT/İşNet fiziksel saha E2E ve 19 sekmenin nihai iş kabulü bu otomatik yayın/CI kanıtıyla **PASS sayılamaz**.
+
+
 ## 29.10.2026 — Muhasebe / e-Belge / İmalat / Desen günlük işlem bağlantıları (#479)
 
 - **Kullanıcı kararı:** 2022 ve eski Excel kayıtlarının toplu aktarımına odaklanma; dört bölümün günlük işlemleri ve ortak Desen→Model→İmalat→İrsaliye/Fatura→Muhasebe tutarlılığı öncelikli. Eski satırlar canlı D1'e aktarılmadı.
