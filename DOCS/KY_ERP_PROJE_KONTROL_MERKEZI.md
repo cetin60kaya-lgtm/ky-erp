@@ -1,5 +1,15 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 29.10.2026 — İmalat doğrudan üretim girişi, Excel 10 alan (#484)
+
+- **Kaynak**: Kullanıcının `İMALAT BASKI MUHASEBE (1).xlsm` üretim sayfası. Excel başlıkları (asıl A:O): Tarih, Sipariş No, Model Adı, İrsaliye Adedi, **Adet**, Zemin Renk, Baskı Bölgesi, Makina No, Vardiya, Makine Adı, Kumaş Sakatı, Baskı Sakatı, Makine Sorumlu, Makine Yardımcı, Toplam Adet. **Yalnız kullanıcının istediği 10 alan** üretim fişine alındı: Model Adı, Tarih, Adet, Vardiya, Makina No, Zemin, Baskı Bölgesi, Baskı Sakatı, Kumaş Sakatı, Makinacı. Yardımcı/Excel toplamı/sipariş/irsaliye adedi bu günlük formda zorunlu değil.
+- **Yeni UX**: `ProductionDirectEntryPanel.jsx` ana İmalat/Model ve Üretim Merkezi ekranında görünür. Model adıyla ara ve ID seçimi, tarih, tam sayı adet, makine ve gündüz/gece vardiya, makinacının manuel düzenlenmesi, zemin/bölge, iki sakat adet; net sağlam adet önizleme. **Üretimi Kaydet** `POST /api/production-center/entries` kanonik mevcut API'ye gönderir. RequestId/idempotency + çift tıklama kilidi, işlem sonrası yalnız adet/sakatları temizleme; son 8 gerçek üretim fişini salt okunur gösterir. Kullanıcıya uydurma üretim sayısı girilmedi.
+- **Akış**: Model listesinde **Üretim Gir**, yeni manuel model oluşturma ve Desenlerden Model Al sonrasında ana kayıt alanına gider. Metin tabanlı Akıllı Seri Giriş ve Geçmiş CSV Al, **Diğer işlemler** altına taşındı. Düzenleme/arşiv ve ayrıntılı fiş çekmecesi korunuyor.
+- **Kodu**: PR [#484](https://github.com/cetin60kaya-lgtm/ky-erp/pull/484) **MERGED**, SHA `98440423bc7f988ea491a6c221155c3fb787ab07`. CI [#40921768293](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40921768293) Frontend lint/test/build ve Worker typecheck/test/build **SUCCESS**. Form validasyonu testleri `productionDirectEntryValidation.test.js`.
+- **Frontend production**: [Pages run #40922008771](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40922008771) **SUCCESS**; frontend bundle smoke PASS; release SHA `49d954c8c6dbb5b5528c66f117385b7ccd7c72ff`, #484 merge ancestry `behind_by=0`.
+- **Sınır**: Backend değişmedi; en son başarılı API/Worker #40918328487 kalır. Yeni migration, D1 veri aktarımı, muhasebe/KDV/LOT, İşNet veya otomatik üretim fişi yazımı yok. **Gerçek kullanıcıyla bir üretim fişi kaydı, son fişte görünmesi ve rapor mutabakatı** saha kabulü gerekiyor. Eski 2022/Excel toplu kayıt aktarımı yapılmadı.
+
+
 ## 29.10.2026 — Canlı saha ekranı gece vardiyası + rapor kabulü (#482)
 
 - Kullanıcı canlı ekranları (Muhasebe Firma & Cari, Tedarikçi/Alış, Müşteri/Satış, Model ve Üretim Merkezi, Üretim Raporları, Makine/Vardiya) görüntüledi. Firma kartlarında 2 firma ve toplam 50.000 TL alacak; kanonik İmalat merkezinde 112 model; 6 makine; kayıtlı üretim/irsaliye yok. Bu sayıların birebir mali doğruluğu yetkili muhasebe kabulü olmadan teyit edilmedi.
