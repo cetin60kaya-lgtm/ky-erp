@@ -61,7 +61,7 @@ export default function AdminPlatformHub({activeTab,activeMainCompany}){
  const groups=owner?ALL_GROUPS:COMPANY_GROUPS;
  const initial=allowedTarget(activeTab,groups);
  const [group,setGroup]=useState(initial[0]),[panel,setPanel]=useState(initial[1]);
- useEffect(()=>{const [g,p]=allowedTarget(activeTab,groups);setGroup(g);setPanel(p)},[activeTab,owner]);
+ useEffect(()=>{const [g,p]=allowedTarget(activeTab,groups);setGroup(g);setPanel(p)},[activeTab,groups]);
  const current=groups[group]||groups.management;
  const selected=current.panels.find(([key])=>key===panel)||current.panels[0];
  const content=useMemo(()=>{
