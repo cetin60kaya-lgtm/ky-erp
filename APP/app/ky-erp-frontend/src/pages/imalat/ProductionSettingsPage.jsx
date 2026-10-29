@@ -23,7 +23,7 @@ function normalize(row, index) {
     makineNo: row?.machineNo || row?.makineNo || row?.no || row?.id || "",
     makineAdi: row?.makineAdi || row?.machineName || row?.ad || row?.name || "",
     gunduzMakinaci: row?.gunduzMakinaci || row?.dayOperator || row?.operator || row?.makinaci || "",
-    geceMakinaci: row?.geceMakinaci || row?.nightOperator || row?.operator || row?.makinaci || "",
+    geceMakinaci: row?.geceMakinaci ?? row?.nightOperator ?? "",
     isActive: row?.isActive !== false && row?.durum !== "Pasif",
     sortOrder: Number(row?.sortOrder || index + 1),
   };
@@ -92,7 +92,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
       makineNo: String(row.makineNo || "").trim(),
       makineAdi: String(row.makineAdi || "").trim(),
       gunduzMakinaci: String(row.gunduzMakinaci || "").trim(),
-      geceMakinaci: String(row.geceMakinaci || row.gunduzMakinaci || "").trim(),
+      geceMakinaci: String(row.geceMakinaci ?? "").trim(),
       sortOrder: index + 1,
     }));
     const incomplete = prepared.find((row) => !row.makineNo || (row.isActive !== false && (!row.makineAdi || !row.gunduzMakinaci)));
@@ -149,12 +149,12 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
               <label><span>Makine No *</span><input disabled={saving} value={row.makineNo} onChange={(event) => update(index, "makineNo", event.target.value)} placeholder="1" /></label>
               <label><span>Makine Adı *</span><input disabled={saving} value={row.makineAdi} onChange={(event) => update(index, "makineAdi", event.target.value)} placeholder="Oval Baskı 1" /></label>
               <label><span>Gündüz Makinacısı *</span><input disabled={saving} value={row.gunduzMakinaci} onChange={(event) => update(index, "gunduzMakinaci", event.target.value)} placeholder="Ad soyad" /></label>
-              <label><span>Gece Makinacısı</span><input disabled={saving} value={row.geceMakinaci} onChange={(event) => update(index, "geceMakinaci", event.target.value)} placeholder="Boşsa gündüz kullanılır" /></label>
+              <label><span>Gece Makinacısı (ayrı)</span><input disabled={saving} value={row.geceMakinaci} onChange={(event) => update(index, "geceMakinaci", event.target.value)} placeholder="Gece makinacısını elle yazın" /></label>
               <label><span>Durum</span><select disabled={saving} value={row.isActive === false ? "passive" : "active"} onChange={(event) => update(index, "isActive", event.target.value === "active")}><option value="active">Aktif</option><option value="passive">Pasif</option></select></label>
               <button className="iw-btn danger" type="button" onClick={() => removeRow(index)} disabled={saving || (Boolean(row.id) && row.isActive === false)} title={row.id ? "Kayıtlı makine pasife alınır; eski fişler korunur." : "Yeni satırı kaldır"}><Trash2 size={15} /> {row.id ? "Pasifleştir" : "Kaldır"}</button>
             </article>
           ))}
-          <div className="production-settings-footer"><span>Değişiklikler toplu kaydedilir. Gece makinacısı boşsa gündüz makinacısı kullanılır.</span><button className="iw-btn primary" type="button" onClick={saveAll} disabled={saving || loading || !rows.length || !(activeMainCompany?.slug || activeMainCompany?.id)}><Save size={16} /> {saving ? "Kaydediliyor..." : "Tüm Ayarları Kaydet"}</button></div>
+          <div className="production-settings-footer"><span>Değişiklikler toplu kaydedilir. Gece makinacısı ayrı kaydedilir. Boşsa üretim fişinde elle girilir.</span><button className="iw-btn primary" type="button" onClick={saveAll} disabled={saving || loading || !rows.length || !(activeMainCompany?.slug || activeMainCompany?.id)}><Save size={16} /> {saving ? "Kaydediliyor..." : "Tüm Ayarları Kaydet"}</button></div>
         </div>
       </section>
     </div>
