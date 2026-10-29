@@ -7,7 +7,8 @@ import {
   RotateCcw,
   Search,
 } from "lucide-react";
-import { getImalatDenetim, getImalatOperasyonRaporu } from "../../services/imalatApi";
+import { getProductionCenterMachines, getProductionCenterReconciliation } from "../../services/productionCenterApi";
+import { buildProductionCanonicalReport } from "./productionCanonicalReport";
 import { Field, Status } from "./ImalatShared";
 import { formatQty, toneForStatus } from "./imalatData";
 import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
@@ -60,27 +61,23 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
       const result = await loadModuleData({
         scope: `imalat:${tenant}:rapor:${JSON.stringify(nextFilters)}`,
         sources: {
-          audit: { critical: true, load: () => getImalatDenetim(activeMainCompany, nextFilters) },
-          report: { critical: true, load: () => getImalatOperasyonRaporu(activeMainCompany, nextFilters) },
+          models: { critical: true, load: () => getProductionCenterReconciliation(activeMainCompany) },
+          machines: { fallback: [], load: () => getProductionCenterMachines(activeMainCompany) },
         },
       });
       if (requestId !== requestSeq.current) return;
-      if (result.states.audit.status !== "error") {
-        const auditResult = result.data.audit;
-        setAudit({ summary: auditResult?.summary || {}, rows: Array.isArray(auditResult?.rows) ? auditResult.rows : [] });
+      if (result.states.models.status !== "error") {
+        const data = result.data.models || {};
+        const computed = buildProductionCanonicalReport({
+          rows: Array.isArray(data.rows) ? data.rows : [],
+          machines: Array.isArray(result.data.machines) ? result.data.machines : [],
+        }, nextFilters);
+        setAudit(computed.audit);
+        setReport(computed.report);
+        setAppliedFilters({ ...nextFilters });
       }
-      if (result.states.report.status !== "error") {
-        const reportResult = result.data.report;
-        setReport({
-          summary: reportResult?.summary || {},
-          machineRows: Array.isArray(reportResult?.machineRows) ? reportResult.machineRows : [],
-          operatorRows: Array.isArray(reportResult?.operatorRows) ? reportResult.operatorRows : [],
-          modelRows: Array.isArray(reportResult?.modelRows) ? reportResult.modelRows : [],
-          rows: Array.isArray(reportResult?.rows) ? reportResult.rows : [],
-        });
-      }
-      if (result.states.audit.status !== "error" && result.states.report.status !== "error") setAppliedFilters({ ...nextFilters });
-      setMessage(moduleLoadMessage(result, "İmalat denetim veya rapor ana kaynağı okunamadı; diğer başarılı sonuç korunuyor.", ""));
+      setMessage(moduleLoadMessage(result, "Kanonik İmalat rapor kaynağı okunamadı; son başarılı sonuç korunuyor.", "Makine tanımları geçici olarak okunamadı."));
+
     } catch (error) {
       if (requestId === requestSeq.current) setMessage(error?.message || "İmalat denetim ve rapor verileri okunamadı.");
     } finally {
@@ -92,6 +89,16 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
     const timer = window.setTimeout(() => loadData(initialFilters), 0);
     return () => { window.clearTimeout(timer); requestSeq.current += 1; };
   }, [loadData]);
+
+  useEffect(() => {
+    const refresh = () => { void loadData(appliedFilters); };
+    window.addEventListener("kyerp:production-refresh", refresh);
+    window.addEventListener("kyerp:accounting-refresh", refresh);
+    return () => {
+      window.removeEventListener("kyerp:production-refresh", refresh);
+      window.removeEventListener("kyerp:accounting-refresh", refresh);
+    };
+  }, [loadData, appliedFilters]);
 
   const metrics = useMemo(() => [
     ["Açık parti", audit.summary.acikParti || 0, ""],
