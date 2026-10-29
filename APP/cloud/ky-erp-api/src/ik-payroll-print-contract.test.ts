@@ -124,7 +124,7 @@ test("payroll payment balance is auto-reconciled in UI while backend keeps the h
   assert.match(page, /function reconcilePaymentSplit/);
   assert.match(page, /function paymentSplitByType\(paymentType, netValue, bankValue = 0, bankDeductionsValue = 0\)/);
   assert.match(page, /const bank = Math\.min\(Math\.max\(round\(bankPlan - bankDeductions\), 0\), net\)/);
-  assert.match(page, /const balancedSplit = reconcilePaymentSplit\(rowTotals\.net/);
+  assert.match(page, /const balancedSplit = reconcilePaymentSplit\(fullNet, row\.bank, row\.cash\)/);
   assert.match(page, /const autoBalanceFinalPayment = \(\) =>/);
   assert.match(page, /const modalPayment = paymentSplitByType\(modalDraft\.paymentType, preBaseTotals\.net, modalDraft\.bankAmount, movementBankDeductions\)/);
   assert.match(page, /const sourcePayment = paymentSplitByType\(modalDraft\.paymentType, sourcePlanEarnings, modalDraft\.bankAmount\)/);
@@ -323,17 +323,18 @@ test("payroll final control exposes every financial value and saves back to cano
 });
 
 
-test("EK is an explicit canonical amount and is never inferred from salary difference", () => {
+test("reference-linked EK is the real-minus-reference difference, without changing the stored real salary", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.match(page, /extraPaymentAmount: sourceExtra/);
-  assert.match(page, /const extra = num\(employee\.extraPaymentAmount\)/);
-  assert.match(cloud, /const extraPaymentAmount = number\(body\.extraPaymentAmount \?\? currentCard\?\.extra_payment_amount\)/);
-  assert.match(cloud, /const extra = number\(employee\.extraPaymentAmount\)/);
-  assert.doesNotMatch(cloud, /autoExtra/);
-  assert.doesNotMatch(cloud, /autoPremium/);
-  assert.doesNotMatch(cloud, /Math\.max\(actualSalary - number\(baseEmployee\.salary\), 0\)/);
+  assert.match(page, /const compensation = payrollCompensation\(employee, rawEmployees\)/);
+  assert.match(page, /const extra = compensation\.extra/);
+  assert.match(cloud, /export function resolveReferencePay/);
+  assert.match(cloud, /const extraPaymentAmount = baseEmployee/);
+  assert.match(cloud, /const extra = split\.extra/);
+  assert.match(cloud, /const realSalaryForMaster = referenceEmployee/);
+  assert.match(cloud, /REFERENCE_BASE_MISMATCH/);
 });
 
 
