@@ -291,6 +291,13 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
 
   const summary = center.summary || {};
 
+  // e-Belge'de irsaliye veya fatura değişirse üretim / kalan / faturalanan miktar güncel kalır.
+  useEffect(() => {
+    const refresh = () => { void load(); };
+    window.addEventListener("kyerp:accounting-refresh", refresh);
+    return () => window.removeEventListener("kyerp:accounting-refresh", refresh);
+  }, [load]);
+
   async function openDetail(row) {
     setMessage("");
     try {
@@ -333,6 +340,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       else await createProductionCenterEntry(activeMainCompany, entry);
       setEntryOpen(false);
       setMessage(`${entry.id ? "Üretim kaydı güncellendi" : "Üretim kaydedildi"}: ${qty(entry.quantity)} adet.`);
+      window.dispatchEvent(new CustomEvent("kyerp:production-refresh", { detail: { source: "imalat", modelId: entry.modelId } }));
       await load();
       if (detail?.id === entry.modelId) {
         const full = await getProductionCenterModel(activeMainCompany, entry.modelId);
@@ -350,7 +358,8 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     if (!window.confirm(`${qty(row.grossQty)} adet ${row.printArea || "üretim"} kaydı silinsin mi?`)) return;
     try {
       await deleteProductionCenterEntry(activeMainCompany, row.id);
-      setMessage("Üretim kaydı silindi.");
+      setMessage("Üretim kaydı arşivlendi.");
+      window.dispatchEvent(new CustomEvent("kyerp:production-refresh", { detail: { source: "imalat", modelId: detail?.id || "" } }));
       await load();
       if (detail?.id) setDetail(await getProductionCenterModel(activeMainCompany, detail.id));
     } catch (error) {
@@ -392,6 +401,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       const full = await getProductionCenterModel(activeMainCompany, planDraft.modelId);
       setDetail(full);
       setMessage("Modelin imalat planı güncellendi. Desen, irsaliye ve fatura kayıtları değiştirilmedi.");
+      window.dispatchEvent(new CustomEvent("kyerp:production-refresh", { detail: { source: "imalat", modelId: planDraft.modelId } }));
     } catch (error) {
       setMessage(error?.message || "İmalat planı düzenlenemedi.");
     } finally { setSaving(false); }
@@ -417,6 +427,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       const full = await getProductionCenterModel(activeMainCompany, saved.id || saved.modelId);
       setDetail(full);
       setMessage(saved?.duplicate ? "Model zaten üretimdeydi; mevcut kayıt açıldı." : "Yeni model üretime açıldı.");
+      window.dispatchEvent(new CustomEvent("kyerp:production-refresh", { detail: { source: "imalat", modelId: saved.id || saved.modelId } }));
     } catch (error) {
       setMessage(error?.message || "Model üretime açılamadı.");
     } finally {
