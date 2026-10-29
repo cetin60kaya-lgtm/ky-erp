@@ -5,16 +5,15 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-10-29",
   "scope": [
-    "PR486-home-dashboard-missing-company-icon-and-fallback",
-    "PR486-single-six-section-navigation-source-and-sequence",
-    "PR486-canonical-heading-open-tab-breadcrumb-sync",
-    "PR486-admin-13-real-routes-history-refresh-workspace-tabs",
-    "PR486-company-admin-role-correct-headings",
-    "PR486-readable-desktop-sidebar-and-collapsible-groups",
-    "PR486-node-navigation-tests-frontend-worker-CI-40930522828",
-    "Pages-production-bundle-and-live-smoke-required"
+    "PR487-imalat-production-entry-default-collapsed",
+    "PR487-clickable-full-accordion-header",
+    "PR487-toggle-form-queue-recent-together",
+    "PR487-top-production-button-opens-form",
+    "PR487-row-production-button-opens-form",
+    "frontend-worker-ci-40935425166-success",
+    "Cloudflare-Pages-deploy-and-bundle-smoke"
   ],
-  "note": "29.10.2026 PR #486 (merge 3ecf63e...): Ana Sayfa company ikon render hatası ve default fallback; başlık/sekme/rota birlikte; Yönetim 13 gerçek işlem tek kaynak; firma sahibi rolüne uygun etiket; menü genişliği. Frontend + Worker CI #40930522828 başarılı. Yalnız Pages UI; Worker/D1/migration/gerçek kayıt işlemi yapılmaz. Gerçek yetkili kullanıcıyla PC/tablet/telefon saha kabulü ayrıca gerektirir.",
-  "sourceCommit": "3ecf63e34aec02561ab1ac19ede890a23194d884",
+  "note": "29 Ekim 2026 PR #487: Günlük Üretim Girişi ilk açılışta kapalı. Tüm başlık tıklanabilir; form, seri liste ve son kayıtlar birlikte açılır-kapanır. Üst Üretim Girişi ve model Üretim Gir düğmeleri kapalı paneli açar, aynı modele tekrar tıklamada da çalışır. PR CI #40935425166 başarılı. Worker, D1, fiş verileri veya migration değişmedi. Canlı Pages smoke doğrulaması zorunlu.",
+  "sourceCommit": "af2d799c1ece8c0f964cb64efddd9d6dd9c51883",
   "requestedAt": "2026-10-29"
 }
