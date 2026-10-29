@@ -831,10 +831,10 @@ async function loadMachines(c: Context<AppEnv>, slug: string): Promise<Row[]> {
       machineName: text(first(row.machine_name, row.makine_adi, row.name, raw.machineName, raw.makineAdi, raw.ad)),
       dayOperator: text(first(row.day_operator, row.gunduz_makinaci, raw.dayOperator, raw.gunduzMakinaci, row.operator)),
       nightOperator: text(first(row.night_operator, row.gece_makinaci, raw.nightOperator, raw.geceMakinaci, row.operator)),
-      isActive: first(row.is_active, row.active, raw.isActive) !== false && first(row.is_active, row.active) !== 0,
+      isActive: ![false, 0, "0", "false"].includes(first(row.is_active, row.active, raw.isActive)),
       sortOrder: numberValue(first(row.sort_order, raw.sortOrder, index + 1)),
     };
-  }).filter((row) => row.machineNo && row.isActive !== false));
+  }).filter((row) => row.machineNo));
 }
 
 async function buildCenter(
