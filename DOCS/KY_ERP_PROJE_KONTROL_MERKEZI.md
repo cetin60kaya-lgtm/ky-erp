@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 29.10.2026 — İmalat rol/firma koruması #481, Worker yayın ENGELLENDİ
+
+- **PR #481** (merge `20bada4b25870b5ab3656e8d4696df363edbd9a9`) `production-tenant-guard.ts` ve `main.ts` üzerinden `/api/production-center`, `/api/model-flow/*`, `/api/production/*`, `/api/imalat/kayitlar`, `/api/uretim/seri/*` yollarını oturum + `IMALAT` görüntüleme/ekleme/düzenleme/silme yetkisi + tek firma sınırıyla korur. Çapraz/eksik tenant ve izinsiz işlem reddedilir. Bu düzeltme önceki 24 görünüm auditinde fark edilmeyen kritik eksiktir. Gerçek istismar gözlenmedi.
+- [PR CI #40896867570](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40896867570) **SUCCESS**: frontend ve Worker test/build. Gerçek rol oturumuyla E2E henüz yapılmadı.
+- **Worker canlı yayını [#40897128218](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40897128218) BAŞARISIZ**, 1. deneme ve güvenli tek tekrar: `wrangler d1 export ky-erp-db --remote` aşamasında Cloudflare `internal error`. İlk D1 export ref `s6jco36imhdsjd6gibommcag`; tekrar ref `l11qk5ad8vs1a6ihu1t9vv0l`. Yedek zorunlu olduğundan **Worker deploy yapılmadı**, migration da yapılmadı. D1/veri bütünlüğü bozulduğuna ilişkin kanıt yok. Cloudflare D1 servisinde 29.10 günü yaşanan genel hatalar olası bağlantı ama kesin kök neden değildir.
+- **Hâlen canlıdaki son başarılı Worker:** [#40892183913](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40892183913) (PR #480). **Canlı Pages:** [#40892328950](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40892328950) (PR #480). #481 güvenlik kodu **merge+CI PASS**, **henüz canlı Worker değil**.
+- Öncelikli sonraki kapı: Cloudflare D1 tam export tekrar çalışır hale gelene kadar **yedeği atlama, Worker deploy yapma**. Yeni migration yok; eski Excel/2022 aktarımı yok. 24 görünüm gerçek yetkili saha kabulü hâlâ açık.
+
+
 ## 29.10.2026 — #480 canlı yayın doğrulaması
 
 - PR #480 merge `da208e3619331a3a3d5e85d25b5a4f9f6dfce97e`. Canonical [CI #40891809902](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40891809902) Frontend + Worker SUCCESS.
