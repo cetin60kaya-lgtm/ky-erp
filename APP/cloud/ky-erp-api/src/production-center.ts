@@ -404,6 +404,7 @@ function mapProductionRow(row: Row): Row {
     machineName: text(first(row.machine_name, raw.machineName, raw.makineAdi, raw.makina)),
     shift: text(first(row.shift, raw.shift, raw.vardiya)),
     operatorName: text(first(row.machinist, raw.operatorName, raw.makinaci, raw.sorumluPersonel)),
+    ground: text(first(row.ground_color, raw.ground, raw.zemin)),
     grossQty: gross,
     printDefectQty: printDefect,
     fabricDefectQty: fabricDefect,
@@ -1111,7 +1112,7 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
     const rawPayload = {
       modelId, date, grossQty, printDefectQty, fabricDefectQty, testQty,
       printArea, machineId: raw.machineId, machineName: raw.machineName,
-      operatorName: raw.operatorName, shift: raw.shift, batchNo: raw.batchNo,
+      operatorName: raw.operatorName, shift: raw.shift, ground: raw.ground, batchNo: raw.batchNo,
       dispatchNo: raw.dispatchNo, orderNo: raw.orderNo, note: raw.note,
     };
     const identity = await productionIdentity(slug, requestId, clientId, rawPayload);
@@ -1188,7 +1189,7 @@ async function maintainProductionEntry(
       date: old.date, quantity: old.grossQty, printRegion: old.printArea,
       printDefectQty: old.printDefectQty, fabricDefectQty: old.fabricDefectQty,
       testQty: old.testQty, machineId: old.machineId, machineName: old.machineName,
-      operatorName: old.operatorName, shift: old.shift, dispatchNo: old.dispatchNo,
+      operatorName: old.operatorName, shift: old.shift, ground: old.ground, dispatchNo: old.dispatchNo,
       batchNo: old.batchNo, orderNo: old.orderNo, note: old.note,
     },
   }];
@@ -1231,16 +1232,17 @@ async function maintainProductionEntry(
   const batchNo = optionalText(["batchNo", "partiNo"], old.batchNo) || "GENEL";
   const orderNo = optionalText(["orderNo", "siparisNo"], old.orderNo);
   const note = optionalText(["note", "not"], old.note);
+  const ground = optionalText(["ground", "zemin"], old.ground);
   const raw = {
     ...previousRaw, modelId: old.modelId, date, quantity: gross,
     printDefectQty: printDefect, fabricDefectQty: fabricDefect, testQty,
     printRegion: printArea, printArea, machineId, machineName, operatorName,
-    shift, dispatchNo, batchNo, orderNo, note, revisions: history, updatedAt: now,
+    shift, ground, dispatchNo, batchNo, orderNo, note, revisions: history, updatedAt: now,
   };
   const result = await c.env.DB.prepare(
-    "UPDATE production_records SET total_quantity=?,print_defect=?,fabric_defect=?,production_date=?,print_area=?,machine_name=?,machinist=?,shift=?,order_no=?,note=?,raw=?,updated_at=? WHERE id=? AND main_company_slug=? AND updated_at IS ?",
+    "UPDATE production_records SET total_quantity=?,print_defect=?,fabric_defect=?,production_date=?,print_area=?,machine_name=?,machinist=?,shift=?,ground_color=?,order_no=?,note=?,raw=?,updated_at=? WHERE id=? AND main_company_slug=? AND updated_at IS ?",
   ).bind(gross, String(printDefect), String(fabricDefect), date + "T12:00:00.000Z",
-    printArea, machineName || machineId, operatorName, shift, orderNo, note,
+    printArea, machineName || machineId, operatorName, shift, ground, orderNo, note,
     JSON.stringify(raw), now, entryId, slug, current.updated_at ?? null).run();
   if (!result.meta?.changes) {
     return { status: 409, code: "PRODUCTION_STALE_EDIT", message: "Fiş değişti. Yenileyip tekrar deneyin." };
@@ -1249,7 +1251,7 @@ async function maintainProductionEntry(
     ...current, total_quantity: gross, print_defect: String(printDefect),
     fabric_defect: String(fabricDefect), production_date: date + "T12:00:00.000Z",
     print_area: printArea, machine_name: machineName || machineId, machinist: operatorName,
-    shift, order_no: orderNo, note, raw, updated_at: now,
+    shift, ground_color: ground, order_no: orderNo, note, raw, updated_at: now,
   }) };
 }
 
