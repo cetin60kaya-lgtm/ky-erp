@@ -2402,7 +2402,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     const fullNet = Math.max(round(num(row.net)), 0);
     const extraCoupon = Math.min(Math.max(round(num(row.extra)), 0), fullNet);
     const mainNet = round(fullNet - extraCoupon);
-    const mainBank = Math.min(Math.max(round(num(row.bank)), 0), mainNet);
+    const balancedSplit = reconcilePaymentSplit(fullNet, row.bank, row.cash);
+    const mainBank = Math.min(balancedSplit.bank, mainNet);
     return { mainNet, mainBank, mainCash: round(mainNet - mainBank), extraCoupon };
   };
 
