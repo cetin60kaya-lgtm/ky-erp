@@ -95,7 +95,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
       geceMakinaci: String(row.geceMakinaci || row.gunduzMakinaci || "").trim(),
       sortOrder: index + 1,
     }));
-    const incomplete = prepared.find((row) => !row.makineNo || !row.makineAdi || !row.gunduzMakinaci);
+    const incomplete = prepared.find((row) => !row.makineNo || (row.isActive !== false && (!row.makineAdi || !row.gunduzMakinaci)));
     if (incomplete) {
       setMessage("Makine no, makine adı ve gündüz makinacısı zorunludur.");
       return;
@@ -151,7 +151,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
               <label><span>Gündüz Makinacısı *</span><input disabled={saving} value={row.gunduzMakinaci} onChange={(event) => update(index, "gunduzMakinaci", event.target.value)} placeholder="Ad soyad" /></label>
               <label><span>Gece Makinacısı</span><input disabled={saving} value={row.geceMakinaci} onChange={(event) => update(index, "geceMakinaci", event.target.value)} placeholder="Boşsa gündüz kullanılır" /></label>
               <label><span>Durum</span><select disabled={saving} value={row.isActive === false ? "passive" : "active"} onChange={(event) => update(index, "isActive", event.target.value === "active")}><option value="active">Aktif</option><option value="passive">Pasif</option></select></label>
-              <button className="iw-btn danger" type="button" onClick={() => removeRow(index)} disabled={saving || Boolean(row.id)} title={row.id ? "Kayıtlı makine silinmez; pasife alınır." : "Satırı kaldır"}><Trash2 size={15} /> Kaldır</button>
+              <button className="iw-btn danger" type="button" onClick={() => removeRow(index)} disabled={saving || (Boolean(row.id) && row.isActive === false)} title={row.id ? "Kayıtlı makine pasife alınır; eski fişler korunur." : "Yeni satırı kaldır"}><Trash2 size={15} /> {row.id ? "Pasifleştir" : "Kaldır"}</button>
             </article>
           ))}
           <div className="production-settings-footer"><span>Değişiklikler toplu kaydedilir. Gece makinacısı boşsa gündüz makinacısı kullanılır.</span><button className="iw-btn primary" type="button" onClick={saveAll} disabled={saving || loading || !rows.length || !(activeMainCompany?.slug || activeMainCompany?.id)}><Save size={16} /> {saving ? "Kaydediliyor..." : "Tüm Ayarları Kaydet"}</button></div>
