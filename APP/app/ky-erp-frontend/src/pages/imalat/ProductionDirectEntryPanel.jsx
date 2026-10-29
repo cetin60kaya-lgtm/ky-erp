@@ -20,9 +20,9 @@ const MAX_QUEUED_ROWS = 100;
 
 export default function ProductionDirectEntryPanel({
   activeMainCompany, models = [], machines = [], companies = [],
-  onSaved, onModelCreated, preselectModelId = "",
+  onSaved, onModelCreated, preselectModelId = "", openRequestToken = 0,
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [entry, setEntry] = useState(blankEntry);
   const [query, setQuery] = useState("");
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -71,6 +71,7 @@ export default function ProductionDirectEntryPanel({
   useEffect(() => { void loadRecent(); }, [loadRecent]);
   useEffect(() => {
     setEntry(blankEntry());
+    setOpen(false);
     setQueue([]);
     setSelectedIds([]);
     setEditingId("");
@@ -82,17 +83,20 @@ export default function ProductionDirectEntryPanel({
     appliedPreselect.current = "";
   }, [activeMainCompany?.slug, activeMainCompany?.id]);
   useEffect(() => {
-    if (!preselectModelId || appliedPreselect.current === preselectModelId) return;
+    if (!preselectModelId || appliedPreselect.current === `${openRequestToken}:${preselectModelId}`) return;
     const model = allModels.find((m) => modelKey(m) === preselectModelId && !m.isVirtual);
     if (!model) return;
-    appliedPreselect.current = preselectModelId;
+    appliedPreselect.current = `${openRequestToken}:${preselectModelId}`;
     setEntry((current) => ({ ...current, modelId: modelKey(model),
       printRegion: availableProductionRegions(model)[0],
       ground: asText(model.groundColor) || current.ground }));
     setQuery(nameOf(model));
     setSuggestionsOpen(false);
     setOpen(true);
-  }, [preselectModelId, allModels]);
+  }, [preselectModelId, openRequestToken, allModels]);
+  useEffect(() => {
+    if (openRequestToken > 0) setOpen(true);
+  }, [openRequestToken]);
 
   function clearFeedback() { setError(""); setMessage(""); }
   function field(key, value) {
@@ -273,22 +277,24 @@ export default function ProductionDirectEntryPanel({
   return (
     <section className="pde-shell" id="direct-production-entry" aria-label="Günlük üretim girişi">
       <header className="pde-head">
-        <div><span className="pde-eyebrow"><ClipboardList size={15} /> GÜNLÜK ÜRETİM</span>
-          <h2>Üretim Girişi</h2>
-          <p>Modeli yaz, kayıtlı olanı seç; satırları hazırla ve toplu kaydet.</p>
-        </div>
-        <div className="pde-head-actions">
-          <span className="pde-count">{queue.length} hazır satır</span>
-          <button type="button" className="pde-toggle" aria-expanded={open} aria-controls="pde-expandable"
-            onClick={() => setOpen((value) => !value)}>
-            {open ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
-            {open ? "Daralt" : "Girişi Aç"}
-          </button>
-        </div>
+        <button type="button" className="pde-head-trigger" disabled={saving || creatingModel}
+          aria-expanded={open} aria-controls="pde-expandable" onClick={() => setOpen((value) => !value)}>
+          <span className="pde-head-title">
+            <span className="pde-eyebrow"><ClipboardList size={15}/> GÜNLÜK ÜRETİM</span>
+            <strong className="pde-heading">Üretim Girişi</strong>
+            <span className="pde-head-subtitle">{open
+              ? "Modeli yaz, kayıtlı olanı seç; satırları hazırla ve toplu kaydet."
+              : "Model: " + (nameOf(selectedModel) || "Seçilmedi") + " · " + entry.date + " · " + queuedGross.toLocaleString("tr-TR") + " hazır adet"}</span>
+          </span>
+          <span className="pde-head-actions">
+            <span className="pde-count">{queue.length} hazır satır</span>
+            <span className="pde-toggle">
+              {open ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+              {open ? "Daralt" : "Girişi Aç"}
+            </span>
+          </span>
+        </button>
       </header>
-      {!open && <div className="pde-collapsed"><span>Model: {nameOf(selectedModel) || "Seçilmedi"}</span><span>Tarih: {entry.date}</span>
-        <span>Makine: {machineLabel(selectedMachine) || "Seçilmedi"}</span>
-        <strong>Hazır: {queue.length} satır / {queuedGross.toLocaleString("tr-TR")} adet</strong></div>}
       {open && <div id="pde-expandable">
         <form className="pde-form" onSubmit={stage}>
           <div className="pde-main-grid">
@@ -419,7 +425,6 @@ export default function ProductionDirectEntryPanel({
           {message && <div className="pde-success" role="status"><CheckCircle2 size={15}/>{message}</div>}
           {saving && <p className="pde-progress" role="status">Kayıtlar sırayla ve güvenli biçimde işleniyor. İşlem sırasında sayfayı kapatmayın.</p>}
         </div>
-      </div>}
       <section className="pde-recent" aria-label="Son kaydedilen üretimler">
         <div className="pde-recent-head"><strong>Son Kaydedilen Üretimler</strong>
           <button type="button" onClick={loadRecent} title="Son üretimleri yenile"><RotateCcw size={14}/> Yenile</button></div>
@@ -434,6 +439,7 @@ export default function ProductionDirectEntryPanel({
         </tr>)}</tbody></table></div>
         : <p className="pde-empty-recent">Henüz kayıtlı üretim görünmüyor. İlk kaydedilen fiş burada listelenecek.</p>}
       </section>
+      </div>}
     </section>
   );
 }
