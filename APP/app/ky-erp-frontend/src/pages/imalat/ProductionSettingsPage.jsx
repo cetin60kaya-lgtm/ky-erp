@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CircleAlert, Factory, Plus, Save, Settings, Trash2 } from "lucide-react";
-import { getImalatMakineler, saveImalatMakine } from "../../services/imalatApi";
+import { getProductionCenterMachines, saveProductionCenterMachine } from "../../services/productionCenterApi";
 import "../modules/cleanWorkflow.css";
 import "./imalatWorkflow.css";
 import "./productionCenter.css";
@@ -20,7 +20,7 @@ function emptyMachine(index = 0) {
 function normalize(row, index) {
   return {
     id: row?.id || row?.makineNo || "",
-    makineNo: row?.makineNo || row?.no || row?.id || "",
+    makineNo: row?.machineNo || row?.makineNo || row?.no || row?.id || "",
     makineAdi: row?.makineAdi || row?.machineName || row?.ad || row?.name || "",
     gunduzMakinaci: row?.gunduzMakinaci || row?.dayOperator || row?.operator || row?.makinaci || "",
     geceMakinaci: row?.geceMakinaci || row?.nightOperator || row?.operator || row?.makinaci || "",
@@ -46,7 +46,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
     }
     setLoading(true);
     try {
-      const result = await getImalatMakineler(activeMainCompany);
+      const result = await getProductionCenterMachines(activeMainCompany);
       const next = Array.isArray(result) ? result.map(normalize) : [];
       const prepared = next.length ? next : [emptyMachine()];
       setRows(prepared);
@@ -73,6 +73,15 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
   }
 
   function removeRow(index) {
+    const row = rows[index];
+    if (!row) return;
+    if (row.id) {
+      if (!window.confirm((row.makineNo || "Makine") + " pasifleştirilsin mi? Eski üretim fişleri korunur.")) return;
+      setRows((current) => current.map((item, rowIndex) =>
+        rowIndex === index ? { ...item, isActive: false } : item));
+      setMessage("Makine pasif olarak işaretlendi. Kalıcı olması için Değişiklikleri Kaydet'e basın.");
+      return;
+    }
     setRows((current) => current.length === 1 ? [emptyMachine()] : current.filter((_, rowIndex) => rowIndex !== index));
   }
 
@@ -100,7 +109,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
     setSaving(true);
     const saved = [];
     try {
-      for (const row of prepared) saved.push(await saveImalatMakine(activeMainCompany, row));
+      for (const row of prepared) saved.push(await saveProductionCenterMachine(activeMainCompany, { id: row.id, machineNo: row.makineNo, machineName: row.makineAdi, dayOperator: row.gunduzMakinaci, nightOperator: row.geceMakinaci, isActive: row.isActive, sortOrder: row.sortOrder }));
       const confirmedRows = saved.map((row, index) => normalize(row?.data || row, index));
       setRows(confirmedRows);
       savedSnapshot.current = confirmedRows.map((row) => ({ ...row }));
