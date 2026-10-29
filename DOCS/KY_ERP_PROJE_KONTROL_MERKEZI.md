@@ -1,5 +1,16 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 29.10.2026 — Tek menü, başlık ve çalışma sekmesi düzeni (hazırlık)
+
+- Kullanıcı talebi: Ana Sayfa render hatasını gider; tüm modüllerin ana menüleri, başlıkları, açılır grupları ve üst sekmeleri tek anlaşılır düzene al; mevcut işlemleri ve izinleri koru.
+- Kök hata: Denetim/Firma grubu `company` için HomeDashboard ikon eşlemesi yoktu; render sırasında `<Icon/>` tanımsız bileşen çağırıyordu. `company: Building2` ve varsayılan `LayoutDashboard` ile düzeltiliyor.
+- `navigationGroups.js` ana gruplar, sıra ve başlıkların tek kaynağıdır: Personel & İK, Üretim (Desen→İmalat→Boyahane), Muhasebe & Finans, Denetim & Uygunluk, İletişim & Dosyalar, Yönetim & Sistem. Modül key/permission/URL korunur.
+- `navigationTitles.js` üst açık sekme ve breadcrumb isimlerini tek standarda bağlar; `useWorkspaceTabs.js` her render'da güncel canonical sekme adını kullanır. Menü satırları kırpılmadan sarılır; PC sol menüsü 270px tutarlı genişliktedir.
+- `adminNavigation.js` Yönetim, Güvenlik, Sistem için 13 gerçek işlem yolunu hem registry hem yönetim paneline tek kaynaktan sağlar. Tıklama `openModule` ile gerçek adres, üst sekme, geri tuşu ve çalışma alanına yansır; gizli/eski linkler kalır. Firma yetkilileri ayrı route ile açılır; 6 firma/4 paket açılır form, API ve yetki akışına dokunulmaz.
+- Bu değişiklik yalnız UI/navigasyon kaynaklarını etkiler; Worker, D1, migration, muhasebe/PDKS veri kayıtları, kullanıcı hesapları ve güvenlik ayarları değişmez.
+- Kanıt: kod branch test/PR/Pages dağıtımıyla doğrulanacaktır; gerçek kullanıcı oturumunda PC/tablet/telefon tıklama kabulü ayrıca yapılmalıdır. Canlı kanıt yoksa canlı denmeyecektir.
+
+
 ## 29.10.2026 — İmalat açılır seri kayıt ve model arama, CANLI (#485)
 
 - **Kullanıcı talebi:** 10 alanlı Excel üretim fişi korunarak günlük giriş açılır-kapanır olsun. Model adı yazdıkça kayıtlı model çıksın, kayıtlı yoksa aynı yerde yeni model açılsın; hazır **Ön/Arka/Kol** ve diğer baskı bölgeleri select; **Satır Ekle → Seri Liste → Toplu Kaydet**, satır düzenleme/seçili sil/tümünü temizle.
