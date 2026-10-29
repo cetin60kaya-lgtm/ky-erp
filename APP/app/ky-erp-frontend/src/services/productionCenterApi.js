@@ -112,6 +112,13 @@ export async function getProductionCenterRecent(
   );
 }
 
+export async function importProductionHistory(activeMainCompany, payload = {}) {
+  return unwrap(await apiPost(
+    "/production-center/history-import",
+    companyPayload(activeMainCompany, payload),
+  ));
+}
+
 export async function createProductionCenterEntries(
   activeMainCompany,
   payload = {},
