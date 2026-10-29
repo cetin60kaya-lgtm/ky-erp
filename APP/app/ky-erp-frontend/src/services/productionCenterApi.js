@@ -79,6 +79,10 @@ export async function getProductionCenter(activeMainCompany, params = {}) {
   );
 }
 
+export async function getProductionCenterReconciliation(activeMainCompany) {
+  return unwrap(await apiGet("/model-flow/reconciliation", companyPayload(activeMainCompany)));
+}
+
 export async function getProductionCenterModel(activeMainCompany, modelId) {
   if (!modelId) throw new Error("Model seçilmedi.");
   return unwrap(
