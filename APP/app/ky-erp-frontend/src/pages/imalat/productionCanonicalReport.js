@@ -112,9 +112,9 @@ export function buildProductionCanonicalReport(payload = {}, filters = {}) {
   const activeMachines = machines.filter((m) => m.isActive !== false).length;
   const todayTotal = records.filter((r) => r.tarih === now).reduce((sum, r) => sum + r.basilan, 0);
   const auditSummary = {
-    acikParti: auditRows.filter((r) => r.durum !== "Tamam").length,
+    acikParti: auditRows.filter((r) => r.durum !== "Tamam" && (r.planlanan > 0 || r.basilan > 0)).length,
     kontrolGereken: auditRows.filter((r) => r.durum === "Kontrol Gerekli").length,
-    eksikBolge: auditRows.filter((r) => r.durum === "Eksik Operasyon" || r.durum === "Bekliyor").length,
+    eksikBolge: auditRows.filter((r) => r.durum === "Eksik Operasyon").length,
     bugunBasilanAdet: todayTotal,
   };
   return {

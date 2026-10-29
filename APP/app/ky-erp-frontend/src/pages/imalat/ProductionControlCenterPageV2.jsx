@@ -66,8 +66,8 @@ function machineName(machine) {
 function operatorFor(machine, shift) {
   if (!machine) return "";
   return String(shift || "").toLocaleLowerCase("tr-TR").includes("gece")
-    ? machine.nightOperator || machine.geceMakinaci || machine.dayOperator || ""
-    : machine.dayOperator || machine.gunduzMakinaci || "";
+    ? (machine.nightOperator ?? machine.geceMakinaci ?? "")
+    : (machine.dayOperator ?? machine.gunduzMakinaci ?? "");
 }
 function statusLabel(value) {
   return {
@@ -183,8 +183,7 @@ function defaultEntry(model, dictionaries, source = null, preferences = {}) {
     shift,
     ground: source?.ground || model?.groundColor || "",
     operatorName:
-      source?.operatorName ||
-      (selectedMachine ? operatorFor(selectedMachine, shift) : ""),
+      (source ? (source.operatorName ?? "") : (selectedMachine ? operatorFor(selectedMachine, shift) : "")),
     batchNo: source?.batchNo || model?.defaultDispatchNo || "GENEL",
     dispatchNo: source?.dispatchNo || model?.defaultDispatchNo || "",
     orderNo: source?.orderNo || model?.orderNo || "",
@@ -482,7 +481,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     setEntry((current) => ({
       ...current,
       shift: nextShift,
-      operatorName: operatorFor(machine, nextShift) || current.operatorName,
+      operatorName: operatorFor(machine, nextShift),
     }));
     writeProductionEntryPreferences(activeMainCompany, { shift: nextShift });
   }

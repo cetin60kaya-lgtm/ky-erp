@@ -55,7 +55,7 @@ export function operatorForMachine(machine, shift) {
   if (!machine) return "";
   const normalizedShift = normalizeProductionText(shift);
   if (normalizedShift.includes("gece")) {
-    return machine.nightOperator || machine.geceMakinaci || machine.operator || machine.makinaci || "";
+    return machine.nightOperator ?? machine.geceMakinaci ?? "";
   }
   return machine.dayOperator || machine.gunduzMakinaci || machine.operator || machine.makinaci || "";
 }

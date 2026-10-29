@@ -90,9 +90,7 @@ export default function ProductionSmartEntryDrawer({
           ...current,
           machineId: current.machineId || machineId(firstMachine),
           machineName: current.machineName || machineName(firstMachine),
-          operatorName:
-            current.operatorName ||
-            operatorForMachine(firstMachine, current.shift),
+          operatorName: operatorForMachine(next.machines.find((item) => machineId(item) === current.machineId) || firstMachine, current.shift),
         }));
       }
       setMessage(
@@ -329,8 +327,8 @@ export default function ProductionSmartEntryDrawer({
                 </select>
               </label>
               <label>
-                Kayıtlı makinacı
-                <input value={defaults.operatorName} disabled />
+                Makinacı (gerekirse elle yazın)
+                <input value={defaults.operatorName} onChange={(event) => setDefaults((current) => ({ ...current, operatorName: event.target.value }))} placeholder="Bu vardiyanın makinacısı" />
               </label>
             </div>
 

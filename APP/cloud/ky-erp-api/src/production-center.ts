@@ -831,7 +831,7 @@ async function loadMachines(c: Context<AppEnv>, slug: string): Promise<Row[]> {
       no: machineNo,
       machineName: text(first(row.machine_name, row.makine_adi, row.name, raw.machineName, raw.makineAdi, raw.ad)),
       dayOperator: text(first(row.day_operator, row.gunduz_makinaci, raw.dayOperator, raw.gunduzMakinaci, row.operator)),
-      nightOperator: text(first(row.night_operator, row.gece_makinaci, raw.nightOperator, raw.geceMakinaci, row.operator)),
+      nightOperator: text(raw.nightOperator ?? row.night_operator ?? row.gece_makinaci ?? raw.geceMakinaci ?? ""),
       isActive: ![false, 0, "0", "false"].includes(first(row.is_active, row.active, raw.isActive)),
       sortOrder: numberValue(first(row.sort_order, raw.sortOrder, index + 1)),
     };
@@ -1545,7 +1545,7 @@ async function saveMachine(c: Context<AppEnv>, body: Row, forcedId = "") {
     machineNo,
     machineName: text(first(body.machineName, body.makineAdi, body.name, machineNo)),
     dayOperator: text(first(body.dayOperator, body.gunduzMakinaci, body.operator)),
-    nightOperator: text(first(body.nightOperator, body.geceMakinaci, body.operator)),
+    nightOperator: text(body.nightOperator ?? body.geceMakinaci ?? ""),
     isActive: body.isActive !== false,
     sortOrder: numberValue(body.sortOrder) || 1,
   };
