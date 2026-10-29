@@ -5,6 +5,7 @@ import {
   CircleAlert,
   CirclePlus,
   FileCheck2,
+  FileSpreadsheet,
   FileText,
   History,
   ImageIcon,
@@ -31,6 +32,7 @@ import { getDesignModels } from "../../services/desenWorkflowApi";
 import { assetUrl } from "../desen/DesenWorkflowShared";
 import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import ProductionSmartEntryDrawer from "./ProductionSmartEntryDrawer";
+import ProductionHistoryImportDrawer from "./ProductionHistoryImportDrawer";
 import "./productionControlCenterV2.css";
 
 const PAGE_SIZE = 100;
@@ -198,6 +200,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
   const [page, setPage] = useState(1);
   const [designOpen, setDesignOpen] = useState(false);
   const [smartOpen, setSmartOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [modelDraft, setModelDraft] = useState(defaultModelDraft());
   const [detail, setDetail] = useState(null);
@@ -442,6 +445,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
           <button className="primary" type="button" onClick={() => setDesignOpen(true)}><ImageIcon size={16} /> Desenlerden Model Al</button>
           <button type="button" onClick={() => setModelOpen(true)}><CirclePlus size={16} /> Yeni Model</button>
           <button type="button" onClick={() => setSmartOpen(true)}><Zap size={16} /> Akıllı Seri Giriş</button>
+          <button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16} /> Geçmiş CSV Al</button>
         </div>
       </section>
 
@@ -501,6 +505,13 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
           </table>
         </div>
       </section>
+
+      <ProductionHistoryImportDrawer
+        open={historyOpen}
+        activeMainCompany={activeMainCompany}
+        onClose={() => setHistoryOpen(false)}
+        onImported={load}
+      />
 
       <ProductionSmartEntryDrawer
         open={smartOpen}
