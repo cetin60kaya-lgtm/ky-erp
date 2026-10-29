@@ -1,5 +1,16 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 29.10.2026 — Canlı saha ekranı gece vardiyası + rapor kabulü (#482)
+
+- Kullanıcı canlı ekranları (Muhasebe Firma & Cari, Tedarikçi/Alış, Müşteri/Satış, Model ve Üretim Merkezi, Üretim Raporları, Makine/Vardiya) görüntüledi. Firma kartlarında 2 firma ve toplam 50.000 TL alacak; kanonik İmalat merkezinde 112 model; 6 makine; kayıtlı üretim/irsaliye yok. Bu sayıların birebir mali doğruluğu yetkili muhasebe kabulü olmadan teyit edilmedi.
+- **Kural:** Gündüz ve gece makinacısı bağımsız. Gece makinacısı yalnız elle yazılan ayrı kayıttır. Gece adı boşsa gündüz makinacısı otomatik atanmaz; üretim fişinde elle yazılabilir. Mevcut kayıtlı gece adlarını sistem değiştirmez; kullanıcının güncellemesi gerekir.
+- **Düzeltme:** Makine vardiya formu, normal üretim fişi, akıllı seri giriş, parser ve Worker'da gündüz→gece fallback kaldırıldı. 112 hedefi/üretimi olmayan model artık otomatik 112 eksik operasyon/açık parti sayılmaz.
+- **PR #482 MERGED** SHA `31c0639dc24dcc71a9b32413ae52077bc58b8603`; [CI #40918033763](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40918033763) frontend lint/test/build ve Worker typecheck/test/build **SUCCESS**.
+- **Worker/API** [#40918328487](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40918328487) **SUCCESS**, D1 tam yedek + artifact, migration kapısı SKIPPED, schema kontrol, deploy ve `api.kyerp.net` health SUCCESS. Kaynak SHA `da555bc07f154cb1e32a676f5d07890a452ed0f9`; önceki #481 tenant/rol güvenliği de artık canlı kaynakta.
+- **Pages/UI** [#40918384940](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40918384940) **SUCCESS**, canlı bundle smoke. Kaynak SHA `cc6fc0e11acbe2d1a34d3f99cbf247bb5622c4ff`. İki yayın commit soyunda #482 merge SHA için `behind_by=0`.
+- **Saha kabul sınırı:** Bu otomatik test ve yayın, gerçek gece makinacısı isimlerinin doğru girildiğini, üretim fişi kaydını, alış/satış faturasını veya gerçek finans/LOT/İşNet işlemlerini kanıtlamaz. Var olan altı makinenin gece adları kullanıcının manuel düzenlemesine bırakıldı. D1 migration ve eski Excel veri importu yapılmadı.
+
+
 ## 29.10.2026 — İmalat rol/firma koruması #481, Worker yayın ENGELLENDİ
 
 - **PR #481** (merge `20bada4b25870b5ab3656e8d4696df363edbd9a9`) `production-tenant-guard.ts` ve `main.ts` üzerinden `/api/production-center`, `/api/model-flow/*`, `/api/production/*`, `/api/imalat/kayitlar`, `/api/uretim/seri/*` yollarını oturum + `IMALAT` görüntüleme/ekleme/düzenleme/silme yetkisi + tek firma sınırıyla korur. Çapraz/eksik tenant ve izinsiz işlem reddedilir. Bu düzeltme önceki 24 görünüm auditinde fark edilmeyen kritik eksiktir. Gerçek istismar gözlenmedi.
