@@ -111,6 +111,9 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
     loadData(initialFilters);
   }
 
+  const yearChoices = Array.from({ length: Math.max(4, new Date().getFullYear() - 2022) }, (_, index) => new Date().getFullYear() - index);
+  const selectedFullYear = /^\d{4}-01-01$/.test(filters.baslangic) && filters.bitis === `${filters.baslangic.slice(0, 4)}-12-31`
+    ? filters.baslangic.slice(0, 4) : "";
   const filtersDirty = JSON.stringify(filters) !== JSON.stringify(appliedFilters);
   const exportedRows = view === "audit" ? audit.rows : report.rows;
   function exportCurrentView() {
@@ -145,6 +148,17 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
 
         <div className="iw-card-body">
           <div className="imalat-shared-filters">
+            <Field label="Yıl"><select value={selectedFullYear} onChange={(event) => {
+              const selected = event.target.value;
+              setFilters((current) => ({
+                ...current,
+                baslangic: selected ? `${selected}-01-01` : "",
+                bitis: selected ? `${selected}-12-31` : "",
+              }));
+            }}>
+              <option value="">Tüm yıllar / özel tarih</option>
+              {yearChoices.map((year) => <option key={year} value={String(year)}>{year}</option>)}
+            </select></Field>
             <Field label="Başlangıç"><input type="date" value={filters.baslangic} onChange={(event) => updateFilter("baslangic", event.target.value)} /></Field>
             <Field label="Bitiş"><input type="date" value={filters.bitis} onChange={(event) => updateFilter("bitis", event.target.value)} /></Field>
             <Field label="Firma"><input value={filters.firma} onChange={(event) => updateFilter("firma", event.target.value)} placeholder="Firma ara" /></Field>
