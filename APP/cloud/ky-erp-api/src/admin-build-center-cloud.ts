@@ -265,9 +265,9 @@ export function registerAdminBuildCenterRoutes(app:any) {
     const body = await bodyOf(c);
     const product = normalizeProduct(body.product||"PDKS_PRO");
     if (!product) return c.json(errorBody("BUILD_PRODUCT_INVALID","Desteklenen ürün seçilmedi."),400);
-    const version = text(body.version || (product==="PDKS_PRO" ? "1.9.0" : ""));
+    const version = text(body.version);
     if (!/^\d+\.\d+\.\d+$/.test(version)) return c.json(errorBody("BUILD_VERSION_INVALID","Sürüm x.y.z biçiminde olmalıdır."),400);
-    const branch = text(body.branch || "codex/pdks-desktop-1.8.1-device-final-20260907");
+    const branch = text(body.branch);
     if (!/^[a-zA-Z0-9._\/-]{3,180}$/.test(branch) || branch.includes("..")) return c.json(errorBody("BUILD_BRANCH_INVALID","Branch adı geçersiz."),400);
     const duplicate=(await listJobObjects(c.env.FILES)).find((row)=>
       ACTIVE_JOB_STATUSES.has(upper(row.status)) &&

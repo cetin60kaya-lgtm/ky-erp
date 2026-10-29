@@ -9,7 +9,7 @@ import {
 } from "../../services/adminApi";
 import "./AdminBuildCenter.css";
 
-const BRANCH = "codex/pdks-desktop-1.8.1-device-final-20260907";
+const AGENT_BRANCH = "codex/model-uretim-kontrol-merkezi-final";
 const API = "https://api.kyerp.net";
 const REPO = "https://github.com/cetin60kaya-lgtm/ky-erp.git";
 
@@ -44,6 +44,7 @@ export default function AdminBuildCenter() {
   const [state,setState]=useState({agentConfigured:false,heartbeat:null,jobs:[],storage:""});
   const [busy,setBusy]=useState(false),[message,setMessage]=useState(""),[error,setError]=useState("");
   const [enrollment,setEnrollment]=useState(null);
+  const [jobProduct,setJobProduct]=useState("PDKS_PRO"),[jobVersion,setJobVersion]=useState(""),[jobBranch,setJobBranch]=useState("");
 
   const load=useCallback(async()=>{
     try{setState(await getBuildCenterStatus()||{});setError("");}
@@ -69,7 +70,7 @@ export default function AdminBuildCenter() {
     if(!enrollment?.enrollmentId||!enrollment?.enrollmentCode)return;
     const script = [
       "$ErrorActionPreference='Stop'",
-      "$Branch='"+BRANCH+"'",
+      "$Branch='"+AGENT_BRANCH+"'",
       "$Repo='"+REPO+"'",
       "$EnrollmentId='"+enrollment.enrollmentId+"'",
       "$EnrollmentCode='"+enrollment.enrollmentCode+"'",
@@ -95,8 +96,11 @@ export default function AdminBuildCenter() {
   const queuePdks=async()=>{
     setBusy(true);setError("");setMessage("");
     try{
-      const job=await createBuildJob({product:"PDKS_PRO",version:"1.9.0",branch:BRANCH});
-      setMessage("PDKS 1.9.0 build kuyruğa alındı: "+(job?.id||""));
+      const product=jobProduct,version=jobVersion.trim(),branch=jobBranch.trim();
+      if(!/^\d+\.\d+\.\d+$/.test(version)||!/^[a-zA-Z0-9._/-]{3,180}$/.test(branch)||branch.includes(".."))throw new Error("Sürüm ve GitHub dalı geçersiz.");
+      if(!window.confirm(`${product} ${version} sürümü ${branch} dalından üretilecek. Kaynağı doğruladınız mı?`))return;
+      const job=await createBuildJob({product,version,branch});
+      setMessage(`${product} ${version} build kuyruğa alındı: `+(job?.id||""));
       await load();
     }catch(cause){setError(cause?.message||"Build kuyruğa alınamadı.");}
     finally{setBusy(false)}
@@ -129,10 +133,11 @@ export default function AdminBuildCenter() {
       </section>
 
       <section className="abc-card">
-        <header><div><small>2 · RELEASE</small><h2>KY PDKS Pro 1.9.0</h2></div><span className="badge">win-x64</span></header>
-        <p>Worker unit/typecheck/build, frontend test/lint/build, .NET/xUnit, self-contained publish, WebView2, Inno Setup ve SHA256 zinciri.</p>
-        <div className="abc-release"><div><span>Branch</span><code>{BRANCH}</code></div><div><span>Çıktı</span><strong>KY-PDKS-Pro-Setup-1.9.0.exe</strong></div></div>
-        <button className="primary wide" type="button" onClick={queuePdks} disabled={busy||Boolean(running)}>PDKS 1.9.0 Build Al</button>
+        <header><div><small>2 · WINDOWS SÜRÜM</small><h2>Kurulum Paketi Oluştur</h2></div><span className="badge">win-x64</span></header>
+        <p>Gerçek kaynak dalını ve sürümü yazın. Eski PDKS 1.9.0 otomatik seçilmez. İşlem için bağlı Windows Build Agent gerekir.</p>
+        <div className="abc-release"><label>Ürün<select value={jobProduct} onChange={e=>setJobProduct(e.target.value)}><option value="PDKS_PRO">KY PDKS Pro</option><option value="ERP_DESKTOP">KY ERP Masaüstü</option></select></label><label>Sürüm (x.y.z)<input placeholder="Örn: 2.0.25" value={jobVersion} onChange={e=>setJobVersion(e.target.value)}/></label><label>GitHub Kaynak Dalı<input placeholder="Doğrulanmış release dalı" value={jobBranch} onChange={e=>setJobBranch(e.target.value)}/></label></div>
+        <p>Build sonucu yalnız başarılı test, commit SHA ve SHA256 kanıtıyla kabul edilir.</p>
+        <button className="primary wide" type="button" onClick={queuePdks} disabled={busy||Boolean(running)||!jobVersion.trim()||!jobBranch.trim()}>Build Talebi Oluştur</button>
       </section>
     </div>
 
@@ -148,7 +153,7 @@ export default function AdminBuildCenter() {
           <span>{fmt(row.createdAt)}<small>{row.completedAt?"Bitti "+fmt(row.completedAt):""}</small></span>
           <span>{row.agentName||"-"}</span>
           <div className="buttons">
-            {row.artifactKey?<button type="button" onClick={()=>downloadBuildArtifact(row.id,row.artifactFileName||"KY-PDKS-Pro-Setup-1.9.0.exe")}>Setup İndir</button>:null}
+            {row.artifactKey?<button type="button" onClick={()=>downloadBuildArtifact(row.id,row.artifactFileName||"KYERP-Setup.exe")}>Setup İndir</button>:null}
             {row.logKey?<button type="button" onClick={()=>downloadBuildLog(row.id,"KYERP-build-"+row.id+".log")}>Log</button>:null}
             {["QUEUED","CLAIMED"].includes(String(row.status).toUpperCase())?<button className="danger" type="button" onClick={async()=>{await cancelBuildJob(row.id);await load()}}>İptal</button>:null}
           </div>
