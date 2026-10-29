@@ -1446,6 +1446,65 @@ async function createModel(c: Context<AppEnv>, body: Row) {
   return { id, modelId: id, storage, ...raw };
 }
 
+// İmalat planı değişebilir; Desen'deki kanonik model kimliği, resmî irsaliye,
+// KDV, cari ve kesinleşmiş fatura bu işlemde ASLA yeniden yazılmaz.
+async function updateProductionModelPlan(c: Context<AppEnv>, modelId: string, body: Row) {
+  const slug = companySlug(c);
+  const existing = await c.env.DB.prepare(
+    "SELECT * FROM model_records WHERE id=? AND main_company_slug=? LIMIT 1",
+  ).bind(modelId, slug).first<Row>();
+  if (!existing) return { status: 404, code: "MODEL_PLAN_NOT_FOUND", message: "Yalnız kalıcı model kartının imalat planı düzenlenebilir." };
+  const expectedAt = text(body.expectedUpdatedAt);
+  if (!expectedAt) return { status: 428, code: "MODEL_PLAN_VERSION_REQUIRED", message: "Model kartını yenileyip tekrar deneyin." };
+  if (expectedAt !== text(existing.updated_at)) {
+    return { status: 409, code: "MODEL_PLAN_STALE", message: "Model başka oturumda değişti. Önce ekranı yenileyin." };
+  }
+  // Model adı, modelId, firma, tasarım, baskı bölgeleri ve belge ilişkileri kanonik kaynaktan yönetilir.
+  const disallowed = ["modelName", "modelId", "designModelId", "companyId", "companyName", "printRegions", "dispatchNo"];
+  if (disallowed.some((field) => Object.prototype.hasOwnProperty.call(body, field))) {
+    return { status: 400, code: "MODEL_CANONICAL_FIELDS_LOCKED", message: "Model kimliği, firma ve baskı bölgesi Desen Havuzu / belge bağlantısından yönetilir." };
+  }
+  const raw = objectValue(existing.raw);
+  const incomingQty = body.expectedQty === undefined ? numberValue(first(existing.incoming_qty, raw.expectedQty)) : Number(body.expectedQty);
+  const orderNo = body.orderNo === undefined ? text(existing.order_no) : text(body.orderNo);
+  const groundColor = body.groundColor === undefined ? text(first(existing.ground_color, raw.groundColor)) : text(body.groundColor);
+  if (!Number.isFinite(incomingQty) || incomingQty < 0 || incomingQty > 100000000 ||
+      orderNo.length > 120 || groundColor.length > 100) {
+    return { status: 400, code: "MODEL_PLAN_INVALID", message: "Hedef adet, sipariş no veya zemin rengi geçersiz." };
+  }
+  if (orderNo !== text(existing.order_no)) {
+    const center = await buildCenter(c, slug);
+    const card = center.cards.find((item) => text(item.id) === modelId);
+    if (card && ((card.dispatches || []).length || (card.invoices || []).length)) {
+      return { status: 409, code: "MODEL_ORDER_DOCUMENT_LOCKED", message: "İrsaliye veya fatura bağlı modele sipariş no değişikliği yapılamaz." };
+    }
+  }
+  const now = new Date().toISOString();
+  const nextRaw = {
+    ...raw, expectedQty: incomingQty, incomingQty,
+    orderNo, groundColor, updatedAt: now,
+    productionPlanHistory: [...(Array.isArray(raw.productionPlanHistory) ? raw.productionPlanHistory.slice(-49) : []),
+      { at: now, expectedQty: numberValue(first(existing.incoming_qty, raw.expectedQty)),
+        orderNo: text(existing.order_no), groundColor: text(first(existing.ground_color, raw.groundColor)) }],
+  };
+  const columns = await tableColumns(c, "model_records");
+  const updates: Row = { raw: JSON.stringify(nextRaw), order_no: orderNo, updated_at: now };
+  if (columns.has("incoming_qty")) updates.incoming_qty = incomingQty;
+  if (columns.has("incoming_quantity")) updates.incoming_quantity = incomingQty;
+  if (columns.has("ground_color")) updates.ground_color = groundColor;
+  const values = Object.entries(updates).filter(([key]) => columns.has(key));
+  const result = await c.env.DB.prepare(
+    "UPDATE model_records SET " + values.map(([key]) => quote(key) + "=?").join(",") +
+      " WHERE id=? AND main_company_slug=? AND updated_at IS ?",
+  ).bind(...values.map(([, value]) => sqlValue(value)), modelId, slug, existing.updated_at ?? null).run();
+  if (!result.meta?.changes) {
+    return { status: 409, code: "MODEL_PLAN_STALE", message: "Kayıt eşzamanlı değişti, tekrar yükleyin." };
+  }
+  return { status: 200, data: {
+    id: modelId, modelId, expectedQty: incomingQty, orderNo, groundColor, updatedAt: now,
+  } };
+}
+
 async function saveMachine(c: Context<AppEnv>, body: Row, forcedId = "") {
   const slug = companySlug(c, body);
   const machineNo = text(first(body.machineNo, body.makineNo, body.no, forcedId));
@@ -1655,6 +1714,19 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
         jsonError("MODEL_CREATE_FAILED", error instanceof Error ? error.message : String(error)),
         400,
       );
+    }
+  });
+
+  app.put("/api/production-center/models/:id", async (c) => {
+    const body = await requestBody(c);
+    try {
+      const result = await updateProductionModelPlan(c, c.req.param("id"), body);
+      return "code" in result
+        ? c.json(jsonError(String(result.code), String(result.message)), result.status as 400 | 404 | 409 | 428)
+        : c.json({ ok: true, success: true, data: result.data }, 200);
+    } catch (error) {
+      return c.json(jsonError("MODEL_PLAN_UPDATE_FAILED",
+        error instanceof Error ? error.message : String(error)), 500);
     }
   });
 
