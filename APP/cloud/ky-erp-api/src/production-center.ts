@@ -1275,8 +1275,10 @@ async function createModel(c: Context<AppEnv>, body: Row) {
     createdAt: now,
   };
   let storage = "model_records";
-  try {
-    if (!(await tableExists(c, "model_records"))) throw new Error("model_records yok");
+  // Var olan D1 tablosundaki yazma/unique hatasını JSON yedek veriye gizlice aktarma.
+  // Yalnız tablo bulunmuyorsa tarihsel uyumluluk kaynağı kullanılabilir.
+  const hasModelRecords = await tableExists(c, "model_records");
+  if (hasModelRecords) {
     await insertDynamic(c, "model_records", {
       id,
       main_company_slug: slug,
@@ -1296,7 +1298,7 @@ async function createModel(c: Context<AppEnv>, body: Row) {
       created_at: now,
       updated_at: now,
     });
-  } catch {
+  } else {
     storage = "json_store";
     await jsonStorePut(c, "PRODUCTION_CENTER_MODEL", id, { id, ...raw }, slug);
   }
