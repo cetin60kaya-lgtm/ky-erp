@@ -252,7 +252,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
 
   const action = async (key, fn) => {
     setBusy(key); setError("");
-    try { await fn(); await load(); await onChanged?.(); }
+    try { await fn(); await load(); await onChanged?.(); if (!key.startsWith("file-")) window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", documentId: id, action: key } })); }
     catch (e) { setError(e?.message || "İşlem tamamlanamadı."); }
     finally { setBusy(""); }
   };
@@ -316,7 +316,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
                 <span>{Number(line.quantity || 0).toLocaleString("tr-TR")} {line.unit_code || ""}</span>
                 <span>{lotLabel(line)}</span>
                 <span><strong>{routingLabel(line)}</strong><small>{line.raw_metadata?.expenseCategoryName ? `Gider: ${line.raw_metadata.expenseCategoryName}` : ""}</small></span>
-                <span><EBelgeLineReview documentId={id} documentType={detail.document_type} line={line} onChanged={load} hasCounterDocument={relationCount > 0} /></span>
+                <span><EBelgeLineReview documentId={id} documentType={detail.document_type} line={line} onChanged={async () => { await load(); await onChanged?.(); window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", documentId: id, action: "line" } })); }} hasCounterDocument={relationCount > 0} /></span>
               </div>)}
             </div> : <Empty title="Kalem bulunamadı" text="Belge kalemleri kontrol gerektiriyor." />}
           </section>
@@ -513,6 +513,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       setMatchingConfirmOpen(false);
       setMatchingApproved(false);
       await loadPool();
+      window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", action: "matching" } }));
     } catch (e) {
       setMatchingConfirmOpen(false);
       setMatchingApproved(false);
@@ -525,6 +526,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
 
   const handleUploaded = async (result) => {
     setLastUpload(result || {});
+    window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", action: "upload" } }));
     try { await loadPool(); } catch { /* Yükleme başarılıysa liste yenileme ikincil kalır. */ }
   };
 
