@@ -57,9 +57,7 @@ export default function AdminPage({ activeTab, activeMainCompany, openModule }) 
   if (activeTab === "kullanicilar") {
     return owner
       ? <AdminUsersPanel activeMainCompany={activeMainCompany} />
-      : companyAdmin
-        ? <><AdminCompanyUsersPanel activeMainCompany={activeMainCompany} /><SecurityCenterPanel /></>
-        : <AdminCompanyUsersPanel activeMainCompany={activeMainCompany} />;
+      : <AdminCompanyUsersPanel activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "ana-firma-ayarlar") {
     if (owner) {
