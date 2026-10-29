@@ -34,6 +34,7 @@ export function buildProductionCanonicalReport(payload = {}, filters = {}) {
   const auditRows = [];
   const regionRows = [];
   const activeModels = new Set();
+  const completedModelIds = new Set();
   for (const card of cards) {
     if ((filters.firma && !search(card.companyName, filters.firma)) ||
         (filters.model && !search(card.modelName, filters.model))) continue;
@@ -48,6 +49,7 @@ export function buildProductionCanonicalReport(payload = {}, filters = {}) {
       .some((key) => Boolean(filters[key]));
     if (hasRecordFilters && !entries.length) continue;
     if (entries.length) activeModels.add(value(card.id));
+    if (num(card.incomingQty) > 0 && (card.operationRows || []).length > 0 && card.operationRows.every((r) => value(r.status) === 'COMPLETED')) completedModelIds.add(value(card.id));
     for (const entry of entries) {
       records.push({
         id: value(entry.id), modelId: value(card.id),
@@ -75,7 +77,7 @@ export function buildProductionCanonicalReport(payload = {}, filters = {}) {
       const latest = matching[0] || {};
       const durum = statusLabel(card.status, matching.length > 0, planned, produced);
       const row = {
-        id: value(card.id) + ":" + region,
+        id: value(card.id) + ":" + region, modelId: value(card.id),
         model: value(card.modelName), firma: value(card.companyName),
         modelImageUrl: value(card.imageUrl), partiNo: value(latest.batchNo || latest.dispatchNo) || "GENEL",
         baskiBolgesi: region, planlanan: planned, basilan: produced,
@@ -124,7 +126,7 @@ export function buildProductionCanonicalReport(payload = {}, filters = {}) {
         eksikOperasyon: auditSummary.eksikBolge,
         bugunBasilanAdet: todayTotal,
         aktifMakine: activeMachines,
-        tamamlananModelAdedi: new Set(auditRows.filter((r) => r.durum === "Tamam").map((r) => r.id.split(":")[0])).size,
+        tamamlananModelAdedi: new Set(auditRows.map((r) => r.modelId).filter((id) => completedModelIds.has(id))).size,
         secilenFiltreUretimAdedi: records.reduce((sum, r) => sum + r.basilan, 0),
       },
       machineRows, operatorRows, modelRows: regionRows, rows: records,
