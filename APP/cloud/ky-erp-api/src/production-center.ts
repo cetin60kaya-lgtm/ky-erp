@@ -1613,7 +1613,7 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
           modelImageUrl: card.imageUrl,
           isVirtual: card.isVirtual,
         })),
-        machines: center.machines,
+        machines: center.machines.filter((machine: Row) => machine.isActive !== false),
         operators: [...new Set(center.machines.flatMap((machine: Row) => [machine.dayOperator, machine.nightOperator]).filter(Boolean))].map((name) => ({ id: name, name })),
         companies: center.companies,
       },
