@@ -540,7 +540,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     if (view === "outgoing") return allRows.filter((row) => String(row.direction || "").toUpperCase() === "OUTGOING");
     return allRows;
   }, [pool.items, view]);
-  const companyName = activeMainCompany?.name || activeMainCompany?.title || activeMainCompany?.slug || "Hakan Emprime";
+  const companyName = activeMainCompany?.name || activeMainCompany?.title || activeMainCompany?.slug || "Ana firma seçilmedi";
   const summary = dashboard.summary || {};
   const providers = [...(integrations.providers || [])].sort((a, b) => String(a.label || a.key || "").localeCompare(String(b.label || b.key || ""), "tr"));
   const viewMeta = {

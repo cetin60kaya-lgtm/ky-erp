@@ -74,7 +74,7 @@ function exportCsv(rows) {
   URL.revokeObjectURL(url);
 }
 
-export default function InvoiceDispatchControlWorkspace({ activeMainCompany }) {
+export default function InvoiceDispatchControlWorkspace({ activeMainCompany, openModule }) {
   const [state, setState] = useState({ loading: true, error: "", rows: [], summary: {} });
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("OPEN");
@@ -231,6 +231,10 @@ export default function InvoiceDispatchControlWorkspace({ activeMainCompany }) {
               <button type="button" onClick={() => setSelected(null)} aria-label="Kapat"><X size={20} /></button>
             </header>
             <div className="idc-drawer-body">
+              <div className="accounting-inline-actions">
+                {selected.id && <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "gelen-belgeler", actionContext: { documentId: selected.id } })}>Müşteri İrsaliyesini Aç</button>}
+                {selected.invoiceId && <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "giden-belgeler", actionContext: { documentId: selected.invoiceId } })}>İlişkili Faturayı Aç</button>}
+              </div>
               <section className="idc-detail-grid">
                 <div><span>Müşteri</span><strong>{selected.companyName || "-"}</strong></div>
                 <div><span>Model</span><strong>{selected.modelName || "Model bekliyor"}</strong></div>

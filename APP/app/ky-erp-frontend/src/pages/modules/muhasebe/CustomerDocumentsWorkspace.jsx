@@ -87,7 +87,7 @@ export default function CustomerDocumentsWorkspace({ activeMainCompany, openModu
         <button type="button" className={view === "chain" ? "active" : ""} onClick={() => setView("chain")}>İrsaliye / Fatura Zinciri</button>
         <button type="button" className={view === "invoices" ? "active" : ""} onClick={() => setView("invoices")}>Satış Faturaları</button>
       </div>
-      {view === "chain" ? <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} /> : <OutgoingInvoicesPanel activeMainCompany={activeMainCompany} openModule={openModule} refreshKey={refreshKey} />}
+      {view === "chain" ? <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} openModule={openModule} /> : <OutgoingInvoicesPanel activeMainCompany={activeMainCompany} openModule={openModule} refreshKey={refreshKey} />}
     </section>
   );
 }

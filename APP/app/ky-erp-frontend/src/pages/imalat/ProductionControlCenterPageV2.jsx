@@ -181,6 +181,7 @@ function defaultEntry(model, dictionaries, source = null, preferences = {}) {
     machineId: selectedMachine ? machineId(selectedMachine) : source?.machineId || "",
     machineName: selectedMachine ? machineName(selectedMachine) : source?.machineName || "",
     shift,
+    ground: source?.ground || model?.groundColor || "",
     operatorName:
       source?.operatorName ||
       (selectedMachine ? operatorFor(selectedMachine, shift) : ""),
@@ -498,7 +499,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
           <button className="primary" type="button" onClick={() => setDesignOpen(true)}><ImageIcon size={16} /> Desenlerden Model Al</button>
           <button type="button" onClick={() => setModelOpen(true)}><CirclePlus size={16} /> Yeni Model</button>
           <button type="button" onClick={() => setSmartOpen(true)}><Zap size={16} /> Akıllı Seri Giriş</button>
-          <button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16} /> Geçmiş CSV Al</button>
+          <details className="pc2-more-actions"><summary>Diğer işlemler</summary><button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16} /> Geçmiş CSV Al</button></details>
         </div>
       </section>
 
@@ -626,6 +627,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
           <label>Baskı bölgesi{entryPrintRegions.length ? (<select value={entry.printRegion} onChange={(event) => setEntry((current) => ({ ...current, printRegion: event.target.value }))}>{entryPrintRegions.map((region) => <option key={region} value={region}>{region}</option>)}</select>) : (<input value={entry.printRegion} onChange={(event) => setEntry((current) => ({ ...current, printRegion: event.target.value }))} />)}</label>
           <label>Üretim adedi *<input type="number" min="0" value={entry.quantity} onChange={(event) => setEntry((current) => ({ ...current, quantity: event.target.value }))} autoFocus /></label>
           <label>Makine<select value={entry.machineId} onChange={(event) => changeEntryMachine(event.target.value)}><option value="">Makine seçin</option>{dictionaries.machines.map((machine) => <option key={machineId(machine)} value={machineId(machine)}>{machine.machineNo || machine.no} - {machineName(machine)}</option>)}</select></label>
+          <label>Zemin<input value={entry.ground} onChange={(event) => setEntry((current) => ({ ...current, ground: event.target.value }))} placeholder="Zemin rengi" /></label>
           <label>Vardiya<select value={entry.shift} onChange={(event) => changeShift(event.target.value)}><option>Gündüz</option><option>Gece</option></select></label>
           <label>Makinacı<input value={entry.operatorName} onChange={(event) => setEntry((current) => ({ ...current, operatorName: event.target.value }))} placeholder="Bilinmiyorsa boş bırak, sonra tamamla" /></label>
           <label>Parti / irsaliye<input value={entry.batchNo} onChange={(event) => setEntry((current) => ({ ...current, batchNo: event.target.value }))} title="Bu fişin parti etiketi; asıl irsaliye belgesi değişmez" /></label>
