@@ -1520,36 +1520,31 @@ async function saveMachine(c: Context<AppEnv>, body: Row, forcedId = "") {
     isActive: body.isActive !== false,
     sortOrder: numberValue(body.sortOrder) || 1,
   };
-  try {
-    if (!(await tableExists(c, "machine_shift_defaults"))) throw new Error("machine_shift_defaults yok");
+  // Var olan D1 tablosunda sürümler arası alan farklılıkları olabilir.
+  // raw JSON, makine no/makinacı/vardiya/durum için kanonik saklama alanıdır.
+  // SQL hatasını sessizce paralel json_store kaydına çevirme.
+  if (await tableExists(c, "machine_shift_defaults")) {
     const existing = (await tableRows(c, "machine_shift_defaults", slug)).find(
-      (row) => text(row.id) === id || text(row.machine_no) === machineNo,
+      (row) => text(row.id) === id ||
+        text(first(row.machine_no, objectValue(row.raw).machineNo)) === machineNo,
     );
     if (existing) {
       await updateDynamic(c, "machine_shift_defaults", text(existing.id), {
-        machine_no: machineNo,
-        machine_name: data.machineName,
-        day_operator: data.dayOperator,
-        night_operator: data.nightOperator,
-        is_active: data.isActive,
-        sort_order: data.sortOrder,
-        updated_at: now,
+        machine_id: machineNo, machine_no: machineNo, machine_name: data.machineName,
+        day_operator: data.dayOperator, night_operator: data.nightOperator,
+        is_active: data.isActive, sort_order: data.sortOrder,
+        raw: data, updated_at: now,
       }, slug);
     } else {
       await insertDynamic(c, "machine_shift_defaults", {
-        id,
-        main_company_slug: slug,
-        machine_no: machineNo,
-        machine_name: data.machineName,
-        day_operator: data.dayOperator,
-        night_operator: data.nightOperator,
-        is_active: data.isActive,
-        sort_order: data.sortOrder,
-        created_at: now,
-        updated_at: now,
+        id, main_company_slug: slug, machine_id: machineNo,
+        machine_no: machineNo, machine_name: data.machineName,
+        day_operator: data.dayOperator, night_operator: data.nightOperator,
+        is_active: data.isActive, sort_order: data.sortOrder,
+        raw: data, created_at: now, updated_at: now,
       });
     }
-  } catch {
+  } else {
     await jsonStorePut(c, "PRODUCTION_MACHINE", id, data, slug);
   }
   return data;
