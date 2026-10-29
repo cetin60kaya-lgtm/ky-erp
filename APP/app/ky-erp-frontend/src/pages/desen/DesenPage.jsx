@@ -42,10 +42,10 @@ function resolveScreenKey(activeTab) {
   return activeTab && SCREEN_COPY[activeTab] ? activeTab : "gelen-desenler";
 }
 
-function renderScreen(screenKey, activeMainCompany, inboxRevision) {
+function renderScreen(screenKey, activeMainCompany, inboxRevision, openModule) {
   if (screenKey === "desen-klasor-ayarlari") return null;
   if (screenKey === "desen-modeller") {
-    return <DesenModeller activeMainCompany={activeMainCompany} />;
+    return <DesenModeller activeMainCompany={activeMainCompany} openModule={openModule} />;
   }
   if (screenKey === "desen-yerlesim-is-akisi") {
     return <YerlesimKalipPage activeMainCompany={activeMainCompany} />;
@@ -61,13 +61,13 @@ function renderScreen(screenKey, activeMainCompany, inboxRevision) {
   );
 }
 
-export default function DesenPage({ activeTab, activeMainCompany }) {
+export default function DesenPage({ activeTab, activeMainCompany, openModule }) {
   const [inboxRevision, setInboxRevision] = useState(0);
   const screenKey = resolveScreenKey(activeTab);
   const screenCopy = SCREEN_COPY[screenKey];
   const isInbox = screenKey === "gelen-desenler";
   const showFolderSettings = isInbox || screenKey === "desen-klasor-ayarlari";
-  const page = renderScreen(screenKey, activeMainCompany, inboxRevision);
+  const page = renderScreen(screenKey, activeMainCompany, inboxRevision, openModule);
 
   return (
     <div className="clean-workflow-page dw-page">
