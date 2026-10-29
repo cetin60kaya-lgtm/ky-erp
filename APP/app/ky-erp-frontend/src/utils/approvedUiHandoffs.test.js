@@ -45,7 +45,9 @@ test("Tasarım yalnız son ortak CSS katmanından yüklenir", () => {
   const shell = readFileSync(new URL("../layouts/AppShellV3.jsx", import.meta.url), "utf8");
   assert.ok(shell.includes('import "../styles/approved-html-shell.css";'));
   const css = readFileSync(new URL("../styles/approved-html-shell.css", import.meta.url), "utf8");
-  assert.ok(css.includes("grid-template-columns: 258px minmax(0, 1fr)"));
+  assert.ok(css.includes("grid-template-columns: 270px minmax(0, 1fr)"));
+  const canonical = readFileSync(new URL("../styles/ky-pro-shell.css", import.meta.url), "utf8");
+  assert.ok(canonical.includes("grid-template-columns:270px minmax(0,1fr)"));
   assert.ok(css.includes('data-active-module="gunluk-operasyon"'));
   assert.ok(css.includes('data-active-module="ik"'));
 });

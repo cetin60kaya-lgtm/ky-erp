@@ -9,12 +9,16 @@ test("admin navigation is corporate and has no standalone login approval tab", (
   const base = read("../../../app/ky-erp-frontend/src/app/moduleRegistryBase.js");
   assert.doesNotMatch(registry, /withLoginApprovals/);
   assert.match(registry, /"giris-onaylari": "admin-guvenlik"/);
-  assert.match(base, /"Süper Yönetici & Güvenlik"/);
-  assert.match(base, /"Kullanıcı & Yetkiler"/);
-  assert.match(base, /"Firmalar & Organizasyon"/);
-  assert.match(base, /\["admin-yonetim-ozeti", "Yönetim"/);
-  assert.match(base, /\["admin-guvenlik", "Güvenlik"/);
-  assert.match(base, /\["admin-sistem", "Sistem"/);
+  const navigation = read("../../../app/ky-erp-frontend/src/app/adminNavigation.js");
+  assert.match(base, /groups: \[\{label:"Yönetim İşlemleri",tabs:getAdminPrimaryTabs\(\)\}\]/);
+  assert.match(base, /hiddenTabs: getAdminHiddenTabs\(\)/);
+  assert.match(navigation, /ADMIN_PRIMARY_ROUTES=\["admin-yonetim-ozeti","admin-guvenlik","admin-sistem"\]/);
+  assert.match(navigation, /route:"uygulama-sahibi",label:"Süper Yönetici"/);
+  assert.match(navigation, /route:"kullanicilar",label:"Kullanıcılar"/);
+  assert.match(navigation, /route:"ana-firma-ayarlar",label:"Firmalar"/);
+  assert.match(navigation, /route:"firma-yetkilileri",label:"Firma Yetkilileri"/);
+  assert.match(navigation, /route:"admin-guvenlik",label:"Güvenlik Merkezi"/);
+  assert.match(navigation, /route:"admin-sistem",label:"Uygulama Ayarları"/);
 });
 
 test("management console contains the compact decision center", () => {
