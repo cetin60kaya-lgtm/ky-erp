@@ -67,6 +67,7 @@ import { registerIsnetRuntimeV2Routes } from "./isnet-runtime-v2";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
 import { enforceIsnetTenant } from "./isnet-tenant-guard";
 import { registerProductionCenterRoutes } from "./production-center";
+import { enforceProductionTenant } from "./production-tenant-guard";
 import { registerProductionRuntimeV2Routes } from "./production-runtime-v2";
 import { registerNotificationRoutes } from "./notifications-cloud";
 import { registerMailCommunicationRoutes } from "./mail-communication-core";
@@ -321,6 +322,18 @@ shell.use("/api/mail/*", async (c, next) => {
 shell.use("/api/gunluk-operasyon/*", enforceDailyOperationsTenant);
 
 shell.use("/api/desen/*", enforceDesenTenant);
+
+// İmalat raporları/fişleri dahil tüm kanonik ve legacy uyumluluk uçları
+// tenant+yetki kontrolünden aynı şekilde geçer; yalnız oturum kontrolü yeterli değildir.
+for (const productionRoute of [
+  "/api/production-center", "/api/production-center/*",
+  "/api/model-flow/*", "/api/production/*",
+  "/api/imalat/kayitlar", "/api/uretim/seri/*",
+]) {
+  shell.use(productionRoute, enforceProductionTenant);
+}
+
+
 
 // File Hub authenticated routes cannot cross tenant boundaries.
 shell.use("/api/file-hub/*", enforceFileHubTenant);
