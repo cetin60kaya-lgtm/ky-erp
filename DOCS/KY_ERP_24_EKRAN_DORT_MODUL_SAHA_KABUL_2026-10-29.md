@@ -1,5 +1,14 @@
 # KY ERP — Muhasebe / e-Belge / İmalat / Desen — 24 Ekran Saha Kontrolü
 
+## 29.10.2026 — #480 canlı yayın doğrulaması
+
+- PR #480 merge `da208e3619331a3a3d5e85d25b5a4f9f6dfce97e`. Canonical [CI #40891809902](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40891809902) Frontend + Worker SUCCESS.
+- **Worker/API** [#40892183913](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40892183913) SUCCESS; deploy source `1470cf7afa14b5e4bc57353712733b9ffc19d34b`; D1 tam backup artifact, yeni migration SKIPPED, schema read-only, Worker deploy ve `api.kyerp.net` health PASS.
+- **Pages/UI** [#40892328950](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40892328950) SUCCESS; deploy source `b067a516537d984765ed30ddb8c29a147c6f7a99`; Pages production, gerçek bundle/Günlük Operasyon chunk smoke PASS.
+- **Ancestry:** PR merge SHA → Worker ve Pages compare ikisinde de `behind_by=0`. #480 kodu iki canlı kaynakta da mevcut.
+- **Açık:** 24 bölüm görünümünün yetkili gerçek kullanıcı ve finans/LOT/İşNet/makine/yerleşim uçtan uca saha kabulü *BEKLİYOR*. CI/PAGES/WORKER success bu kabulün yerine geçmez. 2022/Excel aktarımı ve test için veri oluşturma YAPILMADI.
+
+
 **Tarih:** 29.10.2026 · **Kanonik kaynak:** `codex/model-uretim-kontrol-merkezi-final` · **Talep:** önce günlük gerçek kullanım, eski Excel (2022 dahil) içeri aktarma yok.
 
 **Kabul kuralı:** Buradaki `KOD` bir sekmenin doğrudan kanonik JSX/API akışının incelendiğini gösterir; `CI` gerçek otomatik test + build kanıtıdır; `SAHA` ise yetkili gerçek oturumla iş akışının adım adım yapılmasıdır. Kaynak kodun mevcut olması ya da CI PASS, sahada her işlemin çalıştığı anlamına gelmez. Kasıtlı olarak canlı fatura, banka, kasa, stok, LOT, İşNet resmî gönderim veya veri mutasyonu yaratılmadı.
