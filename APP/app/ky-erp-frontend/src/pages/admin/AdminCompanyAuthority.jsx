@@ -56,13 +56,14 @@ export default function AdminCompanyAuthority({ activeMainCompany }) {
   );
 
   const candidates = useMemo(
-    () => users.filter((row) => row?.isActive !== false && !["SUPER_ADMIN", "ADMIN"].includes(roleOf(row?.role))),
-    [users],
+    () => users.filter((row) => row?.isActive !== false && !["SUPER_ADMIN", "ADMIN"].includes(roleOf(row?.role)) && (!row?.mainCompanySlug || String(row.mainCompanySlug) === String(companySlug))),
+    [users, companySlug],
   );
 
   async function assignAdmin() {
     const target = users.find((row) => String(row.id) === String(candidateId));
-    if (!target || !companySlug || busy) return;
+    if (!target || !companySlug || busy || (target.mainCompanySlug && target.mainCompanySlug !== companySlug)) return;
+    if (!window.confirm(`${target.fullName || target.username} kullanıcısına ${companySlug} firması için Firma Sahibi yetkisi verilsin mi?`)) return;
     setBusy(true);
     try {
       await updateUser(target.id, {
@@ -82,6 +83,7 @@ export default function AdminCompanyAuthority({ activeMainCompany }) {
 
   async function removeAdmin(row) {
     if (!row?.id || busy) return;
+    if (!window.confirm(`${row.fullName || row.username} için Firma Sahibi yetkisi kaldırılacak. İlgili giriş onaylarını artık yönetemeyecek. Devam edilsin mi?`)) return;
     setBusy(true);
     try {
       await updateUser(row.id, {
@@ -127,7 +129,7 @@ export default function AdminCompanyAuthority({ activeMainCompany }) {
       <div className="admpro-card-head">
         <div>
           <h3>Firma Sahibi / Admin Yetkisi</h3>
-          <p>Yeni firma için bir veya birden fazla COMPANY_ADMIN atanabilir. Bu kişiler yalnız kendi firmasının giriş onaylarını ve kullanıcılarını yönetir.</p>
+          <p>Yalnız seçili firmanın aktif kullanıcıları Firma Sahibi olarak atanabilir. Başka firmadan yetki taşıma bu ekranda yapılmaz. Bir veya birden fazla COMPANY_ADMIN atanabilir. Bu kişiler yalnız kendi firmasının giriş onaylarını ve kullanıcılarını yönetir.</p>
         </div>
         <button type="button" onClick={load} disabled={busy}>{busy ? "İşleniyor..." : "Yenile"}</button>
       </div>
@@ -146,7 +148,7 @@ export default function AdminCompanyAuthority({ activeMainCompany }) {
         </label>
       </div>
       <div className="admpro-actions" style={{ justifyContent: "flex-start", marginTop: 12 }}>
-        <button type="button" className="primary" onClick={assignAdmin} disabled={!candidateId || !companySlug || busy}>COMPANY_ADMIN Yetkisi Ver</button>
+        <button type="button" className="primary" onClick={assignAdmin} disabled={!candidateId || !companySlug || busy}>Firma Sahibi Yetkisi Ver</button>
       </div>
       <div className="admpro-table" style={{ marginTop: 16 }}>
         <table>

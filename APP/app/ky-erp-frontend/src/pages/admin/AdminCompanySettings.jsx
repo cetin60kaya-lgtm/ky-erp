@@ -38,6 +38,7 @@ export default function AdminCompanySettings({ activeMainCompany }) {
   const [users,setUsers]=useState([]);
   const [form,setForm]=useState(emptyForm());
   const [selectedId,setSelectedId]=useState("");
+  const [formOpen,setFormOpen]=useState(false);
   const [delivery,setDelivery]=useState(null);
   const [recovery,setRecovery]=useState(null);
   const [approvalSettings,setApprovalSettings]=useState(null);
@@ -147,8 +148,8 @@ export default function AdminCompanySettings({ activeMainCompany }) {
   },[selected?.slug]);
   useEffect(()=>{loadSelectedBackups();},[loadSelectedBackups]);
 
-  function beginEdit(row){ setSelectedId(row.id); setForm({...row}); setMessage(`${row.name} düzenlemeye açıldı.`); }
-  function beginNew(){ setForm(emptyForm()); setMessage("Yeni ana firma kaydı hazırlanıyor."); }
+  function beginEdit(row){ setSelectedId(row.id); setForm({...row});setFormOpen(true); setMessage(`${row.name} düzenlemeye açıldı.`); }
+  function beginNew(){ setForm(emptyForm());setFormOpen(true); setMessage("Yeni ana firma kaydı hazırlanıyor."); }
 
   async function save(event){
     event?.preventDefault();
@@ -163,7 +164,7 @@ export default function AdminCompanySettings({ activeMainCompany }) {
       else result=await apiPost("/admin/main-companies",payload);
       const created=result?.data || result;
       setMessage(form.id?"Ana firma güncellendi.":"Ana firma oluşturuldu.");
-      setForm(emptyForm());
+      setForm(emptyForm());setFormOpen(false);
       await load();
       if(created?.id) setSelectedId(String(created.id));
     }catch(error){setMessage(`Hata: ${error?.message || "Firma kaydedilemedi."}`);}finally{setBusy(false);}
@@ -234,12 +235,12 @@ export default function AdminCompanySettings({ activeMainCompany }) {
         <div className="admpro-company-list">{companies.map((row)=><div key={row.id} className={`admpro-company-row ${row.id===selectedId?"active":""}`}><div onClick={()=>setSelectedId(row.id)} role="button" tabIndex={0}><strong>{row.name}</strong><small>{row.slug} · {row.isActive?"Aktif":"Pasif"} · {companyPeopleCount.get(row.slug)||0} kişi{row.id===activeMainCompany?.id?" · Şu an seçili":""}</small></div><div className="admpro-row-actions"><button type="button" onClick={()=>beginEdit(row)}>Düzenle</button><button type="button" onClick={()=>toggle(row)}>{row.isActive?"Pasife Al":"Aktifleştir"}</button></div></div>)}{!companies.length?<div className="admpro-empty">Ana firma kaydı alınamadı.</div>:null}</div>
       </div>
 
-      <div className="admpro-card"><div className="admpro-card-head"><div><h3>{form.id?"Ana Firma Düzenle":"Yeni Ana Firma"}</h3><p>İsim, kısa kod ve aktiflik ayarları.</p></div>{form.id?<button type="button" onClick={()=>setForm(emptyForm())}>Formu Temizle</button>:null}</div>
+      {formOpen?<div className="admpro-card"><div className="admpro-card-head"><div><h3>{form.id?"Ana Firma Düzenle":"Yeni Ana Firma"}</h3><p>İsim, kısa kod ve aktiflik ayarları.</p></div>{form.id?<button type="button" onClick={()=>setForm(emptyForm())}>Formu Temizle</button>:null}</div>
         <form onSubmit={save}><div className="admpro-form-grid"><label>Firma Adı<input value={form.name} onChange={(e)=>setForm((old)=>({...old,name:e.target.value,slug:old.slug||slugify(e.target.value)}))}/></label><label>Kısa Kod / Slug<input value={form.slug} onChange={(e)=>setForm((old)=>({...old,slug:e.target.value}))}/></label><label className="wide">Açıklama<textarea value={form.note} onChange={(e)=>setForm((old)=>({...old,note:e.target.value}))}/></label><label className="admpro-check wide"><input type="checkbox" checked={form.isActive} onChange={(e)=>setForm((old)=>({...old,isActive:e.target.checked}))}/> Aktif ana firma</label></div><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:12}}><button className="primary" type="submit" disabled={busy}>{form.id?"Değişiklikleri Kaydet":"Ana Firma Oluştur"}</button></div></form>
-      </div>
+      </div>:null}
     </section>
 
-    {selected?<section className="admpro-card admpro-company-profile">
+    {selected?<details className="aph-fold" key={selectedId} open><summary>Firma Kartı ve Kullanıcılar</summary><section className="admpro-card admpro-company-profile">
       <div className="admpro-card-head">
         <div><h3>Firma Kartı · {selected.name}</h3><p>İşveren, muhasebe ve diğer bölüm kullanıcıları bu firmaya bağlı tek listede görünür. Mail ve Drive/File Hub karar yetkisi Firma Sahibi / İşveren rolündedir.</p></div>
         <span className="admpro-badge ok">{activePeople.length} aktif / {selectedPeople.length} toplam</span>
@@ -259,9 +260,9 @@ export default function AdminCompanySettings({ activeMainCompany }) {
         </div>)}
         {!selectedPeople.length?<div className="admpro-empty">Bu firmaya bağlı kullanıcı bulunamadı.</div>:null}
       </div>
-    </section>:null}
+    </section></details>:null}
 
-    {selected?<section className="admpro-card">
+    {selected?<details className="aph-fold" key={selectedId}><summary>PDKS Firma Politikası</summary><section className="admpro-card">
       <div className="admpro-card-head"><div><h3>Firma PDKS Profili · {selected.name}</h3><p>Normal çalışma kredisi, takvim, kart, mesai ve vardiya davranışı firmaya özeldir. Uygulama geneli sabit saat kullanmaz.</p></div><span className={`admpro-badge ${pdksProfile?.configured?"ok":"warn"}`}>{pdksProfile?.configured?"Profil Aktif":"Kurulum Bekliyor"}</span></div>
       {pdksProfile?<div className="admpro-form-grid">
         <label>Profil Adı<input value={pdksProfile.profileName||""} onChange={e=>setPdksProfile(v=>({...v,profileName:e.target.value}))}/></label>
@@ -282,9 +283,9 @@ export default function AdminCompanySettings({ activeMainCompany }) {
         <label className="admpro-check wide"><input type="checkbox" checked={Boolean(pdksProfile.configured)} onChange={e=>setPdksProfile(v=>({...v,configured:e.target.checked}))}/> Bu firma için PDKS puantaj profilini aktif et</label>
         <div className="admpro-actions wide" style={{justifyContent:"flex-start"}}><button type="button" className="primary" disabled={pdksProfileBusy} onClick={savePdksProfile}>{pdksProfileBusy?"Kaydediliyor...":"PDKS Firma Profilini Kaydet"}</button><small>NÇ ve bordro değerleri terminalde geçirilen süreden ayrıdır; grup/personel istisnaları bu profilin üstüne uygulanır.</small></div>
       </div>:<div className="admpro-empty">{pdksProfileBusy?"PDKS profili yükleniyor...":"PDKS profili alınamadı."}</div>}
-    </section>:null}
+    </section></details>:null}
 
-    {selected?<section className="admpro-card">
+    {selected?<details className="aph-fold" key={selectedId}><summary>Giriş Bildirimleri</summary><section className="admpro-card">
       <div className="admpro-card-head">
         <div><h3>Telefon Giriş Onayları · {selected.name}</h3><p>Firma kullanıcılarının giriş isteği önce firma sahibine gider. İsterseniz aynı onay Süper Yöneticinin telefonuna da gönderilir.</p></div>
         <span className="admpro-badge ok">Push + Tenant Kilitli</span>
@@ -303,16 +304,16 @@ export default function AdminCompanySettings({ activeMainCompany }) {
         İki bildirim de açıksa firma sahibi veya Süper Yönetici güvenli telefonundan Onayla / Reddet diyebilir; ilk geçerli karar uygulanır. 6 haneli Authenticator kodları yedek yöntem olarak korunur.
       </div>
       {!owners.length?<div className="admpro-notice warn" style={{marginTop:10}}>Bu firmada Firma Sahibi / İşveren atanmadığı için firma sahibi push onayı gönderilemez. Süper Yönetici bildirimi açıksa onay size gelir.</div>:null}
-    </section>:null}
+    </section></details>:null}
 
-    {selected?<section className="admpro-card"><div className="admpro-card-head"><div><h3>Firma Yedek & Geri Dönüş · {selected.name}</h3><p>Bu firmanın tenant verileri, R2 dosyaları ve SQL arşivi tek işlemde korunur.</p></div><div className="admpro-actions"><button className="primary" type="button" onClick={backupSelected} disabled={backupBusy}>{backupBusy?"İşleniyor...":"Tam Yedek Al"}</button></div></div><div className="admpro-notice success">Yedek firma bazlıdır. Geri dönüş başlamadan önce ayrıca PRE_RESTORE güvenlik yedeği alınır; auth/session/MFA kayıtları firma geri dönüşüyle geriye sarılmaz.</div><div className="admpro-table" style={{marginTop:12}}><table><thead><tr><th>Tarih</th><th>Veri</th><th>Dosya</th><th>SQL</th><th>İşlem</th></tr></thead><tbody>{companyBackups.slice(0,5).map((row)=><tr key={row.id}><td>{dateText(row.createdAt||row.completedAt)}</td><td>{Number(row.totalRows||0).toLocaleString("tr-TR")} satır</td><td>{Number(row.totalFiles||0).toLocaleString("tr-TR")}</td><td><button type="button" onClick={()=>downloadSql(row)} disabled={backupBusy}>{row.sqlKey?"SQL İndir":"SQL Hazırla & İndir"}</button></td><td><button type="button" className="danger" onClick={()=>setRestore({backup:row,password:"",confirmText:""})}>Bu Yedeğe Dön</button></td></tr>)}{!companyBackups.length?<tr><td colSpan="5">Bu firma için henüz yedek yok.</td></tr>:null}</tbody></table></div></section>:null}
+    {selected?<details className="aph-fold" key={selectedId}><summary>Firma Yedekleri ve Geri Yükleme</summary><section className="admpro-card"><div className="admpro-card-head"><div><h3>Firma Yedek & Geri Dönüş · {selected.name}</h3><p>Bu firmanın tenant verileri, R2 dosyaları ve SQL arşivi tek işlemde korunur.</p></div><div className="admpro-actions"><button className="primary" type="button" onClick={backupSelected} disabled={backupBusy}>{backupBusy?"İşleniyor...":"Tam Yedek Al"}</button></div></div><div className="admpro-notice success">Yedek firma bazlıdır. Geri dönüş başlamadan önce ayrıca PRE_RESTORE güvenlik yedeği alınır; auth/session/MFA kayıtları firma geri dönüşüyle geriye sarılmaz.</div><div className="admpro-table" style={{marginTop:12}}><table><thead><tr><th>Tarih</th><th>Veri</th><th>Dosya</th><th>SQL</th><th>İşlem</th></tr></thead><tbody>{companyBackups.slice(0,5).map((row)=><tr key={row.id}><td>{dateText(row.createdAt||row.completedAt)}</td><td>{Number(row.totalRows||0).toLocaleString("tr-TR")} satır</td><td>{Number(row.totalFiles||0).toLocaleString("tr-TR")}</td><td><button type="button" onClick={()=>downloadSql(row)} disabled={backupBusy}>{row.sqlKey?"SQL İndir":"SQL Hazırla & İndir"}</button></td><td><button type="button" className="danger" onClick={()=>setRestore({backup:row,password:"",confirmText:""})}>Bu Yedeğe Dön</button></td></tr>)}{!companyBackups.length?<tr><td colSpan="5">Bu firma için henüz yedek yok.</td></tr>:null}</tbody></table></div></section></details>:null}
 
     {restore.backup&&selected?<section className="admpro-card"><div className="admpro-card-head"><div><h3>Firma Geri Dönüş Doğrulaması · {selected.name}</h3><p>{dateText(restore.backup.createdAt||restore.backup.completedAt)} yedeğine dönülecek.</p></div><button type="button" onClick={()=>setRestore({backup:null,password:"",confirmText:""})}>İptal</button></div><div className="admpro-notice warn">Mevcut firma verisi değişeceği için yönetici şifresi ve açık onay zorunludur. Güvenlik yedeği alınamazsa işlem başlamaz.</div><div className="admpro-form-grid" style={{marginTop:12}}><label>Yönetici Şifresi<input type="password" value={restore.password} onChange={(e)=>setRestore((old)=>({...old,password:e.target.value}))}/></label><label>Onay Metni<input value={restore.confirmText} onChange={(e)=>setRestore((old)=>({...old,confirmText:e.target.value}))} placeholder="GERI YUKLE"/></label></div><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:12}}><button type="button" className="danger" onClick={restoreSelected} disabled={backupBusy}>Güvenlik Yedeği Al ve Geri Dön</button></div></section>:null}
 
-    {selected?<section className="admpro-card"><div className="admpro-card-head"><div><h3>Kritik Firma İşlemleri · {selected.name}</h3><p>Silme ve veri aktarma geri dönüşü zor işlemlerdir; yönetici şifresiyle ayrıca doğrulanır.</p></div></div><div className="admpro-actions" style={{justifyContent:"flex-start"}}><button type="button" onClick={()=>setDanger({mode:"TRANSFER",item:selected,password:"",targetId:""})}>Verileri Başka Firmaya Aktar</button><button type="button" className="danger" onClick={()=>setDanger({mode:"DELETE",item:selected,password:"",targetId:""})}>Firmayı Sil</button></div></section>:null}
+    {selected?<details className="aph-fold aph-danger" key={selectedId}><summary>Kritik İşlemler: Aktar / Sil</summary><section className="admpro-card"><div className="admpro-card-head"><div><h3>Kritik Firma İşlemleri · {selected.name}</h3><p>Silme ve veri aktarma geri dönüşü zor işlemlerdir; yönetici şifresiyle ayrıca doğrulanır.</p></div></div><div className="admpro-actions" style={{justifyContent:"flex-start"}}><button type="button" onClick={()=>setDanger({mode:"TRANSFER",item:selected,password:"",targetId:""})}>Verileri Başka Firmaya Aktar</button><button type="button" className="danger" onClick={()=>setDanger({mode:"DELETE",item:selected,password:"",targetId:""})}>Firmayı Sil</button></div></section></details>:null}
 
     {danger.item?<section className="admpro-card"><div className="admpro-card-head"><div><h3>{danger.mode==="DELETE"?"Firma Silme Doğrulaması":"Firma Veri Aktarma"}</h3><p>{danger.item.name} için kritik işlem onayı.</p></div><button type="button" onClick={()=>setDanger({mode:"",item:null,password:"",targetId:""})}>İptal</button></div><div className="admpro-form-grid">{danger.mode==="TRANSFER"?<label>Hedef Firma<select value={danger.targetId} onChange={(e)=>setDanger((old)=>({...old,targetId:e.target.value}))}><option value="">Hedef seçin</option>{companies.filter((row)=>row.id!==danger.item.id&&row.isActive).map((row)=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>:null}<label>Yönetici Şifresi<input type="password" value={danger.password} onChange={(e)=>setDanger((old)=>({...old,password:e.target.value}))}/></label></div><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:12}}><button type="button" className="danger" onClick={runDanger} disabled={busy}>{danger.mode==="DELETE"?"Silme İşlemini Onayla":"Aktarımı Onayla"}</button></div></section>:null}
 
-    <section className="admpro-card"><div className="admpro-card-head"><div><h3>Entegrasyon & Kurtarma Hazırlığı</h3><p>Gizli anahtarlar ekranda gösterilmez; yalnız güvenli hazır/eksik durumu raporlanır.</p></div></div><div className="admpro-integration"><div><span>E-posta Doğrulama Servisi</span><strong>{deliveryData.email?"Bağlı":"Bağlı değil"}</strong><small className="admpro-muted">{deliveryData.email?`${deliveryData.emailProvider||"Gönderim servisi"} ile kod gönderilebilir.`:"Resend API anahtarı + gönderen adresi veya güvenli webhook Worker secret olarak tanımlanmalı."}</small></div><div><span>SMS Doğrulama Servisi</span><strong>{deliveryData.sms?"Bağlı":"Bağlı değil"}</strong><small className="admpro-muted">{deliveryData.sms?`${deliveryData.smsProvider||"SMS servisi"} hazır.`:"SMS isteğe bağlıdır; tanımlanmamış olması normal kullanıcı girişini engellemez."}</small></div><div><span>Süper Yönetici Kurtarma</span><strong>{recoveryData.recoveryEnabled?"Hazır":"Kurulum eksik"}</strong><small className="admpro-muted">İletişim doğrulaması + 3 güvenlik sorusu tamamlandığında aktif olur.</small></div><div><span>Aktif Ana Firma</span><strong>{activeMainCompany?.name||activeMainCompany?.slug||"Seçilmedi"}</strong><small className="admpro-muted">Tüm tenant kapsamlı yönetim işlemleri bu seçimle sınırlandırılır.</small></div></div></section>
+    <details className="aph-fold"><summary>Entegrasyon ve Kurtarma Durumu</summary><section className="admpro-card"><div className="admpro-card-head"><div><h3>Entegrasyon & Kurtarma Hazırlığı</h3><p>Gizli anahtarlar ekranda gösterilmez; yalnız güvenli hazır/eksik durumu raporlanır.</p></div></div><div className="admpro-integration"><div><span>E-posta Doğrulama Servisi</span><strong>{deliveryData.email?"Bağlı":"Bağlı değil"}</strong><small className="admpro-muted">{deliveryData.email?`${deliveryData.emailProvider||"Gönderim servisi"} ile kod gönderilebilir.`:"Resend API anahtarı + gönderen adresi veya güvenli webhook Worker secret olarak tanımlanmalı."}</small></div><div><span>SMS Doğrulama Servisi</span><strong>{deliveryData.sms?"Bağlı":"Bağlı değil"}</strong><small className="admpro-muted">{deliveryData.sms?`${deliveryData.smsProvider||"SMS servisi"} hazır.`:"SMS isteğe bağlıdır; tanımlanmamış olması normal kullanıcı girişini engellemez."}</small></div><div><span>Süper Yönetici Kurtarma</span><strong>{recoveryData.recoveryEnabled?"Hazır":"Kurulum eksik"}</strong><small className="admpro-muted">İletişim doğrulaması + 3 güvenlik sorusu tamamlandığında aktif olur.</small></div><div><span>Aktif Ana Firma</span><strong>{activeMainCompany?.name||activeMainCompany?.slug||"Seçilmedi"}</strong><small className="admpro-muted">Tüm tenant kapsamlı yönetim işlemleri bu seçimle sınırlandırılır.</small></div></div></section></details>
   </div>;
 }

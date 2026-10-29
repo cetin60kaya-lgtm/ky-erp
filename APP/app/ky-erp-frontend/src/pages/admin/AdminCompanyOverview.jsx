@@ -18,11 +18,13 @@ export default function AdminCompanyOverview({ activeMainCompany }) {
   const [approvals, setApprovals] = useState([]);
   const [mailApprovals, setMailApprovals] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [sourcesReady,setSourcesReady]=useState([false,false,false,false]);
   const [message, setMessage] = useState("Firma yönetim merkezi hazırlanıyor...");
 
   const load = useCallback(async () => {
     setBusy(true);
     const jobs = await Promise.allSettled([listUsers(), listActiveSessions(), listLoginApprovals(), listMailApprovals()]);
+    setSourcesReady(jobs.map((job)=>job.status==="fulfilled"));
     if (jobs[0].status === "fulfilled") setUsers(rowsOf(jobs[0].value));
     if (jobs[1].status === "fulfilled") setSessions(rowsOf(jobs[1].value));
     if (jobs[2].status === "fulfilled") setApprovals(rowsOf(jobs[2].value));
@@ -60,10 +62,10 @@ export default function AdminCompanyOverview({ activeMainCompany }) {
       <div className={`admpro-notice ${message.includes("yanıt vermedi") ? "warn" : "success"}`}>{message}</div>
 
       <section className="admpro-stats">
-        <div className="admpro-stat"><span>Aktif Kullanıcı</span><strong>{metrics.activeUsers}</strong><small>{metrics.passiveUsers} pasif kullanıcı</small></div>
-        <div className="admpro-stat"><span>Aktif Oturum</span><strong>{metrics.sessions}</strong><small>Yalnız bu firma</small></div>
-        <div className="admpro-stat"><span>Bekleyen Giriş Onayı</span><strong>{metrics.approvals}</strong><small>Karar bekleyen yeni cihaz girişi</small></div>
-        <div className="admpro-stat"><span>Bekleyen Mail Onayı</span><strong>{metrics.mailApprovals}</strong><small>Mail hesabı bağlantı kararı</small></div>
+        <div className="admpro-stat"><span>Aktif Kullanıcı</span><strong>{sourcesReady[0]?metrics.activeUsers:"—"}</strong><small>{sourcesReady[0]?`${metrics.passiveUsers} pasif kullanıcı`:"Kullanıcı verisi alınamadı"}</small></div>
+        <div className="admpro-stat"><span>Aktif Oturum</span><strong>{sourcesReady[1]?metrics.sessions:"—"}</strong><small>{sourcesReady[1]?"Yalnız bu firma":"Oturum verisi alınamadı"}</small></div>
+        <div className="admpro-stat"><span>Bekleyen Giriş Onayı</span><strong>{sourcesReady[2]?metrics.approvals:"—"}</strong><small>Karar bekleyen yeni cihaz girişi</small></div>
+        <div className="admpro-stat"><span>Bekleyen Mail Onayı</span><strong>{sourcesReady[3]?metrics.mailApprovals:"—"}</strong><small>Mail hesabı bağlantı kararı</small></div>
       </section>
 
       <section className="admpro-grid-2">

@@ -119,7 +119,8 @@ export default function SecurityCenterPanel() {
       setPreferences(prefResult.status === "fulfilled" ? prefResult.value || {} : {});
       setUsers(userResult.status === "fulfilled" ? rows(userResult.value) : []);
       setGrants(grantResult.status === "fulfilled" ? rows(grantResult.value) : []);
-      setMessage("KY Güvenlik Merkezi güncel.");
+      const failedSources=[sessionResult,trustedResult,auditResult,approvalResult,prefResult,userResult,grantResult].filter((job)=>job.status==="rejected").length;
+      setMessage(failedSources?`Güvenlik kontrolünün ${failedSources} kaynağı yanıt vermedi. Eksik listeler sıfır kayıt değildir.`:"KY Güvenlik Merkezi güncel.");
     } catch (error) {
       setMessage(`Hata: ${messageOf(error, "Güvenlik Merkezi yüklenemedi.")}`);
     } finally { setBusy(false); }
@@ -225,7 +226,7 @@ export default function SecurityCenterPanel() {
     </div>}
 
     {tab === "sessions" && canSessionView && <div className="sc-panel">
-      <div className="sc-panel-head"><div><h3>Gerçek ERP Oturumları</h3><p>Login onayı ile cihaz güveni ayrıdır. Onaylı cihazdan gelen yeni oturumlar otomatik “Güvenilir” görünür; yalnız yeni veya güveni kaldırılmış cihazlar onay bekler.</p></div>{scopeType === "SYSTEM" && <button className="danger strong" disabled={busy} onClick={() => critical({ operation: "ONLY_ME" }, "Sadece Ben Kalayım tamamlandı; Süper Admin dışındaki aktif oturumlar kapatıldı.")}>Sadece Ben Kalayım</button>}</div>
+      <div className="sc-panel-head"><div><h3>Gerçek ERP Oturumları</h3><p>Login onayı ile cihaz güveni ayrıdır. Onaylı cihazdan gelen yeni oturumlar otomatik “Güvenilir” görünür; yalnız yeni veya güveni kaldırılmış cihazlar onay bekler.</p></div>{scopeType === "SYSTEM" && <button className="danger strong" disabled={busy} onClick={() => critical({ operation: "ONLY_ME" }, "Standart Kullanıcı Oturumlarını Kapat tamamlandı; Süper Admin dışındaki aktif oturumlar kapatıldı.")}>Standart Kullanıcı Oturumlarını Kapat</button>}</div>
       <div className="sc-table"><div className="sc-table-head"><span>Kullanıcı / Cihaz</span><span>{scopeType === "SYSTEM" ? "Kapsam / IP" : "Firma / IP"}</span><span>Güven</span><span>Durum</span><span>İşlem</span></div>
         {visibleSessions.map((row) => <div className="sc-table-row" key={row.id}>
           <span><strong>{row.fullName || row.username}</strong><small>{row.deviceLabel || "Tarayıcı"}<br/>{dateText(row.createdAt)}</small></span>

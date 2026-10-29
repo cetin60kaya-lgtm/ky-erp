@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 29.10.2026 — Yönetim ve Sistem son düzenleme (#483)
+- Menü, üç ana yönetim alanı ve rol bazlı alt işlem kartlarına ayrıldı. Firma kartındaki 6 işlem, paket/fiyat ekranındaki 4 işlem açılır panel olarak düzenlendi; mevcut kayıt ve butonlar korunur.
+- Denetim & Evrak Takibi firma işlemlerine taşındı, COMPLIANCE izni ve eski rotalar korundu. DENETIM/PDSK okuma hesabı firma belge denetimiyle karıştırılmadı.
+- Firma sahibi platform-sahibi teknik sayfalarını görmez. Yetki ataması yalnız seçili firma içindeki kullanıcıya açıktır; verme/kaldırmada onay gerekir. Kaynak yanıtı başarısızsa sayaç sıfır sayılmaz.
+- /api/system/status kimlik doğrulama gerektirir, /api/health kamusal kalır. Paket ve hareket kaydı D1.batch ile atomiktir. Firma açıklaması json_store'da atomik saklanır; migration yoktur.
+- Build panelinde eski PDKS 1.9.0/20260907 otomatik dalı kaldırıldı. Ürün, sürüm, dal seçimi gerekir. Gerçek EXE, Build Agent ve SHA256 saha kabulü ayrıca gerekir.
+- Canlı kullanıcı, üretim verisi, yetkiler, dosyalar, cihazlar, veritabanı veya EXE üzerinde mutasyon/test yapılmadı. CI sonuçları ve production deploy kanıtı ayrıca doğrulanır.
+
+
 ## 29.10.2026 — İmalat doğrudan üretim girişi, Excel 10 alan (#484)
 
 - **Kaynak**: Kullanıcının `İMALAT BASKI MUHASEBE (1).xlsm` üretim sayfası. Excel başlıkları (asıl A:O): Tarih, Sipariş No, Model Adı, İrsaliye Adedi, **Adet**, Zemin Renk, Baskı Bölgesi, Makina No, Vardiya, Makine Adı, Kumaş Sakatı, Baskı Sakatı, Makine Sorumlu, Makine Yardımcı, Toplam Adet. **Yalnız kullanıcının istediği 10 alan** üretim fişine alındı: Model Adı, Tarih, Adet, Vardiya, Makina No, Zemin, Baskı Bölgesi, Baskı Sakatı, Kumaş Sakatı, Makinacı. Yardımcı/Excel toplamı/sipariş/irsaliye adedi bu günlük formda zorunlu değil.
