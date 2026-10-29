@@ -1,5 +1,16 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 29.10.2026 — Muhasebe / e-Belge / İmalat / Desen günlük işlem bağlantıları (#479)
+
+- **Kullanıcı kararı:** 2022 ve eski Excel kayıtlarının toplu aktarımına odaklanma; dört bölümün günlük işlemleri ve ortak Desen→Model→İmalat→İrsaliye/Fatura→Muhasebe tutarlılığı öncelikli. Eski satırlar canlı D1'e aktarılmadı.
+- **PR #479 MERGED** (squash SHA `1c40638517a07de9aa053206fd1f64bb889832be`); [CI #40888419009](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40888419009) Frontend lint/test/build + Worker typecheck/test/build SUCCESS.
+- **İmalat:** fiş düzenleme/arşiv geçmişi ve CAS; model planında hedef adet/sipariş/zemin güncellemesi; makine/vardiya ekranı Worker kanonik API'sine geçirildi, makine durumu D1 raw'da korunur, pasifler yeni fişte seçilmez; yıl filtresi.
+- **Desen:** Model Havuzu'ndaki kayıtlar kanonik designModelId ile tek tık İmalat'a aktarılır. Farklı kimlikli modeller aynı ad nedeniyle karıştırılmaz. Belirsiz firma otomatik başka cariye atanmaz.
+- **Muhasebe/e-Belge:** tedarikçi irsaliyesi/satış faturası satırından belge detayına doğrudan açılış; belge, satır, eşleşme ve yükleme değişikliklerinden sonra ilgili muhasebe/imalat ekranlarının yenilenmesi; model–belge eşleşmesinde farklı firma/sipariş karışmasını önleyen fail-closed kontrol.
+- **D1 fiziksel 0062** önceki 26.10.2026 tarihinde canlıya uygulandı (kanıt: #40279707049); ek D1 migration izni açılmadı. İşNet resmî gönderimi veya test için canlı finans/üretim mutasyonu yapılmadı.
+- **Yayın ve sınır:** Kaynak merge CI PASS'tir; Pages/Worker gerçek production release ve oturumlu saha E2E ayrıca kayıtla doğrulanmadan "tam canlı"/"19/19 kabul" denemez.
+
+
 ## 26.10.2026 — PR #472 yayın kanıtı (production 0062 migration SKIPPED)
 
 - **Worker [#40277506081](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40277506081)** SUCCESS, deploy SHA `1ef3348135db1395bad86c51735fa1b191c84f0e`, canlı D1 tam export+artifact, read-only schema, Worker deploy ve API health başarılı; migration adımları **SKIPPED**.
