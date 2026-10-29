@@ -1,5 +1,14 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 29.10.2026 — İmalat açılır seri kayıt ve model arama, CANLI (#485)
+
+- **Kullanıcı talebi:** 10 alanlı Excel üretim fişi korunarak günlük giriş açılır-kapanır olsun. Model adı yazdıkça kayıtlı model çıksın, kayıtlı yoksa aynı yerde yeni model açılsın; hazır **Ön/Arka/Kol** ve diğer baskı bölgeleri select; **Satır Ekle → Seri Liste → Toplu Kaydet**, satır düzenleme/seçili sil/tümünü temizle.
+- **Kod:** `ProductionDirectEntryPanel.jsx` yeniden düzenlendi. Tek autocomplete, firma bağlamına göre kanonik model ID seçimi ve yeni model (firma/baskı bölgesi) oluşturma; makine adı/no ve gündüz-gece bağımsız makinacı; 100 satırlık geçici sıra, net adet, güvenli satır idempotency `requestId`, hata halinde kalan satırları tutma. `productionDirectEntryOptions.js` + test ve `productionDirectEntry.css` yeni responsive tasarım. Eski metin/CSV işlemleri ve model-üretim raporu korunur.
+- **PR [#485](https://github.com/cetin60kaya-lgtm/ky-erp/pull/485)** MERGED, SHA `4c738d22ec761c27ab5097a108e0636916048dda`. **CI [#40926471806](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40926471806) SUCCESS:** frontend lint/test/build ve Worker typecheck/test/build.
+- **Pages production [#40926683795](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40926683795) SUCCESS**, Cloudflare Pages deploy + canlı bundle / Günlük Operasyon chunk smoke PASS. Yayın commit `d1a72206d6b5edf8ad58af5946899bab5ba8773e`; PR merge karşılaştırmasında `behind_by=0`.
+- **Worker değişmedi**: en son başarılı Worker kodu kullanılır. Yeni D1 migration / geçmiş Excel import / otomatik üretim veya muhasebe kaydı yapılmadı. Satır sadece yetkili kullanıcı **Toplu Kaydet** diyince gerçek D1'e yazılır; fiş adedi/rapor/şirket saha E2E henüz kullanıcıyla test edilmedi.
+
+
 ## 29.10.2026 — PR #483 Yönetim ve Sistem iki parça canlı yayın kanıtı
 
 - **PR #483 MERGED:** SHA `1148e8785514fd3705dd243999d31ebcfc8cfe6b`. CI [#40923106664](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40923106664) **SUCCESS**: Frontend lint/test/build ve Worker typecheck/test/build.
