@@ -34,6 +34,7 @@ import { assetUrl } from "../desen/DesenWorkflowShared";
 import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import ProductionSmartEntryDrawer from "./ProductionSmartEntryDrawer";
 import ProductionHistoryImportDrawer from "./ProductionHistoryImportDrawer";
+import ProductionDirectEntryPanel from "./ProductionDirectEntryPanel";
 import "./productionControlCenterV2.css";
 
 const PAGE_SIZE = 100;
@@ -201,6 +202,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
   const [page, setPage] = useState(1);
   const [designOpen, setDesignOpen] = useState(false);
   const [smartOpen, setSmartOpen] = useState(false);
+  const [quickSelectedModel, setQuickSelectedModel] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
@@ -281,6 +283,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     setPage(1);
     setDetail(null);
     setEntryOpen(false);
+    setQuickSelectedModel("");
     setCenter({ rows: [], summary: {}, pagination: {} });
     setDictionaries({ models: [], machines: [], operators: [], companies: [] });
   }, [activeMainCompany?.slug, activeMainCompany?.id]);
@@ -306,6 +309,12 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     } catch (error) {
       setMessage(error?.message || "Model detayı açılamadı.");
     }
+  }
+
+  function focusQuick(model) {
+    if (!model) return;
+    setQuickSelectedModel(String(model.id || model.modelId || ""));
+    window.requestAnimationFrame(() => document.getElementById("direct-production-entry")?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
   function openEntry(model, source = null) {
@@ -457,7 +466,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       const full = await getProductionCenterModel(activeMainCompany, saved.id || saved.modelId);
       setDetail(full);
       setMessage(saved?.duplicate ? `${design.modelName} zaten üretimdeydi; mevcut kart açıldı.` : `${design.modelName} Desen Havuzundan üretime açıldı.`);
-      if (dictionaries.machines.length) openEntry(full);
+      focusQuick(full);
     } catch (error) {
       setMessage(error?.message || "Desen modeli üretime alınamadı.");
     } finally {
@@ -491,18 +500,20 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       <section className="pc2-head">
         <div>
           <span>İMALAT · TEK MERKEZ</span>
-          <h1>Model ve Üretim Merkezi</h1>
-          <p>Desen Havuzundan modeli seç, üretime aç ve aynı ekrandan adet girişini yap.</p>
+          <h1>İmalat · Üretim Girişi</h1>
+          <p>Excel düzenindeki alanlarla üretimi gir, kaydet, son fişleri ve modelleri tek yerden takip et.</p>
         </div>
         <div className="pc2-actions">
-          <button className="primary" type="button" onClick={() => setDesignOpen(true)}><ImageIcon size={16} /> Desenlerden Model Al</button>
+          <button className="primary" type="button" onClick={() => document.getElementById("direct-production-entry")?.scrollIntoView({ behavior: "smooth", block: "start" })}><Layers3 size={16} /> Üretim Girişi</button>
+          <button type="button" onClick={() => setDesignOpen(true)}><ImageIcon size={16} /> Desenlerden Model Al</button>
           <button type="button" onClick={() => setModelOpen(true)}><CirclePlus size={16} /> Yeni Model</button>
-          <button type="button" onClick={() => setSmartOpen(true)}><Zap size={16} /> Akıllı Seri Giriş</button>
-          <details className="pc2-more-actions"><summary>Diğer işlemler</summary><button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16} /> Geçmiş CSV Al</button></details>
+          <details className="pc2-more-actions"><summary>Diğer işlemler</summary><div className="pc2-more-menu"><button type="button" onClick={() => { setSmartOpen(true); }}><Zap size={16} /> Metinden Akıllı Seri Giriş</button><button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16} /> Geçmiş CSV Al</button></div></details>
         </div>
       </section>
 
       {message ? <div className="pc2-notice"><CircleAlert size={17} /> {message}</div> : null}
+
+      <ProductionDirectEntryPanel activeMainCompany={activeMainCompany} models={dictionaries.models} machines={dictionaries.machines} preselectModelId={quickSelectedModel} onSaved={load} />
 
       <section className="pc2-metrics">
         <Metric label="Üretimde model" value={summary.modelCount || 0} helper="Yalnız gerçekten açılan modeller" />
@@ -551,7 +562,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
                   <td>{qty(row.productionRemainingQty)}</td>
                   <td>{qty(row.invoicedQty)}</td>
                   <td><span className={`pc2-status ${statusTone(row.status)}`}>{statusLabel(row.status)}</span></td>
-                  <td><div className="pc2-row-actions"><button className="primary" type="button" onClick={() => openEntry(row)}><Layers3 size={14} /> Üretim Gir</button><button type="button" onClick={() => openDetail(row)}>Detay</button></div></td>
+                  <td><div className="pc2-row-actions"><button className="primary" type="button" onClick={() => focusQuick(row)}><Layers3 size={14} /> Üretim Gir</button><button type="button" onClick={() => openDetail(row)}>Detay</button></div></td>
                 </tr>
               ))}
             </tbody>
