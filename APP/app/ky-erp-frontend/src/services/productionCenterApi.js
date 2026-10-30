@@ -28,15 +28,6 @@ function companyPayload(activeMainCompany, extra = {}) {
   };
 }
 
-function normalize(value) {
-  return String(value || "")
-    .trim()
-    .toLocaleUpperCase("tr-TR")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/İ/g, "I");
-}
-
 // İmalat, Muhasebe > Firmalar & Cari'nin etkin firma kartlarını kullanır.
 // Eski filtre yalnız CUSTOMER türünü kabul ediyor ve Tedarikçi olarak
 // kayıtlı TAHA firmalarını boş listeye düşürüyordu. Rol değiştirilmez.
