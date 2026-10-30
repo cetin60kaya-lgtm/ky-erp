@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Edit3, Plus, RotateCcw, Save, Search, ShieldAlert, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, ClipboardList, Edit3, Plus, RotateCcw, Save, Search, ShieldAlert, Trash2, X } from "lucide-react";
+import { createPortal } from "react-dom";
 import { createProductionCenterEntry, createProductionCenterModel, getProductionCenterRecent } from "../../services/productionCenterApi";
 import { validateDirectProduction, validCount } from "./productionDirectEntryValidation";
 import { availableProductionRegions, filterProductionModels, productionLineNet } from "./productionDirectEntryOptions";
@@ -21,8 +22,9 @@ const MAX_QUEUED_ROWS = 100;
 export default function ProductionDirectEntryPanel({
   activeMainCompany, models = [], machines = [], companies = [],
   onSaved, onModelCreated, preselectModelId = "", openRequestToken = 0,
+  modalOpen = false, onClose,
 }) {
-  const [open, setOpen] = useState(false);
+  const modalRef = useRef(null);
   const [entry, setEntry] = useState(blankEntry);
   const [query, setQuery] = useState("");
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -71,7 +73,6 @@ export default function ProductionDirectEntryPanel({
   useEffect(() => { void loadRecent(); }, [loadRecent]);
   useEffect(() => {
     setEntry(blankEntry());
-    setOpen(false);
     setQueue([]);
     setSelectedIds([]);
     setEditingId("");
@@ -92,11 +93,19 @@ export default function ProductionDirectEntryPanel({
       ground: asText(model.groundColor) || current.ground }));
     setQuery(nameOf(model));
     setSuggestionsOpen(false);
-    setOpen(true);
   }, [preselectModelId, openRequestToken, allModels]);
   useEffect(() => {
-    if (openRequestToken > 0) setOpen(true);
-  }, [openRequestToken]);
+    if (!modalOpen) return undefined;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const frame = window.requestAnimationFrame(() => modalRef.current?.focus({ preventScroll: true }));
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus?.();
+    };
+  }, [modalOpen]);
 
   function clearFeedback() { setError(""); setMessage(""); }
   function field(key, value) {
@@ -148,7 +157,6 @@ export default function ProductionDirectEntryPanel({
     setNewModelRegion("Ön");
     setNewModelOpen(true);
     setSuggestionsOpen(false);
-    setOpen(true);
     clearFeedback();
   }
   async function createModel() {
@@ -222,7 +230,6 @@ export default function ProductionDirectEntryPanel({
     setQuery(row.modelName);
     setEditingId(row.id);
     setSuggestionsOpen(false);
-    setOpen(true);
     clearFeedback();
   }
   function removeSelected() {
@@ -274,28 +281,50 @@ export default function ProductionDirectEntryPanel({
   }
 
   const selectAll = queue.length > 0 && selectedIds.length === queue.length;
-  return (
-    <section className="pde-shell" id="direct-production-entry" aria-label="Günlük üretim girişi">
-      <header className="pde-head">
-        <button type="button" className="pde-head-trigger" disabled={saving || creatingModel}
-          aria-expanded={open} aria-controls="pde-expandable" onClick={() => setOpen((value) => !value)}>
-          <span className="pde-head-title">
-            <span className="pde-eyebrow"><ClipboardList size={15}/> GÜNLÜK ÜRETİM</span>
-            <strong className="pde-heading">Üretim Girişi</strong>
-            <span className="pde-head-subtitle">{open
-              ? "Modeli yaz, kayıtlı olanı seç; satırları hazırla ve toplu kaydet."
-              : "Model: " + (nameOf(selectedModel) || "Seçilmedi") + " · " + entry.date + " · " + queuedGross.toLocaleString("tr-TR") + " hazır adet"}</span>
-          </span>
-          <span className="pde-head-actions">
+  function requestClose() {
+    if (saving || creatingModel) return;
+    setSuggestionsOpen(false);
+    onClose?.();
+  }
+  function handleDialogKey(event) {
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      if (suggestionsOpen) { setSuggestionsOpen(false); return; }
+      requestClose();
+    }
+    if (event.key === "Tab") {
+      const items = [...event.currentTarget.querySelectorAll(
+        'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[href],[tabindex]:not([tabindex="-1"])'
+      )].filter((element) => element.getClientRects().length > 0);
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+  }
+  if (!modalOpen) return null;
+  return createPortal(
+    <div className="pde-modal-overlay" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) requestClose();
+    }}>
+      <section className="pde-modal pde-shell" id="direct-production-entry" role="dialog"
+        aria-modal="true" aria-labelledby="pde-modal-title" aria-describedby="pde-modal-description"
+        ref={modalRef} tabIndex={-1} onKeyDown={handleDialogKey}>
+        <header className="pde-modal-header">
+          <div className="pde-modal-heading">
+            <span className="pde-eyebrow"><ClipboardList size={15}/> GÜNLÜK İMALAT</span>
+            <h2 id="pde-modal-title">Üretim Girişi</h2>
+            <p id="pde-modal-description">Modeli seç, üretim satırlarını hazırla ve toplu kaydet.</p>
+          </div>
+          <div className="pde-modal-top-actions">
             <span className="pde-count">{queue.length} hazır satır</span>
-            <span className="pde-toggle">
-              {open ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
-              {open ? "Daralt" : "Girişi Aç"}
-            </span>
-          </span>
-        </button>
-      </header>
-      {open && <div id="pde-expandable">
+            <button type="button" className="pde-modal-close" onClick={requestClose}
+              disabled={saving || creatingModel} aria-label="Üretim girişi penceresini kapat" title="Kapat">
+              <X size={19}/>
+            </button>
+          </div>
+        </header>
+        <div className="pde-modal-scroll">
         <form className="pde-form" onSubmit={stage}>
           <div className="pde-main-grid">
             <div className="pde-model-search pde-field">
@@ -439,7 +468,13 @@ export default function ProductionDirectEntryPanel({
         </tr>)}</tbody></table></div>
         : <p className="pde-empty-recent">Henüz kayıtlı üretim görünmüyor. İlk kaydedilen fiş burada listelenecek.</p>}
       </section>
-      </div>}
-    </section>
+        </div>
+        <footer className="pde-modal-footer">
+          <span>{queue.length ? queue.length + " satır hazır · " + queuedGross.toLocaleString("tr-TR") + " adet · " + queuedNet.toLocaleString("tr-TR") + " net" : "Satır ekleyene kadar kayıt oluşturulmaz."}</span>
+          <button type="button" onClick={requestClose} disabled={saving || creatingModel}>Kapat</button>
+        </footer>
+      </section>
+    </div>,
+    document.body,
   );
 }
