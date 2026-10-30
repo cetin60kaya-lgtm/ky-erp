@@ -471,7 +471,11 @@ export default function ProductionDirectEntryPanel({
         </div>
         <footer className="pde-modal-footer">
           <span>{queue.length ? queue.length + " satır hazır · " + queuedGross.toLocaleString("tr-TR") + " adet · " + queuedNet.toLocaleString("tr-TR") + " net" : "Satır ekleyene kadar kayıt oluşturulmaz."}</span>
-          <button type="button" onClick={requestClose} disabled={saving || creatingModel}>Kapat</button>
+          <div><button type="button" onClick={requestClose} disabled={saving || creatingModel}>Kapat</button>
+            <button type="button" className="pde-modal-save" onClick={saveAll}
+              disabled={!queue.length || saving || creatingModel || Boolean(editingId)}>
+              <Save size={15}/> {saving ? "Kaydediliyor..." : "Toplu Kaydet (" + queue.length + ")"}
+            </button></div>
         </footer>
       </section>
     </div>,
