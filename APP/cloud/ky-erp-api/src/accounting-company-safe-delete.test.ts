@@ -25,6 +25,8 @@ test("linked companies and nonzero balances are fail closed", () => {
   assert.match(source, /PRAGMA table_info/);
   assert.match(source, /refs\.has\(n\)/);
   assert.match(source, /model_records/);
+  assert.match(source, /json_store/);
+  assert.match(source, /INSTR\(COALESCE/);
   assert.match(source, /production_records/);
 });
 test("only company and aliases are physically deleted, accounting records remain", () => {
