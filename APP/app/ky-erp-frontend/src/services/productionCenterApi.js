@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "../utils/api";
+import { selectableProductionCompanies } from "./productionCompanyOptions";
 
 function unwrap(payload) {
   if (
@@ -40,15 +41,6 @@ function normalize(value) {
 // Eski filtre yalnız CUSTOMER türünü kabul ediyor ve Tedarikçi olarak
 // kayıtlı TAHA firmalarını boş listeye düşürüyordu. Rol değiştirilmez.
 // Model için firma ID seçimi her zaman kullanıcıya aittir.
-export function selectableProductionCompanies(rows) {
-  return (Array.isArray(rows) ? rows : [])
-    .filter((row) => row?.id && row?.isActive !== false && row?.is_active !== 0)
-    .filter((row) => !row?.deletedAt && !row?.deleted_at)
-    .sort((a, b) => String(a?.name || a?.firmaAdi || "").localeCompare(
-      String(b?.name || b?.firmaAdi || ""), "tr",
-    ));
-}
-
 function withCustomerDictionary(payload) {
   const data = payload && typeof payload === "object" ? payload : {};
   return {
