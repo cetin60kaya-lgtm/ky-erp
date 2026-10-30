@@ -1,5 +1,17 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 30.10.2026 — İmalat firma dropdown kök neden ve güvenli TAHA birleştirme (#492)
+
+- **Saha:** Muhasebe Firma&Cari ekranında iki TAHA (kısa TAHA 0 ₺; TAHA GİYİM ... 50.000 ₺) var. İmalat > Üretim Girişi > Yeni Model'de firma dropdown yalnız "Firma seçilmedi" gösteriyordu.
+- **Kök neden kanıtı:** productionCenterApi.js `withCustomerDictionary` yalnız CUSTOMER türünü kabul ettiği için, D1 companies'de SUPPLIER/Tedarikçi türündeki TAHA kartlarının **ikisi de filtreleniyordu**. API `/api/production-center/dictionaries` tüm şirketleri göndermesine rağmen servis listesi boştu.
+- **Çözüm:** `productionCompanyOptions.js` aktif/silinmemiş **her firma ID'sini** listeler (tür değiştirme/varsayılan şirket ataması yok); yeni modelde cari firma seçimi zorunludur; dropdown ad + kısa ID gösterir. Parent `ProductionControlCenterPageV2` sözlüğü zaten modala geçiriyor.
+- **Birleştir:** Firmalar&Cari seçilen kaynaktan **Birleştir**: hedef korunacak firma ID'si, gerçek D1 bağımlılık/bakiye etki raporu, yönetici BIRLESTIR onayı. Worker `accounting-company-safe-delete.ts` `merge-preview` ve `merge` yalnız **kaynak sıfır bakiye ve bağlı kayıt yoksa** aliasları hedef ID'ye aktarır, kaynak boş kartı kaldırır. Hedef firma ID, 50.000 ₺ ve mali kayıtlar değişmez; bağlı model/fatura/cari/LOT/legacy JSON varsa reddedilir. D1 batch ve audit log. Gerçek iki TAHA üzerinde işlem **YAPILMADI**; user onayı ve saha raporu gerekir.
+- **PR [#492](https://github.com/cetin60kaya-lgtm/ky-erp/pull/492)** MERGED SHA 4ac5c3a540369ccf1dc36c6bf25c5d91614be283. [CI #41019688373](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41019688373) frontend lint/test/build ve Worker typecheck/test/build SUCCESS. Önceki #41019576658 unused normalize lint hatası sonrası temizlendi.
+- **Canlı Worker [#41019886286](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41019886286): SUCCESS**. D1 tam yedeği, schema salt okunur denetimi, Worker yayın + API health PASS. D1 migration yok.
+- **Canlı Pages [#41019890573](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41019890573): SUCCESS** ikinci denemede. İlk Pages denemesi Cloudflare upload-token API 10500 sunucu hatasıyla başarısız; yalnız başarısız job yeniden başlatıldı, kod/token değiştirilmedi; son Pages production deployment ve bundle/chunk smoke PASS.
+- **Saha kabul bekliyor:** İmalat Yeni Model firma dropdown'da iki farklı TAHA ID'sinin görünmesi; Firma&Cari kısa TAHA seçiliyken Birleştir → hedef TAHA GİYİM ID seç → Etki Raporu. Rapor bağlantı varsa işlem yok. Toplu üretim kayıt kriterleri kullanıcıdan ayrıca gelecek.
+
+
 ## 30.10.2026 — Firmalar & Cari aktif/pasif, yönetici onaylı hard silme; İmalat modal dış tıklama
 
 - **Saha talepleri:** İmalat Üretim Girişi modalı karartılmış dış boşluğa tıklanınca kapansın. Firma eşleştirmesinde iki TAHA kaydı var; yanlış mükerrer firma için Aktif/Pasif ve yönetici onaylı Hard Sil; doğru firma ID ve bağlı kayıtlar korunmalı.
