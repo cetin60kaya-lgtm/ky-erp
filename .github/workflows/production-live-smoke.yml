@@ -32,7 +32,10 @@ jobs:
               && printf '%s' "$root" | grep -q '<title>KY ERP</title>' \
               && ! printf '%s' "$root" | grep -q 'app\.kyerp\.net' \
               && grep -q 'KY ERP' /tmp/login.html \
-              && grep -q '<title>KY ERP Güvenlik</title>' /tmp/security.html               && grep -q '/guvenlik/app.js' /tmp/security.html; then
+              && grep -Eq '<title>KY ERP[^<]*</title>' /tmp/security.html \
+              && grep -q '/guvenlik/app.js' /tmp/security.html \
+              && grep -q '/guvenlik/manifest.webmanifest' /tmp/security.html \
+              && jq -e '.ok == true and .service == "ky-erp-api" and .database == "d1"' /tmp/api.json >/dev/null; then
               ok=1
               echo "Production smoke PASS on attempt ${attempt}."
               break
