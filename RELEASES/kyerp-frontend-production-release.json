@@ -3,17 +3,17 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-10-29",
+  "releaseDate": "2026-10-30",
   "scope": [
-    "PR487-imalat-production-entry-default-collapsed",
-    "PR487-clickable-full-accordion-header",
-    "PR487-toggle-form-queue-recent-together",
-    "PR487-top-production-button-opens-form",
-    "PR487-row-production-button-opens-form",
-    "frontend-worker-ci-40935425166-success",
-    "Cloudflare-Pages-deploy-and-bundle-smoke"
+    "PR488-improved-production-entry-real-centered-modal",
+    "PR488-remove-inline-production-form-and-accordion",
+    "PR488-production-buttons-open-modal",
+    "PR488-focus-escape-tab-overlay-close-scroll-lock",
+    "PR488-modal-sequential-bulk-save-persistent-drafts",
+    "frontend-worker-ci-41009653185-success",
+    "Cloudflare-Pages-production-bundle-smoke"
   ],
-  "note": "29 Ekim 2026 PR #487: Günlük Üretim Girişi ilk açılışta kapalı. Tüm başlık tıklanabilir; form, seri liste ve son kayıtlar birlikte açılır-kapanır. Üst Üretim Girişi ve model Üretim Gir düğmeleri kapalı paneli açar, aynı modele tekrar tıklamada da çalışır. PR CI #40935425166 başarılı. Worker, D1, fiş verileri veya migration değişmedi. Canlı Pages smoke doğrulaması zorunlu.",
-  "sourceCommit": "af2d799c1ece8c0f964cb64efddd9d6dd9c51883",
-  "requestedAt": "2026-10-29"
+  "note": "30.10.2026 saha ekranı: kullanıcı günlük üretim girişini daralan panel değil, Yeni Model Aç gibi merkez modal olarak istedi. PR #488 merge 61496ed..., CI 41009653185 frontend + Worker SUCCESS. Form/seri giriş ve son fişler merkez modal; açma Üretim Girişi ve Üretim Gir butonları, odağı/focus trap/Escape, kapatınca taslak satır korunur; footer Toplu Kaydet. Worker/D1 migration/veri importu yok. Yetkili saha fiş yazma E2E henüz yapılmadı.",
+  "sourceCommit": "61496ed85a64f2060307215a17063f23c6e2b5e7",
+  "requestedAt": "2026-10-30"
 }
