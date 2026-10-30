@@ -5,6 +5,8 @@ import {
   CirclePlus,
   Landmark,
   Pencil,
+  Trash2,
+  ShieldAlert,
   RefreshCcw,
   Search,
   X,
@@ -183,6 +185,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [balanceFilter, setBalanceFilter] = useState("ALL");
   const [recordFilter, setRecordFilter] = useState("ALL");
   const [balanceSort, setBalanceSort] = useState("NAME");
+  const [activityFilter, setActivityFilter] = useState("ALL");
   const [selected, setSelected] = useState(null);
   const [movementFilter, setMovementFilter] = useState("ALL");
   const [movements, setMovements] = useState([]);
@@ -199,6 +202,14 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [companyFormOpen, setCompanyFormOpen] = useState(false);
   const [companyForm, setCompanyForm] = useState(emptyCompany);
   const [companySaving, setCompanySaving] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePreview, setDeletePreview] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState("");
+  const [deletePhrase, setDeletePhrase] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const detailRequest = useRef(0);
   const listRequest = useRef(0);
   const transactionPending = useRef(false);
@@ -264,6 +275,8 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const visibleFirms = useMemo(() => {
     const rows = firms.filter((firm) => {
       const firmRole = roleLabel(firm);
+      if (activityFilter === "ACTIVE" && firm.isActive === false) return false;
+      if (activityFilter === "PASSIVE" && firm.isActive !== false) return false;
       const balance = Number(firm.currentBalance || 0);
       const record = normalize(firm.defaultRecordType);
       if (role === "CUSTOMER" && !/Müşteri/.test(firmRole)) return false;
@@ -289,7 +302,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       }
       return String(a.firmaAdi || a.companyName || a.name || "").localeCompare(String(b.firmaAdi || b.companyName || b.name || ""), "tr");
     });
-  }, [balanceFilter, balanceSort, firms, recordFilter, role]);
+  }, [activityFilter, balanceFilter, balanceSort, firms, recordFilter, role]);
 
   const totals = useMemo(() => {
     const receivable = visibleFirms.filter((firm) => Number(firm.currentBalance || 0) > 0).reduce((sum, firm) => sum + Number(firm.currentBalance || 0), 0);
@@ -347,6 +360,73 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     const stillVisible = selected && visibleFirms.some((firm) => String(firm.id) === String(selected.id));
     if (!stillVisible) loadMovements(visibleFirms[0]);
   }, [detailLoading, loadMovements, selected, visibleFirms]);
+
+  const changeActiveStatus = async () => {
+    if (!selected?.id || statusSaving) return;
+    const isActive = selected.isActive !== false;
+    const companyName = selected.firmaAdi || selected.companyName || selected.name || selected.id;
+    if (!window.confirm(companyName + " firmasını " + (isActive ? "PASİF" : "AKTİF") + " duruma geçirmek istiyor musunuz? Mevcut mali kayıtlar silinmeyecek.")) return;
+    setStatusSaving(true);
+    setNotice("");
+    try {
+      const payload = objectOf(await apiPatch("/muhasebe/firmalar/" + encodeURIComponent(selected.id) + "/status", { ...params, isActive: !isActive }));
+      const updated = { ...selected, ...payload, isActive: !isActive };
+      setSelected(updated);
+      setFirms((rows) => rows.map((row) => row.id === selected.id ? { ...row, isActive: !isActive } : row));
+      setNotice("Firma " + (!isActive ? "aktif" : "pasif") + " duruma alındı. Cari ve fatura geçmişi korunuyor.");
+      await loadFirms();
+      reloadAll?.();
+    } catch (cause) {
+      setNotice(cause?.message || "Firma durumu değiştirilemedi.");
+    } finally { setStatusSaving(false); }
+  };
+
+  const inspectHardDelete = async () => {
+    if (!selected?.id || deleteBusy) return;
+    setDeleteOpen(true);
+    setDeletePreview(null);
+    setDeleteConfirmName("");
+    setDeleteConfirmId("");
+    setDeletePhrase("");
+    setDeleteError("");
+    setDeleteBusy(true);
+    try {
+      const payload = objectOf(await apiGet("/muhasebe/firmalar/" + encodeURIComponent(selected.id) + "/hard-delete-preview", { ...params, _ts: Date.now() }));
+      setDeletePreview(payload);
+    } catch (cause) {
+      setDeleteError(cause?.message || "Silme etki analizi yapılamadı. Yönetici yetkisini kontrol edin.");
+    } finally { setDeleteBusy(false); }
+  };
+
+  const hardDelete = async () => {
+    if (!selected?.id || deleteBusy || !deletePreview?.canHardDelete) return;
+    const name = selected.firmaAdi || selected.companyName || selected.name || "";
+    if (deleteConfirmName !== name || deleteConfirmId !== String(selected.id) || deletePhrase !== "KALICI SIL") {
+      setDeleteError("Firma adı, tam ID ve KALICI SIL ifadesi eksiksiz yazılmalıdır.");
+      return;
+    }
+    if (!window.confirm("SON YÖNETİCİ ONAYI: Bağlantısız " + name + " firma kartı ve alias kayıtları KALICI olarak silinecek. Bu işlem geri alınamaz. Devam edilsin mi?")) return;
+    setDeleteBusy(true);
+    setDeleteError("");
+    try {
+      await apiPost("/muhasebe/firmalar/" + encodeURIComponent(selected.id) + "/hard-delete", {
+        ...params,
+        confirmCompanyId: String(selected.id),
+        confirmName: name,
+        confirmPhrase: "KALICI SIL",
+        expectedUpdatedAt: deletePreview.updatedAt,
+      });
+      setDeleteOpen(false);
+      setDeletePreview(null);
+      setSelected(null);
+      setMovements([]);
+      setNotice("");
+      await loadFirms();
+      reloadAll?.();
+    } catch (cause) {
+      setDeleteError(cause?.message || "Kalıcı silme engellendi. Kayıtların bağlantılarını tekrar kontrol edin.");
+    } finally { setDeleteBusy(false); }
+  };
 
   const createCompany = async () => {
     if (!companyForm.companyName.trim()) return setError("Firma adı zorunludur.");
@@ -481,6 +561,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     <section className="ccw-root">
       <header className="ccw-toolbar">
         <label className="ccw-search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Firma adı veya vergi no ara" /></label>
+        <select value={activityFilter} onChange={(event) => setActivityFilter(event.target.value)} aria-label="Firma durumu"><option value="ALL">Aktif + Pasif</option><option value="ACTIVE">Aktif firmalar</option><option value="PASSIVE">Pasif firmalar</option></select>
         <select value={role} onChange={(event) => setRole(event.target.value)} aria-label="Firma türü"><option value="ALL">Tüm firmalar</option><option value="CUSTOMER">Müşteriler</option><option value="SUPPLIER">Tedarikçiler</option><option value="CHEMICAL">Boya / kimyasal</option></select>
         <select value={balanceFilter} onChange={(event) => setBalanceFilter(event.target.value)} aria-label="Bakiye"><option value="ALL">Tüm bakiyeler</option><option value="RECEIVABLE">Alacak bakiyesi</option><option value="PAYABLE">Borç bakiyesi</option><option value="NONZERO">Bakiyesi olanlar</option><option value="ZERO">Sıfır bakiye</option></select>
         <select value={recordFilter} onChange={(event) => setRecordFilter(event.target.value)} aria-label="Kayıt türü"><option value="ALL">Resmî + Gayri resmî</option><option value="OFFICIAL">Yalnız resmî</option><option value="UNOFFICIAL">Yalnız gayri resmî</option></select>
@@ -508,7 +589,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                 <thead><tr><th>Firma</th><th>Bakiye</th><th>Son işlem</th></tr></thead>
                 <tbody>{visibleFirms.map((firm) => (
                   <tr key={firm.id} className={String(selected?.id) === String(firm.id) ? "selected" : ""} onClick={() => { if (!saving) loadMovements(firm); }} onKeyDown={(event) => { if (!saving && ["Enter", " "].includes(event.key)) { event.preventDefault(); loadMovements(firm); } }} tabIndex={0} aria-selected={String(selected?.id) === String(firm.id)}>
-                    <td><strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong><small>{roleLabel(firm)} · {recordLabel(firm)}{firm.isChemicalSupplier ? " · Boya/kimyasal" : ""}</small></td>
+                    <td><strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong><small>{firm.isActive === false ? "PASİF · " : "AKTİF · "}{roleLabel(firm)} · {recordLabel(firm)}{firm.isChemicalSupplier ? " · Boya/kimyasal" : ""}</small></td>
                     <td><strong className={Number(firm.currentBalance || 0) >= 0 ? "positive" : "negative"}>{money(firm.currentBalance)}</strong></td>
                     <td>{firm.lastMovementAt ? dateText(firm.lastMovementAt) : "-"}<small>{Number(firm.movementCount || 0) ? `${Number(firm.movementCount)} hareket` : ""}</small></td>
                   </tr>
@@ -522,11 +603,13 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           {!selected ? <div className="ccw-empty"><Building2 size={28} /><strong>Firma seçin</strong><span>Cari özet ve hareketler burada açılır.</span></div> : (
             <>
               <header>
-                <div><h2>{selected.firmaAdi || selected.companyName || selected.name}</h2><p>{roleLabel(selected)} · {recordLabel(selected)} · {cariLabel(selected)} · {selected.taxNo || "Vergi no yok"}</p></div>
+                <div><h2>{selected.firmaAdi || selected.companyName || selected.name}</h2><p>{selected.isActive === false ? "PASİF" : "AKTİF"} · {roleLabel(selected)} · {recordLabel(selected)} · {cariLabel(selected)} · {selected.taxNo || "Vergi no yok"}</p><p className="ccw-company-id">Firma ID: <code>{selected.id}</code></p></div>
                 <div className="ccw-actions">
                   {canUseCari ? <button type="button" className="primary" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> Cari Hareket</button> : null}
                   <button type="button" onClick={() => openFinance(selected.id)}><Landmark size={16} /> Finans</button>
                   <button type="button" onClick={() => setEditOpen(true)}><Pencil size={16} /> Düzenle</button>
+                   <button type="button" disabled={statusSaving} onClick={changeActiveStatus}>{selected.isActive === false ? "Aktifleştir" : "Pasifleştir"}</button>
+                   <button type="button" className="ccw-danger-button" onClick={inspectHardDelete} disabled={deleteBusy}><Trash2 size={16} /> Hard Sil</button>
                 </div>
               </header>
               <div className="ccw-detail-body">
@@ -569,6 +652,51 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
             <header><div><h2>Yeni Firma / Cari</h2><p>Firma kartı belge sağlayıcısından bağımsızdır; VKN veya alias ile e‑Belgeye bağlanır.</p></div><button type="button" className="icon" onClick={() => setCompanyFormOpen(false)} aria-label="Kapat"><X size={18} /></button></header>
             <div className="ccw-modal-body"><CompanyFormFields value={companyForm} onChange={setCompanyForm} /><div className="ccw-rule-note">Peşin tedarikçide cari borç oluşmaz. Resmî belgede KDV takibi açıksa KDV kaydı belge onayıyla oluşur.</div></div>
             <footer><button type="button" onClick={() => setCompanyFormOpen(false)}>Vazgeç</button><button type="button" className="primary" disabled={companySaving} onClick={createCompany}>{companySaving ? "Kaydediliyor…" : "Firma Kartını Oluştur"}</button></footer>
+          </section>
+        </div>
+      ) : null}
+
+      {deleteOpen && selected ? (
+        <div className="ccw-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !deleteBusy) setDeleteOpen(false); }}>
+          <section className="ccw-modal ccw-delete-dialog" role="dialog" aria-modal="true" aria-label="Yönetici onaylı kalıcı firma silme"
+            onMouseDown={(event) => event.stopPropagation()}>
+            <header><div><h2>Firma Silme · Yönetici Onayı</h2><p>Önce bağlı kayıtlar denetlenir. Finansal bağlantısı olan firma hard silinemez.</p></div>
+              <button type="button" className="icon" disabled={deleteBusy} onClick={() => setDeleteOpen(false)} aria-label="Kapat"><X size={18}/></button></header>
+            <div className="ccw-modal-body">
+              <p><strong>{selected.firmaAdi || selected.companyName || selected.name}</strong></p>
+              <p>Firma ID: <code>{selected.id}</code></p>
+              {deleteBusy && !deletePreview ? <p>Bağlı kayıtların etki raporu hazırlanıyor…</p> : null}
+              {deleteError ? <div className="ccw-error" role="alert"><ShieldAlert size={17}/>{deleteError}</div> : null}
+              {deletePreview ? (<>
+                <div className="ccw-delete-summary">
+                  <span>Cari bakiye: <strong>{money(deletePreview.currentBalance)}</strong></span>
+                  <span>Açılış bakiyesi: <strong>{money(deletePreview.openingBalance)}</strong></span>
+                  <span>Bağlı kayıt: <strong>{deletePreview.blockedTotal}</strong></span>
+                  <span>Alias (firma takma adı): <strong>{deletePreview.aliasCount}</strong></span>
+                </div>
+                {deletePreview.blockedRelations?.length ? <div className="ccw-delete-blockers"><strong>Bağlı kayıtlar</strong>
+                  {deletePreview.blockedRelations.map((item) => <p key={item.table}>{item.table}: {item.count} kayıt</p>)}
+                </div> : null}
+                {!deletePreview.canHardDelete ? <p className="ccw-delete-warning"><ShieldAlert size={17}/>
+                  Firma hâlen kayıtlarla bağlantılı. Kalıcı silme kapalıdır. Yanlış açılan firma kartını pasife alın;
+                  mevcut model/cari/belge bağlantıları ayrı, denetimli ID birleştirmesiyle taşınmalıdır.</p>
+                  : <div className="ccw-delete-confirm">
+                    <p>Yalnız bağlantısız firma kartı ve alias kayıtları silinebilir. Yöneticinin tam doğrulaması gerekir.</p>
+                    <label>Firma adını aynen yaz<input value={deleteConfirmName} onChange={(event) => setDeleteConfirmName(event.target.value)} placeholder={deletePreview.companyName}/></label>
+                    <label>Silinecek firma ID’sini aynen yaz<input value={deleteConfirmId} onChange={(event) => setDeleteConfirmId(event.target.value)} placeholder={deletePreview.companyId}/></label>
+                    <label>Onay ifadesi: KALICI SIL<input value={deletePhrase} onChange={(event) => setDeletePhrase(event.target.value)} placeholder="KALICI SIL"/></label>
+                  </div>}
+              </>) : null}
+            </div>
+            <footer>
+              <button type="button" onClick={() => setDeleteOpen(false)} disabled={deleteBusy}>Vazgeç</button>
+              <button type="button" className="ccw-danger-button" onClick={hardDelete}
+                disabled={deleteBusy || !deletePreview?.canHardDelete ||
+                  deleteConfirmName !== deletePreview?.companyName ||
+                  deleteConfirmId !== deletePreview?.companyId || deletePhrase !== "KALICI SIL"}>
+                <Trash2 size={16}/> {deleteBusy ? "İşleniyor…" : "Yönetici Onayıyla Kalıcı Sil"}
+              </button>
+            </footer>
           </section>
         </div>
       ) : null}
