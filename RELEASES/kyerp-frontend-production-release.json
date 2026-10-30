@@ -5,15 +5,14 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-10-30",
   "scope": [
-    "PR488-improved-production-entry-real-centered-modal",
-    "PR488-remove-inline-production-form-and-accordion",
-    "PR488-production-buttons-open-modal",
-    "PR488-focus-escape-tab-overlay-close-scroll-lock",
-    "PR488-modal-sequential-bulk-save-persistent-drafts",
-    "frontend-worker-ci-41009653185-success",
-    "Cloudflare-Pages-production-bundle-smoke"
+    "PR490-company-active-passive-filter-and-buttons",
+    "PR490-company-ID-and-delete-preview-manager-confirmation",
+    "PR490-company-hard-delete-dependency-blockers",
+    "PR490-production-modal-outside-blank-click",
+    "PR490-frontend-and-worker-CI-41011491393-success",
+    "Cloudflare-Pages-deploy-and-bundle-smoke"
   ],
-  "note": "30.10.2026 saha ekranı: kullanıcı günlük üretim girişini daralan panel değil, Yeni Model Aç gibi merkez modal olarak istedi. PR #488 merge 61496ed..., CI 41009653185 frontend + Worker SUCCESS. Form/seri giriş ve son fişler merkez modal; açma Üretim Girişi ve Üretim Gir butonları, odağı/focus trap/Escape, kapatınca taslak satır korunur; footer Toplu Kaydet. Worker/D1 migration/veri importu yok. Yetkili saha fiş yazma E2E henüz yapılmadı.",
-  "sourceCommit": "61496ed85a64f2060307215a17063f23c6e2b5e7",
+  "note": "30.10.2026 PR490: muhasebe Firmalar & Cari aktif/pasif filtreleri, firma durum düğmesi, tam ID, yönetici etki denetimi ve yalnız bağlantısız karta hard silme onay penceresi. Üretim modalı karartılmış dış alana tıklanınca kapanır, taslaklar korunur. Worker ayrı backup-gated yayın. Veri/migration/önceki Excel import yok.",
+  "sourceCommit": "7c8cd9a1c07abc8a9d573152044a27bb511e5957",
   "requestedAt": "2026-10-30"
 }
