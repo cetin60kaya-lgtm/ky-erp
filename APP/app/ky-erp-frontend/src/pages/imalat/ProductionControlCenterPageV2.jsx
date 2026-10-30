@@ -204,6 +204,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
   const [smartOpen, setSmartOpen] = useState(false);
   const [quickSelectedModel, setQuickSelectedModel] = useState("");
   const [openRequestToken, setOpenRequestToken] = useState(0);
+  const [directEntryModalOpen, setDirectEntryModalOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
@@ -316,7 +317,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     if (!model) return;
     setQuickSelectedModel(String(model.id || model.modelId || ""));
     setOpenRequestToken((current) => current + 1);
-    window.requestAnimationFrame(() => document.getElementById("direct-production-entry")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    setDirectEntryModalOpen(true);
   }
 
   function openEntry(model, source = null) {
@@ -467,7 +468,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       setDesignOpen(false);
       await load();
       const full = await getProductionCenterModel(activeMainCompany, saved.id || saved.modelId);
-      setDetail(full);
+      setDetail(null);
       setMessage(saved?.duplicate ? `${design.modelName} zaten üretimdeydi; mevcut kart açıldı.` : `${design.modelName} Desen Havuzundan üretime açıldı.`);
       focusQuick(full);
     } catch (error) {
@@ -507,7 +508,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
           <p>Excel düzenindeki alanlarla üretimi gir, kaydet, son fişleri ve modelleri tek yerden takip et.</p>
         </div>
         <div className="pc2-actions">
-          <button className="primary" type="button" onClick={() => { setOpenRequestToken((current) => current + 1); document.getElementById("direct-production-entry")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}><Layers3 size={16} /> Üretim Girişi</button>
+          <button className="primary" type="button" onClick={() => { setDirectEntryModalOpen(true); setOpenRequestToken((current) => current + 1); }}><Layers3 size={16} /> Üretim Girişi</button>
           <button type="button" onClick={() => setDesignOpen(true)}><ImageIcon size={16} /> Desenlerden Model Al</button>
           <button type="button" onClick={() => setModelOpen(true)}><CirclePlus size={16} /> Yeni Model</button>
           <details className="pc2-more-actions"><summary>Diğer işlemler</summary><div className="pc2-more-menu"><button type="button" onClick={() => { setSmartOpen(true); }}><Zap size={16} /> Metinden Akıllı Seri Giriş</button><button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16} /> Geçmiş CSV Al</button></div></details>
@@ -516,7 +517,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
 
       {message ? <div className="pc2-notice"><CircleAlert size={17} /> {message}</div> : null}
 
-      <ProductionDirectEntryPanel activeMainCompany={activeMainCompany} models={dictionaries.models} machines={dictionaries.machines} companies={dictionaries.companies} preselectModelId={quickSelectedModel} openRequestToken={openRequestToken} onSaved={load} onModelCreated={load} />
+      <ProductionDirectEntryPanel activeMainCompany={activeMainCompany} models={dictionaries.models} machines={dictionaries.machines} companies={dictionaries.companies} preselectModelId={quickSelectedModel} openRequestToken={openRequestToken} modalOpen={directEntryModalOpen} onClose={() => setDirectEntryModalOpen(false)} onSaved={load} onModelCreated={load} />
 
       <section className="pc2-metrics">
         <Metric label="Üretimde model" value={summary.modelCount || 0} helper="Yalnız gerçekten açılan modeller" />
