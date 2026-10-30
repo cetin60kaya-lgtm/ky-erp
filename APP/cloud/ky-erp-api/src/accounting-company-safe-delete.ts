@@ -30,14 +30,14 @@ async function preview(c: Context<AppEnv>, slug: string, id: string) {
     if (!safeName(table) || table === "companies") continue;
     const meta = await c.env.DB.prepare('PRAGMA table_info("' + table + '")').all<Row>();
     const cols = (meta.results || []).map((r) => txt(r.name)).filter(safeName);
-    const keys = cols.filter((n) => refs.has(n));
+    const keys = cols.filter((n) => refs.has(n) || (n.endsWith("_company_id") && n !== "main_company_id"));
     const raw = jsonRef.has(table) && cols.includes("raw");
     if (!keys.length && !raw) continue;
     const where: string[] = keys.map((key) => '"' + key + '" = ?');
     const params: unknown[] = keys.map(() => id);
     if (raw) {
-      where.push('(INSTR(COALESCE("raw",\'\'), ?) > 0 OR INSTR(COALESCE("raw",\'\'), ?) > 0)');
-      params.push('"companyId":"' + id + '"', '"firmId":"' + id + '"');
+      where.push('INSTR(COALESCE("raw",\'\'), ?) > 0');
+      params.push(id);
     }
     const scoped = cols.includes("main_company_slug") ? " AND main_company_slug = ?" : "";
     if (scoped) params.push(slug);
@@ -87,20 +87,25 @@ export function registerAccountingCompanySafeDeleteRoutes(app: Hono<AppEnv>) {
       }
       // D1 batch is transactional. Only an entirely unlinked duplicate company
       // and its non-financial aliases can be removed. Linked records NEVER cascade.
+      const actor = txt(approver.email || approver.username || approver.id || approver.role);
       const statements = [
-        c.env.DB.prepare("DELETE FROM company_aliases WHERE main_company_slug=? AND company_id=?").bind(slug,id),
-        c.env.DB.prepare("DELETE FROM companies WHERE id=? AND main_company_slug=? AND updated_at=? AND COALESCE(current_balance,0)=0 AND COALESCE(opening_balance,0)=0 AND deleted_at IS NULL").bind(id,slug,state.updatedAt),
+        c.env.DB.prepare(
+          "DELETE FROM companies WHERE id=? AND main_company_slug=? AND updated_at=? AND COALESCE(current_balance,0)=0 AND COALESCE(opening_balance,0)=0 AND deleted_at IS NULL",
+        ).bind(id,slug,state.updatedAt),
+        c.env.DB.prepare(
+          "DELETE FROM company_aliases WHERE main_company_slug=? AND company_id=? AND NOT EXISTS(SELECT 1 FROM companies WHERE id=? AND main_company_slug=?)",
+        ).bind(slug,id,id,slug),
+        c.env.DB.prepare(
+          "INSERT INTO activity_logs (id,main_company_slug,module,entity_type,entity_id,action,action_type,description,old_value,new_value,after_data,actor,created_at) " +
+          "SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM companies WHERE id=? AND main_company_slug=?)",
+        ).bind(crypto.randomUUID(),slug,"MUHASEBE","COMPANY",id,"HARD_DELETE","ACCOUNTING_COMPANY_HARD_DELETE",
+          "Yönetici onayıyla bağlantısız firma kartı silindi",
+          JSON.stringify({name:state.companyName,removedAliases:state.aliasCount}),null,
+          JSON.stringify({actorId:txt(approver.id || approver.userId),requestId:txt(c.get?.("requestId"))}),
+          actor,new Date().toISOString(),id,slug),
       ];
       const results = await c.env.DB.batch(statements);
-      if (!results[1]?.meta?.changes) return c.json(err("CHANGED", "Firma kaydı değişti; güvenlik için silme durduruldu."), 409);
-      try {
-        await c.env.DB.prepare(
-          "INSERT INTO activity_logs (id,main_company_slug,module,entity_type,entity_id,action,action_type,description,old_value,new_value,after_data,actor,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        ).bind(crypto.randomUUID(),slug,"MUHASEBE","COMPANY",id,"HARD_DELETE","ACCOUNTING_COMPANY_HARD_DELETE",
-          "Yönetici onayıyla bağlantısız firma kartı silindi",JSON.stringify({name:state.companyName,removedAliases:state.aliasCount}),null,
-          JSON.stringify({actorId:txt(approver.id || approver.userId),requestId:txt(c.get?.("requestId"))}),
-          txt(approver.email || approver.username || approver.id),new Date().toISOString()).run();
-      } catch (auditError) { console.error("company deletion audit failed",auditError); }
+      if (!results[0]?.meta?.changes) return c.json(err("CHANGED", "Firma kaydı değişti; güvenlik için silme durduruldu."), 409);
       return c.json({ ok:true, success:true, data:{ id,deleted:true,removedAliases:state.aliasCount } });
     } catch (cause) {
       console.error("company deletion blocked",cause);
