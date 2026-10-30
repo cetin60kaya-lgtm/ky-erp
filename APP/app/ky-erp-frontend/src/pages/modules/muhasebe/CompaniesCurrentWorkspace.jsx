@@ -203,6 +203,12 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [companyForm, setCompanyForm] = useState(emptyCompany);
   const [companySaving, setCompanySaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeTargetId, setMergeTargetId] = useState("");
+  const [mergePreview, setMergePreview] = useState(null);
+  const [mergePhrase, setMergePhrase] = useState("");
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const [mergeError, setMergeError] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePreview, setDeletePreview] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -379,6 +385,51 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     } catch (cause) {
       setNotice(cause?.message || "Firma durumu değiştirilemedi.");
     } finally { setStatusSaving(false); }
+  };
+
+
+  const inspectMerge = async () => {
+    if (!selected?.id || !mergeTargetId || mergeBusy || mergeTargetId === String(selected.id)) return;
+    setMergePreview(null);
+    setMergeError("");
+    setMergePhrase("");
+    setMergeBusy(true);
+    try {
+      const report = objectOf(await apiGet("/muhasebe/firmalar/" + encodeURIComponent(selected.id) + "/merge-preview", {
+        ...params, targetId: mergeTargetId, _ts: Date.now(),
+      }));
+      setMergePreview(report);
+    } catch (cause) {
+      setMergeError(cause?.message || "Birleştirme etki raporu alınamadı; işlem kapalı.");
+    } finally { setMergeBusy(false); }
+  };
+
+  const applyMerge = async () => {
+    if (!selected?.id || !mergePreview?.canMerge || mergeBusy || mergePhrase !== "BIRLESTIR") return;
+    const sourceId = String(selected.id);
+    const targetId = String(mergePreview.target.companyId);
+    if (!window.confirm("YÖNETİCİ SON ONAYI: " + mergePreview.source.companyName +
+      " (" + sourceId + ") boş firma kartı, " + mergePreview.target.companyName +
+      " (" + targetId + ") ID'sine birleştirilecek. Korunan mali kayıtlar değişmeyecek. Devam edilsin mi?")) return;
+    setMergeBusy(true); setMergeError("");
+    try {
+      await apiPost("/muhasebe/firmalar/" + encodeURIComponent(sourceId) + "/merge", {
+        ...params, targetId, confirmSourceId: sourceId, confirmTargetId: targetId,
+        expectedSourceUpdatedAt: mergePreview.source.updatedAt,
+        expectedTargetUpdatedAt: mergePreview.target.updatedAt,
+        confirmPhrase: "BIRLESTIR",
+      });
+      setMergeOpen(false); setMergePreview(null); setMergePhrase(""); setMergeTargetId("");
+      setSelected(null); setMovements([]);
+      const latest = await loadFirms();
+      const target = latest.find((row) => String(row.id) === targetId);
+      if (target) setSelected(target);
+      setNotice("Boş mükerrer firma kartı, seçilen ana firma ID'sine güvenli birleştirildi. Mali kayıtlar korunuyor.");
+      window.dispatchEvent(new Event("kyerp:accounting-refresh"));
+      reloadAll?.();
+    } catch (cause) {
+      setMergeError(cause?.message || "Birleştirme işlemi reddedildi. Firma kayıtları korunuyor.");
+    } finally { setMergeBusy(false); }
   };
 
   const inspectHardDelete = async () => {
@@ -609,6 +660,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                   <button type="button" onClick={() => openFinance(selected.id)}><Landmark size={16} /> Finans</button>
                   <button type="button" onClick={() => setEditOpen(true)}><Pencil size={16} /> Düzenle</button>
                    <button type="button" disabled={statusSaving} onClick={changeActiveStatus}>{selected.isActive === false ? "Aktifleştir" : "Pasifleştir"}</button>
+                   <button type="button" onClick={() => { setMergeOpen(true); setMergeTargetId(""); setMergePreview(null); setMergePhrase(""); setMergeError(""); }}>Birleştir</button>
                    <button type="button" className="ccw-danger-button" onClick={inspectHardDelete} disabled={deleteBusy}><Trash2 size={16} /> Hard Sil</button>
                 </div>
               </header>
@@ -652,6 +704,61 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
             <header><div><h2>Yeni Firma / Cari</h2><p>Firma kartı belge sağlayıcısından bağımsızdır; VKN veya alias ile e‑Belgeye bağlanır.</p></div><button type="button" className="icon" onClick={() => setCompanyFormOpen(false)} aria-label="Kapat"><X size={18} /></button></header>
             <div className="ccw-modal-body"><CompanyFormFields value={companyForm} onChange={setCompanyForm} /><div className="ccw-rule-note">Peşin tedarikçide cari borç oluşmaz. Resmî belgede KDV takibi açıksa KDV kaydı belge onayıyla oluşur.</div></div>
             <footer><button type="button" onClick={() => setCompanyFormOpen(false)}>Vazgeç</button><button type="button" className="primary" disabled={companySaving} onClick={createCompany}>{companySaving ? "Kaydediliyor…" : "Firma Kartını Oluştur"}</button></footer>
+          </section>
+        </div>
+      ) : null}
+
+
+      {mergeOpen && selected ? (
+        <div className="ccw-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !mergeBusy) setMergeOpen(false); }}>
+          <section className="ccw-modal ccw-delete-dialog" role="dialog" aria-modal="true" aria-label="Firma kimliği birleştirme"
+            onMouseDown={(event) => event.stopPropagation()}>
+            <header>
+              <div><h2>Firma Birleştir · Ön Kontrol</h2>
+                <p>Korunacak firma ID'sini sen seç. Yalnız bağlantısız ve sıfır bakiyeli kaynak birleştirilebilir.</p></div>
+              <button type="button" className="icon" disabled={mergeBusy} onClick={() => setMergeOpen(false)} aria-label="Kapat"><X size={18}/></button>
+            </header>
+            <div className="ccw-modal-body">
+              <div className="ccw-delete-summary"><span>Birleştirilecek kaynak: <strong>{selected.firmaAdi || selected.name}</strong></span>
+                <span>Kaynak ID: <code>{selected.id}</code></span></div>
+              <label className="ccw-merge-target">Korunacak ana firma ID *
+                <select value={mergeTargetId} onChange={(event) => {
+                  setMergeTargetId(event.target.value); setMergePreview(null); setMergePhrase(""); setMergeError("");
+                }}>
+                  <option value="">Korunacak firmayı seç</option>
+                  {firms.filter((row) => String(row.id) !== String(selected.id) && row.isActive !== false)
+                    .map((row) => <option key={row.id} value={row.id}>{row.firmaAdi || row.name} · {row.id}</option>)}
+                </select>
+              </label>
+              <p className="ccw-merge-hint">Bu seçim, kaynak firmanın ID'sini kapatıp yalnız mevcut takma adlarını hedefe bağlamak içindir. Faturalar, hareketler, modeller ve bakiyeler kendiliğinden taşınmaz.</p>
+              <button type="button" onClick={inspectMerge} disabled={!mergeTargetId || mergeBusy}>
+                {mergeBusy && !mergePreview ? "Kontrol ediliyor..." : "Bağlantıları Kontrol Et"}
+              </button>
+              {mergeError ? <div className="ccw-error" role="alert"><ShieldAlert size={17}/>{mergeError}</div> : null}
+              {mergePreview ? <>
+                <div className="ccw-delete-summary">
+                  <span>Kaynak bakiye <strong>{money(mergePreview.source.currentBalance)}</strong></span>
+                  <span>Kaynak bağlı kayıt <strong>{mergePreview.source.blockedTotal}</strong></span>
+                  <span>Korunacak firma <strong>{mergePreview.target.companyName}</strong></span>
+                  <span>Korunan bakiye <strong>{money(mergePreview.target.currentBalance)}</strong></span>
+                </div>
+                {mergePreview.source.blockedRelations?.length ? <div className="ccw-delete-blockers">
+                  <strong>Kaynağa bağlı kayıtlar</strong>
+                  {mergePreview.source.blockedRelations.map((row) => <p key={row.table}>{row.table}: {row.count}</p>)}
+                </div> : null}
+                <p className={mergePreview.canMerge ? "ccw-merge-hint" : "ccw-delete-warning"}>{mergePreview.message}</p>
+                {mergePreview.canMerge && <label className="ccw-merge-target">
+                  Yönetici onayı için BIRLESTIR yaz
+                  <input value={mergePhrase} onChange={(event) => setMergePhrase(event.target.value)} placeholder="BIRLESTIR" />
+                </label>}
+              </> : null}
+            </div>
+            <footer><button type="button" disabled={mergeBusy} onClick={() => setMergeOpen(false)}>Vazgeç</button>
+              <button type="button" className="primary" onClick={applyMerge}
+                disabled={mergeBusy || !mergePreview?.canMerge || mergePhrase !== "BIRLESTIR"}>
+                {mergeBusy ? "Birleştiriliyor..." : "Yönetici Onayıyla Birleştir"}
+              </button>
+            </footer>
           </section>
         </div>
       ) : null}

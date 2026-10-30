@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "../utils/api";
+import { selectableProductionCompanies } from "./productionCompanyOptions";
 
 function unwrap(payload) {
   if (
@@ -27,47 +28,18 @@ function companyPayload(activeMainCompany, extra = {}) {
   };
 }
 
-function normalize(value) {
-  return String(value || "")
-    .trim()
-    .toLocaleUpperCase("tr-TR")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/İ/g, "I");
-}
-
-function isCustomerCompany(row) {
-  const role = normalize(
-    `${row?.type || ""} ${row?.companyType || row?.company_type || ""}`,
-  );
-  return /MUSTERI|CUSTOMER|ALICI/.test(role) &&
-    !/SUPPLIER|TEDARIK|SATICI|VENDOR/.test(role);
-}
-
-function customerCompanies(rows) {
-  return (Array.isArray(rows) ? rows : [])
-    .filter((row) => row?.isActive !== false && row?.is_active !== 0)
-    .filter((row) => !row?.deletedAt && !row?.deleted_at)
-    .filter(isCustomerCompany)
-    .sort((a, b) => {
-      const aTaha = /^TAHA\b/.test(normalize(a?.name || a?.firmaAdi));
-      const bTaha = /^TAHA\b/.test(normalize(b?.name || b?.firmaAdi));
-      if (aTaha !== bTaha) return aTaha ? -1 : 1;
-      return String(a?.name || a?.firmaAdi || "").localeCompare(
-        String(b?.name || b?.firmaAdi || ""),
-        "tr",
-      );
-    });
-}
-
+// İmalat, Muhasebe > Firmalar & Cari'nin etkin firma kartlarını kullanır.
+// Eski filtre yalnız CUSTOMER türünü kabul ediyor ve Tedarikçi olarak
+// kayıtlı TAHA firmalarını boş listeye düşürüyordu. Rol değiştirilmez.
+// Model için firma ID seçimi her zaman kullanıcıya aittir.
 function withCustomerDictionary(payload) {
   const data = payload && typeof payload === "object" ? payload : {};
-  const companies = customerCompanies(data.companies);
-  const defaultCompany =
-    companies.find((row) => /^TAHA\b/.test(normalize(row?.name || row?.firmaAdi))) ||
-    companies[0] ||
-    null;
-  return { ...data, companies, defaultCompany };
+  return {
+    ...data,
+    companies: selectableProductionCompanies(data.companies),
+    // Müşteri/tedarikçi unvanından ilk firmayı otomatik seçme.
+    defaultCompany: null,
+  };
 }
 
 export async function getProductionCenter(activeMainCompany, params = {}) {

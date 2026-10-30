@@ -163,6 +163,10 @@ export default function ProductionDirectEntryPanel({
     if (creatingModel || saving) return;
     const modelName = asText(newModelName);
     if (modelName.length < 2) { setError("Yeni model adı en az iki karakter olmalıdır."); return; }
+    if (!newModelCompanyId || !companies.some((c) => asText(c.id) === newModelCompanyId)) {
+      setError("Yeni modeli açmak için Muhasebe’de kayıtlı aktif firmayı seçin.");
+      return;
+    }
     const company = companies.find((c) => asText(c.id) === newModelCompanyId);
     const same = allModels.find((m) => !m.isVirtual &&
       nameOf(m).localeCompare(modelName, "tr", { sensitivity: "base" }) === 0 &&
@@ -395,14 +399,17 @@ export default function ProductionDirectEntryPanel({
                 onChange={(event) => setNewModelName(event.target.value)} maxLength={150}/></label>
               <label><span>Firma</span><select value={newModelCompanyId}
                 onChange={(event) => setNewModelCompanyId(event.target.value)}>
-                <option value="">Firma seçilmedi — daha sonra eşleştir</option>
-                {companies.map((company) => <option key={company.id} value={company.id}>{company.name || company.firmaAdi}</option>)}
+                <option value="">Firma seçin (zorunlu)</option>
+                {companies.map((company) => <option key={company.id} value={company.id}>
+                  {company.name || company.firmaAdi} · {String(company.type || company.companyType || "").toUpperCase() === "CUSTOMER" ? "Müşteri" : "Cari"} · {String(company.id).slice(0, 8)}
+                </option>)}
               </select></label>
               <label><span>İlk Baskı Bölgesi</span><select value={newModelRegion}
                 onChange={(event) => setNewModelRegion(event.target.value)}>
                 {availableProductionRegions(null).map((region) => <option key={region}>{region}</option>)}
               </select></label>
             </div>
+            {!companies.length && <div className="pde-error" role="status">Aktif firma bulunamadı. Muhasebe → Firmalar & Cari kayıtlarını kontrol edin.</div>}
             <div className="pde-new-actions">
               <button type="button" onClick={() => setNewModelOpen(false)} disabled={creatingModel}>Vazgeç</button>
               <button type="button" onClick={createModel} disabled={creatingModel || saving}>
