@@ -36,7 +36,7 @@ async function preview(c: Context<AppEnv>, slug: string, id: string) {
     const where: string[] = keys.map((key) => '"' + key + '" = ?');
     const params: unknown[] = keys.map(() => id);
     if (raw) {
-      where.push('INSTR(COALESCE("raw",\'\'), ?) > 0');
+      where.push("INSTR(COALESCE(\"raw\",\'\'), ?) > 0");
       params.push(id);
     }
     const scoped = cols.includes("main_company_slug") ? " AND main_company_slug = ?" : "";
