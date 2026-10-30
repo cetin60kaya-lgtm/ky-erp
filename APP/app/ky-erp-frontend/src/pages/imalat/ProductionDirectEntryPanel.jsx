@@ -304,12 +304,16 @@ export default function ProductionDirectEntryPanel({
   }
   if (!modalOpen) return null;
   return createPortal(
-    <div className="pde-modal-overlay" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) requestClose();
+    <div className="pde-modal-overlay" onClick={(event) => {
+      // Fare, dokunmatik ve kalem: yalnız modalın dışındaki karartılmış
+      // boş alana tıklamak pencereyi kapatır; form içindeki boşluk kapatmaz.
+      if (event.target !== event.currentTarget) return;
+      requestClose();
     }}>
       <section className="pde-modal pde-shell" id="direct-production-entry" role="dialog"
         aria-modal="true" aria-labelledby="pde-modal-title" aria-describedby="pde-modal-description"
-        ref={modalRef} tabIndex={-1} onKeyDown={handleDialogKey}>
+        ref={modalRef} tabIndex={-1} onKeyDown={handleDialogKey}
+        onClick={(event) => event.stopPropagation()}>
         <header className="pde-modal-header">
           <div className="pde-modal-heading">
             <span className="pde-eyebrow"><ClipboardList size={15}/> GÜNLÜK İMALAT</span>

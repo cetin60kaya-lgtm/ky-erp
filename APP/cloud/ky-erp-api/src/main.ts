@@ -19,6 +19,7 @@ import { registerAuthSessionRefreshRoutes } from "./auth-session-refresh";
 import { registerAuthPushRoutes } from "./auth-push-cloud";
 import { registerSecurityActionRoutes } from "./security-action-cloud";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
+import { registerAccountingCompanySafeDeleteRoutes } from "./accounting-company-safe-delete";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
 import { registerAccountingDocumentArchiveRoutes } from "./accounting-document-archive";
 import { registerAccountingOperationRoutes } from "./accounting-operations";
@@ -179,6 +180,7 @@ async function targetRole(c: any, userId: string): Promise<AnyRow | null> {
 }
 
 registerAccountingCompanyDirectoryRoutes(app);
+registerAccountingCompanySafeDeleteRoutes(app);
 registerAccountingCompanyProfileRoutes(app);
 registerAccountingDocumentArchiveRoutes(app);
 registerAccountingOperationRoutes(app);
