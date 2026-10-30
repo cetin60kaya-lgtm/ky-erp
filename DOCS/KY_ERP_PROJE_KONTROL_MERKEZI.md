@@ -1,5 +1,17 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 30.10.2026 — Firmalar & Cari aktif/pasif, yönetici onaylı hard silme; İmalat modal dış tıklama
+
+- **Saha talepleri:** İmalat Üretim Girişi modalı karartılmış dış boşluğa tıklanınca kapansın. Firma eşleştirmesinde iki TAHA kaydı var; yanlış mükerrer firma için Aktif/Pasif ve yönetici onaylı Hard Sil; doğru firma ID ve bağlı kayıtlar korunmalı.
+- **PR [#490](https://github.com/cetin60kaya-lgtm/ky-erp/pull/490)** MERGED SHA 7c8cd9a1c07abc8a9d573152044a27bb511e5957. İmalat modalı yalnız dış katmana tıklanınca kapanır, içerideki etkileşimler kapatmaz; taslak seri satırlar korunur. Muhasebe Firma & Cari aktif/pasif filtre, firma durum düğmesi, tam ID, Hard Sil etki/onay modali. Worker sadece giriş yapmış SUPER_ADMIN/ADMIN aynı ana firma yöneticisine preview/hard-delete; D1 şema taraması, pozitif/negatif mali bakiye ve tüm bağlı kayıtlar hard-delete için engel. Yalnız bağlantısız firma ve alias fiziksel silinir, admin adı/ID/KALICI SIL/güncel sürüm onayı gerekir. Silme atomik D1 batch ve activity_logs denetimiyle yapılır.
+- **PR [#491](https://github.com/cetin60kaya-lgtm/ky-erp/pull/491)** MERGED SHA c2968efabefcb1f29c020bfc9cae13befa894663. Eski model ve **json_store.data** JSON kayıtlarında firma UUID'si geçerse hard-delete de engellenir.
+- **CI:** [#41011491393](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41011491393) ve [#41012024941](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41012024941): Frontend lint/test/build + Worker typecheck/test/build **SUCCESS**.
+- **Canlı Pages:** [#41011728624](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41011728624) **SUCCESS**, bundle kontrolü PASS.
+- **Canlı Worker:** [#41011696281](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41011696281) ve son ek güvenlik [#41012177381](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41012177381) **SUCCESS**. D1 **tam yedek artifact**, şema salt okunur kontrolü, Worker deploy ve API health PASS; D1 migration kapalı.
+- **İşlem yapılmadı:** İki TAHA ID'sinin hangi veriye bağlı olduğunu canlı D1 içeriği üzerinden burada tek tek tespit etmedik; **hiçbir firma pasife alınmadı, silinmedi, birleştirilmedi**. Kullanıcıdan istenen mükerrer ID'yi birleştirme/düzeltme saha kabul işi açıktır. Bağlı fatura/cari/model/LOT gibi yasal kayıtların geri dönüşsüz toplu silinmesi **bilinçli olarak kapalı**, bu durumda pasif / ayrı güvenli ID eşleştirme gerekir.
+- **Gerçek kabul bekliyor:** Kullanıcı /muhasebe/firma-kartlari ekranında aktif/pasif seçeneklerini, iki TAHA tam ID'sini ve bağlı kayıt etki raporunu inceleyecek. /uretim/uretim-merkezi modalı dış tıklama kapanışı doğrulanacak. Üretim fişi gerçek saha kaydı ayrıca kontrol edilecek.
+
+
 ## 30.10.2026 — İmalat Üretim Girişi gerçek modal, canlı (#488)
 
 - **Saha:** Kullanıcı PR #487'nin akordeonunu istemedi; Yeni Model Aç gibi karartılmış ekran üzerinde **merkez modal** istedi. Sayfa-içi üretim formu artık render edilmez.
