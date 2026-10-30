@@ -1,5 +1,16 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 30.10.2026 — İmalat Üretim Girişi gerçek modal, canlı (#488)
+
+- **Saha:** Kullanıcı PR #487'nin akordeonunu istemedi; Yeni Model Aç gibi karartılmış ekran üzerinde **merkez modal** istedi. Sayfa-içi üretim formu artık render edilmez.
+- **Kod:** ProductionDirectEntryPanel.jsx createPortal(document.body), role=dialog ve aria-modal; ayrı modalOpen/onClose, klavye Tab/ESC, odak iadesi, scroll kilidi, karartılmış arka plan, X/Kapat ve işlem sürerken kapatma engeli. Model arama, yeni model, seri satırlar, son kayıtlar ve modal footer'da Toplu Kaydet korunur. Kapatınca hazırlanmış satırlar silinmez.
+- **Ana ekran:** ProductionControlCenterPageV2.jsx Üretim Girişi, model listesi Üretim Gir, model detayındaki Üretim Gir ve yeni model/Desen sonrası aynı modala yönlenir. Ana ekranda artık form paneli yok; KPI ve model listesi görülür.
+- **Stil:** productionDirectEntry.css responsive merkez modal, kaydırma modal içi. Eski accordion testi kaldırıldı, productionDirectEntryModal.test.js eklendi.
+- **PR [#488](https://github.com/cetin60kaya-lgtm/ky-erp/pull/488)** MERGED SHA 61496ed85a64f2060307215a17063f23c6e2b5e7. [CI #41009653185](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41009653185) frontend lint/test/build ve Worker typecheck/test/build **SUCCESS**.
+- **Pages canlı [#41009803431](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41009803431)** **SUCCESS**: Cloudflare Pages production dağıtım ve canlı bundle/chunk smoke. Release SHA 110caf4f2b9d6b1671665056424b24d5f92cbcd3; merge ancestry behind_by=0.
+- **Veri güvenliği:** Worker / D1 migration / eski Excel import / yeni üretim fişi yazımı **YOK**. Yetkili oturumla modal görüntüsü, seri kayıt ve rapor doğrulaması **saha E2E BEKLİYOR**.
+
+
 ## 29.10.2026 — İmalat seri giriş accordion ilk açılışta KAPALI, canlı #487
 
 - **Gerçek saha görselinde sorun:** PR #485 formunun başlığında "Daralt" görünüyordu, ancak `open=true` olduğundan 10 alanlı form ilk açılışta tüm ekranı kaplıyordu. Üst `Üretim Girişi` düğmesi yalnız scroll yapıyordu.
