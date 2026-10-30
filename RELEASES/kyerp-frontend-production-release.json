@@ -5,14 +5,14 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-10-30",
   "scope": [
-    "PR490-company-active-passive-filter-and-buttons",
-    "PR490-company-ID-and-delete-preview-manager-confirmation",
-    "PR490-company-hard-delete-dependency-blockers",
-    "PR490-production-modal-outside-blank-click",
-    "PR490-frontend-and-worker-CI-41011491393-success",
-    "Cloudflare-Pages-deploy-and-bundle-smoke"
+    "PR492-imalat-active-cari-firma-dropdown-with-IDs",
+    "PR492-new-model-requires-company-selection",
+    "PR492-accounting-safe-merge-admin-modal",
+    "PR492-preview-alias-and-balanced-company-protection",
+    "CI-41019688373-success",
+    "Cloudflare-Pages-production-bundle-smoke"
   ],
-  "note": "30.10.2026 PR490: muhasebe Firmalar & Cari aktif/pasif filtreleri, firma durum düğmesi, tam ID, yönetici etki denetimi ve yalnız bağlantısız karta hard silme onay penceresi. Üretim modalı karartılmış dış alana tıklanınca kapanır, taslaklar korunur. Worker ayrı backup-gated yayın. Veri/migration/önceki Excel import yok.",
-  "sourceCommit": "7c8cd9a1c07abc8a9d573152044a27bb511e5957",
+  "note": "30.10.2026 PR492: İmalat Yeni Model firma dropdown Muhasebe'nin tüm aktif firmalarını ID ile gösterir; Tedarikçi rolündeki iki TAHA da görünür; varsayılan otomatik atama yok. Firma&Cari'de Birleştir modalı: kaynak/korunacak hedef ID, bağlı kayıt ve bakiye raporu, BIRLESTIR onayı; backend izin vermezse pasife alma. Eski kayıt Excel import yok, veri otomatik güncellenmez.",
+  "sourceCommit": "4ac5c3a540369ccf1dc36c6bf25c5d91614be283",
   "requestedAt": "2026-10-30"
 }
