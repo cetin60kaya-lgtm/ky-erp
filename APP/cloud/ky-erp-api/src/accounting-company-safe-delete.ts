@@ -7,7 +7,7 @@ const txt = (v: unknown) => v == null ? "" : String(v).trim();
 const safeName = (v: string) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(v);
 const refs = new Set(["company_id", "firm_id", "customer_id", "supplier_company_id", "party_company_id", "counterparty_id", "supplier_id", "customer_company_id", "source_company_id", "target_company_id"]);
 const err = (code: string, message: string, detail?: unknown) => ({ ok: false, success: false, error: { code, message, ...(detail === undefined ? {} : { detail }) } });
-const jsonRef = new Set(["model_records", "models", "production_records"]);
+const jsonRef = new Map([["model_records", "raw"], ["models", "raw"], ["production_records", "raw"], ["json_store", "data"]]);
 export function companyHardDeleteAllowed(p: Row) {
   return Number(p?.blockedTotal || 0) === 0 &&
     Number(p?.currentBalance || 0) === 0 && Number(p?.openingBalance || 0) === 0;
@@ -31,12 +31,13 @@ async function preview(c: Context<AppEnv>, slug: string, id: string) {
     const meta = await c.env.DB.prepare('PRAGMA table_info("' + table + '")').all<Row>();
     const cols = (meta.results || []).map((r) => txt(r.name)).filter(safeName);
     const keys = cols.filter((n) => refs.has(n) || (n.endsWith("_company_id") && n !== "main_company_id"));
-    const raw = jsonRef.has(table) && cols.includes("raw");
+    const rawColumn = jsonRef.get(table) || "";
+    const raw = Boolean(rawColumn) && cols.includes(rawColumn);
     if (!keys.length && !raw) continue;
     const where: string[] = keys.map((key) => '"' + key + '" = ?');
     const params: unknown[] = keys.map(() => id);
     if (raw) {
-      where.push("INSTR(COALESCE(\"raw\",\'\'), ?) > 0");
+      where.push("INSTR(COALESCE(\"" + rawColumn + "\",\'\'), ?) > 0");
       params.push(id);
     }
     const scoped = cols.includes("main_company_slug") ? " AND main_company_slug = ?" : "";
