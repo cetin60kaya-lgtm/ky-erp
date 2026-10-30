@@ -698,3 +698,22 @@
     width: 100vw;
   }
 }
+
+/* Firma kartı güvenli durum yönetimi / yönetici onaylı silme */
+.ccw-company-id{font-size:10px!important;color:#7a8ba0!important;word-break:break-word}
+.ccw-company-id code{font-size:10px;font-weight:650;color:#546987}
+.ccw-root .ccw-danger-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid #e1a9ad!important;background:#fff5f5!important;color:#a72d35!important;border-radius:8px;cursor:pointer}
+.ccw-root .ccw-danger-button:disabled{cursor:not-allowed;opacity:.45}
+.ccw-root .ccw-danger-button:hover:not(:disabled){background:#ffe8e8!important;border-color:#cf7a7f!important}
+.ccw-delete-dialog{max-width:620px;width:min(620px,calc(100vw - 25px))}
+.ccw-delete-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0}
+.ccw-delete-summary span{display:flex;justify-content:space-between;gap:10px;padding:10px;border-radius:8px;background:#f4f7fb;border:1px solid #e4ebf2;font-size:11px}
+.ccw-delete-blockers{border:1px solid #edd2d2;background:#fff8f6;border-radius:9px;padding:10px 12px;color:#80343b;font-size:11px;margin-bottom:12px}
+.ccw-delete-blockers p{margin:5px 0 0}
+.ccw-delete-warning{display:flex;align-items:flex-start;gap:8px;border-left:3px solid #d97e7e;padding:11px;color:#80343b;font-size:12px;background:#fff8f6;border-radius:7px}
+.ccw-delete-warning svg{flex:0 0 17px}
+.ccw-delete-confirm{border:1px solid #e3cfce;border-radius:10px;padding:13px;background:#fffafa;display:grid;gap:11px}
+.ccw-delete-confirm p{margin:0;color:#8a4850;font-size:11px;line-height:1.5}
+.ccw-delete-confirm label{display:flex;flex-direction:column;gap:5px;color:#583b42;font-size:11px;font-weight:700}
+.ccw-delete-confirm input{width:100%;min-height:35px;padding:8px;border-radius:7px;border:1px solid #d7bbc0;background:#fff;color:#283f56;font-size:12px}
+@media(max-width:600px){.ccw-delete-summary{grid-template-columns:1fr}.ccw-delete-dialog{max-height:calc(100dvh - 24px);overflow:auto}}
