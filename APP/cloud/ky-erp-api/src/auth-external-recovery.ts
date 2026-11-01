@@ -28,6 +28,10 @@ async function sha256Bytes(value: string) { const digest = await crypto.subtle.d
 async function sha256(value: string) { return Array.from(await sha256Bytes(value)).map((byte) => byte.toString(16).padStart(2, "0")).join(""); }
 function safeEqual(left: string, right: string) { if (left.length !== right.length) return false; let diff = 0; for (let index = 0; index < left.length; index += 1) diff |= left.charCodeAt(index) ^ right.charCodeAt(index); return diff === 0; }
 function validEmail(value: unknown) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text(value)); }
+/** Google yalnız SUPER_ADMIN yedek kurtarma için; normal firma girişi değildir. */
+function googleRecoveryAllowed(user: AnyRow) {
+  return upper(user?.role_override || user?.role) === "SUPER_ADMIN";
+}
 function providerOf(value: unknown): Provider | "" { const normalized = text(value).toLowerCase(); return normalized === "google" || normalized === "microsoft" ? normalized : ""; }
 function allowedOrigin(value: unknown) { const origin = text(value); return ALLOWED_APP_ORIGINS.has(origin) ? origin : "https://kyerp.net"; }
 function callbackBase(c: any) { return text(c.env?.AUTH_EXTERNAL_CALLBACK_BASE || "https://api.kyerp.net").replace(/\/+$/, ""); }
@@ -150,6 +154,10 @@ export function registerAuthExternalRecoveryRoutes(app: any) {
     const config = providerConfig(c, provider); if (!config) return c.json(jsonError("EXTERNAL_PROVIDER_UNAVAILABLE", "Bu kimlik sağlayıcı henüz etkin değil."), 503);
     const body = await bodyOf(c), proof = await challengeProof(c, body); if (!proof) return c.json(jsonError("EXTERNAL_RECOVERY_PROOF_INVALID", "Önce kullanıcı adı, şifre ve normal güvenlik adımını başlatın."), 401);
     const user = await userById(c, proof.userId); if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
+    if (provider === "google" && !googleRecoveryAllowed(user)) {
+      await audit(c, "GOOGLE_RECOVERY_SUPER_ADMIN_REQUIRED", user, { provider });
+      return c.json(jsonError("GOOGLE_RECOVERY_SUPER_ADMIN_REQUIRED", "Google yedek hesap doğrulaması yalnız sistem SUPER_ADMIN kullanıcısı içindir."), 403);
+    }
     if (!Boolean(user.email_verified) || !validEmail(user.email)) return c.json(jsonError("EXTERNAL_RECOVERY_EMAIL_NOT_VERIFIED", "Google/Microsoft doğrulaması için hesap e-posta adresi önceden doğrulanmış olmalıdır."), 409);
     await ensureSchema(c);
     const recent = await c.env.DB.prepare("SELECT COUNT(*) AS total FROM auth_external_recovery_challenges WHERE user_id=? AND provider=? AND created_at>?").bind(user.id, provider, addSeconds(-3600)).first<AnyRow>();
@@ -175,6 +183,10 @@ export function registerAuthExternalRecoveryRoutes(app: any) {
       const row = await c.env.DB.prepare("SELECT * FROM auth_external_recovery_challenges WHERE provider=? AND state_hash=? AND used_at IS NULL LIMIT 1").bind(provider, await sha256(state)).first<AnyRow>();
       if (!row) throw new Error("Kimlik doğrulama isteği bulunamadı veya daha önce kullanıldı."); origin = allowedOrigin(row.origin); user = await userById(c, text(row.user_id));
       if (!user || !Boolean(user.is_active)) throw new Error("Kullanıcı hesabı kullanılamıyor.");
+       if (provider === "google" && !googleRecoveryAllowed(user)) {
+         await audit(c, "GOOGLE_RECOVERY_SUPER_ADMIN_REQUIRED", user, { provider });
+         throw new Error("Google yedek doğrulaması yalnız sistem SUPER_ADMIN hesabına açıktır.");
+       }
       if (Date.parse(text(row.expires_at)) <= Date.now()) { await c.env.DB.prepare("UPDATE auth_external_recovery_challenges SET used_at=? WHERE id=? AND used_at IS NULL").bind(nowIso(), row.id).run(); throw new Error("Kimlik doğrulama isteğinin süresi doldu."); }
       if (providerError) throw new Error("Kimlik sağlayıcı doğrulaması iptal edildi."); if (!code) throw new Error("Kimlik sağlayıcı doğrulama kodu alınamadı."); if (!(await sourceStillPending(c, row))) throw new Error("İlk giriş güvenlik isteği artık geçerli değil.");
       const claim = await c.env.DB.prepare("UPDATE auth_external_recovery_challenges SET used_at=? WHERE id=? AND used_at IS NULL").bind(nowIso(), row.id).run(); if (!Number(claim?.meta?.changes || 0)) throw new Error("Kimlik doğrulama isteği daha önce kullanıldı.");
