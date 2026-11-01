@@ -5,11 +5,12 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-11-01",
   "scope": [
-    "PR503-OAuth-hata-sinifina-gore-Turkce-gosterim",
-    "CI-41329031934-success",
+    "PR504-central-document-catalog-all-departments",
+    "PR504-mobile-file-index-preview-download",
+    "CI-41333342069-success",
     "Cloudflare-Pages-production-smoke"
   ],
-  "note": "PR503: File Hub OAuth Google token hatasında sabit güvenli hata kodu ve kullanıcıya tek cümleli yönlendirme. Secret/token/error_description frontend veya URL'ye taşınmaz. Gerçek Google Drive OAuth bağlantısı henüz doğrulanmadı.",
-  "sourceCommit": "b26fecf243446eb63ed886ad99cd4006b9a4935d",
+  "note": "PR504: Ortak tüm belge türleri, masaüstü/mobil File Hub index önizleme/indirme ve hassas belge uyarı. Gerçek modül modül yükleme akışları ve cihaz kabul testleri tamam sayılmaz.",
+  "sourceCommit": "56fe28a1b9fce5759d2516ed5a730b171673c641",
   "requestedAt": "2026-11-01"
 }
