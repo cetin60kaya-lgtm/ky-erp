@@ -51,3 +51,9 @@ test("akıllı kontrol D1 salt okunur diagnostik verisine bağlanır ve ilgili i
  assert.match(page,/setTab\(row\.actionTab\)/);
  assert.match(css,/storage-insight-critical/);
 });
+
+test("Dropbox API v2 altyapısı gerçek sağlayıcı yönlendirmesine bağlıdır",()=>{
+ assert.match(page,/DROPBOX:"Dropbox \(alternatif\)"/);
+ assert.match(page,/isCloud=p=>\["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT","DROPBOX"\]/);
+ assert.match(page,/Dropbox.*OAuth ayarları/);
+});
