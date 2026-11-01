@@ -218,7 +218,7 @@ function withOperationalGroups(module) {
   if (module.key === "e-belge") {
     return {
       ...module,
-      label: "e-Belge",
+      label: "e-Belge / Faturalar",
       groups: [
         { label: "Operasyon", tabs: [["genel-bakis", "Genel Bakış", "dashboard"], ["gelen-belgeler", "Gelen Belgeler", "dosya"], ["giden-belgeler", "Giden Belgeler", "dosya"], ["belge-havuzu", "Belge Havuzu", "upload"]] },
         { label: "Kontrol & Eşleştirme", tabs: [["eslestirmeler", "Eşleştirmeler", "file-check"], ["onay-sorunlar", "Onay & Sorunlar", "uyari"], ["is-akislari", "İş Akışları", "file-check"]] },
@@ -233,7 +233,8 @@ function withOperationalGroups(module) {
 const preparedBaseModules = BASE_MODULES
   .map(withoutStorageDuplicates)
   .map(withCompanyBilling)
-  .map(withOperationalGroups);
+  .map(withOperationalGroups)
+  .map((module) => module.key === "ik" ? { ...module, label: "İK Aylık" } : module);
 
 const modulesByKey = new Map(preparedBaseModules.map((module) => [module.key, module]));
 modulesByKey.set(PDKS_MODULE.key, PDKS_MODULE);
@@ -254,17 +255,17 @@ const CANONICAL_MODULE_ORDER = [
   "ana-sayfa",
   "muhasebe",
   "e-belge",
-  "ik",
   "gunluk-operasyon",
+  "ik",
   "pdks",
   "desen",
-  "boyahane",
   "uretim",
-  "iletisim",
+  "boyahane",
   "compliance",
+  "iletisim",
+  "admin",
   "depolama",
   "sistem-merkezi",
-  "admin",
   "asistan",
 ];
 
