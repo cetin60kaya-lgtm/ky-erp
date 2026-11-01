@@ -173,10 +173,12 @@ test("PDKS primary sidebar exposes exactly five operation groups without dumping
   assert.match(registry, /\["saat-terminal", "Terminal & Sistem"/);
   assert.match(registry, /\["raporlar", "Rapor & Denetim"/);
 
-  // PDKS'nin 5 dahili grubu ve 18 işlemi registry'de korunur; ekran içi şeride aktarılır.
-  assert.ok(shell.includes("visibleMenuModules(modules, KY_PRIMARY_MENU_KEYS)"));
-  assert.ok(shell.includes("getTabs(activeModule, user).map"));
-  assert.ok(shell.includes("ky-pro-module-tabs-scroll"));
+  // PDKS'nin 5 dahili grubu ve 18 sekmesi mevcut registry'den sol açılır menüye aktarılır.
+  assert.ok(shell.includes("buildShellMenuSections(module, visibleGroups(module, user))"));
+  assert.ok(shell.includes("section.tabs.map"));
+  assert.ok(shell.includes("ky-pro-sidebar-tab-list"));
+  assert.ok(shell.includes("isShellMenuSectionOpen"));
+  assert.doesNotMatch(shell, /ky-pro-module-tabs/);
   assert.doesNotMatch(shell, /flatModuleTabs|hasPrimarySidebarGroups/);
 });
 
