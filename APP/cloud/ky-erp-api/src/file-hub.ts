@@ -2,6 +2,7 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { canManageOwnCompanyStorage } from "./file-hub-company-owner-access";
+import { buildFileHubSmartDiagnostics } from "./file-hub-smart-diagnostics";
 
 type Bindings = Cloudflare.Env & { FILE_HUB_AGENT_KEY?: string };
 type Variables = { requestId: string };
@@ -30,6 +31,20 @@ async function findAssetByLocation(c: Context<AppEnv>, slug: string, connectionI
 }
 
 export function registerFileHubRoutes(app: Hono<AppEnv>) {
+  app.get("/api/file-hub/diagnostics", async c => {
+    if (!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401);
+    const slug=slugOf(c);
+    const [connections,bindings,agents,unmatched,missing]=await Promise.all([
+      c.env.DB.prepare("SELECT id,name,provider_type,is_active,sync_mode,connection_status,last_sync_at,last_error,metadata FROM file_hub_connections WHERE main_company_slug=?").bind(slug).all<Row>(),
+      c.env.DB.prepare("SELECT module_code,purpose_code,storage_connection_id,sync_enabled FROM file_hub_bindings WHERE main_company_slug=?").bind(slug).all<Row>(),
+      c.env.DB.prepare("SELECT device_name,last_seen_at FROM file_hub_agent_status WHERE main_company_slug=?").bind(slug).all<Row>(),
+      c.env.DB.prepare("SELECT COUNT(*) n FROM file_hub_assets a WHERE a.main_company_slug=? AND NOT EXISTS(SELECT 1 FROM file_hub_relations r WHERE r.file_asset_id=a.id AND r.main_company_slug=a.main_company_slug)").bind(slug).first<Row>(),
+      c.env.DB.prepare("SELECT COUNT(*) n FROM file_hub_assets WHERE main_company_slug=? AND status='MISSING'").bind(slug).first<Row>(),
+    ]);
+    const data=buildFileHubSmartDiagnostics({connections:connections.results||[],bindings:bindings.results||[],agents:agents.results||[],unmatchedCount:Number(unmatched?.n||0),missingCount:Number(missing?.n||0)});
+    return c.json({ok:true,data,generatedAt:now(),basis:"TENANT_D1_READ_ONLY"});
+  });
+
   app.get("/api/file-hub/overview", async c => {
     if (!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401);
     const slug = slugOf(c);
