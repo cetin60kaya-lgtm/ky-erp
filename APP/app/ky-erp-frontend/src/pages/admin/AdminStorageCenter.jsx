@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiFetch, apiGet, apiPost } from "../../utils/api";
+import { apiFetch, apiGet, apiPost, downloadFile } from "../../utils/api";
+import { STORAGE_MODULES, STORAGE_PURPOSES, STORAGE_PURPOSES_BY_MODULE, storageModuleLabel, storagePurposeLabel, isSensitiveStoragePurpose } from "./StorageDocumentCatalog";
 import "./AdminManagement.css";
 import "./AdminStorageCenter.css";
 import "./StorageCloudHub.css";
@@ -8,21 +9,12 @@ import AdminMailConnectionsV2 from "./AdminMailConnectionsV2";
 
 const ROUTE_TO_TAB={"depolama-genel":"overview","depolama-kaynaklar":"connections","depolama-mail":"mail","depolama-atamalar":"bindings","depolama-dosyalar":"files","depolama-senkronizasyon":"sync","depolama-yedekleme":"logs"};
 const TABS=[["overview","Genel Bakış"],["connections","Dosya Servisleri"],["mail","E-posta Hesapları"],["bindings","Bölüm / Dosya Atamaları"],["files","Dosya İndeksi"],["sync","Senkronizasyon & Agent"],["logs","Yedekleme & Loglar"]];
-const MODULES=["DESEN","IMALAT","BOYAHANE","MUHASEBE","EBELGE","IK","DTF","STOK"];
-const PURPOSES=["MODEL_IMAGE","MODEL_SOURCE","PLACEMENT","OUTGOING_DESIGN","RIP_PDF","INVOICE","DELIVERY_NOTE","E_DOCUMENT","PAYMENT_DOCUMENT","PERSONNEL_DOCUMENT","CONTRACT","RECIPE","TECHNICAL_SHEET","QUALITY","PRODUCTION_PHOTO","QUALITY_PHOTO","CUSTOMER_REFERENCE","GENERIC"];
-const PURPOSES_BY_MODULE={
- DESEN:["MODEL_IMAGE","MODEL_SOURCE","PLACEMENT","OUTGOING_DESIGN","CUSTOMER_REFERENCE"],
- IMALAT:["TECHNICAL_SHEET","PRODUCTION_PHOTO","CUSTOMER_REFERENCE","GENERIC"],
- BOYAHANE:["RECIPE","QUALITY","QUALITY_PHOTO","PRODUCTION_PHOTO","GENERIC"],
- MUHASEBE:["INVOICE","DELIVERY_NOTE","PAYMENT_DOCUMENT","GENERIC"],
- EBELGE:["E_DOCUMENT","INVOICE","DELIVERY_NOTE","GENERIC"],
- IK:["PERSONNEL_DOCUMENT","CONTRACT","GENERIC"],
- DTF:["RIP_PDF","MODEL_SOURCE","GENERIC"],
- STOK:["TECHNICAL_SHEET","QUALITY","GENERIC"],
-};
+const MODULES=STORAGE_MODULES;
+const PURPOSES=STORAGE_PURPOSES;
+const PURPOSES_BY_MODULE=STORAGE_PURPOSES_BY_MODULE;
+const moduleLabel=storageModuleLabel;
+const purposeLabel=storagePurposeLabel;
 const providerLabel=v=>({GOOGLE_DRIVE:"Google Drive",ONEDRIVE:"Microsoft OneDrive",DROPBOX:"Dropbox (alternatif)",SHAREPOINT:"Microsoft SharePoint",LOCAL_FOLDER:"Yerel Klasör",NAS:"NAS / Ağ Klasörü"})[v]||v||"-";
-const moduleLabel=v=>({DESEN:"Desen",IMALAT:"İmalat",BOYAHANE:"Boyahane",MUHASEBE:"Muhasebe",EBELGE:"e-Belge Merkezi",IK:"İK",DTF:"DTF",STOK:"Stok"})[v]||v||"-";
-const purposeLabel=v=>({MODEL_IMAGE:"Desen / Model Görseli",MODEL_SOURCE:"Kaynak Dosya (PSD / AI / TIFF)",PLACEMENT:"Yerleşim / Kalıp",OUTGOING_DESIGN:"Giden Desen / Takım",RIP_PDF:"DTF / RIP PDF",INVOICE:"Fatura",DELIVERY_NOTE:"İrsaliye",E_DOCUMENT:"e-Belge",PAYMENT_DOCUMENT:"Ödeme / Dekont / Çek",PERSONNEL_DOCUMENT:"Personel Evrakı",CONTRACT:"Sözleşme",RECIPE:"Reçete",TECHNICAL_SHEET:"Teknik Föy",QUALITY:"Kalite Belgesi",PRODUCTION_PHOTO:"Üretim Fotoğrafı",QUALITY_PHOTO:"Kalite Fotoğrafı",CUSTOMER_REFERENCE:"Müşteri Referansı",GENERIC:"Genel Ek / Diğer"})[v]||v||"-";
 const statusLabel=v=>({CONNECTED:"Bağlı",DISCONNECTED:"Bağlantı Kesildi",ERROR:"Hata",UNKNOWN:"Bekliyor",AVAILABLE:"Mevcut",MISSING:"Kaynakta Yok",ONLINE:"Çevrimiçi",OFFLINE:"Çevrimdışı"})[v]||v||"-";
 const formatDate=v=>v?new Date(v).toLocaleString("tr-TR"):"-";
 const formatBytes=v=>{const n=Number(v||0);if(n<1024)return`${n} B`;if(n<1048576)return`${(n/1024).toFixed(1)} KB`;if(n<1073741824)return`${(n/1048576).toFixed(1)} MB`;return`${(n/1073741824).toFixed(2)} GB`};
@@ -92,7 +84,7 @@ function ServiceCard({row,loading,onSync,onDisconnect}){
 }
 
 export default function AdminStorageCenter({activeMainCompany,activeTab,showToolbar=true}){
- const[tab,setTab]=useState(ROUTE_TO_TAB[activeTab]||"overview"),[overview,setOverview]=useState({}),[insights,setInsights]=useState([]),[connections,setConnections]=useState([]),[bindings,setBindings]=useState([]),[files,setFiles]=useState([]),[providers,setProviders]=useState([]),[accounts,setAccounts]=useState([]),[mailAccounts,setMailAccounts]=useState([]),[credential,setCredential]=useState(null),[newSecret,setNewSecret]=useState(null),[wizard,setWizard]=useState(null),[folderPicker,setFolderPicker]=useState(null),[binding,setBinding]=useState({moduleCode:"DESEN",purposeCode:"MODEL_IMAGE",storageConnectionId:"",rootPath:"",readEnabled:true,writeEnabled:true,syncEnabled:true,folderSelected:false}),[search,setSearch]=useState(""),[searchDraft,setSearchDraft]=useState(""),[fileOffset,setFileOffset]=useState(0),[fileTotal,setFileTotal]=useState(null),[statusFilter,setStatusFilter]=useState(""),[loading,setLoading]=useState(false),[message,setMessage]=useState(""),[error,setError]=useState("");
+ const[preview,setPreview]=useState(null),[previewLoading,setPreviewLoading]=useState(false),[tab,setTab]=useState(ROUTE_TO_TAB[activeTab]||"overview"),[overview,setOverview]=useState({}),[insights,setInsights]=useState([]),[connections,setConnections]=useState([]),[bindings,setBindings]=useState([]),[files,setFiles]=useState([]),[providers,setProviders]=useState([]),[accounts,setAccounts]=useState([]),[mailAccounts,setMailAccounts]=useState([]),[credential,setCredential]=useState(null),[newSecret,setNewSecret]=useState(null),[wizard,setWizard]=useState(null),[folderPicker,setFolderPicker]=useState(null),[binding,setBinding]=useState({moduleCode:"DESEN",purposeCode:"MODEL_IMAGE",storageConnectionId:"",rootPath:"",readEnabled:true,writeEnabled:true,syncEnabled:true,folderSelected:false}),[search,setSearch]=useState(""),[searchDraft,setSearchDraft]=useState(""),[fileOffset,setFileOffset]=useState(0),[fileTotal,setFileTotal]=useState(null),[statusFilter,setStatusFilter]=useState(""),[loading,setLoading]=useState(false),[message,setMessage]=useState(""),[error,setError]=useState("");
  const slug=String(activeMainCompany?.slug||"").trim(),companyName=activeMainCompany?.name||activeMainCompany?.title||slug||"Aktif firma seçilmedi",tenantParams=useMemo(()=>({mainCompanySlug:slug}),[slug]);
  useEffect(()=>{const mapped=ROUTE_TO_TAB[activeTab];if(mapped)setTab(mapped)},[activeTab]);
  const refresh=useCallback(async()=>{if(!slug){setError("Depolama yönetimi için aktif firma seçilmelidir.");return}setLoading(true);setError("");try{const[o,c,b,f,p,a,m,cred,d]=await Promise.all([apiGet("/file-hub/overview",tenantParams),apiGet("/file-hub/connections",tenantParams),apiGet("/file-hub/bindings",tenantParams),apiGet("/file-hub/files",{...tenantParams,q:search||undefined,status:statusFilter||undefined,take:100,offset:fileOffset}),apiGet("/file-hub/cloud/providers",tenantParams).catch(()=>({data:[]})),apiGet("/file-hub/cloud/accounts",tenantParams).catch(()=>({data:[]})),apiGet("/mail/accounts",tenantParams).catch(()=>({data:[]})),apiGet("/file-hub/agent-credential",tenantParams).catch(()=>null),apiGet("/file-hub/diagnostics",tenantParams).catch(()=>({data:[]}))]);setOverview(o?.data||{});setInsights(d?.data||[]);setConnections(c?.data||[]);setBindings(b?.data||[]);setFiles(f?.data||[]);setFileTotal(f?.page?.total??null);setProviders(p?.data||[]);setAccounts(a?.data||[]);setMailAccounts(m?.data||[]);setCredential(cred?.data||null)}catch(e){setError(e?.message||"Depolama Merkezi yüklenemedi.")}finally{setLoading(false)}},[search,statusFilter,fileOffset,tenantParams,slug]);
@@ -110,12 +102,35 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
  }if(accountId&&provider){setMessage("Hesap bağlandı. Şimdi ana klasörü seçin.");setWizard({accountId,provider})}if(accountId||oauthError)window.history.replaceState({},"",window.location.pathname)},[]);
  const relevantPurposeCodes=PURPOSES_BY_MODULE[binding.moduleCode]||PURPOSES;
  const purposeCodes=relevantPurposeCodes.includes(binding.purposeCode)?relevantPurposeCodes:[...relevantPurposeCodes,binding.purposeCode];
- function changeModule(moduleCode){setBinding(x=>({...x,moduleCode,purposeCode:(PURPOSES_BY_MODULE[moduleCode]||PURPOSES)[0],rootPath:"",folderSelected:false}));setMessage("");}
- function changePurpose(purposeCode){const existing=bindings.find(x=>x.module_code===binding.moduleCode&&x.purpose_code===purposeCode);setBinding(x=>({...x,purposeCode,storageConnectionId:existing?.storage_connection_id||x.storageConnectionId,rootPath:existing?.root_path||"",folderSelected:Boolean(existing),readEnabled:existing?.readEnabled??true,writeEnabled:existing?.writeEnabled??true,syncEnabled:existing?.syncEnabled??true}));}
+ function changeModule(moduleCode){const purposeCode=(PURPOSES_BY_MODULE[moduleCode]||PURPOSES)[0];setBinding(x=>({...x,moduleCode,purposeCode,rootPath:"",folderSelected:false,readEnabled:true,writeEnabled:!isSensitiveStoragePurpose(purposeCode),syncEnabled:!isSensitiveStoragePurpose(purposeCode)}));setMessage("");}
+ function changePurpose(purposeCode){const existing=bindings.find(x=>x.module_code===binding.moduleCode&&x.purpose_code===purposeCode);setBinding(x=>({...x,purposeCode,storageConnectionId:existing?.storage_connection_id||x.storageConnectionId,rootPath:existing?.root_path||"",folderSelected:Boolean(existing),readEnabled:existing?.readEnabled??true,writeEnabled:existing?.writeEnabled??!isSensitiveStoragePurpose(purposeCode),syncEnabled:existing?.syncEnabled??!isSensitiveStoragePurpose(purposeCode)}));}
  function selectBinding(row){setBinding({moduleCode:row.module_code,purposeCode:row.purpose_code,storageConnectionId:row.storage_connection_id,rootPath:row.root_path||"",folderSelected:true,readEnabled:row.readEnabled!==false,writeEnabled:row.writeEnabled!==false,syncEnabled:row.syncEnabled!==false});setMessage("Mevcut klasör ataması düzenleme için yüklendi. Kaydetmeden önce hedefi ve yetkileri kontrol edin.");setError("");}
  const activeConnections=connections.filter(row=>row.isActive!==false),cloudConnections=activeConnections.filter(row=>row.sync_mode==="CLOUD_API"),localConnections=activeConnections.filter(row=>row.sync_mode!=="CLOUD_API"),dualProviders=[{type:"GOOGLE_DRIVE",name:"Google Drive"},{type:"ONEDRIVE",name:"Microsoft OneDrive"}].map(item=>({ ...item, configured:providers.find(p=>p.providerType===item.type)?.configured===true, connections:cloudConnections.filter(c=>c.provider_type===item.type), accounts:accounts.filter(a=>a.provider_type===item.type) })),onlineAgents=(overview.agents||[]).filter(row=>row.last_seen_at&&Date.now()-new Date(row.last_seen_at).getTime()<5*60*1000);const setupSteps=[{label:"Servis Ekle",done:activeConnections.length>0},{label:"Bölüm Ataması",done:bindings.length>0},{label:"Dosya İndeksi",done:Number(overview.fileCount||0)>0},{label:"Senkron Sağlığı",done:cloudConnections.some(row=>row.connection_status==="CONNECTED")||onlineAgents.length>0}];
  async function syncConnection(row){setLoading(true);setError("");setMessage("");try{const r=await apiPost(`/file-hub/cloud/connections/${row.id}/sync`,{mainCompanySlug:slug});const d=r?.data||{};const summary = `${row.name}: ${d.files||0} dosya, ${d.folders||0} klasör tarandı. D1'de ${d.linkedImages||0} görsel / ${d.linkedModels||0} farklı model ilişkisi doğrulandı; bu turda ${d.modelSyncs||0} model eşleştirmesi yapıldı.`;setMessage(summary + (d.designImageBindingPresent===false?" Bu servis için DESEN / MODEL_IMAGE ataması bulunamadı; görseller otomatik model kartı açamaz. Bölüm / Dosya Atamaları'ndan kontrol edin.":d.truncated?" Tarama sınırına ulaşıldı; tüm klasörler kontrol edilmiş olmayabilir.":""));await refresh()}catch(e){setError(e?.message||"Bulut senkronizasyonu başarısız.")}finally{setLoading(false)}}
  async function disconnect(row){if(!window.confirm(`${row.name} bağlantısı pasif yapılsın mı? Dosya indeks kayıtları silinmez.`))return;setLoading(true);try{await apiFetch(`/file-hub/cloud/connections/${row.id}`,{method:"DELETE",body:{mainCompanySlug:slug}});setMessage("Servis bağlantısı pasif yapıldı.");await refresh()}catch(e){setError(e?.message||"Bağlantı kesilemedi.")}finally{setLoading(false)}}
+ function closePreview(){setPreview(current=>{if(current?.url)URL.revokeObjectURL(current.url);return null});}
+ useEffect(()=>()=>{if(preview?.url)URL.revokeObjectURL(preview.url)},[preview]);
+ async function openPreview(row){
+   const mime=String(row.mime_type||"").toLowerCase(),name=String(row.file_name||"dosya");
+   const allowed=/^(application\/pdf|image\/(png|jpeg|webp|gif)|text\/plain|text\/xml|application\/xml)(;|$)/.test(mime)||
+      /\.(pdf|png|jpe?g|webp|gif|txt|xml)$/i.test(name);
+   if(!allowed){setError("Bu dosya türü tarayıcı önizlemesini desteklemiyor. İndir seçeneğini kullanın.");return;}
+   setPreviewLoading(true);setError("");
+   try{
+     let blob;
+     try{blob=await apiFetch(`/file-hub/files/${encodeURIComponent(row.id)}/preview`,{params:{mainCompanySlug:slug},responseType:"blob"});}
+     catch(error){if(row.source_type!=="CLOUD_API"||error?.status===403||error?.status===401)throw error;
+       blob=await apiFetch(`/file-hub/cloud/files/${encodeURIComponent(row.id)}/download`,{params:{mainCompanySlug:slug},responseType:"blob"});}
+     const url=URL.createObjectURL(blob);
+     const previewType=/^(image\/(png|jpeg|webp|gif))/.test(mime)||/\.(png|jpe?g|webp|gif)$/i.test(name)?"image":mime==="application/pdf"||/\.pdf$/i.test(name)?"pdf":"text";
+     setPreview(current=>{if(current?.url)URL.revokeObjectURL(current.url);return {url,type:previewType,name};});
+   }catch(error){setError(error?.message||"Dosyanın önizlemesi henüz hazır değil. Bağlantı/senkron durumunu kontrol edin.");}
+   finally{setPreviewLoading(false);}
+ }
+ async function downloadIndexedFile(row){
+   setError("");try{const path=row.source_type==="CLOUD_API"?`/file-hub/cloud/files/${encodeURIComponent(row.id)}/download`:`/file-hub/files/${encodeURIComponent(row.id)}/preview`;await downloadFile(path,{mainCompanySlug:slug},row.file_name||"dosya");}
+   catch(error){setError(error?.message||"Dosya indirilemedi; sağlayıcı veya önizleme henüz hazır olmayabilir.");}
+ }
  async function saveBinding(){if(!binding.storageConnectionId)return setError("Önce depolama servisini seçin.");if(!binding.folderSelected)return setError("Hedef klasörü seçin; servis kökü kullanılacaksa klasör seçicide ana klasörü onaylayın.");setLoading(true);setError("");try{await apiFetch("/file-hub/bindings",{method:"PUT",body:{...binding,mainCompanySlug:slug}});setMessage(`${moduleLabel(binding.moduleCode)} / ${purposeLabel(binding.purposeCode)} klasörü bağlandı.`);await refresh()}catch(e){setError(e?.message||"Klasör ataması kaydedilemedi.")}finally{setLoading(false)}}
  async function rotateCredential(){if(credential?.configured&&!window.confirm("File Agent anahtarı yenilenecek. Mevcut yerel/NAS ajanları eski anahtarla bağlanamaz. Yedek/yeniden yapılandırma hazırlığı olmadan devam etmeyin. Onaylıyor musunuz?"))return;setLoading(true);setNewSecret(null);try{const r=await apiPost("/file-hub/agent-credential/rotate",{mainCompanySlug:slug,label:"KY File Agent"});setNewSecret(r?.data||r);setMessage("Yerel/NAS Agent anahtarı yenilendi. Bu anahtar yalnız şimdi gösterilir.");await refresh()}catch(e){setError(e?.message||"Agent anahtarı yenilenemedi.")}finally{setLoading(false)}}
  async function copy(v){try{await navigator.clipboard.writeText(String(v||""));setMessage("Agent anahtarı panoya kopyalandı.")}catch{setError("Anahtar kopyalanamadı.")}}
@@ -147,6 +162,7 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
     </select></label>
    </div>
    <div className="storage-service-path">Hedef klasör: <strong>{binding.folderSelected?(binding.rootPath||"Servis ana klasörü"):"Henüz seçilmedi"}</strong></div>
+   {isSensitiveStoragePurpose(binding.purposeCode)?<p className="storage-sensitive-warning" role="note"><strong>Hassas belge:</strong> Kimlik, ücret, sağlık, çek/banka veya denetim kanıtı gibi özel evraklarda klasör seçimi erişim yetkisi vermez. Mevcut rol ve firma kuralları geçerlidir; yazma ve senkronizasyonu yalnız bilinçli açın.</p>:null}
    <fieldset className="storage-binding-permissions"><legend>Dosya işlemleri</legend>
     <label><input type="checkbox" checked={binding.readEnabled!==false} onChange={e=>setBinding(x=>({...x,readEnabled:e.target.checked}))}/> Okuma</label>
     <label><input type="checkbox" checked={binding.writeEnabled!==false} onChange={e=>setBinding(x=>({...x,writeEnabled:e.target.checked}))}/> Yazma</label>
@@ -155,6 +171,7 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
    <div className="storage-action-row"><button className="storage-secondary" type="button" disabled={!binding.storageConnectionId||loading} onClick={()=>setFolderPicker(connections.find(x=>x.id===binding.storageConnectionId)||null)}>📁 Klasör Seç</button>
     <button className="storage-primary" type="button" disabled={!binding.storageConnectionId||!binding.folderSelected||loading} onClick={saveBinding}>Atamayı Kaydet</button>
    </div>
+   <p className="storage-muted">Bu işlem yeni klasör oluşturmaz, mevcut dosyaları taşımaz. Aynı dosya, ilgili fatura/çek/personel kaydına File Hub ilişki kimliğiyle bağlanabilir; klasör ataması ile kayıt ilişkisi farklı işlemlerdir.</p>
    {!activeConnections.length?<p className="storage-muted">Atama için önce Dosya Servisleri bölümünden gerçek bir servis bağlanmalıdır.</p>:null}
   </section>
   <section className="storage-card-v2">
@@ -176,9 +193,11 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
   </select></label>
   <div className="storage-action-row storage-full"><button className="storage-primary" type="submit" disabled={loading}>Ara</button><button className="storage-secondary" type="button" disabled={loading} onClick={()=>{setSearch("");setSearchDraft("");setStatusFilter("");setFileOffset(0)}}>Filtreleri Temizle</button></div>
  </form>
+ <p className="storage-muted">Tek dosya kimliği ve ilgili ERP kaydı bütün cihazlarda aynıdır. Önizleme izinli HTTPS üzerinden açılır; PDF, JPG, PNG ve metin/XML desteklenir. Tarayıcı önizlemesi hazır olmayan dosyada erişim yetkisi varsa bulut kaynağı okunur.</p>
+ <div className="storage-mobile-files">{files.map(row=><article key={row.id} className="storage-mobile-file"><div><strong>{row.file_name}</strong><small>{providerLabel(row.provider_type)} · {statusLabel(row.status)}</small><small>{row.relative_path||"Yol belirtilmedi"}</small><small>{formatBytes(row.size_bytes)} · {formatDate(row.last_seen_at)}</small></div><div className="storage-index-actions"><button type="button" className="storage-secondary" disabled={previewLoading} onClick={()=>openPreview(row)}>Önizle</button><button type="button" className="storage-secondary" onClick={()=>downloadIndexedFile(row)}>İndir</button></div></article>)}</div>
  <div className="storage-table-scroll"><table className="storage-file-table">
-  <thead><tr><th>Dosya</th><th>Sağlayıcı / Servis</th><th>Yol</th><th>ERP ilişkisi</th><th>Boyut</th><th>Durum</th><th>Son Görülme</th></tr></thead>
-  <tbody>{files.map(row=><tr key={row.id}><td><strong>{row.file_name}</strong></td><td>{providerLabel(row.provider_type)} · {row.connection_name||"-"}</td><td className="storage-path-cell">{row.relative_path||"-"}</td><td>{row.relation_count||0}</td><td>{formatBytes(row.size_bytes)}</td><td>{statusLabel(row.status)}</td><td>{formatDate(row.last_seen_at)}</td></tr>)}</tbody>
+  <thead><tr><th>Dosya</th><th>Sağlayıcı / Servis</th><th>Yol</th><th>ERP ilişkisi</th><th>Boyut</th><th>Durum</th><th>Son Görülme</th><th>İşlem</th></tr></thead>
+  <tbody>{files.map(row=><tr key={row.id}><td><strong>{row.file_name}</strong></td><td>{providerLabel(row.provider_type)} · {row.connection_name||"-"}</td><td className="storage-path-cell">{row.relative_path||"-"}</td><td>{row.relation_count||0}</td><td>{formatBytes(row.size_bytes)}</td><td>{statusLabel(row.status)}</td><td>{formatDate(row.last_seen_at)}</td><td><div className="storage-index-actions"><button type="button" className="storage-secondary" disabled={previewLoading} onClick={()=>openPreview(row)}>Önizle</button><button type="button" className="storage-secondary" onClick={()=>downloadIndexedFile(row)}>İndir</button></div></td></tr>)}</tbody>
  </table>{!files.length?<div className="storage-empty-v2"><strong>Bu filtrede kayıt bulunamadı</strong><p>Önce Dosya Servisleri bağlantısını ve senkronizasyon sonucunu kontrol edin.</p></div>:null}</div>
  <div className="storage-pagination"><span>{fileTotal===null?`Bu sayfada ${files.length} kayıt`:`${fileTotal===0?0:fileOffset+1}–${Math.min(fileOffset+files.length,fileTotal)} / ${fileTotal}`}</span><div className="storage-action-row"><button type="button" className="storage-secondary" disabled={loading||fileOffset===0} onClick={()=>setFileOffset(x=>Math.max(0,x-100))}>Önceki</button><button type="button" className="storage-secondary" disabled={loading||files.length<100||(fileTotal!==null&&fileOffset+files.length>=fileTotal)} onClick={()=>setFileOffset(x=>x+100)}>Sonraki</button></div></div>
  </section>:null}
@@ -204,6 +223,7 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
    {(overview.recentEvents||[]).length?<div className="storage-event-list">{(overview.recentEvents||[]).map(row=><div className="storage-event" key={row.id}><div><strong>{eventLabel(row.event_type)}</strong><small>{eventDetails(row.details)}</small></div><time>{formatDate(row.created_at)}</time></div>)}</div>:<div className="storage-empty-v2"><strong>Henüz olay kaydı yok</strong><p>Dosya servisi ve senkron işlemleri gerçekleştiğinde kayıtlar burada görüntülenir.</p></div>}
   </section>
  </div>:null}
+ {preview?<div className="storage-preview-backdrop" role="presentation" onClick={closePreview}><section className="storage-preview-panel" role="dialog" aria-modal="true" aria-label="Dosya önizlemesi" onClick={e=>e.stopPropagation()}><header><strong>{preview.name}</strong><button type="button" className="storage-secondary" onClick={closePreview}>Kapat</button></header>{preview.type==="image"?<img src={preview.url} alt={preview.name}/>:<iframe title={preview.name} src={preview.url} sandbox=""/>}</section></div>:null}
  {wizard?<ServiceWizard slug={slug} providers={providers.length?providers:[{providerType:"GOOGLE_DRIVE",label:"Google Drive",configured:false,mode:"CLOUD_API"},{providerType:"ONEDRIVE",label:"Microsoft OneDrive",configured:false,mode:"CLOUD_API"},{providerType:"SHAREPOINT",label:"Microsoft SharePoint",configured:false,mode:"CLOUD_API"},{providerType:"LOCAL_FOLDER",label:"Yerel Klasör",configured:true,mode:"AGENT"},{providerType:"NAS",label:"NAS / Ağ Klasörü",configured:true,mode:"AGENT"}]} accounts={accounts} initialAccountId={wizard.accountId||""} initialProvider={wizard.provider||""} onClose={()=>setWizard(null)} onSaved={refresh}/>:null}
  {folderPicker?<BindingFolderPicker slug={slug} connection={folderPicker} accounts={accounts} onClose={()=>setFolderPicker(null)} onSelect={v=>{setBinding(x=>({...x,rootPath:v.path??"",folderSelected:true}));setFolderPicker(null)}}/>:null}</div>;
 }

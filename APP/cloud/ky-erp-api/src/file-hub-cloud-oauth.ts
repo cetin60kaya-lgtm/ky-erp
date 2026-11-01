@@ -810,7 +810,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   });
 
   app.get("/api/file-hub/cloud/files/:assetId/download", async (c) => {
-    const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401); const slug = companySlug(c), assetId = c.req.param("assetId");
+    const gate = await assertCompanyOwner(c); if (gate.error) return gate.error; const slug = gate.slug!, assetId = c.req.param("assetId");
     const row = await c.env.DB.prepare(`SELECT a.file_name,a.mime_type,l.provider_file_id,l.storage_connection_id,x.oauth_account_id,x.provider_drive_id,c.provider_type FROM file_hub_assets a JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug JOIN file_hub_connections c ON c.id=l.storage_connection_id AND c.main_company_slug=l.main_company_slug JOIN file_hub_cloud_connection_accounts x ON x.connection_id=c.id AND x.main_company_slug=c.main_company_slug WHERE a.id=? AND a.main_company_slug=? LIMIT 1`).bind(assetId, slug).first<Row>();
     if (!row) return c.json(err("NOT_FOUND", "Bulut dosyası bulunamadı."), 404);
     try {

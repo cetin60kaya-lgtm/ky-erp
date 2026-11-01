@@ -11,7 +11,8 @@ type Row = Record<string, any>;
 const text = (v: unknown) => v == null ? "" : String(v).trim();
 const upper = (v: unknown) => text(v).toLocaleUpperCase("tr-TR");
 const slugOf = (c: any) => text(c.req.header("X-KYERP-Tenant-Slug") || c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "mecit-hakan");
-const owner = (role: unknown) => ["ADMIN", "SUPER_ADMIN"].includes(upper(role));
+// Company owner is already tenant-checked by admin-storage-cloud middleware.
+const owner = (role: unknown) => ["ADMIN", "SUPER_ADMIN", "COMPANY_ADMIN"].includes(upper(role));
 function permission(user: Row, moduleKey: string) {
   return Array.isArray(user?.permissions)
     ? user.permissions.find((p: Row) => upper(p.moduleKey || p.module_key) === upper(moduleKey))
@@ -30,8 +31,20 @@ function moduleForEntity(entityType: unknown) {
     STOCK_ITEM: "BOYAHANE",
     DOCUMENT: "MUHASEBE",
     INVOICE: "MUHASEBE",
+    DELIVERY_NOTE: "EBELGE",
+    E_DOCUMENT: "EBELGE",
+    CHEQUE: "MUHASEBE",
+    PAYMENT: "MUHASEBE",
+    BANK_TRANSACTION: "MUHASEBE",
+    ACCOUNTING_ENTRY: "MUHASEBE",
     PERSONNEL: "IK",
     EMPLOYEE: "IK",
+    PAYROLL: "IK",
+    LEAVE_REQUEST: "IK",
+    PDKS_ATTENDANCE: "PDKS",
+    AUDIT: "DENETIM",
+    AUDIT_REPORT: "DENETIM",
+    QUALITY_REPORT: "DENETIM",
   } as Record<string, string>)[upper(entityType)] || "";
 }
 
@@ -52,8 +65,11 @@ export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
         `SELECT entity_type FROM file_hub_relations
           WHERE main_company_slug=? AND file_asset_id=?`,
       ).bind(slug, id).all<Row>();
-      const modules = [...new Set((relations.results || []).map((row: Row) => moduleForEntity(row.entity_type)).filter(Boolean))];
-      if (!modules.length || !modules.some((moduleKey) => permission(user, moduleKey)?.canView)) {
+      const relationRows = relations.results || [];
+      const modules = [...new Set(relationRows.map((row: Row) => moduleForEntity(row.entity_type)))];
+      // Bilinmeyen ilişki tipi bir açık erişim yolu olamaz. Bir dosya hem finans hem
+      // özlük kaydına bağlıysa her iki modülün görüntüleme yetkisi de gerekli.
+      if (!modules.length || !modules.every((moduleKey) => moduleKey && permission(user, moduleKey)?.canView)) {
         return c.json({ ok:false, error:{ code:"FORBIDDEN", message:"Bu dosyanın önizlemesini görme yetkiniz bulunmuyor." } }, 403);
       }
     }
