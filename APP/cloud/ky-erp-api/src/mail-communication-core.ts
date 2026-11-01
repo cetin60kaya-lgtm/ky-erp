@@ -450,6 +450,39 @@ export function registerMailCommunicationRoutes(app:any){
     return c.json({ok:true,data:r.results||[]});
   });
 
+  // Native mail templates share the existing mail_templates table, no parallel store.
+  app.get("/api/mail/templates",async(c:any)=>{
+    const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
+    if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Şablonları görüntüleme yetkiniz yok."),403);
+    if(!(await tableExists(c,"mail_templates")))return c.json({ok:true,data:[]});
+    const r=await c.env.DB.prepare("SELECT id,template_code,name,subject_template,body_template,category,is_active,created_at,updated_at FROM mail_templates WHERE main_company_slug=? ORDER BY is_active DESC,updated_at DESC LIMIT 200").bind(tenant).all<AnyRow>();
+    return c.json({ok:true,data:r.results||[]});
+  });
+
+  app.post("/api/mail/templates",async(c:any)=>{
+    const body=await bodyOf(c),a:any=await currentAndTenant(c,body);if(a.error)return a.error;const{current,tenant}=a;
+    if(!hasMailPermission(current,"canCreate"))return c.json(jsonError("MAIL_TEMPLATE_FORBIDDEN","Şablon oluşturma yetkiniz yok."),403);
+    if(!(await tableExists(c,"mail_templates")))return c.json(jsonError("MAIL_TEMPLATE_SCHEMA_NOT_READY","Şablon veritabanı hazır değil."),409);
+    const name=text(body.name).slice(0,120),subject=text(body.subject).slice(0,250),bodyText=text(body.bodyText).slice(0,20000),category=text(body.category).slice(0,60);
+    if(!name||!bodyText)return c.json(jsonError("MAIL_TEMPLATE_REQUIRED","Şablon adı ve gövdesi zorunlu."),422);
+    const id=crypto.randomUUID(),code="MAIL_"+id.replace(/-/g,"").slice(0,20),ts=nowIso();
+    await c.env.DB.prepare("INSERT INTO mail_templates (id,main_company_slug,template_code,name,subject_template,body_template,category,is_active,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)").bind(id,tenant,code,name,subject,bodyText,category,1,text(current?.id),ts,ts).run();
+    await audit(c,tenant,current,"MAIL_TEMPLATE_CREATED",{id});
+    return c.json({ok:true,data:{id,template_code:code,name,subject_template:subject,body_template:bodyText,category,is_active:1}},201);
+  });
+
+  app.put("/api/mail/templates/:id",async(c:any)=>{
+    const body=await bodyOf(c),a:any=await currentAndTenant(c,body);if(a.error)return a.error;const{current,tenant}=a;
+    if(!hasMailPermission(current,"canUpdate"))return c.json(jsonError("MAIL_TEMPLATE_FORBIDDEN","Şablon düzenleme yetkiniz yok."),403);
+    if(!(await tableExists(c,"mail_templates")))return c.json(jsonError("MAIL_TEMPLATE_SCHEMA_NOT_READY","Şablon veritabanı hazır değil."),409);
+    const id=text(c.req.param("id")),name=text(body.name).slice(0,120),subject=text(body.subject).slice(0,250),bodyText=text(body.bodyText).slice(0,20000),category=text(body.category).slice(0,60),active=body.isActive===false?0:1;
+    if(!name||!bodyText)return c.json(jsonError("MAIL_TEMPLATE_REQUIRED","Şablon adı ve gövdesi zorunlu."),422);
+    const updated=await c.env.DB.prepare("UPDATE mail_templates SET name=?,subject_template=?,body_template=?,category=?,is_active=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(name,subject,bodyText,category,active,nowIso(),id,tenant).run();
+    if(Number(updated?.meta?.changes||0)===0)return c.json(jsonError("MAIL_TEMPLATE_NOT_FOUND","Şablon bulunamadı."),404);
+    await audit(c,tenant,current,"MAIL_TEMPLATE_UPDATED",{id,active});
+    return c.json({ok:true,data:{id,name,subject_template:subject,body_template:bodyText,category,is_active:active}});
+  });
+
   app.get("/api/mail/drafts",async(c:any)=>{
     const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
     if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail taslaklarını görüntüleme yetkiniz yok."),403);
