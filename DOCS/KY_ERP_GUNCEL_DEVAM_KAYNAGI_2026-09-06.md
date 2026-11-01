@@ -1,5 +1,11 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 01.11.2026 — Yeni sohbet devamı: File Hub firma bazlı işletme ve tam arşiv tarama
+- Hakan Emp Drive altında 9 doğrudan klasör görüldü; `görsel/2026` 347, `yerleşim dosyaları` 684, `giden desenler` >=1000 dosya, `modeller` >=1600 alt klasör. Alt sınırlar gerçek toplam değildir; otomatik indeksin tamamlanması bekleniyor.
+- Öncelik sadece teknik bağlantı değil: her ana firmaya ayrı Google/OneDrive hesabı ve güvenli kaldırma, eski firma verisinin UI'da taşmaması, senkron cursor/cron ilerleme doğruluğu, üretim/finans/özlük dosyalarının yalnız gerçek belge/ilişkiyle sınıflandırılması. OneDrive hesabı henüz production OAuth hazır değilse PASS ilan edilmez.
+- Feature dalı: `fix/filehub-sync-automatic-progress-20261101`; ayrıntılı mimari ve gerçek envanter `DOCS/KY_FILE_HUB_FIRMA_BAZLI_DEPOLAMA_20261101.md`. Henüz gerçek oturumlu D1 toplamı, 2026 model ilişkisi, üretim deploy ve çapraz modül saha kabulü olmadan bitmiş denmez.
+
+
 
 ## 01.11.2026 — Firma bazlı Drive/OneDrive ve tarama devam düzeltmesi (PR kontrolü bekliyor)
 - Kaynak iş dalı: `fix/filehub-sync-automatic-progress-20261101`. Detay: `DOCS/KY_ERP_FIRMA_BAZLI_DOSYA_MERKEZI_2026-11-01.md`.
