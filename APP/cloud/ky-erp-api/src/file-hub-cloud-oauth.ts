@@ -597,9 +597,34 @@ function prioritizedDriveFolder(folderPath: unknown) {
   return 4;
 }
 
+// Microsoft Graph tek sayfa okunur. nextLink yalniz Graph hostunda kabul edilir.
+async function microsoftChildrenPage(token:string,parentId:string,driveId="",nextLink="") {
+  const select="$select=id,name,size,lastModifiedDateTime,webUrl,folder,file,parentReference,eTag,cTag&$top=15";
+  const base=driveId
+    ? (parentId && parentId!=="root"
+      ? `https://graph.microsoft.com/v1.0/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(parentId)}/children?${select}`
+      : `https://graph.microsoft.com/v1.0/drives/${encodeURIComponent(driveId)}/root/children?${select}`)
+    : (parentId && parentId!=="root"
+      ? `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(parentId)}/children?${select}`
+      : `https://graph.microsoft.com/v1.0/me/drive/root/children?${select}`);
+  const link=nextLink||base;
+  const url=new URL(link);
+  if(url.origin!=="https://graph.microsoft.com"||!url.pathname.startsWith("/v1.0/"))
+    throw Object.assign(new Error("Microsoft Graph sayfa adresi geçersiz."),{code:"INVALID_GRAPH_PAGE"});
+  const payload=await providerJson(url.toString(),token);
+  const children=(Array.isArray(payload.value)?payload.value:[]).map((row:Row)=>({
+    id:text(row.id), name:text(row.name), isFolder:Boolean(row.folder),
+    mimeType:text(row.file?.mimeType), size:Number(row.size||0),
+    modifiedAt:text(row.lastModifiedDateTime),webUrl:text(row.webUrl),
+    checksum:text(row.eTag||row.cTag),
+  })).filter((row:Row)=>row.id&&row.name);
+  return {children,nextPageToken:text(payload["@odata.nextLink"])};
+}
+
 async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId: string, pageLimit = 1, scheduled = false) {
   const { link, accessToken } = await connectionAccount(c, slug, connectionId);
-  if (upper(link.provider_type) !== "GOOGLE_DRIVE") throw Object.assign(new Error("Google Drive bağlantısı bekleniyor."), { code: "INVALID_PROVIDER" });
+  const providerType=upper(link.provider_type);
+  if (!["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(providerType)) throw Object.assign(new Error("Google Drive veya Microsoft depolama servisi bekleniyor."), { code: "INVALID_PROVIDER" });
   if (Number(link.is_active) === 0) throw Object.assign(new Error("Depolama servisi pasif."), { code: "CONNECTION_DISABLED", status: 409 });
   const rootId = text(link.remote_root_id) || "root";
   const raw = text(link.connection_metadata), meta = json(raw);
@@ -642,7 +667,9 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   try {
     for (let p = 0; p < Math.min(4, Math.max(1, Number(pageLimit) || 1)) && cursor.queue.length; p++) {
       const folder = cursor.queue[0];
-      const page = await googleChildrenPage(accessToken, folder.id, folder.pageToken);
+      const page = providerType==="GOOGLE_DRIVE"
+        ? await googleChildrenPage(accessToken, folder.id, folder.pageToken)
+        : await microsoftChildrenPage(accessToken, folder.id, text(link.provider_drive_id), folder.pageToken);
       const discoveredFolders: Row[] = [];
       for (const child of page.children) {
         const relativePath = folder.path ? folder.path + "/" + child.name : child.name;
@@ -650,11 +677,11 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
           folders += 1; cursor.folders += 1;
           discoveredFolders.push({ id: child.id, path: relativePath, pageToken: "" });
         } else {
-          const indexed = await upsertCloudFile(c, slug, connectionId, "GOOGLE_DRIVE", child, relativePath, now());
+          const indexed = await upsertCloudFile(c, slug, connectionId, providerType, child, relativePath, now());
           files += 1; cursor.files += 1;
           if (indexed.changed) cursor.changedFiles += 1;
           if (indexed.needsModelSync) {
-            const model = await syncCloudDesignBinding(c, slug, connectionId, indexed.assetId, child, relativePath, "GOOGLE_DRIVE");
+            const model = await syncCloudDesignBinding(c, slug, connectionId, indexed.assetId, child, relativePath, providerType);
             if (model?.modelId) { modelSyncs += 1; cursor.modelSyncs += 1; }
           }
         }
@@ -712,7 +739,7 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
     try {
       const { link, accessToken } = await connectionAccount(c, slug, connectionId);
       const provider=upper(link.provider_type), driveId=text(link.provider_drive_id);
-      if (provider === "GOOGLE_DRIVE") {
+      if (["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(provider)) {
         await runGoogleSyncBatch(c, slug, connectionId, 3, true);
         continue;
       }
@@ -947,7 +974,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     try {
       const { link, accessToken } = await connectionAccount(c, gate.slug, connectionId); if (Number(link.is_active) === 0) return c.json(err("CONNECTION_DISABLED", "Bu depolama servisi pasif."), 409);
       const provider = upper(link.provider_type), driveId = text(link.provider_drive_id), rootId = text(link.remote_root_id) || "root", rootName = text(link.remote_root_name) || "Ana Klasör", seenAt = now();
-      if (provider === "GOOGLE_DRIVE") {
+      if (["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(provider)) {
         const progress = await runGoogleSyncBatch(c, gate.slug, connectionId, 1, false);
         return c.json({ ok: true, data: progress });
       }
