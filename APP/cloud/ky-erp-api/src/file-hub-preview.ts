@@ -11,7 +11,8 @@ type Row = Record<string, any>;
 const text = (v: unknown) => v == null ? "" : String(v).trim();
 const upper = (v: unknown) => text(v).toLocaleUpperCase("tr-TR");
 const slugOf = (c: any) => text(c.req.header("X-KYERP-Tenant-Slug") || c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "mecit-hakan");
-const owner = (role: unknown) => ["ADMIN", "SUPER_ADMIN"].includes(upper(role));
+// Company owner is already tenant-checked by admin-storage-cloud middleware.
+const owner = (role: unknown) => ["ADMIN", "SUPER_ADMIN", "COMPANY_ADMIN"].includes(upper(role));
 function permission(user: Row, moduleKey: string) {
   return Array.isArray(user?.permissions)
     ? user.permissions.find((p: Row) => upper(p.moduleKey || p.module_key) === upper(moduleKey))
