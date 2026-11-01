@@ -1,5 +1,15 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 01.11.2026 — Ana menü + günlük işletme özeti revizyonu (#494)
+
+- Kullanıcı kararı: Sol ana menü artık sırasıyla Ana Sayfa → Muhasebe → e-Belge / Faturalar → Günlük Operasyon → İK Aylık → PDKS → Desen → İmalat → Boyahane → Denetim Merkezi → Mail & Dosyalar. Yalnız en altta, yönetim yetkileri varsa Ayarlar & Sistem açılır alanı. Asistan modülü Hızlı İşlem/arama erişimiyle korunur; sırf Asistan izni Ayarlar & Sistem alanını göstermez.
+- Teknik kaynak: `navigationGroups.js`, `moduleRegistry.js`, `AppShellV3.jsx`, `HomeDashboard.jsx`, `ky-pro-shell.css`, `ky-pro-home.css` ve ilgili frontend / PDKS sözleşme testleri. Eski altı ana açılır grup kaldırıldı. Mevcut tüm alt işlem tabları yatay bölüm işlem şeridine alındı; modül ID, URL, izin, Worker, D1 ve gerçek işletme verisi değişmedi.
+- Ana Sayfa: Tekrarlı bölüm kartları kaldırıldı; hızlı erişim, günlük operasyon/personel/imalat/belge kontrol yönlendirmeleri ve takip listesi eklendi. Canlı metrik uydurulmuyor; tutar/adet için gerçek modüle gidiliyor.
+- GitHub **[PR #494](https://github.com/cetin60kaya-lgtm/ky-erp/pull/494)** MERGED SHA `03c68fd2f1007d59b88e105d7a177f8638531680`. **[CI #41263168527](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41263168527)** frontend lint/test/build + Worker typecheck/test/build SUCCESS. **[Pages #41263286343](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41263286343)** SUCCESS: Pages production deploy ve canlı entry + Günlük Operasyon chunk smoke. Release SHA `2e424cd916f9cba16910000e5ace6b81d66ba208` PR merge SHA'sının atası olduğunu doğruladı (behind_by=0).
+- **Saha kabul sınırı:** Oturumlu kullanıcıda PC/tablet/telefon gerçek tıklama, rol bazlı navigasyon, alt sekmeler ve yenileme davranışı ayrıca görsel/doğrudan kabul ister. Sadece bundle smoke bu kabul değildir.
+
+
+
 ## 01.11.2026 — Desen Google Drive JPEG → otomatik Taha model kartı (#493)
 
 - **Kullanıcı kararı:** 2026 Google Drive `görsel` klasöründeki JPEG dosya ismi (yalnız uzantı çıkarılır) Desen model adı olur. Eksik ölçü, firma detayı, renk, Pantone veya üretim bilgisi kayıt açmayı durdurmaz. İlk tercih tam **TAHA GİYİM** firma kartıdır; farklı firma sonradan düzenlenebilir. PSD/fotoğraf paneli kaydetme otomasyonu daha sonra mevcut File Hub'a bağlanacaktır.
