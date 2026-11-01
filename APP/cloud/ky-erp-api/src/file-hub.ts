@@ -68,7 +68,7 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   app.post("/api/file-hub/connections", async c => {
     const b=await bodyOf(c), owner=await requireCompanyOwner(c,b); if(!owner) return c.json(err("COMPANY_OWNER_ONLY","Depolama bağlantısını yalnız firma sahibi veya kendi firmasında uygulama sahibi ekleyebilir."),403);
     const slug=slugOf(c,b), provider=upper(b.providerType);
-    if(!["GOOGLE_DRIVE","ONEDRIVE","LOCAL_FOLDER","NAS","SHAREPOINT"].includes(provider)) return c.json(err("INVALID_PROVIDER","Geçersiz depolama sağlayıcısı."),422);
+    if(!["GOOGLE_DRIVE","ONEDRIVE","LOCAL_FOLDER","NAS","SHAREPOINT","DROPBOX"].includes(provider)) return c.json(err("INVALID_PROVIDER","Geçersiz depolama sağlayıcısı."),422);
     const id=crypto.randomUUID(), ts=now();
     if(bool(b.isPrimary,false)) await c.env.DB.prepare(`UPDATE file_hub_connections SET is_primary=0,updated_at=? WHERE main_company_slug=?`).bind(ts,slug).run();
     await c.env.DB.prepare(`INSERT INTO file_hub_connections(id,main_company_slug,provider_type,name,is_active,is_primary,local_root_path,remote_root_id,remote_root_name,sync_mode,connection_status,metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,slug,provider,text(b.name)||provider,bool(b.isActive,true)?1:0,bool(b.isPrimary,false)?1:0,text(b.localRootPath)||null,text(b.remoteRootId)||null,text(b.remoteRootName)||null,upper(b.syncMode)||"AGENT",upper(b.connectionStatus)||"UNKNOWN",JSON.stringify(b.metadata||{}),ts,ts).run();
