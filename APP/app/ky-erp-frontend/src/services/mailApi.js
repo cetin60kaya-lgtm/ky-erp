@@ -65,6 +65,15 @@ export const downloadMailAttachment = async (messageId, attachmentId, fileName =
   }
 };
 
+export const listMailTemplates = () =>
+  apiGet("/mail/templates", { _ts: Date.now() }).then(unwrap);
+
+export const createMailTemplate = (payload) =>
+  apiPost("/mail/templates", payload).then(unwrap);
+
+export const updateMailTemplate = (id, payload) =>
+  apiPut("/mail/templates/" + encodeURIComponent(id), payload).then(unwrap);
+
 export const listMailDrafts = () =>
   apiGet("/mail/drafts", { _ts: Date.now() }).then(unwrap);
 
