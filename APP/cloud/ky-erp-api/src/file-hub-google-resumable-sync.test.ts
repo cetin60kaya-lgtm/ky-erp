@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { selectCloudModelBinding, canUseModelImageFolder } from "./file-hub-cloud-model-binding.ts";
 
 const cloud = readFileSync(new URL("./file-hub-cloud-oauth.ts", import.meta.url), "utf8");
 const screen = readFileSync(new URL("../../../app/ky-erp-frontend/src/pages/admin/AdminStorageCenter.jsx", import.meta.url), "utf8");
@@ -32,9 +33,20 @@ test("Senkronizasyon kilidi tenant kapsamında ve tek bağlantıya özeldir", ()
   assert.match(cloud, /runGoogleSyncBatch\(c, gate\.slug, connectionId, 1, false\)/);
 });
 
-test("DESEN model görseli sadece açıkça atanan alt klasörden eşleşir", () => {
-  assert.match(cloud, /if\(purposeCode==="MODEL_IMAGE" && !normDesignPath\(binding\.root_path\)\) return null/);
-  assert.match(cloud, /designImageBindingPresent: Boolean\(design && normDesignPath\(design\.root_path\)\)/);
+test("DESEN model görseli sadece açıkça atanan klasörden ve uygun türden eşleşir", () => {
+  const image={module_code:"DESEN",purpose_code:"MODEL_IMAGE",root_path:"görsel/2026"};
+  const generic={module_code:"DESEN",purpose_code:"GENERIC",root_path:""};
+  const employee={module_code:"IK",purpose_code:"EMPLOYEE_ID",root_path:"personel"};
+  assert.equal(canUseModelImageFolder(""),false);
+  assert.equal(canUseModelImageFolder("görsel/2026"),true);
+  assert.equal(selectCloudModelBinding([image,generic,employee],"görsel/2026/Model-1.JPG","Model-1.JPG"),image);
+  assert.equal(selectCloudModelBinding([image,generic,employee],"görsel/2026/Model-1.PDF","Model-1.PDF"),null);
+  assert.equal(selectCloudModelBinding([image,generic,employee],"görsel/2025/Model-1.JPG","Model-1.JPG"),null);
+  assert.equal(selectCloudModelBinding([image,generic,employee],"görsel/2026-sahte/Model-1.JPG","Model-1.JPG"),null);
+  assert.equal(selectCloudModelBinding([image,generic,employee],"personel/kimlik.JPG","kimlik.JPG"),null);
+  assert.equal(selectCloudModelBinding([generic],"görsel/2026/Model-1.JPG","Model-1.JPG"),null);
+  assert.match(cloud,/selectCloudModelBinding\(result\.results\|\|\[\],relativePath,text\(item\.name\)\)/);
+  assert.match(cloud,/designImageBindingPresent: Boolean\(design && canUseModelImageFolder\(design\.root_path\)\)/);
 });
 
 test("Dosya arayüzü yarım taramayı tamamlandı diye göstermez", () => {
