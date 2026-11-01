@@ -5,14 +5,12 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-11-01",
   "scope": [
-    "PR494-direct-sidebar-menu-user-defined-order",
-    "PR494-only-one-authorized-settings-accordion",
-    "PR494-all-module-operation-tabs-retained",
-    "PR494-home-dashboard-operational-shortcuts",
-    "CI-41263168527-success",
+    "PR495-Desen-Drive-sync-model-evidence-UI",
+    "PR495-no-DESEN-MODEL_IMAGE-binding-warning",
+    "CI-41265494324-success",
     "Cloudflare-Pages-production-bundle-smoke"
   ],
-  "note": "01.11.2026 PR494: KY ERP ana menüsü tek tıklamalı doğrudan modül sırasına alındı; Muhasebe altında e-Belge/Faturalar, İK Aylık ve üretim akışı. Yalnız yönetim yetkili Ayarlar & Sistem açılır; modül alt işlemleri sayfa işlem sekmelerinde. Ana Sayfa günlük izleme/kısayol düzenine alındı; sahte KPI yok. Yalnız frontend; Worker, D1, MFA, modül izinleri ve gerçek işletme verisi değişmedi. Gerçek rol/PC-tablet-telefon kullanıcı etkileşimi saha kabulü ayrıca gerekir.",
-  "sourceCommit": "03c68fd2f1007d59b88e105d7a177f8638531680",
+  "note": "01.11.2026 PR495: Depolama > Dosya Servisleri / Senkronizasyon ekranı manuel Google Drive taramasında gerçek D1 bağlı görsel ve model adetlerini ve atama eksikliğini gösterir. Saha kabulü ve gerçek 2026 model kartı sayısı ayrıca doğrulanacaktır.",
+  "sourceCommit": "97fdb508bbb5e9cb2afd8a44061ce984d0ef77c3",
   "requestedAt": "2026-11-01"
 }
