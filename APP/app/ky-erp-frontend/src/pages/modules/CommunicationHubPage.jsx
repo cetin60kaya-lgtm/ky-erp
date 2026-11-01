@@ -4,26 +4,20 @@ import {
   getMailOverview,
   downloadMailAttachment,
   getMailAttachmentBlob,
-  getMailProviders,
-  listCommunicationFiles,
   listMailAccounts,
   listMailAttachments,
   listMailDrafts,
   listMailFolders,
   listMailMessages,
   pinMailMessage,
-  requestMailAccount,
   runMailMessageAction,
-  searchCommunicationFiles,
   sendMailDraft,
-  setMailAccountDefaults,
-  startGoogleMailOAuth,
-  startMicrosoftMailOAuth,
   syncMailAccount,
   syncMailFolder,
 } from "../../services/mailApi";
 import "./CommunicationHubPage.css";
 import { queueMailTemplatesOpen } from "../../utils/approvedUiHandoffs";
+import CommunicationFilesWorkspace from "./CommunicationFilesWorkspace.jsx";
 
 const MAIL_TABS = new Set(["mail-gelen", "mail-sabitlenen", "mail-gonderilen", "mail-taslaklar", "mail-yanit-bekleyen", "mail-sablonlar"]);
 
@@ -317,35 +311,9 @@ function flattenFolders(rows) {
   return result;
 }
 
-const HAKAN_DIRECT_ACCOUNTS = [
-  {
-    key: "HAKAN_MAIN",
-    title: "Hakan Emprime Ana Mail",
-    providerType: "MICROSOFT_365",
-    accountType: "PERSONAL",
-    emailAddress: "hkngursu@hotmail.com",
-    displayName: "Hakan Emprime",
-    departmentCode: "YONETIM",
-    isDefaultSend: true,
-    isDefaultReceive: true,
-  },
-  {
-    key: "DESEN",
-    title: "Desen Maili",
-    providerType: "GMAIL",
-    accountType: "DEPARTMENT",
-    emailAddress: "hkndesen@gmail.com",
-    displayName: "Hakan Emprime Desen",
-    departmentCode: "DESEN",
-    isDefaultSend: false,
-    isDefaultReceive: false,
-  },
-];
-
 export default function CommunicationHubPage({ activeTab, activeMainCompany, openModule }) {
   const isMail = MAIL_TABS.has(activeTab);
   const [overview, setOverview] = useState(null);
-  const [providers, setProviders] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [messages, setMessages] = useState([]);
@@ -355,22 +323,13 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const [selectedFolderId, setSelectedFolderId] = useState("");
   const [moveTargetId, setMoveTargetId] = useState("");
   const [mailboxRefresh, setMailboxRefresh] = useState(0);
-  const [files, setFiles] = useState([]);
   const [selectedMessage, setSelectedMessage] = useState(null);
-  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
-  const [requestOpen, setRequestOpen] = useState(false);
-  const [advancedAccountOpen, setAdvancedAccountOpen] = useState(false);
-  const [requestForm, setRequestForm] = useState({
-    providerType: "MICROSOFT_365",
-    accountType: "PERSONAL",
-    emailAddress: "",
-    displayName: "",
-    departmentCode: "",
-  });
   const [draftForm, setDraftForm] = useState({ to: "", cc: "", bcc: "", subject: "", bodyText: "", replyToMessageId: "" });
   const [composeOpen, setComposeOpen] = useState(false);
+  const [draftFiles, setDraftFiles] = useState([]);
+  const [filePickerOpen, setFilePickerOpen] = useState(false);
   const [messageSearch, setMessageSearch] = useState("");
   const [paneWidths, setPaneWidths] = useState(initialMailPaneWidths);
   const [attachmentPreview, setAttachmentPreview] = useState(null);
@@ -383,15 +342,9 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const backgroundSyncRef = useRef(false);
 
   const activeCompanyName = activeMainCompany?.name || activeMainCompany?.ad || activeMainCompany?.slug || "Aktif Firma";
-  const activeCompanyKey = String(activeMainCompany?.slug || activeCompanyName || "").toLocaleLowerCase("tr-TR");
-  const showHakanDirectAccounts = ["mecit-hakan", "main-mecit-hakan"].includes(activeCompanyKey);
   const selectedAccount = useMemo(
     () => accounts.find((row) => String(row.id) === String(selectedAccountId)) || null,
     [accounts, selectedAccountId],
-  );
-  const selectedProviderRuntime = useMemo(
-    () => providers.find((row) => row.provider === requestForm.providerType) || null,
-    [providers, requestForm.providerType],
   );
   const folderRows = useMemo(() => flattenFolders(folders), [folders]);
   const folderGroups = useMemo(() => ({
@@ -435,28 +388,17 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
 
   const loadBase = useCallback(async () => {
     setLoading(true);
-    const results = await Promise.allSettled([
-      getMailOverview(),
-      getMailProviders(),
-      listMailAccounts(),
-      listCommunicationFiles(),
-    ]);
+    const results = await Promise.allSettled([getMailOverview(), listMailAccounts()]);
     if (results[0].status === "fulfilled") setOverview(results[0].value || null);
-    if (results[1].status === "fulfilled") setProviders(safeArray(results[1].value?.providers));
-    if (results[2].status === "fulfilled") {
-      const rows = safeArray(results[2].value);
+    if (results[1].status === "fulfilled") {
+      const rows = safeArray(results[1].value);
       setAccounts(rows);
       setSelectedAccountId((current) => rows.some((row) => String(row.id) === String(current)) ? current : String(rows[0]?.id || ""));
     }
-    if (results[3].status === "fulfilled") setFiles(safeArray(results[3].value));
-    const sourceNames = ["Mail özeti", "Sağlayıcı durumu", "Posta kutuları", "Firma dosyaları"];
-    const failedSources = results
-      .map((row, index) => row.status === "rejected" ? sourceNames[index] : "")
-      .filter(Boolean);
-    const schemaPending = results[0].status === "fulfilled" && results[0].value?.schemaReady === false;
-    setNotice(schemaPending
-      ? "Mail bağlantı servisi hazırlanıyor. Hazır olduğunda hesaplarınızı bağlayabilirsiniz."
-      : failedSources.length ? `Hazır olmayan kaynak: ${failedSources.join(", ")}. Diğer bilgiler gösteriliyor.` : "");
+    const failures = results.flatMap((result, index) => result.status === "rejected" ? [index === 0 ? "Mail özeti" : "Posta kutuları"] : []);
+    setNotice(results[0].status === "fulfilled" && results[0].value?.schemaReady === false
+      ? "Mail bağlantı servisi hazırlanıyor. Hesaplar Bağlantılar & Depolama'dan yönetilir."
+      : failures.length ? "Hata: Yüklenemeyen kaynak: " + failures.join(", ") : "");
     setLoading(false);
   }, []);
 
@@ -883,22 +825,6 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     } finally { setLoading(false); }
   }
 
-  async function submitAccountRequest(event) {
-    event.preventDefault();
-    setLoading(true);
-    try {
-      await requestMailAccount(requestForm);
-      setNotice("Hesap talebi oluşturuldu. İlgili firma sahibi / işveren onayı bekleniyor.");
-      setRequestOpen(false);
-      setRequestForm((current) => ({ ...current, emailAddress: "", displayName: "", departmentCode: "" }));
-      await loadBase();
-    } catch (error) {
-      setNotice(`Hata: ${error?.message || "Mail hesabı talebi oluşturulamadı."}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function saveDraft(sendNow = false) {
     if (!selectedAccountId) return;
     setLoading(true);
@@ -908,6 +834,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
         replyToMessageId: draftForm.replyToMessageId || undefined,
         subject: draftForm.subject,
         bodyText: draftForm.bodyText,
+        attachmentRefs: draftFiles.map((file) => String(file.id)),
         recipients: {
           to: draftForm.to.split(/[;,]/).map((email) => email.trim()).filter(Boolean),
           cc: draftForm.cc.split(/[;,]/).map((email) => email.trim()).filter(Boolean),
@@ -924,6 +851,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
         setNotice("Taslak kaydedildi.");
       }
       setDraftForm({ to: "", cc: "", bcc: "", subject: "", bodyText: "", replyToMessageId: "" });
+      setDraftFiles([]);
+      setFilePickerOpen(false);
       setComposeOpen(false);
       setMailboxRefresh((value) => value + 1);
       await loadBase();
@@ -937,68 +866,6 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   async function submitDraft(event) {
     event.preventDefault();
     await saveDraft(false);
-  }
-
-  async function addAndConnectPreset(preset) {
-    const existingAccount = accounts.find((row) => String(row.email_address || row.emailAddress || "").trim().toLowerCase() === preset.emailAddress.toLowerCase());
-    if (String(existingAccount?.status || "").toUpperCase() === "ACTIVE") {
-      setSelectedAccountId(String(existingAccount.id));
-      setSelectedFolderId("");
-      setSelectedMessage(null);
-      setRequestOpen(false);
-      openModule?.("iletisim", { tabKey: "mail-gelen" });
-      return;
-    }
-    setLoading(true);
-    try {
-      const runtime = providers.find((row) => String(row.provider || "").toUpperCase() === preset.providerType);
-      if (!runtime?.adapterReady || !runtime?.configured) throw new Error("Bağlantı servisi hazırlanıyor. Lütfen daha sonra tekrar deneyin.");
-
-      let account = accounts.find((row) => String(row.email_address || row.emailAddress || "").trim().toLowerCase() === preset.emailAddress.toLowerCase()) || null;
-      let accountId = account?.id || "";
-      if (!accountId) {
-        const created = await requestMailAccount(preset);
-        accountId = created?.accountId || "";
-        if (!accountId) throw new Error("Mail hesabı kaydı oluşturulamadı.");
-        if (preset.isDefaultSend || preset.isDefaultReceive) {
-          await setMailAccountDefaults(accountId, {
-            isDefaultSend: Boolean(preset.isDefaultSend),
-            isDefaultReceive: Boolean(preset.isDefaultReceive),
-          });
-        }
-      }
-
-      const startOAuth = preset.providerType === "GMAIL" ? startGoogleMailOAuth : startMicrosoftMailOAuth;
-      const result = await startOAuth(accountId);
-      if (!result?.authorizeUrl) throw new Error("OAuth giriş adresi alınamadı.");
-      window.location.assign(result.authorizeUrl);
-    } catch (error) {
-      setNotice(`Hata: ${error?.message || "Mail hesabı doğrudan eklenemedi."}`);
-      setLoading(false);
-    }
-  }
-
-  async function connectSelectedAccount() {
-    if (!selectedAccountId || !selectedAccount) return;
-    const provider = String(selectedAccount.provider_type || selectedAccount.providerType || "").toUpperCase();
-    const startOAuth = provider === "GMAIL"
-      ? startGoogleMailOAuth
-      : provider === "MICROSOFT_365"
-        ? startMicrosoftMailOAuth
-        : null;
-    if (!startOAuth) {
-      setNotice("Hata: Bu posta sağlayıcısı için etkileşimli bağlantı henüz aktif değil.");
-      return;
-    }
-    setLoading(true);
-    try {
-      const result = await startOAuth(selectedAccountId);
-      if (!result?.authorizeUrl) throw new Error("OAuth giriş adresi alınamadı.");
-      window.location.assign(result.authorizeUrl);
-    } catch (error) {
-      setNotice(`Hata: ${error?.message || "Mail hesabı bağlantısı başlatılamadı."}`);
-      setLoading(false);
-    }
   }
 
   function openReply() {
@@ -1126,14 +993,26 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     }
   }
 
-  async function runFileSearch(value) {
-    setSearch(value);
-    try {
-      const rows = value.trim() ? await searchCommunicationFiles(value) : await listCommunicationFiles();
-      setFiles(safeArray(rows));
-    } catch (error) {
-      setNotice(error?.message || "Dosya araması yapılamadı.");
+  function toggleDraftFile(file) {
+    setDraftFiles((current) => {
+      const found = current.some((item) => String(item.id) === String(file.id));
+      if (found) return current.filter((item) => String(item.id) !== String(file.id));
+      const total = current.reduce((sum, item) => sum + Number(item.size_bytes || 0), 0) + Number(file.size_bytes || 0);
+      if (current.length >= 10 || total > 25 * 1024 * 1024) {
+        setNotice("Hata: En fazla 10 dosya ve toplam 25 MB mail eki seçilebilir.");
+        return current;
+      }
+      return [...current, file];
+    });
+  }
+
+  function selectFileForDraft(file) {
+    if (Number(file?.size_bytes || 0) > 25 * 1024 * 1024) {
+      setNotice("Hata: 25 MB üzerindeki dosyalar mail eki olarak gönderilemez.");
+      return;
     }
+    toggleDraftFile(file);
+    setComposeOpen(true);
   }
 
   const visibleDrafts = !selectedFolderId && activeTab === "mail-taslaklar" ? drafts : [];
@@ -1174,7 +1053,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
         </div>
         <div className="comm-actions">
           {isMail ? <button type="button" onClick={() => setComposeOpen(true)} disabled={!selectedAccountId || loading}>+ Yeni Mail</button> : null}
-          {isMail ? <button type="button" className="secondary" onClick={() => { setAdvancedAccountOpen(false); setRequestOpen(true); }}>+ Mail Hesabı</button> : null}
+          {isMail ? <button type="button" className="secondary" onClick={() => openModule?.("depolama", { tabKey: "depolama-mail" })}>Hesap Bağlantıları</button> : null}
           <button type="button" className="secondary" onClick={loadBase} disabled={loading}>Yenile</button>
         </div>
       </header>
@@ -1185,46 +1064,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
         <div className="comm-unread-metric" title="Seçili posta kutusunun Gelen Kutusu okunmamış sayısı"><span><i aria-hidden="true" />Okunmamış</span><b>{selectedInboxUnreadCount}</b></div>
         <div><span>Aktif hesap</span><b>{overview?.activeAccountCount ?? 0}</b></div>
         <div><span>Onay bekleyen</span><b>{overview?.pendingAccountCount ?? 0}</b></div>
-        <div><span>Firma dosyası</span><b>{files.length}</b></div>
+        <div><span>Taslaklar</span><b>{overview?.draftCount ?? 0}</b></div>
       </section>
-
-      {requestOpen ? (
-        <div className="comm-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRequestOpen(false); }}>
-        <section className="comm-request-card comm-modal" role="dialog" aria-modal="true" aria-label="Mail hesabı ekleme talebi">
-          <div className="comm-section-title"><div><h2>Mail Hesabı Ekle</h2><p>Outlook/Hotmail veya Gmail hesabını seçin; KY ERP sizi doğrudan sağlayıcının güvenli giriş ekranına gönderir.</p></div><button type="button" className="secondary" onClick={() => setRequestOpen(false)}>Kapat</button></div>
-          {showHakanDirectAccounts ? <div className="comm-direct-mail-grid">
-            {HAKAN_DIRECT_ACCOUNTS.map((preset) => {
-              const runtime = providers.find((row) => String(row.provider || "").toUpperCase() === preset.providerType);
-              const existing = accounts.find((row) => String(row.email_address || row.emailAddress || "").trim().toLowerCase() === preset.emailAddress.toLowerCase());
-              const ready = Boolean(runtime?.adapterReady && runtime?.configured);
-              const active = String(existing?.status || "").toUpperCase() === "ACTIVE";
-              return <article key={preset.key} className="comm-direct-mail-card">
-                <div><b>{preset.title}</b><span>{preset.emailAddress}</span><small>{providerLabel(preset.providerType)} · {preset.departmentCode === "DESEN" ? "Desen bölümü" : "Şirket ana maili"}</small></div>
-                <button type="button" onClick={() => addAndConnectPreset(preset)} disabled={loading || (!active && !ready)}>{active ? "Posta Kutusunu Aç" : existing ? "Hesabı Bağla" : "Ekle & Bağla"}</button>
-                <em>{active ? "Bağlı" : ready ? "Bağlantıya hazır" : "Bağlantı servisi hazırlanıyor"}</em>
-              </article>;
-            })}
-          </div> : null}
-          <button type="button" className="comm-advanced-mail-title" onClick={() => setAdvancedAccountOpen((value) => !value)}><b>+ Başka Mail Hesabı Ekle</b><span>{advancedAccountOpen ? "Gelişmiş formu kapat" : "Farklı bir Outlook / Gmail hesabı ekle"}</span></button>
-          {advancedAccountOpen ? <form onSubmit={submitAccountRequest}>
-            <label>Sağlayıcı<select value={requestForm.providerType} onChange={(e) => setRequestForm((v) => ({ ...v, providerType: e.target.value }))}>
-              {(providers.length ? providers : [
-                {provider:"MICROSOFT_365",adapterReady:true,configured:false},
-                {provider:"GMAIL",adapterReady:false,configured:false},
-                {provider:"JMAP",adapterReady:false,configured:false},
-                {provider:"IMAP_SMTP",adapterReady:false,configured:false},
-              ]).map((row) => <option key={row.provider} value={row.provider} disabled={row.adapterReady===false || row.configured===false}>{providerLabel(row.provider)}{row.adapterReady===false ? " · Yakında" : row.configured===false ? " · Hazırlanıyor" : ""}</option>)}
-            </select></label>
-            <label>Hesap Türü<select value={requestForm.accountType} onChange={(e) => setRequestForm((v) => ({ ...v, accountType: e.target.value }))}><option value="PERSONAL">Kişisel</option><option value="SHARED">Ortak / Shared</option><option value="DEPARTMENT">Bölüm</option></select></label>
-            <label>E-posta<input type="email" required value={requestForm.emailAddress} onChange={(e) => setRequestForm((v) => ({ ...v, emailAddress: e.target.value }))} placeholder="muhasebe@firma.com"/></label>
-            <label>Görünen Ad<input value={requestForm.displayName} onChange={(e) => setRequestForm((v) => ({ ...v, displayName: e.target.value }))} placeholder="Muhasebe"/></label>
-            <label>Bölüm<select value={requestForm.departmentCode} onChange={(e) => setRequestForm((v) => ({ ...v, departmentCode: e.target.value }))}><option value="">Genel</option><option value="MUHASEBE">Muhasebe</option><option value="E_BELGE">e-Belge</option><option value="DESEN">Desen</option><option value="IK">İK</option><option value="YONETIM">Yönetim</option></select></label>
-            <button type="submit" disabled={loading || overview?.schemaReady===false || selectedProviderRuntime?.adapterReady===false || selectedProviderRuntime?.configured===false}>Onaya Gönder</button>
-            {selectedProviderRuntime && (!selectedProviderRuntime.adapterReady || !selectedProviderRuntime.configured) ? <div className="wide comm-provider-warning">Bağlantı servisi hazırlanıyor.</div> : null}
-          </form> : null}
-        </section>
-        </div>
-      ) : null}
 
       {composeOpen ? (
         <div className="comm-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setComposeOpen(false); }}>
@@ -1237,6 +1078,12 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             <label>BCC<input value={draftForm.bcc} onChange={(e) => setDraftForm((v) => ({ ...v, bcc: e.target.value }))} placeholder="opsiyonel"/></label>
             <label className="wide">Konu<input value={draftForm.subject} onChange={(e) => setDraftForm((v) => ({ ...v, subject: e.target.value }))}/></label>
             <label className="wide">Mesaj<textarea rows={10} value={draftForm.bodyText} onChange={(e) => setDraftForm((v) => ({ ...v, bodyText: e.target.value }))}/></label>
+            <div className="wide commf-attachment-summary">
+              <button type="button" className="secondary" onClick={() => setFilePickerOpen((value) => !value)}>+ File Hub Dosyası Ekle</button>
+              <small>{draftFiles.length} ek · Toplam {(draftFiles.reduce((sum, file) => sum + Number(file.size_bytes || 0), 0) / (1024 * 1024)).toFixed(1)} MB / 25 MB</small>
+              {draftFiles.map((file) => <span key={file.id}>{file.file_name || file.fileName} <button type="button" title="Eki çıkar" aria-label={(file.file_name || file.fileName) + " ekini çıkar"} onClick={() => toggleDraftFile(file)}>×</button></span>)}
+            </div>
+            {filePickerOpen ? <CommunicationFilesWorkspace picker activeMainCompany={activeMainCompany} selectedIds={draftFiles.map((file) => String(file.id))} onSelect={toggleDraftFile} onClose={() => setFilePickerOpen(false)} /> : null}
             <div className="wide comm-compose-actions"><button type="button" onClick={() => saveDraft(true)} disabled={loading || String(selectedAccount?.status || "").toUpperCase() !== "ACTIVE"}>Gönder</button><button type="submit" className="secondary" disabled={loading}>Taslağı Kaydet</button><span>Gönderim yalnız sizin açık işleminizle yapılır.</span></div>
           </form>
         </section>
@@ -1253,11 +1100,11 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                 <span>{row.email_address || row.emailAddress}</span>
                 <em>{providerLabel(row.provider_type || row.providerType)} · {statusLabel(row.status)}</em>
               </button>
-            )) : <div className="comm-empty">Henüz atanmış posta kutusu yok.<br/>“+ Mail Hesabı” ile talep oluşturabilirsiniz.</div>}
+            )) : <div className="comm-empty">Henüz atanmış posta kutusu yok. Hesaplar Bağlantılar & Depolama bölümünden açılır.</div>}
             {selectedAccount ? <div className="comm-account-tools">
               <span><b>{statusLabel(selectedAccount.status)}</b> · {providerLabel(selectedAccount.provider_type || selectedAccount.providerType)}</span>
               {["MICROSOFT_365", "GMAIL"].includes(String(selectedAccount.provider_type || selectedAccount.providerType).toUpperCase()) && String(selectedAccount.status || "").toUpperCase() !== "ACTIVE"
-                ? <button type="button" onClick={connectSelectedAccount} disabled={loading}>{String(selectedAccount.provider_type || selectedAccount.providerType).toUpperCase() === "GMAIL" ? "Google Hesabını Bağla" : "Microsoft Hesabını Bağla"}</button>
+                ? <button type="button" onClick={() => openModule?.("depolama", { tabKey: "depolama-mail" })}>Bağlantı Ayarlarını Aç</button>
                 : null}
               {String(selectedAccount.status || "").toUpperCase() === "ACTIVE"
                 ? <button type="button" className="secondary" onClick={syncSelectedMailbox} disabled={loading}>Postayı Senkronize Et</button>
@@ -1328,26 +1175,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
           </aside>
         </section>
       ) : (
-        <section className="comm-files">
-          <div className="comm-files-toolbar">
-            <div><b>Firma Dosyaları</b><span>Google Drive, OneDrive, SharePoint, Yerel ve NAS tek File Hub görünümünde.</span></div>
-            <input type="search" value={search} onChange={(e) => runFileSearch(e.target.value)} placeholder="Dosya, model veya klasör ara"/>
-          </div>
-          <div className="comm-file-table">
-            <div className="head"><span>Dosya</span><span>Kaynak</span><span>Konum</span><span>Durum</span><span>Güncelleme</span></div>
-            {files.length ? files.map((row) => <div className="row" key={row.id}>
-              <span><b>{row.file_name || row.fileName}</b><small>{row.extension || ""}</small></span>
-              <span>{row.provider_type || row.providerType || row.connection_name || "File Hub"}</span>
-              <span title={row.relative_path || row.relativePath || ""}>{row.relative_path || row.relativePath || "—"}</span>
-              <span>{row.status || "AVAILABLE"}</span>
-              <span>{dateText(row.updated_at || row.updatedAt)}</span>
-            </div>) : <div className="comm-empty large">Bu firmada indekslenmiş dosya bulunamadı.</div>}
-          </div>
-          <footer className="comm-files-footer">
-            <span>Günlük kullanım burada; servis ekleme, OAuth, ana klasör ve bölüm atamaları Bağlantılar & Depolama bölümünde kalır.</span>
-            <button type="button" className="secondary" onClick={() => openModule?.("depolama", { tabKey: "depolama-kaynaklar" })}>Bağlantılar & Depolama</button>
-          </footer>
-        </section>
+        <CommunicationFilesWorkspace activeTab={activeTab} activeMainCompany={activeMainCompany} onComposeWithFile={selectFileForDraft}/>
       )}
 
       {contextMenu ? <div className="comm-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()} role="menu">
