@@ -54,7 +54,7 @@ export function registerAdminStorageRoutes(app:any){
     // Uygulama sahibi sistem seviyesinde görünürlüğünü korur; normal kullanıcılar yönetim endpointlerine çıkamaz.
     if(isCompanyOwner(user.role))return next();
 
-    const ownerOnly = path.startsWith("/api/file-hub/cloud/") || path==="/api/file-hub/overview" || path==="/api/file-hub/connections" || path==="/api/file-hub/bindings" || path==="/api/file-hub/files" || path==="/api/file-hub/search" || /\/files\/[^/]+\/relations$/.test(path);
+    const ownerOnly = path.startsWith("/api/file-hub/cloud/") || path==="/api/file-hub/overview" || path==="/api/file-hub/diagnostics" || path==="/api/file-hub/connections" || path==="/api/file-hub/bindings" || path==="/api/file-hub/files" || path==="/api/file-hub/search" || /\/files\/[^/]+\/relations$/.test(path);
     if(ownerOnly)return c.json(errorBody("COMPANY_OWNER_ONLY","Dosya Merkezi yönetim görünümü firma sahibi / işverene açıktır."),403);
     if(path==="/api/file-hub/entity-files"){
       const moduleKey=entityModule(c.req.query("entityType"));

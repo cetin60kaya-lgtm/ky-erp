@@ -2,6 +2,7 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { canManageOwnCompanyStorage } from "./file-hub-company-owner-access";
+import { buildFileHubSmartDiagnostics } from "./file-hub-smart-diagnostics";
 
 type Bindings = Cloudflare.Env & { FILE_HUB_AGENT_KEY?: string };
 type Variables = { requestId: string };
@@ -30,6 +31,20 @@ async function findAssetByLocation(c: Context<AppEnv>, slug: string, connectionI
 }
 
 export function registerFileHubRoutes(app: Hono<AppEnv>) {
+  app.get("/api/file-hub/diagnostics", async c => {
+    if (!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401);
+    const slug=slugOf(c);
+    const [connections,bindings,agents,unmatched,missing]=await Promise.all([
+      c.env.DB.prepare("SELECT id,name,provider_type,is_active,sync_mode,connection_status,last_sync_at,last_error,metadata FROM file_hub_connections WHERE main_company_slug=?").bind(slug).all<Row>(),
+      c.env.DB.prepare("SELECT module_code,purpose_code,storage_connection_id,sync_enabled FROM file_hub_bindings WHERE main_company_slug=?").bind(slug).all<Row>(),
+      c.env.DB.prepare("SELECT device_name,last_seen_at FROM file_hub_agent_status WHERE main_company_slug=?").bind(slug).all<Row>(),
+      c.env.DB.prepare("SELECT COUNT(*) n FROM file_hub_assets a WHERE a.main_company_slug=? AND NOT EXISTS(SELECT 1 FROM file_hub_relations r WHERE r.file_asset_id=a.id AND r.main_company_slug=a.main_company_slug)").bind(slug).first<Row>(),
+      c.env.DB.prepare("SELECT COUNT(*) n FROM file_hub_assets WHERE main_company_slug=? AND status='MISSING'").bind(slug).first<Row>(),
+    ]);
+    const data=buildFileHubSmartDiagnostics({connections:connections.results||[],bindings:bindings.results||[],agents:agents.results||[],unmatchedCount:Number(unmatched?.n||0),missingCount:Number(missing?.n||0)});
+    return c.json({ok:true,data,generatedAt:now(),basis:"TENANT_D1_READ_ONLY"});
+  });
+
   app.get("/api/file-hub/overview", async c => {
     if (!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401);
     const slug = slugOf(c);
@@ -53,7 +68,7 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   app.post("/api/file-hub/connections", async c => {
     const b=await bodyOf(c), owner=await requireCompanyOwner(c,b); if(!owner) return c.json(err("COMPANY_OWNER_ONLY","Depolama bağlantısını yalnız firma sahibi veya kendi firmasında uygulama sahibi ekleyebilir."),403);
     const slug=slugOf(c,b), provider=upper(b.providerType);
-    if(!["GOOGLE_DRIVE","ONEDRIVE","LOCAL_FOLDER","NAS","SHAREPOINT"].includes(provider)) return c.json(err("INVALID_PROVIDER","Geçersiz depolama sağlayıcısı."),422);
+    if(!["GOOGLE_DRIVE","ONEDRIVE","LOCAL_FOLDER","NAS","SHAREPOINT","DROPBOX"].includes(provider)) return c.json(err("INVALID_PROVIDER","Geçersiz depolama sağlayıcısı."),422);
     const id=crypto.randomUUID(), ts=now();
     if(bool(b.isPrimary,false)) await c.env.DB.prepare(`UPDATE file_hub_connections SET is_primary=0,updated_at=? WHERE main_company_slug=?`).bind(ts,slug).run();
     await c.env.DB.prepare(`INSERT INTO file_hub_connections(id,main_company_slug,provider_type,name,is_active,is_primary,local_root_path,remote_root_id,remote_root_name,sync_mode,connection_status,metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,slug,provider,text(b.name)||provider,bool(b.isActive,true)?1:0,bool(b.isPrimary,false)?1:0,text(b.localRootPath)||null,text(b.remoteRootId)||null,text(b.remoteRootName)||null,upper(b.syncMode)||"AGENT",upper(b.connectionStatus)||"UNKNOWN",JSON.stringify(b.metadata||{}),ts,ts).run();
@@ -91,10 +106,14 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   });
 
   app.get("/api/file-hub/files", async c => {
-    if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),q=text(c.req.query("q")),status=upper(c.req.query("status")),take=Math.min(500,Math.max(1,Number(c.req.query("take")||100)));
-    const where=["a.main_company_slug=?"],args:any[]=[slug]; if(q){where.push("(a.file_name LIKE ? OR a.logical_key LIKE ? OR l.relative_path LIKE ?)"); const like=`%${q}%`; args.push(like,like,like);} if(status){where.push("a.status=?");args.push(status);} args.push(take);
-    const r=await c.env.DB.prepare(`SELECT a.*,l.id location_id,l.storage_connection_id,l.relative_path,l.location_role,l.is_available,c.provider_type,c.name connection_name,(SELECT COUNT(*) FROM file_hub_relations x WHERE x.file_asset_id=a.id AND x.main_company_slug=a.main_company_slug) relation_count FROM file_hub_assets a LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.location_role='PRIMARY' LEFT JOIN file_hub_connections c ON c.id=l.storage_connection_id WHERE ${where.join(" AND ")} ORDER BY a.updated_at DESC LIMIT ?`).bind(...args).all<Row>();
-    return c.json({ok:true,data:(r.results||[]).map(rowView)});
+    if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),q=text(c.req.query("q")),status=upper(c.req.query("status")),take=Math.min(500,Math.max(1,Number(c.req.query("take")||100))),offset=Math.min(1000000,Math.max(0,Math.floor(Number(c.req.query("offset")||0)||0)));
+    const where=["a.main_company_slug=?"],args:any[]=[slug]; if(q){where.push("(a.file_name LIKE ? OR a.logical_key LIKE ? OR l.relative_path LIKE ?)"); const like=`%${q}%`; args.push(like,like,like);} if(status){where.push("a.status=?");args.push(status);}
+    const whereSql=where.join(" AND ");
+    const totalRow=await c.env.DB.prepare(`SELECT COUNT(DISTINCT a.id) total FROM file_hub_assets a LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.location_role='PRIMARY' WHERE ${whereSql}`).bind(...args).first<Row>();
+    const total=Number(totalRow?.total||0);
+    args.push(take,offset);
+    const r=await c.env.DB.prepare(`SELECT a.*,l.id location_id,l.storage_connection_id,l.relative_path,l.location_role,l.is_available,c.provider_type,c.name connection_name,(SELECT COUNT(*) FROM file_hub_relations x WHERE x.file_asset_id=a.id AND x.main_company_slug=a.main_company_slug) relation_count FROM file_hub_assets a LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.location_role='PRIMARY' LEFT JOIN file_hub_connections c ON c.id=l.storage_connection_id WHERE ${where.join(" AND ")} ORDER BY a.updated_at DESC LIMIT ? OFFSET ?`).bind(...args).all<Row>();
+    return c.json({ok:true,data:(r.results||[]).map(rowView),page:{total,offset,take,hasMore:offset+(r.results||[]).length<total}});
   });
 
   app.get("/api/file-hub/entity-files", async c => {

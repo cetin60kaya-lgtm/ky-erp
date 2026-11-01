@@ -1,5 +1,24 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.11.2026 — Popüler bulut servis karar matrisi ve akıllı denetim
+
+- Kullanım önceliği: **Google Drive + Microsoft OneDrive aynı anda aktif** (birini varsayılan seçmek diğerini pasifleştirmez). Mevcut SharePoint, NAS ve yerel File Agent servisleri desteklenir. Cloudflare R2 sistem önizleme/cache ve kontrollü arşiv rolünde kalır; kullanıcıya ana dosya evi gibi gösterilmez.
+- Alternatifler: Dropbox (ücretsiz başlangıç 2 GB, resmi OAuth API + webhook), Box (ücretsiz 10 GB, 250 MB tek dosya limiti), pCloud (OAuth/HTTP JSON API), S3 uyumlu depolama. **Dropbox API v2 altyapısı** (OAuth authorization/refresh, klasör sayfalama, dosya tarama, indirme, oluşturma/yükleme) PR #499'da eklendi; Dropbox OAuth app ayarları ve gerçek hesap izni verilmeden aktif sayılmaz. Box ve pCloud adapterı yok, bunlar için kullanılır buton gösterilmez.
+- Akıllı kontrol: `GET /api/file-hub/diagnostics` (firma bazlı D1 salt okunur) Google/OneDrive eksikliği, 24 saatten eski/yarım senkron, ERROR, DESEN/MODEL_IMAGE ataması eksikliği, MISSING/UNMATCHED dosyalar ve yerel File Agent yanıtının eskimesini izler. Sadece işlemi önerir; dosya silmez, hesap bağlamaz, habersiz sağlayıcı geçişi/klonlama yapmaz.
+- Doğrulama ölçütü: Oturum sahibi Google ve Microsoft OAuth hesaplarını ayrı ayrı yetkilendirir; klasör seçimi, dosya yükleme/indirme, D1 indeks, eşleştirme, telefonu/Windows ekranı aynı API, hata/yeniden bağlama ve en az bir gerçek dosya saha testinden sonra ilgili servis **canlı aktif** sayılabilir. Proje CI/publish başarısı tek başına OAuth kullanım onayı değildir.
+- Resmi sağlayıcı belgeleri: developers.google.com/workspace/drive/api; learn.microsoft.com/graph/api/driveitem-list-children; docs.dropboxapi.com; developer.box.com; docs.pcloud.com; developers.cloudflare.com/r2.
+
+
+## 01.11.2026 — Bağlantılar & Depolama altı işlem alanı tam düzeni
+
+- Mevcut alt sayfalar: Genel Bakış, Dosya Servisleri, E-posta Hesapları, Bölüm / Dosya Atamaları, Dosya İndeksi, Senkronizasyon & Agent, Yedekleme & Loglar. Mail sekmesindeki boş ekran, gerçek `AdminMailConnectionsV2` yönetimine bağlandı; hazır OAuth/onay/posta kutusu akışı yeniden kullanılacak, ikinci mail sistemi kurulmayacak.
+- Bölüm→dosya türü seçimleri ilgili amaçlarla sınırlandı; mevcut atamalar düğmeyle formda açılıp düzenlenebilir. Kök klasör açık seçilmedikçe atama yanlışlıkla kaydedilmez. Okuma/yazma/senkron bayrakları mevcut File Hub sözleşmesini kullanır.
+- Dosya İndeksi salt okunur `LIMIT/OFFSET` ve tenant + arama + durum filtreleriyle gerçek toplam kayıt sayısı, önceki/sonraki sayfa destekler; 300'lük sessiz kesim kalkar. D1 şema değişmez.
+- Bulut OAuth servisi / yerel Agent / KY Control Hub ayrımı açık gösterilir; mevcut bağlantı, hata, son senkron, D1 model ilişki sayısı ve agent sağlığı ayrı ve gerçek kaynaklara bağlıdır. Agent anahtarı yenilemesi açık ikinci onay gerektirir.
+- Yedekleme ekranı gerçek File Hub olaylarını gösterir; D1 yedek kanıtını Worker production Actions kaynağına yönlendirir. Test edilmemiş yedek varmış gibi gösterilmez. Şifre/secret, OAuth, D1 iş verileri ve mevcut dosyalar aktarılmaz/silinmez.
+- Saha kabulü: X bilgisayarında firma sahibi oturumuyla Google hesabı OAuth bağlama, kök/2026 klasör ataması, manuel senkron ve canlı D1 model sayısı doğrulanana kadar toplu model açma tamamlanmış sayılmaz.
+
+
 ## 01.11.2026 — File Hub uygulama sahibi / kendi firma depolama erişimi düzeltmesi
 
 - **Saha:** Hakan Emprime > Bağlantılar > Dosya Servisleri > Google Drive hesabı bağlantısı, oturumda `SUPER_ADMIN` / Uygulama Sahibi / Tüm Sistem görünürken `COMPANY_OWNER_ONLY` (403) reddi verdi. İlgili OAuth `assertCompanyOwner` ve File Hub `requireCompanyOwner` yalnız `COMPANY_ADMIN` kabul ediyordu.
