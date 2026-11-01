@@ -5,13 +5,13 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-11-01",
   "scope": [
-    "PR496-fixed-legacy-workspace-grid-layout",
-    "PR496-module-subtabs-inside-existing-workspace",
-    "PR496-no-business-logic-or-record-mutability",
-    "CI-41265616018-success",
+    "PR497-sidebar-expandable-existing-module-subtabs",
+    "PR497-settings-system-separate-at-bottom",
+    "PR497-remove-horizontal-module-operation-strip",
+    "CI-41266202229-success",
     "Cloudflare-Pages-production-bundle-smoke"
   ],
-  "note": "01.11.2026 PR #496: önceki PR #494 ile eklenen bölüm sekmesi ana ekranın altıncı grid elemanı olup Muhasebe/Günlük Operasyon ve diğer mevcut ekranları boş gösteriyordu. Sekme barı mevcut shell-v3-workspace içine taşındı; tüm mevcut render ve sekme bağlantıları aynen korundu. Yeni işlev veya modül yok; Worker, D1, auth ve canlı iş verisi değiştirilmedi. Frontend ve Worker CI SUCCESS; gerçek kullanıcı oturumu PC/tablet/telefon etkileşimleri ayrı saha kabulü gerektirir.",
-  "sourceCommit": "88f6566ac96fd854ce0a70d374b3647e5dd4ec66",
+  "note": "01.11.2026 PR497: Kullanıcı onaylı sol açılır ana modül/alt işlem menüleri. Kullanıcı seçili modülün mevcut gerçek sekmeleri sol menüde açılır, başka modül seçilince önceki kapanır. PDKS 5 işlem grubu modül kayıtlarından korunur. Ayarlar & Sistem menüsü yalnız yetkili kullanıcıya, ayırıcı çizginin altında ayrı gösterilir. 'BÖLÜM İŞLEMLERİ' yatay sekme şeridi kaldırılır; üst açık çalışma sekmeleri korunur. İş bileşenleri, Worker, D1, auth ve veri işlemleri değişmedi. Gerçek oturumlu tıklama/görsel saha kabulü ayrı.",
+  "sourceCommit": "ffaf9f27b414b073fc2ee241e1d66e886e395d5b",
   "requestedAt": "2026-11-01"
 }
