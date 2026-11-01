@@ -646,7 +646,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     const body = await bodyOf(c); const gate = await assertCompanyOwner(c, body); if (gate.error) return gate.error;
     const providerType = upper(body.providerType), cfg = providerConfig(c, providerType);
     if (!cfg.family) return c.json(err("INVALID_PROVIDER", "Bu servis doğrudan bulut bağlantısını desteklemiyor."), 422);
-    if (!providerReady(c, providerType)) return c.json(err("OAUTH_NOT_CONFIGURED", `${providerType === "GOOGLE_DRIVE" ? "Google Drive" : "Microsoft"} OAuth uygulama bilgileri henüz production ortamında tanımlı değil.`), 503);
+    if (!providerReady(c, providerType)) return c.json(err("OAUTH_NOT_CONFIGURED", `${providerType === "GOOGLE_DRIVE" ? "Google Drive" : providerType === "DROPBOX" ? "Dropbox" : "Microsoft"} OAuth uygulama bilgileri henüz production ortamında tanımlı değil.`), 503);
     const state = stateToken(), createdAt = now(), expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(), returnPath = sanitizeReturnPath(body.returnPath);
     await c.env.DB.prepare(`DELETE FROM file_hub_oauth_states WHERE expires_at<?`).bind(createdAt).run();
     await c.env.DB.prepare(`INSERT INTO file_hub_oauth_states(state,main_company_slug,provider_type,user_id,return_path,expires_at,created_at) VALUES(?,?,?,?,?,?,?)`).bind(state, gate.slug, providerType, gate.user.id, returnPath, expiresAt, createdAt).run();
