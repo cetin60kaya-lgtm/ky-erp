@@ -1,5 +1,14 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 01.11.2026 — Popüler bulut servis karar matrisi ve akıllı denetim
+
+- Kullanım önceliği: **Google Drive + Microsoft OneDrive aynı anda aktif** (birini varsayılan seçmek diğerini pasifleştirmez). Mevcut SharePoint, NAS ve yerel File Agent servisleri desteklenir. Cloudflare R2 sistem önizleme/cache ve kontrollü arşiv rolünde kalır; kullanıcıya ana dosya evi gibi gösterilmez.
+- Alternatifler: Dropbox (ücretsiz başlangıç 2 GB, resmi OAuth API + webhook), Box (ücretsiz 10 GB, 250 MB tek dosya limiti), pCloud (OAuth/HTTP JSON API), S3 uyumlu depolama. **Henüz gerçek adapterı olmayan Dropbox/Box/pCloud için bağlanabilir buton gösterilmez; gerçek OAuth/okuma/yazma/senkron olmadan destek tamamlandı denmez.**
+- Akıllı kontrol: `GET /api/file-hub/diagnostics` (firma bazlı D1 salt okunur) Google/OneDrive eksikliği, 24 saatten eski/yarım senkron, ERROR, DESEN/MODEL_IMAGE ataması eksikliği, MISSING/UNMATCHED dosyalar ve yerel File Agent yanıtının eskimesini izler. Sadece işlemi önerir; dosya silmez, hesap bağlamaz, habersiz sağlayıcı geçişi/klonlama yapmaz.
+- Doğrulama ölçütü: Oturum sahibi Google ve Microsoft OAuth hesaplarını ayrı ayrı yetkilendirir; klasör seçimi, dosya yükleme/indirme, D1 indeks, eşleştirme, telefonu/Windows ekranı aynı API, hata/yeniden bağlama ve en az bir gerçek dosya saha testinden sonra ilgili servis **canlı aktif** sayılabilir. Proje CI/publish başarısı tek başına OAuth kullanım onayı değildir.
+- Resmi sağlayıcı belgeleri: developers.google.com/workspace/drive/api; learn.microsoft.com/graph/api/driveitem-list-children; docs.dropboxapi.com; developer.box.com; docs.pcloud.com; developers.cloudflare.com/r2.
+
+
 ## 01.11.2026 — Bağlantılar & Depolama altı işlem alanı tam düzeni
 
 - Mevcut alt sayfalar: Genel Bakış, Dosya Servisleri, E-posta Hesapları, Bölüm / Dosya Atamaları, Dosya İndeksi, Senkronizasyon & Agent, Yedekleme & Loglar. Mail sekmesindeki boş ekran, gerçek `AdminMailConnectionsV2` yönetimine bağlandı; hazır OAuth/onay/posta kutusu akışı yeniden kullanılacak, ikinci mail sistemi kurulmayacak.
