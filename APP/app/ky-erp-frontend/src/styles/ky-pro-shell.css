@@ -93,27 +93,51 @@
 .shell-v3 .ky-pro-settings-items{padding:0 0 2px 12px;border-left:1px solid #3c526d;margin-left:25px}
 .shell-v3 .ky-pro-settings-link{min-height:39px;padding:7px 9px;font-size:12px}
 .shell-v3 .ky-pro-settings-link .ky-pro-direct-icon{flex-basis:24px;width:24px;height:24px}
-.shell-v3 .ky-pro-module-tabs{
-  display:flex;align-items:center;gap:12px;min-width:0;max-width:100%;
-  padding:8px 15px;background:#fff;border-bottom:1px solid #e0e7f0;
+/* Sol ana modüller tek sıra; gerçek işlem sekmeleri yalnız açılan modülün altında. */
+.shell-v3 .ky-pro-sidebar-module{min-width:0}
+.shell-v3 .ky-pro-direct-link>svg:last-child{flex:0 0 auto;color:#aec5e3;transition:transform .16s ease}
+.shell-v3 .ky-pro-direct-link>svg.expanded:last-child{transform:rotate(180deg)}
+.shell-v3 .ky-pro-sidebar-submenu{
+  min-width:0;display:grid;gap:2px;padding:3px 2px 7px 10px;
+  margin:0 0 4px 24px;border-left:1px solid #415977;
 }
-.shell-v3 .ky-pro-module-tabs-caption{flex:0 0 auto;color:#6c7d94;font-size:10px;font-weight:800;letter-spacing:.055em}
-.shell-v3 .ky-pro-module-tabs-scroll{display:flex;align-items:center;gap:5px;min-width:0;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;padding:2px 0}
-.shell-v3 .ky-pro-module-tabs-scroll>button{
-  flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;min-height:33px;
-  padding:7px 11px;border:1px solid transparent;border-radius:9px;background:#f3f6fa;
-  color:#415673;font:inherit;font-size:11.5px;font-weight:650;white-space:nowrap;cursor:pointer;
+.shell-v3 .ky-pro-sidebar-submenu :is(.ky-pro-sidebar-tab,.ky-pro-sidebar-tab-list>button){
+  width:100%;min-width:0;min-height:34px;display:flex;align-items:center;gap:8px;
+  border:0;border-radius:7px;padding:8px 8px;background:transparent;
+  color:#cadbf0;text-align:left;font:inherit;font-size:11.5px;font-weight:560;
+  line-height:1.4;cursor:pointer;
 }
-.shell-v3 .ky-pro-module-tabs-scroll>button:hover{background:#eaf2fe;color:#2457a7}
-.shell-v3 .ky-pro-module-tabs-scroll>button.active{border-color:#bcd2f2;background:#eaf2ff;color:#2458ad}
+.shell-v3 .ky-pro-sidebar-submenu :is(.ky-pro-sidebar-tab,.ky-pro-sidebar-tab-list>button)>svg{flex:0 0 auto;color:#98b5d8}
+.shell-v3 .ky-pro-sidebar-submenu :is(.ky-pro-sidebar-tab,.ky-pro-sidebar-tab-list>button)>span{
+  min-width:0;overflow-wrap:anywhere;
+}
+.shell-v3 .ky-pro-sidebar-submenu :is(.ky-pro-sidebar-tab,.ky-pro-sidebar-tab-list>button):is(:hover,:focus-visible){
+  background:#284363;color:#fff;
+}
+.shell-v3 .ky-pro-sidebar-submenu :is(.ky-pro-sidebar-tab,.ky-pro-sidebar-tab-list>button).active{
+  background:#355987;color:#fff;box-shadow:inset 2px 0 0 #9fc4f8;font-weight:750;
+}
+.shell-v3 .ky-pro-sidebar-subgroup{min-width:0}
+.shell-v3 .ky-pro-sidebar-section-trigger{
+  width:100%;min-width:0;min-height:35px;display:flex;align-items:center;gap:7px;
+  border:0;border-radius:7px;padding:7px 7px;background:transparent;
+  color:#bbcee8;text-align:left;font:inherit;font-size:11.5px;font-weight:720;cursor:pointer;
+}
+.shell-v3 .ky-pro-sidebar-section-trigger:hover,
+.shell-v3 .ky-pro-sidebar-section-trigger.open{background:#263b55;color:#fff}
+.shell-v3 .ky-pro-sidebar-section-trigger>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.shell-v3 .ky-pro-sidebar-section-trigger>svg{flex:0 0 auto}
+.shell-v3 .ky-pro-sidebar-section-trigger>svg:last-child{transition:transform .16s ease}
+.shell-v3 .ky-pro-sidebar-section-trigger.open>svg:last-child{transform:rotate(180deg)}
+.shell-v3 .ky-pro-sidebar-tab-list{display:grid;gap:1px;margin:0 0 5px 8px;padding-left:8px;border-left:1px solid #3c526d}
 .shell-v3 .ky-pro-direct-link:focus-visible,
 .shell-v3 .ky-pro-settings-trigger:focus-visible,
-.shell-v3 .ky-pro-module-tabs-scroll>button:focus-visible{outline:2px solid #8ab4f5;outline-offset:2px}
-@media(max-width:1024px){.shell-v3 .ky-pro-module-tabs{padding:7px 9px;gap:8px}}
+.shell-v3 .ky-pro-sidebar-submenu button:focus-visible{
+  outline:2px solid #8ab4f5;outline-offset:2px;
+}
 @media(max-width:600px){
-  .shell-v3 .ky-pro-module-tabs{display:block}
-  .shell-v3 .ky-pro-module-tabs-caption{display:block;margin-bottom:5px}
-  .shell-v3 .ky-pro-module-tabs-scroll>button{font-size:11px}
+  .shell-v3 .ky-pro-sidebar-submenu{margin-left:19px;padding-left:8px}
+  .shell-v3 .ky-pro-sidebar-submenu button{min-height:40px}
 }
 @media(prefers-reduced-motion:reduce){
   .shell-v3 .ky-pro-direct-link,.shell-v3 .ky-pro-settings-trigger,
