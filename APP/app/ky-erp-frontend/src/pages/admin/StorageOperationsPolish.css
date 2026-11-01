@@ -65,3 +65,14 @@
 .storage-insight-critical{border-left:3px solid #c74444}
 .storage-insight-info{border-left:3px solid #358b83}
 .storage-insight button{align-self:flex-start}
+
+/* OAuth yönetim konsollarının gerçek URI kaydını açık göster; bağlanmış gibi sunma. */
+.storage-oauth-help{width:100%;border:1px solid #d4dfec;border-radius:10px;padding:10px 12px;background:#f8fbff;color:#34516e;min-width:0}
+.storage-oauth-help summary{cursor:pointer;font-weight:700;font-size:12px;line-height:1.5}
+.storage-oauth-help p{font-size:12px;line-height:1.5;margin:9px 0}
+.storage-oauth-address{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid #dfe8f2;padding:9px;border-radius:8px}
+.storage-oauth-address code{flex:1 1 200px;font-size:11px;overflow-wrap:anywhere;min-width:0}
+.storage-oauth-help a{color:#165caa;text-decoration:underline;font-size:12px;font-weight:700}
+.storage-oauth-help small{display:block;font-size:11px;color:#687e97;margin-top:8px;line-height:1.5}
+.storage-oauth-warning{color:#963b27!important}
+@media(max-width:640px){.storage-oauth-address{flex-direction:column;align-items:stretch}.storage-oauth-address button{width:100%}}

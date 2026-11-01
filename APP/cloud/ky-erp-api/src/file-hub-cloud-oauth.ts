@@ -626,10 +626,10 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/cloud/providers", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
     return c.json({ ok: true, data: [
-      { providerType: "GOOGLE_DRIVE", label: "Google Drive", authFamily: "GOOGLE", configured: providerReady(c, "GOOGLE_DRIVE"), mode: "CLOUD_API" },
-      { providerType: "ONEDRIVE", label: "Microsoft OneDrive", authFamily: "MICROSOFT", configured: providerReady(c, "ONEDRIVE"), mode: "CLOUD_API" },
-      { providerType: "DROPBOX", label: "Dropbox (alternatif)", authFamily: "DROPBOX", configured: providerReady(c, "DROPBOX"), mode: "CLOUD_API", optional: true },
-      { providerType: "SHAREPOINT", label: "Microsoft SharePoint", authFamily: "MICROSOFT", configured: providerReady(c, "SHAREPOINT"), mode: "CLOUD_API" },
+      { providerType: "GOOGLE_DRIVE", label: "Google Drive", authFamily: "GOOGLE", configured: providerReady(c, "GOOGLE_DRIVE"), redirectUri: providerConfig(c, "GOOGLE_DRIVE").redirectUri, registrationVerified: false, mode: "CLOUD_API" },
+      { providerType: "ONEDRIVE", label: "Microsoft OneDrive", authFamily: "MICROSOFT", configured: providerReady(c, "ONEDRIVE"), redirectUri: providerConfig(c, "ONEDRIVE").redirectUri, registrationVerified: false, mode: "CLOUD_API" },
+      { providerType: "DROPBOX", label: "Dropbox (alternatif)", authFamily: "DROPBOX", configured: providerReady(c, "DROPBOX"), redirectUri: providerConfig(c, "DROPBOX").redirectUri, registrationVerified: false, mode: "CLOUD_API", optional: true },
+      { providerType: "SHAREPOINT", label: "Microsoft SharePoint", authFamily: "MICROSOFT", configured: providerReady(c, "SHAREPOINT"), redirectUri: providerConfig(c, "SHAREPOINT").redirectUri, registrationVerified: false, mode: "CLOUD_API" },
       { providerType: "LOCAL_FOLDER", label: "Yerel Klasör", configured: true, mode: "AGENT" },
       { providerType: "NAS", label: "NAS / Ağ Klasörü", configured: true, mode: "AGENT" },
     ] });
