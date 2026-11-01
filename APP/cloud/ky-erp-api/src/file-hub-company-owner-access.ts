@@ -5,7 +5,7 @@
  */
 const text = (value: unknown) => value == null ? "" : String(value).trim();
 const roleOf = (value: unknown) => text(value).toUpperCase().replace(/İ/g, "I");
-const slugOf = (value: unknown) => text(value).toLocaleLowerCase("tr-TR");
+const slugOf = (value: unknown) => text(value).toLowerCase(); // Firma slug'ı ASCII/URL anahtarıdır; tr-TR dotless-I kullanma.
 
 export function canManageOwnCompanyStorage(user: Record<string, any> | null | undefined, requestedCompanySlug: unknown): boolean {
   if (!user || !["COMPANY_ADMIN", "SUPER_ADMIN", "ADMIN"].includes(roleOf(user.role))) return false;
