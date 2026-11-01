@@ -99,3 +99,17 @@ test("0046 canonical report controls are runtime-ready and keep fallback-safe re
   assert.match(read("e-belge-product-store.ts"), /tableExists\(c,"accounting_expense_rules"\)/);
   assert.match(read("e-belge-product-store.ts"), /ACCOUNTING_EXPENSE_RULE/);
 });
+
+test("OAuth token hata kodu sir tasimadan hatanin gercek sinifini dondurur", () => {
+  const ui = readFileSync(resolve(here, "../../../../APP/app/ky-erp-frontend/src/pages/admin/AdminStorageCenter.jsx"), "utf8");
+  assert.match(cloud, /invalid_client: "OAUTH_TOKEN_INVALID_CLIENT"/);
+  assert.match(cloud, /invalid_grant: "OAUTH_TOKEN_INVALID_GRANT"/);
+  assert.match(cloud, /redirect_uri_mismatch: "OAUTH_TOKEN_REDIRECT_MISMATCH"/);
+  assert.match(cloud, /unauthorized_client: "OAUTH_TOKEN_UNAUTHORIZED_CLIENT"/);
+  assert.match(cloud, /invalid_request: "OAUTH_TOKEN_INVALID_REQUEST"/);
+  assert.match(cloud, /response.ok \? "OAUTH_TOKEN_NO_ACCESS" : "OAUTH_TOKEN_FAILED"/);
+  assert.doesNotMatch(cloud, /new Error\(text\(payload.error_description/);
+  assert.match(ui, /OAUTH_TOKEN_INVALID_CLIENT/);
+  assert.match(ui, /OAUTH_TOKEN_INVALID_GRANT/);
+  assert.match(ui, /hints\[oauthError\]/);
+});
