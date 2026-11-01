@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.11.2026 — PR #497 eski sol açılır alt menü düzeni (kullanıcı onaylı)
+
+- **Son menü kararı:** Ana Sayfa, Muhasebe, e-Belge / Faturalar, Günlük Operasyon, İK Aylık, PDKS, Desen, İmalat, Boyahane, Denetim Merkezi, Mail & Dosyalar sırası korunur. Seçili ana modülün **mevcut gerçek işlem sekmeleri sol menü altında açılır/kapanır**, başka modül açılınca önceki kapanır. Kullanıcı ekranıyla teyit edilen **Ayarlar & Sistem**, yönetim yetkisi olanlarda, ayırıcı çizginin altında ayrı açılır bölüm olarak kalır.
+- Muhasebe/PDKS/İK/üretim dahil mevcut `moduleRegistry` ve `shellMenuModel` grupları tekrar kullanılır; PDKS'nin 5 grubu/18 sekmesi korunur. Üstteki `BÖLÜM İŞLEMLERİ` yatay şeridi kaldırıldı; üst açık çalışma sekmeleri ve gerçek tüm modül render yolları aynı kaldı. Değişen dosyalar `AppShellV3.jsx`, `ky-pro-shell.css`, ilgili frontend ve PDKS sözleşme testleri. Worker, D1, kimlik yetkileri ve canlı iş verileri **değişmedi**.
+- [PR #497](https://github.com/cetin60kaya-lgtm/ky-erp/pull/497) **MERGED** `ffaf9f27b414b073fc2ee241e1d66e886e395d5b`. [CI #41266202229](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41266202229) frontend lint/test/build ve Worker typecheck/test/build **SUCCESS**. [Pages #41266296013](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41266296013) production deploy ve canlı entry/Günlük Operasyon chunk smoke **SUCCESS**; release SHA `f63012c43ae946cc8336994efaeb99d1d5f8ddd4` merge SHA'nın devamıdır (behind_by=0).
+- **Saha kabul sınırı:** Gerçek girişli kullanıcı oturumunda bütün alt menüleri tıklama, mobil/tablet düzeni ve tüm işleme/yazma senaryoları ayrıca teyit gerekir; CI/Pages bundle smoke bu sahada tam kabul anlamına gelmez.
+
+
 ## 01.11.2026 — PR #496 mevcut modül ekranlarının boş görünmesi düzeltildi
 
 - Gerçek kullanıcı ekranlarında Muhasebe ve Günlük Operasyon sayfaları boş ve bölüm sekmeleri sayfanın ortasında görünüyordu. Kök neden PR #494'te `AppShellV3.jsx` içine eklenen sekme şeridinin 5 satırlık `shell-v3-main` grid'inde 6. kardeş olarak konumlanmasıydı; mevcut `shell-v3-workspace` yüksekliği sıkışıyordu.
