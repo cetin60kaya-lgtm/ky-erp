@@ -37,6 +37,8 @@ test("Depolama is a first-class owner module with all storage screens", () => {
 
 test("Depolama screen exposes provider-neutral connection, routing and index management", () => {
   const screen = read("APP/app/ky-erp-frontend/src/pages/admin/AdminStorageCenter.jsx");
+  const catalog = read("APP/app/ky-erp-frontend/src/pages/admin/StorageDocumentCatalog.js");
+  assert.match(screen,/StorageDocumentCatalog/);
 
   for (const provider of [
     "GOOGLE_DRIVE",
@@ -58,7 +60,7 @@ test("Depolama screen exposes provider-neutral connection, routing and index man
     "DTF",
     "STOK",
   ]) {
-    assert.match(screen, new RegExp(moduleCode));
+    assert.match(catalog, new RegExp(moduleCode));
   }
 
   for (const purpose of [
@@ -80,7 +82,7 @@ test("Depolama screen exposes provider-neutral connection, routing and index man
     "CUSTOMER_REFERENCE",
     "GENERIC",
   ]) {
-    assert.match(screen, new RegExp(purpose));
+    assert.match(catalog, new RegExp(purpose));
   }
 
   assert.match(screen, /\/file-hub\/overview/);
