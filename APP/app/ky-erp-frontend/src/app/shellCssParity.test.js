@@ -39,3 +39,23 @@ test("iPhone güvenli alanları ve 44px menü hedefleri cihaz kabuklarında bulu
     assert.match(css, /min-height:\s*44px/);
   }
 });
+
+test("bölüm sekmeleri mevcut ekranın çalışma alanında kalır; grid satırını sıkıştırmaz", () => {
+  const source = load("../layouts/AppShellV3.jsx");
+  const start = source.indexOf('<section className="shell-v3-workspace">');
+  const moduleTabs = source.indexOf('<nav className="ky-pro-module-tabs"', start);
+  const actualPage = source.indexOf("{children}", moduleTabs);
+  const end = source.indexOf("</section>", actualPage);
+  assert.ok(start >= 0 && moduleTabs > start && actualPage > moduleTabs && end > actualPage,
+    "Bölüm işlem sekmeleri ve mevcut modül ekranları aynı workspace içinde olmalı");
+  assert.equal(source.indexOf('<nav className="ky-pro-module-tabs"', 0), moduleTabs,
+    "İşlem sekmeleri workspace dışında ikinci bir grid satırı oluşturmamalı");
+  assert.ok(load("../styles/shell-v3.css").includes("grid-template-rows: 58px 38px 26px minmax(0, 1fr) 28px;"));
+  assert.ok(source.includes("getTabs(activeModule, user).map"),
+    "Modül işlem sekmeleri aynı mevcut route tanımlarından gelmeli");
+  const app = load("../AppV3.jsx");
+  for (const key of ["muhasebe", "e-belge", "gunluk-operasyon", "ik", "pdks", "desen", "uretim", "boyahane", "compliance", "iletisim"]) {
+    assert.ok(app.includes(`activeModule?.key === "${key}"`),
+      `${key}: mevcut modül ekranının AppV3 render bağlantısı korunmalı`);
+  }
+});
