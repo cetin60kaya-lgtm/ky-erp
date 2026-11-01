@@ -5,12 +5,12 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-11-01",
   "scope": [
-    "PR501-Google-Drive-redirect-uri-mismatch-owner-guidance",
-    "PR501-OneDrive-Entra-redirect-uri-public-guidance",
-    "CI-41294372208-success",
-    "Cloudflare-Pages-production-bundle-smoke"
+    "PR502-public-privacy-terms-for-Google-OAuth-branding",
+    "PR502-public-footer-real-links",
+    "CI-41320996684-success",
+    "Cloudflare-Pages-production-smoke"
   ],
-  "note": "01.11.2026 PR501: Dosya Servisleri Google Drive/OneDrive kartında ve hesap sihirbazında backend'den gelen gerçek callback URI, tek tık kopyalama, sağlayıcı konsol navigasyonu, eksik production ayar durumu ve doğrulanmamış kayıt uyarısı. Gerçek Google/Microsoft OAuth konsolunu değiştirmez; kullanıcı uygulama kaydını yapılandırmadan hesap bağlı sayılmaz.",
-  "sourceCommit": "780e380b41f3c1701f5015fa178665ea1958d0d7",
+  "note": "PR502: Kamuya açık /gizlilik.html ve /kullanim-kosullari.html, KY ERP footer bağlantıları, Google Drive kapsam bilgilendirmesi. Resmî KVKK danışmanlık/onayı veya Google OAuth üretim verification tamamlandı sayılmaz.",
+  "sourceCommit": "a4d492ef347b88171671b70579dbadf14614240f",
   "requestedAt": "2026-11-01"
 }
