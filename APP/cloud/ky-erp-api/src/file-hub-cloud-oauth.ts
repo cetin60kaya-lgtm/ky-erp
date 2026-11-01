@@ -689,7 +689,7 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
         AND c.sync_mode='CLOUD_API'
         AND b.sync_enabled=1
       ORDER BY c.updated_at DESC
-      LIMIT 12`,
+      LIMIT 4`,
   ).all<Row>();
 
   for (const row of result.results || []) {
@@ -698,6 +698,10 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
     try {
       const { link, accessToken } = await connectionAccount(c, slug, connectionId);
       const provider=upper(link.provider_type), driveId=text(link.provider_drive_id);
+      if (provider === "GOOGLE_DRIVE") {
+        await runGoogleSyncBatch(c, slug, connectionId, 3, true);
+        continue;
+      }
       const rootId=text(link.remote_root_id)||"root", rootName=text(link.remote_root_name)||"Ana Klasör", seenAt=now();
       const queue:Row[]=[{id:rootId,path:""}];
       let files=0,folders=0,truncated=false,changedFiles=0,modelSyncs=0;
@@ -879,6 +883,10 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     try {
       const { link, accessToken } = await connectionAccount(c, gate.slug, connectionId); if (Number(link.is_active) === 0) return c.json(err("CONNECTION_DISABLED", "Bu depolama servisi pasif."), 409);
       const provider = upper(link.provider_type), driveId = text(link.provider_drive_id), rootId = text(link.remote_root_id) || "root", rootName = text(link.remote_root_name) || "Ana Klasör", seenAt = now();
+      if (provider === "GOOGLE_DRIVE") {
+        const progress = await runGoogleSyncBatch(c, gate.slug, connectionId, 1, false);
+        return c.json({ ok: true, data: progress });
+      }
       const queue: Row[] = [{ id: rootId, path: "" }]; let files = 0, folders = 0, truncated = false, modelSyncs = 0;
       const designBinding = await c.env.DB.prepare(`SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? AND module_code='DESEN' AND purpose_code='MODEL_IMAGE' AND sync_enabled=1 LIMIT 1`).bind(gate.slug, connectionId).first<Row>();
       while (queue.length && files + folders < limit) {
