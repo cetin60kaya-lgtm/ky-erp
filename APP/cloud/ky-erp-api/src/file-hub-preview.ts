@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { ensureCloudModelImagePreview } from "./file-hub-cloud-oauth";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -40,7 +41,7 @@ export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
     if (!user) return c.json({ ok:false, error:{ code:"UNAUTHORIZED", message:"Oturum gerekli." } }, 401);
     const slug = slugOf(c), id = c.req.param("id");
     const asset = await c.env.DB.prepare(
-      `SELECT id,file_name,mime_type,preview_status,preview_storage_key,status
+      `SELECT id,file_name,mime_type,preview_status,preview_storage_key,status,source_type
          FROM file_hub_assets
         WHERE id=? AND main_company_slug=? LIMIT 1`,
     ).bind(id, slug).first<Row>();
@@ -57,8 +58,23 @@ export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
       }
     }
 
-    const key = text(asset.preview_storage_key);
-    if (!key || upper(asset.preview_status) !== "READY") {
+    let key = text(asset.preview_storage_key);
+    let status = upper(asset.preview_status);
+    if ((!key || status !== "READY") && upper(asset.source_type) === "CLOUD_API" &&
+        ["image/jpeg","image/png","image/webp"].includes(text(asset.mime_type).toLowerCase())) {
+      try {
+        if (await ensureCloudModelImagePreview(c,slug,id)) {
+          const ready = await c.env.DB.prepare(
+            "SELECT preview_storage_key,preview_status FROM file_hub_assets WHERE id=? AND main_company_slug=?",
+          ).bind(id,slug).first<Row>();
+          key = text(ready?.preview_storage_key);
+          status = upper(ready?.preview_status);
+        }
+      } catch {
+        // Sağlayıcı önizlemesi geçici erişilemiyorsa ana model kaydı ve dosya ilişkisi korunur.
+      }
+    }
+    if (!key || status !== "READY") {
       return c.json({ ok:false, error:{ code:"PREVIEW_NOT_READY", message:"Dosya mevcut ancak web önizlemesi henüz hazır değil." } }, 404);
     }
     const object = await c.env.FILES.get(key);

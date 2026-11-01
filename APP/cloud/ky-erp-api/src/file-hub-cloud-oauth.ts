@@ -236,8 +236,8 @@ async function connectionAccount(c: Context<AppEnv>, slug: string, connectionId:
   return { link: { ...link, ...account }, accessToken };
 }
 async function upsertCloudFile(c: Context<AppEnv>, slug: string, connectionId: string, provider: string, item: Row, relativePath: string, seenAt: string) {
-  let location = await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,(SELECT COUNT(*) FROM file_hub_relations r WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.provider_file_id=? LIMIT 1`).bind(slug, connectionId, text(item.id)).first<Row>();
-  if (!location) location = await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,(SELECT COUNT(*) FROM file_hub_relations r WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.relative_path=? LIMIT 1`).bind(slug, connectionId, relativePath).first<Row>();
+  let location = await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,(SELECT COUNT(*) FROM file_hub_relations r JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.provider_file_id=? LIMIT 1`).bind(slug, connectionId, text(item.id)).first<Row>();
+  if (!location) location = await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,(SELECT COUNT(*) FROM file_hub_relations r JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.relative_path=? LIMIT 1`).bind(slug, connectionId, relativePath).first<Row>();
   const fileName = text(item.name) || "dosya";
   const extension = fileName.includes(".") ? fileName.split(".").pop()!.toUpperCase() : "";
   if (location) {
@@ -252,8 +252,16 @@ async function upsertCloudFile(c: Context<AppEnv>, slug: string, connectionId: s
       upper(location.asset_status)!=="AVAILABLE" ||
       Number(location.is_available||0)!==1;
     if (changed) {
-      await c.env.DB.prepare(`UPDATE file_hub_assets SET file_name=?,extension=?,mime_type=?,size_bytes=?,status='AVAILABLE',source_type='CLOUD_API',last_seen_at=?,updated_at=?,metadata=? WHERE id=? AND main_company_slug=?`)
-        .bind(fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), seenAt, seenAt, JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), location.asset_id, slug).run();
+      // JPEG değiştiyse eski küçük önizlemeyi bir sonraki görüntülemede yeniden üret.
+      const previewChanged = text(location.provider_modified_at) !== text(item.modifiedAt) ||
+        text(oldMeta.checksum) !== text(item.checksum);
+      await c.env.DB.prepare(`UPDATE file_hub_assets
+          SET file_name=?,extension=?,mime_type=?,size_bytes=?,status='AVAILABLE',source_type='CLOUD_API',
+              last_seen_at=?,updated_at=?,metadata=?,
+              preview_status=CASE WHEN ?=1 THEN 'NONE' ELSE preview_status END,
+              preview_storage_key=CASE WHEN ?=1 THEN NULL ELSE preview_storage_key END
+          WHERE id=? AND main_company_slug=?`)
+        .bind(fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), seenAt, seenAt, JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), previewChanged ? 1 : 0, previewChanged ? 1 : 0, location.asset_id, slug).run();
       await c.env.DB.prepare(`UPDATE file_hub_locations SET provider_file_id=?,relative_path=?,is_available=1,provider_modified_at=?,last_seen_at=?,updated_at=? WHERE id=?`)
         .bind(text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, seenAt, location.id).run();
     }
@@ -275,11 +283,9 @@ function bindingMatches(rootPath: unknown, relativePath: unknown) {
   return rel===root || rel.startsWith(root+"/");
 }
 function designModelIdentity(value: unknown) {
-  return upper(value)
-    .replace(/\.[A-Z0-9]+$/i,"")
-    .replace(/\b(YERLEŞİM|YERLESIM|KALIP|PLACEMENT|GÖRSEL|GORSEL|RIP|SOURCE|KAYNAK|FINAL|SON)\b.*$/i,"")
-    .replace(/\s+/g," ")
-    .trim();
+  // Dosya adı aynen model adıdır. Yalnız uzantı kaldırılır; FINAL/SON gibi
+  // modelin gerçek adının parçası olabilecek kelimeler silinmez.
+  return text(value).replace(/\.[^.]+$/, "").replace(/\s+/g, " ").trim();
 }
 async function insertCloudDesignRelation(c:Context<AppEnv>,slug:string,fileAssetId:string,entityId:string,relationType:string,metadata:Row={}){
   if(!entityId) return;
@@ -299,12 +305,15 @@ async function syncCloudDesignBinding(c:Context<AppEnv>,slug:string,connectionId
   if(purposeCode==="MODEL_IMAGE" && !["JPG","JPEG","PNG","WEBP"].includes(extension)) return null;
   const modelName=designModelIdentity(item.name);
   if(!modelName) return null;
-  await insertCloudDesignRelation(c,slug,fileAssetId,modelName,purposeCode,{moduleCode:upper(binding.module_code),purposeCode,relativePath,provider});
-  return syncFileHubDesignModel(c,{
+  const synced = await syncFileHubDesignModel(c,{
     slug,fileAssetId,modelName,purposeCode,
     fileName:text(item.name),extension,mimeType:text(item.mimeType),sizeBytes:Number(item.size||0),
     sha256:text(item.checksum),relativePath,providerType:provider,storageConnectionId:connectionId,
   });
+  // İlişkinin entity_id alanı model adı değil, gerçek canonical model UUID olmalı.
+  if (synced?.modelId) await insertCloudDesignRelation(c,slug,fileAssetId,synced.modelId,purposeCode,
+    {moduleCode:upper(binding.module_code),purposeCode,relativePath,provider});
+  return synced;
 }
 
 
@@ -401,6 +410,44 @@ export async function archiveFileToCloudConnection(c:Context<AppEnv>,slug:string
   throw Object.assign(new Error("Bu File Hub sağlayıcısı doğrudan bulut arşivlemeyi desteklemiyor."),{code:"CLOUD_ARCHIVE_PROVIDER_UNSUPPORTED"});
 }
 
+
+// Google Drive orijinalini R2'ye kopyalamadan, sağlayıcının küçük JPEG önizlemesini cache'le.
+export async function ensureCloudModelImagePreview(c: Context<AppEnv>, slug: string, assetId: string): Promise<boolean> {
+  const row = await c.env.DB.prepare(
+    `SELECT a.extension,a.mime_type,l.provider_file_id,x.oauth_account_id
+       FROM file_hub_assets a
+       JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.is_available=1
+       JOIN file_hub_connections sc ON sc.id=l.storage_connection_id AND sc.main_company_slug=l.main_company_slug
+       JOIN file_hub_cloud_connection_accounts x ON x.connection_id=sc.id AND x.main_company_slug=sc.main_company_slug
+      WHERE a.id=? AND a.main_company_slug=? AND sc.provider_type='GOOGLE_DRIVE'
+      LIMIT 1`,
+  ).bind(assetId,slug).first<Row>();
+  if (!row || !["JPG","JPEG","PNG","WEBP"].includes(upper(row.extension))) return false;
+  const { accessToken } = await usableAccount(c,slug,text(row.oauth_account_id));
+  const metadata = await providerJson(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(text(row.provider_file_id))}?fields=thumbnailLink,mimeType`,
+    accessToken,
+  );
+  const link = text(metadata.thumbnailLink);
+  if (!link) return false;
+  const thumbnail = new URL(link);
+  if (thumbnail.protocol !== "https:" || !(thumbnail.hostname === "googleusercontent.com" ||
+      thumbnail.hostname.endsWith(".googleusercontent.com"))) return false;
+  const response = await fetch(thumbnail.toString(), { headers: { Authorization:`Bearer ${accessToken}` } });
+  if (!response.ok) return false;
+  const mime = text(response.headers.get("content-type")).split(";")[0].toLowerCase();
+  if (!["image/jpeg","image/png","image/webp"].includes(mime)) return false;
+  if (Number(response.headers.get("content-length") || 0) > 2_000_000) return false;
+  const bytes = await response.arrayBuffer();
+  if (!bytes.byteLength || bytes.byteLength > 2_000_000) return false;
+  const key = `file-hub/previews/cloud/${encodeURIComponent(slug)}/${encodeURIComponent(assetId)}`;
+  await c.env.FILES.put(key,bytes,{httpMetadata:{contentType:mime}});
+  await c.env.DB.prepare(
+    `UPDATE file_hub_assets SET preview_storage_key=?,preview_status='READY',updated_at=?
+       WHERE id=? AND main_company_slug=?`,
+  ).bind(key,now(),assetId,slug).run();
+  return true;
+}
 
 export async function readFileHubAssetForMail(c:any,slug:string,assetId:string,maxBytes=25*1024*1024){
   const asset=await c.env.DB.prepare(`SELECT id,file_name,mime_type,size_bytes,status,source_type,preview_storage_key,metadata

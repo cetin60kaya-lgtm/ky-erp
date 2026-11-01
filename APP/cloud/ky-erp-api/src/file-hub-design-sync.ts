@@ -17,24 +17,46 @@ const objectOf = (v: unknown): Row => {
 };
 const normalize = (v: unknown) => upper(v).replace(/İ/g, "I").replace(/[^A-Z0-9ÇĞÖŞÜ]+/g, " ").replace(/\s+/g, " ").trim();
 
+// Model JPEG dosyası tek başına kayda yeterlidir. Firma ID'si tahmin edilmez:
+// tam TAHA GİYİM kartı tekilse kullanılır, değilse ad korunup ID boş bırakılır.
+const DEFAULT_DESIGN_COMPANY_NAME = "TAHA GİYİM SAN. VE TİC.";
 async function defaultDesignCompany(c: Context<AppEnv>, slug: string) {
   try {
-    const row = await c.env.DB.prepare(
-      `SELECT customer_id,customer_name,COUNT(*) n
-         FROM model_records
-        WHERE main_company_slug=?
-          AND COALESCE(TRIM(deleted_at),'')=''
-          AND customer_name LIKE 'TAHA%' COLLATE NOCASE
-        GROUP BY customer_id,customer_name
-        ORDER BY n DESC
-        LIMIT 1`,
-    ).bind(slug).first<Row>();
+    const result = await c.env.DB.prepare(
+      `SELECT id,name FROM companies
+         WHERE main_company_slug=? AND deleted_at IS NULL
+           AND COALESCE(is_active,1)=1 AND name LIKE 'TAHA%' COLLATE NOCASE`,
+    ).bind(slug).all<Row>();
+    const candidates = (result.results || []).filter((row: Row) =>
+      normalize(row.name).startsWith("TAHA GIYIM"),
+    );
+    const matched = candidates.length === 1 ? candidates[0] : null;
     return {
-      companyId:text(row?.customer_id),
-      companyName:text(row?.customer_name) || "TAHA GİYİM SAN. VE TİC.",
+      companyId: text(matched?.id),
+      companyName: text(matched?.name) || DEFAULT_DESIGN_COMPANY_NAME,
     };
   } catch {
-    return { companyId:"", companyName:"TAHA GİYİM SAN. VE TİC." };
+    return { companyId:"", companyName:DEFAULT_DESIGN_COMPANY_NAME };
+  }
+}
+
+// Desen JSON kaydı henüz yoksa mevcut imalat/model ana kartını tekrar oluşturma.
+async function existingCanonicalModel(c: Context<AppEnv>, slug: string, modelName: string) {
+  try {
+    const result = await c.env.DB.prepare(
+      `SELECT id,model_name,model_code,company_id,customer_id,customer_name,status,raw,created_at
+         FROM model_records
+        WHERE main_company_slug=? AND COALESCE(TRIM(deleted_at),'')=''
+          AND (model_name=? COLLATE NOCASE OR model_code=? COLLATE NOCASE)
+        ORDER BY updated_at DESC LIMIT 20`,
+    ).bind(slug,modelName,modelName).all<Row>();
+    const candidates = (result.results || []).filter((row: Row) =>
+      normalize(row.model_name || row.model_code) === normalize(modelName));
+    return candidates.find((row: Row) => normalize(row.customer_name).startsWith("TAHA GIYIM"))
+      || candidates.find((row: Row) => !text(row.company_id || row.customer_id))
+      || null;
+  } catch {
+    return null;
   }
 }
 
@@ -126,24 +148,37 @@ export async function syncFileHubDesignModel(c: Context<AppEnv>, input: Row) {
   if (!slug || !modelName || !fileAssetId) return null;
 
   const rows = await modelRows(c, slug);
-  let current = rows.find((row: Row) => normalize(row.modelName || row.modelCode) === normalize(modelName) && upper(row.status) !== "ARCHIVE");
-  const created = !current;
+  let current = rows.find((row: Row) =>
+    normalize(row.modelName || row.modelCode) === normalize(modelName) &&
+    upper(row.status) !== "ARCHIVE" &&
+    (normalize(row.companyName).startsWith("TAHA GIYIM") || !text(row.companyId)));
+  const canonical = current ? null : await existingCanonicalModel(c, slug, modelName);
+  // Modeli otomatik AÇAN dosya yalnız görseldir. PSD/PDF/AI mevcut modele
+  // bağlanabilir, ancak tek başına yeni ve eksik hayalet model üretmez.
+  if (!current && !canonical && purposeCode !== "MODEL_IMAGE") return null;
+  const created = !current && !canonical;
   if (!current) {
     const defaultCompany = await defaultDesignCompany(c, slug);
+    const oldRaw = objectOf(canonical?.raw);
     current = {
-      id: crypto.randomUUID(),
+      ...oldRaw,
+      id: text(canonical?.id) || crypto.randomUUID(),
       modelName,
-      modelCode:modelName,
-      companyId:defaultCompany.companyId,
-      companyName:defaultCompany.companyName,
-      status: purposeCode === "MODEL_IMAGE" ? "NEW_ARRIVAL" : "MODEL_INFO_MISSING",
-      sourceType:"FILE_HUB",
-      operations:[{
-        id:crypto.randomUUID(), printAreaCode:"FRONT", printAreaName:"Ön", sequence:1,
-        moldType:"UNDEFINED", placementStatus:"WAITING", dyehouseStatus:"WAITING",
-        productionReady:false, channels:[], colorGroups:[],
-      }],
-      files:[], metadata:{}, createdAt:now(),
+      modelCode:text(canonical?.model_code) || modelName,
+      companyId:text(canonical?.company_id || canonical?.customer_id) || defaultCompany.companyId,
+      companyName:text(canonical?.customer_name) || defaultCompany.companyName,
+      status:text(canonical?.status) || (purposeCode === "MODEL_IMAGE" ? "NEW_ARRIVAL" : "MODEL_INFO_MISSING"),
+      sourceType:text(oldRaw.sourceType) || "FILE_HUB",
+      operations:Array.isArray(oldRaw.operations) && oldRaw.operations.length
+        ? oldRaw.operations : [{
+          id:crypto.randomUUID(), printAreaCode:"FRONT", printAreaName:"Ön", sequence:1,
+          moldType:"UNDEFINED", placementStatus:"WAITING", dyehouseStatus:"WAITING",
+          productionReady:false, channels:[], colorGroups:[],
+        }],
+      files:Array.isArray(oldRaw.files) ? oldRaw.files : [],
+      metadata:objectOf(oldRaw.metadata),
+      raw:oldRaw,
+      createdAt:text(canonical?.created_at) || now(),
     };
   }
 
