@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { canManageOwnCompanyStorage } from "./file-hub-company-owner-access";
 import { syncFileHubDesignModel } from "./file-hub-design-sync";
 
 type Bindings = Cloudflare.Env & {
@@ -50,13 +51,12 @@ function companySlug(c: Context<AppEnv>, body: Row = {}) {
 }
 async function assertCompanyOwner(c: Context<AppEnv>, body: Row = {}) {
   const user = await currentUser(c);
-  if (!user || upper(user.role) !== "COMPANY_ADMIN") {
-    return { error: c.json(err("COMPANY_OWNER_ONLY", "Google Drive / OneDrive / SharePoint bağlantısını yalnız bu firmanın sahibi / işvereni yönetebilir."), 403) };
+  if (!user || !["COMPANY_ADMIN", "SUPER_ADMIN", "ADMIN"].includes(upper(user.role))) {
+    return { error: c.json(err("COMPANY_OWNER_ONLY", "Bu işlemi yalnız firma sahibi veya kendi firmasında uygulama sahibi yönetebilir."), 403) };
   }
   const slug = companySlug(c, body);
   if (!slug) return { error: c.json(err("TENANT_REQUIRED", "Aktif firma seçimi gerekli."), 422) };
-  const own = text(user.mainCompanySlug || user.main_company_slug || user.security?.main_company_slug);
-  if (!own || own !== slug) return { error: c.json(err("TENANT_FORBIDDEN", "Başka firmanın depolama bağlantısını yönetemezsiniz."), 403) };
+  if (!canManageOwnCompanyStorage(user, slug)) return { error: c.json(err("TENANT_FORBIDDEN", "Başka firmanın depolama bağlantısını yönetemezsiniz."), 403) };
   return { user, slug };
 }
 

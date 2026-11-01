@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { canManageOwnCompanyStorage } from "./file-hub-company-owner-access";
 
 type Bindings = Cloudflare.Env & { FILE_HUB_AGENT_KEY?: string };
 type Variables = { requestId: string };
@@ -18,10 +19,7 @@ function err(code: string, message: string, details?: unknown) { return { ok:fal
 function rowView(r: Row) { return { ...r, metadata: json(r.metadata), isActive: r.is_active == null ? undefined : Number(r.is_active) !== 0, isPrimary: r.is_primary == null ? undefined : Number(r.is_primary) !== 0, readEnabled: r.read_enabled == null ? undefined : Number(r.read_enabled)!==0, writeEnabled: r.write_enabled == null ? undefined : Number(r.write_enabled)!==0, syncEnabled: r.sync_enabled == null ? undefined : Number(r.sync_enabled)!==0, isDefault: r.is_default == null ? undefined : Number(r.is_default)!==0, isAvailable: r.is_available == null ? undefined : Number(r.is_available)!==0 }; }
 async function requireCompanyOwner(c: Context<AppEnv>, body: Row = {}) {
   const u = await getAuthenticatedUser(c) as Row | null;
-  if (!u || upper(u.role) !== "COMPANY_ADMIN") return null;
-  const own = text(u.mainCompanySlug || u.main_company_slug || u.security?.main_company_slug);
-  const requested = slugOf(c, body);
-  return own && requested && own === requested ? u : null;
+  return canManageOwnCompanyStorage(u, slugOf(c, body)) ? u : null;
 }
 async function requireUser(c: Context<AppEnv>) { return await getAuthenticatedUser(c) as Row | null; }
 function agentAllowed(c: Context<AppEnv>) { const expected = text(c.env.FILE_HUB_AGENT_KEY); const actual = text(c.req.header("X-KYERP-Agent-Key")); return Boolean(expected && actual && expected === actual); }
@@ -53,7 +51,7 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   });
 
   app.post("/api/file-hub/connections", async c => {
-    const b=await bodyOf(c), owner=await requireCompanyOwner(c,b); if(!owner) return c.json(err("COMPANY_OWNER_ONLY","Depolama bağlantısını yalnız bu firmanın sahibi / işvereni ekleyebilir."),403);
+    const b=await bodyOf(c), owner=await requireCompanyOwner(c,b); if(!owner) return c.json(err("COMPANY_OWNER_ONLY","Depolama bağlantısını yalnız firma sahibi veya kendi firmasında uygulama sahibi ekleyebilir."),403);
     const slug=slugOf(c,b), provider=upper(b.providerType);
     if(!["GOOGLE_DRIVE","ONEDRIVE","LOCAL_FOLDER","NAS","SHAREPOINT"].includes(provider)) return c.json(err("INVALID_PROVIDER","Geçersiz depolama sağlayıcısı."),422);
     const id=crypto.randomUUID(), ts=now();
@@ -64,7 +62,7 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   });
 
   app.patch("/api/file-hub/connections/:id", async c => {
-    const b=await bodyOf(c), owner=await requireCompanyOwner(c,b); if(!owner) return c.json(err("COMPANY_OWNER_ONLY","Depolama bağlantısını yalnız bu firmanın sahibi / işvereni değiştirebilir."),403);
+    const b=await bodyOf(c), owner=await requireCompanyOwner(c,b); if(!owner) return c.json(err("COMPANY_OWNER_ONLY","Depolama bağlantısını yalnız firma sahibi veya kendi firmasında uygulama sahibi değiştirebilir."),403);
     const slug=slugOf(c,b), id=c.req.param("id"), ts=now();
     const old=await c.env.DB.prepare(`SELECT * FROM file_hub_connections WHERE id=? AND main_company_slug=?`).bind(id,slug).first<Row>(); if(!old) return c.json(err("NOT_FOUND","Bağlantı bulunamadı."),404);
     const isPrimary=b.isPrimary===undefined?Number(old.is_primary):bool(b.isPrimary)?1:0; if(isPrimary) await c.env.DB.prepare(`UPDATE file_hub_connections SET is_primary=0,updated_at=? WHERE main_company_slug=? AND id<>?`).bind(ts,slug,id).run();
@@ -75,7 +73,7 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/bindings", async c => { if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c); const r=await c.env.DB.prepare(`SELECT b.*,c.name connection_name,c.provider_type FROM file_hub_bindings b JOIN file_hub_connections c ON c.id=b.storage_connection_id WHERE b.main_company_slug=? ORDER BY b.module_code,b.purpose_code`).bind(slug).all<Row>(); return c.json({ok:true,data:(r.results||[]).map(rowView)}); });
 
   app.put("/api/file-hub/bindings", async c => {
-    const b=await bodyOf(c),owner=await requireCompanyOwner(c,b); if(!owner) return c.json(err("COMPANY_OWNER_ONLY","Bölüm / dosya depolama yönlendirmesini yalnız bu firmanın sahibi / işvereni değiştirebilir."),403);
+    const b=await bodyOf(c),owner=await requireCompanyOwner(c,b); if(!owner) return c.json(err("COMPANY_OWNER_ONLY","Bölüm / dosya depolama yönlendirmesini yalnız firma sahibi veya kendi firmasında uygulama sahibi değiştirebilir."),403);
     const slug=slugOf(c,b),moduleCode=upper(b.moduleCode),purposeCode=upper(b.purposeCode),connectionId=text(b.storageConnectionId),ts=now();
     if(!moduleCode||!purposeCode||!connectionId) return c.json(err("REQUIRED","Modül, amaç ve depolama bağlantısı zorunludur."),422);
     const conn=await c.env.DB.prepare(`SELECT id FROM file_hub_connections WHERE id=? AND main_company_slug=? AND is_active=1`).bind(connectionId,slug).first<Row>(); if(!conn) return c.json(err("INVALID_CONNECTION","Aktif depolama bağlantısı bulunamadı."),422);
