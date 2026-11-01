@@ -586,6 +586,17 @@ async function googleChildrenPage(token: string, parentId: string, pageToken = "
   return { children, nextPageToken: text(response.nextPageToken) };
 }
 
+// Once per unfinished scan, inspect the 2026 model-image collection first.
+// This never skips other folders: every folder stays in the same checkpoint queue.
+function prioritizedDriveFolder(folderPath: unknown) {
+  const path=String(folderPath||"").trim().replace(/\\/g,"/").toLocaleLowerCase("tr-TR");
+  if(path==="görsel/2026") return 0;
+  if(path==="görsel") return 1;
+  if(path.startsWith("görsel/2026/")) return 2;
+  if(path.startsWith("görsel/")) return 3;
+  return 4;
+}
+
 async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId: string, pageLimit = 1, scheduled = false) {
   const { link, accessToken } = await connectionAccount(c, slug, connectionId);
   if (upper(link.provider_type) !== "GOOGLE_DRIVE") throw Object.assign(new Error("Google Drive bağlantısı bekleniyor."), { code: "INVALID_PROVIDER" });
@@ -605,6 +616,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   let cursor = resumed
     ? { ...meta.cloudSyncCursor, queue: meta.cloudSyncCursor.queue.map((f: Row) => ({ id: text(f.id), path: text(f.path), pageToken: text(f.pageToken) })) }
     : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], pages: 0, files: 0, folders: 0, changedFiles: 0, modelSyncs: 0 };
+  if(resumed && Number(cursor.pages||0)<2)cursor.queue.sort((a:Row,b:Row)=>prioritizedDriveFolder(a.path)-prioritizedDriveFolder(b.path));
   let checkpoint = JSON.parse(JSON.stringify(cursor));
   let files = 0, folders = 0, modelSyncs = 0, linkedImages: number | null = null, linkedModels: number | null = null;
   const persist = async (state: Row, complete = false, error = "", release = false) => {
@@ -650,6 +662,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       if (page.nextPageToken) folder.pageToken = page.nextPageToken;
       else cursor.queue.shift();
       // Derinlik öncelikli: kökte binlerce klasör olsa bile bekleyen kuyruk büyümez.
+      discoveredFolders.sort((a:Row,b:Row)=>prioritizedDriveFolder(a.path)-prioritizedDriveFolder(b.path));
       cursor.queue.unshift(...discoveredFolders);
       cursor.pages = Number(cursor.pages || 0) + 1;
       if (cursor.queue.length > 4000) throw Object.assign(new Error("Klasör kuyruğu sınırı aşıldı."), { code: "SYNC_QUEUE_TOO_LARGE" });
