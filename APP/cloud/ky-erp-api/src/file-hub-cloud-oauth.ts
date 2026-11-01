@@ -692,7 +692,7 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
       WHERE c.is_active=1
         AND c.sync_mode='CLOUD_API'
         AND (b.id IS NOT NULL OR json_extract(c.metadata,'$.cloudSyncCursor') IS NOT NULL)
-      ORDER BY c.updated_at DESC
+      ORDER BY c.updated_at ASC
       LIMIT 4`,
   ).all<Row>();
 
