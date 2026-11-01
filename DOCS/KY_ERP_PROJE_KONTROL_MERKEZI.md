@@ -1,5 +1,8 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+> 01.11.2026 File Hub Drive timeout devir notu: feature dalı `feature/filehub-google-resumable-sync-20261101` üzerinde checkpoint'li Drive indeks motoru geliştirildi; gerçek üretim dağıtımı ve Hakan Emp tam senkron canlı kanıtı henüz yok. Ayrıntı güncel devam kaynağındadır. OAuth ayarları ve hassas veriler değiştirilmedi.
+
+
 ## 01.11.2026 — KY ERP bütün bölümler / PC-tablet-telefon TEK DOSYA DÜZENİ (GELİŞTİRME)
 - Kullanıcı kararı: Hakan Emp Google Drive ana depolama, OneDrive ikinci ana bulut, NAS/yerel ek kaynak, Dropbox yedek alternatif. Tüm modüller, e-fatura/XML, irsaliye, çek/senet, kasa/banka/dekont, cari, personel özlük/kimlik/sağlık, İK aylık, PDKS/bordro, denetim/İSG, desen/DTF/imalat/boyahane/stok/firma belgeleri tek File Hub üzerinden yönetilecek. Masaüstü, tablet, telefon aynı D1 dosya kimliği ve kayıt ilişkisini kullanacak.
 - Mevcut File Hub bağlantıları/Drive ana klasörleri, D1 varlık/konum/ilişki tabloları ve kullanıcı yetki zinciri korundu. Yeni paralel depolama veya migration oluşturulmadı. Kullanıcı ekranında 01.11.2026 Google Drive Hakan Emp bağlı, 1 aktif servis; eski hakan drive ajan bağlantısı bekliyor. İlk senkron ve tüm dosya indeks kayıtları henüz kanıtlanmadı.

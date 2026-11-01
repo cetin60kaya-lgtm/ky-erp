@@ -4,13 +4,15 @@ import { readFileSync } from "node:fs";
 
 const cloud = readFileSync(new URL("./file-hub-cloud-oauth.ts", import.meta.url), "utf8");
 const design = readFileSync(new URL("./file-hub-design-sync.ts", import.meta.url), "utf8");
+const binding = readFileSync(new URL("./file-hub-cloud-model-binding.ts", import.meta.url), "utf8");
 const preview = readFileSync(new URL("./file-hub-preview.ts", import.meta.url), "utf8");
 
 test("Drive JPEG filename is preserved as the canonical model name without its extension", () => {
   assert.match(cloud, /function designModelIdentity\(value: unknown\)/);
   assert.match(cloud, /return text\(value\)\.replace\(/);
   assert.doesNotMatch(cloud, /replace\(\/\\b\(YERLEŞİM\|YERLESIM\|KALIP\|PLACEMENT/);
-  assert.match(cloud, /if\(purposeCode==="MODEL_IMAGE" && !\["JPG","JPEG","PNG","WEBP"\]/);
+  assert.match(binding, /MODEL_IMAGE: \["JPG", "JPEG", "PNG", "WEBP"\]/);
+  assert.match(cloud, /selectCloudModelBinding\(result\.results\|\|\[\],relativePath,text\(item\.name\)\)/);
 });
 
 test("Drive File Hub MODEL relation refers to the actual saved model ID", () => {
