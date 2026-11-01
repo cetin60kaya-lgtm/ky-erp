@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 01.11.2026 — Google Drive OAuth TOKEN hata ayrımı
+- Cloudflare ky-erp-api Production Deployments ekranında son GOOGLE_DRIVE_CLIENT_ID ve GOOGLE_DRIVE_CLIENT_SECRET güncellemeleri Ready, en son active d47fcc2f Deployed olarak kullanıcının ekranında görüldü. Buna rağmen KY ERP File Hub Google OAuth dönüşünde OAUTH_TOKEN_FAILED görüldü; bağlı hesap 0, OAuth henüz tamamlanmadı.
+- Kod bulgusu: tokenPost gerçek sağlayıcı error sınıfını OAUTH_TOKEN_FAILED sabit koduna indiriyordu. Secret/oturum/veri taşımadan izinli hata sınıfları eklendi: OAUTH_TOKEN_INVALID_CLIENT, OAUTH_TOKEN_INVALID_GRANT, OAUTH_TOKEN_REDIRECT_MISMATCH, OAUTH_TOKEN_UNAUTHORIZED_CLIENT, OAUTH_TOKEN_INVALID_REQUEST, OAUTH_TOKEN_NO_ACCESS; bilinmeyen hata eskisi gibi OAUTH_TOKEN_FAILED kalır. Frontend sabit Türkçe açıklama gösterir, Google error_description URL'ye taşınmaz.
+- Kod test/CI + merge + Worker/Pages deploy olmadan canlı denmez; gerçek Google hesabıyla yeni authorize denemesi tamamlanmadan bağlantı PASS değildir.
+- Yanlış eşleşme varsa Google Cloud KY Firebase ERP içindeki KY ERP - Google Drive istemcisinin ID/Secret çifti kullanıcı tarafından doğrudan Cloudflare'ya aktarılacak. Hiçbir secret GitHub/sohbete yazılmaz. FILE_HUB_OAUTH_KEY korunur, D1 migration yok.
+
+
+
 ## 01.11.2026 — GOOGLE YALNIZ SUPER_ADMIN YEDEK GÜVENLİK + OAUTH MARKALAMA
 
 **Kullanıcı nihai kararı:** Google harici kimlik doğrulaması, günlük firma/personel girişi değil; yalnız KY ERP sistem `SUPER_ADMIN` için parola + mevcut güvenlik isteği sonrasında kullanılacak **yedek kurtarma** yoludur. Mevcut KY Güvenlik telefon onayı, MFA ve normal kullanıcı giriş politikası korunur. Microsoft'un var olan kurtarma akışı değiştirilmez.
