@@ -14,7 +14,9 @@ export const KY_PRIMARY_MENU_KEYS = [
   "iletisim",
 ];
 
-export const KY_SETTINGS_MENU_KEYS = ["admin", "depolama", "sistem-merkezi", "asistan"];
+export const KY_SETTINGS_MENU_KEYS = ["admin", "depolama", "sistem-merkezi"];
+// Asistan mevcut üst arama / Hızlı İşlem üzerinden açılır; yönetim menüsünü yanlışlıkla görünür kılmaz.
+export const KY_QUICK_ACCESS_KEYS = ["asistan"];
 
 export function visibleMenuModules(modules = [], keys = []) {
   const accessible = new Map(modules.filter((module) => module?.key).map((module) => [module.key, module]));
@@ -27,8 +29,8 @@ export const KY_NAV_GROUPS = [
   { key: "daily", title: "Personel & İK", description: "Günlük operasyon, aylık İK ve PDKS", keys: ["gunluk-operasyon", "ik", "pdks"] },
   { key: "production", title: "Üretim", description: "Desen, imalat ve boyahane", keys: ["desen", "uretim", "boyahane"] },
   { key: "company", title: "Denetim", description: "Evrak ve uygunluk", keys: ["compliance"] },
-  { key: "communication", title: "İletişim", description: "Mail ve dosyalar", keys: ["iletisim"] },
-  { key: "management", title: "Ayarlar & Sistem", description: "Yönetim, güvenlik, bağlantılar ve asistan", keys: ["admin", "depolama", "sistem-merkezi", "asistan"] },
+  { key: "communication", title: "İletişim", description: "Mail ve dosyalar", keys: ["iletisim", "asistan"] },
+  { key: "management", title: "Ayarlar & Sistem", description: "Yönetim, güvenlik, bağlantılar ve asistan", keys: ["admin", "depolama", "sistem-merkezi"] },
 ];
 export function visibleNavigationGroups(modules = []) {
   const access = new Map(modules.filter((module) => module?.key && module.key !== "ana-sayfa").map((module) => [module.key, module]));
