@@ -25,11 +25,12 @@ test("admin address remains a system-only sender and is not the public mail targ
   assert.match(footer, /admin@kyerp\.net yalnız sistem bildirimleri için ayrılmıştır/);
 });
 
-test("footer legal placeholders remain informational until real legal pages exist", () => {
-  assert.match(footer, />KVKK</);
-  assert.match(footer, />Gizlilik</);
-  assert.match(footer, />Kullanım Koşulları</);
-  assert.match(footer, />Çerez Politikası</);
-  assert.doesNotMatch(footer, /href=["'][^"']*(kvkk|gizlilik|kullanim|çerez|cerez)/i);
-  assert.match(footer, /© 2026 KY ERP\. Tüm hakları saklıdır\./);
+test("public footer exposes actual static privacy and usage pages instead of placeholders", () => {
+  const privacy = readFileSync(resolve(root, "APP/app/ky-erp-frontend/public/gizlilik.html"), "utf8");
+  const terms = readFileSync(resolve(root, "APP/app/ky-erp-frontend/public/kullanim-kosullari.html"), "utf8");
+  assert.match(footer, /href="\\/gizlilik\\.html"/);
+  assert.match(footer, /href="\\/kullanim-kosullari\\.html"/);
+  assert.match(privacy, /<h1>Gizlilik Politikası<\\/h1>/);
+  assert.match(terms, /<h1>Kullanım Koşulları<\\/h1>/);
+  assert.match(footer, /© 2026 KY ERP\\. Tüm hakları saklıdır\\./);
 });
