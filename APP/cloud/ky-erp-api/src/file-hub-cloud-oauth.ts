@@ -685,12 +685,13 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
   const result = await env.DB.prepare(
     `SELECT DISTINCT c.id,c.main_company_slug
        FROM file_hub_connections c
-       JOIN file_hub_bindings b
+       LEFT JOIN file_hub_bindings b
          ON b.main_company_slug=c.main_company_slug
         AND b.storage_connection_id=c.id
+        AND b.sync_enabled=1
       WHERE c.is_active=1
         AND c.sync_mode='CLOUD_API'
-        AND b.sync_enabled=1
+        AND (b.id IS NOT NULL OR json_extract(c.metadata,'$.cloudSyncCursor') IS NOT NULL)
       ORDER BY c.updated_at DESC
       LIMIT 4`,
   ).all<Row>();
