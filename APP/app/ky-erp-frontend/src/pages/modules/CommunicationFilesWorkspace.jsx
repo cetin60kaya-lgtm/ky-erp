@@ -117,12 +117,12 @@ export default function CommunicationFilesWorkspace({
           {picker ? <button type="button" className="secondary" onClick={onClose}>Seçimi Bitir ({selectedIds.length})</button> : null}
         </div>
       </header>
-      <form className="commf-search" onSubmit={(event) => { event.preventDefault(); refresh(query); }}>
+      <div className="commf-search">
         <label htmlFor="commf-file-query">Dosya veya model adı</label>
-        <input id="commf-file-query" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="PSD, PDF, model, klasör..." />
-        <button type="submit" disabled={busy}>Ara</button>
+        <input id="commf-file-query" type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); refresh(query); } }} placeholder="PSD, PDF, model, klasör..." />
+        <button type="button" disabled={busy} onClick={() => refresh(query)}>Ara</button>
         {query ? <button type="button" className="secondary" onClick={() => { setQuery(""); refresh(""); }}>Temizle</button> : null}
-      </form>
+      </div>
       {notice ? <p className="commf-notice" role="alert">{notice}</p> : null}
       <div className="commf-summary">{busy ? "Dosyalar yükleniyor..." : rows.length + " dosya gösteriliyor"} · Kaynak: KY File Hub · Dosyalar fiziksel kaynaklarında kalır</div>
       <div className="commf-list">
