@@ -144,7 +144,7 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
  <form className="storage-form-grid storage-search-controls" onSubmit={e=>{e.preventDefault();setFileOffset(0);setSearch(searchDraft.trim())}}>
   <label>Dosya adı / model / yol<input value={searchDraft} onChange={e=>setSearchDraft(e.target.value)} placeholder="Dosya, model veya yol ara"/></label>
   <label>Durum<select value={statusFilter} onChange={e=>{setStatusFilter(e.target.value);setFileOffset(0)}}>
-    <option value="">Tüm durumlar</option><option value="AVAILABLE">Mevcut</option><option value="MISSING">Kaynakta Yok</option>
+    <option value="">Tüm Durumlar</option><option value="AVAILABLE">Mevcut</option><option value="MISSING">Kaynakta Yok</option>
   </select></label>
   <div className="storage-action-row storage-full"><button className="storage-primary" type="submit" disabled={loading}>Ara</button><button className="storage-secondary" type="button" disabled={loading} onClick={()=>{setSearch("");setSearchDraft("");setStatusFilter("");setFileOffset(0)}}>Filtreleri Temizle</button></div>
  </form>
