@@ -604,15 +604,16 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
 
   let cursor = resumed
     ? { ...meta.cloudSyncCursor, queue: meta.cloudSyncCursor.queue.map((f: Row) => ({ id: text(f.id), path: text(f.path), pageToken: text(f.pageToken) })) }
-    : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], files: 0, folders: 0, changedFiles: 0, modelSyncs: 0 };
+    : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], pages: 0, files: 0, folders: 0, changedFiles: 0, modelSyncs: 0 };
   let checkpoint = JSON.parse(JSON.stringify(cursor));
   let files = 0, folders = 0, modelSyncs = 0, linkedImages: number | null = null, linkedModels: number | null = null;
   const persist = async (state: Row, complete = false, error = "", release = false) => {
     const stamp = now();
     const progress = { files: Number(state.files || 0), folders: Number(state.folders || 0),
       changedFiles: Number(state.changedFiles || 0), modelSyncs: Number(state.modelSyncs || 0),
-      startedAt: state.startedAt, completedAt: complete ? stamp : null,
-      state: error ? "ERROR" : complete ? "COMPLETED" : "RUNNING" };
+      startedAt: state.startedAt, updatedAt: stamp, completedAt: complete ? stamp : null,
+      pages: Number(state.pages || 0), pendingFolders: Array.isArray(state.queue) ? state.queue.length : 0,
+      state: error ? "ERROR" : complete ? "COMPLETED" : release ? "WAITING" : "RUNNING" };
     const data = { ...meta, cloudDirect: true, cloudSyncCursor: complete ? null : state,
       cloudSyncProgress: progress, syncTruncated: !complete,
       lastSyncFiles: progress.files, lastSyncFolders: progress.folders,
@@ -650,6 +651,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       else cursor.queue.shift();
       // Derinlik öncelikli: kökte binlerce klasör olsa bile bekleyen kuyruk büyümez.
       cursor.queue.unshift(...discoveredFolders);
+      cursor.pages = Number(cursor.pages || 0) + 1;
       if (cursor.queue.length > 4000) throw Object.assign(new Error("Klasör kuyruğu sınırı aşıldı."), { code: "SYNC_QUEUE_TOO_LARGE" });
       await persist(cursor);
       checkpoint = JSON.parse(JSON.stringify(cursor));
@@ -687,7 +689,7 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
       WHERE c.is_active=1
         AND c.sync_mode='CLOUD_API'
         AND (b.id IS NOT NULL OR json_extract(c.metadata,'$.cloudSyncCursor') IS NOT NULL)
-      ORDER BY c.updated_at ASC
+      ORDER BY CASE WHEN json_extract(c.metadata,'$.cloudSyncCursor') IS NOT NULL THEN 0 ELSE 1 END, c.updated_at ASC
       LIMIT 4`,
   ).all<Row>();
 
