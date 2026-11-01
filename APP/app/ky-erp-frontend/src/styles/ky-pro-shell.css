@@ -68,3 +68,54 @@
 .shell-v3-tabs-overflow-item>.shell-v3-tabs-overflow-close:hover{color:#b42318}
 .ky-pro-home-link:focus-visible,.ky-pro-nav-group-trigger:focus-visible,.shell-v3-module-button:focus-visible,.shell-v3-tabs-overflow button:focus-visible,.shell-v3-tabs-overflow>summary:focus-visible{outline:2px solid #8ab4f5;outline-offset:2px}
 @media(max-width:700px){.shell-v3-tabs>button{max-width:150px}.shell-v3-tabs-overflow>summary{padding:6px 8px;font-size:11px}.shell-v3-tabs-overflow-list{right:-8px}.shell-v3-workspace{padding:10px 9px 30px!important}}
+
+
+/* 01.11.2026 — Doğrudan ana menü + yalnız Ayarlar & Sistem açılır alanı. */
+.shell-v3 .shell-v3-sidebar-nav{display:block}
+.shell-v3 .ky-pro-direct-link,
+.shell-v3 .ky-pro-settings-trigger{
+  width:100%;min-width:0;min-height:44px;display:flex;align-items:center;gap:11px;
+  padding:9px 12px;margin:2px 0;border:0;border-radius:10px;background:transparent;
+  color:#d9e7f8;text-align:left;font:inherit;font-size:12.5px;font-weight:680;
+  cursor:pointer;transition:background .16s ease;
+}
+.shell-v3 .ky-pro-direct-link:hover,
+.shell-v3 .ky-pro-settings-trigger:hover{background:#263e5c;color:#fff}
+.shell-v3 .ky-pro-direct-link.active{background:#2859a4;color:#fff}
+.shell-v3 .ky-pro-direct-link>span:nth-child(2),
+.shell-v3 .ky-pro-settings-trigger>span:nth-child(2){flex:1;min-width:0;line-height:1.35}
+.shell-v3 .ky-pro-direct-icon{flex:0 0 27px;width:27px;height:27px;display:grid;place-items:center;border-radius:7px;background:#30435e;color:#e6f1ff}
+.shell-v3 .ky-pro-direct-link.active .ky-pro-direct-icon{background:#4476be;color:#fff}
+.shell-v3 .ky-pro-settings-group{margin-top:11px;padding-top:10px;border-top:1px solid #374a63}
+.shell-v3 .ky-pro-settings-trigger{font-weight:750}
+.shell-v3 .ky-pro-settings-trigger>svg:last-child{margin-left:auto;transition:transform .16s ease}
+.shell-v3 .ky-pro-settings-trigger.open>svg:last-child{transform:rotate(180deg)}
+.shell-v3 .ky-pro-settings-items{padding:0 0 2px 12px;border-left:1px solid #3c526d;margin-left:25px}
+.shell-v3 .ky-pro-settings-link{min-height:39px;padding:7px 9px;font-size:12px}
+.shell-v3 .ky-pro-settings-link .ky-pro-direct-icon{flex-basis:24px;width:24px;height:24px}
+.shell-v3 .ky-pro-module-tabs{
+  display:flex;align-items:center;gap:12px;min-width:0;max-width:100%;
+  padding:8px 15px;background:#fff;border-bottom:1px solid #e0e7f0;
+}
+.shell-v3 .ky-pro-module-tabs-caption{flex:0 0 auto;color:#6c7d94;font-size:10px;font-weight:800;letter-spacing:.055em}
+.shell-v3 .ky-pro-module-tabs-scroll{display:flex;align-items:center;gap:5px;min-width:0;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;padding:2px 0}
+.shell-v3 .ky-pro-module-tabs-scroll>button{
+  flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;min-height:33px;
+  padding:7px 11px;border:1px solid transparent;border-radius:9px;background:#f3f6fa;
+  color:#415673;font:inherit;font-size:11.5px;font-weight:650;white-space:nowrap;cursor:pointer;
+}
+.shell-v3 .ky-pro-module-tabs-scroll>button:hover{background:#eaf2fe;color:#2457a7}
+.shell-v3 .ky-pro-module-tabs-scroll>button.active{border-color:#bcd2f2;background:#eaf2ff;color:#2458ad}
+.shell-v3 .ky-pro-direct-link:focus-visible,
+.shell-v3 .ky-pro-settings-trigger:focus-visible,
+.shell-v3 .ky-pro-module-tabs-scroll>button:focus-visible{outline:2px solid #8ab4f5;outline-offset:2px}
+@media(max-width:1024px){.shell-v3 .ky-pro-module-tabs{padding:7px 9px;gap:8px}}
+@media(max-width:600px){
+  .shell-v3 .ky-pro-module-tabs{display:block}
+  .shell-v3 .ky-pro-module-tabs-caption{display:block;margin-bottom:5px}
+  .shell-v3 .ky-pro-module-tabs-scroll>button{font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){
+  .shell-v3 .ky-pro-direct-link,.shell-v3 .ky-pro-settings-trigger,
+  .shell-v3 .ky-pro-settings-trigger>svg:last-child{transition:none}
+}
