@@ -32,6 +32,11 @@ test("Senkronizasyon kilidi tenant kapsamında ve tek bağlantıya özeldir", ()
   assert.match(cloud, /runGoogleSyncBatch\(c, gate\.slug, connectionId, 1, false\)/);
 });
 
+test("DESEN model görseli sadece açıkça atanan alt klasörden eşleşir", () => {
+  assert.match(cloud, /if\(purposeCode==="MODEL_IMAGE" && !normDesignPath\(binding\.root_path\)\) return null/);
+  assert.match(cloud, /designImageBindingPresent: Boolean\(design && normDesignPath\(design\.root_path\)\)/);
+});
+
 test("Dosya arayüzü yarım taramayı tamamlandı diye göstermez", () => {
   assert.match(screen, /Son tamamlanan tarama/);
   assert.match(screen, /meta\.cloudSyncCursor/);
