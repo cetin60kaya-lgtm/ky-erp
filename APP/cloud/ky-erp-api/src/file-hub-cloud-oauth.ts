@@ -3,6 +3,7 @@ import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { canManageOwnCompanyStorage } from "./file-hub-company-owner-access";
 import { syncFileHubDesignModel } from "./file-hub-design-sync";
+import { selectCloudModelBinding, canUseModelImageFolder } from "./file-hub-cloud-model-binding";
 
 type Bindings = Cloudflare.Env & {
   GOOGLE_DRIVE_CLIENT_ID?: string;
@@ -353,12 +354,6 @@ async function upsertCloudFile(c: Context<AppEnv>, slug: string, connectionId: s
 }
 
 
-const normDesignPath = (value: unknown) => text(value).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"").toLocaleLowerCase("tr-TR");
-function bindingMatches(rootPath: unknown, relativePath: unknown) {
-  const root=normDesignPath(rootPath), rel=normDesignPath(relativePath);
-  if(!root) return true;
-  return rel===root || rel.startsWith(root+"/");
-}
 function designModelIdentity(value: unknown) {
   // Dosya adı aynen model adıdır. Yalnız uzantı kaldırılır; FINAL/SON gibi
   // modelin gerçek adının parçası olabilecek kelimeler silinmez.
@@ -376,19 +371,9 @@ async function syncCloudDesignBinding(c:Context<AppEnv>,slug:string,connectionId
      WHERE main_company_slug=? AND storage_connection_id=? AND sync_enabled=1
        AND module_code IN ('DESEN','DTF','IMALAT')
      ORDER BY LENGTH(root_path) DESC`).bind(slug,connectionId).all<Row>();
-  // Model oluşturma genel firma kökü üzerinden yapılmaz. Mutlaka açık bir
-  // DESEN/DTF/IMALAT alt klasörü ve uygun dosya türü gerekir.
-  const eligible=(result.results||[]).filter((row:Row)=>normDesignPath(row.root_path) && bindingMatches(row.root_path,relativePath));
-  const extension=upper(text(item.name).split(".").pop());
-  const permitted:Record<string,string[]>={
-    MODEL_IMAGE:["JPG","JPEG","PNG","WEBP"],
-    MODEL_SOURCE:["PSD","PSB","AI","PDF","TIF","TIFF","SVG","EPS"],
-    PLACEMENT:["AI","PDF","PSD","PSB","SVG","EPS"],
-    OUTGOING_DESIGN:["AI","PDF","PSD","PSB","SVG","EPS","JPG","JPEG","PNG"],
-    RIP_PDF:["PDF"],
-  };
-  const binding=eligible.find((row:Row)=>permitted[upper(row.purpose_code)]?.includes(extension));
+  const binding=selectCloudModelBinding(result.results||[],relativePath,text(item.name));
   if(!binding) return null;
+  const extension=upper(text(item.name).split(".").pop());
   const purposeCode=upper(binding.purpose_code);
   const modelName=designModelIdentity(item.name);
   if(!modelName) return null;
@@ -681,7 +666,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       .bind(slug, connectionId).first<Row>();
     return { files, folders, totalFiles: cursor.files, totalFolders: cursor.folders, modelSyncs,
       linkedImages, linkedModels, truncated: !complete, inProgress: !complete, completed: complete,
-      lastSyncAt: complete ? now() : null, designImageBindingPresent: Boolean(design && normDesignPath(design.root_path)),
+      lastSyncAt: complete ? now() : null, designImageBindingPresent: Boolean(design && canUseModelImageFolder(design.root_path)),
       designImageRootPath: text(design?.root_path) };
   } catch (error: any) {
     // Checkpoint sonrası yarım sayfa yeniden okunabilir; eski kayıtlar silinmez.
