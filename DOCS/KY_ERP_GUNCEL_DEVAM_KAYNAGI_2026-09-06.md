@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 01.11.2026 — Desen 2026 Google Drive gerçek D1 model eşleşmesi görünürlüğü
+
+- **Canlı kaynak kontrolü:** Google Drive `görsel/2026` 347 dosya (342 JPG, 4 PNG, 1 TIFF) olarak tekrar sayıldı. Canlı `/api/health` `ok=true, database=d1` verdi. Bu kontrol tek başına 347 model kartının açıldığı kanıtı değildir.
+- **Tespit:** Yönetim > Bağlantılar & Depolama'daki elle bulut taraması yalnız dosya/klasör sayıyordu; gerçek D1 model ilişkisi ve `DESEN / MODEL_IMAGE` atamasının varlığı görünmüyordu.
+- **Düzeltme:** Mevcut `POST /api/file-hub/cloud/connections/:id/sync` yanıtına bu turdaki başarılı model eşleştirme adedi, `file_hub_relations JOIN model_records` ile doğrulanan toplam görsel/ayrı model sayısı ve geçerli `DESEN / MODEL_IMAGE` bağlama durumu eklenir. Mevcut yönetim ekranı bunları gösterir; atama yoksa taramayı başarılı model kaydı gibi sunmaz. Yeni model üretimi, yetki veya D1 şeması değiştirilmez.
+- **Saha kabulü:** Yetkili KY ERP oturumundan mevcut Google Drive bağlantısında senkron sonrası gerçek D1 sayısı ve 2026 klasör kapsamı kontrol edilene kadar toplu model açma **DOĞRULANMADI**. İş kanıtı PR ve yayın sonuçlarıyla ayrıca tutulur.
+
+
 ## 01.11.2026 — Ana menü + günlük işletme özeti revizyonu (#494)
 
 - Kullanıcı kararı: Sol ana menü artık sırasıyla Ana Sayfa → Muhasebe → e-Belge / Faturalar → Günlük Operasyon → İK Aylık → PDKS → Desen → İmalat → Boyahane → Denetim Merkezi → Mail & Dosyalar. Yalnız en altta, yönetim yetkileri varsa Ayarlar & Sistem açılır alanı. Asistan modülü Hızlı İşlem/arama erişimiyle korunur; sırf Asistan izni Ayarlar & Sistem alanını göstermez.

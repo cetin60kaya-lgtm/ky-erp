@@ -38,3 +38,14 @@ test("Cloud JPG preview caches a provider thumbnail, not the original PSD or JPE
   assert.match(preview, /await ensureCloudModelImagePreview\(c,slug,id\)/);
   assert.match(cloud, /previewChanged \? 1 : 0/);
 });
+
+
+test("manual Drive sync reports only model relations backed by real D1 model_records", () => {
+  assert.match(cloud, /const synced = await syncCloudDesignBinding\(c, gate\.slug, connectionId/);
+  assert.match(cloud, /if \(synced\?\.modelId\) modelSyncs \+= 1/);
+  assert.match(cloud, /COUNT\(DISTINCT l\.file_asset_id\) AS linked_images/);
+  assert.match(cloud, /COUNT\(DISTINCT r\.entity_id\) AS linked_models/);
+  assert.match(cloud, /JOIN model_records m ON m\.id=r\.entity_id/);
+  assert.match(cloud, /designImageBindingPresent: Boolean\(designBinding\)/);
+  assert.match(cloud, /lastLinkedModels: linkedModels/);
+});

@@ -688,7 +688,8 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     try {
       const { link, accessToken } = await connectionAccount(c, gate.slug, connectionId); if (Number(link.is_active) === 0) return c.json(err("CONNECTION_DISABLED", "Bu depolama servisi pasif."), 409);
       const provider = upper(link.provider_type), driveId = text(link.provider_drive_id), rootId = text(link.remote_root_id) || "root", rootName = text(link.remote_root_name) || "Ana Klasör", seenAt = now();
-      const queue: Row[] = [{ id: rootId, path: "" }]; let files = 0, folders = 0, truncated = false;
+      const queue: Row[] = [{ id: rootId, path: "" }]; let files = 0, folders = 0, truncated = false, modelSyncs = 0;
+      const designBinding = await c.env.DB.prepare(`SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? AND module_code='DESEN' AND purpose_code='MODEL_IMAGE' AND sync_enabled=1 LIMIT 1`).bind(gate.slug, connectionId).first<Row>();
       while (queue.length && files + folders < limit) {
         const current = queue.shift()!;
         const children = provider === "GOOGLE_DRIVE" ? await listGoogleChildren(accessToken, current.id, true) : await listMicrosoftChildren(accessToken, current.id, driveId, true);
@@ -698,15 +699,24 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
           else {
             const indexed = await upsertCloudFile(c, gate.slug, connectionId, provider, child, relativePath, seenAt);
             if (indexed.needsModelSync) {
-              await syncCloudDesignBinding(c, gate.slug, connectionId, indexed.assetId, child, relativePath, provider);
+              const synced = await syncCloudDesignBinding(c, gate.slug, connectionId, indexed.assetId, child, relativePath, provider);
+              if (synced?.modelId) modelSyncs += 1;
             }
             files += 1;
           }
           if (files + folders >= limit) { truncated = true; break; }
         }
       }
-      await c.env.DB.prepare(`UPDATE file_hub_connections SET connection_status='CONNECTED',last_sync_at=?,last_error=NULL,metadata=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(seenAt, JSON.stringify({ ...json(link.connection_metadata), cloudDirect: true, accountEmail: text(link.account_email), accountName: text(link.display_name), driveId: driveId || null, lastSyncFiles: files, lastSyncFolders: folders, syncTruncated: truncated, rootName }), seenAt, connectionId, gate.slug).run();
-      return c.json({ ok: true, data: { files, folders, truncated, lastSyncAt: seenAt } });
+      // Bu rakamlar dosya tarama sayısı değil, D1'de gerçekten bulunan model ilişkileridir.
+      const linked = await c.env.DB.prepare(`SELECT COUNT(DISTINCT l.file_asset_id) AS linked_images, COUNT(DISTINCT r.entity_id) AS linked_models
+          FROM file_hub_locations l
+          JOIN file_hub_relations r ON r.file_asset_id=l.file_asset_id AND r.main_company_slug=l.main_company_slug AND r.entity_type='MODEL' AND r.relation_type='MODEL_IMAGE'
+          JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug
+          WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1`).bind(gate.slug, connectionId).first<Row>();
+      const linkedImages = Number(linked?.linked_images || 0);
+      const linkedModels = Number(linked?.linked_models || 0);
+      await c.env.DB.prepare(`UPDATE file_hub_connections SET connection_status='CONNECTED',last_sync_at=?,last_error=NULL,metadata=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(seenAt, JSON.stringify({ ...json(link.connection_metadata), cloudDirect: true, accountEmail: text(link.account_email), accountName: text(link.display_name), driveId: driveId || null, lastSyncFiles: files, lastSyncFolders: folders, lastModelSyncs: modelSyncs, lastLinkedImages: linkedImages, lastLinkedModels: linkedModels, syncTruncated: truncated, rootName }), seenAt, connectionId, gate.slug).run();
+      return c.json({ ok: true, data: { files, folders, truncated, lastSyncAt: seenAt, modelSyncs, linkedImages, linkedModels, designImageBindingPresent: Boolean(designBinding), designImageRootPath: text(designBinding?.root_path) } });
     } catch (error: any) {
       await c.env.DB.prepare(`UPDATE file_hub_connections SET connection_status='ERROR',last_error=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(text(error?.message) || "Bulut senkronizasyonu başarısız.", now(), connectionId, gate.slug).run().catch(() => {});
       return c.json(err(text(error?.code) || "CLOUD_SYNC_FAILED", text(error?.message) || "Bulut senkronizasyonu başarısız."), Number(error?.status) || 502);
