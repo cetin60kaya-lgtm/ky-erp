@@ -9,9 +9,13 @@
     "PR499-Storage-full-management-mail-bindings-files-agent-logs",
     "PR499-Responsive-mobile-smart-D1-diagnostics",
     "CI-41269191063-success",
-    "Cloudflare-Pages-production-bundle-smoke"
+    "Cloudflare-Pages-production-bundle-smoke",
+    "PR500-Mail-Merkezi-Tek-Kullanim-FileHub-Ekler-Sablonlar",
+    "CI-41269933018-success",
+    "Worker-41270108290-success",
+    "Frontend-Live-Verification"
   ],
-  "note": "01.11.2026 PR499: Bağlantılar/Depolama uçtan uca panel: Google Drive + OneDrive ana, Dropbox opsiyonel OAuth durumu, NAS/yerel seçenekler, gerçek mail, bölüm dosya atama, indeks 100/sayfa, akıllı D1 denetim, Agent ve log. Her servis bağlanmış sayılmaz; kullanıcı OAuth ve gerçek saha denemesi gerekir.",
-  "sourceCommit": "51b046d05dd0eb05ad97bec5e8c8910ac5d0b3d5",
+  "note": "01.11.2026 PR500: Mail & Dosyalar tek temiz çalışma alanı; Mail şablonları/ek seçimi, güvenli File Hub dosya görüntüleme, dosya görünümleri. Mevcut Bağlantılar & Depolama yönetimi korunmuştur. 01.11.2026 PR499: Bağlantılar/Depolama uçtan uca panel: Google Drive + OneDrive ana, Dropbox opsiyonel OAuth durumu, NAS/yerel seçenekler, gerçek mail, bölüm dosya atama, indeks 100/sayfa, akıllı D1 denetim, Agent ve log. Her servis bağlanmış sayılmaz; kullanıcı OAuth ve gerçek saha denemesi gerekir.",
+  "sourceCommit": "30229174c51bf061e0a6063a5561c43e8abf08c1",
   "requestedAt": "2026-11-01"
 }
