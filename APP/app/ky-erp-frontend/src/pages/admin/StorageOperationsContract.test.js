@@ -44,3 +44,10 @@ test("Google Drive ve OneDrive iki bağımsız aktif bağlantı olarak görüleb
  assert.match(page,/initialProvider\?"account":"provider"/);
  assert.match(css,/storage-dual-providers/);
 });
+
+test("akıllı kontrol D1 salt okunur diagnostik verisine bağlanır ve ilgili işleme götürür",()=>{
+ assert.match(page,/apiGet\("\/file-hub\/diagnostics"/);
+ assert.match(page,/Akıllı Bağlantı Denetimi/);
+ assert.match(page,/setTab\(row\.actionTab\)/);
+ assert.match(css,/storage-insight-critical/);
+});
