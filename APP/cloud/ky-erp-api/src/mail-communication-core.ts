@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud.ts";
 import { mailProviderRegistry, normalizeMailProvider } from "./mail-connection-broker.ts";
+import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -351,15 +352,44 @@ export function registerMailCommunicationRoutes(app:any){
       where.push("r.entity_type IN ("+allowed.map(()=>"?").join(",")+")");
       args.push(...allowed);
     }
+    if(upper(c.req.query("scope"))==="RELATED") where.push("EXISTS (SELECT 1 FROM file_hub_relations related WHERE related.main_company_slug=a.main_company_slug AND related.file_asset_id=a.id)");
     if(q){
       const like="%"+q+"%";
       where.push("(a.file_name LIKE ? OR a.logical_key LIKE ? OR l.relative_path LIKE ? OR r.entity_id LIKE ?)");
       args.push(like,like,like,like);
     }
     args.push(take);
-    const sql="SELECT DISTINCT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,a.status,a.logical_key,a.updated_at,l.relative_path,l.storage_connection_id,c.provider_type,c.name connection_name FROM file_hub_assets a LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.location_role='PRIMARY' LEFT JOIN file_hub_connections c ON c.id=l.storage_connection_id "+join+" WHERE "+where.join(" AND ")+" ORDER BY a.updated_at DESC LIMIT ?";
+    const sql="SELECT DISTINCT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,a.status,a.logical_key,a.updated_at,l.relative_path,l.storage_connection_id,c.provider_type,c.name connection_name,(SELECT COUNT(*) FROM file_hub_relations related WHERE related.main_company_slug=a.main_company_slug AND related.file_asset_id=a.id) relation_count FROM file_hub_assets a LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.location_role='PRIMARY' LEFT JOIN file_hub_connections c ON c.id=l.storage_connection_id "+join+" WHERE "+where.join(" AND ")+" ORDER BY a.updated_at DESC LIMIT ?";
     const r=await c.env.DB.prepare(sql).bind(...args).all<AnyRow>();
     return c.json({ok:true,data:r.results||[]});
+  });
+
+  // Same tenant and module permissions as /api/mail/files, with an independent
+  // item-level permission check. Never expose the unscoped storage download route.
+  app.get("/api/mail/files/:id/content",async(c:any)=>{
+    const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
+    if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Dosyayı görüntüleme yetkiniz yok."),403);
+    const id=text(c.req.param("id")),allowed=fileEntityTypesForUser(current);
+    if(Array.isArray(allowed)&&!allowed.length)return c.json(jsonError("FILE_FORBIDDEN","Dosya erişim izni bulunmuyor."),403);
+    const where=["a.id=?","a.main_company_slug=?"];const args:any[]=[id,tenant];
+    if(Array.isArray(allowed)){
+      where.push("EXISTS (SELECT 1 FROM file_hub_relations r WHERE r.file_asset_id=a.id AND r.main_company_slug=a.main_company_slug AND r.entity_type IN ("+allowed.map(()=>"?").join(",")+"))");
+      args.push(...allowed);
+    }
+    const asset=await c.env.DB.prepare("SELECT a.id,a.status,a.file_name FROM file_hub_assets a WHERE "+where.join(" AND ")+" LIMIT 1").bind(...args).first<AnyRow>();
+    if(!asset?.id)return c.json(jsonError("FILE_FORBIDDEN","Dosya bulunamadı veya yetki yok."),403);
+    if(upper(asset.status)!=="AVAILABLE")return c.json(jsonError("FILE_UNAVAILABLE","Dosya kaynakta kullanılabilir değil."),409);
+    try{
+      const file=await readFileHubAssetForMail(c,tenant,id,25*1024*1024);
+      const headers=new Headers();
+      headers.set("Content-Type",text(file.mimeType)||"application/octet-stream");
+      headers.set("Content-Disposition","inline; filename*=UTF-8''"+encodeURIComponent(text(file.fileName)||"dosya"));
+      headers.set("Cache-Control","private, no-store");
+      headers.set("X-Content-Type-Options","nosniff");
+      return new Response(file.bytes,{status:200,headers});
+    }catch(error:any){
+      return c.json(jsonError(text(error?.code)||"FILE_READ_FAILED",text(error?.message)||"File Hub dosyası alınamadı."),Number(error?.status)||502);
+    }
   });
 
   app.get("/api/mail/folders",async(c:any)=>{
@@ -418,6 +448,39 @@ export function registerMailCommunicationRoutes(app:any){
     if(!(await canAccessAccount(c,current,tenant,text(message.account_id),"can_view")))return c.json(jsonError("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusuna erişim yok."),403);
     const r=await c.env.DB.prepare("SELECT id,file_name,mime_type,size_bytes,is_inline,content_id FROM mail_attachments WHERE main_company_slug=? AND message_id=? ORDER BY is_inline ASC,file_name").bind(tenant,messageId).all<AnyRow>();
     return c.json({ok:true,data:r.results||[]});
+  });
+
+  // Native mail templates share the existing mail_templates table, no parallel store.
+  app.get("/api/mail/templates",async(c:any)=>{
+    const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
+    if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Şablonları görüntüleme yetkiniz yok."),403);
+    if(!(await tableExists(c,"mail_templates")))return c.json({ok:true,data:[]});
+    const r=await c.env.DB.prepare("SELECT id,template_code,name,subject_template,body_template,category,is_active,created_at,updated_at FROM mail_templates WHERE main_company_slug=? ORDER BY is_active DESC,updated_at DESC LIMIT 200").bind(tenant).all<AnyRow>();
+    return c.json({ok:true,data:r.results||[]});
+  });
+
+  app.post("/api/mail/templates",async(c:any)=>{
+    const body=await bodyOf(c),a:any=await currentAndTenant(c,body);if(a.error)return a.error;const{current,tenant}=a;
+    if(!hasMailPermission(current,"canCreate"))return c.json(jsonError("MAIL_TEMPLATE_FORBIDDEN","Şablon oluşturma yetkiniz yok."),403);
+    if(!(await tableExists(c,"mail_templates")))return c.json(jsonError("MAIL_TEMPLATE_SCHEMA_NOT_READY","Şablon veritabanı hazır değil."),409);
+    const name=text(body.name).slice(0,120),subject=text(body.subject).slice(0,250),bodyText=text(body.bodyText).slice(0,20000),category=text(body.category).slice(0,60);
+    if(!name||!bodyText)return c.json(jsonError("MAIL_TEMPLATE_REQUIRED","Şablon adı ve gövdesi zorunlu."),422);
+    const id=crypto.randomUUID(),code="MAIL_"+id.replace(/-/g,"").slice(0,20),ts=nowIso();
+    await c.env.DB.prepare("INSERT INTO mail_templates (id,main_company_slug,template_code,name,subject_template,body_template,category,is_active,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)").bind(id,tenant,code,name,subject,bodyText,category,1,text(current?.id),ts,ts).run();
+    await audit(c,tenant,current,"MAIL_TEMPLATE_CREATED",{id});
+    return c.json({ok:true,data:{id,template_code:code,name,subject_template:subject,body_template:bodyText,category,is_active:1}},201);
+  });
+
+  app.put("/api/mail/templates/:id",async(c:any)=>{
+    const body=await bodyOf(c),a:any=await currentAndTenant(c,body);if(a.error)return a.error;const{current,tenant}=a;
+    if(!hasMailPermission(current,"canUpdate"))return c.json(jsonError("MAIL_TEMPLATE_FORBIDDEN","Şablon düzenleme yetkiniz yok."),403);
+    if(!(await tableExists(c,"mail_templates")))return c.json(jsonError("MAIL_TEMPLATE_SCHEMA_NOT_READY","Şablon veritabanı hazır değil."),409);
+    const id=text(c.req.param("id")),name=text(body.name).slice(0,120),subject=text(body.subject).slice(0,250),bodyText=text(body.bodyText).slice(0,20000),category=text(body.category).slice(0,60),active=body.isActive===false?0:1;
+    if(!name||!bodyText)return c.json(jsonError("MAIL_TEMPLATE_REQUIRED","Şablon adı ve gövdesi zorunlu."),422);
+    const updated=await c.env.DB.prepare("UPDATE mail_templates SET name=?,subject_template=?,body_template=?,category=?,is_active=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(name,subject,bodyText,category,active,nowIso(),id,tenant).run();
+    if(Number(updated?.meta?.changes||0)===0)return c.json(jsonError("MAIL_TEMPLATE_NOT_FOUND","Şablon bulunamadı."),404);
+    await audit(c,tenant,current,"MAIL_TEMPLATE_UPDATED",{id,active});
+    return c.json({ok:true,data:{id,name,subject_template:subject,body_template:bodyText,category,is_active:active}});
   });
 
   app.get("/api/mail/drafts",async(c:any)=>{

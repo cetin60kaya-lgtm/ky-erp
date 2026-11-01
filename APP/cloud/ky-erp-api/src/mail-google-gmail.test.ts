@@ -49,10 +49,13 @@ test("worker source no longer contains the literal escaped import regression",()
 });
 
 
-test("daily Mail Center can connect Gmail and keeps account setup out of the inbox flow",()=>{
+test("daily Mail Center handles Gmail inbox while OAuth stays in Storage",()=>{
   const source=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
-  assert.match(source,/startGoogleMailOAuth/);
-  assert.match(source,/Google Hesabını Bağla/);
+  const admin=read("../../../app/ky-erp-frontend/src/pages/admin/AdminMailConnectionsV2.jsx");
+  assert.doesNotMatch(source,/startGoogleMailOAuth|addAndConnectPreset/);
+  assert.match(source,/tabKey: "depolama-mail"/);
+  assert.match(admin,/startGoogleMailOAuth/);
+  assert.match(admin,/Hesabı Bağla/);
   assert.match(source,/comm-modal-backdrop/);
   assert.match(source,/messageSearch/);
   assert.match(source,/replyToMessageId/);
@@ -80,18 +83,18 @@ test("reply-waiting view is server-derived instead of misusing incoming flags",(
 });
 
 
-test("Hakan mail center exposes direct Hotmail and Gmail OAuth onboarding",()=>{
+test("daily Mail keeps OAuth provisioning in the canonical storage connection screen",()=>{
   const source=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
-  assert.match(source,/hkngursu@hotmail\.com/);
-  assert.match(source,/hkndesen@gmail\.com/);
-  assert.match(source,/Ekle & Bağla/);
-  assert.match(source,/Posta Kutusunu Aç/);
-  assert.match(source,/Bağlantı servisi hazırlanıyor/);
-  assert.doesNotMatch(source,/Sağlayıcı production OAuth ayarı henüz doğrulanmadı/);
-  assert.match(source,/addAndConnectPreset/);
-  assert.match(source,/setMailAccountDefaults/);
+  const storage=read("../../../app/ky-erp-frontend/src/pages/admin/AdminMailConnectionsV2.jsx");
+  assert.match(source,/Hesap Bağlantıları/);
+  assert.match(source,/tabKey: "depolama-mail"/);
+  assert.doesNotMatch(source,/addAndConnectPreset|setMailAccountDefaults|requestMailAccount/);
+  assert.match(storage,/hkngursu@hotmail\.com/);
+  assert.match(storage,/hkndesen@gmail\.com/);
+  assert.match(storage,/startGoogleMailOAuth/);
+  assert.match(storage,/startMicrosoftMailOAuth/);
+  assert.match(storage,/setMailAccountDefaults/);
 });
-
 
 test("mail workspace final includes per-user pinning and provider folders",()=>{
   const core=read("./mail-communication-core.ts");

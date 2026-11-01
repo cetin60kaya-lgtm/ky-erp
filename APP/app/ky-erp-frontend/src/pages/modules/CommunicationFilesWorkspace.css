@@ -1,0 +1,38 @@
+.commf-workspace{display:grid;gap:0;min-width:0;background:#fff;border:1px solid #dbe5ef;border-radius:13px;overflow:hidden;color:#18334d}
+.commf-workspace .commf-head{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:19px 20px;background:linear-gradient(135deg,#f3f7fc,#fdfefe);border-bottom:1px solid #dbe5ef}
+.commf-workspace .commf-head small{color:#60758d;font-size:10px;letter-spacing:.1em;font-weight:800}
+.commf-workspace .commf-head h2{margin:5px 0;font-size:22px;line-height:1.2}
+.commf-workspace .commf-head p{margin:0;color:#62758a;font-size:12px}
+.commf-head-actions,.commf-row-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.commf-workspace .commf-search{display:flex;gap:8px;align-items:center;padding:13px 17px;border-bottom:1px solid #e4ebf2}
+.commf-workspace .commf-search label{font-size:12px;font-weight:800;color:#475569;white-space:nowrap}
+.commf-workspace .commf-search input{min-width:0;flex:1;border:1px solid #bdcde0;border-radius:8px;padding:10px 12px;font-size:13px;background:#fff;color:#172b46}
+.commf-workspace button{border:0;border-radius:8px;background:#174273;color:white;padding:9px 11px;font-size:12px;font-weight:700;cursor:pointer}
+.commf-workspace button.secondary{background:#edf3fa;border:1px solid #d2e0ee;color:#20466e}
+.commf-workspace button:disabled{opacity:.45;cursor:not-allowed}
+.commf-summary{font-size:11px;color:#58718d;padding:9px 17px;background:#fafcff}
+.commf-list{min-height:180px;max-height:65vh;overflow-y:auto}
+.commf-row{display:grid;grid-template-columns:38px minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid #edf1f5}
+.commf-row:hover,.commf-row.selected{background:#f5f9fe}
+.commf-icon{display:grid;place-items:center;font-size:21px;background:#e9f2ff;color:#214b7e;border-radius:10px;height:38px;width:38px}
+.commf-identity{min-width:0;display:grid;gap:3px}
+.commf-identity strong{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.commf-identity span,.commf-identity small{font-size:11px;color:#61748a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.commf-status{font-size:10px;font-weight:700;color:#a03d3d;white-space:nowrap}
+.commf-status.ok{color:#166b55}
+.commf-notice{margin:10px 16px;padding:10px 12px;background:#fff0f0;color:#8d2b2b;border-radius:8px;font-size:12px}
+.commf-empty{padding:42px;text-align:center;color:#657892;font-size:13px}
+.commf-footer{padding:12px 17px;font-size:11px;background:#f8fbfe;color:#657892;border-top:1px solid #e7edf4}
+.commf-overlay{position:fixed;inset:0;background:rgba(9,25,45,.65);z-index:110;display:grid;place-items:center;padding:24px}
+.commf-preview{width:min(1100px,94vw);height:min(780px,90vh);background:#fff;border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
+.commf-preview header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid #e5edf5;gap:14px}
+.commf-preview header strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.commf-preview img{width:100%;height:100%;object-fit:contain;min-height:0}
+.commf-preview iframe{height:100%;width:100%;border:0;min-height:0}
+.comm-compose .commf-workspace{grid-column:1/-1}
+.comm-compose .commf-workspace .commf-list{max-height:36vh}
+.comm-compose .commf-attachment-summary{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.comm-compose .commf-attachment-summary span{border:1px solid #d2deec;border-radius:7px;padding:6px 8px;font-size:12px}
+.comm-compose .commf-attachment-summary button{border:0;background:transparent;color:#b13737;padding:0 5px}
+@media(max-width:850px){.commf-row{grid-template-columns:32px minmax(0,1fr);gap:8px}.commf-status,.commf-row-actions{grid-column:2;justify-content:flex-start}.commf-workspace .commf-head{align-items:flex-start;flex-direction:column}.commf-workspace .commf-search{flex-wrap:wrap}.commf-workspace .commf-search label{width:100%}}
+@media(max-width:500px){.commf-row{padding:12px}.commf-workspace .commf-search input{flex-basis:100%}.commf-workspace .commf-head{padding:15px}.commf-row-actions button{flex:1}}

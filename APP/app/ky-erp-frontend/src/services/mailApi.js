@@ -65,6 +65,15 @@ export const downloadMailAttachment = async (messageId, attachmentId, fileName =
   }
 };
 
+export const listMailTemplates = () =>
+  apiGet("/mail/templates", { _ts: Date.now() }).then(unwrap);
+
+export const createMailTemplate = (payload) =>
+  apiPost("/mail/templates", payload).then(unwrap);
+
+export const updateMailTemplate = (id, payload) =>
+  apiPut("/mail/templates/" + encodeURIComponent(id), payload).then(unwrap);
+
 export const listMailDrafts = () =>
   apiGet("/mail/drafts", { _ts: Date.now() }).then(unwrap);
 
@@ -73,6 +82,9 @@ export const createMailDraft = (payload = {}) =>
 
 export const listCommunicationFiles = (params = {}) =>
   apiGet("/mail/files", { take: 150, ...params }).then(unwrap);
+
+export const getCommunicationFileBlob = (assetId) =>
+  apiFetch(`/mail/files/${encodeURIComponent(assetId)}/content`, { method: "GET", responseType: "blob", timeoutMs: 60_000 });
 
 export const searchCommunicationFiles = (q = "") =>
   q.trim()

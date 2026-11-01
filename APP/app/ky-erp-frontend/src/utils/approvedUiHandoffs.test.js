@@ -35,10 +35,15 @@ test("Şablonlar komutu bir kere ve güvenli şekilde devredilir", () => {
   assert.equal(consumeMailTemplatesOpen({ getItem() { throw new Error("denied"); } }), false);
 });
 
-test("Mail Şablonları bağlantısı kayıtsız muhasebe sekmesine gitmez", () => {
+test("Mail şablonları artık günlük Mail alanında gerçek çalışma ekranıdır", () => {
   const file = readFileSync(new URL("../pages/modules/CommunicationHubPage.jsx", import.meta.url), "utf8");
-  assert.ok(file.includes('tabKey: "mail-ekstre"'));
-  assert.ok(!file.includes('tabKey: "mail-sablonlari"'));
+  const templates = readFileSync(new URL("../pages/modules/MailTemplatesWorkspace.jsx", import.meta.url), "utf8");
+  assert.ok(file.includes("MailTemplatesWorkspace"));
+  assert.ok(file.includes('activeTab === "mail-sablonlar"'));
+  assert.ok(!file.includes('tabKey: "mail-ekstre"'));
+  assert.ok(templates.includes("listMailTemplates"));
+  assert.ok(templates.includes("createMailTemplate"));
+  assert.ok(templates.includes("updateMailTemplate"));
 });
 
 test("Tasarım yalnız son ortak CSS katmanından yüklenir", () => {
