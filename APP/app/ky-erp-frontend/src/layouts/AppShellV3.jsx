@@ -4,6 +4,7 @@ import { Bell, CheckCheck, ChevronDown, Command, Download, LogOut, Menu, Monitor
 import { ErpIcon } from "../components/erp/IconMap";
 import { KY_NAV_GROUPS, KY_PRIMARY_MENU_KEYS, KY_SETTINGS_MENU_KEYS, visibleMenuModules } from "../app/navigationGroups";
 import { breadcrumbTitles, workspaceTabTitle } from "../app/navigationTitles";
+import { buildShellMenuSections, isShellMenuSectionOpen, toggleShellMenuSection } from "../app/shellMenuModel";
 import { partitionWorkspaceTabs } from "../app/workspaceTabs";
 import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
 
@@ -184,6 +185,8 @@ export default function AppShellV3({
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState("");
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const [expandedModuleKey, setExpandedModuleKey] = useState(activeModule?.key || "");
+  const [expandedGroupKey, setExpandedGroupKey] = useState("");
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [phoneApprovalOpen, setPhoneApprovalOpen] = useState(false);
@@ -393,8 +396,89 @@ export default function AppShellV3({
   useEffect(() => { if (!quickOpen) setQuickSearch(""); }, [quickOpen]);
 
   useEffect(() => {
-    setSettingsMenuOpen(KY_SETTINGS_MENU_KEYS.includes(activeModule?.key));
+    const moduleKey = activeModule?.key || "";
+    setExpandedModuleKey(moduleKey === "ana-sayfa" ? "" : moduleKey);
+    setSettingsMenuOpen(KY_SETTINGS_MENU_KEYS.includes(moduleKey));
   }, [activeModule?.key]);
+
+  useEffect(() => { setExpandedGroupKey(""); }, [activeModule?.key, activeTab]);
+
+  // Kaynak: mevcut moduleRegistry grupları ve yetkili gerçek sekmeler; ayrı rota üretilmez.
+  function renderSidebarModule(module, settings = false) {
+    const active = activeModule?.key === module.key;
+    const sections = buildShellMenuSections(module, visibleGroups(module, user));
+    const tabs = getTabs(module, user);
+    const hasSubmenu = module.key !== "ana-sayfa" && tabs.length > 0;
+    const expanded = hasSubmenu && expandedModuleKey === module.key;
+    const submenuId = `ky-sidebar-subtabs-${module.key}`;
+
+    return (
+      <div key={module.key} className={`ky-pro-sidebar-module ${settings ? "in-settings" : ""}`}>
+        <button
+          type="button"
+          data-module={module.key}
+          className={`ky-pro-direct-link ${settings ? "ky-pro-settings-link" : ""} ${active ? "active" : ""}`}
+          aria-current={active ? "page" : undefined}
+          aria-expanded={hasSubmenu ? expanded : undefined}
+          aria-controls={hasSubmenu ? submenuId : undefined}
+          onClick={() => {
+            if (!hasSubmenu) {
+              setExpandedModuleKey("");
+              onOpenTab(module.key, tabs[0]?.[0]);
+              return;
+            }
+            if (expanded) {
+              setExpandedModuleKey("");
+              return;
+            }
+            setExpandedModuleKey(module.key);
+            setExpandedGroupKey("");
+            if (!active) onOpenTab(module.key, tabs[0]?.[0]);
+          }}
+        >
+          <span className="ky-pro-direct-icon"><ErpIcon name={module.key === "ana-sayfa" ? "dashboard" : moduleVisual(module).icon} size={18} /></span>
+          <span>{settings && module.key === "admin" && isOwnerUser(user) ? "Platform Yönetimi" : module.label}</span>
+          {hasSubmenu ? <ChevronDown className={expanded ? "expanded" : ""} size={15} aria-hidden="true" /> : null}
+        </button>
+        {expanded ? (
+          <div id={submenuId} className="ky-pro-sidebar-submenu">
+            {sections.length > 1 ? sections.map((section) => {
+              const sectionActive = section.tabs.some(([key]) => key === activeTab);
+              const open = isShellMenuSectionOpen(expandedGroupKey, section.id, sectionActive);
+              return (
+                <div key={section.id} className="ky-pro-sidebar-subgroup">
+                  <button type="button" className={`ky-pro-sidebar-section-trigger ${open ? "open" : ""}`}
+                    aria-expanded={open}
+                    onClick={() => setExpandedGroupKey((current) => toggleShellMenuSection(current, section.id, sectionActive))}>
+                    <ErpIcon name={section.icon} size={14} />
+                    <span>{section.label}</span>
+                    <ChevronDown size={13} aria-hidden="true" />
+                  </button>
+                  {open ? (
+                    <div className="ky-pro-sidebar-tab-list">
+                      {section.tabs.map(([key, label, icon]) => (
+                        <button type="button" key={key} className={active && activeTab === key ? "active" : ""}
+                          aria-current={active && activeTab === key ? "page" : undefined}
+                          onClick={() => onOpenTab(module.key, key)}>
+                          <ErpIcon name={tabVisualIcon(key, icon)} size={14} /><span>{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }) : (sections[0]?.tabs || tabs).map(([key, label, icon]) => (
+              <button type="button" key={key} className={`ky-pro-sidebar-tab ${active && activeTab === key ? "active" : ""}`}
+                aria-current={active && activeTab === key ? "page" : undefined}
+                onClick={() => onOpenTab(module.key, key)}>
+                <ErpIcon name={tabVisualIcon(key, icon)} size={14} /><span>{label}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   function runQuickAction(action) {
     onOpenTab(action.moduleKey, action.tabKey);
@@ -539,22 +623,7 @@ export default function AppShellV3({
         </header>
 
         <nav className="shell-v3-sidebar-nav" aria-label="Ana modüller">
-          {visibleMenuModules(modules, KY_PRIMARY_MENU_KEYS).map((module) => {
-            const active = activeModule?.key === module.key;
-            return (
-              <button
-                type="button"
-                key={module.key}
-                data-module={module.key}
-                className={`ky-pro-direct-link ${active ? "active" : ""}`}
-                aria-current={active ? "page" : undefined}
-                onClick={() => onOpenTab(module.key, getTabs(module, user)[0]?.[0])}
-              >
-                <span className="ky-pro-direct-icon"><ErpIcon name={module.key === "ana-sayfa" ? "dashboard" : moduleVisual(module).icon} size={18} /></span>
-                <span>{module.label}</span>
-              </button>
-            );
-          })}
+          {visibleMenuModules(modules, KY_PRIMARY_MENU_KEYS).map((module) => renderSidebarModule(module))}
           {visibleMenuModules(modules, KY_SETTINGS_MENU_KEYS).length > 0 ? (
             <div className="ky-pro-settings-group">
               <button
@@ -562,7 +631,7 @@ export default function AppShellV3({
                 className={`ky-pro-settings-trigger ${settingsMenuOpen ? "open" : ""}`}
                 aria-expanded={settingsMenuOpen}
                 aria-controls="ky-settings-module-list"
-                onClick={() => setSettingsMenuOpen((value) => !value)}
+                onClick={() => { setSettingsMenuOpen((value) => !value); setExpandedModuleKey(""); }}
               >
                 <span className="ky-pro-direct-icon"><Settings2 size={18} /></span>
                 <span>Ayarlar & Sistem</span>
@@ -570,22 +639,7 @@ export default function AppShellV3({
               </button>
               {settingsMenuOpen ? (
                 <div id="ky-settings-module-list" className="ky-pro-settings-items">
-                  {visibleMenuModules(modules, KY_SETTINGS_MENU_KEYS).map((module) => {
-                    const active = activeModule?.key === module.key;
-                    return (
-                      <button
-                        type="button"
-                        key={module.key}
-                        data-module={module.key}
-                        className={`ky-pro-direct-link ky-pro-settings-link ${active ? "active" : ""}`}
-                        aria-current={active ? "page" : undefined}
-                        onClick={() => onOpenTab(module.key, getTabs(module, user)[0]?.[0])}
-                      >
-                        <span className="ky-pro-direct-icon"><ErpIcon name={moduleVisual(module).icon} size={17} /></span>
-                        <span>{module.key === "admin" && isOwnerUser(user) ? "Platform Yönetimi" : module.label}</span>
-                      </button>
-                    );
-                  })}
+                  {visibleMenuModules(modules, KY_SETTINGS_MENU_KEYS).map((module) => renderSidebarModule(module, true))}
                 </div>
               ) : null}
             </div>
@@ -813,25 +867,6 @@ export default function AppShellV3({
 
         <div className="shell-v3-crumb"><span className="shell-v3-crumb-icon"><ErpIcon name={tabVisualIcon(activeTab, activeModuleVisual.icon)} size={15} /></span>{breadcrumbs.map((label,index)=><span key={index} className={index===breadcrumbs.length-1?"shell-v3-crumb-current":"shell-v3-crumb-module"}>{index>0 ? <span className="shell-v3-crumb-separator"> / </span> : null}{label}</span>)}</div>
         <section className="shell-v3-workspace">
-          {activeModule?.key !== "ana-sayfa" && getTabs(activeModule, user).length > 0 ? (
-            <nav className="ky-pro-module-tabs" aria-label={`${activeModule.label} işlem sekmeleri`}>
-            <span className="ky-pro-module-tabs-caption">BÖLÜM İŞLEMLERİ</span>
-            <div className="ky-pro-module-tabs-scroll">
-              {getTabs(activeModule, user).map(([key, label, icon]) => (
-                <button
-                  type="button"
-                  key={key}
-                  className={activeTab === key ? "active" : ""}
-                  aria-current={activeTab === key ? "page" : undefined}
-                  onClick={() => onOpenTab(activeModule.key, key)}
-                >
-                  <ErpIcon name={tabVisualIcon(key, icon)} size={15} />
-                  <span>{label}</span>
-                </button>
-              ))}
-            </div>
-            </nav>
-          ) : null}
           {children}
         </section>
         <footer className="shell-v3-status"><span>KY ERP</span><span>{ownerUser ? "Kapsam: Uygulama Sahibi · Tüm Sistem" : `Firma: ${activeCompanyName}`}</span><span className="ok">Güvenli çalışma alanı</span></footer>
