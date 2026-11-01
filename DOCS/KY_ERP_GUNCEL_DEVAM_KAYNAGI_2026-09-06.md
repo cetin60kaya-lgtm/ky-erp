@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 01.11.2026 — Google Drive ilk büyük indeks: zaman aşımı ve devam motoru (FEATURE DALINDA)
+- Kullanıcı ekranında Google Drive / Hakan Emp bulut bağlantısı bağlı, ancak ilk tam indeks için "Sunucu zamanında yanıt vermedi" hatası ve son tamamlanma kanıtı yok.
+- Kök neden kod: ilk manuel/cron senkronu tek HTTP invocation içinde 1.200 öğeye kadar arama; klasörler BFS ile taranırken kaldığı yer D1'e yazılmıyordu. 45 saniyelik frontend timeout, Google API/D1/model ilişkisiyle birleşince büyük kökte sonuç döndüremiyordu.
+- Bu feature dalında Google Drive özelinde 15 öğelik API sayfaları, D1 connection metadata üzerinde devam kuyruğu ve sayfa checkpoint'i, derinlik öncelikli klasör sırası, tenant/connection lease, başarılı kısmi adımda kilit bırakma, cron ile aynı devam fonksiyonu, doğru tamamlanma/ilerleme arayüzü eklendi. Yeni D1 şeması, token/secret değişimi, fiziksel Drive dosyası silme/taşıma ve kullanıcı izni genişletme yok.
+- **Kabul sınırı:** Bu kayıt yalnız feature dalı kod durumudur. Son GitHub CI/Worker deploy, gerçek Hakan Emp tam taraması, D1 toplam dosya sayısı ve DESEN/MODEL_IMAGE 2026 ilişkisi canlı veriden ayrıca doğrulanmadan tamamlandı/canlı denmez. Google dışındaki OneDrive/Dropbox tam taramaları hâlâ eski yoldadır. Fatura, bordro, çek, çalışan evrakı vb. işlem ekranlarının tek tek File Hub entity ilişkisi/açma/yükleme testleri ayrıca eksiktir.
+
+
 ## 01.11.2026 — KY ERP bütün bölümler / PC-tablet-telefon TEK DOSYA DÜZENİ (GELİŞTİRME)
 - Kullanıcı kararı: Hakan Emp Google Drive ana depolama, OneDrive ikinci ana bulut, NAS/yerel ek kaynak, Dropbox yedek alternatif. Tüm modüller, e-fatura/XML, irsaliye, çek/senet, kasa/banka/dekont, cari, personel özlük/kimlik/sağlık, İK aylık, PDKS/bordro, denetim/İSG, desen/DTF/imalat/boyahane/stok/firma belgeleri tek File Hub üzerinden yönetilecek. Masaüstü, tablet, telefon aynı D1 dosya kimliği ve kayıt ilişkisini kullanacak.
 - Mevcut File Hub bağlantıları/Drive ana klasörleri, D1 varlık/konum/ilişki tabloları ve kullanıcı yetki zinciri korundu. Yeni paralel depolama veya migration oluşturulmadı. Kullanıcı ekranında 01.11.2026 Google Drive Hakan Emp bağlı, 1 aktif servis; eski hakan drive ajan bağlantısı bekliyor. İlk senkron ve tüm dosya indeks kayıtları henüz kanıtlanmadı.
