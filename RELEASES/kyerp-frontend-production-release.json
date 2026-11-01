@@ -3,16 +3,16 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-10-30",
+  "releaseDate": "2026-11-01",
   "scope": [
-    "PR492-imalat-active-cari-firma-dropdown-with-IDs",
-    "PR492-new-model-requires-company-selection",
-    "PR492-accounting-safe-merge-admin-modal",
-    "PR492-preview-alias-and-balanced-company-protection",
-    "CI-41019688373-success",
+    "PR494-direct-sidebar-menu-user-defined-order",
+    "PR494-only-one-authorized-settings-accordion",
+    "PR494-all-module-operation-tabs-retained",
+    "PR494-home-dashboard-operational-shortcuts",
+    "CI-41263168527-success",
     "Cloudflare-Pages-production-bundle-smoke"
   ],
-  "note": "30.10.2026 PR492: İmalat Yeni Model firma dropdown Muhasebe'nin tüm aktif firmalarını ID ile gösterir; Tedarikçi rolündeki iki TAHA da görünür; varsayılan otomatik atama yok. Firma&Cari'de Birleştir modalı: kaynak/korunacak hedef ID, bağlı kayıt ve bakiye raporu, BIRLESTIR onayı; backend izin vermezse pasife alma. Eski kayıt Excel import yok, veri otomatik güncellenmez.",
-  "sourceCommit": "4ac5c3a540369ccf1dc36c6bf25c5d91614be283",
-  "requestedAt": "2026-10-30"
+  "note": "01.11.2026 PR494: KY ERP ana menüsü tek tıklamalı doğrudan modül sırasına alındı; Muhasebe altında e-Belge/Faturalar, İK Aylık ve üretim akışı. Yalnız yönetim yetkili Ayarlar & Sistem açılır; modül alt işlemleri sayfa işlem sekmelerinde. Ana Sayfa günlük izleme/kısayol düzenine alındı; sahte KPI yok. Yalnız frontend; Worker, D1, MFA, modül izinleri ve gerçek işletme verisi değişmedi. Gerçek rol/PC-tablet-telefon kullanıcı etkileşimi saha kabulü ayrıca gerekir.",
+  "sourceCommit": "03c68fd2f1007d59b88e105d7a177f8638531680",
+  "requestedAt": "2026-11-01"
 }
