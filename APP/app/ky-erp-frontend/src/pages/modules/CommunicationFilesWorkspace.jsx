@@ -49,7 +49,7 @@ export default function CommunicationFilesWorkspace({
       setNotice("Hata: " + (error?.message || "Dosya listesi alınamadı."));
       setFiles([]);
     } finally { setBusy(false); }
-  }, [scope, tenant]);
+  }, [scope]);
 
   useEffect(() => {
     let cancelled = false;
