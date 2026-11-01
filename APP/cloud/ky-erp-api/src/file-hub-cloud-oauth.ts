@@ -252,8 +252,16 @@ async function upsertCloudFile(c: Context<AppEnv>, slug: string, connectionId: s
       upper(location.asset_status)!=="AVAILABLE" ||
       Number(location.is_available||0)!==1;
     if (changed) {
-      await c.env.DB.prepare(`UPDATE file_hub_assets SET file_name=?,extension=?,mime_type=?,size_bytes=?,status='AVAILABLE',source_type='CLOUD_API',last_seen_at=?,updated_at=?,metadata=? WHERE id=? AND main_company_slug=?`)
-        .bind(fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), seenAt, seenAt, JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), location.asset_id, slug).run();
+      // JPEG değiştiyse eski küçük önizlemeyi bir sonraki görüntülemede yeniden üret.
+      const previewChanged = text(location.provider_modified_at) !== text(item.modifiedAt) ||
+        text(oldMeta.checksum) !== text(item.checksum);
+      await c.env.DB.prepare(`UPDATE file_hub_assets
+          SET file_name=?,extension=?,mime_type=?,size_bytes=?,status='AVAILABLE',source_type='CLOUD_API',
+              last_seen_at=?,updated_at=?,metadata=?,
+              preview_status=CASE WHEN ?=1 THEN 'NONE' ELSE preview_status END,
+              preview_storage_key=CASE WHEN ?=1 THEN NULL ELSE preview_storage_key END
+          WHERE id=? AND main_company_slug=?`)
+        .bind(fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), seenAt, seenAt, JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), previewChanged ? 1 : 0, previewChanged ? 1 : 0, location.asset_id, slug).run();
       await c.env.DB.prepare(`UPDATE file_hub_locations SET provider_file_id=?,relative_path=?,is_available=1,provider_modified_at=?,last_seen_at=?,updated_at=? WHERE id=?`)
         .bind(text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, seenAt, location.id).run();
     }
