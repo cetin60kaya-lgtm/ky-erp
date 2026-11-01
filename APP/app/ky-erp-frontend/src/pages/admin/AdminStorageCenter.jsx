@@ -81,7 +81,7 @@ function ServiceCard({row,loading,onSync,onDisconnect}){
    <div className="storage-service-meta"><span>Son tamamlanan tarama: <strong>{formatDate(row.last_sync_at)}</strong></span>{row.isPrimary?<span className="storage-pill">Varsayılan servis</span>:null}{meta.lastLinkedModels!==undefined?<span>İlişkili model: <strong>{meta.lastLinkedModels}</strong></span>:null}</div>
     {meta.cloudSyncProgress?<div className="storage-notice storage-hint" role="status"><strong>{stateText}</strong><div>{Number(sync.files||0)} dosya · {Number(sync.folders||0)} klasör · {Number(sync.pages||0)} sayfa · {Number(sync.pendingFolders??meta.cloudSyncCursor?.queue?.length??0)} bekleyen konum</div><small>Son ilerleme: {formatDate(sync.updatedAt)} · Otomatik tarama her 5 dakika · Durum ekranı 15 saniyede yenilenir</small></div>:null}
    {row.last_error?<div className="storage-notice bad" role="alert">{row.last_error}</div>:null}
-   <div className="storage-service-actions">{cloud?<><button disabled={loading||!row.isActive} type="button" onClick={()=>onSync(row)}>{row.provider_type==="GOOGLE_DRIVE"?(meta.cloudSyncCursor?"↻ Taramaya Devam Et":meta.cloudSyncProgress?.state==="COMPLETED"?"↻ Yeniden Tara":"↻ Taramayı Başlat"):"↻ Şimdi Senkronize Et"}</button><button disabled={loading} type="button" onClick={()=>onDisconnect(row)}>Bağlantıyı Kes</button></>:<span className="storage-muted">Agent bağlantısı · yerel cihazdan izlenir</span>}</div>
+   <div className="storage-service-actions">{cloud?<><button disabled={loading||!row.isActive} type="button" onClick={()=>onSync(row)}>{["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(row.provider_type)?(meta.cloudSyncCursor?"↻ Taramaya Devam Et":meta.cloudSyncProgress?.state==="COMPLETED"?"↻ Yeniden Tara":"↻ Taramayı Başlat"):"↻ Şimdi Senkronize Et"}</button><button disabled={loading} type="button" onClick={()=>onDisconnect(row)}>Bağlantıyı Kes</button></>:<span className="storage-muted">Agent bağlantısı · yerel cihazdan izlenir</span>}</div>
  </article>;
 }
 
@@ -91,7 +91,7 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
  useEffect(()=>{const mapped=ROUTE_TO_TAB[activeTab];if(mapped)setTab(mapped)},[activeTab]);
  const refresh=useCallback(async()=>{if(!slug){setError("Depolama yönetimi için aktif firma seçilmelidir.");return}setLoading(true);setError("");try{const[o,c,b,f,p,a,m,cred,d]=await Promise.all([apiGet("/file-hub/overview",tenantParams),apiGet("/file-hub/connections",tenantParams),apiGet("/file-hub/bindings",tenantParams),apiGet("/file-hub/files",{...tenantParams,q:search||undefined,status:statusFilter||undefined,take:100,offset:fileOffset}),apiGet("/file-hub/cloud/providers",tenantParams).catch(()=>({data:[]})),apiGet("/file-hub/cloud/accounts",tenantParams).catch(()=>({data:[]})),apiGet("/mail/accounts",tenantParams).catch(()=>({data:[]})),apiGet("/file-hub/agent-credential",tenantParams).catch(()=>null),apiGet("/file-hub/diagnostics",tenantParams).catch(()=>({data:[]}))]);setOverview(o?.data||{});setInsights(d?.data||[]);setConnections(c?.data||[]);setBindings(b?.data||[]);setFiles(f?.data||[]);setFileTotal(f?.page?.total??null);setProviders(p?.data||[]);setAccounts(a?.data||[]);setMailAccounts(m?.data||[]);setCredential(cred?.data||null)}catch(e){setError(e?.message||"Depolama Merkezi yüklenemedi.")}finally{setLoading(false)}},[search,statusFilter,fileOffset,tenantParams,slug]);
  useEffect(()=>{refresh()},[refresh]);
- const watchKey=connections.filter(row=>row.provider_type==="GOOGLE_DRIVE"&&row.sync_mode==="CLOUD_API"&&row.isActive&&row.metadata?.cloudSyncCursor).map(row=>row.id).join("|");
+ const watchKey=connections.filter(row=>["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(row.provider_type)&&row.sync_mode==="CLOUD_API"&&row.isActive&&row.metadata?.cloudSyncCursor).map(row=>row.id).join("|");
  useEffect(()=>{
    if(!slug||!watchKey||!["overview","connections","sync"].includes(tab))return;
    let alive=true;
@@ -144,10 +144,10 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
   try{
    const r=await apiPost(`/file-hub/cloud/connections/${row.id}/sync`,{mainCompanySlug:slug}),d=r?.data||{};
    if(d.busy)setMessage("Tarama halen çalışıyor; mevcut indeks ve devam konumu korunuyor.");
-   else if(row.provider_type==="GOOGLE_DRIVE"){
+   else if(["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(row.provider_type)){
     const summary=`${row.name}: bu adımda ${d.files||0} dosya / ${d.folders||0} klasör, toplam ${d.totalFiles||0} dosya / ${d.totalFolders||0} klasör tarandı.`;
     const models=d.completed?` D1'de ${d.linkedImages||0} görsel ve ${d.linkedModels||0} model ilişkisi doğrulandı.`:"";
-    const status=d.inProgress?" İşlem tamamlanmadı, kaldığı konum kaydedildi. Senkronizasyonu açık bölüm ataması varsa zamanlanmış tarama da devam eder.":" Tam tarama tamamlandı.";
+    const status=d.inProgress?" İşlem tamamlanmadı, kaldığı konum kaydedildi. Worker otomatik taramayı sürdürecektir.":" Tam tarama tamamlandı.";
     setMessage(summary+models+status+(d.designImageBindingPresent===false?" DESEN / MODEL_IMAGE için görsel/2026 gibi açık bir alt klasör ataması gerekli; ana servis kökü yeterli değil.":""));
    }else setMessage(`${row.name}: ${d.files||0} dosya / ${d.folders||0} klasör tarandı.`+(d.truncated?" Tarama sınırına ulaşıldı.":""));
    await refresh();
