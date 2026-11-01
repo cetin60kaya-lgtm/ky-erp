@@ -26,6 +26,7 @@ test("only unambiguous TAHA GIYIM company ID can be assigned by default", () => 
   assert.match(design, /candidates\.length === 1 \? candidates\[0\] : null/);
   assert.match(design, /companyId: text\(matched\?\.id\)/);
   assert.match(design, /existingCanonicalModel\(c, slug, modelName\)/);
+  assert.match(design, /!current && !canonical && purposeCode !== "MODEL_IMAGE"/);
   assert.match(design, /id: text\(canonical\?\.id\) \|\| crypto\.randomUUID\(\)/);
 });
 
