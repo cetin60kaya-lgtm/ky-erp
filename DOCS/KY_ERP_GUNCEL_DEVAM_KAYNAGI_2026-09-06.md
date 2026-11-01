@@ -1,5 +1,15 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 01.11.2026 — Bağlantılar & Depolama altı işlem alanı tam düzeni
+
+- Mevcut alt sayfalar: Genel Bakış, Dosya Servisleri, E-posta Hesapları, Bölüm / Dosya Atamaları, Dosya İndeksi, Senkronizasyon & Agent, Yedekleme & Loglar. Mail sekmesindeki boş ekran, gerçek `AdminMailConnectionsV2` yönetimine bağlandı; hazır OAuth/onay/posta kutusu akışı yeniden kullanılacak, ikinci mail sistemi kurulmayacak.
+- Bölüm→dosya türü seçimleri ilgili amaçlarla sınırlandı; mevcut atamalar düğmeyle formda açılıp düzenlenebilir. Kök klasör açık seçilmedikçe atama yanlışlıkla kaydedilmez. Okuma/yazma/senkron bayrakları mevcut File Hub sözleşmesini kullanır.
+- Dosya İndeksi salt okunur `LIMIT/OFFSET` ve tenant + arama + durum filtreleriyle gerçek toplam kayıt sayısı, önceki/sonraki sayfa destekler; 300'lük sessiz kesim kalkar. D1 şema değişmez.
+- Bulut OAuth servisi / yerel Agent / KY Control Hub ayrımı açık gösterilir; mevcut bağlantı, hata, son senkron, D1 model ilişki sayısı ve agent sağlığı ayrı ve gerçek kaynaklara bağlıdır. Agent anahtarı yenilemesi açık ikinci onay gerektirir.
+- Yedekleme ekranı gerçek File Hub olaylarını gösterir; D1 yedek kanıtını Worker production Actions kaynağına yönlendirir. Test edilmemiş yedek varmış gibi gösterilmez. Şifre/secret, OAuth, D1 iş verileri ve mevcut dosyalar aktarılmaz/silinmez.
+- Saha kabulü: X bilgisayarında firma sahibi oturumuyla Google hesabı OAuth bağlama, kök/2026 klasör ataması, manuel senkron ve canlı D1 model sayısı doğrulanana kadar toplu model açma tamamlanmış sayılmaz.
+
+
 ## 01.11.2026 — File Hub uygulama sahibi / kendi firma depolama erişimi düzeltmesi
 
 - **Saha:** Hakan Emprime > Bağlantılar > Dosya Servisleri > Google Drive hesabı bağlantısı, oturumda `SUPER_ADMIN` / Uygulama Sahibi / Tüm Sistem görünürken `COMPANY_OWNER_ONLY` (403) reddi verdi. İlgili OAuth `assertCompanyOwner` ve File Hub `requireCompanyOwner` yalnız `COMPANY_ADMIN` kabul ediyordu.
