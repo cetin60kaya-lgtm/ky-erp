@@ -3,9 +3,9 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "51b046d05dd0eb05ad97bec5e8c8910ac5d0b3d5",
+  "sourceCommit": "bdd11c7772102070ed788f9cf98c1e775b95ebf1",
   "requestedAt": "2026-11-01",
-  "attempt": 40,
+  "attempt": 41,
   "scope": [
     "PR499-FileHub-GoogleDrive-OneDrive-dual-primary-NAS-Local",
     "PR499-Dropbox-optional-OAuth-APIv2-provider",
@@ -13,9 +13,11 @@
     "CI-41269191063-success",
     "D1-full-backup-required",
     "no-migration",
-    "API-production-health"
+    "API-production-health",
+    "PR500-Mail-Merkezi-FileHub-Ek-Sablon-Secure-Read",
+    "CI-41269933018-success"
   ],
-  "note": "01.11.2026 PR499: Google Drive ve OneDrive eşzamanlı ana bulut sağlayıcıları; Dropbox API v2 OAuth/refresh, klasör, download/upload opsiyonel adapter; File Hub D1 tenant salt okunur akıllı denetim, dosya indeksi sayfalama. NAS ve yerel File Agent korunur. Dropbox credentials yoksa devre dışıdır; dosya aktarımı, OAuth hesabı açma veya migration bu yayında yapılmaz.",
+  "note": "01.11.2026 PR500 Mail & Dosyalar: tenant/modül yetkili File Hub dosya okuma, gerçek firma dosyaları, mail şablon CRUD. Bağlantılar & Depolama/OAuth/Agent yönetimi değiştirilmedi; yeni D1 migration uygulanmaz. 01.11.2026 PR499: Google Drive ve OneDrive eşzamanlı ana bulut sağlayıcıları; Dropbox API v2 OAuth/refresh, klasör, download/upload opsiyonel adapter; File Hub D1 tenant salt okunur akıllı denetim, dosya indeksi sayfalama. NAS ve yerel File Agent korunur. Dropbox credentials yoksa devre dışıdır; dosya aktarımı, OAuth hesabı açma veya migration bu yayında yapılmaz.",
   "applyMigrations": false,
   "migrationApprovedByUser": false,
   "applyPhysical0062": false,
