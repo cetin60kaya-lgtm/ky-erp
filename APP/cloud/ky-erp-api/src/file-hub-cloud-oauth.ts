@@ -379,6 +379,8 @@ async function syncCloudDesignBinding(c:Context<AppEnv>,slug:string,connectionId
   const binding=(result.results||[]).find((row:Row)=>bindingMatches(row.root_path,relativePath));
   if(!binding) return null;
   const purposeCode=upper(binding.purpose_code), extension=upper(text(item.name).split(".").pop());
+  // Google ana kökü seçilmiş olsa bile bütün JPEG'leri yanlışlıkla model kartına çevirme.
+  if(purposeCode==="MODEL_IMAGE" && !normDesignPath(binding.root_path)) return null;
   if(purposeCode==="MODEL_IMAGE" && !["JPG","JPEG","PNG","WEBP"].includes(extension)) return null;
   const modelName=designModelIdentity(item.name);
   if(!modelName) return null;
@@ -671,7 +673,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       .bind(slug, connectionId).first<Row>();
     return { files, folders, totalFiles: cursor.files, totalFolders: cursor.folders, modelSyncs,
       linkedImages, linkedModels, truncated: !complete, inProgress: !complete, completed: complete,
-      lastSyncAt: complete ? now() : null, designImageBindingPresent: Boolean(design),
+      lastSyncAt: complete ? now() : null, designImageBindingPresent: Boolean(design && normDesignPath(design.root_path)),
       designImageRootPath: text(design?.root_path) };
   } catch (error: any) {
     // Checkpoint sonrası yarım sayfa yeniden okunabilir; eski kayıtlar silinmez.
