@@ -236,8 +236,8 @@ async function connectionAccount(c: Context<AppEnv>, slug: string, connectionId:
   return { link: { ...link, ...account }, accessToken };
 }
 async function upsertCloudFile(c: Context<AppEnv>, slug: string, connectionId: string, provider: string, item: Row, relativePath: string, seenAt: string) {
-  let location = await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,(SELECT COUNT(*) FROM file_hub_relations r WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.provider_file_id=? LIMIT 1`).bind(slug, connectionId, text(item.id)).first<Row>();
-  if (!location) location = await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,(SELECT COUNT(*) FROM file_hub_relations r WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.relative_path=? LIMIT 1`).bind(slug, connectionId, relativePath).first<Row>();
+  let location = await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,(SELECT COUNT(*) FROM file_hub_relations r JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.provider_file_id=? LIMIT 1`).bind(slug, connectionId, text(item.id)).first<Row>();
+  if (!location) location = await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,(SELECT COUNT(*) FROM file_hub_relations r JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.relative_path=? LIMIT 1`).bind(slug, connectionId, relativePath).first<Row>();
   const fileName = text(item.name) || "dosya";
   const extension = fileName.includes(".") ? fileName.split(".").pop()!.toUpperCase() : "";
   if (location) {
@@ -275,11 +275,9 @@ function bindingMatches(rootPath: unknown, relativePath: unknown) {
   return rel===root || rel.startsWith(root+"/");
 }
 function designModelIdentity(value: unknown) {
-  return upper(value)
-    .replace(/\.[A-Z0-9]+$/i,"")
-    .replace(/\b(YERLEŞİM|YERLESIM|KALIP|PLACEMENT|GÖRSEL|GORSEL|RIP|SOURCE|KAYNAK|FINAL|SON)\b.*$/i,"")
-    .replace(/\s+/g," ")
-    .trim();
+  // Dosya adı aynen model adıdır. Yalnız uzantı kaldırılır; FINAL/SON gibi
+  // modelin gerçek adının parçası olabilecek kelimeler silinmez.
+  return text(value).replace(/\.[^.]+$/, "").replace(/\s+/g, " ").trim();
 }
 async function insertCloudDesignRelation(c:Context<AppEnv>,slug:string,fileAssetId:string,entityId:string,relationType:string,metadata:Row={}){
   if(!entityId) return;
@@ -299,12 +297,15 @@ async function syncCloudDesignBinding(c:Context<AppEnv>,slug:string,connectionId
   if(purposeCode==="MODEL_IMAGE" && !["JPG","JPEG","PNG","WEBP"].includes(extension)) return null;
   const modelName=designModelIdentity(item.name);
   if(!modelName) return null;
-  await insertCloudDesignRelation(c,slug,fileAssetId,modelName,purposeCode,{moduleCode:upper(binding.module_code),purposeCode,relativePath,provider});
-  return syncFileHubDesignModel(c,{
+  const synced = await syncFileHubDesignModel(c,{
     slug,fileAssetId,modelName,purposeCode,
     fileName:text(item.name),extension,mimeType:text(item.mimeType),sizeBytes:Number(item.size||0),
     sha256:text(item.checksum),relativePath,providerType:provider,storageConnectionId:connectionId,
   });
+  // İlişkinin entity_id alanı model adı değil, gerçek canonical model UUID olmalı.
+  if (synced?.modelId) await insertCloudDesignRelation(c,slug,fileAssetId,synced.modelId,purposeCode,
+    {moduleCode:upper(binding.module_code),purposeCode,relativePath,provider});
+  return synced;
 }
 
 
