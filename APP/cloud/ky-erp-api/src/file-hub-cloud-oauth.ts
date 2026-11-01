@@ -387,7 +387,7 @@ async function syncCloudDesignBinding(c:Context<AppEnv>,slug:string,connectionId
     OUTGOING_DESIGN:["AI","PDF","PSD","PSB","SVG","EPS","JPG","JPEG","PNG"],
     RIP_PDF:["PDF"],
   };
-  const binding=eligible.find((row:Row)=>!permitted[upper(row.purpose_code)] || permitted[upper(row.purpose_code)].includes(extension));
+  const binding=eligible.find((row:Row)=>permitted[upper(row.purpose_code)]?.includes(extension));
   if(!binding) return null;
   const purposeCode=upper(binding.purpose_code);
   const modelName=designModelIdentity(item.name);
