@@ -1,5 +1,11 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.11.2026 — Firma bazlı File Hub ve tam Hakan Emp envanteri (geliştirme)
+- Kanıtlı salt-okunur Drive sayımı: `görsel/2026` 347 (342 JPG/JPEG, 4 PNG, 1 TIF); `yerleşim dosyaları` 684 (664 PDF); `giden desenler` en az 1000 dosya; `modeller` doğrudan en az 1600 alt klasör, daha büyük sayım ve alt klasör içerikleri henüz tam bitmedi.
+- Firma/tenant bazlı Google Drive ve OneDrive hesapları, hesap kaldırma güvenliği, ekrandaki firma değişiminde önceki hesap/dosya listesini temizleme, senkron WAITING/RUNNING görünümü, 2026 tarama önceliği ve Microsoft Graph sayfa checkpoint'i geliştirme dalında. Yeni OAuth secret, fiziksel dosya taşıma/silme veya D1 migration yok.
+- Gerçek D1 2026 `linkedImages/linkedModels` ve tüm arşiv tarama sonucu ayrıca canlı kabul bekliyor. Ayrıntı: `DOCS/KY_FILE_HUB_FIRMA_BAZLI_DEPOLAMA_20261101.md`.
+
+
 
 ## 01.11.2026 — Firma bazlı Drive/OneDrive ve tarama devam düzeltmesi (PR kontrolü bekliyor)
 - Kaynak iş dalı: `fix/filehub-sync-automatic-progress-20261101`. Detay: `DOCS/KY_ERP_FIRMA_BAZLI_DOSYA_MERKEZI_2026-11-01.md`.
