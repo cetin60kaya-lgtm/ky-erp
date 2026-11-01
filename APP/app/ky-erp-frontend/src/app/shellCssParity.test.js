@@ -9,7 +9,9 @@ test("PC/tablet/telefon tek shell ve ayrı cihaz CSS dosyalarıyla çalışır",
   for (const name of ["shell-menu-core.css", "shell-device-pc.css", "shell-device-tablet.css", "shell-device-phone.css"]) {
     assert.ok(source.includes(`../styles/${name}`), `${name} ortak shell üzerinde yüklenmeli`);
   }
-  assert.match(source, /buildShellMenuSections\(module, visibleGroups\(module, user\)\)/);
+  assert.match(source, /visibleMenuModules\\(modules, KY_PRIMARY_MENU_KEYS\\)/);
+  assert.match(source, /visibleMenuModules\\(modules, KY_SETTINGS_MENU_KEYS\\)/);
+  assert.match(source, /ky-pro-module-tabs-scroll/);
   assert.doesNotMatch(source, /flatModuleTabs|hasPrimarySidebarGroups/);
 });
 
