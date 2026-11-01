@@ -1,16 +1,39 @@
-// Tek kanonik ana menü: sol panel ile Ana Sayfa aynı başlık, sıra ve yetki gruplarını kullanır.
-export const KY_NAV_GROUPS = [
-  { key:"daily", title:"Personel & İK", description:"Aylık İK, günlük personel ve PDKS", keys:["ik","gunluk-operasyon","pdks"] },
-  { key:"production", title:"Üretim", description:"Desen, imalat ve boyahane", keys:["desen","uretim","boyahane"] },
-  { key:"finance", title:"Muhasebe & Finans", description:"Cari hesaplar, faturalar ve e-Belge", keys:["muhasebe","e-belge"] },
-  { key:"company", title:"Denetim & Uygunluk", description:"Firma denetimleri, evraklar ve süreler", keys:["compliance"] },
-  { key:"communication", title:"İletişim & Dosyalar", description:"E-posta, firma dosyaları ve asistan", keys:["iletisim","asistan"] },
-  { key:"management", title:"Yönetim & Sistem", description:"Yönetim, güvenlik, bağlantılar ve sistem", keys:["admin","depolama","sistem-merkezi"] },
+// Sol menü: günlük kullanılan modüller doğrudan, yalnız ayarlar tek açılır alanda.
+// Modül anahtarları/izinleri/rotaları değiştirilmez.
+export const KY_PRIMARY_MENU_KEYS = [
+  "ana-sayfa",
+  "muhasebe",
+  "e-belge",
+  "gunluk-operasyon",
+  "ik",
+  "pdks",
+  "desen",
+  "uretim",
+  "boyahane",
+  "compliance",
+  "iletisim",
 ];
-export function visibleNavigationGroups(modules=[]) {
-  const access=new Map(modules.filter(module=>module?.key && module.key!=="ana-sayfa").map(module=>[module.key,module]));
-  return KY_NAV_GROUPS.map(group=>({...group,modules:group.keys.map(key=>access.get(key)).filter(Boolean)})).filter(group=>group.modules.length);
+
+export const KY_SETTINGS_MENU_KEYS = ["admin", "depolama", "sistem-merkezi", "asistan"];
+
+export function visibleMenuModules(modules = [], keys = []) {
+  const accessible = new Map(modules.filter((module) => module?.key).map((module) => [module.key, module]));
+  return keys.map((key) => accessible.get(key)).filter(Boolean);
+}
+
+// Bu gruplar yalnız breadcrumb / mantıksal sınıflandırma içindir; sol menüde açılır başlık oluşturmaz.
+export const KY_NAV_GROUPS = [
+  { key: "finance", title: "Muhasebe", description: "Cari, faturalar ve e-Belge", keys: ["muhasebe", "e-belge"] },
+  { key: "daily", title: "Personel & İK", description: "Günlük operasyon, aylık İK ve PDKS", keys: ["gunluk-operasyon", "ik", "pdks"] },
+  { key: "production", title: "Üretim", description: "Desen, imalat ve boyahane", keys: ["desen", "uretim", "boyahane"] },
+  { key: "company", title: "Denetim", description: "Evrak ve uygunluk", keys: ["compliance"] },
+  { key: "communication", title: "İletişim", description: "Mail ve dosyalar", keys: ["iletisim"] },
+  { key: "management", title: "Ayarlar & Sistem", description: "Yönetim, güvenlik, bağlantılar ve asistan", keys: ["admin", "depolama", "sistem-merkezi", "asistan"] },
+];
+export function visibleNavigationGroups(modules = []) {
+  const access = new Map(modules.filter((module) => module?.key && module.key !== "ana-sayfa").map((module) => [module.key, module]));
+  return KY_NAV_GROUPS.map((group) => ({ ...group, modules: group.keys.map((key) => access.get(key)).filter(Boolean) })).filter((group) => group.modules.length);
 }
 export function navigationGroupFor(moduleKey) {
-  return KY_NAV_GROUPS.find(group=>group.keys.includes(moduleKey))?.key || "";
+  return KY_NAV_GROUPS.find((group) => group.keys.includes(moduleKey))?.key || "";
 }
