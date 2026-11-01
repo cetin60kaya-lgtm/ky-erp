@@ -10,6 +10,8 @@ type Bindings = Cloudflare.Env & {
   MICROSOFT_GRAPH_CLIENT_ID?: string;
   MICROSOFT_GRAPH_CLIENT_SECRET?: string;
   FILE_HUB_OAUTH_KEY?: string;
+  DROPBOX_CLIENT_ID?: string;
+  DROPBOX_CLIENT_SECRET?: string;
 };
 type AppEnv = { Bindings: Bindings; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -33,7 +35,7 @@ const unb64url = (value: string) => {
   const raw = atob(normalized);
   return Uint8Array.from(raw, (ch) => ch.charCodeAt(0));
 };
-const providerFamily = (provider: unknown) => upper(provider) === "GOOGLE_DRIVE" ? "GOOGLE" : ["ONEDRIVE", "SHAREPOINT"].includes(upper(provider)) ? "MICROSOFT" : "";
+const providerFamily = (provider: unknown) => upper(provider) === "GOOGLE_DRIVE" ? "GOOGLE" : ["ONEDRIVE", "SHAREPOINT"].includes(upper(provider)) ? "MICROSOFT" : upper(provider) === "DROPBOX" ? "DROPBOX" : "";
 const appBaseUrl = "https://kyerp.net";
 const apiBaseUrl = "https://api.kyerp.net";
 const sanitizeReturnPath = (value: unknown) => {
@@ -104,6 +106,7 @@ function providerConfig(c: Context<AppEnv>, providerType: unknown) {
       scope: "openid profile email offline_access User.Read Files.ReadWrite.All Sites.ReadWrite.All",
     };
   }
+  if (provider === "DROPBOX") return {provider,family:"DROPBOX",clientId:text(c.env.DROPBOX_CLIENT_ID),clientSecret:text(c.env.DROPBOX_CLIENT_SECRET),redirectUri:`${apiBaseUrl}/api/auth/file-hub/oauth/dropbox/callback`,scope:"account_info.read files.metadata.read files.content.read files.content.write"};
   return { provider, family: "", clientId: "", clientSecret: "", redirectUri: "", scope: "" };
 }
 function providerReady(c: Context<AppEnv>, provider: string) {
@@ -126,6 +129,7 @@ async function tokenPost(url: string, values: Record<string, string>) {
 }
 async function exchangeCode(c: Context<AppEnv>, providerType: string, code: string) {
   const cfg = providerConfig(c, providerType);
+  if (cfg.family === "DROPBOX") return tokenPost("https://api.dropboxapi.com/oauth2/token",{code,client_id:cfg.clientId,client_secret:cfg.clientSecret,redirect_uri:cfg.redirectUri,grant_type:"authorization_code"});
   if (cfg.family === "GOOGLE") {
     return tokenPost("https://oauth2.googleapis.com/token", {
       code,
@@ -150,6 +154,8 @@ async function refreshProviderToken(c: Context<AppEnv>, account: Row) {
   const cfg = providerConfig(c, account.provider_type);
   const payload = cfg.family === "GOOGLE"
     ? await tokenPost("https://oauth2.googleapis.com/token", { refresh_token: refresh, client_id: cfg.clientId, client_secret: cfg.clientSecret, grant_type: "refresh_token" })
+    : cfg.family === "DROPBOX"
+    ? await tokenPost("https://api.dropboxapi.com/oauth2/token", { refresh_token: refresh, client_id: cfg.clientId, client_secret: cfg.clientSecret, grant_type: "refresh_token" })
     : await tokenPost("https://login.microsoftonline.com/common/oauth2/v2.0/token", { refresh_token: refresh, client_id: cfg.clientId, client_secret: cfg.clientSecret, grant_type: "refresh_token", scope: cfg.scope });
   const accessCipher = await encrypt(c, payload.access_token);
   const refreshCipher = text(payload.refresh_token) ? await encrypt(c, payload.refresh_token) : text(account.refresh_token_cipher);
@@ -176,6 +182,10 @@ async function providerJson(url: string, token: string, init: RequestInit = {}) 
 }
 
 async function accountIdentity(c: Context<AppEnv>, providerType: string, accessToken: string) {
+  if (providerFamily(providerType) === "DROPBOX") {
+    const profile=await dropboxRpc(accessToken,"users/get_current_account",null);
+    return {id:text(profile.account_id),email:text(profile.email),name:text(profile.name?.display_name||profile.email),metadata:{accountType:text(profile.account_type?.[".tag"])}};
+  }
   if (providerFamily(providerType) === "GOOGLE") {
     const profile = await providerJson("https://www.googleapis.com/oauth2/v3/userinfo", accessToken);
     return { id: text(profile.sub || profile.email), email: text(profile.email), name: text(profile.name || profile.email), metadata: { picture: text(profile.picture) } };
@@ -204,6 +214,62 @@ async function listGoogleChildren(token: string, parentId: string, includeFiles 
     id: text(row.id), name: text(row.name), isFolder: row.mimeType === "application/vnd.google-apps.folder", mimeType: text(row.mimeType), size: Number(row.size || 0), modifiedAt: text(row.modifiedTime), webUrl: text(row.webViewLink), checksum: text(row.md5Checksum), raw: row,
   }));
 }
+
+// Dropbox, File Hub'un opsiyonel 3. bulut sağlayıcısıdır. Ana servis olarak zorlanmaz.
+// Bu adapter yalnız izin verilmiş Dropbox OAuth tokenı ile API v2 RPC/content çağrıları yapar.
+async function dropboxRpc(token:string,route:string,payload:Row|null):Promise<Row>{
+  const response=await fetch(`https://api.dropboxapi.com/2/${route}`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify(payload??null)});
+  const result=await response.json().catch(()=>({})) as Row;
+  if(!response.ok)throw Object.assign(new Error(text(result.error_summary||result.error_description||result.error)||`Dropbox API HTTP ${response.status}`),{code:"DROPBOX_API_FAILED",status:response.status});
+  return result;
+}
+function dropboxRootPath(value:unknown):string {
+  const s=text(value);
+  if(!s||s==="root")return "";
+  if(s.startsWith("id:")||s.startsWith("/"))return s;
+  throw Object.assign(new Error("Dropbox klasör kimliği geçersiz."),{code:"DROPBOX_PATH_INVALID",status:422});
+}
+async function listDropboxChildren(token:string,parentId:string,includeFiles=false){
+  const rows:Row[]=[];
+  let response=await dropboxRpc(token,"files/list_folder",{path:dropboxRootPath(parentId),recursive:false,include_deleted:false,limit:1000});
+  while(true){
+    rows.push(...(Array.isArray(response.entries)?response.entries:[]));
+    if(!response.has_more)break;
+    if(rows.length>=5000)throw Object.assign(new Error("Dropbox klasöründe 5000+ öğe bulundu. Tarama sınırına ulaşıldı; veri tam değil."),{code:"DROPBOX_LIST_LIMIT"});
+    response=await dropboxRpc(token,"files/list_folder/continue",{cursor:text(response.cursor)});
+  }
+  return rows.filter(row=>includeFiles||row[".tag"]==="folder").map(row=>({
+    id:text(row.id),name:text(row.name),isFolder:row[".tag"]==="folder",
+    mimeType:"",size:Number(row.size||0),modifiedAt:text(row.server_modified||row.client_modified),
+    webUrl:"",checksum:text(row.content_hash),raw:row,
+  }));
+}
+async function dropboxArchivePath(token:string,rootId:string,folders:string[],fileName:string){
+  const value=dropboxRootPath(rootId);
+  const root=value&&!value.startsWith("/")?text((await dropboxRpc(token,"files/get_metadata",{path:value})).path_display):value;
+  let current=root.replace(/\/$/,"");
+  for(const part of folders){
+    const clean=text(part);
+    if(!clean||clean==="."||clean===".."||/[\\/\x00-\x1f]/.test(clean))throw Object.assign(new Error("Dropbox alt klasörü geçersiz."),{code:"DROPBOX_PATH_INVALID"});
+    current+="/"+clean;
+    try{await dropboxRpc(token,"files/create_folder_v2",{path:current,autorename:false})}
+    catch(e:any){
+      if(Number(e.status)!==409)throw e;
+      const existing=await dropboxRpc(token,"files/get_metadata",{path:current});
+      if(existing[".tag"]!=="folder")throw Object.assign(new Error("Dropbox hedef adında klasör yerine dosya var."),{code:"DROPBOX_FOLDER_CONFLICT"});
+    }
+  }
+  if(!fileName||fileName==="."||fileName===".."||/[\\/\x00-\x1f]/.test(fileName))throw Object.assign(new Error("Dropbox dosya adı geçersiz."),{code:"DROPBOX_PATH_INVALID"});
+  return current+"/"+fileName;
+}
+async function dropboxArchiveUpload(token:string,path:string,bytes:ArrayBuffer){
+  if(bytes.byteLength>150*1024*1024)throw Object.assign(new Error("Dropbox bu yüklemede 150 MiB üstünü desteklemiyor; büyük dosya için yükleme oturumu gerekir."),{code:"DROPBOX_LARGE_UPLOAD_UNSUPPORTED",status:413});
+  const response=await fetch("https://content.dropboxapi.com/2/files/upload",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/octet-stream","Dropbox-API-Arg":JSON.stringify({path,mode:"add",autorename:true,mute:true})},body:bytes});
+  const data=await response.json().catch(()=>({})) as Row;
+  if(!response.ok)throw Object.assign(new Error(text(data.error_summary)||`Dropbox yükleme HTTP ${response.status}`),{code:"DROPBOX_UPLOAD_FAILED",status:response.status});
+  return {id:text(data.id),name:text(data.name),webUrl:"",provider:"DROPBOX"};
+}
+
 async function graphPaged(url: string, token: string) {
   const rows: Row[] = [];
   let next = url;
@@ -403,6 +469,10 @@ export async function archiveFileToCloudConnection(c:Context<AppEnv>,slug:string
     const parentId=await ensureGooglePath(accessToken,rootId,parts.folders);
     return{...(await googleUpload(accessToken,parentId,parts.fileName,text(input.mimeType)||"application/octet-stream",input.bytes)),providerType:provider,parentId,relativePath:text(input.relativePath)};
   }
+  if(provider==="DROPBOX"){
+    const path=await dropboxArchivePath(accessToken,rootId,parts.folders,parts.fileName);
+    return{...(await dropboxArchiveUpload(accessToken,path,input.bytes)),providerType:provider,relativePath:text(input.relativePath)};
+  }
   if(["ONEDRIVE","SHAREPOINT"].includes(provider)){
     const parentId=await ensureMicrosoftPath(accessToken,rootId,driveId,parts.folders);
     return{...(await microsoftUpload(accessToken,driveId,parentId,parts.fileName,text(input.mimeType)||"application/octet-stream",input.bytes)),providerType:provider,parentId,relativePath:text(input.relativePath)};
@@ -558,6 +628,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     return c.json({ ok: true, data: [
       { providerType: "GOOGLE_DRIVE", label: "Google Drive", authFamily: "GOOGLE", configured: providerReady(c, "GOOGLE_DRIVE"), mode: "CLOUD_API" },
       { providerType: "ONEDRIVE", label: "Microsoft OneDrive", authFamily: "MICROSOFT", configured: providerReady(c, "ONEDRIVE"), mode: "CLOUD_API" },
+      { providerType: "DROPBOX", label: "Dropbox (alternatif)", authFamily: "DROPBOX", configured: providerReady(c, "DROPBOX"), mode: "CLOUD_API", optional: true },
       { providerType: "SHAREPOINT", label: "Microsoft SharePoint", authFamily: "MICROSOFT", configured: providerReady(c, "SHAREPOINT"), mode: "CLOUD_API" },
       { providerType: "LOCAL_FOLDER", label: "Yerel Klasör", configured: true, mode: "AGENT" },
       { providerType: "NAS", label: "NAS / Ağ Klasörü", configured: true, mode: "AGENT" },
@@ -580,7 +651,10 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     await c.env.DB.prepare(`DELETE FROM file_hub_oauth_states WHERE expires_at<?`).bind(createdAt).run();
     await c.env.DB.prepare(`INSERT INTO file_hub_oauth_states(state,main_company_slug,provider_type,user_id,return_path,expires_at,created_at) VALUES(?,?,?,?,?,?,?)`).bind(state, gate.slug, providerType, gate.user.id, returnPath, expiresAt, createdAt).run();
     let authorizeUrl = "";
-    if (cfg.family === "GOOGLE") {
+    if (cfg.family === "DROPBOX") {
+      const params=new URLSearchParams({client_id:cfg.clientId,redirect_uri:cfg.redirectUri,response_type:"code",token_access_type:"offline",scope:cfg.scope,state});
+      authorizeUrl=`https://www.dropbox.com/oauth2/authorize?${params}`;
+    } else if (cfg.family === "GOOGLE") {
       const params = new URLSearchParams({ client_id: cfg.clientId, redirect_uri: cfg.redirectUri, response_type: "code", scope: cfg.scope, access_type: "offline", include_granted_scopes: "true", prompt: "consent", state });
       authorizeUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
     } else {
@@ -624,6 +698,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   }
   app.get("/api/auth/file-hub/oauth/google/callback", (c) => oauthCallback(c, "GOOGLE"));
   app.get("/api/auth/file-hub/oauth/microsoft/callback", (c) => oauthCallback(c, "MICROSOFT"));
+  app.get("/api/auth/file-hub/oauth/dropbox/callback", (c) => oauthCallback(c, "DROPBOX"));
 
   app.get("/api/file-hub/cloud/folders", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
@@ -632,7 +707,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     try {
       const { account, accessToken } = await usableAccount(c, slug, accountId);
       const provider = upper(account.provider_type);
-      const rows = provider === "GOOGLE_DRIVE" ? await listGoogleChildren(accessToken, parentId, false) : await listMicrosoftChildren(accessToken, parentId, driveId, false);
+      const rows = provider === "GOOGLE_DRIVE" ? await listGoogleChildren(accessToken, parentId, false) : provider==="DROPBOX"?await listDropboxChildren(accessToken,parentId,false):await listMicrosoftChildren(accessToken, parentId, driveId, false);
       return c.json({ ok: true, data: rows.map(({ raw, ...row }) => row) });
     } catch (error: any) { return c.json(err(text(error?.code) || "FOLDER_LIST_FAILED", text(error?.message) || "Klasörler alınamadı."), Number(error?.status) || 502); }
   });
@@ -665,7 +740,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     if (!accountId) return c.json(err("ACCOUNT_REQUIRED", "Bağlanacak bulut hesabını seçin."), 422);
     const account = await c.env.DB.prepare(`SELECT * FROM file_hub_oauth_accounts WHERE id=? AND main_company_slug=? LIMIT 1`).bind(accountId, gate.slug).first<Row>();
     if (!account) return c.json(err("ACCOUNT_NOT_FOUND", "Bulut hesabı bulunamadı."), 404);
-    const provider = upper(account.provider_type); if (!["GOOGLE_DRIVE", "ONEDRIVE", "SHAREPOINT"].includes(provider)) return c.json(err("INVALID_PROVIDER", "Bulut hesabı sağlayıcısı geçersiz."), 422);
+    const provider = upper(account.provider_type); if (!["GOOGLE_DRIVE", "ONEDRIVE", "SHAREPOINT", "DROPBOX"].includes(provider)) return c.json(err("INVALID_PROVIDER", "Bulut hesabı sağlayıcısı geçersiz."), 422);
     if (provider === "SHAREPOINT" && !driveId) return c.json(err("DRIVE_REQUIRED", "SharePoint belge kitaplığı seçimi zorunludur."), 422);
     const id = crypto.randomUUID(), ts = now(), name = text(body.name) || `${text(account.display_name || account.account_email) || provider} · ${rootFolderName}`;
     if (isPrimary) await c.env.DB.prepare(`UPDATE file_hub_connections SET is_primary=0,updated_at=? WHERE main_company_slug=?`).bind(ts, gate.slug).run();
@@ -692,7 +767,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
       const designBinding = await c.env.DB.prepare(`SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? AND module_code='DESEN' AND purpose_code='MODEL_IMAGE' AND sync_enabled=1 LIMIT 1`).bind(gate.slug, connectionId).first<Row>();
       while (queue.length && files + folders < limit) {
         const current = queue.shift()!;
-        const children = provider === "GOOGLE_DRIVE" ? await listGoogleChildren(accessToken, current.id, true) : await listMicrosoftChildren(accessToken, current.id, driveId, true);
+        const children = provider === "GOOGLE_DRIVE" ? await listGoogleChildren(accessToken, current.id, true) : provider==="DROPBOX"?await listDropboxChildren(accessToken,current.id,true):await listMicrosoftChildren(accessToken, current.id, driveId, true);
         for (const child of children) {
           const relativePath = current.path ? `${current.path}/${child.name}` : child.name;
           if (child.isFolder) { folders += 1; if (files + folders < limit) queue.push({ id: child.id, path: relativePath }); else truncated = true; }
@@ -730,7 +805,9 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     try {
       const { accessToken } = await usableAccount(c, slug, text(row.oauth_account_id)); const provider = upper(row.provider_type), fileId = text(row.provider_file_id), driveId = text(row.provider_drive_id);
       const url = provider === "GOOGLE_DRIVE" ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media` : driveId ? `https://graph.microsoft.com/v1.0/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(fileId)}/content` : `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(fileId)}/content`;
-      const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, redirect: "follow" }); if (!response.ok || !response.body) return c.json(err("DOWNLOAD_FAILED", `Bulut dosyası HTTP ${response.status} ile alınamadı.`), 502);
+      const response = provider==="DROPBOX"
+        ? await fetch("https://content.dropboxapi.com/2/files/download",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Dropbox-API-Arg":JSON.stringify({path:fileId})}})
+        : await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, redirect: "follow" }); if (!response.ok || !response.body) return c.json(err("DOWNLOAD_FAILED", `Bulut dosyası HTTP ${response.status} ile alınamadı.`), 502);
       const headers = new Headers(); headers.set("Content-Type", text(row.mime_type) || response.headers.get("Content-Type") || "application/octet-stream"); headers.set("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(text(row.file_name) || "dosya")}`); headers.set("Cache-Control", "private, no-store");
       return new Response(response.body, { status: 200, headers });
     } catch (error: any) { return c.json(err(text(error?.code) || "DOWNLOAD_FAILED", text(error?.message) || "Bulut dosyası indirilemedi."), 502); }
