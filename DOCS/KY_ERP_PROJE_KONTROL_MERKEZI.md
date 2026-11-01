@@ -1,5 +1,15 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 01.11.2026 — File Hub Google OAuth redirect_uri_mismatch saha engeli ve kontrol kolaylaştırma
+
+- Gerçek kullanıcı ekranında Google oturum açma: `400 redirect_uri_mismatch`; Google'a iletilen URI, ilgili OAuth Web client'ın Google Cloud **Yetkilendirilmiş yönlendirme URI'leri** listesinde yok veya birebir uyuşmuyor. Bu, KY ERP kullanıcısının `SUPER_ADMIN` rol engeli değildir.
+- Canonical backend URI: `https://api.kyerp.net/api/auth/file-hub/oauth/google/callback`. Microsoft OneDrive: `https://api.kyerp.net/api/auth/file-hub/oauth/microsoft/callback`. Kod zaten aynı URI'leri authorization ve token exchange için kullanıyor; sırf Google'a uysun diye URI keyfî değiştirilmez.
+- Kullanıcı ekranında OneDrive `configured=false`; production Worker tarafında `MICROSOFT_GRAPH_CLIENT_ID` / `MICROSOFT_GRAPH_CLIENT_SECRET` ve ortak `FILE_HUB_OAUTH_KEY` varlığı kontrollü gözden geçirilmelidir. Client ID/Secret değerleri GitHub veya sohbete yazılmaz.
+- PR ile provider listeleme yanıtında **yalnız kamuya açık redirect URI** gösterilir; `registrationVerified:false` değerinin anlamı, sunucunun Google/Microsoft kayıtlı URI listesini görememesidir. Ekranda hata çözüm yolu ve tek tık kopyalama görünür. Bu değişiklik **Google Cloud Console/Microsoft Entra app kaydını dışarıdan değiştirmez**; doğru client içinde redirect URI'nin kaydedilmesi ve gerçek OAuth giriş testi tamamlanana kadar Google/OneDrive **BAĞLI DEĞİL**.
+- Google konsol menüsü: Google Auth Platform → İstemciler → aynı OAuth web client → Yetkilendirilmiş yönlendirme URI'leri. Microsoft: Entra → App registrations → ilgili uygulama → Authentication → Web redirect URI. Hesap sahibi konsoldan onay verir; token/şifre/MFA açılmaz, rota değişmez.
+- Saha kabul: Google OAuth onayı → seçilen kök klasör → DESEN/MODEL_IMAGE bağlama → gerçek D1 model sayısı; Microsoft OAuth → klasör listeleme/dosya örneği. Kod/CI/Pages/Worker başarısı dış provider OAuth girişini PASS saymaz.
+
+
 ## 01.11.2026 — Popüler bulut servis karar matrisi ve akıllı denetim
 
 - Kullanım önceliği: **Google Drive + Microsoft OneDrive aynı anda aktif** (birini varsayılan seçmek diğerini pasifleştirmez). Mevcut SharePoint, NAS ve yerel File Agent servisleri desteklenir. Cloudflare R2 sistem önizleme/cache ve kontrollü arşiv rolünde kalır; kullanıcıya ana dosya evi gibi gösterilmez.
