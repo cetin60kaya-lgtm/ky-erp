@@ -572,6 +572,111 @@ export async function readFileHubAssetForMail(c:any,slug:string,assetId:string,m
 }
 
 
+
+/** Google Drive taraması: sayfa imleci ve klasör kuyruğu tenant bağlantı metadata'sında tutulur.
+ * Dosyalar fiziksel olarak taşınmaz; kesilen sayfa tekrar işlendiğinde upsert idempotent kalır. */
+async function googleChildrenPage(token: string, parentId: string, pageToken = "") {
+  const params = new URLSearchParams({
+    q: "'" + String(parentId || "root").replace(/'/g, "\\'") + "' in parents and trashed=false",
+    fields: "nextPageToken,files(id,name,mimeType,modifiedTime,size,webViewLink,md5Checksum)",
+    pageSize: "15", spaces: "drive",
+  });
+  if (pageToken) params.set("pageToken", pageToken);
+  const response = await providerJson("https://www.googleapis.com/drive/v3/files?" + params, token);
+  const children = (Array.isArray(response.files) ? response.files : []).map((row: Row) => ({
+    id: text(row.id), name: text(row.name), isFolder: row.mimeType === "application/vnd.google-apps.folder",
+    mimeType: text(row.mimeType), size: Number(row.size || 0), modifiedAt: text(row.modifiedTime),
+    webUrl: text(row.webViewLink), checksum: text(row.md5Checksum),
+  })).filter((row: Row) => row.id && row.name);
+  return { children, nextPageToken: text(response.nextPageToken) };
+}
+
+async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId: string, pageLimit = 1, scheduled = false) {
+  const { link, accessToken } = await connectionAccount(c, slug, connectionId);
+  if (upper(link.provider_type) !== "GOOGLE_DRIVE") throw Object.assign(new Error("Google Drive bağlantısı bekleniyor."), { code: "INVALID_PROVIDER" });
+  if (Number(link.is_active) === 0) throw Object.assign(new Error("Depolama servisi pasif."), { code: "CONNECTION_DISABLED", status: 409 });
+  const rootId = text(link.remote_root_id) || "root";
+  const raw = text(link.connection_metadata), meta = json(raw);
+  const resumed = meta.cloudSyncCursor && meta.cloudSyncCursor.rootId === rootId && Array.isArray(meta.cloudSyncCursor.queue);
+  const previousComplete = Date.parse(text(meta.cloudSyncProgress?.completedAt)) || 0;
+  if (scheduled && !resumed && previousComplete && Date.now() - previousComplete < 6 * 3600000) return { skipped: true };
+  if ((Date.parse(text(meta.cloudSyncLeaseUntil)) || 0) > Date.now()) return { inProgress: true, busy: true, ...json(meta.cloudSyncProgress) };
+  const leaseId = crypto.randomUUID();
+  const leaseUntil = new Date(Date.now() + 180000).toISOString();
+  const acquired = await c.env.DB.prepare("UPDATE file_hub_connections SET metadata=? WHERE id=? AND main_company_slug=? AND COALESCE(metadata,'')=? AND is_active=1")
+    .bind(JSON.stringify({ ...meta, cloudSyncLeaseId: leaseId, cloudSyncLeaseUntil: leaseUntil }), connectionId, slug, raw).run();
+  if (Number(acquired.meta?.changes || 0) !== 1) return { inProgress: true, busy: true };
+
+  let cursor = resumed
+    ? { ...meta.cloudSyncCursor, queue: meta.cloudSyncCursor.queue.map((f: Row) => ({ id: text(f.id), path: text(f.path), pageToken: text(f.pageToken) })) }
+    : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], files: 0, folders: 0, changedFiles: 0, modelSyncs: 0 };
+  let checkpoint = JSON.parse(JSON.stringify(cursor));
+  let files = 0, folders = 0, modelSyncs = 0, linkedImages: number | null = null, linkedModels: number | null = null;
+  const persist = async (state: Row, complete = false, error = "") => {
+    const stamp = now();
+    const progress = { files: Number(state.files || 0), folders: Number(state.folders || 0),
+      changedFiles: Number(state.changedFiles || 0), modelSyncs: Number(state.modelSyncs || 0),
+      startedAt: state.startedAt, completedAt: complete ? stamp : null,
+      state: error ? "ERROR" : complete ? "COMPLETED" : "RUNNING" };
+    const data = { ...meta, cloudDirect: true, cloudSyncCursor: complete ? null : state,
+      cloudSyncProgress: progress, syncTruncated: !complete,
+      lastSyncFiles: progress.files, lastSyncFolders: progress.folders,
+      lastChangedFiles: progress.changedFiles, lastModelSyncs: progress.modelSyncs,
+      ...(complete ? { lastLinkedImages: linkedImages, lastLinkedModels: linkedModels } : {}),
+      cloudSyncLeaseId: complete || error ? null : leaseId,
+      cloudSyncLeaseUntil: complete || error ? null : leaseUntil };
+    if (JSON.stringify(data).length > 240000) throw Object.assign(new Error("Dosya tarama kuyruğu metadata sınırını aştı."), { code: "SYNC_CURSOR_TOO_LARGE" });
+    const saved = await c.env.DB.prepare("UPDATE file_hub_connections SET metadata=?,connection_status=?,last_error=?,last_sync_at=CASE WHEN ?=1 THEN ? ELSE last_sync_at END,updated_at=? WHERE id=? AND main_company_slug=? AND json_extract(metadata,'$.cloudSyncLeaseId')=?")
+      .bind(JSON.stringify(data), error ? "ERROR" : "CONNECTED", error || null,
+        complete ? 1 : 0, stamp, stamp, connectionId, slug, leaseId).run();
+    if (Number(saved.meta?.changes || 0) !== 1) throw Object.assign(new Error("Senkronizasyon kilidi değişti, indeks korundu."), { code: "SYNC_LEASE_CONFLICT", status: 409 });
+  };
+  try {
+    for (let p = 0; p < Math.min(4, Math.max(1, Number(pageLimit) || 1)) && cursor.queue.length; p++) {
+      const folder = cursor.queue[0];
+      const page = await googleChildrenPage(accessToken, folder.id, folder.pageToken);
+      for (const child of page.children) {
+        const relativePath = folder.path ? folder.path + "/" + child.name : child.name;
+        if (child.isFolder) {
+          folders += 1; cursor.folders += 1;
+          cursor.queue.push({ id: child.id, path: relativePath, pageToken: "" });
+        } else {
+          const indexed = await upsertCloudFile(c, slug, connectionId, "GOOGLE_DRIVE", child, relativePath, now());
+          files += 1; cursor.files += 1;
+          if (indexed.changed) cursor.changedFiles += 1;
+          if (indexed.needsModelSync) {
+            const model = await syncCloudDesignBinding(c, slug, connectionId, indexed.assetId, child, relativePath, "GOOGLE_DRIVE");
+            if (model?.modelId) { modelSyncs += 1; cursor.modelSyncs += 1; }
+          }
+        }
+      }
+      if (page.nextPageToken) cursor.queue[0].pageToken = page.nextPageToken;
+      else cursor.queue.shift();
+      if (cursor.queue.length > 4000) throw Object.assign(new Error("Klasör kuyruğu sınırı aşıldı."), { code: "SYNC_QUEUE_TOO_LARGE" });
+      await persist(cursor);
+      checkpoint = JSON.parse(JSON.stringify(cursor));
+    }
+    const complete = cursor.queue.length === 0;
+    if (complete) {
+      const result = await c.env.DB.prepare("SELECT COUNT(DISTINCT l.file_asset_id) linked_images,COUNT(DISTINCT r.entity_id) linked_models FROM file_hub_locations l JOIN file_hub_relations r ON r.file_asset_id=l.file_asset_id AND r.main_company_slug=l.main_company_slug AND r.entity_type='MODEL' AND r.relation_type='MODEL_IMAGE' JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1")
+        .bind(slug, connectionId).first<Row>();
+      linkedImages = Number(result?.linked_images || 0);
+      linkedModels = Number(result?.linked_models || 0);
+    }
+    await persist(cursor, complete); // Kilidi bırak; tamamlanmamış kuyruk saklanır.
+    const design = await c.env.DB.prepare("SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? AND module_code='DESEN' AND purpose_code='MODEL_IMAGE' AND sync_enabled=1 LIMIT 1")
+      .bind(slug, connectionId).first<Row>();
+    return { files, folders, totalFiles: cursor.files, totalFolders: cursor.folders, modelSyncs,
+      linkedImages, linkedModels, truncated: !complete, inProgress: !complete, completed: complete,
+      lastSyncAt: complete ? now() : null, designImageBindingPresent: Boolean(design),
+      designImageRootPath: text(design?.root_path) };
+  } catch (error: any) {
+    // Checkpoint sonrası yarım sayfa yeniden okunabilir; eski kayıtlar silinmez.
+    await persist(checkpoint, false, text(error?.message).slice(0, 300)).catch(() => {});
+    throw error;
+  }
+}
+
 export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
   const c = { env } as Context<AppEnv>;
   const result = await env.DB.prepare(
