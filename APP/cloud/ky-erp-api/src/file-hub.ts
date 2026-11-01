@@ -91,10 +91,14 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   });
 
   app.get("/api/file-hub/files", async c => {
-    if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),q=text(c.req.query("q")),status=upper(c.req.query("status")),take=Math.min(500,Math.max(1,Number(c.req.query("take")||100)));
-    const where=["a.main_company_slug=?"],args:any[]=[slug]; if(q){where.push("(a.file_name LIKE ? OR a.logical_key LIKE ? OR l.relative_path LIKE ?)"); const like=`%${q}%`; args.push(like,like,like);} if(status){where.push("a.status=?");args.push(status);} args.push(take);
-    const r=await c.env.DB.prepare(`SELECT a.*,l.id location_id,l.storage_connection_id,l.relative_path,l.location_role,l.is_available,c.provider_type,c.name connection_name,(SELECT COUNT(*) FROM file_hub_relations x WHERE x.file_asset_id=a.id AND x.main_company_slug=a.main_company_slug) relation_count FROM file_hub_assets a LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.location_role='PRIMARY' LEFT JOIN file_hub_connections c ON c.id=l.storage_connection_id WHERE ${where.join(" AND ")} ORDER BY a.updated_at DESC LIMIT ?`).bind(...args).all<Row>();
-    return c.json({ok:true,data:(r.results||[]).map(rowView)});
+    if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),q=text(c.req.query("q")),status=upper(c.req.query("status")),take=Math.min(500,Math.max(1,Number(c.req.query("take")||100))),offset=Math.min(1000000,Math.max(0,Math.floor(Number(c.req.query("offset")||0)||0)));
+    const where=["a.main_company_slug=?"],args:any[]=[slug]; if(q){where.push("(a.file_name LIKE ? OR a.logical_key LIKE ? OR l.relative_path LIKE ?)"); const like=`%${q}%`; args.push(like,like,like);} if(status){where.push("a.status=?");args.push(status);}
+    const whereSql=where.join(" AND ");
+    const totalRow=await c.env.DB.prepare(`SELECT COUNT(DISTINCT a.id) total FROM file_hub_assets a LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.location_role='PRIMARY' WHERE ${whereSql}`).bind(...args).first<Row>();
+    const total=Number(totalRow?.total||0);
+    args.push(take,offset);
+    const r=await c.env.DB.prepare(`SELECT a.*,l.id location_id,l.storage_connection_id,l.relative_path,l.location_role,l.is_available,c.provider_type,c.name connection_name,(SELECT COUNT(*) FROM file_hub_relations x WHERE x.file_asset_id=a.id AND x.main_company_slug=a.main_company_slug) relation_count FROM file_hub_assets a LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.location_role='PRIMARY' LEFT JOIN file_hub_connections c ON c.id=l.storage_connection_id WHERE ${where.join(" AND ")} ORDER BY a.updated_at DESC LIMIT ? OFFSET ?`).bind(...args).all<Row>();
+    return c.json({ok:true,data:(r.results||[]).map(rowView),page:{total,offset,take,hasMore:offset+(r.results||[]).length<total}});
   });
 
   app.get("/api/file-hub/entity-files", async c => {
