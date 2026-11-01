@@ -51,8 +51,11 @@ test("bölüm sekmeleri mevcut ekranın çalışma alanında kalır; grid satır
   assert.equal(source.indexOf('<nav className="ky-pro-module-tabs"', 0), moduleTabs,
     "İşlem sekmeleri workspace dışında ikinci bir grid satırı oluşturmamalı");
   assert.match(load("../styles/shell-v3.css"), /grid-template-rows:\\s*58px 38px 26px minmax\\(0, 1fr\\) 28px/);
+  assert.ok(source.includes("getTabs(activeModule, user).map"),
+    "Modül işlem sekmeleri aynı mevcut route tanımlarından gelmeli");
+  const app = load("../AppV3.jsx");
   for (const key of ["muhasebe", "e-belge", "gunluk-operasyon", "ik", "pdks", "desen", "uretim", "boyahane", "compliance", "iletisim"]) {
-    assert.ok(source.includes("getTabs(activeModule, user).map"),
-      `${key} modülünün mevcut sekme bağlantısı korunmalı`);
+    assert.ok(app.includes(`activeModule?.key === "${key}"`),
+      `${key}: mevcut modül ekranının AppV3 render bağlantısı korunmalı`);
   }
 });
