@@ -116,7 +116,7 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
     const summary=`${row.name}: bu adımda ${d.files||0} dosya / ${d.folders||0} klasör, toplam ${d.totalFiles||0} dosya / ${d.totalFolders||0} klasör tarandı.`;
     const models=d.completed?` D1'de ${d.linkedImages||0} görsel ve ${d.linkedModels||0} model ilişkisi doğrulandı.`:"";
     const status=d.inProgress?" İşlem tamamlanmadı, kaldığı konum kaydedildi. Senkronizasyonu açık bölüm ataması varsa zamanlanmış tarama da devam eder.":" Tam tarama tamamlandı.";
-    setMessage(summary+models+status+(d.designImageBindingPresent===false?" DESEN / MODEL_IMAGE klasör ataması bulunamadı.":""));
+    setMessage(summary+models+status+(d.designImageBindingPresent===false?" DESEN / MODEL_IMAGE için görsel/2026 gibi açık bir alt klasör ataması gerekli; ana servis kökü yeterli değil.":""));
    }else setMessage(`${row.name}: ${d.files||0} dosya / ${d.folders||0} klasör tarandı.`+(d.truncated?" Tarama sınırına ulaşıldı.":""));
    await refresh();
   }catch(e){setError(e?.message||"Bulut senkronizasyonu başarısız.");}
