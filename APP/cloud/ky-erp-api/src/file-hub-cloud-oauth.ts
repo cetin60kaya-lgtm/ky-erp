@@ -586,9 +586,45 @@ async function googleChildrenPage(token: string, parentId: string, pageToken = "
   return { children, nextPageToken: text(response.nextPageToken) };
 }
 
+// Once per unfinished scan, inspect the 2026 model-image collection first.
+// This never skips other folders: every folder stays in the same checkpoint queue.
+function prioritizedDriveFolder(folderPath: unknown) {
+  const path=String(folderPath||"").trim().replace(/\\/g,"/").toLocaleLowerCase("tr-TR");
+  if(path==="görsel/2026") return 0;
+  if(path==="görsel") return 1;
+  if(path.startsWith("görsel/2026/")) return 2;
+  if(path.startsWith("görsel/")) return 3;
+  return 4;
+}
+
+// Microsoft Graph tek sayfa okunur. nextLink yalniz Graph hostunda kabul edilir.
+async function microsoftChildrenPage(token:string,parentId:string,driveId="",nextLink="") {
+  const select="$select=id,name,size,lastModifiedDateTime,webUrl,folder,file,parentReference,eTag,cTag&$top=15";
+  const base=driveId
+    ? (parentId && parentId!=="root"
+      ? `https://graph.microsoft.com/v1.0/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(parentId)}/children?${select}`
+      : `https://graph.microsoft.com/v1.0/drives/${encodeURIComponent(driveId)}/root/children?${select}`)
+    : (parentId && parentId!=="root"
+      ? `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(parentId)}/children?${select}`
+      : `https://graph.microsoft.com/v1.0/me/drive/root/children?${select}`);
+  const link=nextLink||base;
+  const url=new URL(link);
+  if(url.origin!=="https://graph.microsoft.com"||!url.pathname.startsWith("/v1.0/"))
+    throw Object.assign(new Error("Microsoft Graph sayfa adresi geçersiz."),{code:"INVALID_GRAPH_PAGE"});
+  const payload=await providerJson(url.toString(),token);
+  const children=(Array.isArray(payload.value)?payload.value:[]).map((row:Row)=>({
+    id:text(row.id), name:text(row.name), isFolder:Boolean(row.folder),
+    mimeType:text(row.file?.mimeType), size:Number(row.size||0),
+    modifiedAt:text(row.lastModifiedDateTime),webUrl:text(row.webUrl),
+    checksum:text(row.eTag||row.cTag),
+  })).filter((row:Row)=>row.id&&row.name);
+  return {children,nextPageToken:text(payload["@odata.nextLink"])};
+}
+
 async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId: string, pageLimit = 1, scheduled = false) {
   const { link, accessToken } = await connectionAccount(c, slug, connectionId);
-  if (upper(link.provider_type) !== "GOOGLE_DRIVE") throw Object.assign(new Error("Google Drive bağlantısı bekleniyor."), { code: "INVALID_PROVIDER" });
+  const providerType=upper(link.provider_type);
+  if (!["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(providerType)) throw Object.assign(new Error("Google Drive veya Microsoft depolama servisi bekleniyor."), { code: "INVALID_PROVIDER" });
   if (Number(link.is_active) === 0) throw Object.assign(new Error("Depolama servisi pasif."), { code: "CONNECTION_DISABLED", status: 409 });
   const rootId = text(link.remote_root_id) || "root";
   const raw = text(link.connection_metadata), meta = json(raw);
@@ -604,15 +640,17 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
 
   let cursor = resumed
     ? { ...meta.cloudSyncCursor, queue: meta.cloudSyncCursor.queue.map((f: Row) => ({ id: text(f.id), path: text(f.path), pageToken: text(f.pageToken) })) }
-    : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], files: 0, folders: 0, changedFiles: 0, modelSyncs: 0 };
+    : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], pages: 0, files: 0, folders: 0, changedFiles: 0, modelSyncs: 0 };
+  if(resumed && Number(cursor.pages||0)<2)cursor.queue.sort((a:Row,b:Row)=>prioritizedDriveFolder(a.path)-prioritizedDriveFolder(b.path));
   let checkpoint = JSON.parse(JSON.stringify(cursor));
   let files = 0, folders = 0, modelSyncs = 0, linkedImages: number | null = null, linkedModels: number | null = null;
   const persist = async (state: Row, complete = false, error = "", release = false) => {
     const stamp = now();
     const progress = { files: Number(state.files || 0), folders: Number(state.folders || 0),
       changedFiles: Number(state.changedFiles || 0), modelSyncs: Number(state.modelSyncs || 0),
-      startedAt: state.startedAt, completedAt: complete ? stamp : null,
-      state: error ? "ERROR" : complete ? "COMPLETED" : "RUNNING" };
+      startedAt: state.startedAt, updatedAt: stamp, completedAt: complete ? stamp : null,
+      pages: Number(state.pages || 0), pendingFolders: Array.isArray(state.queue) ? state.queue.length : 0,
+      state: error ? "ERROR" : complete ? "COMPLETED" : release ? "WAITING" : "RUNNING" };
     const data = { ...meta, cloudDirect: true, cloudSyncCursor: complete ? null : state,
       cloudSyncProgress: progress, syncTruncated: !complete,
       lastSyncFiles: progress.files, lastSyncFolders: progress.folders,
@@ -629,7 +667,9 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   try {
     for (let p = 0; p < Math.min(4, Math.max(1, Number(pageLimit) || 1)) && cursor.queue.length; p++) {
       const folder = cursor.queue[0];
-      const page = await googleChildrenPage(accessToken, folder.id, folder.pageToken);
+      const page = providerType==="GOOGLE_DRIVE"
+        ? await googleChildrenPage(accessToken, folder.id, folder.pageToken)
+        : await microsoftChildrenPage(accessToken, folder.id, text(link.provider_drive_id), folder.pageToken);
       const discoveredFolders: Row[] = [];
       for (const child of page.children) {
         const relativePath = folder.path ? folder.path + "/" + child.name : child.name;
@@ -637,11 +677,11 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
           folders += 1; cursor.folders += 1;
           discoveredFolders.push({ id: child.id, path: relativePath, pageToken: "" });
         } else {
-          const indexed = await upsertCloudFile(c, slug, connectionId, "GOOGLE_DRIVE", child, relativePath, now());
+          const indexed = await upsertCloudFile(c, slug, connectionId, providerType, child, relativePath, now());
           files += 1; cursor.files += 1;
           if (indexed.changed) cursor.changedFiles += 1;
           if (indexed.needsModelSync) {
-            const model = await syncCloudDesignBinding(c, slug, connectionId, indexed.assetId, child, relativePath, "GOOGLE_DRIVE");
+            const model = await syncCloudDesignBinding(c, slug, connectionId, indexed.assetId, child, relativePath, providerType);
             if (model?.modelId) { modelSyncs += 1; cursor.modelSyncs += 1; }
           }
         }
@@ -649,7 +689,9 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       if (page.nextPageToken) folder.pageToken = page.nextPageToken;
       else cursor.queue.shift();
       // Derinlik öncelikli: kökte binlerce klasör olsa bile bekleyen kuyruk büyümez.
+      discoveredFolders.sort((a:Row,b:Row)=>prioritizedDriveFolder(a.path)-prioritizedDriveFolder(b.path));
       cursor.queue.unshift(...discoveredFolders);
+      cursor.pages = Number(cursor.pages || 0) + 1;
       if (cursor.queue.length > 4000) throw Object.assign(new Error("Klasör kuyruğu sınırı aşıldı."), { code: "SYNC_QUEUE_TOO_LARGE" });
       await persist(cursor);
       checkpoint = JSON.parse(JSON.stringify(cursor));
@@ -687,7 +729,7 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
       WHERE c.is_active=1
         AND c.sync_mode='CLOUD_API'
         AND (b.id IS NOT NULL OR json_extract(c.metadata,'$.cloudSyncCursor') IS NOT NULL)
-      ORDER BY c.updated_at ASC
+      ORDER BY CASE WHEN json_extract(c.metadata,'$.cloudSyncCursor') IS NOT NULL THEN 0 ELSE 1 END, c.updated_at ASC
       LIMIT 4`,
   ).all<Row>();
 
@@ -697,7 +739,7 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
     try {
       const { link, accessToken } = await connectionAccount(c, slug, connectionId);
       const provider=upper(link.provider_type), driveId=text(link.provider_drive_id);
-      if (provider === "GOOGLE_DRIVE") {
+      if (["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(provider)) {
         await runGoogleSyncBatch(c, slug, connectionId, 3, true);
         continue;
       }
@@ -759,6 +801,56 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     const slug = companySlug(c); if (!slug) return c.json(err("TENANT_REQUIRED", "Aktif firma seçimi gerekli."), 422);
     const result = await c.env.DB.prepare(`SELECT id,provider_type,provider_account_id,account_email,display_name,token_expires_at,scopes,metadata,created_at,updated_at FROM file_hub_oauth_accounts WHERE main_company_slug=? ORDER BY updated_at DESC`).bind(slug).all<Row>();
     return c.json({ ok: true, data: (result.results || []).map((row) => ({ ...row, metadata: json(row.metadata) })) });
+  });
+
+  // OAuth hesabi silme islemi yalniz bu ana firma tenant'ini etkiler.
+  // Etkin servis varsa engellenir; fiziksel Drive/OneDrive dosyasi ve D1 indeks silinmez.
+  app.delete("/api/file-hub/cloud/accounts/:id", async (c) => {
+    const gate = await assertCompanyOwner(c); if (gate.error) return gate.error;
+    const id = text(c.req.param("id"));
+    const account = await c.env.DB.prepare(
+      "SELECT id FROM file_hub_oauth_accounts WHERE id=? AND main_company_slug=? LIMIT 1",
+    ).bind(id, gate.slug).first<Row>();
+    if (!account) return c.json(err("ACCOUNT_NOT_FOUND", "Bu firmaya ait bulut hesabı bulunamadı."), 404);
+    const active = await c.env.DB.prepare(
+      `SELECT COUNT(*) n FROM file_hub_cloud_connection_accounts a
+       JOIN file_hub_connections co ON co.id=a.connection_id AND co.main_company_slug=a.main_company_slug
+       WHERE a.main_company_slug=? AND a.oauth_account_id=? AND co.is_active=1`,
+    ).bind(gate.slug, id).first<Row>();
+    if (Number(active?.n || 0) > 0) return c.json(err(
+      "ACCOUNT_HAS_ACTIVE_SERVICES",
+      "Hesabı kaldırmadan önce bu firmanın bağlı dosya servislerini pasifleştirin. Drive dosyaları ve indeks korunur.",
+    ), 409);
+    // Geçmişte pasif edilen servis kartları ve File Hub belge kayıtları korunur.
+    // Sadece OAuth hesabına ait bağlantı haritaları ve şifreli token kaydı kaldırılır.
+    await c.env.DB.prepare(
+      "DELETE FROM file_hub_cloud_connection_accounts WHERE main_company_slug=? AND oauth_account_id=?",
+    ).bind(gate.slug, id).run();
+    await c.env.DB.prepare(
+      "DELETE FROM file_hub_oauth_accounts WHERE main_company_slug=? AND id=?",
+    ).bind(gate.slug, id).run();
+    return c.json({ ok: true, data: { accountRemoved: true, indexedFilesPreserved: true } });
+  });
+
+  // Salt-okunur, şirket kapsamlı anlık durum. Büyük indeks sorgusu veya tarama başlatmaz.
+  app.get("/api/file-hub/cloud/connections/:id/status", async (c) => {
+    const gate = await assertCompanyOwner(c); if (gate.error) return gate.error;
+    const connectionId = text(c.req.param("id"));
+    const row = await c.env.DB.prepare(
+      "SELECT id,provider_type,connection_status,last_sync_at,last_error,metadata FROM file_hub_connections WHERE id=? AND main_company_slug=? LIMIT 1",
+    ).bind(connectionId,gate.slug).first<Row>();
+    if (!row) return c.json(err("CONNECTION_NOT_FOUND", "Bu firmaya ait dosya servisi bulunamadı."), 404);
+    const metadata=json(row.metadata);
+    const until=Date.parse(text(metadata.cloudSyncLeaseUntil))||0;
+    const progress=json(metadata.cloudSyncProgress);
+    const inProgress=Boolean(metadata.cloudSyncCursor);
+    const leaseActive=until>Date.now();
+    return c.json({ok:true,data:{
+      id:row.id,providerType:row.provider_type,connectionStatus:row.connection_status,
+      lastSyncAt:row.last_sync_at,lastError:row.last_error,
+      sync:{...progress, state:progress.state==="ERROR"?"ERROR":inProgress?(leaseActive?"RUNNING":"WAITING"):progress.state||"NOT_STARTED",
+        inProgress, leaseActive, pendingFolders:Number(progress.pendingFolders||metadata.cloudSyncCursor?.queue?.length||0)}
+    }});
   });
 
   app.post("/api/file-hub/cloud/authorize", async (c) => {
@@ -882,7 +974,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     try {
       const { link, accessToken } = await connectionAccount(c, gate.slug, connectionId); if (Number(link.is_active) === 0) return c.json(err("CONNECTION_DISABLED", "Bu depolama servisi pasif."), 409);
       const provider = upper(link.provider_type), driveId = text(link.provider_drive_id), rootId = text(link.remote_root_id) || "root", rootName = text(link.remote_root_name) || "Ana Klasör", seenAt = now();
-      if (provider === "GOOGLE_DRIVE") {
+      if (["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(provider)) {
         const progress = await runGoogleSyncBatch(c, gate.slug, connectionId, 1, false);
         return c.json({ ok: true, data: progress });
       }
