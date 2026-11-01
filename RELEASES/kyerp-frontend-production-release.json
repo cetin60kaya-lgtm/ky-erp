@@ -5,12 +5,13 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-11-01",
   "scope": [
-    "PR495-Desen-Drive-sync-model-evidence-UI",
-    "PR495-no-DESEN-MODEL_IMAGE-binding-warning",
-    "CI-41265494324-success",
+    "PR496-fixed-legacy-workspace-grid-layout",
+    "PR496-module-subtabs-inside-existing-workspace",
+    "PR496-no-business-logic-or-record-mutability",
+    "CI-41265616018-success",
     "Cloudflare-Pages-production-bundle-smoke"
   ],
-  "note": "01.11.2026 PR495: Depolama > Dosya Servisleri / Senkronizasyon ekranı manuel Google Drive taramasında gerçek D1 bağlı görsel ve model adetlerini ve atama eksikliğini gösterir. Saha kabulü ve gerçek 2026 model kartı sayısı ayrıca doğrulanacaktır.",
-  "sourceCommit": "97fdb508bbb5e9cb2afd8a44061ce984d0ef77c3",
+  "note": "01.11.2026 PR #496: önceki PR #494 ile eklenen bölüm sekmesi ana ekranın altıncı grid elemanı olup Muhasebe/Günlük Operasyon ve diğer mevcut ekranları boş gösteriyordu. Sekme barı mevcut shell-v3-workspace içine taşındı; tüm mevcut render ve sekme bağlantıları aynen korundu. Yeni işlev veya modül yok; Worker, D1, auth ve canlı iş verisi değiştirilmedi. Frontend ve Worker CI SUCCESS; gerçek kullanıcı oturumu PC/tablet/telefon etkileşimleri ayrı saha kabulü gerektirir.",
+  "sourceCommit": "88f6566ac96fd854ce0a70d374b3647e5dd4ec66",
   "requestedAt": "2026-11-01"
 }
