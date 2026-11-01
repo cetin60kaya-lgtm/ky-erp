@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 01.11.2026 — File Hub uygulama sahibi / kendi firma depolama erişimi düzeltmesi
+
+- **Saha:** Hakan Emprime > Bağlantılar > Dosya Servisleri > Google Drive hesabı bağlantısı, oturumda `SUPER_ADMIN` / Uygulama Sahibi / Tüm Sistem görünürken `COMPANY_OWNER_ONLY` (403) reddi verdi. İlgili OAuth `assertCompanyOwner` ve File Hub `requireCompanyOwner` yalnız `COMPANY_ADMIN` kabul ediyordu.
+- **Çözüm:** Mevcut imzalı kullanıcı oturumundaki `mainCompanySlug` ile istenen firma slug'ı **eşit olduğunda** `COMPANY_ADMIN`, `SUPER_ADMIN` (legacy `ADMIN`) için File Hub depolama yönetimi ve OAuth başlatma izni. Başka firmaya slug/header değiştirerek yazma izni **yok**; normal kullanıcı, hesap dışı tenant ve eksik firma bağlamı reddedilir. Mail onayları, MFA, OAuth şifreleme ve diğer firmaların verileri değişmez.
+- **Sınır:** Kod, sahibin kendi firmasında ekran engelini giderir; Google hesabının OAuth izni yine bizzat kullanıcı tarafından verilir. Önceden eklenen `hakan drive` yerel Agent bağlantısı, Google Drive `CLOUD_API` OAuth bağlantısından ayrı tutulur; otomatik sessiz Google erişimi sunulmaz.
+
+
 ## 01.11.2026 — PR #497 eski sol açılır alt menü düzeni (kullanıcı onaylı)
 
 - **Son menü kararı:** Ana Sayfa, Muhasebe, e-Belge / Faturalar, Günlük Operasyon, İK Aylık, PDKS, Desen, İmalat, Boyahane, Denetim Merkezi, Mail & Dosyalar sırası korunur. Seçili ana modülün **mevcut gerçek işlem sekmeleri sol menü altında açılır/kapanır**, başka modül açılınca önceki kapanır. Kullanıcı ekranıyla teyit edilen **Ayarlar & Sistem**, yönetim yetkisi olanlarda, ayırıcı çizginin altında ayrı açılır bölüm olarak kalır.
