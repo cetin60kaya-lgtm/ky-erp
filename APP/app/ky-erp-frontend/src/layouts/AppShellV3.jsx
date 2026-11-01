@@ -812,8 +812,9 @@ export default function AppShellV3({
         </div>
 
         <div className="shell-v3-crumb"><span className="shell-v3-crumb-icon"><ErpIcon name={tabVisualIcon(activeTab, activeModuleVisual.icon)} size={15} /></span>{breadcrumbs.map((label,index)=><span key={index} className={index===breadcrumbs.length-1?"shell-v3-crumb-current":"shell-v3-crumb-module"}>{index>0 ? <span className="shell-v3-crumb-separator"> / </span> : null}{label}</span>)}</div>
-        {activeModule?.key !== "ana-sayfa" && getTabs(activeModule, user).length > 0 ? (
-          <nav className="ky-pro-module-tabs" aria-label={`${activeModule.label} işlem sekmeleri`}>
+        <section className="shell-v3-workspace">
+          {activeModule?.key !== "ana-sayfa" && getTabs(activeModule, user).length > 0 ? (
+            <nav className="ky-pro-module-tabs" aria-label={`${activeModule.label} işlem sekmeleri`}>
             <span className="ky-pro-module-tabs-caption">BÖLÜM İŞLEMLERİ</span>
             <div className="ky-pro-module-tabs-scroll">
               {getTabs(activeModule, user).map(([key, label, icon]) => (
@@ -829,9 +830,10 @@ export default function AppShellV3({
                 </button>
               ))}
             </div>
-          </nav>
-        ) : null}
-        <section className="shell-v3-workspace">{children}</section>
+            </nav>
+          ) : null}
+          {children}
+        </section>
         <footer className="shell-v3-status"><span>KY ERP</span><span>{ownerUser ? "Kapsam: Uygulama Sahibi · Tüm Sistem" : `Firma: ${activeCompanyName}`}</span><span className="ok">Güvenli çalışma alanı</span></footer>
       </main>
 
