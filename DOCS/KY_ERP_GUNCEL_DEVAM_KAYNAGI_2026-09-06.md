@@ -1,5 +1,14 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 01.11.2026 — Desen Google Drive JPEG → otomatik Taha model kartı (#493)
+
+- **Kullanıcı kararı:** 2026 Google Drive `görsel` klasöründeki JPEG dosya ismi (yalnız uzantı çıkarılır) Desen model adı olur. Eksik ölçü, firma detayı, renk, Pantone veya üretim bilgisi kayıt açmayı durdurmaz. İlk tercih tam **TAHA GİYİM** firma kartıdır; farklı firma sonradan düzenlenebilir. PSD/fotoğraf paneli kaydetme otomasyonu daha sonra mevcut File Hub'a bağlanacaktır.
+- **Kaynak gerçekleri:** Google Drive `görsel/2026` listesinde 347 dosya tespit edildi (2026 Ekim için mevcut JPEG yok); `giden desenler` PSD ve `modeller` müşteri orijinal arşivi korunur. Üretim/imalat geçmişinin kaynağı kullanıcının gerçek Excel dosyasıdır; otomatik üretim fişi veya tahmini imalat adedi yazılmayacak.
+- **PR [#493](https://github.com/cetin60kaya-lgtm/ky-erp/pull/493):** Cloud File Hub `MODEL_IMAGE` senkronundaki dosya adı eşleştirmesi, gerçek model UUID ilişkisi, geçmiş `model_records` kartına tek ID ile bağlanma, tekil tam Taha firma ID seçimi ve yetkili kullanıcı için Google thumbnail (2 MB sınırı, R2 cache) düzeltildi. JPEG değiştiğinde cache geçersizleşir. PSD/AI/PDF **tek başına yeni hayalet model açmaz**; var olan modelle ilişkilenebilir. Yeni sözleşme testleri eklendi.
+- **Kanıt sınırı:** Bu kayıt sadece GitHub kod işidir. Gerçek D1 üzerinde 2026 toplu model açma, mevcut Google Drive OAuth/bağlantı ve `DESEN + MODEL_IMAGE` klasör ataması, yedek/readiness ve uygulama senkronu doğrulanmadan **tamamlandı denmez**. Kullanıcıya yeni kurulum/token istemeden mevcut bağlantı kontrol edilecek. İlk canlı Desen Hub durum isteğine bu çalışmada eşleşen gerçek Windows yanıtı gelmedi.
+- **Sıradaki ayrı iş:** 2026 JPEG dosyalarını mevcut bulut klasör taraması üzerinden idempotent eşitlemek; gerçekleşen D1 kayıt adetlerini doğrulamak; sonra Excel imalat modeli ilişkisi ve Photoshop fotoğraf paneli otomatik JPEG kaydetme akışı.
+
+
 ## 30.10.2026 — İmalat Üretim Girişi gerçek modal, canlı (#488)
 
 - **Saha:** Kullanıcı PR #487'nin akordeonunu istemedi; Yeni Model Aç gibi karartılmış ekran üzerinde **merkez modal** istedi. Sayfa-içi üretim formu artık render edilmez.
