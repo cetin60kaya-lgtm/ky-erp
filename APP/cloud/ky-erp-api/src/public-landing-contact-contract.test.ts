@@ -28,9 +28,9 @@ test("admin address remains a system-only sender and is not the public mail targ
 test("public footer exposes actual static privacy and usage pages instead of placeholders", () => {
   const privacy = readFileSync(resolve(root, "APP/app/ky-erp-frontend/public/gizlilik.html"), "utf8");
   const terms = readFileSync(resolve(root, "APP/app/ky-erp-frontend/public/kullanim-kosullari.html"), "utf8");
-  assert.match(footer, /href="\\/gizlilik\\.html"/);
-  assert.match(footer, /href="\\/kullanim-kosullari\\.html"/);
-  assert.match(privacy, /<h1>Gizlilik Politikası<\\/h1>/);
-  assert.match(terms, /<h1>Kullanım Koşulları<\\/h1>/);
-  assert.match(footer, /© 2026 KY ERP\\. Tüm hakları saklıdır\\./);
+  assert.ok(footer.includes('href="/gizlilik.html"'));
+  assert.ok(footer.includes('href="/kullanim-kosullari.html"'));
+  assert.ok(privacy.includes("<h1>Gizlilik Politikası</h1>"));
+  assert.ok(terms.includes("<h1>Kullanım Koşulları</h1>"));
+  assert.ok(footer.includes("© 2026 KY ERP. Tüm hakları saklıdır."));
 });
