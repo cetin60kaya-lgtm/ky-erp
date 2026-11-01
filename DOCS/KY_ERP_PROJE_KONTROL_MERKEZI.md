@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+
+## 01.11.2026 — Firma bazlı Drive/OneDrive ve tarama devam düzeltmesi (PR kontrolü bekliyor)
+- Kaynak iş dalı: `fix/filehub-sync-automatic-progress-20261101`. Detay: `DOCS/KY_ERP_FIRMA_BAZLI_DOSYA_MERKEZI_2026-11-01.md`.
+- Her ana firma kendi OAuth hesapları, fiziksel klasör kökü, dosya indeksi ve yetkileri ile yönetilir; cari firma ana firma değildir. SUPER_ADMIN seçili ana firma adını/slug'ını görür.
+- Google Drive ve OneDrive/SharePoint sayfalı devam imleci, cron sırasında yarım taramaya öncelik, son adım saati ve 15 saniye arayüz durum takibi; hesap kaldırma aktif bağlantıda engellenip mevcut dosya/ilişkiler korunur.
+- Drive salt okunur envanter: Hakan Emp 9 üst klasör; `görsel/2026` 347 dosya, `yerleşim dosyaları` 684, `modeller` ve `giden desenler` en az 850 öğe. İkincilerin alt dosyaları ve canlı D1 model eşleşmesi henüz tam kabul edilmedi.
+- OneDrive OAuth production yapılandırması mevcut ekrana göre tamamlanmamış, otomatik bağlanmış sayılmaz. Hesap secret'larına dokunulmadı. CI/merge/release gerçeği doğrulanmadan canlı PASS yazılmayacak.
+
 > 01.11.2026 File Hub Drive timeout devir notu: feature dalı `feature/filehub-google-resumable-sync-20261101` üzerinde checkpoint'li Drive indeks motoru geliştirildi; gerçek üretim dağıtımı ve Hakan Emp tam senkron canlı kanıtı henüz yok. Ayrıntı güncel devam kaynağındadır. OAuth ayarları ve hassas veriler değiştirilmedi.
 
 
