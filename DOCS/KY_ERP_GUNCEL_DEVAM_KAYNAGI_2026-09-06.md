@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 01.11.2026 — PR #496 mevcut modül ekranlarının boş görünmesi düzeltildi
+
+- Gerçek kullanıcı ekranlarında Muhasebe ve Günlük Operasyon sayfaları boş ve bölüm sekmeleri sayfanın ortasında görünüyordu. Kök neden PR #494'te `AppShellV3.jsx` içine eklenen sekme şeridinin 5 satırlık `shell-v3-main` grid'inde 6. kardeş olarak konumlanmasıydı; mevcut `shell-v3-workspace` yüksekliği sıkışıyordu.
+- Yalnız ortak kabuk düzeltildi: Bölüm sekmeleri mevcut `shell-v3-workspace` içine, gerçek `{children}` modül ekranından önce taşındı. Modül sayfaları, alt sekmeler, rota/izin kuralları, Worker, D1 ve işletme verileri **değişmedi**. `shellCssParity.test.js` mevcut ekran/render bağlantılarını ve 5 satır grid sözleşmesini denetler.
+- [PR #496](https://github.com/cetin60kaya-lgtm/ky-erp/pull/496) **MERGED** `88f6566ac96fd854ce0a70d374b3647e5dd4ec66`. [CI #41265616018](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41265616018) frontend lint/test/build + Worker typecheck/test/build SUCCESS. [Pages #41265737122](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41265737122) production deploy ve canlı entry / Günlük Operasyon bundle smoke SUCCESS; release SHA `c05c59a9582b17fd2d7675e29c9b8c98da289062` merge SHA atası (`behind_by=0`).
+- **Sınır:** Bu düzeltme ortak yerleşimi hedefler. Gerçek yetkili kullanıcı hesabıyla Muhasebe, Günlük, İK, PDKS, Desen, İmalat, Boyahane, e-Belge, Denetim ve Mail bölümlerinde tüm işlem butonları/gerçek veri yazma akışları uçtan uca test edilmedi; otomatik smoke bunun yerine geçmez.
+
+
 ## 01.11.2026 — Desen 2026 Google Drive gerçek D1 model eşleşmesi görünürlüğü
 
 - **Canlı kaynak kontrolü:** Google Drive `görsel/2026` 347 dosya (342 JPG, 4 PNG, 1 TIFF) olarak tekrar sayıldı. Canlı `/api/health` `ok=true, database=d1` verdi. Bu kontrol tek başına 347 model kartının açıldığı kanıtı değildir.
