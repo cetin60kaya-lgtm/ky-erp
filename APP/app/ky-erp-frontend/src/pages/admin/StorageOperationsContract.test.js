@@ -35,3 +35,12 @@ test("sistem olayı güvenli alanlarla özetlenir ve agent anahtarı yenileme on
  assert.match(page,/D1 yedek ve yayın kayıtları/);
  assert.match(css,/storage-binding-choice\.selected/);
 });
+
+test("Google Drive ve OneDrive iki bağımsız aktif bağlantı olarak görülebilir",()=>{
+ assert.match(page,/type:"GOOGLE_DRIVE",name:"Google Drive"/);
+ assert.match(page,/type:"ONEDRIVE",name:"Microsoft OneDrive"/);
+ assert.match(page,/cloudConnections\.filter\(c=>c\.provider_type===item\.type\)/);
+ assert.match(page,/setWizard\(\{provider:item\.type\}\)/);
+ assert.match(page,/initialProvider\?"account":"provider"/);
+ assert.match(css,/storage-dual-providers/);
+});
