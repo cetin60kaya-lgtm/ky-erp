@@ -30,6 +30,14 @@ async function findAssetByLocation(c: Context<AppEnv>, slug: string, connectionI
   return await c.env.DB.prepare(`SELECT a.*,l.id location_id,l.provider_file_id,l.relative_path,l.location_role,l.is_available,l.provider_modified_at,l.last_seen_at location_last_seen_at FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.relative_path=? LIMIT 1`).bind(slug,connectionId,relativePath).first<Row>();
 }
 
+// Hassas dosyalar genel firma köküne sessizce düşmemeli; dosya hedefi açıkça atanmalıdır.
+const restrictedPurposes = new Set([
+  "EMPLOYEE_ID","EMPLOYEE_CONTRACT","EMPLOYEE_LEAVE","EMPLOYEE_MEDICAL",
+  "EMPLOYEE_PAYROLL","EMPLOYEE_PAYMENT","PERSONNEL_DOCUMENT","ATTENDANCE_REPORT",
+  "OVERTIME_APPROVAL","DISCIPLINARY_RECORD","CHEQUE","PROMISSORY_NOTE",
+  "BANK_RECEIPT","CREDIT_CARD_SLIP","TAX_DOCUMENT","AUDIT_EVIDENCE",
+]);
+
 export function registerFileHubRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/diagnostics", async c => {
     if (!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401);
@@ -101,6 +109,7 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/resolve-storage", async c => {
     if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),moduleCode=upper(c.req.query("moduleCode")),purposeCode=upper(c.req.query("purposeCode"));
     let row=await c.env.DB.prepare(`SELECT b.*,c.provider_type,c.name connection_name,c.local_root_path,c.remote_root_id,c.remote_root_name,c.sync_mode,c.connection_status,c.last_sync_at,c.last_error FROM file_hub_bindings b JOIN file_hub_connections c ON c.id=b.storage_connection_id WHERE b.main_company_slug=? AND b.module_code=? AND b.purpose_code=? AND c.is_active=1 LIMIT 1`).bind(slug,moduleCode,purposeCode).first<Row>();
+    if(!row && restrictedPurposes.has(purposeCode)) return c.json(err("SENSITIVE_BINDING_REQUIRED","Hassas belge için ana firma kökü yerine özel yetkilendirilmiş klasör ataması zorunludur."),404);
     if(!row) row=await c.env.DB.prepare(`SELECT NULL id,'' module_code,'' purpose_code,c.id storage_connection_id,'' root_path,1 read_enabled,1 write_enabled,1 sync_enabled,1 is_default,c.provider_type,c.name connection_name,c.local_root_path,c.remote_root_id,c.remote_root_name,c.sync_mode,c.connection_status,c.last_sync_at,c.last_error FROM file_hub_connections c WHERE c.main_company_slug=? AND c.is_active=1 AND c.is_primary=1 LIMIT 1`).bind(slug).first<Row>();
     if(!row) return c.json(err("NO_STORAGE","Bu firma/modül için depolama hedefi tanımlı değil."),404); return c.json({ok:true,data:rowView(row)});
   });
