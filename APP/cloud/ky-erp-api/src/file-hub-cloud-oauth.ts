@@ -403,6 +403,44 @@ export async function archiveFileToCloudConnection(c:Context<AppEnv>,slug:string
 }
 
 
+// Google Drive orijinalini R2'ye kopyalamadan, sağlayıcının küçük JPEG önizlemesini cache'le.
+export async function ensureCloudModelImagePreview(c: Context<AppEnv>, slug: string, assetId: string): Promise<boolean> {
+  const row = await c.env.DB.prepare(
+    `SELECT a.extension,a.mime_type,l.provider_file_id,x.oauth_account_id
+       FROM file_hub_assets a
+       JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.is_available=1
+       JOIN file_hub_connections sc ON sc.id=l.storage_connection_id AND sc.main_company_slug=l.main_company_slug
+       JOIN file_hub_cloud_connection_accounts x ON x.connection_id=sc.id AND x.main_company_slug=sc.main_company_slug
+      WHERE a.id=? AND a.main_company_slug=? AND sc.provider_type='GOOGLE_DRIVE'
+      LIMIT 1`,
+  ).bind(assetId,slug).first<Row>();
+  if (!row || !["JPG","JPEG","PNG","WEBP"].includes(upper(row.extension))) return false;
+  const { accessToken } = await usableAccount(c,slug,text(row.oauth_account_id));
+  const metadata = await providerJson(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(text(row.provider_file_id))}?fields=thumbnailLink,mimeType`,
+    accessToken,
+  );
+  const link = text(metadata.thumbnailLink);
+  if (!link) return false;
+  const thumbnail = new URL(link);
+  if (thumbnail.protocol !== "https:" || !(thumbnail.hostname === "googleusercontent.com" ||
+      thumbnail.hostname.endsWith(".googleusercontent.com"))) return false;
+  const response = await fetch(thumbnail.toString(), { headers: { Authorization:`Bearer ${accessToken}` } });
+  if (!response.ok) return false;
+  const mime = text(response.headers.get("content-type")).split(";")[0].toLowerCase();
+  if (!["image/jpeg","image/png","image/webp"].includes(mime)) return false;
+  if (Number(response.headers.get("content-length") || 0) > 2_000_000) return false;
+  const bytes = await response.arrayBuffer();
+  if (!bytes.byteLength || bytes.byteLength > 2_000_000) return false;
+  const key = `file-hub/previews/cloud/${encodeURIComponent(slug)}/${encodeURIComponent(assetId)}`;
+  await c.env.FILES.put(key,bytes,{httpMetadata:{contentType:mime}});
+  await c.env.DB.prepare(
+    `UPDATE file_hub_assets SET preview_storage_key=?,preview_status='READY',updated_at=?
+       WHERE id=? AND main_company_slug=?`,
+  ).bind(key,now(),assetId,slug).run();
+  return true;
+}
+
 export async function readFileHubAssetForMail(c:any,slug:string,assetId:string,maxBytes=25*1024*1024){
   const asset=await c.env.DB.prepare(`SELECT id,file_name,mime_type,size_bytes,status,source_type,preview_storage_key,metadata
     FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1`).bind(assetId,slug).first<Row>();
