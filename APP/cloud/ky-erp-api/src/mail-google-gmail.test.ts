@@ -49,10 +49,13 @@ test("worker source no longer contains the literal escaped import regression",()
 });
 
 
-test("daily Mail Center can connect Gmail and keeps account setup out of the inbox flow",()=>{
+test("daily Mail Center handles Gmail inbox while OAuth stays in Storage",()=>{
   const source=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
-  assert.match(source,/startGoogleMailOAuth/);
-  assert.match(source,/Google Hesabını Bağla/);
+  const admin=read("../../../app/ky-erp-frontend/src/pages/admin/AdminMailConnectionsV2.jsx");
+  assert.doesNotMatch(source,/startGoogleMailOAuth|addAndConnectPreset/);
+  assert.match(source,/tabKey: "depolama-mail"/);
+  assert.match(admin,/startGoogleMailOAuth/);
+  assert.match(admin,/Hesabı Bağla/);
   assert.match(source,/comm-modal-backdrop/);
   assert.match(source,/messageSearch/);
   assert.match(source,/replyToMessageId/);
