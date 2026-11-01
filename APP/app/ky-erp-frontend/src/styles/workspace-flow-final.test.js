@@ -20,8 +20,10 @@ test("ana menü doğrudan erişim, tek yönetim açılır grubu ve bölüm sekme
   assert.ok(shell.includes("visibleMenuModules(modules, KY_PRIMARY_MENU_KEYS)"));
   assert.ok(shell.includes("visibleMenuModules(modules, KY_SETTINGS_MENU_KEYS)"));
   assert.match(shell, /settingsMenuOpen/);
-  assert.ok(shell.includes("getTabs(activeModule, user).map"));
-  assert.ok(shell.includes('aria-current={activeTab === key ? "page" : undefined}'));
+  assert.ok(shell.includes("buildShellMenuSections(module, visibleGroups(module, user))"));
+  assert.ok(shell.includes("renderSidebarModule(module)"));
+  assert.doesNotMatch(shell, /ky-pro-module-tabs/);
+  assert.ok(shell.includes('aria-current={active && activeTab === key ? "page" : undefined}'));
   assert.doesNotMatch(shell, /flatModuleTabs|hasPrimarySidebarGroups/);
 
 });
