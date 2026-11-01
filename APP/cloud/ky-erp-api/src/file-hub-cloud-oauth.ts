@@ -376,12 +376,20 @@ async function syncCloudDesignBinding(c:Context<AppEnv>,slug:string,connectionId
      WHERE main_company_slug=? AND storage_connection_id=? AND sync_enabled=1
        AND module_code IN ('DESEN','DTF','IMALAT')
      ORDER BY LENGTH(root_path) DESC`).bind(slug,connectionId).all<Row>();
-  const binding=(result.results||[]).find((row:Row)=>bindingMatches(row.root_path,relativePath));
+  // Model oluşturma genel firma kökü üzerinden yapılmaz. Mutlaka açık bir
+  // DESEN/DTF/IMALAT alt klasörü ve uygun dosya türü gerekir.
+  const eligible=(result.results||[]).filter((row:Row)=>normDesignPath(row.root_path) && bindingMatches(row.root_path,relativePath));
+  const extension=upper(text(item.name).split(".").pop());
+  const permitted:Record<string,string[]>={
+    MODEL_IMAGE:["JPG","JPEG","PNG","WEBP"],
+    MODEL_SOURCE:["PSD","PSB","AI","PDF","TIF","TIFF","SVG","EPS"],
+    PLACEMENT:["AI","PDF","PSD","PSB","SVG","EPS"],
+    OUTGOING_DESIGN:["AI","PDF","PSD","PSB","SVG","EPS","JPG","JPEG","PNG"],
+    RIP_PDF:["PDF"],
+  };
+  const binding=eligible.find((row:Row)=>!permitted[upper(row.purpose_code)] || permitted[upper(row.purpose_code)].includes(extension));
   if(!binding) return null;
-  const purposeCode=upper(binding.purpose_code), extension=upper(text(item.name).split(".").pop());
-  // Google ana kökü seçilmiş olsa bile bütün JPEG'leri yanlışlıkla model kartına çevirme.
-  if(purposeCode==="MODEL_IMAGE" && !normDesignPath(binding.root_path)) return null;
-  if(purposeCode==="MODEL_IMAGE" && !["JPG","JPEG","PNG","WEBP"].includes(extension)) return null;
+  const purposeCode=upper(binding.purpose_code);
   const modelName=designModelIdentity(item.name);
   if(!modelName) return null;
   const synced = await syncFileHubDesignModel(c,{
