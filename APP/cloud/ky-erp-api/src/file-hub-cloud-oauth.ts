@@ -763,6 +763,56 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     return c.json({ ok: true, data: (result.results || []).map((row) => ({ ...row, metadata: json(row.metadata) })) });
   });
 
+  // OAuth hesabi silme islemi yalniz bu ana firma tenant'ini etkiler.
+  // Etkin servis varsa engellenir; fiziksel Drive/OneDrive dosyasi ve D1 indeks silinmez.
+  app.delete("/api/file-hub/cloud/accounts/:id", async (c) => {
+    const gate = await assertCompanyOwner(c); if (gate.error) return gate.error;
+    const id = text(c.req.param("id"));
+    const account = await c.env.DB.prepare(
+      "SELECT id FROM file_hub_oauth_accounts WHERE id=? AND main_company_slug=? LIMIT 1",
+    ).bind(id, gate.slug).first<Row>();
+    if (!account) return c.json(err("ACCOUNT_NOT_FOUND", "Bu firmaya ait bulut hesabı bulunamadı."), 404);
+    const active = await c.env.DB.prepare(
+      `SELECT COUNT(*) n FROM file_hub_cloud_connection_accounts a
+       JOIN file_hub_connections co ON co.id=a.connection_id AND co.main_company_slug=a.main_company_slug
+       WHERE a.main_company_slug=? AND a.oauth_account_id=? AND co.is_active=1`,
+    ).bind(gate.slug, id).first<Row>();
+    if (Number(active?.n || 0) > 0) return c.json(err(
+      "ACCOUNT_HAS_ACTIVE_SERVICES",
+      "Hesabı kaldırmadan önce bu firmanın bağlı dosya servislerini pasifleştirin. Drive dosyaları ve indeks korunur.",
+    ), 409);
+    // Geçmişte pasif edilen servis kartları ve File Hub belge kayıtları korunur.
+    // Sadece OAuth hesabına ait bağlantı haritaları ve şifreli token kaydı kaldırılır.
+    await c.env.DB.prepare(
+      "DELETE FROM file_hub_cloud_connection_accounts WHERE main_company_slug=? AND oauth_account_id=?",
+    ).bind(gate.slug, id).run();
+    await c.env.DB.prepare(
+      "DELETE FROM file_hub_oauth_accounts WHERE main_company_slug=? AND id=?",
+    ).bind(gate.slug, id).run();
+    return c.json({ ok: true, data: { accountRemoved: true, indexedFilesPreserved: true } });
+  });
+
+  // Salt-okunur, şirket kapsamlı anlık durum. Büyük indeks sorgusu veya tarama başlatmaz.
+  app.get("/api/file-hub/cloud/connections/:id/status", async (c) => {
+    const gate = await assertCompanyOwner(c); if (gate.error) return gate.error;
+    const connectionId = text(c.req.param("id"));
+    const row = await c.env.DB.prepare(
+      "SELECT id,provider_type,connection_status,last_sync_at,last_error,metadata FROM file_hub_connections WHERE id=? AND main_company_slug=? LIMIT 1",
+    ).bind(connectionId,gate.slug).first<Row>();
+    if (!row) return c.json(err("CONNECTION_NOT_FOUND", "Bu firmaya ait dosya servisi bulunamadı."), 404);
+    const metadata=json(row.metadata);
+    const until=Date.parse(text(metadata.cloudSyncLeaseUntil))||0;
+    const progress=json(metadata.cloudSyncProgress);
+    const inProgress=Boolean(metadata.cloudSyncCursor);
+    const leaseActive=until>Date.now();
+    return c.json({ok:true,data:{
+      id:row.id,providerType:row.provider_type,connectionStatus:row.connection_status,
+      lastSyncAt:row.last_sync_at,lastError:row.last_error,
+      sync:{...progress, state:progress.state==="ERROR"?"ERROR":inProgress?(leaseActive?"RUNNING":"WAITING"):progress.state||"NOT_STARTED",
+        inProgress, leaseActive, pendingFolders:Number(progress.pendingFolders||metadata.cloudSyncCursor?.queue?.length||0)}
+    }});
+  });
+
   app.post("/api/file-hub/cloud/authorize", async (c) => {
     const body = await bodyOf(c); const gate = await assertCompanyOwner(c, body); if (gate.error) return gate.error;
     const providerType = upper(body.providerType), cfg = providerConfig(c, providerType);
