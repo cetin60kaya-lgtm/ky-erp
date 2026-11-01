@@ -39,10 +39,8 @@ export default function PublicCorporateFooter({ onOpenLogin }) {
       <div className="ky-corporate-footer__bottom">
         <span>© 2026 KY ERP. Tüm hakları saklıdır.</span>
         <div className="ky-corporate-footer__legal" aria-label="Yasal bilgilendirme başlıkları">
-          <span>KVKK</span>
-          <span>Gizlilik</span>
-          <span>Kullanım Koşulları</span>
-          <span>Çerez Politikası</span>
+          <a href="/gizlilik.html">Gizlilik ve Veri İşleme</a>
+          <a href="/kullanim-kosullari.html">Kullanım Koşulları</a>
         </div>
       </div>
     </footer>

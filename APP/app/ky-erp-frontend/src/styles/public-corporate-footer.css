@@ -112,11 +112,15 @@
   gap: 18px;
 }
 
-.ky-corporate-footer__legal span {
-  color: #707b89;
-  font-size: 10px;
+.ky-corporate-footer__legal span,
+.ky-corporate-footer__legal a {
+  color: #566c86;
+  font-size: 11px;
   font-weight: 650;
 }
+.ky-corporate-footer__legal a { text-decoration: underline; text-underline-offset: 3px; }
+.ky-corporate-footer__legal a:hover,
+.ky-corporate-footer__legal a:focus-visible { color: #1568a8; }
 
 @media (max-width: 860px) {
   .ky-corporate-footer__main {
