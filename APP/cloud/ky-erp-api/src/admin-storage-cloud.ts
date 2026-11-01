@@ -17,7 +17,7 @@ const isCompanyOwner = (role: unknown) => upper(role) === "COMPANY_ADMIN";
 const errorBody = (code: string, message: string) => ({ ok:false, error:{ code,message } });
 async function ownerCurrent(c:any){ const u=await getAuthenticatedUser(c); return u&&isOwner(u.role)?u:null; }
 function permissionFor(user:Row,moduleKey:string){return Array.isArray(user?.permissions)?user.permissions.find((p:Row)=>upper(p.moduleKey||p.module_key)===upper(moduleKey)):null;}
-function entityModule(entityType:string){return ({MODEL:"DESEN",MODEL_TEAMMATE:"DESEN",OUTGOING_PACKAGE:"DESEN",PRODUCTION_ORDER:"IMALAT",PRODUCTION:"IMALAT",DYE_RECIPE:"BOYAHANE",DYE_BATCH:"BOYAHANE",LOT:"BOYAHANE",STOCK_ITEM:"BOYAHANE",DOCUMENT:"MUHASEBE",INVOICE:"MUHASEBE",PERSONNEL:"IK",EMPLOYEE:"IK"})[upper(entityType)]||"";}
+function entityModule(entityType:string){return ({MODEL:"DESEN",MODEL_TEAMMATE:"DESEN",OUTGOING_PACKAGE:"DESEN",PRODUCTION_ORDER:"IMALAT",PRODUCTION:"IMALAT",DYE_RECIPE:"BOYAHANE",DYE_BATCH:"BOYAHANE",LOT:"BOYAHANE",STOCK_ITEM:"BOYAHANE",DOCUMENT:"MUHASEBE",INVOICE:"MUHASEBE",DELIVERY_NOTE:"EBELGE",E_DOCUMENT:"EBELGE",CHEQUE:"MUHASEBE",PAYMENT:"MUHASEBE",BANK_TRANSACTION:"MUHASEBE",ACCOUNTING_ENTRY:"MUHASEBE",PERSONNEL:"IK",EMPLOYEE:"IK",PAYROLL:"IK",LEAVE_REQUEST:"IK",PDKS_ATTENDANCE:"PDKS",AUDIT:"DENETIM",AUDIT_REPORT:"DENETIM",QUALITY_REPORT:"DENETIM"})[upper(entityType)]||"";}
 function normalizeModule(moduleCode:string){const key=upper(moduleCode);return key==="URETIM"?"IMALAT":key;}
 function requestedTenant(c:any){return lowerSlug(c.req.header("X-KYERP-Tenant-Slug")||c.req.query("mainCompanySlug")||c.req.query("mainCompanyId"));}
 function userTenant(user:Row){return lowerSlug(user?.mainCompanySlug||user?.main_company_slug||user?.security?.main_company_slug);}
@@ -58,7 +58,7 @@ export function registerAdminStorageRoutes(app:any){
     if(ownerOnly)return c.json(errorBody("COMPANY_OWNER_ONLY","Dosya Merkezi yönetim görünümü firma sahibi / işverene açıktır."),403);
     if(path==="/api/file-hub/entity-files"){
       const moduleKey=entityModule(c.req.query("entityType"));
-      if(moduleKey&&!permissionFor(user,moduleKey)?.canView)return c.json(errorBody("FORBIDDEN","Bu kaydın dosyalarını görme yetkiniz bulunmuyor."),403);
+      if(!moduleKey||!permissionFor(user,moduleKey)?.canView)return c.json(errorBody("FORBIDDEN","Bu kaydın dosyalarını görme yetkiniz bulunmuyor."),403);
     }
     if(path==="/api/file-hub/resolve-storage"){
       const moduleKey=normalizeModule(c.req.query("moduleCode"));
