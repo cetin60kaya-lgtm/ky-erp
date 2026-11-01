@@ -53,7 +53,7 @@ export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
           WHERE main_company_slug=? AND file_asset_id=?`,
       ).bind(slug, id).all<Row>();
       const modules = [...new Set((relations.results || []).map((row: Row) => moduleForEntity(row.entity_type)).filter(Boolean))];
-      if (!modules.length || !modules.some((moduleKey) => permission(user, moduleKey)?.canView)) {
+      if (!modules.length || !modules.every((moduleKey) => permission(user, moduleKey)?.canView)) {
         return c.json({ ok:false, error:{ code:"FORBIDDEN", message:"Bu dosyanın önizlemesini görme yetkiniz bulunmuyor." } }, 403);
       }
     }
