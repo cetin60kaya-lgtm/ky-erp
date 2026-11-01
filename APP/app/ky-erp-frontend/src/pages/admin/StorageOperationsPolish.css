@@ -56,3 +56,12 @@
 .storage-provider-warning{font-size:11px;color:#a14127;line-height:1.5}
 .storage-space-top{margin-top:18px}
 @media(max-width:700px){.storage-dual-providers{grid-template-columns:1fr}}
+
+.storage-insight-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr));gap:10px}
+.storage-insight{border:1px solid #d9e3ed;background:#fbfdff;padding:13px;border-radius:11px;display:flex;flex-direction:column;gap:12px;justify-content:space-between;min-width:0}
+.storage-insight strong{font-size:13px;color:#263b55}
+.storage-insight p{font-size:11px;color:#526780;line-height:1.55;margin:6px 0 0}
+.storage-insight-warning{border-left:3px solid #cf8e30}
+.storage-insight-critical{border-left:3px solid #c74444}
+.storage-insight-info{border-left:3px solid #358b83}
+.storage-insight button{align-self:flex-start}
