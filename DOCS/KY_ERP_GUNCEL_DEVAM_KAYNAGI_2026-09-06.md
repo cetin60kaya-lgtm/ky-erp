@@ -1,5 +1,17 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 01.11.2026 — GOOGLE YALNIZ SUPER_ADMIN YEDEK GÜVENLİK + OAUTH MARKALAMA
+
+**Kullanıcı nihai kararı:** Google harici kimlik doğrulaması, günlük firma/personel girişi değil; yalnız KY ERP sistem `SUPER_ADMIN` için parola + mevcut güvenlik isteği sonrasında kullanılacak **yedek kurtarma** yoludur. Mevcut KY Güvenlik telefon onayı, MFA ve normal kullanıcı giriş politikası korunur. Microsoft'un var olan kurtarma akışı değiştirilmez.
+
+- `auth-external-recovery.ts` Google başlangıç ve callback'te `SUPER_ADMIN` rolü zorunluluğu eklendi; gerçek oturum açma kimlik sağlayıcısına dönüştürülmedi; `GOOGLE_OAUTH_CLIENT_ID` ile `GOOGLE_DRIVE_CLIENT_ID` ayrı kaldı.
+- Google OAuth Branding için herkese açık /gizlilik.html, /kullanim-kosullari.html statik sayfaları hazırlandı; kurumsal site footer bağlantıları aktif. Cloudflare Pages statik HTML olduğundan giriş zorunluluğu yoktur. Tek otorite kyerp.net.
+- **Hukuki kabul sınırı:** KY ERP platform marka iletişim adresi üzerinden genel gizlilik ve kullanım bilgilendirmesi sağlanır; bu sayfalar çalışan bordro verileri gibi KVKK'ya konu işletme kayıtlarının resmi aydınlatma metni yerine geçmez. Veri sorumlusunun ticari unvanı, rolü, saklama/aktarım envanteri ve işleme şartları işletme tarafından teyit edilmeden KVKK uyumluluğu veya Google hassas/kısıtlı izin onayı tamamlandı sayılmaz.
+- Google `https://www.googleapis.com/auth/drive` **restricted** (kısıtlı) iznini kullanıyor. Üretime alındı/Branding kayıtlı diye Google restricted verification veya güvenlik değerlendirmesi otomatik geçilmiş olmaz. `drive.file` seçeneği daha dar kapsamdır; arşivdeki mevcut tüm görsellerin taranma ihtiyacını aynı şekilde karşılayacağı doğrulanmadan scope değiştirilmez.
+- Google Cloud KY Firebase ERP'de Google Drive Web client 01.11.2026 günü kullanıcı ekranıyla oluştu, redirect URI `https://api.kyerp.net/api/auth/file-hub/oauth/google/callback`. Ancak production `GOOGLE_DRIVE_CLIENT_ID/SECRET` yeni client ile eşleşmesi ve gerçek OAuth giriş/senkron kabulü henüz kanıtlanmadı. Gizli değerler repo, Drive veya sohbete alınmaz.
+- Google güvenlik yedek recovery için ayrıca `GOOGLE_OAUTH_CLIENT_ID/SECRET` ve callback `https://api.kyerp.net/api/auth/external/google/callback` gerekebilir. Drive istemcisi, yalnız Drive callback ile kaydedildiyse kimlik kurtarma için geçerli değildir. Ayrı Web istemci ve MFA + doğrulanmış e-posta koşulları korunur.
+
+
 ## 01.11.2026 — File Hub Google OAuth redirect_uri_mismatch saha engeli ve kontrol kolaylaştırma
 
 - Gerçek kullanıcı ekranında Google oturum açma: `400 redirect_uri_mismatch`; Google'a iletilen URI, ilgili OAuth Web client'ın Google Cloud **Yetkilendirilmiş yönlendirme URI'leri** listesinde yok veya birebir uyuşmuyor. Bu, KY ERP kullanıcısının `SUPER_ADMIN` rol engeli değildir.
