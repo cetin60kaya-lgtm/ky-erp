@@ -47,3 +47,12 @@
 .storage-page-v2 button:focus-visible,.storage-page-v2 a:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
 @media(max-width:900px){.storage-page-v2 .storage-company-banner{padding:13px}.storage-page-v2 .storage-binding-row{grid-template-columns:1fr 1fr}.storage-page-v2 .storage-binding-row>span:last-child{grid-column:1/-1}}
 @media(max-width:640px){.storage-page-v2 .storage-company-banner h2{font-size:16px}.storage-page-v2 .storage-company-pill{max-width:100%;white-space:normal}.storage-page-v2 .storage-card-v2{padding:13px}.storage-section-head,.storage-pagination{flex-direction:column;align-items:stretch}.storage-page-v2 .storage-binding-row{grid-template-columns:1fr}.storage-page-v2 .storage-binding-row>span:last-child{grid-column:auto}.storage-page-v2 .storage-tabs-v2{width:100%}.storage-page-v2 .storage-tabs-v2 button{flex:1 1 auto}}
+
+.storage-dual-providers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0 15px}
+.storage-dual-provider{display:flex;flex-direction:column;align-items:flex-start;gap:9px;border:1px solid #d5e1ef;border-radius:12px;background:linear-gradient(145deg,#fff,#f9fbff);padding:15px;min-width:0}
+.storage-dual-provider-head{width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.storage-dual-provider-head strong{font-size:15px;color:#203956}
+.storage-dual-provider p{margin:0!important;flex:1;font-size:12px;overflow-wrap:anywhere}
+.storage-provider-warning{font-size:11px;color:#a14127;line-height:1.5}
+.storage-space-top{margin-top:18px}
+@media(max-width:700px){.storage-dual-providers{grid-template-columns:1fr}}
