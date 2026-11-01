@@ -4,6 +4,7 @@ import { getAuthenticatedUser } from "./auth-cloud";
 import { canManageOwnCompanyStorage } from "./file-hub-company-owner-access";
 import { syncFileHubDesignModel } from "./file-hub-design-sync";
 import { selectCloudModelBinding, canUseModelImageFolder } from "./file-hub-cloud-model-binding";
+import { prioritizeGoogleScanQueue } from "./file-hub-google-priority";
 
 type Bindings = Cloudflare.Env & {
   GOOGLE_DRIVE_CLIENT_ID?: string;
@@ -642,6 +643,8 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     ? { ...meta.cloudSyncCursor, queue: meta.cloudSyncCursor.queue.map((f: Row) => ({ id: text(f.id), path: text(f.path), pageToken: text(f.pageToken) })) }
     : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], pages: 0, files: 0, folders: 0, changedFiles: 0, modelSyncs: 0 };
   if(resumed && Number(cursor.pages||0)<2)cursor.queue.sort((a:Row,b:Row)=>prioritizedDriveFolder(a.path)-prioritizedDriveFolder(b.path));
+  // Var olan (PR #505) imlecinin kuyrugunu da onceliklendir: yeniden baslatma yok.
+  prioritizeGoogleScanQueue(cursor.queue);
   let checkpoint = JSON.parse(JSON.stringify(cursor));
   let files = 0, folders = 0, modelSyncs = 0, linkedImages: number | null = null, linkedModels: number | null = null;
   const persist = async (state: Row, complete = false, error = "", release = false) => {
@@ -691,6 +694,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       // Derinlik öncelikli: kökte binlerce klasör olsa bile bekleyen kuyruk büyümez.
       discoveredFolders.sort((a:Row,b:Row)=>prioritizedDriveFolder(a.path)-prioritizedDriveFolder(b.path));
       cursor.queue.unshift(...discoveredFolders);
+      prioritizeGoogleScanQueue(cursor.queue);
       cursor.pages = Number(cursor.pages || 0) + 1;
       if (cursor.queue.length > 4000) throw Object.assign(new Error("Klasör kuyruğu sınırı aşıldı."), { code: "SYNC_QUEUE_TOO_LARGE" });
       await persist(cursor);
