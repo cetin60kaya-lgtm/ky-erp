@@ -612,7 +612,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], files: 0, folders: 0, changedFiles: 0, modelSyncs: 0 };
   let checkpoint = JSON.parse(JSON.stringify(cursor));
   let files = 0, folders = 0, modelSyncs = 0, linkedImages: number | null = null, linkedModels: number | null = null;
-  const persist = async (state: Row, complete = false, error = "") => {
+  const persist = async (state: Row, complete = false, error = "", release = false) => {
     const stamp = now();
     const progress = { files: Number(state.files || 0), folders: Number(state.folders || 0),
       changedFiles: Number(state.changedFiles || 0), modelSyncs: Number(state.modelSyncs || 0),
@@ -623,8 +623,8 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       lastSyncFiles: progress.files, lastSyncFolders: progress.folders,
       lastChangedFiles: progress.changedFiles, lastModelSyncs: progress.modelSyncs,
       ...(complete ? { lastLinkedImages: linkedImages, lastLinkedModels: linkedModels } : {}),
-      cloudSyncLeaseId: complete || error ? null : leaseId,
-      cloudSyncLeaseUntil: complete || error ? null : leaseUntil };
+      cloudSyncLeaseId: complete || error || release ? null : leaseId,
+      cloudSyncLeaseUntil: complete || error || release ? null : leaseUntil };
     if (JSON.stringify(data).length > 240000) throw Object.assign(new Error("Dosya tarama kuyruğu metadata sınırını aştı."), { code: "SYNC_CURSOR_TOO_LARGE" });
     const saved = await c.env.DB.prepare("UPDATE file_hub_connections SET metadata=?,connection_status=?,last_error=?,last_sync_at=CASE WHEN ?=1 THEN ? ELSE last_sync_at END,updated_at=? WHERE id=? AND main_company_slug=? AND json_extract(metadata,'$.cloudSyncLeaseId')=?")
       .bind(JSON.stringify(data), error ? "ERROR" : "CONNECTED", error || null,
@@ -666,7 +666,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       linkedImages = Number(result?.linked_images || 0);
       linkedModels = Number(result?.linked_models || 0);
     }
-    await persist(cursor, complete); // Kilidi bırak; tamamlanmamış kuyruk saklanır.
+    await persist(cursor, complete, "", true); // Kilidi bırak; tamamlanmamış kuyruk saklanır.
     const design = await c.env.DB.prepare("SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? AND module_code='DESEN' AND purpose_code='MODEL_IMAGE' AND sync_enabled=1 LIMIT 1")
       .bind(slug, connectionId).first<Row>();
     return { files, folders, totalFiles: cursor.files, totalFolders: cursor.folders, modelSyncs,
