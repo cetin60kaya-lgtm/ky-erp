@@ -123,7 +123,18 @@ async function tokenPost(url: string, values: Record<string, string>) {
   });
   const payload = await response.json().catch(() => ({})) as Row;
   if (!response.ok || !text(payload.access_token)) {
-    throw Object.assign(new Error(text(payload.error_description || payload.error) || `OAuth token isteği HTTP ${response.status} döndürdü.`), { code: "OAUTH_TOKEN_FAILED" });
+    // Google/Microsoft/Dropbox'in serbest metin hata aciklamalarini URL, frontend
+    // veya audit kaydina tasima. Yalniz sabit, gizli veri icermeyen siniflar.
+    const providerError = text(payload.error).toLowerCase();
+    const safeCodes: Record<string, string> = {
+      invalid_client: "OAUTH_TOKEN_INVALID_CLIENT",
+      invalid_grant: "OAUTH_TOKEN_INVALID_GRANT",
+      redirect_uri_mismatch: "OAUTH_TOKEN_REDIRECT_MISMATCH",
+      unauthorized_client: "OAUTH_TOKEN_UNAUTHORIZED_CLIENT",
+      invalid_request: "OAUTH_TOKEN_INVALID_REQUEST",
+    };
+    const code = safeCodes[providerError] || (response.ok ? "OAUTH_TOKEN_NO_ACCESS" : "OAUTH_TOKEN_FAILED");
+    throw Object.assign(new Error("OAuth token alisverisi reddedildi."), { code });
   }
   return payload;
 }
