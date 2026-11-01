@@ -635,11 +635,12 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     for (let p = 0; p < Math.min(4, Math.max(1, Number(pageLimit) || 1)) && cursor.queue.length; p++) {
       const folder = cursor.queue[0];
       const page = await googleChildrenPage(accessToken, folder.id, folder.pageToken);
+      const discoveredFolders: Row[] = [];
       for (const child of page.children) {
         const relativePath = folder.path ? folder.path + "/" + child.name : child.name;
         if (child.isFolder) {
           folders += 1; cursor.folders += 1;
-          cursor.queue.push({ id: child.id, path: relativePath, pageToken: "" });
+          discoveredFolders.push({ id: child.id, path: relativePath, pageToken: "" });
         } else {
           const indexed = await upsertCloudFile(c, slug, connectionId, "GOOGLE_DRIVE", child, relativePath, now());
           files += 1; cursor.files += 1;
@@ -650,8 +651,10 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
           }
         }
       }
-      if (page.nextPageToken) cursor.queue[0].pageToken = page.nextPageToken;
+      if (page.nextPageToken) folder.pageToken = page.nextPageToken;
       else cursor.queue.shift();
+      // Derinlik öncelikli: kökte binlerce klasör olsa bile bekleyen kuyruk büyümez.
+      cursor.queue.unshift(...discoveredFolders);
       if (cursor.queue.length > 4000) throw Object.assign(new Error("Klasör kuyruğu sınırı aşıldı."), { code: "SYNC_QUEUE_TOO_LARGE" });
       await persist(cursor);
       checkpoint = JSON.parse(JSON.stringify(cursor));
