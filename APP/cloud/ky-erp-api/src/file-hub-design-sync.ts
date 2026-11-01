@@ -153,6 +153,9 @@ export async function syncFileHubDesignModel(c: Context<AppEnv>, input: Row) {
     upper(row.status) !== "ARCHIVE" &&
     (normalize(row.companyName).startsWith("TAHA GIYIM") || !text(row.companyId)));
   const canonical = current ? null : await existingCanonicalModel(c, slug, modelName);
+  // Modeli otomatik AÇAN dosya yalnız görseldir. PSD/PDF/AI mevcut modele
+  // bağlanabilir, ancak tek başına yeni ve eksik hayalet model üretmez.
+  if (!current && !canonical && purposeCode !== "MODEL_IMAGE") return null;
   const created = !current && !canonical;
   if (!current) {
     const defaultCompany = await defaultDesignCompany(c, slug);
