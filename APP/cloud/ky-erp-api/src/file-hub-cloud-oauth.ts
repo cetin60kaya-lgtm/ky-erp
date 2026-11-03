@@ -342,7 +342,8 @@ async function upsertCloudFile(c: Context<AppEnv>, slug: string, connectionId: s
           WHERE id=? AND main_company_slug=?`)
         .bind(fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), seenAt, seenAt, JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), previewChanged ? 1 : 0, previewChanged ? 1 : 0, location.asset_id, slug).run();
       await c.env.DB.prepare(`UPDATE file_hub_locations SET provider_file_id=?,relative_path=?,is_available=1,provider_modified_at=?,last_seen_at=?,updated_at=? WHERE id=?`)
-        .bind(text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, seenAt, location.id).run();
+        // Six SQL placeholders: provider id, path, modification time, last seen, updated, location id.
+        .bind(text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, location.id).run();
     }
     return { assetId:text(location.asset_id), changed, needsModelSync:changed || Number(location.model_relation_count||0)===0 };
   }
