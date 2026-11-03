@@ -612,7 +612,7 @@ async function microsoftChildrenPage(token:string,parentId:string,driveId="",nex
   return {children,nextPageToken:text(payload["@odata.nextLink"])};
 }
 
-async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId: string, pageLimit = 1, scheduled = false) {
+// Dosyalar klasor atamasi oncesinde indekslendiyse root taramasini beklemeden\n// yalniz atanan MODEL_IMAGE altindaki iliskisiz resimleri kucuk partilerle eslestir.\nasync function backfillIndexedCloudModelImages(c: Context<AppEnv>, slug: string, connectionId: string, provider: string) {\n  const binding = await c.env.DB.prepare(\n    "SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? AND module_code='DESEN' AND purpose_code='MODEL_IMAGE' AND sync_enabled=1 LIMIT 1",\n  ).bind(slug, connectionId).first<Row>();\n  if (!binding || !canUseModelImageFolder(binding.root_path)) return 0;\n  const root = text(binding.root_path).replace(/^\/+|\/+$/g, "");\n  const candidates = await c.env.DB.prepare(\n    "SELECT a.id asset_id,a.file_name,a.mime_type,a.size_bytes,l.provider_file_id,l.relative_path " +\n    "FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug " +\n    "WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1 " +\n    "AND substr(l.relative_path,1,length(?))=? AND substr(l.relative_path,length(?)+1,1)='/' " +\n    "AND l.provider_file_id IS NOT NULL AND lower(a.extension) IN ('jpg','jpeg','png','webp') " +\n    "AND NOT EXISTS(SELECT 1 FROM file_hub_relations r WHERE r.main_company_slug=l.main_company_slug " +\n    "AND r.file_asset_id=l.file_asset_id AND r.entity_type='MODEL' AND r.relation_type='MODEL_IMAGE') " +\n    "ORDER BY l.relative_path LIMIT 25",\n  ).bind(slug, connectionId, root, root, root).all<Row>();\n  let linked = 0;\n  for (const row of candidates.results || []) {\n    const item = { id: text(row.provider_file_id), name: text(row.file_name), mimeType: text(row.mime_type), size: Number(row.size_bytes || 0) };\n    const model = await syncCloudDesignBinding(c, slug, connectionId, text(row.asset_id), item, text(row.relative_path), provider);\n    if (model?.modelId) linked += 1;\n  }\n  return linked;\n}\n\nasync function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId: string, pageLimit = 1, scheduled = false) {
   const { link, accessToken } = await connectionAccount(c, slug, connectionId);
   const providerType=upper(link.provider_type);
   if (!["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(providerType)) throw Object.assign(new Error("Google Drive veya Microsoft depolama servisi bekleniyor."), { code: "INVALID_PROVIDER" });
@@ -688,6 +688,9 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       await persist(cursor);
       checkpoint = JSON.parse(JSON.stringify(cursor));
     }
+    const recoveredModelLinks = await backfillIndexedCloudModelImages(c, slug, connectionId, providerType);
+    modelSyncs += recoveredModelLinks;
+    cursor.modelSyncs += recoveredModelLinks;
     const complete = cursor.queue.length === 0;
     if (complete) {
       const result = await c.env.DB.prepare("SELECT COUNT(DISTINCT l.file_asset_id) linked_images,COUNT(DISTINCT r.entity_id) linked_models FROM file_hub_locations l JOIN file_hub_relations r ON r.file_asset_id=l.file_asset_id AND r.main_company_slug=l.main_company_slug AND r.entity_type='MODEL' AND r.relation_type='MODEL_IMAGE' JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1")
