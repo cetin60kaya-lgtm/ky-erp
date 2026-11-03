@@ -1,5 +1,14 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 03.11.2026 — 2026 Excel → Desen Havuzu ve İmalat canlı kayıt kabulü
+- Canlı Hakan Emp D1: 346 mevcut modele 377 görselsiz model eklendi; **723 model_records + 723 DESEN_WORKFLOW_MODEL** doğrulandı.
+- **1.551** adet 2026 imalat kaydı + **1.551** model_production_links; kopuk ilişki **0**, tekrar çalıştırma dry-run'ında yeni iş **0**.
+- Excel'deki **10 hatalı miktar** ve **2 birebir mükerrer** imalat satırı aktarılmadı; kaynak Excel/Drive dosyaları/2025 ve öncesi değiştirilmedi.
+- D1 export yedeği alındı. Mevcut Google Drive Hakan Emp bağlantısına **DESEN/MODEL_SOURCE → modeller** (salt okunur, senkron açık) klasör ataması eklendi; `görsel/2026` aynen korunur.
+- **Açık:** File Hub `modeller` taramasının bitmesi, PSD/AI/PDF gerçek önizlemeleri, mobil saha kabulü. Görsel yokken model/imalat kaydı engellenmez; görseli varmış gibi gösterilmez.
+- Kod/kanıt: PR #512; [ayrıntı](KY_ERP_2026_DESEN_IMALAT_AKTARIM_KABUL_2026-11-03.md). PR CI/merge/Cloudflare yayın ayrı kabul gerektirir.
+
+
 
 ## 01.11.2026 — Firma bazlı Drive/OneDrive ve tarama devam düzeltmesi (PR kontrolü bekliyor)
 - Kaynak iş dalı: `fix/filehub-sync-automatic-progress-20261101`. Detay: `DOCS/KY_ERP_FIRMA_BAZLI_DOSYA_MERKEZI_2026-11-01.md`.
