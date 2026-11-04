@@ -1,5 +1,7 @@
 # KY ERP — ANA YÖNLENDİRME
 
+> **04.11.2026 ORTAK UZAK ERİŞİM KURALI:** KY ERP / PC PDKS / DESEN / X / DESIGNER sohbetlerinin erişim ve kullanım kararları için tek güncel kaynak özel `cetin60kaya-lgtm/kyerp/CONTROL/KY_CONTROL_MERKEZ.md` dosyasının **04.11.2026 ortak erişim bölümü**dür. KY Control birinci tercih; Remote Desktop Commander mevcut DESEN Windows üzerinde sessiz/otomatik hazır tutulur fakat yalnız kullanıcının somut isteğinde, başka uygun kanal yetersizse ve asgari çağrıyla kullanılır. İki cihazı karıştırma, yeni ZIP/token isteme, gerçek Windows sonucu olmadan başarı bildirme. Bu kayıt bütün eski sohbetleri otomatik değiştirmez; yeni sohbet ilgili kaynağı yeniden okur.
+
 > **KY Control tek güncel kaynak:** Özel `cetin60kaya-lgtm/kyerp` deposunda [CONTROL/KY_CONTROL_MERKEZ.md](https://github.com/cetin60kaya-lgtm/kyerp/blob/main/CONTROL/KY_CONTROL_MERKEZ.md). KY ERP / DESEN yerel işlerinde ilk adım bu merkezi ve mevcut güvenlik protokolünü okumaktır. Yeni ZIP/token/Remote Desktop Commander varsayılan değildir; yeni işlemde gerçek Windows yanıtı gerekir.
 
 
