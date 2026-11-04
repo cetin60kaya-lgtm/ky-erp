@@ -417,7 +417,7 @@ async function syncCloudDesignBinding(c:Context<AppEnv>,slug:string,connectionId
   if(!selected.length)return null;
   let first:Row|null=null, matchedCount=0;
   for(const modelName of selected){
-    const synced=await syncFileHubDesignModel(c,{
+    const synced = await syncFileHubDesignModel(c,{
       slug,fileAssetId,modelName,purposeCode,isDtf:classified.isDtf,
       fileName:text(item.name),extension,mimeType:text(item.mimeType),sizeBytes:Number(item.size||0),
       sha256:text(item.checksum),relativePath,providerType:provider,storageConnectionId:connectionId,
