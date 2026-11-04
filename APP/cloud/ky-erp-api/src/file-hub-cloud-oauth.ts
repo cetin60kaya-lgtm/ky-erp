@@ -673,6 +673,27 @@ async function backfillIndexedCloudModelImages(c: Context<AppEnv>, slug: string,
   return linked;
 }
 
+// Eski bağ atamasından önce indekslenmiş dosyaları tekrar Drive'dan indirmeden
+// küçük, devam edebilir parçalarda tek model kimliğine bağla. Dosya taşıma yok.
+async function backfillIndexedCloudDesignFiles(c:Context<AppEnv>,slug:string,connectionId:string,provider:string,afterPath:string){
+  const query=async(after:string)=>await c.env.DB.prepare(
+    "SELECT a.id asset_id,a.file_name,a.extension,a.mime_type,a.size_bytes,l.relative_path,l.provider_file_id " +
+    "FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug " +
+    "WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1 " +
+    "AND l.relative_path>? AND lower(a.extension) IN ('jpg','jpeg','png','webp','pdf','psd','psb','ai','tif','tiff','svg','eps') " +
+    "ORDER BY l.relative_path LIMIT 30"
+  ).bind(slug,connectionId,after).all<Row>();
+  let rows=(await query(afterPath)).results||[];
+  if(!rows.length && afterPath)rows=(await query("")).results||[];
+  let matched=0;
+  for(const row of rows){
+    const item={id:text(row.provider_file_id),name:text(row.file_name),mimeType:text(row.mime_type),size:Number(row.size_bytes||0)};
+    const result=await syncCloudDesignBinding(c,slug,connectionId,text(row.asset_id),item,text(row.relative_path),provider);
+    if(result?.modelId)matched+=Number(result.matchedCount||1);
+  }
+  return {matched,lastPath:rows.length?text(rows[rows.length-1].relative_path):""};
+}
+
 async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId: string, pageLimit = 1, scheduled = false) {
   const { link, accessToken } = await connectionAccount(c, slug, connectionId);
   const providerType=upper(link.provider_type);
@@ -692,7 +713,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
 
   let cursor = resumed
     ? { ...meta.cloudSyncCursor, queue: meta.cloudSyncCursor.queue.map((f: Row) => ({ id: text(f.id), path: text(f.path), pageToken: text(f.pageToken) })) }
-    : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], pages: 0, files: 0, folders: 0, changedFiles: 0, modelSyncs: 0 };
+    : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], pages: 0, files: 0, folders: 0, changedFiles: 0, modelSyncs: 0, designBackfillPath:text(meta.designBackfillPath) };
   // Eski checkpoint korunur; yillar onceki klasorler 2026 islerini bloklamaz.
   prioritizeGoogleScanQueue(cursor.queue);
   let checkpoint = JSON.parse(JSON.stringify(cursor));
@@ -709,6 +730,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       lastSyncFiles: progress.files, lastSyncFolders: progress.folders,
       lastChangedFiles: progress.changedFiles, lastModelSyncs: progress.modelSyncs,
       ...(complete ? { lastLinkedImages: linkedImages, lastLinkedModels: linkedModels } : {}),
+      designBackfillPath:text(state.designBackfillPath || ""),
       cloudSyncLeaseId: complete || error || release ? null : leaseId,
       cloudSyncLeaseUntil: complete || error || release ? null : leaseUntil };
     if (JSON.stringify(data).length > 240000) throw Object.assign(new Error("Dosya tarama kuyruğu metadata sınırını aştı."), { code: "SYNC_CURSOR_TOO_LARGE" });
@@ -750,8 +772,10 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       checkpoint = JSON.parse(JSON.stringify(cursor));
     }
     const recoveredModelLinks = await backfillIndexedCloudModelImages(c, slug, connectionId, providerType);
-    modelSyncs += recoveredModelLinks;
-    cursor.modelSyncs += recoveredModelLinks;
+    const priorDesignFiles = await backfillIndexedCloudDesignFiles(c, slug, connectionId, providerType, text(cursor.designBackfillPath || meta.designBackfillPath));
+    cursor.designBackfillPath = priorDesignFiles.lastPath;
+    modelSyncs += recoveredModelLinks + priorDesignFiles.matched;
+    cursor.modelSyncs += recoveredModelLinks + priorDesignFiles.matched;
     const complete = cursor.queue.length === 0;
     if (complete) {
       const result = await c.env.DB.prepare("SELECT COUNT(DISTINCT l.file_asset_id) linked_images,COUNT(DISTINCT r.entity_id) linked_models FROM file_hub_locations l JOIN file_hub_relations r ON r.file_asset_id=l.file_asset_id AND r.main_company_slug=l.main_company_slug AND r.entity_type='MODEL' AND r.relation_type='MODEL_IMAGE' JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1")
