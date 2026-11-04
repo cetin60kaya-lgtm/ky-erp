@@ -14,5 +14,7 @@ echo [KY FILE HUB] Firma: %KYERP_MAIN_COMPANY_SLUG%
 echo [KY FILE HUB] Yerel config yoksa kaynaklar KY ERP Dosya Merkezi ayarlarindan alinacak.
 echo [KY FILE HUB] Muhasebe PDF/tarama arsiv worker baslatiliyor...
 start "KY Muhasebe Arsiv Worker" /min node "%CD%\accounting-archive-worker.mjs"
+echo [KY FILE HUB] PSD/PSB tam tuval onizleme islemcisi baslatiliyor...
+start "KY PSD Preview Worker" /min node "%CD%\psd-preview-worker.mjs"
 node "%CD%\file-hub-agent.mjs"
 if errorlevel 1 pause
