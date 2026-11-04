@@ -49,6 +49,46 @@ function moduleForEntity(entityType: unknown) {
 }
 
 export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
+  // User-triggered full-canvas PSD conversion; heavy source never enters Worker memory.
+  app.post("/api/file-hub/files/:id/preview/request", async (c) => {
+    const user = await getAuthenticatedUser(c) as Row | null;
+    if (!user) return c.json({ok:false,error:{code:"UNAUTHORIZED",message:"Oturum gerekli."}},401);
+    const slug = slugOf(c), id = c.req.param("id");
+    const asset = await c.env.DB.prepare(
+      "SELECT id,extension,source_type,status,preview_status,preview_storage_key FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1"
+    ).bind(id,slug).first<Row>();
+    if (!asset) return c.json({ok:false,error:{code:"NOT_FOUND",message:"Dosya bulunamadı."}},404);
+    if (!owner(user.role)) {
+      const relations = await c.env.DB.prepare(
+        "SELECT entity_type FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=?"
+      ).bind(slug,id).all<Row>();
+      const modules = [...new Set((relations.results || []).map((row:Row) => moduleForEntity(row.entity_type)))];
+      if (!modules.length || !modules.every((moduleKey) => moduleKey && permission(user,moduleKey)?.canView)) {
+        return c.json({ok:false,error:{code:"FORBIDDEN",message:"Bu dosyayı görme yetkiniz bulunmuyor."}},403);
+      }
+    }
+    if (!["PSD","PSB"].includes(upper(asset.extension))) {
+      return c.json({ok:false,error:{code:"PREVIEW_NOT_PSD",message:"Bu işlem yalnız PSD/PSB için geçerlidir."}},422);
+    }
+    if (upper(asset.status) !== "AVAILABLE") {
+      return c.json({ok:false,error:{code:"SOURCE_UNAVAILABLE",message:"Kaynak dosya kullanılabilir değil."}},409);
+    }
+    const key = text(asset.preview_storage_key);
+    const status = upper(asset.preview_status);
+    // Small Google thumbnails are not full-canvas PSD previews.
+    if (status === "READY" && key && !key.startsWith("file-hub/previews/cloud/")) {
+      return c.json({ok:true,data:{status:"READY",previewUrl:"/api/file-hub/files/"+encodeURIComponent(id)+"/preview"}});
+    }
+    if (["PROCESSING","PENDING"].includes(status)) return c.json({ok:true,data:{status}},202);
+    if (upper(asset.source_type) !== "CLOUD_API") {
+      return c.json({ok:false,error:{code:"AGENT_SOURCE_REQUIRED",message:"Yerel dosya önizlemesi File Hub Agent üzerinden hazırlanmalıdır."}},409);
+    }
+    await c.env.DB.prepare(
+      "UPDATE file_hub_assets SET preview_status='PENDING',preview_storage_key=NULL,updated_at=? WHERE id=? AND main_company_slug=?"
+    ).bind(new Date().toISOString(),id,slug).run();
+    return c.json({ok:true,data:{status:"PENDING"}},202);
+  });
+
   app.get("/api/file-hub/files/:id/preview", async (c) => {
     const user = await getAuthenticatedUser(c) as Row | null;
     if (!user) return c.json({ ok:false, error:{ code:"UNAUTHORIZED", message:"Oturum gerekli." } }, 401);
@@ -77,7 +117,7 @@ export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
     let key = text(asset.preview_storage_key);
     let status = upper(asset.preview_status);
     if ((!key || status !== "READY") && upper(asset.source_type) === "CLOUD_API" &&
-        ["JPG","JPEG","PNG","WEBP","PSD","PSB","AI","PDF","TIF","TIFF"].includes(upper(asset.extension))) {
+        ["JPG","JPEG","PNG","WEBP","AI","PDF","TIF","TIFF"].includes(upper(asset.extension))) {
       try {
         if (await ensureCloudModelImagePreview(c,slug,id)) {
           const ready = await c.env.DB.prepare(
@@ -98,7 +138,7 @@ export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
     const headers = new Headers();
     object.writeHttpMetadata(headers);
     headers.set("etag", object.httpEtag);
-    headers.set("cache-control", "private, max-age=3600");
+    headers.set("cache-control", ["PSD","PSB"].includes(upper(asset.extension)) ? "private, no-store" : "private, max-age=3600");
     const type = headers.get("content-type") || text(asset.mime_type) || "application/octet-stream";
     headers.set("content-type", type);
     if (type === "application/pdf") headers.set("content-disposition", `inline; filename="${text(asset.file_name).replace(/\"/g, "")}"`);
