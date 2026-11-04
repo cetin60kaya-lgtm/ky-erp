@@ -98,7 +98,7 @@ export default function DesenModeller({ activeMainCompany, openModule }) {
   useEffect(() => { const timer = window.setTimeout(load, 220); return () => window.clearTimeout(timer); }, [activeMainCompany?.slug, filters.q, filters.companyId, filters.status, filters.printAreaCode, filters.placementStatus, filters.dateField, filters.dateFrom, filters.dateTo, filters.sort, load]);
   useEffect(() => { setPage(0); }, [view, filters.q, filters.companyId, filters.status, filters.printAreaCode, filters.placementStatus, filters.dateField, filters.dateFrom, filters.dateTo, filters.sort]);
 
-  const pageSize = view === "cards" ? 48 : 100;
+  const pageSize = view === "cards" ? 24 : 100;
   const pageCount = Math.ceil(models.length / pageSize);
   const visibleModels = models.slice(page * pageSize, page * pageSize + pageSize);
 
@@ -145,8 +145,8 @@ export default function DesenModeller({ activeMainCompany, openModule }) {
     setMessage("");
     try {
       await uploadDesignWorkflowFile(activeMainCompany, model.id, null, file, "MODEL_IMAGE");
-      setMessage(`${model.modelName} önizlemesi yüklendi. Drive kaynak dosyası ve otomatik eşleştirme ayrıca korunur.`);
       await load();
+      setMessage(`${model.modelName} önizlemesi yüklendi. Drive kaynak dosyası ve otomatik eşleştirme ayrıca korunur.`);
     } catch (error) {
       setMessage(error?.message || "Model önizlemesi yüklenemedi.");
     } finally {
@@ -177,7 +177,7 @@ export default function DesenModeller({ activeMainCompany, openModule }) {
         <select value={filters.placementStatus} onChange={(event) => setFilters((current) => ({ ...current, placementStatus: event.target.value }))}><option value="">Tüm yerleşimler</option><option value="WAITING">Yerleşim Bekliyor</option><option value="READY">Yerleşim Hazır</option><option value="REVISION_PENDING">Revize Bekliyor</option></select>
         <select value={filters.dateField} onChange={(event) => setFilters((current) => ({ ...current, dateField: event.target.value }))}><option value="createdAt">Tarih: ERP'ye Eklenme</option><option value="sourceModifiedAt">Tarih: Dosya Tarihi</option><option value="updatedAt">Tarih: Son Güncelleme</option></select><input className="dsg-date-input" type="date" aria-label="Başlangıç tarihi" value={filters.dateFrom} onChange={(event) => setFilters((current) => ({ ...current, dateFrom: event.target.value }))} /><input className="dsg-date-input" type="date" aria-label="Bitiş tarihi" value={filters.dateTo} onChange={(event) => setFilters((current) => ({ ...current, dateTo: event.target.value }))} /><select value={filters.sort} onChange={(event) => setFilters((current) => ({ ...current, sort: event.target.value }))}><option value="created_desc">Yeni Eklenenler</option><option value="source_desc">Yeni Dosya Tarihi</option><option value="updated_desc">Son Güncellenenler</option><option value="name_asc">Model A-Z</option></select></div></details><div className="dsg-view-switch"><button className={view === "cards" ? "active" : ""} onClick={() => setView("cards")}><Grid2X2 size={16} /></button><button className={view === "list" ? "active" : ""} onClick={() => setView("list")}><List size={17} /></button></div>
       </div>
-      <div className="dsg-toolbar-main"><button className="dsg-btn" onClick={goInbox}><ScanLine size={16} /> Gelen Desenler</button><button className="dsg-btn primary" onClick={() => setNewModel(true)}><Plus size={16} /> Yeni Model</button><button className="dsg-btn" onClick={analyzeVisible} disabled={analyzing || loading}>{analyzing ? <LoaderCircle className="spin" size={16} /> : <ScanLine size={16} />} {selectedIds.length ? `Seçiliyi Akıllı Tara (${selectedIds.length})` : "Görünenleri Akıllı Tara"}</button><button className="dsg-btn" disabled={!selectedIds.length} onClick={() => setBulkOpen(true)}><CheckSquare size={16} /> Toplu Düzenle ({selectedIds.length})</button><button className="dsg-btn" onClick={load}><RefreshCw size={16} /> Yenile</button><button className="dsg-btn" onClick={() => downloadDesignReport(activeMainCompany, filters).catch((error) => setMessage(error?.message || "Excel indirilemedi."))}><Download size={16} /> Excel</button></div>
+      <div className="dsg-toolbar-main"><button className="dsg-btn" onClick={goInbox}><ScanLine size={16} /> Gelen Desenler</button><button className="dsg-btn primary" onClick={() => setNewModel(true)}><Plus size={16} /> Yeni Model</button><button className="dsg-btn" onClick={analyzeVisible} disabled={analyzing || loading}>{analyzing ? <LoaderCircle className="spin" size={16} /> : <ScanLine size={16} />} {selectedIds.length ? `Seçiliyi Akıllı Tara (${selectedIds.length})` : "Görünenleri Akıllı Tara"}</button><button className="dsg-btn" disabled={!selectedIds.length} onClick={() => setBulkOpen(true)}><CheckSquare size={16} /> Toplu Düzenle ({selectedIds.length})</button><button className="dsg-btn" onClick={load}><RefreshCw size={16} /> Yenile</button><button className="dsg-btn" onClick={() => downloadDesignReport(activeMainCompany, filters).catch((error) => setMessage(error?.message || "CSV raporu indirilemedi."))}><Download size={16} /> CSV</button></div>
     </section>
     {message && <div className="dsg-page-message">{message}</div>}
     <section className="dsg-results-head"><div><strong>{models.length}</strong><span>model bulundu</span></div><span>Gerçek Desen kayıtları · ERP eklenme, dosya ve güncelleme tarihleriyle</span></section>
