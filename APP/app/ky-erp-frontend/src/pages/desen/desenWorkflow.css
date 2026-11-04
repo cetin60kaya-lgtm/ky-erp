@@ -437,5 +437,7 @@
   .dsg-pool-toolbar .dsg-filter-extra { grid-template-columns: minmax(0, 1fr); }
   .dsg-pool-toolbar .dsg-toolbar-main { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dsg-pool-toolbar .dsg-toolbar-main .dsg-btn { min-width: 0; white-space: normal; }
+  .dw-page .dsg-btn, .dw-page .dsg-icon-btn,
+  .dw-page .dsg-filter-grid select, .dw-page .dsg-filter-grid input { min-height: 44px; }
   .dsg-model-image { min-height: 200px; }
 }
