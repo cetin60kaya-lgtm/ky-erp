@@ -1,8 +1,9 @@
-deploy: gunluk-operasyon-5-sekme-tam-onarim-20261104
+deploy: gunluk-operasyon-5-sekme-kanitli-yayin-20261104-r2
 pr: 514
 merge: c204bf41614a67bde0c052021d862caf2fed1ece
 ci: 41811145091 SUCCESS
-scope: canonical KY ERP Pages frontend
-reason: five Daily Operations tabs shared integrity, period-lock and sync repair; no data mutation
+security_api_run: 41811788918 SUCCESS
+first_pages_run: 41811796132 DEPLOYED_VERIFY_OLD_MARKER_FAILED
+reason: Production Pages file SHA256 + new Günlük Operasyon period lock chunk verification
 requested: 2026-11-04
 migration: NONE
