@@ -49,6 +49,8 @@
 .dsg-scan-meta strong { color: var(--dsg-ink); }
 .dsg-scan-meta code { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-left: 1px solid var(--dsg-line); padding-left: 8px; color: #365a7a; }
 .dsg-page-message { padding: 9px 12px; border: 1px solid #b9d5f5; border-radius: 8px; background: #eef6ff; color: #174f86; font-size: 12px; }
+.dsg-inbox-origin-note { margin: 0; padding: 10px 12px; border: 1px solid #d8e4f0; background: #f7faff; border-radius: 9px; color: #435e76; font-size: 12px; line-height: 1.5; }
+.dsg-inbox-origin-note strong { color: #153f69; }
 
 .dsg-summary-grid { display: grid; grid-template-columns: repeat(6, minmax(125px, 1fr)); gap: 9px; }
 .dsg-summary-grid.reports { grid-template-columns: repeat(8, minmax(110px, 1fr)); }
