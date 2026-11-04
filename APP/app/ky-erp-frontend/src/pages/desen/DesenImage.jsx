@@ -24,7 +24,10 @@ export default function DesenImage({ src, alt = "", className = "", style, ...pr
     }
 
     setState({ source: "", ready: false, failed: false });
-    apiFetch(rawSource, {
+    const requestPath = sourceUrl.startsWith(`${API_BASE}/`)
+      ? sourceUrl.slice(API_BASE.length)
+      : rawSource;
+    apiFetch(requestPath, {
       method: "GET",
       responseType: "blob",
       timeoutMs: 45000,
