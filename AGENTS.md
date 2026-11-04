@@ -1,5 +1,7 @@
 # KY ERP — AI Agent Ana Kuralları
 
+> **04.11.2026 ORTAK UZAK ERİŞİM KURALI:** DESEN, X, KY ERP, PC PDKS ve DESIGNER çalışmaları için tek güncel operasyon politikası özel `cetin60kaya-lgtm/kyerp/CONTROL/KY_CONTROL_MERKEZ.md` dosyasındaki **04.11.2026 ortak erişim bölümü**dür. KY Control/Chat Bridge/Drive uygun işlerde önceliklidir. Remote Desktop Commander DESEN'de hazır/otomatik başlatılır; sadece gerçekten yerel Windows işi gerektiğinde, kullanıcı isteğiyle ve düşük kota tüketimiyle kullanılır. Ayrı güvenlik protokolünü uygula; gerçek Windows yanıtı olmadan kabul ilan etme. Bu yönlendirme bütün eski sohbetleri kendiliğinden güncellemez.
+
 > **KY CONTROL — TEK KAYNAK:** DESEN/yerel Windows işleri için özel `cetin60kaya-lgtm/kyerp` deposundaki `CONTROL/KY_CONTROL_MERKEZ.md` ana giriş noktasıdır. Mevcut `kyerp/CONTROL/KY_CHAT_BRIDGE_AGENT_RULES.md` güvenlik sözleşmesi ayrıca zorunludur. ChatGPT yeni komut için eşleşen gerçek Windows yanıtı almadan PASS demez; Remote Desktop Commander veya yeni ZIP/token ilk tercih değildir. Bu yalnız kaynak yönlendirmesidir, production onayı değildir.
 
 
