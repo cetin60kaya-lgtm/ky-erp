@@ -441,3 +441,27 @@
   .dw-page .dsg-filter-grid select, .dw-page .dsg-filter-grid input { min-height: 44px; }
   .dsg-model-image { min-height: 200px; }
 }
+
+
+/* DESEN modelin bütün dosyaları: tek grup görünümü ve mobil PDF erişimi. */
+.dsg-file-groups { display: grid; gap: 16px; }
+.dsg-file-groups > section { min-width: 0; }
+.dsg-file-groups h3 { display: flex; gap: 7px; align-items: center; margin: 0 0 9px; color: var(--dsg-ink); font-size: 14px; }
+.dsg-file-groups h3 span { color: var(--dsg-muted); font-size: 12px; }
+.dsg-file-tile { min-width: 0; }
+.dsg-file-placeholder { display: flex; min-height: 140px; align-items: center; justify-content: center; flex-direction: column; gap: 8px; background: #f5f8fc; color: #526d82; border-bottom: 1px solid var(--dsg-line); text-align: center; padding: 12px; }
+.dsg-file-placeholder span { color: #1e4d75; font-size: 13px; font-weight: 800; }
+.dsg-file-placeholder small { font-size: 11px; line-height: 1.4; }
+.dsg-file-tile .dsg-file-tile-body { display: flex; flex-direction: column; gap: 7px; padding: 11px; }
+.dsg-file-tile-body strong { white-space: normal; overflow-wrap: anywhere; line-height: 1.4; font-size: 12px; }
+.dsg-file-tile-body > span { font-size: 11px; }
+.dsg-file-tile-body > small { overflow-wrap: anywhere; color: var(--dsg-muted); font-size: 11px; }
+.dsg-file-tile-body label { display: grid; gap: 4px; font-size: 11px; font-weight: 700; color: var(--dsg-muted); }
+.dsg-file-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.dsg-file-pdf { border: 1px solid var(--dsg-line); border-radius: 7px; height: 290px; width: 100%; }
+.dsg-file-tile-body .dsg-file-error { color: var(--dsg-red); font-weight: 700; }
+@media (max-width: 760px) {
+  .dsg-file-actions { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .dsg-file-actions .dsg-btn { white-space: normal; min-height: 44px; }
+  .dsg-file-pdf { height: 52vh; min-height: 330px; }
+}
