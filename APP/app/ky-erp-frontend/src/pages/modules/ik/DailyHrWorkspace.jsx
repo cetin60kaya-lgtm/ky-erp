@@ -49,6 +49,7 @@ import {
   updateDailyEmployee,
 } from "../../../services/dailyOpsApi";
 import { printHtmlDocument } from "../../../services/printService";
+import { dailyPeriodScope, dailyRangeScope, dailyFocusedScope, assessDailyPeriodLocks, dailyWriteGate } from "../../../services/dailyOpsIntegrity";
 import { exportRowsToExcelFile } from "../../../utils/excelExport";
 import "./daily-hr-workspace.css";
 import "./daily-hr-workspace-final.css";
@@ -59,7 +60,7 @@ const RANGE_KEY = "kyerp.dailyOperations.range.v5";
 // Tek tarih aralığı, bütün Günlük Operasyon alt ekranlarında ortak.
 const PAYMENT_POOL_RANGE_KEY = RANGE_KEY;
 const PAYMENT_HISTORY_RANGE_KEY = RANGE_KEY;
-const LIVE_SYNC_INTERVAL_MS = 1500;
+const LIVE_SYNC_INTERVAL_MS = 5000;
 const DAILY_SYNC_CHANNEL = "kyerp.dailyOperations.live.v1";
 const QUICK_ROW_HEIGHT_KEY = "kyerp.dailyOperations.quickRowHeight.v4";
 const QUICK_CARD_WIDTH_KEY = "kyerp.dailyOperations.quickCardWidth.v5";
@@ -468,6 +469,12 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [controlQuery, setControlQuery] = useState("");
   const [periodLocked, setPeriodLocked] = useState(true);
   const [periodLockKnown, setPeriodLockKnown] = useState(false);
+  const [periodLockScope, setPeriodLockScope] = useState("");
+  const [periodLockError, setPeriodLockError] = useState("");
+  const [rangeLoadError, setRangeLoadError] = useState("");
+  const [rangeReadScope, setRangeReadScope] = useState("");
+  const [focusedReadScope, setFocusedReadScope] = useState("");
+  const [rangeLockInfo, setRangeLockInfo] = useState(null);
   const [periodLockInfo, setPeriodLockInfo] = useState(null);
   const [excelPreview, setExcelPreview] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -478,6 +485,21 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const liveVersionRef = useRef("");
   const dailyRangeRef = useRef(range);
   const livePollBusyRef = useRef(false);
+  const rangeRequestRef = useRef(0);
+  const focusedRequestRef = useRef(0);
+  const expectedPeriodScope = dailyPeriodScope(companyId, selectedDate, range.start, range.end);
+  const expectedRangeScope = dailyRangeScope(companyId, range.start, range.end);
+  const expectedFocusedScope = dailyFocusedScope(companyId, selectedDate, shift);
+  const periodLockVerified = periodLockKnown && periodLockScope === expectedPeriodScope;
+  const sharedGate = {
+    lockKnown: periodLockKnown, lockScope: periodLockScope, requiredLockScope: expectedPeriodScope,
+    dayLock: periodLockVerified && periodLocked,
+    rangeScope: rangeReadScope, requiredRangeScope: expectedRangeScope,
+    focusedScope: focusedReadScope, requiredFocusedScope: expectedFocusedScope,
+    rangeLock: rangeLockInfo,
+  };
+  const dailyWriteBlocked = Boolean(dailyWriteGate(sharedGate));
+  const rosterWriteBlocked = Boolean(dailyWriteGate({ ...sharedGate, roster: true }));
 
   const days = useMemo(() => rangeDays(range.start, range.end), [range.end, range.start]);
   const roleOptions = useMemo(() => {
@@ -537,26 +559,57 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
   const loadRangeData = useCallback(async () => {
     if (!companyId) return;
-    setPeriodLockKnown(false);
-    try {
-      const [rows, roster, lock] = await Promise.all([
-        getDailyAttendance({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }),
-        getDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }),
-        getDailyPeriodLock({ mainCompanyId: companyId, date: selectedDate }),
-      ]);
-      const attendanceRows = Array.isArray(rows) ? rows : [];
-      setAttendance(attendanceRows);
-      const savedIds = Array.isArray(roster?.employeeIds) ? roster.employeeIds.map(String) : Array.isArray(roster) ? roster.map(String) : [];
+    const requestId = ++rangeRequestRef.current;
+    const targetPeriod = dailyPeriodScope(companyId, selectedDate, range.start, range.end);
+    const targetRange = dailyRangeScope(companyId, range.start, range.end);
+    // Attendance, roster and period lock are independent reads.
+    // Errors must not be confused with a genuinely closed period.
+    const [attendanceResult, rosterResult, lockResult] = await Promise.allSettled([
+      getDailyAttendance({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }),
+      getDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }),
+      getDailyPeriodLock({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }),
+    ]);
+    if (requestId !== rangeRequestRef.current) return;
+    const errors = [];
+    const attendanceRows = attendanceResult.status === "fulfilled" && Array.isArray(attendanceResult.value)
+      ? attendanceResult.value : null;
+    if (attendanceRows) setAttendance(attendanceRows);
+    else errors.push(`Çalışma kayıtları: ${attendanceResult.status === "rejected" ? attendanceResult.reason?.message || "okunamadı" : "sunucu yanıtı geçersiz"}.`);
+
+    const roster = rosterResult.status === "fulfilled" ? rosterResult.value : null;
+    const savedIds = Array.isArray(roster?.employeeIds) ? roster.employeeIds.map(String)
+      : Array.isArray(roster) ? roster.map(String) : null;
+    if (savedIds) {
       const savedSet = new Set(savedIds);
-      const recordedIds = new Set(attendanceRows.filter((row) => rowDay(row) || rowNight(row)).map(rowEmployeeId).filter(Boolean));
+      const recordedIds = new Set((attendanceRows || []).filter((row) => rowDay(row) || rowNight(row)).map(rowEmployeeId).filter(Boolean));
       setRosterIds(savedSet);
-      setRosterSaved(![...recordedIds].some((id) => !savedSet.has(id)));
-      const locked = (Array.isArray(lock) ? lock : []).find((entry) => String(entry.status || "").toUpperCase() === "LOCKED"
-        && entry.start_date <= selectedDate && entry.end_date >= selectedDate) || null;
-      setPeriodLockInfo(locked);
-      setPeriodLocked(Boolean(locked));
+      setRosterSaved(Boolean(attendanceRows) && ![...recordedIds].some((id) => !savedSet.has(id)));
+    } else {
+      setRosterSaved(false);
+      errors.push(`Personel havuzu: ${rosterResult.status === "rejected" ? rosterResult.reason?.message || "okunamadı" : "sunucu yanıtı geçersiz"}.`);
+    }
+    setRangeLoadError(errors.join(" "));
+    setRangeReadScope(errors.length ? "" : targetRange);
+
+    try {
+      if (lockResult.status === "rejected") throw lockResult.reason;
+      const { dayLock, rangeLock } = assessDailyPeriodLocks(lockResult.value, {
+        date: selectedDate, start: range.start, end: range.end,
+      });
+      setPeriodLockInfo(dayLock);
+      setRangeLockInfo(rangeLock);
+      setPeriodLocked(Boolean(dayLock));
+      setPeriodLockScope(targetPeriod);
       setPeriodLockKnown(true);
-    } catch (loadError) { setPeriodLockKnown(false); setPeriodLocked(true); setError(loadError?.message || "Dönem kilidi doğrulanamadı; işlemler güvenlik için engellendi."); }
+      setPeriodLockError("");
+    } catch (lockError) {
+      setPeriodLockKnown(false);
+      setPeriodLockScope("");
+      setPeriodLocked(true);
+      setPeriodLockInfo(null);
+      setRangeLockInfo(null);
+      setPeriodLockError(`Dönem kilidi doğrulanamadı: ${lockError?.message || "sunucu hatası"}. Kaydetme güvenlik nedeniyle durduruldu.`);
+    }
   }, [companyId, range.end, range.start, selectedDate]);
 
   useEffect(() => {
@@ -568,14 +621,25 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
   const loadFocused = useCallback(async () => {
     if (!companyId || view !== "daily-entry" || !selectedDate) return;
+    const requestId = ++focusedRequestRef.current;
+    const targetScope = dailyFocusedScope(companyId, selectedDate, shift);
     setLoading(true); setError("");
     try {
       const focused = await getDailyFocusedRecords({ mainCompanyId: companyId, date: selectedDate, shift });
-      const focusedRows = Array.isArray(focused) ? focused : [];
-      setRecords(focusedRows); setSelectedIds(focusedIds(focusedRows)); setCheckedIds(focusedCheckedIds(focusedRows));
-      setNotes(Object.fromEntries(focusedRows.map((row) => [rowEmployeeId(row), row.note || ""]).filter(([id]) => id)));
-    } catch (loadError) { setError(loadError?.message || "Seçili gün kayıtları alınamadı."); }
-    finally { setLoading(false); }
+      if (requestId !== focusedRequestRef.current) return;
+      if (!Array.isArray(focused)) throw new Error("Seçili güne ait kayıtların sunucu yanıtı geçersiz.");
+      setRecords(focused);
+      setSelectedIds(focusedIds(focused));
+      setCheckedIds(focusedCheckedIds(focused));
+      setNotes(Object.fromEntries(focused.map((row) => [rowEmployeeId(row), row.note || ""]).filter(([id]) => id)));
+      setFocusedReadScope(targetScope);
+    } catch (loadError) {
+      if (requestId !== focusedRequestRef.current) return;
+      setFocusedReadScope("");
+      setError(loadError?.message || "Seçili gün kayıtları alınamadı.");
+    } finally {
+      if (requestId === focusedRequestRef.current) setLoading(false);
+    }
   }, [companyId, selectedDate, shift, view]);
   useEffect(() => { void loadFocused(); }, [loadFocused]);
 
@@ -857,10 +921,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (paymentLoadError) rows.push("Ödeme verisi şu anda alınamadı; diğer günlük operasyon verileri etkilenmedi.");
     if (periodStatusError) rows.push(periodStatusError);
     if (dashboardZeroWage) rows.push(`${dashboardZeroWage} aktif personelin gündüz ücreti 0.`);
-    if (periodLocked) rows.push("Seçili dönem kapalı; günlük kayıt değişikliği kilitli.");
+    if (periodLockVerified && periodLocked) rows.push("Seçili dönem kapalı; günlük kayıt değişikliği kilitli.");
+    if (rangeLoadError) rows.push(rangeLoadError);
     if (!attendance.length) rows.push("Seçili tarih aralığında çalışma kaydı yok.");
     return rows;
-  }, [attendance.length, dashboardZeroWage, paymentLoadError, periodStatusError, openPaymentMetrics.people, periodLocked, weeklyPending]);
+  }, [attendance.length, dashboardZeroWage, paymentLoadError, periodStatusError, openPaymentMetrics.people, periodLocked, periodLockVerified, rangeLoadError, weeklyPending]);
   const recentOperations = useMemo(() => [...attendance].sort((a, b) => String(b.updatedAt || b.createdAt || rowDate(b)).localeCompare(String(a.updatedAt || a.createdAt || rowDate(a)))).slice(0, 8), [attendance]);
   useEffect(() => {
     const valid = new Set(paymentPeriodRows.map((row) => String(row.employeeId || row.id || row.personnelNo || row.name || row.fullName || "")));
@@ -871,7 +936,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   }, [paymentPeriodRows]);
 
   const saveRoster = async () => {
-    if (busy) return; setBusy(true); setError(""); setNotice("");
+    if (busy || rosterWriteBlocked) return; setBusy(true); setError(""); setNotice("");
     try {
       const requestedIds = [...effectiveRosterIds];
       const saved = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: requestedIds, mode: "merge" });
@@ -882,6 +947,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     catch (e) { setError(e?.message || "Personel listesi kaydedilemedi."); } finally { setBusy(false); }
   };
   const addRosterPerson = (person, target = "main") => {
+    if (busy || rosterWriteBlocked) return;
     if (!person?.id) { setError("Listeden eklenecek personeli seçin."); return; }
     setRosterIds((current) => { const next = new Set(current); next.add(person.id); return next; });
     setRosterSaved(false);
@@ -891,7 +957,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
 
   const addPersonToRoster = async (person) => {
-    if (!person?.id || busy || periodLocked || rosterIds.has(person.id)) return;
+    if (!person?.id || busy || rosterWriteBlocked || rosterIds.has(person.id)) return;
     setBusy(true); setError(""); setNotice("");
     try {
       const serverRoster = await getDailyRoster({
@@ -929,7 +995,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   };
 
   const setPersonSelectedForShift = async (person, nextSelected) => {
-    if (!person?.id || busy || periodLocked) return;
+    if (!person?.id || busy || dailyWriteBlocked) return;
     const currentRecord = recordByEmployee.get(person.id) || {};
     setBusy(true); setError(""); setNotice("");
     try {
@@ -961,7 +1027,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   };
 
   const removePersonFromRoster = async (person) => {
-    if (!person?.id || busy || periodLocked || !rosterIds.has(person.id)) return;
+    if (!person?.id || busy || rosterWriteBlocked || !rosterIds.has(person.id)) return;
     const workRows = attendance.filter((row) => {
       const date = rowDate(row);
       return rowEmployeeId(row) === person.id
@@ -1019,7 +1085,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   };
 
   const setPersonReviewed = async (person, nextChecked) => {
-    if (!person?.id || busy || periodLocked || !selectedIds.has(person.id)) return;
+    if (!person?.id || busy || dailyWriteBlocked || !selectedIds.has(person.id)) return;
     const currentRecord = recordByEmployee.get(person.id) || {};
     setBusy(true); setError(""); setNotice("");
     try {
@@ -1049,10 +1115,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const addFromQuickPool = () => addRosterPerson(resolveRosterChoice(quickAddQuery), "quick");
 
   const saveFocused = async () => {
-    if (busy || periodLocked) return; setBusy(true); setError(""); setNotice("");
+    if (busy || dailyWriteBlocked) return; setBusy(true); setError(""); setNotice("");
     try {
       const missingSelectedPeople = [...selectedIds].filter((id) => !employeeMap.has(id));
       if (missingSelectedPeople.length) throw new Error("Personel listesi eksik yüklendi. Kayıt korunması için ekranı yenileyip tekrar deneyin.");
+      if (!rosterSaved && rosterWriteBlocked) throw new Error("Dönem personel listesi doğrulanamadı veya aralıkta kapalı gün var.");
       if (!rosterSaved) { const savedRoster = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...effectiveRosterIds], mode: "merge" }); setRosterIds(new Set(Array.isArray(savedRoster?.employeeIds) ? savedRoster.employeeIds.map(String) : effectiveRosterIds)); setRosterSaved(true); }
       // Delta write: başka cihazdaki değişmemiş satırları tekrar yazma.
       const changedPeople = activeRosterPeople.filter((person) => {
@@ -1076,8 +1143,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       setNotice(`${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} kayıtları kaydedildi.`); await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
     } catch (e) { setError(e?.message || "Günlük giriş kaydedilemedi. Başka cihazda değişiklik olduysa Yenile'ye basın."); } finally { setBusy(false); }
   };
-  const selectAll = () => setSelectedIds(new Set(activeRosterPeople.filter((p) => shift === "day" || personWageAtDate(p, selectedDate).night > 0).map((p) => p.id)));
-  const clearAll = () => { setSelectedIds(new Set()); setCheckedIds(new Set()); };
+  const selectAll = () => { if (busy || dailyWriteBlocked) return; setSelectedIds(new Set(activeRosterPeople.filter((p) => shift === "day" || personWageAtDate(p, selectedDate).night > 0).map((p) => p.id))); };
+  const clearAll = () => { if (busy || dailyWriteBlocked) return; setSelectedIds(new Set()); setCheckedIds(new Set()); };
   const thisWeek = () => { const start = startOfWeek(); setSafeRange({ start, end: addDays(start, 6) }); setSelectedDate(localDateKey()); };
 
   const loadQuickFocus = async (date, mode, preserveQuery = "") => {
@@ -1108,11 +1175,12 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     finally { setBusy(false); }
   };
   const saveQuick = async (goNext = false) => {
-    if (!quick || busy || periodLocked) return;
+    if (!quick || busy || dailyWriteBlocked || quick.date !== selectedDate || quick.shift !== shift) return;
     const snapshot = quick; setBusy(true); setError("");
     try {
       const missingQuickPeople = [...snapshot.ids].filter((id) => !employeeMap.has(id));
       if (missingQuickPeople.length) throw new Error("Hızlı giriş personel listesi eksik yüklendi. Kayıtlar korunması için Yenile yapıp tekrar deneyin.");
+      if (!rosterSaved && rosterWriteBlocked) throw new Error("Dönem personel listesi doğrulanamadı veya aralıkta kapalı gün var.");
       if (!rosterSaved) { const savedRoster = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...effectiveRosterIds], mode: "merge" }); setRosterIds(new Set(Array.isArray(savedRoster?.employeeIds) ? savedRoster.employeeIds.map(String) : effectiveRosterIds)); setRosterSaved(true); }
       const rows = await getDailyFocusedRecords({ mainCompanyId: companyId, date: snapshot.date, shift: snapshot.shift });
       const currentMap = new Map((Array.isArray(rows) ? rows : []).map((row) => [rowEmployeeId(row), row]));
@@ -1181,7 +1249,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     void loadLog(next, true);
   };
   const togglePeriodLock = async () => {
-    if (busy || !periodLockKnown) { setError("Dönem kilidi sunucudan henüz doğrulanmadı."); return; }
+    if (busy || !periodLockVerified) { setError("Dönem kilidi sunucudan henüz doğrulanmadı."); return; }
     const next = !periodLocked;
     const reason = window.prompt(next ? "Dönem kapatma gerekçesi (zorunlu):" : "Dönemi yeniden açma gerekçesi (zorunlu):");
     if (!reason?.trim()) return;
@@ -1475,7 +1543,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         await refreshVisibleView();
         if (!cancelled) {
           liveVersionRef.current = version;
-          setNotice("Canlı senkron: başka bilgisayardaki değişiklikler alındı.");
+          setNotice("Canlı senkron: sunucudaki yeni değişiklikler alındı.");
         }
       } catch {
         setSyncError("Diğer bilgisayarla senkron bağlantısı geçici olarak doğrulanamıyor. Kaydetmeden önce Yenile ile kontrol edin.");
