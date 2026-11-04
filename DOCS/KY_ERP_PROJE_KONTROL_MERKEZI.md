@@ -1,5 +1,15 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 04.11.2026 — Günlük Operasyon beş sekme sistem onarımı ve canlı yayın kabulü (PR #514)
+- Kapsam: Yönetim Özeti, Günlük Personel Girişi, Personel & Ücret Kartları, Dönem Kontrolü, Hakediş & Ödeme. Mevcut sekme/iş akışı korundu; paralel uygulama veya yeni veri modeli açılmadı.
+- Kök neden: Günlük ekran dönem kilidi sonucunu çalışma/personel havuzu sorgularıyla aynı Promise.all başarısına bağlıyordu; veri hataları gerçek dönem kilidi gibi görünebiliyor, sık senkron ve eski yanıtlar yanlış güne/vardiyaya güven verebiliyordu.
+- Onarım: Bağımsız Promise.allSettled yüklemesi; firma+tarih+aralık+vardiya kapsamlı eski yanıt kontrolü; açık/kapalı/doğrulanamayan dönem ayrımı; yazma öncesi güvenli kapılar; dönem aralığındaki başka kilitli gün yalnız havuz değişimini engeller; Worker lockGet aralık filtresi; senkron 5 s; saf bütünlük sözleşmesi ve regresyon testleri. Güvenlik, D1 vardiya/maaş/ödeme kayıtları, optimistik kontrol ve immutable log korunmuştur.
+- GitHub PR: https://github.com/cetin60kaya-lgtm/ky-erp/pull/514 — merged `c204bf41614a67bde0c052021d862caf2fed1ece`. CI https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41811145091 SUCCESS (frontend lint/test/build ve Worker typecheck/test/build).
+- Gerçek üretim yayın kanıtı: API+KY Güvenlik https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41811788918 SUCCESS; Pages+canlı Chrome https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41812254700 SUCCESS. Günlük Operasyon bundle `/assets/DailyHrWorkspace-BtK-DWyf.js` canlı SHA256 `92241886036e786b08f573bd2b26114f1fc7f6464ce6caaa2e0c07683d291a73`, üretim build ile eşleşti. API /api/health HTTP 200 ok=true database=d1; anonim erişimde yetki koruması 401; Chrome public mobil oturum ekranları PASS.
+- İlk Pages yayınında eski `KY ERP Yönetim Merkezi` marker testi yanlış sebeple FAIL verdi; aynı mevcut frontend workflow Günlük Operasyon gerçek asset/SHA256 kontrolüne düzeltildi ve ikinci yayın SUCCESS oldu. Yeni workflow veya ekstra otomatik Actions hattı eklenmedi.
+- Kabul sınırı: Üretim üzerinde muhasebeci/diğer yetkili kullanıcılarla gerçek kayıt ekleme, dönem açma-kapatma, ücret/ödeme işlemi veya D1 veri mutasyonu yapılmadı. Bu kullanıcı oturumu operasyon kabulü ayrıca gerekir; giriş yetkileri ve veri gizliliği korunur. D1 schema migration veya veri taşıma/silme yok.
+
+
 ## 04.11.2026 — DESEN tek menü / dosya / teknik iş akışı revizyon dalı
 - Dal: `refactor/desen-tek-merkez-20261104`; production tabanı `695e8b02`. Dört görünür sekme tek “Desen Merkezi” grubunda: Gelen Desenler, Desen Havuzu, Yerleşim/Kalıp, Kontrol & Rapor.
 - Gelen R2 kuyruğuyla Google Drive File Hub indeksinin ayrı kaynaklar olduğu kullanıcıya açıkça gösterilir; gizli 30 saniyelik R2 POST tarama kaldırıldı.
