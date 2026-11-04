@@ -401,12 +401,19 @@ async function syncCloudDesignBinding(c:Context<AppEnv>,slug:string,connectionId
     : [];
   // Gelen kaynakta klasör adı baskın; yerleşim/giden üretimde yalnız bilinen
   // model adlarını ara. Tire ve A/B varyantlarının gerçek model adını bozma.
-  const candidates=classified.folderModelName ? folderMatches
+  const isRgb = purposeCode==="MODEL_IMAGE";
+  const otherMatches=classified.folderModelName ? folderMatches
     : matchExistingDesignModelNames(names,sourceStem,{multi:purposeCode==="OUTGOING_DESIGN"});
-  // Yeni model oluşturabilen tek legacy akış: doğrudan gerçek RGB model görseli.
+  // RGB ana görselde dosya adı TAM model adı olmalıdır. K-B_BOY, ILAVE vb.
+  // kısmi eşleşmeler ana görseli sessizce değiştiremez; inceleme bekler.
+  const candidates=isRgb
+    ? otherMatches.filter((name:string)=>normalizeDesignModelKey(name)===normalizeDesignModelKey(sourceStem))
+    : otherMatches;
+  const ambiguousRgb=isRgb && !candidates.length && otherMatches.length>0;
+  // Yeni model oluşturabilen tek legacy akış: tam yeni RGB dosya adı.
   // PSD, PDF, AI, DTF ve kalıp dosyası tek başına yeni model oluşturamaz.
   const selected=candidates.length ? candidates
-    : purposeCode==="MODEL_IMAGE" && !classified.folderModelName ? [sourceStem] : [];
+    : isRgb && !classified.folderModelName && !ambiguousRgb ? [sourceStem] : [];
   if(!selected.length)return null;
   let first:Row|null=null, matchedCount=0;
   for(const modelName of selected){
