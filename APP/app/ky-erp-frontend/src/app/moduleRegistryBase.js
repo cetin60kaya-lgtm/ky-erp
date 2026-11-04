@@ -48,8 +48,8 @@ export const MODULES = [
         label: "Desen Merkezi",
         tabs: [
           ["gelen-desenler", "Gelen Desenler", "upload"],
-          ["desen-modeller", "Model Havuzu", "dosya"],
-          ["desen-yerlesim-is-akisi", "Teknik Hazırlık", "file-check"],
+          ["desen-modeller", "Desen Havuzu", "dosya"],
+          ["desen-yerlesim-is-akisi", "Yerleşim / Kalıp", "file-check"],
           ["desen-raporlari", "Kontrol & Rapor", "raporlar"],
         ],
       },
