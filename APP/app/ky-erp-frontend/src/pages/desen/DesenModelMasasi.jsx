@@ -40,7 +40,7 @@ const EMPTY_INBOX = {
   summary: { readyFiles: 0, suggestedGroups: 0, missingModelImage: 0, missingChannelImage: 0, duplicates: 0, errors: 0 },
 };
 
-export default function DesenModelMasasi({ activeMainCompany }) {
+export default function DesenModelMasasi({ activeMainCompany, openModule }) {
   const [inbox, setInbox] = useState(EMPTY_INBOX);
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -109,6 +109,7 @@ export default function DesenModelMasasi({ activeMainCompany }) {
       <div className="dsg-toolbar-main">
         <button className="dsg-btn primary" onClick={() => runScan(true)} disabled={scanning}>{scanning ? <LoaderCircle className="spin" size={16} /> : <ScanLine size={16} />} R2 Gelenleri Tara</button>
         <button className="dsg-btn" onClick={load}><RefreshCw size={16} /> Yenile</button>
+        {openModule ? <button className="dsg-btn" onClick={() => openModule("depolama", { tabKey: "depolama-senkronizasyon" })}><FolderOpen size={16} /> Drive / File Hub Kontrol</button> : null}
         <button className={`dsg-btn ${showErrors ? "active danger" : ""}`} onClick={() => setShowErrors((value) => !value)}><AlertTriangle size={16} /> Hatalı Dosyalar</button>
       </div>
       <div className="dsg-scan-meta"><Clock3 size={16} /><span>R2 son tarama</span><strong>{formatDate(inbox.lastScanAt)}</strong><code>{inbox.folderPath || "STORAGE/desen/gelen"}</code></div>
