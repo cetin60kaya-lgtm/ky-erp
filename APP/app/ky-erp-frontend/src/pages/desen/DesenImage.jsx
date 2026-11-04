@@ -15,8 +15,9 @@ export default function DesenImage({ src, alt = "", className = "", style, ...pr
       return undefined;
     }
 
-    const sourceUrl = apiUrl(rawSource);
-    const isInternal = sourceUrl.startsWith(`${API_BASE}/`) || sourceUrl === API_BASE;
+    const isDirectMedia = /^(blob:|data:|http:\/\/)/i.test(rawSource);
+    const sourceUrl = isDirectMedia ? rawSource : apiUrl(rawSource);
+    const isInternal = !isDirectMedia && (sourceUrl.startsWith(`${API_BASE}/`) || sourceUrl === API_BASE);
     if (!isInternal) {
       setState({ source: sourceUrl, ready: true, failed: false });
       return undefined;
