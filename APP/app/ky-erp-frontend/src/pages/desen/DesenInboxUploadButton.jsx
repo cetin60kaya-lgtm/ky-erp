@@ -53,7 +53,7 @@ export default function DesenInboxUploadButton({
         ) : (
           <UploadCloud size={16} />
         )}
-        {busy ? "Yükleniyor…" : "Görsel Yükle"}
+        {busy ? "Yükleniyor…" : "R2 Gelen Dosya Yükle"}
       </button>
       <input
         ref={inputRef}
