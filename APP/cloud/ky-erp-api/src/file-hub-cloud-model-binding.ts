@@ -11,7 +11,7 @@ export type CloudModelBinding = {
 
 const extensionsByPurpose: Readonly<Record<string, readonly string[]>> = Object.freeze({
   MODEL_IMAGE: ["JPG", "JPEG", "PNG", "WEBP"],
-  MODEL_SOURCE: ["PSD", "PSB", "AI", "PDF", "TIF", "TIFF", "SVG", "EPS"],
+  MODEL_SOURCE: ["PSD", "PSB", "AI", "PDF", "TIF", "TIFF", "SVG", "EPS", "JPG", "JPEG", "PNG", "WEBP"],
   PLACEMENT: ["AI", "PDF", "PSD", "PSB", "SVG", "EPS"],
   OUTGOING_DESIGN: ["AI", "PDF", "PSD", "PSB", "SVG", "EPS", "JPG", "JPEG", "PNG"],
   RIP_PDF: ["PDF"],
@@ -77,7 +77,7 @@ export function classifyDesignSourcePath(
     ? firstFolder.replace(/(?:\s|[-_])DTF$/i, "").trim()
     : "";
   return {
-    purposeCode: isDtf ? "RIP_PDF" : String(binding.purpose_code || "").toUpperCase(),
+    purposeCode: isDtf && /\.PDF$/i.test(path) ? "RIP_PDF" : String(binding.purpose_code || "").toUpperCase(),
     folderModelName,
     isDtf,
   };
