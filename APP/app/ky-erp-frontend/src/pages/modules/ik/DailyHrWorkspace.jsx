@@ -50,6 +50,7 @@ import {
 } from "../../../services/dailyOpsApi";
 import { printHtmlDocument } from "../../../services/printService";
 import { dailyPeriodScope, dailyRangeScope, dailyFocusedScope, assessDailyPeriodLocks, dailyWriteGate } from "../../../services/dailyOpsIntegrity";
+import { persistDailyRosterMember } from "../../../services/dailyOpsPersonnelFlow";
 import { exportRowsToExcelFile } from "../../../utils/excelExport";
 import "./daily-hr-workspace.css";
 import "./daily-hr-workspace-final.css";
@@ -946,81 +947,33 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     }
     catch (e) { setError(e?.message || "Personel listesi kaydedilemedi."); } finally { setBusy(false); }
   };
-  const addRosterPerson = (person, target = "main") => {
-    if (busy || rosterWriteBlocked) return;
+  // A new roster member is not visible as "saved" until D1 has acknowledged and a fresh read confirms it.
+  const persistRosterAddition = async (employeeId) => persistDailyRosterMember({
+    employeeId, mainCompanyId: companyId, startDate: range.start, endDate: range.end,
+    localIds: [...effectiveRosterIds],
+    readRoster: getDailyRoster, writeRoster: saveDailyRoster,
+  });
+
+  const addRosterPerson = async (person, target = "main") => {
     if (!person?.id) { setError("Listeden eklenecek personeli seçin."); return; }
-    setRosterIds((current) => { const next = new Set(current); next.add(person.id); return next; });
-    setRosterSaved(false);
-    if (target === "quick") setQuickAddQuery(""); else setPoolAddQuery("");
-    setNotice(`${person.name} tarih aralığı listesine eklendi. Kaydettiğinizde sunucuya yazılacak.`);
-  };
-
-
-  const addPersonToRoster = async (person) => {
-    if (!person?.id || busy || rosterWriteBlocked || rosterIds.has(person.id)) return;
-    setBusy(true); setError(""); setNotice("");
-    try {
-      const serverRoster = await getDailyRoster({
-        mainCompanyId: companyId,
-        startDate: range.start,
-        endDate: range.end,
-      });
-      const serverRosterIds = Array.isArray(serverRoster?.employeeIds)
-        ? serverRoster.employeeIds.map(String)
-        : Array.isArray(serverRoster)
-          ? serverRoster.map(String)
-          : [...rosterIds];
-      const nextRosterIds = new Set([...serverRosterIds, ...effectiveRosterIds]);
-      nextRosterIds.add(person.id);
-      const savedRoster = await saveDailyRoster({
-        mainCompanyId: companyId,
-        startDate: range.start,
-        endDate: range.end,
-        employeeIds: [...nextRosterIds],
-        mode: "merge",
-      });
-      const finalRosterIds = new Set(
-        Array.isArray(savedRoster?.employeeIds)
-          ? savedRoster.employeeIds.map(String)
-          : [...nextRosterIds],
-      );
-      setRosterIds(finalRosterIds);
-      setRosterSaved(true);
-      setNotice(`${person.name} ${dateText(range.start)}–${dateText(range.end)} personel havuzuna eklendi.`);
-    } catch (e) {
-      setError(e?.message || "Personel tarih aralığı havuzuna eklenemedi.");
-    } finally {
-      setBusy(false);
+    const added = await addPersonToRoster(person);
+    if (added) {
+      if (target === "quick") setQuickAddQuery(""); else setPoolAddQuery("");
     }
   };
 
-  const setPersonSelectedForShift = async (person, nextSelected) => {
-    if (!person?.id || busy || dailyWriteBlocked) return;
-    const currentRecord = recordByEmployee.get(person.id) || {};
+  const addPersonToRoster = async (person) => {
+    if (!person?.id || busy || rosterWriteBlocked || (rosterIds.has(person.id) && rosterSaved)) return false;
     setBusy(true); setError(""); setNotice("");
     try {
-      await saveDailyFocusedRecords({
-        mainCompanyId: companyId,
-        date: selectedDate,
-        shift,
-        personnelEntries: [{
-          personelId: person.id,
-          status: nextSelected ? "ACTIVE" : "REMOVE",
-          checked: nextSelected ? false : false,
-          expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
-          expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
-          expectedNoteUpdatedAt: currentRecord.noteUpdatedAt || "",
-          note: nextSelected ? (notes[person.id] || "") : "",
-        }],
-      });
-      await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
-      setNotice(
-        nextSelected
-          ? `${person.name} ${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} vardiyasına kaydedildi.`
-          : `${person.name} ${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} kaydı kaldırıldı. Personel havuzda kaldı.`,
-      );
+      const verifiedIds = await persistRosterAddition(person.id);
+      setRosterIds(verifiedIds);
+      setRosterSaved(true);
+      setNotice(`${person.name} ${dateText(range.start)}–${dateText(range.end)} personel havuzuna kaydedildi ve D1 üzerinden doğrulandı.`);
+      return true;
     } catch (e) {
-      setError(e?.message || "Gün/vardiya kaydı güncellenemedi. Ekranı yenileyip tekrar deneyin.");
+      setError(e?.message || "Personel tarih aralığı havuzuna kaydedilemedi.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -1177,6 +1130,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const saveQuick = async (goNext = false) => {
     if (!quick || busy || dailyWriteBlocked || quick.date !== selectedDate || quick.shift !== shift) return;
     const snapshot = quick; setBusy(true); setError("");
+    let savedAndVerified = false;
     try {
       const missingQuickPeople = [...snapshot.ids].filter((id) => !employeeMap.has(id));
       if (missingQuickPeople.length) throw new Error("Hızlı giriş personel listesi eksik yüklendi. Kayıtlar korunması için Yenile yapıp tekrar deneyin.");
@@ -1199,12 +1153,25 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           confirmedChecks.has(person.id) !== (snapshot.ids.has(person.id) && snapshot.checked.has(person.id)));
         if (notSaved) throw new Error("Kontrol seçimleri sunucuda doğrulanamadı. Veriler tekrar okunmalı; ödeme kaydı oluşturulmadı.");
       }
-      setSelectedDate(snapshot.date); setShift(snapshot.shift); setNotice(`${dateText(snapshot.date)} hızlı giriş sunucuda doğrulanarak kaydedildi.`);
+      savedAndVerified = true;
       await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
       const nextDate = addDays(snapshot.date, 1);
-      if (goNext && nextDate && nextDate <= range.end) await loadQuickFocus(nextDate, snapshot.shift, snapshot.query);
-      else await loadQuickFocus(snapshot.date, snapshot.shift, snapshot.query);
-    } catch (e) { setError(e?.message || "Hızlı giriş kaydedilemedi."); }
+      if (goNext && nextDate && nextDate <= range.end) {
+        await loadQuickFocus(nextDate, snapshot.shift, snapshot.query);
+        // The modal and the authorization scope must always refer to the same day.
+        setSelectedDate(nextDate);
+        setShift(snapshot.shift);
+      } else {
+        await loadQuickFocus(snapshot.date, snapshot.shift, snapshot.query);
+        setSelectedDate(snapshot.date);
+        setShift(snapshot.shift);
+      }
+      setNotice(`${dateText(snapshot.date)} hızlı giriş sunucuda doğrulanarak kaydedildi.`);
+    } catch (e) {
+      setError(savedAndVerified
+        ? `Günlük kayıt D1'de kaydedildi ancak sonraki ekran yüklenemedi: ${e?.message || "sunucu hatası"}.`
+        : e?.message || "Hızlı giriş kaydedilemedi.");
+    }
     finally { setBusy(false); }
   };
 
@@ -1269,29 +1236,52 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (busy || !cardDialog) return;
     if (!String(cardDialog.name || "").trim()) { setError("Ad soyad zorunludur."); return; }
     if (!String(cardDialog.role || "").trim()) { setError("Vasıf seçimi zorunludur."); return; }
-    setBusy(true); setError("");
+    const requestedRoster = Boolean(cardAddToRoster && !cardDialog.id);
+    if (requestedRoster && rosterWriteBlocked) {
+      setError("Dönem personel listesi doğrulanamadı veya kapalı dönem var. Yeni personeli bu aralığa ekleyebilmek için önce dönem kontrolünü tamamlayın.");
+      return;
+    }
+    setBusy(true); setError(""); setNotice("");
+    let createdId = "";
+    let employeeCommitted = false;
     try {
       const safeCard = cardDialog.id ? confirmBackdatedWage(cardDialog, employees.find((person) => person.id === cardDialog.id)) : cardDialog;
       if (!safeCard) return;
       const payload = employeePayload(safeCard, companyId);
-      let saved = null;
-      if (cardDialog.id) saved = await updateDailyEmployee(cardDialog.id, payload);
-      else saved = await createDailyEmployee(payload);
-      const refreshed = await loadEmployees();
-      if (cardAddToRoster && !cardDialog.id) {
-        const savedId = String(saved?.id || saved?.employeeId || "");
-        const created = refreshed.find((person) => person.id === savedId)
-          || refreshed.find((person) => normalizeText(person.personnelNo) === normalizeText(payload.personnelNo) && payload.personnelNo)
-          || refreshed.find((person) => normalizeText(person.name) === normalizeText(payload.fullName));
-        if (created?.id) {
-          setRosterIds((current) => { const next = new Set(current); next.add(created.id); return next; });
-          setRosterSaved(false);
+      const saved = cardDialog.id
+        ? await updateDailyEmployee(cardDialog.id, payload)
+        : await createDailyEmployee(payload);
+      createdId = cardDialog.id ? "" : String(saved?.id || saved?.employeeId || "").trim();
+      employeeCommitted = true;
+      // Never leave a confirmed-created card in the dialog: a retry must not duplicate it.
+      setCardDialog(null);
+      setCardAddToRoster(false);
+      await loadEmployees();
+      if (requestedRoster) {
+        if (!createdId) throw new Error("Yeni personelin kimliği sunucudan dönmedi; dönem kaydı doğrulanamadı.");
+        const verifiedIds = await persistRosterAddition(createdId);
+        setRosterIds(verifiedIds);
+        setRosterSaved(true);
+        // The quick screen is a draft until the operator explicitly saves this shift.
+        if (quick) {
+          setQuick((current) => {
+            if (!current) return current;
+            return { ...current, ids: new Set([...current.ids, createdId]) };
+          });
+        } else if (view === "daily-entry") {
+          setSelectedIds((current) => new Set([...current, createdId]));
         }
+        setNotice("Yeni personel kartı ve dönem havuzu D1 üzerinde kaydedildi. Seçilen gün/vardiya için Kaydet'e basın.");
+      } else {
+        setNotice(cardDialog.id ? "Personel kartı güncellendi." : "Yeni günlük personel oluşturuldu.");
       }
-      setCardDialog(null); setCardAddToRoster(false);
-      setNotice(cardDialog.id ? "Personel kartı güncellendi." : "Yeni günlük personel oluşturuldu.");
-    } catch (e) { setError(e?.message || "Personel kartı kaydedilemedi."); }
-    finally { setBusy(false); }
+    } catch (e) {
+      setError(
+        employeeCommitted && !cardDialog.id
+          ? `Personel kartı oluşturuldu; ancak dönem listesine ekleme tamamlanamadı: ${e?.message || "sunucu hatası"}. Aynı kartı tekrar oluşturmayın; mevcut personeli listeden ekleyin.`
+          : e?.message || "Personel kartı kaydedilemedi."
+      );
+    } finally { setBusy(false); }
   };
   const deactivateCard = async (person) => { if (busy || !person?.id) return; setBusy(true); try { await deleteDailyEmployee(person.id, { mainCompanyId: companyId }); await loadEmployees(); if (cardEditor?.id === person.id) setCardEditor(null); setNotice(`${person.name} pasife alındı.`); } catch (e) { setError(e?.message || "Personel pasife alınamadı."); } finally { setBusy(false); } };
   const saveCardEditor = async () => {
