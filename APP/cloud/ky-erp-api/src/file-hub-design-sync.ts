@@ -51,10 +51,10 @@ async function existingCanonicalModel(c: Context<AppEnv>, slug: string, modelNam
         ORDER BY updated_at DESC LIMIT 20`,
     ).bind(slug,modelName,modelName).all<Row>();
     const candidates = (result.results || []).filter((row: Row) =>
-      normalize(row.model_name || row.model_code) === normalize(modelName));
-    return candidates.find((row: Row) => normalize(row.customer_name).startsWith("TAHA GIYIM"))
-      || candidates.find((row: Row) => !text(row.company_id || row.customer_id))
-      || null;
+      (normalize(row.model_name) === normalize(modelName) || normalize(row.model_code) === normalize(modelName)));
+    // Aynı ada sahip birden fazla firma varsa dosyadan firma tahmin etme.
+    if (candidates.length > 1) return { ambiguous:true };
+    return candidates[0] || null;
   } catch {
     return null;
   }
@@ -107,14 +107,21 @@ async function upsertCanonicalModelRecord(c: Context<AppEnv>, slug: string, mode
   }
 }
 
+// Bir senkron batch'inde aynı yüzlerce model kartını her dosyada tekrar okuma.
+const modelRowsCache = new WeakMap<object,Map<string,Promise<Row[]>>>();
 async function modelRows(c: Context<AppEnv>, slug: string) {
-  const result = await c.env.DB.prepare(
-    `SELECT id,file_name,data,created_at,updated_at
-       FROM json_store
-      WHERE scope=? AND (main_company_slug=? OR main_company_slug IS NULL)
-      ORDER BY updated_at DESC`,
-  ).bind(MODEL_SCOPE, slug).all<Row>();
-  return (result.results || []).map((row: Row) => ({ ...objectOf(row.data), storeId:row.id, fileName:row.file_name }));
+  let cache=modelRowsCache.get(c);
+  if(!cache){cache=new Map();modelRowsCache.set(c,cache);}
+  if(!cache.has(slug))cache.set(slug,(async()=>{
+    const result = await c.env.DB.prepare(
+      `SELECT id,file_name,data,created_at,updated_at
+         FROM json_store
+        WHERE scope=? AND (main_company_slug=? OR main_company_slug IS NULL)
+        ORDER BY updated_at DESC`,
+    ).bind(MODEL_SCOPE, slug).all<Row>();
+    return (result.results || []).map((row: Row) => ({ ...objectOf(row.data), storeId:row.id, fileName:row.file_name }));
+  })());
+  return await cache.get(slug)!;
 }
 
 async function saveModel(c: Context<AppEnv>, slug: string, model: Row) {
@@ -128,10 +135,19 @@ async function saveModel(c: Context<AppEnv>, slug: string, model: Row) {
   } else {
     await c.env.DB.prepare(`INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`).bind(crypto.randomUUID(),MODEL_SCOPE,slug,payload.id,JSON.stringify(payload),ts,ts).run();
   }
+  // Başarılı upsert sonrası aynı request'teki snapshot da güncellenir.
+  const cache=modelRowsCache.get(c)?.get(slug);
+  if(cache){
+    const rows=await cache;
+    const i=rows.findIndex((row:Row)=>text(row.id)===payload.id);
+    if(i>=0) rows[i]={...payload,storeId:rows[i].storeId,fileName:payload.id};
+    else rows.unshift({...payload,storeId:existing?.id||"",fileName:payload.id});
+  }
   return payload;
 }
 
-function roleFor(purposeCode: string, extension: string) {
+function roleFor(purposeCode: string, extension: string, isDtf = false) {
+  if(isDtf)return extension==="PDF" ? "RIP_PDF" : "DTF_SOURCE";
   if (purposeCode === "MODEL_IMAGE") return "MODEL_IMAGE";
   if (purposeCode === "PLACEMENT") return extension === "PDF" ? "PLACEMENT_PDF" : "PLACEMENT_FILE";
   if (purposeCode === "RIP_PDF") return "RIP_PDF";
@@ -148,11 +164,12 @@ export async function syncFileHubDesignModel(c: Context<AppEnv>, input: Row) {
   if (!slug || !modelName || !fileAssetId) return null;
 
   const rows = await modelRows(c, slug);
-  let current = rows.find((row: Row) =>
-    normalize(row.modelName || row.modelCode) === normalize(modelName) &&
-    upper(row.status) !== "ARCHIVE" &&
-    (normalize(row.companyName).startsWith("TAHA GIYIM") || !text(row.companyId)));
+  const matching=rows.filter((row:Row)=>(normalize(row.modelName) === normalize(modelName) || normalize(row.modelCode) === normalize(modelName)) && upper(row.status)!=="ARCHIVE");
+  // Firma ID'si dosya adından çıkarılamaz; birden fazla adayda otomatik bağlama kapalı.
+  if(matching.length>1)return null;
+  let current = matching[0] || null;
   const canonical = current ? null : await existingCanonicalModel(c, slug, modelName);
+  if(canonical?.ambiguous)return null;
   // Modeli otomatik AÇAN dosya yalnız görseldir. PSD/PDF/AI mevcut modele
   // bağlanabilir, ancak tek başına yeni ve eksik hayalet model üretmez.
   if (!current && !canonical && purposeCode !== "MODEL_IMAGE") return null;
@@ -183,7 +200,7 @@ export async function syncFileHubDesignModel(c: Context<AppEnv>, input: Row) {
   }
 
   const previewUrl = `/api/file-hub/files/${encodeURIComponent(fileAssetId)}/preview`;
-  const role = roleFor(purposeCode, extension);
+  const role = roleFor(purposeCode, extension, input.isDtf === true);
   let files = Array.isArray(current.files) ? [...current.files] : [];
   const oldIndex = files.findIndex((row: Row) => text(row.id) === fileAssetId || text(row.fileHubAssetId) === fileAssetId);
   const fileRow = {
@@ -191,16 +208,18 @@ export async function syncFileHubDesignModel(c: Context<AppEnv>, input: Row) {
     fileHubAssetId:fileAssetId,
     fileName:text(input.fileName),
     role,
-    printAreaCode:"FRONT",
+    printAreaCode:role==="MODEL_IMAGE" ? "FRONT" : "",
     contentType:text(input.mimeType),
     size:Number(input.sizeBytes || 0),
     sourceSha256:text(input.sha256),
     sourceRelativePath:text(input.relativePath),
     sourceProvider:upper(input.providerType),
     storageConnectionId:text(input.storageConnectionId),
+    isDtf:input.isDtf===true,
+    previewStatus:["SOURCE_PSD","DTF_SOURCE","OUTGOING_DESIGN"].includes(role) ? "NOT_GENERATED" : "PENDING",
     bridgeManaged:false,
     fileHubManaged:true,
-    previewUrl: ["MODEL_IMAGE","PLACEMENT_PDF","RIP_PDF"].includes(role) ? previewUrl : "",
+    previewUrl: ["MODEL_IMAGE","PLACEMENT_PDF","RIP_PDF"].includes(role) || ["PSD","PSB","AI","PDF","TIF","TIFF"].includes(extension) ? previewUrl : "",
     thumbnailUrl: role === "MODEL_IMAGE" ? previewUrl : "",
     createdAt:text(input.createdAt || now()),
     updatedAt:now(),

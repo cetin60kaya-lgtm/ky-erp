@@ -1,5 +1,11 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 04.11.2026 — DESEN Google Drive tek model / DTF / PSD kaynak ilişki revizyonu (PR #517)
+- GitHub: [PR #517](https://github.com/cetin60kaya-lgtm/ky-erp/pull/517), dal `feature/desen-filehub-one-model-20261104`. 04.11 ön Drive incelemesinde RGB 2026: 347, yerleşim: 694, modeller/giden PSD: en az ilk 1.000 kayıt doğrulandı; asıl dosya klasörleri değişmedi.
+- Kod: MODEL ADI DTF kökünden DTF kaynak/RIP PDF ayırma, model adı+kodu alias doğrulama, çoklu model giden PSD için birden fazla canonical UUID ilişkisi, belirsiz firma/model eşleşmesinde güvenli durma, mevcut indeks için küçük parti yeniden eşleştirme, idempotent File Hub ilişki kontrolü, model kartında RGB/kaynak/yerleşim/giden PSD/DTF dosya grupları; bulut PDF yetkili görüntüleme/indirme ve sağlayıcı destekliyorsa PSD küçük thumbnail.
+- **Kabul sınırı:** Tam PSD Photoshop birleşik render / 508 dpi ayrı Windows işi; otomatik tam Drive indeks + 723 model/1.551 imalat güncel canlı saha kabulü henüz yok. Production D1 ve Drive üzerinde manuel yazma/taşıma/silme/OAuth işlemi yapılmadı. Kodun tek kabul kaydı: [DESEN tek model kapsamı](KY_ERP_DESEN_DRIVE_TEK_MODEL_KOD_KABUL_20261104.md).
+- Yayın durumu yalnız GitHub PR/CI/Cloudflare kanıtıyla güncellenir; PR birleştirilmeden canlı kabul edilmez.
+
 ## 04.11.2026 — Günlük Operasyon yeni personel kayıt zinciri onarıldı, Pages canlı (PR #516)
 - Kullanıcı kabul hatası: Günlük Personel Girişi / Hızlı Personel ekranında yeni oluşturulan personel seçili görünüyordu; Kaydet sonrasında vardiya kalıcı değildi, yeniden açma ihtiyacı doğuyordu. PR #514 dönem doğrulama onarımı bu ayrı problemi gidermiyordu.
 - Kök neden: Yeni kart sonrası `setRosterIds` yalnız React hafızasını değiştiriyor, `setRosterSaved(false)` bırakıyor, sunucudaki D1 dönem havuzuna yazmıyordu. Canlı senkron/yenileme geçici eklemeyi kaybettirebiliyordu. `saveQuick(true)` sonraki gün modalını açarken ana `selectedDate` eski günde kaldığından kayıt kapsamı uyumsuzluğu oluşuyordu.

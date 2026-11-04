@@ -3,7 +3,7 @@ import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { canManageOwnCompanyStorage } from "./file-hub-company-owner-access";
 import { syncFileHubDesignModel } from "./file-hub-design-sync";
-import { selectCloudModelBinding, canUseModelImageFolder } from "./file-hub-cloud-model-binding";
+import { selectCloudModelBinding, canUseModelImageFolder, classifyDesignSourcePath, matchExistingDesignModelNames, normalizeDesignModelKey } from "./file-hub-cloud-model-binding";
 import { prioritizeGoogleScanQueue } from "./file-hub-google-priority";
 
 type Bindings = Cloudflare.Env & {
@@ -363,9 +363,25 @@ function designModelIdentity(value: unknown) {
 }
 async function insertCloudDesignRelation(c:Context<AppEnv>,slug:string,fileAssetId:string,entityId:string,relationType:string,metadata:Row={}){
   if(!entityId) return;
+  // Tek bir Drive asset + model + rol bağlantısı tekrar taramalarda çoğalmaz.
+  const existing=await c.env.DB.prepare("SELECT id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='MODEL' AND entity_id=? AND relation_type=? LIMIT 1")
+    .bind(slug,fileAssetId,entityId,relationType).first<Row>();
+  if(existing?.id)return;
   const ts=now();
   await c.env.DB.prepare(`INSERT OR IGNORE INTO file_hub_relations(id,main_company_slug,file_asset_id,entity_type,entity_id,relation_type,is_primary,confidence,source,metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,0,1,'CLOUD_RULE',?,?,?)`)
     .bind(crypto.randomUUID(),slug,fileAssetId,"MODEL",entityId,relationType,JSON.stringify(metadata),ts,ts).run();
+}
+// Tek HTTP/scheduled batch boyunca model adlarını yalnız bir defa oku.
+const knownModelsByRequest=new WeakMap<object,Map<string,Promise<string[]>>>();
+async function knownDesignModelNames(c:Context<AppEnv>,slug:string){
+  let cache=knownModelsByRequest.get(c);
+  if(!cache){cache=new Map();knownModelsByRequest.set(c,cache);}
+  if(!cache.has(slug))cache.set(slug,(async()=>{
+    const rows=await c.env.DB.prepare("SELECT model_name,model_code FROM model_records WHERE main_company_slug=? AND COALESCE(TRIM(deleted_at),'')='' LIMIT 10000")
+      .bind(slug).all<Row>();
+    return [...new Set((rows.results||[]).flatMap((row:Row)=>[text(row.model_name),text(row.model_code)]).filter(Boolean))];
+  })());
+  return await cache.get(slug)!;
 }
 async function syncCloudDesignBinding(c:Context<AppEnv>,slug:string,connectionId:string,fileAssetId:string,item:Row,relativePath:string,provider:string){
   const result=await c.env.DB.prepare(`SELECT module_code,purpose_code,root_path
@@ -374,20 +390,45 @@ async function syncCloudDesignBinding(c:Context<AppEnv>,slug:string,connectionId
        AND module_code IN ('DESEN','DTF','IMALAT')
      ORDER BY LENGTH(root_path) DESC`).bind(slug,connectionId).all<Row>();
   const binding=selectCloudModelBinding(result.results||[],relativePath,text(item.name));
-  if(!binding) return null;
+  if(!binding)return null;
   const extension=upper(text(item.name).split(".").pop());
-  const purposeCode=upper(binding.purpose_code);
-  const modelName=designModelIdentity(item.name);
-  if(!modelName) return null;
-  const synced = await syncFileHubDesignModel(c,{
-    slug,fileAssetId,modelName,purposeCode,
-    fileName:text(item.name),extension,mimeType:text(item.mimeType),sizeBytes:Number(item.size||0),
-    sha256:text(item.checksum),relativePath,providerType:provider,storageConnectionId:connectionId,
-  });
-  // İlişkinin entity_id alanı model adı değil, gerçek canonical model UUID olmalı.
-  if (synced?.modelId) await insertCloudDesignRelation(c,slug,fileAssetId,synced.modelId,purposeCode,
-    {moduleCode:upper(binding.module_code),purposeCode,relativePath,provider});
-  return synced;
+  const classified=classifyDesignSourcePath(binding,relativePath);
+  const purposeCode=classified.isDtf && extension!=="PDF" ? "MODEL_SOURCE" : classified.purposeCode;
+  const names=await knownDesignModelNames(c,slug);
+  const sourceStem=designModelIdentity(item.name);
+  const folderMatches=classified.folderModelName
+    ? matchExistingDesignModelNames(names,classified.folderModelName).filter((name:string)=>normalizeDesignModelKey(name)===normalizeDesignModelKey(classified.folderModelName))
+    : [];
+  // Gelen kaynakta klasör adı baskın; yerleşim/giden üretimde yalnız bilinen
+  // model adlarını ara. Tire ve A/B varyantlarının gerçek model adını bozma.
+  const isRgb = purposeCode==="MODEL_IMAGE";
+  const otherMatches=classified.folderModelName ? folderMatches
+    : matchExistingDesignModelNames(names,sourceStem,{multi:purposeCode==="OUTGOING_DESIGN"});
+  // RGB ana görselde dosya adı TAM model adı olmalıdır. K-B_BOY, ILAVE vb.
+  // kısmi eşleşmeler ana görseli sessizce değiştiremez; inceleme bekler.
+  const candidates=isRgb
+    ? otherMatches.filter((name:string)=>normalizeDesignModelKey(name)===normalizeDesignModelKey(sourceStem))
+    : otherMatches;
+  const ambiguousRgb=isRgb && !candidates.length && otherMatches.length>0;
+  // Yeni model oluşturabilen tek legacy akış: tam yeni RGB dosya adı.
+  // PSD, PDF, AI, DTF ve kalıp dosyası tek başına yeni model oluşturamaz.
+  const selected=candidates.length ? candidates
+    : isRgb && !classified.folderModelName && !ambiguousRgb ? [sourceStem] : [];
+  if(!selected.length)return null;
+  let first:Row|null=null, matchedCount=0;
+  for(const modelName of selected){
+    const synced = await syncFileHubDesignModel(c,{
+      slug,fileAssetId,modelName,purposeCode,isDtf:classified.isDtf,
+      fileName:text(item.name),extension,mimeType:text(item.mimeType),sizeBytes:Number(item.size||0),
+      sha256:text(item.checksum),relativePath,providerType:provider,storageConnectionId:connectionId,
+    });
+    if(!synced?.modelId)continue;
+    await insertCloudDesignRelation(c,slug,fileAssetId,synced.modelId,classified.isDtf ? (extension==="PDF" ? "RIP_PDF" : "DTF_SOURCE") : purposeCode,
+      {moduleCode:upper(binding.module_code),purposeCode,relativePath,provider,isDtf:classified.isDtf});
+    matchedCount+=1;
+    first ||= synced;
+  }
+  return first ? {...first,matchedCount} : null;
 }
 
 
@@ -500,7 +541,9 @@ export async function ensureCloudModelImagePreview(c: Context<AppEnv>, slug: str
       WHERE a.id=? AND a.main_company_slug=? AND sc.provider_type='GOOGLE_DRIVE'
       LIMIT 1`,
   ).bind(assetId,slug).first<Row>();
-  if (!row || !["JPG","JPEG","PNG","WEBP"].includes(upper(row.extension))) return false;
+  const basicImageExtensions=["JPG","JPEG","PNG","WEBP"];
+  const documentPreviewExtensions=["PSD","PSB","AI","PDF","TIF","TIFF"];
+  if (!row || ![...basicImageExtensions,...documentPreviewExtensions].includes(upper(row.extension))) return false;
   const { accessToken } = await usableAccount(c,slug,text(row.oauth_account_id));
   const metadata = await providerJson(
     `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(text(row.provider_file_id))}?fields=thumbnailLink,mimeType`,
@@ -639,6 +682,27 @@ async function backfillIndexedCloudModelImages(c: Context<AppEnv>, slug: string,
   return linked;
 }
 
+// Eski bağ atamasından önce indekslenmiş dosyaları tekrar Drive'dan indirmeden
+// küçük, devam edebilir parçalarda tek model kimliğine bağla. Dosya taşıma yok.
+async function backfillIndexedCloudDesignFiles(c:Context<AppEnv>,slug:string,connectionId:string,provider:string,afterPath:string){
+  const query=async(after:string)=>await c.env.DB.prepare(
+    "SELECT a.id asset_id,a.file_name,a.extension,a.mime_type,a.size_bytes,l.relative_path,l.provider_file_id " +
+    "FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug " +
+    "WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1 " +
+    "AND l.relative_path>? AND lower(a.extension) IN ('jpg','jpeg','png','webp','pdf','psd','psb','ai','tif','tiff','svg','eps') " +
+    "ORDER BY l.relative_path LIMIT 8"
+  ).bind(slug,connectionId,after).all<Row>();
+  let rows=(await query(afterPath)).results||[];
+  if(!rows.length && afterPath)rows=(await query("")).results||[];
+  let matched=0;
+  for(const row of rows){
+    const item={id:text(row.provider_file_id),name:text(row.file_name),mimeType:text(row.mime_type),size:Number(row.size_bytes||0)};
+    const result=await syncCloudDesignBinding(c,slug,connectionId,text(row.asset_id),item,text(row.relative_path),provider);
+    if(result?.modelId)matched+=Number(result.matchedCount||1);
+  }
+  return {matched,lastPath:rows.length?text(rows[rows.length-1].relative_path):""};
+}
+
 async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId: string, pageLimit = 1, scheduled = false) {
   const { link, accessToken } = await connectionAccount(c, slug, connectionId);
   const providerType=upper(link.provider_type);
@@ -658,7 +722,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
 
   let cursor = resumed
     ? { ...meta.cloudSyncCursor, queue: meta.cloudSyncCursor.queue.map((f: Row) => ({ id: text(f.id), path: text(f.path), pageToken: text(f.pageToken) })) }
-    : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], pages: 0, files: 0, folders: 0, changedFiles: 0, modelSyncs: 0 };
+    : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], pages: 0, files: 0, folders: 0, changedFiles: 0, modelSyncs: 0, designBackfillPath:text(meta.designBackfillPath) };
   // Eski checkpoint korunur; yillar onceki klasorler 2026 islerini bloklamaz.
   prioritizeGoogleScanQueue(cursor.queue);
   let checkpoint = JSON.parse(JSON.stringify(cursor));
@@ -675,6 +739,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       lastSyncFiles: progress.files, lastSyncFolders: progress.folders,
       lastChangedFiles: progress.changedFiles, lastModelSyncs: progress.modelSyncs,
       ...(complete ? { lastLinkedImages: linkedImages, lastLinkedModels: linkedModels } : {}),
+      designBackfillPath:text(state.designBackfillPath || ""),
       cloudSyncLeaseId: complete || error || release ? null : leaseId,
       cloudSyncLeaseUntil: complete || error || release ? null : leaseUntil };
     if (JSON.stringify(data).length > 240000) throw Object.assign(new Error("Dosya tarama kuyruğu metadata sınırını aştı."), { code: "SYNC_CURSOR_TOO_LARGE" });
@@ -716,8 +781,12 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       checkpoint = JSON.parse(JSON.stringify(cursor));
     }
     const recoveredModelLinks = await backfillIndexedCloudModelImages(c, slug, connectionId, providerType);
+    const priorDesignFiles = await backfillIndexedCloudDesignFiles(c, slug, connectionId, providerType, text(cursor.designBackfillPath || meta.designBackfillPath));
+    cursor.designBackfillPath = priorDesignFiles.lastPath;
     modelSyncs += recoveredModelLinks;
     cursor.modelSyncs += recoveredModelLinks;
+    modelSyncs += priorDesignFiles.matched;
+    cursor.modelSyncs += priorDesignFiles.matched;
     const complete = cursor.queue.length === 0;
     if (complete) {
       const result = await c.env.DB.prepare("SELECT COUNT(DISTINCT l.file_asset_id) linked_images,COUNT(DISTINCT r.entity_id) linked_models FROM file_hub_locations l JOIN file_hub_relations r ON r.file_asset_id=l.file_asset_id AND r.main_company_slug=l.main_company_slug AND r.entity_type='MODEL' AND r.relation_type='MODEL_IMAGE' JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1")
