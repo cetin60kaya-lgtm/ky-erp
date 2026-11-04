@@ -1332,7 +1332,16 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
       size: file.size,
       createdAt: nowIso(),
     });
-    const saved = await saveModel(c, model.id, { ...model, files: [...model.files, row] }, slug);
+    const isModelPreview = row.role === "MODEL_IMAGE";
+    const saved = await saveModel(c, model.id, {
+      ...model,
+      files: [...model.files, row],
+      status: isModelPreview && model.status === "MODEL_INFO_MISSING" ? "NEW_ARRIVAL" : model.status,
+      metadata: {
+        ...objectOf(model.metadata),
+        previewStatus: isModelPreview ? "READY" : objectOf(model.metadata).previewStatus,
+      },
+    }, slug);
     const analyzed = await analyzeAndSave(c, saved, slug);
     return c.json({ ok: true, success: true, data: { file: row, model: analyzed } }, 201);
   });
