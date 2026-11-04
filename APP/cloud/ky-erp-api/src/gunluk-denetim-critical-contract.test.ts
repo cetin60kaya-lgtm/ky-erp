@@ -18,7 +18,8 @@ test("period lock fails closed across check-only, roster, adjustments, and front
   assert.match(worker,/async function saveFocused[\s\S]*?if \(await lockedPeriod\(c, companyId, date\)\)/);
   assert.match(worker,/async function saveRoster[\s\S]*?if \(await lockedRange\(c, companyId, start, end\)\)/);
   assert.match(frontend,/action: next \? "LOCK" : "UNLOCK"/);
-  assert.match(frontend,/getDailyPeriodLock\(\{ mainCompanyId: companyId, date: selectedDate \}\)/);
+  assert.match(frontend,/getDailyPeriodLock\(\{ mainCompanyId: companyId, startDate: range\.start, endDate: range\.end \}\)/);
+  assert.match(frontend,/assessDailyPeriodLocks\(lockResult\.value/);
   assert.match(frontend,/setPeriodLockKnown\(false\)/);
 });
 test("two-PC note/check mutations have immutable optimistic concurrency keys and reject stale writes",()=>{
