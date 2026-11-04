@@ -55,6 +55,10 @@ function PlacementModal({ activeMainCompany, model, operation, onClose, onSaved 
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   const save = async () => {
     if (busy) return;
+    if (draft.productionReady && draft.placementStatus !== "READY") {
+      setMessage("Üretime hazır işaretlemek için yerleşim durumu da Hazır olmalıdır.");
+      return;
+    }
     const ready = draft.placementStatus === "READY" || draft.productionReady;
     const width = Number(draft.moldWidth), height = Number(draft.moldHeight);
     if (ready && (draft.moldType === "UNDEFINED" || !Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0)) {
