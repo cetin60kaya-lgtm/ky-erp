@@ -79,8 +79,9 @@ jobs:
           project="$(curl --fail --silent --show-error -H "$auth" "$base")"
           jq -e --arg b "$PROD_BRANCH" '.success == true and .result.production_branch == $b' <<<"$project" >/dev/null
           echo "Canonical deployment URL: $(jq -r '.result.canonical_deployment.url // empty' <<<"$project")"
-          marker_file="$(grep -R -l --include='*.js' 'KY ERP Yönetim Merkezi' APP/app/ky-erp-frontend/dist/assets | head -1 || true)"
-          test -n "$marker_file" || { echo "Platform Yönetimi marker chunk build içinde bulunamadı." >&2; exit 1; }
+          marker_file="$(find APP/app/ky-erp-frontend/dist/assets -maxdepth 1 -type f -name 'DailyHrWorkspace-*.js' -print -quit)"
+          test -n "$marker_file" || { echo "Günlük Operasyon canonical chunk build içinde bulunamadı." >&2; exit 1; }
+          grep -q 'KİLİT DOĞRULANAMADI' "$marker_file" || { echo "Günlük Operasyon yeni kilit güvenlik sözleşmesi build içinde yok." >&2; exit 1; }
           marker_asset="/assets/$(basename "$marker_file")"
           marker_sha="$(sha256sum "$marker_file" | awk '{print $1}')"
           ready=0
@@ -89,9 +90,9 @@ jobs:
             live_sha=""
             if [ "$code" = "200" ]; then
               live_sha="$(sha256sum /tmp/kyerp-live-admin.js | awk '{print $1}')"
-              if [ "$live_sha" = "$marker_sha" ] && grep -q 'KY ERP Yönetim Merkezi' /tmp/kyerp-live-admin.js; then
+              if [ "$live_sha" = "$marker_sha" ] && grep -q 'KİLİT DOĞRULANAMADI' /tmp/kyerp-live-admin.js; then
                 ready=1
-                echo "Canlı Platform Yönetimi chunk doğrulandı: $marker_asset sha=$live_sha"
+                echo "Canlı Günlük Operasyon chunk SHA256 ve yeni dönem kilidi kodu doğrulandı: $marker_asset sha=$live_sha"
                 break
               fi
             fi
