@@ -22,7 +22,7 @@ Bu 4 ana ekran dışında, işlevi onaylanmamış yeni "Giden Desenler", "DTF", 
 - Asıl PSD/AI/PDF dosyalarını veya diğer firmalara ait kayıtları taşıma, silme, kamusallaştırma, kopyalama yok. Model kapatılması/aktarım, onay ve mevcut erişim kontrolleri korunur.
 
 ## 4. Tam kabul için bekleyen gerçek kontroller
-- Cloudflare Pages frontend için lint/test/build, Worker typecheck/test/dry-run, ilgili Desen kontrat testleri: **bu revizyon dalında henüz çalıştırılmış/test sonucu alınmış değildir**.
+- **Kod CI PASS:** [Run #41783410744](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41783410744) · commit `7d948835918e56864372657cc237410a25082764` · frontend lint/test/build ve Worker typecheck/test/build tamamı başarılı. Yetkili tarayıcı ve gerçek Drive dosya eşleştirme kabulü ayrı bekliyor.
 - Görsel için gerçek yetkili kullanıcı oturumunda `MODEL_IMAGE` (JPEG), File Hub kaynaklı önizleme, boş 377 model, PDF/PSD için önizleme yok/error ve 403/404 durumları.
 - Google Drive 2026 model görsellerinin File Hub indeks eşleştirmesi; 723 model sayısı ve sıfır mükerrer, `placementFileId` kalıcı geri okuma, Boyahane/İmalat hedefi.
 - Masaüstü 1600x900 / 1366x768, tablet ve Android dokunmatik dört ekran; teknik modal kapanmadan kaydetme/geri açma.
