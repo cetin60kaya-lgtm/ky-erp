@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 04.11.2026 — DESEN tek menü / dosya / teknik iş akışı revizyon dalı
+- Dal: `refactor/desen-tek-merkez-20261104`; production tabanı `695e8b02`. Dört görünür sekme tek “Desen Merkezi” grubunda: Gelen Desenler, Desen Havuzu, Yerleşim/Kalıp, Kontrol & Rapor.
+- Gelen R2 kuyruğuyla Google Drive File Hub indeksinin ayrı kaynaklar olduğu kullanıcıya açıkça gösterilir; gizli 30 saniyelik R2 POST tarama kaldırıldı.
+- Özel dosya önizlemesi `apiFetch` kimliğiyle Blob üzerinden yapılır, token URL'ye eklenmez. Modelin eksik önizlemesi kendi UUID'sine bağlanır; yerleşimde dosya/kalıp/hazır olma kontrolü sertleştirildi.
+- **Durum: PR #513 taslak, kod CI PASS.** [GitHub run #41783410744](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41783410744) frontend lint/test/build ve Worker typecheck/test/build başarılı; Cloudflare merge/yayın, yetkili tarayıcı ve Drive 2026 görsel eşleştirme kabulü henüz yapılmadı. Canlı D1/Drive kaydı değiştirilmedi.
+- İşin ayrıntısı ve kalan kabul kapıları: [DESEN tek merkez revizyon kaydı](KY_ERP_DESEN_TEK_MERKEZ_REVIZYON_KABUL_2026-11-04.md).
+
 ## 03.11.2026 — 2026 Excel → Desen Havuzu ve İmalat canlı kayıt kabulü
 - Canlı Hakan Emp D1: 346 mevcut modele 377 görselsiz model eklendi; **723 model_records + 723 DESEN_WORKFLOW_MODEL** doğrulandı.
 - **1.551** adet 2026 imalat kaydı + **1.551** model_production_links; kopuk ilişki **0**, tekrar çalıştırma dry-run'ında yeni iş **0**.

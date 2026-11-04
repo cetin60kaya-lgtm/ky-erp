@@ -9,7 +9,6 @@ import {
   ImageOff,
   Images,
   LoaderCircle,
-  Play,
   RefreshCw,
   ScanLine,
   Search,
@@ -24,10 +23,9 @@ import {
   processDesignInboxBulk,
   scanDesignInbox,
 } from "../../services/desenWorkflowApi";
-import { openDesenImportFolder } from "../../services/desenApi";
 import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import {
-  assetUrl,
+  DesenImage,
   EmptyState,
   formatDate,
   ImagePreview,
@@ -42,12 +40,11 @@ const EMPTY_INBOX = {
   summary: { readyFiles: 0, suggestedGroups: 0, missingModelImage: 0, missingChannelImage: 0, duplicates: 0, errors: 0 },
 };
 
-export default function DesenModelMasasi({ activeMainCompany }) {
+export default function DesenModelMasasi({ activeMainCompany, openModule }) {
   const [inbox, setInbox] = useState(EMPTY_INBOX);
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
-  const [autoScan, setAutoScan] = useState(false);
   const [message, setMessage] = useState("");
   const [scanOpen, setScanOpen] = useState(false);
   const [activeGroup, setActiveGroup] = useState(null);
@@ -90,11 +87,6 @@ export default function DesenModelMasasi({ activeMainCompany }) {
   }, [activeMainCompany, scanning]);
 
   useEffect(() => { load(); }, [activeMainCompany?.slug, load]);
-  useEffect(() => {
-    if (!autoScan) return undefined;
-    const timer = window.setInterval(() => runScan(false), 30000);
-    return () => window.clearInterval(timer);
-  }, [autoScan, activeMainCompany?.slug, runScan]);
 
   const groups = useMemo(() => showErrors
     ? inbox.groups.filter((group) => ["ERROR", "UNSUPPORTED"].includes(group.status))
@@ -102,18 +94,6 @@ export default function DesenModelMasasi({ activeMainCompany }) {
   [inbox.groups, showErrors]);
 
   const openGroup = (group) => { setActiveGroup(group); setScanOpen(true); };
-  const openFolder = async () => {
-    try {
-      const result = await openDesenImportFolder(activeMainCompany);
-      if (result?.opened === false) {
-        setMessage(result?.message || `Canlı sistemde fiziksel klasör açılamaz. Kaynak: ${result?.path || "R2 desen gelen alanı"}.`);
-        return;
-      }
-      setMessage(result?.message || "Desen gelen klasörü açıldı.");
-    } catch (error) {
-      setMessage(error?.message || "Klasör açılamadı.");
-    }
-  };
 
   const summaryCards = [
     ["Hazır Dosya", inbox.summary.readyFiles, CheckCircle2, "green"],
@@ -127,19 +107,19 @@ export default function DesenModelMasasi({ activeMainCompany }) {
   return <>
     <section className="dsg-toolbar-card">
       <div className="dsg-toolbar-main">
-        <button className="dsg-btn primary" onClick={() => runScan(true)} disabled={scanning}>{scanning ? <LoaderCircle className="spin" size={16} /> : <ScanLine size={16} />} Bulut Gelenleri Tara</button>
-        <button className={`dsg-btn ${autoScan ? "active" : ""}`} onClick={() => setAutoScan((value) => !value)}><Play size={16} /> Otomatik Tarama {autoScan ? "Açık" : "Kapalı"}</button>
+        <button className="dsg-btn primary" onClick={() => runScan(true)} disabled={scanning}>{scanning ? <LoaderCircle className="spin" size={16} /> : <ScanLine size={16} />} R2 Gelenleri Tara</button>
         <button className="dsg-btn" onClick={load}><RefreshCw size={16} /> Yenile</button>
-        <button className="dsg-btn" onClick={openFolder}><FolderOpen size={16} /> Klasörü Aç</button>
+        {openModule ? <button className="dsg-btn" onClick={() => openModule("depolama", { tabKey: "depolama-senkronizasyon" })}><FolderOpen size={16} /> Drive / File Hub Kontrol</button> : null}
         <button className={`dsg-btn ${showErrors ? "active danger" : ""}`} onClick={() => setShowErrors((value) => !value)}><AlertTriangle size={16} /> Hatalı Dosyalar</button>
       </div>
-      <div className="dsg-scan-meta"><Clock3 size={16} /><span>Son tarama</span><strong>{formatDate(inbox.lastScanAt)}</strong><code>{inbox.folderPath || "STORAGE/desen/gelen"}</code></div>
+      <div className="dsg-scan-meta"><Clock3 size={16} /><span>R2 kuyruk durumu</span><strong>{formatDate(inbox.lastScanAt)}</strong><code>{inbox.folderPath || "STORAGE/desen/gelen"}</code></div>
     </section>
     {message && <div className="dsg-page-message">{message}</div>}
+    <p className="dsg-inbox-origin-note"><strong>Kaynak ayrımı:</strong> Google Drive dosyaları File Hub üzerinden mevcut model kartlarıyla eşleştirilir. Buradaki gelen kuyruğu yalnız uygulama üzerinden R2'ye yüklenmiş, henüz işlenmemiş dosyaları gösterir; sıfır grup olması Drive'ın boş olduğu anlamına gelmez.</p>
     <section className="dsg-summary-grid">{summaryCards.map(([label, value, Icon, tone]) => <article className={tone} key={label}><Icon size={22} /><div><span>{label}</span><strong>{value}</strong></div></article>)}</section>
     <section className="dsg-card dsg-inbox-list-card">
       <header className="dsg-card-head"><div><h2>Gelen model grupları</h2><p>Aynı model köküne sahip görseller birlikte önerilir; son karar kullanıcıya aittir.</p></div><span>{groups.length} grup</span></header>
-      {loading ? <div className="dsg-loading"><LoaderCircle className="spin" /> Gerçek veriler yükleniyor…</div> : groups.length === 0 ? <EmptyState icon={FolderOpen} title={showErrors ? "Hatalı dosya yok" : "Gelen klasörde bekleyen grup yok"} text="Yeni model veya kanal görsellerini gelen klasöre bırakıp taramayı başlatın." action={<button className="dsg-btn primary" onClick={() => runScan(true)}><ScanLine size={16} /> Klasörü Tara</button>} /> : <div className="dsg-inbox-table"><div className="dsg-inbox-row head"><span>Önizleme</span><span>Tahmini Model</span><span>Dosya</span><span>Model Görseli</span><span>Kanal Görseli</span><span>Durum</span><span>İşlem</span></div>{groups.map((group) => <button className="dsg-inbox-row" key={group.id} onClick={() => openGroup(group)}><span className="dsg-row-thumb">{group.files.find((file) => file.metadata?.imagePreview) ? <img src={assetUrl(group.files.find((file) => file.metadata?.imagePreview).previewUrl)} alt="" /> : <FileImage size={22} />}</span><strong>{group.modelName}</strong><span>{group.fileCount} dosya</span><span>{group.hasModelImage ? <CheckCircle2 className="ok" size={18} /> : <XCircle className="missing" size={18} />}</span><span>{group.hasChannelImage ? <CheckCircle2 className="ok" size={18} /> : <XCircle className="missing" size={18} />}</span><StatusBadge value={group.status}>{group.status === "READY" ? "Kontrole Hazır" : group.status}</StatusBadge><span className="dsg-btn compact"><Settings2 size={15} /> Kontrol Et</span></button>)}</div>}
+      {loading ? <div className="dsg-loading"><LoaderCircle className="spin" /> Gerçek veriler yükleniyor…</div> : groups.length === 0 ? <EmptyState icon={FolderOpen} title={showErrors ? "Hatalı dosya yok" : "Gelen klasörde bekleyen grup yok"} text="Bu R2 kuyruğunda bekleyen dosya yok. Google Drive kaynakları ayrı File Hub indeksinden model kartlarına bağlanır." action={<button className="dsg-btn primary" onClick={() => runScan(true)}><ScanLine size={16} /> R2 Klasörünü Tara</button>} /> : <div className="dsg-inbox-table"><div className="dsg-inbox-row head"><span>Önizleme</span><span>Tahmini Model</span><span>Dosya</span><span>Model Görseli</span><span>Kanal Görseli</span><span>Durum</span><span>İşlem</span></div>{groups.map((group) => <button className="dsg-inbox-row" key={group.id} onClick={() => openGroup(group)}><span className="dsg-row-thumb">{group.files.find((file) => file.metadata?.imagePreview) ? <DesenImage src={group.files.find((file) => file.metadata?.imagePreview).previewUrl} alt="" /> : <FileImage size={22} />}</span><strong>{group.modelName}</strong><span>{group.fileCount} dosya</span><span>{group.hasModelImage ? <CheckCircle2 className="ok" size={18} /> : <XCircle className="missing" size={18} />}</span><span>{group.hasChannelImage ? <CheckCircle2 className="ok" size={18} /> : <XCircle className="missing" size={18} />}</span><StatusBadge value={group.status}>{group.status === "READY" ? "Kontrole Hazır" : group.status}</StatusBadge><span className="dsg-btn compact"><Settings2 size={15} /> Kontrol Et</span></button>)}</div>}
     </section>
     {scanOpen && <InboxScanModal activeMainCompany={activeMainCompany} companies={companies} inbox={inbox} initialGroup={activeGroup} scanning={scanning} onScan={() => runScan(false)} onClose={() => { setScanOpen(false); setActiveGroup(null); }} onEdit={(group) => setEditorGroup(group)} onChanged={async () => { await load(); setActiveGroup(null); }} />}
     {editorGroup && <ModelEditorModal activeMainCompany={activeMainCompany} companies={companies} inboxGroup={editorGroup} onClose={() => setEditorGroup(null)} onSaved={async () => { setEditorGroup(null); setScanOpen(false); await load(); }} />}
@@ -210,7 +190,7 @@ function InboxScanModal({ activeMainCompany, companies, inbox, initialGroup, sca
   return <WideModal title="Gelen Desen Dosyalarını Kontrol Et" subtitle="Tümünü seçin, firmayı belirleyin ve desenleri toplu kaydedin." onClose={onClose} footer={<><span className="dsg-foot-message">{message}</span><button className="dsg-btn ghost" disabled={busy} onClick={onClose}>Vazgeç</button><button className="dsg-btn danger" disabled={busy || !selectedIds.length} onClick={moveError}>Hatalı Klasörüne Gönder</button><button className="dsg-btn" disabled={busy || !selectedIds.length} onClick={ignore}>Yok Say</button><button className="dsg-btn primary" disabled={busy || !companyId || !selectedGroups.length} onClick={bulkSave}>{busy ? "Kaydediliyor…" : `Seçili Firmaya Toplu Kaydet (${selectedGroups.length})`}</button></>}>
     <div className="dsg-scan-tools"><button className="dsg-btn" onClick={onScan} disabled={scanning || busy}>{scanning ? <LoaderCircle className="spin" size={16} /> : <ScanLine size={16} />} Yeniden Tara</button><button className="dsg-btn primary" disabled={busy || !selectableFiles.length} onClick={selectAll}>Tümünü Seç ({selectableFiles.length})</button><button className="dsg-btn" disabled={busy} onClick={() => setSelectedIds([])}>Seçimi Temizle</button><select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="ALL">Tüm Dosyalar</option><option value="READY">Hazır Dosyalar</option><option value="MODEL_IMAGE">Model Görselleri</option><option value="CHANNEL_IMAGE">Kanal Görselleri</option></select><div className="dsg-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Dosya veya model ara" /></div><strong className="dsg-selection-count">{selectedGroups.length} grup / {selectedIds.length} dosya seçili</strong></div>
     <div className="dsg-scan-layout">
-      <aside className="dsg-scan-list"><h3>Dosya grupları <span>{groups.length}</span></h3>{groups.map((item) => { const selectedCount = item.files.filter((child) => selectedIds.includes(child.id)).length; return <div key={item.id} className={`dsg-scan-group ${group?.id === item.id ? "active" : ""} ${selectedCount ? "selected" : ""}`}><button onClick={() => setSelectedGroupId(item.id)}><strong>{item.modelName}</strong><small>{item.fileCount} dosya · {item.status} · {selectedCount ? `${selectedCount} seçili` : "seçilmedi"}</small></button>{group?.id === item.id && item.files.map((child, index) => <button key={child.id} className={`dsg-scan-file ${file?.id === child.id ? "active" : ""}`} onClick={() => setFileIndex(index)}><input type="checkbox" disabled={busy || !["READY", "DUPLICATE"].includes(child.status)} checked={selectedIds.includes(child.id)} onChange={(event) => { event.stopPropagation(); setSelectedIds((current) => event.target.checked ? [...new Set([...current, child.id])] : current.filter((id) => id !== child.id)); }} /><span className="dsg-file-mini">{child.metadata?.imagePreview ? <img src={assetUrl(child.previewUrl)} alt="" /> : <FileImage size={18} />}</span><span><strong>{child.fileName}</strong><small>{child.suggestedRole} · {(child.fileSize / 1024).toFixed(1)} KB</small></span><StatusBadge value={child.status}>{child.status}</StatusBadge></button>)}</div>; })}</aside>
+      <aside className="dsg-scan-list"><h3>Dosya grupları <span>{groups.length}</span></h3>{groups.map((item) => { const selectedCount = item.files.filter((child) => selectedIds.includes(child.id)).length; return <div key={item.id} className={`dsg-scan-group ${group?.id === item.id ? "active" : ""} ${selectedCount ? "selected" : ""}`}><button onClick={() => setSelectedGroupId(item.id)}><strong>{item.modelName}</strong><small>{item.fileCount} dosya · {item.status} · {selectedCount ? `${selectedCount} seçili` : "seçilmedi"}</small></button>{group?.id === item.id && item.files.map((child, index) => <button key={child.id} className={`dsg-scan-file ${file?.id === child.id ? "active" : ""}`} onClick={() => setFileIndex(index)}><input type="checkbox" disabled={busy || !["READY", "DUPLICATE"].includes(child.status)} checked={selectedIds.includes(child.id)} onChange={(event) => { event.stopPropagation(); setSelectedIds((current) => event.target.checked ? [...new Set([...current, child.id])] : current.filter((id) => id !== child.id)); }} /><span className="dsg-file-mini">{child.metadata?.imagePreview ? <DesenImage src={child.previewUrl} alt="" /> : <FileImage size={18} />}</span><span><strong>{child.fileName}</strong><small>{child.suggestedRole} · {(child.fileSize / 1024).toFixed(1)} KB</small></span><StatusBadge value={child.status}>{child.status}</StatusBadge></button>)}</div>; })}</aside>
       <main className="dsg-scan-preview"><ImagePreview src={file?.previewUrl} alt={file?.fileName} /><Pager index={fileIndex} count={group?.files.length || 0} onPrevious={() => setFileIndex((value) => Math.max(0, value - 1))} onNext={() => setFileIndex((value) => Math.min((group?.files.length || 1) - 1, value + 1))} />{file && <dl><dt>Dosya adı</dt><dd>{file.fileName}</dd><dt>Tahmini rol</dt><dd>{file.suggestedRole}</dd><dt>Değiştirilme</dt><dd>{formatDate(file.modifiedAt)}</dd><dt>SHA-256</dt><dd><code>{file.fileHash || "Dosya henüz hazır değil"}</code></dd></dl>}</main>
       <aside className="dsg-scan-settings"><h3>Toplu kayıt ayarları</h3><label className="dsg-bulk-company"><span>Kaydedilecek firma</span><select value={companyId} disabled={busy} onChange={(event) => setCompanyId(event.target.value)}><option value="">Firma seçin</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label><div className="dsg-group-summary"><strong>{selectedGroups.length} desen grubu seçili</strong><span>{selectedIds.length} dosya toplu kaydedilecek</span><div><StatusBadge value={companyId ? "READY" : "UNRESOLVED"}>{companyId ? "Firma belirlendi" : "Firma seçilmedi"}</StatusBadge></div></div><p>Tüm seçili desenler, seçtiğiniz firmaya ayrı model kartları olarak kaydedilir. Kanal bilgileri daha sonra tamamlanabilir.</p><button className="dsg-btn primary full" disabled={busy || !companyId || !selectedGroups.length} onClick={bulkSave}>{busy ? "Toplu kayıt yapılıyor…" : "Kaydet ve Bitir"}</button><button className="dsg-btn full" disabled={busy || !group} onClick={() => onEdit(group)}><Settings2 size={16} /> Seçili Grubu Ayrıntılı Düzenle</button></aside>
     </div>

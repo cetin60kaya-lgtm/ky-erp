@@ -45,16 +45,13 @@ export const MODULES = [
     icon: "desen",
     groups: [
       {
-        label: "Desen İşlemleri",
+        label: "Desen Merkezi",
         tabs: [
-          ["gelen-desenler", "Gelen Desenler", "dashboard"],
+          ["gelen-desenler", "Gelen Desenler", "upload"],
           ["desen-modeller", "Desen Havuzu", "dosya"],
           ["desen-yerlesim-is-akisi", "Yerleşim / Kalıp", "file-check"],
+          ["desen-raporlari", "Kontrol & Rapor", "raporlar"],
         ],
-      },
-      {
-        label: "Rapor",
-        tabs: [["desen-raporlari", "Desen Raporları", "raporlar"]],
       },
     ],
   },

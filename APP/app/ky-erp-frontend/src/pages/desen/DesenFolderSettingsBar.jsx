@@ -94,43 +94,44 @@ export default function DesenFolderSettingsBar() {
   const cloudPending = cloudRows.some((row) => row.syncMode !== "CLOUD_API" || row.connectionStatus !== "CONNECTED" || !row.remoteRootId);
 
   return (
-    <>
-      <section className="dsg-toolbar-card dsg-storage-status">
-        <div className="dsg-toolbar-main">
-          <span className={`dsg-btn ${connected.length ? "active" : ""}`}>
-            {busy ? <LoaderCircle className="spin" size={16} /> : connected.length ? <ShieldCheck size={16} /> : <Cloud size={16} />}
-            {connected.length ? `File Hub bağlı · ${providerLabel(primaryProvider)}` : "Desen depolaması bekliyor"}
-          </span>
-          {directReady ? <span className="dsg-btn active"><Cloud size={16} />Doğrudan bulut senkronu aktif</span> : null}
-          {agentOnly ? <span className="dsg-btn"><Cloud size={16} />Bulut kaydı Agent modunda</span> : null}
-          {cloudPending && !directReady ? <span className="dsg-btn"><TriangleAlert size={16} />Doğrudan bulut bağlantısı tamamlanmadı</span> : null}
+    <section className="dsg-toolbar-card dsg-storage-status" aria-label="Desen dosya bağlantıları">
+      <div className="dsg-storage-overview">
+        <div className="dsg-storage-title">
+          {busy ? <LoaderCircle className="spin" size={17} /> : connected.length ? <ShieldCheck size={17} /> : <TriangleAlert size={17} />}
+          <div>
+            <strong>Dosya bağlantıları · {connected.length}/{TARGETS.length}</strong>
+            <small>{connected.length
+              ? `${providerLabel(primaryProvider)} · ${directReady ? "Bulut bağlantısı hazır" : "Dosya hedefi tanımlı"}`
+              : "Desen için dosya kaynağı tanımlanmalı"}</small>
+          </div>
+        </div>
+        <div className="dsg-storage-actions">
+          {cloudPending ? <span className="dsg-storage-alert"><TriangleAlert size={14} /> Bulut ayarı eksik</span> : null}
+          {agentOnly ? <span className="dsg-storage-hint">Agent modunda</span> : null}
           <button className="dsg-btn" type="button" disabled={busy} onClick={load}>
-            {busy ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}
-            Depolamayı Yenile
+            <RefreshCw size={15} /> Yenile
           </button>
         </div>
-
+      </div>
+      {message ? <div className="dsg-page-message" role="status">{message}</div> : null}
+      <details className="dsg-storage-details">
+        <summary>Kaynak ve senkronizasyon ayrıntıları</summary>
         <div className="dsg-storage-facts">
           {targets.map((row) => (
-            <span key={row.purposeCode}>
-              {row.ok ? <CheckCircle2 size={14} /> : <TriangleAlert size={14} />}
-              <strong>{row.label}:</strong>{" "}
-              {row.ok
-                ? `${row.connectionName || providerLabel(row.provider)} · ${row.rootPath || row.localRootPath || row.remoteRootName || "/"} · ${row.syncMode || "mod bilinmiyor"} · ${row.connectionStatus || "durum bilinmiyor"}${row.exact ? "" : " · firma varsayılanı"}`
-                : "Atama yok"}
-            </span>
+            <div key={row.purposeCode} className="dsg-storage-fact">
+              {row.ok ? <CheckCircle2 size={16} /> : <TriangleAlert size={16} />}
+              <div>
+                <strong>{row.label}</strong>
+                <span>{row.ok
+                  ? `${row.connectionName || providerLabel(row.provider)} · ${row.rootPath || row.localRootPath || row.remoteRootName || "/"} · ${row.syncMode || "Mod bilinmiyor"} · ${row.connectionStatus || "Durum bilinmiyor"}${row.exact ? "" : " · Firma varsayılanı"}`
+                  : "Atama yok"}</span>
+                {row.ok ? <small>Son doğrulanmış tarama: {formatSync(row.lastSyncAt)}{row.lastError ? ` · Hata: ${row.lastError}` : ""}</small> : null}
+              </div>
+            </div>
           ))}
-          {connected.map((row) => row.ok ? (
-            <span key={`sync-${row.purposeCode}`}>
-              <RefreshCw size={14} /><strong>{row.label} son senkron:</strong> {formatSync(row.lastSyncAt)}
-              {row.lastError ? ` · Hata: ${row.lastError}` : ""}
-            </span>
-          ) : null)}
-          <span><FolderOpen size={14} /><strong>Orijinal dosya:</strong> seçilen Google / Microsoft / Yerel / NAS kaynağında kalır.</span>
-          <span><Cloud size={14} /><strong>R2:</strong> yalnız web önizleme / cache; Desen ana arşivi değildir.</span>
         </div>
-      </section>
-      {message ? <div className="dsg-page-message">{message}</div> : null}
-    </>
+        <p className="dsg-storage-note"><FolderOpen size={14} /> Orijinal PSD/AI/PDF, seçili bulut veya yerel sağlayıcıda kalır. R2 yalnız yükleme, önizleme ve önbellek içindir.</p>
+      </details>
+    </section>
   );
 }

@@ -21,6 +21,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { apiUrl } from "../../utils/api";
+import DesenImage from "./DesenImage";
 import {
   createDesignOperation,
   createDesignModel,
@@ -34,6 +35,8 @@ import {
   updateDesignModel,
   updateDesignOperation,
 } from "../../services/desenWorkflowApi";
+
+export { DesenImage };
 
 export const PRINT_AREAS = [
   ["FRONT", "Ön"],
@@ -262,8 +265,8 @@ export function ImagePreview({ src, alt = "Desen önizleme", className = "" }) {
         </button>
       </div>
       <div className="dsg-image-stage">
-        <img
-          src={assetUrl(src)}
+        <DesenImage
+          src={src}
           alt={alt}
           style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
         />
@@ -603,7 +606,7 @@ export function ModelEditorModal({
       <div className="dsg-editor-summary">
         <div className="dsg-summary-image">
           {mainImage ? (
-            <img src={assetUrl(mainImage)} alt="Model" />
+            <DesenImage src={mainImage} alt="Model" />
           ) : (
             <FileImage size={28} />
           )}
@@ -1446,7 +1449,7 @@ export function ModelDetailModal({
       <div className="dsg-editor-summary">
         <div className="dsg-summary-image">
           {model.mainImage ? (
-            <img src={assetUrl(model.mainImage.previewUrl)} alt="Model" />
+            <DesenImage src={model.mainImage.previewUrl} alt="Model" />
           ) : (
             <FileImage />
           )}

@@ -27,14 +27,14 @@ const SCREEN_COPY = {
       "Baskı bölgesi bazlı yerleşim ve kalıp işlerini teknik kuyrukta tamamlayın.",
   },
   "desen-raporlari": {
-    title: "Desen Raporları",
+    title: "Kontrol & Rapor",
     description:
       "Desen hazırlık sürecini gerçek kayıtlar ve filtreli CSV çıktısıyla izleyin.",
   },
   "gelen-desenler": {
     title: "Gelen Desenler",
     description:
-      "File Hub'a bağlı Google Drive, Microsoft, yerel klasör veya NAS kaynağından gelen desenleri tek model kartına bağlayın. Uygulama içi yüklemelerde R2 yalnız geçici/önizleme alanı olarak kullanılır.",
+      "Google Drive ve diğer kaynaklar File Hub üzerinden modellere bağlanır; bu ekran R2 gelen dosya kuyruğunu ve kaynak bağlantılarını gösterir.",
   },
 };
 
@@ -57,6 +57,7 @@ function renderScreen(screenKey, activeMainCompany, inboxRevision, openModule) {
     <DesenModelMasasi
       key={`${activeMainCompany?.slug || "company"}-${inboxRevision}`}
       activeMainCompany={activeMainCompany}
+      openModule={openModule}
     />
   );
 }
