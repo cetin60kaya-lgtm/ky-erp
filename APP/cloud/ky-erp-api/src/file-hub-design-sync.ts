@@ -219,7 +219,7 @@ export async function syncFileHubDesignModel(c: Context<AppEnv>, input: Row) {
     previewStatus:["SOURCE_PSD","DTF_SOURCE","OUTGOING_DESIGN"].includes(role) ? "NOT_GENERATED" : "PENDING",
     bridgeManaged:false,
     fileHubManaged:true,
-    previewUrl: ["MODEL_IMAGE","PLACEMENT_PDF","RIP_PDF"].includes(role) ? previewUrl : "",
+    previewUrl: ["MODEL_IMAGE","PLACEMENT_PDF","RIP_PDF"].includes(role) || ["PSD","PSB","AI","PDF","TIF","TIFF"].includes(extension) ? previewUrl : "",
     thumbnailUrl: role === "MODEL_IMAGE" ? previewUrl : "",
     createdAt:text(input.createdAt || now()),
     updatedAt:now(),
