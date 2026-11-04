@@ -57,6 +57,7 @@ function renderScreen(screenKey, activeMainCompany, inboxRevision, openModule) {
     <DesenModelMasasi
       key={`${activeMainCompany?.slug || "company"}-${inboxRevision}`}
       activeMainCompany={activeMainCompany}
+      openModule={openModule}
     />
   );
 }
