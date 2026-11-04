@@ -43,3 +43,69 @@ export function selectCloudModelBinding(
   matching.sort((a,b) => normalizeFileHubFolder(b.root_path).length - normalizeFileHubFolder(a.root_path).length);
   return matching[0] ?? null;
 }
+
+
+/**
+ * Dosya adı tek başına model değildir. Önce doğrulanmış klasör yolunu inceler,
+ * ardından var olan model adlarını okur. Fiziksel dosyayı taşımaz veya yeni
+ * model üretmez. Çoklu model PSD'leri ayrı ilişkiler olarak korunabilir.
+ */
+export function normalizeDesignModelKey(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[ıİ]/g, "I").replace(/[çÇ]/g, "C")
+    .replace(/[ğĞ]/g, "G").replace(/[öÖ]/g, "O")
+    .replace(/[şŞ]/g, "S").replace(/[üÜ]/g, "U")
+    .toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+export function classifyDesignSourcePath(
+  binding: CloudModelBinding,
+  relativePath: string,
+): { purposeCode: string; folderModelName: string; isDtf: boolean } {
+  const root = normalizeFileHubFolder(binding.root_path);
+  const path = String(relativePath || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const normalizedPath = normalizeFileHubFolder(path);
+  const remainder = normalizedPath.startsWith(root + "/")
+    ? path.slice(root.length + 1)
+    : "";
+  const parts = remainder.split("/").filter(Boolean);
+  const firstFolder = parts.length > 1 ? parts[0].trim() : "";
+  const isModelFolder = String(binding.purpose_code || "").toUpperCase() === "MODEL_SOURCE";
+  const isDtf = isModelFolder && /(?:\s|[-_])DTF$/i.test(firstFolder);
+  const folderModelName = isModelFolder
+    ? firstFolder.replace(/(?:\s|[-_])DTF$/i, "").trim()
+    : "";
+  return {
+    purposeCode: isDtf ? "RIP_PDF" : String(binding.purpose_code || "").toUpperCase(),
+    folderModelName,
+    isDtf,
+  };
+}
+
+/** Yalnız mevcut model sözlüğündeki kesin adları seç; hiçbir parçadan yeni model uydurma. */
+export function matchExistingDesignModelNames(
+  knownNames: readonly string[],
+  sourceName: string,
+  options: { multi?: boolean } = {},
+): string[] {
+  const stem = String(sourceName || "").replace(/\.[^.]+$/, "");
+  const haystack = " " + normalizeDesignModelKey(stem) + " ";
+  const candidates = [...new Set(knownNames.map((value) => String(value || "").trim()).filter(Boolean))]
+    .map((name) => ({ name, key: normalizeDesignModelKey(name) }))
+    .filter((row) => row.key && (row.key.length >= 4 || haystack.trim() === row.key))
+    .sort((a, b) => b.key.length - a.key.length || a.name.localeCompare(b.name, "tr"));
+  const used: Array<[number, number]> = [];
+  const result: string[] = [];
+  for (const candidate of candidates) {
+    const match = " " + candidate.key + " ";
+    const at = haystack.indexOf(match);
+    if (at < 0) continue;
+    const from = at, to = at + match.length;
+    if (used.some(([start, end]) => from < end && to > start)) continue;
+    used.push([from, to]);
+    result.push(candidate.name);
+    if (!options.multi) break;
+  }
+  return result;
+}
