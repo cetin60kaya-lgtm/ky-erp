@@ -1410,9 +1410,11 @@ function DesignFileTile({ file, onRoleChange }) {
   const cloudPath = fromCloud ? "/file-hub/cloud/files/" + encodeURIComponent(id) + "/download" : "";
   const size = Number(file.size || file.fileSize || 0);
   const [pdfUrl, setPdfUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl); }, [pdfUrl]);
+  useEffect(() => () => { if (imageUrl) URL.revokeObjectURL(imageUrl); }, [imageUrl]);
   const openPdf = async () => {
     if (busy || !cloudPath) return;
     if (size > 30 * 1024 * 1024) { setError("PDF 30 MB üzerindedir. Orijinalini indirin."); return; }
@@ -1424,6 +1426,16 @@ function DesignFileTile({ file, onRoleChange }) {
     } catch (err) { setError(err?.message || "PDF önizlemesi açılamadı."); }
     finally { setBusy(false); }
   };
+  const openThumbnail = async () => {
+    if (busy || !file.previewUrl) return;
+    setBusy(true); setError("");
+    try {
+      const blob = await apiFetch(file.previewUrl, { responseType: "blob", timeoutMs: 45000 });
+      if (!blob?.type?.startsWith("image/")) throw new Error("Görsel önizlemesi henüz hazır değil.");
+      setImageUrl(URL.createObjectURL(blob));
+    } catch (err) { setError(err?.message || "Sağlayıcı bu dosya için önizleme sağlayamadı."); }
+    finally { setBusy(false); }
+  };
   const downloadOriginal = async () => {
     if (busy || !cloudPath) return;
     setBusy(true); setError("");
@@ -1433,7 +1445,7 @@ function DesignFileTile({ file, onRoleChange }) {
   };
   return (
     <article className="dsg-file-tile">
-      {isImage && file.previewUrl
+      {imageUrl ? <img className="dsg-file-derived-preview" src={imageUrl} alt={fileName + " küçük önizlemesi"} /> : isImage && file.previewUrl
         ? <ImagePreview src={file.previewUrl} alt={fileName} />
         : <div className="dsg-file-placeholder">
             <FileImage size={30} />
@@ -1452,6 +1464,7 @@ function DesignFileTile({ file, onRoleChange }) {
           </label>
         ) : null}
         <div className="dsg-file-actions">
+          {!isImage && file.previewUrl ? <button type="button" className="dsg-btn" disabled={busy} onClick={openThumbnail}>{busy ? "Hazırlanıyor…" : "Küçük Önizleme"}</button> : null}
           {isPdf && cloudPath ? <button type="button" className="dsg-btn" disabled={busy} onClick={openPdf}>{busy ? "Açılıyor…" : "PDF Görüntüle"}</button> : null}
           {cloudPath ? <button type="button" className="dsg-btn" disabled={busy} onClick={downloadOriginal}><Download size={15} /> Orijinali İndir</button> : null}
         </div>
