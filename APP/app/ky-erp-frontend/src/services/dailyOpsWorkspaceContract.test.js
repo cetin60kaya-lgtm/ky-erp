@@ -37,3 +37,20 @@ test("payment, payroll and roster operations keep D1 endpoints and optimistic gu
   assert.match(source, /mode: "remove", removeEmployeeId: person\.id/);
   assert.match(source, /paymentNo/);
 });
+
+test("new employee is saved to the D1 roster and not silently counted as worked", () => {
+  const start = source.indexOf("  const saveCard = async () => {");
+  const end = source.indexOf("  const deactivateCard = async", start);
+  assert.ok(start >= 0 && end > start, "Canonical person create handler is missing");
+  const flow = source.slice(start, end);
+  assert.match(flow, /addToRoster && rosterWriteBlocked/);
+  assert.match(flow, /const saved = await createDailyEmployee\(payload\)/);
+  assert.match(flow, /const createdId = String\(saved\?\.id/);
+  assert.match(flow, /const savedRoster = await saveDailyRoster\(/);
+  assert.match(flow, /employeeIds: \[createdId\], mode: "merge"/);
+  assert.match(flow, /serverIds\?\.includes\(createdId\)/);
+  assert.match(flow, /setRosterIds\(new Set\(/);
+  assert.match(flow, /setRosterSaved\(pendingRosterIds\.length === 0\)/);
+  assert.match(flow, /Personel kartı oluşturuldu ancak dönem listesine eklenemedi/);
+  assert.doesNotMatch(flow, /saveDailyFocusedRecords\(/, "Card creation must not book an unselected work shift");
+});

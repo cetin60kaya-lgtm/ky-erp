@@ -1269,27 +1269,70 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (busy || !cardDialog) return;
     if (!String(cardDialog.name || "").trim()) { setError("Ad soyad zorunludur."); return; }
     if (!String(cardDialog.role || "").trim()) { setError("Vasıf seçimi zorunludur."); return; }
+    const addToRoster = !cardDialog.id && cardAddToRoster;
+    // A new card must not be created as a half-finished roster operation.
+    if (addToRoster && rosterWriteBlocked) {
+      setError("Dönem personel listesi şu anda doğrulanamıyor veya kapalı. Personeli bu aralığa eklemek için önce dönem kontrolünü tamamlayın.");
+      return;
+    }
     setBusy(true); setError("");
     try {
       const safeCard = cardDialog.id ? confirmBackdatedWage(cardDialog, employees.find((person) => person.id === cardDialog.id)) : cardDialog;
       if (!safeCard) return;
       const payload = employeePayload(safeCard, companyId);
-      let saved = null;
-      if (cardDialog.id) saved = await updateDailyEmployee(cardDialog.id, payload);
-      else saved = await createDailyEmployee(payload);
-      const refreshed = await loadEmployees();
-      if (cardAddToRoster && !cardDialog.id) {
-        const savedId = String(saved?.id || saved?.employeeId || "");
-        const created = refreshed.find((person) => person.id === savedId)
-          || refreshed.find((person) => normalizeText(person.personnelNo) === normalizeText(payload.personnelNo) && payload.personnelNo)
-          || refreshed.find((person) => normalizeText(person.name) === normalizeText(payload.fullName));
-        if (created?.id) {
-          setRosterIds((current) => { const next = new Set(current); next.add(created.id); return next; });
-          setRosterSaved(false);
-        }
+      if (cardDialog.id) {
+        await updateDailyEmployee(cardDialog.id, payload);
+        await loadEmployees();
+        setCardDialog(null); setCardAddToRoster(false);
+        setNotice("Personel kartı güncellendi.");
+        return;
       }
+      const saved = await createDailyEmployee(payload);
+      const createdId = String(saved?.id || saved?.employeeId || "").trim();
+      // Creation is already committed in D1. Close the editor so a roster failure
+      // cannot accidentally create the same employee again on a second click.
       setCardDialog(null); setCardAddToRoster(false);
-      setNotice(cardDialog.id ? "Personel kartı güncellendi." : "Yeni günlük personel oluşturuldu.");
+      if (createdId) {
+        setEmployees((current) => [...current.filter((person) => person.id !== createdId), employeeOf(saved)]
+          .sort((a, b) => a.name.localeCompare(b.name, "tr")));
+      }
+      if (addToRoster) {
+        if (!createdId) {
+          setError("Personel kartı oluşturuldu, ancak sunucu personel kimliğini döndürmedi. Tekrar yeni kart açmayın; personel listesini yenileyin.");
+        } else {
+          try {
+            // The Worker merges with the latest D1 roster. Never replace other
+            // computers' entries and never mark a work shift without selection.
+            const savedRoster = await saveDailyRoster({
+              mainCompanyId: companyId, startDate: range.start, endDate: range.end,
+              employeeIds: [createdId], mode: "merge",
+            });
+            const serverIds = Array.isArray(savedRoster?.employeeIds)
+              ? savedRoster.employeeIds.map(String) : null;
+            if (!serverIds?.includes(createdId)) {
+              throw new Error("Sunucu yanıtında yeni personelin dönem kaydı doğrulanamadı.");
+            }
+            // Keep any local roster additions that were not part of this write.
+            const savedSet = new Set(serverIds);
+            const pendingRosterIds = [...rosterIds].filter((id) => !savedSet.has(id));
+            ++rangeRequestRef.current; // Ignore older range reads while applying verified roster.
+            setRosterIds(new Set([...serverIds, ...pendingRosterIds]));
+            setRosterSaved(pendingRosterIds.length === 0);
+            setNotice("Yeni personel dönem listesine kaydedildi. Çalışacağı gün ve vardiyayı seçerek kaydedebilirsiniz.");
+          } catch (rosterError) {
+            setError(`Personel kartı oluşturuldu ancak dönem listesine eklenemedi: ${rosterError?.message || "sunucu hatası"}. Tekrar yeni personel açmayın; soldaki mevcut personelden dönem listesine eklemeyi deneyin.`);
+          }
+        }
+      } else {
+        setNotice("Yeni günlük personel oluşturuldu.");
+      }
+      try {
+        await loadEmployees();
+      } catch {
+        // The server's create response keeps the employee visible; report the
+        // refresh failure separately without claiming the creation failed.
+        setError((current) => current || "Personel kartı kaydedildi fakat liste yenilenemedi. Yenile ile sunucudan tekrar okuyun.");
+      }
     } catch (e) { setError(e?.message || "Personel kartı kaydedilemedi."); }
     finally { setBusy(false); }
   };
