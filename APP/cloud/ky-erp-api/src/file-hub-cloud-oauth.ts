@@ -570,6 +570,40 @@ export async function ensureCloudModelImagePreview(c: Context<AppEnv>, slug: str
   return true;
 }
 
+/** Stream an authorized PSD/PSB directly from its provider to the existing
+ * File Hub Agent. No provider OAuth token, original PSD, or source bytes are
+ * persisted in R2/Worker memory. Called only after tenant-scoped agent auth. */
+export async function streamCloudPsdPreviewSource(c:Context<AppEnv>,slug:string,assetId:string):Promise<Response>{
+  const row=await c.env.DB.prepare(
+    "SELECT a.extension,a.size_bytes,a.status,a.preview_status,l.provider_file_id,sc.provider_type,x.oauth_account_id,x.provider_drive_id FROM file_hub_assets a JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.is_available=1 JOIN file_hub_connections sc ON sc.id=l.storage_connection_id AND sc.main_company_slug=l.main_company_slug AND sc.is_active=1 JOIN file_hub_cloud_connection_accounts x ON x.connection_id=sc.id AND x.main_company_slug=sc.main_company_slug WHERE a.id=? AND a.main_company_slug=? AND a.source_type='CLOUD_API' LIMIT 1"
+  ).bind(assetId,slug).first<Row>();
+  if(!row || !["PSD","PSB"].includes(upper(row.extension)) || upper(row.status)!=="AVAILABLE" || upper(row.preview_status)!=="PROCESSING"){
+    throw Object.assign(new Error("PSD görevi bulunamadı."),{code:"SOURCE_NOT_READY",status:409});
+  }
+  const maxBytes=1024*1024*1024;
+  if(Number(row.size_bytes)>maxBytes)throw Object.assign(new Error("PSD boyut sınırı."),{code:"SOURCE_TOO_LARGE",status:413});
+  const {accessToken}=await usableAccount(c,slug,text(row.oauth_account_id));
+  const provider=upper(row.provider_type),fileId=text(row.provider_file_id),driveId=text(row.provider_drive_id);
+  if(!fileId)throw Object.assign(new Error("Dosya bağlantısı yok."),{code:"SOURCE_LOCATION_MISSING",status:404});
+  let response:Response;
+  if(provider==="GOOGLE_DRIVE"){
+    response=await fetch("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(fileId)+"?alt=media",{headers:{Authorization:"Bearer "+accessToken},redirect:"follow"});
+  }else if(provider==="ONEDRIVE"||provider==="SHAREPOINT"){
+    const itemUrl=driveId
+      ? "https://graph.microsoft.com/v1.0/drives/"+encodeURIComponent(driveId)+"/items/"+encodeURIComponent(fileId)+"/content"
+      : "https://graph.microsoft.com/v1.0/me/drive/items/"+encodeURIComponent(fileId)+"/content";
+    response=await fetch(itemUrl,{headers:{Authorization:"Bearer "+accessToken},redirect:"follow"});
+  }else if(provider==="DROPBOX"){
+    response=await fetch("https://content.dropboxapi.com/2/files/download",{method:"POST",headers:{Authorization:"Bearer "+accessToken,"Dropbox-API-Arg":JSON.stringify({path:fileId})}});
+  }else throw Object.assign(new Error("Sağlayıcı desteklenmiyor."),{code:"SOURCE_PROVIDER_UNSUPPORTED",status:422});
+  if(!response.ok || !response.body)throw Object.assign(new Error("PSD sağlayıcı yanıtı başarısız."),{code:"SOURCE_PROVIDER_FAILED",status:502});
+  if(Number(response.headers.get("content-length")||0)>maxBytes) {
+    await response.body.cancel();
+    throw Object.assign(new Error("PSD boyut sınırı."),{code:"SOURCE_TOO_LARGE",status:413});
+  }
+  return new Response(response.body,{status:200,headers:{"content-type":"application/octet-stream","cache-control":"private, no-store","x-content-type-options":"nosniff"}});
+}
+
 export async function readFileHubAssetForMail(c:any,slug:string,assetId:string,maxBytes=25*1024*1024){
   const asset=await c.env.DB.prepare(`SELECT id,file_name,mime_type,size_bytes,status,source_type,preview_storage_key,metadata
     FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1`).bind(assetId,slug).first<Row>();
