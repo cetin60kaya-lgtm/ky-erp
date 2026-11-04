@@ -1,5 +1,7 @@
 # KY ERP / PC PDKS — ChatGPT DESEN Erişimi ve Yeni Sohbet Kuralı
 
+**04.11.2026 — Tüm sohbetler ortak erişim güncellemesi:** Özel `cetin60kaya-lgtm/kyerp/CONTROL/KY_CONTROL_MERKEZ.md` içindeki **04.11.2026 ortak erişim düzeni** öncelikli güncel referanstır. DESEN Remote Desktop Commander Windows oturumunda gizli başlangıç ile hazır olabilir ve mevcut 5 dakikalık KY Control Watchdog yalnız işlem yoksa kurtarmayı dener; kullanımı yalnız gerekçeli, açıkça istenen yerel Windows işlerinde ve kota tasarrufuyla yapılır. KY Control Chat Bridge ve Drive birinci tercihtir. Mevcut bağlantı yetkiyi genişletmez; eski sohbetlere otomatik kural enjeksiyonu değildir.
+
 > **Güncel ve sabit giriş noktası:** Özel `cetin60kaya-lgtm/kyerp/CONTROL/KY_CONTROL_MERKEZ.md`. Bu dosya ve tarihli kayıtlar geçmiş kabul ve güvenlik kılavuzudur; güncel tek merkezde işaretlenir.
 
 
