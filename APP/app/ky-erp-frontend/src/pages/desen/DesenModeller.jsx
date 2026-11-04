@@ -25,6 +25,7 @@ import {
   getDesignModels,
   syncDesignDyehouse,
   updateDesignModel,
+  uploadDesignWorkflowFile,
 } from "../../services/desenWorkflowApi";
 import { createProductionCenterModel } from "../../services/productionCenterApi";
 import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
@@ -60,9 +61,10 @@ export default function DesenModeller({ activeMainCompany, openModule }) {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [sendingModelId, setSendingModelId] = useState("");
+  const [uploadingModelId, setUploadingModelId] = useState("");
   const [page, setPage] = useState(0);
   const [filters, setFilters] = useState({ q: new URLSearchParams(window.location.search).get("q") || "", companyId: "", status: "", printAreaCode: "", placementStatus: "", dateField: "createdAt", dateFrom: "", dateTo: "", sort: "created_desc" });
-  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(() => !window.matchMedia("(max-width: 760px)").matches);
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
@@ -133,6 +135,25 @@ export default function DesenModeller({ activeMainCompany, openModule }) {
     } finally { setSendingModelId(""); }
   };
 
+  const uploadPreview = async (model, file) => {
+    if (!file || uploadingModelId) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setMessage("Önizleme için JPEG, PNG veya WEBP seçin. Orijinal PSD/AI/PDF Google Drive File Hub'da kalır.");
+      return;
+    }
+    setUploadingModelId(model.id);
+    setMessage("");
+    try {
+      await uploadDesignWorkflowFile(activeMainCompany, model.id, null, file, "MODEL_IMAGE");
+      setMessage(`${model.modelName} önizlemesi yüklendi. Drive kaynak dosyası ve otomatik eşleştirme ayrıca korunur.`);
+      await load();
+    } catch (error) {
+      setMessage(error?.message || "Model önizlemesi yüklenemedi.");
+    } finally {
+      setUploadingModelId("");
+    }
+  };
+
   const analyzeVisible = async () => {
     const ids = selectedIds.length ? selectedIds : visibleModels.map((model) => model.id);
     if (!ids.length) return;
@@ -160,14 +181,14 @@ export default function DesenModeller({ activeMainCompany, openModule }) {
     </section>
     {message && <div className="dsg-page-message">{message}</div>}
     <section className="dsg-results-head"><div><strong>{models.length}</strong><span>model bulundu</span></div><span>Gerçek Desen kayıtları · ERP eklenme, dosya ve güncelleme tarihleriyle</span></section>
-    {loading ? <div className="dsg-loading"><LoaderCircle className="spin" /> Desen modelleri yükleniyor…</div> : !models.length ? <EmptyState icon={FileImage} title="Filtreye uygun model yok" text="Gelen klasörü tarayarak veya Yeni Model düğmesiyle ilk kaydı oluşturabilirsiniz." action={<button className="dsg-btn primary" onClick={() => setNewModel(true)}><Plus size={16} /> Yeni Model</button>} /> : <>{view === "cards" ? <div className="dsg-model-grid">{visibleModels.map((model) => <ModelCard key={model.id} model={model} selected={selectedIds.includes(model.id)} onSelect={() => toggleSelection(model.id)} onDetail={() => openDetail(model)} onUpload={goInbox} onEdit={() => openEditor(model)} onDyehouse={() => syncDyehouse(model)} onProduction={() => sendToProduction(model)} productionBusy={Boolean(sendingModelId)} />)}</div> : <ModelTable models={visibleModels} selectedIds={selectedIds} onSelect={toggleSelection} onDetail={openDetail} onEdit={openEditor} onProduction={sendToProduction} productionBusy={Boolean(sendingModelId)} />}<Pager index={page} count={pageCount} onPrevious={() => setPage((value) => Math.max(0, value - 1))} onNext={() => setPage((value) => Math.min(pageCount - 1, value + 1))} /></>}
+    {loading ? <div className="dsg-loading"><LoaderCircle className="spin" /> Desen modelleri yükleniyor…</div> : !models.length ? <EmptyState icon={FileImage} title="Filtreye uygun model yok" text="Gelen klasörü tarayarak veya Yeni Model düğmesiyle ilk kaydı oluşturabilirsiniz." action={<button className="dsg-btn primary" onClick={() => setNewModel(true)}><Plus size={16} /> Yeni Model</button>} /> : <>{view === "cards" ? <div className="dsg-model-grid">{visibleModels.map((model) => <ModelCard key={model.id} model={model} selected={selectedIds.includes(model.id)} onSelect={() => toggleSelection(model.id)} onDetail={() => openDetail(model)} onUpload={(file) => uploadPreview(model, file)} uploadBusy={Boolean(uploadingModelId)} onEdit={() => openEditor(model)} onDyehouse={() => syncDyehouse(model)} onProduction={() => sendToProduction(model)} productionBusy={Boolean(sendingModelId)} />)}</div> : <ModelTable models={visibleModels} selectedIds={selectedIds} onSelect={toggleSelection} onDetail={openDetail} onEdit={openEditor} onProduction={sendToProduction} productionBusy={Boolean(sendingModelId)} />}<Pager index={page} count={pageCount} onPrevious={() => setPage((value) => Math.max(0, value - 1))} onNext={() => setPage((value) => Math.min(pageCount - 1, value + 1))} /></>}
     {(newModel || editor) && <ModelEditorModal activeMainCompany={activeMainCompany} companies={companies} model={editor} onClose={() => { setNewModel(false); setEditor(null); }} onSaved={async () => { setNewModel(false); setEditor(null); await load(); }} />}
     {detail && <ModelDetailModal model={detail} onClose={() => setDetail(null)} onEdit={() => openEditor(detail)} onArchive={() => archive(detail)} onDyehouse={() => syncDyehouse(detail)} />}
     {bulkOpen && <BulkEditModal activeMainCompany={activeMainCompany} models={models.filter((model) => selectedIds.includes(model.id))} onClose={() => setBulkOpen(false)} onSaved={async () => { setBulkOpen(false); setSelectedIds([]); await load(); }} />}
   </>;
 }
 
-function ModelCard({ model, selected, onSelect, onDetail, onUpload, onEdit, onDyehouse, onProduction, productionBusy }) {
+function ModelCard({ model, selected, onSelect, onDetail, onUpload, uploadBusy, onEdit, onDyehouse, onProduction, productionBusy }) {
   const [menu, setMenu] = useState(false);
   const analysis = model.metadata?.analysis || {};
   const analysisTags = [...(analysis.pantoneCodes || []), ...(analysis.characters || []), ...(analysis.themes || []), ...(analysis.shapes || [])].filter(Boolean).slice(0, 4);
@@ -175,7 +196,7 @@ function ModelCard({ model, selected, onSelect, onDetail, onUpload, onEdit, onDy
     <button className="dsg-select-btn" onClick={onSelect}>{selected ? <CheckSquare size={18} /> : <Square size={18} />}</button>
     <button className="dsg-model-image" onClick={onDetail}>{model.mainImage ? <DesenImage src={model.mainImage.thumbnailUrl || model.mainImage.previewUrl} alt={model.modelName} /> : <FileImage size={38} />}<span>{model.mainImage ? "Zoom" : "Görsel Yüklenecek"}</span></button>
     <div className="dsg-model-card-body"><div className="dsg-card-title"><div><h3>{model.modelName}</h3><p>{model.companyName}</p></div><StatusBadge value={model.status} /></div><div className="dsg-area-tags">{model.operations.map((operation) => <span key={operation.id}>{operation.printAreaName}</span>)}</div>{analysisTags.length > 0 && <div className="dsg-analysis-tags">{analysisTags.map((tag) => <span key={tag}>{tag}</span>)}</div>}<div className="dsg-metrics"><span>Kanal<strong>{model.totals.activeChannelCount}</strong></span><span>Kalıp<strong>{model.totals.totalMoldCount}</strong></span><span>Benzersiz boya<strong>{model.totals.uniqueColorCount}</strong></span><span>Eksik renk<strong>{model.totals.unresolvedColorCount}</strong></span></div><div className="dsg-progress-lines"><span>Yerleşim <strong>{model.operations.every((operation) => operation.placementStatus === "READY") ? "Hazır" : "Bekliyor"}</strong></span><span>Boyahane <strong>{model.operations.every((operation) => operation.dyehouseStatus === "READY") ? "Hazır" : "Bekliyor"}</strong></span></div><div className="dsg-date-meta"><small>ERP eklenme: {formatDate(model.createdAt)}</small><small>Dosya tarihi: {formatDate(model.sourceModifiedAt)}</small><small>{analysis.analyzedAt ? `Akıllı tarama: ${formatDate(analysis.analyzedAt)}` : `Güncelleme: ${formatDate(model.updatedAt)}`}</small></div></div>
-    <footer><button className="dsg-btn" onClick={onDetail}>Detay</button>{!model.mainImage && <button className="dsg-btn" onClick={onUpload}><FileImage size={15} /> Görsel Yükle</button>}<button className="dsg-btn" onClick={onEdit}><Pencil size={15} /> Düzenle</button><div className="dsg-more"><button className="dsg-icon-btn" onClick={() => setMenu((value) => !value)}><MoreHorizontal /></button>{menu && <div className="dsg-more-menu"><button onClick={onDyehouse}><Palette size={15} /> Boyahaneye Hazırla</button><button disabled={productionBusy} onClick={() => { setMenu(false); onProduction(); }}><Factory size={15} /> İmalata Al</button><button onClick={onDetail}><Archive size={15} /> Diğer işlemler</button></div>}</div></footer>
+    <footer><button className="dsg-btn" onClick={onDetail}>Detay</button>{!model.mainImage && <label className="dsg-btn" aria-label={`${model.modelName} önizleme yükle`}><FileImage size={15} /> {uploadBusy ? "Yükleniyor…" : "Önizleme Yükle"}<input hidden type="file" accept="image/jpeg,image/png,image/webp" disabled={uploadBusy} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) onUpload(file); }} /></label>}<button className="dsg-btn" onClick={onEdit}><Pencil size={15} /> Düzenle</button><div className="dsg-more"><button className="dsg-icon-btn" onClick={() => setMenu((value) => !value)}><MoreHorizontal /></button>{menu && <div className="dsg-more-menu"><button onClick={onDyehouse}><Palette size={15} /> Boyahaneye Hazırla</button><button disabled={productionBusy} onClick={() => { setMenu(false); onProduction(); }}><Factory size={15} /> İmalata Al</button><button onClick={onDetail}><Archive size={15} /> Diğer işlemler</button></div>}</div></footer>
   </article>;
 }
 
