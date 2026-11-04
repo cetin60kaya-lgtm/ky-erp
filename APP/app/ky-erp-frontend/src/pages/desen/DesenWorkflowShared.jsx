@@ -20,7 +20,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { apiUrl } from "../../utils/api";
+import { apiUrl, apiFetch, downloadFile } from "../../utils/api";
 import DesenImage from "./DesenImage";
 import {
   createDesignOperation,
@@ -1075,43 +1075,13 @@ export function ModelEditorModal({
 
       {tab === "files" && (
         <div className="dsg-files-grid">
-          {(draft.files.length ? draft.files : model?.files || []).map(
-            (file, index) => (
-              <article key={file.id || file.queueId || index}>
-                <ImagePreview src={file.previewUrl} />
-                <div>
-                  <strong>{file.originalFileName || file.fileName}</strong>
-                  <span>
-                    {file.fileSize
-                      ? `${(file.fileSize / 1024).toFixed(1)} KB`
-                      : ""}
-                  </span>
-                  <label>
-                    Dosya rolü
-                    <select
-                      value={file.role || file.fileRole || "OTHER"}
-                      onChange={(event) =>
-                        update({
-                          files: draft.files.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? { ...item, role: event.target.value }
-                              : item,
-                          ),
-                        })
-                      }
-                    >
-                      <option value="MODEL_IMAGE">Model Görseli</option>
-                      <option value="CHANNEL_IMAGE">Kanal Görseli</option>
-                      <option value="PLACEMENT_IMAGE">Yerleşim Görseli</option>
-                      <option value="TECHNICAL_IMAGE">Teknik Görsel</option>
-                      <option value="OTHER">Diğer</option>
-                    </select>
-                  </label>
-                  {file.fileHash && <code>{file.fileHash.slice(0, 18)}…</code>}
-                </div>
-              </article>
-            ),
-          )}
+          {(draft.files.length ? draft.files : model?.files || []).map((file, index) => (
+            <DesignFileTile
+              key={file.id || file.queueId || index}
+              file={file}
+              onRoleChange={(role) => update({ files: draft.files.map((item, itemIndex) => itemIndex === index ? { ...item, role } : item) })}
+            />
+          ))}
         </div>
       )}
 
@@ -1409,6 +1379,90 @@ function RegisteredColorModal({
   );
 }
 
+
+const FILE_GROUPS = [
+  ["MODEL_IMAGE", "Gerçek RGB Görsel", ["MODEL_IMAGE", "REVISION_IMAGE"]],
+  ["MODEL_SOURCE", "Gelen Model / Orijinal Kaynak", ["SOURCE_PSD", "SOURCE_AI", "SOURCE_FILE", "MODEL_SOURCE"]],
+  ["PLACEMENT", "Yerleşim / Kalıp", ["PLACEMENT_PDF", "PLACEMENT_FILE", "PLACEMENT_IMAGE"]],
+  ["OUTGOING_DESIGN", "Giden PSD / Üretim", ["OUTGOING_DESIGN"]],
+  ["DTF", "DTF Kaynak / RIP PDF", ["DTF_SOURCE", "RIP_PDF"]],
+  ["OTHER", "Diğer Dosyalar", ["CHANNEL_IMAGE", "TECHNICAL_IMAGE", "OTHER"]],
+];
+
+function groupDesignFiles(files) {
+  const pending = Array.isArray(files) ? [...files] : [];
+  const groups = FILE_GROUPS.map(([code, title, roles]) => {
+    const selected = pending.filter((file) => roles.includes(file.role || file.fileRole || "OTHER"));
+    selected.forEach((file) => pending.splice(pending.indexOf(file), 1));
+    return { code, title, files: selected };
+  }).filter((group) => group.files.length);
+  if (pending.length) groups.push({ code: "UNKNOWN", title: "Diğer Kaynaklar", files: pending });
+  return groups;
+}
+
+function DesignFileTile({ file, onRoleChange }) {
+  const fileName = file.originalFileName || file.fileName || "Dosya";
+  const suffix = fileName.split(".").pop()?.toLowerCase() || "";
+  const isPdf = suffix === "pdf";
+  const isImage = ["jpg", "jpeg", "png", "webp"].includes(suffix);
+  const id = file.fileHubAssetId || (file.fileHubManaged ? file.id : "");
+  const fromCloud = id && ["GOOGLE_DRIVE", "ONEDRIVE", "SHAREPOINT"].includes(file.sourceProvider);
+  const cloudPath = fromCloud ? "/file-hub/cloud/files/" + encodeURIComponent(id) + "/download" : "";
+  const size = Number(file.size || file.fileSize || 0);
+  const [pdfUrl, setPdfUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl); }, [pdfUrl]);
+  const openPdf = async () => {
+    if (busy || !cloudPath) return;
+    if (size > 30 * 1024 * 1024) { setError("PDF 30 MB üzerindedir. Orijinalini indirin."); return; }
+    setBusy(true); setError("");
+    try {
+      const blob = await apiFetch(cloudPath, { responseType: "blob", timeoutMs: 90000 });
+      if (!blob?.size) throw new Error("PDF içeriği alınamadı.");
+      setPdfUrl(URL.createObjectURL(new Blob([blob], { type: "application/pdf" })));
+    } catch (err) { setError(err?.message || "PDF önizlemesi açılamadı."); }
+    finally { setBusy(false); }
+  };
+  const downloadOriginal = async () => {
+    if (busy || !cloudPath) return;
+    setBusy(true); setError("");
+    try { await downloadFile(cloudPath, undefined, fileName); }
+    catch (err) { setError(err?.message || "Orijinal dosya indirilemedi."); }
+    finally { setBusy(false); }
+  };
+  return (
+    <article className="dsg-file-tile">
+      {isImage && file.previewUrl
+        ? <ImagePreview src={file.previewUrl} alt={fileName} />
+        : <div className="dsg-file-placeholder">
+            <FileImage size={30} />
+            <span>{suffix.toUpperCase() || "DOSYA"}</span>
+            <small>{["psd", "psb", "psdc"].includes(suffix) ? "PSD önizlemesi henüz hazırlanmadı" : isPdf ? "PDF belgesi" : "Kaynak dosyası"}</small>
+          </div>}
+      <div className="dsg-file-tile-body">
+        <strong title={fileName}>{fileName}</strong>
+        <span>{file.role || file.fileRole || "OTHER"}{file.isDtf ? " · DTF" : ""}{size ? " · " + (size/1048576).toFixed(1) + " MB" : ""}</span>
+        {file.sourceRelativePath ? <small title={file.sourceRelativePath}>Drive: {file.sourceRelativePath}</small> : null}
+        {onRoleChange ? (
+          <label>Dosya rolü
+            <select value={file.role || file.fileRole || "OTHER"} disabled={Boolean(file.fileHubManaged)} onChange={(e) => onRoleChange(e.target.value)}>
+              {["MODEL_IMAGE","CHANNEL_IMAGE","PLACEMENT_IMAGE","TECHNICAL_IMAGE","SOURCE_PSD","SOURCE_AI","SOURCE_FILE","PLACEMENT_PDF","PLACEMENT_FILE","OUTGOING_DESIGN","DTF_SOURCE","RIP_PDF","OTHER"].map((role) => <option key={role} value={role}>{role}</option>)}
+            </select>
+          </label>
+        ) : null}
+        <div className="dsg-file-actions">
+          {isPdf && cloudPath ? <button type="button" className="dsg-btn" disabled={busy} onClick={openPdf}>{busy ? "Açılıyor…" : "PDF Görüntüle"}</button> : null}
+          {cloudPath ? <button type="button" className="dsg-btn" disabled={busy} onClick={downloadOriginal}><Download size={15} /> Orijinali İndir</button> : null}
+        </div>
+        {pdfUrl ? <iframe className="dsg-file-pdf" src={pdfUrl} title={fileName + " PDF önizlemesi"} loading="lazy" /> : null}
+        {error ? <small className="dsg-file-error" role="alert">{error}</small> : null}
+        {file.fileHubManaged && !cloudPath ? <small>Orijinal dosya için File Hub üzerinden erişim gerekir.</small> : null}
+      </div>
+    </article>
+  );
+}
+
 export function ModelDetailModal({
   model,
   onClose,
@@ -1606,25 +1660,16 @@ export function ModelDetailModal({
         <ColorMatches operations={model.operations} model={model} />
       )}
       {tab === "files" && (
-        <div className="dsg-files-grid">
-          {model.files.map((file) => (
-            <article key={file.id}>
-              <ImagePreview src={file.previewUrl} />
-              <div>
-                <strong>{file.originalFileName || file.fileName}</strong>
-                <span>{file.fileRole}</span>
-                <code>{file.fileHash?.slice(0, 18)}…</code>
-                <a
-                  className="dsg-btn"
-                  href={assetUrl(file.previewUrl)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <Download size={15} /> Aç
-                </a>
+        <div className="dsg-file-groups">
+          {groupDesignFiles(model.files).map((group) => (
+            <section key={group.code}>
+              <h3>{group.title} <span>({group.files.length})</span></h3>
+              <div className="dsg-files-grid">
+                {group.files.map((file, index) => <DesignFileTile file={file} key={file.id || index} />)}
               </div>
-            </article>
+            </section>
           ))}
+          {!model.files?.length ? <EmptyState title="Model dosyası henüz eşleşmedi" text="File Hub indeksinde eşleşen kaynaklar burada görünür." /> : null}
         </div>
       )}
       {tab === "dyehouse" && (
