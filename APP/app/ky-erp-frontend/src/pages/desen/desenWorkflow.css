@@ -465,3 +465,5 @@
   .dsg-file-actions .dsg-btn { white-space: normal; min-height: 44px; }
   .dsg-file-pdf { height: 52vh; min-height: 330px; }
 }
+
+.dsg-file-derived-preview { display: block; width: 100%; max-height: 300px; object-fit: contain; background: #f5f8fc; border-bottom: 1px solid var(--dsg-line); }
