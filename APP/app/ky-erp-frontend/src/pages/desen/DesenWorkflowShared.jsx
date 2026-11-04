@@ -1404,9 +1404,10 @@ function DesignFileTile({ file, onRoleChange }) {
   const fileName = file.originalFileName || file.fileName || "Dosya";
   const suffix = fileName.split(".").pop()?.toLowerCase() || "";
   const isPdf = suffix === "pdf";
+  const isPsd = ["psd", "psb"].includes(suffix);
   const isImage = ["jpg", "jpeg", "png", "webp"].includes(suffix);
   const id = file.fileHubAssetId || (file.fileHubManaged ? file.id : "");
-  const fromCloud = id && ["GOOGLE_DRIVE", "ONEDRIVE", "SHAREPOINT"].includes(file.sourceProvider);
+  const fromCloud = id && ["GOOGLE_DRIVE", "ONEDRIVE", "SHAREPOINT", "DROPBOX"].includes(file.sourceProvider);
   const cloudPath = fromCloud ? "/file-hub/cloud/files/" + encodeURIComponent(id) + "/download" : "";
   const size = Number(file.size || file.fileSize || 0);
   const [pdfUrl, setPdfUrl] = useState("");
@@ -1427,14 +1428,31 @@ function DesignFileTile({ file, onRoleChange }) {
     finally { setBusy(false); }
   };
   const openThumbnail = async () => {
-    if (busy || !file.previewUrl) return;
+    if (busy || (!file.previewUrl && !id)) return;
     setBusy(true); setError("");
     try {
-      const blob = await apiFetch(file.previewUrl, { responseType: "blob", timeoutMs: 45000 });
-      if (!blob?.type?.startsWith("image/")) throw new Error("Görsel önizlemesi henüz hazır değil.");
+      const path = isPsd && id ? "/file-hub/files/" + encodeURIComponent(id) + "/preview" : file.previewUrl;
+      if (isPsd && id) {
+        // The source PSD stays in Drive; conversion runs in the existing File Hub Agent.
+        await apiFetch(path + "/request", { method: "POST", timeoutMs: 30000 });
+      }
+      let blob = null;
+      const maxAttempts = isPsd ? 16 : 1;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        try {
+          blob = await apiFetch(path, { responseType: "blob", timeoutMs: 45000, headers: { Accept: "image/*" } });
+          if (!blob?.type?.toLowerCase().startsWith("image/")) throw new Error("Görsel önizlemesi geçersiz.");
+          break;
+        } catch (err) {
+          if (!isPsd || attempt === maxAttempts - 1) throw err;
+          await new Promise((resolve) => setTimeout(resolve, 4000));
+        }
+      }
+      if (!blob) throw new Error("Önizleme henüz hazırlanamadı.");
       setImageUrl(URL.createObjectURL(blob));
-    } catch (err) { setError(err?.message || "Sağlayıcı bu dosya için önizleme sağlayamadı."); }
-    finally { setBusy(false); }
+    } catch (err) {
+      setError(isPsd ? "PSD önizlemesi henüz hazır değil. File Hub işlemcisinin çalıştığını kontrol edip tekrar deneyin. " + (err?.message || "") : err?.message || "Sağlayıcı bu dosya için önizleme sağlayamadı.");
+    } finally { setBusy(false); }
   };
   const downloadOriginal = async () => {
     if (busy || !cloudPath) return;
@@ -1445,12 +1463,12 @@ function DesignFileTile({ file, onRoleChange }) {
   };
   return (
     <article className="dsg-file-tile">
-      {imageUrl ? <img className="dsg-file-derived-preview" src={imageUrl} alt={fileName + " küçük önizlemesi"} /> : isImage && file.previewUrl
+      {imageUrl ? <ImagePreview src={imageUrl} alt={fileName + " tam tuval önizlemesi"} /> : isImage && file.previewUrl
         ? <ImagePreview src={file.previewUrl} alt={fileName} />
         : <div className="dsg-file-placeholder">
             <FileImage size={30} />
             <span>{suffix.toUpperCase() || "DOSYA"}</span>
-            <small>{["psd", "psb", "psdc"].includes(suffix) ? "PSD önizlemesi henüz hazırlanmadı" : isPdf ? "PDF belgesi" : "Kaynak dosyası"}</small>
+            <small>{isPsd ? "Tam yerleşimi görmek için Önizle düğmesine basın" : isPdf ? "PDF belgesi" : "Kaynak dosyası"}</small>
           </div>}
       <div className="dsg-file-tile-body">
         <strong title={fileName}>{fileName}</strong>
@@ -1464,7 +1482,7 @@ function DesignFileTile({ file, onRoleChange }) {
           </label>
         ) : null}
         <div className="dsg-file-actions">
-          {!isImage && file.previewUrl ? <button type="button" className="dsg-btn" disabled={busy} onClick={openThumbnail}>{busy ? "Hazırlanıyor…" : "Küçük Önizleme"}</button> : null}
+          {!isImage && (file.previewUrl || (isPsd && id)) ? <button type="button" className="dsg-btn" disabled={busy} onClick={openThumbnail}>{busy ? "Hazırlanıyor…" : isPsd ? "PSD Önizle" : "Küçük Önizleme"}</button> : null}
           {isPdf && cloudPath ? <button type="button" className="dsg-btn" disabled={busy} onClick={openPdf}>{busy ? "Açılıyor…" : "PDF Görüntüle"}</button> : null}
           {cloudPath ? <button type="button" className="dsg-btn" disabled={busy} onClick={downloadOriginal}><Download size={15} /> Orijinali İndir</button> : null}
         </div>
