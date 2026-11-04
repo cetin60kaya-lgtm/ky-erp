@@ -541,7 +541,9 @@ export async function ensureCloudModelImagePreview(c: Context<AppEnv>, slug: str
       WHERE a.id=? AND a.main_company_slug=? AND sc.provider_type='GOOGLE_DRIVE'
       LIMIT 1`,
   ).bind(assetId,slug).first<Row>();
-  if (!row || !["JPG","JPEG","PNG","WEBP","PSD","PSB","AI","PDF","TIF","TIFF"].includes(upper(row.extension))) return false;
+  const basicImageExtensions=["JPG","JPEG","PNG","WEBP"];
+  const documentPreviewExtensions=["PSD","PSB","AI","PDF","TIF","TIFF"];
+  if (!row || ![...basicImageExtensions,...documentPreviewExtensions].includes(upper(row.extension))) return false;
   const { accessToken } = await usableAccount(c,slug,text(row.oauth_account_id));
   const metadata = await providerJson(
     `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(text(row.provider_file_id))}?fields=thumbnailLink,mimeType`,
@@ -688,7 +690,7 @@ async function backfillIndexedCloudDesignFiles(c:Context<AppEnv>,slug:string,con
     "FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug " +
     "WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1 " +
     "AND l.relative_path>? AND lower(a.extension) IN ('jpg','jpeg','png','webp','pdf','psd','psb','ai','tif','tiff','svg','eps') " +
-    "ORDER BY l.relative_path LIMIT 30"
+    "ORDER BY l.relative_path LIMIT 8"
   ).bind(slug,connectionId,after).all<Row>();
   let rows=(await query(afterPath)).results||[];
   if(!rows.length && afterPath)rows=(await query("")).results||[];
@@ -781,8 +783,10 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     const recoveredModelLinks = await backfillIndexedCloudModelImages(c, slug, connectionId, providerType);
     const priorDesignFiles = await backfillIndexedCloudDesignFiles(c, slug, connectionId, providerType, text(cursor.designBackfillPath || meta.designBackfillPath));
     cursor.designBackfillPath = priorDesignFiles.lastPath;
-    modelSyncs += recoveredModelLinks + priorDesignFiles.matched;
-    cursor.modelSyncs += recoveredModelLinks + priorDesignFiles.matched;
+    modelSyncs += recoveredModelLinks;
+    cursor.modelSyncs += recoveredModelLinks;
+    modelSyncs += priorDesignFiles.matched;
+    cursor.modelSyncs += priorDesignFiles.matched;
     const complete = cursor.queue.length === 0;
     if (complete) {
       const result = await c.env.DB.prepare("SELECT COUNT(DISTINCT l.file_asset_id) linked_images,COUNT(DISTINCT r.entity_id) linked_models FROM file_hub_locations l JOIN file_hub_relations r ON r.file_asset_id=l.file_asset_id AND r.main_company_slug=l.main_company_slug AND r.entity_type='MODEL' AND r.relation_type='MODEL_IMAGE' JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1")
