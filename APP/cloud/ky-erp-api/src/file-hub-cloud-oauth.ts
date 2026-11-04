@@ -534,7 +534,7 @@ export async function ensureCloudModelImagePreview(c: Context<AppEnv>, slug: str
       WHERE a.id=? AND a.main_company_slug=? AND sc.provider_type='GOOGLE_DRIVE'
       LIMIT 1`,
   ).bind(assetId,slug).first<Row>();
-  if (!row || !["JPG","JPEG","PNG","WEBP"].includes(upper(row.extension))) return false;
+  if (!row || !["JPG","JPEG","PNG","WEBP","PSD","PSB","AI","PDF","TIF","TIFF"].includes(upper(row.extension))) return false;
   const { accessToken } = await usableAccount(c,slug,text(row.oauth_account_id));
   const metadata = await providerJson(
     `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(text(row.provider_file_id))}?fields=thumbnailLink,mimeType`,
