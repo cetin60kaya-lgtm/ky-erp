@@ -979,6 +979,38 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     }
   };
 
+  const setPersonSelectedForShift = async (person, nextSelected) => {
+    if (!person?.id || busy || dailyWriteBlocked) return;
+    const currentRecord = recordByEmployee.get(person.id) || {};
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await saveDailyFocusedRecords({
+        mainCompanyId: companyId,
+        date: selectedDate,
+        shift,
+        personnelEntries: [{
+          personelId: person.id,
+          status: nextSelected ? "ACTIVE" : "REMOVE",
+          checked: nextSelected ? false : false,
+          expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
+          expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
+          expectedNoteUpdatedAt: currentRecord.noteUpdatedAt || "",
+          note: nextSelected ? (notes[person.id] || "") : "",
+        }],
+      });
+      await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
+      setNotice(
+        nextSelected
+          ? `${person.name} ${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} vardiyasına kaydedildi.`
+          : `${person.name} ${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} kaydı kaldırıldı. Personel havuzda kaldı.`,
+      );
+    } catch (e) {
+      setError(e?.message || "Gün/vardiya kaydı güncellenemedi. Ekranı yenileyip tekrar deneyin.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const removePersonFromRoster = async (person) => {
     if (!person?.id || busy || rosterWriteBlocked || !rosterIds.has(person.id)) return;
     const workRows = attendance.filter((row) => {
