@@ -48,20 +48,46 @@ function PlacementModal({ activeMainCompany, model, operation, onClose, onSaved 
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const placement = model.files.find((item) => item.id === operation.placementFileId);
-  const channelImage = model.files.find((item) => item.id === operation.channelImageFileId);
+  const placement = (model.files || []).find((item) => item.id === operation.placementFileId);
+  const channelImage = (model.files || []).find((item) => item.id === operation.channelImageFileId);
+  const localPreview = useMemo(() => file ? URL.createObjectURL(file) : "", [file]);
+  useEffect(() => () => { if (localPreview) URL.revokeObjectURL(localPreview); }, [localPreview]);
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   const save = async () => {
+    if (busy) return;
+    const ready = draft.placementStatus === "READY" || draft.productionReady;
+    const width = Number(draft.moldWidth), height = Number(draft.moldHeight);
+    if (ready && (draft.moldType === "UNDEFINED" || !Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0)) {
+      setMessage("Hazır işaretlemek için kalıp tipini, eni ve boyu doğru girin.");
+      return;
+    }
+    if (ready && !file && !placement) {
+      setMessage("Hazır işaretlemek için gerçek yerleşim görseli veya PDF gerekir.");
+      return;
+    }
+    if (draft.productionReady && (operation.totals?.activeChannelCount || 0) === 0) {
+      setMessage("Üretime hazırlamak için baskı kanalları da tamamlanmalıdır.");
+      return;
+    }
     setBusy(true); setMessage("");
     try {
-      if (file) await uploadDesignWorkflowFile(activeMainCompany, model.id, operation.id, file, "PLACEMENT_IMAGE");
-      await updateDesignOperation(activeMainCompany, operation.id, { ...draft, placementStatus: file ? "READY" : draft.placementStatus });
+      let placementFileId = operation.placementFileId || "";
+      if (file) {
+        const upload = await uploadDesignWorkflowFile(activeMainCompany, model.id, operation.id, file, "PLACEMENT_IMAGE");
+        placementFileId = upload?.file?.id || "";
+        if (!placementFileId) throw new Error("Yerleşim dosyası sunucudan doğrulanamadı; teknik kayıt tamamlanmadı.");
+      }
+      await updateDesignOperation(activeMainCompany, operation.id, {
+        ...draft,
+        placementFileId,
+        placementStatus: draft.placementStatus,
+      });
       onSaved();
     } catch (error) { setMessage(error?.message || "Teknik kayıt tamamlanamadı."); }
     finally { setBusy(false); }
   };
   return <WideModal title="Yerleşim / Kalıp Teknik Kontrol" subtitle={`${model.modelName} · ${model.companyName} · ${operation.printAreaName}`} onClose={onClose} onSave={save} dirty footer={<><span className="dsg-foot-message">{message}</span><button className="dsg-btn ghost" onClick={onClose}>Vazgeç</button><button className="dsg-btn primary" onClick={save} disabled={busy}>Teknik Kaydı Kaydet</button></>}>
-    <div className="dsg-placement-summary"><div><ImagePreview src={model.mainImage?.previewUrl} /><strong>Model Görseli</strong></div><div><ImagePreview src={channelImage?.previewUrl} /><strong>Kanal Görseli</strong></div><div><ImagePreview src={file ? URL.createObjectURL(file) : placement?.previewUrl} /><strong>Yerleşim Görseli</strong></div></div>
+    <div className="dsg-placement-summary"><div><ImagePreview src={model.mainImage?.previewUrl} /><strong>Model Görseli</strong></div><div><ImagePreview src={channelImage?.previewUrl} /><strong>Kanal Görseli</strong></div><div><ImagePreview src={localPreview || placement?.previewUrl} /><strong>Yerleşim Görseli</strong></div></div>
     <div className="dsg-editor-summary compact"><div><span>Model</span><strong>{model.modelName}</strong></div><div><span>Firma</span><strong>{model.companyName}</strong></div><div><span>Baskı Bölgesi</span><strong>{operation.printAreaName}</strong></div><div><span>Kanal / Kalıp</span><strong>{(operation.totals?.activeChannelCount || 0)} / {(operation.totals?.totalMoldCount || 0)}</strong></div><div><span>Benzersiz Boya</span><strong>{(operation.totals?.uniqueColorCount || 0)}</strong></div></div>
     <div className="dsg-form-grid four placement-form"><label>Kalıp tipi<select value={draft.moldType} onChange={(event) => update("moldType", event.target.value)}><option value="UNDEFINED">Belirsiz</option><option value="K_BOY">K-Boy</option><option value="B_BOY">B-Boy</option><option value="SPECIAL">Özel</option></select></label><label>En (cm)<input type="number" step="0.1" value={draft.moldWidth} onChange={(event) => update("moldWidth", event.target.value)} /></label><label>Boy (cm)<input type="number" step="0.1" value={draft.moldHeight} onChange={(event) => update("moldHeight", event.target.value)} /></label><label>Kontrol durumu<select value={draft.placementStatus} onChange={(event) => update("placementStatus", event.target.value)}><option value="WAITING">Yerleşim Bekliyor</option><option value="READY">Hazır</option><option value="REVISION_PENDING">Revize Bekliyor</option></select></label><label className="dsg-file-input"><Upload size={18} /> Yerleşim Görseli / PDF<input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" onChange={(event) => setFile(event.target.files?.[0] || null)} /><span>{file?.name || placement?.originalFileName || "Dosya seçilmedi"}</span></label><label className="span-3">Teknik Not<textarea value={draft.notes} onChange={(event) => update("notes", event.target.value)} /></label><label className="dsg-check-label"><input type="checkbox" checked={draft.productionReady} onChange={(event) => update("productionReady", event.target.checked)} /> Üretime Hazır</label></div>
   </WideModal>;
