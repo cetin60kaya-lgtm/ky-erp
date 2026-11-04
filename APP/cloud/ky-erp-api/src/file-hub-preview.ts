@@ -54,7 +54,7 @@ export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
     if (!user) return c.json({ ok:false, error:{ code:"UNAUTHORIZED", message:"Oturum gerekli." } }, 401);
     const slug = slugOf(c), id = c.req.param("id");
     const asset = await c.env.DB.prepare(
-      `SELECT id,file_name,mime_type,preview_status,preview_storage_key,status,source_type
+      `SELECT id,file_name,extension,mime_type,preview_status,preview_storage_key,status,source_type
          FROM file_hub_assets
         WHERE id=? AND main_company_slug=? LIMIT 1`,
     ).bind(id, slug).first<Row>();
@@ -77,7 +77,7 @@ export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
     let key = text(asset.preview_storage_key);
     let status = upper(asset.preview_status);
     if ((!key || status !== "READY") && upper(asset.source_type) === "CLOUD_API" &&
-        ["image/jpeg","image/png","image/webp"].includes(text(asset.mime_type).toLowerCase())) {
+        ["JPG","JPEG","PNG","WEBP","PSD","PSB","AI","PDF","TIF","TIFF"].includes(upper(asset.extension))) {
       try {
         if (await ensureCloudModelImagePreview(c,slug,id)) {
           const ready = await c.env.DB.prepare(
