@@ -1,7 +1,8 @@
-deploy: ky-erp-pro-android-responsive-navigation-20261026
-canonical: bb7fb42ffb433a7bd6030703dbe5990f7dc2f5e4
-requested: 2026-10-26
-source_prs: 476
-reason: mobile one-PWA module selector, daily operation mobile viewport, personnel dialog and Desen collapsible filters, same canonical AppV3 and D1
-ci: 40305765435 SUCCESS
+deploy: gunluk-operasyon-5-sekme-tam-onarim-20261104
+pr: 514
+merge: c204bf41614a67bde0c052021d862caf2fed1ece
+ci: 41811145091 SUCCESS
+scope: KY ERP API + canonical /guvenlik/pro/ frontend assets
+reason: independent period-lock/attendance/roster reads, locked range, verified day/shift, fail-closed edit; no DB migration or data mutation
+requested: 2026-11-04
 migration: NONE
