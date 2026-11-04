@@ -75,6 +75,9 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: Verify Photoshop-free PSD and PSB composite preview
+        working-directory: .
+        run: node --test tools/file-hub-agent/psd-composite-preview.test.mjs
       - name: Isolated personnel D1 migration and integrity smoke
         run: python3 scripts/employee-portal-sandbox-smoke.py
       - run: npm run build
