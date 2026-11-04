@@ -27,7 +27,7 @@ const SCREEN_COPY = {
       "Baskı bölgesi bazlı yerleşim ve kalıp işlerini teknik kuyrukta tamamlayın.",
   },
   "desen-raporlari": {
-    title: "Desen Raporları",
+    title: "Kontrol & Rapor",
     description:
       "Desen hazırlık sürecini gerçek kayıtlar ve filtreli CSV çıktısıyla izleyin.",
   },
