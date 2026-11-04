@@ -22,7 +22,6 @@ import {
 } from "lucide-react";
 import { apiUrl } from "../../utils/api";
 import DesenImage from "./DesenImage";
-export { DesenImage };
 import {
   createDesignOperation,
   createDesignModel,
@@ -36,6 +35,8 @@ import {
   updateDesignModel,
   updateDesignOperation,
 } from "../../services/desenWorkflowApi";
+
+export { DesenImage };
 
 export const PRINT_AREAS = [
   ["FRONT", "Ön"],
