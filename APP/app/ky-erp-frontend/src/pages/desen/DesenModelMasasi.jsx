@@ -112,7 +112,7 @@ export default function DesenModelMasasi({ activeMainCompany, openModule }) {
         {openModule ? <button className="dsg-btn" onClick={() => openModule("depolama", { tabKey: "depolama-senkronizasyon" })}><FolderOpen size={16} /> Drive / File Hub Kontrol</button> : null}
         <button className={`dsg-btn ${showErrors ? "active danger" : ""}`} onClick={() => setShowErrors((value) => !value)}><AlertTriangle size={16} /> Hatalı Dosyalar</button>
       </div>
-      <div className="dsg-scan-meta"><Clock3 size={16} /><span>R2 son tarama</span><strong>{formatDate(inbox.lastScanAt)}</strong><code>{inbox.folderPath || "STORAGE/desen/gelen"}</code></div>
+      <div className="dsg-scan-meta"><Clock3 size={16} /><span>R2 kuyruk durumu</span><strong>{formatDate(inbox.lastScanAt)}</strong><code>{inbox.folderPath || "STORAGE/desen/gelen"}</code></div>
     </section>
     {message && <div className="dsg-page-message">{message}</div>}
     <p className="dsg-inbox-origin-note"><strong>Kaynak ayrımı:</strong> Google Drive dosyaları File Hub üzerinden mevcut model kartlarıyla eşleştirilir. Buradaki gelen kuyruğu yalnız uygulama üzerinden R2'ye yüklenmiş, henüz işlenmemiş dosyaları gösterir; sıfır grup olması Drive'ın boş olduğu anlamına gelmez.</p>
