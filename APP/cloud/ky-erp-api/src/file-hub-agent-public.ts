@@ -131,6 +131,12 @@ async function previewUpload(c:Context<AppEnv>){
 async function claimPsdPreview(c:Context<AppEnv>){
   const b=await bodyOf(c),slug=slugOf(c,b);
   if(!(await verifyFileHubAgentCredential(c,slug)).ok)return c.json(err("AGENT_UNAUTHORIZED","Agent yetkisi geçersiz."),401);
+  // Recover an interrupted job without permanent PROCESSING limbo.
+  // A real error reported by the worker stays FAILED until the user requests retry.
+  const staleAt=new Date(Date.now()-45*60*1000).toISOString();
+  await c.env.DB.prepare(
+    "UPDATE file_hub_assets SET preview_status='PENDING',updated_at=? WHERE main_company_slug=? AND source_type='CLOUD_API' AND UPPER(extension) IN ('PSD','PSB') AND preview_status='PROCESSING' AND updated_at<?"
+  ).bind(now(),slug,staleAt).run();
   const row=await c.env.DB.prepare(
     "SELECT a.id FROM file_hub_assets a WHERE a.main_company_slug=? AND a.status='AVAILABLE' AND a.source_type='CLOUD_API' AND UPPER(a.extension) IN ('PSD','PSB') AND a.preview_status='PENDING' AND EXISTS(SELECT 1 FROM file_hub_relations r WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') ORDER BY a.updated_at LIMIT 1"
   ).bind(slug).first<Row>();
