@@ -206,7 +206,8 @@ test("control approval turns entire V2 card green and preserves server-side save
   assert.match(workspace, /kyq2-card/);
   assert.match(workspace, /kyq2-verify/);
   assert.match(workspace, /is-checked/);
-  assert.match(workspace, /disabled={!selected \|\| blocked \|\| busy \|\| periodLocked}/);
+  assert.match(workspace, /disabled={!selected \|\| blocked \|\| busy \|\| dailyWriteBlocked}/);
+  assert.match(workspace, /dailyWriteGate\(sharedGate\)/);
   assert.match(quickV2Css, /\.kyq2-card\.is-checked/);
   assert.match(quickV2Css, /background: #bbf7d0/);
   assert.match(quickV2Css, /\.kyq2-verify\.is-active/);
