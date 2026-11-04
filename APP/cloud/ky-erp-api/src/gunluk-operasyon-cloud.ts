@@ -1425,11 +1425,24 @@ async function lockGet(c: Context<AppEnv>) {
   await ensureSchema(c);
   const companyId = companyIdOf(c);
   const date = dateOnly(c.req.query("date"));
+  const start = dateOnly(c.req.query("startDate"));
+  const end = dateOnly(c.req.query("endDate"));
+  if (start || end) {
+    if (!validDate(start) || !validDate(end) || end < start) {
+      return fail(c, 400, "DATE_RANGE_REQUIRED", "Dönem kilidi için geçerli tarih aralığı zorunludur.");
+    }
+  } else if (date && !validDate(date)) {
+    return fail(c, 400, "DATE_REQUIRED", "Dönem kilidi için geçerli tarih zorunludur.");
+  }
+  // An open historical period is not a lock. Fetch only actual LOCKED
+  // intervals that intersect the selected date or the whole roster range.
+  const from = start || date;
+  const until = end || date;
   const result = await c.env.DB.prepare(`SELECT * FROM hr_daily_period_lock
-      WHERE main_company_id=?
+      WHERE main_company_id=? AND status='LOCKED'
         AND (?='' OR (start_date<=? AND end_date>=?))
       ORDER BY updated_at DESC LIMIT 100`)
-    .bind(companyId, date, date, date)
+    .bind(companyId, from, until, from)
     .all<Row>();
   return ok(c, result.results || []);
 }
