@@ -51,7 +51,7 @@ async function existingCanonicalModel(c: Context<AppEnv>, slug: string, modelNam
         ORDER BY updated_at DESC LIMIT 20`,
     ).bind(slug,modelName,modelName).all<Row>();
     const candidates = (result.results || []).filter((row: Row) =>
-      normalize(row.model_name || row.model_code) === normalize(modelName));
+      (normalize(row.model_name) === normalize(modelName) || normalize(row.model_code) === normalize(modelName)));
     // Aynı ada sahip birden fazla firma varsa dosyadan firma tahmin etme.
     if (candidates.length > 1) return { ambiguous:true };
     return candidates[0] || null;
@@ -164,7 +164,7 @@ export async function syncFileHubDesignModel(c: Context<AppEnv>, input: Row) {
   if (!slug || !modelName || !fileAssetId) return null;
 
   const rows = await modelRows(c, slug);
-  const matching=rows.filter((row:Row)=>normalize(row.modelName || row.modelCode) === normalize(modelName) && upper(row.status)!=="ARCHIVE");
+  const matching=rows.filter((row:Row)=>(normalize(row.modelName) === normalize(modelName) || normalize(row.modelCode) === normalize(modelName)) && upper(row.status)!=="ARCHIVE");
   // Firma ID'si dosya adından çıkarılamaz; birden fazla adayda otomatik bağlama kapalı.
   if(matching.length>1)return null;
   let current = matching[0] || null;
