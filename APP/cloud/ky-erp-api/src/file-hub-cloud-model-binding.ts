@@ -101,7 +101,7 @@ export function matchExistingDesignModelNames(
     const match = " " + candidate.key + " ";
     const at = haystack.indexOf(match);
     if (at < 0) continue;
-    const from = at, to = at + match.length;
+    const from = at + 1, to = from + candidate.key.length;
     if (used.some(([start, end]) => from < end && to > start)) continue;
     used.push([from, to]);
     result.push(candidate.name);
