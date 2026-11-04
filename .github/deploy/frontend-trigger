@@ -1,5 +1,8 @@
-deploy: daily-check-save-20261016
-pr: 430
-merge: 628e6ce3cd8ea41a0a4d88a143d7bd32b947eaee
-ci: 38878016565
-reason: persist and verify quick attendance checked state
+deploy: gunluk-operasyon-5-sekme-tam-onarim-20261104
+pr: 514
+merge: c204bf41614a67bde0c052021d862caf2fed1ece
+ci: 41811145091 SUCCESS
+scope: canonical KY ERP Pages frontend
+reason: five Daily Operations tabs shared integrity, period-lock and sync repair; no data mutation
+requested: 2026-11-04
+migration: NONE
