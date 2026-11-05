@@ -121,7 +121,7 @@ export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
       const modules = [...new Set(relationRows.map((row: Row) => moduleForEntity(row.entity_type)))];
       // Bilinmeyen ilişki tipi bir açık erişim yolu olamaz. Bir dosya hem finans hem
       // özlük kaydına bağlıysa her iki modülün görüntüleme yetkisi de gerekli.
-      if (!modules.length || !modules.every((moduleKey) => moduleKey && permission(user, moduleKey)?.canView)) {
+      if (!modules.length || !modules.every((moduleKey) => moduleKey && canView(user, moduleKey))) {
         return c.json({ ok:false, error:{ code:"FORBIDDEN", message:"Bu dosyanın önizlemesini görme yetkiniz bulunmuyor." } }, 403);
       }
     }
