@@ -1,7 +1,7 @@
 // @ts-nocheck
 import type { Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { describeSharedPlate, suggestPlateMembership, validatePlateEntries } from "./desen-plate-logic";
+import { describeSharedPlate, rankPrintVariants, suggestPlateMembership, validatePlateEntries } from "./desen-plate-logic";
 
 /** A PSD/PSB file asset is the physical shared kalip identity; names are never renamed. */
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
@@ -81,6 +81,7 @@ async function plateView(c:any,slug:string,asset:Row) {
     all.push({modelId:t(row.modelId),sizeCode:"UNSPECIFIED",sizeLabel:"Boy bilinmiyor",printArea:"",evidence:"EXISTING_MODEL_RELATION"});
   }
   const confirmed=Array.isArray(stored.entries)?stored.entries:[];
+  const sizeRanking=rankPrintVariants(confirmed);
   const revised=Boolean(stored.sourceFingerprint && stored.sourceFingerprint!==sourceKey(asset));
   return {
     assetId:t(asset.id),fileName:t(asset.file_name),relativePath:t(asset.relative_path),
@@ -88,7 +89,7 @@ async function plateView(c:any,slug:string,asset:Row) {
     previewUrl:"/api/file-hub/files/"+encodeURIComponent(t(asset.id))+"/preview",
     sourceRevised:revised,revision:Number(stored.revision||0),
     shelfLabel:t(stored.shelfLabel),plateCode:t(stored.plateCode),
-    entries:confirmed.map((row:Row)=>({...row,modelName:byId.get(t(row.modelId))||t(row.modelName)||"Model bulunamadı"})),
+    entries:confirmed.map((row:Row,index:number)=>({...row,printedSizeRank:sizeRanking[index],modelName:byId.get(t(row.modelId))||t(row.modelName)||"Model bulunamadı"})),
     suggestions:stored.revision>0 ? [] : all.map((row:Row)=>({...row,modelName:byId.get(t(row.modelId))||"Model bulunamadı"})),
     status:stored.revision>0?(revised?"REVISION_REVIEW":confirmed.some((row:Row)=>!(Number(row.widthCm)>0 && Number(row.heightCm)>0))?"MEASUREMENT_PENDING":"CONFIRMED"):"REVIEW_REQUIRED",
     uniqueModels:new Set(confirmed.map((row:Row)=>t(row.modelId))).size,
