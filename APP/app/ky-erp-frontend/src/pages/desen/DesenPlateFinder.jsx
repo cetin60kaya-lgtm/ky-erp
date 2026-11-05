@@ -8,14 +8,26 @@ const text = (x) => String(x ?? "").trim();
 const unique = (rows) => [...new Set((rows || []).map((row) => row.modelId))];
 const showCm = (value) => value === null || value === undefined || value === "" ? "" :
   Number(value).toLocaleString("tr-TR", {maximumFractionDigits:3});
-const describeSize = (item) => {
+const relativeCm = (item,reference) => {
+  if (!reference || item===reference || !reference.widthCm || !reference.heightCm ||
+      !item.widthCm || !item.heightCm) return "";
+  const widthChange = (Number(item.widthCm)/Number(reference.widthCm)-1)*100;
+  const heightChange = (Number(item.heightCm)/Number(reference.heightCm)-1)*100;
+  const printPercent = (value) => (value>0 ? "+" : "") +
+    value.toLocaleString("tr-TR",{maximumFractionDigits:2}) + "%";
+  if(Math.abs(widthChange-heightChange)<0.5)
+    return "Orijinale göre " + printPercent((widthChange+heightChange)/2);
+  return "Orijinale göre en " + printPercent(widthChange) +
+    ", boy " + printPercent(heightChange) + " (orantı farklı)";
+};
+const describeSize = (item, reference) => {
   const dimension = item.widthCm && item.heightCm
     ? showCm(item.widthCm) + " × " + showCm(item.heightCm) + " cm"
     : "En–boy ölçüsü girilmedi";
   const use = item.allGarmentSizes ? "Tüm ürün bedenleri"
     : item.garmentSizes?.length ? "Ürün: " + item.garmentSizes.join(", ")
     : "Uygulanacak ürün bedenleri bilinmiyor";
-  return [item.sizeLabel || "Varyant",dimension,
+  return [item.sizeLabel || "Varyant",dimension,relativeCm(item,reference),
     item.artworkPart ? "Parça: "+item.artworkPart : "",
     use].filter(Boolean).join(" · ");
 };
@@ -24,7 +36,10 @@ const displayRows = (rows) => {
   for (const item of rows || []) {
     const id = text(item.modelId);
     const group = groups.get(id) || {name:item.modelName || "Model",variants:[],areas:[]};
-    const label = describeSize(item);
+    const reference = (rows || []).find((row) => row.modelId===item.modelId &&
+      (row.artworkPart || "")===(item.artworkPart || "") &&
+      (row.printArea || "")===(item.printArea || "") && row.isReferenceSize===true);
+    const label = describeSize(item,reference);
     if (!group.variants.includes(label)) group.variants.push(label);
     if (item.printArea && !group.areas.includes(item.printArea)) group.areas.push(item.printArea);
     groups.set(id,group);
