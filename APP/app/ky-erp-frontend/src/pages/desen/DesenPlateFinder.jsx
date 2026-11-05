@@ -106,7 +106,7 @@ function PlatePreview({ assetId, slug, initialPreviewStatus = "" }) {
   </div>;
 }
 
-function PlateEditor({ plate, models, slug, focusedModelId, onSaved }) {
+function PlateEditor({ plate, models, slug, onSaved }) {
   const [entries, setEntries] = useState(plate.entries.map((row) => ({...row,garmentSizesText:(row.garmentSizes || []).join(", ")})));
   const [plateCode, setPlateCode] = useState(plate.plateCode || "");
   const [shelfLabel, setShelfLabel] = useState(plate.shelfLabel || "");
@@ -134,7 +134,7 @@ function PlateEditor({ plate, models, slug, focusedModelId, onSaved }) {
       });
       const list=result?.data?.measurements||[];
       if(!list.length){setNotice("PDF yazılarından güvenilir en × boy çifti okunamadı; elle kontrol edin.");return;}
-      setOcrCandidates(list.map((row)=>({...row,modelId:focusedModelId||""})));
+      setOcrCandidates(list.map((row)=>({...row,modelId:""})));
     }catch(error){setNotice(error?.message||"PDF yorumlanamadı.");}
     finally{setOcrBusy(false);}
   };
@@ -365,8 +365,12 @@ export default function DesenPlateFinder({ activeMainCompany, query = "" }) {
         <p key={row.id}><strong>{row.name}</strong>: {row.variants.join(" / ")} {row.areas.length ? "· "+row.areas.join(", ") : ""}</p>)}
       <PlatePreview key={active.assetId} assetId={active.assetId} slug={slug} initialPreviewStatus={active.previewStatus} />
       <button type="button" className="dsg-btn" onClick={()=>setEditing((value)=>!value)}>{editing ? "Düzenlemeyi kapat" : "Yetkili düzeltme / raf ve boy bilgisi"}</button>
-      {editing && <PlateEditor key={active.assetId+"-"+active.revision} plate={active} models={models} slug={slug} focusedModelId={effectiveId}
-        onSaved={()=>{choosePlate(active.assetId);setEditing(false);}} />}
+      {editing && <PlateEditor key={active.assetId+"-"+active.revision} plate={active} models={models} slug={slug}
+        onSaved={()=>{
+          choosePlate(active.assetId);setEditing(false);
+          if (effectiveId) apiFetch("/desen/plates/model/"+encodeURIComponent(effectiveId)+
+            "?mainCompanySlug="+encodeURIComponent(slug)).then((res)=>setPlates(res?.data?.plates||[])).catch(()=>{});
+        }} />}
     </div>}
   </section>;
 }
