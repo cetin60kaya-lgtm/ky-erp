@@ -85,6 +85,17 @@ function undoZipPrediction(bytes, width, height, channels, depth) {
   }
 }
 
+function hsbToRgb(h, s, v) {
+  const sector = h * 6;
+  const i = Math.floor(sector) % 6;
+  const f = sector - Math.floor(sector);
+  const p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  return [
+    [v, t, p], [q, v, p], [p, v, t],
+    [p, q, v], [t, p, v], [v, p, q],
+  ][i];
+}
+
 /** Returns {png,width,height,sourceWidth,sourceHeight}; never writes or changes input. */
 export async function renderPsdComposite(file, options = {}) {
   const handle = await open(file, 'r');
@@ -112,16 +123,60 @@ export async function renderPsdComposite(file, options = {}) {
     const depth = head.readUInt16BE(22);
     const colorMode = head.readUInt16BE(24);
     if (!sourceWidth || !sourceHeight || sourceWidth > MAX_DIMENSION || sourceHeight > MAX_DIMENSION || channels > 32) throw new Error('PSD_DIMENSIONS_UNSUPPORTED');
-    if (![8, 16].includes(depth) || ![1, 3].includes(colorMode)) throw new Error('PSD_COLOR_MODE_UNSUPPORTED');
+    if (![8, 16].includes(depth) || ![1, 3, 7].includes(colorMode)) throw new Error('PSD_COLOR_MODE_UNSUPPORTED');
+    const multichannel = colorMode === 7;
     const baseChannels = colorMode === 3 ? 3 : 1;
     if (channels < baseChannels) throw new Error('PSD_CHANNELS_INVALID');
-    const alphaChannel = channels > baseChannels ? baseChannels : -1;
+    const alphaChannel = !multichannel && channels > baseChannels ? baseChannels : -1;
     const bytesPerSample = depth / 8;
     const rowBytes = sourceWidth * bytesPerSample;
     const decompressedBytes = rowBytes * sourceHeight * channels;
     if (!Number.isSafeInteger(decompressedBytes)) throw new Error('PSD_SIZE_UNSUPPORTED');
     let position = 26;
-    for (const isLayerSection of [false, false, true]) {
+    let spotColors = null;
+    // Photoshop DisplayInfo resource 1077 contains each spot channel's
+    // preview colour and opacity. Multichannel channels are inks, not RGB.
+    if (multichannel) {
+      const colorBytes = (await readAt(position, 4)).readUInt32BE(0);
+      position += 4 + colorBytes;
+      const resourceSize = (await readAt(position, 4)).readUInt32BE(0);
+      position += 4;
+      const resourceEnd = position + resourceSize;
+      if (resourceEnd > size) throw new Error('PSD_TRUNCATED');
+      while (position + 12 <= resourceEnd) {
+        const header = await readAt(position, 7);
+        if (header.toString('ascii', 0, 4) !== '8BIM') break;
+        const id = header.readUInt16BE(4);
+        const nameBytes = header[6] + 1;
+        const namePadded = nameBytes + (nameBytes % 2);
+        const length = (await readAt(position + 6 + namePadded, 4)).readUInt32BE(0);
+        const payloadAt = position + 6 + namePadded + 4;
+        if (payloadAt + length > resourceEnd) throw new Error('PSD_RESOURCE_CORRUPT');
+        if (id === 1077 && length >= 4 + channels * 13 && length < 65536) {
+          const info = await readAt(payloadAt, length);
+          if (info.readUInt32BE(0) === 1) {
+            spotColors = Array.from({length: channels}, (_, i) => {
+              const offset = 4 + i * 13;
+              const colorSpace = info.readUInt16BE(offset);
+              const c = [0, 1, 2].map(j => info.readUInt16BE(offset + 2 + j * 2) / 65535);
+              let rgb;
+              if (colorSpace === 1) rgb = hsbToRgb(...c);
+              else if (colorSpace === 0) rgb = c;
+              else throw new Error('PSD_SPOT_COLOR_UNSUPPORTED');
+              const opacity = Math.min(1, info.readUInt16BE(offset + 10) / 100);
+              if (info[offset + 12] !== 2) throw new Error('PSD_SPOT_KIND_UNSUPPORTED');
+              return {rgb, opacity};
+            });
+          }
+        }
+        position = payloadAt + length + (length % 2);
+      }
+      if (!spotColors?.length) throw new Error('PSD_SPOT_COLOR_MISSING');
+      position = resourceEnd;
+      const layerBytes = version === 2 ? Number((await readAt(position, 8)).readBigUInt64BE(0)) : (await readAt(position, 4)).readUInt32BE(0);
+      position += (version === 2 ? 8 : 4) + layerBytes;
+      if (position > size) throw new Error('PSD_TRUNCATED');
+    } else for (const isLayerSection of [false, false, true]) {
       const lengthSize = isLayerSection && version === 2 ? 8 : 4;
       const field = await readAt(position, lengthSize);
       const length = lengthSize === 8 ? Number(field.readBigUInt64BE(0)) : field.readUInt32BE(0);
@@ -167,7 +222,7 @@ export async function renderPsdComposite(file, options = {}) {
       const begin = (plane * sourceHeight + y) * rowBytes;
       return zipped.subarray(begin, begin + rowBytes);
     }
-    const planeCount = baseChannels + (alphaChannel >= 0 ? 1 : 0);
+    const planeCount = multichannel ? channels : baseChannels + (alphaChannel >= 0 ? 1 : 0);
     for (let dy = 0; dy < height; dy++) {
       const sy = Math.min(sourceHeight - 1, Math.floor((dy + 0.5) * sourceHeight / height));
       const rows = await Promise.all(Array.from({length: planeCount}, (_, ch) => planeRow(ch, sy)));
@@ -176,9 +231,23 @@ export async function renderPsdComposite(file, options = {}) {
         const pos = sx * bytesPerSample;
         const byte = (ch) => rows[ch][pos];
         const dst = (dy * width + dx) * 4;
-        if (baseChannels === 1) rgba[dst] = rgba[dst + 1] = rgba[dst + 2] = byte(0);
-        else { rgba[dst] = byte(0); rgba[dst + 1] = byte(1); rgba[dst + 2] = byte(2); }
-        if (alphaChannel >= 0) rgba[dst + 3] = byte(alphaChannel);
+        if (multichannel) {
+          let r = 1, g = 1, b = 1;
+          for (let ch = 0; ch < channels; ch++) {
+            const ink = (1 - byte(ch) / 255) * spotColors[ch].opacity;
+            const [cr, cg, cb] = spotColors[ch].rgb;
+            r = r * (1 - ink) + cr * ink;
+            g = g * (1 - ink) + cg * ink;
+            b = b * (1 - ink) + cb * ink;
+          }
+          rgba[dst] = Math.round(r * 255);
+          rgba[dst + 1] = Math.round(g * 255);
+          rgba[dst + 2] = Math.round(b * 255);
+        } else {
+          if (baseChannels === 1) rgba[dst] = rgba[dst + 1] = rgba[dst + 2] = byte(0);
+          else { rgba[dst] = byte(0); rgba[dst + 1] = byte(1); rgba[dst + 2] = byte(2); }
+          if (alphaChannel >= 0) rgba[dst + 3] = byte(alphaChannel);
+        }
       }
     }
     return { png: pngFromRgba(rgba, width, height), width, height, sourceWidth, sourceHeight };
