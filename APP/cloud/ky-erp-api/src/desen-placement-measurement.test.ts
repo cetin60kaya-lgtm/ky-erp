@@ -34,3 +34,8 @@ test("yetişkin bedenleri cm değildir, yalnız seçilmiş giysi grubunu belirle
   assert.deepEqual(rows[0].garmentSizes,["S","M","L"]);
   assert.equal(rows[0].widthCm,10.5);
 });
+
+test("OCR aynı satırda tüm bedenler, desen ölçüsü ve çekme ölçüsü yazsa bile ayırır",()=>{
+  const rows=interpretPlacementText("TÜM BEDENLERDE DESEN EN=26.6 CM DESEN BOY=5.01 CM ÇEKME EN=2 CM ÇEKME BOY=3.5 CM");
+  assert.deepEqual(rows.map(x=>[x.widthCm,x.heightCm,x.allGarmentSizes]),[[26.6,5.01,true]]);
+});
