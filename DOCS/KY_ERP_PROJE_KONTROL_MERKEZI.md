@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 05.11.2026 — DESEN ortak PSD kalıbı, gerçek santimetre varyantları ve canlı kabul (PR #519)
+- [PR #519](https://github.com/cetin60kaya-lgtm/ky-erp/pull/519) dalı `feature/desen-ortak-kalip-boy-eslesme-20261105`; fiziksel PSD adı korunur, model başına sınırsız en×boy cm varyantı, ürün bedenleri ayrı, ortak model/raf/yerleşim/önizleme araması ve kontrollü OCR metin adayları kodlandı. PDF metin çıkarma gerçek taranmış görüntü OCR'ı kabulü değildir.
+- **Gerçek DESEN Windows kabulü:** 05.11 ~08:32 TRT özel Chat Bridge eşleşen `status` sonucu `ok=true`, `desktop=true`, Hub8840/Mesh8443=true; Remote Commander DESEN Online. Yerel canonical repo `ab8a4b67` → `5e5e01af` fast-forward; iki untracked XLSM aktarım betiği dosya içerik SHA'sı GitHub versiyonuyla aynı doğrulanarak güvenli Git stash yedeğinde korundu. Çalışma ağacı temiz, PSD worker dosyası mevcut.
+- Windows Node v24.20.0: `node --test tools/file-hub-agent/psd-composite-preview.test.mjs` = **18 PASS, 0 FAIL**. Bu testler sentetik PSD/PSB ve spot fixture'larıdır, gerçek Google Drive → R2 canlı uçtan uca kabul değildir.
+- Windows üstünden üretim HTTPS smoke: `api.kyerp.net/api/health` 200, `ok=true`, `database=d1`; `kyerp.net` 200; anonim `/api/desen/plates/models` 401 (beklenen). Authenticated D1 veri yazma yapılmadı.
+- **Bloker:** DESEN kullanıcı/makine/process ortamlarında `KYERP_AGENT_KEY` mevcut değil; `KY ERP File Hub Agent` Windows görevi ve aktif File Hub/PSD preview agent süreci mevcut değil. Yeni token üretilmedi veya sohbete taşınmadı. İlgili ajan kurulup var olan tenant yetkisiyle çalıştırılmadan yeni tam önizleme için R2 READY kanıtı üretilemez.
+- **Yayın:** PR #519 hâlen taslak; son CI ve merge + Pages/Worker production ancestry doğrulanmadan özellik canlı denmez. PR'ı ready durumuna taşıma önceki araç güvenlik kontrolünde engellendi; farklı yöntemle aşılmadı. Yetkili kullanıcı ERP oturumu ve gerçek Drive PDF OCR sonucu ayrıca bekliyor.
+
+
 ## 04.11.2026 — DESEN Google Drive tek model / DTF / PSD kaynak ilişki revizyonu (PR #517)
 - GitHub: [PR #517](https://github.com/cetin60kaya-lgtm/ky-erp/pull/517), dal `feature/desen-filehub-one-model-20261104`. 04.11 ön Drive incelemesinde RGB 2026: 347, yerleşim: 694, modeller/giden PSD: en az ilk 1.000 kayıt doğrulandı; asıl dosya klasörleri değişmedi.
 - Kod: MODEL ADI DTF kökünden DTF kaynak/RIP PDF ayırma, model adı+kodu alias doğrulama, çoklu model giden PSD için birden fazla canonical UUID ilişkisi, belirsiz firma/model eşleşmesinde güvenli durma, mevcut indeks için küçük parti yeniden eşleştirme, idempotent File Hub ilişki kontrolü, model kartında RGB/kaynak/yerleşim/giden PSD/DTF dosya grupları; bulut PDF yetkili görüntüleme/indirme ve sağlayıcı destekliyorsa PSD küçük thumbnail.
