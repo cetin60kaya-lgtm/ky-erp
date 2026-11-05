@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 05.11.2026 — DESEN ortak PSD kalıbı, gerçek santimetre varyantları ve canlı kabul (PR #519)
+- [PR #519](https://github.com/cetin60kaya-lgtm/ky-erp/pull/519) dalı `feature/desen-ortak-kalip-boy-eslesme-20261105`; fiziksel PSD adı korunur, model başına sınırsız en×boy cm varyantı, ürün bedenleri ayrı, ortak model/raf/yerleşim/önizleme araması ve kontrollü OCR metin adayları kodlandı. PDF metin çıkarma gerçek taranmış görüntü OCR'ı kabulü değildir.
+- **Gerçek DESEN Windows kabulü:** 05.11 ~08:32 TRT özel Chat Bridge eşleşen `status` sonucu `ok=true`, `desktop=true`, Hub8840/Mesh8443=true; Remote Commander DESEN Online. Yerel canonical repo `ab8a4b67` → `5e5e01af` fast-forward; iki untracked XLSM aktarım betiği dosya içerik SHA'sı GitHub versiyonuyla aynı doğrulanarak güvenli Git stash yedeğinde korundu. Çalışma ağacı temiz, PSD worker dosyası mevcut.
+- Windows Node v24.20.0: `node --test tools/file-hub-agent/psd-composite-preview.test.mjs` = **18 PASS, 0 FAIL**. Bu testler sentetik PSD/PSB ve spot fixture'larıdır, gerçek Google Drive → R2 canlı uçtan uca kabul değildir.
+- Windows üstünden üretim HTTPS smoke: `api.kyerp.net/api/health` 200, `ok=true`, `database=d1`; `kyerp.net` 200; anonim `/api/desen/plates/models` 401 (beklenen). Authenticated D1 veri yazma yapılmadı.
+- **Bloker:** DESEN kullanıcı/makine/process ortamlarında `KYERP_AGENT_KEY` mevcut değil; `KY ERP File Hub Agent` Windows görevi ve aktif File Hub/PSD preview agent süreci mevcut değil. Yeni token üretilmedi veya sohbete taşınmadı. İlgili ajan kurulup var olan tenant yetkisiyle çalıştırılmadan yeni tam önizleme için R2 READY kanıtı üretilemez.
+- **Yayın:** PR #519 incelemeye hazır (kullanıcı tarafından 05.11.2026 tarihinde taslak durumdan çıkarıldı); son CI ve merge + Pages/Worker production ancestry doğrulanmadan özellik canlı denmez. GitHub'da incelemeye hazır durumu doğrulandı. Yetkili kullanıcı ERP oturumu ve gerçek Drive PDF OCR sonucu ayrıca bekliyor.
+
 ## 05.11.2026 — Günlük Operasyon LOG tarih sınırı + Haftalık Özet D1 ek/kesinti/net canlı (PR #520)
 - Kök neden 1: Günlük LOG, D1 audit/revisions/attendance kaynaklarını birleştirirken `revisions()` sadece `date` kullanıyor, `startDate/endDate` değerlerini yok sayıyordu. UI son filtrede iş tarihini ve istenen aralık kapsamını tekrar doğrulamıyordu. Kanıt kapsamı: seçilen ÇALIŞMA TARİHİ (workDate); işlem yapılış saati (createdAt) yalnız bilgi.
 - Kök neden 2: `weeklySummary()` sadece vardiya baz ücretlerini topluyordu; frontend `getDailyWeeklySummary` verisini çekip kullanmadan attendance ile bağımsız toplam yapıyordu. Bu yüzden D1 ACTIVE ek ödeme/kesinti haftalık personel listesi, net KPI, A4 ve Excel'e geçmiyordu.
@@ -9,7 +17,6 @@
 - PR https://github.com/cetin60kaya-lgtm/ky-erp/pull/520 birleştirme SHA `16595364aaa518577540152c004174adf6d1fde4`. CI https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41975967565 SUCCESS: frontend lint/test/build + Worker typecheck/test/build.
 - Canlı API & Security deploy https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41976186241 SUCCESS; API Worker Version ID `683d116a-71bb-4306-ac1d-66774a4f5874`. Pages https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/41976206014 SUCCESS; canlı `/assets/DailyHrWorkspace-D43Pi0vB.js` SHA256 `ec6bf1e52bdc987bf3c1257bb98e6b74d8edaed97fc2742efdb066b7321b6864` build ile eşleşti. Health 200; anonim personel izni 401; üretim Chrome kamuya açık smoke PASS.
 - Saha kabulü: Yetkili muhasebeci oturumu ve gerçek D1 haftalık ek ödeme/kesinti örneği salt-okunur eşleştirmeyle henüz doğrulanmadı. CI/Chrome public smoke, muhasebeci oturumunda gerçek tutarın teyidi değildir. Girilmiş veya ödenmiş fişler test için yeniden işlenmedi.
-
 
 ## 04.11.2026 — DESEN Google Drive tek model / DTF / PSD kaynak ilişki revizyonu (PR #517)
 - GitHub: [PR #517](https://github.com/cetin60kaya-lgtm/ky-erp/pull/517), dal `feature/desen-filehub-one-model-20261104`. 04.11 ön Drive incelemesinde RGB 2026: 347, yerleşim: 694, modeller/giden PSD: en az ilk 1.000 kayıt doğrulandı; asıl dosya klasörleri değişmedi.
