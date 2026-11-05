@@ -1375,6 +1375,10 @@ async function revisions(c: Context<AppEnv>) {
   const companyId = companyIdOf(c);
   const employeeId = text(c.req.query("employeeId"));
   const workDate = dateOnly(c.req.query("date") || c.req.query("workDate"));
+  const start = dateOnly(c.req.query("startDate") || c.req.query("start"));
+  const end = dateOnly(c.req.query("endDate") || c.req.query("end"));
+  if ((start || end) && (!validDate(start) || !validDate(end) || end < start))
+    return fail(c, 400, "DATE_RANGE_REQUIRED", "Revizyon geçmişi için geçerli başlangıç ve bitiş tarihleri zorunludur.");
   const attendanceId = text(c.req.query("attendanceId"));
   const limit = Math.max(
     1,
@@ -1384,16 +1388,17 @@ async function revisions(c: Context<AppEnv>) {
       WHERE main_company_id=?
         AND (?='' OR employee_id=?)
         AND (?='' OR work_date=?)
+        AND (?='' OR work_date>=?)
+        AND (?='' OR work_date<=?)
         AND (?='' OR attendance_id=?)
       ORDER BY created_at DESC,revision DESC LIMIT ?`)
     .bind(
       companyId,
-      employeeId,
-      employeeId,
-      workDate,
-      workDate,
-      attendanceId,
-      attendanceId,
+      employeeId, employeeId,
+      workDate, workDate,
+      start, start,
+      end, end,
+      attendanceId, attendanceId,
       limit,
     )
     .all<Row>();
@@ -1716,7 +1721,34 @@ async function weeklySummary(c: Context<AppEnv>) {
     }
     map.set(id,item);
   }
-  const rows: Row[]=[...map.values()].map((row): Row=>({...row,total:row.totalAmount})).sort((a,b)=>String(a.name).localeCompare(String(b.name),"tr"));
+  // The weekly matrix, payment pool, printed summary and Excel all use D1's
+  // period-scoped adjustments. They never change wage history or attendance shifts.
+  const additions = await c.env.DB.prepare(`SELECT a.*,e.full_name,e.qualification
+      FROM hr_daily_payment_adjustments a
+      JOIN hr_daily_employees e ON e.id=a.employee_id AND e.main_company_id=a.main_company_id
+      WHERE a.main_company_id=? AND a.period_start=? AND a.period_end=? AND a.status='ACTIVE'
+      ORDER BY a.created_at,a.id`)
+    .bind(companyId,start,end).all<Row>();
+  for (const extra of additions.results || []) {
+    const id=text(extra.employee_id);
+    const item=map.get(id) || {
+      id:`${id}-${start}`,employeeId:id,fullName:text(extra.full_name),name:text(extra.full_name),
+      qualification:text(extra.qualification),dayWage:0,nightWage:0,dayCount:0,nightCount:0,
+      totalAmount:0,paidAmount:0,weekStart:start,weekEnd:end,
+    };
+    const amount=money(Number(extra.amount_cents || 0)/100);
+    if (text(extra.kind)==="ADD") item.additions=money(num(item.additions)+amount);
+    if (text(extra.kind)==="DEDUCT") item.deductions=money(num(item.deductions)+amount);
+    map.set(id,item);
+  }
+  const rows: Row[]=[...map.values()].map((row): Row=>{
+    const baseAmount=money(row.totalAmount);
+    const additionsAmount=money(row.additions);
+    const deductionsAmount=money(row.deductions);
+    const netAmount=money(baseAmount+additionsAmount-deductionsAmount);
+    return {...row,baseAmount,additions:additionsAmount,deductions:deductionsAmount,
+      totalAmount:netAmount,total:netAmount};
+  }).sort((a,b)=>String(a.name).localeCompare(String(b.name),"tr"));
   return okItems(c,rows,rows);
 }
 

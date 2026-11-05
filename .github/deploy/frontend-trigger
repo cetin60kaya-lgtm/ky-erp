@@ -1,9 +1,8 @@
-deploy: gunluk-operasyon-yeni-personel-kalici-kayit-20261104
-pr: 516
-merge: c79a0aae496def275419c67940b8aa8d3dcc0928
-ci: 41846017568 SUCCESS
-scope: Frontend Pages — daily personnel card onboarding + D1 roster persistence + next-day quick-entry alignment
-security_api: unchanged, previously deployed
-reason: Card creation, verified roster membership and quick day selection must persist across refresh/sync
-requested: 2026-11-04
+deploy: gunluk-operasyon-log-tarih-haftalik-ek-kesinti-20261105
+pr: 520
+merge: 16595364aaa518577540152c004174adf6d1fde4
+ci: 41975967565 SUCCESS
+scope: Pages daily-entry LOG, weekly summary and A4/Excel net financial reports
+reason: Same-date range scopes, exact D1 weekly net wage + additions - deductions, and no unverified financial export
 migration: NONE
+production_mutation: NONE

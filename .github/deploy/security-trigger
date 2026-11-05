@@ -1,8 +1,8 @@
-deploy: gunluk-operasyon-5-sekme-tam-onarim-20261104
-pr: 514
-merge: c204bf41614a67bde0c052021d862caf2fed1ece
-ci: 41811145091 SUCCESS
-scope: KY ERP API + canonical /guvenlik/pro/ frontend assets
-reason: independent period-lock/attendance/roster reads, locked range, verified day/shift, fail-closed edit; no DB migration or data mutation
-requested: 2026-11-04
+deploy: gunluk-operasyon-log-tarih-haftalik-ek-kesinti-20261105
+pr: 520
+merge: 16595364aaa518577540152c004174adf6d1fde4
+ci: 41975967565 SUCCESS
+scope: API Worker weekly-summary net amounts + revisions workdate filter; Security canonical build
+reason: Date-scoped revisions and ACTIVE weekly adjustment additions/deductions with D1 canonical settlement unchanged
 migration: NONE
+production_mutation: NONE
