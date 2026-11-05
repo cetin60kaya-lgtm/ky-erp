@@ -28,7 +28,11 @@ export function suggestedPlateSizes(segment: string): {sizeCode: PlateSize; size
   }
   const numbered = /\\b(?:BOY|BEDEN)\\s*(\\d{1,3})\\b|\\b(\\d{1,3})\\s*(?:\\.|-)\\s*(?:BOY|BEDEN)\\b/g;
   for (const hit of normalized.matchAll(numbered)) {
-    const n = hit[1] || hit[2];
+    const n = hit[1];
+    add("BOY_"+n, n+". boy");
+  }
+  for (const hit of String(segment).toUpperCase().matchAll(/\b(\d{1,3})\s*[.-]\s*(?:BOY|BEDEN)\b/g)) {
+    const n = hit[1];
     add("BOY_"+n, n+". boy");
   }
   if (clues.length) return clues;
