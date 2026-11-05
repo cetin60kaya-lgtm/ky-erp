@@ -130,10 +130,16 @@ export function validatePlateEntries(raw:unknown):
 }
 
 export function describeSharedPlate(entries:readonly PlateEntry[],modelId:string) {
+  const groups = new Map<string, Set<string>>();
+  for (const row of entries.filter(item => item.modelId === modelId)) {
+    // Ana desen ve kuyruk aynı iki beden grubunu kullanabilir; 4 sayılmaz.
+    const part = canonicalPlateText(row.artworkPart) + "|" + row.printArea;
+    if (!groups.has(part)) groups.set(part,new Set());
+    const key = row.widthCm && row.heightCm ? row.widthCm+"x"+row.heightCm : row.sizeCode;
+    groups.get(part)!.add(key);
+  }
   return {
-    modelSizeCount:new Set(entries.filter(row=>row.modelId===modelId).map(row=>[
-      row.sizeCode,row.widthCm,row.heightCm
-    ].join("|"))).size,
+    modelSizeCount:Math.max(0,...[...groups.values()].map(rows=>rows.size)),
     sharedModelCount:new Set(entries.map(row=>row.modelId)).size,
   };
 }
