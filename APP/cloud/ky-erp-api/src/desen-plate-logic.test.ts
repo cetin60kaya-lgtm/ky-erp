@@ -107,3 +107,10 @@ test("ana desen ve yardımcı kuyruk iki ebatta çekilirse toplam dört boy say�
   ];
   assert.deepEqual(describeSharedPlate(grouped,a),{modelSizeCount:2,sharedModelCount:1});
 });
+
+test("aynı parçaya iki orijinal ebat seçilemez; başka parça ayrı referans alabilir",()=>{
+  const original={...entry(a,"FIRST",10,12),isReferenceSize:true};
+  const second={...entry(a,"SECOND",12,14.4),isReferenceSize:true};
+  assert.equal(validatePlateEntries([original,second]).ok,false);
+  assert.equal(validatePlateEntries([original,{...second,artworkPart:"Kuyruk"}]).ok,true);
+});
