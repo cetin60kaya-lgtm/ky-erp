@@ -97,3 +97,13 @@ test("dört ve üzeri desen cm ölçüsü sıralanır, ters boy oranı kesin kü
     "En–boy oranı karşılaştırılmalı","En–boy oranı karşılaştırılmalı"
   ]);
 });
+
+test("ana desen ve yardımcı kuyruk iki ebatta çekilirse toplam dört boy sayılmaz",()=>{
+  const grouped=[
+    {...entry(a,"SMALL",17.93,23,["1-3 ay"]),artworkPart:"Ana desen"},
+    {...entry(a,"LARGE",20.61,26.45,["6-9 ay"]),artworkPart:"Ana desen"},
+    {...entry(a,"TAIL_SMALL",9,9.3,["1-3 ay"]),artworkPart:"Kuyruk"},
+    {...entry(a,"TAIL_LARGE",10.35,10.69,["6-9 ay"]),artworkPart:"Kuyruk"},
+  ];
+  assert.deepEqual(describeSharedPlate(grouped,a),{modelSizeCount:2,sharedModelCount:1});
+});
