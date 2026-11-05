@@ -499,3 +499,20 @@
 .dsg-plate-revision { display: flex; align-items: center; gap: 8px; font-weight: 700; }
 .dsg-plate-revision input { width: 18px; min-height: 18px; }
 @media(max-width:700px){ .dsg-plate-edit-row { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } .dsg-plate-editor-metadata { grid-template-columns: 1fr; } .dsg-plate-search-panel { padding: 10px; } }
+
+/* Baskı ölçüsü (cm) ile ürün bedeni eşleştirme; tek/iki/üç+ desen ölçüsüne uyumlu */
+.dsg-plate-edit-entry { display:grid; gap:8px; padding:12px; background:#fff; border:1px solid #cddce8; border-radius:8px; min-width:0; }
+.dsg-plate-edit-entry .dsg-plate-edit-row { grid-template-columns:repeat(4,minmax(0,1fr)); align-items:end; }
+.dsg-plate-edit-entry .dsg-plate-edit-row:nth-child(2) { grid-template-columns:minmax(0,.9fr) minmax(0,1.6fr) minmax(0,.7fr) auto; }
+.dsg-plate-edit-entry .dsg-plate-edit-row label { display:grid; gap:4px; min-width:0; font-size:12px; font-weight:650; }
+.dsg-plate-flags { display:flex; flex-wrap:wrap; gap:8px 20px; }
+.dsg-plate-flags label { display:inline-flex; gap:8px; align-items:center; font-size:12px; }
+.dsg-plate-flags input[type="checkbox"] { width:18px; min-height:18px; }
+@media (max-width:920px) {
+ .dsg-plate-edit-entry .dsg-plate-edit-row,
+ .dsg-plate-edit-entry .dsg-plate-edit-row:nth-child(2) { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (max-width:520px) {
+ .dsg-plate-edit-entry .dsg-plate-edit-row,
+ .dsg-plate-edit-entry .dsg-plate-edit-row:nth-child(2) { grid-template-columns:1fr; }
+}
