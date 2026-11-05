@@ -1,53 +1,76 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canonicalPlateText, suggestedPlateSizes, suggestPlateMembership, validatePlateEntries, describeSharedPlate } from "./desen-plate-logic.ts";
-const modelA = "a741a328-9613-4dfe-9fd4-318301a9701a";
-const modelB = "b741a328-9613-4dfe-9fd4-318301a9701b";
-
-test("kalıpta boy sayısı sınırsız: 1, 3, 80 boy aynı modelde ayrı kayıt", () => {
-  for (const count of [1, 3, 80]) {
-    const raw = Array.from({length:count}, (_,i) => ({
-      modelId:modelA,sizeCode:"BOY_"+String(i+1),sizeLabel:String(i+1)+". boy",printArea:"FRONT",
-    }));
-    const result = validatePlateEntries(raw);
-    assert.equal(result.ok, true);
-    if (result.ok) {
-      assert.equal(result.entries.length, count);
-      assert.equal(describeSharedPlate(result.entries,modelA).modelSizeCount,count);
-    }
-  }
+import {
+  canonicalPlateText, suggestedPlateSizes, suggestPlateMembership,
+  validatePlateEntries, describeSharedPlate, scaleRelativeToReference, cm,
+} from "./desen-plate-logic.ts";
+const a="a741a328-9613-4dfe-9fd4-318301a9701a",b="b741a328-9613-4dfe-9fd4-318301a9701b";
+const entry=(modelId:string, sizeCode:string, widthCm:number|null,heightCm:number|null, garments:string[]=[])=>({
+  modelId,sizeCode,sizeLabel:sizeCode,printArea:"FRONT",artworkPart:"Ana desen",
+  widthCm,heightCm,garmentSizes:garments,allGarmentSizes:false,isReferenceSize:false,
 });
-
-test("ortak PSD: A üç boy, B yalnız büyük; model ve boylar karışmaz", () => {
-  const raw = [
-    ...["1. boy","2. boy","3. boy"].map((sizeLabel,i)=>({modelId:modelA,sizeLabel,sizeCode:"BOY_"+(i+1),printArea:"FRONT"})),
-    {modelId:modelB,sizeLabel:"Büyük boy",sizeCode:"LARGE",printArea:"BACK"},
-  ];
-  const result = validatePlateEntries(raw);
+test("desen boyutu santimetre en x boy; ürün S/M/L/XL kalıp ölçüsü değildir",()=>{
+  assert.deepEqual(suggestedPlateSizes("XS/S/M/L/XL"),[{sizeCode:"UNSPECIFIED",sizeLabel:"Desen ölçüsü doğrulanmadı"}]);
+  assert.deepEqual(suggestedPlateSizes("3 BOY"),[{sizeCode:"UNSPECIFIED",sizeLabel:"Desen ölçüsü doğrulanmadı"}]);
+  assert.deepEqual(suggestedPlateSizes("K-B_BOY").map(x=>x.sizeCode),["SMALL","LARGE"]);
+});
+test("çok sayıda baskı ebadı, iki model ve her boya farklı ürün bedenleri",()=>{
+  const items=Array.from({length:80},(_,i)=>entry(a,"PRINT_"+(i+1),10+i/10,12+i/10,["3-4 yaş","4-5 yaş"]));
+  items.push(entry(b,"ORIGINAL",15,20,["S","M"]));
+  const result=validatePlateEntries(items);
   assert.equal(result.ok,true);
-  if (result.ok) {
-    assert.deepEqual(describeSharedPlate(result.entries,modelA),{modelSizeCount:3,sharedModelCount:2});
-    assert.deepEqual(describeSharedPlate(result.entries,modelB),{modelSizeCount:1,sharedModelCount:2});
+  if(result.ok){
+    assert.equal(result.entries.length,81);
+    assert.deepEqual(describeSharedPlate(result.entries,a),{modelSizeCount:80,sharedModelCount:2});
+    assert.deepEqual(result.entries[0].garmentSizes,["3-4 yaş","4-5 yaş"]);
   }
 });
-
-test("dosya adı asla yeniden adlandırılmaz, yalnız mevcut modeller önerilir", () => {
-  const file = "TEDCOR K-B_BOY - FANTY ÖN + ARKA.psd";
-  const suggestion = suggestPlateMembership(file,[{modelId:modelA,modelName:"TEDCOR"},{modelId:modelB,modelName:"FANTY"}]);
-  assert.equal(file,"TEDCOR K-B_BOY - FANTY ÖN + ARKA.psd");
-  assert.deepEqual(new Set(suggestion.map(x=>x.modelId)),new Set([modelA,modelB]));
-  assert.equal(canonicalPlateText("Büyük"),"BUYUK");
+test("tek baskı ebadı tüm ürün bedenlerinde kullanılabilir",()=>{
+  const candidate={...entry(a,"ORIGINAL","26,6" as unknown as number,"5,01" as unknown as number),allGarmentSizes:true,isReferenceSize:true};
+  const parsed=validatePlateEntries([candidate]);
+  assert.equal(parsed.ok,true);
+  if(parsed.ok)assert.deepEqual([parsed.entries[0].widthCm,parsed.entries[0].heightCm],[26.6,5.01]);
 });
-
-test("üçten fazla açıkça yazılmış boy ismi önerilebilir; salt sayı 3 BOY kesin boya çevrilmez", () => {
-  assert.deepEqual(suggestedPlateSizes("XS/S/M/L/XL").map(x=>x.sizeCode),["XS","S","M","L","XL"]);
-  assert.deepEqual(suggestedPlateSizes("1.BOY 2.BOY 3.BOY").map(x=>x.sizeCode),["BOY_1","BOY_2","BOY_3"]);
-  assert.equal(suggestedPlateSizes("3 BOY")[0].sizeCode,"UNSPECIFIED");
+test("orijinal 10x12 cm ile %15 küçük 8.5x10.2 cm ilişkisi",()=>{
+  const original=entry(a,"ORIGINAL",10,12);
+  const small=entry(a,"SMALL",8.5,10.2);
+  const actual=scaleRelativeToReference(original,small);
+  assert.ok(actual);
+  assert.equal(actual?.widthChangePercent,-15);
+  assert.equal(actual?.heightChangePercent,-15);
+  assert.equal(actual?.uniform,true);
+  const large=entry(a,"LARGE",12,14.4);
+  assert.equal(scaleRelativeToReference(original,large)?.widthChangePercent,20);
 });
-
-test("tekrarlanan model-boy-bölge reddedilir, aynı boy başka baskı bölgesinde olabilir", () => {
-  const row = {modelId:modelA,sizeCode:"BOY_9",sizeLabel:"9. boy",printArea:"FRONT"};
-  assert.equal(validatePlateEntries([row,row]).ok,false);
-  assert.equal(validatePlateEntries([row,{...row,printArea:"BACK"}]).ok,true);
-  assert.equal(validatePlateEntries([{...row,sizeCode:"KALIP_XL_4"}]).ok,true);
+test("sonradan gelen büyük ölçü, önceki orijinali küçük hale getirir; referans değişebilir",()=>{
+  const original={...entry(a,"SMALL",10,12),isReferenceSize:true};
+  const larger=entry(a,"LARGE",12,14.4);
+  const parsed=validatePlateEntries([original,larger]);
+  assert.equal(parsed.ok,true);
+  assert.equal(scaleRelativeToReference(original,larger)?.uniform,true);
+});
+test("bir model farklı ürün beden grubunda farklı desen ölçüsü kullanır",()=>{
+  const rows=[
+    entry(a,"PRINT_SMALL",17.93,23,["1-3 ay","3-6 ay"]),
+    entry(a,"PRINT_LARGE",20.61,26.45,["6-9 ay","9-12 ay","12-18 ay"]),
+    {...entry(a,"TAIL_SMALL",9,9.3,["1-3 ay","3-6 ay"]),artworkPart:"Kuyruk"},
+    {...entry(a,"TAIL_LARGE",10.35,10.69,["6-9 ay","9-12 ay","12-18 ay"]),artworkPart:"Kuyruk"},
+  ];
+  assert.equal(validatePlateEntries(rows).ok,true);
+  assert.notDeepEqual(rows[0].garmentSizes,rows[1].garmentSizes);
+});
+test("eksik tek boy ölçüsü, negatif değer, tekrar veya beden/ölçü karmaşası reddedilir",()=>{
+  assert.equal(validatePlateEntries([{...entry(a,"SMALL",10,null)}]).ok,false);
+  assert.equal(validatePlateEntries([{...entry(a,"SMALL",-1,10)}]).ok,false);
+  assert.equal(validatePlateEntries([entry(a,"SMALL",10,12),entry(a,"SMALL",11,13)]).ok,false);
+  assert.equal(validatePlateEntries([{...entry(a,"ONE",10,12),allGarmentSizes:true,garmentSizes:["S"]}]).ok,false);
+  assert.equal(validatePlateEntries([{...entry(a,"SMALL",null,null),garmentSizes:["S","S"]}]).ok,false);
+  assert.equal(cm("10,125"),10.125);
+});
+test("orijinal PSD dosya adı aynen kalır; sadece mevcut model isimleri aday olur",()=>{
+  const name="TEDCOR K-B_BOY - FANTY ÖN + ARKA.psd";
+  const results=suggestPlateMembership(name,[{modelId:a,modelName:"TEDCOR"},{modelId:b,modelName:"FANTY"}]);
+  assert.deepEqual(new Set(results.map(x=>x.modelId)),new Set([a,b]));
+  assert.equal(canonicalPlateText("Küçük"),"KUCUK");
+  assert.equal(name,"TEDCOR K-B_BOY - FANTY ÖN + ARKA.psd");
 });
