@@ -27,7 +27,7 @@ const describeSize = (item, reference) => {
   const use = item.allGarmentSizes ? "Tüm ürün bedenleri"
     : item.garmentSizes?.length ? "Ürün: " + item.garmentSizes.join(", ")
     : "Uygulanacak ürün bedenleri bilinmiyor";
-  return [item.sizeLabel || "Varyant",dimension,relativeCm(item,reference),
+  return [item.sizeLabel || "Varyant",item.printedSizeRank && item.printedSizeRank !== item.sizeLabel ? item.printedSizeRank : "",dimension,relativeCm(item,reference),
     item.artworkPart ? "Parça: "+item.artworkPart : "",
     use].filter(Boolean).join(" · ");
 };
