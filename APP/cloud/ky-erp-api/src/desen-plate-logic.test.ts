@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   canonicalPlateText, suggestedPlateSizes, suggestPlateMembership,
-  validatePlateEntries, describeSharedPlate, scaleRelativeToReference, cm,
+  validatePlateEntries, describeSharedPlate, scaleRelativeToReference, rankPrintVariants, cm,
 } from "./desen-plate-logic.ts";
 const a="a741a328-9613-4dfe-9fd4-318301a9701a",b="b741a328-9613-4dfe-9fd4-318301a9701b";
 const entry=(modelId:string, sizeCode:string, widthCm:number|null,heightCm:number|null, garments:string[]=[])=>({
@@ -73,4 +73,27 @@ test("orijinal PSD dosya adı aynen kalır; sadece mevcut model isimleri aday ol
   assert.deepEqual(new Set(results.map(x=>x.modelId)),new Set([a,b]));
   assert.equal(canonicalPlateText("Küçük"),"KUCUK");
   assert.equal(name,"TEDCOR K-B_BOY - FANTY ÖN + ARKA.psd");
+});
+
+test("iki desen ölçüsü: önceki orijinalin küçük/büyük sırası yeni gelen cm ile değişir",()=>{
+  const a1={...entry(a,"FIRST",10,12),isReferenceSize:true};
+  const smaller=entry(a,"NEW_SMALL",8.5,10.2);
+  const bigger=entry(a,"NEW_BIG",12,14.4);
+  assert.deepEqual(rankPrintVariants([a1,smaller]),["Büyük desen","Küçük desen"]);
+  assert.deepEqual(rankPrintVariants([a1,bigger]),["Küçük desen","Büyük desen"]);
+  assert.deepEqual(rankPrintVariants([a1,smaller,bigger]),["Orta desen","Küçük desen","Büyük desen"]);
+});
+test("ürün beden listesi artınca desen ebadı adedi artmaz",()=>{
+  const same=entry(a,"ORIGINAL",10,12,["S","M","L","XL","2XL"]);
+  assert.deepEqual(rankPrintVariants([same]),["Tek desen ebadı"]);
+});
+test("dört ve üzeri desen cm ölçüsü sıralanır, ters boy oranı kesin küçük/büyük yapılmaz",()=>{
+  const rows=[entry(a,"X",10,11),entry(a,"Y",12,13),entry(a,"Z",14,15),entry(a,"W",16,17)];
+  assert.deepEqual(rankPrintVariants(rows),[
+    "1/4 desen ebadı (en küçük)","2/4 desen ebadı","3/4 desen ebadı","4/4 desen ebadı (en büyük)"
+  ]);
+  const contrary=[entry(a,"A",10,20),entry(a,"B",12,18)];
+  assert.deepEqual(rankPrintVariants(contrary),[
+    "En–boy oranı karşılaştırılmalı","En–boy oranı karşılaştırılmalı"
+  ]);
 });
