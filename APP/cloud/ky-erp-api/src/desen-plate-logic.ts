@@ -96,6 +96,7 @@ export function validatePlateEntries(raw:unknown):
   if(JSON.stringify(raw).length>256_000)return {ok:false,error:"Kalıp kaydı çok büyük."};
   const entries:PlateEntry[]=[];
   const seen=new Set<string>();
+  const references=new Set<string>();
   for(const row of raw) {
     if(!row||typeof row!=="object"||Array.isArray(row))return {ok:false,error:"Geçersiz kalıp satırı."};
     const modelId=String(row.modelId??"").trim();
@@ -123,6 +124,11 @@ export function validatePlateEntries(raw:unknown):
     const key=[modelId,sizeCode,canonicalPlateText(artworkPart),printArea].join("|");
     if(seen.has(key))return {ok:false,error:"Aynı model, desen ölçü varyantı ve baskı parçası iki kez eklenemez."};
     seen.add(key);
+    if(isReferenceSize) {
+      const referenceKey=[modelId,canonicalPlateText(artworkPart),printArea].join("|");
+      if(references.has(referenceKey))return {ok:false,error:"Aynı model ve baskı parçası için yalnız bir orijinal ebat seçilebilir."};
+      references.add(referenceKey);
+    }
     entries.push({modelId,sizeCode,sizeLabel,printArea,artworkPart,
       widthCm,heightCm,garmentSizes,allGarmentSizes,isReferenceSize});
   }
