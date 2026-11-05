@@ -516,3 +516,10 @@
  .dsg-plate-edit-entry .dsg-plate-edit-row,
  .dsg-plate-edit-entry .dsg-plate-edit-row:nth-child(2) { grid-template-columns:1fr; }
 }
+
+.dsg-plate-ocr { display:grid; justify-items:start; gap:9px; padding:12px; border:1px solid #c7d7e5; background:#f3f8fc; border-radius:8px; }
+.dsg-plate-ocr > select { min-height:42px; width:100%; }
+.dsg-plate-ocr-candidate { width:100%; display:grid; grid-template-columns:minmax(0,2fr) minmax(140px,1fr) auto; gap:10px; align-items:center; border-radius:7px; background:white; border:1px solid #cfdeea; padding:10px; }
+.dsg-plate-ocr-candidate > span { overflow-wrap:anywhere; font-size:12px; }
+.dsg-plate-ocr-candidate select { min-width:0; }
+@media(max-width:700px) { .dsg-plate-ocr-candidate { grid-template-columns:1fr; } }
