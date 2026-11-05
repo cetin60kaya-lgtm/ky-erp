@@ -334,14 +334,14 @@ export default function DesenPlateFinder({ activeMainCompany, query = "" }) {
         <div className="dsg-plate-member-summary">{displayRows(plate.entries.length ? plate.entries : plate.suggestions).map((row)=><span key={row.id}>
           <b>{row.name}:</b> {row.variants.join(" / ")}
         </span>)}</div>
-        <small>{plate.status==="CONFIRMED" ? "En–boy cm doğrulandı" : plate.status==="MEASUREMENT_PENDING" ? "Model ilişkisi kayıtlı, santimetre ölçüsü eksik" : plate.status==="REVISION_REVIEW" ? "PSD değişti: yeniden kontrol gerekli" : "Otomatik model adayı — en ve boy cm doğrulanmadı"} · {plate.uniqueModels||unique(plate.suggestions).length} model</small>
+        <small>{plate.status==="CONFIRMED" ? "En–boy cm doğrulandı" : plate.status==="MEASUREMENT_PENDING" ? "Model ilişkisi kayıtlı, santimetre ölçüsü eksik" : plate.status==="GARMENT_SIZES_PENDING" ? "Desen cm ölçüsü var, uygulanacak ürün bedenleri eksik" : plate.status==="REVISION_REVIEW" ? "PSD değişti: yeniden kontrol gerekli" : "Otomatik model adayı — en ve boy cm doğrulanmadı"} · {plate.uniqueModels||unique(plate.suggestions).length} model</small>
         <button type="button" className="dsg-btn primary" onClick={()=>choosePlate(plate.assetId)}>Kalıbı ve PSD'yi gör</button>
       </article>)}
     </div>}
     {active && <div className="dsg-plate-detail" role="region" aria-label="Ortak kalıp detayları">
       <div className="dsg-plate-detail-head"><div><h3>{active.fileName}</h3><p>{active.relativePath || "Dosya yolu bulunamadı"} · {active.shelfLabel || "Raf belirtilmedi"}</p></div>
         <button type="button" className="dsg-btn" onClick={()=>{setActive(null);setEditing(false);}}><X size={16}/> Kapat</button></div>
-      <small>{active.status==="CONFIRMED" ? "Onaylanan baskı ölçüleri (cm) ve ürün bedenleri" : active.status==="MEASUREMENT_PENDING" ? "Model ilişkisi kaydedilmiş, bazı en–boy ölçüleri bekliyor" : "Model adayı — desen ölçüleri doğrulanmalı"}</small>
+      <small>{active.status==="CONFIRMED" ? "Onaylanan baskı ölçüleri (cm) ve ürün bedenleri" : active.status==="MEASUREMENT_PENDING" ? "Model ilişkisi kaydedilmiş, bazı en–boy ölçüleri bekliyor" : active.status==="GARMENT_SIZES_PENDING" ? "En–boy belli, ancak hangi ürün bedenlerinde kullanılacağı belirlenmedi" : "Model adayı — desen ölçüleri doğrulanmalı"}</small>
       {displayRows(active.entries.length ? active.entries : active.suggestions).map((row)=>
         <p key={row.id}><strong>{row.name}</strong>: {row.variants.join(" / ")} {row.areas.length ? "· "+row.areas.join(", ") : ""}</p>)}
       <PlatePreview key={active.assetId} assetId={active.assetId} slug={slug} />
