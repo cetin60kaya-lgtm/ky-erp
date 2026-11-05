@@ -248,7 +248,7 @@ export function registerDesenPlateRoutes(app:Hono<AppEnv>) {
         name:source.fileName,
         blob:new Blob([source.bytes],{type:"application/pdf"}),
       },{
-        conversionOptions:{image:{descriptionLanguage:"tr"},output:{format:"text"}},
+        conversionOptions:{pdf:{metadata:false},output:{format:"text"}},
       });
       const document=Array.isArray(result)?result[0]:result;
       if(!document || document.format==="error")return c.json(error("OCR_FAILED","Yerleşim yazıları okunamadı."),422);
