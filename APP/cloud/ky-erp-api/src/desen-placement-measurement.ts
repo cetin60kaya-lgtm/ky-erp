@@ -20,7 +20,7 @@ const G=/\b(\d{1,2})\s*[-–—]\s*(\d{1,2})\b/g;
 const DIM=/\b([A-Z]{3,20})\s+(ENI?|BOYU?)\s*[:=]?\s*(\d{1,4}(?:[.,]\d{1,3})?)\s*CM\b/g;
 function productGroup(line:string) {
   if (/\b(TUM|BUTUN)\s+BEDENLER(?:DE|INDE|I)?\b/.test(line))return {all:true,garments:[] as string[]};
-  if (!/\b(AY|YAS|BEDEN)\b/.test(line) || !/\b(ICIN|BEDENLER|GRUBU)\b/.test(line)) return null;
+  if (!/\b(AY|YAS|BEDEN(?:LER)?)\b/.test(line) || !/\b(ICIN|BEDENLER|GRUBU)\b/.test(line)) return null;
   const unit=/\bYAS\b/.test(line)?"yaş":/\bAY\b/.test(line)?"ay":"";
   const garments:string[]=[];
   for(const found of line.matchAll(G)) {
