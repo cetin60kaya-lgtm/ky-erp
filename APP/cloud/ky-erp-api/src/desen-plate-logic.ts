@@ -137,3 +137,43 @@ export function describeSharedPlate(entries:readonly PlateEntry[],modelId:string
     sharedModelCount:new Set(entries.map(row=>row.modelId)).size,
   };
 }
+
+
+/** Desen ebat sıralaması yalnız EN x BOY karşılaştırmasıyla yapılır.
+ * S, M, L, yaş, ay ve diğer ürün bedenleri asla bu sıralamaya girmez.
+ * En küçülürken boy büyüyorsa, "küçük/büyük" demek güvenilir değildir.
+ */
+export function rankPrintVariants(entries: readonly PlateEntry[]): (string|null)[] {
+  const ranks:(string|null)[]=Array(entries.length).fill(null);
+  const groups=new Map<string,number[]>();
+  entries.forEach((row,i)=>{
+    const key=[row.modelId,canonicalPlateText(row.artworkPart),row.printArea].join("|");
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key)!.push(i);
+  });
+  for (const indices of groups.values()) {
+    const dimensions=new Map<string,{width:number;height:number;indices:number[]}>();
+    for (const i of indices) {
+      const row=entries[i];
+      if(!(Number(row.widthCm)>0&&Number(row.heightCm)>0))continue;
+      const key=String(row.widthCm)+"|"+String(row.heightCm);
+      if(!dimensions.has(key))dimensions.set(key,{width:Number(row.widthCm),height:Number(row.heightCm),indices:[]});
+      dimensions.get(key)!.indices.push(i);
+    }
+    const sorted=[...dimensions.values()].sort((a,b)=>a.width-b.width||a.height-b.height);
+    const count=sorted.length;
+    // A single measurement (even for 20 garment sizes) is ONE print size.
+    if (!count) continue;
+    const contradictory=sorted.some((item,i)=>i>0&&item.height+0.001<sorted[i-1].height);
+    sorted.forEach((item,i)=>{
+      let label:string;
+      if(contradictory)label="En–boy oranı karşılaştırılmalı";
+      else if(count===1)label="Tek desen ebadı";
+      else if(count===2)label=i===0?"Küçük desen":"Büyük desen";
+      else if(count===3)label=["Küçük desen","Orta desen","Büyük desen"][i];
+      else label=String(i+1)+"/"+count+" desen ebadı"+(i===0?" (en küçük)":i===count-1?" (en büyük)":"");
+      for (const index of item.indices)ranks[index]=label;
+    });
+  }
+  return ranks;
+}
