@@ -18,6 +18,10 @@ function permission(user: Row, moduleKey: string) {
     ? user.permissions.find((p: Row) => upper(p.moduleKey || p.module_key) === upper(moduleKey))
     : null;
 }
+function canView(user: Row, moduleKey: string) {
+  const record = permission(user, moduleKey);
+  return record?.canView === true || Number(record?.can_view || 0) === 1;
+}
 function moduleForEntity(entityType: unknown) {
   return ({
     MODEL: "DESEN",
@@ -63,7 +67,7 @@ export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
         "SELECT entity_type FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=?"
       ).bind(slug,id).all<Row>();
       const modules = [...new Set((relations.results || []).map((row:Row) => moduleForEntity(row.entity_type)))];
-      if (!modules.length || !modules.every((moduleKey) => moduleKey && permission(user,moduleKey)?.canView)) {
+      if (!modules.length || !modules.every((moduleKey) => moduleKey && canView(user,moduleKey))) {
         return c.json({ok:false,error:{code:"FORBIDDEN",message:"Bu dosyayı görme yetkiniz bulunmuyor."}},403);
       }
     }
@@ -77,9 +81,17 @@ export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
     const status = upper(asset.preview_status);
     // Small Google thumbnails are not full-canvas PSD previews.
     if (status === "READY" && key && !key.startsWith("file-hub/previews/cloud/")) {
-      return c.json({ok:true,data:{status:"READY",previewUrl:"/api/file-hub/files/"+encodeURIComponent(id)+"/preview"}});
+      // Stale D1 cache pointers can outlive an R2 preview object; repair on demand.
+      const existing = await c.env.FILES.head(key);
+      if (existing) return c.json({ok:true,data:{status:"READY",previewUrl:"/api/file-hub/files/"+encodeURIComponent(id)+"/preview"}});
     }
     if (["PROCESSING","PENDING"].includes(status)) return c.json({ok:true,data:{status}},202);
+    if (upper(asset.source_type) === "CLOUD_API") {
+      const linked = await c.env.DB.prepare(
+        "SELECT 1 ok FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='MODEL' LIMIT 1"
+      ).bind(slug,id).first<Row>();
+      if (!linked) return c.json({ok:false,error:{code:"MODEL_RELATION_PENDING",message:"Önizleme için önce PSD ile model dosya bağlantısı indekslenmeli."}},409);
+    }
     if (upper(asset.source_type) !== "CLOUD_API") {
       return c.json({ok:false,error:{code:"AGENT_SOURCE_REQUIRED",message:"Yerel dosya önizlemesi File Hub Agent üzerinden hazırlanmalıdır."}},409);
     }
