@@ -27,3 +27,10 @@ test("SIMSAH: ay grupları ayrı, ana desen ile kuyruk kendi ölçülerinde",()=
 test("yalnız ürün bedenleri ölçü üretmez, çekme boyu baskı sanılmaz",()=>{
   assert.deepEqual(interpretPlacementText("XS/S/M/L/XL\nDİKİŞ PAYI:1CM\nÇEKME EN:2 CM\nÇEKME BOY:3.5 CM"),[]);
 });
+
+test("yetişkin bedenleri cm değildir, yalnız seçilmiş giysi grubunu belirler",()=>{
+  const rows=interpretPlacementText("S/M/L BEDENLER İÇİN\nDESEN EN=10.5 CM\nDESEN BOY=12 CM");
+  assert.equal(rows.length,1);
+  assert.deepEqual(rows[0].garmentSizes,["S","M","L"]);
+  assert.equal(rows[0].widthCm,10.5);
+});
