@@ -1,22 +1,35 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileImage, Search, Plus, Save, RefreshCw, X, Image as ImageIcon } from "lucide-react";
+import { FileImage, Search, Plus, Save, X, Image as ImageIcon } from "lucide-react";
 import { apiFetch } from "../../utils/api";
 import { ImagePreview } from "./DesenWorkflowShared";
 
 const text = (x) => String(x ?? "").trim();
-const unique = (rows) => [...new Set(rows.map((row) => row.modelId))];
+const unique = (rows) => [...new Set((rows || []).map((row) => row.modelId))];
+const showCm = (value) => value === null || value === undefined || value === "" ? "" :
+  Number(value).toLocaleString("tr-TR", {maximumFractionDigits:3});
+const describeSize = (item) => {
+  const dimension = item.widthCm && item.heightCm
+    ? showCm(item.widthCm) + " × " + showCm(item.heightCm) + " cm"
+    : "En–boy ölçüsü girilmedi";
+  const use = item.allGarmentSizes ? "Tüm ürün bedenleri"
+    : item.garmentSizes?.length ? "Ürün: " + item.garmentSizes.join(", ")
+    : "Uygulanacak ürün bedenleri bilinmiyor";
+  return [item.sizeLabel || "Varyant",dimension,
+    item.artworkPart ? "Parça: "+item.artworkPart : "",
+    use].filter(Boolean).join(" · ");
+};
 const displayRows = (rows) => {
   const groups = new Map();
-  for (const row of rows || []) {
-    const id = text(row.modelId);
-    const item = groups.get(id) || { name: row.modelName || "Model", sizes: [], areas: [] };
-    const size = text(row.sizeLabel) || "Boy belirtilmemiş";
-    if (!item.sizes.includes(size)) item.sizes.push(size);
-    if (row.printArea && !item.areas.includes(row.printArea)) item.areas.push(row.printArea);
-    groups.set(id, item);
+  for (const item of rows || []) {
+    const id = text(item.modelId);
+    const group = groups.get(id) || {name:item.modelName || "Model",variants:[],areas:[]};
+    const label = describeSize(item);
+    if (!group.variants.includes(label)) group.variants.push(label);
+    if (item.printArea && !group.areas.includes(item.printArea)) group.areas.push(item.printArea);
+    groups.set(id,group);
   }
-  return [...groups.entries()].map(([id, group]) => ({ id, ...group }));
+  return [...groups.entries()].map(([id,group])=>({id,...group}));
 };
 
 function PlatePreview({ assetId, slug }) {
@@ -60,21 +73,26 @@ function PlatePreview({ assetId, slug }) {
 }
 
 function PlateEditor({ plate, models, slug, onSaved }) {
-  const [entries, setEntries] = useState(plate.entries.map((row) => ({...row})));
+  const [entries, setEntries] = useState(plate.entries.map((row) => ({...row,garmentSizesText:(row.garmentSizes || []).join(", ")})));
   const [plateCode, setPlateCode] = useState(plate.plateCode || "");
   const [shelfLabel, setShelfLabel] = useState(plate.shelfLabel || "");
   const [acceptRevision, setAcceptRevision] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const edit = (index, patch) => setEntries((all) => all.map((row, i) => i === index ? {...row,...patch} : row));
-  const add = () => setEntries((rows) => [
-    ...rows, { modelId:models[0]?.modelId || "", sizeCode:"CUSTOM", sizeLabel:"", printArea:"" }
-  ]);
+  const add = () => setEntries((rows) => {
+    let n=rows.length+1;
+    while(rows.some((row)=>row.sizeCode==="VARIANT_"+n))n+=1;
+    return [...rows, {modelId:models[0]?.modelId || "",sizeCode:"VARIANT_"+n,
+      sizeLabel:"",widthCm:"",heightCm:"",artworkPart:"",garmentSizesText:"",
+      garmentSizes:[],allGarmentSizes:false,isReferenceSize:false,printArea:""}];
+  });
   const useSuggestions = () => setEntries((rows) => [
     ...rows, ...plate.suggestions.filter((row) => !rows.some((existing) =>
       existing.modelId === row.modelId && existing.sizeCode === row.sizeCode &&
       existing.sizeLabel === row.sizeLabel && existing.printArea === row.printArea
-    )).map((row) => ({...row}))
+    )).map((row) => ({...row,widthCm:null,heightCm:null,artworkPart:"",
+      garmentSizesText:"",garmentSizes:[],allGarmentSizes:false,isReferenceSize:false}))
   ]);
   const save = async () => {
     setSaving(true); setNotice("");
@@ -85,7 +103,10 @@ function PlateEditor({ plate, models, slug, onSaved }) {
           mainCompanySlug:slug, expectedRevision:plate.revision,
           plateCode, shelfLabel, acceptSourceRevision:acceptRevision,
           entries:entries.map((row) => ({
-            modelId:row.modelId, sizeCode:row.sizeCode, sizeLabel:row.sizeLabel, printArea:row.printArea || ""
+            modelId:row.modelId, sizeCode:row.sizeCode, sizeLabel:row.sizeLabel, printArea:row.printArea || "",
+            artworkPart:row.artworkPart || "",widthCm:row.widthCm,heightCm:row.heightCm,
+            garmentSizes:row.allGarmentSizes ? [] : (row.garmentSizesText ?? (row.garmentSizes || []).join(",")).split(/[,;]+/).map(text).filter(Boolean),
+            allGarmentSizes:row.allGarmentSizes === true,isReferenceSize:row.isReferenceSize === true
           })),
         },
       });
@@ -94,24 +115,67 @@ function PlateEditor({ plate, models, slug, onSaved }) {
     finally {setSaving(false);}
   };
   return <div className="dsg-plate-editor">
-    <p><strong>Yetkili kalıp düzeltme</strong> · PSD dosya adı değiştirilmez. Eklediğiniz her satır bir modelin bir boyudur. 1, 2, 3 veya daha fazla boy girebilirsiniz.</p>
+    <p><strong>Yetkili kalıp düzeltme</strong> · PSD dosya adı değiştirilmez. Her satır bir modelin desen en × boy ölçüsüdür (cm). S/M/L, yaş ve ay değerleri yalnız ürün bedenidir; aynı ölçü birden fazla ürüne uygulanabilir. Boy sayısı sınırsızdır.</p>
     <div className="dsg-plate-editor-metadata">
       <label>Raf / fiziksel yer <input value={shelfLabel} maxLength={120} onChange={(e)=>setShelfLabel(e.target.value)} placeholder="Örn: Raf 4, göz 12" /></label>
       <label>Kalıp kodu <input value={plateCode} maxLength={100} onChange={(e)=>setPlateCode(e.target.value)} /></label>
     </div>
     <div className="dsg-plate-edit-list">
-      {entries.map((row, index) => <div className="dsg-plate-edit-row" key={index}>
-        <select aria-label="Model seç" value={row.modelId} onChange={(e)=>edit(index,{modelId:e.target.value})}>
-          <option value="">Model seç</option>
-          {models.map((model) => <option key={model.modelId} value={model.modelId}>{model.modelName}</option>)}
-        </select>
-        <input aria-label="Boy adı" value={row.sizeLabel || ""} placeholder="Örn: 3. boy, XS, 48-52" maxLength={80}
-          onChange={(e)=>edit(index,{sizeLabel:e.target.value,sizeCode: row.sizeCode === "UNSPECIFIED" ? "CUSTOM" : row.sizeCode || "CUSTOM"})} />
-        <select aria-label="Baskı bölgesi" value={row.printArea || ""} onChange={(e)=>edit(index,{printArea:e.target.value})}>
-          <option value="">Bölge belirtilmedi</option><option value="FRONT">Ön</option><option value="BACK">Arka</option>
-          <option value="NECK">Ense</option><option value="SLEEVE">Kol</option><option value="OTHER">Diğer</option>
-        </select>
-        <button type="button" className="dsg-btn" aria-label="Satırı kaldır" onClick={()=>setEntries((rows)=>rows.filter((_,i)=>i!==index))}><X size={15} /></button>
+      {entries.map((row,index)=><div className="dsg-plate-edit-entry" key={index}>
+        <div className="dsg-plate-edit-row">
+          <label>Model
+            <select aria-label="Model seç" value={row.modelId} onChange={(e)=>edit(index,{modelId:e.target.value})}>
+              <option value="">Model seç</option>
+              {models.map((model)=><option key={model.modelId} value={model.modelId}>{model.modelName}</option>)}
+            </select>
+          </label>
+          <label>Desen varyantı
+            <input aria-label="Desen boy adı" value={row.sizeLabel || ""} maxLength={80}
+              placeholder="Örn: Orijinal / Küçük / Büyük / 3. ebat"
+              onChange={(e)=>edit(index,{sizeLabel:e.target.value,
+                sizeCode:row.sizeCode==="UNSPECIFIED"?"VARIANT_"+(index+1):row.sizeCode||"VARIANT_"+(index+1)})} />
+          </label>
+          <label>Desen eni (cm)
+            <input aria-label="Desen eni santimetre" inputMode="decimal" value={row.widthCm ?? ""}
+              placeholder="Örn: 17,93" onChange={(e)=>edit(index,{widthCm:e.target.value})} />
+          </label>
+          <label>Desen boyu (cm)
+            <input aria-label="Desen boyu santimetre" inputMode="decimal" value={row.heightCm ?? ""}
+              placeholder="Örn: 23" onChange={(e)=>edit(index,{heightCm:e.target.value})} />
+          </label>
+        </div>
+        <div className="dsg-plate-edit-row">
+          <label>Baskı parçası
+            <input aria-label="Desen parçası" maxLength={80} placeholder="Örn: Ana desen / Kuyruk"
+              value={row.artworkPart || ""} onChange={(e)=>edit(index,{artworkPart:e.target.value})} />
+          </label>
+          <label>Ürün bedenleri (virgülle ayır)
+            <input aria-label="Uygulanacak ürün bedenleri" placeholder="Örn: 1-3 ay, 3-6 ay veya S, M"
+              disabled={row.allGarmentSizes}
+              value={row.garmentSizesText ?? (row.garmentSizes || []).join(", ")}
+              onChange={(e)=>edit(index,{garmentSizesText:e.target.value})} />
+          </label>
+          <label>Baskı yeri
+            <select aria-label="Baskı bölgesi" value={row.printArea || ""}
+              onChange={(e)=>edit(index,{printArea:e.target.value})}>
+              <option value="">Bilinmiyor</option><option value="FRONT">Ön</option>
+              <option value="BACK">Arka</option><option value="NECK">Ense</option>
+              <option value="SLEEVE">Kol</option><option value="OTHER">Diğer</option>
+            </select>
+          </label>
+          <button type="button" className="dsg-btn" aria-label="Satırı kaldır"
+            onClick={()=>setEntries((rows)=>rows.filter((_,i)=>i!==index))}>
+            <X size={15} /> Kaldır
+          </button>
+        </div>
+        <div className="dsg-plate-flags">
+          <label><input type="checkbox" checked={row.allGarmentSizes===true}
+            onChange={(e)=>edit(index,{allGarmentSizes:e.target.checked,garmentSizesText:e.target.checked?"":row.garmentSizesText})} />
+            Aynı desen ölçüsü tüm ürün bedenlerinde kullanılır</label>
+          <label><input type="checkbox" checked={row.isReferenceSize===true}
+            onChange={(e)=>edit(index,{isReferenceSize:e.target.checked})} />
+            Bu, müşteriden gelen / ilk çalışılan referans ebat</label>
+        </div>
       </div>)}
     </div>
     <div className="dsg-plate-editor-actions">
@@ -188,18 +252,18 @@ export default function DesenPlateFinder({ activeMainCompany, query = "" }) {
       plates.map((plate)=><article key={plate.assetId} className="dsg-plate-search-card">
         <div><strong>{plate.fileName}</strong><small>{plate.shelfLabel || "Raf bilgisi henüz girilmedi"} · {plate.plateCode || "Kalıp kodu yok"}</small></div>
         <div className="dsg-plate-member-summary">{displayRows(plate.entries.length ? plate.entries : plate.suggestions).map((row)=><span key={row.id}>
-          <b>{row.name}:</b> {row.sizes.join(" + ")}
+          <b>{row.name}:</b> {row.variants.join(" / ")}
         </span>)}</div>
-        <small>{plate.status==="CONFIRMED" ? "Boylar doğrulandı" : plate.status==="REVISION_REVIEW" ? "PSD değişti: yeniden kontrol gerekli" : "Otomatik aday — boylar doğrulanmadı"} · {plate.uniqueModels||unique(plate.suggestions).length} model</small>
+        <small>{plate.status==="CONFIRMED" ? "Model–desen ölçüsü eşleşmesi onaylandı" : plate.status==="REVISION_REVIEW" ? "PSD değişti: yeniden kontrol gerekli" : "Otomatik model adayı — en ve boy cm doğrulanmadı"} · {plate.uniqueModels||unique(plate.suggestions).length} model</small>
         <button type="button" className="dsg-btn primary" onClick={()=>choosePlate(plate.assetId)}>Kalıbı ve PSD'yi gör</button>
       </article>)}
     </div>}
     {active && <div className="dsg-plate-detail" role="region" aria-label="Ortak kalıp detayları">
       <div className="dsg-plate-detail-head"><div><h3>{active.fileName}</h3><p>{active.relativePath || "Dosya yolu bulunamadı"} · {active.shelfLabel || "Raf belirtilmedi"}</p></div>
         <button type="button" className="dsg-btn" onClick={()=>{setActive(null);setEditing(false);}}><X size={16}/> Kapat</button></div>
-      <small>{active.status==="CONFIRMED" ? "Doğrulanmış boy ilişkileri" : "Boy/model adayları — doğrulama gerekli"}</small>
+      <small>{active.status==="CONFIRMED" ? "Onaylanan baskı ölçüleri (cm) ve ürün bedenleri" : "Model adayı — desen ölçüleri doğrulanmalı"}</small>
       {displayRows(active.entries.length ? active.entries : active.suggestions).map((row)=>
-        <p key={row.id}><strong>{row.name}</strong>: {row.sizes.join(" + ")} {row.areas.length ? "· "+row.areas.join(", ") : ""}</p>)}
+        <p key={row.id}><strong>{row.name}</strong>: {row.variants.join(" / ")} {row.areas.length ? "· "+row.areas.join(", ") : ""}</p>)}
       <PlatePreview key={active.assetId} assetId={active.assetId} slug={slug} />
       <button type="button" className="dsg-btn" onClick={()=>setEditing((value)=>!value)}>{editing ? "Düzenlemeyi kapat" : "Yetkili düzeltme / raf ve boy bilgisi"}</button>
       {editing && <PlateEditor key={active.assetId+"-"+active.revision} plate={active} models={models} slug={slug}
