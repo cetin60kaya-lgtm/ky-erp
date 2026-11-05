@@ -2,6 +2,7 @@
 import type { Context, Hono } from "hono";
 import { syncFileHubDesignModel } from "./file-hub-design-sync";
 import { verifyFileHubAgentCredential } from "./file-hub-agent-auth";
+import { streamCloudPsdPreviewSource } from "./file-hub-cloud-oauth";
 
 // Public transport contract stays X-KYERP-Agent-Key. Validation is now tenant-scoped.
 type Bindings = Cloudflare.Env & { FILE_HUB_AGENT_KEY?: string };
@@ -100,20 +101,70 @@ async function previewUpload(c:Context<AppEnv>){
   if(!(await verifyFileHubAgentCredential(c,slug)).ok)return c.json(err("AGENT_UNAUTHORIZED","Bu firma için File Agent anahtarı geçersiz."),401);
   const file=candidate instanceof File?candidate:Array.isArray(candidate)?candidate.find((x:any)=>x instanceof File):null;
   if(!fileAssetId||!file)return c.json(err("REQUIRED","fileAssetId ve file zorunludur."),422);
-  const asset=await c.env.DB.prepare(`SELECT id,file_name,mime_type FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1`).bind(fileAssetId,slug).first<Row>();
+  const asset=await c.env.DB.prepare(`SELECT id,file_name,mime_type,extension,preview_status FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1`).bind(fileAssetId,slug).first<Row>();
   if(!asset)return c.json(err("NOT_FOUND","Dosya indeksi bulunamadı."),404);
+  const derivedPsd=["PSD","PSB"].includes(upper(asset.extension));
+  if (derivedPsd && (upper(asset.preview_status)!=="PROCESSING" || file.type!=="image/png"))
+    return c.json(err("PREVIEW_JOB_MISMATCH","PSD işleme görevi güncel değil."),409);
+  if (derivedPsd) {
+    const header=new Uint8Array(await file.slice(0,24).arrayBuffer());
+    const view=new DataView(header.buffer);
+    if (header.length!==24 || Array.from(header.slice(0,8)).join(",")!=="137,80,78,71,13,10,26,10" ||
+        view.getUint32(16)<1 || view.getUint32(20)<1 || view.getUint32(16)>2400 || view.getUint32(20)>2400)
+      return c.json(err("PREVIEW_INVALID_PNG","Önizleme PNG imzası veya boyutu hatalı."),422);
+  }
   const type=text(file.type||asset.mime_type).toLowerCase();
   const isImage=["image/jpeg","image/png","image/webp"].includes(type),isPdf=type==="application/pdf";
   if(!isImage&&!isPdf)return c.json(err("UNSUPPORTED_PREVIEW","Yalnız JPEG, PNG, WebP ve PDF web cache'e alınabilir."),415);
   const max=isPdf?PDF_MAX_BYTES:IMAGE_MAX_BYTES;
   if(file.size>max)return c.json(err("PREVIEW_TOO_LARGE","Web önizleme boyut sınırını aşıyor.",{maxBytes:max}),413);
   const safeName=text(asset.file_name||file.name).replace(/[\\/:*?"<>|]+/g,"-");
-  const key=`file-hub/previews/${slug}/${fileAssetId}/${safeName}`;
+  const key=`file-hub/previews/${slug}/${fileAssetId}/${derivedPsd ? "full-canvas.png" : safeName}`;
   await c.env.FILES.put(key,file.stream(),{httpMetadata:{contentType:type},customMetadata:{fileAssetId,mainCompanySlug:slug,role:"PREVIEW_CACHE"}});
   const ts=now();
   await c.env.DB.prepare(`UPDATE file_hub_assets SET preview_status='READY',preview_storage_key=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(key,ts,fileAssetId,slug).run();
   await logEvent(c,slug,"PREVIEW_READY",{deviceName:form.deviceName,fileAssetId,details:{contentType:type,size:file.size}});
   return c.json({ok:true,data:{fileAssetId,previewUrl:`/api/file-hub/files/${encodeURIComponent(fileAssetId)}/preview?mainCompanySlug=${encodeURIComponent(slug)}`,contentType:type,size:file.size}});
+}
+
+// Existing tenant-scoped File Hub Agent key, not a new service/token.
+async function claimPsdPreview(c:Context<AppEnv>){
+  const b=await bodyOf(c),slug=slugOf(c,b);
+  if(!(await verifyFileHubAgentCredential(c,slug)).ok)return c.json(err("AGENT_UNAUTHORIZED","Agent yetkisi geçersiz."),401);
+  // Recover an interrupted job without permanent PROCESSING limbo.
+  // A real error reported by the worker stays FAILED until the user requests retry.
+  const staleAt=new Date(Date.now()-45*60*1000).toISOString();
+  await c.env.DB.prepare(
+    "UPDATE file_hub_assets SET preview_status='PENDING',updated_at=? WHERE main_company_slug=? AND source_type='CLOUD_API' AND UPPER(extension) IN ('PSD','PSB') AND preview_status='PROCESSING' AND updated_at<?"
+  ).bind(now(),slug,staleAt).run();
+  const row=await c.env.DB.prepare(
+    "SELECT a.id FROM file_hub_assets a WHERE a.main_company_slug=? AND a.status='AVAILABLE' AND a.source_type='CLOUD_API' AND UPPER(a.extension) IN ('PSD','PSB') AND a.preview_status='PENDING' AND EXISTS(SELECT 1 FROM file_hub_relations r WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') ORDER BY a.updated_at LIMIT 1"
+  ).bind(slug).first<Row>();
+  if(!row)return c.json({ok:true,data:{job:null}});
+  const result=await c.env.DB.prepare(
+    "UPDATE file_hub_assets SET preview_status='PROCESSING',updated_at=? WHERE id=? AND main_company_slug=? AND preview_status='PENDING'"
+  ).bind(now(),row.id,slug).run();
+  if(!result.meta?.changes)return c.json({ok:true,data:{job:null}});
+  return c.json({ok:true,data:{job:{fileAssetId:text(row.id)}}});
+}
+
+async function sourcePsdPreview(c:Context<AppEnv>){
+  const slug=slugOf(c);
+  if(!(await verifyFileHubAgentCredential(c,slug)).ok)return c.json(err("AGENT_UNAUTHORIZED","Agent yetkisi geçersiz."),401);
+  try{return await streamCloudPsdPreviewSource(c,slug,c.req.param("assetId"));}
+  catch(error:any){return c.json(err(text(error?.code)||"SOURCE_FAILED","PSD kaynağı geçici olarak alınamadı."),Number(error?.status)||502);}
+}
+
+async function failPsdPreview(c:Context<AppEnv>){
+  const b=await bodyOf(c),slug=slugOf(c,b),id=text(b.fileAssetId);
+  if(!(await verifyFileHubAgentCredential(c,slug)).ok)return c.json(err("AGENT_UNAUTHORIZED","Agent yetkisi geçersiz."),401);
+  if(!id)return c.json(err("REQUIRED","Dosya kimliği gerekli."),422);
+  const code=/^[A-Z0-9_]{3,64}$/.test(text(b.code))?text(b.code):"PREVIEW_FAILED";
+  const result=await c.env.DB.prepare(
+    "UPDATE file_hub_assets SET preview_status='FAILED',updated_at=? WHERE id=? AND main_company_slug=? AND preview_status='PROCESSING' AND UPPER(extension) IN ('PSD','PSB')"
+  ).bind(now(),id,slug).run();
+  if(result.meta?.changes)await logEvent(c,slug,"PREVIEW_FAILED",{fileAssetId:id,deviceName:b.deviceName,details:{code}});
+  return c.json({ok:true,data:{failed:Boolean(result.meta?.changes)}});
 }
 
 async function missing(c:Context<AppEnv>){
@@ -128,4 +179,7 @@ export function registerPublicFileHubAgentRoutes(app:Hono<AppEnv>){
   app.post("/api/auth/file-hub-agent/ingest",ingest);
   app.post("/api/auth/file-hub-agent/preview",previewUpload);
   app.post("/api/auth/file-hub-agent/missing",missing);
+  app.post("/api/auth/file-hub-agent/psd-preview/claim",claimPsdPreview);
+  app.post("/api/auth/file-hub-agent/psd-preview/fail",failPsdPreview);
+  app.get("/api/auth/file-hub-agent/psd-preview/source/:assetId",sourcePsdPreview);
 }
