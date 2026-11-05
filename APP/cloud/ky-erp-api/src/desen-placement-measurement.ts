@@ -28,6 +28,12 @@ function productGroup(line:string) {
     if (!garments.includes(value))garments.push(value);
   }
   if(garments.length)return {all:false,garments};
+  // Adult garment sizes are applicability metadata ONLY, never printed cm variants.
+  if (/\\bBEDEN/.test(line)) {
+    const sizes=line.match(/\\b(?:XS|S|M|L|XL|2XL|3XL|4XL|5XL|6XL)\\b/g)||[];
+    const unique=[...new Set(sizes)];
+    if (unique.length) return {all:false,garments:unique};
+  }
   return null;
 }
 export function interpretPlacementText(text:unknown):PlacementObservation[] {
