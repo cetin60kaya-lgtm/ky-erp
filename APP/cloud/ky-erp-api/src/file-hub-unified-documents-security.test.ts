@@ -16,7 +16,7 @@ test("birden çok modüle bağlı hassas dosya herkesin görebildiği bir ilişk
  assert.match(preview,/modules.every\(\(moduleKey\) => moduleKey && canView\(user,moduleKey\)\)/);
  assert.match(preview,/const record = permission\(user, moduleKey\)/);
  assert.match(preview,/record\?\.canView === true \|\| Number\(record\?\.can_view \|\| 0\) === 1/);
- assert.equal((preview.match(/modules.every\(\(moduleKey\) => moduleKey && canView\(user,moduleKey\)\)/g) || []).length,2);
+ assert.equal((preview.match(/modules.every\(\(moduleKey\) => moduleKey && canView\(user,\s*moduleKey\)\)/g) || []).length,2);
  assert.doesNotMatch(preview,/modules.some\(\(moduleKey\) => permission/);
  assert.match(preview,/main_company_slug=\?/);
 });
