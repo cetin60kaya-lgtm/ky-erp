@@ -1,8 +1,20 @@
-/** Pure, conservative shared-screen/plate classification. Never changes PSD filenames or model identity. */
-export type PlateSize = string; // Existing labels and any number of custom boy groups are valid.
+/** Print artwork variants are dimensions (cm); garment sizing is a separate applicability map.
+ * Never create model names from a PSD or rename the source file.
+ */
+export type PlateSize = string;
 export type PlateEntry = {
-  modelId: string; sizeCode: PlateSize; sizeLabel: string; printArea: string;
+  modelId: string;
+  sizeCode: PlateSize; // Artwork variation key, NOT garment size.
+  sizeLabel: string; // Small, original, large, variation 3... as locally named.
+  printArea: string;
+  artworkPart: string;
+  widthCm: number | null;
+  heightCm: number | null;
+  garmentSizes: string[]; // e.g. ["1-3 ay","3-6 ay"], ["S","M"]
+  allGarmentSizes: boolean; // Same physical artwork size on every garment.
+  isReferenceSize: boolean; // Original/reference dimensions can be middle/small/large.
 };
+export type SizeHint = {sizeCode: string; sizeLabel: string};
 
 export function canonicalPlateText(input: unknown): string {
   return String(input ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
@@ -11,103 +23,117 @@ export function canonicalPlateText(input: unknown): string {
     .toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 
-export function suggestedPlateSizes(segment: string): {sizeCode: PlateSize; sizeLabel: string}[] {
-  const normalized = " " + canonicalPlateText(segment) + " ";
-  const clues: {sizeCode: PlateSize; sizeLabel: string}[] = [];
-  const add = (sizeCode: string, sizeLabel: string) => {
-    if (!clues.some(row => row.sizeCode === sizeCode)) clues.push({sizeCode,sizeLabel});
+/** Do NOT infer print-size variants from XS/S/M/XL or child ages: those are garment sizes. */
+export function suggestedPlateSizes(segment: string): SizeHint[] {
+  const key = " " + canonicalPlateText(segment) + " ";
+  const out: SizeHint[] = [];
+  const add = (sizeCode:string,sizeLabel:string) => {
+    if (!out.some(entry => entry.sizeCode === sizeCode)) out.push({sizeCode,sizeLabel});
   };
-  // A plate may have one, three, six or more independently named sizes.
-  // Detect only explicit, delimited size tokens; a mere "3 BOY" is a count,
-  // not proof that any specific 3 sizes are present.
-  const list = String(segment).toUpperCase().replace(/(\\b(?:BOY|BEDEN|SIZE)\\b)/g, " ");
-  // Multi-size lists must have explicit separators (XS/S/M) to avoid
-  // accidentally treating ordinary model-name letters as garment sizes.
-  for (const candidate of list.matchAll(/\\b(?:XS|S|M|L|XL|XXL|XXXL|[2-9]XL)(?:\\s*[/+,;]\\s*(?:XS|S|M|L|XL|XXL|XXXL|[2-9]XL))+\\b/g)) {
-    for (const token of candidate[0].split(/\\s*[/+,;]\\s*/)) add(token === "XXL" ? "2XL" : token === "XXXL" ? "3XL" : token,token);
-  }
-  const numbered = /\\b(?:BOY|BEDEN)\\s*(\\d{1,3})\\b|\\b(\\d{1,3})\\s*(?:\\.|-)\\s*(?:BOY|BEDEN)\\b/g;
-  for (const hit of normalized.matchAll(numbered)) {
-    const n = hit[1];
-    add("BOY_"+n, n+". boy");
-  }
-  for (const hit of String(segment).toUpperCase().matchAll(/\b(\d{1,3})\s*[.-]\s*(?:BOY|BEDEN)\b/g)) {
-    const n = hit[1];
-    add("BOY_"+n, n+". boy");
-  }
-  if (clues.length) return clues;
-  const small = /\\b(KUCUK|K BOY|K BEDEN|SMALL)\\b/.test(normalized);
-  const large = /\\b(BUYUK|B BOY|B BEDEN|LARGE)\\b/.test(normalized);
-  const pair = /\\b(K B|K VE B|KUCUK BUYUK|BUYUK KUCUK)\\s*(BOY|BEDEN)?\\b/.test(normalized);
-  const one = /\\b(TEK BOY|TEK BEDEN|STANDART BOY|ONE SIZE)\\b/.test(normalized);
+  // Use *explicit* K/B boy notation only. "3 BOY" alone describes a possible
+  // quantity; it never specifies three validated artwork dimensions.
+  const pair = /\b(K B|K VE B|KUCUK BUYUK|BUYUK KUCUK)\s*(BOY|EBAT)?\b/.test(key);
+  const small = /\b(KUCUK|K BOY|K EBAT|SMALL)\b/.test(key);
+  const large = /\b(BUYUK|B BOY|B EBAT|LARGE)\b/.test(key);
   if (pair || (small && large)) {
-    add("SMALL","Küçük boy");
-    add("LARGE","Büyük boy");
-  } else if (small) add("SMALL","Küçük boy");
-  else if (large) add("LARGE","Büyük boy");
-  else if (one) add("ONE_SIZE","Tek boy");
-  return clues.length ? clues : [{sizeCode:"UNSPECIFIED",sizeLabel:"Boy doğrulanmadı"}];
+    add("SMALL","Küçük desen");
+    add("LARGE","Büyük desen");
+  } else if (small) add("SMALL","Küçük desen");
+  else if (large) add("LARGE","Büyük desen");
+  else if (/\b(TEK BOY|TEK EBAT|ONE SIZE)\b/.test(key)) add("ONE_SIZE","Tek desen ebadı");
+  return out.length ? out : [{sizeCode:"UNSPECIFIED",sizeLabel:"Desen ölçüsü doğrulanmadı"}];
 }
 
-/** Size clues are advisory only. Filename may describe a combined placement differently. */
+/** Filename suggestions list only known model records. Every measurement stays unverified. */
 export function suggestPlateMembership(
   originalFileName: string,
   models: readonly {modelId: string; modelName: string}[],
-): {modelId: string; sizeCode: PlateSize; sizeLabel: string; printArea: string; evidence: string}[] {
+): ({modelId: string; printArea: string; evidence: string} & SizeHint)[] {
   const stem = String(originalFileName).replace(/\.(psd|psb|pdf|ai)$/i, "");
   const hay = " " + canonicalPlateText(stem) + " ";
-  const found = models.map((model) => {
+  const found = models.map(model => {
     const key = canonicalPlateText(model.modelName);
     const at = key ? hay.indexOf(" " + key + " ") : -1;
-    return {...model, key, at: at < 0 ? -1 : at + 1};
-  }).filter((row) => row.at >= 0).sort((a,b) => a.at-b.at || b.key.length-a.key.length);
+    return {...model,key,at:at<0?-1:at+1};
+  }).filter(row=>row.at>=0).sort((a,b)=>a.at-b.at||b.key.length-a.key.length);
   const matches: typeof found = [];
   for (const candidate of found) {
-    if (matches.some((other) => candidate.at < other.at+other.key.length && other.at < candidate.at+candidate.key.length)) continue;
+    if (matches.some(other=>candidate.at<other.at+other.key.length&&other.at<candidate.at+candidate.key.length))continue;
     matches.push(candidate);
   }
-  const rows: ReturnType<typeof suggestPlateMembership> = [];
-  matches.forEach((model, i) => {
-    const start = model.at + model.key.length;
-    const end = matches[i+1]?.at ?? hay.length;
-    const segment = hay.slice(start, end);
-    const area = /\b(ARKA|BACK)\b/.test(segment) ? "BACK"
-      : /\b(ON|FRONT)\b/.test(segment) ? "FRONT" : "";
-    for (const size of suggestedPlateSizes(segment)) {
-      rows.push({modelId:model.modelId, ...size, printArea:area, evidence:"FILENAME_SUGGESTION"});
-    }
+  const result: ReturnType<typeof suggestPlateMembership> = [];
+  matches.forEach((model,i)=>{
+    const segment=hay.slice(model.at+model.key.length,matches[i+1]?.at??hay.length);
+    const area=/\b(ARKA|BACK)\b/.test(segment)?"BACK":/\b(ON|FRONT)\b/.test(segment)?"FRONT":"";
+    for(const hint of suggestedPlateSizes(segment))result.push({
+      modelId:model.modelId,...hint,printArea:area,evidence:"FILENAME_SUGGESTION"
+    });
   });
-  return rows;
+  return result;
 }
 
-export function validatePlateEntries(
-  raw: unknown,
-): {ok: true; entries: PlateEntry[]} | {ok: false; error: string} {
-  if (!Array.isArray(raw)) return {ok:false,error:"Kalıp boy satırları bir dizi olmalıdır."};
-  // Safety bound is the request payload size, never a fixed number of sizes.
-  if (JSON.stringify(raw).length > 256_000) return {ok:false,error:"Çok büyük eşleştirme isteği. Kaydı küçük partilerde düzenleyin."};
-  const rows: PlateEntry[] = [];
-  const seen = new Set<string>();
-  for (const row of raw) {
-    if (!row || typeof row !== "object") return {ok:false,error:"Kalıp satırı geçersiz."};
-    const modelId = String(row.modelId ?? "").trim();
-    const sizeCode = String(row.sizeCode ?? "").trim().toUpperCase() as PlateSize;
-    const sizeLabel = String(row.sizeLabel ?? "").trim();
-    const printArea = String(row.printArea ?? "").trim().toUpperCase();
-    if (!/^[a-zA-Z0-9-]{8,90}$/.test(modelId) ||
-        !/^[A-Z0-9][A-Z0-9_-]{0,39}$/.test(sizeCode) ||
-        !sizeLabel || sizeLabel.length > 80 ||
-        printArea.length > 40 || !/^[A-Z0-9_]*$/.test(printArea))
-      return {ok:false,error:"Model, boy veya baskı bölgesi bilgisi hatalı."};
-    const id = [modelId,sizeCode,canonicalPlateText(sizeLabel),printArea].join("|");
-    if (seen.has(id)) return {ok:false,error:"Aynı model ve boy kalıba iki defa eklenemez."};
-    seen.add(id);
-    rows.push({modelId,sizeCode,sizeLabel,printArea});
+/** Locale-friendly cm input. These are physical print measurements, not PDF page sizes. */
+export function cm(value:unknown):number|null {
+  if(value===undefined||value===null||String(value).trim()==="")return null;
+  const source=String(value).trim().replace(",",".");
+  if(!/^\d{1,4}(?:\.\d{1,3})?$/.test(source))return NaN;
+  const amount=Number(source);
+  return Number.isFinite(amount)&&amount>0&&amount<=2000?Math.round(amount*1000)/1000:NaN;
+}
+
+export function scaleRelativeToReference(reference:Pick<PlateEntry,"widthCm"|"heightCm">,
+  changed:Pick<PlateEntry,"widthCm"|"heightCm">): {widthChangePercent:number;heightChangePercent:number;uniform:boolean}|null {
+  if(!reference.widthCm||!reference.heightCm||!changed.widthCm||!changed.heightCm)return null;
+  const x=(changed.widthCm/reference.widthCm-1)*100;
+  const y=(changed.heightCm/reference.heightCm-1)*100;
+  return {widthChangePercent:Math.round(x*100)/100,heightChangePercent:Math.round(y*100)/100,uniform:Math.abs(x-y)<0.5};
+}
+
+export function validatePlateEntries(raw:unknown):
+  {ok:true;entries:PlateEntry[]}|{ok:false;error:string} {
+  if(!Array.isArray(raw))return {ok:false,error:"Kalıp ölçüleri dizi olmalıdır."};
+  // Payload limit protects D1; artwork variant count is NOT restricted to 1, 2 or 3.
+  if(JSON.stringify(raw).length>256_000)return {ok:false,error:"Kalıp kaydı çok büyük."};
+  const entries:PlateEntry[]=[];
+  const seen=new Set<string>();
+  for(const row of raw) {
+    if(!row||typeof row!=="object"||Array.isArray(row))return {ok:false,error:"Geçersiz kalıp satırı."};
+    const modelId=String(row.modelId??"").trim();
+    const sizeCode=String(row.sizeCode??"").trim().toUpperCase();
+    const sizeLabel=String(row.sizeLabel??"").trim();
+    const artworkPart=String(row.artworkPart??"").trim();
+    const printArea=String(row.printArea??"").trim().toUpperCase();
+    const widthCm=cm(row.widthCm);
+    const heightCm=cm(row.heightCm);
+    const allGarmentSizes=row.allGarmentSizes===true;
+    const isReferenceSize=row.isReferenceSize===true;
+    const garmentSizesRaw=row.garmentSizes??[];
+    if(!Array.isArray(garmentSizesRaw))return {ok:false,error:"Ürün bedenleri bir liste olmalı."};
+    const garmentSizes=garmentSizesRaw.map((v:unknown)=>String(v??"").trim()).filter(Boolean);
+    if(!/^[a-zA-Z0-9-]{8,90}$/.test(modelId)||
+      !/^[A-Z0-9][A-Z0-9_-]{0,39}$/.test(sizeCode)||
+      !sizeLabel||sizeLabel.length>80||artworkPart.length>80||
+      printArea.length>40||!/^[A-Z0-9_]*$/.test(printArea)||
+      Number.isNaN(widthCm)||Number.isNaN(heightCm)||
+      (widthCm===null)!==(heightCm===null)||
+      garmentSizes.some((v:string)=>v.length>60)||
+      garmentSizes.length!==new Set(garmentSizes.map((v:string)=>canonicalPlateText(v))).size||
+      (allGarmentSizes&&garmentSizes.length>0))
+        return {ok:false,error:"Model, desen en-boy (cm), baskı parçası veya ürün bedenleri hatalı."};
+    const key=[modelId,sizeCode,canonicalPlateText(artworkPart),printArea].join("|");
+    if(seen.has(key))return {ok:false,error:"Aynı model, desen ölçü varyantı ve baskı parçası iki kez eklenemez."};
+    seen.add(key);
+    entries.push({modelId,sizeCode,sizeLabel,printArea,artworkPart,
+      widthCm,heightCm,garmentSizes,allGarmentSizes,isReferenceSize});
   }
-  return {ok:true,entries:rows};
+  return {ok:true,entries};
 }
 
-export function describeSharedPlate(entries: readonly PlateEntry[], modelId: string) {
-  const groups = [...new Set(entries.filter(row=>row.modelId===modelId).map(row => row.sizeCode+"|"+canonicalPlateText(row.sizeLabel)))];
-  return {modelSizeCount:groups.length, sharedModelCount:new Set(entries.map(row=>row.modelId)).size};
+export function describeSharedPlate(entries:readonly PlateEntry[],modelId:string) {
+  return {
+    modelSizeCount:new Set(entries.filter(row=>row.modelId===modelId).map(row=>[
+      row.sizeCode,row.widthCm,row.heightCm
+    ].join("|"))).size,
+    sharedModelCount:new Set(entries.map(row=>row.modelId)).size,
+  };
 }
