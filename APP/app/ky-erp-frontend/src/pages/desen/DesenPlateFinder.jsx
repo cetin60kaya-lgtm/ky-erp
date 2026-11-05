@@ -87,13 +87,54 @@ function PlatePreview({ assetId, slug }) {
   </div>;
 }
 
-function PlateEditor({ plate, models, slug, onSaved }) {
+function PlateEditor({ plate, models, slug, focusedModelId, onSaved }) {
   const [entries, setEntries] = useState(plate.entries.map((row) => ({...row,garmentSizesText:(row.garmentSizes || []).join(", ")})));
   const [plateCode, setPlateCode] = useState(plate.plateCode || "");
   const [shelfLabel, setShelfLabel] = useState(plate.shelfLabel || "");
   const [acceptRevision, setAcceptRevision] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  const [placementFiles,setPlacementFiles] = useState([]);
+  const [placementFileId,setPlacementFileId] = useState("");
+  const [ocrCandidates,setOcrCandidates] = useState([]);
+  const [ocrBusy,setOcrBusy] = useState(false);
+  useEffect(()=>{
+    let live=true;
+    apiFetch("/desen/plates/"+encodeURIComponent(plate.assetId)+
+      "/placement-pdfs?mainCompanySlug="+encodeURIComponent(slug))
+      .then((res)=>{if(live)setPlacementFiles(res?.data?.items||[]);})
+      .catch(()=>{if(live)setPlacementFiles([]);});
+    return ()=>{live=false};
+  },[plate.assetId,slug]);
+  const scanPlacement = async () => {
+    if(!placementFileId || ocrBusy)return;
+    setOcrBusy(true);setNotice("");setOcrCandidates([]);
+    try {
+      const result=await apiFetch("/desen/plates/"+encodeURIComponent(plate.assetId)+"/interpret-placement",{
+        method:"POST",body:{mainCompanySlug:slug,placementAssetId:placementFileId},timeoutMs:120000
+      });
+      const list=result?.data?.measurements||[];
+      if(!list.length){setNotice("PDF yazılarından güvenilir en × boy çifti okunamadı; elle kontrol edin.");return;}
+      setOcrCandidates(list.map((row)=>({...row,modelId:focusedModelId||""})));
+    }catch(error){setNotice(error?.message||"PDF yorumlanamadı.");}
+    finally{setOcrBusy(false);}
+  };
+  const adoptObservation = (row) => {
+    if(!row.modelId){setNotice("Bu ebat hangi modele ait? Önce model seçin.");return;}
+    setEntries((rows)=>{
+      if(rows.some((existing)=>existing.modelId===row.modelId &&
+        Number(existing.widthCm)===row.widthCm && Number(existing.heightCm)===row.heightCm &&
+        (existing.artworkPart||"")===(row.artworkPart||"")))return rows;
+      let n=rows.length+1;
+      while(rows.some((existing)=>existing.sizeCode==="OCR_"+n))n+=1;
+      return [...rows,{modelId:row.modelId,sizeCode:"OCR_"+n,sizeLabel:"Ölçü "+n,
+        widthCm:row.widthCm,heightCm:row.heightCm,artworkPart:row.artworkPart||"",
+        printArea:"",garmentSizes:row.garmentSizes||[],
+        garmentSizesText:(row.garmentSizes||[]).join(", "),
+        allGarmentSizes:row.allGarmentSizes===true,isReferenceSize:false}];
+    });
+  };
+
   const edit = (index, patch) => setEntries((all) => all.map((row, i) => i === index ? {...row,...patch} : row));
   const add = () => setEntries((rows) => {
     let n=rows.length+1;
@@ -131,6 +172,30 @@ function PlateEditor({ plate, models, slug, onSaved }) {
   };
   return <div className="dsg-plate-editor">
     <p><strong>Yetkili kalıp düzeltme</strong> · PSD dosya adı değiştirilmez. Her satır bir modelin desen en × boy ölçüsüdür (cm). S/M/L, yaş ve ay değerleri yalnız ürün bedenidir; aynı ölçü birden fazla ürüne uygulanabilir. Boy sayısı sınırsızdır.</p>
+    <div className="dsg-plate-ocr">
+      <strong>Drive yerleşim PDF'sinden ölçü önerisi</strong>
+      <small>Yazıları mevcut görsel okuma servisi yorumlar. Çekme, dikiş payı ve ürün bedenleri desen eni/boyu sayılmaz. Sonuçlar yalnız öneridir.</small>
+      {placementFiles.length ? <>
+        <select aria-label="İlişkili yerleşim PDF seç" value={placementFileId}
+          onChange={(e)=>{setPlacementFileId(e.target.value);setOcrCandidates([]);}}>
+          <option value="">İlişkili yerleşim PDF'sini seç</option>
+          {placementFiles.map((row)=><option key={row.assetId} value={row.assetId}>{row.fileName}</option>)}
+        </select>
+        <button type="button" className="dsg-btn" onClick={scanPlacement} disabled={!placementFileId||ocrBusy}>
+          {ocrBusy?"PDF okunuyor…":"PDF ölçülerini yorumla"}
+        </button>
+      </>:<small>Bu PSD'yle modeli eşleşen indeksli yerleşim PDF bulunamadı.</small>}
+      {ocrCandidates.map((row,index)=><div className="dsg-plate-ocr-candidate" key={index}>
+        <span><b>{row.artworkPart || "Desen"}</b>: {showCm(row.widthCm)} × {showCm(row.heightCm)} cm;
+          {" "}{row.allGarmentSizes?"tüm ürün bedenlerinde":(row.garmentSizes||[]).join(", ")||"beden grubu belirsiz"}</span>
+        <select aria-label="Ölçü adayını modele bağla" value={row.modelId||""}
+          onChange={(e)=>setOcrCandidates((prev)=>prev.map((item,i)=>i===index?{...item,modelId:e.target.value}:item))}>
+          <option value="">Model seç</option>
+          {models.map((model)=><option key={model.modelId} value={model.modelId}>{model.modelName}</option>)}
+        </select>
+        <button type="button" className="dsg-btn" onClick={()=>adoptObservation(row)}>Öneriyi düzenlemeye al</button>
+      </div>)}
+    </div>
     <div className="dsg-plate-editor-metadata">
       <label>Raf / fiziksel yer <input value={shelfLabel} maxLength={120} onChange={(e)=>setShelfLabel(e.target.value)} placeholder="Örn: Raf 4, göz 12" /></label>
       <label>Kalıp kodu <input value={plateCode} maxLength={100} onChange={(e)=>setPlateCode(e.target.value)} /></label>
@@ -281,7 +346,7 @@ export default function DesenPlateFinder({ activeMainCompany, query = "" }) {
         <p key={row.id}><strong>{row.name}</strong>: {row.variants.join(" / ")} {row.areas.length ? "· "+row.areas.join(", ") : ""}</p>)}
       <PlatePreview key={active.assetId} assetId={active.assetId} slug={slug} />
       <button type="button" className="dsg-btn" onClick={()=>setEditing((value)=>!value)}>{editing ? "Düzenlemeyi kapat" : "Yetkili düzeltme / raf ve boy bilgisi"}</button>
-      {editing && <PlateEditor key={active.assetId+"-"+active.revision} plate={active} models={models} slug={slug}
+      {editing && <PlateEditor key={active.assetId+"-"+active.revision} plate={active} models={models} slug={slug} focusedModelId={effectiveId}
         onSaved={()=>{choosePlate(active.assetId);setEditing(false);}} />}
     </div>}
   </section>;
