@@ -93,10 +93,11 @@ async function plateView(c:any,slug:string,asset:Row) {
     shelfLabel:t(stored.shelfLabel),plateCode:t(stored.plateCode),
     entries:confirmed.map((row:Row,index:number)=>({...row,printedSizeRank:sizeRanking[index],modelName:byId.get(t(row.modelId))||t(row.modelName)||"Model bulunamadı"})),
     suggestions:stored.revision>0 ? [] : all.map((row:Row)=>({...row,modelName:byId.get(t(row.modelId))||"Model bulunamadı"})),
-    status:stored.revision>0?(revised?"REVISION_REVIEW":confirmed.some((row:Row)=>!(Number(row.widthCm)>0 && Number(row.heightCm)>0))?"MEASUREMENT_PENDING":"CONFIRMED"):"REVIEW_REQUIRED",
+    status:stored.revision>0?(revised?"REVISION_REVIEW":confirmed.some((row:Row)=>!(Number(row.widthCm)>0 && Number(row.heightCm)>0))?"MEASUREMENT_PENDING":confirmed.some((row:Row)=>!row.allGarmentSizes&&!(Array.isArray(row.garmentSizes)&&row.garmentSizes.length))?"GARMENT_SIZES_PENDING":"CONFIRMED"):"REVIEW_REQUIRED",
     uniqueModels:new Set(confirmed.map((row:Row)=>t(row.modelId))).size,
     measuredVariants:confirmed.filter((row:Row)=>Number(row.widthCm)>0&&Number(row.heightCm)>0).length,
     measurementPending:confirmed.filter((row:Row)=>!(Number(row.widthCm)>0&&Number(row.heightCm)>0)).length,
+    garmentSizePending:confirmed.filter((row:Row)=>!row.allGarmentSizes&&!(Array.isArray(row.garmentSizes)&&row.garmentSizes.length)).length,
   };
 }
 
