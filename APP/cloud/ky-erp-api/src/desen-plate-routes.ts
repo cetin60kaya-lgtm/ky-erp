@@ -91,24 +91,46 @@ async function plateView(c:any,slug:string,asset:Row) {
 
 export function registerDesenPlateRoutes(app:Hono<AppEnv>) {
   // /api/desen/* is protected by enforceDesenTenant: auth + tenant + module rights.
+  app.get("/api/desen/plates/models", async c=>{
+    const slug=slugOf(c);
+    const rows=await c.env.DB.prepare(
+      "SELECT id modelId,model_name modelName FROM model_records WHERE main_company_slug=? AND COALESCE(TRIM(deleted_at),'')='' ORDER BY model_name LIMIT 4000"
+    ).bind(slug).all<Row>();
+    return c.json({ok:true,data:{models:rows.results||[]}});
+  });
+
   app.get("/api/desen/plates/model/:modelId", async c=>{
     const slug=slugOf(c),modelId=t(c.req.param("modelId"));
     const model=await c.env.DB.prepare("SELECT id,model_name FROM model_records WHERE id=? AND main_company_slug=? AND COALESCE(TRIM(deleted_at),'')='' LIMIT 1")
       .bind(modelId,slug).first<Row>();
     if(!model)return c.json(error("MODEL_NOT_FOUND","Model bulunamadı."),404);
+    const name=t(model.model_name);
+    // Include unbound candidate PSD files with the exact known model token,
+    // but keep these as suggestions until sizes and membership are confirmed.
     const r=await c.env.DB.prepare(`
-      SELECT DISTINCT a.id FROM file_hub_relations f JOIN file_hub_assets a ON a.id=f.file_asset_id
-        AND a.main_company_slug=f.main_company_slug
-      WHERE f.main_company_slug=? AND f.entity_type='MODEL' AND f.entity_id=?
-        AND COALESCE(f.source,'')<>'SUPERSEDED_MANUAL'
-        AND a.status='AVAILABLE' AND UPPER(a.extension) IN ('PSD','PSB')
-      ORDER BY a.id LIMIT 100
-    `).bind(slug,modelId).all<Row>();
+      SELECT DISTINCT a.id FROM file_hub_assets a
+      WHERE a.main_company_slug=? AND a.status='AVAILABLE' AND UPPER(a.extension) IN ('PSD','PSB')
+        AND (
+          EXISTS(SELECT 1 FROM file_hub_relations f WHERE f.file_asset_id=a.id
+            AND f.main_company_slug=a.main_company_slug AND f.entity_type='MODEL' AND f.entity_id=?
+            AND COALESCE(f.source,'')<>'SUPERSEDED_MANUAL')
+          OR (length(?)>=4 AND upper(a.file_name) LIKE upper(?) ESCAPE '\\'
+              AND EXISTS(SELECT 1 FROM file_hub_locations loc
+                JOIN file_hub_bindings b ON b.main_company_slug=loc.main_company_slug
+                  AND b.storage_connection_id=loc.storage_connection_id AND b.module_code='DESEN'
+                  AND b.sync_enabled=1
+                WHERE loc.file_asset_id=a.id AND loc.main_company_slug=a.main_company_slug
+                  AND substr(lower(loc.relative_path),1,length(b.root_path)+1)=lower(b.root_path)||'/'))
+        )
+      ORDER BY a.id LIMIT 150
+    `).bind(slug,modelId,name,"%"+name.replace(/[\\%_]/g,x=>"\\"+x)+"%").all<Row>();
     const plates:Row[]=[];
     for(const row of (r.results||[])){
       const asset=await plateAsset(c,slug,t(row.id));
       if(!asset)continue;
       const view=await plateView(c,slug,asset);
+      if (!(view.entries.some((entry:Row)=>t(entry.modelId)===modelId)
+         || view.suggestions.some((entry:Row)=>t(entry.modelId)===modelId))) continue;
       const stats=describeSharedPlate(view.entries,modelId);
       plates.push({...view,modelSizeCount:stats.modelSizeCount});
     }
