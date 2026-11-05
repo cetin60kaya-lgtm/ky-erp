@@ -121,7 +121,7 @@ Secret değerleri repoya yazılmaz. `/api/muhasebe/belge-zeka/status` yalnız ya
   görüntüsünü Photoshop kullanmadan okur; en fazla 2400 piksel kenarlı,
   şeffaflığı koruyan PNG oluşturur. PNG'yi mevcut yetkili File Hub endpointi
   R2 preview/cache'e alır. Model kartı PNG'yi büyüterek gösterir.
-- RGB ve gri tonlamalı, 8/16 bit PSD/PSB, RAW/RLE/ZIP/ZIP prediction desteklenir.
+- RGB, gri tonlama ve spot renkli **Multichannel** (Photoshop DisplayInfo 1077), 8/16 bit PSD/PSB, RAW/RLE/ZIP/ZIP prediction desteklenir.
   **CMYK, LAB, 32-bit ve birleşik kompoziti bulunmayan/sorunlu dosyalarda
   yanlış renk gösterilmez; açık hata durumu verilir.** Önizleme renk ayrımı
   veya Pantone baskı onayı değildir.
@@ -136,3 +136,5 @@ Secret değerleri repoya yazılmaz. `/api/muhasebe/belge-zeka/status` yalnız ya
 - Canlı kabul için: gerçek Google Drive PSD/PSB seçimi, ilk tıklama ve
   R2 READY; ayrıca telefon/tablet ve kaynak revizyonu sonrası yeniden
   üretim test edilmelidir. Photoshop kesinlikle çağrılmaz.
+
+**Gerçek kaynak kabul örneği (salt okunur, 05.11.2026):** Drive'daki `TEDCOR K-B_BOY - FANTY ÖN + ARKA.psd` dosyası Multichannel / 9 spot kanal / 7303×6655 tuvaldir. Node dönüştürücüyle Photoshop açılmadan 2400×2187 tam tuval PNG üretildi (yaklaşık 1,2 saniye); küçük gömülü Photoshop JPEG önizlemesiyle görsel olarak karşılaştırıldı. Bu test bir File Hub canlı e2e kabulü veya spot/Pantone renk kalibrasyon onayı değildir. Orijinal PSD ve PNG GitHub'a eklenmedi.
