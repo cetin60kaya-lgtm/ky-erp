@@ -55,8 +55,7 @@ export function interpretPlacementText(text:unknown):PlacementObservation[] {
   for(let index=0;index<lines.length;index++){
     const line=lines[index];
     const group=productGroup(line);
-    if(group){flush();all=group.all;garments=group.garments;continue;}
-    if(BAD.test(line))continue;
+    if(group){flush();all=group.all;garments=group.garments;}
     // Both directions may occur on one OCR line; do not treat "3-6 AY" as a measurement.
     for(const found of line.matchAll(DIM)) {
       const kind=found[1];
