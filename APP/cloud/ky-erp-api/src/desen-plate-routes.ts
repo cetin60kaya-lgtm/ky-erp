@@ -275,8 +275,12 @@ export function registerDesenPlateRoutes(app:Hono<AppEnv>) {
       if(!written.meta?.changes)return c.json(error("REVISION_CONFLICT","Eşleştirme eş zamanlı değişti."),409);
     }else{
       // Existing json_store scope; no migration or new canonical model record.
-      await c.env.DB.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?)")
-        .bind(crypto.randomUUID(),SCOPE,slug,t(asset.id),JSON.stringify(payload),stamp,stamp).run();
+      // Deterministic primary ID makes simultaneous first saves fail closed instead of
+      // creating two independently editable copies of the same physical PSD plate.
+      const first=await c.env.DB.prepare(
+        "INSERT OR IGNORE INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?)"
+      ).bind("desen-plate-"+t(asset.id),SCOPE,slug,t(asset.id),JSON.stringify(payload),stamp,stamp).run();
+      if(!first.meta?.changes)return c.json(error("REVISION_CONFLICT","Kalıp başka bir kullanıcı tarafından eş zamanlı kaydedildi; yeniden açın."),409);
     }
     // Manual relation is only an index. The authoritative per-size mapping is the plate record.
     // Do not delete automatic CLOUD_RULE relationships or move any physical source file.
