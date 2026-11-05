@@ -27,6 +27,7 @@ import {
   updateDesignModel,
   uploadDesignWorkflowFile,
 } from "../../services/desenWorkflowApi";
+import DesenPlateFinder from "./DesenPlateFinder";
 import { createProductionCenterModel } from "../../services/productionCenterApi";
 import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import {
@@ -179,6 +180,7 @@ export default function DesenModeller({ activeMainCompany, openModule }) {
       </div>
       <div className="dsg-toolbar-main"><button className="dsg-btn" onClick={goInbox}><ScanLine size={16} /> Gelen Desenler</button><button className="dsg-btn primary" onClick={() => setNewModel(true)}><Plus size={16} /> Yeni Model</button><button className="dsg-btn" onClick={analyzeVisible} disabled={analyzing || loading}>{analyzing ? <LoaderCircle className="spin" size={16} /> : <ScanLine size={16} />} {selectedIds.length ? `Seçiliyi Akıllı Tara (${selectedIds.length})` : "Görünenleri Akıllı Tara"}</button><button className="dsg-btn" disabled={!selectedIds.length} onClick={() => setBulkOpen(true)}><CheckSquare size={16} /> Toplu Düzenle ({selectedIds.length})</button><button className="dsg-btn" onClick={load}><RefreshCw size={16} /> Yenile</button><button className="dsg-btn" onClick={() => downloadDesignReport(activeMainCompany, filters).catch((error) => setMessage(error?.message || "CSV raporu indirilemedi."))}><Download size={16} /> CSV</button></div>
     </section>
+    <DesenPlateFinder activeMainCompany={activeMainCompany} query={filters.q} />
     {message && <div className="dsg-page-message">{message}</div>}
     <section className="dsg-results-head"><div><strong>{models.length}</strong><span>model bulundu</span></div><span>Gerçek Desen kayıtları · ERP eklenme, dosya ve güncelleme tarihleriyle</span></section>
     {loading ? <div className="dsg-loading"><LoaderCircle className="spin" /> Desen modelleri yükleniyor…</div> : !models.length ? <EmptyState icon={FileImage} title="Filtreye uygun model yok" text="Gelen klasörü tarayarak veya Yeni Model düğmesiyle ilk kaydı oluşturabilirsiniz." action={<button className="dsg-btn primary" onClick={() => setNewModel(true)}><Plus size={16} /> Yeni Model</button>} /> : <>{view === "cards" ? <div className="dsg-model-grid">{visibleModels.map((model) => <ModelCard key={model.id} model={model} selected={selectedIds.includes(model.id)} onSelect={() => toggleSelection(model.id)} onDetail={() => openDetail(model)} onUpload={(file) => uploadPreview(model, file)} uploadBusy={Boolean(uploadingModelId)} onEdit={() => openEditor(model)} onDyehouse={() => syncDyehouse(model)} onProduction={() => sendToProduction(model)} productionBusy={Boolean(sendingModelId)} />)}</div> : <ModelTable models={visibleModels} selectedIds={selectedIds} onSelect={toggleSelection} onDetail={openDetail} onEdit={openEditor} onProduction={sendToProduction} productionBusy={Boolean(sendingModelId)} />}<Pager index={page} count={pageCount} onPrevious={() => setPage((value) => Math.max(0, value - 1))} onNext={() => setPage((value) => Math.min(pageCount - 1, value + 1))} /></>}
