@@ -103,6 +103,37 @@ async function plateView(c:any,slug:string,asset:Row) {
 
 export function registerDesenPlateRoutes(app:Hono<AppEnv>) {
   // /api/desen/* is protected by enforceDesenTenant: auth + tenant + module rights.
+  // Lightweight, tenant-guarded operational readiness. Never disclose credentials.
+  // A File Hub heartbeat proves only that an agent is online, not that the
+  // PSD consumer is running or that Cloudflare has OCR'd a real PDF.
+  app.get("/api/desen/plates/status", async c=>{
+    const slug=slugOf(c);
+    const recent=new Date(Date.now()-3*60*1000).toISOString();
+    const agent=await c.env.DB.prepare(
+      "SELECT device_name,last_seen_at,status FROM file_hub_agent_status " +
+      "WHERE main_company_slug=? ORDER BY last_seen_at DESC LIMIT 1"
+    ).bind(slug).first<Row>().catch(()=>null);
+    const agentHeartbeatFresh=Boolean(agent && t(agent.last_seen_at)>=recent &&
+      t(agent.status).toUpperCase()==="ONLINE");
+    const counts=await c.env.DB.prepare(
+      "SELECT COUNT(*) total, "+
+      "SUM(CASE WHEN preview_status='READY' AND preview_storage_key IS NOT NULL "+
+      "AND preview_storage_key NOT LIKE 'file-hub/previews/cloud/%' THEN 1 ELSE 0 END) ready, "+
+      "SUM(CASE WHEN preview_status IN ('PENDING','PROCESSING') THEN 1 ELSE 0 END) pending, "+
+      "SUM(CASE WHEN preview_status='FAILED' THEN 1 ELSE 0 END) failed "+
+      "FROM file_hub_assets WHERE main_company_slug=? AND status='AVAILABLE' "+
+      "AND UPPER(extension) IN ('PSD','PSB')"
+    ).bind(slug).first<Row>();
+    return c.json({ok:true,data:{
+      indexedPsd:Number(counts?.total||0),fullPreviewReady:Number(counts?.ready||0),
+      previewPending:Number(counts?.pending||0),previewFailed:Number(counts?.failed||0),
+      agentHeartbeatFresh,
+      previewConsumerVerified:false,
+      pdfTextExtractionConfigured:typeof (c.env as any).AI?.toMarkdown==="function",
+      livePdfOcrVerified:false,
+    }});
+  });
+
   app.get("/api/desen/plates/models", async c=>{
     const slug=slugOf(c);
     const rows=await c.env.DB.prepare(
