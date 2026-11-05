@@ -295,6 +295,7 @@ function PlateEditor({ plate, models, slug, onSaved }) {
 export default function DesenPlateFinder({ activeMainCompany, query = "" }) {
   const slug = text(activeMainCompany?.slug || activeMainCompany?.mainCompanySlug || activeMainCompany?.id);
   const [models, setModels] = useState([]);
+  const [serviceStatus, setServiceStatus] = useState(null);
   const [selectedId, setSelectedId] = useState("");
   const [plates, setPlates] = useState([]);
   const [active, setActive] = useState(null);
@@ -308,8 +309,11 @@ export default function DesenPlateFinder({ activeMainCompany, query = "" }) {
   }, [models,query]);
   useEffect(() => {
     let alive=true;
-    setModels([]);setPlates([]);setSelectedId("");setActive(null);
+    setModels([]);setPlates([]);setSelectedId("");setActive(null);setServiceStatus(null);
     if (!slug) return undefined;
+    apiFetch("/desen/plates/status?mainCompanySlug="+encodeURIComponent(slug))
+      .then((result)=>{if(alive)setServiceStatus(result?.data||null);})
+      .catch(()=>{if(alive)setServiceStatus(null);});
     apiFetch("/desen/plates/models?mainCompanySlug="+encodeURIComponent(slug))
       .then((result)=>{if(alive)setModels(result?.data?.models||[]);})
       .catch((error)=>{if(alive)setWarning(error?.message||"Model listesi alınamadı.");});
@@ -340,6 +344,13 @@ export default function DesenPlateFinder({ activeMainCompany, query = "" }) {
   </section>;
   return <section className="dsg-plate-search-panel">
     <header><strong><Search size={17} /> Ortak kalıp bul · model / boy / raf</strong><small>{matched.length} model seçeneği</small></header>
+    {serviceStatus && <div className="dsg-plate-service-status" role="status">
+      <small>{serviceStatus.indexedPsd} PSD/PSB indeksli · {serviceStatus.fullPreviewReady} tam önizleme hazır
+        {serviceStatus.previewPending>0 ? " · "+serviceStatus.previewPending+" önizleme sırada" : ""}
+      </small>
+      {!serviceStatus.agentHeartbeatFresh && <small>File Hub ajanı henüz çevrimiçi doğrulanmadı; eski önizlemeler açılabilir, yenileri bekleyebilir.</small>}
+      {!serviceStatus.pdfTextExtractionConfigured && <small>Drive yerleşim PDF metin çıkarma servisi hazır değil; en × boy ölçülerini kontrol ederek girin.</small>}
+    </div>}
     <div className="dsg-plate-model-options">{matched.map((model)=><button type="button"
       key={model.modelId} className={effectiveId===model.modelId ? "active" : ""}
       onClick={()=>setSelectedId(model.modelId)}>{model.modelName}</button>)}</div>
