@@ -47,39 +47,58 @@ const displayRows = (rows) => {
   return [...groups.entries()].map(([id,group])=>({id,...group}));
 };
 
-function PlatePreview({ assetId, slug }) {
+function PlatePreview({ assetId, slug, initialPreviewStatus = "" }) {
   const [url, setUrl] = useState("");
   const [status, setStatus] = useState("");
+  const [jobStatus, setJobStatus] = useState(initialPreviewStatus);
   const [busy, setBusy] = useState(false);
   const open = async () => {
     if (busy) return;
-    setBusy(true); setStatus("");
+    setBusy(true);
+    setStatus("");
     const path = `/file-hub/files/${encodeURIComponent(assetId)}/preview`;
     const query = "?mainCompanySlug=" + encodeURIComponent(slug);
     try {
-      // A cached full-canvas PNG is returned immediately. Otherwise enqueue
-      // the Photoshop-free converter and retry a bounded number of times.
-      await apiFetch(path + "/request" + query, { method: "POST", body: { mainCompanySlug: slug } });
+      const job = await apiFetch(path + "/request" + query, {
+        method: "POST", body: { mainCompanySlug: slug },
+      });
+      setJobStatus(job?.data?.status || "PENDING");
+      // The source is never rewritten. Only the full-canvas web cache is requested.
       for (let i = 0; i < 12; i += 1) {
         try {
           const blob = await apiFetch(path + query, { responseType: "blob", timeoutMs: 35000 });
-          if (!blob?.type?.startsWith("image/")) throw new Error("Önizleme görsel biçiminde değil.");
+          if (!blob?.type?.startsWith("image/")) throw new Error("Önizleme yanıtı görsel değil.");
           setUrl(URL.createObjectURL(blob));
-          setStatus(""); return;
+          setJobStatus("READY");
+          setStatus("");
+          return;
         } catch (err) {
-          if (i === 11 || err?.status === 403 || err?.status === 401) throw err;
-          setStatus("Görüntü hazırlanıyor…");
+          if (err?.status === 401 || err?.status === 403) throw err;
+          // Distinguish backend conversion failures from waiting for an offline agent.
+          const plate = await apiFetch("/desen/plates/" + encodeURIComponent(assetId) + query);
+          const next = plate?.data?.previewStatus || "PENDING";
+          setJobStatus(next);
+          if (next === "FAILED") throw new Error("PSD dönüştürme başarısız. Kaynak dosya veya renk modunu kontrol edin; yeniden deneyebilirsiniz.");
+          if (i === 11) throw new Error("PSD önizlemesi hazır olmadı. DESEN File Hub ajanı çevrimdışı olabilir veya Google Drive kaynağı henüz eşleşmemiş olabilir.");
+          setStatus(next === "PROCESSING" ? "PSD tam tuval görüntüsü hazırlanıyor…" : "PSD önizleme işi sırada, File Hub Agent bekleniyor…");
           await new Promise((resolve) => setTimeout(resolve, 3500));
         }
       }
     } catch (err) {
-      setStatus(err?.message || "PSD görüntüsü henüz hazırlanamadı; tekrar deneyin.");
+      const explanation = err?.code === "MODEL_RELATION_PENDING"
+        ? "Önce PSD ile modelin Dosya Merkezi bağlantısını doğrulayın."
+        : err?.code === "AGENT_SOURCE_REQUIRED"
+          ? "Bu PSD yerel ajan kaynağında; bulut önizleme için kaynak indeksinin bağlanması gerekiyor."
+          : err?.message || "PSD önizlemesi hazırlanamadı.";
+      setStatus(explanation);
     } finally { setBusy(false); }
   };
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
   return <div className="dsg-plate-preview">
     {url ? <ImagePreview src={url} alt="PSD tam yerleşim önizlemesi" /> :
-      <div className="dsg-plate-no-preview"><FileImage size={28} /> Orijinal PSD değiştirilmeden önizleme oluşturulur.</div>}
+      <div className="dsg-plate-no-preview"><FileImage size={28} />
+        {jobStatus === "READY" ? "Hazır önizleme var; görmek için açın." : "Orijinal PSD değiştirilmeden önizleme oluşturulur."}
+      </div>}
     <button type="button" className="dsg-btn primary" onClick={open} disabled={busy}>
       <ImageIcon size={16} /> {busy ? "Hazırlanıyor…" : url ? "Yeniden Aç" : "PSD'yi Önizle"}
     </button>
@@ -344,7 +363,7 @@ export default function DesenPlateFinder({ activeMainCompany, query = "" }) {
       <small>{active.status==="CONFIRMED" ? "Onaylanan baskı ölçüleri (cm) ve ürün bedenleri" : active.status==="MEASUREMENT_PENDING" ? "Model ilişkisi kaydedilmiş, bazı en–boy ölçüleri bekliyor" : active.status==="GARMENT_SIZES_PENDING" ? "En–boy belli, ancak hangi ürün bedenlerinde kullanılacağı belirlenmedi" : "Model adayı — desen ölçüleri doğrulanmalı"}</small>
       {displayRows(active.entries.length ? active.entries : active.suggestions).map((row)=>
         <p key={row.id}><strong>{row.name}</strong>: {row.variants.join(" / ")} {row.areas.length ? "· "+row.areas.join(", ") : ""}</p>)}
-      <PlatePreview key={active.assetId} assetId={active.assetId} slug={slug} />
+      <PlatePreview key={active.assetId} assetId={active.assetId} slug={slug} initialPreviewStatus={active.previewStatus} />
       <button type="button" className="dsg-btn" onClick={()=>setEditing((value)=>!value)}>{editing ? "Düzenlemeyi kapat" : "Yetkili düzeltme / raf ve boy bilgisi"}</button>
       {editing && <PlateEditor key={active.assetId+"-"+active.revision} plate={active} models={models} slug={slug} focusedModelId={effectiveId}
         onSaved={()=>{choosePlate(active.assetId);setEditing(false);}} />}
