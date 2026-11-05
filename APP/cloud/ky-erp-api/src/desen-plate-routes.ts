@@ -1,6 +1,8 @@
 // @ts-nocheck
 import type { Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { readFileHubAssetForMail } from "./file-hub-cloud-oauth";
+import { interpretPlacementText } from "./desen-placement-measurement";
 import { describeSharedPlate, rankPrintVariants, suggestPlateMembership, validatePlateEntries } from "./desen-plate-logic";
 
 /** A PSD/PSB file asset is the physical shared kalip identity; names are never renamed. */
@@ -171,6 +173,66 @@ export function registerDesenPlateRoutes(app:Hono<AppEnv>) {
     const slug=slugOf(c),asset=await plateAsset(c,slug,t(c.req.param("assetId")));
     if(!asset)return c.json(error("PLATE_NOT_FOUND","Kalıp PSD bulunamadı."),404);
     return c.json({ok:true,data:await plateView(c,slug,asset)});
+  });
+
+
+  // Related placement PDFs are only CANDIDATES; not proof that a PDF covers the same plate.
+  async function placementCandidates(c:any,slug:string,asset:Row) {
+    const view=await plateView(c,slug,asset);
+    const ids=[...new Set([...view.entries,...view.suggestions].map((row:Row)=>t(row.modelId)).filter(Boolean))];
+    if(!ids.length)return [];
+    const sql="SELECT DISTINCT a.id,a.file_name,a.size_bytes FROM file_hub_assets a " +
+      "JOIN file_hub_relations r ON r.file_asset_id=a.id AND r.main_company_slug=a.main_company_slug " +
+      "WHERE a.main_company_slug=? AND a.status='AVAILABLE' AND UPPER(a.extension)='PDF' " +
+      "AND a.source_type='CLOUD_API' AND r.entity_type='MODEL' AND r.entity_id IN ("+
+      ids.map(()=>"?").join(",")+") ORDER BY a.file_name LIMIT 40";
+    return (await c.env.DB.prepare(sql).bind(slug,...ids).all<Row>()).results||[];
+  }
+  app.get("/api/desen/plates/:assetId/placement-pdfs",async c=>{
+    const slug=slugOf(c),asset=await plateAsset(c,slug,t(c.req.param("assetId")));
+    if(!asset)return c.json(error("PLATE_NOT_FOUND","PSD kaynağı bulunamadı."),404);
+    const items=await placementCandidates(c,slug,asset);
+    return c.json({ok:true,data:{items:items.map((row:Row)=>({
+      assetId:t(row.id),fileName:t(row.file_name),sizeBytes:Number(row.size_bytes||0),
+      status:"CANDIDATE"
+    }))}});
+  });
+  app.post("/api/desen/plates/:assetId/interpret-placement",async c=>{
+    const slug=slugOf(c),asset=await plateAsset(c,slug,t(c.req.param("assetId")));
+    if(!asset)return c.json(error("PLATE_NOT_FOUND","PSD kaynağı bulunamadı."),404);
+    let body:Row={};
+    try {body=await c.req.json<Row>()}catch{return c.json(error("INVALID_JSON","Yerleşim kaynağı seçilmedi."),400)}
+    const id=t(body.placementAssetId);
+    if(!id)return c.json(error("PDF_REQUIRED","Yerleşim PDF'si seçilmelidir."),422);
+    const permitted=await placementCandidates(c,slug,asset);
+    if(!permitted.some((row:Row)=>t(row.id)===id))
+      return c.json(error("PLACEMENT_NOT_LINKED","Bu PDF, kalıpla ilişkili bir modelin yerleşim kaynağı olarak bulunamadı."),403);
+    const ai=(c.env as any).AI;
+    if(!ai?.toMarkdown)return c.json(error("OCR_UNAVAILABLE","Yerleşim görsel okuma servisi şu anda hazır değil."),503);
+    try {
+      // Provider OAuth stays in Worker; original PDF never goes to GitHub or R2.
+      const source=await readFileHubAssetForMail(c,slug,id,5*1024*1024);
+      const result=await ai.toMarkdown({
+        name:source.fileName,
+        blob:new Blob([source.bytes],{type:"application/pdf"}),
+      },{
+        conversionOptions:{image:{descriptionLanguage:"tr"},output:{format:"text"}},
+      });
+      const document=Array.isArray(result)?result[0]:result;
+      if(!document || document.format==="error")return c.json(error("OCR_FAILED","Yerleşim yazıları okunamadı."),422);
+      const lines=t(document.data).slice(0,30000);
+      const observations=interpretPlacementText(lines);
+      return c.json({ok:true,data:{
+        placementAssetId:id,fileName:source.fileName,
+        status:"OCR_UNVERIFIED",measurements:observations,
+        message:"Ölçüler otomatik adaydır; model, baskı yeri, ürün bedeni ve gerçek en–boy kontrol edilmeden kaydetmeyin."
+      }});
+    }catch(e:any){
+      // External provider errors and OCR response contents are not forwarded.
+      const code=t(e?.code);
+      return c.json(error(code==="MAIL_ATTACHMENT_TOO_LARGE"?"PDF_TOO_LARGE":"PLACEMENT_SCAN_FAILED",
+        "Yerleşim PDF'si okunamadı. Dosyayı ve bağlantıyı kontrol edin."),502);
+    }
   });
 
   app.put("/api/desen/plates/:assetId",async c=>{
