@@ -51,6 +51,7 @@ import {
 import { printHtmlDocument } from "../../../services/printService";
 import { dailyPeriodScope, dailyRangeScope, dailyFocusedScope, assessDailyPeriodLocks, dailyWriteGate } from "../../../services/dailyOpsIntegrity";
 import { persistDailyRosterMember } from "../../../services/dailyOpsPersonnelFlow";
+import { dailyWorkDateInRange, reconcileDailyWeeklyReport } from "../../../services/dailyOpsReportIntegrity";
 import { exportRowsToExcelFile } from "../../../utils/excelExport";
 import "./daily-hr-workspace.css";
 import "./daily-hr-workspace-final.css";
@@ -419,7 +420,9 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [notes, setNotes] = useState({});
   const [rosterIds, setRosterIds] = useState(() => new Set());
   const [rosterSaved, setRosterSaved] = useState(false);
-  const [, setSummaryRows] = useState([]);
+  const [summaryRows, setSummaryRows] = useState([]);
+  const [weeklyReadScope, setWeeklyReadScope] = useState("");
+  const [weeklyLoadError, setWeeklyLoadError] = useState("");
   const [paymentRows, setPaymentRows] = useState([]);
   const [periodStatusRows, setPeriodStatusRows] = useState([]);
   const [periodStatusError, setPeriodStatusError] = useState("");
@@ -459,6 +462,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [logOpen, setLogOpen] = useState(false);
   const [logTab, setLogTab] = useState("summary");
   const [logRows, setLogRows] = useState([]);
+  const [logLoadedScope, setLogLoadedScope] = useState("");
+  const [logLimitWarning, setLogLimitWarning] = useState("");
   const [inlineAuditRows, setInlineAuditRows] = useState([]);
   const [inlineAuditError, setInlineAuditError] = useState("");
   const [logRevisions, setLogRevisions] = useState([]);
@@ -488,6 +493,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const livePollBusyRef = useRef(false);
   const rangeRequestRef = useRef(0);
   const focusedRequestRef = useRef(0);
+  const weeklyRequestRef = useRef(0);
+  const logRequestRef = useRef(0);
   const expectedPeriodScope = dailyPeriodScope(companyId, selectedDate, range.start, range.end);
   const expectedRangeScope = dailyRangeScope(companyId, range.start, range.end);
   const expectedFocusedScope = dailyFocusedScope(companyId, selectedDate, shift);
@@ -645,10 +652,26 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   useEffect(() => { void loadFocused(); }, [loadFocused]);
 
   const loadWeekly = useCallback(async () => {
-    if (!companyId || !["daily-weekly", "daily-dashboard"].includes(view)) return;
-    setLoading(true); setError("");
-    try { const rows = await getDailyWeeklySummary({ mainCompanyId: companyId, startDate: range.start, endDate: range.end }); setSummaryRows(Array.isArray(rows) ? rows : []); }
-    catch (e) { setError(e?.message || "Haftalık özet alınamadı."); } finally { setLoading(false); }
+    if (!companyId || !["daily-entry", "daily-weekly", "daily-dashboard"].includes(view)) return;
+    const requestId = ++weeklyRequestRef.current;
+    const requiredScope = dailyRangeScope(companyId, range.start, range.end);
+    setLoading(true);
+    setWeeklyLoadError("");
+    try {
+      const rows = await getDailyWeeklySummary({ mainCompanyId: companyId, startDate: range.start, endDate: range.end });
+      if (requestId !== weeklyRequestRef.current) return;
+      // Reject malformed D1 monetary data instead of silently treating extras as zero.
+      reconcileDailyWeeklyReport([], rows);
+      setSummaryRows(rows);
+      setWeeklyReadScope(requiredScope);
+    } catch (e) {
+      if (requestId !== weeklyRequestRef.current) return;
+      setWeeklyReadScope("");
+      setSummaryRows([]);
+      setWeeklyLoadError(e?.message || "Haftalık ek ödeme/kesinti ve net tutar doğrulanamadı.");
+    } finally {
+      if (requestId === weeklyRequestRef.current) setLoading(false);
+    }
   }, [companyId, range.end, range.start, view]);
   useEffect(() => { void loadWeekly(); }, [loadWeekly]);
 
@@ -804,6 +827,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     const groups = new Map(); visibleEntryPeople.forEach((person) => { const key = person.role || "Vasıfsız"; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(person); }); return [...groups.entries()].sort(roleSort);
   }, [visibleEntryPeople]);
   const selectedRoleCounts = useMemo(() => groupedEntryPeople.map(([role, people]) => ({ role, count: people.filter((person) => selectedIds.has(person.id)).length })).filter((row) => row.count > 0), [groupedEntryPeople, selectedIds]);
+  const weeklySummaryInScope = weeklyReadScope === expectedRangeScope;
   const weeklyControlRows = useMemo(() => {
     const map = new Map();
     attendance.forEach((row) => {
@@ -820,8 +844,12 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       if (night) { const amount = number(row.nightWage ?? row.nightRate ?? person.nightRate); current.nightCount += 1; current.nightTotal += amount; current.totalAmount += amount; }
       map.set(employeeId, current);
     });
-    return [...map.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), "tr"));
-  }, [attendance, employeeMap, range.end, range.start]);
+    const matrixRows = [...map.values()];
+    return weeklySummaryInScope
+      ? reconcileDailyWeeklyReport(matrixRows, summaryRows)
+      : matrixRows.map((row) => ({ ...row, baseAmount: row.totalAmount, additions: 0, deductions: 0, financialVerified: false }));
+  }, [attendance, employeeMap, range.end, range.start, summaryRows, weeklySummaryInScope]);
+  const weeklyFinancialReady = weeklySummaryInScope && weeklyControlRows.every((row) => row.financialVerified);
   // Geçmiş haftalarda da açık hakediş olabilir; tarih nedeniyle havuzu gizleme.
   const visiblePaymentRows = paymentRows;
   const selectedPaymentRows = useMemo(() => visiblePaymentRows.filter((row) => paymentSelectedIds.has(String(row.employeeId))), [visiblePaymentRows, paymentSelectedIds]);
@@ -898,8 +926,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     people: sum.people + 1,
     day: sum.day + number(row.dayCount),
     night: sum.night + number(row.nightCount),
+    base: sum.base + number(row.baseAmount),
+    additions: sum.additions + number(row.additions),
+    deductions: sum.deductions + number(row.deductions),
     total: sum.total + number(row.totalAmount ?? row.total),
-  }), { people: 0, day: 0, night: 0, total: 0 }), [weeklyControlRows]);
+  }), { people: 0, day: 0, night: 0, base: 0, additions: 0, deductions: 0, total: 0 }), [weeklyControlRows]);
   const weeklyPending = useMemo(() => attendance.reduce((sum, row) =>
     sum + (rowDay(row) && !row.dayChecked ? 1 : 0) + (rowNight(row) && !row.nightChecked ? 1 : 0), 0), [attendance]);
   const roleOverview = useMemo(() => {
@@ -1220,26 +1251,38 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const loadLog = async (targetRange = logRange, shouldOpen = true) => {
     if (busy) return;
     const safe = targetRange?.start && targetRange?.end && targetRange.end >= targetRange.start ? targetRange : range;
+    const requestId = ++logRequestRef.current;
+    setLogRange(safe);
+    setLogLoadedScope("");
+    setLogLimitWarning("");
     setBusy(true); setError("");
     try {
-      const auditPromise = getDailyAudit({ mainCompanyId: companyId, startDate: safe.start, endDate: safe.end, limit: 1200 }).catch(async () => {
-        const batches = await Promise.all(rangeDays(safe.start, safe.end).map((date) => getDailyAudit({ mainCompanyId: companyId, date, limit: 300 }).catch(() => [])));
-        return batches.flatMap((row) => Array.isArray(row) ? row : Array.isArray(row?.rows) ? row.rows : []);
-      });
-      const [auditResult, revisionResult, attendanceResult] = await Promise.all([
-        auditPromise,
-        getDailyRevisions({ mainCompanyId: companyId, startDate: safe.start, endDate: safe.end, limit: 1200 }).catch(() => []),
-        getDailyAttendance({ mainCompanyId: companyId, startDate: safe.start, endDate: safe.end }).catch(() => []),
+      // Audit and revision queries must use the SAME date range. No unbounded
+      // revision fallback, and no silent empty list on failed server reads.
+      const [audits, revisions, workRows] = await Promise.all([
+        getDailyAudit({ mainCompanyId: companyId, startDate: safe.start, endDate: safe.end, limit: 500 }),
+        getDailyRevisions({ mainCompanyId: companyId, startDate: safe.start, endDate: safe.end, limit: 500 }),
+        getDailyAttendance({ mainCompanyId: companyId, startDate: safe.start, endDate: safe.end }),
       ]);
-      const audits = Array.isArray(auditResult) ? auditResult : Array.isArray(auditResult?.rows) ? auditResult.rows : [];
-      const revisions = Array.isArray(revisionResult) ? revisionResult : Array.isArray(revisionResult?.rows) ? revisionResult.rows : [];
-      setLogRows(audits.sort((a, b) => String(b.createdAt || b.timestamp || "").localeCompare(String(a.createdAt || a.timestamp || ""))));
-      setLogRevisions(revisions);
-      setLogAttendance(Array.isArray(attendanceResult) ? attendanceResult : []);
-      setLogRange(safe);
+      if (requestId !== logRequestRef.current) return;
+      if (![audits, revisions, workRows].every(Array.isArray))
+        throw new Error("Log ve revizyon sunucu yanıtı geçersiz.");
+      setLogRows(audits.filter((row) => dailyWorkDateInRange(row, safe.start, safe.end))
+        .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))));
+      setLogRevisions(revisions.filter((row) => dailyWorkDateInRange(row, safe.start, safe.end)));
+      setLogAttendance(workRows.filter((row) => dailyWorkDateInRange(row, safe.start, safe.end)));
+      setLogLoadedScope(dailyRangeScope(companyId, safe.start, safe.end));
+      setLogLimitWarning(audits.length >= 500 || revisions.length >= 500
+        ? "500 kayıt sınırına ulaşıldı; bütün kayıtları görmek için tarih aralığını daraltın."
+        : "");
       if (shouldOpen) setLogOpen(true);
-    } catch (e) { setError(e?.message || "Log kayıtları alınamadı."); }
-    finally { setBusy(false); }
+    } catch (e) {
+      if (requestId !== logRequestRef.current) return;
+      setLogLoadedScope("");
+      setError(e?.message || "Log kayıtları alınamadı.");
+    } finally {
+      if (requestId === logRequestRef.current) setBusy(false);
+    }
   };
   const searchLogRange = () => loadLog(logRange, true);
   const moveLogWeek = (offset) => {
@@ -1614,25 +1657,28 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   };
   const controlNeedle = normalizeText(controlQuery);
   const controlPerson = controlNeedle ? employees.find((person) => normalizeText(person.personnelNo) === controlNeedle || normalizeText(person.name) === controlNeedle) || employees.find((person) => `${normalizeText(person.personnelNo)} ${normalizeText(person.name)}`.includes(controlNeedle)) : null;
-  const personControlRows = controlPerson ? logAttendance.filter((row) => rowEmployeeId(row) === controlPerson.id && rowDate(row) >= logRange.start && rowDate(row) <= logRange.end).sort((a, b) => rowDate(a).localeCompare(rowDate(b))) : [];
+  const logRangeReady = logLoadedScope === dailyRangeScope(companyId, logRange.start, logRange.end);
+  const personControlRows = controlPerson && logRangeReady ? logAttendance.filter((row) => rowEmployeeId(row) === controlPerson.id && dailyWorkDateInRange(row, logRange.start, logRange.end)).sort((a, b) => rowDate(a).localeCompare(rowDate(b))) : [];
   const controlTotals = personControlRows.reduce((sum, row) => ({ day: sum.day + (rowDay(row) ? 1 : 0), night: sum.night + (rowNight(row) ? 1 : 0), paid: sum.paid + (rowPaid(row) ? (rowDay(row) ? 1 : 0) + (rowNight(row) ? 1 : 0) : 0), total: sum.total + (rowDay(row) ? number(row.dayWage ?? controlPerson?.dayRate) : 0) + (rowNight(row) ? number(row.nightWage ?? controlPerson?.nightRate) : 0) }), { day: 0, night: 0, paid: 0, total: 0 });
   const revisionEvents = logRevisions.map((row) => ({ ...row, action: row.action || row.changeType || "REVISION", createdAt: row.createdAt || row.timestamp }));
-  const rawLogRows = logRows.length || revisionEvents.length ? [...logRows, ...revisionEvents] : logAttendance.flatMap((row) => {
+  const rawLogRows = !logRangeReady ? [] : logRows.length || revisionEvents.length ? [...logRows, ...revisionEvents] : logAttendance.flatMap((row) => {
     const events = [];
     if (rowDay(row)) events.push({ ...row, action: "KAYIT", shift: "day", createdAt: row.updatedAt || row.createdAt });
     if (rowNight(row)) events.push({ ...row, action: "KAYIT", shift: "night", createdAt: row.updatedAt || row.createdAt });
     return events;
   });
   const visibleLogRows = rawLogRows.filter((row) => {
+    if (!dailyWorkDateInRange(row, logRange.start, logRange.end)) return false;
     const person = employeeMap.get(rowEmployeeId(row));
     const personText = `${row.personName || row.employeeName || row.name || person?.name || ""} ${row.personnelNo || row.code || person?.personnelNo || ""}`.toLocaleLowerCase("tr-TR");
     const actionText = actionLabel(row).toLocaleLowerCase("tr-TR");
     const shiftName = String(row.shift || row.vardiya || "").toLowerCase();
     return (!logQuery || personText.includes(logQuery.toLocaleLowerCase("tr-TR"))) && (!logAction || actionText.includes(logAction.toLocaleLowerCase("tr-TR"))) && (logShift === "all" || shiftName.includes(logShift));
   }).sort((a, b) => String(b.createdAt || b.timestamp || rowDate(b)).localeCompare(String(a.createdAt || a.timestamp || rowDate(a))));
-  const logPeople = new Set(logAttendance.map(rowEmployeeId).filter(Boolean)).size;
-  const logTotals = logAttendance.reduce((sum, row) => ({ day: sum.day + (rowDay(row) ? 1 : 0), night: sum.night + (rowNight(row) ? 1 : 0), total: sum.total + (rowDay(row) ? number(row.dayWage ?? employeeMap.get(rowEmployeeId(row))?.dayRate) : 0) + (rowNight(row) ? number(row.nightWage ?? employeeMap.get(rowEmployeeId(row))?.nightRate) : 0) }), { day: 0, night: 0, total: 0 });
-  const recentDailyAudit = inlineAuditRows.slice(0, 16);
+  const logAttendanceInScope = logRangeReady ? logAttendance.filter((row) => dailyWorkDateInRange(row, logRange.start, logRange.end)) : [];
+  const logPeople = new Set(logAttendanceInScope.map(rowEmployeeId).filter(Boolean)).size;
+  const logTotals = logAttendanceInScope.reduce((sum, row) => ({ day: sum.day + (rowDay(row) ? 1 : 0), night: sum.night + (rowNight(row) ? 1 : 0), total: sum.total + (rowDay(row) ? number(row.dayWage ?? employeeMap.get(rowEmployeeId(row))?.dayRate) : 0) + (rowNight(row) ? number(row.nightWage ?? employeeMap.get(rowEmployeeId(row))?.nightRate) : 0) }), { day: 0, night: 0, total: 0 });
+  const recentDailyAudit = inlineAuditRows.filter((row) => dailyWorkDateInRange(row, range.start, range.end)).slice(0, 16);
   const quickDirty = quick ? !sameSet(quick.ids, quick.baseline) || !sameSet(quick.checked, quick.checkedBaseline || new Set()) : false;
   const closeQuickDialog = () => {
     if (quickDirty && !window.confirm("Kaydedilmemiş hızlı giriş değişiklikleri var. Kaydetmeden kapatılsın mı?")) return;
