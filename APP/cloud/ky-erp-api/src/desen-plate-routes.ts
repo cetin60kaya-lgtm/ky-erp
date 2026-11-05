@@ -58,18 +58,24 @@ async function modelsOnPlate(c:any,slug:string,assetId:string) {
   `).bind(slug,assetId).all<Row>();
   return r.results||[];
 }
+
+const knownModelCache = new WeakMap<object, Map<string, Promise<Row[]>>>();
+async function existingModels(c:any, slug:string):Promise<Row[]> {
+  let scope = knownModelCache.get(c);
+  if (!scope) { scope = new Map(); knownModelCache.set(c, scope); }
+  if (!scope.has(slug)) scope.set(slug, c.env.DB.prepare("SELECT id modelId,model_name modelName FROM model_records WHERE main_company_slug=? LIMIT 10000").bind(slug).all<Row>().then((data:Row) => data.results || []));
+  return scope.get(slug)!;
+}
+
 async function plateView(c:any,slug:string,asset:Row) {
   const stored=objectOf((await readMap(c,slug,t(asset.id)))?.data);
   const relations=await modelsOnPlate(c,slug,t(asset.id));
   // Filename hint generation only from known canonical models; never invent a model.
-  const known=await c.env.DB.prepare(`
-    SELECT id modelId,model_name modelName FROM model_records
-    WHERE main_company_slug=? AND COALESCE(TRIM(deleted_at),'')='' LIMIT 4000
-  `).bind(slug).all<Row>();
-  const all=suggestPlateMembership(t(asset.file_name),(known.results||[]).map((r:Row)=>({
+  const known=await existingModels(c,slug);
+  const all=suggestPlateMembership(t(asset.file_name),known.map((r:Row)=>({
     modelId:t(r.modelId),modelName:t(r.modelName)
   })));
-  const byId=new Map((known.results||[]).map((r:Row)=>[t(r.modelId),t(r.modelName)]));
+  const byId=new Map(known.map((r:Row)=>[t(r.modelId),t(r.modelName)]));
   const hinted=new Set(all.map((r:Row)=>t(r.modelId)));
   for (const row of relations) if(!hinted.has(t(row.modelId))) {
     all.push({modelId:t(row.modelId),sizeCode:"UNSPECIFIED",sizeLabel:"Boy bilinmiyor",printArea:"",evidence:"EXISTING_MODEL_RELATION"});
@@ -83,7 +89,7 @@ async function plateView(c:any,slug:string,asset:Row) {
     sourceRevised:revised,revision:Number(stored.revision||0),
     shelfLabel:t(stored.shelfLabel),plateCode:t(stored.plateCode),
     entries:confirmed.map((row:Row)=>({...row,modelName:byId.get(t(row.modelId))||t(row.modelName)||"Model bulunamadı"})),
-    suggestions:all.map((row:Row)=>({...row,modelName:byId.get(t(row.modelId))||"Model bulunamadı"})),
+    suggestions:stored.revision>0 ? [] : all.map((row:Row)=>({...row,modelName:byId.get(t(row.modelId))||"Model bulunamadı"})),
     status:stored.revision>0?(revised?"REVISION_REVIEW":"CONFIRMED"):"REVIEW_REQUIRED",
     uniqueModels:new Set(confirmed.map((row:Row)=>t(row.modelId))).size,
   };
@@ -130,7 +136,7 @@ export function registerDesenPlateRoutes(app:Hono<AppEnv>) {
       if(!asset)continue;
       const view=await plateView(c,slug,asset);
       if (!(view.entries.some((entry:Row)=>t(entry.modelId)===modelId)
-         || view.suggestions.some((entry:Row)=>t(entry.modelId)===modelId))) continue;
+         || (view.revision===0 && view.suggestions.some((entry:Row)=>t(entry.modelId)===modelId)))) continue;
       const stats=describeSharedPlate(view.entries,modelId);
       plates.push({...view,modelSizeCount:stats.modelSizeCount});
     }
