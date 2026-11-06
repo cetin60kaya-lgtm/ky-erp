@@ -16,9 +16,11 @@ import { imalatReportTsv } from "./imalatReportExport";
 import "../modules/cleanWorkflow.css";
 import "./imalatWorkflow.css";
 
+// 2026 imalat Excel aktarımı canlıya alındığı için rapor ilk açılışta yalnız 2026 işlerini gösterir.
+// Önceki yılların kayıtları değişmez; tarih aralığı ve Yıl filtresiyle ayrıca görülebilir.
 const initialFilters = {
-  baslangic: "",
-  bitis: "",
+  baslangic: "2026-01-01",
+  bitis: "2026-12-31",
   firma: "",
   model: "",
   partiNo: "",
@@ -118,6 +120,12 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
     loadData(initialFilters);
   }
 
+  function applyDateScope(baslangic, bitis) {
+    const next = { ...filters, baslangic, bitis };
+    setFilters(next);
+    loadData(next);
+  }
+
   const yearChoices = Array.from({ length: Math.max(4, new Date().getFullYear() - 2022) }, (_, index) => new Date().getFullYear() - index);
   const selectedFullYear = /^\d{4}-01-01$/.test(filters.baslangic) && filters.bitis === `${filters.baslangic.slice(0, 4)}-12-31`
     ? filters.baslangic.slice(0, 4) : "";
@@ -176,6 +184,8 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
             <Field label="Baskı bölgesi"><input value={filters.baskiBolgesi} onChange={(event) => updateFilter("baskiBolgesi", event.target.value)} /></Field>
             <Field label="Durum"><select value={filters.durum} onChange={(event) => updateFilter("durum", event.target.value)}><option value="">Tümü</option><option>Tamam</option><option>Eksik Operasyon</option><option>Bekliyor</option><option>İptal</option><option>Kontrol Gerekli</option></select></Field>
             <div className="imalat-filter-buttons">
+              <button className="iw-btn" type="button" disabled={loading} onClick={() => applyDateScope("2026-08-01", "2026-11-30")}>Ağustos–Kasım 2026</button>
+              <button className="iw-btn" type="button" disabled={loading} onClick={() => applyDateScope("2026-01-01", "2026-12-31")}>2026 tamamı</button>
               <button className="iw-btn primary" type="button" disabled={loading} onClick={() => loadData(filters)}><Search size={16} /> {loading ? "Yükleniyor" : "Uygula"}</button>
               <button className="iw-btn" type="button" onClick={resetFilters}><RotateCcw size={15} /> Temizle</button>
             </div>
