@@ -68,7 +68,14 @@ const dateText = (value) => {
     : parsed.toLocaleDateString("tr-TR");
 };
 
-const productionDateTime = (row) => {\n  const date = row.productionLastAt || row.productionStartAt || row.lastActivityAt;\n  const timestamp = String(row.productionLastTimestamp || "");\n  const time = /T\d{2}:\d{2}/.test(timestamp) ? timestamp.match(/T(\d{2}:\d{2})/)?.[1] : "";\n  return { date: dateText(date), time: time || "Saat kaydı yok" };\n};\n\nfunction machineId(machine) {
+const productionDateTime = (row) => {
+  const date = row.productionLastAt || row.productionStartAt || row.lastActivityAt;
+  const timestamp = String(row.productionLastTimestamp || "");
+  const time = /T\d{2}:\d{2}/.test(timestamp) ? timestamp.match(/T(\d{2}:\d{2})/)?.[1] : "";
+  return { date: dateText(date), time: time || "Saat kaydı yok" };
+};
+
+function machineId(machine) {
   return String(machine?.id || machine?.machineNo || machine?.no || "");
 }
 function machineName(machine) {
