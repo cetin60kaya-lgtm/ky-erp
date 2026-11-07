@@ -2,7 +2,7 @@ import { CircleAlert, Gauge } from "lucide-react";
 import ImalatKontrolRapor from "../imalat/ImalatKontrolRapor";
 import ProductionControlCenterPage from "../imalat/ProductionControlCenterPage";
 import ProductionSettingsPage from "../imalat/ProductionSettingsPage";
-import ProductionHistoryArchivePage from "../imalat/ProductionHistoryArchivePage";
+
 import "../imalat/productionCenter.css";
 
 function CompanyPending() {
@@ -47,7 +47,7 @@ export default function UretimPage({ activeMainCompany, activeTab }) {
   }
 
   if (activeTab === "uretim-gecmis-arsiv") {
-    return <ProductionHistoryArchivePage activeMainCompany={activeMainCompany} />;
+    return <ProductionControlCenterPage activeMainCompany={activeMainCompany} pool="ARSIV" />;
   }
 
   if (activeTab === "uretim-ayarlari") {
