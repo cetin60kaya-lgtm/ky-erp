@@ -744,7 +744,7 @@ async function syncRecentBoundGoogleImages(
         modifiedAt:text(f.modifiedTime),checksum:text(f.md5Checksum),webUrl:text(f.webViewLink)};
       const relativePath=rootPath+"/"+name;
       const indexed=await upsertCloudFile(c,slug,connectionId,"GOOGLE_DRIVE",item,relativePath,now());
-      if(!indexed.needsModelSync) continue;
+      // İndeksli ama canonical image_url boş kalmış eski ilişkileri de onar.
       const result=await syncCloudDesignBinding(c,slug,connectionId,indexed.assetId,item,relativePath,"GOOGLE_DRIVE");
       if(result?.modelId===modelId){
         linked+=1;
