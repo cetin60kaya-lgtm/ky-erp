@@ -467,3 +467,59 @@
 }
 
 .dsg-file-derived-preview { display: block; width: 100%; max-height: 300px; object-fit: contain; background: #f5f8fc; border-bottom: 1px solid var(--dsg-line); }
+
+/* 05.11.2026 · İmalat ortak PSD/kalıp arama: full original names, arbitrary size rows */
+.dsg-plate-search-panel { margin: 12px 0; padding: 15px; background: #f7fafc; border: 1px solid #c9d7e3; border-radius: 10px; display: grid; gap: 10px; color: #233d55; }
+.dsg-plate-search-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.dsg-plate-search-panel > header strong { display: flex; gap: 7px; align-items: center; }
+.dsg-plate-search-panel p { margin: 3px 0; overflow-wrap: anywhere; line-height: 1.5; }
+.dsg-plate-search-panel small { font-size: 12px; color: #62778a; }
+.dsg-plate-model-options { display: flex; gap: 6px; flex-wrap: wrap; }
+.dsg-plate-model-options button { padding: 8px 12px; border: 1px solid #b6c9da; border-radius: 8px; background: #fff; color: #274b66; font-weight: 700; cursor: pointer; }
+.dsg-plate-model-options button.active { background: #194d75; color: #fff; border-color: #194d75; }
+.dsg-plate-results { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,300px),1fr)); gap: 12px; }
+.dsg-plate-search-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; background: #fff; border: 1px solid #d4e0e9; border-radius: 9px; padding: 14px; min-width: 0; }
+.dsg-plate-search-card strong, .dsg-plate-detail-head h3 { font-size: 14px; color: #152e42; white-space: normal; overflow-wrap: anywhere; }
+.dsg-plate-search-card > div:first-child { display: grid; gap: 6px; }
+.dsg-plate-member-summary { display: grid; gap: 4px; }
+.dsg-plate-member-summary span { color: #34566e; font-size: 12px; }
+.dsg-plate-detail { background: #fff; border: 1px solid #c4d5e3; padding: 15px; border-radius: 9px; display: grid; gap: 10px; min-width: 0; }
+.dsg-plate-detail-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.dsg-plate-detail-head h3 { margin: 0 0 8px; }
+.dsg-plate-preview { display: grid; gap: 9px; justify-items: start; width: 100%; min-width: 0; }
+.dsg-plate-preview .dsg-image-preview { width: 100%; min-height: 250px; }
+.dsg-plate-no-preview { display: flex; align-items: center; gap: 9px; color: #587083; min-height: 90px; }
+.dsg-plate-editor { padding: 12px; display: grid; gap: 12px; border: 1px solid #b8cbdb; border-radius: 8px; background: #f7fbff; }
+.dsg-plate-editor-metadata { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.dsg-plate-editor-metadata label { display: grid; gap: 5px; font-size: 12px; font-weight: 700; }
+.dsg-plate-editor input, .dsg-plate-editor select { min-height: 40px; max-width: 100%; width: 100%; background: #fff; border: 1px solid #b4c9dc; border-radius: 6px; padding: 6px; color: #1d3447; }
+.dsg-plate-edit-list { display: grid; gap: 8px; }
+.dsg-plate-edit-row { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(0,1fr) minmax(0,.8fr) auto; gap: 7px; }
+.dsg-plate-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.dsg-plate-revision { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.dsg-plate-revision input { width: 18px; min-height: 18px; }
+@media(max-width:700px){ .dsg-plate-edit-row { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } .dsg-plate-editor-metadata { grid-template-columns: 1fr; } .dsg-plate-search-panel { padding: 10px; } }
+
+/* Baskı ölçüsü (cm) ile ürün bedeni eşleştirme; tek/iki/üç+ desen ölçüsüne uyumlu */
+.dsg-plate-edit-entry { display:grid; gap:8px; padding:12px; background:#fff; border:1px solid #cddce8; border-radius:8px; min-width:0; }
+.dsg-plate-edit-entry .dsg-plate-edit-row { grid-template-columns:repeat(4,minmax(0,1fr)); align-items:end; }
+.dsg-plate-edit-entry .dsg-plate-edit-row:nth-child(2) { grid-template-columns:minmax(0,.9fr) minmax(0,1.6fr) minmax(0,.7fr) auto; }
+.dsg-plate-edit-entry .dsg-plate-edit-row label { display:grid; gap:4px; min-width:0; font-size:12px; font-weight:650; }
+.dsg-plate-flags { display:flex; flex-wrap:wrap; gap:8px 20px; }
+.dsg-plate-flags label { display:inline-flex; gap:8px; align-items:center; font-size:12px; }
+.dsg-plate-flags input[type="checkbox"] { width:18px; min-height:18px; }
+@media (max-width:920px) {
+ .dsg-plate-edit-entry .dsg-plate-edit-row,
+ .dsg-plate-edit-entry .dsg-plate-edit-row:nth-child(2) { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (max-width:520px) {
+ .dsg-plate-edit-entry .dsg-plate-edit-row,
+ .dsg-plate-edit-entry .dsg-plate-edit-row:nth-child(2) { grid-template-columns:1fr; }
+}
+
+.dsg-plate-ocr { display:grid; justify-items:start; gap:9px; padding:12px; border:1px solid #c7d7e5; background:#f3f8fc; border-radius:8px; }
+.dsg-plate-ocr > select { min-height:42px; width:100%; }
+.dsg-plate-ocr-candidate { width:100%; display:grid; grid-template-columns:minmax(0,2fr) minmax(140px,1fr) auto; gap:10px; align-items:center; border-radius:7px; background:white; border:1px solid #cfdeea; padding:10px; }
+.dsg-plate-ocr-candidate > span { overflow-wrap:anywhere; font-size:12px; }
+.dsg-plate-ocr-candidate select { min-width:0; }
+@media(max-width:700px) { .dsg-plate-ocr-candidate { grid-template-columns:1fr; } }

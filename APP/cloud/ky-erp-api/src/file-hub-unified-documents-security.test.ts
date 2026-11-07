@@ -13,7 +13,10 @@ test("Google Drive raw dosya indirmesi yalnız kendi ana firmasını yöneten he
  assert.doesNotMatch(part,/const user = await currentUser\(c\); if \(!user\)/);
 });
 test("birden çok modüle bağlı hassas dosya herkesin görebildiği bir ilişkiyle açılamaz",()=>{
- assert.match(preview,/modules.every\(\(moduleKey\) => moduleKey && permission\(user, moduleKey\)\?\.canView\)/);
+ assert.match(preview,/modules.every\(\(moduleKey\) => moduleKey && canView\(user,moduleKey\)\)/);
+ assert.match(preview,/const record = permission\(user, moduleKey\)/);
+ assert.match(preview,/record\?\.canView === true \|\| Number\(record\?\.can_view \|\| 0\) === 1/);
+ assert.equal((preview.match(/modules.every\(\(moduleKey\) => moduleKey && canView\(user,\s*moduleKey\)\)/g) || []).length,2);
  assert.doesNotMatch(preview,/modules.some\(\(moduleKey\) => permission/);
  assert.match(preview,/main_company_slug=\?/);
 });
