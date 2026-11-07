@@ -5,7 +5,7 @@ import { MODULES } from "../../app/moduleRegistryBase.js";
 
 const page = readFileSync(new URL("./ProductionControlCenterPageV2.jsx", import.meta.url), "utf8");
 const router = readFileSync(new URL("../modules/UretimPage.jsx", import.meta.url), "utf8");
-const api = readFileSync(new URL("../../../../../../cloud/ky-erp-api/src/production-center.ts", import.meta.url), "utf8");
+const api = readFileSync(new URL("../../../../../cloud/ky-erp-api/src/production-center.ts", import.meta.url), "utf8");
 
 test("İmalat sol menüde dört gerçek ayrı rota; geçmiş yalnız rapor altında", () => {
   const imalat = MODULES.find((module) => module.key === "uretim");
