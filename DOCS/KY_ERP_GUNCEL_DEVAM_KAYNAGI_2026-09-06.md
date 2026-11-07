@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 08.11.2026 — DESEN RGB görsel taraması tüm Drive sayfaları (yeni PR)
+
+- Önceki #526'nın eksik tarafı `görsel/2026` 433 dosyadan yalnız en yeni 100'ünün öncelikli senkrona girmesi idi. `modelImageFastProgress.nextPageToken` ile devam, kümülatif tarama/bağlama ve açık tamamlanma göstergesi eklendi; `DESEN/MODEL_IMAGE` bağlamı dışında dosyaya dokunulmaz.
+- DESEN File Hub satırına sahibi/yöneticisi için `Drive Görsellerini Eşleştir` eylemi, durum/hata ve toplamlar eklendi. Mevcut 5 dk cron ve File Hub OAuth korunur; firma seçimi değişince bağlantı bilgisi tekrar yüklenir.
+- Üretim yayımlanmış #526 kaynak sürümü SHA `ca65340b` sonrası `96661464` (Frontend ve Worker GitHub deployment SUCCESS). Bu yeni PR'ın CI/merge/deploy ve gerçek yetkili D1 model-görsel örneği ayrı doğrulanır. DESEN Chat Bridge yanıtı gelmeden Online denmez. 39 kaynak belirsiz model sahte tahminle bağlanmaz.
+
+
 ## 08.11.2026 — DESEN üç aylık eksik görsel onarımı (PR #526)
 - X Google Drive `Hakan Emp/görsel/2026`: son üç ay 147 üretim modeli içinden 121 başlangıçta görselsiz; 4 hazır JPEG kopyası ve 82 yeni JPEG (PDF/AI/PSD asıllarından), 82/82 bulut dosyası ad/boyut doğrulaması, klasörde 433 dosya. Orijinal dosyalar korunmuştur.
 - PR #526 yeni JPEG'leri öncelikli indeksler; `MODEL_IMAGE` bağından yalnız boş/tekil mevcut canonical UUID'lere ilişki kurar. Eski indeksli ama image_url'si boş kayıtları onarır. Yeni model/sahte görsel oluşturmaz, var olan görseli değiştirmez.
