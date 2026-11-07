@@ -9,6 +9,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { resolveFileHubStorage } from "../../components/files/fileHub";
+import { apiGet, apiPost } from "../../utils/api";
 
 const TARGETS = [
   ["MODEL_IMAGE", "Model görseli"],
@@ -31,6 +32,7 @@ function storageView(payload, purposeCode, label) {
     purposeCode,
     label,
     ok: Boolean(row.storage_connection_id),
+    connectionId: row.storage_connection_id || "",
     provider: row.provider_type || "",
     connectionName: row.connection_name || "",
     rootPath: row.root_path || "",
@@ -51,10 +53,12 @@ function formatSync(value) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("tr-TR");
 }
 
-export default function DesenFolderSettingsBar() {
+export default function DesenFolderSettingsBar({ activeMainCompany }) {
   const [targets, setTargets] = useState([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [imageSyncStatus, setImageSyncStatus] = useState(null);
+  const [syncingImages, setSyncingImages] = useState(false);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -70,6 +74,16 @@ export default function DesenFolderSettingsBar() {
     });
     setTargets(next);
 
+    const imageTarget = next.find((row) => row.purposeCode === "MODEL_IMAGE");
+    if (imageTarget?.ok && imageTarget.provider === "GOOGLE_DRIVE" && imageTarget.syncMode === "CLOUD_API" && imageTarget.connectionId) {
+      try {
+        const state = await apiGet(`/file-hub/cloud/connections/${encodeURIComponent(imageTarget.connectionId)}/status`, undefined, { forceFresh: true });
+        setImageSyncStatus(state?.data || null);
+      } catch (error) {
+        setImageSyncStatus({ error: error?.message || "Dosya senkron durumu okunamadı." });
+      }
+    } else setImageSyncStatus(null);
+
     const missing = next.filter((row) => !row.ok);
     const cloudPending = next.filter((row) =>
       row.ok
@@ -82,9 +96,31 @@ export default function DesenFolderSettingsBar() {
       setMessage("Bulut depolama kaydı var ancak doğrudan bulut senkronu henüz hazır değil. OAuth hesabı, uzak klasör ve CLOUD_API bağlantısını Depolama ekranından tamamlayın.");
     }
     setBusy(false);
-  }, []);
+  }, [activeMainCompany?.slug, activeMainCompany?.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  const syncModelImages = async () => {
+    const target = targets.find((row) => row.purposeCode === "MODEL_IMAGE");
+    if (!target?.connectionId || target.provider !== "GOOGLE_DRIVE" || target.syncMode !== "CLOUD_API" || busy || syncingImages) return;
+    setSyncingImages(true);
+    setMessage("");
+    try {
+      const result = await apiPost(`/file-hub/cloud/connections/${encodeURIComponent(target.connectionId)}/sync`, {});
+      await load();
+      const progress = result?.data || {};
+      setMessage(progress.designImagePriority
+        ? `${progress.files || 0} Drive görseli tarandı, ${progress.modelSyncs || 0} model ilişkilendirildi. Toplam ${progress.scannedTotal || 0} incelendi. ${progress.inProgress ? "Diğer sayfalar sırada; yeniden Senkronize seçilebilir veya otomatik tarama sürdürebilir." : "Görsel klasörü taraması tamamlandı."}`
+        : progress.busy || progress.inProgress
+          ? "File Hub zaten senkronize ediliyor; devam eden işlemin tamamlanmasını kontrol edin."
+          : "File Hub taraması başlatıldı; durumunu kontrol edin.");
+    } catch (error) {
+      const forbidden = Number(error?.status) === 403;
+      setMessage(forbidden ? "Bu işlem için Firma Sahibi / Yönetici dosya senkronizasyon yetkisi gerekiyor." : error?.message || "Görsel senkronizasyonu tamamlanamadı.");
+    } finally {
+      setSyncingImages(false);
+    }
+  };
 
   const connected = useMemo(() => targets.filter((row) => row.ok), [targets]);
   const primaryProvider = connected[0]?.provider || "";
@@ -92,6 +128,9 @@ export default function DesenFolderSettingsBar() {
   const directReady = cloudRows.some((row) => row.syncMode === "CLOUD_API" && row.connectionStatus === "CONNECTED" && row.remoteRootId);
   const agentOnly = cloudRows.some((row) => row.syncMode === "AGENT");
   const cloudPending = cloudRows.some((row) => row.syncMode !== "CLOUD_API" || row.connectionStatus !== "CONNECTED" || !row.remoteRootId);
+  const imageTarget = targets.find((row) => row.purposeCode === "MODEL_IMAGE");
+  const imageCloudReady = imageTarget?.ok && imageTarget.provider === "GOOGLE_DRIVE" && imageTarget.syncMode === "CLOUD_API" && imageTarget.connectionId;
+  const imageProgress = imageSyncStatus?.modelImageSync || null;
 
   return (
     <section className="dsg-toolbar-card dsg-storage-status" aria-label="Desen dosya bağlantıları">
@@ -108,12 +147,24 @@ export default function DesenFolderSettingsBar() {
         <div className="dsg-storage-actions">
           {cloudPending ? <span className="dsg-storage-alert"><TriangleAlert size={14} /> Bulut ayarı eksik</span> : null}
           {agentOnly ? <span className="dsg-storage-hint">Agent modunda</span> : null}
-          <button className="dsg-btn" type="button" disabled={busy} onClick={load}>
+          {imageCloudReady ? <button className="dsg-btn primary" type="button" disabled={busy || syncingImages} onClick={syncModelImages}>
+            {syncingImages ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}
+            {syncingImages ? "Eşleştiriliyor…" : "Drive Görsellerini Eşleştir"}
+          </button> : null}
+          <button className="dsg-btn" type="button" disabled={busy || syncingImages} onClick={load}>
             <RefreshCw size={15} /> Yenile
           </button>
         </div>
       </div>
       {message ? <div className="dsg-page-message" role="status">{message}</div> : null}
+      {imageCloudReady ? <div className="dsg-storage-note" role="status">
+        <Cloud size={14} />
+        <span>Drive görsel taraması: {imageProgress?.error ? "Hata — " + imageProgress.error : imageProgress?.completedAt ? "Tamamlandı" : imageProgress?.nextPageToken ? "Devam ediyor" : "Kontrol bekliyor"}
+          {" · "}{Number(imageProgress?.scannedTotal || 0)} dosya incelendi, {Number(imageProgress?.linkedTotal || 0)} model bağı güncellendi
+          {imageProgress?.lastRunAt ? " · Son tur: " + formatSync(imageProgress.lastRunAt) : ""}
+          {imageSyncStatus?.sync?.pendingFolders ? " · Tam File Hub kuyruğu: " + imageSyncStatus.sync.pendingFolders + " klasör" : ""}
+        </span>
+      </div> : null}
       <details className="dsg-storage-details">
         <summary>Kaynak ve senkronizasyon ayrıntıları</summary>
         <div className="dsg-storage-facts">
