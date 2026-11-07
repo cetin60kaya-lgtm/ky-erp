@@ -5,6 +5,13 @@ import LoginPage from "./pages/LoginPage.jsx";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { installPersistedAuthBootstrap } from "./context/authBootstrap";
 import { installAndroidRuntimeBridge } from "./utils/installAndroidRuntimeBridge";
+import { tryRecoverStaleChunk } from "./utils/lazyWithRetry";
+
+window.addEventListener("vite:preloadError", (event) => {
+  // Vite emits this for missing lazy chunks after a Cloudflare production rollout.
+  if (tryRecoverStaleChunk(event.payload)) event.preventDefault();
+});
+
 
 const PUBLIC_SITE_HOSTS = new Set(["kyerp.net", "www.kyerp.net"]);
 const hostname = String(window.location.hostname || "").toLowerCase();
@@ -93,6 +100,7 @@ async function renderCanonicalHost() {
         })
         .catch((error) => {
           console.error("KY ERP authenticated workspace yuklenemedi", error);
+          if (tryRecoverStaleChunk(error)) return;
           if (active) setRuntimeError("Çalışma alanı yüklenemedi. Giriş oturumunuz korunuyor; yeniden deneyebilirsiniz.");
         });
       return () => { active = false; };
@@ -208,6 +216,7 @@ async function renderErpApp() {
 
 const renderFailure = (error) => {
   console.error("KY ERP uygulama kabugu yuklenemedi", error);
+  if (tryRecoverStaleChunk(error)) return;
   ReactDOM.createRoot(rootElement).render(
     <main style={{ maxWidth: 560, margin: "64px auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
       <h1 style={{ fontSize: 24 }}>KY ERP acilamadi</h1>
