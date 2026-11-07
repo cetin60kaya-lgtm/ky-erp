@@ -38,6 +38,18 @@ import ProductionDirectEntryPanel from "./ProductionDirectEntryPanel";
 import "./productionControlCenterV2.css";
 
 const PAGE_SIZE = 100;
+const periodDates = (period) => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(start);
+  if (period === "LAST_30" || period === "LAST_60") start.setDate(start.getDate() - (period === "LAST_30" ? 29 : 59));
+  else if (period === "THIS_MONTH") start.setDate(1);
+  else if (period === "PREV_MONTH") { start.setMonth(start.getMonth() - 1, 1); end.setDate(0); }
+  else return { startDate: "", endDate: "" };
+  const iso = (d) => [d.getFullYear(), String(d.getMonth()+1).padStart(2,"0"), String(d.getDate()).padStart(2,"0")].join("-");
+  return { startDate: iso(start), endDate: iso(end) };
+};
+
 const today = () => {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
@@ -200,6 +212,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
   const [pool, setPool] = useState("IMALATTA");
+  const [period, setPeriod] = useState("ALL");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [archiveYear, setArchiveYear] = useState("2026");
@@ -527,19 +540,30 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
 
       <ProductionDirectEntryPanel activeMainCompany={activeMainCompany} models={dictionaries.models} machines={dictionaries.machines} companies={dictionaries.companies} preselectModelId={quickSelectedModel} openRequestToken={openRequestToken} modalOpen={directEntryModalOpen} onClose={() => setDirectEntryModalOpen(false)} onSaved={load} onModelCreated={load} />
 
-      <nav className="pc2-pool-tabs" aria-label="İmalat iş havuzları" style={{display:"flex",gap:8,flexWrap:"wrap",padding:"12px 0"}}>
-        {[
-          ["IMALATTA","İmalatta"],["IRSALIYE","İrsaliye Bekleyen"],["TAMAMLANAN","Tamamlanan"],["FATURA","Fatura Kontrol"],["ARSIV","Geçmiş Arşiv"]
-        ].map(([key,label]) => <button key={key} type="button" className={pool === key ? "primary" : ""} aria-current={pool === key ? "page" : undefined} onClick={() => { setPool(key); setStatus("ALL"); setPage(1); }}>{label}</button>)}
-        <button type="button" onClick={() => {setDirectEntryModalOpen(true);setOpenRequestToken((v)=>v+1);}}><Layers3 size={15}/> Üretim Girişi</button>
+      <nav className="pc2-pool-tabs" aria-label="İmalat iş havuzları">
+        {[["IMALATTA","İmalatta"],["IRSALIYE","İrsaliye Bekleyen"],["TAMAMLANAN","Tamamlanan"],["FATURA","Fatura Kontrol"],["ARSIV","Geçmiş Arşiv"]].map(([key,label]) =>
+          <button key={key} type="button" className={pool === key ? "primary" : ""} aria-current={pool === key ? "page" : undefined} onClick={() => {setPool(key);setStatus("ALL");setPage(1);}}>{label}</button>
+        )}
       </nav>
-      <section className="pc2-toolbar" aria-label="Üretim tarih aralığı">
-        <label>Başlangıç <input type="date" value={startDate} onChange={(e)=>{setStartDate(e.target.value);setPage(1);}} /></label>
-        <label>Bitiş <input type="date" min={startDate || undefined} value={endDate} onChange={(e)=>{setEndDate(e.target.value);setPage(1);}} /></label>
-        {pool === "ARSIV" ? <label>Arşiv yılı <select value={archiveYear} onChange={(e)=>{setArchiveYear(e.target.value);setPage(1);}}>{Array.from({length:9},(_,i)=>String(2026-i)).map((year)=><option key={year} value={year}>{year}</option>)}</select></label> : null}
-        <button type="button" onClick={()=>{setStartDate("");setEndDate("");setPage(1);}}>Tarihleri temizle</button>
+      <section className="pc2-toolbar pc2-period-toolbar" aria-label="Üretim dönem filtresi">
+        <label>Dönem <select aria-label="Üretim dönemi" value={period} onChange={(event) => {
+          const next = event.target.value; const dates = periodDates(next);
+          setPeriod(next); setStartDate(dates.startDate); setEndDate(dates.endDate); setPage(1);
+        }}>
+          <option value="ALL">Tüm tarihler</option><option value="LAST_30">Son 30 gün</option>
+          <option value="LAST_60">Son 60 gün</option><option value="THIS_MONTH">Bu ay</option>
+          <option value="PREV_MONTH">Geçen ay</option><option value="CUSTOM">Özel tarih</option>
+        </select></label>
+        {period === "CUSTOM" ? <div className="pc2-period-dates">
+          <label>Başlangıç <input type="date" aria-label="Başlangıç tarihi" max={endDate || undefined} value={startDate} onChange={(e)=>{setStartDate(e.target.value);setPage(1);}} /></label>
+          <label>Bitiş <input type="date" aria-label="Bitiş tarihi" min={startDate || undefined} value={endDate} onChange={(e)=>{setEndDate(e.target.value);setPage(1);}} /></label>
+        </div> : null}
+        {pool === "ARSIV" ? <label>Arşiv yılı <select value={archiveYear} onChange={(e)=>{setArchiveYear(e.target.value);setPage(1);}}>{Array.from({length:9},(_,i)=>String(2026-i)).map(year=><option key={year} value={year}>{year}</option>)}</select></label> : null}
+        {period !== "ALL" ? <button type="button" onClick={()=>{setPeriod("ALL");setStartDate("");setEndDate("");setPage(1);}}>Filtreyi sıfırla</button> : null}
+        <span className="pc2-period-note">Tarih seçimi yalnızca listedeki kayıtları filtreler.</span>
       </section>
       {pool === "ARSIV" ? <p className="pc2-notice">Geçmiş üretim fişleri korunur. Bu bölümdeki “Onaylandı” ifadesi yalnız eski üretim kaydının arşiv statüsüdür; irsaliye veya faturanın onaylandığı anlamına gelmez.</p> : null}
+      <p className="pc2-metrics-caption">Genel üretim özeti · dönem ve havuz filtresinden bağımsız</p>
       <section className="pc2-metrics">
         <Metric label="Üretimde model" value={summary.modelCount || 0} helper="Yalnız gerçekten açılan modeller" />
         <Metric label="Gelen adet" value={qty(summary.totalIncomingQty)} helper="Eşleşen irsaliye / manuel hedef" />
