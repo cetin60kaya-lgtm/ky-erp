@@ -287,7 +287,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     } finally {
       if (ticket === requestSeq.current) setLoading(false);
     }
-  }, [activeMainCompany, search, status, page]);
+  }, [activeMainCompany, search, status, pool, startDate, endDate, archiveYear, page]);
 
   useEffect(() => {
     setPage(1);
