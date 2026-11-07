@@ -695,26 +695,36 @@ async function microsoftChildrenPage(token:string,parentId:string,driveId="",nex
  */
 async function syncRecentBoundGoogleImages(
   c: Context<AppEnv>, slug: string, connectionId: string, link: Row, accessToken: string, force = false,
-): Promise<{ ran: boolean; scanned: number; linked: number }> {
-  const skip = {ran:false,scanned:0,linked:0};
+): Promise<{ ran: boolean; scanned: number; linked: number; hasMore: boolean; scannedTotal: number; linkedTotal: number }> {
+  const skip = {ran:false,scanned:0,linked:0,hasMore:false,scannedTotal:0,linkedTotal:0};
   if (upper(link.provider_type) !== "GOOGLE_DRIVE") return skip;
   const binding = await c.env.DB.prepare(
     "SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? AND module_code='DESEN' AND purpose_code='MODEL_IMAGE' AND sync_enabled=1 LIMIT 1",
-  ).bind(slug,connectionId).first<Row>();
-  const rootPath = text(binding?.root_path).replace(/^\/+|\/+$/g,"");
+  ).bind(slug, connectionId).first<Row>();
+  const rootPath = text(binding?.root_path).replace(/^\/+|\/+$/g, "");
   if (!rootPath || !canUseModelImageFolder(rootPath)) return skip;
+
   const raw = text(link.connection_metadata), meta = json(raw);
-  const last = Date.parse(text(meta.modelImageFastAt)) || 0;
-  if (!force && last && Date.now()-last < 30*60000) return skip;
+  const progress = json(meta.modelImageFastProgress);
+  const resume = text(progress.rootPath) === rootPath && Boolean(text(progress.nextPageToken));
+  const lastCompletedAt = Date.parse(text(progress.completedAt || meta.modelImageFastAt)) || 0;
+  if (!force && !resume && lastCompletedAt && Date.now() - lastCompletedAt < 30 * 60000) return skip;
+
   const stamp = now(), leaseId = crypto.randomUUID();
   const claimed = await c.env.DB.prepare(
     "UPDATE file_hub_connections SET metadata=? WHERE id=? AND main_company_slug=? AND COALESCE(metadata,'')=? AND COALESCE(json_extract(metadata,'$.cloudSyncLeaseUntil'),'')<=? AND is_active=1",
   ).bind(JSON.stringify({...meta,cloudSyncLeaseId:leaseId,cloudSyncLeaseUntil:new Date(Date.now()+180000).toISOString()}),connectionId,slug,raw,stamp).run();
-  if (Number(claimed.meta?.changes||0)!==1) return skip;
+  if (Number(claimed.meta?.changes || 0) !== 1) return skip;
 
-  let scanned=0,linked=0,problem="";
+  // Continuation is saved per tenant/connection. Re-running a page after an error
+  // is safe: assets, relations and UUID-based image updates are idempotent.
+  const priorScanned = resume ? Number(progress.scannedTotal || 0) : 0;
+  const priorLinked = resume ? Number(progress.linkedTotal || 0) : 0;
+  const cursor = resume ? text(progress.nextPageToken) : "";
+  let nextPageToken = cursor, scanned = 0, linked = 0, problem = "";
+  let completed = false;
   try {
-    let parent = text(link.remote_root_id)||"root";
+    let parent = text(link.remote_root_id) || "root";
     for(const part of rootPath.split("/").filter(Boolean)){
       const params = new URLSearchParams({
         q:"'"+googleQueryValue(parent)+"' in parents and name='"+googleQueryValue(part)+"' and mimeType='application/vnd.google-apps.folder' and trashed=false",
@@ -723,43 +733,55 @@ async function syncRecentBoundGoogleImages(
       const folders = await providerJson("https://www.googleapis.com/drive/v3/files?"+params,accessToken);
       const matches = (Array.isArray(folders.files)?folders.files:[]).filter((r:Row)=>text(r.name)===part && text(r.id));
       if(matches.length!==1) throw new Error("MODEL_IMAGE_ROOT_AMBIGUOUS_OR_MISSING");
-      parent = text(matches[0].id); // Arşivde yeni klasör oluşturulmaz.
+      parent = text(matches[0].id); // Asla yeni klasör oluşturma.
     }
     const q="'"+googleQueryValue(parent)+"' in parents and trashed=false and (mimeType='image/jpeg' or mimeType='image/png' or mimeType='image/webp')";
-    const params=new URLSearchParams({
+    const params = new URLSearchParams({
       q,fields:"nextPageToken,files(id,name,mimeType,size,modifiedTime,md5Checksum,webViewLink)",
       pageSize:"100",spaces:"drive",orderBy:"modifiedTime desc",
     });
+    if(cursor) params.set("pageToken",cursor);
     const page = await providerJson("https://www.googleapis.com/drive/v3/files?"+params,accessToken);
     const existing = await c.env.DB.prepare(
       "SELECT id,model_name,model_code,image_url,deleted_at FROM model_records WHERE main_company_slug=? AND COALESCE(TRIM(deleted_at),'')='' LIMIT 10000",
     ).bind(slug).all<Row>();
-    const models = existing.results||[];
+    const models = existing.results || [];
     for(const f of Array.isArray(page.files)?page.files:[]){
-      scanned+=1;
-      const name=text(f.name);
-      const modelId=findUniqueMissingDesignImageModel(models,name);
+      scanned += 1;
+      const name = text(f.name);
+      const modelId = findUniqueMissingDesignImageModel(models,name);
       if(!modelId) continue;
-      const item={id:text(f.id),name,mimeType:text(f.mimeType),size:Number(f.size||0),
+      const item = {id:text(f.id),name,mimeType:text(f.mimeType),size:Number(f.size||0),
         modifiedAt:text(f.modifiedTime),checksum:text(f.md5Checksum),webUrl:text(f.webViewLink)};
-      const relativePath=rootPath+"/"+name;
-      const indexed=await upsertCloudFile(c,slug,connectionId,"GOOGLE_DRIVE",item,relativePath,now());
-      // İndeksli ama canonical image_url boş kalmış eski ilişkileri de onar.
-      const result=await syncCloudDesignBinding(c,slug,connectionId,indexed.assetId,item,relativePath,"GOOGLE_DRIVE");
-      if(result?.modelId===modelId){
-        linked+=1;
-        const row=models.find((m:Row)=>text(m.id)===modelId);
-        if(row) row.image_url="LINKED_IN_CURRENT_BATCH";
+      const relativePath = rootPath+"/"+name;
+      const indexed = await upsertCloudFile(c,slug,connectionId,"GOOGLE_DRIVE",item,relativePath,now());
+      // Eski indeksin modeli olmasına rağmen image_url boşsa tekrar bağla.
+      const result = await syncCloudDesignBinding(c,slug,connectionId,indexed.assetId,item,relativePath,"GOOGLE_DRIVE");
+      if(result?.modelId === modelId){
+        linked += 1;
+        const row = models.find((m:Row)=>text(m.id)===modelId);
+        if(row) row.image_url = "LINKED_THIS_BATCH"; // Sadece bellek içindeki tekrarı engeller.
       }
     }
-  }catch(error:any){problem=text(error?.code||error?.message||"MODEL_IMAGE_QUICK_SCAN_FAILED").slice(0,160);}
+    nextPageToken = text(page.nextPageToken);
+    completed = !nextPageToken;
+  }catch(error:any){problem = text(error?.code || error?.message || "MODEL_IMAGE_QUICK_SCAN_FAILED").slice(0,160);}
   finally {
-    await c.env.DB.prepare(
-      "UPDATE file_hub_connections SET metadata=json_set(COALESCE(NULLIF(metadata,''),'{}'),'$.cloudSyncLeaseId',NULL,'$.cloudSyncLeaseUntil',NULL,'$.modelImageFastAt',?,'$.modelImageFastError',?),updated_at=? WHERE id=? AND main_company_slug=? AND json_extract(metadata,'$.cloudSyncLeaseId')=?",
-    ).bind(problem?"":now(),problem||null,now(),connectionId,slug,leaseId).run();
+    const finishedAt = now();
+    const state = {
+      rootPath, nextPageToken:problem ? cursor : nextPageToken,
+      scannedTotal:priorScanned + (problem ? 0 : scanned),
+      linkedTotal:priorLinked + (problem ? 0 : linked),
+      completedAt:completed && !problem ? finishedAt : null,
+      lastRunAt:finishedAt, error:problem || null,
+    };
+    const released = await c.env.DB.prepare(
+      "UPDATE file_hub_connections SET metadata=json_set(COALESCE(NULLIF(metadata,''),'{}'),'$.cloudSyncLeaseId',NULL,'$.cloudSyncLeaseUntil',NULL,'$.modelImageFastProgress',json(?),'$.modelImageFastAt',?,'$.modelImageFastError',?),updated_at=? WHERE id=? AND main_company_slug=? AND json_extract(metadata,'$.cloudSyncLeaseId')=?",
+    ).bind(JSON.stringify(state),completed && !problem ? finishedAt : "",problem || null,finishedAt,connectionId,slug,leaseId).run();
+    if(Number(released.meta?.changes || 0)!==1) throw Object.assign(new Error("MODEL_IMAGE_LEASE_CONFLICT"),{code:"MODEL_IMAGE_LEASE_CONFLICT",status:409});
   }
-  if(problem) throw Object.assign(new Error("DESEN model görseli öncelikli indeksleme başarısız."),{code:"MODEL_IMAGE_QUICK_SCAN_FAILED"});
-  return {ran:true,scanned,linked};
+  if(problem) throw Object.assign(new Error("DESEN görsel taraması tamamlanamadı; sonraki denemede aynı sayfadan devam edilir."),{code:"MODEL_IMAGE_QUICK_SCAN_FAILED"});
+  return {ran:true,scanned,linked,hasMore:!completed,scannedTotal:priorScanned+scanned,linkedTotal:priorLinked+linked};
 }
 
 // Dosyalar klasor atamasi oncesinde indekslendiyse root taramasini beklemeden
@@ -1051,7 +1073,8 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
       id:row.id,providerType:row.provider_type,connectionStatus:row.connection_status,
       lastSyncAt:row.last_sync_at,lastError:row.last_error,
       sync:{...progress, state:progress.state==="ERROR"?"ERROR":inProgress?(leaseActive?"RUNNING":"WAITING"):progress.state||"NOT_STARTED",
-        inProgress, leaseActive, pendingFolders:Number(progress.pendingFolders||metadata.cloudSyncCursor?.queue?.length||0)}
+        inProgress, leaseActive, pendingFolders:Number(progress.pendingFolders||metadata.cloudSyncCursor?.queue?.length||0)},
+      modelImageSync:json(metadata.modelImageFastProgress)
     }});
   });
 
@@ -1181,8 +1204,9 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
           const priority=await syncRecentBoundGoogleImages(c,gate.slug,connectionId,link,accessToken,true);
           if (priority.ran) return c.json({ok:true,data:{
             files:priority.scanned,folders:0,modelSyncs:priority.linked,
-            designImagePriority:true,truncated:false,inProgress:false,
-            message:"Son Drive görselleri indekslendi; kalan dosyalar normal senkronizasyonda izlenir.",
+            designImagePriority:true,truncated:priority.hasMore,inProgress:priority.hasMore,
+            scannedTotal:priority.scannedTotal,linkedTotal:priority.linkedTotal,
+            message:priority.hasMore ? "Drive görsel taraması sonraki sayfadan devam edecek." : "Drive görsel taraması tamamlandı.",
           }});
         }
         const progress = await runGoogleSyncBatch(c, gate.slug, connectionId, 1, false);
