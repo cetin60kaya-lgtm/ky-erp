@@ -1037,7 +1037,7 @@ function listCard(card: Row): Row {
 function filterCards(cards: Row[], query: Row): Row[] {
   const search = normalized(query.search || query.q);
   const status = normalized(query.status);
-  const pool = normalized(query.pool || "IMAlATTA");
+  const pool = normalized(query.pool || "IMALATTA");
   const companyId = text(query.companyId);
   const startDate = text(query.startDate).slice(0, 10);
   const endDate = text(query.endDate).slice(0, 10);
@@ -1046,7 +1046,7 @@ function filterCards(cards: Row[], query: Row): Row[] {
     const legacy = Boolean(card.legacyApproved);
     const productionComplete = card.status === "COMPLETED" || (card.completedGrossQty > 0 && card.productionRemainingQty <= 0 && card.incomingQty > 0);
     if (pool === "ARSIV" && !legacy) return false;
-    if (pool === "IMAlATTA" && (legacy || productionComplete)) return false;
+    if (pool === "IMALATTA" && (legacy || productionComplete)) return false;
     if (pool === "TAMAMLANAN" && (legacy || !productionComplete)) return false;
     if (pool === "IRSALIYE" && (legacy || card.dispatchCount > 0 || !(card.completedGrossQty > 0 || card.expectedQty > 0))) return false;
     if (pool === "FATURA" && (legacy || card.invoiceRemainingQty <= 0)) return false;
