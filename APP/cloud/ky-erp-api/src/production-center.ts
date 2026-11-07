@@ -988,7 +988,23 @@ async function buildCenter(
   });
 
   cards.sort((left, right) => text(right.lastActivityAt).localeCompare(text(left.lastActivityAt)));
-  const summary = {
+  const summary = summarizeCards(cards, ambiguousMatchCount, unmatchedSourceCount);
+  return {
+    slug,
+    cards,
+    summary,
+    machines,
+    companies: [...companyById.values()].map((row) => ({
+      id: text(row.id),
+      name: text(row.name),
+      type: text(first(row.company_type, row.type)),
+      isActive: row.is_active !== 0 && row.is_active !== false,
+    })),
+  };
+}
+
+function summarizeCards(cards: Row[], ambiguousMatchCount = 0, unmatchedSourceCount = 0): Row {
+  return {
     modelCount: cards.length,
     openModelCount: cards.filter((row) => row.status !== "COMPLETED").length,
     modelWaitingCount: cards.filter((row) => row.status === "MODEL_WAITING").length,
@@ -1002,18 +1018,6 @@ async function buildCenter(
     totalInvoiceRemainingQty: cards.reduce((sum, row) => sum + numberValue(row.invoiceRemainingQty), 0),
     ambiguousMatchCount,
     unmatchedSourceCount,
-  };
-  return {
-    slug,
-    cards,
-    summary,
-    machines,
-    companies: [...companyById.values()].map((row) => ({
-      id: text(row.id),
-      name: text(row.name),
-      type: text(first(row.company_type, row.type)),
-      isActive: row.is_active !== 0 && row.is_active !== false,
-    })),
   };
 }
 
@@ -1031,9 +1035,20 @@ function filterCards(cards: Row[], query: Row): Row[] {
   const search = normalized(query.search || query.q);
   const status = normalized(query.status);
   const companyId = text(query.companyId);
+  const billing = text(query.billing).toUpperCase();
+  const recentDays = Number(query.recentDays || 0);
+  const recentCutoff = Number.isSafeInteger(recentDays) && recentDays > 0 && recentDays <= 366
+    ? new Date(Date.now() - recentDays * 86400000).toISOString().slice(0, 10) : "";
   return cards.filter((card) => {
     if (status && status !== "ALL" && normalized(card.status) !== status) return false;
     if (companyId && card.companyId !== companyId) return false;
+    if (recentCutoff && isoDate(card.lastActivityAt || card.createdAt) < recentCutoff) return false;
+    const billed = numberValue(card.invoicedQty);
+    const remaining = numberValue(card.invoiceRemainingQty);
+    if (billing === "BILLED" && billed <= 0) return false;
+    if (billing === "UNBILLED" && (billed > 0 || numberValue(card.completedNetQty) <= 0)) return false;
+    if (billing === "PARTIAL" && !(billed > 0 && remaining > 0)) return false;
+    if (billing === "FULL" && !(billed > 0 && remaining <= 0 && numberValue(card.overInvoicedQty) <= 0)) return false;
     if (!search) return true;
     return normalized(
       `${card.modelName || ""} ${card.companyName || ""} ${card.orderNo || ""} ${card.defaultDispatchNo || ""}`,
@@ -1596,6 +1611,8 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
       search: c.req.query("search"),
       status: c.req.query("status"),
       companyId: c.req.query("companyId"),
+      billing: c.req.query("billing"),
+      recentDays: c.req.query("recentDays"),
     });
     const rawPage = Number(c.req.query("page") || 1);
     const rawSize = Number(c.req.query("pageSize") || 100);
@@ -1607,7 +1624,7 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
       success: true,
       data: {
         rows: filtered.slice(start, start + pageSize).map(listCard),
-        summary: center.summary,
+        summary: summarizeCards(filtered, center.summary.ambiguousMatchCount, center.summary.unmatchedSourceCount),
         pagination: { page, pageSize, total: filtered.length },
       },
     });
