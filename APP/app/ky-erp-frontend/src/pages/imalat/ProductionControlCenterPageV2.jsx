@@ -68,6 +68,13 @@ const dateText = (value) => {
     : parsed.toLocaleDateString("tr-TR");
 };
 
+const productionDateTime = (row) => {
+  const date = row.productionLastAt || row.productionStartAt || row.lastActivityAt;
+  const timestamp = String(row.productionLastTimestamp || "");
+  const time = /T\d{2}:\d{2}/.test(timestamp) ? timestamp.match(/T(\d{2}:\d{2})/)?.[1] : "";
+  return { date: dateText(date), time: time || "Saat kaydı yok" };
+};
+
 function machineId(machine) {
   return String(machine?.id || machine?.machineNo || machine?.no || "");
 }
@@ -562,7 +569,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
         {period !== "ALL" ? <button type="button" onClick={()=>{setPeriod("ALL");setStartDate("");setEndDate("");setPage(1);}}>Filtreyi sıfırla</button> : null}
         <span className="pc2-period-note">Tarih seçimi yalnızca listedeki kayıtları filtreler.</span>
       </section>
-      {pool === "ARSIV" ? <p className="pc2-notice">Geçmiş üretim fişleri korunur. Bu bölümdeki “Onaylandı” ifadesi yalnız eski üretim kaydının arşiv statüsüdür; irsaliye veya faturanın onaylandığı anlamına gelmez.</p> : null}
+      {pool === "ARSIV" ? <p className="pc2-notice">Geçmiş üretim fişleri Tamamlanan havuzunda da görünür. Bu, yalnız üretimin geçmişte tamamlandığı anlamına gelir; irsaliye veya fatura onayı değildir.</p> : null}
       <p className="pc2-metrics-caption">Seçili havuz ve döneme ait üretim özeti</p>
       <section className="pc2-metrics">
         <Metric label="Listelenen model" value={summary.modelCount || 0} helper="Seçili havuz ve dönem" />
@@ -597,20 +604,21 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       <section className="pc2-table-card">
         <div className="pc2-table-wrap">
           <table>
-            <thead><tr><th>Görsel</th><th>Model / Firma</th><th>Gelen</th><th>Üretim</th><th>Net</th><th>Kalan</th><th>Faturalanan</th><th>Durum</th><th /></tr></thead>
+            <thead><tr><th>Görsel</th><th>Model / Firma</th><th>Üretim tarihi / saat</th><th>Gelen</th><th>Üretim</th><th>Net</th><th>Kalan</th><th>Faturalanan</th><th>Durum</th><th /></tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={9}>İmalat verileri yükleniyor…</td></tr> : null}
+              {loading ? <tr><td colSpan={10}>İmalat verileri yükleniyor…</td></tr> : null}
               {!loading && !(center.rows || []).length ? <tr><td colSpan={9}><div className="pc2-empty"><Boxes size={28} /><strong>İmalat merkezi temiz ve boş.</strong><span>Desenlerden Model Al ile ilk modeli üretime aç.</span><button className="primary" onClick={() => setDesignOpen(true)}><ImageIcon size={16} /> Desenlerden Model Al</button></div></td></tr> : null}
               {(center.rows || []).map((row) => (
                 <tr key={row.id}>
                   <td><button className="pc2-thumb" type="button" onClick={() => openDetail(row)}>{row.imageUrl ? <img src={imageSrc(row.imageUrl)} alt={row.modelName} /> : <ImageIcon size={22} />}</button></td>
                   <td><strong>{row.modelName}</strong><small>{row.companyName || "Firma bekliyor"}</small></td>
+                  <td><strong>{productionDateTime(row).date}</strong><small>{productionDateTime(row).time}</small></td>
                   <td>{qty(row.incomingQty)}</td>
                   <td>{qty(row.completedGrossQty)}</td>
                   <td>{qty(row.completedNetQty)}</td>
                   <td>{qty(row.productionRemainingQty)}</td>
                   <td>{qty(row.invoicedQty)}</td>
-                  <td><span className={`pc2-status ${statusTone(row.legacyApproved ? "COMPLETED" : row.status)}`}>{row.legacyApproved ? "Onaylandı · Geçmiş üretim" : statusLabel(row.status)}</span></td>
+                  <td><span className={`pc2-status ${statusTone(row.legacyApproved ? "COMPLETED" : row.status)}`}>{row.legacyApproved ? "Tamamlandı · Eski üretim" : statusLabel(row.status)}</span></td>
                   <td><div className="pc2-row-actions"><button className="primary" type="button" onClick={() => focusQuick(row)}><Layers3 size={14} /> Üretim Gir</button><button type="button" onClick={() => openDetail(row)}>Detay</button></div></td>
                 </tr>
               ))}
