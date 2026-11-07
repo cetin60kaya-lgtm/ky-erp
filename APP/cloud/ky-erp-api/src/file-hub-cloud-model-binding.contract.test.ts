@@ -71,6 +71,11 @@ test("aynı ada sahip iki firma modeli ve silinmiş kayıt yanlış bağlanmaz",
     { id: "b", model_name: "EBAREL", image_url: "" },
   ];
   assert.equal(findUniqueMissingDesignImageModel(shared, "EBAREL.jpg"), null);
+  assert.equal(findUniqueMissingDesignImageModel([
+    { id: "m-1", model_name: "EBAREL", image_url: "" },
+    { id: "m-2", model_name: "EBAREL", image_url: "/api/old-preview" },
+  ], "EBAREL.jpg"), null);
+
   assert.equal(findUniqueMissingDesignImageModel(
     [...shared, { id: "deleted", model_name: "ANIL", image_url: "", deleted_at: "2026-09-01" }],
     "ANIL.jpg",
