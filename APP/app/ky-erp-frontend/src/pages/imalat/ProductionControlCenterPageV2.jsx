@@ -629,7 +629,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
                 <td><strong>{productionDateTime(row).date}</strong><small>{productionDateTime(row).time}</small></td>
                 {pool === "IMALATTA" ? <>
                   <td>{qty(row.incomingQty)}</td><td>{qty(row.completedGrossQty)}</td><td>{qty(row.productionRemainingQty)}</td>
-                  <td><span className={`pc2-status ${statusTone(row.status)}`}>{statusLabel(row.status)}</span></td>
+                  <td><span className={`pc2-status ${statusTone(detail.legacyApproved ? "COMPLETED" : row.status)}`}>{detail.legacyApproved ? "Tamamlandı" : statusLabel(row.status)}</span></td>
                 </> : null}
                 {pool === "IRSALIYE" ? <>
                   <td>{qty(row.incomingQty)}</td><td>{qty(row.completedGrossQty)}</td>
@@ -739,12 +739,12 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
       <Drawer
         open={Boolean(detail)}
         title={detail?.modelName || "Model"}
-        subtitle={`${detail?.companyName || "Firma bekliyor"} · ${statusLabel(detail?.status)}`}
+        subtitle={`${detail?.companyName || "Firma bekliyor"} · ${detail?.legacyApproved ? "Geçmiş üretim tamamlandı" : statusLabel(detail?.status)}`}
         onClose={() => setDetail(null)}
         wide
-        footer={<><button type="button" onClick={() => setDetail(null)}>Kapat</button><button type="button" onClick={() => openModelPlan(detail)}><Pencil size={15} /> İmalat Planı</button><button className="primary" type="button" onClick={() => { focusQuick(detail); setDetail(null); }}><Layers3 size={15} /> Üretim Gir</button></>}
+        footer={<><button type="button" onClick={() => setDetail(null)}>Kapat</button>{pool === "IMALATTA" && !detail?.legacyApproved ? <><button type="button" onClick={() => openModelPlan(detail)}><Pencil size={15} /> İmalat Planı</button><button className="primary" type="button" onClick={() => { focusQuick(detail); setDetail(null); }}><Layers3 size={15} /> Üretim Gir</button></> : null}</>}
       >
-        {detail ? <ModelDetail detail={detail} onEdit={(row) => openEntry(detail, row)} onDelete={removeEntry} /> : null}
+        {detail ? <ModelDetail detail={detail} readOnly={pool !== "IMALATTA" || Boolean(detail.legacyApproved)} onEdit={(row) => openEntry(detail, row)} onDelete={removeEntry} /> : null}
       </Drawer>
     </div>
   );
@@ -754,7 +754,7 @@ function Metric({ label, value, helper, tone = "" }) {
   return <article className={`pc2-metric ${tone}`}><span>{label}</span><strong>{value}</strong><small>{helper}</small></article>;
 }
 
-function ModelDetail({ detail, onEdit, onDelete }) {
+function ModelDetail({ detail, readOnly = false, onEdit, onDelete }) {
   return (
     <div className="pc2-detail">
       <section className="pc2-detail-top">
@@ -773,8 +773,8 @@ function ModelDetail({ detail, onEdit, onDelete }) {
       </section>
 
       <section className="pc2-panel">
-        <header><div><h3><History size={17} /> Üretim geçmişi</h3><p>Kayıtları buradan düzelt veya sil.</p></div></header>
-        <div className="pc2-table-wrap"><table><thead><tr><th>Tarih</th><th>Bölge</th><th>Brüt</th><th>Net</th><th>Makine</th><th>Vardiya</th><th>Makinacı</th><th /></tr></thead><tbody>{(detail.productionEntries || []).length ? detail.productionEntries.map((row) => <tr key={row.id}><td>{dateText(row.date)}</td><td>{row.printArea}</td><td>{qty(row.grossQty)}</td><td>{qty(row.netQty)}</td><td>{row.machineName || row.machineId || "-"}</td><td>{row.shift || "-"}</td><td>{row.operatorName || "-"}</td><td><div className="pc2-row-actions"><button type="button" onClick={() => onEdit(row)}><Pencil size={14} /> Düzenle</button><button className="danger" type="button" onClick={() => onDelete(row)}><Trash2 size={14} /> Sil</button></div></td></tr>) : <tr><td colSpan={8}>Henüz üretim kaydı yok.</td></tr>}</tbody></table></div>
+        <header><div><h3><History size={17} /> Üretim geçmişi</h3><p>{readOnly ? "Üretim fişleri salt okunur olarak görüntülenir." : "Kayıtlı üretim fişlerini düzenle veya sil."}</p></div></header>
+        <div className="pc2-table-wrap"><table><thead><tr><th>Tarih</th><th>Bölge</th><th>Brüt</th><th>Net</th><th>Makine</th><th>Vardiya</th><th>Makinacı</th><th /></tr></thead><tbody>{(detail.productionEntries || []).length ? detail.productionEntries.map((row) => <tr key={row.id}><td>{dateText(row.date)}</td><td>{row.printArea}</td><td>{qty(row.grossQty)}</td><td>{qty(row.netQty)}</td><td>{row.machineName || row.machineId || "-"}</td><td>{row.shift || "-"}</td><td>{row.operatorName || "-"}</td><td>{readOnly ? <span className="pc2-readonly">Kayıtlı</span> : <div className="pc2-row-actions"><button type="button" onClick={() => onEdit(row)}><Pencil size={14} /> Düzenle</button><button className="danger" type="button" onClick={() => onDelete(row)}><Trash2 size={14} /> Sil</button></div>}</td></tr>) : <tr><td colSpan={8}>Henüz üretim kaydı yok.</td></tr>}</tbody></table></div>
       </section>
 
       <section className="pc2-detail-split">
