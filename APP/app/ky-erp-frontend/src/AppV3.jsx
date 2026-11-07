@@ -5,7 +5,7 @@ import LoginPage from "./pages/LoginPage";
 import HomeDashboard from "./pages/HomeDashboard";
 import "./styles/secure-launch.css";
 import MuhasebePage from "./pages/modules/MuhasebePage";
-import { lazyWithRetry } from "./utils/lazyWithRetry";
+import { lazyWithRetry, openFreshFrontendVersion, tryRecoverStaleChunk } from "./utils/lazyWithRetry";
 import { MODULES, findModule, findTab, getInitialRoute, getModuleTabs } from "./app/moduleRegistry";
 import { useWorkspaceTabs } from "./hooks/useWorkspaceTabs";
 import { roleModules } from "./app/roleModuleNavigation";
@@ -120,16 +120,20 @@ class ModuleErrorBoundary extends React.Component {
     this.state = { error: null, recoveryKey: 0 };
   }
   static getDerivedStateFromError(error) { return { error }; }
-  componentDidCatch(error, info) { console.error("KY ERP V3 module render error", error, info); }
+  componentDidCatch(error, info) {
+    console.error("KY ERP V3 module render error", error, info);
+    tryRecoverStaleChunk(error);
+  }
   render() {
     if (!this.state.error) return <React.Fragment key={this.state.recoveryKey}>{this.props.children}</React.Fragment>;
     const errorCode = String(this.state.error?.code || "").trim();
     return (
       <div className="content-card module-error-card">
         <h3>Ekran şu anda açılamıyor</h3>
-        <p>Ekranı yeniden yüklemeyi deneyin. Sorun sürerse sistem yöneticisine bildirin.</p>
+        <p>Uygulama dosyası yüklenemedi. Yayın sırasında sürüm değişmiş olabilir. Güncel sürümü yükleyin; giriş oturumunuz korunur.</p>
         {errorCode ? <small>Hata kodu: {errorCode}</small> : null}
-        <button type="button" className="primary-btn" onClick={() => this.setState((current) => ({ error: null, recoveryKey: current.recoveryKey + 1 }))}>Tekrar Dene</button>
+        <button type="button" className="primary-btn" onClick={() => openFreshFrontendVersion()}>Güncel Sürümü Yükle</button>
+        <button type="button" onClick={() => this.setState((current) => ({ error: null, recoveryKey: current.recoveryKey + 1 }))}>Ekranı Tekrar Dene</button>
       </div>
     );
   }
