@@ -37,8 +37,8 @@ test("Her ekran kendi tablosunu, özetini ve tarih aramasını sunar", () => {
 });
 
 test("Eski fişler aktif ve irsaliye havuzlarına sızmaz; fatura hedefi irsaliye öncelikli", () => {
-  assert.match(api, /pool === "IMALATTA" && \(legacy \|\| productionComplete\)/);
-  assert.match(api, /pool === "IRSALIYE" && \(legacy \|\| card\.dispatchCount > 0/);
+  assert.match(api, /pool === "IMALATTA" && \(card\.isVirtual \|\| legacy \|\| productionComplete\)/);
+  assert.match(api, /pool === "IRSALIYE" && \(card\.isVirtual \|\| legacy \|\| card\.dispatchCount > 0/);
   assert.match(api, /pool === "TAMAMLANAN" && !legacy && !productionComplete/);
   assert.match(api, /incomingFromDocuments > 0 \? incomingFromDocuments : Math\.max/);
   assert.match(api, /totalInvoiceRemainingQty: filtered\.reduce/);
