@@ -211,14 +211,14 @@ function defaultEntry(model, dictionaries, source = null, preferences = {}) {
   };
 }
 
-export default function ProductionControlCenterPageV2({ activeMainCompany }) {
+export default function ProductionControlCenterPageV2({ activeMainCompany, pool = "IMALATTA" }) {
   const [center, setCenter] = useState({ rows: [], summary: {}, pagination: {} });
   const [dictionaries, setDictionaries] = useState({ models: [], machines: [], operators: [], companies: [] });
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
-  const [pool, setPool] = useState("IMALATTA");
+
   const [period, setPeriod] = useState("ALL");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -321,6 +321,14 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     const timer = window.setTimeout(load, 150);
     return () => { window.clearTimeout(timer); requestSeq.current += 1; };
   }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+    setStatus("ALL");
+    setSearch("");
+    setDetail(null);
+    setCenter({ rows: [], summary: {}, pagination: {} });
+  }, [pool]);
 
   const summary = center.summary || {};
 
@@ -531,15 +539,22 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     <div className="pc2-page">
       <section className="pc2-head">
         <div>
-          <span>İMALAT · TEK MERKEZ</span>
-          <h1>İmalat · Üretim Girişi</h1>
-          <p>Excel düzenindeki alanlarla üretimi gir, kaydet, son fişleri ve modelleri tek yerden takip et.</p>
+          <span>İMALAT · İŞLEM MERKEZİ</span>
+          <h1>{({ IMALATTA: "İmalatta", IRSALIYE: "İrsaliye Bekleyen", TAMAMLANAN: "Tamamlanan Üretimler", FATURA: "Fatura Kontrol", ARSIV: "Geçmiş Üretim Arşivi" })[pool]}</h1>
+          <p>{({ IMALATTA: "Aktif üretimler, günlük fişler ve iş bazında ilerleme.", IRSALIYE: "Yeni üretimlerin eksik irsaliye bağlantılarını takip et.", TAMAMLANAN: "Biten üretimler; tarihi, saati ve model görseliyle.", FATURA: "İrsaliye ve faturalandırılan adetlerin mutabakatı.", ARSIV: "Geçmiş yılların üretim fişleri. Kayıtlar salt okunur." })[pool]}</p>
         </div>
         <div className="pc2-actions">
-          <button className="primary" type="button" onClick={() => { setDirectEntryModalOpen(true); setOpenRequestToken((current) => current + 1); }}><Layers3 size={16} /> Üretim Girişi</button>
-          <button type="button" onClick={() => setDesignOpen(true)}><ImageIcon size={16} /> Desenlerden Model Al</button>
-          <button type="button" onClick={() => setModelOpen(true)}><CirclePlus size={16} /> Yeni Model</button>
-          <details className="pc2-more-actions"><summary>Diğer işlemler</summary><div className="pc2-more-menu"><button type="button" onClick={() => { setSmartOpen(true); }}><Zap size={16} /> Metinden Akıllı Seri Giriş</button><button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16} /> Geçmiş CSV Al</button></div></details>
+          {pool === "IMALATTA" ? <>
+            <button className="primary" type="button" onClick={() => { setDirectEntryModalOpen(true); setOpenRequestToken((current) => current + 1); }}><Layers3 size={16} /> Üretim Girişi</button>
+            <details className="pc2-more-actions"><summary>Diğer işlemler</summary><div className="pc2-more-menu">
+              <button type="button" onClick={() => setDesignOpen(true)}><ImageIcon size={16}/> Desenlerden Model Al</button>
+              <button type="button" onClick={() => setModelOpen(true)}><CirclePlus size={16}/> Yeni Model</button>
+              <button type="button" onClick={() => setSmartOpen(true)}><Zap size={16}/> Akıllı Seri Giriş</button>
+              <button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16}/> Geçmiş CSV Al</button>
+            </div></details>
+          </> : null}
+          {pool === "IRSALIYE" ? <a className="pc2-link-action" href="/e-belge/eslestirmeler"><FileCheck2 size={16}/> İrsaliye Eşleştirme</a> : null}
+          {pool === "FATURA" ? <a className="pc2-link-action" href="/e-belge/giden-belgeler"><FileText size={16}/> Muhasebede Faturalar</a> : null}
         </div>
       </section>
 
@@ -547,11 +562,6 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
 
       <ProductionDirectEntryPanel activeMainCompany={activeMainCompany} models={dictionaries.models} machines={dictionaries.machines} companies={dictionaries.companies} preselectModelId={quickSelectedModel} openRequestToken={openRequestToken} modalOpen={directEntryModalOpen} onClose={() => setDirectEntryModalOpen(false)} onSaved={load} onModelCreated={load} />
 
-      <nav className="pc2-pool-tabs" aria-label="İmalat iş havuzları">
-        {[["IMALATTA","İmalatta"],["IRSALIYE","İrsaliye Bekleyen"],["TAMAMLANAN","Tamamlanan"],["FATURA","Fatura Kontrol"],["ARSIV","Geçmiş Arşiv"]].map(([key,label]) =>
-          <button key={key} type="button" className={pool === key ? "primary" : ""} aria-current={pool === key ? "page" : undefined} onClick={() => {setPool(key);setStatus("ALL");setPage(1);}}>{label}</button>
-        )}
-      </nav>
       <section className="pc2-toolbar pc2-period-toolbar" aria-label="Üretim dönem filtresi">
         <label>Dönem <select aria-label="Üretim dönemi" value={period} onChange={(event) => {
           const next = event.target.value; const dates = periodDates(next);
@@ -569,59 +579,78 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
         {period !== "ALL" ? <button type="button" onClick={()=>{setPeriod("ALL");setStartDate("");setEndDate("");setPage(1);}}>Filtreyi sıfırla</button> : null}
         <span className="pc2-period-note">Tarih seçimi yalnızca listedeki kayıtları filtreler.</span>
       </section>
-      {pool === "ARSIV" ? <p className="pc2-notice">Geçmiş üretim fişleri Tamamlanan havuzunda da görünür. Bu, yalnız üretimin geçmişte tamamlandığı anlamına gelir; irsaliye veya fatura onayı değildir.</p> : null}
-      <p className="pc2-metrics-caption">Seçili havuz ve döneme ait üretim özeti</p>
-      <section className="pc2-metrics">
-        <Metric label="Listelenen model" value={summary.modelCount || 0} helper="Seçili havuz ve dönem" />
-        <Metric label="Gelen adet" value={qty(summary.totalIncomingQty)} helper="Eşleşen irsaliye / manuel hedef" />
-        <Metric label="Net tamamlanan" value={qty(summary.totalCompletedNetQty)} helper="Sakat ve test düşülmüş" tone="success" />
-        <Metric label="Üretim bekleyen" value={summary.productionOpenCount || 0} helper="Eksik üretim" tone="blue" />
-        <Metric label="İrsaliye bekleyen" value={summary.dispatchWaitingCount || 0} helper="Yeni işlerde irsaliyesi eşleşmeyen" tone="warning" />
-        <Metric label="Kontrol gerekli" value={summary.controlCount || 0} helper="Fazla üretim / fatura" tone={summary.controlCount ? "danger" : "success"} />
+      {pool === "ARSIV" ? <p className="pc2-notice"><History size={16} /> Geçmiş üretimler arşiv amaçlıdır. İrsaliye ve fatura durumu geçmiş kayıtlara otomatik onay verilerek değiştirilmez.</p> : null}
+      <section className="pc2-metrics pc2-metrics-compact" aria-label="Seçili bölümün özeti">
+        <Metric label={pool === "ARSIV" ? "Geçmiş model" : pool === "TAMAMLANAN" ? "Tamamlanan model" : pool === "IRSALIYE" ? "İrsaliye bekleyen" : pool === "FATURA" ? "Fatura kontrolü" : "Aktif üretim"} value={summary.modelCount || 0} helper="Bu bölümün kayıt sayısı" />
+        {pool === "FATURA" ? <>
+          <Metric label="Faturalanan adet" value={qty(summary.totalInvoicedQty)} helper="Eşleşen faturalar" tone="success" />
+          <Metric label="Açık fatura adedi" value={qty(summary.totalInvoiceRemainingQty)} helper="İrsaliye ve fatura mutabakatı" tone="warning" />
+        </> : <>
+          <Metric label="Brüt üretilen" value={qty(summary.totalCompletedGrossQty)} helper="Bölge bazlı üretim" />
+          <Metric label="Net sağlam adet" value={qty(summary.totalCompletedNetQty)} helper="Sakat / test düşülmüş" tone="success" />
+        </>}
       </section>
 
-      <section className="pc2-toolbar">
-        <label className="pc2-search"><Search size={16} /><input value={search} onChange={(event) => { setPage(1); setSearch(event.target.value); }} placeholder="Model, firma, sipariş veya irsaliye ara" /></label>
-        <select aria-label="Duruma göre filtrele" value={status} onChange={(event) => { setPage(1); setStatus(event.target.value); }}>
-          <option value="ALL">Tüm durumlar</option>
-          <option value="NEW_MODEL">Yeni model</option>
-          <option value="DISPATCH_WAITING">İrsaliye bekliyor</option>
-          <option value="PRODUCTION_OPEN">Üretim bekliyor</option>
-          <option value="INVOICE_OPEN">Fatura bekliyor</option>
-          <option value="COMPLETED">Tamamlandı</option>
-          <option value="OVER_PRODUCTION">Fazla üretim</option>
-        </select>
-        <span>{center.pagination?.total || center.rows?.length || 0} kayıt</span>
+      <section className="pc2-toolbar pc2-list-toolbar">
+        <label className="pc2-search"><Search size={16} /><input value={search} onChange={(event) => { setPage(1); setSearch(event.target.value); }} placeholder="Model ID, model adı, firma veya sipariş no" aria-label="Üretim modeli ara" /></label>
+        <span className="pc2-record-total">{center.pagination?.total ?? center.rows?.length ?? 0} kayıt</span>
         <button type="button" onClick={load} disabled={loading}><RefreshCcw size={15} /> Yenile</button>
       </section>
 
-      <nav aria-label="İmalat kayıt sayfaları" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, padding: "10px 0" }}>
+      <nav className="pc2-pagination" aria-label="İmalat kayıt sayfaları">
         <button type="button" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>← Önceki</button>
-        <span>Sayfa {page} · {center.pagination?.total ?? center.rows?.length ?? 0} toplam kayıt</span>
-        <button type="button" disabled={loading || (center.rows || []).length < PAGE_SIZE || (Number(center.pagination?.total || 0) > 0 && page * PAGE_SIZE >= Number(center.pagination.total))} onClick={() => setPage((value) => value + 1)}>Sonraki →</button>
+        <span>Sayfa {page} / {Math.max(1, Math.ceil(Number(center.pagination?.total || 0) / PAGE_SIZE))}</span>
+        <button type="button" disabled={loading || page * PAGE_SIZE >= Number(center.pagination?.total || 0)} onClick={() => setPage((value) => value + 1)}>Sonraki →</button>
       </nav>
 
       <section className="pc2-table-card">
         <div className="pc2-table-wrap">
           <table>
-            <thead><tr><th>Görsel</th><th>Model / Firma</th><th>Üretim tarihi / saat</th><th>Gelen</th><th>Üretim</th><th>Net</th><th>Kalan</th><th>Faturalanan</th><th>Durum</th><th /></tr></thead>
+            <thead><tr>
+              <th>Görsel</th><th>Model / Firma</th><th>Son üretim / saat</th>
+              {pool === "IMALATTA" ? <><th>Hedef</th><th>Üretim</th><th>Kalan</th><th>Durum</th></> : null}
+              {pool === "IRSALIYE" ? <><th>Beklenen adet</th><th>Üretilen</th><th>İrsaliye</th></> : null}
+              {pool === "TAMAMLANAN" ? <><th>Brüt</th><th>Net</th><th>Durum</th></> : null}
+              {pool === "FATURA" ? <><th>İrsaliye adedi</th><th>Faturalanan</th><th>Fatura kalanı</th><th>Durum</th></> : null}
+              {pool === "ARSIV" ? <><th>Net adet</th><th>Durum</th></> : null}
+              <th>İşlem</th>
+            </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={10}>İmalat verileri yükleniyor…</td></tr> : null}
-              {!loading && !(center.rows || []).length ? <tr><td colSpan={9}><div className="pc2-empty"><Boxes size={28} /><strong>İmalat merkezi temiz ve boş.</strong><span>Desenlerden Model Al ile ilk modeli üretime aç.</span><button className="primary" onClick={() => setDesignOpen(true)}><ImageIcon size={16} /> Desenlerden Model Al</button></div></td></tr> : null}
-              {(center.rows || []).map((row) => (
-                <tr key={row.id}>
-                  <td><button className="pc2-thumb" type="button" onClick={() => openDetail(row)}>{row.imageUrl ? <img src={imageSrc(row.imageUrl)} alt={row.modelName} /> : <ImageIcon size={22} />}</button></td>
-                  <td><strong>{row.modelName}</strong><small>{row.companyName || "Firma bekliyor"}</small></td>
-                  <td><strong>{productionDateTime(row).date}</strong><small>{productionDateTime(row).time}</small></td>
-                  <td>{qty(row.incomingQty)}</td>
-                  <td>{qty(row.completedGrossQty)}</td>
-                  <td>{qty(row.completedNetQty)}</td>
-                  <td>{qty(row.productionRemainingQty)}</td>
-                  <td>{qty(row.invoicedQty)}</td>
-                  <td><span className={`pc2-status ${statusTone(row.legacyApproved ? "COMPLETED" : row.status)}`}>{row.legacyApproved ? "Tamamlandı · Eski üretim" : statusLabel(row.status)}</span></td>
-                  <td><div className="pc2-row-actions"><button className="primary" type="button" onClick={() => focusQuick(row)}><Layers3 size={14} /> Üretim Gir</button><button type="button" onClick={() => openDetail(row)}>Detay</button></div></td>
-                </tr>
-              ))}
+              {loading ? <tr><td colSpan={{IMALATTA:8,IRSALIYE:7,TAMAMLANAN:7,FATURA:8,ARSIV:6}[pool] || 8}>İmalat kayıtları yükleniyor…</td></tr> : null}
+              {!loading && !(center.rows || []).length ? <tr><td colSpan={{IMALATTA:8,IRSALIYE:7,TAMAMLANAN:7,FATURA:8,ARSIV:6}[pool] || 8}>
+                <div className="pc2-empty"><Boxes size={28} /><strong>{({IMALATTA:"Aktif üretim bulunamadı.",IRSALIYE:"İrsaliye eşleşmesi bekleyen yeni iş yok.",TAMAMLANAN:"Tamamlanmış üretim bulunamadı.",FATURA:"Fatura kontrolü gereken iş yok.",ARSIV:"Bu dönemde geçmiş üretim kaydı yok."})[pool]}</strong>
+                  <span>Dönemi değiştirebilir veya model aramasını temizleyebilirsiniz.</span>
+                  {pool === "IMALATTA" ? <button className="primary" type="button" onClick={() => {setDirectEntryModalOpen(true);setOpenRequestToken((v)=>v+1);}}><Layers3 size={16}/> Üretim Girişi</button> : null}
+                </div>
+              </td></tr> : null}
+              {(center.rows || []).map((row) => <tr key={row.id}>
+                <td><button className="pc2-thumb" type="button" onClick={() => openDetail(row)} aria-label={`${row.modelName} detay`}>{row.imageUrl ? <img src={imageSrc(row.imageUrl)} alt={row.modelName} loading="lazy" /> : <ImageIcon size={22}/>}</button></td>
+                <td><strong>{row.modelName}</strong><small>{row.companyName || "Firma bekliyor"}</small></td>
+                <td><strong>{productionDateTime(row).date}</strong><small>{productionDateTime(row).time}</small></td>
+                {pool === "IMALATTA" ? <>
+                  <td>{qty(row.incomingQty)}</td><td>{qty(row.completedGrossQty)}</td><td>{qty(row.productionRemainingQty)}</td>
+                  <td><span className={`pc2-status ${statusTone(detail.legacyApproved ? "COMPLETED" : row.status)}`}>{detail.legacyApproved ? "Tamamlandı" : statusLabel(row.status)}</span></td>
+                </> : null}
+                {pool === "IRSALIYE" ? <>
+                  <td>{qty(row.incomingQty)}</td><td>{qty(row.completedGrossQty)}</td>
+                  <td><span className="pc2-status warning">İrsaliye eşleşmedi</span></td>
+                </> : null}
+                {pool === "TAMAMLANAN" ? <>
+                  <td>{qty(row.completedGrossQty)}</td><td>{qty(row.completedNetQty)}</td>
+                  <td><span className="pc2-status success">{row.legacyApproved ? "Geçmiş tamamlandı" : "Tamamlandı"}</span></td>
+                </> : null}
+                {pool === "FATURA" ? <>
+                  <td>{qty(row.incomingQty)}</td><td>{qty(row.invoicedQty)}</td><td><strong>{qty(row.invoiceRemainingQty)}</strong></td>
+                  <td><span className="pc2-status warning">{Number(row.invoicedQty || 0) > 0 ? "Kısmi fatura" : "Fatura bekliyor"}</span></td>
+                </> : null}
+                {pool === "ARSIV" ? <>
+                  <td>{qty(row.completedNetQty)}</td><td><span className="pc2-status success">Geçmiş tamamlandı</span></td>
+                </> : null}
+                <td><div className="pc2-row-actions">
+                  {pool === "IMALATTA" ? <button className="primary" type="button" onClick={() => focusQuick(row)}><Layers3 size={14}/> Üretim Gir</button> : null}
+                  <button type="button" onClick={() => openDetail(row)}>Detay</button>
+                </div></td>
+              </tr>)}
             </tbody>
           </table>
         </div>
@@ -710,12 +739,12 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       <Drawer
         open={Boolean(detail)}
         title={detail?.modelName || "Model"}
-        subtitle={`${detail?.companyName || "Firma bekliyor"} · ${statusLabel(detail?.status)}`}
+        subtitle={`${detail?.companyName || "Firma bekliyor"} · ${detail?.legacyApproved ? "Geçmiş üretim tamamlandı" : statusLabel(detail?.status)}`}
         onClose={() => setDetail(null)}
         wide
-        footer={<><button type="button" onClick={() => setDetail(null)}>Kapat</button><button type="button" onClick={() => openModelPlan(detail)}><Pencil size={15} /> İmalat Planı</button><button className="primary" type="button" onClick={() => { focusQuick(detail); setDetail(null); }}><Layers3 size={15} /> Üretim Gir</button></>}
+        footer={<><button type="button" onClick={() => setDetail(null)}>Kapat</button>{pool === "IMALATTA" && !detail?.legacyApproved ? <><button type="button" onClick={() => openModelPlan(detail)}><Pencil size={15} /> İmalat Planı</button><button className="primary" type="button" onClick={() => { focusQuick(detail); setDetail(null); }}><Layers3 size={15} /> Üretim Gir</button></> : null}</>}
       >
-        {detail ? <ModelDetail detail={detail} onEdit={(row) => openEntry(detail, row)} onDelete={removeEntry} /> : null}
+        {detail ? <ModelDetail detail={detail} readOnly={pool !== "IMALATTA" || Boolean(detail.legacyApproved)} onEdit={(row) => openEntry(detail, row)} onDelete={removeEntry} /> : null}
       </Drawer>
     </div>
   );
@@ -725,7 +754,7 @@ function Metric({ label, value, helper, tone = "" }) {
   return <article className={`pc2-metric ${tone}`}><span>{label}</span><strong>{value}</strong><small>{helper}</small></article>;
 }
 
-function ModelDetail({ detail, onEdit, onDelete }) {
+function ModelDetail({ detail, readOnly = false, onEdit, onDelete }) {
   return (
     <div className="pc2-detail">
       <section className="pc2-detail-top">
@@ -744,8 +773,8 @@ function ModelDetail({ detail, onEdit, onDelete }) {
       </section>
 
       <section className="pc2-panel">
-        <header><div><h3><History size={17} /> Üretim geçmişi</h3><p>Kayıtları buradan düzelt veya sil.</p></div></header>
-        <div className="pc2-table-wrap"><table><thead><tr><th>Tarih</th><th>Bölge</th><th>Brüt</th><th>Net</th><th>Makine</th><th>Vardiya</th><th>Makinacı</th><th /></tr></thead><tbody>{(detail.productionEntries || []).length ? detail.productionEntries.map((row) => <tr key={row.id}><td>{dateText(row.date)}</td><td>{row.printArea}</td><td>{qty(row.grossQty)}</td><td>{qty(row.netQty)}</td><td>{row.machineName || row.machineId || "-"}</td><td>{row.shift || "-"}</td><td>{row.operatorName || "-"}</td><td><div className="pc2-row-actions"><button type="button" onClick={() => onEdit(row)}><Pencil size={14} /> Düzenle</button><button className="danger" type="button" onClick={() => onDelete(row)}><Trash2 size={14} /> Sil</button></div></td></tr>) : <tr><td colSpan={8}>Henüz üretim kaydı yok.</td></tr>}</tbody></table></div>
+        <header><div><h3><History size={17} /> Üretim geçmişi</h3><p>{readOnly ? "Üretim fişleri salt okunur olarak görüntülenir." : "Kayıtlı üretim fişlerini düzenle veya sil."}</p></div></header>
+        <div className="pc2-table-wrap"><table><thead><tr><th>Tarih</th><th>Bölge</th><th>Brüt</th><th>Net</th><th>Makine</th><th>Vardiya</th><th>Makinacı</th><th /></tr></thead><tbody>{(detail.productionEntries || []).length ? detail.productionEntries.map((row) => <tr key={row.id}><td>{dateText(row.date)}</td><td>{row.printArea}</td><td>{qty(row.grossQty)}</td><td>{qty(row.netQty)}</td><td>{row.machineName || row.machineId || "-"}</td><td>{row.shift || "-"}</td><td>{row.operatorName || "-"}</td><td>{readOnly ? <span className="pc2-readonly">Kayıtlı</span> : <div className="pc2-row-actions"><button type="button" onClick={() => onEdit(row)}><Pencil size={14} /> Düzenle</button><button className="danger" type="button" onClick={() => onDelete(row)}><Trash2 size={14} /> Sil</button></div>}</td></tr>) : <tr><td colSpan={8}>Henüz üretim kaydı yok.</td></tr>}</tbody></table></div>
       </section>
 
       <section className="pc2-detail-split">
