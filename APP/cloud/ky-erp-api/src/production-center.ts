@@ -995,7 +995,8 @@ async function buildCenter(
     return card;
   });
 
-  cards.sort((left, right) => text(right.lastActivityAt).localeCompare(text(left.lastActivityAt)));
+  // En yeni üretim kaydı üstte; modelin son düzenlenme zamanı sıralamayı bozmaz.
+  cards.sort((left, right) => text(right.productionLastAt || right.lastActivityAt).localeCompare(text(left.productionLastAt || left.lastActivityAt)) || text(right.lastActivityAt).localeCompare(text(left.lastActivityAt)));
   const summary = {
     modelCount: cards.length,
     openModelCount: cards.filter((row) => row.status !== "COMPLETED").length,
