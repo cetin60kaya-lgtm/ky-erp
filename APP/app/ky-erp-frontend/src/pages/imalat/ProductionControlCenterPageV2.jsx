@@ -199,6 +199,10 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
+  const [pool, setPool] = useState("IMALATTA");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [archiveYear, setArchiveYear] = useState("2026");
   const [page, setPage] = useState(1);
   const [designOpen, setDesignOpen] = useState(false);
   const [smartOpen, setSmartOpen] = useState(false);
@@ -234,13 +238,17 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     try {
       const tenant = activeMainCompany?.slug || activeMainCompany?.id;
       const loadResult = await loadModuleData({
-        scope: `imalat:${tenant}:merkez:${search}:${status}:${page}`,
+        scope: `imalat:${tenant}:merkez:${search}:${status}:${pool}:${startDate}:${endDate}:${archiveYear}:${page}`,
         sources: {
           center: {
             critical: true,
             load: () => getProductionCenter(activeMainCompany, {
               search,
               status,
+              pool,
+              startDate,
+              endDate,
+              year: pool === "ARSIV" ? archiveYear : "",
               page,
               pageSize: PAGE_SIZE,
               _ts: Date.now(),
@@ -519,6 +527,19 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
 
       <ProductionDirectEntryPanel activeMainCompany={activeMainCompany} models={dictionaries.models} machines={dictionaries.machines} companies={dictionaries.companies} preselectModelId={quickSelectedModel} openRequestToken={openRequestToken} modalOpen={directEntryModalOpen} onClose={() => setDirectEntryModalOpen(false)} onSaved={load} onModelCreated={load} />
 
+      <nav className="pc2-pool-tabs" aria-label="İmalat iş havuzları" style={{display:"flex",gap:8,flexWrap:"wrap",padding:"12px 0"}}>
+        {[
+          ["IMALATTA","İmalatta"],["IRSALIYE","İrsaliye Bekleyen"],["TAMAMLANAN","Tamamlanan"],["FATURA","Fatura Kontrol"],["ARSIV","Geçmiş Arşiv"]
+        ].map(([key,label]) => <button key={key} type="button" className={pool === key ? "primary" : ""} aria-current={pool === key ? "page" : undefined} onClick={() => { setPool(key); setStatus("ALL"); setPage(1); }}>{label}</button>)}
+        <button type="button" onClick={() => {setDirectEntryModalOpen(true);setOpenRequestToken((v)=>v+1);}}><Layers3 size={15}/> Üretim Girişi</button>
+      </nav>
+      <section className="pc2-toolbar" aria-label="Üretim tarih aralığı">
+        <label>Başlangıç <input type="date" value={startDate} onChange={(e)=>{setStartDate(e.target.value);setPage(1);}} /></label>
+        <label>Bitiş <input type="date" min={startDate || undefined} value={endDate} onChange={(e)=>{setEndDate(e.target.value);setPage(1);}} /></label>
+        {pool === "ARSIV" ? <label>Arşiv yılı <select value={archiveYear} onChange={(e)=>{setArchiveYear(e.target.value);setPage(1);}}>{Array.from({length:9},(_,i)=>String(2026-i)).map((year)=><option key={year} value={year}>{year}</option>)}</select></label> : null}
+        <button type="button" onClick={()=>{setStartDate("");setEndDate("");setPage(1);}}>Tarihleri temizle</button>
+      </section>
+      {pool === "ARSIV" ? <p className="pc2-notice">Geçmiş üretim fişleri korunur. Bu bölümdeki “Onaylandı” ifadesi yalnız eski üretim kaydının arşiv statüsüdür; irsaliye veya faturanın onaylandığı anlamına gelmez.</p> : null}
       <section className="pc2-metrics">
         <Metric label="Üretimde model" value={summary.modelCount || 0} helper="Yalnız gerçekten açılan modeller" />
         <Metric label="Gelen adet" value={qty(summary.totalIncomingQty)} helper="Eşleşen irsaliye / manuel hedef" />
@@ -565,7 +586,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
                   <td>{qty(row.completedNetQty)}</td>
                   <td>{qty(row.productionRemainingQty)}</td>
                   <td>{qty(row.invoicedQty)}</td>
-                  <td><span className={`pc2-status ${statusTone(row.status)}`}>{statusLabel(row.status)}</span></td>
+                  <td><span className={`pc2-status ${statusTone(row.legacyApproved ? "COMPLETED" : row.status)}`}>{row.legacyApproved ? "Onaylandı · Geçmiş üretim" : statusLabel(row.status)}</span></td>
                   <td><div className="pc2-row-actions"><button className="primary" type="button" onClick={() => focusQuick(row)}><Layers3 size={14} /> Üretim Gir</button><button type="button" onClick={() => openDetail(row)}>Detay</button></div></td>
                 </tr>
               ))}
