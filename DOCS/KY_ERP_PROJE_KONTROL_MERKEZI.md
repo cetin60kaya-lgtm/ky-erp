@@ -1,5 +1,12 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 08.11.2026 — Son üç ay model görselleri / File Hub hızlı eşleştirme (PR #526)
+
+- 08.08–08.11.2026 döneminden 147 farklı imalat modeli; 121 görsel adı başlangıçta `görsel/2026` içinde yoktu. Önceden hazır 4 JPEG kopyalandı. Kaynak PDF/AI/PSD'den çıkarılan yeni 82 JPEG X Google Drive kökünde dosya SHA-256 ve Drive connector'unda 82/82 isim+boyut ile doğrulandı; mevcut klasör toplamı 433 oldu.
+- [PR #526](https://github.com/cetin60kaya-lgtm/ky-erp/pull/526): DESEN/MODEL_IMAGE Drive bağından en yeni görsellerin öncelikli indekslenmesi; yalnız `image_url` boş tekil canonical UUID; aynı adlı farklı modellerde/önceden görselli kartta otomatik değişiklik yok; yeni model ve yeni token yok. Mevcut cron ve yetkili kullanıcı senkronu çalışır.
+- **Canlı sınır:** GitHub CI, merge, Pages/Worker yeni sürüm ancestry ve gerçek D1 File Hub ilişkisi/önizleme ekranı ayrıca doğrulanmalıdır; 82 Drive dosyası henüz 82 bağlı ERP modeli demek değildir. X'te Wrangler login yok; canlı D1 write veya şema değişikliği yapılmadı. 39 modelin kaynak kararı bekler. Ayrıntı: [DESEN eksik görsel çalışma kaydı](KY_ERP_DESEN_2026_GORSEL_EKSIK_TAMAMLAMA_20261108.md).
+
+
 ## 05.11.2026 — DESEN ortak PSD kalıbı, gerçek santimetre varyantları ve canlı kabul (PR #519)
 - [PR #519](https://github.com/cetin60kaya-lgtm/ky-erp/pull/519) dalı `feature/desen-ortak-kalip-boy-eslesme-20261105`; fiziksel PSD adı korunur, model başına sınırsız en×boy cm varyantı, ürün bedenleri ayrı, ortak model/raf/yerleşim/önizleme araması ve kontrollü OCR metin adayları kodlandı. PDF metin çıkarma gerçek taranmış görüntü OCR'ı kabulü değildir.
 - **Gerçek DESEN Windows kabulü:** 05.11 ~08:32 TRT özel Chat Bridge eşleşen `status` sonucu `ok=true`, `desktop=true`, Hub8840/Mesh8443=true; Remote Commander DESEN Online. Yerel canonical repo `ab8a4b67` → `5e5e01af` fast-forward; iki untracked XLSM aktarım betiği dosya içerik SHA'sı GitHub versiyonuyla aynı doğrulanarak güvenli Git stash yedeğinde korundu. Çalışma ağacı temiz, PSD worker dosyası mevcut.
