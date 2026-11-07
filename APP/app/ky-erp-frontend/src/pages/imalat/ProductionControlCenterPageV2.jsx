@@ -71,8 +71,15 @@ const dateText = (value) => {
 const productionDateTime = (row) => {
   const date = row.productionLastAt || row.productionStartAt || row.lastActivityAt;
   const timestamp = String(row.productionLastTimestamp || "");
-  const time = /T\d{2}:\d{2}/.test(timestamp) ? timestamp.match(/T(\d{2}:\d{2})/)?.[1] : "";
-  return { date: dateText(date), time: time || "Saat kaydı yok" };
+  let time = "";
+  if (/T\d{2}:\d{2}/.test(timestamp)) {
+    const parsed = new Date(timestamp);
+    const zoned = /(?:Z|[+-]\d{2}:\d{2})$/.test(timestamp);
+    time = zoned && !Number.isNaN(parsed.getTime())
+      ? parsed.toLocaleTimeString("tr-TR", { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit" })
+      : timestamp.match(/T(\d{2}:\d{2})/)?.[1] || "";
+  }
+  return { date: dateText(date), time: time ? `Kayıt: ${time}` : "Saat bilgisi yok" };
 };
 
 function machineId(machine) {
