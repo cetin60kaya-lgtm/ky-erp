@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 08.11.2026 — DESEN Drive 2026 tam sayfalı senkron + kullanıcı ilerlemesi (PR çalışması)
+
+- **Önceki PR #526 yayın kanıtı:** birleştirme `ca65340bb9e00a98c202e933b84742c8e94c6f04`; birleştirmeden sonraki canonical yayın commit'i `96661464657413667258886152e88be41e72f344` bu commit'i içeriyor. Frontend Actions run `42425243523` SUCCESS ve API/Security run `42425245908` SUCCESS. Bu kaynak/yayın kanıtıdır, D1 File Hub ilişki sayımı değildir.
+- **Sorun:** PR #526'nin yeni görsel öncelikli yolu Google Drive `görsel/2026` klasöründeki en yeni 100 JPEG'den fazlasını okumuyordu. 433 kayıtlı dosya olduğundan eski sıralı eksikler dışarıda kalabiliyordu; arayüzde öncelikli tarama/ilerleme takibi görünmüyordu.
+- **Düzeltme:** Sunucu her 100 dosyalık tur sonrası `nextPageToken` ile kaldığı yerden devam eder; bağlantı/tenant-kapsamlı `modelImageFastProgress` ile `scannedTotal`, `linkedTotal`, `completedAt` ve hatayı saklar. 5 dakikalık mevcut cron ile devam eder; yeni görev/worker veya tarama sistemi açılmaz. Hata aynı sayfa imlecini korur; Cloudflare D1 lease/CAS devam eder; eski dosyaya/model görseline yazılmaz. Owner/admin mevcut File Hub bağlantısı altında manuel **Drive Görsellerini Eşleştir** düğmesini kullanabilir.
+- **Arayüz:** DESEN Gelen Desenler üzerindeki File Hub kontrolünde model görsellerinin durum ve sayaçları gösterilir, tamamlanmadan tamamlandı mesajı verilmez. Firma değişince kaynaklar yeniden okunur. API/OAuth bilgisi gösterilmez.
+- **Saha sınırı:** Kullanıcının mevcut ERP yetkili oturumundan gerçek `file_hub_connections` / `file_hub_relations` D1 okuma, bağlantı durumu ve yeni önizlemelerin (ör. NYCTEAM, TEAMSPORT) açılması henüz ayrı kabul gerektirir. DESEN Chat Bridge status talebi bu turda gönderildi, eşleşen Windows yanıtı alınmadığı sürece DESEN Online yazılamaz. X Wrangler oturumu yetkisizdi; D1 credential/token istenmedi veya taşınmadı. 39 belirsiz görsel kaynak kararı açık; sahte Pantone/görsel üretilemez.
+
+
 ## 08.11.2026 — Son üç ay model görselleri / File Hub hızlı eşleştirme (PR #526)
 
 - 08.08–08.11.2026 döneminden 147 farklı imalat modeli; 121 görsel adı başlangıçta `görsel/2026` içinde yoktu. Önceden hazır 4 JPEG kopyalandı. Kaynak PDF/AI/PSD'den çıkarılan yeni 82 JPEG X Google Drive kökünde dosya SHA-256 ve Drive connector'unda 82/82 isim+boyut ile doğrulandı; mevcut klasör toplamı 433 oldu.
