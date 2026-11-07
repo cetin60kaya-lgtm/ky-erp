@@ -640,7 +640,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
                   <td><span className="pc2-status success">{row.legacyApproved ? "Geçmiş tamamlandı" : "Tamamlandı"}</span></td>
                 </> : null}
                 {pool === "FATURA" ? <>
-                  <td>{qty(row.incomingQty)}</td><td>{qty(row.invoicedQty)}</td><td><strong>{qty(row.invoiceRemainingQty)}</strong></td>
+                  <td>{Number(row.dispatchCount || 0) > 0 ? qty(row.dispatchQty) : <span className="pc2-readonly">İrsaliye yok · plan: {qty(row.incomingQty)}</span>}</td><td>{qty(row.invoicedQty)}</td><td><strong>{qty(row.invoiceRemainingQty)}</strong></td>
                   <td><span className="pc2-status warning">{Number(row.invoicedQty || 0) > 0 ? "Kısmi fatura" : "Fatura bekliyor"}</span></td>
                 </> : null}
                 {pool === "ARSIV" ? <>
