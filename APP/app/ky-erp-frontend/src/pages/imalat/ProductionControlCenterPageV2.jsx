@@ -563,19 +563,19 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
         <span className="pc2-period-note">Tarih seçimi yalnızca listedeki kayıtları filtreler.</span>
       </section>
       {pool === "ARSIV" ? <p className="pc2-notice">Geçmiş üretim fişleri korunur. Bu bölümdeki “Onaylandı” ifadesi yalnız eski üretim kaydının arşiv statüsüdür; irsaliye veya faturanın onaylandığı anlamına gelmez.</p> : null}
-      <p className="pc2-metrics-caption">Genel üretim özeti · dönem ve havuz filtresinden bağımsız</p>
+      <p className="pc2-metrics-caption">Seçili havuz ve döneme ait üretim özeti</p>
       <section className="pc2-metrics">
-        <Metric label="Üretimde model" value={summary.modelCount || 0} helper="Yalnız gerçekten açılan modeller" />
+        <Metric label="Listelenen model" value={summary.modelCount || 0} helper="Seçili havuz ve dönem" />
         <Metric label="Gelen adet" value={qty(summary.totalIncomingQty)} helper="Eşleşen irsaliye / manuel hedef" />
         <Metric label="Net tamamlanan" value={qty(summary.totalCompletedNetQty)} helper="Sakat ve test düşülmüş" tone="success" />
         <Metric label="Üretim bekleyen" value={summary.productionOpenCount || 0} helper="Eksik üretim" tone="blue" />
-        <Metric label="İrsaliye bekleyen" value={summary.dispatchWaitingCount || 0} helper="Üretim var, irsaliye yok" tone="warning" />
+        <Metric label="İrsaliye bekleyen" value={summary.dispatchWaitingCount || 0} helper="Yeni işlerde irsaliyesi eşleşmeyen" tone="warning" />
         <Metric label="Kontrol gerekli" value={summary.controlCount || 0} helper="Fazla üretim / fatura" tone={summary.controlCount ? "danger" : "success"} />
       </section>
 
       <section className="pc2-toolbar">
         <label className="pc2-search"><Search size={16} /><input value={search} onChange={(event) => { setPage(1); setSearch(event.target.value); }} placeholder="Model, firma, sipariş veya irsaliye ara" /></label>
-        <select value={status} onChange={(event) => { setPage(1); setStatus(event.target.value); }}>
+        <select aria-label="Duruma göre filtrele" value={status} onChange={(event) => { setPage(1); setStatus(event.target.value); }}>
           <option value="ALL">Tüm durumlar</option>
           <option value="NEW_MODEL">Yeni model</option>
           <option value="DISPATCH_WAITING">İrsaliye bekliyor</option>
