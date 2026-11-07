@@ -2,6 +2,7 @@ import { CircleAlert, Gauge } from "lucide-react";
 import ImalatKontrolRapor from "../imalat/ImalatKontrolRapor";
 import ProductionControlCenterPage from "../imalat/ProductionControlCenterPage";
 import ProductionSettingsPage from "../imalat/ProductionSettingsPage";
+import ProductionHistoryArchivePage from "../imalat/ProductionHistoryArchivePage";
 import "../imalat/productionCenter.css";
 
 function CompanyPending() {
@@ -45,11 +46,20 @@ export default function UretimPage({ activeMainCompany, activeTab }) {
     );
   }
 
+  if (activeTab === "uretim-gecmis-arsiv") {
+    return <ProductionHistoryArchivePage activeMainCompany={activeMainCompany} />;
+  }
+
   if (activeTab === "uretim-ayarlari") {
     return <ProductionSettingsPage activeMainCompany={activeMainCompany} />;
   }
 
-  return (
-    <ProductionControlCenterPage activeMainCompany={activeMainCompany} />
-  );
+  const pool = {
+    "uretim-merkezi": "IMALATTA",
+    "irsaliye-bekleyen": "IRSALIYE",
+    "uretim-tamamlanan": "TAMAMLANAN",
+    "fatura-kontrol": "FATURA",
+  }[activeTab] || "IMALATTA";
+
+  return <ProductionControlCenterPage activeMainCompany={activeMainCompany} pool={pool} />;
 }
