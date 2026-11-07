@@ -999,7 +999,7 @@ async function buildCenter(
     modelCount: cards.length,
     openModelCount: cards.filter((row) => row.status !== "COMPLETED").length,
     modelWaitingCount: cards.filter((row) => row.status === "MODEL_WAITING").length,
-    dispatchWaitingCount: cards.filter((row) => row.status === "DISPATCH_WAITING").length,
+    dispatchWaitingCount: cards.filter((row) => !row.legacyApproved && row.dispatchCount === 0 && (row.completedGrossQty > 0 || row.expectedQty > 0)).length,
     productionOpenCount: cards.filter((row) => row.status === "PRODUCTION_OPEN").length,
     invoiceOpenCount: cards.filter((row) => row.status === "INVOICE_OPEN").length,
     controlCount: cards.filter((row) => ["MODEL_WAITING", "DISPATCH_WAITING", "OVER_PRODUCTION", "OVER_INVOICED"].includes(row.status)).length,
