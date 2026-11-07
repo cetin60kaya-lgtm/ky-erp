@@ -211,14 +211,14 @@ function defaultEntry(model, dictionaries, source = null, preferences = {}) {
   };
 }
 
-export default function ProductionControlCenterPageV2({ activeMainCompany }) {
+export default function ProductionControlCenterPageV2({ activeMainCompany, pool = "IMALATTA" }) {
   const [center, setCenter] = useState({ rows: [], summary: {}, pagination: {} });
   const [dictionaries, setDictionaries] = useState({ models: [], machines: [], operators: [], companies: [] });
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
-  const [pool, setPool] = useState("IMALATTA");
+
   const [period, setPeriod] = useState("ALL");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -321,6 +321,14 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     const timer = window.setTimeout(load, 150);
     return () => { window.clearTimeout(timer); requestSeq.current += 1; };
   }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+    setStatus("ALL");
+    setSearch("");
+    setDetail(null);
+    setCenter({ rows: [], summary: {}, pagination: {} });
+  }, [pool]);
 
   const summary = center.summary || {};
 
@@ -531,15 +539,22 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     <div className="pc2-page">
       <section className="pc2-head">
         <div>
-          <span>İMALAT · TEK MERKEZ</span>
-          <h1>İmalat · Üretim Girişi</h1>
-          <p>Excel düzenindeki alanlarla üretimi gir, kaydet, son fişleri ve modelleri tek yerden takip et.</p>
+          <span>İMALAT · İŞLEM MERKEZİ</span>
+          <h1>{({ IMALATTA: "İmalatta", IRSALIYE: "İrsaliye Bekleyen", TAMAMLANAN: "Tamamlanan Üretimler", FATURA: "Fatura Kontrol", ARSIV: "Geçmiş Üretim Arşivi" })[pool]}</h1>
+          <p>{({ IMALATTA: "Aktif üretimler, günlük fişler ve iş bazında ilerleme.", IRSALIYE: "Yeni üretimlerin eksik irsaliye bağlantılarını takip et.", TAMAMLANAN: "Biten üretimler; tarihi, saati ve model görseliyle.", FATURA: "İrsaliye ve faturalandırılan adetlerin mutabakatı.", ARSIV: "Geçmiş yılların üretim fişleri. Kayıtlar salt okunur." })[pool]}</p>
         </div>
         <div className="pc2-actions">
-          <button className="primary" type="button" onClick={() => { setDirectEntryModalOpen(true); setOpenRequestToken((current) => current + 1); }}><Layers3 size={16} /> Üretim Girişi</button>
-          <button type="button" onClick={() => setDesignOpen(true)}><ImageIcon size={16} /> Desenlerden Model Al</button>
-          <button type="button" onClick={() => setModelOpen(true)}><CirclePlus size={16} /> Yeni Model</button>
-          <details className="pc2-more-actions"><summary>Diğer işlemler</summary><div className="pc2-more-menu"><button type="button" onClick={() => { setSmartOpen(true); }}><Zap size={16} /> Metinden Akıllı Seri Giriş</button><button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16} /> Geçmiş CSV Al</button></div></details>
+          {pool === "IMALATTA" ? <>
+            <button className="primary" type="button" onClick={() => { setDirectEntryModalOpen(true); setOpenRequestToken((current) => current + 1); }}><Layers3 size={16} /> Üretim Girişi</button>
+            <details className="pc2-more-actions"><summary>Diğer işlemler</summary><div className="pc2-more-menu">
+              <button type="button" onClick={() => setDesignOpen(true)}><ImageIcon size={16}/> Desenlerden Model Al</button>
+              <button type="button" onClick={() => setModelOpen(true)}><CirclePlus size={16}/> Yeni Model</button>
+              <button type="button" onClick={() => setSmartOpen(true)}><Zap size={16}/> Akıllı Seri Giriş</button>
+              <button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16}/> Geçmiş CSV Al</button>
+            </div></details>
+          </> : null}
+          {pool === "IRSALIYE" ? <a className="pc2-link-action" href="/e-belge/eslestirmeler"><FileCheck2 size={16}/> İrsaliye Eşleştirme</a> : null}
+          {pool === "FATURA" ? <a className="pc2-link-action" href="/e-belge/giden-belgeler"><FileText size={16}/> Muhasebede Faturalar</a> : null}
         </div>
       </section>
 
@@ -547,21 +562,6 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
 
       <ProductionDirectEntryPanel activeMainCompany={activeMainCompany} models={dictionaries.models} machines={dictionaries.machines} companies={dictionaries.companies} preselectModelId={quickSelectedModel} openRequestToken={openRequestToken} modalOpen={directEntryModalOpen} onClose={() => setDirectEntryModalOpen(false)} onSaved={load} onModelCreated={load} />
 
-      <div className="pc2-workspace" style={{display:"grid",gridTemplateColumns:"minmax(185px, 215px) minmax(0, 1fr)",gap:16,alignItems:"start"}}>
-        <nav aria-label="İmalat iş bölümleri" style={{display:"grid",gap:8,padding:12,background:"var(--surface, #fff)",border:"1px solid #dbe3ef",borderRadius:12,position:"sticky",top:12}}>
-          <strong style={{fontSize:12,color:"#52637b",padding:"6px 8px"}}>İMALAT İŞLEMLERİ</strong>
-          {[["IMALATTA","İmalatta","Üretimi süren işler"],["IRSALIYE","İrsaliye Bekleyen","Yeni sevk eşleşmeleri"],["TAMAMLANAN","Tamamlanan","Biten üretimler"],["FATURA","Fatura Kontrol","Fatura mutabakatı"]].map(([key,label,description]) =>
-            <button key={key} type="button" aria-current={pool===key?"page":undefined} onClick={()=>{setPool(key);setStatus("ALL");setPage(1);}} style={{textAlign:"left",display:"grid",gap:3,padding:"12px 10px",borderRadius:9,border:pool===key?"1px solid #2b65c9":"1px solid #e0e7f1",background:pool===key?"#eaf2ff":"#fff",color:"#19365c",cursor:"pointer"}}>
-              <strong>{label}</strong><small style={{fontSize:11,color:"#61718a"}}>{description}</small>
-            </button>
-          )}
-          <small style={{padding:8,color:"#61718a"}}>Geçmiş üretimler: İmalat → Rapor</small>
-        </nav>
-        <div style={{minWidth:0,display:"grid",gap:12}}>
-          <header style={{padding:"14px 18px",border:"1px solid #dbe3ef",borderRadius:12,background:"#fff"}}>
-            <h2 style={{margin:"0 0 4px",fontSize:19}}>{({IMALATTA:"Aktif İmalat",IRSALIYE:"İrsaliye Bekleyen İşler",TAMAMLANAN:"Tamamlanan Üretimler",FATURA:"Fatura Kontrol ve Mutabakat"})[pool]}</h2>
-            <p style={{margin:0,color:"#64748b",fontSize:13}}>{({IMALATTA:"Yalnız üretimi devam eden modeller. Yeni üretim girişi bu bölümden yapılır.",IRSALIYE:"İrsaliye bağlantısı eksik yeni üretimler; geçmişte tamamlanan fişler bu listeye alınmaz.",TAMAMLANAN:"Tamamlanmış üretim kayıtları, tarih ve saat bilgileriyle izlenir.",FATURA:"Üretilen net adet, faturalanan adet ve açık fatura miktarı karşılaştırılır."})[pool]}</p>
-          </header>
       <section className="pc2-toolbar pc2-period-toolbar" aria-label="Üretim dönem filtresi">
         <label>Dönem <select aria-label="Üretim dönemi" value={period} onChange={(event) => {
           const next = event.target.value; const dates = periodDates(next);
@@ -637,9 +637,6 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
           </table>
         </div>
       </section>
-
-        </div>
-      </div>
 
       <ProductionHistoryImportDrawer
         open={historyOpen}
