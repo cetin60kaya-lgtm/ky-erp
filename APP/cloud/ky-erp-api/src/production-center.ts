@@ -975,7 +975,13 @@ async function buildCenter(
       productionEntries: entries.sort((left, right) => text(right.date).localeCompare(text(left.date))),
       productionStartAt: entries.map((row) => text(row.date || row.createdAt).slice(0, 10)).filter(Boolean).sort()[0] || "",
       productionLastAt: entries.map((row) => text(row.date || row.createdAt).slice(0, 10)).filter(Boolean).sort().at(-1) || "",
-      productionLastTimestamp: entries.map((row) => text(row.date)).filter((value) => /T\d{2}:\d{2}/.test(value)).sort().at(-1) || "",
+      productionLastTimestamp: entries.map((row) => {
+        const workTime = text(row.date);
+        if (/T\d{2}:\d{2}/.test(workTime)) return workTime;
+        const savedTime = text(row.createdAt);
+        // İçe aktarımdaki işlem saatini geçmiş üretim saatiymiş gibi kullanma.
+        return workTime.slice(0, 10) === savedTime.slice(0, 10) && /T\d{2}:\d{2}/.test(savedTime) ? savedTime : "";
+      }).filter(Boolean).sort().at(-1) || "",
       // Eski fişleri silmeden, yalnız tarihsel üretim ekranında onaylı göster.
       legacyApproved: entries.length > 0 && entries.every((row) => {
         const day = text(row.date || row.createdAt).slice(0, 10);
