@@ -87,8 +87,16 @@ export const MODULES = [
     label: "İmalat",
     icon: "imalat",
     groups: [
-      { label: "Üretim", tabs: [["uretim-merkezi", "Model ve Üretim Kontrol Merkezi", "imalat"]] },
-      { label: "Rapor", tabs: [["uretim-raporlari", "Üretim Raporları", "raporlar"]] },
+      { label: "Üretim İşlemleri", tabs: [
+        ["uretim-merkezi", "İmalatta", "imalat"],
+        ["irsaliye-bekleyen", "İrsaliye Bekleyen", "dosya"],
+        ["uretim-tamamlanan", "Tamamlanan", "file-check"],
+        ["fatura-kontrol", "Fatura Kontrol", "raporlar"],
+      ] },
+      { label: "Rapor", tabs: [
+        ["uretim-raporlari", "Üretim Raporları", "raporlar"],
+        ["uretim-gecmis-arsiv", "Geçmiş Üretim Arşivi", "dosya"],
+      ] },
       { label: "Makine & Vardiya", tabs: [["uretim-ayarlari", "Makine ve Vardiya Ayarları", "ayarlar"]] },
     ],
   },
@@ -188,6 +196,10 @@ export const MODULE_ROUTE_ALIASES = {
     "manuel-is-ac": "uretim-merkezi",
     "imalat-kontrol-rapor": "uretim-raporlari",
     "uretim-raporu": "uretim-raporlari",
+    "imalat-irsaliye": "irsaliye-bekleyen",
+    "tamamlanan-imalat": "uretim-tamamlanan",
+    "imalat-fatura-kontrol": "fatura-kontrol",
+    "imalat-gecmis": "uretim-gecmis-arsiv",
     "imalat-raporlari": "uretim-raporlari",
   },
   admin: {
