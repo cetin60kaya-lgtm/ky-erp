@@ -59,8 +59,10 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
   const [message, setMessage] = useState("");
   const [imageSyncStatus, setImageSyncStatus] = useState(null);
   const [syncingImages, setSyncingImages] = useState(false);
+  const companyKey = String(activeMainCompany?.slug || activeMainCompany?.id || "");
 
   const load = useCallback(async () => {
+    if (!companyKey) { setTargets([]); setImageSyncStatus(null); setMessage(""); return; }
     setBusy(true);
     setMessage("");
     const settled = await Promise.allSettled(
@@ -96,7 +98,7 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
       setMessage("Bulut depolama kaydı var ancak doğrudan bulut senkronu henüz hazır değil. OAuth hesabı, uzak klasör ve CLOUD_API bağlantısını Depolama ekranından tamamlayın.");
     }
     setBusy(false);
-  }, [activeMainCompany?.slug, activeMainCompany?.id]);
+  }, [companyKey]);
 
   useEffect(() => { load(); }, [load]);
 
