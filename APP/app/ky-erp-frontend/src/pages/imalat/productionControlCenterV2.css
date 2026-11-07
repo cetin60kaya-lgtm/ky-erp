@@ -30,3 +30,28 @@
 .pc2-period-note { margin-left:auto; font-size:12px; color:#64748b; }
 .pc2-metrics-caption { margin:10px 0 5px; color:#64748b; font-size:12px; font-weight:600; }
 @media (max-width:850px) { .pc2-period-toolbar { align-items:stretch; } .pc2-period-note { margin-left:0; width:100%; } .pc2-period-dates { width:100%; } }
+
+
+/* İmalat'ın dört bağımsız rota ekranı: tekrar eden iç menü yoktur. */
+.pc2-page{gap:10px;background:#f4f7fb}
+.pc2-head{border-radius:13px;padding:16px 20px}
+.pc2-head h1{font-size:22px;line-height:1.2}
+.pc2-head p{font-size:13px;max-width:770px}
+.pc2-link-action{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid #b9d1ee;border-radius:9px;background:#eff6ff;color:#174a8b;padding:9px 12px;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap}
+.pc2-link-action:hover,.pc2-link-action:focus-visible{background:#e0eeff;outline:2px solid transparent}
+.pc2-metrics.pc2-metrics-compact{grid-template-columns:repeat(3,minmax(0,1fr));}
+.pc2-metrics-compact .pc2-metric{padding:13px 16px}
+.pc2-list-toolbar{grid-template-columns:minmax(200px,1fr) auto auto}
+.pc2-record-total{font-variant-numeric:tabular-nums;white-space:nowrap}
+.pc2-pagination{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:3px 2px;font-size:12px;color:#52637b}
+.pc2-pagination span{white-space:nowrap}
+.pc2-table-card .pc2-table-wrap table{min-width:760px}
+.pc2-table-card .pc2-table-wrap th{padding:11px 12px;letter-spacing:.01em}
+.pc2-table-card .pc2-table-wrap td{padding:11px 12px}
+.pc2-table-card .pc2-table-wrap tr:hover td{background:#f8fbff}
+.pc2-table-card .pc2-row-actions{white-space:nowrap;justify-content:flex-start}
+.pc2-table-card .pc2-row-actions button{padding:7px 10px;font-size:12px}
+@media(max-width:900px){.pc2-head{flex-wrap:wrap}.pc2-metrics.pc2-metrics-compact{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.pc2-metrics.pc2-metrics-compact{grid-template-columns:1fr 1fr}.pc2-list-toolbar{grid-template-columns:1fr auto}.pc2-list-toolbar .pc2-search{grid-column:1/-1}.pc2-head{padding:14px}.pc2-pagination{justify-content:space-between}}
+
+.pc2-readonly{font-size:11px;color:#66798c;font-weight:600;background:#f3f6fb;border:1px solid #e1e8f1;border-radius:6px;padding:5px 8px;white-space:nowrap}
