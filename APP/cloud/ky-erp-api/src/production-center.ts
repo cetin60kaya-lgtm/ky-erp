@@ -971,6 +971,13 @@ async function buildCenter(
       operationRows: metrics.operationRows,
       dispatches,
       productionEntries: entries.sort((left, right) => text(right.date).localeCompare(text(left.date))),
+      productionStartAt: entries.map((row) => text(row.date || row.createdAt).slice(0, 10)).filter(Boolean).sort()[0] || "",
+      productionLastAt: entries.map((row) => text(row.date || row.createdAt).slice(0, 10)).filter(Boolean).sort().at(-1) || "",
+      // Eski fişleri silmeden, yalnız tarihsel üretim ekranında onaylı göster.
+      legacyApproved: entries.length > 0 && entries.every((row) => {
+        const day = text(row.date || row.createdAt).slice(0, 10);
+        return day.length === 10 && day < "2026-11-08";
+      }) && !dispatches.some((row) => text(row.date).slice(0, 10) >= "2026-11-08") && !invoices.some((row) => text(row.date).slice(0, 10) >= "2026-11-08"),
       invoices,
       lastActivityAt: [
         model.updatedAt,
@@ -1030,14 +1037,27 @@ function listCard(card: Row): Row {
 function filterCards(cards: Row[], query: Row): Row[] {
   const search = normalized(query.search || query.q);
   const status = normalized(query.status);
+  const pool = normalized(query.pool || "IMAlATTA");
   const companyId = text(query.companyId);
+  const startDate = text(query.startDate).slice(0, 10);
+  const endDate = text(query.endDate).slice(0, 10);
+  const year = text(query.year);
   return cards.filter((card) => {
+    const legacy = Boolean(card.legacyApproved);
+    const productionComplete = card.status === "COMPLETED" || (card.completedGrossQty > 0 && card.productionRemainingQty <= 0 && card.incomingQty > 0);
+    if (pool === "ARSIV" && !legacy) return false;
+    if (pool === "IMAlATTA" && (legacy || productionComplete)) return false;
+    if (pool === "TAMAMLANAN" && (legacy || !productionComplete)) return false;
+    if (pool === "IRSALIYE" && (legacy || card.dispatchCount > 0 || !(card.completedGrossQty > 0 || card.expectedQty > 0))) return false;
+    if (pool === "FATURA" && (legacy || card.invoiceRemainingQty <= 0)) return false;
     if (status && status !== "ALL" && normalized(card.status) !== status) return false;
     if (companyId && card.companyId !== companyId) return false;
+    const day = text(card.productionStartAt || card.lastActivityAt).slice(0, 10);
+    if (startDate && (!day || day < startDate)) return false;
+    if (endDate && (!day || day > endDate)) return false;
+    if (pool === "ARSIV" && year && day.slice(0, 4) !== year) return false;
     if (!search) return true;
-    return normalized(
-      `${card.modelName || ""} ${card.companyName || ""} ${card.orderNo || ""} ${card.defaultDispatchNo || ""}`,
-    ).includes(search);
+    return normalized(`${card.modelName || ""} ${card.companyName || ""} ${card.orderNo || ""} ${card.defaultDispatchNo || ""}`).includes(search);
   });
 }
 
@@ -1596,6 +1616,10 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
       search: c.req.query("search"),
       status: c.req.query("status"),
       companyId: c.req.query("companyId"),
+      pool: c.req.query("pool"),
+      startDate: c.req.query("startDate"),
+      endDate: c.req.query("endDate"),
+      year: c.req.query("year"),
     });
     const rawPage = Number(c.req.query("page") || 1);
     const rawSize = Number(c.req.query("pageSize") || 100);
@@ -1607,7 +1631,7 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
       success: true,
       data: {
         rows: filtered.slice(start, start + pageSize).map(listCard),
-        summary: center.summary,
+        summary: { ...center.summary, modelCount: filtered.length, dispatchWaitingCount: filtered.filter((row) => !row.legacyApproved && row.dispatchCount === 0 && row.completedGrossQty > 0).length, totalCompletedNetQty: filtered.reduce((sum, row) => sum + numberValue(row.completedNetQty), 0), totalIncomingQty: filtered.reduce((sum, row) => sum + numberValue(row.incomingQty), 0) },
         pagination: { page, pageSize, total: filtered.length },
       },
     });
