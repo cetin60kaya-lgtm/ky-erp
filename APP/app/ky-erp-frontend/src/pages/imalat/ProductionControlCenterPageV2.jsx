@@ -199,6 +199,8 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
+  const [billing, setBilling] = useState("ALL");
+  const [recentDays, setRecentDays] = useState(60);
   const [page, setPage] = useState(1);
   const [designOpen, setDesignOpen] = useState(false);
   const [smartOpen, setSmartOpen] = useState(false);
@@ -234,13 +236,15 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     try {
       const tenant = activeMainCompany?.slug || activeMainCompany?.id;
       const loadResult = await loadModuleData({
-        scope: `imalat:${tenant}:merkez:${search}:${status}:${page}`,
+        scope: `imalat:${tenant}:merkez:${search}:${status}:${billing}:${recentDays}:${page}`,
         sources: {
           center: {
             critical: true,
             load: () => getProductionCenter(activeMainCompany, {
               search,
               status,
+              billing,
+              recentDays,
               page,
               pageSize: PAGE_SIZE,
               _ts: Date.now(),
@@ -279,7 +283,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     } finally {
       if (ticket === requestSeq.current) setLoading(false);
     }
-  }, [activeMainCompany, search, status, page]);
+  }, [activeMainCompany, search, status, billing, recentDays, page]);
 
   useEffect(() => {
     setPage(1);
@@ -539,7 +543,20 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
           <option value="COMPLETED">Tamamlandı</option>
           <option value="OVER_PRODUCTION">Fazla üretim</option>
         </select>
-        <span>{center.pagination?.total || center.rows?.length || 0} kayıt</span>
+        <select aria-label="Tarih aralığı" value={recentDays} onChange={(event) => { setPage(1); setRecentDays(Number(event.target.value)); }}>
+          <option value={30}>Son 30 gün</option>
+          <option value={60}>Son 60 gün</option>
+          <option value={90}>Son 90 gün</option>
+          <option value={0}>Tüm kayıtlar</option>
+        </select>
+        <select aria-label="Fatura durumu" value={billing} onChange={(event) => { setPage(1); setBilling(event.target.value); }}>
+          <option value="ALL">Tüm faturalar</option>
+          <option value="UNBILLED">Üretildi, fatura yok</option>
+          <option value="PARTIAL">Kısmen faturalandı</option>
+          <option value="FULL">Tam faturalandı</option>
+          <option value="BILLED">Faturası olanlar</option>
+        </select>
+        <span>{center.pagination?.total ?? center.rows?.length ?? 0} eşleşen kayıt</span>
         <button type="button" onClick={load} disabled={loading}><RefreshCcw size={15} /> Yenile</button>
       </section>
 
@@ -552,10 +569,10 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       <section className="pc2-table-card">
         <div className="pc2-table-wrap">
           <table>
-            <thead><tr><th>Görsel</th><th>Model / Firma</th><th>Gelen</th><th>Üretim</th><th>Net</th><th>Kalan</th><th>Faturalanan</th><th>Durum</th><th /></tr></thead>
+            <thead><tr><th>Görsel</th><th>Model / Firma</th><th>Gelen</th><th>Üretim</th><th>Net</th><th>Kalan</th><th>Faturalanan</th><th>Fatura Kalan</th><th>Fatura Durumu</th><th>Durum</th><th /></tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={9}>İmalat verileri yükleniyor…</td></tr> : null}
-              {!loading && !(center.rows || []).length ? <tr><td colSpan={9}><div className="pc2-empty"><Boxes size={28} /><strong>İmalat merkezi temiz ve boş.</strong><span>Desenlerden Model Al ile ilk modeli üretime aç.</span><button className="primary" onClick={() => setDesignOpen(true)}><ImageIcon size={16} /> Desenlerden Model Al</button></div></td></tr> : null}
+              {loading ? <tr><td colSpan={11}>İmalat verileri yükleniyor…</td></tr> : null}
+              {!loading && !(center.rows || []).length ? <tr><td colSpan={11}><div className="pc2-empty"><Boxes size={28} /><strong>Seçili filtrede kayıt bulunamadı.</strong><span>Son 60 gün veya fatura filtresini değiştirin. Yeni model için Desenlerden Model Al'ı kullanın.</span><button className="primary" onClick={() => setDesignOpen(true)}><ImageIcon size={16} /> Desenlerden Model Al</button></div></td></tr> : null}
               {(center.rows || []).map((row) => (
                 <tr key={row.id}>
                   <td><button className="pc2-thumb" type="button" onClick={() => openDetail(row)}>{row.imageUrl ? <img src={imageSrc(row.imageUrl)} alt={row.modelName} /> : <ImageIcon size={22} />}</button></td>
@@ -565,6 +582,8 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
                   <td>{qty(row.completedNetQty)}</td>
                   <td>{qty(row.productionRemainingQty)}</td>
                   <td>{qty(row.invoicedQty)}</td>
+                  <td>{qty(row.invoiceRemainingQty)}</td>
+                  <td><span className={`pc2-status ${Number(row.overInvoicedQty) > 0 ? "danger" : Number(row.invoicedQty) <= 0 ? "warning" : Number(row.invoiceRemainingQty) > 0 ? "violet" : "success"}`}>{Number(row.overInvoicedQty) > 0 ? "Fazla fatura" : Number(row.invoicedQty) <= 0 ? "Fatura yok" : Number(row.invoiceRemainingQty) > 0 ? "Kısmi fatura" : "Tam fatura"}</span></td>
                   <td><span className={`pc2-status ${statusTone(row.status)}`}>{statusLabel(row.status)}</span></td>
                   <td><div className="pc2-row-actions"><button className="primary" type="button" onClick={() => focusQuick(row)}><Layers3 size={14} /> Üretim Gir</button><button type="button" onClick={() => openDetail(row)}>Detay</button></div></td>
                 </tr>
