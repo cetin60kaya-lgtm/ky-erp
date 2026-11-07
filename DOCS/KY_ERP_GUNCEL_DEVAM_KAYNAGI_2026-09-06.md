@@ -1,5 +1,11 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 08.11.2026 — DESEN üç aylık eksik görsel onarımı (PR #526)
+- X Google Drive `Hakan Emp/görsel/2026`: son üç ay 147 üretim modeli içinden 121 başlangıçta görselsiz; 4 hazır JPEG kopyası ve 82 yeni JPEG (PDF/AI/PSD asıllarından), 82/82 bulut dosyası ad/boyut doğrulaması, klasörde 433 dosya. Orijinal dosyalar korunmuştur.
+- PR #526 yeni JPEG'leri öncelikli indeksler; `MODEL_IMAGE` bağından yalnız boş/tekil mevcut canonical UUID'lere ilişki kurar. Eski indeksli ama image_url'si boş kayıtları onarır. Yeni model/sahte görsel oluşturmaz, var olan görseli değiştirmez.
+- **Canlı bağlantı kabulü henüz yok:** X Wrangler giriş yetkisi yok; GitHub CI/merge/deploy ve D1 File Hub ilişki sayımı + yetkili model kartı önizlemesi doğrulanmalıdır. 39 kalan model belirsiz/ad uyuşmazlığı ile açık. Çalışma kaydı `DOCS/KY_ERP_DESEN_2026_GORSEL_EKSIK_TAMAMLAMA_20261108.md`.
+
+
 ## 05.11.2026 — Günlük Operasyon LOG tarih sınırı + Haftalık Özet D1 ek/kesinti/net canlı (PR #520)
 - Kök neden 1: Günlük LOG, D1 audit/revisions/attendance kaynaklarını birleştirirken `revisions()` sadece `date` kullanıyor, `startDate/endDate` değerlerini yok sayıyordu. UI son filtrede iş tarihini ve istenen aralık kapsamını tekrar doğrulamıyordu. Kanıt kapsamı: seçilen ÇALIŞMA TARİHİ (workDate); işlem yapılış saati (createdAt) yalnız bilgi.
 - Kök neden 2: `weeklySummary()` sadece vardiya baz ücretlerini topluyordu; frontend `getDailyWeeklySummary` verisini çekip kullanmadan attendance ile bağımsız toplam yapıyordu. Bu yüzden D1 ACTIVE ek ödeme/kesinti haftalık personel listesi, net KPI, A4 ve Excel'e geçmiyordu.

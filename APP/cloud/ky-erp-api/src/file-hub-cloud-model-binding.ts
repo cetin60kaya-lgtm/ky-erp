@@ -83,6 +83,36 @@ export function classifyDesignSourcePath(
   };
 }
 
+/**
+ * Sonradan eklenen Drive RGB görselleri yalnız mevcut, görseli boş TEKİL model
+ * kartına bağlanabilir. Aynı isimli iki model veya daha önce atanmış önizleme
+ * varsa yeni model açma ve mevcut görselin üzerine yazma.
+ */
+export function findUniqueMissingDesignImageModel(
+  records: readonly {
+    id?: unknown; model_name?: unknown; model_code?: unknown;
+    image_url?: unknown; deleted_at?: unknown;
+  }[],
+  fileName: string,
+): string | null {
+  if (!/\.(jpe?g|png|webp)$/i.test(fileName)) return null;
+  const key = normalizeDesignModelKey(fileName.replace(/\.[^.]+$/, ""));
+  if (!key) return null;
+  const matches = new Set<string>();
+  let eligibleId = "";
+  for (const row of records) {
+    const id = String(row?.id ?? "").trim();
+    if (!id || String(row?.deleted_at ?? "").trim()) continue;
+    const modelName = normalizeDesignModelKey(row.model_name);
+    const modelCode = normalizeDesignModelKey(row.model_code);
+    if (key !== modelName && key !== modelCode) continue;
+    matches.add(id);
+    if (!String(row?.image_url ?? "").trim()) eligibleId = id;
+  }
+  // Başka firma modelinde görsel olsa dahi adı çakışan model otomatik güncellenmez.
+  return matches.size === 1 ? eligibleId || null : null;
+}
+
 /** Yalnız mevcut model sözlüğündeki kesin adları seç; hiçbir parçadan yeni model uydurma. */
 export function matchExistingDesignModelNames(
   knownNames: readonly string[],
