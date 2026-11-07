@@ -53,3 +53,5 @@
 .pc2-table-card .pc2-row-actions button{padding:7px 10px;font-size:12px}
 @media(max-width:900px){.pc2-head{flex-wrap:wrap}.pc2-metrics.pc2-metrics-compact{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:650px){.pc2-metrics.pc2-metrics-compact{grid-template-columns:1fr 1fr}.pc2-list-toolbar{grid-template-columns:1fr auto}.pc2-list-toolbar .pc2-search{grid-column:1/-1}.pc2-head{padding:14px}.pc2-pagination{justify-content:space-between}}
+
+.pc2-readonly{font-size:11px;color:#66798c;font-weight:600;background:#f3f6fb;border:1px solid #e1e8f1;border-radius:6px;padding:5px 8px;white-space:nowrap}
