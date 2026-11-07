@@ -23,3 +23,21 @@ test("hata sonrasi onceki sayfa imleci silinmez",()=>{
   assert.match(cloud,/await persist\(checkpoint, false,/);
   assert.match(cloud,/last_sync_at=CASE WHEN \?=1/);
 });
+
+
+test("DESEN RGB taraması 100 dosyadan sonra imleçle sürer, erken tamamlandı demez",()=>{
+  assert.match(cloud,/const resume = text\(progress\.rootPath\) === rootPath && Boolean\(text\(progress\.nextPageToken\)\)/);
+  assert.match(cloud,/if\(cursor\) params\.set\("pageToken",cursor\)/);
+  assert.match(cloud,/nextPageToken = text\(page\.nextPageToken\)/);
+  assert.match(cloud,/completed = !nextPageToken/);
+  assert.match(cloud,/modelImageFastProgress',json\(\?\)/);
+  assert.match(cloud,/hasMore:!completed,scannedTotal:priorScanned\+scanned,linkedTotal:priorLinked\+linked/);
+  assert.match(cloud,/modelImageSync:json\(metadata\.modelImageFastProgress\)/);
+});
+
+test("DESEN RGB gecici sağlayıcı hatasında imleç korunur ve D1 lease bırakılır",()=>{
+  assert.match(cloud,/nextPageToken:problem \? cursor : nextPageToken/);
+  assert.match(cloud,/problem \? 0 : scanned/);
+  assert.match(cloud,/cloudSyncLeaseId',NULL,'\$\.cloudSyncLeaseUntil',NULL/);
+  assert.match(cloud,/MODEL_IMAGE_LEASE_CONFLICT/);
+});
