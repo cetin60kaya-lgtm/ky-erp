@@ -988,7 +988,23 @@ async function buildCenter(
   });
 
   cards.sort((left, right) => text(right.lastActivityAt).localeCompare(text(left.lastActivityAt)));
-  const summary = {
+  const summary = summarizeCards(cards, ambiguousMatchCount, unmatchedSourceCount);
+  return {
+    slug,
+    cards,
+    summary,
+    machines,
+    companies: [...companyById.values()].map((row) => ({
+      id: text(row.id),
+      name: text(row.name),
+      type: text(first(row.company_type, row.type)),
+      isActive: row.is_active !== 0 && row.is_active !== false,
+    })),
+  };
+}
+
+function summarizeCards(cards: Row[], ambiguousMatchCount = 0, unmatchedSourceCount = 0): Row {
+  return {
     modelCount: cards.length,
     openModelCount: cards.filter((row) => row.status !== "COMPLETED").length,
     modelWaitingCount: cards.filter((row) => row.status === "MODEL_WAITING").length,
@@ -1002,18 +1018,6 @@ async function buildCenter(
     totalInvoiceRemainingQty: cards.reduce((sum, row) => sum + numberValue(row.invoiceRemainingQty), 0),
     ambiguousMatchCount,
     unmatchedSourceCount,
-  };
-  return {
-    slug,
-    cards,
-    summary,
-    machines,
-    companies: [...companyById.values()].map((row) => ({
-      id: text(row.id),
-      name: text(row.name),
-      type: text(first(row.company_type, row.type)),
-      isActive: row.is_active !== 0 && row.is_active !== false,
-    })),
   };
 }
 
@@ -1620,7 +1624,7 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
       success: true,
       data: {
         rows: filtered.slice(start, start + pageSize).map(listCard),
-        summary: center.summary,
+        summary: summarizeCards(filtered, center.summary.ambiguousMatchCount, center.summary.unmatchedSourceCount),
         pagination: { page, pageSize, total: filtered.length },
       },
     });
