@@ -1056,9 +1056,9 @@ function filterCards(cards: Row[], query: Row): Row[] {
     const legacy = Boolean(card.legacyApproved);
     const productionComplete = card.status === "COMPLETED" || (card.completedGrossQty > 0 && card.productionRemainingQty <= 0 && card.incomingQty > 0);
     if (pool === "ARSIV" && !legacy) return false;
-    if (pool === "IMALATTA" && (legacy || productionComplete)) return false;
+    if (pool === "IMALATTA" && (card.isVirtual || legacy || productionComplete)) return false;
     if (pool === "TAMAMLANAN" && !legacy && !productionComplete) return false;
-    if (pool === "IRSALIYE" && (legacy || card.dispatchCount > 0 || !(card.completedGrossQty > 0 || card.expectedQty > 0))) return false;
+    if (pool === "IRSALIYE" && (card.isVirtual || legacy || card.dispatchCount > 0 || !(card.completedGrossQty > 0 || card.expectedQty > 0))) return false;
     if (pool === "FATURA" && (legacy || card.invoiceRemainingQty <= 0)) return false;
     if (status && status !== "ALL" && normalized(legacy ? "COMPLETED" : card.status) !== status) return false;
     if (companyId && card.companyId !== companyId) return false;
