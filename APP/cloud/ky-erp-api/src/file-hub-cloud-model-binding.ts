@@ -98,15 +98,19 @@ export function findUniqueMissingDesignImageModel(
   if (!/\.(jpe?g|png|webp)$/i.test(fileName)) return null;
   const key = normalizeDesignModelKey(fileName.replace(/\.[^.]+$/, ""));
   if (!key) return null;
-  const ids = new Set<string>();
+  const matches = new Set<string>();
+  let eligibleId = "";
   for (const row of records) {
     const id = String(row?.id ?? "").trim();
-    if (!id || String(row?.deleted_at ?? "").trim() || String(row?.image_url ?? "").trim()) continue;
+    if (!id || String(row?.deleted_at ?? "").trim()) continue;
     const modelName = normalizeDesignModelKey(row.model_name);
     const modelCode = normalizeDesignModelKey(row.model_code);
-    if (key === modelName || key === modelCode) ids.add(id);
+    if (key !== modelName && key !== modelCode) continue;
+    matches.add(id);
+    if (!String(row?.image_url ?? "").trim()) eligibleId = id;
   }
-  return ids.size === 1 ? [...ids][0] : null;
+  // Başka firma modelinde görsel olsa dahi adı çakışan model otomatik güncellenmez.
+  return matches.size === 1 ? eligibleId || null : null;
 }
 
 /** Yalnız mevcut model sözlüğündeki kesin adları seç; hiçbir parçadan yeni model uydurma. */
