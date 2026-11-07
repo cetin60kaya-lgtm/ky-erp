@@ -100,6 +100,27 @@ jobs:
             sleep 2
           done
           test "$ready" -eq 1
+      - name: Verify production İmalat chunk without query cache bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          module_file="$(find APP/app/ky-erp-frontend/dist/assets -maxdepth 1 -type f -name 'UretimPage-*.js' -print -quit)"
+          test -n "$module_file" || { echo "İmalat Vite chunk derlenmedi." >&2; exit 1; }
+          expected_sha="$(sha256sum "$module_file" | awk '{print $1}')"
+          asset="/assets/$(basename "$module_file")"
+          ok=0
+          for attempt in $(seq 1 20); do
+            response="$(curl --location --silent --show-error --max-time 20 -o /tmp/kyerp-live-imalat.js -w '%{http_code} %{content_type}' "https://kyerp.net${asset}" || true)"
+            current_sha="$(test -f /tmp/kyerp-live-imalat.js && sha256sum /tmp/kyerp-live-imalat.js | awk '{print $1}' || true)"
+            if [ "$response" = "200 application/javascript" ] && [ "$current_sha" = "$expected_sha" ]; then
+              ok=1
+              echo "İmalat chunk canlı: ${asset}, SHA256=${current_sha}; JavaScript MIME doğrulandı."
+              break
+            fi
+            echo "İmalat chunk henüz tutarlı değil: attempt=${attempt} response=${response} sha=${current_sha}" >&2
+            sleep 2
+          done
+          test "$ok" -eq 1 || { echo "Kyerp.net İmalat modülü gerçek JS yerine SPA fallback / yanlış bundle gönderiyor." >&2; exit 1; }
       - name: Verify real Chrome production mobile routes and auth boundary
         working-directory: APP/app/ky-erp-frontend
         shell: bash
