@@ -946,14 +946,16 @@ async function buildCenter(
     const requiredRegions = model.printRegions.map((region) => region.regionName).filter(Boolean);
     const metrics = productionMetrics(entries, requiredRegions, incomingQty);
     const invoicedQty = invoices.reduce((sum, row) => sum + numberValue(row.quantity), 0);
-    const invoiceableQty = metrics.completedNetQty;
+    // Fatura üretim fişine göre değil önce irsaliye, irsaliye gelmeden önce planlanan adet üzerinden takip edilir.
+    const invoiceableQty = incomingFromDocuments > 0 ? incomingFromDocuments : Math.max(numberValue(model.expectedQty), metrics.completedNetQty);
     const productionRemainingQty = Math.max(0, incomingQty - metrics.completedGrossQty);
     const invoiceRemainingQty = Math.max(0, invoiceableQty - invoicedQty);
     const overProducedQty = Math.max(0, metrics.completedGrossQty - incomingQty);
-    const overInvoicedQty = Math.max(0, invoicedQty - invoiceableQty);
+    const overInvoicedQty = invoiceableQty > 0 ? Math.max(0, invoicedQty - invoiceableQty) : 0;
     const card: Row = {
       ...model,
       incomingQty,
+      dispatchQty: incomingFromDocuments,
       dispatchCount: new Set(dispatches.map((row) => row.documentId)).size,
       grossOperationQty: metrics.totalGross,
       completedGrossQty: metrics.completedGrossQty,
@@ -995,7 +997,8 @@ async function buildCenter(
     return card;
   });
 
-  cards.sort((left, right) => text(right.lastActivityAt).localeCompare(text(left.lastActivityAt)));
+  // En yeni üretim kaydı üstte; modelin son düzenlenme zamanı sıralamayı bozmaz.
+  cards.sort((left, right) => text(right.productionLastAt || right.lastActivityAt).localeCompare(text(left.productionLastAt || left.lastActivityAt)) || text(right.lastActivityAt).localeCompare(text(left.lastActivityAt)));
   const summary = {
     modelCount: cards.length,
     openModelCount: cards.filter((row) => row.status !== "COMPLETED").length,
@@ -1632,7 +1635,20 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
       success: true,
       data: {
         rows: filtered.slice(start, start + pageSize).map(listCard),
-        summary: { ...center.summary, modelCount: filtered.length, dispatchWaitingCount: filtered.filter((row) => !row.legacyApproved && row.dispatchCount === 0 && row.completedGrossQty > 0).length, totalCompletedNetQty: filtered.reduce((sum, row) => sum + numberValue(row.completedNetQty), 0), totalIncomingQty: filtered.reduce((sum, row) => sum + numberValue(row.incomingQty), 0) },
+        summary: {
+          ...center.summary,
+          modelCount: filtered.length,
+          openModelCount: filtered.filter((row) => !row.legacyApproved && row.status !== "COMPLETED").length,
+          productionOpenCount: filtered.filter((row) => !row.legacyApproved && row.productionRemainingQty > 0).length,
+          invoiceOpenCount: filtered.filter((row) => !row.legacyApproved && row.invoiceRemainingQty > 0).length,
+          dispatchWaitingCount: filtered.filter((row) => !row.legacyApproved && row.dispatchCount === 0 && (row.completedGrossQty > 0 || row.expectedQty > 0)).length,
+          controlCount: filtered.filter((row) => !row.legacyApproved && (row.overProducedQty > 0 || row.overInvoicedQty > 0)).length,
+          totalCompletedGrossQty: filtered.reduce((sum, row) => sum + numberValue(row.completedGrossQty), 0),
+          totalCompletedNetQty: filtered.reduce((sum, row) => sum + numberValue(row.completedNetQty), 0),
+          totalIncomingQty: filtered.reduce((sum, row) => sum + numberValue(row.incomingQty), 0),
+          totalInvoicedQty: filtered.reduce((sum, row) => sum + numberValue(row.invoicedQty), 0),
+          totalInvoiceRemainingQty: filtered.reduce((sum, row) => sum + numberValue(row.invoiceRemainingQty), 0),
+        },
         pagination: { page, pageSize, total: filtered.length },
       },
     });
