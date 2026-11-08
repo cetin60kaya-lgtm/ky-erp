@@ -523,3 +523,85 @@
 .dsg-plate-ocr-candidate > span { overflow-wrap:anywhere; font-size:12px; }
 .dsg-plate-ocr-candidate select { min-width:0; }
 @media(max-width:700px) { .dsg-plate-ocr-candidate { grid-template-columns:1fr; } }
+
+
+/* Model detayında sekme içerikleri pencereyi yeniden boyutlandırmaz.
+   Yalnız bu pencere soldan en / sol-alt köşeden en-boy ayarlanabilir. */
+.dsg-modal.model-detail {
+  position: relative;
+  width: min(840px, calc(100vw - 32px));
+  height: min(590px, calc(100dvh - 32px));
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  min-height: 0;
+}
+.dsg-modal.model-detail .dsg-modal-body {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.dsg-modal-resize-left,
+.dsg-modal-resize-corner {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  z-index: 20;
+  padding: 0;
+  color: #2e618e;
+  border: 1px solid #9cb7d2;
+  background: #e8f2fd;
+  touch-action: none;
+  user-select: none;
+}
+.dsg-modal-resize-left {
+  left: 0;
+  top: 50%;
+  width: 14px;
+  height: 80px;
+  transform: translateY(-50%);
+  border-left: none;
+  border-radius: 0 9px 9px 0;
+  cursor: ew-resize;
+}
+.dsg-modal-resize-left::before {
+  content: "⋮";
+  font-size: 19px;
+  line-height: 1;
+}
+.dsg-modal-resize-corner {
+  left: 0;
+  bottom: 0;
+  width: 30px;
+  height: 30px;
+  border-left: none;
+  border-bottom: none;
+  border-radius: 0 10px 0 0;
+  cursor: nesw-resize;
+}
+.dsg-modal-resize-corner::before {
+  content: "⤡";
+  font-size: 18px;
+  line-height: 1;
+}
+.dsg-modal-resize-left:hover,
+.dsg-modal-resize-corner:hover,
+.dsg-modal-resize-left:focus-visible,
+.dsg-modal-resize-corner:focus-visible {
+  outline: 2px solid #3978b9;
+  outline-offset: -2px;
+  background: #d1e8ff;
+}
+@media (max-width: 700px) {
+  .dsg-modal.model-detail {
+    position: relative !important;
+    right: auto !important;
+    top: auto !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+  }
+  .dsg-modal-resize-left,
+  .dsg-modal-resize-corner { display: none; }
+}
