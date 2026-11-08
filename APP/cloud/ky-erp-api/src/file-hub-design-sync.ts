@@ -17,6 +17,11 @@ const objectOf = (v: unknown): Row => {
 };
 const normalize = (v: unknown) => upper(v).replace(/İ/g, "I").replace(/[^A-Z0-9ÇĞÖŞÜ]+/g, " ").replace(/\s+/g, " ").trim();
 
+/** Bir PSD/PDF kaynağının senkronu mevcut RGB model görselini boşaltamaz. */
+export function preserveCanonicalImageUrl(workflowUrl: unknown, storedUrl: unknown): string | null {
+  return text(workflowUrl) || text(storedUrl) || null;
+}
+
 // Model JPEG dosyası tek başına kayda yeterlidir. Firma ID'si tahmin edilmez:
 // tam TAHA GİYİM kartı tekilse kullanılır, değilse ad korunup ID boş bırakılır.
 const DEFAULT_DESIGN_COMPANY_NAME = "TAHA GİYİM SAN. VE TİC.";
@@ -66,6 +71,14 @@ async function upsertCanonicalModelRecord(c: Context<AppEnv>, slug: string, mode
   if (!columns.has("id") || !columns.has("model_name")) return;
 
   const mainImage = (Array.isArray(model.files) ? model.files : []).find((row: Row) => row.role === "MODEL_IMAGE");
+  // Kaynak PDF/AI/PSD ayrı senkron olduğunda workflow files içinde ana JPEG
+  // bulunmayabilir. Bu, model_records üzerindeki mevcut görseli SİLME sebebi olamaz.
+  const existing = await c.env.DB.prepare(
+    "SELECT id,image_url FROM model_records WHERE id=? AND (main_company_slug=? OR main_company_slug IS NULL) LIMIT 1",
+  ).bind(text(model.id), slug).first<Row>();
+  const canonicalImage = preserveCanonicalImageUrl(
+    mainImage?.thumbnailUrl || mainImage?.previewUrl, existing?.image_url,
+  );
   const raw = {
     ...objectOf(model.raw),
     workflowModelId:text(model.id),
@@ -73,7 +86,7 @@ async function upsertCanonicalModelRecord(c: Context<AppEnv>, slug: string, mode
     modelCode:text(model.modelCode || model.modelName),
     companyId:text(model.companyId),
     companyName:text(model.companyName),
-    imageUrl:text(mainImage?.thumbnailUrl || mainImage?.previewUrl),
+    imageUrl:canonicalImage || "",
     sourceType:text(model.sourceType || "FILE_HUB"),
     workflowStatus:text(model.status || "NEW_ARRIVAL"),
     updatedAt:now(),
@@ -86,15 +99,13 @@ async function upsertCanonicalModelRecord(c: Context<AppEnv>, slug: string, mode
     company_id:text(model.companyId) || null,
     customer_id:text(model.companyId) || null,
     customer_name:text(model.companyName) || null,
-    image_url:text(mainImage?.thumbnailUrl || mainImage?.previewUrl) || null,
+    image_url:canonicalImage,
     status:text(model.status || "NEW_ARRIVAL"),
     raw:JSON.stringify(raw),
     created_at:text(model.createdAt || now()),
     updated_at:now(),
   };
   const entries = Object.entries(payload).filter(([key]) => columns.has(key));
-  const existing = await c.env.DB.prepare("SELECT id FROM model_records WHERE id=? AND (main_company_slug=? OR main_company_slug IS NULL) LIMIT 1")
-    .bind(payload.id, slug).first<Row>();
   if (existing?.id) {
     const update = entries.filter(([key]) => !["id","created_at"].includes(key));
     if (update.length) {
@@ -152,7 +163,7 @@ function roleFor(purposeCode: string, extension: string, isDtf = false) {
   if (purposeCode === "PLACEMENT") return extension === "PDF" ? "PLACEMENT_PDF" : "PLACEMENT_FILE";
   if (purposeCode === "RIP_PDF") return "RIP_PDF";
   if (purposeCode === "OUTGOING_DESIGN") return "OUTGOING_DESIGN";
-  if (purposeCode === "MODEL_SOURCE" && extension === "PSD") return "SOURCE_PSD";
+  if (purposeCode === "MODEL_SOURCE" && ["PSD","PSB"].includes(extension)) return "SOURCE_PSD";
   if (purposeCode === "MODEL_SOURCE" && extension === "AI") return "SOURCE_AI";
   if (purposeCode === "MODEL_SOURCE") return "SOURCE_FILE";
   return purposeCode || "OTHER";

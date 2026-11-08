@@ -1,5 +1,17 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 08.11.2026 — DESEN Drive görsel/kaynak/yerleşim/giden bağları tam denetim
+
+- Kullanıcı İmalat işine geçilmesini durdurdu; yalnız DESEN'e, Drive dosya akışına ve model kartı ilişkilerine odaklanılmasını istedi.
+- Google Drive mevcut bağlantısından salt-okunur klasör envanteri: `Hakan Emp/görsel/2026` **433** JPEG; `Hakan Emp/yerleşim dosyaları` **704** dosya (684 PDF); `Hakan Emp/modeller` ilk sayfada **en az 1.000** model klasörü; `Hakan Emp/giden desenler` ilk 1.000 dosyadan 995 PSD. Son iki sayının toplam klasör/dosya sayısı olduğu ileri sürülmez.
+- Üretim DESEN Havuzu son canlı kullanıcı ekranında 723 kart ve 275 görselsiz kart. Drive dosyasının bulunması `file_hub_relations`, `model_records.image_url` veya gerçek tam PSD önizlemesinin hazır olduğu anlamına gelmez.
+- Kodda risk: `upsertCanonicalModelRecord` kaynağa PSD/PDF/AI bağı eklerken `mainImage` bulunmazsa canonical `image_url` alanını `null` yapabilir. Onarım: aynı tenant/UUID için kayıtlı image_url korunur; yeni gerçek workflow ana görseli varsa kullanılır. Kaynağa, dosyaya veya D1'deki gerçek verilere manuel müdahale yok.
+- `MODEL_SOURCE` PSB kaynakları artık PSD gibi `SOURCE_PSD` tanınır.
+- Giden Desen / Takım `AGENT / UNKNOWN` olduğunda çalışan `MODEL_IMAGE`, `MODEL_SOURCE`, `PLACEMENT` `CLOUD_API / CONNECTED` kaynaklarının yanlış biçimde 'Bulut ayarı eksik' görünmesi ayrıştırıldı: kaynak bağlantı hatası ve Agent doğrulanmadı uyarıları ayrı.
+- Manuel `D1 Schema Readiness - Check Only` işine dört DESEN bağının sayısal görüntülenmesi ve görselsiz model özeti için **salt SELECT** sorguları eklendi; hesap/tenant harici kayıt dökümü, token, dosya ismi, Drive klasörü taşıma veya yeniden tarama yok.
+- Kalan kabul: PR CI, Worker/Pages yayın kanıtı, gerçek D1 dört kaynak istatistiği, PSD canlı preview/Agent ve örnek model kartlarının PDF/AI/PSD/yerleşim önizlemesi. İrsaliye/İmalat/Fatura koduna dokunulmaz.
+
+
 ## 08.11.2026 — DESEN model detayında tek sağ-alt tutacak / bütün sekmeler sabit ebat
 
 - Kullanıcı gerçek ekran görüntüsünde önceki #535 sürümünde **iki sol tutacağı** ve sekmelerin içeriğe göre değişen pencere boyunu reddetti; **yalnız sağ-alt köşede tek tutacak, tüm sekmelerde aynı en-boy** istedi.

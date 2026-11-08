@@ -58,3 +58,45 @@ jobs:
           ! grep -Fq 'wrangler d1 migrations apply' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
           ! grep -Fq 'wrangler d1 reset' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
           echo 'D1 check-only contract PASSED; production write yok.'
+
+
+      - name: DESEN Drive kaynak/yerleşim/model bağları — D1 salt okunur denetim
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          audit="SELECT b.purpose_code AS purpose,
+                 co.provider_type AS provider, co.sync_mode AS sync_mode,
+                 co.connection_status AS connection_status,
+                 COUNT(DISTINCT l.file_asset_id) AS indexed_files,
+                 COUNT(DISTINCT CASE WHEN r.entity_type='MODEL' THEN r.file_asset_id END) AS linked_files,
+                 COUNT(DISTINCT CASE WHEN r.entity_type='MODEL' THEN r.entity_id END) AS linked_models
+               FROM file_hub_bindings b
+               JOIN file_hub_connections co
+                 ON co.id=b.storage_connection_id AND co.main_company_slug=b.main_company_slug
+               LEFT JOIN file_hub_locations l
+                 ON l.storage_connection_id=co.id AND l.main_company_slug=b.main_company_slug
+                 AND l.is_available=1
+                 AND substr(lower(l.relative_path),1,length(b.root_path)+1)=lower(b.root_path)||'/'
+               LEFT JOIN file_hub_relations r
+                 ON r.file_asset_id=l.file_asset_id AND r.main_company_slug=l.main_company_slug
+                 AND r.relation_type=b.purpose_code
+               WHERE b.main_company_slug='mecit-hakan'
+                 AND b.module_code='DESEN' AND b.sync_enabled=1
+               GROUP BY b.purpose_code,co.provider_type,co.sync_mode,co.connection_status
+               ORDER BY b.purpose_code;"
+          response="$(npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$audit" --json)"
+          echo "$response" | jq -e 'type=="array" and .[0].success==true' >/dev/null
+          echo "$response" | jq -cr '.[0].results[] | "DESEN_PURPOSE purpose=\(.purpose) provider=\(.provider) sync=\(.sync_mode) connection=\(.connection_status) indexed=\(.indexed_files) related=\(.linked_files) models=\(.linked_models)"'
+          summary="SELECT COUNT(*) AS total_models,
+                    SUM(CASE WHEN COALESCE(TRIM(image_url),'')<>'' THEN 1 ELSE 0 END) AS models_with_image,
+                    SUM(CASE WHEN COALESCE(TRIM(image_url),'')='' THEN 1 ELSE 0 END) AS models_without_image
+                   FROM model_records
+                  WHERE main_company_slug='mecit-hakan' AND COALESCE(TRIM(deleted_at),'')='';"
+          response="$(npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$summary" --json)"
+          echo "$response" | jq -e 'type=="array" and .[0].success==true' >/dev/null
+          echo "$response" | jq -cr '.[0].results[0] | "DESEN_MODEL_COVERAGE total=\(.total_models) with_image=\(.models_with_image) missing=\(.models_without_image)"'
