@@ -39,7 +39,9 @@ test("File Hub model sync keeps workflow and canonical model_records aligned", (
 
 
 test("kaynak PSD/PDF/AI bağlanırken var olan RGB model görseli silinmez", () => {
-  assert.match(design, /SELECT id,image_url FROM model_records/);
+  assert.match(design, /SELECT id,image_url,raw FROM model_records/);
+  assert.match(design, /existingRaw\.imageUrl/);
+  assert.match(design, /existingRaw\.mainImage\?\.previewUrl/);
   assert.match(design, /const canonicalImage = preserveCanonicalImageUrl\(/);
   assert.match(design, /image_url:canonicalImage/);
   assert.match(design, /imageUrl:canonicalImage \|\| ""/);
@@ -52,4 +54,12 @@ test("RGB görsel koruma, mevcut canonical veriyi ve yeni görseli doğru seçer
   assert.equal(preserveCanonicalImageUrl(null, "/api/eski.jpg"), "/api/eski.jpg");
   assert.equal(preserveCanonicalImageUrl("/api/yeni.jpg", "/api/eski.jpg"), "/api/yeni.jpg");
   assert.equal(preserveCanonicalImageUrl("", ""), null);
+});
+
+test("canonical sütun boş ama eski modelin raw önizlemesi varsa korunur", async () => {
+  const { preserveCanonicalImageUrl } = await import("./file-hub-design-sync.ts");
+  assert.equal(preserveCanonicalImageUrl("", "", "/api/legacy-raw.jpg"), "/api/legacy-raw.jpg");
+  assert.equal(preserveCanonicalImageUrl(null, "", "", null, "/api/legacy-main-image.jpg"), "/api/legacy-main-image.jpg");
+  assert.equal(preserveCanonicalImageUrl("/api/new.jpg", "", "/api/legacy.jpg"), "/api/new.jpg");
+  assert.equal(preserveCanonicalImageUrl(null, undefined, ""), null);
 });
