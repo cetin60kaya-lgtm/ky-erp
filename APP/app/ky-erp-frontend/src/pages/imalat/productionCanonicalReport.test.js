@@ -44,3 +44,30 @@ test("canonical report respects day/shift/region/model filters and does not inve
   assert.equal(old.audit.rows.length, 0);
   assert.equal(old.report.rows.length, 0);
 });
+
+test("tarihsel tamamlanan iş rapora girer ancak aktif açık parti/fatura borcu oluşturmaz", () => {
+  const historical = [{
+    id: "legacy-1", modelName: "GEÇMİŞ 2026", companyName: "Taha",
+    legacyApproved: true, status: "MODEL_WAITING", incomingQty: 500,
+    printRegions: [{ regionName: "Ön" }], productionEntries: [],
+  }];
+  const data = buildProductionCanonicalReport({ rows: historical }, {});
+  assert.equal(data.audit.rows.length, 1);
+  assert.equal(data.audit.rows[0].durum, "Geçmiş Tamamlandı");
+  assert.equal(data.audit.rows[0].eksik, 0);
+  assert.equal(data.audit.rows[0].gecmisPlanFarki, 500, "tarihsel adet farkı kaybolmaz");
+  assert.equal(data.audit.summary.acikParti, 0);
+  assert.equal(data.audit.summary.kontrolGereken, 0);
+  assert.equal(data.report.summary.tamamlananModelAdedi, 1);
+});
+test("yeni açık üretim tarihsel sınıfa alınmaz, gerçek eksik adet gösterir", () => {
+  const data = buildProductionCanonicalReport({ rows: [{
+    id: "new-1", modelName: "YENİ", companyName: "Taha", legacyApproved: false,
+    status: "PRODUCTION_OPEN", incomingQty: 100,
+    printRegions: [{regionName:"Ön"}],
+    productionEntries:[{id:"p1",date:"2026-11-08",printArea:"Ön",grossQty:60,netQty:59}],
+  }]}, {});
+  assert.equal(data.audit.rows[0].eksik, 40);
+  assert.equal(data.audit.rows[0].durum, "Eksik Operasyon");
+  assert.equal(data.report.summary.tamamlananModelAdedi, 0);
+});
