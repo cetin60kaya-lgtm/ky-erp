@@ -110,24 +110,41 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
       setMessage("Aynı makine no birden fazla kez kullanılamaz.");
       return;
     }
+    const keys = ["makineNo", "makineAdi", "gunduzMakinaci", "geceMakinaci", "isActive", "sortOrder"];
+    const changed = prepared.map((row, index) => ({ row, index })).filter(({ row, index }) => {
+      const previous = savedSnapshot.current[index];
+      return !previous || keys.some((key) => String(previous[key] ?? "") !== String(row[key] ?? ""));
+    });
+    if (!changed.length) {
+      setMessage("Kaydedilecek değişiklik yok. Makine tanımları güncel.");
+      return;
+    }
     saveLock.current = true;
     setSaving(true);
-    const saved = [];
+    let saved = 0;
+    const confirmedRows = prepared.map((row) => ({ ...row }));
+    const confirmedSnapshot = savedSnapshot.current.map((row) => ({ ...row }));
     try {
-      for (const row of prepared) saved.push(await saveProductionCenterMachine(activeMainCompany, { id: row.id, machineNo: row.makineNo, machineName: row.makineAdi, dayOperator: row.gunduzMakinaci, nightOperator: row.geceMakinaci, isActive: row.isActive, sortOrder: row.sortOrder }));
-      const confirmedRows = saved.map((row, index) => normalize(row?.data || row, index));
-      setRows(confirmedRows);
-      setEditingIndex(-1);
-      savedSnapshot.current = confirmedRows.map((row) => ({ ...row }));
-      setMessage(`${saved.length} makine ve vardiya ayarı kaydedildi.`);
-    } catch (error) {
-      if (saved.length) {
-        const partialRows = prepared.map((row, index) => index < saved.length ? normalize(saved[index]?.data || saved[index], index) : row);
-        setRows(partialRows);
-        setMessage(`${saved.length}/${prepared.length} makine kaydedildi; ${prepared.length - saved.length} makine kaydedilemedi. Tekrar göndermeden önce kayıtlı makineleri kontrol edin. ${error?.message || ""}`);
-      } else {
-        setMessage(error?.message || "Hiçbir makine ayarı kaydedilemedi; bağlantı ve kayıtları kontrol edin.");
+      // Yalnız değişen satırlar gider. Başarısız istek otomatik tekrarlanmaz;
+      // farklı makinelerin eski fişlerine ve durumlarına dokunulmaz.
+      for (const { row, index } of changed) {
+        const result = await saveProductionCenterMachine(activeMainCompany, {
+          id: row.id, machineNo: row.makineNo, machineName: row.makineAdi,
+          dayOperator: row.gunduzMakinaci, nightOperator: row.geceMakinaci,
+          isActive: row.isActive, sortOrder: row.sortOrder,
+        });
+        confirmedRows[index] = normalize(result?.data || result, index);
+        confirmedSnapshot[index] = { ...confirmedRows[index] };
+        saved += 1;
       }
+      setRows(confirmedRows);
+      savedSnapshot.current = confirmedSnapshot;
+      setEditingIndex(-1);
+      setMessage(`${saved} değişen makine/vardiya kaydı başarıyla kaydedildi. Diğer makinelere dokunulmadı.`);
+    } catch (error) {
+      setRows(confirmedRows);
+      savedSnapshot.current = confirmedSnapshot;
+      setMessage(`${saved}/${changed.length} değişiklik kaydedildi. Hata alan kayıt korunuyor. Yeniden göndermeden önce makine listesini kontrol edin. ${error?.message || ""}`);
     } finally {
       saveLock.current = false;
       setSaving(false);
