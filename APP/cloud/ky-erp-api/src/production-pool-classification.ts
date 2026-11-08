@@ -4,7 +4,7 @@
  * Bu fonksiyonlar yalnız okuma/filtreleme yapar; D1 durumunu değiştirmez.
  */
 export const PRODUCTION_POOL_CONTRACT = "kyerp-production-pools-v3" as const;
-export const HISTORICAL_PRODUCTION_CUTOVER = "2026-11-08" as const;
+export const HISTORICAL_PRODUCTION_CUTOVER = "2026-11-08T13:58:00Z" as const;
 
 type DatedItem = { date?: unknown; createdAt?: unknown; raw?: { source?: unknown } };
 type HistoryInput = {
@@ -19,28 +19,36 @@ type HistoryInput = {
 function shortDate(value: unknown): string {
   return String(value ?? "").slice(0, 10);
 }
+function newerThanCutover(value: unknown): boolean {
+  const moment = String(value ?? "");
+  if (moment.length >= 19) {
+    const parsed = new Date(moment.endsWith("Z") || /[+-]\d\d:\d\d$/.test(moment) ? moment : moment.replace(" ", "T") + "Z");
+    if (Number.isFinite(parsed.getTime())) return parsed.toISOString() >= HISTORICAL_PRODUCTION_CUTOVER;
+  }
+  // Belirsiz saatli yeni kayıtlar yanlışlıkla eski arşive geçirilmez.
+  return shortDate(moment) >= HISTORICAL_PRODUCTION_CUTOVER.slice(0, 10);
+}
 function imported(item: DatedItem): boolean {
   return String(item.raw?.source || "").toUpperCase() === "XLSM_IMPORT";
 }
 
-/** 03.11.2026 Excel geçmişi + geçmiş üretimler arşiv sayılır.
- *  08.11.2026 ve sonrası yeni gerçek üretim/belge varsa yeniden aktifleşir. */
+/** 08.11.2026 saat 16:58 TRT anındaki mevcut model/üretim havuzunu
+ *  arşivle; bundan sonraki gerçek üretim fişleri otomatik aktifleşsin. */
 export function isHistoricalProduction(input: HistoryInput): boolean {
   const entries = input.productionEntries || [];
   const hasNewProduction = entries.some((item) =>
-    !imported(item) && shortDate(item.date || item.createdAt) >= HISTORICAL_PRODUCTION_CUTOVER);
+    !imported(item) && newerThanCutover(item.createdAt || item.date));
   // Yeni irsaliye veya fatura eski üretimi tekrar İmalatta yapmaz.
   if (hasNewProduction) return false;
   const importedModel = String(input.modelSource || "").toUpperCase() === "XLSM_IMPORT"
     && String(input.modelSourceYear || "") === "2026";
   if (importedModel) return true;
   if (entries.length > 0) return entries.every((item) =>
-    imported(item) || (shortDate(item.date || item.createdAt).length === 10 &&
-      shortDate(item.date || item.createdAt) < HISTORICAL_PRODUCTION_CUTOVER));
+    imported(item) || !newerThanCutover(item.createdAt || item.date));
   // Kesimden önce açılmış ancak üretim fişi olmayan model kartlarını da
   // tarihsel katalog olarak ayır. Yeni Desen kartları henüz imalat değildir.
-  const createdDay = shortDate(input.modelCreatedAt);
-  return createdDay.length === 10 && createdDay < HISTORICAL_PRODUCTION_CUTOVER;
+  const createdAt = String(input.modelCreatedAt || "");
+  return Boolean(createdAt) && !newerThanCutover(createdAt);
 }
 
 export type ProductionPoolCard = {
