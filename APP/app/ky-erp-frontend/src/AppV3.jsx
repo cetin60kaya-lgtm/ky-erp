@@ -5,7 +5,7 @@ import LoginPage from "./pages/LoginPage";
 import HomeDashboard from "./pages/HomeDashboard";
 import "./styles/secure-launch.css";
 import MuhasebePage from "./pages/modules/MuhasebePage";
-import { lazyWithRetry, openFreshFrontendVersion, tryRecoverStaleChunk } from "./utils/lazyWithRetry";
+import { isDynamicImportError, lazyWithRetry, openFreshFrontendVersion, tryRecoverStaleChunk } from "./utils/lazyWithRetry";
 import { MODULES, findModule, findTab, getInitialRoute, getModuleTabs } from "./app/moduleRegistry";
 import { useWorkspaceTabs } from "./hooks/useWorkspaceTabs";
 import { roleModules } from "./app/roleModuleNavigation";
@@ -127,12 +127,13 @@ class ModuleErrorBoundary extends React.Component {
   render() {
     if (!this.state.error) return <React.Fragment key={this.state.recoveryKey}>{this.props.children}</React.Fragment>;
     const errorCode = String(this.state.error?.code || "").trim();
+    const chunkError = isDynamicImportError(this.state.error);
     return (
       <div className="content-card module-error-card">
         <h3>Ekran şu anda açılamıyor</h3>
-        <p>Uygulama dosyası yüklenemedi. Yayın sırasında sürüm değişmiş olabilir. Güncel sürümü yükleyin; giriş oturumunuz korunur.</p>
+        <p>{chunkError ? "Uygulama sürümü değiştiği için bir dosya yüklenemedi. Güncel sürüme geçebilirsiniz." : "Ekran işleminde beklenmeyen bir hata oluştu. Tekrar Dene işe yaramazsa ekranı yenileyin."}</p>
         {errorCode ? <small>Hata kodu: {errorCode}</small> : null}
-        <button type="button" className="primary-btn" onClick={() => openFreshFrontendVersion()}>Güncel Sürümü Yükle</button>
+        <button type="button" className="primary-btn" onClick={() => openFreshFrontendVersion()}>{chunkError ? "Güncel Sürümü Yükle" : "Ekranı Yenile"}</button>
         <button type="button" onClick={() => this.setState((current) => ({ error: null, recoveryKey: current.recoveryKey + 1 }))}>Ekranı Tekrar Dene</button>
       </div>
     );
