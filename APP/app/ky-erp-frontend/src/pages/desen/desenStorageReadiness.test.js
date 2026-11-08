@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyzeDesenStorageTargets } from "./desenStorageReadiness.js";
+import { analyzeDesenStorageTargets, canOfferPlacementBinding } from "./desenStorageReadiness.js";
 
 const connected = (purposeCode) => ({
   purposeCode, ok: true, provider: "GOOGLE_DRIVE", syncMode: "CLOUD_API",
@@ -40,4 +40,30 @@ test("atanmamış kaynağı bağlandı gibi göstermez", () => {
     { purposeCode: "MODEL_SOURCE", ok: false, provider: "GOOGLE_DRIVE" },
   ]);
   assert.equal(state.connected.length, 1);
+});
+
+test("firma varsayılanına düşen yerleşim bağlantısı 4/4 bağlı sayılmaz", () => {
+  const state = analyzeDesenStorageTargets([
+    { ...connected("MODEL_IMAGE"), exact: true },
+    { ...connected("MODEL_SOURCE"), exact: true },
+    { ...connected("PLACEMENT"), exact: false },
+    { ...connected("OUTGOING_DESIGN"), exact: true, syncMode: "AGENT" },
+  ]);
+  assert.equal(state.connected.length, 3);
+});
+
+test("yerleşim ataması yalnız doğrulanmış MODELLER kökünden ve aynı bağlantıdan önerilir", () => {
+  const source = {
+    ...connected("MODEL_SOURCE"), exact: true, syncEnabled: true,
+    connectionId: "conn-1", rootPath: "modeller",
+  };
+  const placement = {
+    ...connected("PLACEMENT"), exact: false,
+    connectionId: "conn-1",
+  };
+  assert.equal(canOfferPlacementBinding([source, placement]), true);
+  assert.equal(canOfferPlacementBinding([source, { ...placement, connectionId: "conn-2" }]), false);
+  assert.equal(canOfferPlacementBinding([{ ...source, rootPath: "farkli" }, placement]), false);
+  assert.equal(canOfferPlacementBinding([{ ...source, connectionStatus: "ERROR" }, placement]), false);
+  assert.equal(canOfferPlacementBinding([source, { ...placement, exact: true }]), false);
 });
