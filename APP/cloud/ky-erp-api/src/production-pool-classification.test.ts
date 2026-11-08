@@ -34,8 +34,11 @@ test("yeni fiş eklendiğinde eski model yeniden aktif olabilir", () => {
   assert.equal(isHistoricalProduction({
     modelSource: "XLSM_IMPORT", modelSourceYear: 2026,
     dispatches: [{ date: "2026-11-08" }],
-  }), false);
+  }), true, "Eski üretimin irsaliyesi sonradan gelse bile üretim aktifleşmez");
   assert.equal(isHistoricalProduction({ modelSource: "DESEN", productionEntries: [] }), false);
+  assert.equal(isHistoricalProduction({ modelCreatedAt: "2026-10-15", productionEntries: [] }), true,
+    "Eski model kartları da tamamlanan geçmişe ayrılır");
+  assert.equal(isHistoricalProduction({ modelCreatedAt: "2026-11-08", productionEntries: [] }), false);
 });
 
 test("5200 plan, 3000 avans faturası, henüz üretim başlamadı: aktif ve fatura havuzunda", () => {
