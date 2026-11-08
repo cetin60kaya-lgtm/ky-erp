@@ -45,6 +45,7 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
   const [audit, setAudit] = useState({ summary: {}, rows: [] });
   const [report, setReport] = useState({ summary: {}, machineRows: [], operatorRows: [], modelRows: [], rows: [] });
   const [loading, setLoading] = useState(true);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [message, setMessage] = useState("");
   const [appliedFilters, setAppliedFilters] = useState(initialFilters);
   const requestSeq = useRef(0);
@@ -154,7 +155,11 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
         </div>
 
         <div className="iw-card-body">
-          <div className="imalat-shared-filters">
+          <div className="imalat-report-quick">
+            <span><strong>{view === "audit" ? "Operasyon Denetimi" : "Üretim Analizi"}</strong><small>Önce filtreyi uygula, sonra tabloyu veya Excel çıktısını incele.</small></span>
+            <button className="iw-btn" type="button" aria-expanded={filtersExpanded} onClick={() => setFiltersExpanded((value) => !value)}>{filtersExpanded ? "Filtreleri Kapat" : "Tarih / Model / Makine Filtrelerini Aç"}</button>
+          </div>
+          {filtersExpanded ? <div className="imalat-shared-filters">
             <Field label="Yıl"><select value={selectedFullYear} onChange={(event) => {
               const selected = event.target.value;
               setFilters((current) => ({
@@ -179,7 +184,7 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
               <button className="iw-btn primary" type="button" disabled={loading} onClick={() => loadData(filters)}><Search size={16} /> {loading ? "Yükleniyor" : "Uygula"}</button>
               <button className="iw-btn" type="button" onClick={resetFilters}><RotateCcw size={15} /> Temizle</button>
             </div>
-          </div>
+          </div> : <p className="imalat-report-filter-note">{filtersDirty ? "Değiştirilen filtreler henüz uygulanmadı." : "Tüm dönemlerin son uygulanmış kayıtları görüntüleniyor. Filtreyle yıl, tarih, firma, model, makine, vardiya ve baskı bölgesi seçebilirsiniz."}</p>}
 
           <div className="summary uretim-summary imalat-control-metrics">
             {metrics.map(([label, value, tone]) => <Stat key={label} label={label} value={formatQty(value)} tone={tone} />)}

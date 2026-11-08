@@ -13,13 +13,15 @@ test("modeli adını yazdıkça bulur; sahte/virtual modele üretim önermez", (
   assert.deepEqual(filterProductionModels(models, "carface").map((m) => m.id), ["m1"]);
   assert.deepEqual(filterProductionModels(models, "teddy").map((m) => m.id), ["m2", "m3"]);
   assert.deepEqual(filterProductionModels(models, "teddy", 1).map((m) => m.id), ["m2"]);
+  assert.deepEqual(filterProductionModels(models, "m3").map((m) => m.id), ["m3"], "model ID ile arama");
 });
-test("hazır baskı bölgeleri ve modelin özel baskı bölgeleri birlikte açılır", () => {
-  const options = availableProductionRegions(models[0]);
-  for (const value of ["Göğüs", "Ön", "Arka", "Kol", "Sağ Kol", "Sol Kol", "Yan"]) {
-    assert.ok(options.includes(value), value);
+test("Desen kartında gerçek bölge varsa yalnız o bölge; bölge yoksa varsayılan", () => {
+  assert.deepEqual(availableProductionRegions(models[0]), ["Göğüs"]);
+  const defaults = availableProductionRegions(models[1]);
+  for (const value of ["Ön", "Arka", "Kol", "Sağ Kol", "Sol Kol", "Yan"]) {
+    assert.ok(defaults.includes(value), value);
   }
-  assert.equal(options.filter((n) => n === "Ön").length, 1);
+  assert.equal(defaults.filter((n) => n === "Ön").length, 1);
 });
 test("seri satırdaki net = adet - baskı sakatı - kumaş sakatı", () => {
   assert.equal(productionLineNet({ quantity: 250, printDefectQty: 5, fabricDefectQty: 3 }), 242);

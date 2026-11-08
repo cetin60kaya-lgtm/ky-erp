@@ -55,3 +55,16 @@
 @media(max-width:650px){.pc2-metrics.pc2-metrics-compact{grid-template-columns:1fr 1fr}.pc2-list-toolbar{grid-template-columns:1fr auto}.pc2-list-toolbar .pc2-search{grid-column:1/-1}.pc2-head{padding:14px}.pc2-pagination{justify-content:space-between}}
 
 .pc2-readonly{font-size:11px;color:#66798c;font-weight:600;background:#f3f6fb;border:1px solid #e1e8f1;border-radius:6px;padding:5px 8px;white-space:nowrap}
+
+/* Saha kullanımında her bölümün 3 adımlı sabit işlem anlatımı */
+.pc2-workflow-guide{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.pc2-workflow-step{display:flex;align-items:center;gap:9px;min-height:48px;padding:10px 12px;background:#fff;border:1px solid #dbe6f3;border-radius:10px;color:#29486d;font-size:12px;font-weight:650;line-height:1.35}
+.pc2-workflow-index{flex:0 0 23px;width:23px;height:23px;display:inline-flex;align-items:center;justify-content:center;background:#e6f1fd;border-radius:8px;color:#1559a3;font-size:11px;font-weight:850}
+.pc2-model-id{font-size:10px!important;color:#7d8d9e!important;overflow-wrap:anywhere;max-width:230px}
+.pc2-action-link{display:inline-flex;align-items:center;justify-content:center;gap:4px;border-radius:8px;border:1px solid #bad3f0;background:#eef6ff;color:#165396;font-size:11px;font-weight:750;text-decoration:none;padding:7px 10px;min-height:33px}
+.pc2-action-link:hover,.pc2-action-link:focus-visible{background:#deedff;border-color:#77a7dd}
+.pc2-detail-reference{display:flex;flex-wrap:wrap;gap:10px 18px;padding:11px 14px;background:#f4f8fe;border:1px solid #dce7f3;border-radius:10px;font-size:12px;color:#455f7c}
+.pc2-detail-reference strong{color:#164574}
+.pc2-detail-reference code{font-size:11px;overflow-wrap:anywhere}
+@media(max-width:840px){.pc2-workflow-guide{grid-template-columns:1fr}.pc2-workflow-step{min-height:40px}.pc2-workflow-index{flex-basis:22px}}
+@media(max-width:650px){.pc2-workflow-guide{gap:5px}.pc2-workflow-step{padding:8px 10px;font-size:11px}.pc2-action-link{min-height:44px}.pc2-detail-reference{flex-direction:column;gap:5px}}

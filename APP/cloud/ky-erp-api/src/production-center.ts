@@ -1069,7 +1069,7 @@ function filterCards(cards: Row[], query: Row): Row[] {
     if (endDate && (!day || day > endDate)) return false;
     if (pool === "ARSIV" && year && day.slice(0, 4) !== year) return false;
     if (!search) return true;
-    return normalized(`${card.modelName || ""} ${card.companyName || ""} ${card.orderNo || ""} ${card.defaultDispatchNo || ""}`).includes(search);
+    return normalized(`${card.id || ""} ${card.modelCode || ""} ${card.modelName || ""} ${card.companyName || ""} ${card.orderNo || ""} ${card.defaultDispatchNo || ""}`).includes(search);
   });
 }
 
