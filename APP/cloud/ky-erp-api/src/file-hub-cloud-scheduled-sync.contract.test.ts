@@ -27,3 +27,14 @@ test("existing five minute Worker cron also runs File Hub cloud sync", () => {
   assert.ok(entry.includes("runFileHubCloudScheduledSync(env)"));
   assert.ok(entry.includes("retryPhysicalOperations(env)"));
 });
+
+test("DESEN File Hub cron başka görevin hatasından etkilenmez ve gizli veri loglamaz",()=>{
+  assert.doesNotMatch(entry, /ctx\.waitUntil\(Promise\.all\(/);
+  assert.match(entry, /ctx\.waitUntil\(runSecurityWorkspaceReminderSweep\(env\)\.catch/);
+  assert.match(entry, /ctx\.waitUntil\(runFileHubCloudScheduledSync\(env\)\.catch/);
+  assert.match(entry, /ctx\.waitUntil\(retryPhysicalOperations\(env\)\.then/);
+  assert.match(entry, /FILE_HUB_CLOUD_CRON_FAILED/);
+  assert.match(entry, /SECURITY_REMINDER_CRON_FAILED/);
+  // Hata metni serbest provider/OAuth yanıtı değil, sabit gizli-verisiz kod.
+  assert.doesNotMatch(entry, /FILE_HUB_CLOUD_CRON_FAILED.*\+.*error/);
+});
