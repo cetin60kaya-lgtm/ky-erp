@@ -10,6 +10,7 @@ type DatedItem = { date?: unknown; createdAt?: unknown; raw?: { source?: unknown
 type HistoryInput = {
   modelSource?: unknown;
   modelSourceYear?: unknown;
+  modelCreatedAt?: unknown;
   productionEntries?: DatedItem[];
   dispatches?: DatedItem[];
   invoices?: DatedItem[];
@@ -26,19 +27,20 @@ function imported(item: DatedItem): boolean {
  *  08.11.2026 ve sonrası yeni gerçek üretim/belge varsa yeniden aktifleşir. */
 export function isHistoricalProduction(input: HistoryInput): boolean {
   const entries = input.productionEntries || [];
-  const dispatches = input.dispatches || [];
-  const invoices = input.invoices || [];
   const hasNewProduction = entries.some((item) =>
     !imported(item) && shortDate(item.date || item.createdAt) >= HISTORICAL_PRODUCTION_CUTOVER);
-  const hasNewDocuments = [...dispatches, ...invoices].some((item) =>
-    shortDate(item.date || item.createdAt) >= HISTORICAL_PRODUCTION_CUTOVER);
-  if (hasNewProduction || hasNewDocuments) return false;
+  // Yeni irsaliye veya fatura eski üretimi tekrar İmalatta yapmaz.
+  if (hasNewProduction) return false;
   const importedModel = String(input.modelSource || "").toUpperCase() === "XLSM_IMPORT"
     && String(input.modelSourceYear || "") === "2026";
   if (importedModel) return true;
-  return entries.length > 0 && entries.every((item) =>
+  if (entries.length > 0) return entries.every((item) =>
     imported(item) || (shortDate(item.date || item.createdAt).length === 10 &&
       shortDate(item.date || item.createdAt) < HISTORICAL_PRODUCTION_CUTOVER));
+  // Kesimden önce açılmış ancak üretim fişi olmayan model kartlarını da
+  // tarihsel katalog olarak ayır. Yeni Desen kartları henüz imalat değildir.
+  const createdDay = shortDate(input.modelCreatedAt);
+  return createdDay.length === 10 && createdDay < HISTORICAL_PRODUCTION_CUTOVER;
 }
 
 export type ProductionPoolCard = {
