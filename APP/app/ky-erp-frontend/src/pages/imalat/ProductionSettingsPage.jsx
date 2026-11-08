@@ -34,6 +34,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [editingIndex, setEditingIndex] = useState(-1);
   const saveLock = useRef(false);
   const savedSnapshot = useRef([]);
 
@@ -52,6 +53,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
       setRows(prepared);
       savedSnapshot.current = prepared.map((row) => ({ ...row }));
       setMessage("");
+      setEditingIndex(-1);
     } catch (error) {
       setMessage(error?.message || "Makine ayarları okunamadı. Yeniden denemeden değişiklikleri kaydetmeyin.");
       setRows([]);
@@ -69,6 +71,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
   }
 
   function addRow() {
+    setEditingIndex(rows.length);
     setRows((current) => [...current, emptyMachine(current.length)]);
   }
 
@@ -83,6 +86,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
       return;
     }
     setRows((current) => current.length === 1 ? [emptyMachine()] : current.filter((_, rowIndex) => rowIndex !== index));
+    setEditingIndex(-1);
   }
 
   async function saveAll() {
@@ -112,6 +116,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
       for (const row of prepared) saved.push(await saveProductionCenterMachine(activeMainCompany, { id: row.id, machineNo: row.makineNo, machineName: row.makineAdi, dayOperator: row.gunduzMakinaci, nightOperator: row.geceMakinaci, isActive: row.isActive, sortOrder: row.sortOrder }));
       const confirmedRows = saved.map((row, index) => normalize(row?.data || row, index));
       setRows(confirmedRows);
+      setEditingIndex(-1);
       savedSnapshot.current = confirmedRows.map((row) => ({ ...row }));
       setMessage(`${saved.length} makine ve vardiya ayarı kaydedildi.`);
     } catch (error) {
@@ -133,7 +138,7 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
       <section className="iw-card production-settings-head">
         <div><span className="production-eyebrow">ÜRETİM TANIMLARI</span><h1>Makine · Vardiya · Makinacı</h1><p>Akıllı fişte “gündüz 1” veya “gece 1” yazıldığında doğru makinacı bu kayıttan otomatik atanır.</p></div>
         <div className="production-settings-actions">
-          <button className="iw-btn" type="button" disabled={saving || loading || !(activeMainCompany?.slug || activeMainCompany?.id)} onClick={() => { setRows(savedSnapshot.current.map((row) => ({ ...row }))); setMessage("Kaydedilmemiş değişiklikler geri alındı."); }}>Değişiklikleri Geri Al</button>
+          <button className="iw-btn" type="button" disabled={saving || loading || !(activeMainCompany?.slug || activeMainCompany?.id)} onClick={() => { setRows(savedSnapshot.current.map((row) => ({ ...row }))); setEditingIndex(-1); setMessage("Kaydedilmemiş değişiklikler geri alındı."); }}>Değişiklikleri Geri Al</button>
           <button className="iw-btn" type="button" disabled={saving || loading || !(activeMainCompany?.slug || activeMainCompany?.id)} onClick={addRow}><Plus size={16} /> Yeni Makine</button>
         </div>
       </section>
@@ -144,14 +149,24 @@ export default function ProductionSettingsPage({ activeMainCompany }) {
         <div className="iw-card-head"><div><h2><Settings size={18} /> Kayıtlı Makineler</h2><small>Pasif makine yeni üretim girişinde seçilemez; eski kayıtları korunur.</small></div><span className="iw-badge b-blue">{rows.length} makine</span></div>
         <div className="iw-card-body production-settings-list" aria-busy={saving}>
           {loading ? <div className="iw-empty">Makine tanımları yükleniyor...</div> : rows.map((row, index) => (
-            <article className={`production-machine-row ${row.isActive === false ? "inactive" : ""}`} key={`${row.id || "new"}-${index}`}>
-              <div className="production-machine-index"><Factory size={18} /></div>
-              <label><span>Makine No *</span><input disabled={saving} value={row.makineNo} onChange={(event) => update(index, "makineNo", event.target.value)} placeholder="1" /></label>
-              <label><span>Makine Adı *</span><input disabled={saving} value={row.makineAdi} onChange={(event) => update(index, "makineAdi", event.target.value)} placeholder="Oval Baskı 1" /></label>
-              <label><span>Gündüz Makinacısı *</span><input disabled={saving} value={row.gunduzMakinaci} onChange={(event) => update(index, "gunduzMakinaci", event.target.value)} placeholder="Ad soyad" /></label>
-              <label><span>Gece Makinacısı (ayrı)</span><input disabled={saving} value={row.geceMakinaci} onChange={(event) => update(index, "geceMakinaci", event.target.value)} placeholder="Gece makinacısını elle yazın" /></label>
-              <label><span>Durum</span><select disabled={saving} value={row.isActive === false ? "passive" : "active"} onChange={(event) => update(index, "isActive", event.target.value === "active")}><option value="active">Aktif</option><option value="passive">Pasif</option></select></label>
-              <button className="iw-btn danger" type="button" onClick={() => removeRow(index)} disabled={saving || (Boolean(row.id) && row.isActive === false)} title={row.id ? "Kayıtlı makine pasife alınır; eski fişler korunur." : "Yeni satırı kaldır"}><Trash2 size={15} /> {row.id ? "Pasifleştir" : "Kaldır"}</button>
+            <article className={`production-machine-card ${row.isActive === false ? "inactive" : ""}`} key={`${row.id || "new"}-${index}`}>
+              <div className="production-machine-overview">
+                <span className="production-machine-icon"><Factory size={18} /></span>
+                <div className="production-machine-summary">
+                  <strong>Makine {row.makineNo || "(yeni)"} · {row.makineAdi || "Makine adı girilecek"}</strong>
+                  <small>Gündüz: {row.gunduzMakinaci || "Tanımsız"} · Gece: {row.geceMakinaci || "Elle girilecek"}</small>
+                </div>
+                <span className={row.isActive === false ? "production-machine-state passive" : "production-machine-state"}>{row.isActive === false ? "Pasif" : "Aktif"}</span>
+                <button className="iw-btn" type="button" aria-expanded={editingIndex === index} onClick={() => setEditingIndex((current) => current === index ? -1 : index)}>{editingIndex === index ? "Kapat" : "Düzenle"}</button>
+              </div>
+              {(editingIndex === index || !row.id) ? <div className="production-machine-fields">
+                <label><span>Makine No *</span><input disabled={saving} value={row.makineNo} onChange={(event) => update(index, "makineNo", event.target.value)} placeholder="1" /></label>
+                <label><span>Makine Adı *</span><input disabled={saving} value={row.makineAdi} onChange={(event) => update(index, "makineAdi", event.target.value)} placeholder="Oval Baskı 1" /></label>
+                <label><span>Gündüz Makinacısı *</span><input disabled={saving} value={row.gunduzMakinaci} onChange={(event) => update(index, "gunduzMakinaci", event.target.value)} placeholder="Ad soyad" /></label>
+                <label><span>Gece Makinacısı (ayrı)</span><input disabled={saving} value={row.geceMakinaci} onChange={(event) => update(index, "geceMakinaci", event.target.value)} placeholder="Gece makinacısını elle yazın" /></label>
+                <label><span>Durum</span><select disabled={saving} value={row.isActive === false ? "passive" : "active"} onChange={(event) => update(index, "isActive", event.target.value === "active")}><option value="active">Aktif</option><option value="passive">Pasif</option></select></label>
+                <button className="iw-btn danger" type="button" onClick={() => removeRow(index)} disabled={saving || (Boolean(row.id) && row.isActive === false)} title={row.id ? "Eski fişleri koruyarak pasifleştir" : "Yeni satırı kaldır"}><Trash2 size={15} /> {row.id ? "Pasifleştir" : "Kaldır"}</button>
+              </div> : null}
             </article>
           ))}
           <div className="production-settings-footer"><span>Değişiklikler toplu kaydedilir. Gece makinacısı ayrı kaydedilir. Boşsa üretim fişinde elle girilir.</span><button className="iw-btn primary" type="button" onClick={saveAll} disabled={saving || loading || !rows.length || !(activeMainCompany?.slug || activeMainCompany?.id)}><Save size={16} /> {saving ? "Kaydediliyor..." : "Tüm Ayarları Kaydet"}</button></div>
