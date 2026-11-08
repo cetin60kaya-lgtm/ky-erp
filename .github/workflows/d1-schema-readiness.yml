@@ -137,3 +137,19 @@ jobs:
           response="$(npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$mismatch" --json)"
           echo "$response" | jq -e 'type=="array" and .[0].success==true' >/dev/null
           echo "$response" | jq -cr '.[0].results[0] | "DESEN_IMAGE_GAP workflow_has_image_canonical_empty=\(.workflow_image_without_canonical)"'
+
+          legacy="SELECT
+             COUNT(*) AS raw_visual_fallback_models
+            FROM model_records
+           WHERE main_company_slug='mecit-hakan'
+             AND COALESCE(TRIM(deleted_at),'')=''
+             AND COALESCE(TRIM(image_url),'')=''
+             AND (
+               COALESCE(TRIM(json_extract(CASE WHEN json_valid(raw) THEN raw ELSE '{}' END,'$.imageUrl')),'')<>''
+               OR COALESCE(TRIM(json_extract(CASE WHEN json_valid(raw) THEN raw ELSE '{}' END,'$.thumbnailUrl')),'')<>''
+               OR COALESCE(TRIM(json_extract(CASE WHEN json_valid(raw) THEN raw ELSE '{}' END,'$.mainImage.thumbnailUrl')),'')<>''
+               OR COALESCE(TRIM(json_extract(CASE WHEN json_valid(raw) THEN raw ELSE '{}' END,'$.mainImage.previewUrl')),'')<>''
+             );"
+          response="$(npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$legacy" --json)"
+          echo "$response" | jq -e 'type=="array" and .[0].success==true' >/dev/null
+          echo "$response" | jq -cr '.[0].results[0] | "DESEN_RAW_IMAGE_FALLBACK canonical_empty_but_visible=\(.raw_visual_fallback_models)"'
