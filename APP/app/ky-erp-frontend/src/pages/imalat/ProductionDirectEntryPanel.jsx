@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { createProductionCenterEntry, createProductionCenterModel, getProductionCenterRecent } from "../../services/productionCenterApi";
 import { validateDirectProduction, validCount } from "./productionDirectEntryValidation";
 import { availableProductionRegions, filterProductionModels, productionLineNet } from "./productionDirectEntryOptions";
+import { assetUrl } from "../desen/DesenWorkflowShared";
 import "./productionDirectEntry.css";
 
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
@@ -11,6 +12,8 @@ const asText = (value) => String(value ?? "").trim();
 const machineKey = (machine) => asText(machine?.id || machine?.machineNo || machine?.no);
 const machineLabel = (machine) => [machine?.machineNo, machine?.machineName].filter(Boolean).join(" · ");
 const nameOf = (model) => asText(model?.modelName || model?.modelAdi);
+const imageOf = (model) => asText(model?.modelImageUrl || model?.imageUrl || model?.mainImage?.previewUrl);
+const imageSource = (model) => imageOf(model) ? assetUrl(imageOf(model)) : "";
 const modelKey = (model) => asText(model?.id || model?.modelId);
 const operatorForShift = (machine, shift) => asText(shift === "Gece"
   ? (machine?.nightOperator ?? machine?.geceMakinaci ?? "")
@@ -70,7 +73,7 @@ export default function ProductionDirectEntryPanel({
     }
   }, [activeMainCompany, activeTenant]);
 
-  useEffect(() => { void loadRecent(); }, [loadRecent]);
+  useEffect(() => { if (modalOpen) void loadRecent(); }, [modalOpen, loadRecent]);
   useEffect(() => {
     setEntry(blankEntry());
     setQueue([]);
@@ -287,6 +290,7 @@ export default function ProductionDirectEntryPanel({
   const selectAll = queue.length > 0 && selectedIds.length === queue.length;
   function requestClose() {
     if (saving || creatingModel) return;
+    if (queue.length > 0 && !window.confirm(`${queue.length} üretim satırı henüz kaydedilmedi. Başka sayfaya geçerseniz hazırlanan satırlar kaybolabilir. Pencere kapatılsın mı?`)) return;
     setSuggestionsOpen(false);
     onClose?.();
   }
@@ -348,7 +352,7 @@ export default function ProductionDirectEntryPanel({
                     aria-expanded={suggestionsOpen} aria-controls="pde-model-options"
                     value={query} onChange={(event) => changeQuery(event.target.value)}
                     onFocus={() => setSuggestionsOpen(true)} onKeyDown={handleSearchKey}
-                    placeholder="Model adını yazın; kayıtlı modeller gelsin" />
+                    placeholder="Model adı, kodu veya model ID yazın" />
                 </div>
                 {suggestionsOpen && <div className="pde-combobox-menu" id="pde-model-options" role="listbox">
                   {suggestions.map((model, index) =>
@@ -356,14 +360,15 @@ export default function ProductionDirectEntryPanel({
                       aria-selected={modelKey(model) === entry.modelId}
                       className={index === suggestionIndex ? "pde-option pde-active" : "pde-option"}
                       onMouseDown={(event) => event.preventDefault()} onClick={() => pickModel(model)}>
-                      <span>{nameOf(model)}</span><small>{model.companyName || "Firma tanımsız"}</small>
+                      {imageSource(model) ? <img className="pde-option-image" src={imageSource(model)} alt="" loading="lazy" /> : <span className="pde-option-image pde-image-empty">MODEL</span>}
+                      <span className="pde-option-name">{nameOf(model)}<small>{model.companyName || "Firma tanımsız"} · ID: {modelKey(model)}</small></span>
                       {modelKey(model) === entry.modelId && <Check size={14}/>}
                     </button>)}
                   {!suggestions.length && <div className="pde-no-match">Kayıtlı model bulunamadı.</div>}
                   {asText(query).length >= 2 && !exactMatch &&
                     <button type="button" className="pde-create-choice"
                       onMouseDown={(event) => event.preventDefault()} onClick={openNewModel}>
-                      <Plus size={15}/> Yeni model oluştur: <strong>{asText(query)}</strong>
+                      <Plus size={15}/> Kayıtlı model yok · Yeni model kartı aç: <strong>{asText(query)}</strong>
                     </button>}
                 </div>}
               </div>
@@ -398,7 +403,7 @@ export default function ProductionDirectEntryPanel({
                 placeholder="Makinacıyı girin"/></label>
           </div>
           {newModelOpen && <section className="pde-new-model" aria-label="Yeni model oluştur">
-            <div className="pde-new-title"><strong>Yeni Model</strong><span>Kayıtlı model yoksa burada oluştur; üretim girişine devam et.</span></div>
+            <div className="pde-new-title"><strong>Yeni Model</strong><span>Önce Desen Havuzu ve firma eşleşmesini kontrol edin. Zorunluysa yetkili olarak yeni model oluşturun.</span></div>
             <div className="pde-new-fields">
               <label><span>Model Adı *</span><input value={newModelName}
                 onChange={(event) => setNewModelName(event.target.value)} maxLength={150}/></label>
@@ -422,8 +427,8 @@ export default function ProductionDirectEntryPanel({
             </div>
           </section>}
           {selectedModel && <div className="pde-context">
-            <span><strong>Model:</strong> {nameOf(selectedModel)}</span>
-            <span><strong>Firma:</strong> {selectedModel.companyName || "Henüz eşleştirilmedi"}</span>
+            {imageSource(selectedModel) ? <img className="pde-selected-image" src={imageSource(selectedModel)} alt={nameOf(selectedModel)} loading="lazy" /> : <div className="pde-selected-image pde-image-empty">Görsel yok</div>}
+            <div className="pde-selected-details"><strong>{nameOf(selectedModel)}</strong><span>Model ID: {modelKey(selectedModel)}</span><span>{selectedModel.companyName || "Firma tanımsız"} · {regions.join(", ")}</span></div>
           </div>}
           <div className="pde-bottom">
             <div className="pde-net"><small>Net sağlam</small><strong className={draftNet < 0 ? "pde-negative" : ""}>
@@ -431,7 +436,7 @@ export default function ProductionDirectEntryPanel({
               <small>Adet − baskı sakatı − kumaş sakatı</small></div>
             <div className="pde-submit">
               <button type="button" className="pde-reset" disabled={saving || creatingModel} onClick={clearEntry}>
-                <RotateCcw size={15}/> Yeni Kayıt</button>
+                <RotateCcw size={15}/> Alanları Temizle</button>
               {editingId && <button type="button" className="pde-reset" onClick={() => { setEditingId(""); clearFeedback(); }}>Düzenlemeyi İptal Et</button>}
               <button className="pde-save" type="submit" disabled={saving || creatingModel || !allModels.length || !machines.length}>
                 <Plus size={16}/>{editingId ? "Satırı Güncelle" : "Satır Ekle"}</button>
