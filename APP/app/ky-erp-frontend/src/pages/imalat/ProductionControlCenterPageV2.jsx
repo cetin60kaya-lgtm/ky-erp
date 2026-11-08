@@ -590,7 +590,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
       {message ? <div className="pc2-notice"><CircleAlert size={17} /> {message}</div> : null}
       {listError ? <div className="pc2-notice warning" role="alert"><CircleAlert size={17} /> {listError} <button type="button" onClick={load} disabled={loading}>Tekrar Yükle</button></div> : null}
 
-      <ProductionDirectEntryPanel activeMainCompany={activeMainCompany} models={dictionaries.models} machines={dictionaries.machines} companies={dictionaries.companies} preselectModelId={quickSelectedModel} openRequestToken={openRequestToken} modalOpen={directEntryModalOpen} onClose={() => setDirectEntryModalOpen(false)} onSaved={load} onModelCreated={load} />
+      <ProductionDirectEntryPanel activeMainCompany={activeMainCompany} models={dictionaries.models} machines={dictionaries.machines} companies={dictionaries.companies} preselectModelId={quickSelectedModel} openRequestToken={openRequestToken} modalOpen={directEntryModalOpen} onClose={() => setDirectEntryModalOpen(false)} optionsLoading={loading} onRefreshOptions={load} onSaved={load} onModelCreated={load} />
 
       <section className="pc2-toolbar pc2-period-toolbar" aria-label="Üretim dönem filtresi">
         <label>Dönem <select aria-label="Üretim dönemi" value={period} onChange={(event) => {
