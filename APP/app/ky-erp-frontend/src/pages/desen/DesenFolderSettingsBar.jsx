@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { resolveFileHubStorage } from "../../components/files/fileHub";
 import { apiGet, apiPost } from "../../utils/api";
+import { analyzeDesenStorageTargets } from "./desenStorageReadiness";
 
 const TARGETS = [
   ["MODEL_IMAGE", "Model görseli"],
@@ -87,15 +88,13 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
     } else setImageSyncStatus(null);
 
     const missing = next.filter((row) => !row.ok);
-    const cloudPending = next.filter((row) =>
-      row.ok
-      && ["GOOGLE_DRIVE", "ONEDRIVE", "SHAREPOINT"].includes(row.provider)
-      && (row.syncMode !== "CLOUD_API" || row.connectionStatus !== "CONNECTED" || !row.remoteRootId),
-    );
+    const readiness = analyzeDesenStorageTargets(next);
     if (missing.length) {
       setMessage("Desen için eksik depolama ataması var. Depolama > Bölüm / Dosya Atamaları ekranından hedefi tanımlayın.");
-    } else if (cloudPending.length) {
-      setMessage("Bulut depolama kaydı var ancak doğrudan bulut senkronu henüz hazır değil. OAuth hesabı, uzak klasör ve CLOUD_API bağlantısını Depolama ekranından tamamlayın.");
+    } else if (readiness.cloudPending.length) {
+      setMessage("Doğrudan bulut kaynağı hazır değil: " + readiness.cloudPending.map((row) => row.label).join(", ") + ". Mevcut bağlantının OAuth/uzak klasör ayarını kontrol edin.");
+    } else if (readiness.agentPending.length) {
+      setMessage("Drive bulut kaynakları ayrı çalışıyor. Agent bağlantısı henüz doğrulanmadı: " + readiness.agentPending.map((row) => row.label).join(", ") + ". Yeni hesap veya anahtar açmadan mevcut KY Control bağlantısını kontrol edin.");
     }
     setBusy(false);
   }, [companyKey]);
@@ -124,12 +123,13 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
     }
   };
 
-  const connected = useMemo(() => targets.filter((row) => row.ok), [targets]);
+  const readiness = useMemo(() => analyzeDesenStorageTargets(targets), [targets]);
+  const connected = readiness.connected;
   const primaryProvider = connected[0]?.provider || "";
-  const cloudRows = connected.filter((row) => ["GOOGLE_DRIVE", "ONEDRIVE", "SHAREPOINT"].includes(row.provider));
-  const directReady = cloudRows.some((row) => row.syncMode === "CLOUD_API" && row.connectionStatus === "CONNECTED" && row.remoteRootId);
-  const agentOnly = cloudRows.some((row) => row.syncMode === "AGENT");
-  const cloudPending = cloudRows.some((row) => row.syncMode !== "CLOUD_API" || row.connectionStatus !== "CONNECTED" || !row.remoteRootId);
+  const directReady = readiness.directReady;
+  const agentOnly = readiness.agentRows.length > 0;
+  const cloudPending = readiness.cloudPending.length > 0;
+  const agentPending = readiness.agentPending;
   const imageTarget = targets.find((row) => row.purposeCode === "MODEL_IMAGE");
   const imageCloudReady = imageTarget?.ok && imageTarget.provider === "GOOGLE_DRIVE" && imageTarget.syncMode === "CLOUD_API" && imageTarget.connectionId;
   const imageProgress = imageSyncStatus?.modelImageSync || null;
@@ -148,7 +148,8 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
         </div>
         <div className="dsg-storage-actions">
           {cloudPending ? <span className="dsg-storage-alert"><TriangleAlert size={14} /> Bulut ayarı eksik</span> : null}
-          {agentOnly ? <span className="dsg-storage-hint">Agent modunda</span> : null}
+          {agentPending.length ? <span className="dsg-storage-alert"><TriangleAlert size={14} /> Agent doğrulanmadı: {agentPending.map((row) => row.label).join(", ")}</span>
+            : agentOnly ? <span className="dsg-storage-hint">Agent bağlantısı tanımlı</span> : null}
           {imageCloudReady ? <button className="dsg-btn primary" type="button" disabled={busy || syncingImages} onClick={syncModelImages}>
             {syncingImages ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}
             {syncingImages ? "Eşleştiriliyor…" : "Drive Görsellerini Eşleştir"}
