@@ -4,6 +4,7 @@ import { getProductionCenterMachines, saveProductionCenterMachine } from "../../
 import "../modules/cleanWorkflow.css";
 import "./imalatWorkflow.css";
 import "./productionCenter.css";
+import "./productionSettingsPro.css";
 
 function emptyMachine(index = 0) {
   return {
