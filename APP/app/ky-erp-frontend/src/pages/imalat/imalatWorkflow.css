@@ -1893,3 +1893,11 @@
     grid-column: 1;
   }
 }
+
+/* Üretim raporlarında filtreler açıkça istenince görünür. */
+.imalat-report-quick{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.imalat-report-quick>span{display:flex;flex-direction:column;gap:4px;color:#224b74}
+.imalat-report-quick strong{font-size:13px}
+.imalat-report-quick small{font-size:11px;color:#637b91}
+.imalat-report-filter-note{margin:0 0 15px;color:#657891;font-size:12px;line-height:1.5}
+@media(max-width:650px){.imalat-report-quick>button{min-height:44px;width:100%;justify-content:center}}
