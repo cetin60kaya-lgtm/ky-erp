@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 08.11.2026 — DESEN model detayı sabit pencere / soldan en-boy ayarı
+
+- Kullanıcı canlı LONE modalında Genel, İşlem Logları, Dosyalar, Boyahane ve Baskı Bölgeleri arasında pencerenin görünür ölçüsünün değişmemesini, ayrıca **sol kenardan en** ve **sol-alt köşeden en-boy** ayarı istedi.
+- Yalnız `ModelDetailModal`, ortak `WideModal` bileşenini `size="model-detail" resizable` ile kullanır; diğer dialoglar değiştirilmez.
+- Masaüstünde başlangıç 840×590 CSS px (ekran boyuna göre sınırlı); içerik `dsg-modal-body` içinde kaydırılır ve sekme değişiminde başa döner. Sol tutacak sadece genişliği, sol-alt tutacak genişliği ve yüksekliği değiştirir. Sağ kenar sürükleme boyunca sabitlenir; ok tuşlarıyla da tutacak kullanılabilir; viewport min/max sınırları korunur. Mobilde eski tam ekran görünümü korunur, boyutlandırma tutacakları gizlidir.
+- `desenModalResize.test.js` genişletme/daraltma, sol-alt en-boy, ekran sınırı ve dar ekran kontrolünü kapsar.
+- Bu istek model dosyası, D1/Drive/File Hub ilişkisi, model UUID, gerçek en-boy cm bilgisi veya baskı ölçüsünü değiştirmez. **Frontend CI/merge/Pages yayını ve gerçek canlı masaüstü drag testi ayrı doğrulama gerektirir.**
+
+
 
 ## 08.11.2026 — DESEN model detayında İşlem Logları ekran çökmesi düzeltmesi
 
