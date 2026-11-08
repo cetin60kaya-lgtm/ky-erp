@@ -179,12 +179,12 @@ export default function ImalatKontrolRapor({ activeMainCompany, initialView = "a
             <Field label="Makinacı"><input value={filters.makinaci} onChange={(event) => updateFilter("makinaci", event.target.value)} placeholder="Makinacı ara" /></Field>
             <Field label="Vardiya"><select value={filters.vardiya} onChange={(event) => updateFilter("vardiya", event.target.value)}><option value="">Tümü</option><option>Gündüz</option><option>Gece</option></select></Field>
             <Field label="Baskı bölgesi"><input value={filters.baskiBolgesi} onChange={(event) => updateFilter("baskiBolgesi", event.target.value)} /></Field>
-            <Field label="Durum"><select value={filters.durum} onChange={(event) => updateFilter("durum", event.target.value)}><option value="">Tümü</option><option>Tamam</option><option>Eksik Operasyon</option><option>Bekliyor</option><option>İptal</option><option>Kontrol Gerekli</option></select></Field>
+            <Field label="Durum"><select value={filters.durum} onChange={(event) => updateFilter("durum", event.target.value)}><option value="">Tümü</option><option>Tamam</option><option>Eksik Operasyon</option><option>Bekliyor</option><option>İptal</option><option>Kontrol Gerekli</option><option>Geçmiş Tamamlandı</option></select></Field>
             <div className="imalat-filter-buttons">
               <button className="iw-btn primary" type="button" disabled={loading} onClick={() => loadData(filters)}><Search size={16} /> {loading ? "Yükleniyor" : "Uygula"}</button>
               <button className="iw-btn" type="button" onClick={resetFilters}><RotateCcw size={15} /> Temizle</button>
             </div>
-          </div> : <p className="imalat-report-filter-note">{filtersDirty ? "Değiştirilen filtreler henüz uygulanmadı." : "Tüm dönemlerin son uygulanmış kayıtları görüntüleniyor. Filtreyle yıl, tarih, firma, model, makine, vardiya ve baskı bölgesi seçebilirsiniz."}</p>}
+          </div> : <p className="imalat-report-filter-note">{filtersDirty ? "Değiştirilen filtreler henüz uygulanmadı." : "Tüm dönemlerin üretimleri ve geçmiş tamamlanan işler görüntüleniyor. Geçmiş aktarım farkları yeni açık imalat borcu sayılmaz. Yıl, tarih, firma, model ve makine filtresi kullanabilirsiniz."}</p>}
 
           <div className="summary uretim-summary imalat-control-metrics">
             {metrics.map(([label, value, tone]) => <Stat key={label} label={label} value={formatQty(value)} tone={tone} />)}
