@@ -100,3 +100,40 @@ jobs:
           response="$(npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$summary" --json)"
           echo "$response" | jq -e 'type=="array" and .[0].success==true' >/dev/null
           echo "$response" | jq -cr '.[0].results[0] | "DESEN_MODEL_COVERAGE total=\(.total_models) with_image=\(.models_with_image) missing=\(.models_without_image)"'
+
+          bindings="SELECT b.purpose_code AS purpose,
+                   b.sync_enabled AS sync_enabled,
+                   CASE WHEN COALESCE(TRIM(b.root_path),'')='' THEN 0 ELSE 1 END AS has_specific_root,
+                   co.sync_mode AS sync_mode,
+                   co.connection_status AS connection_status
+              FROM file_hub_bindings b
+              JOIN file_hub_connections co ON co.id=b.storage_connection_id
+                AND co.main_company_slug=b.main_company_slug
+             WHERE b.main_company_slug='mecit-hakan' AND b.module_code='DESEN'
+               AND b.purpose_code IN ('MODEL_IMAGE','MODEL_SOURCE','PLACEMENT','OUTGOING_DESIGN')
+             ORDER BY b.purpose_code;"
+          response="$(npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$bindings" --json)"
+          echo "$response" | jq -e 'type=="array" and .[0].success==true' >/dev/null
+          echo "$response" | jq -cr '.[0].results[] | "DESEN_BINDING purpose=\(.purpose) enabled=\(.sync_enabled) root=\(.has_specific_root) mode=\(.sync_mode) state=\(.connection_status)"'
+          mismatch="SELECT COUNT(DISTINCT m.id) AS workflow_image_without_canonical
+              FROM model_records m
+              JOIN json_store j ON j.main_company_slug=m.main_company_slug
+                AND j.scope='DESEN_WORKFLOW_MODEL'
+                AND json_extract(j.data,'$.id')=m.id
+             WHERE m.main_company_slug='mecit-hakan' AND COALESCE(TRIM(m.deleted_at),'')=''
+               AND COALESCE(TRIM(m.image_url),'')=''
+               AND (
+                 COALESCE(TRIM(json_extract(j.data,'$.imageUrl')),'')<>''
+                 OR EXISTS(
+                   SELECT 1 FROM json_each(j.data,'$.files') f
+                   WHERE json_extract(f.value,'$.role')='MODEL_IMAGE'
+                     AND COALESCE(
+                       NULLIF(json_extract(f.value,'$.thumbnailUrl'),''),
+                       NULLIF(json_extract(f.value,'$.previewUrl'),''),
+                       ''
+                     )<>''
+                 )
+               );"
+          response="$(npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$mismatch" --json)"
+          echo "$response" | jq -e 'type=="array" and .[0].success==true' >/dev/null
+          echo "$response" | jq -cr '.[0].results[0] | "DESEN_IMAGE_GAP workflow_has_image_canonical_empty=\(.workflow_image_without_canonical)"'
