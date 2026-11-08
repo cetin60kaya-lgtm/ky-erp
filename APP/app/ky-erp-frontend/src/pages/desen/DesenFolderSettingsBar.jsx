@@ -8,9 +8,9 @@ import {
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
-import { resolveFileHubStorage } from "../../components/files/fileHub";
+import { resolveFileHubStorage, saveFileHubBinding } from "../../components/files/fileHub";
 import { apiGet, apiPost } from "../../utils/api";
-import { analyzeDesenStorageTargets } from "./desenStorageReadiness";
+import { analyzeDesenStorageTargets, canOfferPlacementBinding } from "./desenStorageReadiness";
 
 const TARGETS = [
   ["MODEL_IMAGE", "Model görseli"],
@@ -45,6 +45,7 @@ function storageView(payload, purposeCode, label) {
     lastSyncAt: row.last_sync_at || "",
     lastError: row.last_error || "",
     exact: Boolean(row.module_code && row.purpose_code),
+    syncEnabled: Number(row.sync_enabled ?? 1) !== 0,
   };
 }
 
@@ -60,6 +61,7 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
   const [message, setMessage] = useState("");
   const [imageSyncStatus, setImageSyncStatus] = useState(null);
   const [syncingImages, setSyncingImages] = useState(false);
+  const [bindingPlacement, setBindingPlacement] = useState(false);
   const companyKey = String(activeMainCompany?.slug || activeMainCompany?.id || "");
 
   const load = useCallback(async () => {
@@ -87,10 +89,10 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
       }
     } else setImageSyncStatus(null);
 
-    const missing = next.filter((row) => !row.ok);
+    const missing = next.filter((row) => !row.ok || !row.exact || row.syncEnabled === false);
     const readiness = analyzeDesenStorageTargets(next);
     if (missing.length) {
-      setMessage("Desen için eksik depolama ataması var. Depolama > Bölüm / Dosya Atamaları ekranından hedefi tanımlayın.");
+      setMessage("DESEN için özel senkron ataması eksik veya kapalı: " + missing.map((row) => row.label).join(", ") + ". Genel firma depolaması bir DESEN klasör ataması yerine geçmez.");
     } else if (readiness.cloudPending.length) {
       setMessage("Doğrudan bulut kaynağı hazır değil: " + readiness.cloudPending.map((row) => row.label).join(", ") + ". Mevcut bağlantının OAuth/uzak klasör ayarını kontrol edin.");
     } else if (readiness.agentPending.length) {
@@ -123,6 +125,31 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
     }
   };
 
+  const bindPlacement = async () => {
+    const source = targets.find((row) => row.purposeCode === "MODEL_SOURCE");
+    if (!canOfferPlacementBinding(targets) || busy || bindingPlacement) return;
+    // Genel klasör yoluna sessiz yazma: yetkili kullanıcı bir kez onaylar.
+    if (!window.confirm("Mevcut Hakan Emp Google Drive hesabında 'yerleşim dosyaları' klasörünü DESEN / Yerleşim-Kalıp kaynağı olarak bağlamak istiyor musunuz? Dosyalar taşınmaz, yalnız okuma ve senkron açılır.")) return;
+    setBindingPlacement(true);
+    setMessage("");
+    try {
+      await saveFileHubBinding({
+        moduleCode: "DESEN", purposeCode: "PLACEMENT",
+        storageConnectionId: source.connectionId,
+        rootPath: "yerleşim dosyaları",
+        readEnabled: true, writeEnabled: false, syncEnabled: true, isDefault: false,
+      });
+      await load();
+      setMessage("Yerleşim klasörü ataması kaydedildi. File Hub'ın sonraki otomatik taramasında PDF/AI dosyaları indekslenir; model ilişkileri kaynak adına göre ayrıca doğrulanır.");
+    } catch (error) {
+      setMessage(Number(error?.status) === 403
+        ? "Yerleşim atamasını yalnız ana firma sahibi / yetkili yönetici değiştirebilir."
+        : error?.message || "Yerleşim klasörü bağlanamadı.");
+    } finally {
+      setBindingPlacement(false);
+    }
+  };
+
   const readiness = useMemo(() => analyzeDesenStorageTargets(targets), [targets]);
   const connected = readiness.connected;
   const primaryProvider = connected[0]?.provider || "";
@@ -130,6 +157,7 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
   const agentOnly = readiness.agentRows.length > 0;
   const cloudPending = readiness.cloudPending.length > 0;
   const agentPending = readiness.agentPending;
+  const offerPlacementBinding = canOfferPlacementBinding(targets);
   const imageTarget = targets.find((row) => row.purposeCode === "MODEL_IMAGE");
   const imageCloudReady = imageTarget?.ok && imageTarget.provider === "GOOGLE_DRIVE" && imageTarget.syncMode === "CLOUD_API" && imageTarget.connectionId;
   const imageProgress = imageSyncStatus?.modelImageSync || null;
@@ -150,6 +178,9 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
           {cloudPending ? <span className="dsg-storage-alert"><TriangleAlert size={14} /> Bulut ayarı eksik</span> : null}
           {agentPending.length ? <span className="dsg-storage-alert"><TriangleAlert size={14} /> Agent doğrulanmadı: {agentPending.map((row) => row.label).join(", ")}</span>
             : agentOnly ? <span className="dsg-storage-hint">Agent bağlantısı tanımlı</span> : null}
+          {offerPlacementBinding ? <button className="dsg-btn" type="button" disabled={busy || bindingPlacement} onClick={bindPlacement}>
+            <FolderOpen size={15} /> {bindingPlacement ? "Yerleşim bağlanıyor…" : "Yerleşim klasörünü bağla"}
+          </button> : null}
           {imageCloudReady ? <button className="dsg-btn primary" type="button" disabled={busy || syncingImages} onClick={syncModelImages}>
             {syncingImages ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}
             {syncingImages ? "Eşleştiriliyor…" : "Drive Görsellerini Eşleştir"}
@@ -173,11 +204,11 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
         <div className="dsg-storage-facts">
           {targets.map((row) => (
             <div key={row.purposeCode} className="dsg-storage-fact">
-              {row.ok ? <CheckCircle2 size={16} /> : <TriangleAlert size={16} />}
+              {row.ok && row.exact && row.syncEnabled !== false ? <CheckCircle2 size={16} /> : <TriangleAlert size={16} />}
               <div>
                 <strong>{row.label}</strong>
                 <span>{row.ok
-                  ? `${row.connectionName || providerLabel(row.provider)} · ${row.rootPath || row.localRootPath || row.remoteRootName || "/"} · ${row.syncMode || "Mod bilinmiyor"} · ${row.connectionStatus || "Durum bilinmiyor"}${row.exact ? "" : " · Firma varsayılanı"}`
+                  ? `${row.connectionName || providerLabel(row.provider)} · ${row.rootPath || row.localRootPath || row.remoteRootName || "/"} · ${row.syncMode || "Mod bilinmiyor"} · ${row.connectionStatus || "Durum bilinmiyor"}${row.exact ? row.syncEnabled === false ? " · Senkron kapalı" : "" : " · Özel DESEN ataması yok (firma varsayılanı)"}`
                   : "Atama yok"}</span>
                 {row.ok ? <small>Son doğrulanmış tarama: {formatSync(row.lastSyncAt)}{row.lastError ? ` · Hata: ${row.lastError}` : ""}</small> : null}
               </div>
