@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Archive,
@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { apiUrl, apiFetch, downloadFile } from "../../utils/api";
 import DesenImage from "./DesenImage";
+import { resizeModelDetailBox } from "./desenModalResize";
 import { safeModelLogRows } from "./desenModelLogs";
 import {
   createDesignOperation,
@@ -142,7 +143,55 @@ export function WideModal({
   onSave,
   dirty = false,
   size = "wide",
+  resizable = false,
 }) {
+  const modalRef = useRef(null);
+  const resizeStartRef = useRef(null);
+  const [modalBox, setModalBox] = useState(null);
+
+  const startResize = (event, edge) => {
+    if (!resizable || event.button !== 0 || window.matchMedia("(max-width: 700px)").matches) return;
+    const rect = modalRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const base = { width: rect.width, height: rect.height, right: window.innerWidth - rect.right, top: rect.top };
+    resizeStartRef.current = { ...base, startX: event.clientX, startY: event.clientY, pointerId: event.pointerId, edge };
+    setModalBox(base);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const moveResize = (event) => {
+    const drag = resizeStartRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    event.preventDefault();
+    const next = resizeModelDetailBox({
+      ...drag, x: event.clientX, y: event.clientY,
+      maxWidth: window.innerWidth - drag.right - 8,
+      maxHeight: window.innerHeight - drag.top - 8,
+    });
+    setModalBox({ width: next.width, height: next.height, right: drag.right, top: drag.top });
+  };
+  const endResize = (event) => {
+    const drag = resizeStartRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    resizeStartRef.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+  const keyboardResize = (event, edge) => {
+    const delta = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] }[event.key];
+    if (!delta || (edge === "left" && delta[1])) return;
+    const rect = modalRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    event.preventDefault();
+    const current = modalBox || { width: rect.width, height: rect.height, right: window.innerWidth - rect.right, top: rect.top };
+    const next = resizeModelDetailBox({
+      ...current, startX: 0, startY: 0, x: delta[0], y: delta[1], edge,
+      maxWidth: window.innerWidth - current.right - 8,
+      maxHeight: window.innerHeight - current.top - 8,
+    });
+    setModalBox({ ...current, ...next });
+  };
+
   useEffect(() => {
     const handleKey = (event) => {
       if (event.key === "Escape") {
@@ -176,10 +225,15 @@ export function WideModal({
       onMouseDown={(event) => event.target === event.currentTarget && close()}
     >
       <section
+        ref={modalRef}
         className={`dsg-modal ${size}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        style={resizable && modalBox ? {
+          position: "fixed", right: modalBox.right, top: modalBox.top,
+          width: modalBox.width, height: modalBox.height,
+        } : undefined}
       >
         <header className="dsg-modal-head">
           <div>
@@ -197,6 +251,20 @@ export function WideModal({
         </header>
         <div className="dsg-modal-body">{children}</div>
         {footer && <footer className="dsg-modal-foot">{footer}</footer>}
+        {resizable && <>
+          <button type="button" className="dsg-modal-resize-left"
+            title="Sol kenardan sürükleyerek genişliği değiştirin"
+            aria-label="Pencere genişliğini soldan ayarla (sol ve sağ ok tuşları)"
+            onPointerDown={(event) => startResize(event, "left")}
+            onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize}
+            onKeyDown={(event) => keyboardResize(event, "left")} />
+          <button type="button" className="dsg-modal-resize-corner"
+            title="Sol-alt köşeden sürükleyerek genişliği ve yüksekliği değiştirin"
+            aria-label="Pencere genişliğini ve yüksekliğini soldan ayarla (ok tuşları)"
+            onPointerDown={(event) => startResize(event, "corner")}
+            onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize}
+            onKeyDown={(event) => keyboardResize(event, "corner")} />
+        </>}
       </section>
     </div>
   );
@@ -1515,6 +1583,8 @@ export function ModelDetailModal({
   ];
   return (
     <WideModal
+      size="model-detail"
+      resizable
       title={`${model.modelName} model detayı`}
       subtitle={`${model.companyName} · ${model.operations.length} baskı bölgesi`}
       onClose={onClose}
