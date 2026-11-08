@@ -650,7 +650,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
           <Metric label="Üretilen net" value={dataReady ? qty(summary.totalCompletedNetQty) : "—"} helper="Fişlerden hesaplanan" tone="success" />
         </> : pool === "IMALATTA" ? <>
           <Metric label="Üretilen net" value={dataReady ? qty(summary.totalCompletedNetQty) : "—"} helper="Baskı ve kumaş sakatı düşülmüş" tone="success" />
-          <Metric label="Bekleyen üretim" value={dataReady ? qty(summary.totalProductionRemainingQty) : "—"} helper="Hedefi kayıtlı modellerde" tone="warning" />
+          <Metric label="Üretimi açık model" value={dataReady ? qty(summary.productionOpenCount) : "—"} helper="Hedefine ulaşmamış işler" tone="warning" />
         </> : <>
           <Metric label="Brüt üretilen" value={dataReady ? qty(summary.totalCompletedGrossQty) : "—"} helper="İşlem fişlerinin toplamı" />
           <Metric label="Net sağlam adet" value={dataReady ? qty(summary.totalCompletedNetQty) : "—"} helper="Sakat / test düşülmüş" tone="success" />
