@@ -1,5 +1,15 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 08.11.2026 — DESEN yerleşim PDF özel Drive ataması (yanlış 4/4 düzeltmesi)
+
+- Canlı D1 `D1 Schema Readiness - Check Only` denetimi (run 42491972133) `MODEL_IMAGE` 432 indeksli/431 modele bağlı, `MODEL_SOURCE` 7.147 indeksli/703 dosya bağlı/346 model, `OUTGOING_DESIGN` AGENT UNKNOWN/0 indeksli gösterdi. **`PLACEMENT` etkin özel senkron bağlarında hiç görünmedi**.
+- Gerçek kullanıcı ekranındaki `Yerleşim / kalıp` satırı `Firma varsayılanı` idi: `/file-hub/resolve-storage` özel DESEN/PLACEMENT ataması olmayınca ana firma bağlantısına fallback yapar. Önceki arayüz bunu yanlış biçimde “4/4 bağlı” sayıyordu; fakat bu, `sync_enabled=1` özel kök bağı değildir.
+- Düzeltme: gerçek/etkin özel atamalar sayılır, fallback ayrı uyarılır. Mevcut `MODEL_SOURCE` `modeller` yolu + aynı `GOOGLE_DRIVE CLOUD_API CONNECTED` hesabı doğrulanırsa, yalnız yetkili kullanıcı **“Yerleşim klasörünü bağla”** düğmesine bilinçli basarak mevcut `yerleşim dosyaları` kökünü `DESEN / PLACEMENT` ataması yapabilir. Tarama izni `readEnabled=true`, `writeEnabled=false`, `syncEnabled=true`. Sonuç mevcut owner-gated `PUT /file-hub/bindings` yolundan kaydedilir. Yeni Drive hesabı/token/yerel root/migration veya dosya taşıma yok; otomatik sessiz D1 mutasyonu yok.
+- Google Drive salt-okunur liste: `yerleşim dosyaları` 704 dosya (684 PDF). Atama tamamlandıktan sonra mevcut 5 dk cron taraması/idempotent backfill ile indeks; model adına göre özgün ilişki ayrıca doğrulanır.
+- Mevcut D1 manuel check-only'a ayrıca `DESEN_BINDING` gerçek özel kaynak/sync flag ve `DESEN_IMAGE_GAP` workflow görseli olup canonical boş model sayısı eklendi (yalnız SELECT ve aggregate, model adı/ID/tokens/log yok).
+- Sahada kullanıcı owner oturumunda butona basıp gerçek `DESEN/PLACEMENT` D1 indeks/bağı görülmeden yerleşim senkronuna PASS denmez. Giden Agent kimliği ayrı doğrulama bekler. D1 iş kayıtları, PDF/PSD/AI ve İmalat değiştirilmez.
+
+
 ## 08.11.2026 — DESEN Drive görsel/kaynak/yerleşim/giden bağları tam denetim
 
 - Kullanıcı İmalat işine geçilmesini durdurdu; yalnız DESEN'e, Drive dosya akışına ve model kartı ilişkilerine odaklanılmasını istedi.
