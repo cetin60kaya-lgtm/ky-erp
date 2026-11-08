@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 08.11.2026 — DESEN legacy raw görsellerini kaynak senkronunda koruma
+
+- Canlı kullanıcı DESEN Havuzu ekranında **723 toplam / 275 görselsiz**, D1 salt-okunur `model_records.image_url` sorgusunda **723 / 292** görüldü. Aradaki 17 farkın nedeni öncelikle JSON `raw.imageUrl`/`raw.mainImage` fallback olasılığıdır; kesin sayım yeni D1 SELECT adımıyla doğrulanacak, tahmin PASS sayılmaz.
+- `desen-workflow.ts` `canonicalRecordView` zaten `row.image_url || raw.imageUrl || raw.thumbnailUrl` ve `raw.mainImage` kullanır. Oysa `file-hub-design-sync.ts` kaynak PDF/AI/PSD bağında `mainImage` yoksa önceki düzeltmenin yalnız `existing.image_url` koruması, raw'daki eski görüntüyü yanlışlıkla boşaltabilirdi.
+- Düzeltme: mevcut canonical aynı tenant/UUID `raw` alanı da okunur; öncelik gerçek workflow `MODEL_IMAGE`, sonra `image_url`, sonra mevcut canonical `raw.imageUrl`/`raw.thumbnailUrl`/`raw.mainImage`, en son workflow eski raw önizleme alanları. Hiçbir kaynak yoksa sahte görsel üretilmez.
+- `preserveCanonicalImageUrl` testleri eski raw fallback, mainImage, yeni görsel önceliği ve boş durumları içerir. D1 manuel check-only'a aggregate raw fallback sayımı eklenir. Model, dosya, görsel, renk ve D1 verileri doğrudan bu kod değişikliğiyle elle değiştirilmez.
+- Bu değişiklik İmalat modülünün koduna, cari/fatura kayıtlarına, dosya adına veya Drive klasörüne dokunmaz.
+
+
 ## 08.11.2026 — DESEN yerleşim PDF özel Drive ataması (yanlış 4/4 düzeltmesi)
 
 - Canlı D1 `D1 Schema Readiness - Check Only` denetimi (run 42491972133) `MODEL_IMAGE` 432 indeksli/431 modele bağlı, `MODEL_SOURCE` 7.147 indeksli/703 dosya bağlı/346 model, `OUTGOING_DESIGN` AGENT UNKNOWN/0 indeksli gösterdi. **`PLACEMENT` etkin özel senkron bağlarında hiç görünmedi**.
