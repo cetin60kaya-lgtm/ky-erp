@@ -222,6 +222,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
   const [center, setCenter] = useState({ rows: [], summary: {}, pagination: {} });
   const [dictionaries, setDictionaries] = useState({ models: [], machines: [], operators: [], companies: [] });
   const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState("");
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -246,6 +247,11 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
   const [entry, setEntry] = useState(defaultEntry(null, {}));
   const [saving, setSaving] = useState(false);
   const requestSeq = useRef(0);
+  const listCache = useRef(new Map());
+  const companyRef = useRef(activeMainCompany);
+  companyRef.current = activeMainCompany;
+  const tenantKey = String(activeMainCompany?.slug || activeMainCompany?.id || "");
+  const queryKey = JSON.stringify([tenantKey, pool, search, status, startDate, endDate, pool === "ARSIV" ? archiveYear : "", page]);
   const saveLock = useRef(false);
   const entryModel = dictionaries.models.find((row) => String(row.id || row.modelId) === String(entry.modelId)) || null;
   const entryPrintRegions = (entryModel?.printRegions || [])
@@ -254,22 +260,25 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
 
   const load = useCallback(async () => {
     const ticket = ++requestSeq.current;
-    if (!activeMainCompany?.slug && !activeMainCompany?.id) {
-      setCenter({ rows: [], summary: {}, pagination: {} });
+    if (!tenantKey) {
+      setCenter({ rows: [], summary: {}, pagination: {}, __queryKey: queryKey });
       setDictionaries({ models: [], machines: [], operators: [], companies: [] });
       setLoading(false);
-      setMessage("İmalat merkezi için ana firma seçin.");
+      setListError("İmalat merkezi için ana firma seçin.");
       return;
     }
     setLoading(true);
+    setListError("");
+    const company = companyRef.current;
+    const tenant = tenantKey;
+    let timeoutId;
     try {
-      const tenant = activeMainCompany?.slug || activeMainCompany?.id;
-      const loadResult = await loadModuleData({
+      const loadResult = await Promise.race([loadModuleData({
         scope: `imalat:${tenant}:merkez:${search}:${status}:${pool}:${startDate}:${endDate}:${archiveYear}:${page}`,
         sources: {
           center: {
             critical: true,
-            load: () => getProductionCenter(activeMainCompany, {
+            load: () => getProductionCenter(company, {
               search,
               status,
               pool,
@@ -281,9 +290,11 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
               _ts: Date.now(),
             }),
           },
-          dictionaries: { fallback: {}, load: () => getProductionCenterDictionaries(activeMainCompany) },
+          dictionaries: { fallback: {}, load: () => getProductionCenterDictionaries(company) },
         },
-      });
+      }), new Promise((_, reject) => {
+        timeoutId = window.setTimeout(() => reject(new Error("Üretim listesi zamanında yüklenemedi. Yenile ile tekrar deneyin.")), 30000);
+      })]);
       if (ticket !== requestSeq.current) return;
       if (loadResult.states.center.status !== "error") {
         const next = loadResult.data.center || { rows: [], summary: {}, pagination: {} };
@@ -293,7 +304,11 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
           setPage(lastPage);
           return;
         }
-        setCenter(next);
+        const snapshot = { ...next, __queryKey: queryKey };
+        listCache.current.set(queryKey, snapshot);
+        setCenter(snapshot);
+      } else {
+        setListError("İmalat listesine erişilemedi. Yenile ile tekrar deneyin.");
       }
       if (loadResult.states.dictionaries.status !== "error") {
         const dict = loadResult.data.dictionaries;
@@ -310,11 +325,12 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
         "Makine veya sözlük bilgileri geçici olarak yenilenemedi; imalat listesi kullanılabilir.",
       ));
     } catch (error) {
-      if (ticket === requestSeq.current) setMessage(error?.message || "İmalat merkezi yüklenemedi.");
+      if (ticket === requestSeq.current) setListError(error?.message || "İmalat merkezi yüklenemedi. Yenile ile tekrar deneyin.");
     } finally {
+      if (timeoutId) window.clearTimeout(timeoutId);
       if (ticket === requestSeq.current) setLoading(false);
     }
-  }, [activeMainCompany, search, status, pool, startDate, endDate, archiveYear, page]);
+  }, [tenantKey, queryKey, search, status, pool, startDate, endDate, archiveYear, page]);
 
   useEffect(() => {
     setPage(1);
@@ -636,7 +652,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
                 <td><strong>{productionDateTime(row).date}</strong><small>{productionDateTime(row).time}</small></td>
                 {pool === "IMALATTA" ? <>
                   <td>{qty(row.incomingQty)}</td><td>{qty(row.completedGrossQty)}</td><td>{qty(row.productionRemainingQty)}</td>
-                  <td><span className={`pc2-status ${statusTone(detail.legacyApproved ? "COMPLETED" : row.status)}`}>{detail.legacyApproved ? "Tamamlandı" : statusLabel(row.status)}</span></td>
+                  <td><span className={`pc2-status ${statusTone(row.legacyApproved ? "COMPLETED" : row.status)}`}>{row.legacyApproved ? "Tamamlandı" : statusLabel(row.status)}</span></td>
                 </> : null}
                 {pool === "IRSALIYE" ? <>
                   <td>{qty(row.incomingQty)}</td><td>{qty(row.completedGrossQty)}</td>
