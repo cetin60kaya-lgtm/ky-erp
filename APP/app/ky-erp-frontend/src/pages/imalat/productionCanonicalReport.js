@@ -38,6 +38,7 @@ export function buildProductionCanonicalReport(payload = {}, filters = {}) {
   for (const card of cards) {
     if ((filters.firma && !search(card.companyName, filters.firma)) ||
         (filters.model && !search(card.modelName, filters.model))) continue;
+    const historical = Boolean(card.legacyApproved);
     const entries = (Array.isArray(card.productionEntries) ? card.productionEntries : [])
       .filter((e) => inDate(dateOnly(e.date || e.createdAt), filters))
       .filter((e) => !filters.partiNo || search(e.batchNo || e.dispatchNo, filters.partiNo))
@@ -49,7 +50,7 @@ export function buildProductionCanonicalReport(payload = {}, filters = {}) {
       .some((key) => Boolean(filters[key]));
     if (hasRecordFilters && !entries.length) continue;
     if (entries.length) activeModels.add(value(card.id));
-    if (num(card.incomingQty) > 0 && (card.operationRows || []).length > 0 && card.operationRows.every((r) => value(r.status) === 'COMPLETED')) completedModelIds.add(value(card.id));
+    if (historical || (num(card.incomingQty) > 0 && (card.operationRows || []).length > 0 && card.operationRows.every((r) => value(r.status) === 'COMPLETED'))) completedModelIds.add(value(card.id));
     for (const entry of entries) {
       records.push({
         id: value(entry.id), modelId: value(card.id),
@@ -62,7 +63,7 @@ export function buildProductionCanonicalReport(payload = {}, filters = {}) {
         makineNo: value(entry.machineId), makineAdi: value(entry.machineName),
         vardiya: value(entry.shift), makinaci: value(entry.operatorName),
         zemin: value(entry.raw?.ground || card.groundColor),
-        durum: value(card.status),
+        durum: historical ? "Geçmiş Tamamlandı" : value(card.status),
       });
     }
     const wantedRegions = (card.printRegions || []).map((r) => value(r.regionName || r.name)).filter(Boolean);
@@ -75,13 +76,16 @@ export function buildProductionCanonicalReport(payload = {}, filters = {}) {
       const planned = num(card.incomingQty);
       const produced = matching.reduce((s, e) => s + num(e.grossQty), 0);
       const latest = matching[0] || {};
-      const durum = statusLabel(card.status, matching.length > 0, planned, produced);
+      const durum = historical ? "Geçmiş Tamamlandı" : statusLabel(card.status, matching.length > 0, planned, produced);
       const row = {
         id: value(card.id) + ":" + region, modelId: value(card.id),
         model: value(card.modelName), firma: value(card.companyName),
         modelImageUrl: value(card.imageUrl), partiNo: value(latest.batchNo || latest.dispatchNo) || "GENEL",
         baskiBolgesi: region, planlanan: planned, basilan: produced,
-        eksik: Math.max(0, planned - produced), makineNo: value(latest.machineId),
+        // Geçmiş onaylı işlerde fiş/plan farkı yeni açık üretim borcu değildir.
+        eksik: historical ? 0 : Math.max(0, planned - produced),
+        gecmisPlanFarki: historical ? Math.max(0, planned - produced) : 0,
+        legacyApproved: historical, makineNo: value(latest.machineId),
         makineAdi: value(latest.machineName), makinaci: value(latest.operatorName),
         vardiya: value(latest.shift), zemin: value(latest.ground || latest.raw?.ground || card.groundColor), durum,
       };
