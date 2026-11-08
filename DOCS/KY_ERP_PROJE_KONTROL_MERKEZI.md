@@ -1,5 +1,15 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 08.11.2026 — DESEN model detayında tek sağ-alt tutacak / bütün sekmeler sabit ebat
+
+- Kullanıcı gerçek ekran görüntüsünde önceki #535 sürümünde **iki sol tutacağı** ve sekmelerin içeriğe göre değişen pencere boyunu reddetti; **yalnız sağ-alt köşede tek tutacak, tüm sekmelerde aynı en-boy** istedi.
+- Düzeltme: `WideModal` resizable modunda başlangıç **840 × 590 CSS px**, `width/height` doğrudan bileşen inline stillerinde sabit; Genel, Dosyalar, Kanallar, Boyahane, İşlem Logları sekmeleri değişince dış pencere yeniden ölçülmez. İçerik grid gövdesinde scroll olur.
+- Sol ve sol-alt tutacaklar kaldırıldı; **yalnız sağ-alt tutacak** fare/pointer ile en-boy ayarlıyor. Sürükleme sırasında sol-üst köşe sabit kalır; viewport dışına taşma önlenir. Klavye yön tuşları ve mobil tam ekran davranışı korunur.
+- `desenModalResize.test.js` yeni sağ-alt en-boy, min-max ve CSS/JSX tek tutacak-sabit ölçü regresyonlarını içerir.
+- Bu değişiklik sadece modal UI ile ilgilidir; model/imalat, PDF/AI/PSD, File Hub, D1, gerçek santimetre boyutu ve orijinal görsel değiştirilmez.
+- **CI, PR merge, Pages deploy ve kullanıcı canlı görsel kabulü birbirinden ayrı.** Canlı fare testine kadar bu son adım açık kalır.
+
+
 ## 08.11.2026 — DESEN model detayı sabit pencere / soldan en-boy ayarı
 
 - Kullanıcı canlı LONE modalında Genel, İşlem Logları, Dosyalar, Boyahane ve Baskı Bölgeleri arasında pencerenin görünür ölçüsünün değişmemesini, ayrıca **sol kenardan en** ve **sol-alt köşeden en-boy** ayarı istedi.

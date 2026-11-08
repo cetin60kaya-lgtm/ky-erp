@@ -149,14 +149,16 @@ export function WideModal({
   const resizeStartRef = useRef(null);
   const [modalBox, setModalBox] = useState(null);
 
-  const startResize = (event, edge) => {
+  // Boyut yalnız kullanıcının sağ-alt tutacağı sürüklemesiyle değişir;
+  // sekme içeriği pencerenin dış ölçülerini hiçbir zaman belirlemez.
+  const startResize = (event) => {
     if (!resizable || event.button !== 0 || window.matchMedia("(max-width: 700px)").matches) return;
     const rect = modalRef.current?.getBoundingClientRect();
     if (!rect) return;
     event.preventDefault();
     event.stopPropagation();
-    const base = { width: rect.width, height: rect.height, right: window.innerWidth - rect.right, top: rect.top };
-    resizeStartRef.current = { ...base, startX: event.clientX, startY: event.clientY, pointerId: event.pointerId, edge };
+    const base = { width: rect.width, height: rect.height, left: rect.left, top: rect.top };
+    resizeStartRef.current = { ...base, startX: event.clientX, startY: event.clientY, pointerId: event.pointerId };
     setModalBox(base);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -166,10 +168,10 @@ export function WideModal({
     event.preventDefault();
     const next = resizeModelDetailBox({
       ...drag, x: event.clientX, y: event.clientY,
-      maxWidth: window.innerWidth - drag.right - 8,
+      maxWidth: window.innerWidth - drag.left - 8,
       maxHeight: window.innerHeight - drag.top - 8,
     });
-    setModalBox({ width: next.width, height: next.height, right: drag.right, top: drag.top });
+    setModalBox({ width: next.width, height: next.height, left: drag.left, top: drag.top });
   };
   const endResize = (event) => {
     const drag = resizeStartRef.current;
@@ -177,16 +179,16 @@ export function WideModal({
     resizeStartRef.current = null;
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
-  const keyboardResize = (event, edge) => {
+  const keyboardResize = (event) => {
     const delta = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] }[event.key];
-    if (!delta || (edge === "left" && delta[1])) return;
+    if (!delta) return;
     const rect = modalRef.current?.getBoundingClientRect();
     if (!rect) return;
     event.preventDefault();
-    const current = modalBox || { width: rect.width, height: rect.height, right: window.innerWidth - rect.right, top: rect.top };
+    const current = modalBox || { width: rect.width, height: rect.height, left: rect.left, top: rect.top };
     const next = resizeModelDetailBox({
-      ...current, startX: 0, startY: 0, x: delta[0], y: delta[1], edge,
-      maxWidth: window.innerWidth - current.right - 8,
+      ...current, startX: 0, startY: 0, x: delta[0], y: delta[1],
+      maxWidth: window.innerWidth - current.left - 8,
       maxHeight: window.innerHeight - current.top - 8,
     });
     setModalBox({ ...current, ...next });
@@ -230,9 +232,11 @@ export function WideModal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        style={resizable && modalBox ? {
-          position: "fixed", right: modalBox.right, top: modalBox.top,
-          width: modalBox.width, height: modalBox.height,
+        style={resizable ? {
+          // Sabit başlangıç ölçüsü: içerik/sekme değişimi yüksekliği değiştiremez.
+          width: modalBox?.width ?? "min(840px, calc(100vw - 32px))",
+          height: modalBox?.height ?? "min(590px, calc(100dvh - 32px))",
+          ...(modalBox ? { position: "fixed", left: modalBox.left, top: modalBox.top } : {}),
         } : undefined}
       >
         <header className="dsg-modal-head">
@@ -251,20 +255,14 @@ export function WideModal({
         </header>
         <div className="dsg-modal-body">{children}</div>
         {footer && <footer className="dsg-modal-foot">{footer}</footer>}
-        {resizable && <>
-          <button type="button" className="dsg-modal-resize-left"
-            title="Sol kenardan sürükleyerek genişliği değiştirin"
-            aria-label="Pencere genişliğini soldan ayarla (sol ve sağ ok tuşları)"
-            onPointerDown={(event) => startResize(event, "left")}
-            onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize}
-            onKeyDown={(event) => keyboardResize(event, "left")} />
+        {resizable && (
           <button type="button" className="dsg-modal-resize-corner"
-            title="Sol-alt köşeden sürükleyerek genişliği ve yüksekliği değiştirin"
-            aria-label="Pencere genişliğini ve yüksekliğini soldan ayarla (ok tuşları)"
-            onPointerDown={(event) => startResize(event, "corner")}
+            title="Sağ-alt köşeden sürükleyerek pencerenin enini ve boyunu ayarlayın"
+            aria-label="Pencere enini ve boyunu sağ-alt köşeden ayarla (ok tuşları)"
+            onPointerDown={startResize}
             onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize}
-            onKeyDown={(event) => keyboardResize(event, "corner")} />
-        </>}
+            onKeyDown={keyboardResize} />
+        )}
       </section>
     </div>
   );

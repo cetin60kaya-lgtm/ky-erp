@@ -525,67 +525,52 @@
 @media(max-width:700px) { .dsg-plate-ocr-candidate { grid-template-columns:1fr; } }
 
 
-/* Model detayında sekme içerikleri pencereyi yeniden boyutlandırmaz.
-   Yalnız bu pencere soldan en / sol-alt köşeden en-boy ayarlanabilir. */
+/* Model detayı: sekme değişince dış pencere sabit, sadece iç içerik kayar.
+   Büyütme/küçültme yalnız sağ-alt köşeden; diğer diyaloglar etkilenmez. */
 .dsg-modal.model-detail {
   position: relative;
   width: min(840px, calc(100vw - 32px));
   height: min(590px, calc(100dvh - 32px));
+  min-width: min(460px, calc(100vw - 16px));
+  min-height: min(320px, calc(100dvh - 16px));
   max-width: calc(100vw - 16px);
   max-height: calc(100dvh - 16px);
-  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
 }
 .dsg-modal.model-detail .dsg-modal-body {
   min-height: 0;
+  min-width: 0;
   overflow: auto;
   overscroll-behavior: contain;
 }
-.dsg-modal-resize-left,
 .dsg-modal-resize-corner {
   position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
-  z-index: 20;
   padding: 0;
   color: #2e618e;
   border: 1px solid #9cb7d2;
+  border-bottom: 0;
+  border-right: 0;
+  border-radius: 9px 0 0 0;
   background: #e8f2fd;
+  cursor: nwse-resize;
   touch-action: none;
   user-select: none;
 }
-.dsg-modal-resize-left {
-  left: 0;
-  top: 50%;
-  width: 14px;
-  height: 80px;
-  transform: translateY(-50%);
-  border-left: none;
-  border-radius: 0 9px 9px 0;
-  cursor: ew-resize;
-}
-.dsg-modal-resize-left::before {
-  content: "⋮";
-  font-size: 19px;
-  line-height: 1;
-}
-.dsg-modal-resize-corner {
-  left: 0;
-  bottom: 0;
-  width: 30px;
-  height: 30px;
-  border-left: none;
-  border-bottom: none;
-  border-radius: 0 10px 0 0;
-  cursor: nesw-resize;
-}
 .dsg-modal-resize-corner::before {
   content: "⤡";
-  font-size: 18px;
+  font-size: 17px;
   line-height: 1;
+  transform: scaleX(-1);
 }
-.dsg-modal-resize-left:hover,
 .dsg-modal-resize-corner:hover,
-.dsg-modal-resize-left:focus-visible,
 .dsg-modal-resize-corner:focus-visible {
   outline: 2px solid #3978b9;
   outline-offset: -2px;
@@ -595,6 +580,7 @@
   .dsg-modal.model-detail {
     position: relative !important;
     right: auto !important;
+    left: auto !important;
     top: auto !important;
     width: 100vw !important;
     height: 100dvh !important;
@@ -602,6 +588,5 @@
     max-height: none;
     border-radius: 0;
   }
-  .dsg-modal-resize-left,
   .dsg-modal-resize-corner { display: none; }
 }
