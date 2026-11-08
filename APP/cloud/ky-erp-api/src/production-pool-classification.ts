@@ -58,11 +58,11 @@ export type ProductionPoolCard = {
 
 export function isProductionComplete(card: ProductionPoolCard): boolean {
   if (card.legacyApproved) return true;
-  // Üretim tamamlanması, faturanın kesilmesinden bağımsızdır.
-  return card.status === "COMPLETED" ||
-    (Number(card.completedGrossQty || 0) > 0 &&
-     Number(card.incomingQty || 0) > 0 &&
-     Number(card.productionRemainingQty || 0) <= 0);
+  // Fatura tamamen kesilse bile henüz üretilmemiş model TAMAMLANAN'a düşmez.
+  // Üretim tamamlanması muhasebe etiketinden bağımsızdır.
+  return Number(card.completedGrossQty || 0) > 0 &&
+    Number(card.incomingQty || 0) > 0 &&
+    Number(card.productionRemainingQty || 0) <= 0;
 }
 
 export function matchesProductionPool(card: ProductionPoolCard, requestedPool: string): boolean {
