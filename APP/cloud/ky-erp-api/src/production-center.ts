@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { isHistoricalProduction, matchesProductionPool, PRODUCTION_POOL_CONTRACT } from "./production-pool-classification.ts";
 import { productionIdentity, writeProductionEntryAtomic } from "./production-idempotency";
 
 type AppEnv = {
@@ -982,11 +983,17 @@ async function buildCenter(
         // İçe aktarımdaki işlem saatini geçmiş üretim saatiymiş gibi kullanma.
         return workTime.slice(0, 10) === savedTime.slice(0, 10) && /T\d{2}:\d{2}/.test(savedTime) ? savedTime : "";
       }).filter(Boolean).sort().at(-1) || "",
-      // Eski fişleri silmeden, yalnız tarihsel üretim ekranında onaylı göster.
-      legacyApproved: entries.length > 0 && entries.every((row) => {
-        const day = text(row.date || row.createdAt).slice(0, 10);
-        return day.length === 10 && day < "2026-11-08";
+      // 2026 Excel kaynaklı geçmişi silmeden arşivle; yeni üretim/belgeyle yeniden aktifleşir.
+      legacyApproved: isHistoricalProduction({
+        modelSource: model.raw?.sourceType || model.raw?.source,
+        modelSourceYear: model.raw?.sourceYear || model.raw?.year,
+        modelCreatedAt: model.createdAt,
+        productionEntries: entries,
+        dispatches,
+        invoices,
       }),
+      productionEntryCount: entries.length,
+      invoiceCount: new Set(invoices.map((row) => row.documentId)).size,
       invoices,
       lastActivityAt: [
         model.updatedAt,
@@ -1054,12 +1061,7 @@ function filterCards(cards: Row[], query: Row): Row[] {
   const year = text(query.year);
   return cards.filter((card) => {
     const legacy = Boolean(card.legacyApproved);
-    const productionComplete = card.status === "COMPLETED" || (card.completedGrossQty > 0 && card.productionRemainingQty <= 0 && card.incomingQty > 0);
-    if (pool === "ARSIV" && !legacy) return false;
-    if (pool === "IMALATTA" && (card.isVirtual || legacy || productionComplete)) return false;
-    if (pool === "TAMAMLANAN" && !legacy && !productionComplete) return false;
-    if (pool === "IRSALIYE" && (card.isVirtual || legacy || card.dispatchCount > 0 || !(card.completedGrossQty > 0 || card.expectedQty > 0))) return false;
-    if (pool === "FATURA" && (legacy || card.invoiceRemainingQty <= 0)) return false;
+    if (!matchesProductionPool(card, pool)) return false;
     if (status && status !== "ALL" && normalized(legacy ? "COMPLETED" : card.status) !== status) return false;
     if (companyId && card.companyId !== companyId) return false;
     const day = text(card.productionStartAt || card.lastActivityAt).slice(0, 10);
@@ -1640,6 +1642,8 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
       ok: true,
       success: true,
       data: {
+        poolContract: PRODUCTION_POOL_CONTRACT,
+        appliedPool: normalized(c.req.query("pool") || "IMALATTA"),
         rows: filtered.slice(start, start + pageSize).map(listCard),
         summary: {
           ...center.summary,
