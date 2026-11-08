@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { apiUrl, apiFetch, downloadFile } from "../../utils/api";
 import DesenImage from "./DesenImage";
+import { safeModelLogRows } from "./desenModelLogs";
 import {
   createDesignOperation,
   createDesignModel,
@@ -1502,6 +1503,7 @@ export function ModelDetailModal({
   onDyehouse,
 }) {
   const [tab, setTab] = useState("general");
+  const logRows = safeModelLogRows(model?.logs);
   const tabs = [
     ["general", "Genel"],
     ["areas", "Baskı Bölgeleri"],
@@ -1727,13 +1729,18 @@ export function ModelDetailModal({
       )}
       {tab === "logs" && (
         <div className="dsg-log-list">
-          {model.logs.map((log) => (
-            <div key={log.id}>
-              <span>{formatDate(log.createdAt)}</span>
-              <strong>{log.action}</strong>
-              <p>{log.description}</p>
+          {logRows.length ? logRows.map((log, index) => (
+            <div key={log.id || `model-log-${index}`}>
+              <span>{formatDate(log.createdAt || log.created_at)}</span>
+              <strong>{log.action || "İşlem"}</strong>
+              <p>{log.description || log.message || ""}</p>
             </div>
-          ))}
+          )) : (
+            <EmptyState
+              title="Görüntülenebilen işlem günlüğü yok"
+              text="Bu model için işlem kaydı henüz sağlanmamış. Model ve bağlı kaynak dosyaları korunuyor."
+            />
+          )}
         </div>
       )}
     </WideModal>
