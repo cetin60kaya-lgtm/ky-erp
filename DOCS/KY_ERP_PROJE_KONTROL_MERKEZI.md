@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 08.11.2026 — DESEN son kabul: Drive/ERP ve 5 dakikalık cron yalıtımı
+- Canlı D1 salt-okunur Actions testleri: aktif model **723**, görseli dolu **431**, model görsel ilişkisi **431**, görünmeyen **292** (tüm yıl), File Hub varlıkları **21.731**. Google Drive DESEN/MODEL_IMAGE bağı 1, CLOUD_API bağlı 1, geçerli root, OAuth bağlı; 5 test modelinden D1’de bulunan 4'ünün görsel alanı dolu.
+- Önceden eklenen 82 yeni JPEG, Google Drive `görsel/2026` toplam 433 dosyanın içindeydi. Bu dosyaların 82 model kartına ayrı ayrı bağlandığı henüz doğrulanmadı; 39 kaynak belirsiz.
+- Root neden henüz kesinleşmedi: D1 `modelImageFastProgress` yok, `scannedTotal=0`; tam tarama kuyruğu 20 klasör, kilit 0, hata 0; cron öncelik sırası 1/1 ve lease/CAS koşulu uygun. Deployed 5 dakikalık trigger var ama *uygulama içi cron yürütme* bağımsız doğrulanmadı.
+- Bu değişiklik risk azaltır: güvenlik hatırlatıcısı, File Hub senkronu ve fiziksel muhasebe kurtarmayı tek `Promise.all` yerine **ayrı `ctx.waitUntil`** ile yürütür; sabit ve kişisel verisiz hata kodlarıyla iş ayrımını görünür yapar. Bu tek başına canlı D1 kabulü değildir.
+- Açık yetkili oturumdaki KY ERP ekranında sürüm değişimi sonucu **Uygulama dosyası yüklenemedi** hatası görüldü. `Güncel Sürümü Yükle` mevcut sekmede çalıştırılmadan canlı DESEN ekranı smoke'u PASS olamaz.
+- DESEN Windows Remote Commander Offline; özel Chat Bridge için bu sohbette yeni status gönderildi, `KYBRIDGE_RESULT` alınırsa ayrıca kabul. Kimlik bilgisi/ham Windows ekranı taşınmadı.
+
+
 ## 08.11.2026 — DESEN Drive 2026 tam sayfalı senkron + kullanıcı ilerlemesi (PR çalışması)
 
 - **Önceki PR #526 yayın kanıtı:** birleştirme `ca65340bb9e00a98c202e933b84742c8e94c6f04`; birleştirmeden sonraki canonical yayın commit'i `96661464657413667258886152e88be41e72f344` bu commit'i içeriyor. Frontend Actions run `42425243523` SUCCESS ve API/Security run `42425245908` SUCCESS. Bu kaynak/yayın kanıtıdır, D1 File Hub ilişki sayımı değildir.
