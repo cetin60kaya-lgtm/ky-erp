@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+
+## 08.11.2026 — DESEN model detayında İşlem Logları ekran çökmesi düzeltmesi
+
+- Gerçek kullanıcı ekranında, görseli eksik bir canonical/XLSM_IMPORT modelin `Dosyalar` sekmesi bağlı PDF dosyalarını gösterirken `İşlem Logları` sekmesine basınca **tüm modül React hata ekranına düşüyordu**.
+- Kök neden: `ModelDetailModal` içinde `model.logs.map(...)` çağrılıyor; canonical model API görüntüsü `logs` alanını zorunlu/daima dizi olarak sunmuyor.
+- Düzeltme: `safeModelLogRows` yalnız geçerli günlük nesnelerini korur; olmayan/bozuk `logs` boş dizidir. İşlem geçmişi gelmiyorsa açık boş durum gösterilir; mevcut modelin PDF/AI/PSD bağlantıları, UUID, kaynak, kayıtlar değişmez; sahte log üretilmez.
+- Regresyon testi: eksik `logs`, `null`, yanlış tip, karışık eleman ve gerçek kayıtların korunması. **CI, PR merge, Pages yayını ve canlı kullanıcı tıklaması ayrı doğrulanmalıdır.** Bu değişiklik DESEN görsellerinin otomatik tamamlandığı anlamına gelmez.
+
+
 ## 08.11.2026 — DESEN son kabul: Drive/ERP ve 5 dakikalık cron yalıtımı
 - Canlı D1 salt-okunur Actions testleri: aktif model **723**, görseli dolu **431**, model görsel ilişkisi **431**, görünmeyen **292** (tüm yıl), File Hub varlıkları **21.731**. Google Drive DESEN/MODEL_IMAGE bağı 1, CLOUD_API bağlı 1, geçerli root, OAuth bağlı; 5 test modelinden D1’de bulunan 4'ünün görsel alanı dolu.
 - Önceden eklenen 82 yeni JPEG, Google Drive `görsel/2026` toplam 433 dosyanın içindeydi. Bu dosyaların 82 model kartına ayrı ayrı bağlandığı henüz doğrulanmadı; 39 kaynak belirsiz.
