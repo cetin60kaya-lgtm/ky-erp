@@ -19,7 +19,7 @@ test("2026 XLSM fişleri ve model kartları yalnız geçmiş / tamamlanan olur",
   assert.equal(isHistoricalProduction({
     modelSource: "XLSM_IMPORT", modelSourceYear: "2026", productionEntries: [],
   }), true, "Excel'den gelen görselli fakat henüz fişsiz eski kart da arşiv");
-  assert.equal(HISTORICAL_PRODUCTION_CUTOVER, "2026-11-08");
+  assert.equal(HISTORICAL_PRODUCTION_CUTOVER, "2026-11-08T13:58:00Z");
   assert.equal(PRODUCTION_POOL_CONTRACT, "kyerp-production-pools-v3");
 });
 
@@ -38,7 +38,10 @@ test("yeni fiş eklendiğinde eski model yeniden aktif olabilir", () => {
   assert.equal(isHistoricalProduction({ modelSource: "DESEN", productionEntries: [] }), false);
   assert.equal(isHistoricalProduction({ modelCreatedAt: "2026-10-15", productionEntries: [] }), true,
     "Eski model kartları da tamamlanan geçmişe ayrılır");
-  assert.equal(isHistoricalProduction({ modelCreatedAt: "2026-11-08", productionEntries: [] }), false);
+  assert.equal(isHistoricalProduction({ modelCreatedAt: "2026-11-08T13:30:00Z", productionEntries: [] }), true,
+    "08.11 saat 16:58 öncesi var olan model de geçmiş sayılır");
+  assert.equal(isHistoricalProduction({ modelCreatedAt: "2026-11-08T13:59:00Z", productionEntries: [] }), false,
+    "Sıfırlama sonrası yeni model bitmiş üretim sayılmaz");
 });
 
 test("5200 plan, 3000 avans faturası, henüz üretim başlamadı: aktif ve fatura havuzunda", () => {
