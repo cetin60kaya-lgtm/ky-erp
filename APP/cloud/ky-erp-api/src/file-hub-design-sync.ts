@@ -18,8 +18,10 @@ const objectOf = (v: unknown): Row => {
 const normalize = (v: unknown) => upper(v).replace(/İ/g, "I").replace(/[^A-Z0-9ÇĞÖŞÜ]+/g, " ").replace(/\s+/g, " ").trim();
 
 /** Bir PSD/PDF kaynağının senkronu mevcut RGB model görselini boşaltamaz. */
-export function preserveCanonicalImageUrl(workflowUrl: unknown, storedUrl: unknown): string | null {
-  return text(workflowUrl) || text(storedUrl) || null;
+export function preserveCanonicalImageUrl(...candidates: unknown[]): string | null {
+  // Canonical alan boş kalsa da eski raw.imageUrl/mainImage geçerli olabilir.
+  // Yalnız gerçek, dolu model kaydı URL'lerinden ilkini koru; yeni URL uydurma.
+  return candidates.map(text).find(Boolean) || null;
 }
 
 // Model JPEG dosyası tek başına kayda yeterlidir. Firma ID'si tahmin edilmez:
@@ -74,10 +76,17 @@ async function upsertCanonicalModelRecord(c: Context<AppEnv>, slug: string, mode
   // Kaynak PDF/AI/PSD ayrı senkron olduğunda workflow files içinde ana JPEG
   // bulunmayabilir. Bu, model_records üzerindeki mevcut görseli SİLME sebebi olamaz.
   const existing = await c.env.DB.prepare(
-    "SELECT id,image_url FROM model_records WHERE id=? AND (main_company_slug=? OR main_company_slug IS NULL) LIMIT 1",
+    "SELECT id,image_url,raw FROM model_records WHERE id=? AND (main_company_slug=? OR main_company_slug IS NULL) LIMIT 1",
   ).bind(text(model.id), slug).first<Row>();
+  const existingRaw = objectOf(existing?.raw);
+  const workflowRaw = objectOf(model.raw);
   const canonicalImage = preserveCanonicalImageUrl(
-    mainImage?.thumbnailUrl || mainImage?.previewUrl, existing?.image_url,
+    mainImage?.thumbnailUrl, mainImage?.previewUrl,
+    existing?.image_url,
+    existingRaw.imageUrl, existingRaw.thumbnailUrl,
+    existingRaw.mainImage?.thumbnailUrl, existingRaw.mainImage?.previewUrl,
+    workflowRaw.imageUrl, workflowRaw.thumbnailUrl,
+    workflowRaw.mainImage?.thumbnailUrl, workflowRaw.mainImage?.previewUrl,
   );
   const raw = {
     ...objectOf(model.raw),
