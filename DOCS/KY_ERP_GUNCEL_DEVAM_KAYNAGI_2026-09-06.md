@@ -1,5 +1,14 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+
+## 08.11.2026 — DESEN model detayında İşlem Logları ekran çökmesi düzeltmesi
+
+- Gerçek kullanıcı ekranında, görseli eksik bir canonical/XLSM_IMPORT modelin `Dosyalar` sekmesi bağlı PDF dosyalarını gösterirken `İşlem Logları` sekmesine basınca **tüm modül React hata ekranına düşüyordu**.
+- Kök neden: `ModelDetailModal` içinde `model.logs.map(...)` çağrılıyor; canonical model API görüntüsü `logs` alanını zorunlu/daima dizi olarak sunmuyor.
+- Düzeltme: `safeModelLogRows` yalnız geçerli günlük nesnelerini korur; olmayan/bozuk `logs` boş dizidir. İşlem geçmişi gelmiyorsa açık boş durum gösterilir; mevcut modelin PDF/AI/PSD bağlantıları, UUID, kaynak, kayıtlar değişmez; sahte log üretilmez.
+- Regresyon testi: eksik `logs`, `null`, yanlış tip, karışık eleman ve gerçek kayıtların korunması. **CI, PR merge, Pages yayını ve canlı kullanıcı tıklaması ayrı doğrulanmalıdır.** Bu değişiklik DESEN görsellerinin otomatik tamamlandığı anlamına gelmez.
+
+
 ## 08.11.2026 — DESEN File Hub cron iş ayrımı ve son canlı kabul
 - Son canlı D1 salt-okunur bulgu: 723 model / 431 model resmi / 431 File Hub model resmi ilişkisi; DESEN/MODEL_IMAGE Google Drive CLOUD_API+OAuth+root bağlantısı mevcut, 20 klasörlük eski kuyruk sürüyor. Yeni `modelImageFastProgress` durumu bulunmuyor (0 taranan), fakat cron 5 dakikalık tetikleme deploy edilmiş. Yalnız kodun varlığına canlı kabul verilmedi.
 - Üç `ctx.waitUntil` ile cron görevleri birbirinden ayrılıyor; bir bağımsız görevin hatası File Hub'ın yürütmesini Promise.all kısa devresiyle bitirmesin. Çalışma, mevcut Worker'da, yeni token/cron/depo oluşturulmadan, sabit hata koduyla yürür.
