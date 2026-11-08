@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { resolveFileHubStorage, saveFileHubBinding } from "../../components/files/fileHub";
 import { apiGet, apiPost } from "../../utils/api";
-import { analyzeDesenStorageTargets, canOfferPlacementBinding } from "./desenStorageReadiness";
+import { analyzeDesenStorageTargets, canOfferPlacementBinding, canOfferOutgoingCloudBinding } from "./desenStorageReadiness";
 
 const TARGETS = [
   ["MODEL_IMAGE", "Model görseli"],
@@ -62,6 +62,7 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
   const [imageSyncStatus, setImageSyncStatus] = useState(null);
   const [syncingImages, setSyncingImages] = useState(false);
   const [bindingPlacement, setBindingPlacement] = useState(false);
+  const [bindingOutgoing, setBindingOutgoing] = useState(false);
   const companyKey = String(activeMainCompany?.slug || activeMainCompany?.id || "");
 
   const load = useCallback(async () => {
@@ -150,6 +151,31 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
     }
   };
 
+  const bindOutgoingCloud = async () => {
+    const source = targets.find((row) => row.purposeCode === "MODEL_SOURCE");
+    const outgoing = targets.find((row) => row.purposeCode === "OUTGOING_DESIGN");
+    if (!canOfferOutgoingCloudBinding(targets) || busy || bindingOutgoing) return;
+    if (!window.confirm("Giden desenlerin mevcut '" + (outgoing.rootPath || "giden desenler") + "' AGENT ataması doğrulanamıyor. Bu kaynağı bağlı Google Drive üzerinden, 'giden desenler' klasörüne salt okunur olarak geçirmek istiyor musunuz? Dosyalar taşınmaz veya silinmez. PSD önizlemesi ayrıca doğrulanır.")) return;
+    setBindingOutgoing(true);
+    setMessage("");
+    try {
+      await saveFileHubBinding({
+        moduleCode: "DESEN", purposeCode: "OUTGOING_DESIGN",
+        storageConnectionId: source.connectionId,
+        rootPath: "giden desenler",
+        readEnabled: true, writeEnabled: false, syncEnabled: true, isDefault: false,
+      });
+      await load();
+      setMessage("Giden desen Drive kaynağı kaydedildi. File Hub indeksleme ve çoklu PSD-model ilişkileri ayrıca kontrol edilmelidir; henüz senkron tamamlandı sayılmaz.");
+    } catch (error) {
+      setMessage(Number(error?.status) === 403
+        ? "Giden desen atamasını yalnız ana firma sahibi / yetkili yönetici değiştirebilir."
+        : error?.message || "Giden desen kaynağı değiştirilemedi.");
+    } finally {
+      setBindingOutgoing(false);
+    }
+  };
+
   const readiness = useMemo(() => analyzeDesenStorageTargets(targets), [targets]);
   const connected = readiness.connected;
   const primaryProvider = connected[0]?.provider || "";
@@ -158,6 +184,7 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
   const cloudPending = readiness.cloudPending.length > 0;
   const agentPending = readiness.agentPending;
   const offerPlacementBinding = canOfferPlacementBinding(targets);
+  const offerOutgoingCloudBinding = canOfferOutgoingCloudBinding(targets);
   const imageTarget = targets.find((row) => row.purposeCode === "MODEL_IMAGE");
   const imageCloudReady = imageTarget?.ok && imageTarget.provider === "GOOGLE_DRIVE" && imageTarget.syncMode === "CLOUD_API" && imageTarget.connectionId;
   const imageProgress = imageSyncStatus?.modelImageSync || null;
@@ -180,6 +207,9 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
             : agentOnly ? <span className="dsg-storage-hint">Agent bağlantısı tanımlı</span> : null}
           {offerPlacementBinding ? <button className="dsg-btn" type="button" disabled={busy || bindingPlacement} onClick={bindPlacement}>
             <FolderOpen size={15} /> {bindingPlacement ? "Yerleşim bağlanıyor…" : "Yerleşim klasörünü bağla"}
+          </button> : null}
+          {offerOutgoingCloudBinding ? <button className="dsg-btn" type="button" disabled={busy || bindingOutgoing} onClick={bindOutgoingCloud}>
+            <FolderOpen size={15} /> {bindingOutgoing ? "Giden desen bağlanıyor…" : "Giden desenleri Drive'a bağla"}
           </button> : null}
           {imageCloudReady ? <button className="dsg-btn primary" type="button" disabled={busy || syncingImages} onClick={syncModelImages}>
             {syncingImages ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}
