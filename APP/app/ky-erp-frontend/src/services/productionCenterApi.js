@@ -42,13 +42,21 @@ function withCustomerDictionary(payload) {
   };
 }
 
+const REQUIRED_POOL_CONTRACT = "kyerp-production-pools-v3";
+
 export async function getProductionCenter(activeMainCompany, params = {}) {
-  return unwrap(
-    await apiGet(
-      "/production-center",
-      companyPayload(activeMainCompany, params),
-    ),
-  );
+  const response = unwrap(await apiGet(
+    "/production-center",
+    companyPayload(activeMainCompany, params),
+  ));
+  const requestedPool = String(params.pool || "").trim().toUpperCase();
+  if (requestedPool && (response?.poolContract !== REQUIRED_POOL_CONTRACT ||
+      response?.appliedPool !== requestedPool)) {
+    // Eski Worker 723 modeli her havuza gönderebiliyor. Bu sayıları
+    // tamamlandı/irsaliye/fatura olarak göstermek üretim kararını bozar.
+    throw new Error("İmalat API sürümü güncel değil. Havuzlar karıştırılmadı; Worker yayını kontrol edilip liste yenilenmeli.");
+  }
+  return response;
 }
 
 export async function getProductionCenterReconciliation(activeMainCompany) {
