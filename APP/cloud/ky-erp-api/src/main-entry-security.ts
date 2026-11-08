@@ -110,17 +110,21 @@ security.onError((error, c) => {
 
 export default {
   async scheduled(_controller: ScheduledController, env: Cloudflare.Env, ctx: ExecutionContext) {
-    ctx.waitUntil(Promise.all([
-      runSecurityWorkspaceReminderSweep(env),
-      runFileHubCloudScheduledSync(env),
-      retryPhysicalOperations(env).then((result)=>{
-        if(result.processed || result.status!=="OK")console.log(JSON.stringify({
-          code:"ACCOUNTING_PHYSICAL_RECOVERY",status:result.status,
-          processed:result.processed,recovered:result.recovered||0,
-          errors:result.errors||0,review:result.review||0,
-        }));
-      }).catch(()=>console.error("ACCOUNTING_PHYSICAL_RECOVERY_FAILED")),
-    ]));
+    // Bağımsız zamanlayıcı işleri: güvenlik/finans sorunu DESEN File Hub'ı
+    // Promise.all kısa devresi ile iptal edemez. Loglara token/tenant kimliği yazılmaz.
+    ctx.waitUntil(runSecurityWorkspaceReminderSweep(env).catch(() => {
+      console.error("SECURITY_REMINDER_CRON_FAILED");
+    }));
+    ctx.waitUntil(runFileHubCloudScheduledSync(env).catch(() => {
+      console.error("FILE_HUB_CLOUD_CRON_FAILED");
+    }));
+    ctx.waitUntil(retryPhysicalOperations(env).then((result)=>{
+      if(result.processed || result.status!=="OK")console.log(JSON.stringify({
+        code:"ACCOUNTING_PHYSICAL_RECOVERY",status:result.status,
+        processed:result.processed,recovered:result.recovered||0,
+        errors:result.errors||0,review:result.review||0,
+      }));
+    }).catch(()=>console.error("ACCOUNTING_PHYSICAL_RECOVERY_FAILED")));
   },
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext) {
     const path = new URL(request.url).pathname;

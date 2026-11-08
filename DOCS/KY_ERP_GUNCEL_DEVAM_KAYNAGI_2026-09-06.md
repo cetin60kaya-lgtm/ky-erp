@@ -1,5 +1,11 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 08.11.2026 — DESEN File Hub cron iş ayrımı ve son canlı kabul
+- Son canlı D1 salt-okunur bulgu: 723 model / 431 model resmi / 431 File Hub model resmi ilişkisi; DESEN/MODEL_IMAGE Google Drive CLOUD_API+OAuth+root bağlantısı mevcut, 20 klasörlük eski kuyruk sürüyor. Yeni `modelImageFastProgress` durumu bulunmuyor (0 taranan), fakat cron 5 dakikalık tetikleme deploy edilmiş. Yalnız kodun varlığına canlı kabul verilmedi.
+- Üç `ctx.waitUntil` ile cron görevleri birbirinden ayrılıyor; bir bağımsız görevin hatası File Hub'ın yürütmesini Promise.all kısa devresiyle bitirmesin. Çalışma, mevcut Worker'da, yeni token/cron/depo oluşturulmadan, sabit hata koduyla yürür.
+- Yetkili KY ERP ekranında mevcut tarayıcı sürüm hatası için `Güncel Sürümü Yükle` ve ardından `Desen > Gelen Desenler > Dosya Bağlantıları > Drive Görsellerini Eşleştir` canlı kontrolü gerek. D1 tarama sayaçları ve örnek model resimleri okunmadan PASS yazılmaz; 39 belirsiz model kaynak kararına bağlı.
+
+
 ## 08.11.2026 — DESEN RGB görsel taraması tüm Drive sayfaları (yeni PR)
 
 - Önceki #526'nın eksik tarafı `görsel/2026` 433 dosyadan yalnız en yeni 100'ünün öncelikli senkrona girmesi idi. `modelImageFastProgress.nextPageToken` ile devam, kümülatif tarama/bağlama ve açık tamamlanma göstergesi eklendi; `DESEN/MODEL_IMAGE` bağlamı dışında dosyaya dokunulmaz.
