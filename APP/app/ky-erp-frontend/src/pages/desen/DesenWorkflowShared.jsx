@@ -1639,7 +1639,11 @@ export function ModelDetailModal({
         {tabs.map(([key, label]) => (
           <button
             className={tab === key ? "active" : ""}
-            onClick={() => setTab(key)}
+            type="button"
+            onClick={(event) => {
+              setTab(key);
+              event.currentTarget.closest(".dsg-modal-body")?.scrollTo({ top: 0 });
+            }}
             key={key}
           >
             {label}
