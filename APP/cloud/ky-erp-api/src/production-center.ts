@@ -987,6 +987,7 @@ async function buildCenter(
       legacyApproved: isHistoricalProduction({
         modelSource: model.raw?.sourceType || model.raw?.source,
         modelSourceYear: model.raw?.sourceYear || model.raw?.year,
+        modelCreatedAt: model.createdAt,
         productionEntries: entries,
         dispatches,
         invoices,
