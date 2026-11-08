@@ -65,3 +65,14 @@ test("Makine vardiya sekmesi açılır düzenleme ve sadece değişen kaydı yaz
   assert.match(report, /aria-expanded=\{filtersExpanded\}/);
   assert.match(report, /filtreleri/i);
 });
+
+test("canlı test düzeltmesi: mevcut model önerilirken yeni model kopyası açılmaz", () => {
+  assert.match(entry, /suggestions\.length === 0 && !exactMatch/);
+  assert.match(entry, /ModelImage model=\{model\}/);
+  assert.match(entry, /ModelImage model=\{selectedModel\}/);
+});
+test("sahte son üretim tarihi yerine gerçek fiş veya model kartı tarihi kullanılır", () => {
+  assert.match(center, /row\.productionLastAt \|\| row\.productionStartAt/);
+  assert.match(center, /Model kartı tarihi · fiş yok/);
+  assert.doesNotMatch(center, /row\.productionStartAt \|\| row\.lastActivityAt/);
+});

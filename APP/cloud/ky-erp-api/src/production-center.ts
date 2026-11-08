@@ -1010,8 +1010,9 @@ async function buildCenter(
     return card;
   });
 
-  // En yeni üretim kaydı üstte; modelin son düzenlenme zamanı sıralamayı bozmaz.
-  cards.sort((left, right) => text(right.productionLastAt || right.lastActivityAt).localeCompare(text(left.productionLastAt || left.lastActivityAt)) || text(right.lastActivityAt).localeCompare(text(left.lastActivityAt)));
+  // En yeni üretim kaydı üstte; üretimi olmayan eski kartlar açılış tarihine göre gelir.
+  // Belge/önizleme güncellemesi (updatedAt) sahte üretim tarihi ya da sıralama oluşturamaz.
+  cards.sort((left, right) => text(right.productionLastAt || right.createdAt).localeCompare(text(left.productionLastAt || left.createdAt)) || text(right.createdAt).localeCompare(text(left.createdAt)));
   const summary = {
     modelCount: cards.length,
     openModelCount: cards.filter((row) => row.status !== "COMPLETED").length,
@@ -1064,7 +1065,7 @@ function filterCards(cards: Row[], query: Row): Row[] {
     if (!matchesProductionPool(card, pool)) return false;
     if (status && status !== "ALL" && normalized(legacy ? "COMPLETED" : card.status) !== status) return false;
     if (companyId && card.companyId !== companyId) return false;
-    const day = text(card.productionStartAt || card.lastActivityAt).slice(0, 10);
+    const day = text(card.productionLastAt || card.productionStartAt || card.createdAt).slice(0, 10);
     if (startDate && (!day || day < startDate)) return false;
     if (endDate && (!day || day > endDate)) return false;
     if (pool === "ARSIV" && year && day.slice(0, 4) !== year) return false;

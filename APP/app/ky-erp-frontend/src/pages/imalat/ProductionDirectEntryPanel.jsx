@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, CheckCircle2, ClipboardList, Edit3, Plus, RotateCcw, Save, Search, ShieldAlert, Trash2, X } from "lucide-react";
+import { Check, CheckCircle2, ClipboardList, Edit3, ImageIcon, Plus, RotateCcw, Save, Search, ShieldAlert, Trash2, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { createProductionCenterEntry, createProductionCenterModel, getProductionCenterRecent } from "../../services/productionCenterApi";
 import { validateDirectProduction, validCount } from "./productionDirectEntryValidation";
 import { availableProductionRegions, filterProductionModels, productionLineNet } from "./productionDirectEntryOptions";
 import { assetUrl } from "../desen/DesenWorkflowShared";
+import { productionImagePath } from "./productionModelImage";
 import "./productionDirectEntry.css";
 
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
@@ -13,7 +14,17 @@ const machineKey = (machine) => asText(machine?.id || machine?.machineNo || mach
 const machineLabel = (machine) => [machine?.machineNo, machine?.machineName].filter(Boolean).join(" · ");
 const nameOf = (model) => asText(model?.modelName || model?.modelAdi);
 const imageOf = (model) => asText(model?.modelImageUrl || model?.imageUrl || model?.mainImage?.previewUrl);
-const imageSource = (model) => imageOf(model) ? assetUrl(imageOf(model)) : "";
+const imageSource = (model) => {
+  const path = productionImagePath(imageOf(model));
+  return path ? assetUrl(path) : "";
+};
+function ModelImage({ model, variant }) {
+  const src = imageSource(model);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  return <span className={`${variant} pde-image-frame`}><ImageIcon size={16} aria-hidden="true" />
+    {src && !failed ? <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} /> : null}</span>;
+}
 const modelKey = (model) => asText(model?.id || model?.modelId);
 const operatorForShift = (machine, shift) => asText(shift === "Gece"
   ? (machine?.nightOperator ?? machine?.geceMakinaci ?? "")
@@ -360,12 +371,12 @@ export default function ProductionDirectEntryPanel({
                       aria-selected={modelKey(model) === entry.modelId}
                       className={index === suggestionIndex ? "pde-option pde-active" : "pde-option"}
                       onMouseDown={(event) => event.preventDefault()} onClick={() => pickModel(model)}>
-                      {imageSource(model) ? <img className="pde-option-image" src={imageSource(model)} alt="" loading="lazy" /> : <span className="pde-option-image pde-image-empty">MODEL</span>}
+                      <ModelImage model={model} variant="pde-option-image" />
                       <span className="pde-option-name">{nameOf(model)}<small>{model.companyName || "Firma tanımsız"} · ID: {modelKey(model)}</small></span>
                       {modelKey(model) === entry.modelId && <Check size={14}/>}
                     </button>)}
                   {!suggestions.length && <div className="pde-no-match">Kayıtlı model bulunamadı.</div>}
-                  {asText(query).length >= 2 && !exactMatch &&
+                  {asText(query).length >= 3 && suggestions.length === 0 && !exactMatch &&
                     <button type="button" className="pde-create-choice"
                       onMouseDown={(event) => event.preventDefault()} onClick={openNewModel}>
                       <Plus size={15}/> Kayıtlı model yok · Yeni model kartı aç: <strong>{asText(query)}</strong>
@@ -427,7 +438,7 @@ export default function ProductionDirectEntryPanel({
             </div>
           </section>}
           {selectedModel && <div className="pde-context">
-            {imageSource(selectedModel) ? <img className="pde-selected-image" src={imageSource(selectedModel)} alt={nameOf(selectedModel)} loading="lazy" /> : <div className="pde-selected-image pde-image-empty">Görsel yok</div>}
+            <ModelImage model={selectedModel} variant="pde-selected-image" />
             <div className="pde-selected-details"><strong>{nameOf(selectedModel)}</strong><span>Model ID: {modelKey(selectedModel)}</span><span>{selectedModel.companyName || "Firma tanımsız"} · {regions.join(", ")}</span></div>
           </div>}
           <div className="pde-bottom">

@@ -35,6 +35,7 @@ import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoad
 import ProductionSmartEntryDrawer from "./ProductionSmartEntryDrawer";
 import ProductionHistoryImportDrawer from "./ProductionHistoryImportDrawer";
 import ProductionDirectEntryPanel from "./ProductionDirectEntryPanel";
+import { productionImagePath } from "./productionModelImage";
 import "./productionControlCenterV2.css";
 
 const PAGE_SIZE = 100;
@@ -93,7 +94,11 @@ const dateText = (value) => {
 };
 
 const productionDateTime = (row) => {
-  const date = row.productionLastAt || row.productionStartAt || row.lastActivityAt;
+  const date = row.productionLastAt || row.productionStartAt;
+  if (!date) {
+    return { date: row.createdAt ? dateText(row.createdAt) : "—",
+      time: row.createdAt ? "Model kartı tarihi · fiş yok" : "Üretim fişi yok" };
+  }
   const timestamp = String(row.productionLastTimestamp || "");
   let time = "";
   if (/T\d{2}:\d{2}/.test(timestamp)) {
@@ -139,13 +144,8 @@ function statusTone(value) {
   return "warning";
 }
 function imageSrc(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  try {
-    return assetUrl(raw);
-  } catch {
-    return raw;
-  }
+  const resolved = productionImagePath(value);
+  return resolved ? assetUrl(resolved) : "";
 }
 
 function Drawer({ open, title, subtitle, onClose, children, footer, wide = false }) {
@@ -673,7 +673,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
         <div className="pc2-table-wrap">
           <table>
             <thead><tr>
-              <th>Görsel</th><th>Model / Firma</th><th>Son hareket / saat</th>
+              <th>Görsel</th><th>Model / Firma</th><th>Üretim / model tarihi</th>
               {pool === "IMALATTA" ? <><th>Hedef</th><th>Üretim</th><th>Kalan</th><th>Durum</th></> : null}
               {pool === "IRSALIYE" ? <><th>Beklenen adet</th><th>Üretilen</th><th>İrsaliye</th></> : null}
               {pool === "TAMAMLANAN" ? <><th>Brüt</th><th>Net</th><th>Durum</th></> : null}
@@ -822,8 +822,9 @@ function ModelThumbnail({ row, onOpen }) {
   const [failed, setFailed] = useState(false);
   const url = imageSrc(row.imageUrl);
   useEffect(() => setFailed(false), [url]);
-  return <button className="pc2-thumb" type="button" onClick={onOpen} aria-label={`${row.modelName} model detayını aç`}>
-    {url && !failed ? <img src={url} alt={row.modelName} loading="lazy" onError={() => setFailed(true)} /> : <ImageIcon size={22} />}
+  return <button className="pc2-thumb pc2-image-frame" type="button" onClick={onOpen} aria-label={`${row.modelName} model detayını aç`}>
+    <ImageIcon size={22} />
+    {url && !failed ? <img src={url} alt={row.modelName} loading="lazy" onError={() => setFailed(true)} /> : null}
   </button>;
 }
 
@@ -836,7 +837,7 @@ function ModelDetail({ detail, readOnly = false, onEdit, onDelete }) {
     <div className="pc2-detail">
       <div className="pc2-detail-reference"><strong>Model kartı: {detail.modelName}</strong><span>Model ID: <code>{detail.id}</code></span><span>Firma: {detail.companyName || "Firma tanımlanmamış"}</span></div>
       <section className="pc2-detail-top">
-        <div className="pc2-detail-image">{detail.imageUrl ? <img src={imageSrc(detail.imageUrl)} alt={detail.modelName} onError={(event) => { event.currentTarget.style.display = "none"; }} /> : <ImageIcon size={44} />}</div>
+        <div className="pc2-detail-image pc2-image-frame"><ImageIcon size={44} />{imageSrc(detail.imageUrl) ? <img src={imageSrc(detail.imageUrl)} alt={detail.modelName} onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}</div>
         <div className="pc2-detail-metrics">
           <Metric label="Gelen" value={qty(detail.incomingQty)} helper={`${detail.dispatchCount || 0} irsaliye`} />
           <Metric label="Brüt tamamlanan" value={qty(detail.completedGrossQty)} helper={`Operasyon ${qty(detail.grossOperationQty)}`} />

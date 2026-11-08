@@ -68,3 +68,8 @@
 .pc2-detail-reference code{font-size:11px;overflow-wrap:anywhere}
 @media(max-width:840px){.pc2-workflow-guide{grid-template-columns:1fr}.pc2-workflow-step{min-height:40px}.pc2-workflow-index{flex-basis:22px}}
 @media(max-width:650px){.pc2-workflow-guide{gap:5px}.pc2-workflow-step{padding:8px 10px;font-size:11px}.pc2-action-link{min-height:44px}.pc2-detail-reference{flex-direction:column;gap:5px}}
+
+
+.pc2-image-frame{position:relative;overflow:hidden;display:inline-flex;align-items:center;justify-content:center}
+.pc2-image-frame>img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff}
+.pc2-image-frame>img[data-kyerp-secure-error]{display:none!important}
