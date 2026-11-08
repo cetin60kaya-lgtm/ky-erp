@@ -22,7 +22,7 @@ const MAX_QUEUED_ROWS = 100;
 export default function ProductionDirectEntryPanel({
   activeMainCompany, models = [], machines = [], companies = [],
   onSaved, onModelCreated, preselectModelId = "", openRequestToken = 0,
-  modalOpen = false, onClose,
+  modalOpen = false, onClose, optionsLoading = false, onRefreshOptions,
 }) {
   const modalRef = useRef(null);
   const [entry, setEntry] = useState(blankEntry);
@@ -333,6 +333,11 @@ export default function ProductionDirectEntryPanel({
           </div>
         </header>
         <div className="pde-modal-scroll">
+        {(!allModels.length || !machines.length) ? <div className="pde-error" role="status">
+          <ShieldAlert size={16}/>
+          {optionsLoading ? "Model ve makine listeleri yükleniyor…" : !allModels.length ? "Kayıtlı model listesi alınamadı veya henüz model yok." : "Aktif makine tanımı bulunamadı."}
+          <button type="button" onClick={() => onRefreshOptions?.()} disabled={optionsLoading}>Listeleri Yenile</button>
+        </div> : null}
         <form className="pde-form" onSubmit={stage}>
           <div className="pde-main-grid">
             <div className="pde-model-search pde-field">

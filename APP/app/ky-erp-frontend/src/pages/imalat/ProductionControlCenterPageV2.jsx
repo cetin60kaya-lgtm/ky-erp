@@ -222,6 +222,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
   const [center, setCenter] = useState({ rows: [], summary: {}, pagination: {} });
   const [dictionaries, setDictionaries] = useState({ models: [], machines: [], operators: [], companies: [] });
   const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState("");
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -246,6 +247,11 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
   const [entry, setEntry] = useState(defaultEntry(null, {}));
   const [saving, setSaving] = useState(false);
   const requestSeq = useRef(0);
+  const listCache = useRef(new Map());
+  const companyRef = useRef(activeMainCompany);
+  companyRef.current = activeMainCompany;
+  const tenantKey = String(activeMainCompany?.slug || activeMainCompany?.id || "");
+  const queryKey = JSON.stringify([tenantKey, pool, search, status, startDate, endDate, pool === "ARSIV" ? archiveYear : "", page]);
   const saveLock = useRef(false);
   const entryModel = dictionaries.models.find((row) => String(row.id || row.modelId) === String(entry.modelId)) || null;
   const entryPrintRegions = (entryModel?.printRegions || [])
@@ -254,22 +260,25 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
 
   const load = useCallback(async () => {
     const ticket = ++requestSeq.current;
-    if (!activeMainCompany?.slug && !activeMainCompany?.id) {
-      setCenter({ rows: [], summary: {}, pagination: {} });
+    if (!tenantKey) {
+      setCenter({ rows: [], summary: {}, pagination: {}, __queryKey: queryKey });
       setDictionaries({ models: [], machines: [], operators: [], companies: [] });
       setLoading(false);
-      setMessage("İmalat merkezi için ana firma seçin.");
+      setListError("İmalat merkezi için ana firma seçin.");
       return;
     }
     setLoading(true);
+    setListError("");
+    const company = companyRef.current;
+    const tenant = tenantKey;
+    let timeoutId;
     try {
-      const tenant = activeMainCompany?.slug || activeMainCompany?.id;
-      const loadResult = await loadModuleData({
+      const loadResult = await Promise.race([loadModuleData({
         scope: `imalat:${tenant}:merkez:${search}:${status}:${pool}:${startDate}:${endDate}:${archiveYear}:${page}`,
         sources: {
           center: {
             critical: true,
-            load: () => getProductionCenter(activeMainCompany, {
+            load: () => getProductionCenter(company, {
               search,
               status,
               pool,
@@ -281,9 +290,11 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
               _ts: Date.now(),
             }),
           },
-          dictionaries: { fallback: {}, load: () => getProductionCenterDictionaries(activeMainCompany) },
+          dictionaries: { fallback: {}, load: () => getProductionCenterDictionaries(company) },
         },
-      });
+      }), new Promise((_, reject) => {
+        timeoutId = window.setTimeout(() => reject(new Error("Üretim listesi zamanında yüklenemedi. Yenile ile tekrar deneyin.")), 30000);
+      })]);
       if (ticket !== requestSeq.current) return;
       if (loadResult.states.center.status !== "error") {
         const next = loadResult.data.center || { rows: [], summary: {}, pagination: {} };
@@ -293,7 +304,11 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
           setPage(lastPage);
           return;
         }
-        setCenter(next);
+        const snapshot = { ...next, __queryKey: queryKey };
+        listCache.current.set(queryKey, snapshot);
+        setCenter(snapshot);
+      } else {
+        setListError("İmalat listesine erişilemedi. Yenile ile tekrar deneyin.");
       }
       if (loadResult.states.dictionaries.status !== "error") {
         const dict = loadResult.data.dictionaries;
@@ -310,18 +325,20 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
         "Makine veya sözlük bilgileri geçici olarak yenilenemedi; imalat listesi kullanılabilir.",
       ));
     } catch (error) {
-      if (ticket === requestSeq.current) setMessage(error?.message || "İmalat merkezi yüklenemedi.");
+      if (ticket === requestSeq.current) setListError(error?.message || "İmalat merkezi yüklenemedi. Yenile ile tekrar deneyin.");
     } finally {
+      if (timeoutId) window.clearTimeout(timeoutId);
       if (ticket === requestSeq.current) setLoading(false);
     }
-  }, [activeMainCompany, search, status, pool, startDate, endDate, archiveYear, page]);
+  }, [tenantKey, queryKey, search, status, pool, startDate, endDate, archiveYear, page]);
 
   useEffect(() => {
     setPage(1);
     setDetail(null);
     setEntryOpen(false);
     setQuickSelectedModel("");
-    setCenter({ rows: [], summary: {}, pagination: {} });
+    listCache.current.clear();
+    setCenter({ rows: [], summary: {}, pagination: {}, __queryKey: "" });
     setDictionaries({ models: [], machines: [], operators: [], companies: [] });
   }, [activeMainCompany?.slug, activeMainCompany?.id]);
   useEffect(() => {
@@ -334,10 +351,15 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
     setStatus("ALL");
     setSearch("");
     setDetail(null);
-    setCenter({ rows: [], summary: {}, pagination: {} });
+    // Eski kayıtları sıfırlama: aktif sorgu anahtarı havuzlar arası sızıntıyı engeller.
   }, [pool]);
 
-  const summary = center.summary || {};
+  const visibleCenter = center.__queryKey === queryKey ? center : listCache.current.get(queryKey);
+  const dataReady = Boolean(visibleCenter);
+  const summary = visibleCenter?.summary || {};
+  const visibleRows = visibleCenter?.rows || [];
+  const recordTotal = visibleCenter?.pagination?.total;
+  const isInitialLoad = !dataReady && (loading || !listError);
 
   // e-Belge'de irsaliye veya fatura değişirse üretim / kalan / faturalanan miktar güncel kalır.
   useEffect(() => {
@@ -566,8 +588,9 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
       </section>
 
       {message ? <div className="pc2-notice"><CircleAlert size={17} /> {message}</div> : null}
+      {listError ? <div className="pc2-notice warning" role="alert"><CircleAlert size={17} /> {listError} <button type="button" onClick={load} disabled={loading}>Tekrar Yükle</button></div> : null}
 
-      <ProductionDirectEntryPanel activeMainCompany={activeMainCompany} models={dictionaries.models} machines={dictionaries.machines} companies={dictionaries.companies} preselectModelId={quickSelectedModel} openRequestToken={openRequestToken} modalOpen={directEntryModalOpen} onClose={() => setDirectEntryModalOpen(false)} onSaved={load} onModelCreated={load} />
+      <ProductionDirectEntryPanel activeMainCompany={activeMainCompany} models={dictionaries.models} machines={dictionaries.machines} companies={dictionaries.companies} preselectModelId={quickSelectedModel} openRequestToken={openRequestToken} modalOpen={directEntryModalOpen} onClose={() => setDirectEntryModalOpen(false)} optionsLoading={loading} onRefreshOptions={load} onSaved={load} onModelCreated={load} />
 
       <section className="pc2-toolbar pc2-period-toolbar" aria-label="Üretim dönem filtresi">
         <label>Dönem <select aria-label="Üretim dönemi" value={period} onChange={(event) => {
@@ -588,26 +611,26 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
       </section>
       {pool === "ARSIV" ? <p className="pc2-notice"><History size={16} /> Geçmiş üretimler arşiv amaçlıdır. İrsaliye ve fatura durumu geçmiş kayıtlara otomatik onay verilerek değiştirilmez.</p> : null}
       <section className="pc2-metrics pc2-metrics-compact" aria-label="Seçili bölümün özeti">
-        <Metric label={pool === "ARSIV" ? "Geçmiş model" : pool === "TAMAMLANAN" ? "Tamamlanan model" : pool === "IRSALIYE" ? "İrsaliye bekleyen" : pool === "FATURA" ? "Fatura kontrolü" : "Aktif üretim"} value={summary.modelCount || 0} helper="Bu bölümün kayıt sayısı" />
+        <Metric label={pool === "ARSIV" ? "Geçmiş model" : pool === "TAMAMLANAN" ? "Tamamlanan model" : pool === "IRSALIYE" ? "İrsaliye bekleyen" : pool === "FATURA" ? "Fatura kontrolü" : "Aktif üretim"} value={!dataReady ? "—" : summary.modelCount || 0} helper="Bu bölümün kayıt sayısı" />
         {pool === "FATURA" ? <>
-          <Metric label="Faturalanan adet" value={qty(summary.totalInvoicedQty)} helper="Eşleşen faturalar" tone="success" />
-          <Metric label="Açık fatura adedi" value={qty(summary.totalInvoiceRemainingQty)} helper="İrsaliye ve fatura mutabakatı" tone="warning" />
+          <Metric label="Faturalanan adet" value={dataReady ? qty(summary.totalInvoicedQty) : "—"} helper="Eşleşen faturalar" tone="success" />
+          <Metric label="Açık fatura adedi" value={dataReady ? qty(summary.totalInvoiceRemainingQty) : "—"} helper="İrsaliye ve fatura mutabakatı" tone="warning" />
         </> : <>
-          <Metric label="Brüt üretilen" value={qty(summary.totalCompletedGrossQty)} helper="Bölge bazlı üretim" />
-          <Metric label="Net sağlam adet" value={qty(summary.totalCompletedNetQty)} helper="Sakat / test düşülmüş" tone="success" />
+          <Metric label="Brüt üretilen" value={dataReady ? qty(summary.totalCompletedGrossQty) : "—"} helper="Bölge bazlı üretim" />
+          <Metric label="Net sağlam adet" value={dataReady ? qty(summary.totalCompletedNetQty) : "—"} helper="Sakat / test düşülmüş" tone="success" />
         </>}
       </section>
 
       <section className="pc2-toolbar pc2-list-toolbar">
         <label className="pc2-search"><Search size={16} /><input value={search} onChange={(event) => { setPage(1); setSearch(event.target.value); }} placeholder="Model ID, model adı, firma veya sipariş no" aria-label="Üretim modeli ara" /></label>
-        <span className="pc2-record-total">{center.pagination?.total ?? center.rows?.length ?? 0} kayıt</span>
+        <span className="pc2-record-total">{!dataReady ? (loading ? "Yükleniyor…" : "Veri alınamadı") : `${recordTotal ?? visibleRows.length} kayıt`}</span>
         <button type="button" onClick={load} disabled={loading}><RefreshCcw size={15} /> Yenile</button>
       </section>
 
       <nav className="pc2-pagination" aria-label="İmalat kayıt sayfaları">
-        <button type="button" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>← Önceki</button>
-        <span>Sayfa {page} / {Math.max(1, Math.ceil(Number(center.pagination?.total || 0) / PAGE_SIZE))}</span>
-        <button type="button" disabled={loading || page * PAGE_SIZE >= Number(center.pagination?.total || 0)} onClick={() => setPage((value) => value + 1)}>Sonraki →</button>
+        <button type="button" disabled={loading || !dataReady || page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>← Önceki</button>
+        <span>Sayfa {page} / {dataReady ? Math.max(1, Math.ceil(Number(recordTotal || 0) / PAGE_SIZE)) : "—"}</span>
+        <button type="button" disabled={loading || !dataReady || page * PAGE_SIZE >= Number(recordTotal || 0)} onClick={() => setPage((value) => value + 1)}>Sonraki →</button>
       </nav>
 
       <section className="pc2-table-card">
@@ -623,20 +646,20 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
               <th>İşlem</th>
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={{IMALATTA:8,IRSALIYE:7,TAMAMLANAN:7,FATURA:8,ARSIV:6}[pool] || 8}>İmalat kayıtları yükleniyor…</td></tr> : null}
-              {!loading && !(center.rows || []).length ? <tr><td colSpan={{IMALATTA:8,IRSALIYE:7,TAMAMLANAN:7,FATURA:8,ARSIV:6}[pool] || 8}>
+              {isInitialLoad ? <tr><td colSpan={{IMALATTA:8,IRSALIYE:7,TAMAMLANAN:7,FATURA:8,ARSIV:6}[pool] || 8}>İmalat kayıtları yükleniyor…</td></tr> : null}
+              {!loading && dataReady && !visibleRows.length ? <tr><td colSpan={{IMALATTA:8,IRSALIYE:7,TAMAMLANAN:7,FATURA:8,ARSIV:6}[pool] || 8}>
                 <div className="pc2-empty"><Boxes size={28} /><strong>{({IMALATTA:"Aktif üretim bulunamadı.",IRSALIYE:"İrsaliye eşleşmesi bekleyen yeni iş yok.",TAMAMLANAN:"Tamamlanmış üretim bulunamadı.",FATURA:"Fatura kontrolü gereken iş yok.",ARSIV:"Bu dönemde geçmiş üretim kaydı yok."})[pool]}</strong>
                   <span>Dönemi değiştirebilir veya model aramasını temizleyebilirsiniz.</span>
                   {pool === "IMALATTA" ? <button className="primary" type="button" onClick={() => {setDirectEntryModalOpen(true);setOpenRequestToken((v)=>v+1);}}><Layers3 size={16}/> Üretim Girişi</button> : null}
                 </div>
               </td></tr> : null}
-              {(center.rows || []).map((row) => <tr key={row.id}>
+              {visibleRows.map((row) => <tr key={row.id}>
                 <td><button className="pc2-thumb" type="button" onClick={() => openDetail(row)} aria-label={`${row.modelName} detay`}>{row.imageUrl ? <img src={imageSrc(row.imageUrl)} alt={row.modelName} loading="lazy" /> : <ImageIcon size={22}/>}</button></td>
                 <td><strong>{row.modelName}</strong><small>{row.companyName || "Firma bekliyor"}</small></td>
                 <td><strong>{productionDateTime(row).date}</strong><small>{productionDateTime(row).time}</small></td>
                 {pool === "IMALATTA" ? <>
                   <td>{qty(row.incomingQty)}</td><td>{qty(row.completedGrossQty)}</td><td>{qty(row.productionRemainingQty)}</td>
-                  <td><span className={`pc2-status ${statusTone(detail.legacyApproved ? "COMPLETED" : row.status)}`}>{detail.legacyApproved ? "Tamamlandı" : statusLabel(row.status)}</span></td>
+                  <td><span className={`pc2-status ${statusTone(row.legacyApproved ? "COMPLETED" : row.status)}`}>{row.legacyApproved ? "Tamamlandı" : statusLabel(row.status)}</span></td>
                 </> : null}
                 {pool === "IRSALIYE" ? <>
                   <td>{qty(row.incomingQty)}</td><td>{qty(row.completedGrossQty)}</td>
