@@ -92,7 +92,7 @@ export function buildProductionCanonicalReport(payload = {}, filters = {}) {
       if (!filters.durum || search(durum, filters.durum)) {
         auditRows.push(row);
         regionRows.push({ ...row, operasyonAdedi: matching.length,
-          tamamlananModelAdedi: durum === "Tamam" ? 1 : 0 });
+          tamamlananModelAdedi: durum === "Tamam" || durum === "Geçmiş Tamamlandı" ? 1 : 0 });
       }
     }
   }
