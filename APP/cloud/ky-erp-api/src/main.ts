@@ -192,8 +192,11 @@ registerComplianceCenterRoutes(app);
 registerComplianceConfigRoutes(app);
 registerComplianceSharedEvidenceRoutes(app);
 registerComplianceOperationsRoutes(app);
-registerProductionRuntimeV2Routes(app);
+// Canonical production-center routes must be registered FIRST. Hono runs the first
+// matching handler; the legacy runtime responds without poolContract/appliedPool
+// and incorrectly returns all models to all four İmalat screens.
 registerProductionCenterRoutes(app);
+registerProductionRuntimeV2Routes(app);
 registerNotificationRoutes(app);
 registerMailCommunicationRoutes(app);
 registerGoogleMailRoutes(app);
