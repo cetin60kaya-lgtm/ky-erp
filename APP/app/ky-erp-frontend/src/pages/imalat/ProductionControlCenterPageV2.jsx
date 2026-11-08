@@ -643,10 +643,16 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
       <section className="pc2-metrics pc2-metrics-compact" aria-label="Seçili bölümün özeti">
         <Metric label={pool === "ARSIV" ? "Geçmiş model" : pool === "TAMAMLANAN" ? "Tamamlanan model" : pool === "IRSALIYE" ? "İrsaliye bekleyen" : pool === "FATURA" ? "Fatura kontrolü" : "Aktif üretim"} value={!dataReady ? "—" : summary.modelCount || 0} helper="Bu bölümün kayıt sayısı" />
         {pool === "FATURA" ? <>
-          <Metric label="Faturalanan adet" value={dataReady ? qty(summary.totalInvoicedQty) : "—"} helper="Eşleşen faturalar" tone="success" />
-          <Metric label="Açık fatura adedi" value={dataReady ? qty(summary.totalInvoiceRemainingQty) : "—"} helper="İrsaliye ve fatura mutabakatı" tone="warning" />
+          <Metric label="Faturalanan adet" value={dataReady ? qty(summary.totalInvoicedQty) : "—"} helper="Bağlı faturalardaki adet" tone="success" />
+          <Metric label="Fatura kalanı" value={dataReady ? qty(summary.totalInvoiceRemainingQty) : "—"} helper="İrsaliye / plan bazında açık" tone="warning" />
+        </> : pool === "IRSALIYE" ? <>
+          <Metric label="Planlanan / hedef" value={dataReady ? qty(summary.totalIncomingQty) : "—"} helper="İrsaliye gelmeden önceki hedef" />
+          <Metric label="Üretilen net" value={dataReady ? qty(summary.totalCompletedNetQty) : "—"} helper="Fişlerden hesaplanan" tone="success" />
+        </> : pool === "IMALATTA" ? <>
+          <Metric label="Üretilen net" value={dataReady ? qty(summary.totalCompletedNetQty) : "—"} helper="Baskı ve kumaş sakatı düşülmüş" tone="success" />
+          <Metric label="Bekleyen üretim" value={dataReady ? qty(summary.totalProductionRemainingQty) : "—"} helper="Hedefi kayıtlı modellerde" tone="warning" />
         </> : <>
-          <Metric label="Brüt üretilen" value={dataReady ? qty(summary.totalCompletedGrossQty) : "—"} helper="Bölge bazlı üretim" />
+          <Metric label="Brüt üretilen" value={dataReady ? qty(summary.totalCompletedGrossQty) : "—"} helper="İşlem fişlerinin toplamı" />
           <Metric label="Net sağlam adet" value={dataReady ? qty(summary.totalCompletedNetQty) : "—"} helper="Sakat / test düşülmüş" tone="success" />
         </>}
       </section>
@@ -667,7 +673,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
         <div className="pc2-table-wrap">
           <table>
             <thead><tr>
-              <th>Görsel</th><th>Model / Firma</th><th>Son üretim / saat</th>
+              <th>Görsel</th><th>Model / Firma</th><th>Son hareket / saat</th>
               {pool === "IMALATTA" ? <><th>Hedef</th><th>Üretim</th><th>Kalan</th><th>Durum</th></> : null}
               {pool === "IRSALIYE" ? <><th>Beklenen adet</th><th>Üretilen</th><th>İrsaliye</th></> : null}
               {pool === "TAMAMLANAN" ? <><th>Brüt</th><th>Net</th><th>Durum</th></> : null}
@@ -684,8 +690,8 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
                 </div>
               </td></tr> : null}
               {visibleRows.map((row) => <tr key={row.id}>
-                <td><button className="pc2-thumb" type="button" onClick={() => openDetail(row)} aria-label={`${row.modelName} detay`}>{row.imageUrl ? <img src={imageSrc(row.imageUrl)} alt={row.modelName} loading="lazy" /> : <ImageIcon size={22}/>}</button></td>
-                <td><strong>{row.modelName}</strong><small>{row.companyName || "Firma bekliyor"}</small></td>
+                <td><ModelThumbnail row={row} onOpen={() => openDetail(row)} /></td>
+                <td><strong>{row.modelName}</strong><small>{row.companyName || "Firma bekliyor"}</small><small className="pc2-model-id">ID: {row.id}</small></td>
                 <td><strong>{productionDateTime(row).date}</strong><small>{productionDateTime(row).time}</small></td>
                 {pool === "IMALATTA" ? <>
                   <td>{qty(row.incomingQty)}</td><td>{qty(row.completedGrossQty)}</td><td>{qty(row.productionRemainingQty)}</td>
@@ -707,7 +713,9 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
                   <td>{qty(row.completedNetQty)}</td><td><span className="pc2-status success">Geçmiş tamamlandı</span></td>
                 </> : null}
                 <td><div className="pc2-row-actions">
-                  {pool === "IMALATTA" ? <button className="primary" type="button" onClick={() => focusQuick(row)}><Layers3 size={14}/> Üretim Gir</button> : null}
+                  {pool === "IMALATTA" ? <button className="primary" type="button" onClick={() => focusQuick(row)}><Layers3 size={14}/> Fiş Gir</button> : null}
+                  {pool === "IRSALIYE" ? <a href="/e-belge/eslestirmeler" className="pc2-action-link"><FileCheck2 size={13}/> Eşleştir</a> : null}
+                  {pool === "FATURA" ? <a href="/e-belge/giden-belgeler" className="pc2-action-link"><FileText size={13}/> Faturalar</a> : null}
                   <button type="button" onClick={() => openDetail(row)}>Detay</button>
                 </div></td>
               </tr>)}
@@ -810,6 +818,15 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
   );
 }
 
+function ModelThumbnail({ row, onOpen }) {
+  const [failed, setFailed] = useState(false);
+  const url = imageSrc(row.imageUrl);
+  useEffect(() => setFailed(false), [url]);
+  return <button className="pc2-thumb" type="button" onClick={onOpen} aria-label={`${row.modelName} model detayını aç`}>
+    {url && !failed ? <img src={url} alt={row.modelName} loading="lazy" onError={() => setFailed(true)} /> : <ImageIcon size={22} />}
+  </button>;
+}
+
 function Metric({ label, value, helper, tone = "" }) {
   return <article className={`pc2-metric ${tone}`}><span>{label}</span><strong>{value}</strong><small>{helper}</small></article>;
 }
@@ -817,8 +834,9 @@ function Metric({ label, value, helper, tone = "" }) {
 function ModelDetail({ detail, readOnly = false, onEdit, onDelete }) {
   return (
     <div className="pc2-detail">
+      <div className="pc2-detail-reference"><strong>Model kartı: {detail.modelName}</strong><span>Model ID: <code>{detail.id}</code></span><span>Firma: {detail.companyName || "Firma tanımlanmamış"}</span></div>
       <section className="pc2-detail-top">
-        <div className="pc2-detail-image">{detail.imageUrl ? <img src={imageSrc(detail.imageUrl)} alt={detail.modelName} /> : <ImageIcon size={44} />}</div>
+        <div className="pc2-detail-image">{detail.imageUrl ? <img src={imageSrc(detail.imageUrl)} alt={detail.modelName} onError={(event) => { event.currentTarget.style.display = "none"; }} /> : <ImageIcon size={44} />}</div>
         <div className="pc2-detail-metrics">
           <Metric label="Gelen" value={qty(detail.incomingQty)} helper={`${detail.dispatchCount || 0} irsaliye`} />
           <Metric label="Brüt tamamlanan" value={qty(detail.completedGrossQty)} helper={`Operasyon ${qty(detail.grossOperationQty)}`} />
