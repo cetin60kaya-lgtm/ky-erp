@@ -44,3 +44,29 @@ test("canonical report respects day/shift/region/model filters and does not inve
   assert.equal(old.audit.rows.length, 0);
   assert.equal(old.report.rows.length, 0);
 });
+
+test("2026 ve Ağustos-Kasım filtreleri, eski yıl fişlerini değiştirmeden dışarıda tutar", () => {
+  const withHistory = [{
+    ...cards[0],
+    productionEntries: [
+      { id: "legacy-2025", date: "2025-12-31", printArea: "Ön", grossQty: 11,
+        netQty: 11, machineId: "6", shift: "Gece", operatorName: "Ahmet" },
+      { id: "aug-2026", date: "2026-08-14", printArea: "Ön", grossQty: 12,
+        netQty: 12, machineId: "6", shift: "Gündüz", operatorName: "Ahmet" },
+      ...cards[0].productionEntries,
+    ],
+  }];
+  const year = buildProductionCanonicalReport({ rows: withHistory }, {
+    baslangic: "2026-01-01", bitis: "2026-12-31",
+  });
+  assert.deepEqual(year.report.rows.map((row) => row.id).sort(), ["aug-2026", "p-1", "p-2"]);
+  assert.equal(year.report.summary.secilenFiltreUretimAdedi, 202);
+  const lastMonths = buildProductionCanonicalReport({ rows: withHistory }, {
+    baslangic: "2026-08-01", bitis: "2026-11-30",
+  });
+  assert.equal(lastMonths.report.rows.length, 3);
+  const old = buildProductionCanonicalReport({ rows: withHistory }, {
+    baslangic: "2025-01-01", bitis: "2025-12-31",
+  });
+  assert.deepEqual(old.report.rows.map((row) => row.id), ["legacy-2025"]);
+});
