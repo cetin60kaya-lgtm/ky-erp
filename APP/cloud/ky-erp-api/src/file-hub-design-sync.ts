@@ -1,6 +1,6 @@
 // @ts-nocheck
 import type { Context } from "hono";
-import { ensureCanonicalModel } from "./canonical-model-identity";
+import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
