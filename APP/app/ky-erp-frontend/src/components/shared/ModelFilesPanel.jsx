@@ -43,6 +43,10 @@ export default function ModelFilesPanel({ modelId, modelName = "", activeMainCom
   const [folderMode, setFolderMode] = useState(false);
   const [folderPreview, setFolderPreview] = useState(null);
   const [folderBusy, setFolderBusy] = useState(false);
+  const [psdQuery, setPsdQuery] = useState("");
+  const [psdItems, setPsdItems] = useState([]);
+  const [selectedPsd, setSelectedPsd] = useState(null);
+  const [psdBusy, setPsdBusy] = useState(false);
   const [assignments, setAssignments] = useState([]);
   const [busy, setBusy] = useState(false);
   const [busyFile, setBusyFile] = useState("");
@@ -81,6 +85,7 @@ export default function ModelFilesPanel({ modelId, modelName = "", activeMainCom
       setIncoming([]);return;
     }
     setIncoming(list);
+    setSelectedPsd(null);
     setFolderMode(isFolder);
     setRole(suggested);
     setAssignments([{ key: "primary", modelId: String(modelId), boy: "", printArea: "" }]);
@@ -107,11 +112,55 @@ export default function ModelFilesPanel({ modelId, modelName = "", activeMainCom
     }catch(err){setError(err?.message||"Drive model klasörü bağlanamadı.");}
     finally{setFolderBusy(false);}
   }
+  async function searchExistingPsd() {
+    if(psdQuery.trim().length<2 || psdBusy || readOnly)return;
+    setPsdBusy(true);setPsdItems([]);setSelectedPsd(null);setError("");setNotice("");
+    try{
+      const result=await apiGet("/model-files/library/outgoing",{...query,q:psdQuery.trim()},{forceFresh:true});
+      setPsdItems(result?.data?.items||[]);
+      if(!result?.data?.items?.length)setNotice("Aranan PSD indeks içinde bulunamadı. Giden desenler Drive bağlantısı ve taraması kontrol edilmeli.");
+    }catch(err){setError(err?.message||"Giden PSD arşivi açılamadı.");}
+    finally{setPsdBusy(false);}
+  }
+  async function linkExistingPsd() {
+    if(!selectedPsd || psdBusy || readOnly)return;
+    if(!assignments.length || assignments.some(a=>!a.modelId||!a.boy.trim())){
+      setError("PSD içindeki her model için BOY alanını seçin.");return;
+    }
+    setPsdBusy(true);setError("");setNotice("");
+    try{
+      const payload=await apiFetch(`/model-files/${encodeURIComponent(modelId)}/link-existing-outgoing`,{
+        method:"POST",params:query,body:{assetId:selectedPsd.id,assignments:assignments.map(({modelId:id,boy,printArea})=>({modelId:id,boy:boy.trim(),printArea}))}
+      });
+      const info=payload?.data||payload;
+      if(info.copied!==0)throw new Error("Fiziksel kopyalama sonucu beklenmiyor; kayıt kontrol edilmeli.");
+      setNotice(`${info.fileName} → ${info.linkedModels} model bağlantısı kaydedildi. PSD Drive'da yerinde kaldı.`);
+      setSelectedPsd(null);setPsdItems([]);setPsdQuery("");
+      await refresh();onUploaded?.();
+    }catch(err){setError(err?.message||"Giden PSD bağlantısı kurulamadı.");}
+    finally{setPsdBusy(false);}
+  }
   const isPsd = role === "OUTGOING_DESIGN";
   const setAssignment = (key, field, value) => setAssignments((prev) => prev.map((a) => a.key === key ? { ...a, [field]: value } : a));
   const addAssignment = () => setAssignments((prev) => [...prev, { key: String(Date.now()) + "-" + prev.length, modelId: String(modelId), boy: "", printArea: "" }]);
   const removeAssignment = (key) => setAssignments((prev) => prev.filter((a) => a.key !== key));
 
+  const assignmentEditor = (
+    <div className="ky-model-psd-assignments">
+      <p><strong>PSD içindeki modeller, BOY ve baskı bölgeleri</strong> — Her satır aynı fiziksel PSD'nin ayrı ilişkisidir.</p>
+      {assignments.map((item) => <div className="ky-model-files-assignment" key={item.key}>
+        <label>Model
+          <select value={item.modelId} disabled={busy||psdBusy} onChange={(ev) => setAssignment(item.key, "modelId", ev.target.value)}>
+            {options.map((m) => <option key={m.id} value={m.id}>{m.modelName || m.name || m.id}</option>)}
+          </select>
+        </label>
+        <label>BOY <input value={item.boy} disabled={busy||psdBusy} onChange={(ev) => setAssignment(item.key, "boy", ev.target.value)} placeholder="Küçük Boy / Büyük Boy / Özel ölçü" /></label>
+        <label>Baskı bölgesi <select value={item.printArea} disabled={busy||psdBusy} onChange={(ev) => setAssignment(item.key, "printArea", ev.target.value)}>{PRINT_AREAS.map(([code, title]) => <option key={code} value={code}>{title}</option>)}</select></label>
+        <button type="button" onClick={() => removeAssignment(item.key)} disabled={busy||psdBusy||assignments.length===1} aria-label="Model BOY bağlantısını kaldır">Sil</button>
+      </div>)}
+      <button type="button" onClick={addAssignment} disabled={busy||psdBusy||assignments.length>=30}>+ Model / BOY Ekle</button>
+    </div>
+  );
   async function save() {
     if (!incoming.length || !modelId || !slug || busy) return;
     if (isPsd && assignments.some((a) => !a.modelId || !a.boy.trim())) {
@@ -179,6 +228,27 @@ export default function ModelFilesPanel({ modelId, modelName = "", activeMainCom
               : <small>Dosya bulunamadı. Drive File Hub taramasını ve klasör adının model adıyla eşleşmesini kontrol edin.</small>}
           </div>}
         </div>
+        <details className="ky-model-psd-existing">
+          <summary>Drive'da zaten bulunan giden PSD'yi bağla (büyük dosyalar için)</summary>
+          <div className="ky-model-psd-search">
+            <label>Dosya adı <input type="search" value={psdQuery} onChange={(ev)=>setPsdQuery(ev.target.value)} placeholder="Giden PSD dosya adında ara" /></label>
+            <button type="button" disabled={psdBusy||psdQuery.trim().length<2} onClick={searchExistingPsd}>Drive Arşivinde Ara</button>
+          </div>
+          {!!psdItems.length && <div className="ky-model-psd-results">{psdItems.map((item)=>(
+            <button type="button" key={item.id} className={selectedPsd?.id===item.id?"is-selected":""} onClick={()=>{
+              setSelectedPsd(item);setRole("OUTGOING_DESIGN");
+              setAssignments([{key:"primary",modelId:String(modelId),boy:"",printArea:""}]);setError("");setNotice("");
+            }}>{item.fileName} · {(item.size/1048576).toFixed(1)} MB</button>
+          ))}</div>}
+          {selectedPsd && <div className="ky-model-files-editor">
+            <strong>Seçilen PSD: {selectedPsd.fileName}</strong>
+            {assignmentEditor}
+            <div className="ky-model-files-actions">
+              <button type="button" onClick={()=>setSelectedPsd(null)} disabled={psdBusy}>Vazgeç</button>
+              <button type="button" onClick={linkExistingPsd} disabled={psdBusy}>{psdBusy?"Bağlanıyor…":"PSD Bağlantılarını Kaydet"}</button>
+            </div>
+          </div>}
+        </details>
         <div
           className={`ky-model-files-drop ${drag ? "is-dragging" : ""}`}
           onDragEnter={(ev) => { ev.preventDefault(); setDrag(true); }}
@@ -205,20 +275,7 @@ export default function ModelFilesPanel({ modelId, modelName = "", activeMainCom
             <select value={role} onChange={(ev) => setRole(ev.target.value)} disabled={busy||folderMode}>{CATEGORIES.map(([code, title]) => <option key={code} value={code}>{title}</option>)}</select>
           </label>
           <div className="ky-model-files-selected">{incoming.map(({file,relative},i) => <span key={relative + file.name + i}>{relative||file.name} · {(file.size / 1048576).toFixed(1)} MB · {folderMode?modelSourceFileType(file.name):role}</span>)}</div>
-          {isPsd && <>
-            <p><strong>PSD içindeki modeller, boylar ve baskı bölgeleri</strong> — Dosya bir kez Drive'a kaydedilir. Her satır aynı dosyanın ayrı ilişkisidir.</p>
-            {assignments.map((item) => <div className="ky-model-files-assignment" key={item.key}>
-              <label>Model
-                <select value={item.modelId} disabled={busy} onChange={(ev) => setAssignment(item.key, "modelId", ev.target.value)}>
-                  {options.map((m) => <option key={m.id} value={m.id}>{m.modelName || m.name || m.id}</option>)}
-                </select>
-              </label>
-              <label>BOY <input value={item.boy} disabled={busy} onChange={(ev) => setAssignment(item.key, "boy", ev.target.value)} placeholder="Küçük Boy / Büyük Boy / Özel ölçü" /></label>
-              <label>Baskı bölgesi <select value={item.printArea} disabled={busy} onChange={(ev) => setAssignment(item.key, "printArea", ev.target.value)}>{PRINT_AREAS.map(([code, title]) => <option key={code} value={code}>{title}</option>)}</select></label>
-              <button type="button" onClick={() => removeAssignment(item.key)} disabled={busy || assignments.length === 1} aria-label="Model boy bağlantısını kaldır">Sil</button>
-            </div>)}
-            <button type="button" onClick={addAssignment} disabled={busy || assignments.length >= 30}>+ Model / Boy Ekle</button>
-          </>}
+          {isPsd && assignmentEditor}
           <div className="ky-model-files-actions">
             <button type="button" onClick={() => { setIncoming([]); setExpanded(false); }} disabled={busy}>Vazgeç</button>
             <button type="button" onClick={save} disabled={busy}>{busy ? `Kaydediliyor: ${busyFile}` : `${incoming.length} Dosyayı Drive'a Kaydet`}</button>
