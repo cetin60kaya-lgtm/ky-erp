@@ -32,6 +32,7 @@ import {
 } from "../../../../services/ik/monthlyApi";
 import { printHtmlDocument } from "../../../../services/printService";
 import { exportRowsToExcelFile } from "../../../../utils/excelExport";
+import { canonicalCompanySlug } from "../../../../utils/companyIdentity";
 import { useAuth } from "../../../../context/AuthContext";
 import IkMonthlyProShell from "./IkMonthlyProShell";
 import "./ik.advanced.css";
@@ -413,6 +414,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const [payrollData, setPayrollData] = useState(null);
   // A prepared period is shared company data, never a browser/account preference.
   const [preparedPeriods, setPreparedPeriods] = useState([]);
+  const [periodCheckFailed, setPeriodCheckFailed] = useState(false);
   const [logs, setLogs] = useState([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -467,6 +469,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setYear(stored.year);
     setMonth(stored.month);
     setPreparedPeriods([]);
+    setPeriodCheckFailed(false);
+    setData({});
+    setPayrollData(null);
     setSelectedId(readIkSelectedPerson(companyId, `${stored.year}-${String(stored.month).padStart(2, "0")}`));
   }, [companyId]);
 
@@ -491,7 +496,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const masterDocuments = safeList(data.rawDocuments).length ? safeList(data.rawDocuments) : safeList(data.documents);
   const documents = safeList(data.documents).filter((item) => canonicalEmployeeIds.has(item.employeeId));
   const checks = safeList(data.checks);
-  const payrollLines = safeList(payrollData?.lines).filter((line) => canonicalEmployeeIds.has(line.employeeId || line.employee?.id));
+  const payrollReady = periodPrepared
+    && Number(payrollData?.year) === year
+    && Number(payrollData?.month) === month
+    && canonicalCompanySlug(payrollData?.mainCompanyId || companyId) === canonicalCompanySlug(companyId);
+  const payrollLines = payrollReady
+    ? safeList(payrollData?.lines).filter((line) => canonicalEmployeeIds.has(line.employeeId || line.employee?.id))
+    : [];
   const totalDays = daysInMonth(year, month);
   // Personel Kartları always read the permanent master; monthly tabs read
   // the period-specific employee projection. Neither depends on user role.
@@ -521,12 +532,19 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         ]);
         if (resultState.status !== "fulfilled") throw resultState.reason;
         const result = resultState.value;
+        if (result?.mainCompanyId && canonicalCompanySlug(result.mainCompanyId) !== canonicalCompanySlug(companyId)) {
+          throw new Error("İK şirket kimliği uyuşmuyor. Yanlış firmaya ait personel veya bordro gösterilmedi.");
+        }
         const audit = auditState.status === "fulfilled" ? auditState.value : [];
         const center = centerState.status === "fulfilled" ? centerState.value : null;
 
         // The D1 period-state endpoint is the single source of truth for every
         // authorized user. Never promote a period from localStorage during reads.
         const periodStateFailed = periodState.status !== "fulfilled";
+        if (!periodStateFailed && periodState.value?.mainCompanyId
+          && canonicalCompanySlug(periodState.value.mainCompanyId) !== canonicalCompanySlug(companyId)) {
+          throw new Error("İK dönem bilgisi farklı firmaya ait. İşlem durduruldu.");
+        }
         const authoritativePrepared = !periodStateFailed && Boolean(periodState.value?.prepared);
         const includePayroll = authoritativePrepared;
 
@@ -535,6 +553,10 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         if (includePayroll) {
           try {
             payroll = await getIkAdvancedPayroll(params({ mainCompanyId: companyId, year, month }));
+            if (payroll?.mainCompanyId
+              && canonicalCompanySlug(payroll.mainCompanyId) !== canonicalCompanySlug(companyId)) {
+              throw new Error("İK bordro verisi farklı firmaya ait.");
+            }
           } catch {
             payrollFailed = true;
           }
@@ -570,6 +592,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         } : null;
 
         setData(cleanResult);
+        setPeriodCheckFailed(periodStateFailed);
         setLogs(safeList(audit));
         setPayrollData(includePayroll ? cleanPayroll : null);
         setPreparedPeriods((old) => {
@@ -825,7 +848,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   };
 }, [periodMovements, payrollLines, rawEmployees]);
 
-  const payrollRows = useMemo(() => periodPrepared ? employees.map((employee) => {
+  const payrollRows = useMemo(() => payrollReady ? employees.map((employee) => {
   const system = planFor(employee);
   const saved = payrollLines.find((line) => line.employeeId === employee.id);
   if (!saved?.final) return system;
@@ -855,7 +878,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     paidLocked: Boolean(saved.frozen),
     monthOverride: ["OVERRIDE", "MANUAL_APPROVED"].includes(upper(saved.status)),
   };
-}): [], [employees, payrollLines, planFor, periodPrepared]);
+}): [], [employees, payrollLines, planFor, payrollReady]);
 
   const summary = useMemo(() => payrollRows.reduce((acc, row) => ({
     count: acc.count + 1,
@@ -914,7 +937,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
 
   const unbalancedPayrollRows = useMemo(() => payrollRows.filter((row) => Math.abs(num(row.diff)) > 0.01), [payrollRows]);
   const grandPaymentDiff = round(summary.bank + summary.cash - summary.net);
-  const balanced = Math.abs(grandPaymentDiff) <= 0.01 && unbalancedPayrollRows.length === 0;
+  const balanced = payrollReady && Math.abs(grandPaymentDiff) <= 0.01 && unbalancedPayrollRows.length === 0;
   const missingHireEmployees = useMemo(() => employees.filter((employee) => !employeeHireDate(employee)), [employees]);
   const passiveWithoutExitEmployees = useMemo(() => rawEmployees.filter((employee) => upper(`${employee.status || ""} ${employee.activePassive || ""}`).includes("PAS") && !employeeExitDate(employee)), [rawEmployees]);
   const duplicateNameCount = useMemo(() => {
@@ -927,8 +950,10 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   }, [rawEmployees]);
 
   const smartIssues = [
-    !periodPrepared ? { tone: "orange", title: "Bordro dönemi hazırlanmadı", detail: `${MONTHS[month - 1]} ${year} için önce Bilgileri Hazırla.`, action: preparePeriod, actionLabel: "Hazırla" } : null,
-    periodPrepared && !balanced ? { tone: "red", title: "Ödeme dengesi", detail: unbalancedPayrollRows.length ? `${unbalancedPayrollRows.length} personelde Banka + Elden, Net Ödenecek ile eşleşmiyor.` : `Genel ödeme farkı ${money(grandPaymentDiff)}.`, action: () => go("bordro"), actionLabel: "Bordroya Git" } : null,
+    periodCheckFailed ? { tone: "red", title: "Dönem doğrulanamadı", detail: "Sunucudaki İK hazırlık durumu okunamadı. Yerel tarayıcı verisi kullanılmıyor.", action: () => load({ force: true }), actionLabel: "Yenile" } : null,
+    !periodPrepared && !periodCheckFailed ? { tone: "orange", title: "Bordro dönemi hazırlanmadı", detail: `${MONTHS[month - 1]} ${year} için önce Bilgileri Hazırla.`, action: preparePeriod, actionLabel: "Hazırla" } : null,
+    periodPrepared && !payrollReady ? { tone: "red", title: "Ortak bordro verisi yüklenemedi", detail: "Banka, elden ve net tutarları farklı hesaplamayla doldurulmadı.", action: () => load({ force: true }), actionLabel: "Yenile" } : null,
+    payrollReady && !balanced ? { tone: "red", title: "Ödeme dengesi", detail: unbalancedPayrollRows.length ? `${unbalancedPayrollRows.length} personelde Banka + Elden, Net Ödenecek ile eşleşmiyor.` : `Genel ödeme farkı ${money(grandPaymentDiff)}.`, action: () => go("bordro"), actionLabel: "Bordroya Git" } : null,
     missingHireEmployees.length ? { tone: "orange", title: "İşe giriş tarihi eksik", detail: `${missingHireEmployees.length} dönem personelinde işe giriş tarihi eksik. Ay kapanışı engellenir.`, action: () => go("personel"), actionLabel: "Personellere Git" } : null,
     passiveWithoutExitEmployees.length ? { tone: "red", title: "İşten çıkış tarihi eksik", detail: `${passiveWithoutExitEmployees.length} pasif personelde çıkış tarihi eksik. Ay kapanışı engellenir.`, action: () => go("personel"), actionLabel: "Personellere Git" } : null,
     duplicateNameCount ? { tone: "orange", title: "Mükerrer ad kontrolü", detail: `${duplicateNameCount} ad-soyad birden fazla personel kartında bulunuyor. Kod/TC ile teyit edilmelidir.`, action: () => go("personel"), actionLabel: "Kontrol Et" } : null,
@@ -2720,7 +2745,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   }
 
   function renderOzet() {
-    const payrollReadyText = periodPrepared ? "Hazır" : "Hazırlanmadı";
+    const payrollReadyText = periodCheckFailed ? "Sunucu doğrulanamadı" : payrollReady ? "Hazır" : periodPrepared ? "Bordro yüklenemedi" : "Hazırlanmadı";
+    const payrollValue = (amount) => payrollReady ? money(amount) : periodPrepared ? "Veri yüklenemedi" : "Hazırlanmadı";
     return (
       <section>
         <div className="page-head">
@@ -2730,14 +2756,19 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         {filters({ third: "Personel / uyarı ara", fourth: "Durum", fifth: "SGK" })}
         <div className={`warnline ${periodPrepared ? "ok" : "warn"}`}>
           <b>Ödeme dönemi: {MONTHS[month - 1]} {year}</b> · Ay bir kez hazırlandığında firma bazında sunucuya kaydedilir ve tekrar hazırlanmaz.
-          {!periodPrepared ? <><span> Bu dönem bordro hesabı henüz açılmadı.</span> <button className="btn primary" onClick={preparePeriod} disabled={busy}>{busy ? "Hazırlanıyor" : "Bilgileri Hazırla"}</button></> : <span> Bordro verileri hazır.</span>}
+          {periodCheckFailed
+            ? <><span> Dönem durumu sunucudan doğrulanamadı.</span> <button className="btn" onClick={() => load({ force: true })}>Yenile</button></>
+            : !periodPrepared
+              ? <><span> Bu dönem bordro hesabı henüz açılmadı.</span> <button className="btn primary" onClick={preparePeriod} disabled={busy}>{busy ? "Hazırlanıyor" : "Bilgileri Hazırla"}</button></>
+              : payrollReady ? <span> Ortak bordro verileri hazır.</span>
+                : <><span> Bordro verisi yüklenemedi; farklı bir hesapla doldurulmaz.</span> <button className="btn" onClick={() => load({ force: true })}>Yenile</button></>}
         </div>
 
         <div className="sumgrid">
           {summaryBox("Dönem personeli", employees.length, "", `${employees.filter(isSgk).length} SGK'lı · ${employees.filter((item) => employeeHireDate(item).startsWith(period)).length} yeni giriş · ${employees.filter((item) => employeeExitDate(item).startsWith(period)).length} çıkış`)}
-          {summaryBox("Banka ödeme", periodPrepared ? money(summary.bank) : "Hazırlanmadı")}
-          {summaryBox("Elden ödeme", periodPrepared ? money(summary.cash) : "Hazırlanmadı")}
-          {summaryBox("Net ödeme", periodPrepared ? money(summary.net) : "Hazırlanmadı", periodPrepared ? (balanced ? "green" : "red") : "orange")}
+          {summaryBox("Banka ödeme", payrollValue(summary.bank))}
+          {summaryBox("Elden ödeme", payrollValue(summary.cash))}
+          {summaryBox("Net ödeme", payrollValue(summary.net), payrollReady ? (balanced ? "green" : "red") : "orange")}
           {summaryBox("Ek ödeme", periodPrepared ? money(summary.extra) : "-", summary.extra ? "green" : "")}
           {summaryBox("Mesai", periodPrepared ? money(summary.overtime) : "-", summary.overtime ? "orange" : "")}
           {summaryBox("Avans", periodPrepared ? money(summary.advance) : "-", summary.advance ? "orange" : "")}
@@ -2765,7 +2796,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           </tbody></table>
         </div>
 
-        {periodPrepared && <div className="card"><div className="ch"><div><b>Seçili Dönem Ödeme Özeti</b><span>Satıra tıklayıp personeli seçin; son kontrol bordro ekranından yapılır.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>SGK</th><th>Ek</th><th>Mesai</th><th>Avans</th><th>Kesinti</th><th>Banka</th><th>Elden</th><th>Net</th><th>Durum</th></tr></thead><tbody>
+        {payrollReady && <div className="card"><div className="ch"><div><b>Seçili Dönem Ödeme Özeti</b><span>Satıra tıklayıp personeli seçin; son kontrol bordro ekranından yapılır.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>SGK</th><th>Ek</th><th>Mesai</th><th>Avans</th><th>Kesinti</th><th>Banka</th><th>Elden</th><th>Net</th><th>Durum</th></tr></thead><tbody>
           {payrollRows.map((row) => <tr key={row.employee.id} onClick={() => setSelectedId(row.employee.id)}><td><span className="person">{row.employee.fullName}</span><span className="code">{row.employee.code || "-"}</span></td><td>{sgkLabel(row.employee)}</td><td>{money(row.extra)}</td><td>{money(row.overtime)}</td><td>{money(row.advance)}</td><td>{money(row.deduction + row.garnishment)}</td><td>{money(row.bank)}</td><td>{money(row.cash)}</td><td className="money">{money(row.net)}</td><td><span className={`badge ${row.diff === 0 ? "green" : "red"}`}>{row.diff === 0 ? "Hazır" : "Kontrol"}</span></td></tr>)}
           <EmptyRow show={!payrollRows.length} colSpan={10} text="Hazırlanmış bordro satırı yok."/>
         </tbody></table></div></div>}
