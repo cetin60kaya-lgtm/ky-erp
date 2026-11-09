@@ -1410,27 +1410,6 @@
   margin-bottom:2px;
 }
 
-/* İç alan daraldığında, ekranın toplam genişliği yerine gerçek form genişliği
-   esas alınır. Böylece Chrome zoom ve hesap farkında kolonlar sıkışmaz. */
-@container ik-payroll-main (max-width:1080px) {
-  .modal-bg .prepayroll-dialog .payroll-control-grid,
-  .modal-bg .prepayroll-dialog .final-manual-grid {
-    grid-template-columns:minmax(0,1fr);
-  }
-  .modal-bg .prepayroll-dialog .payroll-control-grid > .modal-section:last-child {
-    grid-column:1;
-  }
-}
-@container ik-payroll-main (max-width:760px) {
-  .modal-bg .prepayroll-dialog .final-manual-card .form {
-    grid-template-columns:repeat(2,minmax(0,1fr));
-  }
-}
-@container ik-payroll-main (max-width:480px) {
-  .modal-bg .prepayroll-dialog .final-manual-card .form {
-    grid-template-columns:minmax(0,1fr);
-  }
-}
 @media(max-width:1180px){
   .modal-bg .prepayroll-dialog input,
   .modal-bg .prepayroll-dialog select{
@@ -1521,6 +1500,28 @@
   }
 }
 
+
+/* İç alan daraldığında, ekranın toplam genişliği yerine gerçek form genişliği
+   esas alınır. Böylece Chrome zoom ve hesap farkında kolonlar sıkışmaz. */
+@container ik-payroll-main (max-width:1080px) {
+  .modal-bg .prepayroll-dialog .payroll-control-grid,
+  .modal-bg .prepayroll-dialog .final-manual-grid {
+    grid-template-columns:minmax(0,1fr);
+  }
+  .modal-bg .prepayroll-dialog .payroll-control-grid > .modal-section:last-child {
+    grid-column:1;
+  }
+}
+@container ik-payroll-main (max-width:760px) {
+  .modal-bg .prepayroll-dialog .final-manual-card .form {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@container ik-payroll-main (max-width:480px) {
+  .modal-bg .prepayroll-dialog .final-manual-card .form {
+    grid-template-columns:minmax(0,1fr);
+  }
+}
 
 /* IK_LEAVE_EMPLOYEE_CENTER_V3 */
 .ik-monthly-pro .ik-leave-workspace {
