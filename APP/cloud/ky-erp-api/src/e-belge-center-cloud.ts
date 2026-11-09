@@ -430,7 +430,7 @@ async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:
           current.quantity+=numberValue(alloc.quantity)*factor;
           grouped.set(key,current);
         }
-        if(Math.abs([...grouped.values()].reduce((sum,a)=>sum+numberValue(a.quantity),0)-qty)>0.00001)
+        if(Math.abs([...grouped.values()].reduce((sum,a)=>sum+numberValue(a.quantity),0)-physicalQty)>0.00001)
           throw Object.assign(new Error("Çoklu LOT toplamı fiziksel irsaliye miktarıyla eşleşmiyor."),{code:"LOT_QUANTITY_MISMATCH"});
       }else grouped.set(normalizeLotNo(sourceLot),{lotNo:sourceLot,quantity:physicalQty});
       for(const allocation of grouped.values()){
