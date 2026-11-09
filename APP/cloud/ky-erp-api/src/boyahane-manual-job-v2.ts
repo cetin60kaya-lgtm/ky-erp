@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
+import { ensureCanonicalModel } from "./canonical-model-identity";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -170,6 +171,16 @@ export function registerBoyahaneManualJobV2Routes(app: Hono<AppEnv>) {
       return c.json(errorBody("BOYAHANE_JOB_EXISTS", "Bu model için aynı tür açık Boyahane işi zaten bulunuyor.", { jobId: duplicate.id }), 409);
     }
 
+    // Boyahane iş kimliği ayrı; bütün iş/renk satırları tek model kartına bağlıdır.
+    let canonical;
+    try {
+      canonical = await ensureCanonicalModel(c, slug, {
+        modelName, companyId: text(body.companyId), companyName: text(body.companyName),
+        orderNo, sourceModule: "BOYAHANE", requestedId: text(body.modelCardId || body.modelId),
+      });
+    } catch (error) {
+      return c.json(errorBody("MODEL_IDENTITY_REVIEW", error instanceof Error ? error.message : String(error)), 409);
+    }
     const registered = await ensureRegistered(c, slug, body);
     const now = nowIso();
     const jobId = crypto.randomUUID();
@@ -177,6 +188,10 @@ export function registerBoyahaneManualJobV2Routes(app: Hono<AppEnv>) {
       id: jobId,
       source: "BOYAHANE_MANUAL",
       manualEntry: true,
+      modelId: canonical.id,
+      modelCardId: canonical.id,
+      designId: canonical.id,
+      companyId: canonical.companyId,
       jobType,
       workflowType: jobType,
       type: jobType,
@@ -202,6 +217,7 @@ export function registerBoyahaneManualJobV2Routes(app: Hono<AppEnv>) {
       id: colorId,
       jobId,
       dyehouseModelId: jobId,
+      modelCardId: canonical.id,
       jobType,
       registeredColorId: registered.id,
       colorName,
