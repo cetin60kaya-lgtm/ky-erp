@@ -1660,11 +1660,16 @@ async function advancedPayroll(c: Context<AppEnv>) {
     const systemFinal = { salaryPay: salary, roadPay: number(employee.roadAllowance), overtimeAmount: overtime, premiumAmount: extra, garnishmentAmount: garnishment, deductionAmount: deduction, advanceAmount: advance, bank: systemPayment.bank, cash: systemPayment.cash, total: baseNet };
     const savedStatus = upper(row?.status);
     const hasSavedFinal = Boolean(row && ["OVERRIDE", "CALCULATED", "PAID", "MANUAL_APPROVED"].includes(savedStatus));
-    const monthlyOverride = Boolean(row && ["OVERRIDE", "MANUAL_APPROVED"].includes(savedStatus));
+    const latestMonthPlan = monthPlanByEmployee.get(text(employee.id));
+    // Saving the payroll as CALCULATED does not erase a deliberate monthly override.
+    const monthlyOverride = Boolean(row && (
+      ["OVERRIDE", "MANUAL_APPROVED"].includes(savedStatus) ||
+      (savedStatus === "CALCULATED" && latestMonthPlan)
+    ));
     const savedFinal = hasSavedFinal ? { salaryPay: number(row.salary), roadPay: number(row.roadAllowance), overtimeAmount: number(row.overtimeAmount), premiumAmount: number(row.premiumAmount), garnishmentAmount: number(row.garnishmentAmount), deductionAmount: number(row.deductionAmount), advanceAmount: number(row.advanceAmount), bank: number(row.bankAmount), cash: number(row.cashAmount), total: number(row.totalAmount) } : null;
     // The personnel card is permanent. An explicit monthly override belongs ONLY to
     // its period. Current finance movements always come from their dated source rows.
-    const monthPlan = monthlyOverride ? monthPlanByEmployee.get(text(employee.id)) : null;
+    const monthPlan = monthlyOverride ? latestMonthPlan : null;
     const currentSalary = monthlyOverride ? number(row.salary) : salary;
     const currentRoad = monthlyOverride ? number(row.roadAllowance) : number(employee.roadAllowance);
     const currentExtra = monthlyOverride ? number(row.premiumAmount) : extra;
