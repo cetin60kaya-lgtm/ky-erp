@@ -629,6 +629,23 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     let phase="VALIDATING";
     try {
       const {doc,lines}=await validateForFinal(c,slug,id);
+      if(b.confirmPhysicalReceipt===true){
+        if(upper(doc.direction)!=="INCOMING"||!isInvoice(doc.document_type))
+          throw Object.assign(new Error("Fiziksel teslim kabulü yalnız gelen alış faturalarında yapılabilir."),{code:"PHYSICAL_RECEIPT_NOT_APPLICABLE"});
+        if(!["OWNER","SUPER_ADMIN","COMPANY_OWNER","ADMIN","MUHASEBE","ACCOUNTING","FINANCE"].includes(upper(user.role)))
+          throw Object.assign(new Error("Fiziksel teslim onayı için muhasebe yetkisi gerekir."),{code:"PHYSICAL_RECEIPT_FORBIDDEN"});
+        const ts=now();
+        for(const l of lines){
+          const raw=safeJson(l.raw_metadata),route=upper(raw.routingType);
+          if(!["BOYAHANE","STOCK","CONSUMABLE"].includes(route))continue;
+          if(!text(l.product_id)||!text(raw.lotNo||raw.invoiceLotNo))
+            throw Object.assign(new Error("Teslim alınan ürün ve LOT doğrulanmadan fiziksel giriş yapılmaz."),{code:"PHYSICAL_PRODUCT_LOT_REQUIRED"});
+          const next={...raw,provisionalPhysicalReceiptApproved:true,physicalReceiptApprovedBy:text(user.id),physicalReceiptApprovedAt:ts};
+          await c.env.DB.prepare("UPDATE accounting_document_lines SET raw_metadata=?,updated_at=? WHERE id=? AND document_id=? AND main_company_slug=?")
+            .bind(JSON.stringify(next),ts,l.id,id,slug).run();
+          l.raw_metadata=JSON.stringify(next);
+        }
+      }
       // Stok/Boyahane fiziksel girişleri farklı tablolara ve json_store'a yazılıyor.
       // Aynı atomik D1 planına alınmadıkları sürece asla "POSTED" gösterme.
       phase="PHYSICAL";
