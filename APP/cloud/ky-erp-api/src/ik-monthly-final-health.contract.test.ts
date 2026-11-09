@@ -127,8 +127,8 @@ test("month-only payroll does not write the permanent card, while the explicit a
   const api = cloud("ik-relational-cloud.ts");
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   assert.match(api, /const updatePersonnelCard = body\.updatePersonnelCard === true/);
-  assert.match(api, /if \(updatePersonnelCard\) statements\.push\(/[\s\S]*?UPDATE hr_monthly_employees/);
-  assert.match(api, /if \(updatePersonnelCard\) statements\.push\(/[\s\S]*?INSERT INTO ik_person_card_settings/);
+  assert.match(api, /if \(updatePersonnelCard\) statements\.push\([\s\S]*?UPDATE hr_monthly_employees/);
+  assert.match(api, /if \(updatePersonnelCard\) statements\.push\([\s\S]*?INSERT INTO ik_person_card_settings/);
   assert.match(api, /if \(updatePersonnelCard\) for \(const \[field, before, after\] of financialChanges\)/);
   assert.match(api, /const permanentEarnings =/);
   assert.match(api, /const permanentBankPlan =/);
