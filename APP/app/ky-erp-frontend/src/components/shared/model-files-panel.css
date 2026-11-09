@@ -23,3 +23,9 @@
 .ky-model-files-list li{border:1px solid #dce2e9;border-radius:8px;padding:8px;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .ky-model-files-list li>div{display:grid;gap:4px;min-width:0;overflow-wrap:anywhere}
 @media(max-width:620px){.ky-model-files-assignment{grid-template-columns:1fr 1fr}.ky-model-files-assignment>label:first-child{grid-column:1/-1}.ky-model-files-list li{align-items:stretch;flex-direction:column}.ky-model-files-list li button{width:100%}}
+
+.ky-model-folder-import{border:1px solid var(--ky-border,#d5dce4);background:var(--ky-subtle,#f6f8fa);border-radius:9px;padding:10px;display:grid;grid-template-columns:minmax(180px,1fr) auto;gap:10px;align-items:center}
+.ky-model-folder-import>div:first-child{display:grid;gap:5px}
+.ky-model-folder-preview{grid-column:1/-1;display:grid;gap:6px;padding:9px;background:var(--ky-surface,#fff);border-radius:7px;border:1px solid #dce2e9}
+.ky-model-folder-preview button{justify-self:start}
+@media(max-width:620px){.ky-model-folder-import{grid-template-columns:1fr}.ky-model-folder-preview{grid-column:auto}}
