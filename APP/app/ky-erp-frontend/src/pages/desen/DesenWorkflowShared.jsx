@@ -23,6 +23,7 @@ import {
 import { apiUrl, apiFetch, downloadFile } from "../../utils/api";
 import DesenImage from "./DesenImage";
 import KyRecordDialog from "../../components/shared/KyRecordDialog";
+import ModelFilesPanel from "../../components/shared/ModelFilesPanel";
 import { safeModelLogRows } from "./desenModelLogs";
 import {
   createDesignOperation,
@@ -1478,6 +1479,9 @@ export function ModelDetailModal({
   onEdit,
   onArchive,
   onDyehouse,
+  activeMainCompany,
+  models = [],
+  onFilesUpdated,
 }) {
   const [tab, setTab] = useState("general");
   const logRows = safeModelLogRows(model?.logs);
@@ -1677,6 +1681,8 @@ export function ModelDetailModal({
       )}
       {tab === "files" && (
         <div className="dsg-file-groups">
+          {activeMainCompany && <ModelFilesPanel modelId={model.id} modelName={model.modelName}
+            activeMainCompany={activeMainCompany} models={models} onUploaded={onFilesUpdated} />}
           {groupDesignFiles(model.files).map((group) => (
             <section key={group.code}>
               <h3>{group.title} <span>({group.files.length})</span></h3>
