@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { ensureCanonicalModel } from "./canonical-model-identity";
 import { isHistoricalProduction, matchesProductionPool, PRODUCTION_POOL_CONTRACT } from "./production-pool-classification.ts";
 import { productionIdentity, writeProductionEntryAtomic } from "./production-idempotency";
 
@@ -1416,96 +1417,40 @@ async function createModel(c: Context<AppEnv>, body: Row) {
   const slug = companySlug(c, body);
   const modelName = text(first(body.modelName, body.modelAdi));
   if (!modelName) throw new Error("Model adı zorunludur.");
-  const center = await buildCenter(c, slug);
   const companyId = text(first(body.companyId, body.firmaId));
-  const orderNo = text(first(body.orderNo, body.siparisNo));
-  const designModelId = text(body.designModelId);
-  const requestedId = text(first(body.designModelId, body.modelId, body.id));
-  // Desen kanonik model ID'si her zaman isim benzerliğinden üstündür.
-  const sameId = requestedId && center.cards.find((card) => !card.isVirtual && card.id === requestedId);
-  if (sameId) {
-    if (designModelId && ((sameId.companyId && companyId && sameId.companyId !== companyId) ||
-      normalized(sameId.modelName) !== normalized(modelName))) {
-      throw Object.assign(new Error("Desen modeli ID'si ile kayıtlı üretim kartının adı/firma bağı farklı; önce Desen'de eşleştirin."), { code: "CANONICAL_MODEL_CONFLICT" });
-    }
-    return { ...sameId, duplicate: true };
-  }
-  const duplicate = center.cards.find(
-    (card) =>
-      !card.isVirtual &&
-      normalized(card.modelName) === normalized(modelName) &&
-      card.companyId === companyId &&
-      (!orderNo || normalized(card.orderNo) === normalized(orderNo)),
-  );
-  if (duplicate && designModelId && duplicate.id !== designModelId) {
-    throw Object.assign(new Error("Aynı isimde başka bir model kimliği var. Yanlış Desen→İmalat bağlantısı oluşturulmadı."), { code: "CANONICAL_MODEL_CONFLICT" });
-  }
-  if (duplicate) return { ...duplicate, duplicate: true };
-  const id = requestedId || crypto.randomUUID();
-  const now = new Date().toISOString();
+  const center = await buildCenter(c, slug);
   const company: Row = center.companies.find((row: Row) => row.id === companyId) || {};
   const regions = String(first(body.printRegions, body.printArea, body.baskiBolgesi, "Ön"))
-    .split(/[,;|]/)
-    .map((value) => value.trim())
-    .filter(Boolean);
-  const raw = {
-    modelName,
-    companyId,
-    companyName: text(first(company.name, body.companyName, body.firmaAdi)),
-    orderNo,
+    .split(/[,;|]/).map((value) => value.trim()).filter(Boolean);
+  const model = await ensureCanonicalModel(c, slug, {
+    modelName, modelCode: text(body.modelCode),
+    companyId, companyName: text(first(company.name, body.companyName, body.firmaAdi)),
+    orderNo: text(first(body.orderNo, body.siparisNo)),
     dispatchNo: text(first(body.dispatchNo, body.irsaliyeNo)),
     expectedQty: numberValue(first(body.expectedQty, body.gelenAdet)),
-    printRegions: regions.map((regionName, index) => ({ regionName, sortOrder: index + 1 })),
-    designModelId: text(body.designModelId || id),
-    source: text(body.sourceModule) || "PRODUCTION_CENTER",
-    createdAt: now,
-  };
-  let storage = "model_records";
-  // Var olan D1 tablosundaki yazma/unique hatasını JSON yedek veriye gizlice aktarma.
-  // Yalnız tablo bulunmuyorsa tarihsel uyumluluk kaynağı kullanılabilir.
-  const hasModelRecords = await tableExists(c, "model_records");
-  if (hasModelRecords) {
-    await insertDynamic(c, "model_records", {
-      id,
-      main_company_slug: slug,
-      model_name: modelName,
-      model_code: text(body.modelCode),
-      order_no: orderNo,
-      company_id: companyId || null,
-      customer_id: companyId || null,
-      customer_name: raw.companyName,
-      source_dispatch_no: raw.dispatchNo,
-      customer_dispatch_no: raw.dispatchNo,
-      incoming_qty: raw.expectedQty,
-      incoming_quantity: raw.expectedQty,
-      remaining_quantity: raw.expectedQty,
-      status: "ACTIVE",
-      raw,
-      created_at: now,
-      updated_at: now,
-    });
-  } else {
-    storage = "json_store";
-    await jsonStorePut(c, "PRODUCTION_CENTER_MODEL", id, { id, ...raw }, slug);
+    printRegions: regions, sourceModule: text(body.sourceModule || "IMALAT"),
+    requestedId: text(first(body.designModelId, body.modelId, body.id)),
+  });
+  if (!model.created) {
+    const existing = center.cards.find((card: Row) => card.id === model.id && !card.isVirtual);
+    return { ...(existing || {}), id: model.id, modelId: model.id,
+      modelName: model.modelName, companyId: model.companyId, duplicate: true };
   }
+  const now = new Date().toISOString();
   if (await tableExists(c, "model_print_regions")) {
     for (const [index, regionName] of regions.entries()) {
       await insertDynamic(c, "model_print_regions", {
-        id: crypto.randomUUID(),
-        main_company_slug: slug,
+        id: crypto.randomUUID(), main_company_slug: slug,
         main_company_id: text(body.mainCompanyId) || null,
-        model_record_id: id,
-        model_id: id,
-        region_code: normalized(regionName).replace(/\s+/g, "_").slice(0, 40),
-        region_name: regionName,
-        sort_order: index + 1,
-        is_active: 1,
-        created_at: now,
-        updated_at: now,
-      }).catch(() => undefined);
+        model_record_id: model.id, model_id: model.id,
+        region_code: normalized(regionName).replace(/\\s+/g, "_").slice(0, 40),
+        region_name: regionName, sort_order: index + 1,
+        is_active: 1, created_at: now, updated_at: now,
+      });
     }
   }
-  return { id, modelId: id, storage, ...raw };
+  return { id: model.id, modelId: model.id, modelName: model.modelName,
+    companyId: model.companyId, duplicate: false, source: "CANONICAL" };
 }
 
 // İmalat planı değişebilir; Desen'deki kanonik model kimliği, resmî irsaliye,
