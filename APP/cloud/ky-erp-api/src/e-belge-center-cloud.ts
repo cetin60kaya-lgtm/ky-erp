@@ -12,7 +12,7 @@ import { requiredLotCoverageComplete, resolveAllocatedLotEvidence } from "./acco
 import { resolveProductLotPolicy, normalizeLotNo } from "./accounting-lot-reconciliation-core";
 import { recordBoyahanePhysicalReceipt, recordGenericPhysicalReceipt } from "./accounting-physical-receipt";
 import { reconcileEBelgeInvoice } from "./e-belge-match-engine";
-import { chooseCanonicalDocumentModels } from "./e-belge-document-automation";
+import { chooseCanonicalDocumentModels, modelHintFromArchiveName } from "./e-belge-document-automation";
 import { parseCanonicalEBelgeUbl } from "./e-belge-ubl";
 import { explicitEBelgeDirection, resolveManualEBelgeDirection } from "./e-belge-direction";
 import { eBelgeProductRouting, getEBelgeProduct, getEBelgeSupplierProfile, matchEBelgeProduct, resolveEBelgeExpenseCategory, validateEBelgeChemicalReceipt } from "./e-belge-product-store";
@@ -153,7 +153,7 @@ async function linkDocumentCanonicalModels(c:Context<AppEnv>,slug:string,documen
     return;
   }
   if(!result.modelId&&!result.models.some((m:any)=>m.id)){
-    if(result.fileHint)await addIssue(c,slug,documentId,"MODEL_NOT_FOUND","DDM/HKN dosya adındaki model için tek ve kesin model kartı bulunamadı.","WARNING","model");
+    if(result.fileHint)await addIssue(c,slug,documentId,"MODEL_NOT_FOUND","DDM/HKN dosya adındaki model için tek ve kesin model kartı bulunamadı.","ERROR","model");
     return;
   }
   const ts=now();
@@ -242,8 +242,10 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
     if(!readiness.configured)throw Object.assign(new Error("PDF ayrıştırma servisi hazır değil; dosya Drive'da korunuyor."),{code:"PDF_EXTRACTION_NOT_READY"});
     const file=new File([bytes],text(asset.file_name),{type:text(asset.mime_type)||"application/pdf"});
     const ai=await analyzeAccountingDocument(c,file,"AUTO"),canonical=ai?.canonical||ai?.data||ai||{};
-    const kind=isDispatch(canonical.inferredDocumentKind)?"IRSALIYE":"FATURA";
-    parsed=await resolveManualDirection(c,slug,"AUTO",canonical,kind);
+    const fileHint=modelHintFromArchiveName(asset.file_name);
+    const detected=isDispatch(canonical.inferredDocumentKind)?"IRSALIYE":"FATURA";
+    const kind=fileHint?.series==="DDM"?"IRSALIYE":fileHint?.series==="HKN"?"FATURA":detected;
+    parsed=await resolveManualDirection(c,slug,"AUTO",{...canonical,documentNo:text(canonical.documentNo)||fileHint?.documentNo},kind);
     parsed={...parsed,sourceType:"FILE_HUB_PDF",extractionConfidence:numberValue(canonical.extractionConfidence),
       needsManualReview:canonical.needsManualReview===true,manualReviewReasons:canonical.manualReviewReasons,
       rawMetadata:{...safeJson(canonical.rawMetadata),fileHubAssetId:assetId,
