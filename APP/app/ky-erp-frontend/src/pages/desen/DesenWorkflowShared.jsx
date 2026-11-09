@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { apiUrl, apiFetch, downloadFile } from "../../utils/api";
 import DesenImage from "./DesenImage";
-import { resizeModelDetailBox } from "./desenModalResize";
+import KyRecordDialog from "../../components/shared/KyRecordDialog";
 import { safeModelLogRows } from "./desenModelLogs";
 import {
   createDesignOperation,
@@ -134,138 +134,15 @@ export function EmptyState({ icon: Icon = FileImage, title, text, action }) {
   );
 }
 
-export function WideModal({
-  title,
-  subtitle,
-  children,
-  footer,
-  onClose,
-  onSave,
-  dirty = false,
-  size = "wide",
-  resizable = false,
-}) {
-  const modalRef = useRef(null);
-  const resizeStartRef = useRef(null);
-  const [modalBox, setModalBox] = useState(null);
-
-  // Boyut yalnız kullanıcının sağ-alt tutacağı sürüklemesiyle değişir;
-  // sekme içeriği pencerenin dış ölçülerini hiçbir zaman belirlemez.
-  const startResize = (event) => {
-    if (!resizable || event.button !== 0 || window.matchMedia("(max-width: 700px)").matches) return;
-    const rect = modalRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const base = { width: rect.width, height: rect.height, left: rect.left, top: rect.top };
-    resizeStartRef.current = { ...base, startX: event.clientX, startY: event.clientY, pointerId: event.pointerId };
-    setModalBox(base);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-  const moveResize = (event) => {
-    const drag = resizeStartRef.current;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    event.preventDefault();
-    const next = resizeModelDetailBox({
-      ...drag, x: event.clientX, y: event.clientY,
-      maxWidth: window.innerWidth - drag.left - 8,
-      maxHeight: window.innerHeight - drag.top - 8,
-    });
-    setModalBox({ width: next.width, height: next.height, left: drag.left, top: drag.top });
-  };
-  const endResize = (event) => {
-    const drag = resizeStartRef.current;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    resizeStartRef.current = null;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-  };
-  const keyboardResize = (event) => {
-    const delta = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] }[event.key];
-    if (!delta) return;
-    const rect = modalRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    event.preventDefault();
-    const current = modalBox || { width: rect.width, height: rect.height, left: rect.left, top: rect.top };
-    const next = resizeModelDetailBox({
-      ...current, startX: 0, startY: 0, x: delta[0], y: delta[1],
-      maxWidth: window.innerWidth - current.left - 8,
-      maxHeight: window.innerHeight - current.top - 8,
-    });
-    setModalBox({ ...current, ...next });
-  };
-
-  useEffect(() => {
-    const handleKey = (event) => {
-      if (event.key === "Escape") {
-        if (
-          !dirty ||
-          window.confirm("Kaydedilmemiş değişiklikler var. Kapatılsın mı?")
-        )
-          onClose?.();
-      }
-      if (event.ctrlKey && event.key === "Enter") {
-        event.preventDefault();
-        onSave?.();
-      }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [dirty, onClose, onSave]);
-
-  const close = () => {
-    if (
-      !dirty ||
-      window.confirm("Kaydedilmemiş değişiklikler var. Kapatılsın mı?")
-    )
-      onClose?.();
-  };
-
-  return (
-    <div
-      className="dsg-modal-backdrop"
-      role="presentation"
-      onMouseDown={(event) => event.target === event.currentTarget && close()}
-    >
-      <section
-        ref={modalRef}
-        className={`dsg-modal ${size}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        style={resizable ? {
-          // Sabit başlangıç ölçüsü: içerik/sekme değişimi yüksekliği değiştiremez.
-          width: modalBox?.width ?? "min(840px, calc(100vw - 32px))",
-          height: modalBox?.height ?? "min(590px, calc(100dvh - 32px))",
-          ...(modalBox ? { position: "fixed", left: modalBox.left, top: modalBox.top } : {}),
-        } : undefined}
-      >
-        <header className="dsg-modal-head">
-          <div>
-            <h2>{title}</h2>
-            {subtitle && <p>{subtitle}</p>}
-          </div>
-          <button
-            type="button"
-            className="dsg-icon-btn"
-            onClick={close}
-            aria-label="Kapat"
-          >
-            <X size={20} />
-          </button>
-        </header>
-        <div className="dsg-modal-body">{children}</div>
-        {footer && <footer className="dsg-modal-foot">{footer}</footer>}
-        {resizable && (
-          <button type="button" className="dsg-modal-resize-corner"
-            title="Sağ-alt köşeden sürükleyerek pencerenin enini ve boyunu ayarlayın"
-            aria-label="Pencere enini ve boyunu sağ-alt köşeden ayarla (ok tuşları)"
-            onPointerDown={startResize}
-            onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize}
-            onKeyDown={keyboardResize} />
-        )}
-      </section>
-    </div>
-  );
+export function WideModal({ title, subtitle, children, footer, onClose, onSave, dirty = false, size = "wide", resizable = false }) {
+  // Bütün KY ERP kayıt formları aynı çerçeveyi kullanır; boyut her sekmede sabittir.
+  return <KyRecordDialog
+    title={title} subtitle={subtitle} footer={footer}
+    onClose={onClose} onSave={onSave} dirty={dirty}
+    className={`dsg-modal ${size}`}
+    headerClassName="dsg-modal-head" bodyClassName="dsg-modal-body"
+    footerClassName="dsg-modal-foot"
+  >{children}</KyRecordDialog>;
 }
 
 export function ImagePreview({ src, alt = "Desen önizleme", className = "" }) {
@@ -408,8 +285,8 @@ export function ModelEditorModal({
   const [quickEntry, setQuickEntry] = useState(false);
   const [colorPicker, setColorPicker] = useState(null);
   const [draft, setDraft] = useState(() => ({
-    companyId: model?.companyId || companies?.[0]?.id || "",
-    companyName: model?.companyName || companies?.[0]?.name || "",
+    companyId: model?.companyId || "",
+    companyName: model?.companyName || "",
     modelCode: model?.modelCode || inboxGroup?.modelName || "",
     modelName: model?.modelName || inboxGroup?.modelName || "",
     designName: model?.designName || "",
@@ -738,7 +615,7 @@ export function ModelEditorModal({
                 <option value="">Firma seçin</option>
                 {companies.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.name}
+                    {item.displayName || item.name}
                   </option>
                 ))}
               </select>
