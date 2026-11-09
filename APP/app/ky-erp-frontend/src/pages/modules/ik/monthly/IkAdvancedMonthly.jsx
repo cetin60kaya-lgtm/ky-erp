@@ -3492,7 +3492,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         : num(editor.amount);
       const modalTitle = finalMode ? "Son Bordro Kontrolü" : "Bordro Öncesi Giriş Kontrolü";
       const modalSub = editableMode
-        ? `${MONTHS[month - 1]} ${year} · Ay kilidi açık; finans alanları düzenlenebilir ve gerçek kaynaklara kaydedilir`
+        ? `${MONTHS[month - 1]} ${year} · Ay açık · Düzeltme ilgili aya kaydedilir; kalıcı personel kartı ayrıca güncellenir`
         : `${MONTHS[month - 1]} ${year} · Salt okunur kontrol görünümü`;
 
       return (
@@ -3520,7 +3520,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                 <label><span>Personel Seç</span><select value={modalDraft.id || ""} disabled={busy} onChange={(event) => switchPayPlanPerson(event.target.value)}>{periodPeople.map((employee) => <option key={employee.id} value={employee.id}>{employee.code || "HKN yok"} · {employee.fullName}</option>)}</select></label>
                 <span className="person-modal-position">{currentIndex >= 0 ? currentIndex + 1 : 0} / {periodPeople.length}</span>
                 <button type="button" className="btn" disabled={busy || !nextPerson} onClick={() => nextPerson && switchPayPlanPerson(nextPerson.id)}>Sonraki →</button>
-                <small>{editableMode ? "Ay kilidi açıkken maaş, yol, EK, banka/elden ve hareketler düzenlenebilir." : "Salt okunur kontrol görünümü."}</small>
+                <small>{editableMode ? "Bu ayın bordrosu düzenlenebilir. Kalıcı personel kartı yalnız ayrı işlemle değişir." : "Salt okunur kontrol görünümü."}</small>
               </div>
 
               {editableMode ? (
@@ -3575,7 +3575,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                         ? "Banka + Elden = Net Ödenecek. Son kontrol kayda hazır."
                         : `Banka + Elden ile Net arasında ${money(Math.abs(finalTotals.diff))} fark var. Kaydetmeden önce düzeltin veya Otomatik Dengele kullanın.`}
                     </div>
-                    <div className="warnline">Bu ekrandaki Maaş/Yol/EK değişikliği ücret kaynağına; Mesai/Avans/Kesinti/İcra değişikliği hareket kaynağına yazılır.</div>
+                    <div className="warnline">Maaş/Yol/EK ve banka/elden düzeltmesi yalnız seçilen aya aittir. Mesai/Avans/Kesinti/İcra ilgili ayın hareket kaynağını günceller. Kalıcı ücret planı yalnız “Personel Kartını Güncelle” ile değişir.</div>
                   </div>
                 </div>
               ) : (
