@@ -109,7 +109,8 @@ test("payroll row opens fully editable final mode on canonical sources", () => {
   assert.match(monthly, /Son Kontrol \/ Düzenle/);
   assert.match(monthly, /Kaynak Hareketleri \/ Log/);
   assert.match(monthly, /openPayPlan\(row\.employee, "FINAL", row\)/);
-  assert.match(monthly, /Son Kontrolü Kaydet/);
+  assert.match(monthly, /Yalnız Bu Ayı Kaydet/);
+  assert.match(monthly, /Personel Kartını Güncelle/);
   assert.doesNotMatch(monthly, /editPayrollPaymentSplit/);
   assert.doesNotMatch(monthly, /Bordrodan Düzelt/);
 });
@@ -152,7 +153,7 @@ test("payroll output is read-only while month lock owns editability", () => {
   assert.match(monthly, /unlock,/);
   assert.match(relational, /body\.unlock === true/);
   assert.match(relational, /"UNLOCK"/);
-  assert.doesNotMatch(relational, /PAYROLL_PAID_LOCKED/);
+  assert.match(relational, /PAYROLL_PAID_LOCKED/);
 });
 
 
